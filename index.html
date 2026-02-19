@@ -1,0 +1,1509 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SFL Flower Tracker</title>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-darkest: #0d0906;
+      --bg-dark: #1a0e08;
+      --bg-medium: #2c1810;
+      --bg-light: #3e2415;
+      --bg-card: #2a1a0f;
+      --bg-card-alt: #231509;
+      --border-dark: #000;
+      --border-brown: #5c3a1e;
+      --border-light: #8b6914;
+      --text-primary: #f0e6d2;
+      --text-secondary: #a89070;
+      --text-dim: #6d5a45;
+      --green: #30D158;
+      --red: #FF6B6B;
+      --yellow: #FFD60A;
+      --blue: #5DADE2;
+      --sunpetal: #FFD700;
+      --bloom: #FF69B4;
+      --lily: #B07CD8;
+      --edelweiss: #87CEEB;
+      --gladiolus: #FF6347;
+      --lavender: #C8A2C8;
+      --clover: #2ECC71;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg-darkest);
+      color: var(--text-primary);
+      font-family: 'Courier New', monospace;
+      min-height: 100vh;
+      image-rendering: pixelated;
+    }
+
+    .pixel-font { font-family: 'Press Start 2P', cursive; }
+
+    /* ── Pixel panel ── */
+    .pixel-panel {
+      background: var(--bg-medium);
+      border: 4px solid var(--border-brown);
+      box-shadow:
+        inset 3px 3px 0 rgba(255,255,255,0.08),
+        inset -3px -3px 0 rgba(0,0,0,0.25),
+        0 0 0 3px var(--border-dark),
+        6px 6px 0 rgba(0,0,0,0.4);
+    }
+
+    /* ── Container ── */
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 12px;
+    }
+
+    /* ── Header ── */
+    .header {
+      text-align: center;
+      padding: 20px 16px;
+      margin-bottom: 16px;
+      background: linear-gradient(180deg, #3e2415 0%, #2c1810 100%);
+      position: relative;
+      overflow: hidden;
+    }
+    .header::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 4px;
+      background: repeating-linear-gradient(90deg, var(--sunpetal) 0 8px, transparent 8px 16px);
+    }
+    .header h1 {
+      font-size: 16px;
+      letter-spacing: 1px;
+      color: var(--sunpetal);
+      text-shadow: 2px 2px 0 #000, 0 0 8px rgba(255,215,0,0.3);
+      margin-bottom: 8px;
+    }
+    .header .farm-id {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    /* ── Summary bar ── */
+    .summary-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+      background: var(--bg-dark);
+    }
+    .summary-stat {
+      text-align: center;
+      min-width: 100px;
+    }
+    .summary-stat .label {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+      letter-spacing: 0.5px;
+    }
+    .summary-stat .value {
+      font-size: 16px;
+      font-weight: bold;
+    }
+    .summary-stat .value.complete { color: var(--green); }
+    .summary-stat .value.pending { color: var(--yellow); }
+    .summary-stat .value.time { color: var(--blue); }
+
+    /* ── Progress overview ── */
+    .progress-overview {
+      padding: 12px 16px;
+      margin-bottom: 16px;
+    }
+    .progress-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      margin-bottom: 6px;
+      color: var(--text-secondary);
+    }
+    .progress-bar-outer {
+      background: #111;
+      border: 3px solid #000;
+      height: 20px;
+      position: relative;
+      box-shadow: inset 2px 2px 0 rgba(0,0,0,0.6);
+    }
+    .progress-bar-fill {
+      height: 100%;
+      transition: width 0.8s ease-out;
+      position: relative;
+    }
+    .progress-bar-fill.green {
+      background: linear-gradient(180deg, #4ade80 0%, #22c55e 40%, #16a34a 100%);
+      box-shadow: inset 0 2px 0 rgba(255,255,255,0.25), inset 0 -2px 0 rgba(0,0,0,0.2);
+    }
+    .progress-bar-fill::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: repeating-linear-gradient(
+        90deg,
+        transparent 0 6px,
+        rgba(0,0,0,0.12) 6px 8px
+      );
+    }
+
+    /* ── Seed section ── */
+    .seed-section {
+      margin-bottom: 20px;
+    }
+    .seed-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: var(--bg-dark);
+      border: 3px solid var(--border-dark);
+      border-bottom: none;
+      box-shadow: inset 3px 3px 0 rgba(255,255,255,0.05);
+    }
+    .seed-icon {
+      width: 28px;
+      height: 28px;
+      image-rendering: pixelated;
+      filter: drop-shadow(1px 1px 0 #000);
+    }
+    .seed-header h2 {
+      font-size: 13px;
+      flex: 1;
+    }
+    .seed-meta {
+      font-size: 10px;
+      color: var(--text-dim);
+      text-align: right;
+    }
+    .seed-meta span { display: block; margin-top: 2px; }
+    .seed-badge {
+      display: inline-block;
+      padding: 2px 6px;
+      font-size: 9px;
+      border: 2px solid;
+      margin-left: 4px;
+    }
+
+    /* ── Flower grid ── */
+    .flower-grid {
+      border: 3px solid var(--border-dark);
+    }
+
+    /* ── Flower row ── */
+    .flower-row {
+      display: grid;
+      grid-template-columns: 36px 1fr 100px 140px;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-bottom: 2px solid rgba(0,0,0,0.4);
+      transition: background 0.15s;
+      min-height: 48px;
+    }
+    .flower-row:nth-child(even) { background: var(--bg-card); }
+    .flower-row:nth-child(odd) { background: var(--bg-card-alt); }
+    .flower-row:hover { background: #382210; }
+    .flower-row.complete { opacity: 0.55; }
+    .flower-row.complete:hover { opacity: 0.85; }
+
+    .flower-img-wrap {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .flower-img {
+      width: 28px;
+      height: 28px;
+      image-rendering: pixelated;
+      filter: drop-shadow(1px 1px 0 rgba(0,0,0,0.6));
+    }
+    .flower-color-dot {
+      width: 14px;
+      height: 14px;
+      border: 2px solid #000;
+      box-shadow: inset 2px 2px 0 rgba(255,255,255,0.3);
+    }
+
+    .flower-info { min-width: 0; }
+    .flower-name {
+      font-size: 13px;
+      font-weight: bold;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .flower-chain {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .flower-chain .input-flower { color: var(--yellow); }
+    .flower-chain .consumed-by { color: #c87d38; }
+
+    .flower-progress { min-width: 0; }
+    .flower-bar-outer {
+      background: #111;
+      border: 2px solid #000;
+      height: 12px;
+      box-shadow: inset 1px 1px 0 rgba(0,0,0,0.5);
+      margin-bottom: 3px;
+    }
+    .flower-bar-fill {
+      height: 100%;
+      transition: width 0.6s;
+    }
+    .flower-bar-fill.bar-green {
+      background: linear-gradient(180deg, #4ade80, #16a34a);
+    }
+    .flower-bar-fill.bar-yellow {
+      background: linear-gradient(180deg, #fbbf24, #d97706);
+    }
+    .flower-bar-fill.bar-red {
+      background: linear-gradient(180deg, #f87171, #dc2626);
+    }
+    .flower-count {
+      font-size: 11px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .flower-count .have { color: var(--text-secondary); }
+    .flower-count .pending { color: var(--green); font-size: 10px; }
+
+    .flower-time {
+      text-align: right;
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+    .flower-time .remaining-count { color: var(--yellow); font-size: 12px; }
+    .flower-time .remaining-time { color: var(--text-dim); margin-top: 2px; }
+    .flower-time .done { color: var(--green); font-size: 12px; }
+
+    /* ── Loading ── */
+    .loading-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 60vh;
+      gap: 20px;
+    }
+    .loading-flower {
+      font-size: 48px;
+      animation: bounce 1s ease-in-out infinite;
+    }
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-12px); }
+    }
+    .loading-text {
+      font-size: 12px;
+      color: var(--text-secondary);
+      animation: blink 1.2s step-end infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* ── Error ── */
+    .error-screen {
+      text-align: center;
+      padding: 40px 20px;
+    }
+    .error-screen .icon { font-size: 40px; margin-bottom: 12px; }
+    .error-screen h2 { font-size: 14px; color: var(--red); margin-bottom: 8px; }
+    .error-screen p { font-size: 11px; color: var(--text-secondary); max-width: 400px; margin: 0 auto 16px; }
+
+    /* ── Footer ── */
+    .footer {
+      text-align: center;
+      padding: 16px;
+      margin-top: 8px;
+    }
+    .refresh-btn {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 11px;
+      color: var(--text-primary);
+      background: var(--bg-light);
+      border: 3px solid var(--border-brown);
+      padding: 8px 18px;
+      cursor: pointer;
+      box-shadow:
+        inset 2px 2px 0 rgba(255,255,255,0.1),
+        inset -2px -2px 0 rgba(0,0,0,0.3),
+        3px 3px 0 #000;
+      transition: transform 0.1s;
+    }
+    .refresh-btn:hover { background: #4a2e18; }
+    .refresh-btn:active {
+      transform: translate(2px, 2px);
+      box-shadow: inset 2px 2px 0 rgba(0,0,0,0.3), inset -2px -2px 0 rgba(255,255,255,0.1);
+    }
+    .timestamp {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-top: 10px;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 640px) {
+      .container { padding: 8px; }
+      .header h1 { font-size: 13px; }
+      .flower-row {
+        grid-template-columns: 30px 1fr 80px;
+        gap: 6px;
+        padding: 6px 8px;
+      }
+      .flower-time { display: none; }
+      .flower-row.mobile-show-time .flower-time { display: block; }
+      .seed-header { flex-wrap: wrap; gap: 6px; }
+      .summary-bar { gap: 8px; }
+      .summary-stat { min-width: 80px; }
+    }
+
+    /* ── Scanline overlay (subtle) ── */
+    body::after {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      pointer-events: none;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent 0 3px,
+        rgba(0,0,0,0.03) 3px 4px
+      );
+      z-index: 9999;
+    }
+
+    /* ── Tooltip for consumed-by ── */
+    .consumed-tag {
+      display: inline-block;
+      font-size: 9px;
+      padding: 1px 4px;
+      margin-left: 3px;
+      border: 1px solid #5c3a1e;
+      background: rgba(92,58,30,0.3);
+      color: #c87d38;
+      vertical-align: middle;
+    }
+
+    /* ── Config bar ── */
+    .config-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: flex-end;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+      background: var(--bg-dark);
+    }
+    .config-field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+      min-width: 120px;
+    }
+    .config-field.small { flex: 0 0 100px; min-width: 80px; }
+    .config-field label {
+      font-size: 9px;
+      color: var(--text-dim);
+      letter-spacing: 0.5px;
+    }
+    .config-field input {
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      padding: 6px 10px;
+      color: var(--text-primary);
+      background: #111;
+      border: 3px solid var(--border-brown);
+      box-shadow: inset 2px 2px 0 rgba(0,0,0,0.5);
+      outline: none;
+      width: 100%;
+    }
+    .config-field input:focus {
+      border-color: var(--sunpetal);
+      box-shadow: inset 2px 2px 0 rgba(0,0,0,0.5), 0 0 6px rgba(255,215,0,0.2);
+    }
+    .config-field input::placeholder { color: var(--text-dim); }
+    .config-go {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 11px;
+      color: #fff;
+      background: #2d6a30;
+      border: 3px solid #1a4a1c;
+      padding: 8px 16px;
+      cursor: pointer;
+      box-shadow: inset 2px 2px 0 rgba(255,255,255,0.15), inset -2px -2px 0 rgba(0,0,0,0.3), 3px 3px 0 #000;
+      white-space: nowrap;
+      transition: transform 0.1s;
+    }
+    .config-go:hover { background: #38833c; }
+    .config-go:active {
+      transform: translate(2px, 2px);
+      box-shadow: inset 2px 2px 0 rgba(0,0,0,0.3);
+    }
+
+    /* ── Donate section ── */
+    .donate-section {
+      margin-top: 20px;
+      padding: 20px 16px;
+      text-align: center;
+      background: linear-gradient(180deg, #2c1810 0%, #1a0e08 100%);
+    }
+    .donate-section h3 {
+      font-size: 12px;
+      color: var(--sunpetal);
+      margin-bottom: 12px;
+      text-shadow: 1px 1px 0 #000;
+    }
+    .donate-section p {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+      line-height: 1.6;
+    }
+    .donate-qr {
+      display: inline-block;
+      padding: 8px;
+      background: #fff;
+      border: 4px solid var(--border-brown);
+      box-shadow: 0 0 0 3px #000, 4px 4px 0 rgba(0,0,0,0.4);
+      margin-bottom: 12px;
+    }
+    .donate-qr img {
+      display: block;
+      width: 140px;
+      height: 140px;
+      image-rendering: pixelated;
+    }
+    .donate-addr-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #111;
+      border: 3px solid var(--border-brown);
+      padding: 6px 10px;
+      max-width: 100%;
+      box-shadow: inset 2px 2px 0 rgba(0,0,0,0.5);
+    }
+    .donate-addr {
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      color: var(--text-primary);
+      word-break: break-all;
+      user-select: all;
+    }
+    .donate-copy {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 9px;
+      color: var(--text-primary);
+      background: var(--bg-light);
+      border: 2px solid var(--border-brown);
+      padding: 4px 8px;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .donate-copy:hover { background: #4a2e18; }
+    .donate-chain-label {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-top: 8px;
+    }
+    /* ── Bed selector ── */
+    .bed-selector {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 140px;
+    }
+    .bed-selector label {
+      font-size: 9px;
+      color: var(--text-dim);
+      letter-spacing: 0.5px;
+    }
+    .bed-row {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+    .bed-slot {
+      width: 28px;
+      height: 28px;
+      background: #111;
+      border: 3px solid var(--border-brown);
+      box-shadow: inset 2px 2px 0 rgba(0,0,0,0.5);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      transition: transform 0.1s, background 0.15s;
+      user-select: none;
+      position: relative;
+    }
+    .bed-slot:hover { background: #1a1200; transform: scale(1.1); }
+    .bed-slot.active {
+      background: #2a1a00;
+      border-color: var(--sunpetal);
+      box-shadow: inset 2px 2px 0 rgba(255,215,0,0.15), 0 0 6px rgba(255,215,0,0.2);
+    }
+    .bed-slot.active::after {
+      content: '';
+      position: absolute;
+      bottom: 1px; left: 50%;
+      transform: translateX(-50%);
+      width: 4px; height: 4px;
+      background: var(--green);
+      border-radius: 50%;
+    }
+    .bed-count {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 11px;
+      color: var(--sunpetal);
+      min-width: 20px;
+      text-align: center;
+    }
+
+    /* ── Petal Blessed panel ── */
+    .petal-blessed-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      font-family: 'Press Start 2P', cursive;
+      font-size: 11px;
+      color: #fff;
+      background: linear-gradient(180deg, #6b21a8 0%, #4c1d95 50%, #3b0764 100%);
+      border: 4px solid #7c3aed;
+      cursor: pointer;
+      box-shadow:
+        inset 3px 3px 0 rgba(255,255,255,0.15),
+        inset -3px -3px 0 rgba(0,0,0,0.3),
+        0 0 0 3px #000,
+        0 0 16px rgba(124,58,237,0.3);
+      transition: transform 0.1s;
+      text-shadow: 1px 1px 0 #000;
+    }
+    .petal-blessed-btn:hover {
+      background: linear-gradient(180deg, #7c3aed 0%, #5b21b6 50%, #4c1d95 100%);
+      box-shadow:
+        inset 3px 3px 0 rgba(255,255,255,0.2),
+        inset -3px -3px 0 rgba(0,0,0,0.3),
+        0 0 0 3px #000,
+        0 0 24px rgba(124,58,237,0.5);
+    }
+    .petal-blessed-btn:active {
+      transform: translate(2px, 2px);
+    }
+    .pb-cooldown #pb-timer {
+      color: #c084fc;
+      font-size: 12px;
+    }
+    .petal-blessed-panel {
+      margin-bottom: 16px;
+      padding: 16px;
+      background: linear-gradient(180deg, #2e1065 0%, #1e0a3c 100%);
+      border: 4px solid #7c3aed;
+      box-shadow: 0 0 0 3px #000, 0 0 20px rgba(124,58,237,0.25);
+    }
+    .petal-blessed-panel h3 {
+      font-size: 12px;
+      color: #c084fc;
+      text-align: center;
+      margin-bottom: 4px;
+      text-shadow: 0 0 8px rgba(192,132,252,0.4);
+    }
+    .petal-blessed-panel .pb-subtitle {
+      font-size: 10px;
+      color: var(--text-dim);
+      text-align: center;
+      margin-bottom: 14px;
+    }
+    .pb-bed {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      margin-bottom: 6px;
+      background: rgba(124,58,237,0.1);
+      border: 2px solid rgba(124,58,237,0.3);
+    }
+    .pb-bed-num {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 12px;
+      color: #7c3aed;
+      min-width: 24px;
+    }
+    .pb-bed-img {
+      width: 28px;
+      height: 28px;
+      image-rendering: pixelated;
+      filter: drop-shadow(1px 1px 0 #000);
+    }
+    .pb-bed-info { flex: 1; min-width: 0; }
+    .pb-bed-name {
+      font-size: 12px;
+      font-weight: bold;
+      color: var(--text-primary);
+    }
+    .pb-bed-recipe {
+      font-size: 10px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+    .pb-bed-time {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 10px;
+      color: #c084fc;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .pb-bed-time .saved { color: var(--green); }
+    .pb-close {
+      display: block;
+      margin: 12px auto 0;
+      font-family: 'Press Start 2P', cursive;
+      font-size: 9px;
+      color: var(--text-secondary);
+      background: transparent;
+      border: 2px solid rgba(124,58,237,0.3);
+      padding: 6px 16px;
+      cursor: pointer;
+    }
+    .pb-close:hover { border-color: #7c3aed; color: #c084fc; }
+
+    @media (max-width: 640px) {
+      .config-field { min-width: 100%; }
+      .config-field.small { flex: 1; min-width: 80px; }
+      .bed-selector { min-width: 100%; }
+      .donate-addr { font-size: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="config-bar"></div>
+    <div id="app">
+      <div class="loading-screen pixel-font">
+        <div class="loading-flower">🌻</div>
+        <div class="loading-text">Loading farm data...</div>
+      </div>
+    </div>
+    <div id="donate-section"></div>
+  </div>
+
+  <script>
+    // ═══════════════════════════════════════
+    //  CONFIGURATION (from URL params)
+    // ═══════════════════════════════════════
+
+    const DEFAULTS = {
+      farm: "",
+      key: "",
+      limit: "5",
+      beds: "4",
+      sunpetal: "24",
+    };
+    const MAX_BEDS = 8;
+    const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
+    const IMG_BASE = "https://sfl.world/img/flowers/";
+
+    function getParams() {
+      const p = new URLSearchParams(window.location.search);
+      return {
+        farm: p.get("farm") || DEFAULTS.farm,
+        key: p.get("key") || DEFAULTS.key,
+        limit: parseInt(p.get("limit") || DEFAULTS.limit, 10) || 5,
+        beds: parseInt(p.get("beds") || DEFAULTS.beds, 10) || 4,
+        sunpetal: parseInt(p.get("sunpetal") || DEFAULTS.sunpetal, 10) || 24,
+      };
+    }
+
+    function updateURL(farm, key, limit, beds, sunpetal) {
+      const p = new URLSearchParams();
+      if (farm) p.set("farm", farm);
+      if (key) p.set("key", key);
+      if (limit) p.set("limit", limit);
+      if (beds) p.set("beds", beds);
+      if (sunpetal) p.set("sunpetal", sunpetal);
+      const newURL = window.location.pathname + "?" + p.toString();
+      history.replaceState(null, "", newURL);
+    }
+
+    function renderConfigBar() {
+      const cfg = getParams();
+      let bedSlots = "";
+      for (let i = 1; i <= MAX_BEDS; i++) {
+        bedSlots += `<div class="bed-slot ${i <= cfg.beds ? "active" : ""}" data-bed="${i}" onclick="setBeds(${i})">🌱</div>`;
+      }
+      document.getElementById("config-bar").innerHTML = `
+        <div class="config-bar pixel-panel">
+          <div class="config-field">
+            <label class="pixel-font">FARM ID</label>
+            <input id="cfg-farm" type="text" value="${escHTML(cfg.farm)}" placeholder="e.g. 155498">
+          </div>
+          <div class="config-field">
+            <label class="pixel-font">API KEY</label>
+            <input id="cfg-key" type="password" value="${escHTML(cfg.key)}" placeholder="sfl.xxxxx.xxxxx">
+          </div>
+          <div class="config-field small">
+            <label class="pixel-font">LIMIT</label>
+            <input id="cfg-limit" type="number" min="1" max="99" value="${cfg.limit}">
+          </div>
+          <div class="config-field small">
+            <label class="pixel-font">SUNPETAL (h)</label>
+            <input id="cfg-sunpetal" type="number" min="1" max="24" value="${cfg.sunpetal}">
+          </div>
+          <div class="bed-selector pixel-font">
+            <label>FLOWER BEDS</label>
+            <div class="bed-row">
+              ${bedSlots}
+              <span class="bed-count" id="bed-count">${cfg.beds}</span>
+            </div>
+          </div>
+          <button class="config-go" onclick="applyConfig()">LOAD</button>
+        </div>`;
+
+      // Toggle API key visibility on focus
+      const keyInput = document.getElementById("cfg-key");
+      keyInput.addEventListener("focus", () => keyInput.type = "text");
+      keyInput.addEventListener("blur", () => keyInput.type = "password");
+    }
+
+    function setBeds(n) {
+      const slots = document.querySelectorAll(".bed-slot");
+      slots.forEach(s => {
+        s.classList.toggle("active", parseInt(s.dataset.bed) <= n);
+      });
+      document.getElementById("bed-count").textContent = n;
+    }
+
+    function getSelectedBeds() {
+      return document.querySelectorAll(".bed-slot.active").length || 4;
+    }
+
+    function applyConfig() {
+      const farm = document.getElementById("cfg-farm").value.trim();
+      const key = document.getElementById("cfg-key").value.trim();
+      const limit = document.getElementById("cfg-limit").value.trim();
+      const beds = getSelectedBeds();
+      const sunpetal = document.getElementById("cfg-sunpetal").value.trim();
+      if (!farm || !key) return;
+      updateURL(farm, key, limit, beds, sunpetal);
+      main();
+    }
+
+    function renderDonate() {
+      const ethURI = `ethereum:${DONATE_ADDR}`;
+      const qrURL = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(ethURI)}&bgcolor=ffffff&color=2c1810`;
+      document.getElementById("donate-section").innerHTML = `
+        <div class="donate-section pixel-panel pixel-font">
+          <h3>SUPPORT THE PROJECT</h3>
+          <p>If this tool helped you, consider sending<br>a flower or some ETH</p>
+          <div class="donate-qr">
+            <img src="${qrURL}" alt="Donate QR">
+          </div>
+          <br>
+          <div class="donate-addr-wrap">
+            <span class="donate-addr">${DONATE_ADDR}</span>
+            <button class="donate-copy" onclick="copyAddr()">COPY</button>
+          </div>
+          <div class="donate-chain-label">ETH / Polygon / Base / Arbitrum</div>
+          <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size:10px;color:var(--text-dim)">Created by 0xStableFarmer - #155498<br>Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a></div>
+        </div>`;
+    }
+
+    function copyAddr() {
+      navigator.clipboard.writeText(DONATE_ADDR).then(() => {
+        const btn = document.querySelector(".donate-copy");
+        btn.textContent = "COPIED!";
+        setTimeout(() => btn.textContent = "COPY", 2000);
+      });
+    }
+
+    // ═══════════════════════════════════════
+
+    let FARM_ID, API_KEY, LIMIT, FLOWER_BEDS;
+
+    // ═══════════════════════════════════════
+    //  SEED GROW TIMES (base hours + computed)
+    // ═══════════════════════════════════════
+
+    const SUNPETAL_BASE = 24; // default base hours for Sunpetal
+
+    const SEED_DATA = {
+      "Sunpetal Seed":   { base: 24,  color: "#FFD700", label: "Sunpetal", season: null },
+      "Bloom Seed":      { base: 48,  color: "#FF69B4", label: "Bloom", season: null },
+      "Edelweiss Seed":  { base: 72,  color: "#87CEEB", label: "Edelweiss", season: "Winter" },
+      "Gladiolus Seed":  { base: 72,  color: "#FF6347", label: "Gladiolus", season: "Summer" },
+      "Lavender Seed":   { base: 72,  color: "#C8A2C8", label: "Lavender", season: "Spring" },
+      "Clover Seed":     { base: 72,  color: "#2ECC71", label: "Clover", season: "Autumn" },
+      "Lily Seed":       { base: 120, color: "#B07CD8", label: "Lily", season: null },
+    };
+
+    // Recompute actual hours from user's Sunpetal speed
+    let SUNPETAL_HOURS; // set in main()
+    function recomputeSeedHours() {
+      const ratio = SUNPETAL_HOURS / SUNPETAL_BASE;
+      for (const sd of Object.values(SEED_DATA)) {
+        sd.hours = Math.round(sd.base * ratio);
+      }
+    }
+
+    const SEED_ORDER = [
+      "Sunpetal Seed", "Bloom Seed",
+      "Edelweiss Seed", "Gladiolus Seed", "Lavender Seed", "Clover Seed",
+      "Lily Seed",
+    ];
+
+    // ═══════════════════════════════════════
+    //  FLOWER RECIPES
+    // ═══════════════════════════════════════
+
+    const FLOWER_RECIPES = {
+      "Red Pansy":       { seed: "Sunpetal Seed", input: "Radish" },
+      "Yellow Pansy":    { seed: "Sunpetal Seed", input: "Sunflower" },
+      "Purple Cosmos":   { seed: "Sunpetal Seed", input: "Beetroot" },
+      "Blue Cosmos":     { seed: "Sunpetal Seed", input: "Cauliflower" },
+      "Blue Pansy":      { seed: "Sunpetal Seed", input: "Purple Cosmos" },
+      "Yellow Cosmos":   { seed: "Sunpetal Seed", input: "Yellow Pansy" },
+      "Purple Pansy":    { seed: "Sunpetal Seed", input: "Blue Pansy" },
+      "White Pansy":     { seed: "Sunpetal Seed", input: "Yellow Cosmos" },
+      "White Cosmos":    { seed: "Sunpetal Seed", input: "Prism Petal" },
+      "Prism Petal":     { seed: "Sunpetal Seed", input: "Blue Lotus" },
+      "Red Cosmos":      { seed: "Sunpetal Seed", input: "Yellow Daffodil" },
+
+      "Red Balloon Flower":   { seed: "Bloom Seed", input: "Sunflower" },
+      "Blue Balloon Flower":  { seed: "Bloom Seed", input: "Cauliflower" },
+      "Purple Daffodil":      { seed: "Bloom Seed", input: "Radish" },
+      "Red Daffodil":         { seed: "Bloom Seed", input: "Yellow Pansy" },
+      "White Daffodil":       { seed: "Bloom Seed", input: "Yellow Cosmos" },
+      "Celestial Frostbloom": { seed: "Bloom Seed", input: "White Pansy" },
+      "White Balloon Flower": { seed: "Bloom Seed", input: "White Cosmos" },
+      "Yellow Daffodil":      { seed: "Bloom Seed", input: "Red Cosmos" },
+      "Blue Daffodil":        { seed: "Bloom Seed", input: "Purple Balloon Flower" },
+      "Yellow Balloon Flower":{ seed: "Bloom Seed", input: "Yellow Lotus" },
+      "Purple Balloon Flower":{ seed: "Bloom Seed", input: "Blue Carnation" },
+
+      "Purple Carnation": { seed: "Lily Seed", input: "Eggplant" },
+      "Red Lotus":        { seed: "Lily Seed", input: "Beetroot" },
+      "White Lotus":      { seed: "Lily Seed", input: "Cauliflower" },
+      "Yellow Carnation": { seed: "Lily Seed", input: "Sunflower" },
+      "White Carnation":  { seed: "Lily Seed", input: "Yellow Pansy" },
+      "Yellow Lotus":     { seed: "Lily Seed", input: "Red Pansy" },
+      "Blue Lotus":       { seed: "Lily Seed", input: "Blue Pansy" },
+      "Blue Carnation":   { seed: "Lily Seed", input: "Purple Daffodil" },
+      "Red Carnation":    { seed: "Lily Seed", input: "Purple Pansy" },
+      "Purple Lotus":     { seed: "Lily Seed", input: "Blue Carnation" },
+      "Primula Enigma":   { seed: "Lily Seed", input: "Purple Balloon Flower" },
+
+      "Red Edelweiss":    { seed: "Edelweiss Seed", input: "Artichoke" },
+      "Yellow Edelweiss": { seed: "Edelweiss Seed", input: "Onion" },
+      "Purple Edelweiss": { seed: "Edelweiss Seed", input: "Rhubarb" },
+      "White Edelweiss":  { seed: "Edelweiss Seed", input: "Blue Edelweiss" },
+      "Blue Edelweiss":   { seed: "Edelweiss Seed", input: "Purple Edelweiss" },
+
+      "Red Gladiolus":    { seed: "Gladiolus Seed", input: "Yellow Edelweiss" },
+      "Yellow Gladiolus": { seed: "Gladiolus Seed", input: "Pepper" },
+      "Purple Gladiolus": { seed: "Gladiolus Seed", input: "Artichoke" },
+      "White Gladiolus":  { seed: "Gladiolus Seed", input: "White Edelweiss" },
+      "Blue Gladiolus":   { seed: "Gladiolus Seed", input: "Rhubarb" },
+
+      "Red Lavender":     { seed: "Lavender Seed", input: "Pepper" },
+      "Yellow Lavender":  { seed: "Lavender Seed", input: "Red Gladiolus" },
+      "Purple Lavender":  { seed: "Lavender Seed", input: "Blue Lavender" },
+      "White Lavender":   { seed: "Lavender Seed", input: "Rhubarb" },
+      "Blue Lavender":    { seed: "Lavender Seed", input: "White Edelweiss" },
+
+      "Red Clover":       { seed: "Clover Seed", input: "Red Edelweiss" },
+      "Yellow Clover":    { seed: "Clover Seed", input: "Pepper" },
+      "Purple Clover":    { seed: "Clover Seed", input: "Red Lavender" },
+      "White Clover":     { seed: "Clover Seed", input: "Blue Edelweiss" },
+      "Blue Clover":      { seed: "Clover Seed", input: "Rhubarb" },
+    };
+
+    const CROPS_AND_FRUITS = new Set([
+      "Sunflower","Potato","Pumpkin","Carrot","Cabbage","Soybean",
+      "Beetroot","Cauliflower","Parsnip","Eggplant","Corn","Radish",
+      "Wheat","Kale","Turnip","Onion","Pepper","Rhubarb","Artichoke",
+      "Barley","Zucchini","Yam","Broccoli",
+      "Tomato","Lemon","Blueberry","Orange","Apple","Banana",
+      "Grape","Rice","Olive",
+      "Celestine","Lunara","Duskberry",
+    ]);
+
+    // ═══════════════════════════════════════
+    //  DEPENDENCY COMPUTATION
+    // ═══════════════════════════════════════
+
+    function isFlowerInput(inputName) {
+      return FLOWER_RECIPES[inputName] !== undefined;
+    }
+
+    function buildDependencyGraph() {
+      // dependents[flower] = list of flowers that use it as primary input (only flower inputs)
+      const dependents = {};
+      for (const [name, recipe] of Object.entries(FLOWER_RECIPES)) {
+        if (isFlowerInput(recipe.input)) {
+          if (!dependents[recipe.input]) dependents[recipe.input] = [];
+          dependents[recipe.input].push(name);
+        }
+      }
+      return dependents;
+    }
+
+    function computeAllTotalNeeded(inventory, inProgress) {
+      const dependents = buildDependencyGraph();
+      const memo = {};
+      const visiting = new Set(); // cycle detection
+
+      // effectiveNeeded(X) = LIMIT + sum of remaining-needed-of-each-dependent
+      // remaining of dependent D = max(0, effectiveNeeded(D) - have(D) - inProgress(D))
+      // This way, if you already own enough of a dependent, it won't inflate the parent's need.
+      function compute(name) {
+        if (memo[name] !== undefined) return memo[name];
+        if (visiting.has(name)) return LIMIT; // cycle: break with base need only
+        visiting.add(name);
+        let total = LIMIT;
+        const deps = dependents[name] || [];
+        for (const dep of deps) {
+          const depNeeded = compute(dep);
+          const depHave = getCount(inventory, dep) + (inProgress[dep] || 0);
+          total += Math.max(0, depNeeded - depHave);
+        }
+        visiting.delete(name);
+        memo[name] = total;
+        return total;
+      }
+
+      const result = {};
+      for (const name of Object.keys(FLOWER_RECIPES)) {
+        result[name] = compute(name);
+      }
+      return { totalNeeded: result, dependents };
+    }
+
+    // ═══════════════════════════════════════
+    //  API FETCH
+    // ═══════════════════════════════════════
+
+    function extractInProgress(farm) {
+      const pending = {};
+      const add = (name, qty) => { pending[name] = (pending[name] || 0) + qty; };
+
+      const beds = farm.flowers?.flowerBeds || {};
+      for (const bed of Object.values(beds)) {
+        if (bed.flower?.name) {
+          const crits = bed.flower.criticalHit || {};
+          const bonus = Object.values(crits).reduce((s, c) => s + c, 0);
+          add(bed.flower.name, 1 + bonus);
+        }
+      }
+      return pending;
+    }
+
+    const PETAL_BLESSED_COOLDOWN = 96 * 60 * 60; // 96h in seconds
+
+    function extractPetalBlessed(farm) {
+      const powers = farm.bumpkin?.previousPowerUseAt;
+      if (!powers || powers["Petal Blessed"] === undefined) {
+        return { status: "unavailable" };
+      }
+      const hasLunas = farm.wardrobe?.["Luna's Crescent"] > 0;
+      const cooldownMs = PETAL_BLESSED_COOLDOWN * (hasLunas ? 0.5 : 1) * 1000;
+      const lastUsed = powers["Petal Blessed"];
+      const nextAt = lastUsed + cooldownMs;
+      if (Date.now() >= nextAt) {
+        return { status: "ready" };
+      }
+      return { status: "cooldown", nextAt };
+    }
+
+    async function fetchFarmData() {
+      const apiUrl = `https://api.sunflower-land.com/community/farms/${FARM_ID}`;
+
+      // Try direct first, then CORS proxy fallback
+      let data;
+      try {
+        const resp = await fetch(apiUrl, { headers: { "x-api-key": API_KEY } });
+        if (!resp.ok) throw new Error(`API ${resp.status}`);
+        data = await resp.json();
+      } catch (directErr) {
+        console.warn("Direct fetch failed, trying CORS proxy...", directErr);
+        const proxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(apiUrl)}`;
+        const resp = await fetch(proxyUrl, { headers: { "x-api-key": API_KEY } });
+        if (!resp.ok) throw new Error(`Proxy API ${resp.status}`);
+        data = await resp.json();
+      }
+
+      const farm = data.farm || {};
+      const inventory = farm.inventory || {};
+      const inProgress = extractInProgress(farm);
+      const petalBlessed = extractPetalBlessed(farm);
+      return { inventory, inProgress, petalBlessed };
+    }
+
+    // ═══════════════════════════════════════
+    //  HELPERS
+    // ═══════════════════════════════════════
+
+    function getCount(inv, name) {
+      const v = inv[name];
+      if (v === undefined || v === null) return 0;
+      return Math.floor(parseFloat(v));
+    }
+
+    function formatHours(h) {
+      if (h <= 0) return "Done";
+      const d = Math.floor(h / 24);
+      const hrs = Math.round(h % 24);
+      if (d > 0 && hrs > 0) return `${d}d ${hrs}h`;
+      if (d > 0) return `${d}d`;
+      return `${hrs}h`;
+    }
+
+    function flowerColorCSS(name) {
+      if (name.startsWith("Red")) return "#e74c3c";
+      if (name.startsWith("Yellow")) return "#f1c40f";
+      if (name.startsWith("Purple")) return "#9b59b6";
+      if (name.startsWith("Blue")) return "#3498db";
+      if (name.startsWith("White")) return "#ecf0f1";
+      if (name === "Prism Petal") return "linear-gradient(135deg,#e74c3c,#f1c40f,#3498db,#9b59b6)";
+      if (name === "Celestial Frostbloom") return "#a8d8ea";
+      if (name === "Primula Enigma") return "#d5a6e6";
+      return "#bdc3c7";
+    }
+
+    function barClass(pct) {
+      if (pct >= 100) return "bar-green";
+      if (pct >= 50) return "bar-yellow";
+      return "bar-red";
+    }
+
+    function escHTML(s) {
+      return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+
+    // ═══════════════════════════════════════
+    //  RENDERING
+    // ═══════════════════════════════════════
+
+    function render(inventory, inProgress, petalBlessed) {
+      const { totalNeeded, dependents } = computeAllTotalNeeded(inventory, inProgress);
+      const app = document.getElementById("app");
+
+      // Group flowers by seed
+      const groups = {};
+      for (const seed of SEED_ORDER) groups[seed] = [];
+      for (const [name, recipe] of Object.entries(FLOWER_RECIPES)) {
+        groups[recipe.seed].push(name);
+      }
+
+      // Compute per-flower data
+      const flowerData = {};
+      let totalComplete = 0;
+      let totalAll = 0;
+      let grandRemaining = 0;
+
+      for (const [name, needed] of Object.entries(totalNeeded)) {
+        const have = getCount(inventory, name);
+        const pend = inProgress[name] || 0;
+        const remaining = Math.max(0, needed - have - pend);
+        const isComplete = remaining === 0;
+        if (isComplete) totalComplete++;
+        totalAll++;
+        grandRemaining += remaining;
+
+        const recipe = FLOWER_RECIPES[name];
+        const inputIsFlower = isFlowerInput(recipe.input);
+        const consumedBy = dependents[name] || [];
+
+        flowerData[name] = {
+          name, needed, have, pend, remaining, isComplete,
+          seed: recipe.seed,
+          input: recipe.input,
+          inputIsFlower,
+          consumedBy,
+          ownNeed: LIMIT,
+          depNeed: needed - LIMIT,
+        };
+      }
+
+      // Seed group stats
+      const seedStats = {};
+      for (const seed of SEED_ORDER) {
+        const flowers = groups[seed];
+        let rem = 0;
+        let complete = 0;
+        for (const f of flowers) {
+          rem += flowerData[f].remaining;
+          if (flowerData[f].isComplete) complete++;
+        }
+        const batches = Math.ceil(rem / FLOWER_BEDS);
+        const hours = batches * SEED_DATA[seed].hours;
+        seedStats[seed] = { remaining: rem, complete, total: flowers.length, batches, hours };
+      }
+
+      const grandHours = Object.values(seedStats).reduce((s, x) => s + x.hours, 0);
+      const pctComplete = totalAll > 0 ? Math.round((totalComplete / totalAll) * 100) : 0;
+
+      // Build HTML
+      let html = "";
+
+      // Header
+      html += `<div class="header pixel-panel pixel-font">
+        <h1>FLOWER TRACKER</h1>
+        <div class="farm-id">Farm #${escHTML(FARM_ID)} | Target: ${LIMIT} of each</div>
+      </div>`;
+
+      // Summary
+      html += `<div class="summary-bar pixel-panel pixel-font">
+        <div class="summary-stat">
+          <div class="label">COMPLETE</div>
+          <div class="value complete">${totalComplete} / ${totalAll}</div>
+        </div>
+        <div class="summary-stat">
+          <div class="label">REMAINING</div>
+          <div class="value pending">${grandRemaining} grows</div>
+        </div>
+        <div class="summary-stat">
+          <div class="label">EST. TIME</div>
+          <div class="value time">${formatHours(grandHours)}</div>
+        </div>
+      </div>`;
+
+      // Progress bar
+      html += `<div class="progress-overview pixel-panel">
+        <div class="progress-label pixel-font">
+          <span>Progress</span>
+          <span>${pctComplete}%</span>
+        </div>
+        <div class="progress-bar-outer">
+          <div class="progress-bar-fill green" style="width:${pctComplete}%"></div>
+        </div>
+      </div>`;
+
+      // Petal Blessed button (only if power is known)
+      if (petalBlessed.status === "ready") {
+        html += `<button class="petal-blessed-btn" onclick="togglePetalBlessed()">
+          ✨ Petal Blessed READY — tap to plan! ✨
+        </button>`;
+      } else if (petalBlessed.status === "cooldown") {
+        html += `<div class="petal-blessed-btn pb-cooldown" style="cursor:default;opacity:0.7;background:linear-gradient(180deg,#3b1768,#2a1050,#1e0a3c)">
+          ⏳ Petal Blessed in <span id="pb-timer" data-next="${petalBlessed.nextAt}">--:--:--</span>
+        </div>`;
+      }
+      // status === "unavailable" → no button shown
+      html += `<div id="petal-blessed-container"></div>`;
+
+      // Seed sections
+      for (const seed of SEED_ORDER) {
+        const sd = SEED_DATA[seed];
+        const ss = seedStats[seed];
+        const flowers = groups[seed];
+        if (flowers.length === 0) continue;
+
+        html += `<div class="seed-section">`;
+        html += `<div class="seed-header pixel-font">
+          <img class="seed-icon"
+               src="${IMG_BASE}${encodeURIComponent(seed)}.webp"
+               onerror="this.style.display='none'"
+               alt="">
+          <h2 style="color:${sd.color}">${sd.label}</h2>
+          ${sd.season ? `<span class="seed-badge" style="border-color:${sd.color};color:${sd.color}">${sd.season}</span>` : ""}
+          <div class="seed-meta">
+            <span>${sd.hours}h / grow</span>
+            <span>${ss.complete}/${ss.total} done</span>
+            <span>${ss.remaining > 0 ? `~${ss.batches} batches = ${formatHours(ss.hours)}` : "All complete!"}</span>
+          </div>
+        </div>`;
+
+        html += `<div class="flower-grid">`;
+
+        // Sort: incomplete first (by remaining desc), then complete
+        const sorted = [...flowers].sort((a, b) => {
+          const fa = flowerData[a], fb = flowerData[b];
+          if (fa.isComplete !== fb.isComplete) return fa.isComplete ? 1 : -1;
+          return fb.remaining - fa.remaining;
+        });
+
+        for (const fname of sorted) {
+          const f = flowerData[fname];
+          const pct = f.needed > 0 ? Math.min(100, Math.round(((f.have + f.pend) / f.needed) * 100)) : 100;
+          const color = flowerColorCSS(fname);
+          const isGradient = color.includes("gradient");
+
+          // Chain info
+          let chainHTML = "";
+          if (f.inputIsFlower) {
+            const inputData = flowerData[f.input];
+            chainHTML += `<span class="input-flower">${escHTML(f.input)}</span>`;
+            if (inputData) {
+              const avail = inputData.have + inputData.pend;
+              chainHTML += ` (${avail} avail)`;
+            }
+          } else {
+            chainHTML += `Direct`;
+          }
+          if (f.consumedBy.length > 0) {
+            const tags = f.consumedBy.map(c => {
+              const cd = flowerData[c];
+              return `<span class="consumed-tag">${escHTML(c)} (×${cd ? cd.needed : "?"})</span>`;
+            }).join("");
+            chainHTML += ` <span class="consumed-by">used in</span>${tags}`;
+          }
+
+          html += `<div class="flower-row ${f.isComplete ? "complete" : ""}">
+            <div class="flower-img-wrap">
+              <img class="flower-img"
+                   src="${IMG_BASE}${encodeURIComponent(fname)}.png"
+                   onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+                   alt="">
+              <div class="flower-color-dot" style="display:none;${isGradient ? "background:" + color : "background-color:" + color}"></div>
+            </div>
+            <div class="flower-info">
+              <div class="flower-name">${escHTML(fname)}</div>
+              <div class="flower-chain">${chainHTML}</div>
+            </div>
+            <div class="flower-progress">
+              <div class="flower-bar-outer">
+                <div class="flower-bar-fill ${barClass(pct)}" style="width:${pct}%"></div>
+              </div>
+              <div class="flower-count">
+                <span class="have">${f.have}${f.pend > 0 ? `<span class="pending">+${f.pend}</span>` : ""} / ${f.needed}</span>
+                ${f.depNeed > 0 ? `<span style="color:#6d5a45;font-size:9px">(${f.ownNeed}+${f.depNeed})</span>` : ""}
+              </div>
+            </div>
+            <div class="flower-time">
+              ${f.isComplete
+                ? `<div class="done pixel-font">DONE</div>`
+                : `<div class="remaining-count pixel-font">-${f.remaining}</div>
+                   <div class="remaining-time">${formatHours(f.remaining * sd.hours)}</div>`
+              }
+            </div>
+          </div>`;
+        }
+
+        html += `</div></div>`;
+      }
+
+      // Footer
+      html += `<div class="footer">
+        <button class="refresh-btn" onclick="main()">REFRESH</button>
+        <div class="timestamp pixel-font">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
+      </div>`;
+
+      app.innerHTML = html;
+    }
+
+    // ═══════════════════════════════════════
+    //  MAIN
+    // ═══════════════════════════════════════
+
+    // ═══════════════════════════════════════
+    //  PETAL BLESSED (instant grow)
+    // ═══════════════════════════════════════
+
+    // Store last loaded data for Petal Blessed toggle
+    let lastInventory = null, lastInProgress = null;
+
+    function getPetalBlessedRecommendation(inventory, inProgress) {
+      const { totalNeeded, dependents } = computeAllTotalNeeded(inventory, inProgress);
+
+      // Build list of flowers still needed, with their seed hours
+      const candidates = [];
+      for (const [name, needed] of Object.entries(totalNeeded)) {
+        const have = getCount(inventory, name);
+        const pend = inProgress[name] || 0;
+        const remaining = Math.max(0, needed - have - pend);
+        if (remaining <= 0) continue;
+
+        const recipe = FLOWER_RECIPES[name];
+        const seedHours = SEED_DATA[recipe.seed].hours;
+        const inputIsFlower = isFlowerInput(recipe.input);
+
+        // Check if input is available (has stock or is a crop)
+        let inputReady = true;
+        if (inputIsFlower) {
+          const inputHave = getCount(inventory, recipe.input) + (inProgress[recipe.input] || 0);
+          if (inputHave <= 0) inputReady = false;
+        }
+
+        candidates.push({
+          name, remaining, seedHours, seed: recipe.seed,
+          input: recipe.input, inputIsFlower, inputReady,
+        });
+      }
+
+      // Sort: longest grow time first, then prefer those with input ready, then most remaining
+      candidates.sort((a, b) => {
+        if (b.seedHours !== a.seedHours) return b.seedHours - a.seedHours;
+        if (a.inputReady !== b.inputReady) return a.inputReady ? -1 : 1;
+        return b.remaining - a.remaining;
+      });
+
+      // Fill beds - same flower can repeat if remaining > 1
+      const picks = [];
+      const used = {}; // track how many times each flower is picked
+      for (const c of candidates) {
+        if (picks.length >= FLOWER_BEDS) break;
+        const canUse = Math.min(c.remaining - (used[c.name] || 0), FLOWER_BEDS - picks.length);
+        for (let i = 0; i < canUse; i++) {
+          picks.push(c);
+          used[c.name] = (used[c.name] || 0) + 1;
+        }
+      }
+      return picks;
+    }
+
+    function togglePetalBlessed() {
+      const container = document.getElementById("petal-blessed-container");
+      if (container.innerHTML) {
+        container.innerHTML = "";
+        return;
+      }
+      if (!lastInventory) return;
+
+      const picks = getPetalBlessedRecommendation(lastInventory, lastInProgress);
+      if (picks.length === 0) {
+        container.innerHTML = `<div class="petal-blessed-panel pixel-font">
+          <h3>✨ PETAL BLESSED ✨</h3>
+          <p class="pb-subtitle">All flowers are complete! Nothing to grow.</p>
+        </div>`;
+        return;
+      }
+
+      const totalSaved = picks.reduce((s, p) => s + p.seedHours, 0);
+
+      let bedsHTML = "";
+      picks.forEach((p, i) => {
+        const sd = SEED_DATA[p.seed];
+        const inputLabel = p.inputIsFlower
+          ? `${sd.label} Seed + <span style="color:var(--yellow)">${escHTML(p.input)}</span>${p.inputReady ? "" : " <span style='color:var(--red)'>(!)</span>"}`
+          : `${sd.label} Seed + ${escHTML(p.input)}`;
+
+        bedsHTML += `<div class="pb-bed">
+          <div class="pb-bed-num">${i + 1}</div>
+          <img class="pb-bed-img"
+               src="${IMG_BASE}${encodeURIComponent(p.name)}.png"
+               onerror="this.style.display='none'" alt="">
+          <div class="pb-bed-info">
+            <div class="pb-bed-name">${escHTML(p.name)}</div>
+            <div class="pb-bed-recipe">${inputLabel}</div>
+          </div>
+          <div class="pb-bed-time">
+            ${formatHours(p.seedHours)}
+            <div class="saved">saved</div>
+          </div>
+        </div>`;
+      });
+
+      container.innerHTML = `<div class="petal-blessed-panel pixel-font">
+        <h3>✨ PETAL BLESSED ✨</h3>
+        <div class="pb-subtitle">Plant these ${picks.length} flowers, then use instant grow — saves ${formatHours(totalSaved)}</div>
+        ${bedsHTML}
+        <button class="pb-close" onclick="togglePetalBlessed()">CLOSE</button>
+      </div>`;
+    }
+
+    // Live countdown for Petal Blessed cooldown
+    let pbTimerInterval = null;
+    function startPBTimer() {
+      if (pbTimerInterval) clearInterval(pbTimerInterval);
+      const el = document.getElementById("pb-timer");
+      if (!el) return;
+      const nextAt = parseInt(el.dataset.next, 10);
+
+      function tick() {
+        const el = document.getElementById("pb-timer");
+        if (!el) { clearInterval(pbTimerInterval); return; }
+        const diff = nextAt - Date.now();
+        if (diff <= 0) {
+          clearInterval(pbTimerInterval);
+          // Cooldown expired - reload to show ready state
+          main();
+          return;
+        }
+        const h = Math.floor(diff / 3600000);
+        const m = Math.floor((diff % 3600000) / 60000);
+        const s = Math.floor((diff % 60000) / 1000);
+        el.textContent = `${h}h ${String(m).padStart(2,"0")}m ${String(s).padStart(2,"0")}s`;
+      }
+
+      tick();
+      pbTimerInterval = setInterval(tick, 1000);
+    }
+
+    async function main() {
+      // Read config from URL
+      const cfg = getParams();
+      FARM_ID = cfg.farm;
+      API_KEY = cfg.key;
+      LIMIT = cfg.limit;
+      FLOWER_BEDS = cfg.beds;
+      SUNPETAL_HOURS = cfg.sunpetal;
+      recomputeSeedHours();
+
+      // Render persistent UI
+      renderConfigBar();
+      renderDonate();
+
+      const app = document.getElementById("app");
+      app.innerHTML = `<div class="loading-screen pixel-font">
+        <div class="loading-flower">🌻</div>
+        <div class="loading-text">Loading farm data...</div>
+      </div>`;
+
+      try {
+        const { inventory, inProgress, petalBlessed } = await fetchFarmData();
+        lastInventory = inventory;
+        lastInProgress = inProgress;
+        render(inventory, inProgress, petalBlessed);
+        startPBTimer();
+      } catch (err) {
+        console.error(err);
+        app.innerHTML = `<div class="error-screen pixel-panel pixel-font">
+          <div class="icon">⚠️</div>
+          <h2>Failed to load data</h2>
+          <p>${escHTML(err.message)}</p>
+          <p style="font-size:10px;color:#6d5a45">
+            This may be a CORS issue if opened locally.<br>
+            Try a local server: <code>npx serve .</code>
+          </p>
+          <button class="refresh-btn" onclick="main()">RETRY</button>
+        </div>`;
+      }
+    }
+
+    // Enter key in config inputs triggers load
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && e.target.closest(".config-bar")) applyConfig();
+    });
+
+    main();
+  </script>
+</body>
+</html>
