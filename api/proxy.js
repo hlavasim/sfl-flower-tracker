@@ -19,10 +19,8 @@ export default async function handler(req, res) {
   try {
     const resp = await fetch(url, { headers });
     const body = await resp.text();
-    return new Response(body, {
-      status: resp.status,
-      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-    });
+    res.setHeader("Content-Type", "application/json");
+    return res.status(resp.status).send(body);
   } catch (err) {
     return res.status(502).json({ error: err.message });
   }
