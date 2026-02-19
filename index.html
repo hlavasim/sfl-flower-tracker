@@ -832,7 +832,7 @@
             <button class="donate-copy" onclick="copyAddr()">COPY</button>
           </div>
           <div class="donate-chain-label">ETH / Polygon / Base / Arbitrum</div>
-          <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size:10px;color:var(--text-dim)">Created by 0xStableFarmer - #155498<br>Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br><span style="color:var(--text-dim);opacity:0.6">v1.0</span></div>
+          <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size:10px;color:var(--text-dim)">Created by 0xStableFarmer - #155498<br>Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br><span style="color:var(--text-dim);opacity:0.6">v1.1</span></div>
         </div>`;
     }
 
@@ -1042,41 +1042,34 @@
       return { status: "cooldown", nextAt };
     }
 
-    const CORS_PROXIES = [
-      (url) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
-      (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-    ];
-
     async function fetchFarmData() {
       if (!FARM_ID || !API_KEY) {
         throw new Error("Enter your Farm ID and API Key, then click LOAD");
       }
 
       const apiUrl = `https://api.sunflower-land.com/community/farms/${FARM_ID}`;
-      const opts = { headers: { "x-api-key": API_KEY } };
+      const proxyUrl = `/api/proxy?url=${encodeURIComponent(apiUrl)}&key=${encodeURIComponent(API_KEY)}`;
 
-      // Try direct first
       let data, lastErr;
-      try {
-        const resp = await fetch(apiUrl, opts);
-        if (!resp.ok) throw new Error(`API ${resp.status}`);
-        data = await resp.json();
-      } catch (directErr) {
-        lastErr = directErr;
-        console.warn("Direct fetch failed, trying CORS proxies...", directErr);
 
-        // Try each CORS proxy
-        for (const proxy of CORS_PROXIES) {
-          try {
-            const resp = await fetch(proxy(apiUrl), opts);
-            if (!resp.ok) throw new Error(`Proxy ${resp.status}`);
-            data = await resp.json();
-            lastErr = null;
-            break;
-          } catch (proxyErr) {
-            lastErr = proxyErr;
-            console.warn("Proxy failed:", proxyErr);
-          }
+      // Try our own serverless proxy first (same origin, no CORS)
+      try {
+        const resp = await fetch(proxyUrl);
+        if (!resp.ok) throw new Error(`Proxy ${resp.status}`);
+        data = await resp.json();
+      } catch (proxyErr) {
+        lastErr = proxyErr;
+        console.warn("Proxy fetch failed, trying direct...", proxyErr);
+
+        // Fallback: try direct API (works if no CORS restriction)
+        try {
+          const resp = await fetch(apiUrl, { headers: { "x-api-key": API_KEY } });
+          if (!resp.ok) throw new Error(`API ${resp.status}`);
+          data = await resp.json();
+          lastErr = null;
+        } catch (directErr) {
+          lastErr = directErr;
+          console.warn("Direct fetch also failed:", directErr);
         }
       }
 
