@@ -1042,22 +1042,45 @@
       return { status: "cooldown", nextAt };
     }
 
-    async function fetchFarmData() {
-      const apiUrl = `https://api.sunflower-land.com/community/farms/${FARM_ID}`;
+    const CORS_PROXIES = [
+      (url) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+      (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    ];
 
-      // Try direct first, then CORS proxy fallback
-      let data;
+    async function fetchFarmData() {
+      if (!FARM_ID || !API_KEY) {
+        throw new Error("Enter your Farm ID and API Key, then click LOAD");
+      }
+
+      const apiUrl = `https://api.sunflower-land.com/community/farms/${FARM_ID}`;
+      const opts = { headers: { "x-api-key": API_KEY } };
+
+      // Try direct first
+      let data, lastErr;
       try {
-        const resp = await fetch(apiUrl, { headers: { "x-api-key": API_KEY } });
+        const resp = await fetch(apiUrl, opts);
         if (!resp.ok) throw new Error(`API ${resp.status}`);
         data = await resp.json();
       } catch (directErr) {
-        console.warn("Direct fetch failed, trying CORS proxy...", directErr);
-        const proxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(apiUrl)}`;
-        const resp = await fetch(proxyUrl, { headers: { "x-api-key": API_KEY } });
-        if (!resp.ok) throw new Error(`Proxy API ${resp.status}`);
-        data = await resp.json();
+        lastErr = directErr;
+        console.warn("Direct fetch failed, trying CORS proxies...", directErr);
+
+        // Try each CORS proxy
+        for (const proxy of CORS_PROXIES) {
+          try {
+            const resp = await fetch(proxy(apiUrl), opts);
+            if (!resp.ok) throw new Error(`Proxy ${resp.status}`);
+            data = await resp.json();
+            lastErr = null;
+            break;
+          } catch (proxyErr) {
+            lastErr = proxyErr;
+            console.warn("Proxy failed:", proxyErr);
+          }
+        }
       }
+
+      if (!data) throw lastErr || new Error("All fetch attempts failed");
 
       const farm = data.farm || {};
       const inventory = farm.inventory || {};
@@ -1485,14 +1508,15 @@
         startPBTimer();
       } catch (err) {
         console.error(err);
+        const needsConfig = !FARM_ID || !API_KEY;
         app.innerHTML = `<div class="error-screen pixel-panel pixel-font">
-          <div class="icon">⚠️</div>
-          <h2>Failed to load data</h2>
+          <div class="icon">${needsConfig ? "👆" : "⚠️"}</div>
+          <h2>${needsConfig ? "Enter your Farm ID & API Key above" : "Failed to load data"}</h2>
           <p>${escHTML(err.message)}</p>
-          <p style="font-size:10px;color:#6d5a45">
-            This may be a CORS issue if opened locally.<br>
-            Try a local server: <code>npx serve .</code>
-          </p>
+          ${needsConfig ? `<p style="font-size:10px;color:#6d5a45">
+            Get your API key at <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal)">sfl.world</a><br>
+            Your settings will be saved in the URL for bookmarking.
+          </p>` : ""}
           <button class="refresh-btn" onclick="main()">RETRY</button>
         </div>`;
       }
