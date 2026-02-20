@@ -1675,6 +1675,11 @@
       return 1;
     }
 
+    function isWearableEquipped(farm, name) {
+      const equipped = farm.bumpkin?.equipped || {};
+      return Object.values(equipped).flat().includes(name);
+    }
+
     function detectCookingBoosts(farm) {
       const skills = farm.bumpkin?.skills || {};
       const xpBoosts = [];
@@ -1691,6 +1696,7 @@
       if (findCollectible(farm, "Observatory").length > 0) xpBoosts.push({ name: "Observatory", multiplier: 1.05 });
       if (findCollectible(farm, "Blossombeard").length > 0) xpBoosts.push({ name: "Blossombeard", multiplier: 1.1 });
       if (findCollectible(farm, "Grain Grinder").length > 0) xpBoosts.push({ name: "Grain Grinder", multiplier: 1.2, cakeOnly: true });
+      if (findCollectible(farm, "Lifetime Farmer Banner").length > 0) xpBoosts.push({ name: "Lifetime Farmer Banner", multiplier: 1.1 });
 
       // Time skills
       if (skills["Fast Feasts"]) timeBoosts.push({ name: "Fast Feasts", multiplier: 0.9, buildings: ["Fire Pit", "Kitchen"] });
@@ -1698,8 +1704,18 @@
 
       // Time collectibles
       if (findCollectible(farm, "Luna's Hat").length > 0) timeBoosts.push({ name: "Luna's Hat", multiplier: 0.5 });
+      if (findCollectible(farm, "Desert Gnome").length > 0) timeBoosts.push({ name: "Desert Gnome", multiplier: 0.9 });
+      if (findCollectible(farm, "Nightshade Medallion").length > 0) timeBoosts.push({ name: "Nightshade Medallion", multiplier: 0.75 });
+      if (findCollectible(farm, "Master Chefs Cleaver").length > 0) timeBoosts.push({ name: "Master Chefs Cleaver", multiplier: 0.85 });
 
-      return { xpBoosts, timeBoosts };
+      // Time wearables
+      if (isWearableEquipped(farm, "Desert Gnome")) timeBoosts.push({ name: "Desert Gnome", multiplier: 0.9 });
+      if (isWearableEquipped(farm, "Nightshade Medallion")) timeBoosts.push({ name: "Nightshade Medallion", multiplier: 0.75 });
+      if (isWearableEquipped(farm, "Master Chefs Cleaver")) timeBoosts.push({ name: "Master Chefs Cleaver", multiplier: 0.85 });
+
+      // Deduplicate (item might be found as both collectible and wearable)
+      const dedup = (arr) => { const s = new Set(); return arr.filter(b => { if (s.has(b.name)) return false; s.add(b.name); return true; }); };
+      return { xpBoosts: dedup(xpBoosts), timeBoosts: dedup(timeBoosts) };
     }
 
     function computeFoodXP(foodName, food, buildingName, boosts) {
@@ -1734,6 +1750,14 @@
       if (m > 0) return `${m}m`;
       return `${s}s`;
     }
+
+    const BUMPKIN_DEFAULT_RECIPES = {
+      "Fire Pit": "Pizza Margherita",
+      "Kitchen": "Spaghetti al Limone",
+      "Bakery": "Lemon Cheesecake",
+      "Deli": "Honey Cheddar",
+      "Smoothie Shack": "Sour Shake",
+    };
 
     function getSavedBumpkinRecipes() {
       try {
@@ -2858,8 +2882,8 @@
             })
             .sort((a, b) => b.xpPerHour - a.xpPerHour);
 
-          const selectedName = savedRecipes[buildingName] || (recipes.length > 0 ? recipes[0].name : "");
-          const selected = recipes.find(r => r.name === selectedName) || recipes[0];
+          const selectedName = savedRecipes[buildingName] !== undefined ? savedRecipes[buildingName] : (BUMPKIN_DEFAULT_RECIPES[buildingName] || "");
+          const selected = selectedName ? recipes.find(r => r.name === selectedName) : null;
 
           let xpPerDay = 0, cooksPerDay = 0, daysNeeded = Infinity;
 
@@ -2873,6 +2897,7 @@
           buildingStats.push({ buildingName, xpPerDay, count });
 
           const emoji = COOKING_BUILDING_EMOJI[buildingName] || "🏠";
+          const fmtXP = (v) => v % 1 === 0 ? v.toLocaleString() : v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
           html += `<div class="bumpkin-building-card pixel-panel">
             <div class="bumpkin-building-header pixel-font">
@@ -2881,15 +2906,16 @@
               ${count > 1 ? `<span class="bumpkin-building-count">×${count}</span>` : ""}
             </div>
             <select class="bumpkin-recipe-select" onchange="selectBumpkinRecipe('${escHTML(buildingName)}', this.value)">
+              <option value="" ${!selectedName ? "selected" : ""}>-- None --</option>
               ${recipes.map(r => `<option value="${escHTML(r.name)}" ${r.name === selectedName ? "selected" : ""}>${escHTML(r.name)} (${Math.round(r.xpPerHour).toLocaleString()} XP/h)</option>`).join("")}
             </select>
             ${selected ? `<div class="bumpkin-recipe-stats">
-              XP per cook: <span style="color:var(--green)">${Math.round(selected.xp).toLocaleString()}</span><br>
+              XP per cook: <span style="color:var(--green)">${fmtXP(selected.xp)}</span><br>
               Cook time: <span style="color:var(--blue)">${formatCookTime(selected.time)}</span><br>
-              XP/hour: <span style="color:var(--sunpetal)">${Math.round(selected.xpPerHour).toLocaleString()}</span><br>
-              XP/day${count > 1 ? " (×" + count + ")" : ""}: <span style="color:var(--green)">${Math.round(xpPerDay).toLocaleString()}</span><br>
+              XP/hour: <span style="color:var(--sunpetal)">${fmtXP(selected.xpPerHour)}</span><br>
+              XP/day${count > 1 ? " (×" + count + ")" : ""}: <span style="color:var(--green)">${fmtXP(xpPerDay)}</span><br>
               ${xpRemaining > 0 ? `Solo days to 200: <span style="color:var(--text-dim)">${daysNeeded.toLocaleString()}d</span>` : ""}
-            </div>` : `<div style="font-size:10px;color:var(--text-dim)">No recipes available</div>`}
+            </div>` : `<div style="font-size:10px;color:var(--text-dim)">${recipes.length > 0 ? "Not cooking" : "No recipes available"}</div>`}
           </div>`;
         }
 
