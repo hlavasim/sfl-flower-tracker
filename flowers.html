@@ -3281,9 +3281,20 @@
 
     const TREASURY_CAT_COLORS = {
       resources: "#2ECC71",
+      treasures: "#F1C40F",
       collectibles: "#E67E22",
       wearables: "#9B59B6",
       liquid: "#3498DB",
+    };
+
+    // Treasure sell prices in COINS (base, no boosts)
+    const TREASURE_SELL_PRICES = {
+      "Crab": 18, "Camel Bone": 12, "Sea Cucumber": 27, "Vase": 60,
+      "Starfish": 135, "Sand": 12, "Old Bottle": 27, "Seaweed": 90,
+      "Cockle Shell": 120, "Clam Shell": 450, "Iron Compass": 225,
+      "Pipi": 225, "Pearl": 4500, "Wooden Compass": 157.5,
+      "Hieroglyph": 300, "Coral": 1800, "Broken Pillar": 240,
+      "Coprolite": 240, "Pirate Bounty": 9000,
     };
 
     const SFL_ICON_URL = "https://sfl.world/img/source/SFL.png";
@@ -3333,13 +3344,17 @@
 
       const p2pPrices = priceData?.data?.p2p || {};
       const sflUsd = exchangeData?.sfl?.usd || 0;
-      const coinsPerSFL = parseFloat(Object.keys(exchangeData?.coins || {})[0]) || 160;
       const btcUsd = btcData?.bitcoin?.usd || 0;
 
-      // Gems: use the base tier (no discount) to get SFL-per-gem rate
+      // Coins: use the best-value tier (highest coins/SFL — last/largest package)
+      const coinTiers = Object.values(exchangeData?.coins || {});
+      const bestCoinTier = coinTiers.reduce((best, t) => (!best || (t.coin / t.sfl) > (best.coin / best.sfl)) ? t : best, null);
+      const coinsPerSFL = bestCoinTier ? (bestCoinTier.coin / bestCoinTier.sfl) : 160;
+
+      // Gems: use the best-value tier (highest gems/SFL — last/largest package)
       const gemTiers = Object.values(exchangeData?.gems || {});
-      const baseTier = gemTiers.find(t => t.discount === 0) || gemTiers[0];
-      const gemsPerSFL = baseTier ? (baseTier.gem / baseTier.sfl) : 0;
+      const bestGemTier = gemTiers.reduce((best, t) => (!best || (t.gem / t.sfl) > (best.gem / best.sfl)) ? t : best, null);
+      const gemsPerSFL = bestGemTier ? (bestGemTier.gem / bestGemTier.sfl) : 0;
 
       return { nftCollectibles, nftWearables, p2pPrices, sflUsd, coinsPerSFL, gemsPerSFL, btcUsd };
     }
@@ -3349,6 +3364,10 @@
       const inventory = farm.inventory || {};
       const wardrobe = farm.wardrobe || {};
       const MIN_VALUE = 0.01;
+
+      // Debug: log farm keys to help find gems path
+      console.log("[Treasury] farm keys:", Object.keys(farm));
+      console.log("[Treasury] farm.gems:", farm.gems, "| farm.bank:", farm.bank, "| inventory Gem:", inventory["Gem"]);
 
       // --- Resources: inventory items with P2P prices ---
       const resources = [];
@@ -3361,6 +3380,25 @@
       }
       resources.sort((a, b) => b.total - a.total);
 
+      // --- Treasures: inventory items with coin sell prices ---
+      const treasures = [];
+      // Detect treasure sell boosts
+      let treasureBoost = 1;
+      if (findCollectible(farm, "Treasure Map").length > 0) treasureBoost += 0.2;
+      // Camel: check inventory (might not be placed)
+      if (getCount(inventory, "Camel") > 0 || findCollectible(farm, "Camel").length > 0) treasureBoost += 0.3;
+
+      for (const [name, baseCoins] of Object.entries(TREASURE_SELL_PRICES)) {
+        const qty = getCount(inventory, name);
+        if (qty <= 0) continue;
+        const boostedCoins = baseCoins * treasureBoost;
+        const sflValue = coinsPerSFL > 0 ? boostedCoins / coinsPerSFL : 0;
+        const total = qty * sflValue;
+        if (total < MIN_VALUE) continue;
+        treasures.push({ name, qty, unitPrice: sflValue, unitCoins: boostedCoins, total });
+      }
+      treasures.sort((a, b) => b.total - a.total);
+
       // --- Collectibles: inventory NFT collectibles (inventory includes placed) ---
       const collectibles = [];
       const countedCollectibles = new Set();
@@ -3370,7 +3408,6 @@
         const floor = parseFloat(nft.floor) || 0;
         if (floor <= 0) continue;
 
-        // inventory already includes placed items — don't double-count
         const qty = getCount(inventory, name);
         if (qty <= 0) continue;
         const total = qty * floor;
@@ -3397,21 +3434,25 @@
       // --- Liquid: SFL balance + coins + gems ---
       const sflBalance = parseFloat(farm.balance) || 0;
       const coinBalance = parseFloat(farm.coins) || 0;
-      const gemBalance = parseFloat(farm.gems) || 0;
+      // Try multiple paths for gems
+      const gemBalance = parseFloat(farm.gems) || parseFloat(farm.bank?.gems) || getCount(inventory, "Gem") || 0;
       const coinsAsSFL = coinsPerSFL > 0 ? coinBalance / coinsPerSFL : 0;
       const gemsAsSFL = gemsPerSFL > 0 ? gemBalance / gemsPerSFL : 0;
       const liquidTotal = sflBalance + coinsAsSFL + gemsAsSFL;
 
       const resourcesTotal = resources.reduce((s, r) => s + r.total, 0);
+      const treasuresTotal = treasures.reduce((s, t) => s + t.total, 0);
       const collectiblesTotal = collectibles.reduce((s, c) => s + c.total, 0);
       const wearablesTotal = wearables.reduce((s, w) => s + w.total, 0);
-      const grandTotal = resourcesTotal + collectiblesTotal + wearablesTotal + liquidTotal;
+      const grandTotal = resourcesTotal + treasuresTotal + collectiblesTotal + wearablesTotal + liquidTotal;
 
       return {
-        resources, collectibles, wearables,
+        resources, treasures, collectibles, wearables,
         liquid: { sflBalance, coinBalance, gemBalance, coinsAsSFL, gemsAsSFL, total: liquidTotal },
+        treasureBoost,
         totals: {
           resources: resourcesTotal,
+          treasures: treasuresTotal,
           collectibles: collectiblesTotal,
           wearables: wearablesTotal,
           liquid: liquidTotal,
@@ -3434,6 +3475,7 @@
     function renderPieChart(totals) {
       const cats = [
         { key: "resources", label: "Resources", color: TREASURY_CAT_COLORS.resources },
+        { key: "treasures", label: "Treasures", color: TREASURY_CAT_COLORS.treasures },
         { key: "collectibles", label: "Collectibles", color: TREASURY_CAT_COLORS.collectibles },
         { key: "wearables", label: "Wearables", color: TREASURY_CAT_COLORS.wearables },
         { key: "liquid", label: "Liquid", color: TREASURY_CAT_COLORS.liquid },
@@ -3518,7 +3560,7 @@
       try {
         const td = await fetchTreasuryData();
         const val = computeFarmValue(farm, td);
-        const { totals, rates, resources, collectibles, wearables, liquid } = val;
+        const { totals, rates, resources, treasures, collectibles, wearables, liquid, treasureBoost } = val;
 
         const usdTotal = totals.grand * rates.sflUsd;
         const btcTotal = rates.btcUsd > 0 ? usdTotal / rates.btcUsd : 0;
@@ -3532,7 +3574,7 @@
             ${formatSFL(totals.grand)} SFL
           </div>
           <div class="treasury-secondary">${formatUSD(usdTotal)} &nbsp;|&nbsp; ${formatBTC(btcTotal)}</div>
-          <div class="treasury-rates">1 SFL = ${rates.sflUsd.toFixed(4)} USD &nbsp;|&nbsp; 1 BTC = ${formatUSD(rates.btcUsd)}</div>
+          <div class="treasury-rates">1 SFL = ${rates.sflUsd.toFixed(4)} USD &nbsp;|&nbsp; 1 SFL = ${rates.coinsPerSFL} coins &nbsp;|&nbsp; 1 BTC = ${formatUSD(rates.btcUsd)}</div>
         </div>`;
 
         // Pie chart
@@ -3541,6 +3583,7 @@
         // Category cards
         html += '<div class="treasury-categories">';
         html += renderCategoryCard("resources", "⛏️", "RESOURCES", totals.resources, totals.grand, resources);
+        html += renderCategoryCard("treasures", "🏴‍☠️", "TREASURES", totals.treasures, totals.grand, treasures);
         html += renderCategoryCard("collectibles", "🏆", "COLLECTIBLES", totals.collectibles, totals.grand, collectibles);
         html += renderCategoryCard("wearables", "👕", "WEARABLES", totals.wearables, totals.grand, wearables);
 
@@ -3563,8 +3606,10 @@
         html += '</div>';
 
         // Detail sections (collapsible)
+        const boostLabel = treasureBoost > 1 ? ` (×${treasureBoost.toFixed(1)} boost)` : "";
         const sections = [
           { key: "resources", icon: "⛏️", label: "Resources", items: resources },
+          { key: "treasures", icon: "🏴‍☠️", label: `Treasures${boostLabel}`, items: treasures },
           { key: "collectibles", icon: "🏆", label: "Collectibles", items: collectibles },
           { key: "wearables", icon: "👕", label: "Wearables", items: wearables },
         ];
