@@ -2117,10 +2117,14 @@
           let chainHTML = "";
           if (f.inputIsFlower) {
             const inputData = flowerData[f.input];
-            chainHTML += `<span class="input-flower">${escHTML(f.input)}</span>`;
-            if (inputData) chainHTML += ` (${inputData.have + inputData.pend} avail)`;
+            const avail = inputData ? inputData.have + inputData.pend : 0;
+            const inputOk = avail > 0;
+            chainHTML += `<span style="color:${inputOk ? 'var(--green)' : 'var(--red)'}">${escHTML(f.input)}</span>`;
+            chainHTML += ` (${avail} avail)`;
           } else {
-            chainHTML += `Direct`;
+            const cropHave = getCount(inventory, f.input);
+            const cropOk = cropHave > 0;
+            chainHTML += `<span style="color:${cropOk ? 'var(--green)' : 'var(--red)'}">${escHTML(f.input)}</span> (${cropHave} avail)`;
           }
           if (f.consumedBy.length > 0) {
             const tags = f.consumedBy.map(c => {
