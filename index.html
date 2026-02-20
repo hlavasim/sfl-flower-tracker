@@ -1744,6 +1744,8 @@
       if (hasItem("Blossombeard")) xpBoosts.push({ name: "Blossombeard", multiplier: 1.1 });
       if (hasItem("Grain Grinder")) xpBoosts.push({ name: "Grain Grinder", multiplier: 1.2, buildings: ["Bakery"] });
       if (hasItem("Lifetime Farmer Banner")) xpBoosts.push({ name: "Lifetime Farmer Banner", multiplier: 1.1 });
+      // Manual toggle
+      if (localStorage.getItem("sfl_pet_streak") === "1") xpBoosts.push({ name: "Pet's Streak", multiplier: 1.5, manual: true });
 
       // === TIME BOOSTS ===
       // Skills
@@ -1813,6 +1815,19 @@
       saved[building] = recipe;
       localStorage.setItem("sfl_bumpkin_recipes", JSON.stringify(saved));
       if (cachedFarmData) renderBumpkin(cachedFarmData);
+    }
+
+    function togglePetStreak() {
+      const on = localStorage.getItem("sfl_pet_streak") === "1";
+      localStorage.setItem("sfl_pet_streak", on ? "0" : "1");
+      if (cachedFarmData) renderBumpkin(cachedFarmData);
+    }
+
+    function toggleFoodInventory() {
+      const el = document.getElementById("food-inv-list");
+      if (el) el.style.display = el.style.display === "none" ? "block" : "none";
+      const arrow = document.getElementById("food-inv-arrow");
+      if (arrow) arrow.textContent = el.style.display === "none" ? "▶" : "▼";
     }
 
     // ═══════════════════════════════════════
@@ -2912,9 +2927,13 @@
       if (bankedXP > 0) {
         const fmtXP = (v) => v % 1 === 0 ? v.toLocaleString() : v.toLocaleString(undefined, { maximumFractionDigits: 0 });
         html += `<div class="bumpkin-boosts pixel-panel pixel-font" style="display:block">
-          <h4 style="color:var(--sunpetal);margin-bottom:6px;padding-bottom:4px;border-bottom:2px solid rgba(92,58,30,0.4);font-size:10px">FOOD IN INVENTORY — ${fmtXP(bankedXP)} XP</h4>
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:2px 16px">
-            ${foodInInventory.map(f => `<div class="boost-row"><span>${f.qty}× ${escHTML(f.name)}</span><span class="boost-val" style="color:var(--green)">${fmtXP(f.totalFoodXP)} XP</span></div>`).join("")}
+          <h4 style="color:var(--sunpetal);margin-bottom:6px;padding-bottom:4px;border-bottom:2px solid rgba(92,58,30,0.4);font-size:10px;cursor:pointer" onclick="toggleFoodInventory()">
+            <span id="food-inv-arrow">▶</span> FOOD IN INVENTORY — ${fmtXP(bankedXP)} XP (${foodInInventory.length} items)
+          </h4>
+          <div id="food-inv-list" style="display:none">
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:2px 16px">
+              ${foodInInventory.map(f => `<div class="boost-row"><span>${f.qty}× ${escHTML(f.name)}</span><span class="boost-val" style="color:var(--green)">${fmtXP(f.totalFoodXP)} XP</span></div>`).join("")}
+            </div>
           </div>
           ${xpAfterFood > 0 ? `<div style="margin-top:6px;padding-top:4px;border-top:2px solid rgba(92,58,30,0.4);color:var(--text-secondary)">After eating: <span style="color:var(--yellow)">${fmtXP(xpAfterFood)}</span> XP still needed</div>` : `<div style="margin-top:6px;padding-top:4px;border-top:2px solid rgba(92,58,30,0.4);color:var(--green)">Eating all food would reach level 200!</div>`}
         </div>`;
@@ -2922,6 +2941,7 @@
 
       // Boosts section — always show both columns
       {
+        const petStreakOn = localStorage.getItem("sfl_pet_streak") === "1";
         const xpLabel = (b) => {
           let tag = "";
           if (b.buildings) tag = ` (${b.buildings.join(", ")})`;
@@ -2931,7 +2951,14 @@
         html += `<div class="bumpkin-boosts pixel-panel pixel-font">
           <div class="bumpkin-boosts-col">
             <h4 style="color:var(--green)">XP BOOSTS</h4>
-            ${boosts.xpBoosts.length > 0 ? boosts.xpBoosts.map(b => `<div class="boost-row"><span>${escHTML(b.name)}${xpLabel(b)}</span><span class="boost-val">×${b.multiplier}</span></div>`).join("") : '<div style="color:var(--text-dim)">None detected</div>'}
+            ${boosts.xpBoosts.filter(b => !b.manual).map(b => `<div class="boost-row"><span>${escHTML(b.name)}${xpLabel(b)}</span><span class="boost-val">×${b.multiplier}</span></div>`).join("") || '<div style="color:var(--text-dim)">None detected</div>'}
+            <div class="boost-row" style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(92,58,30,0.3)">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:${petStreakOn ? "var(--green)" : "var(--text-dim)"}">
+                <input type="checkbox" ${petStreakOn ? "checked" : ""} onchange="togglePetStreak()" style="cursor:pointer;accent-color:var(--green)">
+                Pet's Streak +50% XP
+              </label>
+              <span class="boost-val" style="color:${petStreakOn ? "var(--green)" : "var(--text-dim)"}">×1.5</span>
+            </div>
           </div>
           <div class="bumpkin-boosts-col">
             <h4 style="color:var(--blue)">TIME BOOSTS</h4>
