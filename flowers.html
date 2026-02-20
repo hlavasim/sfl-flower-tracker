@@ -1690,9 +1690,23 @@
       return 1;
     }
 
+    function getAllEquippedWearables(farm) {
+      // Main bumpkin + all farm hands (additional bumpkins)
+      const all = [];
+      if (farm.bumpkin?.equipped) all.push(farm.bumpkin.equipped);
+      // Farm hands — try common API field names
+      const hands = farm.farmHands?.bumpkins || farm.farmHands || {};
+      for (const hand of Object.values(hands)) {
+        if (hand?.equipped) all.push(hand.equipped);
+      }
+      return all;
+    }
+
     function isWearableEquipped(farm, name) {
-      const equipped = farm.bumpkin?.equipped || {};
-      return Object.values(equipped).flat().includes(name);
+      for (const equipped of getAllEquippedWearables(farm)) {
+        if (Object.values(equipped).flat().includes(name)) return true;
+      }
+      return false;
     }
 
     function detectCookingBoosts(farm) {
@@ -1712,7 +1726,10 @@
       // Debug: log all available items so user can spot missing boosts
       console.log("[Cooking Boosts] Collectibles:", Object.keys(farm.collectibles || {}));
       console.log("[Cooking Boosts] Home collectibles:", Object.keys(farm.home?.collectibles || {}));
-      console.log("[Cooking Boosts] Equipped wearables:", farm.bumpkin?.equipped);
+      const allEquipped = getAllEquippedWearables(farm);
+      console.log("[Cooking Boosts] Main bumpkin equipped:", allEquipped[0]);
+      console.log("[Cooking Boosts] Farm hands equipped:", allEquipped.slice(1));
+      console.log("[Cooking Boosts] farmHands raw:", farm.farmHands);
       console.log("[Cooking Boosts] Skills:", Object.keys(skills));
 
       // === XP BOOSTS ===
