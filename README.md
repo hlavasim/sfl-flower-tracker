@@ -2,7 +2,7 @@
 
 A pixel-art collection tracker for [Sunflower Land](https://sunflower-land.com/) — track your flowers, dolls, and crustaceans progress.
 
-**Live:** [sajmonium.quest](https://www.sajmonium.quest)
+**Live:** [sunflower.sajmonium.quest](https://sunflower.sajmonium.quest)
 
 ## Features
 
@@ -35,7 +35,7 @@ A pixel-art collection tracker for [Sunflower Land](https://sunflower-land.com/)
 
 1. Get your **API Key** from the game: `Settings > General > API Key`
 2. Get your **Farm ID** from the game: `Settings > Farm ID`
-3. Visit [sajmonium.quest](https://www.sajmonium.quest), enter your details, click LOAD
+3. Visit [sunflower.sajmonium.quest](https://sunflower.sajmonium.quest), enter your details, click LOAD
 4. Bookmark the page — Farm ID and settings are saved in the URL, API key in your browser's localStorage
 
 ## Architecture
@@ -77,7 +77,7 @@ git add -A && git commit -m "description" && git push
 
 ## Deployment
 
-Hosted on [Vercel](https://vercel.com/) with custom domain `sajmonium.quest`.
+Hosted on [Vercel](https://vercel.com/) with custom domain `sunflower.sajmonium.quest`.
 
 The Vercel project expects:
 - `index.html` at root (the app)
