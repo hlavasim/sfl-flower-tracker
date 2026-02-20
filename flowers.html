@@ -2959,10 +2959,8 @@
           <input type="range" min="${currentLevel + 1}" max="200" value="${targetLevel}" oninput="document.getElementById('target-val').textContent=this.value" onchange="setBumpkinTargetLevel(this.value)" style="flex:1;accent-color:var(--sunpetal);cursor:pointer">
           <span id="target-val" style="font-size:11px;color:var(--sunpetal);min-width:24px;text-align:right">${targetLevel}</span>
         </div>
-        <div style="font-size:9px;color:var(--text-dim);margin-bottom:2px">→ Level ${targetLevel}: ${xpPctTarget.toFixed(1)}%</div>
         <div class="progress-bar-outer"><div class="progress-bar-fill green" style="width:${xpPctTarget.toFixed(2)}%"></div></div>
-        <div style="font-size:9px;color:var(--text-dim);margin:4px 0 2px">→ Level 200: ${xpPctTotal.toFixed(1)}%</div>
-        <div class="progress-bar-outer"><div class="progress-bar-fill" style="width:${xpPctTotal.toFixed(2)}%;background:var(--text-dim)"></div></div>
+        <div style="font-size:9px;color:var(--text-dim);margin-top:2px">${xpPctTarget.toFixed(1)}% to level ${targetLevel}</div>
         ${currentLevel < 200 ? `<div style="margin-top:6px;font-size:9px;color:var(--text-dim)">Level ${currentLevel} → ${currentLevel + 1}: ${levelProgress}%</div>` : ""}
       </div>`;
 
