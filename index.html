@@ -2092,7 +2092,7 @@
         html += `<div class="seed-header pixel-font">
           <img class="seed-icon" src="${IMG_BASE}${encodeURIComponent(seed)}.webp" onerror="this.style.display='none'" alt="">
           <h2 style="color:${sd.color}">${sd.label}</h2>
-          ${sd.season ? `<span class="seed-badge" style="border-color:${sd.season.toLowerCase() === (season || "").toLowerCase() ? 'var(--green)' : 'var(--red)'};color:${sd.season.toLowerCase() === (season || "").toLowerCase() ? 'var(--green)' : 'var(--red)'}">${sd.season} ${sd.season.toLowerCase() === (season || "").toLowerCase() ? '(IN SEASON)' : '(OFF SEASON)'}</span>` : ""}
+          ${sd.season ? (() => { const inSeason = sd.season.toLowerCase() === (season || "").toLowerCase(); return `<span class="seed-badge" style="border-color:${inSeason ? 'var(--green)' : 'var(--text-dim)'};color:${inSeason ? 'var(--green)' : 'var(--text-dim)'};${inSeason ? '' : 'opacity:0.5;text-decoration:line-through'}">${sd.season}</span>`; })() : ""}
           <div class="seed-meta">
             <span>${formatHours(sd.hours)} / grow</span>
             <span>${ss.complete}/${ss.total} done</span>
