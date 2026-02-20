@@ -1748,21 +1748,27 @@
       // === PET STREAK (auto-detect from faction) ===
       const faction = farm.faction || {};
       const factionHistory = faction.history || {};
-      const currentWeekKey = Object.keys(factionHistory).sort().pop() || "";
+      const sortedWeeks = Object.keys(factionHistory).sort();
+      const currentWeekKey = sortedWeeks[sortedWeeks.length - 1] || "";
+      const prevWeekKey = sortedWeeks[sortedWeeks.length - 2] || "";
       const currentWeekData = factionHistory[currentWeekKey] || {};
+      const prevWeekData = factionHistory[prevWeekKey] || {};
       const petStreak = currentWeekData.collectivePet?.streak || 0;
-      const qualifiesForBoost = faction.pet?.qualifiesForBoost === true;
       const streakMultiplier = petStreak >= 8 ? 1.5 : petStreak >= 6 ? 1.3 : petStreak >= 4 ? 1.2 : petStreak >= 2 ? 1.1 : 1.0;
       const weeksToMax = petStreak >= 8 ? 0 : 8 - petStreak;
+      // This week: boost active if player fed pet LAST week (petXP > 0)
+      const thisWeekActive = (prevWeekData.petXP || 0) > 0 && streakMultiplier > 1;
+      // Next week: qualifiesForBoost = player fed pet THIS week
+      const nextWeekQualified = faction.pet?.qualifiesForBoost === true;
       const manualPetStreak = localStorage.getItem("sfl_pet_streak") === "1";
 
-      if (qualifiesForBoost && streakMultiplier > 1) {
+      if (thisWeekActive) {
         xpBoosts.push({ name: "Pet's Streak", multiplier: streakMultiplier, petStreak: true });
       } else if (manualPetStreak) {
-        xpBoosts.push({ name: "Pet's Streak (override)", multiplier: 1.5, petStreak: true, manual: true });
+        xpBoosts.push({ name: "Pet's Streak (simulate)", multiplier: 1.5, petStreak: true, manual: true });
       }
 
-      const petStreakInfo = { streak: petStreak, multiplier: streakMultiplier, qualifies: qualifiesForBoost, weeksToMax, currentWeekKey, manualOverride: manualPetStreak };
+      const petStreakInfo = { streak: petStreak, multiplier: streakMultiplier, thisWeekActive, nextWeekQualified, weeksToMax, manualOverride: manualPetStreak };
 
       // === TIME BOOSTS ===
       // Skills
@@ -2968,10 +2974,17 @@
         };
         // Pet streak section
         let petStreakHTML = `<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(92,58,30,0.3)">`;
-        if (ps.qualifies && ps.multiplier > 1) {
+        // This week status
+        if (ps.thisWeekActive) {
           petStreakHTML += `<div class="boost-row"><span>Pet's Streak (${ps.streak}w)</span><span class="boost-val" style="color:var(--green)">×${ps.multiplier}</span></div>`;
         } else {
-          petStreakHTML += `<div class="boost-row" style="color:var(--text-dim)"><span>Pet's Streak (${ps.streak}w) — not qualified</span><span class="boost-val">×${ps.multiplier}</span></div>`;
+          petStreakHTML += `<div class="boost-row" style="color:var(--text-dim)"><span>Pet's Streak (${ps.streak}w) — inactive</span><span class="boost-val">×${ps.multiplier}</span></div>`;
+        }
+        // Next week status
+        if (!ps.nextWeekQualified) {
+          petStreakHTML += `<div style="font-size:9px;color:#c0392b;margin:2px 0">Feed pet to qualify for next week!</div>`;
+        } else {
+          petStreakHTML += `<div style="font-size:9px;color:var(--green);margin:2px 0">Qualified for next week</div>`;
         }
         if (ps.weeksToMax > 0) {
           petStreakHTML += `<div style="font-size:9px;color:var(--text-dim)">${ps.weeksToMax}w to max ×1.5</div>`;
