@@ -2967,31 +2967,19 @@
           return tag;
         };
         // Pet streak section
-        const streakTiers = [
-          { min: 2, mult: 1.1 }, { min: 4, mult: 1.2 },
-          { min: 6, mult: 1.3 }, { min: 8, mult: 1.5 },
-        ];
-        const activeMultiplier = ps.qualifies ? ps.multiplier : (ps.manualOverride ? 1.5 : 1.0);
-        const isActive = ps.qualifies || ps.manualOverride;
-        let petStreakHTML = `<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(92,58,30,0.3)">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-            <span style="color:var(--sunpetal);font-size:10px">PET STREAK: ${ps.streak}</span>
-            <span style="font-size:9px;color:var(--text-dim)">${streakTiers.map(t => `<span style="color:${ps.streak >= t.min ? "var(--green)" : "var(--text-dim)"}">${t.min}w=×${t.mult}</span>`).join(" · ")}</span>
-          </div>`;
+        let petStreakHTML = `<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(92,58,30,0.3)">`;
         if (ps.qualifies && ps.multiplier > 1) {
-          petStreakHTML += `<div class="boost-row"><span style="color:var(--green)">Active: ×${ps.multiplier} XP</span></div>`;
+          petStreakHTML += `<div class="boost-row"><span>Pet's Streak (${ps.streak}w)</span><span class="boost-val" style="color:var(--green)">×${ps.multiplier}</span></div>`;
         } else {
-          petStreakHTML += `<div style="color:#c0392b;font-size:9px;margin-bottom:4px">Not qualified for boost next week — feed the pet!</div>`;
+          petStreakHTML += `<div class="boost-row" style="color:var(--text-dim)"><span>Pet's Streak (${ps.streak}w) — not qualified</span><span class="boost-val">×${ps.multiplier}</span></div>`;
         }
         if (ps.weeksToMax > 0) {
-          petStreakHTML += `<div style="font-size:9px;color:var(--text-dim)">${ps.weeksToMax} week${ps.weeksToMax > 1 ? "s" : ""} to max ×1.5 boost</div>`;
-        } else {
-          petStreakHTML += `<div style="font-size:9px;color:var(--green)">MAX streak reached!</div>`;
+          petStreakHTML += `<div style="font-size:9px;color:var(--text-dim)">${ps.weeksToMax}w to max ×1.5</div>`;
         }
         petStreakHTML += `<div class="boost-row" style="margin-top:4px">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:${ps.manualOverride ? "var(--green)" : "var(--text-dim)"}">
             <input type="checkbox" ${ps.manualOverride ? "checked" : ""} onchange="togglePetStreak()" style="cursor:pointer;accent-color:var(--green)">
-            Override: simulate ×1.5 boost
+            Simulate ×1.5
           </label>
           <span class="boost-val" style="color:${ps.manualOverride ? "var(--green)" : "var(--text-dim)"}">×1.5</span>
         </div></div>`;
