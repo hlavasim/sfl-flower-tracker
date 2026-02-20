@@ -2871,6 +2871,22 @@
       const boosts = detectCookingBoosts(farm);
       const savedRecipes = getSavedBumpkinRecipes();
 
+      // Calculate XP banked in food inventory
+      const inventory = data.inventory || {};
+      const foodInInventory = [];
+      let bankedXP = 0;
+      for (const [foodName, recipe] of Object.entries(COOKING_RECIPES_DATA)) {
+        const qty = getCount(inventory, foodName);
+        if (qty > 0) {
+          const xpEach = computeFoodXP(foodName, recipe, recipe.building, boosts);
+          const totalFoodXP = xpEach * qty;
+          bankedXP += totalFoodXP;
+          foodInInventory.push({ name: foodName, qty, xpEach, totalFoodXP });
+        }
+      }
+      foodInInventory.sort((a, b) => b.totalFoodXP - a.totalFoodXP);
+      const xpAfterFood = Math.max(0, xpRemaining - bankedXP);
+
       let html = "";
 
       // Dev banner
@@ -2892,6 +2908,18 @@
         <div class="progress-bar-outer"><div class="progress-bar-fill green" style="width:${xpPct.toFixed(2)}%"></div></div>
         ${currentLevel < 200 ? `<div style="margin-top:6px;font-size:9px;color:var(--text-dim)">Level ${currentLevel} → ${currentLevel + 1}: ${levelProgress}%</div>` : ""}
       </div>`;
+
+      // Food in inventory
+      if (bankedXP > 0) {
+        const fmtXP = (v) => v % 1 === 0 ? v.toLocaleString() : v.toLocaleString(undefined, { maximumFractionDigits: 0 });
+        html += `<div class="bumpkin-boosts pixel-panel pixel-font" style="display:block">
+          <h4 style="color:var(--sunpetal);margin-bottom:6px;padding-bottom:4px;border-bottom:2px solid rgba(92,58,30,0.4);font-size:10px">FOOD IN INVENTORY — ${fmtXP(bankedXP)} XP</h4>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:2px 16px">
+            ${foodInInventory.map(f => `<div class="boost-row"><span>${f.qty}× ${escHTML(f.name)}</span><span class="boost-val" style="color:var(--green)">${fmtXP(f.totalFoodXP)} XP</span></div>`).join("")}
+          </div>
+          ${xpAfterFood > 0 ? `<div style="margin-top:6px;padding-top:4px;border-top:2px solid rgba(92,58,30,0.4);color:var(--text-secondary)">After eating: <span style="color:var(--yellow)">${fmtXP(xpAfterFood)}</span> XP still needed</div>` : `<div style="margin-top:6px;padding-top:4px;border-top:2px solid rgba(92,58,30,0.4);color:var(--green)">Eating all food would reach level 200!</div>`}
+        </div>`;
+      }
 
       // Boosts section — always show both columns
       {
@@ -2946,7 +2974,7 @@
             cooksPerDay = (86400 / selected.time) * count;
             xpPerDay = selected.xp * cooksPerDay;
             totalXPPerDay += xpPerDay;
-            daysNeeded = xpRemaining > 0 ? Math.ceil(xpRemaining / xpPerDay) : 0;
+            daysNeeded = xpAfterFood > 0 ? Math.ceil(xpAfterFood / xpPerDay) : 0;
           }
 
           buildingStats.push({ buildingName, xpPerDay, count });
@@ -2977,15 +3005,15 @@
         html += `</div>`;
 
         // Summary
-        const totalDays = totalXPPerDay > 0 && xpRemaining > 0 ? Math.ceil(xpRemaining / totalXPPerDay) : 0;
+        const totalDays = totalXPPerDay > 0 && xpAfterFood > 0 ? Math.ceil(xpAfterFood / totalXPPerDay) : 0;
 
         html += `<div class="bumpkin-summary pixel-panel pixel-font">
           <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">ALL BUILDINGS COMBINED</div>
           <div style="font-size:13px;color:var(--sunpetal);margin-bottom:8px">${Math.round(totalXPPerDay).toLocaleString()} XP / day</div>
-          ${xpRemaining > 0 ? `
+          ${xpAfterFood > 0 ? `
             <div class="bumpkin-days-big">${totalDays.toLocaleString()} days</div>
-            <div style="font-size:10px;color:var(--text-dim)">to reach level 200</div>
-          ` : `<div class="bumpkin-days-big" style="color:var(--green)">MAX LEVEL!</div>`}
+            <div style="font-size:10px;color:var(--text-dim)">to reach level 200${bankedXP > 0 ? " (after eating food)" : ""}</div>
+          ` : `<div class="bumpkin-days-big" style="color:var(--green)">${currentLevel >= 200 ? "MAX LEVEL!" : "Food covers it!"}</div>`}
           ${buildingStats.length > 1 ? `<div style="margin-top:12px;font-size:9px;color:var(--text-dim);line-height:2">
             ${buildingStats.map(b => `${COOKING_BUILDING_EMOJI[b.buildingName] || ""} ${escHTML(b.buildingName)}${b.count > 1 ? " ×" + b.count : ""}: ${Math.round(b.xpPerDay).toLocaleString()} XP/day`).join("<br>")}
           </div>` : ""}
