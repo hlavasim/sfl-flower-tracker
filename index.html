@@ -3103,9 +3103,6 @@
 
       let html = "";
 
-      // Dev banner
-      html += `<div class="bumpkin-dev-banner pixel-panel pixel-font">⚠ UNDER DEVELOPMENT — might show incorrect data</div>`;
-
       // Header
       html += `<div class="header pixel-panel pixel-font">
         <h1>BUMPKIN XP CALCULATOR</h1>
@@ -3505,7 +3502,8 @@
       const app = document.getElementById("app");
       const farm = data.farm;
 
-      app.innerHTML = `<div class="header pixel-panel pixel-font">
+      app.innerHTML = `<div class="bumpkin-dev-banner pixel-panel pixel-font">⚠ UNDER DEVELOPMENT — might show incorrect data</div>
+      <div class="header pixel-panel pixel-font">
         <h1>TREASURY</h1>
         <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
       </div>
@@ -3522,7 +3520,8 @@
         const usdTotal = totals.grand * rates.sflUsd;
         const btcTotal = rates.btcUsd > 0 ? usdTotal / rates.btcUsd : 0;
 
-        let html = `<div class="treasury-header pixel-panel pixel-font">
+        let html = `<div class="bumpkin-dev-banner pixel-panel pixel-font">⚠ UNDER DEVELOPMENT — might show incorrect data</div>
+        <div class="treasury-header pixel-panel pixel-font">
           <h1>TREASURY</h1>
           <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
           <div class="treasury-total">

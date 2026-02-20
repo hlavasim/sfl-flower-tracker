@@ -9,8 +9,14 @@ export default async function handler(req, res) {
 
   const { url, key } = req.query;
   if (!url) return res.status(400).json({ error: "Missing ?url= parameter" });
-  if (!url.startsWith("https://api.sunflower-land.com/")) {
-    return res.status(403).json({ error: "Only sunflower-land API allowed" });
+
+  const ALLOWED = [
+    "https://api.sunflower-land.com/",
+    "https://sfl.world/",
+    "https://api.coingecko.com/",
+  ];
+  if (!ALLOWED.some(prefix => url.startsWith(prefix))) {
+    return res.status(403).json({ error: "Domain not allowed" });
   }
 
   const headers = {};
