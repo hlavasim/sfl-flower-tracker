@@ -1533,12 +1533,12 @@
           const name = bed.flower.name;
           const recipe = FLOWER_RECIPES[name];
           const seedType = recipe ? recipe.seed : "Unknown";
-          const seedHours = recipe ? SEED_DATA[seedType].hours : 24;
+          const baseSeconds = recipe ? SEED_DATA[seedType].baseSeconds : 86400;
           const plantedAt = toMs(bed.flower.plantedAt);
           const crits = bed.flower.criticalHit || {};
           const bonus = Object.values(crits).reduce((s, c) => s + c, 0);
           const totalYield = 1 + bonus;
-          const readyAt = plantedAt + seedHours * 3600 * 1000;
+          const readyAt = plantedAt + baseSeconds * 1000;
           beds.push({ id, name, plantedAt, seedType, bonus, totalYield, readyAt });
         } else {
           beds.push({ id, name: null, empty: true });
@@ -2095,7 +2095,7 @@
           <h2 style="color:${sd.color}">${sd.label}</h2>
           ${sd.season ? `<span class="seed-badge" style="border-color:${sd.color};color:${sd.color}">${sd.season}</span>` : ""}
           <div class="seed-meta">
-            <span>${sd.hours}h / grow</span>
+            <span>${formatHours(sd.hours)} / grow</span>
             <span>${ss.complete}/${ss.total} done</span>
             <span>${ss.remaining > 0 ? `~${ss.batches} batches = ${formatHours(ss.hours)}` : "All complete!"}</span>
           </div>
