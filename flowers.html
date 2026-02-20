@@ -1855,6 +1855,11 @@
       if (arrow) arrow.textContent = el.style.display === "none" ? "▶" : "▼";
     }
 
+    function setBumpkinTargetLevel(val) {
+      localStorage.setItem("sfl_bumpkin_target", val);
+      if (cachedFarmData) renderBumpkin(cachedFarmData);
+    }
+
     // ═══════════════════════════════════════
     //  DEPENDENCY COMPUTATION (flowers)
     // ═══════════════════════════════════════
@@ -2890,8 +2895,14 @@
       const currentXP = parseFloat(bumpkin.experience || 0);
       const currentLevel = getBumpkinLevel(currentXP);
       const maxXP = BUMPKIN_XP_TABLE[199];
-      const xpRemaining = Math.max(0, maxXP - currentXP);
-      const xpPct = Math.min(100, (currentXP / maxXP) * 100);
+
+      // Target level (user-adjustable)
+      const savedTarget = parseInt(localStorage.getItem("sfl_bumpkin_target") || "200");
+      const targetLevel = Math.max(currentLevel + 1, Math.min(200, savedTarget));
+      const targetXP = BUMPKIN_XP_TABLE[targetLevel - 1];
+      const xpRemaining = Math.max(0, targetXP - currentXP);
+      const xpPctTotal = Math.min(100, (currentXP / maxXP) * 100);
+      const xpPctTarget = Math.min(100, (currentXP / targetXP) * 100);
 
       // Level progress within current level
       const nextLevelXP = currentLevel < 200 ? BUMPKIN_XP_TABLE[currentLevel] : maxXP;
@@ -2941,10 +2952,17 @@
       html += `<div class="bumpkin-xp-section pixel-panel pixel-font">
         <div class="bumpkin-level-big">LVL ${currentLevel}</div>
         <div class="bumpkin-xp-info">
-          ${Math.floor(currentXP).toLocaleString()} / ${maxXP.toLocaleString()} XP<br>
-          ${xpRemaining > 0 ? `${Math.ceil(xpRemaining).toLocaleString()} XP to level 200` : "MAX LEVEL!"}
+          ${Math.floor(currentXP).toLocaleString()} XP${xpRemaining > 0 ? ` — ${Math.ceil(xpRemaining).toLocaleString()} XP to level ${targetLevel}` : " — MAX LEVEL!"}
         </div>
-        <div class="progress-bar-outer"><div class="progress-bar-fill green" style="width:${xpPct.toFixed(2)}%"></div></div>
+        <div style="display:flex;align-items:center;gap:8px;margin:8px 0 4px">
+          <span style="font-size:9px;color:var(--text-dim);white-space:nowrap">Target LVL</span>
+          <input type="range" min="${currentLevel + 1}" max="200" value="${targetLevel}" oninput="document.getElementById('target-val').textContent=this.value" onchange="setBumpkinTargetLevel(this.value)" style="flex:1;accent-color:var(--sunpetal);cursor:pointer">
+          <span id="target-val" style="font-size:11px;color:var(--sunpetal);min-width:24px;text-align:right">${targetLevel}</span>
+        </div>
+        <div style="font-size:9px;color:var(--text-dim);margin-bottom:2px">→ Level ${targetLevel}: ${xpPctTarget.toFixed(1)}%</div>
+        <div class="progress-bar-outer"><div class="progress-bar-fill green" style="width:${xpPctTarget.toFixed(2)}%"></div></div>
+        <div style="font-size:9px;color:var(--text-dim);margin:4px 0 2px">→ Level 200: ${xpPctTotal.toFixed(1)}%</div>
+        <div class="progress-bar-outer"><div class="progress-bar-fill" style="width:${xpPctTotal.toFixed(2)}%;background:var(--text-dim)"></div></div>
         ${currentLevel < 200 ? `<div style="margin-top:6px;font-size:9px;color:var(--text-dim)">Level ${currentLevel} → ${currentLevel + 1}: ${levelProgress}%</div>` : ""}
       </div>`;
 
@@ -2960,7 +2978,7 @@
               ${foodInInventory.map(f => `<div class="boost-row"><span>${f.qty}× ${escHTML(f.name)}</span><span class="boost-val" style="color:var(--green)">${fmtXP(f.totalFoodXP)} XP</span></div>`).join("")}
             </div>
           </div>
-          ${xpAfterFood > 0 ? `<div style="margin-top:6px;padding-top:4px;border-top:2px solid rgba(92,58,30,0.4);color:var(--text-secondary)">After eating: <span style="color:var(--yellow)">${fmtXP(xpAfterFood)}</span> XP still needed</div>` : `<div style="margin-top:6px;padding-top:4px;border-top:2px solid rgba(92,58,30,0.4);color:var(--green)">Eating all food would reach level 200!</div>`}
+          ${xpAfterFood > 0 ? `<div style="margin-top:6px;padding-top:4px;border-top:2px solid rgba(92,58,30,0.4);color:var(--text-secondary)">After eating: <span style="color:var(--yellow)">${fmtXP(xpAfterFood)}</span> XP still needed</div>` : `<div style="margin-top:6px;padding-top:4px;border-top:2px solid rgba(92,58,30,0.4);color:var(--green)">Eating all food would reach level ${targetLevel}!</div>`}
         </div>`;
       }
 
@@ -3066,7 +3084,7 @@
               Cook time: <span style="color:var(--blue)">${formatCookTime(selected.time)}</span><br>
               XP/hour: <span style="color:var(--sunpetal)">${fmtXP(selected.xpPerHour)}</span><br>
               XP/day${count > 1 ? " (×" + count + ")" : ""}: <span style="color:var(--green)">${fmtXP(xpPerDay)}</span><br>
-              ${xpRemaining > 0 ? `Solo days to 200: <span style="color:var(--text-dim)">${daysNeeded.toLocaleString()}d</span>` : ""}
+              ${xpRemaining > 0 ? `Solo days to ${targetLevel}: <span style="color:var(--text-dim)">${daysNeeded.toLocaleString()}d</span>` : ""}
             </div>` : `<div style="font-size:10px;color:var(--text-dim)">${recipes.length > 0 ? "Not cooking" : "No recipes available"}</div>`}
           </div>`;
         }
@@ -3081,8 +3099,8 @@
           <div style="font-size:13px;color:var(--sunpetal);margin-bottom:8px">${Math.round(totalXPPerDay).toLocaleString()} XP / day</div>
           ${xpAfterFood > 0 ? `
             <div class="bumpkin-days-big">${totalDays.toLocaleString()} days</div>
-            <div style="font-size:10px;color:var(--text-dim)">to reach level 200${bankedXP > 0 ? " (after eating food)" : ""}</div>
-          ` : `<div class="bumpkin-days-big" style="color:var(--green)">${currentLevel >= 200 ? "MAX LEVEL!" : "Food covers it!"}</div>`}
+            <div style="font-size:10px;color:var(--text-dim)">to reach level ${targetLevel}${bankedXP > 0 ? " (after eating food)" : ""}</div>
+          ` : `<div class="bumpkin-days-big" style="color:var(--green)">${currentLevel >= targetLevel ? "TARGET REACHED!" : "Food covers it!"}</div>`}
           ${buildingStats.length > 1 ? `<div style="margin-top:12px;font-size:9px;color:var(--text-dim);line-height:2">
             ${buildingStats.map(b => `${COOKING_BUILDING_EMOJI[b.buildingName] || ""} ${escHTML(b.buildingName)}${b.count > 1 ? " ×" + b.count : ""}: ${Math.round(b.xpPerDay).toLocaleString()} XP/day`).join("<br>")}
           </div>` : ""}
