@@ -3336,11 +3336,16 @@
       const coinsPerSFL = parseFloat(Object.keys(exchangeData?.coins || {})[0]) || 160;
       const btcUsd = btcData?.bitcoin?.usd || 0;
 
-      return { nftCollectibles, nftWearables, p2pPrices, sflUsd, coinsPerSFL, btcUsd };
+      // Gems: use the base tier (no discount) to get SFL-per-gem rate
+      const gemTiers = Object.values(exchangeData?.gems || {});
+      const baseTier = gemTiers.find(t => t.discount === 0) || gemTiers[0];
+      const gemsPerSFL = baseTier ? (baseTier.gem / baseTier.sfl) : 0;
+
+      return { nftCollectibles, nftWearables, p2pPrices, sflUsd, coinsPerSFL, gemsPerSFL, btcUsd };
     }
 
     function computeFarmValue(farm, td) {
-      const { nftCollectibles, nftWearables, p2pPrices, sflUsd, coinsPerSFL, btcUsd } = td;
+      const { nftCollectibles, nftWearables, p2pPrices, sflUsd, coinsPerSFL, gemsPerSFL, btcUsd } = td;
       const inventory = farm.inventory || {};
       const wardrobe = farm.wardrobe || {};
       const MIN_VALUE = 0.01;
@@ -3356,10 +3361,8 @@
       }
       resources.sort((a, b) => b.total - a.total);
 
-      // --- Collectibles: placed + inventory NFT collectibles ---
+      // --- Collectibles: inventory NFT collectibles (inventory includes placed) ---
       const collectibles = [];
-      const mainColl = farm.collectibles || {};
-      const homeColl = farm.home?.collectibles || {};
       const countedCollectibles = new Set();
 
       for (const name of Object.keys(nftCollectibles)) {
@@ -3367,10 +3370,8 @@
         const floor = parseFloat(nft.floor) || 0;
         if (floor <= 0) continue;
 
-        const placedMain = (mainColl[name] || []).length;
-        const placedHome = (homeColl[name] || []).length;
-        const inInv = getCount(inventory, name);
-        const qty = placedMain + placedHome + inInv;
+        // inventory already includes placed items — don't double-count
+        const qty = getCount(inventory, name);
         if (qty <= 0) continue;
         const total = qty * floor;
         if (total < MIN_VALUE) continue;
@@ -3393,11 +3394,13 @@
       }
       wearables.sort((a, b) => b.total - a.total);
 
-      // --- Liquid: SFL balance + coins ---
+      // --- Liquid: SFL balance + coins + gems ---
       const sflBalance = parseFloat(farm.balance) || 0;
       const coinBalance = parseFloat(farm.coins) || 0;
+      const gemBalance = parseFloat(farm.gems) || 0;
       const coinsAsSFL = coinsPerSFL > 0 ? coinBalance / coinsPerSFL : 0;
-      const liquidTotal = sflBalance + coinsAsSFL;
+      const gemsAsSFL = gemsPerSFL > 0 ? gemBalance / gemsPerSFL : 0;
+      const liquidTotal = sflBalance + coinsAsSFL + gemsAsSFL;
 
       const resourcesTotal = resources.reduce((s, r) => s + r.total, 0);
       const collectiblesTotal = collectibles.reduce((s, c) => s + c.total, 0);
@@ -3406,7 +3409,7 @@
 
       return {
         resources, collectibles, wearables,
-        liquid: { sflBalance, coinBalance, coinsAsSFL, total: liquidTotal },
+        liquid: { sflBalance, coinBalance, gemBalance, coinsAsSFL, gemsAsSFL, total: liquidTotal },
         totals: {
           resources: resourcesTotal,
           collectibles: collectiblesTotal,
@@ -3554,6 +3557,7 @@
           <div class="treasury-cat-top" style="line-height:2.2">
             <div>SFL Balance: <span style="color:var(--sunpetal)">${formatSFL(liquid.sflBalance)}</span></div>
             <div>Coins: <span style="color:var(--text-secondary)">${Math.floor(liquid.coinBalance).toLocaleString()}</span> <span style="color:var(--text-dim)">(≈ ${formatSFL(liquid.coinsAsSFL)} SFL)</span></div>
+            <div>Gems: <span style="color:var(--text-secondary)">${Math.floor(liquid.gemBalance).toLocaleString()}</span> <span style="color:var(--text-dim)">(≈ ${formatSFL(liquid.gemsAsSFL)} SFL)</span></div>
           </div>
         </div>`;
         html += '</div>';
