@@ -851,6 +851,88 @@
       z-index: 9999;
     }
 
+    /* ── Bumpkin page ── */
+    .bumpkin-dev-banner {
+      text-align: center;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      background: rgba(255,214,10,0.1);
+      border-color: rgba(255,214,10,0.4);
+      font-size: 10px;
+      color: var(--yellow);
+    }
+    .bumpkin-xp-section {
+      padding: 20px 16px;
+      margin-bottom: 16px;
+      text-align: center;
+    }
+    .bumpkin-level-big {
+      font-size: 32px;
+      color: var(--sunpetal);
+      text-shadow: 2px 2px 0 #000, 0 0 12px rgba(255,215,0,0.3);
+    }
+    .bumpkin-xp-info {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin: 8px 0 12px;
+      line-height: 1.8;
+    }
+    .bumpkin-buildings-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .bumpkin-building-card { padding: 14px; }
+    .bumpkin-building-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .bumpkin-building-name { font-size: 12px; color: var(--sunpetal); }
+    .bumpkin-building-count { font-size: 9px; color: var(--text-dim); }
+    .bumpkin-recipe-select {
+      width: 100%;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      padding: 6px 8px;
+      color: var(--text-primary);
+      background: #111;
+      border: 3px solid var(--border-brown);
+      box-shadow: inset 2px 2px 0 rgba(0,0,0,0.5);
+      margin-bottom: 8px;
+      outline: none;
+    }
+    .bumpkin-recipe-select:focus {
+      border-color: var(--sunpetal);
+    }
+    .bumpkin-recipe-stats {
+      font-size: 10px;
+      color: var(--text-secondary);
+      line-height: 1.8;
+    }
+    .bumpkin-summary {
+      padding: 20px 16px;
+      margin-bottom: 16px;
+      text-align: center;
+    }
+    .bumpkin-days-big {
+      font-size: 28px;
+      color: var(--green);
+      text-shadow: 2px 2px 0 #000;
+      margin: 8px 0;
+    }
+    .bumpkin-boosts {
+      padding: 8px 12px;
+      margin-bottom: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 12px;
+      font-size: 9px;
+    }
+
     /* ── Responsive ── */
     @media (max-width: 640px) {
       .container { padding: 8px; }
@@ -873,6 +955,9 @@
       .nav-link { font-size: 9px; padding: 12px 12px; }
       .nav-link.help-btn { padding: 12px 14px; font-size: 13px; }
       .config-collapsed { gap: 10px; font-size: 9px; flex-wrap: wrap; justify-content: center; }
+      .bumpkin-buildings-grid { grid-template-columns: 1fr; }
+      .bumpkin-level-big { font-size: 24px; }
+      .bumpkin-days-big { font-size: 22px; }
     }
   </style>
   <script defer src="/_vercel/insights/script.js"></script>
@@ -899,7 +984,7 @@
     const DEFAULTS = { farm: "", key: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
     const IMG_BASE = "https://sfl.world/img/flowers/";
-    const PAGES = ["hub", "flowers", "dolls", "crustaceans"];
+    const PAGES = ["hub", "flowers", "dolls", "crustaceans", "bumpkin"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -1158,6 +1243,148 @@
     };
 
     // ═══════════════════════════════════════
+    //  BUMPKIN XP TABLE (total XP for levels 1-200)
+    // ═══════════════════════════════════════
+
+    const BUMPKIN_XP_TABLE = [
+      // Lvl 1-10
+      0, 2, 22, 205, 555, 1155, 2155, 3405, 5405, 7905,
+      // Lvl 11-20
+      10905, 14405, 18405, 22905, 27905, 33655, 40155, 47405, 55405, 64155,
+      // Lvl 21-30
+      73905, 84655, 96405, 109155, 122905, 137405, 152905, 169405, 186905, 205405,
+      // Lvl 31-40
+      225405, 246905, 269905, 294405, 320405, 348405, 378405, 410405, 444405, 480405,
+      // Lvl 41-50
+      518905, 559905, 603405, 649405, 697905, 749405, 803905, 861405, 921905, 985405,
+      // Lvl 51-60
+      1053905, 1127405, 1205905, 1289405, 1377905, 1476405, 1584905, 1703405, 1831905, 1970405,
+      // Lvl 61-70
+      2128905, 2287405, 2485905, 2704405, 2942905, 3221405, 3539905, 3898405, 4296905, 4735405,
+      // Lvl 71-80
+      5233905, 5743905, 6263905, 6793905, 7333905, 7883905, 8443905, 9013905, 9593905, 10183905,
+      // Lvl 81-90
+      10783905, 11393905, 12013905, 12643905, 13283905, 13933905, 14593905, 15263905, 15943905, 16633905,
+      // Lvl 91-100
+      17333905, 18043905, 18763905, 19493905, 20233905, 20983905, 21743905, 22513905, 23293905, 24083905,
+      // Lvl 101-110
+      24893905, 25723905, 26573905, 27443905, 28333905, 29243905, 30173905, 31123905, 32093905, 33083905,
+      // Lvl 111-120
+      34093905, 35123905, 36173905, 37243905, 38333905, 39443905, 40573905, 41723905, 42893905, 44083905,
+      // Lvl 121-130
+      45293905, 46523905, 47773905, 49043905, 50333905, 51653905, 53003905, 54383905, 55793905, 57233905,
+      // Lvl 131-140
+      58708905, 60218905, 61763905, 63343905, 64958905, 66613905, 68308905, 70043905, 71818905, 73633905,
+      // Lvl 141-150
+      75493905, 77398905, 79348905, 81343905, 83383905, 85473905, 87613905, 89803905, 92043905, 94333905,
+      // Lvl 151-160
+      95662605, 97031166, 98440783, 99892688, 101388150, 102928475, 104515009, 106149139, 107832292, 109565939,
+      // Lvl 161-170
+      111351595, 113190820, 115085221, 117036454, 119046223, 121116285, 123248448, 125444575, 127706585, 130036455,
+      // Lvl 171-180
+      132436221, 134907979, 137453889, 140076176, 142777131, 145559114, 148424556, 151375961, 154415908, 157547053,
+      // Lvl 181-190
+      160772132, 164093963, 167515448, 171039577, 174669429, 178408176, 182259085, 186225521, 190310950, 194518941,
+      // Lvl 191-200
+      198853171, 203317427, 207915610, 212651738, 217529949, 222554506, 227729799, 233060350, 238550817, 244206000,
+    ];
+
+    // ═══════════════════════════════════════
+    //  COOKING RECIPES (84 foods, 5 buildings)
+    // ═══════════════════════════════════════
+
+    const COOKING_RECIPES_DATA = {
+      // Fire Pit (18)
+      "Mashed Potato":        { building: "Fire Pit",       xp: 3,     cookSec: 30,     usesHoney: false },
+      "Rhubarb Tart":         { building: "Fire Pit",       xp: 5,     cookSec: 60,     usesHoney: false },
+      "Pumpkin Soup":         { building: "Fire Pit",       xp: 24,    cookSec: 180,    usesHoney: false },
+      "Reindeer Carrot":      { building: "Fire Pit",       xp: 36,    cookSec: 300,    usesHoney: false },
+      "Mushroom Soup":        { building: "Fire Pit",       xp: 56,    cookSec: 600,    usesHoney: false },
+      "Boiled Eggs":          { building: "Fire Pit",       xp: 90,    cookSec: 3600,   usesHoney: false },
+      "Bumpkin Broth":        { building: "Fire Pit",       xp: 96,    cookSec: 1200,   usesHoney: false },
+      "Popcorn":              { building: "Fire Pit",       xp: 200,   cookSec: 720,    usesHoney: false },
+      "Cabbers n Mash":       { building: "Fire Pit",       xp: 250,   cookSec: 2400,   usesHoney: false },
+      "Rapid Roast":          { building: "Fire Pit",       xp: 300,   cookSec: 10,     usesHoney: false },
+      "Kale Stew":            { building: "Fire Pit",       xp: 400,   cookSec: 7200,   usesHoney: false },
+      "Fried Tofu":           { building: "Fire Pit",       xp: 400,   cookSec: 5400,   usesHoney: false },
+      "Gumbo":                { building: "Fire Pit",       xp: 600,   cookSec: 14400,  usesHoney: false },
+      "Kale Omelette":        { building: "Fire Pit",       xp: 1250,  cookSec: 12600,  usesHoney: false },
+      "Rice Bun":             { building: "Fire Pit",       xp: 2600,  cookSec: 18000,  usesHoney: false },
+      "Antipasto":            { building: "Fire Pit",       xp: 3000,  cookSec: 10800,  usesHoney: false },
+      "Pizza Margherita":     { building: "Fire Pit",       xp: 25000, cookSec: 72000,  usesHoney: false },
+      // Kitchen (27)
+      "Sunflower Crunch":     { building: "Kitchen",        xp: 50,    cookSec: 600,    usesHoney: false },
+      "Club Sandwich":        { building: "Kitchen",        xp: 170,   cookSec: 10800,  usesHoney: false },
+      "Roast Veggies":        { building: "Kitchen",        xp: 170,   cookSec: 7200,   usesHoney: false },
+      "Fruit Salad":          { building: "Kitchen",        xp: 225,   cookSec: 1800,   usesHoney: false },
+      "Mushroom Jacket Potatoes": { building: "Kitchen",    xp: 240,   cookSec: 600,    usesHoney: false },
+      "Cauliflower Burger":   { building: "Kitchen",        xp: 255,   cookSec: 10800,  usesHoney: false },
+      "Bumpkin Salad":        { building: "Kitchen",        xp: 290,   cookSec: 12600,  usesHoney: false },
+      "Goblin's Treat":       { building: "Kitchen",        xp: 500,   cookSec: 21600,  usesHoney: false },
+      "Pancakes":             { building: "Kitchen",        xp: 1000,  cookSec: 3600,   usesHoney: true  },
+      "Bumpkin ganoush":      { building: "Kitchen",        xp: 1000,  cookSec: 18000,  usesHoney: false },
+      "Chowder":              { building: "Kitchen",        xp: 1000,  cookSec: 28800,  usesHoney: false },
+      "Tofu Scramble":        { building: "Kitchen",        xp: 1000,  cookSec: 10800,  usesHoney: false },
+      "Fish Burger":          { building: "Kitchen",        xp: 1300,  cookSec: 7200,   usesHoney: false },
+      "Fish Omelette":        { building: "Kitchen",        xp: 1500,  cookSec: 18000,  usesHoney: false },
+      "Fried Calamari":       { building: "Kitchen",        xp: 1500,  cookSec: 18000,  usesHoney: false },
+      "Beetroot Blaze":       { building: "Kitchen",        xp: 2000,  cookSec: 30,     usesHoney: false },
+      "Sushi Roll":           { building: "Kitchen",        xp: 2000,  cookSec: 3600,   usesHoney: false },
+      "Ocean's Olive":        { building: "Kitchen",        xp: 2000,  cookSec: 7200,   usesHoney: false },
+      "Fish n Chips":         { building: "Kitchen",        xp: 2000,  cookSec: 14400,  usesHoney: false },
+      "Seafood Basket":       { building: "Kitchen",        xp: 2200,  cookSec: 18000,  usesHoney: false },
+      "Bumpkin Roast":        { building: "Kitchen",        xp: 2500,  cookSec: 43200,  usesHoney: false },
+      "Goblin Brunch":        { building: "Kitchen",        xp: 2500,  cookSec: 43200,  usesHoney: false },
+      "Steamed Red Rice":     { building: "Kitchen",        xp: 3000,  cookSec: 14400,  usesHoney: false },
+      "Caprese Salad":        { building: "Kitchen",        xp: 6000,  cookSec: 10800,  usesHoney: false },
+      "Spaghetti al Limone":  { building: "Kitchen",        xp: 15000, cookSec: 54000,  usesHoney: false },
+      // Bakery (17)
+      "Sunflower Cake":       { building: "Bakery",         xp: 525,   cookSec: 23400,  usesHoney: false },
+      "Cornbread":            { building: "Bakery",         xp: 600,   cookSec: 43200,  usesHoney: false },
+      "Pumpkin Cake":         { building: "Bakery",         xp: 625,   cookSec: 37800,  usesHoney: false },
+      "Potato Cake":          { building: "Bakery",         xp: 650,   cookSec: 37800,  usesHoney: false },
+      "Apple Pie":            { building: "Bakery",         xp: 720,   cookSec: 14400,  usesHoney: false },
+      "Kale & Mushroom Pie":  { building: "Bakery",         xp: 720,   cookSec: 14400,  usesHoney: false },
+      "Orange Cake":          { building: "Bakery",         xp: 730,   cookSec: 14400,  usesHoney: false },
+      "Carrot Cake":          { building: "Bakery",         xp: 750,   cookSec: 46800,  usesHoney: false },
+      "Cabbage Cake":         { building: "Bakery",         xp: 860,   cookSec: 54000,  usesHoney: false },
+      "Wheat Cake":           { building: "Bakery",         xp: 1100,  cookSec: 86400,  usesHoney: false },
+      "Cauliflower Cake":     { building: "Bakery",         xp: 1190,  cookSec: 79200,  usesHoney: false },
+      "Radish Cake":          { building: "Bakery",         xp: 1200,  cookSec: 86400,  usesHoney: false },
+      "Beetroot Cake":        { building: "Bakery",         xp: 1250,  cookSec: 79200,  usesHoney: false },
+      "Parsnip Cake":         { building: "Bakery",         xp: 1300,  cookSec: 86400,  usesHoney: false },
+      "Eggplant Cake":        { building: "Bakery",         xp: 1400,  cookSec: 86400,  usesHoney: false },
+      "Honey Cake":           { building: "Bakery",         xp: 4000,  cookSec: 28800,  usesHoney: true  },
+      "Lemon Cheesecake":     { building: "Bakery",         xp: 30000, cookSec: 108000, usesHoney: false },
+      // Deli (9)
+      "Cheese":               { building: "Deli",           xp: 1,     cookSec: 1200,   usesHoney: false },
+      "Fermented Carrots":    { building: "Deli",           xp: 250,   cookSec: 86400,  usesHoney: false },
+      "Blueberry Jam":        { building: "Deli",           xp: 500,   cookSec: 43200,  usesHoney: false },
+      "Sauerkraut":           { building: "Deli",           xp: 500,   cookSec: 86400,  usesHoney: false },
+      "Fancy Fries":          { building: "Deli",           xp: 1000,  cookSec: 86400,  usesHoney: false },
+      "Fermented Fish":       { building: "Deli",           xp: 3000,  cookSec: 86400,  usesHoney: false },
+      "Blue Cheese":          { building: "Deli",           xp: 6000,  cookSec: 10800,  usesHoney: false },
+      "Shroom Syrup":         { building: "Deli",           xp: 10000, cookSec: 10,     usesHoney: true  },
+      "Honey Cheddar":        { building: "Deli",           xp: 15000, cookSec: 43200,  usesHoney: true  },
+      // Smoothie Shack (12)
+      "Quick Juice":          { building: "Smoothie Shack", xp: 100,   cookSec: 1800,   usesHoney: false },
+      "Carrot Juice":         { building: "Smoothie Shack", xp: 200,   cookSec: 3600,   usesHoney: false },
+      "Purple Smoothie":      { building: "Smoothie Shack", xp: 310,   cookSec: 1800,   usesHoney: false },
+      "Orange Juice":         { building: "Smoothie Shack", xp: 375,   cookSec: 2700,   usesHoney: false },
+      "Apple Juice":          { building: "Smoothie Shack", xp: 500,   cookSec: 3600,   usesHoney: false },
+      "Power Smoothie":       { building: "Smoothie Shack", xp: 775,   cookSec: 5400,   usesHoney: false },
+      "Bumpkin Detox":        { building: "Smoothie Shack", xp: 975,   cookSec: 7200,   usesHoney: false },
+      "Sour Shake":           { building: "Smoothie Shack", xp: 1000,  cookSec: 3600,   usesHoney: false },
+      "Banana Blast":         { building: "Smoothie Shack", xp: 1200,  cookSec: 10800,  usesHoney: false },
+      "The Lot":              { building: "Smoothie Shack", xp: 1500,  cookSec: 12600,  usesHoney: false },
+      "Grape Juice":          { building: "Smoothie Shack", xp: 3300,  cookSec: 10800,  usesHoney: false },
+      "Slow Juice":           { building: "Smoothie Shack", xp: 7500,  cookSec: 86400,  usesHoney: false },
+    };
+
+    const COOKING_BUILDING_NAMES = ["Fire Pit", "Kitchen", "Bakery", "Deli", "Smoothie Shack"];
+    const COOKING_BUILDING_EMOJI = { "Fire Pit": "🔥", "Kitchen": "🍳", "Bakery": "🧁", "Deli": "🥩", "Smoothie Shack": "🥤" };
+
+    // ═══════════════════════════════════════
     //  GLOBALS
     // ═══════════════════════════════════════
 
@@ -1258,6 +1485,7 @@
         { id: "flowers", label: "FLOWERS" },
         { id: "dolls", label: "DOLLS" },
         { id: "crustaceans", label: "CRABS" },
+        { id: "bumpkin", label: "BUMPKIN" },
       ];
       let html = '<div class="nav-bar pixel-panel">';
       for (const l of links) {
@@ -1336,7 +1564,7 @@
             <button class="donate-copy" onclick="copyAddr()">COPY</button>
           </div>
           <div class="donate-chain-label">ETH / Polygon / Base / Arbitrum</div>
-          <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size:10px;color:var(--text-dim)">Created by 0xStableFarmer - #155498<br>Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br><span style="color:var(--text-dim);opacity:0.6">v1.5</span></div>
+          <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size:10px;color:var(--text-dim)">Created by 0xStableFarmer - #155498<br>Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br><span style="color:var(--text-dim);opacity:0.6">v1.6</span></div>
         </div>`;
     }
 
@@ -1434,6 +1662,91 @@
 
     function escHTML(s) {
       return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    }
+
+    // ═══════════════════════════════════════
+    //  BUMPKIN HELPERS
+    // ═══════════════════════════════════════
+
+    function getBumpkinLevel(xp) {
+      for (let i = BUMPKIN_XP_TABLE.length - 1; i >= 0; i--) {
+        if (xp >= BUMPKIN_XP_TABLE[i]) return i + 1;
+      }
+      return 1;
+    }
+
+    function detectCookingBoosts(farm) {
+      const skills = farm.bumpkin?.skills || {};
+      const xpBoosts = [];
+      const timeBoosts = [];
+
+      // XP skills
+      if (skills["Munching Mastery"]) xpBoosts.push({ name: "Munching Mastery", multiplier: 1.05 });
+      if (skills["Juicy Boost"]) xpBoosts.push({ name: "Juicy Boost", multiplier: 1.1, buildings: ["Smoothie Shack"] });
+      if (skills["Drive-Through Deli"]) xpBoosts.push({ name: "Drive-Through Deli", multiplier: 1.15, buildings: ["Deli"] });
+      if (skills["Buzzworthy Treats"]) xpBoosts.push({ name: "Buzzworthy Treats", multiplier: 1.1, honeyOnly: true });
+
+      // XP collectibles
+      if (findCollectible(farm, "Golden Spatula").length > 0) xpBoosts.push({ name: "Golden Spatula", multiplier: 1.1 });
+      if (findCollectible(farm, "Observatory").length > 0) xpBoosts.push({ name: "Observatory", multiplier: 1.05 });
+      if (findCollectible(farm, "Blossombeard").length > 0) xpBoosts.push({ name: "Blossombeard", multiplier: 1.1 });
+      if (findCollectible(farm, "Grain Grinder").length > 0) xpBoosts.push({ name: "Grain Grinder", multiplier: 1.2, cakeOnly: true });
+
+      // Time skills
+      if (skills["Fast Feasts"]) timeBoosts.push({ name: "Fast Feasts", multiplier: 0.9, buildings: ["Fire Pit", "Kitchen"] });
+      if (skills["Frosted Cakes"]) timeBoosts.push({ name: "Frosted Cakes", multiplier: 0.9, buildings: ["Bakery"] });
+
+      // Time collectibles
+      if (findCollectible(farm, "Luna's Hat").length > 0) timeBoosts.push({ name: "Luna's Hat", multiplier: 0.5 });
+
+      return { xpBoosts, timeBoosts };
+    }
+
+    function computeFoodXP(foodName, food, buildingName, boosts) {
+      let xp = food.xp;
+      for (const b of boosts.xpBoosts) {
+        if (b.buildings && !b.buildings.includes(buildingName)) continue;
+        if (b.honeyOnly && !food.usesHoney) continue;
+        if (b.cakeOnly && !foodName.includes("Cake")) continue;
+        xp *= b.multiplier;
+      }
+      return xp;
+    }
+
+    function computeCookTime(baseSec, buildingName, boosts) {
+      let time = baseSec;
+      for (const b of boosts.timeBoosts) {
+        if (b.buildings && !b.buildings.includes(buildingName)) continue;
+        time *= b.multiplier;
+      }
+      return time;
+    }
+
+    function formatCookTime(seconds) {
+      if (seconds <= 0) return "Instant";
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = Math.floor(seconds % 60);
+      if (h >= 24) { const d = Math.floor(h / 24); const rh = h % 24; return rh > 0 ? `${d}d ${rh}h` : `${d}d`; }
+      if (h > 0 && m > 0) return `${h}h ${m}m`;
+      if (h > 0) return `${h}h`;
+      if (m > 0 && s > 0) return `${m}m ${s}s`;
+      if (m > 0) return `${m}m`;
+      return `${s}s`;
+    }
+
+    function getSavedBumpkinRecipes() {
+      try {
+        const saved = localStorage.getItem("sfl_bumpkin_recipes");
+        return saved ? JSON.parse(saved) : {};
+      } catch (e) { return {}; }
+    }
+
+    function selectBumpkinRecipe(building, recipe) {
+      const saved = getSavedBumpkinRecipes();
+      saved[building] = recipe;
+      localStorage.setItem("sfl_bumpkin_recipes", JSON.stringify(saved));
+      if (cachedFarmData) renderBumpkin(cachedFarmData);
     }
 
     // ═══════════════════════════════════════
@@ -1608,7 +1921,7 @@
       const activeBoosts = detectFlowerBoosts(farm);
       const flowerMultiplier = computeFlowerMultiplier(activeBoosts);
       const season = farm.season?.season || null;
-      return { inventory, inProgress, petalBlessed, flowerBeds, craftingBox, trapSpots, activeBoosts, flowerMultiplier, season };
+      return { inventory, inProgress, petalBlessed, flowerBeds, craftingBox, trapSpots, activeBoosts, flowerMultiplier, season, bumpkin: farm.bumpkin, buildings: farm.buildings, farm };
     }
 
     // ═══════════════════════════════════════
@@ -1898,7 +2211,7 @@
       const dollTotal = Object.entries(trackedDolls).filter(([,v]) => v).length;
       const crustTotal = Object.keys(CRUSTACEAN_RECIPES).length;
 
-      let flowerProgress = "", dollProgress = "", crustProgress = "";
+      let flowerProgress = "", dollProgress = "", crustProgress = "", bumpkinProgress = "";
 
       if (data) {
         const { inventory, inProgress } = data;
@@ -1922,6 +2235,12 @@
           if (getCount(inventory, name) + (inProgress[name] || 0) >= LIMIT) cc++;
         }
         crustProgress = `<div class="hub-card-progress pixel-font">${cc}/${crustTotal} complete</div>`;
+
+        if (data.bumpkin) {
+          const bxp = parseFloat(data.bumpkin.experience || 0);
+          const blvl = getBumpkinLevel(bxp);
+          bumpkinProgress = `<div class="hub-card-progress pixel-font">Level ${blvl}/200</div>`;
+        }
       }
 
       let html = `<div class="header pixel-panel pixel-font">
@@ -1947,6 +2266,12 @@
           <h3 class="pixel-font">CRUSTACEANS</h3>
           <div class="hub-card-count pixel-font">${crustTotal} types</div>
           ${crustProgress}
+        </div>
+        <div class="hub-card pixel-panel" onclick="navigateTo('bumpkin')">
+          <div class="hub-card-icon">👨‍🍳</div>
+          <h3 class="pixel-font">BUMPKIN</h3>
+          <div class="hub-card-count pixel-font">XP Calculator</div>
+          ${bumpkinProgress}
         </div>
       </div>`;
 
@@ -2440,6 +2765,162 @@
     }
 
     // ═══════════════════════════════════════
+    //  RENDER: BUMPKIN
+    // ═══════════════════════════════════════
+
+    function renderBumpkin(data) {
+      const { bumpkin, buildings, farm } = data;
+      const app = document.getElementById("app");
+
+      if (!bumpkin) {
+        app.innerHTML = `<div class="error-screen pixel-panel pixel-font">
+          <div class="icon">⚠️</div>
+          <h2>No bumpkin data found</h2>
+          <p>Make sure your API key has the correct permissions.</p>
+        </div>`;
+        return;
+      }
+
+      const currentXP = parseFloat(bumpkin.experience || 0);
+      const currentLevel = getBumpkinLevel(currentXP);
+      const maxXP = BUMPKIN_XP_TABLE[199];
+      const xpRemaining = Math.max(0, maxXP - currentXP);
+      const xpPct = Math.min(100, (currentXP / maxXP) * 100);
+
+      // Level progress within current level
+      const nextLevelXP = currentLevel < 200 ? BUMPKIN_XP_TABLE[currentLevel] : maxXP;
+      const prevLevelXP = BUMPKIN_XP_TABLE[currentLevel - 1];
+      const levelProgress = currentLevel >= 200 ? 100 :
+        Math.round(((currentXP - prevLevelXP) / (nextLevelXP - prevLevelXP)) * 100);
+
+      // Detect owned cooking buildings
+      const ownedBuildings = {};
+      for (const name of COOKING_BUILDING_NAMES) {
+        const count = (buildings?.[name] || []).length;
+        if (count > 0) ownedBuildings[name] = count;
+      }
+
+      // Detect cooking boosts
+      const boosts = detectCookingBoosts(farm);
+      const savedRecipes = getSavedBumpkinRecipes();
+
+      let html = "";
+
+      // Dev banner
+      html += `<div class="bumpkin-dev-banner pixel-panel pixel-font">⚠ UNDER DEVELOPMENT — might show incorrect data</div>`;
+
+      // Header
+      html += `<div class="header pixel-panel pixel-font">
+        <h1>BUMPKIN XP CALCULATOR</h1>
+        <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
+      </div>`;
+
+      // Level section
+      html += `<div class="bumpkin-xp-section pixel-panel pixel-font">
+        <div class="bumpkin-level-big">LVL ${currentLevel}</div>
+        <div class="bumpkin-xp-info">
+          ${Math.floor(currentXP).toLocaleString()} / ${maxXP.toLocaleString()} XP<br>
+          ${xpRemaining > 0 ? `${Math.ceil(xpRemaining).toLocaleString()} XP to level 200` : "MAX LEVEL!"}
+        </div>
+        <div class="progress-bar-outer"><div class="progress-bar-fill green" style="width:${xpPct.toFixed(2)}%"></div></div>
+        ${currentLevel < 200 ? `<div style="margin-top:6px;font-size:9px;color:var(--text-dim)">Level ${currentLevel} → ${currentLevel + 1}: ${levelProgress}%</div>` : ""}
+      </div>`;
+
+      // Boosts section
+      if (boosts.xpBoosts.length > 0 || boosts.timeBoosts.length > 0) {
+        html += `<div class="bumpkin-boosts pixel-panel pixel-font">
+          <span style="color:var(--green)">DETECTED BOOSTS</span>
+          ${boosts.xpBoosts.map(b => `<span style="color:var(--text-secondary)">${escHTML(b.name)} <span style="color:var(--text-dim)">×${b.multiplier} XP${b.buildings ? " (" + b.buildings.join(", ") + ")" : ""}${b.honeyOnly ? " (honey)" : ""}${b.cakeOnly ? " (cake)" : ""}</span></span>`).join("")}
+          ${boosts.timeBoosts.map(b => `<span style="color:var(--text-secondary)">${escHTML(b.name)} <span style="color:var(--text-dim)">×${b.multiplier} time${b.buildings ? " (" + b.buildings.join(", ") + ")" : ""}</span></span>`).join("")}
+        </div>`;
+      }
+
+      // Building cards
+      const buildingEntries = Object.entries(ownedBuildings);
+      if (buildingEntries.length === 0) {
+        html += `<div class="bumpkin-summary pixel-panel pixel-font">
+          <div style="font-size:11px;color:var(--text-dim)">No cooking buildings detected.</div>
+        </div>`;
+      } else {
+        html += `<div class="bumpkin-buildings-grid">`;
+
+        let totalXPPerDay = 0;
+        const buildingStats = [];
+
+        for (const [buildingName, count] of buildingEntries) {
+          const recipes = Object.entries(COOKING_RECIPES_DATA)
+            .filter(([, r]) => r.building === buildingName && r.cookSec > 0)
+            .map(([name, r]) => {
+              const xp = computeFoodXP(name, r, buildingName, boosts);
+              const time = computeCookTime(r.cookSec, buildingName, boosts);
+              const xpPerHour = time > 0 ? (xp / time) * 3600 : 0;
+              return { name, xp, time, xpPerHour };
+            })
+            .sort((a, b) => b.xpPerHour - a.xpPerHour);
+
+          const selectedName = savedRecipes[buildingName] || (recipes.length > 0 ? recipes[0].name : "");
+          const selected = recipes.find(r => r.name === selectedName) || recipes[0];
+
+          let xpPerDay = 0, cooksPerDay = 0, daysNeeded = Infinity;
+
+          if (selected && selected.time > 0) {
+            cooksPerDay = (86400 / selected.time) * count;
+            xpPerDay = selected.xp * cooksPerDay;
+            totalXPPerDay += xpPerDay;
+            daysNeeded = xpRemaining > 0 ? Math.ceil(xpRemaining / xpPerDay) : 0;
+          }
+
+          buildingStats.push({ buildingName, xpPerDay, count });
+
+          const emoji = COOKING_BUILDING_EMOJI[buildingName] || "🏠";
+
+          html += `<div class="bumpkin-building-card pixel-panel">
+            <div class="bumpkin-building-header pixel-font">
+              <span style="font-size:20px">${emoji}</span>
+              <span class="bumpkin-building-name">${escHTML(buildingName)}</span>
+              ${count > 1 ? `<span class="bumpkin-building-count">×${count}</span>` : ""}
+            </div>
+            <select class="bumpkin-recipe-select" onchange="selectBumpkinRecipe('${escHTML(buildingName)}', this.value)">
+              ${recipes.map(r => `<option value="${escHTML(r.name)}" ${r.name === selectedName ? "selected" : ""}>${escHTML(r.name)} (${Math.round(r.xpPerHour).toLocaleString()} XP/h)</option>`).join("")}
+            </select>
+            ${selected ? `<div class="bumpkin-recipe-stats">
+              XP per cook: <span style="color:var(--green)">${Math.round(selected.xp).toLocaleString()}</span><br>
+              Cook time: <span style="color:var(--blue)">${formatCookTime(selected.time)}</span><br>
+              XP/hour: <span style="color:var(--sunpetal)">${Math.round(selected.xpPerHour).toLocaleString()}</span><br>
+              XP/day${count > 1 ? " (×" + count + ")" : ""}: <span style="color:var(--green)">${Math.round(xpPerDay).toLocaleString()}</span><br>
+              ${xpRemaining > 0 ? `Solo days to 200: <span style="color:var(--text-dim)">${daysNeeded.toLocaleString()}d</span>` : ""}
+            </div>` : `<div style="font-size:10px;color:var(--text-dim)">No recipes available</div>`}
+          </div>`;
+        }
+
+        html += `</div>`;
+
+        // Summary
+        const totalDays = totalXPPerDay > 0 && xpRemaining > 0 ? Math.ceil(xpRemaining / totalXPPerDay) : 0;
+
+        html += `<div class="bumpkin-summary pixel-panel pixel-font">
+          <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">ALL BUILDINGS COMBINED</div>
+          <div style="font-size:13px;color:var(--sunpetal);margin-bottom:8px">${Math.round(totalXPPerDay).toLocaleString()} XP / day</div>
+          ${xpRemaining > 0 ? `
+            <div class="bumpkin-days-big">${totalDays.toLocaleString()} days</div>
+            <div style="font-size:10px;color:var(--text-dim)">to reach level 200</div>
+          ` : `<div class="bumpkin-days-big" style="color:var(--green)">MAX LEVEL!</div>`}
+          ${buildingStats.length > 1 ? `<div style="margin-top:12px;font-size:9px;color:var(--text-dim);line-height:2">
+            ${buildingStats.map(b => `${COOKING_BUILDING_EMOJI[b.buildingName] || ""} ${escHTML(b.buildingName)}${b.count > 1 ? " ×" + b.count : ""}: ${Math.round(b.xpPerDay).toLocaleString()} XP/day`).join("<br>")}
+          </div>` : ""}
+        </div>`;
+      }
+
+      // Footer
+      html += `<div class="footer">
+        <button class="refresh-btn" onclick="refresh()">REFRESH</button>
+        <div class="timestamp pixel-font">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
+      </div>`;
+
+      app.innerHTML = html;
+    }
+
+    // ═══════════════════════════════════════
     //  MAIN
     // ═══════════════════════════════════════
 
@@ -2492,6 +2973,7 @@
           case "flowers": renderFlowers(data); break;
           case "dolls": renderDolls(data); break;
           case "crustaceans": renderCrustaceans(data); break;
+          case "bumpkin": renderBumpkin(data); break;
           default: renderHub(data);
         }
 
