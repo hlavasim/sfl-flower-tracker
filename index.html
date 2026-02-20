@@ -924,13 +924,28 @@
       margin: 8px 0;
     }
     .bumpkin-boosts {
-      padding: 8px 12px;
+      padding: 12px 16px;
       margin-bottom: 12px;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 6px 12px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0 20px;
       font-size: 9px;
+    }
+    .bumpkin-boosts-col h4 {
+      font-size: 10px;
+      margin-bottom: 6px;
+      padding-bottom: 4px;
+      border-bottom: 2px solid rgba(92,58,30,0.4);
+    }
+    .bumpkin-boosts-col .boost-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 3px 0;
+      color: var(--text-secondary);
+    }
+    .bumpkin-boosts-col .boost-row .boost-val {
+      color: var(--text-dim);
+      white-space: nowrap;
     }
 
     /* ── Responsive ── */
@@ -955,6 +970,7 @@
       .nav-link { font-size: 9px; padding: 12px 12px; }
       .nav-link.help-btn { padding: 12px 14px; font-size: 13px; }
       .config-collapsed { gap: 10px; font-size: 9px; flex-wrap: wrap; justify-content: center; }
+      .bumpkin-boosts { grid-template-columns: 1fr; gap: 12px 0; }
       .bumpkin-buildings-grid { grid-template-columns: 1fr; }
       .bumpkin-level-big { font-size: 24px; }
       .bumpkin-days-big { font-size: 22px; }
@@ -2850,12 +2866,24 @@
         ${currentLevel < 200 ? `<div style="margin-top:6px;font-size:9px;color:var(--text-dim)">Level ${currentLevel} → ${currentLevel + 1}: ${levelProgress}%</div>` : ""}
       </div>`;
 
-      // Boosts section
-      if (boosts.xpBoosts.length > 0 || boosts.timeBoosts.length > 0) {
+      // Boosts section — always show both columns
+      {
+        const xpLabel = (b) => {
+          let tag = "";
+          if (b.buildings) tag = ` (${b.buildings.join(", ")})`;
+          if (b.honeyOnly) tag = " (honey)";
+          if (b.cakeOnly) tag = " (cake)";
+          return tag;
+        };
         html += `<div class="bumpkin-boosts pixel-panel pixel-font">
-          <span style="color:var(--green)">DETECTED BOOSTS</span>
-          ${boosts.xpBoosts.map(b => `<span style="color:var(--text-secondary)">${escHTML(b.name)} <span style="color:var(--text-dim)">×${b.multiplier} XP${b.buildings ? " (" + b.buildings.join(", ") + ")" : ""}${b.honeyOnly ? " (honey)" : ""}${b.cakeOnly ? " (cake)" : ""}</span></span>`).join("")}
-          ${boosts.timeBoosts.map(b => `<span style="color:var(--text-secondary)">${escHTML(b.name)} <span style="color:var(--text-dim)">×${b.multiplier} time${b.buildings ? " (" + b.buildings.join(", ") + ")" : ""}</span></span>`).join("")}
+          <div class="bumpkin-boosts-col">
+            <h4 style="color:var(--green)">XP BOOSTS</h4>
+            ${boosts.xpBoosts.length > 0 ? boosts.xpBoosts.map(b => `<div class="boost-row"><span>${escHTML(b.name)}${xpLabel(b)}</span><span class="boost-val">×${b.multiplier}</span></div>`).join("") : '<div style="color:var(--text-dim)">None detected</div>'}
+          </div>
+          <div class="bumpkin-boosts-col">
+            <h4 style="color:var(--blue)">TIME BOOSTS</h4>
+            ${boosts.timeBoosts.length > 0 ? boosts.timeBoosts.map(b => `<div class="boost-row"><span>${escHTML(b.name)}${b.buildings ? " (" + b.buildings.join(", ") + ")" : ""}</span><span class="boost-val">×${b.multiplier}</span></div>`).join("") : '<div style="color:var(--text-dim)">None detected</div>'}
+          </div>
         </div>`;
       }
 
