@@ -1565,8 +1565,7 @@
     // ═══════════════════════════════════════
 
     function renderDonate() {
-      const ethURI = `ethereum:${DONATE_ADDR}`;
-      const qrURL = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(ethURI)}&bgcolor=ffffff&color=2c1810`;
+      const qrURL = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(DONATE_ADDR)}&bgcolor=ffffff&color=2c1810`;
       document.getElementById("donate-section").innerHTML = `
         <div class="donate-section pixel-panel pixel-font">
           <h3>SUPPORT THE PROJECT</h3>
@@ -1701,37 +1700,48 @@
       const xpBoosts = [];
       const timeBoosts = [];
 
-      // XP skills
+      // Check collectible OR wearable (handles both cases)
+      function hasItem(name) {
+        return findCollectible(farm, name).length > 0 || isWearableEquipped(farm, name);
+      }
+      // Try multiple name variants
+      function hasAny(...names) {
+        return names.some(n => hasItem(n));
+      }
+
+      // Debug: log all available items so user can spot missing boosts
+      console.log("[Cooking Boosts] Collectibles:", Object.keys(farm.collectibles || {}));
+      console.log("[Cooking Boosts] Home collectibles:", Object.keys(farm.home?.collectibles || {}));
+      console.log("[Cooking Boosts] Equipped wearables:", farm.bumpkin?.equipped);
+      console.log("[Cooking Boosts] Skills:", Object.keys(skills));
+
+      // === XP BOOSTS ===
+      // Skills
       if (skills["Munching Mastery"]) xpBoosts.push({ name: "Munching Mastery", multiplier: 1.05 });
       if (skills["Juicy Boost"]) xpBoosts.push({ name: "Juicy Boost", multiplier: 1.1, buildings: ["Smoothie Shack"] });
       if (skills["Drive-Through Deli"]) xpBoosts.push({ name: "Drive-Through Deli", multiplier: 1.15, buildings: ["Deli"] });
       if (skills["Buzzworthy Treats"]) xpBoosts.push({ name: "Buzzworthy Treats", multiplier: 1.1, honeyOnly: true });
+      // Items (check both collectibles + wearables)
+      if (hasItem("Golden Spatula")) xpBoosts.push({ name: "Golden Spatula", multiplier: 1.1 });
+      if (hasItem("Observatory")) xpBoosts.push({ name: "Observatory", multiplier: 1.05 });
+      if (hasItem("Blossombeard")) xpBoosts.push({ name: "Blossombeard", multiplier: 1.1 });
+      if (hasItem("Grain Grinder")) xpBoosts.push({ name: "Grain Grinder", multiplier: 1.2, cakeOnly: true });
+      if (hasItem("Lifetime Farmer Banner")) xpBoosts.push({ name: "Lifetime Farmer Banner", multiplier: 1.1 });
 
-      // XP collectibles
-      if (findCollectible(farm, "Golden Spatula").length > 0) xpBoosts.push({ name: "Golden Spatula", multiplier: 1.1 });
-      if (findCollectible(farm, "Observatory").length > 0) xpBoosts.push({ name: "Observatory", multiplier: 1.05 });
-      if (findCollectible(farm, "Blossombeard").length > 0) xpBoosts.push({ name: "Blossombeard", multiplier: 1.1 });
-      if (findCollectible(farm, "Grain Grinder").length > 0) xpBoosts.push({ name: "Grain Grinder", multiplier: 1.2, cakeOnly: true });
-      if (findCollectible(farm, "Lifetime Farmer Banner").length > 0) xpBoosts.push({ name: "Lifetime Farmer Banner", multiplier: 1.1 });
-
-      // Time skills
+      // === TIME BOOSTS ===
+      // Skills
       if (skills["Fast Feasts"]) timeBoosts.push({ name: "Fast Feasts", multiplier: 0.9, buildings: ["Fire Pit", "Kitchen"] });
       if (skills["Frosted Cakes"]) timeBoosts.push({ name: "Frosted Cakes", multiplier: 0.9, buildings: ["Bakery"] });
+      // Items
+      if (hasItem("Luna's Hat")) timeBoosts.push({ name: "Luna's Hat", multiplier: 0.5 });
+      if (hasItem("Desert Gnome")) timeBoosts.push({ name: "Desert Gnome", multiplier: 0.9 });
+      if (hasAny("Nightshade Medallion")) timeBoosts.push({ name: "Nightshade Medallion", multiplier: 0.75 });
+      if (hasAny("Master Chefs Cleaver", "Master Chef's Cleaver")) timeBoosts.push({ name: "Master Chefs Cleaver", multiplier: 0.85 });
 
-      // Time collectibles
-      if (findCollectible(farm, "Luna's Hat").length > 0) timeBoosts.push({ name: "Luna's Hat", multiplier: 0.5 });
-      if (findCollectible(farm, "Desert Gnome").length > 0) timeBoosts.push({ name: "Desert Gnome", multiplier: 0.9 });
-      if (findCollectible(farm, "Nightshade Medallion").length > 0) timeBoosts.push({ name: "Nightshade Medallion", multiplier: 0.75 });
-      if (findCollectible(farm, "Master Chefs Cleaver").length > 0) timeBoosts.push({ name: "Master Chefs Cleaver", multiplier: 0.85 });
+      console.log("[Cooking Boosts] Detected XP:", xpBoosts.map(b => b.name));
+      console.log("[Cooking Boosts] Detected Time:", timeBoosts.map(b => b.name));
 
-      // Time wearables
-      if (isWearableEquipped(farm, "Desert Gnome")) timeBoosts.push({ name: "Desert Gnome", multiplier: 0.9 });
-      if (isWearableEquipped(farm, "Nightshade Medallion")) timeBoosts.push({ name: "Nightshade Medallion", multiplier: 0.75 });
-      if (isWearableEquipped(farm, "Master Chefs Cleaver")) timeBoosts.push({ name: "Master Chefs Cleaver", multiplier: 0.85 });
-
-      // Deduplicate (item might be found as both collectible and wearable)
-      const dedup = (arr) => { const s = new Set(); return arr.filter(b => { if (s.has(b.name)) return false; s.add(b.name); return true; }); };
-      return { xpBoosts: dedup(xpBoosts), timeBoosts: dedup(timeBoosts) };
+      return { xpBoosts, timeBoosts };
     }
 
     function computeFoodXP(foodName, food, buildingName, boosts) {
