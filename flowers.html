@@ -1742,7 +1742,7 @@
       if (hasItem("Golden Spatula")) xpBoosts.push({ name: "Golden Spatula", multiplier: 1.1 });
       if (hasItem("Observatory")) xpBoosts.push({ name: "Observatory", multiplier: 1.05 });
       if (hasItem("Blossombeard")) xpBoosts.push({ name: "Blossombeard", multiplier: 1.1 });
-      if (hasItem("Grain Grinder")) xpBoosts.push({ name: "Grain Grinder", multiplier: 1.2, cakeOnly: true });
+      if (hasItem("Grain Grinder")) xpBoosts.push({ name: "Grain Grinder", multiplier: 1.2, buildings: ["Bakery"] });
       if (hasItem("Lifetime Farmer Banner")) xpBoosts.push({ name: "Lifetime Farmer Banner", multiplier: 1.1 });
 
       // === TIME BOOSTS ===
@@ -1766,7 +1766,6 @@
       for (const b of boosts.xpBoosts) {
         if (b.buildings && !b.buildings.includes(buildingName)) continue;
         if (b.honeyOnly && !food.usesHoney) continue;
-        if (b.cakeOnly && !foodName.includes("Cake")) continue;
         xp *= b.multiplier;
       }
       return xp;
@@ -2927,7 +2926,6 @@
           let tag = "";
           if (b.buildings) tag = ` (${b.buildings.join(", ")})`;
           if (b.honeyOnly) tag = " (honey)";
-          if (b.cakeOnly) tag = " (cake)";
           return tag;
         };
         html += `<div class="bumpkin-boosts pixel-panel pixel-font">
