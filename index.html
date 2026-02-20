@@ -948,6 +948,159 @@
       white-space: nowrap;
     }
 
+    /* ── Treasury page ── */
+    .treasury-header {
+      text-align: center;
+      padding: 20px 16px;
+      margin-bottom: 16px;
+      background: linear-gradient(180deg, #3e2415 0%, #2c1810 100%);
+    }
+    .treasury-total {
+      font-size: 28px;
+      color: var(--sunpetal);
+      text-shadow: 2px 2px 0 #000, 0 0 12px rgba(255,215,0,0.3);
+      margin: 8px 0 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .treasury-total img {
+      width: 28px; height: 28px;
+      image-rendering: pixelated;
+      filter: drop-shadow(1px 1px 0 #000);
+    }
+    .treasury-secondary {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+    .treasury-rates {
+      font-size: 9px;
+      color: var(--text-dim);
+      margin-top: 8px;
+    }
+    .treasury-categories {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .treasury-cat-card {
+      padding: 14px;
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+    .treasury-cat-card:hover { transform: translateY(-2px); }
+    .treasury-cat-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .treasury-cat-icon { font-size: 20px; }
+    .treasury-cat-name { font-size: 11px; color: var(--text-secondary); }
+    .treasury-cat-value {
+      font-size: 16px;
+      color: var(--sunpetal);
+      text-shadow: 1px 1px 0 #000;
+    }
+    .treasury-cat-pct {
+      font-size: 9px;
+      color: var(--text-dim);
+      margin-top: 4px;
+    }
+    .treasury-cat-bar {
+      height: 6px;
+      background: #111;
+      border: 1px solid #000;
+      margin-top: 6px;
+    }
+    .treasury-cat-bar-fill { height: 100%; transition: width 0.6s; }
+    .treasury-cat-top {
+      margin-top: 8px;
+      font-size: 10px;
+      line-height: 1.8;
+      color: var(--text-secondary);
+    }
+    .treasury-cat-top-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .treasury-cat-top-item img {
+      width: 18px; height: 18px;
+      image-rendering: pixelated;
+      filter: drop-shadow(1px 1px 0 #000);
+    }
+    .treasury-pie-wrap {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 20px;
+      margin-bottom: 16px;
+      padding: 16px;
+    }
+    .treasury-pie {
+      width: 140px; height: 140px;
+      border-radius: 50%;
+      border: 3px solid #000;
+      box-shadow: 0 0 0 3px rgba(92,58,30,0.5), 4px 4px 0 rgba(0,0,0,0.4);
+    }
+    .treasury-pie-legend {
+      font-size: 10px;
+      line-height: 2;
+      color: var(--text-secondary);
+    }
+    .treasury-pie-swatch {
+      display: inline-block;
+      width: 12px; height: 12px;
+      border: 2px solid #000;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    .treasury-detail-section { margin-bottom: 16px; }
+    .treasury-detail-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: var(--bg-dark);
+      border: 3px solid var(--border-dark);
+      border-bottom: none;
+      cursor: pointer;
+    }
+    .treasury-detail-header:hover { background: var(--bg-medium); }
+    .treasury-detail-header h3 { font-size: 12px; flex: 1; }
+    .treasury-detail-arrow { font-size: 10px; color: var(--text-dim); }
+    .treasury-detail-grid { border: 3px solid var(--border-dark); }
+    .treasury-item-row {
+      display: grid;
+      grid-template-columns: 32px 1fr 70px 80px 90px;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-bottom: 2px solid rgba(0,0,0,0.4);
+      font-size: 11px;
+      min-height: 40px;
+    }
+    .treasury-item-row:nth-child(even) { background: var(--bg-card); }
+    .treasury-item-row:nth-child(odd) { background: var(--bg-card-alt); }
+    .treasury-item-img {
+      width: 24px; height: 24px;
+      image-rendering: pixelated;
+      filter: drop-shadow(1px 1px 0 #000);
+    }
+    .treasury-item-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text-primary);
+    }
+    .treasury-item-qty { color: var(--text-secondary); text-align: right; }
+    .treasury-item-unit { color: var(--text-dim); text-align: right; }
+    .treasury-item-total { color: var(--sunpetal); text-align: right; font-weight: bold; }
+
     /* ── Responsive ── */
     @media (max-width: 640px) {
       .container { padding: 8px; }
@@ -974,6 +1127,11 @@
       .bumpkin-buildings-grid { grid-template-columns: 1fr; }
       .bumpkin-level-big { font-size: 24px; }
       .bumpkin-days-big { font-size: 22px; }
+      .treasury-total { font-size: 20px; }
+      .treasury-categories { grid-template-columns: 1fr; }
+      .treasury-pie-wrap { flex-direction: column; }
+      .treasury-item-row { grid-template-columns: 24px 1fr 60px 70px; }
+      .treasury-item-unit { display: none; }
     }
   </style>
   <script defer src="/_vercel/insights/script.js"></script>
@@ -1000,7 +1158,7 @@
     const DEFAULTS = { farm: "", key: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
     const IMG_BASE = "https://sfl.world/img/flowers/";
-    const PAGES = ["hub", "flowers", "dolls", "crustaceans", "bumpkin"];
+    const PAGES = ["hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -1502,6 +1660,7 @@
         { id: "dolls", label: "DOLLS" },
         { id: "crustaceans", label: "CRABS" },
         { id: "bumpkin", label: "BUMPKIN" },
+        { id: "treasury", label: "TREASURY" },
       ];
       let html = '<div class="nav-bar pixel-panel">';
       for (const l of links) {
@@ -1579,7 +1738,7 @@
             <button class="donate-copy" onclick="copyAddr()">COPY</button>
           </div>
           <div class="donate-chain-label">ETH / Polygon / Base / Arbitrum</div>
-          <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size:10px;color:var(--text-dim)">Created by 0xStableFarmer - #155498<br>Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br><span style="color:var(--text-dim);opacity:0.6">v1.6</span></div>
+          <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size:10px;color:var(--text-dim)">Created by 0xStableFarmer - #155498<br>Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br><span style="color:var(--text-dim);opacity:0.6">v1.7</span></div>
         </div>`;
     }
 
@@ -2384,6 +2543,11 @@
           <div class="hub-card-count pixel-font">XP Calculator</div>
           ${bumpkinProgress}
         </div>
+        <div class="hub-card pixel-panel" onclick="navigateTo('treasury')">
+          <div class="hub-card-icon">💰</div>
+          <h3 class="pixel-font">TREASURY</h3>
+          <div class="hub-card-count pixel-font">Farm Value</div>
+        </div>
       </div>`;
 
       app.innerHTML = html;
@@ -3115,6 +3279,323 @@
     }
 
     // ═══════════════════════════════════════
+    //  TREASURY
+    // ═══════════════════════════════════════
+
+    const TREASURY_CAT_COLORS = {
+      resources: "#2ECC71",
+      collectibles: "#E67E22",
+      wearables: "#9B59B6",
+      liquid: "#3498DB",
+    };
+
+    const SFL_ICON_URL = "https://sfl.world/img/source/SFL.png";
+    const ITEM_ICON_BASE = "https://sfl.world/img/source/";
+
+    function formatSFL(v) {
+      if (v >= 1e6) return (v / 1e6).toFixed(2) + "M";
+      if (v >= 1e4) return Math.round(v).toLocaleString();
+      if (v >= 100) return v.toFixed(1);
+      if (v >= 1) return v.toFixed(2);
+      return v.toFixed(4);
+    }
+    function formatUSD(v) {
+      return "$" + v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function formatBTC(v) {
+      if (v >= 0.01) return "₿" + v.toFixed(4);
+      return "₿" + v.toFixed(8);
+    }
+
+    async function fetchTreasuryData() {
+      const proxyFetch = async (url) => {
+        try {
+          const resp = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
+          if (resp.ok) return resp.json();
+        } catch {}
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`Fetch ${url} failed: ${resp.status}`);
+        return resp.json();
+      };
+
+      const [nftData, priceData, exchangeData, btcData] = await Promise.all([
+        proxyFetch("https://sfl.world/api/v1/nfts"),
+        proxyFetch("https://sfl.world/api/v1/prices"),
+        proxyFetch("https://sfl.world/api/v1.1/exchange"),
+        proxyFetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"),
+      ]);
+
+      const nftCollectibles = {};
+      for (const c of (nftData.collectibles || [])) {
+        nftCollectibles[c.name] = c;
+      }
+      const nftWearables = {};
+      for (const w of (nftData.wearables || [])) {
+        nftWearables[w.name] = w;
+      }
+
+      const p2pPrices = priceData?.data?.p2p || {};
+      const sflUsd = exchangeData?.sfl?.usd || 0;
+      const coinsPerSFL = parseFloat(Object.keys(exchangeData?.coins || {})[0]) || 160;
+      const btcUsd = btcData?.bitcoin?.usd || 0;
+
+      return { nftCollectibles, nftWearables, p2pPrices, sflUsd, coinsPerSFL, btcUsd };
+    }
+
+    function computeFarmValue(farm, td) {
+      const { nftCollectibles, nftWearables, p2pPrices, sflUsd, coinsPerSFL, btcUsd } = td;
+      const inventory = farm.inventory || {};
+      const wardrobe = farm.wardrobe || {};
+      const MIN_VALUE = 0.01;
+
+      // --- Resources: inventory items with P2P prices ---
+      const resources = [];
+      for (const [name, price] of Object.entries(p2pPrices)) {
+        const qty = getCount(inventory, name);
+        if (qty <= 0) continue;
+        const total = qty * price;
+        if (total < MIN_VALUE) continue;
+        resources.push({ name, qty, unitPrice: price, total });
+      }
+      resources.sort((a, b) => b.total - a.total);
+
+      // --- Collectibles: placed + inventory NFT collectibles ---
+      const collectibles = [];
+      const mainColl = farm.collectibles || {};
+      const homeColl = farm.home?.collectibles || {};
+      const countedCollectibles = new Set();
+
+      for (const name of Object.keys(nftCollectibles)) {
+        const nft = nftCollectibles[name];
+        const floor = parseFloat(nft.floor) || 0;
+        if (floor <= 0) continue;
+
+        const placedMain = (mainColl[name] || []).length;
+        const placedHome = (homeColl[name] || []).length;
+        const inInv = getCount(inventory, name);
+        const qty = placedMain + placedHome + inInv;
+        if (qty <= 0) continue;
+        const total = qty * floor;
+        if (total < MIN_VALUE) continue;
+        collectibles.push({ name, qty, unitPrice: floor, total });
+        countedCollectibles.add(name);
+      }
+      collectibles.sort((a, b) => b.total - a.total);
+
+      // --- Wearables: wardrobe matched against NFT wearables ---
+      const wearables = [];
+      for (const [name, qty] of Object.entries(wardrobe)) {
+        if (!qty || qty <= 0) continue;
+        const nft = nftWearables[name];
+        if (!nft) continue;
+        const price = parseFloat(nft.lastSalePrice) || parseFloat(nft.floor) || 0;
+        if (price <= 0) continue;
+        const total = qty * price;
+        if (total < MIN_VALUE) continue;
+        wearables.push({ name, qty, unitPrice: price, total });
+      }
+      wearables.sort((a, b) => b.total - a.total);
+
+      // --- Liquid: SFL balance + coins ---
+      const sflBalance = parseFloat(farm.balance) || 0;
+      const coinBalance = parseFloat(farm.coins) || 0;
+      const coinsAsSFL = coinsPerSFL > 0 ? coinBalance / coinsPerSFL : 0;
+      const liquidTotal = sflBalance + coinsAsSFL;
+
+      const resourcesTotal = resources.reduce((s, r) => s + r.total, 0);
+      const collectiblesTotal = collectibles.reduce((s, c) => s + c.total, 0);
+      const wearablesTotal = wearables.reduce((s, w) => s + w.total, 0);
+      const grandTotal = resourcesTotal + collectiblesTotal + wearablesTotal + liquidTotal;
+
+      return {
+        resources, collectibles, wearables,
+        liquid: { sflBalance, coinBalance, coinsAsSFL, total: liquidTotal },
+        totals: {
+          resources: resourcesTotal,
+          collectibles: collectiblesTotal,
+          wearables: wearablesTotal,
+          liquid: liquidTotal,
+          grand: grandTotal,
+        },
+        rates: { sflUsd, btcUsd, coinsPerSFL },
+      };
+    }
+
+    let treasuryDetailOpen = {};
+
+    function toggleTreasuryDetail(cat) {
+      treasuryDetailOpen[cat] = !treasuryDetailOpen[cat];
+      const grid = document.getElementById("treasury-detail-" + cat);
+      const arrow = document.getElementById("treasury-arrow-" + cat);
+      if (grid) grid.style.display = treasuryDetailOpen[cat] ? "block" : "none";
+      if (arrow) arrow.textContent = treasuryDetailOpen[cat] ? "▼" : "▶";
+    }
+
+    function renderPieChart(totals) {
+      const cats = [
+        { key: "resources", label: "Resources", color: TREASURY_CAT_COLORS.resources },
+        { key: "collectibles", label: "Collectibles", color: TREASURY_CAT_COLORS.collectibles },
+        { key: "wearables", label: "Wearables", color: TREASURY_CAT_COLORS.wearables },
+        { key: "liquid", label: "Liquid", color: TREASURY_CAT_COLORS.liquid },
+      ];
+      const grand = totals.grand || 1;
+      let gradParts = [];
+      let cumPct = 0;
+      for (const c of cats) {
+        const pct = (totals[c.key] / grand) * 100;
+        if (pct < 0.1) continue;
+        gradParts.push(`${c.color} ${cumPct}% ${cumPct + pct}%`);
+        cumPct += pct;
+      }
+      if (gradParts.length === 0) gradParts.push("#333 0% 100%");
+      const gradient = `conic-gradient(${gradParts.join(", ")})`;
+
+      let legendHTML = "";
+      for (const c of cats) {
+        const pct = ((totals[c.key] / grand) * 100).toFixed(1);
+        legendHTML += `<div><span class="treasury-pie-swatch" style="background:${c.color}"></span>${c.label}: ${pct}%</div>`;
+      }
+
+      return `<div class="treasury-pie-wrap pixel-panel">
+        <div class="treasury-pie" style="background:${gradient}"></div>
+        <div class="treasury-pie-legend pixel-font">${legendHTML}</div>
+      </div>`;
+    }
+
+    function renderTreasuryItemRows(items) {
+      if (items.length === 0) return '<div style="padding:12px;text-align:center;font-size:10px;color:var(--text-dim)">No items found</div>';
+      return items.map(item => {
+        const imgUrl = ITEM_ICON_BASE + encodeURIComponent(item.name) + ".png";
+        return `<div class="treasury-item-row">
+          <img class="treasury-item-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">
+          <div class="treasury-item-name" title="${escHTML(item.name)}">${escHTML(item.name)}</div>
+          <div class="treasury-item-qty">×${item.qty}</div>
+          <div class="treasury-item-unit">${formatSFL(item.unitPrice)}</div>
+          <div class="treasury-item-total">${formatSFL(item.total)}</div>
+        </div>`;
+      }).join("");
+    }
+
+    function renderCategoryCard(key, icon, label, total, grandTotal, items) {
+      const pct = grandTotal > 0 ? ((total / grandTotal) * 100) : 0;
+      const color = TREASURY_CAT_COLORS[key];
+      const top5 = items.slice(0, 5);
+      let topHTML = "";
+      for (const item of top5) {
+        const imgUrl = ITEM_ICON_BASE + encodeURIComponent(item.name) + ".png";
+        topHTML += `<div class="treasury-cat-top-item">
+          <img src="${imgUrl}" onerror="this.style.display='none'" alt="" style="width:16px;height:16px;image-rendering:pixelated">
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHTML(item.name)}</span>
+          <span style="color:var(--sunpetal)">${formatSFL(item.total)}</span>
+        </div>`;
+      }
+      return `<div class="treasury-cat-card pixel-panel" onclick="toggleTreasuryDetail('${key}')">
+        <div class="treasury-cat-header">
+          <span class="treasury-cat-icon">${icon}</span>
+          <span class="treasury-cat-name pixel-font">${label}</span>
+        </div>
+        <div class="treasury-cat-value pixel-font">${formatSFL(total)} SFL</div>
+        <div class="treasury-cat-pct pixel-font">${pct.toFixed(1)}%</div>
+        <div class="treasury-cat-bar"><div class="treasury-cat-bar-fill" style="width:${pct.toFixed(1)}%;background:${color}"></div></div>
+        <div class="treasury-cat-top">${topHTML}</div>
+      </div>`;
+    }
+
+    async function renderTreasury(data) {
+      const app = document.getElementById("app");
+      const farm = data.farm;
+
+      app.innerHTML = `<div class="header pixel-panel pixel-font">
+        <h1>TREASURY</h1>
+        <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
+      </div>
+      <div class="loading-screen pixel-font" style="min-height:30vh">
+        <div class="loading-flower">💰</div>
+        <div class="loading-text">Fetching market data...</div>
+      </div>`;
+
+      try {
+        const td = await fetchTreasuryData();
+        const val = computeFarmValue(farm, td);
+        const { totals, rates, resources, collectibles, wearables, liquid } = val;
+
+        const usdTotal = totals.grand * rates.sflUsd;
+        const btcTotal = rates.btcUsd > 0 ? usdTotal / rates.btcUsd : 0;
+
+        let html = `<div class="treasury-header pixel-panel pixel-font">
+          <h1>TREASURY</h1>
+          <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
+          <div class="treasury-total">
+            <img src="${SFL_ICON_URL}" onerror="this.style.display='none'" alt="SFL">
+            ${formatSFL(totals.grand)} SFL
+          </div>
+          <div class="treasury-secondary">${formatUSD(usdTotal)} &nbsp;|&nbsp; ${formatBTC(btcTotal)}</div>
+          <div class="treasury-rates">1 SFL = ${rates.sflUsd.toFixed(4)} USD &nbsp;|&nbsp; 1 BTC = ${formatUSD(rates.btcUsd)}</div>
+        </div>`;
+
+        // Pie chart
+        html += renderPieChart(totals);
+
+        // Category cards
+        html += '<div class="treasury-categories">';
+        html += renderCategoryCard("resources", "⛏️", "RESOURCES", totals.resources, totals.grand, resources);
+        html += renderCategoryCard("collectibles", "🏆", "COLLECTIBLES", totals.collectibles, totals.grand, collectibles);
+        html += renderCategoryCard("wearables", "👕", "WEARABLES", totals.wearables, totals.grand, wearables);
+
+        // Liquid card — special (no item rows)
+        const liqPct = totals.grand > 0 ? ((totals.liquid / totals.grand) * 100) : 0;
+        html += `<div class="treasury-cat-card pixel-panel">
+          <div class="treasury-cat-header">
+            <span class="treasury-cat-icon">💧</span>
+            <span class="treasury-cat-name pixel-font">LIQUID</span>
+          </div>
+          <div class="treasury-cat-value pixel-font">${formatSFL(totals.liquid)} SFL</div>
+          <div class="treasury-cat-pct pixel-font">${liqPct.toFixed(1)}%</div>
+          <div class="treasury-cat-bar"><div class="treasury-cat-bar-fill" style="width:${liqPct.toFixed(1)}%;background:${TREASURY_CAT_COLORS.liquid}"></div></div>
+          <div class="treasury-cat-top" style="line-height:2.2">
+            <div>SFL Balance: <span style="color:var(--sunpetal)">${formatSFL(liquid.sflBalance)}</span></div>
+            <div>Coins: <span style="color:var(--text-secondary)">${Math.floor(liquid.coinBalance).toLocaleString()}</span> <span style="color:var(--text-dim)">(≈ ${formatSFL(liquid.coinsAsSFL)} SFL)</span></div>
+          </div>
+        </div>`;
+        html += '</div>';
+
+        // Detail sections (collapsible)
+        const sections = [
+          { key: "resources", icon: "⛏️", label: "Resources", items: resources },
+          { key: "collectibles", icon: "🏆", label: "Collectibles", items: collectibles },
+          { key: "wearables", icon: "👕", label: "Wearables", items: wearables },
+        ];
+        for (const sec of sections) {
+          const isOpen = treasuryDetailOpen[sec.key];
+          html += `<div class="treasury-detail-section">
+            <div class="treasury-detail-header pixel-panel pixel-font" onclick="toggleTreasuryDetail('${sec.key}')">
+              <span>${sec.icon}</span>
+              <h3>${sec.label} (${sec.items.length})</h3>
+              <span class="treasury-detail-arrow" id="treasury-arrow-${sec.key}">${isOpen ? "▼" : "▶"}</span>
+            </div>
+            <div class="treasury-detail-grid" id="treasury-detail-${sec.key}" style="display:${isOpen ? "block" : "none"}">
+              ${renderTreasuryItemRows(sec.items)}
+            </div>
+          </div>`;
+        }
+
+        app.innerHTML = html;
+      } catch (err) {
+        console.error("Treasury error:", err);
+        app.innerHTML = `<div class="header pixel-panel pixel-font">
+          <h1>TREASURY</h1>
+          <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
+        </div>
+        <div class="error-screen pixel-panel pixel-font">
+          <div class="icon">⚠️</div>
+          <h2>Failed to load market data</h2>
+          <p>${escHTML(err.message)}</p>
+          <button class="refresh-btn" onclick="refresh()">RETRY</button>
+        </div>`;
+      }
+    }
+
+    // ═══════════════════════════════════════
     //  MAIN
     // ═══════════════════════════════════════
 
@@ -3168,6 +3649,7 @@
           case "dolls": renderDolls(data); break;
           case "crustaceans": renderCrustaceans(data); break;
           case "bumpkin": renderBumpkin(data); break;
+          case "treasury": renderTreasury(data); break;
           default: renderHub(data);
         }
 
