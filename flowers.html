@@ -875,6 +875,7 @@
       .config-collapsed { gap: 10px; font-size: 9px; flex-wrap: wrap; justify-content: center; }
     }
   </style>
+  <script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
   <div class="container">
@@ -1335,7 +1336,7 @@
             <button class="donate-copy" onclick="copyAddr()">COPY</button>
           </div>
           <div class="donate-chain-label">ETH / Polygon / Base / Arbitrum</div>
-          <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size:10px;color:var(--text-dim)">Created by 0xStableFarmer - #155498<br>Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br><span style="color:var(--text-dim);opacity:0.6">v1.4</span></div>
+          <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size:10px;color:var(--text-dim)">Created by 0xStableFarmer - #155498<br>Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br><span style="color:var(--text-dim);opacity:0.6">v1.5</span></div>
         </div>`;
     }
 
@@ -1428,9 +1429,7 @@
     }
 
     function barClass(pct) {
-      if (pct >= 100) return "bar-green";
-      if (pct >= 50) return "bar-yellow";
-      return "bar-red";
+      return pct >= 100 ? "bar-green" : "bar-red";
     }
 
     function escHTML(s) {
@@ -1608,7 +1607,8 @@
       const petalBlessed = extractPetalBlessed(farm);
       const activeBoosts = detectFlowerBoosts(farm);
       const flowerMultiplier = computeFlowerMultiplier(activeBoosts);
-      return { inventory, inProgress, petalBlessed, flowerBeds, craftingBox, trapSpots, activeBoosts, flowerMultiplier };
+      const season = farm.season?.season || null;
+      return { inventory, inProgress, petalBlessed, flowerBeds, craftingBox, trapSpots, activeBoosts, flowerMultiplier, season };
     }
 
     // ═══════════════════════════════════════
@@ -1958,7 +1958,7 @@
     // ═══════════════════════════════════════
 
     function renderFlowers(data) {
-      const { inventory, inProgress, petalBlessed, flowerBeds, activeBoosts, flowerMultiplier } = data;
+      const { inventory, inProgress, petalBlessed, flowerBeds, activeBoosts, flowerMultiplier, season } = data;
       lastInventory = inventory;
       lastInProgress = inProgress;
 
@@ -2012,7 +2012,7 @@
 
       html += `<div class="header pixel-panel pixel-font">
         <h1>FLOWER TRACKER</h1>
-        <div class="farm-id">Farm #${escHTML(FARM_ID)} | Target: ${LIMIT} of each</div>
+        <div class="farm-id">Farm #${escHTML(FARM_ID)} | Target: ${LIMIT} of each${season ? ` | Season: ${escHTML(season)}` : ""}</div>
       </div>`;
 
       html += `<div class="summary-bar pixel-panel pixel-font">
@@ -2092,7 +2092,7 @@
         html += `<div class="seed-header pixel-font">
           <img class="seed-icon" src="${IMG_BASE}${encodeURIComponent(seed)}.webp" onerror="this.style.display='none'" alt="">
           <h2 style="color:${sd.color}">${sd.label}</h2>
-          ${sd.season ? `<span class="seed-badge" style="border-color:${sd.color};color:${sd.color}">${sd.season}</span>` : ""}
+          ${sd.season ? `<span class="seed-badge" style="border-color:${sd.season.toLowerCase() === (season || "").toLowerCase() ? 'var(--green)' : 'var(--red)'};color:${sd.season.toLowerCase() === (season || "").toLowerCase() ? 'var(--green)' : 'var(--red)'}">${sd.season} ${sd.season.toLowerCase() === (season || "").toLowerCase() ? '(IN SEASON)' : '(OFF SEASON)'}</span>` : ""}
           <div class="seed-meta">
             <span>${formatHours(sd.hours)} / grow</span>
             <span>${ss.complete}/${ss.total} done</span>
@@ -2398,7 +2398,7 @@
           if (d.chum) {
             const chumHave = getCount(inventory, d.chum);
             const ok = chumHave >= d.qty;
-            chumHTML = `<span style="color:${ok ? 'var(--green)' : 'var(--yellow)'}">${escHTML(d.chum)} x${d.qty}</span>`;
+            chumHTML = `<span style="color:${ok ? 'var(--green)' : 'var(--red)'}">${escHTML(d.chum)} x${d.qty}</span>`;
             if (d.alt) chumHTML += ` <span style="color:var(--text-dim);font-size:10px">alt: ${escHTML(d.alt)}</span>`;
           } else {
             chumHTML = `<span style="color:var(--text-dim)">No chum needed</span>`;
@@ -2498,6 +2498,8 @@
         if (page === "dolls" && data.craftingBox?.readyAt) {
           startGrowingTimers();
         }
+
+        fetch(`/api/track?farm=${FARM_ID}&page=${page}`).catch(() => {});
       } catch (err) {
         console.error(err);
         const needsConfig = !FARM_ID || !API_KEY;
