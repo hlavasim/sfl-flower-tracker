@@ -1101,6 +1101,39 @@
     .treasury-item-unit { color: var(--text-dim); text-align: right; }
     .treasury-item-total { color: var(--sunpetal); text-align: right; font-weight: bold; }
 
+    /* ── Changelog ── */
+    .changelog-toggle {
+      cursor: pointer;
+      color: var(--text-dim);
+      opacity: 0.6;
+      transition: opacity 0.2s;
+      user-select: none;
+    }
+    .changelog-toggle:hover { opacity: 1; }
+    .changelog-content {
+      text-align: left;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 2px solid rgba(92,58,30,0.3);
+      font-family: 'Courier New', monospace;
+      font-size: 10px;
+      color: var(--text-secondary);
+      line-height: 1.7;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .changelog-ver {
+      color: var(--sunpetal);
+      font-weight: bold;
+      margin-top: 8px;
+      margin-bottom: 2px;
+    }
+    .changelog-ver:first-child { margin-top: 0; }
+    .changelog-item { padding-left: 12px; color: var(--text-dim); }
+    .changelog-item::before { content: "• "; color: var(--text-secondary); }
+    .changelog-new { color: var(--green); }
+    .changelog-fix { color: var(--yellow); }
+
     /* ── Responsive ── */
     @media (max-width: 640px) {
       .container { padding: 8px; }
@@ -1738,7 +1771,14 @@
             <button class="donate-copy" onclick="copyAddr()">COPY</button>
           </div>
           <div class="donate-chain-label">ETH / Polygon / Base / Arbitrum</div>
-          <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size:10px;color:var(--text-dim)">Created by 0xStableFarmer - #155498<br>Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br><span style="color:var(--text-dim);opacity:0.6">v1.7</span></div>
+          <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size:10px;color:var(--text-dim)">
+            Created by 0xStableFarmer - #155498<br>
+            Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v1.7</span>
+            <div id="changelog-content" class="changelog-content" style="display:none">
+              ${renderChangelog()}
+            </div>
+          </div>
         </div>`;
     }
 
@@ -1748,6 +1788,78 @@
         btn.textContent = "COPIED!";
         setTimeout(() => btn.textContent = "COPY", 2000);
       });
+    }
+
+    function toggleChangelog() {
+      const el = document.getElementById("changelog-content");
+      const arrow = document.getElementById("changelog-arrow");
+      if (!el) return;
+      const show = el.style.display === "none";
+      el.style.display = show ? "block" : "none";
+      arrow.textContent = show ? "▼" : "▶";
+    }
+
+    function renderChangelog() {
+      const log = [
+        { ver: "v1.7", items: [
+          { t: "new", text: "Treasury page — farm value visualizer" },
+          { t: "new", text: "5 value categories: Resources, Treasures, Collectibles, Wearables, Liquid" },
+          { t: "new", text: "Treasure sell prices with Treasure Map (+20%) and Camel (+30%) boosts" },
+          { t: "new", text: "NFT collectible & wearable valuations from sfl.world" },
+          { t: "new", text: "SFL/USD/BTC conversion with live exchange rates" },
+          { t: "new", text: "Pie chart breakdown + collapsible detail tables" },
+          { t: "new", text: "Gems + coins liquid balance with best-tier conversion" },
+          { t: "new", text: "Expandable version changelog in footer" },
+        ]},
+        { ver: "v1.6", items: [
+          { t: "new", text: "Bumpkin XP Calculator page" },
+          { t: "new", text: "Current level/XP with progress bar to target level" },
+          { t: "new", text: "Building cards with recipe selectors (sorted by XP/hour)" },
+          { t: "new", text: "Auto-detect cooking boosts (skills + collectibles)" },
+          { t: "new", text: "Combined XP/day + days to target level calculation" },
+          { t: "new", text: "Food in inventory XP breakdown" },
+          { t: "new", text: "Pet streak detection with weekly status" },
+        ]},
+        { ver: "v1.5", items: [
+          { t: "new", text: "Usage stats tracking (anonymous)" },
+          { t: "fix", text: "Unified colors: green = have, red = don't have" },
+          { t: "new", text: "Season detection — IN SEASON / OFF SEASON badges" },
+          { t: "new", text: "Current season shown in flower tracker header" },
+          { t: "new", text: "Vercel Web Analytics" },
+        ]},
+        { ver: "v1.4", items: [
+          { t: "new", text: "Multi-page app with nav bar (HUB | FLOWERS | DOLLS | CRABS)" },
+          { t: "new", text: "Auto-detected flower boosts (7 boosts, multiplicative)" },
+          { t: "new", text: "Dolls tracker with configurable tracking + ingredient breakdown" },
+          { t: "new", text: "Crustaceans tracker — Crab Pot / Mariner Pot sections" },
+          { t: "new", text: "Help modal with usage instructions" },
+          { t: "new", text: "API key stored in localStorage (improved security)" },
+        ]},
+        { ver: "v1.3", items: [
+          { t: "new", text: "Auto-detect flower beds from API" },
+          { t: "new", text: "Currently growing section with live timers" },
+          { t: "new", text: "Clickable flower rows with dependency chain details" },
+          { t: "new", text: "Favicon" },
+        ]},
+        { ver: "v1.2", items: [
+          { t: "fix", text: "Proxy: use Node.js res API for Vercel compatibility" },
+        ]},
+        { ver: "v1.1", items: [
+          { t: "new", text: "Vercel deployment with API proxy (CORS fix)" },
+          { t: "new", text: "Custom domain: sunflower.sajmonium.quest" },
+        ]},
+        { ver: "v1.0", items: [
+          { t: "new", text: "Initial release — flower collection tracker" },
+          { t: "new", text: "Progress bars, dependency chains, time estimates" },
+          { t: "new", text: "Petal Blessed optimizer" },
+        ]},
+      ];
+      return log.map(v =>
+        `<div class="changelog-ver">${v.ver}</div>` +
+        v.items.map(i =>
+          `<div class="changelog-item"><span class="changelog-${i.t}">${i.t === "new" ? "NEW" : "FIX"}</span> ${escHTML(i.text)}</div>`
+        ).join("")
+      ).join("");
     }
 
     // ═══════════════════════════════════════
