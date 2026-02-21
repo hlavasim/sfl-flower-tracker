@@ -1134,6 +1134,80 @@
     .changelog-new { color: var(--green); }
     .changelog-fix { color: var(--yellow); }
 
+    /* ── Grow Planner ── */
+    .planner-section {
+      margin-bottom: 16px;
+      border: 4px solid var(--border-brown);
+      background: var(--bg-dark);
+      box-shadow: 0 0 0 3px #000;
+    }
+    .planner-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 14px;
+      background: var(--bg-medium);
+      border-bottom: 3px solid var(--border-dark);
+      cursor: pointer;
+    }
+    .planner-header:hover { background: var(--bg-light); }
+    .planner-body { padding: 10px 14px; }
+    .planner-batch { margin-bottom: 12px; }
+    .planner-batch:last-child { margin-bottom: 0; }
+    .planner-batch-label {
+      font-size: 10px;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .planner-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 0;
+      font-size: 11px;
+    }
+    .planner-row img {
+      width: 22px; height: 22px;
+      image-rendering: pixelated;
+      filter: drop-shadow(1px 1px 0 #000);
+    }
+    .planner-row-info { flex: 1; }
+    .planner-row-name { color: var(--text-primary); }
+    .planner-row-detail { font-size: 9px; color: var(--text-dim); }
+    .planner-row-time { font-size: 10px; text-align: right; white-space: nowrap; color: var(--text-secondary); }
+    .planner-row-time.sleep { color: var(--yellow); }
+    .planner-idle { font-size: 9px; color: var(--text-dim); padding: 6px 0; text-align: center; }
+    .planner-pb-box {
+      background: rgba(176,124,216,0.08);
+      border: 2px solid rgba(176,124,216,0.2);
+      padding: 8px 10px;
+      margin-top: 4px;
+    }
+    .planner-pb-saved { font-size: 10px; color: var(--lily); margin-top: 6px; text-align: right; }
+    .planner-sleep-cfg {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-top: 2px solid rgba(92,58,30,0.2);
+      font-size: 9px;
+      color: var(--text-dim);
+    }
+    .planner-sleep-cfg input {
+      width: 40px;
+      padding: 2px 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 10px;
+      background: var(--bg-card);
+      border: 2px solid var(--border-brown);
+      color: var(--text-primary);
+      text-align: center;
+    }
+
     /* ── Responsive ── */
     @media (max-width: 640px) {
       .container { padding: 8px; }
@@ -1165,6 +1239,9 @@
       .treasury-pie-wrap { flex-direction: column; }
       .treasury-item-row { grid-template-columns: 24px 1fr 60px 70px; }
       .treasury-item-unit { display: none; }
+      .planner-row { font-size: 10px; gap: 6px; }
+      .planner-row img { width: 18px; height: 18px; }
+      .planner-row-time { font-size: 9px; }
     }
   </style>
   <script defer src="/_vercel/insights/script.js"></script>
@@ -2583,6 +2660,227 @@
     }
 
     // ═══════════════════════════════════════
+    //  GROW PLANNER
+    // ═══════════════════════════════════════
+
+    function getSleepSchedule() {
+      try {
+        const s = localStorage.getItem("sfl_sleep_schedule");
+        if (s) return JSON.parse(s);
+      } catch(e) {}
+      return { start: 23, end: 7 };
+    }
+
+    function saveSleepSchedule(s) {
+      localStorage.setItem("sfl_sleep_schedule", JSON.stringify(s));
+    }
+
+    function isHourDuringSleep(hour, sleep) {
+      const s = sleep.start, e = sleep.end;
+      return s < e ? (hour >= s && hour < e) : (hour >= s || hour < e);
+    }
+
+    function formatTimeShort(ms) {
+      const d = new Date(ms);
+      const days = ["Ne","Po","Út","St","Čt","Pá","So"];
+      return `${days[d.getDay()]} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+    }
+
+    function buildGrowPlan(flowerData, beds, petalBlessed, sleep) {
+      const now = Date.now();
+      let pbTime = null, pbReady = false;
+      if (petalBlessed.status === "ready") { pbTime = now; pbReady = true; }
+      else if (petalBlessed.status === "cooldown") { pbTime = petalBlessed.nextAt; }
+
+      // Collect plantable incomplete flowers sorted by grow time desc
+      const incomplete = [];
+      for (const [name, f] of Object.entries(flowerData)) {
+        if (f.isComplete || f.remaining <= 0) continue;
+        const growH = SEED_DATA[f.seed].hours;
+        let inputOk = !f.inputIsFlower;
+        if (f.inputIsFlower) {
+          const id = flowerData[f.input];
+          inputOk = id && id.have > 0;
+        }
+        incomplete.push({ name, seed: f.seed, growH, growMs: growH * 3600000, inputOk, remaining: f.remaining });
+      }
+      incomplete.sort((a, b) => b.growH !== a.growH ? b.growH - a.growH : b.remaining - a.remaining);
+
+      const alloc = {};
+      const canA = f => (alloc[f.name] || 0) < f.remaining;
+      const doA = f => { alloc[f.name] = (alloc[f.name] || 0) + 1; };
+
+      const bedFree = beds.map(b => b.empty ? now : Math.max(now, b.readyAt));
+      const steps = [];
+
+      if (!pbReady) {
+        for (let i = 0; i < bedFree.length; i++) {
+          let t = bedFree[i];
+          const limit = pbTime || (t + 30 * 24 * 3600000);
+          let safety = 10;
+          while (safety-- > 0 && t < limit) {
+            const rem = limit - t;
+            let best = null;
+            for (const f of incomplete) {
+              if (!f.inputOk || !canA(f)) continue;
+              if (pbTime && f.growMs > rem) continue;
+              best = f;
+              break;
+            }
+            if (!best) break;
+            const fin = t + best.growMs;
+            const fH = new Date(fin).getHours();
+            steps.push({
+              flower: best.name, seed: best.seed, growH: best.growH,
+              startAt: t, finishAt: fin,
+              sleepWaste: isHourDuringSleep(fH, sleep),
+              bedIdx: i,
+            });
+            doA(best);
+            t = fin;
+            if (!pbTime) break;
+          }
+        }
+      }
+
+      // PB flowers: always longest incomplete
+      const pbFlowers = [];
+      if (pbTime) {
+        for (const f of incomplete) {
+          if (pbFlowers.length >= beds.length) break;
+          if (!f.inputOk || !canA(f)) continue;
+          pbFlowers.push({ name: f.name, seed: f.seed, growH: f.growH });
+          doA(f);
+        }
+      }
+
+      // Idle before PB
+      let idleH = 0;
+      if (pbTime && !pbReady) {
+        const lastFin = steps.length > 0 ? Math.max(...steps.map(s => s.finishAt)) : Math.min(...bedFree);
+        idleH = Math.max(0, (pbTime - lastFin) / 3600000);
+      }
+
+      return { steps, pbFlowers, pbTime, pbReady, idleH };
+    }
+
+    function renderGrowPlanner(flowerData, beds, petalBlessed) {
+      if (Object.values(flowerData).every(f => f.isComplete)) return "";
+
+      const sleep = getSleepSchedule();
+      const plan = buildGrowPlan(flowerData, beds, petalBlessed, sleep);
+      const now = Date.now();
+
+      let html = `<div class="planner-section">`;
+
+      // Header
+      html += `<div class="planner-header" onclick="document.getElementById('planner-body').style.display=document.getElementById('planner-body').style.display==='none'?'block':'none'">
+        <span class="pixel-font" style="font-size:11px">📋 GROW PLANNER</span>
+        <span style="display:flex;align-items:center;gap:10px;font-size:9px">`;
+      if (plan.pbTime && !plan.pbReady) {
+        const d = plan.pbTime - now;
+        html += `<span class="pixel-font" style="color:var(--lily)">⚡ PB ${Math.floor(d/3600000)}h ${Math.floor((d%3600000)/60000)}m</span>`;
+      } else if (plan.pbReady) {
+        html += `<span class="pixel-font" style="color:var(--green)">⚡ PB READY</span>`;
+      }
+      html += `<span class="pixel-font" style="color:var(--text-dim)">💤 ${String(sleep.start).padStart(2,"0")}-${String(sleep.end).padStart(2,"0")}</span>`;
+      html += `</span></div>`;
+
+      html += `<div id="planner-body">`;
+
+      if (plan.pbReady && plan.pbFlowers.length > 0) {
+        // PB ready NOW
+        html += `<div class="planner-body"><div class="planner-batch planner-pb-box">
+          <div class="planner-batch-label pixel-font" style="color:var(--lily)">⚡ USE PETAL BLESSED NOW</div>`;
+        for (const f of plan.pbFlowers) {
+          html += `<div class="planner-row">
+            <img src="${IMG_BASE}${encodeURIComponent(f.name)}.png" onerror="this.style.display='none'" alt="">
+            <div class="planner-row-info"><div class="planner-row-name">${escHTML(f.name)}</div>
+            <div class="planner-row-detail">${SEED_DATA[f.seed]?.label || "?"} · saves ${formatHours(f.growH)}</div></div>
+          </div>`;
+        }
+        const saved = plan.pbFlowers.reduce((s, f) => s + f.growH, 0);
+        html += `<div class="planner-pb-saved pixel-font">Total saved: ${formatHours(saved)}</div>`;
+        html += `</div></div>`;
+      } else {
+        html += `<div class="planner-body">`;
+
+        // Group regular steps by approximate start time into batches
+        if (plan.steps.length > 0) {
+          const batches = [];
+          const sorted = [...plan.steps].sort((a, b) => a.startAt - b.startAt);
+          let cur = null;
+          for (const s of sorted) {
+            if (!cur || s.startAt - cur.t > 3600000) {
+              cur = { t: s.startAt, items: [] };
+              batches.push(cur);
+            }
+            cur.items.push(s);
+          }
+
+          for (const batch of batches) {
+            const isNow = batch.t <= now + 60000;
+            html += `<div class="planner-batch">
+              <div class="planner-batch-label pixel-font">▸ ${isNow ? "PLANT NOW" : "PLANT " + formatTimeShort(batch.t)}</div>`;
+            for (const s of batch.items) {
+              const cls = s.sleepWaste ? "planner-row-time sleep" : "planner-row-time";
+              html += `<div class="planner-row">
+                <img src="${IMG_BASE}${encodeURIComponent(s.flower)}.png" onerror="this.style.display='none'" alt="">
+                <div class="planner-row-info"><div class="planner-row-name">${escHTML(s.flower)}</div>
+                <div class="planner-row-detail">${SEED_DATA[s.seed]?.label || "?"} · ${formatHours(s.growH)}</div></div>
+                <div class="${cls}">→ ${formatTimeShort(s.finishAt)}${s.sleepWaste ? " 💤" : ""}</div>
+              </div>`;
+            }
+            html += `</div>`;
+          }
+
+          if (plan.idleH > 0.5 && plan.pbTime) {
+            html += `<div class="planner-idle">⏳ ${Math.round(plan.idleH * 10) / 10}h idle before Petal Blessed</div>`;
+          }
+        } else if (!plan.pbTime) {
+          html += `<div class="planner-idle">No Petal Blessed data · plant highest priority flowers</div>`;
+        } else {
+          html += `<div class="planner-idle">⏳ No flowers fit before Petal Blessed — wait for PB</div>`;
+        }
+
+        // PB batch (future)
+        if (plan.pbFlowers.length > 0 && plan.pbTime && !plan.pbReady) {
+          html += `<div class="planner-batch planner-pb-box">
+            <div class="planner-batch-label pixel-font"><span style="color:var(--lily)">⚡ PETAL BLESSED</span> <span style="color:var(--text-dim)">${formatTimeShort(plan.pbTime)}</span></div>`;
+          for (const f of plan.pbFlowers) {
+            html += `<div class="planner-row">
+              <img src="${IMG_BASE}${encodeURIComponent(f.name)}.png" onerror="this.style.display='none'" alt="">
+              <div class="planner-row-info"><div class="planner-row-name">${escHTML(f.name)}</div>
+              <div class="planner-row-detail">${SEED_DATA[f.seed]?.label || "?"} · saves ${formatHours(f.growH)}</div></div>
+            </div>`;
+          }
+          const saved = plan.pbFlowers.reduce((s, f) => s + f.growH, 0);
+          html += `<div class="planner-pb-saved pixel-font">Total saved: ${formatHours(saved)}</div>`;
+          html += `</div>`;
+        }
+
+        html += `</div>`;
+      }
+
+      // Sleep config
+      html += `<div class="planner-sleep-cfg">
+        💤 Sleep:
+        <input type="number" min="0" max="23" value="${sleep.start}" onchange="updateSleepSchedule(this,'start')">:00 —
+        <input type="number" min="0" max="23" value="${sleep.end}" onchange="updateSleepSchedule(this,'end')">:00
+      </div>`;
+
+      html += `</div></div>`;
+      return html;
+    }
+
+    function updateSleepSchedule(input, field) {
+      const s = getSleepSchedule();
+      s[field] = Math.max(0, Math.min(23, parseInt(input.value) || 0));
+      saveSleepSchedule(s);
+      if (cachedFarmData) renderFlowers(cachedFarmData);
+    }
+
+    // ═══════════════════════════════════════
     //  RENDER: HUB
     // ═══════════════════════════════════════
 
@@ -2751,38 +3049,36 @@
       </div>`;
 
       // Currently Growing
-      if (flowerBeds) {
-        const beds = extractBedDetails(flowerBeds);
-        if (beds.length > 0) {
-          html += `<div class="growing-section pixel-panel pixel-font">
-            <div class="growing-title">CURRENTLY GROWING</div>
-            <div class="growing-grid">`;
-          const now = Date.now();
-          for (const bed of beds) {
-            if (bed.empty) {
-              html += `<div class="growing-bed empty-bed">
-                <div style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:18px;opacity:0.3">🌱</div>
-                <div class="growing-bed-info"><div class="growing-bed-name" style="color:var(--text-dim)">Empty</div></div>
-              </div>`;
-            } else {
-              const diff = bed.readyAt - now;
-              const isReady = diff <= 0;
-              let timeStr;
-              if (isReady) { timeStr = "Ready!"; }
-              else { const h = Math.floor(diff/3600000); const m = Math.floor((diff%3600000)/60000); timeStr = h > 0 ? `${h}h ${String(m).padStart(2,"0")}m` : `${m}m`; }
-              const sdLabel = SEED_DATA[bed.seedType]?.label || "?";
-              html += `<div class="growing-bed">
-                <img class="growing-bed-img" src="${IMG_BASE}${encodeURIComponent(bed.name)}.png" onerror="this.style.display='none'" alt="">
-                <div class="growing-bed-info">
-                  <div class="growing-bed-name">${escHTML(bed.name)}</div>
-                  <div class="growing-bed-detail">${sdLabel} | yield: ${bed.totalYield}${bed.bonus > 0 ? ` (1+${bed.bonus})` : ""}</div>
-                </div>
-                <div class="growing-bed-time ${isReady ? "ready" : "growing"}" data-ready="${bed.readyAt}">${timeStr}</div>
-              </div>`;
-            }
+      const plannerBeds = flowerBeds ? extractBedDetails(flowerBeds) : [];
+      if (plannerBeds.length > 0) {
+        html += `<div class="growing-section pixel-panel pixel-font">
+          <div class="growing-title">CURRENTLY GROWING</div>
+          <div class="growing-grid">`;
+        const now = Date.now();
+        for (const bed of plannerBeds) {
+          if (bed.empty) {
+            html += `<div class="growing-bed empty-bed">
+              <div style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:18px;opacity:0.3">🌱</div>
+              <div class="growing-bed-info"><div class="growing-bed-name" style="color:var(--text-dim)">Empty</div></div>
+            </div>`;
+          } else {
+            const diff = bed.readyAt - now;
+            const isReady = diff <= 0;
+            let timeStr;
+            if (isReady) { timeStr = "Ready!"; }
+            else { const h = Math.floor(diff/3600000); const m = Math.floor((diff%3600000)/60000); timeStr = h > 0 ? `${h}h ${String(m).padStart(2,"0")}m` : `${m}m`; }
+            const sdLabel = SEED_DATA[bed.seedType]?.label || "?";
+            html += `<div class="growing-bed">
+              <img class="growing-bed-img" src="${IMG_BASE}${encodeURIComponent(bed.name)}.png" onerror="this.style.display='none'" alt="">
+              <div class="growing-bed-info">
+                <div class="growing-bed-name">${escHTML(bed.name)}</div>
+                <div class="growing-bed-detail">${sdLabel} | yield: ${bed.totalYield}${bed.bonus > 0 ? ` (1+${bed.bonus})` : ""}</div>
+              </div>
+              <div class="growing-bed-time ${isReady ? "ready" : "growing"}" data-ready="${bed.readyAt}">${timeStr}</div>
+            </div>`;
           }
-          html += `</div></div>`;
         }
+        html += `</div></div>`;
       }
 
       // Petal Blessed
@@ -2792,6 +3088,9 @@
         html += `<div class="petal-blessed-btn pb-cooldown" style="cursor:default;opacity:0.7;background:linear-gradient(180deg,#3b1768,#2a1050,#1e0a3c)">Petal Blessed in <span id="pb-timer" data-next="${petalBlessed.nextAt}">--:--:--</span></div>`;
       }
       html += `<div id="petal-blessed-container"></div>`;
+
+      // Grow Planner
+      html += renderGrowPlanner(flowerData, plannerBeds, petalBlessed);
 
       // Seed sections
       for (const seed of SEED_ORDER) {
