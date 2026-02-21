@@ -3409,6 +3409,30 @@
       "Coprolite": 240, "Pirate Bounty": 9000,
     };
 
+    // Betty sell prices in COINS (from game source crops.ts / fruits.ts)
+    const BETTY_SELL_PRICES = {
+      "Sunflower": 0.02, "Potato": 0.14, "Rhubarb": 0.24, "Pumpkin": 0.4,
+      "Zucchini": 0.4, "Carrot": 0.8, "Yam": 0.8, "Cabbage": 1.5,
+      "Broccoli": 1.5, "Soybean": 2.3, "Beetroot": 2.8, "Pepper": 3,
+      "Cauliflower": 4.25, "Parsnip": 6.5, "Eggplant": 8, "Corn": 9,
+      "Onion": 10, "Radish": 9.5, "Wheat": 7, "Turnip": 8,
+      "Kale": 10, "Artichoke": 12, "Barley": 12,
+      "Tomato": 2, "Lemon": 6, "Blueberry": 12, "Orange": 18,
+      "Apple": 25, "Banana": 25, "Celestine": 200, "Lunara": 500,
+      "Duskberry": 1000, "Grape": 240, "Rice": 320, "Olive": 400,
+    };
+
+    function computeBettyRate(p2pPrices) {
+      let bestRate = 0, bestItem = "";
+      for (const [name, sellCoins] of Object.entries(BETTY_SELL_PRICES)) {
+        const p2p = p2pPrices[name];
+        if (!p2p || p2p <= 0) continue;
+        const rate = sellCoins / p2p;
+        if (rate > bestRate) { bestRate = rate; bestItem = name; }
+      }
+      return { rate: bestRate, item: bestItem };
+    }
+
     const SFL_ICON_URL = "https://sfl.world/img/source/SFL.png";
     const ITEM_ICON_BASE = "https://sfl.world/img/source/";
 
@@ -3458,21 +3482,24 @@
       const sflUsd = exchangeData?.sfl?.usd || 0;
       const btcUsd = btcData?.bitcoin?.usd || 0;
 
-      // Coins: use the best-value tier (highest coins/SFL — last/largest package)
+      // Coins: API rate (best tier) + Betty rate (best crop to sell)
       const coinTiers = Object.values(exchangeData?.coins || {});
       const bestCoinTier = coinTiers.reduce((best, t) => (!best || (t.coin / t.sfl) > (best.coin / best.sfl)) ? t : best, null);
-      const coinsPerSFL = bestCoinTier ? (bestCoinTier.coin / bestCoinTier.sfl) : 160;
+      const coinsPerSFL_api = bestCoinTier ? (bestCoinTier.coin / bestCoinTier.sfl) : 320;
+      const betty = computeBettyRate(p2pPrices);
+      const coinsPerSFL_betty = betty.rate;
 
-      // Gems: use the best-value tier (highest gems/SFL — last/largest package)
+      // Gems: best-value tier with -30% pack discount applied
       const gemTiers = Object.values(exchangeData?.gems || {});
       const bestGemTier = gemTiers.reduce((best, t) => (!best || (t.gem / t.sfl) > (best.gem / best.sfl)) ? t : best, null);
-      const gemsPerSFL = bestGemTier ? (bestGemTier.gem / bestGemTier.sfl) : 0;
+      const gemsPerSFL = bestGemTier ? (bestGemTier.gem / (bestGemTier.sfl * 0.7)) : 0;
 
-      return { nftCollectibles, nftWearables, p2pPrices, sflUsd, coinsPerSFL, gemsPerSFL, btcUsd };
+      return { nftCollectibles, nftWearables, p2pPrices, sflUsd, coinsPerSFL_api, coinsPerSFL_betty, bettyItem: betty.item, gemsPerSFL, btcUsd };
     }
 
-    function computeFarmValue(farm, td) {
-      const { nftCollectibles, nftWearables, p2pPrices, sflUsd, coinsPerSFL, gemsPerSFL, btcUsd } = td;
+    function computeFarmValue(farm, td, coinMode) {
+      const { nftCollectibles, nftWearables, p2pPrices, sflUsd, coinsPerSFL_api, coinsPerSFL_betty, bettyItem, gemsPerSFL, btcUsd } = td;
+      const coinsPerSFL = coinMode === "api" ? coinsPerSFL_api : coinMode === "betty" ? coinsPerSFL_betty : 0;
       const inventory = farm.inventory || {};
       const wardrobe = farm.wardrobe || {};
       const MIN_VALUE = 0.01;
@@ -3570,11 +3597,21 @@
           liquid: liquidTotal,
           grand: grandTotal,
         },
-        rates: { sflUsd, btcUsd, coinsPerSFL },
+        rates: { sflUsd, btcUsd, coinsPerSFL, coinsPerSFL_api, coinsPerSFL_betty, bettyItem },
       };
     }
 
     let treasuryDetailOpen = {};
+    let treasuryCoinMode = localStorage.getItem("sfl_coin_mode") || "betty";
+    let cachedTreasuryData = null;
+
+    function setCoinMode(mode) {
+      treasuryCoinMode = mode;
+      localStorage.setItem("sfl_coin_mode", mode);
+      if (cachedTreasuryData && cachedFarmData) {
+        renderTreasuryWithData(cachedFarmData, cachedTreasuryData);
+      }
+    }
 
     function toggleTreasuryDetail(cat) {
       treasuryDetailOpen[cat] = !treasuryDetailOpen[cat];
@@ -3655,9 +3692,96 @@
       </div>`;
     }
 
-    async function renderTreasury(data) {
+    function renderTreasuryWithData(data, td) {
       const app = document.getElementById("app");
       const farm = data.farm;
+      const val = computeFarmValue(farm, td, treasuryCoinMode);
+      const { totals, rates, resources, treasures, collectibles, wearables, liquid, treasureBoost } = val;
+
+      const usdTotal = totals.grand * rates.sflUsd;
+      const btcTotal = rates.btcUsd > 0 ? usdTotal / rates.btcUsd : 0;
+
+      const coinModeLabel = treasuryCoinMode === "betty"
+        ? `Betty (${escHTML(rates.bettyItem)}: ${Math.round(rates.coinsPerSFL_betty)}/SFL)`
+        : treasuryCoinMode === "api"
+          ? `Exchange API (${Math.round(rates.coinsPerSFL_api)}/SFL)`
+          : "0 (no value)";
+
+      let html = `<div class="bumpkin-dev-banner pixel-panel pixel-font">⚠ UNDER DEVELOPMENT — might show incorrect data</div>
+      <div class="treasury-header pixel-panel pixel-font">
+        <h1>TREASURY</h1>
+        <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
+        <div class="treasury-total">
+          <img src="${SFL_ICON_URL}" onerror="this.style.display='none'" alt="SFL">
+          ${formatSFL(totals.grand)} SFL
+        </div>
+        <div class="treasury-secondary">${formatUSD(usdTotal)} &nbsp;|&nbsp; ${formatBTC(btcTotal)}</div>
+        <div class="treasury-rates">1 SFL = ${rates.sflUsd.toFixed(4)} USD &nbsp;|&nbsp; 1 BTC = ${formatUSD(rates.btcUsd)}</div>
+        <div style="margin-top:8px;font-size:9px">
+          <span style="color:var(--text-dim)">Coin rate:</span>
+          <select onchange="setCoinMode(this.value)" style="font-family:'Courier New',monospace;font-size:9px;background:#111;color:var(--text-primary);border:2px solid var(--border-brown);padding:2px 4px">
+            <option value="betty" ${treasuryCoinMode === "betty" ? "selected" : ""}>Betty (${escHTML(rates.bettyItem)} ${Math.round(rates.coinsPerSFL_betty)}/SFL)</option>
+            <option value="api" ${treasuryCoinMode === "api" ? "selected" : ""}>Exchange API (${Math.round(rates.coinsPerSFL_api)}/SFL)</option>
+            <option value="zero" ${treasuryCoinMode === "zero" ? "selected" : ""}>0 (no real value)</option>
+          </select>
+        </div>
+      </div>`;
+
+      // Pie chart
+      html += renderPieChart(totals);
+
+      // Category cards
+      html += '<div class="treasury-categories">';
+      html += renderCategoryCard("resources", "⛏️", "RESOURCES", totals.resources, totals.grand, resources);
+      html += renderCategoryCard("treasures", "🏴‍☠️", "TREASURES", totals.treasures, totals.grand, treasures);
+      html += renderCategoryCard("collectibles", "🏆", "COLLECTIBLES", totals.collectibles, totals.grand, collectibles);
+      html += renderCategoryCard("wearables", "👕", "WEARABLES", totals.wearables, totals.grand, wearables);
+
+      // Liquid card
+      const liqPct = totals.grand > 0 ? ((totals.liquid / totals.grand) * 100) : 0;
+      html += `<div class="treasury-cat-card pixel-panel">
+        <div class="treasury-cat-header">
+          <span class="treasury-cat-icon">💧</span>
+          <span class="treasury-cat-name pixel-font">LIQUID</span>
+        </div>
+        <div class="treasury-cat-value pixel-font">${formatSFL(totals.liquid)} SFL</div>
+        <div class="treasury-cat-pct pixel-font">${liqPct.toFixed(1)}%</div>
+        <div class="treasury-cat-bar"><div class="treasury-cat-bar-fill" style="width:${liqPct.toFixed(1)}%;background:${TREASURY_CAT_COLORS.liquid}"></div></div>
+        <div class="treasury-cat-top" style="line-height:2.2">
+          <div>SFL Balance: <span style="color:var(--sunpetal)">${formatSFL(liquid.sflBalance)}</span></div>
+          <div>Coins: <span style="color:var(--text-secondary)">${Math.floor(liquid.coinBalance).toLocaleString()}</span> <span style="color:var(--text-dim)">(≈ ${formatSFL(liquid.coinsAsSFL)} SFL)</span></div>
+          <div>Gems: <span style="color:var(--text-secondary)">${Math.floor(liquid.gemBalance).toLocaleString()}</span> <span style="color:var(--text-dim)">(≈ ${formatSFL(liquid.gemsAsSFL)} SFL)</span></div>
+        </div>
+      </div>`;
+      html += '</div>';
+
+      // Detail sections
+      const boostLabel = treasureBoost > 1 ? ` (×${treasureBoost.toFixed(1)} boost)` : "";
+      const sections = [
+        { key: "resources", icon: "⛏️", label: "Resources", items: resources },
+        { key: "treasures", icon: "🏴‍☠️", label: `Treasures${boostLabel}`, items: treasures },
+        { key: "collectibles", icon: "🏆", label: "Collectibles", items: collectibles },
+        { key: "wearables", icon: "👕", label: "Wearables", items: wearables },
+      ];
+      for (const sec of sections) {
+        const isOpen = treasuryDetailOpen[sec.key];
+        html += `<div class="treasury-detail-section">
+          <div class="treasury-detail-header pixel-panel pixel-font" onclick="toggleTreasuryDetail('${sec.key}')">
+            <span>${sec.icon}</span>
+            <h3>${sec.label} (${sec.items.length})</h3>
+            <span class="treasury-detail-arrow" id="treasury-arrow-${sec.key}">${isOpen ? "▼" : "▶"}</span>
+          </div>
+          <div class="treasury-detail-grid" id="treasury-detail-${sec.key}" style="display:${isOpen ? "block" : "none"}">
+            ${renderTreasuryItemRows(sec.items)}
+          </div>
+        </div>`;
+      }
+
+      app.innerHTML = html;
+    }
+
+    async function renderTreasury(data) {
+      const app = document.getElementById("app");
 
       app.innerHTML = `<div class="bumpkin-dev-banner pixel-panel pixel-font">⚠ UNDER DEVELOPMENT — might show incorrect data</div>
       <div class="header pixel-panel pixel-font">
@@ -3670,76 +3794,8 @@
       </div>`;
 
       try {
-        const td = await fetchTreasuryData();
-        const val = computeFarmValue(farm, td);
-        const { totals, rates, resources, treasures, collectibles, wearables, liquid, treasureBoost } = val;
-
-        const usdTotal = totals.grand * rates.sflUsd;
-        const btcTotal = rates.btcUsd > 0 ? usdTotal / rates.btcUsd : 0;
-
-        let html = `<div class="bumpkin-dev-banner pixel-panel pixel-font">⚠ UNDER DEVELOPMENT — might show incorrect data</div>
-        <div class="treasury-header pixel-panel pixel-font">
-          <h1>TREASURY</h1>
-          <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
-          <div class="treasury-total">
-            <img src="${SFL_ICON_URL}" onerror="this.style.display='none'" alt="SFL">
-            ${formatSFL(totals.grand)} SFL
-          </div>
-          <div class="treasury-secondary">${formatUSD(usdTotal)} &nbsp;|&nbsp; ${formatBTC(btcTotal)}</div>
-          <div class="treasury-rates">1 SFL = ${rates.sflUsd.toFixed(4)} USD &nbsp;|&nbsp; 1 SFL = ${rates.coinsPerSFL} coins &nbsp;|&nbsp; 1 BTC = ${formatUSD(rates.btcUsd)}</div>
-        </div>`;
-
-        // Pie chart
-        html += renderPieChart(totals);
-
-        // Category cards
-        html += '<div class="treasury-categories">';
-        html += renderCategoryCard("resources", "⛏️", "RESOURCES", totals.resources, totals.grand, resources);
-        html += renderCategoryCard("treasures", "🏴‍☠️", "TREASURES", totals.treasures, totals.grand, treasures);
-        html += renderCategoryCard("collectibles", "🏆", "COLLECTIBLES", totals.collectibles, totals.grand, collectibles);
-        html += renderCategoryCard("wearables", "👕", "WEARABLES", totals.wearables, totals.grand, wearables);
-
-        // Liquid card — special (no item rows)
-        const liqPct = totals.grand > 0 ? ((totals.liquid / totals.grand) * 100) : 0;
-        html += `<div class="treasury-cat-card pixel-panel">
-          <div class="treasury-cat-header">
-            <span class="treasury-cat-icon">💧</span>
-            <span class="treasury-cat-name pixel-font">LIQUID</span>
-          </div>
-          <div class="treasury-cat-value pixel-font">${formatSFL(totals.liquid)} SFL</div>
-          <div class="treasury-cat-pct pixel-font">${liqPct.toFixed(1)}%</div>
-          <div class="treasury-cat-bar"><div class="treasury-cat-bar-fill" style="width:${liqPct.toFixed(1)}%;background:${TREASURY_CAT_COLORS.liquid}"></div></div>
-          <div class="treasury-cat-top" style="line-height:2.2">
-            <div>SFL Balance: <span style="color:var(--sunpetal)">${formatSFL(liquid.sflBalance)}</span></div>
-            <div>Coins: <span style="color:var(--text-secondary)">${Math.floor(liquid.coinBalance).toLocaleString()}</span> <span style="color:var(--text-dim)">(≈ ${formatSFL(liquid.coinsAsSFL)} SFL)</span></div>
-            <div>Gems: <span style="color:var(--text-secondary)">${Math.floor(liquid.gemBalance).toLocaleString()}</span> <span style="color:var(--text-dim)">(≈ ${formatSFL(liquid.gemsAsSFL)} SFL)</span></div>
-          </div>
-        </div>`;
-        html += '</div>';
-
-        // Detail sections (collapsible)
-        const boostLabel = treasureBoost > 1 ? ` (×${treasureBoost.toFixed(1)} boost)` : "";
-        const sections = [
-          { key: "resources", icon: "⛏️", label: "Resources", items: resources },
-          { key: "treasures", icon: "🏴‍☠️", label: `Treasures${boostLabel}`, items: treasures },
-          { key: "collectibles", icon: "🏆", label: "Collectibles", items: collectibles },
-          { key: "wearables", icon: "👕", label: "Wearables", items: wearables },
-        ];
-        for (const sec of sections) {
-          const isOpen = treasuryDetailOpen[sec.key];
-          html += `<div class="treasury-detail-section">
-            <div class="treasury-detail-header pixel-panel pixel-font" onclick="toggleTreasuryDetail('${sec.key}')">
-              <span>${sec.icon}</span>
-              <h3>${sec.label} (${sec.items.length})</h3>
-              <span class="treasury-detail-arrow" id="treasury-arrow-${sec.key}">${isOpen ? "▼" : "▶"}</span>
-            </div>
-            <div class="treasury-detail-grid" id="treasury-detail-${sec.key}" style="display:${isOpen ? "block" : "none"}">
-              ${renderTreasuryItemRows(sec.items)}
-            </div>
-          </div>`;
-        }
-
-        app.innerHTML = html;
+        cachedTreasuryData = await fetchTreasuryData();
+        renderTreasuryWithData(data, cachedTreasuryData);
       } catch (err) {
         console.error("Treasury error:", err);
         app.innerHTML = `<div class="header pixel-panel pixel-font">
