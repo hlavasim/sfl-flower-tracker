@@ -1204,6 +1204,61 @@
     .sales-section-count { font-size: 9px; color: var(--text-dim); }
     .sales-section-body { border: 3px solid var(--border-dark); border-top: none; }
 
+    /* ── Power Page ── */
+    .power-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 8px 12px;
+      background: var(--bg-dark);
+      border: 3px solid var(--border-dark);
+      margin-bottom: 16px;
+    }
+    .power-filter-btn {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 7px;
+      padding: 5px 8px;
+      border: 2px solid var(--border-brown);
+      background: var(--bg-card);
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .power-filter-btn:hover { background: var(--bg-medium); }
+    .power-filter-btn.active { border-color: var(--sunpetal); color: var(--sunpetal); background: rgba(255,215,0,0.08); }
+    .power-item {
+      display: grid;
+      grid-template-columns: 36px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-bottom: 2px solid rgba(0,0,0,0.4);
+      font-size: 11px;
+    }
+    .power-item:nth-child(even) { background: var(--bg-card); }
+    .power-item:nth-child(odd) { background: var(--bg-card-alt); }
+    .power-item.has-it { border-left: 3px solid var(--green); }
+    .power-item.missing { border-left: 3px solid var(--text-dim); opacity: 0.8; }
+    .power-item-img {
+      width: 28px; height: 28px;
+      image-rendering: pixelated;
+      filter: drop-shadow(1px 1px 0 #000);
+    }
+    .power-item-name { color: var(--text-primary); font-weight: bold; }
+    .power-item-type { font-size: 8px; color: var(--text-dim); margin-left: 4px; }
+    .power-item-boost { font-size: 9px; color: var(--green); margin-top: 2px; white-space: pre-line; }
+    .power-item-price { text-align: right; }
+    .power-item-floor { font-size: 10px; color: var(--sunpetal); }
+    .power-item-supply { font-size: 8px; color: var(--text-dim); }
+    .power-item-status {
+      font-size: 8px;
+      font-family: 'Press Start 2P', cursive;
+      padding: 2px 5px;
+      border: 1px solid;
+    }
+    .power-item-status.owned { color: var(--green); border-color: var(--green); }
+    .power-item-status.buy { color: var(--yellow); border-color: var(--yellow); }
+
     /* ── Grow Planner ── */
     .planner-section {
       margin-bottom: 16px;
@@ -1315,6 +1370,10 @@
       .sales-listing { grid-template-columns: 28px 1fr auto; gap: 6px; padding: 6px 8px; }
       .sales-listing-img { width: 22px; height: 22px; }
       .sales-summary-grid { grid-template-columns: repeat(2, 1fr); }
+      .power-item { grid-template-columns: 28px 1fr auto; gap: 6px; padding: 6px 8px; }
+      .power-item-img { width: 22px; height: 22px; }
+      .power-filters { gap: 3px; }
+      .power-filter-btn { font-size: 6px; padding: 4px 6px; }
     }
   </style>
   <script defer src="/_vercel/insights/script.js"></script>
@@ -1341,7 +1400,7 @@
     const DEFAULTS = { farm: "", key: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
     const IMG_BASE = "https://sfl.world/img/flowers/";
-    const PAGES = ["hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales"];
+    const PAGES = ["hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -1845,6 +1904,7 @@
         { id: "bumpkin", label: "BUMPKIN" },
         { id: "treasury", label: "TREASURY" },
         { id: "sales", label: "SALES" },
+        { id: "power", label: "POWER" },
       ];
       let html = '<div class="nav-bar pixel-panel">';
       for (const l of links) {
@@ -3037,6 +3097,11 @@
           <div class="hub-card-icon">📤</div>
           <h3 class="pixel-font">SALES</h3>
           <div class="hub-card-count pixel-font">Marketplace</div>
+        </div>
+        <div class="hub-card pixel-panel" onclick="navigateTo('power')">
+          <div class="hub-card-icon">⚡</div>
+          <h3 class="pixel-font">POWER</h3>
+          <div class="hub-card-count pixel-font">Boost Analyzer</div>
         </div>
       </div>`;
 
@@ -4461,6 +4526,207 @@
     }
 
     // ═══════════════════════════════════════
+    //  RENDER: POWER
+    // ═══════════════════════════════════════
+
+    const BOOST_CATEGORIES = {
+      "Crops": /crop|sunflower|potato|pumpkin|carrot|cabbage|soybean|beetroot|cauliflower|parsnip|corn|radish|wheat|kale|turnip|onion|pepper|rhubarb|artichoke|barley|zucchini|yam|broccoli|harvest/i,
+      "Fruits": /fruit|tomato|lemon|blueberry|orange|apple|banana|grape|rice|olive|celestine|lunara|duskberry/i,
+      "Flowers": /flower|petal|bloom|blossom/i,
+      "Animals": /animal|chicken|egg|cow|milk|sheep|wool|pig|feather|leather|honey|bee/i,
+      "Cooking": /cook|cake|food|dish|meal|recipe|kitchen|deliveri/i,
+      "Mining": /mine|mining|stone|iron|gold|crimstone|oil|opal|diamond|sunstone/i,
+      "Fishing": /fish|rod|bait|catch|crab|lobster/i,
+      "Trees": /tree|wood|timber|axe|chop/i,
+      "XP": /\bxp\b/i,
+      "Coins": /coin/i,
+      "SFL": /\bsfl\b/i,
+      "Speed": /time|speed|fast|quick|\d+%\s*(less|reduc)/i,
+    };
+
+    function categorizeBoost(text) {
+      for (const [cat, rx] of Object.entries(BOOST_CATEGORIES)) {
+        if (rx.test(text)) return cat;
+      }
+      return "Other";
+    }
+
+    async function renderPower(data) {
+      const app = document.getElementById("app");
+      const { inventory, farm } = data;
+      const wardrobe = farm.wardrobe || {};
+      const skills = farm.bumpkin?.skills || {};
+
+      let html = `<div class="header pixel-panel pixel-font">
+        <h1>POWER ANALYZER</h1>
+        <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
+      </div>`;
+
+      html += `<div class="under-dev-banner pixel-font" style="background:linear-gradient(180deg,#3b1768,#2a1050);padding:8px 12px;border:3px solid #000;margin-bottom:16px;text-align:center;font-size:9px;color:var(--lily)">
+        ⚠️ UNDER DEVELOPMENT ⚠️
+      </div>`;
+
+      html += `<div id="power-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading boost data...</div></div></div>`;
+      app.innerHTML = html;
+
+      let nftData;
+      try {
+        const proxyFetch = async (url) => {
+          try {
+            const resp = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
+            if (resp.ok) return resp.json();
+          } catch {}
+          return (await fetch(url)).json();
+        };
+        nftData = await proxyFetch("https://sfl.world/api/v1/nfts");
+      } catch (err) {
+        document.getElementById("power-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load: ${escHTML(err.message)}</p></div>`;
+        return;
+      }
+
+      // Build boost items
+      const boostItems = [];
+
+      for (const item of (nftData.collectibles || [])) {
+        if (!item.have_boost || !item.name || !item.boost_text) continue;
+        const has = getCount(inventory, item.name) > 0 || findCollectible(farm, item.name).length > 0;
+        const category = categorizeBoost(item.boost_text);
+        boostItems.push({
+          name: item.name, type: "Collectible", boost: item.boost_text,
+          floor: parseFloat(item.floor) || 0, supply: item.supply || 0,
+          has, category,
+        });
+      }
+
+      for (const item of (nftData.wearables || [])) {
+        if (!item.have_boost || !item.name || !item.boost_text) continue;
+        const has = (wardrobe[item.name] || 0) > 0;
+        const category = categorizeBoost(item.boost_text);
+        boostItems.push({
+          name: item.name, type: "Wearable", boost: item.boost_text,
+          floor: parseFloat(item.floor) || 0, supply: item.supply || 0,
+          has, category,
+        });
+      }
+
+      // Add skills as "boosts" too
+      const KNOWN_SKILL_BOOSTS = {
+        "Blooming Boost": "×0.9 Flower Growing Time",
+        "Flower Power": "×0.8 Flower Growing Time",
+        "Flowery Abode": "×1.5 Flower Growing Time (slower)",
+        "Green Thumb": "+5% Crop Yield",
+        "Young Farmer": "+10% Crop Yield",
+        "Experienced Farmer": "+20% Crop Yield",
+        "Betty's Friend": "+20% Crop Sell Price",
+        "Gift Giver": "+50% Delivery Reward",
+      };
+      for (const [skillName, desc] of Object.entries(KNOWN_SKILL_BOOSTS)) {
+        const has = skills[skillName] !== undefined;
+        boostItems.push({
+          name: skillName, type: "Skill", boost: desc,
+          floor: 0, supply: 0, has,
+          category: categorizeBoost(desc),
+        });
+      }
+
+      // Sort: owned first, then by floor price ascending
+      boostItems.sort((a, b) => {
+        if (a.has !== b.has) return a.has ? -1 : 1;
+        if (a.floor !== b.floor) return a.floor - b.floor;
+        return a.name.localeCompare(b.name);
+      });
+
+      // Compute stats
+      const ownedCount = boostItems.filter(b => b.has).length;
+      const totalCount = boostItems.length;
+      const categories = [...new Set(boostItems.map(b => b.category))].sort();
+      const cheapestMissing = boostItems.filter(b => !b.has && b.floor > 0).sort((a, b) => a.floor - b.floor).slice(0, 5);
+
+      let content = "";
+
+      // Summary
+      content += `<div class="sales-summary-grid pixel-font">
+        <div class="sales-stat"><div class="sales-stat-label">OWNED BOOSTS</div><div class="sales-stat-value" style="color:var(--green)">${ownedCount}</div></div>
+        <div class="sales-stat"><div class="sales-stat-label">TOTAL BOOSTS</div><div class="sales-stat-value">${totalCount}</div></div>
+        <div class="sales-stat"><div class="sales-stat-label">MISSING</div><div class="sales-stat-value" style="color:var(--red)">${totalCount - ownedCount}</div></div>
+        <div class="sales-stat"><div class="sales-stat-label">CATEGORIES</div><div class="sales-stat-value">${categories.length}</div></div>
+      </div>`;
+
+      // Cheapest missing
+      if (cheapestMissing.length > 0) {
+        content += `<div class="pixel-panel" style="padding:10px 14px;margin-bottom:16px">
+          <div class="pixel-font" style="font-size:10px;color:var(--yellow);margin-bottom:8px">💡 CHEAPEST MISSING BOOSTS</div>`;
+        for (const b of cheapestMissing) {
+          const imgUrl = ITEM_ICON_BASE + encodeURIComponent(b.name) + ".png";
+          content += `<div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:10px">
+            <img src="${imgUrl}" style="width:20px;height:20px;image-rendering:pixelated" onerror="this.style.display='none'" alt="">
+            <span style="flex:1;color:var(--text-primary)">${escHTML(b.name)}</span>
+            <span style="color:var(--sunpetal);font-weight:bold">${b.floor.toFixed(1)} SFL</span>
+            <span style="font-size:8px;color:var(--text-dim)">${escHTML(b.category)}</span>
+          </div>`;
+        }
+        content += `</div>`;
+      }
+
+      // Filter buttons
+      content += `<div class="power-filters">
+        <button class="power-filter-btn active" onclick="filterPower('all')">ALL (${totalCount})</button>
+        <button class="power-filter-btn" onclick="filterPower('owned')">OWNED (${ownedCount})</button>
+        <button class="power-filter-btn" onclick="filterPower('missing')">MISSING (${totalCount - ownedCount})</button>`;
+      for (const cat of categories) {
+        const count = boostItems.filter(b => b.category === cat).length;
+        content += `<button class="power-filter-btn" onclick="filterPower('${escHTML(cat)}')">${escHTML(cat.toUpperCase())} (${count})</button>`;
+      }
+      content += `</div>`;
+
+      // Boost items
+      content += `<div id="power-list" class="pixel-panel" style="padding:0;border:3px solid var(--border-dark)">`;
+      for (const b of boostItems) {
+        const imgUrl = b.type !== "Skill" ? ITEM_ICON_BASE + encodeURIComponent(b.name) + ".png" : "";
+        const statusCls = b.has ? "owned" : "buy";
+        const statusText = b.has ? "✓" : b.floor > 0 ? `${b.floor.toFixed(1)}` : "—";
+        const itemCls = b.has ? "has-it" : "missing";
+
+        content += `<div class="power-item ${itemCls}" data-cat="${escHTML(b.category)}" data-has="${b.has ? 1 : 0}">
+          ${imgUrl ? `<img class="power-item-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">` : `<div style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:16px">🧠</div>`}
+          <div>
+            <div class="power-item-name">${escHTML(b.name)} <span class="power-item-type">${escHTML(b.type)}</span></div>
+            <div class="power-item-boost">${escHTML(b.boost)}</div>
+          </div>
+          <div class="power-item-price">
+            <div class="power-item-status ${statusCls}">${statusText}</div>
+            ${b.supply > 0 ? `<div class="power-item-supply">${b.supply} supply</div>` : ""}
+          </div>
+        </div>`;
+      }
+      content += `</div>`;
+
+      content += `<div class="footer" style="margin-top:16px">
+        <button class="refresh-btn" onclick="refresh()">REFRESH</button>
+        <div class="timestamp pixel-font">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
+      </div>`;
+
+      document.getElementById("power-content").innerHTML = content;
+    }
+
+    function filterPower(filter) {
+      const items = document.querySelectorAll("#power-list .power-item");
+      const buttons = document.querySelectorAll(".power-filter-btn");
+      buttons.forEach(btn => btn.classList.toggle("active", btn.textContent.toLowerCase().startsWith(filter.toLowerCase())));
+
+      items.forEach(el => {
+        const cat = el.dataset.cat;
+        const has = el.dataset.has === "1";
+        let show = false;
+        if (filter === "all") show = true;
+        else if (filter === "owned") show = has;
+        else if (filter === "missing") show = !has;
+        else show = cat === filter;
+        el.style.display = show ? "" : "none";
+      });
+    }
+
+    // ═══════════════════════════════════════
     //  MAIN
     // ═══════════════════════════════════════
 
@@ -4516,6 +4782,7 @@
           case "bumpkin": renderBumpkin(data); break;
           case "treasury": renderTreasury(data); break;
           case "sales": renderSales(data); break;
+          case "power": renderPower(data); break;
           default: renderHub(data);
         }
 
