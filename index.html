@@ -1134,6 +1134,76 @@
     .changelog-new { color: var(--green); }
     .changelog-fix { color: var(--yellow); }
 
+    /* ── Sales Tracker ── */
+    .sales-listing {
+      display: grid;
+      grid-template-columns: 36px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-bottom: 2px solid rgba(0,0,0,0.4);
+      font-size: 11px;
+      min-height: 48px;
+    }
+    .sales-listing:nth-child(even) { background: var(--bg-card); }
+    .sales-listing:nth-child(odd) { background: var(--bg-card-alt); }
+    .sales-listing-img {
+      width: 28px; height: 28px;
+      image-rendering: pixelated;
+      filter: drop-shadow(1px 1px 0 #000);
+    }
+    .sales-listing-info { flex: 1; }
+    .sales-listing-name { color: var(--text-primary); font-weight: bold; }
+    .sales-listing-detail { font-size: 9px; color: var(--text-dim); margin-top: 2px; }
+    .sales-listing-prices {
+      text-align: right;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 2px;
+    }
+    .sales-price-yours { color: var(--sunpetal); font-weight: bold; }
+    .sales-price-market { font-size: 9px; color: var(--text-dim); }
+    .sales-badge {
+      display: inline-block;
+      font-size: 8px;
+      padding: 2px 5px;
+      border: 1px solid;
+      font-family: 'Press Start 2P', cursive;
+      margin-left: 4px;
+    }
+    .sales-badge.overpriced { color: var(--red); border-color: var(--red); }
+    .sales-badge.good { color: var(--green); border-color: var(--green); }
+    .sales-badge.stale { color: var(--yellow); border-color: var(--yellow); }
+    .sales-badge.sold { color: var(--blue); border-color: var(--blue); }
+    .sales-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 10px;
+      margin: 12px 0;
+    }
+    .sales-stat {
+      background: var(--bg-card);
+      border: 2px solid var(--border-dark);
+      padding: 10px;
+      text-align: center;
+    }
+    .sales-stat-label { font-size: 9px; color: var(--text-dim); margin-bottom: 4px; }
+    .sales-stat-value { font-size: 14px; color: var(--sunpetal); text-shadow: 1px 1px 0 #000; }
+    .sales-section-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: var(--bg-medium);
+      border: 3px solid var(--border-dark);
+      cursor: pointer;
+    }
+    .sales-section-header:hover { background: var(--bg-light); }
+    .sales-section-header h3 { font-size: 11px; flex: 1; }
+    .sales-section-count { font-size: 9px; color: var(--text-dim); }
+    .sales-section-body { border: 3px solid var(--border-dark); border-top: none; }
+
     /* ── Grow Planner ── */
     .planner-section {
       margin-bottom: 16px;
@@ -1242,6 +1312,9 @@
       .planner-row { font-size: 10px; gap: 6px; }
       .planner-row img { width: 18px; height: 18px; }
       .planner-row-time { font-size: 9px; }
+      .sales-listing { grid-template-columns: 28px 1fr auto; gap: 6px; padding: 6px 8px; }
+      .sales-listing-img { width: 22px; height: 22px; }
+      .sales-summary-grid { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
   <script defer src="/_vercel/insights/script.js"></script>
@@ -1268,7 +1341,7 @@
     const DEFAULTS = { farm: "", key: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
     const IMG_BASE = "https://sfl.world/img/flowers/";
-    const PAGES = ["hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury"];
+    const PAGES = ["hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -1771,6 +1844,7 @@
         { id: "crustaceans", label: "CRABS" },
         { id: "bumpkin", label: "BUMPKIN" },
         { id: "treasury", label: "TREASURY" },
+        { id: "sales", label: "SALES" },
       ];
       let html = '<div class="nav-bar pixel-panel">';
       for (const l of links) {
@@ -2380,7 +2454,8 @@
       const activeBoosts = detectFlowerBoosts(farm);
       const flowerMultiplier = computeFlowerMultiplier(activeBoosts);
       const season = farm.season?.season || null;
-      return { inventory, inProgress, petalBlessed, flowerBeds, craftingBox, trapSpots, activeBoosts, flowerMultiplier, season, bumpkin: farm.bumpkin, buildings: farm.buildings, farm };
+      const trades = farm.trades || {};
+      return { inventory, inProgress, petalBlessed, flowerBeds, craftingBox, trapSpots, activeBoosts, flowerMultiplier, season, bumpkin: farm.bumpkin, buildings: farm.buildings, trades, farm };
     }
 
     // ═══════════════════════════════════════
@@ -2957,6 +3032,11 @@
           <div class="hub-card-icon">💰</div>
           <h3 class="pixel-font">TREASURY</h3>
           <div class="hub-card-count pixel-font">Farm Value</div>
+        </div>
+        <div class="hub-card pixel-panel" onclick="navigateTo('sales')">
+          <div class="hub-card-icon">📤</div>
+          <h3 class="pixel-font">SALES</h3>
+          <div class="hub-card-count pixel-font">Marketplace</div>
         </div>
       </div>`;
 
@@ -4111,6 +4191,276 @@
     }
 
     // ═══════════════════════════════════════
+    //  RENDER: SALES
+    // ═══════════════════════════════════════
+
+    async function fetchMarketPrices() {
+      const proxyFetch = async (url) => {
+        try {
+          const resp = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
+          if (resp.ok) return resp.json();
+        } catch {}
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
+        return resp.json();
+      };
+
+      const [nftData, priceData] = await Promise.all([
+        proxyFetch("https://sfl.world/api/v1/nfts"),
+        proxyFetch("https://sfl.world/api/v1/prices"),
+      ]);
+
+      const nfts = {};
+      for (const c of (nftData.collectibles || [])) {
+        if (c.name) nfts[c.name] = { floor: parseFloat(c.floor) || 0, lastSale: parseFloat(c.lastSalePrice) || 0, type: "collectible" };
+      }
+      for (const w of (nftData.wearables || [])) {
+        if (w.name) nfts[w.name] = { floor: parseFloat(w.floor) || 0, lastSale: parseFloat(w.lastSalePrice) || 0, type: "wearable" };
+      }
+
+      const p2p = priceData?.data?.p2p || {};
+      return { nfts, p2p };
+    }
+
+    function formatAge(ms) {
+      const h = Math.floor(ms / 3600000);
+      if (h < 24) return `${h}h`;
+      const d = Math.floor(h / 24);
+      if (d < 7) return `${d}d`;
+      const w = Math.floor(d / 7);
+      return `${w}w`;
+    }
+
+    async function renderSales(data) {
+      const app = document.getElementById("app");
+      const { trades } = data;
+      const listings = trades.listings || {};
+      const offers = trades.offers || {};
+
+      let html = `<div class="header pixel-panel pixel-font">
+        <h1>SALES TRACKER</h1>
+        <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
+      </div>`;
+
+      html += `<div class="under-dev-banner pixel-font" style="background:linear-gradient(180deg,#3b1768,#2a1050);padding:8px 12px;border:3px solid #000;margin-bottom:16px;text-align:center;font-size:9px;color:var(--lily)">
+        ⚠️ UNDER DEVELOPMENT ⚠️
+      </div>`;
+
+      // Show loading while fetching market data
+      html += `<div id="sales-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading market prices...</div></div></div>`;
+      app.innerHTML = html;
+
+      // Fetch market data
+      let market;
+      try {
+        market = await fetchMarketPrices();
+      } catch (err) {
+        document.getElementById("sales-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load prices: ${escHTML(err.message)}</p></div>`;
+        return;
+      }
+
+      const now = Date.now();
+
+      // Process listings
+      const activeListings = [];
+      const soldListings = [];
+
+      for (const [id, listing] of Object.entries(listings)) {
+        const items = Object.entries(listing.items || {});
+        if (items.length === 0) continue;
+        const [itemName, qty] = items[0];
+        const priceSFL = listing.sfl || 0;
+        const unitPrice = qty > 0 ? priceSFL / qty : priceSFL;
+        const createdAt = toMs(listing.createdAt || 0);
+        const age = now - createdAt;
+        const collection = listing.collection || "unknown";
+
+        // Get market price
+        let marketPrice = 0;
+        let priceSource = "";
+        if (market.p2p[itemName]) {
+          marketPrice = market.p2p[itemName];
+          priceSource = "P2P";
+        } else if (market.nfts[itemName]) {
+          marketPrice = market.nfts[itemName].floor;
+          priceSource = "Floor";
+        }
+
+        const delta = marketPrice > 0 ? ((unitPrice - marketPrice) / marketPrice) * 100 : 0;
+
+        const entry = {
+          id, itemName, qty, priceSFL, unitPrice, createdAt, age,
+          marketPrice, priceSource, delta, collection,
+          tradeType: listing.tradeType || "onchain",
+        };
+
+        if (listing.fulfilledAt || listing.boughtAt) {
+          entry.soldAt = toMs(listing.fulfilledAt || listing.boughtAt);
+          soldListings.push(entry);
+        } else {
+          activeListings.push(entry);
+        }
+      }
+
+      // Process offers (buy orders)
+      const activeOffers = [];
+      for (const [id, offer] of Object.entries(offers)) {
+        const items = Object.entries(offer.items || {});
+        if (items.length === 0) continue;
+        const [itemName, qty] = items[0];
+        const priceSFL = offer.sfl || 0;
+        const unitPrice = qty > 0 ? priceSFL / qty : priceSFL;
+        const createdAt = toMs(offer.createdAt || 0);
+        const age = now - createdAt;
+
+        let marketPrice = 0;
+        let priceSource = "";
+        if (market.p2p[itemName]) {
+          marketPrice = market.p2p[itemName];
+          priceSource = "P2P";
+        } else if (market.nfts[itemName]) {
+          marketPrice = market.nfts[itemName].floor;
+          priceSource = "Floor";
+        }
+
+        const delta = marketPrice > 0 ? ((unitPrice - marketPrice) / marketPrice) * 100 : 0;
+
+        if (!offer.fulfilledAt) {
+          activeOffers.push({
+            id, itemName, qty, priceSFL, unitPrice, createdAt, age,
+            marketPrice, priceSource, delta, collection: offer.collection || "unknown",
+          });
+        }
+      }
+
+      // Sort: most overpriced first (for listings), cheapest first (for offers)
+      activeListings.sort((a, b) => b.delta - a.delta);
+      activeOffers.sort((a, b) => a.delta - b.delta);
+      soldListings.sort((a, b) => (b.soldAt || 0) - (a.soldAt || 0));
+
+      // Summary stats
+      const totalListedSFL = activeListings.reduce((s, l) => s + l.priceSFL, 0);
+      const totalOfferSFL = activeOffers.reduce((s, o) => s + o.priceSFL, 0);
+      const overpricedCount = activeListings.filter(l => l.delta > 20).length;
+      const staleCount = activeListings.filter(l => l.age > 7 * 24 * 3600000).length;
+
+      let content = "";
+
+      // Summary
+      content += `<div class="sales-summary-grid pixel-font">
+        <div class="sales-stat"><div class="sales-stat-label">ACTIVE LISTINGS</div><div class="sales-stat-value">${activeListings.length}</div></div>
+        <div class="sales-stat"><div class="sales-stat-label">TOTAL LISTED</div><div class="sales-stat-value">${totalListedSFL.toFixed(1)} SFL</div></div>
+        <div class="sales-stat"><div class="sales-stat-label">OVERPRICED</div><div class="sales-stat-value" style="color:${overpricedCount > 0 ? 'var(--red)' : 'var(--green)'}">${overpricedCount}</div></div>
+        <div class="sales-stat"><div class="sales-stat-label">STALE (>7d)</div><div class="sales-stat-value" style="color:${staleCount > 0 ? 'var(--yellow)' : 'var(--green)'}">${staleCount}</div></div>
+        <div class="sales-stat"><div class="sales-stat-label">ACTIVE OFFERS</div><div class="sales-stat-value">${activeOffers.length}</div></div>
+        <div class="sales-stat"><div class="sales-stat-label">TOTAL OFFERED</div><div class="sales-stat-value">${totalOfferSFL.toFixed(1)} SFL</div></div>
+        ${trades.tradePoints ? `<div class="sales-stat"><div class="sales-stat-label">TRADE POINTS</div><div class="sales-stat-value">${trades.tradePoints}</div></div>` : ""}
+      </div>`;
+
+      // Render listing rows helper
+      const renderListingRow = (l, isSell) => {
+        const imgUrl = ITEM_ICON_BASE + encodeURIComponent(l.itemName) + ".png";
+        const badges = [];
+        if (isSell && l.delta > 20) badges.push(`<span class="sales-badge overpriced">+${Math.round(l.delta)}%</span>`);
+        else if (isSell && l.delta < -10) badges.push(`<span class="sales-badge good">${Math.round(l.delta)}%</span>`);
+        if (l.age > 7 * 24 * 3600000) badges.push(`<span class="sales-badge stale">STALE</span>`);
+        if (l.soldAt) badges.push(`<span class="sales-badge sold">SOLD</span>`);
+
+        return `<div class="sales-listing">
+          <img class="sales-listing-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">
+          <div class="sales-listing-info">
+            <div class="sales-listing-name">${escHTML(l.itemName)}${l.qty > 1 ? ` x${l.qty}` : ""} ${badges.join("")}</div>
+            <div class="sales-listing-detail">${formatAge(l.age)} ago · ${l.tradeType || l.collection}${l.marketPrice > 0 ? ` · market: ${l.marketPrice.toFixed(3)} SFL/${l.priceSource}` : ""}</div>
+          </div>
+          <div class="sales-listing-prices">
+            <div class="sales-price-yours">${l.priceSFL.toFixed(2)} SFL</div>
+            ${l.marketPrice > 0 && l.qty > 0 ? `<div class="sales-price-market">${l.unitPrice.toFixed(3)}/ea vs ${l.marketPrice.toFixed(3)}</div>` : ""}
+          </div>
+        </div>`;
+      };
+
+      // Active Listings section
+      content += `<div style="margin-bottom:16px">
+        <div class="sales-section-header pixel-font" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+          <h3>📤 ACTIVE LISTINGS</h3>
+          <span class="sales-section-count">${activeListings.length} items</span>
+        </div>
+        <div class="sales-section-body">`;
+      if (activeListings.length === 0) {
+        content += `<div style="padding:16px;text-align:center;font-size:10px;color:var(--text-dim)">No active listings</div>`;
+      } else {
+        for (const l of activeListings) content += renderListingRow(l, true);
+      }
+      content += `</div></div>`;
+
+      // Active Offers section
+      if (activeOffers.length > 0) {
+        content += `<div style="margin-bottom:16px">
+          <div class="sales-section-header pixel-font" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+            <h3>📥 ACTIVE OFFERS</h3>
+            <span class="sales-section-count">${activeOffers.length} items</span>
+          </div>
+          <div class="sales-section-body">`;
+        for (const o of activeOffers) content += renderListingRow(o, false);
+        content += `</div></div>`;
+      }
+
+      // Sold / Fulfilled section
+      if (soldListings.length > 0) {
+        content += `<div style="margin-bottom:16px">
+          <div class="sales-section-header pixel-font" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+            <h3>✅ SOLD</h3>
+            <span class="sales-section-count">${soldListings.length} items</span>
+          </div>
+          <div class="sales-section-body" style="display:none">`;
+        for (const l of soldListings) content += renderListingRow(l, true);
+        content += `</div></div>`;
+      }
+
+      // Weekly stats
+      const weeklySales = trades.weeklySales || {};
+      const weeklyPurchases = trades.weeklyPurchases || {};
+      const weekKeys = [...new Set([...Object.keys(weeklySales), ...Object.keys(weeklyPurchases)])].sort().reverse();
+
+      if (weekKeys.length > 0) {
+        content += `<div style="margin-bottom:16px">
+          <div class="sales-section-header pixel-font" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+            <h3>📊 WEEKLY HISTORY</h3>
+            <span class="sales-section-count">${weekKeys.length} weeks</span>
+          </div>
+          <div class="sales-section-body" style="display:none;padding:10px 14px">`;
+
+        for (const week of weekKeys.slice(0, 8)) {
+          const sales = weeklySales[week] || {};
+          const purchases = weeklyPurchases[week] || {};
+          const saleItems = Object.entries(sales).map(([n, q]) => `${n} x${q}`).join(", ");
+          const purchItems = Object.entries(purchases).map(([n, q]) => `${n} x${q}`).join(", ");
+          const weekDate = new Date(parseInt(week)).toLocaleDateString("cs-CZ");
+
+          content += `<div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid rgba(92,58,30,0.2)">
+            <div style="font-size:10px;color:var(--text-secondary);margin-bottom:3px">${weekDate}</div>
+            ${saleItems ? `<div style="font-size:9px;color:var(--green)">Sold: ${escHTML(saleItems)}</div>` : ""}
+            ${purchItems ? `<div style="font-size:9px;color:var(--blue)">Bought: ${escHTML(purchItems)}</div>` : ""}
+            ${!saleItems && !purchItems ? `<div style="font-size:9px;color:var(--text-dim)">No activity</div>` : ""}
+          </div>`;
+        }
+
+        content += `</div></div>`;
+      }
+
+      // Debug: log raw trade data
+      console.log("[Sales] trades:", trades);
+      console.log("[Sales] listings:", Object.keys(listings).length, "offers:", Object.keys(offers).length);
+
+      content += `<div class="footer">
+        <button class="refresh-btn" onclick="refresh()">REFRESH</button>
+        <div class="timestamp pixel-font">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
+      </div>`;
+
+      document.getElementById("sales-content").innerHTML = content;
+    }
+
+    // ═══════════════════════════════════════
     //  MAIN
     // ═══════════════════════════════════════
 
@@ -4165,6 +4515,7 @@
           case "crustaceans": renderCrustaceans(data); break;
           case "bumpkin": renderBumpkin(data); break;
           case "treasury": renderTreasury(data); break;
+          case "sales": renderSales(data); break;
           default: renderHub(data);
         }
 
