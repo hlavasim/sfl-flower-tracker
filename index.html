@@ -5638,6 +5638,26 @@
         const boostText = skill.buff + (skill.debuff ? "\n" + skill.debuff : "");
         const effects = parseBoostEffects(boostText);
         const categories = classifyToCategories(effects);
+        // Add tree-based categories for skills that parser couldn't classify
+        const TREE_TO_CATS = {
+          "Animals": ["chickens", "cows", "sheep"],
+          "Crops": ["crops"],
+          "Fruit Patch": ["fruits"],
+          "Fishing": ["fishing"],
+          "Mining": ["stone", "iron", "gold"],
+          "Trees": ["trees"],
+          "Bees & Flowers": ["bees", "flowers"],
+          "Cooking": ["cooking"],
+        };
+        const treeCats = TREE_TO_CATS[skill.tree];
+        if (treeCats) {
+          for (const tc of treeCats) {
+            if (!categories.includes(tc)) categories.push(tc);
+          }
+          // Remove "other" if we now have real categories
+          const otherIdx = categories.indexOf("other");
+          if (otherIdx !== -1 && categories.length > 1) categories.splice(otherIdx, 1);
+        }
         // Skill cost = skill points × SFL per skill point
         const skillFloor = skillCostInfo.sflPerPoint > 0 ? skill.points * skillCostInfo.sflPerPoint : 0;
         boostItems.push({
