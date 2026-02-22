@@ -5970,6 +5970,52 @@
         content += `</div></div>`;
       }
 
+      // ── DEBUG: All Boosts Mapping Table ──
+      content += `<div style="margin-top:16px">
+        <div class="pixel-font" style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;border-bottom:2px solid var(--border-dark);padding-bottom:4px;cursor:pointer" onclick="document.getElementById('power-debug-table').style.display=document.getElementById('power-debug-table').style.display==='none'?'block':'none'">
+          ═══ 🔍 ALL BOOSTS DEBUG TABLE (${boostItems.length}) ═══ <span style="font-size:9px;color:var(--text-dim)">click to toggle</span>
+        </div>
+        <div id="power-debug-table" style="display:none;overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:8px;color:var(--text-secondary)">
+            <thead>
+              <tr style="background:rgba(92,58,30,0.3);text-align:left">
+                <th style="padding:4px 6px;border:1px solid var(--border-dark);min-width:100px">Name</th>
+                <th style="padding:4px 6px;border:1px solid var(--border-dark);min-width:55px">Type</th>
+                <th style="padding:4px 6px;border:1px solid var(--border-dark)">Own</th>
+                <th style="padding:4px 6px;border:1px solid var(--border-dark);min-width:140px">Boost Text</th>
+                <th style="padding:4px 6px;border:1px solid var(--border-dark);min-width:65px">Categories</th>
+                <th style="padding:4px 6px;border:1px solid var(--border-dark);min-width:180px">Parsed Effects</th>
+              </tr>
+            </thead>
+            <tbody>`;
+
+      const sortedBoosts = [...boostItems].sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
+      for (const b of sortedBoosts) {
+        const ownIcon = b.has ? "✅" : "❌";
+        const effectsDesc = b.effects.map(e => {
+          if (e.type === "qualitative") return `<span style="color:var(--text-dim)">qualitative: ${escHTML(e.raw || "?")}</span>`;
+          let desc = `<span style="color:var(--lily)">${e.type}</span>`;
+          if (e.value !== undefined) desc += ` <strong>${e.value > 0 ? "+" : ""}${e.value}</strong>`;
+          if (e.pct !== undefined) desc += ` ${e.pct}%`;
+          if (e.extra !== undefined) desc += ` +${e.extra}`;
+          if (e.product) desc += ` <span style="color:var(--sunpetal)">${escHTML(e.product)}</span>`;
+          desc += ` → <span style="color:var(--green)">${e.cat || "?"}</span>`;
+          return desc;
+        }).join("<br>");
+        const catBadges = b.categories.map(c => `<span style="background:rgba(92,58,30,0.3);padding:1px 4px;border-radius:3px;margin:1px">${c}</span>`).join(" ");
+
+        content += `<tr style="border-bottom:1px solid rgba(92,58,30,0.15)">
+          <td style="padding:3px 6px;border:1px solid var(--border-dark);font-weight:bold">${escHTML(b.name)}</td>
+          <td style="padding:3px 6px;border:1px solid var(--border-dark)">${b.type}${b.skillTree ? ` (${b.skillTree})` : ""}</td>
+          <td style="padding:3px 6px;border:1px solid var(--border-dark);text-align:center">${ownIcon}</td>
+          <td style="padding:3px 6px;border:1px solid var(--border-dark);white-space:pre-wrap">${escHTML(b.boost)}</td>
+          <td style="padding:3px 6px;border:1px solid var(--border-dark)">${catBadges}</td>
+          <td style="padding:3px 6px;border:1px solid var(--border-dark)">${effectsDesc || "<em>none</em>"}</td>
+        </tr>`;
+      }
+
+      content += `</tbody></table></div></div>`;
+
       content += `<div class="footer" style="margin-top:16px">
         <button class="refresh-btn" onclick="refresh()">REFRESH</button>
         <div class="timestamp pixel-font">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
