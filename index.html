@@ -1902,10 +1902,11 @@
     };
 
     const RESOURCE_RESPAWN_DATA = {
-      "Stone": { respawnSec: 14400, yield: 2, farmKey: "stones" },
-      "Iron":  { respawnSec: 28800, yield: 1, farmKey: "iron" },
-      "Gold":  { respawnSec: 43200, yield: 1, farmKey: "gold" },
-      "Wood":  { respawnSec: 7200,  yield: 3, farmKey: "trees" },
+      "Stone":     { respawnSec: 14400, yield: 2, farmKey: "stones" },
+      "Iron":      { respawnSec: 28800, yield: 1, farmKey: "iron" },
+      "Gold":      { respawnSec: 43200, yield: 1, farmKey: "gold" },
+      "Crimstone": { respawnSec: 64800, yield: 1, farmKey: "crimstones" },
+      "Wood":      { respawnSec: 7200,  yield: 3, farmKey: "trees" },
     };
 
     // Full skill tree data from sfl.world/tools/skills
@@ -2211,8 +2212,9 @@
       flowers:  { label: "FLOWERS",  emoji: "🌸", selector: "flower", quantifiable: true },
       stone:    { label: "STONE",    emoji: "⛏️", selector: null,   quantifiable: true },
       iron:     { label: "IRON",     emoji: "🪨", selector: null,   quantifiable: true },
-      gold:     { label: "GOLD",     emoji: "🥇", selector: null,   quantifiable: true },
-      trees:    { label: "TREES",    emoji: "🌳", selector: null,   quantifiable: true },
+      gold:      { label: "GOLD",      emoji: "🥇", selector: null,   quantifiable: true },
+      crimstone: { label: "CRIMSTONE",emoji: "💎", selector: null,   quantifiable: true },
+      trees:     { label: "TREES",    emoji: "🌳", selector: null,   quantifiable: true },
       fishing:  { label: "FISHING",  emoji: "🎣", selector: null,   quantifiable: true },
       bees:     { label: "BEES",     emoji: "🐝", selector: null,   quantifiable: true },
       // Qualitative
@@ -2233,6 +2235,7 @@
     PRODUCT_TO_CATEGORY["Stone"] = "stone";
     PRODUCT_TO_CATEGORY["Iron"] = "iron";
     PRODUCT_TO_CATEGORY["Gold"] = "gold";
+    PRODUCT_TO_CATEGORY["Crimstone"] = "crimstone";
     PRODUCT_TO_CATEGORY["Wood"] = "trees";
     PRODUCT_TO_CATEGORY["Fish"] = "fishing";
 
@@ -5197,6 +5200,7 @@
         stones: Object.keys(farm.stones || {}).length,
         iron: Object.keys(farm.iron || {}).length,
         gold: Object.keys(farm.gold || {}).length,
+        crimstones: Object.keys(farm.crimstones || {}).length,
         trees: Object.keys(farm.trees || {}).length,
       };
     }
@@ -5231,9 +5235,11 @@
         case "bees": {
           return (capacity.bees || 0) * 1; // ~1 honey/day per hive
         }
-        case "stone": case "iron": case "gold": {
-          const d = RESOURCE_RESPAWN_DATA[catId === "stone" ? "Stone" : catId === "iron" ? "Iron" : "Gold"];
-          const n = capacity[catId === "stone" ? "stones" : catId] || 0;
+        case "stone": case "iron": case "gold": case "crimstone": {
+          const rKey = catId === "stone" ? "Stone" : catId === "iron" ? "Iron" : catId === "gold" ? "Gold" : "Crimstone";
+          const d = RESOURCE_RESPAWN_DATA[rKey];
+          const capKey = catId === "stone" ? "stones" : catId === "crimstone" ? "crimstones" : catId;
+          const n = capacity[capKey] || 0;
           return n * (86400 / d.respawnSec) * d.yield;
         }
         case "trees": {
@@ -5262,6 +5268,7 @@
         case "stone": return RESOURCE_RESPAWN_DATA["Stone"].respawnSec;
         case "iron": return RESOURCE_RESPAWN_DATA["Iron"].respawnSec;
         case "gold": return RESOURCE_RESPAWN_DATA["Gold"].respawnSec;
+        case "crimstone": return RESOURCE_RESPAWN_DATA["Crimstone"].respawnSec;
         case "trees": return RESOURCE_RESPAWN_DATA["Wood"].respawnSec;
         case "flowers": return 86400;
         default: return 86400;
@@ -5280,6 +5287,7 @@
         case "stone": return capacity.stones;
         case "iron": return capacity.iron;
         case "gold": return capacity.gold;
+        case "crimstone": return capacity.crimstones;
         case "trees": return capacity.trees;
         default: return 0;
       }
@@ -5296,6 +5304,7 @@
         case "stone": return "Stone";
         case "iron": return "Iron";
         case "gold": return "Gold";
+        case "crimstone": return "Crimstone";
         case "trees": return "Wood";
         case "flowers": return "Sunpetal Seed";
         case "fishing": return "Fish";
@@ -5308,6 +5317,7 @@
         case "stone": return RESOURCE_RESPAWN_DATA["Stone"].yield;
         case "iron": return RESOURCE_RESPAWN_DATA["Iron"].yield;
         case "gold": return RESOURCE_RESPAWN_DATA["Gold"].yield;
+        case "crimstone": return RESOURCE_RESPAWN_DATA["Crimstone"].yield;
         case "trees": return RESOURCE_RESPAWN_DATA["Wood"].yield;
         default: return 1;
       }
@@ -5376,6 +5386,68 @@
     function unitToSfl(unitsPerDay, product, p2pPrices) {
       const price = p2pPrices[product] || 0;
       return unitsPerDay * price;
+    }
+
+    // Format seconds to human-readable time
+    function fmtSec(s) {
+      if (s >= 86400) return (s / 86400).toFixed(1) + "d";
+      if (s >= 3600) return (s / 3600).toFixed(1) + "h";
+      if (s >= 60) return (s / 60).toFixed(0) + "m";
+      return s + "s";
+    }
+
+    // Build detailed production breakdown HTML for a category
+    function buildProductionBreakdown(catId, product, capacity, p2pPrices, catBoosts) {
+      const n = getCapacityCount(catId, capacity);
+      const priceProduct = getPriceProduct(catId, product);
+      const price = p2pPrices[priceProduct] || 0;
+      const baseCycleSec = getCycleSec(catId, product);
+      const baseYield = getBaseYield(catId);
+      const baseResult = applyBoosts(catId, product, capacity, []);
+      const baseSfl = unitToSfl(baseResult.unitsPerDay, priceProduct, p2pPrices);
+
+      // Boosted (all owned)
+      const ownedEffects = catBoosts.filter(b => b.has).flatMap(b => getEffectsForCategory(b, catId));
+      const boostedResult = applyBoosts(catId, product, capacity, ownedEffects);
+      const boostedSfl = unitToSfl(boostedResult.unitsPerDay, priceProduct, p2pPrices);
+      const delta = boostedSfl - baseSfl;
+
+      if (n === 0 && catId !== "fishing") {
+        return `<div style="padding:8px 12px;font-size:10px;color:var(--text-dim)">No capacity detected on farm.</div>`;
+      }
+
+      // Unit label
+      const unitLabels = {
+        crops: "plots", fruits: "patches", chickens: "chickens", cows: "cows",
+        sheep: "sheep", bees: "hives", flowers: "beds", stone: "rocks",
+        iron: "nodes", gold: "nodes", crimstone: "nodes", trees: "trees", fishing: "reels"
+      };
+      const unitLabel = unitLabels[catId] || catId;
+
+      let h = `<div style="padding:8px 12px;font-size:9px;color:var(--text-secondary);line-height:1.8;border-bottom:1px solid var(--border-dark)">`;
+
+      // Base calculation
+      const cyclesPerDay = baseCycleSec > 0 ? 86400 / baseCycleSec : 0;
+      h += `<div style="color:var(--lily);font-size:10px;margin-bottom:2px"><strong>📊 BASE PRODUCTION</strong></div>`;
+      h += `<div>${n} ${unitLabel} × ${fmtSec(baseCycleSec)} cycle = <strong>${cyclesPerDay.toFixed(2)} cycles/day</strong></div>`;
+      h += `<div>${cyclesPerDay.toFixed(2)} cycles × ${baseYield} yield × ${n} ${unitLabel} = <strong>${baseResult.unitsPerDay.toFixed(2)} ${priceProduct}/day</strong></div>`;
+      h += `<div>P2P price: ${price.toFixed(6)} SFL/${priceProduct}</div>`;
+      h += `<div>${baseResult.unitsPerDay.toFixed(2)} × ${price.toFixed(6)} = <strong style="color:var(--sunpetal)">${baseSfl.toFixed(4)} SFL/day</strong></div>`;
+
+      // Boosted calculation
+      if (ownedEffects.length > 0) {
+        const bCyclesPerDay = boostedResult.effectiveCycle > 0 ? 86400 / boostedResult.effectiveCycle : 0;
+        const bOutputPerCycle = baseYield * boostedResult.yieldMult + boostedResult.yieldFlat;
+        h += `<div style="color:var(--lily);font-size:10px;margin-top:6px;margin-bottom:2px"><strong>⚡ BOOSTED PRODUCTION</strong></div>`;
+        h += `<div>Speed: ×${boostedResult.speedMult.toFixed(3)} → ${fmtSec(boostedResult.effectiveCycle)} cycle → <strong>${bCyclesPerDay.toFixed(2)} cycles/day</strong></div>`;
+        h += `<div>Yield: ×${boostedResult.yieldMult.toFixed(3)} ${boostedResult.yieldFlat !== 0 ? `+ ${boostedResult.yieldFlat.toFixed(2)} flat` : ""} → <strong>${bOutputPerCycle.toFixed(2)} per cycle</strong></div>`;
+        h += `<div>${bCyclesPerDay.toFixed(2)} × ${bOutputPerCycle.toFixed(2)} × ${n} = <strong>${boostedResult.unitsPerDay.toFixed(2)} ${priceProduct}/day</strong></div>`;
+        h += `<div>${boostedResult.unitsPerDay.toFixed(2)} × ${price.toFixed(6)} = <strong style="color:var(--green)">${boostedSfl.toFixed(4)} SFL/day</strong>`;
+        h += ` <span style="color:var(--sunpetal)">(+${delta.toFixed(4)} | +${baseSfl > 0 ? ((delta / baseSfl) * 100).toFixed(0) : "∞"}%)</span></div>`;
+      }
+
+      h += `</div>`;
+      return h;
     }
 
     // Get all effects for a specific boost item relevant to a category
@@ -5644,7 +5716,7 @@
           "Crops": ["crops"],
           "Fruit Patch": ["fruits"],
           "Fishing": ["fishing"],
-          "Mining": ["stone", "iron", "gold"],
+          "Mining": ["stone", "iron", "gold", "crimstone"],
           "Trees": ["trees"],
           "Bees & Flowers": ["bees", "flowers"],
           "Cooking": ["cooking"],
@@ -5799,7 +5871,7 @@
         content += `<div class="power-category pixel-panel" id="power-cat-${catId}">`;
         content += `<div class="power-cat-header pixel-font" onclick="togglePowerCategory('${catId}')">
           <span>${catDef.emoji} ${catDef.label}</span>
-          <span class="power-cat-count">${n} ${catId === "crops" ? "plots" : catId === "fruits" ? "patches" : catId === "trees" ? "trees" : catId === "flowers" ? "beds" : catId}</span>`;
+          <span class="power-cat-count">${n} ${({crops:"plots",fruits:"patches",trees:"trees",flowers:"beds",stone:"rocks",iron:"nodes",gold:"nodes",crimstone:"nodes",chickens:"chickens",cows:"cows",sheep:"sheep",bees:"hives",fishing:"reels"})[catId] || catId}</span>`;
 
         // Product selector
         if (catDef.selector === "crop") {
@@ -5827,12 +5899,7 @@
         </div>`;
 
         content += `<div class="power-cat-body">`;
-
-        if (n === 0) {
-          content += `<div style="padding:8px 12px;font-size:10px;color:var(--text-dim)">No capacity detected.</div>`;
-        } else {
-          content += `<div style="padding:6px 12px;font-size:9px;color:var(--text-dim)">Base: ${summary.baseSfl.toFixed(4)} SFL/day | Boosted: ${summary.boostedSfl.toFixed(4)} SFL/day${summary.baseSfl > 0 ? ` (+${((summary.delta / summary.baseSfl) * 100).toFixed(0)}%)` : ""}</div>`;
-        }
+        content += buildProductionBreakdown(catId, product, capacity, p2pPrices, items);
 
         // Owned boosts
         if (owned.length > 0) {
