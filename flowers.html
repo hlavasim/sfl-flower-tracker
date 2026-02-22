@@ -1214,59 +1214,118 @@
     .sales-section-body { border: 3px solid var(--border-dark); border-top: none; }
 
     /* ── Power Page ── */
-    .power-filters {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
-      padding: 8px 12px;
-      background: var(--bg-dark);
-      border: 3px solid var(--border-dark);
+    .power-summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
       margin-bottom: 16px;
     }
-    .power-filter-btn {
-      font-family: 'Press Start 2P', cursive;
-      font-size: 7px;
-      padding: 5px 8px;
-      border: 2px solid var(--border-brown);
+    .power-summary-stat {
       background: var(--bg-card);
-      color: var(--text-dim);
-      cursor: pointer;
-      transition: all 0.15s;
+      border: 3px solid var(--border-dark);
+      padding: 10px 8px;
+      text-align: center;
     }
-    .power-filter-btn:hover { background: var(--bg-medium); }
-    .power-filter-btn.active { border-color: var(--sunpetal); color: var(--sunpetal); background: rgba(255,215,0,0.08); }
-    .power-item {
-      display: grid;
-      grid-template-columns: 36px 1fr auto;
+    .power-summary-label { font-size: 8px; color: var(--text-dim); margin-bottom: 4px; }
+    .power-summary-value { font-size: 11px; text-shadow: 1px 1px 0 #000; }
+    .power-best-buys { margin-bottom: 16px; }
+    .power-section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--bg-medium);
+      border-bottom: 3px solid var(--border-dark);
+      cursor: pointer;
+      font-size: 11px;
+      color: var(--sunpetal);
+    }
+    .power-section-header:hover { background: var(--bg-light); }
+    .power-section-body { padding: 4px 0; }
+    .power-bb-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      font-size: 10px;
+      border-bottom: 1px solid rgba(0,0,0,0.3);
+    }
+    .power-bb-row:hover { background: var(--bg-light); }
+    .power-bb-rank { color: var(--sunpetal); width: 20px; font-weight: bold; }
+    .power-bb-img { width: 20px; height: 20px; image-rendering: pixelated; }
+    .power-bb-name { flex: 1; color: var(--text-primary); font-weight: bold; }
+    .power-bb-cat { font-size: 8px; color: var(--text-dim); width: 60px; }
+    .power-bb-sfl { color: var(--green); width: 70px; text-align: right; }
+    .power-bb-floor { color: var(--sunpetal); width: 55px; text-align: right; }
+    .power-bb-roi { color: var(--lily); width: 55px; text-align: right; font-weight: bold; }
+    .power-category { margin-bottom: 12px; }
+    .power-cat-header {
+      display: flex;
       align-items: center;
       gap: 8px;
-      padding: 8px 12px;
-      border-bottom: 2px solid rgba(0,0,0,0.4);
+      padding: 10px 14px;
+      background: var(--bg-medium);
+      border-bottom: 3px solid var(--border-dark);
+      cursor: pointer;
       font-size: 11px;
     }
-    .power-item:nth-child(even) { background: var(--bg-card); }
-    .power-item:nth-child(odd) { background: var(--bg-card-alt); }
-    .power-item.has-it { border-left: 3px solid var(--green); }
-    .power-item.missing { border-left: 3px solid var(--text-dim); opacity: 0.8; }
-    .power-item-img {
-      width: 28px; height: 28px;
+    .power-cat-header:hover { background: var(--bg-light); }
+    .power-cat-count { font-size: 9px; color: var(--text-dim); }
+    .power-cat-sfl { margin-left: auto; font-weight: bold; }
+    .power-toggle-arrow { font-size: 9px; color: var(--text-dim); margin-left: 4px; }
+    .power-cat-body { }
+    .power-product-select {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 7px;
+      padding: 3px 6px;
+      background: var(--bg-dark);
+      color: var(--text-primary);
+      border: 2px solid var(--border-brown);
+      cursor: pointer;
+    }
+    .power-subsection-label {
+      font-size: 9px;
+      color: var(--text-secondary);
+      padding: 6px 12px 2px;
+      font-weight: bold;
+    }
+    .power-boost-row {
+      display: grid;
+      grid-template-columns: 28px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-bottom: 1px solid rgba(0,0,0,0.3);
+      font-size: 10px;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .power-boost-row:hover { background: var(--bg-light); }
+    .power-boost-row.has-it { border-left: 3px solid var(--green); }
+    .power-boost-row.missing { border-left: 3px solid var(--text-dim); opacity: 0.85; }
+    .power-boost-img {
+      width: 24px; height: 24px;
       image-rendering: pixelated;
       filter: drop-shadow(1px 1px 0 #000);
     }
-    .power-item-name { color: var(--text-primary); font-weight: bold; }
-    .power-item-type { font-size: 8px; color: var(--text-dim); margin-left: 4px; }
-    .power-item-boost { font-size: 9px; color: var(--green); margin-top: 2px; white-space: pre-line; }
-    .power-item-price { text-align: right; }
-    .power-item-floor { font-size: 10px; color: var(--sunpetal); }
-    .power-item-supply { font-size: 8px; color: var(--text-dim); }
-    .power-item-status {
-      font-size: 8px;
-      font-family: 'Press Start 2P', cursive;
-      padding: 2px 5px;
-      border: 1px solid;
+    .power-boost-icon { width: 24px; text-align: center; font-size: 14px; }
+    .power-boost-info { min-width: 0; }
+    .power-boost-name { color: var(--text-primary); font-weight: bold; font-size: 10px; }
+    .power-boost-type { font-size: 8px; color: var(--text-dim); margin-left: 3px; font-weight: normal; }
+    .power-boost-text { font-size: 8px; color: var(--green); margin-top: 1px; white-space: pre-line; overflow: hidden; text-overflow: ellipsis; }
+    .power-boost-value { text-align: right; white-space: nowrap; }
+    .power-boost-sfl { font-size: 10px; color: var(--green); font-weight: bold; }
+    .power-boost-roi { font-size: 8px; color: var(--lily); }
+    .power-boost-floor { font-size: 8px; color: var(--sunpetal); }
+    .power-detail {
+      padding: 10px 14px;
+      background: var(--bg-dark);
+      border: 2px solid var(--border-dark);
+      border-top: none;
+      margin-bottom: 2px;
     }
-    .power-item-status.owned { color: var(--green); border-color: var(--green); }
-    .power-item-status.buy { color: var(--yellow); border-color: var(--yellow); }
+    .power-formula { font-size: 9px; line-height: 1.6; color: var(--text-secondary); }
+    .power-formula strong { color: var(--text-primary); }
 
     /* ── Grow Planner ── */
     .planner-section {
@@ -1381,10 +1440,16 @@
       .sales-listing { grid-template-columns: 28px 1fr auto; gap: 6px; padding: 6px 8px; }
       .sales-listing-img { width: 22px; height: 22px; }
       .sales-summary-grid { grid-template-columns: repeat(2, 1fr); }
-      .power-item { grid-template-columns: 28px 1fr auto; gap: 6px; padding: 6px 8px; }
-      .power-item-img { width: 22px; height: 22px; }
-      .power-filters { gap: 3px; }
-      .power-filter-btn { font-size: 6px; padding: 4px 6px; }
+      .power-summary { grid-template-columns: repeat(2, 1fr); }
+      .power-boost-row { grid-template-columns: 22px 1fr auto; gap: 5px; padding: 5px 8px; }
+      .power-boost-img { width: 20px; height: 20px; }
+      .power-boost-name { font-size: 9px; }
+      .power-boost-text { font-size: 7px; }
+      .power-bb-row { font-size: 9px; gap: 4px; }
+      .power-bb-cat { display: none; }
+      .power-bb-roi { width: 45px; }
+      .power-cat-header { font-size: 9px; flex-wrap: wrap; }
+      .power-product-select { font-size: 6px; }
     }
   </style>
   <script defer src="/_vercel/insights/script.js"></script>
@@ -1810,6 +1875,181 @@
 
     const COOKING_BUILDING_NAMES = ["Fire Pit", "Kitchen", "Bakery", "Deli", "Smoothie Shack"];
     const COOKING_BUILDING_EMOJI = { "Fire Pit": "🔥", "Kitchen": "🍳", "Bakery": "🧁", "Deli": "🥩", "Smoothie Shack": "🥤" };
+
+    // ═══════════════════════════════════════
+    //  POWER ANALYZER DATA
+    // ═══════════════════════════════════════
+
+    // Grow times in seconds (approximate — base values before boosts)
+    const CROP_GROW_DATA = {
+      "Sunflower": 60, "Potato": 300, "Pumpkin": 1800, "Carrot": 3600,
+      "Cabbage": 7200, "Soybean": 3600, "Beetroot": 14400, "Cauliflower": 28800,
+      "Parsnip": 43200, "Eggplant": 28800, "Corn": 21600, "Radish": 43200,
+      "Wheat": 14400, "Kale": 43200, "Turnip": 14400, "Onion": 28800,
+      "Pepper": 7200, "Zucchini": 600, "Yam": 3600, "Broccoli": 3600,
+      "Artichoke": 43200, "Barley": 43200,
+    };
+
+    const FRUIT_GROW_DATA = {
+      "Apple": 43200, "Blueberry": 21600, "Orange": 43200, "Banana": 43200,
+      "Lemon": 14400, "Tomato": 7200, "Grape": 86400, "Rice": 86400, "Olive": 86400,
+    };
+
+    const ANIMAL_CYCLE_DATA = {
+      "Chicken": { cycleSec: 48 * 3600, product: "Egg", farmKey: "chickens" },
+      "Cow":     { cycleSec: 48 * 3600, product: "Milk", farmKey: "cows" },
+      "Sheep":   { cycleSec: 48 * 3600, product: "Wool", farmKey: "sheep" },
+    };
+
+    const RESOURCE_RESPAWN_DATA = {
+      "Stone": { respawnSec: 14400, yield: 2, farmKey: "stones" },
+      "Iron":  { respawnSec: 28800, yield: 1, farmKey: "iron" },
+      "Gold":  { respawnSec: 43200, yield: 1, farmKey: "gold" },
+      "Wood":  { respawnSec: 7200,  yield: 3, farmKey: "trees" },
+    };
+
+    const POWER_KNOWN_SKILL_BOOSTS = {
+      // Flowers
+      "Blooming Boost": "×0.9 Flower Growing Time",
+      "Flower Power": "×0.8 Flower Growing Time",
+      "Flowery Abode": "×1.5 Flower Growing Time",
+      // Crops
+      "Green Thumb": "+5% Crop Yield",
+      "Young Farmer": "+10% Crop Yield",
+      "Experienced Farmer": "+20% Crop Yield",
+      // Animals
+      "Stable Hand": "+10% Animal Yield",
+      "Free Range": "-10% Chicken Time",
+      // Mining
+      "Rock'n'Roll": "+0.1 Stone",
+      "Iron Bumpkin": "+0.1 Iron",
+      "Gold Rush": "+0.1 Gold",
+      // Trees
+      "Lumberjack": "+10% Wood",
+      "Tree Hugger": "-20% Tree Recovery Time",
+      // Coins/XP/Qualitative
+      "Betty's Friend": "+20% Crop Sell Price",
+      "Gift Giver": "+50% Delivery Reward",
+    };
+
+    // Power category definitions
+    const POWER_CATEGORIES = {
+      // Quantifiable
+      crops:    { label: "CROPS",    emoji: "🌾", selector: "crop",  quantifiable: true },
+      fruits:   { label: "FRUITS",   emoji: "🍎", selector: "fruit", quantifiable: true },
+      chickens: { label: "CHICKENS", emoji: "🐔", selector: null,   quantifiable: true },
+      cows:     { label: "COWS",     emoji: "🐄", selector: null,   quantifiable: true },
+      sheep:    { label: "SHEEP",    emoji: "🐑", selector: null,   quantifiable: true },
+      flowers:  { label: "FLOWERS",  emoji: "🌸", selector: "flower", quantifiable: true },
+      stone:    { label: "STONE",    emoji: "⛏️", selector: null,   quantifiable: true },
+      iron:     { label: "IRON",     emoji: "🪨", selector: null,   quantifiable: true },
+      gold:     { label: "GOLD",     emoji: "🥇", selector: null,   quantifiable: true },
+      trees:    { label: "TREES",    emoji: "🌳", selector: null,   quantifiable: true },
+      fishing:  { label: "FISHING",  emoji: "🎣", selector: null,   quantifiable: true },
+      bees:     { label: "BEES",     emoji: "🐝", selector: null,   quantifiable: true },
+      // Qualitative
+      cooking:    { label: "COOKING / XP",  emoji: "🍳", selector: null, quantifiable: false },
+      coins:      { label: "COINS / SFL",   emoji: "🪙", selector: null, quantifiable: false },
+      protection: { label: "PROTECTION",    emoji: "🛡️", selector: null, quantifiable: false },
+      other:      { label: "OTHER",         emoji: "❓", selector: null, quantifiable: false },
+    };
+
+    // Map product names → category IDs
+    const PRODUCT_TO_CATEGORY = {};
+    Object.keys(CROP_GROW_DATA).forEach(k => PRODUCT_TO_CATEGORY[k] = "crops");
+    Object.keys(FRUIT_GROW_DATA).forEach(k => PRODUCT_TO_CATEGORY[k] = "fruits");
+    ["Egg", "Feather"].forEach(k => PRODUCT_TO_CATEGORY[k] = "chickens");
+    ["Milk", "Leather"].forEach(k => PRODUCT_TO_CATEGORY[k] = "cows");
+    ["Wool", "Merino Wool"].forEach(k => PRODUCT_TO_CATEGORY[k] = "sheep");
+    PRODUCT_TO_CATEGORY["Honey"] = "bees";
+    PRODUCT_TO_CATEGORY["Stone"] = "stone";
+    PRODUCT_TO_CATEGORY["Iron"] = "iron";
+    PRODUCT_TO_CATEGORY["Gold"] = "gold";
+    PRODUCT_TO_CATEGORY["Wood"] = "trees";
+    PRODUCT_TO_CATEGORY["Fish"] = "fishing";
+
+    // Boost text parser rules (ordered by priority)
+    const BOOST_PARSE_RULES = [
+      // Specific product growth time: "-20% Pumpkin Growth Time"
+      { rx: /([+-]?\d+\.?\d*)%\s+([\w\s]+?)\s+(?:Growth|Growing)\s+Time/i,
+        fn: m => {
+          const prod = m[2].trim();
+          const cat = PRODUCT_TO_CATEGORY[prod];
+          return cat ? { type: "speed_pct", value: parseFloat(m[1]), cat, product: prod }
+                     : { type: "speed_pct", value: parseFloat(m[1]), cat: "other", product: prod };
+        }},
+      // Generic crop growth: "-10% Crop Growth Time"
+      { rx: /([+-]?\d+\.?\d*)%\s+Crop\s+(?:Growth|Growing)\s+Time/i,
+        fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "crops" }) },
+      // Fruit growth
+      { rx: /([+-]?\d+\.?\d*)%\s+Fruit.*(?:Growth|Growing)\s+Time/i,
+        fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "fruits" }) },
+      // Flower growth %
+      { rx: /([+-]?\d+\.?\d*)%\s+Flower\s+(?:Growth|Growing)\s+Time/i,
+        fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "flowers" }) },
+      // Flower growth multiplier: ×0.9 Flower Growing Time
+      { rx: /[×x](\d+\.?\d*)\s+Flower\s+(?:Growth|Growing)\s+Time/i,
+        fn: m => ({ type: "speed_mult", value: parseFloat(m[1]), cat: "flowers" }) },
+      // Tree recovery
+      { rx: /([+-]?\d+\.?\d*)%\s+Tree\s+Recovery\s+Time/i,
+        fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "trees" }) },
+      // Animal time: "-10% Chicken Time"
+      { rx: /([+-]?\d+\.?\d*)%\s+(Chicken|Cow|Sheep)\s+.*Time/i,
+        fn: m => {
+          const animalCats = { "Chicken": "chickens", "Cow": "cows", "Sheep": "sheep" };
+          return { type: "speed_pct", value: parseFloat(m[1]), cat: animalCats[m[2]] || "other" };
+        }},
+      // Generic animal time
+      { rx: /([+-]?\d+\.?\d*)%\s+Animal.*Time/i,
+        fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "chickens", alsoApply: ["cows", "sheep"] }) },
+      // Crop yield %
+      { rx: /([+-]?\d+\.?\d*)%\s+Crop\s+Yield/i,
+        fn: m => ({ type: "yield_pct", value: parseFloat(m[1]), cat: "crops" }) },
+      // Fruit yield %
+      { rx: /([+-]?\d+\.?\d*)%\s+Fruit\s+Yield/i,
+        fn: m => ({ type: "yield_pct", value: parseFloat(m[1]), cat: "fruits" }) },
+      // Animal yield %
+      { rx: /([+-]?\d+\.?\d*)%\s+Animal\s+Yield/i,
+        fn: m => ({ type: "yield_pct", value: parseFloat(m[1]), cat: "chickens", alsoApply: ["cows", "sheep"] }) },
+      // Specific product yield %: "+10% Egg Yield" or "+10% Wood"
+      { rx: /([+-]?\d+\.?\d*)%\s+(Egg|Milk|Wool|Wood|Honey|Stone|Iron|Gold)/i,
+        fn: m => {
+          const cat = PRODUCT_TO_CATEGORY[m[2]] || "other";
+          return { type: "yield_pct", value: parseFloat(m[1]), cat, product: m[2] };
+        }},
+      // Flat yield: "+0.1 Stone", "+1 Egg"
+      { rx: /([+-]?\d+\.?\d*)\s+(Egg|Milk|Wool|Wood|Honey|Stone|Iron|Gold|Sunflower|Potato|Pumpkin|Carrot|Cabbage|Soybean|Beetroot|Cauliflower|Parsnip|Eggplant|Corn|Radish|Wheat|Kale|Turnip|Onion|Pepper|Zucchini|Yam|Broccoli|Artichoke|Barley|Apple|Blueberry|Orange|Banana|Lemon|Tomato|Grape|Rice|Olive)/i,
+        fn: m => {
+          const cat = PRODUCT_TO_CATEGORY[m[2]] || "other";
+          return { type: "yield_flat", value: parseFloat(m[1]), cat, product: m[2] };
+        }},
+      // Chance: "20% Chance +1 Egg"
+      { rx: /(\d+\.?\d*)%\s+Chance.*\+(\d+\.?\d*)\s+(\w+)/i,
+        fn: m => {
+          const cat = PRODUCT_TO_CATEGORY[m[3]] || "other";
+          return { type: "chance", pct: parseFloat(m[1]), extra: parseFloat(m[2]), cat, product: m[3] };
+        }},
+      // Fishing: "+X daily fish" or fishing-specific
+      { rx: /(\d+)\s+daily/i,
+        fn: m => ({ type: "daily_flat", value: parseFloat(m[1]), cat: "fishing" }) },
+      // XP boosts
+      { rx: /([+-]?\d+\.?\d*)%?\s*(Cook|Bake|Food|Meal|Dish|Kitchen|Delivery|XP)\b/i,
+        fn: m => ({ type: "qualitative", cat: "cooking", raw: m[0] }) },
+      // Coin / SFL boosts
+      { rx: /(Coin|SFL|Sell\s+Price|Revenue)/i,
+        fn: m => ({ type: "qualitative", cat: "coins", raw: m[0] }) },
+      // Protection
+      { rx: /(Protect|Guard|Shield|Disaster|Repel)/i,
+        fn: m => ({ type: "qualitative", cat: "protection", raw: m[0] }) },
+      // Bee-specific
+      { rx: /([+-]?\d+\.?\d*)%?\s*Honey/i,
+        fn: m => {
+          const v = parseFloat(m[1]);
+          if (isNaN(v)) return { type: "qualitative", cat: "bees", raw: m[0] };
+          return m[0].includes("%") ? { type: "yield_pct", value: v, cat: "bees" }
+                                     : { type: "yield_flat", value: v, cat: "bees", product: "Honey" };
+        }},
+    ];
 
     // ═══════════════════════════════════════
     //  GLOBALS
@@ -4569,30 +4809,392 @@
     }
 
     // ═══════════════════════════════════════
+    //  POWER ANALYZER: PARSER & CALC ENGINE
+    // ═══════════════════════════════════════
+
+    function parseBoostEffects(boostText) {
+      if (!boostText) return [];
+      const effects = [];
+      const lines = boostText.split("\n").map(l => l.trim()).filter(Boolean);
+      for (const line of lines) {
+        let matched = false;
+        for (const rule of BOOST_PARSE_RULES) {
+          const m = line.match(rule.rx);
+          if (m) {
+            const eff = rule.fn(m);
+            if (eff) {
+              eff.raw = line;
+              effects.push(eff);
+              // If alsoApply, duplicate for other categories
+              if (eff.alsoApply) {
+                for (const extraCat of eff.alsoApply) {
+                  effects.push({ ...eff, cat: extraCat, alsoApply: undefined });
+                }
+              }
+            }
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) {
+          effects.push({ type: "qualitative", cat: "other", raw: line });
+        }
+      }
+      return effects;
+    }
+
+    function classifyToCategories(effects) {
+      const cats = new Set();
+      for (const e of effects) {
+        if (e.cat) cats.add(e.cat);
+      }
+      if (cats.size === 0) cats.add("other");
+      return [...cats];
+    }
+
+    function detectFarmCapacity(farm) {
+      return {
+        crops: Object.keys(farm.crops || {}).length,
+        fruitPatches: Object.keys(farm.fruitPatches || {}).length,
+        chickens: Object.keys(farm.chickens || {}).length || (farm.henHouse ? 10 : 0),
+        cows: Object.keys(farm.cows || {}).length,
+        sheep: Object.keys(farm.sheep || {}).length,
+        bees: Object.keys(farm.beehives || {}).length,
+        flowers: Object.keys(farm.flowers?.flowerBeds || {}).length,
+        stones: Object.keys(farm.stones || {}).length,
+        iron: Object.keys(farm.iron || {}).length,
+        gold: Object.keys(farm.gold || {}).length,
+        trees: Object.keys(farm.trees || {}).length,
+      };
+    }
+
+    // Get base production per day (units, not SFL) for a category + selected product
+    function getBaseProductionPerDay(catId, product, capacity) {
+      switch (catId) {
+        case "crops": {
+          const growSec = CROP_GROW_DATA[product];
+          if (!growSec) return 0;
+          const n = capacity.crops || 0;
+          return n * (86400 / growSec) * 1; // yield=1 per harvest
+        }
+        case "fruits": {
+          const growSec = FRUIT_GROW_DATA[product];
+          if (!growSec) return 0;
+          const n = capacity.fruitPatches || 0;
+          return n * (86400 / growSec) * 1;
+        }
+        case "chickens": {
+          const d = ANIMAL_CYCLE_DATA["Chicken"];
+          return (capacity.chickens || 0) * (86400 / d.cycleSec) * 1;
+        }
+        case "cows": {
+          const d = ANIMAL_CYCLE_DATA["Cow"];
+          return (capacity.cows || 0) * (86400 / d.cycleSec) * 1;
+        }
+        case "sheep": {
+          const d = ANIMAL_CYCLE_DATA["Sheep"];
+          return (capacity.sheep || 0) * (86400 / d.cycleSec) * 1;
+        }
+        case "bees": {
+          return (capacity.bees || 0) * 1; // ~1 honey/day per hive
+        }
+        case "stone": case "iron": case "gold": {
+          const d = RESOURCE_RESPAWN_DATA[catId === "stone" ? "Stone" : catId === "iron" ? "Iron" : "Gold"];
+          const n = capacity[catId === "stone" ? "stones" : catId] || 0;
+          return n * (86400 / d.respawnSec) * d.yield;
+        }
+        case "trees": {
+          const d = RESOURCE_RESPAWN_DATA["Wood"];
+          return (capacity.trees || 0) * (86400 / d.respawnSec) * d.yield;
+        }
+        case "flowers": {
+          // Use generic flower grow time (Sunpetal = 86400s base)
+          const n = capacity.flowers || 0;
+          return n * (86400 / 86400) * 1; // 1 flower/bed/day base
+        }
+        case "fishing": return 20; // ~20 catches/day estimate
+        default: return 0;
+      }
+    }
+
+    // Get the grow/cycle seconds for a category's selected product
+    function getCycleSec(catId, product) {
+      switch (catId) {
+        case "crops": return CROP_GROW_DATA[product] || 43200;
+        case "fruits": return FRUIT_GROW_DATA[product] || 43200;
+        case "chickens": return ANIMAL_CYCLE_DATA["Chicken"].cycleSec;
+        case "cows": return ANIMAL_CYCLE_DATA["Cow"].cycleSec;
+        case "sheep": return ANIMAL_CYCLE_DATA["Sheep"].cycleSec;
+        case "bees": return 86400;
+        case "stone": return RESOURCE_RESPAWN_DATA["Stone"].respawnSec;
+        case "iron": return RESOURCE_RESPAWN_DATA["Iron"].respawnSec;
+        case "gold": return RESOURCE_RESPAWN_DATA["Gold"].respawnSec;
+        case "trees": return RESOURCE_RESPAWN_DATA["Wood"].respawnSec;
+        case "flowers": return 86400;
+        default: return 86400;
+      }
+    }
+
+    function getCapacityCount(catId, capacity) {
+      switch (catId) {
+        case "crops": return capacity.crops;
+        case "fruits": return capacity.fruitPatches;
+        case "chickens": return capacity.chickens;
+        case "cows": return capacity.cows;
+        case "sheep": return capacity.sheep;
+        case "bees": return capacity.bees;
+        case "flowers": return capacity.flowers;
+        case "stone": return capacity.stones;
+        case "iron": return capacity.iron;
+        case "gold": return capacity.gold;
+        case "trees": return capacity.trees;
+        default: return 0;
+      }
+    }
+
+    function getDefaultProduct(catId) {
+      switch (catId) {
+        case "crops": return "Kale";
+        case "fruits": return "Blueberry";
+        case "chickens": return "Egg";
+        case "cows": return "Milk";
+        case "sheep": return "Wool";
+        case "bees": return "Honey";
+        case "stone": return "Stone";
+        case "iron": return "Iron";
+        case "gold": return "Gold";
+        case "trees": return "Wood";
+        case "flowers": return "Sunpetal Seed";
+        case "fishing": return "Fish";
+        default: return null;
+      }
+    }
+
+    function getBaseYield(catId) {
+      switch (catId) {
+        case "stone": return RESOURCE_RESPAWN_DATA["Stone"].yield;
+        case "iron": return RESOURCE_RESPAWN_DATA["Iron"].yield;
+        case "gold": return RESOURCE_RESPAWN_DATA["Gold"].yield;
+        case "trees": return RESOURCE_RESPAWN_DATA["Wood"].yield;
+        default: return 1;
+      }
+    }
+
+    // Apply a set of boost effects to calculate boosted production
+    // Returns { unitsPerDay, speedMult, yieldMult, yieldFlat, details }
+    function applyBoosts(catId, product, capacity, boostEffects) {
+      const baseCycleSec = getCycleSec(catId, product);
+      const baseYield = getBaseYield(catId);
+      const n = getCapacityCount(catId, capacity);
+      if (n === 0 && catId !== "fishing") return { unitsPerDay: 0, speedMult: 1, yieldMult: 1, yieldFlat: 0 };
+
+      let speedMult = 1; // multiplied to cycle time (< 1 = faster)
+      let yieldMult = 1; // multiplied to output
+      let yieldFlat = 0; // added per cycle per slot
+
+      for (const eff of boostEffects) {
+        // Only apply effects that match this category
+        if (eff.cat !== catId) continue;
+        // For product-specific boosts, check if product matches
+        if (eff.product && PRODUCT_TO_CATEGORY[eff.product] === catId) {
+          // Specific product boost — only if it's a crop/fruit that doesn't match selector, skip
+          if ((catId === "crops" || catId === "fruits") && eff.product !== product && eff.type !== "yield_flat" && eff.type !== "chance") {
+            continue; // skip speed/yield% boosts for wrong product
+          }
+        }
+
+        switch (eff.type) {
+          case "speed_pct":
+            speedMult *= (1 + eff.value / 100);
+            break;
+          case "speed_mult":
+            speedMult *= eff.value;
+            break;
+          case "yield_pct":
+            yieldMult *= (1 + eff.value / 100);
+            break;
+          case "yield_flat":
+            yieldFlat += eff.value;
+            break;
+          case "chance":
+            // Expected value: pct% chance of +extra per cycle
+            yieldFlat += (eff.pct / 100) * eff.extra;
+            break;
+        }
+      }
+
+      const effectiveCycle = baseCycleSec * speedMult;
+      const cyclesPerDay = catId === "fishing" ? 1 : (effectiveCycle > 0 ? 86400 / effectiveCycle : 0);
+      const outputPerCycle = baseYield * yieldMult + yieldFlat;
+
+      let unitsPerDay;
+      if (catId === "fishing") {
+        unitsPerDay = 20 + yieldFlat; // flat estimate for fishing
+      } else if (catId === "bees") {
+        unitsPerDay = n * (baseYield * yieldMult + yieldFlat); // simplified for bees
+      } else {
+        unitsPerDay = n * cyclesPerDay * outputPerCycle;
+      }
+
+      return { unitsPerDay, speedMult, yieldMult, yieldFlat, effectiveCycle };
+    }
+
+    // Calculate SFL/day from units/day
+    function unitToSfl(unitsPerDay, product, p2pPrices) {
+      const price = p2pPrices[product] || 0;
+      return unitsPerDay * price;
+    }
+
+    // Get all effects for a specific boost item relevant to a category
+    function getEffectsForCategory(boostItem, catId) {
+      return boostItem.effects.filter(e => e.cat === catId);
+    }
+
+    // Calculate solo + synergy SFL/day for a boost within a category
+    function calcBoostValue(boostItem, catId, product, capacity, p2pPrices, allCatBoosts, isOwned) {
+      const catEffects = getEffectsForCategory(boostItem, catId);
+      if (catEffects.length === 0) return { solo: 0, synergy: 0, roi: Infinity };
+
+      const priceProduct = getPriceProduct(catId, product);
+      const baseResult = applyBoosts(catId, product, capacity, []);
+      const baseSfl = unitToSfl(baseResult.unitsPerDay, priceProduct, p2pPrices);
+
+      // Solo: just this boost
+      const soloResult = applyBoosts(catId, product, capacity, catEffects);
+      const soloSfl = unitToSfl(soloResult.unitsPerDay, priceProduct, p2pPrices);
+      const solo = soloSfl - baseSfl;
+
+      // Synergy: all owned boosts ± this one
+      const allEffects = [];
+      const allEffectsWithout = [];
+      for (const b of allCatBoosts) {
+        const eff = getEffectsForCategory(b, catId);
+        if (b.has) {
+          allEffects.push(...eff);
+          if (b.name !== boostItem.name) allEffectsWithout.push(...eff);
+        } else if (b.name === boostItem.name) {
+          // For missing boost: add it to "with" set
+        }
+      }
+
+      let synergy;
+      if (isOwned) {
+        // Marginal: allOwned - allOwned\this
+        const withAll = applyBoosts(catId, product, capacity, allEffects);
+        const without = applyBoosts(catId, product, capacity, allEffectsWithout);
+        synergy = unitToSfl(withAll.unitsPerDay, priceProduct, p2pPrices) - unitToSfl(without.unitsPerDay, priceProduct, p2pPrices);
+      } else {
+        // For missing: allOwned∪this - allOwned
+        const ownedEffects = allCatBoosts.filter(b => b.has).flatMap(b => getEffectsForCategory(b, catId));
+        const withThis = [...ownedEffects, ...catEffects];
+        const withResult = applyBoosts(catId, product, capacity, withThis);
+        const ownedResult = applyBoosts(catId, product, capacity, ownedEffects);
+        synergy = unitToSfl(withResult.unitsPerDay, priceProduct, p2pPrices) - unitToSfl(ownedResult.unitsPerDay, priceProduct, p2pPrices);
+      }
+
+      const roi = (!isOwned && boostItem.floor > 0 && synergy > 0) ? boostItem.floor / synergy : Infinity;
+
+      return { solo, synergy, roi };
+    }
+
+    // Get the product name used for P2P price lookup
+    function getPriceProduct(catId, product) {
+      // For flowers, use the seed label
+      if (catId === "flowers") {
+        const sd = SEED_DATA[product];
+        return sd ? sd.label : "Sunpetal";
+      }
+      return product;
+    }
+
+    // localStorage persistence for product selections
+    function getSavedPowerProducts() {
+      try { return JSON.parse(localStorage.getItem("sfl_power_products") || "{}"); } catch { return {}; }
+    }
+    function savePowerProduct(catId, product) {
+      const saved = getSavedPowerProducts();
+      saved[catId] = product;
+      localStorage.setItem("sfl_power_products", JSON.stringify(saved));
+    }
+
+    // Build formula HTML for expandable detail
+    function buildFormulaHTML(boostItem, catId, product, capacity, p2pPrices, allCatBoosts) {
+      const catEffects = getEffectsForCategory(boostItem, catId);
+      const priceProduct = getPriceProduct(catId, product);
+      const price = p2pPrices[priceProduct] || 0;
+      const n = getCapacityCount(catId, capacity);
+      const baseCycleSec = getCycleSec(catId, product);
+      const baseYield = getBaseYield(catId);
+
+      let h = `<div class="power-formula pixel-font">`;
+      h += `<div style="margin-bottom:6px"><strong>${escHTML(boostItem.name)}</strong> — ${escHTML(boostItem.type)}${boostItem.floor > 0 ? ` | Floor: ${boostItem.floor.toFixed(1)} SFL` : ""}</div>`;
+      h += `<div style="color:var(--green);margin-bottom:6px">${escHTML(boostItem.boost)}</div>`;
+      h += `<hr style="border-color:var(--border-dark);margin:4px 0">`;
+
+      if (POWER_CATEGORIES[catId]?.quantifiable && n > 0) {
+        h += `<div style="margin-bottom:4px"><strong>Farm:</strong> ${n} × ${escHTML(product)} (${formatSec(baseCycleSec)} grow | ${price.toFixed(6)} SFL)</div>`;
+
+        // Base production
+        const baseResult = applyBoosts(catId, product, capacity, []);
+        const baseSfl = unitToSfl(baseResult.unitsPerDay, priceProduct, p2pPrices);
+        h += `<div style="margin-bottom:4px"><strong>Base:</strong> ${baseResult.unitsPerDay.toFixed(2)} units/day = ${baseSfl.toFixed(4)} SFL/day</div>`;
+
+        // Solo effect
+        const soloResult = applyBoosts(catId, product, capacity, catEffects);
+        const soloSfl = unitToSfl(soloResult.unitsPerDay, priceProduct, p2pPrices);
+        const soloDelta = soloSfl - baseSfl;
+        h += `<div style="margin-bottom:4px"><strong>Solo:</strong>`;
+        if (soloResult.speedMult !== 1) h += ` speed ×${soloResult.speedMult.toFixed(2)}`;
+        if (soloResult.yieldMult !== 1) h += ` yield ×${soloResult.yieldMult.toFixed(2)}`;
+        if (soloResult.yieldFlat) h += ` +${soloResult.yieldFlat.toFixed(2)}/cycle`;
+        h += ` → ${soloSfl.toFixed(4)} SFL/day (<span style="color:var(--green)">+${soloDelta.toFixed(4)}</span>)</div>`;
+
+        // Synergy (marginal/with-all)
+        const ownedEffects = allCatBoosts.filter(b => b.has).flatMap(b => getEffectsForCategory(b, catId));
+        if (boostItem.has) {
+          const allResult = applyBoosts(catId, product, capacity, ownedEffects);
+          const withoutEffects = allCatBoosts.filter(b => b.has && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId));
+          const withoutResult = applyBoosts(catId, product, capacity, withoutEffects);
+          const allSfl = unitToSfl(allResult.unitsPerDay, priceProduct, p2pPrices);
+          const withoutSfl = unitToSfl(withoutResult.unitsPerDay, priceProduct, p2pPrices);
+          const marginal = allSfl - withoutSfl;
+          h += `<div><strong>Marginal (${ownedEffects.length} active effects):</strong> <span style="color:var(--green)">+${marginal.toFixed(4)} SFL/day</span></div>`;
+        } else {
+          const withThis = [...ownedEffects, ...catEffects];
+          const withResult = applyBoosts(catId, product, capacity, withThis);
+          const ownedResult = applyBoosts(catId, product, capacity, ownedEffects);
+          const withSfl = unitToSfl(withResult.unitsPerDay, priceProduct, p2pPrices);
+          const ownedSfl = unitToSfl(ownedResult.unitsPerDay, priceProduct, p2pPrices);
+          const synergy = withSfl - ownedSfl;
+          h += `<div style="margin-bottom:4px"><strong>Synergy (with your boosts):</strong> <span style="color:var(--green)">+${synergy.toFixed(4)} SFL/day</span></div>`;
+          if (boostItem.floor > 0 && synergy > 0) {
+            const roi = boostItem.floor / synergy;
+            h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${synergy.toFixed(4)} = <span style="color:var(--sunpetal)">${roi.toFixed(0)} days</span></div>`;
+          }
+        }
+      } else if (n === 0 && POWER_CATEGORIES[catId]?.quantifiable) {
+        h += `<div style="color:var(--text-dim)">No capacity detected for this category. Cannot calculate SFL/day.</div>`;
+      } else {
+        h += `<div style="color:var(--text-dim)">Qualitative boost — cannot calculate SFL/day value.</div>`;
+      }
+
+      h += `</div>`;
+      return h;
+    }
+
+    function formatSec(sec) {
+      if (sec < 60) return sec + "s";
+      if (sec < 3600) return (sec / 60).toFixed(0) + "m";
+      if (sec < 86400) return (sec / 3600).toFixed(1) + "h";
+      return (sec / 86400).toFixed(1) + "d";
+    }
+
+    // ═══════════════════════════════════════
     //  RENDER: POWER
     // ═══════════════════════════════════════
 
-    const BOOST_CATEGORIES = {
-      "Crops": /crop|sunflower|potato|pumpkin|carrot|cabbage|soybean|beetroot|cauliflower|parsnip|corn|radish|wheat|kale|turnip|onion|pepper|rhubarb|artichoke|barley|zucchini|yam|broccoli|harvest/i,
-      "Fruits": /fruit|tomato|lemon|blueberry|orange|apple|banana|grape|rice|olive|celestine|lunara|duskberry/i,
-      "Flowers": /flower|petal|bloom|blossom/i,
-      "Animals": /animal|chicken|egg|cow|milk|sheep|wool|pig|feather|leather|honey|bee/i,
-      "Cooking": /cook|cake|food|dish|meal|recipe|kitchen|deliveri/i,
-      "Mining": /mine|mining|stone|iron|gold|crimstone|oil|opal|diamond|sunstone/i,
-      "Fishing": /fish|rod|bait|catch|crab|lobster/i,
-      "Trees": /tree|wood|timber|axe|chop/i,
-      "XP": /\bxp\b/i,
-      "Coins": /coin/i,
-      "SFL": /\bsfl\b/i,
-      "Speed": /time|speed|fast|quick|\d+%\s*(less|reduc)/i,
-    };
-
-    function categorizeBoost(text) {
-      for (const [cat, rx] of Object.entries(BOOST_CATEGORIES)) {
-        if (rx.test(text)) return cat;
-      }
-      return "Other";
-    }
+    // Global state for power page
+    let powerState = null;
 
     async function renderPower(data) {
       const app = document.getElementById("app");
@@ -4612,7 +5214,8 @@
       html += `<div id="power-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading boost data...</div></div></div>`;
       app.innerHTML = html;
 
-      let nftData;
+      // Fetch NFT data + P2P prices in parallel
+      let nftData, p2pPrices = {};
       try {
         const proxyFetch = async (url) => {
           try {
@@ -4621,128 +5224,265 @@
           } catch {}
           return (await fetch(url)).json();
         };
-        nftData = await proxyFetch("https://sfl.world/api/v1/nfts");
+        const [nftResp, priceResp] = await Promise.all([
+          proxyFetch("https://sfl.world/api/v1/nfts"),
+          proxyFetch("https://sfl.world/api/v1/prices"),
+        ]);
+        nftData = nftResp;
+        const priceData = priceResp?.data?.p2p || priceResp?.p2p || {};
+        for (const [k, v] of Object.entries(priceData)) {
+          p2pPrices[k] = parseFloat(v) || 0;
+        }
       } catch (err) {
         document.getElementById("power-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load: ${escHTML(err.message)}</p></div>`;
         return;
       }
 
-      // Build boost items
+      // Detect farm capacity
+      const capacity = detectFarmCapacity(farm);
+
+      // Build boost items with parsed effects
       const boostItems = [];
 
       for (const item of (nftData.collectibles || [])) {
         if (!item.have_boost || !item.name || !item.boost_text) continue;
         const has = getCount(inventory, item.name) > 0 || findCollectible(farm, item.name).length > 0;
-        const category = categorizeBoost(item.boost_text);
+        const effects = parseBoostEffects(item.boost_text);
+        const categories = classifyToCategories(effects);
         boostItems.push({
           name: item.name, type: "Collectible", boost: item.boost_text,
           floor: parseFloat(item.floor) || 0, supply: item.supply || 0,
-          has, category,
+          has, effects, categories,
         });
       }
 
       for (const item of (nftData.wearables || [])) {
         if (!item.have_boost || !item.name || !item.boost_text) continue;
         const has = (wardrobe[item.name] || 0) > 0;
-        const category = categorizeBoost(item.boost_text);
+        const effects = parseBoostEffects(item.boost_text);
+        const categories = classifyToCategories(effects);
         boostItems.push({
           name: item.name, type: "Wearable", boost: item.boost_text,
           floor: parseFloat(item.floor) || 0, supply: item.supply || 0,
-          has, category,
+          has, effects, categories,
         });
       }
 
-      // Add skills as "boosts" too
-      const KNOWN_SKILL_BOOSTS = {
-        "Blooming Boost": "×0.9 Flower Growing Time",
-        "Flower Power": "×0.8 Flower Growing Time",
-        "Flowery Abode": "×1.5 Flower Growing Time (slower)",
-        "Green Thumb": "+5% Crop Yield",
-        "Young Farmer": "+10% Crop Yield",
-        "Experienced Farmer": "+20% Crop Yield",
-        "Betty's Friend": "+20% Crop Sell Price",
-        "Gift Giver": "+50% Delivery Reward",
-      };
-      for (const [skillName, desc] of Object.entries(KNOWN_SKILL_BOOSTS)) {
+      // Add skill boosts
+      for (const [skillName, desc] of Object.entries(POWER_KNOWN_SKILL_BOOSTS)) {
         const has = skills[skillName] !== undefined;
+        const effects = parseBoostEffects(desc);
+        const categories = classifyToCategories(effects);
         boostItems.push({
           name: skillName, type: "Skill", boost: desc,
-          floor: 0, supply: 0, has,
-          category: categorizeBoost(desc),
+          floor: 0, supply: 0, has, effects, categories,
         });
       }
 
-      // Sort: owned first, then by floor price ascending
-      boostItems.sort((a, b) => {
-        if (a.has !== b.has) return a.has ? -1 : 1;
-        if (a.floor !== b.floor) return a.floor - b.floor;
-        return a.name.localeCompare(b.name);
-      });
+      // Load saved product selections
+      const savedProducts = getSavedPowerProducts();
 
-      // Compute stats
+      // Build category → boosts mapping
+      const catBoosts = {};
+      for (const catId of Object.keys(POWER_CATEGORIES)) {
+        catBoosts[catId] = boostItems.filter(b => b.categories.includes(catId));
+      }
+
+      // Store state for interactive updates
+      powerState = { boostItems, catBoosts, capacity, p2pPrices, savedProducts, farm };
+
+      // Render
+      renderPowerContent();
+    }
+
+    function renderPowerContent() {
+      const { boostItems, catBoosts, capacity, p2pPrices, savedProducts } = powerState;
+
       const ownedCount = boostItems.filter(b => b.has).length;
       const totalCount = boostItems.length;
-      const categories = [...new Set(boostItems.map(b => b.category))].sort();
-      const cheapestMissing = boostItems.filter(b => !b.has && b.floor > 0).sort((a, b) => a.floor - b.floor).slice(0, 5);
+
+      // Calculate total boost value across all quantifiable categories
+      let totalBaseSfl = 0, totalBoostedSfl = 0;
+      const catSummaries = {};
+      for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
+        if (!catDef.quantifiable) continue;
+        const product = savedProducts[catId] || getDefaultProduct(catId);
+        const priceProduct = getPriceProduct(catId, product);
+        const baseResult = applyBoosts(catId, product, capacity, []);
+        const baseSfl = unitToSfl(baseResult.unitsPerDay, priceProduct, p2pPrices);
+
+        const ownedEffects = catBoosts[catId].filter(b => b.has).flatMap(b => getEffectsForCategory(b, catId));
+        const boostedResult = applyBoosts(catId, product, capacity, ownedEffects);
+        const boostedSfl = unitToSfl(boostedResult.unitsPerDay, priceProduct, p2pPrices);
+
+        totalBaseSfl += baseSfl;
+        totalBoostedSfl += boostedSfl;
+        catSummaries[catId] = { baseSfl, boostedSfl, delta: boostedSfl - baseSfl, product };
+      }
+
+      const totalDelta = totalBoostedSfl - totalBaseSfl;
+      const boostPct = totalBaseSfl > 0 ? ((totalDelta / totalBaseSfl) * 100).toFixed(0) : 0;
 
       let content = "";
 
       // Summary
-      content += `<div class="sales-summary-grid pixel-font">
-        <div class="sales-stat"><div class="sales-stat-label">OWNED BOOSTS</div><div class="sales-stat-value" style="color:var(--green)">${ownedCount}</div></div>
-        <div class="sales-stat"><div class="sales-stat-label">TOTAL BOOSTS</div><div class="sales-stat-value">${totalCount}</div></div>
-        <div class="sales-stat"><div class="sales-stat-label">MISSING</div><div class="sales-stat-value" style="color:var(--red)">${totalCount - ownedCount}</div></div>
-        <div class="sales-stat"><div class="sales-stat-label">CATEGORIES</div><div class="sales-stat-value">${categories.length}</div></div>
+      content += `<div class="power-summary pixel-font">
+        <div class="power-summary-stat"><div class="power-summary-label">OWNED</div><div class="power-summary-value" style="color:var(--green)">${ownedCount} / ${totalCount}</div></div>
+        <div class="power-summary-stat"><div class="power-summary-label">BOOST VALUE</div><div class="power-summary-value" style="color:var(--sunpetal)">+${totalDelta.toFixed(2)} SFL/day</div></div>
+        <div class="power-summary-stat"><div class="power-summary-label">BASE</div><div class="power-summary-value">${totalBaseSfl.toFixed(2)} SFL/day</div></div>
+        <div class="power-summary-stat"><div class="power-summary-label">BOOSTED</div><div class="power-summary-value" style="color:var(--green)">${totalBoostedSfl.toFixed(2)} SFL/day (+${boostPct}%)</div></div>
       </div>`;
 
-      // Cheapest missing
-      if (cheapestMissing.length > 0) {
-        content += `<div class="pixel-panel" style="padding:10px 14px;margin-bottom:16px">
-          <div class="pixel-font" style="font-size:10px;color:var(--yellow);margin-bottom:8px">💡 CHEAPEST MISSING BOOSTS</div>`;
-        for (const b of cheapestMissing) {
-          const imgUrl = ITEM_ICON_BASE + encodeURIComponent(b.name) + ".png";
-          content += `<div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:10px">
-            <img src="${imgUrl}" style="width:20px;height:20px;image-rendering:pixelated" onerror="this.style.display='none'" alt="">
-            <span style="flex:1;color:var(--text-primary)">${escHTML(b.name)}</span>
-            <span style="color:var(--sunpetal);font-weight:bold">${b.floor.toFixed(1)} SFL</span>
-            <span style="font-size:8px;color:var(--text-dim)">${escHTML(b.category)}</span>
+      // Best Buys: top 10 missing boosts by ROI
+      const bestBuys = [];
+      for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
+        if (!catDef.quantifiable) continue;
+        const product = savedProducts[catId] || getDefaultProduct(catId);
+        const missingInCat = catBoosts[catId].filter(b => !b.has && b.floor > 0);
+        for (const b of missingInCat) {
+          const val = calcBoostValue(b, catId, product, capacity, p2pPrices, catBoosts[catId], false);
+          if (val.synergy > 0.0001) {
+            bestBuys.push({ boost: b, catId, catLabel: catDef.label, synergy: val.synergy, roi: val.roi, floor: b.floor });
+          }
+        }
+      }
+      bestBuys.sort((a, b) => a.roi - b.roi);
+      const top10 = bestBuys.slice(0, 10);
+
+      if (top10.length > 0) {
+        content += `<div class="power-best-buys pixel-panel">
+          <div class="power-section-header pixel-font" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+            <span>🏆 TOP 10 BEST BUYS (by ROI)</span>
+            <span class="power-toggle-arrow">▼</span>
+          </div>
+          <div class="power-section-body">`;
+        for (let i = 0; i < top10.length; i++) {
+          const bb = top10[i];
+          const imgUrl = bb.boost.type !== "Skill" ? ITEM_ICON_BASE + encodeURIComponent(bb.boost.name) + ".png" : "";
+          content += `<div class="power-bb-row">
+            <span class="power-bb-rank">${i + 1}.</span>
+            ${imgUrl ? `<img class="power-bb-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">` : `<span style="width:20px"></span>`}
+            <span class="power-bb-name">${escHTML(bb.boost.name)}</span>
+            <span class="power-bb-cat">${escHTML(bb.catLabel)}</span>
+            <span class="power-bb-sfl">+${bb.synergy.toFixed(2)}/day</span>
+            <span class="power-bb-floor">${bb.floor.toFixed(0)} SFL</span>
+            <span class="power-bb-roi">${bb.roi.toFixed(0)}d ROI</span>
           </div>`;
         }
-        content += `</div>`;
+        content += `</div></div>`;
       }
 
-      // Filter buttons
-      content += `<div class="power-filters">
-        <button class="power-filter-btn active" onclick="filterPower('all')">ALL (${totalCount})</button>
-        <button class="power-filter-btn" onclick="filterPower('owned')">OWNED (${ownedCount})</button>
-        <button class="power-filter-btn" onclick="filterPower('missing')">MISSING (${totalCount - ownedCount})</button>`;
-      for (const cat of categories) {
-        const count = boostItems.filter(b => b.category === cat).length;
-        content += `<button class="power-filter-btn" onclick="filterPower('${escHTML(cat)}')">${escHTML(cat.toUpperCase())} (${count})</button>`;
-      }
-      content += `</div>`;
+      // Quantifiable categories
+      content += `<div class="pixel-font" style="font-size:11px;color:var(--text-secondary);margin:16px 0 8px;border-bottom:2px solid var(--border-dark);padding-bottom:4px">═══ QUANTIFIABLE CATEGORIES ═══</div>`;
 
-      // Boost items
-      content += `<div id="power-list" class="pixel-panel" style="padding:0;border:3px solid var(--border-dark)">`;
-      for (const b of boostItems) {
-        const imgUrl = b.type !== "Skill" ? ITEM_ICON_BASE + encodeURIComponent(b.name) + ".png" : "";
-        const statusCls = b.has ? "owned" : "buy";
-        const statusText = b.has ? "✓" : b.floor > 0 ? `${b.floor.toFixed(1)}` : "—";
-        const itemCls = b.has ? "has-it" : "missing";
+      for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
+        if (!catDef.quantifiable) continue;
+        const items = catBoosts[catId];
+        if (items.length === 0) continue;
 
-        content += `<div class="power-item ${itemCls}" data-cat="${escHTML(b.category)}" data-has="${b.has ? 1 : 0}">
-          ${imgUrl ? `<img class="power-item-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">` : `<div style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:16px">🧠</div>`}
-          <div>
-            <div class="power-item-name">${escHTML(b.name)} <span class="power-item-type">${escHTML(b.type)}</span></div>
-            <div class="power-item-boost">${escHTML(b.boost)}</div>
-          </div>
-          <div class="power-item-price">
-            <div class="power-item-status ${statusCls}">${statusText}</div>
-            ${b.supply > 0 ? `<div class="power-item-supply">${b.supply} supply</div>` : ""}
-          </div>
+        const product = savedProducts[catId] || getDefaultProduct(catId);
+        const summary = catSummaries[catId] || { baseSfl: 0, boostedSfl: 0, delta: 0 };
+        const n = getCapacityCount(catId, capacity);
+        const owned = items.filter(b => b.has);
+        const missing = items.filter(b => !b.has);
+
+        content += `<div class="power-category pixel-panel" id="power-cat-${catId}">`;
+        content += `<div class="power-cat-header pixel-font" onclick="togglePowerCategory('${catId}')">
+          <span>${catDef.emoji} ${catDef.label}</span>
+          <span class="power-cat-count">${n} ${catId === "crops" ? "plots" : catId === "fruits" ? "patches" : catId === "trees" ? "trees" : catId === "flowers" ? "beds" : catId}</span>`;
+
+        // Product selector
+        if (catDef.selector === "crop") {
+          content += `<select class="power-product-select" onchange="selectPowerProduct('${catId}',this.value)" onclick="event.stopPropagation()">`;
+          for (const crop of Object.keys(CROP_GROW_DATA)) {
+            content += `<option value="${crop}"${crop === product ? " selected" : ""}>${crop}</option>`;
+          }
+          content += `</select>`;
+        } else if (catDef.selector === "fruit") {
+          content += `<select class="power-product-select" onchange="selectPowerProduct('${catId}',this.value)" onclick="event.stopPropagation()">`;
+          for (const fruit of Object.keys(FRUIT_GROW_DATA)) {
+            content += `<option value="${fruit}"${fruit === product ? " selected" : ""}>${fruit}</option>`;
+          }
+          content += `</select>`;
+        } else if (catDef.selector === "flower") {
+          content += `<select class="power-product-select" onchange="selectPowerProduct('${catId}',this.value)" onclick="event.stopPropagation()">`;
+          for (const seed of Object.keys(SEED_DATA)) {
+            content += `<option value="${seed}"${seed === product ? " selected" : ""}>${SEED_DATA[seed].label}</option>`;
+          }
+          content += `</select>`;
+        }
+
+        content += `<span class="power-cat-sfl" style="color:var(--sunpetal)">+${summary.delta.toFixed(2)}/day</span>
+          <span class="power-toggle-arrow">▼</span>
         </div>`;
+
+        content += `<div class="power-cat-body">`;
+
+        if (n === 0) {
+          content += `<div style="padding:8px 12px;font-size:10px;color:var(--text-dim)">No capacity detected.</div>`;
+        } else {
+          content += `<div style="padding:6px 12px;font-size:9px;color:var(--text-dim)">Base: ${summary.baseSfl.toFixed(4)} SFL/day | Boosted: ${summary.boostedSfl.toFixed(4)} SFL/day${summary.baseSfl > 0 ? ` (+${((summary.delta / summary.baseSfl) * 100).toFixed(0)}%)` : ""}</div>`;
+        }
+
+        // Owned boosts
+        if (owned.length > 0) {
+          content += `<div class="power-subsection-label">✅ OWNED (${owned.length})</div>`;
+          for (const b of owned) {
+            const val = calcBoostValue(b, catId, product, capacity, p2pPrices, items, true);
+            content += renderPowerBoostRow(b, catId, product, val, true);
+          }
+        }
+
+        // Missing boosts
+        if (missing.length > 0) {
+          const missingWithVal = missing.map(b => {
+            const val = calcBoostValue(b, catId, product, capacity, p2pPrices, items, false);
+            return { b, val };
+          }).sort((a, b) => a.val.roi - b.val.roi);
+
+          content += `<div class="power-subsection-label">❌ MISSING (${missing.length})</div>`;
+          for (const { b, val } of missingWithVal) {
+            content += renderPowerBoostRow(b, catId, product, val, false);
+          }
+        }
+
+        content += `</div></div>`; // cat-body, power-category
       }
-      content += `</div>`;
+
+      // Qualitative categories
+      content += `<div class="pixel-font" style="font-size:11px;color:var(--text-secondary);margin:16px 0 8px;border-bottom:2px solid var(--border-dark);padding-bottom:4px">═══ QUALITATIVE BOOSTS ═══</div>`;
+
+      for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
+        if (catDef.quantifiable) continue;
+        const items = catBoosts[catId];
+        if (items.length === 0) continue;
+
+        const owned = items.filter(b => b.has);
+        const missing = items.filter(b => !b.has);
+
+        content += `<div class="power-category pixel-panel" id="power-cat-${catId}">`;
+        content += `<div class="power-cat-header pixel-font" onclick="togglePowerCategory('${catId}')">
+          <span>${catDef.emoji} ${catDef.label}</span>
+          <span class="power-cat-count">${owned.length}/${items.length} owned</span>
+          <span class="power-toggle-arrow">▼</span>
+        </div>`;
+        content += `<div class="power-cat-body">`;
+
+        if (owned.length > 0) {
+          content += `<div class="power-subsection-label">✅ OWNED (${owned.length})</div>`;
+          for (const b of owned) {
+            content += renderPowerQualRow(b, true);
+          }
+        }
+        if (missing.length > 0) {
+          content += `<div class="power-subsection-label">❌ MISSING (${missing.length})</div>`;
+          for (const b of missing.sort((a, b) => a.floor - b.floor)) {
+            content += renderPowerQualRow(b, false);
+          }
+        }
+
+        content += `</div></div>`;
+      }
 
       content += `<div class="footer" style="margin-top:16px">
         <button class="refresh-btn" onclick="refresh()">REFRESH</button>
@@ -4752,21 +5492,82 @@
       document.getElementById("power-content").innerHTML = content;
     }
 
-    function filterPower(filter) {
-      const items = document.querySelectorAll("#power-list .power-item");
-      const buttons = document.querySelectorAll(".power-filter-btn");
-      buttons.forEach(btn => btn.classList.toggle("active", btn.textContent.toLowerCase().startsWith(filter.toLowerCase())));
+    function renderPowerBoostRow(b, catId, product, val, isOwned) {
+      const imgUrl = b.type !== "Skill" ? ITEM_ICON_BASE + encodeURIComponent(b.name) + ".png" : "";
+      const sflText = val.synergy !== 0 ? `${val.synergy > 0 ? "+" : ""}${val.synergy.toFixed(2)}/day` : "—";
+      const roiText = !isOwned && val.roi < Infinity ? `${val.roi.toFixed(0)}d` : "";
 
-      items.forEach(el => {
-        const cat = el.dataset.cat;
-        const has = el.dataset.has === "1";
-        let show = false;
-        if (filter === "all") show = true;
-        else if (filter === "owned") show = has;
-        else if (filter === "missing") show = !has;
-        else show = cat === filter;
-        el.style.display = show ? "" : "none";
-      });
+      return `<div class="power-boost-row ${isOwned ? "has-it" : "missing"}" onclick="togglePowerDetail(this,'${escHTML(b.name).replace(/'/g, "\\'")}','${catId}')">
+        ${imgUrl ? `<img class="power-boost-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">` : `<span class="power-boost-icon">🧠</span>`}
+        <div class="power-boost-info">
+          <div class="power-boost-name">${escHTML(b.name)} <span class="power-boost-type">${escHTML(b.type)}</span></div>
+          <div class="power-boost-text">${escHTML(b.boost)}</div>
+        </div>
+        <div class="power-boost-value">
+          <div class="power-boost-sfl">${sflText}</div>
+          ${roiText ? `<div class="power-boost-roi">${roiText} ROI</div>` : ""}
+          ${!isOwned && b.floor > 0 ? `<div class="power-boost-floor">${b.floor.toFixed(0)} SFL</div>` : ""}
+        </div>
+      </div>`;
+    }
+
+    function renderPowerQualRow(b, isOwned) {
+      const imgUrl = b.type !== "Skill" ? ITEM_ICON_BASE + encodeURIComponent(b.name) + ".png" : "";
+      return `<div class="power-boost-row ${isOwned ? "has-it" : "missing"}">
+        ${imgUrl ? `<img class="power-boost-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">` : `<span class="power-boost-icon">🧠</span>`}
+        <div class="power-boost-info">
+          <div class="power-boost-name">${escHTML(b.name)} <span class="power-boost-type">${escHTML(b.type)}</span></div>
+          <div class="power-boost-text">${escHTML(b.boost)}</div>
+        </div>
+        <div class="power-boost-value">
+          ${!isOwned && b.floor > 0 ? `<div class="power-boost-floor">${b.floor.toFixed(0)} SFL</div>` : ""}
+        </div>
+      </div>`;
+    }
+
+    function togglePowerCategory(catId) {
+      const cat = document.getElementById("power-cat-" + catId);
+      if (!cat) return;
+      const body = cat.querySelector(".power-cat-body");
+      const arrow = cat.querySelector(".power-toggle-arrow");
+      if (body.style.display === "none") {
+        body.style.display = "block";
+        if (arrow) arrow.textContent = "▼";
+      } else {
+        body.style.display = "none";
+        if (arrow) arrow.textContent = "▶";
+      }
+    }
+
+    function togglePowerDetail(el, boostName, catId) {
+      const row = el.closest ? el : el.parentElement;
+      // If next sibling is a detail, remove it (toggle off)
+      if (row.nextElementSibling && row.nextElementSibling.classList.contains("power-detail")) {
+        row.nextElementSibling.remove();
+        return;
+      }
+      // Remove any other open details in this category
+      const catEl = document.getElementById("power-cat-" + catId);
+      if (catEl) catEl.querySelectorAll(".power-detail").forEach(d => d.remove());
+
+      // Find the boost item
+      const { catBoosts, capacity, p2pPrices, savedProducts } = powerState;
+      const product = savedProducts[catId] || getDefaultProduct(catId);
+      const items = catBoosts[catId] || [];
+      const boostItem = items.find(b => b.name === boostName);
+      if (!boostItem) return;
+
+      const detailHTML = buildFormulaHTML(boostItem, catId, product, capacity, p2pPrices, items);
+      const detail = document.createElement("div");
+      detail.className = "power-detail";
+      detail.innerHTML = detailHTML;
+      row.after(detail);
+    }
+
+    function selectPowerProduct(catId, product) {
+      savePowerProduct(catId, product);
+      powerState.savedProducts[catId] = product;
+      renderPowerContent();
     }
 
     // ═══════════════════════════════════════
