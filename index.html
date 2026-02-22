@@ -1908,29 +1908,217 @@
       "Wood":  { respawnSec: 7200,  yield: 3, farmKey: "trees" },
     };
 
-    const POWER_KNOWN_SKILL_BOOSTS = {
-      // Flowers
-      "Blooming Boost": "×0.9 Flower Growing Time",
-      "Flower Power": "×0.8 Flower Growing Time",
-      "Flowery Abode": "×1.5 Flower Growing Time",
-      // Crops
-      "Green Thumb": "+5% Crop Yield",
-      "Young Farmer": "+10% Crop Yield",
-      "Experienced Farmer": "+20% Crop Yield",
-      // Animals
-      "Stable Hand": "+10% Animal Yield",
-      "Free Range": "-10% Chicken Time",
-      // Mining
-      "Rock'n'Roll": "+0.1 Stone",
-      "Iron Bumpkin": "+0.1 Iron",
-      "Gold Rush": "+0.1 Gold",
-      // Trees
-      "Lumberjack": "+10% Wood",
-      "Tree Hugger": "-20% Tree Recovery Time",
-      // Coins/XP/Qualitative
-      "Betty's Friend": "+20% Crop Sell Price",
-      "Gift Giver": "+50% Delivery Reward",
+    // Full skill tree data from sfl.world/tools/skills
+    const SKILL_TREE_DATA = {
+      // ── Crops ──
+      "Green Thumb":        { tree: "Crops", points: 1, tier: 1, buff: "-5% Crop Growth Time", debuff: null },
+      "Young Farmer":       { tree: "Crops", points: 1, tier: 1, buff: "+0.1 Basic Crop yield", debuff: null },
+      "Experienced Farmer": { tree: "Crops", points: 1, tier: 1, buff: "+0.1 Medium Crop yield", debuff: null },
+      "Old Farmer":         { tree: "Crops", points: 1, tier: 1, buff: "+0.1 Advanced Crop yield", debuff: null },
+      "Chonky Scarecrow":   { tree: "Crops", points: 1, tier: 1, buff: "+0.1 Basic Crop yield", debuff: null },
+      "Betty's Friend":     { tree: "Crops", points: 1, tier: 1, buff: "+30% Betty Coin delivery revenue", debuff: null },
+      "Strong Roots":       { tree: "Crops", points: 2, tier: 2, buff: "-10% Advanced Crop Growth Time", debuff: null },
+      "Coin Swindler":      { tree: "Crops", points: 2, tier: 2, buff: "+10% coins selling crops at Market", debuff: null },
+      "Golden Sunflower":   { tree: "Crops", points: 2, tier: 2, buff: "1/700 chance +0.35 Gold harvesting Sunflower", debuff: null },
+      "Horror Mike":        { tree: "Crops", points: 2, tier: 2, buff: "+0.1 Medium Crop yield", debuff: null },
+      "Laurie's Gains":     { tree: "Crops", points: 2, tier: 2, buff: "+0.1 Advanced Crop yield", debuff: null },
+      "Instant Growth":     { tree: "Crops", points: 3, tier: 3, buff: "Instantly harvest all growing crops", debuff: null, power: true },
+      "Acre Farm":          { tree: "Crops", points: 3, tier: 3, buff: "+1 Advanced Crop yield", debuff: "-0.5 Basic and Medium Crop yield" },
+      "Hectare Farm":       { tree: "Crops", points: 3, tier: 3, buff: "+1 Basic and Medium Crop yield", debuff: "-0.5 Advanced Crop yield" },
+      // ── Fruit Patch ──
+      "Fruitful Fumble":    { tree: "Fruit Patch", points: 1, tier: 1, buff: "+0.1 Fruit yield", debuff: null },
+      "Fruity Heaven":      { tree: "Fruit Patch", points: 1, tier: 1, buff: "-10% Fruit seeds cost", debuff: null },
+      "Fruity Profit":      { tree: "Fruit Patch", points: 1, tier: 1, buff: "+50% coins from Tango deliveries", debuff: null },
+      "Loyal Macaw":        { tree: "Fruit Patch", points: 1, tier: 1, buff: "Double Macaw effect", debuff: null },
+      "No Axe No Worries":  { tree: "Fruit Patch", points: 1, tier: 1, buff: "Chop fruit without axes", debuff: "-1 Wood from fruit" },
+      "Catchup":            { tree: "Fruit Patch", points: 2, tier: 2, buff: "-10% Fruit Growth Time", debuff: null },
+      "Fruity Woody":       { tree: "Fruit Patch", points: 2, tier: 2, buff: "+1 Wood from fruit branches", debuff: null },
+      "Pear Turbocharge":   { tree: "Fruit Patch", points: 2, tier: 2, buff: "Double Immortal Pear effect", debuff: null },
+      "Crime Fruit":        { tree: "Fruit Patch", points: 2, tier: 2, buff: "+10 Tomato and Lemon seed stock", debuff: null },
+      "Generous Orchard":   { tree: "Fruit Patch", points: 3, tier: 3, buff: "20% chance +1 Fruit yield", debuff: null },
+      "Long Pickings":      { tree: "Fruit Patch", points: 3, tier: 3, buff: "-50% Apple and Banana Growth Time", debuff: "+100% Growth Time other fruits" },
+      "Short Pickings":     { tree: "Fruit Patch", points: 3, tier: 3, buff: "-50% Blueberry and Orange Growth Time", debuff: "+100% Growth Time other fruits" },
+      "Zesty Vibes":        { tree: "Fruit Patch", points: 3, tier: 3, buff: "+1 Tomato and Lemon yield", debuff: "-0.25 yield other fruits" },
+      // ── Trees ──
+      "Lumberjack's Extra": { tree: "Trees", points: 1, tier: 1, buff: "+0.1 Wood yield", debuff: null },
+      "Tree Charge":        { tree: "Trees", points: 1, tier: 1, buff: "-10% Tree Recovery Time", debuff: null },
+      "More Axes":          { tree: "Trees", points: 1, tier: 1, buff: "+50 axe stock", debuff: null },
+      "Insta-Chop":         { tree: "Trees", points: 1, tier: 1, buff: "1 Tap Trees", debuff: null },
+      "Tough Tree":         { tree: "Trees", points: 2, tier: 2, buff: "10% chance x3 Wood yield", debuff: null },
+      "Feller's Discount":  { tree: "Trees", points: 2, tier: 2, buff: "-20% axe cost", debuff: null },
+      "Money Tree":         { tree: "Trees", points: 2, tier: 2, buff: "1% chance +200 Coins chopping trees", debuff: null },
+      "Tree Turnaround":    { tree: "Trees", points: 3, tier: 3, buff: "15% chance trees grow instantly", debuff: null },
+      "Tree Blitz":         { tree: "Trees", points: 3, tier: 3, buff: "Instantly grow all trees", debuff: null, power: true },
+      // ── Mining ──
+      "Rock'N'Roll":        { tree: "Mining", points: 1, tier: 1, buff: "+0.1 Stone Yield", debuff: null },
+      "Iron Bumpkin":       { tree: "Mining", points: 1, tier: 1, buff: "+0.1 Iron Yield", debuff: null },
+      "Speed Miner":        { tree: "Mining", points: 1, tier: 1, buff: "-20% Stone Recovery Time", debuff: null },
+      "Tap Prospector":     { tree: "Mining", points: 1, tier: 1, buff: "1 tap mineral nodes", debuff: null },
+      "Forge-Ward Profits": { tree: "Mining", points: 1, tier: 1, buff: "+20% Blacksmith delivery revenue", debuff: null },
+      "Iron Hustle":        { tree: "Mining", points: 2, tier: 2, buff: "-30% Iron Recovery Time", debuff: null },
+      "Frugal Miner":       { tree: "Mining", points: 2, tier: 2, buff: "-20% pickaxe cost", debuff: null },
+      "Rocky Favor":        { tree: "Mining", points: 2, tier: 2, buff: "+1 Stone yield", debuff: "-0.5 Iron yield" },
+      "Fire Kissed":        { tree: "Mining", points: 2, tier: 2, buff: "+1 Crimstone on 5th consecutive mine", debuff: null },
+      "Midas Sprint":       { tree: "Mining", points: 2, tier: 2, buff: "-10% Gold Recovery Time", debuff: null },
+      "Ferrous Favor":      { tree: "Mining", points: 3, tier: 3, buff: "+1 Iron yield", debuff: "-0.5 Stone yield" },
+      "Golden Touch":       { tree: "Mining", points: 3, tier: 3, buff: "+0.5 Gold Yield", debuff: null },
+      "More Picks":         { tree: "Mining", points: 3, tier: 3, buff: "Increased pickaxe stock", debuff: null },
+      "Fireside Alchemist": { tree: "Mining", points: 3, tier: 3, buff: "-15% Crimstone Recovery Time", debuff: null },
+      "Midas Rush":         { tree: "Mining", points: 3, tier: 3, buff: "-20% Gold Recovery Time", debuff: null },
+      // ── Fishing ──
+      "Fisherman's 5 Fold": { tree: "Fishing", points: 1, tier: 1, buff: "+5 daily fishing limit", debuff: null },
+      "Fishy Chance":       { tree: "Fishing", points: 1, tier: 1, buff: "10% chance +1 basic fish", debuff: null },
+      "Fishy Roll":         { tree: "Fishing", points: 1, tier: 1, buff: "10% chance +1 advanced fish", debuff: null },
+      "Reel Deal":          { tree: "Fishing", points: 1, tier: 1, buff: "-50% rod cost", debuff: null },
+      "Fisherman's 10 Fold":{ tree: "Fishing", points: 2, tier: 2, buff: "+10 daily fishing limit", debuff: null },
+      "Fishy Fortune":      { tree: "Fishing", points: 2, tier: 2, buff: "+100% coins from Corale deliveries", debuff: null },
+      "Fishy Gamble":       { tree: "Fishing", points: 2, tier: 2, buff: "20% chance +1 expert fish", debuff: null },
+      "Frenzied Fish":      { tree: "Fishing", points: 3, tier: 3, buff: "Fish frenzy: +1 fish, 50% chance +1", debuff: null },
+      "More With Less":     { tree: "Fishing", points: 3, tier: 3, buff: "+15 daily fishing limit", debuff: "-1 worm from composters" },
+      "Fishy Feast":        { tree: "Fishing", points: 3, tier: 3, buff: "+20% Fish XP", debuff: null },
+      // ── Animals ──
+      "Efficient Feeding":  { tree: "Animals", points: 1, tier: 1, buff: "-5% feed for all animals", debuff: null },
+      "Restless Animals":   { tree: "Animals", points: 1, tier: 1, buff: "-10% Animal sleep time", debuff: null },
+      "Fine Fibers":        { tree: "Animals", points: 1, tier: 1, buff: "+0.1 Feather, Leather, Merino Wool yield", debuff: null },
+      "Bountiful Bounties": { tree: "Animals", points: 1, tier: 1, buff: "+50% Coins from Animal Bounties", debuff: null },
+      "Double Bale":        { tree: "Animals", points: 1, tier: 1, buff: "Double Bale effect", debuff: null },
+      "Bale Economy":       { tree: "Animals", points: 1, tier: 1, buff: "Bale affects milk and wool production", debuff: null },
+      "Featherweight":      { tree: "Animals", points: 1, tier: 1, buff: "+0.25 Feather yield", debuff: "-0.35 Leather & Merino Wool yield" },
+      "Abundant Harvest":   { tree: "Animals", points: 2, tier: 2, buff: "+0.2 Egg, Wool and Milk yield", debuff: null },
+      "Heartwarming Instruments": { tree: "Animals", points: 2, tier: 2, buff: "+50% Animal XP from tools", debuff: null },
+      "Kale Mix":           { tree: "Animals", points: 2, tier: 2, buff: "Mixed Grain requires 3 Kale instead", debuff: null },
+      "Alternate Medicine": { tree: "Animals", points: 2, tier: 2, buff: "Barn Delight requires -1 Lemon and Honey", debuff: null },
+      "Healthy Livestock":  { tree: "Animals", points: 2, tier: 2, buff: "-50% chance of sickness", debuff: null },
+      "Merino Whisperer":   { tree: "Animals", points: 2, tier: 2, buff: "+0.25 Merino Wool yield", debuff: "-0.35 Leather & Feather yield" },
+      "Clucky Grazing":     { tree: "Animals", points: 3, tier: 3, buff: "-25% feed for Chickens", debuff: "+50% feed other animals" },
+      "Sheepwise Diet":     { tree: "Animals", points: 3, tier: 3, buff: "-25% feed for Sheep", debuff: "+50% feed other animals" },
+      "Cow-Smart Nutrition":{ tree: "Animals", points: 3, tier: 3, buff: "-25% feed for Cows", debuff: "+50% feed other animals" },
+      "Chonky Feed":        { tree: "Animals", points: 3, tier: 3, buff: "2x animal XP from feed", debuff: "+50% feed all animals" },
+      "Leathercraft Mastery":{ tree: "Animals", points: 3, tier: 3, buff: "+0.25 Leather yield", debuff: "-0.35 Feather & Merino Wool yield" },
+      "Barnyard Rouse":     { tree: "Animals", points: 3, tier: 3, buff: "Instantly wake all animals", debuff: null, power: true },
+      // ── Bees & Flowers ──
+      "Sweet Bonus":        { tree: "Bees & Flowers", points: 1, tier: 1, buff: "+0.1 Honey per hive", debuff: null },
+      "Hyper Bees":         { tree: "Bees & Flowers", points: 1, tier: 1, buff: "+0.1 Honey production speed", debuff: null },
+      "Blooming Boost":     { tree: "Bees & Flowers", points: 1, tier: 1, buff: "-10% Flower Growth Time", debuff: null },
+      "Flower Sale":        { tree: "Bees & Flowers", points: 1, tier: 1, buff: "-20% Flower Seeds cost", debuff: null },
+      "Buzzworthy Treats":  { tree: "Bees & Flowers", points: 2, tier: 2, buff: "+10% XP on food with Honey", debuff: null },
+      "Blossom Bonding":    { tree: "Bees & Flowers", points: 2, tier: 2, buff: "+2 relationship points gifting flowers", debuff: null },
+      "Pollen Power Up":    { tree: "Bees & Flowers", points: 2, tier: 2, buff: "+0.1 Crop yield after pollination", debuff: null },
+      "Petalled Perk":      { tree: "Bees & Flowers", points: 2, tier: 2, buff: "10% chance +1 Flower", debuff: null },
+      "Bee Collective":     { tree: "Bees & Flowers", points: 3, tier: 3, buff: "+20% Bee Swarm chance", debuff: null },
+      "Flower Power":       { tree: "Bees & Flowers", points: 3, tier: 3, buff: "-20% Flower Growth Time", debuff: null },
+      "Flowery Abode":      { tree: "Bees & Flowers", points: 3, tier: 3, buff: "+0.5 Honey production speed", debuff: "+50% Flower Growth Time" },
+      "Petal Blessed":      { tree: "Bees & Flowers", points: 3, tier: 3, buff: "Instantly harvest all flowers", debuff: null, power: true },
+      // ── Cooking ──
+      "Fast Feasts":        { tree: "Cooking", points: 1, tier: 1, buff: "-10% Firepit and Kitchen cook time", debuff: null },
+      "Nom Nom":            { tree: "Cooking", points: 1, tier: 1, buff: "+10% Food delivery revenue", debuff: null },
+      "Munching Mastery":   { tree: "Cooking", points: 1, tier: 1, buff: "+5% XP from eating meals", debuff: null },
+      "Swift Sizzle":       { tree: "Cooking", points: 1, tier: 1, buff: "-40% Fire Pit cook time with oil", debuff: null },
+      "Frosted Cakes":      { tree: "Cooking", points: 2, tier: 2, buff: "-10% Cakes cook time", debuff: null },
+      "Juicy Boost":        { tree: "Cooking", points: 2, tier: 2, buff: "+10% XP Smoothie Shack drinks", debuff: null },
+      "Turbo Fry":          { tree: "Cooking", points: 2, tier: 2, buff: "-50% Kitchen cook time with oil", debuff: null },
+      "Drive-Through Deli": { tree: "Cooking", points: 2, tier: 2, buff: "+15% XP Deli meals", debuff: null },
+      "Instant Gratification":{ tree: "Cooking", points: 3, tier: 3, buff: "Instantly finish all cooking", debuff: null, power: true },
+      "Double Nom":         { tree: "Cooking", points: 3, tier: 3, buff: "+1 food from cooking", debuff: "2x ingredients required" },
+      "Fiery Jackpot":      { tree: "Cooking", points: 3, tier: 3, buff: "20% chance +1 food from Firepit", debuff: null },
+      "Fry Frenzy":         { tree: "Cooking", points: 3, tier: 3, buff: "-60% Deli cook time with oil", debuff: null },
+      // ── Greenhouse ──
+      "Glass Room":         { tree: "Greenhouse", points: 1, tier: 1, buff: "+0.1 Greenhouse yield", debuff: null },
+      "Seedy Business":     { tree: "Greenhouse", points: 1, tier: 1, buff: "-15% Greenhouse seeds cost", debuff: null },
+      "Rice and Shine":     { tree: "Greenhouse", points: 1, tier: 1, buff: "-5% Greenhouse Growth Time", debuff: null },
+      "Victoria's Secretary":{ tree: "Greenhouse", points: 1, tier: 1, buff: "+50% coins Victoria deliveries", debuff: null },
+      "Olive Express":      { tree: "Greenhouse", points: 2, tier: 2, buff: "-10% Olive Growth Time", debuff: null },
+      "Rice Rocket":        { tree: "Greenhouse", points: 2, tier: 2, buff: "-10% Rice Growth Time", debuff: null },
+      "Vine Velocity":      { tree: "Greenhouse", points: 2, tier: 2, buff: "-10% Grape Growth Time", debuff: null },
+      "Seeded Bounty":      { tree: "Greenhouse", points: 2, tier: 2, buff: "+0.5 Greenhouse yield", debuff: "+1 seed to plant" },
+      "Greenhouse Guru":    { tree: "Greenhouse", points: 3, tier: 3, buff: "Instantly harvest greenhouse", debuff: null, power: true },
+      "Greenhouse Gamble":  { tree: "Greenhouse", points: 3, tier: 3, buff: "25% chance +1 greenhouse produce", debuff: null },
+      "Slick Saver":        { tree: "Greenhouse", points: 3, tier: 3, buff: "-1 Oil for greenhouse", debuff: null },
+      "Greasy Plants":      { tree: "Greenhouse", points: 3, tier: 3, buff: "+1 Greenhouse yield", debuff: "+100% Oil consumption" },
+      // ── Machinery ──
+      "Crop Extension Module I":  { tree: "Machinery", points: 1, tier: 1, buff: "Rhubarb/Zucchini in crop machine", debuff: null },
+      "Crop Processor Unit":      { tree: "Machinery", points: 1, tier: 1, buff: "-5% Crop Machine growth time", debuff: "+10% Oil in Crop Machine" },
+      "Oil Gadget":               { tree: "Machinery", points: 1, tier: 1, buff: "-10% Oil in Crop Machine", debuff: null },
+      "Oil Extraction":           { tree: "Machinery", points: 1, tier: 1, buff: "+1 Oil from reserves", debuff: null },
+      "Leak-Proof Tank":          { tree: "Machinery", points: 1, tier: 1, buff: "3x oil tank in crop machine", debuff: null },
+      "Crop Extension Module II": { tree: "Machinery", points: 2, tier: 2, buff: "Carrot/Cabbage in crop machine", debuff: null },
+      "Crop Extension Module III":{ tree: "Machinery", points: 2, tier: 2, buff: "Yam/Broccoli in crop machine", debuff: null },
+      "Rapid Rig":                { tree: "Machinery", points: 2, tier: 2, buff: "-20% Crop Machine growth time", debuff: "+40% Oil in Crop Machine" },
+      "Oil Be Back":              { tree: "Machinery", points: 2, tier: 2, buff: "-20% Oil refill time", debuff: null },
+      "Oil Rig":                  { tree: "Machinery", points: 2, tier: 2, buff: "Oil Drill uses Wool instead of Leather", debuff: null },
+      "Field Expansion Module":   { tree: "Machinery", points: 3, tier: 3, buff: "+5 packs in machine queue", debuff: null },
+      "Field Extension Module":   { tree: "Machinery", points: 3, tier: 3, buff: "+5 plots in machine", debuff: null },
+      "Efficiency Extension Module":{ tree: "Machinery", points: 3, tier: 3, buff: "-30% Oil in Crop Machine", debuff: null },
+      "Grease Lightning":         { tree: "Machinery", points: 3, tier: 3, buff: "Instantly refill oil wells", debuff: null, power: true },
+      // ── Compost ──
+      "Efficient Bin":      { tree: "Compost", points: 1, tier: 1, buff: "+5 Sprout Mix", debuff: null },
+      "Turbo Charged":      { tree: "Compost", points: 1, tier: 1, buff: "+5 Fruitful Blend", debuff: null },
+      "Wormy Treat":        { tree: "Compost", points: 1, tier: 1, buff: "+1 Worm", debuff: null },
+      "Feathery Business":  { tree: "Compost", points: 1, tier: 1, buff: "Feathers instead of eggs for compost", debuff: "2x feathers needed" },
+      "Sprout Surge":       { tree: "Compost", points: 1, tier: 1, buff: "Sprout Mix on all plots", debuff: null, power: true },
+      "Blend-tastic":       { tree: "Compost", points: 1, tier: 1, buff: "Fruitful Blend on all plots", debuff: null, power: true },
+      "Premium Worms":      { tree: "Compost", points: 2, tier: 2, buff: "+10 Rapid Root", debuff: null },
+      "Fruitful Bounty":    { tree: "Compost", points: 2, tier: 2, buff: "Double Fruitful Blend effect", debuff: null },
+      "Swift Decomposer":   { tree: "Compost", points: 2, tier: 2, buff: "-10% compost time", debuff: null },
+      "Composting Bonanza":  { tree: "Compost", points: 2, tier: 2, buff: "+1h compost speed when boosting", debuff: "2x resources to boost" },
+      "Root Rocket":        { tree: "Compost", points: 2, tier: 2, buff: "Rapid Root on all plots", debuff: null, power: true },
+      "Composting Overhaul":{ tree: "Compost", points: 3, tier: 3, buff: "+2 Worms", debuff: "-5 fertilisers" },
+      "Composting Revamp":  { tree: "Compost", points: 3, tier: 3, buff: "+5 fertilisers", debuff: "-3 Worms" },
     };
+
+    // Approximate recipe ingredients for skill cost calculation (SFL cost per XP)
+    // Used to estimate "how much SFL does one skill point cost"
+    const SKILL_COST_RECIPES = [
+      { name: "Pumpkin Soup",        xp: 24,   ingredients: { Pumpkin: 10 } },
+      { name: "Bumpkin Broth",       xp: 48,   ingredients: { Carrot: 10, Cabbage: 5 } },
+      { name: "Boiled Eggs",         xp: 60,   ingredients: { Egg: 10 } },
+      { name: "Cauliflower Burger",  xp: 54,   ingredients: { Cauliflower: 15, Wheat: 5 } },
+      { name: "Kale Stew",           xp: 36,   ingredients: { Kale: 10 } },
+      { name: "Kale Omelette",       xp: 100,  ingredients: { Kale: 5, Egg: 12 } },
+      { name: "Sunflower Crunch",    xp: 100,  ingredients: { Sunflower: 300, Wheat: 10 } },
+      { name: "Pancakes",            xp: 240,  ingredients: { Wheat: 10, Egg: 10, Honey: 1 } },
+      { name: "Roast Veggies",       xp: 170,  ingredients: { Beetroot: 15, Parsnip: 10 } },
+      { name: "Club Sandwich",       xp: 170,  ingredients: { Sunflower: 100, Carrot: 25, Wheat: 5 } },
+    ];
+
+    // Crop tier classification for "Basic/Medium/Advanced Crop" skill boosts
+    const CROP_TIERS = {
+      basic:    ["Sunflower", "Potato", "Pumpkin", "Carrot", "Cabbage", "Soybean", "Beetroot", "Cauliflower", "Parsnip", "Eggplant", "Corn", "Radish", "Wheat", "Kale"],
+      medium:   ["Turnip", "Onion", "Pepper", "Zucchini", "Yam", "Broccoli"],
+      advanced: ["Artichoke", "Barley"],
+    };
+
+    // Calculate the SFL cost per skill point for current bumpkin
+    function calcSkillPointCost(bumpkin, p2pPrices) {
+      const xp = bumpkin?.experience || 0;
+      const level = getBumpkinLevel(xp);
+      if (level <= 1) return { sflPerPoint: 0, bestRecipe: null, level, totalXP: xp };
+
+      const totalXP = BUMPKIN_XP_TABLE[level - 1] || 0;
+
+      // Find best recipe: highest XP per SFL of ingredients
+      let bestRatio = 0, bestRecipe = null;
+      for (const recipe of SKILL_COST_RECIPES) {
+        let cost = 0;
+        for (const [item, qty] of Object.entries(recipe.ingredients)) {
+          cost += (p2pPrices[item] || 0) * qty;
+        }
+        if (cost <= 0) continue;
+        const ratio = recipe.xp / cost; // XP per SFL
+        if (ratio > bestRatio) {
+          bestRatio = ratio;
+          bestRecipe = { ...recipe, cost, ratio };
+        }
+      }
+
+      if (!bestRecipe || bestRatio === 0) return { sflPerPoint: 0, bestRecipe: null, level, totalXP };
+
+      // Total SFL to reach current level via most efficient cooking
+      const totalSFL = totalXP / bestRatio;
+      const sflPerLevel = totalSFL / level;
+      // 1 level = 1 skill point
+      return { sflPerPoint: sflPerLevel, bestRecipe, level, totalXP, totalSFL, sflPerLevel };
+    }
 
     // Power category definitions
     const POWER_CATEGORIES = {
@@ -5126,9 +5314,29 @@
       const baseCycleSec = getCycleSec(catId, product);
       const baseYield = getBaseYield(catId);
 
+      const { skillCostInfo } = powerState;
+
       let h = `<div class="power-formula pixel-font">`;
-      h += `<div style="margin-bottom:6px"><strong>${escHTML(boostItem.name)}</strong> — ${escHTML(boostItem.type)}${boostItem.floor > 0 ? ` | Floor: ${boostItem.floor.toFixed(1)} SFL` : ""}</div>`;
+      // Header with type and cost
+      if (boostItem.type === "Skill") {
+        h += `<div style="margin-bottom:6px"><strong>${escHTML(boostItem.name)}</strong> — Skill (${escHTML(boostItem.skillTree)}, Tier ${boostItem.skillTier}, ${boostItem.skillPoints} point${boostItem.skillPoints > 1 ? "s" : ""})`;
+        if (boostItem.floor > 0) h += ` | Est. cost: ~${boostItem.floor.toFixed(0)} SFL`;
+        h += `</div>`;
+      } else {
+        h += `<div style="margin-bottom:6px"><strong>${escHTML(boostItem.name)}</strong> — ${escHTML(boostItem.type)}${boostItem.floor > 0 ? ` | Floor: ${boostItem.floor.toFixed(1)} SFL` : ""}</div>`;
+      }
       h += `<div style="color:var(--green);margin-bottom:6px">${escHTML(boostItem.boost)}</div>`;
+
+      // Skill cost breakdown
+      if (boostItem.type === "Skill" && skillCostInfo && skillCostInfo.sflPerPoint > 0) {
+        h += `<hr style="border-color:var(--border-dark);margin:4px 0">`;
+        h += `<div style="margin-bottom:2px;color:var(--lily)"><strong>Skill Cost Calculation:</strong></div>`;
+        h += `<div>Bumpkin Level: ${skillCostInfo.level} → Total XP: ${(skillCostInfo.totalXP / 1e6).toFixed(1)}M</div>`;
+        h += `<div>Best recipe: ${escHTML(skillCostInfo.bestRecipe.name)} (${skillCostInfo.bestRecipe.xp} XP / ${skillCostInfo.bestRecipe.cost.toFixed(4)} SFL = ${skillCostInfo.bestRecipe.ratio.toFixed(0)} XP/SFL)</div>`;
+        h += `<div>Total SFL to reach lvl ${skillCostInfo.level}: ${(skillCostInfo.totalXP / skillCostInfo.bestRecipe.ratio).toFixed(0)} SFL</div>`;
+        h += `<div>Avg cost per level: ${skillCostInfo.sflPerLevel.toFixed(1)} SFL → <strong>1 skill point ≈ ${skillCostInfo.sflPerPoint.toFixed(1)} SFL</strong></div>`;
+        h += `<div style="color:var(--sunpetal)">This skill (${boostItem.skillPoints}pt): <strong>${boostItem.skillPoints} × ${skillCostInfo.sflPerPoint.toFixed(1)} = ~${boostItem.floor.toFixed(0)} SFL</strong></div>`;
+      }
       h += `<hr style="border-color:var(--border-dark);margin:4px 0">`;
 
       if (POWER_CATEGORIES[catId]?.quantifiable && n > 0) {
@@ -5268,14 +5476,20 @@
         });
       }
 
-      // Add skill boosts
-      for (const [skillName, desc] of Object.entries(POWER_KNOWN_SKILL_BOOSTS)) {
+      // Add skill boosts from full skill tree
+      const skillCostInfo = calcSkillPointCost(farm.bumpkin, p2pPrices);
+      for (const [skillName, skill] of Object.entries(SKILL_TREE_DATA)) {
         const has = skills[skillName] !== undefined;
-        const effects = parseBoostEffects(desc);
+        const boostText = skill.buff + (skill.debuff ? "\n" + skill.debuff : "");
+        const effects = parseBoostEffects(boostText);
         const categories = classifyToCategories(effects);
+        // Skill cost = skill points × SFL per skill point
+        const skillFloor = skillCostInfo.sflPerPoint > 0 ? skill.points * skillCostInfo.sflPerPoint : 0;
         boostItems.push({
-          name: skillName, type: "Skill", boost: desc,
-          floor: 0, supply: 0, has, effects, categories,
+          name: skillName, type: "Skill", boost: boostText,
+          floor: skillFloor, supply: 0, has, effects, categories,
+          skillPoints: skill.points, skillTree: skill.tree, skillTier: skill.tier,
+          isPower: skill.power || false,
         });
       }
 
@@ -5289,7 +5503,7 @@
       }
 
       // Store state for interactive updates
-      powerState = { boostItems, catBoosts, capacity, p2pPrices, savedProducts, farm };
+      powerState = { boostItems, catBoosts, capacity, p2pPrices, savedProducts, farm, skillCostInfo };
 
       // Render
       renderPowerContent();
@@ -5326,12 +5540,28 @@
       let content = "";
 
       // Summary
+      const { skillCostInfo } = powerState;
+
       content += `<div class="power-summary pixel-font">
         <div class="power-summary-stat"><div class="power-summary-label">OWNED</div><div class="power-summary-value" style="color:var(--green)">${ownedCount} / ${totalCount}</div></div>
         <div class="power-summary-stat"><div class="power-summary-label">BOOST VALUE</div><div class="power-summary-value" style="color:var(--sunpetal)">+${totalDelta.toFixed(2)} SFL/day</div></div>
         <div class="power-summary-stat"><div class="power-summary-label">BASE</div><div class="power-summary-value">${totalBaseSfl.toFixed(2)} SFL/day</div></div>
         <div class="power-summary-stat"><div class="power-summary-label">BOOSTED</div><div class="power-summary-value" style="color:var(--green)">${totalBoostedSfl.toFixed(2)} SFL/day (+${boostPct}%)</div></div>
       </div>`;
+
+      // Skill cost info panel
+      if (skillCostInfo && skillCostInfo.sflPerPoint > 0) {
+        content += `<div class="pixel-panel" style="padding:8px 12px;margin-bottom:16px;font-size:9px;border:2px solid var(--border-dark)">
+          <div class="pixel-font" style="font-size:10px;color:var(--lily);margin-bottom:6px">🧠 SKILL POINT COST ESTIMATE</div>
+          <div style="color:var(--text-secondary);line-height:1.6">
+            Bumpkin Lvl <strong>${skillCostInfo.level}</strong> → ${(skillCostInfo.totalXP / 1e6).toFixed(1)}M XP total<br>
+            Best recipe: <strong>${escHTML(skillCostInfo.bestRecipe.name)}</strong> (${skillCostInfo.bestRecipe.xp} XP for ${skillCostInfo.bestRecipe.cost.toFixed(4)} SFL = ${skillCostInfo.bestRecipe.ratio.toFixed(0)} XP/SFL)<br>
+            Total SFL to cook to lvl ${skillCostInfo.level}: ~${(skillCostInfo.totalSFL).toFixed(0)} SFL<br>
+            <span style="color:var(--sunpetal);font-weight:bold">1 skill point ≈ ${skillCostInfo.sflPerPoint.toFixed(1)} SFL</span>
+            <span style="color:var(--text-dim)"> (${skillCostInfo.sflPerLevel.toFixed(1)} SFL/level avg)</span>
+          </div>
+        </div>`;
+      }
 
       // Best Buys: top 10 missing boosts by ROI
       const bestBuys = [];
@@ -5496,31 +5726,39 @@
       const imgUrl = b.type !== "Skill" ? ITEM_ICON_BASE + encodeURIComponent(b.name) + ".png" : "";
       const sflText = val.synergy !== 0 ? `${val.synergy > 0 ? "+" : ""}${val.synergy.toFixed(2)}/day` : "—";
       const roiText = !isOwned && val.roi < Infinity ? `${val.roi.toFixed(0)}d` : "";
+      const typeLabel = b.type === "Skill" ? `Skill (${b.skillTree}, ${b.skillPoints}pt)` : b.type;
+      const costLabel = b.type === "Skill" && b.floor > 0
+        ? `~${b.floor.toFixed(0)} SFL (${b.skillPoints}pt)`
+        : (b.floor > 0 ? `${b.floor.toFixed(0)} SFL` : "");
 
       return `<div class="power-boost-row ${isOwned ? "has-it" : "missing"}" onclick="togglePowerDetail(this,'${escHTML(b.name).replace(/'/g, "\\'")}','${catId}')">
         ${imgUrl ? `<img class="power-boost-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">` : `<span class="power-boost-icon">🧠</span>`}
         <div class="power-boost-info">
-          <div class="power-boost-name">${escHTML(b.name)} <span class="power-boost-type">${escHTML(b.type)}</span></div>
+          <div class="power-boost-name">${escHTML(b.name)} <span class="power-boost-type">${escHTML(typeLabel)}</span></div>
           <div class="power-boost-text">${escHTML(b.boost)}</div>
         </div>
         <div class="power-boost-value">
           <div class="power-boost-sfl">${sflText}</div>
           ${roiText ? `<div class="power-boost-roi">${roiText} ROI</div>` : ""}
-          ${!isOwned && b.floor > 0 ? `<div class="power-boost-floor">${b.floor.toFixed(0)} SFL</div>` : ""}
+          ${!isOwned && costLabel ? `<div class="power-boost-floor">${costLabel}</div>` : ""}
         </div>
       </div>`;
     }
 
     function renderPowerQualRow(b, isOwned) {
       const imgUrl = b.type !== "Skill" ? ITEM_ICON_BASE + encodeURIComponent(b.name) + ".png" : "";
-      return `<div class="power-boost-row ${isOwned ? "has-it" : "missing"}">
+      const typeLabel = b.type === "Skill" ? `Skill (${b.skillTree}, ${b.skillPoints}pt)` : b.type;
+      const costLabel = b.type === "Skill" && b.floor > 0
+        ? `~${b.floor.toFixed(0)} SFL (${b.skillPoints}pt)`
+        : (b.floor > 0 ? `${b.floor.toFixed(0)} SFL` : "");
+      return `<div class="power-boost-row ${isOwned ? "has-it" : "missing"}" onclick="togglePowerDetail(this,'${escHTML(b.name).replace(/'/g, "\\'")}','qual')">
         ${imgUrl ? `<img class="power-boost-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">` : `<span class="power-boost-icon">🧠</span>`}
         <div class="power-boost-info">
-          <div class="power-boost-name">${escHTML(b.name)} <span class="power-boost-type">${escHTML(b.type)}</span></div>
+          <div class="power-boost-name">${escHTML(b.name)} <span class="power-boost-type">${escHTML(typeLabel)}</span></div>
           <div class="power-boost-text">${escHTML(b.boost)}</div>
         </div>
         <div class="power-boost-value">
-          ${!isOwned && b.floor > 0 ? `<div class="power-boost-floor">${b.floor.toFixed(0)} SFL</div>` : ""}
+          ${!isOwned && costLabel ? `<div class="power-boost-floor">${costLabel}</div>` : ""}
         </div>
       </div>`;
     }
@@ -5546,18 +5784,26 @@
         row.nextElementSibling.remove();
         return;
       }
-      // Remove any other open details in this category
-      const catEl = document.getElementById("power-cat-" + catId);
-      if (catEl) catEl.querySelectorAll(".power-detail").forEach(d => d.remove());
+      // Remove any other open details nearby
+      const parentCat = row.closest(".power-category");
+      if (parentCat) parentCat.querySelectorAll(".power-detail").forEach(d => d.remove());
 
-      // Find the boost item
-      const { catBoosts, capacity, p2pPrices, savedProducts } = powerState;
-      const product = savedProducts[catId] || getDefaultProduct(catId);
-      const items = catBoosts[catId] || [];
-      const boostItem = items.find(b => b.name === boostName);
+      // Find the boost item across all categories
+      const { catBoosts, boostItems, capacity, p2pPrices, savedProducts } = powerState;
+      let boostItem, effectiveCatId = catId;
+      if (catId === "qual") {
+        // Qualitative — find item in all boosts
+        boostItem = boostItems.find(b => b.name === boostName);
+        effectiveCatId = boostItem?.categories?.[0] || "other";
+      } else {
+        const items = catBoosts[catId] || [];
+        boostItem = items.find(b => b.name === boostName);
+      }
       if (!boostItem) return;
 
-      const detailHTML = buildFormulaHTML(boostItem, catId, product, capacity, p2pPrices, items);
+      const product = savedProducts[effectiveCatId] || getDefaultProduct(effectiveCatId);
+      const items = catBoosts[effectiveCatId] || [];
+      const detailHTML = buildFormulaHTML(boostItem, effectiveCatId, product, capacity, p2pPrices, items);
       const detail = document.createElement("div");
       detail.className = "power-detail";
       detail.innerHTML = detailHTML;
