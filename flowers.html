@@ -1303,7 +1303,9 @@
       gap: 8px;
       padding: 4px 0;
       font-size: 11px;
+      cursor: pointer;
     }
+    .planner-row:hover { background: rgba(255,255,255,0.03); }
     .planner-row img {
       width: 22px; height: 22px;
       image-rendering: pixelated;
@@ -2720,6 +2722,38 @@
       row.after(detail);
     }
 
+    function togglePlannerChain(el) {
+      const row = el.closest(".planner-row");
+      const existing = row.nextElementSibling;
+      if (existing && existing.classList.contains("chain-detail")) {
+        existing.remove();
+        return;
+      }
+      document.querySelectorAll(".planner-row + .chain-detail").forEach(d => d.remove());
+
+      const name = row.dataset.flower;
+      if (!name || !lastInventory) return;
+
+      const recipe = FLOWER_RECIPES[name];
+      if (!recipe) return;
+
+      const sd = SEED_DATA[recipe.seed];
+      let html = `<strong>Recipe:</strong> <span class="chain-seed">${sd.label} Seed</span> + `;
+
+      if (isFlowerInput(recipe.input)) {
+        html += `<span class="chain-flower">${escHTML(recipe.input)}</span>`;
+        html += buildChainHTML(recipe.input, lastInventory, lastInProgress || {});
+      } else {
+        const cropHave = getCount(lastInventory, recipe.input);
+        html += `<span class="chain-crop">${escHTML(recipe.input)}</span> <span style="color:var(--text-dim)">(have: ${cropHave})</span>`;
+      }
+
+      const detail = document.createElement("div");
+      detail.className = "chain-detail";
+      detail.innerHTML = html;
+      row.after(detail);
+    }
+
     // ═══════════════════════════════════════
     //  PETAL BLESSED
     // ═══════════════════════════════════════
@@ -2826,7 +2860,7 @@
 
     function formatTimeShort(ms) {
       const d = new Date(ms);
-      const days = ["Ne","Po","Út","St","Čt","Pá","So"];
+      const days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
       return `${days[d.getDay()]} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
     }
 
@@ -2937,7 +2971,7 @@
         html += `<div class="planner-body"><div class="planner-batch planner-pb-box">
           <div class="planner-batch-label pixel-font" style="color:var(--lily)">⚡ USE PETAL BLESSED NOW</div>`;
         for (const f of plan.pbFlowers) {
-          html += `<div class="planner-row">
+          html += `<div class="planner-row" data-flower="${escHTML(f.name)}" onclick="togglePlannerChain(this)">
             <img src="${IMG_BASE}${encodeURIComponent(f.name)}.png" onerror="this.style.display='none'" alt="">
             <div class="planner-row-info"><div class="planner-row-name">${escHTML(f.name)}</div>
             <div class="planner-row-detail">${SEED_DATA[f.seed]?.label || "?"} · saves ${formatHours(f.growH)}</div></div>
@@ -2968,7 +3002,7 @@
               <div class="planner-batch-label pixel-font">▸ ${isNow ? "PLANT NOW" : "PLANT " + formatTimeShort(batch.t)}</div>`;
             for (const s of batch.items) {
               const cls = s.sleepWaste ? "planner-row-time sleep" : "planner-row-time";
-              html += `<div class="planner-row">
+              html += `<div class="planner-row" data-flower="${escHTML(s.flower)}" onclick="togglePlannerChain(this)">
                 <img src="${IMG_BASE}${encodeURIComponent(s.flower)}.png" onerror="this.style.display='none'" alt="">
                 <div class="planner-row-info"><div class="planner-row-name">${escHTML(s.flower)}</div>
                 <div class="planner-row-detail">${SEED_DATA[s.seed]?.label || "?"} · ${formatHours(s.growH)}</div></div>
@@ -2992,7 +3026,7 @@
           html += `<div class="planner-batch planner-pb-box">
             <div class="planner-batch-label pixel-font"><span style="color:var(--lily)">⚡ PETAL BLESSED</span> <span style="color:var(--text-dim)">${formatTimeShort(plan.pbTime)}</span></div>`;
           for (const f of plan.pbFlowers) {
-            html += `<div class="planner-row">
+            html += `<div class="planner-row" data-flower="${escHTML(f.name)}" onclick="togglePlannerChain(this)">
               <img src="${IMG_BASE}${encodeURIComponent(f.name)}.png" onerror="this.style.display='none'" alt="">
               <div class="planner-row-info"><div class="planner-row-name">${escHTML(f.name)}</div>
               <div class="planner-row-detail">${SEED_DATA[f.seed]?.label || "?"} · saves ${formatHours(f.growH)}</div></div>
@@ -4509,7 +4543,7 @@
           const purchases = weeklyPurchases[week] || {};
           const saleItems = Object.entries(sales).map(([n, q]) => `${n} x${q}`).join(", ");
           const purchItems = Object.entries(purchases).map(([n, q]) => `${n} x${q}`).join(", ");
-          const weekDate = new Date(parseInt(week)).toLocaleDateString("cs-CZ");
+          const weekDate = new Date(parseInt(week)).toLocaleDateString("en-GB");
 
           content += `<div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid rgba(92,58,30,0.2)">
             <div style="font-size:10px;color:var(--text-secondary);margin-bottom:3px">${weekDate}</div>
