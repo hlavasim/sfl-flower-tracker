@@ -2396,15 +2396,20 @@
 
     function getConfig() {
       const p = new URLSearchParams(window.location.search);
+      const urlFarm = p.get("farm");
+      const storedFarm = localStorage.getItem("sfl_farm_id") || "";
+      const farm = urlFarm || storedFarm || DEFAULTS.farm;
+      if (urlFarm) localStorage.setItem("sfl_farm_id", urlFarm);
       return {
-        farm: p.get("farm") || DEFAULTS.farm,
+        farm,
         limit: parseInt(p.get("limit") || DEFAULTS.limit, 10) || 5,
       };
     }
 
     function saveConfig(farm, limit) {
       const p = new URLSearchParams(window.location.search);
-      if (farm) p.set("farm", farm); else p.delete("farm");
+      if (farm) { p.set("farm", farm); localStorage.setItem("sfl_farm_id", farm); }
+      else { p.delete("farm"); localStorage.removeItem("sfl_farm_id"); }
       if (limit) p.set("limit", limit);
       // Clean up legacy params
       p.delete("sunpetal");
