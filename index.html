@@ -2,9 +2,16 @@
 <html lang="cs">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>SFL Collection Tracker</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='10' fill='%23614126'/%3E%3Cg fill='%23FFD700'%3E%3Cellipse cx='32' cy='14' rx='7' ry='12'/%3E%3Cellipse cx='32' cy='50' rx='7' ry='12'/%3E%3Cellipse cx='14' cy='32' rx='12' ry='7'/%3E%3Cellipse cx='50' cy='32' rx='12' ry='7'/%3E%3Cellipse cx='19' cy='19' rx='7' ry='12' transform='rotate(-45 19 19)'/%3E%3Cellipse cx='45' cy='45' rx='7' ry='12' transform='rotate(-45 45 45)'/%3E%3Cellipse cx='45' cy='19' rx='7' ry='12' transform='rotate(45 45 19)'/%3E%3Cellipse cx='19' cy='45' rx='7' ry='12' transform='rotate(45 19 45)'/%3E%3C/g%3E%3Ccircle cx='32' cy='32' r='8' fill='%23614126'/%3E%3C/svg%3E">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icon-192.svg">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SFL Tracker">
+  <meta name="theme-color" content="#1a0e08">
+  <meta name="description" content="Sunflower Land collection tracker - flowers, dolls, crustaceans, treasury & more">
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -59,6 +66,8 @@
       max-width: 960px;
       margin: 0 auto;
       padding: 12px;
+      padding-top: max(12px, env(safe-area-inset-top));
+      padding-bottom: max(12px, env(safe-area-inset-bottom));
     }
 
     /* ── Nav Bar ── */
@@ -4819,6 +4828,11 @@
     // Init
     migrateApiKey();
     main();
+
+    // Register service worker for PWA
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
   </script>
 </body>
 </html>
