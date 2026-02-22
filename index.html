@@ -1896,10 +1896,13 @@
     };
 
     const ANIMAL_CYCLE_DATA = {
-      "Chicken": { cycleSec: 48 * 3600, product: "Egg", farmKey: "chickens" },
-      "Cow":     { cycleSec: 48 * 3600, product: "Milk", farmKey: "cows" },
-      "Sheep":   { cycleSec: 48 * 3600, product: "Wool", farmKey: "sheep" },
+      "Chicken": { cycleSec: 24 * 3600, products: ["Egg", "Feather"], farmKey: "chickens" },
+      "Cow":     { cycleSec: 24 * 3600, products: ["Milk", "Leather"], farmKey: "cows" },
+      "Sheep":   { cycleSec: 24 * 3600, products: ["Wool", "Merino Wool"], farmKey: "sheep" },
     };
+    const ANIMAL_CAT_MAP = { chickens: "Chicken", cows: "Cow", sheep: "Sheep" };
+    function isAnimalCat(catId) { return catId in ANIMAL_CAT_MAP; }
+    function getAnimalData(catId) { return ANIMAL_CYCLE_DATA[ANIMAL_CAT_MAP[catId]]; }
 
     const RESOURCE_RESPAWN_DATA = {
       "Stone":     { respawnSec: 14400, yield: 2, farmKey: "stones" },
@@ -2239,24 +2242,34 @@
     PRODUCT_TO_CATEGORY["Wood"] = "trees";
     PRODUCT_TO_CATEGORY["Fish"] = "fishing";
 
+    // Build dynamic product regex alternation (longest first to prevent partial match)
+    const ALL_PRODUCTS_SORTED = Object.keys(PRODUCT_TO_CATEGORY).sort((a,b) => b.length - a.length);
+    const PROD_ALT = ALL_PRODUCTS_SORTED.join("|");
+    const PROD_ALT_RX = new RegExp(`([+-]?\\d+\\.?\\d*)%\\s+(${PROD_ALT})\\b`, 'i');
+    const PROD_FLAT_RX = new RegExp(`([+-]?\\d+\\.?\\d*)\\s+(${PROD_ALT})\\b`, 'i');
+
     // Boost text parser rules (ordered by priority)
     const BOOST_PARSE_RULES = [
-      // Specific product growth time: "-20% Pumpkin Growth Time"
-      { rx: /([+-]?\d+\.?\d*)%\s+([\w\s]+?)\s+(?:Growth|Growing)\s+Time/i,
+      // Specific product growth/cooldown/production time: "-20% Pumpkin Growth Time", "-20% Crimstone Cooldown Time"
+      { rx: /([+-]?\d+\.?\d*)%\s+([\w\s]+?)\s+(?:Growth|Growing|Cooldown|Recovery|Respawn|Production|Sleep)\s+Time/i,
         fn: m => {
           const prod = m[2].trim();
           const cat = PRODUCT_TO_CATEGORY[prod];
-          return cat ? { type: "speed_pct", value: parseFloat(m[1]), cat, product: prod }
-                     : { type: "speed_pct", value: parseFloat(m[1]), cat: "other", product: prod };
+          if (cat) return { type: "speed_pct", value: parseFloat(m[1]), cat, product: prod };
+          // Try animal name (case-insensitive)
+          const animalCats = { chicken: "chickens", cow: "cows", sheep: "sheep" };
+          const aCat = animalCats[prod.toLowerCase()];
+          if (aCat) return { type: "speed_pct", value: parseFloat(m[1]), cat: aCat };
+          return { type: "speed_pct", value: parseFloat(m[1]), cat: "other", product: prod };
         }},
       // Generic crop growth: "-10% Crop Growth Time"
-      { rx: /([+-]?\d+\.?\d*)%\s+Crop\s+(?:Growth|Growing)\s+Time/i,
+      { rx: /([+-]?\d+\.?\d*)%\s+Crop\s+(?:Growth|Growing|Cooldown|Production)\s+Time/i,
         fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "crops" }) },
       // Fruit growth
-      { rx: /([+-]?\d+\.?\d*)%\s+Fruit.*(?:Growth|Growing)\s+Time/i,
+      { rx: /([+-]?\d+\.?\d*)%\s+Fruit.*(?:Growth|Growing|Cooldown|Production)\s+Time/i,
         fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "fruits" }) },
       // Flower growth %
-      { rx: /([+-]?\d+\.?\d*)%\s+Flower\s+(?:Growth|Growing)\s+Time/i,
+      { rx: /([+-]?\d+\.?\d*)%\s+Flower\s+(?:Growth|Growing|Cooldown|Production)\s+Time/i,
         fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "flowers" }) },
       // Flower growth multiplier: ×0.9 Flower Growing Time
       { rx: /[×x](\d+\.?\d*)\s+Flower\s+(?:Growth|Growing)\s+Time/i,
@@ -2264,14 +2277,15 @@
       // Tree recovery
       { rx: /([+-]?\d+\.?\d*)%\s+Tree\s+Recovery\s+Time/i,
         fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "trees" }) },
-      // Animal time: "-10% Chicken Time"
-      { rx: /([+-]?\d+\.?\d*)%\s+(Chicken|Cow|Sheep)\s+.*Time/i,
+      // Animal time: "-10% Chicken Time", "-5% chicken sleep time", "-25% Sheep Production Time"
+      { rx: /([+-]?\d+\.?\d*)%\s+(Chicken|Cow|Sheep)\s+.*(?:Time|time)/i,
         fn: m => {
+          const key = m[2].charAt(0).toUpperCase() + m[2].slice(1).toLowerCase();
           const animalCats = { "Chicken": "chickens", "Cow": "cows", "Sheep": "sheep" };
-          return { type: "speed_pct", value: parseFloat(m[1]), cat: animalCats[m[2]] || "other" };
+          return { type: "speed_pct", value: parseFloat(m[1]), cat: animalCats[key] || "other" };
         }},
       // Generic animal time / sleep
-      { rx: /([+-]?\d+\.?\d*)%\s+Animal\s+(?:sleep\s+)?time/i,
+      { rx: /([+-]?\d+\.?\d*)%\s+Animal\s+(?:sleep\s+|production\s+)?time/i,
         fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "chickens", alsoApply: ["cows", "sheep"] }) },
       // Crop yield %
       { rx: /([+-]?\d+\.?\d*)%\s+Crop\s+Yield/i,
@@ -2280,7 +2294,7 @@
       { rx: /([+-]?\d+\.?\d*)\s+(Basic|Medium|Advanced)\s+Crop\s+yield/i,
         fn: m => ({ type: "yield_flat", value: parseFloat(m[1]), cat: "crops", cropTier: m[2].toLowerCase() }) },
       // Basic/Medium/Advanced Crop growth time
-      { rx: /([+-]?\d+\.?\d*)%\s+(Basic|Medium|Advanced)\s+Crop\s+(?:Growth|Growing)\s+Time/i,
+      { rx: /([+-]?\d+\.?\d*)%\s+(Basic|Medium|Advanced)\s+Crop\s+(?:Growth|Growing|Cooldown|Production)\s+Time/i,
         fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "crops", cropTier: m[2].toLowerCase() }) },
       // Fruit yield %
       { rx: /([+-]?\d+\.?\d*)%\s+Fruit\s+Yield/i,
@@ -2288,14 +2302,14 @@
       // Animal yield %
       { rx: /([+-]?\d+\.?\d*)%\s+Animal\s+Yield/i,
         fn: m => ({ type: "yield_pct", value: parseFloat(m[1]), cat: "chickens", alsoApply: ["cows", "sheep"] }) },
-      // Specific product yield %: "+10% Egg Yield" or "+10% Wood"
-      { rx: /([+-]?\d+\.?\d*)%\s+(Egg|Milk|Wool|Merino Wool|Wood|Honey|Stone|Iron|Gold|Feather|Leather)\b/i,
+      // Specific product yield %: "+10% Egg Yield", "+20% Pumpkin", "+10% Sunflower" (dynamic product list)
+      { rx: PROD_ALT_RX,
         fn: m => {
           const cat = PRODUCT_TO_CATEGORY[m[2]] || "other";
           return { type: "yield_pct", value: parseFloat(m[1]), cat, product: m[2] };
         }},
-      // Flat yield: "+0.1 Stone", "+1 Egg" (longer names first to prevent partial match)
-      { rx: /([+-]?\d+\.?\d*)\s+(Merino Wool|Eggplant|Cauliflower|Sunflower|Blueberry|Artichoke|Beetroot|Broccoli|Parsnip|Zucchini|Cabbage|Soybean|Pumpkin|Leather|Feather|Potato|Carrot|Turnip|Pepper|Barley|Banana|Orange|Tomato|Radish|Wheat|Olive|Onion|Apple|Lemon|Grape|Honey|Stone|Rice|Corn|Kale|Wood|Gold|Iron|Wool|Milk|Yam|Egg)\b/i,
+      // Flat yield: "+0.1 Stone", "+1 Egg", "+0.1 Crimstone" (dynamic product list, longest first)
+      { rx: PROD_FLAT_RX,
         fn: m => {
           const cat = PRODUCT_TO_CATEGORY[m[2]] || "other";
           return { type: "yield_flat", value: parseFloat(m[1]), cat, product: m[2] };
@@ -3327,7 +3341,7 @@
           : `${sd.label} Seed + ${escHTML(p.input)}`;
         bedsHTML += `<div class="pb-bed">
           <div class="pb-bed-num">${i + 1}</div>
-          <img class="pb-bed-img" src="${IMG_BASE}${encodeURIComponent(p.name)}.png" onerror="this.style.display='none'" alt="">
+          <img class="pb-bed-img" src="${IMG_BASE}${encodeURIComponent(p.name)}.png" onerror="imgFallback(this)" alt="">
           <div class="pb-bed-info">
             <div class="pb-bed-name">${escHTML(p.name)}</div>
             <div class="pb-bed-recipe">${inputLabel}</div>
@@ -3479,7 +3493,7 @@
           <div class="planner-batch-label pixel-font" style="color:var(--lily)">⚡ USE PETAL BLESSED NOW</div>`;
         for (const f of plan.pbFlowers) {
           html += `<div class="planner-row" data-flower="${escHTML(f.name)}" onclick="togglePlannerChain(this)">
-            <img src="${IMG_BASE}${encodeURIComponent(f.name)}.png" onerror="this.style.display='none'" alt="">
+            <img src="${IMG_BASE}${encodeURIComponent(f.name)}.png" onerror="imgFallback(this)" alt="">
             <div class="planner-row-info"><div class="planner-row-name">${escHTML(f.name)}</div>
             <div class="planner-row-detail">${SEED_DATA[f.seed]?.label || "?"} · saves ${formatHours(f.growH)}</div></div>
           </div>`;
@@ -3510,7 +3524,7 @@
             for (const s of batch.items) {
               const cls = s.sleepWaste ? "planner-row-time sleep" : "planner-row-time";
               html += `<div class="planner-row" data-flower="${escHTML(s.flower)}" onclick="togglePlannerChain(this)">
-                <img src="${IMG_BASE}${encodeURIComponent(s.flower)}.png" onerror="this.style.display='none'" alt="">
+                <img src="${IMG_BASE}${encodeURIComponent(s.flower)}.png" onerror="imgFallback(this)" alt="">
                 <div class="planner-row-info"><div class="planner-row-name">${escHTML(s.flower)}</div>
                 <div class="planner-row-detail">${SEED_DATA[s.seed]?.label || "?"} · ${formatHours(s.growH)}</div></div>
                 <div class="${cls}">→ ${formatTimeShort(s.finishAt)}${s.sleepWaste ? " 💤" : ""}</div>
@@ -3534,7 +3548,7 @@
             <div class="planner-batch-label pixel-font"><span style="color:var(--lily)">⚡ PETAL BLESSED</span> <span style="color:var(--text-dim)">${formatTimeShort(plan.pbTime)}</span></div>`;
           for (const f of plan.pbFlowers) {
             html += `<div class="planner-row" data-flower="${escHTML(f.name)}" onclick="togglePlannerChain(this)">
-              <img src="${IMG_BASE}${encodeURIComponent(f.name)}.png" onerror="this.style.display='none'" alt="">
+              <img src="${IMG_BASE}${encodeURIComponent(f.name)}.png" onerror="imgFallback(this)" alt="">
               <div class="planner-row-info"><div class="planner-row-name">${escHTML(f.name)}</div>
               <div class="planner-row-detail">${SEED_DATA[f.seed]?.label || "?"} · saves ${formatHours(f.growH)}</div></div>
             </div>`;
@@ -3764,7 +3778,7 @@
             else { const h = Math.floor(diff/3600000); const m = Math.floor((diff%3600000)/60000); timeStr = h > 0 ? `${h}h ${String(m).padStart(2,"0")}m` : `${m}m`; }
             const sdLabel = SEED_DATA[bed.seedType]?.label || "?";
             html += `<div class="growing-bed">
-              <img class="growing-bed-img" src="${IMG_BASE}${encodeURIComponent(bed.name)}.png" onerror="this.style.display='none'" alt="">
+              <img class="growing-bed-img" src="${IMG_BASE}${encodeURIComponent(bed.name)}.png" onerror="imgFallback(this)" alt="">
               <div class="growing-bed-info">
                 <div class="growing-bed-name">${escHTML(bed.name)}</div>
                 <div class="growing-bed-detail">${sdLabel} | yield: ${bed.totalYield}${bed.bonus > 0 ? ` (1+${bed.bonus})` : ""}</div>
@@ -3796,7 +3810,7 @@
 
         html += `<div class="seed-section">`;
         html += `<div class="seed-header pixel-font">
-          <img class="seed-icon" src="${IMG_BASE}${encodeURIComponent(seed)}.webp" onerror="this.style.display='none'" alt="">
+          <img class="seed-icon" src="${IMG_BASE}${encodeURIComponent(seed)}.webp" onerror="imgFallback(this)" alt="">
           <h2 style="color:${sd.color}">${sd.label}</h2>
           ${sd.season ? (() => { const inSeason = sd.season.toLowerCase() === (season || "").toLowerCase(); return `<span class="seed-badge" style="border-color:${inSeason ? 'var(--green)' : 'var(--text-dim)'};color:${inSeason ? 'var(--green)' : 'var(--text-dim)'};${inSeason ? '' : 'opacity:0.5;text-decoration:line-through'}">${sd.season}</span>`; })() : ""}
           <div class="seed-meta">
@@ -3842,7 +3856,7 @@
 
           html += `<div class="flower-row ${f.isComplete ? "complete" : ""}" data-flower="${escHTML(fname)}" onclick="toggleChain(this)">
             <div class="flower-img-wrap">
-              <img class="flower-img" src="${IMG_BASE}${encodeURIComponent(fname)}.png" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" alt="">
+              <img class="flower-img" src="${IMG_BASE}${encodeURIComponent(fname)}.png" onerror="imgFallback(this);this.nextElementSibling.style.display='flex'" alt="">
               <div class="flower-color-dot" style="display:none;${isGradient ? "background:" + color : "background-color:" + color}"></div>
             </div>
             <div class="flower-info">
@@ -4455,8 +4469,20 @@
       return { rate: bestRate, item: bestItem };
     }
 
-    const SFL_ICON_URL = "https://sfl.world/img/source/SFL.png";
-    const ITEM_ICON_BASE = "https://sfl.world/img/source/";
+    const SFL_ICON_URL = "/assets/SFL.png";
+    const ITEM_ICON_BASE = "/assets/";
+    const ITEM_ICON_FALLBACK = "https://sfl.world/img/source/";
+    // Image fallback: try sfl.world if local /assets/ fails
+    function imgFallback(img) {
+      if (img.dataset.tried) { img.style.display = 'none'; return; }
+      img.dataset.tried = '1';
+      const src = img.getAttribute('src');
+      if (src && src.startsWith('/assets/')) {
+        img.src = ITEM_ICON_FALLBACK + src.slice('/assets/'.length);
+      } else {
+        img.style.display = 'none';
+      }
+    }
 
     function formatSFL(v) {
       if (v >= 1e6) return (v / 1e6).toFixed(2) + "M";
@@ -4680,7 +4706,7 @@
       return items.map(item => {
         const imgUrl = ITEM_ICON_BASE + encodeURIComponent(item.name) + ".png";
         return `<div class="treasury-item-row">
-          <img class="treasury-item-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">
+          <img class="treasury-item-img" src="${imgUrl}" onerror="imgFallback(this)" alt="">
           <div class="treasury-item-name" title="${escHTML(item.name)}">${escHTML(item.name)}</div>
           <div class="treasury-item-qty">×${item.qty}</div>
           <div class="treasury-item-unit">${formatSFL(item.unitPrice)}</div>
@@ -4697,7 +4723,7 @@
       for (const item of top5) {
         const imgUrl = ITEM_ICON_BASE + encodeURIComponent(item.name) + ".png";
         topHTML += `<div class="treasury-cat-top-item">
-          <img src="${imgUrl}" onerror="this.style.display='none'" alt="" style="width:16px;height:16px;image-rendering:pixelated">
+          <img src="${imgUrl}" onerror="imgFallback(this)" alt="" style="width:16px;height:16px;image-rendering:pixelated">
           <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHTML(item.name)}</span>
           <span style="color:var(--sunpetal)">${formatSFL(item.total)}</span>
         </div>`;
@@ -4734,7 +4760,7 @@
         <h1>TREASURY</h1>
         <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
         <div class="treasury-total">
-          <img src="${SFL_ICON_URL}" onerror="this.style.display='none'" alt="SFL">
+          <img src="${SFL_ICON_URL}" onerror="imgFallback(this)" alt="SFL">
           ${formatSFL(totals.grand)} SFL
         </div>
         <div class="treasury-secondary">${formatUSD(usdTotal)} &nbsp;|&nbsp; ${formatBTC(btcTotal)}</div>
@@ -5010,7 +5036,7 @@
         if (l.soldAt) badges.push(`<span class="sales-badge sold">SOLD</span>`);
 
         return `<div class="sales-listing">
-          <img class="sales-listing-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">
+          <img class="sales-listing-img" src="${imgUrl}" onerror="imgFallback(this)" alt="">
           <div class="sales-listing-info">
             <div class="sales-listing-name">${escHTML(l.itemName)}${l.qty > 1 ? ` x${l.qty}` : ""} ${badges.join("")}</div>
             <div class="sales-listing-detail">${formatAge(l.age)} ago · ${l.tradeType || l.collection}${l.marketPrice > 0 ? ` · market: ${l.marketPrice.toFixed(3)} SFL/${l.priceSource}` : ""}</div>
@@ -5107,10 +5133,42 @@
     //  POWER ANALYZER: PARSER & CALC ENGINE
     // ═══════════════════════════════════════
 
+    // Normalize common plurals in boost text
+    const PLURAL_FIXES = { "Crimstones":"Crimstone", "Feathers":"Feather", "Leathers":"Leather" };
+    function normalizeBoostLine(line) {
+      for (const [p, s] of Object.entries(PLURAL_FIXES))
+        line = line.replace(new RegExp(`\\b${p}\\b`, 'g'), s);
+      return line;
+    }
+
+    // Expand comma/and/&-separated product lines into individual lines
+    // e.g. "+0.2 Egg, Wool and Milk yield" → ["+0.2 Egg yield", "+0.2 Wool yield", "+0.2 Milk yield"]
+    function expandMultiProductLines(lines) {
+      const out = [];
+      for (const line of lines) {
+        // Match: "+0.2 Egg, Wool and Milk yield" or "-0.35 Leather & Merino Wool yield"
+        const m = line.match(/^([+-]?\d+\.?\d*)\s+(.+?)\s+(yield)$/i);
+        if (m) {
+          const prods = m[2].split(/\s*(?:,\s*(?:and\s+)?|\s+and\s+|\s*&\s*)\s*/);
+          if (prods.length > 1) {
+            for (const p of prods) out.push(`${m[1]} ${p.trim()} ${m[3]}`);
+            continue;
+          }
+        }
+        // Handle "+X Basic and Medium Crop yield"
+        const m2 = line.match(/^([+-]?\d+\.?\d*)\s+(.+?)\s+(?:and|&)\s+(.+?)\s+(Crop\s+yield)$/i);
+        if (m2) { out.push(`${m2[1]} ${m2[2]} ${m2[4]}`); out.push(`${m2[1]} ${m2[3]} ${m2[4]}`); continue; }
+        out.push(line);
+      }
+      return out;
+    }
+
     function parseBoostEffects(boostText) {
       if (!boostText) return [];
       const effects = [];
-      const lines = boostText.split("\n").map(l => l.trim()).filter(Boolean);
+      let lines = boostText.split("\n").map(l => l.trim()).filter(Boolean);
+      lines = lines.map(normalizeBoostLine);
+      lines = expandMultiProductLines(lines);
       for (const line of lines) {
         let matched = false;
         for (const rule of BOOST_PARSE_RULES) {
@@ -5350,6 +5408,10 @@
         if (eff.cat !== catId) continue;
         // For product-specific boosts, check if product matches
         if (eff.product && PRODUCT_TO_CATEGORY[eff.product] === catId) {
+          // Animal product-specific: "+0.1 Feather" only applies when computing Feather, not Egg
+          if (isAnimalCat(catId) && eff.product !== product) {
+            continue;
+          }
           // Specific product boost — only if it's a crop/fruit that doesn't match selector, skip
           if ((catId === "crops" || catId === "fruits") && eff.product !== product && eff.type !== "yield_flat" && eff.type !== "chance") {
             continue; // skip speed/yield% boosts for wrong product
@@ -5398,6 +5460,21 @@
       return unitsPerDay * price;
     }
 
+    // Compute total SFL/day across all products for an animal category
+    function getAnimalCatSfl(catId, capacity, boostEffects, p2pPrices) {
+      const animal = getAnimalData(catId);
+      if (!animal) return { totalSfl: 0, breakdown: [] };
+      let totalSfl = 0;
+      const breakdown = [];
+      for (const prod of animal.products) {
+        const result = applyBoosts(catId, prod, capacity, boostEffects);
+        const sfl = unitToSfl(result.unitsPerDay, prod, p2pPrices);
+        totalSfl += sfl;
+        breakdown.push({ product: prod, unitsPerDay: result.unitsPerDay, sfl, ...result });
+      }
+      return { totalSfl, breakdown };
+    }
+
     // Format seconds to human-readable time
     function fmtSec(s) {
       if (s >= 86400) return (s / 86400).toFixed(1) + "d";
@@ -5409,24 +5486,12 @@
     // Build detailed production breakdown HTML for a category
     function buildProductionBreakdown(catId, product, capacity, p2pPrices, catBoosts) {
       const n = getCapacityCount(catId, capacity);
-      const priceProduct = getPriceProduct(catId, product);
-      const price = p2pPrices[priceProduct] || 0;
-      const baseCycleSec = getCycleSec(catId, product);
-      const baseYield = getBaseYield(catId);
-      const baseResult = applyBoosts(catId, product, capacity, []);
-      const baseSfl = unitToSfl(baseResult.unitsPerDay, priceProduct, p2pPrices);
-
-      // Boosted (all owned)
       const ownedEffects = catBoosts.filter(b => b.has).flatMap(b => getEffectsForCategory(b, catId));
-      const boostedResult = applyBoosts(catId, product, capacity, ownedEffects);
-      const boostedSfl = unitToSfl(boostedResult.unitsPerDay, priceProduct, p2pPrices);
-      const delta = boostedSfl - baseSfl;
 
       if (n === 0 && catId !== "fishing") {
         return `<div style="padding:8px 12px;font-size:10px;color:var(--text-dim)">No capacity detected on farm.</div>`;
       }
 
-      // Unit label
       const unitLabels = {
         crops: "plots", fruits: "patches", chickens: "chickens", cows: "cows",
         sheep: "sheep", bees: "hives", flowers: "beds", stone: "rocks",
@@ -5436,24 +5501,66 @@
 
       let h = `<div style="padding:8px 12px;font-size:9px;color:var(--text-secondary);line-height:1.8;border-bottom:1px solid var(--border-dark)">`;
 
-      // Base calculation
-      const cyclesPerDay = baseCycleSec > 0 ? 86400 / baseCycleSec : 0;
-      h += `<div style="color:var(--lily);font-size:10px;margin-bottom:2px"><strong>📊 BASE PRODUCTION</strong></div>`;
-      h += `<div>${n} ${unitLabel} × ${fmtSec(baseCycleSec)} cycle = <strong>${cyclesPerDay.toFixed(2)} cycles/day</strong></div>`;
-      h += `<div>${cyclesPerDay.toFixed(2)} cycles × ${baseYield} yield × ${n} ${unitLabel} = <strong>${baseResult.unitsPerDay.toFixed(2)} ${priceProduct}/day</strong></div>`;
-      h += `<div>P2P price: ${price.toFixed(6)} SFL/${priceProduct}</div>`;
-      h += `<div>${baseResult.unitsPerDay.toFixed(2)} × ${price.toFixed(6)} = <strong style="color:var(--sunpetal)">${baseSfl.toFixed(4)} SFL/day</strong></div>`;
+      // Animal categories: show per-product breakdown
+      if (isAnimalCat(catId)) {
+        const animal = getAnimalData(catId);
+        const baseCycleSec = animal.cycleSec;
+        const cyclesPerDay = 86400 / baseCycleSec;
 
-      // Boosted calculation
-      if (ownedEffects.length > 0) {
-        const bCyclesPerDay = boostedResult.effectiveCycle > 0 ? 86400 / boostedResult.effectiveCycle : 0;
-        const bOutputPerCycle = baseYield * boostedResult.yieldMult + boostedResult.yieldFlat;
-        h += `<div style="color:var(--lily);font-size:10px;margin-top:6px;margin-bottom:2px"><strong>⚡ BOOSTED PRODUCTION</strong></div>`;
-        h += `<div>Speed: ×${boostedResult.speedMult.toFixed(3)} → ${fmtSec(boostedResult.effectiveCycle)} cycle → <strong>${bCyclesPerDay.toFixed(2)} cycles/day</strong></div>`;
-        h += `<div>Yield: ×${boostedResult.yieldMult.toFixed(3)} ${boostedResult.yieldFlat !== 0 ? `+ ${boostedResult.yieldFlat.toFixed(2)} flat` : ""} → <strong>${bOutputPerCycle.toFixed(2)} per cycle</strong></div>`;
-        h += `<div>${bCyclesPerDay.toFixed(2)} × ${bOutputPerCycle.toFixed(2)} × ${n} = <strong>${boostedResult.unitsPerDay.toFixed(2)} ${priceProduct}/day</strong></div>`;
-        h += `<div>${boostedResult.unitsPerDay.toFixed(2)} × ${price.toFixed(6)} = <strong style="color:var(--green)">${boostedSfl.toFixed(4)} SFL/day</strong>`;
-        h += ` <span style="color:var(--sunpetal)">(+${delta.toFixed(4)} | +${baseSfl > 0 ? ((delta / baseSfl) * 100).toFixed(0) : "∞"}%)</span></div>`;
+        // BASE
+        h += `<div style="color:var(--lily);font-size:10px;margin-bottom:2px"><strong>📊 BASE PRODUCTION</strong></div>`;
+        h += `<div>${n} ${unitLabel} × ${fmtSec(baseCycleSec)} cycle = <strong>${cyclesPerDay.toFixed(2)} cycles/day</strong></div>`;
+        const baseInfo = getAnimalCatSfl(catId, capacity, [], p2pPrices);
+        for (const bp of baseInfo.breakdown) {
+          const price = p2pPrices[bp.product] || 0;
+          h += `<div style="padding-left:8px">${bp.product}: ${n} × ${cyclesPerDay.toFixed(2)} × 1 = ${bp.unitsPerDay.toFixed(2)}/day × ${price.toFixed(6)} = <strong>${bp.sfl.toFixed(4)} SFL/day</strong></div>`;
+        }
+        h += `<div>TOTAL: <strong style="color:var(--sunpetal)">${baseInfo.totalSfl.toFixed(4)} SFL/day</strong></div>`;
+
+        // BOOSTED
+        if (ownedEffects.length > 0) {
+          const boostedInfo = getAnimalCatSfl(catId, capacity, ownedEffects, p2pPrices);
+          const delta = boostedInfo.totalSfl - baseInfo.totalSfl;
+          h += `<div style="color:var(--lily);font-size:10px;margin-top:6px;margin-bottom:2px"><strong>⚡ BOOSTED PRODUCTION</strong></div>`;
+          for (const bp of boostedInfo.breakdown) {
+            const price = p2pPrices[bp.product] || 0;
+            const bCyclesPerDay = bp.effectiveCycle > 0 ? 86400 / bp.effectiveCycle : 0;
+            const bOutput = 1 * bp.yieldMult + bp.yieldFlat;
+            h += `<div style="padding-left:8px">${bp.product}: ×${bp.speedMult.toFixed(3)} → ${fmtSec(bp.effectiveCycle)} (${bCyclesPerDay.toFixed(2)}/day) | yield ×${bp.yieldMult.toFixed(3)}${bp.yieldFlat ? ` +${bp.yieldFlat.toFixed(2)}` : ""} → ${bp.unitsPerDay.toFixed(2)}/day × ${price.toFixed(6)} = <strong>${bp.sfl.toFixed(4)} SFL/day</strong></div>`;
+          }
+          h += `<div>TOTAL: <strong style="color:var(--green)">${boostedInfo.totalSfl.toFixed(4)} SFL/day</strong>`;
+          h += ` <span style="color:var(--sunpetal)">(+${delta.toFixed(4)} | +${baseInfo.totalSfl > 0 ? ((delta / baseInfo.totalSfl) * 100).toFixed(0) : "∞"}%)</span></div>`;
+        }
+      } else {
+        // Non-animal: original single-product breakdown
+        const priceProduct = getPriceProduct(catId, product);
+        const price = p2pPrices[priceProduct] || 0;
+        const baseCycleSec = getCycleSec(catId, product);
+        const baseYield = getBaseYield(catId);
+        const baseResult = applyBoosts(catId, product, capacity, []);
+        const baseSfl = unitToSfl(baseResult.unitsPerDay, priceProduct, p2pPrices);
+
+        const boostedResult = applyBoosts(catId, product, capacity, ownedEffects);
+        const boostedSfl = unitToSfl(boostedResult.unitsPerDay, priceProduct, p2pPrices);
+        const delta = boostedSfl - baseSfl;
+
+        const cyclesPerDay = baseCycleSec > 0 ? 86400 / baseCycleSec : 0;
+        h += `<div style="color:var(--lily);font-size:10px;margin-bottom:2px"><strong>📊 BASE PRODUCTION</strong></div>`;
+        h += `<div>${n} ${unitLabel} × ${fmtSec(baseCycleSec)} cycle = <strong>${cyclesPerDay.toFixed(2)} cycles/day</strong></div>`;
+        h += `<div>${cyclesPerDay.toFixed(2)} cycles × ${baseYield} yield × ${n} ${unitLabel} = <strong>${baseResult.unitsPerDay.toFixed(2)} ${priceProduct}/day</strong></div>`;
+        h += `<div>P2P price: ${price.toFixed(6)} SFL/${priceProduct}</div>`;
+        h += `<div>${baseResult.unitsPerDay.toFixed(2)} × ${price.toFixed(6)} = <strong style="color:var(--sunpetal)">${baseSfl.toFixed(4)} SFL/day</strong></div>`;
+
+        if (ownedEffects.length > 0) {
+          const bCyclesPerDay = boostedResult.effectiveCycle > 0 ? 86400 / boostedResult.effectiveCycle : 0;
+          const bOutputPerCycle = baseYield * boostedResult.yieldMult + boostedResult.yieldFlat;
+          h += `<div style="color:var(--lily);font-size:10px;margin-top:6px;margin-bottom:2px"><strong>⚡ BOOSTED PRODUCTION</strong></div>`;
+          h += `<div>Speed: ×${boostedResult.speedMult.toFixed(3)} → ${fmtSec(boostedResult.effectiveCycle)} cycle → <strong>${bCyclesPerDay.toFixed(2)} cycles/day</strong></div>`;
+          h += `<div>Yield: ×${boostedResult.yieldMult.toFixed(3)} ${boostedResult.yieldFlat !== 0 ? `+ ${boostedResult.yieldFlat.toFixed(2)} flat` : ""} → <strong>${bOutputPerCycle.toFixed(2)} per cycle</strong></div>`;
+          h += `<div>${bCyclesPerDay.toFixed(2)} × ${bOutputPerCycle.toFixed(2)} × ${n} = <strong>${boostedResult.unitsPerDay.toFixed(2)} ${priceProduct}/day</strong></div>`;
+          h += `<div>${boostedResult.unitsPerDay.toFixed(2)} × ${price.toFixed(6)} = <strong style="color:var(--green)">${boostedSfl.toFixed(4)} SFL/day</strong>`;
+          h += ` <span style="color:var(--sunpetal)">(+${delta.toFixed(4)} | +${baseSfl > 0 ? ((delta / baseSfl) * 100).toFixed(0) : "∞"}%)</span></div>`;
+        }
       }
 
       h += `</div>`;
@@ -5470,6 +5577,40 @@
       const catEffects = getEffectsForCategory(boostItem, catId);
       if (catEffects.length === 0) return { solo: 0, synergy: 0, roi: Infinity };
 
+      // For animals, sum across all products
+      if (isAnimalCat(catId)) {
+        const baseInfo = getAnimalCatSfl(catId, capacity, [], p2pPrices);
+        const soloInfo = getAnimalCatSfl(catId, capacity, catEffects, p2pPrices);
+        const solo = soloInfo.totalSfl - baseInfo.totalSfl;
+
+        const allEffects = [];
+        const allEffectsWithout = [];
+        for (const b of allCatBoosts) {
+          const eff = getEffectsForCategory(b, catId);
+          if (b.has) {
+            allEffects.push(...eff);
+            if (b.name !== boostItem.name) allEffectsWithout.push(...eff);
+          }
+        }
+
+        let synergy;
+        if (isOwned) {
+          const withAll = getAnimalCatSfl(catId, capacity, allEffects, p2pPrices);
+          const without = getAnimalCatSfl(catId, capacity, allEffectsWithout, p2pPrices);
+          synergy = withAll.totalSfl - without.totalSfl;
+        } else {
+          const ownedEffects = allCatBoosts.filter(b => b.has).flatMap(b => getEffectsForCategory(b, catId));
+          const withThis = [...ownedEffects, ...catEffects];
+          const withResult = getAnimalCatSfl(catId, capacity, withThis, p2pPrices);
+          const ownedResult = getAnimalCatSfl(catId, capacity, ownedEffects, p2pPrices);
+          synergy = withResult.totalSfl - ownedResult.totalSfl;
+        }
+
+        const roi = (boostItem.floor > 0 && synergy > 0) ? boostItem.floor / synergy : Infinity;
+        return { solo, synergy, roi };
+      }
+
+      // Non-animal categories: original logic
       const priceProduct = getPriceProduct(catId, product);
       const baseResult = applyBoosts(catId, product, capacity, []);
       const baseSfl = unitToSfl(baseResult.unitsPerDay, priceProduct, p2pPrices);
@@ -5568,48 +5709,80 @@
       h += `<hr style="border-color:var(--border-dark);margin:4px 0">`;
 
       if (POWER_CATEGORIES[catId]?.quantifiable && n > 0) {
-        h += `<div style="margin-bottom:4px"><strong>Farm:</strong> ${n} × ${escHTML(product)} (${formatSec(baseCycleSec)} grow | ${price.toFixed(6)} SFL)</div>`;
+        if (isAnimalCat(catId)) {
+          // Animal multi-product formula
+          const animal = getAnimalData(catId);
+          h += `<div style="margin-bottom:4px"><strong>Farm:</strong> ${n} ${catId} (${formatSec(animal.cycleSec)} cycle) → ${animal.products.join(" + ")}</div>`;
 
-        // Base production
-        const baseResult = applyBoosts(catId, product, capacity, []);
-        const baseSfl = unitToSfl(baseResult.unitsPerDay, priceProduct, p2pPrices);
-        h += `<div style="margin-bottom:4px"><strong>Base:</strong> ${baseResult.unitsPerDay.toFixed(2)} units/day = ${baseSfl.toFixed(4)} SFL/day</div>`;
+          const baseInfo = getAnimalCatSfl(catId, capacity, [], p2pPrices);
+          h += `<div style="margin-bottom:4px"><strong>Base:</strong> ${baseInfo.totalSfl.toFixed(4)} SFL/day (${baseInfo.breakdown.map(bp => `${bp.product}: ${bp.unitsPerDay.toFixed(1)}/day`).join(", ")})</div>`;
 
-        // Solo effect
-        const soloResult = applyBoosts(catId, product, capacity, catEffects);
-        const soloSfl = unitToSfl(soloResult.unitsPerDay, priceProduct, p2pPrices);
-        const soloDelta = soloSfl - baseSfl;
-        h += `<div style="margin-bottom:4px"><strong>Solo:</strong>`;
-        if (soloResult.speedMult !== 1) h += ` speed ×${soloResult.speedMult.toFixed(2)}`;
-        if (soloResult.yieldMult !== 1) h += ` yield ×${soloResult.yieldMult.toFixed(2)}`;
-        if (soloResult.yieldFlat) h += ` +${soloResult.yieldFlat.toFixed(2)}/cycle`;
-        h += ` → ${soloSfl.toFixed(4)} SFL/day (<span style="color:var(--green)">+${soloDelta.toFixed(4)}</span>)</div>`;
+          const soloInfo = getAnimalCatSfl(catId, capacity, catEffects, p2pPrices);
+          const soloDelta = soloInfo.totalSfl - baseInfo.totalSfl;
+          h += `<div style="margin-bottom:4px"><strong>Solo:</strong> ${soloInfo.totalSfl.toFixed(4)} SFL/day (<span style="color:var(--green)">+${soloDelta.toFixed(4)}</span>)</div>`;
 
-        // Synergy (marginal/with-all)
-        const ownedEffects = allCatBoosts.filter(b => b.has).flatMap(b => getEffectsForCategory(b, catId));
-        if (boostItem.has) {
-          const allResult = applyBoosts(catId, product, capacity, ownedEffects);
-          const withoutEffects = allCatBoosts.filter(b => b.has && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId));
-          const withoutResult = applyBoosts(catId, product, capacity, withoutEffects);
-          const allSfl = unitToSfl(allResult.unitsPerDay, priceProduct, p2pPrices);
-          const withoutSfl = unitToSfl(withoutResult.unitsPerDay, priceProduct, p2pPrices);
-          const marginal = allSfl - withoutSfl;
-          h += `<div style="margin-bottom:4px"><strong>Marginal (${ownedEffects.length} active effects):</strong> <span style="color:var(--green)">+${marginal.toFixed(4)} SFL/day</span></div>`;
-          if (boostItem.floor > 0 && marginal > 0) {
-            const roi = boostItem.floor / marginal;
-            h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${marginal.toFixed(4)} = <span style="color:var(--sunpetal)">${roi.toFixed(0)} days</span></div>`;
+          const ownedEffects = allCatBoosts.filter(b => b.has).flatMap(b => getEffectsForCategory(b, catId));
+          if (boostItem.has) {
+            const allInfo = getAnimalCatSfl(catId, capacity, ownedEffects, p2pPrices);
+            const withoutEffects = allCatBoosts.filter(b => b.has && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId));
+            const withoutInfo = getAnimalCatSfl(catId, capacity, withoutEffects, p2pPrices);
+            const marginal = allInfo.totalSfl - withoutInfo.totalSfl;
+            h += `<div style="margin-bottom:4px"><strong>Marginal (${ownedEffects.length} effects):</strong> <span style="color:var(--green)">+${marginal.toFixed(4)} SFL/day</span></div>`;
+            if (boostItem.floor > 0 && marginal > 0) {
+              h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${marginal.toFixed(4)} = <span style="color:var(--sunpetal)">${(boostItem.floor / marginal).toFixed(0)} days</span></div>`;
+            }
+          } else {
+            const withThis = [...ownedEffects, ...catEffects];
+            const withInfo = getAnimalCatSfl(catId, capacity, withThis, p2pPrices);
+            const ownedInfo = getAnimalCatSfl(catId, capacity, ownedEffects, p2pPrices);
+            const synergy = withInfo.totalSfl - ownedInfo.totalSfl;
+            h += `<div style="margin-bottom:4px"><strong>Synergy (with your boosts):</strong> <span style="color:var(--green)">+${synergy.toFixed(4)} SFL/day</span></div>`;
+            if (boostItem.floor > 0 && synergy > 0) {
+              h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${synergy.toFixed(4)} = <span style="color:var(--sunpetal)">${(boostItem.floor / synergy).toFixed(0)} days</span></div>`;
+            }
           }
         } else {
-          const withThis = [...ownedEffects, ...catEffects];
-          const withResult = applyBoosts(catId, product, capacity, withThis);
-          const ownedResult = applyBoosts(catId, product, capacity, ownedEffects);
-          const withSfl = unitToSfl(withResult.unitsPerDay, priceProduct, p2pPrices);
-          const ownedSfl = unitToSfl(ownedResult.unitsPerDay, priceProduct, p2pPrices);
-          const synergy = withSfl - ownedSfl;
-          h += `<div style="margin-bottom:4px"><strong>Synergy (with your boosts):</strong> <span style="color:var(--green)">+${synergy.toFixed(4)} SFL/day</span></div>`;
-          if (boostItem.floor > 0 && synergy > 0) {
-            const roi = boostItem.floor / synergy;
-            h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${synergy.toFixed(4)} = <span style="color:var(--sunpetal)">${roi.toFixed(0)} days</span></div>`;
+          // Non-animal formula (original)
+          h += `<div style="margin-bottom:4px"><strong>Farm:</strong> ${n} × ${escHTML(product)} (${formatSec(baseCycleSec)} grow | ${price.toFixed(6)} SFL)</div>`;
+
+          const baseResult = applyBoosts(catId, product, capacity, []);
+          const baseSfl = unitToSfl(baseResult.unitsPerDay, priceProduct, p2pPrices);
+          h += `<div style="margin-bottom:4px"><strong>Base:</strong> ${baseResult.unitsPerDay.toFixed(2)} units/day = ${baseSfl.toFixed(4)} SFL/day</div>`;
+
+          const soloResult = applyBoosts(catId, product, capacity, catEffects);
+          const soloSfl = unitToSfl(soloResult.unitsPerDay, priceProduct, p2pPrices);
+          const soloDelta = soloSfl - baseSfl;
+          h += `<div style="margin-bottom:4px"><strong>Solo:</strong>`;
+          if (soloResult.speedMult !== 1) h += ` speed ×${soloResult.speedMult.toFixed(2)}`;
+          if (soloResult.yieldMult !== 1) h += ` yield ×${soloResult.yieldMult.toFixed(2)}`;
+          if (soloResult.yieldFlat) h += ` +${soloResult.yieldFlat.toFixed(2)}/cycle`;
+          h += ` → ${soloSfl.toFixed(4)} SFL/day (<span style="color:var(--green)">+${soloDelta.toFixed(4)}</span>)</div>`;
+
+          const ownedEffects = allCatBoosts.filter(b => b.has).flatMap(b => getEffectsForCategory(b, catId));
+          if (boostItem.has) {
+            const allResult = applyBoosts(catId, product, capacity, ownedEffects);
+            const withoutEffects = allCatBoosts.filter(b => b.has && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId));
+            const withoutResult = applyBoosts(catId, product, capacity, withoutEffects);
+            const allSfl = unitToSfl(allResult.unitsPerDay, priceProduct, p2pPrices);
+            const withoutSfl = unitToSfl(withoutResult.unitsPerDay, priceProduct, p2pPrices);
+            const marginal = allSfl - withoutSfl;
+            h += `<div style="margin-bottom:4px"><strong>Marginal (${ownedEffects.length} active effects):</strong> <span style="color:var(--green)">+${marginal.toFixed(4)} SFL/day</span></div>`;
+            if (boostItem.floor > 0 && marginal > 0) {
+              const roi = boostItem.floor / marginal;
+              h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${marginal.toFixed(4)} = <span style="color:var(--sunpetal)">${roi.toFixed(0)} days</span></div>`;
+            }
+          } else {
+            const withThis = [...ownedEffects, ...catEffects];
+            const withResult = applyBoosts(catId, product, capacity, withThis);
+            const ownedResult = applyBoosts(catId, product, capacity, ownedEffects);
+            const withSfl = unitToSfl(withResult.unitsPerDay, priceProduct, p2pPrices);
+            const ownedSfl = unitToSfl(ownedResult.unitsPerDay, priceProduct, p2pPrices);
+            const synergy = withSfl - ownedSfl;
+            h += `<div style="margin-bottom:4px"><strong>Synergy (with your boosts):</strong> <span style="color:var(--green)">+${synergy.toFixed(4)} SFL/day</span></div>`;
+            if (boostItem.floor > 0 && synergy > 0) {
+              const roi = boostItem.floor / synergy;
+              h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${synergy.toFixed(4)} = <span style="color:var(--sunpetal)">${roi.toFixed(0)} days</span></div>`;
+            }
           }
         }
       } else if (n === 0 && POWER_CATEGORIES[catId]?.quantifiable) {
@@ -5777,13 +5950,22 @@
       for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
         if (!catDef.quantifiable) continue;
         const product = savedProducts[catId] || getDefaultProduct(catId);
-        const priceProduct = getPriceProduct(catId, product);
-        const baseResult = applyBoosts(catId, product, capacity, []);
-        const baseSfl = unitToSfl(baseResult.unitsPerDay, priceProduct, p2pPrices);
-
         const ownedEffects = catBoosts[catId].filter(b => b.has).flatMap(b => getEffectsForCategory(b, catId));
-        const boostedResult = applyBoosts(catId, product, capacity, ownedEffects);
-        const boostedSfl = unitToSfl(boostedResult.unitsPerDay, priceProduct, p2pPrices);
+
+        let baseSfl, boostedSfl;
+        if (isAnimalCat(catId)) {
+          // Multi-product: sum SFL across all animal products
+          const baseInfo = getAnimalCatSfl(catId, capacity, [], p2pPrices);
+          const boostedInfo = getAnimalCatSfl(catId, capacity, ownedEffects, p2pPrices);
+          baseSfl = baseInfo.totalSfl;
+          boostedSfl = boostedInfo.totalSfl;
+        } else {
+          const priceProduct = getPriceProduct(catId, product);
+          const baseResult = applyBoosts(catId, product, capacity, []);
+          baseSfl = unitToSfl(baseResult.unitsPerDay, priceProduct, p2pPrices);
+          const boostedResult = applyBoosts(catId, product, capacity, ownedEffects);
+          boostedSfl = unitToSfl(boostedResult.unitsPerDay, priceProduct, p2pPrices);
+        }
 
         totalBaseSfl += baseSfl;
         totalBoostedSfl += boostedSfl;
@@ -5852,7 +6034,7 @@
           const imgUrl = bb.boost.type !== "Skill" ? ITEM_ICON_BASE + encodeURIComponent(bb.boost.name) + ".png" : "";
           content += `<div class="power-bb-row">
             <span class="power-bb-rank">${i + 1}.</span>
-            ${imgUrl ? `<img class="power-bb-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">` : `<span style="width:20px"></span>`}
+            ${imgUrl ? `<img class="power-bb-img" src="${imgUrl}" onerror="imgFallback(this)" alt="">` : `<span style="width:20px"></span>`}
             <span class="power-bb-name">${escHTML(bb.boost.name)}</span>
             <span class="power-bb-cat">${escHTML(bb.catLabel)}</span>
             <span class="power-bb-sfl">+${bb.synergy.toFixed(2)}/day</span>
@@ -6034,7 +6216,7 @@
         : (b.floor > 0 ? `${b.floor.toFixed(0)} SFL` : "");
 
       return `<div class="power-boost-row ${isOwned ? "has-it" : "missing"}" onclick="togglePowerDetail(this,'${escHTML(b.name).replace(/'/g, "\\'")}','${catId}')">
-        ${imgUrl ? `<img class="power-boost-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">` : `<span class="power-boost-icon">🧠</span>`}
+        ${imgUrl ? `<img class="power-boost-img" src="${imgUrl}" onerror="imgFallback(this)" alt="">` : `<span class="power-boost-icon">🧠</span>`}
         <div class="power-boost-info">
           <div class="power-boost-name">${escHTML(b.name)} <span class="power-boost-type">${escHTML(typeLabel)}</span></div>
           <div class="power-boost-text">${escHTML(b.boost)}</div>
@@ -6054,7 +6236,7 @@
         ? `~${b.floor.toFixed(0)} SFL (${b.skillPoints}pt)`
         : (b.floor > 0 ? `${b.floor.toFixed(0)} SFL` : "");
       return `<div class="power-boost-row ${isOwned ? "has-it" : "missing"}" onclick="togglePowerDetail(this,'${escHTML(b.name).replace(/'/g, "\\'")}','qual')">
-        ${imgUrl ? `<img class="power-boost-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">` : `<span class="power-boost-icon">🧠</span>`}
+        ${imgUrl ? `<img class="power-boost-img" src="${imgUrl}" onerror="imgFallback(this)" alt="">` : `<span class="power-boost-icon">🧠</span>`}
         <div class="power-boost-info">
           <div class="power-boost-name">${escHTML(b.name)} <span class="power-boost-type">${escHTML(typeLabel)}</span></div>
           <div class="power-boost-text">${escHTML(b.boost)}</div>
