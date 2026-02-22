@@ -5147,6 +5147,16 @@
       return [...cats];
     }
 
+    // Sum effective base nodes accounting for merged nodes (tier/multiplier)
+    function sumMergedNodes(resourceObj) {
+      if (!resourceObj || typeof resourceObj !== "object") return 0;
+      let total = 0;
+      for (const node of Object.values(resourceObj)) {
+        total += node.multiplier || 1; // unmerged nodes have no multiplier field → count as 1
+      }
+      return total;
+    }
+
     function detectFarmCapacity(farm) {
       // Count animals from henHouse and barn structures
       let chickens = 0, cows = 0, sheep = 0;
@@ -5197,11 +5207,11 @@
         chickens, cows, sheep,
         bees: Object.keys(farm.beehives || {}).length,
         flowers: Object.keys(farm.flowers?.flowerBeds || {}).length,
-        stones: Object.keys(farm.stones || {}).length,
-        iron: Object.keys(farm.iron || {}).length,
-        gold: Object.keys(farm.gold || {}).length,
-        crimstones: Object.keys(farm.crimstones || {}).length,
-        trees: Object.keys(farm.trees || {}).length,
+        stones: sumMergedNodes(farm.stones),
+        iron: sumMergedNodes(farm.iron),
+        gold: sumMergedNodes(farm.gold),
+        crimstones: sumMergedNodes(farm.crimstones),
+        trees: sumMergedNodes(farm.trees),
       };
     }
 
@@ -5710,25 +5720,24 @@
         const boostText = skill.buff + (skill.debuff ? "\n" + skill.debuff : "");
         const effects = parseBoostEffects(boostText);
         const categories = classifyToCategories(effects);
-        // Add tree-based categories for skills that parser couldn't classify
-        const TREE_TO_CATS = {
-          "Animals": ["chickens", "cows", "sheep"],
-          "Crops": ["crops"],
-          "Fruit Patch": ["fruits"],
-          "Fishing": ["fishing"],
-          "Mining": ["stone", "iron", "gold", "crimstone"],
-          "Trees": ["trees"],
-          "Bees & Flowers": ["bees", "flowers"],
-          "Cooking": ["cooking"],
-        };
-        const treeCats = TREE_TO_CATS[skill.tree];
-        if (treeCats) {
-          for (const tc of treeCats) {
-            if (!categories.includes(tc)) categories.push(tc);
+        // Add tree-based categories ONLY for skills the parser couldn't classify (ended up as "other" only)
+        const hasOnlyOther = categories.length === 1 && categories[0] === "other";
+        if (hasOnlyOther) {
+          const TREE_TO_CATS = {
+            "Animals": ["chickens", "cows", "sheep"],
+            "Crops": ["crops"],
+            "Fruit Patch": ["fruits"],
+            "Fishing": ["fishing"],
+            "Mining": ["stone", "iron", "gold", "crimstone"],
+            "Trees": ["trees"],
+            "Bees & Flowers": ["bees", "flowers"],
+            "Cooking": ["cooking"],
+          };
+          const treeCats = TREE_TO_CATS[skill.tree];
+          if (treeCats) {
+            categories.length = 0; // clear "other"
+            categories.push(...treeCats);
           }
-          // Remove "other" if we now have real categories
-          const otherIdx = categories.indexOf("other");
-          if (otherIdx !== -1 && categories.length > 1) categories.splice(otherIdx, 1);
         }
         // Skill cost = skill points × SFL per skill point
         const skillFloor = skillCostInfo.sflPerPoint > 0 ? skill.points * skillCostInfo.sflPerPoint : 0;
