@@ -3064,7 +3064,6 @@
 
     function extractBeehiveDetails(beehives) {
       if (!beehives) return [];
-      console.log("RAW beehives:", JSON.stringify(beehives, null, 2));
       const hives = [];
       const now = Date.now();
 
@@ -3088,55 +3087,22 @@
         }, honeyProducedMs);
 
         const progressPct = Math.min(100, (currentProducedMs / DEFAULT_HONEY_PRODUCTION_TIME) * 100);
-        let honeyLeftMs = Math.max(0, DEFAULT_HONEY_PRODUCTION_TIME - currentProducedMs);
+        const honeyLeftMs = Math.max(0, DEFAULT_HONEY_PRODUCTION_TIME - currentProducedMs);
         let readyAt = now;
 
-        // Future simulation: trace through flower attach/detach events
+        // Current production speed
+        const currentSpeed = flowers.reduce((acc, flower) => {
+          const rate = flower.rate ?? 1;
+          return acc + ((toMs(flower.attachedAt || 0) <= now && toMs(flower.attachedUntil || 0) > now) ? rate : 0);
+        }, 0);
+
         if (honeyLeftMs > 0) {
-          const events = [];
-          flowers.forEach(flower => {
-            const rate = flower.rate ?? 1;
-            const rawStart = toMs(flower.attachedAt || 0);
-            const rawEnd = toMs(flower.attachedUntil || 0);
-            const start = Math.max(now, rawStart);
-            const end = rawEnd;
-            if (end > now) {
-              if (start > now) events.push({ t: start, delta: rate });
-              events.push({ t: end, delta: -rate });
-            }
-          });
-          events.sort((a, b) => a.t - b.t || a.delta - b.delta);
-
-          // Current production speed
-          let speed = flowers.reduce((acc, flower) => {
-            const rate = flower.rate ?? 1;
-            return acc + ((toMs(flower.attachedAt || 0) <= now && toMs(flower.attachedUntil || 0) > now) ? rate : 0);
-          }, 0);
-
-          let prev = now;
-          let finished = false;
-
-          for (const ev of events) {
-            const dt = ev.t - prev;
-            if (dt > 0 && speed > 0) {
-              const produced = dt * speed;
-              if (produced >= honeyLeftMs) {
-                readyAt = prev + honeyLeftMs / speed;
-                finished = true;
-                break;
-              }
-              honeyLeftMs -= produced;
-            }
-            speed += ev.delta;
-            prev = ev.t;
+          if (currentSpeed > 0) {
+            // Optimistic ETA: assumes continuous production at current rate
+            readyAt = now + honeyLeftMs / currentSpeed;
+          } else {
+            readyAt = undefined; // no active flowers → idle
           }
-
-          if (!finished && speed > 0 && honeyLeftMs > 0) {
-            readyAt = prev + honeyLeftMs / speed;
-            finished = true;
-          }
-
-          if (!finished) readyAt = undefined; // stalled — no active flowers
         }
 
         hives.push({
@@ -3144,7 +3110,7 @@
           readyAt: honeyLeftMs <= 0 ? now : readyAt,
           progressPct,
           hasSwarm: hive.swarm || false,
-          stalled: readyAt === undefined,
+          idle: readyAt === undefined,
         });
       }
 
@@ -3965,14 +3931,14 @@
               <div style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:1.125rem;opacity:0.3">🍯</div>
               <div class="growing-bed-info"><div class="growing-bed-name" style="color:var(--text-dim)">Empty</div></div>
             </div>`;
-          } else if (hive.stalled) {
+          } else if (hive.idle) {
             html += `<div class="growing-bed">
               <img class="growing-bed-img" src="${getItemIcon("Honey")}" onerror="this.style.display='none'" alt="">
               <div class="growing-bed-info">
                 <div class="growing-bed-name">Hive #${hive.id.slice(-3)}</div>
                 <div class="growing-bed-detail">${Math.round(hive.progressPct)}% full${hive.hasSwarm ? ' · SWARM' : ''}</div>
               </div>
-              <div class="growing-bed-time" style="color:var(--text-dim)">Stalled</div>
+              <div class="growing-bed-time" style="color:var(--text-dim)">No flower</div>
             </div>`;
           } else {
             const diff = hive.readyAt - now;
