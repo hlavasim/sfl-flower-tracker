@@ -4,7 +4,7 @@ export default async function handler(req, res) {
   const { farm, page } = req.query;
   if (!farm || !page) return res.status(400).json({ error: "Missing ?farm= or ?page=" });
 
-  const validPages = ["hub", "flowers", "dolls", "crustaceans"];
+  const validPages = ["hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power"];
   if (!validPages.includes(page)) return res.status(400).json({ error: "Invalid page" });
 
   const apiUrl = process.env.KV_REST_API_URL;
