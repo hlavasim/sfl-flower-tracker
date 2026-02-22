@@ -1,96 +1,173 @@
 # SFL Collection Tracker
 
-A pixel-art collection tracker for [Sunflower Land](https://sunflower-land.com/) — track your flowers, dolls, and crustaceans progress.
+A pixel-art collection tracker for [Sunflower Land](https://sunflower-land.com/).
 
 **Live:** [sunflower.sajmonium.quest](https://sunflower.sajmonium.quest)
 
 ## Features
 
-### Flower Tracker
-- All 51 flower types with dependency chains
-- Auto-detected grow time boosts (Flower Crown, Moth Shrine, Flower Fox, Blossom Hourglass, Blooming Boost, Flower Power, Flowery Abode)
-- Currently Growing panel with live countdown timers
-- Petal Blessed cooldown tracking (incl. Luna's Crescent half-cooldown)
-- Clickable rows to expand full dependency chains
-- Seed group sections (Sunpetal, Bloom, Seasonal, Lily) with estimated completion time
-
-### Dolls Tracker
-- 24 dolls with ingredient requirements
-- Configurable tracking (choose which dolls to track)
-- Currently Crafting display from crafting box
-- Ingredient breakdown with have/need counts
-
-### Crustaceans Tracker
-- 16 crustaceans in Crab Pot (4h) and Mariner Pot (8h) groups
-- Chum requirements with alternative options
-- Auto-detected trap count
-
-### General
-- Single-page app with `?page=` client-side routing (hub/flowers/dolls/crustaceans)
-- API key stored securely in localStorage (never in URL)
-- Mobile-friendly responsive design
-- Pixel-art UI theme
-
-## Setup
-
-1. Get your **API Key** from the game: `Settings > General > API Key`
-2. Get your **Farm ID** from the game: `Settings > Farm ID`
-3. Visit [sunflower.sajmonium.quest](https://sunflower.sajmonium.quest), enter your details, click LOAD
-4. Bookmark the page — Farm ID and settings are saved in the URL, API key in your browser's localStorage
+- **Flower Tracker** — 51 flowers, dependency chains, grow planner, boost detection, Petal Blessed tracking
+- **Dolls Tracker** — 24 dolls, configurable tracking, ingredient breakdown
+- **Crustaceans Tracker** — Crab Pot / Mariner Pot, chum requirements
+- **Bumpkin XP Calculator** — recipes, cooking boosts, days to level 200
+- **Treasury** — farm value in SFL/USD/BTC, 5 categories, pie chart
+- **Power Analyzer** — all boost NFTs, ROI calculation, owned vs missing
+- **Sales Tracker** — active listings, offers, price comparison
 
 ## Architecture
 
 ```
-flowers.html      ← source file (single-file app, ~2500 lines)
-index.html        ← deploy copy (identical to flowers.html)
-api/proxy.js      ← Vercel serverless function (CORS proxy)
-vercel.json       ← Vercel routing config
+flowers.html          <- source file (single-file app)
+index.html            <- deploy copy (= flowers.html)
+api/proxy.js          <- Vercel serverless CORS proxy + Redis caching
+api/track.js          <- Usage tracking (Upstash Redis)
+api/stats.js          <- Stats endpoint
+build_image_map.js    <- Script to regenerate ITEM_IMAGE_MAP (see below)
 ```
 
-### Why a CORS proxy?
-
-The SFL API (`api.sunflower-land.com`) requires an `x-api-key` header but doesn't support CORS. Free CORS proxies (corsproxy.io, allorigins.win) can't forward custom headers. The `/api/proxy` endpoint accepts `?url=` and `?key=` params and forwards the key as an `x-api-key` header server-side.
-
-### Key technical details
-
-- **SFL API:** `https://api.sunflower-land.com/community/farms/{id}` — requires `x-api-key` header (401 without)
-- **Flower dependency graph:** circular dependency Red Cosmos ↔ Yellow Daffodil handled with a `visiting` Set
-- **Boost detection:** reads `farm.bumpkin.equipped` (wearables), `farm.collectibles` + `farm.home.collectibles` (collectibles), `farm.bumpkin.skills` (skills); temp collectibles check placement time + duration
-- **Seed times:** `baseSeconds × boostMultiplier` — boosts are multiplicative (e.g. Flower Crown ×0.5, Flower Fox ×0.9 → combined ×0.45)
-- **Petal Blessed:** reads `farm.bumpkin.previousPowerUseAt["Petal Blessed"]`, 96h cooldown (48h with Luna's Crescent)
-- **Doll tracking config:** stored in localStorage (`sfl_tracked_dolls`)
-
-## Development
-
-All app code lives in `flowers.html`. Edit that file, then:
+## Deploy
 
 ```bash
-# Copy source to deploy files
 cp flowers.html index.html
-
-# Deploy to Vercel
-npx vercel --yes --prod
-
-# Commit and push
+npx vercel --yes         # preview
+npx vercel --yes --prod  # production
 git add -A && git commit -m "description" && git push
 ```
 
-## Deployment
+---
 
-Hosted on [Vercel](https://vercel.com/) with custom domain `sunflower.sajmonium.quest`.
+## Item Image Map — Refresh Procedure
 
-The Vercel project expects:
-- `index.html` at root (the app)
-- `api/proxy.js` (serverless function for CORS proxy)
-- `vercel.json` (rewrite rules)
+All item images are sourced from the **official sunflower-land GitHub repo** (`src/assets/`), not from sfl.world (which returns placeholder question marks for many items).
 
-## Bugs & Feedback
+The app contains `ITEM_IMAGE_MAP` (~1070 entries) mapping item names to raw GitHub URLs:
+```
+https://raw.githubusercontent.com/sunflower-land/sunflower-land/main/src/assets/sfts/easter/easter_bunny.gif
+```
 
-[Open an issue](https://github.com/hlavasim/sfl-flower-tracker/issues)
+### When to refresh
+
+When the game adds new collectibles, wearables, flowers, or other items and their images appear in the [sunflower-land repo assets](https://github.com/sunflower-land/sunflower-land/tree/main/src/assets).
+
+### Step 1: Crawl the full asset tree
+
+```bash
+curl -s "https://api.github.com/repos/sunflower-land/sunflower-land/git/trees/main?recursive=1" \
+  -H "Accept: application/vnd.github.v3+json" | \
+  python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for item in data.get('tree', []):
+    p = item['path']
+    if p.startswith('src/assets/') and item['type'] == 'blob':
+        print(p)
+" > all_github_assets.txt
+```
+
+This gives ~2290 files across `sfts/`, `flowers/`, `fish/`, `food/`, `wearables/`, etc.
+
+### Step 2: Get the authoritative name-to-file mapping
+
+The game source `images.ts` has the official mapping:
+
+```bash
+curl -sL "https://raw.githubusercontent.com/sunflower-land/sunflower-land/main/src/features/game/types/images.ts" \
+  > images_ts_raw.txt
+```
+
+Key patterns in this file:
+- **Imports:** `import easterBunny from "assets/sfts/easter/easter_bunny.gif"`
+- **Mapping:** `"Easter Bunny": { image: easterBunny, ... }`
+
+### Step 3: Build the map
+
+1. Parse all `import` statements from `images.ts` -> build `variableName -> filePath` map
+2. Parse all `ITEM_DETAILS` entries -> build `"Item Name" -> variableName` map
+3. Combine: `"Item Name" -> filePath` -> full GitHub raw URL
+4. For items NOT in `images.ts`, try filename heuristics:
+   - `"Red Pansy"` -> `flowers/red_pansy.webp`
+   - `"Angler Doll"` -> `sfts/dolls/angler_doll.webp`
+   - Wearables: use NFT ID -> `wearables/{id}.webp`
+5. Verify all URLs: `curl -sI {url}` (check 200 vs 404)
+
+### Step 4: Replace in flowers.html
+
+Find the `const ITEM_IMAGE_MAP = {` block and replace with the new entries:
+
+```javascript
+const GITHUB_ASSETS = "https://raw.githubusercontent.com/sunflower-land/sunflower-land/main/src/assets";
+const ITEM_IMAGE_MAP = {
+  "Item Name": GITHUB_ASSETS+"/path/to/file.webp",
+  ...
+};
+```
+
+Items not in the map fall back to `sfl.world/img/source/{name}.png` via `getItemIcon()`.
+
+### Step 5: Deploy
+
+```bash
+cp flowers.html index.html
+npx vercel --yes         # preview first, verify
+npx vercel --yes --prod  # then production
+```
+
+### Asset directory structure
+
+```
+src/assets/
+  animals/chickens/    <- chicken boost NFTs (speed_chicken.webp, etc.)
+  crops/{name}/        <- crop sprites (proc_sprite.png only)
+  decorations/         <- lanterns, banners, tiles
+  fish/                <- fish images
+  flowers/             <- all flower + seed images (.webp)
+  food/                <- cooked food + cakes
+  fruit/{name}/        <- fruit + seed images
+  icons/               <- UI icons, skill icons
+  resources/           <- gold_ore, iron_ore, honey, oil, etc.
+  sfts/                <- main collectibles directory
+    aoe/               <- area-of-effect items
+    bears/             <- bear collectibles
+    dolls/             <- all doll images
+    easter/            <- easter items
+    flags/             <- country flags
+    mom/               <- observatory, etc.
+  wearables/           <- by NFT ID: {id}.webp
+```
+
+### Naming conventions
+
+- **Collectibles:** lowercase_underscores: `flower_fox.webp`
+- **Wearables:** numeric NFT ID: `27.webp`, `501.webp`
+- **Flowers:** lowercase_underscores: `red_pansy.webp`
+- **Preferred format:** `.webp` > `.png` > `.gif`
+
+### Tricky mappings (name != simple filename conversion)
+
+| Item Name | Actual Path |
+|---|---|
+| Woody the Beaver | `sfts/beaver.gif` |
+| Foreman Beaver | `sfts/construction_beaver.gif` |
+| Undead Rooster | `animals/chickens/undead_chicken.webp` |
+| Easter Bunny | `sfts/easter/easter_bunny.gif` |
+| Super Star | `sfts/starfish_marvel.webp` |
+| Black Bearry | `sfts/black_bear.gif` |
+| Gnome | `decorations/scarlet.png` |
+| Goblin Crown | `sfts/goblin_crown.png` |
+| Astronaut Sheep | `sfts/sheep_astronaut.webp` |
+| Frozen Cow | `sfts/frozen_mutant_cow.webp` |
+| Longhorn Cowfish | `fish/cow_fish.webp` |
+| Poseidon | `sfts/poseidon_fish.webp` |
+
+---
+
+## Environment Variables (Vercel)
+
+- `SFL_API_KEY` — API key for sfl.world proxied requests
+- `KV_REST_API_URL` — Upstash Redis URL
+- `KV_REST_API_TOKEN` — Upstash Redis token
+- `STATS_SECRET` — Secret for stats endpoint
 
 ## Author
 
 Created by **0xStableFarmer** — Farm #155498
-
-If this tool helped you, consider sending a flower or some ETH:
-`0x5F10Ee6FB845785F06766b18C135CDaaf1776EEF` (ETH / Polygon / Base / Arbitrum)
