@@ -41,6 +41,7 @@ export default async function handler(req, res) {
         if (data.result) {
           res.setHeader("Content-Type", "application/json");
           res.setHeader("X-Cache", "HIT");
+          // data.result is a string — send as-is (it's valid JSON text)
           return res.status(200).send(data.result);
         }
       }
@@ -59,10 +60,11 @@ export default async function handler(req, res) {
     // Cache successful responses
     if (canCache && resp.ok) {
       try {
+        // Store raw JSON text — use text/plain to avoid double-encoding
         await fetch(`${apiUrl}/set/${encodeURIComponent(`cache:${url}`)}?EX=${CACHE_TTL}`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify(body),
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "text/plain" },
+          body: body,
         });
       } catch {}
     }

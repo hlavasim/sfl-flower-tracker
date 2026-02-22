@@ -2941,10 +2941,15 @@
         add(cb.item.collectible, 1);
       }
 
-      // Crustaceans: crabTraps
+      // Crustaceans: crabTraps (only count if trap is ready)
       const traps = farm.crabTraps?.trapSpots || {};
+      const nowMs = Date.now();
       for (const spot of Object.values(traps)) {
-        const caught = spot.waterTrap?.caught || {};
+        const wt = spot.waterTrap;
+        if (!wt) continue;
+        const readyAt = toMs(wt.readyAt || 0);
+        if (readyAt > nowMs) continue; // trap not ready yet
+        const caught = wt.caught || {};
         for (const [name, qty] of Object.entries(caught)) {
           add(name, qty);
         }
@@ -4047,20 +4052,48 @@
         <div class="progress-bar-outer"><div class="progress-bar-fill green" style="width:${pctComplete}%"></div></div>
       </div>`;
 
-      // Currently Trapping (caught, ready to collect)
-      const caughtItems = [];
+      // Currently Trapping — show ready + in-progress
+      const readyItems = [];
+      const trappingItems = [];
+      const nowMs = Date.now();
       for (const [id, spot] of Object.entries(trapSpots)) {
-        const caught = spot.waterTrap?.caught || {};
-        for (const [name, qty] of Object.entries(caught)) {
-          caughtItems.push({ id, name, qty });
+        const wt = spot.waterTrap;
+        if (!wt) continue;
+        const readyAt = toMs(wt.readyAt || 0);
+        const caught = wt.caught || {};
+        const names = Object.entries(caught);
+        if (names.length === 0) continue;
+        if (readyAt <= nowMs) {
+          for (const [name, qty] of names) readyItems.push({ id, name, qty });
+        } else {
+          for (const [name, qty] of names) trappingItems.push({ id, name, qty, readyAt });
         }
       }
 
-      if (caughtItems.length > 0) {
+      if (trappingItems.length > 0) {
+        html += `<div class="growing-section pixel-panel pixel-font">
+          <div class="growing-title">TRAPPING</div>
+          <div class="growing-grid">`;
+        for (const c of trappingItems) {
+          const diff = c.readyAt - nowMs;
+          const timeStr = diff > 3600000 ? `${(diff / 3600000).toFixed(1)}h` : `${Math.ceil(diff / 60000)}m`;
+          html += `<div class="growing-bed">
+            <div style="font-size:24px;flex-shrink:0">⏳</div>
+            <div class="growing-bed-info">
+              <div class="growing-bed-name">${escHTML(c.name)}</div>
+              <div class="growing-bed-detail">x${c.qty}</div>
+            </div>
+            <div class="growing-bed-time growing" data-ready="${c.readyAt}">${timeStr}</div>
+          </div>`;
+        }
+        html += `</div></div>`;
+      }
+
+      if (readyItems.length > 0) {
         html += `<div class="growing-section pixel-panel pixel-font">
           <div class="growing-title">READY TO COLLECT</div>
           <div class="growing-grid">`;
-        for (const c of caughtItems) {
+        for (const c of readyItems) {
           html += `<div class="growing-bed">
             <div style="font-size:24px;flex-shrink:0">🦀</div>
             <div class="growing-bed-info">
