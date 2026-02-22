@@ -2233,7 +2233,7 @@
     };
 
     // Faction shop items priced in Marks (from factionShop.ts)
-    // 1 Mark = 0.1 SFL (flower conversion rate)
+    // 100 Marks = 1 SFL (1 Mark = 0.01 SFL)
     const FACTION_MARK_PRICES = {
       // Wearables (faction variants: Goblin/Bumpkin/Sunflorian/Nightshade)
       "Crown": 210000,     // + requires Helmet (burned)
@@ -2259,7 +2259,7 @@
       }
       return 0;
     }
-    function marksToSfl(marks) { return marks / 10; }
+    function marksToSfl(marks) { return marks / 100; }
 
     // Crafted ingredient recipes — derive price from sub-ingredients
     const CRAFTED_INGREDIENT_RECIPES = {
@@ -7593,7 +7593,7 @@
         content += `<div class="pixel-panel" style="padding:8px 12px;margin-bottom:16px;font-size: 0.5625rem;border:2px solid var(--border-dark)">
           <div class="pixel-font" style="font-size: 0.625rem;color:var(--yellow);margin-bottom:6px">⚔️ FACTION MARKS PRICING</div>
           <div style="color:var(--text-secondary);line-height:1.6">
-            1 Mark = 0.1 ${sflIcon()} (flower conversion) · ${marksItems.length} faction items detected<br>
+            100 Marks = 1 ${sflIcon()} · ${marksItems.length} faction items detected<br>
             <span style="color:var(--text-dim)">Faction shop items use Marks-derived cost instead of NFT floor price for ROI calculations.</span>
           </div>
         </div>`;
