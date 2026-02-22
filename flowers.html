@@ -1473,7 +1473,7 @@
     //  CONSTANTS
     // ═══════════════════════════════════════
 
-    const DEFAULTS = { farm: "", key: "", limit: "5" };
+    const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
     const IMG_BASE = "https://sfl.world/img/flowers/";
     const PAGES = ["hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power"];
@@ -2284,7 +2284,7 @@
     //  GLOBALS
     // ═══════════════════════════════════════
 
-    let FARM_ID, API_KEY, LIMIT, FLOWER_BEDS, TRAP_COUNT;
+    let FARM_ID, LIMIT, FLOWER_BEDS, TRAP_COUNT;
     let lastInventory = null, lastInProgress = null;
     let cachedFarmData = null;
     let configExpanded = false;
@@ -2300,7 +2300,7 @@
       const page = p.get("page");
       if (page && PAGES.includes(page)) return page;
       const cfg = getConfig();
-      return (cfg.farm && cfg.key) ? "flowers" : "hub";
+      return cfg.farm ? "flowers" : "hub";
     }
 
     function navigateTo(page) {
@@ -2320,16 +2320,12 @@
     function migrateApiKey() {
       const p = new URLSearchParams(window.location.search);
       let changed = false;
-      const keyFromUrl = p.get("key");
-      if (keyFromUrl) {
-        localStorage.setItem("sfl_api_key", keyFromUrl);
-        p.delete("key");
-        changed = true;
+      // Clean up legacy URL params
+      for (const legacy of ["key", "sunpetal"]) {
+        if (p.has(legacy)) { p.delete(legacy); changed = true; }
       }
-      if (p.has("sunpetal")) {
-        p.delete("sunpetal");
-        changed = true;
-      }
+      // Clean up localStorage key (no longer needed)
+      localStorage.removeItem("sfl_api_key");
       if (changed) {
         const newUrl = window.location.pathname + (p.toString() ? "?" + p.toString() : "");
         history.replaceState(null, "", newUrl);
@@ -2340,32 +2336,29 @@
       const p = new URLSearchParams(window.location.search);
       return {
         farm: p.get("farm") || DEFAULTS.farm,
-        key: localStorage.getItem("sfl_api_key") || DEFAULTS.key,
         limit: parseInt(p.get("limit") || DEFAULTS.limit, 10) || 5,
       };
     }
 
-    function saveConfig(farm, key, limit) {
+    function saveConfig(farm, limit) {
       const p = new URLSearchParams(window.location.search);
       if (farm) p.set("farm", farm); else p.delete("farm");
       if (limit) p.set("limit", limit);
-      // Clean up legacy sunpetal param
+      // Clean up legacy params
       p.delete("sunpetal");
+      p.delete("key");
       // Preserve page param
       const page = p.get("page");
       if (!page) p.set("page", getPage());
-      // Key goes to localStorage only
-      if (key) localStorage.setItem("sfl_api_key", key);
       const newURL = window.location.pathname + "?" + p.toString();
       history.replaceState(null, "", newURL);
     }
 
     function applyConfig() {
       const farm = document.getElementById("cfg-farm").value.trim();
-      const key = document.getElementById("cfg-key").value.trim();
       const limit = document.getElementById("cfg-limit").value.trim();
-      if (!farm || !key) return;
-      saveConfig(farm, key, limit);
+      if (!farm) return;
+      saveConfig(farm, limit);
       cachedFarmData = null;
       configExpanded = false;
       main();
@@ -2420,22 +2413,12 @@
             <label class="pixel-font">FARM ID</label>
             <input id="cfg-farm" type="text" value="${escHTML(cfg.farm)}" placeholder="e.g. 155498">
           </div>
-          <div class="config-field">
-            <label class="pixel-font">API KEY</label>
-            <input id="cfg-key" type="password" value="${escHTML(cfg.key)}" placeholder="sfl.xxxxx.xxxxx">
-          </div>
           <div class="config-field small">
             <label class="pixel-font">LIMIT</label>
             <input id="cfg-limit" type="number" min="1" max="99" value="${cfg.limit}">
           </div>
           <button class="config-go" onclick="applyConfig()">LOAD</button>
         </div>`;
-
-      const keyInput = document.getElementById("cfg-key");
-      if (keyInput) {
-        keyInput.addEventListener("focus", () => keyInput.type = "text");
-        keyInput.addEventListener("blur", () => keyInput.type = "password");
-      }
     }
 
     function expandConfig() {
@@ -2539,7 +2522,7 @@
           { t: "new", text: "Dolls tracker with configurable tracking + ingredient breakdown" },
           { t: "new", text: "Crustaceans tracker — Crab Pot / Mariner Pot sections" },
           { t: "new", text: "Help modal with usage instructions" },
-          { t: "new", text: "API key stored in localStorage (improved security)" },
+          { t: "new", text: "No API key needed — just enter your Farm ID" },
         ]},
         { ver: "v1.3", items: [
           { t: "new", text: "Auto-detect flower beds from API" },
@@ -2577,22 +2560,18 @@
       el.style.display = "flex";
       el.innerHTML = `<div class="modal-content pixel-panel pixel-font">
         <h2>HOW TO USE</h2>
-        <h3>1. GET YOUR API KEY</h3>
-        <p>In the game: <b>Settings &gt; General &gt; API Key</b></p>
-        <h3>2. GET YOUR FARM ID</h3>
+        <h3>1. GET YOUR FARM ID</h3>
         <p>In the game: <b>Settings &gt; Farm ID</b></p>
-        <h3>3. ENTER YOUR DETAILS</h3>
+        <h3>2. ENTER YOUR FARM ID</h3>
         <p><b>Farm ID</b> - your farm number (e.g. 155498)<br>
-        <b>API Key</b> - starts with "sfl." (two dots)<br>
         <b>Limit</b> - target count per item (default: 5)</p>
         <h3>FLOWER BOOSTS</h3>
         <p>Flower grow time boosts are <b>auto-detected</b> from your farm data:<br>
         Flower Crown, Moth Shrine, Flower Fox,<br>
         Blossom Hourglass, Blooming Boost,<br>
         Flower Power, Flowery Abode</p>
-        <h3>4. BOOKMARK THIS PAGE</h3>
+        <h3>3. BOOKMARK THIS PAGE</h3>
         <p>Your Farm ID and settings are saved in the URL.<br>
-        Your API key is stored locally in your browser (not in the URL).<br>
         Bookmark this page for quick access!</p>
         <h3>TRACKERS</h3>
         <p><b>FLOWERS</b> - All flower types with dependency chains and Petal Blessed planning<br>
@@ -2970,12 +2949,12 @@
     }
 
     async function fetchFarmData() {
-      if (!FARM_ID || !API_KEY) {
-        throw new Error("Enter your Farm ID and API Key, then click LOAD");
+      if (!FARM_ID) {
+        throw new Error("Enter your Farm ID, then click LOAD");
       }
 
       const apiUrl = `https://api.sunflower-land.com/community/farms/${FARM_ID}`;
-      const proxyUrl = `/api/proxy?url=${encodeURIComponent(apiUrl)}&key=${encodeURIComponent(API_KEY)}`;
+      const proxyUrl = `/api/proxy?url=${encodeURIComponent(apiUrl)}`;
 
       let data, lastErr;
 
@@ -2985,19 +2964,10 @@
         data = await resp.json();
       } catch (proxyErr) {
         lastErr = proxyErr;
-        console.warn("Proxy fetch failed, trying direct...", proxyErr);
-        try {
-          const resp = await fetch(apiUrl, { headers: { "x-api-key": API_KEY } });
-          if (!resp.ok) throw new Error(`API ${resp.status}`);
-          data = await resp.json();
-          lastErr = null;
-        } catch (directErr) {
-          lastErr = directErr;
-          console.warn("Direct fetch also failed:", directErr);
-        }
+        console.warn("Proxy fetch failed:", proxyErr);
       }
 
-      if (!data) throw lastErr || new Error("All fetch attempts failed");
+      if (!data) throw lastErr || new Error("Failed to load farm data");
 
       const farm = data.farm || {};
       const inventory = farm.inventory || {};
@@ -3587,7 +3557,7 @@
 
       let html = `<div class="header pixel-panel pixel-font">
         <h1>SFL COLLECTION TRACKER</h1>
-        ${FARM_ID ? `<div class="farm-id">Farm #${escHTML(FARM_ID)} | Target: ${LIMIT} of each</div>` : `<div class="farm-id">Enter your Farm ID &amp; API Key to get started</div>`}
+        ${FARM_ID ? `<div class="farm-id">Farm #${escHTML(FARM_ID)} | Target: ${LIMIT} of each</div>` : `<div class="farm-id">Enter your Farm ID to get started</div>`}
       </div>`;
 
       html += `<div class="hub-cards">
@@ -4134,7 +4104,7 @@
         app.innerHTML = `<div class="error-screen pixel-panel pixel-font">
           <div class="icon">⚠️</div>
           <h2>No bumpkin data found</h2>
-          <p>Make sure your API key has the correct permissions.</p>
+          <p>Make sure your Farm ID is correct.</p>
         </div>`;
         return;
       }
@@ -5937,14 +5907,13 @@
       const page = getPage();
 
       FARM_ID = cfg.farm;
-      API_KEY = cfg.key;
       LIMIT = cfg.limit;
       FLOWER_BEDS = 4;
 
       renderNavBar(page);
       renderDonate();
 
-      if (!FARM_ID || !API_KEY) {
+      if (!FARM_ID) {
         renderConfigBar("hub");
         renderHub(null);
         return;
@@ -5994,13 +5963,13 @@
         fetch(`/api/track?farm=${FARM_ID}&page=${page}`).catch(() => {});
       } catch (err) {
         console.error(err);
-        const needsConfig = !FARM_ID || !API_KEY;
+        const needsConfig = !FARM_ID;
         app.innerHTML = `<div class="error-screen pixel-panel pixel-font">
           <div class="icon">${needsConfig ? "👆" : "⚠️"}</div>
-          <h2>${needsConfig ? "Enter your Farm ID & API Key above" : "Failed to load data"}</h2>
+          <h2>${needsConfig ? "Enter your Farm ID above" : "Failed to load data"}</h2>
           <p>${escHTML(err.message)}</p>
           ${needsConfig ? `<p style="font-size:10px;color:var(--text-dim)">
-            Get your API key at <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal)">sfl.world</a><br>
+            Enter your farm number to get started.<br>
             Your settings will be saved in the URL for bookmarking.
           </p>` : ""}
           <button class="refresh-btn" onclick="refresh()">RETRY</button>

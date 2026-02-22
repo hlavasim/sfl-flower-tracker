@@ -48,7 +48,9 @@ export default async function handler(req, res) {
   }
 
   const headers = {};
-  if (key) headers["x-api-key"] = key;
+  // Use client-provided key, or fall back to server-side env var
+  const apiKey = key || process.env.SFL_API_KEY;
+  if (apiKey) headers["x-api-key"] = apiKey;
 
   try {
     const resp = await fetch(url, { headers });
