@@ -217,6 +217,7 @@
     .seed-icon {
       width: 28px;
       height: 28px;
+      object-fit: contain;
       image-rendering: pixelated;
       filter: drop-shadow(1px 1px 0 #000);
     }
@@ -272,6 +273,7 @@
     .flower-img {
       width: 28px;
       height: 28px;
+      object-fit: contain;
       image-rendering: pixelated;
       filter: drop-shadow(1px 1px 0 rgba(0,0,0,0.6));
     }
@@ -301,6 +303,7 @@
     }
     .flower-chain .input-flower { color: var(--yellow); }
     .flower-chain .consumed-by { color: #c87d38; }
+    .inline-icon { width: 14px; height: 14px; object-fit: contain; image-rendering: pixelated; vertical-align: -2px; margin-right: 1px; }
 
     .flower-progress { min-width: 0; }
     .flower-bar-outer {
@@ -596,6 +599,7 @@
     .growing-bed-img {
       width: 28px;
       height: 28px;
+      object-fit: contain;
       image-rendering: pixelated;
       filter: drop-shadow(1px 1px 0 #000);
       flex-shrink: 0;
@@ -720,6 +724,7 @@
     .pb-bed-img {
       width: 28px;
       height: 28px;
+      object-fit: contain;
       image-rendering: pixelated;
       filter: drop-shadow(1px 1px 0 #000);
     }
@@ -1097,6 +1102,7 @@
     .treasury-item-row:nth-child(odd) { background: var(--bg-card-alt); }
     .treasury-item-img {
       width: 24px; height: 24px;
+      object-fit: contain;
       image-rendering: pixelated;
       filter: drop-shadow(1px 1px 0 #000);
     }
@@ -1158,6 +1164,7 @@
     .sales-listing:nth-child(odd) { background: var(--bg-card-alt); }
     .sales-listing-img {
       width: 28px; height: 28px;
+      object-fit: contain;
       image-rendering: pixelated;
       filter: drop-shadow(1px 1px 0 #000);
     }
@@ -1252,7 +1259,7 @@
     }
     .power-bb-row:hover { background: var(--bg-light); }
     .power-bb-rank { color: var(--sunpetal); width: 20px; font-weight: bold; }
-    .power-bb-img { width: 20px; height: 20px; image-rendering: pixelated; }
+    .power-bb-img { width: 20px; height: 20px; object-fit: contain; image-rendering: pixelated; }
     .power-bb-name { flex: 1; color: var(--text-primary); font-weight: bold; }
     .power-bb-cat { font-size: 8px; color: var(--text-dim); width: 60px; }
     .power-bb-sfl { color: var(--green); width: 70px; text-align: right; }
@@ -1305,6 +1312,7 @@
     .power-boost-row.missing { border-left: 3px solid var(--text-dim); opacity: 0.85; }
     .power-boost-img {
       width: 24px; height: 24px;
+      object-fit: contain;
       image-rendering: pixelated;
       filter: drop-shadow(1px 1px 0 #000);
     }
@@ -3126,15 +3134,15 @@
       const haveClass = have > 0 ? "chain-have" : "chain-need";
 
       let html = `<div class="chain-step">`;
-      html += `<span class="${haveClass}">${escHTML(name)}</span>`;
+      html += `<img class="inline-icon" src="${getItemIcon(name)}" onerror="this.style.display='none'" alt=""><span class="${haveClass}">${escHTML(name)}</span>`;
       html += ` <span style="color:var(--text-dim)">(have: ${have})</span>`;
-      html += ` = <span class="chain-seed">${sd.label} Seed</span>`;
+      html += ` = <img class="inline-icon" src="${getItemIcon(sd.label + ' Seed')}" onerror="this.style.display='none'" alt=""><span class="chain-seed">${sd.label} Seed</span>`;
 
       if (isFlowerInput(recipe.input)) {
-        html += ` + <span class="chain-flower">${escHTML(recipe.input)}</span>`;
+        html += ` + <img class="inline-icon" src="${getItemIcon(recipe.input)}" onerror="this.style.display='none'" alt=""><span class="chain-flower">${escHTML(recipe.input)}</span>`;
         html += buildChainHTML(recipe.input, inventory, inProgress, visited);
       } else {
-        html += ` + <span class="chain-crop">${escHTML(recipe.input)}</span> <span style="color:var(--text-dim)">(crop)</span>`;
+        html += ` + <img class="inline-icon" src="${getItemIcon(recipe.input)}" onerror="this.style.display='none'" alt=""><span class="chain-crop">${escHTML(recipe.input)}</span> <span style="color:var(--text-dim)">(crop)</span>`;
       }
       html += `</div>`;
       return html;
@@ -3156,13 +3164,13 @@
       if (!recipe) return;
 
       const sd = SEED_DATA[recipe.seed];
-      let html = `<strong>Recipe:</strong> <span class="chain-seed">${sd.label} Seed</span> + `;
+      let html = `<strong>Recipe:</strong> <img class="inline-icon" src="${getItemIcon(sd.label + ' Seed')}" onerror="this.style.display='none'" alt=""><span class="chain-seed">${sd.label} Seed</span> + `;
 
       if (isFlowerInput(recipe.input)) {
-        html += `<span class="chain-flower">${escHTML(recipe.input)}</span>`;
+        html += `<img class="inline-icon" src="${getItemIcon(recipe.input)}" onerror="this.style.display='none'" alt=""><span class="chain-flower">${escHTML(recipe.input)}</span>`;
         html += buildChainHTML(recipe.input, lastInventory, lastInProgress || {});
       } else {
-        html += `<span class="chain-crop">${escHTML(recipe.input)}</span> <span style="color:var(--text-dim)">(crop)</span>`;
+        html += `<img class="inline-icon" src="${getItemIcon(recipe.input)}" onerror="this.style.display='none'" alt=""><span class="chain-crop">${escHTML(recipe.input)}</span> <span style="color:var(--text-dim)">(crop)</span>`;
       }
 
       const detail = document.createElement("div");
@@ -3197,7 +3205,7 @@
         const have = getCount(lastInventory, ing.item);
         const ok = have >= ing.qty;
         html += `<div class="chain-step">
-          <span class="${ok ? "chain-have" : "chain-need"}">${escHTML(ing.item)}</span>
+          <img class="inline-icon" src="${getItemIcon(ing.item)}" onerror="this.style.display='none'" alt=""><span class="${ok ? "chain-have" : "chain-need"}">${escHTML(ing.item)}</span>
           x${ing.qty} <span style="color:var(--text-dim)">(have: ${have})</span>
           ${ok ? '<span style="color:var(--green)">OK</span>' : `<span style="color:var(--red)">need ${Math.max(0, ing.qty - have)} more</span>`}
         </div>`;
@@ -3230,7 +3238,7 @@
         const chumHave = getCount(lastInventory, recipe.chum);
         const ok = chumHave >= recipe.qty;
         html += `<div class="chain-step">
-          <strong>Chum:</strong> <span class="${ok ? "chain-have" : "chain-need"}">${escHTML(recipe.chum)}</span>
+          <strong>Chum:</strong> <img class="inline-icon" src="${getItemIcon(recipe.chum)}" onerror="this.style.display='none'" alt=""><span class="${ok ? "chain-have" : "chain-need"}">${escHTML(recipe.chum)}</span>
           x${recipe.qty} <span style="color:var(--text-dim)">(have: ${chumHave})</span>
           ${ok ? '<span style="color:var(--green)">OK</span>' : `<span style="color:var(--red)">need ${Math.max(0, recipe.qty - chumHave)} more</span>`}
         </div>`;
@@ -3264,14 +3272,14 @@
       if (!recipe) return;
 
       const sd = SEED_DATA[recipe.seed];
-      let html = `<strong>Recipe:</strong> <span class="chain-seed">${sd.label} Seed</span> + `;
+      let html = `<strong>Recipe:</strong> <img class="inline-icon" src="${getItemIcon(sd.label + ' Seed')}" onerror="this.style.display='none'" alt=""><span class="chain-seed">${sd.label} Seed</span> + `;
 
       if (isFlowerInput(recipe.input)) {
-        html += `<span class="chain-flower">${escHTML(recipe.input)}</span>`;
+        html += `<img class="inline-icon" src="${getItemIcon(recipe.input)}" onerror="this.style.display='none'" alt=""><span class="chain-flower">${escHTML(recipe.input)}</span>`;
         html += buildChainHTML(recipe.input, lastInventory, lastInProgress || {});
       } else {
         const cropHave = getCount(lastInventory, recipe.input);
-        html += `<span class="chain-crop">${escHTML(recipe.input)}</span> <span style="color:var(--text-dim)">(have: ${cropHave})</span>`;
+        html += `<img class="inline-icon" src="${getItemIcon(recipe.input)}" onerror="this.style.display='none'" alt=""><span class="chain-crop">${escHTML(recipe.input)}</span> <span style="color:var(--text-dim)">(have: ${cropHave})</span>`;
       }
 
       const detail = document.createElement("div");
@@ -3844,17 +3852,17 @@
             const inputData = flowerData[f.input];
             const avail = inputData ? inputData.have + inputData.pend : 0;
             const inputOk = avail > 0;
-            chainHTML += `<span style="color:${inputOk ? 'var(--green)' : 'var(--red)'}">${escHTML(f.input)}</span>`;
+            chainHTML += `<span style="color:${inputOk ? 'var(--green)' : 'var(--red)'}"><img class="inline-icon" src="${getItemIcon(f.input)}" onerror="this.style.display='none'" alt="">${escHTML(f.input)}</span>`;
             chainHTML += ` (${avail} avail)`;
           } else {
             const cropHave = getCount(inventory, f.input);
             const cropOk = cropHave > 0;
-            chainHTML += `<span style="color:${cropOk ? 'var(--green)' : 'var(--red)'}">${escHTML(f.input)}</span> (${cropHave} avail)`;
+            chainHTML += `<span style="color:${cropOk ? 'var(--green)' : 'var(--red)'}"><img class="inline-icon" src="${getItemIcon(f.input)}" onerror="this.style.display='none'" alt="">${escHTML(f.input)}</span> (${cropHave} avail)`;
           }
           if (f.consumedBy.length > 0) {
             const tags = f.consumedBy.map(c => {
               const cd = flowerData[c];
-              return `<span class="consumed-tag">${escHTML(c)} (x${cd ? cd.needed : "?"})</span>`;
+              return `<span class="consumed-tag"><img class="inline-icon" src="${getItemIcon(c)}" onerror="this.style.display='none'" alt="">${escHTML(c)} (x${cd ? cd.needed : "?"})</span>`;
             }).join("");
             chainHTML += ` <span class="consumed-by">used in</span>${tags}`;
           }
@@ -3988,7 +3996,7 @@
           ingredientHTML = d.ingredients.map(ing => {
             const have = getCount(inventory, ing.item);
             const ok = have >= ing.qty;
-            return `<span style="color:${ok ? 'var(--green)' : 'var(--red)'}">${escHTML(ing.item)} x${ing.qty}</span>`;
+            return `<span style="color:${ok ? 'var(--green)' : 'var(--red)'}"><img class="inline-icon" src="${getItemIcon(ing.item)}" onerror="this.style.display='none'" alt="">${escHTML(ing.item)} x${ing.qty}</span>`;
           }).join(", ");
         }
 
@@ -4155,8 +4163,12 @@
           if (d.chum) {
             const chumHave = getCount(inventory, d.chum);
             const ok = chumHave >= d.qty;
-            chumHTML = `<span style="color:${ok ? 'var(--green)' : 'var(--red)'}">${escHTML(d.chum)} x${d.qty}</span>`;
-            if (d.alt) chumHTML += ` <span style="color:var(--text-dim);font-size:10px">alt: ${escHTML(d.alt)}</span>`;
+            chumHTML = `<span style="color:${ok ? 'var(--green)' : 'var(--red)'}"><img class="inline-icon" src="${getItemIcon(d.chum)}" onerror="this.style.display='none'" alt="">${escHTML(d.chum)} x${d.qty}</span>`;
+            if (d.alt) {
+              const altMatch = d.alt.match(/^(.+?)\s*x(\d+)$/);
+              const altIcon = altMatch ? `<img class="inline-icon" src="${getItemIcon(altMatch[1])}" onerror="this.style.display='none'" alt="">` : "";
+              chumHTML += ` <span style="color:var(--text-dim);font-size:10px">alt: ${altIcon}${escHTML(d.alt)}</span>`;
+            }
           } else {
             chumHTML = `<span style="color:var(--text-dim)">No chum needed</span>`;
           }
@@ -5880,7 +5892,7 @@
       for (const item of top5) {
         const imgUrl = getItemIcon(item.name);
         topHTML += `<div class="treasury-cat-top-item">
-          <img src="${imgUrl}" onerror="this.style.display='none'" alt="" style="width:16px;height:16px;image-rendering:pixelated">
+          <img src="${imgUrl}" onerror="this.style.display='none'" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated">
           <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHTML(item.name)}</span>
           <span style="color:var(--sunpetal)">${formatSFL(item.total)}</span>
         </div>`;
