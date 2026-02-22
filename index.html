@@ -2066,20 +2066,40 @@
       "Composting Revamp":  { tree: "Compost", points: 3, tier: 3, buff: "+5 fertilisers", debuff: "-3 Worms" },
     };
 
-    // Approximate recipe ingredients for skill cost calculation (SFL cost per XP)
-    // Used to estimate "how much SFL does one skill point cost"
-    const SKILL_COST_RECIPES = [
-      { name: "Pumpkin Soup",        xp: 24,   ingredients: { Pumpkin: 10 } },
-      { name: "Bumpkin Broth",       xp: 48,   ingredients: { Carrot: 10, Cabbage: 5 } },
-      { name: "Boiled Eggs",         xp: 60,   ingredients: { Egg: 10 } },
-      { name: "Cauliflower Burger",  xp: 54,   ingredients: { Cauliflower: 15, Wheat: 5 } },
-      { name: "Kale Stew",           xp: 36,   ingredients: { Kale: 10 } },
-      { name: "Kale Omelette",       xp: 100,  ingredients: { Kale: 5, Egg: 12 } },
-      { name: "Sunflower Crunch",    xp: 100,  ingredients: { Sunflower: 300, Wheat: 10 } },
-      { name: "Pancakes",            xp: 240,  ingredients: { Wheat: 10, Egg: 10, Honey: 1 } },
-      { name: "Roast Veggies",       xp: 170,  ingredients: { Beetroot: 15, Parsnip: 10 } },
-      { name: "Club Sandwich",       xp: 170,  ingredients: { Sunflower: 100, Carrot: 25, Wheat: 5 } },
-    ];
+    // Recipe ingredients for skill cost calculation (SFL cost per XP)
+    // XP values come from COOKING_RECIPES_DATA at runtime; ingredients are approximate P2P costs
+    const RECIPE_INGREDIENTS = {
+      "Pumpkin Soup":        { Pumpkin: 10 },
+      "Bumpkin Broth":       { Carrot: 10, Cabbage: 5 },
+      "Boiled Eggs":         { Egg: 10 },
+      "Popcorn":             { Sunflower: 100, Corn: 5 },
+      "Kale Stew":           { Kale: 10 },
+      "Fried Tofu":          { Soybean: 50, Wheat: 5 },
+      "Kale Omelette":       { Kale: 5, Egg: 12 },
+      "Rice Bun":            { Rice: 5, Wheat: 10 },
+      "Antipasto":           { Olive: 5, Tomato: 5, Cheese: 2 },
+      "Pizza Margherita":    { Tomato: 20, Wheat: 20, Cheese: 5 },
+      "Sunflower Crunch":    { Sunflower: 300, Wheat: 10 },
+      "Cauliflower Burger":  { Cauliflower: 15, Wheat: 5 },
+      "Pancakes":            { Wheat: 10, Egg: 10, Honey: 1 },
+      "Roast Veggies":       { Beetroot: 15, Parsnip: 10 },
+      "Goblin's Treat":      { Pumpkin: 10, Radish: 20 },
+      "Club Sandwich":       { Sunflower: 100, Carrot: 25, Wheat: 5 },
+      "Bumpkin Roast":       { Parsnip: 20, Carrot: 20, Wheat: 10 },
+      "Spaghetti al Limone": { Lemon: 10, Wheat: 20, Egg: 5 },
+      "Caprese Salad":       { Tomato: 10, Olive: 5, Cheese: 3 },
+      "Steamed Red Rice":    { Rice: 10, Beetroot: 5 },
+      "Lemon Cheesecake":    { Lemon: 20, Wheat: 10, Egg: 10, Cheese: 5 },
+      "Honey Cake":          { Honey: 10, Wheat: 10, Egg: 5 },
+      "Honey Cheddar":       { Honey: 5, Milk: 5, Cheese: 3 },
+      "Blue Cheese":         { Milk: 10, Blueberry: 5 },
+      "Shroom Syrup":        { Honey: 3 },
+      "Grape Juice":         { Grape: 10 },
+      "Slow Juice":          { Olive: 10, Rice: 5, Grape: 5 },
+      "Apple Pie":           { Apple: 5, Wheat: 10, Egg: 5 },
+      "Cornbread":           { Corn: 20, Wheat: 10, Egg: 5 },
+      "Gumbo":               { Corn: 10, Eggplant: 10, Wheat: 5 },
+    };
 
     // Crop tier classification for "Basic/Medium/Advanced Crop" skill boosts
     const CROP_TIERS = {
@@ -2089,25 +2109,36 @@
     };
 
     // Calculate the SFL cost per skill point for current bumpkin
-    function calcSkillPointCost(bumpkin, p2pPrices) {
+    function calcSkillPointCost(bumpkin, p2pPrices, farm) {
       const xp = bumpkin?.experience || 0;
       const level = getBumpkinLevel(xp);
       if (level <= 1) return { sflPerPoint: 0, bestRecipe: null, level, totalXP: xp };
 
       const totalXP = BUMPKIN_XP_TABLE[level - 1] || 0;
 
-      // Find best recipe: highest XP per SFL of ingredients
+      // Detect cooking boosts to apply XP multipliers
+      const cookingBoosts = farm ? detectCookingBoosts(farm) : { xpBoosts: [], timeBoosts: [] };
+
+      // Find best recipe: highest boosted-XP per SFL of ingredients
       let bestRatio = 0, bestRecipe = null;
-      for (const recipe of SKILL_COST_RECIPES) {
+      for (const [recipeName, ingredients] of Object.entries(RECIPE_INGREDIENTS)) {
+        const recipeData = COOKING_RECIPES_DATA[recipeName];
+        if (!recipeData) continue;
+
+        // Calculate ingredient cost from P2P prices
         let cost = 0;
-        for (const [item, qty] of Object.entries(recipe.ingredients)) {
+        for (const [item, qty] of Object.entries(ingredients)) {
           cost += (p2pPrices[item] || 0) * qty;
         }
         if (cost <= 0) continue;
-        const ratio = recipe.xp / cost; // XP per SFL
+
+        // Apply cooking XP boosts
+        const boostedXP = computeFoodXP(recipeName, recipeData, recipeData.building, cookingBoosts);
+
+        const ratio = boostedXP / cost; // XP per SFL
         if (ratio > bestRatio) {
           bestRatio = ratio;
-          bestRecipe = { ...recipe, cost, ratio };
+          bestRecipe = { name: recipeName, xp: recipeData.xp, boostedXP: Math.round(boostedXP), cost, ratio, building: recipeData.building, ingredients };
         }
       }
 
@@ -2117,7 +2148,11 @@
       const totalSFL = totalXP / bestRatio;
       const sflPerLevel = totalSFL / level;
       // 1 level = 1 skill point
-      return { sflPerPoint: sflPerLevel, bestRecipe, level, totalXP, totalSFL, sflPerLevel };
+      const xpBoostNames = cookingBoosts.xpBoosts.filter(b =>
+        !b.buildings || b.buildings.includes(bestRecipe.building)
+      ).map(b => `${b.name} (×${b.multiplier})`);
+
+      return { sflPerPoint: sflPerLevel, bestRecipe, level, totalXP, totalSFL, sflPerLevel, xpBoostNames };
     }
 
     // Power category definitions
@@ -2187,12 +2222,18 @@
           const animalCats = { "Chicken": "chickens", "Cow": "cows", "Sheep": "sheep" };
           return { type: "speed_pct", value: parseFloat(m[1]), cat: animalCats[m[2]] || "other" };
         }},
-      // Generic animal time
-      { rx: /([+-]?\d+\.?\d*)%\s+Animal.*Time/i,
+      // Generic animal time / sleep
+      { rx: /([+-]?\d+\.?\d*)%\s+Animal\s+(?:sleep\s+)?time/i,
         fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "chickens", alsoApply: ["cows", "sheep"] }) },
       // Crop yield %
       { rx: /([+-]?\d+\.?\d*)%\s+Crop\s+Yield/i,
         fn: m => ({ type: "yield_pct", value: parseFloat(m[1]), cat: "crops" }) },
+      // Basic/Medium/Advanced Crop yield flat: "+0.1 Basic Crop yield"
+      { rx: /([+-]?\d+\.?\d*)\s+(Basic|Medium|Advanced)\s+Crop\s+yield/i,
+        fn: m => ({ type: "yield_flat", value: parseFloat(m[1]), cat: "crops", cropTier: m[2].toLowerCase() }) },
+      // Basic/Medium/Advanced Crop growth time
+      { rx: /([+-]?\d+\.?\d*)%\s+(Basic|Medium|Advanced)\s+Crop\s+(?:Growth|Growing)\s+Time/i,
+        fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "crops", cropTier: m[2].toLowerCase() }) },
       // Fruit yield %
       { rx: /([+-]?\d+\.?\d*)%\s+Fruit\s+Yield/i,
         fn: m => ({ type: "yield_pct", value: parseFloat(m[1]), cat: "fruits" }) },
@@ -2200,13 +2241,13 @@
       { rx: /([+-]?\d+\.?\d*)%\s+Animal\s+Yield/i,
         fn: m => ({ type: "yield_pct", value: parseFloat(m[1]), cat: "chickens", alsoApply: ["cows", "sheep"] }) },
       // Specific product yield %: "+10% Egg Yield" or "+10% Wood"
-      { rx: /([+-]?\d+\.?\d*)%\s+(Egg|Milk|Wool|Wood|Honey|Stone|Iron|Gold)/i,
+      { rx: /([+-]?\d+\.?\d*)%\s+(Egg|Milk|Wool|Merino Wool|Wood|Honey|Stone|Iron|Gold|Feather|Leather)\b/i,
         fn: m => {
           const cat = PRODUCT_TO_CATEGORY[m[2]] || "other";
           return { type: "yield_pct", value: parseFloat(m[1]), cat, product: m[2] };
         }},
-      // Flat yield: "+0.1 Stone", "+1 Egg"
-      { rx: /([+-]?\d+\.?\d*)\s+(Egg|Milk|Wool|Wood|Honey|Stone|Iron|Gold|Sunflower|Potato|Pumpkin|Carrot|Cabbage|Soybean|Beetroot|Cauliflower|Parsnip|Eggplant|Corn|Radish|Wheat|Kale|Turnip|Onion|Pepper|Zucchini|Yam|Broccoli|Artichoke|Barley|Apple|Blueberry|Orange|Banana|Lemon|Tomato|Grape|Rice|Olive)/i,
+      // Flat yield: "+0.1 Stone", "+1 Egg" (longer names first to prevent partial match)
+      { rx: /([+-]?\d+\.?\d*)\s+(Merino Wool|Eggplant|Cauliflower|Sunflower|Blueberry|Artichoke|Beetroot|Broccoli|Parsnip|Zucchini|Cabbage|Soybean|Pumpkin|Leather|Feather|Potato|Carrot|Turnip|Pepper|Barley|Banana|Orange|Tomato|Radish|Wheat|Olive|Onion|Apple|Lemon|Grape|Honey|Stone|Rice|Corn|Kale|Wood|Gold|Iron|Wool|Milk|Yam|Egg)\b/i,
         fn: m => {
           const cat = PRODUCT_TO_CATEGORY[m[2]] || "other";
           return { type: "yield_flat", value: parseFloat(m[1]), cat, product: m[2] };
@@ -5056,12 +5097,53 @@
     }
 
     function detectFarmCapacity(farm) {
+      // Count animals from henHouse and barn structures
+      let chickens = 0, cows = 0, sheep = 0;
+
+      // Hen House: farm.henHouse.animals OR farm.buildings["Hen House"][].animals
+      const henAnimals = farm.henHouse?.animals;
+      if (henAnimals && typeof henAnimals === "object") {
+        chickens = Object.keys(henAnimals).length;
+      }
+      if (chickens === 0) {
+        const henBuildings = farm.buildings?.["Hen House"] || [];
+        for (const b of henBuildings) {
+          chickens += Object.keys(b.animals || {}).length;
+        }
+      }
+
+      // Barn: farm.barn.animals OR farm.buildings["Barn"][].animals
+      const barnAnimals = farm.barn?.animals;
+      if (barnAnimals && typeof barnAnimals === "object") {
+        for (const a of Object.values(barnAnimals)) {
+          const t = (a.type || "").toLowerCase();
+          if (t === "cow") cows++;
+          else if (t === "sheep") sheep++;
+          else cows++; // default to cow if type unknown
+        }
+      }
+      if (cows === 0 && sheep === 0) {
+        const barnBuildings = farm.buildings?.["Barn"] || [];
+        for (const b of barnBuildings) {
+          for (const a of Object.values(b.animals || {})) {
+            const t = (a.type || "").toLowerCase();
+            if (t === "cow") cows++;
+            else if (t === "sheep") sheep++;
+            else cows++;
+          }
+        }
+      }
+
+      // Debug log for animal detection
+      console.log("[Power] Animal detection:", { chickens, cows, sheep,
+        henHouse: !!farm.henHouse, barn: !!farm.barn,
+        henBuildings: (farm.buildings?.["Hen House"] || []).length,
+        barnBuildings: (farm.buildings?.["Barn"] || []).length });
+
       return {
         crops: Object.keys(farm.crops || {}).length,
         fruitPatches: Object.keys(farm.fruitPatches || {}).length,
-        chickens: Object.keys(farm.chickens || {}).length || (farm.henHouse ? 10 : 0),
-        cows: Object.keys(farm.cows || {}).length,
-        sheep: Object.keys(farm.sheep || {}).length,
+        chickens, cows, sheep,
         bees: Object.keys(farm.beehives || {}).length,
         flowers: Object.keys(farm.flowers?.flowerBeds || {}).length,
         stones: Object.keys(farm.stones || {}).length,
@@ -5295,7 +5377,7 @@
         synergy = unitToSfl(withResult.unitsPerDay, priceProduct, p2pPrices) - unitToSfl(ownedResult.unitsPerDay, priceProduct, p2pPrices);
       }
 
-      const roi = (!isOwned && boostItem.floor > 0 && synergy > 0) ? boostItem.floor / synergy : Infinity;
+      const roi = (boostItem.floor > 0 && synergy > 0) ? boostItem.floor / synergy : Infinity;
 
       return { solo, synergy, roi };
     }
@@ -5344,11 +5426,12 @@
 
       // Skill cost breakdown
       if (boostItem.type === "Skill" && skillCostInfo && skillCostInfo.sflPerPoint > 0) {
+        const br = skillCostInfo.bestRecipe;
         h += `<hr style="border-color:var(--border-dark);margin:4px 0">`;
         h += `<div style="margin-bottom:2px;color:var(--lily)"><strong>Skill Cost Calculation:</strong></div>`;
         h += `<div>Bumpkin Level: ${skillCostInfo.level} → Total XP: ${(skillCostInfo.totalXP / 1e6).toFixed(1)}M</div>`;
-        h += `<div>Best recipe: ${escHTML(skillCostInfo.bestRecipe.name)} (${skillCostInfo.bestRecipe.xp} XP / ${skillCostInfo.bestRecipe.cost.toFixed(4)} SFL = ${skillCostInfo.bestRecipe.ratio.toFixed(0)} XP/SFL)</div>`;
-        h += `<div>Total SFL to reach lvl ${skillCostInfo.level}: ${(skillCostInfo.totalXP / skillCostInfo.bestRecipe.ratio).toFixed(0)} SFL</div>`;
+        h += `<div>Best recipe: ${escHTML(br.name)} (base ${br.xp} XP${br.boostedXP !== br.xp ? ` → ${br.boostedXP} XP boosted` : ""} / ${br.cost.toFixed(4)} SFL = ${br.ratio.toFixed(0)} XP/SFL)</div>`;
+        if (skillCostInfo.xpBoostNames?.length) h += `<div>XP boosts applied: ${escHTML(skillCostInfo.xpBoostNames.join(", "))}</div>`;
         h += `<div>Avg cost per level: ${skillCostInfo.sflPerLevel.toFixed(1)} SFL → <strong>1 skill point ≈ ${skillCostInfo.sflPerPoint.toFixed(1)} SFL</strong></div>`;
         h += `<div style="color:var(--sunpetal)">This skill (${boostItem.skillPoints}pt): <strong>${boostItem.skillPoints} × ${skillCostInfo.sflPerPoint.toFixed(1)} = ~${boostItem.floor.toFixed(0)} SFL</strong></div>`;
       }
@@ -5381,7 +5464,11 @@
           const allSfl = unitToSfl(allResult.unitsPerDay, priceProduct, p2pPrices);
           const withoutSfl = unitToSfl(withoutResult.unitsPerDay, priceProduct, p2pPrices);
           const marginal = allSfl - withoutSfl;
-          h += `<div><strong>Marginal (${ownedEffects.length} active effects):</strong> <span style="color:var(--green)">+${marginal.toFixed(4)} SFL/day</span></div>`;
+          h += `<div style="margin-bottom:4px"><strong>Marginal (${ownedEffects.length} active effects):</strong> <span style="color:var(--green)">+${marginal.toFixed(4)} SFL/day</span></div>`;
+          if (boostItem.floor > 0 && marginal > 0) {
+            const roi = boostItem.floor / marginal;
+            h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${marginal.toFixed(4)} = <span style="color:var(--sunpetal)">${roi.toFixed(0)} days</span></div>`;
+          }
         } else {
           const withThis = [...ownedEffects, ...catEffects];
           const withResult = applyBoosts(catId, product, capacity, withThis);
@@ -5492,7 +5579,7 @@
       }
 
       // Add skill boosts from full skill tree
-      const skillCostInfo = calcSkillPointCost(farm.bumpkin, p2pPrices);
+      const skillCostInfo = calcSkillPointCost(farm.bumpkin, p2pPrices, farm);
       for (const [skillName, skill] of Object.entries(SKILL_TREE_DATA)) {
         const has = skills[skillName] !== undefined;
         const boostText = skill.buff + (skill.debuff ? "\n" + skill.debuff : "");
@@ -5566,12 +5653,17 @@
 
       // Skill cost info panel
       if (skillCostInfo && skillCostInfo.sflPerPoint > 0) {
+        const br = skillCostInfo.bestRecipe;
+        const hasXpBoosts = skillCostInfo.xpBoostNames && skillCostInfo.xpBoostNames.length > 0;
         content += `<div class="pixel-panel" style="padding:8px 12px;margin-bottom:16px;font-size:9px;border:2px solid var(--border-dark)">
           <div class="pixel-font" style="font-size:10px;color:var(--lily);margin-bottom:6px">🧠 SKILL POINT COST ESTIMATE</div>
           <div style="color:var(--text-secondary);line-height:1.6">
             Bumpkin Lvl <strong>${skillCostInfo.level}</strong> → ${(skillCostInfo.totalXP / 1e6).toFixed(1)}M XP total<br>
-            Best recipe: <strong>${escHTML(skillCostInfo.bestRecipe.name)}</strong> (${skillCostInfo.bestRecipe.xp} XP for ${skillCostInfo.bestRecipe.cost.toFixed(4)} SFL = ${skillCostInfo.bestRecipe.ratio.toFixed(0)} XP/SFL)<br>
-            Total SFL to cook to lvl ${skillCostInfo.level}: ~${(skillCostInfo.totalSFL).toFixed(0)} SFL<br>
+            Best recipe: <strong>${escHTML(br.name)}</strong> (${escHTML(br.building)})
+            — base ${br.xp} XP${hasXpBoosts ? ` → <span style="color:var(--green)">${br.boostedXP} XP</span> with boosts` : ""}<br>
+            ${hasXpBoosts ? `XP boosts: ${escHTML(skillCostInfo.xpBoostNames.join(", "))}<br>` : ""}
+            Ingredients: ${Object.entries(br.ingredients).map(([k, v]) => `${v}× ${escHTML(k)}`).join(", ")} = ${br.cost.toFixed(4)} SFL<br>
+            Efficiency: <strong>${br.ratio.toFixed(0)} XP/SFL</strong> | Total SFL to lvl ${skillCostInfo.level}: ~${(skillCostInfo.totalSFL).toFixed(0)} SFL<br>
             <span style="color:var(--sunpetal);font-weight:bold">1 skill point ≈ ${skillCostInfo.sflPerPoint.toFixed(1)} SFL</span>
             <span style="color:var(--text-dim)"> (${skillCostInfo.sflPerLevel.toFixed(1)} SFL/level avg)</span>
           </div>
@@ -5740,7 +5832,7 @@
     function renderPowerBoostRow(b, catId, product, val, isOwned) {
       const imgUrl = b.type !== "Skill" ? ITEM_ICON_BASE + encodeURIComponent(b.name) + ".png" : "";
       const sflText = val.synergy !== 0 ? `${val.synergy > 0 ? "+" : ""}${val.synergy.toFixed(2)}/day` : "—";
-      const roiText = !isOwned && val.roi < Infinity ? `${val.roi.toFixed(0)}d` : "";
+      const roiText = val.roi < Infinity ? `${val.roi.toFixed(0)}d` : "";
       const typeLabel = b.type === "Skill" ? `Skill (${b.skillTree}, ${b.skillPoints}pt)` : b.type;
       const costLabel = b.type === "Skill" && b.floor > 0
         ? `~${b.floor.toFixed(0)} SFL (${b.skillPoints}pt)`
@@ -5755,7 +5847,7 @@
         <div class="power-boost-value">
           <div class="power-boost-sfl">${sflText}</div>
           ${roiText ? `<div class="power-boost-roi">${roiText} ROI</div>` : ""}
-          ${!isOwned && costLabel ? `<div class="power-boost-floor">${costLabel}</div>` : ""}
+          ${costLabel ? `<div class="power-boost-floor">${costLabel}</div>` : ""}
         </div>
       </div>`;
     }
