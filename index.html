@@ -2232,6 +2232,39 @@
       advanced: ["Eggplant", "Corn", "Onion", "Radish", "Wheat", "Turnip", "Kale", "Artichoke", "Barley"],
     };
 
+    // ── Bud boost data (from game source) ──
+    const BUD_TYPE_BOOSTS = {
+      "Plaza":     [{ cats: ["crops"], cropTier: "basic", value: 0.3, type: "yield_flat" }],
+      "Castle":    [{ cats: ["crops"], cropTier: "medium", value: 0.3, type: "yield_flat" }],
+      "Snow":      [{ cats: ["crops"], cropTier: "advanced", value: 0.3, type: "yield_flat" }],
+      "Woodlands": [{ cats: ["trees"], value: 0.2, type: "yield_flat" }],
+      "Cave":      [{ cats: ["stone", "iron", "gold", "crimstone"], value: 0.2, type: "yield_flat" }],
+      "Retreat":   [{ cats: ["chickens", "cows", "sheep"], value: 0.2, type: "yield_flat" }],
+      "Beach":     [{ cats: ["fruits"], value: 0.2, type: "yield_flat" }],
+      "Saphiro":   [{ cats: ["crops"], value: -10, type: "speed_pct" }],
+      "Sea":       [{ cats: ["fishing"], pct: 10, extra: 1, type: "chance" }],
+      "Port":      [], // +10% Fish XP only (non-monetary)
+    };
+    const BUD_STEM_BOOSTS = {
+      "3 Leaf Clover":  [{ cats: ["crops"], value: 0.5, type: "yield_flat" }],
+      "Basic Leaf":     [{ cats: ["crops"], cropTier: "basic", value: 0.2, type: "yield_flat" }],
+      "Sunflower":      [{ cats: ["crops"], cropTier: "basic", value: 0.2, type: "yield_flat" }],
+      "Magic Mushroom": [{ cats: ["crops"], value: 0.2, type: "yield_flat" }],
+      "Tulip":          [{ cats: ["crops"], value: 0.1, type: "yield_flat" }],
+      "Flower Crown":   [{ cats: ["fruits"], value: 0.2, type: "yield_flat" }],
+      "Rose":           [{ cats: ["fruits"], value: 0.1, type: "yield_flat" }],
+      "Pearl":          [{ cats: ["stone", "iron", "gold", "crimstone"], value: 0.2, type: "yield_flat" }],
+      "Diamond":        [{ cats: ["stone", "iron", "gold", "crimstone"], value: 0.2, type: "yield_flat" }],
+      "Ruby":           [{ cats: ["stone", "iron", "gold", "crimstone"], value: 0.1, type: "yield_flat" }],
+      "Gold Leaf":      [{ cats: ["trees"], value: 0.2, type: "yield_flat" }],
+      "Acorn":          [{ cats: ["trees"], value: 0.1, type: "yield_flat" }],
+      "Sea Creature":   [{ cats: ["fishing"], pct: 10, extra: 1, type: "chance" }],
+      "Seaweed":        [{ cats: ["fishing"], value: 0.1, type: "yield_flat" }],
+      "Hibiscus":       [{ cats: ["flowers"], value: 0.2, type: "yield_flat" }],
+      "Egg":            [{ cats: ["chickens", "cows", "sheep"], value: 0.1, type: "yield_flat" }],
+    };
+    const BUD_AURA_MULTIPLIERS = { "None": 1, "Basic": 1.05, "Green": 1.2, "Rare": 2, "Mythical": 5 };
+
     // Faction shop items priced in Marks (from factionShop.ts)
     // 100 Marks = 1 SFL (1 Mark = 0.01 SFL)
     const FACTION_MARK_PRICES = {
@@ -6902,6 +6935,125 @@
       return unitsPerDay * price;
     }
 
+    // ── Bud boost calculation ──
+    function budEffectApplies(eff, catId, product) {
+      if (!eff.cats.includes(catId)) return false;
+      if (eff.cropTier && catId === "crops") {
+        const tierCrops = CROP_TIERS[eff.cropTier];
+        if (tierCrops && !tierCrops.includes(product)) return false;
+      }
+      return true;
+    }
+
+    function calcBudSflPerDay(bud, capacity, p2pPrices, savedProducts) {
+      const typeEffects = BUD_TYPE_BOOSTS[bud.type] || [];
+      const stemEffects = BUD_STEM_BOOSTS[bud.stem] || [];
+      const aura = BUD_AURA_MULTIPLIERS[bud.aura] || 1;
+      const allEffects = [...typeEffects, ...stemEffects];
+      let totalSfl = 0;
+      const breakdown = [];
+
+      for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
+        if (!catDef.quantifiable) continue;
+
+        // Animals: iterate over all products (Egg+Feather, Milk+Leather, etc.)
+        if (isAnimalCat(catId)) {
+          const animal = getAnimalData(catId);
+          if (!animal) continue;
+          let catSfl = 0;
+          for (const prod of animal.products) {
+            const yieldVals = [];
+            for (const eff of allEffects) {
+              if (!budEffectApplies(eff, catId, prod)) continue;
+              if (eff.type === "yield_flat") yieldVals.push(eff.value);
+            }
+            const bestYield = yieldVals.length > 0 ? Math.max(...yieldVals) * aura : 0;
+            if (bestYield > 0) {
+              const n = getCapacityCount(catId, capacity);
+              const cycleSec = getCycleSec(catId, prod);
+              const price = p2pPrices[prod] || 0;
+              catSfl += bestYield * (86400 / cycleSec) * n * price;
+            }
+          }
+          if (catSfl > 0) {
+            totalSfl += catSfl;
+            breakdown.push({ catId, sflPerDay: catSfl });
+          }
+          continue;
+        }
+
+        const product = savedProducts[catId] || getDefaultProduct(catId);
+        const n = getCapacityCount(catId, capacity);
+        if (n === 0 && catId !== "fishing") continue;
+
+        const yieldVals = [], speedVals = [], chanceVals = [];
+        for (const eff of allEffects) {
+          if (!budEffectApplies(eff, catId, product)) continue;
+          if (eff.type === "yield_flat") yieldVals.push(eff.value);
+          else if (eff.type === "speed_pct") speedVals.push(eff.value);
+          else if (eff.type === "chance") chanceVals.push(eff);
+        }
+
+        const bestYield = yieldVals.length > 0 ? Math.max(...yieldVals) * aura : 0;
+        const bestSpeed = speedVals.length > 0 ? Math.min(...speedVals) * aura : 0;
+        const bestChance = chanceVals.length > 0
+          ? chanceVals.reduce((a, b) => (a.pct * a.extra > b.pct * b.extra) ? a : b) : null;
+
+        const cycleSec = getCycleSec(catId, product);
+        const priceProduct = getPriceProduct(catId, product);
+        const price = p2pPrices[priceProduct] || 0;
+        let extraSfl = 0;
+
+        if (bestYield > 0) {
+          if (catId === "fishing") extraSfl += bestYield * price;
+          else if (catId === "bees") extraSfl += bestYield * n * price;
+          else extraSfl += bestYield * (86400 / cycleSec) * n * price;
+        }
+
+        if (bestSpeed !== 0) {
+          const newCycle = cycleSec * (1 + bestSpeed / 100);
+          if (newCycle > 0) {
+            const baseY = getBaseYield(catId);
+            extraSfl += ((86400 / newCycle) - (86400 / cycleSec)) * n * baseY * price;
+          }
+        }
+
+        if (bestChance) {
+          const effPct = bestChance.pct * aura;
+          const catches = catId === "fishing" ? 20 : (86400 / cycleSec) * n;
+          extraSfl += (effPct / 100) * bestChance.extra * catches * price;
+        }
+
+        if (extraSfl > 0) {
+          totalSfl += extraSfl;
+          breakdown.push({ catId, sflPerDay: extraSfl, product: priceProduct });
+        }
+      }
+
+      return { totalSfl, breakdown };
+    }
+
+    function describeBudBoosts(bud) {
+      const typeEffects = BUD_TYPE_BOOSTS[bud.type] || [];
+      const stemEffects = BUD_STEM_BOOSTS[bud.stem] || [];
+      const aura = BUD_AURA_MULTIPLIERS[bud.aura] || 1;
+      const descs = [];
+      const catNames = cats => cats.map(c => POWER_CATEGORIES[c]?.label || c).join("/");
+      for (const eff of typeEffects) {
+        const tier = eff.cropTier ? ` ${eff.cropTier[0].toUpperCase() + eff.cropTier.slice(1)}` : "";
+        if (eff.type === "yield_flat") descs.push(`+${(eff.value * aura).toFixed(2)}${tier} ${catNames(eff.cats)}`);
+        else if (eff.type === "speed_pct") descs.push(`${(eff.value * aura).toFixed(1)}% ${catNames(eff.cats)} Time`);
+        else if (eff.type === "chance") descs.push(`${(eff.pct * aura).toFixed(0)}% +${eff.extra} ${catNames(eff.cats)}`);
+      }
+      for (const eff of stemEffects) {
+        const tier = eff.cropTier ? ` ${eff.cropTier[0].toUpperCase() + eff.cropTier.slice(1)}` : "";
+        if (eff.type === "yield_flat") descs.push(`+${(eff.value * aura).toFixed(2)}${tier} ${catNames(eff.cats)}`);
+        else if (eff.type === "speed_pct") descs.push(`${(eff.value * aura).toFixed(1)}% ${catNames(eff.cats)} Time`);
+        else if (eff.type === "chance") descs.push(`${(eff.pct * aura).toFixed(0)}% +${eff.extra} ${catNames(eff.cats)}`);
+      }
+      return descs;
+    }
+
     // ── Cost calculation helpers ──
 
     // Detect stock modifiers from farm buildings/skills
@@ -7859,6 +8011,82 @@
         </div>`;
 
         content += `</div></div>`;
+      }
+
+      // ── BUDS SECTION ──
+      const farmBuds = powerState.farm.buds || {};
+      const budEntries = Object.entries(farmBuds);
+
+      if (budEntries.length > 0) {
+        const budRows = [];
+        for (const [budId, budData] of budEntries) {
+          if (!budData || !budData.type) continue;
+          const result = calcBudSflPerDay(budData, capacity, p2pPrices, savedProducts);
+          const boostDescs = describeBudBoosts(budData);
+          const breakdownDesc = result.breakdown.map(b => {
+            const cat = POWER_CATEGORIES[b.catId];
+            return `${cat ? cat.emoji : ""} ${b.sflPerDay.toFixed(4)}`;
+          }).join(" · ");
+          budRows.push({
+            id: budId, type: budData.type, stem: budData.stem || "—",
+            aura: budData.aura || "None", colour: budData.colour || "",
+            boostDescs, breakdownDesc,
+            sflPerDay: result.totalSfl, sflPerYear: result.totalSfl * 365,
+            breakdown: result.breakdown,
+          });
+        }
+
+        budRows.sort((a, b) => b.sflPerDay - a.sflPerDay);
+        const totalBudSfl = budRows.reduce((s, b) => s + b.sflPerDay, 0);
+        const budWithBoost = budRows.filter(b => b.sflPerDay > 0).length;
+
+        content += `<div style="margin-top:24px">
+          <div class="pixel-font" style="font-size:0.6875rem;color:var(--sunpetal);margin-bottom:8px;border-bottom:2px solid var(--border-dark);padding-bottom:4px">
+            ═══ 🌱 BUDS (${budRows.length} owned, ${budWithBoost} with boost) ═══
+            <span style="font-size:0.5625rem;color:var(--text-secondary);margin-left:8px">
+              Total: +${totalBudSfl.toFixed(2)} ${sflIcon()}/day · +${(totalBudSfl * 365).toFixed(2)} ${sflIcon()}/year
+            </span>
+          </div>
+          <div class="pixel-font" style="font-size:0.4375rem;color:var(--text-dim);margin-bottom:6px">
+            Values based on selected products above. Same-resource boosts within a bud: best wins (no stacking). Aura multiplies all boosts.
+          </div>
+          <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:0.5rem;color:var(--text-secondary)">
+            <thead>
+              <tr style="background:rgba(92,58,30,0.3);text-align:left">
+                <th style="padding:4px 6px;border:1px solid var(--border-dark)">#</th>
+                <th style="padding:4px 6px;border:1px solid var(--border-dark)">Type</th>
+                <th style="padding:4px 6px;border:1px solid var(--border-dark)">Stem</th>
+                <th style="padding:4px 6px;border:1px solid var(--border-dark)">Aura</th>
+                <th style="padding:4px 6px;border:1px solid var(--border-dark);min-width:140px">Boosts (after aura)</th>
+                <th style="padding:4px 6px;border:1px solid var(--border-dark);min-width:80px">Breakdown</th>
+                <th style="padding:4px 6px;border:1px solid var(--border-dark);text-align:right">${sflIcon()}/day</th>
+                <th style="padding:4px 6px;border:1px solid var(--border-dark);text-align:right">${sflIcon()}/year</th>
+              </tr>
+            </thead>
+            <tbody>`;
+
+        for (const bud of budRows) {
+          const auraStyle = bud.aura === "Mythical" ? "color:#ff66ff;font-weight:bold" :
+                            bud.aura === "Rare" ? "color:#ff8800;font-weight:bold" :
+                            bud.aura === "Green" ? "color:var(--green)" :
+                            bud.aura === "Basic" ? "color:var(--lily)" : "color:var(--text-dim)";
+          const auraLabel = bud.aura !== "None" ? `${bud.aura} (${((BUD_AURA_MULTIPLIERS[bud.aura] - 1) * 100).toFixed(0)}%)` : "None";
+          const sflColor = bud.sflPerDay > 0 ? "var(--green)" : "var(--text-dim)";
+
+          content += `<tr style="border-bottom:1px solid rgba(92,58,30,0.15)">
+            <td style="padding:3px 6px;border:1px solid var(--border-dark);font-weight:bold">${escHTML(bud.id)}</td>
+            <td style="padding:3px 6px;border:1px solid var(--border-dark)">${escHTML(bud.type)}</td>
+            <td style="padding:3px 6px;border:1px solid var(--border-dark)">${escHTML(bud.stem)}</td>
+            <td style="padding:3px 6px;border:1px solid var(--border-dark);${auraStyle}">${escHTML(auraLabel)}</td>
+            <td style="padding:3px 6px;border:1px solid var(--border-dark)">${bud.boostDescs.join("<br>") || "<em>no boost</em>"}</td>
+            <td style="padding:3px 6px;border:1px solid var(--border-dark);font-size:0.4375rem">${bud.breakdownDesc || "—"}</td>
+            <td style="padding:3px 6px;border:1px solid var(--border-dark);text-align:right;color:${sflColor};font-weight:bold">+${bud.sflPerDay.toFixed(4)}</td>
+            <td style="padding:3px 6px;border:1px solid var(--border-dark);text-align:right;color:${sflColor}">+${bud.sflPerYear.toFixed(2)}</td>
+          </tr>`;
+        }
+
+        content += `</tbody></table></div></div>`;
       }
 
       // ── DEBUG: All Boosts Mapping Table ──
