@@ -2170,33 +2170,24 @@
       // Detect cooking boosts to apply XP multipliers
       const cookingBoosts = farm ? detectCookingBoosts(farm) : { xpBoosts: [], timeBoosts: [] };
 
-      // Find best recipe: highest boosted-XP per SFL of ingredients
-      let bestRatio = 0, bestRecipe = null;
-      for (const [recipeName, ingredients] of Object.entries(RECIPE_INGREDIENTS)) {
-        const recipeData = COOKING_RECIPES_DATA[recipeName];
-        if (!recipeData) continue;
-
-        // Calculate ingredient cost from P2P + derived prices
-        let cost = 0;
-        let missingIngredient = false;
-        for (const [item, qty] of Object.entries(ingredients)) {
-          const price = prices[item] || 0;
-          if (price === 0) { missingIngredient = true; break; }
-          cost += price * qty;
-        }
-        if (missingIngredient || cost <= 0) continue;
-
-        // Apply cooking XP boosts
-        const boostedXP = computeFoodXP(recipeName, recipeData, recipeData.building, cookingBoosts);
-
-        const ratio = boostedXP / cost; // XP per SFL
-        if (ratio > bestRatio) {
-          bestRatio = ratio;
-          bestRecipe = { name: recipeName, xp: recipeData.xp, boostedXP: Math.round(boostedXP), cost, ratio, building: recipeData.building, ingredients };
-        }
+      // Hardcoded: Pizza Margherita for verification (TODO: restore best-recipe search after verified)
+      const recipeName = "Pizza Margherita";
+      const ingredients = RECIPE_INGREDIENTS[recipeName];
+      const recipeData = COOKING_RECIPES_DATA[recipeName];
+      let cost = 0;
+      let missingIngredient = false;
+      for (const [item, qty] of Object.entries(ingredients)) {
+        const price = prices[item] || 0;
+        if (price === 0) { missingIngredient = true; break; }
+        cost += price * qty;
       }
+      if (missingIngredient || cost <= 0) return { sflPerPoint: 0, bestRecipe: null, level, totalXP };
 
-      if (!bestRecipe || bestRatio === 0) return { sflPerPoint: 0, bestRecipe: null, level, totalXP };
+      const boostedXP = computeFoodXP(recipeName, recipeData, recipeData.building, cookingBoosts);
+      const bestRatio = boostedXP / cost;
+      const bestRecipe = { name: recipeName, xp: recipeData.xp, boostedXP: Math.round(boostedXP), cost, ratio: bestRatio, building: recipeData.building, ingredients };
+
+      if (bestRatio === 0) return { sflPerPoint: 0, bestRecipe: null, level, totalXP };
 
       // Total SFL to reach current level via most efficient cooking
       const totalSFL = totalXP / bestRatio;

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sfl-tracker-v1';
+const CACHE_NAME = 'sfl-tracker-v2';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
@@ -33,7 +33,19 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache-first for static assets
+  // Network-first for HTML (always get latest)
+  if (event.request.mode === 'navigate' || url.pathname === '/') {
+    event.respondWith(
+      fetch(event.request).then((response) => {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        return response;
+      }).catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Cache-first for other static assets
   event.respondWith(
     caches.match(event.request).then((cached) =>
       cached || fetch(event.request).then((response) => {
