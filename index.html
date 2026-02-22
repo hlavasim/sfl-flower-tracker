@@ -41,6 +41,7 @@
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    .sfl-icon { height:1em; vertical-align:-0.15em; display:inline; }
 
     body {
       background: var(--bg-darkest);
@@ -1909,7 +1910,7 @@
 
     // Grow times in seconds (approximate — base values before boosts)
     const CROP_GROW_DATA = {
-      "Sunflower": 60, "Potato": 300, "Pumpkin": 1800, "Carrot": 3600,
+      "Sunflower": 60, "Potato": 300, "Rhubarb": 600, "Pumpkin": 1800, "Carrot": 3600,
       "Cabbage": 7200, "Soybean": 3600, "Beetroot": 14400, "Cauliflower": 28800,
       "Parsnip": 43200, "Eggplant": 28800, "Corn": 21600, "Radish": 43200,
       "Wheat": 14400, "Kale": 43200, "Turnip": 14400, "Onion": 28800,
@@ -1919,7 +1920,11 @@
 
     const FRUIT_GROW_DATA = {
       "Apple": 43200, "Blueberry": 21600, "Orange": 43200, "Banana": 43200,
-      "Lemon": 14400, "Tomato": 7200, "Grape": 86400, "Rice": 86400, "Olive": 86400,
+      "Lemon": 14400, "Tomato": 7200,
+    };
+
+    const GREENHOUSE_GROW_DATA = {
+      "Grape": 43200, "Rice": 115200, "Olive": 158400,
     };
 
     const ANIMAL_CYCLE_DATA = {
@@ -1937,6 +1942,60 @@
       "Gold":      { respawnSec: 43200, yield: 1, farmKey: "gold" },
       "Crimstone": { respawnSec: 64800, yield: 1, farmKey: "crimstones" },
       "Wood":      { respawnSec: 7200,  yield: 3, farmKey: "trees" },
+    };
+
+    // ── Seed costs (coins per seed) ──
+    const SEED_COSTS = {
+      "Sunflower": 0.01, "Potato": 0.10, "Rhubarb": 0.15, "Pumpkin": 0.20,
+      "Carrot": 0.50, "Cabbage": 1.0, "Soybean": 0.50, "Beetroot": 2.0,
+      "Cauliflower": 3.0, "Parsnip": 4.0, "Eggplant": 3.0, "Corn": 2.5,
+      "Radish": 4.0, "Wheat": 2.0, "Kale": 7.0, "Turnip": 2.0,
+      "Onion": 3.0, "Pepper": 1.0, "Zucchini": 0.10, "Yam": 0.50,
+      "Broccoli": 0.50, "Artichoke": 4.0, "Barley": 10.0,
+      // Fruits
+      "Tomato": 5, "Blueberry": 30, "Orange": 50, "Apple": 70,
+      "Banana": 70, "Lemon": 20,
+      // Greenhouse
+      "Grape": 160, "Rice": 240, "Olive": 320,
+    };
+
+    // ── Tool costs (coins + optional materials per tool) ──
+    const TOOL_COSTS = {
+      "Axe":            { coins: 20 },
+      "Pickaxe":        { coins: 20, materials: { Wood: 3 } },
+      "Stone Pickaxe":  { coins: 20, materials: { Wood: 3, Stone: 5 } },
+      "Iron Pickaxe":   { coins: 80, materials: { Wood: 3, Iron: 5 } },
+      "Gold Pickaxe":   { coins: 100, materials: { Wood: 3, Gold: 3 } },
+      "Oil Drill":      { coins: 100, materials: { Wood: 20, Iron: 9, Leather: 10 } },
+    };
+
+    // ── Tool → resource category mapping ──
+    const TOOL_TO_CAT = {
+      "Axe": "trees", "Pickaxe": "stone", "Stone Pickaxe": "iron",
+      "Iron Pickaxe": "gold", "Gold Pickaxe": "crimstone",
+    };
+
+    // ── Restock gem costs ──
+    const RESTOCK_GEM_COSTS = { seeds: 15, tools: 10, both: 20 };
+
+    // ── Base stock quantities (from INITIAL_STOCK) ──
+    const BASE_STOCK = {
+      "Sunflower Seed": 800, "Potato Seed": 400, "Rhubarb Seed": 400,
+      "Pumpkin Seed": 300, "Zucchini Seed": 400,
+      "Carrot Seed": 200, "Yam Seed": 180, "Cabbage Seed": 180,
+      "Broccoli Seed": 180, "Soybean Seed": 200, "Beetroot Seed": 120,
+      "Pepper Seed": 150, "Cauliflower Seed": 100, "Parsnip Seed": 80,
+      "Eggplant Seed": 100, "Corn Seed": 100, "Onion Seed": 80,
+      "Radish Seed": 60, "Wheat Seed": 80, "Turnip Seed": 80,
+      "Kale Seed": 60, "Artichoke Seed": 60, "Barley Seed": 60,
+      // Fruits
+      "Tomato Seed": 40, "Blueberry Seed": 20, "Orange Seed": 15,
+      "Apple Seed": 15, "Banana Seed": 15, "Lemon Seed": 20,
+      // Greenhouse
+      "Grape Seed": 10, "Rice Seed": 10, "Olive Seed": 10,
+      // Tools
+      "Axe": 200, "Pickaxe": 60, "Stone Pickaxe": 20,
+      "Iron Pickaxe": 5, "Gold Pickaxe": 5,
     };
 
     // Full skill tree data from sfl.world/tools/skills
@@ -2168,10 +2227,39 @@
 
     // Crop tier classification for "Basic/Medium/Advanced Crop" skill boosts
     const CROP_TIERS = {
-      basic:    ["Sunflower", "Potato", "Pumpkin", "Carrot", "Cabbage", "Soybean", "Beetroot", "Cauliflower", "Parsnip", "Eggplant", "Corn", "Radish", "Wheat", "Kale"],
-      medium:   ["Turnip", "Onion", "Pepper", "Zucchini", "Yam", "Broccoli"],
-      advanced: ["Artichoke", "Barley"],
+      basic:    ["Sunflower", "Potato", "Rhubarb", "Pumpkin", "Zucchini"],
+      medium:   ["Carrot", "Yam", "Cabbage", "Broccoli", "Soybean", "Beetroot", "Pepper", "Cauliflower", "Parsnip"],
+      advanced: ["Eggplant", "Corn", "Onion", "Radish", "Wheat", "Turnip", "Kale", "Artichoke", "Barley"],
     };
+
+    // Faction shop items priced in Marks (from factionShop.ts)
+    // 1 Mark = 0.1 SFL (flower conversion rate)
+    const FACTION_MARK_PRICES = {
+      // Wearables (faction variants: Goblin/Bumpkin/Sunflorian/Nightshade)
+      "Crown": 210000,     // + requires Helmet (burned)
+      "Shield": 240000,
+      "Quiver": 240000,
+      "Medallion": 240000,
+      "Armor": 112500,
+      "Helmet": 56250,
+      "Sword": 56250,
+      "Axe": 56250,
+      "Pants": 37500,
+      "Sabatons": 37500,
+      // Collectibles
+      "Throne": 75000,
+    };
+    const FACTION_KEYWORDS = ["Goblin", "Bumpkin", "Sunflorian", "Nightshade"];
+    function getFactionMarkCost(itemName) {
+      for (const [suffix, marks] of Object.entries(FACTION_MARK_PRICES)) {
+        if (itemName.endsWith(" " + suffix)) {
+          const prefix = itemName.slice(0, -(suffix.length + 1));
+          if (FACTION_KEYWORDS.includes(prefix)) return marks;
+        }
+      }
+      return 0;
+    }
+    function marksToSfl(marks) { return marks / 10; }
 
     // Crafted ingredient recipes — derive price from sub-ingredients
     const CRAFTED_INGREDIENT_RECIPES = {
@@ -2234,8 +2322,9 @@
     // Power category definitions
     const POWER_CATEGORIES = {
       // Quantifiable
-      crops:    { label: "CROPS",    emoji: "🌾", selector: "crop",  quantifiable: true },
-      fruits:   { label: "FRUITS",   emoji: "🍎", selector: "fruit", quantifiable: true },
+      crops:      { label: "CROPS",      emoji: "🌾", selector: "crop",       quantifiable: true },
+      fruits:     { label: "FRUITS",     emoji: "🍎", selector: "fruit",      quantifiable: true },
+      greenhouse: { label: "GREENHOUSE", emoji: "🏠", selector: "greenhouse", quantifiable: true },
       chickens: { label: "CHICKENS", emoji: "🐔", selector: null,   quantifiable: true },
       cows:     { label: "COWS",     emoji: "🐄", selector: null,   quantifiable: true },
       sheep:    { label: "SHEEP",    emoji: "🐑", selector: null,   quantifiable: true },
@@ -2258,6 +2347,7 @@
     const PRODUCT_TO_CATEGORY = {};
     Object.keys(CROP_GROW_DATA).forEach(k => PRODUCT_TO_CATEGORY[k] = "crops");
     Object.keys(FRUIT_GROW_DATA).forEach(k => PRODUCT_TO_CATEGORY[k] = "fruits");
+    Object.keys(GREENHOUSE_GROW_DATA).forEach(k => PRODUCT_TO_CATEGORY[k] = "greenhouse");
     ["Egg", "Feather"].forEach(k => PRODUCT_TO_CATEGORY[k] = "chickens");
     ["Milk", "Leather"].forEach(k => PRODUCT_TO_CATEGORY[k] = "cows");
     ["Wool", "Merino Wool"].forEach(k => PRODUCT_TO_CATEGORY[k] = "sheep");
@@ -2323,6 +2413,12 @@
       // Basic/Medium/Advanced Crop growth time
       { rx: /([+-]?\d+\.?\d*)%\s+(Basic|Medium|Advanced)\s+Crop\s+(?:Growth|Growing|Cooldown|Production)\s+Time/i,
         fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "crops", cropTier: m[2].toLowerCase() }) },
+      // Greenhouse yield flat: "+0.1 Greenhouse yield"
+      { rx: /([+-]?\d+\.?\d*)\s+Greenhouse\s+yield/i,
+        fn: m => ({ type: "yield_flat", value: parseFloat(m[1]), cat: "greenhouse" }) },
+      // Greenhouse growth time: "-5% Greenhouse Growth Time"
+      { rx: /([+-]?\d+\.?\d*)%\s+Greenhouse\s+(?:Growth|Growing|Production)\s+Time/i,
+        fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "greenhouse" }) },
       // Fruit yield %
       { rx: /([+-]?\d+\.?\d*)%\s+Fruit\s+Yield/i,
         fn: m => ({ type: "yield_pct", value: parseFloat(m[1]), cat: "fruits" }) },
@@ -4649,6 +4745,9 @@
     }
 
     const SFL_ICON_URL = "https://sfl.world/img/source/SFL.png";
+    function sflIcon(size) {
+      return `<img src="${SFL_ICON_URL}" class="sfl-icon" alt="SFL"${size ? ` style="height:${size}"` : ""}>`;
+    }
     const ITEM_ICON_BASE = "https://sfl.world/img/source/";
     const GITHUB_ASSETS = "https://raw.githubusercontent.com/sunflower-land/sunflower-land/main/src/assets";
     const ITEM_IMAGE_MAP = {
@@ -6064,7 +6163,7 @@
           <span class="treasury-cat-icon">${icon}</span>
           <span class="treasury-cat-name pixel-font">${label}</span>
         </div>
-        <div class="treasury-cat-value pixel-font">${formatSFL(total)} SFL</div>
+        <div class="treasury-cat-value pixel-font">${formatSFL(total)} ${sflIcon()}</div>
         <div class="treasury-cat-pct pixel-font">${pct.toFixed(1)}%</div>
         <div class="treasury-cat-bar"><div class="treasury-cat-bar-fill" style="width:${pct.toFixed(1)}%;background:${color}"></div></div>
         <div class="treasury-cat-top">${topHTML}</div>
@@ -6081,9 +6180,9 @@
       const btcTotal = rates.btcUsd > 0 ? usdTotal / rates.btcUsd : 0;
 
       const coinModeLabel = treasuryCoinMode === "betty"
-        ? `Betty (${escHTML(rates.bettyItem)}: ${Math.round(rates.coinsPerSFL_betty)}/SFL)`
+        ? `Betty (${escHTML(rates.bettyItem)}: ${Math.round(rates.coinsPerSFL_betty)}/${sflIcon()})`
         : treasuryCoinMode === "api"
-          ? `Exchange API (${Math.round(rates.coinsPerSFL_api)}/SFL)`
+          ? `Exchange API (${Math.round(rates.coinsPerSFL_api)}/${sflIcon()})`
           : "0 (no value)";
 
       let html = `<div class="bumpkin-dev-banner pixel-panel pixel-font">⚠ UNDER DEVELOPMENT — might show incorrect data</div>
@@ -6091,11 +6190,11 @@
         <h1>TREASURY</h1>
         <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
         <div class="treasury-total">
-          <img src="${SFL_ICON_URL}" onerror="this.style.display='none'" alt="SFL">
-          ${formatSFL(totals.grand)} SFL
+          ${sflIcon('1.5em')}
+          ${formatSFL(totals.grand)} ${sflIcon()}
         </div>
         <div class="treasury-secondary">${formatUSD(usdTotal)} &nbsp;|&nbsp; ${formatBTC(btcTotal)}</div>
-        <div class="treasury-rates">1 SFL = ${rates.sflUsd.toFixed(4)} USD &nbsp;|&nbsp; 1 BTC = ${formatUSD(rates.btcUsd)}</div>
+        <div class="treasury-rates">1 ${sflIcon()} = ${rates.sflUsd.toFixed(4)} USD &nbsp;|&nbsp; 1 BTC = ${formatUSD(rates.btcUsd)}</div>
         <div style="margin-top:8px;font-size: 0.5625rem">
           <span style="color:var(--text-dim)">Coin rate:</span>
           <select onchange="setCoinMode(this.value)" style="font-family:'Courier New',monospace;font-size: 0.5625rem;background:#111;color:var(--text-primary);border:2px solid var(--border-brown);padding:2px 4px">
@@ -6123,13 +6222,13 @@
           <span class="treasury-cat-icon">💧</span>
           <span class="treasury-cat-name pixel-font">LIQUID</span>
         </div>
-        <div class="treasury-cat-value pixel-font">${formatSFL(totals.liquid)} SFL</div>
+        <div class="treasury-cat-value pixel-font">${formatSFL(totals.liquid)} ${sflIcon()}</div>
         <div class="treasury-cat-pct pixel-font">${liqPct.toFixed(1)}%</div>
         <div class="treasury-cat-bar"><div class="treasury-cat-bar-fill" style="width:${liqPct.toFixed(1)}%;background:${TREASURY_CAT_COLORS.liquid}"></div></div>
         <div class="treasury-cat-top" style="line-height:2.2">
-          <div>SFL Balance: <span style="color:var(--sunpetal)">${formatSFL(liquid.sflBalance)}</span></div>
-          <div>Coins: <span style="color:var(--text-secondary)">${Math.floor(liquid.coinBalance).toLocaleString()}</span> <span style="color:var(--text-dim)">(≈ ${formatSFL(liquid.coinsAsSFL)} SFL)</span></div>
-          <div>Gems: <span style="color:var(--text-secondary)">${Math.floor(liquid.gemBalance).toLocaleString()}</span> <span style="color:var(--text-dim)">(≈ ${formatSFL(liquid.gemsAsSFL)} SFL)</span></div>
+          <div>${sflIcon()} Balance: <span style="color:var(--sunpetal)">${formatSFL(liquid.sflBalance)}</span></div>
+          <div>Coins: <span style="color:var(--text-secondary)">${Math.floor(liquid.coinBalance).toLocaleString()}</span> <span style="color:var(--text-dim)">(≈ ${formatSFL(liquid.coinsAsSFL)} ${sflIcon()})</span></div>
+          <div>Gems: <span style="color:var(--text-secondary)">${Math.floor(liquid.gemBalance).toLocaleString()}</span> <span style="color:var(--text-dim)">(≈ ${formatSFL(liquid.gemsAsSFL)} ${sflIcon()})</span></div>
         </div>
       </div>`;
       html += '</div>';
@@ -6349,11 +6448,11 @@
       // Summary
       content += `<div class="sales-summary-grid pixel-font">
         <div class="sales-stat"><div class="sales-stat-label">ACTIVE LISTINGS</div><div class="sales-stat-value">${activeListings.length}</div></div>
-        <div class="sales-stat"><div class="sales-stat-label">TOTAL LISTED</div><div class="sales-stat-value">${totalListedSFL.toFixed(1)} SFL</div></div>
+        <div class="sales-stat"><div class="sales-stat-label">TOTAL LISTED</div><div class="sales-stat-value">${totalListedSFL.toFixed(1)} ${sflIcon()}</div></div>
         <div class="sales-stat"><div class="sales-stat-label">OVERPRICED</div><div class="sales-stat-value" style="color:${overpricedCount > 0 ? 'var(--red)' : 'var(--green)'}">${overpricedCount}</div></div>
         <div class="sales-stat"><div class="sales-stat-label">STALE (>7d)</div><div class="sales-stat-value" style="color:${staleCount > 0 ? 'var(--yellow)' : 'var(--green)'}">${staleCount}</div></div>
         <div class="sales-stat"><div class="sales-stat-label">ACTIVE OFFERS</div><div class="sales-stat-value">${activeOffers.length}</div></div>
-        <div class="sales-stat"><div class="sales-stat-label">TOTAL OFFERED</div><div class="sales-stat-value">${totalOfferSFL.toFixed(1)} SFL</div></div>
+        <div class="sales-stat"><div class="sales-stat-label">TOTAL OFFERED</div><div class="sales-stat-value">${totalOfferSFL.toFixed(1)} ${sflIcon()}</div></div>
         ${trades.tradePoints ? `<div class="sales-stat"><div class="sales-stat-label">TRADE POINTS</div><div class="sales-stat-value">${Math.round(trades.tradePoints)}</div></div>` : ""}
       </div>`;
 
@@ -6374,10 +6473,10 @@
           <img class="sales-listing-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">
           <div class="sales-listing-info">
             <div class="sales-listing-name">${escHTML(l.itemName)}${l.qty > 1 ? ` x${fmtQty(l.qty)}` : ""} ${badges.join("")}</div>
-            <div class="sales-listing-detail">${formatAge(l.age)} ago · ${l.tradeType || l.collection}${l.marketPrice > 0 ? ` · market: ${fmtSfl(l.marketPrice)} SFL/${l.priceSource}` : ""}</div>
+            <div class="sales-listing-detail">${formatAge(l.age)} ago · ${l.tradeType || l.collection}${l.marketPrice > 0 ? ` · market: ${fmtSfl(l.marketPrice)} ${sflIcon()}/${l.priceSource}` : ""}</div>
           </div>
           <div class="sales-listing-prices">
-            <div class="sales-price-yours">${fmtSfl(l.priceSFL)} SFL</div>
+            <div class="sales-price-yours">${fmtSfl(l.priceSFL)} ${sflIcon()}</div>
             ${l.marketPrice > 0 && l.qty > 0 ? `<div class="sales-price-market">${fmtSfl(l.unitPrice)}/ea vs ${fmtSfl(l.marketPrice)}</div>` : ""}
           </div>
         </div>`;
@@ -6597,6 +6696,7 @@
       return {
         crops: Object.keys(farm.crops || {}).length,
         fruitPatches: Object.keys(farm.fruitPatches || {}).length,
+        greenhouse: Object.keys(farm.greenhouse?.pots || {}).length,
         chickens, cows, sheep,
         bees: Object.keys(farm.beehives || {}).length,
         flowers: Object.keys(farm.flowers?.flowerBeds || {}).length,
@@ -6621,6 +6721,12 @@
           const growSec = FRUIT_GROW_DATA[product];
           if (!growSec) return 0;
           const n = capacity.fruitPatches || 0;
+          return n * (86400 / growSec) * 1;
+        }
+        case "greenhouse": {
+          const growSec = GREENHOUSE_GROW_DATA[product];
+          if (!growSec) return 0;
+          const n = capacity.greenhouse || 0;
           return n * (86400 / growSec) * 1;
         }
         case "chickens": {
@@ -6664,6 +6770,7 @@
       switch (catId) {
         case "crops": return CROP_GROW_DATA[product] || 43200;
         case "fruits": return FRUIT_GROW_DATA[product] || 43200;
+        case "greenhouse": return GREENHOUSE_GROW_DATA[product] || 86400;
         case "chickens": return ANIMAL_CYCLE_DATA["Chicken"].cycleSec;
         case "cows": return ANIMAL_CYCLE_DATA["Cow"].cycleSec;
         case "sheep": return ANIMAL_CYCLE_DATA["Sheep"].cycleSec;
@@ -6682,6 +6789,7 @@
       switch (catId) {
         case "crops": return capacity.crops;
         case "fruits": return capacity.fruitPatches;
+        case "greenhouse": return capacity.greenhouse;
         case "chickens": return capacity.chickens;
         case "cows": return capacity.cows;
         case "sheep": return capacity.sheep;
@@ -6700,6 +6808,7 @@
       switch (catId) {
         case "crops": return "Kale";
         case "fruits": return "Blueberry";
+        case "greenhouse": return "Grape";
         case "chickens": return "Egg";
         case "cows": return "Milk";
         case "sheep": return "Wool";
@@ -6743,14 +6852,12 @@
         if (eff.cat !== catId) continue;
         // For product-specific boosts, check if product matches
         if (eff.product && PRODUCT_TO_CATEGORY[eff.product] === catId) {
-          // Animal product-specific: "+0.1 Feather" only applies when computing Feather, not Egg
-          if (isAnimalCat(catId) && eff.product !== product) {
-            continue;
-          }
-          // Specific product boost — only if it's a crop/fruit that doesn't match selector, skip
-          if ((catId === "crops" || catId === "fruits") && eff.product !== product && eff.type !== "yield_flat" && eff.type !== "chance") {
-            continue; // skip speed/yield% boosts for wrong product
-          }
+          if (eff.product !== product) continue; // all product-specific boosts must match
+        }
+        // cropTier filtering: "Basic/Medium/Advanced Crop" boosts only apply to crops in that tier
+        if (eff.cropTier && catId === "crops") {
+          const tierCrops = CROP_TIERS[eff.cropTier];
+          if (tierCrops && !tierCrops.includes(product)) continue;
         }
 
         switch (eff.type) {
@@ -6795,6 +6902,103 @@
       return unitsPerDay * price;
     }
 
+    // ── Cost calculation helpers ──
+
+    // Detect stock modifiers from farm buildings/skills
+    function detectStockModifiers(farm) {
+      const buildings = farm.buildings || {};
+      const skills = farm.bumpkin?.skills || {};
+      const hasWarehouse = (buildings["Warehouse"] || []).length > 0;
+      const hasToolshed = (buildings["Toolshed"] || []).length > 0;
+      const moreAxes = skills["More Axes"] !== undefined;
+      const morePicks = skills["More Picks"] !== undefined;
+      return { hasWarehouse, hasToolshed, moreAxes, morePicks };
+    }
+
+    // Get effective stock for a seed/tool
+    function getEffectiveStock(seedOrTool, stockMods) {
+      let base = BASE_STOCK[seedOrTool] || 0;
+      if (base === 0) return 0;
+      // Warehouse: +20% seeds
+      if (seedOrTool.includes("Seed") && stockMods.hasWarehouse) base = Math.floor(base * 1.2);
+      // Toolshed: +50% tools
+      if (TOOL_COSTS[seedOrTool] && stockMods.hasToolshed) base = Math.floor(base * 1.5);
+      // Skill bonuses
+      if (seedOrTool === "Axe" && stockMods.moreAxes) base += 50;
+      if (seedOrTool === "Pickaxe" && stockMods.morePicks) base += 70;
+      if (seedOrTool === "Stone Pickaxe" && stockMods.morePicks) base += 20;
+      if (seedOrTool === "Iron Pickaxe" && stockMods.morePicks) base += 7;
+      if (seedOrTool === "Gold Pickaxe" && stockMods.morePicks) base += 2;
+      return base;
+    }
+
+    // Calculate seed cost per day for a crop/fruit/greenhouse category
+    function calcSeedCostPerDay(catId, product, capacity, exchangeRates, stockMods, boostEffects) {
+      const coinCost = SEED_COSTS[product];
+      if (!coinCost || exchangeRates.coinsPerSFL <= 0) return { costPerDay: 0, seedSfl: 0, restockPerDay: 0 };
+      const seedSfl = coinCost / exchangeRates.coinsPerSFL;
+      const n = getCapacityCount(catId, capacity);
+      if (n === 0) return { costPerDay: 0, seedSfl, restockPerDay: 0 };
+
+      // Apply speed boosts to get effective cycles/day
+      const result = applyBoosts(catId, product, capacity, boostEffects);
+      const effectiveCycle = result.effectiveCycle || getCycleSec(catId, product);
+      const cyclesPerDay = effectiveCycle > 0 ? 86400 / effectiveCycle : 0;
+      const costPerDay = seedSfl * cyclesPerDay * n;
+
+      // Restock amortization
+      const seedName = product + " Seed";
+      const stock = getEffectiveStock(seedName, stockMods);
+      let restockPerDay = 0;
+      if (stock > 0 && exchangeRates.gemsPerSFL > 0) {
+        const cyclesPerStock = stock / n;
+        const daysPerStock = cyclesPerStock * (effectiveCycle / 86400);
+        const gemCost = RESTOCK_GEM_COSTS.seeds;
+        const restockSfl = gemCost / exchangeRates.gemsPerSFL;
+        restockPerDay = daysPerStock > 0 ? restockSfl / daysPerStock : 0;
+      }
+
+      return { costPerDay, seedSfl, restockPerDay, cyclesPerDay, stock: getEffectiveStock(seedName, stockMods) };
+    }
+
+    // Calculate tool cost per day for a resource category
+    function calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods) {
+      const toolName = Object.keys(TOOL_TO_CAT).find(t => TOOL_TO_CAT[t] === catId);
+      if (!toolName) return { costPerDay: 0, toolSfl: 0, restockPerDay: 0 };
+      const tool = TOOL_COSTS[toolName];
+      if (!tool || exchangeRates.coinsPerSFL <= 0) return { costPerDay: 0, toolSfl: 0, restockPerDay: 0 };
+
+      // Tool cost in SFL = coins + material costs
+      let toolSfl = tool.coins / exchangeRates.coinsPerSFL;
+      if (tool.materials) {
+        for (const [mat, qty] of Object.entries(tool.materials)) {
+          toolSfl += (p2pPrices[mat] || 0) * qty;
+        }
+      }
+
+      const rKey = catId === "stone" ? "Stone" : catId === "iron" ? "Iron" : catId === "gold" ? "Gold" : catId === "crimstone" ? "Crimstone" : "Wood";
+      const d = RESOURCE_RESPAWN_DATA[rKey];
+      if (!d) return { costPerDay: 0, toolSfl, restockPerDay: 0 };
+      const capKey = catId === "stone" ? "stones" : catId === "crimstone" ? "crimstones" : catId;
+      const n = capacity[capKey] || 0;
+      if (n === 0) return { costPerDay: 0, toolSfl, restockPerDay: 0 };
+      const cyclesPerDay = 86400 / d.respawnSec;
+      const toolsPerDay = n * cyclesPerDay; // 1 tool per node per cycle
+      const costPerDay = toolSfl * toolsPerDay;
+
+      // Restock amortization
+      const stock = getEffectiveStock(toolName, stockMods);
+      let restockPerDay = 0;
+      if (stock > 0 && exchangeRates.gemsPerSFL > 0) {
+        const daysPerStock = stock / toolsPerDay;
+        const gemCost = RESTOCK_GEM_COSTS.tools;
+        const restockSfl = gemCost / exchangeRates.gemsPerSFL;
+        restockPerDay = daysPerStock > 0 ? restockSfl / daysPerStock : 0;
+      }
+
+      return { costPerDay, toolSfl, restockPerDay, toolsPerDay, stock };
+    }
+
     // Compute total SFL/day across all products for an animal category
     function getAnimalCatSfl(catId, capacity, boostEffects, p2pPrices) {
       const animal = getAnimalData(catId);
@@ -6828,7 +7032,7 @@
       }
 
       const unitLabels = {
-        crops: "plots", fruits: "patches", chickens: "chickens", cows: "cows",
+        crops: "plots", fruits: "patches", greenhouse: "pots", chickens: "chickens", cows: "cows",
         sheep: "sheep", bees: "hives", flowers: "beds", stone: "rocks",
         iron: "nodes", gold: "nodes", crimstone: "nodes", trees: "trees", fishing: "reels"
       };
@@ -6848,9 +7052,9 @@
         const baseInfo = getAnimalCatSfl(catId, capacity, [], p2pPrices);
         for (const bp of baseInfo.breakdown) {
           const price = p2pPrices[bp.product] || 0;
-          h += `<div style="padding-left:8px">${bp.product}: ${n} × ${cyclesPerDay.toFixed(2)} × 1 = ${bp.unitsPerDay.toFixed(2)}/day × ${price.toFixed(6)} = <strong>${bp.sfl.toFixed(4)} SFL/day</strong></div>`;
+          h += `<div style="padding-left:8px">${bp.product}: ${n} × ${cyclesPerDay.toFixed(2)} × 1 = ${bp.unitsPerDay.toFixed(2)}/day × ${price.toFixed(6)} = <strong>${bp.sfl.toFixed(4)} ${sflIcon()}/day</strong></div>`;
         }
-        h += `<div>TOTAL: <strong style="color:var(--sunpetal)">${baseInfo.totalSfl.toFixed(4)} SFL/day</strong></div>`;
+        h += `<div>TOTAL: <strong style="color:var(--sunpetal)">${baseInfo.totalSfl.toFixed(4)} ${sflIcon()}/day</strong></div>`;
 
         // BOOSTED
         if (ownedEffects.length > 0) {
@@ -6861,9 +7065,9 @@
             const price = p2pPrices[bp.product] || 0;
             const bCyclesPerDay = bp.effectiveCycle > 0 ? 86400 / bp.effectiveCycle : 0;
             const bOutput = 1 * bp.yieldMult + bp.yieldFlat;
-            h += `<div style="padding-left:8px">${bp.product}: ×${bp.speedMult.toFixed(3)} → ${fmtSec(bp.effectiveCycle)} (${bCyclesPerDay.toFixed(2)}/day) | yield ×${bp.yieldMult.toFixed(3)}${bp.yieldFlat ? ` +${bp.yieldFlat.toFixed(2)}` : ""} → ${bp.unitsPerDay.toFixed(2)}/day × ${price.toFixed(6)} = <strong>${bp.sfl.toFixed(4)} SFL/day</strong></div>`;
+            h += `<div style="padding-left:8px">${bp.product}: ×${bp.speedMult.toFixed(3)} → ${fmtSec(bp.effectiveCycle)} (${bCyclesPerDay.toFixed(2)}/day) | yield ×${bp.yieldMult.toFixed(3)}${bp.yieldFlat ? ` +${bp.yieldFlat.toFixed(2)}` : ""} → ${bp.unitsPerDay.toFixed(2)}/day × ${price.toFixed(6)} = <strong>${bp.sfl.toFixed(4)} ${sflIcon()}/day</strong></div>`;
           }
-          h += `<div>TOTAL: <strong style="color:var(--green)">${boostedInfo.totalSfl.toFixed(4)} SFL/day</strong>`;
+          h += `<div>TOTAL: <strong style="color:var(--green)">${boostedInfo.totalSfl.toFixed(4)} ${sflIcon()}/day</strong>`;
           h += ` <span style="color:var(--sunpetal)">(+${delta.toFixed(4)} | +${baseInfo.totalSfl > 0 ? ((delta / baseInfo.totalSfl) * 100).toFixed(0) : "∞"}%)</span></div>`;
         }
       } else {
@@ -6883,8 +7087,8 @@
         h += `<div style="color:var(--lily);font-size: 0.625rem;margin-bottom:2px"><strong>📊 BASE PRODUCTION</strong></div>`;
         h += `<div>${n} ${unitLabel} × ${fmtSec(baseCycleSec)} cycle = <strong>${cyclesPerDay.toFixed(2)} cycles/day</strong></div>`;
         h += `<div>${cyclesPerDay.toFixed(2)} cycles × ${baseYield} yield × ${n} ${unitLabel} = <strong>${baseResult.unitsPerDay.toFixed(2)} ${priceProduct}/day</strong></div>`;
-        h += `<div>P2P price: ${price.toFixed(6)} SFL/${priceProduct}</div>`;
-        h += `<div>${baseResult.unitsPerDay.toFixed(2)} × ${price.toFixed(6)} = <strong style="color:var(--sunpetal)">${baseSfl.toFixed(4)} SFL/day</strong></div>`;
+        h += `<div>P2P price: ${price.toFixed(6)} ${sflIcon()}/${priceProduct}</div>`;
+        h += `<div>${baseResult.unitsPerDay.toFixed(2)} × ${price.toFixed(6)} = <strong style="color:var(--sunpetal)">${baseSfl.toFixed(4)} ${sflIcon()}/day</strong></div>`;
 
         if (ownedEffects.length > 0) {
           const bCyclesPerDay = boostedResult.effectiveCycle > 0 ? 86400 / boostedResult.effectiveCycle : 0;
@@ -6893,7 +7097,7 @@
           h += `<div>Speed: ×${boostedResult.speedMult.toFixed(3)} → ${fmtSec(boostedResult.effectiveCycle)} cycle → <strong>${bCyclesPerDay.toFixed(2)} cycles/day</strong></div>`;
           h += `<div>Yield: ×${boostedResult.yieldMult.toFixed(3)} ${boostedResult.yieldFlat !== 0 ? `+ ${boostedResult.yieldFlat.toFixed(2)} flat` : ""} → <strong>${bOutputPerCycle.toFixed(2)} per cycle</strong></div>`;
           h += `<div>${bCyclesPerDay.toFixed(2)} × ${bOutputPerCycle.toFixed(2)} × ${n} = <strong>${boostedResult.unitsPerDay.toFixed(2)} ${priceProduct}/day</strong></div>`;
-          h += `<div>${boostedResult.unitsPerDay.toFixed(2)} × ${price.toFixed(6)} = <strong style="color:var(--green)">${boostedSfl.toFixed(4)} SFL/day</strong>`;
+          h += `<div>${boostedResult.unitsPerDay.toFixed(2)} × ${price.toFixed(6)} = <strong style="color:var(--green)">${boostedSfl.toFixed(4)} ${sflIcon()}/day</strong>`;
           h += ` <span style="color:var(--sunpetal)">(+${delta.toFixed(4)} | +${baseSfl > 0 ? ((delta / baseSfl) * 100).toFixed(0) : "∞"}%)</span></div>`;
         }
       }
@@ -7023,10 +7227,10 @@
       // Header with type and cost
       if (boostItem.type === "Skill") {
         h += `<div style="margin-bottom:6px"><strong>${escHTML(boostItem.name)}</strong> — Skill (${escHTML(boostItem.skillTree)}, Tier ${boostItem.skillTier}, ${boostItem.skillPoints} point${boostItem.skillPoints > 1 ? "s" : ""})`;
-        if (boostItem.floor > 0) h += ` | Est. cost: ~${boostItem.floor.toFixed(0)} SFL`;
+        if (boostItem.floor > 0) h += ` | Est. cost: ~${boostItem.floor.toFixed(0)} ${sflIcon()}`;
         h += `</div>`;
       } else {
-        h += `<div style="margin-bottom:6px"><strong>${escHTML(boostItem.name)}</strong> — ${escHTML(boostItem.type)}${boostItem.floor > 0 ? ` | Floor: ${boostItem.floor.toFixed(1)} SFL` : ""}</div>`;
+        h += `<div style="margin-bottom:6px"><strong>${escHTML(boostItem.name)}</strong> — ${escHTML(boostItem.type)}${boostItem.markCost > 0 ? ` | ${(boostItem.markCost/1000).toFixed(0)}k Marks = ${boostItem.floor.toFixed(0)} ${sflIcon()}` : boostItem.floor > 0 ? ` | Floor: ${boostItem.floor.toFixed(1)} ${sflIcon()}` : ""}</div>`;
       }
       h += `<div style="color:var(--green);margin-bottom:6px">${escHTML(boostItem.boost)}</div>`;
 
@@ -7036,10 +7240,10 @@
         h += `<hr style="border-color:var(--border-dark);margin:4px 0">`;
         h += `<div style="margin-bottom:2px;color:var(--lily)"><strong>Skill Cost Calculation:</strong></div>`;
         h += `<div>Bumpkin Level: ${skillCostInfo.level} → Total XP: ${(skillCostInfo.totalXP / 1e6).toFixed(1)}M</div>`;
-        h += `<div>Best recipe: ${escHTML(br.name)} (base ${br.xp} XP${br.boostedXP !== br.xp ? ` → ${br.boostedXP} XP boosted` : ""} / ${br.cost.toFixed(4)} SFL = ${br.ratio.toFixed(0)} XP/SFL)</div>`;
+        h += `<div>Best recipe: ${escHTML(br.name)} (base ${br.xp} XP${br.boostedXP !== br.xp ? ` → ${br.boostedXP} XP boosted` : ""} / ${br.cost.toFixed(4)} ${sflIcon()} = ${br.ratio.toFixed(0)} XP/${sflIcon()})</div>`;
         if (skillCostInfo.xpBoostNames?.length) h += `<div>XP boosts applied: ${escHTML(skillCostInfo.xpBoostNames.join(", "))}</div>`;
-        h += `<div>Avg cost per level: ${skillCostInfo.sflPerLevel.toFixed(1)} SFL → <strong>1 skill point ≈ ${skillCostInfo.sflPerPoint.toFixed(1)} SFL</strong></div>`;
-        h += `<div style="color:var(--sunpetal)">This skill (${boostItem.skillPoints}pt): <strong>${boostItem.skillPoints} × ${skillCostInfo.sflPerPoint.toFixed(1)} = ~${boostItem.floor.toFixed(0)} SFL</strong></div>`;
+        h += `<div>Avg cost per level: ${skillCostInfo.sflPerLevel.toFixed(1)} ${sflIcon()} → <strong>1 skill point ≈ ${skillCostInfo.sflPerPoint.toFixed(1)} ${sflIcon()}</strong></div>`;
+        h += `<div style="color:var(--sunpetal)">This skill (${boostItem.skillPoints}pt): <strong>${boostItem.skillPoints} × ${skillCostInfo.sflPerPoint.toFixed(1)} = ~${boostItem.floor.toFixed(0)} ${sflIcon()}</strong></div>`;
       }
       h += `<hr style="border-color:var(--border-dark);margin:4px 0">`;
 
@@ -7050,11 +7254,11 @@
           h += `<div style="margin-bottom:4px"><strong>Farm:</strong> ${n} ${catId} (${formatSec(animal.cycleSec)} cycle) → ${animal.products.join(" + ")}</div>`;
 
           const baseInfo = getAnimalCatSfl(catId, capacity, [], p2pPrices);
-          h += `<div style="margin-bottom:4px"><strong>Base:</strong> ${baseInfo.totalSfl.toFixed(4)} SFL/day (${baseInfo.breakdown.map(bp => `${bp.product}: ${bp.unitsPerDay.toFixed(1)}/day`).join(", ")})</div>`;
+          h += `<div style="margin-bottom:4px"><strong>Base:</strong> ${baseInfo.totalSfl.toFixed(4)} ${sflIcon()}/day (${baseInfo.breakdown.map(bp => `${bp.product}: ${bp.unitsPerDay.toFixed(1)}/day`).join(", ")})</div>`;
 
           const soloInfo = getAnimalCatSfl(catId, capacity, catEffects, p2pPrices);
           const soloDelta = soloInfo.totalSfl - baseInfo.totalSfl;
-          h += `<div style="margin-bottom:4px"><strong>Solo:</strong> ${soloInfo.totalSfl.toFixed(4)} SFL/day (<span style="color:var(--green)">+${soloDelta.toFixed(4)}</span>)</div>`;
+          h += `<div style="margin-bottom:4px"><strong>Solo:</strong> ${soloInfo.totalSfl.toFixed(4)} ${sflIcon()}/day (<span style="color:var(--green)">+${soloDelta.toFixed(4)}</span>)</div>`;
 
           const ownedEffects = allCatBoosts.filter(b => b.has).flatMap(b => getEffectsForCategory(b, catId));
           if (boostItem.has) {
@@ -7062,7 +7266,7 @@
             const withoutEffects = allCatBoosts.filter(b => b.has && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId));
             const withoutInfo = getAnimalCatSfl(catId, capacity, withoutEffects, p2pPrices);
             const marginal = allInfo.totalSfl - withoutInfo.totalSfl;
-            h += `<div style="margin-bottom:4px"><strong>Marginal (${ownedEffects.length} effects):</strong> <span style="color:var(--green)">+${marginal.toFixed(4)} SFL/day</span></div>`;
+            h += `<div style="margin-bottom:4px"><strong>Marginal (${ownedEffects.length} effects):</strong> <span style="color:var(--green)">+${marginal.toFixed(4)} ${sflIcon()}/day</span></div>`;
             if (boostItem.floor > 0 && marginal > 0) {
               h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${marginal.toFixed(4)} = <span style="color:var(--sunpetal)">${(boostItem.floor / marginal).toFixed(0)} days</span></div>`;
             }
@@ -7071,18 +7275,18 @@
             const withInfo = getAnimalCatSfl(catId, capacity, withThis, p2pPrices);
             const ownedInfo = getAnimalCatSfl(catId, capacity, ownedEffects, p2pPrices);
             const synergy = withInfo.totalSfl - ownedInfo.totalSfl;
-            h += `<div style="margin-bottom:4px"><strong>Synergy (with your boosts):</strong> <span style="color:var(--green)">+${synergy.toFixed(4)} SFL/day</span></div>`;
+            h += `<div style="margin-bottom:4px"><strong>Synergy (with your boosts):</strong> <span style="color:var(--green)">+${synergy.toFixed(4)} ${sflIcon()}/day</span></div>`;
             if (boostItem.floor > 0 && synergy > 0) {
               h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${synergy.toFixed(4)} = <span style="color:var(--sunpetal)">${(boostItem.floor / synergy).toFixed(0)} days</span></div>`;
             }
           }
         } else {
           // Non-animal formula (original)
-          h += `<div style="margin-bottom:4px"><strong>Farm:</strong> ${n} × ${escHTML(product)} (${formatSec(baseCycleSec)} grow | ${price.toFixed(6)} SFL)</div>`;
+          h += `<div style="margin-bottom:4px"><strong>Farm:</strong> ${n} × ${escHTML(product)} (${formatSec(baseCycleSec)} grow | ${price.toFixed(6)} ${sflIcon()})</div>`;
 
           const baseResult = applyBoosts(catId, product, capacity, []);
           const baseSfl = unitToSfl(baseResult.unitsPerDay, priceProduct, p2pPrices);
-          h += `<div style="margin-bottom:4px"><strong>Base:</strong> ${baseResult.unitsPerDay.toFixed(2)} units/day = ${baseSfl.toFixed(4)} SFL/day</div>`;
+          h += `<div style="margin-bottom:4px"><strong>Base:</strong> ${baseResult.unitsPerDay.toFixed(2)} units/day = ${baseSfl.toFixed(4)} ${sflIcon()}/day</div>`;
 
           const soloResult = applyBoosts(catId, product, capacity, catEffects);
           const soloSfl = unitToSfl(soloResult.unitsPerDay, priceProduct, p2pPrices);
@@ -7091,7 +7295,7 @@
           if (soloResult.speedMult !== 1) h += ` speed ×${soloResult.speedMult.toFixed(2)}`;
           if (soloResult.yieldMult !== 1) h += ` yield ×${soloResult.yieldMult.toFixed(2)}`;
           if (soloResult.yieldFlat) h += ` +${soloResult.yieldFlat.toFixed(2)}/cycle`;
-          h += ` → ${soloSfl.toFixed(4)} SFL/day (<span style="color:var(--green)">+${soloDelta.toFixed(4)}</span>)</div>`;
+          h += ` → ${soloSfl.toFixed(4)} ${sflIcon()}/day (<span style="color:var(--green)">+${soloDelta.toFixed(4)}</span>)</div>`;
 
           const ownedEffects = allCatBoosts.filter(b => b.has).flatMap(b => getEffectsForCategory(b, catId));
           if (boostItem.has) {
@@ -7101,7 +7305,7 @@
             const allSfl = unitToSfl(allResult.unitsPerDay, priceProduct, p2pPrices);
             const withoutSfl = unitToSfl(withoutResult.unitsPerDay, priceProduct, p2pPrices);
             const marginal = allSfl - withoutSfl;
-            h += `<div style="margin-bottom:4px"><strong>Marginal (${ownedEffects.length} active effects):</strong> <span style="color:var(--green)">+${marginal.toFixed(4)} SFL/day</span></div>`;
+            h += `<div style="margin-bottom:4px"><strong>Marginal (${ownedEffects.length} active effects):</strong> <span style="color:var(--green)">+${marginal.toFixed(4)} ${sflIcon()}/day</span></div>`;
             if (boostItem.floor > 0 && marginal > 0) {
               const roi = boostItem.floor / marginal;
               h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${marginal.toFixed(4)} = <span style="color:var(--sunpetal)">${roi.toFixed(0)} days</span></div>`;
@@ -7113,7 +7317,7 @@
             const withSfl = unitToSfl(withResult.unitsPerDay, priceProduct, p2pPrices);
             const ownedSfl = unitToSfl(ownedResult.unitsPerDay, priceProduct, p2pPrices);
             const synergy = withSfl - ownedSfl;
-            h += `<div style="margin-bottom:4px"><strong>Synergy (with your boosts):</strong> <span style="color:var(--green)">+${synergy.toFixed(4)} SFL/day</span></div>`;
+            h += `<div style="margin-bottom:4px"><strong>Synergy (with your boosts):</strong> <span style="color:var(--green)">+${synergy.toFixed(4)} ${sflIcon()}/day</span></div>`;
             if (boostItem.floor > 0 && synergy > 0) {
               const roi = boostItem.floor / synergy;
               h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${synergy.toFixed(4)} = <span style="color:var(--sunpetal)">${roi.toFixed(0)} days</span></div>`;
@@ -7121,9 +7325,9 @@
           }
         }
       } else if (n === 0 && POWER_CATEGORIES[catId]?.quantifiable) {
-        h += `<div style="color:var(--text-dim)">No capacity detected for this category. Cannot calculate SFL/day.</div>`;
+        h += `<div style="color:var(--text-dim)">No capacity detected for this category. Cannot calculate ${sflIcon()}/day.</div>`;
       } else {
-        h += `<div style="color:var(--text-dim)">Qualitative boost — cannot calculate SFL/day value.</div>`;
+        h += `<div style="color:var(--text-dim)">Qualitative boost — cannot calculate ${sflIcon()}/day value.</div>`;
       }
 
       h += `</div>`;
@@ -7159,7 +7363,7 @@
         ⚠️ UNDER DEVELOPMENT ⚠️
         <div style="margin-top:6px;font-size: 0.5rem;color:var(--text-secondary);line-height:1.5">
           All NFT collectibles, wearables & bumpkin skills with production boosts.<br>
-          Shows SFL/day value, synergy with your other boosts, ROI payback time, and expandable formulas.<br>
+          Shows ${sflIcon()}/day value, synergy with your other boosts, ROI payback time, and expandable formulas.<br>
           Organized by category (Crops, Animals, Mining, etc.) with product selectors and Best Buys ranking.
         </div>
       </div>`;
@@ -7167,8 +7371,8 @@
       html += `<div id="power-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading boost data...</div></div></div>`;
       app.innerHTML = html;
 
-      // Fetch NFT data + P2P prices in parallel
-      let nftData, p2pPrices = {};
+      // Fetch NFT data + P2P prices + exchange rates in parallel
+      let nftData, p2pPrices = {}, exchangeRates = { coinsPerSFL: 320, gemsPerSFL: 0 };
       try {
         const proxyFetch = async (url) => {
           try {
@@ -7177,14 +7381,29 @@
           } catch {}
           return (await fetch(url)).json();
         };
-        const [nftResp, priceResp] = await Promise.all([
+        const [nftResp, priceResp, rateResp] = await Promise.all([
           proxyFetch("https://sfl.world/api/v1/nfts"),
           proxyFetch("https://sfl.world/api/v1/prices"),
+          proxyFetch("https://sfl.world/api/v1/exchange-rates").catch(() => null),
         ]);
         nftData = nftResp;
         const priceData = priceResp?.data?.p2p || priceResp?.p2p || {};
         for (const [k, v] of Object.entries(priceData)) {
           p2pPrices[k] = parseFloat(v) || 0;
+        }
+        // Extract exchange rates for cost calculations
+        if (rateResp) {
+          const tiers = rateResp?.data?.tiers || rateResp?.tiers || [];
+          const coinTiers = tiers.filter(t => t.coin !== undefined && t.sfl !== undefined);
+          const gemTiers = tiers.filter(t => t.gem !== undefined && t.sfl !== undefined);
+          if (coinTiers.length > 0) {
+            const best = coinTiers.reduce((a, b) => (b.coin / b.sfl) > (a.coin / a.sfl) ? b : a);
+            exchangeRates.coinsPerSFL = best.coin / best.sfl;
+          }
+          if (gemTiers.length > 0) {
+            const best = gemTiers.reduce((a, b) => (b.gem / (b.sfl * 0.7)) > (a.gem / (a.sfl * 0.7)) ? b : a);
+            exchangeRates.gemsPerSFL = best.gem / (best.sfl * 0.7);
+          }
         }
       } catch (err) {
         document.getElementById("power-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load: ${escHTML(err.message)}</p></div>`;
@@ -7202,10 +7421,13 @@
         const has = getCount(inventory, item.name) > 0 || findCollectible(farm, item.name).length > 0;
         const effects = parseBoostEffects(item.boost_text);
         const categories = classifyToCategories(effects);
+        let floor = parseFloat(item.floor) || 0;
+        const markCost = getFactionMarkCost(item.name);
+        if (markCost > 0) floor = marksToSfl(markCost);
         boostItems.push({
           name: item.name, type: "Collectible", boost: item.boost_text,
-          floor: parseFloat(item.floor) || 0, supply: item.supply || 0,
-          has, effects, categories,
+          floor, supply: item.supply || 0,
+          has, effects, categories, markCost,
         });
       }
 
@@ -7214,10 +7436,13 @@
         const has = (wardrobe[item.name] || 0) > 0;
         const effects = parseBoostEffects(item.boost_text);
         const categories = classifyToCategories(effects);
+        let floor = parseFloat(item.floor) || 0;
+        const markCost = getFactionMarkCost(item.name);
+        if (markCost > 0) floor = marksToSfl(markCost);
         boostItems.push({
           name: item.name, type: "Wearable", boost: item.boost_text,
-          floor: parseFloat(item.floor) || 0, supply: item.supply || 0,
-          has, effects, categories,
+          floor, supply: item.supply || 0,
+          has, effects, categories, markCost,
         });
       }
 
@@ -7235,6 +7460,7 @@
             "Animals": ["chickens", "cows", "sheep"],
             "Crops": ["crops"],
             "Fruit Patch": ["fruits"],
+            "Greenhouse": ["greenhouse"],
             "Fishing": ["fishing"],
             "Mining": ["stone", "iron", "gold", "crimstone"],
             "Trees": ["trees"],
@@ -7266,21 +7492,24 @@
         catBoosts[catId] = boostItems.filter(b => b.categories.includes(catId));
       }
 
+      // Detect stock modifiers for cost calculations
+      const stockMods = detectStockModifiers(farm);
+
       // Store state for interactive updates
-      powerState = { boostItems, catBoosts, capacity, p2pPrices, savedProducts, farm, skillCostInfo };
+      powerState = { boostItems, catBoosts, capacity, p2pPrices, savedProducts, farm, skillCostInfo, exchangeRates, stockMods };
 
       // Render
       renderPowerContent();
     }
 
     function renderPowerContent() {
-      const { boostItems, catBoosts, capacity, p2pPrices, savedProducts } = powerState;
+      const { boostItems, catBoosts, capacity, p2pPrices, savedProducts, exchangeRates, stockMods } = powerState;
 
       const ownedCount = boostItems.filter(b => b.has).length;
       const totalCount = boostItems.length;
 
-      // Calculate total boost value across all quantifiable categories
-      let totalBaseSfl = 0, totalBoostedSfl = 0;
+      // Calculate total boost value + costs across all quantifiable categories
+      let totalBaseSfl = 0, totalBoostedSfl = 0, totalCostSfl = 0;
       const catSummaries = {};
       for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
         if (!catDef.quantifiable) continue;
@@ -7289,7 +7518,6 @@
 
         let baseSfl, boostedSfl;
         if (isAnimalCat(catId)) {
-          // Multi-product: sum SFL across all animal products
           const baseInfo = getAnimalCatSfl(catId, capacity, [], p2pPrices);
           const boostedInfo = getAnimalCatSfl(catId, capacity, ownedEffects, p2pPrices);
           baseSfl = baseInfo.totalSfl;
@@ -7302,13 +7530,30 @@
           boostedSfl = unitToSfl(boostedResult.unitsPerDay, priceProduct, p2pPrices);
         }
 
+        // Calculate production costs
+        let costPerDay = 0, restockPerDay = 0, costDetails = null;
+        if (catId === "crops" || catId === "fruits" || catId === "greenhouse") {
+          const c = calcSeedCostPerDay(catId, product, capacity, exchangeRates, stockMods, ownedEffects);
+          costPerDay = c.costPerDay;
+          restockPerDay = c.restockPerDay;
+          costDetails = c;
+        } else if (["trees", "stone", "iron", "gold", "crimstone"].includes(catId)) {
+          const c = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods);
+          costPerDay = c.costPerDay;
+          restockPerDay = c.restockPerDay;
+          costDetails = c;
+        }
+        const totalCatCost = costPerDay + restockPerDay;
+        totalCostSfl += totalCatCost;
+
         totalBaseSfl += baseSfl;
         totalBoostedSfl += boostedSfl;
-        catSummaries[catId] = { baseSfl, boostedSfl, delta: boostedSfl - baseSfl, product };
+        catSummaries[catId] = { baseSfl, boostedSfl, delta: boostedSfl - baseSfl, product, costPerDay: totalCatCost, costDetails };
       }
 
       const totalDelta = totalBoostedSfl - totalBaseSfl;
       const boostPct = totalBaseSfl > 0 ? ((totalDelta / totalBaseSfl) * 100).toFixed(0) : 0;
+      const netBoostedSfl = totalBoostedSfl - totalCostSfl;
 
       let content = "";
 
@@ -7317,9 +7562,10 @@
 
       content += `<div class="power-summary pixel-font">
         <div class="power-summary-stat"><div class="power-summary-label">OWNED</div><div class="power-summary-value" style="color:var(--green)">${ownedCount} / ${totalCount}</div></div>
-        <div class="power-summary-stat"><div class="power-summary-label">BOOST VALUE</div><div class="power-summary-value" style="color:var(--sunpetal)">+${totalDelta.toFixed(2)} SFL/day</div></div>
-        <div class="power-summary-stat"><div class="power-summary-label">BASE</div><div class="power-summary-value">${totalBaseSfl.toFixed(2)} SFL/day</div></div>
-        <div class="power-summary-stat"><div class="power-summary-label">BOOSTED</div><div class="power-summary-value" style="color:var(--green)">${totalBoostedSfl.toFixed(2)} SFL/day (+${boostPct}%)</div></div>
+        <div class="power-summary-stat"><div class="power-summary-label">GROSS REVENUE</div><div class="power-summary-value" style="color:var(--sunpetal)">${totalBoostedSfl.toFixed(2)} ${sflIcon()}/day</div></div>
+        <div class="power-summary-stat"><div class="power-summary-label">COSTS</div><div class="power-summary-value" style="color:var(--red)">-${totalCostSfl.toFixed(2)} ${sflIcon()}/day</div></div>
+        <div class="power-summary-stat"><div class="power-summary-label">NET PROFIT</div><div class="power-summary-value" style="color:${netBoostedSfl >= 0 ? 'var(--green)' : 'var(--red)'}">${netBoostedSfl.toFixed(2)} ${sflIcon()}/day</div></div>
+        <div class="power-summary-stat"><div class="power-summary-label">BOOST VALUE</div><div class="power-summary-value" style="color:var(--text-secondary)">+${totalDelta.toFixed(2)} ${sflIcon()}/day (+${boostPct}%)</div></div>
       </div>`;
 
       // Skill cost info panel
@@ -7333,10 +7579,22 @@
             Best recipe: <strong>${escHTML(br.name)}</strong> (${escHTML(br.building)})
             — base ${br.xp} XP${hasXpBoosts ? ` → <span style="color:var(--green)">${br.boostedXP} XP</span> with boosts` : ""}<br>
             ${hasXpBoosts ? `XP boosts: ${escHTML(skillCostInfo.xpBoostNames.join(", "))}<br>` : ""}
-            Ingredients: ${Object.entries(br.ingredients).map(([k, v]) => `${v}× ${escHTML(k)}`).join(", ")} = ${br.cost.toFixed(4)} SFL<br>
-            Efficiency: <strong>${br.ratio.toFixed(0)} XP/SFL</strong> | Total SFL to lvl ${skillCostInfo.level}: ~${(skillCostInfo.totalSFL).toFixed(0)} SFL<br>
-            <span style="color:var(--sunpetal);font-weight:bold">1 skill point ≈ ${skillCostInfo.sflPerPoint.toFixed(1)} SFL</span>
-            <span style="color:var(--text-dim)"> (${skillCostInfo.sflPerLevel.toFixed(1)} SFL/level avg)</span>
+            Ingredients: ${Object.entries(br.ingredients).map(([k, v]) => `${v}× ${escHTML(k)}`).join(", ")} = ${br.cost.toFixed(4)} ${sflIcon()}<br>
+            Efficiency: <strong>${br.ratio.toFixed(0)} XP/${sflIcon()}</strong> | Total to lvl ${skillCostInfo.level}: ~${(skillCostInfo.totalSFL).toFixed(0)} ${sflIcon()}<br>
+            <span style="color:var(--sunpetal);font-weight:bold">1 skill point ≈ ${skillCostInfo.sflPerPoint.toFixed(1)} ${sflIcon()}</span>
+            <span style="color:var(--text-dim)"> (${skillCostInfo.sflPerLevel.toFixed(1)} ${sflIcon()}/level avg)</span>
+          </div>
+        </div>`;
+      }
+
+      // Faction Marks info panel
+      const marksItems = boostItems.filter(b => b.markCost > 0);
+      if (marksItems.length > 0) {
+        content += `<div class="pixel-panel" style="padding:8px 12px;margin-bottom:16px;font-size: 0.5625rem;border:2px solid var(--border-dark)">
+          <div class="pixel-font" style="font-size: 0.625rem;color:var(--yellow);margin-bottom:6px">⚔️ FACTION MARKS PRICING</div>
+          <div style="color:var(--text-secondary);line-height:1.6">
+            1 Mark = 0.1 ${sflIcon()} (flower conversion) · ${marksItems.length} faction items detected<br>
+            <span style="color:var(--text-dim)">Faction shop items use Marks-derived cost instead of NFT floor price for ROI calculations.</span>
           </div>
         </div>`;
       }
@@ -7373,7 +7631,7 @@
             <span class="power-bb-name">${escHTML(bb.boost.name)}</span>
             <span class="power-bb-cat">${escHTML(bb.catLabel)}</span>
             <span class="power-bb-sfl">+${bb.synergy.toFixed(2)}/day</span>
-            <span class="power-bb-floor">${bb.floor.toFixed(0)} SFL</span>
+            <span class="power-bb-floor">${bb.floor.toFixed(0)} ${sflIcon()}</span>
             <span class="power-bb-roi">${bb.roi.toFixed(0)}d ROI</span>
           </div>`;
         }
@@ -7397,7 +7655,7 @@
         content += `<div class="power-category pixel-panel" id="power-cat-${catId}">`;
         content += `<div class="power-cat-header pixel-font" onclick="togglePowerCategory('${catId}')">
           <span>${catDef.emoji} ${catDef.label}</span>
-          <span class="power-cat-count">${n} ${({crops:"plots",fruits:"patches",trees:"trees",flowers:"beds",stone:"rocks",iron:"nodes",gold:"nodes",crimstone:"nodes",chickens:"chickens",cows:"cows",sheep:"sheep",bees:"hives",fishing:"reels"})[catId] || catId}</span>`;
+          <span class="power-cat-count">${n} ${({crops:"plots",fruits:"patches",greenhouse:"pots",trees:"trees",flowers:"beds",stone:"rocks",iron:"nodes",gold:"nodes",crimstone:"nodes",chickens:"chickens",cows:"cows",sheep:"sheep",bees:"hives",fishing:"reels"})[catId] || catId}</span>`;
 
         // Product selector
         if (catDef.selector === "crop") {
@@ -7412,6 +7670,12 @@
             content += `<option value="${fruit}"${fruit === product ? " selected" : ""}>${fruit}</option>`;
           }
           content += `</select>`;
+        } else if (catDef.selector === "greenhouse") {
+          content += `<select class="power-product-select" onchange="selectPowerProduct('${catId}',this.value)" onclick="event.stopPropagation()">`;
+          for (const item of Object.keys(GREENHOUSE_GROW_DATA)) {
+            content += `<option value="${item}"${item === product ? " selected" : ""}>${item}</option>`;
+          }
+          content += `</select>`;
         } else if (catDef.selector === "flower") {
           content += `<select class="power-product-select" onchange="selectPowerProduct('${catId}',this.value)" onclick="event.stopPropagation()">`;
           for (const seed of Object.keys(SEED_DATA)) {
@@ -7420,12 +7684,32 @@
           content += `</select>`;
         }
 
-        content += `<span class="power-cat-sfl"><span style="color:var(--text-dim);font-size: 0.5rem">${summary.baseSfl.toFixed(2)}</span> <span style="color:var(--sunpetal)">+${summary.delta.toFixed(2)}/day</span></span>
+        const catNet = summary.boostedSfl - (summary.costPerDay || 0);
+        content += `<span class="power-cat-sfl">${summary.costPerDay > 0 ? `<span style="color:var(--text-dim);font-size: 0.4375rem">-${summary.costPerDay.toFixed(2)}</span> ` : ""}<span style="color:${catNet >= 0 ? 'var(--green)' : 'var(--red)'};font-size: 0.5rem">${catNet >= 0 ? "+" : ""}${catNet.toFixed(2)}/day</span></span>
           <span class="power-toggle-arrow">▼</span>
         </div>`;
 
         content += `<div class="power-cat-body">`;
         content += buildProductionBreakdown(catId, product, capacity, p2pPrices, items);
+
+        // Cost breakdown
+        if (summary.costDetails && summary.costPerDay > 0) {
+          const cd = summary.costDetails;
+          content += `<div style="padding:6px 12px;font-size: 0.5625rem;color:var(--text-secondary);line-height:1.8;border-bottom:1px solid var(--border-dark)">`;
+          content += `<div style="color:var(--red);font-size: 0.625rem;margin-bottom:2px"><strong>💰 PRODUCTION COSTS</strong></div>`;
+          if (cd.seedSfl !== undefined) {
+            content += `<div>Seed cost: ${(SEED_COSTS[product] || 0).toFixed(2)} coins = ${cd.seedSfl.toFixed(6)} ${sflIcon()} (${Math.round(exchangeRates.coinsPerSFL)} coins/${sflIcon()})</div>`;
+            content += `<div>Seed cost/day: ${cd.seedSfl.toFixed(6)} × ${(cd.cyclesPerDay || 0).toFixed(2)} cycles × ${getCapacityCount(catId, capacity)} = <strong style="color:var(--red)">${(cd.costPerDay || 0).toFixed(4)} ${sflIcon()}/day</strong></div>`;
+            if (cd.stock > 0) content += `<div>Stock: ${cd.stock} seeds${stockMods.hasWarehouse ? " (Warehouse ×1.2)" : ""} | Restock: ${(cd.restockPerDay || 0).toFixed(4)} ${sflIcon()}/day</div>`;
+          } else if (cd.toolSfl !== undefined) {
+            content += `<div>Tool cost: ${cd.toolSfl.toFixed(4)} ${sflIcon()} per use</div>`;
+            content += `<div>Tool cost/day: ${cd.toolSfl.toFixed(4)} × ${(cd.toolsPerDay || 0).toFixed(2)} = <strong style="color:var(--red)">${(cd.costPerDay || 0).toFixed(4)} ${sflIcon()}/day</strong></div>`;
+            if (cd.stock > 0) content += `<div>Stock: ${cd.stock} tools${stockMods.hasToolshed ? " (Toolshed ×1.5)" : ""} | Restock: ${(cd.restockPerDay || 0).toFixed(4)} ${sflIcon()}/day</div>`;
+          }
+          const netCat = summary.boostedSfl - summary.costPerDay;
+          content += `<div style="margin-top:4px"><strong>Net profit: <span style="color:${netCat >= 0 ? 'var(--green)' : 'var(--red)'}">${netCat.toFixed(4)} ${sflIcon()}/day</span></strong> (revenue ${summary.boostedSfl.toFixed(4)} - costs ${summary.costPerDay.toFixed(4)})</div>`;
+          content += `</div>`;
+        }
 
         // Owned boosts
         if (owned.length > 0) {
@@ -7483,6 +7767,96 @@
             content += renderPowerQualRow(b, false);
           }
         }
+
+        content += `</div></div>`;
+      }
+
+      // ── Cost Verification Tables ──
+      if (totalCostSfl > 0) {
+        content += `<div style="margin-top:16px">
+          <div class="pixel-font" style="font-size: 0.6875rem;color:var(--text-secondary);margin-bottom:8px;border-bottom:2px solid var(--border-dark);padding-bottom:4px;cursor:pointer" onclick="document.getElementById('power-cost-tables').style.display=document.getElementById('power-cost-tables').style.display==='none'?'block':'none'">
+            ═══ 💰 COST BREAKDOWN TABLES ═══ <span style="font-size: 0.5625rem;color:var(--text-dim)">click to toggle</span>
+          </div>
+          <div id="power-cost-tables" style="display:none;overflow-x:auto">`;
+
+        // Seed cost table
+        const seedCats = ["crops", "fruits", "greenhouse"];
+        const seedRows = [];
+        for (const catId of seedCats) {
+          const product = savedProducts[catId] || getDefaultProduct(catId);
+          const growData = catId === "crops" ? CROP_GROW_DATA : catId === "fruits" ? FRUIT_GROW_DATA : GREENHOUSE_GROW_DATA;
+          for (const [name, growSec] of Object.entries(growData)) {
+            const coinCost = SEED_COSTS[name] || 0;
+            const sflCost = exchangeRates.coinsPerSFL > 0 ? coinCost / exchangeRates.coinsPerSFL : 0;
+            const seedName = name + " Seed";
+            const stock = getEffectiveStock(seedName, stockMods);
+            seedRows.push({ name, catId, coinCost, sflCost, stock, growSec });
+          }
+        }
+
+        content += `<div style="margin-bottom:12px"><div class="pixel-font" style="font-size: 0.5625rem;color:var(--lily);margin-bottom:4px">🌱 SEED COSTS (${Math.round(exchangeRates.coinsPerSFL)} coins/${sflIcon()})</div>
+          <table style="width:100%;border-collapse:collapse;font-size: 0.5rem;color:var(--text-secondary)">
+            <thead><tr style="background:rgba(92,58,30,0.3);text-align:left">
+              <th style="padding:3px 6px;border:1px solid var(--border-dark)">Crop</th>
+              <th style="padding:3px 6px;border:1px solid var(--border-dark)">Cat</th>
+              <th style="padding:3px 6px;border:1px solid var(--border-dark)">Coins</th>
+              <th style="padding:3px 6px;border:1px solid var(--border-dark)">${sflIcon()}</th>
+              <th style="padding:3px 6px;border:1px solid var(--border-dark)">Stock</th>
+              <th style="padding:3px 6px;border:1px solid var(--border-dark)">Grow</th>
+            </tr></thead><tbody>`;
+        for (const r of seedRows) {
+          content += `<tr style="border-bottom:1px solid rgba(92,58,30,0.15)">
+            <td style="padding:2px 6px;border:1px solid var(--border-dark)">${escHTML(r.name)}</td>
+            <td style="padding:2px 6px;border:1px solid var(--border-dark)">${r.catId}</td>
+            <td style="padding:2px 6px;border:1px solid var(--border-dark)">${r.coinCost}</td>
+            <td style="padding:2px 6px;border:1px solid var(--border-dark)">${r.sflCost.toFixed(6)}</td>
+            <td style="padding:2px 6px;border:1px solid var(--border-dark)">${r.stock}</td>
+            <td style="padding:2px 6px;border:1px solid var(--border-dark)">${fmtSec(r.growSec)}</td>
+          </tr>`;
+        }
+        content += `</tbody></table></div>`;
+
+        // Tool cost table
+        content += `<div style="margin-bottom:12px"><div class="pixel-font" style="font-size: 0.5625rem;color:var(--lily);margin-bottom:4px">⛏️ TOOL COSTS</div>
+          <table style="width:100%;border-collapse:collapse;font-size: 0.5rem;color:var(--text-secondary)">
+            <thead><tr style="background:rgba(92,58,30,0.3);text-align:left">
+              <th style="padding:3px 6px;border:1px solid var(--border-dark)">Tool</th>
+              <th style="padding:3px 6px;border:1px solid var(--border-dark)">For</th>
+              <th style="padding:3px 6px;border:1px solid var(--border-dark)">Coins</th>
+              <th style="padding:3px 6px;border:1px solid var(--border-dark)">Materials</th>
+              <th style="padding:3px 6px;border:1px solid var(--border-dark)">Total ${sflIcon()}</th>
+              <th style="padding:3px 6px;border:1px solid var(--border-dark)">Stock</th>
+            </tr></thead><tbody>`;
+        for (const [toolName, tool] of Object.entries(TOOL_COSTS)) {
+          const catId = TOOL_TO_CAT[toolName] || "—";
+          let toolSfl = exchangeRates.coinsPerSFL > 0 ? tool.coins / exchangeRates.coinsPerSFL : 0;
+          const mats = [];
+          if (tool.materials) {
+            for (const [mat, qty] of Object.entries(tool.materials)) {
+              const matSfl = (p2pPrices[mat] || 0) * qty;
+              toolSfl += matSfl;
+              mats.push(`${qty}× ${mat}`);
+            }
+          }
+          const stock = getEffectiveStock(toolName, stockMods);
+          content += `<tr style="border-bottom:1px solid rgba(92,58,30,0.15)">
+            <td style="padding:2px 6px;border:1px solid var(--border-dark)">${escHTML(toolName)}</td>
+            <td style="padding:2px 6px;border:1px solid var(--border-dark)">${catId}</td>
+            <td style="padding:2px 6px;border:1px solid var(--border-dark)">${tool.coins}</td>
+            <td style="padding:2px 6px;border:1px solid var(--border-dark)">${mats.join(", ") || "—"}</td>
+            <td style="padding:2px 6px;border:1px solid var(--border-dark)">${toolSfl.toFixed(4)}</td>
+            <td style="padding:2px 6px;border:1px solid var(--border-dark)">${stock}</td>
+          </tr>`;
+        }
+        content += `</tbody></table></div>`;
+
+        // Restock info
+        content += `<div class="pixel-font" style="font-size: 0.5rem;color:var(--text-dim);line-height:1.6">
+          Restock: ${RESTOCK_GEM_COSTS.seeds} gems (seeds) | ${RESTOCK_GEM_COSTS.tools} gems (tools) | ${RESTOCK_GEM_COSTS.both} gems (both)<br>
+          ${stockMods.hasWarehouse ? "✅ Warehouse (+20% seed stock)" : "❌ No Warehouse"} ·
+          ${stockMods.hasToolshed ? "✅ Toolshed (+50% tool stock)" : "❌ No Toolshed"} ·
+          ${stockMods.moreAxes ? "✅ More Axes" : ""} ${stockMods.morePicks ? "✅ More Picks" : ""}
+        </div>`;
 
         content += `</div></div>`;
       }
@@ -7546,9 +7920,16 @@
       const sflText = val.synergy !== 0 ? `${val.synergy > 0 ? "+" : ""}${val.synergy.toFixed(2)}/day` : "—";
       const roiText = val.roi < Infinity ? `${val.roi.toFixed(0)}d` : "";
       const typeLabel = b.type === "Skill" ? `Skill (${b.skillTree}, ${b.skillPoints}pt)` : b.type;
-      const costLabel = b.type === "Skill" && b.floor > 0
-        ? `~${b.floor.toFixed(0)} SFL (${b.skillPoints}pt)`
-        : (b.floor > 0 ? `${b.floor.toFixed(0)} SFL` : "");
+      let costLabel;
+      if (b.type === "Skill" && b.floor > 0) {
+        costLabel = `~${b.floor.toFixed(0)} ${sflIcon()} (${b.skillPoints}pt)`;
+      } else if (b.markCost > 0) {
+        costLabel = `${b.floor.toFixed(0)} ${sflIcon()} (${(b.markCost/1000).toFixed(0)}k⚔️)`;
+      } else if (b.floor > 0) {
+        costLabel = `${b.floor.toFixed(0)} ${sflIcon()}`;
+      } else {
+        costLabel = "";
+      }
 
       return `<div class="power-boost-row ${isOwned ? "has-it" : "missing"}" onclick="togglePowerDetail(this,'${escHTML(b.name).replace(/'/g, "\\'")}','${catId}')">
         ${imgUrl ? `<img class="power-boost-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">` : `<span class="power-boost-icon">🧠</span>`}
@@ -7567,9 +7948,16 @@
     function renderPowerQualRow(b, isOwned) {
       const imgUrl = b.type !== "Skill" ? getItemIcon(b.name) : "";
       const typeLabel = b.type === "Skill" ? `Skill (${b.skillTree}, ${b.skillPoints}pt)` : b.type;
-      const costLabel = b.type === "Skill" && b.floor > 0
-        ? `~${b.floor.toFixed(0)} SFL (${b.skillPoints}pt)`
-        : (b.floor > 0 ? `${b.floor.toFixed(0)} SFL` : "");
+      let costLabel;
+      if (b.type === "Skill" && b.floor > 0) {
+        costLabel = `~${b.floor.toFixed(0)} ${sflIcon()} (${b.skillPoints}pt)`;
+      } else if (b.markCost > 0) {
+        costLabel = `${b.floor.toFixed(0)} ${sflIcon()} (${(b.markCost/1000).toFixed(0)}k⚔️)`;
+      } else if (b.floor > 0) {
+        costLabel = `${b.floor.toFixed(0)} ${sflIcon()}`;
+      } else {
+        costLabel = "";
+      }
       return `<div class="power-boost-row ${isOwned ? "has-it" : "missing"}" onclick="togglePowerDetail(this,'${escHTML(b.name).replace(/'/g, "\\'")}','qual')">
         ${imgUrl ? `<img class="power-boost-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">` : `<span class="power-boost-icon">🧠</span>`}
         <div class="power-boost-info">
