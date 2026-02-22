@@ -41,7 +41,7 @@
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    .sfl-icon { height:1em; vertical-align:-0.15em; display:inline; }
+    .sfl-icon { height:0.9em; vertical-align:middle; display:inline; margin:0 0.15em; }
 
     body {
       background: var(--bg-darkest);
@@ -8020,7 +8020,9 @@
     function selectPowerProduct(catId, product) {
       savePowerProduct(catId, product);
       powerState.savedProducts[catId] = product;
+      const scrollY = window.scrollY;
       renderPowerContent();
+      window.scrollTo(0, scrollY);
     }
 
     // ═══════════════════════════════════════
