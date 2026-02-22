@@ -3993,7 +3993,7 @@
         }
 
         html += `<div class="flower-row ${d.isComplete ? 'complete' : ''}" data-doll="${escHTML(d.name)}" onclick="toggleDollChain(this)">
-          <div class="flower-img-wrap" style="font-size:22px">🪆</div>
+          <div class="flower-img-wrap"><img class="flower-img" src="${getItemIcon(d.name)}" onerror="this.style.display='none'" alt=""></div>
           <div class="flower-info">
             <div class="flower-name">${escHTML(d.name)}</div>
             <div class="flower-chain">${ingredientHTML}</div>
@@ -4091,7 +4091,7 @@
           const diff = c.readyAt - nowMs;
           const timeStr = diff > 3600000 ? `${(diff / 3600000).toFixed(1)}h` : `${Math.ceil(diff / 60000)}m`;
           html += `<div class="growing-bed">
-            <div style="font-size:24px;flex-shrink:0">⏳</div>
+            <img class="growing-bed-img" src="${getItemIcon(c.name)}" onerror="this.style.display='none'" alt="">
             <div class="growing-bed-info">
               <div class="growing-bed-name">${escHTML(c.name)}</div>
               <div class="growing-bed-detail">x${c.qty}</div>
@@ -4108,7 +4108,7 @@
           <div class="growing-grid">`;
         for (const c of readyItems) {
           html += `<div class="growing-bed">
-            <div style="font-size:24px;flex-shrink:0">🦀</div>
+            <img class="growing-bed-img" src="${getItemIcon(c.name)}" onerror="this.style.display='none'" alt="">
             <div class="growing-bed-info">
               <div class="growing-bed-name">${escHTML(c.name)}</div>
               <div class="growing-bed-detail">x${c.qty}</div>
@@ -4162,7 +4162,7 @@
           }
 
           html += `<div class="flower-row ${d.isComplete ? 'complete' : ''}" data-crust="${escHTML(d.name)}" onclick="toggleCrustChain(this)">
-            <div class="flower-img-wrap" style="font-size:18px">${group.emoji}</div>
+            <div class="flower-img-wrap"><img class="flower-img" src="${getItemIcon(d.name)}" onerror="this.style.display='none'" alt=""></div>
             <div class="flower-info">
               <div class="flower-name">${escHTML(d.name)}</div>
               <div class="flower-chain">${chumHTML}</div>
@@ -5547,8 +5547,96 @@
       "Yellow Pansy": GITHUB_ASSETS+"/flowers/yellow_pansy.webp",
       "Yellow Submarine Trophy": GITHUB_ASSETS+"/sfts/yellow_submarine_trophy.webp",
       "Yellow Tile": GITHUB_ASSETS+"/decorations/tiles/icon/yellow_tile_icon.webp",
-      "Zebra Turkeyfish": GITHUB_ASSETS+"/fish/zebra_turkeyfish.png"
-
+      "Zebra Turkeyfish": GITHUB_ASSETS+"/fish/zebra_turkeyfish.png",
+      // Crustaceans (from sunflower-land.com/game-assets CDN, not in GitHub repo)
+      "Blue Crab": "https://sunflower-land.com/game-assets/crustaceans/blue_crab.webp",
+      "Lobster": "https://sunflower-land.com/game-assets/crustaceans/lobster.webp",
+      "Hermit Crab": "https://sunflower-land.com/game-assets/crustaceans/hermit_crab.webp",
+      "Shrimp": "https://sunflower-land.com/game-assets/crustaceans/shrimp.webp",
+      "Mussel": "https://sunflower-land.com/game-assets/crustaceans/mussel.webp",
+      "Oyster": "https://sunflower-land.com/game-assets/crustaceans/oyster.webp",
+      "Anemone": "https://sunflower-land.com/game-assets/crustaceans/anemone.webp",
+      "Isopod": "https://sunflower-land.com/game-assets/crustaceans/isopod.webp",
+      "Sea Slug": "https://sunflower-land.com/game-assets/crustaceans/sea_slug.webp",
+      "Sea Snail": "https://sunflower-land.com/game-assets/crustaceans/sea_snail.webp",
+      "Garden Eel": "https://sunflower-land.com/game-assets/crustaceans/garden_eel.webp",
+      "Sea Grapes": "https://sunflower-land.com/game-assets/crustaceans/sea_grapes.webp",
+      "Octopus": "https://sunflower-land.com/game-assets/crustaceans/octopus.webp",
+      "Sea Urchin": "https://sunflower-land.com/game-assets/crustaceans/sea_urchin.webp",
+      "Horseshoe Crab": "https://sunflower-land.com/game-assets/crustaceans/horseshoe_crab.webp",
+      "Barnacle": "https://sunflower-land.com/game-assets/crustaceans/barnacle.webp",
+      // Wearables with boosts (by NFT ID)
+      "Ancient Rod": GITHUB_ASSETS+"/wearables/224.webp",
+      "Ancient Shovel": GITHUB_ASSETS+"/wearables/369.webp",
+      "Angel Wings": GITHUB_ASSETS+"/wearables/73.webp",
+      "Architect Ruler": GITHUB_ASSETS+"/wearables/477.webp",
+      "Autumn's Embrace": GITHUB_ASSETS+"/wearables/433.webp",
+      "Banana Amulet": GITHUB_ASSETS+"/wearables/250.webp",
+      "Banana Onesie": GITHUB_ASSETS+"/wearables/251.webp",
+      "Bee Suit": GITHUB_ASSETS+"/wearables/276.webp",
+      "Beekeeper Hat": GITHUB_ASSETS+"/wearables/278.webp",
+      "Beetroot Amulet": GITHUB_ASSETS+"/wearables/29.webp",
+      "Black Sheep Onesie": GITHUB_ASSETS+"/wearables/402.webp",
+      "Blossom Ward": GITHUB_ASSETS+"/wearables/432.webp",
+      "Broccoli Hat": GITHUB_ASSETS+"/wearables/454.webp",
+      "Camel Onesie": GITHUB_ASSETS+"/wearables/350.webp",
+      "Carrot Amulet": GITHUB_ASSETS+"/wearables/28.webp",
+      "Cattlegrim": GITHUB_ASSETS+"/wearables/164.webp",
+      "Chef Apron": GITHUB_ASSETS+"/wearables/16.webp",
+      "Chicken Suit": GITHUB_ASSETS+"/wearables/403.webp",
+      "Corn Onesie": GITHUB_ASSETS+"/wearables/174.webp",
+      "Cowbell Necklace": GITHUB_ASSETS+"/wearables/407.webp",
+      "Crab Hat": GITHUB_ASSETS+"/wearables/424.webp",
+      "Crab Trap": GITHUB_ASSETS+"/wearables/230.webp",
+      "Crimstone Amulet": GITHUB_ASSETS+"/wearables/285.webp",
+      "Crimstone Armor": GITHUB_ASSETS+"/wearables/282.webp",
+      "Crimstone Hammer": GITHUB_ASSETS+"/wearables/284.webp",
+      "Dev Wrench": GITHUB_ASSETS+"/wearables/354.webp",
+      "Devil Wings": GITHUB_ASSETS+"/wearables/72.webp",
+      "Dream Scarf": GITHUB_ASSETS+"/wearables/406.webp",
+      "Eggplant Onesie": GITHUB_ASSETS+"/wearables/124.webp",
+      "Flower Crown": GITHUB_ASSETS+"/wearables/293.webp",
+      "Frozen Heart": GITHUB_ASSETS+"/wearables/434.webp",
+      "Golden Spatula": GITHUB_ASSETS+"/wearables/58.webp",
+      "Grape Pants": GITHUB_ASSETS+"/wearables/373.webp",
+      "Green Amulet": GITHUB_ASSETS+"/wearables/30.webp",
+      "Honeycomb Shield": GITHUB_ASSETS+"/wearables/291.webp",
+      "Hornet Mask": GITHUB_ASSETS+"/wearables/292.webp",
+      "Infernal Bullwhip": GITHUB_ASSETS+"/wearables/400.webp",
+      "Infernal Drill": GITHUB_ASSETS+"/wearables/370.webp",
+      "Infernal Pitchfork": GITHUB_ASSETS+"/wearables/162.webp",
+      "Ladybug Suit": GITHUB_ASSETS+"/wearables/422.webp",
+      "Lava Swimwear": GITHUB_ASSETS+"/wearables/481.webp",
+      "Lemon Shield": GITHUB_ASSETS+"/wearables/371.webp",
+      "Luna's Hat": GITHUB_ASSETS+"/wearables/161.webp",
+      "Medic Apron": GITHUB_ASSETS+"/wearables/456.webp",
+      "Merino Jumper": GITHUB_ASSETS+"/wearables/405.webp",
+      "Milk Apron": GITHUB_ASSETS+"/wearables/408.webp",
+      "Mushroom Hat": GITHUB_ASSETS+"/wearables/128.webp",
+      "Non La Hat": GITHUB_ASSETS+"/wearables/309.webp",
+      "Obsidian Necklace": GITHUB_ASSETS+"/wearables/457.webp",
+      "Oil Can": GITHUB_ASSETS+"/wearables/308.webp",
+      "Oil Gallon": GITHUB_ASSETS+"/wearables/479.webp",
+      "Oil Overalls": GITHUB_ASSETS+"/wearables/360.webp",
+      "Olive Royalty Shirt": GITHUB_ASSETS+"/wearables/317.webp",
+      "Olive Shield": GITHUB_ASSETS+"/wearables/310.webp",
+      "Oracle Syringe": GITHUB_ASSETS+"/wearables/461.webp",
+      "Pan": GITHUB_ASSETS+"/wearables/314.webp",
+      "Parsnip": GITHUB_ASSETS+"/wearables/56.webp",
+      "Paw Shield": GITHUB_ASSETS+"/wearables/311.webp",
+      "Pickaxe Shark": GITHUB_ASSETS+"/wearables/257.webp",
+      "Red Pepper Onesie": GITHUB_ASSETS+"/wearables/458.webp",
+      "Saw Fish": GITHUB_ASSETS+"/wearables/238.webp",
+      "Sickle": GITHUB_ASSETS+"/wearables/414.webp",
+      "Sol & Luna": GITHUB_ASSETS+"/wearables/410.webp",
+      "Solflare Aegis": GITHUB_ASSETS+"/wearables/431.webp",
+      "Squirrel Onesie": GITHUB_ASSETS+"/wearables/427.webp",
+      "Sunflower Amulet": GITHUB_ASSETS+"/wearables/27.webp",
+      "Sunflower Shield": GITHUB_ASSETS+"/wearables/31.webp",
+      "Tofu Mask": GITHUB_ASSETS+"/wearables/319.webp",
+      "Training Whistle": GITHUB_ASSETS+"/wearables/501.webp",
+      "Turd Topper": GITHUB_ASSETS+"/wearables/476.webp",
+      "White Sheep Onesie": GITHUB_ASSETS+"/wearables/401.webp",
     };
     function getItemIcon(name) {
       return ITEM_IMAGE_MAP[name] || (ITEM_ICON_BASE + encodeURIComponent(name) + ".png");
