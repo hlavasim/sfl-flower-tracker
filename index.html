@@ -99,8 +99,27 @@
       color: var(--sunpetal);
       border-bottom-color: var(--sunpetal);
     }
-    .nav-link.help-btn {
+    .nav-zoom {
       margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 0;
+    }
+    .zoom-btn {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 10px;
+      color: var(--text-secondary);
+      background: none;
+      border: none;
+      padding: 10px 10px;
+      cursor: pointer;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+    }
+    .zoom-btn:hover { color: var(--text-primary); }
+    .nav-link.help-btn {
+      margin-left: 0;
       font-size: 14px;
       padding: 14px 18px;
     }
@@ -303,7 +322,7 @@
     }
     .flower-chain .input-flower { color: var(--yellow); }
     .flower-chain .consumed-by { color: #c87d38; }
-    .inline-icon { width: 14px; height: 14px; object-fit: contain; image-rendering: pixelated; vertical-align: -2px; margin-right: 1px; }
+    .inline-icon { width: 14px; height: 14px; object-fit: contain; image-rendering: pixelated; vertical-align: middle; margin-right: 3px; }
 
     .flower-progress { min-width: 0; }
     .flower-bar-outer {
@@ -2408,17 +2427,18 @@
       const storedFarm = localStorage.getItem("sfl_farm_id") || "";
       const farm = urlFarm || storedFarm || DEFAULTS.farm;
       if (urlFarm) localStorage.setItem("sfl_farm_id", urlFarm);
-      return {
-        farm,
-        limit: parseInt(p.get("limit") || DEFAULTS.limit, 10) || 5,
-      };
+      const urlLimit = p.get("limit");
+      const storedLimit = localStorage.getItem("sfl_limit") || "";
+      const limit = parseInt(urlLimit || storedLimit || DEFAULTS.limit, 10) || 5;
+      if (urlLimit) localStorage.setItem("sfl_limit", urlLimit);
+      return { farm, limit };
     }
 
     function saveConfig(farm, limit) {
       const p = new URLSearchParams(window.location.search);
       if (farm) { p.set("farm", farm); localStorage.setItem("sfl_farm_id", farm); }
       else { p.delete("farm"); localStorage.removeItem("sfl_farm_id"); }
-      if (limit) p.set("limit", limit);
+      if (limit) { p.set("limit", limit); localStorage.setItem("sfl_limit", limit); }
       // Clean up legacy params
       p.delete("sunpetal");
       p.delete("key");
@@ -2459,10 +2479,35 @@
         const cls = page === l.id ? " active" : "";
         html += `<button class="nav-link${cls}" onclick="navigateTo('${l.id}')">${l.label}</button>`;
       }
+      html += '<div class="nav-zoom">';
+      html += '<button class="zoom-btn" onclick="changeZoom(-1)" title="Zmenšit text">A-</button>';
+      html += '<button class="zoom-btn" onclick="changeZoom(1)" title="Zvětšit text">A+</button>';
+      html += '</div>';
       html += '<button class="nav-link help-btn" onclick="openHelp()">?</button>';
       html += '</div>';
       document.getElementById("nav-bar").innerHTML = html;
     }
+
+    // ═══════════════════════════════════════
+    //  TEXT ZOOM (localStorage)
+    // ═══════════════════════════════════════
+
+    const ZOOM_STEPS = [75, 85, 100, 115, 130, 150];
+    function getZoom() {
+      const stored = parseInt(localStorage.getItem("sfl_zoom") || "100", 10);
+      return ZOOM_STEPS.includes(stored) ? stored : 100;
+    }
+    function applyZoom(pct) {
+      document.documentElement.style.fontSize = pct + "%";
+    }
+    function changeZoom(dir) {
+      const cur = getZoom();
+      const idx = ZOOM_STEPS.indexOf(cur);
+      const next = ZOOM_STEPS[Math.max(0, Math.min(ZOOM_STEPS.length - 1, idx + dir))];
+      localStorage.setItem("sfl_zoom", String(next));
+      applyZoom(next);
+    }
+    applyZoom(getZoom());
 
     // ═══════════════════════════════════════
     //  CONFIG BAR
