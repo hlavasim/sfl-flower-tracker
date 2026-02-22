@@ -2066,39 +2066,73 @@
       "Composting Revamp":  { tree: "Compost", points: 3, tier: 3, buff: "+5 fertilisers", debuff: "-3 Worms" },
     };
 
-    // Recipe ingredients for skill cost calculation (SFL cost per XP)
-    // XP values come from COOKING_RECIPES_DATA at runtime; ingredients are approximate P2P costs
+    // Recipe ingredients for skill cost calculation — verified from sfl.world/info/cooking
+    // XP values come from COOKING_RECIPES_DATA at runtime
+    // Only recipes with P2P-tradeable ingredients (+ Cheese derived from Milk)
     const RECIPE_INGREDIENTS = {
+      // Fire Pit
       "Pumpkin Soup":        { Pumpkin: 10 },
       "Bumpkin Broth":       { Carrot: 10, Cabbage: 5 },
       "Boiled Eggs":         { Egg: 10 },
       "Popcorn":             { Sunflower: 100, Corn: 5 },
       "Kale Stew":           { Kale: 10 },
-      "Fried Tofu":          { Soybean: 50, Wheat: 5 },
-      "Kale Omelette":       { Kale: 5, Egg: 12 },
-      "Rice Bun":            { Rice: 5, Wheat: 10 },
-      "Antipasto":           { Olive: 5, Tomato: 5, Cheese: 2 },
-      "Pizza Margherita":    { Tomato: 20, Wheat: 20, Cheese: 5 },
-      "Sunflower Crunch":    { Sunflower: 300, Wheat: 10 },
+      "Fried Tofu":          { Soybean: 15, Sunflower: 200 },
+      "Kale Omelette":       { Egg: 40, Kale: 5 },
+      "Rice Bun":            { Rice: 2, Wheat: 50 },
+      "Antipasto":           { Olive: 2, Grape: 2 },
+      "Pizza Margherita":    { Tomato: 30, Cheese: 5, Wheat: 20 },
+      "Rhubarb Tart":        { Rhubarb: 3 },
+      "Mashed Potato":       { Potato: 8 },
+      // Kitchen
+      "Sunflower Crunch":    { Sunflower: 300 },
       "Cauliflower Burger":  { Cauliflower: 15, Wheat: 5 },
-      "Pancakes":            { Wheat: 10, Egg: 10, Honey: 1 },
-      "Roast Veggies":       { Beetroot: 15, Parsnip: 10 },
-      "Goblin's Treat":      { Pumpkin: 10, Radish: 20 },
+      "Pancakes":            { Wheat: 10, Egg: 10, Honey: 6 },
+      "Roast Veggies":       { Cauliflower: 15, Carrot: 10 },
+      "Goblin's Treat":      { Pumpkin: 10, Radish: 20, Cabbage: 10 },
       "Club Sandwich":       { Sunflower: 100, Carrot: 25, Wheat: 5 },
-      "Bumpkin Roast":       { Parsnip: 20, Carrot: 20, Wheat: 10 },
-      "Spaghetti al Limone": { Lemon: 10, Wheat: 20, Egg: 5 },
-      "Caprese Salad":       { Tomato: 10, Olive: 5, Cheese: 3 },
-      "Steamed Red Rice":    { Rice: 10, Beetroot: 5 },
-      "Lemon Cheesecake":    { Lemon: 20, Wheat: 10, Egg: 10, Cheese: 5 },
-      "Honey Cake":          { Honey: 10, Wheat: 10, Egg: 5 },
-      "Honey Cheddar":       { Honey: 5, Milk: 5, Cheese: 3 },
-      "Blue Cheese":         { Milk: 10, Blueberry: 5 },
-      "Shroom Syrup":        { Honey: 3 },
-      "Grape Juice":         { Grape: 10 },
-      "Slow Juice":          { Olive: 10, Rice: 5, Grape: 5 },
-      "Apple Pie":           { Apple: 5, Wheat: 10, Egg: 5 },
-      "Cornbread":           { Corn: 20, Wheat: 10, Egg: 5 },
-      "Gumbo":               { Corn: 10, Eggplant: 10, Wheat: 5 },
+      "Spaghetti al Limone": { Wheat: 10, Lemon: 15, Cheese: 3 },
+      "Caprese Salad":       { Cheese: 1, Tomato: 25, Kale: 20 },
+      "Steamed Red Rice":    { Rice: 3, Beetroot: 50 },
+      "Tofu Scramble":       { Soybean: 20, Egg: 20, Cauliflower: 10 },
+      "Bumpkin Salad":       { Beetroot: 20, Parsnip: 10 },
+      "Fruit Salad":         { Apple: 1, Orange: 1, Blueberry: 1 },
+      // Bakery
+      "Lemon Cheesecake":    { Lemon: 20, Cheese: 5, Egg: 40 },
+      "Honey Cake":          { Honey: 10, Wheat: 10, Egg: 20 },
+      "Apple Pie":           { Apple: 5, Wheat: 10, Egg: 20 },
+      "Orange Cake":         { Orange: 5, Egg: 30, Wheat: 10 },
+      "Cornbread":           { Corn: 15, Wheat: 5, Egg: 10 },
+      "Sunflower Cake":      { Sunflower: 1000, Wheat: 10, Egg: 30 },
+      "Potato Cake":         { Potato: 500, Wheat: 10, Egg: 30 },
+      "Pumpkin Cake":        { Pumpkin: 130, Wheat: 10, Egg: 30 },
+      "Carrot Cake":         { Carrot: 120, Wheat: 10, Egg: 30 },
+      "Cabbage Cake":        { Cabbage: 90, Wheat: 10, Egg: 30 },
+      "Wheat Cake":          { Wheat: 35, Egg: 30 },
+      "Cauliflower Cake":    { Cauliflower: 60, Wheat: 10, Egg: 30 },
+      "Beetroot Cake":       { Beetroot: 100, Wheat: 10, Egg: 30 },
+      "Parsnip Cake":        { Parsnip: 45, Wheat: 10, Egg: 30 },
+      "Radish Cake":         { Radish: 25, Wheat: 10, Egg: 30 },
+      "Eggplant Cake":       { Eggplant: 30, Wheat: 10, Egg: 30 },
+      // Deli
+      "Honey Cheddar":       { Cheese: 3, Honey: 5 },
+      "Blue Cheese":         { Cheese: 2, Blueberry: 10 },
+      "Blueberry Jam":       { Blueberry: 5 },
+      "Sauerkraut":          { Cabbage: 20 },
+      "Fermented Carrots":   { Carrot: 20 },
+      "Fancy Fries":         { Sunflower: 500, Potato: 500 },
+      // Smoothie Shack
+      "Grape Juice":         { Grape: 5, Radish: 20 },
+      "Slow Juice":          { Grape: 10, Kale: 100 },
+      "Sour Shake":          { Lemon: 20 },
+      "Purple Smoothie":     { Blueberry: 5, Cabbage: 10 },
+      "Power Smoothie":      { Blueberry: 10, Kale: 5 },
+      "Orange Juice":        { Orange: 5 },
+      "Apple Juice":         { Apple: 5 },
+      "Bumpkin Detox":       { Apple: 5, Orange: 5, Carrot: 10 },
+      "The Lot":             { Blueberry: 1, Orange: 1, Grape: 1, Apple: 1, Banana: 1 },
+      "Banana Blast":        { Banana: 10, Egg: 10 },
+      "Carrot Juice":        { Carrot: 30 },
+      "Quick Juice":         { Sunflower: 50, Pumpkin: 40 },
     };
 
     // Crop tier classification for "Basic/Medium/Advanced Crop" skill boosts
@@ -2106,6 +2140,11 @@
       basic:    ["Sunflower", "Potato", "Pumpkin", "Carrot", "Cabbage", "Soybean", "Beetroot", "Cauliflower", "Parsnip", "Eggplant", "Corn", "Radish", "Wheat", "Kale"],
       medium:   ["Turnip", "Onion", "Pepper", "Zucchini", "Yam", "Broccoli"],
       advanced: ["Artichoke", "Barley"],
+    };
+
+    // Crafted ingredient recipes — derive price from sub-ingredients
+    const CRAFTED_INGREDIENT_RECIPES = {
+      "Cheese": { "Milk": 3 },
     };
 
     // Calculate the SFL cost per skill point for current bumpkin
@@ -2116,6 +2155,18 @@
 
       const totalXP = BUMPKIN_XP_TABLE[level - 1] || 0;
 
+      // Build effective prices including crafted ingredients
+      const prices = { ...p2pPrices };
+      for (const [crafted, recipe] of Object.entries(CRAFTED_INGREDIENT_RECIPES)) {
+        if (!prices[crafted]) {
+          let derivedCost = 0;
+          for (const [item, qty] of Object.entries(recipe)) {
+            derivedCost += (prices[item] || 0) * qty;
+          }
+          if (derivedCost > 0) prices[crafted] = derivedCost;
+        }
+      }
+
       // Detect cooking boosts to apply XP multipliers
       const cookingBoosts = farm ? detectCookingBoosts(farm) : { xpBoosts: [], timeBoosts: [] };
 
@@ -2125,12 +2176,15 @@
         const recipeData = COOKING_RECIPES_DATA[recipeName];
         if (!recipeData) continue;
 
-        // Calculate ingredient cost from P2P prices
+        // Calculate ingredient cost from P2P + derived prices
         let cost = 0;
+        let missingIngredient = false;
         for (const [item, qty] of Object.entries(ingredients)) {
-          cost += (p2pPrices[item] || 0) * qty;
+          const price = prices[item] || 0;
+          if (price === 0) { missingIngredient = true; break; }
+          cost += price * qty;
         }
-        if (cost <= 0) continue;
+        if (missingIngredient || cost <= 0) continue;
 
         // Apply cooking XP boosts
         const boostedXP = computeFoodXP(recipeName, recipeData, recipeData.building, cookingBoosts);
