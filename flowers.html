@@ -3341,7 +3341,7 @@
           : `${sd.label} Seed + ${escHTML(p.input)}`;
         bedsHTML += `<div class="pb-bed">
           <div class="pb-bed-num">${i + 1}</div>
-          <img class="pb-bed-img" src="${IMG_BASE}${encodeURIComponent(p.name)}.png" onerror="imgFallback(this)" alt="">
+          <img class="pb-bed-img" src="${IMG_BASE}${encodeURIComponent(p.name)}.png" onerror="this.style.display='none'" alt="">
           <div class="pb-bed-info">
             <div class="pb-bed-name">${escHTML(p.name)}</div>
             <div class="pb-bed-recipe">${inputLabel}</div>
@@ -3493,7 +3493,7 @@
           <div class="planner-batch-label pixel-font" style="color:var(--lily)">⚡ USE PETAL BLESSED NOW</div>`;
         for (const f of plan.pbFlowers) {
           html += `<div class="planner-row" data-flower="${escHTML(f.name)}" onclick="togglePlannerChain(this)">
-            <img src="${IMG_BASE}${encodeURIComponent(f.name)}.png" onerror="imgFallback(this)" alt="">
+            <img src="${IMG_BASE}${encodeURIComponent(f.name)}.png" onerror="this.style.display='none'" alt="">
             <div class="planner-row-info"><div class="planner-row-name">${escHTML(f.name)}</div>
             <div class="planner-row-detail">${SEED_DATA[f.seed]?.label || "?"} · saves ${formatHours(f.growH)}</div></div>
           </div>`;
@@ -3524,7 +3524,7 @@
             for (const s of batch.items) {
               const cls = s.sleepWaste ? "planner-row-time sleep" : "planner-row-time";
               html += `<div class="planner-row" data-flower="${escHTML(s.flower)}" onclick="togglePlannerChain(this)">
-                <img src="${IMG_BASE}${encodeURIComponent(s.flower)}.png" onerror="imgFallback(this)" alt="">
+                <img src="${IMG_BASE}${encodeURIComponent(s.flower)}.png" onerror="this.style.display='none'" alt="">
                 <div class="planner-row-info"><div class="planner-row-name">${escHTML(s.flower)}</div>
                 <div class="planner-row-detail">${SEED_DATA[s.seed]?.label || "?"} · ${formatHours(s.growH)}</div></div>
                 <div class="${cls}">→ ${formatTimeShort(s.finishAt)}${s.sleepWaste ? " 💤" : ""}</div>
@@ -3548,7 +3548,7 @@
             <div class="planner-batch-label pixel-font"><span style="color:var(--lily)">⚡ PETAL BLESSED</span> <span style="color:var(--text-dim)">${formatTimeShort(plan.pbTime)}</span></div>`;
           for (const f of plan.pbFlowers) {
             html += `<div class="planner-row" data-flower="${escHTML(f.name)}" onclick="togglePlannerChain(this)">
-              <img src="${IMG_BASE}${encodeURIComponent(f.name)}.png" onerror="imgFallback(this)" alt="">
+              <img src="${IMG_BASE}${encodeURIComponent(f.name)}.png" onerror="this.style.display='none'" alt="">
               <div class="planner-row-info"><div class="planner-row-name">${escHTML(f.name)}</div>
               <div class="planner-row-detail">${SEED_DATA[f.seed]?.label || "?"} · saves ${formatHours(f.growH)}</div></div>
             </div>`;
@@ -3778,7 +3778,7 @@
             else { const h = Math.floor(diff/3600000); const m = Math.floor((diff%3600000)/60000); timeStr = h > 0 ? `${h}h ${String(m).padStart(2,"0")}m` : `${m}m`; }
             const sdLabel = SEED_DATA[bed.seedType]?.label || "?";
             html += `<div class="growing-bed">
-              <img class="growing-bed-img" src="${IMG_BASE}${encodeURIComponent(bed.name)}.png" onerror="imgFallback(this)" alt="">
+              <img class="growing-bed-img" src="${IMG_BASE}${encodeURIComponent(bed.name)}.png" onerror="this.style.display='none'" alt="">
               <div class="growing-bed-info">
                 <div class="growing-bed-name">${escHTML(bed.name)}</div>
                 <div class="growing-bed-detail">${sdLabel} | yield: ${bed.totalYield}${bed.bonus > 0 ? ` (1+${bed.bonus})` : ""}</div>
@@ -3810,7 +3810,7 @@
 
         html += `<div class="seed-section">`;
         html += `<div class="seed-header pixel-font">
-          <img class="seed-icon" src="${IMG_BASE}${encodeURIComponent(seed)}.webp" onerror="imgFallback(this)" alt="">
+          <img class="seed-icon" src="${IMG_BASE}${encodeURIComponent(seed)}.webp" onerror="this.style.display='none'" alt="">
           <h2 style="color:${sd.color}">${sd.label}</h2>
           ${sd.season ? (() => { const inSeason = sd.season.toLowerCase() === (season || "").toLowerCase(); return `<span class="seed-badge" style="border-color:${inSeason ? 'var(--green)' : 'var(--text-dim)'};color:${inSeason ? 'var(--green)' : 'var(--text-dim)'};${inSeason ? '' : 'opacity:0.5;text-decoration:line-through'}">${sd.season}</span>`; })() : ""}
           <div class="seed-meta">
@@ -3856,7 +3856,7 @@
 
           html += `<div class="flower-row ${f.isComplete ? "complete" : ""}" data-flower="${escHTML(fname)}" onclick="toggleChain(this)">
             <div class="flower-img-wrap">
-              <img class="flower-img" src="${IMG_BASE}${encodeURIComponent(fname)}.png" onerror="imgFallback(this);this.nextElementSibling.style.display='flex'" alt="">
+              <img class="flower-img" src="${IMG_BASE}${encodeURIComponent(fname)}.png" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" alt="">
               <div class="flower-color-dot" style="display:none;${isGradient ? "background:" + color : "background-color:" + color}"></div>
             </div>
             <div class="flower-info">
@@ -4469,21 +4469,8 @@
       return { rate: bestRate, item: bestItem };
     }
 
-    const SFL_ICON_URL = "/assets/SFL.png";
-    const ITEM_ICON_BASE = "/assets/";
-    const ITEM_ICON_FALLBACK = "https://sfl.world/img/source/";
-    // Image fallback: try sfl.world if local /assets/ fails
-    function imgFallback(img) {
-      if (img.dataset.tried) { img.style.display = 'none'; return; }
-      img.dataset.tried = '1';
-      const src = img.getAttribute('src');
-      if (src && src.startsWith('/assets/')) {
-        img.src = ITEM_ICON_FALLBACK + src.slice('/assets/'.length);
-      } else {
-        img.style.display = 'none';
-      }
-    }
-
+    const SFL_ICON_URL = "https://sfl.world/img/source/SFL.png";
+    const ITEM_ICON_BASE = "https://sfl.world/img/source/";
     function formatSFL(v) {
       if (v >= 1e6) return (v / 1e6).toFixed(2) + "M";
       if (v >= 1e4) return Math.round(v).toLocaleString();
@@ -4706,7 +4693,7 @@
       return items.map(item => {
         const imgUrl = ITEM_ICON_BASE + encodeURIComponent(item.name) + ".png";
         return `<div class="treasury-item-row">
-          <img class="treasury-item-img" src="${imgUrl}" onerror="imgFallback(this)" alt="">
+          <img class="treasury-item-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">
           <div class="treasury-item-name" title="${escHTML(item.name)}">${escHTML(item.name)}</div>
           <div class="treasury-item-qty">×${item.qty}</div>
           <div class="treasury-item-unit">${formatSFL(item.unitPrice)}</div>
@@ -4723,7 +4710,7 @@
       for (const item of top5) {
         const imgUrl = ITEM_ICON_BASE + encodeURIComponent(item.name) + ".png";
         topHTML += `<div class="treasury-cat-top-item">
-          <img src="${imgUrl}" onerror="imgFallback(this)" alt="" style="width:16px;height:16px;image-rendering:pixelated">
+          <img src="${imgUrl}" onerror="this.style.display='none'" alt="" style="width:16px;height:16px;image-rendering:pixelated">
           <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHTML(item.name)}</span>
           <span style="color:var(--sunpetal)">${formatSFL(item.total)}</span>
         </div>`;
@@ -4760,7 +4747,7 @@
         <h1>TREASURY</h1>
         <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
         <div class="treasury-total">
-          <img src="${SFL_ICON_URL}" onerror="imgFallback(this)" alt="SFL">
+          <img src="${SFL_ICON_URL}" onerror="this.style.display='none'" alt="SFL">
           ${formatSFL(totals.grand)} SFL
         </div>
         <div class="treasury-secondary">${formatUSD(usdTotal)} &nbsp;|&nbsp; ${formatBTC(btcTotal)}</div>
@@ -5036,7 +5023,7 @@
         if (l.soldAt) badges.push(`<span class="sales-badge sold">SOLD</span>`);
 
         return `<div class="sales-listing">
-          <img class="sales-listing-img" src="${imgUrl}" onerror="imgFallback(this)" alt="">
+          <img class="sales-listing-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">
           <div class="sales-listing-info">
             <div class="sales-listing-name">${escHTML(l.itemName)}${l.qty > 1 ? ` x${l.qty}` : ""} ${badges.join("")}</div>
             <div class="sales-listing-detail">${formatAge(l.age)} ago · ${l.tradeType || l.collection}${l.marketPrice > 0 ? ` · market: ${l.marketPrice.toFixed(3)} SFL/${l.priceSource}` : ""}</div>
@@ -6034,7 +6021,7 @@
           const imgUrl = bb.boost.type !== "Skill" ? ITEM_ICON_BASE + encodeURIComponent(bb.boost.name) + ".png" : "";
           content += `<div class="power-bb-row">
             <span class="power-bb-rank">${i + 1}.</span>
-            ${imgUrl ? `<img class="power-bb-img" src="${imgUrl}" onerror="imgFallback(this)" alt="">` : `<span style="width:20px"></span>`}
+            ${imgUrl ? `<img class="power-bb-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">` : `<span style="width:20px"></span>`}
             <span class="power-bb-name">${escHTML(bb.boost.name)}</span>
             <span class="power-bb-cat">${escHTML(bb.catLabel)}</span>
             <span class="power-bb-sfl">+${bb.synergy.toFixed(2)}/day</span>
@@ -6216,7 +6203,7 @@
         : (b.floor > 0 ? `${b.floor.toFixed(0)} SFL` : "");
 
       return `<div class="power-boost-row ${isOwned ? "has-it" : "missing"}" onclick="togglePowerDetail(this,'${escHTML(b.name).replace(/'/g, "\\'")}','${catId}')">
-        ${imgUrl ? `<img class="power-boost-img" src="${imgUrl}" onerror="imgFallback(this)" alt="">` : `<span class="power-boost-icon">🧠</span>`}
+        ${imgUrl ? `<img class="power-boost-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">` : `<span class="power-boost-icon">🧠</span>`}
         <div class="power-boost-info">
           <div class="power-boost-name">${escHTML(b.name)} <span class="power-boost-type">${escHTML(typeLabel)}</span></div>
           <div class="power-boost-text">${escHTML(b.boost)}</div>
@@ -6236,7 +6223,7 @@
         ? `~${b.floor.toFixed(0)} SFL (${b.skillPoints}pt)`
         : (b.floor > 0 ? `${b.floor.toFixed(0)} SFL` : "");
       return `<div class="power-boost-row ${isOwned ? "has-it" : "missing"}" onclick="togglePowerDetail(this,'${escHTML(b.name).replace(/'/g, "\\'")}','qual')">
-        ${imgUrl ? `<img class="power-boost-img" src="${imgUrl}" onerror="imgFallback(this)" alt="">` : `<span class="power-boost-icon">🧠</span>`}
+        ${imgUrl ? `<img class="power-boost-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">` : `<span class="power-boost-icon">🧠</span>`}
         <div class="power-boost-info">
           <div class="power-boost-name">${escHTML(b.name)} <span class="power-boost-type">${escHTML(typeLabel)}</span></div>
           <div class="power-boost-text">${escHTML(b.boost)}</div>
