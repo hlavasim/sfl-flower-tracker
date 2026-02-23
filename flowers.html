@@ -2409,6 +2409,8 @@
     PRODUCT_TO_CATEGORY["Crimstone"] = "crimstone";
     PRODUCT_TO_CATEGORY["Wood"] = "trees";
     PRODUCT_TO_CATEGORY["Fish"] = "fishing";
+    PRODUCT_TO_CATEGORY["Wild Mushroom"] = "mushrooms";
+    PRODUCT_TO_CATEGORY["Red Pepper"] = "crops"; // alias for Pepper
 
     // Build dynamic product regex alternation (longest first to prevent partial match)
     const ALL_PRODUCTS_SORTED = Object.keys(PRODUCT_TO_CATEGORY).sort((a,b) => b.length - a.length);
@@ -2417,66 +2419,146 @@
     const PROD_FLAT_RX = new RegExp(`([+-]?\\d+\\.?\\d*)\\s+(${PROD_ALT})\\b`, 'i');
 
     // Boost text parser rules (ordered by priority)
+    // IMPORTANT: Specific category rules (Crop, Flower, Fruit, Tree, Animal, Greenhouse)
+    // must come BEFORE the generic product-name rules (PROD_ALT_RX, PROD_FLAT_RX).
+    // Chance rules must come BEFORE flat yield rules to prevent "X% Chance +N Product"
+    // being captured as "+N Product" flat yield.
     const BOOST_PARSE_RULES = [
-      // Specific product growth/cooldown/production time: "-20% Pumpkin Growth Time", "-20% Crimstone Cooldown Time"
-      { rx: /([+-]?\d+\.?\d*)%\s+([\w\s]+?)\s+(?:Growth|Growing|Cooldown|Recovery|Respawn|Production|Sleep)\s+Time/i,
+      // ── EXCLUSION RULES (match first, return qualitative to prevent misparse) ──
+      // "seed stock" / "seed cost" → not yield (e.g. "+10 Tomato and Lemon seed stock")
+      { rx: /\bseed\s+stock\b/i,
+        fn: m => ({ type: "qualitative", cat: "other", raw: m[0] }) },
+      // "requires N Product" / "instead" → recipe change, not yield
+      { rx: /\brequires?\b.*\d+/i,
+        fn: m => ({ type: "qualitative", cat: "other", raw: m[0] }) },
+      // "instead" in context of recipe substitution
+      { rx: /\binstead\b/i,
+        fn: m => ({ type: "qualitative", cat: "other", raw: m[0] }) },
+      // "XP" as the goal (e.g. "+20% Fish XP", "+500 Bumpkin XP", "+10% XP") → not yield
+      { rx: /([+-]?\d+\.?\d*)%?\s+[\w\s]*\bXP\b/i,
+        fn: m => ({ type: "qualitative", cat: "cooking", raw: m[0] }) },
+      // "N% Onion Seed Coin cost" → cost reduction, not yield
+      { rx: /\d+%\s+[\w\s]+(?:Seed\s+)?Coin\s+cost/i,
+        fn: m => ({ type: "qualitative", cat: "other", raw: m[0] }) },
+      // "N% rod cost" / "N% seeds cost" → qualitative cost reduction
+      { rx: /\d+%\s+(?:rod|seeds?|flower\s+seeds?)\s+cost/i,
+        fn: m => ({ type: "qualitative", cat: "other", raw: m[0] }) },
+
+      // ── CONDITIONAL YIELD (5th mine, chance x3) ──
+      // "+N Product on 5th mine/consecutive" → effective yield = N/5
+      { rx: /\+(\d+\.?\d*)\s+([\w\s]+?)\s+on\s+5th/i,
         fn: m => {
           const prod = m[2].trim();
-          const cat = PRODUCT_TO_CATEGORY[prod];
-          if (cat) return { type: "speed_pct", value: parseFloat(m[1]), cat, product: prod };
-          // Try animal name (case-insensitive)
-          const animalCats = { chicken: "chickens", cow: "cows", sheep: "sheep" };
-          const aCat = animalCats[prod.toLowerCase()];
-          if (aCat) return { type: "speed_pct", value: parseFloat(m[1]), cat: aCat };
-          return { type: "speed_pct", value: parseFloat(m[1]), cat: "other", product: prod };
+          const cat = PRODUCT_TO_CATEGORY[prod] || "other";
+          return { type: "yield_flat", value: parseFloat(m[1]) / 5, cat, product: prod, conditional: "5th mine" };
         }},
+      // "N% chance x3 Product yield" → effective = (pct/100) * (3-1) = pct/100 * 2 extra
+      { rx: /(\d+\.?\d*)%\s+chance\s+x(\d+)\s+(\w+)/i,
+        fn: m => {
+          const prod = m[3].trim();
+          const cat = PRODUCT_TO_CATEGORY[prod] || "other";
+          const pct = parseFloat(m[1]);
+          const mult = parseFloat(m[2]);
+          // Effective extra yield = pct% × (mult - 1) × baseYield (use 1 as proxy)
+          return { type: "yield_flat", value: pct / 100 * (mult - 1), cat, product: prod, conditional: `${pct}% x${mult}` };
+        }},
+
+      // ── CATEGORY-LEVEL SPEED RULES (before generic product rule) ──
+      // Basic/Medium/Advanced Crop growth time: "-10% Advanced Crop Growth Time"
+      { rx: /([+-]?\d+\.?\d*)%\s+(Basic|Medium|Advanced)\s+Crop\s+(?:Growth|Growing|Cooldown|Production)\s+Time/i,
+        fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "crops", cropTier: m[2].toLowerCase() }) },
       // Generic crop growth: "-10% Crop Growth Time"
       { rx: /([+-]?\d+\.?\d*)%\s+Crop\s+(?:Growth|Growing|Cooldown|Production)\s+Time/i,
         fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "crops" }) },
-      // Fruit growth
-      { rx: /([+-]?\d+\.?\d*)%\s+Fruit.*(?:Growth|Growing|Cooldown|Production)\s+Time/i,
+      // Fruit growth: "-10% Fruit Growth Time", "-20% Fruit Patch Growth Time"
+      { rx: /([+-]?\d+\.?\d*)%\s+Fruit\s*(?:Patch\s+)?(?:Growth|Growing|Cooldown|Production)\s+Time/i,
         fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "fruits" }) },
-      // Flower growth %
+      // Flower growth %: "-10% Flower Growth Time"
       { rx: /([+-]?\d+\.?\d*)%\s+Flower\s+(?:Growth|Growing|Cooldown|Production)\s+Time/i,
         fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "flowers" }) },
       // Flower growth multiplier: ×0.9 Flower Growing Time
       { rx: /[×x](\d+\.?\d*)\s+Flower\s+(?:Growth|Growing)\s+Time/i,
         fn: m => ({ type: "speed_mult", value: parseFloat(m[1]), cat: "flowers" }) },
-      // Tree recovery
-      { rx: /([+-]?\d+\.?\d*)%\s+Tree\s+Recovery\s+Time/i,
+      // Tree recovery: "-10% Tree Recovery Time"
+      { rx: /([+-]?\d+\.?\d*)%\s+Tree\s+(?:Recovery|Respawn)\s+Time/i,
         fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "trees" }) },
-      // Animal time: "-10% Chicken Time", "-5% chicken sleep time", "-25% Sheep Production Time"
+      // Greenhouse growth time: "-5% Greenhouse Growth Time"
+      { rx: /([+-]?\d+\.?\d*)%\s+Greenhouse\s+(?:Growth|Growing|Production)\s+Time/i,
+        fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "greenhouse" }) },
+      // Generic animal time / sleep: "-10% Animal sleep time"
+      { rx: /([+-]?\d+\.?\d*)%\s+Animal\s+(?:sleep\s+|production\s+)?time/i,
+        fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "chickens", alsoApply: ["cows", "sheep"] }) },
+      // Specific animal time: "-10% Chicken Time", "-25% Sheep Production Time"
       { rx: /([+-]?\d+\.?\d*)%\s+(Chicken|Cow|Sheep)\s+.*(?:Time|time)/i,
         fn: m => {
           const key = m[2].charAt(0).toUpperCase() + m[2].slice(1).toLowerCase();
           const animalCats = { "Chicken": "chickens", "Cow": "cows", "Sheep": "sheep" };
           return { type: "speed_pct", value: parseFloat(m[1]), cat: animalCats[key] || "other" };
         }},
-      // Generic animal time / sleep
-      { rx: /([+-]?\d+\.?\d*)%\s+Animal\s+(?:sleep\s+|production\s+)?time/i,
-        fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "chickens", alsoApply: ["cows", "sheep"] }) },
-      // Crop yield %
+      // Specific product growth/cooldown time: "-20% Pumpkin Growth Time", "-20% Crimstone Cooldown Time"
+      // ONLY matches if product is in PRODUCT_TO_CATEGORY — unknown products fall through
+      { rx: /([+-]?\d+\.?\d*)%\s+([\w\s]+?)\s+(?:Growth|Growing|Cooldown|Recovery|Respawn|Production|Sleep)\s+Time/i,
+        fn: m => {
+          const prod = m[2].trim();
+          const cat = PRODUCT_TO_CATEGORY[prod];
+          if (cat) return { type: "speed_pct", value: parseFloat(m[1]), cat, product: prod };
+          // Try animal name
+          const animalCats = { chicken: "chickens", cow: "cows", sheep: "sheep" };
+          const aCat = animalCats[prod.toLowerCase()];
+          if (aCat) return { type: "speed_pct", value: parseFloat(m[1]), cat: aCat };
+          // Unknown product → return null to let next rule try
+          return null;
+        }},
+
+      // ── CATEGORY-LEVEL YIELD RULES ──
+      // Crop yield %: "+20% Crop Yield"
       { rx: /([+-]?\d+\.?\d*)%\s+Crop\s+Yield/i,
         fn: m => ({ type: "yield_pct", value: parseFloat(m[1]), cat: "crops" }) },
       // Basic/Medium/Advanced Crop yield flat: "+0.1 Basic Crop yield"
       { rx: /([+-]?\d+\.?\d*)\s+(Basic|Medium|Advanced)\s+Crop\s+yield/i,
         fn: m => ({ type: "yield_flat", value: parseFloat(m[1]), cat: "crops", cropTier: m[2].toLowerCase() }) },
-      // Basic/Medium/Advanced Crop growth time
-      { rx: /([+-]?\d+\.?\d*)%\s+(Basic|Medium|Advanced)\s+Crop\s+(?:Growth|Growing|Cooldown|Production)\s+Time/i,
-        fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "crops", cropTier: m[2].toLowerCase() }) },
-      // Greenhouse yield flat: "+0.1 Greenhouse yield"
-      { rx: /([+-]?\d+\.?\d*)\s+Greenhouse\s+yield/i,
-        fn: m => ({ type: "yield_flat", value: parseFloat(m[1]), cat: "greenhouse" }) },
-      // Greenhouse growth time: "-5% Greenhouse Growth Time"
-      { rx: /([+-]?\d+\.?\d*)%\s+Greenhouse\s+(?:Growth|Growing|Production)\s+Time/i,
-        fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "greenhouse" }) },
-      // Fruit yield %
+      // Generic crop yield flat: "+0.5 crop yield", "+3 Crops"
+      { rx: /([+-]?\d+\.?\d*)\s+[Cc]rops?\s*(?:yield)?/i,
+        fn: m => ({ type: "yield_flat", value: parseFloat(m[1]), cat: "crops" }) },
+      // Fruit yield %: "+10% Fruit Yield"
       { rx: /([+-]?\d+\.?\d*)%\s+Fruit\s+Yield/i,
         fn: m => ({ type: "yield_pct", value: parseFloat(m[1]), cat: "fruits" }) },
-      // Animal yield %
+      // Fruit yield flat: "+0.1 Fruit yield", "+0.1 Fruit Patch Yield"
+      { rx: /([+-]?\d+\.?\d*)\s+Fruit\s*(?:Patch\s+)?[Yy]ield/i,
+        fn: m => ({ type: "yield_flat", value: parseFloat(m[1]), cat: "fruits" }) },
+      // Greenhouse yield flat: "+0.1 Greenhouse yield", "+2 Greenhouse Produce"
+      { rx: /([+-]?\d+\.?\d*)\s+Greenhouse\s+(?:yield|[Pp]roduce)/i,
+        fn: m => ({ type: "yield_flat", value: parseFloat(m[1]), cat: "greenhouse" }) },
+      // Animal yield %: "+10% Animal Yield"
       { rx: /([+-]?\d+\.?\d*)%\s+Animal\s+Yield/i,
         fn: m => ({ type: "yield_pct", value: parseFloat(m[1]), cat: "chickens", alsoApply: ["cows", "sheep"] }) },
-      // Specific product yield %: "+10% Egg Yield", "+20% Pumpkin", "+10% Sunflower" (dynamic product list)
+      // Animal produce flat: "+0.25 Animal Produce"
+      { rx: /([+-]?\d+\.?\d*)\s+Animal\s+[Pp]roduce/i,
+        fn: m => ({ type: "yield_flat", value: parseFloat(m[1]), cat: "chickens", alsoApply: ["cows", "sheep"] }) },
+
+      // ── CHANCE RULES (before PROD_ALT_RX / PROD_FLAT_RX to prevent misparse) ──
+      // "20% Chance +1 Egg", "3% Chance of +10 Potato", "10% chance for +1 Flower"
+      { rx: /(\d+\.?\d*)%\s+[Cc]hance.*?\+(\d+\.?\d*)\s+([\w\s]+?)(?:\s+yield)?$/i,
+        fn: m => {
+          const prodRaw = m[3].trim();
+          // Map generic words to categories
+          const CHANCE_CAT_MAP = {
+            "flower": "flowers", "fruit": "fruits", "greenhouse": "greenhouse",
+            "basic fish": "fishing", "advanced fish": "fishing", "expert fish": "fishing",
+            "basic": "fishing", "advanced": "fishing", "expert": "fishing",
+            "fish": "fishing", "crop": "crops",
+          };
+          let cat = PRODUCT_TO_CATEGORY[prodRaw];
+          if (!cat) cat = CHANCE_CAT_MAP[prodRaw.toLowerCase()];
+          if (!cat) cat = "other";
+          return { type: "chance", pct: parseFloat(m[1]), extra: parseFloat(m[2]), cat, product: prodRaw };
+        }},
+      // "N% chance +N food" (cooking-related chance)
+      { rx: /(\d+\.?\d*)%\s+chance\s+\+(\d+\.?\d*)\s+food/i,
+        fn: m => ({ type: "chance", pct: parseFloat(m[1]), extra: parseFloat(m[2]), cat: "cooking", product: "food" }) },
+
+      // ── SPECIFIC PRODUCT YIELD (dynamic product list) ──
+      // Specific product yield %: "+10% Egg Yield", "+20% Pumpkin", "+10% Sunflower"
       { rx: PROD_ALT_RX,
         fn: m => {
           const cat = PRODUCT_TO_CATEGORY[m[2]] || "other";
@@ -2488,25 +2570,20 @@
           const cat = PRODUCT_TO_CATEGORY[m[2]] || "other";
           return { type: "yield_flat", value: parseFloat(m[1]), cat, product: m[2] };
         }},
-      // Chance: "20% Chance +1 Egg"
-      { rx: /(\d+\.?\d*)%\s+Chance.*\+(\d+\.?\d*)\s+(\w+)/i,
-        fn: m => {
-          const cat = PRODUCT_TO_CATEGORY[m[3]] || "other";
-          return { type: "chance", pct: parseFloat(m[1]), extra: parseFloat(m[2]), cat, product: m[3] };
-        }},
-      // Fishing: "+X daily fish" or fishing-specific
+
+      // ── FISHING ──
       { rx: /(\d+)\s+daily/i,
         fn: m => ({ type: "daily_flat", value: parseFloat(m[1]), cat: "fishing" }) },
-      // XP boosts
-      { rx: /([+-]?\d+\.?\d*)%?\s*(Cook|Bake|Food|Meal|Dish|Kitchen|Delivery|XP)\b/i,
+      // ── XP boosts ──
+      { rx: /([+-]?\d+\.?\d*)%?\s*(Cook|Bake|Food|Meal|Dish|Kitchen|Delivery)\b/i,
         fn: m => ({ type: "qualitative", cat: "cooking", raw: m[0] }) },
-      // Coin / SFL boosts
+      // ── Coin / SFL boosts ──
       { rx: /(Coin|SFL|Sell\s+Price|Revenue)/i,
         fn: m => ({ type: "qualitative", cat: "coins", raw: m[0] }) },
-      // Protection
+      // ── Protection ──
       { rx: /(Protect|Guard|Shield|Disaster|Repel)/i,
         fn: m => ({ type: "qualitative", cat: "protection", raw: m[0] }) },
-      // Bee-specific
+      // ── Bee/Honey-specific ──
       { rx: /([+-]?\d+\.?\d*)%?\s*Honey/i,
         fn: m => {
           const v = parseFloat(m[1]);
@@ -2514,18 +2591,23 @@
           return m[0].includes("%") ? { type: "yield_pct", value: v, cat: "bees" }
                                      : { type: "yield_flat", value: v, cat: "bees", product: "Honey" };
         }},
-      // Cost reduction: "-20% axe cost", "-20% pickaxe cost"
+      // ── Cost reduction: "-20% axe cost", "-20% pickaxe cost" ──
       { rx: /([+-]?\d+\.?\d*)%\s+(axe|pickaxe)\s+cost/i,
         fn: m => {
-          const val = Math.abs(parseFloat(m[1])) / 100; // e.g. 0.2
+          const val = Math.abs(parseFloat(m[1])) / 100;
           const tool = m[2].toLowerCase();
           if (tool === "axe") {
             return { type: "cost_reduction", value: val, cat: "trees", tool: "Axe" };
           } else {
-            // Pickaxe cost applies to stone, iron, gold, crimstone
             return { type: "cost_reduction", value: val, cat: "stone", tool: "Pickaxe", alsoApply: ["iron", "gold", "crimstone"] };
           }
         }},
+      // ── Feed reduction ──
+      { rx: /(\d+\.?\d*)%\s+(?:less\s+)?feed(?:ing)?\s+(?:cost\s+)?(?:for\s+|to\s+)?(\w+)/i,
+        fn: m => ({ type: "qualitative", cat: "other", raw: m[0] }) },
+      // ── Mushroom-specific ──
+      { rx: /([+-]?\d+\.?\d*)\s+Wild\s+Mushroom/i,
+        fn: m => ({ type: "yield_flat", value: parseFloat(m[1]), cat: "mushrooms", product: "Wild Mushroom" }) },
     ];
 
     // ═══════════════════════════════════════
@@ -6637,7 +6719,18 @@
     // ═══════════════════════════════════════
 
     // Normalize common plurals in boost text
-    const PLURAL_FIXES = { "Crimstones":"Crimstone", "Feathers":"Feather", "Leathers":"Leather" };
+    const PLURAL_FIXES = {
+      "Crimstones":"Crimstone", "Feathers":"Feather", "Leathers":"Leather",
+      "Artichokes":"Artichoke", "Onions":"Onion", "Yams":"Yam",
+      "Lemons":"Lemon", "Bananas":"Banana", "Grapes":"Grape",
+      "Potatoes":"Potato", "Pumpkins":"Pumpkin", "Carrots":"Carrot",
+      "Cabbages":"Cabbage", "Soybeans":"Soybean", "Beetroots":"Beetroot",
+      "Cauliflowers":"Cauliflower", "Parsnips":"Parsnip", "Eggplants":"Eggplant",
+      "Radishes":"Radish", "Turnips":"Turnip", "Peppers":"Pepper",
+      "Zucchinis":"Zucchini", "Apples":"Apple", "Blueberries":"Blueberry",
+      "Oranges":"Orange", "Tomatoes":"Tomato", "Olives":"Olive",
+      "Sunflowers":"Sunflower", "Eggs":"Egg",
+    };
     function normalizeBoostLine(line) {
       for (const [p, s] of Object.entries(PLURAL_FIXES))
         line = line.replace(new RegExp(`\\b${p}\\b`, 'g'), s);
@@ -6646,6 +6739,7 @@
 
     // Expand comma/and/&-separated product lines into individual lines
     // e.g. "+0.2 Egg, Wool and Milk yield" → ["+0.2 Egg yield", "+0.2 Wool yield", "+0.2 Milk yield"]
+    // e.g. "+0.5 Wheat, Radish, Kale, Rice, Barley" → ["+0.5 Wheat", "+0.5 Radish", ...]
     function expandMultiProductLines(lines) {
       const out = [];
       for (const line of lines) {
@@ -6661,6 +6755,31 @@
         // Handle "+X Basic and Medium Crop yield"
         const m2 = line.match(/^([+-]?\d+\.?\d*)\s+(.+?)\s+(?:and|&)\s+(.+?)\s+(Crop\s+yield)$/i);
         if (m2) { out.push(`${m2[1]} ${m2[2]} ${m2[4]}`); out.push(`${m2[1]} ${m2[3]} ${m2[4]}`); continue; }
+        // Handle "+0.5 Wheat, Radish, Kale, Rice, Barley" (no trailing "yield")
+        // and "+0.5 Stone, Iron, Gold (AOE 3x3)" — strip parenthetical first
+        const cleaned = line.replace(/\s*\([^)]*\)\s*/g, '');
+        const m3 = cleaned.match(/^([+-]?\d+\.?\d*)\s+(.+)$/);
+        if (m3) {
+          const prods = m3[2].split(/\s*(?:,\s*(?:and\s+)?|\s+and\s+|\s*&\s*)\s*/);
+          if (prods.length > 1) {
+            // Verify at least 2 parts look like product names (in PRODUCT_TO_CATEGORY)
+            const known = prods.filter(p => PRODUCT_TO_CATEGORY[p.trim()]);
+            if (known.length >= 2) {
+              for (const p of prods) out.push(`${m3[1]} ${p.trim()}`);
+              continue;
+            }
+          }
+        }
+        // Handle "-50% Apple and Banana Growth Time" → split into two lines
+        const m4 = line.match(/^([+-]?\d+\.?\d*%?)\s+(.+?)\s+(?:and|&)\s+(.+?)\s+((?:Growth|Growing|Cooldown|Recovery|Respawn|Production)\s+Time.*)$/i);
+        if (m4) {
+          const p1 = m4[2].trim(), p2 = m4[3].trim();
+          if (PRODUCT_TO_CATEGORY[p1] && PRODUCT_TO_CATEGORY[p2]) {
+            out.push(`${m4[1]} ${p1} ${m4[4]}`);
+            out.push(`${m4[1]} ${p2} ${m4[4]}`);
+            continue;
+          }
+        }
         out.push(line);
       }
       return out;
@@ -6687,9 +6806,10 @@
                   effects.push({ ...eff, cat: extraCat, alsoApply: undefined });
                 }
               }
+              matched = true;
+              break;
             }
-            matched = true;
-            break;
+            // If fn returned null, continue to next rule (product not recognized)
           }
         }
         if (!matched) {
