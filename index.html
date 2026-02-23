@@ -8014,57 +8014,67 @@
       }
 
       // ── BUDS SECTION ──
+      // ── BUDS SECTION ── Always show for debug
       const farmBuds = powerState.farm.buds || {};
       const budEntries = Object.entries(farmBuds);
+      const budRows = [];
+      for (const [budId, budData] of budEntries) {
+        if (!budData || !budData.type) continue;
+        const result = calcBudSflPerDay(budData, capacity, p2pPrices, savedProducts);
+        const boostDescs = describeBudBoosts(budData);
+        const breakdownDesc = result.breakdown.map(b => {
+          const cat = POWER_CATEGORIES[b.catId];
+          return `${cat ? cat.emoji : ""} ${b.sflPerDay.toFixed(4)}`;
+        }).join(" · ");
+        budRows.push({
+          id: budId, type: budData.type, stem: budData.stem || "—",
+          aura: budData.aura || "None", colour: budData.colour || "",
+          boostDescs, breakdownDesc,
+          sflPerDay: result.totalSfl, sflPerYear: result.totalSfl * 365,
+          breakdown: result.breakdown,
+        });
+      }
 
-      if (budEntries.length > 0) {
-        const budRows = [];
-        for (const [budId, budData] of budEntries) {
-          if (!budData || !budData.type) continue;
-          const result = calcBudSflPerDay(budData, capacity, p2pPrices, savedProducts);
-          const boostDescs = describeBudBoosts(budData);
-          const breakdownDesc = result.breakdown.map(b => {
-            const cat = POWER_CATEGORIES[b.catId];
-            return `${cat ? cat.emoji : ""} ${b.sflPerDay.toFixed(4)}`;
-          }).join(" · ");
-          budRows.push({
-            id: budId, type: budData.type, stem: budData.stem || "—",
-            aura: budData.aura || "None", colour: budData.colour || "",
-            boostDescs, breakdownDesc,
-            sflPerDay: result.totalSfl, sflPerYear: result.totalSfl * 365,
-            breakdown: result.breakdown,
-          });
-        }
+      budRows.sort((a, b) => b.sflPerDay - a.sflPerDay);
+      const totalBudSfl = budRows.reduce((s, b) => s + b.sflPerDay, 0);
+      const budWithBoost = budRows.filter(b => b.sflPerDay > 0).length;
 
-        budRows.sort((a, b) => b.sflPerDay - a.sflPerDay);
-        const totalBudSfl = budRows.reduce((s, b) => s + b.sflPerDay, 0);
-        const budWithBoost = budRows.filter(b => b.sflPerDay > 0).length;
+      // Debug: show what keys exist on farm object
+      const farmKeys = Object.keys(powerState.farm).filter(k => k.toLowerCase().includes("bud")).join(", ") || "(none with 'bud')";
+      const farmTopKeys = Object.keys(powerState.farm).slice(0, 30).join(", ");
 
-        content += `<div style="margin-top:24px">
-          <div class="pixel-font" style="font-size:0.6875rem;color:var(--sunpetal);margin-bottom:8px;border-bottom:2px solid var(--border-dark);padding-bottom:4px">
-            ═══ 🌱 BUDS (${budRows.length} owned, ${budWithBoost} with boost) ═══
-            <span style="font-size:0.5625rem;color:var(--text-secondary);margin-left:8px">
-              Total: +${totalBudSfl.toFixed(2)} ${sflIcon()}/day · +${(totalBudSfl * 365).toFixed(2)} ${sflIcon()}/year
-            </span>
-          </div>
-          <div class="pixel-font" style="font-size:0.4375rem;color:var(--text-dim);margin-bottom:6px">
-            Values based on selected products above. Same-resource boosts within a bud: best wins (no stacking). Aura multiplies all boosts.
-          </div>
-          <div style="overflow-x:auto">
-          <table style="width:100%;border-collapse:collapse;font-size:0.5rem;color:var(--text-secondary)">
-            <thead>
-              <tr style="background:rgba(92,58,30,0.3);text-align:left">
-                <th style="padding:4px 6px;border:1px solid var(--border-dark)">#</th>
-                <th style="padding:4px 6px;border:1px solid var(--border-dark)">Type</th>
-                <th style="padding:4px 6px;border:1px solid var(--border-dark)">Stem</th>
-                <th style="padding:4px 6px;border:1px solid var(--border-dark)">Aura</th>
-                <th style="padding:4px 6px;border:1px solid var(--border-dark);min-width:140px">Boosts (after aura)</th>
-                <th style="padding:4px 6px;border:1px solid var(--border-dark);min-width:80px">Breakdown</th>
-                <th style="padding:4px 6px;border:1px solid var(--border-dark);text-align:right">${sflIcon()}/day</th>
-                <th style="padding:4px 6px;border:1px solid var(--border-dark);text-align:right">${sflIcon()}/year</th>
-              </tr>
-            </thead>
-            <tbody>`;
+      content += `<div style="margin-top:24px">
+        <div class="pixel-font" style="font-size:0.6875rem;color:var(--sunpetal);margin-bottom:8px;border-bottom:2px solid var(--border-dark);padding-bottom:4px">
+          ═══ 🌱 BUDS (${budRows.length} owned, ${budWithBoost} with boost) ═══
+          <span style="font-size:0.5625rem;color:var(--text-secondary);margin-left:8px">
+            Total: +${totalBudSfl.toFixed(2)} ${sflIcon()}/day · +${(totalBudSfl * 365).toFixed(2)} ${sflIcon()}/year
+          </span>
+        </div>`;
+
+      if (budRows.length === 0) {
+        content += `<div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);padding:8px 0">
+          No buds found in farm.buds (${budEntries.length} entries).<br>
+          <span style="font-size:0.4375rem">Bud-related keys: ${escHTML(farmKeys)}<br>Top farm keys: ${escHTML(farmTopKeys)}</span>
+        </div>`;
+      } else {
+        content += `<div class="pixel-font" style="font-size:0.4375rem;color:var(--text-dim);margin-bottom:6px">
+          Values based on selected products above. Same-resource boosts within a bud: best wins (no stacking). Aura multiplies all boosts.
+        </div>
+        <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:0.5rem;color:var(--text-secondary)">
+          <thead>
+            <tr style="background:rgba(92,58,30,0.3);text-align:left">
+              <th style="padding:4px 6px;border:1px solid var(--border-dark)">#</th>
+              <th style="padding:4px 6px;border:1px solid var(--border-dark)">Type</th>
+              <th style="padding:4px 6px;border:1px solid var(--border-dark)">Stem</th>
+              <th style="padding:4px 6px;border:1px solid var(--border-dark)">Aura</th>
+              <th style="padding:4px 6px;border:1px solid var(--border-dark);min-width:140px">Boosts (after aura)</th>
+              <th style="padding:4px 6px;border:1px solid var(--border-dark);min-width:80px">Breakdown</th>
+              <th style="padding:4px 6px;border:1px solid var(--border-dark);text-align:right">${sflIcon()}/day</th>
+              <th style="padding:4px 6px;border:1px solid var(--border-dark);text-align:right">${sflIcon()}/year</th>
+            </tr>
+          </thead>
+          <tbody>`;
 
         for (const bud of budRows) {
           const auraStyle = bud.aura === "Mythical" ? "color:#ff66ff;font-weight:bold" :
@@ -8086,8 +8096,9 @@
           </tr>`;
         }
 
-        content += `</tbody></table></div></div>`;
+        content += `</tbody></table></div>`;
       }
+      content += `</div>`;
 
       // ── DEBUG: All Boosts Mapping Table ──
       content += `<div style="margin-top:16px">
