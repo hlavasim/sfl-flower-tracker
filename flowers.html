@@ -1996,6 +1996,9 @@
       "Grape": 160, "Rice": 240, "Olive": 320,
     };
 
+    // ── Greenhouse oil costs per seed ──
+    const GREENHOUSE_OIL_COSTS = { "Grape": 3, "Rice": 4, "Olive": 5 };
+
     // ── Tool costs (coins + optional materials per tool) ──
     const TOOL_COSTS = {
       "Axe":            { coins: 20 },
@@ -2584,6 +2587,9 @@
       // "Oil Drill uses Wool instead of Leather" (Oil Rig skill) → qualitative
       { rx: /Oil\s+Drill\s+uses\s+Wool/i,
         fn: m => ({ type: "qualitative", cat: "oil", raw: m[0] }) },
+      // "-1 Oil for greenhouse" (Slick Saver) → handled via stockMods, not yield
+      { rx: /Oil\s+for\s+greenhouse/i,
+        fn: m => ({ type: "qualitative", cat: "greenhouse", raw: m[0] }) },
 
       // ── LAVA PIT SPECIFIC (before generic speed rules) ──
       // "-50% Lava Pit Time" (Obsidian Necklace, Magma Stone) → speed for obsidian
@@ -7413,7 +7419,8 @@
       const hasForeman = findCollectible(farm, "Foreman Beaver").length > 0 || getCount(inventory, "Foreman Beaver") > 0;
       const oilRigActive = skills["Oil Rig"] !== undefined;
       const hasInfernalDrill = isWearableEquipped(farm, "Infernal Drill");
-      return { hasWarehouse, hasToolshed, moreAxes, morePicks, fellersDiscount, frugalMiner, hasQuarry, hasForeman, oilRigActive, hasInfernalDrill };
+      const slickSaver = skills["Slick Saver"] !== undefined; // -1 Oil for greenhouse seeds
+      return { hasWarehouse, hasToolshed, moreAxes, morePicks, fellersDiscount, frugalMiner, hasQuarry, hasForeman, oilRigActive, hasInfernalDrill, slickSaver };
     }
 
     // Get effective stock for a seed/tool
@@ -7434,7 +7441,7 @@
     }
 
     // Calculate seed cost per day for a crop/fruit/greenhouse category
-    function calcSeedCostPerDay(catId, product, capacity, exchangeRates, stockMods, boostEffects) {
+    function calcSeedCostPerDay(catId, product, capacity, exchangeRates, stockMods, boostEffects, p2pPrices) {
       const coinCost = SEED_COSTS[product];
       if (!coinCost || exchangeRates.coinsPerSFL <= 0) return { costPerDay: 0, seedSfl: 0, restockPerDay: 0 };
       const seedSfl = coinCost / exchangeRates.coinsPerSFL;
@@ -7445,7 +7452,17 @@
       const result = applyBoosts(catId, product, capacity, boostEffects);
       const effectiveCycle = result.effectiveCycle || getCycleSec(catId, product);
       const cyclesPerDay = effectiveCycle > 0 ? 86400 / effectiveCycle : 0;
-      const costPerDay = seedSfl * cyclesPerDay * n;
+      let costPerDay = seedSfl * cyclesPerDay * n;
+
+      // Greenhouse oil cost per seed
+      let oilPerSeed = 0, oilSflPerSeed = 0, oilCostPerDay = 0;
+      if (catId === "greenhouse" && GREENHOUSE_OIL_COSTS[product]) {
+        oilPerSeed = GREENHOUSE_OIL_COSTS[product];
+        if (stockMods.slickSaver) oilPerSeed = Math.max(0, oilPerSeed - 1);
+        oilSflPerSeed = oilPerSeed * ((p2pPrices && p2pPrices["Oil"]) || 0);
+        oilCostPerDay = oilSflPerSeed * cyclesPerDay * n;
+        costPerDay += oilCostPerDay;
+      }
 
       // Restock amortization
       const seedName = product + " Seed";
@@ -7459,7 +7476,7 @@
         restockPerDay = daysPerStock > 0 ? restockSfl / daysPerStock : 0;
       }
 
-      return { costPerDay, seedSfl, restockPerDay, cyclesPerDay, stock: getEffectiveStock(seedName, stockMods) };
+      return { costPerDay, seedSfl, restockPerDay, cyclesPerDay, stock: getEffectiveStock(seedName, stockMods), oilPerSeed, oilSflPerSeed, oilCostPerDay };
     }
 
     // Calculate tool cost per day for a resource category
@@ -8348,7 +8365,7 @@
         let costPerDay = 0, restockPerDay = 0, costDetails = null;
         let baseCostPerDay = 0; // cost WITHOUT skill discounts
         if (catId === "crops" || catId === "fruits" || catId === "greenhouse") {
-          const c = calcSeedCostPerDay(catId, product, capacity, exchangeRates, stockMods, ownedEffects);
+          const c = calcSeedCostPerDay(catId, product, capacity, exchangeRates, stockMods, ownedEffects, p2pPrices);
           costPerDay = c.costPerDay;
           baseCostPerDay = c.costPerDay; // seeds have no skill discount
           restockPerDay = c.restockPerDay;
@@ -8550,8 +8567,18 @@
           content += `<div style="color:var(--red);font-size: 0.625rem;margin-bottom:2px"><strong>💰 PRODUCTION COSTS</strong></div>`;
           if (cd.seedSfl !== undefined) {
             const bettyNote = exchangeRates.bettyItem ? ` via Betty/${exchangeRates.bettyItem}` : "";
+            const coinCostPerDay = cd.seedSfl * (cd.cyclesPerDay || 0) * getCapacityCount(catId, capacity);
             content += `<div>Seed cost: ${(SEED_COSTS[product] || 0).toFixed(2)} coins = ${cd.seedSfl.toFixed(6)} ${sflIcon()} (${Math.round(exchangeRates.coinsPerSFL)} coins/${sflIcon()}${bettyNote})</div>`;
-            content += `<div>Seed cost/day: ${cd.seedSfl.toFixed(6)} × ${(cd.cyclesPerDay || 0).toFixed(2)} cycles × ${getCapacityCount(catId, capacity)} = <strong style="color:var(--red)">${(cd.costPerDay || 0).toFixed(4)} ${sflIcon()}/day</strong></div>`;
+            content += `<div>Coin cost/day: ${cd.seedSfl.toFixed(6)} × ${(cd.cyclesPerDay || 0).toFixed(2)} cycles × ${getCapacityCount(catId, capacity)} = <strong style="color:var(--red)">${coinCostPerDay.toFixed(4)} ${sflIcon()}/day</strong></div>`;
+            if (cd.oilPerSeed > 0) {
+              const baseOil = GREENHOUSE_OIL_COSTS[product] || 0;
+              const slickNote = stockMods.slickSaver ? ` <span style="color:var(--green)">(Slick Saver: ${baseOil} → ${cd.oilPerSeed})</span>` : "";
+              content += `<div>Oil cost: ${cd.oilPerSeed} Oil/seed${slickNote} × ${(p2pPrices["Oil"] || 0).toFixed(6)} ${sflIcon()}/Oil = ${cd.oilSflPerSeed.toFixed(6)} ${sflIcon()}</div>`;
+              content += `<div>Oil cost/day: ${cd.oilSflPerSeed.toFixed(6)} × ${(cd.cyclesPerDay || 0).toFixed(2)} × ${getCapacityCount(catId, capacity)} = <strong style="color:var(--red)">${cd.oilCostPerDay.toFixed(4)} ${sflIcon()}/day</strong></div>`;
+              content += `<div>Total seed+oil cost/day: <strong style="color:var(--red)">${(cd.costPerDay || 0).toFixed(4)} ${sflIcon()}/day</strong></div>`;
+            } else {
+              content += `<div>Seed cost/day: <strong style="color:var(--red)">${(cd.costPerDay || 0).toFixed(4)} ${sflIcon()}/day</strong></div>`;
+            }
             if (cd.stock > 0) content += `<div>Stock: ${cd.stock} seeds${stockMods.hasWarehouse ? " (Warehouse ×1.2)" : ""} | Restock: ${(cd.restockPerDay || 0).toFixed(4)} ${sflIcon()}/day</div>`;
           } else if (cd.freeTool) {
             // Free tool (Quarry / Foreman Beaver) → no tool cost
@@ -8671,7 +8698,9 @@
             const sflCost = exchangeRates.coinsPerSFL > 0 ? coinCost / exchangeRates.coinsPerSFL : 0;
             const seedName = name + " Seed";
             const stock = getEffectiveStock(seedName, stockMods);
-            seedRows.push({ name, catId, coinCost, sflCost, stock, growSec });
+            let oilCost = GREENHOUSE_OIL_COSTS[name] || 0;
+            if (oilCost > 0 && stockMods.slickSaver) oilCost = Math.max(0, oilCost - 1);
+            seedRows.push({ name, catId, coinCost, sflCost, stock, growSec, oilCost });
           }
         }
 
@@ -8683,16 +8712,19 @@
               <th style="padding:3px 6px;border:1px solid var(--border-dark)">Crop</th>
               <th style="padding:3px 6px;border:1px solid var(--border-dark)">Cat</th>
               <th style="padding:3px 6px;border:1px solid var(--border-dark)">Coins</th>
+              <th style="padding:3px 6px;border:1px solid var(--border-dark)">Oil</th>
               <th style="padding:3px 6px;border:1px solid var(--border-dark)">${sflIcon()}</th>
               <th style="padding:3px 6px;border:1px solid var(--border-dark)">Stock</th>
               <th style="padding:3px 6px;border:1px solid var(--border-dark)">Grow</th>
             </tr></thead><tbody>`;
         for (const r of seedRows) {
+          const oilCell = r.oilCost > 0 ? `${r.oilCost} 🛢️` : `<span style="color:var(--text-dim)">—</span>`;
           content += `<tr style="border-bottom:1px solid rgba(92,58,30,0.15)">
             <td style="padding:2px 4px;border:1px solid var(--border-dark);text-align:center"><img src="${getItemIcon(r.name)}" style="height:1.2em;vertical-align:-0.2em" loading="lazy"></td>
             <td style="padding:2px 6px;border:1px solid var(--border-dark)">${escHTML(r.name)}</td>
             <td style="padding:2px 6px;border:1px solid var(--border-dark)">${catIcon(r.catId, "1em")}</td>
             <td style="padding:2px 6px;border:1px solid var(--border-dark)">${r.coinCost}</td>
+            <td style="padding:2px 6px;border:1px solid var(--border-dark)">${oilCell}</td>
             <td style="padding:2px 6px;border:1px solid var(--border-dark)">${r.sflCost.toFixed(6)}</td>
             <td style="padding:2px 6px;border:1px solid var(--border-dark)">${r.stock}</td>
             <td style="padding:2px 6px;border:1px solid var(--border-dark)">${fmtSec(r.growSec)}</td>
