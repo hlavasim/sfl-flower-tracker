@@ -8466,7 +8466,7 @@
         const catNet = summary.boostedSfl - (summary.costPerDay || 0);
         // Show: 125<product-icon> ~ +13<sfl>/day
         const unitsPart = !isAnimalCat(catId) && catId !== "fishing" && prodPerDay > 0
-          ? `<span style="color:var(--sunpetal);font-size:0.5rem">${prodPerDay % 1 < 0.01 ? prodPerDay.toFixed(0) : prodPerDay.toFixed(1)}${prodIcon}</span> <span style="color:var(--text-dim);font-size:0.4375rem">~</span> ` : "";
+          ? `<span style="color:var(--sunpetal);font-size:0.5rem">${prodPerDay % 1 < 0.01 ? prodPerDay.toFixed(0) : prodPerDay.toFixed(1)} ${prodIcon}</span> <span style="color:var(--text-dim);font-size:0.4375rem">~</span> ` : "";
         content += `<span class="power-cat-sfl">${unitsPart}<span style="color:${catNet >= 0 ? 'var(--green)' : 'var(--red)'};font-size: 0.5rem">${catNet >= 0 ? "+" : ""}${catNet.toFixed(2)}${sflIcon()}/day</span></span>
           <span class="power-toggle-arrow">▶</span>
         </div>`;
