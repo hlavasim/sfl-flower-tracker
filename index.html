@@ -8273,12 +8273,13 @@
         const ownedEffects = catBoosts[catId].filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId));
 
         let baseSfl, boostedSfl, boostedUnitsPerDay = 0;
+        let animalBreakdown = null;
         if (isAnimalCat(catId)) {
           const baseInfo = getAnimalCatSfl(catId, capacity, [], p2pPrices);
           const boostedInfo = getAnimalCatSfl(catId, capacity, ownedEffects, p2pPrices);
           baseSfl = baseInfo.totalSfl;
           boostedSfl = boostedInfo.totalSfl;
-          // Animals have multiple products, use total units (not meaningful for display)
+          animalBreakdown = boostedInfo.breakdown;
         } else {
           const priceProduct = getPriceProduct(catId, product);
           const baseResult = applyBoosts(catId, product, capacity, []);
@@ -8323,7 +8324,7 @@
 
         totalBaseSfl += baseSfl;
         totalBoostedSfl += boostedSfl;
-        catSummaries[catId] = { baseSfl, boostedSfl, delta: boostedSfl - baseSfl, product, boostedUnitsPerDay, costPerDay: totalCatCost, baseCostPerDay: totalCatBaseCost, costSavings: totalCatBaseCost - totalCatCost, costDetails };
+        catSummaries[catId] = { baseSfl, boostedSfl, delta: boostedSfl - baseSfl, product, boostedUnitsPerDay, animalBreakdown, costPerDay: totalCatCost, baseCostPerDay: totalCatBaseCost, costSavings: totalCatBaseCost - totalCatCost, costDetails };
       }
 
       const totalDelta = totalBoostedSfl - totalBaseSfl;
@@ -8430,9 +8431,9 @@
         content += `<div class="power-category pixel-panel" id="power-cat-${catId}">`;
         // 24h production with product icon
         const prodPerDay = summary.boostedUnitsPerDay || 0;
-        const priceProduct = !isAnimalCat(catId) ? getPriceProduct(catId, product) : null;
-        const prodIconUrl = priceProduct ? getItemIcon(priceProduct) : null;
-        const prodIcon = prodIconUrl ? `<img src="${prodIconUrl}" style="height:1.4em;vertical-align:-0.3em" onerror="this.style.display='none'" alt="${priceProduct}">` : "";
+        // For flowers use seed name for icon; for others use priceProduct
+        const iconItem = catId === "flowers" ? product : (!isAnimalCat(catId) ? getPriceProduct(catId, product) : null);
+        const mkIcon = (name, size) => `<img src="${getItemIcon(name)}" style="height:${size || '1.4em'};vertical-align:-0.3em" onerror="this.style.display='none'" alt="${name}">`;
         content += `<div class="power-cat-header pixel-font" onclick="togglePowerCategory('${catId}')">
           <span>${catDef.emoji} ${catDef.label}</span>`;
 
@@ -8464,9 +8465,21 @@
         }
 
         const catNet = summary.boostedSfl - (summary.costPerDay || 0);
-        // Show: 125<product-icon> ~ +13<sfl>/day
-        const unitsPart = !isAnimalCat(catId) && catId !== "fishing" && prodPerDay > 0
-          ? `<span style="color:var(--sunpetal);font-size:0.5rem">${prodPerDay % 1 < 0.01 ? prodPerDay.toFixed(0) : prodPerDay.toFixed(1)} ${prodIcon}</span> <span style="color:var(--text-dim);font-size:0.4375rem">~</span> ` : "";
+        // Show: 125<product-icon> ~ +13<sfl>/day   (animals: 10<egg> + 10<feather> ~ ...)
+        let unitsPart = "";
+        if (isAnimalCat(catId) && summary.animalBreakdown && summary.animalBreakdown.length > 0) {
+          const parts = summary.animalBreakdown
+            .filter(b => b.unitsPerDay > 0)
+            .map(b => {
+              const u = b.unitsPerDay;
+              return `${u % 1 < 0.01 ? u.toFixed(0) : u.toFixed(1)} ${mkIcon(b.product)}`;
+            });
+          if (parts.length > 0) {
+            unitsPart = `<span style="color:var(--sunpetal);font-size:0.5rem">${parts.join(' + ')}</span> <span style="color:var(--text-dim);font-size:0.4375rem">~</span> `;
+          }
+        } else if (!isAnimalCat(catId) && catId !== "fishing" && prodPerDay > 0 && iconItem) {
+          unitsPart = `<span style="color:var(--sunpetal);font-size:0.5rem">${prodPerDay % 1 < 0.01 ? prodPerDay.toFixed(0) : prodPerDay.toFixed(1)} ${mkIcon(iconItem)}</span> <span style="color:var(--text-dim);font-size:0.4375rem">~</span> `;
+        }
         content += `<span class="power-cat-sfl">${unitsPart}<span style="color:${catNet >= 0 ? 'var(--green)' : 'var(--red)'};font-size: 0.5rem">${catNet >= 0 ? "+" : ""}${catNet.toFixed(2)}${sflIcon()}/day</span></span>
           <span class="power-toggle-arrow">▶</span>
         </div>`;
