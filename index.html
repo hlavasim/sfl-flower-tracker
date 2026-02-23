@@ -2247,23 +2247,41 @@
     };
     const BUD_STEM_BOOSTS = {
       "3 Leaf Clover":  [{ cats: ["crops"], value: 0.5, type: "yield_flat" }],
+      "Acorn Hat":      [{ cats: ["trees"], value: 0.1, type: "yield_flat" }],
+      "Apple Head":     [{ cats: ["fruits"], value: 0.2, type: "yield_flat" }],
+      "Banana":         [{ cats: ["fruits"], value: 0.2, type: "yield_flat" }],
       "Basic Leaf":     [{ cats: ["crops"], cropTier: "basic", value: 0.2, type: "yield_flat" }],
-      "Sunflower":      [{ cats: ["crops"], cropTier: "basic", value: 0.2, type: "yield_flat" }],
-      "Magic Mushroom": [{ cats: ["crops"], value: 0.2, type: "yield_flat" }],
-      "Tulip":          [{ cats: ["crops"], value: 0.1, type: "yield_flat" }],
-      "Flower Crown":   [{ cats: ["fruits"], value: 0.2, type: "yield_flat" }],
-      "Rose":           [{ cats: ["fruits"], value: 0.1, type: "yield_flat" }],
-      "Pearl":          [{ cats: ["stone", "iron", "gold", "crimstone"], value: 0.2, type: "yield_flat" }],
-      "Diamond":        [{ cats: ["stone", "iron", "gold", "crimstone"], value: 0.2, type: "yield_flat" }],
-      "Ruby":           [{ cats: ["stone", "iron", "gold", "crimstone"], value: 0.1, type: "yield_flat" }],
-      "Gold Leaf":      [{ cats: ["trees"], value: 0.2, type: "yield_flat" }],
-      "Acorn":          [{ cats: ["trees"], value: 0.1, type: "yield_flat" }],
-      "Sea Creature":   [{ cats: ["fishing"], pct: 10, extra: 1, type: "chance" }],
-      "Seaweed":        [{ cats: ["fishing"], value: 0.1, type: "yield_flat" }],
-      "Hibiscus":       [{ cats: ["flowers"], value: 0.2, type: "yield_flat" }],
-      "Egg":            [{ cats: ["chickens", "cows", "sheep"], value: 0.1, type: "yield_flat" }],
+      "Carrot Head":    [{ cats: ["crops"], product: "Carrot", value: 0.3, type: "yield_flat" }],
+      "Diamond Gem":    [{ cats: ["stone", "iron", "gold", "crimstone"], value: 0.2, type: "yield_flat" }],
+      "Egg Head":       [{ cats: ["chickens"], product: "Egg", value: 0.2, type: "yield_flat" }],
+      "Fish Hat":       [{ cats: ["fishing"], pct: 10, extra: 1, type: "chance" }],
+      "Gold Gem":       [{ cats: ["gold"], value: 0.2, type: "yield_flat" }],
+      "Magic Mushroom": [{ cats: ["mushrooms"], value: 0.2, type: "yield_flat" }],
+      "Miner Hat":      [{ cats: ["iron"], value: 0.2, type: "yield_flat" }],
+      "Mushroom":       [{ cats: ["mushrooms"], value: 0.3, type: "yield_flat" }],
+      "Ruby Gem":       [{ cats: ["stone"], value: 0.2, type: "yield_flat" }],
+      "Sunflower Hat":  [{ cats: ["crops"], product: "Sunflower", value: 0.5, type: "yield_flat" }],
+      "Tree Hat":       [{ cats: ["trees"], value: 0.2, type: "yield_flat" }],
     };
-    const BUD_AURA_MULTIPLIERS = { "None": 1, "Basic": 1.05, "Green": 1.2, "Rare": 2, "Mythical": 5 };
+    const BUD_AURA_MULTIPLIERS = { "No Aura": 1, "Basic": 1.05, "Green": 1.2, "Rare": 2, "Mythical": 5 };
+
+    // ── Hardcoded bud data (2,621 NFTs, never changes) ──
+    const BUD_COUNT = 2621;
+    const BUD_TYPE_NAMES = ["Beach","Castle","Cave","Plaza","Port","Retreat","Saphiro","Sea","Snow","Woodlands"];
+    const BUD_STEM_NAMES = ["3 Leaf Clover","Acorn Hat","Apple Head","Axe Head","Banana","Basic Leaf","Carrot Head","Diamond Gem","Egg Head","Fish Hat","Gold Gem","Hibiscus","Magic Mushroom","Miner Hat","Mushroom","Rainbow Horn","Red Bow","Ruby Gem","Seashell","Silver Horn","Sunflower Hat","Sunflower Headband","Sunshield Foliage","Tender Coral","Tree Hat"];
+    const BUD_AURA_NAMES = ["No Aura","Basic","Green","Rare","Mythical"];
+    const BUD_TYPES_ENC = "66437663288399648642954165595695238181989364964338308918839080720217921906361312374745302734796685535964198940123885797739080989377504891438453746781274152788794581745850855822811844494297502621612841188079966519558341393927440901161925384124071975504230076556543868255410706573658265137126366483954451844240985066268217235027237343368282690597790796108852142387212419443398222568049324317739491399959331962911342411552504704468092880210708925172194970567608704346316238674298295421449667765652581736985864385749043736605646721188178796663799939759403109069299911076400912397942849785036701857800924136961697052701016851622871919588797420435485837724874237415468269312618077015374761447810338752613913748309778113670930819947375930362976254828338025771556314263136269004620764149895524892198427896942621067197685088650600821374900707927681241634793295162828178657288485297746093043267416956069248907206414972540126169322722226701224104880237578082114353649556247022845215644842439874481810269742121650383270172040119654897966002600465556443683369129799557207230595491835564189596193815907772052448219902571121606088479955721607454817456093321824765063446256143324660755532283616374382405804081810496665413685277868099943942063707472733712152536798892347045320162139695201780516785109689920388670863905086312946979124970400526044240191385945760143629929788522854181571055639557861110051346240259858680073065357867089742486621407483561599017952874516637337759972518179600603688882494325026044243556643714372504647001729637464484802197716393440338971759228690510642252602837154719163029109762308393479234287117565251932582554595519553209473829899747271112289549526026583660918482436961356620842045168112082021975320333227481058121366598754467693464520083847705788179017235050242189817415686034190486036745248354729565961758653194782092459616024845657566485873198056933445394513395621305679100111552536845752304222934807074641661950357820866435308406936450429766916566335412305299111313933548896505319717881322005765619966906347819231716971107629764904441059932246148063315740783580680425086116313421368541523190560675387981279423123510901377477275651577193624205374204101530958075005503869907045930901013060620969267716363943089895326138834789861190165999686278284245534803020037005499494867893226252657511361096850754329803169705386773414966779898111937265845748640880479611523366579555004739624128998664490164445121551940890759624541748553980578880580386414258583037659989959290944530052153034360056068935651703480758471308445330447593342330911756633023509235798954391302853545766067608245615927640565105260311509220940673";
+    const BUD_STEMS_ENC = "mf2odlinjl53jfiaffojglnll7e5ggdlgon2blgj3dm3j2njil0nl2oh44hdk7job8bb4iblolfjo3ffbajbjbl3fonlil3gi4l3i8gl35njgegcnfnn8lnn4dam1be6l9j4bfmkbf1f3ib22g5bb3cml33cjffhnhjbg0db3oibjijjkddi8cglbggn0335bl3mnf3lm8jf1fdmbj2jj4nnlbjonllkkjid6g1o2kgmjjoibfblic8lll469iha6hf2c1i8j88b8f83ff8ig3con6m3mi5n2g3m4lhnjlgfjlfll3lglgg4k24gmo3fj1b17dfofg63fo28ndlchmb9labniei6efi8gnbg473h1f2j1jnib2b9odjn4l3fioei32m8mlgaom434d5g1m1h285nm4fj4gja1jfnnb5i2879fliigc4k32njniib17f0a3nm8fo8gn7no34nicbjoogflmij5jdi4oei2ni4ogofb3eecn3l3bbbiboj7kjbjj7lnn559oi62kdf8fafgjamfn2j2lii33fmlmh28bkmofkf2boc62lj33j8n4ii06f33fainbif1fge8fje1g3jinfiffhkb9fljieninmh4m2ggm1f4a0bmo1lin99n533dlilnibbb3nf9ib68mdc1mjiglni2ajabbjabd3a4n4n33blnk3inagblll7gbonnmngbnm7f4lff37bai8bkjg868eg2noil8gl3hlnl89333bblfg94g0jjkmjfbj4jc1jiccfjbl4hn2egd6bnjiff8ecbbci1glgbnjab2bj440g9mocag1fjjmi08mnijcmbolmmgc4li8jajildjajlmb3l17bgml4fa858b6cn42ik7ajn1l7nhmjf8if4fbgi3o6ibg1j6kbblgink0ggfelfb88lobbml3iib6ge66jejkgngilljmfaiffai3m8mb0l3fogmnc1nj8nhbjk21d8ii5nmbgljfmmh5mjf8e7mo351effgjlmjf2dohgn6b6m4m83c84n8jgjjeb1j8lffjn3mna4fb68mnn5njjgnj2lfo6eb3mllndglghibgm3ll63igneoo22f48e3enib1onf5bbnofbk22g1f33fi1jf3fgnin2mi2omon634b32dllne2b3n1lng78bn0ll3mfgimjbgdnlkcnjifbfdof0mofojll45cfinfi8gnem4jnlmb0jhmo4n2gj87emffhgablifmon3lnh4n55fd3fh4c3igb42mje3fnl8bmodbheobfnjijgclf4fa1k4nodilind4nmi44oc2i3eknj39g376ddimj02ibgfl3aii38nij6i1mi0ginlof2lk9jfmi11nhg83442b3c3n0g68bgb7ghbl8nfmlb3hlkfono73le4d4g4ijj2fo68hinlo7g3f9ggmngo3ii12ioikj2g4ldg3m4b2gll2c6f7oknk84fibmj3d4mi3bh2inojj78a3584n3cf38mj4ffef2jfb3g5no6ij13nnclfb33imenjdn3fnbfmlngeg1n5ibkbkf8al3cfhbki8gb5mfj8jl1ngkfj13onlc24n5glbbflnbf42fjllbi832kbdmobin3f4lbho5gl4blm2mi834mnff4iggoni4lnh3f680ib34jie12bgl23nf184bolnjfm37ink33jgin56ig3gg8j9mg8dmkl2m7fg8198blgffeifgfnjingjjfglff4jgjl35no2fbg3bfmgm7l3hijmgilginmgl2m6jlmjikbem36i3jo1i7g2g7jm30418nnff255bnjf08g0nhlm3lamjf32jbm1b98330i2j97dobdm1g2omii2kd83em22jn8lb9if2jf8fgb5bi3j7li3i2e0ihiijn6mjl12fe641coil8ai1doohnjnfnglo1m4fjmg6mf3fl8oninm7gbmdb6nl3b5gbkikcibnnb2ci41b3ocmejbhja6j8gkmbmf7kln2oiif6hfhg6lijfog8ilmmflb8hfg3834i2ifg379lobml9loba3ibdii5mo37fgbjme3l5h4hodlemfjj97kndmndjf8clbb6n1bjolm5mib9an3lgkb7lg6mo7b88j1m2735nh6lfna4m76ea3ol2njhn25l3f24dll24g5jo6814abif4jjj9jblbdfnci8jd248n79gnj7n7dge2i3ggmjdi6gigj31m1f742g6nf66gf4anaomgfoho8nbaf25bbjjo3lnilhbjffik3jgb4l9lij2gcln4cbgfgie4efmj4i6bnmnniih51lfnn8ko7n2162hjd89ggb3fjl6lnk338hggooljb6dmangjn4j8l26jmhmd322nbb592o2b321g13jlo6m85khgj3mbi18oighi9janijf7mii0lbmjfng8mlgojbcli0g57n3b3f36nflomkigkekh5giilgm43jghki4abc3gml4bl8bblj893lkfaf0b8jlfm3gi8jm71n2gi1g2fmo4llf77ono24eoiingifn7ffj1llfj34n6gfiin3dkm3iam1ff";
+    const BUD_AURAS_ENC = "10001110010001101104110200102000100124021100111011003000000000111141010000110201100110303011111110310201300010101001010110110200100110003010010100101011420033003200200132110110101000000412000202104110211111102202101110101210100010100001121103031100230210000001113012100101103010010031231001110100000212101011011100022100101000111110220000100101201110001010113100103300012100120021022100100000103000010001100101000100011011310112004101100100200000110000000000000210100121200011000012021111111112010112010011102120100010030000001000112000200221111000021021111201000002000021331110130101120020110110011101211110100000111001211104011103000101111010001110210112000110101001000212201200203020000010101120413000111001011101333100001200210110200320100200000000000200201100111200010120001110011100100000011110310102100201210001001012010101011120000201301113001000100113001002000001242110111101100000100000010100201101303031004111112220010113010030000021101110120100010003101121112000000220020000201131020000200202310100010101001100110101131001021100000341110000000300001111013121111111011100002100001221110111110000003020010012010003100221000112000200000140124110030000110301001002120010103200120021001110001021104011020132101010100111102100030112101103000023200010000111000111102101000111010133011020210110110120020000111000011111000101110000002010113010000001110021110020001020122011102010300210201111010001002011101000102000110200100010100000010022021200010100230021120101013000001000010100001001010110000200102111010100211122202121011201111021010100100111001112101211323000123111000010010000110101101100003321400100120001111020201010001010101110001110001000020100331011011010111012000100310100011031221001211110412200102100111111020001204001011000122012000110102303112421220020011010011010011100100001011010101104101000010111201000120311001000001111000001010410011001000102111010111201000001001001002111000100033010001201000100021010001003010210000100210001020101100010110100001120303130200110002110103111000103021111100004101020241001110000101201011000111013142210002122210300100103000110011020101000012100221012100200310110010220000003000221100001130000000000130011120100004112022120011000000100100111102010121300200000002200440312113002021011010003011100010200102001011021110000011122011011014000110120000301101101001210321101041111100003030401112000000211000020112010000000101011112101001000021000001000110100131010000003110001001010200131001000100100001113000121101040002012110120031030101120001100010010000100113000021000101000102201021100000001200010010110000011110241100421021200000121102001000101100000011211021200101";
+    function decodeBud(id) {
+      if (id < 1 || id > BUD_COUNT) return null;
+      const i = id - 1;
+      const typeIdx = parseInt(BUD_TYPES_ENC[i], 10);
+      const sc = BUD_STEMS_ENC[i];
+      const stemIdx = sc >= "0" && sc <= "9" ? parseInt(sc) : sc.charCodeAt(0) - 97 + 10;
+      const auraIdx = parseInt(BUD_AURAS_ENC[i], 10);
+      return { id, type: BUD_TYPE_NAMES[typeIdx], stem: BUD_STEM_NAMES[stemIdx], aura: BUD_AURA_NAMES[auraIdx] };
+    }
 
     // Faction shop items priced in Marks (from factionShop.ts)
     // 100 Marks = 1 SFL (1 Mark = 0.01 SFL)
@@ -3922,6 +3940,11 @@
           <div class="hub-card-icon">⚡</div>
           <h3 class="pixel-font">POWER</h3>
           <div class="hub-card-count pixel-font">Boost ROI Analyzer</div>
+        </div>
+        <div class="hub-card pixel-panel" onclick="navigateTo('buds')">
+          <div class="hub-card-icon">🌱</div>
+          <h3 class="pixel-font">BUDS</h3>
+          <div class="hub-card-count pixel-font">${BUD_COUNT} NFTs</div>
         </div>
       </div>`;
 
@@ -6943,6 +6966,7 @@
         const tierCrops = CROP_TIERS[eff.cropTier];
         if (tierCrops && !tierCrops.includes(product)) return false;
       }
+      if (eff.product && eff.product !== product) return false;
       return true;
     }
 
@@ -7040,18 +7064,15 @@
       const aura = BUD_AURA_MULTIPLIERS[bud.aura] || 1;
       const descs = [];
       const catNames = cats => cats.map(c => POWER_CATEGORIES[c]?.label || c).join("/");
-      for (const eff of typeEffects) {
-        const tier = eff.cropTier ? ` ${eff.cropTier[0].toUpperCase() + eff.cropTier.slice(1)}` : "";
-        if (eff.type === "yield_flat") descs.push(`+${(eff.value * aura).toFixed(2)}${tier} ${catNames(eff.cats)}`);
-        else if (eff.type === "speed_pct") descs.push(`${(eff.value * aura).toFixed(1)}% ${catNames(eff.cats)} Time`);
-        else if (eff.type === "chance") descs.push(`${(eff.pct * aura).toFixed(0)}% +${eff.extra} ${catNames(eff.cats)}`);
-      }
-      for (const eff of stemEffects) {
-        const tier = eff.cropTier ? ` ${eff.cropTier[0].toUpperCase() + eff.cropTier.slice(1)}` : "";
-        if (eff.type === "yield_flat") descs.push(`+${(eff.value * aura).toFixed(2)}${tier} ${catNames(eff.cats)}`);
-        else if (eff.type === "speed_pct") descs.push(`${(eff.value * aura).toFixed(1)}% ${catNames(eff.cats)} Time`);
-        else if (eff.type === "chance") descs.push(`${(eff.pct * aura).toFixed(0)}% +${eff.extra} ${catNames(eff.cats)}`);
-      }
+      const descEff = (eff) => {
+        const target = eff.product ? eff.product
+          : ((eff.cropTier ? eff.cropTier[0].toUpperCase() + eff.cropTier.slice(1) + " " : "") + catNames(eff.cats));
+        if (eff.type === "yield_flat") descs.push(`+${(eff.value * aura).toFixed(2)} ${target}`);
+        else if (eff.type === "speed_pct") descs.push(`${(eff.value * aura).toFixed(1)}% ${target} Time`);
+        else if (eff.type === "chance") descs.push(`${(eff.pct * aura).toFixed(0)}% +${eff.extra} ${target}`);
+      };
+      for (const eff of typeEffects) descEff(eff);
+      for (const eff of stemEffects) descEff(eff);
       return descs;
     }
 
@@ -8187,159 +8208,6 @@
     //  BUDS PAGE
     // ═══════════════════════════════════════
 
-    function parseBudBoostText(text) {
-      // Parse boost description text from sfl.world into effects
-      const effects = [];
-      if (!text) return effects;
-      const lines = text.split(/[|;,]|\n/).map(s => s.trim()).filter(Boolean);
-      for (const line of lines) {
-        let m;
-        // "Reduced Crop Growth Time: 10%" or "Crop Growth Time: -10%"
-        if ((m = line.match(/(?:Reduced?\s+)?Crop\s+(?:Growth|Growing)\s+Time[:\s]+[-]?(\d+)%/i))) {
-          effects.push({ type: "speed_pct", value: -parseFloat(m[1]), cats: ["crops"] });
-          continue;
-        }
-        // "Bud Boost Increase: 5%" — skip, handled by aura field
-        if (/Bud\s+Boost\s+Increase/i.test(line)) continue;
-        // "+0.3 Basic Crops" / "+0.2 Medium Crops" / "+0.3 Advanced Crops"
-        if ((m = line.match(/([+-]?\d+\.?\d*)\s+(Basic|Medium|Advanced)\s+Crop/i))) {
-          effects.push({ type: "yield_flat", value: parseFloat(m[1]), cats: ["crops"], cropTier: m[2].toLowerCase() });
-          continue;
-        }
-        // "+0.X Crop yield" / "Increase Yield of Crops" (all crops)
-        if ((m = line.match(/([+-]?\d+\.?\d*)\s+(?:Crop|Crops)\s*(?:yield)?/i)) ||
-            (m = line.match(/(?:Increase\s+)?Yield\s+of\s+Crops?[:\s]+([+-]?\d+\.?\d*)/i))) {
-          effects.push({ type: "yield_flat", value: parseFloat(m[1]), cats: ["crops"] });
-          continue;
-        }
-        // "+0.2 Fruit yield" / "Increase Yield of Fruit"
-        if ((m = line.match(/([+-]?\d+\.?\d*)\s+Fruit/i)) ||
-            (m = line.match(/Yield\s+of\s+Fruit[^:]*[:\s]+([+-]?\d+\.?\d*)/i))) {
-          effects.push({ type: "yield_flat", value: parseFloat(m[1]), cats: ["fruits"] });
-          continue;
-        }
-        // "+0.2 Wood" / "Increase Yield of Wood"
-        if ((m = line.match(/([+-]?\d+\.?\d*)\s+Wood/i)) ||
-            (m = line.match(/Yield\s+of\s+Wood[^:]*[:\s]+([+-]?\d+\.?\d*)/i))) {
-          effects.push({ type: "yield_flat", value: parseFloat(m[1]), cats: ["trees"] });
-          continue;
-        }
-        // "+0.2 Mineral" / "+0.2 Iron" / "+0.2 Stone" etc
-        if ((m = line.match(/([+-]?\d+\.?\d*)\s+Mineral/i)) ||
-            (m = line.match(/Yield\s+of\s+Mineral[^:]*[:\s]+([+-]?\d+\.?\d*)/i))) {
-          effects.push({ type: "yield_flat", value: parseFloat(m[1]), cats: ["stone", "iron", "gold", "crimstone"] });
-          continue;
-        }
-        if ((m = line.match(/([+-]?\d+\.?\d*)\s+Iron/i)) ||
-            (m = line.match(/Yield\s+of\s+Iron[^:]*[:\s]+([+-]?\d+\.?\d*)/i))) {
-          effects.push({ type: "yield_flat", value: parseFloat(m[1]), cats: ["iron"] });
-          continue;
-        }
-        if ((m = line.match(/([+-]?\d+\.?\d*)\s+Stone/i)) ||
-            (m = line.match(/Yield\s+of\s+Stone[^:]*[:\s]+([+-]?\d+\.?\d*)/i))) {
-          effects.push({ type: "yield_flat", value: parseFloat(m[1]), cats: ["stone"] });
-          continue;
-        }
-        if ((m = line.match(/([+-]?\d+\.?\d*)\s+Gold/i)) ||
-            (m = line.match(/Yield\s+of\s+Gold[^:]*[:\s]+([+-]?\d+\.?\d*)/i))) {
-          effects.push({ type: "yield_flat", value: parseFloat(m[1]), cats: ["gold"] });
-          continue;
-        }
-        // "+0.2 Animal" / "Animal Produce"
-        if ((m = line.match(/([+-]?\d+\.?\d*)\s+Animal/i)) ||
-            (m = line.match(/Yield\s+of\s+Animal[^:]*[:\s]+([+-]?\d+\.?\d*)/i))) {
-          effects.push({ type: "yield_flat", value: parseFloat(m[1]), cats: ["chickens", "cows", "sheep"] });
-          continue;
-        }
-        // "10% extra fish" / "10% chance +1 Fish" / "Extra Fish: 10%"
-        if ((m = line.match(/(\d+)%\s+(?:extra|chance)[^f]*fish/i)) ||
-            (m = line.match(/Extra\s+Fish[:\s]+(\d+)%/i))) {
-          effects.push({ type: "chance", pct: parseFloat(m[1]), extra: 1, cats: ["fishing"] });
-          continue;
-        }
-        // "XP Boost when eating Fish: 10%" — non-monetary, skip
-        // "Increase Yield of Flower"
-        if ((m = line.match(/([+-]?\d+\.?\d*)\s+Flower/i)) ||
-            (m = line.match(/Yield\s+of\s+Flower[^:]*[:\s]+([+-]?\d+\.?\d*)/i))) {
-          effects.push({ type: "yield_flat", value: parseFloat(m[1]), cats: ["flowers"] });
-          continue;
-        }
-      }
-      return effects;
-    }
-
-    function calcBudSflFromEffects(effects, auraMultiplier, capacity, p2pPrices, savedProducts) {
-      // Given parsed effects + aura, calculate total SFL/day (same logic as calcBudSflPerDay but from raw effects)
-      let totalSfl = 0;
-      const breakdown = [];
-
-      for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
-        if (!catDef.quantifiable) continue;
-
-        if (isAnimalCat(catId)) {
-          const animal = getAnimalData(catId);
-          if (!animal) continue;
-          let catSfl = 0;
-          for (const prod of animal.products) {
-            const yieldVals = [];
-            for (const eff of effects) {
-              if (eff.type !== "yield_flat" || !eff.cats.includes(catId)) continue;
-              yieldVals.push(eff.value);
-            }
-            const best = yieldVals.length > 0 ? Math.max(...yieldVals) * auraMultiplier : 0;
-            if (best > 0) {
-              const n = getCapacityCount(catId, capacity);
-              const cycleSec = getCycleSec(catId, prod);
-              catSfl += best * (86400 / cycleSec) * n * (p2pPrices[prod] || 0);
-            }
-          }
-          if (catSfl > 0) { totalSfl += catSfl; breakdown.push({ catId, sflPerDay: catSfl }); }
-          continue;
-        }
-
-        const product = savedProducts[catId] || getDefaultProduct(catId);
-        const n = getCapacityCount(catId, capacity);
-        if (n === 0 && catId !== "fishing") continue;
-
-        const yieldVals = [], speedVals = [], chanceVals = [];
-        for (const eff of effects) {
-          if (!eff.cats.includes(catId)) continue;
-          if (eff.cropTier && catId === "crops" && !CROP_TIERS[eff.cropTier]?.includes(product)) continue;
-          if (eff.type === "yield_flat") yieldVals.push(eff.value);
-          else if (eff.type === "speed_pct") speedVals.push(eff.value);
-          else if (eff.type === "chance") chanceVals.push(eff);
-        }
-
-        const bestYield = yieldVals.length > 0 ? Math.max(...yieldVals) * auraMultiplier : 0;
-        const bestSpeed = speedVals.length > 0 ? Math.min(...speedVals) * auraMultiplier : 0;
-        const bestChance = chanceVals.length > 0
-          ? chanceVals.reduce((a, b) => (a.pct * a.extra > b.pct * b.extra) ? a : b) : null;
-
-        const cycleSec = getCycleSec(catId, product);
-        const priceProduct = getPriceProduct(catId, product);
-        const price = p2pPrices[priceProduct] || 0;
-        let extraSfl = 0;
-
-        if (bestYield > 0) {
-          if (catId === "fishing") extraSfl += bestYield * price;
-          else if (catId === "bees") extraSfl += bestYield * n * price;
-          else extraSfl += bestYield * (86400 / cycleSec) * n * price;
-        }
-        if (bestSpeed !== 0) {
-          const newCycle = cycleSec * (1 + bestSpeed / 100);
-          if (newCycle > 0) extraSfl += ((86400 / newCycle) - (86400 / cycleSec)) * n * getBaseYield(catId) * price;
-        }
-        if (bestChance) {
-          const effPct = bestChance.pct * auraMultiplier;
-          const catches = catId === "fishing" ? 20 : (86400 / cycleSec) * n;
-          extraSfl += (effPct / 100) * bestChance.extra * catches * price;
-        }
-
-        if (extraSfl > 0) { totalSfl += extraSfl; breakdown.push({ catId, sflPerDay: extraSfl, product: priceProduct }); }
-      }
-      return { totalSfl, breakdown };
-    }
-
     async function renderBuds(data) {
       const app = document.getElementById("app");
       const { farm } = data;
@@ -8354,113 +8222,44 @@
       html += `<div class="under-dev-banner pixel-font" style="background:linear-gradient(180deg,#3b1768,#2a1050);padding:8px 12px;border:3px solid #000;margin-bottom:16px;text-align:center;font-size:0.5625rem;color:var(--lily)">
         ⚠️ UNDER DEVELOPMENT ⚠️
         <div style="margin-top:6px;font-size:0.5rem;color:var(--text-secondary);line-height:1.5">
-          All 2,600+ bud NFTs from sfl.world with boost calculations.<br>
+          All ${BUD_COUNT} bud NFTs with boost calculations (hardcoded data).<br>
           ${sflIcon()}/day based on YOUR farm capacity. Same-resource boosts: best wins (no stacking). Owned buds shown first.
         </div>
       </div>`;
 
-      html += `<div id="buds-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading bud data from sfl.world...</div></div></div>`;
+      html += `<div id="buds-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading prices...</div></div></div>`;
       app.innerHTML = html;
 
-      // Fetch bud page + P2P prices in parallel
-      let budHtml = "", p2pPrices = {};
+      // Fetch P2P prices only (bud data is hardcoded)
+      let p2pPrices = {};
       try {
-        const proxyFetch = async (url) => {
-          const resp = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
-          if (!resp.ok) throw new Error(`${resp.status}`);
-          return resp;
-        };
-        const [budResp, priceResp] = await Promise.all([
-          proxyFetch("https://sfl.world/info/buds"),
-          proxyFetch("https://sfl.world/api/v1/prices").then(r => r.json()),
-        ]);
-        budHtml = await budResp.text();
-        const priceData = priceResp?.data?.p2p || priceResp?.p2p || {};
-        for (const [k, v] of Object.entries(priceData)) p2pPrices[k] = parseFloat(v) || 0;
-      } catch (err) {
-        document.getElementById("buds-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load: ${escHTML(err.message)}</p></div>`;
-        return;
-      }
-
-      // Parse bud HTML table
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(budHtml, "text/html");
-      const rows = doc.querySelectorAll("table tr");
-      const allBuds = [];
-
-      for (const row of rows) {
-        const cells = row.querySelectorAll("td");
-        if (cells.length < 7) continue;
-        const idText = (cells[0]?.textContent || "").trim();
-        const id = parseInt(idText) || 0;
-        if (!id) continue;
-
-        const type = (cells[1]?.textContent || "").trim();
-        // cells[2] = boost type label (skip)
-        const aura = (cells[3]?.textContent || "").trim();
-        const stem = (cells[4]?.textContent || "").trim();
-        const colour = (cells[5]?.textContent || "").trim();
-        // cells[6] = ears (skip)
-
-        // Collect all remaining cells as boost text
-        const boostTexts = [];
-        for (let i = 7; i < cells.length; i++) {
-          const t = (cells[i]?.textContent || "").trim();
-          if (t) boostTexts.push(t);
+        const resp = await fetch(`/api/proxy?url=${encodeURIComponent("https://sfl.world/api/v1/prices")}`);
+        if (resp.ok) {
+          const priceResp = await resp.json();
+          const priceData = priceResp?.data?.p2p || priceResp?.p2p || {};
+          for (const [k, v] of Object.entries(priceData)) p2pPrices[k] = parseFloat(v) || 0;
         }
-        // Also check if boosts are in cells 2+ as alternate layout
-        if (boostTexts.length === 0) {
-          for (let i = 2; i < cells.length; i++) {
-            const t = (cells[i]?.textContent || "").trim();
-            if (t && /yield|crop|fish|wood|mineral|animal|fruit|flower|growth|boost|speed|chance|extra/i.test(t)) {
-              boostTexts.push(t);
-            }
-          }
-        }
-
-        const boostStr = boostTexts.join(" | ");
-        allBuds.push({ id, type, stem, aura, colour, boostStr });
-      }
+      } catch {}
 
       // Check which buds the user owns
       const ownedBudIds = new Set();
       const farmBuds = farm.buds || {};
-      for (const [budId] of Object.entries(farmBuds)) {
-        ownedBudIds.add(parseInt(budId));
-      }
+      for (const [budId] of Object.entries(farmBuds)) ownedBudIds.add(parseInt(budId));
 
-      // Aura text → multiplier mapping
-      const auraMap = { "No Aura": 1, "None": 1, "Basic": 1.05, "Green": 1.2, "Rare": 2, "Mythical": 5 };
-
-      // Calculate SFL/day for each bud
+      // Build all bud data from hardcoded encoded strings
       const budRows = [];
-      for (const bud of allBuds) {
-        const effects = parseBudBoostText(bud.boostStr);
-        const auraMult = auraMap[bud.aura] || 1;
-        const result = calcBudSflFromEffects(effects, auraMult, capacity, p2pPrices, savedProducts);
-        const owned = ownedBudIds.has(bud.id);
-
-        // Build boost description
-        const descs = [];
-        for (const eff of effects) {
-          const catNames = eff.cats.map(c => POWER_CATEGORIES[c]?.label || c).join("/");
-          const tier = eff.cropTier ? ` ${eff.cropTier[0].toUpperCase() + eff.cropTier.slice(1)}` : "";
-          if (eff.type === "yield_flat") descs.push(`+${(eff.value * auraMult).toFixed(2)}${tier} ${catNames}`);
-          else if (eff.type === "speed_pct") descs.push(`${(eff.value * auraMult).toFixed(1)}% ${catNames} Time`);
-          else if (eff.type === "chance") descs.push(`${(eff.pct * auraMult).toFixed(0)}% +${eff.extra} ${catNames}`);
-        }
-
+      for (let id = 1; id <= BUD_COUNT; id++) {
+        const bud = decodeBud(id);
+        if (!bud) continue;
+        const result = calcBudSflPerDay(bud, capacity, p2pPrices, savedProducts);
+        const boostDescs = describeBudBoosts(bud);
+        const owned = ownedBudIds.has(id);
         const breakdownDesc = result.breakdown.map(b => {
           const cat = POWER_CATEGORIES[b.catId];
           return `${cat ? cat.emoji : ""} ${b.sflPerDay.toFixed(4)}`;
         }).join(" · ");
-
-        budRows.push({
-          id: bud.id, type: bud.type, stem: bud.stem, aura: bud.aura, colour: bud.colour,
-          boostDescs: descs, breakdownDesc, boostStr: bud.boostStr,
-          sflPerDay: result.totalSfl, sflPerYear: result.totalSfl * 365,
-          owned,
-        });
+        budRows.push({ id, type: bud.type, stem: bud.stem, aura: bud.aura,
+          boostDescs, breakdownDesc, sflPerDay: result.totalSfl, sflPerYear: result.totalSfl * 365, owned });
       }
 
       // Sort: owned first, then by SFL/day descending
@@ -8473,14 +8272,33 @@
       const withBoost = budRows.filter(b => b.sflPerDay > 0).length;
 
       let content = `<div class="pixel-font" style="font-size:0.5625rem;color:var(--text-secondary);margin-bottom:12px">
-        Loaded <strong>${budRows.length}</strong> buds from sfl.world ·
+        <strong>${budRows.length}</strong> buds total ·
         <strong style="color:var(--green)">${totalOwned} owned</strong> ·
         ${withBoost} with calculable boost ·
-        Capacity: ${capacity.crops} plots, ${capacity.fruitPatches} fruit, ${capacity.greenhouse} greenhouse, ${capacity.trees} trees
+        Capacity: ${capacity.crops} plots, ${capacity.fruitPatches} fruit, ${capacity.greenhouse || 0} greenhouse, ${capacity.trees} trees
+      </div>`;
+
+      // Filters
+      content += `<div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center" class="pixel-font">
+        <label style="font-size:0.5rem;color:var(--text-secondary)">Type:
+          <select id="bud-filter-type" onchange="filterBudTable()" style="font-size:0.5rem;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-dark);padding:2px 4px">
+            <option value="">All</option>
+            ${BUD_TYPE_NAMES.map(t => `<option value="${t}">${t}</option>`).join("")}
+          </select>
+        </label>
+        <label style="font-size:0.5rem;color:var(--text-secondary)">Aura:
+          <select id="bud-filter-aura" onchange="filterBudTable()" style="font-size:0.5rem;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-dark);padding:2px 4px">
+            <option value="">All</option>
+            ${BUD_AURA_NAMES.map(a => `<option value="${a}">${a}</option>`).join("")}
+          </select>
+        </label>
+        <label style="font-size:0.5rem;color:var(--text-secondary)">
+          <input type="checkbox" id="bud-filter-owned" onchange="filterBudTable()"> Owned only
+        </label>
       </div>`;
 
       content += `<div style="overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:0.5rem;color:var(--text-secondary)">
+      <table id="bud-table" style="width:100%;border-collapse:collapse;font-size:0.5rem;color:var(--text-secondary)">
         <thead>
           <tr style="background:rgba(92,58,30,0.3);text-align:left;position:sticky;top:0">
             <th style="padding:4px 6px;border:1px solid var(--border-dark)">ID</th>
@@ -8500,17 +8318,17 @@
                           bud.aura === "Rare" ? "color:#ff8800;font-weight:bold" :
                           bud.aura === "Green" ? "color:var(--green)" :
                           bud.aura === "Basic" ? "color:var(--lily)" : "color:var(--text-dim)";
-        const auraLabel = bud.aura && bud.aura !== "No Aura" && bud.aura !== "None"
-          ? `${bud.aura} (${((auraMap[bud.aura] - 1) * 100).toFixed(0)}%)` : "—";
+        const auraLabel = bud.aura !== "No Aura"
+          ? `${bud.aura} (${((BUD_AURA_MULTIPLIERS[bud.aura] - 1) * 100).toFixed(0)}%)` : "—";
         const sflColor = bud.sflPerDay > 0 ? "var(--green)" : "var(--text-dim)";
         const ownedBg = bud.owned ? "background:rgba(34,139,34,0.15);" : "";
 
-        content += `<tr style="border-bottom:1px solid rgba(92,58,30,0.15);${ownedBg}">
+        content += `<tr data-type="${escHTML(bud.type)}" data-aura="${escHTML(bud.aura)}" data-owned="${bud.owned ? 1 : 0}" style="border-bottom:1px solid rgba(92,58,30,0.15);${ownedBg}">
           <td style="padding:3px 6px;border:1px solid var(--border-dark);font-weight:bold">${bud.owned ? "✅ " : ""}${bud.id}</td>
           <td style="padding:3px 6px;border:1px solid var(--border-dark)">${escHTML(bud.type)}</td>
           <td style="padding:3px 6px;border:1px solid var(--border-dark)">${escHTML(bud.stem)}</td>
           <td style="padding:3px 6px;border:1px solid var(--border-dark);${auraStyle}">${escHTML(auraLabel)}</td>
-          <td style="padding:3px 6px;border:1px solid var(--border-dark)">${bud.boostDescs.join("<br>") || `<em style="color:var(--text-dim)">${escHTML(bud.boostStr || "—")}</em>`}</td>
+          <td style="padding:3px 6px;border:1px solid var(--border-dark)">${bud.boostDescs.join("<br>") || '<em style="color:var(--text-dim)">—</em>'}</td>
           <td style="padding:3px 6px;border:1px solid var(--border-dark);font-size:0.4375rem">${bud.breakdownDesc || "—"}</td>
           <td style="padding:3px 6px;border:1px solid var(--border-dark);text-align:right;color:${sflColor};font-weight:bold">+${bud.sflPerDay.toFixed(4)}</td>
           <td style="padding:3px 6px;border:1px solid var(--border-dark);text-align:right;color:${sflColor}">+${bud.sflPerYear.toFixed(2)}</td>
@@ -8525,6 +8343,19 @@
       </div>`;
 
       document.getElementById("buds-content").innerHTML = content;
+    }
+
+    function filterBudTable() {
+      const type = document.getElementById("bud-filter-type")?.value || "";
+      const aura = document.getElementById("bud-filter-aura")?.value || "";
+      const ownedOnly = document.getElementById("bud-filter-owned")?.checked || false;
+      const rows = document.querySelectorAll("#bud-table tbody tr");
+      for (const row of rows) {
+        const show = (!type || row.dataset.type === type)
+          && (!aura || row.dataset.aura === aura)
+          && (!ownedOnly || row.dataset.owned === "1");
+        row.style.display = show ? "" : "none";
+      }
     }
 
     function refresh() {
