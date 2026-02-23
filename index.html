@@ -1922,6 +1922,11 @@
       "Apple": 43200, "Blueberry": 21600, "Orange": 43200, "Banana": 43200,
       "Lemon": 14400, "Tomato": 7200,
     };
+    // Number of harvests before fruit tree becomes a stump (chop for 1 Wood, costs 1 Axe)
+    const FRUIT_HARVEST_COUNT = {
+      "Tomato": 7, "Lemon": 4, "Blueberry": 3,
+      "Orange": 3, "Apple": 3, "Banana": 3,
+    };
 
     const GREENHOUSE_GROW_DATA = {
       "Grape": 43200, "Rice": 115200, "Olive": 158400,
@@ -2457,6 +2462,22 @@
       // "N% rod cost" / "N% seeds cost" → qualitative cost reduction
       { rx: /\d+%\s+(?:rod|seeds?|flower\s+seeds?)\s+cost/i,
         fn: m => ({ type: "qualitative", cat: "other", raw: m[0] }) },
+
+      // ── DISABLED IF (superseded by stronger item) ──
+      // "Disabled if Apprentice Beaver or Foreman Beaver Active"
+      { rx: /disabled\s+if\s+(.+?)\s+active$/i,
+        fn: m => {
+          const names = m[1].split(/\s+or\s+/i).map(n => n.trim()).filter(Boolean);
+          return { type: "disabled_by", names };
+        }},
+
+      // ── FRUIT STUMP WOOD ──
+      // "Chop fruit without axes" (No Axe No Worries) → saves axe cost per fruit lifecycle
+      { rx: /chop\s+fruit\s+without\s+axes?/i,
+        fn: m => ({ type: "fruit_free_chop", cat: "fruits" }) },
+      // "±N Wood from fruit" → wood yield per fruit stump chop
+      { rx: /^([+-]?\d+\.?\d*)\s+Wood\s+from\s+fruit/i,
+        fn: m => ({ type: "fruit_stump_wood", value: parseFloat(m[1]), cat: "fruits" }) },
 
       // ── FREE TOOL (zero tool cost for a category) ──
       // "Mine stone without pickaxes" (Quarry) → tool cost = 0 for stone
@@ -7111,7 +7132,9 @@
             break;
           case "free_tool":
           case "cost_reduction":
-            // Handled in cost calculations, not production yield
+          case "fruit_free_chop":
+          case "fruit_stump_wood":
+            // Handled in cost/value calculations, not production yield
             break;
         }
       }
@@ -7430,7 +7453,7 @@
     // Build detailed production breakdown HTML for a category
     function buildProductionBreakdown(catId, product, capacity, p2pPrices, catBoosts) {
       const n = getCapacityCount(catId, capacity);
-      const ownedEffects = catBoosts.filter(b => b.has).flatMap(b => getEffectsForCategory(b, catId));
+      const ownedEffects = catBoosts.filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId));
 
       if (n === 0 && catId !== "fishing") {
         return `<div style="padding:8px 12px;font-size: 0.625rem;color:var(--text-dim)">No capacity detected on farm.</div>`;
@@ -7521,6 +7544,11 @@
       const catEffects = getEffectsForCategory(boostItem, catId);
       if (catEffects.length === 0) return { solo: 0, synergy: 0, roi: Infinity };
 
+      // If this boost is disabled by a stronger owned item, it contributes nothing
+      if (boostItem.isDisabled) {
+        return { solo: 0, synergy: 0, roi: Infinity, disabled: true, disabledByName: boostItem.disabledByName };
+      }
+
       // Handle free_tool effects (Quarry, Foreman Beaver — zero tool cost)
       const freeToolEffects = catEffects.filter(e => e.type === "free_tool");
       if (freeToolEffects.length > 0) {
@@ -7559,6 +7587,35 @@
         return { solo: 0, synergy: 0, roi: Infinity };
       }
 
+      // Handle fruit stump effects (No Axe No Worries, Fruity Woody)
+      // Fruit trees: plant → harvest N times → chop stump (1 Axe, yields 1 Wood) → replant
+      const fruitStumpWood = catEffects.filter(e => e.type === "fruit_stump_wood");
+      const fruitFreeChop = catEffects.filter(e => e.type === "fruit_free_chop");
+      if ((fruitStumpWood.length > 0 || fruitFreeChop.length > 0) && catId === "fruits") {
+        const { exchangeRates } = powerState;
+        const harvestCount = FRUIT_HARVEST_COUNT[product] || 3;
+        const growSec = FRUIT_GROW_DATA[product] || 43200;
+        const lifecycleSec = harvestCount * growSec;
+        const n = getCapacityCount("fruits", capacity);
+        const lifecyclesPerDay = n * (86400 / lifecycleSec);
+        let stumpValue = 0;
+        // Wood gain/loss from stumps
+        const woodPrice = p2pPrices["Wood"] || 0;
+        for (const eff of fruitStumpWood) {
+          stumpValue += lifecyclesPerDay * eff.value * woodPrice;
+        }
+        // Free chop = saves 1 axe per stump
+        if (fruitFreeChop.length > 0 && exchangeRates.coinsPerSFL > 0) {
+          const axeTool = TOOL_COSTS["Axe"];
+          if (axeTool) {
+            const axeSfl = axeTool.coins / exchangeRates.coinsPerSFL;
+            stumpValue += lifecyclesPerDay * axeSfl;
+          }
+        }
+        const roi = (boostItem.floor > 0 && stumpValue > 0) ? boostItem.floor / stumpValue : Infinity;
+        return { solo: stumpValue, synergy: stumpValue, roi, isFruitStump: true };
+      }
+
       // For animals, sum across all products
       if (isAnimalCat(catId)) {
         const baseInfo = getAnimalCatSfl(catId, capacity, [], p2pPrices);
@@ -7569,7 +7626,7 @@
         const allEffectsWithout = [];
         for (const b of allCatBoosts) {
           const eff = getEffectsForCategory(b, catId);
-          if (b.has) {
+          if (b.has && !b.isDisabled) {
             allEffects.push(...eff);
             if (b.name !== boostItem.name) allEffectsWithout.push(...eff);
           }
@@ -7581,7 +7638,7 @@
           const without = getAnimalCatSfl(catId, capacity, allEffectsWithout, p2pPrices);
           synergy = withAll.totalSfl - without.totalSfl;
         } else {
-          const ownedEffects = allCatBoosts.filter(b => b.has).flatMap(b => getEffectsForCategory(b, catId));
+          const ownedEffects = allCatBoosts.filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId));
           const withThis = [...ownedEffects, ...catEffects];
           const withResult = getAnimalCatSfl(catId, capacity, withThis, p2pPrices);
           const ownedResult = getAnimalCatSfl(catId, capacity, ownedEffects, p2pPrices);
@@ -7623,7 +7680,7 @@
         synergy = unitToSfl(withAll.unitsPerDay, priceProduct, p2pPrices) - unitToSfl(without.unitsPerDay, priceProduct, p2pPrices);
       } else {
         // For missing: allOwned∪this - allOwned
-        const ownedEffects = allCatBoosts.filter(b => b.has).flatMap(b => getEffectsForCategory(b, catId));
+        const ownedEffects = allCatBoosts.filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId));
         const withThis = [...ownedEffects, ...catEffects];
         const withResult = applyBoosts(catId, product, capacity, withThis);
         const ownedResult = applyBoosts(catId, product, capacity, ownedEffects);
@@ -7676,6 +7733,13 @@
         h += `<div style="margin-bottom:6px"><strong>${escHTML(boostItem.name)}</strong> — ${escHTML(boostItem.type)}${boostItem.markCost > 0 ? ` | ${(boostItem.markCost/1000).toFixed(0)}k Marks = ${boostItem.floor.toFixed(0)} ${sflIcon()}` : boostItem.floor > 0 ? ` | Floor: ${boostItem.floor.toFixed(1)} ${sflIcon()}` : ""}</div>`;
       }
       h += `<div style="color:var(--green);margin-bottom:6px">${escHTML(boostItem.boost)}</div>`;
+
+      // Disabled state — superseded by stronger item
+      if (boostItem.isDisabled) {
+        h += `<div style="color:var(--red);margin:8px 0">⛔ This boost is <strong>DISABLED</strong> — superseded by <strong>${escHTML(boostItem.disabledByName)}</strong> which is active on your farm.</div>`;
+        h += `</div>`;
+        return h;
+      }
 
       // Skill cost breakdown
       if (boostItem.type === "Skill" && skillCostInfo && skillCostInfo.sflPerPoint > 0) {
@@ -7732,6 +7796,48 @@
         return h;
       }
 
+      // Fruit stump formula (No Axe No Worries, Fruity Woody)
+      const fruitStumpWoodFx = catEffects.filter(e => e.type === "fruit_stump_wood");
+      const fruitFreeChopFx = catEffects.filter(e => e.type === "fruit_free_chop");
+      if ((fruitStumpWoodFx.length > 0 || fruitFreeChopFx.length > 0) && catId === "fruits") {
+        const { exchangeRates } = powerState;
+        const harvestCount = FRUIT_HARVEST_COUNT[product] || 3;
+        const growSec = FRUIT_GROW_DATA[product] || 43200;
+        const lifecycleSec = harvestCount * growSec;
+        const lifecyclesPerDay = n > 0 ? n * (86400 / lifecycleSec) : 0;
+        const woodPrice = p2pPrices["Wood"] || 0;
+
+        h += `<div style="margin-bottom:4px"><strong>Category:</strong> FRUITS — ${n} patches, product: ${escHTML(product)}</div>`;
+        h += `<div style="margin-bottom:4px"><strong>Fruit lifecycle:</strong> ${harvestCount} harvests × ${formatSec(growSec)} = ${formatSec(lifecycleSec)} per lifecycle</div>`;
+        h += `<div style="margin-bottom:4px"><strong>Lifecycles/day:</strong> ${n} patches × (86400 / ${lifecycleSec}) = ${lifecyclesPerDay.toFixed(2)}/day</div>`;
+
+        let totalValue = 0;
+        if (fruitStumpWoodFx.length > 0) {
+          for (const eff of fruitStumpWoodFx) {
+            const woodVal = lifecyclesPerDay * eff.value * woodPrice;
+            totalValue += woodVal;
+            h += `<div><strong>Wood from stump:</strong> ${eff.value > 0 ? "+" : ""}${eff.value} × ${lifecyclesPerDay.toFixed(2)}/day × ${woodPrice.toFixed(4)} ${sflIcon()}/wood = <span style="color:var(${woodVal >= 0 ? '--green' : '--red'})">${woodVal >= 0 ? '+' : ''}${woodVal.toFixed(4)} ${sflIcon()}/day</span></div>`;
+          }
+        }
+        if (fruitFreeChopFx.length > 0 && exchangeRates.coinsPerSFL > 0) {
+          const axeTool = TOOL_COSTS["Axe"];
+          if (axeTool) {
+            const axeSfl = axeTool.coins / exchangeRates.coinsPerSFL;
+            const savings = lifecyclesPerDay * axeSfl;
+            totalValue += savings;
+            h += `<div><strong>Axe saved:</strong> ${lifecyclesPerDay.toFixed(2)}/day × ${axeSfl.toFixed(4)} ${sflIcon()}/axe = <span style="color:var(--green)">+${savings.toFixed(4)} ${sflIcon()}/day</span></div>`;
+          }
+        }
+        h += `<div style="margin-top:4px;color:var(${totalValue >= 0 ? '--green' : '--red'})"><strong>Net: ${totalValue >= 0 ? '+' : ''}${totalValue.toFixed(4)} ${sflIcon()}/day</strong></div>`;
+        if (boostItem.floor > 0 && totalValue > 0) {
+          h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${totalValue.toFixed(4)} = <span style="color:var(--sunpetal)">${(boostItem.floor / totalValue).toFixed(0)} days</span></div>`;
+        } else if (totalValue < 0 && boostItem.floor > 0) {
+          h += `<div style="color:var(--red)"><strong>ROI: LOSS</strong> — net value is negative</div>`;
+        }
+        h += `</div>`;
+        return h;
+      }
+
       if (POWER_CATEGORIES[catId]?.quantifiable && n > 0) {
         if (isAnimalCat(catId)) {
           // Animal multi-product formula
@@ -7745,10 +7851,10 @@
           const soloDelta = soloInfo.totalSfl - baseInfo.totalSfl;
           h += `<div style="margin-bottom:4px"><strong>Solo:</strong> ${soloInfo.totalSfl.toFixed(4)} ${sflIcon()}/day (<span style="color:var(--green)">+${soloDelta.toFixed(4)}</span>)</div>`;
 
-          const ownedEffects = allCatBoosts.filter(b => b.has).flatMap(b => getEffectsForCategory(b, catId));
+          const ownedEffects = allCatBoosts.filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId));
           if (boostItem.has) {
             const allInfo = getAnimalCatSfl(catId, capacity, ownedEffects, p2pPrices);
-            const withoutEffects = allCatBoosts.filter(b => b.has && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId));
+            const withoutEffects = allCatBoosts.filter(b => b.has && !b.isDisabled && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId));
             const withoutInfo = getAnimalCatSfl(catId, capacity, withoutEffects, p2pPrices);
             const marginal = allInfo.totalSfl - withoutInfo.totalSfl;
             h += `<div style="margin-bottom:4px"><strong>Marginal (${ownedEffects.length} effects):</strong> <span style="color:var(--green)">+${marginal.toFixed(4)} ${sflIcon()}/day</span></div>`;
@@ -7782,10 +7888,10 @@
           if (soloResult.yieldFlat) h += ` +${soloResult.yieldFlat.toFixed(2)}/cycle`;
           h += ` → ${soloSfl.toFixed(4)} ${sflIcon()}/day (<span style="color:var(--green)">+${soloDelta.toFixed(4)}</span>)</div>`;
 
-          const ownedEffects = allCatBoosts.filter(b => b.has).flatMap(b => getEffectsForCategory(b, catId));
+          const ownedEffects = allCatBoosts.filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId));
           if (boostItem.has) {
             const allResult = applyBoosts(catId, product, capacity, ownedEffects);
-            const withoutEffects = allCatBoosts.filter(b => b.has && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId));
+            const withoutEffects = allCatBoosts.filter(b => b.has && !b.isDisabled && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId));
             const withoutResult = applyBoosts(catId, product, capacity, withoutEffects);
             const allSfl = unitToSfl(allResult.unitsPerDay, priceProduct, p2pPrices);
             const withoutSfl = unitToSfl(withoutResult.unitsPerDay, priceProduct, p2pPrices);
@@ -7975,6 +8081,24 @@
         });
       }
 
+      // Process "Disabled if X Active" — mark items superseded by stronger owned items
+      for (const b of boostItems) {
+        const disabledByEffects = b.effects.filter(e => e.type === "disabled_by");
+        if (disabledByEffects.length > 0) {
+          b.disabledBy = disabledByEffects.flatMap(e => e.names);
+          b.effects = b.effects.filter(e => e.type !== "disabled_by"); // remove meta-effects
+          // Check if any superseding item is active on this farm
+          const activeSuperseder = b.disabledBy.find(name =>
+            getCount(inventory, name) > 0 || findCollectible(farm, name).length > 0
+            || (wardrobe[name] || 0) > 0 || skills[name] !== undefined
+          );
+          if (activeSuperseder && b.has) {
+            b.isDisabled = true;
+            b.disabledByName = activeSuperseder;
+          }
+        }
+      }
+
       // Load saved product selections
       const savedProducts = getSavedPowerProducts();
 
@@ -8006,7 +8130,7 @@
       for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
         if (!catDef.quantifiable) continue;
         const product = savedProducts[catId] || getDefaultProduct(catId);
-        const ownedEffects = catBoosts[catId].filter(b => b.has).flatMap(b => getEffectsForCategory(b, catId));
+        const ownedEffects = catBoosts[catId].filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId));
 
         let baseSfl, boostedSfl;
         if (isAnimalCat(catId)) {
@@ -8462,10 +8586,25 @@
 
     function renderPowerBoostRow(b, catId, product, val, isOwned) {
       const imgUrl = b.type !== "Skill" ? getItemIcon(b.name) : "";
-      const sflText = val.synergy !== 0
-        ? (val.isFreeTool ? `🆓⬇${val.synergy.toFixed(2)}/day` : val.isCostReduction ? `⬇${val.synergy.toFixed(2)}/day` : `${val.synergy > 0 ? "+" : ""}${val.synergy.toFixed(2)}/day`)
-        : "—";
-      const roiText = val.roi < Infinity ? `${val.roi.toFixed(0)}d` : "";
+      let sflText;
+      if (val.disabled) {
+        sflText = `<span style="color:var(--text-dim)">DISABLED</span>`;
+      } else if (val.synergy !== 0) {
+        sflText = val.isFreeTool ? `🆓⬇${val.synergy.toFixed(2)}/day`
+          : val.isCostReduction ? `⬇${val.synergy.toFixed(2)}/day`
+          : val.isFruitStump ? `🪵${val.synergy > 0 ? "+" : ""}${val.synergy.toFixed(2)}/day`
+          : `${val.synergy > 0 ? "+" : ""}${val.synergy.toFixed(2)}/day`;
+      } else {
+        sflText = "—";
+      }
+      let roiText = "";
+      if (val.disabled) {
+        roiText = "";
+      } else if (val.roi < Infinity && val.roi > 0) {
+        roiText = `${val.roi.toFixed(0)}d`;
+      } else if (val.synergy < 0 && b.floor > 0) {
+        roiText = "LOSS";
+      }
       const typeLabel = b.type === "Skill" ? `Skill (${b.skillTree}, ${b.skillPoints}pt)` : b.type;
       let costLabel;
       if (b.type === "Skill" && b.floor > 0) {
@@ -8477,16 +8616,18 @@
       } else {
         costLabel = "";
       }
+      const disabledNote = val.disabled ? `<div style="color:var(--red);font-size:0.5rem">⛔ Superseded by ${escHTML(val.disabledByName || "stronger item")}</div>` : "";
 
-      return `<div class="power-boost-row ${isOwned ? "has-it" : "missing"}" onclick="togglePowerDetail(this,'${escHTML(b.name).replace(/'/g, "\\'")}','${catId}')">
+      return `<div class="power-boost-row ${isOwned ? "has-it" : "missing"}${val.disabled ? " disabled-boost" : ""}" onclick="togglePowerDetail(this,'${escHTML(b.name).replace(/'/g, "\\'")}','${catId}')" style="${val.disabled ? 'opacity:0.5' : ''}">
         ${imgUrl ? `<img class="power-boost-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">` : `<span class="power-boost-icon">🧠</span>`}
         <div class="power-boost-info">
           <div class="power-boost-name">${escHTML(b.name)} <span class="power-boost-type">${escHTML(typeLabel)}</span></div>
           <div class="power-boost-text">${escHTML(b.boost)}</div>
+          ${disabledNote}
         </div>
         <div class="power-boost-value">
           <div class="power-boost-sfl">${sflText}</div>
-          ${roiText ? `<div class="power-boost-roi">${roiText} ROI</div>` : ""}
+          ${roiText ? `<div class="power-boost-roi" style="${roiText === 'LOSS' ? 'color:var(--red)' : ''}">${roiText}${roiText === 'LOSS' ? '' : ' ROI'}</div>` : ""}
           ${costLabel ? `<div class="power-boost-floor">${costLabel}</div>` : ""}
         </div>
       </div>`;
