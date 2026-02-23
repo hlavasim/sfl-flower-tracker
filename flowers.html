@@ -7101,7 +7101,9 @@
       const hasToolshed = (buildings["Toolshed"] || []).length > 0;
       const moreAxes = skills["More Axes"] !== undefined;
       const morePicks = skills["More Picks"] !== undefined;
-      return { hasWarehouse, hasToolshed, moreAxes, morePicks };
+      const fellersDiscount = skills["Feller's Discount"] !== undefined; // -20% axe coin cost
+      const frugalMiner = skills["Frugal Miner"] !== undefined;         // -20% pickaxe coin cost
+      return { hasWarehouse, hasToolshed, moreAxes, morePicks, fellersDiscount, frugalMiner };
     }
 
     // Get effective stock for a seed/tool
@@ -7157,8 +7159,18 @@
       const tool = TOOL_COSTS[toolName];
       if (!tool || exchangeRates.coinsPerSFL <= 0) return { costPerDay: 0, toolSfl: 0, restockPerDay: 0 };
 
-      // Tool cost in SFL = coins + material costs
-      let toolSfl = tool.coins / exchangeRates.coinsPerSFL;
+      // Apply coin discounts from skills
+      let coinDiscount = 0;
+      let discountSource = "";
+      if (toolName === "Axe" && stockMods.fellersDiscount) {
+        coinDiscount = 0.2; discountSource = "Feller's Discount";
+      } else if (toolName !== "Axe" && toolName !== "Oil Drill" && stockMods.frugalMiner) {
+        coinDiscount = 0.2; discountSource = "Frugal Miner";
+      }
+      const effectiveCoins = tool.coins * (1 - coinDiscount);
+
+      // Tool cost in SFL = coins (after discount) + material costs
+      let toolSfl = effectiveCoins / exchangeRates.coinsPerSFL;
       if (tool.materials) {
         for (const [mat, qty] of Object.entries(tool.materials)) {
           toolSfl += (p2pPrices[mat] || 0) * qty;
@@ -7185,7 +7197,7 @@
         restockPerDay = daysPerStock > 0 ? restockSfl / daysPerStock : 0;
       }
 
-      return { costPerDay, toolSfl, restockPerDay, toolsPerDay, stock };
+      return { costPerDay, toolSfl, restockPerDay, toolsPerDay, stock, coinDiscount, discountSource, effectiveCoins, baseCoins: tool.coins };
     }
 
     // Compute total SFL/day across all products for an animal category
@@ -7581,11 +7593,18 @@
           p2pPrices[k] = parseFloat(v) || 0;
         }
         // Extract exchange rates for cost calculations
+        // Use Betty rate for coins→SFL (more accurate than API exchange rate)
+        const betty = computeBettyRate(p2pPrices);
+        if (betty.rate > 0) {
+          exchangeRates.coinsPerSFL = betty.rate;
+          exchangeRates.bettyItem = betty.item;
+        }
         if (rateResp) {
           const tiers = rateResp?.data?.tiers || rateResp?.tiers || [];
           const coinTiers = tiers.filter(t => t.coin !== undefined && t.sfl !== undefined);
           const gemTiers = tiers.filter(t => t.gem !== undefined && t.sfl !== undefined);
-          if (coinTiers.length > 0) {
+          // Fallback to API rate if Betty rate failed
+          if (!betty.rate && coinTiers.length > 0) {
             const best = coinTiers.reduce((a, b) => (b.coin / b.sfl) > (a.coin / a.sfl) ? b : a);
             exchangeRates.coinsPerSFL = best.coin / best.sfl;
           }
@@ -7887,11 +7906,13 @@
           content += `<div style="padding:6px 12px;font-size: 0.5625rem;color:var(--text-secondary);line-height:1.8;border-bottom:1px solid var(--border-dark)">`;
           content += `<div style="color:var(--red);font-size: 0.625rem;margin-bottom:2px"><strong>💰 PRODUCTION COSTS</strong></div>`;
           if (cd.seedSfl !== undefined) {
-            content += `<div>Seed cost: ${(SEED_COSTS[product] || 0).toFixed(2)} coins = ${cd.seedSfl.toFixed(6)} ${sflIcon()} (${Math.round(exchangeRates.coinsPerSFL)} coins/${sflIcon()})</div>`;
+            const bettyNote = exchangeRates.bettyItem ? ` via Betty/${exchangeRates.bettyItem}` : "";
+            content += `<div>Seed cost: ${(SEED_COSTS[product] || 0).toFixed(2)} coins = ${cd.seedSfl.toFixed(6)} ${sflIcon()} (${Math.round(exchangeRates.coinsPerSFL)} coins/${sflIcon()}${bettyNote})</div>`;
             content += `<div>Seed cost/day: ${cd.seedSfl.toFixed(6)} × ${(cd.cyclesPerDay || 0).toFixed(2)} cycles × ${getCapacityCount(catId, capacity)} = <strong style="color:var(--red)">${(cd.costPerDay || 0).toFixed(4)} ${sflIcon()}/day</strong></div>`;
             if (cd.stock > 0) content += `<div>Stock: ${cd.stock} seeds${stockMods.hasWarehouse ? " (Warehouse ×1.2)" : ""} | Restock: ${(cd.restockPerDay || 0).toFixed(4)} ${sflIcon()}/day</div>`;
           } else if (cd.toolSfl !== undefined) {
-            content += `<div>Tool cost: ${cd.toolSfl.toFixed(4)} ${sflIcon()} per use</div>`;
+            const discInfo = cd.discountSource ? ` <span style="color:var(--green)">(-20% ${cd.discountSource}: <s>${cd.baseCoins}</s> → ${cd.effectiveCoins} coins)</span>` : "";
+            content += `<div>Tool cost: ${cd.toolSfl.toFixed(4)} ${sflIcon()} per use${discInfo}</div>`;
             content += `<div>Tool cost/day: ${cd.toolSfl.toFixed(4)} × ${(cd.toolsPerDay || 0).toFixed(2)} = <strong style="color:var(--red)">${(cd.costPerDay || 0).toFixed(4)} ${sflIcon()}/day</strong></div>`;
             if (cd.stock > 0) content += `<div>Stock: ${cd.stock} tools${stockMods.hasToolshed ? " (Toolshed ×1.5)" : ""} | Restock: ${(cd.restockPerDay || 0).toFixed(4)} ${sflIcon()}/day</div>`;
           }
@@ -7983,9 +8004,11 @@
           }
         }
 
-        content += `<div style="margin-bottom:12px"><div class="pixel-font" style="font-size: 0.5625rem;color:var(--lily);margin-bottom:4px">🌱 SEED COSTS (${Math.round(exchangeRates.coinsPerSFL)} coins/${sflIcon()})</div>
+        const bettyLabel = exchangeRates.bettyItem ? ` via ${exchangeRates.bettyItem}` : "";
+        content += `<div style="margin-bottom:12px"><div class="pixel-font" style="font-size: 0.5625rem;color:var(--lily);margin-bottom:4px">🌱 SEED COSTS (${Math.round(exchangeRates.coinsPerSFL)} coins/${sflIcon()}${bettyLabel})</div>
           <table style="width:100%;border-collapse:collapse;font-size: 0.5rem;color:var(--text-secondary)">
             <thead><tr style="background:rgba(92,58,30,0.3);text-align:left">
+              <th style="padding:3px 6px;border:1px solid var(--border-dark)"></th>
               <th style="padding:3px 6px;border:1px solid var(--border-dark)">Crop</th>
               <th style="padding:3px 6px;border:1px solid var(--border-dark)">Cat</th>
               <th style="padding:3px 6px;border:1px solid var(--border-dark)">Coins</th>
@@ -7995,8 +8018,9 @@
             </tr></thead><tbody>`;
         for (const r of seedRows) {
           content += `<tr style="border-bottom:1px solid rgba(92,58,30,0.15)">
+            <td style="padding:2px 4px;border:1px solid var(--border-dark);text-align:center"><img src="${getItemIcon(r.name)}" style="height:1.2em;vertical-align:-0.2em" loading="lazy"></td>
             <td style="padding:2px 6px;border:1px solid var(--border-dark)">${escHTML(r.name)}</td>
-            <td style="padding:2px 6px;border:1px solid var(--border-dark)">${r.catId}</td>
+            <td style="padding:2px 6px;border:1px solid var(--border-dark)">${catIcon(r.catId, "1em")}</td>
             <td style="padding:2px 6px;border:1px solid var(--border-dark)">${r.coinCost}</td>
             <td style="padding:2px 6px;border:1px solid var(--border-dark)">${r.sflCost.toFixed(6)}</td>
             <td style="padding:2px 6px;border:1px solid var(--border-dark)">${r.stock}</td>
@@ -8009,29 +8033,47 @@
         content += `<div style="margin-bottom:12px"><div class="pixel-font" style="font-size: 0.5625rem;color:var(--lily);margin-bottom:4px">⛏️ TOOL COSTS</div>
           <table style="width:100%;border-collapse:collapse;font-size: 0.5rem;color:var(--text-secondary)">
             <thead><tr style="background:rgba(92,58,30,0.3);text-align:left">
+              <th style="padding:3px 6px;border:1px solid var(--border-dark)"></th>
               <th style="padding:3px 6px;border:1px solid var(--border-dark)">Tool</th>
               <th style="padding:3px 6px;border:1px solid var(--border-dark)">For</th>
               <th style="padding:3px 6px;border:1px solid var(--border-dark)">Coins</th>
+              <th style="padding:3px 6px;border:1px solid var(--border-dark)">Discount</th>
               <th style="padding:3px 6px;border:1px solid var(--border-dark)">Materials</th>
               <th style="padding:3px 6px;border:1px solid var(--border-dark)">Total ${sflIcon()}</th>
               <th style="padding:3px 6px;border:1px solid var(--border-dark)">Stock</th>
             </tr></thead><tbody>`;
         for (const [toolName, tool] of Object.entries(TOOL_COSTS)) {
           const catId = TOOL_TO_CAT[toolName] || "—";
-          let toolSfl = exchangeRates.coinsPerSFL > 0 ? tool.coins / exchangeRates.coinsPerSFL : 0;
+          // Apply coin discounts
+          let coinDiscount = 0, discountLabel = "";
+          if (toolName === "Axe" && stockMods.fellersDiscount) {
+            coinDiscount = 0.2; discountLabel = "-20% Feller's Discount";
+          } else if (toolName !== "Axe" && toolName !== "Oil Drill" && stockMods.frugalMiner) {
+            coinDiscount = 0.2; discountLabel = "-20% Frugal Miner";
+          }
+          const effectiveCoins = tool.coins * (1 - coinDiscount);
+          let toolSfl = exchangeRates.coinsPerSFL > 0 ? effectiveCoins / exchangeRates.coinsPerSFL : 0;
           const mats = [];
           if (tool.materials) {
             for (const [mat, qty] of Object.entries(tool.materials)) {
               const matSfl = (p2pPrices[mat] || 0) * qty;
               toolSfl += matSfl;
-              mats.push(`${qty}× ${mat}`);
+              mats.push(`${qty}× <img src="${getItemIcon(mat)}" style="height:1em;vertical-align:-0.15em" loading="lazy"> ${mat}`);
             }
           }
           const stock = getEffectiveStock(toolName, stockMods);
+          const coinsCell = coinDiscount > 0
+            ? `<s style="color:var(--text-dim)">${tool.coins}</s> → ${effectiveCoins}`
+            : `${tool.coins}`;
+          const discountCell = discountLabel
+            ? `<span style="color:var(--green);font-size:0.4375rem">${discountLabel}</span>`
+            : `<span style="color:var(--text-dim)">—</span>`;
           content += `<tr style="border-bottom:1px solid rgba(92,58,30,0.15)">
+            <td style="padding:2px 4px;border:1px solid var(--border-dark);text-align:center"><img src="${getItemIcon(toolName)}" style="height:1.2em;vertical-align:-0.2em" loading="lazy"></td>
             <td style="padding:2px 6px;border:1px solid var(--border-dark)">${escHTML(toolName)}</td>
-            <td style="padding:2px 6px;border:1px solid var(--border-dark)">${catId}</td>
-            <td style="padding:2px 6px;border:1px solid var(--border-dark)">${tool.coins}</td>
+            <td style="padding:2px 6px;border:1px solid var(--border-dark)">${typeof catId === "string" && catId !== "—" ? catIcon(catId, "1em") : "—"}</td>
+            <td style="padding:2px 6px;border:1px solid var(--border-dark)">${coinsCell}</td>
+            <td style="padding:2px 6px;border:1px solid var(--border-dark)">${discountCell}</td>
             <td style="padding:2px 6px;border:1px solid var(--border-dark)">${mats.join(", ") || "—"}</td>
             <td style="padding:2px 6px;border:1px solid var(--border-dark)">${toolSfl.toFixed(4)}</td>
             <td style="padding:2px 6px;border:1px solid var(--border-dark)">${stock}</td>
@@ -8039,12 +8081,14 @@
         }
         content += `</tbody></table></div>`;
 
-        // Restock info
+        // Restock info + skill discounts
         content += `<div class="pixel-font" style="font-size: 0.5rem;color:var(--text-dim);line-height:1.6">
           Restock: ${RESTOCK_GEM_COSTS.seeds} gems (seeds) | ${RESTOCK_GEM_COSTS.tools} gems (tools) | ${RESTOCK_GEM_COSTS.both} gems (both)<br>
           ${stockMods.hasWarehouse ? "✅ Warehouse (+20% seed stock)" : "❌ No Warehouse"} ·
           ${stockMods.hasToolshed ? "✅ Toolshed (+50% tool stock)" : "❌ No Toolshed"} ·
-          ${stockMods.moreAxes ? "✅ More Axes" : ""} ${stockMods.morePicks ? "✅ More Picks" : ""}
+          ${stockMods.moreAxes ? "✅ More Axes" : ""} ${stockMods.morePicks ? "✅ More Picks" : ""}<br>
+          ${stockMods.fellersDiscount ? "✅ Feller's Discount (-20% axe coin cost)" : "❌ No Feller's Discount"} ·
+          ${stockMods.frugalMiner ? "✅ Frugal Miner (-20% pickaxe coin cost)" : "❌ No Frugal Miner"}
         </div>`;
 
         content += `</div></div>`;
