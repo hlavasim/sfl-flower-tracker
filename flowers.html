@@ -8336,6 +8336,14 @@
       const ownedCount = boostItems.filter(b => b.has).length;
       const totalCount = boostItems.length;
 
+      // Derive Oil unit cost from Oil Drill tool cost / average yield
+      // This is the effective "price" of 1 Oil (cost to produce it)
+      const oilToolInfo = calcToolCostPerDay("oil", capacity, exchangeRates, p2pPrices, stockMods);
+      const oilBaseYield = RESOURCE_RESPAWN_DATA["Oil"].yield;
+      if (oilToolInfo.toolsPerDay > 0 && oilToolInfo.toolSfl > 0) {
+        p2pPrices["Oil"] = oilToolInfo.toolSfl / oilBaseYield;
+      }
+
       // Calculate total boost value + costs across all quantifiable categories
       let totalBaseSfl = 0, totalBoostedSfl = 0, totalCostSfl = 0;
       const catSummaries = {};
