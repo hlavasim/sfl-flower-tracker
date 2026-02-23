@@ -1298,7 +1298,7 @@
     }
     .power-cat-header:hover { background: var(--bg-light); }
     .power-cat-count { font-size: 0.5625rem; color: var(--text-dim); }
-    .power-cat-sfl { margin-left: auto; font-weight: bold; }
+    .power-cat-sfl { margin-left: auto; font-weight: bold; text-align: right; line-height: 1.3; }
     .power-toggle-arrow { font-size: 0.5625rem; color: var(--text-dim); margin-left: 4px; }
     .power-cat-body { display: none; }
     .power-product-select {
@@ -8465,8 +8465,8 @@
         }
 
         const catNet = summary.boostedSfl - (summary.costPerDay || 0);
-        // Show: 125<product-icon> ~ +13<sfl>/day   (animals: 10<egg> + 10<feather> ~ ...)
-        let unitsPart = "";
+        // Two-line display: line1 = units with product icons, line2 = net SFL/day
+        let unitsLine = "";
         if (isAnimalCat(catId) && summary.animalBreakdown && summary.animalBreakdown.length > 0) {
           const parts = summary.animalBreakdown
             .filter(b => b.unitsPerDay > 0)
@@ -8475,12 +8475,13 @@
               return `${u % 1 < 0.01 ? u.toFixed(0) : u.toFixed(1)} ${mkIcon(b.product)}`;
             });
           if (parts.length > 0) {
-            unitsPart = `<span style="color:var(--sunpetal);font-size:0.5rem">${parts.join(' + ')}</span> <span style="color:var(--text-dim);font-size:0.4375rem">~</span> `;
+            unitsLine = `<div style="color:var(--sunpetal);font-size:0.5rem">${parts.join(' + ')}</div>`;
           }
         } else if (!isAnimalCat(catId) && catId !== "fishing" && prodPerDay > 0 && iconItem) {
-          unitsPart = `<span style="color:var(--sunpetal);font-size:0.5rem">${prodPerDay % 1 < 0.01 ? prodPerDay.toFixed(0) : prodPerDay.toFixed(1)} ${mkIcon(iconItem)}</span> <span style="color:var(--text-dim);font-size:0.4375rem">~</span> `;
+          unitsLine = `<div style="color:var(--sunpetal);font-size:0.5rem">${prodPerDay % 1 < 0.01 ? prodPerDay.toFixed(0) : prodPerDay.toFixed(1)} ${mkIcon(iconItem)}</div>`;
         }
-        content += `<span class="power-cat-sfl">${unitsPart}<span style="color:${catNet >= 0 ? 'var(--green)' : 'var(--red)'};font-size: 0.5rem">${catNet >= 0 ? "+" : ""}${catNet.toFixed(2)}${sflIcon()}/day</span></span>
+        const sflLine = `<div style="color:${catNet >= 0 ? 'var(--green)' : 'var(--red)'};font-size:0.5rem">${catNet >= 0 ? "+" : ""}${catNet.toFixed(2)}${sflIcon()}/day</div>`;
+        content += `<span class="power-cat-sfl">${unitsLine}${sflLine}</span>
           <span class="power-toggle-arrow">▶</span>
         </div>`;
 
