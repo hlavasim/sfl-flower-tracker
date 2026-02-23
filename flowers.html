@@ -2466,6 +2466,11 @@
     // being captured as "+N Product" flat yield.
     const BOOST_PARSE_RULES = [
       // ── EXCLUSION RULES (match first, return qualitative to prevent misparse) ──
+      // "Oil in Crop Machine" / "oil tank" → crop machine oil consumption, NOT oil reserve yield
+      { rx: /Oil\s+in\s+Crop\s+Machine/i,
+        fn: m => ({ type: "qualitative", cat: "other", raw: m[0] }) },
+      { rx: /oil\s+tank\s+in\s+crop/i,
+        fn: m => ({ type: "qualitative", cat: "other", raw: m[0] }) },
       // "seed stock" / "seed cost" → not yield (e.g. "+10 Tomato and Lemon seed stock")
       { rx: /\bseed\s+stock\b/i,
         fn: m => ({ type: "qualitative", cat: "other", raw: m[0] }) },
