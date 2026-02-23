@@ -8336,12 +8336,15 @@
       const ownedCount = boostItems.filter(b => b.has).length;
       const totalCount = boostItems.length;
 
-      // Derive Oil unit cost from Oil Drill tool cost / average yield
-      // This is the effective "price" of 1 Oil (cost to produce it)
+      // Derive Oil unit cost from actual drill cost / actual boosted yield
+      // Uses farm's real boosts (Infernal Drill = free, yield boosts, speed boosts)
+      const oilOwnedEffects = (catBoosts["oil"] || []).filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, "oil"));
+      const oilBoostedResult = applyBoosts("oil", "Oil", capacity, oilOwnedEffects);
       const oilToolInfo = calcToolCostPerDay("oil", capacity, exchangeRates, p2pPrices, stockMods);
-      const oilBaseYield = RESOURCE_RESPAWN_DATA["Oil"].yield;
-      if (oilToolInfo.toolsPerDay > 0 && oilToolInfo.toolSfl > 0) {
-        p2pPrices["Oil"] = oilToolInfo.toolSfl / oilBaseYield;
+      if (oilBoostedResult.unitsPerDay > 0 && oilToolInfo.costPerDay > 0) {
+        p2pPrices["Oil"] = oilToolInfo.costPerDay / oilBoostedResult.unitsPerDay;
+      } else if (oilBoostedResult.unitsPerDay > 0) {
+        p2pPrices["Oil"] = 0; // free drilling (Infernal Drill) → oil is free
       }
 
       // Calculate total boost value + costs across all quantifiable categories
