@@ -1504,7 +1504,7 @@
     const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
     const IMG_BASE = "https://sfl.world/img/flowers/";
-    const PAGES = ["hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power"];
+    const PAGES = ["hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "buds"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -2602,6 +2602,7 @@
         { id: "treasury", label: "TREASURY" },
         { id: "sales", label: "SALES" },
         { id: "power", label: "POWER" },
+        { id: "buds", label: "BUDS" },
       ];
       let html = '<div class="nav-bar pixel-panel">';
       for (const l of links) {
@@ -8014,92 +8015,6 @@
       }
 
       // ── BUDS SECTION ──
-      // ── BUDS SECTION ── Always show for debug
-      const farmBuds = powerState.farm.buds || {};
-      const budEntries = Object.entries(farmBuds);
-      const budRows = [];
-      for (const [budId, budData] of budEntries) {
-        if (!budData || !budData.type) continue;
-        const result = calcBudSflPerDay(budData, capacity, p2pPrices, savedProducts);
-        const boostDescs = describeBudBoosts(budData);
-        const breakdownDesc = result.breakdown.map(b => {
-          const cat = POWER_CATEGORIES[b.catId];
-          return `${cat ? cat.emoji : ""} ${b.sflPerDay.toFixed(4)}`;
-        }).join(" · ");
-        budRows.push({
-          id: budId, type: budData.type, stem: budData.stem || "—",
-          aura: budData.aura || "None", colour: budData.colour || "",
-          boostDescs, breakdownDesc,
-          sflPerDay: result.totalSfl, sflPerYear: result.totalSfl * 365,
-          breakdown: result.breakdown,
-        });
-      }
-
-      budRows.sort((a, b) => b.sflPerDay - a.sflPerDay);
-      const totalBudSfl = budRows.reduce((s, b) => s + b.sflPerDay, 0);
-      const budWithBoost = budRows.filter(b => b.sflPerDay > 0).length;
-
-      // Debug: show what keys exist on farm object
-      const farmKeys = Object.keys(powerState.farm).filter(k => k.toLowerCase().includes("bud")).join(", ") || "(none with 'bud')";
-      const farmTopKeys = Object.keys(powerState.farm).slice(0, 30).join(", ");
-
-      content += `<div style="margin-top:24px">
-        <div class="pixel-font" style="font-size:0.6875rem;color:var(--sunpetal);margin-bottom:8px;border-bottom:2px solid var(--border-dark);padding-bottom:4px">
-          ═══ 🌱 BUDS (${budRows.length} owned, ${budWithBoost} with boost) ═══
-          <span style="font-size:0.5625rem;color:var(--text-secondary);margin-left:8px">
-            Total: +${totalBudSfl.toFixed(2)} ${sflIcon()}/day · +${(totalBudSfl * 365).toFixed(2)} ${sflIcon()}/year
-          </span>
-        </div>`;
-
-      if (budRows.length === 0) {
-        content += `<div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);padding:8px 0">
-          No buds found in farm.buds (${budEntries.length} entries).<br>
-          <span style="font-size:0.4375rem">Bud-related keys: ${escHTML(farmKeys)}<br>Top farm keys: ${escHTML(farmTopKeys)}</span>
-        </div>`;
-      } else {
-        content += `<div class="pixel-font" style="font-size:0.4375rem;color:var(--text-dim);margin-bottom:6px">
-          Values based on selected products above. Same-resource boosts within a bud: best wins (no stacking). Aura multiplies all boosts.
-        </div>
-        <div style="overflow-x:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:0.5rem;color:var(--text-secondary)">
-          <thead>
-            <tr style="background:rgba(92,58,30,0.3);text-align:left">
-              <th style="padding:4px 6px;border:1px solid var(--border-dark)">#</th>
-              <th style="padding:4px 6px;border:1px solid var(--border-dark)">Type</th>
-              <th style="padding:4px 6px;border:1px solid var(--border-dark)">Stem</th>
-              <th style="padding:4px 6px;border:1px solid var(--border-dark)">Aura</th>
-              <th style="padding:4px 6px;border:1px solid var(--border-dark);min-width:140px">Boosts (after aura)</th>
-              <th style="padding:4px 6px;border:1px solid var(--border-dark);min-width:80px">Breakdown</th>
-              <th style="padding:4px 6px;border:1px solid var(--border-dark);text-align:right">${sflIcon()}/day</th>
-              <th style="padding:4px 6px;border:1px solid var(--border-dark);text-align:right">${sflIcon()}/year</th>
-            </tr>
-          </thead>
-          <tbody>`;
-
-        for (const bud of budRows) {
-          const auraStyle = bud.aura === "Mythical" ? "color:#ff66ff;font-weight:bold" :
-                            bud.aura === "Rare" ? "color:#ff8800;font-weight:bold" :
-                            bud.aura === "Green" ? "color:var(--green)" :
-                            bud.aura === "Basic" ? "color:var(--lily)" : "color:var(--text-dim)";
-          const auraLabel = bud.aura !== "None" ? `${bud.aura} (${((BUD_AURA_MULTIPLIERS[bud.aura] - 1) * 100).toFixed(0)}%)` : "None";
-          const sflColor = bud.sflPerDay > 0 ? "var(--green)" : "var(--text-dim)";
-
-          content += `<tr style="border-bottom:1px solid rgba(92,58,30,0.15)">
-            <td style="padding:3px 6px;border:1px solid var(--border-dark);font-weight:bold">${escHTML(bud.id)}</td>
-            <td style="padding:3px 6px;border:1px solid var(--border-dark)">${escHTML(bud.type)}</td>
-            <td style="padding:3px 6px;border:1px solid var(--border-dark)">${escHTML(bud.stem)}</td>
-            <td style="padding:3px 6px;border:1px solid var(--border-dark);${auraStyle}">${escHTML(auraLabel)}</td>
-            <td style="padding:3px 6px;border:1px solid var(--border-dark)">${bud.boostDescs.join("<br>") || "<em>no boost</em>"}</td>
-            <td style="padding:3px 6px;border:1px solid var(--border-dark);font-size:0.4375rem">${bud.breakdownDesc || "—"}</td>
-            <td style="padding:3px 6px;border:1px solid var(--border-dark);text-align:right;color:${sflColor};font-weight:bold">+${bud.sflPerDay.toFixed(4)}</td>
-            <td style="padding:3px 6px;border:1px solid var(--border-dark);text-align:right;color:${sflColor}">+${bud.sflPerYear.toFixed(2)}</td>
-          </tr>`;
-        }
-
-        content += `</tbody></table></div>`;
-      }
-      content += `</div>`;
-
       // ── DEBUG: All Boosts Mapping Table ──
       content += `<div style="margin-top:16px">
         <div class="pixel-font" style="font-size: 0.6875rem;color:var(--text-secondary);margin-bottom:8px;border-bottom:2px solid var(--border-dark);padding-bottom:4px;cursor:pointer" onclick="document.getElementById('power-debug-table').style.display=document.getElementById('power-debug-table').style.display==='none'?'block':'none'">
@@ -8268,6 +8183,350 @@
     //  MAIN
     // ═══════════════════════════════════════
 
+    // ═══════════════════════════════════════
+    //  BUDS PAGE
+    // ═══════════════════════════════════════
+
+    function parseBudBoostText(text) {
+      // Parse boost description text from sfl.world into effects
+      const effects = [];
+      if (!text) return effects;
+      const lines = text.split(/[|;,]|\n/).map(s => s.trim()).filter(Boolean);
+      for (const line of lines) {
+        let m;
+        // "Reduced Crop Growth Time: 10%" or "Crop Growth Time: -10%"
+        if ((m = line.match(/(?:Reduced?\s+)?Crop\s+(?:Growth|Growing)\s+Time[:\s]+[-]?(\d+)%/i))) {
+          effects.push({ type: "speed_pct", value: -parseFloat(m[1]), cats: ["crops"] });
+          continue;
+        }
+        // "Bud Boost Increase: 5%" — skip, handled by aura field
+        if (/Bud\s+Boost\s+Increase/i.test(line)) continue;
+        // "+0.3 Basic Crops" / "+0.2 Medium Crops" / "+0.3 Advanced Crops"
+        if ((m = line.match(/([+-]?\d+\.?\d*)\s+(Basic|Medium|Advanced)\s+Crop/i))) {
+          effects.push({ type: "yield_flat", value: parseFloat(m[1]), cats: ["crops"], cropTier: m[2].toLowerCase() });
+          continue;
+        }
+        // "+0.X Crop yield" / "Increase Yield of Crops" (all crops)
+        if ((m = line.match(/([+-]?\d+\.?\d*)\s+(?:Crop|Crops)\s*(?:yield)?/i)) ||
+            (m = line.match(/(?:Increase\s+)?Yield\s+of\s+Crops?[:\s]+([+-]?\d+\.?\d*)/i))) {
+          effects.push({ type: "yield_flat", value: parseFloat(m[1]), cats: ["crops"] });
+          continue;
+        }
+        // "+0.2 Fruit yield" / "Increase Yield of Fruit"
+        if ((m = line.match(/([+-]?\d+\.?\d*)\s+Fruit/i)) ||
+            (m = line.match(/Yield\s+of\s+Fruit[^:]*[:\s]+([+-]?\d+\.?\d*)/i))) {
+          effects.push({ type: "yield_flat", value: parseFloat(m[1]), cats: ["fruits"] });
+          continue;
+        }
+        // "+0.2 Wood" / "Increase Yield of Wood"
+        if ((m = line.match(/([+-]?\d+\.?\d*)\s+Wood/i)) ||
+            (m = line.match(/Yield\s+of\s+Wood[^:]*[:\s]+([+-]?\d+\.?\d*)/i))) {
+          effects.push({ type: "yield_flat", value: parseFloat(m[1]), cats: ["trees"] });
+          continue;
+        }
+        // "+0.2 Mineral" / "+0.2 Iron" / "+0.2 Stone" etc
+        if ((m = line.match(/([+-]?\d+\.?\d*)\s+Mineral/i)) ||
+            (m = line.match(/Yield\s+of\s+Mineral[^:]*[:\s]+([+-]?\d+\.?\d*)/i))) {
+          effects.push({ type: "yield_flat", value: parseFloat(m[1]), cats: ["stone", "iron", "gold", "crimstone"] });
+          continue;
+        }
+        if ((m = line.match(/([+-]?\d+\.?\d*)\s+Iron/i)) ||
+            (m = line.match(/Yield\s+of\s+Iron[^:]*[:\s]+([+-]?\d+\.?\d*)/i))) {
+          effects.push({ type: "yield_flat", value: parseFloat(m[1]), cats: ["iron"] });
+          continue;
+        }
+        if ((m = line.match(/([+-]?\d+\.?\d*)\s+Stone/i)) ||
+            (m = line.match(/Yield\s+of\s+Stone[^:]*[:\s]+([+-]?\d+\.?\d*)/i))) {
+          effects.push({ type: "yield_flat", value: parseFloat(m[1]), cats: ["stone"] });
+          continue;
+        }
+        if ((m = line.match(/([+-]?\d+\.?\d*)\s+Gold/i)) ||
+            (m = line.match(/Yield\s+of\s+Gold[^:]*[:\s]+([+-]?\d+\.?\d*)/i))) {
+          effects.push({ type: "yield_flat", value: parseFloat(m[1]), cats: ["gold"] });
+          continue;
+        }
+        // "+0.2 Animal" / "Animal Produce"
+        if ((m = line.match(/([+-]?\d+\.?\d*)\s+Animal/i)) ||
+            (m = line.match(/Yield\s+of\s+Animal[^:]*[:\s]+([+-]?\d+\.?\d*)/i))) {
+          effects.push({ type: "yield_flat", value: parseFloat(m[1]), cats: ["chickens", "cows", "sheep"] });
+          continue;
+        }
+        // "10% extra fish" / "10% chance +1 Fish" / "Extra Fish: 10%"
+        if ((m = line.match(/(\d+)%\s+(?:extra|chance)[^f]*fish/i)) ||
+            (m = line.match(/Extra\s+Fish[:\s]+(\d+)%/i))) {
+          effects.push({ type: "chance", pct: parseFloat(m[1]), extra: 1, cats: ["fishing"] });
+          continue;
+        }
+        // "XP Boost when eating Fish: 10%" — non-monetary, skip
+        // "Increase Yield of Flower"
+        if ((m = line.match(/([+-]?\d+\.?\d*)\s+Flower/i)) ||
+            (m = line.match(/Yield\s+of\s+Flower[^:]*[:\s]+([+-]?\d+\.?\d*)/i))) {
+          effects.push({ type: "yield_flat", value: parseFloat(m[1]), cats: ["flowers"] });
+          continue;
+        }
+      }
+      return effects;
+    }
+
+    function calcBudSflFromEffects(effects, auraMultiplier, capacity, p2pPrices, savedProducts) {
+      // Given parsed effects + aura, calculate total SFL/day (same logic as calcBudSflPerDay but from raw effects)
+      let totalSfl = 0;
+      const breakdown = [];
+
+      for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
+        if (!catDef.quantifiable) continue;
+
+        if (isAnimalCat(catId)) {
+          const animal = getAnimalData(catId);
+          if (!animal) continue;
+          let catSfl = 0;
+          for (const prod of animal.products) {
+            const yieldVals = [];
+            for (const eff of effects) {
+              if (eff.type !== "yield_flat" || !eff.cats.includes(catId)) continue;
+              yieldVals.push(eff.value);
+            }
+            const best = yieldVals.length > 0 ? Math.max(...yieldVals) * auraMultiplier : 0;
+            if (best > 0) {
+              const n = getCapacityCount(catId, capacity);
+              const cycleSec = getCycleSec(catId, prod);
+              catSfl += best * (86400 / cycleSec) * n * (p2pPrices[prod] || 0);
+            }
+          }
+          if (catSfl > 0) { totalSfl += catSfl; breakdown.push({ catId, sflPerDay: catSfl }); }
+          continue;
+        }
+
+        const product = savedProducts[catId] || getDefaultProduct(catId);
+        const n = getCapacityCount(catId, capacity);
+        if (n === 0 && catId !== "fishing") continue;
+
+        const yieldVals = [], speedVals = [], chanceVals = [];
+        for (const eff of effects) {
+          if (!eff.cats.includes(catId)) continue;
+          if (eff.cropTier && catId === "crops" && !CROP_TIERS[eff.cropTier]?.includes(product)) continue;
+          if (eff.type === "yield_flat") yieldVals.push(eff.value);
+          else if (eff.type === "speed_pct") speedVals.push(eff.value);
+          else if (eff.type === "chance") chanceVals.push(eff);
+        }
+
+        const bestYield = yieldVals.length > 0 ? Math.max(...yieldVals) * auraMultiplier : 0;
+        const bestSpeed = speedVals.length > 0 ? Math.min(...speedVals) * auraMultiplier : 0;
+        const bestChance = chanceVals.length > 0
+          ? chanceVals.reduce((a, b) => (a.pct * a.extra > b.pct * b.extra) ? a : b) : null;
+
+        const cycleSec = getCycleSec(catId, product);
+        const priceProduct = getPriceProduct(catId, product);
+        const price = p2pPrices[priceProduct] || 0;
+        let extraSfl = 0;
+
+        if (bestYield > 0) {
+          if (catId === "fishing") extraSfl += bestYield * price;
+          else if (catId === "bees") extraSfl += bestYield * n * price;
+          else extraSfl += bestYield * (86400 / cycleSec) * n * price;
+        }
+        if (bestSpeed !== 0) {
+          const newCycle = cycleSec * (1 + bestSpeed / 100);
+          if (newCycle > 0) extraSfl += ((86400 / newCycle) - (86400 / cycleSec)) * n * getBaseYield(catId) * price;
+        }
+        if (bestChance) {
+          const effPct = bestChance.pct * auraMultiplier;
+          const catches = catId === "fishing" ? 20 : (86400 / cycleSec) * n;
+          extraSfl += (effPct / 100) * bestChance.extra * catches * price;
+        }
+
+        if (extraSfl > 0) { totalSfl += extraSfl; breakdown.push({ catId, sflPerDay: extraSfl, product: priceProduct }); }
+      }
+      return { totalSfl, breakdown };
+    }
+
+    async function renderBuds(data) {
+      const app = document.getElementById("app");
+      const { farm } = data;
+      const capacity = detectFarmCapacity(farm);
+      const savedProducts = getSavedPowerProducts();
+
+      let html = `<div class="header pixel-panel pixel-font">
+        <h1>BUD EXPLORER</h1>
+        <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
+      </div>`;
+
+      html += `<div class="under-dev-banner pixel-font" style="background:linear-gradient(180deg,#3b1768,#2a1050);padding:8px 12px;border:3px solid #000;margin-bottom:16px;text-align:center;font-size:0.5625rem;color:var(--lily)">
+        ⚠️ UNDER DEVELOPMENT ⚠️
+        <div style="margin-top:6px;font-size:0.5rem;color:var(--text-secondary);line-height:1.5">
+          All 2,600+ bud NFTs from sfl.world with boost calculations.<br>
+          ${sflIcon()}/day based on YOUR farm capacity. Same-resource boosts: best wins (no stacking). Owned buds shown first.
+        </div>
+      </div>`;
+
+      html += `<div id="buds-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading bud data from sfl.world...</div></div></div>`;
+      app.innerHTML = html;
+
+      // Fetch bud page + P2P prices in parallel
+      let budHtml = "", p2pPrices = {};
+      try {
+        const proxyFetch = async (url) => {
+          const resp = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
+          if (!resp.ok) throw new Error(`${resp.status}`);
+          return resp;
+        };
+        const [budResp, priceResp] = await Promise.all([
+          proxyFetch("https://sfl.world/info/buds"),
+          proxyFetch("https://sfl.world/api/v1/prices").then(r => r.json()),
+        ]);
+        budHtml = await budResp.text();
+        const priceData = priceResp?.data?.p2p || priceResp?.p2p || {};
+        for (const [k, v] of Object.entries(priceData)) p2pPrices[k] = parseFloat(v) || 0;
+      } catch (err) {
+        document.getElementById("buds-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load: ${escHTML(err.message)}</p></div>`;
+        return;
+      }
+
+      // Parse bud HTML table
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(budHtml, "text/html");
+      const rows = doc.querySelectorAll("table tr");
+      const allBuds = [];
+
+      for (const row of rows) {
+        const cells = row.querySelectorAll("td");
+        if (cells.length < 7) continue;
+        const idText = (cells[0]?.textContent || "").trim();
+        const id = parseInt(idText) || 0;
+        if (!id) continue;
+
+        const type = (cells[1]?.textContent || "").trim();
+        // cells[2] = boost type label (skip)
+        const aura = (cells[3]?.textContent || "").trim();
+        const stem = (cells[4]?.textContent || "").trim();
+        const colour = (cells[5]?.textContent || "").trim();
+        // cells[6] = ears (skip)
+
+        // Collect all remaining cells as boost text
+        const boostTexts = [];
+        for (let i = 7; i < cells.length; i++) {
+          const t = (cells[i]?.textContent || "").trim();
+          if (t) boostTexts.push(t);
+        }
+        // Also check if boosts are in cells 2+ as alternate layout
+        if (boostTexts.length === 0) {
+          for (let i = 2; i < cells.length; i++) {
+            const t = (cells[i]?.textContent || "").trim();
+            if (t && /yield|crop|fish|wood|mineral|animal|fruit|flower|growth|boost|speed|chance|extra/i.test(t)) {
+              boostTexts.push(t);
+            }
+          }
+        }
+
+        const boostStr = boostTexts.join(" | ");
+        allBuds.push({ id, type, stem, aura, colour, boostStr });
+      }
+
+      // Check which buds the user owns
+      const ownedBudIds = new Set();
+      const farmBuds = farm.buds || {};
+      for (const [budId] of Object.entries(farmBuds)) {
+        ownedBudIds.add(parseInt(budId));
+      }
+
+      // Aura text → multiplier mapping
+      const auraMap = { "No Aura": 1, "None": 1, "Basic": 1.05, "Green": 1.2, "Rare": 2, "Mythical": 5 };
+
+      // Calculate SFL/day for each bud
+      const budRows = [];
+      for (const bud of allBuds) {
+        const effects = parseBudBoostText(bud.boostStr);
+        const auraMult = auraMap[bud.aura] || 1;
+        const result = calcBudSflFromEffects(effects, auraMult, capacity, p2pPrices, savedProducts);
+        const owned = ownedBudIds.has(bud.id);
+
+        // Build boost description
+        const descs = [];
+        for (const eff of effects) {
+          const catNames = eff.cats.map(c => POWER_CATEGORIES[c]?.label || c).join("/");
+          const tier = eff.cropTier ? ` ${eff.cropTier[0].toUpperCase() + eff.cropTier.slice(1)}` : "";
+          if (eff.type === "yield_flat") descs.push(`+${(eff.value * auraMult).toFixed(2)}${tier} ${catNames}`);
+          else if (eff.type === "speed_pct") descs.push(`${(eff.value * auraMult).toFixed(1)}% ${catNames} Time`);
+          else if (eff.type === "chance") descs.push(`${(eff.pct * auraMult).toFixed(0)}% +${eff.extra} ${catNames}`);
+        }
+
+        const breakdownDesc = result.breakdown.map(b => {
+          const cat = POWER_CATEGORIES[b.catId];
+          return `${cat ? cat.emoji : ""} ${b.sflPerDay.toFixed(4)}`;
+        }).join(" · ");
+
+        budRows.push({
+          id: bud.id, type: bud.type, stem: bud.stem, aura: bud.aura, colour: bud.colour,
+          boostDescs: descs, breakdownDesc, boostStr: bud.boostStr,
+          sflPerDay: result.totalSfl, sflPerYear: result.totalSfl * 365,
+          owned,
+        });
+      }
+
+      // Sort: owned first, then by SFL/day descending
+      budRows.sort((a, b) => {
+        if (a.owned !== b.owned) return a.owned ? -1 : 1;
+        return b.sflPerDay - a.sflPerDay;
+      });
+
+      const totalOwned = budRows.filter(b => b.owned).length;
+      const withBoost = budRows.filter(b => b.sflPerDay > 0).length;
+
+      let content = `<div class="pixel-font" style="font-size:0.5625rem;color:var(--text-secondary);margin-bottom:12px">
+        Loaded <strong>${budRows.length}</strong> buds from sfl.world ·
+        <strong style="color:var(--green)">${totalOwned} owned</strong> ·
+        ${withBoost} with calculable boost ·
+        Capacity: ${capacity.crops} plots, ${capacity.fruitPatches} fruit, ${capacity.greenhouse} greenhouse, ${capacity.trees} trees
+      </div>`;
+
+      content += `<div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:0.5rem;color:var(--text-secondary)">
+        <thead>
+          <tr style="background:rgba(92,58,30,0.3);text-align:left;position:sticky;top:0">
+            <th style="padding:4px 6px;border:1px solid var(--border-dark)">ID</th>
+            <th style="padding:4px 6px;border:1px solid var(--border-dark)">Type</th>
+            <th style="padding:4px 6px;border:1px solid var(--border-dark)">Stem</th>
+            <th style="padding:4px 6px;border:1px solid var(--border-dark)">Aura</th>
+            <th style="padding:4px 6px;border:1px solid var(--border-dark);min-width:140px">Boosts (after aura)</th>
+            <th style="padding:4px 6px;border:1px solid var(--border-dark);min-width:80px">Breakdown</th>
+            <th style="padding:4px 6px;border:1px solid var(--border-dark);text-align:right">${sflIcon()}/day</th>
+            <th style="padding:4px 6px;border:1px solid var(--border-dark);text-align:right">${sflIcon()}/year</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+      for (const bud of budRows) {
+        const auraStyle = bud.aura === "Mythical" ? "color:#ff66ff;font-weight:bold" :
+                          bud.aura === "Rare" ? "color:#ff8800;font-weight:bold" :
+                          bud.aura === "Green" ? "color:var(--green)" :
+                          bud.aura === "Basic" ? "color:var(--lily)" : "color:var(--text-dim)";
+        const auraLabel = bud.aura && bud.aura !== "No Aura" && bud.aura !== "None"
+          ? `${bud.aura} (${((auraMap[bud.aura] - 1) * 100).toFixed(0)}%)` : "—";
+        const sflColor = bud.sflPerDay > 0 ? "var(--green)" : "var(--text-dim)";
+        const ownedBg = bud.owned ? "background:rgba(34,139,34,0.15);" : "";
+
+        content += `<tr style="border-bottom:1px solid rgba(92,58,30,0.15);${ownedBg}">
+          <td style="padding:3px 6px;border:1px solid var(--border-dark);font-weight:bold">${bud.owned ? "✅ " : ""}${bud.id}</td>
+          <td style="padding:3px 6px;border:1px solid var(--border-dark)">${escHTML(bud.type)}</td>
+          <td style="padding:3px 6px;border:1px solid var(--border-dark)">${escHTML(bud.stem)}</td>
+          <td style="padding:3px 6px;border:1px solid var(--border-dark);${auraStyle}">${escHTML(auraLabel)}</td>
+          <td style="padding:3px 6px;border:1px solid var(--border-dark)">${bud.boostDescs.join("<br>") || `<em style="color:var(--text-dim)">${escHTML(bud.boostStr || "—")}</em>`}</td>
+          <td style="padding:3px 6px;border:1px solid var(--border-dark);font-size:0.4375rem">${bud.breakdownDesc || "—"}</td>
+          <td style="padding:3px 6px;border:1px solid var(--border-dark);text-align:right;color:${sflColor};font-weight:bold">+${bud.sflPerDay.toFixed(4)}</td>
+          <td style="padding:3px 6px;border:1px solid var(--border-dark);text-align:right;color:${sflColor}">+${bud.sflPerYear.toFixed(2)}</td>
+        </tr>`;
+      }
+
+      content += `</tbody></table></div>`;
+
+      content += `<div class="footer" style="margin-top:16px">
+        <button class="refresh-btn" onclick="refresh()">REFRESH</button>
+        <div class="timestamp pixel-font">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
+      </div>`;
+
+      document.getElementById("buds-content").innerHTML = content;
+    }
+
     function refresh() {
       cachedFarmData = null;
       main();
@@ -8320,6 +8579,7 @@
           case "treasury": renderTreasury(data); break;
           case "sales": renderSales(data); break;
           case "power": renderPower(data); break;
+          case "buds": renderBuds(data); break;
           default: renderHub(data);
         }
 
