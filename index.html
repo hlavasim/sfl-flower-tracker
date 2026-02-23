@@ -8431,7 +8431,7 @@
         // 24h production label with product icon
         const prodPerDay = summary.boostedUnitsPerDay || 0;
         const priceProduct = !isAnimalCat(catId) ? getPriceProduct(catId, product) : null;
-        const prodImgUrl = priceProduct && IMAGE_MAP[priceProduct] ? IMAGE_MAP[priceProduct] : null;
+        const prodImgUrl = priceProduct && ITEM_IMAGE_MAP[priceProduct] ? ITEM_IMAGE_MAP[priceProduct] : null;
         const prodIcon = prodImgUrl ? `<img src="${prodImgUrl}" style="height:1em;vertical-align:-0.15em" alt="${priceProduct}">` : (priceProduct || "");
         content += `<div class="power-cat-header pixel-font" onclick="togglePowerCategory('${catId}')">
           <span>${catDef.emoji} ${catDef.label}</span>`;
