@@ -4799,7 +4799,19 @@
       // Food in inventory
       if (bankedXP > 0) {
         const fmtXP = (v) => v % 1 === 0 ? v.toLocaleString() : v.toLocaleString(undefined, { maximumFractionDigits: 0 });
+        const xpAfterEating = currentXP + bankedXP;
+        const levelAfterFood = getBumpkinLevel(xpAfterEating);
+        const levelsGained = levelAfterFood - currentLevel;
+        const afterFoodNextXP = levelAfterFood < 200 ? BUMPKIN_XP_TABLE[levelAfterFood] : maxXP;
+        const afterFoodPrevXP = BUMPKIN_XP_TABLE[levelAfterFood - 1];
+        const afterFoodPct = levelAfterFood >= 200 ? 100 :
+          Math.round(((xpAfterEating - afterFoodPrevXP) / (afterFoodNextXP - afterFoodPrevXP)) * 100);
         html += `<div class="bumpkin-boosts pixel-panel pixel-font" style="display:block">
+          <div style="text-align:center;margin-bottom:8px;padding-bottom:8px;border-bottom:2px solid rgba(92,58,30,0.4)">
+            <div style="font-size: 0.5625rem;color:var(--text-dim);margin-bottom:2px">AFTER EATING ALL FOOD</div>
+            <div style="font-size: 1.5rem;color:var(--green);font-weight:bold">LVL ${levelAfterFood}</div>
+            ${levelsGained > 0 ? `<div style="font-size: 0.625rem;color:var(--sunpetal)">+${levelsGained} level${levelsGained > 1 ? "s" : ""} (${fmtXP(Math.floor(xpAfterEating))} XP total${levelAfterFood < 200 ? `, ${afterFoodPct}% to ${levelAfterFood + 1}` : ""})</div>` : `<div style="font-size: 0.625rem;color:var(--text-dim)">Same level (${afterFoodPct}% to ${currentLevel + 1})</div>`}
+          </div>
           <h4 style="color:var(--sunpetal);margin-bottom:6px;padding-bottom:4px;border-bottom:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;cursor:pointer" onclick="toggleFoodInventory()">
             <span id="food-inv-arrow">▶</span> FOOD IN INVENTORY — ${fmtXP(bankedXP)} XP (${foodInInventory.length} items)
           </h4>
@@ -4808,7 +4820,7 @@
               ${foodInInventory.map(f => `<div class="boost-row"><span>${f.qty}× ${escHTML(f.name)}</span><span class="boost-val" style="color:var(--green)">${fmtXP(f.totalFoodXP)} XP</span></div>`).join("")}
             </div>
           </div>
-          ${xpAfterFood > 0 ? `<div style="margin-top:6px;padding-top:4px;border-top:2px solid rgba(92,58,30,0.4);color:var(--text-secondary)">After eating: <span style="color:var(--yellow)">${fmtXP(xpAfterFood)}</span> XP still needed</div>` : `<div style="margin-top:6px;padding-top:4px;border-top:2px solid rgba(92,58,30,0.4);color:var(--green)">Eating all food would reach level ${targetLevel}!</div>`}
+          ${xpAfterFood > 0 ? `<div style="margin-top:6px;padding-top:4px;border-top:2px solid rgba(92,58,30,0.4);color:var(--text-secondary)">After eating: <span style="color:var(--yellow)">${fmtXP(xpAfterFood)}</span> XP still needed to target LVL ${targetLevel}</div>` : `<div style="margin-top:6px;padding-top:4px;border-top:2px solid rgba(92,58,30,0.4);color:var(--green)">Eating all food would reach level ${targetLevel}!</div>`}
         </div>`;
       }
 
