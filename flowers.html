@@ -1940,7 +1940,7 @@
       "Stone":     { respawnSec: 14400, yield: 2, farmKey: "stones" },
       "Iron":      { respawnSec: 28800, yield: 1, farmKey: "iron" },
       "Gold":      { respawnSec: 43200, yield: 1, farmKey: "gold" },
-      "Crimstone": { respawnSec: 64800, yield: 1, farmKey: "crimstones" },
+      "Crimstone": { respawnSec: 64800, yield: 1.4, farmKey: "crimstones" }, // native +2 every 5th dig = +0.4 avg
       "Wood":      { respawnSec: 7200,  yield: 3, farmKey: "trees" },
     };
 
@@ -2415,8 +2415,8 @@
     // Build dynamic product regex alternation (longest first to prevent partial match)
     const ALL_PRODUCTS_SORTED = Object.keys(PRODUCT_TO_CATEGORY).sort((a,b) => b.length - a.length);
     const PROD_ALT = ALL_PRODUCTS_SORTED.join("|");
-    const PROD_ALT_RX = new RegExp(`([+-]?\\d+\\.?\\d*)%\\s+(${PROD_ALT})\\b`, 'i');
-    const PROD_FLAT_RX = new RegExp(`([+-]?\\d+\\.?\\d*)\\s+(${PROD_ALT})\\b`, 'i');
+    const PROD_ALT_RX = new RegExp(`^([+-]?\\d+\\.?\\d*)%\\s+(${PROD_ALT})\\b`, 'i');
+    const PROD_FLAT_RX = new RegExp(`^([+-]?\\d+\\.?\\d*)\\s+(${PROD_ALT})\\b`, 'i');
 
     // Boost text parser rules (ordered by priority)
     // IMPORTANT: Specific category rules (Crop, Flower, Fruit, Tree, Animal, Greenhouse)
@@ -2434,15 +2434,37 @@
       // "instead" in context of recipe substitution
       { rx: /\binstead\b/i,
         fn: m => ({ type: "qualitative", cat: "other", raw: m[0] }) },
-      // "XP" as the goal (e.g. "+20% Fish XP", "+500 Bumpkin XP", "+10% XP") → not yield
-      { rx: /([+-]?\d+\.?\d*)%?\s+[\w\s]*\bXP\b/i,
-        fn: m => ({ type: "qualitative", cat: "cooking", raw: m[0] }) },
+      // "XP" as the goal — route to correct category based on context
+      { rx: /([+-]?\d+\.?\d*)%?\s+([\w\s]*?)\bXP\b/i,
+        fn: m => {
+          const ctx = (m[2] || "").trim().toLowerCase();
+          let cat = "other";
+          if (/\bcow\b/.test(ctx)) cat = "cows";
+          else if (/\bchicken\b/.test(ctx)) cat = "chickens";
+          else if (/\bsheep\b/.test(ctx)) cat = "sheep";
+          else if (/\banimal\b/.test(ctx)) cat = "chickens";
+          else if (/\bfish\b/.test(ctx)) cat = "fishing";
+          else if (/\b(?:cook|food|kitchen|bake)\b/.test(ctx)) cat = "cooking";
+          const result = { type: "qualitative", cat, raw: m[0] };
+          if (cat === "chickens" && /\banimal\b/.test(ctx)) {
+            result.alsoApply = ["cows", "sheep"];
+          }
+          return result;
+        }},
       // "N% Onion Seed Coin cost" → cost reduction, not yield
       { rx: /\d+%\s+[\w\s]+(?:Seed\s+)?Coin\s+cost/i,
         fn: m => ({ type: "qualitative", cat: "other", raw: m[0] }) },
       // "N% rod cost" / "N% seeds cost" → qualitative cost reduction
       { rx: /\d+%\s+(?:rod|seeds?|flower\s+seeds?)\s+cost/i,
         fn: m => ({ type: "qualitative", cat: "other", raw: m[0] }) },
+
+      // ── FREE TOOL (zero tool cost for a category) ──
+      // "Mine stone without pickaxes" (Quarry) → tool cost = 0 for stone
+      { rx: /mine\s+\w+\s+without\s+pickaxes?/i,
+        fn: m => ({ type: "free_tool", cat: "stone" }) },
+      // "Chop Trees without Axes" (Foreman Beaver) → tool cost = 0 for trees
+      { rx: /chop\s+\w+\s+without\s+axes?/i,
+        fn: m => ({ type: "free_tool", cat: "trees" }) },
 
       // ── CONDITIONAL YIELD (5th mine, chance x3) ──
       // "+N Product on 5th mine/consecutive" → effective yield = N/5
@@ -2461,6 +2483,23 @@
           const mult = parseFloat(m[2]);
           // Effective extra yield = pct% × (mult - 1) × baseYield (use 1 as proxy)
           return { type: "yield_flat", value: pct / 100 * (mult - 1), cat, product: prod, conditional: `${pct}% x${mult}` };
+        }},
+      // "1/N chance +X Product" → effective = X / N (e.g., Golden Sunflower: "1/700 chance +0.35 Gold")
+      { rx: /1\/(\d+)\s+chance\s+\+?(\d+\.?\d*)\s+([\w\s]+?)$/i,
+        fn: m => {
+          const n = parseInt(m[1]);
+          const extra = parseFloat(m[2]);
+          const prodRaw = m[3].trim();
+          const cat = PRODUCT_TO_CATEGORY[prodRaw] || "other";
+          return { type: "yield_flat", value: extra / n, cat, product: prodRaw, conditional: `1/${n} chance` };
+        }},
+      // "+N fish, X% chance +N" → combined fishing yield (Frenzied Fish)
+      { rx: /\+(\d+\.?\d*)\s+fish.*?(\d+\.?\d*)%\s+chance\s+\+(\d+\.?\d*)/i,
+        fn: m => {
+          const flat = parseFloat(m[1]);
+          const pct = parseFloat(m[2]);
+          const extra = parseFloat(m[3]);
+          return { type: "yield_flat", value: flat + (pct / 100) * extra, cat: "fishing", conditional: `+${flat} + ${pct}% ×${extra}` };
         }},
 
       // ── CATEGORY-LEVEL SPEED RULES (before generic product rule) ──
@@ -2510,54 +2549,58 @@
           return null;
         }},
 
-      // ── CATEGORY-LEVEL YIELD RULES ──
-      // Crop yield %: "+20% Crop Yield"
-      { rx: /([+-]?\d+\.?\d*)%\s+Crop\s+Yield/i,
-        fn: m => ({ type: "yield_pct", value: parseFloat(m[1]), cat: "crops" }) },
-      // Basic/Medium/Advanced Crop yield flat: "+0.1 Basic Crop yield"
-      { rx: /([+-]?\d+\.?\d*)\s+(Basic|Medium|Advanced)\s+Crop\s+yield/i,
-        fn: m => ({ type: "yield_flat", value: parseFloat(m[1]), cat: "crops", cropTier: m[2].toLowerCase() }) },
-      // Generic crop yield flat: "+0.5 crop yield", "+3 Crops"
-      { rx: /([+-]?\d+\.?\d*)\s+[Cc]rops?\s*(?:yield)?/i,
-        fn: m => ({ type: "yield_flat", value: parseFloat(m[1]), cat: "crops" }) },
-      // Fruit yield %: "+10% Fruit Yield"
-      { rx: /([+-]?\d+\.?\d*)%\s+Fruit\s+Yield/i,
-        fn: m => ({ type: "yield_pct", value: parseFloat(m[1]), cat: "fruits" }) },
-      // Fruit yield flat: "+0.1 Fruit yield", "+0.1 Fruit Patch Yield"
-      { rx: /([+-]?\d+\.?\d*)\s+Fruit\s*(?:Patch\s+)?[Yy]ield/i,
-        fn: m => ({ type: "yield_flat", value: parseFloat(m[1]), cat: "fruits" }) },
-      // Greenhouse yield flat: "+0.1 Greenhouse yield", "+2 Greenhouse Produce"
-      { rx: /([+-]?\d+\.?\d*)\s+Greenhouse\s+(?:yield|[Pp]roduce)/i,
-        fn: m => ({ type: "yield_flat", value: parseFloat(m[1]), cat: "greenhouse" }) },
-      // Animal yield %: "+10% Animal Yield"
-      { rx: /([+-]?\d+\.?\d*)%\s+Animal\s+Yield/i,
-        fn: m => ({ type: "yield_pct", value: parseFloat(m[1]), cat: "chickens", alsoApply: ["cows", "sheep"] }) },
-      // Animal produce flat: "+0.25 Animal Produce"
-      { rx: /([+-]?\d+\.?\d*)\s+Animal\s+[Pp]roduce/i,
-        fn: m => ({ type: "yield_flat", value: parseFloat(m[1]), cat: "chickens", alsoApply: ["cows", "sheep"] }) },
-
-      // ── CHANCE RULES (before PROD_ALT_RX / PROD_FLAT_RX to prevent misparse) ──
-      // "20% Chance +1 Egg", "3% Chance of +10 Potato", "10% chance for +1 Flower"
+      // ── CHANCE RULES (BEFORE yield rules to prevent "X% chance +N Fruit yield" being caught as flat yield) ──
+      // "N% chance +N food from Building" (cooking-related chance) — BEFORE generic
+      { rx: /(\d+\.?\d*)%\s+chance\s+\+(\d+\.?\d*)\s+food/i,
+        fn: m => ({ type: "chance", pct: parseFloat(m[1]), extra: parseFloat(m[2]), cat: "cooking", product: "food" }) },
+      // "20% Chance +1 Egg", "3% Chance of +10 Potato", "10% chance for +1 Flower", "20% chance +1 Fruit yield"
       { rx: /(\d+\.?\d*)%\s+[Cc]hance.*?\+(\d+\.?\d*)\s+([\w\s]+?)(?:\s+yield)?$/i,
         fn: m => {
           const prodRaw = m[3].trim();
-          // Map generic words to categories
+          const prodClean = prodRaw.replace(/\s+from\s+.+$/i, '').trim();
           const CHANCE_CAT_MAP = {
             "flower": "flowers", "fruit": "fruits", "greenhouse": "greenhouse",
+            "greenhouse produce": "greenhouse",
             "basic fish": "fishing", "advanced fish": "fishing", "expert fish": "fishing",
             "basic": "fishing", "advanced": "fishing", "expert": "fishing",
-            "fish": "fishing", "crop": "crops",
+            "fish": "fishing", "crop": "crops", "food": "cooking",
           };
-          let cat = PRODUCT_TO_CATEGORY[prodRaw];
-          if (!cat) cat = CHANCE_CAT_MAP[prodRaw.toLowerCase()];
+          let cat = PRODUCT_TO_CATEGORY[prodRaw] || PRODUCT_TO_CATEGORY[prodClean];
+          if (!cat) cat = CHANCE_CAT_MAP[prodRaw.toLowerCase()] || CHANCE_CAT_MAP[prodClean.toLowerCase()];
           if (!cat) cat = "other";
-          return { type: "chance", pct: parseFloat(m[1]), extra: parseFloat(m[2]), cat, product: prodRaw };
+          return { type: "chance", pct: parseFloat(m[1]), extra: parseFloat(m[2]), cat, product: prodClean };
         }},
-      // "N% chance +N food" (cooking-related chance)
-      { rx: /(\d+\.?\d*)%\s+chance\s+\+(\d+\.?\d*)\s+food/i,
-        fn: m => ({ type: "chance", pct: parseFloat(m[1]), extra: parseFloat(m[2]), cat: "cooking", product: "food" }) },
 
-      // ── SPECIFIC PRODUCT YIELD (dynamic product list) ──
+      // ── CATEGORY-LEVEL YIELD RULES (all anchored with ^ to prevent partial match) ──
+      // Crop yield %: "+20% Crop Yield"
+      { rx: /^([+-]?\d+\.?\d*)%\s+Crop\s+Yield/i,
+        fn: m => ({ type: "yield_pct", value: parseFloat(m[1]), cat: "crops" }) },
+      // Basic/Medium/Advanced Crop yield flat: "+0.1 Basic Crop yield"
+      { rx: /^([+-]?\d+\.?\d*)\s+(Basic|Medium|Advanced)\s+Crop\s+yield/i,
+        fn: m => ({ type: "yield_flat", value: parseFloat(m[1]), cat: "crops", cropTier: m[2].toLowerCase() }) },
+      // Conditional crop yield: "+0.1 Crop yield after pollination" (Pollen Power Up)
+      { rx: /^([+-]?\d+\.?\d*)\s+Crop\s+yield\s+after\s+pollination/i,
+        fn: m => ({ type: "yield_flat", value: parseFloat(m[1]), cat: "crops", conditional: "after pollination" }) },
+      // Generic crop yield flat: "+0.5 crop yield", "+3 Crops"
+      { rx: /^([+-]?\d+\.?\d*)\s+[Cc]rops?\s*(?:yield)?/i,
+        fn: m => ({ type: "yield_flat", value: parseFloat(m[1]), cat: "crops" }) },
+      // Fruit yield %: "+10% Fruit Yield"
+      { rx: /^([+-]?\d+\.?\d*)%\s+Fruit\s+Yield/i,
+        fn: m => ({ type: "yield_pct", value: parseFloat(m[1]), cat: "fruits" }) },
+      // Fruit yield flat: "+0.1 Fruit yield", "+0.1 Fruit Patch Yield"
+      { rx: /^([+-]?\d+\.?\d*)\s+Fruit\s*(?:Patch\s+)?[Yy]ield/i,
+        fn: m => ({ type: "yield_flat", value: parseFloat(m[1]), cat: "fruits" }) },
+      // Greenhouse yield flat: "+0.1 Greenhouse yield", "+2 Greenhouse Produce"
+      { rx: /^([+-]?\d+\.?\d*)\s+Greenhouse\s+(?:yield|[Pp]roduce)/i,
+        fn: m => ({ type: "yield_flat", value: parseFloat(m[1]), cat: "greenhouse" }) },
+      // Animal yield %: "+10% Animal Yield"
+      { rx: /^([+-]?\d+\.?\d*)%\s+Animal\s+Yield/i,
+        fn: m => ({ type: "yield_pct", value: parseFloat(m[1]), cat: "chickens", alsoApply: ["cows", "sheep"] }) },
+      // Animal produce flat: "+0.25 Animal Produce"
+      { rx: /^([+-]?\d+\.?\d*)\s+Animal\s+[Pp]roduce/i,
+        fn: m => ({ type: "yield_flat", value: parseFloat(m[1]), cat: "chickens", alsoApply: ["cows", "sheep"] }) },
+
+      // ── SPECIFIC PRODUCT YIELD (dynamic product list, already ^ anchored) ──
       // Specific product yield %: "+10% Egg Yield", "+20% Pumpkin", "+10% Sunflower"
       { rx: PROD_ALT_RX,
         fn: m => {
@@ -2606,7 +2649,7 @@
       { rx: /(\d+\.?\d*)%\s+(?:less\s+)?feed(?:ing)?\s+(?:cost\s+)?(?:for\s+|to\s+)?(\w+)/i,
         fn: m => ({ type: "qualitative", cat: "other", raw: m[0] }) },
       // ── Mushroom-specific ──
-      { rx: /([+-]?\d+\.?\d*)\s+Wild\s+Mushroom/i,
+      { rx: /^([+-]?\d+\.?\d*)\s+Wild\s+Mushroom/i,
         fn: m => ({ type: "yield_flat", value: parseFloat(m[1]), cat: "mushrooms", product: "Wild Mushroom" }) },
     ];
 
@@ -6743,6 +6786,9 @@
     function expandMultiProductLines(lines) {
       const out = [];
       for (const line of lines) {
+        // Handle "+X Basic and Medium Crop yield" — MUST be before generic yield split
+        const m2 = line.match(/^([+-]?\d+\.?\d*)\s+(.+?)\s+(?:and|&)\s+(.+?)\s+(Crop\s+yield)$/i);
+        if (m2) { out.push(`${m2[1]} ${m2[2]} ${m2[4]}`); out.push(`${m2[1]} ${m2[3]} ${m2[4]}`); continue; }
         // Match: "+0.2 Egg, Wool and Milk yield" or "-0.35 Leather & Merino Wool yield"
         const m = line.match(/^([+-]?\d+\.?\d*)\s+(.+?)\s+(yield)$/i);
         if (m) {
@@ -6752,9 +6798,6 @@
             continue;
           }
         }
-        // Handle "+X Basic and Medium Crop yield"
-        const m2 = line.match(/^([+-]?\d+\.?\d*)\s+(.+?)\s+(?:and|&)\s+(.+?)\s+(Crop\s+yield)$/i);
-        if (m2) { out.push(`${m2[1]} ${m2[2]} ${m2[4]}`); out.push(`${m2[1]} ${m2[3]} ${m2[4]}`); continue; }
         // Handle "+0.5 Wheat, Radish, Kale, Rice, Barley" (no trailing "yield")
         // and "+0.5 Stone, Iron, Gold (AOE 3x3)" — strip parenthetical first
         const cleaned = line.replace(/\s*\([^)]*\)\s*/g, '');
@@ -7066,6 +7109,10 @@
             // Expected value: pct% chance of +extra per cycle
             yieldFlat += (eff.pct / 100) * eff.extra;
             break;
+          case "free_tool":
+          case "cost_reduction":
+            // Handled in cost calculations, not production yield
+            break;
         }
       }
 
@@ -7229,13 +7276,17 @@
     function detectStockModifiers(farm) {
       const buildings = farm.buildings || {};
       const skills = farm.bumpkin?.skills || {};
+      const inventory = farm.inventory || {};
       const hasWarehouse = (buildings["Warehouse"] || []).length > 0;
       const hasToolshed = (buildings["Toolshed"] || []).length > 0;
       const moreAxes = skills["More Axes"] !== undefined;
       const morePicks = skills["More Picks"] !== undefined;
       const fellersDiscount = skills["Feller's Discount"] !== undefined; // -20% axe coin cost
       const frugalMiner = skills["Frugal Miner"] !== undefined;         // -20% pickaxe coin cost
-      return { hasWarehouse, hasToolshed, moreAxes, morePicks, fellersDiscount, frugalMiner };
+      // Free tool collectibles (zero tool cost for category)
+      const hasQuarry = findCollectible(farm, "Quarry").length > 0 || getCount(inventory, "Quarry") > 0;
+      const hasForeman = findCollectible(farm, "Foreman Beaver").length > 0 || getCount(inventory, "Foreman Beaver") > 0;
+      return { hasWarehouse, hasToolshed, moreAxes, morePicks, fellersDiscount, frugalMiner, hasQuarry, hasForeman };
     }
 
     // Get effective stock for a seed/tool
@@ -7291,6 +7342,24 @@
       if (!toolName) return { costPerDay: 0, toolSfl: 0, restockPerDay: 0 };
       const tool = TOOL_COSTS[toolName];
       if (!tool || exchangeRates.coinsPerSFL <= 0) return { costPerDay: 0, toolSfl: 0, restockPerDay: 0 };
+
+      // Free tool check (Quarry = free stone mining, Foreman Beaver = free tree chopping)
+      if (!skipDiscount) {
+        if (catId === "stone" && stockMods.hasQuarry) {
+          // Still compute toolsPerDay for display but cost = 0
+          const rKey = "Stone";
+          const d = RESOURCE_RESPAWN_DATA[rKey];
+          const n = capacity.stones || 0;
+          const toolsPerDay = d ? n * (86400 / d.respawnSec) : 0;
+          return { costPerDay: 0, toolSfl: 0, restockPerDay: 0, toolsPerDay, stock: 0, freeTool: true, freeToolSource: "Quarry" };
+        }
+        if (catId === "trees" && stockMods.hasForeman) {
+          const d = RESOURCE_RESPAWN_DATA["Wood"];
+          const n = capacity.trees || 0;
+          const toolsPerDay = d ? n * (86400 / d.respawnSec) : 0;
+          return { costPerDay: 0, toolSfl: 0, restockPerDay: 0, toolsPerDay, stock: 0, freeTool: true, freeToolSource: "Foreman Beaver" };
+        }
+      }
 
       // Apply coin discounts from skills (unless skipDiscount)
       let coinDiscount = 0;
@@ -7452,6 +7521,20 @@
       const catEffects = getEffectsForCategory(boostItem, catId);
       if (catEffects.length === 0) return { solo: 0, synergy: 0, roi: Infinity };
 
+      // Handle free_tool effects (Quarry, Foreman Beaver — zero tool cost)
+      const freeToolEffects = catEffects.filter(e => e.type === "free_tool");
+      if (freeToolEffects.length > 0) {
+        const { exchangeRates, stockMods } = powerState;
+        if (["trees", "stone", "iron", "gold", "crimstone"].includes(catId)) {
+          // Savings = entire base tool cost per day (100% reduction)
+          const baseCost = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods, true);
+          const solo = baseCost.costPerDay;
+          const roi = (boostItem.floor > 0 && solo > 0) ? boostItem.floor / solo : Infinity;
+          return { solo, synergy: solo, roi, isFreeTool: true };
+        }
+        return { solo: 0, synergy: 0, roi: Infinity };
+      }
+
       // Handle cost_reduction effects (e.g., Feller's Discount, Frugal Miner)
       const costEffects = catEffects.filter(e => e.type === "cost_reduction");
       if (costEffects.length > 0) {
@@ -7606,6 +7689,23 @@
         h += `<div style="color:var(--sunpetal)">This skill (${boostItem.skillPoints}pt): <strong>${boostItem.skillPoints} × ${skillCostInfo.sflPerPoint.toFixed(1)} = ~${boostItem.floor.toFixed(0)} ${sflIcon()}</strong></div>`;
       }
       h += `<hr style="border-color:var(--border-dark);margin:4px 0">`;
+
+      // Free tool formula (e.g., Quarry, Foreman Beaver)
+      const freeToolEffects = catEffects.filter(e => e.type === "free_tool");
+      if (freeToolEffects.length > 0 && ["trees", "stone", "iron", "gold", "crimstone"].includes(catId)) {
+        const { exchangeRates, stockMods } = powerState;
+        const baseCost = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods, true);
+        h += `<div style="margin-bottom:4px"><strong>Category:</strong> ${catId.toUpperCase()} — ${n} nodes</div>`;
+        h += `<div style="color:var(--green)">🆓 <strong>No tool cost!</strong> (mine/chop without tools)</div>`;
+        h += `<div>Base tool cost would be: ${baseCost.toolSfl.toFixed(4)} ${sflIcon()} per use</div>`;
+        h += `<div>Would use ${(baseCost.toolsPerDay || 0).toFixed(2)} tools/day</div>`;
+        h += `<div style="color:var(--green)"><strong>Cost savings: ${baseCost.costPerDay.toFixed(4)} ${sflIcon()}/day</strong></div>`;
+        if (boostItem.floor > 0 && baseCost.costPerDay > 0) {
+          h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${baseCost.costPerDay.toFixed(4)} = <span style="color:var(--sunpetal)">${(boostItem.floor / baseCost.costPerDay).toFixed(0)} days</span></div>`;
+        }
+        h += `</div>`;
+        return h;
+      }
 
       // Cost reduction formula (e.g., Feller's Discount, Frugal Miner)
       const costRedEffects = catEffects.filter(e => e.type === "cost_reduction");
@@ -8092,7 +8192,7 @@
         content += buildProductionBreakdown(catId, product, capacity, p2pPrices, items);
 
         // Cost breakdown
-        if (summary.costDetails && summary.costPerDay > 0) {
+        if (summary.costDetails && (summary.costPerDay > 0 || summary.costDetails.freeTool || summary.costSavings > 0)) {
           const cd = summary.costDetails;
           content += `<div style="padding:6px 12px;font-size: 0.5625rem;color:var(--text-secondary);line-height:1.8;border-bottom:1px solid var(--border-dark)">`;
           content += `<div style="color:var(--red);font-size: 0.625rem;margin-bottom:2px"><strong>💰 PRODUCTION COSTS</strong></div>`;
@@ -8101,6 +8201,12 @@
             content += `<div>Seed cost: ${(SEED_COSTS[product] || 0).toFixed(2)} coins = ${cd.seedSfl.toFixed(6)} ${sflIcon()} (${Math.round(exchangeRates.coinsPerSFL)} coins/${sflIcon()}${bettyNote})</div>`;
             content += `<div>Seed cost/day: ${cd.seedSfl.toFixed(6)} × ${(cd.cyclesPerDay || 0).toFixed(2)} cycles × ${getCapacityCount(catId, capacity)} = <strong style="color:var(--red)">${(cd.costPerDay || 0).toFixed(4)} ${sflIcon()}/day</strong></div>`;
             if (cd.stock > 0) content += `<div>Stock: ${cd.stock} seeds${stockMods.hasWarehouse ? " (Warehouse ×1.2)" : ""} | Restock: ${(cd.restockPerDay || 0).toFixed(4)} ${sflIcon()}/day</div>`;
+          } else if (cd.freeTool) {
+            // Free tool (Quarry / Foreman Beaver) → no tool cost
+            content += `<div style="color:var(--green)">🆓 <strong>${cd.freeToolSource}</strong>: No tool cost! (${(cd.toolsPerDay || 0).toFixed(2)} uses/day for free)</div>`;
+            if (cd.baseCostPerDay > 0) {
+              content += `<div style="color:var(--green)">Saving <strong>${(cd.baseCostPerDay || 0).toFixed(4)} ${sflIcon()}/day</strong> vs base tool cost</div>`;
+            }
           } else if (cd.toolSfl !== undefined) {
             // Show BASE cost first, then BOOSTED cost if discount applies
             if (cd.discountSource && cd.baseToolSfl !== undefined) {
@@ -8326,6 +8432,9 @@
           if (e.pct !== undefined) desc += ` ${e.pct}%`;
           if (e.extra !== undefined) desc += ` +${e.extra}`;
           if (e.product) desc += ` <span style="color:var(--sunpetal)">${escHTML(e.product)}</span>`;
+          if (e.cropTier) desc += ` <span style="color:var(--text-dim)">[${e.cropTier}]</span>`;
+          if (e.conditional) desc += ` <span style="color:var(--text-dim)">(${escHTML(e.conditional)})</span>`;
+          if (e.tool) desc += ` <span style="color:var(--text-dim)">[tool:${escHTML(e.tool)}]</span>`;
           desc += ` → <span style="color:var(--green)">${e.cat || "?"}</span>`;
           return desc;
         }).join("<br>");
@@ -8354,7 +8463,7 @@
     function renderPowerBoostRow(b, catId, product, val, isOwned) {
       const imgUrl = b.type !== "Skill" ? getItemIcon(b.name) : "";
       const sflText = val.synergy !== 0
-        ? (val.isCostReduction ? `⬇${val.synergy.toFixed(2)}/day` : `${val.synergy > 0 ? "+" : ""}${val.synergy.toFixed(2)}/day`)
+        ? (val.isFreeTool ? `🆓⬇${val.synergy.toFixed(2)}/day` : val.isCostReduction ? `⬇${val.synergy.toFixed(2)}/day` : `${val.synergy > 0 ? "+" : ""}${val.synergy.toFixed(2)}/day`)
         : "—";
       const roiText = val.roi < Infinity ? `${val.roi.toFixed(0)}d` : "";
       const typeLabel = b.type === "Skill" ? `Skill (${b.skillTree}, ${b.skillPoints}pt)` : b.type;
