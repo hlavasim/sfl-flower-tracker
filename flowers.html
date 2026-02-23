@@ -1947,6 +1947,37 @@
       "Gold":      { respawnSec: 43200, yield: 1, farmKey: "gold" },
       "Crimstone": { respawnSec: 64800, yield: 1.4, farmKey: "crimstones" }, // native +2 every 5th dig = +0.4 avg
       "Wood":      { respawnSec: 7200,  yield: 3, farmKey: "trees" },
+      "Obsidian":  { respawnSec: 43200, yield: 1, farmKey: "lavaPits" },
+    };
+
+    // ── Lava Pit seasonal requirements (cost per ignition) ──
+    const LAVA_PIT_REQUIREMENTS = {
+      autumn: [
+        { item: "Artichoke", qty: 30 },
+        { item: "Broccoli", qty: 750 },
+        { item: "Yam", qty: 1000 },
+        { item: "Gold", qty: 5 },
+        { item: "Crimstone", qty: 6 },
+      ],
+      winter: [
+        { item: "Merino Wool", qty: 150 },
+        { item: "Onion", qty: 400 },
+        { item: "Turnip", qty: 200 },
+        { item: "Crimstone", qty: 5 },
+      ],
+      spring: [
+        { item: "Celestine", qty: 2 },
+        { item: "Lunara", qty: 2 },
+        { item: "Duskberry", qty: 2 },
+        { item: "Rhubarb", qty: 2000 },
+        { item: "Crimstone", qty: 10 },
+      ],
+      summer: [
+        { item: "Oil", qty: 70 },
+        { item: "Pepper", qty: 750 },
+        { item: "Zucchini", qty: 1000 },
+        { item: "Crimstone", qty: 4 },
+      ],
     };
 
     // ── Seed costs (coins per seed) ──
@@ -2389,6 +2420,7 @@
       iron:     { label: "IRON",     emoji: "🪨", selector: null,   quantifiable: true },
       gold:      { label: "GOLD",      emoji: "🥇", selector: null,   quantifiable: true },
       crimstone: { label: "CRIMSTONE",emoji: "💎", selector: null,   quantifiable: true },
+      obsidian:  { label: "OBSIDIAN", emoji: "🌋", selector: null,   quantifiable: true },
       trees:     { label: "TREES",    emoji: "🌳", selector: null,   quantifiable: true },
       fishing:  { label: "FISHING",  emoji: "🎣", selector: null,   quantifiable: true },
       bees:     { label: "BEES",     emoji: "🐝", selector: null,   quantifiable: true },
@@ -2412,6 +2444,7 @@
     PRODUCT_TO_CATEGORY["Iron"] = "iron";
     PRODUCT_TO_CATEGORY["Gold"] = "gold";
     PRODUCT_TO_CATEGORY["Crimstone"] = "crimstone";
+    PRODUCT_TO_CATEGORY["Obsidian"] = "obsidian";
     PRODUCT_TO_CATEGORY["Wood"] = "trees";
     PRODUCT_TO_CATEGORY["Fish"] = "fishing";
     PRODUCT_TO_CATEGORY["Wild Mushroom"] = "mushrooms";
@@ -6957,6 +6990,7 @@
         iron: sumMergedNodes(farm.iron),
         gold: sumMergedNodes(farm.gold),
         crimstones: sumMergedNodes(farm.crimstones),
+        lavaPits: Object.keys(farm.lavaPits || {}).length,
         trees: sumMergedNodes(farm.trees),
       };
     }
@@ -6997,6 +7031,11 @@
         case "bees": {
           return (capacity.bees || 0) * 1; // ~1 honey/day per hive
         }
+        case "obsidian": {
+          const d = RESOURCE_RESPAWN_DATA["Obsidian"];
+          const n = capacity.lavaPits || 0;
+          return n * (86400 / d.respawnSec) * d.yield;
+        }
         case "stone": case "iron": case "gold": case "crimstone": {
           const rKey = catId === "stone" ? "Stone" : catId === "iron" ? "Iron" : catId === "gold" ? "Gold" : "Crimstone";
           const d = RESOURCE_RESPAWN_DATA[rKey];
@@ -7032,6 +7071,7 @@
         case "iron": return RESOURCE_RESPAWN_DATA["Iron"].respawnSec;
         case "gold": return RESOURCE_RESPAWN_DATA["Gold"].respawnSec;
         case "crimstone": return RESOURCE_RESPAWN_DATA["Crimstone"].respawnSec;
+        case "obsidian": return RESOURCE_RESPAWN_DATA["Obsidian"].respawnSec;
         case "trees": return RESOURCE_RESPAWN_DATA["Wood"].respawnSec;
         case "flowers": return 86400;
         default: return 86400;
@@ -7052,6 +7092,7 @@
         case "iron": return capacity.iron;
         case "gold": return capacity.gold;
         case "crimstone": return capacity.crimstones;
+        case "obsidian": return capacity.lavaPits;
         case "trees": return capacity.trees;
         default: return 0;
       }
@@ -7070,6 +7111,7 @@
         case "iron": return "Iron";
         case "gold": return "Gold";
         case "crimstone": return "Crimstone";
+        case "obsidian": return "Obsidian";
         case "trees": return "Wood";
         case "flowers": return "Sunpetal Seed";
         case "fishing": return "Fish";
@@ -7083,6 +7125,7 @@
         case "iron": return RESOURCE_RESPAWN_DATA["Iron"].yield;
         case "gold": return RESOURCE_RESPAWN_DATA["Gold"].yield;
         case "crimstone": return RESOURCE_RESPAWN_DATA["Crimstone"].yield;
+        case "obsidian": return RESOURCE_RESPAWN_DATA["Obsidian"].yield;
         case "trees": return RESOURCE_RESPAWN_DATA["Wood"].yield;
         default: return 1;
       }
@@ -7427,6 +7470,30 @@
       return { costPerDay, toolSfl, restockPerDay, toolsPerDay, stock, coinDiscount, discountSource, effectiveCoins, baseCoins: tool.coins };
     }
 
+    // Lava Pit cost: seasonal material requirements → P2P cost per ignition
+    function calcLavaPitCostPerDay(capacity, p2pPrices, season) {
+      const n = capacity.lavaPits || 0;
+      if (n === 0 || !season) return { costPerDay: 0, costPerIgnition: 0, requirements: [], season };
+      const reqs = LAVA_PIT_REQUIREMENTS[season];
+      if (!reqs) return { costPerDay: 0, costPerIgnition: 0, requirements: [], season };
+
+      let costPerIgnition = 0;
+      const breakdown = [];
+      for (const r of reqs) {
+        const price = p2pPrices[r.item] || 0;
+        const cost = price * r.qty;
+        costPerIgnition += cost;
+        breakdown.push({ item: r.item, qty: r.qty, price, cost });
+      }
+
+      const d = RESOURCE_RESPAWN_DATA["Obsidian"];
+      const cyclesPerDay = 86400 / d.respawnSec;
+      const ignitionsPerDay = n * cyclesPerDay;
+      const costPerDay = costPerIgnition * ignitionsPerDay;
+
+      return { costPerDay, costPerIgnition, ignitionsPerDay, requirements: breakdown, season };
+    }
+
     // Compute total SFL/day across all products for an animal category
     function getAnimalCatSfl(catId, capacity, boostEffects, p2pPrices) {
       const animal = getAnimalData(catId);
@@ -7462,7 +7529,7 @@
       const unitLabels = {
         crops: "plots", fruits: "patches", greenhouse: "pots", chickens: "chickens", cows: "cows",
         sheep: "sheep", bees: "hives", flowers: "beds", stone: "rocks",
-        iron: "nodes", gold: "nodes", crimstone: "nodes", trees: "trees", fishing: "reels"
+        iron: "nodes", gold: "nodes", crimstone: "nodes", obsidian: "pits", trees: "trees", fishing: "reels"
       };
       const unitLabel = unitLabels[catId] || catId;
 
@@ -8125,15 +8192,18 @@
       // Detect stock modifiers for cost calculations
       const stockMods = detectStockModifiers(farm);
 
+      // Detect current season
+      const season = (farm.season?.season || "").toLowerCase();
+
       // Store state for interactive updates
-      powerState = { boostItems, catBoosts, capacity, p2pPrices, savedProducts, farm, skillCostInfo, exchangeRates, stockMods };
+      powerState = { boostItems, catBoosts, capacity, p2pPrices, savedProducts, farm, skillCostInfo, exchangeRates, stockMods, season };
 
       // Render
       renderPowerContent();
     }
 
     function renderPowerContent() {
-      const { boostItems, catBoosts, capacity, p2pPrices, savedProducts, exchangeRates, stockMods } = powerState;
+      const { boostItems, catBoosts, capacity, p2pPrices, savedProducts, exchangeRates, stockMods, season } = powerState;
 
       const ownedCount = boostItems.filter(b => b.has).length;
       const totalCount = boostItems.length;
@@ -8168,6 +8238,11 @@
           costPerDay = c.costPerDay;
           baseCostPerDay = c.costPerDay; // seeds have no skill discount
           restockPerDay = c.restockPerDay;
+          costDetails = c;
+        } else if (catId === "obsidian") {
+          const c = calcLavaPitCostPerDay(capacity, p2pPrices, season);
+          costPerDay = c.costPerDay;
+          baseCostPerDay = c.costPerDay;
           costDetails = c;
         } else if (["trees", "stone", "iron", "gold", "crimstone"].includes(catId)) {
           const c = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods);
@@ -8292,7 +8367,7 @@
         content += `<div class="power-category pixel-panel" id="power-cat-${catId}">`;
         content += `<div class="power-cat-header pixel-font" onclick="togglePowerCategory('${catId}')">
           <span>${catDef.emoji} ${catDef.label}</span>
-          <span class="power-cat-count">${n} ${({crops:"plots",fruits:"patches",greenhouse:"pots",trees:"trees",flowers:"beds",stone:"rocks",iron:"nodes",gold:"nodes",crimstone:"nodes",chickens:"chickens",cows:"cows",sheep:"sheep",bees:"hives",fishing:"reels"})[catId] || catId}</span>`;
+          <span class="power-cat-count">${n} ${({crops:"plots",fruits:"patches",greenhouse:"pots",trees:"trees",flowers:"beds",stone:"rocks",iron:"nodes",gold:"nodes",crimstone:"nodes",obsidian:"pits",chickens:"chickens",cows:"cows",sheep:"sheep",bees:"hives",fishing:"reels"})[catId] || catId}</span>`;
 
         // Product selector
         if (catDef.selector === "crop") {
@@ -8345,6 +8420,16 @@
             if (cd.baseCostPerDay > 0) {
               content += `<div style="color:var(--green)">Saving <strong>${(cd.baseCostPerDay || 0).toFixed(4)} ${sflIcon()}/day</strong> vs base tool cost</div>`;
             }
+          } else if (cd.requirements !== undefined) {
+            // Lava Pit seasonal material cost
+            const seasonName = (cd.season || "?").charAt(0).toUpperCase() + (cd.season || "?").slice(1);
+            content += `<div style="margin-bottom:4px">🌋 <strong>Lava Pit</strong> — Season: <strong>${escHTML(seasonName)}</strong></div>`;
+            content += `<div>Cost per ignition: <strong style="color:var(--red)">${cd.costPerIgnition.toFixed(2)} ${sflIcon()}</strong></div>`;
+            for (const r of cd.requirements) {
+              content += `<div style="padding-left:12px">${r.qty}× ${escHTML(r.item)} @ ${r.price.toFixed(4)} ${sflIcon()} = ${r.cost.toFixed(4)} ${sflIcon()}</div>`;
+            }
+            content += `<div>Ignitions/day: ${(cd.ignitionsPerDay || 0).toFixed(2)} (${getCapacityCount("obsidian", capacity)} pits × ${formatSec(RESOURCE_RESPAWN_DATA["Obsidian"].respawnSec)} cycle)</div>`;
+            content += `<div>Material cost/day: ${cd.costPerIgnition.toFixed(2)} × ${(cd.ignitionsPerDay || 0).toFixed(2)} = <strong style="color:var(--red)">${(cd.costPerDay || 0).toFixed(4)} ${sflIcon()}/day</strong></div>`;
           } else if (cd.toolSfl !== undefined) {
             // Show BASE cost first, then BOOSTED cost if discount applies
             if (cd.discountSource && cd.baseToolSfl !== undefined) {
@@ -8526,6 +8611,42 @@
           </tr>`;
         }
         content += `</tbody></table></div>`;
+
+        // Lava Pit requirements table
+        if (capacity.lavaPits > 0) {
+          const seasonName = season ? season.charAt(0).toUpperCase() + season.slice(1) : "Unknown";
+          content += `<div style="margin-bottom:12px"><div class="pixel-font" style="font-size: 0.5625rem;color:var(--lily);margin-bottom:4px">🌋 LAVA PIT REQUIREMENTS — ${escHTML(seasonName)} Season (${capacity.lavaPits} pits)</div>
+            <table style="width:100%;border-collapse:collapse;font-size: 0.5rem;color:var(--text-secondary)">
+              <thead><tr style="background:rgba(92,58,30,0.3);text-align:left">
+                <th style="padding:3px 6px;border:1px solid var(--border-dark)">Season</th>
+                <th style="padding:3px 6px;border:1px solid var(--border-dark)">Material</th>
+                <th style="padding:3px 6px;border:1px solid var(--border-dark)">Qty</th>
+                <th style="padding:3px 6px;border:1px solid var(--border-dark)">P2P Price</th>
+                <th style="padding:3px 6px;border:1px solid var(--border-dark)">Cost</th>
+              </tr></thead><tbody>`;
+          for (const [szn, reqs] of Object.entries(LAVA_PIT_REQUIREMENTS)) {
+            const isCurrent = szn === season;
+            let sznTotal = 0;
+            for (let i = 0; i < reqs.length; i++) {
+              const r = reqs[i];
+              const price = p2pPrices[r.item] || 0;
+              const cost = price * r.qty;
+              sznTotal += cost;
+              content += `<tr style="border-bottom:1px solid rgba(92,58,30,0.15);${isCurrent ? 'background:rgba(46,204,113,0.08)' : ''}">
+                ${i === 0 ? `<td style="padding:2px 6px;border:1px solid var(--border-dark);font-weight:bold;vertical-align:top" rowspan="${reqs.length + 1}">${szn.charAt(0).toUpperCase() + szn.slice(1)}${isCurrent ? ' 🔥' : ''}</td>` : ''}
+                <td style="padding:2px 6px;border:1px solid var(--border-dark)"><img src="${getItemIcon(r.item)}" style="height:1.2em;vertical-align:-0.2em" loading="lazy"> ${escHTML(r.item)}</td>
+                <td style="padding:2px 6px;border:1px solid var(--border-dark);text-align:right">${r.qty}</td>
+                <td style="padding:2px 6px;border:1px solid var(--border-dark);text-align:right">${price.toFixed(4)}</td>
+                <td style="padding:2px 6px;border:1px solid var(--border-dark);text-align:right">${cost.toFixed(4)}</td>
+              </tr>`;
+            }
+            content += `<tr style="border-bottom:2px solid var(--border-dark);${isCurrent ? 'background:rgba(46,204,113,0.08)' : ''}">
+              <td colspan="3" style="padding:2px 6px;border:1px solid var(--border-dark);text-align:right;font-weight:bold">Total per ignition:</td>
+              <td style="padding:2px 6px;border:1px solid var(--border-dark);text-align:right;font-weight:bold;color:${isCurrent ? 'var(--green)' : 'var(--text-secondary)'}">${sznTotal.toFixed(2)} ${sflIcon()}</td>
+            </tr>`;
+          }
+          content += `</tbody></table></div>`;
+        }
 
         // Restock info + skill discounts
         content += `<div class="pixel-font" style="font-size: 0.5rem;color:var(--text-dim);line-height:1.6">
@@ -8806,7 +8927,7 @@
         <strong>${budRows.length}</strong> buds total ·
         <strong style="color:var(--green)">${totalOwned} owned</strong> ·
         ${withBoost} with calculable boost ·
-        Capacity: ${capacity.crops} plots, ${capacity.fruitPatches} fruit, ${capacity.greenhouse || 0} greenhouse, ${capacity.trees} trees
+        Capacity: ${capacity.crops} plots, ${capacity.fruitPatches} fruit, ${capacity.greenhouse || 0} greenhouse, ${capacity.lavaPits || 0} lava pits, ${capacity.trees} trees
       </div>`;
 
       // Filters
