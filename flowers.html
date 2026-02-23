@@ -8428,14 +8428,13 @@
         const missing = items.filter(b => !b.has);
 
         content += `<div class="power-category pixel-panel" id="power-cat-${catId}">`;
-        // 24h production label
+        // 24h production label with product icon
         const prodPerDay = summary.boostedUnitsPerDay || 0;
-        const prodLabel = !isAnimalCat(catId) && catId !== "fishing" && prodPerDay > 0
-          ? ` · ${prodPerDay % 1 < 0.01 ? prodPerDay.toFixed(0) : prodPerDay.toFixed(1)} ${product}/day` : "";
-
+        const priceProduct = !isAnimalCat(catId) ? getPriceProduct(catId, product) : null;
+        const prodImgUrl = priceProduct && IMAGE_MAP[priceProduct] ? IMAGE_MAP[priceProduct] : null;
+        const prodIcon = prodImgUrl ? `<img src="${prodImgUrl}" style="height:1em;vertical-align:-0.15em" alt="${priceProduct}">` : (priceProduct || "");
         content += `<div class="power-cat-header pixel-font" onclick="togglePowerCategory('${catId}')">
-          <span>${catDef.emoji} ${catDef.label}</span>
-          <span class="power-cat-count">${n} ${({crops:"plots",fruits:"patches",greenhouse:"pots",trees:"trees",flowers:"beds",stone:"rocks",iron:"nodes",gold:"nodes",crimstone:"nodes",obsidian:"pits",chickens:"chickens",cows:"cows",sheep:"sheep",bees:"hives",fishing:"reels"})[catId] || catId}${prodLabel}</span>`;
+          <span>${catDef.emoji} ${catDef.label}</span>`;
 
         // Product selector
         if (catDef.selector === "crop") {
@@ -8465,7 +8464,10 @@
         }
 
         const catNet = summary.boostedSfl - (summary.costPerDay || 0);
-        content += `<span class="power-cat-sfl">${summary.costPerDay > 0 ? `<span style="color:var(--text-dim);font-size: 0.4375rem">-${summary.costPerDay.toFixed(2)}</span> ` : ""}<span style="color:${catNet >= 0 ? 'var(--green)' : 'var(--red)'};font-size: 0.5rem">${catNet >= 0 ? "+" : ""}${catNet.toFixed(2)}/day</span></span>
+        // Show units + SFL equivalent: +125<iron> ~ +13<sfl>/day
+        const unitsPart = !isAnimalCat(catId) && catId !== "fishing" && prodPerDay > 0
+          ? `<span style="color:var(--text-dim);font-size:0.4375rem">${prodPerDay % 1 < 0.01 ? prodPerDay.toFixed(0) : prodPerDay.toFixed(1)}${prodIcon} ~ </span>` : "";
+        content += `<span class="power-cat-sfl">${summary.costPerDay > 0 ? `<span style="color:var(--text-dim);font-size: 0.4375rem">-${summary.costPerDay.toFixed(2)}</span> ` : ""}${unitsPart}<span style="color:${catNet >= 0 ? 'var(--green)' : 'var(--red)'};font-size: 0.5rem">${catNet >= 0 ? "+" : ""}${catNet.toFixed(2)}${sflIcon()}/day</span></span>
           <span class="power-toggle-arrow">▶</span>
         </div>`;
 
