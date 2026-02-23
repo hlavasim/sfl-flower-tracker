@@ -8184,7 +8184,7 @@
         const [nftResp, priceResp, rateResp] = await Promise.all([
           proxyFetch("https://sfl.world/api/v1/nfts"),
           proxyFetch("https://sfl.world/api/v1/prices"),
-          proxyFetch("https://sfl.world/api/v1/exchange-rates").catch(() => null),
+          proxyFetch("https://sfl.world/api/v1.1/exchange").catch(() => null),
         ]);
         nftData = nftResp;
         const priceData = priceResp?.data?.p2p || priceResp?.p2p || {};
@@ -8199,9 +8199,8 @@
           exchangeRates.bettyItem = betty.item;
         }
         if (rateResp) {
-          const tiers = rateResp?.data?.tiers || rateResp?.tiers || [];
-          const coinTiers = tiers.filter(t => t.coin !== undefined && t.sfl !== undefined);
-          const gemTiers = tiers.filter(t => t.gem !== undefined && t.sfl !== undefined);
+          const coinTiers = Object.values(rateResp?.coins || rateResp?.data?.coins || {});
+          const gemTiers = Object.values(rateResp?.gems || rateResp?.data?.gems || {});
           // Fallback to API rate if Betty rate failed
           if (!betty.rate && coinTiers.length > 0) {
             const best = coinTiers.reduce((a, b) => (b.coin / b.sfl) > (a.coin / a.sfl) ? b : a);
