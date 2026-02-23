@@ -1948,6 +1948,7 @@
       "Crimstone": { respawnSec: 64800, yield: 1.4, farmKey: "crimstones" }, // native +2 every 5th dig = +0.4 avg
       "Wood":      { respawnSec: 7200,  yield: 3, farmKey: "trees" },
       "Obsidian":  { respawnSec: 259200, yield: 1, farmKey: "lavaPits" }, // 3 days
+      "Oil":       { respawnSec: 72000, yield: 16.67, farmKey: "oilReserves" }, // 20h, avg yield (10+10+30)/3
     };
 
     // ── Lava Pit seasonal requirements (cost per ignition) ──
@@ -2008,7 +2009,7 @@
     // ── Tool → resource category mapping ──
     const TOOL_TO_CAT = {
       "Axe": "trees", "Pickaxe": "stone", "Stone Pickaxe": "iron",
-      "Iron Pickaxe": "gold", "Gold Pickaxe": "crimstone",
+      "Iron Pickaxe": "gold", "Gold Pickaxe": "crimstone", "Oil Drill": "oil",
     };
 
     // ── Restock gem costs ──
@@ -2031,7 +2032,7 @@
       "Grape Seed": 10, "Rice Seed": 10, "Olive Seed": 10,
       // Tools
       "Axe": 200, "Pickaxe": 60, "Stone Pickaxe": 20,
-      "Iron Pickaxe": 5, "Gold Pickaxe": 5,
+      "Iron Pickaxe": 5, "Gold Pickaxe": 5, "Oil Drill": 5,
     };
 
     // Full skill tree data from sfl.world/tools/skills
@@ -2421,6 +2422,7 @@
       gold:      { label: "GOLD",      emoji: "🥇", selector: null,   quantifiable: true },
       crimstone: { label: "CRIMSTONE",emoji: "💎", selector: null,   quantifiable: true },
       obsidian:  { label: "OBSIDIAN", emoji: "🌋", selector: null,   quantifiable: true },
+      oil:       { label: "OIL",     emoji: "🛢️", selector: null,   quantifiable: true },
       trees:     { label: "TREES",    emoji: "🌳", selector: null,   quantifiable: true },
       fishing:  { label: "FISHING",  emoji: "🎣", selector: null,   quantifiable: true },
       bees:     { label: "BEES",     emoji: "🐝", selector: null,   quantifiable: true },
@@ -2445,6 +2447,7 @@
     PRODUCT_TO_CATEGORY["Gold"] = "gold";
     PRODUCT_TO_CATEGORY["Crimstone"] = "crimstone";
     PRODUCT_TO_CATEGORY["Obsidian"] = "obsidian";
+    PRODUCT_TO_CATEGORY["Oil"] = "oil";
     PRODUCT_TO_CATEGORY["Wood"] = "trees";
     PRODUCT_TO_CATEGORY["Fish"] = "fishing";
     PRODUCT_TO_CATEGORY["Wild Mushroom"] = "mushrooms";
@@ -2520,7 +2523,14 @@
       { rx: /chop\s+\w+\s+without\s+axes?/i,
         fn: m => ({ type: "free_tool", cat: "trees" }) },
 
-      // ── CONDITIONAL YIELD (5th mine, chance x3) ──
+      // ── CONDITIONAL YIELD (5th mine, 3rd drill, chance x3) ──
+      // "+N Product on 3rd drill" → effective yield = N/3 (Stag Shrine oil bonus)
+      { rx: /\+(\d+\.?\d*)\s+([\w\s]+?)\s+on\s+3rd/i,
+        fn: m => {
+          const prod = m[2].trim();
+          const cat = PRODUCT_TO_CATEGORY[prod] || "other";
+          return { type: "yield_flat", value: parseFloat(m[1]) / 3, cat, product: prod, conditional: "3rd drill" };
+        }},
       // "+N Product on 5th mine/consecutive" → effective yield = N/5
       { rx: /\+(\d+\.?\d*)\s+([\w\s]+?)\s+on\s+5th/i,
         fn: m => {
@@ -2555,6 +2565,20 @@
           const extra = parseFloat(m[3]);
           return { type: "yield_flat", value: flat + (pct / 100) * extra, cat: "fishing", conditional: `+${flat} + ${pct}% ×${extra}` };
         }},
+
+      // ── OIL SPECIFIC (before generic speed rules) ──
+      // "Drill oil without Oil Drills" (Infernal Drill) → free tool for oil
+      { rx: /drill\s+oil\s+without/i,
+        fn: m => ({ type: "free_tool", cat: "oil" }) },
+      // "-20% Oil refill time" (Oil Be Back skill), "-50% Oil recovery time" (Dev Wrench)
+      { rx: /([+-]?\d+\.?\d*)%\s+Oil\s+(?:refill|recovery|respawn)\s+time/i,
+        fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "oil" }) },
+      // "×0.5 Oil recovery time" (Dev Wrench multiplier form)
+      { rx: /[×x](\d+\.?\d*)\s+Oil\s+(?:refill|recovery|respawn)\s+time/i,
+        fn: m => ({ type: "speed_mult", value: parseFloat(m[1]), cat: "oil" }) },
+      // "Oil Drill uses Wool instead of Leather" (Oil Rig skill) → qualitative
+      { rx: /Oil\s+Drill\s+uses\s+Wool/i,
+        fn: m => ({ type: "qualitative", cat: "oil", raw: m[0] }) },
 
       // ── LAVA PIT SPECIFIC (before generic speed rules) ──
       // "-50% Lava Pit Time" (Obsidian Necklace, Magma Stone) → speed for obsidian
@@ -7011,6 +7035,7 @@
         gold: sumMergedNodes(farm.gold),
         crimstones: sumMergedNodes(farm.crimstones),
         lavaPits: Object.keys(farm.lavaPits || {}).length,
+        oilReserves: Object.keys(farm.oilReserves || {}).length,
         trees: sumMergedNodes(farm.trees),
       };
     }
@@ -7056,6 +7081,11 @@
           const n = capacity.lavaPits || 0;
           return n * (86400 / d.respawnSec) * d.yield;
         }
+        case "oil": {
+          const d = RESOURCE_RESPAWN_DATA["Oil"];
+          const n = capacity.oilReserves || 0;
+          return n * (86400 / d.respawnSec) * d.yield;
+        }
         case "stone": case "iron": case "gold": case "crimstone": {
           const rKey = catId === "stone" ? "Stone" : catId === "iron" ? "Iron" : catId === "gold" ? "Gold" : "Crimstone";
           const d = RESOURCE_RESPAWN_DATA[rKey];
@@ -7092,6 +7122,7 @@
         case "gold": return RESOURCE_RESPAWN_DATA["Gold"].respawnSec;
         case "crimstone": return RESOURCE_RESPAWN_DATA["Crimstone"].respawnSec;
         case "obsidian": return RESOURCE_RESPAWN_DATA["Obsidian"].respawnSec;
+        case "oil": return RESOURCE_RESPAWN_DATA["Oil"].respawnSec;
         case "trees": return RESOURCE_RESPAWN_DATA["Wood"].respawnSec;
         case "flowers": return 86400;
         default: return 86400;
@@ -7113,6 +7144,7 @@
         case "gold": return capacity.gold;
         case "crimstone": return capacity.crimstones;
         case "obsidian": return capacity.lavaPits;
+        case "oil": return capacity.oilReserves;
         case "trees": return capacity.trees;
         default: return 0;
       }
@@ -7132,6 +7164,7 @@
         case "gold": return "Gold";
         case "crimstone": return "Crimstone";
         case "obsidian": return "Obsidian";
+        case "oil": return "Oil";
         case "trees": return "Wood";
         case "flowers": return "Sunpetal Seed";
         case "fishing": return "Fish";
@@ -7146,6 +7179,7 @@
         case "gold": return RESOURCE_RESPAWN_DATA["Gold"].yield;
         case "crimstone": return RESOURCE_RESPAWN_DATA["Crimstone"].yield;
         case "obsidian": return RESOURCE_RESPAWN_DATA["Obsidian"].yield;
+        case "oil": return RESOURCE_RESPAWN_DATA["Oil"].yield;
         case "trees": return RESOURCE_RESPAWN_DATA["Wood"].yield;
         default: return 1;
       }
@@ -7372,7 +7406,9 @@
       // Free tool collectibles (zero tool cost for category)
       const hasQuarry = findCollectible(farm, "Quarry").length > 0 || getCount(inventory, "Quarry") > 0;
       const hasForeman = findCollectible(farm, "Foreman Beaver").length > 0 || getCount(inventory, "Foreman Beaver") > 0;
-      return { hasWarehouse, hasToolshed, moreAxes, morePicks, fellersDiscount, frugalMiner, hasQuarry, hasForeman };
+      const oilRigActive = skills["Oil Rig"] !== undefined;
+      const hasInfernalDrill = isWearableEquipped(farm, "Infernal Drill");
+      return { hasWarehouse, hasToolshed, moreAxes, morePicks, fellersDiscount, frugalMiner, hasQuarry, hasForeman, oilRigActive, hasInfernalDrill };
     }
 
     // Get effective stock for a seed/tool
@@ -7445,6 +7481,12 @@
           const toolsPerDay = d ? n * (86400 / d.respawnSec) : 0;
           return { costPerDay: 0, toolSfl: 0, restockPerDay: 0, toolsPerDay, stock: 0, freeTool: true, freeToolSource: "Foreman Beaver" };
         }
+        if (catId === "oil" && stockMods.hasInfernalDrill) {
+          const d = RESOURCE_RESPAWN_DATA["Oil"];
+          const n = capacity.oilReserves || 0;
+          const toolsPerDay = d ? n * (86400 / d.respawnSec) : 0;
+          return { costPerDay: 0, toolSfl: 0, restockPerDay: 0, toolsPerDay, stock: 0, freeTool: true, freeToolSource: "Infernal Drill" };
+        }
       }
 
       // Apply coin discounts from skills (unless skipDiscount)
@@ -7459,18 +7501,26 @@
       }
       const effectiveCoins = tool.coins * (1 - coinDiscount);
 
+      // Oil Rig skill: Oil Drill uses Wool×20 instead of Leather×10
+      let effectiveMaterials = tool.materials;
+      if (catId === "oil" && stockMods.oilRigActive && tool.materials) {
+        effectiveMaterials = { ...tool.materials };
+        delete effectiveMaterials["Leather"];
+        effectiveMaterials["Wool"] = 20;
+      }
+
       // Tool cost in SFL = coins (after discount) + material costs
       let toolSfl = effectiveCoins / exchangeRates.coinsPerSFL;
-      if (tool.materials) {
-        for (const [mat, qty] of Object.entries(tool.materials)) {
+      if (effectiveMaterials) {
+        for (const [mat, qty] of Object.entries(effectiveMaterials)) {
           toolSfl += (p2pPrices[mat] || 0) * qty;
         }
       }
 
-      const rKey = catId === "stone" ? "Stone" : catId === "iron" ? "Iron" : catId === "gold" ? "Gold" : catId === "crimstone" ? "Crimstone" : "Wood";
+      const rKey = catId === "stone" ? "Stone" : catId === "iron" ? "Iron" : catId === "gold" ? "Gold" : catId === "crimstone" ? "Crimstone" : catId === "oil" ? "Oil" : "Wood";
       const d = RESOURCE_RESPAWN_DATA[rKey];
       if (!d) return { costPerDay: 0, toolSfl, restockPerDay: 0 };
-      const capKey = catId === "stone" ? "stones" : catId === "crimstone" ? "crimstones" : catId;
+      const capKey = catId === "stone" ? "stones" : catId === "crimstone" ? "crimstones" : catId === "oil" ? "oilReserves" : catId;
       const n = capacity[capKey] || 0;
       if (n === 0) return { costPerDay: 0, toolSfl, restockPerDay: 0 };
       const cyclesPerDay = 86400 / d.respawnSec;
@@ -7551,7 +7601,7 @@
       const unitLabels = {
         crops: "plots", fruits: "patches", greenhouse: "pots", chickens: "chickens", cows: "cows",
         sheep: "sheep", bees: "hives", flowers: "beds", stone: "rocks",
-        iron: "nodes", gold: "nodes", crimstone: "nodes", obsidian: "pits", trees: "trees", fishing: "reels"
+        iron: "nodes", gold: "nodes", crimstone: "nodes", obsidian: "pits", oil: "reserves", trees: "trees", fishing: "reels"
       };
       const unitLabel = unitLabels[catId] || catId;
 
@@ -7642,7 +7692,7 @@
       const freeToolEffects = catEffects.filter(e => e.type === "free_tool");
       if (freeToolEffects.length > 0) {
         const { exchangeRates, stockMods } = powerState;
-        if (["trees", "stone", "iron", "gold", "crimstone"].includes(catId)) {
+        if (["trees", "stone", "iron", "gold", "crimstone", "oil"].includes(catId)) {
           // Savings = entire base tool cost per day (100% reduction)
           const baseCost = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods, true);
           const solo = baseCost.costPerDay;
@@ -7657,7 +7707,7 @@
       if (costEffects.length > 0) {
         // Cost reduction value = base cost - discounted cost for this category
         const { exchangeRates, stockMods } = powerState;
-        if (["trees", "stone", "iron", "gold", "crimstone"].includes(catId)) {
+        if (["trees", "stone", "iron", "gold", "crimstone", "oil"].includes(catId)) {
           // If category already has free tools, cost reduction has no effect
           const hasFreeTools = allCatBoosts.some(b => b.has && !b.isDisabled &&
             getEffectsForCategory(b, catId).some(e => e.type === "free_tool"));
@@ -7863,7 +7913,7 @@
 
       // Free tool formula (e.g., Quarry, Foreman Beaver)
       const freeToolEffects = catEffects.filter(e => e.type === "free_tool");
-      if (freeToolEffects.length > 0 && ["trees", "stone", "iron", "gold", "crimstone"].includes(catId)) {
+      if (freeToolEffects.length > 0 && ["trees", "stone", "iron", "gold", "crimstone", "oil"].includes(catId)) {
         const { exchangeRates, stockMods } = powerState;
         const baseCost = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods, true);
         h += `<div style="margin-bottom:4px"><strong>Category:</strong> ${catId.toUpperCase()} — ${n} nodes</div>`;
@@ -7880,7 +7930,7 @@
 
       // Cost reduction formula (e.g., Feller's Discount, Frugal Miner)
       const costRedEffects = catEffects.filter(e => e.type === "cost_reduction");
-      if (costRedEffects.length > 0 && ["trees", "stone", "iron", "gold", "crimstone"].includes(catId)) {
+      if (costRedEffects.length > 0 && ["trees", "stone", "iron", "gold", "crimstone", "oil"].includes(catId)) {
         const { exchangeRates, stockMods } = powerState;
         // Check if free tools already active → cost reduction is redundant
         const hasFreeToolsFormula = allCatBoosts.some(b => b.has && !b.isDisabled &&
@@ -8308,7 +8358,7 @@
           costPerDay = c.costPerDay;
           baseCostPerDay = cBase.costPerDay;
           costDetails = c;
-        } else if (["trees", "stone", "iron", "gold", "crimstone"].includes(catId)) {
+        } else if (["trees", "stone", "iron", "gold", "crimstone", "oil"].includes(catId)) {
           const c = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods);
           const cBase = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods, true);
           costPerDay = c.costPerDay;
@@ -8670,8 +8720,16 @@
           const effectiveCoins = tool.coins * (1 - coinDiscount);
           let toolSfl = exchangeRates.coinsPerSFL > 0 ? effectiveCoins / exchangeRates.coinsPerSFL : 0;
           const mats = [];
-          if (tool.materials) {
-            for (const [mat, qty] of Object.entries(tool.materials)) {
+          // Oil Rig skill: Oil Drill uses Wool×20 instead of Leather×10
+          let effectiveMats = tool.materials;
+          if (toolName === "Oil Drill" && stockMods.oilRigActive && tool.materials) {
+            effectiveMats = { ...tool.materials };
+            delete effectiveMats["Leather"];
+            effectiveMats["Wool"] = 20;
+            discountLabel = discountLabel || "Oil Rig (Wool)";
+          }
+          if (effectiveMats) {
+            for (const [mat, qty] of Object.entries(effectiveMats)) {
               const matSfl = (p2pPrices[mat] || 0) * qty;
               toolSfl += matSfl;
               mats.push(`${qty}× <img src="${getItemIcon(mat)}" style="height:1em;vertical-align:-0.15em" loading="lazy"> ${mat}`);
@@ -9013,7 +9071,7 @@
         <strong>${budRows.length}</strong> buds total ·
         <strong style="color:var(--green)">${totalOwned} owned</strong> ·
         ${withBoost} with calculable boost ·
-        Capacity: ${capacity.crops} plots, ${capacity.fruitPatches} fruit, ${capacity.greenhouse || 0} greenhouse, ${capacity.lavaPits || 0} lava pits, ${capacity.trees} trees
+        Capacity: ${capacity.crops} plots, ${capacity.fruitPatches} fruit, ${capacity.greenhouse || 0} greenhouse, ${capacity.lavaPits || 0} lava pits, ${capacity.oilReserves || 0} oil reserves, ${capacity.trees} trees
       </div>`;
 
       // Filters
