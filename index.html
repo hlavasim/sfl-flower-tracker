@@ -7058,18 +7058,33 @@
       return { totalSfl, breakdown };
     }
 
+    const CAT_ICON_ITEM = {
+      crops: "Wheat", fruits: "Apple", greenhouse: "Grape", chickens: "Egg", cows: "Milk",
+      sheep: "Wool", flowers: "Red Pansy", stone: "Stone", iron: "Iron", gold: "Gold",
+      crimstone: "Crimstone", trees: "Wood", fishing: "Anchovy", bees: "Honey",
+      mushrooms: "Wild Mushroom", cooking: "Cake",
+    };
+    function catIcon(catId, size) {
+      const item = CAT_ICON_ITEM[catId];
+      if (!item) return "";
+      const s = size || "1em";
+      return `<img src="${getItemIcon(item)}" alt="${catId}" style="height:${s};vertical-align:-0.15em" loading="lazy">`;
+    }
+
     function describeBudBoosts(bud) {
       const typeEffects = BUD_TYPE_BOOSTS[bud.type] || [];
       const stemEffects = BUD_STEM_BOOSTS[bud.stem] || [];
       const aura = BUD_AURA_MULTIPLIERS[bud.aura] || 1;
       const descs = [];
-      const catNames = cats => cats.map(c => POWER_CATEGORIES[c]?.label || c).join("/");
       const descEff = (eff) => {
-        const target = eff.product ? eff.product
-          : ((eff.cropTier ? eff.cropTier[0].toUpperCase() + eff.cropTier.slice(1) + " " : "") + catNames(eff.cats));
-        if (eff.type === "yield_flat") descs.push(`+${(eff.value * aura).toFixed(2)} ${target}`);
-        else if (eff.type === "speed_pct") descs.push(`${(eff.value * aura).toFixed(1)}% ${target} Time`);
-        else if (eff.type === "chance") descs.push(`${(eff.pct * aura).toFixed(0)}% +${eff.extra} ${target}`);
+        const icons = eff.cats.map(c => catIcon(c, "1.1em")).filter(Boolean);
+        const iconStr = icons.length ? icons.join("") + " " : "";
+        const label = eff.product ? eff.product
+          : ((eff.cropTier ? eff.cropTier[0].toUpperCase() + eff.cropTier.slice(1) + " " : "")
+            + eff.cats.map(c => POWER_CATEGORIES[c]?.label || c).join("/"));
+        if (eff.type === "yield_flat") descs.push(`${iconStr}+${(eff.value * aura).toFixed(2)} ${label}`);
+        else if (eff.type === "speed_pct") descs.push(`${iconStr}${(eff.value * aura).toFixed(1)}% ${label} Time`);
+        else if (eff.type === "chance") descs.push(`${iconStr}${(eff.pct * aura).toFixed(0)}% +${eff.extra} ${label}`);
       };
       for (const eff of typeEffects) descEff(eff);
       for (const eff of stemEffects) descEff(eff);
@@ -8256,7 +8271,7 @@
         const owned = ownedBudIds.has(id);
         const breakdownDesc = result.breakdown.map(b => {
           const cat = POWER_CATEGORIES[b.catId];
-          return `${cat ? cat.emoji : ""} ${b.sflPerDay.toFixed(4)}`;
+          return `${catIcon(b.catId, "1em")} ${b.sflPerDay.toFixed(4)}`;
         }).join(" · ");
         budRows.push({ id, type: bud.type, stem: bud.stem, aura: bud.aura,
           boostDescs, breakdownDesc, sflPerDay: result.totalSfl, sflPerYear: result.totalSfl * 365, owned });
