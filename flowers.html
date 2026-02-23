@@ -1924,8 +1924,8 @@
     };
     // Number of harvests before fruit tree becomes a stump (chop for 1 Wood, costs 1 Axe)
     const FRUIT_HARVEST_COUNT = {
-      "Tomato": 7, "Lemon": 4, "Blueberry": 3,
-      "Orange": 3, "Apple": 3, "Banana": 3,
+      "Tomato": 4, "Lemon": 4, "Blueberry": 4,
+      "Orange": 4, "Apple": 4, "Banana": 4,
     };
 
     const GREENHOUSE_GROW_DATA = {
@@ -2606,6 +2606,9 @@
       // Generic crop growth: "-10% Crop Growth Time"
       { rx: /([+-]?\d+\.?\d*)%\s+Crop\s+(?:Growth|Growing|Cooldown|Production)\s+Time/i,
         fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "crops" }) },
+      // "+1 Extra Fruit Harvest" (Immortal Pear, Pear Turbocharge) → more harvests per seed
+      { rx: /\+(\d+)\s+Extra\s+Fruit\s+Harvest/i,
+        fn: m => ({ type: "extra_harvest", value: parseInt(m[1]), cat: "fruits" }) },
       // Fruit growth: "-10% Fruit Growth Time", "-20% Fruit Patch Growth Time"
       { rx: /([+-]?\d+\.?\d*)%\s+Fruit\s*(?:Patch\s+)?(?:Growth|Growing|Cooldown|Production)\s+Time/i,
         fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "fruits" }) },
@@ -7207,6 +7210,7 @@
       let speedMult = 1; // multiplied to cycle time (< 1 = faster)
       let yieldMult = 1; // multiplied to output
       let yieldFlat = 0; // added per cycle per slot
+      let extraHarvest = 0; // extra fruit harvests per seed (Immortal Pear, etc.)
 
       for (const eff of boostEffects) {
         // Only apply effects that match this category
@@ -7238,6 +7242,9 @@
             // Expected value: pct% chance of +extra per cycle
             yieldFlat += (eff.pct / 100) * eff.extra;
             break;
+          case "extra_harvest":
+            extraHarvest += eff.value;
+            break;
           case "free_tool":
           case "cost_reduction":
           case "fruit_free_chop":
@@ -7260,7 +7267,7 @@
         unitsPerDay = n * cyclesPerDay * outputPerCycle;
       }
 
-      return { unitsPerDay, speedMult, yieldMult, yieldFlat, effectiveCycle };
+      return { unitsPerDay, speedMult, yieldMult, yieldFlat, effectiveCycle, extraHarvest };
     }
 
     // Calculate SFL/day from units/day
@@ -7452,7 +7459,17 @@
       const result = applyBoosts(catId, product, capacity, boostEffects);
       const effectiveCycle = result.effectiveCycle || getCycleSec(catId, product);
       const cyclesPerDay = effectiveCycle > 0 ? 86400 / effectiveCycle : 0;
-      let costPerDay = seedSfl * cyclesPerDay * n;
+
+      // Fruit harvest count: one seed produces multiple harvests
+      let effectiveHarvests = 1;
+      if (catId === "fruits") {
+        const baseHarvests = FRUIT_HARVEST_COUNT[product] || 4;
+        effectiveHarvests = baseHarvests + (result.extraHarvest || 0);
+      }
+
+      // Seed consumption: for fruits, 1 seed per (harvestCount × growCycle)
+      const seedsPerDay = cyclesPerDay * n / effectiveHarvests;
+      let costPerDay = seedSfl * seedsPerDay;
 
       // Greenhouse oil cost per seed
       let oilPerSeed = 0, oilSflPerSeed = 0, oilCostPerDay = 0;
@@ -7460,23 +7477,16 @@
         oilPerSeed = GREENHOUSE_OIL_COSTS[product];
         if (stockMods.slickSaver) oilPerSeed = Math.max(0, oilPerSeed - 1);
         oilSflPerSeed = oilPerSeed * ((p2pPrices && p2pPrices["Oil"]) || 0);
-        oilCostPerDay = oilSflPerSeed * cyclesPerDay * n;
+        oilCostPerDay = oilSflPerSeed * seedsPerDay;
         costPerDay += oilCostPerDay;
       }
 
-      // Restock amortization
+      // Stock info (restock cost calculated separately in shared restock system)
       const seedName = product + " Seed";
       const stock = getEffectiveStock(seedName, stockMods);
-      let restockPerDay = 0;
-      if (stock > 0 && exchangeRates.gemsPerSFL > 0) {
-        const cyclesPerStock = stock / n;
-        const daysPerStock = cyclesPerStock * (effectiveCycle / 86400);
-        const gemCost = RESTOCK_GEM_COSTS.seeds;
-        const restockSfl = gemCost / exchangeRates.gemsPerSFL;
-        restockPerDay = daysPerStock > 0 ? restockSfl / daysPerStock : 0;
-      }
+      const daysUntilEmpty = seedsPerDay > 0 ? stock / seedsPerDay : Infinity;
 
-      return { costPerDay, seedSfl, restockPerDay, cyclesPerDay, stock: getEffectiveStock(seedName, stockMods), oilPerSeed, oilSflPerSeed, oilCostPerDay };
+      return { costPerDay, seedSfl, restockPerDay: 0, cyclesPerDay, seedsPerDay, stock, daysUntilEmpty, oilPerSeed, oilSflPerSeed, oilCostPerDay, effectiveHarvests };
     }
 
     // Calculate tool cost per day for a resource category
@@ -7549,17 +7559,115 @@
       const toolsPerDay = n * cyclesPerDay; // 1 tool per node per cycle
       const costPerDay = toolSfl * toolsPerDay;
 
-      // Restock amortization
+      // Stock info (restock cost calculated separately in shared restock system)
       const stock = getEffectiveStock(toolName, stockMods);
-      let restockPerDay = 0;
-      if (stock > 0 && exchangeRates.gemsPerSFL > 0) {
-        const daysPerStock = stock / toolsPerDay;
-        const gemCost = RESTOCK_GEM_COSTS.tools;
-        const restockSfl = gemCost / exchangeRates.gemsPerSFL;
-        restockPerDay = daysPerStock > 0 ? restockSfl / daysPerStock : 0;
-      }
+      const daysUntilEmpty = toolsPerDay > 0 ? stock / toolsPerDay : Infinity;
 
-      return { costPerDay, toolSfl, restockPerDay, toolsPerDay, stock, coinDiscount, discountSource, effectiveCoins, baseCoins: tool.coins };
+      return { costPerDay, toolSfl, restockPerDay: 0, toolsPerDay, stock, daysUntilEmpty, coinDiscount, discountSource, effectiveCoins, baseCoins: tool.coins };
+    }
+
+    // ── Shared Restock System ──
+    // Restock buys ALL seeds (15 gems) or ALL tools (10 gems) or both (20 gems) at once.
+    // Cost is based on how often the fastest-depleting "trigger" queue runs out.
+
+    const RESTOCK_QUEUE_DEFS = {
+      // Seed queues (one per seed category — all plots/patches/pots share)
+      crops:      { group: "seeds", label: "Crops", getProduct: sp => sp.crops || getDefaultProduct("crops") },
+      fruits:     { group: "seeds", label: "Fruits", getProduct: sp => sp.fruits || getDefaultProduct("fruits") },
+      greenhouse: { group: "seeds", label: "Greenhouse", getProduct: sp => sp.greenhouse || getDefaultProduct("greenhouse") },
+      // Tool queues (independent — one per tool type)
+      Axe:            { group: "tools", label: "Axe (trees)",     catId: "trees" },
+      Pickaxe:        { group: "tools", label: "Pickaxe (stone)",  catId: "stone" },
+      "Stone Pickaxe": { group: "tools", label: "Stone Pick (iron)", catId: "iron" },
+      "Iron Pickaxe":  { group: "tools", label: "Iron Pick (gold)",  catId: "gold" },
+      "Gold Pickaxe":  { group: "tools", label: "Gold Pick (crimstone)", catId: "crimstone" },
+      "Oil Drill":     { group: "tools", label: "Oil Drill (oil)", catId: "oil" },
+    };
+
+    function getRestockSettings() {
+      try { return JSON.parse(localStorage.getItem("sfl_restock_settings") || "null"); }
+      catch { return null; }
+    }
+    function saveRestockSettings(settings) {
+      localStorage.setItem("sfl_restock_settings", JSON.stringify(settings));
+    }
+    function getDefaultRestockSettings() {
+      return {
+        mode: "off",
+        activeQueues: Object.keys(RESTOCK_QUEUE_DEFS),
+        trigger: "crops",
+      };
+    }
+
+    // Build queue data: stock, usePerDay, daysUntilEmpty for each queue
+    function buildQueueData(savedProducts, capacity, exchangeRates, stockMods, catBoosts, p2pPrices) {
+      const queues = {};
+      for (const [qId, qDef] of Object.entries(RESTOCK_QUEUE_DEFS)) {
+        if (qDef.group === "seeds") {
+          const catId = qId; // crops, fruits, greenhouse
+          const product = qDef.getProduct(savedProducts);
+          const n = getCapacityCount(catId, capacity);
+          const ownedEffects = (catBoosts[catId] || []).filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId));
+          const result = applyBoosts(catId, product, capacity, ownedEffects);
+          const effectiveCycle = result.effectiveCycle || getCycleSec(catId, product);
+          const cyclesPerDay = effectiveCycle > 0 ? 86400 / effectiveCycle : 0;
+          let effectiveHarvests = 1;
+          if (catId === "fruits") {
+            const baseH = FRUIT_HARVEST_COUNT[product] || 4;
+            effectiveHarvests = baseH + (result.extraHarvest || 0);
+          }
+          const seedsPerDay = cyclesPerDay * n / effectiveHarvests;
+          const seedName = product + " Seed";
+          const stock = getEffectiveStock(seedName, stockMods);
+          const daysUntilEmpty = seedsPerDay > 0 ? stock / seedsPerDay : Infinity;
+          queues[qId] = { stock, usePerDay: seedsPerDay, daysUntilEmpty, product, group: "seeds", label: `${qDef.label} (${product})`, capacity: n };
+        } else {
+          // Tool queue
+          const toolName = qId;
+          const catId = qDef.catId;
+          const n = getCapacityCount(catId, capacity);
+          const d = RESOURCE_RESPAWN_DATA[Object.keys(PRODUCT_TO_CATEGORY).find(p => PRODUCT_TO_CATEGORY[p] === catId)];
+          const ownedEffects = (catBoosts[catId] || []).filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId));
+          const result = applyBoosts(catId, catId === "oil" ? "Oil" : Object.keys(PRODUCT_TO_CATEGORY).find(p => PRODUCT_TO_CATEGORY[p] === catId), capacity, ownedEffects);
+          const effectiveCycle = result.effectiveCycle || (d ? d.respawnSec : 0);
+          const toolsPerDay = effectiveCycle > 0 ? (86400 / effectiveCycle) * n : 0;
+          const stock = getEffectiveStock(toolName, stockMods);
+          // Check for free tool sources
+          let freeTool = false;
+          if (catId === "stone" && stockMods.hasQuarry) freeTool = true;
+          if (catId === "trees" && stockMods.hasForeman) freeTool = true;
+          if (catId === "oil" && stockMods.hasInfernalDrill) freeTool = true;
+          const effectiveUse = freeTool ? 0 : toolsPerDay;
+          const daysUntilEmpty = effectiveUse > 0 ? stock / effectiveUse : Infinity;
+          queues[qId] = { stock, usePerDay: effectiveUse, daysUntilEmpty, toolName, group: "tools", label: qDef.label, capacity: n, freeTool };
+        }
+      }
+      return queues;
+    }
+
+    // Calculate shared restock cost
+    function calcRestockCost(restockSettings, queueData, exchangeRates) {
+      if (!restockSettings || restockSettings.mode === "off") {
+        return { restockPerDay: 0, restockFrequencyDays: Infinity, triggerQueue: null, gemCost: 0, restockSfl: 0 };
+      }
+      const mode = restockSettings.mode;
+      const gemCost = mode === "seeds" ? RESTOCK_GEM_COSTS.seeds : mode === "tools" ? RESTOCK_GEM_COSTS.tools : RESTOCK_GEM_COSTS.both;
+      let trigger = restockSettings.trigger;
+      const tq = queueData[trigger];
+      // Validate trigger group matches mode
+      if (tq && mode !== "both") {
+        const expectedGroup = mode; // "seeds" or "tools"
+        if (tq.group !== expectedGroup) {
+          return { restockPerDay: 0, restockFrequencyDays: Infinity, triggerQueue: trigger, gemCost, restockSfl: 0 };
+        }
+      }
+      if (!tq || tq.daysUntilEmpty === Infinity || tq.usePerDay === 0) {
+        return { restockPerDay: 0, restockFrequencyDays: Infinity, triggerQueue: trigger, gemCost, restockSfl: 0 };
+      }
+      const restockFrequencyDays = tq.daysUntilEmpty;
+      const restockSfl = exchangeRates.gemsPerSFL > 0 ? gemCost / exchangeRates.gemsPerSFL : 0;
+      const restockPerDay = restockFrequencyDays > 0 ? restockSfl / restockFrequencyDays : 0;
+      return { restockPerDay, restockFrequencyDays, triggerQueue: trigger, gemCost, restockSfl };
     }
 
     // Lava Pit cost: seasonal material requirements → P2P cost per ignition
@@ -8329,6 +8437,39 @@
       renderPowerContent();
     }
 
+    // Restock UI event handlers (called from inline onclick/onchange)
+    window._setRestockMode = function(mode) {
+      const s = getRestockSettings() || getDefaultRestockSettings();
+      s.mode = mode;
+      // Ensure trigger is valid for the mode
+      if (mode === "seeds" && RESTOCK_QUEUE_DEFS[s.trigger]?.group !== "seeds") {
+        s.trigger = "crops";
+      } else if (mode === "tools" && RESTOCK_QUEUE_DEFS[s.trigger]?.group !== "tools") {
+        s.trigger = "Axe";
+      }
+      saveRestockSettings(s);
+      renderPowerContent();
+    };
+    window._toggleRestockQueue = function(qId, checked) {
+      const s = getRestockSettings() || getDefaultRestockSettings();
+      if (checked && !s.activeQueues.includes(qId)) s.activeQueues.push(qId);
+      if (!checked) s.activeQueues = s.activeQueues.filter(q => q !== qId);
+      // If unchecked queue was the trigger, pick first remaining active queue
+      if (!checked && s.trigger === qId) {
+        s.trigger = s.activeQueues[0] || "crops";
+      }
+      saveRestockSettings(s);
+      renderPowerContent();
+    };
+    window._setRestockTrigger = function(qId) {
+      const s = getRestockSettings() || getDefaultRestockSettings();
+      s.trigger = qId;
+      // Also ensure the trigger queue is active
+      if (!s.activeQueues.includes(qId)) s.activeQueues.push(qId);
+      saveRestockSettings(s);
+      renderPowerContent();
+    };
+
     function renderPowerContent() {
       const { boostItems, catBoosts, capacity, p2pPrices, savedProducts, exchangeRates, stockMods, season } = powerState;
 
@@ -8409,6 +8550,12 @@
         catSummaries[catId] = { baseSfl, boostedSfl, delta: boostedSfl - baseSfl, product, boostedUnitsPerDay, animalBreakdown, costPerDay: totalCatCost, baseCostPerDay: totalCatBaseCost, costSavings: totalCatBaseCost - totalCatCost, costDetails };
       }
 
+      // ── Shared Restock Calculation ──
+      const restockSettings = getRestockSettings() || getDefaultRestockSettings();
+      const queueData = buildQueueData(savedProducts, capacity, exchangeRates, stockMods, catBoosts, p2pPrices);
+      const restockResult = calcRestockCost(restockSettings, queueData, exchangeRates);
+      totalCostSfl += restockResult.restockPerDay;
+
       const totalDelta = totalBoostedSfl - totalBaseSfl;
       const boostPct = totalBaseSfl > 0 ? ((totalDelta / totalBaseSfl) * 100).toFixed(0) : 0;
       const netBoostedSfl = totalBoostedSfl - totalCostSfl;
@@ -8421,7 +8568,7 @@
       content += `<div class="power-summary pixel-font">
         <div class="power-summary-stat"><div class="power-summary-label">OWNED</div><div class="power-summary-value" style="color:var(--green)">${ownedCount} / ${totalCount}</div></div>
         <div class="power-summary-stat"><div class="power-summary-label">GROSS REVENUE</div><div class="power-summary-value" style="color:var(--sunpetal)">${totalBoostedSfl.toFixed(2)} ${sflIcon()}/day</div></div>
-        <div class="power-summary-stat"><div class="power-summary-label">COSTS</div><div class="power-summary-value" style="color:var(--red)">-${totalCostSfl.toFixed(2)} ${sflIcon()}/day</div></div>
+        <div class="power-summary-stat"><div class="power-summary-label">COSTS</div><div class="power-summary-value" style="color:var(--red)">-${totalCostSfl.toFixed(2)} ${sflIcon()}/day</div>${restockResult.restockPerDay > 0 ? `<div style="font-size:0.5rem;color:var(--text-dim)">(incl. restock ${restockResult.restockPerDay.toFixed(4)} — every ${restockResult.restockFrequencyDays.toFixed(1)}d, ${restockResult.gemCost}💎)</div>` : ''}</div>
         <div class="power-summary-stat"><div class="power-summary-label">NET PROFIT</div><div class="power-summary-value" style="color:${netBoostedSfl >= 0 ? 'var(--green)' : 'var(--red)'}">${netBoostedSfl.toFixed(2)} ${sflIcon()}/day</div></div>
         <div class="power-summary-stat"><div class="power-summary-label">BOOST VALUE</div><div class="power-summary-value" style="color:var(--text-secondary)">+${totalDelta.toFixed(2)} ${sflIcon()}/day (+${boostPct}%)</div></div>
       </div>`;
@@ -8589,7 +8736,8 @@
             } else {
               content += `<div>Seed cost/day: <strong style="color:var(--red)">${(cd.costPerDay || 0).toFixed(4)} ${sflIcon()}/day</strong></div>`;
             }
-            if (cd.stock > 0) content += `<div>Stock: ${cd.stock} seeds${stockMods.hasWarehouse ? " (Warehouse ×1.2)" : ""} | Restock: ${(cd.restockPerDay || 0).toFixed(4)} ${sflIcon()}/day</div>`;
+            if (cd.stock > 0) content += `<div>Stock: ${cd.stock} seeds${stockMods.hasWarehouse ? " (Warehouse ×1.2)" : ""} — lasts ${cd.daysUntilEmpty === Infinity ? "∞" : cd.daysUntilEmpty.toFixed(1)} days</div>`;
+            if (cd.effectiveHarvests > 1) content += `<div style="color:var(--green)">🍎 Fruit harvests: ${cd.effectiveHarvests}× per seed (1 seed lasts ${cd.effectiveHarvests} cycles)</div>`;
           } else if (cd.freeTool) {
             // Free tool (Quarry / Foreman Beaver) → no tool cost
             content += `<div style="color:var(--green)">🆓 <strong>${cd.freeToolSource}</strong>: No tool cost! (${(cd.toolsPerDay || 0).toFixed(2)} uses/day for free)</div>`;
@@ -8622,7 +8770,7 @@
               content += `<div>Tool cost: ${cd.toolSfl.toFixed(4)} ${sflIcon()} per use (${cd.baseCoins} coins)</div>`;
               content += `<div>Tool cost/day: ${cd.toolSfl.toFixed(4)} × ${(cd.toolsPerDay || 0).toFixed(2)} = <strong style="color:var(--red)">${(cd.costPerDay || 0).toFixed(4)} ${sflIcon()}/day</strong></div>`;
             }
-            if (cd.stock > 0) content += `<div>Stock: ${cd.stock} tools${stockMods.hasToolshed ? " (Toolshed ×1.5)" : ""} | Restock: ${(cd.restockPerDay || 0).toFixed(4)} ${sflIcon()}/day</div>`;
+            if (cd.stock > 0) content += `<div>Stock: ${cd.stock} tools${stockMods.hasToolshed ? " (Toolshed ×1.5)" : ""} — lasts ${cd.daysUntilEmpty === Infinity ? "∞" : cd.daysUntilEmpty.toFixed(1)} days</div>`;
           }
           const netCat = summary.boostedSfl - summary.costPerDay;
           content += `<div style="margin-top:4px"><strong>Net profit: <span style="color:${netCat >= 0 ? 'var(--green)' : 'var(--red)'}">${netCat.toFixed(4)} ${sflIcon()}/day</span></strong> (revenue ${summary.boostedSfl.toFixed(4)} - costs ${summary.costPerDay.toFixed(4)})</div>`;
@@ -8710,7 +8858,9 @@
             const stock = getEffectiveStock(seedName, stockMods);
             let oilCost = GREENHOUSE_OIL_COSTS[name] || 0;
             if (oilCost > 0 && stockMods.slickSaver) oilCost = Math.max(0, oilCost - 1);
-            seedRows.push({ name, catId, coinCost, sflCost, stock, growSec, oilCost });
+            let harvests = 1;
+            if (catId === "fruits") harvests = FRUIT_HARVEST_COUNT[name] || 4;
+            seedRows.push({ name, catId, coinCost, sflCost, stock, growSec, oilCost, harvests });
           }
         }
 
@@ -8726,6 +8876,7 @@
               <th style="padding:3px 6px;border:1px solid var(--border-dark)">${sflIcon()}</th>
               <th style="padding:3px 6px;border:1px solid var(--border-dark)">Stock</th>
               <th style="padding:3px 6px;border:1px solid var(--border-dark)">Grow</th>
+              <th style="padding:3px 6px;border:1px solid var(--border-dark)">Harvests</th>
             </tr></thead><tbody>`;
         for (const r of seedRows) {
           const oilCell = r.oilCost > 0 ? `${r.oilCost} 🛢️` : `<span style="color:var(--text-dim)">—</span>`;
@@ -8738,6 +8889,7 @@
             <td style="padding:2px 6px;border:1px solid var(--border-dark)">${r.sflCost.toFixed(6)}</td>
             <td style="padding:2px 6px;border:1px solid var(--border-dark)">${r.stock}</td>
             <td style="padding:2px 6px;border:1px solid var(--border-dark)">${fmtSec(r.growSec)}</td>
+            <td style="padding:2px 6px;border:1px solid var(--border-dark)">${r.harvests > 1 ? r.harvests : `<span style="color:var(--text-dim)">—</span>`}</td>
           </tr>`;
         }
         content += `</tbody></table></div>`;
@@ -8838,9 +8990,113 @@
           content += `</tbody></table></div>`;
         }
 
-        // Restock info + skill discounts
+        // ── Restock Settings UI ──
+        content += `<div style="margin-top:12px;margin-bottom:12px">
+          <div class="pixel-font" style="font-size: 0.625rem;color:var(--lily);margin-bottom:6px">⚙️ RESTOCK SETTINGS</div>
+          <div style="margin-bottom:8px;display:flex;gap:4px;flex-wrap:wrap">`;
+        const modes = [
+          { id: "off", label: "Off", cost: "" },
+          { id: "seeds", label: "Seeds", cost: `${RESTOCK_GEM_COSTS.seeds}💎` },
+          { id: "tools", label: "Tools", cost: `${RESTOCK_GEM_COSTS.tools}💎` },
+          { id: "both", label: "Both", cost: `${RESTOCK_GEM_COSTS.both}💎` },
+        ];
+        for (const m of modes) {
+          const active = restockSettings.mode === m.id;
+          content += `<button onclick="window._setRestockMode('${m.id}')" class="pixel-font" style="padding:3px 10px;font-size:0.5rem;border:2px solid ${active ? 'var(--sunpetal)' : 'var(--border-dark)'};background:${active ? 'rgba(255,200,50,0.2)' : 'rgba(92,58,30,0.15)'};color:${active ? 'var(--sunpetal)' : 'var(--text-secondary)'};border-radius:4px;cursor:pointer">${m.label}${m.cost ? ' ' + m.cost : ''}</button>`;
+        }
+        content += `</div>`;
+
+        if (restockSettings.mode !== "off") {
+          content += `<div style="font-size:0.4375rem;color:var(--text-dim);margin-bottom:8px;line-height:1.5;max-width:500px">
+            ℹ️ Restock buys <strong>ALL</strong> seeds (${RESTOCK_GEM_COSTS.seeds}💎) or ALL tools (${RESTOCK_GEM_COSTS.tools}💎) at once — you can't restock individual items.
+            Pick which items you use, and which one triggers the restock.
+            When the trigger runs out → restock everything in that group.
+            Unused queues get restocked for free as a side effect.
+          </div>`;
+
+          // Seed queues table
+          const seedQueueIds = Object.keys(RESTOCK_QUEUE_DEFS).filter(q => RESTOCK_QUEUE_DEFS[q].group === "seeds");
+          const toolQueueIds = Object.keys(RESTOCK_QUEUE_DEFS).filter(q => RESTOCK_QUEUE_DEFS[q].group === "tools");
+          const showSeeds = restockSettings.mode === "seeds" || restockSettings.mode === "both";
+          const showTools = restockSettings.mode === "tools" || restockSettings.mode === "both";
+
+          if (showSeeds) {
+            content += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin-bottom:4px">🌱 SEED QUEUES</div>
+              <table style="width:100%;border-collapse:collapse;font-size:0.5rem;color:var(--text-secondary);margin-bottom:8px">
+                <thead><tr style="background:rgba(92,58,30,0.3);text-align:left">
+                  <th style="padding:2px 4px;border:1px solid var(--border-dark)">Use</th>
+                  <th style="padding:2px 6px;border:1px solid var(--border-dark)">Queue</th>
+                  <th style="padding:2px 6px;border:1px solid var(--border-dark)">Stock</th>
+                  <th style="padding:2px 6px;border:1px solid var(--border-dark)">Use/day</th>
+                  <th style="padding:2px 6px;border:1px solid var(--border-dark)">Days</th>
+                  <th style="padding:2px 4px;border:1px solid var(--border-dark)">Trigger</th>
+                </tr></thead><tbody>`;
+            for (const qId of seedQueueIds) {
+              const q = queueData[qId];
+              const isActive = restockSettings.activeQueues.includes(qId);
+              const isTrigger = restockSettings.trigger === qId;
+              const daysStr = q.daysUntilEmpty === Infinity ? "∞" : q.daysUntilEmpty.toFixed(1);
+              const daysStyle = isTrigger ? "color:var(--sunpetal);font-weight:bold" : "";
+              const dimStyle = !isActive ? "opacity:0.4" : "";
+              content += `<tr style="border-bottom:1px solid rgba(92,58,30,0.15);${dimStyle}">
+                <td style="padding:2px 4px;border:1px solid var(--border-dark);text-align:center"><input type="checkbox" ${isActive ? "checked" : ""} onchange="window._toggleRestockQueue('${qId}', this.checked)"></td>
+                <td style="padding:2px 6px;border:1px solid var(--border-dark)">${escHTML(q.label)}</td>
+                <td style="padding:2px 6px;border:1px solid var(--border-dark)">${q.stock}</td>
+                <td style="padding:2px 6px;border:1px solid var(--border-dark)">${q.usePerDay.toFixed(2)}</td>
+                <td style="padding:2px 6px;border:1px solid var(--border-dark);${daysStyle}">${daysStr}</td>
+                <td style="padding:2px 4px;border:1px solid var(--border-dark);text-align:center"><input type="radio" name="restock-trigger" ${isTrigger ? "checked" : ""} onchange="window._setRestockTrigger('${qId}')"></td>
+              </tr>`;
+            }
+            content += `</tbody></table>`;
+          }
+
+          if (showTools) {
+            content += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin-bottom:4px">⛏️ TOOL QUEUES</div>
+              <table style="width:100%;border-collapse:collapse;font-size:0.5rem;color:var(--text-secondary);margin-bottom:8px">
+                <thead><tr style="background:rgba(92,58,30,0.3);text-align:left">
+                  <th style="padding:2px 4px;border:1px solid var(--border-dark)">Use</th>
+                  <th style="padding:2px 6px;border:1px solid var(--border-dark)">Queue</th>
+                  <th style="padding:2px 6px;border:1px solid var(--border-dark)">Stock</th>
+                  <th style="padding:2px 6px;border:1px solid var(--border-dark)">Use/day</th>
+                  <th style="padding:2px 6px;border:1px solid var(--border-dark)">Days</th>
+                  <th style="padding:2px 4px;border:1px solid var(--border-dark)">Trigger</th>
+                </tr></thead><tbody>`;
+            for (const qId of toolQueueIds) {
+              const q = queueData[qId];
+              const isActive = restockSettings.activeQueues.includes(qId);
+              const isTrigger = restockSettings.trigger === qId;
+              const daysStr = q.daysUntilEmpty === Infinity ? "∞" : q.daysUntilEmpty.toFixed(1);
+              const daysStyle = isTrigger ? "color:var(--sunpetal);font-weight:bold" : "";
+              const dimStyle = !isActive ? "opacity:0.4" : "";
+              const freeNote = q.freeTool ? ` <span style="color:var(--green);font-size:0.4375rem">(free)</span>` : "";
+              content += `<tr style="border-bottom:1px solid rgba(92,58,30,0.15);${dimStyle}">
+                <td style="padding:2px 4px;border:1px solid var(--border-dark);text-align:center"><input type="checkbox" ${isActive ? "checked" : ""} onchange="window._toggleRestockQueue('${qId}', this.checked)"></td>
+                <td style="padding:2px 6px;border:1px solid var(--border-dark)">${escHTML(q.label)}${freeNote}</td>
+                <td style="padding:2px 6px;border:1px solid var(--border-dark)">${q.stock}</td>
+                <td style="padding:2px 6px;border:1px solid var(--border-dark)">${q.usePerDay.toFixed(2)}</td>
+                <td style="padding:2px 6px;border:1px solid var(--border-dark);${daysStyle}">${daysStr}</td>
+                <td style="padding:2px 4px;border:1px solid var(--border-dark);text-align:center"><input type="radio" name="restock-trigger" ${isTrigger ? "checked" : ""} onchange="window._setRestockTrigger('${qId}')"></td>
+              </tr>`;
+            }
+            content += `</tbody></table>`;
+          }
+
+          // Restock summary line
+          if (restockResult.restockPerDay > 0) {
+            content += `<div class="pixel-font" style="font-size:0.5rem;color:var(--sunpetal);margin-bottom:4px">
+              Restock every <strong>${restockResult.restockFrequencyDays.toFixed(1)} days</strong> (${escHTML(restockResult.triggerQueue)} trigger) → <strong>${restockResult.restockPerDay.toFixed(4)} ${sflIcon()}/day</strong> (${restockResult.gemCost}💎 = ${restockResult.restockSfl.toFixed(4)} ${sflIcon()})
+            </div>`;
+          } else {
+            content += `<div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin-bottom:4px">
+              No restock cost — trigger queue has infinite duration or no consumption.
+            </div>`;
+          }
+        }
+
+        content += `</div>`;
+
+        // Skill discounts + stock modifiers info
         content += `<div class="pixel-font" style="font-size: 0.5rem;color:var(--text-dim);line-height:1.6">
-          Restock: ${RESTOCK_GEM_COSTS.seeds} gems (seeds) | ${RESTOCK_GEM_COSTS.tools} gems (tools) | ${RESTOCK_GEM_COSTS.both} gems (both)<br>
           ${stockMods.hasWarehouse ? "✅ Warehouse (+20% seed stock)" : "❌ No Warehouse"} ·
           ${stockMods.hasToolshed ? "✅ Toolshed (+50% tool stock)" : "❌ No Toolshed"} ·
           ${stockMods.moreAxes ? "✅ More Axes" : ""} ${stockMods.morePicks ? "✅ More Picks" : ""}<br>
