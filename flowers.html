@@ -1300,7 +1300,7 @@
     .power-cat-count { font-size: 0.5625rem; color: var(--text-dim); }
     .power-cat-sfl { margin-left: auto; font-weight: bold; }
     .power-toggle-arrow { font-size: 0.5625rem; color: var(--text-dim); margin-left: 4px; }
-    .power-cat-body { }
+    .power-cat-body { display: none; }
     .power-product-select {
       font-family: 'Press Start 2P', cursive;
       font-size: 0.4375rem;
@@ -7965,7 +7965,7 @@
 
         const catNet = summary.boostedSfl - (summary.costPerDay || 0);
         content += `<span class="power-cat-sfl">${summary.costPerDay > 0 ? `<span style="color:var(--text-dim);font-size: 0.4375rem">-${summary.costPerDay.toFixed(2)}</span> ` : ""}<span style="color:${catNet >= 0 ? 'var(--green)' : 'var(--red)'};font-size: 0.5rem">${catNet >= 0 ? "+" : ""}${catNet.toFixed(2)}/day</span></span>
-          <span class="power-toggle-arrow">▼</span>
+          <span class="power-toggle-arrow">▶</span>
         </div>`;
 
         content += `<div class="power-cat-body">`;
@@ -8043,7 +8043,7 @@
         content += `<div class="power-cat-header pixel-font" onclick="togglePowerCategory('${catId}')">
           <span>${catDef.emoji} ${catDef.label}</span>
           <span class="power-cat-count">${owned.length}/${items.length} owned</span>
-          <span class="power-toggle-arrow">▼</span>
+          <span class="power-toggle-arrow">▶</span>
         </div>`;
         content += `<div class="power-cat-body">`;
 
