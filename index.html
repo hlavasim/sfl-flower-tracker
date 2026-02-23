@@ -1941,6 +1941,77 @@
     function isAnimalCat(catId) { return catId in ANIMAL_CAT_MAP; }
     function getAnimalData(catId) { return ANIMAL_CYCLE_DATA[ANIMAL_CAT_MAP[catId]]; }
 
+    // ── Animal Level System ──
+    // Cumulative XP thresholds per level (index = level, value = min XP needed)
+    const ANIMAL_LEVELS = {
+      Chicken: [0,60,120,240,360,480,660,840,1020,1200,1440,1680,1920,2160,2400,2720],
+      Cow:     [0,180,360,720,1080,1440,1980,2520,3060,3600,4320,5040,5760,6480,7200,8160],
+      Sheep:   [0,120,240,480,720,960,1320,1680,2040,2400,2880,3360,3840,4320,4800,5440],
+    };
+    // Production per level: [primaryQty, secondaryQty] — products from ANIMAL_CYCLE_DATA
+    const ANIMAL_RESOURCE_DROP = {
+      Chicken: [[0,0],[1,0],[1,0],[1,1],[2,1],[2,1],[2,1],[2,1],[3,1],[3,2],[3,2],[3,2],[3,2],[4,2],[4,2],[5,3]],
+      Cow:     [[0,0],[1,1],[1,1],[1,1],[2,1],[2,1],[2,2],[2,2],[3,2],[3,2],[3,3],[3,3],[3,3],[3,3],[3,3],[4,4]],
+      Sheep:   [[0,0],[1,1],[1,1],[1,1],[2,1],[2,1],[2,2],[2,2],[3,2],[3,2],[3,3],[3,3],[3,3],[3,3],[3,3],[4,4]],
+    };
+    // Feed recipes: ingredients per 1 unit
+    const FEED_RECIPES = {
+      "Kernel Blend": { Corn: 1 },
+      "Hay":          { Wheat: 1 },
+      "NutriBarley":  { Barley: 1 },
+      "Mixed Grain":  { Wheat: 1, Corn: 1, Barley: 1 },
+    };
+    // Feed items consumed per animal per feeding
+    const FEED_QTY = { Chicken: 1, Cow: 5, Sheep: 3 };
+    // XP per food item by level range (same for all animal types)
+    const FEED_XP_TABLE = [
+      { min: 0,  max: 2,  xp: { "Kernel Blend": 60, "Hay": 10, "NutriBarley": 20, "Mixed Grain": 30 }},
+      { min: 3,  max: 5,  xp: { "Kernel Blend": 10, "Hay": 60, "NutriBarley": 20, "Mixed Grain": 30 }},
+      { min: 6,  max: 9,  xp: { "Kernel Blend": 10, "Hay": 20, "NutriBarley": 60, "Mixed Grain": 30 }},
+      { min: 10, max: 15, xp: { "Kernel Blend": 10, "Hay": 20, "NutriBarley": 30, "Mixed Grain": 80 }},
+    ];
+    // Golden animals: collectible → free feeding for that animal type
+    const GOLDEN_ANIMALS = { "Gold Egg": "Chicken", "Golden Cow": "Cow", "Golden Sheep": "Sheep" };
+    // Skill feed effects: skill name → per-cat feed multiplier (negative = reduction, positive = increase)
+    const SKILL_FEED_EFFECTS = {
+      "Efficient Feeding":    { chickens: -0.05, cows: -0.05, sheep: -0.05 },
+      "Clucky Grazing":       { chickens: -0.25, cows: 0.50, sheep: 0.50 },
+      "Sheepwise Diet":       { chickens: 0.50, cows: 0.50, sheep: -0.25 },
+      "Cow-Smart Nutrition":  { chickens: 0.50, cows: -0.25, sheep: 0.50 },
+      "Chonky Feed":          { chickens: 0.50, cows: 0.50, sheep: 0.50 },
+    };
+
+    // Get animal level from XP
+    function getAnimalLevel(animalType, experience) {
+      const thresholds = ANIMAL_LEVELS[animalType];
+      if (!thresholds) return 0;
+      for (let i = thresholds.length - 1; i >= 0; i--) {
+        if (experience >= thresholds[i]) return i;
+      }
+      return 0;
+    }
+    // Get drops per cycle for a single animal at a given level
+    function getAnimalDropsPerCycle(animalType, level) {
+      const drops = ANIMAL_RESOURCE_DROP[animalType];
+      const data = ANIMAL_CYCLE_DATA[animalType];
+      if (!drops || !data) return {};
+      const row = drops[Math.min(level, 15)] || [0, 0];
+      const result = {};
+      data.products.forEach((prod, i) => { result[prod] = row[i] || 0; });
+      return result;
+    }
+    // Get level distribution summary from an animal detail list
+    function getAnimalLevelDistribution(animals) {
+      if (!animals || animals.length === 0) return { levels: {}, avgLevel: 0 };
+      const levels = {};
+      let sum = 0;
+      for (const a of animals) {
+        levels[a.level] = (levels[a.level] || 0) + 1;
+        sum += a.level;
+      }
+      return { levels, avgLevel: sum / animals.length };
+    }
+
     const RESOURCE_RESPAWN_DATA = {
       "Stone":     { respawnSec: 14400, yield: 2, farmKey: "stones" },
       "Iron":      { respawnSec: 28800, yield: 1, farmKey: "iron" },
@@ -2745,9 +2816,26 @@
             return { type: "cost_reduction", value: val, cat: "stone", tool: "Pickaxe", alsoApply: ["iron", "gold", "crimstone"] };
           }
         }},
-      // ── Feed reduction ──
-      { rx: /(\d+\.?\d*)%\s+(?:less\s+)?feed(?:ing)?\s+(?:cost\s+)?(?:for\s+|to\s+)?(\w+)/i,
-        fn: m => ({ type: "qualitative", cat: "other", raw: m[0] }) },
+      // ── Feed reduction (collectibles: Fat Chicken, Cluckulator, Infernal Bullwhip, etc.) ──
+      // Multi-animal: "-50% feed for Sheep and Cow"
+      { rx: /(\d+\.?\d*)%\s+(?:less\s+)?feed(?:ing)?\s+(?:cost\s+)?(?:for\s+|to\s+feed\s+(?:a\s+)?)?(\w+)\s+and\s+(\w+)/i,
+        fn: m => {
+          const pct = Math.abs(parseFloat(m[1]));
+          const catMap = { chicken: "chickens", chickens: "chickens", cow: "cows", cows: "cows", sheep: "sheep" };
+          const cat1 = catMap[m[2].toLowerCase()], cat2 = catMap[m[3].toLowerCase()];
+          if (cat1) return { type: "feed_reduction", value: -pct / 100, cat: cat1, alsoApply: cat2 ? [cat2] : [] };
+          return { type: "qualitative", cat: "other", raw: m[0] };
+        }},
+      // Single animal: "-10% feed for Chicken"
+      { rx: /(\d+\.?\d*)%\s+(?:less\s+)?feed(?:ing)?\s+(?:cost\s+)?(?:for\s+|to\s+feed\s+(?:a\s+)?)?(\w+)/i,
+        fn: m => {
+          const pct = Math.abs(parseFloat(m[1]));
+          const target = m[2].toLowerCase();
+          const catMap = { chicken: "chickens", chickens: "chickens", cow: "cows", cows: "cows", sheep: "sheep" };
+          const cat = catMap[target];
+          if (!cat) return { type: "qualitative", cat: "other", raw: m[0] };
+          return { type: "feed_reduction", value: -pct / 100, cat };
+        }},
       // ── Mushroom-specific ──
       { rx: /^([+-]?\d+\.?\d*)\s+Wild\s+Mushroom/i,
         fn: m => ({ type: "yield_flat", value: parseFloat(m[1]), cat: "mushrooms", product: "Wild Mushroom" }) },
@@ -6994,54 +7082,81 @@
     }
 
     function detectFarmCapacity(farm) {
-      // Count animals from henHouse and barn structures
-      let chickens = 0, cows = 0, sheep = 0;
+      // Collect per-animal details (id, type, experience, level)
+      const chickenList = [], cowList = [], sheepList = [];
+
+      // Helper to process animal entries
+      function processAnimal(id, a) {
+        const t = (a.type || "").toLowerCase();
+        const xp = parseFloat(a.experience) || 0;
+        if (t === "chicken" || t === "") {
+          // henHouse animals don't always have type, default to chicken
+        }
+        if (t === "cow") {
+          cowList.push({ id, level: getAnimalLevel("Cow", xp), experience: xp });
+        } else if (t === "sheep") {
+          sheepList.push({ id, level: getAnimalLevel("Sheep", xp), experience: xp });
+        }
+      }
 
       // Hen House: farm.henHouse.animals OR farm.buildings["Hen House"][].animals
       const henAnimals = farm.henHouse?.animals;
       if (henAnimals && typeof henAnimals === "object") {
-        chickens = Object.keys(henAnimals).length;
+        for (const [id, a] of Object.entries(henAnimals)) {
+          const xp = parseFloat(a.experience) || 0;
+          chickenList.push({ id, level: getAnimalLevel("Chicken", xp), experience: xp });
+        }
       }
-      if (chickens === 0) {
+      if (chickenList.length === 0) {
         const henBuildings = farm.buildings?.["Hen House"] || [];
         for (const b of henBuildings) {
-          chickens += Object.keys(b.animals || {}).length;
+          for (const [id, a] of Object.entries(b.animals || {})) {
+            const xp = parseFloat(a.experience) || 0;
+            chickenList.push({ id, level: getAnimalLevel("Chicken", xp), experience: xp });
+          }
         }
       }
 
       // Barn: farm.barn.animals OR farm.buildings["Barn"][].animals
       const barnAnimals = farm.barn?.animals;
       if (barnAnimals && typeof barnAnimals === "object") {
-        for (const a of Object.values(barnAnimals)) {
-          const t = (a.type || "").toLowerCase();
-          if (t === "cow") cows++;
-          else if (t === "sheep") sheep++;
-          else cows++; // default to cow if type unknown
+        for (const [id, a] of Object.entries(barnAnimals)) {
+          processAnimal(id, a);
         }
       }
-      if (cows === 0 && sheep === 0) {
+      if (cowList.length === 0 && sheepList.length === 0) {
         const barnBuildings = farm.buildings?.["Barn"] || [];
         for (const b of barnBuildings) {
-          for (const a of Object.values(b.animals || {})) {
-            const t = (a.type || "").toLowerCase();
-            if (t === "cow") cows++;
-            else if (t === "sheep") sheep++;
-            else cows++;
+          for (const [id, a] of Object.entries(b.animals || {})) {
+            processAnimal(id, a);
           }
         }
       }
 
-      // Debug log for animal detection
-      console.log("[Power] Animal detection:", { chickens, cows, sheep,
+      const chickens = chickenList.length, cows = cowList.length, sheep = sheepList.length;
+
+      // Detect golden animals (free feeding)
+      const inventory = farm.inventory || {};
+      const goldenAnimals = {};
+      for (const [itemName, animalType] of Object.entries(GOLDEN_ANIMALS)) {
+        if (findCollectible(farm, itemName).length > 0 || (parseFloat(inventory[itemName]) || 0) > 0) {
+          goldenAnimals[animalType] = true;
+        }
+      }
+
+      console.log("[Power] Animal detection:", { chickens, cows, sheep, goldenAnimals,
         henHouse: !!farm.henHouse, barn: !!farm.barn,
-        henBuildings: (farm.buildings?.["Hen House"] || []).length,
-        barnBuildings: (farm.buildings?.["Barn"] || []).length });
+        chickenLevels: chickenList.map(a => a.level),
+        cowLevels: cowList.map(a => a.level),
+        sheepLevels: sheepList.map(a => a.level) });
 
       return {
         crops: Object.keys(farm.crops || {}).length,
         fruitPatches: Object.keys(farm.fruitPatches || {}).length,
         greenhouse: Object.keys(farm.greenhouse?.pots || {}).length,
         chickens, cows, sheep,
+        animalDetails: { chickens: chickenList, cows: cowList, sheep: sheepList },
+        goldenAnimals,
         bees: Object.keys(farm.beehives || {}).length,
         flowers: Object.keys(farm.flowers?.flowerBeds || {}).length,
         stones: sumMergedNodes(farm.stones),
@@ -7249,6 +7364,7 @@
           case "cost_reduction":
           case "fruit_free_chop":
           case "fruit_stump_wood":
+          case "feed_reduction":
             // Handled in cost/value calculations, not production yield
             break;
         }
@@ -7427,7 +7543,8 @@
       const oilRigActive = skills["Oil Rig"] !== undefined;
       const hasInfernalDrill = isWearableEquipped(farm, "Infernal Drill");
       const slickSaver = skills["Slick Saver"] !== undefined; // -1 Oil for greenhouse seeds
-      return { hasWarehouse, hasToolshed, moreAxes, morePicks, fellersDiscount, frugalMiner, hasQuarry, hasForeman, oilRigActive, hasInfernalDrill, slickSaver };
+      const hasKaleMix = skills["Kale Mix"] !== undefined; // Mixed Grain uses 3 Kale instead
+      return { hasWarehouse, hasToolshed, moreAxes, morePicks, fellersDiscount, frugalMiner, hasQuarry, hasForeman, oilRigActive, hasInfernalDrill, slickSaver, hasKaleMix };
     }
 
     // Get effective stock for a seed/tool
@@ -7566,6 +7683,128 @@
       return { costPerDay, toolSfl, restockPerDay: 0, toolsPerDay, stock, daysUntilEmpty, coinDiscount, discountSource, effectiveCoins, baseCoins: tool.coins };
     }
 
+    // ── Animal Feed Cost Functions ──
+
+    // Get preferred feed (highest XP) for a given level. Returns null at max level (use cheapest).
+    function getPreferredFeed(level) {
+      if (level >= 15) return null;
+      for (const row of FEED_XP_TABLE) {
+        if (level >= row.min && level <= row.max) {
+          let best = null, bestXP = 0;
+          for (const [food, xp] of Object.entries(row.xp)) {
+            if (xp > bestXP) { bestXP = xp; best = food; }
+          }
+          return best;
+        }
+      }
+      return "Mixed Grain";
+    }
+
+    // Get cheapest feed by P2P ingredient cost
+    function getCheapestFeed(p2pPrices, stockMods) {
+      let cheapest = null, cheapestCost = Infinity;
+      for (const [food, ingredients] of Object.entries(FEED_RECIPES)) {
+        let cost = 0;
+        if (food === "Mixed Grain" && stockMods?.hasKaleMix) {
+          cost = (p2pPrices["Kale"] || 0) * 3;
+        } else {
+          for (const [item, qty] of Object.entries(ingredients)) {
+            cost += (p2pPrices[item] || 0) * qty;
+          }
+        }
+        if (cost < cheapestCost) { cheapestCost = cost; cheapest = food; }
+      }
+      return { food: cheapest, costPerUnit: cheapestCost };
+    }
+
+    // Get cost per 1 unit of a specific feed
+    function getFeedCostPerUnit(foodName, p2pPrices, stockMods) {
+      if (foodName === "Mixed Grain" && stockMods?.hasKaleMix) {
+        return (p2pPrices["Kale"] || 0) * 3;
+      }
+      const recipe = FEED_RECIPES[foodName];
+      if (!recipe) return 0;
+      let cost = 0;
+      for (const [item, qty] of Object.entries(recipe)) {
+        cost += (p2pPrices[item] || 0) * qty;
+      }
+      return cost;
+    }
+
+    // Compute feed reduction multiplier from boost effects for a specific animal category
+    function getFeedReductionMult(catId, boostEffects) {
+      let mult = 1;
+      for (const eff of boostEffects) {
+        if (eff.type === "feed_reduction" && eff.cat === catId) {
+          mult *= (1 + eff.value); // value is negative for reductions (e.g. -0.25)
+        }
+      }
+      return Math.max(0, mult);
+    }
+
+    // Main animal feed cost function (analogous to calcSeedCostPerDay / calcToolCostPerDay)
+    function calcAnimalFeedCost(catId, capacity, p2pPrices, boostEffects, stockMods) {
+      const animalType = ANIMAL_CAT_MAP[catId];
+      if (!animalType) return { costPerDay: 0 };
+
+      const animals = capacity.animalDetails?.[catId] || [];
+      if (animals.length === 0) return { costPerDay: 0, animalCount: 0 };
+
+      // Check golden animal → free feeding
+      if (capacity.goldenAnimals?.[animalType]) {
+        const goldenItem = Object.keys(GOLDEN_ANIMALS).find(k => GOLDEN_ANIMALS[k] === animalType);
+        return { costPerDay: 0, isGolden: true, goldenItem, animalCount: animals.length };
+      }
+
+      // Speed multiplier affects feeding frequency
+      let speedMult = 1;
+      for (const eff of boostEffects) {
+        if (eff.cat !== catId) continue;
+        if (eff.type === "speed_pct") speedMult *= (1 + eff.value / 100);
+        else if (eff.type === "speed_mult") speedMult *= eff.value;
+      }
+      const cycleSec = ANIMAL_CYCLE_DATA[animalType].cycleSec * speedMult;
+      const cyclesPerDay = cycleSec > 0 ? 86400 / cycleSec : 0;
+
+      // Feed reduction from boosts
+      const feedReductionMult = getFeedReductionMult(catId, boostEffects);
+      const baseFeedQty = FEED_QTY[animalType] || 1;
+      const effectiveFeedQty = baseFeedQty * feedReductionMult;
+
+      const cheapest = getCheapestFeed(p2pPrices, stockMods);
+      const levelDist = getAnimalLevelDistribution(animals);
+
+      // Compute per-animal feed cost
+      let totalCostPerCycle = 0;
+      const feedBreakdown = {}; // { foodName: { count, costPerUnit, totalUnits } }
+
+      for (const animal of animals) {
+        const preferred = getPreferredFeed(animal.level);
+        const foodName = preferred || cheapest.food;
+        const costPerUnit = getFeedCostPerUnit(foodName, p2pPrices, stockMods);
+        const costPerAnimal = effectiveFeedQty * costPerUnit;
+        totalCostPerCycle += costPerAnimal;
+
+        if (!feedBreakdown[foodName]) feedBreakdown[foodName] = { count: 0, costPerUnit, totalUnits: 0 };
+        feedBreakdown[foodName].count++;
+        feedBreakdown[foodName].totalUnits += effectiveFeedQty;
+      }
+
+      const costPerDay = totalCostPerCycle * cyclesPerDay;
+
+      return {
+        costPerDay,
+        feedBreakdown,
+        feedReductionMult,
+        animalCount: animals.length,
+        cyclesPerDay,
+        baseFeedQty,
+        effectiveFeedQty,
+        levelDist,
+        speedMult,
+      };
+    }
+
     // ── Shared Restock System ──
     // Restock buys ALL seeds (15 gems) or ALL tools (10 gems) or both (20 gems) at once.
     // Cost is based on how often the fastest-depleting "trigger" queue runs out.
@@ -7698,8 +7937,51 @@
 
     // Compute total SFL/day across all products for an animal category
     function getAnimalCatSfl(catId, capacity, boostEffects, p2pPrices) {
+      const animalType = ANIMAL_CAT_MAP[catId];
       const animal = getAnimalData(catId);
       if (!animal) return { totalSfl: 0, breakdown: [] };
+
+      const animals = capacity.animalDetails?.[catId];
+      // If we have per-animal level data, use level-based drops
+      if (animals && animals.length > 0) {
+        // Extract speed multiplier from boosts (same for all products)
+        let speedMult = 1;
+        for (const eff of boostEffects) {
+          if (eff.cat !== catId) continue;
+          if (eff.type === "speed_pct") speedMult *= (1 + eff.value / 100);
+          else if (eff.type === "speed_mult") speedMult *= eff.value;
+        }
+        const effectiveCycle = animal.cycleSec * speedMult;
+        const cyclesPerDay = effectiveCycle > 0 ? 86400 / effectiveCycle : 0;
+
+        let totalSfl = 0;
+        const breakdown = [];
+        for (const prod of animal.products) {
+          // Collect yield modifiers for this specific product
+          let yieldMult = 1, yieldFlat = 0;
+          for (const eff of boostEffects) {
+            if (eff.cat !== catId) continue;
+            if (eff.product && PRODUCT_TO_CATEGORY[eff.product] === catId && eff.product !== prod) continue;
+            if (eff.type === "yield_pct") yieldMult *= (1 + eff.value / 100);
+            else if (eff.type === "yield_flat") yieldFlat += eff.value;
+            else if (eff.type === "chance") yieldFlat += (eff.pct / 100) * eff.extra;
+          }
+          // Sum production across all animals at their individual levels
+          let totalUnits = 0;
+          for (const a of animals) {
+            const drops = getAnimalDropsPerCycle(animalType, a.level);
+            const baseDrop = drops[prod] || 0;
+            totalUnits += (baseDrop * yieldMult + yieldFlat) * cyclesPerDay;
+          }
+          const price = p2pPrices[prod] || 0;
+          const sfl = totalUnits * price;
+          totalSfl += sfl;
+          breakdown.push({ product: prod, unitsPerDay: totalUnits, sfl, speedMult, yieldMult, yieldFlat, effectiveCycle });
+        }
+        return { totalSfl, breakdown };
+      }
+
+      // Fallback: no per-animal data — use old flat yield=1 path
       let totalSfl = 0;
       const breakdown = [];
       for (const prod of animal.products) {
@@ -7737,19 +8019,39 @@
 
       let h = `<div style="padding:8px 12px;font-size: 0.5625rem;color:var(--text-secondary);line-height:1.8;border-bottom:1px solid var(--border-dark)">`;
 
-      // Animal categories: show per-product breakdown
+      // Animal categories: show per-product breakdown with level-based drops
       if (isAnimalCat(catId)) {
+        const animalType = ANIMAL_CAT_MAP[catId];
         const animal = getAnimalData(catId);
         const baseCycleSec = animal.cycleSec;
         const cyclesPerDay = 86400 / baseCycleSec;
+        const animals = capacity.animalDetails?.[catId] || [];
+        const levelDist = getAnimalLevelDistribution(animals);
+
+        // Level distribution
+        if (animals.length > 0) {
+          const levelParts = Object.entries(levelDist.levels).sort((a,b) => parseInt(a[0]) - parseInt(b[0])).map(([lvl, cnt]) => `L${lvl}: ${cnt}`);
+          h += `<div style="color:var(--text-dim);margin-bottom:4px">📊 ${n} ${unitLabel} — ${levelParts.join(" · ")} (avg L${levelDist.avgLevel.toFixed(1)})</div>`;
+          // Show drops by level group
+          const levelGroups = {};
+          for (const a of animals) {
+            if (!levelGroups[a.level]) levelGroups[a.level] = 0;
+            levelGroups[a.level]++;
+          }
+          for (const [lvl, cnt] of Object.entries(levelGroups).sort((a,b) => parseInt(a[0]) - parseInt(b[0]))) {
+            const drops = getAnimalDropsPerCycle(animalType, parseInt(lvl));
+            const dropStr = animal.products.map(p => `${drops[p] || 0} ${p}`).join(" + ");
+            h += `<div style="padding-left:8px;color:var(--text-dim)">${cnt}× L${lvl}: ${dropStr} per cycle</div>`;
+          }
+        }
 
         // BASE
-        h += `<div style="color:var(--lily);font-size: 0.625rem;margin-bottom:2px"><strong>📊 BASE PRODUCTION</strong></div>`;
+        h += `<div style="color:var(--lily);font-size: 0.625rem;margin-top:4px;margin-bottom:2px"><strong>📊 BASE PRODUCTION</strong></div>`;
         h += `<div>${n} ${unitLabel} × ${fmtSec(baseCycleSec)} cycle = <strong>${cyclesPerDay.toFixed(2)} cycles/day</strong></div>`;
         const baseInfo = getAnimalCatSfl(catId, capacity, [], p2pPrices);
         for (const bp of baseInfo.breakdown) {
           const price = p2pPrices[bp.product] || 0;
-          h += `<div style="padding-left:8px">${bp.product}: ${n} × ${cyclesPerDay.toFixed(2)} × 1 = ${bp.unitsPerDay.toFixed(2)}/day × ${price.toFixed(6)} = <strong>${bp.sfl.toFixed(4)} ${sflIcon()}/day</strong></div>`;
+          h += `<div style="padding-left:8px">${bp.product}: ${bp.unitsPerDay.toFixed(2)}/day × ${price.toFixed(6)} = <strong>${bp.sfl.toFixed(4)} ${sflIcon()}/day</strong></div>`;
         }
         h += `<div>TOTAL: <strong style="color:var(--sunpetal)">${baseInfo.totalSfl.toFixed(4)} ${sflIcon()}/day</strong></div>`;
 
@@ -7761,8 +8063,7 @@
           for (const bp of boostedInfo.breakdown) {
             const price = p2pPrices[bp.product] || 0;
             const bCyclesPerDay = bp.effectiveCycle > 0 ? 86400 / bp.effectiveCycle : 0;
-            const bOutput = 1 * bp.yieldMult + bp.yieldFlat;
-            h += `<div style="padding-left:8px">${bp.product}: ×${bp.speedMult.toFixed(3)} → ${fmtSec(bp.effectiveCycle)} (${bCyclesPerDay.toFixed(2)}/day) | yield ×${bp.yieldMult.toFixed(3)}${bp.yieldFlat ? ` +${bp.yieldFlat.toFixed(2)}` : ""} → ${bp.unitsPerDay.toFixed(2)}/day × ${price.toFixed(6)} = <strong>${bp.sfl.toFixed(4)} ${sflIcon()}/day</strong></div>`;
+            h += `<div style="padding-left:8px">${bp.product}: ×${bp.speedMult.toFixed(3)} speed → ${fmtSec(bp.effectiveCycle)} (${bCyclesPerDay.toFixed(2)}/day) | yield ×${bp.yieldMult.toFixed(3)}${bp.yieldFlat ? ` +${bp.yieldFlat.toFixed(2)}` : ""} → ${bp.unitsPerDay.toFixed(2)}/day × ${price.toFixed(6)} = <strong>${bp.sfl.toFixed(4)} ${sflIcon()}/day</strong></div>`;
           }
           h += `<div>TOTAL: <strong style="color:var(--green)">${boostedInfo.totalSfl.toFixed(4)} ${sflIcon()}/day</strong>`;
           h += ` <span style="color:var(--sunpetal)">(+${delta.toFixed(4)} | +${baseInfo.totalSfl > 0 ? ((delta / baseInfo.totalSfl) * 100).toFixed(0) : "∞"}%)</span></div>`;
@@ -8366,6 +8667,12 @@
         const has = skills[skillName] !== undefined;
         const boostText = skill.buff + (skill.debuff ? "\n" + skill.debuff : "");
         const effects = parseBoostEffects(boostText);
+        // Inject feed reduction effects for named animal skills
+        if (SKILL_FEED_EFFECTS[skillName]) {
+          for (const [cat, value] of Object.entries(SKILL_FEED_EFFECTS[skillName])) {
+            effects.push({ type: "feed_reduction", value, cat });
+          }
+        }
         const categories = classifyToCategories(effects);
         // Add tree-based categories ONLY for skills the parser couldn't classify (ended up as "other" only)
         const hasOnlyOther = categories.length === 1 && categories[0] === "other";
@@ -8540,6 +8847,12 @@
           costDetails = c;
           costDetails.baseCostPerDay = cBase.costPerDay;
           costDetails.baseToolSfl = cBase.toolSfl;
+        } else if (isAnimalCat(catId)) {
+          const c = calcAnimalFeedCost(catId, capacity, p2pPrices, ownedEffects, stockMods);
+          const cBase = calcAnimalFeedCost(catId, capacity, p2pPrices, [], stockMods);
+          costPerDay = c.costPerDay;
+          baseCostPerDay = cBase.costPerDay;
+          costDetails = c;
         }
         const totalCatCost = costPerDay + restockPerDay;
         const totalCatBaseCost = baseCostPerDay + restockPerDay;
@@ -8718,7 +9031,7 @@
         content += buildProductionBreakdown(catId, product, capacity, p2pPrices, items);
 
         // Cost breakdown
-        if (summary.costDetails && (summary.costPerDay > 0 || summary.costDetails.freeTool || summary.costSavings > 0)) {
+        if (summary.costDetails && (summary.costPerDay > 0 || summary.costDetails.freeTool || summary.costDetails.isGolden || summary.costSavings > 0)) {
           const cd = summary.costDetails;
           content += `<div style="padding:6px 12px;font-size: 0.5625rem;color:var(--text-secondary);line-height:1.8;border-bottom:1px solid var(--border-dark)">`;
           content += `<div style="color:var(--red);font-size: 0.625rem;margin-bottom:2px"><strong>💰 PRODUCTION COSTS</strong></div>`;
@@ -8771,6 +9084,28 @@
               content += `<div>Tool cost/day: ${cd.toolSfl.toFixed(4)} × ${(cd.toolsPerDay || 0).toFixed(2)} = <strong style="color:var(--red)">${(cd.costPerDay || 0).toFixed(4)} ${sflIcon()}/day</strong></div>`;
             }
             if (cd.stock > 0) content += `<div>Stock: ${cd.stock} tools${stockMods.hasToolshed ? " (Toolshed ×1.5)" : ""} — lasts ${cd.daysUntilEmpty === Infinity ? "∞" : cd.daysUntilEmpty.toFixed(1)} days</div>`;
+          } else if (cd.feedBreakdown !== undefined || cd.isGolden) {
+            // Animal feed cost display
+            if (cd.isGolden) {
+              content += `<div style="color:var(--green)">🆓 <strong>${escHTML(cd.goldenItem || "Golden Animal")}</strong>: Animals feed for free!</div>`;
+            } else {
+              // Level distribution
+              if (cd.levelDist) {
+                const dist = cd.levelDist;
+                const levelParts = Object.entries(dist.levels).sort((a,b) => parseInt(a[0]) - parseInt(b[0])).map(([lvl, cnt]) => `L${lvl}: ${cnt}`);
+                content += `<div>Levels: ${levelParts.join(" · ")} (avg L${dist.avgLevel.toFixed(1)})</div>`;
+              }
+              // Feed breakdown
+              const feedItems = Object.entries(cd.feedBreakdown || {});
+              for (const [foodName, info] of feedItems) {
+                content += `<div style="padding-left:8px">${info.count}× ${escHTML(foodName)}: ${info.totalUnits.toFixed(1)} units × ${info.costPerUnit.toFixed(6)} ${sflIcon()} = ${(info.totalUnits * info.costPerUnit).toFixed(4)} ${sflIcon()}/cycle</div>`;
+              }
+              if (cd.feedReductionMult !== undefined && cd.feedReductionMult !== 1) {
+                const pct = Math.round((1 - cd.feedReductionMult) * 100);
+                content += `<div style="color:var(--green)">Feed reduction: ×${cd.feedReductionMult.toFixed(2)} (${pct > 0 ? '-' : '+'}${Math.abs(pct)}%)</div>`;
+              }
+              content += `<div>Feed cost/day: <strong style="color:var(--red)">${(cd.costPerDay || 0).toFixed(4)} ${sflIcon()}/day</strong> (${cd.animalCount} animals × ${(cd.cyclesPerDay || 0).toFixed(2)} cycles/day)</div>`;
+            }
           }
           const netCat = summary.boostedSfl - summary.costPerDay;
           content += `<div style="margin-top:4px"><strong>Net profit: <span style="color:${netCat >= 0 ? 'var(--green)' : 'var(--red)'}">${netCat.toFixed(4)} ${sflIcon()}/day</span></strong> (revenue ${summary.boostedSfl.toFixed(4)} - costs ${summary.costPerDay.toFixed(4)})</div>`;
@@ -8985,6 +9320,44 @@
             content += `<tr style="border-bottom:2px solid var(--border-dark);${isCurrent ? 'background:rgba(46,204,113,0.08)' : ''}">
               <td colspan="3" style="padding:2px 6px;border:1px solid var(--border-dark);text-align:right;font-weight:bold">Total per ignition:</td>
               <td style="padding:2px 6px;border:1px solid var(--border-dark);text-align:right;font-weight:bold;color:${isCurrent ? 'var(--green)' : 'var(--text-secondary)'}">${sznTotal.toFixed(2)} ${sflIcon()}</td>
+            </tr>`;
+          }
+          content += `</tbody></table></div>`;
+        }
+
+        // ── Animal Feed Cost Table ──
+        const animalCats = ["chickens", "cows", "sheep"];
+        const animalFeedRows = animalCats.filter(c => (capacity.animalDetails?.[c] || []).length > 0);
+        if (animalFeedRows.length > 0) {
+          content += `<div style="margin-bottom:12px"><div class="pixel-font" style="font-size: 0.5625rem;color:var(--lily);margin-bottom:4px">🐾 ANIMAL FEED COSTS</div>
+            <table style="width:100%;border-collapse:collapse;font-size: 0.5rem;color:var(--text-secondary)">
+              <thead><tr style="background:rgba(92,58,30,0.3);text-align:left">
+                <th style="padding:3px 6px;border:1px solid var(--border-dark)"></th>
+                <th style="padding:3px 6px;border:1px solid var(--border-dark)">Animal</th>
+                <th style="padding:3px 6px;border:1px solid var(--border-dark)">Qty</th>
+                <th style="padding:3px 6px;border:1px solid var(--border-dark)">Avg Lvl</th>
+                <th style="padding:3px 6px;border:1px solid var(--border-dark)">Feed/animal</th>
+                <th style="padding:3px 6px;border:1px solid var(--border-dark)">Cost/feed</th>
+                <th style="padding:3px 6px;border:1px solid var(--border-dark)">${sflIcon()}/day</th>
+              </tr></thead><tbody>`;
+          const animalEmoji = { chickens: "🐔", cows: "🐄", sheep: "🐑" };
+          for (const catId of animalFeedRows) {
+            const animalType = ANIMAL_CAT_MAP[catId];
+            const animals = capacity.animalDetails[catId];
+            const dist = getAnimalLevelDistribution(animals);
+            const ownedEffects = (catBoosts[catId] || []).filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId));
+            const fc = calcAnimalFeedCost(catId, capacity, p2pPrices, ownedEffects, stockMods);
+            const isGolden = fc.isGolden;
+            const feedNames = Object.keys(fc.feedBreakdown || {}).join(", ") || "—";
+            const avgCostPerFeed = fc.feedBreakdown ? Object.values(fc.feedBreakdown).reduce((s, f) => s + f.costPerUnit * f.totalUnits, 0) / Math.max(1, animals.length) : 0;
+            content += `<tr style="border-bottom:1px solid rgba(92,58,30,0.15)">
+              <td style="padding:2px 4px;border:1px solid var(--border-dark);text-align:center">${animalEmoji[catId] || ""}</td>
+              <td style="padding:2px 6px;border:1px solid var(--border-dark)">${escHTML(animalType)}</td>
+              <td style="padding:2px 6px;border:1px solid var(--border-dark)">${animals.length}</td>
+              <td style="padding:2px 6px;border:1px solid var(--border-dark)">L${dist.avgLevel.toFixed(1)}</td>
+              <td style="padding:2px 6px;border:1px solid var(--border-dark)">${isGolden ? `<span style="color:var(--green)">FREE</span>` : `${fc.baseFeedQty || 0}× ${feedNames}`}</td>
+              <td style="padding:2px 6px;border:1px solid var(--border-dark)">${isGolden ? "—" : avgCostPerFeed.toFixed(4)}</td>
+              <td style="padding:2px 6px;border:1px solid var(--border-dark)">${fc.costPerDay.toFixed(4)}</td>
             </tr>`;
           }
           content += `</tbody></table></div>`;
