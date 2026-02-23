@@ -8092,7 +8092,7 @@
             getCount(inventory, name) > 0 || findCollectible(farm, name).length > 0
             || (wardrobe[name] || 0) > 0 || skills[name] !== undefined
           );
-          if (activeSuperseder && b.has) {
+          if (activeSuperseder) {
             b.isDisabled = true;
             b.disabledByName = activeSuperseder;
           }
@@ -8227,7 +8227,7 @@
       for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
         if (!catDef.quantifiable) continue;
         const product = savedProducts[catId] || getDefaultProduct(catId);
-        const missingInCat = catBoosts[catId].filter(b => !b.has && b.floor > 0);
+        const missingInCat = catBoosts[catId].filter(b => !b.has && !b.isDisabled && b.floor > 0);
         for (const b of missingInCat) {
           const val = calcBoostValue(b, catId, product, capacity, p2pPrices, catBoosts[catId], false);
           if (val.synergy > 0.0001) {
