@@ -1947,7 +1947,7 @@
       "Gold":      { respawnSec: 43200, yield: 1, farmKey: "gold" },
       "Crimstone": { respawnSec: 64800, yield: 1.4, farmKey: "crimstones" }, // native +2 every 5th dig = +0.4 avg
       "Wood":      { respawnSec: 7200,  yield: 3, farmKey: "trees" },
-      "Obsidian":  { respawnSec: 43200, yield: 1, farmKey: "lavaPits" },
+      "Obsidian":  { respawnSec: 259200, yield: 1, farmKey: "lavaPits" }, // 3 days
     };
 
     // ── Lava Pit seasonal requirements (cost per ignition) ──
@@ -2555,6 +2555,14 @@
           const extra = parseFloat(m[3]);
           return { type: "yield_flat", value: flat + (pct / 100) * extra, cat: "fishing", conditional: `+${flat} + ${pct}% ×${extra}` };
         }},
+
+      // ── LAVA PIT SPECIFIC (before generic speed rules) ──
+      // "-50% Lava Pit Time" (Obsidian Necklace, Magma Stone) → speed for obsidian
+      { rx: /([+-]?\d+\.?\d*)%\s+Lava\s+Pit\s+Time/i,
+        fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "obsidian" }) },
+      // "-50% Lava Pit resources" (Lava Swimwear) → cost reduction for obsidian
+      { rx: /([+-]?\d+\.?\d*)%\s+Lava\s+Pit\s+resources?/i,
+        fn: m => ({ type: "lava_cost_reduction", value: Math.abs(parseFloat(m[1])) / 100, cat: "obsidian" }) },
 
       // ── CATEGORY-LEVEL SPEED RULES (before generic product rule) ──
       // Basic/Medium/Advanced Crop growth time: "-10% Advanced Crop Growth Time"
@@ -7483,19 +7491,21 @@
     }
 
     // Lava Pit cost: seasonal material requirements → P2P cost per ignition
-    function calcLavaPitCostPerDay(capacity, p2pPrices, season) {
+    function calcLavaPitCostPerDay(capacity, p2pPrices, season, costMult) {
       const n = capacity.lavaPits || 0;
       if (n === 0 || !season) return { costPerDay: 0, costPerIgnition: 0, requirements: [], season };
       const reqs = LAVA_PIT_REQUIREMENTS[season];
       if (!reqs) return { costPerDay: 0, costPerIgnition: 0, requirements: [], season };
 
+      const mult = costMult !== undefined ? costMult : 1;
       let costPerIgnition = 0;
       const breakdown = [];
       for (const r of reqs) {
         const price = p2pPrices[r.item] || 0;
-        const cost = price * r.qty;
+        const effectiveQty = r.qty * mult;
+        const cost = price * effectiveQty;
         costPerIgnition += cost;
-        breakdown.push({ item: r.item, qty: r.qty, price, cost });
+        breakdown.push({ item: r.item, qty: effectiveQty, baseQty: r.qty, price, cost });
       }
 
       const d = RESOURCE_RESPAWN_DATA["Obsidian"];
@@ -7503,7 +7513,7 @@
       const ignitionsPerDay = n * cyclesPerDay;
       const costPerDay = costPerIgnition * ignitionsPerDay;
 
-      return { costPerDay, costPerIgnition, ignitionsPerDay, requirements: breakdown, season };
+      return { costPerDay, costPerIgnition, ignitionsPerDay, requirements: breakdown, season, costMult: mult };
     }
 
     // Compute total SFL/day across all products for an animal category
@@ -7670,6 +7680,18 @@
           return { solo, synergy: solo, roi, isCostReduction: true };
         }
         return { solo: 0, synergy: 0, roi: Infinity };
+      }
+
+      // Handle lava_cost_reduction effects (Lava Swimwear — reduce lava pit material cost)
+      const lavaCostEffects = catEffects.filter(e => e.type === "lava_cost_reduction");
+      if (lavaCostEffects.length > 0 && catId === "obsidian") {
+        const { season } = powerState;
+        const costMult = lavaCostEffects.reduce((acc, e) => acc * (1 - e.value), 1);
+        const baseCost = calcLavaPitCostPerDay(capacity, p2pPrices, season);
+        const reducedCost = calcLavaPitCostPerDay(capacity, p2pPrices, season, costMult);
+        const savings = baseCost.costPerDay - reducedCost.costPerDay;
+        const roi = (boostItem.floor > 0 && savings > 0) ? boostItem.floor / savings : Infinity;
+        return { solo: savings, synergy: savings, roi, isLavaCostReduction: true };
       }
 
       // Handle fruit stump effects (No Axe No Worries, Fruity Woody)
@@ -7884,6 +7906,28 @@
           if (boostItem.floor > 0 && dailySavings > 0) {
             h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${dailySavings.toFixed(4)} = <span style="color:var(--sunpetal)">${(boostItem.floor / dailySavings).toFixed(0)} days</span></div>`;
           }
+        }
+        h += `</div>`;
+        return h;
+      }
+
+      // Lava pit cost reduction formula (e.g., Lava Swimwear -50% resources)
+      const lavaCostFx = catEffects.filter(e => e.type === "lava_cost_reduction");
+      if (lavaCostFx.length > 0 && catId === "obsidian") {
+        const { season } = powerState;
+        const costMult = lavaCostFx.reduce((acc, e) => acc * (1 - e.value), 1);
+        const baseCost = calcLavaPitCostPerDay(capacity, p2pPrices, season);
+        const reducedCost = calcLavaPitCostPerDay(capacity, p2pPrices, season, costMult);
+        const savings = baseCost.costPerDay - reducedCost.costPerDay;
+        const seasonName = (season || "?").charAt(0).toUpperCase() + (season || "?").slice(1);
+        h += `<div style="margin-bottom:4px"><strong>Category:</strong> OBSIDIAN — ${n} lava pits, season: ${escHTML(seasonName)}</div>`;
+        h += `<div>Resource reduction: -${Math.round((1 - costMult) * 100)}% materials per ignition</div>`;
+        h += `<div>Base cost/ignition: ${baseCost.costPerIgnition.toFixed(2)} ${sflIcon()}</div>`;
+        h += `<div>Reduced cost/ignition: ${reducedCost.costPerIgnition.toFixed(2)} ${sflIcon()}</div>`;
+        h += `<div>Ignitions/day: ${(baseCost.ignitionsPerDay || 0).toFixed(2)}</div>`;
+        h += `<div style="color:var(--green)"><strong>Cost savings: (${baseCost.costPerIgnition.toFixed(2)} - ${reducedCost.costPerIgnition.toFixed(2)}) × ${(baseCost.ignitionsPerDay || 0).toFixed(2)} = 🌋⬇${savings.toFixed(4)} ${sflIcon()}/day</strong></div>`;
+        if (boostItem.floor > 0 && savings > 0) {
+          h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${savings.toFixed(4)} = <span style="color:var(--sunpetal)">${(boostItem.floor / savings).toFixed(0)} days</span></div>`;
         }
         h += `</div>`;
         return h;
@@ -8228,18 +8272,20 @@
         const product = savedProducts[catId] || getDefaultProduct(catId);
         const ownedEffects = catBoosts[catId].filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId));
 
-        let baseSfl, boostedSfl;
+        let baseSfl, boostedSfl, boostedUnitsPerDay = 0;
         if (isAnimalCat(catId)) {
           const baseInfo = getAnimalCatSfl(catId, capacity, [], p2pPrices);
           const boostedInfo = getAnimalCatSfl(catId, capacity, ownedEffects, p2pPrices);
           baseSfl = baseInfo.totalSfl;
           boostedSfl = boostedInfo.totalSfl;
+          // Animals have multiple products, use total units (not meaningful for display)
         } else {
           const priceProduct = getPriceProduct(catId, product);
           const baseResult = applyBoosts(catId, product, capacity, []);
           baseSfl = unitToSfl(baseResult.unitsPerDay, priceProduct, p2pPrices);
           const boostedResult = applyBoosts(catId, product, capacity, ownedEffects);
           boostedSfl = unitToSfl(boostedResult.unitsPerDay, priceProduct, p2pPrices);
+          boostedUnitsPerDay = boostedResult.unitsPerDay;
         }
 
         // Calculate production costs (with and without discounts)
@@ -8252,9 +8298,14 @@
           restockPerDay = c.restockPerDay;
           costDetails = c;
         } else if (catId === "obsidian") {
-          const c = calcLavaPitCostPerDay(capacity, p2pPrices, season);
+          // Check for lava cost reduction effects (e.g., Lava Swimwear -50%)
+          const lavaCostMult = ownedEffects
+            .filter(e => e.type === "lava_cost_reduction")
+            .reduce((acc, e) => acc * (1 - e.value), 1);
+          const c = calcLavaPitCostPerDay(capacity, p2pPrices, season, lavaCostMult);
+          const cBase = calcLavaPitCostPerDay(capacity, p2pPrices, season);
           costPerDay = c.costPerDay;
-          baseCostPerDay = c.costPerDay;
+          baseCostPerDay = cBase.costPerDay;
           costDetails = c;
         } else if (["trees", "stone", "iron", "gold", "crimstone"].includes(catId)) {
           const c = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods);
@@ -8272,7 +8323,7 @@
 
         totalBaseSfl += baseSfl;
         totalBoostedSfl += boostedSfl;
-        catSummaries[catId] = { baseSfl, boostedSfl, delta: boostedSfl - baseSfl, product, costPerDay: totalCatCost, baseCostPerDay: totalCatBaseCost, costSavings: totalCatBaseCost - totalCatCost, costDetails };
+        catSummaries[catId] = { baseSfl, boostedSfl, delta: boostedSfl - baseSfl, product, boostedUnitsPerDay, costPerDay: totalCatCost, baseCostPerDay: totalCatBaseCost, costSavings: totalCatBaseCost - totalCatCost, costDetails };
       }
 
       const totalDelta = totalBoostedSfl - totalBaseSfl;
@@ -8377,9 +8428,14 @@
         const missing = items.filter(b => !b.has);
 
         content += `<div class="power-category pixel-panel" id="power-cat-${catId}">`;
+        // 24h production label
+        const prodPerDay = summary.boostedUnitsPerDay || 0;
+        const prodLabel = !isAnimalCat(catId) && catId !== "fishing" && prodPerDay > 0
+          ? ` · ${prodPerDay % 1 < 0.01 ? prodPerDay.toFixed(0) : prodPerDay.toFixed(1)} ${product}/day` : "";
+
         content += `<div class="power-cat-header pixel-font" onclick="togglePowerCategory('${catId}')">
           <span>${catDef.emoji} ${catDef.label}</span>
-          <span class="power-cat-count">${n} ${({crops:"plots",fruits:"patches",greenhouse:"pots",trees:"trees",flowers:"beds",stone:"rocks",iron:"nodes",gold:"nodes",crimstone:"nodes",obsidian:"pits",chickens:"chickens",cows:"cows",sheep:"sheep",bees:"hives",fishing:"reels"})[catId] || catId}</span>`;
+          <span class="power-cat-count">${n} ${({crops:"plots",fruits:"patches",greenhouse:"pots",trees:"trees",flowers:"beds",stone:"rocks",iron:"nodes",gold:"nodes",crimstone:"nodes",obsidian:"pits",chickens:"chickens",cows:"cows",sheep:"sheep",bees:"hives",fishing:"reels"})[catId] || catId}${prodLabel}</span>`;
 
         // Product selector
         if (catDef.selector === "crop") {
@@ -8435,10 +8491,11 @@
           } else if (cd.requirements !== undefined) {
             // Lava Pit seasonal material cost
             const seasonName = (cd.season || "?").charAt(0).toUpperCase() + (cd.season || "?").slice(1);
-            content += `<div style="margin-bottom:4px">🌋 <strong>Lava Pit</strong> — Season: <strong>${escHTML(seasonName)}</strong></div>`;
+            content += `<div style="margin-bottom:4px">🌋 <strong>Lava Pit</strong> — Season: <strong>${escHTML(seasonName)}</strong>${cd.costMult < 1 ? ` <span style="color:var(--green)">(${Math.round((1 - cd.costMult) * 100)}% resource discount)</span>` : ""}</div>`;
             content += `<div>Cost per ignition: <strong style="color:var(--red)">${cd.costPerIgnition.toFixed(2)} ${sflIcon()}</strong></div>`;
             for (const r of cd.requirements) {
-              content += `<div style="padding-left:12px">${r.qty}× ${escHTML(r.item)} @ ${r.price.toFixed(4)} ${sflIcon()} = ${r.cost.toFixed(4)} ${sflIcon()}</div>`;
+              const qtyLabel = r.baseQty && r.baseQty !== r.qty ? `<s>${r.baseQty}</s> → ${r.qty}` : `${r.qty}`;
+              content += `<div style="padding-left:12px">${qtyLabel}× ${escHTML(r.item)} @ ${r.price.toFixed(4)} ${sflIcon()} = ${r.cost.toFixed(4)} ${sflIcon()}</div>`;
             }
             content += `<div>Ignitions/day: ${(cd.ignitionsPerDay || 0).toFixed(2)} (${getCapacityCount("obsidian", capacity)} pits × ${formatSec(RESOURCE_RESPAWN_DATA["Obsidian"].respawnSec)} cycle)</div>`;
             content += `<div>Material cost/day: ${cd.costPerIgnition.toFixed(2)} × ${(cd.ignitionsPerDay || 0).toFixed(2)} = <strong style="color:var(--red)">${(cd.costPerDay || 0).toFixed(4)} ${sflIcon()}/day</strong></div>`;
@@ -8741,6 +8798,7 @@
       } else if (val.synergy !== 0) {
         sflText = val.isFreeTool ? `🆓⬇${val.synergy.toFixed(2)}/day`
           : val.isCostReduction ? `⬇${val.synergy.toFixed(2)}/day`
+          : val.isLavaCostReduction ? `🌋⬇${val.synergy.toFixed(2)}/day`
           : val.isFruitStump ? `🪵${val.synergy > 0 ? "+" : ""}${val.synergy.toFixed(2)}/day`
           : `${val.synergy > 0 ? "+" : ""}${val.synergy.toFixed(2)}/day`;
       } else {
