@@ -2514,6 +2514,18 @@
           return m[0].includes("%") ? { type: "yield_pct", value: v, cat: "bees" }
                                      : { type: "yield_flat", value: v, cat: "bees", product: "Honey" };
         }},
+      // Cost reduction: "-20% axe cost", "-20% pickaxe cost"
+      { rx: /([+-]?\d+\.?\d*)%\s+(axe|pickaxe)\s+cost/i,
+        fn: m => {
+          const val = Math.abs(parseFloat(m[1])) / 100; // e.g. 0.2
+          const tool = m[2].toLowerCase();
+          if (tool === "axe") {
+            return { type: "cost_reduction", value: val, cat: "trees", tool: "Axe" };
+          } else {
+            // Pickaxe cost applies to stone, iron, gold, crimstone
+            return { type: "cost_reduction", value: val, cat: "stone", tool: "Pickaxe", alsoApply: ["iron", "gold", "crimstone"] };
+          }
+        }},
     ];
 
     // ═══════════════════════════════════════
@@ -7153,19 +7165,22 @@
     }
 
     // Calculate tool cost per day for a resource category
-    function calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods) {
+    // skipDiscount: if true, ignore coin discounts (for base cost calculation)
+    function calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods, skipDiscount) {
       const toolName = Object.keys(TOOL_TO_CAT).find(t => TOOL_TO_CAT[t] === catId);
       if (!toolName) return { costPerDay: 0, toolSfl: 0, restockPerDay: 0 };
       const tool = TOOL_COSTS[toolName];
       if (!tool || exchangeRates.coinsPerSFL <= 0) return { costPerDay: 0, toolSfl: 0, restockPerDay: 0 };
 
-      // Apply coin discounts from skills
+      // Apply coin discounts from skills (unless skipDiscount)
       let coinDiscount = 0;
       let discountSource = "";
-      if (toolName === "Axe" && stockMods.fellersDiscount) {
-        coinDiscount = 0.2; discountSource = "Feller's Discount";
-      } else if (toolName !== "Axe" && toolName !== "Oil Drill" && stockMods.frugalMiner) {
-        coinDiscount = 0.2; discountSource = "Frugal Miner";
+      if (!skipDiscount) {
+        if (toolName === "Axe" && stockMods.fellersDiscount) {
+          coinDiscount = 0.2; discountSource = "Feller's Discount";
+        } else if (toolName !== "Axe" && toolName !== "Oil Drill" && stockMods.frugalMiner) {
+          coinDiscount = 0.2; discountSource = "Frugal Miner";
+        }
       }
       const effectiveCoins = tool.coins * (1 - coinDiscount);
 
@@ -7317,6 +7332,30 @@
       const catEffects = getEffectsForCategory(boostItem, catId);
       if (catEffects.length === 0) return { solo: 0, synergy: 0, roi: Infinity };
 
+      // Handle cost_reduction effects (e.g., Feller's Discount, Frugal Miner)
+      const costEffects = catEffects.filter(e => e.type === "cost_reduction");
+      if (costEffects.length > 0) {
+        // Cost reduction value = base cost - discounted cost for this category
+        const { exchangeRates, stockMods } = powerState;
+        if (["trees", "stone", "iron", "gold", "crimstone"].includes(catId)) {
+          const baseCost = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods, true);
+          // Apply only THIS boost's discount
+          const discountValue = costEffects[0].value || 0.2;
+          const savings = baseCost.costPerDay * discountValue; // 20% of base coin cost portion
+          // More precisely: savings = (baseCoins * discountValue / coinsPerSFL) * toolsPerDay
+          const toolName = Object.keys(TOOL_TO_CAT).find(t => TOOL_TO_CAT[t] === catId);
+          const tool = toolName ? TOOL_COSTS[toolName] : null;
+          let solo = 0;
+          if (tool && baseCost.toolsPerDay > 0 && exchangeRates.coinsPerSFL > 0) {
+            const coinSavingsPerUse = tool.coins * discountValue / exchangeRates.coinsPerSFL;
+            solo = coinSavingsPerUse * baseCost.toolsPerDay;
+          }
+          const roi = (boostItem.floor > 0 && solo > 0) ? boostItem.floor / solo : Infinity;
+          return { solo, synergy: solo, roi, isCostReduction: true };
+        }
+        return { solo: 0, synergy: 0, roi: Infinity };
+      }
+
       // For animals, sum across all products
       if (isAnimalCat(catId)) {
         const baseInfo = getAnimalCatSfl(catId, capacity, [], p2pPrices);
@@ -7447,6 +7486,31 @@
         h += `<div style="color:var(--sunpetal)">This skill (${boostItem.skillPoints}pt): <strong>${boostItem.skillPoints} × ${skillCostInfo.sflPerPoint.toFixed(1)} = ~${boostItem.floor.toFixed(0)} ${sflIcon()}</strong></div>`;
       }
       h += `<hr style="border-color:var(--border-dark);margin:4px 0">`;
+
+      // Cost reduction formula (e.g., Feller's Discount, Frugal Miner)
+      const costRedEffects = catEffects.filter(e => e.type === "cost_reduction");
+      if (costRedEffects.length > 0 && ["trees", "stone", "iron", "gold", "crimstone"].includes(catId)) {
+        const { exchangeRates, stockMods } = powerState;
+        const eff = costRedEffects[0];
+        const toolName = Object.keys(TOOL_TO_CAT).find(t => TOOL_TO_CAT[t] === catId);
+        const tool = toolName ? TOOL_COSTS[toolName] : null;
+        if (tool && exchangeRates.coinsPerSFL > 0) {
+          const baseCost = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods, true);
+          const coinSavings = tool.coins * eff.value;
+          const sflSavings = coinSavings / exchangeRates.coinsPerSFL;
+          const dailySavings = sflSavings * (baseCost.toolsPerDay || 0);
+          h += `<div style="margin-bottom:4px"><strong>Category:</strong> ${catId.toUpperCase()} — ${n} nodes, tool: ${escHTML(toolName)}</div>`;
+          h += `<div>Base tool coin cost: ${tool.coins} coins = ${(tool.coins / exchangeRates.coinsPerSFL).toFixed(6)} ${sflIcon()}</div>`;
+          h += `<div>Discount: -${(eff.value * 100).toFixed(0)}% coin cost → saves ${coinSavings.toFixed(1)} coins = ${sflSavings.toFixed(6)} ${sflIcon()} per use</div>`;
+          h += `<div>Tools/day: ${(baseCost.toolsPerDay || 0).toFixed(2)}</div>`;
+          h += `<div style="color:var(--green)"><strong>Cost savings: ${sflSavings.toFixed(6)} × ${(baseCost.toolsPerDay || 0).toFixed(2)} = ⬇${dailySavings.toFixed(4)} ${sflIcon()}/day</strong></div>`;
+          if (boostItem.floor > 0 && dailySavings > 0) {
+            h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${dailySavings.toFixed(4)} = <span style="color:var(--sunpetal)">${(boostItem.floor / dailySavings).toFixed(0)} days</span></div>`;
+          }
+        }
+        h += `</div>`;
+        return h;
+      }
 
       if (POWER_CATEGORIES[catId]?.quantifiable && n > 0) {
         if (isAnimalCat(catId)) {
@@ -7738,25 +7802,32 @@
           boostedSfl = unitToSfl(boostedResult.unitsPerDay, priceProduct, p2pPrices);
         }
 
-        // Calculate production costs
+        // Calculate production costs (with and without discounts)
         let costPerDay = 0, restockPerDay = 0, costDetails = null;
+        let baseCostPerDay = 0; // cost WITHOUT skill discounts
         if (catId === "crops" || catId === "fruits" || catId === "greenhouse") {
           const c = calcSeedCostPerDay(catId, product, capacity, exchangeRates, stockMods, ownedEffects);
           costPerDay = c.costPerDay;
+          baseCostPerDay = c.costPerDay; // seeds have no skill discount
           restockPerDay = c.restockPerDay;
           costDetails = c;
         } else if (["trees", "stone", "iron", "gold", "crimstone"].includes(catId)) {
           const c = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods);
+          const cBase = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods, true);
           costPerDay = c.costPerDay;
+          baseCostPerDay = cBase.costPerDay;
           restockPerDay = c.restockPerDay;
           costDetails = c;
+          costDetails.baseCostPerDay = cBase.costPerDay;
+          costDetails.baseToolSfl = cBase.toolSfl;
         }
         const totalCatCost = costPerDay + restockPerDay;
+        const totalCatBaseCost = baseCostPerDay + restockPerDay;
         totalCostSfl += totalCatCost;
 
         totalBaseSfl += baseSfl;
         totalBoostedSfl += boostedSfl;
-        catSummaries[catId] = { baseSfl, boostedSfl, delta: boostedSfl - baseSfl, product, costPerDay: totalCatCost, costDetails };
+        catSummaries[catId] = { baseSfl, boostedSfl, delta: boostedSfl - baseSfl, product, costPerDay: totalCatCost, baseCostPerDay: totalCatBaseCost, costSavings: totalCatBaseCost - totalCatCost, costDetails };
       }
 
       const totalDelta = totalBoostedSfl - totalBaseSfl;
@@ -7911,9 +7982,20 @@
             content += `<div>Seed cost/day: ${cd.seedSfl.toFixed(6)} × ${(cd.cyclesPerDay || 0).toFixed(2)} cycles × ${getCapacityCount(catId, capacity)} = <strong style="color:var(--red)">${(cd.costPerDay || 0).toFixed(4)} ${sflIcon()}/day</strong></div>`;
             if (cd.stock > 0) content += `<div>Stock: ${cd.stock} seeds${stockMods.hasWarehouse ? " (Warehouse ×1.2)" : ""} | Restock: ${(cd.restockPerDay || 0).toFixed(4)} ${sflIcon()}/day</div>`;
           } else if (cd.toolSfl !== undefined) {
-            const discInfo = cd.discountSource ? ` <span style="color:var(--green)">(-20% ${cd.discountSource}: <s>${cd.baseCoins}</s> → ${cd.effectiveCoins} coins)</span>` : "";
-            content += `<div>Tool cost: ${cd.toolSfl.toFixed(4)} ${sflIcon()} per use${discInfo}</div>`;
-            content += `<div>Tool cost/day: ${cd.toolSfl.toFixed(4)} × ${(cd.toolsPerDay || 0).toFixed(2)} = <strong style="color:var(--red)">${(cd.costPerDay || 0).toFixed(4)} ${sflIcon()}/day</strong></div>`;
+            // Show BASE cost first, then BOOSTED cost if discount applies
+            if (cd.discountSource && cd.baseToolSfl !== undefined) {
+              content += `<div>Base tool cost: ${cd.baseToolSfl.toFixed(4)} ${sflIcon()} per use (${cd.baseCoins} coins)</div>`;
+              content += `<div>Base cost/day: ${cd.baseToolSfl.toFixed(4)} × ${(cd.toolsPerDay || 0).toFixed(2)} = <strong>${(cd.baseCostPerDay || 0).toFixed(4)} ${sflIcon()}/day</strong></div>`;
+              content += `<div style="color:var(--green)">⬇ ${cd.discountSource}: -20% coin cost (<s>${cd.baseCoins}</s> → ${cd.effectiveCoins} coins)</div>`;
+              content += `<div>Boosted tool cost: ${cd.toolSfl.toFixed(4)} ${sflIcon()} per use</div>`;
+              content += `<div>Boosted cost/day: ${cd.toolSfl.toFixed(4)} × ${(cd.toolsPerDay || 0).toFixed(2)} = <strong style="color:var(--green)">${(cd.costPerDay || 0).toFixed(4)} ${sflIcon()}/day</strong>`;
+              const savings = (cd.baseCostPerDay || 0) - (cd.costPerDay || 0);
+              if (savings > 0) content += ` <span style="color:var(--green)">(saving ${savings.toFixed(4)} ${sflIcon()}/day)</span>`;
+              content += `</div>`;
+            } else {
+              content += `<div>Tool cost: ${cd.toolSfl.toFixed(4)} ${sflIcon()} per use (${cd.baseCoins} coins)</div>`;
+              content += `<div>Tool cost/day: ${cd.toolSfl.toFixed(4)} × ${(cd.toolsPerDay || 0).toFixed(2)} = <strong style="color:var(--red)">${(cd.costPerDay || 0).toFixed(4)} ${sflIcon()}/day</strong></div>`;
+            }
             if (cd.stock > 0) content += `<div>Stock: ${cd.stock} tools${stockMods.hasToolshed ? " (Toolshed ×1.5)" : ""} | Restock: ${(cd.restockPerDay || 0).toFixed(4)} ${sflIcon()}/day</div>`;
           }
           const netCat = summary.boostedSfl - summary.costPerDay;
@@ -8151,7 +8233,9 @@
 
     function renderPowerBoostRow(b, catId, product, val, isOwned) {
       const imgUrl = b.type !== "Skill" ? getItemIcon(b.name) : "";
-      const sflText = val.synergy !== 0 ? `${val.synergy > 0 ? "+" : ""}${val.synergy.toFixed(2)}/day` : "—";
+      const sflText = val.synergy !== 0
+        ? (val.isCostReduction ? `⬇${val.synergy.toFixed(2)}/day` : `${val.synergy > 0 ? "+" : ""}${val.synergy.toFixed(2)}/day`)
+        : "—";
       const roiText = val.roi < Infinity ? `${val.roi.toFixed(0)}d` : "";
       const typeLabel = b.type === "Skill" ? `Skill (${b.skillTree}, ${b.skillPoints}pt)` : b.type;
       let costLabel;
