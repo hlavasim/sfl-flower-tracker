@@ -8428,11 +8428,11 @@
         const missing = items.filter(b => !b.has);
 
         content += `<div class="power-category pixel-panel" id="power-cat-${catId}">`;
-        // 24h production label with product icon
+        // 24h production with product icon
         const prodPerDay = summary.boostedUnitsPerDay || 0;
         const priceProduct = !isAnimalCat(catId) ? getPriceProduct(catId, product) : null;
-        const prodImgUrl = priceProduct && ITEM_IMAGE_MAP[priceProduct] ? ITEM_IMAGE_MAP[priceProduct] : null;
-        const prodIcon = prodImgUrl ? `<img src="${prodImgUrl}" style="height:1em;vertical-align:-0.15em" alt="${priceProduct}">` : (priceProduct || "");
+        const prodIconUrl = priceProduct ? getItemIcon(priceProduct) : null;
+        const prodIcon = prodIconUrl ? `<img src="${prodIconUrl}" style="height:1.4em;vertical-align:-0.3em" onerror="this.style.display='none'" alt="${priceProduct}">` : "";
         content += `<div class="power-cat-header pixel-font" onclick="togglePowerCategory('${catId}')">
           <span>${catDef.emoji} ${catDef.label}</span>`;
 
@@ -8464,10 +8464,10 @@
         }
 
         const catNet = summary.boostedSfl - (summary.costPerDay || 0);
-        // Show units + SFL equivalent: +125<iron> ~ +13<sfl>/day
+        // Show: 125<product-icon> ~ +13<sfl>/day
         const unitsPart = !isAnimalCat(catId) && catId !== "fishing" && prodPerDay > 0
-          ? `<span style="color:var(--text-dim);font-size:0.4375rem">${prodPerDay % 1 < 0.01 ? prodPerDay.toFixed(0) : prodPerDay.toFixed(1)}${prodIcon} ~ </span>` : "";
-        content += `<span class="power-cat-sfl">${summary.costPerDay > 0 ? `<span style="color:var(--text-dim);font-size: 0.4375rem">-${summary.costPerDay.toFixed(2)}</span> ` : ""}${unitsPart}<span style="color:${catNet >= 0 ? 'var(--green)' : 'var(--red)'};font-size: 0.5rem">${catNet >= 0 ? "+" : ""}${catNet.toFixed(2)}${sflIcon()}/day</span></span>
+          ? `<span style="color:var(--sunpetal);font-size:0.5rem">${prodPerDay % 1 < 0.01 ? prodPerDay.toFixed(0) : prodPerDay.toFixed(1)}${prodIcon}</span> <span style="color:var(--text-dim);font-size:0.4375rem">~</span> ` : "";
+        content += `<span class="power-cat-sfl">${unitsPart}<span style="color:${catNet >= 0 ? 'var(--green)' : 'var(--red)'};font-size: 0.5rem">${catNet >= 0 ? "+" : ""}${catNet.toFixed(2)}${sflIcon()}/day</span></span>
           <span class="power-toggle-arrow">▶</span>
         </div>`;
 
