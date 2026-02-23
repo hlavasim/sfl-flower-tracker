@@ -7569,6 +7569,12 @@
         // Cost reduction value = base cost - discounted cost for this category
         const { exchangeRates, stockMods } = powerState;
         if (["trees", "stone", "iron", "gold", "crimstone"].includes(catId)) {
+          // If category already has free tools, cost reduction has no effect
+          const hasFreeTools = allCatBoosts.some(b => b.has && !b.isDisabled &&
+            getEffectsForCategory(b, catId).some(e => e.type === "free_tool"));
+          if (hasFreeTools) {
+            return { solo: 0, synergy: 0, roi: Infinity, redundantFreeTool: true };
+          }
           const baseCost = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods, true);
           // Apply only THIS boost's discount
           const discountValue = costEffects[0].value || 0.2;
@@ -7775,6 +7781,14 @@
       const costRedEffects = catEffects.filter(e => e.type === "cost_reduction");
       if (costRedEffects.length > 0 && ["trees", "stone", "iron", "gold", "crimstone"].includes(catId)) {
         const { exchangeRates, stockMods } = powerState;
+        // Check if free tools already active → cost reduction is redundant
+        const hasFreeToolsFormula = allCatBoosts.some(b => b.has && !b.isDisabled &&
+          getEffectsForCategory(b, catId).some(e => e.type === "free_tool"));
+        if (hasFreeToolsFormula) {
+          h += `<div style="color:var(--text-dim);margin:8px 0">🆓 <strong>NO EFFECT</strong> — tools in this category are already free (free tool boost active). A cost discount on a free tool saves nothing.</div>`;
+          h += `</div>`;
+          return h;
+        }
         const eff = costRedEffects[0];
         const toolName = Object.keys(TOOL_TO_CAT).find(t => TOOL_TO_CAT[t] === catId);
         const tool = toolName ? TOOL_COSTS[toolName] : null;
@@ -8589,6 +8603,8 @@
       let sflText;
       if (val.disabled) {
         sflText = `<span style="color:var(--text-dim)">DISABLED</span>`;
+      } else if (val.redundantFreeTool) {
+        sflText = `<span style="color:var(--text-dim)">NO EFFECT</span>`;
       } else if (val.synergy !== 0) {
         sflText = val.isFreeTool ? `🆓⬇${val.synergy.toFixed(2)}/day`
           : val.isCostReduction ? `⬇${val.synergy.toFixed(2)}/day`
@@ -8598,7 +8614,7 @@
         sflText = "—";
       }
       let roiText = "";
-      if (val.disabled) {
+      if (val.disabled || val.redundantFreeTool) {
         roiText = "";
       } else if (val.roi < Infinity && val.roi > 0) {
         roiText = `${val.roi.toFixed(0)}d`;
@@ -8616,9 +8632,11 @@
       } else {
         costLabel = "";
       }
-      const disabledNote = val.disabled ? `<div style="color:var(--red);font-size:0.5rem">⛔ Superseded by ${escHTML(val.disabledByName || "stronger item")}</div>` : "";
+      const disabledNote = val.disabled ? `<div style="color:var(--red);font-size:0.5rem">⛔ Superseded by ${escHTML(val.disabledByName || "stronger item")}</div>`
+        : val.redundantFreeTool ? `<div style="color:var(--text-dim);font-size:0.5rem">🆓 No effect — tools already free</div>` : "";
 
-      return `<div class="power-boost-row ${isOwned ? "has-it" : "missing"}${val.disabled ? " disabled-boost" : ""}" onclick="togglePowerDetail(this,'${escHTML(b.name).replace(/'/g, "\\'")}','${catId}')" style="${val.disabled ? 'opacity:0.5' : ''}">
+      const dimmed = val.disabled || val.redundantFreeTool;
+      return `<div class="power-boost-row ${isOwned ? "has-it" : "missing"}${dimmed ? " disabled-boost" : ""}" onclick="togglePowerDetail(this,'${escHTML(b.name).replace(/'/g, "\\'")}','${catId}')" style="${dimmed ? 'opacity:0.5' : ''}">
         ${imgUrl ? `<img class="power-boost-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">` : `<span class="power-boost-icon">🧠</span>`}
         <div class="power-boost-info">
           <div class="power-boost-name">${escHTML(b.name)} <span class="power-boost-type">${escHTML(typeLabel)}</span></div>
