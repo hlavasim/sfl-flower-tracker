@@ -2534,6 +2534,15 @@
     const PROD_FLAT_RX = new RegExp(`^([+-]?\\d+\\.?\\d*)\\s+(${PROD_ALT})\\b`, 'i');
 
     // Boost text parser rules (ordered by priority)
+    // Item-name-based effect overrides (when buff text can't be regex-parsed reliably)
+    const BOOST_EFFECT_OVERRIDES = {
+      "Green Amulet": [
+        { type: "chance", pct: 10, extra: 10, cat: "crops", raw: "10% chance +10 Crop yield" },
+        { type: "chance", pct: 10, extra: 10, cat: "greenhouse", product: "Rice", raw: "10% chance +10 Rice (greenhouse)" },
+        { type: "chance", pct: 10, extra: 10, cat: "greenhouse", product: "Olive", raw: "10% chance +10 Olive (greenhouse)" },
+      ],
+    };
+
     // IMPORTANT: Specific category rules (Crop, Flower, Fruit, Tree, Animal, Greenhouse)
     // must come BEFORE the generic product-name rules (PROD_ALT_RX, PROD_FLAT_RX).
     // Chance rules must come BEFORE flat yield rules to prevent "X% Chance +N Product"
@@ -7028,8 +7037,9 @@
       return out;
     }
 
-    function parseBoostEffects(boostText) {
+    function parseBoostEffects(boostText, itemName) {
       if (!boostText) return [];
+      if (itemName && BOOST_EFFECT_OVERRIDES[itemName]) return BOOST_EFFECT_OVERRIDES[itemName].map(e => ({ ...e }));
       const effects = [];
       let lines = boostText.split("\n").map(l => l.trim()).filter(Boolean);
       lines = lines.map(normalizeBoostLine);
@@ -8634,7 +8644,7 @@
       for (const item of (nftData.collectibles || [])) {
         if (!item.have_boost || !item.name || !item.boost_text) continue;
         const has = getCount(inventory, item.name) > 0 || findCollectible(farm, item.name).length > 0;
-        const effects = parseBoostEffects(item.boost_text);
+        const effects = parseBoostEffects(item.boost_text, item.name);
         const categories = classifyToCategories(effects);
         let floor = parseFloat(item.floor) || 0;
         const markCost = getFactionMarkCost(item.name);
@@ -8649,7 +8659,7 @@
       for (const item of (nftData.wearables || [])) {
         if (!item.have_boost || !item.name || !item.boost_text) continue;
         const has = (wardrobe[item.name] || 0) > 0;
-        const effects = parseBoostEffects(item.boost_text);
+        const effects = parseBoostEffects(item.boost_text, item.name);
         const categories = classifyToCategories(effects);
         let floor = parseFloat(item.floor) || 0;
         const markCost = getFactionMarkCost(item.name);
