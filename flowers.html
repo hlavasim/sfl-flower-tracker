@@ -11149,39 +11149,52 @@
       html += `<div id="diff-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading snapshots...</div></div></div>`;
       app.innerHTML = html;
 
-      // Fetch P2P prices, exchange rates + farm history in parallel
+      // Fetch with retry (up to 2 retries on 5xx / network error)
+      const fetchRetry = async (url, label, retries = 2) => {
+        for (let i = 0; i <= retries; i++) {
+          try {
+            const resp = await fetch(url);
+            if (resp.ok) return { ok: true, data: await resp.json(), label };
+            if (resp.status >= 500 && i < retries) { await new Promise(r => setTimeout(r, 1000 * (i + 1))); continue; }
+            return { ok: false, label, error: `${resp.status} ${resp.statusText}` };
+          } catch (e) {
+            if (i < retries) { await new Promise(r => setTimeout(r, 1000 * (i + 1))); continue; }
+            return { ok: false, label, error: e.message };
+          }
+        }
+      };
+
       let p2pPrices = {};
       let snapshots = [];
       let coinsPerSFL = 0;
       let gemsPerSFL = 0;
-      try {
-        const proxyUrl = (u) => `/api/proxy?url=${encodeURIComponent(u)}`;
-        const [priceResp, exchangeResp, histResp] = await Promise.all([
-          fetch(proxyUrl("https://sfl.world/api/v1/prices")),
-          fetch(proxyUrl("https://sfl.world/api/v1.1/exchange")),
-          fetch(`/api/farm-history?farm=${FARM_ID}&latest=50`),
-        ]);
-        if (priceResp.ok) {
-          const pd = await priceResp.json();
-          const raw = pd?.data?.p2p || pd?.p2p || {};
-          for (const [k, v] of Object.entries(raw)) p2pPrices[k] = parseFloat(v) || 0;
-        }
-        if (exchangeResp.ok) {
-          const ed = await exchangeResp.json();
-          // Coins: Betty rate (best crop sell price / P2P price)
-          const betty = computeBettyRate(p2pPrices);
-          coinsPerSFL = betty.rate || 320;
-          // Gems: best-value tier with -30% pack discount
-          const gemTiers = Object.values(ed?.gems || {});
-          const bestGemTier = gemTiers.reduce((best, t) => (!best || (t.gem / t.sfl) > (best.gem / best.sfl)) ? t : best, null);
-          gemsPerSFL = bestGemTier ? (bestGemTier.gem / (bestGemTier.sfl * 0.7)) : 0;
-        }
-        if (histResp.ok) {
-          const hd = await histResp.json();
-          snapshots = (hd.snapshots || []).reverse(); // oldest first
-        }
-      } catch (e) {
-        document.getElementById("diff-content").innerHTML = `<div class="pixel-panel pixel-font" style="padding:20px;text-align:center;color:var(--red)">Error loading data: ${escHTML(e.message)}</div>`;
+      const warnings = [];
+
+      const proxyUrl = (u) => `/api/proxy?url=${encodeURIComponent(u)}`;
+      const [priceRes, exchangeRes, histRes] = await Promise.all([
+        fetchRetry(proxyUrl("https://sfl.world/api/v1/prices"), "P2P prices"),
+        fetchRetry(proxyUrl("https://sfl.world/api/v1.1/exchange"), "Exchange rates"),
+        fetchRetry(`/api/farm-history?farm=${FARM_ID}&latest=50`, "Farm history"),
+      ]);
+
+      if (priceRes.ok) {
+        const raw = priceRes.data?.data?.p2p || priceRes.data?.p2p || {};
+        for (const [k, v] of Object.entries(raw)) p2pPrices[k] = parseFloat(v) || 0;
+      } else { warnings.push(`P2P prices: ${priceRes.error}`); }
+
+      if (exchangeRes.ok) {
+        const ed = exchangeRes.data;
+        const betty = computeBettyRate(p2pPrices);
+        coinsPerSFL = betty.rate || 320;
+        const gemTiers = Object.values(ed?.gems || {});
+        const bestGemTier = gemTiers.reduce((best, t) => (!best || (t.gem / t.sfl) > (best.gem / best.sfl)) ? t : best, null);
+        gemsPerSFL = bestGemTier ? (bestGemTier.gem / (bestGemTier.sfl * 0.7)) : 0;
+      } else { warnings.push(`Exchange rates: ${exchangeRes.error}`); }
+
+      if (histRes.ok) {
+        snapshots = (histRes.data.snapshots || []).reverse();
+      } else {
+        document.getElementById("diff-content").innerHTML = `<div class="pixel-panel pixel-font" style="padding:20px;text-align:center;color:var(--red)">Failed to load snapshots: ${escHTML(histRes.error)}<br><button class="pixel-font" style="margin-top:10px;padding:8px 16px;cursor:pointer" onclick="renderDiff(cachedFarmData)">Retry</button></div>`;
         return;
       }
 
@@ -11189,6 +11202,8 @@
         document.getElementById("diff-content").innerHTML = `<div class="pixel-panel pixel-font" style="padding:20px;text-align:center;color:var(--text-secondary)">No snapshots found for this farm.</div>`;
         return;
       }
+
+      const noPrices = Object.keys(p2pPrices).length === 0;
 
       // Process each snapshot diff
       const processed = [];
@@ -11256,6 +11271,15 @@
 
       function renderContent() {
         let out = "";
+
+        // Warnings banner
+        if (warnings.length > 0) {
+          out += `<div class="pixel-panel pixel-font" style="padding:8px 12px;margin-bottom:12px;border-color:var(--red);font-size:0.5rem;color:var(--text-secondary)">
+            ${noPrices ? '<span style="color:var(--red)">Price data unavailable</span> — SFL values will be missing. ' : '<span style="color:var(--yellow)">Partial data</span> — '}
+            ${warnings.map(w => escHTML(w)).join("; ")}
+            <button class="pixel-font" style="margin-left:8px;padding:2px 8px;cursor:pointer;font-size:0.4375rem" onclick="renderDiff(cachedFarmData)">Retry</button>
+          </div>`;
+        }
 
         // Stat cards
         const timeSpan = processed.length >= 2
