@@ -1832,6 +1832,7 @@
       font-weight: bold;
     }
   </style>
+  <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
   <script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
@@ -7247,30 +7248,83 @@
 
     // ── Shared price timeline bar chart ──
 
+    let _chartCounter = 0;
     function renderPriceTimeline(changes, label) {
       if (!changes || changes.length === 0) {
         return `<div class="ph-empty">Tracking started recently — no history yet</div>`;
       }
+      const chartId = `lw-chart-${++_chartCounter}`;
+      // Schedule chart creation after DOM insert
+      setTimeout(() => _createLWChart(chartId, changes, label), 0);
+      return `<div class="ph-detail-title">${escHTML(label)} — last ${changes.length} changes</div>
+        <div id="${chartId}" style="height:220px;width:100%;border-radius:4px;overflow:hidden"></div>`;
+    }
+
+    function _createLWChart(containerId, changes, label) {
+      const container = document.getElementById(containerId);
+      if (!container || typeof LightweightCharts === "undefined") return;
+
       const sorted = [...changes].sort((a, b) => new Date(a.captured_at) - new Date(b.captured_at));
-      const maxVal = Math.max(...sorted.map(c => c.price ?? c.value ?? 0), 0.001);
-      let html = `<div class="ph-detail-title">${escHTML(label)} — last ${sorted.length} changes</div>`;
-      let prevVal = null;
-      for (const c of sorted) {
-        const val = c.price ?? c.value ?? 0;
-        // Use previous_price from DB if available, otherwise compare to prior entry
-        const prev = c.previous_price ?? c.previous_value ?? prevVal ?? val;
-        const pct = (val / maxVal * 100).toFixed(1);
-        const dir = val > prev ? "up" : val < prev ? "down" : "flat";
+      const data = sorted.map(c => {
         const d = new Date(c.captured_at);
-        const dateStr = `${d.getDate()}/${d.getMonth() + 1} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
-        html += `<div class="ph-bar-row">
-          <span class="ph-bar-date">${dateStr}</span>
-          <div class="ph-bar-track"><div class="ph-bar-fill ${dir}" style="width:${pct}%"></div></div>
-          <span class="ph-bar-val">${formatSFL(val)}</span>
-        </div>`;
-        prevVal = val;
-      }
-      return html;
+        return {
+          time: Math.floor(d.getTime() / 1000),
+          value: c.price ?? c.value ?? 0,
+        };
+      });
+
+      // Detect if first value > last (price dropped) for color
+      const first = data.length > 0 ? data[0].value : 0;
+      const last = data.length > 0 ? data[data.length - 1].value : 0;
+      const trendColor = last >= first ? "#22c55e" : "#ef4444";
+
+      const chart = LightweightCharts.createChart(container, {
+        height: 220,
+        layout: {
+          background: { color: "transparent" },
+          textColor: "#9ca3af",
+          fontFamily: "'Press Start 2P', monospace",
+          fontSize: 9,
+        },
+        grid: {
+          vertLines: { color: "rgba(92,58,30,0.15)" },
+          horzLines: { color: "rgba(92,58,30,0.15)" },
+        },
+        crosshair: {
+          mode: 0,
+          vertLine: { color: "rgba(255,215,0,0.3)", width: 1, style: 2 },
+          horzLine: { color: "rgba(255,215,0,0.3)", width: 1, style: 2 },
+        },
+        rightPriceScale: {
+          borderColor: "rgba(92,58,30,0.3)",
+        },
+        timeScale: {
+          borderColor: "rgba(92,58,30,0.3)",
+          timeVisible: true,
+          secondsVisible: false,
+        },
+        handleScroll: { mouseWheel: true, pressedMouseMove: true },
+        handleScale: { mouseWheel: true, pinch: true },
+      });
+
+      const areaSeries = chart.addAreaSeries({
+        topColor: trendColor + "40",
+        bottomColor: trendColor + "08",
+        lineColor: trendColor,
+        lineWidth: 2,
+        crosshairMarkerVisible: true,
+        crosshairMarkerRadius: 4,
+        priceFormat: { type: "price", precision: 4, minMove: 0.0001 },
+      });
+
+      areaSeries.setData(data);
+      chart.timeScale().fitContent();
+
+      // Resize observer
+      const ro = new ResizeObserver(() => {
+        chart.applyOptions({ width: container.clientWidth });
+      });
+      ro.observe(container);
     }
 
     // ── P2P History toggle detail ──
