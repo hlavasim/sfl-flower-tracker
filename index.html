@@ -11336,17 +11336,16 @@
             for (const it of visibleItems) {
               const rowCls = it.sflValue > 0.0001 ? "gain" : it.sflValue < -0.0001 ? "loss" : "neutral";
               const unitPrice = it.category === "sfl" ? "1.0000" :
-                it.category === "coins" && coinsPerSFL > 0 ? `${Math.round(coinsPerSFL)}/SFL` :
-                it.category === "gems" && gemsPerSFL > 0 ? `${gemsPerSFL.toFixed(1)}/SFL` :
                 it.delta !== 0 && it.sflValue !== 0 ? Math.abs(it.sflValue / it.delta).toFixed(4) : "\u2014";
               const deltaStr = it.category === "sfl" ? (it.delta >= 0 ? "+" : "") + it.delta.toFixed(4) :
                 (it.delta >= 0 ? "+" : "") + (Number.isInteger(it.delta) ? it.delta.toString() : it.delta.toFixed(2));
               const valStr = it.sflValue !== 0 ? (it.sflValue >= 0 ? "+" : "") + it.sflValue.toFixed(4) : "\u2014";
-              const catBadge = it.category === "sfl" ? ' <span style="font-size:0.4375rem;color:var(--sunpetal)">\u25C9</span>' :
-                it.category === "coins" ? ' <span style="font-size:0.4375rem;color:#fbbf24">\u25CB</span>' :
-                it.category === "gems" ? ' <span style="font-size:0.4375rem;color:#a78bfa">\u25C6</span>' :
-                it.category === "wardrobe" ? ' <span style="font-size:0.4375rem;color:var(--lily)">\u{1F455}</span>' : '';
-              out += `<tr class="${rowCls}"><td>${escHTML(it.itemName)}${catBadge}</td><td>${deltaStr}</td><td>${unitPrice}</td><td>${valStr}</td></tr>`;
+              // Icon: SFL icon for balance, item image for everything else
+              const iconName = it.category === "sfl" ? null : it.category === "coins" ? "Coins" : it.itemName;
+              const iconHtml = it.category === "sfl"
+                ? `${sflIcon("14px")} `
+                : iconName ? `<img src="${getItemIcon(iconName)}" style="height:14px;vertical-align:middle;margin-right:3px" onerror="this.style.display='none'">` : '';
+              out += `<tr class="${rowCls}"><td>${iconHtml}${escHTML(it.itemName)}</td><td>${deltaStr}</td><td>${unitPrice}</td><td>${valStr}</td></tr>`;
             }
             out += `</tbody></table>`;
           } else {
