@@ -9535,7 +9535,43 @@
         <div class="timestamp pixel-font">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
       </div>`;
 
+      // Save open/closed state of collapsible sections before re-render
+      const openCats = new Set();
+      document.querySelectorAll(".power-category").forEach(cat => {
+        const body = cat.querySelector(".power-cat-body");
+        if (body && body.style.display === "block") {
+          const id = cat.id?.replace("power-cat-", "");
+          if (id) openCats.add(id);
+        }
+      });
+      const costTablesOpen = document.getElementById("power-cost-tables")?.style.display === "block";
+      const debugTableOpen = document.getElementById("power-debug-table")?.style.display === "block";
+      const bestBuysBody = document.querySelector(".power-best-buys .power-section-body");
+      const bestBuysOpen = bestBuysBody?.style.display === "block";
+
       document.getElementById("power-content").innerHTML = content;
+
+      // Restore open/closed state after re-render
+      openCats.forEach(catId => {
+        const cat = document.getElementById("power-cat-" + catId);
+        if (!cat) return;
+        const body = cat.querySelector(".power-cat-body");
+        const arrow = cat.querySelector(".power-toggle-arrow");
+        if (body) body.style.display = "block";
+        if (arrow) arrow.textContent = "▼";
+      });
+      if (costTablesOpen) {
+        const el = document.getElementById("power-cost-tables");
+        if (el) el.style.display = "block";
+      }
+      if (debugTableOpen) {
+        const el = document.getElementById("power-debug-table");
+        if (el) el.style.display = "block";
+      }
+      if (bestBuysOpen) {
+        const el = document.querySelector(".power-best-buys .power-section-body");
+        if (el) el.style.display = "block";
+      }
     }
 
     function renderPowerBoostRow(b, catId, product, val, isOwned) {
