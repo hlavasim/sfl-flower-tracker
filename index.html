@@ -2171,10 +2171,27 @@
 
     // ── Animal Sickness System ──
     // Sickness check: once per 24h, server-side. Higher level = higher chance.
-    // Exact rates are server-side; estimates from original proposal (Discussion #4300):
-    // Day 3: 1.5%, Day 5: 3.5%, Day 7: 5%, Day 10+: 10%, +2.5% per sick animal nearby
-    // Implementation is level-based. We estimate avg ~5% base rate.
-    const SICKNESS_BASE_RATE = 0.05;
+    // Rates mapped to levels from original proposal (Discussion #4300):
+    // +2.5% spread per sick animal in building (not modeled, would be recursive)
+    // Index = animal level (0-15). Implementation confirmed level-based.
+    const SICKNESS_RATE_BY_LEVEL = [
+      0,      // Lv 0  (unused)
+      0,      // Lv 1  — new animal
+      0,      // Lv 2  — still safe
+      0.015,  // Lv 3  — 1.5%
+      0.025,  // Lv 4  — 2.5%
+      0.035,  // Lv 5  — 3.5%
+      0.04,   // Lv 6  — 4%
+      0.05,   // Lv 7  — 5%
+      0.06,   // Lv 8  — 6%
+      0.07,   // Lv 9  — 7%
+      0.10,   // Lv 10 — 10%
+      0.10,   // Lv 11
+      0.10,   // Lv 12
+      0.10,   // Lv 13
+      0.10,   // Lv 14
+      0.10,   // Lv 15
+    ];
     const BARN_DELIGHT_RECIPE = { Lemon: 5, Honey: 3 };
     const BARN_DELIGHT_RECIPE_ALT = { Lemon: 4, Honey: 2 }; // with Alternate Medicine skill
     // Items that fully prevent sickness for a specific animal category
@@ -8335,7 +8352,7 @@
     //   Prevention items (0% for specific type)
     function calcSicknessCost(catId, capacity, p2pPrices, boostItems, skills) {
       const animals = capacity.animalDetails?.[catId] || [];
-      if (animals.length === 0) return { costPerDay: 0, rate: 0, barnDelightSfl: 0, reductions: [] };
+      if (animals.length === 0) return { costPerDay: 0, avgRate: 0, barnDelightSfl: 0, reductions: [], perLevel: [] };
 
       const reductions = [];
 
@@ -8346,9 +8363,6 @@
       const lemonPrice = p2pPrices["Lemon"] || 0;
       const honeyPrice = p2pPrices["Honey"] || 0;
       const barnDelightSfl = (recipe.Lemon * lemonPrice) + (recipe.Honey * honeyPrice);
-
-      // Base sickness rate
-      let rate = SICKNESS_BASE_RATE;
 
       // Check prevention items (full immunity for this category)
       let prevented = false;
@@ -8363,24 +8377,23 @@
           }
         }
       }
-      if (prevented) return { costPerDay: 0, rate: 0, barnDelightSfl, prevented: true, reductions };
+      if (prevented) return { costPerDay: 0, avgRate: 0, barnDelightSfl, prevented: true, reductions, perLevel: [] };
 
-      // Healthy Livestock skill: -50% sickness chance
+      // Rate multiplier from Healthy Livestock
+      let rateMult = 1;
       const hasHealthyLivestock = !!(skills && skills["Healthy Livestock"]);
       if (hasHealthyLivestock) {
-        rate *= 0.5;
+        rateMult = 0.5;
         reductions.push({ name: "Healthy Livestock", desc: "-50% sickness rate" });
       }
 
       // Cure cost modifiers
       let cureCostMult = 1;
-      // Oracle Syringe: free cure
       const hasOracleSyringe = boostItems && boostItems.some(b => b.name === "Oracle Syringe" && b.has);
       if (hasOracleSyringe) {
         cureCostMult = 0;
         reductions.push({ name: "Oracle Syringe", desc: "Free cure" });
       }
-      // Medic Apron: -50% cure cost (stacks multiplicatively)
       if (cureCostMult > 0) {
         const hasMedicApron = boostItems && boostItems.some(b => b.name === "Medic Apron" && b.has);
         if (hasMedicApron) {
@@ -8389,10 +8402,23 @@
         }
       }
 
-      const costPerAnimalPerDay = rate * barnDelightSfl * cureCostMult;
-      const costPerDay = animals.length * costPerAnimalPerDay;
+      // Per-animal level-based sickness rate
+      let totalExpectedSick = 0;
+      const perLevel = {};  // { level: { count, rate, cost } }
+      for (const animal of animals) {
+        const lvl = Math.min(animal.level || 1, SICKNESS_RATE_BY_LEVEL.length - 1);
+        const baseRate = SICKNESS_RATE_BY_LEVEL[lvl] || 0;
+        const effectiveRate = baseRate * rateMult;
+        totalExpectedSick += effectiveRate;
 
-      return { costPerDay, rate, barnDelightSfl, cureCostMult, reductions, animalCount: animals.length };
+        if (!perLevel[lvl]) perLevel[lvl] = { count: 0, rate: effectiveRate, baseRate };
+        perLevel[lvl].count++;
+      }
+
+      const costPerDay = totalExpectedSick * barnDelightSfl * cureCostMult;
+      const avgRate = animals.length > 0 ? totalExpectedSick / animals.length : 0;
+
+      return { costPerDay, avgRate, totalExpectedSick, barnDelightSfl, cureCostMult, rateMult, reductions, animalCount: animals.length, perLevel };
     }
 
     // Calculate sickness cost savings from a specific boost item
@@ -9741,8 +9767,17 @@
               if (sc.prevented) {
                 content += `<div style="color:var(--green)">\u{1F6E1}\uFE0F Sickness: <strong>PREVENTED</strong> by ${sc.reductions.map(r => escHTML(r.name)).join(", ")}</div>`;
               } else {
-                const ratePct = (sc.rate * 100).toFixed(1);
-                content += `<div>\u{1F489} Sickness rate: ~${ratePct}%/day \u00d7 ${sc.animalCount || 0} animals</div>`;
+                const avgPct = (sc.avgRate * 100).toFixed(1);
+                const expectedSick = (sc.totalExpectedSick || 0).toFixed(2);
+                content += `<div>\u{1F489} Avg sickness rate: ~${avgPct}%/day (${expectedSick} expected sick/day)</div>`;
+                // Per-level breakdown
+                const lvlParts = Object.entries(sc.perLevel || {}).sort((a,b) => parseInt(a[0]) - parseInt(b[0])).map(([lvl, d]) => {
+                  const pct = (d.baseRate * 100).toFixed(1);
+                  return `L${lvl}: ${d.count}\u00d7${pct}%`;
+                });
+                if (lvlParts.length > 0) {
+                  content += `<div style="font-size:0.4375rem;color:var(--text-dim)">${lvlParts.join(" \u00b7 ")}${sc.rateMult < 1 ? ' (\u00d7' + sc.rateMult + ' Healthy Livestock)' : ''}</div>`;
+                }
                 content += `<div>Barn Delight cost: ${sc.barnDelightSfl.toFixed(4)} ${sflIcon()} (${sc.cureCostMult < 1 ? 'reduced \u00d7' + sc.cureCostMult.toFixed(2) : 'full price'})</div>`;
                 content += `<div>Sickness cost/day: <strong style="color:var(--red)">${sc.costPerDay.toFixed(4)} ${sflIcon()}/day</strong></div>`;
                 if (sc.reductions.length > 0) {
