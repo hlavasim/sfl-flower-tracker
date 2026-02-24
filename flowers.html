@@ -7227,9 +7227,9 @@
           return (capacity.trees || 0) * (86400 / d.respawnSec) * d.yield;
         }
         case "flowers": {
-          // Use generic flower grow time (Sunpetal = 86400s base)
+          const growSec = SEED_DATA[product]?.baseSeconds || 86400;
           const n = capacity.flowers || 0;
-          return n * (86400 / 86400) * 1; // 1 flower/bed/day base
+          return n * (86400 / growSec) * 1;
         }
         case "fishing": return 20; // ~20 catches/day estimate
         default: return 0;
@@ -7253,7 +7253,7 @@
         case "obsidian": return RESOURCE_RESPAWN_DATA["Obsidian"].respawnSec;
         case "oil": return RESOURCE_RESPAWN_DATA["Oil"].respawnSec;
         case "trees": return RESOURCE_RESPAWN_DATA["Wood"].respawnSec;
-        case "flowers": return 86400;
+        case "flowers": return SEED_DATA[product]?.baseSeconds || 86400;
         default: return 86400;
       }
     }
