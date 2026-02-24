@@ -11125,7 +11125,7 @@
       html += `<div class="under-dev-banner pixel-font" style="background:linear-gradient(180deg,#1a1a2e,#16213e);padding:8px 12px;border:3px solid #000;margin-bottom:16px;text-align:center;font-size:0.5625rem;color:#e94560">
         &#x1F50D; FARM DIFF VIEWER &#x1F50D;
         <div style="margin-top:6px;font-size:0.5rem;color:var(--text-secondary);line-height:1.5">
-          Last 50 snapshots (every 5 min). SFL values from current P2P prices.<br>
+          Last 50 snapshots (every 5 min). SFL values from P2P prices + Betty coins + gem exchange.<br>
           Crafted items valued by ingredient costs.
         </div>
       </div>`;
@@ -11133,18 +11133,32 @@
       html += `<div id="diff-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading snapshots...</div></div></div>`;
       app.innerHTML = html;
 
-      // Fetch P2P prices + farm history in parallel
+      // Fetch P2P prices, exchange rates + farm history in parallel
       let p2pPrices = {};
       let snapshots = [];
+      let coinsPerSFL = 0;
+      let gemsPerSFL = 0;
       try {
-        const [priceResp, histResp] = await Promise.all([
-          fetch(`/api/proxy?url=${encodeURIComponent("https://sfl.world/api/v1/prices")}`),
+        const proxyUrl = (u) => `/api/proxy?url=${encodeURIComponent(u)}`;
+        const [priceResp, exchangeResp, histResp] = await Promise.all([
+          fetch(proxyUrl("https://sfl.world/api/v1/prices")),
+          fetch(proxyUrl("https://sfl.world/api/v1.1/exchange")),
           fetch(`/api/farm-history?farm=${FARM_ID}&latest=50`),
         ]);
         if (priceResp.ok) {
           const pd = await priceResp.json();
           const raw = pd?.data?.p2p || pd?.p2p || {};
           for (const [k, v] of Object.entries(raw)) p2pPrices[k] = parseFloat(v) || 0;
+        }
+        if (exchangeResp.ok) {
+          const ed = await exchangeResp.json();
+          // Coins: Betty rate (best crop sell price / P2P price)
+          const betty = computeBettyRate(p2pPrices);
+          coinsPerSFL = betty.rate || 320;
+          // Gems: best-value tier with -30% pack discount
+          const gemTiers = Object.values(ed?.gems || {});
+          const bestGemTier = gemTiers.reduce((best, t) => (!best || (t.gem / t.sfl) > (best.gem / best.sfl)) ? t : best, null);
+          gemsPerSFL = bestGemTier ? (bestGemTier.gem / (bestGemTier.sfl * 0.7)) : 0;
         }
         if (histResp.ok) {
           const hd = await histResp.json();
@@ -11182,7 +11196,11 @@
           } else if (key === "coins") {
             category = "coins";
             itemName = "Coins";
-            sflValue = 0; // coins aren't SFL
+            sflValue = coinsPerSFL > 0 ? delta / coinsPerSFL : 0;
+          } else if (key === "gems") {
+            category = "gems";
+            itemName = "Gems";
+            sflValue = gemsPerSFL > 0 ? delta / gemsPerSFL : 0;
           } else if (key.startsWith("inventory.")) {
             itemName = key.substring(10);
             category = "inventory";
@@ -11195,7 +11213,7 @@
             continue; // skip stock changes
           }
 
-          items.push({ key, itemName, category, delta, sflValue, hasPrice: sflValue !== 0 || category === "sfl" });
+          items.push({ key, itemName, category, delta, sflValue, hasPrice: sflValue !== 0 || category === "sfl" || category === "coins" || category === "gems" });
           netSfl += sflValue;
         }
 
@@ -11222,7 +11240,7 @@
       const runRange = maxRun - minRun || 1;
 
       // State
-      let showZeroPrice = false;
+      let showZeroPrice = true;
       let selectedIdx = processed.length - 1; // latest
 
       function renderContent() {
@@ -11302,7 +11320,7 @@
           const prev = selectedIdx > 0 ? processed[selectedIdx - 1] : null;
           const timeFmt = p.time.toLocaleString();
 
-          const visibleItems = showZeroPrice ? p.items : p.items.filter(it => it.hasPrice || it.category === "coins");
+          const visibleItems = showZeroPrice ? p.items : p.items.filter(it => it.hasPrice);
 
           out += `<div class="pixel-panel diff-detail">
             <div class="diff-detail-header">
@@ -11321,12 +11339,15 @@
             for (const it of visibleItems) {
               const rowCls = it.sflValue > 0.0001 ? "gain" : it.sflValue < -0.0001 ? "loss" : "neutral";
               const unitPrice = it.category === "sfl" ? "1.0000" :
+                it.category === "coins" && coinsPerSFL > 0 ? `${Math.round(coinsPerSFL)}/SFL` :
+                it.category === "gems" && gemsPerSFL > 0 ? `${gemsPerSFL.toFixed(1)}/SFL` :
                 it.delta !== 0 && it.sflValue !== 0 ? Math.abs(it.sflValue / it.delta).toFixed(4) : "\u2014";
               const deltaStr = it.category === "sfl" ? (it.delta >= 0 ? "+" : "") + it.delta.toFixed(4) :
                 (it.delta >= 0 ? "+" : "") + (Number.isInteger(it.delta) ? it.delta.toString() : it.delta.toFixed(2));
               const valStr = it.sflValue !== 0 ? (it.sflValue >= 0 ? "+" : "") + it.sflValue.toFixed(4) : "\u2014";
               const catBadge = it.category === "sfl" ? ' <span style="font-size:0.4375rem;color:var(--sunpetal)">\u25C9</span>' :
                 it.category === "coins" ? ' <span style="font-size:0.4375rem;color:#fbbf24">\u25CB</span>' :
+                it.category === "gems" ? ' <span style="font-size:0.4375rem;color:#a78bfa">\u25C6</span>' :
                 it.category === "wardrobe" ? ' <span style="font-size:0.4375rem;color:var(--lily)">\u{1F455}</span>' : '';
               out += `<tr class="${rowCls}"><td>${escHTML(it.itemName)}${catBadge}</td><td>${deltaStr}</td><td>${unitPrice}</td><td>${valStr}</td></tr>`;
             }
