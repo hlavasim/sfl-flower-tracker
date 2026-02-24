@@ -1541,6 +1541,132 @@
       .power-bb-roi { width: 45px; }
       .power-cat-header { font-size: 0.5625rem; flex-wrap: wrap; }
       .power-product-select { font-size: 0.375rem; }
+      .nav-more-btn { font-size: 0.5rem; padding: 12px 10px; }
+      .pet-fetch-row { grid-template-columns: 1fr auto auto; gap: 4px; font-size: 0.6875rem; }
+    }
+
+    /* ── Nav More Dropdown ── */
+    .nav-more-wrap {
+      position: relative;
+      display: flex;
+      align-items: stretch;
+    }
+    .nav-more-btn {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 0.625rem;
+      color: var(--text-secondary);
+      background: none;
+      border: none;
+      padding: 14px 14px;
+      cursor: pointer;
+      white-space: nowrap;
+      border-bottom: 3px solid transparent;
+      transition: color 0.15s, border-color 0.15s;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+    }
+    .nav-more-btn:hover { color: var(--text-primary); }
+    .nav-more-btn.active {
+      color: var(--sunpetal);
+      border-bottom-color: var(--sunpetal);
+    }
+    .nav-more-menu {
+      display: none;
+      position: absolute;
+      top: 100%;
+      right: 0;
+      background: var(--bg-medium);
+      border: 3px solid var(--border-brown);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.6);
+      z-index: 100;
+      min-width: 140px;
+    }
+    .nav-more-menu.open { display: block; }
+    .nav-more-menu .nav-link {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(92,58,30,0.3);
+    }
+    .nav-more-menu .nav-link:last-child { border-bottom: none; }
+    .nav-more-menu .nav-link:hover { background: var(--bg-light); }
+    .nav-more-menu .nav-link.active {
+      color: var(--sunpetal);
+      border-bottom-color: transparent;
+      background: rgba(255,215,0,0.08);
+    }
+
+    /* ── Pet Cards ── */
+    .pet-card {
+      margin-bottom: 12px;
+      padding: 12px 14px;
+    }
+    .pet-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .pet-name {
+      font-size: 0.8125rem;
+      font-weight: bold;
+      color: var(--text-primary);
+    }
+    .pet-level {
+      font-size: 0.6875rem;
+      color: var(--text-secondary);
+    }
+    .pet-section-title {
+      font-size: 0.5625rem;
+      color: var(--text-dim);
+      margin: 10px 0 4px;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid rgba(92,58,30,0.3);
+      padding-bottom: 4px;
+    }
+    .pet-fetch-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto auto;
+      gap: 8px;
+      padding: 4px 8px;
+      font-size: 0.75rem;
+      align-items: center;
+    }
+    .pet-fetch-row.pet-best {
+      background: rgba(48,209,88,0.1);
+      border-left: 3px solid var(--green);
+      padding-left: 5px;
+    }
+    .pet-fetch-row.pet-locked {
+      color: var(--text-dim);
+      grid-template-columns: 1fr auto;
+    }
+    .pet-food-list {
+      font-size: 0.6875rem;
+      color: var(--text-secondary);
+      padding: 4px 8px;
+      line-height: 1.6;
+    }
+    .pet-resource-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 4px;
+    }
+    .pet-resource-table th {
+      font-size: 0.5625rem;
+      color: var(--text-dim);
+      text-align: left;
+      padding: 6px 10px;
+      border-bottom: 2px solid var(--border-brown);
+    }
+    .pet-resource-table td {
+      font-size: 0.75rem;
+      padding: 5px 10px;
+      border-bottom: 1px solid rgba(92,58,30,0.2);
     }
   </style>
   <script defer src="/_vercel/insights/script.js"></script>
@@ -3008,7 +3134,7 @@
     // ═══════════════════════════════════════
 
     function renderNavBar(page) {
-      const links = [
+      const primary = [
         { id: "hub", label: "HUB" },
         { id: "flowers", label: "FLOWERS" },
         { id: "dolls", label: "DOLLS" },
@@ -3016,14 +3142,26 @@
         { id: "bumpkin", label: "BUMPKIN" },
         { id: "treasury", label: "TREASURY" },
         { id: "sales", label: "SALES" },
+      ];
+      const overflow = [
         { id: "power", label: "POWER" },
         { id: "buds", label: "BUDS" },
+        { id: "pets", label: "PETS" },
       ];
       let html = '<div class="nav-bar pixel-panel">';
-      for (const l of links) {
+      for (const l of primary) {
         const cls = page === l.id ? " active" : "";
         html += `<button class="nav-link${cls}" onclick="navigateTo('${l.id}')">${l.label}</button>`;
       }
+      const moreActive = overflow.some(l => l.id === page);
+      html += `<div class="nav-more-wrap">`;
+      html += `<button class="nav-more-btn${moreActive ? " active" : ""}" onclick="toggleNavMore(event)">MORE \u25be</button>`;
+      html += `<div class="nav-more-menu" id="nav-more-menu">`;
+      for (const l of overflow) {
+        const cls = page === l.id ? " active" : "";
+        html += `<button class="nav-link${cls}" onclick="navigateTo('${l.id}')">${l.label}</button>`;
+      }
+      html += `</div></div>`;
       html += '<div class="nav-zoom">';
       html += '<button class="zoom-btn" onclick="changeZoom(-1)" title="Zmenšit text">A-</button>';
       html += '<button class="zoom-btn" onclick="changeZoom(1)" title="Zvětšit text">A+</button>';
@@ -3031,6 +3169,22 @@
       html += '<button class="nav-link help-btn" onclick="openHelp()">?</button>';
       html += '</div>';
       document.getElementById("nav-bar").innerHTML = html;
+    }
+
+    function toggleNavMore(e) {
+      e.stopPropagation();
+      const menu = document.getElementById("nav-more-menu");
+      if (!menu) return;
+      menu.classList.toggle("open");
+      if (menu.classList.contains("open")) {
+        const close = (ev) => {
+          if (!menu.contains(ev.target)) {
+            menu.classList.remove("open");
+            document.removeEventListener("click", close);
+          }
+        };
+        setTimeout(() => document.addEventListener("click", close), 0);
+      }
     }
 
     // ═══════════════════════════════════════
@@ -3113,7 +3267,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v1.9</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v2.0</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -3140,6 +3294,12 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v2.0", items: [
+          { t: "new", text: "Pet Advisor page — fetch resource recommendations with SFL/energy ratios" },
+          { t: "new", text: "Per-pet cards with unlocked/locked resources, best fetch highlighted" },
+          { t: "new", text: "Resource market overview table sorted by SFL/energy efficiency" },
+          { t: "new", text: "Nav bar MORE dropdown — overflow pages in collapsible menu" },
+        ]},
         { ver: "v1.9", items: [
           { t: "new", text: "Beehive Honey Tracker on flowers page — countdown timers for each hive" },
           { t: "new", text: "Honey progress %, stalled detection, Bee Swarm alerts" },
@@ -10177,6 +10337,222 @@
       }
     }
 
+    // ═══════════════════════════════════════
+    //  PETS PAGE
+    // ═══════════════════════════════════════
+
+    const PET_FETCH_DATA = {
+      // Common pets (4 resources, unlocked at Lv 1/3/7/20)
+      "Meowchi":  [{res:"Wild Grass",level:1,energy:60},{res:"Ribbon",level:3,energy:150},{res:"Acorn",level:7,energy:100},{res:"Chewed Bone",level:20,energy:200}],
+      "Fluffkin": [{res:"Dewberry",level:1,energy:80},{res:"Heart Leaf",level:3,energy:100},{res:"Wild Grass",level:7,energy:60},{res:"Ruffroot",level:20,energy:200}],
+      "Shadow":   [{res:"Frost Pebble",level:1,energy:100},{res:"Dewberry",level:3,energy:80},{res:"Ribbon",level:7,energy:150},{res:"Chewed Bone",level:20,energy:200}],
+      "Bruce":    [{res:"Wild Grass",level:1,energy:60},{res:"Frost Pebble",level:3,energy:100},{res:"Heart Leaf",level:7,energy:100},{res:"Ruffroot",level:20,energy:200}],
+      "Gummy":    [{res:"Dewberry",level:1,energy:80},{res:"Acorn",level:3,energy:100},{res:"Frost Pebble",level:7,energy:100},{res:"Ribbon",level:20,energy:150}],
+      // NFT pets (6 resources, unlocked at Lv 1/3/7/12/20/25)
+      "Griffin":  [{res:"Wild Grass",level:1,energy:60},{res:"Dewberry",level:3,energy:80},{res:"Frost Pebble",level:7,energy:100},{res:"Ribbon",level:12,energy:150},{res:"Chewed Bone",level:20,energy:200},{res:"Moonfur",level:25,energy:500}],
+      "Dragon":   [{res:"Frost Pebble",level:1,energy:100},{res:"Heart Leaf",level:3,energy:100},{res:"Wild Grass",level:7,energy:60},{res:"Ruffroot",level:12,energy:200},{res:"Fossil Shell",level:20,energy:300},{res:"Moonfur",level:25,energy:500}],
+      "Unicorn":  [{res:"Heart Leaf",level:1,energy:100},{res:"Wild Grass",level:3,energy:60},{res:"Dewberry",level:7,energy:80},{res:"Ribbon",level:12,energy:150},{res:"Ruffroot",level:20,energy:200},{res:"Moonfur",level:25,energy:500}],
+      "Phoenix":  [{res:"Dewberry",level:1,energy:80},{res:"Frost Pebble",level:3,energy:100},{res:"Ribbon",level:7,energy:150},{res:"Chewed Bone",level:12,energy:200},{res:"Ruffroot",level:20,energy:200},{res:"Moonfur",level:25,energy:500}],
+      "Serpent":  [{res:"Wild Grass",level:1,energy:60},{res:"Ribbon",level:3,energy:150},{res:"Heart Leaf",level:7,energy:100},{res:"Acorn",level:12,energy:100},{res:"Chewed Bone",level:20,energy:200},{res:"Moonfur",level:25,energy:500}],
+      "Pegasus":  [{res:"Frost Pebble",level:1,energy:100},{res:"Dewberry",level:3,energy:80},{res:"Heart Leaf",level:7,energy:100},{res:"Wild Grass",level:12,energy:60},{res:"Ribbon",level:20,energy:150},{res:"Moonfur",level:25,energy:500}],
+      "Kitsune":  [{res:"Heart Leaf",level:1,energy:100},{res:"Acorn",level:3,energy:100},{res:"Dewberry",level:7,energy:80},{res:"Frost Pebble",level:12,energy:100},{res:"Chewed Bone",level:20,energy:200},{res:"Moonfur",level:25,energy:500}],
+      "Cerberus": [{res:"Ribbon",level:1,energy:150},{res:"Wild Grass",level:3,energy:60},{res:"Frost Pebble",level:7,energy:100},{res:"Chewed Bone",level:12,energy:200},{res:"Fossil Shell",level:20,energy:300},{res:"Moonfur",level:25,energy:500}],
+      "Basilisk": [{res:"Dewberry",level:1,energy:80},{res:"Heart Leaf",level:3,energy:100},{res:"Acorn",level:7,energy:100},{res:"Ruffroot",level:12,energy:200},{res:"Chewed Bone",level:20,energy:200},{res:"Moonfur",level:25,energy:500}],
+    };
+
+    // Cumulative XP thresholds: index 0 = Lv 1, index 29 = Lv 30
+    const PET_XP_TABLE = [
+      0, 10, 25, 50, 100, 175, 280, 420, 600, 830,
+      1120, 1480, 1920, 2450, 3100, 3880, 4800, 5900, 7200, 8750,
+      10600, 12800, 15400, 18500, 22200, 26600, 31800, 38000, 45300, 54000,
+    ];
+
+    function petLevel(xp) {
+      for (let i = PET_XP_TABLE.length - 1; i >= 0; i--) {
+        if (xp >= PET_XP_TABLE[i]) return i + 1;
+      }
+      return 1;
+    }
+
+    async function renderPets(data) {
+      const app = document.getElementById("app");
+      const { farm } = data;
+
+      let html = `<div class="header pixel-panel pixel-font">
+        <h1>PET ADVISOR</h1>
+        <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
+      </div>`;
+
+      html += `<div class="under-dev-banner pixel-font" style="background:linear-gradient(180deg,#3b1768,#2a1050);padding:8px 12px;border:3px solid #000;margin-bottom:16px;text-align:center;font-size:0.5625rem;color:var(--lily)">
+        ⚠️ UNDER DEVELOPMENT ⚠️
+        <div style="margin-top:6px;font-size:0.5rem;color:var(--text-secondary);line-height:1.5">
+          Pet fetch resource advisor. Prices from sfl.world P2P market.<br>
+          Shows optimal fetch targets based on ${sflIcon()}/energy efficiency.
+        </div>
+      </div>`;
+
+      html += `<div id="pets-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading prices...</div></div></div>`;
+      app.innerHTML = html;
+
+      // Fetch P2P prices
+      let p2pPrices = {};
+      try {
+        const resp = await fetch(`/api/proxy?url=${encodeURIComponent("https://sfl.world/api/v1/prices")}`);
+        if (resp.ok) {
+          const priceResp = await resp.json();
+          const priceData = priceResp?.data?.p2p || priceResp?.p2p || {};
+          for (const [k, v] of Object.entries(priceData)) p2pPrices[k] = parseFloat(v) || 0;
+        }
+      } catch {}
+
+      // Parse pets from farm data
+      const pets = [];
+      const commonPets = farm.pets?.common || {};
+      for (const [name, pet] of Object.entries(commonPets)) {
+        const xp = pet.experience || 0;
+        const level = petLevel(xp);
+        const energy = pet.energy || 0;
+        const foods = pet.requests?.food || [];
+        pets.push({ name, petType: name, level, xp, energy, foods, isNft: false, nftId: null });
+      }
+      const nftPets = farm.pets?.nfts || {};
+      for (const [id, pet] of Object.entries(nftPets)) {
+        const xp = pet.experience || 0;
+        const level = petLevel(xp);
+        const energy = pet.energy || 0;
+        const foods = pet.requests?.food || [];
+        const petType = pet.traits?.type || "Unknown";
+        pets.push({ name: `Pet #${id}`, petType, level, xp, energy, foods, isNft: true, nftId: id });
+      }
+
+      // Sort: NFT first, then common; within each group by level desc
+      pets.sort((a, b) => {
+        if (a.isNft !== b.isNft) return a.isNft ? -1 : 1;
+        return b.level - a.level;
+      });
+
+      // Empty state
+      if (pets.length === 0) {
+        document.getElementById("pets-content").innerHTML = `
+          <div class="pixel-panel" style="padding:24px;text-align:center;font-size:0.75rem;color:var(--text-secondary)">
+            No pets found on this farm.<br><br>
+            <a href="https://docs.sunflower-land.com/player-guides/pets" target="_blank" style="color:var(--sunpetal)">Learn about pets &#x2192;</a>
+          </div>`;
+        return;
+      }
+
+      let content = '';
+
+      // Summary bar
+      const totalEnergy = pets.reduce((s, p) => s + p.energy, 0);
+      const nftCount = pets.filter(p => p.isNft).length;
+      const commonCount = pets.filter(p => !p.isNft).length;
+      content += `<div class="summary-bar pixel-panel">
+        <div class="summary-stat">
+          <div class="label pixel-font">TOTAL PETS</div>
+          <div class="value">${pets.length}</div>
+        </div>
+        <div class="summary-stat">
+          <div class="label pixel-font">COMMON</div>
+          <div class="value">${commonCount}</div>
+        </div>
+        <div class="summary-stat">
+          <div class="label pixel-font">NFT</div>
+          <div class="value" style="color:var(--lily)">${nftCount}</div>
+        </div>
+        <div class="summary-stat">
+          <div class="label pixel-font">TOTAL ENERGY</div>
+          <div class="value time">${totalEnergy.toLocaleString()} &#x26A1;</div>
+        </div>
+      </div>`;
+
+      // Collect all unique fetchable resources with prices
+      const resMap = new Map();
+      for (const entries of Object.values(PET_FETCH_DATA)) {
+        for (const e of entries) {
+          if (!resMap.has(e.res)) {
+            const price = p2pPrices[e.res] || 0;
+            const ratio = price > 0 ? price / e.energy : 0;
+            resMap.set(e.res, { res: e.res, price, energy: e.energy, ratio });
+          }
+        }
+      }
+      const sortedRes = [...resMap.values()].sort((a, b) => b.ratio - a.ratio);
+
+      // Resource market overview
+      content += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:16px">
+        <div style="font-size:0.6875rem;color:var(--sunpetal);margin-bottom:8px;font-weight:bold" class="pixel-font">RESOURCE MARKET</div>
+        <table class="pet-resource-table">
+          <tr><th>RESOURCE</th><th>${sflIcon("1em")} PRICE</th><th>&#x26A1; COST</th><th>${sflIcon("1em")}/&#x26A1;</th></tr>`;
+      for (const r of sortedRes) {
+        const priceStr = r.price > 0 ? r.price.toFixed(2) : "&#x2014;";
+        const ratioStr = r.ratio > 0 ? r.ratio.toFixed(4) : "&#x2014;";
+        const style = r.ratio > 0 ? "" : ' style="color:var(--text-dim)"';
+        content += `<tr${style}><td>${escHTML(r.res)}</td><td>${priceStr}</td><td>${r.energy}</td><td>${ratioStr}</td></tr>`;
+      }
+      content += `</table></div>`;
+
+      // Per-pet cards
+      for (const pet of pets) {
+        const fetchData = PET_FETCH_DATA[pet.petType] || [];
+        const typeLabel = pet.isNft ? ` (${escHTML(pet.petType)})` : "";
+        const nftBadge = pet.isNft ? ' <span style="color:var(--lily);font-size:0.5625rem;font-weight:normal">NFT</span>' : "";
+
+        content += `<div class="pet-card pixel-panel">
+          <div class="pet-header">
+            <span class="pet-name">${escHTML(pet.name)}${typeLabel}${nftBadge}</span>
+            <span class="pet-level pixel-font">Lv ${pet.level} &#xB7; ${pet.energy.toLocaleString()} &#x26A1;</span>
+          </div>`;
+
+        if (fetchData.length > 0) {
+          const unlocked = fetchData.filter(f => pet.level >= f.level);
+          const locked = fetchData.filter(f => pet.level < f.level);
+
+          // Calculate SFL/energy ratio for unlocked
+          const withRatio = unlocked.map(f => {
+            const price = p2pPrices[f.res] || 0;
+            return { ...f, price, ratio: price > 0 ? price / f.energy : 0 };
+          }).sort((a, b) => b.ratio - a.ratio);
+
+          content += `<div class="pet-section-title pixel-font">BEST FETCHES</div>`;
+
+          for (let i = 0; i < withRatio.length; i++) {
+            const f = withRatio[i];
+            const isBest = i === 0 && f.ratio > 0;
+            const cls = isBest ? "pet-fetch-row pet-best" : "pet-fetch-row";
+            const star = isBest ? "&#x2605; " : "";
+            const priceStr = f.price > 0 ? `${f.price.toFixed(2)} ${sflIcon("0.85em")}` : "&#x2014;";
+            const ratioStr = f.ratio > 0 ? `${f.ratio.toFixed(4)}/&#x26A1;` : "&#x2014;";
+            content += `<div class="${cls}">
+              <span>${star}${escHTML(f.res)}</span>
+              <span>${priceStr}</span>
+              <span>${f.energy} &#x26A1;</span>
+              <span>${ratioStr}</span>
+            </div>`;
+          }
+
+          for (const f of locked) {
+            content += `<div class="pet-fetch-row pet-locked">
+              <span>&#x1F512; ${escHTML(f.res)}</span>
+              <span>(Lv ${f.level})</span>
+            </div>`;
+          }
+        } else {
+          content += `<div style="padding:8px;color:var(--text-dim);font-size:0.6875rem">Unknown pet type &#x2014; no fetch data available</div>`;
+        }
+
+        // Food requests
+        if (pet.foods.length > 0) {
+          content += `<div class="pet-section-title pixel-font">FOOD REQUESTS</div>`;
+          content += `<div class="pet-food-list">${pet.foods.map(f => escHTML(f)).join(" &#xB7; ")}</div>`;
+        }
+
+        content += `</div>`;
+      }
+
+      document.getElementById("pets-content").innerHTML = content;
+    }
+
     function refresh() {
       cachedFarmData = null;
       main();
@@ -10230,6 +10606,7 @@
           case "sales": renderSales(data); break;
           case "power": renderPower(data); break;
           case "buds": renderBuds(data); break;
+          case "pets": renderPets(data); break;
           default: renderHub(data);
         }
 
