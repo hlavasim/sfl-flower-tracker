@@ -2403,9 +2403,9 @@
     }
 
     const RESOURCE_RESPAWN_DATA = {
-      "Stone":     { respawnSec: 14400, yield: 2, farmKey: "stones" },
-      "Iron":      { respawnSec: 28800, yield: 1, farmKey: "iron" },
-      "Gold":      { respawnSec: 86400, yield: 1, farmKey: "gold" },
+      "Stone":     { respawnSec: 14400, yield: 2.2, farmKey: "stones" },  // base 2 + Native (20%×1=+0.2)
+      "Iron":      { respawnSec: 28800, yield: 1.2, farmKey: "iron" },    // base 1 + Native (20%×1=+0.2)
+      "Gold":      { respawnSec: 86400, yield: 1.2, farmKey: "gold" },    // base 1 + Native (20%×1=+0.2)
       "Crimstone": { respawnSec: 86400, yield: 1.4, farmKey: "crimstones" }, // native +2 every 5th dig = +0.4 avg
       "Wood":      { respawnSec: 7200,  yield: 3, farmKey: "trees" },
       "Obsidian":  { respawnSec: 259200, yield: 1, farmKey: "lavaPits" }, // 3 days
@@ -2955,6 +2955,23 @@
       ],
       "Sleepy Chicken": [
         { type: "sickness_prevention", value: 1.0, cat: "chickens", raw: "Prevents chicken sickness" },
+      ],
+      "Gold Beetle": [
+        { type: "yield_flat", value: 0.1, cat: "gold", raw: "+0.1 Gold" },
+      ],
+      "Stone Beetle": [
+        { type: "yield_flat", value: 0.1, cat: "stone", raw: "+0.1 Stone" },
+      ],
+      "Iron Beetle": [
+        { type: "yield_flat", value: 0.1, cat: "iron", raw: "+0.1 Iron" },
+      ],
+      "Gilded Swordfish": [
+        { type: "yield_flat", value: 0.1, cat: "gold", raw: "+0.1 Gold" },
+      ],
+      "Volcano Gnome": [
+        { type: "yield_flat", value: 0.1, cat: "stone", raw: "+0.1 Stone (Volcano Island)" },
+        { type: "yield_flat", value: 0.1, cat: "iron", raw: "+0.1 Iron (Volcano Island)" },
+        { type: "yield_flat", value: 0.1, cat: "gold", raw: "+0.1 Gold (Volcano Island)" },
       ],
     };
 
@@ -5610,7 +5627,7 @@
       return { rate: bestRate, item: bestItem };
     }
 
-    const SFL_ICON_URL = "https://sfl.world/img/source/SFL.png";
+    const SFL_ICON_URL = "https://raw.githubusercontent.com/sunflower-land/sunflower-land/main/src/assets/icons/flower_token.webp";
     function sflIcon(size) {
       return `<img src="${SFL_ICON_URL}" class="sfl-icon" alt="SFL"${size ? ` style="height:${size}"` : ""}>`;
     }
@@ -5835,6 +5852,7 @@
       "Cluckapult": GITHUB_ASSETS+"/sfts/cluckapult.webp",
       "Cluckulator": GITHUB_ASSETS+"/sfts/cluckulator.webp",
       "Cobalt": GITHUB_ASSETS+"/decorations/cobalt.png",
+      "Coins": GITHUB_ASSETS+"/icons/coins.webp",
       "Cobia": GITHUB_ASSETS+"/fish/copia.png",
       "Cockle Shell": GITHUB_ASSETS+"/resources/cockle_shell.webp",
       "Coelacanth": GITHUB_ASSETS+"/fish/coelacanth.png",
