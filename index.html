@@ -9498,22 +9498,32 @@
       }
 
       // Inject non-NFT boost items (Helios Blacksmith, event decorations, etc.)
+      // cost: { coins, materials } → converted to SFL as floor price
       const EXTRA_BOOST_ITEMS = [
-        { name: "Gold Beetle", boost: "+0.1 Gold", type: "Collectible" },
-        { name: "Stone Beetle", boost: "+0.1 Stone", type: "Collectible" },
-        { name: "Iron Beetle", boost: "+0.1 Iron", type: "Collectible" },
-        { name: "Gilded Swordfish", boost: "+0.1 Gold", type: "Collectible" },
-        { name: "Volcano Gnome", boost: "+0.1 Stone, Iron & Gold (Volcano Island)", type: "Collectible" },
+        { name: "Gold Beetle", boost: "+0.1 Gold", type: "Collectible", cost: { coins: 10000, materials: { Gold: 20 } } },
+        { name: "Stone Beetle", boost: "+0.1 Stone", type: "Collectible", cost: { coins: 1000, materials: { Stone: 20 } } },
+        { name: "Iron Beetle", boost: "+0.1 Iron", type: "Collectible", cost: { coins: 2000, materials: { Iron: 20 } } },
+        { name: "Gilded Swordfish", boost: "+0.1 Gold", type: "Collectible", cost: null }, // fishing reward, no craft cost
+        { name: "Volcano Gnome", boost: "+0.1 Stone, Iron & Gold (Volcano Island)", type: "Collectible", cost: null }, // free (Volcano Island reward)
       ];
       for (const extra of EXTRA_BOOST_ITEMS) {
-        // Skip if already loaded from NFT API
         if (boostItems.some(b => b.name === extra.name)) continue;
         const has = getCount(inventory, extra.name) > 0 || findCollectible(farm, extra.name).length > 0;
         const effects = parseBoostEffects(extra.boost, extra.name);
         const categories = classifyToCategories(effects);
+        // Calculate craft cost in SFL
+        let floor = 0;
+        if (extra.cost && exchangeRates.coinsPerSFL > 0) {
+          floor = (extra.cost.coins || 0) / exchangeRates.coinsPerSFL;
+          if (extra.cost.materials) {
+            for (const [mat, qty] of Object.entries(extra.cost.materials)) {
+              floor += (p2pPrices[mat] || 0) * qty;
+            }
+          }
+        }
         boostItems.push({
           name: extra.name, type: extra.type, boost: extra.boost,
-          floor: 0, supply: 0, has, effects, categories, markCost: 0,
+          floor, supply: 0, has, effects, categories, markCost: 0,
         });
       }
 
