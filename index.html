@@ -1677,11 +1677,12 @@
     }
     .diff-chart {
       display: flex;
-      align-items: flex-end;
+      align-items: center;
       gap: 2px;
       height: 160px;
       min-width: max-content;
       padding: 0 8px;
+      position: relative;
     }
     .diff-bar-wrap {
       display: flex;
@@ -1689,16 +1690,28 @@
       align-items: center;
       width: 18px;
       height: 100%;
-      justify-content: flex-end;
       cursor: pointer;
       position: relative;
     }
+    .diff-bar-top {
+      flex: 1;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .diff-bar-bot {
+      flex: 1;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+    }
     .diff-bar {
       width: 14px;
-      border-radius: 2px 2px 0 0;
       transition: opacity 0.15s;
       min-height: 2px;
     }
+    .diff-bar.positive { border-radius: 2px 2px 0 0; }
+    .diff-bar.negative { border-radius: 0 0 2px 2px; }
     .diff-bar.positive { background: linear-gradient(180deg, #4ade80, #22c55e); }
     .diff-bar.negative { background: linear-gradient(180deg, #f87171, #ef4444); }
     .diff-bar.zero { background: var(--text-dim); opacity: 0.3; }
@@ -1707,10 +1720,11 @@
     .diff-bar-label {
       font-size: 0.375rem;
       color: var(--text-dim);
-      margin-top: 4px;
+      position: absolute;
+      bottom: -14px;
       writing-mode: vertical-rl;
       transform: rotate(180deg);
-      max-height: 50px;
+      max-height: 40px;
       overflow: hidden;
     }
     .diff-summary-strip {
@@ -1796,24 +1810,7 @@
       border-top: 1px dashed rgba(255,255,255,0.15);
       pointer-events: none;
     }
-    .diff-running-line {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      pointer-events: none;
-    }
-    .diff-running-line svg {
-      width: 100%;
-      height: 100%;
-    }
-    .diff-running-line path {
-      fill: none;
-      stroke: var(--sunpetal);
-      stroke-width: 2;
-      opacity: 0.6;
-    }
+
     .diff-stat-cards {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -11057,7 +11054,7 @@
     //  DIFF PAGE (farm 155498 only)
     // ═══════════════════════════════════════
 
-    function estimateItemSfl(itemName, p2pPrices, _visited) {
+    function estimateItemSfl(itemName, p2pPrices, _visited, rates) {
       // Direct P2P price
       if (p2pPrices[itemName]) return p2pPrices[itemName];
 
@@ -11071,7 +11068,7 @@
       if (craftedRecipe) {
         let total = 0;
         for (const [ing, qty] of Object.entries(craftedRecipe)) {
-          const ingPrice = estimateItemSfl(ing, p2pPrices, visited);
+          const ingPrice = estimateItemSfl(ing, p2pPrices, visited, rates);
           if (ingPrice <= 0) return 0;
           total += ingPrice * qty;
         }
@@ -11083,7 +11080,7 @@
       if (foodRecipe) {
         let total = 0;
         for (const [ing, qty] of Object.entries(foodRecipe)) {
-          const ingPrice = estimateItemSfl(ing, p2pPrices, visited);
+          const ingPrice = estimateItemSfl(ing, p2pPrices, visited, rates);
           if (ingPrice <= 0) return 0;
           total += ingPrice * qty;
         }
@@ -11104,11 +11101,30 @@
         if (recipe.length === 0) return 0;
         let total = 0;
         for (const { item, qty } of recipe) {
-          const ingPrice = estimateItemSfl(item, p2pPrices, visited);
+          const ingPrice = estimateItemSfl(item, p2pPrices, visited, rates);
           if (ingPrice <= 0) return 0;
           total += ingPrice * qty;
         }
         return total;
+      }
+
+      // Tool costs (coins + materials)
+      if (typeof TOOL_COSTS !== "undefined" && TOOL_COSTS[itemName] && rates && rates.coinsPerSFL > 0) {
+        const tool = TOOL_COSTS[itemName];
+        let total = tool.coins / rates.coinsPerSFL;
+        if (tool.materials) {
+          for (const [mat, qty] of Object.entries(tool.materials)) {
+            const matPrice = estimateItemSfl(mat, p2pPrices, visited, rates);
+            total += matPrice * qty;
+          }
+        }
+        return total;
+      }
+
+      // Seed costs (coins only) — SEED_COSTS keyed by crop name, items come as "X Seed"
+      if (typeof SEED_COSTS !== "undefined" && rates && rates.coinsPerSFL > 0) {
+        const cropName = itemName.endsWith(" Seed") ? itemName.slice(0, -5) : itemName;
+        if (SEED_COSTS[cropName]) return SEED_COSTS[cropName] / rates.coinsPerSFL;
       }
 
       return 0;
@@ -11204,7 +11220,7 @@
           } else if (key.startsWith("inventory.")) {
             itemName = key.substring(10);
             category = "inventory";
-            const price = estimateItemSfl(itemName, p2pPrices);
+            const price = estimateItemSfl(itemName, p2pPrices, null, { coinsPerSFL });
             sflValue = delta * price;
           } else if (key.startsWith("wardrobe.")) {
             itemName = key.substring(9);
@@ -11228,16 +11244,7 @@
       const totalLoss = processed.reduce((s, p) => s + (p.netSfl < 0 ? p.netSfl : 0), 0);
       const maxAbs = Math.max(...processed.map(p => Math.abs(p.netSfl)), 0.01);
 
-      // Build running total for line chart
-      const runningTotals = [];
-      let runSum = 0;
-      for (const p of processed) {
-        runSum += p.netSfl;
-        runningTotals.push(runSum);
-      }
-      const minRun = Math.min(...runningTotals);
-      const maxRun = Math.max(...runningTotals);
-      const runRange = maxRun - minRun || 1;
+
 
       // State
       let showZeroPrice = true;
@@ -11282,37 +11289,23 @@
           <div class="diff-chart-wrap" style="position:relative">
             <div class="diff-chart">`;
 
+        // Add zero-line in the middle
+        out += `<div class="diff-zero-line" style="top:50%"></div>`;
+
         for (let i = 0; i < processed.length; i++) {
           const p = processed[i];
-          const pct = Math.max(Math.abs(p.netSfl) / maxAbs * 100, 2);
+          const pct = Math.min(Math.max(Math.abs(p.netSfl) / maxAbs * 90, 2), 90);
           const cls = p.netSfl > 0.001 ? "positive" : p.netSfl < -0.001 ? "negative" : "zero";
           const sel = i === selectedIdx ? " selected" : "";
           const timeLabel = p.time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+          const isPositive = p.netSfl >= 0;
           out += `<div class="diff-bar-wrap${sel}" onclick="window._diffSelect(${i})" title="${timeLabel}: ${p.netSfl >= 0 ? '+' : ''}${p.netSfl.toFixed(2)} SFL">
-            <div class="diff-bar ${cls}" style="height:${pct}%"></div>
-            <div class="diff-bar-label">${timeLabel}</div>
+            <div class="diff-bar-top">${isPositive ? `<div class="diff-bar positive" style="height:${pct}%"></div>` : ''}</div>
+            <div class="diff-bar-bot">${!isPositive ? `<div class="diff-bar negative" style="height:${pct}%"></div>` : ''}</div>
           </div>`;
         }
 
-        out += `</div>`;
-
-        // SVG running total line overlay
-        if (processed.length > 1) {
-          const svgW = processed.length * 20;
-          const svgH = 160;
-          const padTop = 10;
-          const padBot = 10;
-          let pathD = "";
-          for (let i = 0; i < runningTotals.length; i++) {
-            const x = i * 20 + 10 + 8; // center of each bar + chart padding
-            const yNorm = (runningTotals[i] - minRun) / runRange;
-            const y = svgH - padBot - yNorm * (svgH - padTop - padBot);
-            pathD += (i === 0 ? "M" : "L") + `${x},${y}`;
-          }
-          out += `<div class="diff-running-line" style="width:${svgW + 16}px"><svg viewBox="0 0 ${svgW + 16} ${svgH}" preserveAspectRatio="none"><path d="${pathD}"/></svg></div>`;
-        }
-
-        out += `</div></div>`;
+        out += `</div></div></div>`;
 
         // Selected snapshot detail
         if (selectedIdx >= 0 && selectedIdx < processed.length) {
