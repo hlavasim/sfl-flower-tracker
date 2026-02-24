@@ -1667,6 +1667,173 @@
       padding: 5px 10px;
       border-bottom: 1px solid rgba(92,58,30,0.2);
     }
+
+    /* ── Diff Page ── */
+    .diff-timeline { margin-bottom: 16px; }
+    .diff-chart-wrap {
+      position: relative;
+      overflow-x: auto;
+      padding: 12px 0;
+    }
+    .diff-chart {
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 160px;
+      min-width: max-content;
+      padding: 0 8px;
+    }
+    .diff-bar-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 18px;
+      height: 100%;
+      justify-content: flex-end;
+      cursor: pointer;
+      position: relative;
+    }
+    .diff-bar {
+      width: 14px;
+      border-radius: 2px 2px 0 0;
+      transition: opacity 0.15s;
+      min-height: 2px;
+    }
+    .diff-bar.positive { background: linear-gradient(180deg, #4ade80, #22c55e); }
+    .diff-bar.negative { background: linear-gradient(180deg, #f87171, #ef4444); }
+    .diff-bar.zero { background: var(--text-dim); opacity: 0.3; }
+    .diff-bar-wrap:hover .diff-bar { opacity: 0.7; }
+    .diff-bar-wrap.selected .diff-bar { opacity: 1; box-shadow: 0 0 8px rgba(255,215,0,0.6); }
+    .diff-bar-label {
+      font-size: 0.375rem;
+      color: var(--text-dim);
+      margin-top: 4px;
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      max-height: 50px;
+      overflow: hidden;
+    }
+    .diff-summary-strip {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      padding: 10px 14px;
+      font-size: 0.75rem;
+      align-items: center;
+    }
+    .diff-summary-strip .val { font-weight: bold; }
+    .diff-summary-strip .pos { color: var(--green); }
+    .diff-summary-strip .neg { color: var(--red); }
+    .diff-detail {
+      padding: 12px 14px;
+      margin-bottom: 12px;
+      animation: diffFadeIn 0.3s ease;
+    }
+    @keyframes diffFadeIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .diff-detail-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(92,58,30,0.3);
+    }
+    .diff-detail-time {
+      font-size: 0.6875rem;
+      color: var(--text-secondary);
+    }
+    .diff-detail-net {
+      font-size: 0.875rem;
+      font-weight: bold;
+    }
+    .diff-item-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .diff-item-table th {
+      font-size: 0.5rem;
+      color: var(--text-dim);
+      text-align: left;
+      padding: 4px 8px;
+      border-bottom: 2px solid var(--border-brown);
+    }
+    .diff-item-table td {
+      font-size: 0.6875rem;
+      padding: 3px 8px;
+      border-bottom: 1px solid rgba(92,58,30,0.15);
+    }
+    .diff-item-table tr.gain td { color: var(--green); }
+    .diff-item-table tr.loss td { color: var(--red); }
+    .diff-item-table tr.neutral td { color: var(--text-dim); }
+    .diff-toggle-wrap {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .diff-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.5625rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+    .diff-toggle input[type="checkbox"] {
+      accent-color: var(--sunpetal);
+      width: 16px;
+      height: 16px;
+    }
+    .diff-zero-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      border-top: 1px dashed rgba(255,255,255,0.15);
+      pointer-events: none;
+    }
+    .diff-running-line {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+    }
+    .diff-running-line svg {
+      width: 100%;
+      height: 100%;
+    }
+    .diff-running-line path {
+      fill: none;
+      stroke: var(--sunpetal);
+      stroke-width: 2;
+      opacity: 0.6;
+    }
+    .diff-stat-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .diff-stat-card {
+      padding: 10px 12px;
+      text-align: center;
+    }
+    .diff-stat-label {
+      font-size: 0.5rem;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+      letter-spacing: 0.5px;
+    }
+    .diff-stat-value {
+      font-size: 1rem;
+      font-weight: bold;
+    }
   </style>
   <script defer src="/_vercel/insights/script.js"></script>
 </head>
@@ -1692,7 +1859,7 @@
     const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
     const IMG_BASE = "https://sfl.world/img/flowers/";
-    const PAGES = ["hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "buds", "pets"];
+    const PAGES = ["hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "buds", "pets", "diff"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -3217,6 +3384,7 @@
         { id: "buds", label: "BUDS" },
         { id: "pets", label: "PETS" },
       ];
+      if (FARM_ID === "155498") overflow.push({ id: "diff", label: "DIFF" });
       let html = '<div class="nav-bar pixel-panel">';
       for (const l of primary) {
         const cls = page === l.id ? " active" : "";
@@ -3336,7 +3504,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v2.0</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v2.1</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -3363,6 +3531,12 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v2.1", items: [
+          { t: "new", text: "Farm Changelog (Diff) page — SFL value change per snapshot" },
+          { t: "new", text: "Bar chart timeline with running total overlay" },
+          { t: "new", text: "Crafted item value estimation from ingredient prices" },
+          { t: "new", text: "Toggle for zero-price items, clickable snapshot details" },
+        ]},
         { ver: "v2.0", items: [
           { t: "new", text: "Pet Advisor page — fetch resource recommendations with SFL/energy ratios" },
           { t: "new", text: "Per-pet cards with unlocked/locked resources, best fetch highlighted" },
@@ -10878,6 +11052,307 @@
         FLOWER_BEDS = Math.max(1, Object.keys(data.flowerBeds).length);
         applyFlowerBoosts(data.flowerMultiplier);
 
+
+    // ═══════════════════════════════════════
+    //  DIFF PAGE (farm 155498 only)
+    // ═══════════════════════════════════════
+
+    function estimateItemSfl(itemName, p2pPrices, _visited) {
+      // Direct P2P price
+      if (p2pPrices[itemName]) return p2pPrices[itemName];
+
+      // Prevent infinite recursion
+      const visited = _visited || new Set();
+      if (visited.has(itemName)) return 0;
+      visited.add(itemName);
+
+      // Crafted ingredient (e.g., Cheese = 3 Milk)
+      const craftedRecipe = CRAFTED_INGREDIENT_RECIPES[itemName];
+      if (craftedRecipe) {
+        let total = 0;
+        for (const [ing, qty] of Object.entries(craftedRecipe)) {
+          const ingPrice = estimateItemSfl(ing, p2pPrices, visited);
+          if (ingPrice <= 0) return 0;
+          total += ingPrice * qty;
+        }
+        return total;
+      }
+
+      // Food recipe
+      const foodRecipe = RECIPE_INGREDIENTS[itemName];
+      if (foodRecipe) {
+        let total = 0;
+        for (const [ing, qty] of Object.entries(foodRecipe)) {
+          const ingPrice = estimateItemSfl(ing, p2pPrices, visited);
+          if (ingPrice <= 0) return 0;
+          total += ingPrice * qty;
+        }
+        return total;
+      }
+
+      // Barn Delight
+      if (itemName === "Barn Delight") {
+        const lemon = p2pPrices["Lemon"] || 0;
+        const honey = p2pPrices["Honey"] || 0;
+        if (lemon > 0 && honey > 0) return 5 * lemon + 3 * honey;
+        return 0;
+      }
+
+      // Doll recipes
+      if (typeof DOLL_RECIPES !== "undefined" && DOLL_RECIPES[itemName]) {
+        const recipe = DOLL_RECIPES[itemName];
+        if (recipe.length === 0) return 0;
+        let total = 0;
+        for (const { item, qty } of recipe) {
+          const ingPrice = estimateItemSfl(item, p2pPrices, visited);
+          if (ingPrice <= 0) return 0;
+          total += ingPrice * qty;
+        }
+        return total;
+      }
+
+      return 0;
+    }
+
+    async function renderDiff(data) {
+      const app = document.getElementById("app");
+
+      let html = `<div class="header pixel-panel pixel-font">
+        <h1>FARM CHANGELOG</h1>
+        <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
+      </div>`;
+
+      html += `<div class="under-dev-banner pixel-font" style="background:linear-gradient(180deg,#1a1a2e,#16213e);padding:8px 12px;border:3px solid #000;margin-bottom:16px;text-align:center;font-size:0.5625rem;color:#e94560">
+        &#x1F50D; FARM DIFF VIEWER &#x1F50D;
+        <div style="margin-top:6px;font-size:0.5rem;color:var(--text-secondary);line-height:1.5">
+          Last 50 snapshots (every 5 min). SFL values from current P2P prices.<br>
+          Crafted items valued by ingredient costs.
+        </div>
+      </div>`;
+
+      html += `<div id="diff-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading snapshots...</div></div></div>`;
+      app.innerHTML = html;
+
+      // Fetch P2P prices + farm history in parallel
+      let p2pPrices = {};
+      let snapshots = [];
+      try {
+        const [priceResp, histResp] = await Promise.all([
+          fetch(`/api/proxy?url=${encodeURIComponent("https://sfl.world/api/v1/prices")}`),
+          fetch(`/api/farm-history?farm=${FARM_ID}&latest=50`),
+        ]);
+        if (priceResp.ok) {
+          const pd = await priceResp.json();
+          const raw = pd?.data?.p2p || pd?.p2p || {};
+          for (const [k, v] of Object.entries(raw)) p2pPrices[k] = parseFloat(v) || 0;
+        }
+        if (histResp.ok) {
+          const hd = await histResp.json();
+          snapshots = (hd.snapshots || []).reverse(); // oldest first
+        }
+      } catch (e) {
+        document.getElementById("diff-content").innerHTML = `<div class="pixel-panel pixel-font" style="padding:20px;text-align:center;color:var(--red)">Error loading data: ${escHTML(e.message)}</div>`;
+        return;
+      }
+
+      if (snapshots.length === 0) {
+        document.getElementById("diff-content").innerHTML = `<div class="pixel-panel pixel-font" style="padding:20px;text-align:center;color:var(--text-secondary)">No snapshots found for this farm.</div>`;
+        return;
+      }
+
+      // Process each snapshot diff
+      const processed = [];
+      for (const snap of snapshots) {
+        const diff = snap.diff || {};
+        const time = new Date(snap.captured_at);
+        let netSfl = 0;
+        const items = [];
+
+        for (const [key, delta] of Object.entries(diff)) {
+          if (typeof delta !== "number") continue;
+
+          let category = "other";
+          let itemName = key;
+          let sflValue = 0;
+
+          if (key === "balance") {
+            category = "sfl";
+            itemName = "SFL Balance";
+            sflValue = delta;
+          } else if (key === "coins") {
+            category = "coins";
+            itemName = "Coins";
+            sflValue = 0; // coins aren't SFL
+          } else if (key.startsWith("inventory.")) {
+            itemName = key.substring(10);
+            category = "inventory";
+            const price = estimateItemSfl(itemName, p2pPrices);
+            sflValue = delta * price;
+          } else if (key.startsWith("wardrobe.")) {
+            itemName = key.substring(9);
+            category = "wardrobe";
+          } else if (key.startsWith("stock.")) {
+            continue; // skip stock changes
+          }
+
+          items.push({ key, itemName, category, delta, sflValue, hasPrice: sflValue !== 0 || category === "sfl" });
+          netSfl += sflValue;
+        }
+
+        // Sort: by absolute SFL value desc, then by name
+        items.sort((a, b) => Math.abs(b.sflValue) - Math.abs(a.sflValue) || a.itemName.localeCompare(b.itemName));
+        processed.push({ time, netSfl, items, id: snap.id });
+      }
+
+      // Compute stats
+      const totalNet = processed.reduce((s, p) => s + p.netSfl, 0);
+      const totalGain = processed.reduce((s, p) => s + (p.netSfl > 0 ? p.netSfl : 0), 0);
+      const totalLoss = processed.reduce((s, p) => s + (p.netSfl < 0 ? p.netSfl : 0), 0);
+      const maxAbs = Math.max(...processed.map(p => Math.abs(p.netSfl)), 0.01);
+
+      // Build running total for line chart
+      const runningTotals = [];
+      let runSum = 0;
+      for (const p of processed) {
+        runSum += p.netSfl;
+        runningTotals.push(runSum);
+      }
+      const minRun = Math.min(...runningTotals);
+      const maxRun = Math.max(...runningTotals);
+      const runRange = maxRun - minRun || 1;
+
+      // State
+      let showZeroPrice = false;
+      let selectedIdx = processed.length - 1; // latest
+
+      function renderContent() {
+        let out = "";
+
+        // Stat cards
+        const timeSpan = processed.length >= 2
+          ? Math.round((processed[processed.length - 1].time - processed[0].time) / 60000)
+          : 0;
+        const timeStr = timeSpan >= 60 ? `${(timeSpan / 60).toFixed(1)}h` : `${timeSpan}m`;
+
+        out += `<div class="diff-stat-cards">
+          <div class="pixel-panel diff-stat-card">
+            <div class="diff-stat-label">NET CHANGE</div>
+            <div class="diff-stat-value ${totalNet >= 0 ? 'pos' : 'neg'}" style="color:${totalNet >= 0 ? 'var(--green)' : 'var(--red)'}">${totalNet >= 0 ? '+' : ''}${totalNet.toFixed(2)} ${sflIcon("0.85em")}</div>
+          </div>
+          <div class="pixel-panel diff-stat-card">
+            <div class="diff-stat-label">GAINS</div>
+            <div class="diff-stat-value" style="color:var(--green)">+${totalGain.toFixed(2)} ${sflIcon("0.85em")}</div>
+          </div>
+          <div class="pixel-panel diff-stat-card">
+            <div class="diff-stat-label">LOSSES</div>
+            <div class="diff-stat-value" style="color:var(--red)">${totalLoss.toFixed(2)} ${sflIcon("0.85em")}</div>
+          </div>
+          <div class="pixel-panel diff-stat-card">
+            <div class="diff-stat-label">SNAPSHOTS</div>
+            <div class="diff-stat-value" style="color:var(--text-primary)">${processed.length} <span style="font-size:0.5rem;color:var(--text-dim)">(${timeStr})</span></div>
+          </div>
+        </div>`;
+
+        // Bar chart + running total overlay
+        out += `<div class="pixel-panel diff-timeline" style="padding:10px 8px">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;padding:0 6px">
+            <span class="pixel-font" style="font-size:0.5625rem;color:var(--text-dim)">SFL VALUE CHANGE PER SNAPSHOT</span>
+            <div class="diff-toggle-wrap">
+              <label class="diff-toggle"><input type="checkbox" id="diff-zero-toggle" ${showZeroPrice ? 'checked' : ''} onchange="window._diffToggleZero(this.checked)"> Show zero-price items</label>
+            </div>
+          </div>
+          <div class="diff-chart-wrap" style="position:relative">
+            <div class="diff-chart">`;
+
+        for (let i = 0; i < processed.length; i++) {
+          const p = processed[i];
+          const pct = Math.max(Math.abs(p.netSfl) / maxAbs * 100, 2);
+          const cls = p.netSfl > 0.001 ? "positive" : p.netSfl < -0.001 ? "negative" : "zero";
+          const sel = i === selectedIdx ? " selected" : "";
+          const timeLabel = p.time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+          out += `<div class="diff-bar-wrap${sel}" onclick="window._diffSelect(${i})" title="${timeLabel}: ${p.netSfl >= 0 ? '+' : ''}${p.netSfl.toFixed(2)} SFL">
+            <div class="diff-bar ${cls}" style="height:${pct}%"></div>
+            <div class="diff-bar-label">${timeLabel}</div>
+          </div>`;
+        }
+
+        out += `</div>`;
+
+        // SVG running total line overlay
+        if (processed.length > 1) {
+          const svgW = processed.length * 20;
+          const svgH = 160;
+          const padTop = 10;
+          const padBot = 10;
+          let pathD = "";
+          for (let i = 0; i < runningTotals.length; i++) {
+            const x = i * 20 + 10 + 8; // center of each bar + chart padding
+            const yNorm = (runningTotals[i] - minRun) / runRange;
+            const y = svgH - padBot - yNorm * (svgH - padTop - padBot);
+            pathD += (i === 0 ? "M" : "L") + `${x},${y}`;
+          }
+          out += `<div class="diff-running-line" style="width:${svgW + 16}px"><svg viewBox="0 0 ${svgW + 16} ${svgH}" preserveAspectRatio="none"><path d="${pathD}"/></svg></div>`;
+        }
+
+        out += `</div></div>`;
+
+        // Selected snapshot detail
+        if (selectedIdx >= 0 && selectedIdx < processed.length) {
+          const p = processed[selectedIdx];
+          const prev = selectedIdx > 0 ? processed[selectedIdx - 1] : null;
+          const timeFmt = p.time.toLocaleString();
+
+          const visibleItems = showZeroPrice ? p.items : p.items.filter(it => it.hasPrice || it.category === "coins");
+
+          out += `<div class="pixel-panel diff-detail">
+            <div class="diff-detail-header">
+              <div>
+                <div class="diff-detail-time">${escHTML(timeFmt)}</div>
+                <div style="font-size:0.5rem;color:var(--text-dim)">${p.items.length} changes${!showZeroPrice && p.items.length !== visibleItems.length ? ` (${p.items.length - visibleItems.length} hidden)` : ''}</div>
+              </div>
+              <div class="diff-detail-net" style="color:${p.netSfl >= 0 ? 'var(--green)' : 'var(--red)'}">
+                ${p.netSfl >= 0 ? '+' : ''}${p.netSfl.toFixed(4)} ${sflIcon("0.85em")}
+              </div>
+            </div>`;
+
+          if (visibleItems.length > 0) {
+            out += `<table class="diff-item-table">
+              <thead><tr><th>Item</th><th>Change</th><th>Unit Price</th><th>SFL Value</th></tr></thead><tbody>`;
+            for (const it of visibleItems) {
+              const rowCls = it.sflValue > 0.0001 ? "gain" : it.sflValue < -0.0001 ? "loss" : "neutral";
+              const unitPrice = it.category === "sfl" ? "1.0000" :
+                it.delta !== 0 && it.sflValue !== 0 ? Math.abs(it.sflValue / it.delta).toFixed(4) : "\u2014";
+              const deltaStr = it.category === "sfl" ? (it.delta >= 0 ? "+" : "") + it.delta.toFixed(4) :
+                (it.delta >= 0 ? "+" : "") + (Number.isInteger(it.delta) ? it.delta.toString() : it.delta.toFixed(2));
+              const valStr = it.sflValue !== 0 ? (it.sflValue >= 0 ? "+" : "") + it.sflValue.toFixed(4) : "\u2014";
+              const catBadge = it.category === "sfl" ? ' <span style="font-size:0.4375rem;color:var(--sunpetal)">\u25C9</span>' :
+                it.category === "coins" ? ' <span style="font-size:0.4375rem;color:#fbbf24">\u25CB</span>' :
+                it.category === "wardrobe" ? ' <span style="font-size:0.4375rem;color:var(--lily)">\u{1F455}</span>' : '';
+              out += `<tr class="${rowCls}"><td>${escHTML(it.itemName)}${catBadge}</td><td>${deltaStr}</td><td>${unitPrice}</td><td>${valStr}</td></tr>`;
+            }
+            out += `</tbody></table>`;
+          } else {
+            out += `<div style="text-align:center;color:var(--text-dim);font-size:0.6875rem;padding:12px 0">No priced items in this snapshot</div>`;
+          }
+          out += `</div>`;
+        }
+
+        document.getElementById("diff-content").innerHTML = out;
+      }
+
+      // Global handlers
+      window._diffSelect = function(idx) {
+        selectedIdx = idx;
+        renderContent();
+      };
+      window._diffToggleZero = function(checked) {
+        showZeroPrice = checked;
+        renderContent();
+      };
+
+      renderContent();
+    }
+
         switch (page) {
           case "hub": renderHub(data); break;
           case "flowers": renderFlowers(data); break;
@@ -10889,6 +11364,7 @@
           case "power": renderPower(data); break;
           case "buds": renderBuds(data); break;
           case "pets": renderPets(data); break;
+          case "diff": renderDiff(data); break;
           default: renderHub(data);
         }
 

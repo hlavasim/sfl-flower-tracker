@@ -18,7 +18,7 @@ export default async function handler(req, res) {
   try {
     // Latest snapshot mode
     if (req.query.latest) {
-      const count = Math.min(parseInt(req.query.latest) || 1, 10);
+      const count = Math.min(parseInt(req.query.latest) || 1, 100);
       const result = await pool.query(
         `SELECT id, farm_id, captured_at, diff,
                 CASE WHEN $2 THEN game_data ELSE NULL END AS game_data
