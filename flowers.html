@@ -1541,7 +1541,7 @@
       .power-cat-header { font-size: 0.5625rem; flex-wrap: wrap; }
       .power-product-select { font-size: 0.375rem; }
       .nav-more-btn { font-size: 0.5rem; padding: 12px 10px; }
-      .pet-fetch-row { grid-template-columns: 1fr auto auto; gap: 4px; font-size: 0.6875rem; }
+      .pet-fetch-row { grid-template-columns: 1fr auto auto auto; gap: 4px; font-size: 0.6875rem; }
     }
 
     /* ── Nav More Dropdown ── */
@@ -1629,8 +1629,8 @@
     }
     .pet-fetch-row {
       display: grid;
-      grid-template-columns: 1fr auto auto auto;
-      gap: 8px;
+      grid-template-columns: 1fr auto auto auto auto;
+      gap: 6px;
       padding: 4px 8px;
       font-size: 0.75rem;
       align-items: center;
@@ -10506,6 +10506,9 @@
       content += `</table></div>`;
 
       // Per-pet cards
+      let grandTotalSfl = 0;
+      let grandTotalCards = [];
+
       for (const pet of pets) {
         const fetchData = PET_FETCH_DATA[pet.petType] || [];
         const speciesLabel = pet.species ? ` (${escHTML(pet.species)})` : "";
@@ -10517,30 +10520,48 @@
             <span class="pet-level pixel-font">Lv ${pet.level} &#xB7; ${pet.energy.toLocaleString()} &#x26A1;</span>
           </div>`;
 
-        if (fetchData.length > 0) {
+        if (fetchData.length > 0 && pet.energy > 0) {
           const unlocked = fetchData.filter(f => pet.level >= f.level);
           const locked = fetchData.filter(f => pet.level < f.level);
 
-          // Calculate SFL/energy ratio for unlocked
-          const withRatio = unlocked.map(f => {
+          // Calculate fetch counts, total SFL, and ratio for unlocked
+          const withCalc = unlocked.map(f => {
             const price = p2pPrices[f.res] || 0;
-            return { ...f, price, ratio: price > 0 ? price / f.energy : 0 };
-          }).sort((a, b) => b.ratio - a.ratio);
+            const fetches = Math.floor(pet.energy / f.energy);
+            const totalSfl = fetches * price;
+            const ratio = price > 0 ? price / f.energy : 0;
+            return { ...f, price, ratio, fetches, totalSfl };
+          }).sort((a, b) => b.totalSfl - a.totalSfl);
 
-          content += `<div class="pet-section-title pixel-font">BEST FETCHES</div>`;
+          // Best recommendation
+          const best = withCalc.find(f => f.totalSfl > 0);
+          if (best) {
+            grandTotalSfl += best.totalSfl;
+            grandTotalCards.push({ name: pet.name, res: best.res, fetches: best.fetches, totalSfl: best.totalSfl });
+            content += `<div style="background:rgba(48,209,88,0.12);border:2px solid var(--green);padding:8px 10px;margin-bottom:6px;font-size:0.6875rem;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <span style="color:var(--green);font-weight:bold">&#x2192;</span>
+              <span>Fetch <b>${escHTML(best.res)}</b> &#xD7;${best.fetches}</span>
+              <span style="color:var(--green);font-weight:bold">= ${best.totalSfl.toFixed(2)} ${sflIcon("0.85em")}</span>
+              <span style="color:var(--text-dim);font-size:0.5625rem">(${best.energy} &#x26A1; each)</span>
+            </div>`;
+          }
 
-          for (let i = 0; i < withRatio.length; i++) {
-            const f = withRatio[i];
-            const isBest = i === 0 && f.ratio > 0;
+          content += `<div class="pet-section-title pixel-font">ALL FETCHES</div>`;
+
+          for (let i = 0; i < withCalc.length; i++) {
+            const f = withCalc[i];
+            const isBest = i === 0 && f.totalSfl > 0;
             const cls = isBest ? "pet-fetch-row pet-best" : "pet-fetch-row";
             const star = isBest ? "&#x2605; " : "";
             const priceStr = f.price > 0 ? `${f.price.toFixed(2)} ${sflIcon("0.85em")}` : "&#x2014;";
-            const ratioStr = f.ratio > 0 ? `${f.ratio.toFixed(4)}/&#x26A1;` : "&#x2014;";
+            const fetchStr = f.fetches > 0 ? `&#xD7;${f.fetches}` : "&#xD7;0";
+            const totalStr = f.totalSfl > 0 ? `<b style="color:var(--green)">${f.totalSfl.toFixed(2)}</b>` : "&#x2014;";
             content += `<div class="${cls}">
               <span>${star}${escHTML(f.res)}</span>
               <span>${priceStr}</span>
               <span>${f.energy} &#x26A1;</span>
-              <span>${ratioStr}</span>
+              <span>${fetchStr}</span>
+              <span>${totalStr}</span>
             </div>`;
           }
 
@@ -10550,6 +10571,8 @@
               <span>(Lv ${f.level})</span>
             </div>`;
           }
+        } else if (fetchData.length > 0 && pet.energy === 0) {
+          content += `<div style="padding:8px;color:var(--text-dim);font-size:0.6875rem">No energy &#x2014; pet needs to recharge</div>`;
         } else {
           content += `<div style="padding:8px;color:var(--text-dim);font-size:0.6875rem">Unknown pet type &#x2014; no fetch data available</div>`;
         }
@@ -10561,6 +10584,26 @@
         }
 
         content += `</div>`;
+      }
+
+      // Grand total summary (if any pet has earnings)
+      if (grandTotalSfl > 0) {
+        let totalHtml = `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:16px;border-color:var(--green)">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+            <span class="pixel-font" style="font-size:0.6875rem;color:var(--green);font-weight:bold">OPTIMAL EARNINGS</span>
+            <span style="font-size:1rem;font-weight:bold;color:var(--green)">${grandTotalSfl.toFixed(2)} ${sflIcon("1em")} total</span>
+          </div>
+          <div style="font-size:0.6875rem;color:var(--text-secondary);line-height:1.6">`;
+        for (const c of grandTotalCards) {
+          totalHtml += `${escHTML(c.name)}: ${escHTML(c.res)} &#xD7;${c.fetches} = ${c.totalSfl.toFixed(2)} ${sflIcon("0.85em")}<br>`;
+        }
+        totalHtml += `</div></div>`;
+        // Insert between summary bar and resource market
+        const marketAnchor = '<div class="pixel-panel" style="padding:12px 14px;margin-bottom:16px">';
+        const mIdx = content.indexOf(marketAnchor);
+        if (mIdx >= 0) {
+          content = content.substring(0, mIdx) + totalHtml + content.substring(mIdx);
+        }
       }
 
       document.getElementById("pets-content").innerHTML = content;
