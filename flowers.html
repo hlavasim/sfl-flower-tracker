@@ -1240,6 +1240,65 @@
     .sales-section-count { font-size: 0.5625rem; color: var(--text-dim); }
     .sales-section-body { border: 3px solid var(--border-dark); border-top: none; }
 
+    /* ── Price History (Sales page) ── */
+    .ph-search {
+      width: 100%; padding: 6px 10px; margin-bottom: 0;
+      background: var(--bg-darkest); color: var(--text-primary);
+      border: 2px solid var(--border-dark); font-size: 0.6875rem;
+      font-family: inherit; outline: none;
+    }
+    .ph-search:focus { border-color: var(--border-brown); }
+    .ph-tabs {
+      display: flex; gap: 0; border-bottom: 2px solid var(--border-dark);
+    }
+    .ph-tab {
+      flex: 1; padding: 8px 0; text-align: center; cursor: pointer;
+      font-family: 'Press Start 2P', cursive; font-size: 0.5rem;
+      color: var(--text-dim); background: var(--bg-card-alt);
+      border: none; border-bottom: 3px solid transparent;
+    }
+    .ph-tab.active { color: var(--sunpetal); border-bottom-color: var(--sunpetal); background: var(--bg-card); }
+    .ph-row {
+      display: grid; grid-template-columns: 28px 1fr auto;
+      align-items: center; gap: 8px; padding: 6px 12px;
+      font-size: 0.6875rem; cursor: pointer;
+      border-bottom: 1px solid rgba(0,0,0,0.3);
+    }
+    .ph-row:nth-child(even) { background: var(--bg-card); }
+    .ph-row:nth-child(odd) { background: var(--bg-card-alt); }
+    .ph-row:hover { background: var(--bg-light); }
+    .ph-row-img { width: 28px; height: 28px; object-fit: contain; image-rendering: pixelated; filter: drop-shadow(1px 1px 0 #000); }
+    .ph-row-name { font-weight: bold; color: var(--text-primary); }
+    .ph-row-sub { font-size: 0.5625rem; color: var(--text-dim); margin-top: 1px; }
+    .ph-change-up { color: var(--green); font-weight: bold; }
+    .ph-change-down { color: var(--red); font-weight: bold; }
+    .ph-change-flat { color: var(--text-dim); }
+    .ph-supply { font-size: 0.5rem; color: var(--text-dim); padding: 1px 5px; border: 1px solid var(--border-dark); }
+    .ph-detail {
+      padding: 10px 14px; background: var(--bg-darkest);
+      border-bottom: 2px solid var(--border-dark);
+    }
+    .ph-detail-title { font-size: 0.625rem; color: var(--text-secondary); margin-bottom: 8px; }
+    .ph-bar-row {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 0.5625rem; margin-bottom: 3px;
+    }
+    .ph-bar-date { width: 72px; color: var(--text-dim); flex-shrink: 0; text-align: right; }
+    .ph-bar-track { flex: 1; height: 14px; background: var(--bg-card-alt); position: relative; }
+    .ph-bar-fill { height: 100%; transition: width 0.2s; }
+    .ph-bar-fill.up { background: var(--green); }
+    .ph-bar-fill.down { background: var(--red); }
+    .ph-bar-fill.flat { background: var(--text-dim); }
+    .ph-bar-val { width: 65px; color: var(--text-secondary); flex-shrink: 0; }
+    .ph-empty { padding: 16px; text-align: center; font-size: 0.625rem; color: var(--text-dim); }
+    .ph-load-more {
+      display: block; width: 100%; padding: 8px; text-align: center;
+      font-family: 'Press Start 2P', cursive; font-size: 0.5rem;
+      color: var(--text-secondary); background: var(--bg-medium);
+      border: 2px solid var(--border-dark); cursor: pointer;
+    }
+    .ph-load-more:hover { background: var(--bg-light); color: var(--sunpetal); }
+
     /* ── Power Page ── */
     .power-summary {
       display: grid;
@@ -1468,6 +1527,10 @@
       .sales-listing { grid-template-columns: 28px 1fr auto; gap: 6px; padding: 6px 8px; }
       .sales-listing-img { width: 22px; height: 22px; }
       .sales-summary-grid { grid-template-columns: repeat(2, 1fr); }
+      .ph-row { grid-template-columns: 22px 1fr auto; gap: 5px; padding: 5px 8px; }
+      .ph-row-img { width: 22px; height: 22px; }
+      .ph-bar-date { width: 58px; font-size: 0.5rem; }
+      .ph-bar-val { width: 50px; font-size: 0.5rem; }
       .power-summary { grid-template-columns: repeat(2, 1fr); }
       .power-boost-row { grid-template-columns: 22px 1fr auto; gap: 5px; padding: 5px 8px; }
       .power-boost-img { width: 20px; height: 20px; }
@@ -6733,6 +6796,237 @@
       return `${w}w`;
     }
 
+    // ── Price History fetch helpers ──
+
+    async function fetchP2PLatest() {
+      const resp = await fetch("/api/price-history?latest=1");
+      if (!resp.ok) throw new Error("P2P prices fetch failed");
+      const data = await resp.json();
+      return data.prices || [];
+    }
+
+    async function fetchP2PHistory(itemName) {
+      const from = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+      const resp = await fetch(`/api/price-history?item=${encodeURIComponent(itemName)}&from=${from}`);
+      if (!resp.ok) throw new Error("P2P history fetch failed");
+      const data = await resp.json();
+      return data.changes || [];
+    }
+
+    async function fetchNftLatest(collection) {
+      const resp = await fetch(`/api/nft-history?latest=1&collection=${encodeURIComponent(collection)}`);
+      if (!resp.ok) throw new Error("NFT fetch failed");
+      const data = await resp.json();
+      return data.values || [];
+    }
+
+    async function fetchNftItemHistory(nftId, field) {
+      const resp = await fetch(`/api/nft-history?nft_id=${nftId}&field=${encodeURIComponent(field || "floor")}`);
+      if (!resp.ok) throw new Error("NFT history fetch failed");
+      const data = await resp.json();
+      return data.changes || [];
+    }
+
+    // ── Shared price timeline bar chart ──
+
+    function renderPriceTimeline(changes, label) {
+      if (!changes || changes.length === 0) {
+        return `<div class="ph-empty">Tracking started recently — no history yet</div>`;
+      }
+      const sorted = [...changes].sort((a, b) => new Date(a.captured_at) - new Date(b.captured_at));
+      const maxVal = Math.max(...sorted.map(c => c.price ?? c.value ?? 0), 0.001);
+      let html = `<div class="ph-detail-title">${escHTML(label)} — last ${sorted.length} changes</div>`;
+      let prevVal = null;
+      for (const c of sorted) {
+        const val = c.price ?? c.value ?? 0;
+        // Use previous_price from DB if available, otherwise compare to prior entry
+        const prev = c.previous_price ?? c.previous_value ?? prevVal ?? val;
+        const pct = (val / maxVal * 100).toFixed(1);
+        const dir = val > prev ? "up" : val < prev ? "down" : "flat";
+        const d = new Date(c.captured_at);
+        const dateStr = `${d.getDate()}/${d.getMonth() + 1} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+        html += `<div class="ph-bar-row">
+          <span class="ph-bar-date">${dateStr}</span>
+          <div class="ph-bar-track"><div class="ph-bar-fill ${dir}" style="width:${pct}%"></div></div>
+          <span class="ph-bar-val">${formatSFL(val)}</span>
+        </div>`;
+        prevVal = val;
+      }
+      return html;
+    }
+
+    // ── P2P History toggle detail ──
+
+    async function toggleP2PDetail(el, itemName) {
+      const row = el.closest(".ph-row");
+      if (row.nextElementSibling && row.nextElementSibling.classList.contains("ph-detail")) {
+        row.nextElementSibling.remove();
+        return;
+      }
+      row.closest(".sales-section-body")?.querySelectorAll(".ph-detail").forEach(d => d.remove());
+      const detail = document.createElement("div");
+      detail.className = "ph-detail";
+      detail.innerHTML = `<div class="ph-empty">Loading history...</div>`;
+      row.after(detail);
+      try {
+        const changes = await fetchP2PHistory(itemName);
+        detail.innerHTML = renderPriceTimeline(changes, itemName);
+      } catch (e) {
+        detail.innerHTML = `<div class="ph-empty">Failed to load history</div>`;
+      }
+    }
+
+    // ── NFT History toggle detail ──
+
+    async function toggleNftDetail(el, nftId, nftName) {
+      const row = el.closest(".ph-row");
+      if (row.nextElementSibling && row.nextElementSibling.classList.contains("ph-detail")) {
+        row.nextElementSibling.remove();
+        return;
+      }
+      row.closest(".sales-section-body")?.querySelectorAll(".ph-detail").forEach(d => d.remove());
+      const detail = document.createElement("div");
+      detail.className = "ph-detail";
+      detail.innerHTML = `<div class="ph-empty">Loading history...</div>`;
+      row.after(detail);
+      try {
+        const changes = await fetchNftItemHistory(nftId, "floor");
+        detail.innerHTML = renderPriceTimeline(changes, nftName + " (floor)");
+      } catch (e) {
+        detail.innerHTML = `<div class="ph-empty">Failed to load history</div>`;
+      }
+    }
+
+    // ── Filter helper ──
+
+    function filterPHRows(input, containerId) {
+      const q = input.value.toLowerCase();
+      const rows = document.querySelectorAll(`#${containerId} .ph-row`);
+      rows.forEach(r => {
+        const name = r.dataset.name || "";
+        r.style.display = name.toLowerCase().includes(q) ? "" : "none";
+      });
+    }
+
+    // ── NFT tab switch ──
+
+    const _nftCache = {};
+    let _nftShowCount = {};
+
+    async function switchNftTab(collection) {
+      const tabBtns = document.querySelectorAll("#nft-history-tabs .ph-tab");
+      tabBtns.forEach(b => b.classList.toggle("active", b.dataset.col === collection));
+      const body = document.getElementById("nft-history-body");
+      body.innerHTML = `<div class="ph-empty">Loading ${collection}...</div>`;
+
+      try {
+        if (!_nftCache[collection]) {
+          const rows = await fetchNftLatest(collection);
+          const map = {};
+          for (const r of rows) {
+            if (!map[r.nft_id]) map[r.nft_id] = { nft_id: r.nft_id, name: r.nft_name, collection: r.collection };
+            map[r.nft_id][r.field] = r.value;
+          }
+          _nftCache[collection] = Object.values(map).sort((a, b) => (b.floor || 0) - (a.floor || 0));
+        }
+        _nftShowCount[collection] = 50;
+        renderNftItems(collection);
+      } catch (e) {
+        body.innerHTML = `<div class="ph-empty">Failed to load ${collection}: ${escHTML(e.message)}</div>`;
+      }
+    }
+
+    function renderNftItems(collection) {
+      const items = _nftCache[collection] || [];
+      const body = document.getElementById("nft-history-body");
+      const searchVal = document.getElementById("nft-history-search")?.value?.toLowerCase() || "";
+      const filtered = searchVal ? items.filter(i => (i.name || "").toLowerCase().includes(searchVal)) : items;
+      const limit = _nftShowCount[collection] || 50;
+      const visible = filtered.slice(0, limit);
+
+      if (visible.length === 0) {
+        body.innerHTML = `<div class="ph-empty">${searchVal ? "No matches" : "No NFT data yet"}</div>`;
+        return;
+      }
+
+      let html = "";
+      for (const item of visible) {
+        const imgUrl = getItemIcon(item.name || "");
+        const floor = item.floor || 0;
+        const lastSale = item.lastSalePrice || 0;
+        const supply = item.supply;
+        const safeName = (item.name || "").replace(/'/g, "\\'");
+        html += `<div class="ph-row" data-name="${escHTML(item.name || "")}" onclick="toggleNftDetail(this,${item.nft_id},'${safeName}')">
+          <img class="ph-row-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">
+          <div>
+            <div class="ph-row-name">${escHTML(item.name || '#' + item.nft_id)}</div>
+            <div class="ph-row-sub">Floor: ${formatSFL(floor)} ${sflIcon()}${lastSale > 0 ? ' \u00b7 Last: ' + formatSFL(lastSale) : ""}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="color:var(--sunpetal);font-weight:bold">${formatSFL(floor)} ${sflIcon()}</div>
+            ${supply != null ? '<span class="ph-supply">' + Math.round(supply) + ' supply</span>' : ""}
+          </div>
+        </div>`;
+      }
+      if (filtered.length > limit) {
+        html += `<button class="ph-load-more" onclick="_nftShowCount['${collection}']+=50;renderNftItems('${collection}')">LOAD MORE (${filtered.length - limit} remaining)</button>`;
+      }
+      body.innerHTML = html;
+    }
+
+    // ── Render P2P history section ──
+
+    function renderP2PHistorySection(prices) {
+      const sorted = [...prices].sort((a, b) => (b.price || 0) - (a.price || 0));
+      let rowsHTML = "";
+      for (const p of sorted) {
+        const imgUrl = getItemIcon(p.item_name);
+        const price = parseFloat(p.price) || 0;
+        const safeName = p.item_name.replace(/'/g, "\\'");
+        rowsHTML += `<div class="ph-row" data-name="${escHTML(p.item_name)}" onclick="toggleP2PDetail(this,'${safeName}')">
+          <img class="ph-row-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">
+          <div>
+            <div class="ph-row-name">${escHTML(p.item_name)}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="color:var(--sunpetal);font-weight:bold">${formatSFL(price)} ${sflIcon()}</div>
+          </div>
+        </div>`;
+      }
+
+      return `<div style="margin-bottom:16px">
+        <div class="sales-section-header pixel-font" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+          <h3>\ud83d\udcc8 P2P PRICE TRACKER</h3>
+          <span class="sales-section-count">${sorted.length} items</span>
+        </div>
+        <div class="sales-section-body" style="display:none" id="p2p-history-section">
+          <input class="ph-search" type="text" placeholder="Search items..." oninput="filterPHRows(this,'p2p-history-section')">
+          ${rowsHTML || '<div class="ph-empty">Tracking started recently \u2014 no prices yet</div>'}
+        </div>
+      </div>`;
+    }
+
+    // ── Render NFT history section (lazy) ──
+
+    function renderNftHistorySection() {
+      return `<div style="margin-bottom:16px">
+        <div class="sales-section-header pixel-font" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'; if(this.nextElementSibling.style.display!=='none' && !this.dataset.loaded){this.dataset.loaded='1';switchNftTab('collectibles')}">
+          <h3>\ud83c\udfa8 NFT PRICE TRACKER</h3>
+          <span class="sales-section-count">click to load</span>
+        </div>
+        <div class="sales-section-body" style="display:none">
+          <div class="ph-tabs" id="nft-history-tabs">
+            <button class="ph-tab active" data-col="collectibles" onclick="switchNftTab('collectibles')">COLLECTIBLES</button>
+            <button class="ph-tab" data-col="wearables" onclick="switchNftTab('wearables')">WEARABLES</button>
+          </div>
+          <input class="ph-search" type="text" id="nft-history-search" placeholder="Search NFTs..." oninput="renderNftItems(document.querySelector('#nft-history-tabs .ph-tab.active')?.dataset.col||'collectibles')">
+          <div id="nft-history-body">
+            <div class="ph-empty">Expand to load NFT price data</div>
+          </div>
+        </div>
+      </div>`;
+    }
+
     async function renderSales(data) {
       const app = document.getElementById("app");
       const { trades } = data;
@@ -6752,10 +7046,13 @@
       html += `<div id="sales-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading market prices...</div></div></div>`;
       app.innerHTML = html;
 
-      // Fetch market data
-      let market;
+      // Fetch market data + P2P history in parallel
+      let market, p2pPrices = [];
       try {
-        market = await fetchMarketPrices();
+        [market, p2pPrices] = await Promise.all([
+          fetchMarketPrices(),
+          fetchP2PLatest().catch(() => []),
+        ]);
       } catch (err) {
         document.getElementById("sales-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load prices: ${escHTML(err.message)}</p></div>`;
         return;
@@ -6957,6 +7254,10 @@
       // Debug: log raw trade data
       console.log("[Sales] trades:", trades);
       console.log("[Sales] listings:", Object.keys(listings).length, "offers:", Object.keys(offers).length);
+
+      // ── Price History sections ──
+      content += renderP2PHistorySection(p2pPrices);
+      content += renderNftHistorySection();
 
       content += `<div class="footer">
         <button class="refresh-btn" onclick="refresh()">REFRESH</button>
