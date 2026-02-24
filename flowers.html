@@ -9497,6 +9497,26 @@
         });
       }
 
+      // Inject non-NFT boost items (Helios Blacksmith, event decorations, etc.)
+      const EXTRA_BOOST_ITEMS = [
+        { name: "Gold Beetle", boost: "+0.1 Gold", type: "Collectible" },
+        { name: "Stone Beetle", boost: "+0.1 Stone", type: "Collectible" },
+        { name: "Iron Beetle", boost: "+0.1 Iron", type: "Collectible" },
+        { name: "Gilded Swordfish", boost: "+0.1 Gold", type: "Collectible" },
+        { name: "Volcano Gnome", boost: "+0.1 Stone, Iron & Gold (Volcano Island)", type: "Collectible" },
+      ];
+      for (const extra of EXTRA_BOOST_ITEMS) {
+        // Skip if already loaded from NFT API
+        if (boostItems.some(b => b.name === extra.name)) continue;
+        const has = getCount(inventory, extra.name) > 0 || findCollectible(farm, extra.name).length > 0;
+        const effects = parseBoostEffects(extra.boost, extra.name);
+        const categories = classifyToCategories(effects);
+        boostItems.push({
+          name: extra.name, type: extra.type, boost: extra.boost,
+          floor: 0, supply: 0, has, effects, categories, markCost: 0,
+        });
+      }
+
       // Add skill boosts from full skill tree
       const skillCostInfo = calcSkillPointCost(farm.bumpkin, p2pPrices, farm);
       for (const [skillName, skill] of Object.entries(SKILL_TREE_DATA)) {
