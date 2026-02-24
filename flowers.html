@@ -10340,23 +10340,36 @@
     //  PETS PAGE
     // ═══════════════════════════════════════
 
+    // Map common pet names → species (same species = same fetch resources)
+    const PET_NAME_SPECIES = {
+      "Barkley":"Dog","Biscuit":"Dog","Cloudy":"Dog",
+      "Meowchi":"Cat","Butters":"Cat","Smokey":"Cat",
+      "Twizzle":"Owl","Flicker":"Owl","Pippin":"Owl",
+      "Burro":"Horse","Pinto":"Horse","Roan":"Horse","Stallion":"Horse",
+      "Mudhorn":"Bull","Bison":"Bull","Oxen":"Bull",
+      "Nibbles":"Hamster","Peanuts":"Hamster",
+      "Waddles":"Penguin","Pip":"Penguin","Skipper":"Penguin",
+    };
+
+    // Fetch resources per species/type: { res, level, energy }
+    // Energy: Acorn=100, Moonfur=1000, Fossil Shell=300, all others=200
     const PET_FETCH_DATA = {
-      // Common pets (4 resources, unlocked at Lv 1/3/7/20)
-      "Meowchi":  [{res:"Wild Grass",level:1,energy:60},{res:"Ribbon",level:3,energy:150},{res:"Acorn",level:7,energy:100},{res:"Chewed Bone",level:20,energy:200}],
-      "Fluffkin": [{res:"Dewberry",level:1,energy:80},{res:"Heart Leaf",level:3,energy:100},{res:"Wild Grass",level:7,energy:60},{res:"Ruffroot",level:20,energy:200}],
-      "Shadow":   [{res:"Frost Pebble",level:1,energy:100},{res:"Dewberry",level:3,energy:80},{res:"Ribbon",level:7,energy:150},{res:"Chewed Bone",level:20,energy:200}],
-      "Bruce":    [{res:"Wild Grass",level:1,energy:60},{res:"Frost Pebble",level:3,energy:100},{res:"Heart Leaf",level:7,energy:100},{res:"Ruffroot",level:20,energy:200}],
-      "Gummy":    [{res:"Dewberry",level:1,energy:80},{res:"Acorn",level:3,energy:100},{res:"Frost Pebble",level:7,energy:100},{res:"Ribbon",level:20,energy:150}],
-      // NFT pets (6 resources, unlocked at Lv 1/3/7/12/20/25)
-      "Griffin":  [{res:"Wild Grass",level:1,energy:60},{res:"Dewberry",level:3,energy:80},{res:"Frost Pebble",level:7,energy:100},{res:"Ribbon",level:12,energy:150},{res:"Chewed Bone",level:20,energy:200},{res:"Moonfur",level:25,energy:500}],
-      "Dragon":   [{res:"Frost Pebble",level:1,energy:100},{res:"Heart Leaf",level:3,energy:100},{res:"Wild Grass",level:7,energy:60},{res:"Ruffroot",level:12,energy:200},{res:"Fossil Shell",level:20,energy:300},{res:"Moonfur",level:25,energy:500}],
-      "Unicorn":  [{res:"Heart Leaf",level:1,energy:100},{res:"Wild Grass",level:3,energy:60},{res:"Dewberry",level:7,energy:80},{res:"Ribbon",level:12,energy:150},{res:"Ruffroot",level:20,energy:200},{res:"Moonfur",level:25,energy:500}],
-      "Phoenix":  [{res:"Dewberry",level:1,energy:80},{res:"Frost Pebble",level:3,energy:100},{res:"Ribbon",level:7,energy:150},{res:"Chewed Bone",level:12,energy:200},{res:"Ruffroot",level:20,energy:200},{res:"Moonfur",level:25,energy:500}],
-      "Serpent":  [{res:"Wild Grass",level:1,energy:60},{res:"Ribbon",level:3,energy:150},{res:"Heart Leaf",level:7,energy:100},{res:"Acorn",level:12,energy:100},{res:"Chewed Bone",level:20,energy:200},{res:"Moonfur",level:25,energy:500}],
-      "Pegasus":  [{res:"Frost Pebble",level:1,energy:100},{res:"Dewberry",level:3,energy:80},{res:"Heart Leaf",level:7,energy:100},{res:"Wild Grass",level:12,energy:60},{res:"Ribbon",level:20,energy:150},{res:"Moonfur",level:25,energy:500}],
-      "Kitsune":  [{res:"Heart Leaf",level:1,energy:100},{res:"Acorn",level:3,energy:100},{res:"Dewberry",level:7,energy:80},{res:"Frost Pebble",level:12,energy:100},{res:"Chewed Bone",level:20,energy:200},{res:"Moonfur",level:25,energy:500}],
-      "Cerberus": [{res:"Ribbon",level:1,energy:150},{res:"Wild Grass",level:3,energy:60},{res:"Frost Pebble",level:7,energy:100},{res:"Chewed Bone",level:12,energy:200},{res:"Fossil Shell",level:20,energy:300},{res:"Moonfur",level:25,energy:500}],
-      "Basilisk": [{res:"Dewberry",level:1,energy:80},{res:"Heart Leaf",level:3,energy:100},{res:"Acorn",level:7,energy:100},{res:"Ruffroot",level:12,energy:200},{res:"Chewed Bone",level:20,energy:200},{res:"Moonfur",level:25,energy:500}],
+      // Common species (4 resources, Lv 1/3/7/20)
+      "Dog":     [{res:"Acorn",level:1,energy:100},{res:"Chewed Bone",level:3,energy:200},{res:"Ribbon",level:7,energy:200},{res:"Fossil Shell",level:20,energy:300}],
+      "Cat":     [{res:"Acorn",level:1,energy:100},{res:"Ribbon",level:3,energy:200},{res:"Heart Leaf",level:7,energy:200},{res:"Fossil Shell",level:20,energy:300}],
+      "Owl":     [{res:"Acorn",level:1,energy:100},{res:"Heart Leaf",level:3,energy:200},{res:"Dewberry",level:7,energy:200},{res:"Fossil Shell",level:20,energy:300}],
+      "Horse":   [{res:"Acorn",level:1,energy:100},{res:"Ruffroot",level:3,energy:200},{res:"Wild Grass",level:7,energy:200},{res:"Fossil Shell",level:20,energy:300}],
+      "Bull":    [{res:"Acorn",level:1,energy:100},{res:"Wild Grass",level:3,energy:200},{res:"Frost Pebble",level:7,energy:200},{res:"Fossil Shell",level:20,energy:300}],
+      "Hamster": [{res:"Acorn",level:1,energy:100},{res:"Dewberry",level:3,energy:200},{res:"Chewed Bone",level:7,energy:200},{res:"Fossil Shell",level:20,energy:300}],
+      "Penguin": [{res:"Acorn",level:1,energy:100},{res:"Frost Pebble",level:3,energy:200},{res:"Ruffroot",level:7,energy:200},{res:"Fossil Shell",level:20,energy:300}],
+      // NFT types (6 resources, Lv 1/3/7/12/20/25)
+      "Dragon":  [{res:"Acorn",level:1,energy:100},{res:"Frost Pebble",level:3,energy:200},{res:"Chewed Bone",level:7,energy:200},{res:"Moonfur",level:12,energy:1000},{res:"Fossil Shell",level:20,energy:300},{res:"Ruffroot",level:25,energy:200}],
+      "Phoenix": [{res:"Acorn",level:1,energy:100},{res:"Heart Leaf",level:3,energy:200},{res:"Wild Grass",level:7,energy:200},{res:"Moonfur",level:12,energy:1000},{res:"Fossil Shell",level:20,energy:300},{res:"Chewed Bone",level:25,energy:200}],
+      "Griffin": [{res:"Acorn",level:1,energy:100},{res:"Ruffroot",level:3,energy:200},{res:"Dewberry",level:7,energy:200},{res:"Moonfur",level:12,energy:1000},{res:"Fossil Shell",level:20,energy:300},{res:"Wild Grass",level:25,energy:200}],
+      "Ram":     [{res:"Acorn",level:1,energy:100},{res:"Ribbon",level:3,energy:200},{res:"Ruffroot",level:7,energy:200},{res:"Moonfur",level:12,energy:1000},{res:"Fossil Shell",level:20,energy:300},{res:"Heart Leaf",level:25,energy:200}],
+      "Warthog": [{res:"Acorn",level:1,energy:100},{res:"Wild Grass",level:3,energy:200},{res:"Frost Pebble",level:7,energy:200},{res:"Moonfur",level:12,energy:1000},{res:"Fossil Shell",level:20,energy:300},{res:"Ribbon",level:25,energy:200}],
+      "Wolf":    [{res:"Acorn",level:1,energy:100},{res:"Chewed Bone",level:3,energy:200},{res:"Ribbon",level:7,energy:200},{res:"Moonfur",level:12,energy:1000},{res:"Fossil Shell",level:20,energy:300},{res:"Dewberry",level:25,energy:200}],
+      "Bear":    [{res:"Acorn",level:1,energy:100},{res:"Dewberry",level:3,energy:200},{res:"Heart Leaf",level:7,energy:200},{res:"Moonfur",level:12,energy:1000},{res:"Fossil Shell",level:20,energy:300},{res:"Frost Pebble",level:25,energy:200}],
     };
 
     // Cumulative XP thresholds: index 0 = Lv 1, index 29 = Lv 30
@@ -10383,7 +10396,7 @@
       </div>`;
 
       html += `<div class="under-dev-banner pixel-font" style="background:linear-gradient(180deg,#3b1768,#2a1050);padding:8px 12px;border:3px solid #000;margin-bottom:16px;text-align:center;font-size:0.5625rem;color:var(--lily)">
-        ⚠️ UNDER DEVELOPMENT ⚠️
+        &#x26A0;&#xFE0F; UNDER DEVELOPMENT &#x26A0;&#xFE0F;
         <div style="margin-top:6px;font-size:0.5rem;color:var(--text-secondary);line-height:1.5">
           Pet fetch resource advisor. Prices from sfl.world P2P market.<br>
           Shows optimal fetch targets based on ${sflIcon()}/energy efficiency.
@@ -10412,7 +10425,8 @@
         const level = petLevel(xp);
         const energy = pet.energy || 0;
         const foods = pet.requests?.food || [];
-        pets.push({ name, petType: name, level, xp, energy, foods, isNft: false, nftId: null });
+        const species = PET_NAME_SPECIES[name] || null;
+        pets.push({ name, petType: species, species, level, xp, energy, foods, isNft: false, nftId: null });
       }
       const nftPets = farm.pets?.nfts || {};
       for (const [id, pet] of Object.entries(nftPets)) {
@@ -10421,7 +10435,7 @@
         const energy = pet.energy || 0;
         const foods = pet.requests?.food || [];
         const petType = pet.traits?.type || "Unknown";
-        pets.push({ name: `Pet #${id}`, petType, level, xp, energy, foods, isNft: true, nftId: id });
+        pets.push({ name: `Pet #${id}`, petType, species: petType, level, xp, energy, foods, isNft: true, nftId: id });
       }
 
       // Sort: NFT first, then common; within each group by level desc
@@ -10435,7 +10449,7 @@
         document.getElementById("pets-content").innerHTML = `
           <div class="pixel-panel" style="padding:24px;text-align:center;font-size:0.75rem;color:var(--text-secondary)">
             No pets found on this farm.<br><br>
-            <a href="https://docs.sunflower-land.com/player-guides/pets" target="_blank" style="color:var(--sunpetal)">Learn about pets &#x2192;</a>
+            <a href="https://sfl.world/info/pets" target="_blank" style="color:var(--sunpetal)">Learn about pets &#x2192;</a>
           </div>`;
         return;
       }
@@ -10494,12 +10508,12 @@
       // Per-pet cards
       for (const pet of pets) {
         const fetchData = PET_FETCH_DATA[pet.petType] || [];
-        const typeLabel = pet.isNft ? ` (${escHTML(pet.petType)})` : "";
+        const speciesLabel = pet.species ? ` (${escHTML(pet.species)})` : "";
         const nftBadge = pet.isNft ? ' <span style="color:var(--lily);font-size:0.5625rem;font-weight:normal">NFT</span>' : "";
 
         content += `<div class="pet-card pixel-panel">
           <div class="pet-header">
-            <span class="pet-name">${escHTML(pet.name)}${typeLabel}${nftBadge}</span>
+            <span class="pet-name">${escHTML(pet.name)}${speciesLabel}${nftBadge}</span>
             <span class="pet-level pixel-font">Lv ${pet.level} &#xB7; ${pet.energy.toLocaleString()} &#x26A1;</span>
           </div>`;
 
