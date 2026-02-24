@@ -2169,6 +2169,27 @@
       "Chonky Feed":          { chickens: 0.50, cows: 0.50, sheep: 0.50 },
     };
 
+    // ── Animal Sickness System ──
+    // Sickness check: once per 24h, server-side. Higher level = higher chance.
+    // Exact rates are server-side; estimates from original proposal (Discussion #4300):
+    // Day 3: 1.5%, Day 5: 3.5%, Day 7: 5%, Day 10+: 10%, +2.5% per sick animal nearby
+    // Implementation is level-based. We estimate avg ~5% base rate.
+    const SICKNESS_BASE_RATE = 0.05;
+    const BARN_DELIGHT_RECIPE = { Lemon: 5, Honey: 3 };
+    const BARN_DELIGHT_RECIPE_ALT = { Lemon: 4, Honey: 2 }; // with Alternate Medicine skill
+    // Items that fully prevent sickness for a specific animal category
+    const SICKNESS_PREVENTION = {
+      "Frozen Cow": "cows", "Frozen Sheep": "sheep",
+      "Summer Chicken": "chickens", "Nurse Sheep": "sheep", "Sleepy Chicken": "chickens",
+    };
+    // Sickness-reducing skills/items and their effects
+    const SICKNESS_EFFECTS = {
+      "Healthy Livestock":  { type: "rate_reduction", value: 0.50 },  // -50% sickness chance
+      "Oracle Syringe":     { type: "cure_free", value: 1.0 },       // free cure (no Barn Delight)
+      "Medic Apron":        { type: "cure_discount", value: 0.50 },  // half Barn Delight cost
+      "Alternate Medicine": { type: "recipe_reduction" },             // cheaper recipe
+    };
+
     // Get animal level from XP
     function getAnimalLevel(animalType, experience) {
       const thresholds = ANIMAL_LEVELS[animalType];
@@ -2729,6 +2750,31 @@
         { type: "chance", pct: 10, extra: 10, cat: "greenhouse", product: "Rice", raw: "10% chance +10 Rice (greenhouse)" },
         { type: "chance", pct: 10, extra: 10, cat: "greenhouse", product: "Olive", raw: "10% chance +10 Olive (greenhouse)" },
       ],
+      "Oracle Syringe": [
+        { type: "sickness_reduction", value: 1.0, cat: "chickens", raw: "Free cure for sick animals" },
+        { type: "sickness_reduction", value: 1.0, cat: "cows", raw: "Free cure for sick animals" },
+        { type: "sickness_reduction", value: 1.0, cat: "sheep", raw: "Free cure for sick animals" },
+      ],
+      "Medic Apron": [
+        { type: "sickness_reduction", value: 0.5, cat: "chickens", raw: "-50% Barn Delight cost" },
+        { type: "sickness_reduction", value: 0.5, cat: "cows", raw: "-50% Barn Delight cost" },
+        { type: "sickness_reduction", value: 0.5, cat: "sheep", raw: "-50% Barn Delight cost" },
+      ],
+      "Frozen Cow": [
+        { type: "sickness_prevention", value: 1.0, cat: "cows", raw: "Prevents cow sickness" },
+      ],
+      "Frozen Sheep": [
+        { type: "sickness_prevention", value: 1.0, cat: "sheep", raw: "Prevents sheep sickness" },
+      ],
+      "Summer Chicken": [
+        { type: "sickness_prevention", value: 1.0, cat: "chickens", raw: "Prevents chicken sickness" },
+      ],
+      "Nurse Sheep": [
+        { type: "sickness_prevention", value: 1.0, cat: "sheep", raw: "Prevents sheep sickness" },
+      ],
+      "Sleepy Chicken": [
+        { type: "sickness_prevention", value: 1.0, cat: "chickens", raw: "Prevents chicken sickness" },
+      ],
     };
 
     // IMPORTANT: Specific category rules (Crop, Flower, Fruit, Tree, Animal, Greenhouse)
@@ -2748,6 +2794,13 @@
       // "requires N Product" / "instead" → recipe change, not yield
       { rx: /\brequires?\b.*\d+/i,
         fn: m => ({ type: "qualitative", cat: "other", raw: m[0] }) },
+      // Sickness reduction: "-50% chance of sickness" etc.
+      { rx: /([+-]?\d+)%\s+(?:chance\s+of\s+)?sickness/i,
+        fn: m => [
+          { type: "sickness_reduction", value: Math.abs(parseInt(m[1])) / 100, cat: "chickens", raw: m[0] },
+          { type: "sickness_reduction", value: Math.abs(parseInt(m[1])) / 100, cat: "cows", raw: m[0] },
+          { type: "sickness_reduction", value: Math.abs(parseInt(m[1])) / 100, cat: "sheep", raw: m[0] },
+        ]},
       // "instead" in context of recipe substitution
       { rx: /\binstead\b/i,
         fn: m => ({ type: "qualitative", cat: "other", raw: m[0] }) },
@@ -8275,6 +8328,89 @@
       };
     }
 
+    // ── Animal Sickness Cost ──
+    // Expected daily sickness cost = numAnimals * sicknessRate * barnDelightCostSfl
+    // Reduced by: Healthy Livestock (-50% rate), Oracle Syringe (free cure),
+    //   Medic Apron (-50% cost), Alternate Medicine (cheaper recipe),
+    //   Prevention items (0% for specific type)
+    function calcSicknessCost(catId, capacity, p2pPrices, boostItems, skills) {
+      const animals = capacity.animalDetails?.[catId] || [];
+      if (animals.length === 0) return { costPerDay: 0, rate: 0, barnDelightSfl: 0, reductions: [] };
+
+      const reductions = [];
+
+      // Base Barn Delight cost in SFL
+      const hasAltMedicine = !!(skills && skills["Alternate Medicine"]);
+      const recipe = hasAltMedicine ? BARN_DELIGHT_RECIPE_ALT : BARN_DELIGHT_RECIPE;
+      if (hasAltMedicine) reductions.push({ name: "Alternate Medicine", desc: "Recipe: -1 Lemon & Honey" });
+      const lemonPrice = p2pPrices["Lemon"] || 0;
+      const honeyPrice = p2pPrices["Honey"] || 0;
+      const barnDelightSfl = (recipe.Lemon * lemonPrice) + (recipe.Honey * honeyPrice);
+
+      // Base sickness rate
+      let rate = SICKNESS_BASE_RATE;
+
+      // Check prevention items (full immunity for this category)
+      let prevented = false;
+      if (boostItems) {
+        for (const item of boostItems) {
+          if (!item.has) continue;
+          const prevCat = SICKNESS_PREVENTION[item.name];
+          if (prevCat === catId) {
+            prevented = true;
+            reductions.push({ name: item.name, desc: "Full prevention" });
+            break;
+          }
+        }
+      }
+      if (prevented) return { costPerDay: 0, rate: 0, barnDelightSfl, prevented: true, reductions };
+
+      // Healthy Livestock skill: -50% sickness chance
+      const hasHealthyLivestock = !!(skills && skills["Healthy Livestock"]);
+      if (hasHealthyLivestock) {
+        rate *= 0.5;
+        reductions.push({ name: "Healthy Livestock", desc: "-50% sickness rate" });
+      }
+
+      // Cure cost modifiers
+      let cureCostMult = 1;
+      // Oracle Syringe: free cure
+      const hasOracleSyringe = boostItems && boostItems.some(b => b.name === "Oracle Syringe" && b.has);
+      if (hasOracleSyringe) {
+        cureCostMult = 0;
+        reductions.push({ name: "Oracle Syringe", desc: "Free cure" });
+      }
+      // Medic Apron: -50% cure cost (stacks multiplicatively)
+      if (cureCostMult > 0) {
+        const hasMedicApron = boostItems && boostItems.some(b => b.name === "Medic Apron" && b.has);
+        if (hasMedicApron) {
+          cureCostMult *= 0.5;
+          reductions.push({ name: "Medic Apron", desc: "-50% Barn Delight cost" });
+        }
+      }
+
+      const costPerAnimalPerDay = rate * barnDelightSfl * cureCostMult;
+      const costPerDay = animals.length * costPerAnimalPerDay;
+
+      return { costPerDay, rate, barnDelightSfl, cureCostMult, reductions, animalCount: animals.length };
+    }
+
+    // Calculate sickness cost savings from a specific boost item
+    function calcSicknessBoostSavings(boostItem, catId, capacity, p2pPrices, allBoostItems, skills) {
+      const animals = capacity.animalDetails?.[catId] || [];
+      if (animals.length === 0) return 0;
+
+      // Base cost without this item
+      const itemsWithout = (allBoostItems || []).filter(b => b.name !== boostItem.name);
+      const baseCost = calcSicknessCost(catId, capacity, p2pPrices, itemsWithout, skills);
+
+      // Cost with this item (simulate ownership)
+      const itemsWith = (allBoostItems || []).map(b => b.name === boostItem.name ? { ...b, has: true } : b);
+      const withCost = calcSicknessCost(catId, capacity, p2pPrices, itemsWith, skills);
+
+      return baseCost.costPerDay - withCost.costPerDay;
+    }
+
     // ── Shared Restock System ──
     // Restock buys ALL seeds (15 gems) or ALL tools (10 gems) or both (20 gems) at once.
     // Cost is based on how often the fastest-depleting "trigger" queue runs out.
@@ -8674,11 +8810,19 @@
         return { solo: stumpValue, synergy: stumpValue, roi, isFruitStump: true };
       }
 
-      // For animals, sum across all products
+      // For animals, sum across all products (including sickness cost savings)
       if (isAnimalCat(catId)) {
         const baseInfo = getAnimalCatSfl(catId, capacity, [], p2pPrices);
         const soloInfo = getAnimalCatSfl(catId, capacity, catEffects, p2pPrices);
-        const solo = soloInfo.totalSfl - baseInfo.totalSfl;
+        let solo = soloInfo.totalSfl - baseInfo.totalSfl;
+
+        // Add sickness cost savings for sickness-related items
+        const hasSicknessEffect = catEffects.some(e => e.type === "sickness_reduction" || e.type === "sickness_prevention");
+        if (hasSicknessEffect) {
+          const skills = powerState?.farm?.bumpkin?.skills || {};
+          const sicknessValue = calcSicknessBoostSavings(boostItem, catId, capacity, p2pPrices, powerState?.boostItems || [], skills);
+          solo += sicknessValue;
+        }
 
         const allEffects = [];
         const allEffectsWithout = [];
@@ -8701,6 +8845,13 @@
           const withResult = getAnimalCatSfl(catId, capacity, withThis, p2pPrices);
           const ownedResult = getAnimalCatSfl(catId, capacity, ownedEffects, p2pPrices);
           synergy = withResult.totalSfl - ownedResult.totalSfl;
+        }
+
+        // Add sickness cost savings to synergy for sickness items
+        if (hasSicknessEffect) {
+          const skills = powerState?.farm?.bumpkin?.skills || {};
+          const sicknessValue = calcSicknessBoostSavings(boostItem, catId, capacity, p2pPrices, powerState?.boostItems || [], skills);
+          synergy += sicknessValue;
         }
 
         const roi = (boostItem.floor > 0 && synergy > 0) ? boostItem.floor / synergy : Infinity;
@@ -9320,9 +9471,15 @@
         } else if (isAnimalCat(catId)) {
           const c = calcAnimalFeedCost(catId, capacity, p2pPrices, ownedEffects, stockMods);
           const cBase = calcAnimalFeedCost(catId, capacity, p2pPrices, [], stockMods);
-          costPerDay = c.costPerDay;
-          baseCostPerDay = cBase.costPerDay;
+          // Add sickness cost
+          const skills = powerState?.farm?.bumpkin?.skills || {};
+          const sc = calcSicknessCost(catId, capacity, p2pPrices, powerState?.boostItems || [], skills);
+          const scBase = calcSicknessCost(catId, capacity, p2pPrices, [], {});
+          costPerDay = c.costPerDay + sc.costPerDay;
+          baseCostPerDay = cBase.costPerDay + scBase.costPerDay;
           costDetails = c;
+          costDetails.sicknessCost = sc;
+          costDetails.sicknessBaseCost = scBase;
         }
         const totalCatCost = costPerDay + restockPerDay;
         const totalCatBaseCost = baseCostPerDay + restockPerDay;
@@ -9576,6 +9733,28 @@
               }
               content += `<div>Feed cost/day: <strong style="color:var(--red)">${(cd.costPerDay || 0).toFixed(4)} ${sflIcon()}/day</strong> (${cd.animalCount} animals × ${(cd.cyclesPerDay || 0).toFixed(2)} cycles/day)</div>`;
             }
+            // Sickness cost display
+            if (cd.sicknessCost) {
+              const sc = cd.sicknessCost;
+              const scBase = cd.sicknessBaseCost;
+              content += `<div style="margin-top:6px;padding-top:4px;border-top:1px dashed rgba(92,58,30,0.3)">`;
+              if (sc.prevented) {
+                content += `<div style="color:var(--green)">\u{1F6E1}\uFE0F Sickness: <strong>PREVENTED</strong> by ${sc.reductions.map(r => escHTML(r.name)).join(", ")}</div>`;
+              } else {
+                const ratePct = (sc.rate * 100).toFixed(1);
+                content += `<div>\u{1F489} Sickness rate: ~${ratePct}%/day \u00d7 ${sc.animalCount || 0} animals</div>`;
+                content += `<div>Barn Delight cost: ${sc.barnDelightSfl.toFixed(4)} ${sflIcon()} (${sc.cureCostMult < 1 ? 'reduced \u00d7' + sc.cureCostMult.toFixed(2) : 'full price'})</div>`;
+                content += `<div>Sickness cost/day: <strong style="color:var(--red)">${sc.costPerDay.toFixed(4)} ${sflIcon()}/day</strong></div>`;
+                if (sc.reductions.length > 0) {
+                  content += `<div style="color:var(--green);font-size:0.4375rem">Active: ${sc.reductions.map(r => r.name + ' (' + r.desc + ')').join(', ')}</div>`;
+                }
+                if (scBase && scBase.costPerDay > sc.costPerDay) {
+                  const saved = scBase.costPerDay - sc.costPerDay;
+                  content += `<div style="color:var(--green)">Saving ${saved.toFixed(4)} ${sflIcon()}/day vs no protection</div>`;
+                }
+              }
+              content += `</div>`;
+            }
           }
           const netCat = summary.boostedSfl - summary.costPerDay;
           content += `<div style="margin-top:4px"><strong>Net profit: <span style="color:${netCat >= 0 ? 'var(--green)' : 'var(--red)'}">${netCat.toFixed(4)} ${sflIcon()}/day</span></strong> (revenue ${summary.boostedSfl.toFixed(4)} - costs ${summary.costPerDay.toFixed(4)})</div>`;
@@ -9808,7 +9987,9 @@
                 <th style="padding:3px 6px;border:1px solid var(--border-dark)">Avg Lvl</th>
                 <th style="padding:3px 6px;border:1px solid var(--border-dark)">Feed/animal</th>
                 <th style="padding:3px 6px;border:1px solid var(--border-dark)">Cost/feed</th>
-                <th style="padding:3px 6px;border:1px solid var(--border-dark)">${sflIcon()}/day</th>
+                <th style="padding:3px 6px;border:1px solid var(--border-dark)">Feed ${sflIcon()}/d</th>
+                <th style="padding:3px 6px;border:1px solid var(--border-dark)">\u{1F489} Sick ${sflIcon()}/d</th>
+                <th style="padding:3px 6px;border:1px solid var(--border-dark)">Total ${sflIcon()}/d</th>
               </tr></thead><tbody>`;
           const animalEmoji = { chickens: "🐔", cows: "🐄", sheep: "🐑" };
           for (const catId of animalFeedRows) {
@@ -9827,7 +10008,17 @@
               <td style="padding:2px 6px;border:1px solid var(--border-dark)">L${dist.avgLevel.toFixed(1)}</td>
               <td style="padding:2px 6px;border:1px solid var(--border-dark)">${isGolden ? `<span style="color:var(--green)">FREE</span>` : `${fc.baseFeedQty || 0}× ${feedNames}`}</td>
               <td style="padding:2px 6px;border:1px solid var(--border-dark)">${isGolden ? "—" : avgCostPerFeed.toFixed(4)}</td>
-              <td style="padding:2px 6px;border:1px solid var(--border-dark)">${fc.costPerDay.toFixed(4)}</td>
+              <td style="padding:2px 6px;border:1px solid var(--border-dark)">${fc.costPerDay.toFixed(4)}</td>`;
+            // Sickness cost column
+            const skills_t = powerState?.farm?.bumpkin?.skills || {};
+            const sc_t = calcSicknessCost(catId, capacity, p2pPrices, powerState?.boostItems || [], skills_t);
+            const totalAnimalCost = fc.costPerDay + sc_t.costPerDay;
+            if (sc_t.prevented) {
+              content += `<td style="padding:2px 6px;border:1px solid var(--border-dark);color:var(--green)">\u{1F6E1}\uFE0F 0</td>`;
+            } else {
+              content += `<td style="padding:2px 6px;border:1px solid var(--border-dark);color:var(--red)">${sc_t.costPerDay.toFixed(4)}</td>`;
+            }
+            content += `<td style="padding:2px 6px;border:1px solid var(--border-dark);font-weight:bold;color:var(--red)">${totalAnimalCost.toFixed(4)}</td>
             </tr>`;
           }
           content += `</tbody></table></div>`;
