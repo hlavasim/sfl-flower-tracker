@@ -24,9 +24,9 @@ async function fetchPrices() {
   if (!resp.ok) {
     throw new Error(`Prices API ${resp.status}: ${await resp.text()}`);
   }
-  const data = await resp.json();
-  // data.p2p is an object of item_name → price
-  return data.p2p || {};
+  const json = await resp.json();
+  // Structure: { data: { p2p: {...}, seq: {...}, ge: {...} }, updatedAt, ... }
+  return (json.data && json.data.p2p) || {};
 }
 
 /**
