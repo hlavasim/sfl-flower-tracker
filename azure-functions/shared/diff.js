@@ -29,7 +29,7 @@ function flattenPath(obj, prefix) {
 }
 
 const SKIP_PATTERN = /(plantedAt|harvestedAt|readyAt|createdAt|swarmActivatedAt|fertilisedAt|lastFed|awpikeAt)/;
-const TRACK_PATHS = ["inventory", "balance", "coins", "stock", "wardrobe"];
+const TRACK_PATHS = ["inventory", "balance", "coins", "gems", "stock", "wardrobe"];
 
 /**
  * Compute a diff between two farm game_data objects.
