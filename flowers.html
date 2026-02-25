@@ -1753,6 +1753,11 @@
       top: calc(100% + 2px);
       color: rgba(248, 113, 113, 0.9);
     }
+    .diff-bar.negative .diff-bar-val.inside {
+      top: 2px;
+      bottom: auto;
+      color: rgba(255, 255, 255, 0.95);
+    }
     .diff-summary-strip {
       display: flex;
       gap: 16px;
@@ -12636,7 +12641,7 @@
         }
         function fmtBarVal(v) {
           const a = Math.abs(v);
-          if (a < 0.01) return "";
+          if (a < 0.005) return "0";
           const s = v >= 0 ? "+" : "";
           if (a >= 1000) return s + (v / 1000).toFixed(1) + "k";
           if (a >= 100) return s + Math.round(v);
@@ -12673,9 +12678,11 @@
           const isPositive = p.netSfl >= 0;
           const snapInfo = p.count > 1 ? ` (${p.count} snapshots)` : "";
           const valTxt = (i % valEvery === 0) ? fmtBarVal(p.netSfl) : "";
-          const barValHtml = valTxt ? `<span class="diff-bar-val">${valTxt}</span>` : "";
           const showLbl = (i % labelEvery === 0);
           const lblHtml = showLbl ? `<div class="diff-bar-label">${shortBarLabel(p.time, groupMode)}</div>` : "";
+          const negInside = !isPositive && pct > 35;
+          const valCls = negInside ? "diff-bar-val inside" : "diff-bar-val";
+          const barValHtml = valTxt ? `<span class="${valCls}">${valTxt}</span>` : "";
           const posBar = isPositive ? `<div class="diff-bar positive" style="height:${pct}%;width:${barW - 4}px">${barValHtml}</div>` : "";
           const negBar = !isPositive ? `<div class="diff-bar negative" style="height:${pct}%;width:${barW - 4}px">${barValHtml}</div>` : "";
           out += `<div class="diff-bar-wrap${sel}" style="width:${barW}px" onclick="window._diffSelect(${i})" title="${escHTML(tLabel)}: ${p.netSfl >= 0 ? '+' : ''}${p.netSfl.toFixed(2)} SFL${snapInfo}">
