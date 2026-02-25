@@ -5547,16 +5547,15 @@
           const from = order.from || "Unknown";
           const items = order.items || {};
           const itemDesc = Object.entries(items).map(([n, q]) => q + "x " + n).join(", ");
-          // Build reward text
+          // Build reward text — skip SFL (flower), only show coins + items
           const rewards = [];
-          if (order.reward?.sfl) rewards.push("+" + (+order.reward.sfl).toFixed(1) + " SFL");
           if (order.reward?.coins) rewards.push("+" + order.reward.coins + " coins");
           if (order.reward?.items) {
             for (const [rName, rQty] of Object.entries(order.reward.items)) {
               rewards.push("+" + rQty + " " + rName);
             }
           }
-          const rewardText = rewards.length > 0 ? rewards.join(", ") : "";
+          const rewardText = rewards.length > 0 ? "\u27a1 " + rewards.join(", ") : "";
           actions.push({ category:"Deliveries", icon:"📋", label:from + ": " + itemDesc, detail:rewardText, status:"ready", readyAt:0, priority:20 });
         }
       } catch(e) {}
