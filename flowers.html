@@ -11557,7 +11557,7 @@
 
     function renderJsonExplorer(data) {
       _jsonRawData = data.farm || data;
-      const c = document.querySelector(".container");
+      const app = document.getElementById("app");
       let html = `<div class="page-section">`;
       html += `<h2 class="section-title" style="text-align:center">JSON EXPLORER</h2>`;
       html += `<div style="text-align:center;margin-bottom:8px;font-size:0.75rem;color:var(--text-dim)">Farm #${FARM_ID}</div>`;
@@ -11570,7 +11570,7 @@
       html += `<div class="json-tree" id="json-tree"></div>`;
       html += `</div>`;
       html += `<div class="json-copied-toast" id="json-toast"></div>`;
-      c.insertAdjacentHTML("beforeend", html);
+      app.innerHTML = html;
 
       // Build root
       const tree = document.getElementById("json-tree");
