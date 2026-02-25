@@ -1831,6 +1831,51 @@
       font-size: 1rem;
       font-weight: bold;
     }
+
+    /* ── JSON Explorer ── */
+    .json-search-bar { display:flex; gap:8px; align-items:center; margin-bottom:12px; }
+    .json-search-bar input {
+      flex:1; font-family:'Courier New',monospace; font-size:0.8rem;
+      background:rgba(0,0,0,0.25); color:var(--text-primary); border:2px solid var(--panel-border);
+      border-radius:4px; padding:6px 10px; outline:none;
+    }
+    .json-search-bar input:focus { border-color:var(--sunpetal); }
+    .json-search-bar .json-match-count { font-size:0.7rem; color:var(--text-dim); white-space:nowrap; }
+    .json-tree { font-family:'Courier New',monospace; font-size:0.75rem; line-height:1.6; overflow-x:auto; padding:8px 0; }
+    .json-node { padding-left:20px; }
+    .json-line {
+      display:flex; align-items:center; min-height:22px; gap:2px;
+      padding:1px 4px; border-radius:3px; border-left:3px solid transparent;
+    }
+    .json-line:hover { background:rgba(255,255,255,0.04); }
+    .json-line:hover .json-path-btn { opacity:0.6; }
+    .json-toggle { width:16px; text-align:center; cursor:pointer; color:var(--text-dim); flex-shrink:0; user-select:none; }
+    .json-toggle:hover { color:var(--sunpetal); }
+    .json-key { color:var(--text-primary); cursor:pointer; }
+    .json-key:hover { color:var(--sunpetal); }
+    .json-key-arr { color:var(--text-dim); cursor:pointer; font-size:0.7rem; }
+    .json-badge { font-size:0.65rem; color:var(--text-dim); margin-left:4px; }
+    .json-val-string { color:#7ec87e; }
+    .json-val-number { color:#e8c96a; }
+    .json-val-boolean { color:#6ab0e8; }
+    .json-val-null { color:#d96c6c; font-style:italic; }
+    .json-icon { width:16px; height:16px; image-rendering:pixelated; vertical-align:middle; margin-right:2px; flex-shrink:0; }
+    .json-path-btn {
+      opacity:0; cursor:pointer; background:none; border:none; color:var(--text-dim);
+      font-size:0.7rem; padding:0 4px; transition:opacity 0.15s; flex-shrink:0;
+    }
+    .json-path-btn:hover { color:var(--sunpetal); opacity:1 !important; }
+    .json-children { display:none; }
+    .json-children.open { display:block; }
+    .json-line.json-match { border-left-color:var(--sunpetal); background:rgba(232,201,106,0.08); }
+    .json-copied-toast {
+      position:fixed; bottom:24px; right:24px; background:var(--panel-bg); border:2px solid var(--sunpetal);
+      color:var(--sunpetal); padding:8px 16px; border-radius:6px; font-size:0.75rem;
+      font-family:'Courier New',monospace; z-index:9999; opacity:0; transition:opacity 0.3s;
+      pointer-events:none;
+    }
+    .json-copied-toast.show { opacity:1; }
+    .json-more-indicator { color:var(--text-dim); font-size:0.7rem; padding:4px 0 4px 20px; font-style:italic; }
   </style>
   <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
   <script defer src="/_vercel/insights/script.js"></script>
@@ -1857,7 +1902,7 @@
     const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
     const IMG_BASE = "https://sfl.world/img/flowers/";
-    const PAGES = ["hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "buds", "pets", "diff"];
+    const PAGES = ["hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "buds", "pets", "diff", "json"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -3398,6 +3443,7 @@
         { id: "power", label: "POWER" },
         { id: "buds", label: "BUDS" },
         { id: "pets", label: "PETS" },
+        { id: "json", label: "JSON" },
       ];
       if (["155498", "1260204733777858"].includes(FARM_ID)) overflow.push({ id: "diff", label: "DIFF" });
       let html = '<div class="nav-bar pixel-panel">';
@@ -3519,7 +3565,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v2.1</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v2.2</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -3546,6 +3592,11 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v2.2", items: [
+          { t: "new", text: "JSON Explorer page — interactive collapsible tree view of full API response" },
+          { t: "new", text: "Game item icons inline, color-coded values, dot-notation path copy" },
+          { t: "new", text: "Search across all keys & values with auto-expand to matches" },
+        ]},
         { ver: "v2.1", items: [
           { t: "new", text: "Farm Changelog (Diff) page — SFL value change per snapshot" },
           { t: "new", text: "Bar chart timeline with running total overlay" },
@@ -11496,6 +11547,383 @@
       renderContent();
     }
 
+
+    // ═══════════════════════════════════════
+    //  JSON EXPLORER
+    // ═══════════════════════════════════════
+
+    let _jsonSearchTimer = null;
+    let _jsonRawData = null;
+
+    function renderJsonExplorer(data) {
+      _jsonRawData = data.farm || data;
+      const c = document.querySelector(".container");
+      let html = `<div class="page-section">`;
+      html += `<h2 class="section-title" style="text-align:center">JSON EXPLORER</h2>`;
+      html += `<div style="text-align:center;margin-bottom:8px;font-size:0.75rem;color:var(--text-dim)">Farm #${FARM_ID}</div>`;
+      html += `<div style="background:rgba(46,125,50,0.12);border:2px solid rgba(46,125,50,0.3);border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:0.7rem;color:var(--text-primary);text-align:center">`;
+      html += `Browse the full API response. Click arrows to expand, hover for copy path button.</div>`;
+      html += `<div class="json-search-bar">`;
+      html += `<input type="text" id="json-search-input" placeholder="Search keys & values..." autocomplete="off">`;
+      html += `<span class="json-match-count" id="json-match-count"></span>`;
+      html += `</div>`;
+      html += `<div class="json-tree" id="json-tree"></div>`;
+      html += `</div>`;
+      html += `<div class="json-copied-toast" id="json-toast"></div>`;
+      c.insertAdjacentHTML("beforeend", html);
+
+      // Build root
+      const tree = document.getElementById("json-tree");
+      const rootNode = jsonBuildNode("farm", _jsonRawData, "farm", 0, false);
+      tree.appendChild(rootNode);
+
+      // Auto-expand root to depth 1
+      jsonExpandNode(rootNode);
+
+      // Event delegation
+      tree.addEventListener("click", function(e) {
+        const toggle = e.target.closest(".json-toggle");
+        if (toggle) {
+          const node = toggle.closest(".json-node");
+          if (node) jsonToggleNode(node);
+          return;
+        }
+        const key = e.target.closest(".json-key, .json-key-arr");
+        if (key) {
+          const node = key.closest(".json-node");
+          if (node && node.querySelector(".json-children")) jsonToggleNode(node);
+          return;
+        }
+        const copyBtn = e.target.closest(".json-path-btn");
+        if (copyBtn) {
+          jsonCopyPath(copyBtn.dataset.path);
+          return;
+        }
+      });
+
+      // Search
+      const searchInput = document.getElementById("json-search-input");
+      searchInput.addEventListener("input", function() {
+        clearTimeout(_jsonSearchTimer);
+        _jsonSearchTimer = setTimeout(() => jsonSearch(this.value.trim()), 200);
+      });
+    }
+
+    function jsonBuildNode(key, value, path, depth, parentIsArray) {
+      const node = document.createElement("div");
+      node.className = "json-node";
+      node._jsonValue = value;
+      node._jsonPath = path;
+      node._jsonDepth = depth;
+
+      const line = document.createElement("div");
+      line.className = "json-line";
+
+      const isObj = value !== null && typeof value === "object" && !Array.isArray(value);
+      const isArr = Array.isArray(value);
+      const isExpandable = isObj || isArr;
+
+      // Toggle arrow
+      const toggle = document.createElement("span");
+      if (isExpandable) {
+        toggle.className = "json-toggle";
+        toggle.textContent = "\u25B6";
+      } else {
+        toggle.style.width = "16px";
+        toggle.style.display = "inline-block";
+        toggle.style.flexShrink = "0";
+      }
+      line.appendChild(toggle);
+
+      // Icon (try for game items)
+      const iconUrl = jsonDetectIcon(key);
+      if (iconUrl) {
+        const icon = document.createElement("img");
+        icon.className = "json-icon";
+        icon.src = iconUrl;
+        icon.onerror = function() { this.style.display = "none"; };
+        line.appendChild(icon);
+      }
+
+      // Key label
+      const keySpan = document.createElement("span");
+      if (parentIsArray) {
+        keySpan.className = "json-key-arr";
+        keySpan.textContent = `[${key}]`;
+      } else {
+        keySpan.className = "json-key";
+        keySpan.textContent = key;
+      }
+      line.appendChild(keySpan);
+
+      // Colon
+      const colon = document.createTextNode(": ");
+      line.appendChild(colon);
+
+      // Badge or value
+      if (isObj) {
+        const keys = Object.keys(value);
+        const badge = document.createElement("span");
+        badge.className = "json-badge";
+        badge.textContent = `{${keys.length} key${keys.length !== 1 ? "s" : ""}}`;
+        line.appendChild(badge);
+      } else if (isArr) {
+        const badge = document.createElement("span");
+        badge.className = "json-badge";
+        badge.textContent = `[${value.length} item${value.length !== 1 ? "s" : ""}]`;
+        line.appendChild(badge);
+      } else {
+        const valSpan = document.createElement("span");
+        if (value === null) {
+          valSpan.className = "json-val-null";
+          valSpan.textContent = "null";
+        } else if (typeof value === "boolean") {
+          valSpan.className = "json-val-boolean";
+          valSpan.textContent = String(value);
+        } else if (typeof value === "number") {
+          valSpan.className = "json-val-number";
+          valSpan.textContent = String(value);
+        } else {
+          valSpan.className = "json-val-string";
+          const str = String(value);
+          valSpan.textContent = '"' + (str.length > 120 ? str.slice(0, 120) + "..." : str) + '"';
+        }
+        line.appendChild(valSpan);
+      }
+
+      // Copy path button
+      const copyBtn = document.createElement("button");
+      copyBtn.className = "json-path-btn";
+      copyBtn.textContent = "\u{1F4CB}";
+      copyBtn.title = "Copy path: " + path;
+      copyBtn.dataset.path = path;
+      line.appendChild(copyBtn);
+
+      node.appendChild(line);
+
+      // Children container (lazy)
+      if (isExpandable) {
+        const children = document.createElement("div");
+        children.className = "json-children";
+        children.dataset.rendered = "false";
+        node.appendChild(children);
+      }
+
+      return node;
+    }
+
+    function jsonDetectIcon(key) {
+      if (typeof key !== "string") return null;
+      if (ITEM_IMAGE_MAP[key]) return ITEM_IMAGE_MAP[key];
+      // Heuristic: capitalized multi-word keys are likely game items
+      if (/^[A-Z][a-z]/.test(key) && /\s/.test(key)) {
+        return ITEM_ICON_BASE + encodeURIComponent(key) + ".png";
+      }
+      return null;
+    }
+
+    function jsonExpandNode(nodeEl) {
+      const children = nodeEl.querySelector(":scope > .json-children");
+      if (!children) return;
+      const toggle = nodeEl.querySelector(":scope > .json-line > .json-toggle");
+
+      // Lazy render children
+      if (children.dataset.rendered === "false") {
+        const value = nodeEl._jsonValue;
+        const path = nodeEl._jsonPath;
+        const depth = nodeEl._jsonDepth;
+        const frag = document.createDocumentFragment();
+
+        const isArr = Array.isArray(value);
+        const entries = isArr ? value.map((v, i) => [i, v]) : Object.entries(value);
+        const MAX_CHILDREN = 500;
+        const limited = entries.length > MAX_CHILDREN;
+        const toRender = limited ? entries.slice(0, MAX_CHILDREN) : entries;
+
+        for (const [k, v] of toRender) {
+          const childPath = isArr ? `${path}[${k}]` : `${path}.${k}`;
+          frag.appendChild(jsonBuildNode(String(k), v, childPath, depth + 1, isArr));
+        }
+
+        if (limited) {
+          const more = document.createElement("div");
+          more.className = "json-more-indicator";
+          more.textContent = `... ${entries.length - MAX_CHILDREN} more items (${entries.length} total)`;
+          frag.appendChild(more);
+        }
+
+        children.appendChild(frag);
+        children.dataset.rendered = "true";
+      }
+
+      children.classList.add("open");
+      if (toggle) toggle.textContent = "\u25BC";
+    }
+
+    function jsonCollapseNode(nodeEl) {
+      const children = nodeEl.querySelector(":scope > .json-children");
+      if (!children) return;
+      const toggle = nodeEl.querySelector(":scope > .json-line > .json-toggle");
+      children.classList.remove("open");
+      if (toggle) toggle.textContent = "\u25B6";
+    }
+
+    function jsonToggleNode(nodeEl) {
+      const children = nodeEl.querySelector(":scope > .json-children");
+      if (!children) return;
+      if (children.classList.contains("open")) {
+        jsonCollapseNode(nodeEl);
+      } else {
+        jsonExpandNode(nodeEl);
+      }
+    }
+
+    function jsonSearch(query) {
+      const tree = document.getElementById("json-tree");
+      const countEl = document.getElementById("json-match-count");
+      if (!tree || !countEl) return;
+
+      // Clear previous highlights
+      tree.querySelectorAll(".json-match").forEach(el => el.classList.remove("json-match"));
+
+      if (!query || query.length < 2) {
+        countEl.textContent = "";
+        return;
+      }
+
+      const lowerQ = query.toLowerCase();
+      const matches = [];
+      const MAX_MATCHES = 200;
+      const MAX_DEPTH = 20;
+
+      // Walk raw JSON to find matching paths
+      function walk(obj, path, depth) {
+        if (matches.length >= MAX_MATCHES || depth > MAX_DEPTH) return;
+        if (obj === null || typeof obj !== "object") return;
+
+        const entries = Array.isArray(obj) ? obj.map((v, i) => [String(i), v]) : Object.entries(obj);
+        for (const [k, v] of entries) {
+          if (matches.length >= MAX_MATCHES) break;
+          const childPath = Array.isArray(obj) ? `${path}[${k}]` : `${path}.${k}`;
+          const keyMatch = k.toLowerCase().includes(lowerQ);
+          let valMatch = false;
+          if (v !== null && typeof v !== "object") {
+            valMatch = String(v).toLowerCase().includes(lowerQ);
+          }
+          if (keyMatch || valMatch) {
+            matches.push(childPath);
+          }
+          if (typeof v === "object" && v !== null) {
+            walk(v, childPath, depth + 1);
+          }
+        }
+      }
+
+      walk(_jsonRawData, "farm", 0);
+
+      // Expand paths and highlight
+      for (const matchPath of matches) {
+        const segments = jsonParsePath(matchPath);
+        const lineEl = jsonExpandToPath(tree, segments);
+        if (lineEl) {
+          lineEl.classList.add("json-match");
+        }
+      }
+
+      countEl.textContent = matches.length >= MAX_MATCHES
+        ? `${MAX_MATCHES}+ matches`
+        : `${matches.length} match${matches.length !== 1 ? "es" : ""}`;
+
+      // Scroll to first match
+      const first = tree.querySelector(".json-match");
+      if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    function jsonParsePath(path) {
+      // "farm.inventory.Wood" → ["farm", "inventory", "Wood"]
+      // "farm.buildings.Fire Pit[0].createdAt" → ["farm", "buildings", "Fire Pit", "0", "createdAt"]
+      const segments = [];
+      let current = "";
+      let i = 0;
+      while (i < path.length) {
+        if (path[i] === ".") {
+          if (current) segments.push(current);
+          current = "";
+          i++;
+        } else if (path[i] === "[") {
+          if (current) segments.push(current);
+          current = "";
+          i++;
+          while (i < path.length && path[i] !== "]") {
+            current += path[i];
+            i++;
+          }
+          if (current) segments.push(current);
+          current = "";
+          i++; // skip ]
+        } else {
+          current += path[i];
+          i++;
+        }
+      }
+      if (current) segments.push(current);
+      return segments;
+    }
+
+    function jsonExpandToPath(tree, segments) {
+      // Walk DOM nodes, expanding along the path
+      let currentNode = tree.querySelector(":scope > .json-node"); // root "farm" node
+      if (!currentNode || segments.length === 0) return null;
+
+      // First segment is "farm" (root) — expand it
+      jsonExpandNode(currentNode);
+
+      for (let i = 1; i < segments.length; i++) {
+        const seg = segments[i];
+        const children = currentNode.querySelector(":scope > .json-children");
+        if (!children) return currentNode.querySelector(":scope > .json-line");
+
+        // Ensure rendered
+        if (children.dataset.rendered === "false") {
+          jsonExpandNode(currentNode);
+        }
+
+        // Find child with matching key
+        let found = null;
+        for (const child of children.querySelectorAll(":scope > .json-node")) {
+          const keyEl = child.querySelector(":scope > .json-line > .json-key, :scope > .json-line > .json-key-arr");
+          if (!keyEl) continue;
+          const keyText = keyEl.textContent.replace(/^\[|\]$/g, "");
+          if (keyText === seg) {
+            found = child;
+            break;
+          }
+        }
+
+        if (!found) return currentNode.querySelector(":scope > .json-line");
+        jsonExpandNode(found);
+        currentNode = found;
+      }
+
+      return currentNode.querySelector(":scope > .json-line");
+    }
+
+    function jsonCopyPath(path) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(path).then(() => jsonShowToast(path));
+      } else {
+        prompt("Copy path:", path);
+      }
+    }
+
+    function jsonShowToast(path) {
+      const toast = document.getElementById("json-toast");
+      if (!toast) return;
+      toast.textContent = "Copied: " + path;
+      toast.classList.add("show");
+      setTimeout(() => toast.classList.remove("show"), 1500);
+    }
+
         switch (page) {
           case "hub": renderHub(data); break;
           case "flowers": renderFlowers(data); break;
@@ -11508,6 +11936,7 @@
           case "buds": renderBuds(data); break;
           case "pets": renderPets(data); break;
           case "diff": renderDiff(data); break;
+          case "json": renderJsonExplorer(data); break;
           default: renderHub(data);
         }
 
