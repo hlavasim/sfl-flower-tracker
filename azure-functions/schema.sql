@@ -4,7 +4,7 @@
 -- Farm snapshots: full JSON + computed diff
 CREATE TABLE farm_snapshots (
   id BIGSERIAL PRIMARY KEY,
-  farm_id INTEGER NOT NULL,
+  farm_id BIGINT NOT NULL,
   captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   game_data JSONB NOT NULL,
   diff JSONB,

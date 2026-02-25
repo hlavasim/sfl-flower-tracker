@@ -2,11 +2,20 @@ const { getPool } = require("../shared/db");
 const { fetchFarmData } = require("../shared/api");
 const { computeFarmDiff } = require("../shared/diff");
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 module.exports = async function (context) {
+  // Ensure 155498 is always first; 30s delay between farms to avoid rate limits
   const farmIds = (process.env.FARM_IDS || "155498").split(",").map((s) => s.trim());
+  farmIds.sort((a, b) => (a === "155498" ? -1 : b === "155498" ? 1 : 0));
   const pool = getPool();
 
-  for (const farmId of farmIds) {
+  for (let idx = 0; idx < farmIds.length; idx++) {
+    if (idx > 0) {
+      context.log(`Waiting 30s before next farm...`);
+      await sleep(30000);
+    }
+    const farmId = farmIds[idx];
     try {
       // Per-farm API key: FARM_<id>_KEY env var, falls back to SFL_API_KEY
       const apiKey = process.env[`FARM_${farmId}_KEY`] || process.env.SFL_API_KEY;
