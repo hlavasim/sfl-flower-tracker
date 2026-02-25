@@ -1895,6 +1895,7 @@
     .dash-item.empty { border-left-color:var(--blue,#6aa0ff); opacity:0.65; }
     .dash-item-label { flex:1; min-width:0; }
     .dash-time { text-align:right; white-space:nowrap; font-size:0.65rem; }
+    .dash-item .dash-detail { font-size:0.6rem; color:var(--text-dim); word-break:break-word; }
     .dash-ready-badge { padding:1px 6px; border-radius:8px; font-size:0.6rem; font-weight:bold; }
     .dash-ready-badge.green { background:rgba(46,160,67,0.3); color:var(--green); }
     .dash-ready-badge.red { background:rgba(220,60,60,0.3); color:#e55; }
@@ -4859,14 +4860,52 @@
       return actions;
     }
 
+    function dashGetFlowerSuggestions(inventory, inProgress, count) {
+      // Reuse the same logic as getPetalBlessedRecommendation
+      const { totalNeeded } = computeAllTotalNeeded(inventory, inProgress);
+      const candidates = [];
+      for (const [name, needed] of Object.entries(totalNeeded)) {
+        const have = getCount(inventory, name) + (inProgress[name] || 0);
+        const remaining = Math.max(0, needed - have);
+        if (remaining <= 0) continue;
+        const recipe = FLOWER_RECIPES[name];
+        if (!recipe) continue;
+        const sd = SEED_DATA[recipe.seed];
+        if (!sd) continue;
+        let inputReady = true;
+        if (isFlowerInput(recipe.input)) {
+          inputReady = (getCount(inventory, recipe.input) + (inProgress[recipe.input] || 0)) > 0;
+        }
+        candidates.push({ name, remaining, seedHours: sd.hours, seed: recipe.seed, inputReady });
+      }
+      // Sort: longest grow time first, then input-ready, then most remaining
+      candidates.sort((a, b) => {
+        if (b.seedHours !== a.seedHours) return b.seedHours - a.seedHours;
+        if (a.inputReady !== b.inputReady) return a.inputReady ? -1 : 1;
+        return b.remaining - a.remaining;
+      });
+      const picks = [];
+      const used = {};
+      for (const c of candidates) {
+        if (picks.length >= count) break;
+        const canUse = Math.min(c.remaining - (used[c.name] || 0), count - picks.length);
+        for (let i = 0; i < canUse; i++) {
+          picks.push(c);
+          used[c.name] = (used[c.name] || 0) + 1;
+        }
+      }
+      return picks;
+    }
+
     function dashParseFlowers(farm, inventory, inProgress) {
       const actions = [];
       const now = Date.now();
       const beds = farm.flowers?.flowerBeds || {};
+      let readyCount = 0, emptyCount = 0;
+
       for (const [id, bed] of Object.entries(beds)) {
         if (!bed.flower) {
-          // Check if collection still needs flowers
-          actions.push({ category:"Flowers", icon:"🌸", label:"Empty flower bed", detail:"Plant a flower!", status:"empty", readyAt:0, priority:90 });
+          emptyCount++;
           continue;
         }
         const fl = bed.flower;
@@ -4880,11 +4919,32 @@
         }
         const readyAt = plantedAt + growMs;
         if (readyAt <= now) {
+          readyCount++;
           actions.push({ category:"Flowers", icon:"🌸", label:name, detail:dashAgoText(now - readyAt), status:"ready", readyAt, priority:10 });
         } else {
           actions.push({ category:"Flowers", icon:"🌸", label:name, detail:"", status:"upcoming", readyAt, priority:50 });
         }
       }
+
+      // For ready/empty beds, show what to plant next
+      const freeBeds = readyCount + emptyCount;
+      if (freeBeds > 0) {
+        const suggestions = dashGetFlowerSuggestions(inventory, inProgress, freeBeds);
+        if (suggestions.length > 0) {
+          // Group suggestions by name
+          const grouped = {};
+          for (const s of suggestions) {
+            if (!grouped[s.name]) grouped[s.name] = { ...s, count: 0 };
+            grouped[s.name].count++;
+          }
+          for (const s of Object.values(grouped)) {
+            const prefix = s.count > 1 ? s.count + "x " : "";
+            const warn = s.inputReady ? "" : " (need input!)";
+            actions.push({ category:"Flowers", icon:"🌸", label:"➡ Plant: " + prefix + s.name + warn, detail:s.seedHours + "h grow (" + s.remaining + " left)", status:"ready", readyAt:0, priority:11 });
+          }
+        }
+      }
+
       return actions;
     }
 
@@ -5025,21 +5085,25 @@
       if (!cb) return actions;
       if (cb.status === "crafting" && cb.readyAt) {
         const readyAt = toMs(cb.readyAt);
+        const itemName = cb.item?.collectible || "Item";
         if (readyAt <= now) {
-          actions.push({ category:"Crafting Box", icon:"🔨", label:"Crafting complete", detail:dashAgoText(now - readyAt), status:"ready", readyAt, priority:5 });
+          actions.push({ category:"Crafting Box", icon:"🔨", label:itemName + " ready!", detail:dashAgoText(now - readyAt), status:"ready", readyAt, priority:5 });
         } else {
-          actions.push({ category:"Crafting Box", icon:"🔨", label:"Crafting...", detail:"", status:"upcoming", readyAt, priority:50 });
+          actions.push({ category:"Crafting Box", icon:"🔨", label:"Crafting: " + itemName, detail:"", status:"upcoming", readyAt, priority:50 });
         }
-      } else {
-        // Idle — check if dolls still needed
+      }
+      // Show missing dolls when idle OR just finished (player needs to pick next)
+      const isIdle = !cb.status || cb.status !== "crafting" || (cb.readyAt && toMs(cb.readyAt) <= now);
+      if (isIdle) {
         const tracked = getTrackedDolls();
-        let missing = 0;
         for (const [name, on] of Object.entries(tracked)) {
           if (!on) continue;
-          if (getCount(inventory, name) + (inProgress[name] || 0) < LIMIT) missing++;
-        }
-        if (missing > 0) {
-          actions.push({ category:"Crafting Box", icon:"🔨", label:"Crafting box idle", detail:missing + " dolls needed", status:"empty", readyAt:0, priority:85 });
+          const have = getCount(inventory, name) + (inProgress[name] || 0);
+          if (have >= LIMIT) continue;
+          const recipe = DOLL_RECIPES[name];
+          if (!recipe || recipe.length === 0) continue;
+          const ingredients = recipe.map(r => r.qty + "x " + r.item).join(", ");
+          actions.push({ category:"Crafting Box", icon:"🔨", label:"➡ Craft: " + name + " (" + have + "/" + LIMIT + ")", detail:ingredients, status:"ready", readyAt:0, priority:86 });
         }
       }
       return actions;
@@ -5049,25 +5113,34 @@
       const actions = [];
       const now = Date.now();
       const spots = farm.crabTraps?.trapSpots || {};
+      let readyTraps = 0, emptyTraps = 0;
+
       for (const [id, spot] of Object.entries(spots)) {
         if (spot.waterTrap) {
           const readyAt = toMs(spot.waterTrap.readyAt || 0);
           if (readyAt <= now) {
+            readyTraps++;
             actions.push({ category:"Crab Traps", icon:"🦀", label:"Trap ready", detail:dashAgoText(now - readyAt), status:"ready", readyAt, priority:10 });
           } else {
             actions.push({ category:"Crab Traps", icon:"🦀", label:"Trap active", detail:"", status:"upcoming", readyAt, priority:50 });
           }
         } else {
-          // Empty trap — check if crustaceans still needed
-          let missing = 0;
-          for (const name of Object.keys(CRUSTACEAN_RECIPES)) {
-            if (getCount(inventory, name) + (inProgress[name] || 0) < LIMIT) missing++;
-          }
-          if (missing > 0) {
-            actions.push({ category:"Crab Traps", icon:"🦀", label:"Empty trap", detail:missing + " crustaceans needed", status:"empty", readyAt:0, priority:88 });
-          }
+          emptyTraps++;
         }
       }
+
+      // Show missing crustaceans when traps are ready or empty
+      const freeTraps = readyTraps + emptyTraps;
+      if (freeTraps > 0) {
+        for (const [name, recipe] of Object.entries(CRUSTACEAN_RECIPES)) {
+          const have = getCount(inventory, name) + (inProgress[name] || 0);
+          if (have >= LIMIT) continue;
+          const chum = recipe.chum ? recipe.qty + "x " + recipe.chum : "No chum";
+          const pot = recipe.pot;
+          actions.push({ category:"Crab Traps", icon:"🦀", label:"➡ Catch: " + name + " (" + have + "/" + LIMIT + ")", detail:pot + " • " + chum, status:"ready", readyAt:0, priority:89 });
+        }
+      }
+
       return actions;
     }
 
@@ -5511,10 +5584,10 @@
         } else if (item.status === "empty") {
           timeHtml = `<span class="dash-ready-badge blue">IDLE</span>`;
         }
+        const detailHtml = item.detail ? `<div class="dash-detail">${escHTML(item.detail)}</div>` : "";
         return `<div class="dash-item ${cls}">
           <span>${item.icon}</span>
-          <span class="dash-item-label">${escHTML(item.label)}</span>
-          ${item.detail && item.status === "ready" ? `<span class="dash-time" style="opacity:0.6">${escHTML(item.detail)}</span>` : ""}
+          <div class="dash-item-label">${escHTML(item.label)}${detailHtml}</div>
           ${timeHtml}
         </div>`;
       }
