@@ -5547,8 +5547,9 @@
           const from = order.from || "Unknown";
           const items = order.items || {};
           const itemDesc = Object.entries(items).map(([n, q]) => q + "x " + n).join(", ");
-          // Build reward text — skip SFL (flower), only show coins + items
+          // Build reward text — show all rewards
           const rewards = [];
+          if (order.reward?.sfl) rewards.push("+" + (+order.reward.sfl).toFixed(1) + " SFL");
           if (order.reward?.coins) rewards.push("+" + order.reward.coins + " coins");
           if (order.reward?.items) {
             for (const [rName, rQty] of Object.entries(order.reward.items)) {
