@@ -1,13 +1,27 @@
+const ALLOWED_ORIGINS = [
+  "https://sunflower.sajmonium.quest",
+  "http://localhost:3000",
+  "http://localhost:5173",
+];
+
+function getCorsOrigin(req) {
+  const origin = req.headers?.origin || req.headers?.referer || "";
+  if (ALLOWED_ORIGINS.some(o => origin.startsWith(o))) return origin;
+  return ALLOWED_ORIGINS[0]; // fallback to production
+}
+
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  const corsOrigin = getCorsOrigin(req);
+  res.setHeader("Access-Control-Allow-Origin", corsOrigin);
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "*");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-API-Key");
+  res.setHeader("Vary", "Origin");
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
 
-  const { url, key } = req.query;
+  const { url } = req.query;
   if (!url) return res.status(400).json({ error: "Missing ?url= parameter" });
 
   const ALLOWED = [
@@ -41,16 +55,17 @@ export default async function handler(req, res) {
         if (data.result) {
           res.setHeader("Content-Type", "application/json");
           res.setHeader("X-Cache", "HIT");
-          // data.result is a string — send as-is (it's valid JSON text)
           return res.status(200).send(data.result);
         }
       }
-    } catch {}
+    } catch (e) {
+      console.error("[proxy] cache read error:", e.message);
+    }
   }
 
   const headers = {};
-  // Use client-provided key, or fall back to server-side env var
-  const apiKey = key || process.env.SFL_API_KEY;
+  // API key from server env only — never accept from client
+  const apiKey = process.env.SFL_API_KEY;
   if (apiKey) headers["x-api-key"] = apiKey;
 
   try {
@@ -60,19 +75,21 @@ export default async function handler(req, res) {
     // Cache successful responses
     if (canCache && resp.ok) {
       try {
-        // Store raw JSON text — use text/plain to avoid double-encoding
         await fetch(`${apiUrl}/set/${encodeURIComponent(`cache:${url}`)}?EX=${CACHE_TTL}`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "text/plain" },
           body: body,
         });
-      } catch {}
+      } catch (e) {
+        console.error("[proxy] cache write error:", e.message);
+      }
     }
 
     res.setHeader("Content-Type", "application/json");
     res.setHeader("X-Cache", "MISS");
     return res.status(resp.status).send(body);
   } catch (err) {
-    return res.status(502).json({ error: err.message });
+    console.error("[proxy] upstream error:", err.message);
+    return res.status(502).json({ error: "Upstream request failed" });
   }
 }
