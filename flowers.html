@@ -5206,71 +5206,63 @@
 
       if (!fedThisWeek) {
         if (petStreak >= 8) {
-          let detail = "Streak " + petStreak + " (\u00d7" + streakMult + ")";
-          if (boostActiveNow) detail += " | \u00d7" + streakMult + " active now";
-          detail += " | FEED to keep boost!";
-          if (petFoodList) detail += " | Need: " + petFoodList;
-          actions.push({ category:"Faction", icon:"\u2764\ufe0f", label:"Feed faction pet!", detail, status:"ready", readyAt:0, priority:2 });
+          // URGENT — don't lose streak 8+ boost
+          actions.push({ category:"Faction", icon:"\u2764\ufe0f", label:"Feed faction pet!", detail:"Streak " + petStreak + " (\u00d7" + streakMult + ") \u2014 FEED to keep boost!", status:"ready", readyAt:0, priority:2 });
+          if (petFoodList) {
+            actions.push({ category:"Faction", icon:"\u2764\ufe0f", label:"Pet needs:", detail:petFoodList, status:"ready", readyAt:0, priority:3 });
+          }
         } else {
-          let detail = "Not fed | Streak " + petStreak;
-          if (boostActiveNow) detail += " | \u00d7" + streakMult + " active now";
+          // Info only
+          let detail = "Streak " + petStreak;
+          if (boostActiveNow) detail += " | \u00d7" + streakMult + " active";
           if (petStreak > 0) detail += " | Next: \u00d7" + nextMult;
-          if (petFoodList) detail += " | Need: " + petFoodList;
-          actions.push({ category:"Faction", icon:"\u2764\ufe0f", label:"Faction pet", detail, status:"upcoming", readyAt:Infinity, priority:99 });
+          actions.push({ category:"Faction", icon:"\u2764\ufe0f", label:"Pet not fed", detail, status:"upcoming", readyAt:Infinity, priority:99 });
+          if (petFoodList) {
+            actions.push({ category:"Faction", icon:"\u2764\ufe0f", label:"Pet needs:", detail:petFoodList, status:"upcoming", readyAt:Infinity, priority:99 });
+          }
         }
       } else {
         let detail = "Fed \u2714 | Streak " + petStreak;
-        if (boostActiveNow) detail += " | \u00d7" + streakMult + " active now";
-        detail += " | Next week: \u00d7" + nextMult;
+        if (boostActiveNow) detail += " | \u00d7" + streakMult + " active";
+        detail += " | Next: \u00d7" + nextMult;
         actions.push({ category:"Faction", icon:"\u2764\ufe0f", label:"Faction pet", detail, status:"upcoming", readyAt:Infinity, priority:99 });
       }
 
       // \u2500\u2500 Faction Kitchen/Chef \u2500\u2500
       const kitchen = faction.kitchen || {};
-      if (kitchen && kitchen.requests && kitchen.requests.length > 0) {
+      if (kitchen.requests && kitchen.requests.length > 0) {
         const requests = kitchen.requests;
 
-        // Calculate today's day number in the week
-        // kitchen.week = "2026-02-23" (Monday), day 1=Mon, 2=Tue, etc.
+        // Today's day number in the week
         let todayDayNum = 1;
         try {
           const weekStart = new Date(kitchen.week + "T00:00:00Z");
-          const now = new Date();
-          const utcNow = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+          const utcNow = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
           todayDayNum = Math.floor((utcNow - weekStart.getTime()) / 86400000) + 1;
         } catch(e) {}
-        const dayKey = String(todayDayNum);
 
-        // Today's feedings (from first request's dailyFulfilled — all items share same count)
-        const todayFeedings = requests[0]?.dailyFulfilled?.[dayKey] || 0;
-
-        // Total week feedings
+        const todayFeedings = requests[0]?.dailyFulfilled?.[String(todayDayNum)] || 0;
         let weekTotal = 0;
-        const df = requests[0]?.dailyFulfilled || {};
-        for (const v of Object.values(df)) {
+        for (const v of Object.values(requests[0]?.dailyFulfilled || {})) {
           weekTotal += (typeof v === "number" ? v : 0);
         }
 
-        // Cost per feeding
         const cost1 = requests.map(r => r.amount + " " + r.item).join(", ");
         const cost10 = requests.map(r => (r.amount * 10) + " " + r.item).join(", ");
-
-        // Score/marks from currentWeekData
         const score = currentWeekData.score || 0;
 
-        // Build display
-        let parts = [];
-        parts.push("Today: " + todayFeedings + "x | Week: " + weekTotal + "x");
-        parts.push("1x: " + cost1);
-        parts.push("10x: " + cost10);
-        if (score > 0) parts.push("Marks: " + score);
-
         const fedToday = todayFeedings > 0;
-        if (fedToday) {
-          actions.push({ category:"Faction", icon:"👨‍🍳", label:"Faction chef \u2714", detail:parts.join(" | "), status:"upcoming", readyAt:Infinity, priority:99 });
-        } else {
-          actions.push({ category:"Faction", icon:"👨‍🍳", label:"Feed faction chef", detail:parts.join(" | "), status:"ready", readyAt:0, priority:6 });
-        }
+        const label = fedToday ? "Faction chef \u2714" : "Feed faction chef";
+        const status = fedToday ? "upcoming" : "ready";
+
+        // Line 1: feedings + marks
+        let line1 = "Today: " + todayFeedings + "x | Week: " + weekTotal + "x";
+        if (score > 0) line1 += " | Marks: " + score;
+        actions.push({ category:"Faction", icon:"👨‍🍳", label, detail:line1, status, readyAt:fedToday ? Infinity : 0, priority:fedToday ? 99 : 6 });
+
+        // Line 2: costs
+        actions.push({ category:"Faction", icon:"👨‍🍳", label:"Cost 1x:", detail:cost1, status, readyAt:fedToday ? Infinity : 0, priority:fedToday ? 99 : 7 });
+        actions.push({ category:"Faction", icon:"👨‍🍳", label:"Cost 10x:", detail:cost10, status, readyAt:fedToday ? Infinity : 0, priority:fedToday ? 99 : 7 });
       }
 
       return actions;
@@ -5531,12 +5523,14 @@
         const orders = farm.delivery?.orders || [];
         for (const order of orders) {
           if (order.completedAt) continue;
+          // Skip orders that only reward SFL (no coins, no items)
+          const hasCoins = order.reward?.coins > 0;
+          const hasItems = order.reward?.items && Object.keys(order.reward.items).length > 0;
+          if (!hasCoins && !hasItems) continue;
           const from = order.from || "Unknown";
           const items = order.items || {};
           const itemDesc = Object.entries(items).map(([n, q]) => q + "x " + n).join(", ");
-          // Build reward text — show all rewards
           const rewards = [];
-          if (order.reward?.sfl) rewards.push("+" + (+order.reward.sfl).toFixed(1) + " SFL");
           if (order.reward?.coins) rewards.push("+" + order.reward.coins + " coins");
           if (order.reward?.items) {
             for (const [rName, rQty] of Object.entries(order.reward.items)) {
@@ -5684,8 +5678,10 @@
         if (item.status === "ready") {
           timeHtml = `<span class="dash-ready-badge green">READY</span>`;
         } else if (item.status === "upcoming") {
-          const diff = item.readyAt - now;
-          timeHtml = `<span class="dash-time growing-bed-time" data-ready="${item.readyAt}">${dashFormatCountdown(diff)}</span>`;
+          if (item.readyAt < Infinity) {
+            const diff = item.readyAt - now;
+            timeHtml = `<span class="dash-time growing-bed-time" data-ready="${item.readyAt}">${dashFormatCountdown(diff)}</span>`;
+          }
         } else if (item.status === "empty") {
           timeHtml = `<span class="dash-ready-badge blue">IDLE</span>`;
         }
