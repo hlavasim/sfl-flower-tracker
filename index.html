@@ -5191,8 +5191,11 @@
       const currentWeekData = history[currentWeekKey] || {};
       const prevWeekData = history[prevWeekKey] || {};
 
-      // Debug: log faction data to help understand kitchen structure
-      if (faction.kitchen) console.log("[Dashboard] faction.kitchen:", JSON.stringify(faction.kitchen));
+      // Debug: dump faction structure
+      console.log("[Faction] keys:", Object.keys(faction));
+      console.log("[Faction] kitchen:", JSON.stringify(faction.kitchen, null, 2));
+      console.log("[Faction] pet:", JSON.stringify(faction.pet, null, 2));
+      console.log("[Faction] currentWeek:", currentWeekKey, JSON.stringify(currentWeekData, null, 2));
 
       // \u2500\u2500 Faction Pet \u2500\u2500
       const petStreak = currentWeekData.collectivePet?.streak || 0;
@@ -5200,26 +5203,22 @@
       const fedThisWeek = faction.pet?.qualifiesForBoost === true;
       const lastWeekFed = (prevWeekData.petXP || 0) > 0;
       const boostActiveNow = lastWeekFed && streakMult > 1;
-      // Next week's mult (assumes streak continues if fed)
       const nextStreak = petStreak + (fedThisWeek ? 0 : 1);
       const nextMult = nextStreak >= 8 ? 1.5 : nextStreak >= 6 ? 1.3 : nextStreak >= 4 ? 1.2 : nextStreak >= 2 ? 1.1 : 1.0;
 
       if (!fedThisWeek) {
         if (petStreak >= 8) {
-          // URGENT: streak 8+ means \u00d71.5 boost — don't lose it!
           let detail = "Streak " + petStreak + " (\u00d7" + streakMult + ")";
           if (boostActiveNow) detail += " | \u00d7" + streakMult + " active now";
           detail += " | FEED to keep boost!";
           actions.push({ category:"Faction", icon:"\u2764\ufe0f", label:"Feed faction pet!", detail, status:"ready", readyAt:0, priority:2 });
         } else {
-          // Not urgent — just info
           let detail = "Not fed yet | Streak " + petStreak;
           if (boostActiveNow) detail += " | \u00d7" + streakMult + " active now";
           if (petStreak > 0) detail += " | Next: \u00d7" + nextMult;
           actions.push({ category:"Faction", icon:"\u2764\ufe0f", label:"Faction pet", detail, status:"upcoming", readyAt:Infinity, priority:99 });
         }
       } else {
-        // Fed this week
         let detail = "Fed \u2714 | Streak " + petStreak;
         if (boostActiveNow) detail += " | \u00d7" + streakMult + " active now";
         detail += " | Next week: \u00d7" + nextMult;
@@ -5228,61 +5227,75 @@
 
       // \u2500\u2500 Faction Kitchen/Chef \u2500\u2500
       const kitchen = faction.kitchen || {};
-      const todayStartUTC = dashGetTodayStartUTC();
-      const kitchenFedAt = toMs(kitchen.dailyFedAt || kitchen.contributedAt || kitchen.lastFedAt || kitchen.fedAt || 0);
-      const kitchenFedToday = kitchenFedAt >= todayStartUTC;
-
       if (kitchen && Object.keys(kitchen).length > 0) {
-        // Try to parse cost from various possible structures
-        let costPer1 = "";
-        let costPer10 = "";
-        let contributed = "";
+        // Parse cost ingredients
+        let ingredients = [];
         try {
-          // kitchen.requests / kitchen.currentRequest — the weekly ingredient cost
           const req = kitchen.requests || kitchen.currentRequest || kitchen.week?.requests || null;
           if (req) {
-            let ingredients = [];
             if (Array.isArray(req)) {
-              // Array of {item, amount} or similar
               for (const r of req) {
                 if (typeof r === "string") { ingredients.push({ name: r, qty: 1 }); continue; }
-                const name = r.item || r.name || r.resource || Object.keys(r).find(k => typeof r[k] === "string" && k !== "amount" && k !== "qty") || "?";
+                const name = r.item || r.name || r.resource || "?";
                 const qty = r.amount || r.qty || r.quantity || 1;
-                ingredients.push({ name: typeof name === "string" ? name : String(name), qty });
+                ingredients.push({ name, qty });
               }
             } else if (typeof req === "object") {
               for (const [k, v] of Object.entries(req)) {
                 if (typeof v === "number") { ingredients.push({ name: k, qty: v }); continue; }
                 if (typeof v === "object" && v !== null) {
-                  const name = v.item || v.name || k;
-                  const qty = v.amount || v.qty || 1;
-                  ingredients.push({ name, qty });
+                  ingredients.push({ name: v.item || v.name || k, qty: v.amount || v.qty || 1 });
                 }
               }
             }
-            if (ingredients.length > 0) {
-              costPer1 = "1x: " + ingredients.map(i => i.qty + " " + i.name).join(", ");
-              costPer10 = "10x: " + ingredients.map(i => (i.qty * 10) + " " + i.name).join(", ");
-            }
           }
-
-          // Try to find contribution count
-          const pts = kitchen.points || kitchen.score || kitchen.contributions || kitchen.totalContributions || kitchen.week?.contributions || null;
-          if (typeof pts === "number") contributed = "Given: " + pts + "x";
         } catch(e) {}
 
+        // Find contributions — search many possible paths
+        let contributed = 0;
+        const possiblePaths = [
+          kitchen.points, kitchen.score, kitchen.contributions,
+          kitchen.totalContributions, kitchen.dailyContributions,
+          kitchen.week?.contributions, kitchen.week?.points,
+          kitchen.week?.score, kitchen.donated,
+          currentWeekData.kitchen?.contributions,
+          currentWeekData.kitchen?.points,
+          currentWeekData.contributions,
+          currentWeekData.kitchen?.score
+        ];
+        for (const v of possiblePaths) {
+          if (typeof v === "number" && v > 0) { contributed = v; break; }
+        }
+
+        // Find marks earned
+        let marksEarned = 0;
+        const marks = currentWeekData.marks || {};
+        marksEarned = marks.earned || marks.total || marks.kitchen || 0;
+        // Also check faction-level marks
+        if (!marksEarned) {
+          const fMarks = faction.marks || {};
+          marksEarned = fMarks.earned || fMarks.total || 0;
+        }
+
+        // Build detail
+        let parts = [];
+        if (ingredients.length > 0) {
+          parts.push("1x: " + ingredients.map(i => i.qty + " " + i.name).join(", "));
+          parts.push("10x: " + ingredients.map(i => (i.qty * 10) + " " + i.name).join(", "));
+        }
+        if (contributed > 0) parts.push("Given: " + contributed + "x");
+        if (marksEarned > 0) parts.push("Marks: " + marksEarned);
+
+        const todayStartUTC = dashGetTodayStartUTC();
+        const kitchenFedAt = toMs(kitchen.dailyFedAt || kitchen.contributedAt || kitchen.lastFedAt || kitchen.fedAt || 0);
+        const kitchenFedToday = kitchenFedAt >= todayStartUTC;
+
         if (!kitchenFedToday) {
-          let parts = [];
-          if (costPer1) parts.push(costPer1);
-          if (costPer10) parts.push(costPer10);
-          if (contributed) parts.push(contributed);
           const detail = parts.length > 0 ? parts.join(" | ") : "Feed the chef!";
           actions.push({ category:"Faction", icon:"👨‍🍳", label:"Feed faction chef", detail, status:"ready", readyAt:0, priority:6 });
         } else {
-          let parts = ["Done today \u2714"];
-          if (contributed) parts.push(contributed);
-          const detail = parts.join(" | ");
-          actions.push({ category:"Faction", icon:"👨‍🍳", label:"Faction chef", detail, status:"upcoming", readyAt:Infinity, priority:99 });
+          parts.unshift("Done today \u2714");
+          actions.push({ category:"Faction", icon:"👨‍🍳", label:"Faction chef", detail:parts.join(" | "), status:"upcoming", readyAt:Infinity, priority:99 });
         }
       }
 
