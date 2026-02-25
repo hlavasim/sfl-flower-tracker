@@ -5179,6 +5179,80 @@
       return dashCollapseItems(actions);
     }
 
+    function dashParseFaction(farm) {
+      const actions = [];
+      const faction = farm.faction;
+      if (!faction) return actions;
+
+      const history = faction.history || {};
+      const sortedWeeks = Object.keys(history).sort();
+      const currentWeekKey = sortedWeeks[sortedWeeks.length - 1] || "";
+      const prevWeekKey = sortedWeeks[sortedWeeks.length - 2] || "";
+      const currentWeekData = history[currentWeekKey] || {};
+      const prevWeekData = history[prevWeekKey] || {};
+
+      // Pet streak info
+      const petStreak = currentWeekData.collectivePet?.streak || 0;
+      const streakMult = petStreak >= 8 ? 1.5 : petStreak >= 6 ? 1.3 : petStreak >= 4 ? 1.2 : petStreak >= 2 ? 1.1 : 1.0;
+      const lastWeekFed = (prevWeekData.petXP || 0) > 0;
+      const thisWeekFed = faction.pet?.qualifiesForBoost === true;
+      const boostActiveThisWeek = lastWeekFed && streakMult > 1;
+
+      // Show pet feeding status
+      if (!thisWeekFed) {
+        // Player hasn't fed the faction pet this week yet — urgent if streak >= 8
+        if (petStreak >= 8) {
+          actions.push({ category:"Faction", icon:"\u2764\ufe0f", label:"Feed faction pet!", detail:"Streak " + petStreak + " (\u00d7" + streakMult + ") \u2014 don't lose your boost!", status:"ready", readyAt:0, priority:2 });
+        } else if (petStreak >= 2) {
+          actions.push({ category:"Faction", icon:"\u2764\ufe0f", label:"Feed faction pet", detail:"Streak " + petStreak + " (\u00d7" + streakMult + ") \u2014 keep it growing!", status:"ready", readyAt:0, priority:8 });
+        } else {
+          actions.push({ category:"Faction", icon:"\u2764\ufe0f", label:"Feed faction pet", detail:"Streak " + petStreak + " \u2014 start building!", status:"ready", readyAt:0, priority:15 });
+        }
+      } else {
+        // Already fed — show info about current streak
+        if (boostActiveThisWeek) {
+          actions.push({ category:"Faction", icon:"\u2764\ufe0f", label:"Faction pet \u2714", detail:"Streak " + petStreak + " (\u00d7" + streakMult + " cooking XP active)", status:"upcoming", readyAt:Infinity, priority:99 });
+        }
+      }
+
+      // Kitchen: check farm.faction.kitchen for delivery status
+      const kitchen = faction.kitchen || {};
+      const todayStartUTC = dashGetTodayStartUTC();
+
+      // Try to detect kitchen feeding — common patterns:
+      // kitchen.dailyFedAt, kitchen.contributedAt, kitchen.lastFedAt, etc.
+      const kitchenFedAt = toMs(kitchen.dailyFedAt || kitchen.contributedAt || kitchen.lastFedAt || kitchen.fedAt || 0);
+      const kitchenFedToday = kitchenFedAt >= todayStartUTC;
+
+      // Kitchen contribution costs from game data
+      // Feeding cost: depends on the current week's recipe request
+      const weeklyRequest = kitchen.requests || kitchen.currentRequest || null;
+
+      if (kitchen && Object.keys(kitchen).length > 0) {
+        if (!kitchenFedToday) {
+          let detail = "Feed the chef!";
+          if (weeklyRequest) {
+            const items = typeof weeklyRequest === "object"
+              ? Object.entries(weeklyRequest).map(([k, v]) => v + "x " + k).join(", ")
+              : String(weeklyRequest);
+            detail = "Cost: " + items;
+          }
+          actions.push({ category:"Faction", icon:"\U0001f468\u200d\U0001f373", label:"Feed faction chef", detail, status:"ready", readyAt:0, priority:6 });
+        }
+      }
+
+      // Faction marks earned
+      const marks = currentWeekData.marks || {};
+      if (marks.earned !== undefined || marks.total !== undefined) {
+        const earned = marks.earned || marks.total || 0;
+        if (earned > 0) {
+          actions.push({ category:"Faction", icon:"\U0001f3c5", label:"Marks earned: " + earned, detail:"Keep contributing!", status:"upcoming", readyAt:Infinity, priority:99 });
+        }
+      }
+
+      return actions;
+    }
+
     const DASH_POWER_COOLDOWNS = {
       "Instant Growth": 72*3600, "Tree Blitz": 24*3600, "Barnyard Rouse": 120*3600,
       "Greenhouse Guru": 96*3600, "Instant Gratification": 96*3600,
@@ -5510,6 +5584,7 @@
       actions.push(...dashParseCraftingBox(farm, inventory, inProgress));
       actions.push(...dashParseCrabTraps(farm, inventory, inProgress));
       actions.push(...dashParsePets(farm));
+      actions.push(...dashParseFaction(farm));
       actions.push(...dashParsePowers(farm));
       actions.push(...dashParseDailies(farm));
       actions.push(...dashParseTrades(farm));
