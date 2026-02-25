@@ -1893,7 +1893,7 @@
     .dash-item.ready { border-left-color:var(--green); }
     .dash-item.upcoming { border-left-color:var(--yellow); opacity:0.8; }
     .dash-item.empty { border-left-color:var(--blue,#6aa0ff); opacity:0.65; }
-    .dash-item-label { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .dash-item-label { flex:1; min-width:0; }
     .dash-time { text-align:right; white-space:nowrap; font-size:0.65rem; }
     .dash-ready-badge { padding:1px 6px; border-radius:8px; font-size:0.6rem; font-weight:bold; }
     .dash-ready-badge.green { background:rgba(46,160,67,0.3); color:var(--green); }
@@ -4920,21 +4920,35 @@
       const actions = [];
       const now = Date.now();
       const buildings = farm.buildings || {};
+      // Cooking buildings: crafting is an array of items
       for (const bName of COOKING_BUILDING_NAMES) {
         const instances = buildings[bName] || [];
         for (const inst of instances) {
-          const crafting = inst.crafting;
-          if (!crafting) {
-            actions.push({ category:"Cooking", icon:"🍳", label:bName + " idle", detail:"Cook something!", status:"empty", readyAt:0, priority:90 });
-            continue;
+          const craftingArr = inst.crafting;
+          if (!craftingArr || !Array.isArray(craftingArr) || craftingArr.length === 0) continue;
+          for (const craft of craftingArr) {
+            if (!craft.readyAt || !craft.name) continue;
+            const readyAt = toMs(craft.readyAt);
+            if (readyAt <= now) {
+              actions.push({ category:"Cooking", icon:"🍳", label:craft.name + " (" + bName + ")", detail:dashAgoText(now - readyAt), status:"ready", readyAt, priority:10 });
+            } else {
+              actions.push({ category:"Cooking", icon:"🍳", label:craft.name + " (" + bName + ")", detail:"", status:"upcoming", readyAt, priority:50 });
+            }
           }
-          const readyAt = toMs(crafting.readyAt || 0);
+        }
+      }
+      // Fish Market: processing is an array
+      const fishMarkets = buildings["Fish Market"] || [];
+      for (const inst of fishMarkets) {
+        const processing = inst.processing;
+        if (!processing || !Array.isArray(processing)) continue;
+        for (const item of processing) {
+          if (!item.readyAt || !item.name) continue;
+          const readyAt = toMs(item.readyAt);
           if (readyAt <= now) {
-            const name = crafting.name || "Food";
-            actions.push({ category:"Cooking", icon:"🍳", label:name + " (" + bName + ")", detail:dashAgoText(now - readyAt), status:"ready", readyAt, priority:10 });
+            actions.push({ category:"Cooking", icon:"🍳", label:item.name + " (Fish Market)", detail:dashAgoText(now - readyAt), status:"ready", readyAt, priority:10 });
           } else {
-            const name = crafting.name || "Food";
-            actions.push({ category:"Cooking", icon:"🍳", label:name + " (" + bName + ")", detail:"", status:"upcoming", readyAt, priority:50 });
+            actions.push({ category:"Cooking", icon:"🍳", label:item.name + " (Fish Market)", detail:"", status:"upcoming", readyAt, priority:50 });
           }
         }
       }
@@ -4985,29 +4999,23 @@
     }
 
     function dashParseBeehives(farm) {
+      // Reuse existing extractBeehiveDetails which does proper flower-rate calculation
+      const hiveDetails = farm.beehives ? extractBeehiveDetails(farm.beehives) : [];
       const actions = [];
       const now = Date.now();
-      const hives = farm.beehives || {};
-      for (const [id, hive] of Object.entries(hives)) {
-        if (!hive.honey) continue;
-        const h = hive.honey;
-        const updatedAt = toMs(h.updatedAt || 0);
-        const produced = h.produced || 0;
-        // Simplified: if produced >= 1.0 it's full
-        if (produced >= 1.0) {
-          actions.push({ category:"Beehives", icon:"🐝", label:"Beehive", detail:"Full!", status:"ready", readyAt:updatedAt, priority:10 });
+      for (const hive of hiveDetails) {
+        if (hive.empty) continue;
+        const pct = Math.round(hive.progressPct || 0);
+        if (hive.progressPct >= 100 || (hive.readyAt && hive.readyAt <= now)) {
+          actions.push({ category:"Beehives", icon:"🐝", label:"Beehive" + (hive.hasSwarm ? " 🐝!" : ""), detail:"Full!", status:"ready", readyAt:hive.readyAt || now, priority:10 });
+        } else if (hive.readyAt) {
+          actions.push({ category:"Beehives", icon:"🐝", label:"Beehive (" + pct + "%)" + (hive.hasSwarm ? " 🐝!" : ""), detail:"", status:"upcoming", readyAt:hive.readyAt, priority:50 });
         } else {
-          // Estimate when full: rate ~ produced / (now - updatedAt), remaining = 1-produced
-          const elapsed = now - updatedAt;
-          if (elapsed > 0 && produced > 0) {
-            const rate = produced / elapsed;
-            const remaining = (1 - produced) / rate;
-            const readyAt = now + remaining;
-            actions.push({ category:"Beehives", icon:"🐝", label:"Beehive (" + Math.round(produced * 100) + "%)", detail:"", status:"upcoming", readyAt, priority:50 });
-          }
+          // Stalled — no active flowers
+          actions.push({ category:"Beehives", icon:"🐝", label:"Beehive (" + pct + "%) stalled", detail:"No flowers!", status:"empty", readyAt:0, priority:80 });
         }
       }
-      return dashCollapseItems(actions);
+      return actions;
     }
 
     function dashParseCraftingBox(farm, inventory, inProgress) {
@@ -5066,45 +5074,89 @@
     function dashParsePets(farm) {
       const actions = [];
       const now = Date.now();
+      const todayStartUTC = dashGetTodayStartUTC();
       const pets = farm.pets || {};
-      const allPets = [...Object.values(pets.common || {}), ...Object.values(pets.nfts || {})];
-      for (const pet of allPets) {
-        const name = pet.name || pet.type || "Pet";
-        // Caress check (pettedAt + 2h)
+
+      function processPet(name, pet, isNFT) {
+        const icon = isNFT ? "🐶" : "🐱";
+        // Caress: pettedAt + 2h
         const pettedAt = toMs(pet.pettedAt || 0);
-        if (pettedAt > 0) {
-          const caressReady = pettedAt + 2 * 3600000;
-          if (caressReady <= now) {
-            actions.push({ category:"Pets", icon:"🐾", label:"Pet " + name, detail:"Needs caress", status:"ready", readyAt:caressReady, priority:15 });
-          }
-        } else {
-          actions.push({ category:"Pets", icon:"🐾", label:"Pet " + name, detail:"Needs caress", status:"ready", readyAt:0, priority:15 });
+        const napFinishedAt = pettedAt + 2 * 3600000;
+        if (napFinishedAt <= now) {
+          actions.push({ category:"Pets", icon, label:"Pet " + name + " 💕", detail:"Caress ready", status:"ready", readyAt:napFinishedAt, priority:15 });
+        } else if (pettedAt > 0) {
+          actions.push({ category:"Pets", icon, label:"Pet " + name + " 💕", detail:"", status:"upcoming", readyAt:napFinishedAt, priority:55 });
         }
-        // Feed check
-        const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-        const requests = pet.requests ? Object.values(pet.requests) : [];
-        for (const req of requests) {
-          if (!req || typeof req !== "object") continue;
-          const fedAt = toMs(req.fedAt || 0);
-          if (fedAt < todayStart.getTime()) {
-            actions.push({ category:"Pets", icon:"🐾", label:"Feed " + name, detail:req.food || "Hungry!", status:"ready", readyAt:0, priority:12 });
-            break;
-          }
+        // Feed: requests.fedAt is a direct field (not array)
+        const fedAt = toMs(pet.requests?.fedAt || 0);
+        if (fedAt < todayStartUTC) {
+          actions.push({ category:"Pets", icon, label:"Feed " + name + " 🍖", detail:"Hungry!", status:"ready", readyAt:0, priority:12 });
         }
       }
+
+      // NFT pets
+      for (const [petId, pet] of Object.entries(pets.nfts || {})) {
+        processPet(pet.name || "Pet #" + petId, pet, true);
+      }
+      // Common pets
+      for (const [petName, pet] of Object.entries(pets.common || {})) {
+        processPet(petName, pet, false);
+      }
+
       return dashCollapseItems(actions);
+    }
+
+    const DASH_POWER_COOLDOWNS = {
+      "Instant Growth": 72*3600, "Tree Blitz": 24*3600, "Barnyard Rouse": 120*3600,
+      "Greenhouse Guru": 96*3600, "Instant Gratification": 96*3600,
+      "Petal Blessed": 96*3600, "Grease Lightning": 96*3600,
+    };
+
+    function dashParsePowers(farm) {
+      const actions = [];
+      const now = Date.now();
+      const powers = farm.bumpkin?.previousPowerUseAt;
+      if (!powers) return actions;
+      const hasLuna = (farm.wardrobe?.["Luna's Crescent"] || 0) > 0;
+      for (const [name, lastUsed] of Object.entries(powers)) {
+        const baseCooldown = DASH_POWER_COOLDOWNS[name];
+        if (!baseCooldown) continue;
+        const cooldownSec = baseCooldown * (hasLuna ? 0.5 : 1);
+        const nextAt = toMs(lastUsed) + cooldownSec * 1000;
+        if (nextAt <= now) {
+          actions.push({ category:"Powers", icon:"⚡", label:name, detail:dashAgoText(now - nextAt), status:"ready", readyAt:nextAt, priority:15 });
+        } else {
+          actions.push({ category:"Powers", icon:"⚡", label:name, detail:"", status:"upcoming", readyAt:nextAt, priority:50 });
+        }
+      }
+      return actions;
+    }
+
+    function dashGetTodayStartUTC() {
+      const now = new Date();
+      now.setUTCHours(0,0,0,0);
+      return now.getTime();
+    }
+
+    // Bud Box type rotation (from sfl.js)
+    const DASH_BUD_ORDER = ["Plaza","Woodlands","Cave","Sea","Castle","Port","Retreat","Saphiro","Snow","Beach"];
+    function dashGetDailyBudBoxType(ms) {
+      const daysSinceEpoch = Math.floor(ms / (1000 * 60 * 60 * 24)) + 2;
+      return DASH_BUD_ORDER[daysSinceEpoch % DASH_BUD_ORDER.length];
     }
 
     function dashParseDailies(farm) {
       const actions = [];
-      const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-      const ts = todayStart.getTime();
+      const ts = dashGetTodayStartUTC();
 
-      // Desert Dig
+      // Desert Dig — collectedAt is in digging.streak.collectedAt OR digging.collectedAt
       try {
         const digging = farm.desert?.digging;
         if (digging) {
-          const collected = toMs(digging.collectedAt || 0);
+          const collected = toMs(
+            (digging.streak && digging.streak.collectedAt) ? digging.streak.collectedAt
+            : (digging.collectedAt || 0)
+          );
           if (collected < ts) {
             actions.push({ category:"Dailies", icon:"⛏️", label:"Desert Dig", detail:"Uncollected!", status:"ready", readyAt:0, priority:5 });
           }
@@ -5114,8 +5166,8 @@
       // Shipments
       try {
         const ship = farm.shipments;
-        if (ship) {
-          const restocked = toMs(ship.restockedAt || 0);
+        if (ship && ship.restockedAt) {
+          const restocked = toMs(ship.restockedAt);
           if (restocked < ts) {
             actions.push({ category:"Dailies", icon:"📦", label:"Shipments", detail:"Restock available!", status:"ready", readyAt:0, priority:5 });
           }
@@ -5125,19 +5177,20 @@
       // Daily Rewards
       try {
         const dr = farm.dailyRewards?.chest;
-        if (dr) {
-          const collected = toMs(dr.collectedAt || 0);
+        if (dr && dr.collectedAt) {
+          const collected = toMs(dr.collectedAt);
           if (collected < ts) {
             actions.push({ category:"Dailies", icon:"🎁", label:"Daily Reward", detail:"Uncollected!", status:"ready", readyAt:0, priority:5 });
           }
         }
       } catch(e) {}
 
-      // Maneki Neko
+      // Maneki Neko — check both farm.collectibles AND farm.home.collectibles
       try {
-        const mn = (farm.collectibles?.["Maneki Neko"] || [])[0];
-        if (mn) {
-          const shaken = toMs(mn.shakenAt || 0);
+        let mn = (farm.collectibles?.["Maneki Neko"] || [])[0];
+        if (!mn) mn = (farm.home?.collectibles?.["Maneki Neko"] || [])[0];
+        if (mn && mn.shakenAt) {
+          const shaken = toMs(mn.shakenAt);
           if (shaken < ts) {
             actions.push({ category:"Dailies", icon:"🐱", label:"Maneki Neko", detail:"Shake it!", status:"ready", readyAt:0, priority:5 });
           }
@@ -5147,32 +5200,40 @@
       // Pirate Chest
       try {
         const pc = farm.pumpkinPlaza?.pirateChest;
-        if (pc) {
-          const opened = toMs(pc.openedAt || 0);
+        if (pc && pc.openedAt) {
+          const opened = toMs(pc.openedAt);
           if (opened < ts) {
             actions.push({ category:"Dailies", icon:"☠️", label:"Pirate Chest", detail:"Unopened!", status:"ready", readyAt:0, priority:5 });
           }
         }
       } catch(e) {}
 
-      // Bud Box
+      // Bud Box — only show if player owns a bud of today's type
       try {
         const bb = farm.pumpkinPlaza?.budBox;
-        if (bb) {
-          const opened = toMs(bb.openedAt || 0);
+        const buds = farm.buds || {};
+        const playerBudTypes = Object.values(buds).map(b => b.type).filter(Boolean);
+        const todayType = dashGetDailyBudBoxType(Date.now());
+        if (playerBudTypes.includes(todayType)) {
+          const opened = toMs(bb?.openedAt || 0);
           if (opened < ts) {
-            actions.push({ category:"Dailies", icon:"🌱", label:"Bud Box", detail:"Unopened!", status:"ready", readyAt:0, priority:5 });
+            actions.push({ category:"Dailies", icon:"🌱", label:"Bud Box: " + todayType, detail:"Unopened!", status:"ready", readyAt:0, priority:5 });
           }
         }
       } catch(e) {}
 
-      // Floating Island
+      // Floating Island — check schedule + petalPuzzleSolvedAt
       try {
         const fi = farm.floatingIsland;
-        if (fi && fi.id) {
-          const solved = toMs(fi.solvedAt || 0);
-          if (solved < ts) {
-            actions.push({ category:"Dailies", icon:"🏝️", label:"Floating Island", detail:"Puzzle unsolved!", status:"ready", readyAt:0, priority:5 });
+        if (fi) {
+          const solvedAt = toMs(fi.petalPuzzleSolvedAt || 0);
+          if (solvedAt < ts) {
+            const schedule = fi.schedule || [];
+            const now = Date.now();
+            const isActive = schedule.some(p => now >= p.startAt && now <= p.endAt);
+            if (isActive) {
+              actions.push({ category:"Dailies", icon:"🏝️", label:"Floating Island", detail:"Puzzle unsolved!", status:"ready", readyAt:0, priority:5 });
+            }
           }
         }
       } catch(e) {}
@@ -5203,15 +5264,24 @@
       return actions;
     }
 
+    function dashGetLavaPitDurationSeconds(farm) {
+      let time = 72 * 3600; // 72h base
+      if (farm.boostsUsedAt?.["Obsidian Necklace"]) time = time / 2;
+      if (farm.boostsUsedAt?.["Magma Stone"]) time = time * 0.85;
+      return time;
+    }
+
     function dashParseLavaPits(farm) {
       const actions = [];
       const now = Date.now();
       const pits = farm.lavaPits || {};
+      const durationSec = dashGetLavaPitDurationSeconds(farm);
       for (const [id, pit] of Object.entries(pits)) {
-        if (!pit.startedAt) continue;
-        const started = toMs(pit.startedAt);
-        const duration = (pit.duration || 0) * 1000;
-        const readyAt = started + duration;
+        const startedAt = toMs(pit.startedAt || pit.createdAt || 0);
+        const removedAt = pit.removedAt || pit.collectedAt || null;
+        if (removedAt) continue; // already collected
+        if (!startedAt) continue;
+        const readyAt = startedAt + durationSec * 1000;
         if (readyAt <= now) {
           actions.push({ category:"Lava Pits", icon:"🌋", label:"Lava Pit", detail:dashAgoText(now - readyAt), status:"ready", readyAt, priority:10 });
         } else {
@@ -5228,44 +5298,76 @@
       for (const m of machines) {
         const queue = m.queue || [];
         for (const item of queue) {
-          const readyAt = toMs(item.readyAt || 0);
-          if (readyAt <= 0) continue;
-          if (readyAt <= now) {
-            actions.push({ category:"Crop Machine", icon:"⚙️", label:"Crop Machine", detail:dashAgoText(now - readyAt), status:"ready", readyAt, priority:10 });
+          if (!item.crop) continue;
+          let readyAtMs = toMs(item.readyAt || item.growsUntil || 0);
+          if (readyAtMs <= 0) continue;
+          const cropName = item.crop;
+          const seeds = item.seeds || item.amount || 1;
+          if (readyAtMs <= now) {
+            actions.push({ category:"Crop Machine", icon:"⚙️", label:seeds + "x " + cropName, detail:dashAgoText(now - readyAtMs), status:"ready", readyAt:readyAtMs, priority:10 });
           } else {
-            actions.push({ category:"Crop Machine", icon:"⚙️", label:"Crop Machine", detail:"", status:"upcoming", readyAt, priority:50 });
+            actions.push({ category:"Crop Machine", icon:"⚙️", label:seeds + "x " + cropName, detail:"", status:"upcoming", readyAt:readyAtMs, priority:50 });
           }
         }
       }
-      return dashCollapseItems(actions);
+      return actions;
     }
 
     function dashParseMushrooms(farm) {
       const actions = [];
       const now = Date.now();
-      const mushrooms = farm.mushrooms?.mushrooms || {};
-      for (const [id, m] of Object.entries(mushrooms)) {
-        const spawned = toMs(m.spawnedAt || 0);
-        if (spawned <= 0) continue;
-        // Mushrooms despawn after 16h, treat as "collect before gone"
-        const despawnAt = spawned + 16 * 3600000;
-        if (despawnAt > now) {
-          actions.push({ category:"Mushrooms", icon:"🍄", label:m.name || "Mushroom", detail:"Collect before gone!", status:"ready", readyAt:spawned, priority:8 });
+      const mushData = farm.mushrooms;
+      if (!mushData) return actions;
+      const uncollected = mushData.mushrooms || {};
+      // Wild mushrooms
+      if (mushData.spawnedAt) {
+        let hasWild = Object.values(uncollected).some(m => m.name === "Wild Mushroom");
+        if (hasWild) {
+          const count = Object.values(uncollected).filter(m => m.name === "Wild Mushroom").length;
+          actions.push({ category:"Mushrooms", icon:"🍄", label:count + "x Wild Mushroom", detail:"Collect!", status:"ready", readyAt:toMs(mushData.spawnedAt), priority:8 });
+        } else {
+          // Spawning countdown
+          const spawnedAt = toMs(mushData.spawnedAt);
+          const readyAt = spawnedAt + 16 * 3600000;
+          if (readyAt > now) {
+            actions.push({ category:"Mushrooms", icon:"🍄", label:"Mushroom", detail:"", status:"upcoming", readyAt, priority:50 });
+          }
         }
       }
-      return dashCollapseItems(actions);
+      // Magic mushrooms
+      if (mushData.magicSpawnedAt) {
+        let hasMagic = Object.values(uncollected).some(m => m.name === "Magic Mushroom");
+        if (hasMagic) {
+          actions.push({ category:"Mushrooms", icon:"🍄", label:"Magic Mushroom", detail:"Collect!", status:"ready", readyAt:toMs(mushData.magicSpawnedAt), priority:8 });
+        } else {
+          const islandType = farm.island?.type || "basic";
+          const times = { basic:48*3600, petal_paradise:36*3600, desert:24*3600, volcano:22*3600 };
+          const harvestSec = times[islandType] || 48*3600;
+          const spawnedAt = toMs(mushData.magicSpawnedAt);
+          const readyAt = spawnedAt + harvestSec * 1000;
+          if (readyAt > now) {
+            actions.push({ category:"Mushrooms", icon:"🍄", label:"Magic Mushroom", detail:"", status:"upcoming", readyAt, priority:50 });
+          } else {
+            actions.push({ category:"Mushrooms", icon:"🍄", label:"Magic Mushroom", detail:dashAgoText(now - readyAt), status:"ready", readyAt, priority:8 });
+          }
+        }
+      }
+      return actions;
     }
 
     function dashParseDeliveryOrders(farm) {
       const actions = [];
       try {
         const orders = farm.delivery?.orders || [];
-        let unfulfilled = 0;
         for (const order of orders) {
-          if (!order.completedAt && !order.reward?.claimed) unfulfilled++;
-        }
-        if (unfulfilled > 0) {
-          actions.push({ category:"Deliveries", icon:"📋", label:unfulfilled + " order" + (unfulfilled > 1 ? "s" : ""), detail:"Check deliveries", status:"ready", readyAt:0, priority:20 });
+          if (order.completedAt) continue; // already delivered
+          const from = order.from || "Unknown";
+          const items = order.items || {};
+          const itemNames = Object.entries(items).map(([name, qty]) => qty + "x " + name).join(", ");
+          const rewardSfl = order.reward?.sfl ? " +" + (+order.reward.sfl).toFixed(1) + " SFL" : "";
+          const rewardCoins = order.reward?.coins ? " +" + order.reward.coins + " coins" : "";
+          const detail = (itemNames || "Check game") + rewardSfl + rewardCoins;
+          actions.push({ category:"Deliveries", icon:"📋", label:from, detail, status:"ready", readyAt:0, priority:20 });
         }
       } catch(e) {}
       return actions;
@@ -5335,6 +5437,7 @@
       actions.push(...dashParseCraftingBox(farm, inventory, inProgress));
       actions.push(...dashParseCrabTraps(farm, inventory, inProgress));
       actions.push(...dashParsePets(farm));
+      actions.push(...dashParsePowers(farm));
       actions.push(...dashParseDailies(farm));
       actions.push(...dashParseTrades(farm));
       actions.push(...dashParseLavaPits(farm));
