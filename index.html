@@ -5082,8 +5082,9 @@
         }
         // Feed check
         const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-        const requests = pet.requests || [];
+        const requests = pet.requests ? Object.values(pet.requests) : [];
         for (const req of requests) {
+          if (!req || typeof req !== "object") continue;
           const fedAt = toMs(req.fedAt || 0);
           if (fedAt < todayStart.getTime()) {
             actions.push({ category:"Pets", icon:"🐾", label:"Feed " + name, detail:req.food || "Hungry!", status:"ready", readyAt:0, priority:12 });
