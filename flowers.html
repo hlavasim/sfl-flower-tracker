@@ -5523,14 +5523,13 @@
         const orders = farm.delivery?.orders || [];
         for (const order of orders) {
           if (order.completedAt) continue;
-          // Skip orders that only reward SFL (no coins, no items)
-          const hasCoins = order.reward?.coins > 0;
-          const hasItems = order.reward?.items && Object.keys(order.reward.items).length > 0;
-          if (!hasCoins && !hasItems) continue;
+          console.log("[Delivery]", order.from, "reward:", JSON.stringify(order.reward));
           const from = order.from || "Unknown";
           const items = order.items || {};
           const itemDesc = Object.entries(items).map(([n, q]) => q + "x " + n).join(", ");
+          // Show ALL rewards
           const rewards = [];
+          if (order.reward?.sfl) rewards.push("+" + (+order.reward.sfl).toFixed(1) + " SFL");
           if (order.reward?.coins) rewards.push("+" + order.reward.coins + " coins");
           if (order.reward?.items) {
             for (const [rName, rQty] of Object.entries(order.reward.items)) {
