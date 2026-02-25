@@ -5542,15 +5542,27 @@
       const actions = [];
       try {
         const orders = farm.delivery?.orders || [];
-        const flowerNames = new Set(Object.keys(FLOWER_RECIPES));
+        // Build full set of flower-related item names to skip
+        const flowerRelated = new Set([
+          ...Object.keys(FLOWER_RECIPES),
+          ...Object.keys(SEED_DATA)
+        ]);
+        // Also add common flower outputs that might not be in FLOWER_RECIPES
+        // (e.g. "Sunpetal", "Bloom", etc.)
+        for (const sd of Object.values(SEED_DATA)) {
+          if (sd.label) flowerRelated.add(sd.label);
+        }
         for (const order of orders) {
           if (order.completedAt) continue;
           const from = order.from || "Unknown";
           const items = order.items || {};
-          // Skip orders that require flowers
           const itemKeys = Object.keys(items);
-          const hasFlower = itemKeys.some(name => flowerNames.has(name));
-          if (hasFlower) continue;
+          // Skip orders that require any flower-related item
+          const hasFlower = itemKeys.some(name => flowerRelated.has(name));
+          if (hasFlower) {
+            console.log("[Dashboard] Skipping flower delivery:", from, itemKeys);
+            continue;
+          }
           // Build reward text
           const rewards = [];
           if (order.reward?.sfl) rewards.push("+" + (+order.reward.sfl).toFixed(1) + " SFL");
@@ -5564,7 +5576,7 @@
           const itemDesc = Object.entries(items).map(([n, q]) => q + "x " + n).join(", ");
           actions.push({ category:"Deliveries", icon:"📋", label:from + ": " + itemDesc, detail:rewardText, status:"ready", readyAt:0, priority:20 });
         }
-      } catch(e) {}
+      } catch(e) { console.error("[Dashboard] Delivery parse error:", e); }
       return actions;
     }
 
