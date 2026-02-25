@@ -5191,77 +5191,98 @@
       const currentWeekData = history[currentWeekKey] || {};
       const prevWeekData = history[prevWeekKey] || {};
 
-      // ── Faction Pet ──
+      // Debug: log faction data to help understand kitchen structure
+      if (faction.kitchen) console.log("[Dashboard] faction.kitchen:", JSON.stringify(faction.kitchen));
+
+      // \u2500\u2500 Faction Pet \u2500\u2500
       const petStreak = currentWeekData.collectivePet?.streak || 0;
       const streakMult = petStreak >= 8 ? 1.5 : petStreak >= 6 ? 1.3 : petStreak >= 4 ? 1.2 : petStreak >= 2 ? 1.1 : 1.0;
-      // "qualifiesForBoost" means player fed the pet THIS week
       const fedThisWeek = faction.pet?.qualifiesForBoost === true;
-      // Last week's feeding determines if boost is active NOW
       const lastWeekFed = (prevWeekData.petXP || 0) > 0;
       const boostActiveNow = lastWeekFed && streakMult > 1;
-      // Next week mult if player feeds this week
-      const nextMult = petStreak >= 7 ? 1.5 : petStreak >= 5 ? 1.3 : petStreak >= 3 ? 1.2 : petStreak >= 1 ? 1.1 : 1.0;
+      // Next week's mult (assumes streak continues if fed)
+      const nextStreak = petStreak + (fedThisWeek ? 0 : 1);
+      const nextMult = nextStreak >= 8 ? 1.5 : nextStreak >= 6 ? 1.3 : nextStreak >= 4 ? 1.2 : nextStreak >= 2 ? 1.1 : 1.0;
 
       if (!fedThisWeek) {
-        const urgency = petStreak >= 8 ? 2 : petStreak >= 2 ? 8 : 15;
-        let detail = "Streak " + petStreak;
-        if (boostActiveNow) {
-          detail += " | \u00d7" + streakMult + " XP active now";
-        }
-        if (petStreak >= 2) {
-          detail += " | Feed to keep boost! Next: \u00d7" + nextMult;
+        if (petStreak >= 8) {
+          // URGENT: streak 8+ means \u00d71.5 boost — don't lose it!
+          let detail = "Streak " + petStreak + " (\u00d7" + streakMult + ")";
+          if (boostActiveNow) detail += " | \u00d7" + streakMult + " active now";
+          detail += " | FEED to keep boost!";
+          actions.push({ category:"Faction", icon:"\u2764\ufe0f", label:"Feed faction pet!", detail, status:"ready", readyAt:0, priority:2 });
         } else {
-          detail += " | Feed to start streak";
+          // Not urgent — just info
+          let detail = "Not fed yet | Streak " + petStreak;
+          if (boostActiveNow) detail += " | \u00d7" + streakMult + " active now";
+          if (petStreak > 0) detail += " | Next: \u00d7" + nextMult;
+          actions.push({ category:"Faction", icon:"\u2764\ufe0f", label:"Faction pet", detail, status:"upcoming", readyAt:Infinity, priority:99 });
         }
-        actions.push({ category:"Faction", icon:"\u2764\ufe0f", label:"Feed faction pet", detail, status:"ready", readyAt:0, priority:urgency });
       } else {
+        // Fed this week
         let detail = "Fed \u2714 | Streak " + petStreak;
-        if (boostActiveNow) {
-          detail += " | \u00d7" + streakMult + " XP active now";
-        }
+        if (boostActiveNow) detail += " | \u00d7" + streakMult + " active now";
         detail += " | Next week: \u00d7" + nextMult;
         actions.push({ category:"Faction", icon:"\u2764\ufe0f", label:"Faction pet", detail, status:"upcoming", readyAt:Infinity, priority:99 });
       }
 
-      // ── Faction Kitchen/Chef ──
+      // \u2500\u2500 Faction Kitchen/Chef \u2500\u2500
       const kitchen = faction.kitchen || {};
       const todayStartUTC = dashGetTodayStartUTC();
       const kitchenFedAt = toMs(kitchen.dailyFedAt || kitchen.contributedAt || kitchen.lastFedAt || kitchen.fedAt || 0);
       const kitchenFedToday = kitchenFedAt >= todayStartUTC;
-      const weeklyRequest = kitchen.requests || kitchen.currentRequest || null;
 
       if (kitchen && Object.keys(kitchen).length > 0) {
-        if (!kitchenFedToday) {
-          let detail = "Feed the chef!";
-          if (weeklyRequest) {
-            try {
-              let items;
-              if (Array.isArray(weeklyRequest)) {
-                items = weeklyRequest.map(r => {
-                  if (typeof r === "string") return r;
-                  const name = r.item || r.name || r.resource || "?";
-                  const qty = r.amount || r.qty || r.quantity || "?";
-                  return qty + "x " + name;
-                }).join(", ");
-              } else if (typeof weeklyRequest === "object") {
-                items = Object.entries(weeklyRequest).map(([k, v]) => {
-                  if (typeof v === "number") return v + "x " + k;
-                  if (typeof v === "object" && v !== null) {
-                    const name = v.item || v.name || k;
-                    const qty = v.amount || v.qty || "?";
-                    return qty + "x " + name;
-                  }
-                  return v + "x " + k;
-                }).join(", ");
-              } else {
-                items = String(weeklyRequest);
+        // Try to parse cost from various possible structures
+        let costPer1 = "";
+        let costPer10 = "";
+        let contributed = "";
+        try {
+          // kitchen.requests / kitchen.currentRequest — the weekly ingredient cost
+          const req = kitchen.requests || kitchen.currentRequest || kitchen.week?.requests || null;
+          if (req) {
+            let ingredients = [];
+            if (Array.isArray(req)) {
+              // Array of {item, amount} or similar
+              for (const r of req) {
+                if (typeof r === "string") { ingredients.push({ name: r, qty: 1 }); continue; }
+                const name = r.item || r.name || r.resource || Object.keys(r).find(k => typeof r[k] === "string" && k !== "amount" && k !== "qty") || "?";
+                const qty = r.amount || r.qty || r.quantity || 1;
+                ingredients.push({ name: typeof name === "string" ? name : String(name), qty });
               }
-              if (items) detail = items;
-            } catch(e) {}
+            } else if (typeof req === "object") {
+              for (const [k, v] of Object.entries(req)) {
+                if (typeof v === "number") { ingredients.push({ name: k, qty: v }); continue; }
+                if (typeof v === "object" && v !== null) {
+                  const name = v.item || v.name || k;
+                  const qty = v.amount || v.qty || 1;
+                  ingredients.push({ name, qty });
+                }
+              }
+            }
+            if (ingredients.length > 0) {
+              costPer1 = "1x: " + ingredients.map(i => i.qty + " " + i.name).join(", ");
+              costPer10 = "10x: " + ingredients.map(i => (i.qty * 10) + " " + i.name).join(", ");
+            }
           }
+
+          // Try to find contribution count
+          const pts = kitchen.points || kitchen.score || kitchen.contributions || kitchen.totalContributions || kitchen.week?.contributions || null;
+          if (typeof pts === "number") contributed = "Given: " + pts + "x";
+        } catch(e) {}
+
+        if (!kitchenFedToday) {
+          let parts = [];
+          if (costPer1) parts.push(costPer1);
+          if (costPer10) parts.push(costPer10);
+          if (contributed) parts.push(contributed);
+          const detail = parts.length > 0 ? parts.join(" | ") : "Feed the chef!";
           actions.push({ category:"Faction", icon:"👨‍🍳", label:"Feed faction chef", detail, status:"ready", readyAt:0, priority:6 });
         } else {
-          actions.push({ category:"Faction", icon:"👨‍🍳", label:"Chef fed \u2714", detail:"Done for today", status:"upcoming", readyAt:Infinity, priority:99 });
+          let parts = ["Done today \u2714"];
+          if (contributed) parts.push(contributed);
+          const detail = parts.join(" | ");
+          actions.push({ category:"Faction", icon:"👨‍🍳", label:"Faction chef", detail, status:"upcoming", readyAt:Infinity, priority:99 });
         }
       }
 
@@ -5521,15 +5542,27 @@
       const actions = [];
       try {
         const orders = farm.delivery?.orders || [];
+        const flowerNames = new Set(Object.keys(FLOWER_RECIPES));
         for (const order of orders) {
-          if (order.completedAt) continue; // already delivered
+          if (order.completedAt) continue;
           const from = order.from || "Unknown";
           const items = order.items || {};
-          const itemNames = Object.entries(items).map(([name, qty]) => qty + "x " + name).join(", ");
-          const rewardSfl = order.reward?.sfl ? " +" + (+order.reward.sfl).toFixed(1) + " SFL" : "";
-          const rewardCoins = order.reward?.coins ? " +" + order.reward.coins + " coins" : "";
-          const detail = (itemNames || "Check game") + rewardSfl + rewardCoins;
-          actions.push({ category:"Deliveries", icon:"📋", label:from, detail, status:"ready", readyAt:0, priority:20 });
+          // Skip orders that require flowers
+          const itemKeys = Object.keys(items);
+          const hasFlower = itemKeys.some(name => flowerNames.has(name));
+          if (hasFlower) continue;
+          // Build reward text
+          const rewards = [];
+          if (order.reward?.sfl) rewards.push("+" + (+order.reward.sfl).toFixed(1) + " SFL");
+          if (order.reward?.coins) rewards.push("+" + order.reward.coins + " coins");
+          if (order.reward?.items) {
+            for (const [rName, rQty] of Object.entries(order.reward.items)) {
+              rewards.push("+" + rQty + " " + rName);
+            }
+          }
+          const rewardText = rewards.length > 0 ? rewards.join(", ") : "";
+          const itemDesc = Object.entries(items).map(([n, q]) => q + "x " + n).join(", ");
+          actions.push({ category:"Deliveries", icon:"📋", label:from + ": " + itemDesc, detail:rewardText, status:"ready", readyAt:0, priority:20 });
         }
       } catch(e) {}
       return actions;
