@@ -4784,6 +4784,31 @@
     //  DASHBOARD — Sub-parsers
     // ═══════════════════════════════════════
 
+    let dashP2P = {};
+    async function dashFetchP2P() {
+      try {
+        const resp = await fetch("/api/proxy?url=" + encodeURIComponent("https://sfl.world/api/v1/prices"));
+        const d = await resp.json();
+        const raw = d?.data?.p2p || d?.p2p || {};
+        for (const [k, v] of Object.entries(raw)) {
+          dashP2P[k] = parseFloat(v) || 0;
+        }
+        console.log("[Dashboard] P2P prices loaded:", Object.keys(dashP2P).length, "items");
+      } catch(e) { console.warn("[Dashboard] P2P fetch failed:", e); }
+    }
+    function dashP2PCost(items) {
+      let total = 0;
+      const arr = Array.isArray(items) ? items : Object.entries(items).map(([n,q]) => ({name:n, qty:q}));
+      for (const {name, qty} of arr) {
+        total += (dashP2P[name] || 0) * qty;
+      }
+      return total;
+    }
+    function dashFmtSFL(val) {
+      if (val <= 0) return "";
+      return val < 0.01 ? "<0.01 SFL" : val.toFixed(2) + " SFL";
+    }
+
     function dashParseCrops(farm) {
       const actions = [];
       const now = Date.now();
@@ -5628,7 +5653,8 @@
       return actions;
     }
 
-    function renderDashboard(data) {
+    async function renderDashboard(data) {
+      if (Object.keys(dashP2P).length === 0) await dashFetchP2P();
       const app = document.getElementById("app");
       if (!data || !data.farm) {
         app.innerHTML = `<div class="header pixel-panel pixel-font">
