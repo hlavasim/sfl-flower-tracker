@@ -1876,6 +1876,31 @@
     }
     .json-copied-toast.show { opacity:1; }
     .json-more-indicator { color:var(--text-dim); font-size:0.7rem; padding:4px 0 4px 20px; font-style:italic; }
+
+    /* ── Dashboard ── */
+    .dash-summary { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:8px; font-size:0.75rem; }
+    .dash-summary-badge { padding:3px 10px; border-radius:12px; font-weight:bold; }
+    .dash-summary-badge.ready { background:rgba(46,160,67,0.2); color:var(--green); }
+    .dash-summary-badge.upcoming { background:rgba(232,201,106,0.15); color:var(--yellow); }
+    .dash-summary-badge.idle { background:rgba(100,160,255,0.15); color:var(--blue,#6aa0ff); }
+    .dash-group-title { font-size:0.85rem; padding:8px 0 4px; color:var(--text-secondary); border-bottom:1px solid rgba(92,58,30,0.3); margin-bottom:6px; }
+    .dash-section { margin-bottom:6px; padding:8px 10px; }
+    .dash-section-title { display:flex; align-items:center; gap:6px; font-size:0.75rem; font-weight:bold; margin-bottom:4px; }
+    .dash-section-title .dash-count { background:rgba(46,160,67,0.25); color:var(--green); padding:1px 7px; border-radius:10px; font-size:0.65rem; }
+    .dash-section-title .dash-count.upcoming { background:rgba(232,201,106,0.2); color:var(--yellow); }
+    .dash-section-title .dash-count.idle { background:rgba(100,160,255,0.2); color:var(--blue,#6aa0ff); }
+    .dash-item { display:flex; align-items:center; gap:6px; padding:3px 4px; font-size:0.7rem; border-left:3px solid transparent; margin-left:2px; }
+    .dash-item.ready { border-left-color:var(--green); }
+    .dash-item.upcoming { border-left-color:var(--yellow); opacity:0.8; }
+    .dash-item.empty { border-left-color:var(--blue,#6aa0ff); opacity:0.65; }
+    .dash-item-label { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .dash-time { text-align:right; white-space:nowrap; font-size:0.65rem; }
+    .dash-ready-badge { padding:1px 6px; border-radius:8px; font-size:0.6rem; font-weight:bold; }
+    .dash-ready-badge.green { background:rgba(46,160,67,0.3); color:var(--green); }
+    .dash-ready-badge.red { background:rgba(220,60,60,0.3); color:#e55; }
+    .dash-ready-badge.blue { background:rgba(100,160,255,0.25); color:var(--blue,#6aa0ff); }
+    .dash-all-done { text-align:center; padding:40px 20px; font-size:1rem; color:var(--green); }
+    .dash-all-done .icon { font-size:2rem; margin-bottom:8px; }
   </style>
   <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
   <script defer src="/_vercel/insights/script.js"></script>
@@ -1902,7 +1927,7 @@
     const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
     const IMG_BASE = "https://sfl.world/img/flowers/";
-    const PAGES = ["hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "buds", "pets", "diff", "json"];
+    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "buds", "pets", "diff", "json"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -3355,7 +3380,7 @@
       const page = p.get("page");
       if (page && PAGES.includes(page)) return page;
       const cfg = getConfig();
-      return cfg.farm ? "flowers" : "hub";
+      return cfg.farm ? "dashboard" : "hub";
     }
 
     function navigateTo(page) {
@@ -3431,6 +3456,7 @@
 
     function renderNavBar(page) {
       const primary = [
+        { id: "dashboard", label: "DASH" },
         { id: "hub", label: "HUB" },
         { id: "flowers", label: "FLOWERS" },
         { id: "dolls", label: "DOLLS" },
@@ -3565,7 +3591,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v2.2</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v2.3</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -3592,6 +3618,12 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v2.3", items: [
+          { t: "new", text: "Dashboard page — all pending actions at a glance (crops, resources, cooking, animals, dailies, trades, and more)" },
+          { t: "new", text: "Dashboard is now the default landing page" },
+          { t: "new", text: "34 action categories: crops, fruits, trees, stones, iron, gold, flowers, beehives, animals, cooking, composters, pets, powers, dailies, trades, and more" },
+          { t: "new", text: "Three sections: Ready Now, Coming Soon, Idle — with live countdown timers" },
+        ]},
         { ver: "v2.2", items: [
           { t: "new", text: "JSON Explorer page — interactive collapsible tree view of full API response" },
           { t: "new", text: "Game item icons inline, color-coded values, dot-notation path copy" },
@@ -4722,6 +4754,708 @@
     // ═══════════════════════════════════════
     //  RENDER: HUB
     // ═══════════════════════════════════════
+
+
+    // ═══════════════════════════════════════
+    //  DASHBOARD — Reference Data
+    // ═══════════════════════════════════════
+
+    const CROP_HARVEST_SECONDS = {
+      "Sunflower":60,"Potato":300,"Pumpkin":1800,"Carrot":3600,"Cabbage":7200,
+      "Soybean":10800,"Beetroot":14400,"Cauliflower":28800,"Parsnip":43200,
+      "Eggplant":57600,"Corn":72000,"Radish":86400,"Wheat":86400,"Kale":129600,
+      "Barley":172800,"Rice":259200,"Olive":302400,"Grape":259200,"Tomato":7200
+    };
+    const FRUIT_HARVEST_SECONDS = {
+      "Apple":43200,"Blueberry":43200,"Orange":43200,"Banana":43200,
+      "Tomato":7200,"Lemon":86400
+    };
+    const GREENHOUSE_HARVEST_SECONDS = {
+      "Rice":115200,"Olive":158400,"Grape":43200
+    };
+    const RESOURCE_RECOVERY_MS = {
+      "Tree":2*3600000,"Stone":4*3600000,"Iron":8*3600000,
+      "Gold":24*3600000,"Crimstone":24*3600000,"Sunstone":72*3600000,"Oil":20*3600000
+    };
+    const COMPOSTER_NAMES = ["Compost Bin","Turbo Composter","Premium Composter"];
+    const COOKING_BUILDING_NAMES = ["Fire Pit","Kitchen","Bakery","Deli","Smoothie Shack"];
+
+    // ═══════════════════════════════════════
+    //  DASHBOARD — Sub-parsers
+    // ═══════════════════════════════════════
+
+    function dashParseCrops(farm) {
+      const actions = [];
+      const now = Date.now();
+      const crops = farm.crops || {};
+      for (const [id, plot] of Object.entries(crops)) {
+        if (!plot.crop) {
+          actions.push({ category:"Crops", icon:"🌾", label:"Empty plot", detail:"Plant something!", status:"empty", readyAt:0, priority:90 });
+          continue;
+        }
+        const c = plot.crop;
+        const name = c.name || "Crop";
+        const harvestSec = CROP_HARVEST_SECONDS[name] || 86400;
+        const plantedAt = toMs(c.plantedAt || 0);
+        const readyAt = plantedAt + harvestSec * 1000;
+        if (readyAt <= now) {
+          const ago = now - readyAt;
+          actions.push({ category:"Crops", icon:"🌾", label:name, detail:dashAgoText(ago), status:"ready", readyAt, priority:10 });
+        } else {
+          actions.push({ category:"Crops", icon:"🌾", label:name, detail:"", status:"upcoming", readyAt, priority:50 });
+        }
+      }
+      return dashCollapseItems(actions);
+    }
+
+    function dashParseFruits(farm) {
+      const actions = [];
+      const now = Date.now();
+      const patches = farm.fruitPatches || {};
+      for (const [id, patch] of Object.entries(patches)) {
+        if (!patch.fruit) continue;
+        const f = patch.fruit;
+        const name = f.name || "Fruit";
+        const harvestSec = FRUIT_HARVEST_SECONDS[name] || CROP_HARVEST_SECONDS[name] || 43200;
+        const harvestedAt = toMs(f.harvestedAt || f.plantedAt || 0);
+        const readyAt = harvestedAt + harvestSec * 1000;
+        if (readyAt <= now) {
+          actions.push({ category:"Fruits", icon:"🍎", label:name, detail:dashAgoText(now - readyAt), status:"ready", readyAt, priority:10 });
+        } else {
+          actions.push({ category:"Fruits", icon:"🍎", label:name, detail:"", status:"upcoming", readyAt, priority:50 });
+        }
+      }
+      return dashCollapseItems(actions);
+    }
+
+    function dashParseResources(farm) {
+      const actions = [];
+      const now = Date.now();
+      const types = [
+        { key:"trees", sub:"wood", field:"choppedAt", name:"Tree", icon:"🌳", ms:RESOURCE_RECOVERY_MS["Tree"] },
+        { key:"stones", sub:"stone", field:"minedAt", name:"Stone", icon:"⛏️", ms:RESOURCE_RECOVERY_MS["Stone"] },
+        { key:"iron", sub:"stone", field:"minedAt", name:"Iron", icon:"⛏️", ms:RESOURCE_RECOVERY_MS["Iron"] },
+        { key:"gold", sub:"stone", field:"minedAt", name:"Gold", icon:"✨", ms:RESOURCE_RECOVERY_MS["Gold"] },
+        { key:"crimstones", sub:"stone", field:"minedAt", name:"Crimstone", icon:"💎", ms:RESOURCE_RECOVERY_MS["Crimstone"] },
+        { key:"sunstones", sub:"stone", field:"minedAt", name:"Sunstone", icon:"☀️", ms:RESOURCE_RECOVERY_MS["Sunstone"] },
+        { key:"oilReserves", sub:"oil", field:"drilledAt", name:"Oil", icon:"🛢️", ms:RESOURCE_RECOVERY_MS["Oil"] },
+      ];
+      for (const t of types) {
+        const nodes = farm[t.key] || {};
+        const items = [];
+        for (const [id, node] of Object.entries(nodes)) {
+          const inner = node[t.sub];
+          if (!inner) continue;
+          const ts = toMs(inner[t.field] || 0);
+          if (ts === 0) continue;
+          const readyAt = ts + t.ms;
+          if (readyAt <= now) {
+            items.push({ category:t.name, icon:t.icon, label:t.name, detail:dashAgoText(now - readyAt), status:"ready", readyAt, priority:10 });
+          } else {
+            items.push({ category:t.name, icon:t.icon, label:t.name, detail:"", status:"upcoming", readyAt, priority:50 });
+          }
+        }
+        actions.push(...dashCollapseItems(items));
+      }
+      return actions;
+    }
+
+    function dashParseFlowers(farm, inventory, inProgress) {
+      const actions = [];
+      const now = Date.now();
+      const beds = farm.flowers?.flowerBeds || {};
+      for (const [id, bed] of Object.entries(beds)) {
+        if (!bed.flower) {
+          // Check if collection still needs flowers
+          actions.push({ category:"Flowers", icon:"🌸", label:"Empty flower bed", detail:"Plant a flower!", status:"empty", readyAt:0, priority:90 });
+          continue;
+        }
+        const fl = bed.flower;
+        const name = fl.name || "Flower";
+        const plantedAt = toMs(fl.plantedAt || 0);
+        const recipe = FLOWER_RECIPES[name];
+        let growMs = 86400000;
+        if (recipe) {
+          const sd = SEED_DATA[recipe.seed];
+          if (sd) growMs = sd.baseSeconds * 1000;
+        }
+        const readyAt = plantedAt + growMs;
+        if (readyAt <= now) {
+          actions.push({ category:"Flowers", icon:"🌸", label:name, detail:dashAgoText(now - readyAt), status:"ready", readyAt, priority:10 });
+        } else {
+          actions.push({ category:"Flowers", icon:"🌸", label:name, detail:"", status:"upcoming", readyAt, priority:50 });
+        }
+      }
+      return actions;
+    }
+
+    function dashParseAnimals(farm) {
+      const actions = [];
+      const now = Date.now();
+      const sources = [
+        { key:"henHouse", icon:"🐔", name:"Chicken" },
+        { key:"barn", icon:"🐄", name:"Barn animal" },
+      ];
+      for (const src of sources) {
+        const building = farm[src.key];
+        if (!building || !building.animals) continue;
+        for (const [id, animal] of Object.entries(building.animals)) {
+          const name = animal.type || src.name;
+          const icon = name === "Chicken" ? "🐔" : name === "Cow" ? "🐄" : name === "Sheep" ? "🐑" : src.icon;
+          if (animal.state === "sick") {
+            actions.push({ category:"Animals", icon, label:name + " (SICK)", detail:"Needs cure!", status:"ready", readyAt:0, priority:1 });
+            continue;
+          }
+          const awakeAt = toMs(animal.awakeAt || 0);
+          if (awakeAt > 0 && awakeAt <= now) {
+            actions.push({ category:"Animals", icon, label:name, detail:dashAgoText(now - awakeAt), status:"ready", readyAt:awakeAt, priority:10 });
+          } else if (awakeAt > now) {
+            actions.push({ category:"Animals", icon, label:name, detail:"", status:"upcoming", readyAt:awakeAt, priority:50 });
+          }
+        }
+      }
+      return dashCollapseItems(actions);
+    }
+
+    function dashParseCooking(farm) {
+      const actions = [];
+      const now = Date.now();
+      const buildings = farm.buildings || {};
+      for (const bName of COOKING_BUILDING_NAMES) {
+        const instances = buildings[bName] || [];
+        for (const inst of instances) {
+          const crafting = inst.crafting;
+          if (!crafting) {
+            actions.push({ category:"Cooking", icon:"🍳", label:bName + " idle", detail:"Cook something!", status:"empty", readyAt:0, priority:90 });
+            continue;
+          }
+          const readyAt = toMs(crafting.readyAt || 0);
+          if (readyAt <= now) {
+            const name = crafting.name || "Food";
+            actions.push({ category:"Cooking", icon:"🍳", label:name + " (" + bName + ")", detail:dashAgoText(now - readyAt), status:"ready", readyAt, priority:10 });
+          } else {
+            const name = crafting.name || "Food";
+            actions.push({ category:"Cooking", icon:"🍳", label:name + " (" + bName + ")", detail:"", status:"upcoming", readyAt, priority:50 });
+          }
+        }
+      }
+      return actions;
+    }
+
+    function dashParseComposters(farm) {
+      const actions = [];
+      const now = Date.now();
+      const buildings = farm.buildings || {};
+      for (const cName of COMPOSTER_NAMES) {
+        const instances = buildings[cName] || [];
+        for (const inst of instances) {
+          const producing = inst.producing;
+          if (!producing) {
+            actions.push({ category:"Composters", icon:"♻️", label:cName + " idle", detail:"Start composting!", status:"empty", readyAt:0, priority:90 });
+            continue;
+          }
+          const readyAt = toMs(producing.readyAt || 0);
+          if (readyAt <= now) {
+            actions.push({ category:"Composters", icon:"♻️", label:cName, detail:dashAgoText(now - readyAt), status:"ready", readyAt, priority:10 });
+          } else {
+            actions.push({ category:"Composters", icon:"♻️", label:cName, detail:"", status:"upcoming", readyAt, priority:50 });
+          }
+        }
+      }
+      return actions;
+    }
+
+    function dashParseGreenhouse(farm) {
+      const actions = [];
+      const now = Date.now();
+      const pots = farm.greenhouse?.pots || {};
+      for (const [id, pot] of Object.entries(pots)) {
+        if (!pot.plant) continue;
+        const p = pot.plant;
+        const name = p.name || "Greenhouse crop";
+        const plantedAt = toMs(p.plantedAt || 0);
+        const harvestSec = GREENHOUSE_HARVEST_SECONDS[name] || CROP_HARVEST_SECONDS[name] || 86400;
+        const readyAt = plantedAt + harvestSec * 1000;
+        if (readyAt <= now) {
+          actions.push({ category:"Greenhouse", icon:"🏠", label:name, detail:dashAgoText(now - readyAt), status:"ready", readyAt, priority:10 });
+        } else {
+          actions.push({ category:"Greenhouse", icon:"🏠", label:name, detail:"", status:"upcoming", readyAt, priority:50 });
+        }
+      }
+      return dashCollapseItems(actions);
+    }
+
+    function dashParseBeehives(farm) {
+      const actions = [];
+      const now = Date.now();
+      const hives = farm.beehives || {};
+      for (const [id, hive] of Object.entries(hives)) {
+        if (!hive.honey) continue;
+        const h = hive.honey;
+        const updatedAt = toMs(h.updatedAt || 0);
+        const produced = h.produced || 0;
+        // Simplified: if produced >= 1.0 it's full
+        if (produced >= 1.0) {
+          actions.push({ category:"Beehives", icon:"🐝", label:"Beehive", detail:"Full!", status:"ready", readyAt:updatedAt, priority:10 });
+        } else {
+          // Estimate when full: rate ~ produced / (now - updatedAt), remaining = 1-produced
+          const elapsed = now - updatedAt;
+          if (elapsed > 0 && produced > 0) {
+            const rate = produced / elapsed;
+            const remaining = (1 - produced) / rate;
+            const readyAt = now + remaining;
+            actions.push({ category:"Beehives", icon:"🐝", label:"Beehive (" + Math.round(produced * 100) + "%)", detail:"", status:"upcoming", readyAt, priority:50 });
+          }
+        }
+      }
+      return dashCollapseItems(actions);
+    }
+
+    function dashParseCraftingBox(farm, inventory, inProgress) {
+      const actions = [];
+      const now = Date.now();
+      const cb = farm.craftingBox;
+      if (!cb) return actions;
+      if (cb.status === "crafting" && cb.readyAt) {
+        const readyAt = toMs(cb.readyAt);
+        if (readyAt <= now) {
+          actions.push({ category:"Crafting Box", icon:"🔨", label:"Crafting complete", detail:dashAgoText(now - readyAt), status:"ready", readyAt, priority:5 });
+        } else {
+          actions.push({ category:"Crafting Box", icon:"🔨", label:"Crafting...", detail:"", status:"upcoming", readyAt, priority:50 });
+        }
+      } else {
+        // Idle — check if dolls still needed
+        const tracked = getTrackedDolls();
+        let missing = 0;
+        for (const [name, on] of Object.entries(tracked)) {
+          if (!on) continue;
+          if (getCount(inventory, name) + (inProgress[name] || 0) < LIMIT) missing++;
+        }
+        if (missing > 0) {
+          actions.push({ category:"Crafting Box", icon:"🔨", label:"Crafting box idle", detail:missing + " dolls needed", status:"empty", readyAt:0, priority:85 });
+        }
+      }
+      return actions;
+    }
+
+    function dashParseCrabTraps(farm, inventory, inProgress) {
+      const actions = [];
+      const now = Date.now();
+      const spots = farm.crabTraps?.trapSpots || {};
+      for (const [id, spot] of Object.entries(spots)) {
+        if (spot.waterTrap) {
+          const readyAt = toMs(spot.waterTrap.readyAt || 0);
+          if (readyAt <= now) {
+            actions.push({ category:"Crab Traps", icon:"🦀", label:"Trap ready", detail:dashAgoText(now - readyAt), status:"ready", readyAt, priority:10 });
+          } else {
+            actions.push({ category:"Crab Traps", icon:"🦀", label:"Trap active", detail:"", status:"upcoming", readyAt, priority:50 });
+          }
+        } else {
+          // Empty trap — check if crustaceans still needed
+          let missing = 0;
+          for (const name of Object.keys(CRUSTACEAN_RECIPES)) {
+            if (getCount(inventory, name) + (inProgress[name] || 0) < LIMIT) missing++;
+          }
+          if (missing > 0) {
+            actions.push({ category:"Crab Traps", icon:"🦀", label:"Empty trap", detail:missing + " crustaceans needed", status:"empty", readyAt:0, priority:88 });
+          }
+        }
+      }
+      return actions;
+    }
+
+    function dashParsePets(farm) {
+      const actions = [];
+      const now = Date.now();
+      const pets = farm.pets || {};
+      const allPets = [...Object.values(pets.common || {}), ...Object.values(pets.nfts || {})];
+      for (const pet of allPets) {
+        const name = pet.name || pet.type || "Pet";
+        // Caress check (pettedAt + 2h)
+        const pettedAt = toMs(pet.pettedAt || 0);
+        if (pettedAt > 0) {
+          const caressReady = pettedAt + 2 * 3600000;
+          if (caressReady <= now) {
+            actions.push({ category:"Pets", icon:"🐾", label:"Pet " + name, detail:"Needs caress", status:"ready", readyAt:caressReady, priority:15 });
+          }
+        } else {
+          actions.push({ category:"Pets", icon:"🐾", label:"Pet " + name, detail:"Needs caress", status:"ready", readyAt:0, priority:15 });
+        }
+        // Feed check
+        const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+        const requests = pet.requests || [];
+        for (const req of requests) {
+          const fedAt = toMs(req.fedAt || 0);
+          if (fedAt < todayStart.getTime()) {
+            actions.push({ category:"Pets", icon:"🐾", label:"Feed " + name, detail:req.food || "Hungry!", status:"ready", readyAt:0, priority:12 });
+            break;
+          }
+        }
+      }
+      return dashCollapseItems(actions);
+    }
+
+    function dashParseDailies(farm) {
+      const actions = [];
+      const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+      const ts = todayStart.getTime();
+
+      // Desert Dig
+      try {
+        const digging = farm.desert?.digging;
+        if (digging) {
+          const collected = toMs(digging.collectedAt || 0);
+          if (collected < ts) {
+            actions.push({ category:"Dailies", icon:"⛏️", label:"Desert Dig", detail:"Uncollected!", status:"ready", readyAt:0, priority:5 });
+          }
+        }
+      } catch(e) {}
+
+      // Shipments
+      try {
+        const ship = farm.shipments;
+        if (ship) {
+          const restocked = toMs(ship.restockedAt || 0);
+          if (restocked < ts) {
+            actions.push({ category:"Dailies", icon:"📦", label:"Shipments", detail:"Restock available!", status:"ready", readyAt:0, priority:5 });
+          }
+        }
+      } catch(e) {}
+
+      // Daily Rewards
+      try {
+        const dr = farm.dailyRewards?.chest;
+        if (dr) {
+          const collected = toMs(dr.collectedAt || 0);
+          if (collected < ts) {
+            actions.push({ category:"Dailies", icon:"🎁", label:"Daily Reward", detail:"Uncollected!", status:"ready", readyAt:0, priority:5 });
+          }
+        }
+      } catch(e) {}
+
+      // Maneki Neko
+      try {
+        const mn = (farm.collectibles?.["Maneki Neko"] || [])[0];
+        if (mn) {
+          const shaken = toMs(mn.shakenAt || 0);
+          if (shaken < ts) {
+            actions.push({ category:"Dailies", icon:"🐱", label:"Maneki Neko", detail:"Shake it!", status:"ready", readyAt:0, priority:5 });
+          }
+        }
+      } catch(e) {}
+
+      // Pirate Chest
+      try {
+        const pc = farm.pumpkinPlaza?.pirateChest;
+        if (pc) {
+          const opened = toMs(pc.openedAt || 0);
+          if (opened < ts) {
+            actions.push({ category:"Dailies", icon:"☠️", label:"Pirate Chest", detail:"Unopened!", status:"ready", readyAt:0, priority:5 });
+          }
+        }
+      } catch(e) {}
+
+      // Bud Box
+      try {
+        const bb = farm.pumpkinPlaza?.budBox;
+        if (bb) {
+          const opened = toMs(bb.openedAt || 0);
+          if (opened < ts) {
+            actions.push({ category:"Dailies", icon:"🌱", label:"Bud Box", detail:"Unopened!", status:"ready", readyAt:0, priority:5 });
+          }
+        }
+      } catch(e) {}
+
+      // Floating Island
+      try {
+        const fi = farm.floatingIsland;
+        if (fi && fi.id) {
+          const solved = toMs(fi.solvedAt || 0);
+          if (solved < ts) {
+            actions.push({ category:"Dailies", icon:"🏝️", label:"Floating Island", detail:"Puzzle unsolved!", status:"ready", readyAt:0, priority:5 });
+          }
+        }
+      } catch(e) {}
+
+      return actions;
+    }
+
+    function dashParseTrades(farm) {
+      const actions = [];
+      const trades = farm.trades || {};
+
+      // Fulfilled listings (sold, needs collection)
+      const listings = trades.listings || {};
+      for (const [id, listing] of Object.entries(listings)) {
+        if (listing.fulfilledAt) {
+          actions.push({ category:"Trades", icon:"💰", label:"Sale complete", detail:"Collect proceeds!", status:"ready", readyAt:0, priority:3 });
+        }
+      }
+
+      // Fulfilled offers (bought, needs collection)
+      const offers = trades.offers || {};
+      for (const [id, offer] of Object.entries(offers)) {
+        if (offer.fulfilledAt) {
+          actions.push({ category:"Trades", icon:"📥", label:"Purchase complete", detail:"Collect item!", status:"ready", readyAt:0, priority:3 });
+        }
+      }
+
+      return actions;
+    }
+
+    function dashParseLavaPits(farm) {
+      const actions = [];
+      const now = Date.now();
+      const pits = farm.lavaPits || {};
+      for (const [id, pit] of Object.entries(pits)) {
+        if (!pit.startedAt) continue;
+        const started = toMs(pit.startedAt);
+        const duration = (pit.duration || 0) * 1000;
+        const readyAt = started + duration;
+        if (readyAt <= now) {
+          actions.push({ category:"Lava Pits", icon:"🌋", label:"Lava Pit", detail:dashAgoText(now - readyAt), status:"ready", readyAt, priority:10 });
+        } else {
+          actions.push({ category:"Lava Pits", icon:"🌋", label:"Lava Pit", detail:"", status:"upcoming", readyAt, priority:50 });
+        }
+      }
+      return dashCollapseItems(actions);
+    }
+
+    function dashParseCropMachine(farm) {
+      const actions = [];
+      const now = Date.now();
+      const machines = (farm.buildings || {})["Crop Machine"] || [];
+      for (const m of machines) {
+        const queue = m.queue || [];
+        for (const item of queue) {
+          const readyAt = toMs(item.readyAt || 0);
+          if (readyAt <= 0) continue;
+          if (readyAt <= now) {
+            actions.push({ category:"Crop Machine", icon:"⚙️", label:"Crop Machine", detail:dashAgoText(now - readyAt), status:"ready", readyAt, priority:10 });
+          } else {
+            actions.push({ category:"Crop Machine", icon:"⚙️", label:"Crop Machine", detail:"", status:"upcoming", readyAt, priority:50 });
+          }
+        }
+      }
+      return dashCollapseItems(actions);
+    }
+
+    function dashParseMushrooms(farm) {
+      const actions = [];
+      const now = Date.now();
+      const mushrooms = farm.mushrooms?.mushrooms || {};
+      for (const [id, m] of Object.entries(mushrooms)) {
+        const spawned = toMs(m.spawnedAt || 0);
+        if (spawned <= 0) continue;
+        // Mushrooms despawn after 16h, treat as "collect before gone"
+        const despawnAt = spawned + 16 * 3600000;
+        if (despawnAt > now) {
+          actions.push({ category:"Mushrooms", icon:"🍄", label:m.name || "Mushroom", detail:"Collect before gone!", status:"ready", readyAt:spawned, priority:8 });
+        }
+      }
+      return dashCollapseItems(actions);
+    }
+
+    function dashParseDeliveryOrders(farm) {
+      const actions = [];
+      try {
+        const orders = farm.delivery?.orders || [];
+        let unfulfilled = 0;
+        for (const order of orders) {
+          if (!order.completedAt && !order.reward?.claimed) unfulfilled++;
+        }
+        if (unfulfilled > 0) {
+          actions.push({ category:"Deliveries", icon:"📋", label:unfulfilled + " order" + (unfulfilled > 1 ? "s" : ""), detail:"Check deliveries", status:"ready", readyAt:0, priority:20 });
+        }
+      } catch(e) {}
+      return actions;
+    }
+
+    // ═══════════════════════════════════════
+    //  DASHBOARD — Helpers
+    // ═══════════════════════════════════════
+
+    function dashAgoText(ms) {
+      if (ms < 60000) return "just now";
+      if (ms < 3600000) return Math.floor(ms / 60000) + "m ago";
+      if (ms < 86400000) return Math.floor(ms / 3600000) + "h " + Math.floor((ms % 3600000) / 60000) + "m ago";
+      return Math.floor(ms / 86400000) + "d ago";
+    }
+
+    function dashFormatCountdown(ms) {
+      if (ms <= 0) return "Ready!";
+      if (ms < 60000) return Math.ceil(ms / 1000) + "s";
+      if (ms < 3600000) return Math.floor(ms / 60000) + "m " + Math.floor((ms % 60000) / 1000) + "s";
+      const h = Math.floor(ms / 3600000);
+      const m = Math.floor((ms % 3600000) / 60000);
+      return h + "h " + String(m).padStart(2, "0") + "m";
+    }
+
+    function dashCollapseItems(items) {
+      // Group identical category+status+label items into "Nx Label"
+      const groups = {};
+      for (const item of items) {
+        const key = item.category + "|" + item.status + "|" + item.label;
+        if (!groups[key]) {
+          groups[key] = { ...item, count: 1, maxReadyAt: item.readyAt, minReadyAt: item.readyAt };
+        } else {
+          groups[key].count++;
+          if (item.readyAt > groups[key].maxReadyAt) groups[key].maxReadyAt = item.readyAt;
+          if (item.readyAt < groups[key].minReadyAt) groups[key].minReadyAt = item.readyAt;
+        }
+      }
+      return Object.values(groups).map(g => {
+        if (g.count > 1) {
+          g.label = g.count + "× " + g.label;
+          // For upcoming, use the soonest one for countdown
+          if (g.status === "upcoming") g.readyAt = g.minReadyAt;
+        }
+        return g;
+      });
+    }
+
+    // ═══════════════════════════════════════
+    //  DASHBOARD — Main Render
+    // ═══════════════════════════════════════
+
+    function parseDashboardActions(farm) {
+      const inventory = farm.inventory || {};
+      const inProgress = extractInProgress(farm);
+      const actions = [];
+
+      actions.push(...dashParseCrops(farm));
+      actions.push(...dashParseFruits(farm));
+      actions.push(...dashParseResources(farm));
+      actions.push(...dashParseFlowers(farm, inventory, inProgress));
+      actions.push(...dashParseAnimals(farm));
+      actions.push(...dashParseCooking(farm));
+      actions.push(...dashParseComposters(farm));
+      actions.push(...dashParseGreenhouse(farm));
+      actions.push(...dashParseBeehives(farm));
+      actions.push(...dashParseCraftingBox(farm, inventory, inProgress));
+      actions.push(...dashParseCrabTraps(farm, inventory, inProgress));
+      actions.push(...dashParsePets(farm));
+      actions.push(...dashParseDailies(farm));
+      actions.push(...dashParseTrades(farm));
+      actions.push(...dashParseLavaPits(farm));
+      actions.push(...dashParseCropMachine(farm));
+      actions.push(...dashParseMushrooms(farm));
+      actions.push(...dashParseDeliveryOrders(farm));
+
+      return actions;
+    }
+
+    function renderDashboard(data) {
+      const app = document.getElementById("app");
+      if (!data || !data.farm) {
+        app.innerHTML = `<div class="header pixel-panel pixel-font">
+          <h1>DASHBOARD</h1>
+          <div class="farm-id">Load your farm to see pending actions</div>
+        </div>`;
+        return;
+      }
+
+      const farm = data.farm;
+      const actions = parseDashboardActions(farm);
+      const now = Date.now();
+
+      const ready = actions.filter(a => a.status === "ready");
+      const upcoming = actions.filter(a => a.status === "upcoming");
+      const idle = actions.filter(a => a.status === "empty");
+
+      // Sort: ready by most overdue first, upcoming by soonest, idle by priority
+      ready.sort((a, b) => a.readyAt - b.readyAt);
+      upcoming.sort((a, b) => a.readyAt - b.readyAt);
+      idle.sort((a, b) => a.priority - b.priority);
+
+      let html = `<div class="header pixel-panel pixel-font">
+        <h1>DASHBOARD</h1>
+        <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
+        <div class="dash-summary">
+          ${ready.length ? `<span class="dash-summary-badge ready">${ready.length} ready</span>` : ""}
+          ${upcoming.length ? `<span class="dash-summary-badge upcoming">${upcoming.length} upcoming</span>` : ""}
+          ${idle.length ? `<span class="dash-summary-badge idle">${idle.length} idle</span>` : ""}
+        </div>
+      </div>`;
+
+      if (ready.length === 0 && upcoming.length === 0 && idle.length === 0) {
+        html += `<div class="dash-all-done pixel-panel pixel-font">
+          <div class="icon">✅</div>
+          All caught up! Nothing to do right now.
+        </div>`;
+        app.innerHTML = html;
+        return;
+      }
+
+      // Group by category within each status
+      function groupByCategory(items) {
+        const cats = {};
+        for (const item of items) {
+          if (!cats[item.category]) cats[item.category] = [];
+          cats[item.category].push(item);
+        }
+        return cats;
+      }
+
+      function renderItem(item) {
+        const cls = item.status === "ready" ? "ready" : item.status === "upcoming" ? "upcoming" : "empty";
+        let timeHtml = "";
+        if (item.status === "ready") {
+          timeHtml = `<span class="dash-ready-badge green">READY</span>`;
+        } else if (item.status === "upcoming") {
+          const diff = item.readyAt - now;
+          timeHtml = `<span class="dash-time growing-bed-time" data-ready="${item.readyAt}">${dashFormatCountdown(diff)}</span>`;
+        } else if (item.status === "empty") {
+          timeHtml = `<span class="dash-ready-badge blue">IDLE</span>`;
+        }
+        return `<div class="dash-item ${cls}">
+          <span>${item.icon}</span>
+          <span class="dash-item-label">${escHTML(item.label)}</span>
+          ${item.detail && item.status === "ready" ? `<span class="dash-time" style="opacity:0.6">${escHTML(item.detail)}</span>` : ""}
+          ${timeHtml}
+        </div>`;
+      }
+
+      function renderSection(catName, items, badgeCls) {
+        const icon = items[0]?.icon || "";
+        return `<div class="dash-section pixel-panel pixel-font">
+          <div class="dash-section-title">
+            <span>${icon}</span> ${escHTML(catName)}
+            <span class="dash-count ${badgeCls}">${items.length}</span>
+          </div>
+          ${items.map(renderItem).join("")}
+        </div>`;
+      }
+
+      // READY NOW
+      if (ready.length > 0) {
+        html += `<div class="dash-group-title pixel-font">🚨 READY NOW</div>`;
+        const cats = groupByCategory(ready);
+        for (const [cat, items] of Object.entries(cats)) {
+          html += renderSection(cat, items, "");
+        }
+      }
+
+      // COMING SOON
+      if (upcoming.length > 0) {
+        html += `<div class="dash-group-title pixel-font">⏳ COMING SOON</div>`;
+        const cats = groupByCategory(upcoming);
+        for (const [cat, items] of Object.entries(cats)) {
+          html += renderSection(cat, items, "upcoming");
+        }
+      }
+
+      // IDLE
+      if (idle.length > 0) {
+        html += `<div class="dash-group-title pixel-font">💤 IDLE</div>`;
+        const cats = groupByCategory(idle);
+        for (const [cat, items] of Object.entries(cats)) {
+          html += renderSection(cat, items, "idle");
+        }
+      }
+
+      app.innerHTML = html;
+    }
 
     function renderHub(data) {
       const app = document.getElementById("app");
@@ -11925,6 +12659,7 @@
     }
 
         switch (page) {
+          case "dashboard": renderDashboard(data); break;
           case "hub": renderHub(data); break;
           case "flowers": renderFlowers(data); break;
           case "dolls": renderDolls(data); break;
@@ -11937,9 +12672,12 @@
           case "pets": renderPets(data); break;
           case "diff": renderDiff(data); break;
           case "json": renderJsonExplorer(data); break;
-          default: renderHub(data);
+          default: renderDashboard(data);
         }
 
+        if (page === "dashboard") {
+          startGrowingTimers();
+        }
         if (page === "flowers") {
           startPBTimer();
           startGrowingTimers();
