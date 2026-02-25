@@ -12385,6 +12385,9 @@
         if (SEED_COSTS[cropName]) return SEED_COSTS[cropName] / rates.coinsPerSFL;
       }
 
+      // Love Charm: 50 LC = 1 SFL
+      if (itemName === "Love Charm") return 1 / 50;
+
       return 0;
     }
 
