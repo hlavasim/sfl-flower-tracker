@@ -8,7 +8,9 @@ module.exports = async function (context) {
 
   for (const farmId of farmIds) {
     try {
-      const data = await fetchFarmData(farmId);
+      // Per-farm API key: FARM_<id>_KEY env var, falls back to SFL_API_KEY
+      const apiKey = process.env[`FARM_${farmId}_KEY`] || process.env.SFL_API_KEY;
+      const data = await fetchFarmData(farmId, apiKey);
       const gameData = data.farm || data;
 
       // Get previous snapshot for diff

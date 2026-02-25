@@ -1,6 +1,6 @@
 import { getPool } from "./db.js";
 
-const ALLOWED_FARMS = new Set([155498]);
+const ALLOWED_FARMS = new Set([155498, 1260204733777858]);
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");

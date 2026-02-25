@@ -1,13 +1,15 @@
-const API_KEY = process.env.SFL_API_KEY;
+const DEFAULT_API_KEY = process.env.SFL_API_KEY;
 
 /**
  * Fetch farm data from SFL API.
- * Returns the parsed JSON response (contains .farm with game state).
+ * @param {string} farmId
+ * @param {string} [apiKey] - per-farm API key (falls back to SFL_API_KEY env var)
  */
-async function fetchFarmData(farmId) {
+async function fetchFarmData(farmId, apiKey) {
+  const key = apiKey || DEFAULT_API_KEY;
   const url = `https://api.sunflower-land.com/community/farms/${farmId}`;
   const resp = await fetch(url, {
-    headers: { "x-api-key": API_KEY },
+    headers: { "x-api-key": key },
   });
   if (!resp.ok) {
     throw new Error(`Farm API ${resp.status}: ${await resp.text()}`);
