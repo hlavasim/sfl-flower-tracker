@@ -3039,8 +3039,54 @@
       "Giant Apple": 1500, "Giant Orange": 500, "Giant Banana": 4000,
     };
 
+    // Fish Market recipes by season (from sfl.world/info/fishing/info)
+    const FISH_MARKET_RECIPES = {
+      "Fish Flake": {
+        autumn: { "Anchovy": 4, "Halibut": 2, "Muskellunge": 2 },
+        winter: { "Anchovy": 4, "Blowfish": 2, "Clownfish": 2 },
+        spring: { "Anchovy": 4, "Porgy": 2, "Sea Bass": 2 },
+        summer: { "Anchovy": 4, "Butterflyfish": 2, "Sea Horse": 2 },
+      },
+      "Fish Stick": {
+        autumn: { "Red Snapper": 6, "Moray Eel": 2, "Napoleanfish": 2 },
+        winter: { "Red Snapper": 6, "Walleye": 2, "Angelfish": 2 },
+        spring: { "Red Snapper": 6, "Olive Flounder": 2, "Zebra Turkeyfish": 2 },
+        summer: { "Red Snapper": 6, "Surgeonfish": 2, "Tilapia": 2 },
+      },
+      "Crab Stick": {
+        autumn: { "Crab": 1, "Shrimp": 1, "Lobster": 1, "Barnacle": 1 },
+        winter: { "Crab": 1, "Oyster": 1, "Isopod": 1, "Garden Eel": 1 },
+        spring: { "Crab": 1, "Blue Crab": 1, "Hermit Crab": 1, "Sea Slug": 1 },
+        summer: { "Crab": 1, "Mussel": 1, "Isopod": 1, "Sea Snail": 1 },
+      },
+      "Fish Oil": {
+        autumn: { "Tuna": 8, "Mahi Mahi": 4, "Crab": 2 },
+        winter: { "Tuna": 8, "Blue Marlin": 2, "Football Fish": 2 },
+        spring: { "Tuna": 8, "Weakfish": 2, "Oarfish": 2 },
+        summer: { "Tuna": 8, "Cobia": 2, "Sunfish": 2 },
+      },
+    };
+
     const CRAFTED_INGREDIENT_RECIPES = {
       "Cheese": { "Milk": 3 },
+      "Kelp Fibre": { "Seaweed": 9 },
+      "Timber": { "Wood": 9 },
+      "Crimsteel": { "Crimstone": 3, "Iron": 3 },
+      "Hardened Leather": { "Leather": 9 },
+      "Synthetic Fabric": { "Oil": 6, "Wool": 3 },
+      "Cushion": { "Feather": 9 },
+      "Merino Cushion": { "Merino Wool": 9 },
+      "Bee Box": { "Honey": 8 },
+      "Royal Bedding": { "Merino Cushion": 5, "Synthetic Fabric": 4 },
+      "Royal Ornament": { "Gold": 4, "Crimstone": 4 },
+      "Ocean\'s Treasure": { "Coral": 5, "Pearl": 2, "Pirate Bounty": 1 },
+      "Basic Bed": { "Cushion": 3, "Timber": 5 },
+      "Fisher Bed": { "Kelp Fibre": 6, "Basic Bed": 1 },
+      "Sturdy Bed": { "Merino Cushion": 3, "Crimsteel": 5, "Basic Bed": 1 },
+      "Desert Bed": { "Synthetic Fabric": 8, "Sturdy Bed": 1 },
+      "Cow Bed": { "Hardened Leather": 6, "Sturdy Bed": 2 },
+      "Pirate Bed": { "Kelp Fibre": 3, "Vase": 2, "Ocean\'s Treasure": 1, "Sturdy Bed": 3 },
+      "Royal Bed": { "Royal Bedding": 3, "Royal Ornament": 3, "Sturdy Bed": 3 },
     };
 
     // Calculate the SFL cost per skill point for current bumpkin
@@ -6849,7 +6895,7 @@
       "Starfish": 135, "Sand": 12, "Old Bottle": 27, "Seaweed": 90,
       "Cockle Shell": 120, "Clam Shell": 450, "Iron Compass": 225,
       "Pipi": 225, "Pearl": 4500, "Wooden Compass": 157.5,
-      "Hieroglyph": 300, "Coral": 1800, "Broken Pillar": 240,
+      "Hieroglyph": 300, "Ammonite Shell": 300, "Coral": 1800, "Broken Pillar": 240,
       "Coprolite": 240, "Pirate Bounty": 9000,
     };
 
@@ -12531,6 +12577,36 @@
         if (potPrice > 0) return potPrice + chumCost;
       }
 
+      // Mark: fixed 0.01 SFL (from treasury/faction shop)
+      if (itemName === "Mark") return 0.01;
+
+      // Acorn: opportunity cost = best pet resource SFL/energy ratio * 100 energy
+      if (itemName === "Acorn" && typeof PET_FETCH_DATA !== "undefined") {
+        let bestRatio = 0;
+        for (const entries of Object.values(PET_FETCH_DATA)) {
+          for (const e of entries) {
+            if (e.res === "Acorn") continue;
+            const p = p2pPrices[e.res] || 0;
+            if (p > 0) bestRatio = Math.max(bestRatio, p / e.energy);
+          }
+        }
+        if (bestRatio > 0) return bestRatio * 100;
+      }
+
+      // Fish Market recipes (season-dependent: Crab Stick, Fish Flake, Fish Stick, Fish Oil)
+      if (typeof FISH_MARKET_RECIPES !== "undefined" && FISH_MARKET_RECIPES[itemName]) {
+        const seasonRecipes = FISH_MARKET_RECIPES[itemName];
+        const s = rates?.season || "";
+        const recipe = seasonRecipes[s] || Object.values(seasonRecipes)[0];
+        if (recipe) {
+          let total = 0;
+          for (const [ing, qty] of Object.entries(recipe)) {
+            total += estimateItemSfl(ing, p2pPrices, visited, rates) * qty;
+          }
+          if (total > 0) return total;
+        }
+      }
+
       return 0;
     }
 
@@ -12697,6 +12773,47 @@
         return { price: total, method: "Crustacean (pot+chum)", detail: parts.join(" + ") + ` = ${fNum(total)}` };
       }
 
+      // Mark
+      if (itemName === "Mark") {
+        return { price: 0.01, method: "Fixed rate", detail: "1 Mark = 0.01 SFL (faction shop rate)" };
+      }
+
+      // Acorn (pet energy opportunity cost)
+      if (itemName === "Acorn" && typeof PET_FETCH_DATA !== "undefined") {
+        let bestRatio = 0, bestRes = "";
+        for (const entries of Object.values(PET_FETCH_DATA)) {
+          for (const e of entries) {
+            if (e.res === "Acorn") continue;
+            const p = p2pPrices[e.res] || 0;
+            if (p > 0 && p / e.energy > bestRatio) { bestRatio = p / e.energy; bestRes = e.res; }
+          }
+        }
+        if (bestRatio > 0) {
+          const price = bestRatio * 100;
+          return { price, method: "Pet energy cost", detail: `100 energy \u00d7 best ratio ${bestRatio.toFixed(6)} SFL/\u26a1 (${bestRes}) = ${fNum(price)}` };
+        }
+        return { price: 0, method: "Pet energy cost", detail: "No pet resources with P2P prices" };
+      }
+
+      // Fish Market recipes (season-dependent)
+      if (typeof FISH_MARKET_RECIPES !== "undefined" && FISH_MARKET_RECIPES[itemName]) {
+        const seasonRecipes = FISH_MARKET_RECIPES[itemName];
+        const s = rates?.season || "";
+        const season = s || Object.keys(seasonRecipes)[0];
+        const recipe = seasonRecipes[season] || Object.values(seasonRecipes)[0];
+        if (recipe) {
+          let parts = [], total = 0;
+          for (const [ing, qty] of Object.entries(recipe)) {
+            const p = estimateItemSfl(ing, p2pPrices, null, rates);
+            const src = p2pPrices[ing] ? "P2P" : "derived";
+            parts.push(`${qty}\u00d7 ${ing} (${fNum(p)} ${src})`);
+            total += p * qty;
+          }
+          const seasonLabel = season.charAt(0).toUpperCase() + season.slice(1);
+          return { price: total, method: `Fish Market (${seasonLabel})`, detail: parts.join(" + ") + ` = ${fNum(total)}` };
+        }
+      }
+
       return null;
     }
 
@@ -12722,10 +12839,15 @@
       addItems(typeof GIANT_ITEM_COIN_PRICES !== "undefined" ? GIANT_ITEM_COIN_PRICES : null, "Giants");
       addItems(typeof CRUSTACEAN_RECIPES !== "undefined" ? CRUSTACEAN_RECIPES : null, "Crustaceans");
 
+      // Fish Market recipes
+      addItems(typeof FISH_MARKET_RECIPES !== "undefined" ? FISH_MARKET_RECIPES : null, "Fish Market");
+
       // Special items
       items.set("Oil", "Resources");
       items.set("Love Charm", "Special");
       items.set("Barn Delight", "Food");
+      items.set("Mark", "Special");
+      items.set("Acorn", "Pets");
 
       // Seed items from SEED_COSTS (keyed by crop name, but items appear as "X Seed")
       if (typeof SEED_COSTS !== "undefined") {
@@ -12743,7 +12865,7 @@
       }
 
       // Sort by category then name
-      const catOrder = ["Tools", "Seeds", "Flower seeds", "Flowers", "Food", "Crafted", "Dolls", "Fish/XP", "Treasures", "Crustaceans", "Giants", "Resources", "Special"];
+      const catOrder = ["Tools", "Seeds", "Flower seeds", "Flowers", "Food", "Crafted", "Dolls", "Fish/XP", "Fish Market", "Treasures", "Crustaceans", "Giants", "Pets", "Resources", "Special"];
       results.sort((a, b) => {
         const ca = catOrder.indexOf(a.category), cb = catOrder.indexOf(b.category);
         if (ca !== cb) return (ca === -1 ? 99 : ca) - (cb === -1 ? 99 : cb);
@@ -12849,6 +12971,9 @@
         }
       }
 
+      // Detect current season for Fish Market recipes
+      const currentSeason = (data.farm?.season?.season || "").toLowerCase();
+
       const noPrices = Object.keys(p2pPrices).length === 0;
 
       // ── Process a diff object into items + netSfl ──
@@ -12873,7 +12998,7 @@
             sflValue = gemsPerSFL > 0 ? d / gemsPerSFL : 0;
           } else if (key.startsWith("inventory.")) {
             itemName = key.substring(10); category = "inventory";
-            const price = estimateItemSfl(itemName, p2pPrices, null, { coinsPerSFL, sflPerXP });
+            const price = estimateItemSfl(itemName, p2pPrices, null, { coinsPerSFL, sflPerXP, season: currentSeason });
             sflValue = d * price;
           } else if (key.startsWith("wardrobe.")) {
             itemName = key.substring(9); category = "wardrobe";
@@ -13183,7 +13308,7 @@
         }
 
         // Pricing explanation table (collapsed)
-        const priceExplanations = collectDerivedPriceItems(p2pPrices, { coinsPerSFL, sflPerXP });
+        const priceExplanations = collectDerivedPriceItems(p2pPrices, { coinsPerSFL, sflPerXP, season: currentSeason });
         if (priceExplanations.length > 0) {
           const _cm = getCurMult();
           const _cl = getCurLabel();
