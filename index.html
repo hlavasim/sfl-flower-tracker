@@ -12250,6 +12250,7 @@
       { level:35,  perk:"+5 fetch energy",                 type:"energy",    nftOnly:false, value:5 },
       { level:40,  perk:"+15% XP per feed (25% total)",    type:"xp",        nftOnly:true,  value:0.15 },
       { level:50,  perk:"+5% extra fetch resource (15%)",  type:"bonus",     nftOnly:false, value:0.05 },
+      { level:60,  perk:"+1 guaranteed non-Acorn/Moonfur", type:"guaranteed", nftOnly:true },
       { level:75,  perk:"+5 fetch energy",                 type:"energy",    nftOnly:false, value:5 },
       { level:85,  perk:"+25% XP per feed (50% total)",    type:"xp",        nftOnly:true,  value:0.25 },
       { level:100, perk:"+10% extra fetch resource (25%)", type:"bonus",     nftOnly:false, value:0.10 },
@@ -12336,8 +12337,17 @@
         dailySfl += acornBonus;
       }
 
+      // Guaranteed non-Acorn/Moonfur resource at Lv60+ (NFT only)
+      let guaranteedBonus = 0;
+      if (pet.isNft && pet.level >= 60) {
+        const nonAcornRes = unlocked.filter(f => f.res !== "Acorn" && f.res !== "Moonfur");
+        const bestNonAcornPrice = nonAcornRes.reduce((best, f) => Math.max(best, p2pPrices[f.res] || 0), 0);
+        guaranteedBonus = bestNonAcornPrice * fetchesPerDay;
+        dailySfl += guaranteedBonus;
+      }
+
       return { reqTypes, reqEnergy, fetchBonus, energyPerFeed, dailyEnergy, reqXp, xpMult,
-               dailyXp, bestRes, bestSflPerEnergy, extraChance, dailySfl, fetchesPerDay, acornBonus, feedMult };
+               dailyXp, bestRes, bestSflPerEnergy, extraChance, dailySfl, fetchesPerDay, acornBonus, guaranteedBonus, feedMult };
     }
 
 
@@ -12647,7 +12657,7 @@
             </div>
             <div class="pet-sfl-breakdown">
               ${calc.energyPerFeed}\u26A1/feed \u00d7 ${calc.feedMult} feeds/day = ${Math.round(calc.dailyEnergy)}\u26A1/day
-              \u2192 ${fetchCount} fetches${extraPct > 0 ? ` (+${extraPct}% extra)` : ""}${calc.acornBonus > 0 ? ` + ${calc.acornBonus.toFixed(2)} acorn bonus` : ""}
+              \u2192 ${fetchCount} fetches${extraPct > 0 ? ` (+${extraPct}% extra)` : ""}${calc.acornBonus > 0 ? ` + ${calc.acornBonus.toFixed(2)} acorn bonus` : ""}${calc.guaranteedBonus > 0 ? ` + ${calc.guaranteedBonus.toFixed(2)} guaranteed` : ""}
             </div>
           </div>`;
         }
@@ -12738,6 +12748,17 @@
                 }
               } else if (perk.type === "xp") {
                 delta = `<span class="pet-perk-delta" style="color:var(--lily)">XP boost</span>`;
+              } else if (perk.type === "guaranteed") {
+                // +1 guaranteed non-Acorn/Moonfur resource per fetch
+                const nonAcornRes = unlocked.filter(f => f.res !== "Acorn" && f.res !== "Moonfur");
+                const bestNonAcorn = nonAcornRes.reduce((best, f) => {
+                  const p = p2pPrices[f.res] || 0;
+                  return p > (best?.price || 0) ? { res: f.res, price: p } : best;
+                }, null);
+                if (bestNonAcorn && bestNonAcorn.price > 0) {
+                  const d = bestNonAcorn.price * calc.fetchesPerDay;
+                  if (d > 0.001) delta = `<span class="pet-perk-delta" style="color:var(--green)">+${d.toFixed(3)} SFL/d</span>`;
+                }
               } else if (perk.type === "moonfur" && perk.value) {
                 const moonfurPrice = p2pPrices["Moonfur"] || 0;
                 const moonfurData = fetchData.find(f => f.res === "Moonfur");
