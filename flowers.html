@@ -12241,53 +12241,70 @@
       const playerSunstones = parseFloat(inventory["Sunstone"]) || 0;
       const playerCoins = farm.coins || 0;
 
-      // ── Compute marginal net SFL/day per extra node for each category ──
-      function getMarginalNetSfl(nodeKey) {
-        const np = NODE_PRICES[nodeKey];
-        if (!np) return 0;
-        const catId = np.catId;
-        const product = savedProducts[catId] || getDefaultProduct(catId);
+      // ── Compute marginal net SFL/day per extra node for a single product ──
+      function calcMarginalForProduct(catId, product, farmKey, ownedEffects) {
         const priceProduct = getPriceProduct(catId, product);
-        const ownedEffects = getOwnedEffects(catId);
-
-        // Current total
         const currentN = getCapacityCount(catId, capacity);
+
         if (currentN <= 0) {
-          // No nodes yet — compute from scratch for 1 node
           const tempCap = { ...capacity };
-          const capKey = np.farmKey;
-          tempCap[capKey] = 1;
+          tempCap[farmKey] = 1;
           const boosted = applyBoosts(catId, product, tempCap, ownedEffects);
           const grossSfl = unitToSfl(boosted.unitsPerDay, priceProduct, p2pPrices);
           let costPerDay = 0;
           if (catId === "obsidian") {
-            const c = calcLavaPitCostPerDay(tempCap, p2pPrices, season, lavaCostMult);
-            costPerDay = c.costPerDay;
+            costPerDay = calcLavaPitCostPerDay(tempCap, p2pPrices, season, lavaCostMult).costPerDay;
           } else if (["trees", "stone", "iron", "gold", "crimstone", "oil"].includes(catId)) {
-            const c = calcToolCostPerDay(catId, tempCap, exchangeRates, p2pPrices, stockMods);
-            costPerDay = c.costPerDay;
-          } else if (catId === "crops" || catId === "fruits" || catId === "greenhouse") {
-            const c = calcSeedCostPerDay(catId, product, tempCap, exchangeRates, stockMods, ownedEffects, p2pPrices);
-            costPerDay = c.costPerDay;
+            costPerDay = calcToolCostPerDay(catId, tempCap, exchangeRates, p2pPrices, stockMods).costPerDay;
+          } else if (["crops", "fruits", "greenhouse"].includes(catId)) {
+            costPerDay = calcSeedCostPerDay(catId, product, tempCap, exchangeRates, stockMods, ownedEffects, p2pPrices).costPerDay;
           }
           return grossSfl - costPerDay;
         }
 
-        // Linear scaling: marginal = total/n
         const boosted = applyBoosts(catId, product, capacity, ownedEffects);
         const grossSfl = unitToSfl(boosted.unitsPerDay, priceProduct, p2pPrices);
         let costPerDay = 0;
         if (catId === "obsidian") {
           costPerDay = lavaInfo.costPerDay;
         } else if (["trees", "stone", "iron", "gold", "crimstone", "oil"].includes(catId)) {
-          const c = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods);
-          costPerDay = c.costPerDay;
-        } else if (catId === "crops" || catId === "fruits" || catId === "greenhouse") {
-          const c = calcSeedCostPerDay(catId, product, capacity, exchangeRates, stockMods, ownedEffects, p2pPrices);
-          costPerDay = c.costPerDay;
+          costPerDay = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods).costPerDay;
+        } else if (["crops", "fruits", "greenhouse"].includes(catId)) {
+          costPerDay = calcSeedCostPerDay(catId, product, capacity, exchangeRates, stockMods, ownedEffects, p2pPrices).costPerDay;
         }
-        const netSfl = grossSfl - costPerDay;
-        return netSfl / currentN;
+        return grossSfl / currentN - costPerDay / currentN;
+      }
+
+      // Product lists per category (for auto-best selection)
+      const PRODUCT_LISTS = {
+        crops: Object.keys(CROP_GROW_DATA),
+        fruits: Object.keys(FRUIT_GROW_DATA),
+        greenhouse: Object.keys(GREENHOUSE_GROW_DATA),
+        flowers: Object.keys(SEED_DATA),
+      };
+
+      // ── Find best product & marginal net SFL/day for a node type ──
+      function getMarginalNetSfl(nodeKey) {
+        const np = NODE_PRICES[nodeKey];
+        if (!np) return { marginal: 0, product: null };
+        const catId = np.catId;
+        const ownedEffects = getOwnedEffects(catId);
+
+        // For categories with multiple products, try all and pick best
+        const products = PRODUCT_LISTS[catId];
+        if (products && products.length > 1) {
+          let bestMarginal = -Infinity, bestProduct = products[0];
+          for (const prod of products) {
+            const m = calcMarginalForProduct(catId, prod, np.farmKey, ownedEffects);
+            if (m > bestMarginal) { bestMarginal = m; bestProduct = prod; }
+          }
+          return { marginal: bestMarginal, product: bestProduct };
+        }
+
+        // Single-product categories
+        const product = getDefaultProduct(catId);
+        const m = calcMarginalForProduct(catId, product, np.farmKey, ownedEffects);
+        return { marginal: m, product };
       }
 
       // ── Count physical nodes by tier ──
@@ -12323,7 +12340,7 @@
         const purchased = Math.max(0, tiers.physical - baseCount);
         const nextSunstoneCost = np.base + purchased * np.increase;
         const costSfl = nextSunstoneCost * sunstoneCostSfl;
-        const marginal = getMarginalNetSfl(nodeKey);
+        const { marginal, product: bestProduct } = getMarginalNetSfl(nodeKey);
         const roiDays = (marginal > 0 && costSfl > 0) ? costSfl / marginal : Infinity;
         const sunstonesNeeded = nextSunstoneCost;
         const obsNeeded = sunstonesNeeded * 3; // 1 sunstone = 3 obsidian
@@ -12341,6 +12358,7 @@
           need: canAfford ? "" : `Need ${Math.max(0, Math.ceil(obsNeeded - playerObsidian))} more Obsidian`,
           currentNodes: tiers.physical,
           purchased,
+          bestProduct,
         });
       }
 
@@ -12483,25 +12501,27 @@
       } else {
         content += `<div style="overflow-x:auto"><table class="node-table">
           <thead><tr>
-            <th>#</th><th>Action</th><th>Cost</th><th>Cost (${sflIcon()})</th>
+            <th>#</th><th>Action</th><th>Best Product</th><th>Cost</th><th>Cost (${sflIcon()})</th>
             <th>+${sflIcon()}/day</th><th>ROI</th><th>Status</th>
           </tr></thead><tbody>`;
 
         for (let i = 0; i < options.length; i++) {
           const o = options[i];
-          const roiStr = o.roiDays === Infinity ? "—" : `${Math.ceil(o.roiDays)}d`;
-          const margStr = o.marginal <= 0 ? "—" : o.marginal.toFixed(4);
+          const roiStr = o.roiDays === Infinity ? "—" : o.roiDays >= 9999 ? "9999+d" : `${Math.ceil(o.roiDays)}d`;
+          const margStr = o.marginal <= 0 ? `<span style="color:var(--red)">${o.marginal.toFixed(4)}</span>` : o.marginal.toFixed(4);
           const costStr = o.costSfl <= 0 ? "—" : o.costSfl.toFixed(2);
           const statusCls = o.canAfford ? "node-ready" : "node-blocked";
           const statusTxt = o.canAfford ? "Ready" : escHTML(o.need);
           const roiColor = o.roiDays <= 30 ? "var(--green)" : o.roiDays <= 90 ? "var(--sunpetal)" : o.roiDays <= 365 ? "var(--text-secondary)" : "var(--text-dim)";
+          const productStr = o.bestProduct ? escHTML(o.bestProduct) : "—";
 
           content += `<tr>
             <td style="color:var(--text-dim)">${i + 1}</td>
             <td>${escHTML(o.action)}</td>
+            <td style="font-size:0.5625rem;color:var(--lily)">${productStr}</td>
             <td style="font-size:0.5625rem;color:var(--text-dim)">${escHTML(o.costDetail)}</td>
             <td>${costStr}</td>
-            <td style="color:var(--green)">${margStr}</td>
+            <td style="color:${o.marginal > 0 ? 'var(--green)' : 'var(--red)'}">${margStr}</td>
             <td class="node-roi" style="color:${roiColor}">${roiStr}</td>
             <td class="${statusCls}">${statusTxt}</td>
           </tr>`;
@@ -12516,8 +12536,8 @@
         <div class="node-section-title">CURRENT NODES</div>
         <div style="overflow-x:auto"><table class="node-table">
           <thead><tr>
-            <th>Resource</th><th>Physical</th><th>t1 / t2 / t3</th>
-            <th>Effective</th><th>Base</th><th>Bought</th><th>Net ${sflIcon()}/day</th>
+            <th>Resource</th><th>Best Product</th><th>Phys.</th><th>t1/t2/t3</th>
+            <th>Eff.</th><th>Base</th><th>+Bought</th><th>Total Net ${sflIcon()}/d</th><th>Per Node ${sflIcon()}/d</th>
           </tr></thead><tbody>`;
 
       for (const [nodeKey, np] of Object.entries(NODE_PRICES)) {
@@ -12525,34 +12545,25 @@
         const baseCount = baseNodes[nodeKey] || 0;
         const purchased = Math.max(0, tiers.physical - baseCount);
         const catId = np.catId;
-        const product = savedProducts[catId] || getDefaultProduct(catId);
-        const priceProduct = getPriceProduct(catId, product);
         const ownedEffects = getOwnedEffects(catId);
 
-        let netSfl = 0;
+        // Use best product for this category
+        const { marginal: perNode, product: bestProduct } = getMarginalNetSfl(nodeKey);
         const currentN = getCapacityCount(catId, capacity);
-        if (currentN > 0) {
-          const boosted = applyBoosts(catId, product, capacity, ownedEffects);
-          const grossSfl = unitToSfl(boosted.unitsPerDay, priceProduct, p2pPrices);
-          let costPerDay = 0;
-          if (catId === "obsidian") costPerDay = lavaInfo.costPerDay;
-          else if (["trees", "stone", "iron", "gold", "crimstone", "oil"].includes(catId)) {
-            costPerDay = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods).costPerDay;
-          } else if (catId === "crops" || catId === "fruits" || catId === "greenhouse") {
-            costPerDay = calcSeedCostPerDay(catId, product, capacity, exchangeRates, stockMods, ownedEffects, p2pPrices).costPerDay;
-          }
-          netSfl = grossSfl - costPerDay;
-        }
+        const totalNet = perNode * currentN;
 
-        const netColor = netSfl > 0 ? "var(--green)" : netSfl < 0 ? "var(--red)" : "var(--text-dim)";
+        const netColor = totalNet > 0 ? "var(--green)" : totalNet < 0 ? "var(--red)" : "var(--text-dim)";
+        const perColor = perNode > 0 ? "var(--green)" : perNode < 0 ? "var(--red)" : "var(--text-dim)";
         content += `<tr>
           <td>${escHTML(np.label)}</td>
+          <td style="font-size:0.5625rem;color:var(--lily)">${bestProduct ? escHTML(bestProduct) : "—"}</td>
           <td>${tiers.physical}</td>
-          <td style="font-size:0.5625rem;color:var(--text-dim)">${tiers.t1} / ${tiers.t2} / ${tiers.t3}</td>
+          <td style="font-size:0.5625rem;color:var(--text-dim)">${tiers.t1}/${tiers.t2}/${tiers.t3}</td>
           <td>${tiers.effective}</td>
           <td style="color:var(--text-dim)">${baseCount}</td>
           <td>${purchased > 0 ? `<span style="color:var(--sunpetal)">+${purchased}</span>` : "0"}</td>
-          <td style="color:${netColor}">${netSfl.toFixed(2)}</td>
+          <td style="color:${netColor}">${totalNet.toFixed(2)}</td>
+          <td style="color:${perColor}">${perNode.toFixed(4)}</td>
         </tr>`;
       }
 
