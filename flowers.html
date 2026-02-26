@@ -6927,12 +6927,12 @@
 
     // Treasure sell prices in COINS (base, no boosts)
     const TREASURE_SELL_PRICES = {
-      "Crab": 18, "Camel Bone": 12, "Sea Cucumber": 27, "Vase": 60,
-      "Starfish": 135, "Sand": 12, "Old Bottle": 27, "Seaweed": 90,
-      "Cockle Shell": 120, "Clam Shell": 450, "Iron Compass": 225,
-      "Pipi": 225, "Pearl": 4500, "Wooden Compass": 157.5,
-      "Hieroglyph": 300, "Ammonite Shell": 300, "Coral": 1800, "Broken Pillar": 240,
-      "Coprolite": 240, "Pirate Bounty": 9000,
+      "Crab": 15, "Camel Bone": 10, "Sea Cucumber": 22.5, "Vase": 50,
+      "Starfish": 112.5, "Sand": 10, "Old Bottle": 22.5, "Seaweed": 75,
+      "Cockle Shell": 100, "Clam Shell": 375, "Iron Compass": 187.5,
+      "Pipi": 187.5, "Pearl": 3750, "Wooden Compass": 131.25,
+      "Hieroglyph": 250, "Ammonite Shell": 250, "Coral": 1500, "Broken Pillar": 200,
+      "Coprolite": 200, "Pirate Bounty": 7500,
     };
 
     // Betty sell prices in COINS (from game source crops.ts / fruits.ts)
@@ -12558,9 +12558,9 @@
         return total;
       }
 
-      // Seed costs (coins only) — SEED_COSTS keyed by crop name, items come as "X Seed"
+      // Seed costs (coins only) — SEED_COSTS keyed by crop name, items come as "X Seed" or "X Plant"
       if (typeof SEED_COSTS !== "undefined" && rates && rates.coinsPerSFL > 0) {
-        const cropName = itemName.endsWith(" Seed") ? itemName.slice(0, -5) : itemName;
+        const cropName = itemName.endsWith(" Seed") ? itemName.slice(0, -5) : itemName.endsWith(" Plant") ? itemName.slice(0, -6) : itemName;
         if (SEED_COSTS[cropName]) return SEED_COSTS[cropName] / rates.coinsPerSFL;
       }
 
@@ -12752,13 +12752,14 @@
         return { price: total, method: "Tool cost", detail: parts.join(" + ") + ` = ${fNum(total)}` };
       }
 
-      // Seed costs (crop/fruit seeds)
+      // Seed costs (crop/fruit seeds, including "X Plant" like Banana Plant)
       if (typeof SEED_COSTS !== "undefined" && coinsPerSFL > 0) {
-        const cropName = itemName.endsWith(" Seed") ? itemName.slice(0, -5) : itemName;
+        const cropName = itemName.endsWith(" Seed") ? itemName.slice(0, -5) : itemName.endsWith(" Plant") ? itemName.slice(0, -6) : itemName;
         if (SEED_COSTS[cropName]) {
           const coins = SEED_COSTS[cropName];
           const price = coins / coinsPerSFL;
-          return { price, method: "Seed (coins)", detail: `${cropName} Seed: ${coins}c / ${coinsPerSFL.toFixed(0)} c/SFL = ${fNum(price)}` };
+          const seedLabel = itemName.endsWith(" Plant") ? `${cropName} Plant` : `${cropName} Seed`;
+          return { price, method: "Seed (coins)", detail: `${seedLabel}: ${coins}c / ${coinsPerSFL.toFixed(0)} c/SFL = ${fNum(price)}` };
         }
       }
 
