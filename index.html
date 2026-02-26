@@ -12151,9 +12151,14 @@
         if (betty.rate > 0) { exchangeRates.coinsPerSFL = betty.rate; exchangeRates.bettyItem = betty.item; }
         if (rateResp) {
           const coinTiers = Object.values(rateResp?.coins || rateResp?.data?.coins || {});
+          const gemTiers = Object.values(rateResp?.gems || rateResp?.data?.gems || {});
           if (!betty.rate && coinTiers.length > 0) {
             const best = coinTiers.reduce((a, b) => (b.coin / b.sfl) > (a.coin / a.sfl) ? b : a);
             exchangeRates.coinsPerSFL = best.coin / best.sfl;
+          }
+          if (gemTiers.length > 0) {
+            const best = gemTiers.reduce((a, b) => (b.gem / (b.sfl * 0.7)) > (a.gem / (a.sfl * 0.7)) ? b : a);
+            exchangeRates.gemsPerSFL = best.gem / (best.sfl * 0.7);
           }
         }
       } catch (err) {
@@ -12241,38 +12246,59 @@
       const playerSunstones = parseFloat(inventory["Sunstone"]) || 0;
       const playerCoins = farm.coins || 0;
 
-      // ── Compute marginal net SFL/day per extra node for a single product ──
+      // ── Restock cost per consumed seed/tool (amortized gem cost) ──
+      // 1 restock = gemCost gems, refills effectiveStock items.
+      // Cost per item consumed = (gemCost / gemsPerSFL) / effectiveStock
+      function restockCostPerUnit(seedOrTool, mode) {
+        if (exchangeRates.gemsPerSFL <= 0) return 0;
+        const gemCost = mode === "seeds" ? RESTOCK_GEM_COSTS.seeds
+                      : mode === "tools" ? RESTOCK_GEM_COSTS.tools
+                      : RESTOCK_GEM_COSTS.both;
+        const stock = getEffectiveStock(seedOrTool, stockMods);
+        if (stock <= 0) return 0;
+        return (gemCost / exchangeRates.gemsPerSFL) / stock;
+      }
+
+      // ── Compute marginal net SFL/day for 1 extra node (single product) ──
       function calcMarginalForProduct(catId, product, farmKey, ownedEffects) {
         const priceProduct = getPriceProduct(catId, product);
-        const currentN = getCapacityCount(catId, capacity);
+        const n = getCapacityCount(catId, capacity);
+        const useCap = n > 0 ? capacity : (() => { const c = { ...capacity }; c[farmKey] = 1; return c; })();
+        const useN = n > 0 ? n : 1;
 
-        if (currentN <= 0) {
-          const tempCap = { ...capacity };
-          tempCap[farmKey] = 1;
-          const boosted = applyBoosts(catId, product, tempCap, ownedEffects);
-          const grossSfl = unitToSfl(boosted.unitsPerDay, priceProduct, p2pPrices);
-          let costPerDay = 0;
-          if (catId === "obsidian") {
-            costPerDay = calcLavaPitCostPerDay(tempCap, p2pPrices, season, lavaCostMult).costPerDay;
-          } else if (["trees", "stone", "iron", "gold", "crimstone", "oil"].includes(catId)) {
-            costPerDay = calcToolCostPerDay(catId, tempCap, exchangeRates, p2pPrices, stockMods).costPerDay;
-          } else if (["crops", "fruits", "greenhouse"].includes(catId)) {
-            costPerDay = calcSeedCostPerDay(catId, product, tempCap, exchangeRates, stockMods, ownedEffects, p2pPrices).costPerDay;
-          }
-          return grossSfl - costPerDay;
-        }
+        const boosted = applyBoosts(catId, product, useCap, ownedEffects);
+        const grossPerNode = unitToSfl(boosted.unitsPerDay, priceProduct, p2pPrices) / useN;
 
-        const boosted = applyBoosts(catId, product, capacity, ownedEffects);
-        const grossSfl = unitToSfl(boosted.unitsPerDay, priceProduct, p2pPrices);
-        let costPerDay = 0;
+        let costPerNode = 0;
+
         if (catId === "obsidian") {
-          costPerDay = lavaInfo.costPerDay;
+          const c = n > 0 ? lavaInfo : calcLavaPitCostPerDay(useCap, p2pPrices, season, lavaCostMult);
+          costPerNode = c.costPerDay / useN;
         } else if (["trees", "stone", "iron", "gold", "crimstone", "oil"].includes(catId)) {
-          costPerDay = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods).costPerDay;
+          // Tool cost per node
+          const c = calcToolCostPerDay(catId, useCap, exchangeRates, p2pPrices, stockMods);
+          costPerNode = c.costPerDay / useN;
+          // Restock cost: tools consumed per node per day × restock cost per tool
+          if (c.toolsPerDay > 0 && !c.freeTool) {
+            const toolName = Object.keys(TOOL_TO_CAT).find(t => TOOL_TO_CAT[t] === catId);
+            if (toolName) {
+              const toolsPerNodePerDay = c.toolsPerDay / useN;
+              costPerNode += toolsPerNodePerDay * restockCostPerUnit(toolName, "tools");
+            }
+          }
         } else if (["crops", "fruits", "greenhouse"].includes(catId)) {
-          costPerDay = calcSeedCostPerDay(catId, product, capacity, exchangeRates, stockMods, ownedEffects, p2pPrices).costPerDay;
+          // Seed cost per node
+          const c = calcSeedCostPerDay(catId, product, useCap, exchangeRates, stockMods, ownedEffects, p2pPrices);
+          costPerNode = c.costPerDay / useN;
+          // Restock cost: seeds consumed per node per day × restock cost per seed
+          const seedName = product + " Seed";
+          const seedsPerNodePerDay = (c.seedsPerDay || 0) / useN;
+          if (seedsPerNodePerDay > 0) {
+            costPerNode += seedsPerNodePerDay * restockCostPerUnit(seedName, "seeds");
+          }
         }
-        return grossSfl / currentN - costPerDay / currentN;
+
+        return grossPerNode - costPerNode;
       }
 
       // Product lists per category (for auto-best selection)
@@ -12283,12 +12309,24 @@
         flowers: Object.keys(SEED_DATA),
       };
 
+      // Fixed products for node ROI (hardcoded best choices)
+      const NODE_FIXED_PRODUCTS = {
+        crops: "Wheat",
+      };
+
       // ── Find best product & marginal net SFL/day for a node type ──
       function getMarginalNetSfl(nodeKey) {
         const np = NODE_PRICES[nodeKey];
         if (!np) return { marginal: 0, product: null };
         const catId = np.catId;
         const ownedEffects = getOwnedEffects(catId);
+
+        // Hardcoded product override
+        if (NODE_FIXED_PRODUCTS[catId]) {
+          const product = NODE_FIXED_PRODUCTS[catId];
+          const m = calcMarginalForProduct(catId, product, np.farmKey, ownedEffects);
+          return { marginal: m, product };
+        }
 
         // For categories with multiple products, try all and pick best
         const products = PRODUCT_LISTS[catId];
