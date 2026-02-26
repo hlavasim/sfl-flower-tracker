@@ -1650,6 +1650,19 @@
       padding: 4px 8px;
       line-height: 1.6;
     }
+    .pet-sfl-day { background:rgba(46,160,67,0.1); border:1px solid var(--green); padding:8px 10px; margin:6px 0; font-size:0.6875rem; border-radius:4px; }
+    .pet-sfl-breakdown { font-size:0.5625rem; color:var(--text-dim); margin-top:4px; line-height:1.5; }
+    .pet-xp-section { font-size:0.6875rem; padding:4px 0; color:var(--text-secondary); }
+    .pet-xp-bar { height:4px; background:#333; border-radius:2px; overflow:hidden; margin:4px 0; }
+    .pet-xp-fill { height:100%; background:var(--sunpetal); border-radius:2px; transition:width 0.3s; }
+    .pet-perk-row { display:flex; gap:6px; align-items:baseline; font-size:0.5625rem; padding:2px 0; }
+    .pet-perk-row.unlocked { color:var(--green); }
+    .pet-perk-row.upcoming { color:var(--text-secondary); }
+    .pet-perk-row.next { color:var(--sunpetal); font-weight:bold; }
+    .pet-perk-row.na { color:var(--text-dim); text-decoration:line-through; opacity:0.5; }
+    .pet-perk-delta { margin-left:auto; font-size:0.5rem; white-space:nowrap; }
+    .pet-boosts { font-size:0.5625rem; color:var(--lily); padding:4px 0; }
+    .pet-perks-wrap { margin-top:6px; }
     .pet-resource-table {
       width: 100%;
       border-collapse: collapse;
@@ -12221,18 +12234,125 @@
 
     const NFT_BREED_TYPES = ["Dragon", "Phoenix", "Griffin", "Ram", "Warthog", "Wolf", "Bear"];
 
-    // Cumulative XP thresholds: index 0 = Lv 1, index 29 = Lv 30
-    const PET_XP_TABLE = [
-      0, 10, 25, 50, 100, 175, 280, 420, 600, 830,
-      1120, 1480, 1920, 2450, 3100, 3880, 4800, 5900, 7200, 8750,
-      10600, 12800, 15400, 18500, 22200, 26600, 31800, 38000, 45300, 54000,
+    const PET_LEVEL_PERKS = [
+      { level:1,   perk:"Acorn fetch",                    type:"resource",  nftOnly:false, detail:"Acorn (100⚡)" },
+      { level:3,   perk:"Primary resource",               type:"resource",  nftOnly:false, detail:"Category resource (200⚡)" },
+      { level:5,   perk:"+5 fetch energy",                 type:"energy",    nftOnly:false, value:5 },
+      { level:7,   perk:"Secondary resource",              type:"resource",  nftOnly:false, detail:"Category resource (200⚡)" },
+      { level:10,  perk:"Unlock hard request",             type:"request",   nftOnly:false, commonOnly:true, detail:"+300 energy, +300 XP per feed" },
+      { level:12,  perk:"Moonfur fetch",                   type:"resource",  nftOnly:true,  detail:"Moonfur (1000⚡)" },
+      { level:15,  perk:"+10% extra fetch resource",       type:"bonus",     nftOnly:false, value:0.10 },
+      { level:18,  perk:"+1 Acorn",                        type:"acorn",     nftOnly:false },
+      { level:20,  perk:"Fossil Shell fetch",              type:"resource",  nftOnly:false, detail:"Fossil Shell (300⚡)" },
+      { level:25,  perk:"Tertiary resource",               type:"resource",  nftOnly:true,  detail:"Category resource (200⚡)" },
+      { level:27,  perk:"+10% XP per feed",                type:"xp",        nftOnly:false, value:0.10 },
+      { level:30,  perk:"2nd medium request",              type:"request",   nftOnly:true,  detail:"+100 energy, +100 XP per feed" },
+      { level:35,  perk:"+5 fetch energy",                 type:"energy",    nftOnly:false, value:5 },
+      { level:40,  perk:"+15% XP per feed (25% total)",    type:"xp",        nftOnly:true,  value:0.15 },
+      { level:50,  perk:"+5% extra fetch resource (15%)",  type:"bonus",     nftOnly:false, value:0.05 },
+      { level:75,  perk:"+5 fetch energy",                 type:"energy",    nftOnly:false, value:5 },
+      { level:85,  perk:"+25% XP per feed (50% total)",    type:"xp",        nftOnly:true,  value:0.25 },
+      { level:100, perk:"+10% extra fetch resource (25%)", type:"bonus",     nftOnly:false, value:0.10 },
+      { level:150, perk:"+25% extra Moonfur (50% total)",  type:"moonfur",   nftOnly:true,  value:0.25 },
+      { level:200, perk:"2nd hard request",                type:"request",   nftOnly:true,  detail:"+300 energy, +300 XP per feed" },
     ];
 
-    function petLevel(xp) {
-      for (let i = PET_XP_TABLE.length - 1; i >= 0; i--) {
-        if (xp >= PET_XP_TABLE[i]) return i + 1;
+    const PET_REQUEST_VALUES = { easy:{xp:20,energy:20}, medium:{xp:100,energy:100}, hard:{xp:300,energy:300} };
+
+    // ── Pet calculator helpers ──
+    function petRequestsAtLevel(level, isNft) {
+      const r = ["easy","medium"];
+      if (isNft || level >= 10) r.push("hard");
+      if (isNft && level >= 30) r.push("medium");  // 2nd medium
+      if (isNft && level >= 200) r.push("hard");    // 2nd hard
+      return r;
+    }
+
+    function petEnergyFromRequests(level, isNft) {
+      return petRequestsAtLevel(level, isNft).reduce((s, r) => s + PET_REQUEST_VALUES[r].energy, 0);
+    }
+
+    function petFetchEnergyBonus(level) {
+      let b = 0;
+      if (level >= 5)  b += 5;
+      if (level >= 35) b += 5;
+      if (level >= 75) b += 5;
+      return b;
+    }
+
+    function petExtraResourceChance(level) {
+      let c = 0;
+      if (level >= 15)  c += 0.10;
+      if (level >= 50)  c += 0.05;
+      if (level >= 100) c += 0.10;
+      return c;
+    }
+
+    function petXpBonusMultiplier(level, isNft) {
+      let m = 0;
+      if (level >= 27) m += 0.10;
+      if (isNft && level >= 40) m += 0.15;
+      if (isNft && level >= 85) m += 0.25;
+      return m;
+    }
+
+    function petDailyCalc(pet, p2pPrices, feedMult, hasPetBowls) {
+      const reqTypes = petRequestsAtLevel(pet.level, pet.isNft);
+      const reqEnergy = reqTypes.reduce((s, r) => s + PET_REQUEST_VALUES[r].energy, 0);
+      const fetchBonus = petFetchEnergyBonus(pet.level);
+      const energyPerFeed = reqEnergy + fetchBonus;
+      const dailyEnergy = energyPerFeed * feedMult;
+
+      // XP per feed
+      const reqXp = reqTypes.reduce((s, r) => s + PET_REQUEST_VALUES[r].xp + (hasPetBowls ? 10 : 0), 0);
+      const xpMult = 1 + petXpBonusMultiplier(pet.level, pet.isNft);
+      const dailyXp = reqXp * xpMult * feedMult;
+
+      // Best resource
+      const fetchData = PET_FETCH_DATA[pet.petType] || [];
+      const unlocked = fetchData.filter(f => pet.level >= f.level);
+      const extraChance = petExtraResourceChance(pet.level);
+
+      let bestRes = null, bestSflPerEnergy = 0;
+      for (const f of unlocked) {
+        const price = p2pPrices[f.res] || 0;
+        const sflPerE = price / f.energy;
+        if (sflPerE > bestSflPerEnergy) {
+          bestSflPerEnergy = sflPerE;
+          bestRes = f;
+        }
       }
-      return 1;
+
+      let dailySfl = 0, fetchesPerDay = 0;
+      if (bestRes) {
+        fetchesPerDay = dailyEnergy / bestRes.energy;
+        dailySfl = fetchesPerDay * (p2pPrices[bestRes.res] || 0) * (1 + extraChance);
+      }
+
+      // Acorn bonus at Lv18+
+      let acornBonus = 0;
+      if (pet.level >= 18) {
+        acornBonus = (p2pPrices["Acorn"] || 0) * feedMult;
+        dailySfl += acornBonus;
+      }
+
+      return { reqTypes, reqEnergy, fetchBonus, energyPerFeed, dailyEnergy, reqXp, xpMult,
+               dailyXp, bestRes, bestSflPerEnergy, extraChance, dailySfl, fetchesPerDay, acornBonus, feedMult };
+    }
+
+
+    // XP to reach level L = 50 * L * (L - 1)  (each level costs 100 * currentLevel XP)
+    function petCumulativeXp(level) { return 50 * level * (level - 1); }
+    function petXpForLevel(level) { return 100 * level; } // XP needed to go FROM this level to next
+
+    function petLevel(xp) {
+      // Solve 50*L*(L-1) <= xp  =>  L = floor((1 + sqrt(1 + xp/12.5)) / 2)
+      if (xp <= 0) return 1;
+      const L = Math.floor((1 + Math.sqrt(1 + xp / 12.5)) / 2);
+      // Clamp: verify and adjust
+      if (petCumulativeXp(L + 1) <= xp) return L + 1;
+      if (petCumulativeXp(L) > xp) return Math.max(1, L - 1);
+      return Math.max(1, L);
     }
 
     async function renderPets(data) {
@@ -12265,6 +12385,11 @@
           for (const [k, v] of Object.entries(priceData)) p2pPrices[k] = parseFloat(v) || 0;
         }
       } catch {}
+
+      // Detect pet boosts
+      const hasVictoriasApron = (farm.wardrobe?.["Victoria's Apron"] > 0) || isWearableEquipped(farm, "Victoria's Apron");
+      const hasPetBowls = findCollectible(farm, "Pet Bowls").length > 0;
+      const feedMultiplier = hasVictoriasApron ? 1.5 : 1.0;
 
       // Parse pets from farm data
       const pets = [];
@@ -12498,7 +12623,167 @@
           content += `<div class="pet-food-list">${pet.foods.map(f => escHTML(f)).join(" &#xB7; ")}</div>`;
         }
 
+        // ── SFL/DAY + XP + PERKS ──
+        const calc = petDailyCalc(pet, p2pPrices, feedMultiplier, hasPetBowls);
+
+        // Active boosts line
+        {
+          const boosts = [];
+          if (hasVictoriasApron) boosts.push("Victoria's Apron (1.5\u00d7 feeds)");
+          if (hasPetBowls) boosts.push("Pet Bowls (+10 XP/request)");
+          if (boosts.length > 0) {
+            content += `<div class="pet-boosts">\uD83C\uDFAF ${boosts.join(" \u00b7 ")}</div>`;
+          }
+        }
+
+        // SFL/day summary
+        if (calc.dailySfl > 0 && calc.bestRes) {
+          const fetchCount = (calc.dailyEnergy / calc.bestRes.energy).toFixed(1);
+          const extraPct = Math.round(calc.extraChance * 100);
+          content += `<div class="pet-sfl-day">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">
+              <span>\u{1F4C8} <b>${calc.dailySfl.toFixed(2)}</b> ${sflIcon("0.85em")}/day</span>
+              <span style="font-size:0.5625rem;color:var(--text-dim)">fetch ${escHTML(calc.bestRes.res)}</span>
+            </div>
+            <div class="pet-sfl-breakdown">
+              ${calc.energyPerFeed}\u26A1/feed \u00d7 ${calc.feedMult} feeds/day = ${Math.round(calc.dailyEnergy)}\u26A1/day
+              \u2192 ${fetchCount} fetches${extraPct > 0 ? ` (+${extraPct}% extra)` : ""}${calc.acornBonus > 0 ? ` + ${calc.acornBonus.toFixed(2)} acorn bonus` : ""}
+            </div>
+          </div>`;
+        }
+
+        // XP progress
+        {
+          const currentXp = pet.xp;
+          const currentLevelXp = petCumulativeXp(pet.level);
+          const nextLevelXp = petCumulativeXp(pet.level + 1);
+          const xpInLevel = currentXp - currentLevelXp;
+          const xpNeeded = nextLevelXp - currentLevelXp;
+          const pct = xpNeeded > 0 ? Math.min(100, Math.round(xpInLevel / xpNeeded * 100)) : 100;
+
+          // Find next perk level
+          const nextPerk = PET_LEVEL_PERKS.find(p => p.level > pet.level && (!p.nftOnly || pet.isNft) && (!p.commonOnly || !pet.isNft));
+          let daysToNextPerk = "";
+          if (nextPerk && calc.dailyXp > 0) {
+            const xpToReach = petCumulativeXp(nextPerk.level) - currentXp;
+            if (xpToReach > 0) {
+              const days = Math.ceil(xpToReach / calc.dailyXp);
+              daysToNextPerk = ` \u2192 Lv ${nextPerk.level} (${nextPerk.perk}) in ~${days}d`;
+            }
+          }
+
+          content += `<div class="pet-xp-section">
+            \uD83D\uDCCA Lv ${pet.level} \u2014 ${xpInLevel.toLocaleString()} / ${xpNeeded.toLocaleString()} XP (${pct}%)
+            <span style="font-size:0.5625rem;color:var(--text-dim)">~${Math.round(calc.dailyXp)} XP/day${daysToNextPerk}</span>
+            <div class="pet-xp-bar"><div class="pet-xp-fill" style="width:${pct}%"></div></div>
+          </div>`;
+        }
+
+        // Level perks (collapsed)
+        {
+          const perkId = `perks-${pet.isNft ? 'nft-' + pet.nftId : pet.name}`.replace(/[^a-zA-Z0-9-]/g, '_');
+          content += `<div class="pet-perks-wrap">
+            <div class="pet-section-title pixel-font" style="cursor:pointer" onclick="document.getElementById('${perkId}').style.display=document.getElementById('${perkId}').style.display==='none'?'block':'none'">
+              LEVEL PERKS \u25BC
+            </div>
+            <div id="${perkId}" style="display:none">`;
+
+          const fetchData = PET_FETCH_DATA[pet.petType] || [];
+          for (const perk of PET_LEVEL_PERKS) {
+            // Determine status
+            const isNa = (perk.nftOnly && !pet.isNft) || (perk.commonOnly && pet.isNft);
+            const isUnlocked = pet.level >= perk.level;
+            const isNext = !isNa && !isUnlocked && perk === PET_LEVEL_PERKS.find(p => p.level > pet.level && !((p.nftOnly && !pet.isNft) || (p.commonOnly && pet.isNft)));
+
+            let cls = "pet-perk-row";
+            let icon = "";
+            if (isNa) { cls += " na"; icon = "\u26D4"; }
+            else if (isUnlocked) { cls += " unlocked"; icon = "\u2705"; }
+            else if (isNext) { cls += " next"; icon = "\u{1F538}"; }
+            else { cls += " upcoming"; icon = "\uD83D\uDD12"; }
+
+            // Perk description — use species-specific resource name where applicable
+            let desc = perk.perk;
+            if (perk.type === "resource" && fetchData.length > 0) {
+              const match = fetchData.find(f => f.level === perk.level);
+              if (match) desc = `${match.res} fetch (${match.energy}\u26A1)`;
+            }
+
+            // Delta estimate for upcoming perks
+            let delta = "";
+            if (!isNa && !isUnlocked && calc.bestRes) {
+              const bestPrice = p2pPrices[calc.bestRes.res] || 0;
+              if (perk.type === "energy" && perk.value) {
+                const d = perk.value / calc.bestRes.energy * bestPrice * (1 + calc.extraChance) * feedMultiplier;
+                if (d > 0.001) delta = `<span class="pet-perk-delta" style="color:var(--green)">+${d.toFixed(3)} SFL/d</span>`;
+              } else if (perk.type === "bonus" && perk.value) {
+                const d = calc.fetchesPerDay * bestPrice * perk.value;
+                if (d > 0.001) delta = `<span class="pet-perk-delta" style="color:var(--green)">+${d.toFixed(3)} SFL/d</span>`;
+              } else if (perk.type === "acorn") {
+                const d = (p2pPrices["Acorn"] || 0) * feedMultiplier;
+                if (d > 0.001) delta = `<span class="pet-perk-delta" style="color:var(--green)">+${d.toFixed(3)} SFL/d</span>`;
+              } else if (perk.type === "request") {
+                // New request adds energy
+                const addE = perk.detail?.includes("300") ? 300 : 100;
+                const d = addE * feedMultiplier / calc.bestRes.energy * bestPrice * (1 + calc.extraChance);
+                if (d > 0.001) delta = `<span class="pet-perk-delta" style="color:var(--green)">+${d.toFixed(3)} SFL/d</span>`;
+              } else if (perk.type === "resource") {
+                const match = fetchData.find(f => f.level === perk.level);
+                if (match) {
+                  const newPrice = p2pPrices[match.res] || 0;
+                  const newRatio = newPrice / match.energy;
+                  if (newRatio > calc.bestSflPerEnergy) {
+                    delta = `<span class="pet-perk-delta" style="color:var(--sunpetal)">better SFL/\u26A1!</span>`;
+                  }
+                }
+              } else if (perk.type === "xp") {
+                delta = `<span class="pet-perk-delta" style="color:var(--lily)">XP boost</span>`;
+              } else if (perk.type === "moonfur" && perk.value) {
+                const moonfurPrice = p2pPrices["Moonfur"] || 0;
+                const moonfurData = fetchData.find(f => f.res === "Moonfur");
+                if (moonfurData && moonfurPrice > 0) {
+                  const moonfurFetches = calc.dailyEnergy / moonfurData.energy;
+                  const d = moonfurFetches * moonfurPrice * perk.value;
+                  if (d > 0.001) delta = `<span class="pet-perk-delta" style="color:var(--green)">+${d.toFixed(3)} SFL/d (Moonfur)</span>`;
+                }
+              }
+            }
+
+            // Days to reach (for upcoming perks)
+            let daysStr = "";
+            if (!isNa && !isUnlocked && calc.dailyXp > 0) {
+              const xpToReach = petCumulativeXp(perk.level) - pet.xp;
+              if (xpToReach > 0) {
+                const days = Math.ceil(xpToReach / calc.dailyXp);
+                daysStr = `<span style="font-size:0.5rem;color:var(--text-dim);margin-left:4px">~${days}d</span>`;
+              }
+            }
+
+            const naLabel = isNa ? (perk.nftOnly ? " [NFT only]" : " [Common only]") : "";
+            const nextLabel = isNext ? " \u2190 NEXT" : "";
+
+            content += `<div class="${cls}">
+              <span>${icon} Lv ${perk.level}</span>
+              <span style="flex:1">${desc}${naLabel}${nextLabel}</span>
+              ${daysStr}${delta}
+            </div>`;
+          }
+
+          content += `</div></div>`;
+        }
+
         content += `</div>`;
+      }
+
+      // Calculate total daily SFL across all pets
+      let totalDailySfl = 0;
+      const dailyCards = [];
+      for (const pet of pets) {
+        const calc = petDailyCalc(pet, p2pPrices, feedMultiplier, hasPetBowls);
+        if (calc.dailySfl > 0) {
+          totalDailySfl += calc.dailySfl;
+          dailyCards.push({ name: pet.name, sfl: calc.dailySfl, res: calc.bestRes?.res || "?" });
+        }
       }
 
       // Grand total summary (if any pet has earnings)
@@ -12506,11 +12791,21 @@
         let totalHtml = `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:16px;border-color:var(--green)">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
             <span class="pixel-font" style="font-size:0.6875rem;color:var(--green);font-weight:bold">OPTIMAL EARNINGS</span>
-            <span style="font-size:1rem;font-weight:bold;color:var(--green)">${grandTotalSfl.toFixed(2)} ${sflIcon("1em")} total</span>
-          </div>
-          <div style="font-size:0.6875rem;color:var(--text-secondary);line-height:1.6">`;
+            <span style="font-size:1rem;font-weight:bold;color:var(--green)">${grandTotalSfl.toFixed(2)} ${sflIcon("1em")} per feed</span>
+          </div>`;
+
+        if (totalDailySfl > 0) {
+          totalHtml += `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+            <span class="pixel-font" style="font-size:0.6875rem;color:var(--sunpetal);font-weight:bold">DAILY PET INCOME</span>
+            <span style="font-size:1rem;font-weight:bold;color:var(--sunpetal)">${totalDailySfl.toFixed(2)} ${sflIcon("1em")}/day</span>
+          </div>`;
+        }
+
+        totalHtml += `<div style="font-size:0.6875rem;color:var(--text-secondary);line-height:1.6">`;
         for (const c of grandTotalCards) {
-          totalHtml += `${escHTML(c.name)}: ${escHTML(c.res)} &#xD7;${c.fetches} = ${c.totalSfl.toFixed(2)} ${sflIcon("0.85em")}<br>`;
+          const daily = dailyCards.find(d => d.name === c.name);
+          const dailyStr = daily ? ` (${daily.sfl.toFixed(2)}/day)` : "";
+          totalHtml += `${escHTML(c.name)}: ${escHTML(c.res)} &#xD7;${c.fetches} = ${c.totalSfl.toFixed(2)} ${sflIcon("0.85em")}${dailyStr}<br>`;
         }
         totalHtml += `</div></div>`;
         // Insert between summary bar and resource market
