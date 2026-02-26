@@ -12750,7 +12750,8 @@
                 delta = `<span class="pet-perk-delta" style="color:var(--lily)">XP boost</span>`;
               } else if (perk.type === "guaranteed") {
                 // +1 guaranteed non-Acorn/Moonfur resource per fetch
-                const nonAcornRes = unlocked.filter(f => f.res !== "Acorn" && f.res !== "Moonfur");
+                const unlockedRes = fetchData.filter(f => pet.level >= f.level);
+                const nonAcornRes = unlockedRes.filter(f => f.res !== "Acorn" && f.res !== "Moonfur");
                 const bestNonAcorn = nonAcornRes.reduce((best, f) => {
                   const p = p2pPrices[f.res] || 0;
                   return p > (best?.price || 0) ? { res: f.res, price: p } : best;
