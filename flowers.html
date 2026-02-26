@@ -3067,6 +3067,37 @@
       },
     };
 
+    // Compost recipes: season-dependent inputs, base output amounts (from composterDetails)
+    const COMPOST_RECIPES = {
+      "Compost Bin": {
+        outputs: { "Sprout Mix": 10, "Earthworm": 1 },
+        inputs: {
+          spring: { "Rhubarb": 10, "Carrot": 5 },
+          summer: { "Zucchini": 10, "Pepper": 2 },
+          autumn: { "Yam": 15 },
+          winter: { "Potato": 10, "Cabbage": 3 },
+        },
+      },
+      "Turbo Composter": {
+        outputs: { "Fruitful Blend": 3, "Grub": 1 },
+        inputs: {
+          spring: { "Soybean": 5, "Corn": 3 },
+          summer: { "Cauliflower": 4, "Eggplant": 3 },
+          autumn: { "Broccoli": 10, "Artichoke": 2 },
+          winter: { "Onion": 5, "Turnip": 2 },
+        },
+      },
+      "Premium Composter": {
+        outputs: { "Rapid Root": 10, "Red Wiggler": 1 },
+        inputs: {
+          spring: { "Blueberry": 8, "Egg": 5 },
+          summer: { "Banana": 3, "Egg": 5 },
+          autumn: { "Apple": 4, "Tomato": 5 },
+          winter: { "Lemon": 3, "Apple": 3 },
+        },
+      },
+    };
+
     const CRAFTED_INGREDIENT_RECIPES = {
       "Cheese": { "Milk": 3 },
       "Kelp Fibre": { "Seaweed": 9 },
@@ -12607,6 +12638,22 @@
         }
       }
 
+      // Compost products (Sprout Mix, Fruitful Blend, Rapid Root, Earthworm, Grub, Red Wiggler)
+      if (typeof COMPOST_RECIPES !== "undefined") {
+        for (const [composter, data] of Object.entries(COMPOST_RECIPES)) {
+          if (data.outputs[itemName] !== undefined) {
+            const s = rates?.season || "";
+            const inputs = data.inputs[s] || Object.values(data.inputs)[0];
+            let batchCost = 0;
+            for (const [ing, qty] of Object.entries(inputs)) {
+              batchCost += estimateItemSfl(ing, p2pPrices, visited, rates) * qty;
+            }
+            const totalUnits = Object.values(data.outputs).reduce((sum, q) => sum + q, 0);
+            if (batchCost > 0 && totalUnits > 0) return batchCost / totalUnits;
+          }
+        }
+      }
+
       return 0;
     }
 
@@ -12814,6 +12861,33 @@
         }
       }
 
+      // Compost products
+      if (typeof COMPOST_RECIPES !== "undefined") {
+        for (const [composter, data] of Object.entries(COMPOST_RECIPES)) {
+          if (data.outputs[itemName] !== undefined) {
+            const s = rates?.season || "";
+            const season = s || Object.keys(data.inputs)[0];
+            const inputs = data.inputs[season] || Object.values(data.inputs)[0];
+            let inputParts = [], batchCost = 0;
+            for (const [ing, qty] of Object.entries(inputs)) {
+              const p = estimateItemSfl(ing, p2pPrices, null, rates);
+              const src = p2pPrices[ing] ? "P2P" : "derived";
+              inputParts.push(`${qty}\u00d7 ${ing} (${fNum(p)} ${src})`);
+              batchCost += p * qty;
+            }
+            const totalUnits = Object.values(data.outputs).reduce((sum, q) => sum + q, 0);
+            const outputList = Object.entries(data.outputs).map(([n, q]) => `${q}\u00d7 ${n}`).join(" + ");
+            const unitCost = totalUnits > 0 ? batchCost / totalUnits : 0;
+            const seasonLabel = season.charAt(0).toUpperCase() + season.slice(1);
+            return {
+              price: unitCost,
+              method: `Compost (${seasonLabel})`,
+              detail: `${composter}: ${inputParts.join(" + ")} = batch ${fNum(batchCost)} \u00f7 ${totalUnits} units (${outputList}) = ${fNum(unitCost)}/unit`
+            };
+          }
+        }
+      }
+
       return null;
     }
 
@@ -12842,6 +12916,15 @@
       // Fish Market recipes
       addItems(typeof FISH_MARKET_RECIPES !== "undefined" ? FISH_MARKET_RECIPES : null, "Fish Market");
 
+      // Compost products
+      if (typeof COMPOST_RECIPES !== "undefined") {
+        for (const data of Object.values(COMPOST_RECIPES)) {
+          for (const name of Object.keys(data.outputs)) {
+            if (!items.has(name)) items.set(name, "Compost");
+          }
+        }
+      }
+
       // Special items
       items.set("Oil", "Resources");
       items.set("Love Charm", "Special");
@@ -12865,7 +12948,7 @@
       }
 
       // Sort by category then name
-      const catOrder = ["Tools", "Seeds", "Flower seeds", "Flowers", "Food", "Crafted", "Dolls", "Fish/XP", "Fish Market", "Treasures", "Crustaceans", "Giants", "Pets", "Resources", "Special"];
+      const catOrder = ["Tools", "Seeds", "Flower seeds", "Flowers", "Food", "Crafted", "Dolls", "Fish/XP", "Fish Market", "Compost", "Treasures", "Crustaceans", "Giants", "Pets", "Resources", "Special"];
       results.sort((a, b) => {
         const ca = catOrder.indexOf(a.category), cb = catOrder.indexOf(b.category);
         if (ca !== cb) return (ca === -1 ? 99 : ca) - (cb === -1 ? 99 : cb);
