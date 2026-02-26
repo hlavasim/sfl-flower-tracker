@@ -2649,7 +2649,6 @@
       gold:        { base: 10, increase: 6,  farmKey: "gold",        catId: "gold",     label: "Gold" },
       crimstones:  { base: 20, increase: 20, farmKey: "crimstones",  catId: "crimstone", label: "Crimstone" },
       oilReserves: { base: 40, increase: 20, farmKey: "oilReserves", catId: "oil",      label: "Oil Reserve" },
-      lavaPits:    { base: 40, increase: 40, farmKey: "lavaPits",    catId: "obsidian", label: "Lava Pit" },
       crops:       { base: 3,  increase: 2,  farmKey: "crops",       catId: "crops",    label: "Crop Plot" },
       fruitPatches:{ base: 5,  increase: 5,  farmKey: "fruitPatches", catId: "fruits",  label: "Fruit Patch" },
       flowers:     { base: 30, increase: 25, farmKey: "flowers",     catId: "flowers",  label: "Flower Bed" },
@@ -12497,15 +12496,108 @@
       // Sort by ROI days ascending (fastest payback first)
       options.sort((a, b) => a.roiDays - b.roiDays);
 
+      // ── Greedy purchase plan ──
+      // Simulate spending available resources, always picking the best ROI next.
+      // After each "purchase", the next node of that type costs more sunstones.
+      const plan = [];
+      const marginals = {}; // nodeKey → { marginal, product }
+      const purchasedSim = {}; // nodeKey → simulated purchased count
+      for (const [nodeKey, np] of Object.entries(NODE_PRICES)) {
+        marginals[nodeKey] = getMarginalNetSfl(nodeKey);
+        const tiers = getNodeTiers(nodeKey);
+        const baseCount = baseNodes[nodeKey] || 0;
+        purchasedSim[nodeKey] = Math.max(0, tiers.effective - baseCount);
+      }
+
+      // Available resources for simulation
+      let simObs = playerObsidian;
+      let simSunstones = playerSunstones;
+      let simCoins = playerCoins;
+      let cumCostSfl = 0, cumSflPerDay = 0;
+
+      for (let step = 0; step < 50; step++) { // safety cap
+        // For each node type, calc next sunstone cost & ROI
+        let bestKey = null, bestRoi = Infinity, bestCostSun = 0, bestCostSfl = 0, bestMarginal = 0;
+        for (const [nodeKey, np] of Object.entries(NODE_PRICES)) {
+          const m = marginals[nodeKey].marginal;
+          if (m <= 0) continue;
+          const nextSun = np.base + purchasedSim[nodeKey] * np.increase;
+          const costSfl = nextSun * sunstoneCostSfl;
+          const roi = costSfl / m;
+          if (roi < bestRoi) {
+            // Check if affordable (sunstones or obsidian×3)
+            const obsNeeded = nextSun * 3;
+            const canBuySun = simSunstones >= nextSun;
+            const canBuyObs = simObs >= obsNeeded;
+            if (!canBuySun && !canBuyObs) continue;
+            bestKey = nodeKey; bestRoi = roi; bestCostSun = nextSun; bestCostSfl = costSfl; bestMarginal = m;
+          }
+        }
+        if (!bestKey || bestRoi === Infinity) break;
+
+        // "Buy" the node
+        const obsNeeded = bestCostSun * 3;
+        if (simSunstones >= bestCostSun) {
+          simSunstones -= bestCostSun;
+        } else {
+          simObs -= obsNeeded;
+        }
+        purchasedSim[bestKey]++;
+        cumCostSfl += bestCostSfl;
+        cumSflPerDay += bestMarginal;
+
+        const np = NODE_PRICES[bestKey];
+        plan.push({
+          label: np.label,
+          product: marginals[bestKey].product,
+          catId: np.catId,
+          sunstoneCost: bestCostSun,
+          costSfl: bestCostSfl,
+          marginal: bestMarginal,
+          roi: bestRoi,
+          cumCost: cumCostSfl,
+          cumSflPerDay,
+        });
+      }
+
+      // Also try merge options (one-shot, not repeated)
+      // Merges use obsidian + coins directly, add to plan if they have better ROI
+      // than the worst item already in plan
+      for (const o of options.filter(o => o.type.startsWith("merge") && o.marginal > 0 && o.canAfford)) {
+        plan.push({
+          label: o.action,
+          product: null,
+          catId: null,
+          sunstoneCost: 0,
+          costSfl: o.costSfl,
+          marginal: o.marginal,
+          roi: o.roiDays,
+          cumCost: cumCostSfl + o.costSfl,
+          cumSflPerDay: cumSflPerDay + o.marginal,
+          isMerge: true,
+          costDetail: o.costDetail,
+        });
+        cumCostSfl += o.costSfl;
+        cumSflPerDay += o.marginal;
+      }
+
+      // Sort plan by ROI
+      plan.sort((a, b) => a.roi - b.roi);
+
+      // Recompute cumulative values after sorting
+      let runCost = 0, runSfl = 0;
+      for (const p of plan) {
+        runCost += p.costSfl;
+        runSfl += p.marginal;
+        p.cumCost = runCost;
+        p.cumSflPerDay = runSfl;
+      }
+
       // ── Render ──
       let content = "";
 
-      // ── Summary bar (reuses .summary-bar from pets/hub) ──
+      // ── Summary bar ──
       content += `<div class="summary-bar pixel-panel">
-        <div class="summary-stat">
-          <div class="label pixel-font">OBSIDIAN COST</div>
-          <div class="value" style="color:var(--sunpetal);font-size:0.8125rem">${obsidianCostSfl.toFixed(4)} ${sflIcon("0.75em")}</div>
-        </div>
         <div class="summary-stat">
           <div class="label pixel-font">SUNSTONE COST</div>
           <div class="value" style="color:var(--sunpetal);font-size:0.8125rem">${sunstoneCostSfl.toFixed(4)} ${sflIcon("0.75em")}</div>
@@ -12528,16 +12620,48 @@
         </div>
       </div>`;
 
-      // ── Best investments (card-based, one card per option) ──
-      // Split profitable vs unprofitable
+      // ── RECOMMENDED PURCHASE PLAN ──
+      if (plan.length > 0) {
+        content += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+          <div style="font-size:0.6875rem;color:var(--green);margin-bottom:4px;font-weight:bold" class="pixel-font">RECOMMENDED PURCHASE PLAN</div>
+          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px">Greedy order — always buys the best ROI next. Sunstone cost increases with each purchase.</div>
+          <table class="node-res-table">
+            <tr><th>#</th><th>BUY</th><th style="text-align:right">COST</th><th style="text-align:right">+${sflIcon("0.75em")}/DAY</th><th style="text-align:right">ROI</th><th style="text-align:right">CUM. +${sflIcon("0.75em")}/D</th></tr>`;
+
+        for (let i = 0; i < plan.length; i++) {
+          const p = plan[i];
+          const roiStr = p.roi >= 9999 ? "9999+" : Math.ceil(p.roi) + "d";
+          const roiColor = p.roi <= 30 ? "var(--green)" : p.roi <= 90 ? "var(--sunpetal)" : p.roi <= 365 ? "var(--text-secondary)" : "var(--text-dim)";
+          const costStr = p.isMerge
+            ? `<span style="font-size:0.5625rem">${escHTML(p.costDetail)}</span>`
+            : `${p.sunstoneCost} ☀`;
+          const productHint = p.product && PRODUCT_LISTS[p.catId] ? ` <span style="color:var(--text-dim);font-size:0.5625rem">(${escHTML(p.product)})</span>` : "";
+
+          content += `<tr>
+            <td style="color:var(--text-dim)">${i + 1}</td>
+            <td>${escHTML(p.label)}${productHint}</td>
+            <td style="text-align:right;white-space:nowrap">${costStr}</td>
+            <td style="text-align:right;color:var(--green)">+${p.marginal.toFixed(4)}</td>
+            <td style="text-align:right;color:${roiColor};font-weight:bold">${roiStr}</td>
+            <td style="text-align:right;color:var(--sunpetal)">+${p.cumSflPerDay.toFixed(4)}</td>
+          </tr>`;
+        }
+        content += `</table>`;
+        content += `<div style="margin-top:8px;font-size:0.6875rem;color:var(--text-secondary);line-height:1.6">
+          Total: <strong>${plan.length}</strong> purchases · <strong style="color:var(--sunpetal)">${cumCostSfl.toFixed(1)} ${sflIcon("0.75em")}</strong> invested · <strong style="color:var(--green)">+${cumSflPerDay.toFixed(4)} ${sflIcon("0.75em")}/day</strong> gained
+        </div>`;
+        content += `</div>`;
+      }
+
+      // ── Next best (all single options for reference) ──
       const profitable = options.filter(o => o.marginal > 0);
       const unprofitable = options.filter(o => o.marginal <= 0);
 
       if (profitable.length > 0) {
         content += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
-          <div style="font-size:0.6875rem;color:var(--sunpetal);margin-bottom:8px;font-weight:bold" class="pixel-font">BEST INVESTMENTS</div>
+          <div style="font-size:0.6875rem;color:var(--sunpetal);margin-bottom:8px;font-weight:bold" class="pixel-font">ALL OPTIONS (next node only)</div>
           <table class="node-res-table">
-            <tr><th>ACTION</th><th style="text-align:right">COST</th><th style="text-align:right">+${sflIcon("0.75em")}/DAY</th><th style="text-align:right">ROI</th><th>STATUS</th></tr>`;
+            <tr><th>ACTION</th><th style="text-align:right">COST</th><th style="text-align:right">+${sflIcon("0.75em")}/DAY</th><th style="text-align:right">ROI</th></tr>`;
 
         for (const o of profitable) {
           const roiStr = o.roiDays >= 9999 ? "9999+" : Math.ceil(o.roiDays) + "d";
@@ -12547,9 +12671,8 @@
           content += `<tr>
             <td>${escHTML(o.action)}${productHint}</td>
             <td style="text-align:right;white-space:nowrap">${o.costSfl.toFixed(1)} ${sflIcon("0.75em")}</td>
-            <td style="text-align:right;color:var(--green);font-weight:bold">+${o.marginal.toFixed(4)}</td>
+            <td style="text-align:right;color:var(--green)">+${o.marginal.toFixed(4)}</td>
             <td style="text-align:right;color:${roiColor};font-weight:bold">${roiStr}</td>
-            <td>${o.canAfford ? '<span style="color:var(--green)">Ready</span>' : `<span style="color:var(--text-dim)">${escHTML(o.need)}</span>`}</td>
           </tr>`;
         }
         content += `</table></div>`;
@@ -12557,7 +12680,7 @@
 
       if (unprofitable.length > 0) {
         content += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px;opacity:0.6">
-          <div style="font-size:0.6875rem;color:var(--text-dim);margin-bottom:8px;font-weight:bold" class="pixel-font">UNPROFITABLE (negative net)</div>
+          <div style="font-size:0.6875rem;color:var(--text-dim);margin-bottom:8px;font-weight:bold" class="pixel-font">UNPROFITABLE</div>
           <table class="node-res-table">
             <tr><th>ACTION</th><th style="text-align:right">COST</th><th style="text-align:right">${sflIcon("0.75em")}/DAY</th></tr>`;
 
@@ -12570,10 +12693,6 @@
           </tr>`;
         }
         content += `</table></div>`;
-      }
-
-      if (options.length === 0) {
-        content += `<div class="pixel-panel pixel-font" style="padding:24px;text-align:center;color:var(--text-dim)">No investment options available.</div>`;
       }
 
       // ── Current nodes overview ──
