@@ -1299,7 +1299,21 @@
     .ph-load-more:hover { background: var(--bg-light); color: var(--sunpetal); }
 
     /* ── Power Page ── */
-    .power-summary {
+    /* ── Nodes Investment Advisor ── */
+    .node-table { width:100%; border-collapse:collapse; font-size:0.6875rem; }
+    .node-table th { text-align:left; padding:6px 8px; border-bottom:1px solid rgba(92,58,30,0.3); font-size:0.5625rem; color:var(--text-dim); text-transform:uppercase; }
+    .node-table td { padding:6px 8px; border-bottom:1px solid rgba(92,58,30,0.15); }
+    .node-ready { color:var(--green); font-weight:bold; }
+    .node-blocked { color:var(--text-dim); }
+    .node-roi { font-weight:bold; }
+    .node-econ { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:8px; margin-bottom:16px; }
+    .node-econ-stat { background:rgba(0,0,0,0.15); border-radius:6px; padding:8px 12px; }
+    .node-econ-label { font-size:0.5rem; color:var(--text-dim); margin-bottom:4px; }
+    .node-econ-value { font-size:0.6875rem; text-shadow:1px 1px 0 #000; }
+    .node-section { margin-bottom:16px; }
+    .node-section-title { font-size:0.625rem; color:var(--lily); margin-bottom:8px; padding-bottom:4px; border-bottom:1px solid rgba(92,58,30,0.3); }
+
+        .power-summary {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
       gap: 8px;
@@ -2071,7 +2085,7 @@
     const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
     const IMG_BASE = "https://sfl.world/img/flowers/";
-    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "buds", "pets", "diff", "json"];
+    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "nodes", "buds", "pets", "diff", "json"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -2625,6 +2639,36 @@
       "Wood":      { respawnSec: 7200,  yield: 3, farmKey: "trees" },
       "Obsidian":  { respawnSec: 259200, yield: 1, farmKey: "lavaPits" }, // 3 days
       "Oil":       { respawnSec: 72000, yield: 16.67, farmKey: "oilReserves" }, // 20h, avg yield (10+10+30)/3
+    };
+
+    // ── Node purchase prices (Sunstone cost: base + purchased × increase) ──
+    const NODE_PRICES = {
+      trees:       { base: 4,  increase: 3,  farmKey: "trees",       catId: "trees",    label: "Tree" },
+      stones:      { base: 4,  increase: 3,  farmKey: "stones",      catId: "stone",    label: "Stone" },
+      iron:        { base: 7,  increase: 5,  farmKey: "iron",        catId: "iron",     label: "Iron" },
+      gold:        { base: 10, increase: 6,  farmKey: "gold",        catId: "gold",     label: "Gold" },
+      crimstones:  { base: 20, increase: 20, farmKey: "crimstones",  catId: "crimstone", label: "Crimstone" },
+      oilReserves: { base: 40, increase: 20, farmKey: "oilReserves", catId: "oil",      label: "Oil Reserve" },
+      lavaPits:    { base: 40, increase: 40, farmKey: "lavaPits",    catId: "obsidian", label: "Lava Pit" },
+      crops:       { base: 3,  increase: 2,  farmKey: "crops",       catId: "crops",    label: "Crop Plot" },
+      fruitPatches:{ base: 5,  increase: 5,  farmKey: "fruitPatches", catId: "fruits",  label: "Fruit Patch" },
+      flowers:     { base: 30, increase: 25, farmKey: "flowers",     catId: "flowers",  label: "Flower Bed" },
+    };
+
+    // ── Base node counts per island type (default before purchases) ──
+    const BASE_NODE_COUNTS = {
+      basic:          { crops:31, trees:9,  stones:7,  iron:4,  gold:2, crimstones:0, oilReserves:0, lavaPits:0, fruitPatches:0, flowers:0 },
+      spring:         { crops:45, trees:18, stones:15, iron:9,  gold:6, crimstones:2, oilReserves:0, lavaPits:0, fruitPatches:11, flowers:3 },
+      desert:         { crops:65, trees:23, stones:20, iron:12, gold:7, crimstones:4, oilReserves:3, lavaPits:0, fruitPatches:15, flowers:3 },
+      volcano:        { crops:65, trees:23, stones:20, iron:13, gold:8, crimstones:5, oilReserves:4, lavaPits:3, fruitPatches:15, flowers:3 },
+    };
+
+    // ── Merge costs (4×t1→t2, 4×t2→t3) ──
+    const MERGE_COSTS = {
+      trees:  { t2: { obsidian:3,  coins:25000  }, t3: { obsidian:5,  coins:50000  }, yieldBonus: { t2:0.5, t3:2.5 } },
+      stones: { t2: { obsidian:5,  coins:50000  }, t3: { obsidian:10, coins:100000 }, yieldBonus: { t2:0.5, t3:2.5 } },
+      iron:   { t2: { obsidian:10, coins:100000 }, t3: { obsidian:15, coins:200000 }, yieldBonus: { t2:0.5, t3:2.5 } },
+      gold:   { t2: { obsidian:15, coins:200000 }, t3: { obsidian:20, coins:350000 }, yieldBonus: { t2:0.5, t3:2.5 } },
     };
 
     // ── Lava Pit seasonal requirements (cost per ignition) ──
@@ -3729,6 +3773,7 @@
       ];
       const overflow = [
         { id: "power", label: "POWER" },
+        { id: "nodes", label: "NODES" },
         { id: "buds", label: "BUDS" },
         { id: "pets", label: "PETS" },
         { id: "json", label: "JSON" },
@@ -3896,6 +3941,12 @@
           { t: "new", text: "Bar chart timeline with running total overlay" },
           { t: "new", text: "Crafted item value estimation from ingredient prices" },
           { t: "new", text: "Toggle for zero-price items, clickable snapshot details" },
+        ]},
+        { ver: "v2.1", items: [
+          { t: "new", text: "Nodes Investment Advisor page — ROI calculator for buying/merging resource nodes" },
+          { t: "new", text: "Obsidian economy panel with production cost, sunstone cost, player resources" },
+          { t: "new", text: "Best investments table sorted by payback time (ROI days)" },
+          { t: "new", text: "Current nodes overview with physical/effective counts and tier breakdown" },
         ]},
         { ver: "v2.0", items: [
           { t: "new", text: "Pet Advisor page — fetch resource recommendations with SFL/energy ratios" },
@@ -12046,6 +12097,470 @@
     //  BUDS PAGE
     // ═══════════════════════════════════════
 
+    // ═══════════════════════════════════════
+    //  NODES INVESTMENT ADVISOR
+    // ═══════════════════════════════════════
+
+    function countNodeTiers(resourceObj) {
+      let t1 = 0, t2 = 0, t3 = 0;
+      for (const node of Object.values(resourceObj || {})) {
+        const m = node.multiplier || 1;
+        if (m >= 16) t3++; else if (m >= 4) t2++; else t1++;
+      }
+      return { physical: t1 + t2 + t3, t1, t2, t3, effective: t1 + t2 * 4 + t3 * 16 };
+    }
+
+    async function renderNodes(data) {
+      const app = document.getElementById("app");
+      const { inventory, farm } = data;
+
+      let html = `<div class="header pixel-panel pixel-font">
+        <h1>NODES INVESTMENT ADVISOR</h1>
+        <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
+      </div>`;
+
+      html += `<div class="under-dev-banner pixel-font" style="background:linear-gradient(180deg,#3b1768,#2a1050);padding:8px 12px;border:3px solid #000;margin-bottom:16px;text-align:center;font-size: 0.5625rem;color:var(--lily)">
+        ⚠️ UNDER DEVELOPMENT ⚠️
+        <div style="margin-top:6px;font-size: 0.5rem;color:var(--text-secondary);line-height:1.5">
+          ROI calculator for buying new resource nodes (Sunstones) and merging t1→t2→t3.<br>
+          Sorted by fastest payback time. Uses your farm's actual boosts for production estimates.
+        </div>
+      </div>`;
+
+      html += `<div id="nodes-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Calculating investments...</div></div></div>`;
+      app.innerHTML = html;
+
+      // ── Fetch prices ──
+      let p2pPrices = {}, exchangeRates = { coinsPerSFL: 320, gemsPerSFL: 0 };
+      let nftData;
+      try {
+        const proxyFetch = async (url) => {
+          try { const r = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`); if (r.ok) return r.json(); } catch {}
+          return (await fetch(url)).json();
+        };
+        const [nftResp, priceResp, rateResp] = await Promise.all([
+          proxyFetch("https://sfl.world/api/v1/nfts"),
+          proxyFetch("https://sfl.world/api/v1/prices"),
+          proxyFetch("https://sfl.world/api/v1.1/exchange").catch(() => null),
+        ]);
+        nftData = nftResp;
+        const priceData = priceResp?.data?.p2p || priceResp?.p2p || {};
+        for (const [k, v] of Object.entries(priceData)) p2pPrices[k] = parseFloat(v) || 0;
+
+        const betty = computeBettyRate(p2pPrices);
+        if (betty.rate > 0) { exchangeRates.coinsPerSFL = betty.rate; exchangeRates.bettyItem = betty.item; }
+        if (rateResp) {
+          const coinTiers = Object.values(rateResp?.coins || rateResp?.data?.coins || {});
+          if (!betty.rate && coinTiers.length > 0) {
+            const best = coinTiers.reduce((a, b) => (b.coin / b.sfl) > (a.coin / a.sfl) ? b : a);
+            exchangeRates.coinsPerSFL = best.coin / best.sfl;
+          }
+        }
+      } catch (err) {
+        document.getElementById("nodes-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load: ${escHTML(err.message)}</p></div>`;
+        return;
+      }
+
+      // ── Build boost effects (same as power page) ──
+      const wardrobe = farm.wardrobe || {};
+      const skills = farm.bumpkin?.skills || {};
+      const boostItems = [];
+
+      if (nftData) {
+        for (const item of (nftData.collectibles || [])) {
+          if (!item.have_boost || !item.name || !item.boost_text) continue;
+          const has = getCount(inventory, item.name) > 0 || findCollectible(farm, item.name).length > 0;
+          if (!has) continue; // only owned boosts matter for production calc
+          const effects = parseBoostEffects(item.boost_text, item.name);
+          boostItems.push({ name: item.name, has, effects });
+        }
+        for (const item of (nftData.wearables || [])) {
+          if (!item.have_boost || !item.name || !item.boost_text) continue;
+          const has = (wardrobe[item.name] || 0) > 0;
+          if (!has) continue;
+          const effects = parseBoostEffects(item.boost_text, item.name);
+          boostItems.push({ name: item.name, has, effects });
+        }
+      }
+
+      // Add skill boosts
+      for (const [skillName, skill] of Object.entries(SKILL_TREE_DATA)) {
+        if (skills[skillName] === undefined) continue;
+        const boostText = skill.buff + (skill.debuff ? "\n" + skill.debuff : "");
+        const effects = parseBoostEffects(boostText);
+        if (SKILL_FEED_EFFECTS[skillName]) {
+          for (const [cat, value] of Object.entries(SKILL_FEED_EFFECTS[skillName])) {
+            effects.push({ type: "feed_reduction", value, cat });
+          }
+        }
+        boostItems.push({ name: skillName, has: true, effects });
+      }
+
+      // Flatten owned effects per category
+      function getOwnedEffects(catId) {
+        const out = [];
+        for (const b of boostItems) {
+          for (const e of b.effects) {
+            if (e.cat === catId) out.push(e);
+          }
+        }
+        return out;
+      }
+
+      // ── Farm capacity & stock mods ──
+      const capacity = detectFarmCapacity(farm);
+      const stockMods = detectStockModifiers(farm);
+      const season = (farm.season?.season || "").toLowerCase();
+      const savedProducts = getSavedPowerProducts();
+      const islandType = (farm.island?.type || "basic").toLowerCase();
+
+      // ── Derive Oil price (same as power page) ──
+      const oilEffects = getOwnedEffects("oil");
+      const oilBoosted = applyBoosts("oil", "Oil", capacity, oilEffects);
+      const oilToolInfo = calcToolCostPerDay("oil", capacity, exchangeRates, p2pPrices, stockMods);
+      if (oilBoosted.unitsPerDay > 0 && oilToolInfo.costPerDay > 0) {
+        p2pPrices["Oil"] = oilToolInfo.costPerDay / oilBoosted.unitsPerDay;
+      } else if (oilBoosted.unitsPerDay > 0) {
+        p2pPrices["Oil"] = 0;
+      }
+
+      // ── Compute obsidian production cost ──
+      const lavaCostMult = getOwnedEffects("obsidian")
+        .filter(e => e.type === "lava_cost_reduction")
+        .reduce((acc, e) => acc * (1 - e.value), 1);
+      const lavaInfo = calcLavaPitCostPerDay(capacity, p2pPrices, season, lavaCostMult);
+      const obsResult = applyBoosts("obsidian", "Obsidian", capacity, getOwnedEffects("obsidian"));
+      let obsidianCostSfl = p2pPrices["Obsidian"] || 0; // fallback
+      if (obsResult.unitsPerDay > 0) {
+        obsidianCostSfl = lavaInfo.costPerDay / obsResult.unitsPerDay;
+      }
+      const sunstoneCostSfl = obsidianCostSfl * 3;
+
+      // Player resources
+      const playerObsidian = parseFloat(inventory["Obsidian"]) || 0;
+      const playerSunstones = parseFloat(inventory["Sunstone"]) || 0;
+      const playerCoins = farm.coins || 0;
+
+      // ── Compute marginal net SFL/day per extra node for each category ──
+      function getMarginalNetSfl(nodeKey) {
+        const np = NODE_PRICES[nodeKey];
+        if (!np) return 0;
+        const catId = np.catId;
+        const product = savedProducts[catId] || getDefaultProduct(catId);
+        const priceProduct = getPriceProduct(catId, product);
+        const ownedEffects = getOwnedEffects(catId);
+
+        // Current total
+        const currentN = getCapacityCount(catId, capacity);
+        if (currentN <= 0) {
+          // No nodes yet — compute from scratch for 1 node
+          const tempCap = { ...capacity };
+          const capKey = np.farmKey;
+          tempCap[capKey] = 1;
+          const boosted = applyBoosts(catId, product, tempCap, ownedEffects);
+          const grossSfl = unitToSfl(boosted.unitsPerDay, priceProduct, p2pPrices);
+          let costPerDay = 0;
+          if (catId === "obsidian") {
+            const c = calcLavaPitCostPerDay(tempCap, p2pPrices, season, lavaCostMult);
+            costPerDay = c.costPerDay;
+          } else if (["trees", "stone", "iron", "gold", "crimstone", "oil"].includes(catId)) {
+            const c = calcToolCostPerDay(catId, tempCap, exchangeRates, p2pPrices, stockMods);
+            costPerDay = c.costPerDay;
+          } else if (catId === "crops" || catId === "fruits" || catId === "greenhouse") {
+            const c = calcSeedCostPerDay(catId, product, tempCap, exchangeRates, stockMods, ownedEffects, p2pPrices);
+            costPerDay = c.costPerDay;
+          }
+          return grossSfl - costPerDay;
+        }
+
+        // Linear scaling: marginal = total/n
+        const boosted = applyBoosts(catId, product, capacity, ownedEffects);
+        const grossSfl = unitToSfl(boosted.unitsPerDay, priceProduct, p2pPrices);
+        let costPerDay = 0;
+        if (catId === "obsidian") {
+          costPerDay = lavaInfo.costPerDay;
+        } else if (["trees", "stone", "iron", "gold", "crimstone", "oil"].includes(catId)) {
+          const c = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods);
+          costPerDay = c.costPerDay;
+        } else if (catId === "crops" || catId === "fruits" || catId === "greenhouse") {
+          const c = calcSeedCostPerDay(catId, product, capacity, exchangeRates, stockMods, ownedEffects, p2pPrices);
+          costPerDay = c.costPerDay;
+        }
+        const netSfl = grossSfl - costPerDay;
+        return netSfl / currentN;
+      }
+
+      // ── Count physical nodes by tier ──
+      const FARM_RESOURCE_KEYS = {
+        trees: "trees", stones: "stones", iron: "iron", gold: "gold",
+        crimstones: "crimstones", oilReserves: "oilReserves", lavaPits: "lavaPits",
+        crops: "crops", fruitPatches: "fruitPatches", flowers: "flowers",
+      };
+      // For crops/fruits/flowers, no multiplier exists — all t1
+      function getNodeTiers(nodeKey) {
+        const farmObjKey = FARM_RESOURCE_KEYS[nodeKey];
+        if (!farmObjKey) return { physical: 0, t1: 0, t2: 0, t3: 0, effective: 0 };
+        if (["crops", "fruitPatches", "flowers"].includes(nodeKey)) {
+          let objs;
+          if (nodeKey === "flowers") objs = farm.flowers?.flowerBeds || {};
+          else objs = farm[farmObjKey] || {};
+          const n = Object.keys(objs).length;
+          return { physical: n, t1: n, t2: 0, t3: 0, effective: n };
+        }
+        return countNodeTiers(farm[farmObjKey]);
+      }
+
+      // ── Base node counts for this island ──
+      const baseNodes = BASE_NODE_COUNTS[islandType] || BASE_NODE_COUNTS["basic"];
+
+      // ── Build investment options ──
+      const options = [];
+
+      // A. Buy new node (Sunstone purchase)
+      for (const [nodeKey, np] of Object.entries(NODE_PRICES)) {
+        const tiers = getNodeTiers(nodeKey);
+        const baseCount = baseNodes[nodeKey] || 0;
+        const purchased = Math.max(0, tiers.physical - baseCount);
+        const nextSunstoneCost = np.base + purchased * np.increase;
+        const costSfl = nextSunstoneCost * sunstoneCostSfl;
+        const marginal = getMarginalNetSfl(nodeKey);
+        const roiDays = (marginal > 0 && costSfl > 0) ? costSfl / marginal : Infinity;
+        const sunstonesNeeded = nextSunstoneCost;
+        const obsNeeded = sunstonesNeeded * 3; // 1 sunstone = 3 obsidian
+        const canAfford = playerSunstones >= sunstonesNeeded || playerObsidian >= obsNeeded;
+
+        options.push({
+          action: `Buy ${np.label}`,
+          type: "buy",
+          nodeKey,
+          costSfl,
+          costDetail: `${nextSunstoneCost} Sunstones`,
+          marginal,
+          roiDays,
+          canAfford,
+          need: canAfford ? "" : `Need ${Math.max(0, Math.ceil(obsNeeded - playerObsidian))} more Obsidian`,
+          currentNodes: tiers.physical,
+          purchased,
+        });
+      }
+
+      // B. Merge t1→t2
+      for (const [mergeKey, mc] of Object.entries(MERGE_COSTS)) {
+        const tiers = getNodeTiers(mergeKey);
+        if (tiers.t1 < 4) continue;
+        const np = NODE_PRICES[mergeKey === "stones" ? "stones" : mergeKey];
+        if (!np) continue;
+        const catId = np.catId;
+        const product = savedProducts[catId] || getDefaultProduct(catId);
+        const priceProduct = getPriceProduct(catId, product);
+        const rKey = catId === "stone" ? "Stone" : catId === "iron" ? "Iron" : catId === "gold" ? "Gold" : "Wood";
+        const respawn = RESOURCE_RESPAWN_DATA[rKey];
+        if (!respawn) continue;
+        const cyclesPerDay = 86400 / respawn.respawnSec;
+        const price = p2pPrices[priceProduct] || 0;
+
+        // Merge cost in SFL
+        const obsCost = mc.t2.obsidian * obsidianCostSfl;
+        const coinCost = mc.t2.coins / exchangeRates.coinsPerSFL;
+        const costSfl = obsCost + coinCost;
+
+        // Marginal benefit: 1 merged node gets +0.5 yield/dig/cycle
+        // Before: 4 t1 nodes, each giving bonus=0. After: 1 t2 giving bonus=+0.5
+        // Net physical nodes: -3. Effective capacity unchanged (4→4). Extra yield = +0.5×cyclesPerDay×price
+        const marginal = 0.5 * cyclesPerDay * price;
+        const roiDays = (marginal > 0 && costSfl > 0) ? costSfl / marginal : Infinity;
+
+        const hasObs = playerObsidian >= mc.t2.obsidian;
+        const hasCoins = playerCoins >= mc.t2.coins;
+        const canAfford = hasObs && hasCoins;
+
+        let need = "";
+        if (!hasObs) need = `Need ${mc.t2.obsidian - Math.floor(playerObsidian)} Obsidian`;
+        else if (!hasCoins) need = `Need ${(mc.t2.coins - playerCoins).toLocaleString()} coins`;
+
+        options.push({
+          action: `Merge ${np.label} → t2`,
+          type: "merge_t2",
+          nodeKey: mergeKey,
+          costSfl,
+          costDetail: `${mc.t2.obsidian} Obs + ${(mc.t2.coins / 1000).toFixed(0)}k coins`,
+          marginal,
+          roiDays,
+          canAfford,
+          need,
+          t1Available: tiers.t1,
+        });
+      }
+
+      // C. Merge t2→t3
+      for (const [mergeKey, mc] of Object.entries(MERGE_COSTS)) {
+        const tiers = getNodeTiers(mergeKey);
+        if (tiers.t2 < 4) continue;
+        const np = NODE_PRICES[mergeKey === "stones" ? "stones" : mergeKey];
+        if (!np) continue;
+        const catId = np.catId;
+        const product = savedProducts[catId] || getDefaultProduct(catId);
+        const priceProduct = getPriceProduct(catId, product);
+        const rKey = catId === "stone" ? "Stone" : catId === "iron" ? "Iron" : catId === "gold" ? "Gold" : "Wood";
+        const respawn = RESOURCE_RESPAWN_DATA[rKey];
+        if (!respawn) continue;
+        const cyclesPerDay = 86400 / respawn.respawnSec;
+        const price = p2pPrices[priceProduct] || 0;
+
+        const obsCost = mc.t3.obsidian * obsidianCostSfl;
+        const coinCost = mc.t3.coins / exchangeRates.coinsPerSFL;
+        const costSfl = obsCost + coinCost;
+
+        // 4×t2 (each +0.5) → 1×t3 (+2.5). Delta = 2.5 - 4×0.5 = +0.5 per cycle
+        const marginal = 0.5 * cyclesPerDay * price;
+        const roiDays = (marginal > 0 && costSfl > 0) ? costSfl / marginal : Infinity;
+
+        const hasObs = playerObsidian >= mc.t3.obsidian;
+        const hasCoins = playerCoins >= mc.t3.coins;
+        const canAfford = hasObs && hasCoins;
+
+        let need = "";
+        if (!hasObs) need = `Need ${mc.t3.obsidian - Math.floor(playerObsidian)} Obsidian`;
+        else if (!hasCoins) need = `Need ${(mc.t3.coins - playerCoins).toLocaleString()} coins`;
+
+        options.push({
+          action: `Merge ${np.label} → t3`,
+          type: "merge_t3",
+          nodeKey: mergeKey,
+          costSfl,
+          costDetail: `${mc.t3.obsidian} Obs + ${(mc.t3.coins / 1000).toFixed(0)}k coins`,
+          marginal,
+          roiDays,
+          canAfford,
+          need,
+          t2Available: tiers.t2,
+        });
+      }
+
+      // Sort by ROI days ascending (fastest payback first)
+      options.sort((a, b) => a.roiDays - b.roiDays);
+
+      // ── Render ──
+      let content = "";
+
+      // Economy panel
+      content += `<div class="pixel-panel node-section pixel-font" style="padding:10px 14px">
+        <div class="node-section-title">OBSIDIAN ECONOMY</div>
+        <div class="node-econ">
+          <div class="node-econ-stat">
+            <div class="node-econ-label">OBSIDIAN PROD. COST</div>
+            <div class="node-econ-value" style="color:var(--sunpetal)">${obsidianCostSfl.toFixed(4)} ${sflIcon()}/unit</div>
+          </div>
+          <div class="node-econ-stat">
+            <div class="node-econ-label">SUNSTONE COST (3× OBS)</div>
+            <div class="node-econ-value" style="color:var(--sunpetal)">${sunstoneCostSfl.toFixed(4)} ${sflIcon()}</div>
+          </div>
+          <div class="node-econ-stat">
+            <div class="node-econ-label">YOUR OBSIDIAN</div>
+            <div class="node-econ-value">${Math.floor(playerObsidian)}</div>
+          </div>
+          <div class="node-econ-stat">
+            <div class="node-econ-label">YOUR SUNSTONES</div>
+            <div class="node-econ-value">${Math.floor(playerSunstones)}</div>
+          </div>
+          <div class="node-econ-stat">
+            <div class="node-econ-label">YOUR COINS</div>
+            <div class="node-econ-value">${playerCoins.toLocaleString()}</div>
+          </div>
+          <div class="node-econ-stat">
+            <div class="node-econ-label">ISLAND TYPE</div>
+            <div class="node-econ-value">${escHTML(islandType.charAt(0).toUpperCase() + islandType.slice(1))}</div>
+          </div>
+        </div>
+      </div>`;
+
+      // Best investments table
+      content += `<div class="pixel-panel node-section pixel-font" style="padding:10px 14px">
+        <div class="node-section-title">BEST INVESTMENTS (sorted by ROI)</div>`;
+
+      if (options.length === 0) {
+        content += `<div style="color:var(--text-dim);padding:12px">No investment options available.</div>`;
+      } else {
+        content += `<div style="overflow-x:auto"><table class="node-table">
+          <thead><tr>
+            <th>#</th><th>Action</th><th>Cost</th><th>Cost (${sflIcon()})</th>
+            <th>+${sflIcon()}/day</th><th>ROI</th><th>Status</th>
+          </tr></thead><tbody>`;
+
+        for (let i = 0; i < options.length; i++) {
+          const o = options[i];
+          const roiStr = o.roiDays === Infinity ? "—" : `${Math.ceil(o.roiDays)}d`;
+          const margStr = o.marginal <= 0 ? "—" : o.marginal.toFixed(4);
+          const costStr = o.costSfl <= 0 ? "—" : o.costSfl.toFixed(2);
+          const statusCls = o.canAfford ? "node-ready" : "node-blocked";
+          const statusTxt = o.canAfford ? "Ready" : escHTML(o.need);
+          const roiColor = o.roiDays <= 30 ? "var(--green)" : o.roiDays <= 90 ? "var(--sunpetal)" : o.roiDays <= 365 ? "var(--text-secondary)" : "var(--text-dim)";
+
+          content += `<tr>
+            <td style="color:var(--text-dim)">${i + 1}</td>
+            <td>${escHTML(o.action)}</td>
+            <td style="font-size:0.5625rem;color:var(--text-dim)">${escHTML(o.costDetail)}</td>
+            <td>${costStr}</td>
+            <td style="color:var(--green)">${margStr}</td>
+            <td class="node-roi" style="color:${roiColor}">${roiStr}</td>
+            <td class="${statusCls}">${statusTxt}</td>
+          </tr>`;
+        }
+
+        content += `</tbody></table></div>`;
+      }
+      content += `</div>`;
+
+      // Current nodes table
+      content += `<div class="pixel-panel node-section pixel-font" style="padding:10px 14px">
+        <div class="node-section-title">CURRENT NODES</div>
+        <div style="overflow-x:auto"><table class="node-table">
+          <thead><tr>
+            <th>Resource</th><th>Physical</th><th>t1 / t2 / t3</th>
+            <th>Effective</th><th>Base</th><th>Bought</th><th>Net ${sflIcon()}/day</th>
+          </tr></thead><tbody>`;
+
+      for (const [nodeKey, np] of Object.entries(NODE_PRICES)) {
+        const tiers = getNodeTiers(nodeKey);
+        const baseCount = baseNodes[nodeKey] || 0;
+        const purchased = Math.max(0, tiers.physical - baseCount);
+        const catId = np.catId;
+        const product = savedProducts[catId] || getDefaultProduct(catId);
+        const priceProduct = getPriceProduct(catId, product);
+        const ownedEffects = getOwnedEffects(catId);
+
+        let netSfl = 0;
+        const currentN = getCapacityCount(catId, capacity);
+        if (currentN > 0) {
+          const boosted = applyBoosts(catId, product, capacity, ownedEffects);
+          const grossSfl = unitToSfl(boosted.unitsPerDay, priceProduct, p2pPrices);
+          let costPerDay = 0;
+          if (catId === "obsidian") costPerDay = lavaInfo.costPerDay;
+          else if (["trees", "stone", "iron", "gold", "crimstone", "oil"].includes(catId)) {
+            costPerDay = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods).costPerDay;
+          } else if (catId === "crops" || catId === "fruits" || catId === "greenhouse") {
+            costPerDay = calcSeedCostPerDay(catId, product, capacity, exchangeRates, stockMods, ownedEffects, p2pPrices).costPerDay;
+          }
+          netSfl = grossSfl - costPerDay;
+        }
+
+        const netColor = netSfl > 0 ? "var(--green)" : netSfl < 0 ? "var(--red)" : "var(--text-dim)";
+        content += `<tr>
+          <td>${escHTML(np.label)}</td>
+          <td>${tiers.physical}</td>
+          <td style="font-size:0.5625rem;color:var(--text-dim)">${tiers.t1} / ${tiers.t2} / ${tiers.t3}</td>
+          <td>${tiers.effective}</td>
+          <td style="color:var(--text-dim)">${baseCount}</td>
+          <td>${purchased > 0 ? `<span style="color:var(--sunpetal)">+${purchased}</span>` : "0"}</td>
+          <td style="color:${netColor}">${netSfl.toFixed(2)}</td>
+        </tr>`;
+      }
+
+      content += `</tbody></table></div></div>`;
+
+      document.getElementById("nodes-content").innerHTML = content;
+    }
+
     async function renderBuds(data) {
       const app = document.getElementById("app");
       const { farm } = data;
@@ -14261,6 +14776,7 @@
           case "treasury": renderTreasury(data); break;
           case "sales": renderSales(data); break;
           case "power": renderPower(data); break;
+          case "nodes": renderNodes(data); break;
           case "buds": renderBuds(data); break;
           case "pets": renderPets(data); break;
           case "diff": renderDiff(data); break;
