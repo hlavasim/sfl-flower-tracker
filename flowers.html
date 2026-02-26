@@ -1300,18 +1300,18 @@
 
     /* ── Power Page ── */
     /* ── Nodes Investment Advisor ── */
-    .node-table { width:100%; border-collapse:collapse; font-size:0.6875rem; }
-    .node-table th { text-align:left; padding:6px 8px; border-bottom:1px solid rgba(92,58,30,0.3); font-size:0.5625rem; color:var(--text-dim); text-transform:uppercase; }
-    .node-table td { padding:6px 8px; border-bottom:1px solid rgba(92,58,30,0.15); }
-    .node-ready { color:var(--green); font-weight:bold; }
-    .node-blocked { color:var(--text-dim); }
-    .node-roi { font-weight:bold; }
-    .node-econ { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:8px; margin-bottom:16px; }
-    .node-econ-stat { background:rgba(0,0,0,0.15); border-radius:6px; padding:8px 12px; }
-    .node-econ-label { font-size:0.5rem; color:var(--text-dim); margin-bottom:4px; }
-    .node-econ-value { font-size:0.6875rem; text-shadow:1px 1px 0 #000; }
-    .node-section { margin-bottom:16px; }
-    .node-section-title { font-size:0.625rem; color:var(--lily); margin-bottom:8px; padding-bottom:4px; border-bottom:1px solid rgba(92,58,30,0.3); }
+    .node-card { margin-bottom:12px; padding:12px 14px; }
+    .node-card-header { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+    .node-card-name { font-size:0.8125rem; font-weight:bold; color:var(--text-primary); }
+    .node-card-sub { font-size:0.6875rem; color:var(--text-secondary); }
+    .node-card-row { display:grid; grid-template-columns:1fr auto auto; gap:6px; padding:5px 8px; font-size:0.75rem; align-items:center; }
+    .node-card-row + .node-card-row { border-top:1px solid rgba(92,58,30,0.15); }
+    .node-card-row.node-best { background:rgba(48,209,88,0.1); border-left:3px solid var(--green); padding-left:5px; }
+    .node-card-row.node-neg { opacity:0.5; }
+    .node-res-table { width:100%; border-collapse:collapse; margin-bottom:4px; }
+    .node-res-table th { font-size:0.5625rem; color:var(--text-dim); text-align:left; padding:6px 10px; border-bottom:2px solid var(--border-brown); }
+    .node-res-table td { font-size:0.75rem; padding:5px 10px; border-bottom:1px solid rgba(92,58,30,0.2); }
+    .node-section-title { font-size:0.5625rem; color:var(--text-dim); margin:10px 0 4px; letter-spacing:0.5px; border-bottom:1px solid rgba(92,58,30,0.3); padding-bottom:4px; }
 
         .power-summary {
       display: grid;
@@ -12461,113 +12461,111 @@
       // ── Render ──
       let content = "";
 
-      // Economy panel
-      content += `<div class="pixel-panel node-section pixel-font" style="padding:10px 14px">
-        <div class="node-section-title">OBSIDIAN ECONOMY</div>
-        <div class="node-econ">
-          <div class="node-econ-stat">
-            <div class="node-econ-label">OBSIDIAN PROD. COST</div>
-            <div class="node-econ-value" style="color:var(--sunpetal)">${obsidianCostSfl.toFixed(4)} ${sflIcon()}/unit</div>
-          </div>
-          <div class="node-econ-stat">
-            <div class="node-econ-label">SUNSTONE COST (3× OBS)</div>
-            <div class="node-econ-value" style="color:var(--sunpetal)">${sunstoneCostSfl.toFixed(4)} ${sflIcon()}</div>
-          </div>
-          <div class="node-econ-stat">
-            <div class="node-econ-label">YOUR OBSIDIAN</div>
-            <div class="node-econ-value">${Math.floor(playerObsidian)}</div>
-          </div>
-          <div class="node-econ-stat">
-            <div class="node-econ-label">YOUR SUNSTONES</div>
-            <div class="node-econ-value">${Math.floor(playerSunstones)}</div>
-          </div>
-          <div class="node-econ-stat">
-            <div class="node-econ-label">YOUR COINS</div>
-            <div class="node-econ-value">${playerCoins.toLocaleString()}</div>
-          </div>
-          <div class="node-econ-stat">
-            <div class="node-econ-label">ISLAND TYPE</div>
-            <div class="node-econ-value">${escHTML(islandType.charAt(0).toUpperCase() + islandType.slice(1))}</div>
-          </div>
+      // ── Summary bar (reuses .summary-bar from pets/hub) ──
+      content += `<div class="summary-bar pixel-panel">
+        <div class="summary-stat">
+          <div class="label pixel-font">OBSIDIAN COST</div>
+          <div class="value" style="color:var(--sunpetal);font-size:0.8125rem">${obsidianCostSfl.toFixed(4)} ${sflIcon("0.75em")}</div>
+        </div>
+        <div class="summary-stat">
+          <div class="label pixel-font">SUNSTONE COST</div>
+          <div class="value" style="color:var(--sunpetal);font-size:0.8125rem">${sunstoneCostSfl.toFixed(4)} ${sflIcon("0.75em")}</div>
+        </div>
+        <div class="summary-stat">
+          <div class="label pixel-font">OBSIDIAN</div>
+          <div class="value">${Math.floor(playerObsidian)}</div>
+        </div>
+        <div class="summary-stat">
+          <div class="label pixel-font">SUNSTONES</div>
+          <div class="value">${Math.floor(playerSunstones)}</div>
+        </div>
+        <div class="summary-stat">
+          <div class="label pixel-font">COINS</div>
+          <div class="value">${playerCoins.toLocaleString()}</div>
+        </div>
+        <div class="summary-stat">
+          <div class="label pixel-font">ISLAND</div>
+          <div class="value" style="font-size:0.8125rem">${escHTML(islandType.charAt(0).toUpperCase() + islandType.slice(1))}</div>
         </div>
       </div>`;
 
-      // Best investments table
-      content += `<div class="pixel-panel node-section pixel-font" style="padding:10px 14px">
-        <div class="node-section-title">BEST INVESTMENTS (sorted by ROI)</div>`;
+      // ── Best investments (card-based, one card per option) ──
+      // Split profitable vs unprofitable
+      const profitable = options.filter(o => o.marginal > 0);
+      const unprofitable = options.filter(o => o.marginal <= 0);
 
-      if (options.length === 0) {
-        content += `<div style="color:var(--text-dim);padding:12px">No investment options available.</div>`;
-      } else {
-        content += `<div style="overflow-x:auto"><table class="node-table">
-          <thead><tr>
-            <th>#</th><th>Action</th><th>Best Product</th><th>Cost</th><th>Cost (${sflIcon()})</th>
-            <th>+${sflIcon()}/day</th><th>ROI</th><th>Status</th>
-          </tr></thead><tbody>`;
+      if (profitable.length > 0) {
+        content += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+          <div style="font-size:0.6875rem;color:var(--sunpetal);margin-bottom:8px;font-weight:bold" class="pixel-font">BEST INVESTMENTS</div>
+          <table class="node-res-table">
+            <tr><th>ACTION</th><th style="text-align:right">COST</th><th style="text-align:right">+${sflIcon("0.75em")}/DAY</th><th style="text-align:right">ROI</th><th>STATUS</th></tr>`;
 
-        for (let i = 0; i < options.length; i++) {
-          const o = options[i];
-          const roiStr = o.roiDays === Infinity ? "—" : o.roiDays >= 9999 ? "9999+d" : `${Math.ceil(o.roiDays)}d`;
-          const margStr = o.marginal <= 0 ? `<span style="color:var(--red)">${o.marginal.toFixed(4)}</span>` : o.marginal.toFixed(4);
-          const costStr = o.costSfl <= 0 ? "—" : o.costSfl.toFixed(2);
-          const statusCls = o.canAfford ? "node-ready" : "node-blocked";
-          const statusTxt = o.canAfford ? "Ready" : escHTML(o.need);
+        for (const o of profitable) {
+          const roiStr = o.roiDays >= 9999 ? "9999+" : Math.ceil(o.roiDays) + "d";
           const roiColor = o.roiDays <= 30 ? "var(--green)" : o.roiDays <= 90 ? "var(--sunpetal)" : o.roiDays <= 365 ? "var(--text-secondary)" : "var(--text-dim)";
-          const productStr = o.bestProduct ? escHTML(o.bestProduct) : "—";
+          const productHint = o.bestProduct && PRODUCT_LISTS[NODE_PRICES[o.nodeKey]?.catId] ? ` <span style="color:var(--text-dim);font-size:0.5625rem">(${escHTML(o.bestProduct)})</span>` : "";
 
           content += `<tr>
-            <td style="color:var(--text-dim)">${i + 1}</td>
-            <td>${escHTML(o.action)}</td>
-            <td style="font-size:0.5625rem;color:var(--lily)">${productStr}</td>
-            <td style="font-size:0.5625rem;color:var(--text-dim)">${escHTML(o.costDetail)}</td>
-            <td>${costStr}</td>
-            <td style="color:${o.marginal > 0 ? 'var(--green)' : 'var(--red)'}">${margStr}</td>
-            <td class="node-roi" style="color:${roiColor}">${roiStr}</td>
-            <td class="${statusCls}">${statusTxt}</td>
+            <td>${escHTML(o.action)}${productHint}</td>
+            <td style="text-align:right;white-space:nowrap">${o.costSfl.toFixed(1)} ${sflIcon("0.75em")}</td>
+            <td style="text-align:right;color:var(--green);font-weight:bold">+${o.marginal.toFixed(4)}</td>
+            <td style="text-align:right;color:${roiColor};font-weight:bold">${roiStr}</td>
+            <td>${o.canAfford ? '<span style="color:var(--green)">Ready</span>' : `<span style="color:var(--text-dim)">${escHTML(o.need)}</span>`}</td>
           </tr>`;
         }
-
-        content += `</tbody></table></div>`;
+        content += `</table></div>`;
       }
-      content += `</div>`;
 
-      // Current nodes table
-      content += `<div class="pixel-panel node-section pixel-font" style="padding:10px 14px">
-        <div class="node-section-title">CURRENT NODES</div>
-        <div style="overflow-x:auto"><table class="node-table">
-          <thead><tr>
-            <th>Resource</th><th>Best Product</th><th>Phys.</th><th>t1/t2/t3</th>
-            <th>Eff.</th><th>Base</th><th>+Bought</th><th>Total Net ${sflIcon()}/d</th><th>Per Node ${sflIcon()}/d</th>
-          </tr></thead><tbody>`;
+      if (unprofitable.length > 0) {
+        content += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px;opacity:0.6">
+          <div style="font-size:0.6875rem;color:var(--text-dim);margin-bottom:8px;font-weight:bold" class="pixel-font">UNPROFITABLE (negative net)</div>
+          <table class="node-res-table">
+            <tr><th>ACTION</th><th style="text-align:right">COST</th><th style="text-align:right">${sflIcon("0.75em")}/DAY</th></tr>`;
+
+        for (const o of unprofitable) {
+          const productHint = o.bestProduct && PRODUCT_LISTS[NODE_PRICES[o.nodeKey]?.catId] ? ` <span style="color:var(--text-dim);font-size:0.5625rem">(${escHTML(o.bestProduct)})</span>` : "";
+          content += `<tr>
+            <td>${escHTML(o.action)}${productHint}</td>
+            <td style="text-align:right;white-space:nowrap">${o.costSfl.toFixed(1)} ${sflIcon("0.75em")}</td>
+            <td style="text-align:right;color:var(--red)">${o.marginal.toFixed(4)}</td>
+          </tr>`;
+        }
+        content += `</table></div>`;
+      }
+
+      if (options.length === 0) {
+        content += `<div class="pixel-panel pixel-font" style="padding:24px;text-align:center;color:var(--text-dim)">No investment options available.</div>`;
+      }
+
+      // ── Current nodes overview ──
+      content += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+        <div style="font-size:0.6875rem;color:var(--lily);margin-bottom:8px;font-weight:bold" class="pixel-font">CURRENT NODES</div>
+        <table class="node-res-table">
+          <tr><th>RESOURCE</th><th style="text-align:center">NODES</th><th style="text-align:center">TIERS</th><th style="text-align:right">NET ${sflIcon("0.75em")}/DAY</th><th style="text-align:right">PER NODE</th></tr>`;
 
       for (const [nodeKey, np] of Object.entries(NODE_PRICES)) {
         const tiers = getNodeTiers(nodeKey);
         const baseCount = baseNodes[nodeKey] || 0;
         const purchased = Math.max(0, tiers.physical - baseCount);
-        const catId = np.catId;
-        const ownedEffects = getOwnedEffects(catId);
-
-        // Use best product for this category
         const { marginal: perNode, product: bestProduct } = getMarginalNetSfl(nodeKey);
-        const currentN = getCapacityCount(catId, capacity);
+        const currentN = getCapacityCount(np.catId, capacity);
         const totalNet = perNode * currentN;
-
         const netColor = totalNet > 0 ? "var(--green)" : totalNet < 0 ? "var(--red)" : "var(--text-dim)";
         const perColor = perNode > 0 ? "var(--green)" : perNode < 0 ? "var(--red)" : "var(--text-dim)";
+        const boughtStr = purchased > 0 ? `<span style="color:var(--sunpetal)"> +${purchased}</span>` : "";
+        const tierStr = tiers.t2 > 0 || tiers.t3 > 0 ? `<span style="color:var(--text-dim);font-size:0.5625rem">${tiers.t1}/${tiers.t2}/${tiers.t3}</span>` : "";
+        const productHint = bestProduct && PRODUCT_LISTS[np.catId] ? ` <span style="color:var(--text-dim);font-size:0.5625rem">${escHTML(bestProduct)}</span>` : "";
+
         content += `<tr>
-          <td>${escHTML(np.label)}</td>
-          <td style="font-size:0.5625rem;color:var(--lily)">${bestProduct ? escHTML(bestProduct) : "—"}</td>
-          <td>${tiers.physical}</td>
-          <td style="font-size:0.5625rem;color:var(--text-dim)">${tiers.t1}/${tiers.t2}/${tiers.t3}</td>
-          <td>${tiers.effective}</td>
-          <td style="color:var(--text-dim)">${baseCount}</td>
-          <td>${purchased > 0 ? `<span style="color:var(--sunpetal)">+${purchased}</span>` : "0"}</td>
-          <td style="color:${netColor}">${totalNet.toFixed(2)}</td>
-          <td style="color:${perColor}">${perNode.toFixed(4)}</td>
+          <td>${escHTML(np.label)}${productHint}</td>
+          <td style="text-align:center">${tiers.physical}${boughtStr}</td>
+          <td style="text-align:center">${tierStr}</td>
+          <td style="text-align:right;color:${netColor};font-weight:bold">${totalNet.toFixed(2)}</td>
+          <td style="text-align:right;color:${perColor}">${perNode.toFixed(4)}</td>
         </tr>`;
       }
 
-      content += `</tbody></table></div></div>`;
+      content += `</table></div>`;
 
       document.getElementById("nodes-content").innerHTML = content;
     }
