@@ -12375,7 +12375,8 @@
       for (const [nodeKey, np] of Object.entries(NODE_PRICES)) {
         const tiers = getNodeTiers(nodeKey);
         const baseCount = baseNodes[nodeKey] || 0;
-        const purchased = Math.max(0, tiers.physical - baseCount);
+        // Use effective count (t2=4, t3=16) — game prices by effective nodes
+        const purchased = Math.max(0, tiers.effective - baseCount);
         const nextSunstoneCost = np.base + purchased * np.increase;
         const costSfl = nextSunstoneCost * sunstoneCostSfl;
         const { marginal, product: bestProduct } = getMarginalNetSfl(nodeKey);
@@ -12584,7 +12585,7 @@
       for (const [nodeKey, np] of Object.entries(NODE_PRICES)) {
         const tiers = getNodeTiers(nodeKey);
         const baseCount = baseNodes[nodeKey] || 0;
-        const purchased = Math.max(0, tiers.physical - baseCount);
+        const purchased = Math.max(0, tiers.effective - baseCount);
         const { marginal: perNode, product: bestProduct } = getMarginalNetSfl(nodeKey);
         const currentN = getCapacityCount(np.catId, capacity);
         const totalNet = perNode * currentN;
@@ -12596,7 +12597,7 @@
 
         content += `<tr>
           <td>${escHTML(np.label)}${productHint}</td>
-          <td style="text-align:center">${tiers.physical}${boughtStr}</td>
+          <td style="text-align:center">${tiers.effective}${boughtStr}</td>
           <td style="text-align:center">${tierStr}</td>
           <td style="text-align:right;color:${netColor};font-weight:bold">${totalNet.toFixed(2)}</td>
           <td style="text-align:right;color:${perColor}">${perNode.toFixed(4)}</td>
