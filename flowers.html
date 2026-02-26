@@ -12284,7 +12284,7 @@
         const energy = pet.energy || 0;
         const foods = pet.requests?.food || [];
         const petType = pet.traits?.type || "Unknown";
-        pets.push({ name: `Pet #${id}`, petType, species: petType, level, xp, energy, foods, isNft: true, nftId: id });
+        pets.push({ name: petType, petType, species: petType, level, xp, energy, foods, isNft: true, nftId: id });
       }
 
       // Sort: NFT first, then common; within each group by level desc
