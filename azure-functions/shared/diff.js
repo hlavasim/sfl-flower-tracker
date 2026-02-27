@@ -177,49 +177,56 @@ function computeNodeSummaries(oldData, newData, now) {
 
 /* ── Animal tracking ─────────────────────────────────────────── */
 
-function computeAnimalSummaries(oldData, newData) {
+function computeAnimalSummaries(oldData, newData, now) {
   const result = {};
 
-  // Hen House — chickens
-  const newChickens = newData.henHouse?.animals || {};
-  const oldChickens = oldData.henHouse?.animals || {};
-  const chickenTotal = Object.keys(newChickens).length;
-  let chickenFed = 0;
-  for (const [id, animal] of Object.entries(newChickens)) {
-    const oldAnimal = oldChickens[id];
-    if (oldAnimal) {
-      const oldXp = parseFloat(oldAnimal.experience) || 0;
-      const newXp = parseFloat(animal.experience) || 0;
-      if (newXp > oldXp) chickenFed++;
+  function processBuilding(key, typeFilter) {
+    const newAnimals = newData[key]?.animals || {};
+    const oldAnimals = oldData[key]?.animals || {};
+    const counts = {};  // { type: { total, fed, sick, cured } }
+
+    for (const [id, animal] of Object.entries(newAnimals)) {
+      const type = typeFilter || (animal.type || "chicken").toLowerCase();
+      if (!counts[type]) counts[type] = { total: 0, fed: 0, sick: 0, cured: 0 };
+      const c = counts[type];
+      c.total++;
+
+      const oldAnimal = oldAnimals[id];
+
+      // Fed: XP increased
+      if (oldAnimal) {
+        const oldXp = parseFloat(oldAnimal.experience) || 0;
+        const newXp = parseFloat(animal.experience) || 0;
+        if (newXp > oldXp) c.fed++;
+      }
+
+      // Sick: current state
+      if (animal.state === "sick") c.sick++;
+
+      // Cured: was sick, now not sick
+      if (oldAnimal && oldAnimal.state === "sick" && animal.state !== "sick") c.cured++;
+    }
+
+    // Old totals for change detection
+    const oldCounts = {};
+    for (const a of Object.values(oldAnimals)) {
+      const type = typeFilter || (a.type || "chicken").toLowerCase();
+      oldCounts[type] = (oldCounts[type] || 0) + 1;
+    }
+
+    for (const [type, c] of Object.entries(counts)) {
+      const oldTotal = oldCounts[type] || 0;
+      if (c.fed > 0 || c.cured > 0 || c.sick > 0 || c.total !== oldTotal) {
+        result[type + "s"] = c;  // chickens, cows, sheeps → fix sheep below
+      }
     }
   }
-  if (chickenFed > 0 || chickenTotal !== Object.keys(oldChickens).length) {
-    result.chickens = { total: chickenTotal, fed: chickenFed };
-  }
 
-  // Barn — cows & sheep
-  const newBarn = newData.barn?.animals || {};
-  const oldBarn = oldData.barn?.animals || {};
-  let cowTotal = 0, cowFed = 0, sheepTotal = 0, sheepFed = 0;
-  for (const [id, animal] of Object.entries(newBarn)) {
-    const type = (animal.type || "").toLowerCase();
-    const oldAnimal = oldBarn[id];
-    const xpChanged = oldAnimal &&
-      (parseFloat(animal.experience) || 0) > (parseFloat(oldAnimal.experience) || 0);
-    if (type === "cow") { cowTotal++; if (xpChanged) cowFed++; }
-    else if (type === "sheep") { sheepTotal++; if (xpChanged) sheepFed++; }
-  }
-  let oldCowTotal = 0, oldSheepTotal = 0;
-  for (const a of Object.values(oldBarn)) {
-    const t = (a.type || "").toLowerCase();
-    if (t === "cow") oldCowTotal++; else if (t === "sheep") oldSheepTotal++;
-  }
-  if (cowFed > 0 || cowTotal !== oldCowTotal) {
-    result.cows = { total: cowTotal, fed: cowFed };
-  }
-  if (sheepFed > 0 || sheepTotal !== oldSheepTotal) {
-    result.sheep = { total: sheepTotal, fed: sheepFed };
-  }
+  processBuilding("henHouse", "chicken");
+  processBuilding("barn", null);
+
+  // Fix plural: "sheeps" → "sheep"
+  if (result.sheeps) { result.sheep = result.sheeps; delete result.sheeps; }
 
   return result;
 }
@@ -256,16 +263,17 @@ function computeFarmDiff(oldData, newData) {
   const nodes = computeNodeSummaries(oldData, newData, Date.now());
 
   // Animal summaries → merge into nodes
-  const animals = computeAnimalSummaries(oldData, newData);
+  const animals = computeAnimalSummaries(oldData, newData, Date.now());
   Object.assign(nodes, animals);
 
   if (Object.keys(nodes).length > 0) {
     diff.nodes = nodes;
 
-    // Flat harvest/fed keys for aggregation (numeric, summed by farm-diff-agg)
+    // Flat harvest/fed/cured keys for aggregation (numeric, summed by farm-diff-agg)
     for (const [type, summary] of Object.entries(nodes)) {
       const h = summary.harvested || summary.fed || 0;
       if (h > 0) diff[`_h.${type}`] = h;
+      if (summary.cured > 0) diff[`_c.${type}`] = summary.cured;
     }
   }
 

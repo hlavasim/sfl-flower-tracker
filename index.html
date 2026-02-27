@@ -14348,7 +14348,7 @@
         let netSfl = 0;
         const items = [];
         for (const [key, rawDelta] of Object.entries(diff)) {
-          if (key === "nodes" || key === "_v" || key.startsWith("_h.")) continue;
+          if (key === "nodes" || key === "_v" || key.startsWith("_h.") || key.startsWith("_c.")) continue;
           const d = typeof rawDelta === "number" ? rawDelta : parseFloat(rawDelta);
           if (isNaN(d) || Math.abs(d) < 0.0001) continue;
 
@@ -14441,14 +14441,16 @@
           processed = (res.data.periods || []).map(p => {
             const rawDiff = p.diff || {};
             const { items, netSfl } = processDiff(rawDiff);
-            // Reconstruct node harvests from flat _h.* keys (aggregated sums)
+            // Reconstruct node harvests from flat _h.*/_c.* keys (aggregated sums)
             let nodes = rawDiff.nodes || null;
-            const hKeys = Object.entries(rawDiff).filter(([k]) => k.startsWith("_h."));
+            const hKeys = Object.entries(rawDiff).filter(([k]) => k.startsWith("_h.") || k.startsWith("_c."));
             if (hKeys.length > 0) {
-              nodes = {};
+              nodes = nodes || {};
               for (const [k, v] of hKeys) {
                 const type = k.substring(3);
-                nodes[type] = { harvested: Math.round(v) };
+                if (!nodes[type]) nodes[type] = {};
+                if (k.startsWith("_h.")) nodes[type].harvested = Math.round(v);
+                if (k.startsWith("_c.")) nodes[type].cured = Math.round(v);
               }
             }
             return { time: new Date(p.period), netSfl, items, count: p.count, nodes };
@@ -14677,23 +14679,22 @@
               flowerBeds:  { name:"Flowers",   res:"Red Pansy",tool:"Red Pansy" },
               greenhouse:  { name:"Greenhouse",res:"Grape",    tool:"Grape" },
               crabTraps:   { name:"Crab Traps",res:"Crab",     tool:"Crab" },
-              chickens:    { name:"Chickens",  res:"Chicken",  tool:"Egg",     isFed: true },
-              cows:        { name:"Cows",      res:"Cow",      tool:"Milk",    isFed: true },
-              sheep:       { name:"Sheep",     res:"Sheep",    tool:"Wool",    isFed: true },
+              chickens:    { name:"Chickens",  res:"Chicken",  tool:"Egg",     isAnimal: true },
+              cows:        { name:"Cows",      res:"Cow",      tool:"Milk",    isAnimal: true },
+              sheep:       { name:"Sheep",     res:"Sheep",    tool:"Wool",    isAnimal: true },
             };
             const ii = n => `<img class="dn-ico" src="${getItemIcon(n)}" onerror="this.style.display='none'">`;
             out += `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:2px" class="pixel-font">ACTIONS</div>`;
             out += `<table class="diff-nodes-table pixel-font">`;
             for (const [key, nd] of Object.entries(p.nodes)) {
               const c = NC[key] || { name: key, res: key, tool: key };
-              const isFed = c.isFed;
               const h = nd.harvested || nd.fed || 0;
               const col1 = `${escHTML(c.name)} ${ii(c.res)}`;
-              const actionLabel = isFed ? "fed" : "";
               const col2 = h > 0
                 ? `<span class="dn-harv">${h} ${ii(c.tool)}</span>`
                 : `<span class="dn-zero">0 ${ii(c.tool)}</span>`;
-              // State column — only for full snapshots (not aggregated)
+
+              // State column
               let col3 = "";
               if (nd.total != null) {
                 if ("recovering" in nd) {
@@ -14706,12 +14707,20 @@
                   if (nd.active > 0) parts.push(`${nd.active} \u{1F331}`);
                   if (nd.empty > 0) parts.push(`${nd.empty} \u2b1c`);
                   col3 = `<span class="dn-s">${parts.join(" ")} / ${nd.total}</span>`;
-                } else if ("fed" in nd) {
-                  col3 = `<span class="dn-s">/ ${nd.total}</span>`;
+                } else if (c.isAnimal) {
+                  const parts = [];
+                  if (nd.sick > 0) parts.push(`<span style="color:var(--red)">${nd.sick} \u{1F912}</span>`);
+                  if (nd.cured > 0) parts.push(`<span style="color:var(--green)">${nd.cured} \u{1F489}</span>`);
+                  if (!nd.sick && !nd.cured) parts.push("");
+                  col3 = `<span class="dn-s">${parts.filter(Boolean).join(" ")} / ${nd.total}</span>`;
                 } else {
                   col3 = `<span class="dn-s">/ ${nd.total}</span>`;
                 }
+              } else if (nd.cured > 0) {
+                // Aggregated mode with cured
+                col3 = `<span style="color:var(--green)">${nd.cured} \u{1F489}</span>`;
               }
+
               const arrowTd = `<td style="color:var(--text-dim);opacity:0.4">\u2192</td>`;
               if (col3) {
                 out += `<tr><td>${col1}</td>${arrowTd}<td>${col2}</td>${arrowTd}<td>${col3}</td></tr>`;
