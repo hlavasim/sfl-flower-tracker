@@ -14348,6 +14348,7 @@
         let netSfl = 0;
         const items = [];
         for (const [key, rawDelta] of Object.entries(diff)) {
+          if (key === "nodes" || key === "_v" || key.startsWith("_h.")) continue;
           const d = typeof rawDelta === "number" ? rawDelta : parseFloat(rawDelta);
           if (isNaN(d) || Math.abs(d) < 0.0001) continue;
 
@@ -14440,7 +14441,17 @@
           processed = (res.data.periods || []).map(p => {
             const rawDiff = p.diff || {};
             const { items, netSfl } = processDiff(rawDiff);
-            return { time: new Date(p.period), netSfl, items, count: p.count, nodes: rawDiff.nodes || null };
+            // Reconstruct node harvests from flat _h.* keys (aggregated sums)
+            let nodes = rawDiff.nodes || null;
+            const hKeys = Object.entries(rawDiff).filter(([k]) => k.startsWith("_h."));
+            if (hKeys.length > 0) {
+              nodes = {};
+              for (const [k, v] of hKeys) {
+                const type = k.substring(3);
+                nodes[type] = { harvested: Math.round(v) };
+              }
+            }
+            return { time: new Date(p.period), netSfl, items, count: p.count, nodes };
           });
         }
 
@@ -14654,40 +14665,59 @@
           // ── Node state summary ──
           if (p.nodes && Object.keys(p.nodes).length > 0) {
             const NC = {
-              trees:       { name:"Trees",     res:"Wood",  tool:"Axe" },
-              stones:      { name:"Stone",     res:"Stone", tool:"Pickaxe" },
-              iron:        { name:"Iron",      res:"Iron",  tool:"Stone Pickaxe" },
-              gold:        { name:"Gold",      res:"Gold",  tool:"Iron Pickaxe" },
-              crimstones:  { name:"Crimstone", res:"Crimstone", tool:"Gold Pickaxe" },
-              oilReserves: { name:"Oil",       res:"Oil",   tool:"Oil Drill" },
+              trees:       { name:"Trees",     res:"Wood",     tool:"Axe" },
+              stones:      { name:"Stone",     res:"Stone",    tool:"Pickaxe" },
+              iron:        { name:"Iron",      res:"Iron",     tool:"Stone Pickaxe" },
+              gold:        { name:"Gold",      res:"Gold",     tool:"Iron Pickaxe" },
+              crimstones:  { name:"Crimstone", res:"Crimstone",tool:"Gold Pickaxe" },
+              oilReserves: { name:"Oil",       res:"Oil",      tool:"Oil Drill" },
               lavaPits:    { name:"Lava",      res:"Lava Pit", tool:"Lava Pit" },
-              crops:       { name:"Crops",     res:"Crop",  tool:"Crop" },
-              fruitPatches:{ name:"Fruit",     res:"Apple", tool:"Apple" },
-              flowerBeds:  { name:"Flowers",   res:"Red Pansy", tool:"Red Pansy" },
+              crops:       { name:"Crops",     res:"Sunflower",tool:"Sunflower" },
+              fruitPatches:{ name:"Fruit",     res:"Apple",    tool:"Apple" },
+              flowerBeds:  { name:"Flowers",   res:"Red Pansy",tool:"Red Pansy" },
+              greenhouse:  { name:"Greenhouse",res:"Grape",    tool:"Grape" },
+              crabTraps:   { name:"Crab Traps",res:"Crab",     tool:"Crab" },
+              chickens:    { name:"Chickens",  res:"Chicken",  tool:"Egg",     isFed: true },
+              cows:        { name:"Cows",      res:"Cow",      tool:"Milk",    isFed: true },
+              sheep:       { name:"Sheep",     res:"Sheep",    tool:"Wool",    isFed: true },
             };
             const ii = n => `<img class="dn-ico" src="${getItemIcon(n)}" onerror="this.style.display='none'">`;
             out += `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:2px" class="pixel-font">ACTIONS</div>`;
             out += `<table class="diff-nodes-table pixel-font">`;
             for (const [key, nd] of Object.entries(p.nodes)) {
               const c = NC[key] || { name: key, res: key, tool: key };
-              const h = nd.harvested || 0;
+              const isFed = c.isFed;
+              const h = nd.harvested || nd.fed || 0;
               const col1 = `${escHTML(c.name)} ${ii(c.res)}`;
+              const actionLabel = isFed ? "fed" : "";
               const col2 = h > 0
                 ? `<span class="dn-harv">${h} ${ii(c.tool)}</span>`
                 : `<span class="dn-zero">0 ${ii(c.tool)}</span>`;
-              let col3 = `<span class="dn-s">/ ${nd.total}</span>`;
-              if ("recovering" in nd) {
-                const parts = [];
-                if (nd.recovering > 0) parts.push(`${nd.recovering} \u23f3`);
-                if (nd.ready > 0) parts.push(`${nd.ready} \u2705`);
-                col3 = `<span class="dn-s">${parts.join(" ")} / ${nd.total}</span>`;
-              } else if ("active" in nd) {
-                const parts = [];
-                if (nd.active > 0) parts.push(`${nd.active} \u{1F331}`);
-                if (nd.empty > 0) parts.push(`${nd.empty} \u2b1c`);
-                col3 = `<span class="dn-s">${parts.join(" ")} / ${nd.total}</span>`;
+              // State column — only for full snapshots (not aggregated)
+              let col3 = "";
+              if (nd.total != null) {
+                if ("recovering" in nd) {
+                  const parts = [];
+                  if (nd.recovering > 0) parts.push(`${nd.recovering} \u23f3`);
+                  if (nd.ready > 0) parts.push(`${nd.ready} \u2705`);
+                  col3 = `<span class="dn-s">${parts.join(" ")} / ${nd.total}</span>`;
+                } else if ("active" in nd) {
+                  const parts = [];
+                  if (nd.active > 0) parts.push(`${nd.active} \u{1F331}`);
+                  if (nd.empty > 0) parts.push(`${nd.empty} \u2b1c`);
+                  col3 = `<span class="dn-s">${parts.join(" ")} / ${nd.total}</span>`;
+                } else if ("fed" in nd) {
+                  col3 = `<span class="dn-s">/ ${nd.total}</span>`;
+                } else {
+                  col3 = `<span class="dn-s">/ ${nd.total}</span>`;
+                }
               }
-              out += `<tr><td>${col1}</td><td style="color:var(--text-dim);opacity:0.4">\u2192</td><td>${col2}</td><td style="color:var(--text-dim);opacity:0.4">\u2192</td><td>${col3}</td></tr>`;
+              const arrowTd = `<td style="color:var(--text-dim);opacity:0.4">\u2192</td>`;
+              if (col3) {
+                out += `<tr><td>${col1}</td>${arrowTd}<td>${col2}</td>${arrowTd}<td>${col3}</td></tr>`;
+              } else {
+                out += `<tr><td>${col1}</td>${arrowTd}<td colspan="3">${col2}</td></tr>`;
+              }
             }
             out += `</table>`;
           }
