@@ -2012,6 +2012,9 @@
     .json-children { display:none; }
     .json-children.open { display:block; }
     .json-line.json-match { border-left-color:var(--sunpetal); background:rgba(232,201,106,0.08); }
+    .json-node.json-hidden { display:none; }
+    .json-filter-btn { background:var(--bg-input); color:var(--text-secondary); border:1px solid var(--border-dark); padding:4px 10px; font-size:0.7rem; cursor:pointer; border-radius:4px; white-space:nowrap; }
+    .json-filter-btn.active { background:var(--sunpetal); color:#000; border-color:var(--sunpetal); font-weight:bold; }
     .json-copied-toast {
       position:fixed; bottom:24px; right:24px; background:var(--panel-bg); border:2px solid var(--sunpetal);
       color:var(--sunpetal); padding:8px 16px; border-radius:6px; font-size:0.75rem;
@@ -14574,6 +14577,7 @@
       html += `Browse the full API response. Click arrows to expand, hover for copy path button.</div>`;
       html += `<div class="json-search-bar">`;
       html += `<input type="text" id="json-search-input" placeholder="Search keys & values..." autocomplete="off">`;
+      html += `<button class="json-filter-btn" id="json-filter-btn" onclick="jsonToggleFilter()">FILTER</button>`;
       html += `<span class="json-match-count" id="json-match-count"></span>`;
       html += `</div>`;
       html += `<div class="json-tree" id="json-tree"></div>`;
@@ -14787,13 +14791,25 @@
       }
     }
 
+    let _jsonFilterActive = false;
+
+    function jsonToggleFilter() {
+      _jsonFilterActive = !_jsonFilterActive;
+      const btn = document.getElementById("json-filter-btn");
+      if (btn) btn.classList.toggle("active", _jsonFilterActive);
+      // Re-run search with current query
+      const input = document.getElementById("json-search-input");
+      if (input) jsonSearch(input.value.trim());
+    }
+
     function jsonSearch(query) {
       const tree = document.getElementById("json-tree");
       const countEl = document.getElementById("json-match-count");
       if (!tree || !countEl) return;
 
-      // Clear previous highlights
+      // Clear previous highlights & hidden state
       tree.querySelectorAll(".json-match").forEach(el => el.classList.remove("json-match"));
+      tree.querySelectorAll(".json-hidden").forEach(el => el.classList.remove("json-hidden"));
 
       if (!query || query.length < 2) {
         countEl.textContent = "";
@@ -14831,11 +14847,28 @@
       walk(_jsonRawData, "farm", 0);
 
       // Expand paths and highlight
+      const matchedNodeEls = new Set();
       for (const matchPath of matches) {
         const segments = jsonParsePath(matchPath);
         const lineEl = jsonExpandToPath(tree, segments);
         if (lineEl) {
           lineEl.classList.add("json-match");
+          // Collect this node and all ancestors for filter mode
+          let el = lineEl.closest(".json-node");
+          while (el) {
+            matchedNodeEls.add(el);
+            el = el.parentElement?.closest(".json-node");
+          }
+        }
+      }
+
+      // Filter mode: hide non-matching nodes
+      if (_jsonFilterActive && matches.length > 0) {
+        // Walk all rendered json-node elements; hide those not in matchedNodeEls
+        for (const node of tree.querySelectorAll(".json-node")) {
+          if (!matchedNodeEls.has(node)) {
+            node.classList.add("json-hidden");
+          }
         }
       }
 
