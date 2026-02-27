@@ -1828,15 +1828,17 @@
   margin: 0 0 8px 0;
 }
 .diff-nodes-table td {
-  padding: 3px 6px;
+  padding: 2px 4px;
   border-bottom: 1px solid rgba(255,255,255,0.04);
   white-space: nowrap;
+  vertical-align: middle;
 }
-.diff-nodes-table td:first-child { padding-left: 0; }
-.diff-nodes-table td:last-child { text-align: right; }
+.diff-nodes-table td:first-child { padding-left: 0; width: 1%; }
+.diff-nodes-table .dn-ico { height: 14px; vertical-align: middle; }
 .diff-nodes-table .dn-harv { color: var(--green); font-weight: bold; }
-.diff-nodes-table .dn-zero { color: var(--text-dim); }
-.diff-nodes-table .dn-state { color: var(--text-dim); opacity: 0.7; font-size: 0.5rem; }
+.diff-nodes-table .dn-zero { color: var(--text-dim); opacity: 0.5; }
+.diff-nodes-table .dn-s { color: var(--text-dim); opacity: 0.7; }
+.diff-nodes-table .dn-s img { height: 10px; vertical-align: middle; opacity: 0.6; }
 
     .diff-price-explain .pe-cat-hdr td {
       padding-top: 8px;
@@ -14651,21 +14653,45 @@
 
           // ── Node state summary ──
           if (p.nodes && Object.keys(p.nodes).length > 0) {
-            const NL = {
-              trees:"Trees",stones:"Stone",iron:"Iron",gold:"Gold",
-              crimstones:"Crimstone",oilReserves:"Oil",lavaPits:"Lava",
-              crops:"Crops",fruitPatches:"Fruit",flowerBeds:"Flowers",
+            const NC = {
+              trees:       { name:"Trees",     res:"Wood",  tool:"Axe" },
+              stones:      { name:"Stone",     res:"Stone", tool:"Pickaxe" },
+              iron:        { name:"Iron",      res:"Iron",  tool:"Stone Pickaxe" },
+              gold:        { name:"Gold",      res:"Gold",  tool:"Iron Pickaxe" },
+              crimstones:  { name:"Crimstone", res:"Crimstone", tool:"Gold Pickaxe" },
+              oilReserves: { name:"Oil",       res:"Oil",   tool:"Oil Drill" },
+              lavaPits:    { name:"Lava",      res:"Lava Pit", tool:"Lava Pit" },
+              crops:       { name:"Crops",     res:"Crop",  tool:"Crop" },
+              fruitPatches:{ name:"Fruit",     res:"Apple", tool:"Apple" },
+              flowerBeds:  { name:"Flowers",   res:"Red Pansy", tool:"Red Pansy" },
             };
+            const ii = n => `<img class="dn-ico" src="${getItemIcon(n)}" onerror="this.style.display='none'">`;
             out += `<table class="diff-nodes-table pixel-font">`;
             for (const [key, nd] of Object.entries(p.nodes)) {
-              const nm = NL[key] || key;
+              const c = NC[key] || { name: key, res: key, tool: key };
               const h = nd.harvested || 0;
-              const hCls = h > 0 ? "dn-harv" : "dn-zero";
-              const hTxt = h > 0 ? `+${h}` : "0";
-              let state = "";
-              if ("recovering" in nd) state = `${nd.recovering}rec ${nd.ready}rdy`;
-              else if ("active" in nd) state = `${nd.active}act ${nd.empty}emp`;
-              out += `<tr><td>${escHTML(nm)}</td><td class="${hCls}">${hTxt}</td><td class="dn-state">${state} / ${nd.total}</td></tr>`;
+              // Col 1: resource icon + name
+              const col1 = `${ii(c.res)} ${escHTML(c.name)}`;
+              // Col 2: tool icon + harvest count
+              const col2 = h > 0
+                ? `<span class="dn-harv">${ii(c.tool)} ${h}</span>`
+                : `<span class="dn-zero">${ii(c.tool)} 0</span>`;
+              // Col 3: state
+              let col3 = `<span class="dn-s">/${nd.total}</span>`;
+              if ("recovering" in nd) {
+                const recPart = nd.recovering > 0 ? `${nd.recovering}` : "";
+                const rdyPart = nd.ready > 0 ? `${nd.ready}` : "";
+                const parts = [];
+                if (nd.recovering > 0) parts.push(`<img class="dn-ico" src="${getItemIcon("Timer")}" onerror="this.textContent='\u23f3'" style="height:10px;opacity:0.6">${nd.recovering}`);
+                if (nd.ready > 0) parts.push(`<img class="dn-ico" src="${getItemIcon("Confirm")}" onerror="this.textContent='\u2705'" style="height:10px;opacity:0.6">${nd.ready}`);
+                col3 = `<span class="dn-s">${parts.join(" ")} /${nd.total}</span>`;
+              } else if ("active" in nd) {
+                const parts = [];
+                if (nd.active > 0) parts.push(`\u{1F331}${nd.active}`);
+                if (nd.empty > 0) parts.push(`\u2b1c${nd.empty}`);
+                col3 = `<span class="dn-s">${parts.join(" ")} /${nd.total}</span>`;
+              }
+              out += `<tr><td>${col1}</td><td>${col2}</td><td>${col3}</td></tr>`;
             }
             out += `</table>`;
           }
