@@ -14670,26 +14670,21 @@
             for (const [key, nd] of Object.entries(p.nodes)) {
               const c = NC[key] || { name: key, res: key, tool: key };
               const h = nd.harvested || 0;
-              // Col 1: resource icon + name
               const col1 = `${ii(c.res)} ${escHTML(c.name)}`;
-              // Col 2: tool icon + harvest count
               const col2 = h > 0
                 ? `<span class="dn-harv">${ii(c.tool)} ${h}</span>`
                 : `<span class="dn-zero">${ii(c.tool)} 0</span>`;
-              // Col 3: state
-              let col3 = `<span class="dn-s">/${nd.total}</span>`;
+              let col3 = `<span class="dn-s">/ ${nd.total}</span>`;
               if ("recovering" in nd) {
-                const recPart = nd.recovering > 0 ? `${nd.recovering}` : "";
-                const rdyPart = nd.ready > 0 ? `${nd.ready}` : "";
                 const parts = [];
-                if (nd.recovering > 0) parts.push(`<img class="dn-ico" src="${getItemIcon("Timer")}" onerror="this.textContent='\u23f3'" style="height:10px;opacity:0.6">${nd.recovering}`);
-                if (nd.ready > 0) parts.push(`<img class="dn-ico" src="${getItemIcon("Confirm")}" onerror="this.textContent='\u2705'" style="height:10px;opacity:0.6">${nd.ready}`);
-                col3 = `<span class="dn-s">${parts.join(" ")} /${nd.total}</span>`;
+                if (nd.recovering > 0) parts.push(`\u23f3${nd.recovering}`);
+                if (nd.ready > 0) parts.push(`\u2705${nd.ready}`);
+                col3 = `<span class="dn-s">${parts.join(" ")} / ${nd.total}</span>`;
               } else if ("active" in nd) {
                 const parts = [];
                 if (nd.active > 0) parts.push(`\u{1F331}${nd.active}`);
                 if (nd.empty > 0) parts.push(`\u2b1c${nd.empty}`);
-                col3 = `<span class="dn-s">${parts.join(" ")} /${nd.total}</span>`;
+                col3 = `<span class="dn-s">${parts.join(" ")} / ${nd.total}</span>`;
               }
               out += `<tr><td>${col1}</td><td>${col2}</td><td>${col3}</td></tr>`;
             }
