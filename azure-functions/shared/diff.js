@@ -207,16 +207,20 @@ function computeAnimalSummaries(oldData, newData, now) {
       if (oldAnimal && oldAnimal.state === "sick" && animal.state !== "sick") c.cured++;
     }
 
-    // Old totals for change detection
+    // Old totals + sick counts for change detection
     const oldCounts = {};
+    const oldSick = {};
     for (const a of Object.values(oldAnimals)) {
       const type = typeFilter || (a.type || "chicken").toLowerCase();
       oldCounts[type] = (oldCounts[type] || 0) + 1;
+      if (a.state === "sick") oldSick[type] = (oldSick[type] || 0) + 1;
     }
 
     for (const [type, c] of Object.entries(counts)) {
       const oldTotal = oldCounts[type] || 0;
-      if (c.fed > 0 || c.cured > 0 || c.sick > 0 || c.total !== oldTotal) {
+      const oldSickCount = oldSick[type] || 0;
+      // Only include if something actually changed
+      if (c.fed > 0 || c.cured > 0 || c.total !== oldTotal || c.sick !== oldSickCount) {
         result[type + "s"] = c;  // chickens, cows, sheeps → fix sheep below
       }
     }
