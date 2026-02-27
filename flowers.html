@@ -14670,20 +14670,20 @@
             for (const [key, nd] of Object.entries(p.nodes)) {
               const c = NC[key] || { name: key, res: key, tool: key };
               const h = nd.harvested || 0;
-              const col1 = `${ii(c.res)} ${escHTML(c.name)}`;
+              const col1 = `${escHTML(c.name)} ${ii(c.res)}`;
               const col2 = h > 0
-                ? `<span class="dn-harv">${ii(c.tool)} ${h}</span>`
-                : `<span class="dn-zero">${ii(c.tool)} 0</span>`;
+                ? `<span class="dn-harv">${h} ${ii(c.tool)}</span>`
+                : `<span class="dn-zero">0 ${ii(c.tool)}</span>`;
               let col3 = `<span class="dn-s">/ ${nd.total}</span>`;
               if ("recovering" in nd) {
                 const parts = [];
-                if (nd.recovering > 0) parts.push(`\u23f3${nd.recovering}`);
-                if (nd.ready > 0) parts.push(`\u2705${nd.ready}`);
+                if (nd.recovering > 0) parts.push(`${nd.recovering} \u23f3`);
+                if (nd.ready > 0) parts.push(`${nd.ready} \u2705`);
                 col3 = `<span class="dn-s">${parts.join(" ")} / ${nd.total}</span>`;
               } else if ("active" in nd) {
                 const parts = [];
-                if (nd.active > 0) parts.push(`\u{1F331}${nd.active}`);
-                if (nd.empty > 0) parts.push(`\u2b1c${nd.empty}`);
+                if (nd.active > 0) parts.push(`${nd.active} \u{1F331}`);
+                if (nd.empty > 0) parts.push(`${nd.empty} \u2b1c`);
                 col3 = `<span class="dn-s">${parts.join(" ")} / ${nd.total}</span>`;
               }
               out += `<tr><td>${col1}</td><td>${col2}</td><td>${col3}</td></tr>`;
