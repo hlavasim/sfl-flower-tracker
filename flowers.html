@@ -1821,6 +1821,33 @@
       font-size: 0.45rem;
       word-break: break-word;
     }
+.diff-nodes-summary {
+  margin: 0 0 8px 0;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 0.5625rem;
+}
+.diff-node-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.diff-node-icon { font-size: 0.75rem; }
+.diff-node-name { color: var(--text-dim); font-weight: bold; }
+.diff-node-total { color: var(--text-dim); }
+.diff-node-total::after { content: ":"; }
+.diff-node-harvested { color: var(--green); font-weight: bold; }
+.diff-node-zero { color: var(--text-dim); }
+.diff-node-state { color: var(--text-dim); opacity: 0.7; }
+.diff-node-state::before { content: "("; }
+.diff-node-state::after { content: ")"; }
+
     .diff-price-explain .pe-cat-hdr td {
       padding-top: 8px;
       font-weight: bold;
@@ -14405,8 +14432,9 @@
           }
           const snapshots = (res.data.snapshots || []).reverse();
           processed = snapshots.map(snap => {
-            const { items, netSfl } = processDiff(snap.diff || {});
-            return { time: new Date(snap.captured_at), netSfl, items, count: 1 };
+            const rawDiff = snap.diff || {};
+            const { items, netSfl } = processDiff(rawDiff);
+            return { time: new Date(snap.captured_at), netSfl, items, count: 1, nodes: rawDiff.nodes || null };
           });
         } else {
           const groupMap = { hours: "hour", days: "day", weeks: "week", months: "month", years: "year" };
@@ -14418,8 +14446,9 @@
             return;
           }
           processed = (res.data.periods || []).map(p => {
-            const { items, netSfl } = processDiff(p.diff || {});
-            return { time: new Date(p.period), netSfl, items, count: p.count };
+            const rawDiff = p.diff || {};
+            const { items, netSfl } = processDiff(rawDiff);
+            return { time: new Date(p.period), netSfl, items, count: p.count, nodes: rawDiff.nodes || null };
           });
         }
 
@@ -14629,6 +14658,44 @@
                 ${fmtCurSigned(p.netSfl, 4)} ${getCurIcon("0.85em")}
               </div>
             </div>`;
+
+          // ── Node state summary ──
+          if (p.nodes && Object.keys(p.nodes).length > 0) {
+            const nodeLabels = {
+              trees:        { icon: "\u{1FAB5}", name: "Trees" },
+              stones:       { icon: "\u26CF\uFE0F", name: "Stone" },
+              iron:         { icon: "\u2699\uFE0F", name: "Iron" },
+              gold:         { icon: "\u2728", name: "Gold" },
+              crimstones:   { icon: "\u{1F48E}", name: "Crimstone" },
+              oilReserves:  { icon: "\u{1F6E2}\uFE0F", name: "Oil" },
+              lavaPits:     { icon: "\u{1F30B}", name: "Lava Pits" },
+              crops:        { icon: "\u{1F33E}", name: "Crops" },
+              fruitPatches: { icon: "\u{1F352}", name: "Fruit" },
+              flowerBeds:   { icon: "\u{1F33B}", name: "Flowers" },
+            };
+            out += `<div class="diff-nodes-summary pixel-font">`;
+            for (const [key, nd] of Object.entries(p.nodes)) {
+              const lbl = nodeLabels[key] || { icon: "", name: key };
+              const harv = nd.harvested || 0;
+              const harvHtml = harv > 0
+                ? `<span class="diff-node-harvested">+${harv} harvested</span>`
+                : `<span class="diff-node-zero">0 harvested</span>`;
+              let stateHtml = "";
+              if ("recovering" in nd) {
+                stateHtml = `<span class="diff-node-state">${nd.recovering} recovering \u00b7 ${nd.ready} ready</span>`;
+              } else if ("active" in nd) {
+                stateHtml = `<span class="diff-node-state">${nd.active} active \u00b7 ${nd.empty} empty</span>`;
+              }
+              out += `<div class="diff-node-row">
+                <span class="diff-node-icon">${lbl.icon}</span>
+                <span class="diff-node-name">${escHTML(lbl.name)}</span>
+                <span class="diff-node-total">${nd.total}</span>
+                ${harvHtml}
+                ${stateHtml}
+              </div>`;
+            }
+            out += `</div>`;
+          }
 
           if (visibleItems.length > 0) {
             out += `<table class="diff-item-table">
