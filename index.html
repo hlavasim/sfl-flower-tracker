@@ -1828,15 +1828,18 @@
   border-radius: 6px;
   border: 1px solid rgba(255,255,255,0.06);
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
+  flex-direction: column;
+  gap: 3px;
   font-size: 0.5625rem;
+  overflow: hidden;
 }
 .diff-node-row {
   display: flex;
   align-items: center;
   gap: 4px;
-  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .diff-node-icon { font-size: 0.75rem; }
 .diff-node-name { color: var(--text-dim); font-weight: bold; }
