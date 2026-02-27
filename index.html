@@ -2657,6 +2657,16 @@
       flowers:     { base: 30, increase: 25, farmKey: "flowers",     catId: "flowers",  label: "Flower Bed" },
     };
 
+    // Resource categories trackable via farm-history diffs (catId → inventory key)
+    const EFFICIENCY_RESOURCE_MAP = {
+      trees:     "Wood",
+      stone:     "Stone",
+      iron:      "Iron",
+      gold:      "Gold",
+      crimstone: "Crimstone",
+      oil:       "Oil",
+    };
+
     // ── Base node counts per island type (default before purchases) ──
     const BASE_NODE_COUNTS = {
       basic:          { crops:31, trees:9,  stones:7,  iron:4,  gold:2, crimstones:0, oilReserves:0, lavaPits:0, fruitPatches:0, flowers:0 },
@@ -12132,6 +12142,26 @@
       html += `<div id="nodes-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Calculating investments...</div></div></div>`;
       app.innerHTML = html;
 
+      // ── Fetch farm history for efficiency analysis (fire early, await later) ──
+      const historyPromise = (async () => {
+        try {
+          const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+          const today = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+          const baseUrl = `/api/farm-history?farm=${FARM_ID}&from=${weekAgo}&to=${today}&limit=1000`;
+          const r = await fetch(baseUrl);
+          if (!r.ok) return null;
+          const data = await r.json();
+          let allSnaps = data.snapshots || [];
+          if (data.total > 1000 && allSnaps.length >= 1000) {
+            try {
+              const r2 = await fetch(baseUrl + "&offset=1000");
+              if (r2.ok) { const d2 = await r2.json(); allSnaps = allSnaps.concat(d2.snapshots || []); }
+            } catch {}
+          }
+          return allSnaps;
+        } catch { return null; }
+      })();
+
       // ── Fetch prices ──
       let p2pPrices = {}, exchangeRates = { coinsPerSFL: 320, gemsPerSFL: 0 };
       let nftData;
@@ -12496,8 +12526,114 @@
         });
       }
 
-      // Sort by ROI days ascending (fastest payback first)
-      options.sort((a, b) => a.roiDays - b.roiDays);
+      // ── Compute efficiency from farm history (dig-session approach) ──
+      // A "dig" = a snapshot where inventory.{Resource} increased.
+      // Consecutive digs within 30min are merged into one session.
+      // Efficiency = actual sessions/day vs theoretical sessions/day.
+      const efficiencyMap = {};
+      let effDataAvailable = false;
+      let effSnapCount = 0, effPeriodDays = 0;
+      const historySnapshots = await historyPromise;
+      if (historySnapshots && historySnapshots.length >= 2) {
+        const sorted = [...historySnapshots]
+          .filter(s => s.captured_at && s.diff !== null && s.diff !== undefined)
+          .sort((a, b) => new Date(a.captured_at) - new Date(b.captured_at));
+        const pDays = (new Date(sorted[sorted.length - 1].captured_at) - new Date(sorted[0].captured_at)) / 86400000;
+        effSnapCount = sorted.length;
+        effPeriodDays = pDays;
+
+        if (pDays > 0.5) {
+          effDataAvailable = true;
+
+          for (const [catId, invName] of Object.entries(EFFICIENCY_RESOURCE_MAP)) {
+            // 1. Find timestamps where resource increased (= dig events)
+            const digTimes = [];
+            for (const snap of sorted) {
+              const diff = snap.diff || {};
+              if ((diff[`inventory.${invName}`] || 0) > 0) {
+                digTimes.push(new Date(snap.captured_at).getTime());
+              }
+            }
+
+            // 2. Merge consecutive digs within 30min into one session
+            const sessions = [];
+            if (digTimes.length > 0) {
+              let sessionStart = digTimes[0];
+              let sessionEnd = digTimes[0];
+              for (let i = 1; i < digTimes.length; i++) {
+                if (digTimes[i] - sessionEnd <= 1800000) { // 30 min
+                  sessionEnd = digTimes[i];
+                } else {
+                  sessions.push(sessionStart);
+                  sessionStart = digTimes[i];
+                  sessionEnd = digTimes[i];
+                }
+              }
+              sessions.push(sessionStart);
+            }
+
+            // 3. Theoretical digs per day (using boosted respawn, not base)
+            const product = getDefaultProduct(catId);
+            const ownedEff = getOwnedEffects(catId);
+            const boosted = applyBoosts(catId, product, capacity, ownedEff);
+            const effectiveCycle = boosted.effectiveCycle || 0;
+            const theoreticalPerDay = effectiveCycle > 0 ? 86400 / effectiveCycle : 0;
+
+            // 4. Actual digs per day
+            const actualPerDay = sessions.length / pDays;
+
+            // 5. Efficiency = actual / theoretical
+            let ratio = theoreticalPerDay > 0 ? actualPerDay / theoreticalPerDay : 0;
+            if (ratio > 1.5) ratio = 1.5; // cap at 150%
+
+            // 6. Avg gap between sessions (for display)
+            let avgGapH = 0;
+            if (sessions.length >= 2) {
+              let totalGap = 0;
+              for (let i = 1; i < sessions.length; i++) totalGap += sessions[i] - sessions[i - 1];
+              avgGapH = (totalGap / (sessions.length - 1)) / 3600000;
+            }
+
+            efficiencyMap[catId] = {
+              ratio,
+              sessions: sessions.length,
+              theoreticalPerDay,
+              actualPerDay,
+              avgGapH,
+              optimalGapH: effectiveCycle / 3600,
+            };
+          }
+        }
+      }
+
+      // Helper: get efficiency ratio for a catId, or null if not available
+      function getEffRatio(catId) {
+        return efficiencyMap[catId] ? efficiencyMap[catId].ratio : null;
+      }
+
+      // Helper: format efficiency as colored percentage
+      function fmtEff(catId) {
+        const e = efficiencyMap[catId];
+        if (!e) return '<span style="color:var(--text-dim)">\u2014</span>';
+        const pct = Math.round(e.ratio * 100);
+        const color = pct >= 80 ? "var(--green)" : pct >= 40 ? "var(--sunpetal)" : "var(--red)";
+        const tip = `${e.sessions} digs \u00b7 avg ${e.avgGapH.toFixed(1)}h (optimal ${e.optimalGapH.toFixed(1)}h)`;
+        return `<span style="color:${color};font-weight:bold" title="${tip}">${pct}%</span>`;
+      }
+
+      // Helper: get real ROI for a category (efficiency-adjusted)
+      function getRealRoi(costSfl, marginal, catId) {
+        const eff = getEffRatio(catId);
+        if (eff !== null && eff > 0) return costSfl / (marginal * eff);
+        return costSfl / marginal; // fallback to theoretical
+      }
+
+      // Sort by real ROI days ascending (fastest payback first)
+      for (const o of options) {
+        const oCatId = NODE_PRICES[o.nodeKey]?.catId;
+        o.realRoiDays = (o.marginal > 0 && o.costSfl > 0 && oCatId) ? getRealRoi(o.costSfl, o.marginal, oCatId) : Infinity;
+      }
+      options.sort((a, b) => a.realRoiDays - b.realRoiDays);
 
       // ── Greedy purchase plan ──
       // Simulate spending available resources, always picking the best ROI next.
@@ -12519,14 +12655,14 @@
       let cumCostSfl = 0, cumSflPerDay = 0;
 
       for (let step = 0; step < 50; step++) { // safety cap
-        // For each node type, calc next sunstone cost & ROI
+        // For each node type, calc next sunstone cost & real ROI
         let bestKey = null, bestRoi = Infinity, bestCostSun = 0, bestCostSfl = 0, bestMarginal = 0;
         for (const [nodeKey, np] of Object.entries(NODE_PRICES)) {
           const m = marginals[nodeKey].marginal;
           if (m <= 0) continue;
           const nextSun = np.base + purchasedSim[nodeKey] * np.increase;
           const costSfl = nextSun * sunstoneCostSfl;
-          const roi = costSfl / m;
+          const roi = getRealRoi(costSfl, m, np.catId);
           if (roi < bestRoi) {
             // Check if affordable (sunstones or obsidian×3)
             const obsNeeded = nextSun * 3;
@@ -12567,14 +12703,16 @@
       // Merges use obsidian + coins directly, add to plan if they have better ROI
       // than the worst item already in plan
       for (const o of options.filter(o => o.type.startsWith("merge") && o.marginal > 0 && o.canAfford)) {
+        const mergeCatId = NODE_PRICES[o.nodeKey]?.catId || null;
+        const mergeRoi = (o.marginal > 0 && o.costSfl > 0 && mergeCatId) ? getRealRoi(o.costSfl, o.marginal, mergeCatId) : o.roiDays;
         plan.push({
           label: o.action,
           product: null,
-          catId: null,
+          catId: mergeCatId,
           sunstoneCost: 0,
           costSfl: o.costSfl,
           marginal: o.marginal,
-          roi: o.roiDays,
+          roi: mergeRoi,
           cumCost: cumCostSfl + o.costSfl,
           cumSflPerDay: cumSflPerDay + o.marginal,
           isMerge: true,
@@ -12620,6 +12758,10 @@
         <div class="summary-stat">
           <div class="label pixel-font">ISLAND</div>
           <div class="value" style="font-size:0.8125rem">${escHTML(islandType.charAt(0).toUpperCase() + islandType.slice(1))}</div>
+        </div>
+        <div class="summary-stat">
+          <div class="label pixel-font">EFFICIENCY</div>
+          <div class="value" style="font-size:0.6875rem;color:${effDataAvailable ? 'var(--green)' : 'var(--text-dim)'}">${effDataAvailable ? `${effPeriodDays.toFixed(1)}d · ${effSnapCount} snaps` : 'No history'}</div>
         </div>
       </div>`;
 
@@ -12671,11 +12813,14 @@
           const roiColor = o.roiDays <= 30 ? "var(--green)" : o.roiDays <= 90 ? "var(--sunpetal)" : o.roiDays <= 365 ? "var(--text-secondary)" : "var(--text-dim)";
           const productHint = o.bestProduct && PRODUCT_LISTS[NODE_PRICES[o.nodeKey]?.catId] ? ` <span style="color:var(--text-dim);font-size:0.5625rem">(${escHTML(o.bestProduct)})</span>` : "";
 
+          const optRoiDisplay = o.realRoiDays >= 9999 ? "9999+" : Math.ceil(o.realRoiDays) + "d";
+          const optRoiColor = o.realRoiDays <= 30 ? "var(--green)" : o.realRoiDays <= 90 ? "var(--sunpetal)" : o.realRoiDays <= 365 ? "var(--text-secondary)" : "var(--text-dim)";
+
           content += `<tr>
             <td>${escHTML(o.action)}${productHint}</td>
             <td style="text-align:right;white-space:nowrap">${o.costSfl.toFixed(1)} ${sflIcon("0.75em")}</td>
             <td style="text-align:right;color:var(--green)">+${o.marginal.toFixed(4)}</td>
-            <td style="text-align:right;color:${roiColor};font-weight:bold">${roiStr}</td>
+            <td style="text-align:right;color:${optRoiColor};font-weight:bold">${optRoiDisplay}</td>
           </tr>`;
         }
         content += `</table></div>`;
@@ -12702,7 +12847,7 @@
       content += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
         <div style="font-size:0.6875rem;color:var(--lily);margin-bottom:8px;font-weight:bold" class="pixel-font">CURRENT NODES</div>
         <table class="node-res-table">
-          <tr><th>RESOURCE</th><th style="text-align:center">NODES</th><th style="text-align:center">TIERS</th><th style="text-align:right">NET ${sflIcon("0.75em")}/DAY</th><th style="text-align:right">PER NODE</th></tr>`;
+          <tr><th>RESOURCE</th><th style="text-align:center">NODES</th><th style="text-align:center">TIERS</th><th style="text-align:right">NET ${sflIcon("0.75em")}/DAY</th><th style="text-align:right">PER NODE</th>${effDataAvailable ? '<th style="text-align:center">EFF.</th><th style="text-align:right">REAL ' + sflIcon("0.75em") + '/D</th>' : ''}</tr>`;
 
       for (const [nodeKey, np] of Object.entries(NODE_PRICES)) {
         const tiers = getNodeTiers(nodeKey);
@@ -12717,12 +12862,17 @@
         const tierStr = tiers.t2 > 0 || tiers.t3 > 0 ? `<span style="color:var(--text-dim);font-size:0.5625rem">${tiers.t1}/${tiers.t2}/${tiers.t3}</span>` : "";
         const productHint = bestProduct && PRODUCT_LISTS[np.catId] ? ` <span style="color:var(--text-dim);font-size:0.5625rem">${escHTML(bestProduct)}</span>` : "";
 
+        const nodeEff = getEffRatio(np.catId);
+        const realSflDay = nodeEff !== null ? totalNet * nodeEff : null;
+        const realSflColor = realSflDay !== null ? (realSflDay > 0 ? "var(--green)" : realSflDay < 0 ? "var(--red)" : "var(--text-dim)") : "var(--text-dim)";
+
         content += `<tr>
           <td>${escHTML(np.label)}${productHint}</td>
           <td style="text-align:center">${tiers.effective}${boughtStr}</td>
           <td style="text-align:center">${tierStr}</td>
           <td style="text-align:right;color:${netColor};font-weight:bold">${totalNet.toFixed(2)}</td>
           <td style="text-align:right;color:${perColor}">${perNode.toFixed(4)}</td>
+          ${effDataAvailable ? `<td style="text-align:center">${fmtEff(np.catId)}</td><td style="text-align:right;color:${realSflColor};font-weight:bold">${realSflDay !== null ? realSflDay.toFixed(2) : '\u2014'}</td>` : ''}
         </tr>`;
       }
 
