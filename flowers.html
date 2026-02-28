@@ -1239,6 +1239,189 @@
     .sales-section-count { font-size: 0.5625rem; color: var(--text-dim); }
     .sales-section-body { border: 3px solid var(--border-dark); border-top: none; }
 
+
+    /* ── Market Overview & Volume Leaders ── */
+    .market-overview {
+      background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-dark) 100%);
+      border: 3px solid var(--border-dark);
+      padding: 14px;
+      margin-bottom: 16px;
+    }
+    .market-overview-title {
+      font-size: 0.6875rem;
+      color: var(--sunpetal);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .market-overview-stats {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+      font-size: 0.6875rem;
+    }
+    .market-overview-stat {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .market-overview-stat .label { color: var(--text-dim); font-size: 0.5625rem; }
+    .market-overview-stat .value { color: var(--text-primary); font-weight: bold; }
+    .market-sparkline {
+      width: 100%;
+      height: 40px;
+      margin-bottom: 10px;
+      opacity: 0.85;
+    }
+    .market-movers {
+      border-top: 2px solid rgba(92,58,30,0.2);
+      padding-top: 8px;
+    }
+    .market-movers-title { font-size: 0.5625rem; color: var(--text-dim); margin-bottom: 6px; }
+    .market-mover-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 3px 0;
+      font-size: 0.625rem;
+    }
+    .market-mover-rank { color: var(--green); width: 14px; }
+    .market-mover-name { flex: 1; color: var(--text-primary); font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .market-mover-vol { color: var(--sunpetal); white-space: nowrap; }
+    .market-mover-trades { color: var(--text-dim); font-size: 0.5rem; white-space: nowrap; }
+
+    .volume-leader-row {
+      display: grid;
+      grid-template-columns: 28px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      font-size: 0.6875rem;
+      cursor: pointer;
+      border-bottom: 1px solid rgba(0,0,0,0.3);
+    }
+    .volume-leader-row:nth-child(even) { background: var(--bg-card); }
+    .volume-leader-row:nth-child(odd) { background: var(--bg-card-alt); }
+    .volume-leader-row:hover { background: var(--bg-light); }
+
+    /* ── Trade History & Orderbook ── */
+    .trade-history-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    .trade-history-table th {
+      font-size: 0.5rem;
+      color: var(--text-dim);
+      text-align: left;
+      padding: 5px 8px;
+      border-bottom: 2px solid var(--border-brown);
+    }
+    .trade-history-table td {
+      font-size: 0.5625rem;
+      padding: 4px 8px;
+      border-bottom: 1px solid rgba(92,58,30,0.15);
+      color: var(--text-secondary);
+    }
+    .trade-history-table tr:hover td { background: rgba(255,255,255,0.03); }
+    .trade-listing { color: var(--green); }
+    .trade-offer { color: var(--blue); }
+
+    .orderbook-panel {
+      margin-top: 10px;
+      border: 2px solid var(--border-dark);
+      background: var(--bg-card);
+    }
+    .orderbook-title {
+      font-size: 0.5625rem;
+      color: var(--text-dim);
+      padding: 6px 10px;
+      border-bottom: 2px solid var(--border-dark);
+    }
+    .orderbook-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      font-size: 0.5625rem;
+      border-bottom: 1px solid rgba(0,0,0,0.2);
+    }
+    .orderbook-row.sell { color: var(--red); }
+    .orderbook-row.buy { color: var(--green); }
+    .orderbook-side { width: 32px; font-weight: bold; font-size: 0.5rem; }
+    .orderbook-sfl { flex: 1; text-align: right; }
+    .orderbook-who { color: var(--text-dim); font-size: 0.5rem; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .orderbook-spread {
+      text-align: center;
+      font-size: 0.5rem;
+      color: var(--text-dim);
+      padding: 3px 10px;
+      border-top: 1px dashed rgba(92,58,30,0.3);
+      border-bottom: 1px dashed rgba(92,58,30,0.3);
+    }
+
+    /* ── Token Management ── */
+    .token-card {
+      border: 3px solid var(--border-dark);
+      background: var(--bg-card);
+      margin-bottom: 16px;
+    }
+    .token-card-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: var(--bg-medium);
+      border-bottom: 3px solid var(--border-dark);
+      cursor: pointer;
+      font-size: 0.6875rem;
+    }
+    .token-card-header:hover { background: var(--bg-light); }
+    .token-status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .token-status-dot.valid { background: var(--green); }
+    .token-status-dot.expired { background: var(--red); }
+    .token-status-dot.none { background: var(--text-dim); }
+    .token-card-body {
+      padding: 12px 14px;
+      display: none;
+    }
+    .token-input-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .token-input {
+      flex: 1;
+      padding: 6px 8px;
+      background: var(--bg-darkest);
+      color: var(--text-primary);
+      border: 2px solid var(--border-dark);
+      font-size: 0.5625rem;
+      font-family: 'Courier New', monospace;
+    }
+    .token-input:focus { border-color: var(--border-brown); outline: none; }
+    .token-submit {
+      padding: 6px 14px;
+      background: var(--bg-medium);
+      color: var(--sunpetal);
+      border: 2px solid var(--border-brown);
+      font-family: 'Press Start 2P', cursive;
+      font-size: 0.5rem;
+      cursor: pointer;
+    }
+    .token-submit:hover { background: var(--bg-light); }
+    .token-feedback {
+      font-size: 0.5625rem;
+      margin-top: 6px;
+      min-height: 1em;
+    }
+
     /* ── Price History (Sales page) ── */
     .ph-search {
       width: 100%; padding: 6px 10px; margin-bottom: 0;
@@ -1554,6 +1737,11 @@
       .power-bb-roi { width: 45px; }
       .power-cat-header { font-size: 0.5625rem; flex-wrap: wrap; }
       .power-product-select { font-size: 0.375rem; }
+      .market-overview-stats { gap: 8px; font-size: 0.625rem; }
+      .market-mover-name { max-width: 100px; }
+      .volume-leader-row { grid-template-columns: 22px 1fr auto; gap: 5px; padding: 5px 8px; }
+      .orderbook-who { max-width: 60px; }
+      .trade-history-table td { font-size: 0.5rem; padding: 3px 6px; }
       .nav-more-btn { font-size: 0.5rem; padding: 12px 10px; }
       .pet-fetch-row { grid-template-columns: 1fr auto auto auto; gap: 4px; font-size: 0.6875rem; }
     }
@@ -8813,10 +9001,81 @@
       detail.innerHTML = `<div class="ph-empty">Loading history...</div>`;
       row.after(detail);
       try {
-        const changes = await fetchNftItemHistory(nftId, "floor", collection);
-        detail.innerHTML = renderPriceTimeline(changes, nftName + " (floor)");
+        // Fetch price history, trades, orderbook, and volume in parallel
+        const [changes, tradesData, orderbookData, volumeData] = await Promise.all([
+          fetchNftItemHistory(nftId, "floor", collection),
+          fetch(`/api/marketplace-trades?collection=${encodeURIComponent(collection)}&item_id=${nftId}&limit=10`)
+            .then(r => r.ok ? r.json() : { trades: [] }).catch(() => ({ trades: [] })),
+          fetch(`/api/marketplace-orderbook?collection=${encodeURIComponent(collection)}&item_id=${nftId}&sort=price`)
+            .then(r => r.ok ? r.json() : { orders: [] }).catch(() => ({ orders: [] })),
+          fetch(`/api/marketplace-history?collection=${encodeURIComponent(collection)}&item_id=${nftId}&days=7`)
+            .then(r => r.ok ? r.json() : { history: [] }).catch(() => ({ history: [] })),
+        ]);
+
+        let html = renderPriceTimeline(changes, nftName + " (floor)");
+
+        // Volume summary (7-day)
+        const hist = volumeData.history || [];
+        if (hist.length > 0) {
+          const totalVol = hist.reduce((s, h) => s + (parseFloat(h.volume) || 0), 0);
+          const totalTrades = hist.reduce((s, h) => s + (parseInt(h.trades) || 0), 0);
+          html += `<div style="font-size:0.5625rem;color:var(--text-dim);margin-top:8px">
+            7-day volume: <span style="color:var(--sunpetal)">${_fmtBigNum(totalVol)} SFL</span>
+            &middot; ${_fmtBigNum(totalTrades)} trades</div>`;
+        }
+
+        // Trade history table
+        const trades = tradesData.trades || [];
+        if (trades.length > 0) {
+          html += `<table class="trade-history-table">
+            <thead><tr><th>SFL</th><th>Type</th><th>From → To</th><th>Date</th></tr></thead><tbody>`;
+          for (const t of trades) {
+            const sfl = parseFloat(t.sfl) || 0;
+            const src = t.source === "listing" ? "trade-listing" : "trade-offer";
+            const srcLabel = t.source === "listing" ? "listing" : "offer";
+            const from = escHTML(t.initiated_by_name || "?");
+            const to = escHTML(t.fulfilled_by_name || "?");
+            const date = t.fulfilled_at ? new Date(t.fulfilled_at).toLocaleDateString("en-GB", {month:"short",day:"numeric"}) : "?";
+            html += `<tr><td style="color:var(--sunpetal);font-weight:bold">${formatSFL(sfl)} ${sflIcon(10)}</td>
+              <td class="${src}">${srcLabel}</td>
+              <td>${from} → ${to}</td><td>${date}</td></tr>`;
+          }
+          html += `</tbody></table>`;
+        }
+
+        // Orderbook
+        const orders = orderbookData.orders || [];
+        if (orders.length > 0) {
+          const listings = orders.filter(o => o.side === "listing").sort((a,b) => parseFloat(a.sfl) - parseFloat(b.sfl));
+          const offers = orders.filter(o => o.side === "offer").sort((a,b) => parseFloat(b.sfl) - parseFloat(a.sfl));
+          html += `<div class="orderbook-panel">
+            <div class="orderbook-title">ORDER BOOK (${listings.length} listings, ${offers.length} offers)</div>`;
+          for (const l of listings.slice(0, 5)) {
+            html += `<div class="orderbook-row sell">
+              <span class="orderbook-side">SELL</span>
+              <span class="orderbook-sfl">${formatSFL(parseFloat(l.sfl) || 0)} ${sflIcon(10)}</span>
+              <span class="orderbook-who">${escHTML(l.created_by_name || "?")}</span>
+            </div>`;
+          }
+          if (listings.length > 0 && offers.length > 0) {
+            const lowestAsk = parseFloat(listings[0]?.sfl) || 0;
+            const highestBid = parseFloat(offers[0]?.sfl) || 0;
+            const spread = lowestAsk > 0 && highestBid > 0 ? ((lowestAsk - highestBid) / lowestAsk * 100).toFixed(1) : "?";
+            html += `<div class="orderbook-spread">── spread: ${spread}% ──</div>`;
+          }
+          for (const o of offers.slice(0, 5)) {
+            html += `<div class="orderbook-row buy">
+              <span class="orderbook-side">BUY</span>
+              <span class="orderbook-sfl">${formatSFL(parseFloat(o.sfl) || 0)} ${sflIcon(10)}</span>
+              <span class="orderbook-who">${escHTML(o.created_by_name || "?")}</span>
+            </div>`;
+          }
+          html += `</div>`;
+        }
+
+        detail.innerHTML = html;
       } catch (e) {
-        detail.innerHTML = `<div class="ph-empty">Failed to load history</div>`;
+        detail.innerHTML = `<div class="ph-empty">Failed to load history: ${escHTML(e.message)}</div>`;
       }
     }
 
@@ -8843,6 +9102,7 @@
       const id = parseInt(nftId);
       const map = _NFT_NAMES[collection];
       if (map && map[id]) return map[id];
+      if (collection === "buds") return "Bud #" + id;
       if (collection === "pets") return "Pet #" + id;
       return "#" + id;
     }
@@ -8954,6 +9214,8 @@
           <div class="ph-tabs" id="nft-history-tabs">
             <button class="ph-tab active" data-col="collectibles" onclick="switchNftTab('collectibles')">COLLECTIBLES</button>
             <button class="ph-tab" data-col="wearables" onclick="switchNftTab('wearables')">WEARABLES</button>
+            <button class="ph-tab" data-col="buds" onclick="switchNftTab('buds')">BUDS</button>
+            <button class="ph-tab" data-col="pets" onclick="switchNftTab('pets')">PETS</button>
           </div>
           <input class="ph-search" type="text" id="nft-history-search" placeholder="Search NFTs..." oninput="renderNftItems(document.querySelector('#nft-history-tabs .ph-tab.active')?.dataset.col||'collectibles')">
           <div id="nft-history-body">
@@ -8961,6 +9223,239 @@
           </div>
         </div>
       </div>`;
+    }
+
+
+    // ── Big number formatter (1.2M, 45.3K, etc.) ──
+    function _fmtBigNum(n) {
+      n = parseFloat(n) || 0;
+      if (n >= 1e9) return (n / 1e9).toFixed(1) + "B";
+      if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
+      if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
+      return n.toFixed(n < 10 ? 2 : 0);
+    }
+
+    // ── Resolve marketplace item name from collection + id ──
+    function _resolveMarketName(collection, itemId) {
+      const id = parseInt(itemId);
+      const map = _NFT_NAMES[collection];
+      if (map && map[id]) return map[id];
+      if (collection === "buds") return "Bud #" + id;
+      if (collection === "pets") return "Pet #" + id;
+      return collection.slice(0,1).toUpperCase() + collection.slice(1) + " #" + id;
+    }
+
+    // ── Draw sparkline on a canvas ──
+    function _drawSparkline(canvasId, values) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      const w = canvas.width = canvas.offsetWidth * (window.devicePixelRatio || 1);
+      const h = canvas.height = canvas.offsetHeight * (window.devicePixelRatio || 1);
+      canvas.style.width = canvas.offsetWidth + "px";
+      canvas.style.height = canvas.offsetHeight + "px";
+      if (values.length < 2) return;
+      const max = Math.max(...values);
+      const min = Math.min(...values);
+      const range = max - min || 1;
+      ctx.clearRect(0, 0, w, h);
+      ctx.beginPath();
+      const step = w / (values.length - 1);
+      for (let i = 0; i < values.length; i++) {
+        const x = i * step;
+        const y = h - ((values[i] - min) / range) * (h * 0.85) - h * 0.05;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = "#d4a843";
+      ctx.lineWidth = 2 * (window.devicePixelRatio || 1);
+      ctx.stroke();
+      // Fill area
+      ctx.lineTo(w, h);
+      ctx.lineTo(0, h);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(212,168,67,0.12)";
+      ctx.fill();
+    }
+
+    // ── Render Market Overview card ──
+    async function _renderMarketOverview(container) {
+      try {
+        const [totalsResp, moversResp] = await Promise.all([
+          fetch("/api/marketplace-history?totals=1&days=30").then(r => r.ok ? r.json() : null),
+          fetch("/api/marketplace-history?top=volume&days=1&limit=5").then(r => r.ok ? r.json() : null),
+        ]);
+
+        const totals = totalsResp?.totals || [];
+        if (totals.length === 0) { container.innerHTML = ""; return; }
+
+        const today = totals[0] || {};
+        const vol = parseFloat(today.total_volume) || 0;
+        const trades = parseInt(today.total_trades) || 0;
+        const flower = parseFloat(today.flower_price) || 0;
+
+        // Sparkline data (oldest → newest)
+        const sparkVals = totals.slice().reverse().map(t => parseFloat(t.total_volume) || 0);
+
+        const movers = (moversResp?.items || []).slice(0, 5);
+
+        let html = `<div class="market-overview pixel-font">
+          <div class="market-overview-title">\ud83d\udcca MARKET OVERVIEW</div>
+          <div class="market-overview-stats">
+            <div class="market-overview-stat">
+              <span class="label">Volume</span>
+              <span class="value">${_fmtBigNum(vol)} ${sflIcon()}</span>
+            </div>
+            <div class="market-overview-stat">
+              <span class="label">Trades</span>
+              <span class="value">${_fmtBigNum(trades)}</span>
+            </div>
+            <div class="market-overview-stat">
+              <span class="label">\ud83c\udf38 Price</span>
+              <span class="value" style="color:var(--lily)">${flower.toFixed(4)}</span>
+            </div>
+          </div>
+          <canvas id="market-sparkline-canvas" class="market-sparkline"></canvas>`;
+
+        if (movers.length > 0) {
+          html += `<div class="market-movers">
+            <div class="market-movers-title">TOP MOVERS TODAY</div>`;
+          for (let i = 0; i < movers.length; i++) {
+            const m = movers[i];
+            const name = _resolveMarketName(m.collection, m.item_id);
+            html += `<div class="market-mover-row">
+              <span class="market-mover-rank">${i + 1}.</span>
+              <span class="market-mover-name">${escHTML(name)}</span>
+              <span class="market-mover-vol">${_fmtBigNum(m.total_volume)}</span>
+              <span class="market-mover-trades">${_fmtBigNum(m.total_trades)} trades</span>
+            </div>`;
+          }
+          html += `</div>`;
+        }
+
+        html += `</div>`;
+        container.innerHTML = html;
+
+        // Draw sparkline after DOM insert
+        setTimeout(() => _drawSparkline("market-sparkline-canvas", sparkVals), 0);
+      } catch (e) {
+        console.warn("[Market Overview]", e);
+        container.innerHTML = "";
+      }
+    }
+
+    // ── Render Volume Leaders section ──
+    async function _renderVolumeLeaders(container) {
+      try {
+        const resp = await fetch("/api/marketplace-history?top=volume&days=7&limit=10");
+        if (!resp.ok) { container.innerHTML = ""; return; }
+        const data = await resp.json();
+        const items = data.items || [];
+        if (items.length === 0) { container.innerHTML = ""; return; }
+
+        let rowsHtml = "";
+        for (const item of items) {
+          const name = _resolveMarketName(item.collection, item.item_id);
+          const imgUrl = getItemIcon(name);
+          const vol = parseFloat(item.total_volume) || 0;
+          const trades = parseInt(item.total_trades) || 0;
+          const low = parseFloat(item.period_low) || 0;
+          const high = parseFloat(item.period_high) || 0;
+          const safeN = name.replace(/'/g, "\\'");
+          rowsHtml += `<div class="volume-leader-row" onclick="toggleNftDetail(this,${item.item_id},'${safeN}','${item.collection}')">
+            <img class="ph-row-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">
+            <div>
+              <div class="ph-row-name">${escHTML(name)}</div>
+              <div class="ph-row-sub">vol: ${_fmtBigNum(vol)} \u00b7 ${_fmtBigNum(trades)} trades${low > 0 ? ' \u00b7 ' + formatSFL(low) + '\u2013' + formatSFL(high) : ''}</div>
+            </div>
+            <div style="text-align:right;color:var(--sunpetal);font-weight:bold">${_fmtBigNum(vol)} ${sflIcon()}</div>
+          </div>`;
+        }
+
+        container.innerHTML = `<div style="margin-bottom:16px">
+          <div class="sales-section-header pixel-font" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+            <h3>\ud83c\udfc6 VOLUME LEADERS (7 DAYS)</h3>
+            <span class="sales-section-count">${items.length} items</span>
+          </div>
+          <div class="sales-section-body">${rowsHtml}</div>
+        </div>`;
+      } catch (e) {
+        console.warn("[Volume Leaders]", e);
+        container.innerHTML = "";
+      }
+    }
+
+    // ── Render Token Management card ──
+    async function _renderTokenCard(container) {
+      if (FARM_ID !== "155498") { container.innerHTML = ""; return; }
+      try {
+        const resp = await fetch(`/api/game-token?farm=${FARM_ID}`);
+        const data = await resp.json();
+
+        let dotClass = "none", statusText = "Not set";
+        if (data.hasToken) {
+          if (data.status === "valid") {
+            dotClass = "valid";
+            statusText = `Valid (${data.expiresIn || "?"})`;
+          } else if (data.status === "expired") {
+            dotClass = "expired";
+            statusText = "Expired";
+          } else {
+            dotClass = "none";
+            statusText = data.status || "Unknown";
+          }
+        }
+
+        container.innerHTML = `<div class="token-card pixel-font">
+          <div class="token-card-header" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+            <span class="token-status-dot ${dotClass}"></span>
+            <span style="flex:1">\ud83d\udd11 GAME TOKEN</span>
+            <span style="font-size:0.5625rem;color:var(--text-dim)">${escHTML(statusText)}</span>
+          </div>
+          <div class="token-card-body" style="display:none">
+            <div style="font-size:0.5625rem;color:var(--text-dim);margin-bottom:8px">
+              Paste a game JWT to update the stored token for marketplace trade tracking.
+            </div>
+            <div class="token-input-row">
+              <input type="text" class="token-input" id="token-input-field" placeholder="eyJhbG...">
+              <button class="token-submit" onclick="_submitGameToken()">UPDATE</button>
+            </div>
+            <div class="token-feedback" id="token-feedback"></div>
+          </div>
+        </div>`;
+      } catch (e) {
+        console.warn("[Token card]", e);
+        container.innerHTML = "";
+      }
+    }
+
+    async function _submitGameToken() {
+      const input = document.getElementById("token-input-field");
+      const fb = document.getElementById("token-feedback");
+      const token = (input?.value || "").trim();
+      if (!token) { fb.innerHTML = '<span style="color:var(--red)">Paste a token first</span>'; return; }
+      fb.innerHTML = '<span style="color:var(--text-dim)">Updating...</span>';
+      try {
+        const resp = await fetch("/api/game-token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ farm: parseInt(FARM_ID), token }),
+        });
+        const data = await resp.json();
+        if (data.success) {
+          fb.innerHTML = `<span style="color:var(--green)">\u2705 Updated! Expires in ${data.expiresIn || "?"}</span>`;
+          input.value = "";
+          // Refresh the token card status dot
+          const header = fb.closest(".token-card")?.querySelector(".token-card-header");
+          if (header) {
+            header.querySelector(".token-status-dot").className = "token-status-dot valid";
+            header.querySelector("span:last-child").textContent = `Valid (${data.expiresIn || "?"})`;
+          }
+        } else {
+          fb.innerHTML = `<span style="color:var(--red)">\u274c ${escHTML(data.error || "Failed")}</span>`;
+        }
+      } catch (e) {
+        fb.innerHTML = `<span style="color:var(--red)">\u274c ${escHTML(e.message)}</span>`;
+      }
     }
 
     async function renderSales(data) {
@@ -9118,6 +9613,9 @@
         </div>`;
       };
 
+      // Market Overview container (async-filled)
+      content += `<div id="market-overview-container"></div>`;
+
       // Active Listings section
       content += `<div style="margin-bottom:16px">
         <div class="sales-section-header pixel-font" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
@@ -9191,9 +9689,15 @@
       console.log("[Sales] trades:", trades);
       console.log("[Sales] listings:", Object.keys(listings).length, "offers:", Object.keys(offers).length);
 
+      // Volume Leaders container (async-filled)
+      content += `<div id="volume-leaders-container"></div>`;
+
       // ── Price History sections ──
       content += renderP2PHistorySection(p2pPrices);
       content += renderNftHistorySection();
+
+      // Token management container (async-filled, only for farm 155498)
+      content += `<div id="token-card-container"></div>`;
 
       content += `<div class="footer">
         <button class="refresh-btn" onclick="refresh()">REFRESH</button>
@@ -9201,6 +9705,11 @@
       </div>`;
 
       document.getElementById("sales-content").innerHTML = content;
+
+      // Async: fill market overview, volume leaders, token card
+      _renderMarketOverview(document.getElementById("market-overview-container"));
+      _renderVolumeLeaders(document.getElementById("volume-leaders-container"));
+      _renderTokenCard(document.getElementById("token-card-container"));
     }
 
     // ═══════════════════════════════════════
