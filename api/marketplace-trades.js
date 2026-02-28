@@ -12,6 +12,22 @@ export default async function handler(req, res) {
     const limit = Math.min(parseInt(req.query.limit) || 50, 500);
     const days = Math.min(parseInt(req.query.days) || 30, 365);
 
+    // Count mode — return row counts per table
+    if (req.query.count) {
+      const [trades, orderbook, daily, totals] = await Promise.all([
+        pool.query(`SELECT COUNT(*) as n FROM marketplace_trades`),
+        pool.query(`SELECT collection, side, COUNT(*) as n FROM marketplace_orderbook GROUP BY collection, side ORDER BY collection, side`),
+        pool.query(`SELECT COUNT(DISTINCT date) as days, COUNT(*) as items FROM marketplace_daily`),
+        pool.query(`SELECT COUNT(*) as n FROM marketplace_totals`),
+      ]);
+      return res.status(200).json({
+        marketplace_trades: parseInt(trades.rows[0].n),
+        marketplace_orderbook: orderbook.rows.map(r => ({ collection: r.collection, side: r.side, count: parseInt(r.n) })),
+        marketplace_daily: { days: parseInt(daily.rows[0].days), item_rows: parseInt(daily.rows[0].items) },
+        marketplace_totals: parseInt(totals.rows[0].n),
+      });
+    }
+
     // Latest trades across all items
     if (req.query.latest) {
       const result = await pool.query(
