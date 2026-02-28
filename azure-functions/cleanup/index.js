@@ -33,6 +33,15 @@ module.exports = async function (context) {
       DELETE FROM nft_changes WHERE captured_at < NOW() - INTERVAL '365 days'
     `);
     context.log(`Deleted ${nftDelete.rowCount} old NFT records`);
+
+    // Prune marketplace_trades older than 1 year
+    const mktTradesDelete = await pool.query(`
+      DELETE FROM marketplace_trades WHERE fulfilled_at < NOW() - INTERVAL '365 days'
+    `);
+    context.log(`Deleted ${mktTradesDelete.rowCount} old marketplace trade records`);
+
+    // marketplace_orderbook: only latest snapshot kept (overwritten each run, no cleanup needed)
+    // marketplace_daily + marketplace_totals: keep forever (small data)
   } catch (err) {
     context.log.error(`Cleanup error: ${err.message}`);
   }

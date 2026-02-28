@@ -43,4 +43,40 @@ async function fetchNfts() {
   return resp.json();
 }
 
-module.exports = { fetchFarmData, fetchPrices, fetchNfts };
+
+/**
+ * Fetch marketplace activity data (daily aggregates, no auth needed).
+ * Returns { flowerPrice, reports: { "YYYY-MM-DD": { totals, items } } }
+ */
+async function fetchMarketplaceActivity() {
+  const resp = await fetch(
+    "https://api.sunflower-land.com/data?type=marketplaceActivity",
+    { headers: { "Content-Type": "application/json;charset=UTF-8" } }
+  );
+  if (!resp.ok) throw new Error(`MarketplaceActivity API ${resp.status}: ${await resp.text()}`);
+  const json = await resp.json();
+  return json.data || {};
+}
+
+/**
+ * Fetch rich per-item collection data (requires Bearer JWT).
+ * Returns { id, floor, supply, history, listings, offers, ... }
+ */
+async function fetchCollectionItem(collection, itemId, token) {
+  const resp = await fetch(
+    `https://api.sunflower-land.com/collection/${collection}/${itemId}?type=${collection}`,
+    {
+      headers: {
+        "Content-Type": "application/json;charset=UTF-8",
+        "Authorization": `Bearer ${token}`,
+      },
+    }
+  );
+  if (resp.status === 429) {
+    throw Object.assign(new Error("Rate limited"), { status: 429 });
+  }
+  if (!resp.ok) throw new Error(`Collection API ${resp.status}: ${await resp.text()}`);
+  return resp.json();
+}
+
+module.exports = { fetchFarmData, fetchPrices, fetchNfts, fetchMarketplaceActivity, fetchCollectionItem };
