@@ -14679,9 +14679,9 @@
               flowerBeds:  { name:"Flowers",   res:"Red Pansy",tool:"Red Pansy" },
               greenhouse:  { name:"Greenhouse",res:"Grape",    tool:"Grape" },
               crabTraps:   { name:"Crab Traps",res:"Crab",     tool:"Crab" },
-              chickens:    { name:"Chickens",  res:"Chicken",  tool:"Kernel Blend", isAnimal: true },
-              cows:        { name:"Cows",      res:"Cow",      tool:"Hay",          isAnimal: true },
-              sheep:       { name:"Sheep",     res:"Sheep",    tool:"Hay",          isAnimal: true },
+              chickens:    { name:"Chickens",  res:"Chicken",  tool:null, isAnimal: true },
+              cows:        { name:"Cows",      res:"Cow",      tool:null, isAnimal: true },
+              sheep:       { name:"Sheep",     res:"Sheep",    tool:null, isAnimal: true },
             };
             const ii = n => `<img class="dn-ico" src="${getItemIcon(n)}" onerror="this.style.display='none'">`;
             out += `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:2px" class="pixel-font">ACTIONS</div>`;
@@ -14690,9 +14690,10 @@
               const c = NC[key] || { name: key, res: key, tool: key };
               const h = nd.harvested || nd.fed || 0;
               const col1 = `${escHTML(c.name)} ${ii(c.res)}`;
+              const toolHtml = c.tool ? ii(c.tool) : (c.isAnimal ? "\u2764\uFE0F" : "");
               const col2 = h > 0
-                ? `<span class="dn-harv">${h} ${ii(c.tool)}</span>`
-                : `<span class="dn-zero">0 ${ii(c.tool)}</span>`;
+                ? `<span class="dn-harv">${h} ${toolHtml}</span>`
+                : `<span class="dn-zero">0 ${toolHtml}</span>`;
 
               // State column
               let col3 = "";
