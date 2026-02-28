@@ -24,11 +24,11 @@ module.exports = async function (context) {
       return;
     }
 
-    // Load last known values
-    const lastResult = await pool.query("SELECT nft_id, field, value FROM last_known_nft_values");
+    // Load last known values (keyed by nft_id:collection:field)
+    const lastResult = await pool.query("SELECT nft_id, collection, field, value FROM last_known_nft_values");
     const lastValues = new Map();
     for (const r of lastResult.rows) {
-      lastValues.set(`${r.nft_id}:${r.field}`, r.value);
+      lastValues.set(`${r.nft_id}:${r.collection}:${r.field}`, r.value);
     }
 
     const changes = [];
@@ -40,7 +40,7 @@ module.exports = async function (context) {
         const val = parseFloat(nft[field]);
         if (isNaN(val)) continue;
 
-        const key = `${nftId}:${field}`;
+        const key = `${nftId}:${nft.collection}:${field}`;
         const lastVal = lastValues.get(key);
 
         if (lastVal !== undefined && Math.abs(val - lastVal) < 1e-10) {
@@ -76,13 +76,13 @@ module.exports = async function (context) {
         );
       }
 
-      // Upsert last known values
+      // Upsert last known values (keyed by nft_id + collection + field)
       for (const c of changes) {
         await client.query(
-          `INSERT INTO last_known_nft_values (nft_id, field, value, updated_at)
-           VALUES ($1, $2, $3, NOW())
-           ON CONFLICT (nft_id, field) DO UPDATE SET value = $3, updated_at = NOW()`,
-          [c.nft_id, c.field, c.value]
+          `INSERT INTO last_known_nft_values (nft_id, collection, field, value, updated_at)
+           VALUES ($1, $2, $3, $4, NOW())
+           ON CONFLICT (nft_id, collection, field) DO UPDATE SET value = $4, updated_at = NOW()`,
+          [c.nft_id, c.collection, c.field, c.value]
         );
       }
 

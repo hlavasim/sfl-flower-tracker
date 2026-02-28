@@ -8678,8 +8678,10 @@
       return data.values || [];
     }
 
-    async function fetchNftItemHistory(nftId, field) {
-      const resp = await fetch(`/api/nft-history?nft_id=${nftId}&field=${encodeURIComponent(field || "floor")}`);
+    async function fetchNftItemHistory(nftId, field, collection) {
+      let url = `/api/nft-history?nft_id=${nftId}&field=${encodeURIComponent(field || "floor")}`;
+      if (collection) url += `&collection=${encodeURIComponent(collection)}`;
+      const resp = await fetch(url);
       if (!resp.ok) throw new Error("NFT history fetch failed");
       const data = await resp.json();
       return data.changes || [];
@@ -8799,7 +8801,7 @@
 
     // ── NFT History toggle detail ──
 
-    async function toggleNftDetail(el, nftId, nftName) {
+    async function toggleNftDetail(el, nftId, nftName, collection) {
       const row = el.closest(".ph-row");
       if (row.nextElementSibling && row.nextElementSibling.classList.contains("ph-detail")) {
         row.nextElementSibling.remove();
@@ -8811,7 +8813,7 @@
       detail.innerHTML = `<div class="ph-empty">Loading history...</div>`;
       row.after(detail);
       try {
-        const changes = await fetchNftItemHistory(nftId, "floor");
+        const changes = await fetchNftItemHistory(nftId, "floor", collection);
         detail.innerHTML = renderPriceTimeline(changes, nftName + " (floor)");
       } catch (e) {
         detail.innerHTML = `<div class="ph-empty">Failed to load history</div>`;
@@ -8890,7 +8892,7 @@
         const lastSale = item.lastSalePrice || 0;
         const supply = item.supply;
         const safeName = (item.name || "").replace(/'/g, "\\'");
-        html += `<div class="ph-row" data-name="${escHTML(item.name || "")}" onclick="toggleNftDetail(this,${item.nft_id},'${safeName}')">
+        html += `<div class="ph-row" data-name="${escHTML(item.name || "")}" onclick="toggleNftDetail(this,${item.nft_id},'${safeName}','${item.collection}')">
           <img class="ph-row-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">
           <div>
             <div class="ph-row-name">${escHTML(item.name || '#' + item.nft_id)}</div>

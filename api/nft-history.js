@@ -43,15 +43,22 @@ export default async function handler(req, res) {
     const to = req.query.to || "2100-01-01";
     const limit = Math.min(parseInt(req.query.limit) || 500, 5000);
     const field = req.query.field;
+    const collection = req.query.collection;
+
+    // Build query with optional field + collection filters
+    const conditions = ["nft_id = $1", "captured_at >= $2", "captured_at <= $3"];
+    const params = [nftId, from, to];
+    if (field) { params.push(field); conditions.push(`field = $${params.length}`); }
+    if (collection) { params.push(collection); conditions.push(`collection = $${params.length}`); }
+    params.push(limit);
 
     const result = await pool.query(
       `SELECT nft_id, nft_name, collection, field, value, previous_value, captured_at
        FROM nft_changes
-       WHERE nft_id = $1 AND captured_at >= $2 AND captured_at <= $3
-         ${field ? "AND field = $4" : ""}
+       WHERE ${conditions.join(" AND ")}
        ORDER BY captured_at DESC
-       LIMIT ${field ? "$5" : "$4"}`,
-      field ? [nftId, from, to, field, limit] : [nftId, from, to, limit]
+       LIMIT $${params.length}`,
+      params
     );
 
     return res.status(200).json({ changes: result.rows });
