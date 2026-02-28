@@ -19,6 +19,59 @@ module.exports = async function (context) {
       }
     }
 
+    // Derive buds/pets prices from marketplace DB tables
+    for (const collection of ["buds", "pets"]) {
+      try {
+        const [floorRes, saleRes, supplyRes] = await Promise.all([
+          // Floor = lowest listing price per item
+          pool.query(
+            `SELECT item_id, MIN(sfl / GREATEST(quantity, 1)) as floor
+             FROM marketplace_orderbook
+             WHERE collection = $1 AND side = 'listing'
+             GROUP BY item_id`,
+            [collection]
+          ),
+          // Last sale = most recent trade per item
+          pool.query(
+            `SELECT DISTINCT ON (item_id) item_id, sfl / GREATEST(quantity, 1) as last_sale
+             FROM marketplace_trades
+             WHERE collection = $1
+             ORDER BY item_id, fulfilled_at DESC`,
+            [collection]
+          ),
+          // Supply = count of distinct listing orders
+          pool.query(
+            `SELECT item_id, COUNT(*) as supply
+             FROM marketplace_orderbook
+             WHERE collection = $1 AND side = 'listing'
+             GROUP BY item_id`,
+            [collection]
+          ),
+        ]);
+
+        const items = new Map();
+        for (const r of floorRes.rows) {
+          items.set(r.item_id, { id: r.item_id, collection, floor: parseFloat(r.floor) });
+        }
+        for (const r of saleRes.rows) {
+          const item = items.get(r.item_id) || { id: r.item_id, collection };
+          item.lastSalePrice = parseFloat(r.last_sale);
+          items.set(r.item_id, item);
+        }
+        for (const r of supplyRes.rows) {
+          const item = items.get(r.item_id);
+          if (item) item.supply = parseInt(r.supply);
+        }
+
+        for (const item of items.values()) {
+          allNfts.push(item);
+        }
+        context.log(`Derived ${items.size} ${collection} prices from marketplace data`);
+      } catch (err) {
+        context.log.warn(`Failed to derive ${collection} prices: ${err.message}`);
+      }
+    }
+
     if (allNfts.length === 0) {
       context.log("No NFT data returned");
       return;
