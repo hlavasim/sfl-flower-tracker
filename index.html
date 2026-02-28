@@ -2865,13 +2865,15 @@
     };
 
     // Resource categories trackable via farm-history diffs (catId → inventory key)
+    // Resource categories trackable via farm-history diffs
+    // catId -> { inv: inventory key (legacy fallback), hKey: _h.* diff key (precise), nodeKey: nodes.* key }
     const EFFICIENCY_RESOURCE_MAP = {
-      trees:     "Wood",
-      stone:     "Stone",
-      iron:      "Iron",
-      gold:      "Gold",
-      crimstone: "Crimstone",
-      oil:       "Oil",
+      trees:     { inv: "Wood",      hKey: "_h.trees",       nodeKey: "trees" },
+      stone:     { inv: "Stone",     hKey: "_h.stones",      nodeKey: "stones" },
+      iron:      { inv: "Iron",      hKey: "_h.iron",        nodeKey: "iron" },
+      gold:      { inv: "Gold",      hKey: "_h.gold",        nodeKey: "gold" },
+      crimstone: { inv: "Crimstone", hKey: "_h.crimstones",  nodeKey: "crimstones" },
+      oil:       { inv: "Oil",       hKey: "_h.oilReserves", nodeKey: "oilReserves" },
     };
 
     // ── Base node counts per island type (default before purchases) ──
@@ -13124,12 +13126,21 @@
         if (pDays > 0.5) {
           effDataAvailable = true;
 
-          for (const [catId, invName] of Object.entries(EFFICIENCY_RESOURCE_MAP)) {
-            // 1. Find timestamps where resource increased (= dig events)
+          for (const [catId, resInfo] of Object.entries(EFFICIENCY_RESOURCE_MAP)) {
+            // 1. Find timestamps where resource was harvested
+            //    Prefer precise _h.* count, fall back to inventory.* increase
             const digTimes = [];
+            let totalHarvested = 0;
             for (const snap of sorted) {
               const diff = snap.diff || {};
-              if ((diff[`inventory.${invName}`] || 0) > 0) {
+              const hCount = diff[resInfo.hKey];
+              const invIncrease = diff[`inventory.${resInfo.inv}`];
+              if (hCount > 0) {
+                // Precise: we know exactly how many nodes were harvested
+                digTimes.push(new Date(snap.captured_at).getTime());
+                totalHarvested += hCount;
+              } else if (hCount === undefined && (invIncrease || 0) > 0) {
+                // Legacy fallback: inventory increased but no _h.* key
                 digTimes.push(new Date(snap.captured_at).getTime());
               }
             }
@@ -13140,7 +13151,7 @@
               let sessionStart = digTimes[0];
               let sessionEnd = digTimes[0];
               for (let i = 1; i < digTimes.length; i++) {
-                if (digTimes[i] - sessionEnd <= 1800000) { // 30 min
+                if (digTimes[i] - sessionEnd <= 1800000) {
                   sessionEnd = digTimes[i];
                 } else {
                   sessions.push(sessionStart);
@@ -13151,7 +13162,7 @@
               sessions.push(sessionStart);
             }
 
-            // 3. Theoretical digs per day (using boosted respawn, not base)
+            // 3. Theoretical digs per day (using boosted respawn)
             const product = getDefaultProduct(catId);
             const ownedEff = getOwnedEffects(catId);
             const boosted = applyBoosts(catId, product, capacity, ownedEff);
@@ -13163,15 +13174,20 @@
 
             // 5. Efficiency = actual / theoretical
             let ratio = theoreticalPerDay > 0 ? actualPerDay / theoreticalPerDay : 0;
-            if (ratio > 1.5) ratio = 1.5; // cap at 150%
+            if (ratio > 1.5) ratio = 1.5;
 
-            // 6. Avg gap between sessions (for display)
+            // 6. Avg gap between sessions
             let avgGapH = 0;
             if (sessions.length >= 2) {
               let totalGap = 0;
               for (let i = 1; i < sessions.length; i++) totalGap += sessions[i] - sessions[i - 1];
               avgGapH = (totalGap / (sessions.length - 1)) / 3600000;
             }
+
+            // 7. Harvest accuracy: total nodes harvested vs theoretical
+            const nk = resInfo.nodeKey === "stones" ? "stones" : resInfo.nodeKey;
+            const totalNodes = getNodeTiers(nk).effective;
+            const theoreticalHarvests = Math.round(theoreticalPerDay * pDays * totalNodes);
 
             efficiencyMap[catId] = {
               ratio,
@@ -13180,6 +13196,9 @@
               actualPerDay,
               avgGapH,
               optimalGapH: effectiveCycle / 3600,
+              totalHarvested: totalHarvested || null,
+              theoreticalHarvests: theoreticalHarvests || null,
+              totalNodes,
             };
           }
         }
@@ -13196,7 +13215,10 @@
         if (!e) return '<span style="color:var(--text-dim)">\u2014</span>';
         const pct = Math.round(e.ratio * 100);
         const color = pct >= 80 ? "var(--green)" : pct >= 40 ? "var(--sunpetal)" : "var(--red)";
-        const tip = `${e.sessions} digs \u00b7 avg ${e.avgGapH.toFixed(1)}h (optimal ${e.optimalGapH.toFixed(1)}h)`;
+        let tip = `${e.sessions} sessions \u00b7 avg ${e.avgGapH.toFixed(1)}h (optimal ${e.optimalGapH.toFixed(1)}h)`;
+        if (e.totalHarvested) tip += ` \u00b7 ${e.totalHarvested} harvested (theoretical ${e.theoreticalHarvests || '?'})`;
+        return `<span style="color:${color};font-weight:bold" title="${tip}">${pct}%</span>`;
+      }
         return `<span style="color:${color};font-weight:bold" title="${tip}">${pct}%</span>`;
       }
 
