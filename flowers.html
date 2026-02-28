@@ -9290,35 +9290,38 @@
 
         const today = totals[0] || {};
         const flower = parseFloat(today.flower_price) || 0;
-        const isCumulative = (moversResp?.mode === "cumulative");
 
-        // For volume/trades: prefer daily delta, fall back to cumulative
-        const vol = parseFloat(today.total_volume ?? today.cumulative_volume) || 0;
-        const trades = parseInt(today.total_trades ?? today.cumulative_trades) || 0;
+        // Check if we have real daily deltas (need 2+ days of snapshots)
         const hasDelta = today.total_volume != null;
-        const volLabel = hasDelta ? "Volume (daily)" : "Volume (cumul.)";
-        const tradesLabel = hasDelta ? "Trades (daily)" : "Trades (cumul.)";
+        const isCumulative = !hasDelta || (moversResp?.mode === "cumulative");
+
+        // Only show volume/trades when we have daily deltas
+        const vol = hasDelta ? (parseFloat(today.total_volume) || 0) : 0;
+        const trades = hasDelta ? (parseInt(today.total_trades) || 0) : 0;
 
         // Sparkline: only if 2+ days with daily deltas
         const sparkDays = totals.filter(t => t.total_volume != null);
         const sparkVals = sparkDays.slice().reverse().map(t => parseFloat(t.total_volume) || 0);
 
-        const movers = (moversResp?.items || []).slice(0, 5);
-        const moverLabel = isCumulative ? "TOP ITEMS (cumulative)" : "TOP MOVERS (daily delta)";
-
         let html = `<div class="market-overview pixel-font">
           <div class="market-overview-title">\ud83d\udcca MARKET OVERVIEW</div>
-          <div class="market-overview-stats">
+          <div class="market-overview-stats">`;
+
+        if (hasDelta) {
+          html += `
             <div class="market-overview-stat">
-              <span class="label">${volLabel}</span>
+              <span class="label">Volume (24h)</span>
               <span class="value">${_fmtBigNum(vol)} ${sflIcon()}</span>
             </div>
             <div class="market-overview-stat">
-              <span class="label">${tradesLabel}</span>
+              <span class="label">Trades (24h)</span>
               <span class="value">${_fmtBigNum(trades)}</span>
-            </div>
+            </div>`;
+        }
+
+        html += `
             <div class="market-overview-stat">
-              <span class="label">\ud83c\udf38 Price</span>
+              <span class="label">\ud83c\udf38 Flower Price</span>
               <span class="value" style="color:var(--lily)">${flower.toFixed(4)}</span>
             </div>
           </div>`;
@@ -9327,20 +9330,26 @@
           html += `<canvas id="market-sparkline-canvas" class="market-sparkline"></canvas>`;
         }
 
-        if (movers.length > 0) {
-          html += `<div class="market-movers">
-            <div class="market-movers-title">${moverLabel}</div>`;
-          for (let i = 0; i < movers.length; i++) {
-            const m = movers[i];
-            const name = _resolveMarketName(m.collection, m.item_id);
-            html += `<div class="market-mover-row">
-              <span class="market-mover-rank">${i + 1}.</span>
-              <span class="market-mover-name">${escHTML(name)}</span>
-              <span class="market-mover-vol">${_fmtBigNum(m.total_volume)} vol</span>
-              <span class="market-mover-trades">${_fmtBigNum(m.total_quantity || m.total_trades)} qty</span>
-            </div>`;
+        // Top movers only when we have deltas
+        if (!isCumulative) {
+          const movers = (moversResp?.items || []).slice(0, 5);
+          if (movers.length > 0) {
+            html += `<div class="market-movers">
+              <div class="market-movers-title">TOP MOVERS (24h)</div>`;
+            for (let i = 0; i < movers.length; i++) {
+              const m = movers[i];
+              const name = _resolveMarketName(m.collection, m.item_id);
+              html += `<div class="market-mover-row">
+                <span class="market-mover-rank">${i + 1}.</span>
+                <span class="market-mover-name">${escHTML(name)}</span>
+                <span class="market-mover-vol">${_fmtBigNum(m.total_volume)} SFL</span>
+                <span class="market-mover-trades">${_fmtBigNum(m.total_quantity || 0)} qty</span>
+              </div>`;
+            }
+            html += `</div>`;
           }
-          html += `</div>`;
+        } else {
+          html += `<div style="font-size:0.5rem;color:var(--text-dim);margin-top:4px">Volume/trades data collecting \u2014 available after 2+ daily snapshots</div>`;
         }
 
         html += `</div>`;
@@ -9362,16 +9371,19 @@
         if (!resp.ok) { container.innerHTML = ""; return; }
         const data = await resp.json();
         const items = data.items || [];
-        if (items.length === 0) { container.innerHTML = ""; return; }
-        const isCumulative = (data.mode === "cumulative");
-        const titleSuffix = isCumulative ? " (CUMULATIVE)" : " (7-DAY DELTA)";
+
+        // Don't show cumulative all-time data — it's misleading
+        if (data.mode === "cumulative" || items.length === 0) {
+          container.innerHTML = "";
+          return;
+        }
 
         let rowsHtml = "";
         for (const item of items) {
           const name = _resolveMarketName(item.collection, item.item_id);
           const imgUrl = getItemIcon(name);
           const vol = parseFloat(item.total_volume) || 0;
-          const qty = parseInt(item.total_quantity || item.total_trades) || 0;
+          const qty = parseInt(item.total_quantity || 0);
           const low = parseFloat(item.period_low) || 0;
           const high = parseFloat(item.period_high) || 0;
           const safeN = name.replace(/'/g, "\\'");
@@ -9387,7 +9399,7 @@
 
         container.innerHTML = `<div style="margin-bottom:16px">
           <div class="sales-section-header pixel-font" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
-            <h3>\ud83c\udfc6 VOLUME LEADERS${titleSuffix}</h3>
+            <h3>\ud83c\udfc6 VOLUME LEADERS (7 DAYS)</h3>
             <span class="sales-section-count">${items.length} items</span>
           </div>
           <div class="sales-section-body">${rowsHtml}</div>
