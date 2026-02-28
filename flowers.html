@@ -9289,44 +9289,55 @@
         if (totals.length === 0) { container.innerHTML = ""; return; }
 
         const today = totals[0] || {};
-        const vol = parseFloat(today.total_volume) || 0;
-        const trades = parseInt(today.total_trades) || 0;
         const flower = parseFloat(today.flower_price) || 0;
+        const isCumulative = (moversResp?.mode === "cumulative");
 
-        // Sparkline data (oldest → newest)
-        const sparkVals = totals.slice().reverse().map(t => parseFloat(t.total_volume) || 0);
+        // For volume/trades: prefer daily delta, fall back to cumulative
+        const vol = parseFloat(today.total_volume ?? today.cumulative_volume) || 0;
+        const trades = parseInt(today.total_trades ?? today.cumulative_trades) || 0;
+        const hasDelta = today.total_volume != null;
+        const volLabel = hasDelta ? "Volume (daily)" : "Volume (cumul.)";
+        const tradesLabel = hasDelta ? "Trades (daily)" : "Trades (cumul.)";
+
+        // Sparkline: only if 2+ days with daily deltas
+        const sparkDays = totals.filter(t => t.total_volume != null);
+        const sparkVals = sparkDays.slice().reverse().map(t => parseFloat(t.total_volume) || 0);
 
         const movers = (moversResp?.items || []).slice(0, 5);
+        const moverLabel = isCumulative ? "TOP ITEMS (cumulative)" : "TOP MOVERS (daily delta)";
 
         let html = `<div class="market-overview pixel-font">
           <div class="market-overview-title">\ud83d\udcca MARKET OVERVIEW</div>
           <div class="market-overview-stats">
             <div class="market-overview-stat">
-              <span class="label">Volume</span>
+              <span class="label">${volLabel}</span>
               <span class="value">${_fmtBigNum(vol)} ${sflIcon()}</span>
             </div>
             <div class="market-overview-stat">
-              <span class="label">Trades</span>
+              <span class="label">${tradesLabel}</span>
               <span class="value">${_fmtBigNum(trades)}</span>
             </div>
             <div class="market-overview-stat">
               <span class="label">\ud83c\udf38 Price</span>
               <span class="value" style="color:var(--lily)">${flower.toFixed(4)}</span>
             </div>
-          </div>
-          <canvas id="market-sparkline-canvas" class="market-sparkline"></canvas>`;
+          </div>`;
+
+        if (sparkVals.length >= 2) {
+          html += `<canvas id="market-sparkline-canvas" class="market-sparkline"></canvas>`;
+        }
 
         if (movers.length > 0) {
           html += `<div class="market-movers">
-            <div class="market-movers-title">TOP MOVERS TODAY</div>`;
+            <div class="market-movers-title">${moverLabel}</div>`;
           for (let i = 0; i < movers.length; i++) {
             const m = movers[i];
             const name = _resolveMarketName(m.collection, m.item_id);
             html += `<div class="market-mover-row">
               <span class="market-mover-rank">${i + 1}.</span>
               <span class="market-mover-name">${escHTML(name)}</span>
-              <span class="market-mover-vol">${_fmtBigNum(m.total_volume)}</span>
-              <span class="market-mover-trades">${_fmtBigNum(m.total_trades)} trades</span>
+              <span class="market-mover-vol">${_fmtBigNum(m.total_volume)} vol</span>
+              <span class="market-mover-trades">${_fmtBigNum(m.total_quantity || m.total_trades)} qty</span>
             </div>`;
           }
           html += `</div>`;
@@ -9335,8 +9346,9 @@
         html += `</div>`;
         container.innerHTML = html;
 
-        // Draw sparkline after DOM insert
-        setTimeout(() => _drawSparkline("market-sparkline-canvas", sparkVals), 0);
+        if (sparkVals.length >= 2) {
+          setTimeout(() => _drawSparkline("market-sparkline-canvas", sparkVals), 0);
+        }
       } catch (e) {
         console.warn("[Market Overview]", e);
         container.innerHTML = "";
@@ -9351,13 +9363,15 @@
         const data = await resp.json();
         const items = data.items || [];
         if (items.length === 0) { container.innerHTML = ""; return; }
+        const isCumulative = (data.mode === "cumulative");
+        const titleSuffix = isCumulative ? " (CUMULATIVE)" : " (7-DAY DELTA)";
 
         let rowsHtml = "";
         for (const item of items) {
           const name = _resolveMarketName(item.collection, item.item_id);
           const imgUrl = getItemIcon(name);
           const vol = parseFloat(item.total_volume) || 0;
-          const trades = parseInt(item.total_trades) || 0;
+          const qty = parseInt(item.total_quantity || item.total_trades) || 0;
           const low = parseFloat(item.period_low) || 0;
           const high = parseFloat(item.period_high) || 0;
           const safeN = name.replace(/'/g, "\\'");
@@ -9365,7 +9379,7 @@
             <img class="ph-row-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">
             <div>
               <div class="ph-row-name">${escHTML(name)}</div>
-              <div class="ph-row-sub">vol: ${_fmtBigNum(vol)} \u00b7 ${_fmtBigNum(trades)} trades${low > 0 ? ' \u00b7 ' + formatSFL(low) + '\u2013' + formatSFL(high) : ''}</div>
+              <div class="ph-row-sub">vol: ${_fmtBigNum(vol)} SFL \u00b7 ${_fmtBigNum(qty)} qty${low > 0 ? ' \u00b7 ' + formatSFL(low) + '\u2013' + formatSFL(high) : ''}</div>
             </div>
             <div style="text-align:right;color:var(--sunpetal);font-weight:bold">${_fmtBigNum(vol)} ${sflIcon()}</div>
           </div>`;
@@ -9373,7 +9387,7 @@
 
         container.innerHTML = `<div style="margin-bottom:16px">
           <div class="sales-section-header pixel-font" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
-            <h3>\ud83c\udfc6 VOLUME LEADERS (7 DAYS)</h3>
+            <h3>\ud83c\udfc6 VOLUME LEADERS${titleSuffix}</h3>
             <span class="sales-section-count">${items.length} items</span>
           </div>
           <div class="sales-section-body">${rowsHtml}</div>

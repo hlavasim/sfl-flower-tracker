@@ -12,48 +12,117 @@ export default async function handler(req, res) {
     const days = Math.min(parseInt(req.query.days) || 30, 365);
     const limit = Math.min(parseInt(req.query.limit) || 100, 500);
 
-    // Market totals mode
+    // Market totals mode — return daily deltas (computed from cumulative snapshots)
     if (req.query.totals) {
       const result = await pool.query(
         `SELECT date, total_volume, total_trades, flower_price, captured_at
          FROM marketplace_totals
          WHERE date >= CURRENT_DATE - $1::int
-         ORDER BY date DESC
-         LIMIT $2`,
-        [days, limit]
+         ORDER BY date ASC`,
+        [days]
       );
-      return res.status(200).json({ totals: result.rows });
+      const rows = result.rows;
+
+      // Compute deltas: each day's value minus previous day
+      const deltas = [];
+      for (let i = 0; i < rows.length; i++) {
+        const cur = rows[i];
+        const prev = i > 0 ? rows[i - 1] : null;
+        deltas.push({
+          date: cur.date,
+          total_volume: prev ? Math.max(0, (parseFloat(cur.total_volume) || 0) - (parseFloat(prev.total_volume) || 0)) : null,
+          total_trades: prev ? Math.max(0, (parseInt(cur.total_trades) || 0) - (parseInt(prev.total_trades) || 0)) : null,
+          flower_price: parseFloat(cur.flower_price) || null,
+          // Also include raw cumulative for reference
+          cumulative_volume: parseFloat(cur.total_volume) || 0,
+          cumulative_trades: parseInt(cur.total_trades) || 0,
+          captured_at: cur.captured_at,
+        });
+      }
+      // Return newest first for consistency
+      deltas.reverse();
+      return res.status(200).json({ totals: deltas });
     }
 
-    // Top items mode
+    // Top items mode — use latest snapshot only (data is cumulative, SUM makes no sense)
     if (req.query.top) {
       const sortField = req.query.top === "trades" ? "trades" : "volume";
       const collection = req.query.collection;
-      const conditions = ["date >= CURRENT_DATE - $1::int"];
-      const params = [days];
 
-      if (collection) {
-        params.push(collection);
-        conditions.push(`collection = $${params.length}`);
-      }
-      params.push(limit);
-
-      const result = await pool.query(
-        `SELECT collection, item_id,
-                SUM(volume) as total_volume,
-                SUM(trades) as total_trades,
-                SUM(quantity) as total_quantity,
-                MIN(low) as period_low,
-                MAX(high) as period_high,
-                (ARRAY_AGG(latest_sale ORDER BY date DESC))[1] as latest_sale
-         FROM marketplace_daily
-         WHERE ${conditions.join(" AND ")}
-         GROUP BY collection, item_id
-         ORDER BY ${sortField === "trades" ? "total_trades" : "total_volume"} DESC
-         LIMIT $${params.length}`,
-        params
+      // Get latest date with data
+      const latestDate = await pool.query(
+        `SELECT MAX(date) as latest FROM marketplace_daily`
       );
-      return res.status(200).json({ items: result.rows });
+      const latest = latestDate.rows[0]?.latest;
+      if (!latest) return res.status(200).json({ items: [] });
+
+      // Get earliest date in range for delta computation
+      const earliestDate = await pool.query(
+        `SELECT MIN(date) as earliest FROM marketplace_daily WHERE date >= CURRENT_DATE - $1::int`,
+        [days]
+      );
+      const earliest = earliestDate.rows[0]?.earliest;
+      const hasDelta = earliest && earliest.toISOString().slice(0,10) !== latest.toISOString().slice(0,10);
+
+      if (hasDelta) {
+        // Compute delta: latest snapshot minus earliest snapshot in range
+        const conditions = [];
+        const params = [];
+        if (collection) {
+          params.push(collection);
+          conditions.push(`collection = $${params.length}`);
+        }
+        params.push(latest);
+        const latestCond = `date = $${params.length}`;
+        params.push(earliest);
+        const earliestCond = `date = $${params.length}`;
+        params.push(limit);
+
+        const collFilter = conditions.length > 0 ? `AND ${conditions.join(" AND ")}` : "";
+
+        const result = await pool.query(
+          `WITH latest AS (
+            SELECT collection, item_id, volume, trades, quantity, low, high, latest_sale
+            FROM marketplace_daily WHERE ${latestCond} ${collFilter}
+          ), earliest AS (
+            SELECT collection, item_id, volume, trades, quantity
+            FROM marketplace_daily WHERE ${earliestCond} ${collFilter}
+          )
+          SELECT l.collection, l.item_id,
+                 GREATEST(0, COALESCE(l.volume,0) - COALESCE(e.volume,0)) as total_volume,
+                 GREATEST(0, COALESCE(l.trades,0) - COALESCE(e.trades,0)) as total_trades,
+                 GREATEST(0, COALESCE(l.quantity,0) - COALESCE(e.quantity,0)) as total_quantity,
+                 l.low as period_low,
+                 l.high as period_high,
+                 l.latest_sale
+          FROM latest l
+          LEFT JOIN earliest e ON l.collection = e.collection AND l.item_id = e.item_id
+          ORDER BY ${sortField === "trades" ? "total_trades" : "total_volume"} DESC
+          LIMIT $${params.length}`,
+          params
+        );
+        return res.status(200).json({ items: result.rows, mode: "delta", from: earliest, to: latest });
+      } else {
+        // Only 1 day of data — show latest snapshot with warning
+        const conditions = [`date = $1`];
+        const params = [latest];
+        if (collection) {
+          params.push(collection);
+          conditions.push(`collection = $${params.length}`);
+        }
+        params.push(limit);
+
+        const result = await pool.query(
+          `SELECT collection, item_id, volume as total_volume, trades as total_trades,
+                  quantity as total_quantity, low as period_low, high as period_high, latest_sale
+           FROM marketplace_daily
+           WHERE ${conditions.join(" AND ")}
+           ORDER BY ${sortField === "trades" ? "total_trades" : "total_volume"} DESC
+           LIMIT $${params.length}`,
+          params
+        );
+        return res.status(200).json({ items: result.rows, mode: "cumulative", date: latest });
+      }
     }
 
     // Per-item history mode
