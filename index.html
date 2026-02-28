@@ -13116,9 +13116,20 @@
       let effSnapCount = 0, effPeriodDays = 0;
       const historySnapshots = await historyPromise;
       if (historySnapshots && historySnapshots.length >= 2) {
-        const sorted = [...historySnapshots]
+        const allSorted = [...historySnapshots]
           .filter(s => s.captured_at && s.diff !== null && s.diff !== undefined)
           .sort((a, b) => new Date(a.captured_at) - new Date(b.captured_at));
+
+        // Only use v2 snapshots (those with _h.* keys) — find first one
+        const v2Start = allSorted.findIndex(s => {
+          const diff = s.diff || {};
+          return Object.keys(diff).some(k => k.startsWith("_h."));
+        });
+        const sorted = v2Start >= 0 ? allSorted.slice(v2Start) : [];
+
+        if (sorted.length < 2) {
+          // Not enough v2 data yet
+        } else {
         const pDays = (new Date(sorted[sorted.length - 1].captured_at) - new Date(sorted[0].captured_at)) / 86400000;
         effSnapCount = sorted.length;
         effPeriodDays = pDays;
@@ -13127,21 +13138,15 @@
           effDataAvailable = true;
 
           for (const [catId, resInfo] of Object.entries(EFFICIENCY_RESOURCE_MAP)) {
-            // 1. Find timestamps where resource was harvested
-            //    Prefer precise _h.* count, fall back to inventory.* increase
+            // 1. Find timestamps where resource was harvested (precise _h.* only)
             const digTimes = [];
             let totalHarvested = 0;
             for (const snap of sorted) {
               const diff = snap.diff || {};
               const hCount = diff[resInfo.hKey];
-              const invIncrease = diff[`inventory.${resInfo.inv}`];
               if (hCount > 0) {
-                // Precise: we know exactly how many nodes were harvested
                 digTimes.push(new Date(snap.captured_at).getTime());
                 totalHarvested += hCount;
-              } else if (hCount === undefined && (invIncrease || 0) > 0) {
-                // Legacy fallback: inventory increased but no _h.* key
-                digTimes.push(new Date(snap.captured_at).getTime());
               }
             }
 
@@ -13202,6 +13207,7 @@
             };
           }
         }
+        } // end: sorted.length >= 2
       }
 
       // Helper: get efficiency ratio for a catId, or null if not available
