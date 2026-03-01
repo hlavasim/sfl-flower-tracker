@@ -2692,6 +2692,95 @@
       "Slow Juice":           { building: "Smoothie Shack", xp: 7500,  cookSec: 86400,  usesHoney: false },
     };
 
+    // Ingredient lists for cost calculation (from sfl.world/info/cooking)
+    const COOKING_INGREDIENTS = {
+      // ── Fire Pit ──
+      "Mashed Potato":        { "Potato": 8 },
+      "Rhubarb Tart":         { "Rhubarb": 3 },
+      "Pumpkin Soup":         { "Pumpkin": 10 },
+      "Reindeer Carrot":      { "Carrot": 5 },
+      "Mushroom Soup":        { "Wild Mushroom": 5 },
+      "Boiled Eggs":          { "Egg": 10 },
+      "Bumpkin Broth":        { "Carrot": 10, "Cabbage": 5 },
+      "Popcorn":              { "Sunflower": 100, "Corn": 5 },
+      "Cabbers n Mash":       { "Mashed Potato": 10, "Cabbage": 20 },
+      "Rapid Roast":          { "Magic Mushroom": 1, "Pumpkin": 40 },
+      "Kale Stew":            { "Kale": 10 },
+      "Fried Tofu":           { "Soybean": 15, "Sunflower": 200 },
+      "Gumbo":                { "Potato": 50, "Pumpkin": 30, "Carrot": 20, "Red Snapper": 3 },
+      "Kale Omelette":        { "Egg": 40, "Kale": 5 },
+      "Rice Bun":             { "Rice": 2, "Wheat": 50 },
+      "Antipasto":            { "Olive": 2, "Grape": 2 },
+      "Pizza Margherita":     { "Tomato": 30, "Cheese": 5, "Wheat": 20 },
+      // ── Kitchen ──
+      "Sunflower Crunch":     { "Sunflower": 300 },
+      "Club Sandwich":        { "Sunflower": 100, "Carrot": 25, "Wheat": 5 },
+      "Roast Veggies":        { "Cauliflower": 15, "Carrot": 10 },
+      "Fruit Salad":          { "Apple": 1, "Orange": 1, "Blueberry": 1 },
+      "Mushroom Jacket Potatoes": { "Wild Mushroom": 10, "Potato": 5 },
+      "Cauliflower Burger":   { "Cauliflower": 15, "Wheat": 5 },
+      "Bumpkin Salad":        { "Beetroot": 20, "Parsnip": 10 },
+      "Goblin's Treat":       { "Pumpkin": 10, "Radish": 20, "Cabbage": 10 },
+      "Pancakes":             { "Wheat": 10, "Egg": 10, "Honey": 6 },
+      "Bumpkin ganoush":      { "Eggplant": 30, "Potato": 50, "Parsnip": 10 },
+      "Chowder":              { "Beetroot": 10, "Wheat": 10, "Parsnip": 5, "Anchovy": 3 },
+      "Tofu Scramble":        { "Soybean": 20, "Egg": 20, "Cauliflower": 10 },
+      "Fish Burger":          { "Beetroot": 10, "Wheat": 10, "Horse Mackerel": 1 },
+      "Fish Omelette":        { "Egg": 40, "Surgeonfish": 1, "Butterflyfish": 2 },
+      "Fried Calamari":       { "Sunflower": 200, "Wheat": 15, "Squid": 1 },
+      "Beetroot Blaze":       { "Magic Mushroom": 2, "Beetroot": 50 },
+      "Sushi Roll":           { "Angelfish": 1, "Seaweed": 1, "Rice": 2 },
+      "Ocean's Olive":        { "Olive Flounder": 1, "Olive": 2 },
+      "Fish n Chips":         { "Fancy Fries": 1, "Halibut": 1 },
+      "Seafood Basket":       { "Blowfish": 2, "Napoleanfish": 2, "Sunfish": 2 },
+      "Bumpkin Roast":        { "Mashed Potato": 20, "Roast Veggies": 5 },
+      "Goblin Brunch":        { "Boiled Eggs": 5, "Goblin's Treat": 1 },
+      "Steamed Red Rice":     { "Rice": 3, "Beetroot": 50 },
+      "Caprese Salad":        { "Cheese": 1, "Tomato": 25, "Kale": 20 },
+      "Spaghetti al Limone":  { "Wheat": 10, "Lemon": 15, "Cheese": 3 },
+      // ── Bakery ──
+      "Sunflower Cake":       { "Sunflower": 1000, "Wheat": 10, "Egg": 30 },
+      "Cornbread":            { "Corn": 15, "Wheat": 5, "Egg": 10 },
+      "Pumpkin Cake":         { "Pumpkin": 130, "Wheat": 10, "Egg": 30 },
+      "Potato Cake":          { "Potato": 500, "Wheat": 10, "Egg": 30 },
+      "Apple Pie":            { "Apple": 5, "Wheat": 10, "Egg": 20 },
+      "Kale & Mushroom Pie":  { "Wild Mushroom": 10, "Kale": 5, "Wheat": 5 },
+      "Orange Cake":          { "Orange": 5, "Egg": 30, "Wheat": 10 },
+      "Carrot Cake":          { "Carrot": 120, "Wheat": 10, "Egg": 30 },
+      "Cabbage Cake":         { "Cabbage": 90, "Wheat": 10, "Egg": 30 },
+      "Wheat Cake":           { "Wheat": 35, "Egg": 30 },
+      "Cauliflower Cake":     { "Cauliflower": 60, "Wheat": 10, "Egg": 30 },
+      "Radish Cake":          { "Radish": 25, "Wheat": 10, "Egg": 30 },
+      "Beetroot Cake":        { "Beetroot": 100, "Wheat": 10, "Egg": 30 },
+      "Parsnip Cake":         { "Parsnip": 45, "Wheat": 10, "Egg": 30 },
+      "Eggplant Cake":        { "Eggplant": 30, "Wheat": 10, "Egg": 30 },
+      "Honey Cake":           { "Honey": 10, "Wheat": 10, "Egg": 20 },
+      "Lemon Cheesecake":     { "Lemon": 20, "Cheese": 5, "Egg": 40 },
+      // ── Deli ──
+      "Cheese":               { "Milk": 3 },
+      "Fermented Carrots":    { "Carrot": 20 },
+      "Blueberry Jam":        { "Blueberry": 5 },
+      "Sauerkraut":           { "Cabbage": 20 },
+      "Fancy Fries":          { "Sunflower": 500, "Potato": 500 },
+      "Fermented Fish":       { "Tuna": 6 },
+      "Blue Cheese":          { "Cheese": 2, "Blueberry": 10 },
+      "Shroom Syrup":         { "Magic Mushroom": 3, "Honey": 20 },
+      "Honey Cheddar":        { "Cheese": 3, "Honey": 5 },
+      // ── Smoothie Shack ──
+      "Quick Juice":          { "Sunflower": 50, "Pumpkin": 40 },
+      "Carrot Juice":         { "Carrot": 30 },
+      "Purple Smoothie":      { "Blueberry": 5, "Cabbage": 10 },
+      "Orange Juice":         { "Orange": 5 },
+      "Apple Juice":          { "Apple": 5 },
+      "Power Smoothie":       { "Blueberry": 10, "Kale": 5 },
+      "Bumpkin Detox":        { "Apple": 5, "Orange": 5, "Carrot": 10 },
+      "Sour Shake":           { "Lemon": 20 },
+      "Banana Blast":         { "Banana": 10, "Egg": 10 },
+      "The Lot":              { "Blueberry": 1, "Orange": 1, "Grape": 1, "Apple": 1, "Banana": 1 },
+      "Grape Juice":          { "Grape": 5, "Radish": 20 },
+      "Slow Juice":           { "Grape": 10, "Kale": 100 },
+    };
+
     const COOKING_BUILDING_NAMES = ["Fire Pit", "Kitchen", "Bakery", "Deli", "Smoothie Shack"];
     const COOKING_BUILDING_EMOJI = { "Fire Pit": "🔥", "Kitchen": "🍳", "Bakery": "🧁", "Deli": "🥩", "Smoothie Shack": "🥤" };
 
@@ -4119,7 +4208,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v2.3</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v2.4</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -4146,6 +4235,12 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v2.4", items: [
+          { t: "new", text: "Bumpkin XP Calculator — ingredient cost estimation per recipe (P2P prices)" },
+          { t: "new", text: "Cost/cook, cost/day, cost to next level, cost to target level" },
+          { t: "new", text: "84 recipes with full ingredient data from sfl.world" },
+          { t: "new", text: "Per-building cost breakdown with self-produced item detection" },
+        ]},
         { ver: "v2.3", items: [
           { t: "new", text: "Dashboard page — all pending actions at a glance (crops, resources, cooking, animals, dailies, trades, and more)" },
           { t: "new", text: "Dashboard is now the default landing page" },
@@ -4506,6 +4601,46 @@
       const on = localStorage.getItem("sfl_pet_streak") === "1";
       localStorage.setItem("sfl_pet_streak", on ? "0" : "1");
       if (cachedFarmData) renderBumpkin(cachedFarmData);
+    }
+
+
+    // ── P2P price cache for bumpkin cost calculation ──
+    let _bumpkinP2P = null;
+    let _bumpkinP2PLoading = false;
+
+    async function _fetchBumpkinP2P() {
+      if (_bumpkinP2PLoading) return;
+      _bumpkinP2PLoading = true;
+      try {
+        const resp = await fetch("/api/proxy?url=" + encodeURIComponent("https://sfl.world/api/v1/prices"));
+        if (resp.ok) {
+          const data = await resp.json();
+          _bumpkinP2P = data?.data?.p2p || {};
+          if (cachedFarmData && getPage() === "bumpkin") renderBumpkin(cachedFarmData);
+        }
+      } catch(e) { console.warn("P2P prices fetch:", e); }
+      _bumpkinP2PLoading = false;
+    }
+
+    function computeRecipeCost(recipeName, p2p) {
+      if (!p2p) return null;
+      const ingredients = COOKING_INGREDIENTS[recipeName];
+      if (!ingredients) return null;
+      let total = 0;
+      const items = [];
+      let hasUnpriced = false;
+      for (const [itemName, qty] of Object.entries(ingredients)) {
+        const price = parseFloat(p2p[itemName]) || 0;
+        if (price > 0) {
+          const cost = price * qty;
+          total += cost;
+          items.push({ name: itemName, qty, price, cost });
+        } else {
+          hasUnpriced = true;
+          items.push({ name: itemName, qty, price: 0, cost: 0, selfProduced: true });
+        }
+      }
+      return { total, items, hasUnpriced };
     }
 
     function toggleFoodInventory() {
@@ -7007,6 +7142,10 @@
 
       // Detect cooking boosts
       const boosts = detectCookingBoosts(farm);
+
+      // P2P prices for cost calculation (async-loaded)
+      const p2p = _bumpkinP2P;
+      if (!p2p && !_bumpkinP2PLoading) _fetchBumpkinP2P();
       const savedRecipes = getSavedBumpkinRecipes();
 
       // Calculate XP banked in food inventory
@@ -7134,6 +7273,7 @@
         html += `<div class="bumpkin-buildings-grid">`;
 
         let totalXPPerDay = 0;
+        let totalCostPerDay = 0;
         const buildingStats = [];
 
         for (const [buildingName, count] of buildingEntries) {
@@ -7159,16 +7299,25 @@
             daysNeeded = xpAfterFood > 0 ? Math.ceil(xpAfterFood / xpPerDay) : 0;
           }
 
-          buildingStats.push({ buildingName, xpPerDay, count });
-
           const emoji = COOKING_BUILDING_EMOJI[buildingName] || "🏠";
           const fmtXP = (v) => v % 1 === 0 ? v.toLocaleString() : v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+          const recipeCost = selected ? computeRecipeCost(selected.name, p2p) : null;
+          const costPerCook = recipeCost ? recipeCost.total : 0;
+          const costPerDay = costPerCook * cooksPerDay;
+          totalCostPerDay += costPerDay;
+
+          buildingStats.push({ buildingName, xpPerDay, costPerDay, count });
+
+          const costTip = recipeCost ? recipeCost.items.map(i =>
+            i.qty + "\u00d7 " + i.name + (i.price > 0 ? " = " + formatSFL(i.cost) + " SFL" : " (self)")
+          ).join("\n") : "";
 
           html += `<div class="bumpkin-building-card pixel-panel">
             <div class="bumpkin-building-header pixel-font">
               <span style="font-size: 1.25rem">${emoji}</span>
               <span class="bumpkin-building-name">${escHTML(buildingName)}</span>
-              ${count > 1 ? `<span class="bumpkin-building-count">×${count}</span>` : ""}
+              ${count > 1 ? `<span class="bumpkin-building-count">\u00d7${count}</span>` : ""}
             </div>
             <select class="bumpkin-recipe-select" onchange="selectBumpkinRecipe('${escHTML(buildingName)}', this.value)">
               <option value="" ${!selectedName ? "selected" : ""}>-- None --</option>
@@ -7178,7 +7327,9 @@
               XP per cook: <span style="color:var(--green)">${fmtXP(selected.xp)}</span><br>
               Cook time: <span style="color:var(--blue)">${formatCookTime(selected.time)}</span><br>
               XP/hour: <span style="color:var(--sunpetal)">${fmtXP(selected.xpPerHour)}</span><br>
-              XP/day${count > 1 ? " (×" + count + ")" : ""}: <span style="color:var(--green)">${fmtXP(xpPerDay)}</span><br>
+              XP/day${count > 1 ? " (\u00d7" + count + ")" : ""}: <span style="color:var(--green)">${fmtXP(xpPerDay)}</span><br>
+              ${recipeCost && costPerCook > 0 ? `Cost/cook: <span style="color:var(--yellow)" title="${costTip}">${formatSFL(costPerCook)} SFL</span>${recipeCost.hasUnpriced ? ' <span style="color:var(--text-dim);font-size:0.5rem">+self</span>' : ""}<br>
+              Cost/day${count > 1 ? " (\u00d7" + count + ")" : ""}: <span style="color:var(--yellow)">${formatSFL(costPerDay)} SFL</span><br>` : ""}
               ${xpRemaining > 0 ? `Solo days to ${targetLevel}: <span style="color:var(--text-dim)">${daysNeeded.toLocaleString()}d</span>` : ""}
             </div>` : `<div style="font-size: 0.625rem;color:var(--text-dim)">${recipes.length > 0 ? "Not cooking" : "No recipes available"}</div>`}
           </div>`;
@@ -7189,6 +7340,12 @@
         // Summary
         const totalDays = totalXPPerDay > 0 && xpAfterFood > 0 ? Math.ceil(xpAfterFood / totalXPPerDay) : 0;
 
+        // Cost calculations
+        const xpToNextLevel = Math.max(0, (currentLevel < 200 ? BUMPKIN_XP_TABLE[currentLevel] : maxXP) - currentXP - bankedXP);
+        const daysToNextLevel = totalXPPerDay > 0 && xpToNextLevel > 0 ? xpToNextLevel / totalXPPerDay : 0;
+        const costToNextLevel = totalCostPerDay * daysToNextLevel;
+        const costToTarget = totalCostPerDay * totalDays;
+
         html += `<div class="bumpkin-summary pixel-panel pixel-font">
           <div style="font-size: 0.6875rem;color:var(--text-secondary);margin-bottom:4px">ALL BUILDINGS COMBINED</div>
           <div style="font-size: 0.8125rem;color:var(--sunpetal);margin-bottom:8px">${Math.round(totalXPPerDay).toLocaleString()} XP / day</div>
@@ -7197,8 +7354,22 @@
             <div style="font-size: 0.625rem;color:var(--text-dim)">to reach level ${targetLevel}${bankedXP > 0 ? " (after eating food)" : ""}</div>
           ` : `<div class="bumpkin-days-big" style="color:var(--green)">${currentLevel >= targetLevel ? "TARGET REACHED!" : "Food covers it!"}</div>`}
           ${buildingStats.length > 1 ? `<div style="margin-top:12px;font-size: 0.5625rem;color:var(--text-dim);line-height:2">
-            ${buildingStats.map(b => `${COOKING_BUILDING_EMOJI[b.buildingName] || ""} ${escHTML(b.buildingName)}${b.count > 1 ? " ×" + b.count : ""}: ${Math.round(b.xpPerDay).toLocaleString()} XP/day`).join("<br>")}
+            ${buildingStats.map(b => `${COOKING_BUILDING_EMOJI[b.buildingName] || ""} ${escHTML(b.buildingName)}${b.count > 1 ? " \u00d7" + b.count : ""}: ${Math.round(b.xpPerDay).toLocaleString()} XP/day${b.costPerDay > 0 ? " \u00b7 " + formatSFL(b.costPerDay) + " SFL/day" : ""}`).join("<br>")}
           </div>` : ""}
+          ${p2p && totalCostPerDay > 0 && xpAfterFood > 0 ? `
+            <div style="margin-top:12px;padding-top:8px;border-top:2px solid rgba(92,58,30,0.4)">
+              <div style="font-size: 0.6875rem;color:var(--yellow);margin-bottom:4px">${sflIcon("0.75rem")} INGREDIENT COST (P2P)</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;font-size: 0.625rem">
+                <div style="color:var(--text-dim)">Cost / day</div>
+                <div style="color:var(--yellow);text-align:right">${formatSFL(totalCostPerDay)} SFL</div>
+                ${xpToNextLevel > 0 ? `<div style="color:var(--text-dim)">To level ${currentLevel + 1}</div>
+                <div style="color:var(--yellow);text-align:right">${formatSFL(costToNextLevel)} SFL <span style="color:var(--text-dim)">(${Math.ceil(daysToNextLevel)}d)</span></div>` : ""}
+                ${xpAfterFood > 0 && targetLevel > currentLevel + 1 ? `<div style="color:var(--text-dim)">To level ${targetLevel}</div>
+                <div style="color:var(--yellow);text-align:right">${formatSFL(costToTarget)} SFL <span style="color:var(--text-dim)">(${totalDays}d)</span></div>` : ""}
+              </div>
+              <div style="font-size: 0.5rem;color:var(--text-dim);margin-top:4px">Based on P2P market prices. Self-produced items (eggs, milk, honey, fish) = free.</div>
+            </div>` : ""}
+          ${p2p === null ? `<div style="margin-top:8px;font-size: 0.5625rem;color:var(--text-dim)">Loading ingredient prices...</div>` : ""}
         </div>`;
       }
 
