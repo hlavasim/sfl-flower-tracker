@@ -9803,6 +9803,10 @@
       activeOffers.sort((a, b) => a.delta - b.delta);
       soldListings.sort((a, b) => (b.soldAt || 0) - (a.soldAt || 0));
 
+      // Ready to claim: sold listings + fulfilled offers
+      const fulfilledOffers = Object.values(offers).filter(o => o.fulfilledAt).length;
+      const readyToClaim = soldListings.length + fulfilledOffers;
+
       // Summary stats
       const totalListedSFL = activeListings.reduce((s, l) => s + l.priceSFL, 0);
       const totalOfferSFL = activeOffers.reduce((s, o) => s + o.priceSFL, 0);
@@ -9813,6 +9817,7 @@
 
       // Summary
       content += `<div class="sales-summary-grid pixel-font">
+        ${readyToClaim > 0 ? `<div class="sales-stat" style="background:linear-gradient(135deg,rgba(46,204,113,0.2),rgba(46,204,113,0.05));border:2px solid var(--green)"><div class="sales-stat-label" style="color:var(--green)">READY TO CLAIM</div><div class="sales-stat-value" style="color:var(--green);font-size:1.5rem">${readyToClaim}</div></div>` : ""}
         <div class="sales-stat"><div class="sales-stat-label">ACTIVE LISTINGS</div><div class="sales-stat-value">${activeListings.length}</div></div>
         <div class="sales-stat"><div class="sales-stat-label">TOTAL LISTED</div><div class="sales-stat-value">${totalListedSFL.toFixed(1)} ${sflIcon()}</div></div>
         <div class="sales-stat"><div class="sales-stat-label">OVERPRICED</div><div class="sales-stat-value" style="color:${overpricedCount > 0 ? 'var(--red)' : 'var(--green)'}">${overpricedCount}</div></div>
@@ -9843,7 +9848,7 @@
           </div>
           <div class="sales-listing-prices">
             <div class="sales-price-yours">${fmtSfl(l.priceSFL)} ${sflIcon()}</div>
-            ${l.marketPrice > 0 && l.qty > 0 ? `<div class="sales-price-market">${fmtSfl(l.unitPrice)}/ea vs ${fmtSfl(l.marketPrice)}</div>` : ""}
+            ${l.marketPrice > 0 && l.qty > 0 ? `<div class="sales-price-market">${fmtSfl(l.unitPrice)}/ea vs ${fmtSfl(l.marketPrice)} <span style="color:${l.delta > 5 ? 'var(--red)' : l.delta < -5 ? 'var(--green)' : 'var(--text-dim)'};font-weight:bold">${l.delta > 0 ? "+" : ""}${Math.round(l.delta)}%</span></div>` : ""}
           </div>
         </div>`;
       };
