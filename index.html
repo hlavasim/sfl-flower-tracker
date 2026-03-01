@@ -7340,9 +7340,12 @@
         // Summary
         const totalDays = totalXPPerDay > 0 && xpAfterFood > 0 ? Math.ceil(xpAfterFood / totalXPPerDay) : 0;
 
-        // Cost calculations
-        const xpToNextLevelRaw = Math.max(0, (currentLevel < 200 ? BUMPKIN_XP_TABLE[currentLevel] : maxXP) - currentXP);
-        const daysToNextLevel = totalXPPerDay > 0 && xpToNextLevelRaw > 0 ? xpToNextLevelRaw / totalXPPerDay : 0;
+        // Cost calculations — from level after eating all banked food
+        const xpAfterEating = currentXP + bankedXP;
+        const levelAfterFood = getBumpkinLevel(xpAfterEating);
+        const nextLvlAfterFood = Math.min(levelAfterFood + 1, 200);
+        const xpToNextFromFood = Math.max(0, BUMPKIN_XP_TABLE[nextLvlAfterFood - 1] - xpAfterEating);
+        const daysToNextLevel = totalXPPerDay > 0 && xpToNextFromFood > 0 ? xpToNextFromFood / totalXPPerDay : 0;
         const costToNextLevel = totalCostPerDay * daysToNextLevel;
         const costToTarget = totalCostPerDay * totalDays;
 
@@ -7362,7 +7365,7 @@
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;font-size: 0.625rem">
                 <div style="color:var(--text-dim)">Cost / day</div>
                 <div style="color:var(--yellow);text-align:right">${formatSFL(totalCostPerDay)} SFL</div>
-                ${currentLevel < 200 ? `<div style="color:var(--text-dim)">To level ${currentLevel + 1}</div>
+                ${levelAfterFood < 200 ? `<div style="color:var(--text-dim)">To level ${nextLvlAfterFood}${levelAfterFood > currentLevel ? " (after food)" : ""}</div>
                 <div style="color:var(--yellow);text-align:right">${formatSFL(costToNextLevel)} SFL <span style="color:var(--text-dim)">(${Math.ceil(daysToNextLevel)}d)</span></div>` : ""}
                 ${targetLevel > currentLevel + 1 ? `<div style="color:var(--text-dim)">To level ${targetLevel}</div>
                 <div style="color:var(--yellow);text-align:right">${formatSFL(costToTarget)} SFL <span style="color:var(--text-dim)">(${totalDays}d)</span></div>` : ""}
