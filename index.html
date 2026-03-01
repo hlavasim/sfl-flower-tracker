@@ -7371,44 +7371,39 @@
                 <div style="color:var(--yellow);text-align:right">${formatSFL(costToTarget)} SFL <span style="color:var(--text-dim)">(${totalDays}d)</span></div>` : ""}
               </div>
               <div style="font-size: 0.5rem;color:var(--text-dim);margin-top:4px">Based on P2P market prices. Self-produced items (eggs, milk, honey, fish) = free.</div>
-              ${levelAfterFood < targetLevel ? `<div style="margin-top:8px;cursor:pointer;font-size:0.5625rem;color:var(--sunpetal)" onclick="const t=document.getElementById('cost-table');const a=document.getElementById('cost-table-arrow');if(t){t.style.display=t.style.display==='none'?'block':'none';a.textContent=t.style.display==='none'?'\\u25b6':'\\u25bc'}">
-                <span id="cost-table-arrow">\\u25b6</span> Cost per level (${nextLvlAfterFood} \\u2192 ${targetLevel})
-              </div>
-              <div id="cost-table" style="display:none;margin-top:4px;max-height:300px;overflow-y:auto">
-                <table style="width:100%;font-size:0.5rem;border-collapse:collapse;color:var(--text-secondary)">
-                  <thead><tr style="color:var(--text-dim);border-bottom:1px solid rgba(92,58,30,0.3)">
-                    <th style="text-align:left;padding:2px 4px">Lvl</th>
-                    <th style="text-align:right;padding:2px 4px">XP needed</th>
-                    <th style="text-align:right;padding:2px 4px">Days</th>
-                    <th style="text-align:right;padding:2px 4px">Cost</th>
-                    <th style="text-align:right;padding:2px 4px">Cumulative</th>
-                  </tr></thead>
-                  <tbody>${(() => {
-                    let rows = "";
-                    let cumCost = 0;
-                    let cumDays = 0;
-                    let prevXP = xpAfterEating;
-                    for (let lvl = nextLvlAfterFood; lvl <= targetLevel; lvl++) {
-                      const lvlXP = BUMPKIN_XP_TABLE[lvl - 1];
-                      const delta = Math.max(0, lvlXP - prevXP);
-                      const d = totalXPPerDay > 0 ? delta / totalXPPerDay : 0;
-                      const c = totalCostPerDay * d;
-                      cumDays += d;
-                      cumCost += c;
-                      prevXP = lvlXP;
-                      const bg = lvl % 2 === 0 ? "rgba(92,58,30,0.1)" : "transparent";
-                      rows += \`<tr style="background:\${bg}">
-                        <td style="padding:2px 4px;color:var(--sunpetal)">\${lvl}</td>
-                        <td style="padding:2px 4px;text-align:right">\${Math.ceil(delta).toLocaleString()}</td>
-                        <td style="padding:2px 4px;text-align:right">\${d < 1 ? d.toFixed(1) : Math.ceil(d).toLocaleString()}</td>
-                        <td style="padding:2px 4px;text-align:right;color:var(--yellow)">\${formatSFL(c)}</td>
-                        <td style="padding:2px 4px;text-align:right;color:var(--yellow);font-weight:bold">\${formatSFL(cumCost)}</td>
-                      </tr>\`;
-                    }
-                    return rows;
-                  })()}</tbody>
-                </table>
-              </div>` : ""}
+              ${levelAfterFood < targetLevel ? (() => {
+                let tblRows = "";
+                let cumCost = 0;
+                let prevXP = xpAfterEating;
+                for (let lvl = nextLvlAfterFood; lvl <= targetLevel; lvl++) {
+                  const lvlXP = BUMPKIN_XP_TABLE[lvl - 1];
+                  const delta = Math.max(0, lvlXP - prevXP);
+                  const d = totalXPPerDay > 0 ? delta / totalXPPerDay : 0;
+                  const c = totalCostPerDay * d;
+                  cumCost += c;
+                  prevXP = lvlXP;
+                  const bg = lvl % 2 === 0 ? "rgba(92,58,30,0.1)" : "transparent";
+                  tblRows += '<tr style="background:' + bg + '">'
+                    + '<td style="padding:2px 4px;color:var(--sunpetal)">' + lvl + '</td>'
+                    + '<td style="padding:2px 4px;text-align:right">' + Math.ceil(delta).toLocaleString() + '</td>'
+                    + '<td style="padding:2px 4px;text-align:right">' + (d < 1 ? d.toFixed(1) : Math.ceil(d).toLocaleString()) + '</td>'
+                    + '<td style="padding:2px 4px;text-align:right;color:var(--yellow)">' + formatSFL(c) + '</td>'
+                    + '<td style="padding:2px 4px;text-align:right;color:var(--yellow);font-weight:bold">' + formatSFL(cumCost) + '</td>'
+                    + '</tr>';
+                }
+                return '<div style="margin-top:8px;cursor:pointer;font-size:0.5625rem;color:var(--sunpetal)" onclick="var t=document.getElementById(\'cost-table\'),a=document.getElementById(\'cost-table-arrow\');if(t){t.style.display=t.style.display===\'none\'?\'block\':\'none\';a.textContent=t.style.display===\'none\'?\'\\u25b6\':\'\\u25bc\'}">'
+                  + '<span id="cost-table-arrow">\u25b6</span> Cost per level (' + nextLvlAfterFood + ' \u2192 ' + targetLevel + ')'
+                  + '</div>'
+                  + '<div id="cost-table" style="display:none;margin-top:4px;max-height:300px;overflow-y:auto">'
+                  + '<table style="width:100%;font-size:0.5rem;border-collapse:collapse;color:var(--text-secondary)">'
+                  + '<thead><tr style="color:var(--text-dim);border-bottom:1px solid rgba(92,58,30,0.3)">'
+                  + '<th style="text-align:left;padding:2px 4px">Lvl</th>'
+                  + '<th style="text-align:right;padding:2px 4px">XP needed</th>'
+                  + '<th style="text-align:right;padding:2px 4px">Days</th>'
+                  + '<th style="text-align:right;padding:2px 4px">Cost</th>'
+                  + '<th style="text-align:right;padding:2px 4px">Cumulative</th>'
+                  + '</tr></thead><tbody>' + tblRows + '</tbody></table></div>';
+              })() : ""}
             </div>` : ""}
           ${p2p === null ? `<div style="margin-top:8px;font-size: 0.5625rem;color:var(--text-dim)">Loading ingredient prices...</div>` : ""}
         </div>`;
