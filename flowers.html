@@ -7341,8 +7341,8 @@
         const totalDays = totalXPPerDay > 0 && xpAfterFood > 0 ? Math.ceil(xpAfterFood / totalXPPerDay) : 0;
 
         // Cost calculations
-        const xpToNextLevel = Math.max(0, (currentLevel < 200 ? BUMPKIN_XP_TABLE[currentLevel] : maxXP) - currentXP - bankedXP);
-        const daysToNextLevel = totalXPPerDay > 0 && xpToNextLevel > 0 ? xpToNextLevel / totalXPPerDay : 0;
+        const xpToNextLevelRaw = Math.max(0, (currentLevel < 200 ? BUMPKIN_XP_TABLE[currentLevel] : maxXP) - currentXP);
+        const daysToNextLevel = totalXPPerDay > 0 && xpToNextLevelRaw > 0 ? xpToNextLevelRaw / totalXPPerDay : 0;
         const costToNextLevel = totalCostPerDay * daysToNextLevel;
         const costToTarget = totalCostPerDay * totalDays;
 
@@ -7356,15 +7356,15 @@
           ${buildingStats.length > 1 ? `<div style="margin-top:12px;font-size: 0.5625rem;color:var(--text-dim);line-height:2">
             ${buildingStats.map(b => `${COOKING_BUILDING_EMOJI[b.buildingName] || ""} ${escHTML(b.buildingName)}${b.count > 1 ? " \u00d7" + b.count : ""}: ${Math.round(b.xpPerDay).toLocaleString()} XP/day${b.costPerDay > 0 ? " \u00b7 " + formatSFL(b.costPerDay) + " SFL/day" : ""}`).join("<br>")}
           </div>` : ""}
-          ${p2p && totalCostPerDay > 0 && xpAfterFood > 0 ? `
+          ${p2p && totalCostPerDay > 0 ? `
             <div style="margin-top:12px;padding-top:8px;border-top:2px solid rgba(92,58,30,0.4)">
               <div style="font-size: 0.6875rem;color:var(--yellow);margin-bottom:4px">${sflIcon("0.75rem")} INGREDIENT COST (P2P)</div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;font-size: 0.625rem">
                 <div style="color:var(--text-dim)">Cost / day</div>
                 <div style="color:var(--yellow);text-align:right">${formatSFL(totalCostPerDay)} SFL</div>
-                ${xpToNextLevel > 0 ? `<div style="color:var(--text-dim)">To level ${currentLevel + 1}</div>
+                ${currentLevel < 200 ? `<div style="color:var(--text-dim)">To level ${currentLevel + 1}</div>
                 <div style="color:var(--yellow);text-align:right">${formatSFL(costToNextLevel)} SFL <span style="color:var(--text-dim)">(${Math.ceil(daysToNextLevel)}d)</span></div>` : ""}
-                ${xpAfterFood > 0 && targetLevel > currentLevel + 1 ? `<div style="color:var(--text-dim)">To level ${targetLevel}</div>
+                ${targetLevel > currentLevel + 1 ? `<div style="color:var(--text-dim)">To level ${targetLevel}</div>
                 <div style="color:var(--yellow);text-align:right">${formatSFL(costToTarget)} SFL <span style="color:var(--text-dim)">(${totalDays}d)</span></div>` : ""}
               </div>
               <div style="font-size: 0.5rem;color:var(--text-dim);margin-top:4px">Based on P2P market prices. Self-produced items (eggs, milk, honey, fish) = free.</div>
