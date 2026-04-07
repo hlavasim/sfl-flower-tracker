@@ -15154,7 +15154,8 @@
 
       // Days left calculation
       const weekStart = week.week_start;
-      const daysLeft = weekStart ? Math.max(0, (new Date(weekStart + "T00:00:00Z").getTime() + 7 * 86400000 - Date.now()) / 86400000) : 0;
+      const wsDate = weekStart ? new Date(typeof weekStart === "string" && weekStart.length === 10 ? weekStart + "T00:00:00Z" : weekStart) : null;
+      const daysLeft = wsDate ? Math.max(0, (wsDate.getTime() + 7 * 86400000 - Date.now()) / 86400000) : 0;
       const hoursLeft = Math.floor(daysLeft * 24);
       const minsLeft = Math.floor((daysLeft * 24 - hoursLeft) * 60);
 
@@ -15226,6 +15227,16 @@
       </div>`;
 
       // ── Your Strategy: cheapest way to gain marks ──
+      // Fetch P2P prices for cost calculation
+      let _marksP2pPrices = {};
+      try {
+        const p2pResp = await fetch("/api/proxy?url=" + encodeURIComponent("https://sfl.world/api/v1/prices"));
+        if (p2pResp.ok) {
+          const p2pData = await p2pResp.json();
+          _marksP2pPrices = (p2pData.data && p2pData.data.p2p) || p2pData.p2p || {};
+        }
+      } catch(e) { console.warn("P2P prices fetch failed:", e); }
+
       if (me) {
         const myRes = me.resources || {};
         const myFul = me.today_fulfilled || {};
@@ -15270,10 +15281,13 @@
         const allSources = [];
         for (const ka of kitchenAnalysis) {
           if (ka.totalDlv > 0) {
+            const kitchenCost = (estimateItemSfl(ka.item, _marksP2pPrices) || 0) * ka.amount;
             allSources.push({
               type: "kitchen",
               label: `Donate ${ka.amount}\u00D7 ${ka.item}`,
               nextMarks: ka.nextMarks,
+              costPerDlv: kitchenCost,
+              costPerMark: ka.nextMarks > 0 ? kitchenCost / ka.nextMarks : 0,
               stock: ka.totalDlv + " dlv left",
               dailyMarks: ka.dailyMarks,
               daysLeft: ka.daysNeeded + "d supply",
@@ -15284,10 +15298,13 @@
         }
         for (const pa of petAnalysis) {
           if (pa.dlv > 0) {
+            const petFoodCost = (estimateItemSfl(pa.food, _marksP2pPrices) || 0) * pa.qty;
             allSources.push({
               type: "pet",
               label: `Feed pet: ${pa.food} (${pa.label})`,
               nextMarks: pa.nextMarks,
+              costPerDlv: petFoodCost,
+              costPerMark: pa.nextMarks > 0 ? petFoodCost / pa.nextMarks : 0,
               stock: pa.dlv + " feeds",
               dailyMarks: pa.nextMarks,
               daysLeft: pa.dlv + " total",
@@ -15296,7 +15313,14 @@
             });
           }
         }
-        allSources.sort((a, b) => b.nextMarks - a.nextMarks);
+        // Sort by cost per mark (cheapest first = best value)
+        allSources.sort((a, b) => {
+          // Put zero-cost items first, then sort by cost/mark ascending
+          if (a.costPerMark === 0 && b.costPerMark === 0) return b.nextMarks - a.nextMarks;
+          if (a.costPerMark === 0) return 1;
+          if (b.costPerMark === 0) return -1;
+          return a.costPerMark - b.costPerMark;
+        });
 
         html += `<div class="marks-section pixel-panel">
           <div class="marks-section-title" onclick="_marksToggle('marks-strategy-section')">\u25BC Your Strategy — Best Marks Sources</div>
@@ -15308,16 +15332,22 @@
           </div>
           <table class="marks-table"><thead><tr>
             <th>#</th><th>Action</th><th class="num-col">Next marks</th>
+            <th class="num-col">Cost/dlv</th><th class="num-col">SFL/mark</th>
             <th class="num-col">Daily (fresh)</th><th>Stock</th><th>Status</th>
           </tr></thead><tbody>`;
 
         for (let i = 0; i < allSources.length; i++) {
           const s = allSources[i];
           const best = i === 0 ? ' style="color:var(--green);font-weight:bold"' : '';
+          const costStr = s.costPerDlv > 0 ? s.costPerDlv.toFixed(2) : "?";
+          const cpmStr = s.costPerMark > 0 ? s.costPerMark.toFixed(4) : "?";
+          const cpmColor = s.costPerMark > 0 && s.costPerMark < 0.01 ? "var(--green)" : s.costPerMark > 0.05 ? "var(--red)" : "var(--text-secondary)";
           html += `<tr>
             <td${best}>${i + 1}</td>
             <td${best}>${escHTML(s.label)}</td>
             <td class="num-col"${best}>${s.nextMarks.toFixed(1)}</td>
+            <td class="num-col">${costStr} SFL</td>
+            <td class="num-col" style="color:${cpmColor}">${cpmStr}</td>
             <td class="num-col">${s.dailyMarks.toFixed(0)}</td>
             <td>${escHTML(s.stock)}</td>
             <td style="font-size:0.5rem">${s.hint}</td>
@@ -15325,7 +15355,7 @@
         }
 
         if (allSources.length === 0) {
-          html += `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px">No resources available for donations</td></tr>`;
+          html += `<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:16px">No resources available for donations</td></tr>`;
         }
 
         html += `</tbody></table>`;
@@ -15347,11 +15377,13 @@
         <div id="leg-strat" style="display:none;padding:8px 12px;font-size:0.5rem;line-height:1.8;background:var(--bg-card);border-top:1px solid rgba(92,58,30,0.15)">
           <dl style="display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:0">
             <dt style="color:var(--sunpetal)">Next marks</dt><dd>How many marks you'll get from the NEXT donation/feed action, considering diminishing returns today</dd>
+            <dt style="color:var(--sunpetal)">Cost/dlv</dt><dd>SFL cost per delivery — for kitchen: P2P price of resources. For pet food: ingredient cost (raw materials, not food P2P price)</dd>
+            <dt style="color:var(--sunpetal)">SFL/mark</dt><dd>Cost efficiency — how much SFL each mark costs you. Lower = better value. Green = cheap (&lt;0.01), Red = expensive (&gt;0.05)</dd>
             <dt style="color:var(--sunpetal)">Daily (fresh)</dt><dd>Total marks per day if you start with a fresh counter (10 optimal kitchen donations, or pet feeds)</dd>
             <dt style="color:var(--sunpetal)">Stock</dt><dd>How many deliveries/feeds you can still do with current inventory</dd>
             <dt style="color:var(--sunpetal)">Status</dt><dd>Counter state — \u2705 Fresh = best value, \u26A0\uFE0F Diminished = you've already donated 10+ today (only 1 mark per donation)</dd>
           </dl>
-          <p style="margin:6px 0 0;color:var(--text-dim)"><b>Tip:</b> Focus on the highest "Next marks" first. Kitchen donations have diminishing returns after 10/day per resource — spread across resources and days for maximum value. Pet feeding also has diminishing returns per slot.</p>
+          <p style="margin:6px 0 0;color:var(--text-dim)"><b>Tip:</b> Table is sorted by SFL/mark (cheapest first). Focus on sources with the lowest cost per mark. Kitchen donations have diminishing returns after 10/day per resource — spread across resources and days for maximum value. Pet feeding also has diminishing returns per slot.</p>
         </div>
         </div></div>`;
       }
