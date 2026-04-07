@@ -16108,10 +16108,17 @@
           cost += costPerDlv;
           ful++;
         }
-        const needUnits = Math.max(0, dlvCount - ka.totalDlv) * ka.amount;
-        const buyCost = Math.max(0, dlvCount - ka.totalDlv) * costPerDlv;
+        // Track last and next SFL/mark
+        const lastRaw = ful > 0 ? Math.max(20 - (ful - 1) * 2, 1) : 20;
+        const lastCpm = dlvCount > 0 ? costPerDlv / (lastRaw * mult) : 0;
+        const nextRaw = Math.max(20 - ful * 2, 1);
+        const nextCpm = costPerDlv / (nextRaw * mult);
+        const stockCovers = Math.min(dlvCount, ka.totalDlv);
+        const needBuyDlv = Math.max(0, dlvCount - ka.totalDlv);
+        const needUnits = needBuyDlv * ka.amount;
+        const buyCost = needBuyDlv * costPerDlv;
         if (dlvCount > 0) {
-          rows.push({ icon: ka.item, label: `${ka.item} (\u00D7${ka.amount})`, dlvCount, marks, cost, needUnits, buyCost, have: ka.totalDlv, type: "kitchen" });
+          rows.push({ icon: ka.item, label: `${ka.item} (\u00D7${ka.amount})`, dlvCount, marks, cost, needUnits, buyCost, have: ka.totalDlv, type: "kitchen", lastCpm, nextCpm, stockCovers, needBuyDlv, costPerDlv, rawMult: mult });
           totalMarks += marks;
           totalCost += cost;
           totalDlv += dlvCount;
@@ -16142,10 +16149,15 @@
           cost += costPerFeed;
           ful++;
         }
-        const needUnits = Math.max(0, feedCount - pa.dlv) * pa.qty;
-        const buyCost = Math.max(0, feedCount - pa.dlv) * costPerFeed;
+        const lastRawP = ful > 0 ? Math.max(pa.base - (ful - 1) * 2, 1) : pa.base;
+        const lastCpmP = feedCount > 0 ? costPerFeed / (lastRawP * petMult) : 0;
+        const nextRawP = Math.max(pa.base - ful * 2, 1);
+        const nextCpmP = costPerFeed / (nextRawP * petMult);
+        const needBuyDlvP = Math.max(0, feedCount - pa.dlv);
+        const needUnits = needBuyDlvP * pa.qty;
+        const buyCost = needBuyDlvP * costPerFeed;
         if (feedCount > 0) {
-          rows.push({ icon: pa.food, label: `${pa.food} (${pa.label})`, dlvCount: feedCount, marks, cost, needUnits, buyCost, have: pa.dlv, type: "pet" });
+          rows.push({ icon: pa.food, label: `${pa.food} (${pa.label})`, dlvCount: feedCount, marks, cost, needUnits, buyCost, have: pa.dlv, type: "pet", lastCpm: lastCpmP, nextCpm: nextCpmP, stockCovers: Math.min(feedCount, pa.dlv), needBuyDlv: needBuyDlvP, costPerDlv: costPerFeed, rawMult: petMult });
           totalMarks += marks;
           totalCost += cost;
           totalDlv += feedCount;
@@ -16153,23 +16165,42 @@
       }
 
       let html = `<table class="marks-table"><thead><tr>
-        <th>Item</th><th class="num-col">Actions</th><th class="num-col">Marks</th>
-        <th class="num-col">Cost</th><th class="num-col">Have</th><th class="num-col">Buy</th><th class="num-col">Buy cost</th>
+        <th>Item</th><th class="num-col">Do</th><th class="num-col">Marks</th>
+        <th class="num-col">Last SFL/m</th><th class="num-col">Stock</th><th class="num-col">Buy</th><th class="num-col">Buy cost</th><th>Note</th>
       </tr></thead><tbody>`;
 
       if (rows.length === 0) {
-        html += `<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:16px">No actions under ${budget.toFixed(3)} SFL/mark today</td></tr>`;
+        html += `<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:16px">No actions under ${budget.toFixed(3)} SFL/mark today</td></tr>`;
       }
       for (const r of rows) {
         const buyColor = r.needUnits > 0 ? "var(--red)" : "var(--green)";
+        // Note: if stock covers fewer than optimal, and buying more is still under budget
+        let note = "";
+        if (r.needBuyDlv > 0 && r.stockCovers < r.dlvCount) {
+          // Stock runs out before optimal — need to buy
+          // Show: stock gives X marks at good rate, then Y more need buying
+          const stockMarksRaw = [];
+          let f = r.type === "kitchen" ? (r.dlvCount - r.stockCovers - r.needBuyDlv + (r.have > 0 ? 0 : 0)) : 0;
+          note = `\uD83D\uDED2 Stock covers ${r.stockCovers}/${r.dlvCount}, buy ${r.needBuyDlv} more`;
+        } else if (r.needBuyDlv === 0 && r.nextCpm <= budget * 1.5 && r.nextCpm > budget) {
+          // Next delivery is just above budget — note it's close
+          note = `\u26A0\uFE0F Next would be ${r.nextCpm.toFixed(4)} SFL/m (${((r.nextCpm / budget - 1) * 100).toFixed(0)}% over budget)`;
+        } else if (r.needBuyDlv === 0) {
+          note = "\u2705 All from stock";
+        }
+
+        // Last SFL/mark color
+        const lastColor = r.lastCpm <= budget * 0.5 ? "var(--green)" : r.lastCpm > budget * 0.8 ? "var(--sunpetal)" : "var(--text-secondary)";
+
         html += `<tr>
           <td>${_mIcon(r.icon, 16)} ${escHTML(r.label)}</td>
           <td class="num-col">${r.dlvCount}</td>
           <td class="num-col" style="color:var(--sunpetal)">${_fmtNum(Math.round(r.marks))}</td>
-          <td class="num-col">${r.cost.toFixed(2)}</td>
+          <td class="num-col" style="color:${lastColor}">${r.lastCpm.toFixed(4)}</td>
           <td class="num-col">${r.have} in stock</td>
           <td class="num-col" style="color:${buyColor}">${r.needUnits > 0 ? _fmtNum(r.needUnits) + " units" : "\u2705"}</td>
           <td class="num-col">${r.buyCost > 0 ? r.buyCost.toFixed(2) + " SFL" : "-"}</td>
+          <td style="font-size:0.45rem">${note}</td>
         </tr>`;
       }
 
