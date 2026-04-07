@@ -15280,7 +15280,7 @@
         // Sort all sources by next marks per action (descending)
         const allSources = [];
         for (const ka of kitchenAnalysis) {
-          if (ka.totalDlv > 0) {
+          {
             const kitchenCost = (estimateItemSfl(ka.item, _marksP2pPrices) || 0) * ka.amount;
             allSources.push({
               type: "kitchen",
