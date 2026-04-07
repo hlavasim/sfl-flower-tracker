@@ -15341,7 +15341,19 @@
           ${bottleneck > 0 ? ` | Shortest supply: <b>${bottleneck}d</b>` : ''}
         </div>`;
 
-        html += `</div></div>`;
+        html += `
+        <div style="padding:4px 12px;text-align:right">
+          <span style="font-size:0.5rem;color:var(--text-dim);cursor:pointer" onclick="document.getElementById('leg-strat').style.display=document.getElementById('leg-strat').style.display==='none'?'block':'none'">\u2139\uFE0F Legend</span></div>
+        <div id="leg-strat" style="display:none;padding:8px 12px;font-size:0.5rem;line-height:1.8;background:var(--bg-card);border-top:1px solid rgba(92,58,30,0.15)">
+          <dl style="display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:0">
+            <dt style="color:var(--sunpetal)">Next marks</dt><dd>How many marks you'll get from the NEXT donation/feed action, considering diminishing returns today</dd>
+            <dt style="color:var(--sunpetal)">Daily (fresh)</dt><dd>Total marks per day if you start with a fresh counter (10 optimal kitchen donations, or pet feeds)</dd>
+            <dt style="color:var(--sunpetal)">Stock</dt><dd>How many deliveries/feeds you can still do with current inventory</dd>
+            <dt style="color:var(--sunpetal)">Status</dt><dd>Counter state — \u2705 Fresh = best value, \u26A0\uFE0F Diminished = you've already donated 10+ today (only 1 mark per donation)</dd>
+          </dl>
+          <p style="margin:6px 0 0;color:var(--text-dim)"><b>Tip:</b> Focus on the highest "Next marks" first. Kitchen donations have diminishing returns after 10/day per resource — spread across resources and days for maximum value. Pet feeding also has diminishing returns per slot.</p>
+        </div>
+        </div></div>`;
       }
 
       // ── Marks Over Time Chart ──
@@ -15457,7 +15469,23 @@
         html += `</td></tr>`;
       }
 
-      html += `</tbody></table></div></div></div>`;
+      html += `</tbody></table></div>
+      <div style="padding:4px 12px;text-align:right">
+        <span style="font-size:0.5rem;color:var(--text-dim);cursor:pointer" onclick="document.getElementById('leg-lb').style.display=document.getElementById('leg-lb').style.display==='none'?'block':'none'">\u2139\uFE0F Legend</span></div>
+      <div id="leg-lb" style="display:none;padding:8px 12px;font-size:0.5rem;line-height:1.8;background:var(--bg-card);border-top:1px solid rgba(92,58,30,0.15)">
+        <dl style="display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:0">
+          <dt style="color:var(--sunpetal)">#</dt><dd>Current leaderboard rank within Nightshades faction</dd>
+          <dt style="color:var(--sunpetal)">Marks</dt><dd>Total marks earned this week (from faction kitchen donations + pet feeding)</dd>
+          <dt style="color:var(--sunpetal)">\u0394</dt><dd>Change in marks since previous snapshot — green = gained, red = lost (rare, data correction)</dd>
+          <dt style="color:var(--sunpetal)">Mult</dt><dd>Total marks multiplier = 1 + emblem tier boost + wearable boost. Applied to all raw marks.</dd>
+          <dt style="color:var(--sunpetal)">Tier</dt><dd>Emblem tier (Lich=+400%, Sorcerer=+380%, Witch=+350%, Raver=+300%, Enchanter=+150%, Occultist=+5%)</dd>
+          <dt style="color:var(--sunpetal)">Resources</dt><dd>Current stock of this week's kitchen donation items. Higher = more potential marks.</dd>
+          <dt style="color:var(--sunpetal)">Optimal</dt><dd>Max additional marks if resources are spread optimally (10 donations/day per resource, fresh counter each day)</dd>
+          <dt style="color:var(--sunpetal)">Dump</dt><dd>Marks if ALL remaining resources are donated right now (diminishing returns apply after 10/day)</dd>
+          <dt style="color:var(--sunpetal)">Threat</dt><dd>Visual bar showing projected total (current + optimal) relative to the top player. Red = high threat.</dd>
+        </dl>
+      </div>
+      </div></div>`;
 
       // ── Projections section ──
       html += `<div class="marks-section pixel-panel">
@@ -15504,7 +15532,20 @@
           </td></tr>`;
       }
 
-      html += `</tbody></table></div></div>`;
+      html += `</tbody></table>
+      <div style="padding:4px 12px;text-align:right">
+        <span style="font-size:0.5rem;color:var(--text-dim);cursor:pointer" onclick="document.getElementById('leg-proj').style.display=document.getElementById('leg-proj').style.display==='none'?'block':'none'">\u2139\uFE0F Legend</span></div>
+      <div id="leg-proj" style="display:none;padding:8px 12px;font-size:0.5rem;line-height:1.8;background:var(--bg-card);border-top:1px solid rgba(92,58,30,0.15)">
+        <dl style="display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:0">
+          <dt style="color:var(--sunpetal)">Current</dt><dd>Marks already earned this week</dd>
+          <dt style="color:var(--sunpetal)">Optimal</dt><dd>Additional marks possible from kitchen resources if played optimally (10 donations/day/resource, max value per donation)</dd>
+          <dt style="color:var(--sunpetal)">Pet Wk</dt><dd>Total pet feeding marks possible this week (4 slots: Easy 4pts, Medium 8pts, Hard 12pts, Doll 20pts base \u00D7 pet multiplier)</dd>
+          <dt style="color:var(--sunpetal)">Total Proj</dt><dd>Current + Optimal + Pet Weekly = projected end-of-week total if played perfectly</dd>
+          <dt style="color:var(--sunpetal)">Bar</dt><dd>Gold = current marks, transparent gold = kitchen optimal remaining, blue = pet weekly potential</dd>
+        </dl>
+        <p style="margin:6px 0 0;color:var(--text-dim)"><b>Tip:</b> Players sorted by total projection. Watch for players below you with high Optimal — they may overtake you if they start dumping resources.</p>
+      </div>
+      </div></div>`;
 
       // ── Resource Burn Rate ──
       const playersWithDelta = players.filter(p => p.prev_resources && p.prev_captured_at);
@@ -15554,7 +15595,18 @@
           html += `<td style="font-size:0.5rem">${signals.join(" ") || "\u2022"}</td></tr>`;
         }
 
-        html += `</tbody></table></div></div>`;
+        html += `</tbody></table>
+        <div style="padding:4px 12px;text-align:right">
+          <span style="font-size:0.5rem;color:var(--text-dim);cursor:pointer" onclick="document.getElementById('leg-burn').style.display=document.getElementById('leg-burn').style.display==='none'?'block':'none'">\u2139\uFE0F Legend</span></div>
+        <div id="leg-burn" style="display:none;padding:8px 12px;font-size:0.5rem;line-height:1.8;background:var(--bg-card);border-top:1px solid rgba(92,58,30,0.15)">
+          <dl style="display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:0">
+            <dt style="color:var(--sunpetal)">\u0394 (resource)</dt><dd>Change in resource stock since previous snapshot. Negative = player is donating/using it. Large drops = possible dump.</dd>
+            <dt style="color:var(--sunpetal)">Dlv Left</dt><dd>How many more kitchen donations this resource can sustain (stock \u00F7 required amount per donation)</dd>
+            <dt style="color:var(--sunpetal)">Signals</dt><dd>\uD83D\uDFE2 MARKS+ = big marks jump, \uD83D\uDD3B = resource dropping fast (dumping?), \uD83D\uDD3A = resource growing (stockpiling for later dump?)</dd>
+          </dl>
+          <p style="margin:6px 0 0;color:var(--text-dim)"><b>Tip:</b> Watch for players with \uD83D\uDD3B signals — they may be dumping resources to gain marks quickly. Players with \uD83D\uDD3A are stockpiling for a last-minute push.</p>
+        </div>
+        </div></div>`;
       }
 
       root.innerHTML = html;
