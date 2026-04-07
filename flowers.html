@@ -2269,6 +2269,57 @@
     .nft-breed-resources { font-size:0.5625rem; color:var(--text-dim); line-height:1.5; }
     .nft-breed-resources .unique { color:var(--lily); font-weight:bold; }
     .nft-breed-resources .moonfur { color:var(--sunpetal); }
+    /* ── Marks War Tracker ── */
+    .marks-summary { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:16px; }
+    .marks-summary-stat { background:var(--bg-card); border:3px solid var(--border-dark); padding:10px 8px; text-align:center; }
+    .marks-summary-label { font-size:0.5rem; color:var(--text-dim); margin-bottom:4px; }
+    .marks-summary-value { font-size:0.75rem; text-shadow:1px 1px 0 #000; }
+    .marks-controls { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; align-items:center; }
+    .marks-controls select, .marks-controls label { background:var(--bg-card); color:var(--text-primary); border:2px solid var(--border-brown); padding:5px 8px; font-size:0.5625rem; font-family:inherit; }
+    .marks-controls label { cursor:pointer; display:flex; align-items:center; gap:4px; border:none; }
+    .marks-table-wrap { overflow-x:auto; margin-bottom:16px; }
+    .marks-table { width:100%; border-collapse:collapse; white-space:nowrap; }
+    .marks-table th { font-size:0.5rem; color:var(--text-dim); text-align:left; padding:5px 8px; border-bottom:2px solid var(--border-brown); background:var(--bg-medium); cursor:pointer; position:sticky; top:0; z-index:1; }
+    .marks-table th:hover { color:var(--text-primary); }
+    .marks-table th.sorted-asc::after { content:" ▲"; }
+    .marks-table th.sorted-desc::after { content:" ▼"; }
+    .marks-table td { font-size:0.5625rem; padding:4px 8px; border-bottom:1px solid rgba(92,58,30,0.15); color:var(--text-secondary); }
+    .marks-table tr:hover td { background:rgba(255,255,255,0.03); }
+    .marks-table tr.marks-me td { background:rgba(255,215,0,0.08); }
+    .marks-table .rank-col { width:35px; text-align:center; font-weight:bold; }
+    .marks-table .marks-col { text-align:right; font-weight:bold; color:var(--sunpetal); }
+    .marks-table .num-col { text-align:right; }
+    .marks-delta-pos { color:var(--green); }
+    .marks-delta-neg { color:var(--red); }
+    .marks-delta-zero { color:var(--text-dim); }
+    .marks-tier-lich { color:#ff4444; font-weight:bold; }
+    .marks-tier-sorcerer { color:#ff8800; }
+    .marks-tier-witch { color:#cc44ff; }
+    .marks-tier-raver { color:#44aaff; }
+    .marks-tier-enchanter { color:#44cc44; }
+    .marks-threat-bar { height:6px; border-radius:3px; background:var(--bg-card); overflow:hidden; min-width:60px; }
+    .marks-threat-fill { height:100%; border-radius:3px; transition:width 0.3s; }
+    .marks-chart-wrap { height:300px; width:100%; border-radius:4px; overflow:hidden; margin-bottom:16px; }
+    .marks-expand { display:none; }
+    .marks-expand.open { display:table-row; }
+    .marks-expand td { padding:8px 12px; background:var(--bg-card); }
+    .marks-detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:0.5625rem; }
+    .marks-detail-grid dt { color:var(--text-dim); }
+    .marks-detail-grid dd { color:var(--text-secondary); margin:0; text-align:right; }
+    .marks-proj-bar { display:flex; height:20px; border-radius:3px; overflow:hidden; margin:2px 0; background:var(--bg-card); }
+    .marks-proj-current { background:var(--sunpetal); }
+    .marks-proj-remaining { background:rgba(255,215,0,0.25); }
+    .marks-section { margin-bottom:16px; }
+    .marks-section-title { font-size:0.625rem; color:var(--sunpetal); padding:8px 12px; background:var(--bg-medium); border-bottom:2px solid var(--border-dark); margin-bottom:0; cursor:pointer; }
+    .marks-section-title:hover { background:var(--bg-light); }
+    .marks-crawl-status { font-size:0.5rem; color:var(--text-dim); padding:4px 8px; text-align:right; }
+    @media (max-width: 600px) {
+      .marks-summary { grid-template-columns:repeat(2,1fr); }
+      .marks-table { font-size:0.5rem; }
+      .marks-table th, .marks-table td { padding:3px 4px; }
+      .marks-detail-grid { grid-template-columns:1fr; }
+      .marks-chart-wrap { height:220px; }
+    }
   </style>
   <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
   <script defer src="/_vercel/insights/script.js"></script>
@@ -2295,7 +2346,7 @@
     const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
     const IMG_BASE = "https://sfl.world/img/flowers/";
-    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "nodes", "buds", "pets", "diff", "json"];
+    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "nodes", "buds", "pets", "marks", "diff", "json"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -4087,6 +4138,7 @@
         { id: "buds", label: "BUDS" },
         { id: "pets", label: "PETS" },
         { id: "json", label: "JSON" },
+        { id: "marks", label: "MARKS" },
       ];
       if (["155498", "1260204733777858"].includes(FARM_ID)) overflow.push({ id: "diff", label: "DIFF" });
       let html = '<div class="nav-bar pixel-panel">';
@@ -4208,7 +4260,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v2.4</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v2.5</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -4235,6 +4287,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v2.5", items: [
+          { t: "new", text: "Marks War Tracker — top 50 Nightshades faction leaderboard with live crawling" },
+          { t: "new", text: "Marks timeline chart, projections, resource burn rate, threat assessment" },
+        ]},
         { ver: "v2.4", items: [
           { t: "new", text: "Bumpkin XP Calculator — ingredient cost estimation per recipe (P2P prices)" },
           { t: "new", text: "Cost/cook, cost/day, cost to next level, cost to target level" },
@@ -15034,6 +15090,521 @@
       return results;
     }
 
+
+    // ══════════════════════════════════════════════════════════════
+    // MARKS WAR TRACKER
+    // ══════════════════════════════════════════════════════════════
+
+    let _marksRefreshTimer = null;
+    let _marksChartCounter = 0;
+
+    async function renderMarks(data) {
+      const app = document.getElementById("app");
+      app.innerHTML = `<div class="header pixel-panel pixel-font">
+        <h1>\u2694\uFE0F MARKS WAR TRACKER</h1>
+        <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
+      </div>
+      <div class="under-dev-banner pixel-font">\u26A0\uFE0F UNDER DEVELOPMENT</div>
+      <div id="marks-root" class="pixel-font" style="padding:8px 0">
+        <div style="text-align:center;padding:40px;color:var(--text-dim)">Loading marks data...</div>
+      </div>`;
+
+      try {
+        // Fetch weeks list + latest data + crawl state in parallel
+        const [weeksResp, latestResp, stateResp] = await Promise.all([
+          fetch("/api/marks-history?mode=weeks"),
+          fetch("/api/marks-history?mode=latest"),
+          fetch("/api/marks-history?mode=state"),
+        ]);
+
+        const weeksData = weeksResp.ok ? await weeksResp.json() : { weeks: [] };
+        const latestData = latestResp.ok ? await latestResp.json() : { week: {}, players: [], snapshot_count: 0 };
+        const stateData = stateResp.ok ? await stateResp.json() : { state: null };
+
+        _renderMarksContent(latestData, weeksData, stateData);
+
+        // Fetch timeline data for chart
+        const weekStart = latestData.week?.week_start;
+        if (weekStart) {
+          fetch(`/api/marks-history?mode=snapshots&week=${weekStart}`)
+            .then(r => r.ok ? r.json() : { snapshots: [] })
+            .then(timelineData => _renderMarksChart(timelineData.snapshots, latestData.players))
+            .catch(() => {});
+        }
+      } catch (err) {
+        document.getElementById("marks-root").innerHTML =
+          `<div style="color:var(--red);padding:20px">Error: ${escHTML(err.message)}</div>`;
+      }
+    }
+
+    function _renderMarksContent(latestData, weeksData, stateData) {
+      const root = document.getElementById("marks-root");
+      const players = latestData.players || [];
+      const week = latestData.week || {};
+      const kitchenItems = week.kitchen_items || [];
+      const crawlState = stateData.state || {};
+      const myFarmId = parseInt(FARM_ID);
+
+      // Sort by rank
+      players.sort((a, b) => (a.rank || 999) - (b.rank || 999));
+
+      // Find own player
+      const me = players.find(p => p.farm_id === myFarmId || String(p.farm_id) === FARM_ID);
+      const topPlayer = players[0];
+
+      // Days left calculation
+      const weekStart = week.week_start;
+      const daysLeft = weekStart ? Math.max(0, (new Date(weekStart + "T00:00:00Z").getTime() + 7 * 86400000 - Date.now()) / 86400000) : 0;
+      const hoursLeft = Math.floor(daysLeft * 24);
+      const minsLeft = Math.floor((daysLeft * 24 - hoursLeft) * 60);
+
+      // Week selector
+      const weeks = weeksData.weeks || [];
+      let weekOptions = weeks.map(w =>
+        `<option value="${w.week_start}" ${w.week_start === weekStart ? "selected" : ""}>${w.week_start}</option>`
+      ).join("");
+      if (!weekOptions) weekOptions = `<option>${weekStart || "No data"}</option>`;
+
+      // Crawl status
+      let crawlStatus = "";
+      if (crawlState.phase === "discover") {
+        crawlStatus = `\uD83D\uDD0D Discovering players... (${crawlState.discover_cursor || 0} calls)`;
+      } else if (crawlState.phase === "crawl") {
+        crawlStatus = `\uD83D\uDCE1 Crawling farm data... (${crawlState.crawl_cursor || 0}/${crawlState.roster_size || "?"})`;
+      } else {
+        const ago = crawlState.updated_at ? _timeAgo(new Date(crawlState.updated_at)) : "?";
+        crawlStatus = `\u2705 Last cycle: ${ago} ago`;
+      }
+
+      let html = "";
+
+      // ── Controls ──
+      html += `<div class="marks-controls">
+        <select onchange="_marksChangeWeek(this.value)">${weekOptions}</select>
+        <label><input type="checkbox" id="marks-auto-refresh" onchange="_marksToggleRefresh(this.checked)"> Auto-refresh</label>
+        <span class="marks-crawl-status">${crawlStatus}</span>
+      </div>`;
+
+      // ── Summary stats ──
+      html += `<div class="marks-summary">
+        <div class="marks-summary-stat"><div class="marks-summary-label">YOUR RANK</div>
+          <div class="marks-summary-value">${me ? "#" + me.rank : "N/A"}</div></div>
+        <div class="marks-summary-stat"><div class="marks-summary-label">YOUR MARKS</div>
+          <div class="marks-summary-value" style="color:var(--sunpetal)">${me ? _fmtNum(me.marks) : "N/A"}</div></div>
+        <div class="marks-summary-stat"><div class="marks-summary-label">#1 MARKS</div>
+          <div class="marks-summary-value">${topPlayer ? _fmtNum(topPlayer.marks) : "N/A"}</div></div>
+        <div class="marks-summary-stat"><div class="marks-summary-label">TIME LEFT</div>
+          <div class="marks-summary-value">${hoursLeft}h ${minsLeft}m</div></div>
+      </div>`;
+
+      // Additional stats row
+      html += `<div class="marks-summary" style="margin-top:-8px">
+        <div class="marks-summary-stat"><div class="marks-summary-label">YOUR MULT</div>
+          <div class="marks-summary-value">${me ? me.multiplier.toFixed(1) + "x" : "N/A"}</div></div>
+        <div class="marks-summary-stat"><div class="marks-summary-label">PLAYERS</div>
+          <div class="marks-summary-value">${players.length}</div></div>
+        <div class="marks-summary-stat"><div class="marks-summary-label">SNAPSHOTS</div>
+          <div class="marks-summary-value">${latestData.snapshot_count || 0}</div></div>
+        <div class="marks-summary-stat"><div class="marks-summary-label">KITCHEN</div>
+          <div class="marks-summary-value" style="font-size:0.5rem">${kitchenItems.map(k => k.item).join(", ") || "?"}</div></div>
+      </div>`;
+
+      // ── Marks Over Time Chart ──
+      html += `<div class="marks-section pixel-panel">
+        <div class="marks-section-title" onclick="_marksToggle('marks-chart-section')">\u25BC Marks Over Time</div>
+        <div id="marks-chart-section">
+          <div id="marks-timeline-chart" class="marks-chart-wrap" style="background:var(--bg-card)">
+            <div style="text-align:center;padding:40px;color:var(--text-dim);font-size:0.5rem">Loading chart...</div>
+          </div>
+        </div>
+      </div>`;
+
+      // ── Leaderboard Table ──
+      const maxOptimal = Math.max(...players.map(p => (p.marks || 0) + (p.marks_optimal || 0)), 1);
+
+      html += `<div class="marks-section pixel-panel">
+        <div class="marks-section-title" onclick="_marksToggle('marks-lb-section')">\u25BC Leaderboard</div>
+        <div id="marks-lb-section">
+        <div class="marks-table-wrap"><table class="marks-table" id="marks-table">
+        <thead><tr>
+          <th class="rank-col" data-sort="rank">#</th>
+          <th data-sort="name">Name</th>
+          <th class="marks-col" data-sort="marks">Marks</th>
+          <th class="num-col" data-sort="delta">\u0394</th>
+          <th class="num-col" data-sort="multiplier">Mult</th>
+          <th data-sort="tier">Tier</th>`;
+
+      for (const ki of kitchenItems) {
+        html += `<th class="num-col" data-sort="res_${ki.item}">${ki.item.slice(0, 6)}</th>`;
+      }
+
+      html += `<th class="num-col" data-sort="optimal">Optimal</th>
+          <th class="num-col" data-sort="dump">Dump</th>
+          <th>Threat</th>
+        </tr></thead><tbody>`;
+
+      for (const p of players) {
+        const isMe = p.farm_id === myFarmId || String(p.farm_id) === FARM_ID;
+        const delta = p.prev_marks != null ? p.marks - p.prev_marks : null;
+        const deltaClass = delta > 0 ? "marks-delta-pos" : delta < 0 ? "marks-delta-neg" : "marks-delta-zero";
+        const deltaStr = delta != null ? (delta > 0 ? "+" : "") + _fmtNum(delta) : "-";
+        const tierClass = "marks-tier-" + (p.tier || "pagan").toLowerCase();
+        const threatPct = maxOptimal > 0 ? Math.min(100, ((p.marks || 0) + (p.marks_optimal || 0)) / maxOptimal * 100) : 0;
+        const threatColor = threatPct > 80 ? "#ff4444" : threatPct > 50 ? "#ff8800" : "#44cc44";
+
+        html += `<tr class="${isMe ? "marks-me" : ""}" onclick="_marksToggleRow('mexp-${p.farm_id}')" style="cursor:pointer">
+          <td class="rank-col">${p.rank || "?"}</td>
+          <td>${escHTML(p.player_name || "?")}</td>
+          <td class="marks-col">${_fmtNum(p.marks)}</td>
+          <td class="num-col ${deltaClass}">${deltaStr}</td>
+          <td class="num-col">${p.multiplier ? p.multiplier.toFixed(1) + "x" : "?"}</td>
+          <td class="${tierClass}">${escHTML(p.tier || "?")}</td>`;
+
+        const res = p.resources || {};
+        for (const ki of kitchenItems) {
+          html += `<td class="num-col">${_fmtNum(res[ki.item] || 0)}</td>`;
+        }
+
+        const projOptimal = Math.round(p.marks_optimal || 0);
+        const projDump = Math.round(p.marks_dump || 0);
+
+        html += `<td class="num-col">${_fmtNum(projOptimal)}</td>
+          <td class="num-col">${_fmtNum(projDump)}</td>
+          <td><div class="marks-threat-bar"><div class="marks-threat-fill" style="width:${threatPct.toFixed(1)}%;background:${threatColor}"></div></div></td>
+        </tr>`;
+
+        // Expandable detail row
+        html += `<tr class="marks-expand" id="mexp-${p.farm_id}"><td colspan="${7 + kitchenItems.length + 3}">`;
+        html += `<div class="marks-detail-grid">
+          <dt>Farm ID</dt><dd>${p.farm_id}</dd>
+          <dt>Emblems</dt><dd>${_fmtNum(p.emblems || 0)}</dd>
+          <dt>Rank Boost</dt><dd>+${((p.rank_boost || 0) * 100).toFixed(0)}%</dd>
+          <dt>Wear Boost</dt><dd>+${((p.wear_boost || 0) * 100).toFixed(0)}%</dd>
+          <dt>Paw Shield</dt><dd>${p.has_paw_shield ? "\u2705 Yes" : "\u274C No"}</dd>
+          <dt>Pet Mult</dt><dd>${(p.pet_mult || 1).toFixed(2)}x</dd>
+          <dt>Pet Daily</dt><dd>${_fmtNum(Math.round(p.pet_daily || 0))}</dd>
+          <dt>Pet Weekly</dt><dd>${_fmtNum(Math.round(p.pet_weekly || 0))}</dd>
+          <dt>Daily Fresh</dt><dd>${_fmtNum(Math.round(p.marks_daily_fresh || 0))}</dd>
+          <dt>SFL Balance</dt><dd>${(p.sfl || 0).toFixed(1)}</dd>`;
+
+        // Resource details with deltas
+        const prevRes = p.prev_resources || {};
+        for (const ki of kitchenItems) {
+          const cur = res[ki.item] || 0;
+          const prev = prevRes[ki.item];
+          const resDelta = prev != null ? cur - prev : null;
+          const rdStr = resDelta != null ? ` (${resDelta > 0 ? "+" : ""}${_fmtNum(resDelta)})` : "";
+          const fulfilled = (p.today_fulfilled || {})[ki.item] || 0;
+          const deliveries = ki.amount > 0 ? Math.floor(cur / ki.amount) : 0;
+          html += `<dt>${escHTML(ki.item)}</dt><dd>${_fmtNum(cur)}${rdStr} (${deliveries} dlv, ${fulfilled} done today)</dd>`;
+        }
+
+        // Pet food stock
+        const petStock = p.pet_food_stock || {};
+        for (const [food, qty] of Object.entries(petStock)) {
+          html += `<dt>Pet: ${escHTML(food)}</dt><dd>${_fmtNum(qty)}</dd>`;
+        }
+
+        html += `</div>`;
+
+        // Projection bar
+        const totalProj = (p.marks || 0) + (p.marks_optimal || 0);
+        if (totalProj > 0) {
+          const curPct = (p.marks || 0) / totalProj * 100;
+          html += `<div style="margin-top:8px;font-size:0.5rem;color:var(--text-dim)">
+            Current ${_fmtNum(p.marks)} + Optimal remaining ${_fmtNum(projOptimal)} = ${_fmtNum(Math.round(totalProj))}
+            <div class="marks-proj-bar">
+              <div class="marks-proj-current" style="width:${curPct.toFixed(1)}%"></div>
+              <div class="marks-proj-remaining" style="width:${(100 - curPct).toFixed(1)}%"></div>
+            </div></div>`;
+        }
+
+        html += `</td></tr>`;
+      }
+
+      html += `</tbody></table></div></div></div>`;
+
+      // ── Projections section ──
+      html += `<div class="marks-section pixel-panel">
+        <div class="marks-section-title" onclick="_marksToggle('marks-proj-section')">\u25BC Projections & Threat Assessment</div>
+        <div id="marks-proj-section">`;
+
+      // Sort by projected total (marks + optimal)
+      const projected = [...players]
+        .map(p => ({ ...p, total: (p.marks || 0) + (p.marks_optimal || 0) }))
+        .sort((a, b) => b.total - a.total);
+      const maxProj = projected.length > 0 ? projected[0].total : 1;
+
+      html += `<table class="marks-table"><thead><tr>
+        <th class="rank-col">#</th><th>Name</th><th class="num-col">Current</th>
+        <th class="num-col">Optimal</th><th class="num-col">Pet Wk</th>
+        <th class="num-col">Total Proj</th><th>Bar</th>
+      </tr></thead><tbody>`;
+
+      for (let i = 0; i < Math.min(projected.length, 30); i++) {
+        const p = projected[i];
+        const isMe = p.farm_id === myFarmId || String(p.farm_id) === FARM_ID;
+        const curPct = p.total > 0 ? (p.marks || 0) / maxProj * 100 : 0;
+        const optPct = p.total > 0 ? (p.marks_optimal || 0) / maxProj * 100 : 0;
+        const petPct = p.total > 0 ? (p.pet_weekly || 0) / maxProj * 100 : 0;
+
+        html += `<tr class="${isMe ? "marks-me" : ""}">
+          <td class="rank-col">${i + 1}</td>
+          <td>${escHTML(p.player_name || "?")}</td>
+          <td class="num-col marks-col">${_fmtNum(p.marks)}</td>
+          <td class="num-col">${_fmtNum(Math.round(p.marks_optimal || 0))}</td>
+          <td class="num-col">${_fmtNum(Math.round(p.pet_weekly || 0))}</td>
+          <td class="num-col" style="font-weight:bold">${_fmtNum(Math.round(p.total + (p.pet_weekly || 0)))}</td>
+          <td style="min-width:120px">
+            <div class="marks-proj-bar" style="height:12px">
+              <div class="marks-proj-current" style="width:${curPct.toFixed(1)}%"></div>
+              <div class="marks-proj-remaining" style="width:${optPct.toFixed(1)}%"></div>
+              <div style="width:${petPct.toFixed(1)}%;background:rgba(100,200,255,0.3);height:100%"></div>
+            </div>
+          </td></tr>`;
+      }
+
+      html += `</tbody></table></div></div>`;
+
+      // ── Resource Burn Rate ──
+      const playersWithDelta = players.filter(p => p.prev_resources && p.prev_captured_at);
+      if (playersWithDelta.length > 0 && kitchenItems.length > 0) {
+        html += `<div class="marks-section pixel-panel">
+          <div class="marks-section-title" onclick="_marksToggle('marks-burn-section')">\u25BC Resource Burn Rate</div>
+          <div id="marks-burn-section">
+          <table class="marks-table"><thead><tr>
+            <th class="rank-col">#</th><th>Name</th>`;
+
+        for (const ki of kitchenItems) {
+          html += `<th class="num-col">${ki.item.slice(0, 6)} \u0394</th><th class="num-col">Dlv Left</th>`;
+        }
+        html += `<th>Signal</th></tr></thead><tbody>`;
+
+        for (const p of playersWithDelta.slice(0, 30)) {
+          const isMe = p.farm_id === myFarmId || String(p.farm_id) === FARM_ID;
+          const res = p.resources || {};
+          const prevRes = p.prev_resources || {};
+          const hoursBetween = p.prev_captured_at
+            ? (new Date(p.captured_at) - new Date(p.prev_captured_at)) / 3600000
+            : null;
+
+          let signals = [];
+          const marksDelta = p.prev_marks != null ? p.marks - p.prev_marks : 0;
+          if (marksDelta > 500) signals.push("\uD83D\uDFE2 MARKS+");
+
+          html += `<tr class="${isMe ? "marks-me" : ""}">
+            <td class="rank-col">${p.rank || "?"}</td>
+            <td>${escHTML(p.player_name || "?")}</td>`;
+
+          for (const ki of kitchenItems) {
+            const cur = res[ki.item] || 0;
+            const prev = prevRes[ki.item];
+            const d = prev != null ? cur - prev : null;
+            const dClass = d != null ? (d < 0 ? "marks-delta-neg" : d > 0 ? "marks-delta-pos" : "marks-delta-zero") : "";
+            const dStr = d != null ? (d > 0 ? "+" : "") + _fmtNum(d) : "-";
+            const dlvLeft = ki.amount > 0 ? Math.floor(cur / ki.amount) : 0;
+
+            if (d != null && d < -50) signals.push(`\uD83D\uDD3B ${ki.item.slice(0, 4)}`);
+            else if (d != null && d > 50) signals.push(`\uD83D\uDD3A ${ki.item.slice(0, 4)}`);
+
+            html += `<td class="num-col ${dClass}">${dStr}</td><td class="num-col">${_fmtNum(dlvLeft)}</td>`;
+          }
+
+          html += `<td style="font-size:0.5rem">${signals.join(" ") || "\u2022"}</td></tr>`;
+        }
+
+        html += `</tbody></table></div></div>`;
+      }
+
+      root.innerHTML = html;
+
+      // Make table headers sortable
+      _marksInitSort();
+    }
+
+    function _renderMarksChart(snapshots, players) {
+      const container = document.getElementById("marks-timeline-chart");
+      if (!container || typeof LightweightCharts === "undefined" || !snapshots || snapshots.length === 0) {
+        if (container) container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-dim);font-size:0.5rem">No timeline data yet</div>';
+        return;
+      }
+
+      // Group snapshots by farm_id
+      const byFarm = {};
+      for (const s of snapshots) {
+        const fid = String(s.farm_id);
+        if (!byFarm[fid]) byFarm[fid] = [];
+        byFarm[fid].push(s);
+      }
+
+      // Pick top 10 players to chart (by latest marks)
+      const latestByFarm = {};
+      for (const [fid, snaps] of Object.entries(byFarm)) {
+        const latest = snaps[snaps.length - 1];
+        latestByFarm[fid] = { marks: latest.marks || 0, name: latest.player_name || fid };
+      }
+      const topFarms = Object.entries(latestByFarm)
+        .sort((a, b) => b[1].marks - a[1].marks)
+        .slice(0, 10)
+        .map(([fid]) => fid);
+
+      // Always include own farm
+      const myFid = FARM_ID;
+      if (myFid && !topFarms.includes(myFid)) topFarms.push(myFid);
+
+      container.innerHTML = "";
+      const chart = LightweightCharts.createChart(container, {
+        height: 300,
+        layout: {
+          background: { color: "transparent" },
+          textColor: "#9ca3af",
+          fontFamily: "'Press Start 2P', monospace",
+          fontSize: 9,
+        },
+        grid: {
+          vertLines: { color: "rgba(92,58,30,0.15)" },
+          horzLines: { color: "rgba(92,58,30,0.15)" },
+        },
+        crosshair: { mode: 0 },
+        rightPriceScale: { borderColor: "rgba(92,58,30,0.3)" },
+        timeScale: { borderColor: "rgba(92,58,30,0.3)", timeVisible: true, secondsVisible: false },
+        handleScroll: { mouseWheel: true, pressedMouseMove: true },
+        handleScale: { mouseWheel: true, pinch: true },
+      });
+
+      const COLORS = ["#ffd700", "#ff4444", "#44aaff", "#44cc44", "#cc44ff", "#ff8800", "#ff69b4", "#00cccc", "#88ff44", "#ff6644", "#aaaaff"];
+
+      for (let i = 0; i < topFarms.length; i++) {
+        const fid = topFarms[i];
+        const snaps = byFarm[fid] || [];
+        if (snaps.length < 2) continue;
+
+        const sorted = [...snaps].sort((a, b) => new Date(a.captured_at) - new Date(b.captured_at));
+        const deduped = new Map();
+        for (const s of sorted) {
+          const ts = Math.floor(new Date(s.captured_at).getTime() / 1000);
+          deduped.set(ts, s.marks || 0);
+        }
+        const lineData = Array.from(deduped.entries())
+          .sort((a, b) => a[0] - b[0])
+          .map(([time, value]) => ({ time, value }));
+
+        if (lineData.length < 2) continue;
+
+        const color = fid === myFid ? "#ffd700" : COLORS[i % COLORS.length];
+        const isMe = fid === myFid;
+
+        const series = chart.addLineSeries({
+          color,
+          lineWidth: isMe ? 3 : 1,
+          crosshairMarkerVisible: true,
+          crosshairMarkerRadius: isMe ? 5 : 3,
+          title: (latestByFarm[fid]?.name || fid).slice(0, 12),
+          priceFormat: { type: "price", precision: 0, minMove: 1 },
+        });
+        series.setData(lineData);
+      }
+
+      chart.timeScale().fitContent();
+    }
+
+    // ── Marks helper functions ──
+    function _fmtNum(n) {
+      if (n == null || isNaN(n)) return "0";
+      n = Math.round(n);
+      if (Math.abs(n) >= 10000) return (n / 1000).toFixed(1) + "k";
+      return n.toLocaleString("en-US");
+    }
+
+    function _timeAgo(date) {
+      const sec = Math.floor((Date.now() - date.getTime()) / 1000);
+      if (sec < 60) return sec + "s";
+      if (sec < 3600) return Math.floor(sec / 60) + "m";
+      if (sec < 86400) return Math.floor(sec / 3600) + "h";
+      return Math.floor(sec / 86400) + "d";
+    }
+
+    function _marksToggle(id) {
+      const el = document.getElementById(id);
+      if (el) el.style.display = el.style.display === "none" ? "" : "none";
+    }
+
+    function _marksToggleRow(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle("open");
+    }
+
+    function _marksChangeWeek(week) {
+      fetch(`/api/marks-history?mode=latest&week=${week}`)
+        .then(r => r.json())
+        .then(data => {
+          _renderMarksContent(data, { weeks: [] }, { state: null });
+          fetch(`/api/marks-history?mode=snapshots&week=${week}`)
+            .then(r => r.json())
+            .then(td => _renderMarksChart(td.snapshots, data.players))
+            .catch(() => {});
+        })
+        .catch(e => console.error("Week change error:", e));
+    }
+
+    function _marksToggleRefresh(enabled) {
+      if (_marksRefreshTimer) { clearInterval(_marksRefreshTimer); _marksRefreshTimer = null; }
+      if (enabled) {
+        _marksRefreshTimer = setInterval(() => {
+          Promise.all([
+            fetch("/api/marks-history?mode=latest").then(r => r.json()),
+            fetch("/api/marks-history?mode=state").then(r => r.json()),
+          ]).then(([latest, state]) => {
+            _renderMarksContent(latest, { weeks: [] }, state);
+          }).catch(() => {});
+        }, 60000);
+      }
+    }
+
+    function _marksInitSort() {
+      const table = document.getElementById("marks-table");
+      if (!table) return;
+      const headers = table.querySelectorAll("th[data-sort]");
+      headers.forEach(th => {
+        th.addEventListener("click", () => {
+          const key = th.dataset.sort;
+          const tbody = table.querySelector("tbody");
+          const rows = Array.from(tbody.querySelectorAll("tr:not(.marks-expand)"));
+          const asc = th.classList.contains("sorted-asc");
+
+          headers.forEach(h => h.classList.remove("sorted-asc", "sorted-desc"));
+          th.classList.add(asc ? "sorted-desc" : "sorted-asc");
+
+          rows.sort((a, b) => {
+            const av = _marksSortVal(a, key);
+            const bv = _marksSortVal(b, key);
+            return asc ? (bv - av || 0) : (av - bv || 0);
+          });
+
+          for (const row of rows) {
+            const expandRow = row.nextElementSibling;
+            tbody.appendChild(row);
+            if (expandRow && expandRow.classList.contains("marks-expand")) {
+              tbody.appendChild(expandRow);
+            }
+          }
+        });
+      });
+    }
+
+    function _marksSortVal(row, key) {
+      const cells = row.querySelectorAll("td");
+      if (key === "rank") return parseFloat(cells[0]?.textContent) || 999;
+      if (key === "name") return cells[1]?.textContent?.toLowerCase() || "zzz";
+      if (key === "marks") return parseFloat(cells[2]?.textContent?.replace(/[^0-9.-]/g, "")) || 0;
+      if (key === "delta") return parseFloat(cells[3]?.textContent?.replace(/[^0-9.+-]/g, "")) || 0;
+      if (key === "multiplier") return parseFloat(cells[4]?.textContent) || 0;
+      if (key === "tier") return cells[5]?.textContent || "zzz";
+      if (key === "optimal") return parseFloat(cells[cells.length - 3]?.textContent?.replace(/[^0-9.-]/g, "")) || 0;
+      if (key === "dump") return parseFloat(cells[cells.length - 2]?.textContent?.replace(/[^0-9.-]/g, "")) || 0;
+      return 0;
+    }
+
     async function renderDiff(data) {
       const app = document.getElementById("app");
 
@@ -16031,6 +16602,7 @@
           case "pets": renderPets(data); break;
           case "diff": renderDiff(data); break;
           case "json": renderJsonExplorer(data); break;
+          case "marks": renderMarks(data); break;
           default: renderDashboard(data);
         }
 

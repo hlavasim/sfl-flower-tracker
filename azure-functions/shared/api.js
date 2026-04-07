@@ -79,4 +79,16 @@ async function fetchCollectionItem(collection, itemId, token) {
   return resp.json();
 }
 
-module.exports = { fetchFarmData, fetchPrices, fetchNfts, fetchMarketplaceActivity, fetchCollectionItem };
+/**
+ * Fetch marks leaderboard (public, no auth needed).
+ * Returns top 10 + nearby ranks for the queried farmId.
+ */
+async function fetchLeaderboard(farmId) {
+  const date = new Date().toISOString().slice(0, 10);
+  const url = `https://api.sunflower-land.com/leaderboard/kingdom/${farmId}?date=${date}`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`Leaderboard API ${resp.status}: ${await resp.text()}`);
+  return resp.json();
+}
+
+module.exports = { fetchFarmData, fetchPrices, fetchNfts, fetchMarketplaceActivity, fetchCollectionItem, fetchLeaderboard };

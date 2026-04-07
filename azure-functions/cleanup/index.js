@@ -42,6 +42,24 @@ module.exports = async function (context) {
 
     // marketplace_orderbook: only latest snapshot kept (overwritten each run, no cleanup needed)
     // marketplace_daily + marketplace_totals: keep forever (small data)
+
+    // Marks snapshots: keep full 28 days, then 1 per day per player
+    try {
+      const marksRetain = await pool.query(`
+        WITH keepers AS (
+          SELECT DISTINCT ON (farm_id, week_start, DATE(captured_at)) id
+          FROM marks_snapshots
+          WHERE captured_at < NOW() - INTERVAL '28 days'
+          ORDER BY farm_id, week_start, DATE(captured_at), captured_at ASC
+        )
+        DELETE FROM marks_snapshots
+        WHERE captured_at < NOW() - INTERVAL '28 days'
+          AND id NOT IN (SELECT id FROM keepers)
+      `);
+      context.log(`Marks cleanup: ${marksRetain.rowCount} rows deleted`);
+    } catch (e) {
+      context.log.error(`Marks cleanup error: ${e.message}`);
+    }
   } catch (err) {
     context.log.error(`Cleanup error: ${err.message}`);
   }
