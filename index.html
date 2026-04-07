@@ -15447,8 +15447,16 @@
         const projOptimal = Math.round(p.marks_optimal || 0);
         const projDump = Math.round(p.marks_dump || 0);
 
+        // Calculate rank gain if this player dumped everything now
+        const afterDump = (p.marks || 0) + projDump;
+        const rankAfterDump = players.filter(op => (op.marks || 0) > afterDump).length + 1;
+        const currentRank = p.rank || 999;
+        const rankGain = currentRank - rankAfterDump;
+        const rankGainStr = rankGain > 0 ? ` (↑${rankGain})` : rankGain < 0 ? ` (↓${Math.abs(rankGain)})` : "";
+        const rankGainColor = rankGain > 0 ? "var(--green)" : rankGain < 0 ? "var(--red)" : "var(--text-dim)";
+
         html += `<td class="num-col">${_fmtNum(projOptimal)}</td>
-          <td class="num-col">${_fmtNum(projDump)}</td>
+          <td class="num-col">${_fmtNum(projDump)}<span style="font-size:0.45rem;color:${rankGainColor}">${rankGainStr}</span></td>
           <td><div class="marks-threat-bar"><div class="marks-threat-fill" style="width:${threatPct.toFixed(1)}%;background:${threatColor}"></div></div></td>
         </tr>`;
 
@@ -15513,7 +15521,7 @@
           <dt style="color:var(--sunpetal)">Tier</dt><dd>Emblem tier (Lich=+400%, Sorcerer=+380%, Witch=+350%, Raver=+300%, Enchanter=+150%, Occultist=+5%)</dd>
           <dt style="color:var(--sunpetal)">Resources</dt><dd>Current stock of this week's kitchen donation items. Higher = more potential marks.</dd>
           <dt style="color:var(--sunpetal)">Optimal</dt><dd>Max additional marks if resources are spread optimally (10 donations/day per resource, fresh counter each day)</dd>
-          <dt style="color:var(--sunpetal)">Dump</dt><dd>Marks if ALL remaining resources are donated right now (diminishing returns apply after 10/day)</dd>
+          <dt style="color:var(--sunpetal)">Dump</dt><dd>Marks if ALL remaining resources are donated right now (diminishing returns apply after 10/day). Arrow shows how many ranks you'd climb.</dd>
           <dt style="color:var(--sunpetal)">Threat</dt><dd>Visual bar showing projected total (current + optimal) relative to the top player. Red = high threat.</dd>
         </dl>
       </div>
@@ -15541,7 +15549,7 @@
         <th class="num-col">Total Proj</th><th>Bar</th>
       </tr></thead><tbody>`;
 
-      for (let i = 0; i < Math.min(projected.length, 30); i++) {
+      for (let i = 0; i < projected.length; i++) {
         const p = projected[i];
         const isMe = p.farm_id === myFarmId || String(p.farm_id) === FARM_ID;
         const curPct = p.total > 0 ? (p.marks || 0) / maxProj * 100 : 0;
