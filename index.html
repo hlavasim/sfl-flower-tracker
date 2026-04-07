@@ -15956,6 +15956,12 @@
     }
 
     // ── Marks helper functions ──
+    function _mIcon(name, size) {
+      const s = size || 16;
+      const url = getItemIcon(name);
+      return `<img src="${url}" alt="${escHTML(name)}" title="${escHTML(name)}" style="width:${s}px;height:${s}px;vertical-align:middle;image-rendering:pixelated">`;
+    }
+
     function _fmtNum(n) {
       if (n == null || isNaN(n)) return "0";
       n = Math.round(n);
