@@ -15429,8 +15429,7 @@
           <div style="padding:10px 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
             <span style="font-size:0.5625rem;color:var(--text-dim)">Max SFL/mark:</span>
             <input type="range" id="marks-budget-slider" min="0.001" max="0.1" step="0.001" value="${savedBudget}"
-              style="flex:1;min-width:120px;accent-color:var(--sunpetal)"
-              oninput="_marksUpdateShop(this.value)">
+              style="flex:1;min-width:120px;accent-color:var(--sunpetal)">
             <span id="marks-budget-val" style="font-size:0.625rem;color:var(--sunpetal);min-width:60px;font-weight:bold">${savedBudget.toFixed(3)} SFL</span>
           </div>
           <div id="marks-shop-table"></div>
@@ -15889,10 +15888,11 @@
       // Make table headers sortable
       _marksInitSort();
 
-      // Initial render of shopping list
-      if (window._marksShopCtx) {
-        const slider = document.getElementById("marks-budget-slider");
-        if (slider) _marksUpdateShop(slider.value);
+      // Initial render of shopping list + wire up slider
+      const _shopSlider = document.getElementById("marks-budget-slider");
+      if (_shopSlider && window._marksShopCtx) {
+        _shopSlider.addEventListener("input", () => _marksUpdateShop(_shopSlider.value));
+        _marksUpdateShop(_shopSlider.value);
       }
     }
 
