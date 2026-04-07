@@ -15835,7 +15835,7 @@
           btn.textContent = "\u2705 Triggered!";
           // Auto-refresh after 30s to show new data
           setTimeout(() => {
-            fetch("/api/marks-history?mode=latest").then(r => r.json()).then(data => {
+            fetch("/api/marks-history?mode=latest").then(r => r.json()).then(async data => {
               await _renderMarksContent(data, { weeks: [] }, { state: null });
             }).catch(() => {});
           }, 30000);
