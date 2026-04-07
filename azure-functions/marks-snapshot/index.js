@@ -429,7 +429,7 @@ module.exports = async function (context) {
         }
 
         // Emblems + tier
-        const emblems = Math.floor(num("Nightshade Emblem"));
+        const emblems = Math.round(num("Nightshade Emblem"));
         const tier = getTier(emblems);
 
         // Wearable boost
@@ -455,7 +455,7 @@ module.exports = async function (context) {
         // Faction marks from history
         const history = faction.history || {};
         const weekData = history[weekStart] || {};
-        const factionMarks = weekData.score || player.marks || 0;
+        const factionMarks = Math.round(weekData.score || player.marks || 0);
 
         // SFL balance
         const sfl = parseFloat(farm.balance || "0") || 0;
