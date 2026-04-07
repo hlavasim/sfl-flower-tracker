@@ -15330,7 +15330,17 @@
         }
         for (const pa of petAnalysis) {
           if (pa.dlv > 0) {
-            const petFoodCost = (estimateItemSfl(pa.food, _marksP2pPrices) || 0) * pa.qty;
+            // estimateItemSfl may fail for foods — fallback: compute from RECIPE_INGREDIENTS directly
+            let petUnitCost = estimateItemSfl(pa.food, _marksP2pPrices) || 0;
+            if (petUnitCost <= 0 && RECIPE_INGREDIENTS[pa.food]) {
+              let rc = 0;
+              for (const [ing, qty] of Object.entries(RECIPE_INGREDIENTS[pa.food])) {
+                const ip = _marksP2pPrices[ing] || estimateItemSfl(ing, _marksP2pPrices) || 0;
+                rc += ip * qty;
+              }
+              petUnitCost = rc;
+            }
+            const petFoodCost = petUnitCost * pa.qty;
             allSources.push({
               type: "pet",
               label: `Feed pet: ${pa.food} (${pa.label})`, icon: pa.food,
@@ -16109,7 +16119,15 @@
       }
 
       for (const pa of petAnalysis) {
-        const costPerFeed = (estimateItemSfl(pa.food, p2p) || 0) * pa.qty;
+        let petUnit = estimateItemSfl(pa.food, p2p) || 0;
+        if (petUnit <= 0 && typeof RECIPE_INGREDIENTS !== "undefined" && RECIPE_INGREDIENTS[pa.food]) {
+          let rc = 0;
+          for (const [ing, qty] of Object.entries(RECIPE_INGREDIENTS[pa.food])) {
+            rc += (p2p[ing] || estimateItemSfl(ing, p2p) || 0) * qty;
+          }
+          petUnit = rc;
+        }
+        const costPerFeed = petUnit * pa.qty;
         if (costPerFeed <= 0) continue;
         let feedCount = 0, marks = 0, cost = 0;
         let ful = pa.fulfilled;
