@@ -15,9 +15,9 @@ export default async function handler(req, res) {
       const masterKey = process.env.AZURE_FUNC_MASTER_KEY;
       if (!masterKey) return res.status(500).json({ error: "Azure key not configured" });
       try {
-        // Reset crawl state to idle so the function starts a new cycle
+        // Reset crawl state fully (clear roster to trigger bootstrap mode)
         await pool.query(
-          `UPDATE marks_crawl_state SET phase = 'idle', updated_at = NOW() - interval '10 minutes' WHERE id = 1`
+          `UPDATE marks_crawl_state SET phase = 'idle', roster = '[]', discover_cursor = 0, crawl_cursor = 0, updated_at = NOW() - interval '10 minutes' WHERE id = 1`
         );
         const triggerResp = await fetch(
           "https://sfl-data-collector.azurewebsites.net/admin/functions/marks-snapshot",
