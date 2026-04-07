@@ -15419,6 +15419,25 @@
           <p style="margin:6px 0 0;color:var(--text-dim)"><b>Tip:</b> Table is sorted by SFL/mark (cheapest first). Focus on sources with the lowest cost per mark. Kitchen donations have diminishing returns after 10/day per resource — spread across resources and days for maximum value. Pet feeding also has diminishing returns per slot.</p>
         </div>
         </div></div>`;
+
+        // ── Today's Shopping List (budget-constrained) ──
+        const savedBudget = parseFloat(localStorage.getItem("sfl_marks_budget") || "0.03");
+
+        html += `<div class="marks-section pixel-panel">
+          <div class="marks-section-title" onclick="_marksToggle('marks-shop-section')">\u25BC Today's Shopping List</div>
+          <div id="marks-shop-section">
+          <div style="padding:10px 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <span style="font-size:0.5625rem;color:var(--text-dim)">Max SFL/mark:</span>
+            <input type="range" id="marks-budget-slider" min="0.001" max="0.1" step="0.001" value="${savedBudget}"
+              style="flex:1;min-width:120px;accent-color:var(--sunpetal)"
+              oninput="_marksUpdateShop(this.value)">
+            <span id="marks-budget-val" style="font-size:0.625rem;color:var(--sunpetal);min-width:60px;font-weight:bold">${savedBudget.toFixed(3)} SFL</span>
+          </div>
+          <div id="marks-shop-table"></div>
+          </div></div>`;
+
+        // Store data for slider callback
+        window._marksShopCtx = { kitchenAnalysis, petAnalysis, mult: c1Mult, petMult: myPetMult, p2p: _marksP2pPrices };
       }
 
       // ── Marks Over Time Chart ──
@@ -15869,6 +15888,12 @@
 
       // Make table headers sortable
       _marksInitSort();
+
+      // Initial render of shopping list
+      if (window._marksShopCtx) {
+        const slider = document.getElementById("marks-budget-slider");
+        if (slider) _marksUpdateShop(slider.value);
+      }
     }
 
     function _renderMarksChart(snapshots, players) {
@@ -16035,6 +16060,102 @@
         btn.textContent = "\u274C Error";
       }
       setTimeout(() => { btn.disabled = false; btn.textContent = "\u21BB Force refresh"; }, 5000);
+    }
+
+    function _marksUpdateShop(budgetVal) {
+      const budget = parseFloat(budgetVal) || 0.03;
+      localStorage.setItem("sfl_marks_budget", budget.toFixed(3));
+      document.getElementById("marks-budget-val").textContent = budget.toFixed(3) + " SFL";
+
+      const ctx = window._marksShopCtx;
+      if (!ctx) return;
+      const { kitchenAnalysis, petAnalysis, mult, petMult, p2p } = ctx;
+
+      // Simulate: for each resource, how many deliveries can we do today under budget?
+      // Diminishing: delivery i gives max(20 - fulfilled*2, 1) raw marks × mult
+      // Cost per delivery is fixed (resource amount × P2P price)
+      // SFL/mark = cost / marks. We stop when SFL/mark > budget.
+      const rows = [];
+      let totalMarks = 0, totalCost = 0, totalDlv = 0;
+
+      for (const ka of kitchenAnalysis) {
+        const costPerDlv = (estimateItemSfl(ka.item, p2p) || 0) * ka.amount;
+        if (costPerDlv <= 0) continue;
+        let dlvCount = 0, marks = 0, cost = 0;
+        let ful = ka.fulfilled; // start from today's actual fulfilled
+        while (true) {
+          const rawNext = Math.max(20 - ful * 2, 1);
+          const marksNext = rawNext * mult;
+          const cpm = costPerDlv / marksNext;
+          if (cpm > budget) break;
+          dlvCount++;
+          marks += marksNext;
+          cost += costPerDlv;
+          ful++;
+        }
+        const needUnits = Math.max(0, dlvCount - ka.totalDlv) * ka.amount;
+        const buyCost = Math.max(0, dlvCount - ka.totalDlv) * costPerDlv;
+        if (dlvCount > 0) {
+          rows.push({ icon: ka.item, label: `${ka.item} (\u00D7${ka.amount})`, dlvCount, marks, cost, needUnits, buyCost, have: ka.totalDlv, type: "kitchen" });
+          totalMarks += marks;
+          totalCost += cost;
+          totalDlv += dlvCount;
+        }
+      }
+
+      for (const pa of petAnalysis) {
+        const costPerFeed = (estimateItemSfl(pa.food, p2p) || 0) * pa.qty;
+        if (costPerFeed <= 0) continue;
+        let feedCount = 0, marks = 0, cost = 0;
+        let ful = pa.fulfilled;
+        while (true) {
+          const rawNext = Math.max(pa.base - ful * 2, 1);
+          const marksNext = rawNext * petMult;
+          const cpm = costPerFeed / marksNext;
+          if (cpm > budget) break;
+          feedCount++;
+          marks += marksNext;
+          cost += costPerFeed;
+          ful++;
+        }
+        const needUnits = Math.max(0, feedCount - pa.dlv) * pa.qty;
+        const buyCost = Math.max(0, feedCount - pa.dlv) * costPerFeed;
+        if (feedCount > 0) {
+          rows.push({ icon: pa.food, label: `${pa.food} (${pa.label})`, dlvCount: feedCount, marks, cost, needUnits, buyCost, have: pa.dlv, type: "pet" });
+          totalMarks += marks;
+          totalCost += cost;
+          totalDlv += feedCount;
+        }
+      }
+
+      let html = `<table class="marks-table"><thead><tr>
+        <th>Item</th><th class="num-col">Actions</th><th class="num-col">Marks</th>
+        <th class="num-col">Cost</th><th class="num-col">Have</th><th class="num-col">Buy</th><th class="num-col">Buy cost</th>
+      </tr></thead><tbody>`;
+
+      if (rows.length === 0) {
+        html += `<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:16px">No actions under ${budget.toFixed(3)} SFL/mark today</td></tr>`;
+      }
+      for (const r of rows) {
+        const buyColor = r.needUnits > 0 ? "var(--red)" : "var(--green)";
+        html += `<tr>
+          <td>${_mIcon(r.icon, 16)} ${escHTML(r.label)}</td>
+          <td class="num-col">${r.dlvCount}</td>
+          <td class="num-col" style="color:var(--sunpetal)">${_fmtNum(Math.round(r.marks))}</td>
+          <td class="num-col">${r.cost.toFixed(2)}</td>
+          <td class="num-col">${r.have} in stock</td>
+          <td class="num-col" style="color:${buyColor}">${r.needUnits > 0 ? _fmtNum(r.needUnits) + " units" : "\u2705"}</td>
+          <td class="num-col">${r.buyCost > 0 ? r.buyCost.toFixed(2) + " SFL" : "-"}</td>
+        </tr>`;
+      }
+
+      html += `</tbody></table>`;
+      html += `<div style="padding:8px 12px;font-size:0.5625rem;color:var(--text-secondary);border-top:1px solid rgba(92,58,30,0.15)">
+        <b>Today's total:</b> ${_fmtNum(totalDlv)} actions \u2192 <b style="color:var(--sunpetal)">${_fmtNum(Math.round(totalMarks))} marks</b> for ${totalCost.toFixed(2)} SFL
+        ${totalMarks > 0 ? ` (avg ${(totalCost / totalMarks).toFixed(4)} SFL/mark)` : ""}
+      </div>`;
+
+      document.getElementById("marks-shop-table").innerHTML = html;
     }
 
     function _marksInitSort() {
