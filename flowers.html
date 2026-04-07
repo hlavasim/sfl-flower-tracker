@@ -15428,9 +15428,11 @@
           <div id="marks-shop-section">
           <div style="padding:10px 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
             <span style="font-size:0.5625rem;color:var(--text-dim)">Max SFL/mark:</span>
-            <input type="range" id="marks-budget-slider" min="0.001" max="0.1" step="0.001" value="${savedBudget}"
-              style="flex:1;min-width:120px;accent-color:var(--sunpetal)">
-            <span id="marks-budget-val" style="font-size:0.625rem;color:var(--sunpetal);min-width:60px;font-weight:bold">${savedBudget.toFixed(3)} SFL</span>
+            <input type="range" id="marks-budget-slider" min="0.005" max="0.1" step="0.005" value="${savedBudget}"
+              style="flex:1;min-width:120px;accent-color:var(--sunpetal);cursor:pointer">
+            <input type="number" id="marks-budget-input" min="0.001" max="0.5" step="0.001" value="${savedBudget.toFixed(3)}"
+              style="width:70px;background:var(--bg-card);color:var(--sunpetal);border:2px solid var(--border-brown);padding:4px 6px;font-size:0.5625rem;font-family:inherit;text-align:center">
+            <span style="font-size:0.5rem;color:var(--text-dim)">SFL/mark</span>
           </div>
           <div id="marks-shop-table"></div>
           </div></div>`;
@@ -15888,11 +15890,22 @@
       // Make table headers sortable
       _marksInitSort();
 
-      // Initial render of shopping list + wire up slider
+      // Initial render of shopping list + wire up slider + number input
       const _shopSlider = document.getElementById("marks-budget-slider");
+      const _shopInput = document.getElementById("marks-budget-input");
       if (_shopSlider && window._marksShopCtx) {
-        _shopSlider.addEventListener("input", () => _marksUpdateShop(_shopSlider.value));
-        _marksUpdateShop(_shopSlider.value);
+        const update = (v) => {
+          _shopSlider.value = v;
+          if (_shopInput) _shopInput.value = parseFloat(v).toFixed(3);
+          _marksUpdateShop(v);
+        };
+        _shopSlider.addEventListener("input", (e) => update(e.target.value));
+        _shopSlider.addEventListener("change", (e) => update(e.target.value));
+        if (_shopInput) {
+          _shopInput.addEventListener("input", (e) => update(e.target.value));
+          _shopInput.addEventListener("change", (e) => update(e.target.value));
+        }
+        update(_shopSlider.value);
       }
     }
 
@@ -16065,7 +16078,6 @@
     function _marksUpdateShop(budgetVal) {
       const budget = parseFloat(budgetVal) || 0.03;
       localStorage.setItem("sfl_marks_budget", budget.toFixed(3));
-      document.getElementById("marks-budget-val").textContent = budget.toFixed(3) + " SFL";
 
       const ctx = window._marksShopCtx;
       if (!ctx) return;
