@@ -487,6 +487,14 @@ module.exports = async function (context) {
         context.log.error(`  Error for ${player.farmId}: ${e.message}`);
       }
 
+      // Save cursor every 3 farms (so progress survives timeouts)
+      if (cursor % 3 === 0 || cursor >= roster.length) {
+        await pool.query(
+          `UPDATE marks_crawl_state SET crawl_cursor = $1, updated_at = NOW() WHERE id = 1`,
+          [cursor]
+        );
+      }
+
       if (cursor < roster.length) {
         await sleep(RATE_LIMIT_DELAY);
       }
