@@ -162,9 +162,25 @@ module.exports = async function (context) {
   const stateRes = await pool.query("SELECT * FROM marks_crawl_state WHERE id = 1");
   const state = stateRes.rows[0];
 
+  // ── Concurrency lock: skip if another invocation is actively running ──
+  if (state.phase !== "idle") {
+    const lastUpdate = new Date(state.updated_at).getTime();
+    const ageMs = Date.now() - lastUpdate;
+    // If state was updated less than 2 min ago, another invocation is probably running
+    // (function saves progress every ~55s during active work)
+    if (ageMs < 2 * 60 * 1000) {
+      context.log(`Another invocation running (phase=${state.phase}, updated ${Math.round(ageMs/1000)}s ago). Skipping.`);
+      return;
+    }
+    // Stale state (>9 min) — previous run likely crashed. Resume.
+    context.log(`Stale ${state.phase} state (${Math.round(ageMs/1000)}s old). Resuming.`);
+  }
+
   // ── If idle, check if we should start a new cycle ──
   if (state.phase === "idle") {
-    if (!shouldStartNewCycle(now)) {
+    // Always allow first run (bootstrap) or manual triggers when roster is empty
+    const isBootstrap = !state.roster || state.roster.length === 0;
+    if (!isBootstrap && !shouldStartNewCycle(now)) {
       context.log("Schedule says skip. Idle.");
       return;
     }
@@ -266,6 +282,17 @@ module.exports = async function (context) {
       }
 
       await sleep(RATE_LIMIT_DELAY);
+
+      // Save progress every 5 calls (so state survives timeout)
+      if (cursor % 5 === 0) {
+        const partialRoster = Object.values(byFarmId)
+          .filter(p => p.rank >= 1 && p.rank <= TARGET_RANK + 10)
+          .sort((a, b) => a.rank - b.rank);
+        await pool.query(
+          `UPDATE marks_crawl_state SET roster = $1, discover_cursor = $2, updated_at = NOW() WHERE id = 1`,
+          [JSON.stringify(partialRoster), cursor]
+        );
+      }
 
       // Check if we've covered enough
       const coveredRanks = new Set(
