@@ -15560,6 +15560,189 @@
       </div>
       </div></div>`;
 
+      // ── Cost to #1 ──
+      if (liveFarm && topPlayer && me) {
+        // Live multiplier (same calc as strategy section)
+        const TIER_TBL = [[16850,4],[8700,3.8],[5500,3.5],[2700,3],[290,1.5],[20,0.05],[0,0]];
+        const GEAR_BST = {"Nightshade Armor":0.2,"Nightshade Helmet":0.1,"Nightshade Crown":0.1,"Nightshade Sword":0.1,"Nightshade Pants":0.05,"Nightshade Sabatons":0.05};
+        const _inv = liveFarm.inventory || {};
+        const _eq = (liveFarm.bumpkin || {}).equipped || {};
+        const _emb = parseFloat(_inv["Nightshade Emblem"] || 0);
+        const _rb = (TIER_TBL.find(t => _emb >= t[0]) || [0,0])[1];
+        let _wb = 0;
+        for (const [it, b] of Object.entries(GEAR_BST)) { if (Object.values(_eq).includes(it)) _wb += b; }
+        const c1Mult = 1 + _rb + _wb;
+
+        const myMarks = me.marks || 0;
+        const topMarks = topPlayer.marks || 0;
+        const gap = topMarks - myMarks;
+
+        // Get live kitchen config
+        const _kitReqs = (liveFarm.faction?.kitchen?.requests || []);
+        const _wsDate = new Date(typeof weekStart === "string" && weekStart.length === 10 ? weekStart + "T00:00:00Z" : weekStart);
+        const _dayNum = Math.min(Math.max(Math.floor((Date.now() - _wsDate.getTime()) / 86400000) + 1, 1), 7);
+        const _dayStr = String(_dayNum);
+        const daysRemaining = Math.max(0, 7 - _dayNum + 1); // today counts
+
+        if (gap > 0 && _kitReqs.length > 0) {
+          // For each kitchen resource, calculate: how many deliveries needed for X marks
+          // Diminishing: first 10/day give 20+18+...+2 = 110 raw, then 1 each
+          // Over D days: D * 110 raw per resource before diminishing kicks hard
+          // Total raw marks per resource for N deliveries spread optimally over D days:
+          function optimalRawMarks(deliveries, days) {
+            if (deliveries <= 0 || days <= 0) return 0;
+            const perDay = Math.min(10, Math.ceil(deliveries / days));
+            let total = 0;
+            let left = deliveries;
+            for (let d = 0; d < days && left > 0; d++) {
+              const today = Math.min(perDay, left);
+              for (let i = 0; i < today; i++) {
+                total += Math.max(20 - i * 2, 1);
+              }
+              left -= today;
+            }
+            // Any leftover (if perDay * days < deliveries) gets dumped on last day
+            // (this happens when deliveries > 10 * days)
+            if (left > 0) {
+              // Continue from last day's fulfilled count
+              const lastDayDone = Math.min(perDay, deliveries - left + perDay) % (perDay + 1);
+              for (let i = 0; i < left; i++) {
+                total += Math.max(20 - (10 + i) * 2, 1); // after 10, all give 1
+              }
+            }
+            return total;
+          }
+
+          // Simpler: for each resource, cost per delivery and marks per delivery
+          // Use greedy: always pick the cheapest SFL/mark next delivery
+          const resources = _kitReqs.map(r => {
+            const price = (estimateItemSfl(r.item, _marksP2pPrices) || 0) * r.amount;
+            const stock = parseFloat(_inv[r.item] || 0) || 0;
+            const haveDeliveries = r.amount > 0 ? Math.floor(stock / r.amount) : 0;
+            const fulfilled = r.dailyFulfilled?.[_dayStr] || 0;
+            return { item: r.item, amount: r.amount, price, stock, haveDeliveries, fulfilled, dayFulfilled: fulfilled };
+          });
+
+          // Simulate greedy: each step, pick the resource with cheapest cost/mark for its NEXT delivery
+          // Track per-resource: fulfilled today, day number, total deliveries done
+          const sim = resources.map(r => ({
+            item: r.item,
+            price: r.price,
+            amount: r.amount,
+            fulfilled: r.fulfilled, // today's starting point
+            day: _dayNum,
+            totalDeliveries: 0,
+            totalMarks: 0,
+            totalCost: 0,
+            haveDeliveries: r.haveDeliveries,
+            needToBuy: 0,
+          }));
+
+          let totalMarksGained = 0;
+          let totalCost = 0;
+          let steps = 0;
+          const maxSteps = 50000; // safety
+
+          while (totalMarksGained < gap && steps < maxSteps) {
+            // Find cheapest next delivery across all resources
+            let bestIdx = -1;
+            let bestCostPerMark = Infinity;
+            for (let i = 0; i < sim.length; i++) {
+              const s = sim[i];
+              const rawNext = Math.max(20 - s.fulfilled * 2, 1);
+              const marksNext = rawNext * c1Mult;
+              if (marksNext <= 0 || s.price <= 0) continue;
+              const cpm = s.price / marksNext;
+              if (cpm < bestCostPerMark) {
+                bestCostPerMark = cpm;
+                bestIdx = i;
+              }
+            }
+            if (bestIdx < 0) break; // no viable option
+
+            const s = sim[bestIdx];
+            const rawNext = Math.max(20 - s.fulfilled * 2, 1);
+            const marksNext = rawNext * c1Mult;
+
+            s.fulfilled++;
+            s.totalDeliveries++;
+            s.totalMarks += marksNext;
+            s.totalCost += s.price;
+            totalMarksGained += marksNext;
+            totalCost += s.price;
+            steps++;
+
+            // Check if the resource was from stock or needs buying
+            if (s.totalDeliveries > s.haveDeliveries) {
+              s.needToBuy++;
+            }
+
+            // Day rollover: after 10 deliveries per resource per day, could reset
+            // But we do it per-resource: if all resources hit diminishing (fulfilled >= 10),
+            // advance to next day
+            if (sim.every(r => r.fulfilled >= 10)) {
+              const nextDay = sim[0].day + 1;
+              if (nextDay > 7) break; // week over
+              for (const r of sim) {
+                r.day = nextDay;
+                r.fulfilled = 0;
+              }
+            }
+          }
+
+          const success = totalMarksGained >= gap;
+
+          html += `<div class="marks-section pixel-panel">
+            <div class="marks-section-title" onclick="_marksToggle('marks-cost1-section')">\u25BC ${success ? "\uD83C\uDFC6" : "\u26A0\uFE0F"} Cost to Reach #1</div>
+            <div id="marks-cost1-section">
+            <div style="padding:10px 12px;font-size:0.5625rem;color:var(--text-secondary)">
+              <b>Gap to #1:</b> ${escHTML(topPlayer.player_name || "?")} has <b style="color:var(--sunpetal)">${_fmtNum(topMarks)}</b> marks, you have <b>${_fmtNum(myMarks)}</b> \u2192 need <b style="color:var(--red)">${_fmtNum(Math.ceil(gap))}</b> more marks
+              <br>Simulation: greedy, kitchen resources only (no food — too slow to cook), ${daysRemaining} days left, your mult ${c1Mult.toFixed(2)}x
+            </div>
+            <table class="marks-table"><thead><tr>
+              <th>Resource</th><th class="num-col">Deliveries</th><th class="num-col">Marks gained</th>
+              <th class="num-col">Have</th><th class="num-col">Need to buy</th><th class="num-col">Buy cost (SFL)</th>
+            </tr></thead><tbody>`;
+
+          let grandNeedBuy = 0;
+          let grandBuyCost = 0;
+          for (const s of sim) {
+            const needUnits = s.needToBuy * s.amount;
+            const buyCost = s.needToBuy * s.price;
+            grandNeedBuy += needUnits;
+            grandBuyCost += buyCost;
+            html += `<tr>
+              <td>${escHTML(s.item)} (\u00D7${s.amount})</td>
+              <td class="num-col">${_fmtNum(s.totalDeliveries)}</td>
+              <td class="num-col">${_fmtNum(Math.round(s.totalMarks))}</td>
+              <td class="num-col">${_fmtNum(s.haveDeliveries)} dlv</td>
+              <td class="num-col" style="color:${s.needToBuy > 0 ? "var(--red)" : "var(--green)"}">${s.needToBuy > 0 ? _fmtNum(needUnits) + " units" : "\u2705 enough"}</td>
+              <td class="num-col">${s.needToBuy > 0 ? buyCost.toFixed(2) : "-"}</td>
+            </tr>`;
+          }
+
+          html += `</tbody></table>
+            <div style="padding:10px 12px;font-size:0.625rem;color:var(--text-secondary);border-top:1px solid rgba(92,58,30,0.15)">
+              <b>Total marks needed:</b> ${_fmtNum(Math.ceil(gap))} | <b>Total from simulation:</b> ${_fmtNum(Math.round(totalMarksGained))}
+              <br><b>Already in stock:</b> covers ${_fmtNum(Math.round(totalMarksGained - grandBuyCost / (totalCost / totalMarksGained || 1)))} marks
+              <br><b style="color:var(--sunpetal)">Total buy cost: ${grandBuyCost.toFixed(2)} SFL</b> (${_fmtNum(steps)} total deliveries over ${daysRemaining} days)
+              ${!success ? '<br><span style="color:var(--red)">\u26A0\uFE0F Not enough days/resources to close the gap with kitchen alone!</span>' : '<br><span style="color:var(--green)">\u2705 Achievable!</span>'}
+            </div>
+            <div style="padding:4px 12px;text-align:right">
+              <span style="font-size:0.5rem;color:var(--text-dim);cursor:pointer" onclick="document.getElementById('leg-cost1').style.display=document.getElementById('leg-cost1').style.display==='none'?'block':'none'">\u2139\uFE0F Legend</span></div>
+            <div id="leg-cost1" style="display:none;padding:8px 12px;font-size:0.5rem;line-height:1.8;background:var(--bg-card);border-top:1px solid rgba(92,58,30,0.15)">
+              <dl style="display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:0">
+                <dt style="color:var(--sunpetal)">Simulation</dt><dd>Greedy algorithm: each step picks the resource with the cheapest SFL/mark for the next delivery, considering diminishing returns (max 20\u21922\u21921 per delivery after 10/day). Resets daily.</dd>
+                <dt style="color:var(--sunpetal)">Have</dt><dd>Deliveries possible from current inventory without buying anything</dd>
+                <dt style="color:var(--sunpetal)">Need to buy</dt><dd>Additional units you'd need to purchase at P2P market prices</dd>
+                <dt style="color:var(--sunpetal)">Kitchen only</dt><dd>Food/pet feeding excluded \u2014 cooking takes real time, can't mass-produce instantly</dd>
+              </dl>
+              <p style="margin:6px 0 0;color:var(--text-dim)"><b>Note:</b> This assumes #1 player stops gaining marks. In reality they keep playing too, so actual cost may be higher.</p>
+            </div>
+            </div></div>`;
+        }
+      }
+
       // ── Projections section ──
       html += `<div class="marks-section pixel-panel">
         <div class="marks-section-title" onclick="_marksToggle('marks-proj-section')">\u25BC Projections & Threat Assessment</div>
