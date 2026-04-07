@@ -15223,7 +15223,7 @@
         <div class="marks-summary-stat"><div class="marks-summary-label">SNAPSHOTS</div>
           <div class="marks-summary-value">${latestData.snapshot_count || 0}</div></div>
         <div class="marks-summary-stat"><div class="marks-summary-label">KITCHEN</div>
-          <div class="marks-summary-value" style="font-size:0.5rem">${kitchenItems.map(k => k.item).join(", ") || "?"}</div></div>
+          <div class="marks-summary-value" style="font-size:0.5rem">${kitchenItems.map(k => _mIcon(k.item, 14) + " " + k.item).join(", ") || "?"}</div></div>
       </div>`;
 
       // ── Your Strategy: cheapest way to gain marks ──
@@ -15316,7 +15316,7 @@
             const kitchenCost = (estimateItemSfl(ka.item, _marksP2pPrices) || 0) * ka.amount;
             allSources.push({
               type: "kitchen",
-              label: `Donate ${ka.amount}\u00D7 ${ka.item}`,
+              label: `Donate ${ka.amount}\u00D7 ${ka.item}`, icon: ka.item,
               nextMarks: ka.nextMarks,
               costPerDlv: kitchenCost,
               costPerMark: ka.nextMarks > 0 ? kitchenCost / ka.nextMarks : 0,
@@ -15333,7 +15333,7 @@
             const petFoodCost = (estimateItemSfl(pa.food, _marksP2pPrices) || 0) * pa.qty;
             allSources.push({
               type: "pet",
-              label: `Feed pet: ${pa.food} (${pa.label})`,
+              label: `Feed pet: ${pa.food} (${pa.label})`, icon: pa.food,
               nextMarks: pa.nextMarks,
               costPerDlv: petFoodCost,
               costPerMark: pa.nextMarks > 0 ? petFoodCost / pa.nextMarks : 0,
@@ -15377,7 +15377,7 @@
           const cpmColor = s.costPerMark > 0 && s.costPerMark < 0.01 ? "var(--green)" : s.costPerMark > 0.05 ? "var(--red)" : "var(--text-secondary)";
           html += `<tr>
             <td${best}>${i + 1}</td>
-            <td${best}>${escHTML(s.label)}</td>
+            <td${best}>${s.icon ? _mIcon(s.icon, 16) + " " : ""}${escHTML(s.label)}</td>
             <td class="num-col"${best}>${s.nextMarks.toFixed(1)}</td>
             <td class="num-col">${costStr} SFL</td>
             <td class="num-col" style="color:${cpmColor}">${cpmStr}</td>
@@ -15712,7 +15712,7 @@
             grandNeedBuy += needUnits;
             grandBuyCost += buyCost;
             html += `<tr>
-              <td>${escHTML(s.item)} (\u00D7${s.amount})</td>
+              <td>${_mIcon(s.item, 16)} ${escHTML(s.item)} (\u00D7${s.amount})</td>
               <td class="num-col">${_fmtNum(s.totalDeliveries)}</td>
               <td class="num-col">${_fmtNum(Math.round(s.totalMarks))}</td>
               <td class="num-col">${_fmtNum(s.haveDeliveries)} dlv</td>
@@ -15814,7 +15814,7 @@
             <th class="rank-col">#</th><th>Name</th>`;
 
         for (const ki of kitchenItems) {
-          html += `<th class="num-col">${ki.item.slice(0, 6)} \u0394</th><th class="num-col">Dlv Left</th>`;
+          html += `<th class="num-col">${_mIcon(ki.item, 14)} \u0394</th><th class="num-col">${_mIcon(ki.item, 14)} Dlv</th>`;
         }
         html += `<th>Signal</th></tr></thead><tbody>`;
 
