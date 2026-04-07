@@ -15121,7 +15121,7 @@
         const latestData = latestResp.ok ? await latestResp.json() : { week: {}, players: [], snapshot_count: 0 };
         const stateData = stateResp.ok ? await stateResp.json() : { state: null };
 
-        await _renderMarksContent(latestData, weeksData, stateData);
+        await _renderMarksContent(latestData, weeksData, stateData, data);
 
         // Fetch timeline data for chart
         const weekStart = latestData.week?.week_start;
@@ -15137,7 +15137,7 @@
       }
     }
 
-    async function _renderMarksContent(latestData, weeksData, stateData) {
+    async function _renderMarksContent(latestData, weeksData, stateData, liveData) {
       const root = document.getElementById("marks-root");
       const players = latestData.players || [];
       const week = latestData.week || {};
@@ -15237,44 +15237,76 @@
         }
       } catch(e) { console.warn("P2P prices fetch failed:", e); }
 
-      if (me) {
-        const myRes = me.resources || {};
-        const myFul = me.today_fulfilled || {};
-        const myMult = me.multiplier || 1;
-        const myPetMult = me.pet_mult || myMult;
-        const petStock = me.pet_food_stock || {};
-        const petItems = week.pet_items || [];
+      // Use LIVE farm data for strategy (not stale snapshot)
+      const liveFarm = liveData?.farm || null;
+      if (liveFarm) {
+        const liveInv = liveFarm.inventory || {};
+        const liveFaction = liveFarm.faction || {};
+        const liveKitchen = liveFaction.kitchen || {};
+        const livePet = liveFaction.pet || {};
+        const liveBumpkin = liveFarm.bumpkin || {};
+        const liveEquipped = liveBumpkin.equipped || {};
 
-        // Kitchen analysis: marks per delivery for each resource
-        const kitchenAnalysis = kitchenItems.map(ki => {
-          const stock = myRes[ki.item] || 0;
+        // Compute live multiplier from emblems + gear
+        const TIER_TABLE = [[16850,4],[8700,3.8],[5500,3.5],[2700,3],[290,1.5],[20,0.05],[0,0]];
+        const GEAR_BOOST = {"Nightshade Armor":0.2,"Nightshade Helmet":0.1,"Nightshade Crown":0.1,"Nightshade Sword":0.1,"Nightshade Pants":0.05,"Nightshade Sabatons":0.05};
+        const liveEmblems = parseFloat(liveInv["Nightshade Emblem"] || 0);
+        const rankBoost = (TIER_TABLE.find(t => liveEmblems >= t[0]) || [0,0])[1];
+        let wearBoost = 0;
+        for (const [item, boost] of Object.entries(GEAR_BOOST)) {
+          if (Object.values(liveEquipped).includes(item)) wearBoost += boost;
+        }
+        const myMult = 1 + rankBoost + wearBoost;
+        const hasPawShield = liveEquipped.secondaryTool === "Paw Shield";
+        const myPetMult = myMult + (hasPawShield ? 0.25 : 0);
+
+        // Live kitchen fulfilled (today's day number)
+        const num = (key) => parseFloat(liveInv[key] || 0) || 0;
+        const weekStartDate = new Date(typeof weekStart === "string" && weekStart.length === 10 ? weekStart + "T00:00:00Z" : weekStart);
+        const todayDay = Math.min(Math.max(Math.floor((Date.now() - weekStartDate.getTime()) / 86400000) + 1, 1), 7);
+        const dayStr = String(todayDay);
+
+        // Get live kitchen requests + fulfilled
+        const liveKitchenReqs = liveKitchen.requests || [];
+        const liveKitchenItems = liveKitchenReqs.length > 0
+          ? liveKitchenReqs.map(r => ({ item: r.item, amount: r.amount }))
+          : kitchenItems; // fallback to snapshot week config
+
+        const kitchenAnalysis = liveKitchenItems.map(ki => {
+          const stock = num(ki.item);
           const totalDlv = ki.amount > 0 ? Math.floor(stock / ki.amount) : 0;
-          const fulfilled = myFul[ki.item] || 0;
-          // Next delivery marks (diminishing returns)
+          // Get LIVE fulfilled counter for today
+          const req = liveKitchenReqs.find(r => r.item === ki.item);
+          const fulfilled = req ? (req.dailyFulfilled?.[dayStr] || 0) : 0;
           const nextRaw = Math.max(20 - fulfilled * 2, 1);
           const nextMarks = nextRaw * myMult;
-          // Fresh daily (10 deliveries from 0)
           let dailyRaw = 0;
           for (let i = 0; i < Math.min(10, totalDlv); i++) dailyRaw += Math.max(20 - i * 2, 1);
           const dailyMarks = dailyRaw * myMult;
-          // Days to deplete at 10/day
           const daysNeeded = totalDlv > 0 ? Math.ceil(totalDlv / 10) : 0;
           return { item: ki.item, amount: ki.amount, stock, totalDlv, fulfilled, nextRaw, nextMarks, dailyMarks, daysNeeded };
         });
 
-        // Pet analysis
+        // Live pet requests + fulfilled
         const PET_BASE = [4, 8, 12, 20];
+        const livePetReqs = livePet.requests || [];
+        const petItems = livePetReqs.length > 0
+          ? livePetReqs.map(r => ({ food: r.food, quantity: r.quantity }))
+          : (week.pet_items || []);
+
         const petAnalysis = petItems.map((pi, slot) => {
           const food = pi.food;
           const qty = pi.quantity || 1;
-          const have = petStock[food] || 0;
+          const have = num(food);
           const dlv = qty > 0 ? Math.floor(have / qty) : 0;
           const base = PET_BASE[slot] || 4;
-          const fulfilled = 0; // we don't track pet fulfilled in snapshots, assume fresh
+          // Get LIVE pet fulfilled counter for today
+          const petReq = livePetReqs[slot];
+          const fulfilled = petReq ? (petReq.dailyFulfilled?.[dayStr] || 0) : 0;
           const nextRaw = Math.max(base - fulfilled * 2, 1);
           const nextMarks = nextRaw * myPetMult;
           const label = ["Easy", "Medium", "Hard", "Doll"][slot] || `Slot ${slot}`;
-          return { food, qty, have, dlv, base, nextMarks, label, slot };
+          return { food, qty, have, dlv, base, nextMarks, label, slot, fulfilled };
         });
 
         // Sort all sources by next marks per action (descending)
@@ -15309,7 +15341,7 @@
               dailyMarks: pa.nextMarks,
               daysLeft: pa.dlv + " total",
               fulfilled: 0,
-              hint: me.has_paw_shield ? "\uD83D\uDEE1\uFE0F Paw Shield active" : "\u274C No Paw Shield",
+              hint: (pa.fulfilled > 0 ? `${pa.fulfilled} fed today` : "\u2705 Fresh") + (hasPawShield ? " | \uD83D\uDEE1\uFE0F Paw Shield" : ""),
             });
           }
         }
@@ -15328,7 +15360,8 @@
           <div style="padding:8px 12px;font-size:0.5rem;color:var(--text-dim)">
             Your multiplier: <b style="color:var(--sunpetal)">${myMult.toFixed(2)}x</b> (kitchen)
             &nbsp;|&nbsp; Pet: <b style="color:var(--lily)">${myPetMult.toFixed(2)}x</b>
-            ${me.has_paw_shield ? ' | \uD83D\uDEE1\uFE0F Paw Shield (+25% pet)' : ''}
+            ${hasPawShield ? ' | \uD83D\uDEE1\uFE0F Paw Shield (+25% pet)' : ''}
+            &nbsp;|&nbsp; Day ${todayDay}/7
           </div>
           <table class="marks-table"><thead><tr>
             <th>#</th><th>Action</th><th class="num-col">Next marks</th>
