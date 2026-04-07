@@ -1,4 +1,4 @@
-import { getPool } from "./db.js";
+import { getPool } from "./_db.js";
 
 const ALLOWED_FARMS = new Set([155498, 1260204733777858]);
 
