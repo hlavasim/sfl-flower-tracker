@@ -15121,7 +15121,7 @@
         const latestData = latestResp.ok ? await latestResp.json() : { week: {}, players: [], snapshot_count: 0 };
         const stateData = stateResp.ok ? await stateResp.json() : { state: null };
 
-        _renderMarksContent(latestData, weeksData, stateData);
+        await _renderMarksContent(latestData, weeksData, stateData);
 
         // Fetch timeline data for chart
         const weekStart = latestData.week?.week_start;
@@ -15768,8 +15768,8 @@
     function _marksChangeWeek(week) {
       fetch(`/api/marks-history?mode=latest&week=${week}`)
         .then(r => r.json())
-        .then(data => {
-          _renderMarksContent(data, { weeks: [] }, { state: null });
+        .then(async data => {
+          await _renderMarksContent(data, { weeks: [] }, { state: null });
           fetch(`/api/marks-history?mode=snapshots&week=${week}`)
             .then(r => r.json())
             .then(td => _renderMarksChart(td.snapshots, data.players))
@@ -15785,8 +15785,8 @@
           Promise.all([
             fetch("/api/marks-history?mode=latest").then(r => r.json()),
             fetch("/api/marks-history?mode=state").then(r => r.json()),
-          ]).then(([latest, state]) => {
-            _renderMarksContent(latest, { weeks: [] }, state);
+          ]).then(async ([latest, state]) => {
+            await _renderMarksContent(latest, { weeks: [] }, state);
           }).catch(() => {});
         }, 60000);
       }
@@ -15803,7 +15803,7 @@
           // Auto-refresh after 30s to show new data
           setTimeout(() => {
             fetch("/api/marks-history?mode=latest").then(r => r.json()).then(data => {
-              _renderMarksContent(data, { weeks: [] }, { state: null });
+              await _renderMarksContent(data, { weeks: [] }, { state: null });
             }).catch(() => {});
           }, 30000);
         } else {
