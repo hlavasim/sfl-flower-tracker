@@ -2,7 +2,7 @@ const { getPool } = require("../shared/db");
 const { fetchFarmData, fetchLeaderboard } = require("../shared/api");
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const RATE_LIMIT_DELAY = 11000;
+let RATE_LIMIT_DELAY = 11000; // dynamically increased on 429
 const MAX_RUNTIME_MS = 8 * 60 * 1000; // 8 min budget (Azure timeout is 10 min)
 const TARGET_RANK = 50;
 const BASE_POINTS = 20;
@@ -372,7 +372,23 @@ module.exports = async function (context) {
 
       try {
         const apiKey = process.env.SFL_API_KEY;
-        const data = await fetchFarmData(player.farmId, apiKey);
+        let data;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            data = await fetchFarmData(player.farmId, apiKey);
+            break;
+          } catch (fetchErr) {
+            if (fetchErr.message && fetchErr.message.includes("429") && attempt < 2) {
+              RATE_LIMIT_DELAY = Math.min(RATE_LIMIT_DELAY + 5000, 30000);
+              const wait = 20000 + attempt * 10000;
+              context.log(`    429 rate limited, delay now ${RATE_LIMIT_DELAY/1000}s, retry in ${wait/1000}s`);
+              await sleep(wait);
+              continue;
+            }
+            throw fetchErr;
+          }
+        }
+        if (!data) throw new Error("All retries failed");
         const farm = data.farm || data;
         const inv = farm.inventory || {};
         const faction = farm.faction || {};

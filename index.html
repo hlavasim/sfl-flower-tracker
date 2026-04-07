@@ -15179,10 +15179,26 @@
       let html = "";
 
       // ── Controls ──
+      // Calculate next snapshot time
+      const nowUtc = new Date();
+      const utcDay = nowUtc.getUTCDay();
+      const utcHour = nowUtc.getUTCHours();
+      let intervalH = 8; // Mon-Thu
+      if (utcDay === 5) intervalH = 4;
+      if (utcDay === 6) intervalH = 2;
+      if (utcDay === 0) intervalH = utcHour >= 20 ? 0.17 : 1; // Sun: nonstop after 20:00
+      const nextHour = intervalH > 0 ? Math.ceil(utcHour / intervalH) * intervalH : utcHour;
+      const nextSnapshot = new Date(nowUtc);
+      nextSnapshot.setUTCHours(nextHour <= utcHour && intervalH > 0 ? nextHour + intervalH : nextHour, 0, 0, 0);
+      if (nextSnapshot <= nowUtc) nextSnapshot.setUTCHours(nextSnapshot.getUTCHours() + (intervalH || 1));
+      const minsUntilNext = Math.max(0, Math.round((nextSnapshot - nowUtc) / 60000));
+      const nextStr = minsUntilNext < 60 ? `${minsUntilNext}m` : `${Math.floor(minsUntilNext/60)}h${minsUntilNext%60}m`;
+
       html += `<div class="marks-controls">
         <select onchange="_marksChangeWeek(this.value)">${weekOptions}</select>
         <label><input type="checkbox" id="marks-auto-refresh" onchange="_marksToggleRefresh(this.checked)"> Auto-refresh</label>
-        <span class="marks-crawl-status">${crawlStatus}</span>
+        <button onclick="_marksForceRefresh()" style="background:var(--bg-card);color:var(--sunpetal);border:2px solid var(--border-brown);padding:4px 10px;font-size:0.5rem;font-family:inherit;cursor:pointer">\u21BB Force refresh</button>
+        <span class="marks-crawl-status">${crawlStatus} | Next: ~${nextStr}</span>
       </div>`;
 
       // ── Summary stats ──
@@ -15208,6 +15224,125 @@
         <div class="marks-summary-stat"><div class="marks-summary-label">KITCHEN</div>
           <div class="marks-summary-value" style="font-size:0.5rem">${kitchenItems.map(k => k.item).join(", ") || "?"}</div></div>
       </div>`;
+
+      // ── Your Strategy: cheapest way to gain marks ──
+      if (me) {
+        const myRes = me.resources || {};
+        const myFul = me.today_fulfilled || {};
+        const myMult = me.multiplier || 1;
+        const myPetMult = me.pet_mult || myMult;
+        const petStock = me.pet_food_stock || {};
+        const petItems = week.pet_items || [];
+
+        // Kitchen analysis: marks per delivery for each resource
+        const kitchenAnalysis = kitchenItems.map(ki => {
+          const stock = myRes[ki.item] || 0;
+          const totalDlv = ki.amount > 0 ? Math.floor(stock / ki.amount) : 0;
+          const fulfilled = myFul[ki.item] || 0;
+          // Next delivery marks (diminishing returns)
+          const nextRaw = Math.max(20 - fulfilled * 2, 1);
+          const nextMarks = nextRaw * myMult;
+          // Fresh daily (10 deliveries from 0)
+          let dailyRaw = 0;
+          for (let i = 0; i < Math.min(10, totalDlv); i++) dailyRaw += Math.max(20 - i * 2, 1);
+          const dailyMarks = dailyRaw * myMult;
+          // Days to deplete at 10/day
+          const daysNeeded = totalDlv > 0 ? Math.ceil(totalDlv / 10) : 0;
+          return { item: ki.item, amount: ki.amount, stock, totalDlv, fulfilled, nextRaw, nextMarks, dailyMarks, daysNeeded };
+        });
+
+        // Pet analysis
+        const PET_BASE = [4, 8, 12, 20];
+        const petAnalysis = petItems.map((pi, slot) => {
+          const food = pi.food;
+          const qty = pi.quantity || 1;
+          const have = petStock[food] || 0;
+          const dlv = qty > 0 ? Math.floor(have / qty) : 0;
+          const base = PET_BASE[slot] || 4;
+          const fulfilled = 0; // we don't track pet fulfilled in snapshots, assume fresh
+          const nextRaw = Math.max(base - fulfilled * 2, 1);
+          const nextMarks = nextRaw * myPetMult;
+          const label = ["Easy", "Medium", "Hard", "Doll"][slot] || `Slot ${slot}`;
+          return { food, qty, have, dlv, base, nextMarks, label, slot };
+        });
+
+        // Sort all sources by next marks per action (descending)
+        const allSources = [];
+        for (const ka of kitchenAnalysis) {
+          if (ka.totalDlv > 0) {
+            allSources.push({
+              type: "kitchen",
+              label: `Donate ${ka.amount}\u00D7 ${ka.item}`,
+              nextMarks: ka.nextMarks,
+              stock: ka.totalDlv + " dlv left",
+              dailyMarks: ka.dailyMarks,
+              daysLeft: ka.daysNeeded + "d supply",
+              fulfilled: ka.fulfilled,
+              hint: ka.fulfilled >= 10 ? "\u26A0\uFE0F Diminished (10+ today)" : ka.fulfilled > 0 ? `${ka.fulfilled}/10 done today` : "\u2705 Fresh counter",
+            });
+          }
+        }
+        for (const pa of petAnalysis) {
+          if (pa.dlv > 0) {
+            allSources.push({
+              type: "pet",
+              label: `Feed pet: ${pa.food} (${pa.label})`,
+              nextMarks: pa.nextMarks,
+              stock: pa.dlv + " feeds",
+              dailyMarks: pa.nextMarks,
+              daysLeft: pa.dlv + " total",
+              fulfilled: 0,
+              hint: me.has_paw_shield ? "\uD83D\uDEE1\uFE0F Paw Shield active" : "\u274C No Paw Shield",
+            });
+          }
+        }
+        allSources.sort((a, b) => b.nextMarks - a.nextMarks);
+
+        html += `<div class="marks-section pixel-panel">
+          <div class="marks-section-title" onclick="_marksToggle('marks-strategy-section')">\u25BC Your Strategy — Best Marks Sources</div>
+          <div id="marks-strategy-section">
+          <div style="padding:8px 12px;font-size:0.5rem;color:var(--text-dim)">
+            Your multiplier: <b style="color:var(--sunpetal)">${myMult.toFixed(2)}x</b> (kitchen)
+            &nbsp;|&nbsp; Pet: <b style="color:var(--lily)">${myPetMult.toFixed(2)}x</b>
+            ${me.has_paw_shield ? ' | \uD83D\uDEE1\uFE0F Paw Shield (+25% pet)' : ''}
+          </div>
+          <table class="marks-table"><thead><tr>
+            <th>#</th><th>Action</th><th class="num-col">Next marks</th>
+            <th class="num-col">Daily (fresh)</th><th>Stock</th><th>Status</th>
+          </tr></thead><tbody>`;
+
+        for (let i = 0; i < allSources.length; i++) {
+          const s = allSources[i];
+          const best = i === 0 ? ' style="color:var(--green);font-weight:bold"' : '';
+          html += `<tr>
+            <td${best}>${i + 1}</td>
+            <td${best}>${escHTML(s.label)}</td>
+            <td class="num-col"${best}>${s.nextMarks.toFixed(1)}</td>
+            <td class="num-col">${s.dailyMarks.toFixed(0)}</td>
+            <td>${escHTML(s.stock)}</td>
+            <td style="font-size:0.5rem">${s.hint}</td>
+          </tr>`;
+        }
+
+        if (allSources.length === 0) {
+          html += `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px">No resources available for donations</td></tr>`;
+        }
+
+        html += `</tbody></table>`;
+
+        // Quick summary
+        const totalDailyFresh = kitchenAnalysis.reduce((s, k) => s + k.dailyMarks, 0);
+        const totalPetDaily = petAnalysis.reduce((s, p) => s + p.nextMarks, 0);
+        const minDaysSupply = kitchenAnalysis.filter(k => k.totalDlv > 0).map(k => k.daysNeeded);
+        const bottleneck = minDaysSupply.length > 0 ? Math.min(...minDaysSupply) : 0;
+
+        html += `<div style="padding:8px 12px;font-size:0.5625rem;color:var(--text-secondary);border-top:1px solid rgba(92,58,30,0.15)">
+          <b>Daily potential:</b> Kitchen ${_fmtNum(Math.round(totalDailyFresh))} + Pet ${_fmtNum(Math.round(totalPetDaily))} = <b style="color:var(--sunpetal)">${_fmtNum(Math.round(totalDailyFresh + totalPetDaily))}</b> marks/day
+          ${bottleneck > 0 ? ` | Shortest supply: <b>${bottleneck}d</b>` : ''}
+        </div>`;
+
+        html += `</div></div>`;
+      }
 
       // ── Marks Over Time Chart ──
       html += `<div class="marks-section pixel-panel">
@@ -15240,7 +15375,7 @@
 
       html += `<th class="num-col" data-sort="optimal">Optimal</th>
           <th class="num-col" data-sort="dump">Dump</th>
-          <th>Threat</th>
+          <th data-sort="threat">Threat</th>
         </tr></thead><tbody>`;
 
       for (const p of players) {
@@ -15335,6 +15470,11 @@
         .sort((a, b) => b.total - a.total);
       const maxProj = projected.length > 0 ? projected[0].total : 1;
 
+      html += `<div style="display:flex;gap:12px;padding:8px 12px;font-size:0.5rem;color:var(--text-dim);flex-wrap:wrap">
+        <span><span style="display:inline-block;width:12px;height:8px;background:var(--sunpetal);border-radius:2px"></span> Current marks</span>
+        <span><span style="display:inline-block;width:12px;height:8px;background:rgba(255,215,0,0.25);border-radius:2px"></span> Optimal remaining (kitchen)</span>
+        <span><span style="display:inline-block;width:12px;height:8px;background:rgba(100,200,255,0.3);border-radius:2px"></span> Pet weekly</span>
+      </div>`;
       html += `<table class="marks-table"><thead><tr>
         <th class="rank-col">#</th><th>Name</th><th class="num-col">Current</th>
         <th class="num-col">Optimal</th><th class="num-col">Pet Wk</th>
@@ -15368,7 +15508,8 @@
 
       // ── Resource Burn Rate ──
       const playersWithDelta = players.filter(p => p.prev_resources && p.prev_captured_at);
-      if (playersWithDelta.length > 0 && kitchenItems.length > 0) {
+      if (kitchenItems.length > 0) {
+        const burnPlayers = playersWithDelta.length > 0 ? playersWithDelta : players;
         html += `<div class="marks-section pixel-panel">
           <div class="marks-section-title" onclick="_marksToggle('marks-burn-section')">\u25BC Resource Burn Rate</div>
           <div id="marks-burn-section">
@@ -15380,7 +15521,7 @@
         }
         html += `<th>Signal</th></tr></thead><tbody>`;
 
-        for (const p of playersWithDelta.slice(0, 30)) {
+        for (const p of burnPlayers.slice(0, 50)) {
           const isMe = p.farm_id === myFarmId || String(p.farm_id) === FARM_ID;
           const res = p.resources || {};
           const prevRes = p.prev_resources || {};
@@ -15437,7 +15578,7 @@
         byFarm[fid].push(s);
       }
 
-      // Pick top 10 players to chart (by latest marks)
+      // Pick top 15 players to chart (by latest marks), always include own farm
       const latestByFarm = {};
       for (const [fid, snaps] of Object.entries(byFarm)) {
         const latest = snaps[snaps.length - 1];
@@ -15445,10 +15586,8 @@
       }
       const topFarms = Object.entries(latestByFarm)
         .sort((a, b) => b[1].marks - a[1].marks)
-        .slice(0, 10)
+        .slice(0, 15)
         .map(([fid]) => fid);
-
-      // Always include own farm
       const myFid = FARM_ID;
       if (myFid && !topFarms.includes(myFid)) topFarms.push(myFid);
 
@@ -15489,7 +15628,7 @@
           .sort((a, b) => a[0] - b[0])
           .map(([time, value]) => ({ time, value }));
 
-        if (lineData.length < 2) continue;
+        if (lineData.length < 1) continue;
 
         const color = fid === myFid ? "#ffd700" : COLORS[i % COLORS.length];
         const isMe = fid === myFid;
@@ -15561,6 +15700,29 @@
       }
     }
 
+    async function _marksForceRefresh() {
+      const btn = event.target;
+      btn.disabled = true;
+      btn.textContent = "\u23F3 Crawling...";
+      try {
+        const resp = await fetch("/api/marks-history?mode=force-refresh");
+        if (resp.ok) {
+          btn.textContent = "\u2705 Triggered!";
+          // Auto-refresh after 30s to show new data
+          setTimeout(() => {
+            fetch("/api/marks-history?mode=latest").then(r => r.json()).then(data => {
+              _renderMarksContent(data, { weeks: [] }, { state: null });
+            }).catch(() => {});
+          }, 30000);
+        } else {
+          btn.textContent = "\u274C Failed";
+        }
+      } catch (e) {
+        btn.textContent = "\u274C Error";
+      }
+      setTimeout(() => { btn.disabled = false; btn.textContent = "\u21BB Force refresh"; }, 5000);
+    }
+
     function _marksInitSort() {
       const table = document.getElementById("marks-table");
       if (!table) return;
@@ -15602,6 +15764,10 @@
       if (key === "tier") return cells[5]?.textContent || "zzz";
       if (key === "optimal") return parseFloat(cells[cells.length - 3]?.textContent?.replace(/[^0-9.-]/g, "")) || 0;
       if (key === "dump") return parseFloat(cells[cells.length - 2]?.textContent?.replace(/[^0-9.-]/g, "")) || 0;
+      if (key === "threat") {
+        const bar = cells[cells.length - 1]?.querySelector(".marks-threat-fill");
+        return bar ? parseFloat(bar.style.width) || 0 : 0;
+      }
       return 0;
     }
 

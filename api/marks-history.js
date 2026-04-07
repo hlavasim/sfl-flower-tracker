@@ -10,6 +10,29 @@ export default async function handler(req, res) {
   const mode = req.query.mode || "latest";
 
   try {
+    // ── Force refresh: trigger Azure Function manually ──
+    if (mode === "force-refresh") {
+      const masterKey = process.env.AZURE_FUNC_MASTER_KEY;
+      if (!masterKey) return res.status(500).json({ error: "Azure key not configured" });
+      try {
+        // Reset crawl state to idle so the function starts a new cycle
+        await pool.query(
+          `UPDATE marks_crawl_state SET phase = 'idle', updated_at = NOW() - interval '10 minutes' WHERE id = 1`
+        );
+        const triggerResp = await fetch(
+          "https://sfl-data-collector.azurewebsites.net/admin/functions/marks-snapshot",
+          {
+            method: "POST",
+            headers: { "x-functions-key": masterKey, "Content-Type": "application/json" },
+            body: JSON.stringify({ input: "manual" }),
+          }
+        );
+        return res.status(200).json({ ok: true, status: triggerResp.status });
+      } catch (e) {
+        return res.status(500).json({ error: e.message });
+      }
+    }
+
     // ── List tracked weeks ──
     if (mode === "weeks") {
       const result = await pool.query(
