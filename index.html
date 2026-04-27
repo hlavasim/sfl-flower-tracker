@@ -7314,9 +7314,17 @@
 
         html += `</div>
           <div class="pixel-font" style="font-size:0.6875rem;margin:6px 0;color:var(--sunpetal)">PRODUCTION SCHEDULE — ${cycleLabel} cycle</div>
-          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:4px">Each row = one step in the chain. PB ⚡ adds 1 free harvest per cycle on the longest-grow step.</div>
+          <div style="font-size:0.5rem;color:var(--text-secondary);margin-bottom:6px;line-height:1.5">
+            <b>How to read:</b> Each row = one flower in your gift chains (Prism Petal needs Blue Lotus → Blue Pansy → Purple Cosmos, all listed).
+            <span style="color:var(--text-dim)">Grow</span> = real time per harvest after speed boosts.
+            <span style="color:var(--text-dim)">Harvests/bed</span> = how many crops one bed produces in one PB cycle.
+            <span style="color:var(--text-dim)">Flowers/bed</span> = harvests × yield (with +1 chance bonuses).
+            <span style="color:var(--text-dim)">Demand</span> = how many you need over the cycle.
+            <span style="color:var(--text-dim)">Beds</span> = demand / flowers per bed.
+            <span style="color:var(--sunpetal)">PB</span> on the longest-grow step gives +1 free harvest per cycle, reducing beds needed.
+          </div>
           <table class="gifts-schedule-table"><thead><tr>
-            <th></th><th>Flower</th><th>Seed</th><th class="num-col">Base</th>
+            <th></th><th>Flower</th><th>Seed</th><th class="num-col">Grow</th>
             <th class="num-col">Harvests/bed</th><th class="num-col">Flowers/bed</th>
             <th class="num-col">Demand</th><th class="num-col">Beds</th>
           </tr></thead><tbody>`;
