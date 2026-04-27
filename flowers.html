@@ -4152,7 +4152,7 @@
       "Angelfish":       { tier: "advanced", bait: "Grub",        chum: "Banana",     chumQty: 3,  prob: 0.18 },
       "Zebra Turkeyfish":{ tier: "advanced", bait: "Grub",        chum: "Beetroot",   chumQty: 10, prob: 0.18 },
       "Ray":             { tier: "advanced", bait: "Grub",        chum: null,         chumQty: 0,  prob: 0.06 },
-      "Hammerhead shark":{ tier: "advanced", bait: "Grub",        chum: "Iron",       chumQty: 5,  prob: 0.18 },
+      "Hammerhead Shark":{ tier: "advanced", bait: "Grub",        chum: "Iron",       chumQty: 5,  prob: 0.18 },
       "Barred Knifejaw": { tier: "advanced", bait: "Grub",        chum: null,         chumQty: 0,  prob: 0.06 },
       "Walleye":         { tier: "advanced", bait: "Grub",        chum: "Broccoli",   chumQty: 10, prob: 0.18 },
       "Rock Blackfish":  { tier: "advanced", bait: "Grub",        chum: "Onion",      chumQty: 5,  prob: 0.18 },
@@ -4161,7 +4161,7 @@
       "Mahi Mahi":       { tier: "expert",   bait: "Grub",        chum: "Corn",       chumQty: 5,  prob: 0.10 },
       "Blue Marlin":     { tier: "expert",   bait: "Grub",        chum: "Wheat",      chumQty: 5,  prob: 0.10 },
       "Oarfish":         { tier: "expert",   bait: "Red Wiggler", chum: "Kale",       chumQty: 5,  prob: 0.10 },
-      "Football fish":   { tier: "expert",   bait: "Red Wiggler", chum: "Sunflower",  chumQty: 50, prob: 0.10 },
+      "Football Fish":   { tier: "expert",   bait: "Red Wiggler", chum: "Sunflower",  chumQty: 50, prob: 0.10 },
       "Sunfish":         { tier: "expert",   bait: "Red Wiggler", chum: null,         chumQty: 0,  prob: 0.04 },
       "Coelacanth":      { tier: "expert",   bait: "Red Wiggler", chum: "Cabbage",    chumQty: 10, prob: 0.10 },
       "Parrotfish":      { tier: "expert",   bait: "Red Wiggler", chum: "Seaweed",    chumQty: 1,  prob: 0.10 },
@@ -5426,6 +5426,38 @@
         }
         return { price: total, source: "crafted" };
       }
+
+      // 6. Crustacean (Blue Crab, Lobster, etc. via Crab Pot + chum)
+      if (typeof CRUSTACEAN_RECIPES !== "undefined" && CRUSTACEAN_RECIPES[itemName]) {
+        const cr = CRUSTACEAN_RECIPES[itemName];
+        // Pot price (one-time setup, but treat as per-catch since we lack pot-cycle accounting)
+        let total = 0;
+        if (cr.chum && cr.qty > 0) {
+          const chumR = _resolveItemSfl(cr.chum, p2p, coinsPerSFL, skills, _seen);
+          if (chumR) total += chumR.price * cr.qty;
+          // Try cheaper alternate chum
+          if (cr.alt) {
+            const altMatch = cr.alt.match(/^(.+?)\s*x(\d+)$/);
+            if (altMatch) {
+              const altR = _resolveItemSfl(altMatch[1], p2p, coinsPerSFL, skills, _seen);
+              if (altR) {
+                const altCost = altR.price * parseInt(altMatch[2]);
+                if (altCost > 0 && (total <= 0 || altCost < total)) total = altCost;
+              }
+            }
+          }
+        }
+        return total > 0 ? { price: total, source: "crustacean" } : null;
+      }
+
+      // 7. Treasure / coin-priced items (Crab, Sea Cucumber, etc. → coins / coinsPerSFL)
+      if (typeof TREASURE_SELL_PRICES !== "undefined" && TREASURE_SELL_PRICES[itemName] && coinsPerSFL > 0) {
+        return { price: TREASURE_SELL_PRICES[itemName] / coinsPerSFL, source: "treasure" };
+      }
+
+      // 8. Generic fish XP-based fallback (if not in FISH_DATA but in ITEM_XP_VALUES)
+      // Note: this is a heuristic — uses opportunity cost from XP value.
+      // Skipped here since it requires sflPerXP rate which we don't have at call-time.
 
       return null;
     }
