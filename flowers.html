@@ -2320,7 +2320,53 @@
       .marks-detail-grid { grid-template-columns:1fr; }
       .marks-chart-wrap { height:220px; }
     }
-  </style>
+  
+    /* Gifts Planner */
+    .gifts-grid { display: flex; flex-direction: column; gap: 4px; padding: 6px; }
+    .gift-row {
+      display: grid;
+      grid-template-columns: 24px minmax(90px, 130px) 1fr minmax(160px, 220px);
+      gap: 8px;
+      align-items: center;
+      padding: 6px 8px;
+      background: var(--bg-card);
+      border: 1px solid rgba(92,58,30,0.2);
+      border-radius: 4px;
+      font-size: 0.5625rem;
+    }
+    .gift-status { text-align: center; font-size: 0.875rem; }
+    .gift-npc-name { font-weight: bold; color: var(--text-primary); text-transform: capitalize; font-size: 0.625rem; }
+    .gift-next { color: var(--text-secondary); line-height: 1.4; }
+    .gift-next .inline-icon { vertical-align: middle; }
+    .gift-select select {
+      width: 100%;
+      padding: 4px 6px;
+      font-size: 0.5rem;
+      font-family: inherit;
+      background: var(--bg-card);
+      color: var(--text-primary);
+      border: 1px solid rgba(92,58,30,0.4);
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    .gift-select select:hover { border-color: var(--sunpetal); }
+    .gifts-summary { background: rgba(92,58,30,0.05); }
+    @media (max-width: 600px) {
+      .gift-row {
+        grid-template-columns: 20px 1fr;
+        grid-template-areas:
+          "status npc"
+          "status next"
+          "status select";
+        gap: 4px 8px;
+      }
+      .gift-status { grid-area: status; align-self: start; padding-top: 4px; }
+      .gift-npc { grid-area: npc; }
+      .gift-next { grid-area: next; }
+      .gift-select { grid-area: select; }
+    }
+
+</style>
   <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
   <script defer src="/_vercel/insights/script.js"></script>
 </head>
@@ -2503,6 +2549,239 @@
       "White Clover":     { seed: "Clover Seed", input: "Blue Edelweiss" },
       "Blue Clover":      { seed: "Clover Seed", input: "Rhubarb" },
     };
+
+
+    // ═══════════════════════════════════════
+    //  BUMPKIN GIFTS (NPC friendship)
+    //  Source: sunflower-land/src/features/game/types/gifts.ts
+    // ═══════════════════════════════════════
+
+    const BUMPKIN_FLOWER_BONUSES = {
+      "betty":         { "Red Pansy": 5, "Yellow Pansy": 5, "Purple Pansy": 5, "White Pansy": 5, "Blue Pansy": 5 },
+      "pumpkin' pete": { "Yellow Cosmos": 6 },
+      "blacksmith":    { "Red Carnation": 5 },
+      "bert":          { "Red Lotus": 6, "Yellow Lotus": 6, "Purple Lotus": 6, "White Lotus": 6, "Blue Lotus": 6 },
+      "finley":        { "Red Daffodil": 5, "Yellow Daffodil": 5, "Purple Daffodil": 5, "White Daffodil": 5, "Blue Daffodil": 5 },
+      "raven":         { "Purple Carnation": 6, "Purple Lotus": 5, "Purple Daffodil": 4, "Purple Pansy": 4, "Purple Cosmos": 4, "Purple Balloon Flower": 4, "Purple Gladiolus": 3, "Purple Lavender": 4, "Purple Clover": 3, "Purple Edelweiss": 4 },
+      "old salty":     { "Blue Carnation": 6, "Blue Lotus": 5, "Blue Daffodil": 4, "Blue Pansy": 4, "Blue Balloon Flower": 5, "Blue Cosmos": 4, "Blue Gladiolus": 4, "Blue Lavender": 3, "Blue Clover": 4, "Blue Edelweiss": 3 },
+      "miranda":       { "Yellow Carnation": 6, "Yellow Lotus": 5, "Yellow Daffodil": 4, "Yellow Pansy": 4, "Yellow Balloon Flower": 5, "Yellow Cosmos": 4, "Yellow Gladiolus": 4, "Yellow Lavender": 4, "Yellow Clover": 4, "Yellow Edelweiss": 4 },
+      "finn":          { "White Cosmos": 5, "Blue Cosmos": 5 },
+      "corale":        { "Prism Petal": 6 },
+      "cornwell":      { "Red Balloon Flower": 5, "Yellow Balloon Flower": 5, "Purple Balloon Flower": 5, "White Balloon Flower": 5, "Blue Balloon Flower": 5 },
+      "tywin":         { "Primula Enigma": 7, "Celestial Frostbloom": 6 },
+      "victoria":      { "Primula Enigma": 8 },
+      "jester":        { "Red Balloon Flower": 6, "Red Carnation": 6 },
+    };
+
+    const DEFAULT_FLOWER_POINTS = {
+      "Red Pansy": 3, "Yellow Pansy": 3, "Purple Pansy": 3, "White Pansy": 3, "Blue Pansy": 3,
+      "Red Cosmos": 3, "Yellow Cosmos": 3, "Purple Cosmos": 3, "White Cosmos": 3, "Blue Cosmos": 3,
+      "Red Balloon Flower": 5, "Yellow Balloon Flower": 5, "Purple Balloon Flower": 5, "White Balloon Flower": 5, "Blue Balloon Flower": 5,
+      "Red Carnation": 5, "Yellow Carnation": 5, "Purple Carnation": 5, "White Carnation": 5, "Blue Carnation": 5,
+      "Red Daffodil": 7, "Yellow Daffodil": 7, "Purple Daffodil": 7, "White Daffodil": 7, "Blue Daffodil": 7,
+      "Red Lotus": 7, "Yellow Lotus": 7, "Purple Lotus": 7, "White Lotus": 7, "Blue Lotus": 7,
+      "Prism Petal": 12, "Celestial Frostbloom": 12, "Primula Enigma": 12,
+      "Red Edelweiss": 4, "Yellow Edelweiss": 4, "Purple Edelweiss": 4, "White Edelweiss": 4, "Blue Edelweiss": 4,
+      "Red Gladiolus": 4, "Yellow Gladiolus": 4, "Purple Gladiolus": 4, "White Gladiolus": 4, "Blue Gladiolus": 4,
+      "Red Lavender": 4, "Yellow Lavender": 4, "Purple Lavender": 4, "White Lavender": 4, "Blue Lavender": 4,
+      "Red Clover": 4, "Yellow Clover": 4, "Purple Clover": 4, "White Clover": 4, "Blue Clover": 4,
+    };
+
+    const BUMPKIN_GIFTS_DATA = {
+      "pumpkin' pete": {
+        planned: [
+          { fp: 5,   items: {}, coins: 160, wearables: {} },
+          { fp: 12,  items: {"Treasure Key": 1}, coins: 0, wearables: {} },
+          { fp: 50,  items: {}, coins: 0, wearables: {"Pumpkin Hat": 1} },
+          { fp: 100, items: {}, coins: 640, wearables: {} },
+        ],
+        repeats: { fp: 100, items: {"Treasure Key": 1}, coins: 640, wearables: {} },
+      },
+      "betty": {
+        planned: [
+          { fp: 10,  items: {}, coins: 120, wearables: {} },
+          { fp: 20,  items: {}, coins: 960, wearables: {}, recipe: "Basic Bed" },
+          { fp: 40,  items: {"Treasure Key": 1}, coins: 0, wearables: {}, recipe: "Doll" },
+          { fp: 110, items: {"Radish Cake": 1}, coins: 0, wearables: {}, recipe: "Buzz Doll" },
+        ],
+        repeats: { fp: 100, items: {"Treasure Key": 1}, coins: 0, wearables: {} },
+      },
+      "blacksmith": {
+        planned: [
+          { fp: 50,  items: {"Treasure Key": 1}, coins: 0, wearables: {}, recipe: "Timber" },
+          { fp: 110, items: {}, coins: 760, wearables: {}, recipe: "Cushion" },
+          { fp: 200, items: {}, coins: 1600, wearables: {}, recipe: "Hardened Leather" },
+          { fp: 320, items: {"Pickaxe": 10}, coins: 0, wearables: {}, recipe: "Crimsteel" },
+        ],
+        repeats: { fp: 150, items: {"Treasure Key": 1}, coins: 960, wearables: {}, recipe: "Crude Doll" },
+      },
+      "bert": {
+        planned: [
+          { fp: 60,  items: {}, coins: 0, wearables: {"Tattered Jacket": 1}, recipe: "Wooly Doll" },
+          { fp: 100, items: {"Gem": 1}, coins: 0, wearables: {}, recipe: "Cluck Doll" },
+          { fp: 210, items: {"Pirate Cake": 3}, coins: 0, wearables: {}, recipe: "Cow Bed" },
+          { fp: 330, items: {}, coins: 0, wearables: {"Greyed Glory": 1}, recipe: "Moo Doll" },
+        ],
+        repeats: { fp: 150, items: {"Rare Key": 1}, coins: 0, wearables: {} },
+      },
+      "finley": {
+        planned: [
+          { fp: 25,  items: {"Fishing Lure": 3}, coins: 0, wearables: {}, recipe: "Fisher Bed" },
+          { fp: 95,  items: {}, coins: 3200, wearables: {} },
+          { fp: 150, items: {"Tuna": 5}, coins: 0, wearables: {} },
+        ],
+        repeats: { fp: 100, items: {"Fishing Lure": 5}, coins: 0, wearables: {} },
+      },
+      "raven": {
+        planned: [
+          { fp: 50,  items: {"Time Warp Totem": 1}, coins: 0, wearables: {} },
+          { fp: 140, items: {}, coins: 2560, wearables: {}, recipe: "Lunar Doll" },
+          { fp: 220, items: {}, coins: 0, wearables: {"Victorian Hat": 1} },
+          { fp: 330, items: {"Eggplant Seed": 50}, coins: 1600, wearables: {}, recipe: "Shadow Doll" },
+          { fp: 700, items: {}, coins: 0, wearables: {"Bat Wings": 1} },
+        ],
+        repeats: { fp: 160, items: {"Rare Key": 1}, coins: 0, wearables: {} },
+      },
+      "miranda": {
+        planned: [
+          { fp: 30,  items: {"Time Warp Totem": 1}, coins: 0, wearables: {}, recipe: "Floral Bed" },
+          { fp: 90,  items: {}, coins: 960, wearables: {"Fruit Picker Shirt": 1} },
+          { fp: 260, items: {}, coins: 0, wearables: {"Fruit Picker Apron": 1}, recipe: "Desert Bed" },
+          { fp: 500, items: {}, coins: 6400, wearables: {"Fruit Bowl": 1}, recipe: "Juicy Doll" },
+        ],
+        repeats: { fp: 100, items: {"Blueberry Seed": 5, "Apple Seed": 5, "Banana Plant": 5, "Orange Seed": 5}, coins: 0, wearables: {} },
+      },
+      "finn": {
+        planned: [
+          { fp: 40,  items: {"Rod": 10}, coins: 0, wearables: {} },
+          { fp: 150, items: {}, coins: 960, wearables: {} },
+        ],
+        repeats: { fp: 130, items: {"Rare Key": 1}, coins: 0, wearables: {} },
+      },
+      "corale": {
+        planned: [
+          { fp: 45,  items: {}, coins: 960, wearables: {} },
+          { fp: 150, items: {"Gem": 2}, coins: 0, wearables: {}, recipe: "Synthetic Fabric" },
+          { fp: 320, items: {}, coins: 0, wearables: {"Pink Ponytail": 1}, recipe: "Kelp Fibre" },
+        ],
+        repeats: { fp: 200, items: {}, coins: 3200, wearables: {} },
+      },
+      "cornwell": {
+        planned: [
+          { fp: 65,  items: {"Rare Key": 1}, coins: 0, wearables: {}, recipe: "Sturdy Bed" },
+          { fp: 175, items: {"Gem": 1}, coins: 0, wearables: {} },
+          { fp: 340, items: {}, coins: 0, wearables: {"Wise Robes": 1}, recipe: "Harvest Doll" },
+          { fp: 600, items: {}, coins: 0, wearables: {"Wise Beard": 1}, recipe: "Ember Doll" },
+        ],
+        repeats: { fp: 200, items: {"Luxury Key": 1}, coins: 0, wearables: {} },
+      },
+      "tywin": {
+        planned: [
+          { fp: 35,  items: {"Rare Key": 1}, coins: 0, wearables: {} },
+          { fp: 175, items: {}, coins: 3200, wearables: {} },
+          { fp: 330, items: {"Pirate Cake": 5}, coins: 0, wearables: {} },
+        ],
+        repeats: { fp: 160, items: {"Luxury Key": 1}, coins: 0, wearables: {} },
+      },
+      "victoria": {
+        planned: [
+          { fp: 50,  items: {}, coins: 2560, wearables: {} },
+          { fp: 140, items: {"Time Warp Totem": 1}, coins: 0, wearables: {}, recipe: "Royal Bed" },
+          { fp: 340, items: {}, coins: 0, wearables: {"Royal Dress": 1} },
+          { fp: 520, items: {}, coins: 16000, wearables: {} },
+          { fp: 850, items: {}, coins: 0, wearables: {"Queen's Crown": 1} },
+        ],
+        repeats: { fp: 160, items: {"Rare Key": 1}, coins: 0, wearables: {} },
+      },
+      "jester": {
+        planned: [
+          { fp: 50,  items: {"Time Warp Totem": 1}, coins: 0, wearables: {}, recipe: "Royal Bedding" },
+          { fp: 140, items: {"Rare Key": 1}, coins: 0, wearables: {}, recipe: "Royal Ornament" },
+          { fp: 340, items: {}, coins: 0, wearables: {"Cap n Bells": 1} },
+          { fp: 520, items: {}, coins: 16000, wearables: {} },
+          { fp: 740, items: {}, coins: 0, wearables: {"Motley": 1} },
+        ],
+        repeats: { fp: 90, items: {"Treasure Key": 1}, coins: 0, wearables: {} },
+      },
+      "old salty": {
+        planned: [
+          { fp: 30,  items: {}, coins: 80, wearables: {"Striped Blue Shirt": 1} },
+          { fp: 90,  items: {}, coins: 260, wearables: {"Peg Leg": 1}, recipe: "Gilded Doll" },
+          { fp: 500, items: {}, coins: 0, wearables: {"Pirate Potion": 1}, recipe: "Pirate Bed" },
+          { fp: 850, items: {"Pirate Bounty": 1}, coins: 0, wearables: {"Pirate Hat": 1}, recipe: "Ocean's Treasure" },
+        ],
+        repeats: { fp: 250, items: {}, coins: 2500, wearables: {} },
+      },
+    };
+
+    // Display order — alphabetical by display name
+    const GIFT_NPC_ORDER = ["betty", "bert", "blacksmith", "corale", "cornwell", "finley", "finn", "jester", "miranda", "old salty", "pumpkin' pete", "raven", "tywin", "victoria"];
+
+    function getFlowerGiftPoints(npc, flower) {
+      const bonus = (BUMPKIN_FLOWER_BONUSES[npc] || {})[flower];
+      if (bonus !== undefined) return bonus;
+      return DEFAULT_FLOWER_POINTS[flower] || 0;
+    }
+
+    function getNextGiftReward(npc, friendship) {
+      const data = BUMPKIN_GIFTS_DATA[npc];
+      if (!data) return null;
+      const claimed = (friendship && friendship.giftClaimedAtPoints) || 0;
+      const points = (friendship && friendship.points) || 0;
+      for (const p of data.planned) {
+        if (p.fp > claimed) {
+          return { tier: "planned", threshold: p.fp, reward: p, pointsAway: Math.max(0, p.fp - points) };
+        }
+      }
+      const nextThreshold = claimed + data.repeats.fp;
+      return { tier: "repeat", threshold: nextThreshold, reward: data.repeats, pointsAway: Math.max(0, nextThreshold - points) };
+    }
+
+    function formatGiftReward(reward) {
+      const parts = [];
+      for (const [it, qty] of Object.entries(reward.items || {})) {
+        parts.push(`<img class="inline-icon" src="${getItemIcon(it)}" onerror="this.style.display='none'" alt="">${qty}× ${escHTML(it)}`);
+      }
+      if (reward.coins) parts.push(`<img class="inline-icon" src="${getItemIcon('Coin')}" onerror="this.style.display='none'" alt="">${reward.coins.toLocaleString()}`);
+      for (const [w, qty] of Object.entries(reward.wearables || {})) {
+        parts.push(`\u{1F451} ${escHTML(w)}`);
+      }
+      if (reward.recipe) parts.push(`\u{1F4DC} ${escHTML(reward.recipe)}`);
+      return parts.length > 0 ? parts.join(" · ") : "<span style=\"color:var(--text-dim)\">empty</span>";
+    }
+
+    function getGiftPlan() {
+      try {
+        const saved = localStorage.getItem("sfl_gift_plan");
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+      return {};
+    }
+
+    function saveGiftPlan(plan) {
+      try { localStorage.setItem("sfl_gift_plan", JSON.stringify(plan)); } catch (e) {}
+    }
+
+    function setGiftPlanEntry(npc, flower) {
+      const plan = getGiftPlan();
+      if (flower === "" || flower === null) delete plan[npc];
+      else plan[npc] = flower;
+      saveGiftPlan(plan);
+      // Re-render gifts section in place (no full page re-render)
+      if (cachedFarmData) {
+        const sec = document.getElementById("gifts-section-wrap");
+        if (sec) {
+          const newHtml = renderGiftsSection(cachedFarmData);
+          sec.outerHTML = newHtml;
+        }
+      }
+    }
+
+    function _giftsToggleSection(id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.style.display = (el.style.display === "none") ? "block" : "none";
+    }
 
     const CROPS_AND_FRUITS = new Set([
       "Sunflower","Potato","Pumpkin","Carrot","Cabbage","Soybean",
@@ -4260,7 +4539,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v2.5</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v2.6</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -4287,6 +4566,12 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v2.6", items: [
+          { t: "new", text: "Gifts Planner on flowers page — plan daily flower gifts to 14 NPCs" },
+          { t: "new", text: "Per-NPC selectbox with sorted flower options (points + grow hours)" },
+          { t: "new", text: "Daily demand summary + bed capacity feasibility check" },
+          { t: "new", text: "UTC daily reset checkmarks (uses farm.npcs.friendship.giftedAt)" },
+        ]},
         { ver: "v2.5", items: [
           { t: "new", text: "Marks War Tracker — top 50 Nightshades faction leaderboard with live crawling" },
           { t: "new", text: "Marks timeline chart, projections, resource burn rate, threat assessment" },
@@ -6587,6 +6872,165 @@
     }
 
     // ═══════════════════════════════════════
+    //  RENDER: GIFTS SECTION (flowers page)
+    // ═══════════════════════════════════════
+
+    function renderGiftsSection(data) {
+      const farm = data.farm || {};
+      const npcsData = farm.npcs || {};
+      const plan = getGiftPlan();
+      const inventory = data.inventory || {};
+      const inProgress = data.inProgress || {};
+
+      // Build flower options sorted by points desc per NPC
+      const allFlowers = Object.keys(FLOWER_RECIPES);
+      const sd = SEED_DATA;
+
+      // UTC midnight for "given today" check
+      const now = new Date();
+      const utcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+
+      // Aggregate: count of each flower needed per day from plan
+      const dailyNeed = {};
+      let plannedCount = 0;
+      for (const npc of GIFT_NPC_ORDER) {
+        const f = plan[npc];
+        if (f) {
+          dailyNeed[f] = (dailyNeed[f] || 0) + 1;
+          plannedCount++;
+        }
+      }
+
+      let html = `<div id="gifts-section-wrap" class="growing-section pixel-panel pixel-font">
+        <div class="growing-title" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between" onclick="_giftsToggleSection('gifts-body')">
+          <span>\u{1F381} GIFTS PLANNER (${plannedCount}/${GIFT_NPC_ORDER.length})</span>
+          <span style="font-size:0.625rem;color:var(--text-dim)">tap to toggle ▼</span>
+        </div>
+        <div id="gifts-body" style="display:block">`;
+
+      // Per-NPC rows
+      html += `<div class="gifts-grid">`;
+      for (const npc of GIFT_NPC_ORDER) {
+        const npcInfo = npcsData[npc] || {};
+        const friendship = npcInfo.friendship || {};
+        const points = friendship.points || 0;
+        const giftedAt = friendship.giftedAt || 0;
+        const givenToday = giftedAt >= utcMidnight;
+
+        const next = getNextGiftReward(npc, friendship);
+        const planned = plan[npc] || "";
+
+        // Build options sorted by points desc
+        const options = allFlowers.map(f => {
+          const pts = getFlowerGiftPoints(npc, f);
+          const seedSec = sd[FLOWER_RECIPES[f].seed]?.seconds || 0;
+          const hours = Math.round(seedSec / 3600 * 10) / 10;
+          return { f, pts, hours };
+        }).filter(o => o.pts > 0).sort((a, b) => b.pts - a.pts || a.hours - b.hours);
+
+        const optHtml = options.map(o => {
+          const sel = o.f === planned ? " selected" : "";
+          return `<option value="${escHTML(o.f)}"${sel}>${escHTML(o.f)} — ${o.pts}pt, ${o.hours}h</option>`;
+        }).join("");
+
+        const npcName = npc.replace(/(^|\s|')\w/g, c => c.toUpperCase());
+        const checkIcon = givenToday ? '<span style="color:var(--green)" title="Given today">✅</span>' : (planned ? '<span style="color:var(--red)" title="Not given today">❌</span>' : '<span style="color:var(--text-dim)">·</span>');
+
+        const nextHtml = next
+          ? `<span style="color:var(--text-secondary)">${next.tier === "repeat" ? "[repeat] " : ""}<b>${next.threshold}pt</b> (${next.pointsAway} away): ${formatGiftReward(next.reward)}</span>`
+          : `<span style="color:var(--text-dim)">no reward data</span>`;
+
+        html += `<div class="gift-row">
+          <div class="gift-status">${checkIcon}</div>
+          <div class="gift-npc">
+            <div class="gift-npc-name">${escHTML(npcName)}</div>
+            <div class="gift-npc-pts" style="color:var(--text-dim);font-size:0.5rem">${points} pts</div>
+          </div>
+          <div class="gift-next">${nextHtml}</div>
+          <div class="gift-select">
+            <select onchange="setGiftPlanEntry('${escHTML(npc)}', this.value)">
+              <option value=""${planned === "" ? " selected" : ""}>— No gift —</option>
+              ${optHtml}
+            </select>
+          </div>
+        </div>`;
+      }
+      html += `</div>`;
+
+      // Summary: daily flower needs vs production capacity
+      if (plannedCount > 0) {
+        // Compute daily production capacity (flowers per day per bed) accounting for grow time boosts
+        // FLOWER_BEDS already known; SEED_DATA[seed].seconds already includes flowerMultiplier (applyFlowerBoosts)
+        // Production = beds_assigned_to_seed × (86400 / seconds)
+        // We assume all beds rotate among the planned flowers proportionally.
+
+        // Group needs by seed
+        const seedNeed = {};
+        const seedFlowers = {};
+        for (const [flower, count] of Object.entries(dailyNeed)) {
+          const seed = FLOWER_RECIPES[flower]?.seed;
+          if (!seed) continue;
+          seedNeed[seed] = (seedNeed[seed] || 0) + count;
+          if (!seedFlowers[seed]) seedFlowers[seed] = [];
+          seedFlowers[seed].push({ f: flower, c: count });
+        }
+
+        // Production capacity: each bed can produce 86400/seconds flowers per day
+        // If you spread flowers across beds proportionally, you need (count × seconds / 86400) beds for that flower
+        let totalBedsNeeded = 0;
+        const breakdown = [];
+        for (const [seed, count] of Object.entries(seedNeed)) {
+          const sec = sd[seed]?.seconds || 0;
+          const bedsForSeed = (count * sec) / 86400;
+          totalBedsNeeded += bedsForSeed;
+          breakdown.push({ seed, count, sec, beds: bedsForSeed });
+        }
+
+        const ratio = FLOWER_BEDS > 0 ? totalBedsNeeded / FLOWER_BEDS : 999;
+        const feasible = ratio <= 1.0;
+        const ratioColor = feasible ? "var(--green)" : (ratio < 1.5 ? "var(--yellow)" : "var(--red)");
+
+        html += `<div class="gifts-summary" style="margin-top:8px;padding:10px 12px;border-top:2px solid rgba(92,58,30,0.4)">
+          <div class="pixel-font" style="font-size:0.6875rem;margin-bottom:6px;color:var(--sunpetal)">DAILY DEMAND</div>
+          <div style="font-size:0.5625rem;line-height:1.7">`;
+
+        // List needs per flower with stock
+        const needList = Object.entries(dailyNeed).sort((a, b) => b[1] - a[1]);
+        for (const [flower, qty] of needList) {
+          const have = (inventory[flower] !== undefined) ? parseFloat(inventory[flower]) : 0;
+          const pend = inProgress[flower] || 0;
+          const totalAvail = have + pend;
+          const seedName = FLOWER_RECIPES[flower]?.seed || "?";
+          const seedSec = sd[seedName]?.seconds || 0;
+          const hoursStr = (seedSec / 3600).toFixed(1);
+          html += `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <img class="inline-icon" src="${getItemIcon(flower)}" onerror="this.style.display='none'" alt="">
+            <b>${escHTML(flower)}</b>
+            <span style="color:var(--text-secondary)">need ${qty}/day</span>
+            <span style="color:var(--text-dim)">| have ${have}${pend > 0 ? ` (+${pend})` : ""} | ${hoursStr}h grow</span>
+          </div>`;
+        }
+
+        html += `</div>
+          <div class="pixel-font" style="font-size:0.6875rem;margin:10px 0 6px 0;color:var(--sunpetal)">PRODUCTION CAPACITY</div>
+          <div style="font-size:0.5625rem;line-height:1.7">
+            <div>Beds needed: <b style="color:${ratioColor}">${totalBedsNeeded.toFixed(2)}</b> / ${FLOWER_BEDS} available <span style="color:${ratioColor}">(${(ratio * 100).toFixed(0)}% of capacity)</span></div>`;
+        for (const b of breakdown) {
+          html += `<div style="color:var(--text-dim)">· ${escHTML(sd[b.seed]?.label || b.seed)}: ${b.count} flowers/day → ${b.beds.toFixed(2)} beds (${(b.sec/3600).toFixed(1)}h each)</div>`;
+        }
+        html += `<div style="margin-top:6px;color:${feasible ? 'var(--green)' : 'var(--red)'};font-weight:bold">${feasible ? "✅ Plan is feasible at current grow speed" : "⚠️ Plan exceeds bed capacity — reduce gifts or speed up growth"}</div>`;
+        html += `</div>
+        </div>`;
+      } else {
+        html += `<div style="padding:10px 12px;color:var(--text-dim);font-size:0.5625rem;text-align:center">Select flowers above to see daily demand and production capacity.</div>`;
+      }
+
+      html += `</div></div>`;
+      return html;
+    }
+
+
+    // ═══════════════════════════════════════
     //  RENDER: FLOWERS
     // ═══════════════════════════════════════
 
@@ -6752,6 +7196,9 @@
           </div>`;
         }
       }
+
+      // Gifts Planner
+      html += renderGiftsSection(data);
 
       // Petal Blessed
       if (petalBlessed.status === "ready") {
