@@ -2718,9 +2718,10 @@
     const GIFT_NPC_ORDER = ["betty", "bert", "blacksmith", "corale", "cornwell", "finley", "finn", "jester", "miranda", "old salty", "pumpkin' pete", "raven", "tywin", "victoria"];
 
     function getFlowerGiftPoints(npc, flower) {
-      const bonus = (BUMPKIN_FLOWER_BONUSES[npc] || {})[flower];
-      if (bonus !== undefined) return bonus;
-      return DEFAULT_FLOWER_POINTS[flower] || 0;
+      // Bonuses are ADDITIVE: total = base + npc-specific bonus
+      const base = DEFAULT_FLOWER_POINTS[flower] || 0;
+      const bonus = (BUMPKIN_FLOWER_BONUSES[npc] || {})[flower] || 0;
+      return base + bonus;
     }
 
     function getNextGiftReward(npc, friendship) {
