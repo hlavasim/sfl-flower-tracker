@@ -3231,6 +3231,7 @@
       "Rice Bun":             { building: "Fire Pit",       xp: 2600,  cookSec: 18000,  usesHoney: false },
       "Antipasto":            { building: "Fire Pit",       xp: 3000,  cookSec: 10800,  usesHoney: false },
       "Pizza Margherita":     { building: "Fire Pit",       xp: 25000, cookSec: 72000,  usesHoney: false },
+      "Furikake Sprinkle":    { building: "Fire Pit",       xp: 1000,  cookSec: 0,      usesHoney: false },
       // Kitchen (27)
       "Sunflower Crunch":     { building: "Kitchen",        xp: 50,    cookSec: 600,    usesHoney: false },
       "Club Sandwich":        { building: "Kitchen",        xp: 170,   cookSec: 10800,  usesHoney: false },
@@ -3257,6 +3258,9 @@
       "Steamed Red Rice":     { building: "Kitchen",        xp: 3000,  cookSec: 14400,  usesHoney: false },
       "Caprese Salad":        { building: "Kitchen",        xp: 6000,  cookSec: 10800,  usesHoney: false },
       "Spaghetti al Limone":  { building: "Kitchen",        xp: 15000, cookSec: 54000,  usesHoney: false },
+      "Creamy Crab Bite":     { building: "Kitchen",        xp: 10000, cookSec: 0,      usesHoney: false },
+      "Crimstone Infused Fish Oil": { building: "Kitchen",  xp: 18000, cookSec: 0,      usesHoney: false },
+      "Surimi Rice Bowl":     { building: "Kitchen",        xp: 3000,  cookSec: 0,      usesHoney: false },
       // Bakery (17)
       "Sunflower Cake":       { building: "Bakery",         xp: 525,   cookSec: 23400,  usesHoney: false },
       "Cornbread":            { building: "Bakery",         xp: 600,   cookSec: 43200,  usesHoney: false },
@@ -3320,6 +3324,7 @@
       "Rice Bun":             { "Rice": 2, "Wheat": 50 },
       "Antipasto":            { "Olive": 2, "Grape": 2 },
       "Pizza Margherita":     { "Tomato": 30, "Cheese": 5, "Wheat": 20 },
+      "Furikake Sprinkle":    { "Fish Flake": 1, "Seaweed": 1 },
       // ── Kitchen ──
       "Sunflower Crunch":     { "Sunflower": 300 },
       "Club Sandwich":        { "Sunflower": 100, "Carrot": 25, "Wheat": 5 },
@@ -3346,6 +3351,9 @@
       "Steamed Red Rice":     { "Rice": 3, "Beetroot": 50 },
       "Caprese Salad":        { "Cheese": 1, "Tomato": 25, "Kale": 20 },
       "Spaghetti al Limone":  { "Wheat": 10, "Lemon": 15, "Cheese": 3 },
+      "Creamy Crab Bite":           { "Crab Stick": 1, "Cheese": 3 },
+      "Crimstone Infused Fish Oil": { "Fish Oil": 1, "Crimstone": 1 },
+      "Surimi Rice Bowl":           { "Fish Stick": 1, "Rice": 1, "Onion": 1 },
       // ── Bakery ──
       "Sunflower Cake":       { "Sunflower": 1000, "Wheat": 10, "Egg": 30 },
       "Cornbread":            { "Corn": 15, "Wheat": 5, "Egg": 10 },
@@ -5375,6 +5383,24 @@
       if (BAIT_WORM_YIELD[itemName]) {
         const c = computeBaitCostSFL(itemName, p2p);
         return c > 0 ? { price: c, source: "bait" } : null;
+      }
+
+      // 3b. Fish Market processed (Fish Flake / Fish Stick / Fish Oil / Crab Stick)
+      if (typeof FISH_MARKET_RECIPES !== "undefined" && FISH_MARKET_RECIPES[itemName]) {
+        const seasonRecipes = FISH_MARKET_RECIPES[itemName];
+        // Use cheapest season (best player can do)
+        let bestCost = null;
+        for (const s of Object.keys(seasonRecipes)) {
+          const recipe = seasonRecipes[s];
+          let total = 0, missing = false;
+          for (const [sub, q] of Object.entries(recipe)) {
+            const r = _resolveItemSfl(sub, p2p, coinsPerSFL, skills, _seen);
+            if (!r) { missing = true; break; }
+            total += r.price * q;
+          }
+          if (!missing && (bestCost == null || total < bestCost)) bestCost = total;
+        }
+        return bestCost != null ? { price: bestCost, source: "fish-market" } : null;
       }
 
       // 4. Recipe ingredient (chained recipes like Cabbers n Mash → Mashed Potato)
@@ -8451,15 +8477,16 @@
 
         for (const [buildingName, count] of buildingEntries) {
           const recipes = Object.entries(COOKING_RECIPES_DATA)
-            .filter(([, r]) => r.building === buildingName && r.cookSec > 0)
+            .filter(([, r]) => r.building === buildingName)
             .map(([name, r]) => {
               const xp = computeFoodXP(name, r, buildingName, boosts);
               const time = computeCookTime(r.cookSec, buildingName, boosts);
               const xpPerHour = time > 0 ? (xp / time) * 3600 : 0;
+              const isInstant = r.cookSec === 0;
               const rc = p2p ? computeRecipeCost(name, p2p, coinsPerSFL, skills) : null;
               const cost = (rc && rc.total > 0) ? rc.total : null;
               const xpPerSfl = (cost && cost > 0) ? xp / cost : 0;
-              return { name, xp, time, xpPerHour, cost, xpPerSfl };
+              return { name, xp, time, xpPerHour, cost, xpPerSfl, isInstant };
             });
           if (sortMode === "xpPerSfl") {
             recipes.sort((a, b) => b.xpPerSfl - a.xpPerSfl);
@@ -8500,8 +8527,14 @@
             const xph = Math.round(r.xpPerHour).toLocaleString();
             const cost = r.cost == null ? "\u2014" : fmtSfl(r.cost);
             const xps = (r.cost && r.cost > 0) ? Math.round(r.xpPerSfl).toLocaleString() : "\u2014";
+            const xpStr = Math.round(r.xp).toLocaleString();
+            if (r.isInstant) {
+              if (sortMode === "xpPerSfl") return `${escHTML(r.name)} (${xps} XP/SFL, INSTANT ${xpStr} XP)`;
+              if (sortMode === "sflPerCook") return `${escHTML(r.name)} (${cost} SFL/cook, INSTANT ${xpStr} XP)`;
+              return `${escHTML(r.name)} (INSTANT ${xpStr} XP, ${cost} SFL/cook)`;
+            }
             if (sortMode === "xpPerSfl") return `${escHTML(r.name)} (${xps} XP/SFL, ${xph} XP/h)`;
-            if (sortMode === "sflPerCook") return `${escHTML(r.name)} (${cost} SFL/cook, ${Math.round(r.xp).toLocaleString()} XP)`;
+            if (sortMode === "sflPerCook") return `${escHTML(r.name)} (${cost} SFL/cook, ${xpStr} XP)`;
             return `${escHTML(r.name)} (${xph} XP/h, ${cost} SFL/cook)`;
           };
           // Fish breakdown for selected recipe (shown below ingredient tooltips)
@@ -8529,9 +8562,10 @@
             </select>
             ${selected ? `<div class="bumpkin-recipe-stats">
               XP per cook: <span style="color:var(--green)">${fmtXP(selected.xp)}</span><br>
-              Cook time: <span style="color:var(--blue)">${formatCookTime(selected.time)}</span><br>
+              ${selected.isInstant ? `Cook time: <span style="color:var(--sunpetal)">INSTANT</span><br>`
+                : `Cook time: <span style="color:var(--blue)">${formatCookTime(selected.time)}</span><br>
               XP/hour: <span style="color:var(--sunpetal)">${fmtXP(selected.xpPerHour)}</span><br>
-              XP/day${count > 1 ? " (\u00d7" + count + ")" : ""}: <span style="color:var(--green)">${fmtXP(xpPerDay)}</span><br>
+              XP/day${count > 1 ? " (\u00d7" + count + ")" : ""}: <span style="color:var(--green)">${fmtXP(xpPerDay)}</span><br>`}
               ${recipeCost && costPerCook > 0 ? `Cost/cook: <span style="color:var(--yellow)" title="${costTip}">${formatSFL(costPerCook)} SFL</span>${recipeCost.hasUnpriced ? ' <span style="color:var(--text-dim);font-size:0.5rem">+self</span>' : ""}<br>
               Cost/day${count > 1 ? " (\u00d7" + count + ")" : ""}: <span style="color:var(--yellow)">${formatSFL(costPerDay)} SFL</span><br>
               ${selected && selected.xpPerSfl > 0 ? `XP per SFL: <span style="color:var(--sunpetal)">${Math.round(selected.xpPerSfl).toLocaleString()}</span><br>` : ""}` : ""}
