@@ -2405,6 +2405,31 @@
     .gift-dd-pts { color: var(--sunpetal); font-weight: bold; font-size: 0.4375rem; }
     .gift-dd-time { color: var(--text-dim); font-size: 0.4375rem; }
 
+    /* Schedule table */
+    .gifts-schedule-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.5rem;
+      margin-top: 4px;
+    }
+    .gifts-schedule-table th {
+      text-align: left;
+      color: var(--sunpetal);
+      font-weight: bold;
+      padding: 4px 6px;
+      border-bottom: 1px solid rgba(92,58,30,0.3);
+      font-size: 0.4375rem;
+      text-transform: uppercase;
+    }
+    .gifts-schedule-table td {
+      padding: 4px 6px;
+      border-bottom: 1px solid rgba(92,58,30,0.1);
+      vertical-align: middle;
+    }
+    .gifts-schedule-table .num-col { text-align: right; font-variant-numeric: tabular-nums; }
+    .gifts-schedule-table .inline-icon { width: 14px; height: 14px; vertical-align: middle; }
+    .gifts-schedule-table tr:hover { background: rgba(255,193,7,0.05); }
+
     .gifts-summary { background: rgba(92,58,30,0.05); }
     @media (max-width: 600px) {
       .gift-row {
@@ -7177,34 +7202,78 @@
         // Production = beds_assigned_to_seed × (86400 / seconds)
         // We assume all beds rotate among the planned flowers proportionally.
 
-        // Each gift requires the FULL CHAIN. Each chain step is a separate flower with its own grow time.
-        // Effective grow time per flower = baseTime / yieldFactor (yield boosts reduce effective time).
-        // Petal Blessed: instant-grow saves longest_step bed-hours per use; pbUsesPerDay = 24/cooldownH.
-        let totalBedHoursRaw = 0;
-        const breakdown = [];
-        let longestStepH = 0;
-        for (const [flower, count] of Object.entries(dailyNeed)) {
-          const steps = getFlowerChainSteps(flower);
-          const chainHRaw = steps.reduce((s, st) => s + st.hours, 0);
-          const chainHEff = chainHRaw / yieldFactor;
-          const bedsForFlower = (count * chainHEff) / 24;
-          totalBedHoursRaw += count * chainHRaw;
-          breakdown.push({ flower, count, chainHRaw, chainHEff, beds: bedsForFlower, steps });
-          for (const st of steps) {
-            if (st.hours > longestStepH) longestStepH = st.hours;
+        // ─── Build per-flower demand (aggregated across chains) ───
+        // Each gift requires its full chain. Multiple gifts may share intermediate flowers.
+        // Steady-state daily count for each flower = sum of (gift_count) where flower appears in chain
+        const flowerDemandDaily = {};
+        const flowerStepInfo = {};  // flower -> { seed, baseH }
+        for (const [giftFlower, count] of Object.entries(dailyNeed)) {
+          for (const step of getFlowerChainSteps(giftFlower)) {
+            flowerDemandDaily[step.flower] = (flowerDemandDaily[step.flower] || 0) + count;
+            flowerStepInfo[step.flower] = { seed: step.seed, baseH: step.hours };
           }
         }
-        const totalBedHoursEff = totalBedHoursRaw / yieldFactor;
 
-        // Petal Blessed savings: applied to longest step in chain set.
-        // Each PB use saves longestStepH bed-hours of real grow time (yield doesn't apply since flower is already chosen).
-        const pbDailySaveH = pbUsesPerDay * longestStepH;
-        const totalBedHoursAfterPB = Math.max(0, totalBedHoursEff - pbDailySaveH);
-        const totalBedsNeeded = totalBedHoursAfterPB / 24;
+        // ─── Cycle = PB cooldown (one PB use per cycle) ───
+        const cycleH = pbCooldownH;
 
+        // ─── Per-flower step analysis ───
+        // For each unique flower in chain, compute:
+        //   - perBedHarvestsCycle = cycleH / baseH (steady-state, staggered planting)
+        //   - perBedFlowersCycle = perBedHarvests × yieldFactor
+        //   - demandCycle = dailyDemand × cycleH/24
+        //   - bedsNeeded = demandCycle / perBedFlowersCycle
+        // PB target = flower with longest baseH; gets 1 extra harvest per cycle (= +yieldFactor flowers)
+
+        const stepRows = [];
+        let longestBaseH = 0;
+        let longestFlower = null;
+        for (const [flower, dailyCount] of Object.entries(flowerDemandDaily)) {
+          const baseH = flowerStepInfo[flower].baseH;
+          if (baseH > longestBaseH) { longestBaseH = baseH; longestFlower = flower; }
+          const harvestsPerBed = cycleH / baseH;
+          const flowersPerBed = harvestsPerBed * yieldFactor;
+          const demandPerCycle = dailyCount * cycleH / 24;
+          const bedsNeeded = demandPerCycle / flowersPerBed;
+          stepRows.push({
+            flower, seed: flowerStepInfo[flower].seed, baseH, dailyCount,
+            harvestsPerBed, flowersPerBed, demandPerCycle, bedsNeeded
+          });
+        }
+
+        // Apply PB to longest step: 1 extra harvest per cycle = yieldFactor flowers
+        // Reduces demand by yieldFactor → reduces beds by yieldFactor / flowersPerBed
+        let pbBonusFlowers = 0;
+        let pbBonusBeds = 0;
+        for (const r of stepRows) {
+          if (r.flower === longestFlower) {
+            pbBonusFlowers = yieldFactor;  // 1 PB use × yieldFactor flowers
+            const reducedDemand = Math.max(0, r.demandPerCycle - pbBonusFlowers);
+            const newBeds = reducedDemand / r.flowersPerBed;
+            pbBonusBeds = r.bedsNeeded - newBeds;
+            r.bedsBeforePB = r.bedsNeeded;
+            r.bedsNeeded = newBeds;
+            r.isPBTarget = true;
+          }
+        }
+
+        // Sort by beds needed desc (most-demanding first)
+        stepRows.sort((a, b) => b.bedsNeeded - a.bedsNeeded);
+
+        const totalBedsNeeded = stepRows.reduce((s, r) => s + r.bedsNeeded, 0);
         const ratio = FLOWER_BEDS > 0 ? totalBedsNeeded / FLOWER_BEDS : 999;
         const feasible = ratio <= 1.0;
         const ratioColor = feasible ? "var(--green)" : (ratio < 1.5 ? "var(--yellow)" : "var(--red)");
+
+        // Production summary per gift flower (just gift flowers, not chain intermediates)
+        const giftProduction = [];
+        for (const [giftFlower, dailyCount] of Object.entries(dailyNeed)) {
+          const r = stepRows.find(x => x.flower === giftFlower);
+          if (!r) continue;
+          const produced = r.flowersPerBed * r.bedsNeeded + (r.isPBTarget ? pbBonusFlowers : 0);
+          const demanded = dailyCount * cycleH / 24;
+          giftProduction.push({ flower: giftFlower, produced, demanded, dailyCount });
+        }
 
         html += `<div class="gifts-summary" style="margin-top:8px;padding:10px 12px;border-top:2px solid rgba(92,58,30,0.4)">
           <div class="pixel-font" style="font-size:0.6875rem;margin-bottom:6px;color:var(--sunpetal)">DAILY DEMAND</div>
@@ -7227,6 +7296,9 @@
           </div>`;
         }
 
+        const fmtH = (h) => h >= 24 ? `${(h / 24).toFixed(1)}d` : `${h.toFixed(1)}h`;
+        const cycleLabel = fmtH(cycleH);
+
         html += `</div>
           <div class="pixel-font" style="font-size:0.6875rem;margin:10px 0 6px 0;color:var(--sunpetal)">ACTIVE BOOSTS</div>
           <div style="font-size:0.5rem;line-height:1.5;color:var(--text-secondary);padding-bottom:6px">`;
@@ -7234,24 +7306,53 @@
           for (const b of yieldBoosts) {
             html += `<span style="display:inline-block;margin-right:10px"><b>${escHTML(b.name)}</b> <span style="color:var(--text-dim)">(${(b.chance*100).toFixed(0)}% +1)</span></span>`;
           }
-          html += `<div style="margin-top:4px"><b>Yield factor:</b> <span style="color:var(--green)">×${yieldFactor.toFixed(2)}</span> avg per harvest → effective grow time ÷ ${yieldFactor.toFixed(2)}</div>`;
+          html += `<div style="margin-top:4px"><b>Yield factor:</b> <span style="color:var(--green)">×${yieldFactor.toFixed(2)}</span> per harvest</div>`;
         } else {
-          html += `<span style="color:var(--text-dim)">no yield boosts detected</span>`;
+          html += `<span style="color:var(--text-dim)">no yield boosts detected — yield factor ×1.00</span>`;
         }
-        html += `<div style="margin-top:4px"><b>Petal Blessed:</b> 1 instant grow per ${pbCooldownH}h → saves <span style="color:var(--green)">${pbDailySaveH.toFixed(1)}h</span> bed-time/day (applied to longest step: ${longestStepH.toFixed(1)}h)</div>`;
+        html += `<div style="margin-top:4px"><b>Petal Blessed:</b> 1 instant grow per ${cycleLabel} cycle → applied to <b style="color:var(--green)">${escHTML(longestFlower || "—")}</b> (longest at ${longestBaseH}h base)</div>`;
+
         html += `</div>
-          <div class="pixel-font" style="font-size:0.6875rem;margin:6px 0;color:var(--sunpetal)">PRODUCTION CAPACITY</div>
-          <div style="font-size:0.5625rem;line-height:1.7">
-            <div>Bed-hours needed: <b>${totalBedHoursEff.toFixed(1)}h</b>/day (${totalBedHoursRaw.toFixed(1)}h raw ÷ ${yieldFactor.toFixed(2)} yield) − <span style="color:var(--green)">${pbDailySaveH.toFixed(1)}h PB</span> = <b>${totalBedHoursAfterPB.toFixed(1)}h</b></div>
-            <div>Beds needed: <b style="color:${ratioColor}">${totalBedsNeeded.toFixed(2)}</b> / ${FLOWER_BEDS} available <span style="color:${ratioColor}">(${(ratio * 100).toFixed(0)}% of capacity)</span></div>`;
-        for (const b of breakdown) {
-          const days = b.chainHEff >= 24 ? `${(b.chainHEff / 24).toFixed(1)}d` : `${b.chainHEff.toFixed(1)}h`;
-          const stepLabels = b.steps.map(s => `${s.flower} (${(s.hours/yieldFactor).toFixed(1)}h)`).join(" → ");
-          html += `<div style="color:var(--text-dim)">· <img class="inline-icon" src="${getItemIcon(b.flower)}" onerror="this.style.display='none'" alt=""> <b>${escHTML(b.flower)}</b>: ${b.count}/day × ${days} eff chain → ${b.beds.toFixed(2)} beds<br><span style="margin-left:18px;font-size:0.5rem">chain: ${stepLabels}</span></div>`;
+          <div class="pixel-font" style="font-size:0.6875rem;margin:6px 0;color:var(--sunpetal)">PRODUCTION SCHEDULE — ${cycleLabel} cycle</div>
+          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:4px">Each row = one step in the chain. PB ⚡ adds 1 free harvest per cycle on the longest-grow step.</div>
+          <table class="gifts-schedule-table"><thead><tr>
+            <th></th><th>Flower</th><th>Seed</th><th class="num-col">Base</th>
+            <th class="num-col">Harvests/bed</th><th class="num-col">Flowers/bed</th>
+            <th class="num-col">Demand</th><th class="num-col">Beds</th>
+          </tr></thead><tbody>`;
+        for (const r of stepRows) {
+          const pbCell = r.isPBTarget ? `<span style="color:var(--sunpetal);font-size:0.625rem" title="PB applied here">⚡</span>` : "";
+          const bedsCell = r.isPBTarget
+            ? `<b>${r.bedsNeeded.toFixed(2)}</b> <span style="color:var(--text-dim);font-size:0.4375rem">(${r.bedsBeforePB.toFixed(2)} w/o PB)</span>`
+            : `<b>${r.bedsNeeded.toFixed(2)}</b>`;
+          html += `<tr>
+            <td>${pbCell}</td>
+            <td><img class="inline-icon" src="${getItemIcon(r.flower)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.flower)}</td>
+            <td style="color:var(--text-dim)">${escHTML(r.seed.replace(' Seed',''))}</td>
+            <td class="num-col">${r.baseH}h</td>
+            <td class="num-col">${r.harvestsPerBed.toFixed(2)}</td>
+            <td class="num-col">${r.flowersPerBed.toFixed(2)}</td>
+            <td class="num-col">${r.demandPerCycle.toFixed(1)}</td>
+            <td class="num-col">${bedsCell}</td>
+          </tr>`;
         }
-        html += `<div style="margin-top:6px;color:${feasible ? 'var(--green)' : 'var(--red)'};font-weight:bold">${feasible ? "✅ Plan is feasible at current capacity" : "⚠️ Plan exceeds bed capacity — reduce gifts or get more boosts"}</div>`;
+        html += `</tbody></table>`;
+
+        html += `<div style="margin-top:8px;padding:8px 10px;background:rgba(255,193,7,0.08);border-radius:4px;font-size:0.5625rem;line-height:1.6">
+          <div><b>Total beds needed:</b> <span style="color:${ratioColor}">${totalBedsNeeded.toFixed(2)}</span> / ${FLOWER_BEDS} available <span style="color:${ratioColor}">(${(ratio * 100).toFixed(0)}%)</span></div>
+          <div><b>Cycle:</b> ${cycleLabel} (${cycleH}h) — 1 Petal Blessed per cycle</div>`;
+        if (giftProduction.length > 0) {
+          html += `<div style="margin-top:4px"><b>Gift production per cycle:</b> `;
+          html += giftProduction.map(g => {
+            const surplus = g.produced - g.demanded;
+            const color = surplus >= 0 ? "var(--green)" : "var(--red)";
+            return `<span style="display:inline-block;margin-right:10px"><img class="inline-icon" src="${getItemIcon(g.flower)}" onerror="this.style.display='none'" alt=""> <b>${g.produced.toFixed(1)}</b>/<span style="color:var(--text-dim)">${g.demanded.toFixed(0)}</span> <span style="color:${color}">${surplus >= 0 ? "+" : ""}${surplus.toFixed(1)}</span></span>`;
+          }).join("");
+          html += `</div>`;
+        }
+        html += `<div style="margin-top:6px;color:${feasible ? 'var(--green)' : 'var(--red)'};font-weight:bold">${feasible ? "✅ Plan is feasible — schedule fits within available beds" : "⚠️ Plan exceeds bed capacity — reduce gifts or boost yield/speed"}</div>`;
         html += `</div>
-        </div>`;
+        </div></div>`;
       } else {
         html += `<div style="padding:10px 12px;color:var(--text-dim);font-size:0.5625rem;text-align:center">Select flowers above to see daily demand and production capacity.</div>`;
       }
