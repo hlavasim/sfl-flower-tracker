@@ -2717,11 +2717,12 @@
     // Display order — alphabetical by display name
     const GIFT_NPC_ORDER = ["betty", "bert", "blacksmith", "corale", "cornwell", "finley", "finn", "jester", "miranda", "old salty", "pumpkin' pete", "raven", "tywin", "victoria"];
 
-    function getFlowerGiftPoints(npc, flower) {
-      // Bonuses are ADDITIVE: total = base + npc-specific bonus
+    function getFlowerGiftPoints(npc, flower, hasBlossomBonding) {
+      // Bonuses are ADDITIVE: total = base + npc-specific bonus + skill bonus (+2 if Blossom Bonding)
       const base = DEFAULT_FLOWER_POINTS[flower] || 0;
       const bonus = (BUMPKIN_FLOWER_BONUSES[npc] || {})[flower] || 0;
-      return base + bonus;
+      const skill = hasBlossomBonding ? 2 : 0;
+      return base + bonus + skill;
     }
 
     // Recursive chain-time calculation: sum grow times through entire flower chain
@@ -6912,6 +6913,8 @@
       const plan = getGiftPlan();
       const inventory = data.inventory || {};
       const inProgress = data.inProgress || {};
+      const skills = farm.bumpkin?.skills || {};
+      const hasBlossomBonding = !!skills["Blossom Bonding"];
 
       // Build flower options sorted by points desc per NPC
       const allFlowers = Object.keys(FLOWER_RECIPES);
@@ -6932,9 +6935,12 @@
         }
       }
 
+      const skillBadge = hasBlossomBonding
+        ? `<span style="margin-left:8px;font-size:0.5rem;color:var(--green);background:rgba(46,204,113,0.15);padding:2px 6px;border-radius:3px">\u{1F33C} Blossom Bonding +2</span>`
+        : "";
       let html = `<div id="gifts-section-wrap" class="growing-section pixel-panel pixel-font">
-        <div class="growing-title" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between" onclick="_giftsToggleSection('gifts-body')">
-          <span>\u{1F381} GIFTS PLANNER (${plannedCount}/${GIFT_NPC_ORDER.length})</span>
+        <div class="growing-title" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px" onclick="_giftsToggleSection('gifts-body')">
+          <span>\u{1F381} GIFTS PLANNER (${plannedCount}/${GIFT_NPC_ORDER.length})${skillBadge}</span>
           <span style="font-size:0.625rem;color:var(--text-dim)">tap to toggle ▼</span>
         </div>
         <div id="gifts-body" style="display:block">`;
@@ -6954,7 +6960,7 @@
         // Build options sorted by points desc, then by chain hours asc
         // Chain hours = total time for full dependency chain (e.g. Prism Petal = 7 days, not 24h)
         const options = allFlowers.map(f => {
-          const pts = getFlowerGiftPoints(npc, f);
+          const pts = getFlowerGiftPoints(npc, f, hasBlossomBonding);
           const chainH = getFlowerChainHours(f);
           const hours = Math.round(chainH * 10) / 10;
           return { f, pts, hours, emoji: getFlowerColorEmoji(f) };
