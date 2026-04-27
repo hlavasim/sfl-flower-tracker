@@ -2523,7 +2523,61 @@
       return activeBoosts.reduce((m, b) => m * b.multiplier, 1);
     }
 
-    function applyFlowerBoosts(multiplier) {
+    // ═══════════════════════════════════════
+    //  FLOWER YIELD BOOSTS (+1 chance / guaranteed)
+    //  Source: src/features/game/events/landExpansion/harvestFlower.ts
+    // ═══════════════════════════════════════
+
+    const FLOWER_YIELD_BOOSTS = [
+      { name: "Humming Bird",        type: "collectible",      chance: 0.20 },
+      { name: "Butterfly",           type: "collectible",      chance: 0.20 },
+      { name: "Desert Rose",         type: "collectible",      chance: 0.10 },
+      { name: "Chicory",             type: "collectible",      chance: 0.10 },
+      { name: "Salt Crystal Flower", type: "collectible",      chance: 0.10 },
+      { name: "Moth Shrine",         type: "collectible_temp", chance: 0.25, durationMs: 7 * 24 * 3600 * 1000 },
+      { name: "Petalled Perk",       type: "skill",            chance: 0.10 },
+      { name: "Legendary Shrine",    type: "collectible_temp", chance: 1.00, durationMs: 7 * 24 * 3600 * 1000 },
+    ];
+
+    function detectFlowerYieldBoosts(farm) {
+      const active = [];
+      for (const boost of FLOWER_YIELD_BOOSTS) {
+        let isActive = false;
+        switch (boost.type) {
+          case "collectible":
+            isActive = findCollectible(farm, boost.name).length > 0;
+            break;
+          case "collectible_temp": {
+            const placements = findCollectible(farm, boost.name);
+            if (placements.length > 0) {
+              const latest = placements[placements.length - 1];
+              const placedAt = toMs(latest.createdAt || latest.readyAt || 0);
+              isActive = (Date.now() - placedAt) < boost.durationMs;
+            }
+            break;
+          }
+          case "skill": {
+            const skills = farm.bumpkin?.skills || {};
+            isActive = !!skills[boost.name];
+            break;
+          }
+        }
+        if (isActive) active.push(boost);
+      }
+      return active;
+    }
+
+    function computeYieldFactor(yieldBoosts) {
+      // Each boost gives `chance` × +1 flower in expectation. Sum is independent.
+      return 1 + yieldBoosts.reduce((s, b) => s + b.chance, 0);
+    }
+
+    function getPetalBlessedCooldownH(farm) {
+      const hasLunas = farm.wardrobe?.["Luna's Crescent"] > 0;
+      return hasLunas ? 48 : 96;
+    }
+
+        function applyFlowerBoosts(multiplier) {
       for (const sd of Object.values(SEED_DATA)) {
         sd.seconds = sd.baseSeconds * multiplier;
         sd.hours = sd.seconds / 3600;
@@ -2795,6 +2849,21 @@
         return seedHours + getFlowerChainHours(recipe.input, visiting);
       }
       return seedHours;
+    }
+
+    // Returns array of {flower, seed, hours} for each step in the chain.
+    function getFlowerChainSteps(flower, visiting) {
+      visiting = visiting || new Set();
+      if (visiting.has(flower)) return [];
+      visiting.add(flower);
+      const recipe = FLOWER_RECIPES[flower];
+      if (!recipe) return [];
+      const seedSec = SEED_DATA[recipe.seed]?.seconds || 0;
+      const steps = [{ flower, seed: recipe.seed, hours: seedSec / 3600 }];
+      if (FLOWER_RECIPES[recipe.input]) {
+        steps.push(...getFlowerChainSteps(recipe.input, visiting));
+      }
+      return steps;
     }
 
 
@@ -6992,6 +7061,10 @@
       const inProgress = data.inProgress || {};
       const skills = farm.bumpkin?.skills || {};
       const hasBlossomBonding = !!skills["Blossom Bonding"];
+      const yieldBoosts = detectFlowerYieldBoosts(farm);
+      const yieldFactor = computeYieldFactor(yieldBoosts);
+      const pbCooldownH = getPetalBlessedCooldownH(farm);
+      const pbUsesPerDay = 24 / pbCooldownH;
 
       // Build flower options sorted by points desc per NPC
       const allFlowers = Object.keys(FLOWER_RECIPES);
@@ -7034,11 +7107,11 @@
         const next = getNextGiftReward(npc, friendship);
         const planned = plan[npc] || "";
 
-        // Build options sorted by points desc, then by chain hours asc
-        // Chain hours = total time for full dependency chain (e.g. Prism Petal = 7 days, not 24h)
+        // Build options sorted by points desc, then by effective chain hours asc
+        // chainHEff = chain time / yield factor (yield boosts reduce effective time)
         const options = allFlowers.map(f => {
           const pts = getFlowerGiftPoints(npc, f, hasBlossomBonding);
-          const chainH = getFlowerChainHours(f);
+          const chainH = getFlowerChainHours(f) / yieldFactor;
           const hours = Math.round(chainH * 10) / 10;
           return { f, pts, hours };
         }).filter(o => o.pts > 0).sort((a, b) => b.pts - a.pts || a.hours - b.hours);
@@ -7104,17 +7177,30 @@
         // Production = beds_assigned_to_seed × (86400 / seconds)
         // We assume all beds rotate among the planned flowers proportionally.
 
-        // Each daily flower requires its FULL CHAIN (intermediate flowers also need beds)
-        // Total beds needed for flower X = count × chainHours / 24
-        // (overcounts if multiple gifts share intermediates — conservative upper bound)
-        let totalBedsNeeded = 0;
+        // Each gift requires the FULL CHAIN. Each chain step is a separate flower with its own grow time.
+        // Effective grow time per flower = baseTime / yieldFactor (yield boosts reduce effective time).
+        // Petal Blessed: instant-grow saves longest_step bed-hours per use; pbUsesPerDay = 24/cooldownH.
+        let totalBedHoursRaw = 0;
         const breakdown = [];
+        let longestStepH = 0;
         for (const [flower, count] of Object.entries(dailyNeed)) {
-          const chainH = getFlowerChainHours(flower);
-          const bedsForFlower = (count * chainH) / 24;
-          totalBedsNeeded += bedsForFlower;
-          breakdown.push({ flower, count, chainH, beds: bedsForFlower });
+          const steps = getFlowerChainSteps(flower);
+          const chainHRaw = steps.reduce((s, st) => s + st.hours, 0);
+          const chainHEff = chainHRaw / yieldFactor;
+          const bedsForFlower = (count * chainHEff) / 24;
+          totalBedHoursRaw += count * chainHRaw;
+          breakdown.push({ flower, count, chainHRaw, chainHEff, beds: bedsForFlower, steps });
+          for (const st of steps) {
+            if (st.hours > longestStepH) longestStepH = st.hours;
+          }
         }
+        const totalBedHoursEff = totalBedHoursRaw / yieldFactor;
+
+        // Petal Blessed savings: applied to longest step in chain set.
+        // Each PB use saves longestStepH bed-hours of real grow time (yield doesn't apply since flower is already chosen).
+        const pbDailySaveH = pbUsesPerDay * longestStepH;
+        const totalBedHoursAfterPB = Math.max(0, totalBedHoursEff - pbDailySaveH);
+        const totalBedsNeeded = totalBedHoursAfterPB / 24;
 
         const ratio = FLOWER_BEDS > 0 ? totalBedsNeeded / FLOWER_BEDS : 999;
         const feasible = ratio <= 1.0;
@@ -7142,14 +7228,28 @@
         }
 
         html += `</div>
-          <div class="pixel-font" style="font-size:0.6875rem;margin:10px 0 6px 0;color:var(--sunpetal)">PRODUCTION CAPACITY</div>
+          <div class="pixel-font" style="font-size:0.6875rem;margin:10px 0 6px 0;color:var(--sunpetal)">ACTIVE BOOSTS</div>
+          <div style="font-size:0.5rem;line-height:1.5;color:var(--text-secondary);padding-bottom:6px">`;
+        if (yieldBoosts.length > 0) {
+          for (const b of yieldBoosts) {
+            html += `<span style="display:inline-block;margin-right:10px"><b>${escHTML(b.name)}</b> <span style="color:var(--text-dim)">(${(b.chance*100).toFixed(0)}% +1)</span></span>`;
+          }
+          html += `<div style="margin-top:4px"><b>Yield factor:</b> <span style="color:var(--green)">×${yieldFactor.toFixed(2)}</span> avg per harvest → effective grow time ÷ ${yieldFactor.toFixed(2)}</div>`;
+        } else {
+          html += `<span style="color:var(--text-dim)">no yield boosts detected</span>`;
+        }
+        html += `<div style="margin-top:4px"><b>Petal Blessed:</b> 1 instant grow per ${pbCooldownH}h → saves <span style="color:var(--green)">${pbDailySaveH.toFixed(1)}h</span> bed-time/day (applied to longest step: ${longestStepH.toFixed(1)}h)</div>`;
+        html += `</div>
+          <div class="pixel-font" style="font-size:0.6875rem;margin:6px 0;color:var(--sunpetal)">PRODUCTION CAPACITY</div>
           <div style="font-size:0.5625rem;line-height:1.7">
+            <div>Bed-hours needed: <b>${totalBedHoursEff.toFixed(1)}h</b>/day (${totalBedHoursRaw.toFixed(1)}h raw ÷ ${yieldFactor.toFixed(2)} yield) − <span style="color:var(--green)">${pbDailySaveH.toFixed(1)}h PB</span> = <b>${totalBedHoursAfterPB.toFixed(1)}h</b></div>
             <div>Beds needed: <b style="color:${ratioColor}">${totalBedsNeeded.toFixed(2)}</b> / ${FLOWER_BEDS} available <span style="color:${ratioColor}">(${(ratio * 100).toFixed(0)}% of capacity)</span></div>`;
         for (const b of breakdown) {
-          const days = b.chainH >= 24 ? `${(b.chainH / 24).toFixed(1)}d` : `${b.chainH.toFixed(1)}h`;
-          html += `<div style="color:var(--text-dim)">· <img class="inline-icon" src="${getItemIcon(b.flower)}" onerror="this.style.display='none'" alt=""> ${escHTML(b.flower)}: ${b.count}/day × ${days} chain → ${b.beds.toFixed(2)} beds</div>`;
+          const days = b.chainHEff >= 24 ? `${(b.chainHEff / 24).toFixed(1)}d` : `${b.chainHEff.toFixed(1)}h`;
+          const stepLabels = b.steps.map(s => `${s.flower} (${(s.hours/yieldFactor).toFixed(1)}h)`).join(" → ");
+          html += `<div style="color:var(--text-dim)">· <img class="inline-icon" src="${getItemIcon(b.flower)}" onerror="this.style.display='none'" alt=""> <b>${escHTML(b.flower)}</b>: ${b.count}/day × ${days} eff chain → ${b.beds.toFixed(2)} beds<br><span style="margin-left:18px;font-size:0.5rem">chain: ${stepLabels}</span></div>`;
         }
-        html += `<div style="margin-top:6px;color:${feasible ? 'var(--green)' : 'var(--red)'};font-weight:bold">${feasible ? "✅ Plan is feasible at current grow speed" : "⚠️ Plan exceeds bed capacity — reduce gifts or speed up growth"}</div>`;
+        html += `<div style="margin-top:6px;color:${feasible ? 'var(--green)' : 'var(--red)'};font-weight:bold">${feasible ? "✅ Plan is feasible at current capacity" : "⚠️ Plan exceeds bed capacity — reduce gifts or get more boosts"}</div>`;
         html += `</div>
         </div>`;
       } else {
