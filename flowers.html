@@ -2724,6 +2724,36 @@
       return base + bonus;
     }
 
+    // Recursive chain-time calculation: sum grow times through entire flower chain
+    // Crop inputs are treated as 0 hours (assumed available/quick).
+    // Cycles are broken with a visiting Set.
+    function getFlowerChainHours(flower, visiting) {
+      visiting = visiting || new Set();
+      if (visiting.has(flower)) return 0;
+      visiting.add(flower);
+      const recipe = FLOWER_RECIPES[flower];
+      if (!recipe) return 0;
+      const seedSec = SEED_DATA[recipe.seed]?.seconds || 0;
+      const seedHours = seedSec / 3600;
+      if (FLOWER_RECIPES[recipe.input]) {
+        return seedHours + getFlowerChainHours(recipe.input, visiting);
+      }
+      return seedHours;
+    }
+
+    // Color-coded emoji per flower (for <option> text since it can't render images)
+    function getFlowerColorEmoji(flower) {
+      if (flower === "Prism Petal") return "\u{1F308}";  // rainbow
+      if (flower === "Celestial Frostbloom") return "❄️";  // snowflake
+      if (flower === "Primula Enigma") return "✨";  // sparkles
+      if (flower.startsWith("Red ")) return "\u{1F534}";
+      if (flower.startsWith("Yellow ")) return "\u{1F7E1}";
+      if (flower.startsWith("Purple ")) return "\u{1F7E3}";
+      if (flower.startsWith("White ")) return "⚪";
+      if (flower.startsWith("Blue ")) return "\u{1F535}";
+      return "\u{1F33C}";  // generic flower
+    }
+
     function getNextGiftReward(npc, friendship) {
       const data = BUMPKIN_GIFTS_DATA[npc];
       if (!data) return null;
@@ -6921,17 +6951,19 @@
         const next = getNextGiftReward(npc, friendship);
         const planned = plan[npc] || "";
 
-        // Build options sorted by points desc
+        // Build options sorted by points desc, then by chain hours asc
+        // Chain hours = total time for full dependency chain (e.g. Prism Petal = 7 days, not 24h)
         const options = allFlowers.map(f => {
           const pts = getFlowerGiftPoints(npc, f);
-          const seedSec = sd[FLOWER_RECIPES[f].seed]?.seconds || 0;
-          const hours = Math.round(seedSec / 3600 * 10) / 10;
-          return { f, pts, hours };
+          const chainH = getFlowerChainHours(f);
+          const hours = Math.round(chainH * 10) / 10;
+          return { f, pts, hours, emoji: getFlowerColorEmoji(f) };
         }).filter(o => o.pts > 0).sort((a, b) => b.pts - a.pts || a.hours - b.hours);
 
         const optHtml = options.map(o => {
           const sel = o.f === planned ? " selected" : "";
-          return `<option value="${escHTML(o.f)}"${sel}>${escHTML(o.f)} — ${o.pts}pt, ${o.hours}h</option>`;
+          const days = o.hours >= 24 ? `${(o.hours / 24).toFixed(1)}d` : `${o.hours}h`;
+          return `<option value="${escHTML(o.f)}"${sel}>${o.emoji} ${escHTML(o.f)} — ${o.pts}pt, ${days}</option>`;
         }).join("");
 
         const npcName = npc.replace(/(^|\s|')\w/g, c => c.toUpperCase());
@@ -6965,26 +6997,16 @@
         // Production = beds_assigned_to_seed × (86400 / seconds)
         // We assume all beds rotate among the planned flowers proportionally.
 
-        // Group needs by seed
-        const seedNeed = {};
-        const seedFlowers = {};
-        for (const [flower, count] of Object.entries(dailyNeed)) {
-          const seed = FLOWER_RECIPES[flower]?.seed;
-          if (!seed) continue;
-          seedNeed[seed] = (seedNeed[seed] || 0) + count;
-          if (!seedFlowers[seed]) seedFlowers[seed] = [];
-          seedFlowers[seed].push({ f: flower, c: count });
-        }
-
-        // Production capacity: each bed can produce 86400/seconds flowers per day
-        // If you spread flowers across beds proportionally, you need (count × seconds / 86400) beds for that flower
+        // Each daily flower requires its FULL CHAIN (intermediate flowers also need beds)
+        // Total beds needed for flower X = count × chainHours / 24
+        // (overcounts if multiple gifts share intermediates — conservative upper bound)
         let totalBedsNeeded = 0;
         const breakdown = [];
-        for (const [seed, count] of Object.entries(seedNeed)) {
-          const sec = sd[seed]?.seconds || 0;
-          const bedsForSeed = (count * sec) / 86400;
-          totalBedsNeeded += bedsForSeed;
-          breakdown.push({ seed, count, sec, beds: bedsForSeed });
+        for (const [flower, count] of Object.entries(dailyNeed)) {
+          const chainH = getFlowerChainHours(flower);
+          const bedsForFlower = (count * chainH) / 24;
+          totalBedsNeeded += bedsForFlower;
+          breakdown.push({ flower, count, chainH, beds: bedsForFlower });
         }
 
         const ratio = FLOWER_BEDS > 0 ? totalBedsNeeded / FLOWER_BEDS : 999;
@@ -7017,7 +7039,8 @@
           <div style="font-size:0.5625rem;line-height:1.7">
             <div>Beds needed: <b style="color:${ratioColor}">${totalBedsNeeded.toFixed(2)}</b> / ${FLOWER_BEDS} available <span style="color:${ratioColor}">(${(ratio * 100).toFixed(0)}% of capacity)</span></div>`;
         for (const b of breakdown) {
-          html += `<div style="color:var(--text-dim)">· ${escHTML(sd[b.seed]?.label || b.seed)}: ${b.count} flowers/day → ${b.beds.toFixed(2)} beds (${(b.sec/3600).toFixed(1)}h each)</div>`;
+          const days = b.chainH >= 24 ? `${(b.chainH / 24).toFixed(1)}d` : `${b.chainH.toFixed(1)}h`;
+          html += `<div style="color:var(--text-dim)">· <img class="inline-icon" src="${getItemIcon(b.flower)}" onerror="this.style.display='none'" alt=""> ${escHTML(b.flower)}: ${b.count}/day × ${days} chain → ${b.beds.toFixed(2)} beds</div>`;
         }
         html += `<div style="margin-top:6px;color:${feasible ? 'var(--green)' : 'var(--red)'};font-weight:bold">${feasible ? "✅ Plan is feasible at current grow speed" : "⚠️ Plan exceeds bed capacity — reduce gifts or speed up growth"}</div>`;
         html += `</div>
