@@ -2405,6 +2405,43 @@
     .gift-dd-pts { color: var(--sunpetal); font-weight: bold; font-size: 0.4375rem; }
     .gift-dd-time { color: var(--text-dim); font-size: 0.4375rem; }
 
+    /* Concrete timeline */
+    .gifts-timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 6px;
+      background: rgba(0,0,0,0.05);
+      border-radius: 4px;
+      margin-bottom: 8px;
+    }
+    .gifts-tl-row {
+      display: grid;
+      grid-template-columns: 70px 18px 100px 1fr;
+      gap: 6px;
+      align-items: center;
+      padding: 3px 4px;
+      font-size: 0.5rem;
+      border-bottom: 1px solid rgba(92,58,30,0.08);
+    }
+    .gifts-tl-row:last-child { border-bottom: none; }
+    .gifts-tl-time { color: var(--text-dim); font-variant-numeric: tabular-nums; font-size: 0.5rem; }
+    .gifts-tl-icon { text-align: center; font-size: 0.625rem; }
+    .gifts-tl-action { font-size: 0.4375rem; text-transform: uppercase; }
+    .gifts-tl-detail { color: var(--text-primary); }
+    .gifts-tl-detail .inline-icon { width: 12px; height: 12px; vertical-align: middle; }
+    @media (max-width: 600px) {
+      .gifts-tl-row {
+        grid-template-columns: 60px 16px 1fr;
+        grid-template-areas: "time icon action" "time icon detail";
+        gap: 4px;
+      }
+      .gifts-tl-time { grid-area: time; }
+      .gifts-tl-icon { grid-area: icon; }
+      .gifts-tl-action { grid-area: action; }
+      .gifts-tl-detail { grid-area: detail; }
+    }
+
     /* Schedule table */
     .gifts-schedule-table {
       width: 100%;
@@ -7297,6 +7334,14 @@
         }
 
         const fmtH = (h) => h >= 24 ? `${(h / 24).toFixed(1)}d` : `${h.toFixed(1)}h`;
+        const fmtTime = (h) => {
+          if (h <= 0) return "T=0";
+          const d = Math.floor(h / 24);
+          const rem = h - d * 24;
+          if (d > 0 && rem >= 0.05) return `T+${d}d ${rem.toFixed(1)}h`;
+          if (d > 0) return `T+${d}d`;
+          return `T+${h.toFixed(1)}h`;
+        };
         const cycleLabel = fmtH(cycleH);
 
         html += `</div>
@@ -7310,10 +7355,65 @@
         } else {
           html += `<span style="color:var(--text-dim)">no yield boosts detected — yield factor ×1.00</span>`;
         }
-        html += `<div style="margin-top:4px"><b>Petal Blessed:</b> 1 instant grow per ${cycleLabel} cycle → applied to <b style="color:var(--green)">${escHTML(longestFlower || "—")}</b> (longest at ${longestBaseH}h base)</div>`;
+        html += `<div style="margin-top:4px"><b>Petal Blessed:</b> 1 instant grow per ${cycleLabel} cycle → applied to <b style="color:var(--green)">${escHTML(longestFlower || "—")}</b> (longest at ${longestBaseH.toFixed(1)}h grow)</div>`;
 
-        html += `</div>
-          <div class="pixel-font" style="font-size:0.6875rem;margin:6px 0;color:var(--sunpetal)">PRODUCTION SCHEDULE — ${cycleLabel} cycle</div>
+        // ─── Build concrete planting timeline ───
+        // For each step: how many beds we need, how many harvests over cycle, when each happens
+        const events = [];  // {time, kind, flower, qty, note}
+        for (const r of stepRows) {
+          const beds = Math.max(1, Math.ceil(r.bedsNeeded));  // round up to whole beds
+          // Plant at T=0 for all beds of this step
+          events.push({
+            time: 0, kind: "plant", flower: r.flower, seed: r.seed, qty: beds,
+            note: `${beds}× ${r.flower} (${r.baseH.toFixed(1)}h grow)`
+          });
+          // Harvest cycle: each bed harvests at multiples of baseH
+          // Cap at cycleH
+          for (let n = 1; n * r.baseH <= cycleH + 0.001; n++) {
+            const t = n * r.baseH;
+            events.push({
+              time: t, kind: "harvest", flower: r.flower, qty: beds,
+              note: `${beds}× ${r.flower} → +${(beds * yieldFactor).toFixed(1)} flowers (replant)`
+            });
+          }
+          // PB event for the longest-grow target
+          if (r.isPBTarget) {
+            events.push({
+              time: 0.01, kind: "pb", flower: r.flower, qty: 1,
+              note: `Use Petal Blessed on 1× ${r.flower} → instant +${yieldFactor.toFixed(1)} flower (replant immediately)`
+            });
+          }
+        }
+        // Sort events by time
+        events.sort((a, b) => a.time - b.time || (a.kind === "plant" ? -1 : a.kind === "pb" ? 0 : 1));
+
+        html += `<div class="pixel-font" style="font-size:0.6875rem;margin:6px 0;color:var(--sunpetal)">TIMELINE — ${cycleLabel} cycle</div>
+          <div style="font-size:0.5rem;color:var(--text-secondary);margin-bottom:6px;line-height:1.5">
+            <b>What to do:</b> at T=0, plant the listed flowers in your beds. Then wait — each row tells you when to harvest and replant. <b>Repeat the whole cycle every ${cycleLabel}.</b>
+          </div>
+          <div class="gifts-timeline">`;
+
+        for (const e of events) {
+          let icon, color, label;
+          if (e.kind === "plant") {
+            icon = "\u{1F331}"; color = "var(--text-secondary)"; label = "PLANT";
+          } else if (e.kind === "harvest") {
+            icon = "\u{1F33C}"; color = "var(--green)"; label = "HARVEST";
+          } else {
+            icon = "⚡"; color = "var(--sunpetal)"; label = "PETAL BLESSED";
+          }
+          const flowerIcon = `<img class="inline-icon" src="${getItemIcon(e.flower)}" onerror="this.style.display='none'" alt="">`;
+          html += `<div class="gifts-tl-row">
+            <div class="gifts-tl-time">${fmtTime(e.time)}</div>
+            <div class="gifts-tl-icon" style="color:${color}">${icon}</div>
+            <div class="gifts-tl-action" style="color:${color}"><b>${label}</b></div>
+            <div class="gifts-tl-detail">${flowerIcon} ${escHTML(e.note)}</div>
+          </div>`;
+        }
+        html += `</div>`;
+
+        // Production summary row above the per-step table
+        html += `<div class="pixel-font" style="font-size:0.6875rem;margin:10px 0 6px 0;color:var(--sunpetal)">PER-STEP DETAIL</div>
           <div style="font-size:0.5rem;color:var(--text-secondary);margin-bottom:6px;line-height:1.5">
             <b>How to read:</b> Each row = one flower in your gift chains (Prism Petal needs Blue Lotus → Blue Pansy → Purple Cosmos, all listed).
             <span style="color:var(--text-dim)">Grow</span> = real time per harvest after speed boosts.
@@ -7337,7 +7437,7 @@
             <td>${pbCell}</td>
             <td><img class="inline-icon" src="${getItemIcon(r.flower)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.flower)}</td>
             <td style="color:var(--text-dim)">${escHTML(r.seed.replace(' Seed',''))}</td>
-            <td class="num-col">${r.baseH}h</td>
+            <td class="num-col">${r.baseH.toFixed(1)}h</td>
             <td class="num-col">${r.harvestsPerBed.toFixed(2)}</td>
             <td class="num-col">${r.flowersPerBed.toFixed(2)}</td>
             <td class="num-col">${r.demandPerCycle.toFixed(1)}</td>
