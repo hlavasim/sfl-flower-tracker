@@ -7075,14 +7075,13 @@
         const checkIcon = givenToday ? '<span style="color:var(--green)" title="Given today">✅</span>' : (planned ? '<span style="color:var(--red)" title="Not given today">❌</span>' : '<span style="color:var(--text-dim)">·</span>');
 
         const nextHtml = next
-          ? `<span style="color:var(--text-secondary)">${next.tier === "repeat" ? "[repeat] " : ""}<b>${next.threshold}pt</b> (${next.pointsAway} away): ${formatGiftReward(next.reward)}</span>`
+          ? `<span style="color:var(--text-secondary)">${formatGiftReward(next.reward)}</span>`
           : `<span style="color:var(--text-dim)">no reward data</span>`;
 
         html += `<div class="gift-row">
           <div class="gift-status">${checkIcon}</div>
           <div class="gift-npc">
             <div class="gift-npc-name">${escHTML(npcName)}</div>
-            <div class="gift-npc-pts" style="color:var(--text-dim);font-size:0.5rem">${points} pts</div>
           </div>
           <div class="gift-next">${nextHtml}</div>
           <div class="gift-select gift-dropdown">
