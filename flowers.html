@@ -945,6 +945,44 @@
       color: var(--text-secondary);
       line-height: 1.8;
     }
+    .bumpkin-sort-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin: 8px 0 4px;
+      padding: 6px 8px;
+      background: rgba(0,0,0,0.04);
+      border-radius: 4px;
+    }
+    .bumpkin-sort-btn {
+      font-family: inherit;
+      font-size: 0.5rem;
+      padding: 4px 8px;
+      border: 1px solid rgba(92,58,30,0.4);
+      background: var(--bg-card, #f5e9c8);
+      color: var(--text-secondary, #5c3a1e);
+      cursor: pointer;
+      border-radius: 3px;
+      letter-spacing: 0.5px;
+    }
+    .bumpkin-sort-btn:hover { background: rgba(255, 200, 100, 0.3); }
+    .bumpkin-sort-btn.active {
+      background: var(--sunpetal);
+      color: white;
+      border-color: var(--sunpetal);
+      font-weight: bold;
+    }
+    .bumpkin-fish-detail {
+      font-size: 0.5rem;
+      color: var(--text-dim);
+      margin-top: 3px;
+      padding: 2px 6px;
+      background: rgba(135, 206, 250, 0.1);
+      border-left: 2px solid #87ceeb;
+      border-radius: 2px;
+    }
+
     .bumpkin-summary {
       padding: 20px 16px;
       margin-bottom: 16px;
@@ -4075,6 +4113,112 @@
       "Royal Bed": { "Royal Bedding": 3, "Royal Ornament": 3, "Sturdy Bed": 3 },
     };
 
+    // ── Fishing data (rod cost + per-fish probability model) ──
+    // Source: sunflower-land game repo (fishing.ts, tools.ts)
+    // Rod is consumed per cast: 20 coins + 3 Wood + 1 Stone (Reel Deal skill -50%)
+    const FISHING_ROD_COST = { coins: 20, materials: { Wood: 3, Stone: 1 } };
+
+    // Worm-bait: avg yield per composter cycle (game roll: 2-4 / 2-3 / 1-3)
+    const BAIT_WORM_YIELD = { "Earthworm": 3.0, "Grub": 2.4, "Red Wiggler": 1.83 };
+
+    // Per-fish best-bait + best-chum + estimated catch probability with chum
+    // Tier-based prob estimate: basic ~0.30, advanced ~0.18, expert ~0.10
+    // Without chum drops ~3x. Source: sunflower-land FISH constants + estimation.
+    const FISH_DATA = {
+      "Anchovy":         { tier: "basic",    bait: "Earthworm",   chum: "Carrot",     chumQty: 10, prob: 0.30 },
+      "Butterflyfish":   { tier: "basic",    bait: "Earthworm",   chum: "Sunflower",  chumQty: 50, prob: 0.30 },
+      "Blowfish":        { tier: "basic",    bait: "Earthworm",   chum: "Yam",        chumQty: 20, prob: 0.30 },
+      "Clownfish":       { tier: "basic",    bait: "Earthworm",   chum: "Cabbage",    chumQty: 10, prob: 0.30 },
+      "Sea Bass":        { tier: "basic",    bait: "Earthworm",   chum: null,         chumQty: 0,  prob: 0.10 },
+      "Sea Horse":       { tier: "basic",    bait: "Earthworm",   chum: "Seaweed",    chumQty: 1,  prob: 0.30 },
+      "Horse Mackerel":  { tier: "basic",    bait: "Earthworm",   chum: "Blueberry",  chumQty: 3,  prob: 0.30 },
+      "Halibut":         { tier: "basic",    bait: "Earthworm",   chum: null,         chumQty: 0,  prob: 0.10 },
+      "Squid":           { tier: "basic",    bait: "Earthworm",   chum: "Onion",      chumQty: 5,  prob: 0.30 },
+      "Porgy":           { tier: "basic",    bait: "Earthworm",   chum: "Yam",        chumQty: 20, prob: 0.30 },
+      "Muskellunge":     { tier: "basic",    bait: "Earthworm",   chum: "Turnip",     chumQty: 5,  prob: 0.30 },
+      "Red Snapper":     { tier: "advanced", bait: "Grub",        chum: "Apple",      chumQty: 3,  prob: 0.18 },
+      "Moray Eel":       { tier: "advanced", bait: "Earthworm",   chum: "Gold",       chumQty: 1,  prob: 0.18 },
+      "Olive Flounder":  { tier: "advanced", bait: "Earthworm",   chum: "Rhubarb",    chumQty: 20, prob: 0.18 },
+      "Napoleanfish":    { tier: "advanced", bait: "Grub",        chum: "Carrot",     chumQty: 10, prob: 0.18 },
+      "Surgeonfish":     { tier: "advanced", bait: "Grub",        chum: "Orange",     chumQty: 3,  prob: 0.18 },
+      "Angelfish":       { tier: "advanced", bait: "Grub",        chum: "Banana",     chumQty: 3,  prob: 0.18 },
+      "Zebra Turkeyfish":{ tier: "advanced", bait: "Grub",        chum: "Beetroot",   chumQty: 10, prob: 0.18 },
+      "Ray":             { tier: "advanced", bait: "Grub",        chum: null,         chumQty: 0,  prob: 0.06 },
+      "Hammerhead shark":{ tier: "advanced", bait: "Grub",        chum: "Iron",       chumQty: 5,  prob: 0.18 },
+      "Barred Knifejaw": { tier: "advanced", bait: "Grub",        chum: null,         chumQty: 0,  prob: 0.06 },
+      "Walleye":         { tier: "advanced", bait: "Grub",        chum: "Broccoli",   chumQty: 10, prob: 0.18 },
+      "Rock Blackfish":  { tier: "advanced", bait: "Grub",        chum: "Onion",      chumQty: 5,  prob: 0.18 },
+      "Tilapia":         { tier: "advanced", bait: "Grub",        chum: "Zucchini",   chumQty: 20, prob: 0.18 },
+      "Tuna":            { tier: "expert",   bait: "Grub",        chum: "Orange",     chumQty: 3,  prob: 0.10 },
+      "Mahi Mahi":       { tier: "expert",   bait: "Grub",        chum: "Corn",       chumQty: 5,  prob: 0.10 },
+      "Blue Marlin":     { tier: "expert",   bait: "Grub",        chum: "Wheat",      chumQty: 5,  prob: 0.10 },
+      "Oarfish":         { tier: "expert",   bait: "Red Wiggler", chum: "Kale",       chumQty: 5,  prob: 0.10 },
+      "Football fish":   { tier: "expert",   bait: "Red Wiggler", chum: "Sunflower",  chumQty: 50, prob: 0.10 },
+      "Sunfish":         { tier: "expert",   bait: "Red Wiggler", chum: null,         chumQty: 0,  prob: 0.04 },
+      "Coelacanth":      { tier: "expert",   bait: "Red Wiggler", chum: "Cabbage",    chumQty: 10, prob: 0.10 },
+      "Parrotfish":      { tier: "expert",   bait: "Red Wiggler", chum: "Seaweed",    chumQty: 1,  prob: 0.10 },
+      "Cobia":           { tier: "expert",   bait: "Red Wiggler", chum: "Broccoli",   chumQty: 10, prob: 0.10 },
+      "Trout":           { tier: "expert",   bait: "Red Wiggler", chum: "Pepper",     chumQty: 10, prob: 0.10 },
+      "Weakfish":        { tier: "expert",   bait: "Red Wiggler", chum: "Artichoke",  chumQty: 3,  prob: 0.10 },
+    };
+
+    // SFL cost per worm-bait, averaged across seasons (uses existing COMPOST_RECIPES)
+    function computeBaitCostSFL(baitName, p2pPrices) {
+      const data = Object.values(COMPOST_RECIPES || {}).find(d => d.outputs && d.outputs[baitName] !== undefined);
+      if (!data) return 0;
+      const seasons = Object.keys(data.inputs);
+      let total = 0, n = 0;
+      for (const s of seasons) {
+        let seasonCost = 0, missing = false;
+        for (const [ing, qty] of Object.entries(data.inputs[s])) {
+          const p = p2pPrices[ing] || 0;
+          if (p === 0) { missing = true; break; }
+          seasonCost += p * qty;
+        }
+        if (!missing) { total += seasonCost; n++; }
+      }
+      if (n === 0) return 0;
+      const avgComposterCost = total / n;
+      const wormYield = BAIT_WORM_YIELD[baitName] || 1;
+      return avgComposterCost / wormYield;
+    }
+
+    // SFL rod cost per cast, with Reel Deal skill discount
+    function computeRodCostSFL(p2pPrices, coinsPerSFL, skills) {
+      const reelDealMult = (skills && skills["Reel Deal"]) ? 0.5 : 1;
+      const coinSFL = coinsPerSFL > 0 ? FISHING_ROD_COST.coins / coinsPerSFL : 0;
+      let matSFL = 0;
+      for (const [m, q] of Object.entries(FISHING_ROD_COST.materials)) {
+        matSFL += (p2pPrices[m] || 0) * q;
+      }
+      return (coinSFL + matSFL) * reelDealMult;
+    }
+
+    // Effective SFL cost per 1 fish: best of (chum-boosted) vs (no-chum) path
+    function computeFishEffectiveCost(fishName, p2pPrices, coinsPerSFL, skills) {
+      const fd = FISH_DATA[fishName];
+      if (!fd) return null;
+      const baitSFL = computeBaitCostSFL(fd.bait, p2pPrices);
+      const rodSFL = computeRodCostSFL(p2pPrices, coinsPerSFL, skills);
+      if (baitSFL <= 0) return null;
+
+      const tierProbNoChum = { basic: 0.10, advanced: 0.06, expert: 0.04 }[fd.tier] || 0.05;
+      const probNoChum = fd.chum ? tierProbNoChum : fd.prob;
+      const probWithChum = fd.prob;
+      const chumP = fd.chum ? (p2pPrices[fd.chum] || 0) : 0;
+      const chumCostPerCast = chumP * (fd.chumQty || 0);
+      const costPerCast = rodSFL + baitSFL;
+
+      const noChumCost = costPerCast / probNoChum;
+      const withChumCost = (fd.chum && chumP > 0)
+        ? (costPerCast + chumCostPerCast) / probWithChum
+        : Infinity;
+
+      const effective = Math.min(noChumCost, withChumCost);
+      const useChum = withChumCost < noChumCost;
+      return { sfl: effective, useChum, fd, baitSFL, rodSFL, chumCostPerCast };
+    }
+
     // Calculate the SFL cost per skill point for current bumpkin
     function calcSkillPointCost(bumpkin, p2pPrices, farm) {
       const xp = bumpkin?.experience || 0;
@@ -5187,6 +5331,7 @@
 
     // ── P2P price cache for bumpkin cost calculation ──
     let _bumpkinP2P = null;
+    let _bumpkinCoinsPerSFL = 0;
     let _bumpkinP2PLoading = false;
 
     async function _fetchBumpkinP2P() {
@@ -5197,25 +5342,85 @@
         if (resp.ok) {
           const data = await resp.json();
           _bumpkinP2P = data?.data?.p2p || {};
+          // Compute coinsPerSFL from Betty rate (used for rod cost conversion)
+          if (typeof computeBettyRate === "function") {
+            const betty = computeBettyRate(_bumpkinP2P);
+            _bumpkinCoinsPerSFL = betty.rate || 0;
+          }
           if (cachedFarmData && getPage() === "bumpkin") renderBumpkin(cachedFarmData);
         }
       } catch(e) { console.warn("P2P prices fetch:", e); }
       _bumpkinP2PLoading = false;
     }
 
-    function computeRecipeCost(recipeName, p2p) {
+    // Recursive ingredient SFL resolver — returns {price, source} or null if unknown.
+    // Resolution order: P2P → FISH_DATA → bait worm → COOKING_INGREDIENTS recursion → CRAFTED_INGREDIENT_RECIPES → null
+    function _resolveItemSfl(itemName, p2p, coinsPerSFL, skills, _seen) {
+      _seen = _seen || new Set();
+      if (_seen.has(itemName)) return null;
+      _seen.add(itemName);
+
+      // 1. Direct P2P
+      const direct = parseFloat(p2p[itemName]) || 0;
+      if (direct > 0) return { price: direct, source: "P2P" };
+
+      // 2. Fish (FISH_DATA + computeFishEffectiveCost)
+      if (FISH_DATA[itemName]) {
+        const fc = computeFishEffectiveCost(itemName, p2p, coinsPerSFL, skills);
+        if (fc) return { price: fc.sfl, source: "fish", fc };
+        return null;
+      }
+
+      // 3. Worm-bait (Earthworm/Grub/Red Wiggler from COMPOST_RECIPES)
+      if (BAIT_WORM_YIELD[itemName]) {
+        const c = computeBaitCostSFL(itemName, p2p);
+        return c > 0 ? { price: c, source: "bait" } : null;
+      }
+
+      // 4. Recipe ingredient (chained recipes like Cabbers n Mash → Mashed Potato)
+      const recipe = COOKING_INGREDIENTS[itemName];
+      if (recipe) {
+        let total = 0;
+        for (const [sub, q] of Object.entries(recipe)) {
+          const r = _resolveItemSfl(sub, p2p, coinsPerSFL, skills, _seen);
+          if (!r) return null;
+          total += r.price * q;
+        }
+        return { price: total, source: "recipe" };
+      }
+
+      // 5. Crafted ingredient (Cheese, Kernel Blend, Hay, etc.)
+      if (typeof CRAFTED_INGREDIENT_RECIPES !== "undefined" && CRAFTED_INGREDIENT_RECIPES[itemName]) {
+        const recipe = CRAFTED_INGREDIENT_RECIPES[itemName];
+        let total = 0;
+        for (const [sub, q] of Object.entries(recipe)) {
+          const r = _resolveItemSfl(sub, p2p, coinsPerSFL, skills, _seen);
+          if (!r) return null;
+          total += r.price * q;
+        }
+        return { price: total, source: "crafted" };
+      }
+
+      return null;
+    }
+
+    // Compute total SFL cost per cook (resolves fish, bait, chained recipes recursively)
+    // Returns: { total, items, hasUnpriced } where items[i] = { name, qty, price, cost, source, selfProduced? }
+    function computeRecipeCost(recipeName, p2p, coinsPerSFL, skills) {
       if (!p2p) return null;
       const ingredients = COOKING_INGREDIENTS[recipeName];
       if (!ingredients) return null;
       let total = 0;
       const items = [];
       let hasUnpriced = false;
+      coinsPerSFL = coinsPerSFL || 0;
+      skills = skills || {};
       for (const [itemName, qty] of Object.entries(ingredients)) {
-        const price = parseFloat(p2p[itemName]) || 0;
-        if (price > 0) {
-          const cost = price * qty;
+        const r = _resolveItemSfl(itemName, p2p, coinsPerSFL, skills);
+        if (r) {
+          const cost = r.price * qty;
           total += cost;
-          items.push({ name: itemName, qty, price, cost });
+          items.push({ name: itemName, qty, price: r.price, cost, source: r.source, fc: r.fc });
         } else {
           hasUnpriced = true;
           items.push({ name: itemName, qty, price: 0, cost: 0, selfProduced: true });
@@ -5233,6 +5438,11 @@
 
     function setBumpkinTargetLevel(val) {
       localStorage.setItem("sfl_bumpkin_target", val);
+      if (cachedFarmData) renderBumpkin(cachedFarmData);
+    }
+
+    function setBumpkinSort(mode) {
+      localStorage.setItem("sfl_bumpkin_sort", mode);
       if (cachedFarmData) renderBumpkin(cachedFarmData);
     }
 
@@ -8097,8 +8307,11 @@
 
       // P2P prices for cost calculation (async-loaded)
       const p2p = _bumpkinP2P;
+      const coinsPerSFL = _bumpkinCoinsPerSFL || 0;
+      const skills = farm?.bumpkin?.skills || {};
       if (!p2p && !_bumpkinP2PLoading) _fetchBumpkinP2P();
       const savedRecipes = getSavedBumpkinRecipes();
+      const sortMode = localStorage.getItem("sfl_bumpkin_sort") || "xpPerHour"; // xpPerHour | xpPerSfl | sflPerCook
 
       // Calculate XP banked in food inventory
       const inventory = data.inventory || {};
@@ -8222,6 +8435,14 @@
           <div style="font-size: 0.6875rem;color:var(--text-dim)">No cooking buildings detected.</div>
         </div>`;
       } else {
+        // Sort toggle
+        const sortBtn = (mode, label) => `<button class="bumpkin-sort-btn ${sortMode === mode ? "active" : ""}" onclick="setBumpkinSort('${mode}')">${label}</button>`;
+        html += `<div class="bumpkin-sort-row pixel-font">
+          <span style="font-size:0.5625rem;color:var(--text-dim);margin-right:6px">SORT:</span>
+          ${sortBtn("xpPerHour", "XP/hour")}
+          ${sortBtn("xpPerSfl", "XP per SFL")}
+          ${sortBtn("sflPerCook", "SFL/cook")}
+        </div>`;
         html += `<div class="bumpkin-buildings-grid">`;
 
         let totalXPPerDay = 0;
@@ -8235,9 +8456,18 @@
               const xp = computeFoodXP(name, r, buildingName, boosts);
               const time = computeCookTime(r.cookSec, buildingName, boosts);
               const xpPerHour = time > 0 ? (xp / time) * 3600 : 0;
-              return { name, xp, time, xpPerHour };
-            })
-            .sort((a, b) => b.xpPerHour - a.xpPerHour);
+              const rc = p2p ? computeRecipeCost(name, p2p, coinsPerSFL, skills) : null;
+              const cost = (rc && rc.total > 0) ? rc.total : null;
+              const xpPerSfl = (cost && cost > 0) ? xp / cost : 0;
+              return { name, xp, time, xpPerHour, cost, xpPerSfl };
+            });
+          if (sortMode === "xpPerSfl") {
+            recipes.sort((a, b) => b.xpPerSfl - a.xpPerSfl);
+          } else if (sortMode === "sflPerCook") {
+            recipes.sort((a, b) => (a.cost == null ? Infinity : a.cost) - (b.cost == null ? Infinity : b.cost));
+          } else {
+            recipes.sort((a, b) => b.xpPerHour - a.xpPerHour);
+          }
 
           const selectedName = savedRecipes[buildingName] !== undefined ? savedRecipes[buildingName] : (BUMPKIN_DEFAULT_RECIPES[buildingName] || "");
           const selected = selectedName ? recipes.find(r => r.name === selectedName) : null;
@@ -8265,6 +8495,28 @@
             i.qty + "\u00d7 " + i.name + (i.price > 0 ? " = " + formatSFL(i.cost) + " SFL" : " (self)")
           ).join("\n") : "";
 
+          const fmtSfl = (v) => v == null ? "\u2014" : (v < 0.01 ? "<0.01" : v < 100 ? v.toFixed(2) : Math.round(v).toLocaleString());
+          const optionLabel = (r) => {
+            const xph = Math.round(r.xpPerHour).toLocaleString();
+            const cost = r.cost == null ? "\u2014" : fmtSfl(r.cost);
+            const xps = (r.cost && r.cost > 0) ? Math.round(r.xpPerSfl).toLocaleString() : "\u2014";
+            if (sortMode === "xpPerSfl") return `${escHTML(r.name)} (${xps} XP/SFL, ${xph} XP/h)`;
+            if (sortMode === "sflPerCook") return `${escHTML(r.name)} (${cost} SFL/cook, ${Math.round(r.xp).toLocaleString()} XP)`;
+            return `${escHTML(r.name)} (${xph} XP/h, ${cost} SFL/cook)`;
+          };
+          // Fish breakdown for selected recipe (shown below ingredient tooltips)
+          let fishBreakdownHTML = "";
+          if (selected && recipeCost) {
+            for (const it of recipeCost.items) {
+              if (it.fc && it.source === "fish") {
+                const fd = it.fc.fd;
+                const path = it.fc.useChum
+                  ? `${escHTML(fd.bait)} + ${fd.chumQty}\u00d7 ${escHTML(fd.chum)} chum`
+                  : `${escHTML(fd.bait)} only`;
+                fishBreakdownHTML += `<div class="bumpkin-fish-detail">\u{1F41F} <b>${escHTML(it.name)}</b>: ${path} \u2192 ${fmtSfl(it.fc.sfl)} SFL/fish</div>`;
+              }
+            }
+          }
           html += `<div class="bumpkin-building-card pixel-panel">
             <div class="bumpkin-building-header pixel-font">
               <span style="font-size: 1.25rem">${emoji}</span>
@@ -8273,7 +8525,7 @@
             </div>
             <select class="bumpkin-recipe-select" onchange="selectBumpkinRecipe('${escHTML(buildingName)}', this.value)">
               <option value="" ${!selectedName ? "selected" : ""}>-- None --</option>
-              ${recipes.map(r => `<option value="${escHTML(r.name)}" ${r.name === selectedName ? "selected" : ""}>${escHTML(r.name)} (${Math.round(r.xpPerHour).toLocaleString()} XP/h)</option>`).join("")}
+              ${recipes.map(r => `<option value="${escHTML(r.name)}" ${r.name === selectedName ? "selected" : ""}>${optionLabel(r)}</option>`).join("")}
             </select>
             ${selected ? `<div class="bumpkin-recipe-stats">
               XP per cook: <span style="color:var(--green)">${fmtXP(selected.xp)}</span><br>
@@ -8281,8 +8533,10 @@
               XP/hour: <span style="color:var(--sunpetal)">${fmtXP(selected.xpPerHour)}</span><br>
               XP/day${count > 1 ? " (\u00d7" + count + ")" : ""}: <span style="color:var(--green)">${fmtXP(xpPerDay)}</span><br>
               ${recipeCost && costPerCook > 0 ? `Cost/cook: <span style="color:var(--yellow)" title="${costTip}">${formatSFL(costPerCook)} SFL</span>${recipeCost.hasUnpriced ? ' <span style="color:var(--text-dim);font-size:0.5rem">+self</span>' : ""}<br>
-              Cost/day${count > 1 ? " (\u00d7" + count + ")" : ""}: <span style="color:var(--yellow)">${formatSFL(costPerDay)} SFL</span><br>` : ""}
+              Cost/day${count > 1 ? " (\u00d7" + count + ")" : ""}: <span style="color:var(--yellow)">${formatSFL(costPerDay)} SFL</span><br>
+              ${selected && selected.xpPerSfl > 0 ? `XP per SFL: <span style="color:var(--sunpetal)">${Math.round(selected.xpPerSfl).toLocaleString()}</span><br>` : ""}` : ""}
               ${xpRemaining > 0 ? `Solo days to ${targetLevel}: <span style="color:var(--text-dim)">${daysNeeded.toLocaleString()}d</span>` : ""}
+              ${fishBreakdownHTML}
             </div>` : `<div style="font-size: 0.625rem;color:var(--text-dim)">${recipes.length > 0 ? "Not cooking" : "No recipes available"}</div>`}
           </div>`;
         }
