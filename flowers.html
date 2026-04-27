@@ -2350,6 +2350,61 @@
       cursor: pointer;
     }
     .gift-select select:hover { border-color: var(--sunpetal); }
+
+    /* Custom dropdown with flower icons */
+    .gift-dropdown { position: relative; width: 100%; }
+    .gift-dropdown-trigger {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 8px;
+      background: var(--bg-card);
+      color: var(--text-primary);
+      border: 1px solid rgba(92,58,30,0.4);
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 0.5rem;
+      min-height: 22px;
+    }
+    .gift-dropdown-trigger:hover { border-color: var(--sunpetal); }
+    .gift-dropdown-trigger .inline-icon { width: 14px; height: 14px; flex-shrink: 0; }
+    .gift-dropdown-trigger .gift-dd-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .gift-dropdown-trigger .gift-dd-meta { color: var(--text-dim); font-size: 0.4375rem; flex-shrink: 0; }
+    .gift-dd-arrow { color: var(--text-dim); font-size: 0.5rem; margin-left: auto; flex-shrink: 0; }
+
+    .gift-dropdown-list {
+      position: absolute; top: 100%; left: 0; right: 0;
+      max-height: 280px; overflow-y: auto;
+      margin-top: 2px;
+      background: var(--bg-card);
+      border: 2px solid var(--sunpetal);
+      border-radius: 4px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      z-index: 1000;
+      font-size: 0.5rem;
+    }
+    .gift-dropdown-item {
+      display: grid;
+      grid-template-columns: 20px 1fr auto auto;
+      gap: 6px;
+      align-items: center;
+      padding: 5px 8px;
+      cursor: pointer;
+      border-bottom: 1px solid rgba(92,58,30,0.1);
+      color: var(--text-primary);
+    }
+    .gift-dropdown-item:last-child { border-bottom: none; }
+    .gift-dropdown-item:hover { background: rgba(255,193,7,0.15); }
+    .gift-dropdown-item.selected { background: rgba(46,204,113,0.15); }
+    .gift-dropdown-item.gift-dropdown-clear {
+      grid-template-columns: 1fr;
+      color: var(--text-dim);
+      font-style: italic;
+      text-align: center;
+    }
+    .gift-dd-icon { width: 18px; height: 18px; image-rendering: pixelated; }
+    .gift-dropdown-item .gift-dd-name { color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .gift-dd-pts { color: var(--sunpetal); font-weight: bold; font-size: 0.4375rem; }
+    .gift-dd-time { color: var(--text-dim); font-size: 0.4375rem; }
+
     .gifts-summary { background: rgba(92,58,30,0.05); }
     @media (max-width: 600px) {
       .gift-row {
@@ -2742,18 +2797,6 @@
       return seedHours;
     }
 
-    // Color-coded emoji per flower (for <option> text since it can't render images)
-    function getFlowerColorEmoji(flower) {
-      if (flower === "Prism Petal") return "\u{1F308}";  // rainbow
-      if (flower === "Celestial Frostbloom") return "❄️";  // snowflake
-      if (flower === "Primula Enigma") return "✨";  // sparkles
-      if (flower.startsWith("Red ")) return "\u{1F534}";
-      if (flower.startsWith("Yellow ")) return "\u{1F7E1}";
-      if (flower.startsWith("Purple ")) return "\u{1F7E3}";
-      if (flower.startsWith("White ")) return "⚪";
-      if (flower.startsWith("Blue ")) return "\u{1F535}";
-      return "\u{1F33C}";  // generic flower
-    }
 
     function getNextGiftReward(npc, friendship) {
       const data = BUMPKIN_GIFTS_DATA[npc];
@@ -2814,6 +2857,40 @@
       if (!el) return;
       el.style.display = (el.style.display === "none") ? "block" : "none";
     }
+
+    function _giftsSlug(npc) {
+      return "dd" + npc.replace(/[^a-z0-9]/gi, "").toLowerCase();
+    }
+
+    function _giftsToggleDropdown(npc, ev) {
+      if (ev) ev.stopPropagation();
+      const slug = _giftsSlug(npc);
+      const target = document.getElementById("gift-list-" + slug);
+      // Close all other dropdowns
+      document.querySelectorAll(".gift-dropdown-list").forEach(el => {
+        if (el !== target) el.style.display = "none";
+      });
+      if (target) target.style.display = target.style.display === "block" ? "none" : "block";
+    }
+
+    function _giftsCloseAllDropdowns() {
+      document.querySelectorAll(".gift-dropdown-list").forEach(el => { el.style.display = "none"; });
+    }
+
+    function _giftsSelectFlower(npc, flower, ev) {
+      if (ev) ev.stopPropagation();
+      _giftsCloseAllDropdowns();
+      setGiftPlanEntry(npc, flower);
+    }
+
+    // Global click-outside handler — install once
+    if (typeof window !== "undefined" && !window._giftsClickOutsideInstalled) {
+      window._giftsClickOutsideInstalled = true;
+      document.addEventListener("click", (e) => {
+        if (!e.target.closest(".gift-dropdown")) _giftsCloseAllDropdowns();
+      });
+    }
+
 
     const CROPS_AND_FRUITS = new Set([
       "Sunflower","Potato","Pumpkin","Carrot","Cabbage","Soybean",
@@ -6963,14 +7040,36 @@
           const pts = getFlowerGiftPoints(npc, f, hasBlossomBonding);
           const chainH = getFlowerChainHours(f);
           const hours = Math.round(chainH * 10) / 10;
-          return { f, pts, hours, emoji: getFlowerColorEmoji(f) };
+          return { f, pts, hours };
         }).filter(o => o.pts > 0).sort((a, b) => b.pts - a.pts || a.hours - b.hours);
 
-        const optHtml = options.map(o => {
-          const sel = o.f === planned ? " selected" : "";
-          const days = o.hours >= 24 ? `${(o.hours / 24).toFixed(1)}d` : `${o.hours}h`;
-          return `<option value="${escHTML(o.f)}"${sel}>${o.emoji} ${escHTML(o.f)} — ${o.pts}pt, ${days}</option>`;
-        }).join("");
+        const slug = _giftsSlug(npc);
+        const fmtTime = (h) => h >= 24 ? `${(h / 24).toFixed(1)}d` : `${h}h`;
+
+        // Trigger label
+        let triggerLabel;
+        if (planned) {
+          const o = options.find(x => x.f === planned);
+          if (o) {
+            triggerLabel = `<img class="inline-icon" src="${getItemIcon(planned)}" onerror="this.style.display='none'" alt=""> <span class="gift-dd-name">${escHTML(planned)}</span> <span class="gift-dd-meta">${o.pts}pt · ${fmtTime(o.hours)}</span>`;
+          } else {
+            triggerLabel = `<span class="gift-dd-name">${escHTML(planned)}</span>`;
+          }
+        } else {
+          triggerLabel = `<span style="color:var(--text-dim)">— No gift —</span>`;
+        }
+
+        // Dropdown items
+        let listItems = `<div class="gift-dropdown-item gift-dropdown-clear" onclick="_giftsSelectFlower('${escHTML(npc)}', '', event)">— No gift —</div>`;
+        for (const o of options) {
+          const isSel = o.f === planned ? " selected" : "";
+          listItems += `<div class="gift-dropdown-item${isSel}" onclick="_giftsSelectFlower('${escHTML(npc)}', '${escHTML(o.f)}', event)">
+            <img class="gift-dd-icon" src="${getItemIcon(o.f)}" onerror="this.style.display='none'" alt="">
+            <span class="gift-dd-name">${escHTML(o.f)}</span>
+            <span class="gift-dd-pts">${o.pts}pt</span>
+            <span class="gift-dd-time">${fmtTime(o.hours)}</span>
+          </div>`;
+        }
 
         const npcName = npc.replace(/(^|\s|')\w/g, c => c.toUpperCase());
         const checkIcon = givenToday ? '<span style="color:var(--green)" title="Given today">✅</span>' : (planned ? '<span style="color:var(--red)" title="Not given today">❌</span>' : '<span style="color:var(--text-dim)">·</span>');
@@ -6986,11 +7085,14 @@
             <div class="gift-npc-pts" style="color:var(--text-dim);font-size:0.5rem">${points} pts</div>
           </div>
           <div class="gift-next">${nextHtml}</div>
-          <div class="gift-select">
-            <select onchange="setGiftPlanEntry('${escHTML(npc)}', this.value)">
-              <option value=""${planned === "" ? " selected" : ""}>— No gift —</option>
-              ${optHtml}
-            </select>
+          <div class="gift-select gift-dropdown">
+            <div class="gift-dropdown-trigger" onclick="_giftsToggleDropdown('${escHTML(npc)}', event)">
+              ${triggerLabel}
+              <span class="gift-dd-arrow">▼</span>
+            </div>
+            <div class="gift-dropdown-list" id="gift-list-${slug}" style="display:none">
+              ${listItems}
+            </div>
           </div>
         </div>`;
       }
