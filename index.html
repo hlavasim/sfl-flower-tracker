@@ -4133,41 +4133,44 @@
     // Tier-based prob estimate: basic ~0.30, advanced ~0.18, expert ~0.10
     // Without chum drops ~3x. Source: sunflower-land FISH constants + estimation.
     const FISH_DATA = {
-      "Anchovy":         { tier: "basic",    bait: "Earthworm",   chum: "Carrot",     chumQty: 10, prob: 0.30 },
-      "Butterflyfish":   { tier: "basic",    bait: "Earthworm",   chum: "Sunflower",  chumQty: 50, prob: 0.30 },
-      "Blowfish":        { tier: "basic",    bait: "Earthworm",   chum: "Yam",        chumQty: 20, prob: 0.30 },
-      "Clownfish":       { tier: "basic",    bait: "Earthworm",   chum: "Cabbage",    chumQty: 10, prob: 0.30 },
-      "Sea Bass":        { tier: "basic",    bait: "Earthworm",   chum: null,         chumQty: 0,  prob: 0.10 },
-      "Sea Horse":       { tier: "basic",    bait: "Earthworm",   chum: "Seaweed",    chumQty: 1,  prob: 0.30 },
-      "Horse Mackerel":  { tier: "basic",    bait: "Earthworm",   chum: "Blueberry",  chumQty: 3,  prob: 0.30 },
-      "Halibut":         { tier: "basic",    bait: "Earthworm",   chum: null,         chumQty: 0,  prob: 0.10 },
-      "Squid":           { tier: "basic",    bait: "Earthworm",   chum: "Onion",      chumQty: 5,  prob: 0.30 },
-      "Porgy":           { tier: "basic",    bait: "Earthworm",   chum: "Yam",        chumQty: 20, prob: 0.30 },
-      "Muskellunge":     { tier: "basic",    bait: "Earthworm",   chum: "Turnip",     chumQty: 5,  prob: 0.30 },
-      "Red Snapper":     { tier: "advanced", bait: "Grub",        chum: "Apple",      chumQty: 3,  prob: 0.18 },
-      "Moray Eel":       { tier: "advanced", bait: "Earthworm",   chum: "Gold",       chumQty: 1,  prob: 0.18 },
-      "Olive Flounder":  { tier: "advanced", bait: "Earthworm",   chum: "Rhubarb",    chumQty: 20, prob: 0.18 },
-      "Napoleanfish":    { tier: "advanced", bait: "Grub",        chum: "Carrot",     chumQty: 10, prob: 0.18 },
-      "Surgeonfish":     { tier: "advanced", bait: "Grub",        chum: "Orange",     chumQty: 3,  prob: 0.18 },
-      "Angelfish":       { tier: "advanced", bait: "Grub",        chum: "Banana",     chumQty: 3,  prob: 0.18 },
-      "Zebra Turkeyfish":{ tier: "advanced", bait: "Grub",        chum: "Beetroot",   chumQty: 10, prob: 0.18 },
-      "Ray":             { tier: "advanced", bait: "Grub",        chum: null,         chumQty: 0,  prob: 0.06 },
-      "Hammerhead Shark":{ tier: "advanced", bait: "Grub",        chum: "Iron",       chumQty: 5,  prob: 0.18 },
-      "Barred Knifejaw": { tier: "advanced", bait: "Grub",        chum: null,         chumQty: 0,  prob: 0.06 },
-      "Walleye":         { tier: "advanced", bait: "Grub",        chum: "Broccoli",   chumQty: 10, prob: 0.18 },
-      "Rock Blackfish":  { tier: "advanced", bait: "Grub",        chum: "Onion",      chumQty: 5,  prob: 0.18 },
-      "Tilapia":         { tier: "advanced", bait: "Grub",        chum: "Zucchini",   chumQty: 20, prob: 0.18 },
-      "Tuna":            { tier: "expert",   bait: "Grub",        chum: "Orange",     chumQty: 3,  prob: 0.10 },
-      "Mahi Mahi":       { tier: "expert",   bait: "Grub",        chum: "Corn",       chumQty: 5,  prob: 0.10 },
-      "Blue Marlin":     { tier: "expert",   bait: "Grub",        chum: "Wheat",      chumQty: 5,  prob: 0.10 },
-      "Oarfish":         { tier: "expert",   bait: "Red Wiggler", chum: "Kale",       chumQty: 5,  prob: 0.10 },
-      "Football Fish":   { tier: "expert",   bait: "Red Wiggler", chum: "Sunflower",  chumQty: 50, prob: 0.10 },
-      "Sunfish":         { tier: "expert",   bait: "Red Wiggler", chum: null,         chumQty: 0,  prob: 0.04 },
-      "Coelacanth":      { tier: "expert",   bait: "Red Wiggler", chum: "Cabbage",    chumQty: 10, prob: 0.10 },
-      "Parrotfish":      { tier: "expert",   bait: "Red Wiggler", chum: "Seaweed",    chumQty: 1,  prob: 0.10 },
-      "Cobia":           { tier: "expert",   bait: "Red Wiggler", chum: "Broccoli",   chumQty: 10, prob: 0.10 },
-      "Trout":           { tier: "expert",   bait: "Red Wiggler", chum: "Pepper",     chumQty: 10, prob: 0.10 },
-      "Weakfish":        { tier: "expert",   bait: "Red Wiggler", chum: "Artichoke",  chumQty: 3,  prob: 0.10 },
+      // Each fish has 1-2 paths: cost = min(noChum, guaranteed). Picks cheapest at runtime.
+      // Source: sfl.world/info/fishing/bait empirical data (24h+ samples) + fishing.ts likes
+      "Anchovy":         { paths: [{ bait: "Earthworm",  prob: 0.244 }, { bait: "Earthworm",  chum: "Egg",       chumQty: 5  }] },
+      "Butterflyfish":   { paths: [{ bait: "Earthworm",  prob: 0.079 }, { bait: "Earthworm",  chum: "Sunflower", chumQty: 50 }] },
+      "Blowfish":        { paths: [{ bait: "Earthworm",  prob: 0.054 }, { bait: "Earthworm",  chum: "Yam",       chumQty: 20 }] },
+      "Clownfish":       { paths: [{ bait: "Earthworm",  prob: 0.066 }, { bait: "Earthworm",  chum: "Cabbage",   chumQty: 10 }] },
+      "Sea Bass":        { paths: [{ bait: "Earthworm",  prob: 0.058 }] },
+      "Sea Horse":       { paths: [{ bait: "Earthworm",  prob: 0.032 }, { bait: "Earthworm",  chum: "Seaweed",   chumQty: 1  }] },
+      "Horse Mackerel":  { paths: [{ bait: "Earthworm",  chum: "Blueberry", chumQty: 3 }] },
+      "Halibut":         { paths: [{ bait: "Earthworm",  prob: 0.091 }] },
+      "Squid":           { paths: [{ bait: "Earthworm",  prob: 0.0002}, { bait: "Earthworm",  chum: "Eggplant",  chumQty: 5  }] },
+      "Porgy":           { paths: [{ bait: "Earthworm",  prob: 0.037 }, { bait: "Earthworm",  chum: "Yam",       chumQty: 20 }] },
+      "Muskellunge":     { paths: [{ bait: "Earthworm",  prob: 0.022 }, { bait: "Earthworm",  chum: "Turnip",    chumQty: 5  }] },
+      "Red Snapper":     { paths: [{ bait: "Grub",       prob: 0.248 }, { bait: "Red Wiggler",chum: "Honey",     chumQty: 1  }] },
+      "Moray Eel":       { paths: [{ bait: "Earthworm",  prob: 0.051 }, { bait: "Earthworm",  chum: "Gold",      chumQty: 1  }] },
+      "Olive Flounder":  { paths: [{ bait: "Earthworm",  prob: 0.030 }, { bait: "Earthworm",  chum: "Rhubarb",   chumQty: 20 }] },
+      "Napoleanfish":    { paths: [{ bait: "Grub",       prob: 0.046 }, { bait: "Grub",       chum: "Carrot",    chumQty: 10 }] },
+      "Surgeonfish":     { paths: [{ bait: "Grub",       prob: 0.051 }, { bait: "Grub",       chum: "Orange",    chumQty: 3  }] },
+      "Angelfish":       { paths: [{ bait: "Grub",       prob: 0.005 }, { bait: "Grub",       chum: "Banana",    chumQty: 3  }] },
+      "Zebra Turkeyfish":{ paths: [{ bait: "Grub",       prob: 0.057 }, { bait: "Grub",       chum: "Beetroot",  chumQty: 10 }] },
+      "Ray":             { paths: [{ bait: "Grub",       prob: 0.005 }] },
+      "Hammerhead Shark":{ paths: [{ bait: "Grub",       chum: "Iron",      chumQty: 5  }] },
+      "Barred Knifejaw": { paths: [{ bait: "Grub",       prob: 0.0001}] },
+      "Walleye":         { paths: [{ bait: "Grub",       prob: 0.037 }, { bait: "Grub",       chum: "Broccoli",  chumQty: 10 }] },
+      "Rock Blackfish":  { paths: [{ bait: "Grub",       prob: 0.023 }, { bait: "Grub",       chum: "Onion",     chumQty: 5  }] },
+      "Tilapia":         { paths: [{ bait: "Grub",       prob: 0.024 }, { bait: "Grub",       chum: "Zucchini",  chumQty: 20 }] },
+      "Tuna":            { paths: [{ bait: "Red Wiggler",prob: 0.273 }, { bait: "Grub",       chum: "Wild Mushroom", chumQty: 1 }] },
+      "Mahi Mahi":       { paths: [{ bait: "Grub",       prob: 0.024 }, { bait: "Grub",       chum: "Corn",      chumQty: 5  }] },
+      "Blue Marlin":     { paths: [{ bait: "Grub",       prob: 0.012 }, { bait: "Grub",       chum: "Wheat",     chumQty: 5  }] },
+      "Oarfish":         { paths: [{ bait: "Red Wiggler",prob: 0.071 }, { bait: "Red Wiggler",chum: "Kale",      chumQty: 5  }] },
+      "Football Fish":   { paths: [{ bait: "Red Wiggler",chum: "Sunflower", chumQty: 50 }] },
+      "Sunfish":         { paths: [{ bait: "Red Wiggler",prob: 0.074 }] },
+      "Coelacanth":      { paths: [{ bait: "Red Wiggler",prob: 0.002 }, { bait: "Red Wiggler",chum: "Cabbage",   chumQty: 10 }] },
+      "Parrotfish":      { paths: [{ bait: "Red Wiggler",prob: 0.003 }, { bait: "Red Wiggler",chum: "Seaweed",   chumQty: 1  }] },
+      "Cobia":           { paths: [{ bait: "Red Wiggler",prob: 0.030 }, { bait: "Red Wiggler",chum: "Broccoli",  chumQty: 10 }] },
+      "Trout":           { paths: [{ bait: "Red Wiggler",prob: 0.029 }, { bait: "Red Wiggler",chum: "Pepper",    chumQty: 10 }] },
+      "Weakfish":        { paths: [{ bait: "Red Wiggler",prob: 0.043 }, { bait: "Red Wiggler",chum: "Artichoke", chumQty: 3  }] },
+    
     };
 
     // SFL cost per worm-bait, averaged across seasons (uses existing COMPOST_RECIPES)
@@ -4202,29 +4205,40 @@
       return (coinSFL + matSFL) * reelDealMult;
     }
 
-    // Effective SFL cost per 1 fish: best of (chum-boosted) vs (no-chum) path
+    // Effective SFL cost per 1 fish: cheapest of all paths (no-chum vs guaranteed-chum).
+    // Each path: per-cast cost (rod + bait + optional chum*qty) / prob.
+    // Empirical no-chum probs from sfl.world; guaranteed-chum prob = 1.0 (likes mechanic).
     function computeFishEffectiveCost(fishName, p2pPrices, coinsPerSFL, skills) {
       const fd = FISH_DATA[fishName];
-      if (!fd) return null;
-      const baitSFL = computeBaitCostSFL(fd.bait, p2pPrices);
+      if (!fd || !fd.paths || fd.paths.length === 0) return null;
       const rodSFL = computeRodCostSFL(p2pPrices, coinsPerSFL, skills);
-      if (baitSFL <= 0) return null;
 
-      const tierProbNoChum = { basic: 0.10, advanced: 0.06, expert: 0.04 }[fd.tier] || 0.05;
-      const probNoChum = fd.chum ? tierProbNoChum : fd.prob;
-      const probWithChum = fd.prob;
-      const chumP = fd.chum ? (p2pPrices[fd.chum] || 0) : 0;
-      const chumCostPerCast = chumP * (fd.chumQty || 0);
-      const costPerCast = rodSFL + baitSFL;
-
-      const noChumCost = costPerCast / probNoChum;
-      const withChumCost = (fd.chum && chumP > 0)
-        ? (costPerCast + chumCostPerCast) / probWithChum
-        : Infinity;
-
-      const effective = Math.min(noChumCost, withChumCost);
-      const useChum = withChumCost < noChumCost;
-      return { sfl: effective, useChum, fd, baitSFL, rodSFL, chumCostPerCast };
+      let best = null;
+      for (const p of fd.paths) {
+        const baitSFL = computeBaitCostSFL(p.bait, p2pPrices);
+        if (baitSFL <= 0) continue;
+        const chumP = p.chum ? (p2pPrices[p.chum] || 0) : 0;
+        if (p.chum && chumP <= 0) continue;  // can't price chum
+        const chumCostPerCast = chumP * (p.chumQty || 0);
+        const prob = p.chum ? 1.0 : (p.prob || 0);
+        if (prob <= 0) continue;
+        const costPerCast = rodSFL + baitSFL + chumCostPerCast;
+        const sfl = costPerCast / prob;
+        if (best === null || sfl < best.sfl) {
+          best = { sfl, path: p, baitSFL, rodSFL, chumCostPerCast, prob, useChum: !!p.chum };
+        }
+      }
+      if (!best) return null;
+      // Backwards-compat shape: expose fd-like fields used by detail card
+      return {
+        sfl: best.sfl,
+        useChum: best.useChum,
+        fd: { bait: best.path.bait, chum: best.path.chum || null, chumQty: best.path.chumQty || 0 },
+        baitSFL: best.baitSFL,
+        rodSFL: best.rodSFL,
+        chumCostPerCast: best.chumCostPerCast,
+        prob: best.prob,
+      };
     }
 
     // Calculate the SFL cost per skill point for current bumpkin
