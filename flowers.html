@@ -3116,7 +3116,10 @@
     function _giftsToggleSection(id) {
       const el = document.getElementById(id);
       if (!el) return;
-      el.style.display = (el.style.display === "none") ? "block" : "none";
+      const newDisplay = (el.style.display === "none") ? "block" : "none";
+      el.style.display = newDisplay;
+      // Persist state so re-renders (mode switch etc.) keep section open/closed
+      try { localStorage.setItem("sfl_gifts_section_" + id, newDisplay); } catch {}
     }
 
     function _giftsSlug(npc) {
@@ -6079,7 +6082,7 @@
     // ═══════════════════════════════════════
 
     function getPetalBlessedRecommendation(inventory, inProgress) {
-      const { totalNeeded } = computeAllTotalNeeded(inventory, inProgress);
+      const { totalNeeded } = computeAllTotalNeeded(inventory, inProgress, buildFlowerDemandFn());
       const candidates = [];
       for (const [name, needed] of Object.entries(totalNeeded)) {
         const have = getCount(inventory, name);
@@ -6513,7 +6516,7 @@
 
     function dashGetFlowerSuggestions(inventory, inProgress, count) {
       // Reuse the same logic as getPetalBlessedRecommendation
-      const { totalNeeded } = computeAllTotalNeeded(inventory, inProgress);
+      const { totalNeeded } = computeAllTotalNeeded(inventory, inProgress, buildFlowerDemandFn());
       const candidates = [];
       for (const [name, needed] of Object.entries(totalNeeded)) {
         const have = getCount(inventory, name) + (inProgress[name] || 0);
@@ -7405,7 +7408,7 @@
 
       if (data) {
         const { inventory, inProgress } = data;
-        const { totalNeeded } = computeAllTotalNeeded(inventory, inProgress);
+        const { totalNeeded } = computeAllTotalNeeded(inventory, inProgress, buildFlowerDemandFn());
 
         let fc = 0;
         for (const [name, needed] of Object.entries(totalNeeded)) {
@@ -7527,12 +7530,15 @@
       const skillBadge = hasBlossomBonding
         ? `<span style="margin-left:8px;font-size:0.5rem;color:var(--green);background:rgba(46,204,113,0.15);padding:2px 6px;border-radius:3px">\u{1F33C} Blossom Bonding +2</span>`
         : "";
+      const giftsBodyDisplay = (function() {
+        try { return localStorage.getItem("sfl_gifts_section_gifts-body") || "block"; } catch { return "block"; }
+      })();
       let html = `<div id="gifts-section-wrap" class="growing-section pixel-panel pixel-font">
         <div class="growing-title" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px" onclick="_giftsToggleSection('gifts-body')">
           <span>\u{1F381} GIFTS PLANNER (${plannedCount}/${GIFT_NPC_ORDER.length})${skillBadge}</span>
           <span style="font-size:0.625rem;color:var(--text-dim)">tap to toggle ▼</span>
         </div>
-        <div id="gifts-body" style="display:block">`;
+        <div id="gifts-body" style="display:${giftsBodyDisplay}">`;
 
       // Per-NPC rows
       html += `<div class="gifts-grid">`;
