@@ -2359,6 +2359,62 @@
       .marks-chart-wrap { height:220px; }
     }
   
+    /* Flower mode toggle + N slider */
+    .flower-mode-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding: 8px 12px;
+      margin-bottom: 8px;
+    }
+    .flower-mode-toggle { display: flex; align-items: center; gap: 4px; }
+    .flower-mode-btn {
+      font-family: inherit;
+      font-size: 0.5rem;
+      padding: 4px 10px;
+      border: 1px solid rgba(92,58,30,0.4);
+      background: var(--bg-card, #f5e9c8);
+      color: var(--text-secondary, #5c3a1e);
+      cursor: pointer;
+      border-radius: 3px;
+      letter-spacing: 0.5px;
+    }
+    .flower-mode-btn:hover { background: rgba(255, 200, 100, 0.3); }
+    .flower-mode-btn.active {
+      background: var(--sunpetal);
+      color: white;
+      border-color: var(--sunpetal);
+      font-weight: bold;
+    }
+    .flower-mode-n {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: 1;
+      min-width: 200px;
+    }
+    .flower-n-input {
+      width: 50px;
+      font-size: 0.625rem;
+      padding: 2px 4px;
+      border: 1px solid rgba(92,58,30,0.4);
+      background: var(--bg-card, #f5e9c8);
+      color: var(--text-primary);
+      border-radius: 3px;
+      font-family: inherit;
+    }
+    .flower-n-slider {
+      flex: 1;
+      accent-color: var(--sunpetal);
+      cursor: pointer;
+      min-width: 80px;
+    }
+    @media (max-width: 600px) {
+      .flower-mode-row { flex-direction: column; align-items: stretch; gap: 6px; }
+      .flower-mode-n { min-width: auto; }
+    }
+
     /* Gifts Planner */
     .gifts-grid { display: flex; flex-direction: column; gap: 4px; padding: 6px; }
     .gift-row {
@@ -2994,6 +3050,40 @@
       }
       if (reward.recipe) parts.push(`\u{1F4DC} ${escHTML(reward.recipe)}`);
       return parts.length > 0 ? parts.join(" · ") : "<span style=\"color:var(--text-dim)\">empty</span>";
+    }
+
+    // ── Flower page mode (gifts vs collection) + N target ──
+    function getFlowerMode() {
+      return localStorage.getItem("sfl_flower_mode") || "collection"; // "gifts" | "collection"
+    }
+    function getFlowerN() {
+      const v = parseInt(localStorage.getItem("sfl_flower_n") || "");
+      return Number.isFinite(v) && v >= 1 ? v : (LIMIT || 2);
+    }
+    function setFlowerMode(m) {
+      localStorage.setItem("sfl_flower_mode", m);
+      if (cachedFarmData) renderFlowers(cachedFarmData);
+    }
+    function setFlowerN(n) {
+      const v = Math.max(1, Math.min(99, parseInt(n) || 1));
+      localStorage.setItem("sfl_flower_n", v);
+      if (cachedFarmData) renderFlowers(cachedFarmData);
+    }
+    // Build baseDemandFn for current mode
+    function buildFlowerDemandFn() {
+      const mode = getFlowerMode();
+      const n = getFlowerN();
+      if (mode === "gifts") {
+        // Demand = (gifts/day for that flower) × N days
+        const plan = getGiftPlan();
+        const perDay = {};
+        for (const [npc, f] of Object.entries(plan)) {
+          if (f) perDay[f] = (perDay[f] || 0) + 1;
+        }
+        return (flowerName) => (perDay[flowerName] || 0) * n;
+      }
+      // COLLECTION: every flower needs N copies
+      return () => n;
     }
 
     function getGiftPlan() {
@@ -5539,16 +5629,19 @@
       return dependents;
     }
 
-    function computeAllTotalNeeded(inventory, inProgress) {
+    function computeAllTotalNeeded(inventory, inProgress, baseDemandFn) {
+      // baseDemandFn(flowerName) -> direct demand for this flower (excluding chain inputs).
+      // Default: () => LIMIT (legacy behavior — N copies of every flower).
+      baseDemandFn = baseDemandFn || (() => LIMIT);
       const dependents = buildDependencyGraph();
       const memo = {};
       const visiting = new Set();
 
       function compute(name) {
         if (memo[name] !== undefined) return memo[name];
-        if (visiting.has(name)) return LIMIT;
+        if (visiting.has(name)) return baseDemandFn(name);
         visiting.add(name);
-        let total = LIMIT;
+        let total = baseDemandFn(name);
         const deps = dependents[name] || [];
         for (const dep of deps) {
           const depNeeded = compute(dep);
@@ -7793,7 +7886,10 @@
       lastInventory = inventory;
       lastInProgress = inProgress;
 
-      const { totalNeeded, dependents } = computeAllTotalNeeded(inventory, inProgress);
+      const flowerMode = getFlowerMode();
+      const flowerN = getFlowerN();
+      const baseDemandFn = buildFlowerDemandFn();
+      const { totalNeeded, dependents } = computeAllTotalNeeded(inventory, inProgress, baseDemandFn);
       const app = document.getElementById("app");
 
       const groups = {};
@@ -7841,9 +7937,28 @@
 
       let html = "";
 
+      const targetText = flowerMode === "gifts"
+        ? `Target: ${flowerN} day${flowerN === 1 ? "" : "s"} of gifts`
+        : `Target: ${flowerN} of each`;
       html += `<div class="header pixel-panel pixel-font">
         <h1>FLOWER TRACKER</h1>
-        <div class="farm-id">Farm #${escHTML(FARM_ID)} | Target: ${LIMIT} of each${season ? ` | Season: ${escHTML(season)}` : ""}</div>
+        <div class="farm-id">Farm #${escHTML(FARM_ID)} | ${targetText}${season ? ` | Season: ${escHTML(season)}` : ""}</div>
+      </div>`;
+
+      // Mode toggle + N slider
+      const modeBtn = (m, label) => `<button class="flower-mode-btn ${flowerMode === m ? "active" : ""}" onclick="setFlowerMode('${m}')">${label}</button>`;
+      html += `<div class="flower-mode-row pixel-panel pixel-font">
+        <div class="flower-mode-toggle">
+          <span style="font-size:0.5625rem;color:var(--text-dim);margin-right:6px">MODE:</span>
+          ${modeBtn("gifts", "🎁 Gifts")}
+          ${modeBtn("collection", "📦 Collection")}
+        </div>
+        <div class="flower-mode-n">
+          <span style="font-size:0.5625rem;color:var(--text-dim)">${flowerMode === "gifts" ? "Days buffer" : "Per flower"}:</span>
+          <input type="number" min="1" max="99" value="${flowerN}" onchange="setFlowerN(this.value)" class="flower-n-input">
+          <input type="range" min="1" max="${flowerMode === "gifts" ? 30 : 20}" value="${flowerN}" oninput="document.getElementById('flower-n-val').textContent=this.value" onchange="setFlowerN(this.value)" class="flower-n-slider">
+          <span id="flower-n-val" style="font-size:0.6875rem;color:var(--sunpetal);min-width:24px;text-align:right">${flowerN}</span>
+        </div>
       </div>`;
 
       html += `<div class="summary-bar pixel-panel pixel-font">
