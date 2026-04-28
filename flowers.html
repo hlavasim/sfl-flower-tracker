@@ -2440,6 +2440,8 @@
     }
     .gift-dd-icon { width: 18px; height: 18px; image-rendering: pixelated; }
     .gift-dropdown-item .gift-dd-name { color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .gift-dropdown-item .gift-dd-have { flex-shrink: 0; padding: 1px 5px; background: rgba(0,0,0,0.04); border-radius: 3px; font-weight: bold; }
+    .gift-dropdown-trigger .gift-dd-meta { padding: 1px 4px; background: rgba(0,0,0,0.04); border-radius: 3px; }
     .gift-dd-pts { color: var(--sunpetal); font-weight: bold; font-size: 0.4375rem; }
     .gift-dd-time { color: var(--text-dim); font-size: 0.4375rem; }
 
@@ -7457,18 +7459,33 @@
           const pts = getFlowerGiftPoints(npc, f, hasBlossomBonding);
           const chainH = getFlowerChainHours(f) / yieldFactor;
           const hours = Math.round(chainH * 10) / 10;
-          return { f, pts, hours };
+          const have = getCount(inventory, f);
+          const pend = inProgress[f] || 0;
+          const totalAvail = have + pend;
+          // Daily demand for this flower across all NPC plans (this is the gift flower itself, not chain inputs)
+          const demand = dailyNeed[f] || 0;
+          return { f, pts, hours, have, pend, totalAvail, demand };
         }).filter(o => o.pts > 0).sort((a, b) => b.pts - a.pts || a.hours - b.hours);
 
         const slug = _giftsSlug(npc);
         const fmtTime = (h) => h >= 24 ? `${(h / 24).toFixed(1)}d` : `${h}h`;
+
+        // Color-code have count vs gifts/day demand for this flower
+        const haveColor = (have, demand) => {
+          if (demand === 0) return "var(--text-dim)";
+          if (have <= 0) return "var(--red)";
+          if (have < demand) return "var(--yellow)";
+          return "var(--green)";
+        };
 
         // Trigger label
         let triggerLabel;
         if (planned) {
           const o = options.find(x => x.f === planned);
           if (o) {
-            triggerLabel = `<img class="inline-icon" src="${getItemIcon(planned)}" onerror="this.style.display='none'" alt=""> <span class="gift-dd-name">${escHTML(planned)}</span> <span class="gift-dd-meta">${o.pts}pt · ${fmtTime(o.hours)}</span>`;
+            const haveStr = `${o.have}${o.pend > 0 ? `+${o.pend}` : ""}`;
+            const haveCol = haveColor(o.totalAvail, 1);  // for trigger, demand is at least 1 (it's planned)
+            triggerLabel = `<img class="inline-icon" src="${getItemIcon(planned)}" onerror="this.style.display='none'" alt=""> <span class="gift-dd-name">${escHTML(planned)}</span> <span class="gift-dd-meta" style="color:${haveCol}">have ${haveStr}</span> <span class="gift-dd-meta">${o.pts}pt</span>`;
           } else {
             triggerLabel = `<span class="gift-dd-name">${escHTML(planned)}</span>`;
           }
@@ -7480,9 +7497,15 @@
         let listItems = `<div class="gift-dropdown-item gift-dropdown-clear" onclick="_giftsSelectFlower('${escHTML(npc)}', '', event)">— No gift —</div>`;
         for (const o of options) {
           const isSel = o.f === planned ? " selected" : "";
+          // For dropdown items: highlight if currently planned (demand for it = 1+) else just info
+          const haveStr = `${o.have}${o.pend > 0 ? `+${o.pend}` : ""}`;
+          // Demand for this flower across the daily plan (excluding current NPC if not yet selected)
+          const itemDemand = o.demand || 0;
+          const haveCol = haveColor(o.totalAvail, itemDemand);
           listItems += `<div class="gift-dropdown-item${isSel}" onclick="_giftsSelectFlower('${escHTML(npc)}', '${escHTML(o.f)}', event)">
             <img class="gift-dd-icon" src="${getItemIcon(o.f)}" onerror="this.style.display='none'" alt="">
             <span class="gift-dd-name">${escHTML(o.f)}</span>
+            <span class="gift-dd-have" style="color:${haveCol};font-size:0.5rem;font-variant-numeric:tabular-nums">have ${haveStr}${itemDemand > 1 ? `<span style="color:var(--text-dim)">/${itemDemand}d</span>` : ""}</span>
             <span class="gift-dd-pts">${o.pts}pt</span>
             <span class="gift-dd-time">${fmtTime(o.hours)}</span>
           </div>`;
