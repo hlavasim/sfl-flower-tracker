@@ -6083,6 +6083,8 @@
 
     function getPetalBlessedRecommendation(inventory, inProgress) {
       const { totalNeeded } = computeAllTotalNeeded(inventory, inProgress, buildFlowerDemandFn());
+      const flowerMode = getFlowerMode();
+      const N = getFlowerN();
       const candidates = [];
       for (const [name, needed] of Object.entries(totalNeeded)) {
         const have = getCount(inventory, name);
@@ -6097,11 +6099,21 @@
           const inputHave = getCount(inventory, recipe.input) + (inProgress[recipe.input] || 0);
           if (inputHave <= 0) inputReady = false;
         }
-        candidates.push({ name, remaining, seedHours, seed: recipe.seed, input: recipe.input, inputIsFlower, inputReady });
+        // Days of stock — meaningful only in gifts mode (totalNeeded scales with N)
+        // daily_demand = totalNeeded / N. days = (have+pend) / daily_demand.
+        const dailyDemand = N > 0 ? needed / N : 0;
+        const stock = have + pend;
+        const daysOfStock = dailyDemand > 0 ? stock / dailyDemand : Infinity;
+        candidates.push({ name, remaining, seedHours, seed: recipe.seed, input: recipe.input, inputIsFlower, inputReady, daysOfStock });
       }
       candidates.sort((a, b) => {
         if (b.seedHours !== a.seedHours) return b.seedHours - a.seedHours;
         if (a.inputReady !== b.inputReady) return a.inputReady ? -1 : 1;
+        if (flowerMode === "gifts") {
+          // Fewest days of stock first (about to run out)
+          if (a.daysOfStock !== b.daysOfStock) return a.daysOfStock - b.daysOfStock;
+        }
+        // Collection mode (or tiebreaker for gifts): most missing first
         return b.remaining - a.remaining;
       });
       const picks = [];
