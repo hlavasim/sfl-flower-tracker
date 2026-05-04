@@ -3495,17 +3495,6 @@
     const COOKING_BUILDING_NAMES = ["Fire Pit", "Kitchen", "Bakery", "Deli", "Smoothie Shack", "Aging Shed"];
     const COOKING_BUILDING_EMOJI = { "Fire Pit": "🔥", "Kitchen": "🍳", "Bakery": "🧁", "Deli": "🥩", "Smoothie Shack": "🥤", "Aging Shed": "🧂" };
 
-    // Generate Aged Fish recipes from FISH_BASE_XP (1 fish + N salt → 1 Aged Fish)
-    for (const [_fish, _baseXP] of Object.entries(FISH_BASE_XP)) {
-      const _aged = "Aged " + _fish;
-      const _maxXP = getAgingMaxXP(_baseXP);
-      const _saltN = getAgingSaltCost(_baseXP);
-      const _timeS = getAgingTimeSec(_baseXP);
-      const _expectedXP = Math.round(_maxXP * AGING_DEFAULT_FACTOR);
-      COOKING_RECIPES_DATA[_aged] = { building: "Aging Shed", xp: _expectedXP, cookSec: _timeS, usesHoney: false };
-      COOKING_INGREDIENTS[_aged] = { [_fish]: 1, "Salt": _saltN };
-    }
-
     // ═══════════════════════════════════════
     //  POWER ANALYZER DATA
     // ═══════════════════════════════════════
@@ -4271,6 +4260,17 @@
       "Muskellunge": 250, "Trout": 330, "Walleye": 210, "Weakfish": 210,
       "Rock Blackfish": 320, "Cobia": 310, "Tilapia": 190
     };
+
+    // Generate Aged Fish recipes from FISH_BASE_XP (1 fish + N salt → 1 Aged Fish)
+    for (const [_fish, _baseXP] of Object.entries(FISH_BASE_XP)) {
+      const _aged = "Aged " + _fish;
+      const _maxXP = getAgingMaxXP(_baseXP);
+      const _saltN = getAgingSaltCost(_baseXP);
+      const _timeS = getAgingTimeSec(_baseXP);
+      const _expectedXP = Math.round(_maxXP * AGING_DEFAULT_FACTOR);
+      COOKING_RECIPES_DATA[_aged] = { building: "Aging Shed", xp: _expectedXP, cookSec: _timeS, usesHoney: false };
+      COOKING_INGREDIENTS[_aged] = { [_fish]: 1, "Salt": _saltN };
+    }
 
     // Worm-bait: avg yield per composter cycle (game roll: 2-4 / 2-3 / 1-3)
     const BAIT_WORM_YIELD = { "Earthworm": 3.0, "Grub": 2.4, "Red Wiggler": 1.83 };
