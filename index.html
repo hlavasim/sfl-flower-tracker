@@ -3492,8 +3492,19 @@
       "Slow Juice":           { "Grape": 10, "Kale": 100 },
     };
 
-    const COOKING_BUILDING_NAMES = ["Fire Pit", "Kitchen", "Bakery", "Deli", "Smoothie Shack"];
-    const COOKING_BUILDING_EMOJI = { "Fire Pit": "🔥", "Kitchen": "🍳", "Bakery": "🧁", "Deli": "🥩", "Smoothie Shack": "🥤" };
+    const COOKING_BUILDING_NAMES = ["Fire Pit", "Kitchen", "Bakery", "Deli", "Smoothie Shack", "Aging Shed"];
+    const COOKING_BUILDING_EMOJI = { "Fire Pit": "🔥", "Kitchen": "🍳", "Bakery": "🧁", "Deli": "🥩", "Smoothie Shack": "🥤", "Aging Shed": "🧂" };
+
+    // Generate Aged Fish recipes from FISH_BASE_XP (1 fish + N salt → 1 Aged Fish)
+    for (const [_fish, _baseXP] of Object.entries(FISH_BASE_XP)) {
+      const _aged = "Aged " + _fish;
+      const _maxXP = getAgingMaxXP(_baseXP);
+      const _saltN = getAgingSaltCost(_baseXP);
+      const _timeS = getAgingTimeSec(_baseXP);
+      const _expectedXP = Math.round(_maxXP * AGING_DEFAULT_FACTOR);
+      COOKING_RECIPES_DATA[_aged] = { building: "Aging Shed", xp: _expectedXP, cookSec: _timeS, usesHoney: false };
+      COOKING_INGREDIENTS[_aged] = { [_fish]: 1, "Salt": _saltN };
+    }
 
     // ═══════════════════════════════════════
     //  POWER ANALYZER DATA
@@ -4220,6 +4231,46 @@
     // Source: sunflower-land game repo (fishing.ts, tools.ts)
     // Rod is consumed per cast: 20 coins + 3 Wood + 1 Stone (Reel Deal skill -50%)
     const FISHING_ROD_COST = { coins: 20, materials: { Wood: 3, Stone: 1 } };
+
+    // ── Salt mining (Salt Rake consumed per harvest) ──
+    const SALT_RAKE_COST = { coins: 20, materials: { Wood: 3 } };
+    const SALT_BASE_YIELD = 10;
+    function computeSaltYieldPerRake(farm) {
+      let y = SALT_BASE_YIELD;
+      const skills = farm?.bumpkin?.skills || {};
+      if (skills["Wide Rakes"]) y += 2;
+      try { if (farm && isWearableEquipped(farm, "Deep Sea Salt Cave Background")) y += 5; } catch {}
+      return y;
+    }
+
+    // ── Aging Shed formulas (from sunflower-land/agingFormulas.ts) ──
+    const AGING_PRIME_BASE = 0.10, AGING_PRIME_MULT = 1.3;
+    const AGING_DEFAULT_FACTOR = 1 + AGING_PRIME_BASE * (AGING_PRIME_MULT - 1); // 1.03 baseline
+    function getAgingMaxXP(baseXP) {
+      if (baseXP <= 200) return baseXP * 3;
+      if (baseXP <= 330) return baseXP * 4;
+      return baseXP * 5;
+    }
+    function getAgingSaltCost(baseXP) { return Math.round(getAgingMaxXP(baseXP) / 50); }
+    function getAgingTimeSec(baseXP) {
+      const maxXP = getAgingMaxXP(baseXP);
+      const j = baseXP <= 200 ? 300 : baseXP <= 330 ? 500 : 1000;
+      return ((maxXP - baseXP) / j) * 3600;
+    }
+
+    // Base XP per fish (from game consumables FISH record)
+    const FISH_BASE_XP = {
+      "Anchovy": 80, "Butterflyfish": 110, "Blowfish": 170, "Clownfish": 210,
+      "Sea Bass": 140, "Sea Horse": 240, "Horse Mackerel": 250, "Squid": 250,
+      "Red Snapper": 100, "Moray Eel": 220, "Olive Flounder": 180,
+      "Napoleanfish": 180, "Surgeonfish": 210, "Zebra Turkeyfish": 220,
+      "Ray": 430, "Hammerhead Shark": 750, "Barred Knifejaw": 580,
+      "Tuna": 200, "Mahi Mahi": 200, "Blue Marlin": 200, "Oarfish": 220,
+      "Football Fish": 200, "Sunfish": 200, "Coelacanth": 410,
+      "Angelfish": 250, "Halibut": 220, "Parrotfish": 440, "Porgy": 250,
+      "Muskellunge": 250, "Trout": 330, "Walleye": 210, "Weakfish": 210,
+      "Rock Blackfish": 320, "Cobia": 310, "Tilapia": 190
+    };
 
     // Worm-bait: avg yield per composter cycle (game roll: 2-4 / 2-3 / 1-3)
     const BAIT_WORM_YIELD = { "Earthworm": 3.0, "Grub": 2.4, "Red Wiggler": 1.83 };
@@ -5040,7 +5091,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v2.6</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v2.7</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5067,6 +5118,12 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v2.7", items: [
+          { t: "new", text: "Aging Shed on bumpkin page — 35 aged-fish recipes with salt/time/XP" },
+          { t: "new", text: "Salt cost derived from Salt Rake (20 coins + 3 Wood) / yield (10 base, +2 Wide Rakes, +5 wearable)" },
+          { t: "new", text: "Fish cost in aging shed treated as fishing rod cost (random catch approximation)" },
+          { t: "new", text: "Detects Speedy Aging, Fish Smoking, Salt Sculpture L2/L5 boosts" },
+        ]},
         { ver: "v2.6", items: [
           { t: "new", text: "Gifts Planner on flowers page — plan daily flower gifts to 14 NPCs" },
           { t: "new", text: "Per-NPC selectbox with sorted flower options (points + grow hours)" },
@@ -5378,6 +5435,18 @@
       if (hasAny("Nightshade Medallion")) timeBoosts.push({ name: "Nightshade Medallion", multiplier: 0.75 });
       if (hasAny("Master Chefs Cleaver", "Master Chef's Cleaver")) timeBoosts.push({ name: "Master Chefs Cleaver", multiplier: 0.85 });
 
+      // === AGING SHED BOOSTS ===
+      const sculptures = farm.sculptures || {};
+      const saltSculptLvl = sculptures["Salt Sculpture"]?.level || 0;
+      // Time
+      if (skills["Speedy Aging"]) timeBoosts.push({ name: "Speedy Aging", multiplier: 0.9, buildings: ["Aging Shed"] });
+      if (saltSculptLvl >= 5) timeBoosts.push({ name: "Salt Sculpture L5+", multiplier: 0.95, buildings: ["Aging Shed"] });
+      // XP (via prime aged chance: 10% baseline → factor 1.03; +Fish Smoking → 20% → factor 1.06; +L2 sculpt → +4% chance → factor 1.042)
+      if (skills["Fish Smoking"]) xpBoosts.push({ name: "Fish Smoking (\u00d72 prime)", multiplier: 1.029, buildings: ["Aging Shed"] });
+      if (saltSculptLvl >= 2) xpBoosts.push({ name: "Salt Sculpture L2+ (+4% prime)", multiplier: 1.012, buildings: ["Aging Shed"] });
+      // Salt yield (informational — affects salt cost rather than recipe XP/time)
+      if (skills["Wide Rakes"]) xpBoosts.push({ name: "Wide Rakes (+2 salt/rake)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
+
       console.log("[Cooking Boosts] Detected XP:", xpBoosts.map(b => b.name));
       console.log("[Cooking Boosts] Detected Time:", timeBoosts.map(b => b.name));
       console.log("[Cooking Boosts] Pet Streak:", petStreakInfo);
@@ -5423,6 +5492,7 @@
       "Bakery": "Lemon Cheesecake",
       "Deli": "Honey Cheddar",
       "Smoothie Shack": "Sour Shake",
+      "Aging Shed": "Aged Tuna",
     };
 
     function getSavedBumpkinRecipes() {
@@ -5472,17 +5542,34 @@
 
     // Recursive ingredient SFL resolver — returns {price, source} or null if unknown.
     // Resolution order: P2P → FISH_DATA → bait worm → COOKING_INGREDIENTS recursion → CRAFTED_INGREDIENT_RECIPES → null
-    function _resolveItemSfl(itemName, p2p, coinsPerSFL, skills, _seen) {
+    function _resolveItemSfl(itemName, p2p, coinsPerSFL, skills, _seen, extras) {
       _seen = _seen || new Set();
       if (_seen.has(itemName)) return null;
       _seen.add(itemName);
+
+      // 0. Salt — derived from Salt Rake cost (20 coins + 3 Wood per harvest) / yield-per-rake
+      if (itemName === "Salt") {
+        const yieldPerRake = (extras && extras.saltYieldPerRake) || SALT_BASE_YIELD;
+        const coinSFL = coinsPerSFL > 0 ? SALT_RAKE_COST.coins / coinsPerSFL : 0;
+        let matSFL = 0;
+        for (const [m, q] of Object.entries(SALT_RAKE_COST.materials)) {
+          matSFL += (parseFloat(p2p[m]) || 0) * q;
+        }
+        const cost = (coinSFL + matSFL) / yieldPerRake;
+        return cost > 0 ? { price: cost, source: "salt" } : null;
+      }
 
       // 1. Direct P2P
       const direct = parseFloat(p2p[itemName]) || 0;
       if (direct > 0) return { price: direct, source: "P2P" };
 
-      // 2. Fish (FISH_DATA + computeFishEffectiveCost)
+      // 2. Fish — for Aging Shed (extras.fishAsRod) treat as rod cost only;
+      //    otherwise use empirical fishing cost (rod + bait + chum / probability)
       if (FISH_DATA[itemName]) {
+        if (extras && extras.fishAsRod) {
+          const rod = computeRodCostSFL(p2p, coinsPerSFL, skills);
+          return rod > 0 ? { price: rod, source: "fish-rod" } : null;
+        }
         const fc = computeFishEffectiveCost(itemName, p2p, coinsPerSFL, skills);
         if (fc) return { price: fc.sfl, source: "fish", fc };
         return null;
@@ -5503,7 +5590,7 @@
           const recipe = seasonRecipes[s];
           let total = 0, missing = false;
           for (const [sub, q] of Object.entries(recipe)) {
-            const r = _resolveItemSfl(sub, p2p, coinsPerSFL, skills, _seen);
+            const r = _resolveItemSfl(sub, p2p, coinsPerSFL, skills, _seen, extras);
             if (!r) { missing = true; break; }
             total += r.price * q;
           }
@@ -5517,7 +5604,7 @@
       if (recipe) {
         let total = 0;
         for (const [sub, q] of Object.entries(recipe)) {
-          const r = _resolveItemSfl(sub, p2p, coinsPerSFL, skills, _seen);
+          const r = _resolveItemSfl(sub, p2p, coinsPerSFL, skills, _seen, extras);
           if (!r) return null;
           total += r.price * q;
         }
@@ -5529,7 +5616,7 @@
         const recipe = CRAFTED_INGREDIENT_RECIPES[itemName];
         let total = 0;
         for (const [sub, q] of Object.entries(recipe)) {
-          const r = _resolveItemSfl(sub, p2p, coinsPerSFL, skills, _seen);
+          const r = _resolveItemSfl(sub, p2p, coinsPerSFL, skills, _seen, extras);
           if (!r) return null;
           total += r.price * q;
         }
@@ -5542,13 +5629,13 @@
         // Pot price (one-time setup, but treat as per-catch since we lack pot-cycle accounting)
         let total = 0;
         if (cr.chum && cr.qty > 0) {
-          const chumR = _resolveItemSfl(cr.chum, p2p, coinsPerSFL, skills, _seen);
+          const chumR = _resolveItemSfl(cr.chum, p2p, coinsPerSFL, skills, _seen, extras);
           if (chumR) total += chumR.price * cr.qty;
           // Try cheaper alternate chum
           if (cr.alt) {
             const altMatch = cr.alt.match(/^(.+?)\s*x(\d+)$/);
             if (altMatch) {
-              const altR = _resolveItemSfl(altMatch[1], p2p, coinsPerSFL, skills, _seen);
+              const altR = _resolveItemSfl(altMatch[1], p2p, coinsPerSFL, skills, _seen, extras);
               if (altR) {
                 const altCost = altR.price * parseInt(altMatch[2]);
                 if (altCost > 0 && (total <= 0 || altCost < total)) total = altCost;
@@ -5573,7 +5660,7 @@
 
     // Compute total SFL cost per cook (resolves fish, bait, chained recipes recursively)
     // Returns: { total, items, hasUnpriced } where items[i] = { name, qty, price, cost, source, selfProduced? }
-    function computeRecipeCost(recipeName, p2p, coinsPerSFL, skills) {
+    function computeRecipeCost(recipeName, p2p, coinsPerSFL, skills, extras) {
       if (!p2p) return null;
       const ingredients = COOKING_INGREDIENTS[recipeName];
       if (!ingredients) return null;
@@ -5582,8 +5669,13 @@
       let hasUnpriced = false;
       coinsPerSFL = coinsPerSFL || 0;
       skills = skills || {};
+      // Auto-derive extras for Aging Shed recipes (fish counted as rod cost)
+      const _recData = COOKING_RECIPES_DATA[recipeName];
+      if (_recData && _recData.building === "Aging Shed") {
+        extras = Object.assign({ fishAsRod: true }, extras || {});
+      }
       for (const [itemName, qty] of Object.entries(ingredients)) {
-        const r = _resolveItemSfl(itemName, p2p, coinsPerSFL, skills);
+        const r = _resolveItemSfl(itemName, p2p, coinsPerSFL, skills, undefined, extras);
         if (r) {
           const cost = r.price * qty;
           total += cost;
@@ -8685,7 +8777,8 @@
               const time = computeCookTime(r.cookSec, buildingName, boosts);
               const xpPerHour = time > 0 ? (xp / time) * 3600 : 0;
               const isInstant = r.cookSec === 0;
-              const rc = p2p ? computeRecipeCost(name, p2p, coinsPerSFL, skills) : null;
+              const _saltY = computeSaltYieldPerRake(farm);
+              const rc = p2p ? computeRecipeCost(name, p2p, coinsPerSFL, skills, { saltYieldPerRake: _saltY }) : null;
               const cost = (rc && rc.total > 0) ? rc.total : null;
               const xpPerSfl = (cost && cost > 0) ? xp / cost : 0;
               return { name, xp, time, xpPerHour, cost, xpPerSfl, isInstant };
@@ -8713,7 +8806,8 @@
           const emoji = COOKING_BUILDING_EMOJI[buildingName] || "🏠";
           const fmtXP = (v) => v % 1 === 0 ? v.toLocaleString() : v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-          const recipeCost = selected ? computeRecipeCost(selected.name, p2p) : null;
+          const _saltY2 = computeSaltYieldPerRake(farm);
+          const recipeCost = selected ? computeRecipeCost(selected.name, p2p, coinsPerSFL, skills, { saltYieldPerRake: _saltY2 }) : null;
           const costPerCook = recipeCost ? recipeCost.total : 0;
           const costPerDay = costPerCook * cooksPerDay;
           totalCostPerDay += costPerDay;
