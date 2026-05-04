@@ -5426,14 +5426,14 @@
 
       // === TIME BOOSTS ===
       // Skills
-      if (skills["Double Nom"]) timeBoosts.push({ name: "Double Nom", multiplier: 0.5 });
+      if (skills["Double Nom"]) timeBoosts.push({ name: "Double Nom", multiplier: 0.5, excludeBuildings: ["Aging Shed"] });
       if (skills["Fast Feasts"]) timeBoosts.push({ name: "Fast Feasts", multiplier: 0.9, buildings: ["Fire Pit", "Kitchen"] });
       if (skills["Frosted Cakes"]) timeBoosts.push({ name: "Frosted Cakes", multiplier: 0.9, buildings: ["Bakery"] });
       // Items
-      if (hasItem("Luna's Hat")) timeBoosts.push({ name: "Luna's Hat", multiplier: 0.5 });
-      if (hasItem("Desert Gnome")) timeBoosts.push({ name: "Desert Gnome", multiplier: 0.9 });
-      if (hasAny("Nightshade Medallion")) timeBoosts.push({ name: "Nightshade Medallion", multiplier: 0.75 });
-      if (hasAny("Master Chefs Cleaver", "Master Chef's Cleaver")) timeBoosts.push({ name: "Master Chefs Cleaver", multiplier: 0.85 });
+      if (hasItem("Luna's Hat")) timeBoosts.push({ name: "Luna's Hat", multiplier: 0.5, excludeBuildings: ["Aging Shed"] });
+      if (hasItem("Desert Gnome")) timeBoosts.push({ name: "Desert Gnome", multiplier: 0.9, excludeBuildings: ["Aging Shed"] });
+      if (hasAny("Nightshade Medallion")) timeBoosts.push({ name: "Nightshade Medallion", multiplier: 0.75, excludeBuildings: ["Aging Shed"] });
+      if (hasAny("Master Chefs Cleaver", "Master Chef's Cleaver")) timeBoosts.push({ name: "Master Chefs Cleaver", multiplier: 0.85, excludeBuildings: ["Aging Shed"] });
 
       // === AGING SHED BOOSTS ===
       const sculptures = farm.sculptures || {};
@@ -5458,6 +5458,7 @@
       let xp = food.xp;
       for (const b of boosts.xpBoosts) {
         if (b.buildings && !b.buildings.includes(buildingName)) continue;
+        if (b.excludeBuildings && b.excludeBuildings.includes(buildingName)) continue;
         if (b.honeyOnly && !food.usesHoney) continue;
         xp *= b.multiplier;
       }
@@ -5468,6 +5469,7 @@
       let time = baseSec;
       for (const b of boosts.timeBoosts) {
         if (b.buildings && !b.buildings.includes(buildingName)) continue;
+        if (b.excludeBuildings && b.excludeBuildings.includes(buildingName)) continue;
         time *= b.multiplier;
       }
       return time;
