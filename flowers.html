@@ -5091,7 +5091,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v2.7</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v2.8</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5118,6 +5118,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v2.8", items: [
+          { t: "new", text: "Nodes page: 'Road to 2× T3 of Each' panel — buys, merges and SFL cost to reach 2 T3 per type" },
+          { t: "fix", text: "Merge options always listed (incl. Merge Tree); shows what's missing instead of being hidden" },
+        ]},
         { ver: "v2.7", items: [
           { t: "new", text: "Aging Shed on bumpkin page — 35 aged-fish recipes with salt/time/XP" },
           { t: "new", text: "Salt cost derived from Salt Rake (20 coins + 3 Wood) / yield (10 base, +2 Wide Rakes, +5 wearable)" },
@@ -14767,7 +14771,7 @@
       // B. Merge t1→t2
       for (const [mergeKey, mc] of Object.entries(MERGE_COSTS)) {
         const tiers = getNodeTiers(mergeKey);
-        if (tiers.t1 < 4) continue;
+        // Always include the option, even if t1 < 4 — show as not-yet-actionable
         const np = NODE_PRICES[mergeKey === "stones" ? "stones" : mergeKey];
         if (!np) continue;
         const catId = np.catId;
@@ -14792,10 +14796,12 @@
 
         const hasObs = playerObsidian >= mc.t2.obsidian;
         const hasCoins = playerCoins >= mc.t2.coins;
-        const canAfford = hasObs && hasCoins;
+        const hasT1 = tiers.t1 >= 4;
+        const canAfford = hasObs && hasCoins && hasT1;
 
         let need = "";
-        if (!hasObs) need = `Need ${mc.t2.obsidian - Math.floor(playerObsidian)} Obsidian`;
+        if (!hasT1) need = `Need ${4 - tiers.t1} more T1 ${np.label.toLowerCase()}${4 - tiers.t1 > 1 ? 's' : ''}`;
+        else if (!hasObs) need = `Need ${mc.t2.obsidian - Math.floor(playerObsidian)} Obsidian`;
         else if (!hasCoins) need = `Need ${(mc.t2.coins - playerCoins).toLocaleString()} coins`;
 
         options.push({
@@ -14815,7 +14821,7 @@
       // C. Merge t2→t3
       for (const [mergeKey, mc] of Object.entries(MERGE_COSTS)) {
         const tiers = getNodeTiers(mergeKey);
-        if (tiers.t2 < 4) continue;
+        // Always include the option, even if t2 < 4 — show as not-yet-actionable
         const np = NODE_PRICES[mergeKey === "stones" ? "stones" : mergeKey];
         if (!np) continue;
         const catId = np.catId;
@@ -14837,10 +14843,12 @@
 
         const hasObs = playerObsidian >= mc.t3.obsidian;
         const hasCoins = playerCoins >= mc.t3.coins;
-        const canAfford = hasObs && hasCoins;
+        const hasT2 = tiers.t2 >= 4;
+        const canAfford = hasObs && hasCoins && hasT2;
 
         let need = "";
-        if (!hasObs) need = `Need ${mc.t3.obsidian - Math.floor(playerObsidian)} Obsidian`;
+        if (!hasT2) need = `Need ${4 - tiers.t2} more T2 ${np.label.toLowerCase()}${4 - tiers.t2 > 1 ? 's' : ''}`;
+        else if (!hasObs) need = `Need ${mc.t3.obsidian - Math.floor(playerObsidian)} Obsidian`;
         else if (!hasCoins) need = `Need ${(mc.t3.coins - playerCoins).toLocaleString()} coins`;
 
         options.push({
@@ -15167,17 +15175,126 @@
           const roiStr = o.roiDays >= 9999 ? "9999+" : Math.ceil(o.roiDays) + "d";
           const roiColor = o.roiDays <= 30 ? "var(--green)" : o.roiDays <= 90 ? "var(--sunpetal)" : o.roiDays <= 365 ? "var(--text-secondary)" : "var(--text-dim)";
           const productHint = o.bestProduct && PRODUCT_LISTS[NODE_PRICES[o.nodeKey]?.catId] ? ` <span style="color:var(--text-dim);font-size:0.5625rem">(${escHTML(o.bestProduct)})</span>` : "";
+          const needHint = (!o.canAfford && o.need) ? ` <span style="color:var(--text-dim);font-size:0.5625rem">— ${escHTML(o.need)}</span>` : "";
 
           const optRoiDisplay = o.realRoiDays >= 9999 ? "9999+" : Math.ceil(o.realRoiDays) + "d";
           const optRoiColor = o.realRoiDays <= 30 ? "var(--green)" : o.realRoiDays <= 90 ? "var(--sunpetal)" : o.realRoiDays <= 365 ? "var(--text-secondary)" : "var(--text-dim)";
+          const rowOpacity = o.canAfford ? "" : "opacity:0.65;";
 
-          content += `<tr>
-            <td>${escHTML(o.action)}${productHint}</td>
+          content += `<tr style="${rowOpacity}">
+            <td>${escHTML(o.action)}${productHint}${needHint}</td>
             <td style="text-align:right;white-space:nowrap">${o.costSfl.toFixed(1)} ${sflIcon("0.75em")}</td>
             <td style="text-align:right;color:var(--green)">+${o.marginal.toFixed(4)}</td>
             <td style="text-align:right;color:${optRoiColor};font-weight:bold">${optRoiDisplay}</td>
           </tr>`;
         }
+        content += `</table></div>`;
+      }
+
+      // ── ROAD TO 2× T3 OF EACH ──
+      {
+        const ROAD_TARGET_T3 = 2;
+        const roadRows = [];
+        let roadTotalSfl = 0, roadTotalSunstones = 0, roadTotalObsidian = 0, roadTotalCoins = 0;
+
+        for (const [mergeKey, mc] of Object.entries(MERGE_COSTS)) {
+          const np = NODE_PRICES[mergeKey];
+          if (!np) continue;
+          const tiers = getNodeTiers(mergeKey);
+          const baseCount = baseNodes[mergeKey] || 0;
+
+          const t3ToMake = Math.max(0, ROAD_TARGET_T3 - tiers.t3);
+          const t2NeededTotal = 4 * t3ToMake;
+          const t2ToCreate = Math.max(0, t2NeededTotal - tiers.t2);
+          const t1NeededTotal = 4 * t2ToCreate;
+          const t1ToBuy = Math.max(0, t1NeededTotal - tiers.t1);
+
+          let purchasedSoFar = Math.max(0, tiers.effective - baseCount);
+          let sunstones = 0;
+          for (let i = 0; i < t1ToBuy; i++) {
+            sunstones += np.base + purchasedSoFar * np.increase;
+            purchasedSoFar++;
+          }
+          const buyCostSfl = sunstones * sunstoneCostSfl;
+
+          const t2MergeObs = t2ToCreate * mc.t2.obsidian;
+          const t2MergeCoins = t2ToCreate * mc.t2.coins;
+          const t2MergeSfl = t2MergeObs * obsidianCostSfl + (exchangeRates.coinsPerSFL > 0 ? t2MergeCoins / exchangeRates.coinsPerSFL : 0);
+
+          const t3MergeObs = t3ToMake * mc.t3.obsidian;
+          const t3MergeCoins = t3ToMake * mc.t3.coins;
+          const t3MergeSfl = t3MergeObs * obsidianCostSfl + (exchangeRates.coinsPerSFL > 0 ? t3MergeCoins / exchangeRates.coinsPerSFL : 0);
+
+          const totalSfl = buyCostSfl + t2MergeSfl + t3MergeSfl;
+          const totalObs = t2MergeObs + t3MergeObs;
+          const totalCoins = t2MergeCoins + t3MergeCoins;
+
+          roadTotalSfl += totalSfl;
+          roadTotalSunstones += sunstones;
+          roadTotalObsidian += totalObs;
+          roadTotalCoins += totalCoins;
+
+          roadRows.push({
+            label: np.label, current: tiers,
+            t1ToBuy, sunstones, buyCostSfl,
+            t2ToCreate, t2MergeObs, t2MergeCoins, t2MergeSfl,
+            t3ToMake, t3MergeObs, t3MergeCoins, t3MergeSfl,
+            totalSfl, totalObs, totalCoins,
+            done: t3ToMake === 0 && t2ToCreate === 0 && t1ToBuy === 0,
+          });
+        }
+
+        content += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+          <div style="font-size:0.6875rem;color:var(--lily);margin-bottom:4px;font-weight:bold" class="pixel-font">ROAD TO 2× T3 OF EACH</div>
+          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px">What's still needed to have 2 T3 nodes of each mergeable type and nothing else. Sunstone purchase cost grows per node bought.</div>
+          <table class="node-res-table">
+            <tr>
+              <th>RESOURCE</th>
+              <th style="text-align:center">T1/T2/T3</th>
+              <th style="text-align:right">BUY T1</th>
+              <th style="text-align:right">MERGE → T2</th>
+              <th style="text-align:right">MERGE → T3</th>
+              <th style="text-align:right">SFL TOTAL</th>
+            </tr>`;
+
+        for (const r of roadRows) {
+          if (r.done) {
+            content += `<tr>
+              <td>${escHTML(r.label)}</td>
+              <td style="text-align:center;color:var(--green)">${r.current.t1}/${r.current.t2}/${r.current.t3}</td>
+              <td colspan="3" style="text-align:center;color:var(--green);font-size:0.5625rem">— Already at 2× T3 —</td>
+              <td style="text-align:right;color:var(--green);font-weight:bold">DONE</td>
+            </tr>`;
+            continue;
+          }
+          const buyStr = r.t1ToBuy > 0
+            ? `<span style="color:var(--sunpetal)">${r.t1ToBuy}×</span> <span style="color:var(--text-dim)">(${r.sunstones} ☀ · ${r.buyCostSfl.toFixed(1)} ${sflIcon("0.75em")})</span>`
+            : '<span style="color:var(--text-dim)">—</span>';
+          const t2Str = r.t2ToCreate > 0
+            ? `<span style="color:var(--sunpetal)">${r.t2ToCreate}×</span> <span style="color:var(--text-dim)">(${r.t2MergeObs} Obs + ${(r.t2MergeCoins/1000).toFixed(0)}k coin)</span>`
+            : '<span style="color:var(--text-dim)">—</span>';
+          const t3Str = r.t3ToMake > 0
+            ? `<span style="color:var(--sunpetal)">${r.t3ToMake}×</span> <span style="color:var(--text-dim)">(${r.t3MergeObs} Obs + ${(r.t3MergeCoins/1000).toFixed(0)}k coin)</span>`
+            : '<span style="color:var(--text-dim)">—</span>';
+
+          content += `<tr>
+            <td>${escHTML(r.label)}</td>
+            <td style="text-align:center;color:var(--text-dim)">${r.current.t1}/${r.current.t2}/${r.current.t3}</td>
+            <td style="text-align:right;font-size:0.5625rem;white-space:nowrap">${buyStr}</td>
+            <td style="text-align:right;font-size:0.5625rem;white-space:nowrap">${t2Str}</td>
+            <td style="text-align:right;font-size:0.5625rem;white-space:nowrap">${t3Str}</td>
+            <td style="text-align:right;color:var(--sunpetal);font-weight:bold;white-space:nowrap">${r.totalSfl.toFixed(1)} ${sflIcon("0.75em")}</td>
+          </tr>`;
+        }
+
+        content += `<tr style="border-top:2px solid var(--border-light);background:rgba(92,58,30,0.2)">
+          <td style="font-weight:bold" class="pixel-font">TOTAL</td>
+          <td style="text-align:center;color:var(--text-dim);font-size:0.5625rem">all 4 types</td>
+          <td style="text-align:right;font-size:0.5625rem;white-space:nowrap"><span style="color:var(--sunpetal)">${roadTotalSunstones} ☀</span></td>
+          <td colspan="2" style="text-align:right;font-size:0.5625rem;white-space:nowrap"><span style="color:var(--sunpetal)">${roadTotalObsidian} Obs + ${(roadTotalCoins/1000).toFixed(0)}k coin</span></td>
+          <td style="text-align:right;color:var(--sunpetal);font-weight:bold;white-space:nowrap">${roadTotalSfl.toFixed(1)} ${sflIcon("0.75em")}</td>
+        </tr>`;
+
         content += `</table></div>`;
       }
 
