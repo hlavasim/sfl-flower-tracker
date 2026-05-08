@@ -5100,7 +5100,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v2.9</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.0</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5127,6 +5127,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.0", items: [
+          { t: "fix", text: "Aging Shed XP/day now scales with building level (slots = level, capped at 6) — L2 = 2× cooks/day, etc." },
+        ]},
         { ver: "v2.9", items: [
           { t: "fix", text: "Aging Shed XP/SFL now respects Skill Shrimpy (+20% Fish XP) and Fishy Feast skill (+20% Fish XP)" },
           { t: "fix", text: "Salt cost now respects Cheap Rakes (-20% rake coin cost) and Salt Sculpture L4+ (-10% rake coin cost)" },
@@ -8794,7 +8797,11 @@
         let totalCostPerDay = 0;
         const buildingStats = [];
 
-        for (const [buildingName, count] of buildingEntries) {
+        for (const [buildingName, _placedCount] of buildingEntries) {
+          // Aging Shed slots scale with its level (1-6), not number of buildings placed
+          const count = (buildingName === "Aging Shed")
+            ? Math.min(Math.max(farm.agingShed?.level || 1, 1), 6)
+            : _placedCount;
           const recipes = Object.entries(COOKING_RECIPES_DATA)
             .filter(([, r]) => r.building === buildingName)
             .map(([name, r]) => {
@@ -8873,11 +8880,15 @@
               }
             }
           }
+          const _agingLvl = (buildingName === "Aging Shed") ? Math.min(Math.max(farm.agingShed?.level || 1, 1), 6) : 0;
+          const headerExtra = (buildingName === "Aging Shed")
+            ? `<span class="bumpkin-building-count">L${_agingLvl} (\u00d7${count} slots)</span>`
+            : (count > 1 ? `<span class="bumpkin-building-count">\u00d7${count}</span>` : "");
           html += `<div class="bumpkin-building-card pixel-panel">
             <div class="bumpkin-building-header pixel-font">
               <span style="font-size: 1.25rem">${emoji}</span>
               <span class="bumpkin-building-name">${escHTML(buildingName)}</span>
-              ${count > 1 ? `<span class="bumpkin-building-count">\u00d7${count}</span>` : ""}
+              ${headerExtra}
             </div>
             <select class="bumpkin-recipe-select" onchange="selectBumpkinRecipe('${escHTML(buildingName)}', this.value)">
               <option value="" ${!selectedName ? "selected" : ""}>-- None --</option>
