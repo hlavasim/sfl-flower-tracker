@@ -5091,7 +5091,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v2.8</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v2.9</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5118,6 +5118,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v2.9", items: [
+          { t: "fix", text: "Aging Shed XP/SFL now respects Skill Shrimpy (+20% Fish XP) and Fishy Feast skill (+20% Fish XP)" },
+        ]},
         { ver: "v2.8", items: [
           { t: "new", text: "Nodes page: 'Road to 2× T3 of Each' panel — buys, merges and SFL cost to reach 2 T3 per type" },
           { t: "fix", text: "Merge options always listed (incl. Merge Tree); shows what's missing instead of being hidden" },
@@ -5448,6 +5451,9 @@
       // XP (via prime aged chance: 10% baseline → factor 1.03; +Fish Smoking → 20% → factor 1.06; +L2 sculpt → +4% chance → factor 1.042)
       if (skills["Fish Smoking"]) xpBoosts.push({ name: "Fish Smoking (\u00d72 prime)", multiplier: 1.029, buildings: ["Aging Shed"] });
       if (saltSculptLvl >= 2) xpBoosts.push({ name: "Salt Sculpture L2+ (+4% prime)", multiplier: 1.012, buildings: ["Aging Shed"] });
+      // Fish XP boosts — Aging Shed outputs (Aged Fish) count as fish consumables
+      if (hasItem("Skill Shrimpy")) xpBoosts.push({ name: "Skill Shrimpy (+20% Fish XP)", multiplier: 1.20, buildings: ["Aging Shed"] });
+      if (skills["Fishy Feast"]) xpBoosts.push({ name: "Fishy Feast (+20% Fish XP)", multiplier: 1.20, buildings: ["Aging Shed"] });
       // Salt yield (informational — affects salt cost rather than recipe XP/time)
       if (skills["Wide Rakes"]) xpBoosts.push({ name: "Wide Rakes (+2 salt/rake)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
 
