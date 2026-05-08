@@ -4349,15 +4349,15 @@
       return avgComposterCost / wormYield;
     }
 
-    // SFL rod cost per cast, with Reel Deal skill discount
+    // SFL rod cost per cast — Reel Deal skill applies to COIN part only (skill text: "-50% rod coin cost")
     function computeRodCostSFL(p2pPrices, coinsPerSFL, skills) {
-      const reelDealMult = (skills && skills["Reel Deal"]) ? 0.5 : 1;
-      const coinSFL = coinsPerSFL > 0 ? FISHING_ROD_COST.coins / coinsPerSFL : 0;
+      const reelDealCoinMult = (skills && skills["Reel Deal"]) ? 0.5 : 1;
+      const coinSFL = coinsPerSFL > 0 ? (FISHING_ROD_COST.coins * reelDealCoinMult) / coinsPerSFL : 0;
       let matSFL = 0;
       for (const [m, q] of Object.entries(FISHING_ROD_COST.materials)) {
         matSFL += (p2pPrices[m] || 0) * q;
       }
-      return (coinSFL + matSFL) * reelDealMult;
+      return coinSFL + matSFL;
     }
 
     // Effective SFL cost per 1 fish: cheapest of all paths (no-chum vs guaranteed-chum).
@@ -5129,6 +5129,8 @@
       const log = [
         { ver: "v3.0", items: [
           { t: "fix", text: "Aging Shed XP/day now scales with building level (slots = level, capped at 6) — L2 = 2× cooks/day, etc." },
+          { t: "new", text: "Pan wearable detected (+25% Bumpkin XP) — applies to all cooked food incl. Aged Fish" },
+          { t: "fix", text: "Reel Deal applied only to rod COIN cost (game text: -50% rod coin cost), not to Wood/Stone materials" },
         ]},
         { ver: "v2.9", items: [
           { t: "fix", text: "Aging Shed XP/SFL now respects Skill Shrimpy (+20% Fish XP) and Fishy Feast skill (+20% Fish XP)" },
@@ -5414,6 +5416,7 @@
       if (skills["Buzzworthy Treats"]) xpBoosts.push({ name: "Buzzworthy Treats", multiplier: 1.1, honeyOnly: true });
       // Items (check both collectibles + wearables)
       if (hasItem("Golden Spatula")) xpBoosts.push({ name: "Golden Spatula", multiplier: 1.1 });
+      if (hasItem("Pan")) xpBoosts.push({ name: "Pan (+25% Bumpkin XP)", multiplier: 1.25 });
       if (hasItem("Observatory")) xpBoosts.push({ name: "Observatory", multiplier: 1.05 });
       if (hasItem("Blossombeard")) xpBoosts.push({ name: "Blossombeard", multiplier: 1.1 });
       if (hasItem("Grain Grinder")) xpBoosts.push({ name: "Grain Grinder", multiplier: 1.2, buildings: ["Bakery"] });
