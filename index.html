@@ -4270,6 +4270,48 @@
       "Rock Blackfish": 320, "Cobia": 310, "Tilapia": 190
     };
 
+    // Fish tier (per game source FISH definition) — used for +1 fish boosts that target a tier
+    const FISH_TIER_MAP = {
+      // Basic
+      "Anchovy":"basic","Butterflyfish":"basic","Blowfish":"basic","Clownfish":"basic",
+      "Sea Bass":"basic","Sea Horse":"basic","Horse Mackerel":"basic","Halibut":"basic",
+      "Squid":"basic","Porgy":"basic","Muskellunge":"basic","Tilapia":"basic",
+      // Advanced
+      "Red Snapper":"advanced","Moray Eel":"advanced","Olive Flounder":"advanced",
+      "Napoleanfish":"advanced","Surgeonfish":"advanced","Angelfish":"advanced",
+      "Zebra Turkeyfish":"advanced","Ray":"advanced","Hammerhead Shark":"advanced",
+      // Expert
+      "Tuna":"expert","Mahi Mahi":"expert","Blue Marlin":"expert","Oarfish":"expert",
+      "Football Fish":"expert","Sunfish":"expert","Coelacanth":"expert","Trout":"expert",
+      "Walleye":"expert","Weakfish":"expert","Rock Blackfish":"expert","Cobia":"expert",
+      "Barred Knifejaw":"expert","Parrotfish":"expert"
+    };
+
+    // Expected fish per cast for a given tier — accounts for +1 yield collectibles & skills
+    function computeFishYieldPerCast(farm, tier) {
+      let y = 1; // base
+      const skills = farm?.bumpkin?.skills || {};
+      const season = (farm?.season?.season || "").toLowerCase();
+      const has = (n) => findCollectible(farm, n).length > 0;
+      // Always-on
+      if (has("Walrus")) y += 1;
+      // Seasonal +1 fish collectibles
+      if (season === "spring" && has("Pink Dolphin")) y += 1;
+      if (season === "summer" && has("Jellyfish")) y += 1;
+      if (season === "autumn" && has("Poseidon")) y += 1;
+      if (season === "winter" && has("Super Star")) y += 1;
+      // Tier-specific chance boosts (expected value)
+      if (tier === "basic") {
+        if (has("Alba")) y += 0.5;                 // 50% chance +1 basic
+        if (skills["Fishy Chance"]) y += 0.10;     // 10% chance +1 basic
+      } else if (tier === "advanced") {
+        if (skills["Fishy Roll"]) y += 0.10;       // 10% chance +1 advanced
+      } else if (tier === "expert") {
+        if (skills["Fishy Gamble"]) y += 0.20;     // 20% chance +1 expert
+      }
+      return y;
+    }
+
     // Generate Aged Fish recipes from FISH_BASE_XP (1 fish + N salt → 1 Aged Fish)
     for (const [_fish, _baseXP] of Object.entries(FISH_BASE_XP)) {
       const _aged = "Aged " + _fish;
@@ -5100,7 +5142,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.0</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.1</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5127,6 +5169,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.1", items: [
+          { t: "fix", text: "Aged Fish cost now divides rod cost by expected fish per cast — applies +1 Fish boosts: Walrus, seasonal (Pink Dolphin/Jellyfish/Poseidon/Super Star), Alba (basic 50%), and Fishy Chance/Roll/Gamble skills" },
+        ]},
         { ver: "v3.0", items: [
           { t: "fix", text: "Aging Shed XP/day now scales with building level (slots = level, capped at 6) — L2 = 2× cooks/day, etc." },
           { t: "new", text: "Pan wearable detected (+25% Bumpkin XP) — applies to all cooked food incl. Aged Fish" },
@@ -5474,6 +5519,17 @@
       if (skills["Wide Rakes"]) xpBoosts.push({ name: "Wide Rakes (+2 salt/rake)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
       if (skills["Cheap Rakes"]) xpBoosts.push({ name: "Cheap Rakes (-20% rake coin cost)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
       if (saltSculptLvl >= 4) xpBoosts.push({ name: "Salt Sculpture L4+ (-10% rake coin cost)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
+      // Fish-yield boosts (informational — affect fish/rod cost in Aged Fish recipes)
+      const _season = (farm?.season?.season || "").toLowerCase();
+      if (hasItem("Walrus")) xpBoosts.push({ name: "Walrus (+1 Fish)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
+      if (_season === "spring" && hasItem("Pink Dolphin")) xpBoosts.push({ name: "Pink Dolphin (+1 Fish, Spring)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
+      if (_season === "summer" && hasItem("Jellyfish")) xpBoosts.push({ name: "Jellyfish (+1 Fish, Summer)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
+      if (_season === "autumn" && hasItem("Poseidon")) xpBoosts.push({ name: "Poseidon (+1 Fish, Autumn)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
+      if (_season === "winter" && hasItem("Super Star")) xpBoosts.push({ name: "Super Star (+1 Fish, Winter)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
+      if (hasItem("Alba")) xpBoosts.push({ name: "Alba (+0.5 expected Basic Fish)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
+      if (skills["Fishy Chance"]) xpBoosts.push({ name: "Fishy Chance (+0.1 expected Basic)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
+      if (skills["Fishy Roll"]) xpBoosts.push({ name: "Fishy Roll (+0.1 expected Advanced)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
+      if (skills["Fishy Gamble"]) xpBoosts.push({ name: "Fishy Gamble (+0.2 expected Expert)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
 
       console.log("[Cooking Boosts] Detected XP:", xpBoosts.map(b => b.name));
       console.log("[Cooking Boosts] Detected Time:", timeBoosts.map(b => b.name));
@@ -5594,12 +5650,15 @@
       const direct = parseFloat(p2p[itemName]) || 0;
       if (direct > 0) return { price: direct, source: "P2P" };
 
-      // 2. Fish — for Aging Shed (extras.fishAsRod) treat as rod cost only;
+      // 2. Fish — for Aging Shed (extras.fishAsRod) treat as rod cost / yield-per-cast;
       //    otherwise use empirical fishing cost (rod + bait + chum / probability)
       if (FISH_DATA[itemName]) {
         if (extras && extras.fishAsRod) {
           const rod = computeRodCostSFL(p2p, coinsPerSFL, skills);
-          return rod > 0 ? { price: rod, source: "fish-rod" } : null;
+          const tier = FISH_TIER_MAP[itemName];
+          const yieldByTier = (extras && extras.fishYieldByTier) || {};
+          const yieldPerCast = (tier && yieldByTier[tier]) || 1;
+          return rod > 0 ? { price: rod / yieldPerCast, source: "fish-rod" } : null;
         }
         const fc = computeFishEffectiveCost(itemName, p2p, coinsPerSFL, skills);
         if (fc) return { price: fc.sfl, source: "fish", fc };
@@ -8814,7 +8873,12 @@
               const isInstant = r.cookSec === 0;
               const _saltY = computeSaltYieldPerRake(farm);
               const _saltCoinMult = computeSaltRakeCoinMult(farm);
-              const rc = p2p ? computeRecipeCost(name, p2p, coinsPerSFL, skills, { saltYieldPerRake: _saltY, saltRakeCoinMult: _saltCoinMult }) : null;
+              const _fishYieldByTier = {
+                basic: computeFishYieldPerCast(farm, "basic"),
+                advanced: computeFishYieldPerCast(farm, "advanced"),
+                expert: computeFishYieldPerCast(farm, "expert"),
+              };
+              const rc = p2p ? computeRecipeCost(name, p2p, coinsPerSFL, skills, { saltYieldPerRake: _saltY, saltRakeCoinMult: _saltCoinMult, fishYieldByTier: _fishYieldByTier }) : null;
               const cost = (rc && rc.total > 0) ? rc.total : null;
               const xpPerSfl = (cost && cost > 0) ? xp / cost : 0;
               return { name, xp, time, xpPerHour, cost, xpPerSfl, isInstant };
@@ -8844,7 +8908,12 @@
 
           const _saltY2 = computeSaltYieldPerRake(farm);
           const _saltCoinMult2 = computeSaltRakeCoinMult(farm);
-          const recipeCost = selected ? computeRecipeCost(selected.name, p2p, coinsPerSFL, skills, { saltYieldPerRake: _saltY2, saltRakeCoinMult: _saltCoinMult2 }) : null;
+          const _fishYieldByTier2 = {
+            basic: computeFishYieldPerCast(farm, "basic"),
+            advanced: computeFishYieldPerCast(farm, "advanced"),
+            expert: computeFishYieldPerCast(farm, "expert"),
+          };
+          const recipeCost = selected ? computeRecipeCost(selected.name, p2p, coinsPerSFL, skills, { saltYieldPerRake: _saltY2, saltRakeCoinMult: _saltCoinMult2, fishYieldByTier: _fishYieldByTier2 }) : null;
           const costPerCook = recipeCost ? recipeCost.total : 0;
           const costPerDay = costPerCook * cooksPerDay;
           totalCostPerDay += costPerDay;
