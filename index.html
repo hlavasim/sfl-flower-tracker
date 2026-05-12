@@ -3754,19 +3754,27 @@
     const GREENHOUSE_OIL_COSTS = { "Grape": 3, "Rice": 4, "Olive": 5 };
 
     // ── Tool costs (coins + optional materials per tool) ──
-    // Exotic crops + giant fruits sell prices in coins (from SFL beans.ts EXOTIC_CROPS).
-    // Items turned in to potion-house NPC (Eins/Stella). Used by estimateItemSfl
-    // to value bounty turn-ins of Chiogga/Golden Helios/dolls-of-this-type/etc.
-    const EXOTIC_CROPS_SELL_PRICES = {
-      "Black Magic": 32000,
-      "Golden Helios": 16000,
-      "Chiogga": 8000,
-      "Purple Cauliflower": 3200,
-      "Adirondack Potato": 2400,
-      "Warty Goblin Pumpkin": 1600,
-      "White Carrot": 800,
+    // Eins (Potion House) buy price in Potion Tickets — from SFL collectibles.ts
+    // POTION_HOUSE_EXOTIC_CROPS. This is the *acquisition* cost (player → NPC,
+    // you pay tickets to GET the item), which is what matters when valuing what
+    // you'd give to a bounty. The sellPrice (NPC → player) from beans.ts
+    // EXOTIC_CROPS would be the wrong direction — what you'd get if you JUST
+    // sold, not what it cost to acquire.
+    const POTION_TICKET_COIN_VALUE = 15;   // 1 Potion Ticket ≈ 15 coins
+    const EXOTIC_CROPS_TICKET_COST = {
+      "Black Magic":         8000,
+      "Golden Helios":       4000,
+      "Chiogga":             2000,
+      "Purple Cauliflower":  800,
+      "Adirondack Potato":   600,
+      "Warty Goblin Pumpkin":400,
+      "White Carrot":        200,
+    };
+    // Giant fruits aren't sold at Eins — they're a random chance from growing
+    // fruit trees. Use sellPrice as the closest proxy for "value to a farmer".
+    const GIANT_FRUIT_SELL_PRICES = {
       "Giant Orange": 800,
-      "Giant Apple": 2000,
+      "Giant Apple":  2000,
       "Giant Banana": 5000,
     };
 
@@ -5186,7 +5194,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.16</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.17</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5213,6 +5221,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.17", items: [
+          { t: "fix", text: "Exotic crops priced via Eins BUY cost (Potion Ticket × 15 coins) instead of NPC sellPrice. White Carrot=200 tickets×15=3000 coins, Chiogga=2000 tickets×15=30000 coins, Golden Helios=4000×15=60000, etc. Source: POTION_HOUSE_EXOTIC_CROPS in SFL collectibles.ts. Acquisition cost (what you'd pay to get one) is the correct value for items you give to a bounty; the previous sellPrice was the opposite direction." },
+        ]},
         { ver: "v3.16", items: [
           { t: "fix", text: "Gift badge: deliveries to NPCs you haven't planned a flower for show NO badge at all (was 'Give (no plan)'). Less clutter for grindy delivery rows that don't relate to the Gifts Planner." },
         ]},
@@ -17093,11 +17104,19 @@
         return total;
       }
 
-      // Exotic crops + giant fruits — sold to potion-house NPC for coins.
-      if (typeof EXOTIC_CROPS_SELL_PRICES !== "undefined"
-          && EXOTIC_CROPS_SELL_PRICES[itemName]
+      // Exotic crops — buy price at Eins (Potion House) = tickets × 15 coins.
+      // This is the acquisition cost: how much you'd spend to get one.
+      if (typeof EXOTIC_CROPS_TICKET_COST !== "undefined"
+          && EXOTIC_CROPS_TICKET_COST[itemName]
           && rates && rates.coinsPerSFL > 0) {
-        return EXOTIC_CROPS_SELL_PRICES[itemName] / rates.coinsPerSFL;
+        return (EXOTIC_CROPS_TICKET_COST[itemName] * POTION_TICKET_COIN_VALUE) / rates.coinsPerSFL;
+      }
+      // Giant fruits — random chance from fruit trees, not buyable. Approximate
+      // via NPC sellPrice as a rough "value to farmer" proxy.
+      if (typeof GIANT_FRUIT_SELL_PRICES !== "undefined"
+          && GIANT_FRUIT_SELL_PRICES[itemName]
+          && rates && rates.coinsPerSFL > 0) {
+        return GIANT_FRUIT_SELL_PRICES[itemName] / rates.coinsPerSFL;
       }
 
       // Seed costs (coins only) — SEED_COSTS keyed by crop name, items come as "X Seed" or "X Plant"
