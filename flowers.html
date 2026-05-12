@@ -3749,6 +3749,22 @@
     const GREENHOUSE_OIL_COSTS = { "Grape": 3, "Rice": 4, "Olive": 5 };
 
     // ── Tool costs (coins + optional materials per tool) ──
+    // Exotic crops + giant fruits sell prices in coins (from SFL beans.ts EXOTIC_CROPS).
+    // Items turned in to potion-house NPC (Eins/Stella). Used by estimateItemSfl
+    // to value bounty turn-ins of Chiogga/Golden Helios/dolls-of-this-type/etc.
+    const EXOTIC_CROPS_SELL_PRICES = {
+      "Black Magic": 32000,
+      "Golden Helios": 16000,
+      "Chiogga": 8000,
+      "Purple Cauliflower": 3200,
+      "Adirondack Potato": 2400,
+      "Warty Goblin Pumpkin": 1600,
+      "White Carrot": 800,
+      "Giant Orange": 800,
+      "Giant Apple": 2000,
+      "Giant Banana": 5000,
+    };
+
     const TOOL_COSTS = {
       "Axe":            { coins: 20 },
       "Pickaxe":        { coins: 20, materials: { Wood: 3 } },
@@ -5165,7 +5181,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.11</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.12</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5192,8 +5208,12 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.12", items: [
+          { t: "fix", text: "Exotic crops (Chiogga 8000 coins, Golden Helios 16000, White Carrot 800, Purple Cauliflower 3200, Adirondack Potato 2400, Warty Goblin Pumpkin 1600, Black Magic 32000) and giant fruits (Giant Apple/Orange/Banana) now priced via EXOTIC_CROPS sell prices from SFL game source ÷ Betty rate. Replaces the bogus ticket×15 fallback." },
+          { t: "fix", text: "Icons for exotic crops, mutant crops, and all dolls now use official sunflower-land.com ERC1155 image URLs (e.g. erc1155/images/1403.webp for Chiogga) instead of sfl.world's fallback that returned a '?' placeholder with HTTP 200." },
+        ]},
         { ver: "v3.11", items: [
-          { t: "new", text: "Bounty Board items without a P2P/derived price (Golden Helios, Chiogga, White Carrot, dolls, etc.) now use an 'Eins fallback' cost = bounty_ticket_reward × 15 coins ÷ Betty rate. Cost-per-Salt-Rock for those rows is now non-zero (≈ 15/coinsPerSFL SFL/ticket). SW cache bumped to force fresh assets." },
+          { t: "new", text: "Bounty Board items without P2P now estimated. (Superseded by v3.12.)" },
         ]},
         { ver: "v3.10", items: [
           { t: "fix", text: "Aging Shed XP now computes a true weighted average between Aged and Prime Aged using the player's actual prime chance (10% base, ×2 with Fish Smoking, +4 with Salt Sculpture L2+). Was approximated as two fixed multipliers layered on a 1.03 baseline. Boost row now shows the real chance, e.g. 'Prime Aged avg (24% × 1.3 XP) → ×1.072'." },
@@ -6719,17 +6739,6 @@
         console.log("[Dashboard] rates loaded:", dashRates);
       } catch (e) { console.warn("[Dashboard] rates fetch failed:", e); }
     }
-    // Fallback "Eins" pricing for items without a P2P/derived price: assume each
-    // turn-in is worth its bounty ticket reward × 15 coins (the per-ticket coin
-    // value at Eins / Potion Ticket exchange). Returns null when no estimate.
-    const DASH_TICKET_COIN_PRICE = 15;
-    function dashEinsFallbackSFL(name, bountyItems, ticket) {
-      if (!dashRates?.coinsPerSFL || dashRates.coinsPerSFL <= 0) return null;
-      const tk = ticket && bountyItems && bountyItems[ticket];
-      if (!tk || tk <= 0) return null;
-      return (tk * DASH_TICKET_COIN_PRICE) / dashRates.coinsPerSFL;
-    }
-
     function dashP2PCost(items) {
       let total = 0;
       const arr = Array.isArray(items) ? items : Object.entries(items).map(([n,q]) => ({name:n, qty:q}));
@@ -7852,14 +7861,7 @@
           const paysTicket = ticket && reqItems[ticket] > 0;
           if (!showNonTicket && !paysTicket) continue;
           const inputItems = [{ name: req.name, qty: 1 }];
-          let cost = (typeof dashP2PCost === "function") ? dashP2PCost(inputItems) : null;
-          // Fallback for items not on the P2P market (Golden Helios, Chiogga,
-          // White Carrot, dolls, etc.): estimate via Eins ticket price
-          // (1 ticket = 15 coins). Approximates item value as bounty_tickets × 15.
-          if ((!cost || cost <= 0) && paysTicket) {
-            const fb = dashEinsFallbackSFL(req.name, reqItems, ticket);
-            if (fb != null && fb > 0) cost = fb;
-          }
+          const cost = (typeof dashP2PCost === "function") ? dashP2PCost(inputItems) : null;
           const reward = { coins: req.coins, items: reqItems };
           const { rewardText, rewardHtml, efficiency } = dashRewardSummary(reward, ticket, cost, dashRates);
           const label = req.name + " → " + (rewardText || "?");
@@ -9713,7 +9715,38 @@
     }
     const ITEM_ICON_BASE = "https://sfl.world/img/source/";
     const GITHUB_ASSETS = "https://raw.githubusercontent.com/sunflower-land/sunflower-land/main/src/assets";
+    // Helper for the official game ERC1155 image URLs (more reliable than the
+    // sfl.world /img/source/<Name>.png fallback which returns a '?' placeholder
+    // with HTTP 200 for unknown items).
+    const ERC1155_BASE = "https://sunflower-land.com/play/erc1155/images/";
     const ITEM_IMAGE_MAP = {
+      // Exotic crops (from EXOTIC_CROPS_SELL_PRICES; ids via SFL types/index.ts)
+      "Black Magic":         ERC1155_BASE + "1401.webp",
+      "Golden Helios":       ERC1155_BASE + "1402.webp",
+      "Chiogga":             ERC1155_BASE + "1403.webp",
+      "Purple Cauliflower":  ERC1155_BASE + "1404.webp",
+      "Adirondack Potato":   ERC1155_BASE + "1405.webp",
+      "Warty Goblin Pumpkin":ERC1155_BASE + "1406.webp",
+      "White Carrot":        ERC1155_BASE + "1407.webp",
+      "Giant Orange":        ERC1155_BASE + "2319.webp",
+      "Giant Apple":         ERC1155_BASE + "2320.webp",
+      "Giant Banana":        ERC1155_BASE + "2321.webp",
+      // Mutant crops
+      "Stellar Sunflower":   ERC1155_BASE + "437.webp",
+      "Potent Potato":       ERC1155_BASE + "438.webp",
+      "Radical Radish":      ERC1155_BASE + "439.webp",
+      // Dolls
+      "Doll":                ERC1155_BASE + "2501.webp",
+      "Buzz Doll":           ERC1155_BASE + "2502.webp",
+      "Juicy Doll":          ERC1155_BASE + "2503.webp",
+      "Crude Doll":          ERC1155_BASE + "2505.webp",
+      "Cluck Doll":          ERC1155_BASE + "2506.webp",
+      "Wooly Doll":          ERC1155_BASE + "2507.webp",
+      "Shadow Doll":         ERC1155_BASE + "2510.webp",
+      "Ember Doll":          ERC1155_BASE + "2511.webp",
+      "Gilded Doll":         ERC1155_BASE + "2512.webp",
+      "Harvest Doll":        ERC1155_BASE + "2514.webp",
+      // Original entries below
       "Abandoned Bear": GITHUB_ASSETS+"/sfts/bears/abandoned_bear.png",
       "Acorn House": GITHUB_ASSETS+"/sfts/acorn_house.webp",
       "Adrift Ark": GITHUB_ASSETS+"/sfts/adrift_ark.webp",
@@ -16962,6 +16995,13 @@
           }
         }
         return total;
+      }
+
+      // Exotic crops + giant fruits — sold to potion-house NPC for coins.
+      if (typeof EXOTIC_CROPS_SELL_PRICES !== "undefined"
+          && EXOTIC_CROPS_SELL_PRICES[itemName]
+          && rates && rates.coinsPerSFL > 0) {
+        return EXOTIC_CROPS_SELL_PRICES[itemName] / rates.coinsPerSFL;
       }
 
       // Seed costs (coins only) — SEED_COSTS keyed by crop name, items come as "X Seed" or "X Plant"
