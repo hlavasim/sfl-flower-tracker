@@ -2296,6 +2296,10 @@
     .dash-eff-coinrate { background:rgba(100,160,255,0.18); color:var(--blue,#6aa0ff); }
     .dash-eff-net-pos { background:rgba(46,160,67,0.18); color:var(--green); }
     .dash-eff-net-neg { background:rgba(220,60,60,0.18); color:#e55; }
+    .dash-toolbar { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+    .dash-toggle-btn { font-family:'Courier New', monospace; font-size:0.65rem; padding:4px 10px; border-radius:6px; background:var(--bg-input); color:var(--text-secondary); border:1px solid var(--border-dark); cursor:pointer; }
+    .dash-toggle-btn.on { background:rgba(232,201,106,0.15); color:var(--sunpetal); border-color:var(--sunpetal); }
+    .dash-toggle-btn:hover { filter:brightness(1.15); }
     .dash-all-done { text-align:center; padding:40px 20px; font-size:1rem; color:var(--green); }
     .dash-all-done .icon { font-size:2rem; margin-bottom:8px; }
     .nft-breed-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:10px; }
@@ -5146,7 +5150,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.8</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.9</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5173,6 +5177,11 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.9", items: [
+          { t: "new", text: "Dashboard toolbar with two toggles (saved in localStorage): 'Show non-ticket bounties & chores' (default: hide non-ticket rows) and 'Show animal turn-ins' (default: hide Chicken/Cow/Sheep)." },
+          { t: "new", text: "Inline item icons on dashboard rows for input items and rewards (same getItemIcon used elsewhere). Coin rewards get a coin icon, SFL cost gets a SFL icon." },
+          { t: "fix", text: "Sort within sections now: coins-rate rows first (highest coins/SFL), then ticket rows (lowest SFL/ticket), then net-SFL rows." },
+        ]},
         { ver: "v3.8", items: [
           { t: "fix", text: "Dashboard now uses Betty rate (~2000 coins/SFL — what crops actually sell for) instead of the gem-pack API rate (~320 coins/SFL — the worst possible conversion). tywin's 8000-coin input was being valued at 25 SFL; with Betty it's ~4 SFL. Costs across all rows drop ~6× to realistic levels." },
         ]},
@@ -7443,6 +7452,23 @@
       return actions;
     }
 
+    // Per-user dashboard toggle prefs (persisted in localStorage).
+    const DASH_PREFS_KEY = "sfl_dash_prefs";
+    function dashGetPrefs() {
+      try { return JSON.parse(localStorage.getItem(DASH_PREFS_KEY) || "{}") || {}; }
+      catch { return {}; }
+    }
+    function dashSetPref(k, v) {
+      const p = dashGetPrefs(); p[k] = v;
+      try { localStorage.setItem(DASH_PREFS_KEY, JSON.stringify(p)); } catch {}
+    }
+    window.dashTogglePref = function(k) {
+      const p = dashGetPrefs();
+      dashSetPref(k, !p[k]);
+      if (cachedFarmData) renderDashboard(cachedFarmData);
+    };
+    const DASH_ANIMAL_ITEMS = new Set(["Chicken", "Cow", "Sheep"]);
+
     // Mirrors sunflower-land/src/features/game/types/chapters.ts and
     // events/landExpansion/deliver.ts. Update when SFL releases a new chapter.
     const CHAPTERS = [
@@ -7527,6 +7553,11 @@
       return amount;
     }
 
+    // <img> tag for an item icon; falls back to invisible on error.
+    function _dashIcon(name) {
+      try { return `<img class="inline-icon" src="${getItemIcon(name)}" onerror="this.style.display='none'" alt="">`; }
+      catch { return ""; }
+    }
     // Format SFL number to 2 decimal places, with sign for "net" mode.
     function _dashFmtSfl(n, withSign) {
       if (n == null || !isFinite(n)) return "?";
@@ -7548,22 +7579,31 @@
       const items = reward.items || {};
       const gems = Number(items.Gem) || 0;
 
-      // Build human-readable reward text (matches existing delivery format).
+      // Build human-readable reward text + an icon-rich HTML variant.
       const parts = [];
-      if (coins > 0) parts.push("+" + coins + " coins");
-      if (sflDirect > 0) parts.push("+" + sflDirect + " SFL");
+      const partsHtml = [];
+      if (coins > 0) {
+        parts.push("+" + coins + " coins");
+        partsHtml.push(_dashIcon("Coin") + "+" + coins);
+      }
+      if (sflDirect > 0) {
+        parts.push("+" + sflDirect + " SFL");
+        partsHtml.push(_dashIcon("SFL") + "+" + sflDirect);
+      }
       for (const [k, v] of Object.entries(items)) {
         if (!v) continue;
         parts.push("+" + v + " " + k);
+        partsHtml.push(_dashIcon(k) + "+" + v + " " + escHTML(k));
       }
       const rewardText = parts.join(", ");
+      const rewardHtml = partsHtml.join(" ");
 
       // Ticket path takes priority.
       if (ticketName && items[ticketName] > 0 && cost != null && cost >= 0) {
         const ticketQty = items[ticketName];
         const value = ticketQty > 0 ? cost / ticketQty : null;
         if (value != null && isFinite(value)) {
-          return { rewardText, efficiency: { kind: "ticket", value, label: _dashFmtSfl(value) + " SFL/" + ticketName } };
+          return { rewardText, rewardHtml, efficiency: { kind: "ticket", value, label: _dashFmtSfl(value) + " SFL/" + ticketName } };
         }
       }
 
@@ -7571,7 +7611,7 @@
       if (coins > 0 && cost != null && cost > 0) {
         const ratio = coins / cost;
         if (isFinite(ratio)) {
-          return { rewardText, efficiency: { kind: "coinrate", value: ratio, label: Math.round(ratio).toLocaleString() + " coins/SFL" } };
+          return { rewardText, rewardHtml, efficiency: { kind: "coinrate", value: ratio, label: Math.round(ratio).toLocaleString() + " coins/SFL" } };
         }
       }
 
@@ -7584,11 +7624,11 @@
         if (gems > 0 && gemsPerSFL > 0) rewardSfl += gems / gemsPerSFL;
         if (rewardSfl > 0) {
           const net = rewardSfl - cost;
-          return { rewardText, efficiency: { kind: "net", value: net, label: "Net " + _dashFmtSfl(net, true) + " SFL" } };
+          return { rewardText, rewardHtml, efficiency: { kind: "net", value: net, label: "Net " + _dashFmtSfl(net, true) + " SFL" } };
         }
       }
 
-      return { rewardText, efficiency: null };
+      return { rewardText, rewardHtml, efficiency: null };
     }
 
     // Parses a chore name into a structured form. Two patterns supported:
@@ -7705,10 +7745,10 @@
         const orders = farm.delivery?.orders || [];
         const ticket = dashGetSeasonalTicket(farm);
         const now = Date.now();
+        const showAnimals = !!dashGetPrefs().showAnimals;
         for (const order of orders) {
           if (order.completedAt) continue;
-          // Ticket-paying NPCs have empty .reward in the API; the ticket count is
-          // computed from TICKET_REWARDS + VIP + boost items.
+          // Ticket-paying NPCs have empty .reward in the API; computed via game logic.
           const calcTickets = dashCalculateDeliveryTickets(order.from, farm, now);
           let augReward = order.reward || {};
           if (calcTickets > 0 && !(augReward.items && augReward.items[ticket] > 0)) {
@@ -7717,18 +7757,32 @@
           if (augReward.sfl && !augReward.coins && !(augReward.items && Object.keys(augReward.items).length > 0)) continue;
           const from = order.from || "Unknown";
           const items = order.items || {};
+          // Hide animal-input deliveries unless toggle is on.
+          if (!showAnimals && Object.keys(items).some(n => DASH_ANIMAL_ITEMS.has(n))) continue;
           const itemDesc = Object.entries(items).map(([n, q]) => q + "x " + n).join(", ");
+          const itemDescHtml = Object.entries(items).map(([n, q]) =>
+            _dashIcon(n) + q + "× " + escHTML(n)
+          ).join(" · ");
           const inputItems = Object.entries(items).map(([n, q]) => ({ name: n, qty: q }));
           const cost = (typeof dashP2PCost === "function") ? dashP2PCost(inputItems) : null;
-          const { rewardText, efficiency } = dashRewardSummary(augReward, ticket, cost, dashRates);
+          const { rewardText, rewardHtml, efficiency } = dashRewardSummary(augReward, ticket, cost, dashRates);
           const detailParts = [];
-          if (rewardText) detailParts.push("\u27a1 " + rewardText);
-          if (cost != null && isFinite(cost)) detailParts.push("Cost: " + cost.toFixed(2) + " SFL");
+          const detailPartsHtml = [];
+          if (rewardText) {
+            detailParts.push("➡ " + rewardText);
+            detailPartsHtml.push("➡ " + rewardHtml);
+          }
+          if (cost != null && isFinite(cost)) {
+            detailParts.push("Cost: " + cost.toFixed(2) + " SFL");
+            detailPartsHtml.push("Cost: " + cost.toFixed(2) + " " + _dashIcon("SFL"));
+          }
           actions.push({
             category: "Deliveries",
-            icon: "\u{1F4CB}",  // 📋
+            icon: "\u{1F4CB}",
             label: from + ": " + itemDesc,
+            labelHtml: "<b>" + escHTML(from) + ":</b> " + itemDescHtml,
             detail: detailParts.join(" | "),
+            detailHtml: detailPartsHtml.join(" | "),
             efficiency,
             status: "ready",
             readyAt: 0,
@@ -7746,19 +7800,29 @@
         const completedRaw = farm.bounties?.completed || [];
         const completedIds = new Set(completedRaw.map(c => typeof c === "string" ? c : c?.id).filter(Boolean));
         const ticket = dashGetSeasonalTicket(farm);
+        const prefs = dashGetPrefs();
+        const showNonTicket = !!prefs.showNonTicket;
+        const showAnimals = !!prefs.showAnimals;
         for (const req of requests) {
           if (completedIds.has(req.id)) continue;
+          if (!showAnimals && DASH_ANIMAL_ITEMS.has(req.name)) continue;
+          const reqItems = req.items || {};
+          const paysTicket = ticket && reqItems[ticket] > 0;
+          if (!showNonTicket && !paysTicket) continue;
           const inputItems = [{ name: req.name, qty: 1 }];
           const cost = (typeof dashP2PCost === "function") ? dashP2PCost(inputItems) : null;
-          const reward = { coins: req.coins, items: req.items };
-          const { rewardText, efficiency } = dashRewardSummary(reward, ticket, cost, dashRates);
+          const reward = { coins: req.coins, items: reqItems };
+          const { rewardText, rewardHtml, efficiency } = dashRewardSummary(reward, ticket, cost, dashRates);
           const label = req.name + " → " + (rewardText || "?");
+          const labelHtml = _dashIcon(req.name) + "<b>" + escHTML(req.name) + "</b> → " + (rewardHtml || "?");
           const detail = (cost != null && isFinite(cost)) ? "Cost: " + cost.toFixed(2) + " SFL" : "Cost: ?";
+          const detailHtml = (cost != null && isFinite(cost))
+            ? "Cost: " + cost.toFixed(2) + " " + _dashIcon("SFL")
+            : "Cost: ?";
           actions.push({
             category: "Bounty Board",
             icon: "\u{1F3AF}",
-            label,
-            detail,
+            label, labelHtml, detail, detailHtml,
             efficiency,
             status: "ready",
             readyAt: 0,
@@ -7785,30 +7849,41 @@
             if (_dashHasWearable(farm, item)) boostBonus += 1;
           }
         }
+        const showNonTicket = !!dashGetPrefs().showNonTicket;
         for (const [npc, chore] of Object.entries(chores)) {
           if (chore.completedAt) continue;
           const parsed = dashChoreParse(chore, farm);
-          // Augment reward: if chore pays tickets, add VIP +2 and chapter boosts (+1 each).
           let reward = chore.reward || {};
           const baseTickets = (reward.items && reward.items[ticket]) || 0;
+          if (!showNonTicket && baseTickets <= 0) continue;
           if (baseTickets > 0 && (vipBonus + boostBonus) > 0) {
             reward = { ...reward, items: { ...reward.items, [ticket]: baseTickets + vipBonus + boostBonus } };
           }
-          const { rewardText, efficiency } = dashRewardSummary(reward, ticket, parsed.cost, dashRates);
+          const { rewardText, rewardHtml, efficiency } = dashRewardSummary(reward, ticket, parsed.cost, dashRates);
           const progressText = parsed.target == null
             ? "?"
             : (parsed.delta == null
                 ? "?/" + parsed.target
                 : Math.min(parsed.delta, parsed.target) + "/" + parsed.target);
           const label = chore.name + "  (" + progressText + ")";
+          const choreIcon = parsed.item ? _dashIcon(parsed.item) : "";
+          const labelHtml = choreIcon + "<b>" + escHTML(chore.name) + "</b> <span style=\"color:var(--text-dim)\">(" + escHTML(progressText) + ")</span>";
           const detailParts = [];
-          if (rewardText) detailParts.push("Reward: " + rewardText);
-          if (parsed.cost != null && isFinite(parsed.cost)) detailParts.push("Cost: " + parsed.cost.toFixed(2) + " SFL");
+          const detailPartsHtml = [];
+          if (rewardText) {
+            detailParts.push("Reward: " + rewardText);
+            detailPartsHtml.push("Reward: " + rewardHtml);
+          }
+          if (parsed.cost != null && isFinite(parsed.cost)) {
+            detailParts.push("Cost: " + parsed.cost.toFixed(2) + " SFL");
+            detailPartsHtml.push("Cost: " + parsed.cost.toFixed(2) + " " + _dashIcon("SFL"));
+          }
           actions.push({
             category: "Chores",
-            icon: "\u{1F4DC}",  // 📜
-            label,
+            icon: "\u{1F4DC}",
+            label, labelHtml,
             detail: detailParts.join(" · "),
+            detailHtml: detailPartsHtml.join(" · "),
             efficiency,
             status: parsed.ready ? "ready" : "upcoming",
             readyAt: 0,
@@ -7922,6 +7997,7 @@
       upcoming.sort((a, b) => a.readyAt - b.readyAt);
       idle.sort((a, b) => a.priority - b.priority);
 
+      const _prefs = dashGetPrefs();
       let html = `<div class="header pixel-panel pixel-font">
         <h1>DASHBOARD</h1>
         <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
@@ -7929,6 +8005,14 @@
           ${ready.length ? `<span class="dash-summary-badge ready">${ready.length} ready</span>` : ""}
           ${upcoming.length ? `<span class="dash-summary-badge upcoming">${upcoming.length} upcoming</span>` : ""}
           ${idle.length ? `<span class="dash-summary-badge idle">${idle.length} idle</span>` : ""}
+        </div>
+        <div class="dash-toolbar">
+          <button class="dash-toggle-btn ${_prefs.showNonTicket ? "on" : ""}" onclick="dashTogglePref('showNonTicket')">
+            ${_prefs.showNonTicket ? "☑" : "☐"} Show non-ticket bounties &amp; chores
+          </button>
+          <button class="dash-toggle-btn ${_prefs.showAnimals ? "on" : ""}" onclick="dashTogglePref('showAnimals')">
+            ${_prefs.showAnimals ? "☑" : "☐"} Show animal turn-ins (Chicken/Cow/Sheep)
+          </button>
         </div>
       </div>`;
 
@@ -7956,15 +8040,19 @@
         // Sort items inside each category by efficiency when present:
         //   ticket ascending (cheapest SFL/ticket first)
         //   net    descending (highest profit first)
+        const EFF_ORDER = { coinrate: 0, ticket: 1, net: 2 };
         for (const cat of Object.keys(cats)) {
           cats[cat].sort((a, b) => {
             const ea = a.efficiency, eb = b.efficiency;
             if (!ea && !eb) return 0;
             if (!ea) return 1;
             if (!eb) return -1;
-            if (ea.kind === "ticket" && eb.kind === "ticket") return ea.value - eb.value;     // asc: cheapest first
-            if (ea.kind === "coinrate" && eb.kind === "coinrate") return eb.value - ea.value; // desc: best ratio first
-            if (ea.kind === "net" && eb.kind === "net") return eb.value - ea.value;           // desc: best profit first
+            const oa = EFF_ORDER[ea.kind] ?? 9;
+            const ob = EFF_ORDER[eb.kind] ?? 9;
+            if (oa !== ob) return oa - ob;
+            if (ea.kind === "ticket") return ea.value - eb.value;
+            if (ea.kind === "coinrate") return eb.value - ea.value;
+            if (ea.kind === "net") return eb.value - ea.value;
             return 0;
           });
         }
@@ -7999,10 +8087,12 @@
           else if (item.efficiency.value < 0) effCls = "dash-eff-net-neg";
           effHtml = `<span class="dash-eff ${effCls}">${escHTML(item.efficiency.label)}</span>`;
         }
-        const detailHtml = item.detail ? `<div class="dash-detail">${escHTML(item.detail)}</div>` : "";
+        const detailInner = item.detailHtml || (item.detail ? escHTML(item.detail) : "");
+        const detailBlock = detailInner ? `<div class="dash-detail">${detailInner}</div>` : "";
+        const labelInner = item.labelHtml || escHTML(item.label);
         return `<div class="dash-item ${cls}">
           <span>${item.icon}</span>
-          <div class="dash-item-label">${escHTML(item.label)}${detailHtml}</div>
+          <div class="dash-item-label">${labelInner}${detailBlock}</div>
           ${effHtml}
           ${timeHtml}
         </div>`;
