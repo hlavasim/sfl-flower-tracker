@@ -4252,6 +4252,19 @@
     // ── Aging Shed formulas (from sunflower-land/agingFormulas.ts) ──
     const AGING_PRIME_BASE = 0.10, AGING_PRIME_MULT = 1.3;
     const AGING_DEFAULT_FACTOR = 1 + AGING_PRIME_BASE * (AGING_PRIME_MULT - 1); // 1.03 baseline
+
+    // Per-farm prime-aged chance (0..1). Mirrors getPrimeAgedChance in the SFL repo.
+    function getAgingPrimeChance(farm) {
+      const skills = farm?.bumpkin?.skills || {};
+      const saltSculptLvl = farm?.sculptures?.["Salt Sculpture"]?.level || 0;
+      let chance = AGING_PRIME_BASE * 100;  // percent
+      if (skills["Fish Smoking"]) chance *= 2;       // ×2  → 20
+      if (saltSculptLvl >= 2) chance += 4;            // +4% → 14 / 24
+      return chance / 100;
+    }
+    function getAgingPrimeFactor(farm) {
+      return 1 + getAgingPrimeChance(farm) * (AGING_PRIME_MULT - 1);
+    }
     function getAgingMaxXP(baseXP) {
       if (baseXP <= 200) return baseXP * 3;
       if (baseXP <= 330) return baseXP * 4;
@@ -4320,14 +4333,16 @@
       return y;
     }
 
-    // Generate Aged Fish recipes from FISH_BASE_XP (1 fish + N salt → 1 Aged Fish)
+    // Generate Aged Fish recipes from FISH_BASE_XP (1 fish + N salt → 1 Aged Fish).
+    // XP stored here is the regular-aged value (= maxXP). The prime-aged weighted
+    // average is applied per-farm via the "Prime Aged chance" xpBoost in
+    // detectCookingBoosts, using the player's actual skills/sculpture level.
     for (const [_fish, _baseXP] of Object.entries(FISH_BASE_XP)) {
       const _aged = "Aged " + _fish;
       const _maxXP = getAgingMaxXP(_baseXP);
       const _saltN = getAgingSaltCost(_baseXP);
       const _timeS = getAgingTimeSec(_baseXP);
-      const _expectedXP = Math.round(_maxXP * AGING_DEFAULT_FACTOR);
-      COOKING_RECIPES_DATA[_aged] = { building: "Aging Shed", xp: _expectedXP, cookSec: _timeS, usesHoney: false };
+      COOKING_RECIPES_DATA[_aged] = { building: "Aging Shed", xp: _maxXP, cookSec: _timeS, usesHoney: false };
       COOKING_INGREDIENTS[_aged] = { [_fish]: 1, "Salt": _saltN };
     }
 
@@ -5150,7 +5165,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.9</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.10</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5177,6 +5192,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.10", items: [
+          { t: "fix", text: "Aging Shed XP now computes a true weighted average between Aged and Prime Aged using the player's actual prime chance (10% base, ×2 with Fish Smoking, +4 with Salt Sculpture L2+). Was approximated as two fixed multipliers layered on a 1.03 baseline. Boost row now shows the real chance, e.g. 'Prime Aged avg (24% × 1.3 XP) → ×1.072'." },
+        ]},
         { ver: "v3.9", items: [
           { t: "new", text: "Dashboard toolbar with two toggles (saved in localStorage): 'Show non-ticket bounties & chores' (default: hide non-ticket rows) and 'Show animal turn-ins' (default: hide Chicken/Cow/Sheep)." },
           { t: "new", text: "Inline item icons on dashboard rows for input items and rewards (same getItemIcon used elsewhere). Coin rewards get a coin icon, SFL cost gets a SFL icon." },
@@ -5550,9 +5568,19 @@
       // Time
       if (skills["Speedy Aging"]) timeBoosts.push({ name: "Speedy Aging", multiplier: 0.9, buildings: ["Aging Shed"] });
       if (saltSculptLvl >= 5) timeBoosts.push({ name: "Salt Sculpture L5+", multiplier: 0.95, buildings: ["Aging Shed"] });
-      // XP (via prime aged chance: 10% baseline → factor 1.03; +Fish Smoking → 20% → factor 1.06; +L2 sculpt → +4% chance → factor 1.042)
-      if (skills["Fish Smoking"]) xpBoosts.push({ name: "Fish Smoking (\u00d72 prime)", multiplier: 1.029, buildings: ["Aging Shed"] });
-      if (saltSculptLvl >= 2) xpBoosts.push({ name: "Salt Sculpture L2+ (+4% prime)", multiplier: 1.012, buildings: ["Aging Shed"] });
+      // Prime Aged weighted average. Base 10% chance of prime (×1.3 XP) → factor 1.03.
+      // Fish Smoking doubles the chance (→ 20%); Salt Sculpture L2+ adds +4% (→ 14/24%).
+      // Recipe XP is stored as the regular-aged value; this single boost folds in the
+      // expected uplift from primes for the player's actual farm state.
+      {
+        const _primePct = +(getAgingPrimeChance(farm) * 100).toFixed(0);
+        const _primeFactor = getAgingPrimeFactor(farm);
+        xpBoosts.push({
+          name: "Prime Aged avg (" + _primePct + "% \u00d7 1.3 XP)",
+          multiplier: _primeFactor,
+          buildings: ["Aging Shed"]
+        });
+      }
       // Fish XP boosts — Aging Shed outputs (Aged Fish) count as fish consumables
       if (hasItem("Skill Shrimpy")) xpBoosts.push({ name: "Skill Shrimpy (+20% Fish XP)", multiplier: 1.20, buildings: ["Aging Shed"] });
       if (skills["Fishy Feast"]) xpBoosts.push({ name: "Fishy Feast (+20% Fish XP)", multiplier: 1.20, buildings: ["Aging Shed"] });
