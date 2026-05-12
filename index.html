@@ -2293,6 +2293,7 @@
     .dash-ready-badge.blue { background:rgba(100,160,255,0.25); color:var(--blue,#6aa0ff); }
     .dash-eff { font-family:'Courier New', monospace; font-size:0.65rem; padding:1px 8px; border-radius:8px; white-space:nowrap; margin-right:4px; }
     .dash-eff-ticket { background:rgba(232,201,106,0.15); color:var(--sunpetal); }
+    .dash-eff-coinrate { background:rgba(100,160,255,0.18); color:var(--blue,#6aa0ff); }
     .dash-eff-net-pos { background:rgba(46,160,67,0.18); color:var(--green); }
     .dash-eff-net-neg { background:rgba(220,60,60,0.18); color:#e55; }
     .dash-all-done { text-align:center; padding:40px 20px; font-size:1rem; color:var(--green); }
@@ -5145,7 +5146,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.4</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.5</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5172,6 +5173,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.5", items: [
+          { t: "fix", text: "Dashboard exchange-rate fetch was hitting v1/exchange (returns 404) and parsing as flat fields — fixed to v1.1/exchange with tier-based parsing (best coin tier = max coin/sfl, gem tier with -30% pack discount). Without rates, all crafted item / tool / food costs returned 0." },
+          { t: "new", text: "New efficiency pill for coin-only delivery rewards: 'X coins/SFL' (higher = better, blue). Replaces the Net SFL pill for rows like peggy/blacksmith/jester where reward is pure coins." },
+        ]},
         { ver: "v3.4", items: [
           { t: "fix", text: "Dashboard cost calc uses estimateItemSfl (same logic as diff/treasury) — crafted items like Crab Pot/Mariner Pot/Sand Shovel/Rod now priced via TOOL_COSTS (coins + materials), and cooked foods like Kale Omelette via RECIPE_INGREDIENTS (40 Egg + 5 Kale), instead of returning 0. Also 'coins' inputs (e.g. tywin's 8000 coins) converted via coinsPerSFL — so Net SFL profit pill shows true delivery profitability." },
         ]},
@@ -6640,11 +6645,18 @@
     }
     async function dashFetchRates() {
       try {
-        const r = await fetch("/api/proxy?url=" + encodeURIComponent("https://sfl.world/api/v1/exchange"));
+        // sfl.world exchange returns coins/gems as tier objects, not flat numbers.
+        // Best tier = the one giving most coins/gems per SFL spent.
+        const r = await fetch("/api/proxy?url=" + encodeURIComponent("https://sfl.world/api/v1.1/exchange"));
         const j = await r.json();
-        dashRates.coinsPerSFL = j.coinsPerSFL || j.data?.coinsPerSFL || null;
-        dashRates.gemsPerSFL = j.gemsPerSFL || j.data?.gemsPerSFL || null;
-      } catch (e) {}
+        const coinTiers = Object.values(j?.coins || {});
+        const bestCoin = coinTiers.reduce((b, t) => (!b || (t.coin / t.sfl) > (b.coin / b.sfl)) ? t : b, null);
+        dashRates.coinsPerSFL = bestCoin ? (bestCoin.coin / bestCoin.sfl) : null;
+        const gemTiers = Object.values(j?.gems || {});
+        const bestGem = gemTiers.reduce((b, t) => (!b || (t.gem / t.sfl) > (b.gem / b.sfl)) ? t : b, null);
+        dashRates.gemsPerSFL = bestGem ? (bestGem.gem / (bestGem.sfl * 0.7)) : null;
+        console.log("[Dashboard] rates loaded:", dashRates);
+      } catch (e) { console.warn("[Dashboard] rates fetch failed:", e); }
     }
     function dashP2PCost(items) {
       let total = 0;
@@ -7502,9 +7514,10 @@
     }
 
     // Returns { rewardText, efficiency } where efficiency is one of:
-    //   { kind: "ticket", value, label }     when reward has the seasonal ticket
-    //   { kind: "net",    value, label }     when reward has coins/gems convertible to SFL
-    //   null                                  when nothing to show (cost unknown, no rates, no convertible reward)
+    //   { kind: "ticket",   value, label }   "0.76 SFL/Salt Rock" — reward pays seasonal ticket
+    //   { kind: "coinrate", value, label }   "852 coins/SFL"      — reward is coins only
+    //   { kind: "net",      value, label }   "Net +1.20 SFL"      — fallback for gems / mixed-only
+    //   null                                  cost unknown, or nothing convertible
     function dashRewardSummary(reward, ticketName, cost, rates) {
       reward = reward || {};
       const coins = Number(reward.coins) || 0;
@@ -7531,7 +7544,15 @@
         }
       }
 
-      // Net SFL path. Needs cost and at least one convertible reward.
+      // Coin-only reward → show coins-per-SFL efficiency (higher = better).
+      if (coins > 0 && cost != null && cost > 0) {
+        const ratio = coins / cost;
+        if (isFinite(ratio)) {
+          return { rewardText, efficiency: { kind: "coinrate", value: ratio, label: Math.round(ratio).toLocaleString() + " coins/SFL" } };
+        }
+      }
+
+      // Fallback: Net SFL (when reward has gems or direct SFL but no coins).
       const coinsPerSFL = rates && rates.coinsPerSFL;
       const gemsPerSFL = rates && rates.gemsPerSFL;
       if (cost != null) {
@@ -7918,8 +7939,9 @@
             if (!ea && !eb) return 0;
             if (!ea) return 1;
             if (!eb) return -1;
-            if (ea.kind === "ticket" && eb.kind === "ticket") return ea.value - eb.value;
-            if (ea.kind === "net" && eb.kind === "net") return eb.value - ea.value;
+            if (ea.kind === "ticket" && eb.kind === "ticket") return ea.value - eb.value;     // asc: cheapest first
+            if (ea.kind === "coinrate" && eb.kind === "coinrate") return eb.value - ea.value; // desc: best ratio first
+            if (ea.kind === "net" && eb.kind === "net") return eb.value - ea.value;           // desc: best profit first
             return 0;
           });
         }
@@ -7950,6 +7972,7 @@
         if (item.efficiency) {
           let effCls = "dash-eff-net-pos";
           if (item.efficiency.kind === "ticket") effCls = "dash-eff-ticket";
+          else if (item.efficiency.kind === "coinrate") effCls = "dash-eff-coinrate";
           else if (item.efficiency.value < 0) effCls = "dash-eff-net-neg";
           effHtml = `<span class="dash-eff ${effCls}">${escHTML(item.efficiency.label)}</span>`;
         }
