@@ -2296,6 +2296,7 @@
     .dash-eff-coinrate { background:rgba(100,160,255,0.18); color:var(--blue,#6aa0ff); }
     .dash-eff-net-pos { background:rgba(46,160,67,0.18); color:var(--green); }
     .dash-eff-net-neg { background:rgba(220,60,60,0.18); color:#e55; }
+    .dash-npc { width:18px; height:18px; object-fit:contain; image-rendering:pixelated; vertical-align:middle; margin-right:5px; border-radius:3px; }
     .dash-toolbar { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
     .dash-toggle-btn { font-family:'Courier New', monospace; font-size:0.65rem; padding:4px 10px; border-radius:6px; background:var(--bg-input); color:var(--text-secondary); border:1px solid var(--border-dark); cursor:pointer; }
     .dash-toggle-btn.on { background:rgba(232,201,106,0.15); color:var(--sunpetal); border-color:var(--sunpetal); }
@@ -5181,7 +5182,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.12</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.13</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5208,6 +5209,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.13", items: [
+          { t: "fix", text: "Item icons now use sfl.world /img/delivery/<Name>.png (small pixel art, same as sfl.world bounties/deliveries pages) instead of the giant ERC1155 webp full art from v3.12. Covers exotic crops, dolls, fish, crustaceans, ores, tools, salt rock. Cow + Sheep use /img/animals/<Name>.png." },
+          { t: "new", text: "Delivery rows show the NPC's portrait (small 18px) before the name, sourced from sfl.world /img/plaza/<npc>.png — same pixel-art style as the rest of the dashboard." },
+        ]},
         { ver: "v3.12", items: [
           { t: "fix", text: "Exotic crops (Chiogga 8000 coins, Golden Helios 16000, White Carrot 800, Purple Cauliflower 3200, Adirondack Potato 2400, Warty Goblin Pumpkin 1600, Black Magic 32000) and giant fruits (Giant Apple/Orange/Banana) now priced via EXOTIC_CROPS sell prices from SFL game source ÷ Betty rate. Replaces the bogus ticket×15 fallback." },
           { t: "fix", text: "Icons for exotic crops, mutant crops, and all dolls now use official sunflower-land.com ERC1155 image URLs (e.g. erc1155/images/1403.webp for Chiogga) instead of sfl.world's fallback that returned a '?' placeholder with HTTP 200." },
@@ -7831,7 +7836,7 @@
             category: "Deliveries",
             icon: "\u{1F4CB}",
             label: from + ": " + itemDesc,
-            labelHtml: "<b>" + escHTML(from) + ":</b> " + itemDescHtml,
+            labelHtml: `<img class="dash-npc" src="${getNpcIcon(from)}" onerror="this.style.display='none'" alt=""><b>${escHTML(from)}</b>: ` + itemDescHtml,
             detail: detailParts.join(" | "),
             detailHtml: detailPartsHtml.join(" | "),
             efficiency,
@@ -9715,37 +9720,75 @@
     }
     const ITEM_ICON_BASE = "https://sfl.world/img/source/";
     const GITHUB_ASSETS = "https://raw.githubusercontent.com/sunflower-land/sunflower-land/main/src/assets";
-    // Helper for the official game ERC1155 image URLs (more reliable than the
-    // sfl.world /img/source/<Name>.png fallback which returns a '?' placeholder
-    // with HTTP 200 for unknown items).
-    const ERC1155_BASE = "https://sunflower-land.com/play/erc1155/images/";
+    // Small pixel icons from sfl.world. These are the same images shown on the
+    // sfl.world deliveries / bounty board pages. Mutant crops (Stellar Sunflower,
+    // Potent Potato, Radical Radish) aren't hosted there; left to the default
+    // /img/source/ fallback or future ERC1155 wiring.
+    const SFL_WORLD_DELIVERY = "https://sfl.world/img/delivery/";
+    const SFL_WORLD_PLAZA = "https://sfl.world/img/plaza/";
+    const SFL_WORLD_ANIMAL = "https://sfl.world/img/animals/";
+    function getNpcIcon(npcName) {
+      if (!npcName) return "";
+      return SFL_WORLD_PLAZA + encodeURIComponent(String(npcName)) + ".png";
+    }
     const ITEM_IMAGE_MAP = {
-      // Exotic crops (from EXOTIC_CROPS_SELL_PRICES; ids via SFL types/index.ts)
-      "Black Magic":         ERC1155_BASE + "1401.webp",
-      "Golden Helios":       ERC1155_BASE + "1402.webp",
-      "Chiogga":             ERC1155_BASE + "1403.webp",
-      "Purple Cauliflower":  ERC1155_BASE + "1404.webp",
-      "Adirondack Potato":   ERC1155_BASE + "1405.webp",
-      "Warty Goblin Pumpkin":ERC1155_BASE + "1406.webp",
-      "White Carrot":        ERC1155_BASE + "1407.webp",
-      "Giant Orange":        ERC1155_BASE + "2319.webp",
-      "Giant Apple":         ERC1155_BASE + "2320.webp",
-      "Giant Banana":        ERC1155_BASE + "2321.webp",
-      // Mutant crops
-      "Stellar Sunflower":   ERC1155_BASE + "437.webp",
-      "Potent Potato":       ERC1155_BASE + "438.webp",
-      "Radical Radish":      ERC1155_BASE + "439.webp",
+      // Exotic crops & giant fruits — small pixel art used on sfl.world bounties.
+      "Black Magic":          SFL_WORLD_DELIVERY + "Black%20Magic.png",
+      "Golden Helios":        SFL_WORLD_DELIVERY + "Golden%20Helios.png",
+      "Chiogga":              SFL_WORLD_DELIVERY + "Chiogga.png",
+      "Purple Cauliflower":   SFL_WORLD_DELIVERY + "Purple%20Cauliflower.png",
+      "Adirondack Potato":    SFL_WORLD_DELIVERY + "Adirondack%20Potato.png",
+      "Warty Goblin Pumpkin": SFL_WORLD_DELIVERY + "Warty%20Goblin%20Pumpkin.png",
+      "White Carrot":         SFL_WORLD_DELIVERY + "White%20Carrot.png",
+      "Giant Orange":         SFL_WORLD_DELIVERY + "Giant%20Orange.png",
+      "Giant Apple":          SFL_WORLD_DELIVERY + "Giant%20Apple.png",
+      "Giant Banana":         SFL_WORLD_DELIVERY + "Giant%20Banana.png",
       // Dolls
-      "Doll":                ERC1155_BASE + "2501.webp",
-      "Buzz Doll":           ERC1155_BASE + "2502.webp",
-      "Juicy Doll":          ERC1155_BASE + "2503.webp",
-      "Crude Doll":          ERC1155_BASE + "2505.webp",
-      "Cluck Doll":          ERC1155_BASE + "2506.webp",
-      "Wooly Doll":          ERC1155_BASE + "2507.webp",
-      "Shadow Doll":         ERC1155_BASE + "2510.webp",
-      "Ember Doll":          ERC1155_BASE + "2511.webp",
-      "Gilded Doll":         ERC1155_BASE + "2512.webp",
-      "Harvest Doll":        ERC1155_BASE + "2514.webp",
+      "Doll":                 SFL_WORLD_DELIVERY + "Doll.png",
+      "Buzz Doll":            SFL_WORLD_DELIVERY + "Buzz%20Doll.png",
+      "Juicy Doll":           SFL_WORLD_DELIVERY + "Juicy%20Doll.png",
+      "Crude Doll":           SFL_WORLD_DELIVERY + "Crude%20Doll.png",
+      "Cluck Doll":           SFL_WORLD_DELIVERY + "Cluck%20Doll.png",
+      "Wooly Doll":           SFL_WORLD_DELIVERY + "Wooly%20Doll.png",
+      "Shadow Doll":          SFL_WORLD_DELIVERY + "Shadow%20Doll.png",
+      "Ember Doll":           SFL_WORLD_DELIVERY + "Ember%20Doll.png",
+      "Gilded Doll":          SFL_WORLD_DELIVERY + "Gilded%20Doll.png",
+      "Harvest Doll":         SFL_WORLD_DELIVERY + "Harvest%20Doll.png",
+      // Animals (different sfl.world path)
+      "Cow":                  SFL_WORLD_ANIMAL + "Cow.png",
+      "Sheep":                SFL_WORLD_ANIMAL + "Sheep.png",
+      // Common bounty/delivery items — explicit override of /img/source fallback
+      // since /img/delivery has smaller, more consistent icons.
+      "Hermit Crab":          SFL_WORLD_DELIVERY + "Hermit%20Crab.png",
+      "Anemone":              SFL_WORLD_DELIVERY + "Anemone.png",
+      "Octopus":              SFL_WORLD_DELIVERY + "Octopus.png",
+      "Anchovy":              SFL_WORLD_DELIVERY + "Anchovy.png",
+      "Sea Bass":             SFL_WORLD_DELIVERY + "Sea%20Bass.png",
+      "Oarfish":              SFL_WORLD_DELIVERY + "Oarfish.png",
+      "Muskellunge":          SFL_WORLD_DELIVERY + "Muskellunge.png",
+      "Weakfish":             SFL_WORLD_DELIVERY + "Weakfish.png",
+      "Ray":                  SFL_WORLD_DELIVERY + "Ray.png",
+      "Barnacle":             SFL_WORLD_DELIVERY + "Barnacle.png",
+      "Isopod":               SFL_WORLD_DELIVERY + "Isopod.png",
+      "Oyster":               SFL_WORLD_DELIVERY + "Oyster.png",
+      "Salt Rock":            SFL_WORLD_DELIVERY + "Salt%20Rock.png",
+      "Crab Pot":             SFL_WORLD_DELIVERY + "Crab%20Pot.png",
+      "Mariner Pot":          SFL_WORLD_DELIVERY + "Mariner%20Pot.png",
+      "Crab":                 SFL_WORLD_DELIVERY + "Crab.png",
+      "Sand":                 SFL_WORLD_DELIVERY + "Sand.png",
+      "Sand Shovel":          SFL_WORLD_DELIVERY + "Sand%20Shovel.png",
+      "Pearl":                SFL_WORLD_DELIVERY + "Pearl.png",
+      "Coral":                SFL_WORLD_DELIVERY + "Coral.png",
+      "Pirate Bounty":        SFL_WORLD_DELIVERY + "Pirate%20Bounty.png",
+      "Gold":                 SFL_WORLD_DELIVERY + "Gold.png",
+      "Iron":                 SFL_WORLD_DELIVERY + "Iron.png",
+      "Wood":                 SFL_WORLD_DELIVERY + "Wood.png",
+      "Stone":                SFL_WORLD_DELIVERY + "Stone.png",
+      "Crimstone":            SFL_WORLD_DELIVERY + "Crimstone.png",
+      "Sunstone":             SFL_WORLD_DELIVERY + "Sunstone.png",
+      "Obsidian":             SFL_WORLD_DELIVERY + "Obsidian.png",
+      // Coin / SFL — small icons for the cost/reward annotations.
+      "SFL":                  SFL_WORLD_DELIVERY + "SFL.png",
       // Original entries below
       "Abandoned Bear": GITHUB_ASSETS+"/sfts/bears/abandoned_bear.png",
       "Acorn House": GITHUB_ASSETS+"/sfts/acorn_house.webp",
