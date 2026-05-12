@@ -5146,7 +5146,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.7</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.8</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5173,6 +5173,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.8", items: [
+          { t: "fix", text: "Dashboard now uses Betty rate (~2000 coins/SFL — what crops actually sell for) instead of the gem-pack API rate (~320 coins/SFL — the worst possible conversion). tywin's 8000-coin input was being valued at 25 SFL; with Betty it's ~4 SFL. Costs across all rows drop ~6× to realistic levels." },
+        ]},
         { ver: "v3.7", items: [
           { t: "fix", text: "Dashboard cost: my v3.6 window.estimateItemSfl assignment ran at TOP of main() before Annex B hoisting had assigned the function value — so it stored 'undefined'. Moved the assignment to right after estimateItemSfl's body ends inside main(), where the function is already bound. Crab Pot / Mariner Pot / Kale Omelette / Oyster / dolls etc. should finally show real cost now." },
         ]},
@@ -6652,15 +6655,27 @@
     async function dashFetchRates() {
       try {
         // sfl.world exchange returns coins/gems as tier objects, not flat numbers.
-        // Best tier = the one giving most coins/gems per SFL spent.
         const r = await fetch("/api/proxy?url=" + encodeURIComponent("https://sfl.world/api/v1.1/exchange"));
         const j = await r.json();
         const coinTiers = Object.values(j?.coins || {});
         const bestCoin = coinTiers.reduce((b, t) => (!b || (t.coin / t.sfl) > (b.coin / b.sfl)) ? t : b, null);
-        dashRates.coinsPerSFL = bestCoin ? (bestCoin.coin / bestCoin.sfl) : null;
+        const apiRate = bestCoin ? (bestCoin.coin / bestCoin.sfl) : null;
         const gemTiers = Object.values(j?.gems || {});
         const bestGem = gemTiers.reduce((b, t) => (!b || (t.gem / t.sfl) > (b.gem / b.sfl)) ? t : b, null);
         dashRates.gemsPerSFL = bestGem ? (bestGem.gem / (bestGem.sfl * 0.7)) : null;
+
+        // Coins valuation: use the Betty crop-sell rate (~2000 coins/SFL),
+        // which reflects what coins actually cost a farmer in opportunity terms.
+        // The API rate (~320) is the gem-pack purchase rate — the worst way
+        // to convert SFL→coins and not representative of farm economy.
+        let bettyRate = 0;
+        if (typeof computeBettyRate === "function" && Object.keys(dashP2P).length > 0) {
+          const betty = computeBettyRate(dashP2P);
+          bettyRate = betty.rate || 0;
+        }
+        dashRates.coinsPerSFL_api = apiRate;
+        dashRates.coinsPerSFL_betty = bettyRate || null;
+        dashRates.coinsPerSFL = bettyRate > 0 ? bettyRate : apiRate;
         console.log("[Dashboard] rates loaded:", dashRates);
       } catch (e) { console.warn("[Dashboard] rates fetch failed:", e); }
     }
