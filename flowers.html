@@ -5146,7 +5146,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.6</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.7</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5173,6 +5173,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.7", items: [
+          { t: "fix", text: "Dashboard cost: my v3.6 window.estimateItemSfl assignment ran at TOP of main() before Annex B hoisting had assigned the function value — so it stored 'undefined'. Moved the assignment to right after estimateItemSfl's body ends inside main(), where the function is already bound. Crab Pot / Mariner Pot / Kale Omelette / Oyster / dolls etc. should finally show real cost now." },
+        ]},
         { ver: "v3.6", items: [
           { t: "fix", text: "Dashboard cost calc finally works — estimateItemSfl is declared inside main()'s scope, so top-level dashP2PCost couldn't see it (typeof estimateItemSfl === 'function' returned false, falling through to a flat P2P lookup that returned 0 for any crafted/cooked/tool item). Now exposed via window. Crab Pot / Mariner Pot / Kale Omelette / Oyster (CRUSTACEAN_RECIPES) / Hermit Crab / dolls etc. all priced correctly now." },
         ]},
@@ -16705,11 +16708,6 @@
       LIMIT = cfg.limit;
       FLOWER_BEDS = 4;
 
-      // estimateItemSfl is declared deeper in main() so it's not in global scope.
-      // Expose it on window so top-level helpers like dashP2PCost can call it.
-      // (Function declaration is hoisted within main, so this assignment works.)
-      window.estimateItemSfl = estimateItemSfl;
-
       renderNavBar(page);
       renderDonate();
 
@@ -16922,6 +16920,14 @@
 
       return 0;
     }
+
+    // Expose so top-level helpers (dashP2PCost) can reach it — estimateItemSfl
+    // is inside main()'s scope and isn't accessible from outer functions.
+    // This line runs during main's body execution, AFTER the declaration above
+    // has been initialised (Annex B hoists the binding as undefined, then the
+    // declaration line assigns the function value), but BEFORE renderDashboard
+    // is called further down in main(), so dashP2PCost will see it.
+    window.estimateItemSfl = estimateItemSfl;
 
     // Returns { price, method, detail } explaining how the price was derived
     // Returns null for items with direct P2P prices (those are from API)
