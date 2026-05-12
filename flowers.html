@@ -5145,7 +5145,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.3</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.4</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5172,6 +5172,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.4", items: [
+          { t: "fix", text: "Dashboard cost calc uses estimateItemSfl (same logic as diff/treasury) — crafted items like Crab Pot/Mariner Pot/Sand Shovel/Rod now priced via TOOL_COSTS (coins + materials), and cooked foods like Kale Omelette via RECIPE_INGREDIENTS (40 Egg + 5 Kale), instead of returning 0. Also 'coins' inputs (e.g. tywin's 8000 coins) converted via coinsPerSFL — so Net SFL profit pill shows true delivery profitability." },
+        ]},
         { ver: "v3.3", items: [
           { t: "new", text: "Dashboard: delivery & chore ticket rewards calculated from SFL game logic — TICKET_REWARDS per NPC + VIP +2 + chapter boost items (Spa Hat/Robe/Slippers for Salt Awakening etc.). Empty API rewards on tywin/finn/etc. now show the right ticket count." },
           { t: "new", text: "Dashboard: cost-per-ticket pill now appears on chores that pay seasonal tickets too" },
@@ -6647,7 +6650,18 @@
       let total = 0;
       const arr = Array.isArray(items) ? items : Object.entries(items).map(([n,q]) => ({name:n, qty:q}));
       for (const {name, qty} of arr) {
-        total += (dashP2P[name] || 0) * qty;
+        let unit;
+        if (name === "coins") {
+          // Some deliveries (e.g. tywin) consume coins as part of payment.
+          unit = dashRates?.coinsPerSFL > 0 ? 1 / dashRates.coinsPerSFL : 0;
+        } else if (typeof estimateItemSfl === "function") {
+          // Handles direct P2P, crafted ingredients, food recipes, tool costs
+          // (Crab Pot / Mariner Pot etc.), seed costs, doll recipes…
+          unit = estimateItemSfl(name, dashP2P, null, dashRates) || 0;
+        } else {
+          unit = dashP2P[name] || 0;
+        }
+        total += unit * qty;
       }
       return total;
     }
