@@ -2297,6 +2297,10 @@
     .dash-eff-net-pos { background:rgba(46,160,67,0.18); color:var(--green); }
     .dash-eff-net-neg { background:rgba(220,60,60,0.18); color:#e55; }
     .dash-npc { width:18px; height:18px; object-fit:contain; image-rendering:pixelated; vertical-align:middle; margin-right:5px; border-radius:3px; }
+    .dash-npc-large { width:32px; height:32px; object-fit:contain; image-rendering:pixelated; border-radius:4px; background:rgba(0,0,0,0.18); flex-shrink:0; align-self:center; }
+    .dash-gift { font-size:0.6rem; padding:1px 6px; border-radius:8px; margin-left:6px; white-space:nowrap; }
+    .dash-gift-todo { background:rgba(232,201,106,0.18); color:var(--sunpetal); }
+    .dash-gift-done { background:rgba(46,160,67,0.18); color:var(--green); }
     .dash-toolbar { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
     .dash-toggle-btn { font-family:'Courier New', monospace; font-size:0.65rem; padding:4px 10px; border-radius:6px; background:var(--bg-input); color:var(--text-secondary); border:1px solid var(--border-dark); cursor:pointer; }
     .dash-toggle-btn.on { background:rgba(232,201,106,0.15); color:var(--sunpetal); border-color:var(--sunpetal); }
@@ -5182,7 +5186,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.13</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.14</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5209,6 +5213,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.14", items: [
+          { t: "new", text: "Delivery rows: NPC portrait enlarged to 32px and now spans both lines (label + detail) instead of being a small inline icon on just the first line." },
+          { t: "new", text: "Delivery rows: gift status badge from the flowers-page Gifts Planner — yellow '🎁 give <flower>' if you have a plan for that NPC and haven't gifted today, green '🎁 given today' when friendship.giftedAt is in today's UTC window, gray '🎁 no plan' for NPCs that accept flowers but haven't been planned." },
+        ]},
         { ver: "v3.13", items: [
           { t: "fix", text: "Item icons now use sfl.world /img/delivery/<Name>.png (small pixel art, same as sfl.world bounties/deliveries pages) instead of the giant ERC1155 webp full art from v3.12. Covers exotic crops, dolls, fish, crustaceans, ores, tools, salt rock. Cow + Sheep use /img/animals/<Name>.png." },
           { t: "new", text: "Delivery rows show the NPC's portrait (small 18px) before the name, sourced from sfl.world /img/plaza/<npc>.png — same pixel-art style as the rest of the dashboard." },
@@ -7795,6 +7803,21 @@
       return { verb, item, target, activityKey, inputItems, current, delta, remaining, ready, cost };
     }
 
+    // Returns gift status for a delivery NPC, mirroring the Gifts Planner on
+    // the flowers page. Returns null when the NPC doesn't accept flower gifts.
+    // Shape: { givenToday: boolean, planned: string|null }
+    function dashGiftStatus(npc, farm) {
+      if (typeof GIFT_NPC_ORDER === "undefined" || !GIFT_NPC_ORDER.includes(npc)) return null;
+      const friendship = farm?.npcs?.[npc]?.friendship || {};
+      const giftedAt = friendship.giftedAt || 0;
+      const now = new Date();
+      const utcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+      const givenToday = giftedAt >= utcMidnight;
+      let planned = null;
+      try { planned = (typeof getGiftPlan === "function" ? getGiftPlan() : {})[npc] || null; } catch {}
+      return { givenToday, planned };
+    }
+
     function dashParseDeliveryOrders(farm) {
       const actions = [];
       try {
@@ -7832,13 +7855,33 @@
             detailParts.push("Cost: " + cost.toFixed(2) + " SFL");
             detailPartsHtml.push("Cost: " + cost.toFixed(2) + " " + _dashIcon("SFL"));
           }
+          // Gift status for this NPC (mirrors flowers page Gifts Planner).
+          const gift = dashGiftStatus(from, farm);
+          let giftDetail = "";
+          let giftDetailHtml = "";
+          if (gift) {
+            if (gift.givenToday) {
+              giftDetail = "\ud83c\udf81 given today";
+              giftDetailHtml = `<span class="dash-gift dash-gift-done">\ud83c\udf81 given today</span>`;
+            } else if (gift.planned) {
+              giftDetail = "\ud83c\udf81 give " + gift.planned;
+              giftDetailHtml = `<span class="dash-gift dash-gift-todo">\ud83c\udf81 give ${_dashIcon(gift.planned)}${escHTML(gift.planned)}</span>`;
+            } else {
+              giftDetail = "\ud83c\udf81 no plan";
+              giftDetailHtml = `<span class="dash-gift dash-gift-todo">\ud83c\udf81 no plan</span>`;
+            }
+          }
+          const finalDetail = giftDetail ? detailParts.join(" | ") + " | " + giftDetail : detailParts.join(" | ");
+          const finalDetailHtml = giftDetailHtml ? detailPartsHtml.join(" | ") + giftDetailHtml : detailPartsHtml.join(" | ");
+
           actions.push({
             category: "Deliveries",
             icon: "\u{1F4CB}",
+            prefixHtml: `<img class="dash-npc-large" src="${getNpcIcon(from)}" onerror="this.style.display='none'" alt="">`,
             label: from + ": " + itemDesc,
-            labelHtml: `<img class="dash-npc" src="${getNpcIcon(from)}" onerror="this.style.display='none'" alt=""><b>${escHTML(from)}</b>: ` + itemDescHtml,
-            detail: detailParts.join(" | "),
-            detailHtml: detailPartsHtml.join(" | "),
+            labelHtml: `<b>${escHTML(from)}</b>: ` + itemDescHtml,
+            detail: finalDetail,
+            detailHtml: finalDetailHtml,
             efficiency,
             status: "ready",
             readyAt: 0,
@@ -8146,8 +8189,10 @@
         const detailInner = item.detailHtml || (item.detail ? escHTML(item.detail) : "");
         const detailBlock = detailInner ? `<div class="dash-detail">${detailInner}</div>` : "";
         const labelInner = item.labelHtml || escHTML(item.label);
+        const prefix = item.prefixHtml || "";
         return `<div class="dash-item ${cls}">
           <span>${item.icon}</span>
+          ${prefix}
           <div class="dash-item-label">${labelInner}${detailBlock}</div>
           ${effHtml}
           ${timeHtml}
