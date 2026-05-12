@@ -5165,7 +5165,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.10</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.11</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5192,6 +5192,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.11", items: [
+          { t: "new", text: "Bounty Board items without a P2P/derived price (Golden Helios, Chiogga, White Carrot, dolls, etc.) now use an 'Eins fallback' cost = bounty_ticket_reward × 15 coins ÷ Betty rate. Cost-per-Salt-Rock for those rows is now non-zero (≈ 15/coinsPerSFL SFL/ticket). SW cache bumped to force fresh assets." },
+        ]},
         { ver: "v3.10", items: [
           { t: "fix", text: "Aging Shed XP now computes a true weighted average between Aged and Prime Aged using the player's actual prime chance (10% base, ×2 with Fish Smoking, +4 with Salt Sculpture L2+). Was approximated as two fixed multipliers layered on a 1.03 baseline. Boost row now shows the real chance, e.g. 'Prime Aged avg (24% × 1.3 XP) → ×1.072'." },
         ]},
@@ -6716,6 +6719,17 @@
         console.log("[Dashboard] rates loaded:", dashRates);
       } catch (e) { console.warn("[Dashboard] rates fetch failed:", e); }
     }
+    // Fallback "Eins" pricing for items without a P2P/derived price: assume each
+    // turn-in is worth its bounty ticket reward × 15 coins (the per-ticket coin
+    // value at Eins / Potion Ticket exchange). Returns null when no estimate.
+    const DASH_TICKET_COIN_PRICE = 15;
+    function dashEinsFallbackSFL(name, bountyItems, ticket) {
+      if (!dashRates?.coinsPerSFL || dashRates.coinsPerSFL <= 0) return null;
+      const tk = ticket && bountyItems && bountyItems[ticket];
+      if (!tk || tk <= 0) return null;
+      return (tk * DASH_TICKET_COIN_PRICE) / dashRates.coinsPerSFL;
+    }
+
     function dashP2PCost(items) {
       let total = 0;
       const arr = Array.isArray(items) ? items : Object.entries(items).map(([n,q]) => ({name:n, qty:q}));
@@ -7838,7 +7852,14 @@
           const paysTicket = ticket && reqItems[ticket] > 0;
           if (!showNonTicket && !paysTicket) continue;
           const inputItems = [{ name: req.name, qty: 1 }];
-          const cost = (typeof dashP2PCost === "function") ? dashP2PCost(inputItems) : null;
+          let cost = (typeof dashP2PCost === "function") ? dashP2PCost(inputItems) : null;
+          // Fallback for items not on the P2P market (Golden Helios, Chiogga,
+          // White Carrot, dolls, etc.): estimate via Eins ticket price
+          // (1 ticket = 15 coins). Approximates item value as bounty_tickets × 15.
+          if ((!cost || cost <= 0) && paysTicket) {
+            const fb = dashEinsFallbackSFL(req.name, reqItems, ticket);
+            if (fb != null && fb > 0) cost = fb;
+          }
           const reward = { coins: req.coins, items: reqItems };
           const { rewardText, rewardHtml, efficiency } = dashRewardSummary(reward, ticket, cost, dashRates);
           const label = req.name + " → " + (rewardText || "?");
