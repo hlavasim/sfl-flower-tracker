@@ -5146,7 +5146,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.5</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.6</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5173,6 +5173,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.6", items: [
+          { t: "fix", text: "Dashboard cost calc finally works — estimateItemSfl is declared inside main()'s scope, so top-level dashP2PCost couldn't see it (typeof estimateItemSfl === 'function' returned false, falling through to a flat P2P lookup that returned 0 for any crafted/cooked/tool item). Now exposed via window. Crab Pot / Mariner Pot / Kale Omelette / Oyster (CRUSTACEAN_RECIPES) / Hermit Crab / dolls etc. all priced correctly now." },
+        ]},
         { ver: "v3.5", items: [
           { t: "fix", text: "Dashboard exchange-rate fetch was hitting v1/exchange (returns 404) and parsing as flat fields — fixed to v1.1/exchange with tier-based parsing (best coin tier = max coin/sfl, gem tier with -30% pack discount). Without rates, all crafted item / tool / food costs returned 0." },
           { t: "new", text: "New efficiency pill for coin-only delivery rewards: 'X coins/SFL' (higher = better, blue). Replaces the Net SFL pill for rows like peggy/blacksmith/jester where reward is pure coins." },
@@ -6666,10 +6669,12 @@
         if (name === "coins") {
           // Some deliveries (e.g. tywin) consume coins as part of payment.
           unit = dashRates?.coinsPerSFL > 0 ? 1 / dashRates.coinsPerSFL : 0;
-        } else if (typeof estimateItemSfl === "function") {
-          // Handles direct P2P, crafted ingredients, food recipes, tool costs
-          // (Crab Pot / Mariner Pot etc.), seed costs, doll recipes…
-          unit = estimateItemSfl(name, dashP2P, null, dashRates) || 0;
+        } else if (typeof window !== "undefined" && typeof window.estimateItemSfl === "function") {
+          // estimateItemSfl lives inside main()'s scope; main exposes it on
+          // window. Handles direct P2P, crafted ingredients, food recipes,
+          // tool costs (Crab Pot / Mariner Pot etc.), seed costs, doll
+          // recipes, crustaceans (Oyster = Crab Pot + 2 Fish Stick) …
+          unit = window.estimateItemSfl(name, dashP2P, null, dashRates) || 0;
         } else {
           unit = dashP2P[name] || 0;
         }
@@ -16699,6 +16704,11 @@
       FARM_ID = cfg.farm;
       LIMIT = cfg.limit;
       FLOWER_BEDS = 4;
+
+      // estimateItemSfl is declared deeper in main() so it's not in global scope.
+      // Expose it on window so top-level helpers like dashP2PCost can call it.
+      // (Function declaration is hoisted within main, so this assignment works.)
+      window.estimateItemSfl = estimateItemSfl;
 
       renderNavBar(page);
       renderDonate();
