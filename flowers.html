@@ -5186,7 +5186,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.15</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.16</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5213,6 +5213,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.16", items: [
+          { t: "fix", text: "Gift badge: deliveries to NPCs you haven't planned a flower for show NO badge at all (was 'Give (no plan)'). Less clutter for grindy delivery rows that don't relate to the Gifts Planner." },
+        ]},
         { ver: "v3.15", items: [
           { t: "fix", text: "Gift badge text trimmed: '<flower-icon> <Flower> given today' (green) and 'Give <flower-icon> <Flower>' (yellow). Drop the 🎁 emoji. API doesn't record which flower was given, so the planned flower is shown in both states." },
         ]},
@@ -7864,22 +7867,16 @@
           let giftDetailHtml = "";
           if (gift) {
             // API only stores friendship.giftedAt, not the flower name. Use the
-            // planned flower for both states under the assumption the user gave
-            // what they planned.
-            if (gift.givenToday) {
-              if (gift.planned) {
+            // planned flower under the assumption the user gave what they planned.
+            // NPCs without a plan get NO badge at all (avoid clutter on unplanned rows).
+            if (gift.planned) {
+              if (gift.givenToday) {
                 giftDetail = gift.planned + " given today";
                 giftDetailHtml = `<span class="dash-gift dash-gift-done">${_dashIcon(gift.planned)}${escHTML(gift.planned)} given today</span>`;
               } else {
-                giftDetail = "given today";
-                giftDetailHtml = `<span class="dash-gift dash-gift-done">given today</span>`;
+                giftDetail = "Give " + gift.planned;
+                giftDetailHtml = `<span class="dash-gift dash-gift-todo">Give ${_dashIcon(gift.planned)}${escHTML(gift.planned)}</span>`;
               }
-            } else if (gift.planned) {
-              giftDetail = "Give " + gift.planned;
-              giftDetailHtml = `<span class="dash-gift dash-gift-todo">Give ${_dashIcon(gift.planned)}${escHTML(gift.planned)}</span>`;
-            } else {
-              giftDetail = "Give (no plan)";
-              giftDetailHtml = `<span class="dash-gift dash-gift-todo">Give (no plan)</span>`;
             }
           }
           const finalDetail = giftDetail ? detailParts.join(" | ") + " | " + giftDetail : detailParts.join(" | ");
