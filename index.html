@@ -4581,6 +4581,7 @@
       fishing:  { label: "FISHING",  emoji: "🎣", selector: null,   quantifiable: true },
       bees:     { label: "BEES",     emoji: "🐝", selector: null,   quantifiable: true },
       // Qualitative
+      pets:       { label: "PETS",          emoji: "🐾", selector: null, quantifiable: false },
       cooking:    { label: "COOKING / XP",  emoji: "🍳", selector: null, quantifiable: false },
       coins:      { label: "COINS / SFL",   emoji: "🪙", selector: null, quantifiable: false },
       protection: { label: "PROTECTION",    emoji: "🛡️", selector: null, quantifiable: false },
@@ -4663,6 +4664,18 @@
         { type: "yield_flat", value: 0.1, cat: "iron", raw: "+0.1 Iron (Volcano Island)" },
         { type: "yield_flat", value: 0.1, cat: "gold", raw: "+0.1 Gold (Volcano Island)" },
       ],
+      // Golden animals — free feeding for their species (capacity.goldenAnimals already detects ownership,
+      // but parser routing keeps them in their proper category & exposes the savings as a free_feed effect
+      // so the ROI page can scenario-toggle the goldenAnimals flag.
+      "Gold Egg": [
+        { type: "free_feed", cat: "chickens", raw: "Feed Chickens for free" },
+      ],
+      "Golden Cow": [
+        { type: "free_feed", cat: "cows", raw: "Feed Cows for free" },
+      ],
+      "Golden Sheep": [
+        { type: "free_feed", cat: "sheep", raw: "Feed Sheep for free" },
+      ],
     };
 
     // IMPORTANT: Specific category rules (Crop, Flower, Fruit, Tree, Animal, Greenhouse)
@@ -4697,7 +4710,8 @@
         fn: m => {
           const ctx = (m[2] || "").trim().toLowerCase();
           let cat = "other";
-          if (/\bcow\b/.test(ctx)) cat = "cows";
+          if (/\bpet\b/.test(ctx)) cat = "pets";
+          else if (/\bcow\b/.test(ctx)) cat = "cows";
           else if (/\bchicken\b/.test(ctx)) cat = "chickens";
           else if (/\bsheep\b/.test(ctx)) cat = "sheep";
           else if (/\banimal\b/.test(ctx)) cat = "chickens";
@@ -4956,6 +4970,10 @@
       // ── FISHING ──
       { rx: /(\d+)\s+daily/i,
         fn: m => ({ type: "daily_flat", value: parseFloat(m[1]), cat: "fishing" }) },
+      // ── Pet boosts (qualitative — pets system: feeding, XP, satiation) ──
+      // Match before generic XP rule (which would route "Pet XP" to "other").
+      { rx: /\bpet\s+(?:xp|energy|satiation|food|bowl|level)|feed\s+pets?\s+for\s+free|feeding\s+pets?\s+fully|next\s+reset\s+is\s+free/i,
+        fn: m => ({ type: "qualitative", cat: "pets", raw: m[0] }) },
       // ── XP boosts ──
       { rx: /([+-]?\d+\.?\d*)%?\s*(Cook|Bake|Food|Meal|Dish|Kitchen|Delivery)\b/i,
         fn: m => ({ type: "qualitative", cat: "cooking", raw: m[0] }) },
@@ -5243,7 +5261,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.22</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.23</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5270,6 +5288,12 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.23", items: [
+          { t: "new", text: "ROI page: per-category SELL? checkbox + selection summary panel. Tick categories you'd consider liquidating; the panel below the table sums total sale value, daily yield lost, and combined payback years across the selection. Warns about multi-category NFTs in selection (their boost loss in other cats isn't included in the sum). Selection persists in localStorage." },
+          { t: "fix", text: "Golden Cow (124999 ⚀), Golden Sheep (10950 ⚀), and Gold Egg (7695 ⚀) had boost text 'Feed cows/sheep/chickens for free' that the parser couldn't match → routed to PASSIVE/other. Added BOOST_EFFECT_OVERRIDES with type=free_feed so they now land in their proper animal category. ROI scenario toggles capacity.goldenAnimals based on whether the gold animal is in the kept set — selling it correctly resurfaces full feed cost in the marginal." },
+          { t: "new", text: "PETS category added (qualitative). Pet-related NFTs (Walrus Onesie '+5 Pet Energy', Paw Aura 'Feed pets for free', Pet Bowls '+10 Pet XP', Beast Shoes, Paw Shield, Victoria's Apron, Pet Specialist gear) now grouped into PETS sub-table instead of generic OTHER. Generic XP rule also checks for 'pet' context to route '+10 Pet XP' to PETS instead of OTHER." },
+          { t: "new", text: "PASSIVE section reorganised into sub-tables by qualitative category (PETS, COOKING/XP, COINS/SFL, PROTECTION, OTHER) with descriptions, NFT count, and per-group total sale value." },
+        ]},
         { ver: "v3.22", items: [
           { t: "fix", text: "Parser: items previously misrouted to PASSIVE now land in their proper category. Fixed: hour-based animal sleep ('-2h Chicken Sleep Time' / El Pollo Veloz, converted to equivalent speed_pct of 24h cycle), animal feed-reduction NFTs ('-10% Feed to Chicken' / Fat Chicken, '-5% Sheep Feed' / Mermaid Sheep — type=feed_reduction, applied in calcAnimalFeedCost), Crop Machine qualitative ('-50% Growth Time in Crop Machine' / Groovy Gramophone → crops), and fishing-minigame / treasure-when-fishing qualitative tags → fishing. Affects ROI page (passive shrinks, category rows grow) and Power page (same items now classified into their relevant category)." },
         ]},
@@ -16274,6 +16298,7 @@
     const LS_ROI_LOGINS = "sfl_roi_logins_per_day";
     const LS_ROI_CURRENCY = "sfl_roi_currency";
     const LS_ROI_MULTICAT = "sfl_roi_multicat_assignment";
+    const LS_ROI_SELL_SELECTION = "sfl_roi_sell_selection";
 
     let roiState = null;
 
@@ -16292,6 +16317,24 @@
       const m = roiGetMulticatAssignment();
       m[name] = cat;
       localStorage.setItem(LS_ROI_MULTICAT, JSON.stringify(m));
+    }
+    // Per-category "sell whole category" selection — set of catIds the user has marked for sale.
+    // null = not yet initialised (treat as "no selection"). Returns Set.
+    function roiGetSellSelection() {
+      try {
+        const raw = localStorage.getItem(LS_ROI_SELL_SELECTION);
+        if (raw === null) return null;
+        const arr = JSON.parse(raw);
+        return new Set(Array.isArray(arr) ? arr : []);
+      } catch { return new Set(); }
+    }
+    function roiToggleSellSelection(catId) {
+      const s = roiGetSellSelection() || new Set();
+      if (s.has(catId)) s.delete(catId); else s.add(catId);
+      localStorage.setItem(LS_ROI_SELL_SELECTION, JSON.stringify([...s]));
+    }
+    function roiClearSellSelection() {
+      localStorage.setItem(LS_ROI_SELL_SELECTION, JSON.stringify([]));
     }
 
     // Steady-state cycle at given login frequency: harvest happens at next login after cycle completes
@@ -16474,9 +16517,17 @@
         seedCostSfl = (seedInfo?.costPerDay || 0) * costScale;
       }
 
-      // Animal feed + sickness cost (chickens / cows / sheep) — 24h cycle, no login-cap scaling needed
+      // Animal feed + sickness cost (chickens / cows / sheep) — 24h cycle, no login-cap scaling needed.
+      // Override capacity.goldenAnimals based on scenario's free_feed effects so Gold Egg / Golden Cow /
+      // Golden Sheep get scenario-correct treatment (sold → feed cost reappears).
       if (isAnimalCat(catId) && nodeCount > 0) {
-        feedInfo = calcAnimalFeedCost(catId, capacity, p2pPrices, effects, stockMods);
+        const animalType = ANIMAL_CAT_MAP[catId];
+        const hasFreeFeed = effects.some(e => e.type === "free_feed" && e.cat === catId);
+        const effCapacity = {
+          ...capacity,
+          goldenAnimals: { ...(capacity.goldenAnimals || {}), [animalType]: hasFreeFeed },
+        };
+        feedInfo = calcAnimalFeedCost(catId, effCapacity, p2pPrices, effects, stockMods);
         feedCostSfl = feedInfo?.costPerDay || 0;
         sicknessInfo = calcSicknessCost(catId, capacity, p2pPrices, scenarioBoostItems || [], farmSkills || {});
         sicknessCostSfl = sicknessInfo?.costPerDay || 0;
@@ -16691,6 +16742,9 @@
         return 0;
       });
 
+      // Sell selection: default = empty Set (user hasn't checked anything).
+      const sellSel = roiGetSellSelection() || new Set();
+
       // Main table
       html += `<div class="pixel-panel" style="padding:0;overflow-x:auto;background:rgba(0,0,0,0.15)">
         <table class="roi-table pixel-font" style="width:100%;font-size:0.6rem;border-collapse:collapse">
@@ -16704,12 +16758,13 @@
               <th style="text-align:right;padding:8px">Δ/DAY</th>
               <th style="text-align:right;padding:8px">PAYBACK</th>
               <th style="text-align:center;padding:8px">VERDICT</th>
+              <th style="text-align:center;padding:8px" title="Mark category as 'I'll sell this' — totals below.">SELL?</th>
             </tr>
           </thead>
           <tbody>`;
 
       if (displayRows.length === 0) {
-        html += `<tr><td colspan="8" style="padding:16px;text-align:center;color:var(--text-dim)" class="pixel-font">No sellable boost NFTs owned for any resource category.</td></tr>`;
+        html += `<tr><td colspan="9" style="padding:16px;text-align:center;color:var(--text-dim)" class="pixel-font">No sellable boost NFTs owned for any resource category.</td></tr>`;
       }
 
       for (const row of displayRows) {
@@ -16741,6 +16796,8 @@
                             : row.marginalSflPerDay < -0.01 ? `<span style="color:var(--red)">${fmtVal(row.marginalSflPerDay)}</span>`
                             : "—";
 
+        const isSelected = sellSel.has(row.catId);
+        const checkboxDisabled = (row.sellableInCat.length === 0);
         html += `<tr class="roi-row" style="cursor:pointer;border-top:1px solid rgba(255,255,255,0.07)" onclick="_roiToggleRow('${row.catId}')">
           <td style="padding:8px 6px;color:var(--text-dim)"><span id="${expandKey}-arrow">▶</span></td>
           <td style="padding:8px;font-weight:bold">${catDef.emoji} ${catDef.label}</td>
@@ -16750,43 +16807,115 @@
           <td style="text-align:right;padding:8px">${marginalCell}</td>
           <td style="text-align:right;padding:8px;color:${roiColor};font-weight:bold">${roiText}</td>
           <td style="text-align:center;padding:8px"><span style="background:${vc.bg};color:${vc.fg};padding:3px 8px;border-radius:3px;font-size:0.5rem;letter-spacing:0.05em">${vc.label}</span></td>
+          <td style="text-align:center;padding:8px" onclick="event.stopPropagation()">
+            <input type="checkbox" ${isSelected ? 'checked' : ''} ${checkboxDisabled ? 'disabled' : ''} onclick="_roiToggleSell('${row.catId}')" style="cursor:${checkboxDisabled ? 'not-allowed' : 'pointer'};transform:scale(1.2)">
+          </td>
         </tr>
         <tr id="${expandKey}" style="display:none;background:rgba(0,0,0,0.3)">
-          <td colspan="8" style="padding:12px 16px">${renderRoiExpandedRow(row, fmtVal, multicat, L)}</td>
+          <td colspan="9" style="padding:12px 16px">${renderRoiExpandedRow(row, fmtVal, multicat, L)}</td>
         </tr>`;
       }
       html += `</tbody></table></div>`;
 
-      // Passive section
+      // ── Selection summary ──
+      const selectedRows = displayRows.filter(r => sellSel.has(r.catId));
+      if (selectedRows.length > 0) {
+        const totalSale = selectedRows.reduce((s, r) => s + r.saleSfl, 0);
+        const totalMarginal = selectedRows.reduce((s, r) => s + r.marginalSflPerDay, 0);
+        const totalPaybackYears = totalMarginal > 0 ? totalSale / (totalMarginal * 365) : Infinity;
+        // Aggregate sellable item count + multi-cat warning items
+        let totalNfts = 0, multiCatNames = new Set();
+        for (const r of selectedRows) {
+          totalNfts += r.sellableInCat.length;
+          for (const b of r.sellableInCat) if (b.isMultiCat) multiCatNames.add(b.name);
+        }
+        const verdictColor = !isFinite(totalPaybackYears) ? "var(--red)" :
+                              totalPaybackYears < 1 ? "var(--green)" :
+                              totalPaybackYears < 5 ? "var(--sunpetal)" : "#ff8c42";
+        const verdictText = !isFinite(totalPaybackYears) ? "INSTANT" :
+                             totalPaybackYears.toFixed(2) + "y";
+        html += `<div class="pixel-panel" style="margin-top:16px;padding:12px;background:linear-gradient(180deg,rgba(255,215,0,0.08),rgba(0,0,0,0.2));border:2px solid var(--sunpetal)">
+          <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:center" class="pixel-font">
+            <div>
+              <div style="font-size:0.55rem;color:var(--text-secondary);margin-bottom:4px">SELL THESE CATEGORIES</div>
+              <div style="font-size:0.75rem;color:var(--sunpetal);font-weight:bold">${selectedRows.map(r => POWER_CATEGORIES[r.catId].emoji + ' ' + POWER_CATEGORIES[r.catId].label).join(' + ')}</div>
+            </div>
+            <div>
+              <div style="font-size:0.55rem;color:var(--text-secondary);margin-bottom:4px">TOTAL SALE VALUE</div>
+              <div style="font-size:0.8rem;color:var(--sunpetal);font-weight:bold">${fmtVal(totalSale)}</div>
+              <div style="font-size:0.5rem;color:var(--text-dim)">${totalNfts} NFT${totalNfts !== 1 ? 's' : ''}</div>
+            </div>
+            <div>
+              <div style="font-size:0.55rem;color:var(--text-secondary);margin-bottom:4px">DAILY YIELD LOST</div>
+              <div style="font-size:0.8rem;color:var(--red);font-weight:bold">−${fmtVal(totalMarginal)}/day</div>
+              <div style="font-size:0.5rem;color:var(--text-dim)">sum of per-cat marginals</div>
+            </div>
+            <div>
+              <div style="font-size:0.55rem;color:var(--text-secondary);margin-bottom:4px">COMBINED PAYBACK</div>
+              <div style="font-size:0.8rem;color:${verdictColor};font-weight:bold">${verdictText}</div>
+            </div>
+            <div style="margin-left:auto">
+              <button class="roi-pill" onclick="_roiClearSell()">CLEAR SELECTION</button>
+            </div>
+          </div>
+          ${multiCatNames.size > 0 ? `<div class="pixel-font" style="margin-top:10px;font-size:0.5rem;color:var(--text-dim);line-height:1.5">⚠ ${multiCatNames.size} multi-category NFT${multiCatNames.size !== 1 ? 's' : ''} in selection (${[...multiCatNames].slice(0,5).map(escHTML).join(', ')}${multiCatNames.size > 5 ? ', …' : ''}). When physically sold, these NFTs also stop boosting their other categories — total marginal lost may be larger than shown.</div>` : ''}
+        </div>`;
+      } else {
+        html += `<div class="pixel-font" style="margin-top:16px;padding:10px 12px;background:rgba(255,255,255,0.03);border:1px dashed rgba(255,215,0,0.3);font-size:0.55rem;color:var(--text-dim);text-align:center">
+          ☑️ Check the SELL? box on rows you'd consider liquidating — the totals appear here.
+        </div>`;
+      }
+
+      // ── Non-yield items grouped by qualitative category (pets / cooking / coins / protection / other) ──
       const passiveItems = boostItems.filter(b =>
         b.has && !b.isDisabled && b.isSellable && b.quantCats.length === 0
       );
       if (passiveItems.length > 0) {
-        passiveItems.sort((a, b) => b.floor - a.floor);
-        const passiveSum = passiveItems.reduce((s, b) => s + b.floor, 0);
-        html += `<div class="pixel-panel" style="margin-top:24px;padding:12px;background:rgba(0,0,0,0.15)">
-          <h2 class="pixel-font" style="margin:0 0 8px 0;font-size:0.75rem;color:var(--lily)">PASSIVE BOOSTS</h2>
-          <div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);margin-bottom:10px;line-height:1.6">
-            Login-frequency independent — sale value only (cooking XP, sleep, etc.)<br>
-            Total sellable: <b style="color:var(--sunpetal)">${roiFormatValue(passiveSum, currency, sflUsd, btcUsd)}</b>
-          </div>
-          <div style="overflow-x:auto"><table class="pixel-font" style="width:100%;font-size:0.55rem;border-collapse:collapse">
-            <thead><tr style="background:rgba(0,0,0,0.3);color:var(--text-secondary)">
-              <th style="text-align:left;padding:6px">NFT</th>
-              <th style="text-align:left;padding:6px">TYPE</th>
-              <th style="text-align:left;padding:6px">BOOST</th>
-              <th style="text-align:right;padding:6px">SALE</th>
-            </tr></thead><tbody>`;
+        // Group by primary category (first cat from item.categories)
+        const QUAL_ORDER = ["pets", "cooking", "coins", "protection", "other"];
+        const QUAL_DESC = {
+          pets: "Pet-related boosts — XP, energy, satiation, free feeding. Pet feeding savings not yet modeled (random food requests).",
+          cooking: "Cooking / XP boosts — speed up Bumpkin levelling, dish bonuses.",
+          coins: "Coin / SFL boosts — sell-price multipliers, delivery rewards.",
+          protection: "Protection — disaster resistance, etc.",
+          other: "Other / unclassified boosts.",
+        };
+        const grouped = {};
         for (const b of passiveItems) {
-          const boostShort = (b.boost || '').replace(/\n/g, ' • ').slice(0, 90);
-          html += `<tr style="border-top:1px solid rgba(255,255,255,0.05)">
-            <td style="padding:6px;color:var(--text-secondary)">${escHTML(b.name)}</td>
-            <td style="padding:6px;color:var(--text-dim)">${b.type}</td>
-            <td style="padding:6px;color:var(--text-dim)">${escHTML(boostShort)}</td>
-            <td style="text-align:right;padding:6px;color:var(--sunpetal)">${roiFormatValue(b.floor, currency, sflUsd, btcUsd)}</td>
-          </tr>`;
+          const primary = b.categories.find(c => QUAL_ORDER.includes(c)) || "other";
+          if (!grouped[primary]) grouped[primary] = [];
+          grouped[primary].push(b);
         }
-        html += `</tbody></table></div></div>`;
+        for (const catId of QUAL_ORDER) {
+          const items = grouped[catId];
+          if (!items || items.length === 0) continue;
+          items.sort((a, b) => b.floor - a.floor);
+          const sum = items.reduce((s, b) => s + b.floor, 0);
+          const catDef = POWER_CATEGORIES[catId] || { label: catId.toUpperCase(), emoji: "❓" };
+          html += `<div class="pixel-panel" style="margin-top:16px;padding:12px;background:rgba(0,0,0,0.15)">
+            <h2 class="pixel-font" style="margin:0 0 6px 0;font-size:0.75rem;color:var(--lily)">${catDef.emoji} ${catDef.label}</h2>
+            <div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);margin-bottom:10px;line-height:1.6">
+              ${QUAL_DESC[catId] || ''}<br>
+              ${items.length} NFT${items.length !== 1 ? 's' : ''}, total sellable <b style="color:var(--sunpetal)">${roiFormatValue(sum, currency, sflUsd, btcUsd)}</b>
+            </div>
+            <div style="overflow-x:auto"><table class="pixel-font" style="width:100%;font-size:0.55rem;border-collapse:collapse">
+              <thead><tr style="background:rgba(0,0,0,0.3);color:var(--text-secondary)">
+                <th style="text-align:left;padding:6px">NFT</th>
+                <th style="text-align:left;padding:6px">TYPE</th>
+                <th style="text-align:left;padding:6px">BOOST</th>
+                <th style="text-align:right;padding:6px">SALE</th>
+              </tr></thead><tbody>`;
+          for (const b of items) {
+            const boostShort = (b.boost || '').replace(/\n/g, ' • ').slice(0, 90);
+            html += `<tr style="border-top:1px solid rgba(255,255,255,0.05)">
+              <td style="padding:6px;color:var(--text-secondary)">${escHTML(b.name)}</td>
+              <td style="padding:6px;color:var(--text-dim)">${b.type}</td>
+              <td style="padding:6px;color:var(--text-dim)">${escHTML(boostShort)}</td>
+              <td style="text-align:right;padding:6px;color:var(--sunpetal)">${roiFormatValue(b.floor, currency, sflUsd, btcUsd)}</td>
+            </tr>`;
+          }
+          html += `</tbody></table></div></div>`;
+        }
       }
 
       // Footer info
@@ -16906,6 +17035,8 @@
     window._roiSetLogins = function(n) { roiSetLoginsPerDay(n); renderRoiContent(); };
     window._roiSetCurrency = function(c) { roiSetCurrency(c); renderRoiContent(); };
     window._roiSetMulticat = function(name, cat) { roiSetMulticatAssignment(name, cat); renderRoiContent(); };
+    window._roiToggleSell = function(catId) { roiToggleSellSelection(catId); renderRoiContent(); };
+    window._roiClearSell = function() { roiClearSellSelection(); renderRoiContent(); };
     window._roiToggleRow = function(catId) {
       const expandKey = `roi-exp-${catId}`;
       const row = document.getElementById(expandKey);
