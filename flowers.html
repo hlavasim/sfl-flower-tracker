@@ -4841,6 +4841,25 @@
       // Generic animal time / sleep: "-10% Animal sleep time"
       { rx: /([+-]?\d+\.?\d*)%\s+Animal\s+(?:sleep\s+|production\s+)?time/i,
         fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "chickens", alsoApply: ["cows", "sheep"] }) },
+      // Hour-based animal sleep time: "-2h Chicken Sleep Time" (El Pollo Veloz)
+      // Animal cycle is 24h → convert hours to equivalent speed_pct.
+      { rx: /([+-]?\d+\.?\d*)\s*h(?:ours?)?\s+(Chicken|Cow|Sheep)\s+(?:Sleep|Production)\s+Time/i,
+        fn: m => {
+          const hours = parseFloat(m[1]);
+          const key = m[2].charAt(0).toUpperCase() + m[2].slice(1).toLowerCase();
+          const animalCats = { "Chicken": "chickens", "Cow": "cows", "Sheep": "sheep" };
+          return { type: "speed_pct", value: (hours / 24) * 100, cat: animalCats[key] || "other" };
+        }},
+      // Animal feed reduction NFTs: "-10% Feed to Chicken" (Fat Chicken), "-5% Sheep Feed" (Mermaid Sheep)
+      // feed_reduction value follows SKILL_FEED_EFFECTS convention (negative = reduction).
+      { rx: /([+-]?\d+\.?\d*)%\s+(?:Feed\s+to\s+(Chicken|Cow|Sheep)|(Chicken|Cow|Sheep)\s+Feed)\b/i,
+        fn: m => {
+          const pct = parseFloat(m[1]);
+          const animal = m[2] || m[3];
+          const key = animal.charAt(0).toUpperCase() + animal.slice(1).toLowerCase();
+          const animalCats = { "Chicken": "chickens", "Cow": "cows", "Sheep": "sheep" };
+          return { type: "feed_reduction", value: pct / 100, cat: animalCats[key] || "other" };
+        }},
       // Specific animal time: "-10% Chicken Time", "-25% Sheep Production Time"
       { rx: /([+-]?\d+\.?\d*)%\s+(Chicken|Cow|Sheep)\s+.*(?:Time|time)/i,
         fn: m => {
@@ -4848,6 +4867,12 @@
           const animalCats = { "Chicken": "chickens", "Cow": "cows", "Sheep": "sheep" };
           return { type: "speed_pct", value: parseFloat(m[1]), cat: animalCats[key] || "other" };
         }},
+      // Crop Machine boosts: "-50% Growth Time in Crop Machine" (Groovy Gramophone) — qualitative for crops
+      { rx: /Growth\s+Time\s+in\s+Crop\s+Machine|Crop\s+Machine\s+(?:Growth|Production)/i,
+        fn: m => ({ type: "qualitative", cat: "crops", raw: m[0] }) },
+      // Fishing minigame / fishing-treasure qualitative: surfaces in FISHING row
+      { rx: /fishing\s+minigame|treasure\s+when\s+fishing/i,
+        fn: m => ({ type: "qualitative", cat: "fishing", raw: m[0] }) },
       // Specific product growth/cooldown time: "-20% Pumpkin Growth Time", "-20% Crimstone Cooldown Time"
       // ONLY matches if product is in PRODUCT_TO_CATEGORY — unknown products fall through
       { rx: /([+-]?\d+\.?\d*)%\s+([\w\s]+?)\s+(?:Growth|Growing|Cooldown|Recovery|Respawn|Production|Sleep)\s+Time/i,
@@ -5218,7 +5243,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.21</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.22</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5245,6 +5270,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.22", items: [
+          { t: "fix", text: "Parser: items previously misrouted to PASSIVE now land in their proper category. Fixed: hour-based animal sleep ('-2h Chicken Sleep Time' / El Pollo Veloz, converted to equivalent speed_pct of 24h cycle), animal feed-reduction NFTs ('-10% Feed to Chicken' / Fat Chicken, '-5% Sheep Feed' / Mermaid Sheep — type=feed_reduction, applied in calcAnimalFeedCost), Crop Machine qualitative ('-50% Growth Time in Crop Machine' / Groovy Gramophone → crops), and fishing-minigame / treasure-when-fishing qualitative tags → fishing. Affects ROI page (passive shrinks, category rows grow) and Power page (same items now classified into their relevant category)." },
+        ]},
         { ver: "v3.21", items: [
           { t: "fix", text: "ROI page now mirrors Power page's full cost coverage: seed cost (crops/fruits/greenhouse via calcSeedCostPerDay incl. greenhouse Oil per seed), animal feed cost (calcAnimalFeedCost — accounts for golden animals, feed reduction skills, level-based preferred feeds), and animal sickness expected cost (calcSicknessCost — Healthy Livestock rate cut, Oracle Syringe/Medic Apron cure modifiers, Frozen Cow/Sheep prevention). Tool/lava costs already covered in v3.20. Seed cost is scaled by cycle/realisticCycle so wasted time-reduction boosts don't fake-inflate seed usage at low login frequency. Expanded view shows separate lines for each cost type." },
         ]},
