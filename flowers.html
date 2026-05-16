@@ -5218,7 +5218,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.20</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.21</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5245,6 +5245,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.21", items: [
+          { t: "fix", text: "ROI page now mirrors Power page's full cost coverage: seed cost (crops/fruits/greenhouse via calcSeedCostPerDay incl. greenhouse Oil per seed), animal feed cost (calcAnimalFeedCost — accounts for golden animals, feed reduction skills, level-based preferred feeds), and animal sickness expected cost (calcSicknessCost — Healthy Livestock rate cut, Oracle Syringe/Medic Apron cure modifiers, Frozen Cow/Sheep prevention). Tool/lava costs already covered in v3.20. Seed cost is scaled by cycle/realisticCycle so wasted time-reduction boosts don't fake-inflate seed usage at low login frequency. Expanded view shows separate lines for each cost type." },
+        ]},
         { ver: "v3.20", items: [
           { t: "fix", text: "ROI page now subtracts tool cost and lava-pit ingredient cost from each scenario's daily yield, so free-tool NFTs (Crimstone Spikes Hair, Quarry, Foreman Beaver, Infernal Drill) and lava cost-reduction NFTs (Lava Swimwear) get credited their saved costs in the marginal. Previously the calc only compared gross yield, so Crimstone Spikes Hair's main value (no Gold Pickaxes needed) was invisible. Expanded view now shows tool cost line with the actual tool (e.g. 'Gold Pickaxe @ 0.64 ⚀/use') and 'FREE via boost' tag when applicable, plus a yield Δ / tool saved / lava saved breakdown next to the marginal." },
         ]},
@@ -16387,8 +16390,11 @@
     }
 
     // Net SFL/day for a category given a specific set of boost effects (scenario).
-    // Returns yield (gross) minus tool cost minus lava cost (obsidian), capped to login frequency.
-    function roiNetForScenario(catId, product, capacity, effects, p2pPrices, exchangeRates, stockMods, season, L, price, nodeCount, isDailyOutput) {
+    // Returns gross yield minus production costs (tool / lava / seed / feed / sickness),
+    // all capped to login frequency where applicable.
+    // scenarioBoostItems is the subset of boostItems considered "owned" in this scenario
+    // (used for animal sickness calc, which needs item-list rather than effects).
+    function roiNetForScenario(catId, product, capacity, effects, p2pPrices, exchangeRates, stockMods, season, L, price, nodeCount, isDailyOutput, scenarioBoostItems, farmSkills) {
       const result = applyBoosts(catId, product, capacity, effects);
       const baseCycle = getCycleSec(catId, product);
       const cycle = result.effectiveCycle || baseCycle;
@@ -16402,11 +16408,17 @@
       }
 
       const yieldSfl = unitsPerDay * price;
-      let toolCostSfl = 0, lavaCostSfl = 0;
-      let toolInfo = null;
+      // Scale factor for cost helpers that compute costPerDay based on boosted cycle.
+      // When login interval > boosted cycle, realisticCycle > cycle → fewer cycles
+      // realized per day → lower realistic cost. Factor = cycle/realisticCycle (≤ 1).
+      const costScale = (!isDailyOutput && cycle > 0 && realisticCycle > 0) ? (cycle / realisticCycle) : 1;
 
+      let toolCostSfl = 0, lavaCostSfl = 0, seedCostSfl = 0, feedCostSfl = 0, sicknessCostSfl = 0;
+      let toolInfo = null, seedInfo = null, feedInfo = null, sicknessInfo = null;
+
+      // Tool cost (trees / stone / iron / gold / crimstone / oil)
       const TOOL_CATS = new Set(["stone", "iron", "gold", "crimstone", "trees", "oil"]);
-      if (TOOL_CATS.has(catId) && !isDailyOutput && nodeCount > 0) {
+      if (TOOL_CATS.has(catId) && nodeCount > 0) {
         const hasFreeTool = effects.some(e => e.type === "free_tool" && e.cat === catId);
         toolInfo = roiToolCostPerUnit(catId, exchangeRates, p2pPrices, stockMods);
         if (!hasFreeTool && toolInfo.sfl > 0) {
@@ -16416,6 +16428,7 @@
         toolInfo.freeTool = hasFreeTool;
       }
 
+      // Lava-pit ingredient cost (obsidian only)
       if (catId === "obsidian" && nodeCount > 0 && season) {
         const lavaRedMult = effects.filter(e => e.type === "lava_cost_reduction" && e.cat === "obsidian")
                                     .reduce((acc, e) => acc * (1 - e.value), 1);
@@ -16426,11 +16439,26 @@
         }
       }
 
-      const netSfl = yieldSfl - toolCostSfl - lavaCostSfl;
-      return { unitsPerDay, yieldSfl, toolCostSfl, lavaCostSfl, netSfl, cycle, realisticCycle, toolInfo };
+      // Seed cost (crops / fruits / greenhouse) — calcSeedCostPerDay already uses boosted cycle,
+      // so scale to realistic cycle.
+      if (["crops", "fruits", "greenhouse"].includes(catId) && nodeCount > 0) {
+        seedInfo = calcSeedCostPerDay(catId, product, capacity, exchangeRates, stockMods, effects, p2pPrices);
+        seedCostSfl = (seedInfo?.costPerDay || 0) * costScale;
+      }
+
+      // Animal feed + sickness cost (chickens / cows / sheep) — 24h cycle, no login-cap scaling needed
+      if (isAnimalCat(catId) && nodeCount > 0) {
+        feedInfo = calcAnimalFeedCost(catId, capacity, p2pPrices, effects, stockMods);
+        feedCostSfl = feedInfo?.costPerDay || 0;
+        sicknessInfo = calcSicknessCost(catId, capacity, p2pPrices, scenarioBoostItems || [], farmSkills || {});
+        sicknessCostSfl = sicknessInfo?.costPerDay || 0;
+      }
+
+      const netSfl = yieldSfl - toolCostSfl - lavaCostSfl - seedCostSfl - feedCostSfl - sicknessCostSfl;
+      return { unitsPerDay, yieldSfl, toolCostSfl, lavaCostSfl, seedCostSfl, feedCostSfl, sicknessCostSfl, netSfl, cycle, realisticCycle, toolInfo, seedInfo, feedInfo, sicknessInfo };
     }
 
-    function roiComputeCategory(catId, boostItems, capacity, p2pPrices, L, multicat, exchangeRates, stockMods, season) {
+    function roiComputeCategory(catId, boostItems, capacity, p2pPrices, L, multicat, exchangeRates, stockMods, season, farmSkills) {
       const product = roiPickProduct(catId);
       const priceProd = (typeof getPriceProduct === "function") ? getPriceProduct(catId, product) : product;
       const price = p2pPrices[priceProd] || p2pPrices[product] || 0;
@@ -16456,8 +16484,12 @@
       const nodeCount = getCapacityCount(catId, capacity);
       const isDailyOutput = (catId === "fishing" || catId === "bees");
 
-      const keepScen = roiNetForScenario(catId, product, capacity, allEffects, p2pPrices, exchangeRates, stockMods, season, L, price, nodeCount, isDailyOutput);
-      const soldScen = roiNetForScenario(catId, product, capacity, keptEffects, p2pPrices, exchangeRates, stockMods, season, L, price, nodeCount, isDailyOutput);
+      // Scenario boost-item lists (used by calcSicknessCost which needs items, not effects)
+      const keptItems = boostItems.filter(b => b.has && !b.isDisabled && !soldNames.has(b.name));
+      const allOwnedItems = boostItems.filter(b => b.has && !b.isDisabled);
+
+      const keepScen = roiNetForScenario(catId, product, capacity, allEffects, p2pPrices, exchangeRates, stockMods, season, L, price, nodeCount, isDailyOutput, allOwnedItems, farmSkills);
+      const soldScen = roiNetForScenario(catId, product, capacity, keptEffects, p2pPrices, exchangeRates, stockMods, season, L, price, nodeCount, isDailyOutput, keptItems, farmSkills);
 
       const cycleKeep = keepScen.cycle;
       const cycleSold = soldScen.cycle;
@@ -16469,6 +16501,12 @@
       const toolCostSold = soldScen.toolCostSfl;
       const lavaCostKeep = keepScen.lavaCostSfl;
       const lavaCostSold = soldScen.lavaCostSfl;
+      const seedCostKeep = keepScen.seedCostSfl;
+      const seedCostSold = soldScen.seedCostSfl;
+      const feedCostKeep = keepScen.feedCostSfl;
+      const feedCostSold = soldScen.feedCostSfl;
+      const sicknessCostKeep = keepScen.sicknessCostSfl;
+      const sicknessCostSold = soldScen.sicknessCostSfl;
       const netKeepSfl = keepScen.netSfl;
       const netSoldSfl = soldScen.netSfl;
       const marginalSflPerDay = netKeepSfl - netSoldSfl;
@@ -16495,8 +16533,12 @@
         baseCycle, cycleKeep, cycleSold, realisticCycleKeep, realisticCycleSold,
         yieldKeepSfl, yieldSoldSfl,
         toolCostKeep, toolCostSold, lavaCostKeep, lavaCostSold,
+        seedCostKeep, seedCostSold, feedCostKeep, feedCostSold, sicknessCostKeep, sicknessCostSold,
         netKeepSfl, netSoldSfl, marginalSflPerDay,
         toolInfoKeep: keepScen.toolInfo,
+        seedInfoKeep: keepScen.seedInfo,
+        feedInfoKeep: keepScen.feedInfo,
+        sicknessInfoKeep: keepScen.sicknessInfo,
         roiYears, verdict, wastedTimeBoost, isDailyOutput,
       };
     }
@@ -16605,9 +16647,10 @@
       </div>`;
 
       // Compute and sort rows
+      const farmSkills = roiState.farm?.bumpkin?.skills || {};
       const rows = [];
       for (const X of ROI_QUANT_CATS) {
-        const row = roiComputeCategory(X, boostItems, capacity, p2pPrices, L, multicat, exchangeRates, stockMods, season);
+        const row = roiComputeCategory(X, boostItems, capacity, p2pPrices, L, multicat, exchangeRates, stockMods, season, farmSkills);
         if (row) rows.push(row);
       }
       const displayRows = rows.filter(r => r.sellableInCat.length > 0 || r.externallyAssigned.length > 0);
@@ -16786,12 +16829,24 @@
         const harvestsKeep = row.realisticCycleKeep > 0 ? 86400 / row.realisticCycleKeep : 0;
         const harvestsSold = row.realisticCycleSold > 0 ? 86400 / row.realisticCycleSold : 0;
         const fmtH = (s) => s < 7200 ? (s/60).toFixed(0)+"m" : (s/3600).toFixed(2)+"h";
-        const hasTool = (row.toolCostKeep > 0 || row.toolCostSold > 0);
+        const hasTool = (row.toolCostKeep > 0 || row.toolCostSold > 0 || row.toolInfoKeep?.freeTool);
         const hasLava = (row.lavaCostKeep > 0 || row.lavaCostSold > 0);
+        const hasSeed = (row.seedCostKeep > 0 || row.seedCostSold > 0);
+        const hasFeed = (row.feedCostKeep > 0 || row.feedCostSold > 0);
+        const hasSick = (row.sicknessCostKeep > 0 || row.sicknessCostSold > 0);
         const toolDiff = row.toolCostSold - row.toolCostKeep;
         const lavaDiff = row.lavaCostSold - row.lavaCostKeep;
+        const seedDiff = row.seedCostSold - row.seedCostKeep;
+        const feedDiff = row.feedCostSold - row.feedCostKeep;
+        const sickDiff = row.sicknessCostSold - row.sicknessCostKeep;
         const toolName = row.toolInfoKeep?.toolName;
         const toolSflPerUnit = row.toolInfoKeep?.sfl;
+        const costSavingsParts = [];
+        if (toolDiff > 0.01) costSavingsParts.push(`tool saved ${fmtVal(toolDiff)}`);
+        if (lavaDiff > 0.01) costSavingsParts.push(`lava saved ${fmtVal(lavaDiff)}`);
+        if (seedDiff > 0.01) costSavingsParts.push(`seed saved ${fmtVal(seedDiff)}`);
+        if (feedDiff > 0.01) costSavingsParts.push(`feed saved ${fmtVal(feedDiff)}`);
+        if (sickDiff > 0.01) costSavingsParts.push(`sickness saved ${fmtVal(sickDiff)}`);
         html += `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);line-height:1.7;padding:8px 12px;background:rgba(0,0,0,0.25);border-left:3px solid var(--sunpetal)">
           <b style="color:var(--text-secondary)">CALCULATION</b> ${row.isDailyOutput ? '(daily-cap, login-freq independent)' : `(${L}×/day, ${(loginInterval/3600).toFixed(1)}h interval)`}<br>
           • Nodes: ${row.nodeCount}<br>
@@ -16803,9 +16858,12 @@
           • Daily gross yield if sold: <span style="color:var(--text-dim)">${fmtVal(row.yieldSoldSfl)}</span><br>
           ${hasTool ? `• Tool cost ${toolName ? `(${escHTML(toolName)} @ ${toolSflPerUnit.toFixed(3)} ⚀/use)` : ''}: keep <span style="color:var(--red)">−${fmtVal(row.toolCostKeep)}</span>${row.toolInfoKeep?.freeTool ? ' <span style="color:var(--green)">(FREE via boost)</span>' : ''} / sold <span style="color:var(--red)">−${fmtVal(row.toolCostSold)}</span><br>` : ''}
           ${hasLava ? `• Lava-pit ingredient cost: keep <span style="color:var(--red)">−${fmtVal(row.lavaCostKeep)}</span> / sold <span style="color:var(--red)">−${fmtVal(row.lavaCostSold)}</span><br>` : ''}
+          ${hasSeed ? `• Seed cost: keep <span style="color:var(--red)">−${fmtVal(row.seedCostKeep)}</span> / sold <span style="color:var(--red)">−${fmtVal(row.seedCostSold)}</span><br>` : ''}
+          ${hasFeed ? `• Feed cost: keep <span style="color:var(--red)">−${fmtVal(row.feedCostKeep)}</span> / sold <span style="color:var(--red)">−${fmtVal(row.feedCostSold)}</span><br>` : ''}
+          ${hasSick ? `• Sickness cost (expected): keep <span style="color:var(--red)">−${fmtVal(row.sicknessCostKeep)}</span> / sold <span style="color:var(--red)">−${fmtVal(row.sicknessCostSold)}</span><br>` : ''}
           • Daily <b>net</b> with NFTs: <b style="color:var(--green)">${fmtVal(row.netKeepSfl)}</b><br>
           • Daily <b>net</b> if sold: <b style="color:var(--text-dim)">${fmtVal(row.netSoldSfl)}</b><br>
-          • <b style="color:var(--sunpetal)">Marginal: ${fmtVal(row.marginalSflPerDay)}/day</b>${(toolDiff > 0.01 || lavaDiff > 0.01) ? ` <span style="color:var(--text-dim)">(yield Δ ${fmtVal(row.yieldKeepSfl - row.yieldSoldSfl)}${toolDiff > 0.01 ? `, tool saved ${fmtVal(toolDiff)}` : ''}${lavaDiff > 0.01 ? `, lava saved ${fmtVal(lavaDiff)}` : ''})</span>` : ''}
+          • <b style="color:var(--sunpetal)">Marginal: ${fmtVal(row.marginalSflPerDay)}/day</b>${costSavingsParts.length > 0 ? ` <span style="color:var(--text-dim)">(yield Δ ${fmtVal(row.yieldKeepSfl - row.yieldSoldSfl)}, ${costSavingsParts.join(', ')})</span>` : ''}
           ${row.saleSfl > 0 && row.marginalSflPerDay > 0 ? `<br>• ROI: ${fmtVal(row.saleSfl)} ÷ (${fmtVal(row.marginalSflPerDay)} × 365) = <b style="color:var(--sunpetal)">${row.roiYears.toFixed(2)} years</b>` : ''}
           ${row.wastedTimeBoost ? `<br>• ⏰ <span style="color:var(--sunpetal)">Time-reduction boosts wasted</span> — cycle (${fmtH(row.cycleKeep)}) < login interval (${(loginInterval/3600).toFixed(1)}h). Yield-flat boosts still active.` : ''}
         </div>`;
