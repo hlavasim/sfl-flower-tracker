@@ -5218,7 +5218,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.19</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.20</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5245,6 +5245,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.20", items: [
+          { t: "fix", text: "ROI page now subtracts tool cost and lava-pit ingredient cost from each scenario's daily yield, so free-tool NFTs (Crimstone Spikes Hair, Quarry, Foreman Beaver, Infernal Drill) and lava cost-reduction NFTs (Lava Swimwear) get credited their saved costs in the marginal. Previously the calc only compared gross yield, so Crimstone Spikes Hair's main value (no Gold Pickaxes needed) was invisible. Expanded view now shows tool cost line with the actual tool (e.g. 'Gold Pickaxe @ 0.64 ⚀/use') and 'FREE via boost' tag when applicable, plus a yield Δ / tool saved / lava saved breakdown next to the marginal." },
+        ]},
         { ver: "v3.19", items: [
           { t: "fix", text: "Boost parser: 'Mine <resource> without pickaxes' now correctly classifies to the named resource's category instead of hardcoded 'stone'. Affects Crimstone Spikes Hair (floor 18500 → now appears in CRIMSTONE row), and would catch any future Iron/Gold variants. Quarry (Mine stone without pickaxes) continues to land in STONE. Visible on ROI and Power pages." },
         ]},
@@ -16351,7 +16354,83 @@
       return getDefaultProduct(catId);
     }
 
-    function roiComputeCategory(catId, boostItems, capacity, p2pPrices, L, multicat) {
+    // Tool cost per single use (one mine / one chop / one drill), in SFL.
+    // Includes coin (with discounts), material, and amortized gem restock cost.
+    function roiToolCostPerUnit(catId, exchangeRates, p2pPrices, stockMods) {
+      const toolName = Object.keys(TOOL_TO_CAT).find(t => TOOL_TO_CAT[t] === catId);
+      if (!toolName) return { sfl: 0, toolName: null };
+      const tool = TOOL_COSTS[toolName];
+      if (!tool || !exchangeRates || exchangeRates.coinsPerSFL <= 0) return { sfl: 0, toolName };
+
+      let coinDiscount = 0;
+      if (toolName === "Axe" && stockMods?.fellersDiscount) coinDiscount = 0.2;
+      else if (toolName !== "Axe" && toolName !== "Oil Drill" && stockMods?.frugalMiner) coinDiscount = 0.2;
+
+      let sfl = (tool.coins * (1 - coinDiscount)) / exchangeRates.coinsPerSFL;
+      let materials = tool.materials;
+      if (catId === "oil" && stockMods?.oilRigActive && materials) {
+        materials = { ...materials };
+        delete materials.Leather;
+        materials.Wool = 20;
+      }
+      if (materials) {
+        for (const [mat, qty] of Object.entries(materials)) {
+          sfl += (p2pPrices[mat] || 0) * qty;
+        }
+      }
+      // Amortized gem restock cost (1 restock = RESTOCK_GEM_COSTS.tools gems, refills `stock` tools)
+      if (exchangeRates.gemsPerSFL > 0) {
+        const stock = (typeof getEffectiveStock === "function") ? getEffectiveStock(toolName, stockMods) : 0;
+        if (stock > 0) sfl += (RESTOCK_GEM_COSTS.tools / exchangeRates.gemsPerSFL) / stock;
+      }
+      return { sfl, toolName };
+    }
+
+    // Net SFL/day for a category given a specific set of boost effects (scenario).
+    // Returns yield (gross) minus tool cost minus lava cost (obsidian), capped to login frequency.
+    function roiNetForScenario(catId, product, capacity, effects, p2pPrices, exchangeRates, stockMods, season, L, price, nodeCount, isDailyOutput) {
+      const result = applyBoosts(catId, product, capacity, effects);
+      const baseCycle = getCycleSec(catId, product);
+      const cycle = result.effectiveCycle || baseCycle;
+
+      let unitsPerDay = result.unitsPerDay;
+      let realisticCycle = cycle;
+      if (!isDailyOutput && nodeCount > 0 && cycle > 0) {
+        realisticCycle = roiEffectiveCycleAtLogin(cycle, L);
+        const outputPerCycle = (result.unitsPerDay * cycle) / (86400 * nodeCount);
+        unitsPerDay = nodeCount * outputPerCycle * (86400 / realisticCycle);
+      }
+
+      const yieldSfl = unitsPerDay * price;
+      let toolCostSfl = 0, lavaCostSfl = 0;
+      let toolInfo = null;
+
+      const TOOL_CATS = new Set(["stone", "iron", "gold", "crimstone", "trees", "oil"]);
+      if (TOOL_CATS.has(catId) && !isDailyOutput && nodeCount > 0) {
+        const hasFreeTool = effects.some(e => e.type === "free_tool" && e.cat === catId);
+        toolInfo = roiToolCostPerUnit(catId, exchangeRates, p2pPrices, stockMods);
+        if (!hasFreeTool && toolInfo.sfl > 0) {
+          const harvestsPerDay = realisticCycle > 0 ? (86400 / realisticCycle) * nodeCount : 0;
+          toolCostSfl = toolInfo.sfl * harvestsPerDay;
+        }
+        toolInfo.freeTool = hasFreeTool;
+      }
+
+      if (catId === "obsidian" && nodeCount > 0 && season) {
+        const lavaRedMult = effects.filter(e => e.type === "lava_cost_reduction" && e.cat === "obsidian")
+                                    .reduce((acc, e) => acc * (1 - e.value), 1);
+        const lavaBase = calcLavaPitCostPerDay(capacity, p2pPrices, season, 1);
+        if (lavaBase.costPerIgnition > 0) {
+          const ignitionsPerDay = realisticCycle > 0 ? (86400 / realisticCycle) * nodeCount : 0;
+          lavaCostSfl = lavaBase.costPerIgnition * lavaRedMult * ignitionsPerDay;
+        }
+      }
+
+      const netSfl = yieldSfl - toolCostSfl - lavaCostSfl;
+      return { unitsPerDay, yieldSfl, toolCostSfl, lavaCostSfl, netSfl, cycle, realisticCycle, toolInfo };
+    }
+
+    function roiComputeCategory(catId, boostItems, capacity, p2pPrices, L, multicat, exchangeRates, stockMods, season) {
       const product = roiPickProduct(catId);
       const priceProd = (typeof getPriceProduct === "function") ? getPriceProduct(catId, product) : product;
       const price = p2pPrices[priceProd] || p2pPrices[product] || 0;
@@ -16375,33 +16454,26 @@
 
       const baseCycle = getCycleSec(catId, product);
       const nodeCount = getCapacityCount(catId, capacity);
-
-      const keepResult = applyBoosts(catId, product, capacity, allEffects);
-      const soldResult = applyBoosts(catId, product, capacity, keptEffects);
-      const cycleKeep = keepResult.effectiveCycle || baseCycle;
-      const cycleSold = soldResult.effectiveCycle || baseCycle;
-
-      let yieldKeepUnits = keepResult.unitsPerDay;
-      let yieldSoldUnits = soldResult.unitsPerDay;
-      let realisticCycleKeep = cycleKeep;
-      let realisticCycleSold = cycleSold;
-      let wastedTimeBoost = false;
-
       const isDailyOutput = (catId === "fishing" || catId === "bees");
-      if (!isDailyOutput && nodeCount > 0 && cycleKeep > 0 && cycleSold > 0) {
-        const loginInterval = 86400 / L;
-        realisticCycleKeep = roiEffectiveCycleAtLogin(cycleKeep, L);
-        realisticCycleSold = roiEffectiveCycleAtLogin(cycleSold, L);
-        const outputPerCycleKeep = (keepResult.unitsPerDay * cycleKeep) / (86400 * nodeCount);
-        const outputPerCycleSold = (soldResult.unitsPerDay * cycleSold) / (86400 * nodeCount);
-        yieldKeepUnits = nodeCount * outputPerCycleKeep * (86400 / realisticCycleKeep);
-        yieldSoldUnits = nodeCount * outputPerCycleSold * (86400 / realisticCycleSold);
-        wastedTimeBoost = cycleKeep < loginInterval;
-      }
 
-      const yieldKeepSfl = yieldKeepUnits * price;
-      const yieldSoldSfl = yieldSoldUnits * price;
-      const marginalSflPerDay = yieldKeepSfl - yieldSoldSfl;
+      const keepScen = roiNetForScenario(catId, product, capacity, allEffects, p2pPrices, exchangeRates, stockMods, season, L, price, nodeCount, isDailyOutput);
+      const soldScen = roiNetForScenario(catId, product, capacity, keptEffects, p2pPrices, exchangeRates, stockMods, season, L, price, nodeCount, isDailyOutput);
+
+      const cycleKeep = keepScen.cycle;
+      const cycleSold = soldScen.cycle;
+      const realisticCycleKeep = keepScen.realisticCycle;
+      const realisticCycleSold = soldScen.realisticCycle;
+      const yieldKeepSfl = keepScen.yieldSfl;
+      const yieldSoldSfl = soldScen.yieldSfl;
+      const toolCostKeep = keepScen.toolCostSfl;
+      const toolCostSold = soldScen.toolCostSfl;
+      const lavaCostKeep = keepScen.lavaCostSfl;
+      const lavaCostSold = soldScen.lavaCostSfl;
+      const netKeepSfl = keepScen.netSfl;
+      const netSoldSfl = soldScen.netSfl;
+      const marginalSflPerDay = netKeepSfl - netSoldSfl;
+      const loginInterval = 86400 / L;
+      const wastedTimeBoost = !isDailyOutput && nodeCount > 0 && cycleKeep > 0 && cycleKeep < loginInterval;
 
       let roiYears, verdict;
       if (sellableInCat.length === 0) {
@@ -16421,7 +16493,10 @@
         catId, product, price, nodeCount,
         sellableInCat, externallyAssigned, saleSfl,
         baseCycle, cycleKeep, cycleSold, realisticCycleKeep, realisticCycleSold,
-        yieldKeepSfl, yieldSoldSfl, marginalSflPerDay,
+        yieldKeepSfl, yieldSoldSfl,
+        toolCostKeep, toolCostSold, lavaCostKeep, lavaCostSold,
+        netKeepSfl, netSoldSfl, marginalSflPerDay,
+        toolInfoKeep: keepScen.toolInfo,
         roiYears, verdict, wastedTimeBoost, isDailyOutput,
       };
     }
@@ -16487,15 +16562,17 @@
       }
 
       const capacity = detectFarmCapacity(farm);
+      const stockMods = detectStockModifiers(farm);
+      const season = (farm.season?.season || "").toLowerCase();
       const boostItems = buildRoiBoostItems(farm, inventory, wardrobe, skills, nftData);
 
-      roiState = { boostItems, capacity, p2pPrices, sflUsd, btcUsd, exchangeRates, farm };
+      roiState = { boostItems, capacity, p2pPrices, sflUsd, btcUsd, exchangeRates, stockMods, season, farm };
       renderRoiContent();
     }
 
     function renderRoiContent() {
       if (!roiState) return;
-      const { boostItems, capacity, p2pPrices, sflUsd, btcUsd } = roiState;
+      const { boostItems, capacity, p2pPrices, sflUsd, btcUsd, exchangeRates, stockMods, season } = roiState;
       const L = roiGetLoginsPerDay();
       const currency = roiGetCurrency();
       const multicat = roiGetMulticatAssignment();
@@ -16530,7 +16607,7 @@
       // Compute and sort rows
       const rows = [];
       for (const X of ROI_QUANT_CATS) {
-        const row = roiComputeCategory(X, boostItems, capacity, p2pPrices, L, multicat);
+        const row = roiComputeCategory(X, boostItems, capacity, p2pPrices, L, multicat, exchangeRates, stockMods, season);
         if (row) rows.push(row);
       }
       const displayRows = rows.filter(r => r.sellableInCat.length > 0 || r.externallyAssigned.length > 0);
@@ -16709,6 +16786,12 @@
         const harvestsKeep = row.realisticCycleKeep > 0 ? 86400 / row.realisticCycleKeep : 0;
         const harvestsSold = row.realisticCycleSold > 0 ? 86400 / row.realisticCycleSold : 0;
         const fmtH = (s) => s < 7200 ? (s/60).toFixed(0)+"m" : (s/3600).toFixed(2)+"h";
+        const hasTool = (row.toolCostKeep > 0 || row.toolCostSold > 0);
+        const hasLava = (row.lavaCostKeep > 0 || row.lavaCostSold > 0);
+        const toolDiff = row.toolCostSold - row.toolCostKeep;
+        const lavaDiff = row.lavaCostSold - row.lavaCostKeep;
+        const toolName = row.toolInfoKeep?.toolName;
+        const toolSflPerUnit = row.toolInfoKeep?.sfl;
         html += `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);line-height:1.7;padding:8px 12px;background:rgba(0,0,0,0.25);border-left:3px solid var(--sunpetal)">
           <b style="color:var(--text-secondary)">CALCULATION</b> ${row.isDailyOutput ? '(daily-cap, login-freq independent)' : `(${L}×/day, ${(loginInterval/3600).toFixed(1)}h interval)`}<br>
           • Nodes: ${row.nodeCount}<br>
@@ -16716,9 +16799,13 @@
           • Base cycle → with all boosts: ${fmtH(row.baseCycle)} → ${fmtH(row.cycleKeep)}<br>
           ${!row.isDailyOutput ? `• Realistic cycle at ${L}×/day: <b>${fmtH(row.realisticCycleKeep)}</b> keep / <b>${fmtH(row.realisticCycleSold)}</b> sold<br>
           • Harvests/day total: ${harvestsKeep.toFixed(2)} keep / ${harvestsSold.toFixed(2)} sold<br>` : ''}
-          • Daily yield with NFTs: <b style="color:var(--green)">${fmtVal(row.yieldKeepSfl)}</b><br>
-          • Daily yield if sold: <b style="color:var(--text-dim)">${fmtVal(row.yieldSoldSfl)}</b><br>
-          • <b style="color:var(--sunpetal)">Marginal: ${fmtVal(row.marginalSflPerDay)}/day</b>
+          • Daily gross yield with NFTs: <span style="color:var(--green)">${fmtVal(row.yieldKeepSfl)}</span><br>
+          • Daily gross yield if sold: <span style="color:var(--text-dim)">${fmtVal(row.yieldSoldSfl)}</span><br>
+          ${hasTool ? `• Tool cost ${toolName ? `(${escHTML(toolName)} @ ${toolSflPerUnit.toFixed(3)} ⚀/use)` : ''}: keep <span style="color:var(--red)">−${fmtVal(row.toolCostKeep)}</span>${row.toolInfoKeep?.freeTool ? ' <span style="color:var(--green)">(FREE via boost)</span>' : ''} / sold <span style="color:var(--red)">−${fmtVal(row.toolCostSold)}</span><br>` : ''}
+          ${hasLava ? `• Lava-pit ingredient cost: keep <span style="color:var(--red)">−${fmtVal(row.lavaCostKeep)}</span> / sold <span style="color:var(--red)">−${fmtVal(row.lavaCostSold)}</span><br>` : ''}
+          • Daily <b>net</b> with NFTs: <b style="color:var(--green)">${fmtVal(row.netKeepSfl)}</b><br>
+          • Daily <b>net</b> if sold: <b style="color:var(--text-dim)">${fmtVal(row.netSoldSfl)}</b><br>
+          • <b style="color:var(--sunpetal)">Marginal: ${fmtVal(row.marginalSflPerDay)}/day</b>${(toolDiff > 0.01 || lavaDiff > 0.01) ? ` <span style="color:var(--text-dim)">(yield Δ ${fmtVal(row.yieldKeepSfl - row.yieldSoldSfl)}${toolDiff > 0.01 ? `, tool saved ${fmtVal(toolDiff)}` : ''}${lavaDiff > 0.01 ? `, lava saved ${fmtVal(lavaDiff)}` : ''})</span>` : ''}
           ${row.saleSfl > 0 && row.marginalSflPerDay > 0 ? `<br>• ROI: ${fmtVal(row.saleSfl)} ÷ (${fmtVal(row.marginalSflPerDay)} × 365) = <b style="color:var(--sunpetal)">${row.roiYears.toFixed(2)} years</b>` : ''}
           ${row.wastedTimeBoost ? `<br>• ⏰ <span style="color:var(--sunpetal)">Time-reduction boosts wasted</span> — cycle (${fmtH(row.cycleKeep)}) < login interval (${(loginInterval/3600).toFixed(1)}h). Yield-flat boosts still active.` : ''}
         </div>`;
