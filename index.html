@@ -4733,9 +4733,14 @@
         fn: m => ({ type: "fruit_stump_wood", value: parseFloat(m[1]), cat: "fruits" }) },
 
       // ── FREE TOOL (zero tool cost for a category) ──
-      // "Mine stone without pickaxes" (Quarry) → tool cost = 0 for stone
-      { rx: /mine\s+\w+\s+without\s+pickaxes?/i,
-        fn: m => ({ type: "free_tool", cat: "stone" }) },
+      // "Mine stone without pickaxes" (Quarry), "Mine crimstone without Gold Pickaxes" (Crimstone Spikes Hair)
+      // → tool cost = 0 for the named resource. Capture resource name and map to category.
+      { rx: /mine\s+(stone|iron|gold|crimstone)s?\s+without\s+(?:[\w\s]+\s+)?pickaxes?/i,
+        fn: m => {
+          const r = (m[1] || '').toLowerCase();
+          const catMap = { stone: "stone", iron: "iron", gold: "gold", crimstone: "crimstone" };
+          return { type: "free_tool", cat: catMap[r] || "stone" };
+        }},
       // "Chop Trees without Axes" (Foreman Beaver) → tool cost = 0 for trees
       { rx: /chop\s+\w+\s+without\s+axes?/i,
         fn: m => ({ type: "free_tool", cat: "trees" }) },
@@ -5213,7 +5218,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.18</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.19</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5240,6 +5245,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.19", items: [
+          { t: "fix", text: "Boost parser: 'Mine <resource> without pickaxes' now correctly classifies to the named resource's category instead of hardcoded 'stone'. Affects Crimstone Spikes Hair (floor 18500 → now appears in CRIMSTONE row), and would catch any future Iron/Gold variants. Quarry (Mine stone without pickaxes) continues to land in STONE. Visible on ROI and Power pages." },
+        ]},
         { ver: "v3.18", items: [
           { t: "new", text: "ROI page (?page=roi) — Sell-or-Farm Advisor for limited-login playstyle. For each resource type computes total NFT sale value vs marginal yield/day at chosen login frequency (1–4×/day), expressed in FLOWER / USD / BTC. Realistic harvests/node/day are capped to the next login after a cycle completes — time-reduction boosts that shrink cycle below the login interval are flagged as wasted (⏰). Multi-category NFTs (e.g. Volcano Gnome → Stone+Iron+Gold) have a user-assigned home category for sale-value attribution; in non-home categories the boost is still counted as kept. Includes a passive-boost section for login-independent items (cooking XP, sleep, etc.). Crops are modelled with Wheat only (24h, no gem restocks)." },
         ]},
