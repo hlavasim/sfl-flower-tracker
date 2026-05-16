@@ -2592,6 +2592,24 @@
       .gift-select { grid-area: select; }
     }
 
+    .roi-pill {
+      font-family: "Press Start 2P", monospace;
+      font-size: 0.55rem;
+      padding: 5px 10px;
+      background: linear-gradient(180deg, #3b1768, #2a1050);
+      color: var(--text-secondary);
+      border: 2px solid #000;
+      cursor: pointer;
+      transition: filter 0.1s;
+    }
+    .roi-pill:hover { filter: brightness(1.3); }
+    .roi-pill.active {
+      background: linear-gradient(180deg, var(--sunpetal), #d4a800);
+      color: #000;
+    }
+    .roi-table tr.roi-row:hover { background: rgba(255,255,255,0.04); }
+    .roi-table th { font-size: 0.5rem; letter-spacing: 0.05em; }
+
 </style>
   <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
   <script defer src="/_vercel/insights/script.js"></script>
@@ -2618,7 +2636,7 @@
     const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
     const IMG_BASE = "https://sfl.world/img/flowers/";
-    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "nodes", "buds", "pets", "marks", "diff", "json"];
+    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "nodes", "roi", "buds", "pets", "marks", "diff", "json"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -5069,6 +5087,7 @@
       const overflow = [
         { id: "power", label: "POWER" },
         { id: "nodes", label: "NODES" },
+        { id: "roi", label: "ROI" },
         { id: "buds", label: "BUDS" },
         { id: "pets", label: "PETS" },
         { id: "json", label: "JSON" },
@@ -5194,7 +5213,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.17</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.18</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5221,6 +5240,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.18", items: [
+          { t: "new", text: "ROI page (?page=roi) — Sell-or-Farm Advisor for limited-login playstyle. For each resource type computes total NFT sale value vs marginal yield/day at chosen login frequency (1–4×/day), expressed in FLOWER / USD / BTC. Realistic harvests/node/day are capped to the next login after a cycle completes — time-reduction boosts that shrink cycle below the login interval are flagged as wasted (⏰). Multi-category NFTs (e.g. Volcano Gnome → Stone+Iron+Gold) have a user-assigned home category for sale-value attribution; in non-home categories the boost is still counted as kept. Includes a passive-boost section for login-independent items (cooking XP, sleep, etc.). Crops are modelled with Wheat only (24h, no gem restocks)." },
+        ]},
         { ver: "v3.17", items: [
           { t: "fix", text: "Exotic crops priced via Eins BUY cost (Potion Ticket × 15 coins) instead of NPC sellPrice. White Carrot=200 tickets×15=3000 coins, Chiogga=2000 tickets×15=30000 coins, Golden Helios=4000×15=60000, etc. Source: POTION_HOUSE_EXOTIC_CROPS in SFL collectibles.ts. Acquisition cost (what you'd pay to get one) is the correct value for items you give to a bounty; the previous sellPrice was the opposite direction." },
         ]},
@@ -8342,6 +8364,11 @@
           <div class="hub-card-icon">⚡</div>
           <h3 class="pixel-font">POWER</h3>
           <div class="hub-card-count pixel-font">Boost ROI Analyzer</div>
+        </div>
+        <div class="hub-card pixel-panel" onclick="navigateTo('roi')">
+          <div class="hub-card-icon">💸</div>
+          <h3 class="pixel-font">ROI</h3>
+          <div class="hub-card-count pixel-font">Sell-or-Farm Advisor</div>
         </div>
         <div class="hub-card pixel-panel" onclick="navigateTo('buds')">
           <div class="hub-card-icon">🌱</div>
@@ -16194,6 +16221,520 @@
       document.getElementById("nodes-content").innerHTML = content;
     }
 
+    // ═══════════════════════════════════════
+    //  ROI: SELL-OR-FARM ADVISOR
+    // ═══════════════════════════════════════
+
+    const ROI_QUANT_CATS = ["trees", "stone", "iron", "gold", "crimstone", "obsidian", "oil",
+                            "crops", "fruits", "greenhouse", "flowers",
+                            "chickens", "cows", "sheep", "fishing", "bees"];
+    const ROI_FIXED_PRODUCTS = { crops: "Wheat" };
+    const LS_ROI_LOGINS = "sfl_roi_logins_per_day";
+    const LS_ROI_CURRENCY = "sfl_roi_currency";
+    const LS_ROI_MULTICAT = "sfl_roi_multicat_assignment";
+
+    let roiState = null;
+
+    function roiGetLoginsPerDay() {
+      const v = parseInt(localStorage.getItem(LS_ROI_LOGINS));
+      return (v >= 1 && v <= 4) ? v : 2;
+    }
+    function roiSetLoginsPerDay(n) { localStorage.setItem(LS_ROI_LOGINS, String(n)); }
+    function roiGetCurrency() { return localStorage.getItem(LS_ROI_CURRENCY) || "flower"; }
+    function roiSetCurrency(c) { localStorage.setItem(LS_ROI_CURRENCY, c); }
+    function roiGetMulticatAssignment() {
+      try { return JSON.parse(localStorage.getItem(LS_ROI_MULTICAT)) || {}; }
+      catch { return {}; }
+    }
+    function roiSetMulticatAssignment(name, cat) {
+      const m = roiGetMulticatAssignment();
+      m[name] = cat;
+      localStorage.setItem(LS_ROI_MULTICAT, JSON.stringify(m));
+    }
+
+    // Steady-state cycle at given login frequency: harvest happens at next login after cycle completes
+    function roiEffectiveCycleAtLogin(cycleSec, loginsPerDay) {
+      if (cycleSec <= 0) return 0;
+      const loginInterval = 86400 / loginsPerDay;
+      return Math.ceil(cycleSec / loginInterval) * loginInterval;
+    }
+
+    function roiFormatValue(sfl, currency, sflUsd, btcUsd) {
+      if (!isFinite(sfl)) return "—";
+      if (currency === "usd") {
+        if (sflUsd <= 0) return "—";
+        const usd = sfl * sflUsd;
+        if (Math.abs(usd) >= 100) return `$${usd.toFixed(0)}`;
+        return `$${usd.toFixed(2)}`;
+      } else if (currency === "btc") {
+        if (sflUsd <= 0 || btcUsd <= 0) return "—";
+        const btc = (sfl * sflUsd) / btcUsd;
+        if (Math.abs(btc) >= 0.001) return `₿${btc.toFixed(5)}`;
+        return `${Math.round(btc * 1e8)} sats`;
+      } else {
+        if (Math.abs(sfl) >= 100) return `${sfl.toFixed(0)} ⚀`;
+        return `${sfl.toFixed(2)} ⚀`;
+      }
+    }
+
+    function buildRoiBoostItems(farm, inventory, wardrobe, skills, nftData) {
+      const boostItems = [];
+      if (nftData) {
+        for (const item of (nftData.collectibles || [])) {
+          if (!item.have_boost || !item.name || !item.boost_text) continue;
+          const has = getCount(inventory, item.name) > 0 || findCollectible(farm, item.name).length > 0;
+          const effects = parseBoostEffects(item.boost_text, item.name);
+          const categories = classifyToCategories(effects);
+          let floor = parseFloat(item.floor) || 0;
+          const markCost = getFactionMarkCost(item.name);
+          if (markCost > 0) floor = marksToSfl(markCost);
+          boostItems.push({ name: item.name, type: "Collectible", boost: item.boost_text, floor, has, effects, categories });
+        }
+        for (const item of (nftData.wearables || [])) {
+          if (!item.have_boost || !item.name || !item.boost_text) continue;
+          const has = (wardrobe[item.name] || 0) > 0;
+          const effects = parseBoostEffects(item.boost_text, item.name);
+          const categories = classifyToCategories(effects);
+          let floor = parseFloat(item.floor) || 0;
+          const lastSale = parseFloat(item.lastSalePrice) || 0;
+          if (floor <= 0 && lastSale > 0) floor = lastSale;
+          const markCost = getFactionMarkCost(item.name);
+          if (markCost > 0) floor = marksToSfl(markCost);
+          boostItems.push({ name: item.name, type: "Wearable", boost: item.boost_text, floor, has, effects, categories });
+        }
+      }
+      // Skills — non-sellable, included so their boost effects participate in yield calc
+      for (const [skillName, skill] of Object.entries(SKILL_TREE_DATA)) {
+        const has = skills[skillName] !== undefined;
+        const boostText = skill.buff + (skill.debuff ? "\n" + skill.debuff : "");
+        const effects = parseBoostEffects(boostText);
+        if (SKILL_FEED_EFFECTS[skillName]) {
+          for (const [cat, value] of Object.entries(SKILL_FEED_EFFECTS[skillName])) {
+            effects.push({ type: "feed_reduction", value, cat });
+          }
+        }
+        const categories = classifyToCategories(effects);
+        boostItems.push({ name: skillName, type: "Skill", boost: boostText, floor: 0, has, effects, categories });
+      }
+      // Disabled-by detection
+      for (const b of boostItems) {
+        const disabledByEffects = b.effects.filter(e => e.type === "disabled_by");
+        if (disabledByEffects.length > 0) {
+          b.disabledBy = disabledByEffects.flatMap(e => e.names);
+          b.effects = b.effects.filter(e => e.type !== "disabled_by");
+          const activeSuperseder = b.disabledBy.find(name =>
+            getCount(inventory, name) > 0 || findCollectible(farm, name).length > 0
+            || (wardrobe[name] || 0) > 0 || skills[name] !== undefined
+          );
+          if (activeSuperseder) { b.isDisabled = true; b.disabledByName = activeSuperseder; }
+        }
+      }
+      // Mark quant categories, multi-cat, sellable
+      for (const b of boostItems) {
+        b.quantCats = b.categories.filter(c => ROI_QUANT_CATS.includes(c));
+        b.isMultiCat = b.quantCats.length > 1;
+        b.isSellable = b.type !== "Skill" && b.floor > 0;
+      }
+      return boostItems;
+    }
+
+    function roiPickProduct(catId) {
+      if (ROI_FIXED_PRODUCTS[catId]) return ROI_FIXED_PRODUCTS[catId];
+      return getDefaultProduct(catId);
+    }
+
+    function roiComputeCategory(catId, boostItems, capacity, p2pPrices, L, multicat) {
+      const product = roiPickProduct(catId);
+      const priceProd = (typeof getPriceProduct === "function") ? getPriceProduct(catId, product) : product;
+      const price = p2pPrices[priceProd] || p2pPrices[product] || 0;
+
+      const itemsInCat = boostItems.filter(b => b.has && !b.isDisabled && b.categories.includes(catId));
+      const sellableInCat = itemsInCat.filter(b => {
+        if (!b.isSellable) return false;
+        if (!b.isMultiCat) return true;
+        const assigned = multicat[b.name] || b.quantCats[0];
+        return assigned === catId;
+      });
+      const externallyAssigned = itemsInCat.filter(b =>
+        b.isSellable && b.isMultiCat && (multicat[b.name] || b.quantCats[0]) !== catId
+      );
+      const saleSfl = sellableInCat.reduce((sum, b) => sum + b.floor, 0);
+
+      const soldNames = new Set(sellableInCat.map(b => b.name));
+      const allEffects = itemsInCat.flatMap(b => b.effects.filter(e => e.cat === catId));
+      const keptEffects = itemsInCat.filter(b => !soldNames.has(b.name))
+                                     .flatMap(b => b.effects.filter(e => e.cat === catId));
+
+      const baseCycle = getCycleSec(catId, product);
+      const nodeCount = getCapacityCount(catId, capacity);
+
+      const keepResult = applyBoosts(catId, product, capacity, allEffects);
+      const soldResult = applyBoosts(catId, product, capacity, keptEffects);
+      const cycleKeep = keepResult.effectiveCycle || baseCycle;
+      const cycleSold = soldResult.effectiveCycle || baseCycle;
+
+      let yieldKeepUnits = keepResult.unitsPerDay;
+      let yieldSoldUnits = soldResult.unitsPerDay;
+      let realisticCycleKeep = cycleKeep;
+      let realisticCycleSold = cycleSold;
+      let wastedTimeBoost = false;
+
+      const isDailyOutput = (catId === "fishing" || catId === "bees");
+      if (!isDailyOutput && nodeCount > 0 && cycleKeep > 0 && cycleSold > 0) {
+        const loginInterval = 86400 / L;
+        realisticCycleKeep = roiEffectiveCycleAtLogin(cycleKeep, L);
+        realisticCycleSold = roiEffectiveCycleAtLogin(cycleSold, L);
+        const outputPerCycleKeep = (keepResult.unitsPerDay * cycleKeep) / (86400 * nodeCount);
+        const outputPerCycleSold = (soldResult.unitsPerDay * cycleSold) / (86400 * nodeCount);
+        yieldKeepUnits = nodeCount * outputPerCycleKeep * (86400 / realisticCycleKeep);
+        yieldSoldUnits = nodeCount * outputPerCycleSold * (86400 / realisticCycleSold);
+        wastedTimeBoost = cycleKeep < loginInterval;
+      }
+
+      const yieldKeepSfl = yieldKeepUnits * price;
+      const yieldSoldSfl = yieldSoldUnits * price;
+      const marginalSflPerDay = yieldKeepSfl - yieldSoldSfl;
+
+      let roiYears, verdict;
+      if (sellableInCat.length === 0) {
+        roiYears = NaN; verdict = "no-nfts";
+      } else if (nodeCount === 0 && catId !== "fishing") {
+        roiYears = Infinity; verdict = "no-nodes";
+      } else if (marginalSflPerDay <= 0) {
+        roiYears = -1; verdict = "sell-now";
+      } else {
+        roiYears = saleSfl / (marginalSflPerDay * 365);
+        if (roiYears < 1) verdict = "keep";
+        else if (roiYears < 5) verdict = "marginal";
+        else verdict = "sell";
+      }
+
+      return {
+        catId, product, price, nodeCount,
+        sellableInCat, externallyAssigned, saleSfl,
+        baseCycle, cycleKeep, cycleSold, realisticCycleKeep, realisticCycleSold,
+        yieldKeepSfl, yieldSoldSfl, marginalSflPerDay,
+        roiYears, verdict, wastedTimeBoost, isDailyOutput,
+      };
+    }
+
+    async function renderRoi(data) {
+      const app = document.getElementById("app");
+      const { inventory, farm } = data;
+      const wardrobe = farm.wardrobe || {};
+      const skills = farm.bumpkin?.skills || {};
+
+      let html = `<div class="header pixel-panel pixel-font">
+        <h1>ROI vs LOGIN FREQUENCY</h1>
+        <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
+      </div>`;
+
+      html += `<div class="under-dev-banner pixel-font" style="background:linear-gradient(180deg,#3b1768,#2a1050);padding:8px 12px;border:3px solid #000;margin-bottom:16px;text-align:center;font-size: 0.5625rem;color:var(--lily)">
+        💸 SELL-OR-FARM ADVISOR 💸
+        <div style="margin-top:6px;font-size: 0.5rem;color:var(--text-secondary);line-height:1.5">
+          If you log in less often, are your boost NFTs pulling their weight?<br>
+          Per resource type: total NFT sale value vs marginal yield at your chosen login frequency.
+        </div>
+      </div>`;
+
+      html += `<div id="roi-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading...</div></div></div>`;
+      app.innerHTML = html;
+
+      let nftData, p2pPrices = {}, exchangeRates = { coinsPerSFL: 320, gemsPerSFL: 0 };
+      let sflUsd = 0, btcUsd = 0;
+      try {
+        const proxyFetch = async (url) => {
+          try { const r = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`); if (r.ok) return r.json(); } catch {}
+          return (await fetch(url)).json();
+        };
+        const [nftResp, priceResp, rateResp, btcResp] = await Promise.all([
+          proxyFetch("https://sfl.world/api/v1/nfts"),
+          proxyFetch("https://sfl.world/api/v1/prices"),
+          proxyFetch("https://sfl.world/api/v1.1/exchange").catch(() => null),
+          proxyFetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd").catch(() => null),
+        ]);
+        nftData = nftResp;
+        const priceData = priceResp?.data?.p2p || priceResp?.p2p || {};
+        for (const [k, v] of Object.entries(priceData)) p2pPrices[k] = parseFloat(v) || 0;
+        sflUsd = rateResp?.sfl?.usd || 0;
+        btcUsd = btcResp?.bitcoin?.usd || 0;
+
+        const betty = computeBettyRate(p2pPrices);
+        if (betty.rate > 0) { exchangeRates.coinsPerSFL = betty.rate; }
+        if (rateResp) {
+          const coinTiers = Object.values(rateResp?.coins || {});
+          const gemTiers = Object.values(rateResp?.gems || {});
+          if (!betty.rate && coinTiers.length > 0) {
+            const best = coinTiers.reduce((a, b) => (b.coin / b.sfl) > (a.coin / a.sfl) ? b : a);
+            exchangeRates.coinsPerSFL = best.coin / best.sfl;
+          }
+          if (gemTiers.length > 0) {
+            const best = gemTiers.reduce((a, b) => (b.gem / (b.sfl * 0.7)) > (a.gem / (a.sfl * 0.7)) ? b : a);
+            exchangeRates.gemsPerSFL = best.gem / (best.sfl * 0.7);
+          }
+        }
+      } catch (err) {
+        document.getElementById("roi-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load: ${escHTML(err.message)}</p></div>`;
+        return;
+      }
+
+      const capacity = detectFarmCapacity(farm);
+      const boostItems = buildRoiBoostItems(farm, inventory, wardrobe, skills, nftData);
+
+      roiState = { boostItems, capacity, p2pPrices, sflUsd, btcUsd, exchangeRates, farm };
+      renderRoiContent();
+    }
+
+    function renderRoiContent() {
+      if (!roiState) return;
+      const { boostItems, capacity, p2pPrices, sflUsd, btcUsd } = roiState;
+      const L = roiGetLoginsPerDay();
+      const currency = roiGetCurrency();
+      const multicat = roiGetMulticatAssignment();
+      const container = document.getElementById("roi-content");
+      if (!container) return;
+      const fmtVal = (sfl) => roiFormatValue(sfl, currency, sflUsd, btcUsd);
+
+      let html = '';
+
+      // Controls
+      html += `<div class="pixel-panel" style="padding:12px;margin-bottom:16px;background:rgba(0,0,0,0.2)">
+        <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:center;">
+          <div>
+            <div class="pixel-font" style="font-size:0.55rem;margin-bottom:6px;color:var(--text-secondary)">LOGINS/DAY</div>
+            <div style="display:flex;gap:4px;">
+              ${[1,2,3,4].map(n => `<button class="roi-pill${L===n?' active':''}" onclick="_roiSetLogins(${n})">${n}×</button>`).join('')}
+            </div>
+          </div>
+          <div>
+            <div class="pixel-font" style="font-size:0.55rem;margin-bottom:6px;color:var(--text-secondary)">CURRENCY</div>
+            <div style="display:flex;gap:4px;">
+              ${['flower','usd','btc'].map(c => `<button class="roi-pill${currency===c?' active':''}" onclick="_roiSetCurrency('${c}')">${c==='flower'?'⚀ FLOWER':c==='usd'?'$ USD':'₿ BTC'}</button>`).join('')}
+            </div>
+          </div>
+          <div style="margin-left:auto;text-align:right;font-size:0.55rem;color:var(--text-dim);line-height:1.7" class="pixel-font">
+            SFL→USD: $${sflUsd.toFixed(4)}<br>
+            Interval: ${(24/L).toFixed(1)}h between logins
+          </div>
+        </div>
+      </div>`;
+
+      // Compute and sort rows
+      const rows = [];
+      for (const X of ROI_QUANT_CATS) {
+        const row = roiComputeCategory(X, boostItems, capacity, p2pPrices, L, multicat);
+        if (row) rows.push(row);
+      }
+      const displayRows = rows.filter(r => r.sellableInCat.length > 0 || r.externallyAssigned.length > 0);
+
+      const verdictRank = { "sell-now": 0, "sell": 1, "marginal": 2, "keep": 3, "no-nodes": 4, "no-nfts": 5 };
+      displayRows.sort((a, b) => {
+        const dr = (verdictRank[a.verdict] || 9) - (verdictRank[b.verdict] || 9);
+        if (dr !== 0) return dr;
+        if (isFinite(a.roiYears) && isFinite(b.roiYears)) return b.roiYears - a.roiYears;
+        return 0;
+      });
+
+      // Main table
+      html += `<div class="pixel-panel" style="padding:0;overflow-x:auto;background:rgba(0,0,0,0.15)">
+        <table class="roi-table pixel-font" style="width:100%;font-size:0.6rem;border-collapse:collapse">
+          <thead>
+            <tr style="background:rgba(0,0,0,0.4);color:var(--text-secondary)">
+              <th style="text-align:left;padding:8px 6px;width:24px"></th>
+              <th style="text-align:left;padding:8px">RESOURCE</th>
+              <th style="text-align:center;padding:8px">NFTs</th>
+              <th style="text-align:right;padding:8px">SALE</th>
+              <th style="text-align:center;padding:8px">CYCLE</th>
+              <th style="text-align:right;padding:8px">Δ/DAY</th>
+              <th style="text-align:right;padding:8px">PAYBACK</th>
+              <th style="text-align:center;padding:8px">VERDICT</th>
+            </tr>
+          </thead>
+          <tbody>`;
+
+      if (displayRows.length === 0) {
+        html += `<tr><td colspan="8" style="padding:16px;text-align:center;color:var(--text-dim)" class="pixel-font">No sellable boost NFTs owned for any resource category.</td></tr>`;
+      }
+
+      for (const row of displayRows) {
+        const catDef = POWER_CATEGORIES[row.catId];
+        const expandKey = `roi-exp-${row.catId}`;
+        const vc = {
+          "sell-now": { bg: "#7a1a1a", fg: "#fff", label: "SELL NOW" },
+          "sell":     { bg: "#9c4400", fg: "#fff", label: "SELL" },
+          "marginal": { bg: "#7a6a1a", fg: "#fff", label: "MARGINAL" },
+          "keep":     { bg: "#1a5a1a", fg: "#fff", label: "KEEP" },
+          "no-nfts":  { bg: "#333", fg: "#888", label: "—" },
+          "no-nodes": { bg: "#333", fg: "#888", label: "NO NODES" },
+        }[row.verdict] || { bg: "#333", fg: "#888", label: "—" };
+        const roiColor =
+          row.verdict === "sell-now" ? "var(--red)" :
+          row.verdict === "sell" ? "#ff8c42" :
+          row.verdict === "marginal" ? "var(--sunpetal)" :
+          row.verdict === "keep" ? "var(--green)" : "var(--text-dim)";
+        const roiText =
+          row.verdict === "sell-now" ? "INSTANT" :
+          row.verdict === "no-nfts" ? "—" :
+          row.verdict === "no-nodes" ? "n/a" :
+          !isFinite(row.roiYears) ? "∞" :
+          row.roiYears.toFixed(row.roiYears < 10 ? 1 : 0) + "y";
+        const cycleH = (s) => s < 7200 ? (s/60).toFixed(0)+"m" : (s/3600).toFixed(s < 36000 ? 1 : 0)+"h";
+        const wastedIcon = row.wastedTimeBoost ? ` <span style="color:var(--sunpetal)" title="Boosted cycle is shorter than ${(24/L).toFixed(1)}h login interval — time-reduction component wasted">⏰</span>` : '';
+        const cycleCell = row.isDailyOutput ? "daily" : `${cycleH(row.baseCycle)} → ${cycleH(row.cycleKeep)}${wastedIcon}`;
+        const marginalCell = row.marginalSflPerDay > 0.01 ? fmtVal(row.marginalSflPerDay)
+                            : row.marginalSflPerDay < -0.01 ? `<span style="color:var(--red)">${fmtVal(row.marginalSflPerDay)}</span>`
+                            : "—";
+
+        html += `<tr class="roi-row" style="cursor:pointer;border-top:1px solid rgba(255,255,255,0.07)" onclick="_roiToggleRow('${row.catId}')">
+          <td style="padding:8px 6px;color:var(--text-dim)"><span id="${expandKey}-arrow">▶</span></td>
+          <td style="padding:8px;font-weight:bold">${catDef.emoji} ${catDef.label}</td>
+          <td style="text-align:center;padding:8px">${row.sellableInCat.length}</td>
+          <td style="text-align:right;padding:8px;color:var(--sunpetal)">${row.saleSfl > 0 ? fmtVal(row.saleSfl) : "—"}</td>
+          <td style="text-align:center;padding:8px;color:var(--text-secondary)">${cycleCell}</td>
+          <td style="text-align:right;padding:8px">${marginalCell}</td>
+          <td style="text-align:right;padding:8px;color:${roiColor};font-weight:bold">${roiText}</td>
+          <td style="text-align:center;padding:8px"><span style="background:${vc.bg};color:${vc.fg};padding:3px 8px;border-radius:3px;font-size:0.5rem;letter-spacing:0.05em">${vc.label}</span></td>
+        </tr>
+        <tr id="${expandKey}" style="display:none;background:rgba(0,0,0,0.3)">
+          <td colspan="8" style="padding:12px 16px">${renderRoiExpandedRow(row, fmtVal, multicat, L)}</td>
+        </tr>`;
+      }
+      html += `</tbody></table></div>`;
+
+      // Passive section
+      const passiveItems = boostItems.filter(b =>
+        b.has && !b.isDisabled && b.isSellable && b.quantCats.length === 0
+      );
+      if (passiveItems.length > 0) {
+        passiveItems.sort((a, b) => b.floor - a.floor);
+        const passiveSum = passiveItems.reduce((s, b) => s + b.floor, 0);
+        html += `<div class="pixel-panel" style="margin-top:24px;padding:12px;background:rgba(0,0,0,0.15)">
+          <h2 class="pixel-font" style="margin:0 0 8px 0;font-size:0.75rem;color:var(--lily)">PASSIVE BOOSTS</h2>
+          <div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);margin-bottom:10px;line-height:1.6">
+            Login-frequency independent — sale value only (cooking XP, sleep, etc.)<br>
+            Total sellable: <b style="color:var(--sunpetal)">${roiFormatValue(passiveSum, currency, sflUsd, btcUsd)}</b>
+          </div>
+          <div style="overflow-x:auto"><table class="pixel-font" style="width:100%;font-size:0.55rem;border-collapse:collapse">
+            <thead><tr style="background:rgba(0,0,0,0.3);color:var(--text-secondary)">
+              <th style="text-align:left;padding:6px">NFT</th>
+              <th style="text-align:left;padding:6px">TYPE</th>
+              <th style="text-align:left;padding:6px">BOOST</th>
+              <th style="text-align:right;padding:6px">SALE</th>
+            </tr></thead><tbody>`;
+        for (const b of passiveItems) {
+          const boostShort = (b.boost || '').replace(/\n/g, ' • ').slice(0, 90);
+          html += `<tr style="border-top:1px solid rgba(255,255,255,0.05)">
+            <td style="padding:6px;color:var(--text-secondary)">${escHTML(b.name)}</td>
+            <td style="padding:6px;color:var(--text-dim)">${b.type}</td>
+            <td style="padding:6px;color:var(--text-dim)">${escHTML(boostShort)}</td>
+            <td style="text-align:right;padding:6px;color:var(--sunpetal)">${roiFormatValue(b.floor, currency, sflUsd, btcUsd)}</td>
+          </tr>`;
+        }
+        html += `</tbody></table></div></div>`;
+      }
+
+      // Footer info
+      html += `<div class="pixel-font" style="margin-top:24px;padding:12px;background:rgba(0,0,0,0.2);border:2px solid rgba(255,255,255,0.05);font-size:0.55rem;color:var(--text-dim);line-height:1.7">
+        <b style="color:var(--text-secondary)">How it's calculated:</b><br>
+        • Realistic harvests/node/day: at next login after cycle completes (steady-state). Time-reduction boosts that shrink cycle below login interval are wasted (⏰ flagged).<br>
+        • Yield boosts (+1, +10%, etc.) still count per harvest even when time-reduction is wasted.<br>
+        • Crops modeled with Wheat only (24h, no gem restocks needed). Other categories use default product.<br>
+        • Multi-category NFTs (e.g. Volcano Gnome → Stone + Iron + Gold) are sale-attributed to one home category. Use dropdown in expanded row to change. In non-home categories the boost is still counted as kept.<br>
+        • Skills are non-sellable but their boosts ARE included in yield calculations.<br>
+        • Sale values: floor price from sfl.world marketplace at load time. Real market prices may differ.<br>
+        • Fishing & Bees: daily output capped by game mechanics (~20 fish/day, bee→honey rate), not by login frequency.
+      </div>`;
+
+      container.innerHTML = html;
+    }
+
+    function renderRoiExpandedRow(row, fmtVal, multicat, L) {
+      const catDef = POWER_CATEGORIES[row.catId];
+      let html = '';
+
+      html += `<div style="margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.6rem;color:var(--text-secondary);margin-bottom:6px">SELLABLE NFTs ASSIGNED HERE</div>`;
+      if (row.sellableInCat.length === 0) {
+        html += `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);padding:4px 0">None.</div>`;
+      } else {
+        html += `<div style="overflow-x:auto"><table class="pixel-font" style="width:100%;font-size:0.55rem;border-collapse:collapse">
+          <thead><tr style="color:var(--text-dim);background:rgba(0,0,0,0.2)">
+            <th style="text-align:left;padding:5px">NAME</th>
+            <th style="text-align:left;padding:5px">TYPE</th>
+            <th style="text-align:left;padding:5px">BOOST</th>
+            <th style="text-align:right;padding:5px">VALUE</th>
+            <th style="text-align:left;padding:5px">MULTI</th>
+          </tr></thead><tbody>`;
+        for (const b of row.sellableInCat) {
+          let multiCell = '—';
+          if (b.isMultiCat) {
+            const otherCats = b.quantCats.filter(c => c !== row.catId);
+            const otherLabels = otherCats.map(c => POWER_CATEGORIES[c]?.label || c).join(', ');
+            const options = b.quantCats.map(c => `<option value="${c}"${(multicat[b.name] || b.quantCats[0]) === c ? ' selected' : ''}>${POWER_CATEGORIES[c]?.label || c}</option>`).join('');
+            multiCell = `<span style="color:var(--red)" title="Also boosts: ${escHTML(otherLabels)}">⚠</span> <select onchange="_roiSetMulticat('${escHTML(b.name)}', this.value)" onclick="event.stopPropagation()" style="font-size:0.5rem;background:#2a1050;color:#fff;border:1px solid #444;padding:1px 2px">${options}</select>`;
+          }
+          const boostShort = (b.boost || '').replace(/\n/g, ' / ').slice(0, 55);
+          html += `<tr style="border-top:1px solid rgba(255,255,255,0.05)">
+            <td style="padding:4px">${escHTML(b.name)}</td>
+            <td style="padding:4px;color:var(--text-secondary)">${b.type}</td>
+            <td style="padding:4px;color:var(--text-dim)">${escHTML(boostShort)}</td>
+            <td style="text-align:right;padding:4px;color:var(--sunpetal)">${fmtVal(b.floor)}</td>
+            <td style="padding:4px">${multiCell}</td>
+          </tr>`;
+        }
+        html += `</tbody></table></div>`;
+      }
+      html += `</div>`;
+
+      if (row.externallyAssigned.length > 0) {
+        const list = row.externallyAssigned.map(b => {
+          const home = multicat[b.name] || b.quantCats[0];
+          return `<span style="white-space:nowrap">${escHTML(b.name)} → ${POWER_CATEGORIES[home]?.label || home}</span>`;
+        }).join(' &nbsp;·&nbsp; ');
+        html += `<div class="pixel-font" style="margin-bottom:12px;padding:8px 10px;background:rgba(100,150,255,0.1);border-left:3px solid #6688cc;font-size:0.55rem;line-height:1.6">
+          <b style="color:#8aaaff">ℹ Also boosting this category but sale-attributed elsewhere:</b><br>${list}
+        </div>`;
+      }
+
+      if (row.nodeCount > 0 || row.catId === "fishing") {
+        const loginInterval = 86400 / L;
+        const harvestsKeep = row.realisticCycleKeep > 0 ? 86400 / row.realisticCycleKeep : 0;
+        const harvestsSold = row.realisticCycleSold > 0 ? 86400 / row.realisticCycleSold : 0;
+        const fmtH = (s) => s < 7200 ? (s/60).toFixed(0)+"m" : (s/3600).toFixed(2)+"h";
+        html += `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);line-height:1.7;padding:8px 12px;background:rgba(0,0,0,0.25);border-left:3px solid var(--sunpetal)">
+          <b style="color:var(--text-secondary)">CALCULATION</b> ${row.isDailyOutput ? '(daily-cap, login-freq independent)' : `(${L}×/day, ${(loginInterval/3600).toFixed(1)}h interval)`}<br>
+          • Nodes: ${row.nodeCount}<br>
+          • Product: ${escHTML(row.product || '—')} @ ${row.price.toFixed(3)} ⚀/unit<br>
+          • Base cycle → with all boosts: ${fmtH(row.baseCycle)} → ${fmtH(row.cycleKeep)}<br>
+          ${!row.isDailyOutput ? `• Realistic cycle at ${L}×/day: <b>${fmtH(row.realisticCycleKeep)}</b> keep / <b>${fmtH(row.realisticCycleSold)}</b> sold<br>
+          • Harvests/day total: ${harvestsKeep.toFixed(2)} keep / ${harvestsSold.toFixed(2)} sold<br>` : ''}
+          • Daily yield with NFTs: <b style="color:var(--green)">${fmtVal(row.yieldKeepSfl)}</b><br>
+          • Daily yield if sold: <b style="color:var(--text-dim)">${fmtVal(row.yieldSoldSfl)}</b><br>
+          • <b style="color:var(--sunpetal)">Marginal: ${fmtVal(row.marginalSflPerDay)}/day</b>
+          ${row.saleSfl > 0 && row.marginalSflPerDay > 0 ? `<br>• ROI: ${fmtVal(row.saleSfl)} ÷ (${fmtVal(row.marginalSflPerDay)} × 365) = <b style="color:var(--sunpetal)">${row.roiYears.toFixed(2)} years</b>` : ''}
+          ${row.wastedTimeBoost ? `<br>• ⏰ <span style="color:var(--sunpetal)">Time-reduction boosts wasted</span> — cycle (${fmtH(row.cycleKeep)}) < login interval (${(loginInterval/3600).toFixed(1)}h). Yield-flat boosts still active.` : ''}
+        </div>`;
+      } else if (row.nodeCount === 0) {
+        html += `<div class="pixel-font" style="padding:8px;font-size:0.55rem;color:var(--text-dim)">No nodes on farm for this category. Sale value still displayed, but no marginal yield calculation possible.</div>`;
+      }
+
+      return html;
+    }
+
+    // Event handlers (window-scoped so onclick can find them)
+    window._roiSetLogins = function(n) { roiSetLoginsPerDay(n); renderRoiContent(); };
+    window._roiSetCurrency = function(c) { roiSetCurrency(c); renderRoiContent(); };
+    window._roiSetMulticat = function(name, cat) { roiSetMulticatAssignment(name, cat); renderRoiContent(); };
+    window._roiToggleRow = function(catId) {
+      const expandKey = `roi-exp-${catId}`;
+      const row = document.getElementById(expandKey);
+      const arrow = document.getElementById(`${expandKey}-arrow`);
+      if (!row) return;
+      const show = row.style.display === "none";
+      row.style.display = show ? "table-row" : "none";
+      if (arrow) arrow.textContent = show ? "▼" : "▶";
+    };
+
     async function renderBuds(data) {
       const app = document.getElementById("app");
       const { farm } = data;
@@ -19717,6 +20258,7 @@
           case "sales": renderSales(data); break;
           case "power": renderPower(data); break;
           case "nodes": renderNodes(data); break;
+          case "roi": renderRoi(data); break;
           case "buds": renderBuds(data); break;
           case "pets": renderPets(data); break;
           case "diff": renderDiff(data); break;
