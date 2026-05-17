@@ -128,3 +128,20 @@ CREATE INDEX idx_mo_coll_item ON marketplace_orderbook(collection, item_id, side
 -- GRANT USAGE ON SCHEMA public TO sfl_reader;
 -- GRANT SELECT ON ALL TABLES IN SCHEMA public TO sfl_reader;
 -- ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO sfl_reader;
+
+-- ============================================================
+-- Investment Tracker — user-entered BTC deposit/withdrawal log
+-- ============================================================
+CREATE TABLE IF NOT EXISTS btc_transactions (
+  id BIGSERIAL PRIMARY KEY,
+  farm_id BIGINT NOT NULL,
+  tx_date DATE NOT NULL,
+  direction TEXT NOT NULL CHECK (direction IN ('deposit','withdrawal')),
+  btc_amount NUMERIC(20, 8) NOT NULL CHECK (btc_amount > 0),
+  usd_amount NUMERIC(14, 2),
+  notes TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_btc_tx_farm ON btc_transactions(farm_id, tx_date DESC);
+GRANT SELECT, INSERT, DELETE ON btc_transactions TO sfl_reader;
+GRANT USAGE, SELECT ON SEQUENCE btc_transactions_id_seq TO sfl_reader;
