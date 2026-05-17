@@ -5261,7 +5261,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.27</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.28</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5288,6 +5288,11 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.28", items: [
+          { t: "fix", text: "Investment Insights showed identical numbers for every interval (7d / 14d / 30d / lifetime) because `?latest=60&include=game_data` only covered ~2 days of dense collection on a 60-minute-interval farm. Fixed by switching to a date-range fetch (`?from=NOW-30d&to=NOW&bucket_hours=12&limit=100&include=game_data`) and adding a server-side `bucket_hours` parameter to /api/farm-history that keeps the latest snapshot in each N-hour Postgres date_bin. Result: ~60 well-spaced points across 30 days, regardless of collection density (handles both 5-min dense windows and the 1/day retention zone older than 30 days)." },
+          { t: "fix", text: "Metric ② DAYS TO FULL no longer clamps at \">999 days\". Always shows the exact day count, with a parenthetical year-form when the horizon exceeds a year (e.g. \"1842 days (5.0 yr)\"). ETA date falls back to \"—\" only when the projected date would overflow JS Date range (year ≥ 9999)." },
+          { t: "fix", text: "Removed redundant client-side snapshot sampling (was shrinking the response from ~60 server-bucketed points down to ~20). Chart now uses every server-returned point, giving a smoother line without losing detail." },
+        ]},
         { ver: "v3.27", items: [
           { t: "fix", text: "Diff page font/layout cleanup. Investment Tracker metric boxes now use the existing .summary-bar / .summary-stat / .label / .value classes (same pattern as dolls / pets summary stats) — 0.625rem pixel-font labels + 1rem bold values, centered. Section headers (h2) sized to 0.75rem with 1px letter-spacing, matching the rest of the page. Transaction table and insight tables switched to Courier New 0.75rem body for number/date readability, with pixel-font 0.5rem-0.5625rem column headers. Add-transaction form inputs use Courier New 0.75rem with 2px black borders; field labels stay in pixel font. Insight sub-panels (earning rate, history chart, income breakdown, burn vs growth) all share the same panel padding (12px 14px) and header style (pixel-font 0.625rem sunpetal, 0.5px letter-spacing). Fixed a duplicate style attribute in the burn-vs-growth no-data row." },
         ]},
@@ -19784,8 +19789,14 @@
           if (btcPerDay > 0 && remainingBtc > 0) {
             const days = remainingBtc / btcPerDay;
             const eta = new Date(Date.now() + days * 86400000);
-            daysText = days < 999 ? Math.round(days) + " days" : ">999 days";
-            daysSubText = `ETA: ${eta.toISOString().slice(0,10)} @ ${btcPerDay.toFixed(8)} ₿/day`;
+            // Always show the real day count; for long horizons append a yr suffix for legibility.
+            // ETA date stays ISO YYYY-MM-DD as long as it's within JS Date range (~year 275000), else "—".
+            const yrs = days / 365;
+            daysText = days < 365
+              ? Math.round(days) + " days"
+              : `${Math.round(days)} days (${yrs.toFixed(1)} yr)`;
+            const etaStr = (isFinite(eta.getTime()) && eta.getFullYear() < 9999) ? eta.toISOString().slice(0,10) : "—";
+            daysSubText = `ETA: ${etaStr} @ ${btcPerDay.toFixed(8)} ₿/day`;
             daysColor = days < 90 ? "var(--green)" : days < 365 ? "var(--sunpetal)" : "#ff8c42";
           } else if (btcPerDay <= 0) {
             daysText = "🚨 BURN";
@@ -19951,11 +19962,14 @@
 
       // 1) Fetch farm history snapshots (last 30 days)
       const FARM = FARM_ID;
-      // Use ?latest=N&include=game_data so each snapshot includes the full game state
-      // that computeFarmValue needs. Without include=game_data the server returns game_data=null
-      // and per-snapshot valuation collapses to ~0, silently breaking every insight + metric ②.
-      // limit=60 covers ~30 days even with sparser collection windows.
-      const histResp = await fetch(`/api/farm-history?farm=${FARM}&latest=60&include=game_data`);
+      // Fetch a 30-day window with 12-hour bucketing → up to ~60 well-spaced snapshots.
+      // bucket_hours=12 means server keeps the latest snapshot in each 12h slot, so the
+      // 7d/14d/30d earning-rate windows aren't all squeezed into the last few hours of data
+      // (which was the v3.25 bug — `latest=60` only covered ~2 days of dense collection).
+      // include=game_data is required for computeFarmValue per-snapshot.
+      const fromIso = new Date(Date.now() - 30 * 86400000).toISOString();
+      const toIso = new Date(Date.now() + 86400000).toISOString();
+      const histResp = await fetch(`/api/farm-history?farm=${FARM}&from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}&bucket_hours=12&limit=100&include=game_data`);
       if (!histResp.ok) throw new Error(`snapshots fetch failed: ${histResp.status}`);
       const hist = await histResp.json();
       let snaps = hist.snapshots || [];
@@ -19970,18 +19984,13 @@
       // 2) Fetch treasury reference data (prices for valuation)
       const td = await fetchTreasuryData();
 
-      // 3) Compute farm value per snapshot (cache by snapshot id)
+      // 3) Compute farm value per snapshot (cache by snapshot id).
+      // Server-side bucketing (bucket_hours=12) already returns ~60 well-spaced rows for a 30d
+      // window, so no additional client-side sampling — feeding every returned point makes the
+      // chart smooth and gives the 7d/14d/30d windows enough samples each.
       const valueCache = new Map();
-      const sampledSnaps = snaps.length > 20
-        ? snaps.filter((_, i) => i % Math.ceil(snaps.length / 20) === 0)
-        : snaps;
-      // Always include the latest snapshot
-      if (sampledSnaps[sampledSnaps.length - 1] !== snaps[snaps.length - 1]) {
-        sampledSnaps.push(snaps[snaps.length - 1]);
-      }
-
       const points = [];
-      for (const snap of sampledSnaps) {
+      for (const snap of snaps) {
         if (!valueCache.has(snap.id)) {
           try {
             const farmObj = snap.game_data || snap.farm || snap;

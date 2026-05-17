@@ -102,16 +102,35 @@ export default async function handler(req, res) {
     const limit = Math.min(parseInt(req.query.limit) || 100, 1000);
     const offset = parseInt(req.query.offset) || 0;
     const includeData = req.query.include === "game_data";
+    // Optional time-bucketing: ?bucket_hours=N keeps the latest snapshot in each N-hour bucket
+    // (Postgres date_bin, 14+). Gives a consistent points/day regardless of collection density,
+    // and works correctly across the cleanup boundary (~30d) where retention switches to 1/day.
+    // Clamped to [1, 720]. When N=1 → 1 point/hour max. Unset → no bucketing.
+    const bucketHoursRaw = parseInt(req.query.bucket_hours);
+    const bucketHours = (Number.isFinite(bucketHoursRaw) && bucketHoursRaw >= 1)
+      ? Math.min(bucketHoursRaw, 720) : null;
 
-    const result = await pool.query(
-      `SELECT id, farm_id, captured_at, diff,
-              CASE WHEN $5 THEN game_data ELSE NULL END AS game_data
-       FROM farm_snapshots
-       WHERE farm_id = $1 AND captured_at >= $2 AND captured_at <= $3
-       ORDER BY captured_at DESC
-       LIMIT $4 OFFSET $6`,
-      [farmId, from, to, limit, includeData, offset]
-    );
+    const result = bucketHours
+      ? await pool.query(
+          `SELECT DISTINCT ON (date_bin($7::interval, captured_at, '2020-01-01'::timestamptz))
+                  id, farm_id, captured_at, diff,
+                  CASE WHEN $5 THEN game_data ELSE NULL END AS game_data
+           FROM farm_snapshots
+           WHERE farm_id = $1 AND captured_at >= $2 AND captured_at <= $3
+           ORDER BY date_bin($7::interval, captured_at, '2020-01-01'::timestamptz) DESC,
+                    captured_at DESC
+           LIMIT $4 OFFSET $6`,
+          [farmId, from, to, limit, includeData, offset, `${bucketHours} hours`]
+        )
+      : await pool.query(
+          `SELECT id, farm_id, captured_at, diff,
+                  CASE WHEN $5 THEN game_data ELSE NULL END AS game_data
+           FROM farm_snapshots
+           WHERE farm_id = $1 AND captured_at >= $2 AND captured_at <= $3
+           ORDER BY captured_at DESC
+           LIMIT $4 OFFSET $6`,
+          [farmId, from, to, limit, includeData, offset]
+        );
 
     const countResult = await pool.query(
       `SELECT COUNT(*) FROM farm_snapshots
