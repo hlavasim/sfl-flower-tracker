@@ -5261,7 +5261,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.23</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.24</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5288,6 +5288,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.24", items: [
+          { t: "new", text: "PETS is now a first-class main-table row (no longer in the passive section). Daily yield comes from petDailyCalc — same engine as the pets page — summing across all owned pets (common + NFT) for the SFL value of fetched resources at p2p prices. Marginal reflects keep-vs-sold for Victoria's Apron (+50% feedings/day → +50% daily yield) and other pet-boost NFTs. Pet Bowls' XP bonus is acknowledged but contributes 0 to daily-SFL marginal (long-term XP effect, not modelled). Row participates in the SELL? checkbox + summary panel like any other category." },
+        ]},
         { ver: "v3.23", items: [
           { t: "new", text: "ROI page: per-category SELL? checkbox + selection summary panel. Tick categories you'd consider liquidating; the panel below the table sums total sale value, daily yield lost, and combined payback years across the selection. Warns about multi-category NFTs in selection (their boost loss in other cats isn't included in the sum). Selection persists in localStorage." },
           { t: "fix", text: "Golden Cow (124999 ⚀), Golden Sheep (10950 ⚀), and Gold Egg (7695 ⚀) had boost text 'Feed cows/sheep/chickens for free' that the parser couldn't match → routed to PASSIVE/other. Added BOOST_EFFECT_OVERRIDES with type=free_feed so they now land in their proper animal category. ROI scenario toggles capacity.goldenAnimals based on whether the gold animal is in the kept set — selling it correctly resurfaces full feed cost in the marginal." },
@@ -16293,8 +16296,29 @@
 
     const ROI_QUANT_CATS = ["trees", "stone", "iron", "gold", "crimstone", "obsidian", "oil",
                             "crops", "fruits", "greenhouse", "flowers",
-                            "chickens", "cows", "sheep", "fishing", "bees"];
+                            "chickens", "cows", "sheep", "fishing", "bees", "pets"];
     const ROI_FIXED_PRODUCTS = { crops: "Wheat" };
+
+    // Parse pets from farm data (mirrors renderPets parsing logic)
+    function parseRoiPets(farm) {
+      const pets = [];
+      const commonPets = farm.pets?.common || {};
+      for (const [name, pet] of Object.entries(commonPets)) {
+        const xp = pet.experience || 0;
+        const level = petLevel(xp);
+        pets.push({ name, petType: PET_NAME_SPECIES[name] || null, species: PET_NAME_SPECIES[name] || null,
+                    level, xp, energy: pet.energy || 0, foods: pet.requests?.food || [], isNft: false, nftId: null });
+      }
+      const nftPets = farm.pets?.nfts || {};
+      for (const [id, pet] of Object.entries(nftPets)) {
+        const xp = pet.experience || 0;
+        const level = petLevel(xp);
+        const petType = pet.traits?.type || "Unknown";
+        pets.push({ name: petType, petType, species: petType, level, xp, energy: pet.energy || 0,
+                    foods: pet.requests?.food || [], isNft: true, nftId: id });
+      }
+      return pets;
+    }
     const LS_ROI_LOGINS = "sfl_roi_logins_per_day";
     const LS_ROI_CURRENCY = "sfl_roi_currency";
     const LS_ROI_MULTICAT = "sfl_roi_multicat_assignment";
@@ -16424,6 +16448,7 @@
     }
 
     function roiPickProduct(catId) {
+      if (catId === "pets") return "Pet Fetch";
       if (ROI_FIXED_PRODUCTS[catId]) return ROI_FIXED_PRODUCTS[catId];
       return getDefaultProduct(catId);
     }
@@ -16465,7 +16490,23 @@
     // all capped to login frequency where applicable.
     // scenarioBoostItems is the subset of boostItems considered "owned" in this scenario
     // (used for animal sickness calc, which needs item-list rather than effects).
-    function roiNetForScenario(catId, product, capacity, effects, p2pPrices, exchangeRates, stockMods, season, L, price, nodeCount, isDailyOutput, scenarioBoostItems, farmSkills) {
+    function roiNetForScenario(catId, product, capacity, effects, p2pPrices, exchangeRates, stockMods, season, L, price, nodeCount, isDailyOutput, scenarioBoostItems, farmSkills, pets) {
+      // PETS special branch — daily SFL from fetched resources (uses petDailyCalc from pets page).
+      // Yield modifier: Victoria's Apron → +50% feedings/day. Pet Bowls → no daily-SFL effect (XP only).
+      if (catId === "pets") {
+        const petList = pets || [];
+        const zero = { unitsPerDay: 0, yieldSfl: 0, toolCostSfl: 0, lavaCostSfl: 0, seedCostSfl: 0, feedCostSfl: 0, sicknessCostSfl: 0, netSfl: 0, cycle: 86400, realisticCycle: 86400, toolInfo: null, seedInfo: null, feedInfo: null, sicknessInfo: null };
+        if (petList.length === 0) return zero;
+        const hasApron = !!scenarioBoostItems?.some(b => b.has && b.name === "Victoria's Apron");
+        const hasBowls = !!scenarioBoostItems?.some(b => b.has && b.name === "Pet Bowls");
+        const feedMult = hasApron ? 1.5 : 1.0;
+        let totalSfl = 0;
+        for (const pet of petList) {
+          const calc = petDailyCalc(pet, p2pPrices, feedMult, hasBowls);
+          totalSfl += (calc?.dailySfl || 0);
+        }
+        return { ...zero, yieldSfl: totalSfl, netSfl: totalSfl };
+      }
       const result = applyBoosts(catId, product, capacity, effects);
       const baseCycle = getCycleSec(catId, product);
       const cycle = result.effectiveCycle || baseCycle;
@@ -16537,7 +16578,7 @@
       return { unitsPerDay, yieldSfl, toolCostSfl, lavaCostSfl, seedCostSfl, feedCostSfl, sicknessCostSfl, netSfl, cycle, realisticCycle, toolInfo, seedInfo, feedInfo, sicknessInfo };
     }
 
-    function roiComputeCategory(catId, boostItems, capacity, p2pPrices, L, multicat, exchangeRates, stockMods, season, farmSkills) {
+    function roiComputeCategory(catId, boostItems, capacity, p2pPrices, L, multicat, exchangeRates, stockMods, season, farmSkills, pets) {
       const product = roiPickProduct(catId);
       const priceProd = (typeof getPriceProduct === "function") ? getPriceProduct(catId, product) : product;
       const price = p2pPrices[priceProd] || p2pPrices[product] || 0;
@@ -16559,16 +16600,16 @@
       const keptEffects = itemsInCat.filter(b => !soldNames.has(b.name))
                                      .flatMap(b => b.effects.filter(e => e.cat === catId));
 
-      const baseCycle = getCycleSec(catId, product);
-      const nodeCount = getCapacityCount(catId, capacity);
-      const isDailyOutput = (catId === "fishing" || catId === "bees");
+      const baseCycle = catId === "pets" ? 86400 : getCycleSec(catId, product);
+      const nodeCount = catId === "pets" ? (pets?.length || 0) : getCapacityCount(catId, capacity);
+      const isDailyOutput = (catId === "fishing" || catId === "bees" || catId === "pets");
 
       // Scenario boost-item lists (used by calcSicknessCost which needs items, not effects)
       const keptItems = boostItems.filter(b => b.has && !b.isDisabled && !soldNames.has(b.name));
       const allOwnedItems = boostItems.filter(b => b.has && !b.isDisabled);
 
-      const keepScen = roiNetForScenario(catId, product, capacity, allEffects, p2pPrices, exchangeRates, stockMods, season, L, price, nodeCount, isDailyOutput, allOwnedItems, farmSkills);
-      const soldScen = roiNetForScenario(catId, product, capacity, keptEffects, p2pPrices, exchangeRates, stockMods, season, L, price, nodeCount, isDailyOutput, keptItems, farmSkills);
+      const keepScen = roiNetForScenario(catId, product, capacity, allEffects, p2pPrices, exchangeRates, stockMods, season, L, price, nodeCount, isDailyOutput, allOwnedItems, farmSkills, pets);
+      const soldScen = roiNetForScenario(catId, product, capacity, keptEffects, p2pPrices, exchangeRates, stockMods, season, L, price, nodeCount, isDailyOutput, keptItems, farmSkills, pets);
 
       const cycleKeep = keepScen.cycle;
       const cycleSold = soldScen.cycle;
@@ -16686,14 +16727,15 @@
       const stockMods = detectStockModifiers(farm);
       const season = (farm.season?.season || "").toLowerCase();
       const boostItems = buildRoiBoostItems(farm, inventory, wardrobe, skills, nftData);
+      const pets = parseRoiPets(farm);
 
-      roiState = { boostItems, capacity, p2pPrices, sflUsd, btcUsd, exchangeRates, stockMods, season, farm };
+      roiState = { boostItems, capacity, p2pPrices, sflUsd, btcUsd, exchangeRates, stockMods, season, pets, farm };
       renderRoiContent();
     }
 
     function renderRoiContent() {
       if (!roiState) return;
-      const { boostItems, capacity, p2pPrices, sflUsd, btcUsd, exchangeRates, stockMods, season } = roiState;
+      const { boostItems, capacity, p2pPrices, sflUsd, btcUsd, exchangeRates, stockMods, season, pets } = roiState;
       const L = roiGetLoginsPerDay();
       const currency = roiGetCurrency();
       const multicat = roiGetMulticatAssignment();
@@ -16729,10 +16771,11 @@
       const farmSkills = roiState.farm?.bumpkin?.skills || {};
       const rows = [];
       for (const X of ROI_QUANT_CATS) {
-        const row = roiComputeCategory(X, boostItems, capacity, p2pPrices, L, multicat, exchangeRates, stockMods, season, farmSkills);
+        const row = roiComputeCategory(X, boostItems, capacity, p2pPrices, L, multicat, exchangeRates, stockMods, season, farmSkills, pets);
         if (row) rows.push(row);
       }
-      const displayRows = rows.filter(r => r.sellableInCat.length > 0 || r.externallyAssigned.length > 0);
+      // Display rows: include any category with sellable NFTs, external assignments, OR (pets only) actual pets present
+      const displayRows = rows.filter(r => r.sellableInCat.length > 0 || r.externallyAssigned.length > 0 || (r.catId === "pets" && r.nodeCount > 0));
 
       const verdictRank = { "sell-now": 0, "sell": 1, "marginal": 2, "keep": 3, "no-nodes": 4, "no-nfts": 5 };
       displayRows.sort((a, b) => {
@@ -16871,10 +16914,10 @@
         b.has && !b.isDisabled && b.isSellable && b.quantCats.length === 0
       );
       if (passiveItems.length > 0) {
-        // Group by primary category (first cat from item.categories)
-        const QUAL_ORDER = ["pets", "cooking", "coins", "protection", "other"];
+        // Group by primary category (first cat from item.categories).
+        // PETS no longer in passive — it's its own main-table row now.
+        const QUAL_ORDER = ["cooking", "coins", "protection", "other"];
         const QUAL_DESC = {
-          pets: "Pet-related boosts — XP, energy, satiation, free feeding. Pet feeding savings not yet modeled (random food requests).",
           cooking: "Cooking / XP boosts — speed up Bumpkin levelling, dish bonuses.",
           coins: "Coin / SFL boosts — sell-price multipliers, delivery rewards.",
           protection: "Protection — disaster resistance, etc.",
@@ -17005,10 +17048,10 @@
         if (feedDiff > 0.01) costSavingsParts.push(`feed saved ${fmtVal(feedDiff)}`);
         if (sickDiff > 0.01) costSavingsParts.push(`sickness saved ${fmtVal(sickDiff)}`);
         html += `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);line-height:1.7;padding:8px 12px;background:rgba(0,0,0,0.25);border-left:3px solid var(--sunpetal)">
-          <b style="color:var(--text-secondary)">CALCULATION</b> ${row.isDailyOutput ? '(daily-cap, login-freq independent)' : `(${L}×/day, ${(loginInterval/3600).toFixed(1)}h interval)`}<br>
-          • Nodes: ${row.nodeCount}<br>
-          • Product: ${escHTML(row.product || '—')} @ ${row.price.toFixed(3)} ⚀/unit<br>
-          • Base cycle → with all boosts: ${fmtH(row.baseCycle)} → ${fmtH(row.cycleKeep)}<br>
+          <b style="color:var(--text-secondary)">CALCULATION</b> ${row.catId === "pets" ? '(pet fetches, daily-cap)' : row.isDailyOutput ? '(daily-cap, login-freq independent)' : `(${L}×/day, ${(loginInterval/3600).toFixed(1)}h interval)`}<br>
+          • ${row.catId === "pets" ? `Pets: ${row.nodeCount}` : `Nodes: ${row.nodeCount}`}<br>
+          ${row.catId === "pets" ? '' : `• Product: ${escHTML(row.product || '—')} @ ${row.price.toFixed(3)} ⚀/unit<br>`}
+          ${row.catId === "pets" ? '' : `• Base cycle → with all boosts: ${fmtH(row.baseCycle)} → ${fmtH(row.cycleKeep)}<br>`}
           ${!row.isDailyOutput ? `• Realistic cycle at ${L}×/day: <b>${fmtH(row.realisticCycleKeep)}</b> keep / <b>${fmtH(row.realisticCycleSold)}</b> sold<br>
           • Harvests/day total: ${harvestsKeep.toFixed(2)} keep / ${harvestsSold.toFixed(2)} sold<br>` : ''}
           • Daily gross yield with NFTs: <span style="color:var(--green)">${fmtVal(row.yieldKeepSfl)}</span><br>
