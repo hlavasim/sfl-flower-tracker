@@ -19747,6 +19747,33 @@
                                   : p >= 50 ? "var(--sunpetal)"
                                   : "#ff8c42";
 
+      // Days to payback — uses the 30d (preferred) or 7d earning rate from insights cache
+      let daysText = "—", daysSubText = "expand Insights to compute", daysColor = "var(--text-dim)";
+      const remainingBtc = agg.netDebtBtc;
+      if (remainingBtc <= 0 && agg.depositBtc > 0) {
+        daysText = "✅ paid";
+        daysColor = "var(--green)";
+        daysSubText = "you've recouped";
+      } else if (_insState) {
+        const r30 = _insSlopeForWindow(30) || _insSlopeForWindow(7);
+        const sflToUsd2 = _insState.rates?.sflToUsd || sflToUsd;
+        const btcUsd2 = _insState.rates?.btcUsd || btcUsd;
+        if (r30 && sflToUsd2 > 0 && btcUsd2 > 0) {
+          const btcPerDay = r30.sflPerDay * sflToUsd2 / btcUsd2;
+          if (btcPerDay > 0 && remainingBtc > 0) {
+            const days = remainingBtc / btcPerDay;
+            const eta = new Date(Date.now() + days * 86400000);
+            daysText = days < 999 ? Math.round(days) + " days" : ">999 days";
+            daysSubText = `ETA: ${eta.toISOString().slice(0,10)} @ ${btcPerDay.toFixed(8)} ₿/day`;
+            daysColor = days < 90 ? "var(--green)" : days < 365 ? "var(--sunpetal)" : "#ff8c42";
+          } else if (btcPerDay <= 0) {
+            daysText = "🚨 BURN";
+            daysSubText = `farm losing value (${r30.sflPerDay.toFixed(1)} ⛀/day)`;
+            daysColor = "var(--red)";
+          }
+        }
+      }
+
       mount.innerHTML = `
         <h2 class="pixel-font" style="margin:0 0 12px 0;font-size:0.8rem;color:var(--sunpetal)">💰 INVESTMENT TRACKER — Farm #${escHTML(FARM_ID)}</h2>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:12px">
@@ -19757,8 +19784,8 @@
           </div>
           <div class="pixel-panel" style="padding:10px;background:rgba(0,0,0,0.25)">
             <div class="pixel-font" style="font-size:0.55rem;color:var(--text-secondary)">② DAYS TO FULL</div>
-            <div class="pixel-font" style="font-size:1rem;color:var(--text-dim);font-weight:bold">—</div>
-            <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin-top:4px">expand Insights to compute</div>
+            <div class="pixel-font" style="font-size:1rem;color:${daysColor};font-weight:bold">${daysText}</div>
+            <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin-top:4px">${daysSubText}</div>
           </div>
           <div class="pixel-panel" style="padding:10px;background:rgba(0,0,0,0.25)">
             <div class="pixel-font" style="font-size:0.55rem;color:var(--text-secondary)">③ LIQUIDATE NOW (10% fee)</div>
@@ -19871,6 +19898,334 @@
         alert("Delete failed: " + e.message);
       }
     };
+
+    // ═══════════════════════════════════════
+    //  INVESTMENT INSIGHTS
+    // ═══════════════════════════════════════
+
+    let _insState = null;
+    let _insLoadedFor = null;  // FARM_ID we loaded for, so we skip re-fetch on collapse-uncollapse
+
+    window._invToggleInsights = function() {
+      const body = document.getElementById("ins-body");
+      const arrow = document.getElementById("ins-arrow");
+      if (!body) return;
+      const willOpen = body.style.display === "none";
+      body.style.display = willOpen ? "block" : "none";
+      if (arrow) arrow.textContent = willOpen ? "▼" : "▶";
+      localStorage.setItem("sfl_diff_insights_open", willOpen ? "1" : "0");
+      if (willOpen && _insLoadedFor !== FARM_ID) {
+        body.innerHTML = `<div class="loading-screen pixel-font" style="padding:12px"><div class="loading-text">Computing insights — may take a few seconds…</div></div>`;
+        renderInvestmentInsights(window._invDataRef).catch(err => {
+          body.innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>${escHTML(err.message)}</p></div>`;
+        });
+      }
+    };
+
+    async function renderInvestmentInsights(data) {
+      const body = document.getElementById("ins-body");
+      if (!body) return;
+
+      // 1) Fetch farm history snapshots (last 30 days)
+      const FARM = FARM_ID;
+      const weekAgo30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0,10);
+      const today = new Date(Date.now() + 86400000).toISOString().slice(0,10);
+      const histResp = await fetch(`/api/farm-history?farm=${FARM}&from=${weekAgo30}&to=${today}&limit=1000`);
+      if (!histResp.ok) throw new Error(`snapshots fetch failed: ${histResp.status}`);
+      const hist = await histResp.json();
+      let snaps = hist.snapshots || [];
+      if (snaps.length === 0) {
+        body.innerHTML = `<div class="pixel-font" style="padding:12px;font-size:0.55rem;color:var(--text-dim)">No historical snapshots yet. Insights will populate as the data collector accumulates farm data.</div>`;
+        return;
+      }
+
+      // Ensure ascending order by captured_at for downstream logic
+      snaps.sort((a, b) => new Date(a.captured_at).getTime() - new Date(b.captured_at).getTime());
+
+      // 2) Fetch treasury reference data (prices for valuation)
+      const td = await fetchTreasuryData();
+
+      // 3) Compute farm value per snapshot (cache by snapshot id)
+      const valueCache = new Map();
+      const sampledSnaps = snaps.length > 20
+        ? snaps.filter((_, i) => i % Math.ceil(snaps.length / 20) === 0)
+        : snaps;
+      // Always include the latest snapshot
+      if (sampledSnaps[sampledSnaps.length - 1] !== snaps[snaps.length - 1]) {
+        sampledSnaps.push(snaps[snaps.length - 1]);
+      }
+
+      const points = [];
+      for (const snap of sampledSnaps) {
+        if (!valueCache.has(snap.id)) {
+          try {
+            const farmObj = snap.game_data || snap.farm || snap;
+            const v = computeFarmValue(farmObj, td, "betty");
+            valueCache.set(snap.id, v?.totals?.grand || 0);
+          } catch (e) {
+            valueCache.set(snap.id, 0);
+          }
+        }
+        points.push({
+          id: snap.id,
+          time: new Date(snap.captured_at).getTime(),
+          valueSfl: valueCache.get(snap.id),
+        });
+      }
+      points.sort((a, b) => a.time - b.time);
+
+      _insState = {
+        points,
+        transactions: _invState?.transactions || [],
+        rates: _invState?.rates || {},
+        td,
+        rawSnaps: snaps,
+      };
+      _insLoadedFor = FARM;
+
+      renderInsightsContent();
+
+      // Refresh main tracker now that we have an earning rate (so metric ② updates)
+      renderInvestmentTrackerContent();
+    }
+
+    function renderInsightsContent() {
+      const body = document.getElementById("ins-body");
+      if (!body || !_insState) return;
+      body.innerHTML = `
+        <div id="ins-earning-rate" style="margin-bottom:12px">${renderInsightEarningRate()}</div>
+        <div id="ins-history-chart" style="margin-bottom:12px;min-height:240px"></div>
+        <div id="ins-income-breakdown" style="margin-bottom:12px">${renderInsightIncomeBreakdown()}</div>
+        <div id="ins-burn-vs-growth" style="margin-bottom:12px">${renderInsightBurnGrowth()}</div>
+      `;
+      // Chart renders into its container after innerHTML is set
+      renderInsightHistoryChart();
+    }
+
+    // ───── Insight 1: Earning rate panel ─────
+    function renderInsightEarningRate() {
+      const r7 = _insSlopeForWindow(7);
+      const r30 = _insSlopeForWindow(30);
+      const sflToUsd = _insState?.rates?.sflToUsd || 0;
+      const btcUsd = _insState?.rates?.btcUsd || 0;
+
+      function fmtRate(r) {
+        if (!r) return "<span style='color:var(--text-dim)'>(insufficient data)</span>";
+        const btcPerDay = (sflToUsd > 0 && btcUsd > 0) ? r.sflPerDay * sflToUsd / btcUsd : 0;
+        const sign = r.sflPerDay >= 0 ? "+" : "−";
+        const color = r.sflPerDay >= 0 ? "var(--green)" : "var(--red)";
+        return `<span style="color:${color}">${sign}${Math.abs(r.sflPerDay).toFixed(1)} ⛀/day</span>` +
+               (btcPerDay ? ` <span style="color:var(--text-dim)">(${sign}${Math.abs(btcPerDay).toFixed(8)} ₿/day)</span>` : "");
+      }
+
+      return `<div class="pixel-panel" style="padding:10px;background:rgba(0,0,0,0.25)">
+        <div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:6px">EARNING RATE</div>
+        <div class="pixel-font" style="font-size:0.55rem;color:var(--text-secondary);line-height:1.8">
+          7-day:  ${fmtRate(r7)}<br>
+          30-day: ${fmtRate(r30)}
+        </div>
+      </div>`;
+    }
+
+    // ───── Insight 2: Farm value history chart (lightweight-charts) ─────
+    function renderInsightHistoryChart() {
+      const container = document.getElementById("ins-history-chart");
+      if (!container || !_insState) return;
+      const { points, transactions, rates } = _insState;
+      const { sflToUsd, btcUsd } = rates;
+      if (!sflToUsd || !btcUsd || points.length < 2) {
+        container.innerHTML = `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);padding:12px">Not enough data for chart.</div>`;
+        return;
+      }
+      if (typeof LightweightCharts === "undefined") {
+        container.innerHTML = `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);padding:12px">Chart library not loaded.</div>`;
+        return;
+      }
+
+      container.innerHTML = `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:6px">FARM VALUE OVER TIME (BTC)</div><div id="ins-chart-canvas" style="height:240px"></div>`;
+      const canvas = document.getElementById("ins-chart-canvas");
+      const chart = LightweightCharts.createChart(canvas, {
+        height: 240,
+        layout: { background: { color: "transparent" }, textColor: "#c4a882" },
+        grid: { vertLines: { color: "rgba(255,255,255,0.05)" }, horzLines: { color: "rgba(255,255,255,0.05)" } },
+        timeScale: { timeVisible: true, secondsVisible: false },
+        rightPriceScale: { borderColor: "rgba(255,255,255,0.1)" },
+      });
+
+      // Main farm-value series (BTC)
+      const series = chart.addLineSeries({ color: "#FFD700", lineWidth: 2 });
+      const seriesData = points
+        .map(p => ({ time: Math.floor(p.time / 1000), value: p.valueSfl * sflToUsd / btcUsd }))
+        // dedupe duplicate timestamps (lightweight-charts requires strictly ascending)
+        .filter((p, i, arr) => i === 0 || p.time > arr[i - 1].time);
+      series.setData(seriesData);
+
+      // Total-deposited horizontal line (dashed red)
+      const agg = invAggregate(transactions);
+      if (agg.depositBtc > 0 && seriesData.length >= 2) {
+        const depSeries = chart.addLineSeries({
+          color: "#ff6b6b",
+          lineWidth: 1,
+          lineStyle: (LightweightCharts.LineStyle && LightweightCharts.LineStyle.Dashed) != null
+            ? LightweightCharts.LineStyle.Dashed
+            : 2,
+        });
+        depSeries.setData([
+          { time: seriesData[0].time, value: agg.depositBtc },
+          { time: seriesData[seriesData.length - 1].time, value: agg.depositBtc },
+        ]);
+      }
+
+      // Cumulative withdrawals (step series in BTC)
+      if (transactions.some(t => t.direction === "withdrawal")) {
+        const withSeries = chart.addLineSeries({
+          color: "#30D158",
+          lineWidth: 1,
+          lineStyle: (LightweightCharts.LineStyle && LightweightCharts.LineStyle.Solid) != null
+            ? LightweightCharts.LineStyle.Solid
+            : 0,
+        });
+        let cum = 0;
+        const stepPts = [];
+        const ws = transactions
+          .filter(t => t.direction === "withdrawal")
+          .map(t => ({ time: Math.floor(new Date(t.tx_date).getTime() / 1000), btc: parseFloat(t.btc_amount) }))
+          .sort((a, b) => a.time - b.time);
+        for (const w of ws) {
+          cum += w.btc;
+          stepPts.push({ time: w.time, value: cum });
+        }
+        // dedupe + ensure ascending
+        const cleanStep = stepPts.filter((p, i, arr) => i === 0 || p.time > arr[i - 1].time);
+        if (cleanStep.length > 0) withSeries.setData(cleanStep);
+      }
+
+      chart.timeScale().fitContent();
+    }
+
+    // ───── Insight 3: Income breakdown by treasury category ─────
+    function renderInsightIncomeBreakdown() {
+      if (!_insState) return "";
+      const { points } = _insState;
+      if (points.length < 2) {
+        return `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);padding:8px">Need ≥ 2 snapshots for breakdown.</div>`;
+      }
+
+      const cutoff = Date.now() - 30 * 86400000;
+      const windowPts = points.filter(p => p.time >= cutoff);
+      if (windowPts.length < 2) {
+        return `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);padding:8px">< 30 days of snapshots — wait for more data.</div>`;
+      }
+
+      // Resolve raw snapshots for first-in-window and latest
+      const rawSnaps = _insState.rawSnaps || [];
+      const firstSnap = rawSnaps.find(s => new Date(s.captured_at).getTime() >= cutoff);
+      const lastSnap = rawSnaps[rawSnaps.length - 1];
+      if (!firstSnap || !lastSnap || firstSnap.id === lastSnap.id) {
+        return `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);padding:8px">Insufficient snapshot coverage for breakdown.</div>`;
+      }
+      const td = _insState.td;
+      const firstFarm = firstSnap.game_data || firstSnap.farm || firstSnap;
+      const lastFarm = lastSnap.game_data || lastSnap.farm || lastSnap;
+      let v0, v1;
+      try {
+        v0 = computeFarmValue(firstFarm, td, "betty");
+        v1 = computeFarmValue(lastFarm, td, "betty");
+      } catch (e) {
+        return `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);padding:8px">Couldn't compute category breakdown.</div>`;
+      }
+
+      // computeFarmValue returns totals = { resources, treasures, collectibles, wearables, liquid, grand }
+      const CAT_KEYS = ["resources", "treasures", "collectibles", "wearables", "liquid"];
+      const CAT_LABELS = {
+        resources: "Resources",
+        treasures: "Treasures",
+        collectibles: "Collectibles",
+        wearables: "Wearables",
+        liquid: "Liquid (SFL/coins/gems)",
+      };
+      const t0 = v0?.totals || {};
+      const t1 = v1?.totals || {};
+      const rows = [];
+      let total = 0;
+      for (const k of CAT_KEYS) {
+        const d = (t1[k] || 0) - (t0[k] || 0);
+        rows.push({ key: k, label: CAT_LABELS[k], delta: d });
+        total += d;
+      }
+      rows.sort((a, b) => b.delta - a.delta);
+
+      let html = `<div class="pixel-panel" style="padding:10px;background:rgba(0,0,0,0.25)">
+        <div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:6px">INCOME BREAKDOWN (last 30 days)</div>
+        <table class="pixel-font" style="width:100%;font-size:0.55rem;border-collapse:collapse">
+          <thead><tr style="color:var(--text-dim)">
+            <th style="text-align:left;padding:4px">CATEGORY</th>
+            <th style="text-align:right;padding:4px">Δ VALUE</th>
+            <th style="text-align:right;padding:4px">% OF TOTAL</th>
+          </tr></thead><tbody>`;
+      for (const r of rows) {
+        const pct = total !== 0 ? (r.delta / total) * 100 : 0;
+        const color = r.delta >= 0 ? "var(--green)" : "var(--red)";
+        const sign = r.delta >= 0 ? "+" : "−";
+        html += `<tr style="border-top:1px solid rgba(255,255,255,0.05)">
+          <td style="padding:4px;color:var(--text-secondary)">${escHTML(r.label)}</td>
+          <td style="text-align:right;padding:4px;color:${color}">${sign}${Math.abs(r.delta).toFixed(1)} ⛀</td>
+          <td style="text-align:right;padding:4px;color:var(--text-dim)">${pct.toFixed(0)} %</td>
+        </tr>`;
+      }
+      const totalColor = total >= 0 ? "var(--green)" : "var(--red)";
+      html += `<tr style="border-top:2px solid rgba(255,255,255,0.15);font-weight:bold">
+        <td style="padding:4px">TOTAL</td>
+        <td style="text-align:right;padding:4px;color:${totalColor}">${total >= 0 ? "+" : "−"}${Math.abs(total).toFixed(1)} ⛀</td>
+        <td style="text-align:right;padding:4px">100 %</td>
+      </tr>`;
+      html += `</tbody></table></div>`;
+      return html;
+    }
+
+    // ───── Insight 4: Burn vs growth panel ─────
+    function renderInsightBurnGrowth() {
+      const rows = [
+        { label: "Last 7d",  r: _insSlopeForWindow(7) },
+        { label: "Last 14d", r: _insSlopeForWindow(14) },
+        { label: "Last 30d", r: _insSlopeForWindow(30) },
+        { label: "Lifetime", r: _insSlopeForWindow(99999) },
+      ];
+      let html = `<div class="pixel-panel" style="padding:10px;background:rgba(0,0,0,0.25)">
+        <div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:6px">NET RATE (signed)</div>
+        <table class="pixel-font" style="font-size:0.55rem;width:100%;border-collapse:collapse">`;
+      for (const row of rows) {
+        if (!row.r) {
+          html += `<tr><td style="padding:4px;color:var(--text-secondary)">${row.label}</td><td style="text-align:right;padding:4px;color:var(--text-dim)" colspan="2">(no data)</td></tr>`;
+          continue;
+        }
+        const sign = row.r.sflPerDay >= 0 ? "+" : "−";
+        const color = row.r.sflPerDay >= 0 ? "var(--green)" : "var(--red)";
+        const emoji = row.r.sflPerDay >= 0 ? "📈 growth" : "📉 burn";
+        html += `<tr style="border-top:1px solid rgba(255,255,255,0.05)">
+          <td style="padding:4px;color:var(--text-secondary)">${row.label}</td>
+          <td style="text-align:right;padding:4px;color:${color}">${sign}${Math.abs(row.r.sflPerDay).toFixed(1)} ⛀/day</td>
+          <td style="text-align:right;padding:4px;color:var(--text-dim)">${emoji}</td>
+        </tr>`;
+      }
+      html += `</table></div>`;
+      return html;
+    }
+
+    // ───── Slope helper (used by earning rate + burn-vs-growth + metric ②) ─────
+    function _insSlopeForWindow(days) {
+      if (!_insState) return null;
+      const { points } = _insState;
+      if (points.length < 2) return null;
+      const cutoff = Date.now() - days * 86400000;
+      const windowPts = points.filter(p => p.time >= cutoff);
+      if (windowPts.length < 2) return null;
+      const first = windowPts[0], last = windowPts[windowPts.length - 1];
+      const deltaSfl = last.valueSfl - first.valueSfl;
+      const deltaDays = (last.time - first.time) / 86400000;
+      if (deltaDays <= 0) return null;
+      return { sflPerDay: deltaSfl / deltaDays, deltaSfl, deltaDays, sampleSize: windowPts.length };
+    }
 
     async function renderDiff(data) {
       const app = document.getElementById("app");
@@ -19985,10 +20340,37 @@
       invMount.innerHTML = `<div class="loading-screen pixel-font" style="padding:12px"><div class="loading-text">Loading investment tracker…</div></div>`;
       app.insertBefore(invMount, document.getElementById("diff-content"));
 
+      // Investment Insights mount (collapsible, lazy-loaded)
+      const insMount = document.createElement("div");
+      insMount.id = "investment-insights";
+      insMount.className = "pixel-panel";
+      insMount.style.cssText = "padding:12px;margin-bottom:16px;background:rgba(0,0,0,0.15)";
+      const insOpen = localStorage.getItem("sfl_diff_insights_open") === "1";
+      insMount.innerHTML = `
+        <div onclick="_invToggleInsights()" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between">
+          <h2 class="pixel-font" style="margin:0;font-size:0.8rem;color:var(--lily)">📊 INVESTMENT INSIGHTS</h2>
+          <span class="pixel-font" id="ins-arrow" style="color:var(--text-secondary)">${insOpen ? "▼" : "▶"}</span>
+        </div>
+        <div id="ins-body" style="display:${insOpen ? "block" : "none"};margin-top:12px">
+          <div class="loading-screen pixel-font" style="padding:12px"><div class="loading-text">Click to load…</div></div>
+        </div>
+      `;
+      app.insertBefore(insMount, document.getElementById("diff-content"));
+
+      // Expose data ref for toggle handler
+      window._invDataRef = data;
+
       // Kick off the load in the background — don't block diff render.
       renderInvestmentTracker(data, { p2pPrices, sflToUsd }).catch(err => {
         invMount.innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Investment tracker failed: ${escHTML(err.message)}</p></div>`;
       });
+
+      if (insOpen) {
+        renderInvestmentInsights(data).catch(err => {
+          const body = document.getElementById("ins-body");
+          if (body) body.innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>${escHTML(err.message)}</p></div>`;
+        });
+      }
 
       const noPrices = Object.keys(p2pPrices).length === 0;
 
