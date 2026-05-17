@@ -5261,7 +5261,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.26</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.27</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5288,6 +5288,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.27", items: [
+          { t: "fix", text: "Diff page font/layout cleanup. Investment Tracker metric boxes now use the existing .summary-bar / .summary-stat / .label / .value classes (same pattern as dolls / pets summary stats) — 0.625rem pixel-font labels + 1rem bold values, centered. Section headers (h2) sized to 0.75rem with 1px letter-spacing, matching the rest of the page. Transaction table and insight tables switched to Courier New 0.75rem body for number/date readability, with pixel-font 0.5rem-0.5625rem column headers. Add-transaction form inputs use Courier New 0.75rem with 2px black borders; field labels stay in pixel font. Insight sub-panels (earning rate, history chart, income breakdown, burn vs growth) all share the same panel padding (12px 14px) and header style (pixel-font 0.625rem sunpetal, 0.5px letter-spacing). Fixed a duplicate style attribute in the burn-vs-growth no-data row." },
+        ]},
         { ver: "v3.26", items: [
           { t: "fix", text: "Investment Insights were silently broken — the snapshots fetch missed `&include=game_data`, so every per-snapshot value computed to ~0 (the server only returns full game_data when this flag is set). Result: chart was flat at 0, earning rate showed 0/day, income breakdown showed all zeros, and metric ② DAYS TO FULL was bogus. Fixed by switching to `?latest=60&include=game_data` (also caps payload to ~60 most-recent snapshots). Also fixed an optimistic-delete UI bug where pg returns BIGINT id as a string but the inline onclick passes a number, so the filter never matched and deleted rows stayed visible until reload — coerced both sides to String." },
         ]},
@@ -19793,22 +19796,22 @@
       }
 
       mount.innerHTML = `
-        <h2 class="pixel-font" style="margin:0 0 12px 0;font-size:0.8rem;color:var(--sunpetal)">💰 INVESTMENT TRACKER — Farm #${escHTML(FARM_ID)}</h2>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:12px">
-          <div class="pixel-panel" style="padding:10px;background:rgba(0,0,0,0.25)">
-            <div class="pixel-font" style="font-size:0.55rem;color:var(--text-secondary)">① REPAID SO FAR</div>
-            <div class="pixel-font" style="font-size:1rem;color:${verdictColor(agg.repaidPct)};font-weight:bold">${agg.repaidPct === null ? "n/a" : agg.repaidPct.toFixed(1) + " %"}</div>
-            <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin-top:4px">${fmtBtc(agg.withdrawBtc)} / ${fmtBtc(agg.depositBtc)}</div>
+        <h2 class="pixel-font" style="margin:0 0 10px 0;font-size:0.75rem;color:var(--sunpetal);letter-spacing:1px">💰 INVESTMENT TRACKER</h2>
+        <div class="summary-bar" style="margin-bottom:12px">
+          <div class="summary-stat">
+            <div class="label pixel-font">① REPAID SO FAR</div>
+            <div class="value pixel-font" style="color:${verdictColor(agg.repaidPct)}">${agg.repaidPct === null ? "n/a" : agg.repaidPct.toFixed(1) + " %"}</div>
+            <div class="label pixel-font" style="margin-top:4px;color:var(--text-dim)">${fmtBtc(agg.withdrawBtc)} / ${fmtBtc(agg.depositBtc)}</div>
           </div>
-          <div class="pixel-panel" style="padding:10px;background:rgba(0,0,0,0.25)">
-            <div class="pixel-font" style="font-size:0.55rem;color:var(--text-secondary)">② DAYS TO FULL</div>
-            <div class="pixel-font" style="font-size:1rem;color:${daysColor};font-weight:bold">${daysText}</div>
-            <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin-top:4px">${daysSubText}</div>
+          <div class="summary-stat">
+            <div class="label pixel-font">② DAYS TO FULL</div>
+            <div class="value pixel-font" style="color:${daysColor}">${daysText}</div>
+            <div class="label pixel-font" style="margin-top:4px;color:var(--text-dim)">${daysSubText}</div>
           </div>
-          <div class="pixel-panel" style="padding:10px;background:rgba(0,0,0,0.25)">
-            <div class="pixel-font" style="font-size:0.55rem;color:var(--text-secondary)">③ LIQUIDATE NOW (10% fee)</div>
-            <div class="pixel-font" style="font-size:1rem;color:${liqColor};font-weight:bold">${ifLiqText}</div>
-            <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin-top:4px">${liqSubText}</div>
+          <div class="summary-stat">
+            <div class="label pixel-font">③ LIQUIDATE NOW (10% fee)</div>
+            <div class="value pixel-font" style="color:${liqColor}">${ifLiqText}</div>
+            <div class="label pixel-font" style="margin-top:4px;color:var(--text-dim)">${liqSubText}</div>
           </div>
         </div>
         <div id="inv-tx-table-wrap">${renderInvTxTable(transactions)}</div>
@@ -19819,16 +19822,17 @@
 
     function renderInvTxTable(transactions) {
       if (transactions.length === 0) {
-        return `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);padding:12px;text-align:center">No transactions yet. Click + Add to log your first deposit.</div>`;
+        return `<div style="font-size:0.6875rem;color:var(--text-dim);padding:12px;text-align:center;font-family:'Courier New',monospace">No transactions yet. Click <b>+ Add transaction</b> to log your first deposit.</div>`;
       }
-      let html = `<div style="overflow-x:auto"><table class="pixel-font" style="width:100%;font-size:0.55rem;border-collapse:collapse">
-        <thead><tr style="background:rgba(0,0,0,0.35);color:var(--text-secondary)">
-          <th style="text-align:left;padding:6px">DATE</th>
-          <th style="text-align:left;padding:6px">TYPE</th>
-          <th style="text-align:right;padding:6px">BTC</th>
-          <th style="text-align:right;padding:6px">USD</th>
-          <th style="text-align:left;padding:6px">NOTES</th>
-          <th style="text-align:center;padding:6px"></th>
+      // Headers use pixel font (small); rows use Courier New for readability of numbers.
+      let html = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-family:'Courier New',monospace;font-size:0.75rem">
+        <thead><tr class="pixel-font" style="background:rgba(0,0,0,0.35);color:var(--text-secondary);font-size:0.5625rem;letter-spacing:0.5px">
+          <th style="text-align:left;padding:8px 10px">DATE</th>
+          <th style="text-align:left;padding:8px 10px">TYPE</th>
+          <th style="text-align:right;padding:8px 10px">BTC</th>
+          <th style="text-align:right;padding:8px 10px">USD</th>
+          <th style="text-align:left;padding:8px 10px">NOTES</th>
+          <th style="text-align:center;padding:8px 10px"></th>
         </tr></thead><tbody>`;
       for (const t of transactions) {
         const isDep = t.direction === "deposit";
@@ -19836,12 +19840,12 @@
         const color = isDep ? "var(--red)" : "var(--green)";
         const usd = t.usd_amount ? "$" + parseFloat(t.usd_amount).toFixed(2) : "—";
         html += `<tr style="border-top:1px solid rgba(255,255,255,0.05)">
-          <td style="padding:6px">${escHTML(t.tx_date)}</td>
-          <td style="padding:6px;color:${color}">${isDep ? "DEPOSIT" : "WITHDRAW"}</td>
-          <td style="text-align:right;padding:6px;color:${color}">${signed} ₿</td>
-          <td style="text-align:right;padding:6px;color:var(--text-dim)">${usd}</td>
-          <td style="padding:6px;color:var(--text-dim)">${escHTML(t.notes || "")}</td>
-          <td style="text-align:center;padding:6px"><button onclick="_invDeleteTx(${t.id})" style="background:transparent;border:none;color:var(--red);cursor:pointer;font-size:0.7rem" title="Delete">×</button></td>
+          <td style="padding:8px 10px">${escHTML(t.tx_date)}</td>
+          <td style="padding:8px 10px;color:${color};font-weight:bold">${isDep ? "DEPOSIT" : "WITHDRAW"}</td>
+          <td style="text-align:right;padding:8px 10px;color:${color};font-weight:bold">${signed} ₿</td>
+          <td style="text-align:right;padding:8px 10px;color:var(--text-dim)">${usd}</td>
+          <td style="padding:8px 10px;color:var(--text-dim)">${escHTML(t.notes || "")}</td>
+          <td style="text-align:center;padding:8px 10px"><button onclick="_invDeleteTx(${t.id})" style="background:transparent;border:none;color:var(--red);cursor:pointer;font-size:1rem;line-height:1" title="Delete">×</button></td>
         </tr>`;
       }
       html += `</tbody></table></div>`;
@@ -19853,26 +19857,26 @@
       if (!wrap) return;
       const today = new Date().toISOString().slice(0, 10);
       wrap.style.display = "block";
+      const inputStyle = "width:100%;padding:6px 8px;background:#2a1050;color:#fff;border:2px solid #000;font-family:'Courier New',monospace;font-size:0.75rem";
+      const labelStyle = "display:block;font-size:0.5625rem;color:var(--text-secondary);letter-spacing:0.5px;margin-bottom:4px";
       wrap.innerHTML = `
-        <div class="pixel-panel" style="margin-top:12px;padding:12px;background:rgba(0,0,0,0.3)">
-          <div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:8px">ADD TRANSACTION</div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;font-size:0.55rem" class="pixel-font">
-            <label>DATE<br><input type="date" id="inv-f-date" value="${today}" style="width:100%;padding:4px;background:#2a1050;color:#fff;border:1px solid #444"></label>
-            <label>TYPE<br>
-              <select id="inv-f-dir" style="width:100%;padding:4px;background:#2a1050;color:#fff;border:1px solid #444">
-                <option value="withdrawal">WITHDRAWAL (cash out)</option>
-                <option value="deposit">DEPOSIT (money in)</option>
-              </select>
-            </label>
-            <label>BTC AMOUNT<br><input type="number" id="inv-f-btc" min="0" step="0.00000001" placeholder="0.020000" style="width:100%;padding:4px;background:#2a1050;color:#fff;border:1px solid #444"></label>
-            <label>USD VALUE (optional)<br><input type="number" id="inv-f-usd" min="0" step="0.01" placeholder="145.20" style="width:100%;padding:4px;background:#2a1050;color:#fff;border:1px solid #444"></label>
+        <div class="pixel-panel" style="margin-top:12px;padding:14px;background:rgba(0,0,0,0.3)">
+          <div class="pixel-font" style="font-size:0.6875rem;color:var(--sunpetal);margin-bottom:12px;letter-spacing:1px">ADD TRANSACTION</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px">
+            <div><span class="pixel-font" style="${labelStyle}">DATE</span><input type="date" id="inv-f-date" value="${today}" style="${inputStyle}"></div>
+            <div><span class="pixel-font" style="${labelStyle}">TYPE</span><select id="inv-f-dir" style="${inputStyle}">
+              <option value="withdrawal">WITHDRAWAL (cash out)</option>
+              <option value="deposit">DEPOSIT (money in)</option>
+            </select></div>
+            <div><span class="pixel-font" style="${labelStyle}">BTC AMOUNT</span><input type="number" id="inv-f-btc" min="0" step="0.00000001" placeholder="0.020000" style="${inputStyle}"></div>
+            <div><span class="pixel-font" style="${labelStyle}">USD VALUE (optional)</span><input type="number" id="inv-f-usd" min="0" step="0.01" placeholder="145.20" style="${inputStyle}"></div>
           </div>
-          <label class="pixel-font" style="display:block;margin-top:10px;font-size:0.55rem">NOTES<br><input type="text" id="inv-f-notes" maxlength="500" placeholder="cash out 1000 FLOWER…" style="width:100%;padding:4px;background:#2a1050;color:#fff;border:1px solid #444"></label>
-          <div style="margin-top:10px;display:flex;gap:8px">
+          <div style="margin-top:14px"><span class="pixel-font" style="${labelStyle}">NOTES</span><input type="text" id="inv-f-notes" maxlength="500" placeholder="cash out 1000 FLOWER…" style="${inputStyle}"></div>
+          <div style="margin-top:14px;display:flex;gap:8px">
             <button class="roi-pill" onclick="_invSubmitAdd()">Save</button>
             <button class="roi-pill" onclick="_invHideAddForm()">Cancel</button>
           </div>
-          <div id="inv-add-error" class="pixel-font" style="display:none;margin-top:8px;font-size:0.55rem;color:var(--red)"></div>
+          <div id="inv-add-error" style="display:none;margin-top:10px;font-size:0.6875rem;color:var(--red);font-family:'Courier New',monospace"></div>
         </div>
       `;
     };
@@ -20039,11 +20043,11 @@
                (btcPerDay ? ` <span style="color:var(--text-dim)">(${sign}${Math.abs(btcPerDay).toFixed(8)} ₿/day)</span>` : "");
       }
 
-      return `<div class="pixel-panel" style="padding:10px;background:rgba(0,0,0,0.25)">
-        <div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:6px">EARNING RATE</div>
-        <div class="pixel-font" style="font-size:0.55rem;color:var(--text-secondary);line-height:1.8">
-          7-day:  ${fmtRate(r7)}<br>
-          30-day: ${fmtRate(r30)}
+      return `<div class="pixel-panel" style="padding:12px 14px;background:rgba(0,0,0,0.25)">
+        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);margin-bottom:8px;letter-spacing:0.5px">EARNING RATE</div>
+        <div style="font-family:'Courier New',monospace;font-size:0.75rem;color:var(--text-secondary);line-height:1.8">
+          <span class="pixel-font" style="font-size:0.5625rem;color:var(--text-dim);display:inline-block;min-width:60px">7-day</span> ${fmtRate(r7)}<br>
+          <span class="pixel-font" style="font-size:0.5625rem;color:var(--text-dim);display:inline-block;min-width:60px">30-day</span> ${fmtRate(r30)}
         </div>
       </div>`;
     }
@@ -20055,15 +20059,15 @@
       const { points, transactions, rates } = _insState;
       const { sflToUsd, btcUsd } = rates;
       if (!sflToUsd || !btcUsd || points.length < 2) {
-        container.innerHTML = `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);padding:12px">Not enough data for chart.</div>`;
+        container.innerHTML = `<div style="font-family:'Courier New',monospace;font-size:0.6875rem;color:var(--text-dim);padding:12px">Not enough data for chart.</div>`;
         return;
       }
       if (typeof LightweightCharts === "undefined") {
-        container.innerHTML = `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);padding:12px">Chart library not loaded.</div>`;
+        container.innerHTML = `<div style="font-family:'Courier New',monospace;font-size:0.6875rem;color:var(--text-dim);padding:12px">Chart library not loaded.</div>`;
         return;
       }
 
-      container.innerHTML = `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:6px">FARM VALUE OVER TIME (BTC)</div><div id="ins-chart-canvas" style="height:240px"></div>`;
+      container.innerHTML = `<div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);margin-bottom:8px;letter-spacing:0.5px">FARM VALUE OVER TIME (BTC)</div><div id="ins-chart-canvas" style="height:240px"></div>`;
       const canvas = document.getElementById("ins-chart-canvas");
       const chart = LightweightCharts.createChart(canvas, {
         height: 240,
@@ -20128,23 +20132,18 @@
     function renderInsightIncomeBreakdown() {
       if (!_insState) return "";
       const { points } = _insState;
-      if (points.length < 2) {
-        return `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);padding:8px">Need ≥ 2 snapshots for breakdown.</div>`;
-      }
+      const emptyMsg = (text) => `<div class="pixel-panel" style="padding:12px 14px;background:rgba(0,0,0,0.25)"><div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);margin-bottom:8px;letter-spacing:0.5px">INCOME BREAKDOWN</div><div style="font-family:'Courier New',monospace;font-size:0.6875rem;color:var(--text-dim)">${text}</div></div>`;
+      if (points.length < 2) return emptyMsg("Need ≥ 2 snapshots for breakdown.");
 
       const cutoff = Date.now() - 30 * 86400000;
       const windowPts = points.filter(p => p.time >= cutoff);
-      if (windowPts.length < 2) {
-        return `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);padding:8px">< 30 days of snapshots — wait for more data.</div>`;
-      }
+      if (windowPts.length < 2) return emptyMsg("< 30 days of snapshots — wait for more data.");
 
       // Resolve raw snapshots for first-in-window and latest
       const rawSnaps = _insState.rawSnaps || [];
       const firstSnap = rawSnaps.find(s => new Date(s.captured_at).getTime() >= cutoff);
       const lastSnap = rawSnaps[rawSnaps.length - 1];
-      if (!firstSnap || !lastSnap || firstSnap.id === lastSnap.id) {
-        return `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);padding:8px">Insufficient snapshot coverage for breakdown.</div>`;
-      }
+      if (!firstSnap || !lastSnap || firstSnap.id === lastSnap.id) return emptyMsg("Insufficient snapshot coverage for breakdown.");
       const td = _insState.td;
       const firstFarm = firstSnap.game_data || firstSnap.farm || firstSnap;
       const lastFarm = lastSnap.game_data || lastSnap.farm || lastSnap;
@@ -20153,7 +20152,7 @@
         v0 = computeFarmValue(firstFarm, td, "betty");
         v1 = computeFarmValue(lastFarm, td, "betty");
       } catch (e) {
-        return `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);padding:8px">Couldn't compute category breakdown.</div>`;
+        return emptyMsg("Couldn't compute category breakdown.");
       }
 
       // computeFarmValue returns totals = { resources, treasures, collectibles, wearables, liquid, grand }
@@ -20176,29 +20175,29 @@
       }
       rows.sort((a, b) => b.delta - a.delta);
 
-      let html = `<div class="pixel-panel" style="padding:10px;background:rgba(0,0,0,0.25)">
-        <div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:6px">INCOME BREAKDOWN (last 30 days)</div>
-        <table class="pixel-font" style="width:100%;font-size:0.55rem;border-collapse:collapse">
-          <thead><tr style="color:var(--text-dim)">
-            <th style="text-align:left;padding:4px">CATEGORY</th>
-            <th style="text-align:right;padding:4px">Δ VALUE</th>
-            <th style="text-align:right;padding:4px">% OF TOTAL</th>
+      let html = `<div class="pixel-panel" style="padding:12px 14px;background:rgba(0,0,0,0.25)">
+        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);margin-bottom:8px;letter-spacing:0.5px">INCOME BREAKDOWN (last 30 days)</div>
+        <table style="width:100%;font-family:'Courier New',monospace;font-size:0.75rem;border-collapse:collapse">
+          <thead><tr class="pixel-font" style="color:var(--text-dim);font-size:0.5rem;letter-spacing:0.5px">
+            <th style="text-align:left;padding:6px 8px">CATEGORY</th>
+            <th style="text-align:right;padding:6px 8px">Δ VALUE</th>
+            <th style="text-align:right;padding:6px 8px">% OF TOTAL</th>
           </tr></thead><tbody>`;
       for (const r of rows) {
         const pct = total !== 0 ? (r.delta / total) * 100 : 0;
         const color = r.delta >= 0 ? "var(--green)" : "var(--red)";
         const sign = r.delta >= 0 ? "+" : "−";
         html += `<tr style="border-top:1px solid rgba(255,255,255,0.05)">
-          <td style="padding:4px;color:var(--text-secondary)">${escHTML(r.label)}</td>
-          <td style="text-align:right;padding:4px;color:${color}">${sign}${Math.abs(r.delta).toFixed(1)} ⛀</td>
-          <td style="text-align:right;padding:4px;color:var(--text-dim)">${pct.toFixed(0)} %</td>
+          <td style="padding:6px 8px;color:var(--text-secondary)">${escHTML(r.label)}</td>
+          <td style="text-align:right;padding:6px 8px;color:${color}">${sign}${Math.abs(r.delta).toFixed(1)} ⛀</td>
+          <td style="text-align:right;padding:6px 8px;color:var(--text-dim)">${pct.toFixed(0)} %</td>
         </tr>`;
       }
       const totalColor = total >= 0 ? "var(--green)" : "var(--red)";
       html += `<tr style="border-top:2px solid rgba(255,255,255,0.15);font-weight:bold">
-        <td style="padding:4px">TOTAL</td>
-        <td style="text-align:right;padding:4px;color:${totalColor}">${total >= 0 ? "+" : "−"}${Math.abs(total).toFixed(1)} ⛀</td>
-        <td style="text-align:right;padding:4px">100 %</td>
+        <td style="padding:6px 8px">TOTAL</td>
+        <td style="text-align:right;padding:6px 8px;color:${totalColor}">${total >= 0 ? "+" : "−"}${Math.abs(total).toFixed(1)} ⛀</td>
+        <td style="text-align:right;padding:6px 8px">100 %</td>
       </tr>`;
       html += `</tbody></table></div>`;
       return html;
@@ -20212,21 +20211,21 @@
         { label: "Last 30d", r: _insSlopeForWindow(30) },
         { label: "Lifetime", r: _insSlopeForWindow(99999) },
       ];
-      let html = `<div class="pixel-panel" style="padding:10px;background:rgba(0,0,0,0.25)">
-        <div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:6px">NET RATE (signed)</div>
-        <table class="pixel-font" style="font-size:0.55rem;width:100%;border-collapse:collapse">`;
+      let html = `<div class="pixel-panel" style="padding:12px 14px;background:rgba(0,0,0,0.25)">
+        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);margin-bottom:8px;letter-spacing:0.5px">NET RATE (signed)</div>
+        <table style="font-family:'Courier New',monospace;font-size:0.75rem;width:100%;border-collapse:collapse">`;
       for (const row of rows) {
         if (!row.r) {
-          html += `<tr><td style="padding:4px;color:var(--text-secondary)">${row.label}</td><td style="text-align:right;padding:4px;color:var(--text-dim)" colspan="2">(no data)</td></tr>`;
+          html += `<tr><td class="pixel-font" style="padding:6px 8px;color:var(--text-secondary);font-size:0.5625rem">${row.label}</td><td style="text-align:right;padding:6px 8px;color:var(--text-dim)" colspan="2">(no data)</td></tr>`;
           continue;
         }
         const sign = row.r.sflPerDay >= 0 ? "+" : "−";
         const color = row.r.sflPerDay >= 0 ? "var(--green)" : "var(--red)";
         const emoji = row.r.sflPerDay >= 0 ? "📈 growth" : "📉 burn";
         html += `<tr style="border-top:1px solid rgba(255,255,255,0.05)">
-          <td style="padding:4px;color:var(--text-secondary)">${row.label}</td>
-          <td style="text-align:right;padding:4px;color:${color}">${sign}${Math.abs(row.r.sflPerDay).toFixed(1)} ⛀/day</td>
-          <td style="text-align:right;padding:4px;color:var(--text-dim)">${emoji}</td>
+          <td class="pixel-font" style="padding:6px 8px;color:var(--text-secondary);font-size:0.5625rem">${row.label}</td>
+          <td style="text-align:right;padding:6px 8px;color:${color}">${sign}${Math.abs(row.r.sflPerDay).toFixed(1)} ⛀/day</td>
+          <td style="text-align:right;padding:6px 8px;color:var(--text-dim)">${emoji}</td>
         </tr>`;
       }
       html += `</table></div>`;
@@ -20369,8 +20368,8 @@
       const insOpen = localStorage.getItem("sfl_diff_insights_open") === "1";
       insMount.innerHTML = `
         <div onclick="_invToggleInsights()" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between">
-          <h2 class="pixel-font" style="margin:0;font-size:0.8rem;color:var(--lily)">📊 INVESTMENT INSIGHTS</h2>
-          <span class="pixel-font" id="ins-arrow" style="color:var(--text-secondary)">${insOpen ? "▼" : "▶"}</span>
+          <h2 class="pixel-font" style="margin:0;font-size:0.75rem;color:var(--lily);letter-spacing:1px">📊 INVESTMENT INSIGHTS</h2>
+          <span class="pixel-font" id="ins-arrow" style="color:var(--text-secondary);font-size:0.625rem">${insOpen ? "▼" : "▶"}</span>
         </div>
         <div id="ins-body" style="display:${insOpen ? "block" : "none"};margin-top:12px">
           <div class="loading-screen pixel-font" style="padding:12px"><div class="loading-text">Click to load…</div></div>
