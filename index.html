@@ -19620,6 +19620,258 @@
       return 0;
     }
 
+    // ═══════════════════════════════════════
+    //  INVESTMENT TRACKER
+    // ═══════════════════════════════════════
+
+    const INV_API_BASE = "/api/farm-history";
+    const LS_INV_INSIGHTS_OPEN = "sfl_diff_insights_open";
+
+    async function invListTransactions(farmId) {
+      const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(farmId)}&type=btc-tx`);
+      if (!r.ok) throw new Error(`list failed: ${r.status}`);
+      const d = await r.json();
+      return d.transactions || [];
+    }
+
+    async function invAddTransaction(payload) {
+      const r = await fetch(`${INV_API_BASE}?type=btc-tx`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ error: r.statusText }));
+        throw new Error(err.error || `add failed: ${r.status}`);
+      }
+      return (await r.json()).transaction;
+    }
+
+    async function invDeleteTransaction(farmId, id) {
+      const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(farmId)}&type=btc-tx&id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ error: r.statusText }));
+        throw new Error(err.error || `delete failed: ${r.status}`);
+      }
+      return true;
+    }
+
+    function invAggregate(transactions) {
+      let depositBtc = 0, withdrawBtc = 0, depositUsd = 0, withdrawUsd = 0;
+      let firstDepositDate = null;
+      for (const t of transactions) {
+        const btc = parseFloat(t.btc_amount) || 0;
+        const usd = parseFloat(t.usd_amount) || 0;
+        if (t.direction === "deposit") {
+          depositBtc += btc;
+          depositUsd += usd;
+          if (!firstDepositDate || t.tx_date < firstDepositDate) firstDepositDate = t.tx_date;
+        } else if (t.direction === "withdrawal") {
+          withdrawBtc += btc;
+          withdrawUsd += usd;
+        }
+      }
+      const netDebtBtc = depositBtc - withdrawBtc;
+      const repaidPct = depositBtc > 0 ? (withdrawBtc / depositBtc) * 100 : null;
+      return { depositBtc, withdrawBtc, depositUsd, withdrawUsd, netDebtBtc, repaidPct, firstDepositDate };
+    }
+
+    function fmtBtc(v) {
+      if (!isFinite(v)) return "—";
+      return (Math.abs(v) >= 0.001 ? v.toFixed(6) : v.toFixed(8)) + " ₿";
+    }
+    function fmtUsd(v) {
+      if (!isFinite(v) || v === 0) return "—";
+      return "$" + (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2));
+    }
+    function fmtSfl(v) {
+      if (!isFinite(v)) return "—";
+      return (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2)) + " ⛀";
+    }
+
+    let _invState = null;  // { transactions, rates: { sflToUsd, btcUsd, treasuryTotalSfl } }
+
+    async function renderInvestmentTracker(data, opts) {
+      const mount = document.getElementById("investment-tracker");
+      if (!mount) return;
+
+      // Need BTC price too — fetch from coingecko (same source as treasury)
+      let btcUsd = 0;
+      try {
+        const r = await fetch(`/api/proxy?url=${encodeURIComponent("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd")}`);
+        if (r.ok) {
+          const j = await r.json();
+          btcUsd = j?.bitcoin?.usd || 0;
+        }
+      } catch {}
+
+      // Compute treasury value (reuse treasury logic if available — for metric ③)
+      let treasuryTotalSfl = 0;
+      try {
+        if (typeof fetchTreasuryData === "function" && typeof computeFarmValue === "function") {
+          const td = await fetchTreasuryData();
+          const v = computeFarmValue(data.farm, td, "betty");
+          // computeFarmValue returns { totals: { grand, ... }, ... }
+          treasuryTotalSfl = v?.totals?.grand || 0;
+        }
+      } catch (e) {
+        console.warn("[invest] treasury compute failed", e);
+      }
+
+      const transactions = await invListTransactions(FARM_ID).catch(err => {
+        console.error("[invest] list failed", err);
+        return [];
+      });
+      _invState = { transactions, rates: { sflToUsd: opts.sflToUsd, btcUsd, treasuryTotalSfl } };
+
+      renderInvestmentTrackerContent();
+    }
+
+    function renderInvestmentTrackerContent() {
+      const mount = document.getElementById("investment-tracker");
+      if (!mount || !_invState) return;
+      const { transactions, rates } = _invState;
+      const agg = invAggregate(transactions);
+      const { sflToUsd, btcUsd, treasuryTotalSfl } = rates;
+
+      const liquidValueSfl = treasuryTotalSfl * 0.9;
+      const liquidValueBtc = (sflToUsd > 0 && btcUsd > 0) ? (liquidValueSfl * sflToUsd / btcUsd) : 0;
+      const ifLiqPct = agg.depositBtc > 0
+        ? ((agg.withdrawBtc + liquidValueBtc) / agg.depositBtc) * 100
+        : null;
+
+      const verdictColor = (p) => p === null ? "var(--text-dim)"
+                                  : p >= 100 ? "var(--green)"
+                                  : p >= 50 ? "var(--sunpetal)"
+                                  : "#ff8c42";
+
+      mount.innerHTML = `
+        <h2 class="pixel-font" style="margin:0 0 12px 0;font-size:0.8rem;color:var(--sunpetal)">💰 INVESTMENT TRACKER — Farm #${escHTML(FARM_ID)}</h2>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:12px">
+          <div class="pixel-panel" style="padding:10px;background:rgba(0,0,0,0.25)">
+            <div class="pixel-font" style="font-size:0.55rem;color:var(--text-secondary)">① REPAID SO FAR</div>
+            <div class="pixel-font" style="font-size:1rem;color:${verdictColor(agg.repaidPct)};font-weight:bold">${agg.repaidPct === null ? "n/a" : agg.repaidPct.toFixed(1) + " %"}</div>
+            <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin-top:4px">${fmtBtc(agg.withdrawBtc)} / ${fmtBtc(agg.depositBtc)}</div>
+          </div>
+          <div class="pixel-panel" style="padding:10px;background:rgba(0,0,0,0.25)">
+            <div class="pixel-font" style="font-size:0.55rem;color:var(--text-secondary)">② DAYS TO FULL</div>
+            <div class="pixel-font" style="font-size:1rem;color:var(--text-dim);font-weight:bold">—</div>
+            <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin-top:4px">expand Insights to compute</div>
+          </div>
+          <div class="pixel-panel" style="padding:10px;background:rgba(0,0,0,0.25)">
+            <div class="pixel-font" style="font-size:0.55rem;color:var(--text-secondary)">③ LIQUIDATE NOW (10% fee)</div>
+            <div class="pixel-font" style="font-size:1rem;color:${verdictColor(ifLiqPct)};font-weight:bold">${ifLiqPct === null ? "n/a" : ifLiqPct.toFixed(1) + " %"}</div>
+            <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin-top:4px">value: ${fmtSfl(liquidValueSfl)} ≈ ${fmtBtc(liquidValueBtc)}</div>
+          </div>
+        </div>
+        <div id="inv-tx-table-wrap">${renderInvTxTable(transactions)}</div>
+        <button class="roi-pill" onclick="_invShowAddForm()" style="margin-top:10px">+ Add transaction</button>
+        <div id="inv-add-form" style="display:none"></div>
+      `;
+    }
+
+    function renderInvTxTable(transactions) {
+      if (transactions.length === 0) {
+        return `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);padding:12px;text-align:center">No transactions yet. Click + Add to log your first deposit.</div>`;
+      }
+      let html = `<div style="overflow-x:auto"><table class="pixel-font" style="width:100%;font-size:0.55rem;border-collapse:collapse">
+        <thead><tr style="background:rgba(0,0,0,0.35);color:var(--text-secondary)">
+          <th style="text-align:left;padding:6px">DATE</th>
+          <th style="text-align:left;padding:6px">TYPE</th>
+          <th style="text-align:right;padding:6px">BTC</th>
+          <th style="text-align:right;padding:6px">USD</th>
+          <th style="text-align:left;padding:6px">NOTES</th>
+          <th style="text-align:center;padding:6px"></th>
+        </tr></thead><tbody>`;
+      for (const t of transactions) {
+        const isDep = t.direction === "deposit";
+        const signed = (isDep ? "−" : "+") + parseFloat(t.btc_amount).toFixed(8);
+        const color = isDep ? "var(--red)" : "var(--green)";
+        const usd = t.usd_amount ? "$" + parseFloat(t.usd_amount).toFixed(2) : "—";
+        html += `<tr style="border-top:1px solid rgba(255,255,255,0.05)">
+          <td style="padding:6px">${escHTML(t.tx_date)}</td>
+          <td style="padding:6px;color:${color}">${isDep ? "DEPOSIT" : "WITHDRAW"}</td>
+          <td style="text-align:right;padding:6px;color:${color}">${signed} ₿</td>
+          <td style="text-align:right;padding:6px;color:var(--text-dim)">${usd}</td>
+          <td style="padding:6px;color:var(--text-dim)">${escHTML(t.notes || "")}</td>
+          <td style="text-align:center;padding:6px"><button onclick="_invDeleteTx(${t.id})" style="background:transparent;border:none;color:var(--red);cursor:pointer;font-size:0.7rem" title="Delete">×</button></td>
+        </tr>`;
+      }
+      html += `</tbody></table></div>`;
+      return html;
+    }
+
+    window._invShowAddForm = function() {
+      const wrap = document.getElementById("inv-add-form");
+      if (!wrap) return;
+      const today = new Date().toISOString().slice(0, 10);
+      wrap.style.display = "block";
+      wrap.innerHTML = `
+        <div class="pixel-panel" style="margin-top:12px;padding:12px;background:rgba(0,0,0,0.3)">
+          <div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:8px">ADD TRANSACTION</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;font-size:0.55rem" class="pixel-font">
+            <label>DATE<br><input type="date" id="inv-f-date" value="${today}" style="width:100%;padding:4px;background:#2a1050;color:#fff;border:1px solid #444"></label>
+            <label>TYPE<br>
+              <select id="inv-f-dir" style="width:100%;padding:4px;background:#2a1050;color:#fff;border:1px solid #444">
+                <option value="withdrawal">WITHDRAWAL (cash out)</option>
+                <option value="deposit">DEPOSIT (money in)</option>
+              </select>
+            </label>
+            <label>BTC AMOUNT<br><input type="number" id="inv-f-btc" min="0" step="0.00000001" placeholder="0.020000" style="width:100%;padding:4px;background:#2a1050;color:#fff;border:1px solid #444"></label>
+            <label>USD VALUE (optional)<br><input type="number" id="inv-f-usd" min="0" step="0.01" placeholder="145.20" style="width:100%;padding:4px;background:#2a1050;color:#fff;border:1px solid #444"></label>
+          </div>
+          <label class="pixel-font" style="display:block;margin-top:10px;font-size:0.55rem">NOTES<br><input type="text" id="inv-f-notes" maxlength="500" placeholder="cash out 1000 FLOWER…" style="width:100%;padding:4px;background:#2a1050;color:#fff;border:1px solid #444"></label>
+          <div style="margin-top:10px;display:flex;gap:8px">
+            <button class="roi-pill" onclick="_invSubmitAdd()">Save</button>
+            <button class="roi-pill" onclick="_invHideAddForm()">Cancel</button>
+          </div>
+          <div id="inv-add-error" class="pixel-font" style="display:none;margin-top:8px;font-size:0.55rem;color:var(--red)"></div>
+        </div>
+      `;
+    };
+
+    window._invHideAddForm = function() {
+      const wrap = document.getElementById("inv-add-form");
+      if (wrap) { wrap.style.display = "none"; wrap.innerHTML = ""; }
+    };
+
+    window._invSubmitAdd = async function() {
+      const errEl = document.getElementById("inv-add-error");
+      const showError = (msg) => { errEl.style.display = "block"; errEl.textContent = msg; };
+      errEl.style.display = "none";
+
+      const tx_date = document.getElementById("inv-f-date").value;
+      const direction = document.getElementById("inv-f-dir").value;
+      const btc_amount = parseFloat(document.getElementById("inv-f-btc").value);
+      const usdRaw = document.getElementById("inv-f-usd").value;
+      const usd_amount = usdRaw === "" ? null : parseFloat(usdRaw);
+      const notes = document.getElementById("inv-f-notes").value || null;
+
+      if (!tx_date) return showError("Date required");
+      if (!isFinite(btc_amount) || btc_amount <= 0) return showError("BTC amount must be > 0");
+      try {
+        const tx = await invAddTransaction({ farm_id: parseInt(FARM_ID, 10), tx_date, direction, btc_amount, usd_amount, notes });
+        _invState.transactions.unshift(tx);
+        _invHideAddForm();
+        renderInvestmentTrackerContent();
+      } catch (e) {
+        showError(e.message);
+      }
+    };
+
+    window._invDeleteTx = async function(id) {
+      if (!confirm("Delete this transaction?")) return;
+      try {
+        await invDeleteTransaction(FARM_ID, id);
+        _invState.transactions = _invState.transactions.filter(t => t.id !== id);
+        renderInvestmentTrackerContent();
+      } catch (e) {
+        alert("Delete failed: " + e.message);
+      }
+    };
+
     async function renderDiff(data) {
       const app = document.getElementById("app");
 
@@ -19724,6 +19976,19 @@
       let treasureBoost = 1;
       if (findCollectible(data.farm, "Treasure Map").length > 0) treasureBoost += 0.2;
       if (getCount(data.farm?.inventory || {}, "Camel") > 0 || findCollectible(data.farm, "Camel").length > 0) treasureBoost += 0.3;
+
+      // Render the Investment Tracker mount BEFORE the diff body so the user sees it first.
+      const invMount = document.createElement("div");
+      invMount.id = "investment-tracker";
+      invMount.className = "pixel-panel";
+      invMount.style.cssText = "padding:12px;margin-bottom:16px;background:rgba(0,0,0,0.15)";
+      invMount.innerHTML = `<div class="loading-screen pixel-font" style="padding:12px"><div class="loading-text">Loading investment tracker…</div></div>`;
+      app.insertBefore(invMount, document.getElementById("diff-content"));
+
+      // Kick off the load in the background — don't block diff render.
+      renderInvestmentTracker(data, { p2pPrices, sflToUsd }).catch(err => {
+        invMount.innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Investment tracker failed: ${escHTML(err.message)}</p></div>`;
+      });
 
       const noPrices = Object.keys(p2pPrices).length === 0;
 
