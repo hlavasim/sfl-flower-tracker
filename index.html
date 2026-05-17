@@ -5261,7 +5261,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.25</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.26</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5288,6 +5288,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.26", items: [
+          { t: "fix", text: "Investment Insights were silently broken — the snapshots fetch missed `&include=game_data`, so every per-snapshot value computed to ~0 (the server only returns full game_data when this flag is set). Result: chart was flat at 0, earning rate showed 0/day, income breakdown showed all zeros, and metric ② DAYS TO FULL was bogus. Fixed by switching to `?latest=60&include=game_data` (also caps payload to ~60 most-recent snapshots). Also fixed an optimistic-delete UI bug where pg returns BIGINT id as a string but the inline onclick passes a number, so the filter never matched and deleted rows stayed visible until reload — coerced both sides to String." },
+        ]},
         { ver: "v3.25", items: [
           { t: "new", text: "Diff page — Investment Tracker section. Log BTC deposits and withdrawals tied to your farm, stored in Azure Postgres via /api/farm-history?type=btc-tx (extended endpoint, no new Vercel function slot). Three live metrics: ① REPAID SO FAR (total withdrawn / total deposited), ② DAYS TO FULL PAYBACK (uses real earning rate from farm snapshots, 7d/30d window with lifetime fallback), ③ LIQUIDATE NOW % (treasury total × 0.9 marketplace fee → BTC, gracefully shows '— (price API unavailable)' when rates fail). Investment Insights collapsible panel (default closed, lazy-loaded): earning rate (7d/30d), historical farm value chart in BTC with deposit-target dashed line and withdrawal step series, income breakdown by treasury category, burn-vs-growth net rate (7d/14d/30d/lifetime). New btc_transactions table; sfl_reader role granted SELECT/INSERT/DELETE on it. Multi-farm safe: every CRUD operation filters by farm_id from the URL and the allowlist. Note: ~20 [Treasury] console logs may fire when insights load (one per sampled snapshot — these come from the existing treasury computation logic, not new code)." },
         ]},
@@ -19907,7 +19910,8 @@
       if (!confirm("Delete this transaction?")) return;
       try {
         await invDeleteTransaction(FARM_ID, id);
-        _invState.transactions = _invState.transactions.filter(t => t.id !== id);
+        // pg returns BIGINT as string but the template-substituted id is a JS number; coerce both sides.
+        _invState.transactions = _invState.transactions.filter(t => String(t.id) !== String(id));
         renderInvestmentTrackerContent();
       } catch (e) {
         alert("Delete failed: " + e.message);
@@ -19943,9 +19947,11 @@
 
       // 1) Fetch farm history snapshots (last 30 days)
       const FARM = FARM_ID;
-      const weekAgo30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0,10);
-      const today = new Date(Date.now() + 86400000).toISOString().slice(0,10);
-      const histResp = await fetch(`/api/farm-history?farm=${FARM}&from=${weekAgo30}&to=${today}&limit=1000`);
+      // Use ?latest=N&include=game_data so each snapshot includes the full game state
+      // that computeFarmValue needs. Without include=game_data the server returns game_data=null
+      // and per-snapshot valuation collapses to ~0, silently breaking every insight + metric ②.
+      // limit=60 covers ~30 days even with sparser collection windows.
+      const histResp = await fetch(`/api/farm-history?farm=${FARM}&latest=60&include=game_data`);
       if (!histResp.ok) throw new Error(`snapshots fetch failed: ${histResp.status}`);
       const hist = await histResp.json();
       let snaps = hist.snapshots || [];
