@@ -5261,7 +5261,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.24</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.25</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5288,6 +5288,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.25", items: [
+          { t: "new", text: "Diff page — Investment Tracker section. Log BTC deposits and withdrawals tied to your farm, stored in Azure Postgres via /api/farm-history?type=btc-tx (extended endpoint, no new Vercel function slot). Three live metrics: ① REPAID SO FAR (total withdrawn / total deposited), ② DAYS TO FULL PAYBACK (uses real earning rate from farm snapshots, 7d/30d window with lifetime fallback), ③ LIQUIDATE NOW % (treasury total × 0.9 marketplace fee → BTC, gracefully shows '— (price API unavailable)' when rates fail). Investment Insights collapsible panel (default closed, lazy-loaded): earning rate (7d/30d), historical farm value chart in BTC with deposit-target dashed line and withdrawal step series, income breakdown by treasury category, burn-vs-growth net rate (7d/14d/30d/lifetime). New btc_transactions table; sfl_reader role granted SELECT/INSERT/DELETE on it. Multi-farm safe: every CRUD operation filters by farm_id from the URL and the allowlist. Note: ~20 [Treasury] console logs may fire when insights load (one per sampled snapshot — these come from the existing treasury computation logic, not new code)." },
+        ]},
         { ver: "v3.24", items: [
           { t: "new", text: "PETS is now a first-class main-table row (no longer in the passive section). Daily yield comes from petDailyCalc — same engine as the pets page — summing across all owned pets (common + NFT) for the SFL value of fetched resources at p2p prices. Marginal reflects keep-vs-sold for Victoria's Apron (+50% feedings/day → +50% daily yield) and other pet-boost NFTs. Pet Bowls' XP bonus is acknowledged but contributes 0 to daily-SFL marginal (long-term XP effect, not modelled). Row participates in the SELL? checkbox + summary panel like any other category." },
         ]},
@@ -19736,16 +19739,28 @@
       const agg = invAggregate(transactions);
       const { sflToUsd, btcUsd, treasuryTotalSfl } = rates;
 
-      const liquidValueSfl = treasuryTotalSfl * 0.9;
-      const liquidValueBtc = (sflToUsd > 0 && btcUsd > 0) ? (liquidValueSfl * sflToUsd / btcUsd) : 0;
-      const ifLiqPct = agg.depositBtc > 0
-        ? ((agg.withdrawBtc + liquidValueBtc) / agg.depositBtc) * 100
-        : null;
-
       const verdictColor = (p) => p === null ? "var(--text-dim)"
                                   : p >= 100 ? "var(--green)"
                                   : p >= 50 ? "var(--sunpetal)"
                                   : "#ff8c42";
+
+      const liquidValueSfl = treasuryTotalSfl * 0.9;
+      const liquidValueBtc = (sflToUsd > 0 && btcUsd > 0 && treasuryTotalSfl > 0)
+        ? (liquidValueSfl * sflToUsd / btcUsd) : 0;
+      const canCompute3 = (agg.depositBtc > 0 && sflToUsd > 0 && btcUsd > 0 && treasuryTotalSfl > 0);
+      const ifLiqPct = canCompute3
+        ? ((agg.withdrawBtc + liquidValueBtc) / agg.depositBtc) * 100
+        : null;
+      const ifLiqText = (agg.depositBtc <= 0)
+        ? "n/a — no deposits"
+        : !canCompute3
+          ? "— (price API unavailable)"
+          : (ifLiqPct.toFixed(1) + " %");
+      const liqColor = canCompute3 ? verdictColor(ifLiqPct) : "var(--text-dim)";
+      const hasFarmValue = (sflToUsd > 0 && btcUsd > 0 && treasuryTotalSfl > 0);
+      const liqSubText = hasFarmValue
+        ? `value: ${fmtSfl(liquidValueSfl)} ≈ ${fmtBtc(liquidValueBtc)}`
+        : "farm value or price feed unavailable";
 
       // Days to payback — uses the 30d (preferred) or 7d earning rate from insights cache
       let daysText = "—", daysSubText = "expand Insights to compute", daysColor = "var(--text-dim)";
@@ -19789,8 +19804,8 @@
           </div>
           <div class="pixel-panel" style="padding:10px;background:rgba(0,0,0,0.25)">
             <div class="pixel-font" style="font-size:0.55rem;color:var(--text-secondary)">③ LIQUIDATE NOW (10% fee)</div>
-            <div class="pixel-font" style="font-size:1rem;color:${verdictColor(ifLiqPct)};font-weight:bold">${ifLiqPct === null ? "n/a" : ifLiqPct.toFixed(1) + " %"}</div>
-            <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin-top:4px">value: ${fmtSfl(liquidValueSfl)} ≈ ${fmtBtc(liquidValueBtc)}</div>
+            <div class="pixel-font" style="font-size:1rem;color:${liqColor};font-weight:bold">${ifLiqText}</div>
+            <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin-top:4px">${liqSubText}</div>
           </div>
         </div>
         <div id="inv-tx-table-wrap">${renderInvTxTable(transactions)}</div>
