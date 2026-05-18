@@ -5261,7 +5261,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.28</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.29</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5288,6 +5288,11 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.29", items: [
+          { t: "fix", text: "Investment Insights were treating user withdrawals (FLOWER → BTC cash-outs) as if the farm was burning value — the literal opposite of what's happening. When you sell 10000 FLOWER, raw farm value drops by ~10000 ⛀ on the next snapshot, which made earning rate, burn-vs-growth, the chart, and metric ② DAYS TO FULL all flip negative. Fixed by computing a cashflow-adjusted value per snapshot: adjustedValueSfl = raw farm value + cumulative withdrawn (SFL eq.) − cumulative deposited (SFL eq.). All slope-based metrics now use this 'productivity' view, so cash-outs no longer pollute the trend." },
+          { t: "fix", text: "History chart re-titled CUMULATIVE WEALTH OVER TIME — line now plots farm BTC value + cumulative extracted BTC, so withdrawals shift value from on-farm to extracted instead of showing a vertical drop. Break-even target stays as the dashed red line. Removed the redundant cumulative-withdrawals step series (already baked into the wealth line)." },
+          { t: "fix", text: "Income breakdown gains a 'You extracted / You deposited' cashflow row plus a 'PRODUCTIVITY (raw − cashflow)' bottom line, so you can see how much of the raw Liquid Δ was your own sell-off vs the farm. Also: SHARE column (was '% OF TOTAL') now uses sum-of-absolutes as the denominator — fixes nonsense values like '205 %' / '−61 %' that appeared when categories had mixed signs." },
+        ]},
         { ver: "v3.28", items: [
           { t: "fix", text: "Investment Insights showed identical numbers for every interval (7d / 14d / 30d / lifetime) because `?latest=60&include=game_data` only covered ~2 days of dense collection on a 60-minute-interval farm. Fixed by switching to a date-range fetch (`?from=NOW-30d&to=NOW&bucket_hours=12&limit=100&include=game_data`) and adding a server-side `bucket_hours` parameter to /api/farm-history that keeps the latest snapshot in each N-hour Postgres date_bin. Result: ~60 well-spaced points across 30 days, regardless of collection density (handles both 5-min dense windows and the 1/day retention zone older than 30 days)." },
           { t: "fix", text: "Metric ② DAYS TO FULL no longer clamps at \">999 days\". Always shows the exact day count, with a parenthetical year-form when the horizon exceeds a year (e.g. \"1842 days (5.0 yr)\"). ETA date falls back to \"—\" only when the projected date would overflow JS Date range (year ≥ 9999)." },
@@ -20008,9 +20013,48 @@
       }
       points.sort((a, b) => a.time - b.time);
 
+      // ─── Cashflow adjustment ─────────────────────────────────────────────
+      // Raw `valueSfl` drops whenever the user withdraws FLOWER → BTC, which would otherwise
+      // make Insights call cash-outs "burn" — exactly the opposite of what's happening.
+      // For each snapshot point we compute:
+      //   adjustedValueSfl = valueSfl + cumulative_withdrawn_sfl − cumulative_deposited_sfl
+      //     (what the farm would be worth if no external cashflow had touched it — the
+      //      productivity view; used by earning rate + burn/growth + metric ②)
+      //   wealthBtc        = farm_btc + cumulative_withdrawn_btc
+      //     (total wealth created — farm value still on-farm plus BTC already extracted;
+      //      used by the history chart)
+      const transactions = _invState?.transactions || [];
+      const sflToUsd = _invState?.rates?.sflToUsd || 0;
+      const btcUsd = _invState?.rates?.btcUsd || 0;
+      const txToSflEq = (tx) => {
+        if (sflToUsd > 0 && tx.usd_amount && parseFloat(tx.usd_amount) > 0) {
+          return parseFloat(tx.usd_amount) / sflToUsd;
+        }
+        if (sflToUsd > 0 && btcUsd > 0) {
+          return parseFloat(tx.btc_amount) * btcUsd / sflToUsd;
+        }
+        return 0;
+      };
+      const txsByTime = [...transactions].sort((a, b) =>
+        new Date(a.tx_date).getTime() - new Date(b.tx_date).getTime()
+      );
+      for (const p of points) {
+        let withdrawnSfl = 0, depositedSfl = 0, withdrawnBtc = 0, depositedBtc = 0;
+        for (const t of txsByTime) {
+          if (new Date(t.tx_date).getTime() > p.time) break;
+          const sflEq = txToSflEq(t);
+          const btc = parseFloat(t.btc_amount) || 0;
+          if (t.direction === "withdrawal") { withdrawnSfl += sflEq; withdrawnBtc += btc; }
+          else if (t.direction === "deposit") { depositedSfl += sflEq; depositedBtc += btc; }
+        }
+        p.adjustedValueSfl = p.valueSfl + withdrawnSfl - depositedSfl;
+        const farmBtc = (sflToUsd > 0 && btcUsd > 0) ? p.valueSfl * sflToUsd / btcUsd : 0;
+        p.wealthBtc = farmBtc + withdrawnBtc;
+      }
+
       _insState = {
         points,
-        transactions: _invState?.transactions || [],
+        transactions,
         rates: _invState?.rates || {},
         td,
         rawSnaps: snaps,
@@ -20076,7 +20120,12 @@
         return;
       }
 
-      container.innerHTML = `<div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);margin-bottom:8px;letter-spacing:0.5px">FARM VALUE OVER TIME (BTC)</div><div id="ins-chart-canvas" style="height:240px"></div>`;
+      container.innerHTML = `<div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);margin-bottom:8px;letter-spacing:0.5px">CUMULATIVE WEALTH OVER TIME (BTC)</div>
+        <div style="font-size:0.6875rem;color:var(--text-dim);margin-bottom:8px;font-family:'Courier New',monospace">
+          Yellow: farm value + already-extracted BTC (so withdrawals don't appear as drops).<br>
+          Dashed red: total deposited (your break-even target).
+        </div>
+        <div id="ins-chart-canvas" style="height:240px"></div>`;
       const canvas = document.getElementById("ins-chart-canvas");
       const chart = LightweightCharts.createChart(canvas, {
         height: 240,
@@ -20086,10 +20135,14 @@
         rightPriceScale: { borderColor: "rgba(255,255,255,0.1)" },
       });
 
-      // Main farm-value series (BTC)
+      // Cumulative wealth = farm value (BTC) + cumulative extracted BTC
+      // (so user withdrawals don't appear as drops — they shift value from farm side to BTC side)
       const series = chart.addLineSeries({ color: "#FFD700", lineWidth: 2 });
       const seriesData = points
-        .map(p => ({ time: Math.floor(p.time / 1000), value: p.valueSfl * sflToUsd / btcUsd }))
+        .map(p => ({
+          time: Math.floor(p.time / 1000),
+          value: (p.wealthBtc !== undefined ? p.wealthBtc : (p.valueSfl * sflToUsd / btcUsd)),
+        }))
         // dedupe duplicate timestamps (lightweight-charts requires strictly ascending)
         .filter((p, i, arr) => i === 0 || p.time > arr[i - 1].time);
       series.setData(seriesData);
@@ -20110,29 +20163,8 @@
         ]);
       }
 
-      // Cumulative withdrawals (step series in BTC)
-      if (transactions.some(t => t.direction === "withdrawal")) {
-        const withSeries = chart.addLineSeries({
-          color: "#30D158",
-          lineWidth: 1,
-          lineStyle: (LightweightCharts.LineStyle && LightweightCharts.LineStyle.Solid) != null
-            ? LightweightCharts.LineStyle.Solid
-            : 0,
-        });
-        let cum = 0;
-        const stepPts = [];
-        const ws = transactions
-          .filter(t => t.direction === "withdrawal")
-          .map(t => ({ time: Math.floor(new Date(t.tx_date).getTime() / 1000), btc: parseFloat(t.btc_amount) }))
-          .sort((a, b) => a.time - b.time);
-        for (const w of ws) {
-          cum += w.btc;
-          stepPts.push({ time: w.time, value: cum });
-        }
-        // dedupe + ensure ascending
-        const cleanStep = stepPts.filter((p, i, arr) => i === 0 || p.time > arr[i - 1].time);
-        if (cleanStep.length > 0) withSeries.setData(cleanStep);
-      }
+      // Note: cumulative withdrawals are already baked into wealthBtc (yellow line),
+      // so a separate step series for them would be redundant.
 
       chart.timeScale().fitContent();
     }
@@ -20184,16 +20216,43 @@
       }
       rows.sort((a, b) => b.delta - a.delta);
 
+      // User-cashflow row: explains how much of the Liquid delta was the user's own
+      // withdrawals/deposits rather than farm productivity. Computed in SFL equivalents
+      // using current rates (best approximation without per-tx historic rate).
+      const winStart = new Date(firstSnap.captured_at).getTime();
+      const winEnd = new Date(lastSnap.captured_at).getTime();
+      const sflToUsdNow = _insState.rates?.sflToUsd || 0;
+      const btcUsdNow = _insState.rates?.btcUsd || 0;
+      const txInWindow = _insState.transactions.filter(t => {
+        const tt = new Date(t.tx_date).getTime();
+        return tt >= winStart && tt <= winEnd;
+      });
+      let withdrawnSfl = 0, depositedSfl = 0;
+      for (const t of txInWindow) {
+        const sflEq = (sflToUsdNow > 0 && t.usd_amount && parseFloat(t.usd_amount) > 0)
+          ? parseFloat(t.usd_amount) / sflToUsdNow
+          : (sflToUsdNow > 0 && btcUsdNow > 0
+              ? parseFloat(t.btc_amount) * btcUsdNow / sflToUsdNow
+              : 0);
+        if (t.direction === "withdrawal") withdrawnSfl += sflEq;
+        else if (t.direction === "deposit") depositedSfl += sflEq;
+      }
+      const netCashflowSfl = depositedSfl - withdrawnSfl; // negative = net extracted
+      const productiveTotal = total - netCashflowSfl;     // strip out user-driven liquid moves
+
+      // Use sum of absolute deltas as the % denominator so mixed-sign categories don't
+      // produce nonsense like "205 %". This is "share of movement", color carries the sign.
+      const totalAbs = rows.reduce((s, r) => s + Math.abs(r.delta), 0);
       let html = `<div class="pixel-panel" style="padding:12px 14px;background:rgba(0,0,0,0.25)">
         <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);margin-bottom:8px;letter-spacing:0.5px">INCOME BREAKDOWN (last 30 days)</div>
         <table style="width:100%;font-family:'Courier New',monospace;font-size:0.75rem;border-collapse:collapse">
           <thead><tr class="pixel-font" style="color:var(--text-dim);font-size:0.5rem;letter-spacing:0.5px">
             <th style="text-align:left;padding:6px 8px">CATEGORY</th>
             <th style="text-align:right;padding:6px 8px">Δ VALUE</th>
-            <th style="text-align:right;padding:6px 8px">% OF TOTAL</th>
+            <th style="text-align:right;padding:6px 8px">SHARE</th>
           </tr></thead><tbody>`;
       for (const r of rows) {
-        const pct = total !== 0 ? (r.delta / total) * 100 : 0;
+        const pct = totalAbs > 0 ? (Math.abs(r.delta) / totalAbs) * 100 : 0;
         const color = r.delta >= 0 ? "var(--green)" : "var(--red)";
         const sign = r.delta >= 0 ? "+" : "−";
         html += `<tr style="border-top:1px solid rgba(255,255,255,0.05)">
@@ -20204,10 +20263,27 @@
       }
       const totalColor = total >= 0 ? "var(--green)" : "var(--red)";
       html += `<tr style="border-top:2px solid rgba(255,255,255,0.15);font-weight:bold">
-        <td style="padding:6px 8px">TOTAL</td>
+        <td style="padding:6px 8px">TOTAL (raw farm Δ)</td>
         <td style="text-align:right;padding:6px 8px;color:${totalColor}">${total >= 0 ? "+" : "−"}${Math.abs(total).toFixed(1)} ⛀</td>
         <td style="text-align:right;padding:6px 8px">100 %</td>
       </tr>`;
+      if (Math.abs(netCashflowSfl) > 0.5 || txInWindow.length > 0) {
+        const cashColor = netCashflowSfl >= 0 ? "var(--text-dim)" : "var(--sunpetal)";
+        const cashSign = netCashflowSfl >= 0 ? "+" : "−";
+        const cashLabel = netCashflowSfl >= 0 ? "You deposited (added)" : "You extracted (removed)";
+        html += `<tr style="color:${cashColor}">
+          <td style="padding:6px 8px;font-style:italic">${cashLabel}</td>
+          <td style="text-align:right;padding:6px 8px">${cashSign}${Math.abs(netCashflowSfl).toFixed(1)} ⛀</td>
+          <td style="text-align:right;padding:6px 8px;font-style:italic">cashflow</td>
+        </tr>`;
+        const prodColor = productiveTotal >= 0 ? "var(--green)" : "var(--red)";
+        const prodSign = productiveTotal >= 0 ? "+" : "−";
+        html += `<tr style="border-top:1px solid rgba(255,215,0,0.4);font-weight:bold">
+          <td style="padding:6px 8px;color:var(--sunpetal)">PRODUCTIVITY (raw − cashflow)</td>
+          <td style="text-align:right;padding:6px 8px;color:${prodColor}">${prodSign}${Math.abs(productiveTotal).toFixed(1)} ⛀</td>
+          <td style="text-align:right;padding:6px 8px"></td>
+        </tr>`;
+      }
       html += `</tbody></table></div>`;
       return html;
     }
@@ -20242,6 +20318,8 @@
     }
 
     // ───── Slope helper (used by earning rate + burn-vs-growth + metric ②) ─────
+    // Uses `adjustedValueSfl` (cashflow-neutralised) so user withdrawals don't show up as burn.
+    // Falls back to raw `valueSfl` for older state shapes (defensive).
     function _insSlopeForWindow(days) {
       if (!_insState) return null;
       const { points } = _insState;
@@ -20250,7 +20328,9 @@
       const windowPts = points.filter(p => p.time >= cutoff);
       if (windowPts.length < 2) return null;
       const first = windowPts[0], last = windowPts[windowPts.length - 1];
-      const deltaSfl = last.valueSfl - first.valueSfl;
+      const firstV = first.adjustedValueSfl !== undefined ? first.adjustedValueSfl : first.valueSfl;
+      const lastV  = last.adjustedValueSfl  !== undefined ? last.adjustedValueSfl  : last.valueSfl;
+      const deltaSfl = lastV - firstV;
       const deltaDays = (last.time - first.time) / 86400000;
       if (deltaDays <= 0) return null;
       return { sflPerDay: deltaSfl / deltaDays, deltaSfl, deltaDays, sampleSize: windowPts.length };
