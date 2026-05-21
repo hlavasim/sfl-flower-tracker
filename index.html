@@ -5313,7 +5313,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.34</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.35</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5340,6 +5340,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.35", items: [
+          { t: "fix", text: "Shrine BOOST was inflated by two issues: (1) per-category eff was capped at 1.5, so 'over-mining' (more sessions than cycle theoretical) gave shrine credit it didn't deserve — now capped at 1.0. (2) Fallback eff dropped from 0.85 to 0.7 to reflect the typical 1-2× daily play pattern where not every theoretical cycle is captured. Plus each card now shows a per-category contribution breakdown (e.g. 'crimstone: 12.5 ⛀/d × +33% = +4.13 (eff 95%)') so you can verify against your Power-page real income." },
+        ]},
         { ver: "v3.34", items: [
           { t: "fix", text: "Shrines page redesigned into card layout (matching in-game collection view): per-shrine card with icon, ACTIVE/INACTIVE badge, time remaining, and COST + BOOST + EARN + PROFIT/LOSS in a 2×2 grid. Top summary bar with PROFITABLE count / TOTAL BOOST ⛀/d / TOTAL COST ⛀/d / NET (real efficiency). Sorted by NET descending so profitable shrines appear first." },
           { t: "fix", text: "BOOST values now real-eff-adjusted using per-category efficiency derived from your snapshot harvest cadence (Nodes-page algorithm: `_h.<resource>` event counts → actual sessions/day vs theoretical). Trees / stone / iron / gold / crimstone / oil use the real eff; other categories (animals, flowers) fall back to 85 % until snapshot-mapping is extended to them." },
@@ -17373,6 +17376,9 @@
 
         const ingWarn = r.hasIngredients ? '' :
           `<div class="pixel-font" style="margin-top:6px;font-size:0.5rem;color:var(--text-dim)">⚠ missing ingredients</div>`;
+        const breakdown = (r.margin.note && !isIndirect)
+          ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.05);font-family:'Courier New',monospace;font-size:0.625rem;color:var(--text-dim);line-height:1.5">${escHTML(r.margin.note)}</div>`
+          : '';
 
         content += `<div class="pixel-panel" style="padding:12px 14px;background:rgba(0,0,0,0.2)">
           <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:8px">
@@ -17406,6 +17412,7 @@
               <div style="color:${profitColor};font-weight:bold">${profitVal} ${ICON}</div>
             </div>
           </div>
+          ${breakdown}
           ${ingWarn}
         </div>`;
       }
@@ -17522,11 +17529,15 @@
     //      - speed × s → gain = real_baseline × ((1/s) - 1)
     //      - yield_flat per cycle → gain = real_harvests/day × added × price
     //      - chance % +1 → gain = real_harvests/day × p × price
-    const SHRINE_FALLBACK_EFF = 0.85;
+    const SHRINE_FALLBACK_EFF = 0.7;
 
     function _shrineEff(catId, efficiencyMap) {
       const e = (efficiencyMap || {})[catId];
-      return (e && e.ratio > 0) ? Math.min(e.ratio, 1.5) : SHRINE_FALLBACK_EFF;
+      // Cap at 1.0 — over-mining (user visits more often than the cycle completes) doesn't
+      // mean the shrine's speedup compounds. The session-vs-theoretical ratio can read > 1
+      // because the nodes-page metric counts sessions, but actual harvest output is still
+      // bounded by what the nodes produce. Capping at 1.0 prevents inflated shrine BOOST.
+      return (e && e.ratio > 0) ? Math.min(e.ratio, 1.0) : SHRINE_FALLBACK_EFF;
     }
 
     // Helper: baseline SFL/day for a category using current owned effects
