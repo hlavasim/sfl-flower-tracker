@@ -5313,7 +5313,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.36</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.37</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5340,6 +5340,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.37", items: [
+          { t: "new", text: "Each shrine card has a 'Show calculation ▶' toggle that expands a per-resource breakdown: Power base, Power boost Δ (matches the +X.XX shown in Power per category), shrine effect applied, efficiency factor, and the resulting +⛀/d for that resource. Below the per-cat rows the total daily boost and total over the active duration are shown. Speed shrines show base + delta + shrine math; yield-flat shrines show node count × yield × price × eff; chance/conditional shrines (Moth, Stag) get their own rows." },
+        ]},
         { ver: "v3.36", items: [
           { t: "fix", text: "Shrine speed boosts now anchored to Power-page delta (the +X.XX shown in Power for each category) instead of total boosted SFL/day. Formula: shrine_gain = Power_Δ × ((1/shrine_speed) − 1) × per-cat eff. This matches what you see in Power directly: if Power shows crimstone +4.98 ⛀/d and shrine speed=0.75, shrine adds ~+4.98 × 33% × eff ⛀/d. Previously the baseline used base+delta which double-counted base income already happening." },
         ]},
@@ -17379,8 +17382,13 @@
 
         const ingWarn = r.hasIngredients ? '' :
           `<div class="pixel-font" style="margin-top:6px;font-size:0.5rem;color:var(--text-dim)">⚠ missing ingredients</div>`;
-        const breakdown = (r.margin.note && !isIndirect)
-          ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.05);font-family:'Courier New',monospace;font-size:0.625rem;color:var(--text-dim);line-height:1.5">${escHTML(r.margin.note)}</div>`
+
+        // Expandable per-resource detailed breakdown
+        const detailId = `shrine-detail-${r.name.replace(/\s+/g, "-").toLowerCase()}`;
+        const hasBreakdown = r.margin.breakdown && r.margin.breakdown.length > 0;
+        const detailToggle = hasBreakdown
+          ? `<div onclick="document.getElementById('${detailId}').style.display=document.getElementById('${detailId}').style.display==='none'?'block':'none';this.querySelector('.arrow').textContent=document.getElementById('${detailId}').style.display==='none'?'▶':'▼'" class="pixel-font" style="margin-top:8px;cursor:pointer;font-size:0.5rem;color:var(--lily);user-select:none"><span class="arrow">▶</span> Show calculation</div>
+            <div id="${detailId}" style="display:none;margin-top:8px;padding:10px;background:rgba(0,0,0,0.3);border-left:2px solid var(--sunpetal);font-family:'Courier New',monospace;font-size:0.6875rem;color:var(--text-secondary);line-height:1.6">${_shrineRenderDetail(r.margin.breakdown, r.sh, ICON)}</div>`
           : '';
 
         content += `<div class="pixel-panel" style="padding:12px 14px;background:rgba(0,0,0,0.2)">
@@ -17415,7 +17423,7 @@
               <div style="color:${profitColor};font-weight:bold">${profitVal} ${ICON}</div>
             </div>
           </div>
-          ${breakdown}
+          ${detailToggle}
           ${ingWarn}
         </div>`;
       }
@@ -17557,6 +17565,74 @@
       return { sflPerDay, unitsPerDay: r.unitsPerDay, harvestsPerDay, product, priceProduct };
     }
 
+    // Render per-resource detail rows for the expandable section under each shrine card.
+    // Each entry shows: Power baseline + delta, shrine effect added, eff applied, net contribution.
+    function _shrineRenderDetail(breakdown, sh, ICON) {
+      if (!breakdown || breakdown.length === 0) return '';
+      let html = '';
+      let totalGain = 0;
+      for (const b of breakdown) {
+        const catLabel = b.cat.toUpperCase();
+        if (b.kind === "speed") {
+          // Power data: base + delta = boosted
+          // Shrine: delta × speedGain × eff
+          html += `<div style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.05)">
+            <div style="color:var(--sunpetal);font-weight:bold;margin-bottom:4px">${escHTML(catLabel)}</div>
+            <div style="padding-left:8px">
+              Power base:     ${b.baseSfl.toFixed(4)} ${ICON}/d <span style="color:var(--text-dim)">(no boosts)</span><br>
+              Power boost Δ:  +${b.delta.toFixed(4)} ${ICON}/d <span style="color:var(--text-dim)">(your NFT/skill boosts)</span><br>
+              Power boosted:  ${b.boostedSfl.toFixed(4)} ${ICON}/d
+            </div>
+            <div style="margin-top:6px;padding-left:8px;color:var(--lily)">
+              + Shrine: <b>${b.delta.toFixed(2)}</b> × <b>+${(b.speedGain*100).toFixed(0)}%</b> speed × eff <b>${(b.eff*100).toFixed(0)}%</b><br>
+              = <b style="color:var(--green)">+${b.gain.toFixed(4)} ${ICON}/d</b>
+            </div>
+          </div>`;
+        } else if (b.kind === "yield_flat") {
+          html += `<div style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.05)">
+            <div style="color:var(--sunpetal);font-weight:bold;margin-bottom:4px">${escHTML(catLabel)}</div>
+            <div style="padding-left:8px">
+              Yield bonus: +${b.flat} per ${escHTML(b.cat)} cycle<br>
+              × ${b.nodeCount} ${escHTML(b.cat)} × ${b.price.toFixed(4)} ${ICON} × eff <b>${(b.eff*100).toFixed(0)}%</b><br>
+              = <b style="color:var(--green)">+${b.gain.toFixed(4)} ${ICON}/d</b>
+            </div>
+          </div>`;
+        } else if (b.kind === "yield_flat_multi") {
+          html += `<div style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.05)">
+            <div style="color:var(--sunpetal);font-weight:bold;margin-bottom:4px">${escHTML(catLabel)}</div>
+            <div style="padding-left:8px">
+              ${b.nodeCount} ${escHTML(b.cat)} × ${b.harvestsTheo.toFixed(2)} theo harvests/d → ${b.harvestsReal.toFixed(2)} real (eff ${(b.eff*100).toFixed(0)}%)<br>
+              × +${b.flat} ${escHTML(b.product)} × ${b.price.toFixed(4)} ${ICON}<br>
+              = <b style="color:var(--green)">+${b.gain.toFixed(4)} ${ICON}/d</b>
+            </div>
+          </div>`;
+        } else if (b.kind === "chance") {
+          html += `<div style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.05)">
+            <div style="color:var(--sunpetal);font-weight:bold;margin-bottom:4px">${escHTML(catLabel)} (chance +1)</div>
+            <div style="padding-left:8px">
+              ${(b.chance*100).toFixed(0)}% chance × ${b.harvestsPerDay.toFixed(2)} harvests/d × ${b.price.toFixed(4)} ${ICON} × eff ${(b.eff*100).toFixed(0)}%<br>
+              = <b style="color:var(--green)">+${b.gain.toFixed(4)} ${ICON}/d</b>
+            </div>
+          </div>`;
+        } else if (b.kind === "oil_bonus") {
+          html += `<div style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.05)">
+            <div style="color:var(--sunpetal);font-weight:bold;margin-bottom:4px">OIL (3rd-drill bonus)</div>
+            <div style="padding-left:8px">
+              ${b.harvestsPerDay.toFixed(2)} drills/d ÷ 3 × +${b.bonus} oil × ${b.price.toFixed(4)} ${ICON} × eff ${(b.eff*100).toFixed(0)}%<br>
+              = <b style="color:var(--green)">+${b.gain.toFixed(4)} ${ICON}/d</b>
+            </div>
+          </div>`;
+        }
+        totalGain += b.gain;
+      }
+      const totalOverDuration = totalGain * sh.duration_d;
+      html += `<div style="margin-top:6px;color:var(--sunpetal);font-weight:bold">
+        TOTAL BOOST: +${totalGain.toFixed(4)} ${ICON}/d
+        <span style="color:var(--text-dim);font-weight:normal;font-size:0.625rem">(over ${sh.duration_d}d = +${totalOverDuration.toFixed(2)} ${ICON})</span>
+      </div>`;
+      return html;
+    }
+
     function _shrineMarginalSflPerDay(sh, capacity, p2pPrices, ownedEffects, efficiencyMap) {
 
       // Bear Shrine: +0.5 honey per beehive cycle
@@ -17566,15 +17642,20 @@
           const honeyPrice = p2pPrices["Honey"] || 0;
           const beeCount = capacity.bees || 0;
           const gain = beeCount * sh.flat * honeyPrice * eff;
-          return { sflPerDay: gain, note: `${beeCount} beehives × +${sh.flat} honey × eff ${(eff*100).toFixed(0)}%` };
+          return {
+            sflPerDay: gain,
+            note: `${beeCount} beehives × +${sh.flat} honey × eff ${(eff*100).toFixed(0)}%`,
+            breakdown: [{ cat: "bees", kind: "yield_flat", nodeCount: beeCount, flat: sh.flat, price: honeyPrice, eff, gain }],
+          };
         }
-        return { sflPerDay: 0, note: "yield_flat without known target" };
+        return { sflPerDay: 0, note: "yield_flat without known target", breakdown: [] };
       }
 
       // Legendary Shrine: +1 to harvests across categories — eff per category
       if (sh.effectKind === "yield_flat_multi") {
         let sum = 0;
         const parts = [];
+        const breakdown = [];
         for (const tcat of (sh.targets || [])) {
           const product = (tcat === "trees") ? "Wood" : (tcat === "stone") ? "Stone"
             : (tcat === "crops") ? "Wheat" : (tcat === "fruits") ? "Blueberry"
@@ -17585,26 +17666,25 @@
           const r = applyBoosts(tcat, product, capacity, catEffects);
           if (!r || !r.effectiveCycle || !n) continue;
           const eff = _shrineEff(tcat, efficiencyMap);
-          const harvestsPerDay = (86400 / r.effectiveCycle) * n * eff;
+          const harvestsPerDayTheo = (86400 / r.effectiveCycle) * n;
+          const harvestsPerDay = harvestsPerDayTheo * eff;
           const price = p2pPrices[product] || 0;
           const gain = harvestsPerDay * sh.flat * price;
           sum += gain;
           parts.push(`${tcat}: +${gain.toFixed(2)}`);
+          breakdown.push({ cat: tcat, product, kind: "yield_flat_multi", nodeCount: n, harvestsTheo: harvestsPerDayTheo, harvestsReal: harvestsPerDay, flat: sh.flat, price, eff, gain });
         }
-        return { sflPerDay: sum, note: parts.join(", ") };
+        return { sflPerDay: sum, note: parts.join(", "), breakdown };
       }
 
       // Speed shrines: gain = boost_delta × ((1/speed) - 1) × eff
       // boost_delta = (boosted_sfl - base_sfl) per category — same number Power shows as "+X.XX"
-      // Rationale: the shrine speeds up your CYCLE, which gives X% more cycles. Each extra cycle
-      // produces base+boost yield. But the base income was already happening, so the shrine's
-      // net addition is what comes from the EXTRA cycles. Treating it as base+delta inflates
-      // because it credits the shrine for the base income too (which you already had).
       // Power's `delta` is the right anchor — it's what user sees and trusts.
       if (sh.effectKind === "speed" || sh.effectKind === "speed_and_yield") {
         const cats = [sh.catId, ...(sh.alsoCats || [])];
         let sum = 0;
         const parts = [];
+        const breakdown = [];
         const speedGain = (1 / sh.speed) - 1;  // 0.75 → 0.333
         for (const cat of cats) {
           const product = (typeof getDefaultProduct === "function") ? getDefaultProduct(cat) : null;
@@ -17618,11 +17698,15 @@
           const delta = boostedSfl - baseSfl;
           if (boostedSfl <= 0) continue;
           const eff = _shrineEff(cat, efficiencyMap);
-          // Shrine boost = (existing boost contribution) × speedGain × eff
-          // i.e. the shrine adds another speed % on top of what your boosts already give you.
           const gain = delta * speedGain * eff;
           sum += gain;
           parts.push(`${cat}: Power Δ ${delta.toFixed(2)} ⛀/d × +${(speedGain*100).toFixed(0)}% × eff ${(eff*100).toFixed(0)}% = +${gain.toFixed(2)}`);
+          breakdown.push({
+            cat, product, priceProduct,
+            baseSfl, boostedSfl, delta,
+            speedGain, eff, gain,
+            kind: "speed",
+          });
         }
 
         if (sh.effectKind === "speed_and_yield" && sh.chance && sh.catId === "flowers") {
@@ -17632,6 +17716,7 @@
           const chanceGain = sh.chance * base.harvestsPerDay * flowerPrice * eff;
           sum += chanceGain;
           parts.push(`flower chance +1: +${chanceGain.toFixed(2)}`);
+          breakdown.push({ cat: "flowers", kind: "chance", chance: sh.chance, harvestsPerDay: base.harvestsPerDay, price: flowerPrice, eff, gain: chanceGain });
         }
         if (sh.effectKind === "speed_and_yield" && sh.oil3rdDrillBonus) {
           const base = _shrineCategoryBaseline("oil", capacity, p2pPrices, ownedEffects);
@@ -17640,14 +17725,15 @@
           const bonusGain = (base.harvestsPerDay / 3) * sh.oil3rdDrillBonus * oilPrice * eff;
           sum += bonusGain;
           parts.push(`oil 3rd-drill: +${bonusGain.toFixed(2)}`);
+          breakdown.push({ cat: "oil", kind: "oil_bonus", bonus: sh.oil3rdDrillBonus, harvestsPerDay: base.harvestsPerDay, price: oilPrice, eff, gain: bonusGain });
         }
-        return { sflPerDay: sum, note: parts.join(", ") };
+        return { sflPerDay: sum, note: parts.join(", "), breakdown };
       }
 
       if (sh.effectKind === "indirect" || sh.effectKind === "xp_only" || sh.effectKind === "trading") {
-        return { sflPerDay: 0, note: `indirect / ${sh.effectKind}` };
+        return { sflPerDay: 0, note: `indirect / ${sh.effectKind}`, breakdown: [] };
       }
-      return { sflPerDay: 0, note: "unknown effect" };
+      return { sflPerDay: 0, note: "unknown effect", breakdown: [] };
     }
 
     async function renderBuds(data) {
