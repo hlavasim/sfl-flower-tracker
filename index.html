@@ -5313,7 +5313,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.33</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.34</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5340,6 +5340,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.34", items: [
+          { t: "fix", text: "Shrines page redesigned into card layout (matching in-game collection view): per-shrine card with icon, ACTIVE/INACTIVE badge, time remaining, and COST + BOOST + EARN + PROFIT/LOSS in a 2×2 grid. Top summary bar with PROFITABLE count / TOTAL BOOST ⛀/d / TOTAL COST ⛀/d / NET (real efficiency). Sorted by NET descending so profitable shrines appear first." },
+          { t: "fix", text: "BOOST values now real-eff-adjusted using per-category efficiency derived from your snapshot harvest cadence (Nodes-page algorithm: `_h.<resource>` event counts → actual sessions/day vs theoretical). Trees / stone / iron / gold / crimstone / oil use the real eff; other categories (animals, flowers) fall back to 85 % until snapshot-mapping is extended to them." },
+        ]},
         { ver: "v3.33", items: [
           { t: "fix", text: "Shrine EARN calculation rewritten to use Power-page baseline + shrine speedup. Previously most speed shrines computed to 0 because the login-ceiling logic snapped boosted cycles back to the unboosted bracket. Now: for each affected resource we compute current daily SFL via applyBoosts with the user's actual owned boost effects (same engine as Power), then apply the shrine effect on top: speed × s → gain = baseline × ((1/s) − 1) × eff, yield-flat → harvests/day × added × price, chance → harvests/day × pct × price. Speed shrines now show non-zero EARN reflecting the actual ~33 % gain over the user's current real income." },
         ]},
