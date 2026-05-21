@@ -5313,7 +5313,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.41</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.42</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5340,6 +5340,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.42", items: [
+          { t: "fix", text: "Shrine baseline for animal categories (chicken/cow/sheep) now uses getAnimalCatSfl which iterates BOTH products (Wool + Merino Wool for sheep, Egg + Feather for chickens, Milk + Leather for cows) and uses per-animal level drops — exactly what the Power page does. Previously I used getDefaultProduct (single product = Wool only), so Power showed 28.82 ⛀/d for sheep while my baseline showed only 13.45 ⛀/d (Wool only, missing Merino Wool). Animal shrine math now: powerCurrent = animal_cat_sfl_with_existing_boosts, powerWithShrine = same with synthetic shrine speed_pct effect injected, gain = (powerWithShrine − powerCurrent) × eff." },
+        ]},
         { ver: "v3.41", items: [
           { t: "fix", text: "Power page tool-cost calc now recognises Crimstone Spikes Hair as a free-tool source for crimstone mining (same way Quarry is detected for stone, Foreman Beaver for trees, Infernal Drill for oil). Adds `stockMods.hasCrimstoneSpikesHair` detection in detectStockModifiers and a corresponding short-circuit in calcToolCostPerDay + restock-queue free-tool flag. Result: COST row on Power for crimstone drops to 0 ⛀/d when the wearable is owned/equipped, and the corresponding restock queue treats Gold Pickaxe as not-consumed for crimstone." },
         ]},
@@ -17601,6 +17604,26 @@
         const catLabel = b.cat.toUpperCase();
         if (b.kind === "speed") {
           // Multiplicative model (matches game source). Layout: Power → S boostem → eff.
+          if (b.isAnimal) {
+            // Animals: iterate all products (Wool + Merino Wool etc.) via getAnimalCatSfl
+            html += `<div style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.05)">
+              <div style="color:var(--sunpetal);font-weight:bold;margin-bottom:4px">${escHTML(catLabel)}</div>
+              <div style="padding-left:8px;line-height:1.7">
+                <b style="color:var(--text-secondary)">Data z Power:</b> <b>${b.powerCurrent.toFixed(4)} ${ICON}/d</b>
+                <span style="color:var(--text-dim)">(${b.n} animals, all products incl. Wool/Merino/etc.)</span><br>
+                <b style="color:var(--text-secondary)">S boostem se shrine:</b> <b>${b.powerWithShrine.toFixed(4)} ${ICON}/d</b>
+                <span style="color:var(--text-dim)">(shrine × ${b.shrineSpeed} cycle = +25% sleep speed)</span><br>
+                <b style="color:var(--text-secondary)">Raw delta:</b> ${b.powerWithShrine.toFixed(4)} − ${b.powerCurrent.toFixed(4)} = <b>+${b.rawDelta.toFixed(4)} ${ICON}/d</b><br>
+                <b style="color:var(--text-secondary)">S efektivitou:</b> +${b.rawDelta.toFixed(4)} × eff ${(b.eff*100).toFixed(0)}%
+              </div>
+              <div style="margin-top:6px;padding-left:8px;color:var(--lily)">
+                = <b style="color:var(--green)">+${b.gain.toFixed(4)} ${ICON}/d</b>
+              </div>
+            </div>`;
+            totalGain += b.gain;
+            continue;
+          }
+          // Non-animal: single product
           const powerCurrent = b.harvestsExisting * b.yieldPerCycle * b.price;
           const powerWithShrine = b.harvestsWithShrine * b.yieldPerCycle * b.price;
           const rawDelta = powerWithShrine - powerCurrent;
@@ -17708,42 +17731,57 @@
       }
 
       // Speed shrines: MULTIPLICATIVE model — game source confirms each speed boost multiplies
-      // the cycle (e.g., `totalSeconds = totalSeconds * 0.75`). Stacking multiple -25% boosts
-      // gives × 0.75 × 0.75 = × 0.5625, NOT × 0.5 (additive). Additive overshoots dramatically
-      // when many boosts are stacked (e.g., -60% existing + -25% shrine in additive = -85% =
-      // cycle × 0.15 → harvests jump ~6.6×, which doesn't match game behavior).
+      // the cycle (e.g., `totalSeconds = totalSeconds * 0.75`).
       if (sh.effectKind === "speed" || sh.effectKind === "speed_and_yield") {
         const cats = [sh.catId, ...(sh.alsoCats || [])];
         let sum = 0;
         const parts = [];
         const breakdown = [];
         for (const cat of cats) {
-          const product = (typeof getDefaultProduct === "function") ? getDefaultProduct(cat) : null;
-          if (!product) continue;
           const catEffects = ownedEffects.filter(e => e.cat === cat);
-          const priceProduct = (typeof getPriceProduct === "function") ? getPriceProduct(cat, product) : product;
-          const price = p2pPrices[priceProduct] || 0;
           const n = getCapacityCount(cat, capacity);
           if (!n) continue;
+          const eff = _shrineEff(cat, efficiencyMap);
+
+          // ── Animal categories (chicken/cow/sheep): iterate both products via getAnimalCatSfl
+          //     This matches Power page exactly (Wool + Merino Wool, level-based drops).
+          if (typeof isAnimalCat === "function" && isAnimalCat(cat)) {
+            const powerCurrent = getAnimalCatSfl(cat, capacity, catEffects, p2pPrices).totalSfl;
+            // Simulate shrine by injecting a synthetic speed_pct effect on top of existing
+            const shrineEff = { cat, type: "speed_pct", value: (sh.speed - 1) * 100 };
+            const powerWithShrine = getAnimalCatSfl(cat, capacity, [...catEffects, shrineEff], p2pPrices).totalSfl;
+            const rawDelta = powerWithShrine - powerCurrent;
+            const gain = rawDelta * eff;
+            if (gain === 0) continue;
+            sum += gain;
+            parts.push(`${cat}: ${powerCurrent.toFixed(2)} → ${powerWithShrine.toFixed(2)} = +${gain.toFixed(2)}`);
+            breakdown.push({
+              cat, n, eff,
+              powerCurrent, powerWithShrine, rawDelta, gain,
+              shrineSpeed: sh.speed, isAnimal: true,
+              kind: "speed",
+            });
+            continue;
+          }
+
+          // ── Non-animal: single product via applyBoosts
+          const product = (typeof getDefaultProduct === "function") ? getDefaultProduct(cat) : null;
+          if (!product) continue;
+          const priceProduct = (typeof getPriceProduct === "function") ? getPriceProduct(cat, product) : product;
+          const price = p2pPrices[priceProduct] || 0;
           const baseCycle = getCycleSec(cat, product);
           if (!baseCycle) continue;
-          // Existing cycle from applyBoosts (multiplicative chain — matches game)
           const boostedRes = applyBoosts(cat, product, capacity, catEffects);
           const cycleExisting = boostedRes.effectiveCycle || baseCycle;
-          // Shrine multiplies the existing cycle by its speed factor (e.g., × 0.75)
           const cycleWithShrine = cycleExisting * sh.speed;
-          // Yield per cycle (yield_flat + yield_pct keep their semantics)
           const baseYield = (typeof getBaseYield === "function") ? getBaseYield(cat) : 1;
           const yieldPerCycle = baseYield * (boostedRes.yieldMult || 1) + (boostedRes.yieldFlat || 0);
-          // Daily harvests under each scenario
           const harvestsExisting = (86400 / cycleExisting) * n;
           const harvestsWithShrine = (86400 / cycleWithShrine) * n;
           const extraHarvests = harvestsWithShrine - harvestsExisting;
-          const eff = _shrineEff(cat, efficiencyMap);
           const gain = extraHarvests * yieldPerCycle * price * eff;
           if (gain === 0) continue;
           sum += gain;
-          // Display: existing speedMult × 100 → existing pct (e.g., 0.4 multiplicative = -60%)
           const existingPctDisplay = ((boostedRes.speedMult - 1) * 100);
           const withShrinePctDisplay = ((boostedRes.speedMult * sh.speed - 1) * 100);
           parts.push(`${cat}: cycle ${(cycleExisting/3600).toFixed(2)}h → ${(cycleWithShrine/3600).toFixed(2)}h = +${gain.toFixed(2)}`);
