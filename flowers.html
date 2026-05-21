@@ -3935,15 +3935,77 @@
     function cmGetPlotCount(farm) {
       return Object.keys(farm.crops || {}).length;
     }
+    // Temporary collectible cooldowns (ms) — mirror sunflower-land
+    // `lib/collectibleBuilt.ts#EXPIRY_COOLDOWNS`. Used to check if a totem/shrine
+    // boost is still active given its createdAt timestamp.
+    const CM_TEMP_COOLDOWNS_MS = {
+      "Time Warp Totem":   2 * 60 * 60 * 1000,
+      "Super Totem":       7 * 24 * 60 * 60 * 1000,
+      "Harvest Hourglass": 6 * 60 * 60 * 1000,
+      "Sparrow Shrine":    7 * 24 * 60 * 60 * 1000,
+    };
+    function cmIsTempCollectibleActive(farm, name) {
+      const cooldown = CM_TEMP_COOLDOWNS_MS[name];
+      if (!cooldown) return false;
+      const now = Date.now();
+      const lists = [
+        (farm.collectibles || {})[name],
+        (farm.home?.collectibles || {})[name],
+      ];
+      for (const list of lists) {
+        if (!list) continue;
+        for (const placed of list) {
+          const createdAt = toMs(placed.createdAt || 0);
+          if (createdAt + cooldown > now) return true;
+        }
+      }
+      return false;
+    }
+    // Outdoor crop grow-time multiplier — mirrors getCropTime + getCropPlotTime
+    // from sunflower-land/events/landExpansion/plant.ts (wheat-applicable subset).
+    // Returns {mult, boosts:[{name, mult}]} where seconds = base × mult.
+    function cmOutdoorCropTimeMult(farm, cropName) {
+      const sk = farm.bumpkin?.skills || {};
+      const inv = farm.inventory || {};
+      const placed = farm.collectibles || {};
+      const placedHome = farm.home?.collectibles || {};
+      const hasC = (name) => ((placed[name]?.length || 0) > 0) || ((placedHome[name]?.length || 0) > 0);
+      const boosts = [];
+      let m = 1;
+      // Seed Specialist (rare collectible — present in inventory): ×0.9
+      if (parseFloat(inv["Seed Specialist"] || 0) >= 1) { m *= 0.9; boosts.push({ name: "Seed Specialist", mult: 0.9 }); }
+      // Best of {Nancy, Scarecrow, Kuebiko}: ×0.85
+      const hasNancy = hasC("Nancy"), hasScare = hasC("Scarecrow"), hasKueb = hasC("Kuebiko");
+      if (hasNancy || hasScare || hasKueb) {
+        m *= 0.85;
+        boosts.push({ name: hasKueb ? "Kuebiko" : (hasScare ? "Scarecrow" : "Nancy"), mult: 0.85 });
+      }
+      // Lunar Calendar: ×0.9
+      if (hasC("Lunar Calendar")) { m *= 0.9; boosts.push({ name: "Lunar Calendar", mult: 0.9 }); }
+      // Super Totem / Time Warp Totem (temporary): ×0.5
+      const hasSuper = cmIsTempCollectibleActive(farm, "Super Totem");
+      const hasTimeWarp = cmIsTempCollectibleActive(farm, "Time Warp Totem");
+      if (hasSuper || hasTimeWarp) { m *= 0.5; boosts.push({ name: hasSuper ? "Super Totem" : "Time Warp Totem", mult: 0.5 }); }
+      // Harvest Hourglass (temporary): ×0.75
+      if (cmIsTempCollectibleActive(farm, "Harvest Hourglass")) { m *= 0.75; boosts.push({ name: "Harvest Hourglass", mult: 0.75 }); }
+      // Strong Roots skill on advanced crops (harvestSec >= Eggplant=57600): ×0.9
+      const baseSec = CROP_GROW_DATA[cropName] || 0;
+      if (sk["Strong Roots"] && baseSec >= 57600) { m *= 0.9; boosts.push({ name: "Strong Roots", mult: 0.9 }); }
+      // Green Thumb skill: ×0.95
+      if (sk["Green Thumb"]) { m *= 0.95; boosts.push({ name: "Green Thumb", mult: 0.95 }); }
+      // Sparrow Shrine (temporary pet shrine): ×0.75
+      if (cmIsTempCollectibleActive(farm, "Sparrow Shrine")) { m *= 0.75; boosts.push({ name: "Sparrow Shrine", mult: 0.75 }); }
+      return { mult: m, boosts };
+    }
     // Wheat window: how long ONE Betty wheat restock lasts when planted on all
-    // available outdoor plots. ceil(restockCount / plots) × wheatGrowTime seconds.
-    // Ignores crop speed boosts on outdoor wheat (we treat the snapshot as-is — if
-    // the user's actual cadence is shorter due to boosts, that's a conservative
-    // upper bound which the queue simulator can still respect).
+    // available outdoor plots, WITH outdoor crop-speed boosts applied.
+    // ceil(restockCount / plots) × wheatGrowTime × outdoorBoostMult seconds.
     function cmComputeRestockWindow(farm) {
       const restock = cmGetSeedRestockCount(farm, "Wheat");
       const plots = Math.max(1, cmGetPlotCount(farm));
-      const growTime = CROP_GROW_DATA["Wheat"] || 86400;
+      const baseGrowTime = CROP_GROW_DATA["Wheat"] || 86400;
+      const { mult } = cmOutdoorCropTimeMult(farm, "Wheat");
+      const growTime = baseGrowTime * mult;
       const batches = Math.max(1, Math.ceil(restock / plots));
       return batches * growTime;
     }
@@ -5505,7 +5567,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.43</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.44</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5532,6 +5594,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.44", items: [
+          { t: "fix", text: "Crop Machine wheat-window calc now applies outdoor crop-speed boosts (was ignoring them, so 2 batches × 24h base = flat 48h regardless of actual setup). New cmOutdoorCropTimeMult function mirrors getCropTime + getCropPlotTime from sunflower-land/plant.ts: Seed Specialist ×0.9, best of {Nancy/Scarecrow/Kuebiko} ×0.85, Lunar Calendar ×0.9, Super Totem / Time Warp Totem ×0.5 (temporary, createdAt+cooldown check), Harvest Hourglass ×0.75, Strong Roots skill on advanced crops (wheat is advanced) ×0.9, Green Thumb skill ×0.95, Sparrow Shrine ×0.75. Multipliers stack multiplicatively (matches game source). Power CM panel header shows the boost list + final ×mult so you can verify which boosts I detected." },
+        ]},
         { ver: "v3.43", items: [
           { t: "feat", text: "Crop Machine added to Power page as a restock-queue simulator (not a 24h \"best crop\" calc). Window auto-derived from Wheat: ceil(80 × Warehouse_mult / plot_count) × 24h grow_time. Within that window, queue is filled greedily best-net-first using each crop's Betty restock count as the seed cap (e.g. Sunflower 800, Potato 400 — game source `INITIAL_STOCK` mirror, +20% with Warehouse). Partial-fills the last crop if it overflows the window. Shows per-crop seeds/restock-cap, time used, revenue/oil/seed cost/net, plus window totals + daily rate. Mirrors how the user actually plays (\"the most profitable thing I have until I do the next restock\")." },
           { t: "feat", text: "Tortoise Shrine breakdown in shrines page extended with Crop Machine contribution. The shrine's ×0.9 cycle multiplier compresses pack times, so MORE crops fit in the same restock window. Computes cmSimulateQueue(without) vs cmSimulateQueue(with), daily delta = (totalNet_with − totalNet_without) × 86400/windowSec × eff. Expanded detail shows window length, queue composition (with vs without), per-window net, daily-rate, raw delta and eff multiplier. Previously the shrines page only handled greenhouse for Tortoise — now both greenhouse + crop machine contribute." },
@@ -14883,7 +14948,13 @@
         const wheatRestock = cmGetSeedRestockCount(farmRef, "Wheat");
         const plotCount = cmGetPlotCount(farmRef);
         const wheatBatches = Math.max(1, Math.ceil(wheatRestock / Math.max(1, plotCount)));
-        const wheatGrowH = (CROP_GROW_DATA["Wheat"] || 86400) / 3600;
+        const wheatBoosts = cmOutdoorCropTimeMult(farmRef, "Wheat");
+        const wheatGrowSec = (CROP_GROW_DATA["Wheat"] || 86400) * wheatBoosts.mult;
+        const wheatGrowH = wheatGrowSec / 3600;
+        const wheatGrowBaseH = (CROP_GROW_DATA["Wheat"] || 86400) / 3600;
+        const boostListHtml = wheatBoosts.boosts.length
+          ? ` <span style="color:var(--green)">[${wheatBoosts.boosts.map(b => `${escHTML(b.name)} ×${b.mult}`).join(", ")} = ×${wheatBoosts.mult.toFixed(3)}]</span>`
+          : ' <span style="color:var(--text-dim)">[no outdoor crop-speed boosts detected]</span>';
         const hasWh = farmHasWarehouse(farmRef);
         const dailyFactor = 86400 / windowSec;
         const oilCostPerH = sim.oilPerHour * (p2pPrices["Oil"] || 0);
@@ -14904,7 +14975,7 @@
         content += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:16px;border:2px solid var(--border-dark)">
           <div class="pixel-font" style="font-size: 0.625rem;color:var(--lily);margin-bottom:6px">⚙️ CROP MACHINE — RESTOCK QUEUE</div>
           <div style="color:var(--text-secondary);font-size:0.625rem;line-height:1.7;margin-bottom:8px">
-            <b>Restock window:</b> ${windowHours.toFixed(1)}h (${(windowHours/24).toFixed(2)}d) · derived from <b>${wheatRestock} Wheat</b>${hasWh ? ' <span style="color:var(--green)">(Warehouse +20%)</span>' : ''} on ${plotCount} plots = ${wheatBatches} batch${wheatBatches > 1 ? 'es' : ''} × ${wheatGrowH}h grow<br>
+            <b>Restock window:</b> ${windowHours.toFixed(1)}h (${(windowHours/24).toFixed(2)}d) · derived from <b>${wheatRestock} Wheat</b>${hasWh ? ' <span style="color:var(--green)">(Warehouse +20%)</span>' : ''} on ${plotCount} plots = ${wheatBatches} batch${wheatBatches > 1 ? 'es' : ''} × ${wheatGrowH.toFixed(2)}h grow ${wheatBoosts.mult < 1 ? `<span style="color:var(--text-dim)">(base ${wheatGrowBaseH}h)</span>` : ''}${boostListHtml}<br>
             <b>Machine:</b> ${sim.plots} plots · cycle mult ×${sim.speedMult.toFixed(3)} ${skNames.length ? `<span style="color:var(--text-dim)">(${skNames.join(", ")})</span>` : ''}<br>
             <b>Oil:</b> ${sim.oilPerHour.toFixed(2)}/h · ${oilCostPerH.toFixed(3)} ${sflIcon()}/h
           </div>
