@@ -5313,7 +5313,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.39</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.40</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5340,6 +5340,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.40", items: [
+          { t: "fix", text: "Shrine speed math reverted to MULTIPLICATIVE (game-source-correct). I checked SFL source and confirmed each speed boost multiplies the cycle (`totalSeconds = totalSeconds * 0.75`), not adds. Additive in v3.38-v3.39 produced absurd results when boosts stack — e.g. existing -60% + shrine -25% gave -85% additive = cycle × 0.15, producing 2080 tree harvests/day (vs realistic ~720). Multiplicative gives cycle × 0.4 × 0.75 = × 0.3 (still aggressive but bounded). Breakdown layout (Data z Power → S boostem → Raw delta → eff) preserved; only the underlying math changed." },
+        ]},
         { ver: "v3.39", items: [
           { t: "fix", text: "Shrine per-resource breakdown restructured to match the user's mental model: Data z Power (current real income, before shrine) → S boostem se shrine (new income with shrine added additively) → Raw delta → S efektivitou (raw × eff = realistic shrine gain). The underlying math is the same as v3.38 (additive speed-pct sum). Just clearer presentation showing the before / after / delta / eff steps explicitly." },
         ]},
@@ -17581,10 +17584,7 @@
       for (const b of breakdown) {
         const catLabel = b.cat.toUpperCase();
         if (b.kind === "speed") {
-          // Additive model. Layout matches user's mental model:
-          //   1. Data z Power (current real income, no shrine)
-          //   2. S boostem se shrine (new income with shrine applied additively)
-          //   3. Difference × eff = realistic shrine gain
+          // Multiplicative model (matches game source). Layout: Power → S boostem → eff.
           const powerCurrent = b.harvestsExisting * b.yieldPerCycle * b.price;
           const powerWithShrine = b.harvestsWithShrine * b.yieldPerCycle * b.price;
           const rawDelta = powerWithShrine - powerCurrent;
@@ -17592,9 +17592,9 @@
             <div style="color:var(--sunpetal);font-weight:bold;margin-bottom:4px">${escHTML(catLabel)}</div>
             <div style="padding-left:8px;line-height:1.7">
               <b style="color:var(--text-secondary)">Data z Power:</b> <b>${powerCurrent.toFixed(4)} ${ICON}/d</b><br>
-              <span style="color:var(--text-dim)">↳ ${b.n} ${escHTML(b.cat)} × ${b.harvestsExisting.toFixed(3)} harvests/d × yield ${b.yieldPerCycle.toFixed(3)} × ${b.price.toFixed(4)} ${ICON} (speed sum ${b.sumExistingPct.toFixed(0)}%)</span><br>
+              <span style="color:var(--text-dim)">↳ ${b.n} ${escHTML(b.cat)} × ${b.harvestsExisting.toFixed(3)} harvests/d × yield ${b.yieldPerCycle.toFixed(3)} × ${b.price.toFixed(4)} ${ICON} (cycle ${(b.cycleExisting/3600).toFixed(2)}h = base × ${b.speedMultExisting.toFixed(3)} = ${b.existingPctDisplay.toFixed(0)}%)</span><br>
               <b style="color:var(--text-secondary)">S boostem se shrine:</b> <b>${powerWithShrine.toFixed(4)} ${ICON}/d</b><br>
-              <span style="color:var(--text-dim)">↳ shrine přidá ${b.shrinePct.toFixed(0)}% additive → speed sum ${b.sumWithShrinePct.toFixed(0)}% → ${b.harvestsWithShrine.toFixed(3)} harvests/d</span><br>
+              <span style="color:var(--text-dim)">↳ shrine multiplies cycle by ${b.shrineSpeed} → new cycle ${(b.cycleWithShrine/3600).toFixed(2)}h (${b.withShrinePctDisplay.toFixed(0)}% of base) → ${b.harvestsWithShrine.toFixed(3)} harvests/d</span><br>
               <b style="color:var(--text-secondary)">Raw delta:</b> ${powerWithShrine.toFixed(4)} − ${powerCurrent.toFixed(4)} = <b>+${rawDelta.toFixed(4)} ${ICON}/d</b><br>
               <b style="color:var(--text-secondary)">S efektivitou:</b> +${rawDelta.toFixed(4)} × eff ${(b.eff*100).toFixed(0)}%
             </div>
@@ -17691,18 +17691,16 @@
         return { sflPerDay: sum, note: parts.join(", "), breakdown };
       }
 
-      // Speed shrines: ADDITIVE model — game stacks speed_pct boosts additively per category.
-      // Existing total speed reduction X% (sum of all owned speed_pct effects); shrine adds Y%.
-      // cycle_without = base × (1 + X/100)        e.g. -25% gives × 0.75
-      // cycle_with    = base × (1 + (X+Y)/100)    e.g. -25-25 = -50% gives × 0.5
-      // Shrine boost = (1/cycle_with − 1/cycle_without) × nodes × yieldPerCycle × price × eff
-      // where yieldPerCycle is taken from applyBoosts (preserves yield_flat/yield_pct semantics).
+      // Speed shrines: MULTIPLICATIVE model — game source confirms each speed boost multiplies
+      // the cycle (e.g., `totalSeconds = totalSeconds * 0.75`). Stacking multiple -25% boosts
+      // gives × 0.75 × 0.75 = × 0.5625, NOT × 0.5 (additive). Additive overshoots dramatically
+      // when many boosts are stacked (e.g., -60% existing + -25% shrine in additive = -85% =
+      // cycle × 0.15 → harvests jump ~6.6×, which doesn't match game behavior).
       if (sh.effectKind === "speed" || sh.effectKind === "speed_and_yield") {
         const cats = [sh.catId, ...(sh.alsoCats || [])];
         let sum = 0;
         const parts = [];
         const breakdown = [];
-        const shrinePct = (sh.speed - 1) * 100;  // 0.75 → -25
         for (const cat of cats) {
           const product = (typeof getDefaultProduct === "function") ? getDefaultProduct(cat) : null;
           if (!product) continue;
@@ -17713,18 +17711,12 @@
           if (!n) continue;
           const baseCycle = getCycleSec(cat, product);
           if (!baseCycle) continue;
-          // Sum of existing speed_pct effects (additive in user's model)
-          const sumExistingPct = catEffects
-            .filter(e => e.type === "speed_pct")
-            .reduce((s, e) => s + (e.value || 0), 0);
-          const sumWithShrinePct = sumExistingPct + shrinePct;
-          // Effective cycles (clamp to keep positive)
-          const factorExisting = Math.max(0.05, 1 + sumExistingPct / 100);
-          const factorWithShrine = Math.max(0.05, 1 + sumWithShrinePct / 100);
-          const cycleExisting = baseCycle * factorExisting;
-          const cycleWithShrine = baseCycle * factorWithShrine;
-          // Yield per cycle from applyBoosts (yield_flat + yield_pct keep their semantics)
+          // Existing cycle from applyBoosts (multiplicative chain — matches game)
           const boostedRes = applyBoosts(cat, product, capacity, catEffects);
+          const cycleExisting = boostedRes.effectiveCycle || baseCycle;
+          // Shrine multiplies the existing cycle by its speed factor (e.g., × 0.75)
+          const cycleWithShrine = cycleExisting * sh.speed;
+          // Yield per cycle (yield_flat + yield_pct keep their semantics)
           const baseYield = (typeof getBaseYield === "function") ? getBaseYield(cat) : 1;
           const yieldPerCycle = baseYield * (boostedRes.yieldMult || 1) + (boostedRes.yieldFlat || 0);
           // Daily harvests under each scenario
@@ -17735,11 +17727,16 @@
           const gain = extraHarvests * yieldPerCycle * price * eff;
           if (gain === 0) continue;
           sum += gain;
-          parts.push(`${cat}: ${sumExistingPct.toFixed(0)}% → ${sumWithShrinePct.toFixed(0)}% = +${gain.toFixed(2)}`);
+          // Display: existing speedMult × 100 → existing pct (e.g., 0.4 multiplicative = -60%)
+          const existingPctDisplay = ((boostedRes.speedMult - 1) * 100);
+          const withShrinePctDisplay = ((boostedRes.speedMult * sh.speed - 1) * 100);
+          parts.push(`${cat}: cycle ${(cycleExisting/3600).toFixed(2)}h → ${(cycleWithShrine/3600).toFixed(2)}h = +${gain.toFixed(2)}`);
           breakdown.push({
             cat, product, priceProduct, n,
             baseCycle, cycleExisting, cycleWithShrine,
-            sumExistingPct, shrinePct, sumWithShrinePct,
+            speedMultExisting: boostedRes.speedMult,
+            shrineSpeed: sh.speed,
+            existingPctDisplay, withShrinePctDisplay,
             yieldPerCycle, price,
             harvestsExisting, harvestsWithShrine, extraHarvests,
             eff, gain,
