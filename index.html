@@ -5313,7 +5313,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.35</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.36</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5340,6 +5340,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.36", items: [
+          { t: "fix", text: "Shrine speed boosts now anchored to Power-page delta (the +X.XX shown in Power for each category) instead of total boosted SFL/day. Formula: shrine_gain = Power_Δ × ((1/shrine_speed) − 1) × per-cat eff. This matches what you see in Power directly: if Power shows crimstone +4.98 ⛀/d and shrine speed=0.75, shrine adds ~+4.98 × 33% × eff ⛀/d. Previously the baseline used base+delta which double-counted base income already happening." },
+        ]},
         { ver: "v3.35", items: [
           { t: "fix", text: "Shrine BOOST was inflated by two issues: (1) per-category eff was capped at 1.5, so 'over-mining' (more sessions than cycle theoretical) gave shrine credit it didn't deserve — now capped at 1.0. (2) Fallback eff dropped from 0.85 to 0.7 to reflect the typical 1-2× daily play pattern where not every theoretical cycle is captured. Plus each card now shows a per-category contribution breakdown (e.g. 'crimstone: 12.5 ⛀/d × +33% = +4.13 (eff 95%)') so you can verify against your Power-page real income." },
         ]},
@@ -17591,21 +17594,35 @@
         return { sflPerDay: sum, note: parts.join(", ") };
       }
 
-      // Speed shrines: gain = current_real_sfl_per_day × ((1/speed) - 1)
-      // current_real = baseline_theoretical × per-cat eff
+      // Speed shrines: gain = boost_delta × ((1/speed) - 1) × eff
+      // boost_delta = (boosted_sfl - base_sfl) per category — same number Power shows as "+X.XX"
+      // Rationale: the shrine speeds up your CYCLE, which gives X% more cycles. Each extra cycle
+      // produces base+boost yield. But the base income was already happening, so the shrine's
+      // net addition is what comes from the EXTRA cycles. Treating it as base+delta inflates
+      // because it credits the shrine for the base income too (which you already had).
+      // Power's `delta` is the right anchor — it's what user sees and trusts.
       if (sh.effectKind === "speed" || sh.effectKind === "speed_and_yield") {
         const cats = [sh.catId, ...(sh.alsoCats || [])];
         let sum = 0;
         const parts = [];
         const speedGain = (1 / sh.speed) - 1;  // 0.75 → 0.333
         for (const cat of cats) {
-          const base = _shrineCategoryBaseline(cat, capacity, p2pPrices, ownedEffects);
-          if (!base.sflPerDay) continue;
+          const product = (typeof getDefaultProduct === "function") ? getDefaultProduct(cat) : null;
+          if (!product) continue;
+          const catEffects = ownedEffects.filter(e => e.cat === cat);
+          const priceProduct = (typeof getPriceProduct === "function") ? getPriceProduct(cat, product) : product;
+          const baseRes = applyBoosts(cat, product, capacity, []);
+          const boostedRes = applyBoosts(cat, product, capacity, catEffects);
+          const baseSfl = unitToSfl(baseRes.unitsPerDay, priceProduct, p2pPrices);
+          const boostedSfl = unitToSfl(boostedRes.unitsPerDay, priceProduct, p2pPrices);
+          const delta = boostedSfl - baseSfl;
+          if (boostedSfl <= 0) continue;
           const eff = _shrineEff(cat, efficiencyMap);
-          const realBase = base.sflPerDay * eff;
-          const gain = realBase * speedGain;
+          // Shrine boost = (existing boost contribution) × speedGain × eff
+          // i.e. the shrine adds another speed % on top of what your boosts already give you.
+          const gain = delta * speedGain * eff;
           sum += gain;
-          parts.push(`${cat}: ${realBase.toFixed(2)} ⛀/d × +${(speedGain*100).toFixed(0)}% = +${gain.toFixed(2)} (eff ${(eff*100).toFixed(0)}%)`);
+          parts.push(`${cat}: Power Δ ${delta.toFixed(2)} ⛀/d × +${(speedGain*100).toFixed(0)}% × eff ${(eff*100).toFixed(0)}% = +${gain.toFixed(2)}`);
         }
 
         if (sh.effectKind === "speed_and_yield" && sh.chance && sh.catId === "flowers") {
