@@ -5261,7 +5261,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.29</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.30</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5288,6 +5288,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.30", items: [
+          { t: "fix", text: "Nodes page RECOMMENDED PURCHASE PLAN + ALL OPTIONS were showing theoretical 24/7 SFL/day (i.e. 'if I never sleep'). The ROI was already efficiency-adjusted but the displayed +SFL/DAY was not — leading to mismatch where ROI said 47d but the +SFL/day made it look like much more income. Added new columns: THEO SFL/D (raw, dimmed), EFF (% efficiency from historical harvest cadence — same data as the EFFICIENCY column below), REAL SFL/D (= theoretical × efficiency, bold green). CUM column now totals REAL SFL/D. Footer shows both realistic and theoretical totals." },
+        ]},
         { ver: "v3.29", items: [
           { t: "fix", text: "Investment Insights were treating user withdrawals (FLOWER → BTC cash-outs) as if the farm was burning value — the literal opposite of what's happening. When you sell 10000 FLOWER, raw farm value drops by ~10000 ⛀ on the next snapshot, which made earning rate, burn-vs-growth, the chart, and metric ② DAYS TO FULL all flip negative. Fixed by computing a cashflow-adjusted value per snapshot: adjustedValueSfl = raw farm value + cumulative withdrawn (SFL eq.) − cumulative deposited (SFL eq.). All slope-based metrics now use this 'productivity' view, so cash-outs no longer pollute the trend." },
           { t: "fix", text: "History chart re-titled CUMULATIVE WEALTH OVER TIME — line now plots farm BTC value + cumulative extracted BTC, so withdrawals shift value from on-farm to extracted instead of showing a vertical drop. Break-even target stays as the dashed red line. Removed the redundant cumulative-withdrawals step series (already baked into the wealth line)." },
@@ -16086,11 +16089,26 @@
 
       // ── RECOMMENDED PURCHASE PLAN ──
       if (plan.length > 0) {
+        // Eff-adjust per-plan marginals and recompute cumulative.
+        // Each row's +SFL/DAY now reflects what you'll REALLY earn at your harvest cadence
+        // (using getEffRatio per category — same data that drives the EFFICIENCY column on
+        // the per-node summary table). Theoretical 24/7 numbers were unrealistic.
+        let realCum = 0;
+        for (const p of plan) {
+          const e = (p.catId && getEffRatio(p.catId));
+          const eff = (e !== null && e !== undefined) ? e : 1;
+          p.realMarginal = p.marginal * eff;
+          p.eff = eff;
+          realCum += p.realMarginal;
+          p.realCumSflPerDay = realCum;
+        }
+        const realTotalSflPerDay = realCum;
+
         content += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
           <div style="font-size:0.6875rem;color:var(--green);margin-bottom:4px;font-weight:bold" class="pixel-font">RECOMMENDED PURCHASE PLAN</div>
-          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px">Greedy order — always buys the best ROI next. Sunstone cost increases with each purchase.</div>
+          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px">Greedy order by REAL ROI — scaled by efficiency (avg-gap-vs-optimal-cycle) so the numbers reflect what you'll actually harvest, not 24/7 theoretical.</div>
           <table class="node-res-table">
-            <tr><th>#</th><th>BUY</th><th style="text-align:right">COST</th><th style="text-align:right">+${sflIcon("0.75em")}/DAY</th><th style="text-align:right">ROI</th><th style="text-align:right">CUM. +${sflIcon("0.75em")}/D</th></tr>`;
+            <tr><th>#</th><th>BUY</th><th style="text-align:right">COST</th><th style="text-align:right" title="Theoretical SFL/day at 24/7 harvest cadence">THEO ${sflIcon("0.75em")}/D</th><th style="text-align:right">EFF</th><th style="text-align:right" title="Real SFL/day = theoretical × efficiency">REAL ${sflIcon("0.75em")}/D</th><th style="text-align:right">ROI</th><th style="text-align:right" title="Cumulative REAL SFL/day after this purchase">CUM REAL ${sflIcon("0.75em")}/D</th></tr>`;
 
         for (let i = 0; i < plan.length; i++) {
           const p = plan[i];
@@ -16100,19 +16118,24 @@
             ? `<span style="font-size:0.5625rem">${escHTML(p.costDetail)}</span>`
             : `${p.sunstoneCost} ☀`;
           const productHint = p.product && PRODUCT_LISTS[p.catId] ? ` <span style="color:var(--text-dim);font-size:0.5625rem">(${escHTML(p.product)})</span>` : "";
+          const effPct = Math.round(p.eff * 100);
+          const effColor = effPct >= 80 ? "var(--green)" : effPct >= 40 ? "var(--sunpetal)" : "var(--red)";
+          const effDisplay = (efficiencyMap[p.catId]) ? `${effPct}%` : '<span style="color:var(--text-dim)">—</span>';
 
           content += `<tr>
             <td style="color:var(--text-dim)">${i + 1}</td>
             <td>${escHTML(p.label)}${productHint}</td>
             <td style="text-align:right;white-space:nowrap">${costStr}</td>
-            <td style="text-align:right;color:var(--green)">+${p.marginal.toFixed(4)}</td>
+            <td style="text-align:right;color:var(--text-dim)">+${p.marginal.toFixed(4)}</td>
+            <td style="text-align:right;color:${effColor};font-weight:bold">${effDisplay}</td>
+            <td style="text-align:right;color:var(--green);font-weight:bold">+${p.realMarginal.toFixed(4)}</td>
             <td style="text-align:right;color:${roiColor};font-weight:bold">${roiStr}</td>
-            <td style="text-align:right;color:var(--sunpetal)">+${p.cumSflPerDay.toFixed(4)}</td>
+            <td style="text-align:right;color:var(--sunpetal)">+${p.realCumSflPerDay.toFixed(4)}</td>
           </tr>`;
         }
         content += `</table>`;
         content += `<div style="margin-top:8px;font-size:0.6875rem;color:var(--text-secondary);line-height:1.6">
-          Total: <strong>${plan.length}</strong> purchases · <strong style="color:var(--sunpetal)">${cumCostSfl.toFixed(1)} ${sflIcon("0.75em")}</strong> invested · <strong style="color:var(--green)">+${cumSflPerDay.toFixed(4)} ${sflIcon("0.75em")}/day</strong> gained
+          Total: <strong>${plan.length}</strong> purchases · <strong style="color:var(--sunpetal)">${cumCostSfl.toFixed(1)} ${sflIcon("0.75em")}</strong> invested · <strong style="color:var(--green)">+${realTotalSflPerDay.toFixed(4)} ${sflIcon("0.75em")}/day</strong> realistic gain (theo +${cumSflPerDay.toFixed(2)} ${sflIcon("0.75em")}/d)
         </div>`;
         content += `</div>`;
       }
@@ -16125,13 +16148,20 @@
         content += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
           <div style="font-size:0.6875rem;color:var(--sunpetal);margin-bottom:8px;font-weight:bold" class="pixel-font">ALL OPTIONS (next node only)</div>
           <table class="node-res-table">
-            <tr><th>ACTION</th><th style="text-align:right">COST</th><th style="text-align:right">+${sflIcon("0.75em")}/DAY</th><th style="text-align:right">ROI</th></tr>`;
+            <tr><th>ACTION</th><th style="text-align:right">COST</th><th style="text-align:right" title="24/7 theoretical">THEO ${sflIcon("0.75em")}/D</th><th style="text-align:right">EFF</th><th style="text-align:right" title="theoretical × efficiency">REAL ${sflIcon("0.75em")}/D</th><th style="text-align:right">ROI</th></tr>`;
 
         for (const o of profitable) {
-          const roiStr = o.roiDays >= 9999 ? "9999+" : Math.ceil(o.roiDays) + "d";
           const roiColor = o.roiDays <= 30 ? "var(--green)" : o.roiDays <= 90 ? "var(--sunpetal)" : o.roiDays <= 365 ? "var(--text-secondary)" : "var(--text-dim)";
           const productHint = o.bestProduct && PRODUCT_LISTS[NODE_PRICES[o.nodeKey]?.catId] ? ` <span style="color:var(--text-dim);font-size:0.5625rem">(${escHTML(o.bestProduct)})</span>` : "";
           const needHint = (!o.canAfford && o.need) ? ` <span style="color:var(--text-dim);font-size:0.5625rem">— ${escHTML(o.need)}</span>` : "";
+
+          const oCatId = NODE_PRICES[o.nodeKey]?.catId || null;
+          const oEffRatio = (oCatId && getEffRatio(oCatId));
+          const oEff = (oEffRatio !== null && oEffRatio !== undefined) ? oEffRatio : 1;
+          const oRealMarginal = o.marginal * oEff;
+          const oEffPct = Math.round(oEff * 100);
+          const oEffColor = oEffPct >= 80 ? "var(--green)" : oEffPct >= 40 ? "var(--sunpetal)" : "var(--red)";
+          const oEffDisplay = (oCatId && efficiencyMap[oCatId]) ? `${oEffPct}%` : '<span style="color:var(--text-dim)">—</span>';
 
           const optRoiDisplay = o.realRoiDays >= 9999 ? "9999+" : Math.ceil(o.realRoiDays) + "d";
           const optRoiColor = o.realRoiDays <= 30 ? "var(--green)" : o.realRoiDays <= 90 ? "var(--sunpetal)" : o.realRoiDays <= 365 ? "var(--text-secondary)" : "var(--text-dim)";
@@ -16140,7 +16170,9 @@
           content += `<tr style="${rowOpacity}">
             <td>${escHTML(o.action)}${productHint}${needHint}</td>
             <td style="text-align:right;white-space:nowrap">${o.costSfl.toFixed(1)} ${sflIcon("0.75em")}</td>
-            <td style="text-align:right;color:var(--green)">+${o.marginal.toFixed(4)}</td>
+            <td style="text-align:right;color:var(--text-dim)">+${o.marginal.toFixed(4)}</td>
+            <td style="text-align:right;color:${oEffColor};font-weight:bold">${oEffDisplay}</td>
+            <td style="text-align:right;color:var(--green);font-weight:bold">+${oRealMarginal.toFixed(4)}</td>
             <td style="text-align:right;color:${optRoiColor};font-weight:bold">${optRoiDisplay}</td>
           </tr>`;
         }
