@@ -3684,24 +3684,54 @@
 
     // ── Pet Shrines (craftable temporary collectibles) ──
     // Source: sunflower-land/src/features/game/types/pets.ts + each event handler.
-    // Effects are the per-action boost in-game; we compute SFL/day impact at user's login freq.
+    // `effect` strings are written from the player's perspective: "−25% time" = faster = buff.
     const SHRINE_DATA = {
-      "Boar Shrine":      { duration_d: 7,  ingredients: { Acorn: 15 },                                                catId: "cooking",   effect: "x0.8 cook time",                       effectKind: "indirect" },
-      "Hound Shrine":     { duration_d: 7,  ingredients: { Acorn: 50 },                                                catId: "pets",      effect: "+100 Pet XP per feed",                  effectKind: "xp_only" },
-      "Sparrow Shrine":   { duration_d: 7,  ingredients: { Acorn: 15, "Wild Grass": 10, "Ruffroot": 10 },              catId: "crops",     effect: "x0.75 crop growth time",                effectKind: "speed", speed: 0.75 },
-      "Fox Shrine":       { duration_d: 7,  ingredients: { Acorn: 15, "Chewed Bone": 10, "Ribbon": 10 },               catId: "crafting",  effect: "x0 first craft, x0.75 onward (Crafting Box)", effectKind: "indirect" },
-      "Toucan Shrine":    { duration_d: 7,  ingredients: { Acorn: 15, "Heart Leaf": 10, "Frost Pebble": 10 },          catId: "fruits",    effect: "x0.75 fruit growth time",                effectKind: "speed", speed: 0.75 },
-      "Collie Shrine":    { duration_d: 7,  ingredients: { Acorn: 15, "Frost Pebble": 10, "Chewed Bone": 10 },         catId: "cows",      effect: "x0.95 / x0.75 cow & sheep sleep (stacked)", effectKind: "speed", speed: 0.75, alsoCats: ["sheep"] },
-      "Moth Shrine":      { duration_d: 7,  ingredients: { Acorn: 15, "Frost Pebble": 10, "Ribbon": 10 },              catId: "flowers",   effect: "x0.75 flower grow + 25% chance +1 flower", effectKind: "speed_and_yield", speed: 0.75, chance: 0.25 },
-      "Badger Shrine":    { duration_d: 7,  ingredients: { Acorn: 15, "Dewberry": 10, "Heart Leaf": 10 },              catId: "trees",     effect: "x0.75 tree & stone recovery",            effectKind: "speed", speed: 0.75, alsoCats: ["stone"] },
-      "Mole Shrine":      { duration_d: 7,  ingredients: { Acorn: 15, "Dewberry": 10, "Ribbon": 10 },                  catId: "iron",      effect: "x0.75 iron / gold / crimstone recovery", effectKind: "speed", speed: 0.75, alsoCats: ["gold","crimstone"] },
-      "Tortoise Shrine":  { duration_d: 7,  ingredients: { Acorn: 15, "Wild Grass": 10, "Chewed Bone": 10 },           catId: "greenhouse", effect: "x0.67 greenhouse + x0.9 crop machine",   effectKind: "speed", speed: 0.67 },
-      "Stag Shrine":      { duration_d: 7,  ingredients: { Acorn: 15, "Heart Leaf": 10, "Wild Grass": 10 },            catId: "oil",       effect: "x0.75 oil time + +15 oil on 3rd drill", effectKind: "speed_and_yield", speed: 0.75, oil3rdDrillBonus: 15 },
-      "Bear Shrine":      { duration_d: 7,  ingredients: { Acorn: 15, "Chewed Bone": 10, "Ruffroot": 10 },             catId: "bees",      effect: "+0.5 honey per beehive cycle",           effectKind: "yield_flat", flat: 0.5 },
-      "Bantam Shrine":    { duration_d: 7,  ingredients: { Acorn: 15, "Ruffroot": 10, "Dewberry": 10 },                catId: "chickens",  effect: "x0.95 / x0.75 chicken sleep (stacked)",  effectKind: "speed", speed: 0.75 },
+      "Boar Shrine":      { duration_d: 7,  ingredients: { Acorn: 15 },                                                catId: "cooking",   effect: "−20% cook time (faster)",                       effectKind: "indirect" },
+      "Hound Shrine":     { duration_d: 7,  ingredients: { Acorn: 50 },                                                catId: "pets",      effect: "+100 Pet XP per feed (faster pet level-ups)",   effectKind: "xp_only" },
+      "Sparrow Shrine":   { duration_d: 7,  ingredients: { Acorn: 15, "Wild Grass": 10, "Ruffroot": 10 },              catId: "crops",     effect: "−25% Crop growth time (faster)",                effectKind: "speed", speed: 0.75 },
+      "Fox Shrine":       { duration_d: 7,  ingredients: { Acorn: 15, "Chewed Bone": 10, "Ribbon": 10 },               catId: "crafting",  effect: "Free first craft, −25% time afterwards",         effectKind: "indirect" },
+      "Toucan Shrine":    { duration_d: 7,  ingredients: { Acorn: 15, "Heart Leaf": 10, "Frost Pebble": 10 },          catId: "fruits",    effect: "−25% Fruit growth time (faster)",                effectKind: "speed", speed: 0.75 },
+      "Collie Shrine":    { duration_d: 7,  ingredients: { Acorn: 15, "Frost Pebble": 10, "Chewed Bone": 10 },         catId: "cows",      effect: "−5% / −25% Cow & Sheep sleep (stacked, faster)", effectKind: "speed", speed: 0.75, alsoCats: ["sheep"] },
+      "Moth Shrine":      { duration_d: 7,  ingredients: { Acorn: 15, "Frost Pebble": 10, "Ribbon": 10 },              catId: "flowers",   effect: "−25% Flower grow + 25% chance +1 flower",        effectKind: "speed_and_yield", speed: 0.75, chance: 0.25 },
+      "Badger Shrine":    { duration_d: 7,  ingredients: { Acorn: 15, "Dewberry": 10, "Heart Leaf": 10 },              catId: "trees",     effect: "−25% Tree & Stone recovery (faster)",            effectKind: "speed", speed: 0.75, alsoCats: ["stone"] },
+      "Mole Shrine":      { duration_d: 7,  ingredients: { Acorn: 15, "Dewberry": 10, "Ribbon": 10 },                  catId: "iron",      effect: "−25% Iron / Gold / Crimstone recovery (faster)", effectKind: "speed", speed: 0.75, alsoCats: ["gold","crimstone"] },
+      "Tortoise Shrine":  { duration_d: 7,  ingredients: { Acorn: 15, "Wild Grass": 10, "Chewed Bone": 10 },           catId: "greenhouse", effect: "−33% Greenhouse + −10% Crop Machine (faster)",   effectKind: "speed", speed: 0.67 },
+      "Stag Shrine":      { duration_d: 7,  ingredients: { Acorn: 15, "Heart Leaf": 10, "Wild Grass": 10 },            catId: "oil",       effect: "−25% Oil time + +15 Oil on every 3rd drill",     effectKind: "speed_and_yield", speed: 0.75, oil3rdDrillBonus: 15 },
+      "Bear Shrine":      { duration_d: 7,  ingredients: { Acorn: 15, "Chewed Bone": 10, "Ruffroot": 10 },             catId: "bees",      effect: "+0.5 Honey per beehive cycle",                   effectKind: "yield_flat", flat: 0.5 },
+      "Bantam Shrine":    { duration_d: 7,  ingredients: { Acorn: 15, "Ruffroot": 10, "Dewberry": 10 },                catId: "chickens",  effect: "−5% / −25% Chicken sleep (stacked, faster)",     effectKind: "speed", speed: 0.75 },
       "Legendary Shrine": { duration_d: 1,  ingredients: { Obsidian: 1, Moonfur: 10, Acorn: 15 },                       catId: "multi",    effect: "+1 to Crop, Fruit, Wood, Flower, Stone harvests", effectKind: "yield_flat_multi", flat: 1, targets: ["crops","fruits","trees","flowers","stone"] },
-      "Trading Shrine":   { duration_d: 30, ingredients: { Acorn: 15, Moonfur: 5, Obsidian: 3 },                       catId: "trading",   effect: "-2.5% Resources Tax (Marketplace)",      effectKind: "trading" },
+      "Trading Shrine":   { duration_d: 30, ingredients: { Acorn: 15, Moonfur: 5, Obsidian: 3 },                       catId: "trading",   effect: "−2.5% Resources Tax (Marketplace)",              effectKind: "trading" },
     };
+
+    // Acorn opportunity cost: dynamically derived from the pets page logic.
+    // Acorn = 100 energy to fetch (per PET_FETCH_DATA), so 1 Acorn's OC = 100 × best ⛀/energy
+    // across all the user's pets at their current level (the same `bestSflPerEnergy` that
+    // petDailyCalc picks). Falls back to a low constant if pet data isn't available.
+    function _shrineAcornPrice(farm, p2pPrices) {
+      try {
+        const pets = parseRoiPets ? parseRoiPets(farm) : [];
+        if (!pets || pets.length === 0) return 0.1;
+        let bestSflPerE = 0;
+        for (const pet of pets) {
+          const fetchData = (typeof PET_FETCH_DATA !== "undefined" ? PET_FETCH_DATA : {})[pet.petType] || [];
+          for (const f of fetchData) {
+            if (pet.level < f.level) continue;
+            // Skip Acorn itself to avoid circularity
+            if (f.res === "Acorn") continue;
+            const price = parseFloat(p2pPrices[f.res] || 0);
+            if (!price || !f.energy) continue;
+            const r = price / f.energy;
+            if (r > bestSflPerE) bestSflPerE = r;
+          }
+        }
+        // 1 Acorn costs 100 energy → OC = 100 × bestSflPerEnergy
+        const oc = bestSflPerE * 100;
+        return oc > 0 ? oc : 0.1;
+      } catch (e) {
+        console.warn("[Shrines] acorn OC derivation failed", e);
+        return 0.1;
+      }
+    }
 
     // ── Node purchase prices (Sunstone cost: base + purchased × increase) ──
     const NODE_PRICES = {
@@ -5283,7 +5313,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.31</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.32</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5310,6 +5340,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.32", items: [
+          { t: "fix", text: "Shrines page reworked: simpler table (cost / earn over active duration / net / time-left / ingredients / verdict), shrine icons from sfl.world via getItemIcon, SFL flower icon via sflIcon() helper instead of generic ⛀, and effect descriptions reframed as buffs ('−25% time = faster') instead of multiplier shorthand ('x0.75')." },
+          { t: "fix", text: "Acorn opportunity cost is now derived dynamically — your pets need 100 energy to fetch 1 Acorn, so the OC equals 100 × best ⛀/energy across your unlocked pet resources (same formula as petDailyCalc). Previously Acorn was undervalued because it isn't tradeable on p2p." },
+        ]},
         { ver: "v3.31", items: [
           { t: "new", text: "New PET SHRINES page (?page=shrines). Lists all 15 craftable temporary collectibles with: cost in SFL (ingredients × p2p prices), cost/day (cost / duration), real eff-adjusted marginal SFL/day at login freq 2×, days-to-payback, status (active hours-left / expired / never placed), inventory-ingredients check, and verdict badge (GREAT / WORTH IT / MARGINAL / CHECK MANUALLY / SKIP). Speed-only shrines on cycles that ceil back the same way at 12h login show 0 SFL/day gain — expected (same constraint as Farm Dog etc). Yield-flat shrines (Bear +0.5 honey, Stag +15 oil per 3rd drill, Legendary +1 to crops/fruits/wood/flowers/stone, Moth 25% chance +1 flower) compute real marginal directly. Indirect shrines (Boar cooking, Fox crafting, Hound pet XP, Trading) flagged for manual judgment." },
         ]},
@@ -17229,41 +17263,43 @@
       const L = 2;  // assumed login frequency; can be made configurable later
       const loginInterval = 86400 / L;
 
-      // Compute per-shrine ROI
+      // Acorn opportunity cost derived dynamically from pets fetch yields
+      const acornPrice = _shrineAcornPrice(farm, p2pPrices);
+      const fallbackPrices = { Acorn: acornPrice };
+
+      // Compute per-shrine data — simplified: cost, total earned over duration, net, time-left.
       const rows = [];
       for (const [name, sh] of Object.entries(SHRINE_DATA)) {
-        const costSfl = _shrineIngredientCostSfl(sh.ingredients, p2pPrices);
-        const costPerDay = costSfl / sh.duration_d;
+        const costSfl = _shrineIngredientCostSfl(sh.ingredients, p2pPrices, fallbackPrices);
         const hasIngredients = _shrineHasIngredients(sh.ingredients, inventory);
-
-        // Status (active/expired/never)
         const status = _shrineStatus(name, placed, placedHome, sh.duration_d);
-
-        // Real marginal SFL/day estimate
         const margin = _shrineMarginalSflPerDay(sh, capacity, p2pPrices, effMap, L);
 
-        const netPerDay = margin.sflPerDay - costPerDay;
-        const roiDays = (margin.sflPerDay > 0 && costSfl > 0) ? (costSfl / margin.sflPerDay) : Infinity;
+        // Earnings across the full active duration of one placement (sh.duration_d days)
+        const earnTotal = margin.sflPerDay * sh.duration_d;
+        const netTotal = earnTotal - costSfl;
+
+        // Indirect / xp_only / trading → mark manual rather than auto-skip
+        const isIndirect = (margin.note && margin.note.indexOf("indirect") !== -1) || margin.sflPerDay === 0 && sh.effectKind && (sh.effectKind === "xp_only" || sh.effectKind === "indirect" || sh.effectKind === "trading");
+
         let verdict;
-        if (margin.note && margin.note.indexOf("indirect") !== -1) verdict = "manual";
+        if (isIndirect) verdict = "manual";
         else if (margin.sflPerDay <= 0) verdict = "skip";
-        else if (roiDays <= sh.duration_d * 0.5) verdict = "great";
-        else if (roiDays <= sh.duration_d) verdict = "worth";
-        else if (roiDays <= sh.duration_d * 2) verdict = "marginal";
+        else if (netTotal > costSfl) verdict = "great";
+        else if (netTotal > 0) verdict = "worth";
+        else if (netTotal > -costSfl * 0.5) verdict = "marginal";
         else verdict = "skip";
 
-        rows.push({ name, sh, costSfl, costPerDay, hasIngredients, status, margin, netPerDay, roiDays, verdict });
+        rows.push({ name, sh, costSfl, hasIngredients, status, margin, earnTotal, netTotal, verdict });
       }
 
-      // Sort: worth ones first by ROI ascending; "manual" mid; "skip" last
       const rank = { great: 0, worth: 1, marginal: 2, manual: 3, skip: 4 };
       rows.sort((a, b) => {
         const dr = rank[a.verdict] - rank[b.verdict];
         if (dr !== 0) return dr;
-        return a.roiDays - b.roiDays;
+        return b.netTotal - a.netTotal;
       });
 
-      // Render
       const verdictBadge = {
         great:    `<span style="background:#1a5a1a;color:#fff;padding:3px 8px;border-radius:3px;font-size:0.5rem;letter-spacing:0.05em">GREAT</span>`,
         worth:    `<span style="background:#3a7a3a;color:#fff;padding:3px 8px;border-radius:3px;font-size:0.5rem;letter-spacing:0.05em">WORTH IT</span>`,
@@ -17271,52 +17307,51 @@
         manual:   `<span style="background:#3a3a7a;color:#fff;padding:3px 8px;border-radius:3px;font-size:0.5rem;letter-spacing:0.05em">CHECK MANUALLY</span>`,
         skip:     `<span style="background:#7a1a1a;color:#fff;padding:3px 8px;border-radius:3px;font-size:0.5rem;letter-spacing:0.05em">SKIP</span>`,
       };
-      const statusBadge = {
-        active:    (h) => `<span style="color:var(--green);font-weight:bold">${h.toFixed(0)}h left</span>`,
-        expired:   () => `<span style="color:var(--red)">expired</span>`,
-        never:     () => `<span style="color:var(--text-dim)">never placed</span>`,
+      const renderStatus = (s) => {
+        if (s.kind === "active") {
+          const h = s.hoursLeft;
+          const txt = h >= 24 ? `${(h/24).toFixed(1)}d left` : `${h.toFixed(0)}h left`;
+          return `<span style="color:var(--green);font-weight:bold">${txt}</span>`;
+        }
+        if (s.kind === "expired") return `<span style="color:var(--red)">expired</span>`;
+        return `<span style="color:var(--text-dim)">—</span>`;
       };
 
+      const ICON = sflIcon("0.85em");
       let content = `<div class="pixel-panel" style="padding:0;overflow-x:auto;background:rgba(0,0,0,0.15)">
         <table style="width:100%;border-collapse:collapse;font-family:'Courier New',monospace;font-size:0.75rem">
           <thead><tr class="pixel-font" style="background:rgba(0,0,0,0.4);color:var(--text-secondary);font-size:0.5rem;letter-spacing:0.5px">
             <th style="text-align:left;padding:8px">SHRINE</th>
             <th style="text-align:left;padding:8px">EFFECT</th>
-            <th style="text-align:right;padding:8px" title="Total ingredient cost at p2p prices">COST</th>
-            <th style="text-align:right;padding:8px" title="Cost amortized over shrine duration">⛀/DAY</th>
-            <th style="text-align:right;padding:8px" title="Real marginal SFL/day at login freq 2x">REAL ⛀/D</th>
-            <th style="text-align:right;padding:8px">NET ⛀/D</th>
-            <th style="text-align:right;padding:8px">PAYBACK</th>
-            <th style="text-align:center;padding:8px">STATUS</th>
+            <th style="text-align:right;padding:8px" title="Total ingredient cost. Acorn priced dynamically at the best ⛀/energy your pets can fetch instead.">COST</th>
+            <th style="text-align:right;padding:8px" title="Total earned over full active duration (REAL ⛀/d × duration_days)">EARN OVER ${' '}${' '}ACTIVE</th>
+            <th style="text-align:right;padding:8px" title="Net = Earn − Cost">NET</th>
+            <th style="text-align:center;padding:8px" title="Time remaining if currently placed">TIME LEFT</th>
             <th style="text-align:center;padding:8px">HAVE ING.</th>
             <th style="text-align:center;padding:8px">VERDICT</th>
           </tr></thead><tbody>`;
       for (const r of rows) {
-        const cost = r.costSfl > 0 ? r.costSfl.toFixed(1) + " ⛀" : "—";
-        const cpd = r.costPerDay > 0 ? r.costPerDay.toFixed(2) : "—";
-        const real = (r.margin.sflPerDay > 0.001 ? "+" + r.margin.sflPerDay.toFixed(2)
-                      : r.margin.note && r.margin.note.indexOf("indirect") !== -1 ? '<span style="color:var(--text-dim)">indirect</span>'
-                      : "0");
-        const net = (r.netPerDay > 0.001 ? `<span style="color:var(--green);font-weight:bold">+${r.netPerDay.toFixed(2)}</span>`
-                     : r.netPerDay < -0.001 ? `<span style="color:var(--red)">${r.netPerDay.toFixed(2)}</span>`
-                     : "0");
-        const payback = !isFinite(r.roiDays) ? '<span style="color:var(--text-dim)">∞</span>'
-                        : (r.roiDays < r.sh.duration_d ? `<span style="color:var(--green);font-weight:bold">${r.roiDays.toFixed(1)}d</span>`
-                          : `<span style="color:var(--sunpetal)">${r.roiDays.toFixed(0)}d</span>`);
-        const status = r.status.kind === "active" ? statusBadge.active(r.status.hoursLeft)
-                       : r.status.kind === "expired" ? statusBadge.expired()
-                       : statusBadge.never();
+        const cost = r.costSfl > 0 ? r.costSfl.toFixed(1) + " " + ICON : "—";
+        const earn = (r.margin.sflPerDay > 0.001
+          ? `<span style="color:var(--green)">+${r.earnTotal.toFixed(1)}</span> ${ICON}<div style="font-size:0.55rem;color:var(--text-dim)">(${r.sh.duration_d}d × ${r.margin.sflPerDay.toFixed(2)}/d)</div>`
+          : (r.margin.note && r.margin.note.indexOf("indirect") !== -1)
+            ? '<span style="color:var(--text-dim)">indirect</span>'
+            : '<span style="color:var(--text-dim)">0</span>');
+        const net = (r.netTotal > 0.001 ? `<span style="color:var(--green);font-weight:bold">+${r.netTotal.toFixed(1)} ${ICON}</span>`
+                     : r.netTotal < -0.001 ? `<span style="color:var(--red);font-weight:bold">${r.netTotal.toFixed(1)} ${ICON}</span>`
+                     : '<span style="color:var(--text-dim)">0</span>');
+        const status = renderStatus(r.status);
         const hasIng = r.hasIngredients
           ? `<span style="color:var(--green)">✓</span>`
           : `<span style="color:var(--text-dim)">missing</span>`;
+        const shrineIcon = (typeof getItemIcon === "function") ? getItemIcon(r.name) : null;
+        const iconImg = shrineIcon ? `<img src="${shrineIcon}" alt="${escHTML(r.name)}" style="height:1.6em;vertical-align:-0.4em;margin-right:6px;image-rendering:pixelated" loading="lazy">` : '';
         content += `<tr style="border-top:1px solid rgba(255,255,255,0.07)">
-          <td style="padding:8px;font-weight:bold;color:var(--sunpetal)">${escHTML(r.name)}</td>
+          <td style="padding:8px;font-weight:bold;color:var(--sunpetal)">${iconImg}${escHTML(r.name)}</td>
           <td style="padding:8px;color:var(--text-secondary);font-size:0.6875rem">${escHTML(r.sh.effect)}</td>
           <td style="text-align:right;padding:8px">${cost}</td>
-          <td style="text-align:right;padding:8px;color:var(--red)">−${cpd}</td>
-          <td style="text-align:right;padding:8px;color:var(--green)">${real}</td>
+          <td style="text-align:right;padding:8px">${earn}</td>
           <td style="text-align:right;padding:8px">${net}</td>
-          <td style="text-align:right;padding:8px">${payback}</td>
           <td style="text-align:center;padding:8px">${status}</td>
           <td style="text-align:center;padding:8px">${hasIng}</td>
           <td style="text-align:center;padding:8px">${verdictBadge[r.verdict]}</td>
@@ -17324,13 +17359,15 @@
       }
       content += `</tbody></table></div>`;
 
-      // Footer with notes
+      // Footer notes
       content += `<div class="pixel-font" style="margin-top:16px;padding:12px;background:rgba(0,0,0,0.2);border:2px solid rgba(255,255,255,0.05);font-size:0.55rem;color:var(--text-dim);line-height:1.7">
-        <b style="color:var(--text-secondary)">How REAL ⛀/D is computed</b><br>
-        • <b>Yield-flat shrines</b> (Bear +0.5 Honey, Stag +15 oil, Legendary +1, Moth chance +1): direct yield × p2p price × nodeCount, scaled by per-category eff from last 14d snapshots.<br>
-        • <b>Speed-only shrines</b> (Mole, Badger, Sparrow, etc.): cycle × shrine speed factor, login-capped via ceil(cycle/login_interval)×login_interval. If new effective cycle = current → 0 SFL/day gain (most shrines at L=2 fall here).<br>
-        • <b>Indirect</b> (Boar cooking, Fox crafting, Hound pet XP, Trading): no clean SFL/day mapping — judge manually based on your activity.<br>
-        • Assumed login frequency: <b>2× per day</b> (same as ROI page default). Status check uses each shrine's duration: most 7d, Legendary 1d, Trading 30d.
+        <b style="color:var(--text-secondary)">How EARN OVER ACTIVE is computed</b><br>
+        • Sum of expected ${ICON}/day boost × duration_days (7d for most, 1d Legendary, 30d Trading).<br>
+        • <b>Yield-flat</b> shrines (Bear +0.5 Honey, Stag +15 oil, Legendary +1 to crops/fruits/wood/flowers/stone, Moth chance +1 flower): direct yield × p2p × node count.<br>
+        • <b>Speed-only</b> shrines (Mole, Badger, Sparrow…): cycle × shrine factor, login-capped at ceil(cycle/12h)×12h. If new effective cycle = old → 0 gain. At L=2 most speed shrines land here.<br>
+        • <b>Indirect</b> (Boar cooking, Fox crafting, Hound pet XP, Trading): no clean ${ICON}/day mapping — judge manually.<br>
+        • <b>Acorn opportunity cost</b>: not on p2p, so priced dynamically at <b>${acornPrice.toFixed(3)} ${ICON}/Acorn</b> = 100 energy × best ⛀/energy your pets can fetch instead (same logic as petDailyCalc).<br>
+        • Login frequency assumed: <b>2× per day</b>.
       </div>`;
 
       document.getElementById("shrines-content").innerHTML = content;
@@ -17338,11 +17375,13 @@
 
     // ── Shrine helpers ──
 
-    function _shrineIngredientCostSfl(ingredients, p2pPrices) {
+    function _shrineIngredientCostSfl(ingredients, p2pPrices, fallbackPrices) {
+      const fb = fallbackPrices || {};
       let sum = 0;
       for (const [k, q] of Object.entries(ingredients)) {
         // Try both with and without "Heart Leaf" / "Heart leaf" casing
-        const price = p2pPrices[k] || p2pPrices[k.replace(/\s+/g, " ")] || 0;
+        const p2p = p2pPrices[k] || p2pPrices[k.replace(/\s+/g, " ")] || 0;
+        const price = p2p > 0 ? p2p : (fb[k] || 0);
         sum += price * q;
       }
       return sum;
