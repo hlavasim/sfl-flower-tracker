@@ -5313,7 +5313,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.40</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.41</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5340,6 +5340,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.41", items: [
+          { t: "fix", text: "Power page tool-cost calc now recognises Crimstone Spikes Hair as a free-tool source for crimstone mining (same way Quarry is detected for stone, Foreman Beaver for trees, Infernal Drill for oil). Adds `stockMods.hasCrimstoneSpikesHair` detection in detectStockModifiers and a corresponding short-circuit in calcToolCostPerDay + restock-queue free-tool flag. Result: COST row on Power for crimstone drops to 0 ⛀/d when the wearable is owned/equipped, and the corresponding restock queue treats Gold Pickaxe as not-consumed for crimstone." },
+        ]},
         { ver: "v3.40", items: [
           { t: "fix", text: "Shrine speed math reverted to MULTIPLICATIVE (game-source-correct). I checked SFL source and confirmed each speed boost multiplies the cycle (`totalSeconds = totalSeconds * 0.75`), not adds. Additive in v3.38-v3.39 produced absurd results when boosts stack — e.g. existing -60% + shrine -25% gave -85% additive = cycle × 0.15, producing 2080 tree harvests/day (vs realistic ~720). Multiplicative gives cycle × 0.4 × 0.75 = × 0.3 (still aggressive but bounded). Breakdown layout (Data z Power → S boostem → Raw delta → eff) preserved; only the underlying math changed." },
         ]},
@@ -13124,9 +13127,15 @@
       const hasForeman = findCollectible(farm, "Foreman Beaver").length > 0 || getCount(inventory, "Foreman Beaver") > 0;
       const oilRigActive = skills["Oil Rig"] !== undefined;
       const hasInfernalDrill = isWearableEquipped(farm, "Infernal Drill");
+      // Crimstone Spikes Hair: wearable that lets you mine crimstone without Gold Pickaxes.
+      // Counted whether equipped OR just owned in wardrobe — the in-game effect applies once
+      // it's part of the bumpkin's outfit, but UI-wise we show the savings regardless so the
+      // user can immediately see the value before equipping.
+      const hasCrimstoneSpikesHair = isWearableEquipped(farm, "Crimstone Spikes Hair")
+        || ((farm.wardrobe || {})["Crimstone Spikes Hair"] || 0) > 0;
       const slickSaver = skills["Slick Saver"] !== undefined; // -1 Oil for greenhouse seeds
       const hasKaleMix = skills["Kale Mix"] !== undefined; // Mixed Grain uses 3 Kale instead
-      return { hasWarehouse, hasToolshed, moreAxes, morePicks, fellersDiscount, frugalMiner, hasQuarry, hasForeman, oilRigActive, hasInfernalDrill, slickSaver, hasKaleMix };
+      return { hasWarehouse, hasToolshed, moreAxes, morePicks, fellersDiscount, frugalMiner, hasQuarry, hasForeman, oilRigActive, hasInfernalDrill, hasCrimstoneSpikesHair, slickSaver, hasKaleMix };
     }
 
     // Get effective stock for a seed/tool
@@ -13217,6 +13226,12 @@
           const n = capacity.oilReserves || 0;
           const toolsPerDay = d ? n * (86400 / d.respawnSec) : 0;
           return { costPerDay: 0, toolSfl: 0, restockPerDay: 0, toolsPerDay, stock: 0, freeTool: true, freeToolSource: "Infernal Drill" };
+        }
+        if (catId === "crimstone" && stockMods.hasCrimstoneSpikesHair) {
+          const d = RESOURCE_RESPAWN_DATA["Crimstone"];
+          const n = capacity.crimstones || 0;
+          const toolsPerDay = d ? n * (86400 / d.respawnSec) : 0;
+          return { costPerDay: 0, toolSfl: 0, restockPerDay: 0, toolsPerDay, stock: 0, freeTool: true, freeToolSource: "Crimstone Spikes Hair" };
         }
       }
 
@@ -13550,6 +13565,7 @@
           if (catId === "stone" && stockMods.hasQuarry) freeTool = true;
           if (catId === "trees" && stockMods.hasForeman) freeTool = true;
           if (catId === "oil" && stockMods.hasInfernalDrill) freeTool = true;
+          if (catId === "crimstone" && stockMods.hasCrimstoneSpikesHair) freeTool = true;
           const effectiveUse = freeTool ? 0 : toolsPerDay;
           const daysUntilEmpty = effectiveUse > 0 ? stock / effectiveUse : Infinity;
           queues[qId] = { stock, usePerDay: effectiveUse, daysUntilEmpty, toolName, group: "tools", label: qDef.label, capacity: n, freeTool };
