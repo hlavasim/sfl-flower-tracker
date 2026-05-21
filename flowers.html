@@ -17257,22 +17257,20 @@
         : [];
       const ownedEffects = boostItems.filter(b => b.has && !b.isDisabled).flatMap(b => b.effects || []);
 
-      // Fetch farm history to derive eff for each category (same approach as nodes page).
-      // Use last 14 days bucketed at 2h to keep payload small. We only need recent harvest cadence.
-      let effMap = {};
+      const capacity = detectFarmCapacity(farm);
+
+      // Fetch farm history & compute per-category eff (same algorithm as Nodes page).
+      let efficiencyMap = {};
       try {
         const fromIso = new Date(Date.now() - 14 * 86400000).toISOString();
         const toIso = new Date(Date.now() + 86400000).toISOString();
-        const r = await fetch(`/api/farm-history?farm=${FARM_ID}&from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}&bucket_hours=2&limit=200`);
+        // Use raw (no bucket) date-range with limit=1000 to get snapshot diffs covering ~14d
+        const r = await fetch(`/api/farm-history?farm=${FARM_ID}&from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}&limit=1000`);
         if (r.ok) {
           const histData = await r.json();
-          const snaps = (histData.snapshots || []).filter(s => s.diff);
-          effMap = _shrineComputeEffMap(snaps);
+          efficiencyMap = _shrineBuildEffMap(histData.snapshots || [], capacity, ownedEffects);
         }
       } catch (e) { console.warn("[Shrines] eff fetch failed", e); }
-
-      const capacity = detectFarmCapacity(farm);
-      const L = 2;  // assumed login frequency; can be made configurable later
 
       // Acorn opportunity cost derived dynamically from pets fetch yields
       const acornPrice = _shrineAcornPrice(farm, p2pPrices);
@@ -17284,7 +17282,7 @@
         const costSfl = _shrineIngredientCostSfl(sh.ingredients, p2pPrices, fallbackPrices);
         const hasIngredients = _shrineHasIngredients(sh.ingredients, inventory);
         const status = _shrineStatus(name, placed, placedHome, sh.duration_d);
-        const margin = _shrineMarginalSflPerDay(sh, capacity, p2pPrices, ownedEffects);
+        const margin = _shrineMarginalSflPerDay(sh, capacity, p2pPrices, ownedEffects, efficiencyMap);
 
         // Earnings across the full active duration of one placement (sh.duration_d days)
         const earnTotal = margin.sflPerDay * sh.duration_d;
@@ -17304,81 +17302,118 @@
         rows.push({ name, sh, costSfl, hasIngredients, status, margin, earnTotal, netTotal, verdict });
       }
 
-      const rank = { great: 0, worth: 1, marginal: 2, manual: 3, skip: 4 };
-      rows.sort((a, b) => {
-        const dr = rank[a.verdict] - rank[b.verdict];
-        if (dr !== 0) return dr;
-        return b.netTotal - a.netTotal;
-      });
-
-      const verdictBadge = {
-        great:    `<span style="background:#1a5a1a;color:#fff;padding:3px 8px;border-radius:3px;font-size:0.5rem;letter-spacing:0.05em">GREAT</span>`,
-        worth:    `<span style="background:#3a7a3a;color:#fff;padding:3px 8px;border-radius:3px;font-size:0.5rem;letter-spacing:0.05em">WORTH IT</span>`,
-        marginal: `<span style="background:#7a6a1a;color:#fff;padding:3px 8px;border-radius:3px;font-size:0.5rem;letter-spacing:0.05em">MARGINAL</span>`,
-        manual:   `<span style="background:#3a3a7a;color:#fff;padding:3px 8px;border-radius:3px;font-size:0.5rem;letter-spacing:0.05em">CHECK MANUALLY</span>`,
-        skip:     `<span style="background:#7a1a1a;color:#fff;padding:3px 8px;border-radius:3px;font-size:0.5rem;letter-spacing:0.05em">SKIP</span>`,
-      };
-      const renderStatus = (s) => {
-        if (s.kind === "active") {
-          const h = s.hoursLeft;
-          const txt = h >= 24 ? `${(h/24).toFixed(1)}d left` : `${h.toFixed(0)}h left`;
-          return `<span style="color:var(--green);font-weight:bold">${txt}</span>`;
-        }
-        if (s.kind === "expired") return `<span style="color:var(--red)">expired</span>`;
-        return `<span style="color:var(--text-dim)">—</span>`;
-      };
+      // Sort: profitable first (highest net), then unprofitable
+      rows.sort((a, b) => b.netTotal - a.netTotal);
 
       const ICON = sflIcon("0.85em");
-      let content = `<div class="pixel-panel" style="padding:0;overflow-x:auto;background:rgba(0,0,0,0.15)">
-        <table style="width:100%;border-collapse:collapse;font-family:'Courier New',monospace;font-size:0.75rem">
-          <thead><tr class="pixel-font" style="background:rgba(0,0,0,0.4);color:var(--text-secondary);font-size:0.5rem;letter-spacing:0.5px">
-            <th style="text-align:left;padding:8px">SHRINE</th>
-            <th style="text-align:left;padding:8px">EFFECT</th>
-            <th style="text-align:right;padding:8px" title="Total ingredient cost. Acorn priced dynamically at the best ⛀/energy your pets can fetch instead.">COST</th>
-            <th style="text-align:right;padding:8px" title="Total earned over full active duration (REAL ⛀/d × duration_days)">EARN OVER ${' '}${' '}ACTIVE</th>
-            <th style="text-align:right;padding:8px" title="Net = Earn − Cost">NET</th>
-            <th style="text-align:center;padding:8px" title="Time remaining if currently placed">TIME LEFT</th>
-            <th style="text-align:center;padding:8px">HAVE ING.</th>
-            <th style="text-align:center;padding:8px">VERDICT</th>
-          </tr></thead><tbody>`;
+
+      // Summary metrics (top 4-box panel — matches in-game shrine economy view)
+      let profitableCount = 0;
+      let totalBoostPerDay = 0;
+      let totalCostPerDay = 0;
       for (const r of rows) {
-        const cost = r.costSfl > 0 ? r.costSfl.toFixed(1) + " " + ICON : "—";
-        const earn = (r.margin.sflPerDay > 0.001
-          ? `<span style="color:var(--green)">+${r.earnTotal.toFixed(1)}</span> ${ICON}<div style="font-size:0.55rem;color:var(--text-dim)">(${r.sh.duration_d}d × ${r.margin.sflPerDay.toFixed(2)}/d)</div>`
-          : (r.margin.note && r.margin.note.indexOf("indirect") !== -1)
-            ? '<span style="color:var(--text-dim)">indirect</span>'
-            : '<span style="color:var(--text-dim)">0</span>');
-        const net = (r.netTotal > 0.001 ? `<span style="color:var(--green);font-weight:bold">+${r.netTotal.toFixed(1)} ${ICON}</span>`
-                     : r.netTotal < -0.001 ? `<span style="color:var(--red);font-weight:bold">${r.netTotal.toFixed(1)} ${ICON}</span>`
-                     : '<span style="color:var(--text-dim)">0</span>');
-        const status = renderStatus(r.status);
-        const hasIng = r.hasIngredients
-          ? `<span style="color:var(--green)">✓</span>`
-          : `<span style="color:var(--text-dim)">missing</span>`;
-        const shrineIcon = (typeof getItemIcon === "function") ? getItemIcon(r.name) : null;
-        const iconImg = shrineIcon ? `<img src="${shrineIcon}" alt="${escHTML(r.name)}" style="height:1.6em;vertical-align:-0.4em;margin-right:6px;image-rendering:pixelated" loading="lazy">` : '';
-        content += `<tr style="border-top:1px solid rgba(255,255,255,0.07)">
-          <td style="padding:8px;font-weight:bold;color:var(--sunpetal)">${iconImg}${escHTML(r.name)}</td>
-          <td style="padding:8px;color:var(--text-secondary);font-size:0.6875rem">${escHTML(r.sh.effect)}</td>
-          <td style="text-align:right;padding:8px">${cost}</td>
-          <td style="text-align:right;padding:8px">${earn}</td>
-          <td style="text-align:right;padding:8px">${net}</td>
-          <td style="text-align:center;padding:8px">${status}</td>
-          <td style="text-align:center;padding:8px">${hasIng}</td>
-          <td style="text-align:center;padding:8px">${verdictBadge[r.verdict]}</td>
-        </tr>`;
+        if (r.netTotal > 0) profitableCount++;
+        totalBoostPerDay += r.margin.sflPerDay || 0;
+        totalCostPerDay += (r.costSfl > 0 ? r.costSfl / r.sh.duration_d : 0);
       }
-      content += `</tbody></table></div>`;
+      const netPerDay = totalBoostPerDay - totalCostPerDay;
+
+      let content = `<div class="summary-bar" style="margin-bottom:12px">
+        <div class="summary-stat">
+          <div class="label pixel-font">PROFITABLE</div>
+          <div class="value pixel-font"><span style="color:var(--green)">${profitableCount}</span> / <span style="color:var(--text-secondary)">${rows.length}</span></div>
+        </div>
+        <div class="summary-stat">
+          <div class="label pixel-font">TOTAL BOOST</div>
+          <div class="value pixel-font" style="color:var(--green)">+${totalBoostPerDay.toFixed(4)} ${ICON}/d</div>
+        </div>
+        <div class="summary-stat">
+          <div class="label pixel-font">TOTAL COST</div>
+          <div class="value pixel-font" style="color:var(--red)">${totalCostPerDay.toFixed(4)} ${ICON}/d</div>
+        </div>
+        <div class="summary-stat">
+          <div class="label pixel-font">NET (real eff.)</div>
+          <div class="value pixel-font" style="color:${netPerDay >= 0 ? 'var(--green)' : 'var(--red)'}">${netPerDay >= 0 ? '+' : ''}${netPerDay.toFixed(4)} ${ICON}/d</div>
+        </div>
+      </div>`;
+
+      // Per-shrine cards (matches the in-game collection card layout)
+      content += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:12px">`;
+      for (const r of rows) {
+        const shrineIconUrl = (typeof getItemIcon === "function") ? getItemIcon(r.name) : null;
+        const iconImg = shrineIconUrl
+          ? `<img src="${shrineIconUrl}" alt="${escHTML(r.name)}" style="width:48px;height:48px;image-rendering:pixelated;flex-shrink:0" loading="lazy">`
+          : `<div style="width:48px;height:48px;background:rgba(255,255,255,0.05);flex-shrink:0"></div>`;
+
+        const statusBadge = r.status.kind === "active"
+          ? `<span style="background:#1a5a1a;color:#fff;padding:3px 8px;border-radius:3px;font-size:0.5rem;letter-spacing:0.05em" class="pixel-font">ACTIVE</span>`
+          : `<span style="background:#444;color:#aaa;padding:3px 8px;border-radius:3px;font-size:0.5rem;letter-spacing:0.05em" class="pixel-font">INACTIVE</span>`;
+        const timeLeft = r.status.kind === "active"
+          ? (r.status.hoursLeft >= 24
+              ? `${(r.status.hoursLeft / 24).toFixed(1)} days left`
+              : `${r.status.hoursLeft.toFixed(0)}h left`)
+          : `${r.sh.duration_d} day${r.sh.duration_d !== 1 ? 's' : ''}`;
+
+        const isIndirect = r.margin.note && r.margin.note.indexOf("indirect") !== -1;
+        const earnLabel = `EARN (${r.sh.duration_d}d)`;
+        const profitLabel = r.netTotal >= 0 ? `PROFIT (${r.sh.duration_d}d)` : `LOSS (${r.sh.duration_d}d)`;
+        const profitColor = r.netTotal >= 0 ? "var(--green)" : "var(--red)";
+        const profitVal = r.netTotal >= 0 ? `+${r.netTotal.toFixed(2)}` : r.netTotal.toFixed(2);
+
+        const earnVal = isIndirect
+          ? `<span style="color:var(--text-dim);font-size:0.75rem">indirect</span>`
+          : `${r.earnTotal.toFixed(2)} ${ICON}`;
+        const boostVal = isIndirect
+          ? `<span style="color:var(--text-dim);font-size:0.75rem">—</span>`
+          : `<span style="color:var(--green)">+${r.margin.sflPerDay.toFixed(4)}</span> ${ICON}/d`;
+
+        const ingWarn = r.hasIngredients ? '' :
+          `<div class="pixel-font" style="margin-top:6px;font-size:0.5rem;color:var(--text-dim)">⚠ missing ingredients</div>`;
+
+        content += `<div class="pixel-panel" style="padding:12px 14px;background:rgba(0,0,0,0.2)">
+          <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:8px">
+            ${iconImg}
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+                <div class="pixel-font" style="font-size:0.75rem;color:var(--sunpetal);font-weight:bold">${escHTML(r.name)}</div>
+                <div style="text-align:right;flex-shrink:0">
+                  ${statusBadge}
+                  <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin-top:3px">${escHTML(timeLeft)}</div>
+                </div>
+              </div>
+              <div style="font-family:'Courier New',monospace;font-size:0.6875rem;color:var(--text-secondary);margin-top:4px;line-height:1.4">${escHTML(r.sh.effect)}</div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-family:'Courier New',monospace;font-size:0.8125rem">
+            <div>
+              <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);letter-spacing:0.5px">COST</div>
+              <div style="color:var(--sunpetal);font-weight:bold">${r.costSfl.toFixed(2)} ${ICON}</div>
+            </div>
+            <div>
+              <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);letter-spacing:0.5px">BOOST</div>
+              <div>${boostVal}</div>
+            </div>
+            <div>
+              <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);letter-spacing:0.5px">${earnLabel}</div>
+              <div>${earnVal}</div>
+            </div>
+            <div>
+              <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);letter-spacing:0.5px">${profitLabel}</div>
+              <div style="color:${profitColor};font-weight:bold">${profitVal} ${ICON}</div>
+            </div>
+          </div>
+          ${ingWarn}
+        </div>`;
+      }
+      content += `</div>`;
 
       // Footer notes
       content += `<div class="pixel-font" style="margin-top:16px;padding:12px;background:rgba(0,0,0,0.2);border:2px solid rgba(255,255,255,0.05);font-size:0.55rem;color:var(--text-dim);line-height:1.7">
-        <b style="color:var(--text-secondary)">How EARN OVER ACTIVE is computed</b><br>
-        • Sum of expected ${ICON}/day boost × duration_days (7d for most, 1d Legendary, 30d Trading).<br>
-        • <b>Yield-flat</b> shrines (Bear +0.5 Honey, Stag +15 oil, Legendary +1 to crops/fruits/wood/flowers/stone, Moth chance +1 flower): direct yield × p2p × node count.<br>
-        • <b>Speed-only</b> shrines (Mole, Badger, Sparrow…): cycle × shrine factor, login-capped at ceil(cycle/12h)×12h. If new effective cycle = old → 0 gain. At L=2 most speed shrines land here.<br>
+        <b style="color:var(--text-secondary)">How BOOST / EARN are computed (real efficiency)</b><br>
+        • <b>BOOST</b> = current daily ${ICON} per affected resource × shrine effect × <b>per-category eff</b> (from your snapshot harvest cadence; same data as the Nodes-page EFFICIENCY column). Categories without snapshot data (animals, flowers) use ${(SHRINE_FALLBACK_EFF*100).toFixed(0)}% fallback.<br>
+        • <b>EARN</b> = BOOST × shrine duration_days (7 / 1 / 30).<br>
         • <b>Indirect</b> (Boar cooking, Fox crafting, Hound pet XP, Trading): no clean ${ICON}/day mapping — judge manually.<br>
-        • <b>Acorn opportunity cost</b>: not on p2p, so priced dynamically at <b>${acornPrice.toFixed(3)} ${ICON}/Acorn</b> = 100 energy × best ⛀/energy your pets can fetch instead (same logic as petDailyCalc).<br>
-        • Login frequency assumed: <b>2× per day</b>.
+        • <b>Acorn opportunity cost</b>: not on p2p, priced dynamically at <b>${acornPrice.toFixed(3)} ${ICON}/Acorn</b> = 100 energy × best ${ICON}/energy your pets can fetch.<br>
       </div>`;
 
       document.getElementById("shrines-content").innerHTML = content;
@@ -17422,25 +17457,73 @@
       return { kind: "expired" };
     }
 
-    // Compute efficiency per category from snapshot diffs (similar to nodes page logic)
-    // Returns a Map: catId -> {ratio: 0..1+} where ratio is real-harvest-rate / theoretical-max.
-    function _shrineComputeEffMap(snaps) {
-      // For each snapshot diff we can read _h.<resource>.<event> counts.
-      // Without re-implementing the full nodes-page efficiency engine, we just take a
-      // very rough estimate: count harvests over the period and compare to theoretical 1/day per node.
-      // The nodes page builds this with more nuance; this is a degraded fallback for shrines.
-      return {};  // empty → marginal calcs assume eff=1 (optimistic upper bound)
+    // Compute efficiency per category from snapshot diffs.
+    // Mirrors the Nodes page algorithm: extract `_h.<resource>` event counts,
+    // merge digs within 30 min into sessions, compute actual sessions/day vs
+    // theoretical (using applyBoosts effectiveCycle), ratio = actual / theoretical.
+    // Returns { catId: { ratio, sessions, ... } }. Only known node categories
+    // (trees, stone, iron, gold, crimstone, oil) get computed; others remain undefined.
+    function _shrineBuildEffMap(snapshots, capacity, ownedEffects) {
+      const efficiencyMap = {};
+      if (typeof EFFICIENCY_RESOURCE_MAP === "undefined") return efficiencyMap;
+      const sorted = (snapshots || [])
+        .filter(s => s.captured_at && s.diff !== null && s.diff !== undefined)
+        .sort((a, b) => new Date(a.captured_at) - new Date(b.captured_at));
+      // Filter to v2 snapshots (those with _h.*)
+      const v2Start = sorted.findIndex(s => Object.keys(s.diff || {}).some(k => k.startsWith("_h.")));
+      const v2 = v2Start >= 0 ? sorted.slice(v2Start) : [];
+      if (v2.length < 2) return efficiencyMap;
+      const pDays = (new Date(v2[v2.length - 1].captured_at) - new Date(v2[0].captured_at)) / 86400000;
+      if (pDays < 0.5) return efficiencyMap;
+
+      for (const [catId, resInfo] of Object.entries(EFFICIENCY_RESOURCE_MAP)) {
+        const digTimes = [];
+        let totalHarvested = 0;
+        for (const snap of v2) {
+          const hCount = (snap.diff || {})[resInfo.hKey];
+          if (hCount > 0) {
+            digTimes.push(new Date(snap.captured_at).getTime());
+            totalHarvested += hCount;
+          }
+        }
+        const sessions = [];
+        if (digTimes.length > 0) {
+          let sStart = digTimes[0], sEnd = digTimes[0];
+          for (let i = 1; i < digTimes.length; i++) {
+            if (digTimes[i] - sEnd <= 1800000) sEnd = digTimes[i];
+            else { sessions.push(sStart); sStart = digTimes[i]; sEnd = digTimes[i]; }
+          }
+          sessions.push(sStart);
+        }
+        const product = getDefaultProduct(catId);
+        const catEffects = ownedEffects.filter(e => e.cat === catId);
+        const boosted = applyBoosts(catId, product, capacity, catEffects);
+        const effectiveCycle = boosted.effectiveCycle || 0;
+        const theoreticalPerDay = effectiveCycle > 0 ? 86400 / effectiveCycle : 0;
+        const actualPerDay = sessions.length / pDays;
+        let ratio = theoreticalPerDay > 0 ? actualPerDay / theoreticalPerDay : 0;
+        if (ratio > 1.5) ratio = 1.5;
+        efficiencyMap[catId] = { ratio, sessions: sessions.length, actualPerDay, theoreticalPerDay, totalHarvested };
+      }
+      return efficiencyMap;
     }
 
     // Marginal SFL/day from owning a shrine. Approach:
     //   1. Compute baseline daily SFL per relevant category using applyBoosts with the user's
     //      OWNED effects (same engine as the Power page). This is what the user actually earns.
-    //   2. Apply the shrine's effect ON TOP of that baseline:
-    //      - speed × s → gain = baseline × ((1/s) - 1) × eff
-    //      - yield_flat per cycle → gain = harvests/day × added × price
-    //      - chance % +1 → gain = harvests/day × p × price
-    // Global eff factor accounts for the user not actually harvesting 24/7.
-    const SHRINE_GLOBAL_EFF = 0.85;
+    //   2. Multiply by the per-category eff ratio derived from snapshot diff history (Nodes page
+    //      algorithm: actual sessions/day vs theoretical sessions/day). Falls back to 0.85 when
+    //      no eff data is available (animals, flowers — categories not in EFFICIENCY_RESOURCE_MAP).
+    //   3. Apply the shrine's effect ON TOP of that real-eff-adjusted baseline:
+    //      - speed × s → gain = real_baseline × ((1/s) - 1)
+    //      - yield_flat per cycle → gain = real_harvests/day × added × price
+    //      - chance % +1 → gain = real_harvests/day × p × price
+    const SHRINE_FALLBACK_EFF = 0.85;
+
+    function _shrineEff(catId, efficiencyMap) {
+      const e = (efficiencyMap || {})[catId];
+      return (e && e.ratio > 0) ? Math.min(e.ratio, 1.5) : SHRINE_FALLBACK_EFF;
+    }
 
     // Helper: baseline SFL/day for a category using current owned effects
     function _shrineCategoryBaseline(catId, capacity, p2pPrices, ownedEffects) {
@@ -17456,27 +17539,25 @@
       return { sflPerDay, unitsPerDay: r.unitsPerDay, harvestsPerDay, product, priceProduct };
     }
 
-    function _shrineMarginalSflPerDay(sh, capacity, p2pPrices, ownedEffects) {
+    function _shrineMarginalSflPerDay(sh, capacity, p2pPrices, ownedEffects, efficiencyMap) {
 
-      // Bear Shrine: +0.5 honey per beehive cycle → multiply current honey/day by gain ratio
+      // Bear Shrine: +0.5 honey per beehive cycle
       if (sh.effectKind === "yield_flat") {
         if (sh.catId === "bees") {
-          const base = _shrineCategoryBaseline("bees", capacity, p2pPrices, ownedEffects);
+          const eff = _shrineEff("bees", efficiencyMap);
           const honeyPrice = p2pPrices["Honey"] || 0;
           const beeCount = capacity.bees || 0;
-          // applyBoosts for bees returns n * yield (no cycle factor) so adding +0.5 per cycle ≈ +0.5/day per bee
-          const gain = beeCount * sh.flat * honeyPrice * SHRINE_GLOBAL_EFF;
-          return { sflPerDay: gain, note: `${beeCount} beehives × +${sh.flat} honey (current ${base.sflPerDay.toFixed(2)} ${sflIcon()}/d)` };
+          const gain = beeCount * sh.flat * honeyPrice * eff;
+          return { sflPerDay: gain, note: `${beeCount} beehives × +${sh.flat} honey × eff ${(eff*100).toFixed(0)}%` };
         }
         return { sflPerDay: 0, note: "yield_flat without known target" };
       }
 
-      // Legendary Shrine: +1 to harvests across categories — use real harvests/day per category
+      // Legendary Shrine: +1 to harvests across categories — eff per category
       if (sh.effectKind === "yield_flat_multi") {
         let sum = 0;
         const parts = [];
         for (const tcat of (sh.targets || [])) {
-          // Resolve a sensible product per category for price lookup
           const product = (tcat === "trees") ? "Wood" : (tcat === "stone") ? "Stone"
             : (tcat === "crops") ? "Wheat" : (tcat === "fruits") ? "Blueberry"
             : (tcat === "flowers") ? "Red Pansy" : null;
@@ -17485,16 +17566,18 @@
           const catEffects = ownedEffects.filter(e => e.cat === tcat);
           const r = applyBoosts(tcat, product, capacity, catEffects);
           if (!r || !r.effectiveCycle || !n) continue;
-          const harvestsPerDay = (86400 / r.effectiveCycle) * n * SHRINE_GLOBAL_EFF;
+          const eff = _shrineEff(tcat, efficiencyMap);
+          const harvestsPerDay = (86400 / r.effectiveCycle) * n * eff;
           const price = p2pPrices[product] || 0;
           const gain = harvestsPerDay * sh.flat * price;
           sum += gain;
-          parts.push(`${tcat}: +${gain.toFixed(2)} ${sflIcon()}/d`);
+          parts.push(`${tcat}: +${gain.toFixed(2)}`);
         }
         return { sflPerDay: sum, note: parts.join(", ") };
       }
 
-      // Speed shrines: gain = baseline_sfl_per_day × ((1/speed) - 1) × eff
+      // Speed shrines: gain = current_real_sfl_per_day × ((1/speed) - 1)
+      // current_real = baseline_theoretical × per-cat eff
       if (sh.effectKind === "speed" || sh.effectKind === "speed_and_yield") {
         const cats = [sh.catId, ...(sh.alsoCats || [])];
         let sum = 0;
@@ -17503,26 +17586,28 @@
         for (const cat of cats) {
           const base = _shrineCategoryBaseline(cat, capacity, p2pPrices, ownedEffects);
           if (!base.sflPerDay) continue;
-          const gain = base.sflPerDay * speedGain * SHRINE_GLOBAL_EFF;
+          const eff = _shrineEff(cat, efficiencyMap);
+          const realBase = base.sflPerDay * eff;
+          const gain = realBase * speedGain;
           sum += gain;
-          parts.push(`${cat}: ${base.sflPerDay.toFixed(2)} ${sflIcon()}/d × +${(speedGain*100).toFixed(0)}% = +${gain.toFixed(2)}`);
+          parts.push(`${cat}: ${realBase.toFixed(2)} ⛀/d × +${(speedGain*100).toFixed(0)}% = +${gain.toFixed(2)} (eff ${(eff*100).toFixed(0)}%)`);
         }
 
-        // Add chance / flat extras for speed_and_yield
         if (sh.effectKind === "speed_and_yield" && sh.chance && sh.catId === "flowers") {
           const base = _shrineCategoryBaseline("flowers", capacity, p2pPrices, ownedEffects);
-          // chance × harvests/day × flower_price
+          const eff = _shrineEff("flowers", efficiencyMap);
           const flowerPrice = p2pPrices["Red Pansy"] || p2pPrices["Sunpetal"] || 0.5;
-          const chanceGain = sh.chance * base.harvestsPerDay * flowerPrice * SHRINE_GLOBAL_EFF;
+          const chanceGain = sh.chance * base.harvestsPerDay * flowerPrice * eff;
           sum += chanceGain;
-          parts.push(`flower chance +1: +${chanceGain.toFixed(2)} ${sflIcon()}/d`);
+          parts.push(`flower chance +1: +${chanceGain.toFixed(2)}`);
         }
         if (sh.effectKind === "speed_and_yield" && sh.oil3rdDrillBonus) {
           const base = _shrineCategoryBaseline("oil", capacity, p2pPrices, ownedEffects);
+          const eff = _shrineEff("oil", efficiencyMap);
           const oilPrice = p2pPrices["Oil"] || 0;
-          const bonusGain = (base.harvestsPerDay / 3) * sh.oil3rdDrillBonus * oilPrice * SHRINE_GLOBAL_EFF;
+          const bonusGain = (base.harvestsPerDay / 3) * sh.oil3rdDrillBonus * oilPrice * eff;
           sum += bonusGain;
-          parts.push(`oil 3rd-drill: +${bonusGain.toFixed(2)} ${sflIcon()}/d`);
+          parts.push(`oil 3rd-drill: +${bonusGain.toFixed(2)}`);
         }
         return { sflPerDay: sum, note: parts.join(", ") };
       }
