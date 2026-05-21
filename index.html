@@ -3822,6 +3822,198 @@
     // ── Greenhouse oil costs per seed ──
     const GREENHOUSE_OIL_COSTS = { "Grape": 3, "Rice": 4, "Olive": 5 };
 
+    // ── Crop Machine constants (mirror sunflower-land/src/features/game/events/landExpansion/supplyCropMachine.ts) ──
+    // Plots: 10 base, 15 with Field Extension Module skill.
+    // Time per pack: crop_grow_seconds × seeds / plots, times all speed boost multipliers.
+    // Oil: 1/h base × (1 + 0.1·Crop Processor Unit + 0.4·Rapid Rig) × (1 − 0.1·Oil Gadget − 0.3·Efficiency Extension Module).
+    // Speed boosts (multiplicative): Crop Processor Unit ×0.95, Rapid Rig ×0.8, Groovy Gramophone ×0.5, Tortoise Shrine ×0.9.
+    // Available crops depend on Crop Extension Module I/II/III skills + base set.
+    function cropMachinePlots(farm) {
+      return (farm.bumpkin?.skills?.["Field Extension Module"]) ? 15 : 10;
+    }
+    function cropMachineOilPerHour(farm) {
+      const sk = farm.bumpkin?.skills || {};
+      let addtl = 1;
+      if (sk["Crop Processor Unit"]) addtl += 0.1;
+      if (sk["Rapid Rig"]) addtl += 0.4;
+      let reduction = 1;
+      if (sk["Oil Gadget"]) reduction -= 0.1;
+      if (sk["Efficiency Extension Module"]) reduction -= 0.3;
+      return addtl * reduction;
+    }
+    // Crops unlocked for Crop Machine. Default basic set + skill-gated additions.
+    const CROP_MACHINE_BASIC = ["Sunflower", "Potato", "Pumpkin"];
+    const CROP_MACHINE_MODULE_I = ["Rhubarb", "Zucchini"];          // Crop Extension Module I
+    const CROP_MACHINE_MODULE_II = ["Carrot", "Cabbage"];           // Crop Extension Module II
+    const CROP_MACHINE_MODULE_III = ["Yam", "Broccoli"];            // Crop Extension Module III
+    function cropMachineCrops(farm) {
+      const sk = farm.bumpkin?.skills || {};
+      const out = [...CROP_MACHINE_BASIC];
+      if (sk["Crop Extension Module I"])   out.push(...CROP_MACHINE_MODULE_I);
+      if (sk["Crop Extension Module II"])  out.push(...CROP_MACHINE_MODULE_II);
+      if (sk["Crop Extension Module III"]) out.push(...CROP_MACHINE_MODULE_III);
+      return out;
+    }
+    function cropMachineSpeedMult(farm, withTortoiseShrine) {
+      const sk = farm.bumpkin?.skills || {};
+      const placed = (farm.collectibles || {});
+      const placedHome = (farm.home?.collectibles || {});
+      let m = 1;
+      if (sk["Crop Processor Unit"]) m *= 0.95;
+      if (sk["Rapid Rig"]) m *= 0.8;
+      const hasGramo = (placed["Groovy Gramophone"]?.length || 0) > 0 || (placedHome["Groovy Gramophone"]?.length || 0) > 0;
+      if (hasGramo) m *= 0.5;
+      if (withTortoiseShrine) m *= 0.9;
+      return m;
+    }
+    // Compute daily SFL net (revenue − oil − seed cost) for a given crop in the Crop Machine.
+    function calcCropMachineDaily(farm, cropName, p2pPrices, exchangeRates, withTortoiseShrine) {
+      const baseSec = CROP_GROW_DATA[cropName];
+      if (!baseSec) return null;
+      const plots = cropMachinePlots(farm);
+      const speedMult = cropMachineSpeedMult(farm, !!withTortoiseShrine);
+      const effSecPerCrop = baseSec * speedMult / plots;
+      const cropsPerDay = effSecPerCrop > 0 ? 86400 / effSecPerCrop : 0;
+      const cropPrice = p2pPrices[cropName] || 0;
+      const revenue = cropsPerDay * cropPrice;
+      // Oil cost
+      const oilPerHour = cropMachineOilPerHour(farm);
+      const oilPerDay = oilPerHour * 24;
+      const oilPrice = p2pPrices["Oil"] || 0;
+      const oilCost = oilPerDay * oilPrice;
+      // Seed cost (coins → SFL via coinsPerSFL)
+      const seedCoinsPerCrop = SEED_COSTS[cropName] || 0;
+      const coinsPerSFL = exchangeRates?.coinsPerSFL || 320;
+      const seedCostPerDay = (cropsPerDay * seedCoinsPerCrop) / coinsPerSFL;
+      const net = revenue - oilCost - seedCostPerDay;
+      return {
+        crop: cropName, plots, speedMult, effSecPerCrop, cropsPerDay,
+        revenue, oilPerDay, oilCost, seedCostPerDay, net,
+      };
+    }
+    // Pick the most profitable available crop for the user's Crop Machine.
+    function cropMachineBestCrop(farm, p2pPrices, exchangeRates) {
+      const crops = cropMachineCrops(farm);
+      let best = null;
+      for (const c of crops) {
+        const r = calcCropMachineDaily(farm, c, p2pPrices, exchangeRates, false);
+        if (!r) continue;
+        if (!best || r.net > best.net) best = r;
+      }
+      return best;
+    }
+    function farmHasCropMachine(farm) {
+      return ((farm.buildings || {})["Crop Machine"] || []).length > 0;
+    }
+
+    // ── Crop Machine queue simulator ──
+    // Mirrors how the user actually plays: between restocks, fill the queue from
+    // the most-profitable available crop downward, using each crop's Betty
+    // restock-count as the seed cap. Stop when cumulative pack time reaches the
+    // restock window (auto-derived from how long the user's Wheat batch lasts).
+    //
+    // BETTY_RESTOCK_AMOUNT mirrors INITIAL_STOCK seeds map in
+    // sunflower-land/src/features/game/lib/constants.ts.
+    const BETTY_RESTOCK_AMOUNT = {
+      "Sunflower": 800, "Potato": 400, "Rhubarb": 400, "Zucchini": 400,
+      "Pumpkin": 300, "Carrot": 200, "Cabbage": 180, "Yam": 180, "Soybean": 180,
+      "Broccoli": 180, "Beetroot": 160, "Pepper": 160, "Cauliflower": 160,
+      "Parsnip": 120, "Eggplant": 100, "Corn": 100, "Onion": 100,
+      "Turnip": 80, "Radish": 80, "Wheat": 80,
+      "Kale": 60, "Artichoke": 60, "Barley": 60,
+    };
+    function farmHasWarehouse(farm) {
+      return (((farm.buildings || {})["Warehouse"]) || []).length > 0;
+    }
+    // Effective restock amount per Betty visit: base × 1.2 if Warehouse present.
+    function cmGetSeedRestockCount(farm, cropName) {
+      const base = BETTY_RESTOCK_AMOUNT[cropName];
+      if (!base) return 0;
+      return farmHasWarehouse(farm) ? Math.ceil(base * 1.2) : base;
+    }
+    // Active outdoor crop plots count — used as parallel capacity for Wheat window calc.
+    function cmGetPlotCount(farm) {
+      return Object.keys(farm.crops || {}).length;
+    }
+    // Wheat window: how long ONE Betty wheat restock lasts when planted on all
+    // available outdoor plots. ceil(restockCount / plots) × wheatGrowTime seconds.
+    // Ignores crop speed boosts on outdoor wheat (we treat the snapshot as-is — if
+    // the user's actual cadence is shorter due to boosts, that's a conservative
+    // upper bound which the queue simulator can still respect).
+    function cmComputeRestockWindow(farm) {
+      const restock = cmGetSeedRestockCount(farm, "Wheat");
+      const plots = Math.max(1, cmGetPlotCount(farm));
+      const growTime = CROP_GROW_DATA["Wheat"] || 86400;
+      const batches = Math.max(1, Math.ceil(restock / plots));
+      return batches * growTime;
+    }
+    // Greedy queue simulator: best-net first, fill until window full, partial-fill last crop.
+    // Returns per-crop entries + totals. Window can be overridden (for shrine diff calcs).
+    function cmSimulateQueue(farm, p2pPrices, exchangeRates, withTortoiseShrine, windowSec) {
+      const crops = cropMachineCrops(farm);
+      const plots = cropMachinePlots(farm);
+      const speedMult = cropMachineSpeedMult(farm, !!withTortoiseShrine);
+      const oilPerHour = cropMachineOilPerHour(farm);
+      const oilPrice = p2pPrices["Oil"] || 0;
+      const coinsPerSFL = exchangeRates?.coinsPerSFL || 320;
+      const win = (windowSec && windowSec > 0) ? windowSec : cmComputeRestockWindow(farm);
+
+      // Per-crop economics — net SFL per second is the greedy sort key.
+      const candidates = crops.map(c => {
+        const baseSec = CROP_GROW_DATA[c];
+        if (!baseSec) return null;
+        const secPerCrop = baseSec * speedMult / plots; // CM seconds per single crop
+        const cropPrice = p2pPrices[c] || 0;
+        const seedCoinsPerCrop = SEED_COSTS[c] || 0;
+        const seedSflPerCrop = seedCoinsPerCrop / coinsPerSFL;
+        const oilSflPerCrop = (oilPerHour * oilPrice / 3600) * secPerCrop;
+        const netPerCrop = cropPrice - seedSflPerCrop - oilSflPerCrop;
+        const netPerSec = secPerCrop > 0 ? netPerCrop / secPerCrop : -Infinity;
+        const restock = cmGetSeedRestockCount(farm, c);
+        return { crop: c, secPerCrop, cropPrice, seedSflPerCrop, oilSflPerCrop, netPerCrop, netPerSec, restock };
+      }).filter(x => x && isFinite(x.netPerSec));
+
+      // Sort by profit per second descending. Negative-net crops are kept in the
+      // list but won't be added to the queue (we stop once we hit a losing crop).
+      candidates.sort((a, b) => b.netPerSec - a.netPerSec);
+
+      const queue = [];
+      let timeUsed = 0;
+      let totalNet = 0, totalRevenue = 0, totalOilCost = 0, totalSeedCost = 0;
+      let totalCrops = 0;
+
+      for (const cand of candidates) {
+        if (cand.netPerCrop <= 0) break; // queueing losers is never optimal
+        const remaining = win - timeUsed;
+        if (remaining <= 0) break;
+        const maxSeeds = cand.restock;
+        const seedsFitTime = cand.secPerCrop > 0 ? Math.floor(remaining / cand.secPerCrop) : 0;
+        const seedsUsed = Math.min(maxSeeds, seedsFitTime);
+        if (seedsUsed <= 0) continue;
+        const timeUsedHere = seedsUsed * cand.secPerCrop;
+        const revenue = seedsUsed * cand.cropPrice;
+        const seedCost = seedsUsed * cand.seedSflPerCrop;
+        const oilCost = seedsUsed * cand.oilSflPerCrop;
+        const net = revenue - seedCost - oilCost;
+        queue.push({
+          crop: cand.crop, seedsUsed, timeSec: timeUsedHere,
+          revenue, seedCost, oilCost, net,
+          netPerSec: cand.netPerSec, restockCap: maxSeeds, partial: seedsUsed < maxSeeds,
+        });
+        timeUsed += timeUsedHere;
+        totalNet += net;
+        totalRevenue += revenue;
+        totalOilCost += oilCost;
+        totalSeedCost += seedCost;
+        totalCrops += seedsUsed;
+      }
+
+      return {
+        queue, timeUsed, windowSec: win, totalNet, totalRevenue, totalOilCost, totalSeedCost,
+        totalCrops, plots, speedMult, oilPerHour, withTortoiseShrine: !!withTortoiseShrine,
+      };
+    }
+
     // ── Tool costs (coins + optional materials per tool) ──
     // Eins (Potion House) buy price in Potion Tickets — from SFL collectibles.ts
     // POTION_HOUSE_EXOTIC_CROPS. This is the *acquisition* cost (player → NPC,
@@ -5313,7 +5505,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.42</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.43</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5340,6 +5532,11 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.43", items: [
+          { t: "feat", text: "Crop Machine added to Power page as a restock-queue simulator (not a 24h \"best crop\" calc). Window auto-derived from Wheat: ceil(80 × Warehouse_mult / plot_count) × 24h grow_time. Within that window, queue is filled greedily best-net-first using each crop's Betty restock count as the seed cap (e.g. Sunflower 800, Potato 400 — game source `INITIAL_STOCK` mirror, +20% with Warehouse). Partial-fills the last crop if it overflows the window. Shows per-crop seeds/restock-cap, time used, revenue/oil/seed cost/net, plus window totals + daily rate. Mirrors how the user actually plays (\"the most profitable thing I have until I do the next restock\")." },
+          { t: "feat", text: "Tortoise Shrine breakdown in shrines page extended with Crop Machine contribution. The shrine's ×0.9 cycle multiplier compresses pack times, so MORE crops fit in the same restock window. Computes cmSimulateQueue(without) vs cmSimulateQueue(with), daily delta = (totalNet_with − totalNet_without) × 86400/windowSec × eff. Expanded detail shows window length, queue composition (with vs without), per-window net, daily-rate, raw delta and eff multiplier. Previously the shrines page only handled greenhouse for Tortoise — now both greenhouse + crop machine contribute." },
+          { t: "feat", text: "Crop Machine helpers: cropMachinePlots/OilPerHour/Crops/SpeedMult (game-source mirror of `supplyCropMachine.ts` — Field Extension Module +5 plots, Crop Processor Unit ×0.95, Rapid Rig ×0.8, Groovy Gramophone ×0.5, Tortoise Shrine ×0.9 stack multiplicatively; oil/h = (1 + 0.1·CPU + 0.4·RR) × (1 − 0.1·OilGadget − 0.3·EEM)). BETTY_RESTOCK_AMOUNT constant + farmHasWarehouse / cmGetSeedRestockCount / cmGetPlotCount / cmComputeRestockWindow / cmSimulateQueue functions." },
+        ]},
         { ver: "v3.42", items: [
           { t: "fix", text: "Shrine baseline for animal categories (chicken/cow/sheep) now uses getAnimalCatSfl which iterates BOTH products (Wool + Merino Wool for sheep, Egg + Feather for chickens, Milk + Leather for cows) and uses per-animal level drops — exactly what the Power page does. Previously I used getDefaultProduct (single product = Wool only), so Power showed 28.82 ⛀/d for sheep while my baseline showed only 13.45 ⛀/d (Wool only, missing Merino Wool). Animal shrine math now: powerCurrent = animal_cat_sfl_with_existing_boosts, powerWithShrine = same with synthetic shrine speed_pct effect injected, gain = (powerWithShrine − powerCurrent) × eff." },
         ]},
@@ -14665,6 +14862,74 @@
         </div>`;
       }
 
+      // Crop Machine panel (if user has one). Queue simulator — fills the machine
+      // from most-profitable crop down using each crop's Betty restock count, until
+      // cumulative time hits the user's wheat restock window. Mirrors realistic play.
+      const farmRef = powerState?.farm;
+      if (farmRef && farmHasCropMachine(farmRef)) {
+        const windowSec = cmComputeRestockWindow(farmRef);
+        const windowHours = windowSec / 3600;
+        const sim = cmSimulateQueue(farmRef, p2pPrices, exchangeRates, false, windowSec);
+        // Skill / collectible labels for the speed-multiplier breakdown
+        const skNames = [];
+        const sk = farmRef.bumpkin?.skills || {};
+        if (sk["Crop Processor Unit"]) skNames.push("Crop Processor Unit ×0.95");
+        if (sk["Rapid Rig"]) skNames.push("Rapid Rig ×0.8");
+        const placed = (farmRef.collectibles || {});
+        const placedHome = (farmRef.home?.collectibles || {});
+        const hasGramo = (placed["Groovy Gramophone"]?.length || 0) > 0 || (placedHome["Groovy Gramophone"]?.length || 0) > 0;
+        if (hasGramo) skNames.push("Groovy Gramophone ×0.5");
+        // Wheat-window basis breakdown
+        const wheatRestock = cmGetSeedRestockCount(farmRef, "Wheat");
+        const plotCount = cmGetPlotCount(farmRef);
+        const wheatBatches = Math.max(1, Math.ceil(wheatRestock / Math.max(1, plotCount)));
+        const wheatGrowH = (CROP_GROW_DATA["Wheat"] || 86400) / 3600;
+        const hasWh = farmHasWarehouse(farmRef);
+        const dailyFactor = 86400 / windowSec;
+        const oilCostPerH = sim.oilPerHour * (p2pPrices["Oil"] || 0);
+        const rowsHtml = sim.queue.map((q, i) => {
+          const netColor = q.net > 0 ? "var(--green)" : "var(--red)";
+          const partialTag = q.partial ? `<span style="color:var(--text-dim);font-size:0.55rem"> (partial)</span>` : '';
+          return `<tr style="border-top:1px solid rgba(255,255,255,0.05)">
+            <td style="padding:4px 6px;${i === 0 ? "font-weight:bold;color:var(--sunpetal)" : ""}">${i + 1}. ${escHTML(q.crop)}${partialTag}</td>
+            <td style="text-align:right;padding:4px 6px">${q.seedsUsed}/${q.restockCap}</td>
+            <td style="text-align:right;padding:4px 6px">${(q.timeSec/3600).toFixed(2)}h</td>
+            <td style="text-align:right;padding:4px 6px;color:var(--green)">+${q.revenue.toFixed(2)}</td>
+            <td style="text-align:right;padding:4px 6px;color:var(--red)">−${q.oilCost.toFixed(2)}</td>
+            <td style="text-align:right;padding:4px 6px;color:var(--red)">−${q.seedCost.toFixed(2)}</td>
+            <td style="text-align:right;padding:4px 6px;color:${netColor};font-weight:bold">${q.net >= 0 ? "+" : ""}${q.net.toFixed(2)}</td>
+          </tr>`;
+        }).join("");
+        const unfilledH = Math.max(0, (sim.windowSec - sim.timeUsed) / 3600);
+        content += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:16px;border:2px solid var(--border-dark)">
+          <div class="pixel-font" style="font-size: 0.625rem;color:var(--lily);margin-bottom:6px">⚙️ CROP MACHINE — RESTOCK QUEUE</div>
+          <div style="color:var(--text-secondary);font-size:0.625rem;line-height:1.7;margin-bottom:8px">
+            <b>Restock window:</b> ${windowHours.toFixed(1)}h (${(windowHours/24).toFixed(2)}d) · derived from <b>${wheatRestock} Wheat</b>${hasWh ? ' <span style="color:var(--green)">(Warehouse +20%)</span>' : ''} on ${plotCount} plots = ${wheatBatches} batch${wheatBatches > 1 ? 'es' : ''} × ${wheatGrowH}h grow<br>
+            <b>Machine:</b> ${sim.plots} plots · cycle mult ×${sim.speedMult.toFixed(3)} ${skNames.length ? `<span style="color:var(--text-dim)">(${skNames.join(", ")})</span>` : ''}<br>
+            <b>Oil:</b> ${sim.oilPerHour.toFixed(2)}/h · ${oilCostPerH.toFixed(3)} ${sflIcon()}/h
+          </div>
+          <table style="width:100%;font-family:'Courier New',monospace;font-size:0.6875rem;border-collapse:collapse;margin-bottom:8px">
+            <thead><tr class="pixel-font" style="color:var(--text-dim);font-size:0.5rem;letter-spacing:0.5px">
+              <th style="text-align:left;padding:4px 6px">QUEUE</th>
+              <th style="text-align:right;padding:4px 6px">SEEDS</th>
+              <th style="text-align:right;padding:4px 6px">TIME</th>
+              <th style="text-align:right;padding:4px 6px">REVENUE</th>
+              <th style="text-align:right;padding:4px 6px">OIL</th>
+              <th style="text-align:right;padding:4px 6px">SEED COST</th>
+              <th style="text-align:right;padding:4px 6px">NET ${sflIcon()}</th>
+            </tr></thead><tbody>${rowsHtml || `<tr><td colspan="7" style="padding:8px;text-align:center;color:var(--text-dim)">No profitable crops in queue.</td></tr>`}</tbody>
+          </table>
+          <div style="background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:4px;line-height:1.7;font-size:0.6875rem">
+            <b style="color:var(--sunpetal)">Window total:</b> ${sim.totalCrops} crops · ${(sim.timeUsed/3600).toFixed(2)}h used${unfilledH > 0.05 ? ` <span style="color:var(--text-dim)">(${unfilledH.toFixed(2)}h idle)</span>` : ''}<br>
+            <span style="color:var(--green)">+${sim.totalRevenue.toFixed(2)}</span> revenue
+            − <span style="color:var(--red)">${sim.totalOilCost.toFixed(2)}</span> oil
+            − <span style="color:var(--red)">${sim.totalSeedCost.toFixed(2)}</span> seeds
+            = <b style="color:${sim.totalNet >= 0 ? 'var(--green)' : 'var(--red)'}">${sim.totalNet >= 0 ? '+' : ''}${sim.totalNet.toFixed(2)} ${sflIcon()}</b> per restock window<br>
+            <b style="color:var(--sunpetal)">Daily rate:</b> <b style="color:${sim.totalNet >= 0 ? 'var(--green)' : 'var(--red)'}">${(sim.totalNet * dailyFactor).toFixed(2)} ${sflIcon()}/d</b>
+          </div>
+        </div>`;
+      }
+
       // Best Buys: top 10 missing boosts by ROI
       const bestBuys = [];
       for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
@@ -17301,6 +17566,11 @@
 
       const capacity = detectFarmCapacity(farm);
 
+      // Expose farm + exchange rates to shrine helpers via module-scoped refs
+      // (lets Tortoise Shrine include crop-machine contribution without function-signature churn)
+      _shrineFarmRef = farm;
+      _shrineExchangeRates = { coinsPerSFL: 320 };
+
       // Fetch farm history & compute per-category eff (same algorithm as Nodes page).
       let efficiencyMap = {};
       try {
@@ -17594,6 +17864,11 @@
       return { sflPerDay, unitsPerDay: r.unitsPerDay, harvestsPerDay, product, priceProduct };
     }
 
+    // Module-scoped refs so the shrine marginal helper can reach farm + exchange rates
+    // when computing Crop Machine contributions for Tortoise Shrine.
+    let _shrineFarmRef = null;
+    let _shrineExchangeRates = null;
+
     // Render per-resource detail rows for the expandable section under each shrine card.
     // Each entry shows: Power baseline + delta, shrine effect added, eff applied, net contribution.
     function _shrineRenderDetail(breakdown, sh, ICON) {
@@ -17665,6 +17940,23 @@
             <div style="padding-left:8px">
               ${(b.chance*100).toFixed(0)}% chance × ${b.harvestsPerDay.toFixed(2)} harvests/d × ${b.price.toFixed(4)} ${ICON} × eff ${(b.eff*100).toFixed(0)}%<br>
               = <b style="color:var(--green)">+${b.gain.toFixed(4)} ${ICON}/d</b>
+            </div>
+          </div>`;
+        } else if (b.kind === "crop_machine_queue") {
+          const qListWithout = b.queueWithout.map(q => `${q.crop} ${q.seedsUsed}/${q.restockCap}`).join(", ") || "—";
+          const qListWith = b.queueWith.map(q => `${q.crop} ${q.seedsUsed}/${q.restockCap}`).join(", ") || "—";
+          html += `<div style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.05)">
+            <div style="color:var(--sunpetal);font-weight:bold;margin-bottom:4px">CROP MACHINE (restock-queue diff)</div>
+            <div style="padding-left:8px;line-height:1.7;font-size:0.6875rem">
+              <b style="color:var(--text-secondary)">Window:</b> ${b.windowHours.toFixed(1)}h (one Wheat restock cycle)<br>
+              <b style="color:var(--text-secondary)">Without shrine:</b> ${b.cropsWithout} crops/window · queue: ${escHTML(qListWithout)}<br>
+              &nbsp;&nbsp;net ${b.netWithoutPerWindow >= 0 ? "+" : ""}${b.netWithoutPerWindow.toFixed(2)} ${ICON}/window = <b>${b.netWithoutPerDay >= 0 ? "+" : ""}${b.netWithoutPerDay.toFixed(4)} ${ICON}/d</b><br>
+              <b style="color:var(--text-secondary)">With shrine ×0.9 cycle:</b> ${b.cropsWith} crops/window · queue: ${escHTML(qListWith)}<br>
+              &nbsp;&nbsp;net ${b.netWithPerWindow >= 0 ? "+" : ""}${b.netWithPerWindow.toFixed(2)} ${ICON}/window = <b>${b.netWithPerDay >= 0 ? "+" : ""}${b.netWithPerDay.toFixed(4)} ${ICON}/d</b><br>
+              <b style="color:var(--text-secondary)">Raw delta:</b> +${b.rawDelta.toFixed(4)} ${ICON}/d × eff ${(b.eff*100).toFixed(0)}%
+            </div>
+            <div style="margin-top:6px;padding-left:8px;color:var(--lily)">
+              = <b style="color:${b.gain >= 0 ? 'var(--green)' : 'var(--red)'}">${b.gain >= 0 ? '+' : ''}${b.gain.toFixed(4)} ${ICON}/d</b>
             </div>
           </div>`;
         } else if (b.kind === "oil_bonus") {
@@ -17806,6 +18098,41 @@
           sum += chanceGain;
           parts.push(`flower chance +1: +${chanceGain.toFixed(2)}`);
           breakdown.push({ cat: "flowers", kind: "chance", chance: sh.chance, harvestsPerDay: base.harvestsPerDay, price: flowerPrice, eff, gain: chanceGain });
+        }
+
+        // Tortoise Shrine: also boosts Crop Machine ×0.9 cycle.
+        // Compute queue-based diff: same restock window, more crops fit in queue.
+        // Daily gain = (totalNet_with − totalNet_without) × 86400 / windowSec.
+        const farmRef = _shrineFarmRef;
+        if (sh.catId === "greenhouse" && farmRef && farmHasCropMachine(farmRef)) {
+          const xr = _shrineExchangeRates || { coinsPerSFL: 320 };
+          const windowSec = cmComputeRestockWindow(farmRef);
+          const simWithout = cmSimulateQueue(farmRef, p2pPrices, xr, false, windowSec);
+          const simWith    = cmSimulateQueue(farmRef, p2pPrices, xr, true,  windowSec);
+          if (simWithout && simWith) {
+            const dailyFactor = 86400 / windowSec;
+            const rawDelta = (simWith.totalNet - simWithout.totalNet) * dailyFactor;
+            // Approximate crop-machine efficiency via "crops" category (no dedicated CM eff metric).
+            const eff = _shrineEff("crops", efficiencyMap);
+            const cmGain = rawDelta * eff;
+            sum += cmGain;
+            parts.push(`crop machine queue: +${cmGain.toFixed(2)}`);
+            breakdown.push({
+              cat: "crop_machine",
+              kind: "crop_machine_queue",
+              windowSec,
+              windowHours: windowSec / 3600,
+              netWithoutPerWindow: simWithout.totalNet,
+              netWithPerWindow: simWith.totalNet,
+              netWithoutPerDay: simWithout.totalNet * dailyFactor,
+              netWithPerDay: simWith.totalNet * dailyFactor,
+              cropsWithout: simWithout.totalCrops,
+              cropsWith: simWith.totalCrops,
+              queueWithout: simWithout.queue,
+              queueWith: simWith.queue,
+              rawDelta, eff, gain: cmGain,
+            });
+          }
         }
         if (sh.effectKind === "speed_and_yield" && sh.oil3rdDrillBonus) {
           const base = _shrineCategoryBaseline("oil", capacity, p2pPrices, ownedEffects);
