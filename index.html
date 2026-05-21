@@ -5313,7 +5313,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.38</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.39</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5340,6 +5340,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.39", items: [
+          { t: "fix", text: "Shrine per-resource breakdown restructured to match the user's mental model: Data z Power (current real income, before shrine) → S boostem se shrine (new income with shrine added additively) → Raw delta → S efektivitou (raw × eff = realistic shrine gain). The underlying math is the same as v3.38 (additive speed-pct sum). Just clearer presentation showing the before / after / delta / eff steps explicitly." },
+        ]},
         { ver: "v3.38", items: [
           { t: "fix", text: "Shrine speed math switched to ADDITIVE per-category (game-correct semantics): existing speed-pct effects on a resource are SUMMED with the shrine's own pct, not multiplied. Example: if you already have −25% Crimstone recovery (Amulet) and Mole Shrine adds −25%, the result is −50% combined → cycle × 0.5 (not 0.75 × 0.75 = 0.5625). Shrine boost = (1/cycle_with − 1/cycle_without) × nodes × yield_per_cycle × price × eff. Yield_pct / yield_flat still come from applyBoosts (those semantics unchanged)." },
           { t: "fix", text: "Expandable per-resource detail now shows the additive math directly: base cycle, current % sum, current cycles/day, shrine adds X% additively → new % total, new cycles/day, extra harvests, × yield × price × eff = ⛀/d. So you can spot any incorrect % easily." },
@@ -17578,17 +17581,22 @@
       for (const b of breakdown) {
         const catLabel = b.cat.toUpperCase();
         if (b.kind === "speed") {
-          // Additive model: existing pct sum + shrine pct → new cycle
-          const fmtH = (s) => (s/3600).toFixed(2) + "h";
-          const fmtCyclesPerDay = (s) => (86400/s).toFixed(3);
+          // Additive model. Layout matches user's mental model:
+          //   1. Data z Power (current real income, no shrine)
+          //   2. S boostem se shrine (new income with shrine applied additively)
+          //   3. Difference × eff = realistic shrine gain
+          const powerCurrent = b.harvestsExisting * b.yieldPerCycle * b.price;
+          const powerWithShrine = b.harvestsWithShrine * b.yieldPerCycle * b.price;
+          const rawDelta = powerWithShrine - powerCurrent;
           html += `<div style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.05)">
             <div style="color:var(--sunpetal);font-weight:bold;margin-bottom:4px">${escHTML(catLabel)}</div>
-            <div style="padding-left:8px">
-              Base cycle: ${fmtH(b.baseCycle)} <span style="color:var(--text-dim)">(no boosts)</span><br>
-              Current sum of speed boosts: <b>${b.sumExistingPct.toFixed(0)}%</b> → cycle ${fmtH(b.cycleExisting)} <span style="color:var(--text-dim)">(${fmtCyclesPerDay(b.cycleExisting)} cycles/d × ${b.n} ${escHTML(b.cat)} = ${b.harvestsExisting.toFixed(2)}/d)</span><br>
-              + Shrine: <b>${b.shrinePct.toFixed(0)}%</b> additive → total <b>${b.sumWithShrinePct.toFixed(0)}%</b> → cycle ${fmtH(b.cycleWithShrine)} <span style="color:var(--text-dim)">(${fmtCyclesPerDay(b.cycleWithShrine)} cycles/d × ${b.n} = ${b.harvestsWithShrine.toFixed(2)}/d)</span><br>
-              Extra harvests: <b>+${b.extraHarvests.toFixed(3)}/d</b><br>
-              × yield/cycle ${b.yieldPerCycle.toFixed(3)} × ${b.price.toFixed(4)} ${ICON} × eff <b>${(b.eff*100).toFixed(0)}%</b>
+            <div style="padding-left:8px;line-height:1.7">
+              <b style="color:var(--text-secondary)">Data z Power:</b> <b>${powerCurrent.toFixed(4)} ${ICON}/d</b><br>
+              <span style="color:var(--text-dim)">↳ ${b.n} ${escHTML(b.cat)} × ${b.harvestsExisting.toFixed(3)} harvests/d × yield ${b.yieldPerCycle.toFixed(3)} × ${b.price.toFixed(4)} ${ICON} (speed sum ${b.sumExistingPct.toFixed(0)}%)</span><br>
+              <b style="color:var(--text-secondary)">S boostem se shrine:</b> <b>${powerWithShrine.toFixed(4)} ${ICON}/d</b><br>
+              <span style="color:var(--text-dim)">↳ shrine přidá ${b.shrinePct.toFixed(0)}% additive → speed sum ${b.sumWithShrinePct.toFixed(0)}% → ${b.harvestsWithShrine.toFixed(3)} harvests/d</span><br>
+              <b style="color:var(--text-secondary)">Raw delta:</b> ${powerWithShrine.toFixed(4)} − ${powerCurrent.toFixed(4)} = <b>+${rawDelta.toFixed(4)} ${ICON}/d</b><br>
+              <b style="color:var(--text-secondary)">S efektivitou:</b> +${rawDelta.toFixed(4)} × eff ${(b.eff*100).toFixed(0)}%
             </div>
             <div style="margin-top:6px;padding-left:8px;color:var(--lily)">
               = <b style="color:var(--green)">+${b.gain.toFixed(4)} ${ICON}/d</b>
