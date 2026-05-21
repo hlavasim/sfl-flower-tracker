@@ -5313,7 +5313,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.32</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.33</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5340,6 +5340,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.33", items: [
+          { t: "fix", text: "Shrine EARN calculation rewritten to use Power-page baseline + shrine speedup. Previously most speed shrines computed to 0 because the login-ceiling logic snapped boosted cycles back to the unboosted bracket. Now: for each affected resource we compute current daily SFL via applyBoosts with the user's actual owned boost effects (same engine as Power), then apply the shrine effect on top: speed × s → gain = baseline × ((1/s) − 1) × eff, yield-flat → harvests/day × added × price, chance → harvests/day × pct × price. Speed shrines now show non-zero EARN reflecting the actual ~33 % gain over the user's current real income." },
+        ]},
         { ver: "v3.32", items: [
           { t: "fix", text: "Shrines page reworked: simpler table (cost / earn over active duration / net / time-left / ingredients / verdict), shrine icons from sfl.world via getItemIcon, SFL flower icon via sflIcon() helper instead of generic ⛀, and effect descriptions reframed as buffs ('−25% time = faster') instead of multiplier shorthand ('x0.75')." },
           { t: "fix", text: "Acorn opportunity cost is now derived dynamically — your pets need 100 energy to fetch 1 Acorn, so the OC equals 100 × best ⛀/energy across your unlocked pet resources (same formula as petDailyCalc). Previously Acorn was undervalued because it isn't tradeable on p2p." },
@@ -17223,26 +17226,36 @@
       html += `<div id="shrines-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Computing shrine ROI…</div></div></div>`;
       app.innerHTML = html;
 
-      // Fetch p2p prices + exchange rates
-      let p2pPrices = {}, sflUsd = 0, btcUsd = 0;
+      // Fetch p2p prices + exchange rates + NFT boost data
+      let p2pPrices = {}, sflUsd = 0, btcUsd = 0, nftData = null;
       try {
         const proxyFetch = async (url) => {
           try { const r = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`); if (r.ok) return r.json(); } catch {}
           return (await fetch(url)).json();
         };
-        const [priceResp, rateResp, btcResp] = await Promise.all([
+        const [priceResp, rateResp, btcResp, nftResp] = await Promise.all([
           proxyFetch("https://sfl.world/api/v1/prices"),
           proxyFetch("https://sfl.world/api/v1.1/exchange").catch(() => null),
           proxyFetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd").catch(() => null),
+          proxyFetch("https://sfl.world/api/v1/nfts").catch(() => null),
         ]);
         const priceData = priceResp?.data?.p2p || priceResp?.p2p || {};
         for (const [k, v] of Object.entries(priceData)) p2pPrices[k] = parseFloat(v) || 0;
         sflUsd = rateResp?.sfl?.usd || 0;
         btcUsd = btcResp?.bitcoin?.usd || 0;
+        nftData = nftResp;
       } catch (err) {
         document.getElementById("shrines-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load prices: ${escHTML(err.message)}</p></div>`;
         return;
       }
+
+      // Build owned boost effects from NFTs + skills (same logic as ROI/Power pages)
+      const wardrobe = farm.wardrobe || {};
+      const skills = farm.bumpkin?.skills || {};
+      const boostItems = (typeof buildRoiBoostItems === "function")
+        ? buildRoiBoostItems(farm, inventory, wardrobe, skills, nftData)
+        : [];
+      const ownedEffects = boostItems.filter(b => b.has && !b.isDisabled).flatMap(b => b.effects || []);
 
       // Fetch farm history to derive eff for each category (same approach as nodes page).
       // Use last 14 days bucketed at 2h to keep payload small. We only need recent harvest cadence.
@@ -17259,9 +17272,7 @@
       } catch (e) { console.warn("[Shrines] eff fetch failed", e); }
 
       const capacity = detectFarmCapacity(farm);
-      const skills = farm.bumpkin?.skills || {};
       const L = 2;  // assumed login frequency; can be made configurable later
-      const loginInterval = 86400 / L;
 
       // Acorn opportunity cost derived dynamically from pets fetch yields
       const acornPrice = _shrineAcornPrice(farm, p2pPrices);
@@ -17273,7 +17284,7 @@
         const costSfl = _shrineIngredientCostSfl(sh.ingredients, p2pPrices, fallbackPrices);
         const hasIngredients = _shrineHasIngredients(sh.ingredients, inventory);
         const status = _shrineStatus(name, placed, placedHome, sh.duration_d);
-        const margin = _shrineMarginalSflPerDay(sh, capacity, p2pPrices, effMap, L);
+        const margin = _shrineMarginalSflPerDay(sh, capacity, p2pPrices, ownedEffects);
 
         // Earnings across the full active duration of one placement (sh.duration_d days)
         const earnTotal = margin.sflPerDay * sh.duration_d;
@@ -17421,89 +17432,101 @@
       return {};  // empty → marginal calcs assume eff=1 (optimistic upper bound)
     }
 
-    // Marginal SFL/day from owning a shrine, vs not owning it, at given login freq L.
-    // Returns { sflPerDay, note }. For unclear effects, note explains.
-    function _shrineMarginalSflPerDay(sh, capacity, p2pPrices, effMap, L) {
-      const loginInterval = 86400 / L;
-      const note = null;
+    // Marginal SFL/day from owning a shrine. Approach:
+    //   1. Compute baseline daily SFL per relevant category using applyBoosts with the user's
+    //      OWNED effects (same engine as the Power page). This is what the user actually earns.
+    //   2. Apply the shrine's effect ON TOP of that baseline:
+    //      - speed × s → gain = baseline × ((1/s) - 1) × eff
+    //      - yield_flat per cycle → gain = harvests/day × added × price
+    //      - chance % +1 → gain = harvests/day × p × price
+    // Global eff factor accounts for the user not actually harvesting 24/7.
+    const SHRINE_GLOBAL_EFF = 0.85;
 
-      // Yield-flat / yield-flat-multi (direct yield boost — works at any login freq)
+    // Helper: baseline SFL/day for a category using current owned effects
+    function _shrineCategoryBaseline(catId, capacity, p2pPrices, ownedEffects) {
+      const product = (typeof getDefaultProduct === "function") ? getDefaultProduct(catId) : null;
+      if (!product) return { sflPerDay: 0, unitsPerDay: 0, harvestsPerDay: 0, product: null };
+      const catEffects = (ownedEffects || []).filter(e => e.cat === catId);
+      const r = (typeof applyBoosts === "function") ? applyBoosts(catId, product, capacity, catEffects) : null;
+      if (!r || !r.unitsPerDay) return { sflPerDay: 0, unitsPerDay: 0, harvestsPerDay: 0, product };
+      const priceProduct = (typeof getPriceProduct === "function") ? getPriceProduct(catId, product) : product;
+      const sflPerDay = (typeof unitToSfl === "function") ? unitToSfl(r.unitsPerDay, priceProduct, p2pPrices) : (r.unitsPerDay * (p2pPrices[priceProduct] || 0));
+      const n = (typeof getCapacityCount === "function") ? getCapacityCount(catId, capacity) : 0;
+      const harvestsPerDay = (r.effectiveCycle && n) ? (86400 / r.effectiveCycle) * n : 0;
+      return { sflPerDay, unitsPerDay: r.unitsPerDay, harvestsPerDay, product, priceProduct };
+    }
+
+    function _shrineMarginalSflPerDay(sh, capacity, p2pPrices, ownedEffects) {
+
+      // Bear Shrine: +0.5 honey per beehive cycle → multiply current honey/day by gain ratio
       if (sh.effectKind === "yield_flat") {
-        // Bear Shrine: +0.5 honey per beehive cycle
         if (sh.catId === "bees") {
-          const beeCount = capacity.bees || 0;
-          // Honey production cycle ~24h with active flowers; approximate as 1 cycle/day
+          const base = _shrineCategoryBaseline("bees", capacity, p2pPrices, ownedEffects);
           const honeyPrice = p2pPrices["Honey"] || 0;
-          return { sflPerDay: beeCount * sh.flat * honeyPrice, note: `${beeCount} beehives × +${sh.flat} honey × ${honeyPrice.toFixed(3)} ⛀` };
+          const beeCount = capacity.bees || 0;
+          // applyBoosts for bees returns n * yield (no cycle factor) so adding +0.5 per cycle ≈ +0.5/day per bee
+          const gain = beeCount * sh.flat * honeyPrice * SHRINE_GLOBAL_EFF;
+          return { sflPerDay: gain, note: `${beeCount} beehives × +${sh.flat} honey (current ${base.sflPerDay.toFixed(2)} ${sflIcon()}/d)` };
         }
         return { sflPerDay: 0, note: "yield_flat without known target" };
       }
+
+      // Legendary Shrine: +1 to harvests across categories — use real harvests/day per category
       if (sh.effectKind === "yield_flat_multi") {
-        // Legendary Shrine: +1 to crop, fruit, wood, flower, stone harvests
         let sum = 0;
+        const parts = [];
         for (const tcat of (sh.targets || [])) {
+          // Resolve a sensible product per category for price lookup
           const product = (tcat === "trees") ? "Wood" : (tcat === "stone") ? "Stone"
             : (tcat === "crops") ? "Wheat" : (tcat === "fruits") ? "Blueberry"
             : (tcat === "flowers") ? "Red Pansy" : null;
           if (!product) continue;
           const n = getCapacityCount(tcat, capacity);
-          const baseCycle = getCycleSec(tcat, product);
-          const realisticCycle = Math.ceil(baseCycle / loginInterval) * loginInterval;
-          const harvestsPerDay = realisticCycle > 0 ? (86400 / realisticCycle) * n : 0;
+          const catEffects = ownedEffects.filter(e => e.cat === tcat);
+          const r = applyBoosts(tcat, product, capacity, catEffects);
+          if (!r || !r.effectiveCycle || !n) continue;
+          const harvestsPerDay = (86400 / r.effectiveCycle) * n * SHRINE_GLOBAL_EFF;
           const price = p2pPrices[product] || 0;
-          sum += harvestsPerDay * sh.flat * price;
+          const gain = harvestsPerDay * sh.flat * price;
+          sum += gain;
+          parts.push(`${tcat}: +${gain.toFixed(2)} ${sflIcon()}/d`);
         }
-        return { sflPerDay: sum, note: `+1 yield × ${sh.targets.join("/")}` };
+        return { sflPerDay: sum, note: parts.join(", ") };
       }
+
+      // Speed shrines: gain = baseline_sfl_per_day × ((1/speed) - 1) × eff
       if (sh.effectKind === "speed" || sh.effectKind === "speed_and_yield") {
-        // Compute harvest delta from cycle shortening, capped by login interval
         const cats = [sh.catId, ...(sh.alsoCats || [])];
         let sum = 0;
         const parts = [];
+        const speedGain = (1 / sh.speed) - 1;  // 0.75 → 0.333
         for (const cat of cats) {
-          const n = getCapacityCount(cat, capacity);
-          if (n === 0) continue;
-          const defaultProduct = (typeof getDefaultProduct === "function") ? getDefaultProduct(cat) : null;
-          const baseCycle = (typeof getCycleSec === "function") ? getCycleSec(cat, defaultProduct) : 86400;
-          if (baseCycle <= 0) continue;
-          const realisticBase = Math.ceil(baseCycle / loginInterval) * loginInterval;
-          const newCycle = baseCycle * sh.speed;
-          const realisticNew = Math.ceil(newCycle / loginInterval) * loginInterval;
-          const baseHarvests = realisticBase > 0 ? 86400 / realisticBase : 0;
-          const newHarvests = realisticNew > 0 ? 86400 / realisticNew : 0;
-          const deltaPerNode = newHarvests - baseHarvests;
-          const baseYield = (typeof getBaseYield === "function") ? getBaseYield(cat) : 1;
-          const priceProduct = defaultProduct;
-          const price = p2pPrices[priceProduct] || 0;
-          const catGain = deltaPerNode * n * baseYield * price;
-          sum += catGain;
-          parts.push(`${cat}: ${realisticBase/3600}h → ${realisticNew/3600}h, +${catGain.toFixed(2)} ⛀/d`);
+          const base = _shrineCategoryBaseline(cat, capacity, p2pPrices, ownedEffects);
+          if (!base.sflPerDay) continue;
+          const gain = base.sflPerDay * speedGain * SHRINE_GLOBAL_EFF;
+          sum += gain;
+          parts.push(`${cat}: ${base.sflPerDay.toFixed(2)} ${sflIcon()}/d × +${(speedGain*100).toFixed(0)}% = +${gain.toFixed(2)}`);
         }
-        // Add chance / flat extras
+
+        // Add chance / flat extras for speed_and_yield
         if (sh.effectKind === "speed_and_yield" && sh.chance && sh.catId === "flowers") {
-          // Moth Shrine 25% +1 flower
-          const n = getCapacityCount("flowers", capacity);
-          const baseCycle = getCycleSec("flowers", "Sunpetal Seed");
-          const realistic = Math.ceil(baseCycle / loginInterval) * loginInterval;
-          const harvestsPerDay = realistic > 0 ? (86400 / realistic) * n : 0;
-          // Flowers average ~0.5 SFL/p2p — use Sunpetal or Red Pansy
+          const base = _shrineCategoryBaseline("flowers", capacity, p2pPrices, ownedEffects);
+          // chance × harvests/day × flower_price
           const flowerPrice = p2pPrices["Red Pansy"] || p2pPrices["Sunpetal"] || 0.5;
-          sum += sh.chance * harvestsPerDay * flowerPrice;
-          parts.push(`flowers chance: +${(sh.chance * harvestsPerDay * flowerPrice).toFixed(2)} ⛀/d`);
+          const chanceGain = sh.chance * base.harvestsPerDay * flowerPrice * SHRINE_GLOBAL_EFF;
+          sum += chanceGain;
+          parts.push(`flower chance +1: +${chanceGain.toFixed(2)} ${sflIcon()}/d`);
         }
         if (sh.effectKind === "speed_and_yield" && sh.oil3rdDrillBonus) {
-          // Stag Shrine: +15 oil on every 3rd drill
-          const n = getCapacityCount("oil", capacity);
-          const baseCycle = getCycleSec("oil", "Oil");
-          const realistic = Math.ceil(baseCycle / loginInterval) * loginInterval;
-          const drillsPerDay = realistic > 0 ? (86400 / realistic) * n : 0;
-          const bonusOilPerDay = drillsPerDay * (sh.oil3rdDrillBonus / 3);
+          const base = _shrineCategoryBaseline("oil", capacity, p2pPrices, ownedEffects);
           const oilPrice = p2pPrices["Oil"] || 0;
-          sum += bonusOilPerDay * oilPrice;
-          parts.push(`oil 3rd-drill +15: +${(bonusOilPerDay * oilPrice).toFixed(2)} ⛀/d`);
+          const bonusGain = (base.harvestsPerDay / 3) * sh.oil3rdDrillBonus * oilPrice * SHRINE_GLOBAL_EFF;
+          sum += bonusGain;
+          parts.push(`oil 3rd-drill: +${bonusGain.toFixed(2)} ${sflIcon()}/d`);
         }
-        return { sflPerDay: sum, note: parts.join("; ") };
+        return { sflPerDay: sum, note: parts.join(", ") };
       }
+
       if (sh.effectKind === "indirect" || sh.effectKind === "xp_only" || sh.effectKind === "trading") {
         return { sflPerDay: 0, note: `indirect / ${sh.effectKind}` };
       }
