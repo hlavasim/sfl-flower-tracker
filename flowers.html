@@ -5578,7 +5578,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.45</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.46</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5605,6 +5605,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.46", items: [
+          { t: "fix", text: "Dashboard faction toggle now also hides the entire \"Faction\" category section (Faction pet + Feed faction chef + Cost 1x/10x rows). These come from dashParseFaction not the delivery/bounty parsers, so v3.45's filter missed them. Early-return in dashParseFaction when showFaction = false." },
+        ]},
         { ver: "v3.45", items: [
           { t: "feat", text: "Dashboard: new \"Show faction items\" toggle (default ON). When off, hides deliveries from known faction NPCs (Goblin faction: gambit/gordo/grimbly/grimtooth/grubnuk/guria + faction spruikers/recruiters/chefs/pet from sunflower-land/src/lib/npcs.ts) and any bounty paying Mark. Useful when you don't want faction work cluttering the list." },
           { t: "feat", text: "Dashboard: new Weather Shop placement status card at top. Detects all 4 weather items (Tornado Pinwheel→tornado, Mangrove→tsunami, Thermal Stone→great freeze, Protective Pesticide→insect plague) and shows green ✓ or red ✗ per item. Card border turns red when any item is missing. Source: sunflower-land/types/calendar.ts `WeatherShopItem`." },
@@ -7675,6 +7678,11 @@
       const actions = [];
       const faction = farm.faction;
       if (!faction) return actions;
+      // Faction toggle: when OFF, suppress the entire Faction section
+      // (faction pet + faction kitchen/chef).
+      const _fp = dashGetPrefs();
+      const _showFaction = (_fp.showFaction === undefined) ? true : !!_fp.showFaction;
+      if (!_showFaction) return actions;
 
       const history = faction.history || {};
       const sortedWeeks = Object.keys(history).sort();
