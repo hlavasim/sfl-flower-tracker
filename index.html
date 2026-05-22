@@ -5578,7 +5578,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.46</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.47</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5605,6 +5605,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.47", items: [
+          { t: "fix", text: "Nodes page RECOMMENDED PURCHASE PLAN: removed the affordability gate from the greedy simulator. Previously if Stone had the best ROI (e.g. 190d) but you didn't have enough sunstones/obsidian RIGHT NOW, the loop silently skipped it and picked the next-best affordable option (e.g. Crop Plot at 413d) — so the plan ordering didn't actually reflect ROI. Now the plan shows the ideal save-up order purely by REAL ROI; cumulative cost column tells you how much you need to invest to reach each step. Also added an early-stop when ROI exceeds 10 years so plan doesn't pad with low-value entries. Merge prereqs (4×t1 for t2-merge, 4×t2 for t3-merge) are still required since you literally can't perform them otherwise — but obsidian/coin cost isn't a gate either." },
+        ]},
         { ver: "v3.46", items: [
           { t: "fix", text: "Dashboard faction toggle now also hides the entire \"Faction\" category section (Faction pet + Feed faction chef + Cost 1x/10x rows). These come from dashParseFaction not the delivery/bounty parsers, so v3.45's filter missed them. Early-return in dashParseFaction when showFaction = false." },
         ]},
@@ -16503,8 +16506,11 @@
       options.sort((a, b) => a.realRoiDays - b.realRoiDays);
 
       // ── Greedy purchase plan ──
-      // Simulate spending available resources, always picking the best ROI next.
-      // After each "purchase", the next node of that type costs more sunstones.
+      // Simulate ideal purchase order by REAL ROI. Affordability is NOT a gate —
+      // the plan shows what to save for next, not what's instantly buyable today
+      // (cumulative cost tells you how much investment is needed). After each
+      // "purchase" the next node of that type costs more sunstones, so its ROI
+      // naturally degrades and other node types eventually win the next slot.
       const plan = [];
       const marginals = {}; // nodeKey → { marginal, product }
       const purchasedSim = {}; // nodeKey → simulated purchased count
@@ -16515,14 +16521,9 @@
         purchasedSim[nodeKey] = Math.max(0, tiers.effective - baseCount);
       }
 
-      // Available resources for simulation
-      let simObs = playerObsidian;
-      let simSunstones = playerSunstones;
-      let simCoins = playerCoins;
       let cumCostSfl = 0, cumSflPerDay = 0;
 
       for (let step = 0; step < 50; step++) { // safety cap
-        // For each node type, calc next sunstone cost & real ROI
         let bestKey = null, bestRoi = Infinity, bestCostSun = 0, bestCostSfl = 0, bestMarginal = 0;
         for (const [nodeKey, np] of Object.entries(NODE_PRICES)) {
           const m = marginals[nodeKey].marginal;
@@ -16531,23 +16532,13 @@
           const costSfl = nextSun * sunstoneCostSfl;
           const roi = getRealRoi(costSfl, m, np.catId);
           if (roi < bestRoi) {
-            // Check if affordable (sunstones or obsidian×3)
-            const obsNeeded = nextSun * 3;
-            const canBuySun = simSunstones >= nextSun;
-            const canBuyObs = simObs >= obsNeeded;
-            if (!canBuySun && !canBuyObs) continue;
             bestKey = nodeKey; bestRoi = roi; bestCostSun = nextSun; bestCostSfl = costSfl; bestMarginal = m;
           }
         }
         if (!bestKey || bestRoi === Infinity) break;
+        // Stop once ROI exceeds 10 years — beyond that the plan is noise.
+        if (bestRoi > 3650) break;
 
-        // "Buy" the node
-        const obsNeeded = bestCostSun * 3;
-        if (simSunstones >= bestCostSun) {
-          simSunstones -= bestCostSun;
-        } else {
-          simObs -= obsNeeded;
-        }
         purchasedSim[bestKey]++;
         cumCostSfl += bestCostSfl;
         cumSflPerDay += bestMarginal;
@@ -16566,10 +16557,16 @@
         });
       }
 
-      // Also try merge options (one-shot, not repeated)
-      // Merges use obsidian + coins directly, add to plan if they have better ROI
-      // than the worst item already in plan
-      for (const o of options.filter(o => o.type.startsWith("merge") && o.marginal > 0 && o.canAfford)) {
+      // Merge options (one-shot, not repeated). Resource cost (obs/coins) is NOT
+      // a gate — saving for it is fine — but the structural prereq (4×t1 for a
+      // t2 merge, 4×t2 for a t3 merge) IS, since you literally can't perform
+      // the merge without source nodes. Let ROI sort decide order in the plan.
+      for (const o of options.filter(o => {
+        if (!o.type.startsWith("merge") || o.marginal <= 0) return false;
+        if (o.type === "merge_t2" && (o.t1Available || 0) < 4) return false;
+        if (o.type === "merge_t3" && (o.t2Available || 0) < 4) return false;
+        return true;
+      })) {
         const mergeCatId = NODE_PRICES[o.nodeKey]?.catId || null;
         const mergeRoi = (o.marginal > 0 && o.costSfl > 0 && mergeCatId) ? getRealRoi(o.costSfl, o.marginal, mergeCatId) : o.roiDays;
         plan.push({
@@ -16651,7 +16648,7 @@
 
         content += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
           <div style="font-size:0.6875rem;color:var(--green);margin-bottom:4px;font-weight:bold" class="pixel-font">RECOMMENDED PURCHASE PLAN</div>
-          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px">Greedy order by REAL ROI — scaled by efficiency (avg-gap-vs-optimal-cycle) so the numbers reflect what you'll actually harvest, not 24/7 theoretical.</div>
+          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px">Greedy order by REAL ROI — scaled by efficiency. Not gated by current resources (plan shows the ideal save-up order; use CUM REAL ${sflIcon("0.65em")}/D and the cumulative cost below to see how far each step gets you).</div>
           <table class="node-res-table">
             <tr><th>#</th><th>BUY</th><th style="text-align:right">COST</th><th style="text-align:right" title="Theoretical SFL/day at 24/7 harvest cadence">THEO ${sflIcon("0.75em")}/D</th><th style="text-align:right">EFF</th><th style="text-align:right" title="Real SFL/day = theoretical × efficiency">REAL ${sflIcon("0.75em")}/D</th><th style="text-align:right">ROI</th><th style="text-align:right" title="Cumulative REAL SFL/day after this purchase">CUM REAL ${sflIcon("0.75em")}/D</th></tr>`;
 
