@@ -2305,6 +2305,17 @@
     .dash-toggle-btn { font-family:'Courier New', monospace; font-size:0.65rem; padding:4px 10px; border-radius:6px; background:var(--bg-input); color:var(--text-secondary); border:1px solid var(--border-dark); cursor:pointer; }
     .dash-toggle-btn.on { background:rgba(232,201,106,0.15); color:var(--sunpetal); border-color:var(--sunpetal); }
     .dash-toggle-btn:hover { filter:brightness(1.15); }
+    .dash-weather-card { padding:12px 14px; margin-bottom:14px; border:3px solid var(--border-dark); }
+    .dash-weather-card.ready { border-color:var(--green); background:rgba(46,160,67,0.06); }
+    .dash-weather-card.upcoming { border-color:#cc5555; background:rgba(204,85,85,0.06); }
+    .dash-weather-title { font-size:0.625rem; letter-spacing:0.5px; margin-bottom:8px; color:var(--sunpetal); }
+    .dash-weather-card.ready .dash-weather-title { color:var(--green); }
+    .dash-weather-card.upcoming .dash-weather-title { color:#ff6a6a; }
+    .dash-weather-pills { display:flex; flex-wrap:wrap; gap:8px; }
+    .dash-weather-pill { display:inline-flex; align-items:center; gap:5px; padding:5px 10px; border-radius:6px; font-family:'Courier New', monospace; font-size:0.6875rem; border:1px solid var(--border-dark); background:var(--bg-input); }
+    .dash-weather-pill.ok { border-color:var(--green); color:var(--green); background:rgba(46,160,67,0.10); }
+    .dash-weather-pill.miss { border-color:#cc5555; color:#ff8888; background:rgba(204,85,85,0.10); }
+    .dash-weather-pill img { width:18px; height:18px; image-rendering:pixelated; }
     .dash-all-done { text-align:center; padding:40px 20px; font-size:1rem; color:var(--green); }
     .dash-all-done .icon { font-size:2rem; margin-bottom:8px; }
     .nft-breed-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:10px; }
@@ -5567,7 +5578,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.44</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.45</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5594,6 +5605,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.45", items: [
+          { t: "feat", text: "Dashboard: new \"Show faction items\" toggle (default ON). When off, hides deliveries from known faction NPCs (Goblin faction: gambit/gordo/grimbly/grimtooth/grubnuk/guria + faction spruikers/recruiters/chefs/pet from sunflower-land/src/lib/npcs.ts) and any bounty paying Mark. Useful when you don't want faction work cluttering the list." },
+          { t: "feat", text: "Dashboard: new Weather Shop placement status card at top. Detects all 4 weather items (Tornado Pinwheel→tornado, Mangrove→tsunami, Thermal Stone→great freeze, Protective Pesticide→insect plague) and shows green ✓ or red ✗ per item. Card border turns red when any item is missing. Source: sunflower-land/types/calendar.ts `WeatherShopItem`." },
+        ]},
         { ver: "v3.44", items: [
           { t: "fix", text: "Crop Machine wheat-window calc now applies outdoor crop-speed boosts (was ignoring them, so 2 batches × 24h base = flat 48h regardless of actual setup). New cmOutdoorCropTimeMult function mirrors getCropTime + getCropPlotTime from sunflower-land/plant.ts: Seed Specialist ×0.9, best of {Nancy/Scarecrow/Kuebiko} ×0.85, Lunar Calendar ×0.9, Super Totem / Time Warp Totem ×0.5 (temporary, createdAt+cooldown check), Harvest Hourglass ×0.75, Strong Roots skill on advanced crops (wheat is advanced) ×0.9, Green Thumb skill ×0.95, Sparrow Shrine ×0.75. Multipliers stack multiplicatively (matches game source). Power CM panel header shows the boost list + final ×mult so you can verify which boosts I detected." },
         ]},
@@ -8014,7 +8029,56 @@
       dashSetPref(k, !p[k]);
       if (cachedFarmData) renderDashboard(cachedFarmData);
     };
+    // Faction toggle defaults TRUE — special-cased so first click flips to false
+    // (rather than toggling undefined → true which would be a no-op visually).
+    window.dashToggleFaction = function() {
+      const p = dashGetPrefs();
+      const current = (p.showFaction === undefined) ? true : !!p.showFaction;
+      dashSetPref("showFaction", !current);
+      if (cachedFarmData) renderDashboard(cachedFarmData);
+    };
     const DASH_ANIMAL_ITEMS = new Set(["Chicken", "Cow", "Sheep"]);
+
+    // Faction delivery NPCs. Goblin faction (per sunflower-land/events/deliver.ts
+    // `GOBLINS_REQUIRING_REPUTATION` + grimbly) is the only one we've observed
+    // in farm data so far; other factions' delivery NPCs are added defensively
+    // from sunflower-land/src/lib/npcs.ts comments — "faction spruiker/recruiter/chef"
+    // entries — so they get filtered too when they appear.
+    const DASH_FACTION_NPCS = new Set([
+      // Goblin faction (delivery NPCs)
+      "gambit", "gordo", "grimbly", "grimtooth", "grubnuk", "guria",
+      // Faction spruikers/recruiters/chefs/pet (sunflower-land/src/lib/npcs.ts comments)
+      "grommy", "lady day", "robert", "maximus",
+      "graxle", "barlow", "nyx", "reginald",
+      "chef tuck", "chef ebon", "chef maple", "chef lumen",
+      "pet",
+    ]);
+    // Weather Shop items — sunflower-land/types/calendar.ts `WeatherShopItem`.
+    // Each prevents one disaster: Tornado Pinwheel→tornado, Mangrove→tsunami,
+    // Thermal Stone→great freeze, Protective Pesticide→insect plague.
+    const DASH_WEATHER_ITEMS = ["Tornado Pinwheel", "Mangrove", "Thermal Stone", "Protective Pesticide"];
+    const DASH_WEATHER_PREVENTS = {
+      "Tornado Pinwheel":    "tornado",
+      "Mangrove":            "tsunami",
+      "Thermal Stone":       "great freeze",
+      "Protective Pesticide":"insect plague",
+    };
+    // Is the item placed on the farm? Checks farm.collectibles[name] / farm.home.collectibles[name]
+    function dashIsPlaced(farm, name) {
+      const placed = (farm.collectibles || {})[name];
+      if (placed && placed.length > 0) return true;
+      const placedHome = (farm.home?.collectibles || {})[name];
+      if (placedHome && placedHome.length > 0) return true;
+      return false;
+    }
+    // Faction-item detector. Used to filter dashboard rows when showFaction = false.
+    // Treats anything paying a Faction Mark (reward.items["Mark"]) as faction-related.
+    function dashIsFactionItem(npc, reward) {
+      if (npc && DASH_FACTION_NPCS.has(String(npc).toLowerCase())) return true;
+      const items = (reward && reward.items) || {};
+      if (items["Mark"] > 0) return true;
+      return false;
+    }
 
     // Mirrors sunflower-land/src/features/game/types/chapters.ts and
     // events/landExpansion/deliver.ts. Update when SFL releases a new chapter.
@@ -8308,6 +8372,9 @@
         const ticket = dashGetSeasonalTicket(farm);
         const now = Date.now();
         const showAnimals = !!dashGetPrefs().showAnimals;
+        // Faction toggle defaults TRUE (show) when key is missing
+        const _fp = dashGetPrefs();
+        const showFaction = (_fp.showFaction === undefined) ? true : !!_fp.showFaction;
         for (const order of orders) {
           if (order.completedAt) continue;
           // Ticket-paying NPCs have empty .reward in the API; computed via game logic.
@@ -8321,6 +8388,8 @@
           const items = order.items || {};
           // Hide animal-input deliveries unless toggle is on.
           if (!showAnimals && Object.keys(items).some(n => DASH_ANIMAL_ITEMS.has(n))) continue;
+          // Hide faction-NPC / Mark-paying deliveries unless toggle is on.
+          if (!showFaction && dashIsFactionItem(from, augReward)) continue;
           const itemDesc = Object.entries(items).map(([n, q]) => q + "x " + n).join(", ");
           const itemDescHtml = Object.entries(items).map(([n, q]) =>
             _dashIcon(n) + q + "× " + escHTML(n)
@@ -8387,12 +8456,15 @@
         const prefs = dashGetPrefs();
         const showNonTicket = !!prefs.showNonTicket;
         const showAnimals = !!prefs.showAnimals;
+        const showFaction = (prefs.showFaction === undefined) ? true : !!prefs.showFaction;
         for (const req of requests) {
           if (completedIds.has(req.id)) continue;
           if (!showAnimals && DASH_ANIMAL_ITEMS.has(req.name)) continue;
           const reqItems = req.items || {};
           const paysTicket = ticket && reqItems[ticket] > 0;
           if (!showNonTicket && !paysTicket) continue;
+          // Hide Mark-paying bounties unless faction toggle is on.
+          if (!showFaction && reqItems["Mark"] > 0) continue;
           const inputItems = [{ name: req.name, qty: 1 }];
           const cost = (typeof dashP2PCost === "function") ? dashP2PCost(inputItems) : null;
           const reward = { coins: req.coins, items: reqItems };
@@ -8582,6 +8654,8 @@
       idle.sort((a, b) => a.priority - b.priority);
 
       const _prefs = dashGetPrefs();
+      // Faction toggle defaults TRUE (show) when key is missing
+      const _showFaction = (_prefs.showFaction === undefined) ? true : !!_prefs.showFaction;
       let html = `<div class="header pixel-panel pixel-font">
         <h1>DASHBOARD</h1>
         <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
@@ -8597,7 +8671,30 @@
           <button class="dash-toggle-btn ${_prefs.showAnimals ? "on" : ""}" onclick="dashTogglePref('showAnimals')">
             ${_prefs.showAnimals ? "☑" : "☐"} Show animal turn-ins (Chicken/Cow/Sheep)
           </button>
+          <button class="dash-toggle-btn ${_showFaction ? "on" : ""}" onclick="dashToggleFaction()">
+            ${_showFaction ? "☑" : "☐"} Show faction items (Goblin NPCs, Mark rewards)
+          </button>
         </div>
+      </div>`;
+
+      // Weather Shop placement status — needs all 4 placed (Tornado Pinwheel /
+      // Mangrove / Thermal Stone / Protective Pesticide) to be protected against
+      // all 4 disasters. Show a status card so missing protection is obvious.
+      const _wPlaced = DASH_WEATHER_ITEMS.filter(w => dashIsPlaced(farm, w));
+      const _wMissing = DASH_WEATHER_ITEMS.filter(w => !dashIsPlaced(farm, w));
+      const _wAllOk = _wMissing.length === 0;
+      const _wCardCls = _wAllOk ? "ready" : "upcoming";
+      const _wTitle = _wAllOk ? "ALL 4 WEATHER ITEMS PLACED" : `${_wMissing.length}/4 WEATHER ITEM${_wMissing.length === 1 ? "" : "S"} MISSING`;
+      const _wPills = DASH_WEATHER_ITEMS.map(w => {
+        const ok = _wPlaced.includes(w);
+        return `<span class="dash-weather-pill ${ok ? "ok" : "miss"}" title="prevents ${escHTML(DASH_WEATHER_PREVENTS[w])}">
+          ${_dashIcon(w)}${escHTML(w)} <b>${ok ? "✓" : "✗"}</b>
+          <span style="opacity:0.7;font-size:0.55rem">${escHTML(DASH_WEATHER_PREVENTS[w])}</span>
+        </span>`;
+      }).join("");
+      html += `<div class="dash-weather-card pixel-panel ${_wCardCls}">
+        <div class="dash-weather-title pixel-font">🌦 ${_wTitle}</div>
+        <div class="dash-weather-pills">${_wPills}</div>
       </div>`;
 
       if (ready.length === 0 && upcoming.length === 0 && idle.length === 0) {
