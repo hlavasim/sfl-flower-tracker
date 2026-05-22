@@ -5578,7 +5578,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.51</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.52</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5605,6 +5605,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.52", items: [
+          { t: "fix", text: "Paw Aura gain cap. Was reporting full daily food cost as gain, which can exceed pets' daily fetch revenue (Paw Aura claiming +40 SFL/d when pets only fetch ~10 SFL/d). A rational player won't feed a pet whose food cost > fetch revenue — they'd just leave it idle. So Paw Aura's benefit per pet is bounded by min(daily food cost, daily fetch SFL): either it saves the food cost on feeds you'd do anyway, or it unlocks net-positive feeding you wouldn't otherwise do (capped at the fetch revenue gained). When the cap kicks in the gain cell shows the raw food number too." },
+        ]},
         { ver: "v3.51", items: [
           { t: "fix", text: "Paw Aura ROI calc: was reading each pet's current request-food set which is often empty/stale → \"no food cost detected\". Now uses per-category average from PET_FOOD_CATEGORIES (14 Easy / 26 Medium / 24 Hard foods, hardcoded from sfl.world/info/pets Requests). Average computed dynamically from current p2p prices (falls back to sfl.world avg 0.10/0.47/1.60 if no prices). Per-pet daily food cost = sum(category_avg for each unlocked request difficulty) × feedMult — gives a proper SFL/d save value and thus ROI." },
         ]},
@@ -15239,21 +15242,30 @@
             _walrusDelta += calc.dailySfl * (5 / calc.energyPerFeed);
           }
         }
-        // Paw Aura: feed pets for free → save daily food cost. Use per-request-
-        // difficulty category averages (Easy/Medium/Hard) computed from current
-        // p2p prices — robust against the user's current request set being empty
-        // or skewed. Daily cost per pet = sum(category_avg) × feedMult, where the
-        // categories are determined by petRequestsAtLevel().
+        // Paw Aura: feeds pets for free. Per-pet daily food cost = sum of
+        // request-difficulty category averages (Easy/Medium/Hard) × feedMult.
+        // Category averages come from current p2p prices over PET_FOOD_CATEGORIES,
+        // with sfl.world fallback when none are tradeable.
+        //
+        // Cap each pet's contribution at min(foodCost, fetchSfl): if food cost
+        // exceeds what the pet fetches, a rational player simply wouldn't feed
+        // that pet — so Paw Aura's benefit is bounded by the fetch revenue it
+        // unlocks (rather than infinite "saved" food on feeds you'd never do).
         const _easyAvg   = petCategoryAvgPrice("easy",   p2pPrices);
         const _mediumAvg = petCategoryAvgPrice("medium", p2pPrices);
         const _hardAvg   = petCategoryAvgPrice("hard",   p2pPrices);
         const _catAvg = { easy: _easyAvg, medium: _mediumAvg, hard: _hardAvg };
         let _pawAuraDelta = 0;
+        let _pawAuraGrossFood = 0;
         for (const pet of _petsList) {
           const reqs = petRequestsAtLevel(pet.level, pet.isNft);
           let costPerFeed = 0;
           for (const r of reqs) costPerFeed += (_catAvg[r] || 0);
-          _pawAuraDelta += costPerFeed * _feedMult;
+          const dailyFoodCost = costPerFeed * _feedMult;
+          _pawAuraGrossFood += dailyFoodCost;
+          const calc = petDailyCalc(pet, p2pPrices, _feedMult, _hasBowls);
+          const petFetchSfl = calc?.dailySfl || 0;
+          _pawAuraDelta += Math.min(dailyFoodCost, petFetchSfl);
         }
         // Bowls + Beast Shoes: XP-only boosts → no direct SFL value, skip from ROI.
         const _bowlsXpPerDay = _petsList.reduce((s,p) => {
@@ -15300,7 +15312,7 @@
               <th style="text-align:right;padding:4px 6px">STATUS / ROI</th>
             </tr></thead><tbody>
               ${_renderBoostRow(_apron,    _apronDelta,    _apronDelta    > 0 ? `+${_apronDelta.toFixed(3)} ${sflIcon()}/d`    : '—')}
-              ${_renderBoostRow(_pawAura,  _pawAuraDelta,  _pawAuraDelta  > 0 ? `+${_pawAuraDelta.toFixed(3)} ${sflIcon()}/d`  : 'no food cost detected')}
+              ${_renderBoostRow(_pawAura,  _pawAuraDelta,  _pawAuraDelta  > 0 ? `+${_pawAuraDelta.toFixed(3)} ${sflIcon()}/d${_pawAuraGrossFood > _pawAuraDelta + 0.01 ? ` <span style="color:var(--text-dim);font-size:0.5rem">(food ${_pawAuraGrossFood.toFixed(2)}, capped by fetch)</span>` : ''}`  : 'no food cost detected')}
               ${_renderBoostRow(_walrus,   _walrusDelta,   _walrusDelta   > 0 ? `+${_walrusDelta.toFixed(3)} ${sflIcon()}/d`   : '—')}
               ${_renderBoostRow(_bowls,    0,              _bowlsXpPerDay > 0 ? `+${_bowlsXpPerDay.toFixed(0)} XP/d`           : '+10 XP/feed')}
               ${_renderBoostRow(_beastShoes, 0,            _beastXpPerDay > 0 ? `+${_beastXpPerDay.toFixed(0)} XP/d`           : '—')}
