@@ -5578,7 +5578,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.50</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.51</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5605,6 +5605,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.51", items: [
+          { t: "fix", text: "Paw Aura ROI calc: was reading each pet's current request-food set which is often empty/stale → \"no food cost detected\". Now uses per-category average from PET_FOOD_CATEGORIES (14 Easy / 26 Medium / 24 Hard foods, hardcoded from sfl.world/info/pets Requests). Average computed dynamically from current p2p prices (falls back to sfl.world avg 0.10/0.47/1.60 if no prices). Per-pet daily food cost = sum(category_avg for each unlocked request difficulty) × feedMult — gives a proper SFL/d save value and thus ROI." },
+        ]},
         { ver: "v3.50", items: [
           { t: "feat", text: "Power page PETS panel: added Paw Aura, Walrus Onesie, Beast Shoes to the pet-boost NFT table. Paw Aura (26500 SFL): feeds pets for free — gain = sum of (current food requests × feedMult × p2p price) per pet → daily SFL saved. Walrus Onesie (3.46 SFL): +5 fetch energy/feed — gain ≈ current daily SFL × (5 / energyPerFeed) per pet. Beast Shoes (860 SFL): +100/+250 XP for medium/hard requests — shown as XP/day (no direct SFL conversion). Owned items now also show ROI (✓ + Xd) instead of just ✓ owned, so you can see the investment-vs-daily-gain ratio for items you already have." },
         ]},
@@ -15236,14 +15239,20 @@
             _walrusDelta += calc.dailySfl * (5 / calc.energyPerFeed);
           }
         }
-        // Paw Aura: feed pets for free → save daily food cost. Food = each pet's
-        // current request set × feedMult × p2p price (game cycles requests, but
-        // current set is a fair sample given identical rarity classes).
+        // Paw Aura: feed pets for free → save daily food cost. Use per-request-
+        // difficulty category averages (Easy/Medium/Hard) computed from current
+        // p2p prices — robust against the user's current request set being empty
+        // or skewed. Daily cost per pet = sum(category_avg) × feedMult, where the
+        // categories are determined by petRequestsAtLevel().
+        const _easyAvg   = petCategoryAvgPrice("easy",   p2pPrices);
+        const _mediumAvg = petCategoryAvgPrice("medium", p2pPrices);
+        const _hardAvg   = petCategoryAvgPrice("hard",   p2pPrices);
+        const _catAvg = { easy: _easyAvg, medium: _mediumAvg, hard: _hardAvg };
         let _pawAuraDelta = 0;
         for (const pet of _petsList) {
-          const foods = ((farmRef.pets?.common?.[pet.displayName] || farmRef.pets?.nfts?.[pet.nftId])?.requests?.food) || [];
+          const reqs = petRequestsAtLevel(pet.level, pet.isNft);
           let costPerFeed = 0;
-          for (const f of foods) costPerFeed += (p2pPrices[f] || 0);
+          for (const r of reqs) costPerFeed += (_catAvg[r] || 0);
           _pawAuraDelta += costPerFeed * _feedMult;
         }
         // Bowls + Beast Shoes: XP-only boosts → no direct SFL value, skip from ROI.
@@ -18765,6 +18774,45 @@
     ];
 
     const PET_REQUEST_VALUES = { easy:{xp:20,energy:20}, medium:{xp:100,energy:100}, hard:{xp:300,energy:300} };
+
+    // Foods asked by pets per request difficulty — mirrors sfl.world/info/pets
+    // Requests section. Used by Paw Aura ROI calc on the Power page to estimate
+    // daily food cost saved when current request set isn't enough to compute it
+    // from the user's actual pet state (or as a per-category average).
+    const PET_FOOD_CATEGORIES = {
+      easy: [
+        "Mashed Potato","Rhubarb Tart","Pumpkin Soup","Reindeer Carrot","Bumpkin Broth",
+        "Popcorn","Sunflower Crunch","Roast Veggies","Club Sandwich","Fruit Salad",
+        "Cheese","Quick Juice","Carrot Juice","Purple Smoothie",
+      ],
+      medium: [
+        "Boiled Eggs","Cabbers n Mash","Fried Tofu","Kale Stew","Cauliflower Burger",
+        "Bumpkin Salad","Goblin's Treat","Pancakes","Bumpkin ganoush","Tofu Scramble",
+        "Sunflower Cake","Cornbread","Pumpkin Cake","Potato Cake","Apple Pie",
+        "Orange Cake","Carrot Cake","Fermented Carrots","Blueberry Jam","Sauerkraut",
+        "Fancy Fries","Orange Juice","Apple Juice","Power Smoothie","Bumpkin Detox","Sour Shake",
+      ],
+      hard: [
+        "Kale Omelette","Rice Bun","Antipasto","Pizza Margherita","Bumpkin Roast",
+        "Goblin Brunch","Steamed Red Rice","Caprese Salad","Spaghetti al Limone",
+        "Cabbage Cake","Wheat Cake","Cauliflower Cake","Radish Cake","Beetroot Cake",
+        "Parsnip Cake","Eggplant Cake","Honey Cake","Lemon Cheesecake","Blue Cheese",
+        "Honey Cheddar","Banana Blast","Grape Juice","Slow Juice","The Lot",
+      ],
+    };
+    // Fallback averages from sfl.world (used when no p2p price is available for
+    // any food in a category). Should rarely kick in since most foods trade.
+    const PET_FOOD_CATEGORY_FALLBACK = { easy: 0.10, medium: 0.47, hard: 1.60 };
+    // Compute average price for a request category from current p2p prices.
+    function petCategoryAvgPrice(category, p2pPrices) {
+      const foods = PET_FOOD_CATEGORIES[category] || [];
+      let sum = 0, n = 0;
+      for (const f of foods) {
+        const p = p2pPrices[f];
+        if (p > 0) { sum += p; n++; }
+      }
+      return n > 0 ? sum / n : (PET_FOOD_CATEGORY_FALLBACK[category] || 0);
+    }
 
     // ── Pet calculator helpers ──
     function petRequestsAtLevel(level, isNft) {
