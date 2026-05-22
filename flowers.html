@@ -5578,7 +5578,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.48</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.49</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5605,6 +5605,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.49", items: [
+          { t: "feat", text: "Power page: new PETS panel (after Crop Machine). Lists every owned pet (NFT + common) with breed, level, energy, daily SFL gen (via petDailyCalc, same as Pets page). Each row has an editable purchase-price input — values stored in localStorage (sfl_pet_prices_v1) per pet key. ROI = price / daily SFL. Until a price is entered the row shows \"Missing purchase price\" (no global breed-floor data exists since pet NFT prices are per-token, not aggregated by breed). Below the pet table: pet-boost NFT table (Victoria's Apron — ×1.5 feed mult → estimated daily SFL gain → ROI vs marketplace floor; Pet Bowls — +10 XP/feed, shown as XP/day delta since XP doesn't directly convert to SFL)." },
+        ]},
         { ver: "v3.48", items: [
           { t: "feat", text: "Nodes purchase plan ROI cap is now a 1Y/2Y/All toggle (next to the section title, persisted in localStorage as sfl_nodes_roi_cap). Default 2Y; pick 1Y to see only quick payback purchases, or All to see everything. Cap is applied both to the greedy loop's early-stop and as a post-sort filter so merges (which bypass the loop) also respect it." },
         ]},
@@ -15112,6 +15115,154 @@
         </div>`;
       }
 
+      // PETS panel — mirror Pets-page logic so this page becomes one-stop for ROI.
+      // Lists every owned pet (NFT + common) with its daily SFL gen + a price input
+      // so the user can record what each NFT cost them and we compute ROI. Common
+      // pets have no purchase cost (earned via gameplay) — input still available
+      // for consistency. Pet-boost NFTs (Pet Bowls, Victoria's Apron) shown separately.
+      if (farmRef && farmRef.pets && (Object.keys(farmRef.pets.nfts || {}).length > 0 || Object.keys(farmRef.pets.common || {}).length > 0)) {
+        const _petPrices = (() => {
+          try { return JSON.parse(localStorage.getItem("sfl_pet_prices_v1") || "{}") || {}; }
+          catch { return {}; }
+        })();
+        // Detect pet boosts (matches Pets page logic)
+        const _hasApron = (farmRef.wardrobe?.["Victoria's Apron"] > 0) || (typeof isWearableEquipped === "function" && isWearableEquipped(farmRef, "Victoria's Apron"));
+        const _hasBowls = findCollectible(farmRef, "Pet Bowls").length > 0;
+        const _feedMult = _hasApron ? 1.5 : 1.0;
+
+        const _petsList = [];
+        for (const [name, pet] of Object.entries(farmRef.pets.common || {})) {
+          const xp = pet.experience || 0;
+          const lvl = petLevel(xp);
+          const species = PET_NAME_SPECIES[name] || null;
+          _petsList.push({ key: `common-${name}`, displayName: name, petType: species, species, level: lvl, xp, energy: pet.energy || 0, isNft: false, nftId: null });
+        }
+        for (const [id, pet] of Object.entries(farmRef.pets.nfts || {})) {
+          const xp = pet.experience || 0;
+          const lvl = petLevel(xp);
+          const petType = pet.traits?.type || "Unknown";
+          _petsList.push({ key: `nft-${id}`, displayName: `${petType} #${id}`, petType, species: petType, level: lvl, xp, energy: pet.energy || 0, isNft: true, nftId: id });
+        }
+        // NFT first, then by level desc
+        _petsList.sort((a, b) => {
+          if (a.isNft !== b.isNft) return a.isNft ? -1 : 1;
+          return b.level - a.level;
+        });
+
+        // Per-pet daily SFL via petDailyCalc (same as Pets page)
+        let _totalDailySfl = 0;
+        let _totalPrice = 0;
+        const _petRows = _petsList.map(pet => {
+          const calc = petDailyCalc(pet, p2pPrices, _feedMult, _hasBowls);
+          const dailySfl = calc?.dailySfl || 0;
+          _totalDailySfl += dailySfl;
+          const price = parseFloat(_petPrices[pet.key]) || 0;
+          if (price > 0) _totalPrice += price;
+          const roiDays = (price > 0 && dailySfl > 0) ? (price / dailySfl) : null;
+          const roiHtml = roiDays !== null
+            ? `<span style="color:${roiDays <= 30 ? 'var(--green)' : roiDays <= 90 ? 'var(--sunpetal)' : roiDays <= 365 ? 'var(--text-secondary)' : 'var(--text-dim)'};font-weight:bold">${Math.ceil(roiDays)}d</span>`
+            : (price > 0 ? `<span style="color:var(--text-dim)">—</span>` : `<span style="color:var(--text-dim);font-style:italic">Missing purchase price</span>`);
+          const breedLabel = pet.isNft ? `<span style="color:var(--lily)">NFT</span> ${escHTML(pet.petType)}` : `${escHTML(pet.species || "?")}`;
+          return `<tr style="border-top:1px solid rgba(255,255,255,0.05)">
+            <td style="padding:4px 6px"><b>${escHTML(pet.displayName)}</b></td>
+            <td style="padding:4px 6px">${breedLabel}</td>
+            <td style="text-align:right;padding:4px 6px">Lv ${pet.level}</td>
+            <td style="text-align:right;padding:4px 6px">${pet.energy.toLocaleString()}⚡</td>
+            <td style="text-align:right;padding:4px 6px;color:var(--green);font-weight:bold">${dailySfl > 0 ? `+${dailySfl.toFixed(3)}` : '—'}</td>
+            <td style="padding:4px 6px;text-align:right">
+              <input type="number" step="0.01" min="0" value="${price > 0 ? price : ''}"
+                placeholder="?" onchange="powerSetPetPrice('${pet.key}', this.value)"
+                style="width:70px;padding:2px 4px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-dark);font-family:'Courier New',monospace;font-size:0.6875rem;text-align:right">
+            </td>
+            <td style="text-align:right;padding:4px 6px">${roiHtml}</td>
+          </tr>`;
+        }).join("");
+        const _grossDaily = _totalDailySfl;
+        const _grossRoi = (_totalPrice > 0 && _grossDaily > 0) ? (_totalPrice / _grossDaily) : null;
+
+        // Pet-boost NFT items (Pet Bowls, Victoria's Apron). Use boostItems for floor data.
+        function _findBoost(name) {
+          return boostItems.find(b => b.name === name) || null;
+        }
+        const _bowls = _findBoost("Pet Bowls");
+        const _apron = _findBoost("Victoria's Apron");
+
+        function _renderBoostRow(b, gainSfl, gainDesc) {
+          if (!b) return '';
+          const has = b.has;
+          const floor = b.floor || 0;
+          const roi = (gainSfl > 0 && floor > 0) ? (floor / gainSfl) : null;
+          const roiHtml = has
+            ? `<span style="color:var(--green)">✓ owned</span>`
+            : (roi !== null
+              ? `<span style="color:${roi <= 30 ? 'var(--green)' : roi <= 90 ? 'var(--sunpetal)' : roi <= 365 ? 'var(--text-secondary)' : 'var(--text-dim)'};font-weight:bold">${Math.ceil(roi)}d ROI</span>`
+              : `<span style="color:var(--text-dim)">—</span>`);
+          const imgUrl = getItemIcon(b.name);
+          return `<tr style="border-top:1px solid rgba(255,255,255,0.05)">
+            <td style="padding:6px 6px"><img src="${imgUrl}" onerror="this.style.display='none'" style="width:18px;height:18px;image-rendering:pixelated;vertical-align:middle;margin-right:4px"><b>${escHTML(b.name)}</b></td>
+            <td style="padding:6px 6px;color:var(--text-secondary);font-size:0.625rem">${escHTML(b.boost || '')}</td>
+            <td style="text-align:right;padding:6px 6px">${floor > 0 ? `${floor.toFixed(2)} ${sflIcon()}` : '—'}</td>
+            <td style="text-align:right;padding:6px 6px;color:var(--green)">${gainDesc}</td>
+            <td style="text-align:right;padding:6px 6px">${roiHtml}</td>
+          </tr>`;
+        }
+
+        // Apron gain: +50% feed-mult on daily SFL. Delta = with-apron − without-apron.
+        let _apronDelta = 0;
+        if (_apron && !_hasApron) {
+          // Recompute daily SFL with feedMult=1.5 to estimate gain
+          let with15 = 0;
+          for (const pet of _petsList) {
+            const c = petDailyCalc(pet, p2pPrices, 1.5, _hasBowls);
+            with15 += c?.dailySfl || 0;
+          }
+          _apronDelta = with15 - _totalDailySfl;
+        } else if (_apron && _hasApron) {
+          // Already-owned delta = current vs without
+          let without = 0;
+          for (const pet of _petsList) {
+            const c = petDailyCalc(pet, p2pPrices, 1.0, _hasBowls);
+            without += c?.dailySfl || 0;
+          }
+          _apronDelta = _totalDailySfl - without;
+        }
+        // Bowls gain: +10 XP/request — XP doesn't directly map to SFL. Show as XP delta only.
+        const _bowlsXpPerFeed = (10 * (_petsList.reduce((s,p) => s + (petDailyCalc(p, p2pPrices, _feedMult, true).reqXp - petDailyCalc(p, p2pPrices, _feedMult, false).reqXp), 0)));
+
+        content += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:16px;border:2px solid var(--border-dark)">
+          <div class="pixel-font" style="font-size: 0.625rem;color:var(--lily);margin-bottom:6px">🐾 PETS</div>
+          <div style="color:var(--text-secondary);font-size:0.625rem;line-height:1.6;margin-bottom:8px">
+            <b>Total:</b> ${_petsList.length} pets · <b style="color:var(--green)">+${_grossDaily.toFixed(3)} ${sflIcon()}/d</b> from fetches
+            ${_totalPrice > 0 ? `<br><b>Invested:</b> ${_totalPrice.toFixed(2)} ${sflIcon()} → portfolio ROI <b style="color:${_grossRoi <= 90 ? 'var(--green)' : _grossRoi <= 365 ? 'var(--sunpetal)' : 'var(--text-dim)'}">${_grossRoi !== null ? Math.ceil(_grossRoi) + 'd' : '—'}</b>` : ''}
+            <br><span style="color:var(--text-dim)">Feed mult ×${_feedMult.toFixed(2)}${_hasApron ? ' (Victoria\'s Apron ✓)' : ''}${_hasBowls ? ' · Pet Bowls ✓' : ''}</span>
+          </div>
+          <table style="width:100%;font-family:'Courier New',monospace;font-size:0.6875rem;border-collapse:collapse;margin-bottom:10px">
+            <thead><tr class="pixel-font" style="color:var(--text-dim);font-size:0.5rem;letter-spacing:0.5px">
+              <th style="text-align:left;padding:4px 6px">PET</th>
+              <th style="text-align:left;padding:4px 6px">BREED</th>
+              <th style="text-align:right;padding:4px 6px">LV</th>
+              <th style="text-align:right;padding:4px 6px">⚡</th>
+              <th style="text-align:right;padding:4px 6px">${sflIcon()}/D</th>
+              <th style="text-align:right;padding:4px 6px">PRICE (${sflIcon()})</th>
+              <th style="text-align:right;padding:4px 6px">ROI</th>
+            </tr></thead><tbody>${_petRows}</tbody>
+          </table>
+          <div class="pixel-font" style="font-size:0.5625rem;color:var(--sunpetal);margin:8px 0 4px">PET-BOOST NFTs</div>
+          <table style="width:100%;font-family:'Courier New',monospace;font-size:0.6875rem;border-collapse:collapse">
+            <thead><tr class="pixel-font" style="color:var(--text-dim);font-size:0.5rem;letter-spacing:0.5px">
+              <th style="text-align:left;padding:4px 6px">ITEM</th>
+              <th style="text-align:left;padding:4px 6px">EFFECT</th>
+              <th style="text-align:right;padding:4px 6px">FLOOR</th>
+              <th style="text-align:right;padding:4px 6px">GAIN</th>
+              <th style="text-align:right;padding:4px 6px">STATUS / ROI</th>
+            </tr></thead><tbody>
+              ${_renderBoostRow(_apron, _apronDelta, _apronDelta > 0 ? `+${_apronDelta.toFixed(3)} ${sflIcon()}/d` : '—')}
+              ${_renderBoostRow(_bowls, 0, _bowlsXpPerFeed > 0 ? `+${_bowlsXpPerFeed.toFixed(0)} XP/d` : '+10 XP/feed (no SFL)')}
+            </tbody>
+          </table>
+        </div>`;
+      }
+
       // Best Buys: top 10 missing boosts by ROI
       const bestBuys = [];
       for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
@@ -15890,6 +16041,20 @@
         </div>
       </div>`;
     }
+
+    // Persist per-pet purchase price for the Power-page Pets panel ROI calc.
+    window.powerSetPetPrice = function(key, val) {
+      try {
+        const obj = JSON.parse(localStorage.getItem("sfl_pet_prices_v1") || "{}") || {};
+        const n = parseFloat(val);
+        if (!isFinite(n) || n <= 0) delete obj[key];
+        else obj[key] = n;
+        localStorage.setItem("sfl_pet_prices_v1", JSON.stringify(obj));
+      } catch {}
+      const scroll = window.scrollY;
+      if (typeof renderPowerContent === "function") renderPowerContent();
+      window.scrollTo(0, scroll);
+    };
 
     function togglePowerCategory(catId) {
       const cat = document.getElementById("power-cat-" + catId);
