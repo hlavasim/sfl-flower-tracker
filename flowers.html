@@ -5578,7 +5578,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.49</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.50</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5605,6 +5605,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.50", items: [
+          { t: "feat", text: "Power page PETS panel: added Paw Aura, Walrus Onesie, Beast Shoes to the pet-boost NFT table. Paw Aura (26500 SFL): feeds pets for free — gain = sum of (current food requests × feedMult × p2p price) per pet → daily SFL saved. Walrus Onesie (3.46 SFL): +5 fetch energy/feed — gain ≈ current daily SFL × (5 / energyPerFeed) per pet. Beast Shoes (860 SFL): +100/+250 XP for medium/hard requests — shown as XP/day (no direct SFL conversion). Owned items now also show ROI (✓ + Xd) instead of just ✓ owned, so you can see the investment-vs-daily-gain ratio for items you already have." },
+        ]},
         { ver: "v3.49", items: [
           { t: "feat", text: "Power page: new PETS panel (after Crop Machine). Lists every owned pet (NFT + common) with breed, level, energy, daily SFL gen (via petDailyCalc, same as Pets page). Each row has an editable purchase-price input — values stored in localStorage (sfl_pet_prices_v1) per pet key. ROI = price / daily SFL. Until a price is entered the row shows \"Missing purchase price\" (no global breed-floor data exists since pet NFT prices are per-token, not aggregated by breed). Below the pet table: pet-boost NFT table (Victoria's Apron — ×1.5 feed mult → estimated daily SFL gain → ROI vs marketplace floor; Pet Bowls — +10 XP/feed, shown as XP/day delta since XP doesn't directly convert to SFL)." },
         ]},
@@ -15180,54 +15183,85 @@
         const _grossDaily = _totalDailySfl;
         const _grossRoi = (_totalPrice > 0 && _grossDaily > 0) ? (_totalPrice / _grossDaily) : null;
 
-        // Pet-boost NFT items (Pet Bowls, Victoria's Apron). Use boostItems for floor data.
+        // Pet-boost NFT items. Always show ROI (even when owned) since the user
+        // wants the investment vs daily-gain ratio regardless of ownership state.
         function _findBoost(name) {
           return boostItems.find(b => b.name === name) || null;
         }
         const _bowls = _findBoost("Pet Bowls");
         const _apron = _findBoost("Victoria's Apron");
+        const _pawAura = _findBoost("Paw Aura");
+        const _walrus = _findBoost("Walrus Onesie");
+        const _beastShoes = _findBoost("Beast Shoes");
 
         function _renderBoostRow(b, gainSfl, gainDesc) {
           if (!b) return '';
           const has = b.has;
           const floor = b.floor || 0;
           const roi = (gainSfl > 0 && floor > 0) ? (floor / gainSfl) : null;
-          const roiHtml = has
-            ? `<span style="color:var(--green)">✓ owned</span>`
-            : (roi !== null
-              ? `<span style="color:${roi <= 30 ? 'var(--green)' : roi <= 90 ? 'var(--sunpetal)' : roi <= 365 ? 'var(--text-secondary)' : 'var(--text-dim)'};font-weight:bold">${Math.ceil(roi)}d ROI</span>`
-              : `<span style="color:var(--text-dim)">—</span>`);
+          const roiDaysHtml = roi !== null
+            ? `<span style="color:${roi <= 30 ? 'var(--green)' : roi <= 90 ? 'var(--sunpetal)' : roi <= 365 ? 'var(--text-secondary)' : 'var(--text-dim)'};font-weight:bold">${Math.ceil(roi)}d</span>`
+            : `<span style="color:var(--text-dim)">—</span>`;
+          const statusHtml = has
+            ? `<span style="color:var(--green)">✓</span> ${roiDaysHtml}`
+            : roiDaysHtml;
           const imgUrl = getItemIcon(b.name);
           return `<tr style="border-top:1px solid rgba(255,255,255,0.05)">
             <td style="padding:6px 6px"><img src="${imgUrl}" onerror="this.style.display='none'" style="width:18px;height:18px;image-rendering:pixelated;vertical-align:middle;margin-right:4px"><b>${escHTML(b.name)}</b></td>
             <td style="padding:6px 6px;color:var(--text-secondary);font-size:0.625rem">${escHTML(b.boost || '')}</td>
             <td style="text-align:right;padding:6px 6px">${floor > 0 ? `${floor.toFixed(2)} ${sflIcon()}` : '—'}</td>
-            <td style="text-align:right;padding:6px 6px;color:var(--green)">${gainDesc}</td>
-            <td style="text-align:right;padding:6px 6px">${roiHtml}</td>
+            <td style="text-align:right;padding:6px 6px;color:${gainSfl > 0 ? 'var(--green)' : 'var(--text-dim)'}">${gainDesc}</td>
+            <td style="text-align:right;padding:6px 6px">${statusHtml}</td>
           </tr>`;
         }
 
-        // Apron gain: +50% feed-mult on daily SFL. Delta = with-apron − without-apron.
+        // ── Per-boost gain estimates ──
+        // Apron gain: feed-mult delta on daily SFL. Compute with vs without using
+        // the SAME other-flags state, so we isolate apron's contribution.
         let _apronDelta = 0;
-        if (_apron && !_hasApron) {
-          // Recompute daily SFL with feedMult=1.5 to estimate gain
-          let with15 = 0;
+        {
+          let without = 0, withAp = 0;
           for (const pet of _petsList) {
-            const c = petDailyCalc(pet, p2pPrices, 1.5, _hasBowls);
-            with15 += c?.dailySfl || 0;
+            without += (petDailyCalc(pet, p2pPrices, 1.0, _hasBowls)?.dailySfl || 0);
+            withAp  += (petDailyCalc(pet, p2pPrices, 1.5, _hasBowls)?.dailySfl || 0);
           }
-          _apronDelta = with15 - _totalDailySfl;
-        } else if (_apron && _hasApron) {
-          // Already-owned delta = current vs without
-          let without = 0;
-          for (const pet of _petsList) {
-            const c = petDailyCalc(pet, p2pPrices, 1.0, _hasBowls);
-            without += c?.dailySfl || 0;
-          }
-          _apronDelta = _totalDailySfl - without;
+          _apronDelta = withAp - without;
         }
-        // Bowls gain: +10 XP/request — XP doesn't directly map to SFL. Show as XP delta only.
-        const _bowlsXpPerFeed = (10 * (_petsList.reduce((s,p) => s + (petDailyCalc(p, p2pPrices, _feedMult, true).reqXp - petDailyCalc(p, p2pPrices, _feedMult, false).reqXp), 0)));
+        // Walrus Onesie: +5 fetch energy per feed across all pets. Pet daily SFL
+        // scales linearly with energyPerFeed → delta ≈ current × (5 / energyPerFeed).
+        let _walrusDelta = 0;
+        for (const pet of _petsList) {
+          const calc = petDailyCalc(pet, p2pPrices, _feedMult, _hasBowls);
+          if (calc && calc.energyPerFeed > 0 && calc.dailySfl > 0) {
+            _walrusDelta += calc.dailySfl * (5 / calc.energyPerFeed);
+          }
+        }
+        // Paw Aura: feed pets for free → save daily food cost. Food = each pet's
+        // current request set × feedMult × p2p price (game cycles requests, but
+        // current set is a fair sample given identical rarity classes).
+        let _pawAuraDelta = 0;
+        for (const pet of _petsList) {
+          const foods = ((farmRef.pets?.common?.[pet.displayName] || farmRef.pets?.nfts?.[pet.nftId])?.requests?.food) || [];
+          let costPerFeed = 0;
+          for (const f of foods) costPerFeed += (p2pPrices[f] || 0);
+          _pawAuraDelta += costPerFeed * _feedMult;
+        }
+        // Bowls + Beast Shoes: XP-only boosts → no direct SFL value, skip from ROI.
+        const _bowlsXpPerDay = _petsList.reduce((s,p) => {
+          const w = petDailyCalc(p, p2pPrices, _feedMult, true);
+          const wo = petDailyCalc(p, p2pPrices, _feedMult, false);
+          return s + ((w?.dailyXp || 0) - (wo?.dailyXp || 0));
+        }, 0);
+        // Beast Shoes: +100 XP for medium, +250 for hard, per feed. dailyMult = feedMult.
+        const _beastXpPerDay = _petsList.reduce((s, p) => {
+          const reqs = petRequestsAtLevel(p.level, p.isNft);
+          let perFeed = 0;
+          for (const r of reqs) {
+            if (r === "medium") perFeed += 100;
+            else if (r === "hard") perFeed += 250;
+          }
+          return s + perFeed * _feedMult;
+        }, 0);
 
         content += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:16px;border:2px solid var(--border-dark)">
           <div class="pixel-font" style="font-size: 0.625rem;color:var(--lily);margin-bottom:6px">🐾 PETS</div>
@@ -15256,8 +15290,11 @@
               <th style="text-align:right;padding:4px 6px">GAIN</th>
               <th style="text-align:right;padding:4px 6px">STATUS / ROI</th>
             </tr></thead><tbody>
-              ${_renderBoostRow(_apron, _apronDelta, _apronDelta > 0 ? `+${_apronDelta.toFixed(3)} ${sflIcon()}/d` : '—')}
-              ${_renderBoostRow(_bowls, 0, _bowlsXpPerFeed > 0 ? `+${_bowlsXpPerFeed.toFixed(0)} XP/d` : '+10 XP/feed (no SFL)')}
+              ${_renderBoostRow(_apron,    _apronDelta,    _apronDelta    > 0 ? `+${_apronDelta.toFixed(3)} ${sflIcon()}/d`    : '—')}
+              ${_renderBoostRow(_pawAura,  _pawAuraDelta,  _pawAuraDelta  > 0 ? `+${_pawAuraDelta.toFixed(3)} ${sflIcon()}/d`  : 'no food cost detected')}
+              ${_renderBoostRow(_walrus,   _walrusDelta,   _walrusDelta   > 0 ? `+${_walrusDelta.toFixed(3)} ${sflIcon()}/d`   : '—')}
+              ${_renderBoostRow(_bowls,    0,              _bowlsXpPerDay > 0 ? `+${_bowlsXpPerDay.toFixed(0)} XP/d`           : '+10 XP/feed')}
+              ${_renderBoostRow(_beastShoes, 0,            _beastXpPerDay > 0 ? `+${_beastXpPerDay.toFixed(0)} XP/d`           : '—')}
             </tbody>
           </table>
         </div>`;
