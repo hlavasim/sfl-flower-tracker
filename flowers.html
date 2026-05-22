@@ -5606,7 +5606,7 @@
     function renderChangelog() {
       const log = [
         { ver: "v3.48", items: [
-          { t: "tweak", text: "Nodes purchase plan ROI cap lowered 10y → 2y (730 days). Anything beyond is unlikely to ever pay back at current prices, so it just clutters the list." },
+          { t: "feat", text: "Nodes purchase plan ROI cap is now a 1Y/2Y/All toggle (next to the section title, persisted in localStorage as sfl_nodes_roi_cap). Default 2Y; pick 1Y to see only quick payback purchases, or All to see everything. Cap is applied both to the greedy loop's early-stop and as a post-sort filter so merges (which bypass the loop) also respect it." },
         ]},
         { ver: "v3.47", items: [
           { t: "fix", text: "Nodes page RECOMMENDED PURCHASE PLAN: removed the affordability gate from the greedy simulator. Previously if Stone had the best ROI (e.g. 190d) but you didn't have enough sunstones/obsidian RIGHT NOW, the loop silently skipped it and picked the next-best affordable option (e.g. Crop Plot at 413d) — so the plan ordering didn't actually reflect ROI. Now the plan shows the ideal save-up order purely by REAL ROI; cumulative cost column tells you how much you need to invest to reach each step. Also added an early-stop when ROI exceeds 10 years so plan doesn't pad with low-value entries. Merge prereqs (4×t1 for t2-merge, 4×t2 for t3-merge) are still required since you literally can't perform them otherwise — but obsidian/coin cost isn't a gate either." },
@@ -15967,6 +15967,11 @@
       return { physical: t1 + t2 + t3, t1, t2, t3, effective: t1 + t2 * 4 + t3 * 16 };
     }
 
+    window.nodesSetRoiCap = function(val) {
+      try { localStorage.setItem("sfl_nodes_roi_cap", val); } catch {}
+      if (cachedFarmData) renderNodes(cachedFarmData);
+    };
+
     async function renderNodes(data) {
       const app = document.getElementById("app");
       const { inventory, farm } = data;
@@ -16514,6 +16519,13 @@
       // (cumulative cost tells you how much investment is needed). After each
       // "purchase" the next node of that type costs more sunstones, so its ROI
       // naturally degrades and other node types eventually win the next slot.
+      // ROI cap controlled by user toggle (sfl_nodes_roi_cap): "1y" | "2y" | "all".
+      const _nodesRoiCap = (() => {
+        const v = localStorage.getItem("sfl_nodes_roi_cap");
+        if (v === "1y") return 365;
+        if (v === "all") return Infinity;
+        return 730; // default 2y
+      })();
       const plan = [];
       const marginals = {}; // nodeKey → { marginal, product }
       const purchasedSim = {}; // nodeKey → simulated purchased count
@@ -16539,8 +16551,8 @@
           }
         }
         if (!bestKey || bestRoi === Infinity) break;
-        // Stop once ROI exceeds 2 years — beyond that the plan is noise.
-        if (bestRoi > 730) break;
+        // Stop once ROI exceeds the user-selected cap (default 2y, or 1y / All).
+        if (bestRoi > _nodesRoiCap) break;
 
         purchasedSim[bestKey]++;
         cumCostSfl += bestCostSfl;
@@ -16589,8 +16601,10 @@
         cumSflPerDay += o.marginal;
       }
 
-      // Sort plan by ROI
+      // Sort plan by ROI then drop anything beyond the user-selected cap
+      // (covers merges too — they bypass the greedy loop's early-stop).
       plan.sort((a, b) => a.roi - b.roi);
+      while (plan.length > 0 && plan[plan.length - 1].roi > _nodesRoiCap) plan.pop();
 
       // Recompute cumulative values after sorting
       let runCost = 0, runSfl = 0;
@@ -16649,8 +16663,16 @@
         }
         const realTotalSflPerDay = realCum;
 
+        const _capLabel = _nodesRoiCap === 365 ? "1y" : (_nodesRoiCap === Infinity ? "all" : "2y");
+        const _capBtn = (val, label) => `<button class="dash-toggle-btn ${_capLabel === val ? "on" : ""}" onclick="nodesSetRoiCap('${val}')">${label}</button>`;
         content += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
-          <div style="font-size:0.6875rem;color:var(--green);margin-bottom:4px;font-weight:bold" class="pixel-font">RECOMMENDED PURCHASE PLAN</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px;flex-wrap:wrap">
+            <div style="font-size:0.6875rem;color:var(--green);font-weight:bold" class="pixel-font">RECOMMENDED PURCHASE PLAN</div>
+            <div style="display:flex;gap:4px">
+              <span style="font-size:0.5rem;color:var(--text-dim);align-self:center;margin-right:4px">ROI cap:</span>
+              ${_capBtn("1y","1Y")}${_capBtn("2y","2Y")}${_capBtn("all","All")}
+            </div>
+          </div>
           <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px">Greedy order by REAL ROI — scaled by efficiency. Not gated by current resources (plan shows the ideal save-up order; use CUM REAL ${sflIcon("0.65em")}/D and the cumulative cost below to see how far each step gets you).</div>
           <table class="node-res-table">
             <tr><th>#</th><th>BUY</th><th style="text-align:right">COST</th><th style="text-align:right" title="Theoretical SFL/day at 24/7 harvest cadence">THEO ${sflIcon("0.75em")}/D</th><th style="text-align:right">EFF</th><th style="text-align:right" title="Real SFL/day = theoretical × efficiency">REAL ${sflIcon("0.75em")}/D</th><th style="text-align:right">ROI</th><th style="text-align:right" title="Cumulative REAL SFL/day after this purchase">CUM REAL ${sflIcon("0.75em")}/D</th></tr>`;
