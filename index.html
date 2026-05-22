@@ -5578,7 +5578,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.47</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.48</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5605,6 +5605,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.48", items: [
+          { t: "tweak", text: "Nodes purchase plan ROI cap lowered 10y → 2y (730 days). Anything beyond is unlikely to ever pay back at current prices, so it just clutters the list." },
+        ]},
         { ver: "v3.47", items: [
           { t: "fix", text: "Nodes page RECOMMENDED PURCHASE PLAN: removed the affordability gate from the greedy simulator. Previously if Stone had the best ROI (e.g. 190d) but you didn't have enough sunstones/obsidian RIGHT NOW, the loop silently skipped it and picked the next-best affordable option (e.g. Crop Plot at 413d) — so the plan ordering didn't actually reflect ROI. Now the plan shows the ideal save-up order purely by REAL ROI; cumulative cost column tells you how much you need to invest to reach each step. Also added an early-stop when ROI exceeds 10 years so plan doesn't pad with low-value entries. Merge prereqs (4×t1 for t2-merge, 4×t2 for t3-merge) are still required since you literally can't perform them otherwise — but obsidian/coin cost isn't a gate either." },
         ]},
@@ -16536,8 +16539,8 @@
           }
         }
         if (!bestKey || bestRoi === Infinity) break;
-        // Stop once ROI exceeds 10 years — beyond that the plan is noise.
-        if (bestRoi > 3650) break;
+        // Stop once ROI exceeds 2 years — beyond that the plan is noise.
+        if (bestRoi > 730) break;
 
         purchasedSim[bestKey]++;
         cumCostSfl += bestCostSfl;
