@@ -4395,7 +4395,9 @@
       "Castle":    [{ cats: ["crops"], cropTier: "medium", value: 0.3, type: "yield_flat" }],
       "Snow":      [{ cats: ["crops"], cropTier: "advanced", value: 0.3, type: "yield_flat" }],
       "Woodlands": [{ cats: ["trees"], value: 0.2, type: "yield_flat" }],
-      "Cave":      [{ cats: ["stone", "iron", "gold", "crimstone"], value: 0.2, type: "yield_flat" }],
+      // "Cave" → minerals only. Per sunflower-land/lib/getBudYieldBoosts.ts
+      // `isMineral` = Stone | Iron | Gold (NOT crimstone), so we exclude crimstone here.
+      "Cave":      [{ cats: ["stone", "iron", "gold"], value: 0.2, type: "yield_flat" }],
       "Retreat":   [{ cats: ["chickens", "cows", "sheep"], value: 0.2, type: "yield_flat" }],
       "Beach":     [{ cats: ["fruits"], value: 0.2, type: "yield_flat" }],
       "Saphiro":   [{ cats: ["crops"], value: -10, type: "speed_pct" }],
@@ -4409,7 +4411,8 @@
       "Banana":         [{ cats: ["fruits"], value: 0.2, type: "yield_flat" }],
       "Basic Leaf":     [{ cats: ["crops"], cropTier: "basic", value: 0.2, type: "yield_flat" }],
       "Carrot Head":    [{ cats: ["crops"], product: "Carrot", value: 0.3, type: "yield_flat" }],
-      "Diamond Gem":    [{ cats: ["stone", "iron", "gold", "crimstone"], value: 0.2, type: "yield_flat" }],
+      // "Diamond Gem" stem → minerals only (same isMineral definition as Cave bud).
+      "Diamond Gem":    [{ cats: ["stone", "iron", "gold"], value: 0.2, type: "yield_flat" }],
       "Egg Head":       [{ cats: ["chickens"], product: "Egg", value: 0.2, type: "yield_flat" }],
       "Fish Hat":       [{ cats: ["fishing"], pct: 10, extra: 1, type: "chance" }],
       "Gold Gem":       [{ cats: ["gold"], value: 0.2, type: "yield_flat" }],
@@ -5578,7 +5581,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.52</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.53</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5605,6 +5608,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.53", items: [
+          { t: "fix", text: "Buds page minerals boost no longer applies to Crimstone. Per sunflower-land/lib/getBudYieldBoosts.ts `isMineral` returns Stone | Iron | Gold (not Crimstone). Cave bud type and Diamond Gem stem had `cats: [stone, iron, gold, crimstone]` — corrected to `[stone, iron, gold]`. Crimstone boosts come from dedicated NFTs (Crimstone Amulet, Crim Peckster, Crimstone Clam etc.), not the generic minerals trait." },
+        ]},
         { ver: "v3.52", items: [
           { t: "fix", text: "Paw Aura gain cap. Was reporting full daily food cost as gain, which can exceed pets' daily fetch revenue (Paw Aura claiming +40 SFL/d when pets only fetch ~10 SFL/d). A rational player won't feed a pet whose food cost > fetch revenue — they'd just leave it idle. So Paw Aura's benefit per pet is bounded by min(daily food cost, daily fetch SFL): either it saves the food cost on feeds you'd do anyway, or it unlocks net-positive feeding you wouldn't otherwise do (capped at the fetch revenue gained). When the cap kicks in the gain cell shows the raw food number too." },
         ]},
