@@ -5581,7 +5581,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.53</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.54</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5608,6 +5608,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.54", items: [
+          { t: "fix", text: "Investment Tracker DAYS TO FULL was using a first-vs-last endpoint slope on the 30d window — meaning only 2 of ~30 snapshots actually drove the SFL/day estimate. A single anomalous boundary snapshot (NFT floor flip, price spike at the start of window, dip at end) flipped the projected payback by 8× (500d → 4078d in observed case). Switched to least-squares linear regression across all points in the window, which is robust to outlier endpoints. Same metric is also used by the Insights burn/growth indicator." },
+        ]},
         { ver: "v3.53", items: [
           { t: "fix", text: "Buds page minerals boost no longer applies to Crimstone. Per sunflower-land/lib/getBudYieldBoosts.ts `isMineral` returns Stone | Iron | Gold (not Crimstone). Cave bud type and Diamond Gem stem had `cats: [stone, iron, gold, crimstone]` — corrected to `[stone, iron, gold]`. Crimstone boosts come from dedicated NFTs (Crimstone Amulet, Crim Peckster, Crimstone Clam etc.), not the generic minerals trait." },
         ]},
@@ -21829,6 +21832,11 @@
     // ───── Slope helper (used by earning rate + burn-vs-growth + metric ②) ─────
     // Uses `adjustedValueSfl` (cashflow-neutralised) so user withdrawals don't show up as burn.
     // Falls back to raw `valueSfl` for older state shapes (defensive).
+    // Linear-regression slope (SFL per day) across the window. Robust to a single
+    // anomalous endpoint — first-vs-last endpoint math used to flip wildly when
+    // either boundary point was outlier-priced (e.g. NFT floor refresh moment).
+    // Uses adjustedValueSfl when available (cashflow-neutralised so user withdrawals
+    // don't read as burn), with sample count + window span exposed for debugging.
     function _insSlopeForWindow(days) {
       if (!_insState) return null;
       const { points } = _insState;
@@ -21836,13 +21844,29 @@
       const cutoff = Date.now() - days * 86400000;
       const windowPts = points.filter(p => p.time >= cutoff);
       if (windowPts.length < 2) return null;
-      const first = windowPts[0], last = windowPts[windowPts.length - 1];
-      const firstV = first.adjustedValueSfl !== undefined ? first.adjustedValueSfl : first.valueSfl;
-      const lastV  = last.adjustedValueSfl  !== undefined ? last.adjustedValueSfl  : last.valueSfl;
-      const deltaSfl = lastV - firstV;
+      const valOf = (p) => p.adjustedValueSfl !== undefined ? p.adjustedValueSfl : p.valueSfl;
+
+      // Anchor x at first point in days (numerical stability).
+      const t0 = windowPts[0].time;
+      let sumX = 0, sumY = 0, sumXX = 0, sumXY = 0;
+      const n = windowPts.length;
+      for (const p of windowPts) {
+        const x = (p.time - t0) / 86400000;
+        const y = valOf(p);
+        sumX += x; sumY += y; sumXX += x * x; sumXY += x * y;
+      }
+      const denom = n * sumXX - sumX * sumX;
+      let sflPerDay;
+      if (denom > 0) {
+        sflPerDay = (n * sumXY - sumX * sumY) / denom;
+      } else {
+        // All snapshots at same instant — fall back to endpoint math.
+        sflPerDay = 0;
+      }
+      const first = windowPts[0], last = windowPts[n - 1];
       const deltaDays = (last.time - first.time) / 86400000;
-      if (deltaDays <= 0) return null;
-      return { sflPerDay: deltaSfl / deltaDays, deltaSfl, deltaDays, sampleSize: windowPts.length };
+      const deltaSfl = valOf(last) - valOf(first);
+      return { sflPerDay, deltaSfl, deltaDays, sampleSize: n };
     }
 
     async function renderDiff(data) {
