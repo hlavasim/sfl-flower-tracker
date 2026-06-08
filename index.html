@@ -5581,7 +5581,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.54</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.55</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5608,6 +5608,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.55", items: [
+          { t: "feat", text: "Investment Tracker ③ LIQUIDATE NOW now shows how much FLOWER is still needed to reach 100% repaid: 'w/ liq' = the gap beyond the treasury liquidation proceeds (netDebt − liquidValue), 'w/o liq' = the full remaining debt with the treasury untouched. FLOWER = remaining_debt_BTC × (btcUsd / sflToUsd). Shows ✅ when liquidation alone (or current withdrawals) already hit 100%. The w/ liq line only appears when a treasury value could be computed." },
+        ]},
         { ver: "v3.54", items: [
           { t: "fix", text: "Investment Tracker DAYS TO FULL was using a first-vs-last endpoint slope on the 30d window — meaning only 2 of ~30 snapshots actually drove the SFL/day estimate. A single anomalous boundary snapshot (NFT floor flip, price spike at the start of window, dip at end) flipped the projected payback by 8× (500d → 4078d in observed case). Switched to least-squares linear regression across all points in the window, which is robust to outlier endpoints. Same metric is also used by the Insights burn/growth indicator." },
         ]},
@@ -21290,6 +21293,26 @@
         ? `value: ${fmtSfl(liquidValueSfl)} ≈ ${fmtBtc(liquidValueBtc)}`
         : "farm value or price feed unavailable";
 
+      // FLOWER still needed to reach 100% repaid. 1 BTC = (btcUsd/sflToUsd) FLOWER.
+      //   w/ liq : gap beyond the treasury liquidation proceeds (netDebt − liquidValue)
+      //   w/o liq: the full remaining debt (netDebt), treasury untouched
+      let liqFlowerHtml = "";
+      if (sflToUsd > 0 && btcUsd > 0 && agg.depositBtc > 0) {
+        const flowerPerBtc = btcUsd / sflToUsd;
+        const fmtFlower = (v) => Math.round(v).toLocaleString("en-US") + " 🌸";
+        const noLiqLine = agg.netDebtBtc <= 0
+          ? `<span style="color:var(--green)">✅ already at 100%</span>`
+          : `to 100% w/o liq: <b style="color:var(--text-secondary)">+${fmtFlower(agg.netDebtBtc * flowerPerBtc)}</b>`;
+        let withLiqLine = "";
+        if (treasuryTotalSfl > 0) {
+          const gapAfterLiqBtc = agg.netDebtBtc - liquidValueBtc;
+          withLiqLine = gapAfterLiqBtc <= 0
+            ? `<span style="color:var(--green)">✅ liquidation alone hits 100%</span>`
+            : `to 100% w/ liq: <b style="color:var(--sunpetal)">+${fmtFlower(gapAfterLiqBtc * flowerPerBtc)}</b>`;
+        }
+        liqFlowerHtml = `<div class="label pixel-font" style="margin-top:6px;color:var(--text-dim);line-height:1.7;font-family:'Courier New',monospace">${withLiqLine ? withLiqLine + "<br>" : ""}${noLiqLine}</div>`;
+      }
+
       // Days to payback — uses the 30d (preferred) or 7d earning rate from insights cache
       let daysText = "—", daysSubText = "expand Insights to compute", daysColor = "var(--text-dim)";
       const remainingBtc = agg.netDebtBtc;
@@ -21340,6 +21363,7 @@
             <div class="label pixel-font">③ LIQUIDATE NOW (10% fee)</div>
             <div class="value pixel-font" style="color:${liqColor}">${ifLiqText}</div>
             <div class="label pixel-font" style="margin-top:4px;color:var(--text-dim)">${liqSubText}</div>
+            ${liqFlowerHtml}
           </div>
         </div>
         <div id="inv-tx-table-wrap">${renderInvTxTable(transactions)}</div>
