@@ -5581,7 +5581,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.55</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.57</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5608,6 +5608,14 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.57", items: [
+          { t: "fix", text: "ROI page animal yield was badly understated. roiNetForScenario computed gross via applyBoosts(catId, getDefaultProduct) — a SINGLE product (Wool/Egg/Milk) at flat base yield = 1, ignoring the secondary product (Merino Wool / Feather / Leather) AND the per-level drop table (a L15 sheep drops 4+4 per cycle, not 1). Feed/sickness cost was full, so net looked tiny or negative ('loss-making'). Now uses getAnimalCatSfl (same multi-product, level-based path as the Power page), with login-frequency capping preserved via the realisticCycle scale factor. Fixes gross, net, Δ/DAY marginal and payback for sheep, cows AND chickens. Example: 35×L15 sheep gross 2.08 → 10.41 ⚀/day at current prices." },
+        ]},
+        { ver: "v3.56", items: [
+          { t: "feat", text: "Treasury now values NFT pets (new PETS category — pie slice + card). Uses the purchase prices you enter on the Power-page Pets panel (localStorage sfl_pet_prices_v1, keyed nft-<id>); pets without an entered price contribute 0. Common (non-tradeable) pets excluded." },
+          { t: "feat", text: "Treasury now values active marketplace LISTINGS (items escrowed in trades.listings — they leave inventory when listed, so otherwise vanished from farm value). Valued at market (p2p → collectible floor → wearable price), same methodology as inventory, not the asking price. New pie slice + card." },
+          { t: "fix", text: "Because the diff-page Investment Tracker reads treasury grand total, LIQUIDATE NOW % and the v3.55 'FLOWER to 100%' figure now include pet + listing value too. Buds are still NOT counted (separate NFT collection, no floor source wired up yet)." },
+        ]},
         { ver: "v3.55", items: [
           { t: "feat", text: "Investment Tracker ③ LIQUIDATE NOW now shows how much FLOWER is still needed to reach 100% repaid: 'w/ liq' = the gap beyond the treasury liquidation proceeds (netDebt − liquidValue), 'w/o liq' = the full remaining debt with the treasury untouched. FLOWER = remaining_debt_BTC × (btcUsd / sflToUsd). Shows ✅ when liquidation alone (or current withdrawals) already hit 100%. The w/ liq line only appears when a treasury value could be computed." },
         ]},
@@ -10347,6 +10355,8 @@
       treasures: "#F1C40F",
       collectibles: "#E67E22",
       wearables: "#9B59B6",
+      pets: "#E91E63",
+      listings: "#1ABC9C",
       liquid: "#3498DB",
     };
 
@@ -11758,6 +11768,44 @@
       }
       wearables.sort((a, b) => b.total - a.total);
 
+      // --- Pets: NFT pets valued at user-entered purchase prices (sfl_pet_prices_v1) ---
+      // Keyed `nft-${id}` to match the Power-page Pets panel. Common pets aren't
+      // tradeable, so only NFT pets count toward liquidatable farm value.
+      const pets = [];
+      let _petPrices = {};
+      try { _petPrices = JSON.parse(localStorage.getItem("sfl_pet_prices_v1") || "{}") || {}; } catch {}
+      for (const [id, pet] of Object.entries(farm.pets?.nfts || {})) {
+        const price = parseFloat(_petPrices["nft-" + id]) || 0;
+        if (price < MIN_VALUE) continue;
+        const petType = pet.traits?.type || "Pet";
+        pets.push({ name: `${petType} #${id}`, qty: 1, unitPrice: price, total: price });
+      }
+      pets.sort((a, b) => b.total - a.total);
+
+      // --- Listings: items escrowed in active marketplace listings (trades.listings) ---
+      // Listed items leave inventory, so they'd otherwise vanish from farm value. Valued
+      // at market (p2p → collectible floor → wearable price) — same methodology as inventory,
+      // not the asking price — so the figure is consistent with the rest of the treasury.
+      const listings = [];
+      const _listAgg = {};
+      for (const l of Object.values(farm.trades?.listings || {})) {
+        for (const [name, qty] of Object.entries(l.items || {})) {
+          const q = parseFloat(qty) || 0;
+          if (q <= 0) continue;
+          let price = p2pPrices[name] || 0;
+          if (price <= 0 && nftCollectibles[name]) price = parseFloat(nftCollectibles[name].floor) || 0;
+          if (price <= 0 && nftWearables[name]) price = parseFloat(nftWearables[name].lastSalePrice) || parseFloat(nftWearables[name].floor) || 0;
+          if (!_listAgg[name]) _listAgg[name] = { qty: 0, price };
+          _listAgg[name].qty += q;
+        }
+      }
+      for (const [name, agg] of Object.entries(_listAgg)) {
+        const total = agg.qty * agg.price;
+        if (total < MIN_VALUE) continue;
+        listings.push({ name, qty: agg.qty, unitPrice: agg.price, total });
+      }
+      listings.sort((a, b) => b.total - a.total);
+
       // --- Liquid: SFL balance + coins + gems ---
       const sflBalance = parseFloat(farm.balance) || 0;
       const coinBalance = parseFloat(farm.coins) || 0;
@@ -11771,10 +11819,12 @@
       const treasuresTotal = treasures.reduce((s, t) => s + t.total, 0);
       const collectiblesTotal = collectibles.reduce((s, c) => s + c.total, 0);
       const wearablesTotal = wearables.reduce((s, w) => s + w.total, 0);
-      const grandTotal = resourcesTotal + treasuresTotal + collectiblesTotal + wearablesTotal + liquidTotal;
+      const petsTotal = pets.reduce((s, p) => s + p.total, 0);
+      const listingsTotal = listings.reduce((s, l) => s + l.total, 0);
+      const grandTotal = resourcesTotal + treasuresTotal + collectiblesTotal + wearablesTotal + petsTotal + listingsTotal + liquidTotal;
 
       return {
-        resources, treasures, collectibles, wearables,
+        resources, treasures, collectibles, wearables, pets, listings,
         liquid: { sflBalance, coinBalance, gemBalance, coinsAsSFL, gemsAsSFL, total: liquidTotal },
         treasureBoost,
         totals: {
@@ -11782,6 +11832,8 @@
           treasures: treasuresTotal,
           collectibles: collectiblesTotal,
           wearables: wearablesTotal,
+          pets: petsTotal,
+          listings: listingsTotal,
           liquid: liquidTotal,
           grand: grandTotal,
         },
@@ -11815,6 +11867,8 @@
         { key: "treasures", label: "Treasures", color: TREASURY_CAT_COLORS.treasures },
         { key: "collectibles", label: "Collectibles", color: TREASURY_CAT_COLORS.collectibles },
         { key: "wearables", label: "Wearables", color: TREASURY_CAT_COLORS.wearables },
+        { key: "pets", label: "Pets", color: TREASURY_CAT_COLORS.pets },
+        { key: "listings", label: "Listings", color: TREASURY_CAT_COLORS.listings },
         { key: "liquid", label: "Liquid", color: TREASURY_CAT_COLORS.liquid },
       ];
       const grand = totals.grand || 1;
@@ -11884,7 +11938,7 @@
       const app = document.getElementById("app");
       const farm = data.farm;
       const val = computeFarmValue(farm, td, treasuryCoinMode);
-      const { totals, rates, resources, treasures, collectibles, wearables, liquid, treasureBoost } = val;
+      const { totals, rates, resources, treasures, collectibles, wearables, pets, listings, liquid, treasureBoost } = val;
 
       const usdTotal = totals.grand * rates.sflUsd;
       const btcTotal = rates.btcUsd > 0 ? usdTotal / rates.btcUsd : 0;
@@ -11924,6 +11978,8 @@
       html += renderCategoryCard("treasures", "🏴‍☠️", "TREASURES", totals.treasures, totals.grand, treasures);
       html += renderCategoryCard("collectibles", "🏆", "COLLECTIBLES", totals.collectibles, totals.grand, collectibles);
       html += renderCategoryCard("wearables", "👕", "WEARABLES", totals.wearables, totals.grand, wearables);
+      if (pets.length > 0) html += renderCategoryCard("pets", "🐾", "PETS", totals.pets, totals.grand, pets);
+      if (listings.length > 0) html += renderCategoryCard("listings", "🏷️", "LISTINGS", totals.listings, totals.grand, listings);
 
       // Liquid card
       const liqPct = totals.grand > 0 ? ((totals.liquid / totals.grand) * 100) : 0;
@@ -17372,7 +17428,17 @@
         unitsPerDay = nodeCount * outputPerCycle * (86400 / realisticCycle);
       }
 
-      const yieldSfl = unitsPerDay * price;
+      let yieldSfl = unitsPerDay * price;
+      // Animals produce TWO products (Wool+Merino, Egg+Feather, Milk+Leather) with
+      // level-based drops. The single-product applyBoosts path above (product = "Wool"
+      // at flat yield = 1) misses the second product AND the per-level drop scaling, so
+      // gross was massively understated. Use getAnimalCatSfl (same as the Power page) and
+      // apply the same login-frequency cap via the realisticCycle scale factor.
+      if (isAnimalCat(catId) && nodeCount > 0) {
+        const animInfo = getAnimalCatSfl(catId, capacity, effects, p2pPrices);
+        const animScale = (cycle > 0 && realisticCycle > 0) ? (cycle / realisticCycle) : 1;
+        yieldSfl = animInfo.totalSfl * animScale;
+      }
       // Scale factor for cost helpers that compute costPerDay based on boosted cycle.
       // When login interval > boosted cycle, realisticCycle > cycle → fewer cycles
       // realized per day → lower realistic cost. Factor = cycle/realisticCycle (≤ 1).
@@ -17903,7 +17969,9 @@
         html += `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);line-height:1.7;padding:8px 12px;background:rgba(0,0,0,0.25);border-left:3px solid var(--sunpetal)">
           <b style="color:var(--text-secondary)">CALCULATION</b> ${row.catId === "pets" ? '(pet fetches, daily-cap)' : row.isDailyOutput ? '(daily-cap, login-freq independent)' : `(${L}×/day, ${(loginInterval/3600).toFixed(1)}h interval)`}<br>
           • ${row.catId === "pets" ? `Pets: ${row.nodeCount}` : `Nodes: ${row.nodeCount}`}<br>
-          ${row.catId === "pets" ? '' : `• Product: ${escHTML(row.product || '—')} @ ${row.price.toFixed(3)} ⚀/unit<br>`}
+          ${row.catId === "pets" ? ''
+            : isAnimalCat(row.catId) ? `• Products: ${getAnimalData(row.catId).products.join(' + ')} (level-based drops, both counted)<br>`
+            : `• Product: ${escHTML(row.product || '—')} @ ${row.price.toFixed(3)} ⚀/unit<br>`}
           ${row.catId === "pets" ? '' : `• Base cycle → with all boosts: ${fmtH(row.baseCycle)} → ${fmtH(row.cycleKeep)}<br>`}
           ${!row.isDailyOutput ? `• Realistic cycle at ${L}×/day: <b>${fmtH(row.realisticCycleKeep)}</b> keep / <b>${fmtH(row.realisticCycleSold)}</b> sold<br>
           • Harvests/day total: ${harvestsKeep.toFixed(2)} keep / ${harvestsSold.toFixed(2)} sold<br>` : ''}
