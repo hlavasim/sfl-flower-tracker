@@ -5581,7 +5581,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.57</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.58</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5608,6 +5608,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.58", items: [
+          { t: "fix", text: "ROI page sheep/cows/chickens were still wrong: animal yield got login-frequency-capped (round-up cap meant for short-cycle crops) but feed/sickness costs did NOT, so a boosted animal's net collapsed toward zero/negative even though real production is much higher. Animals are now NOT login-capped — an active player collects each 13–24h cycle, so gross matches the full-cycle production (e.g. sfl.world). With all boosts the sheep figure jumps from ~10 (no-boost baseline) to ~30/day; without boosts net is correctly near-zero/negative (feed ≥ wool)." },
+          { t: "feat", text: "Treasury PETS now defaults to 2000 ⚀ per NFT pet when no purchase price is entered on the Power-page Pets panel (prices you enter still win). Per-type market floors aren't derivable — marketplace_trades stores only token id, not pet breed." },
+        ]},
         { ver: "v3.57", items: [
           { t: "fix", text: "ROI page animal yield was badly understated. roiNetForScenario computed gross via applyBoosts(catId, getDefaultProduct) — a SINGLE product (Wool/Egg/Milk) at flat base yield = 1, ignoring the secondary product (Merino Wool / Feather / Leather) AND the per-level drop table (a L15 sheep drops 4+4 per cycle, not 1). Feed/sickness cost was full, so net looked tiny or negative ('loss-making'). Now uses getAnimalCatSfl (same multi-product, level-based path as the Power page), with login-frequency capping preserved via the realisticCycle scale factor. Fixes gross, net, Δ/DAY marginal and payback for sheep, cows AND chickens. Example: 35×L15 sheep gross 2.08 → 10.41 ⚀/day at current prices." },
         ]},
@@ -11772,10 +11776,11 @@
       // Keyed `nft-${id}` to match the Power-page Pets panel. Common pets aren't
       // tradeable, so only NFT pets count toward liquidatable farm value.
       const pets = [];
+      const PET_DEFAULT_PRICE = 2000; // flat fallback per NFT pet (no reliable per-type floor data)
       let _petPrices = {};
       try { _petPrices = JSON.parse(localStorage.getItem("sfl_pet_prices_v1") || "{}") || {}; } catch {}
       for (const [id, pet] of Object.entries(farm.pets?.nfts || {})) {
-        const price = parseFloat(_petPrices["nft-" + id]) || 0;
+        const price = parseFloat(_petPrices["nft-" + id]) || PET_DEFAULT_PRICE; // entered price wins, else 2000
         if (price < MIN_VALUE) continue;
         const petType = pet.traits?.type || "Pet";
         pets.push({ name: `${petType} #${id}`, qty: 1, unitPrice: price, total: price });
@@ -17422,7 +17427,10 @@
 
       let unitsPerDay = result.unitsPerDay;
       let realisticCycle = cycle;
-      if (!isDailyOutput && nodeCount > 0 && cycle > 0) {
+      // Animals (long 13–24h cycles) are NOT login-capped: an active player collects each
+      // cycle, and the round-up cap would scale yield down while feed/sickness stay full →
+      // net collapsed for boosted animals. Crops/resources (short cycles) still get capped.
+      if (!isDailyOutput && !isAnimalCat(catId) && nodeCount > 0 && cycle > 0) {
         realisticCycle = roiEffectiveCycleAtLogin(cycle, L);
         const outputPerCycle = (result.unitsPerDay * cycle) / (86400 * nodeCount);
         unitsPerDay = nodeCount * outputPerCycle * (86400 / realisticCycle);
@@ -17435,9 +17443,8 @@
       // gross was massively understated. Use getAnimalCatSfl (same as the Power page) and
       // apply the same login-frequency cap via the realisticCycle scale factor.
       if (isAnimalCat(catId) && nodeCount > 0) {
-        const animInfo = getAnimalCatSfl(catId, capacity, effects, p2pPrices);
-        const animScale = (cycle > 0 && realisticCycle > 0) ? (cycle / realisticCycle) : 1;
-        yieldSfl = animInfo.totalSfl * animScale;
+        // Full-cycle production (no login cap — see above), both products + level drops.
+        yieldSfl = getAnimalCatSfl(catId, capacity, effects, p2pPrices).totalSfl;
       }
       // Scale factor for cost helpers that compute costPerDay based on boosted cycle.
       // When login interval > boosted cycle, realisticCycle > cycle → fewer cycles
@@ -17550,7 +17557,7 @@
       const netSoldSfl = soldScen.netSfl;
       const marginalSflPerDay = netKeepSfl - netSoldSfl;
       const loginInterval = 86400 / L;
-      const wastedTimeBoost = !isDailyOutput && nodeCount > 0 && cycleKeep > 0 && cycleKeep < loginInterval;
+      const wastedTimeBoost = !isDailyOutput && !isAnimalCat(catId) && nodeCount > 0 && cycleKeep > 0 && cycleKeep < loginInterval;
 
       let roiYears, verdict;
       if (sellableInCat.length === 0) {
