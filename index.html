@@ -1250,6 +1250,9 @@
     .sales-badge.first { color: #1a1205; background: var(--sunpetal); border-color: var(--sunpetal); font-weight: bold; }
     .sales-live { font-size: 0.5625rem; margin-top: 3px; line-height: 1.5; color: var(--text-secondary); }
     .sales-live-load { color: var(--text-dim); opacity: 0.6; }
+    @keyframes sales-spin { to { transform: rotate(360deg); } }
+    .sales-spin { display: inline-block; animation: sales-spin 0.9s linear infinite; }
+    .sales-live-progress { font-size: 0.5rem; color: var(--sunpetal); margin-left: 8px; font-family: 'Press Start 2P', cursive; }
     .sales-badge.stale { color: var(--yellow); border-color: var(--yellow); }
     .sales-badge.sold { color: var(--blue); border-color: var(--blue); }
     .sales-summary-grid {
@@ -5584,7 +5587,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.61</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.62</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5611,6 +5614,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.62", items: [
+          { t: "feat", text: "Sales live-market loading feedback: each row being fetched shows a spinning ⟳ icon, and the ACTIVE LISTINGS header shows an overall progress counter (⟳ live 5/27 → ✓ live market) so you can see it's still loading while rows fill sequentially." },
+        ]},
         { ver: "v3.61", items: [
           { t: "fix", text: "Sales live-market fixes: (1) removed the instant floor-proxy '🥇 1ST' badge + 'AT FLOOR' tile — they contradicted the real live rank (floor could match your price while someone was 1 SFL cheaper → actually #2). The async live line is now the single source of truth. (2) Rate-limiting: live fetches are now sequential + paced (~2.5/s) with 429 backoff/retry instead of 3-way concurrent bursts that were getting throttled. (3) Pets now work — their token id is parsed from the listing name ('Pet #262' → pets/262); since pets are 1-of-1 they show '🥇 only listing' plus any live offers on that specific pet." },
         ]},
@@ -12916,7 +12922,7 @@
           <div class="sales-listing-info">
             <div class="sales-listing-name">${escHTML(l.itemName)}${l.qty > 1 ? ` x${fmtQty(l.qty)}` : ""} ${badges.join("")}</div>
             <div class="sales-listing-detail">${formatAge(l.age)} ago · ${l.tradeType || l.collection}${l.marketPrice > 0 ? ` · market: ${fmtSfl(l.marketPrice)} ${sflIcon()}/${l.priceSource}` : ""}</div>
-            ${isSell && !l.soldAt && l.nftId ? `<div class="sales-live" id="sales-live-${l.id}"><span class="sales-live-load">⟳ checking live market…</span></div>` : ""}
+            ${isSell && !l.soldAt && l.nftId ? `<div class="sales-live" id="sales-live-${l.id}"><span class="sales-live-load"><span class="sales-spin">⟳</span> live market…</span></div>` : ""}
           </div>
           <div class="sales-listing-prices">
             <div class="sales-price-yours">${fmtSfl(l.priceSFL)} ${sflIcon()}</div>
@@ -12950,24 +12956,29 @@
       // Sequential + paced (~2.5 req/s) with 429 backoff — gentle on the SFL API to avoid bans/limits.
       const _fillLiveOffers = async (rows) => {
         const queue = rows.filter(l => l.nftId && l.collection);
+        const prog = document.getElementById("sales-live-progress");
+        const total = queue.length;
+        let loaded = 0;
+        const setProg = () => { if (prog) prog.innerHTML = loaded < total ? `<span class="sales-spin">⟳</span> live ${loaded}/${total}` : `✓ live market`; };
+        if (total > 0) setProg();
         for (const l of queue) {
           const el = document.getElementById(`sales-live-${l.id}`);
-          if (!el) continue;
           const key = `${l.collection}:${l.nftId}`;
           const cached = _liveObCache[key];
-          if (cached && Date.now() - cached._t < 120000) { el.innerHTML = _renderLiveOffer(l, cached); continue; }
+          if (cached && Date.now() - cached._t < 120000) { if (el) el.innerHTML = _renderLiveOffer(l, cached); loaded++; setProg(); continue; }
           let done = false;
           for (let attempt = 0; attempt < 4 && !done; attempt++) {
-            if (attempt > 0) { el.innerHTML = `<span class="sales-live-load">⟳ retrying…</span>`; await _sleep(1500 * attempt); }
+            if (attempt > 0) { if (el) el.innerHTML = `<span class="sales-live-load"><span class="sales-spin">⟳</span> retrying…</span>`; await _sleep(1500 * attempt); }
             try {
               const r = await fetch(`/api/marketplace-orderbook?live=1&collection=${encodeURIComponent(l.collection)}&item_id=${l.nftId}`);
               if (r.status === 429) continue; // retry with backoff
-              if (!r.ok) { el.innerHTML = ""; done = true; break; }
+              if (!r.ok) { if (el) el.innerHTML = ""; done = true; break; }
               const d = await r.json(); d._t = Date.now(); _liveObCache[key] = d;
-              el.innerHTML = _renderLiveOffer(l, d); done = true;
-            } catch { el.innerHTML = ""; done = true; }
+              if (el) el.innerHTML = _renderLiveOffer(l, d); done = true;
+            } catch { if (el) el.innerHTML = ""; done = true; }
           }
-          if (!done) el.innerHTML = `<span style="color:var(--yellow)">⏳ market busy — reopen later</span>`;
+          if (!done && el) el.innerHTML = `<span style="color:var(--yellow)">⏳ market busy — reopen later</span>`;
+          loaded++; setProg();
           await _sleep(400);
         }
       };
@@ -12980,6 +12991,7 @@
         <div class="sales-section-header pixel-font" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
           <h3>📤 ACTIVE LISTINGS</h3>
           <span class="sales-section-count">${activeListings.length} items</span>
+          <span id="sales-live-progress" class="sales-live-progress"></span>
         </div>
         <div class="sales-section-body">`;
       if (activeListings.length === 0) {
