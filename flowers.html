@@ -1225,6 +1225,9 @@
       image-rendering: pixelated;
       filter: drop-shadow(1px 1px 0 #000);
     }
+    /* Pet images come as a horizontal sprite sheet (all frames). Show only frame 0:
+       scale sheet height to the box, anchor left → leftmost (first) frame fills the square. */
+    .sales-listing-img.pet-frame { object-fit: initial; background-repeat: no-repeat; background-size: auto 100%; background-position: left center; }
     .sales-listing-info { flex: 1; }
     .sales-listing-name { color: var(--text-primary); font-weight: bold; }
     .sales-listing-detail { font-size: 0.5625rem; color: var(--text-dim); margin-top: 2px; }
@@ -5592,7 +5595,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.66</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.67</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5619,6 +5622,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.67", items: [
+          { t: "fix", text: "Pet listing icons showed the whole horizontal sprite sheet (all animation frames). Now only the first frame is displayed — the pet image is rendered as a CSS background scaled to the box height and anchored left, so just frame 0 fills the square (works regardless of how many frames the sheet has)." },
+        ]},
         { ver: "v3.66", items: [
           { t: "feat", text: "Wearable icons now load straight from the game's GitHub repo via jsDelivr (cdn.jsdelivr.net/gh/sunflower-land/sunflower-land/src/assets/wearables/<id>.webp) — so even brand-new wearables sfl.world hasn't indexed yet (e.g. Luna's Crescent) show their real icon. Pets use the pet CDN (v3.65). Only new COLLECTIBLES can still lag, since their art lives at bespoke (non-id) paths in the repo — those stay on sfl.world by name." },
         ]},
@@ -11674,7 +11680,7 @@
     function getItemIcon(name) {
       // Pet NFTs ("Pet #262") have real per-token images on the SFL pet CDN (sfl.world only has a generic placeholder).
       const pet = /^Pet #(\d+)$/.exec(name);
-      if (pet) return `https://pets.sunflower-land.com/marketplace/${pet[1]}.webp`;
+      if (pet) return `https://pets.sunflower-land.com/marketplace/${pet[1]}_animated.webp`;
       if (ITEM_IMAGE_MAP[name]) return ITEM_IMAGE_MAP[name];
       // Wearables: pull straight from the game repo via jsDelivr (covers brand-new ones sfl.world hasn't indexed).
       const wid = (typeof WEARABLE_IDS !== "undefined") && WEARABLE_IDS[name];
@@ -13027,7 +13033,9 @@
         if (l.soldAt) badges.push(`<span class="sales-badge sold">SOLD</span>`);
 
         return `<div class="sales-listing">
-          <img class="sales-listing-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">
+          ${(l.collection === "pets" && l.nftId)
+            ? `<div class="sales-listing-img pet-frame" style="background-image:url('${imgUrl}')" title="${escHTML(l.itemName)}"></div>`
+            : `<img class="sales-listing-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">`}
           <div class="sales-listing-info">
             <div class="sales-listing-name">${escHTML(l.itemName)}${l.qty > 1 ? ` x${fmtQty(l.qty)}` : ""} ${badges.join("")}${(isSell && l.nftId && l.collection) ? ` <a href="https://sunflower-land.com/play/#/marketplace/${l.collection}/${l.nftId}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open in marketplace — adjust price / re-list" style="text-decoration:none;margin-left:2px">🔗</a>` : ""}</div>
             <div class="sales-listing-detail">${formatAge(l.age)} ago · ${l.tradeType || l.collection}${l.marketPrice > 0 ? ` · market: ${fmtSfl(l.marketPrice)} ${sflIcon()}/${l.priceSource}` : ""}</div>
