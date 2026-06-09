@@ -5595,7 +5595,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.67</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.68</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5622,6 +5622,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.68", items: [
+          { t: "fix", text: "Treasury (and the diff-page Investment Tracker that reads its total) double-counted any collectible/wearable you had up for sale: a listed NFT stays in your inventory/wardrobe while it waits to sell, so it was counted once in Collectibles/Wearables AND again in the v3.56 LISTINGS category. Now LISTINGS only counts fungible resources (the only things actually deducted from inventory when listed); NFTs are counted solely in their own category. On the current farm this removed ~150.5k SFL of phantom value (16 collectibles + 11 wearables). Pets were never affected (they had no marketplace price in LISTINGS)." },
+        ]},
         { ver: "v3.67", items: [
           { t: "fix", text: "Pet listing icons showed the whole horizontal sprite sheet (all animation frames). Now only the first frame is displayed — the pet image is rendered as a CSS background scaled to the box height and anchored left, so just frame 0 fills the square (works regardless of how many frames the sheet has)." },
         ]},
@@ -11836,13 +11839,17 @@
       }
       pets.sort((a, b) => b.total - a.total);
 
-      // --- Listings: items escrowed in active marketplace listings (trades.listings) ---
-      // Listed items leave inventory, so they'd otherwise vanish from farm value. Valued
-      // at market (p2p → collectible floor → wearable price) — same methodology as inventory,
-      // not the asking price — so the figure is consistent with the rest of the treasury.
+      // --- Listings: FUNGIBLE items escrowed in active marketplace listings (trades.listings) ---
+      // IMPORTANT: only resources are added here. NFTs (collectibles / wearables / pets / buds)
+      // STAY in inventory / wardrobe / pets.nfts while listed, so they're already counted in
+      // those categories — adding them here too double-counts (treasury + listing). Only fungible
+      // resources are deducted from inventory when listed, so only those would otherwise vanish.
+      // Valued at market (p2p) — same methodology as the Resources category.
+      const NFT_LISTING_COLLECTIONS = ["collectibles", "wearables", "pets", "buds"];
       const listings = [];
       const _listAgg = {};
       for (const l of Object.values(farm.trades?.listings || {})) {
+        if (NFT_LISTING_COLLECTIONS.includes(l.collection)) continue; // already counted in their own category
         for (const [name, qty] of Object.entries(l.items || {})) {
           const q = parseFloat(qty) || 0;
           if (q <= 0) continue;
