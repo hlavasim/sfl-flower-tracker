@@ -5587,7 +5587,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.62</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.63</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5614,6 +5614,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.63", items: [
+          { t: "feat", text: "Each active listing now has a 🔗 link straight to its marketplace page (sunflower-land.com/play/#/marketplace/{collection}/{id}) so you can jump in and re-price/undercut immediately. Works for collectibles, wearables and pets." },
+          { t: "fix", text: "Listings whose item sfl.world doesn't index (e.g. Luna's Crescent) showed no live data — couldn't resolve the item id. Added an embedded wearable id map (541 entries from sunflower-land ITEM_IDS) as a fallback, so all wearables now resolve for both the live orderbook and the marketplace link." },
+        ]},
         { ver: "v3.62", items: [
           { t: "feat", text: "Sales live-market loading feedback: each row being fetched shows a spinning ⟳ icon, and the ACTIVE LISTINGS header shows an overall progress counter (⟳ live 5/27 → ✓ live market) so you can see it's still loading while rows fill sequentially." },
         ]},
@@ -12761,6 +12765,87 @@
       }
     }
 
+    // Wearable name -> marketplace item id (sfl.world /nfts misses some, e.g. Luna's Crescent).
+    // Source: sunflower-land src/features/game/types/bumpkin.ts ITEM_IDS.
+    const WEARABLE_IDS = {
+      "2026 Tiara": 517, "404 Chic Boots": 533, "404 Chic Skirt": 530, "404 Chic Top": 528, "Abyssal Angler Hat": 222, "Acorn Hat": 423, "Admin Fools Tools": 531,
+      "Adventurer's Suit": 417, "Adventurer's Torch": 418, "Aether Specs": 534, "Alchemist Apron": 480, "Amber Amulet": 351, "Amberfall Suit": 452, "Ancient Goblin Sword": 77,
+      "Ancient Rod": 224, "Ancient Shovel": 369, "Ancient War Hammer": 76, "Angel Wings": 73, "Angler Waders": 234, "Angry Mouth": 548, "Ankh Shirt": 368, "Antique Dress": 198,
+      "Architect Ruler": 477, "Artist Scarf": 59, "Ash Ponytail": 201, "Auction Megaphone": 145, "Auctioneer Slacks": 146, "Autumn's Embrace": 433, "Baby Teeth": 549,
+      "Banana Amulet": 250, "Banana Onesie": 251, "Basic Hair": 5, "Bat Wings": 189, "Beach Sarong": 108, "Beach Trunks": 120, "Bear Onesie": 105, "Beast Shoes": 522,
+      "Bee Smoker": 275, "Bee Suit": 276, "Bee Wings": 277, "Beehive Staff": 274, "Beekeeper Hat": 278, "Beekeeper Suit": 279, "Beetroot Amulet": 29, "Beige Farmer Potion": 1,
+      "Bidder's Brocade": 147, "Big Smile": 550, "Big Wink Eyes": 539, "Bionic Drill": 374, "Birthday Hat": 171, "Black Farmer Boots": 22, "Black Sheep Onesie": 402,
+      "Blacksmith Hair": 63, "Bloomwarden Suit": 450, "Blossom Dumbo": 252, "Blossom Ward": 432, "Blue Blossom Shirt": 287, "Blue Farmer Shirt": 15, "Blue Monarch Dress": 294,
+      "Blue Monarch Shirt": 297, "Blue Rose Dress": 302, "Blue Suspenders": 46, "Boater Hat": 197, "Broccoli Hat": 454, "Brown Boots": 34, "Brown Long Hair": 50,
+      "Brown Rancher Hair": 204, "Brown Suspenders": 35, "Brush Back Hair": 470, "Bubble Aura": 559, "Bucket O' Worms": 228, "Bumpkin Armor": 330,
+      "Bumpkin Art Competition Merch": 60, "Bumpkin Boots": 65, "Bumpkin Crown": 376, "Bumpkin Eyes": 538, "Bumpkin Helmet": 331, "Bumpkin Medallion": 388, "Bumpkin Pants": 333,
+      "Bumpkin Puppet": 102, "Bumpkin Quiver": 384, "Bumpkin Sabatons": 334, "Bumpkin Shield": 380, "Bumpkin Smile": 547, "Bumpkin Sword": 332, "Bunny Mask": 448,
+      "Bunny Onesie": 117, "Bunny Pants": 447, "Butterfly Wings": 268, "Buzz Cut": 42, "Camel Onesie": 350, "Candy Cane": 261, "Candy Halbred": 513, "Cap n Bells": 340,
+      "Cardboard Wings": 536, "Carrot Amulet": 28, "Carrot Pitchfork": 445, "Cemetery Background": 53, "Chef Apron": 16, "Chef Hat": 25, "Chef Shirt": 502, "Chemist Potion": 472,
+      "Chic Gala Blouse": 200, "Chicken Hat": 303, "Chicken Suit": 403, "China Town Background": 83, "Christmas Background": 71, "Clam Shell Hat": 561, "Clown Shirt": 220,
+      "Club Polo": 121, "Coconut Mask": 229, "Coin Aura": 367, "Coin Head": 462, "Comfy Xmas Pants": 510, "Comfy Xmas Sweater": 512, "Companion Cap": 253, "Cookie Shield": 514,
+      "Cool Glasses": 509, "Corn Onesie": 174, "Corn Silk Hair": 526, "Cowbell Necklace": 407, "Cowboy Boots": 399, "Cowboy Hat": 396, "Cowboy Shirt": 397, "Cowboy Trouser": 398,
+      "Cowgirl Skirt": 404, "Cozy Hoodie": 269, "Cozy Reindeer Onesie": 515, "Crab Claw": 95, "Crab Hat": 424, "Crab Trap": 230, "Crimson Skirt": 199, "Crimstone Amulet": 285,
+      "Crimstone Armor": 282, "Crimstone Boots": 280, "Crimstone Hammer": 284, "Crimstone Pants": 281, "Crimstone Spikes Hair": 519, "Crow Wings": 175, "Crumple Crown": 165,
+      "Cupid Dress": 98, "Cupid Hair": 97, "Cupid Sandals": 99, "Daisy Tee": 289, "Dark Brown Farmer Potion": 2, "Dark Enchantment Gown": 191, "Dawn Breaker Background": 122,
+      "Dawn Breaker Tee": 168, "Dawn Lamp": 123, "Deep Sea Helm": 255, "Deep Sea Salt Cave Background": 560, "Desert Background": 352, "Desert Camel Background": 364,
+      "Desert Merchant Shoes": 362, "Desert Merchant Suit": 363, "Desert Merchant Turban": 361, "Dev Wrench": 354, "Developer Hoodie": 62, "Devil Wings": 72,
+      "Diamond Patterned Vest": 473, "Diamond Snow Aura": 516, "Dino Onesie": 439, "Double Harvest Cap": 172, "Dream Scarf": 406, "Earn Alliance Sombrero": 216,
+      "Easter Apron": 449, "Eggplant Onesie": 124, "Elf Hat": 262, "Elf Potion": 263, "Elf Shoes": 264, "Elf Suit": 265, "Embersteel Suit": 451, "Explorer Hair": 7,
+      "Explorer Hat": 357, "Explorer Shirt": 353, "Explorer Shorts": 359, "Fairy Sandals": 288, "Fancy Pants": 36, "Fancy Top": 33, "Fanged Smile": 551, "Farm Background": 32,
+      "Farmer Hat": 24, "Farmer Overalls": 18, "Farmer Pants": 20, "Farmer Pitchfork": 23, "Faulty Barrier Background": 535, "Feather Hat": 214,
+      "Festival of Colors Background": 348, "Fire Hair": 74, "Fire Shirt": 66, "Fish Hook Hat": 523, "Fish Hook Vest": 524, "Fish Hook Waders": 525, "Fish Pro Vest": 218,
+      "Fish Trap": 232, "Fishing Hat": 225, "Fishing Pants": 233, "Fishing Spear": 235, "Flip Flops": 236, "Flower Bouquet": 437, "Flower Crown": 293, "Flower Mask": 441,
+      "Forest Background": 47, "Fossil Armor": 411, "Fossil Head": 375, "Fossil Pants": 412, "Fox Hat": 125, "Frank Onesie": 493, "Fresh Catch Vest": 217, "Frizzy Bob Cut": 486,
+      "Frog Onesie": 106, "Frost Sword": 455, "Frozen Heart": 434, "Fruit Bowl": 87, "Fruit Picker Apron": 86, "Fruit Picker Shirt": 85, "Full Bloom Shirt": 286, "Fun Eyes": 540,
+      "Gam3s Cap": 395, "Garbage Bin Hat": 475, "Gardening Overalls": 283, "Gift Giver": 316, "Giggle Eyes": 541, "Gingerbread Onesie": 420, "Glacial Plume": 430,
+      "Glacierguard Suit": 453, "Glitch Aura": 537, "Gloomy Dumbo": 259, "Goblin Armor": 320, "Goblin Axe": 324, "Goblin Crown": 377, "Goblin Helmet": 321, "Goblin Medallion": 389,
+      "Goblin Pants": 322, "Goblin Potion": 4, "Goblin Puppet": 103, "Goblin Quiver": 385, "Goblin Retreat Background": 393, "Goblin Sabatons": 323, "Goblin Shield": 381,
+      "Gold Teeth": 552, "Golden Seedling": 484, "Golden Spatula": 58, "Golden Wings": 440, "Goth Hair": 192, "Gothic Twilight": 190, "Grape Pants": 373,
+      "Grave Diggers Shovel": 126, "Green Amulet": 30, "Green Monarch Dress": 295, "Green Monarch Shirt": 298, "Grey Merch Hoodie": 211, "Greyed Glory": 184, "Grumpy Cat": 443,
+      "Grumpy Eyes": 542, "Halloween Deathscythe": 488, "Handheld Bunny": 446, "Harry's Hat": 148, "Hawaiian Shirt": 104, "Hoary Chin": 186, "Holiday Feast Background": 511,
+      "Honeycomb Shield": 291, "Hornet Mask": 292, "Imp Costume": 159, "Infected Potion": 127, "Infernal Bullwhip": 400, "Infernal Bumpkin Potion": 157, "Infernal Drill": 370,
+      "Infernal Goblin Potion": 158, "Infernal Horns": 163, "Infernal Pitchfork": 162, "Infernal Rod": 227, "Infernal Smile": 553, "Jack O'Sweets": 492, "Jail Background": 57,
+      "Kingdom Background": 394, "Knight Gambit": 341, "Koi Fish Hat": 244, "Ladybug Suit": 422, "Lava Swimwear": 481, "Leather Shoes": 149, "Lemon Shield": 371,
+      "Lifeguard Hat": 109, "Lifeguard Pants": 110, "Lifeguard Shirt": 111, "Light Brown Farmer Potion": 3, "Light Brown Worried Farmer Potion": 118, "Lion Dance Mask": 84,
+      "Locust King Onesie": 429, "Locust Onesie": 428, "Love Bear Onesie": 436, "Love Charm Shirt": 459, "Love Heart Onesie": 435, "Love Puff Aura": 444, "Love Quiver": 100,
+      "Love's Topper": 307, "Lucky Red Hat": 304, "Lucky Red Suit": 305, "Lumberjack Overalls": 19, "Luminous Anglerfish Topper": 221, "Luna's Crescent": 499, "Luna's Hat": 161,
+      "Luscious Hair": 75, "Luvvy Head": 442, "Maiden Skirt": 37, "Maiden Top": 38, "Maple Dumbo": 256, "Master Chef's Cleaver": 500, "Medic Apron": 456, "Merch Bucket Hat": 166,
+      "Merch Coffee Mug": 167, "Merch Hoodie": 170, "Merch Tee": 169, "Merino Jumper": 405, "Mermaid Potion": 242, "Milk Apron": 408, "Moonseeker Hand Puppet": 489,
+      "Moonseeker Potion": 485, "Mountain View Background": 78, "Mushroom Hat": 128, "Mushroom Lamp": 129, "Mushroom Lights Background": 130, "Mushroom Pants": 131,
+      "Mushroom Shield": 132, "Mushroom Shoes": 133, "Mushroom Sweater": 134, "Neon Noiz Jacket": 527, "Neon Noiz Pants": 529, "Neon Noiz Shoes": 532, "Neutral Mouth": 554,
+      "New Years Crown": 421, "New Years Tiara": 270, "Nightshade Armor": 325, "Nightshade Crown": 378, "Nightshade Helmet": 326, "Nightshade Medallion": 390,
+      "Nightshade Pants": 327, "Nightshade Quiver": 386, "Nightshade Sabatons": 328, "Nightshade Shield": 382, "Nightshade Sword": 329, "Non La Hat": 309, "Normal Fish Hat": 245,
+      "Northern Lights Background": 271, "Obsidian Necklace": 457, "Oil Can": 308, "Oil Gallon": 479, "Oil Overalls": 360, "Oil Protection Hat": 358, "Old Shoes": 188,
+      "Olive Royalty Shirt": 317, "Olive Shield": 310, "Onion Leek": 478, "Oracle Syringe": 461, "Orange Monarch Dress": 296, "Orange Monarch Shirt": 299, "Ox Costume": 160,
+      "Paint Splattered Hair": 463, "Paint Splattered Overalls": 465, "Paint Splattered Shirt": 464, "Paint Spray Can": 466, "Painter's Cap": 347, "Pale Potion": 193,
+      "Parlour Hair": 43, "Parsnip Horns": 205, "Paw Aura": 520, "Paw Shield": 311, "Peasant Skirt": 39, "Peg Leg": 89, "Pet Specialist Hat": 505, "Pet Specialist Pants": 504,
+      "Pet Specialist Shirt": 503, "Pharaoh Headdress": 349, "Pickaxe Shark": 257, "Pineapple Shirt": 82, "Pink Ponytail": 202, "Pirate General Coat": 92, "Pirate Hat": 91,
+      "Pirate Leather Polo": 94, "Pirate Pants": 93, "Pirate Potion": 90, "Pirate Scimitar": 96, "Pistol Shrimp": 555, "Pixel Perfect Hoodie": 342, "Polkastarter Shirt": 119,
+      "Potato Suit": 206, "Project Dignity Hoodie": 61, "Propeller Hat": 290, "Pumpkin Hat": 178, "Pumpkin Head": 419, "Pumpkin Plaza Background": 392, "Pumpkin Shirt": 208,
+      "Queen Bee Crown": 300, "Queen's Crown": 343, "Raccoon Onesie": 483, "Radiant Dumbo": 254, "Rancher Hair": 6, "Rash Vest": 135, "Recycle Shirt": 474, "Red Farmer Shirt": 13,
+      "Red Long Hair": 67, "Red Pepper Onesie": 458, "Reel Fishing Vest": 219, "Reindeer Antlers": 80, "Reindeer Mask": 507, "Reindeer Suit": 69, "Relaxed Eyes": 543,
+      "Research Uniform": 494, "Rice Shirt": 413, "Rock Hammer": 355, "Rocket Onesie": 366, "Rose Dress": 301, "Royal Braids": 346, "Royal Dress": 344, "Royal Robe": 312,
+      "Royal Scepter": 318, "SFL Office Background": 101, "SFL T-Shirt": 40, "Sakura Shirt": 426, "Santa Beard": 266, "Santa Hat": 81, "Santa Suit": 267, "Saw Fish": 238,
+      "Scarab Wings": 372, "Scared Eyes": 544, "Seashore Background": 48, "Seaside Tank Top": 231, "Seedling Hat": 258, "Sequence Hat": 114, "Sequence Shirt": 115,
+      "Shark Onesie": 70, "Shepherd Staff": 409, "Short Shorts": 272, "Shrimp Onesie": 562, "Silver Streaks": 203, "Skinning Knife": 239, "Skull Hat": 79, "Skull Shirt": 195,
+      "Sky Island Background": 460, "Sleeping Otter": 112, "Slime Aura": 469, "Slime Hat": 467, "Slime Wings": 468, "Snowman Mask": 508, "Snowman Onesie": 68, "Sol & Luna": 410,
+      "Solflare Aegis": 431, "Soybean Onesie": 315, "Spa Hat": 556, "Spa Robe": 557, "Spa Slippers": 558, "Space Background": 55, "Speed Boots": 415, "Squid Hat": 136,
+      "Squirrel Monkey Potion": 243, "Squirrel Onesie": 427, "St Patricks Hat": 116, "Stockeye Salmon Onesie": 246, "Straw Hat": 151, "Streamer Hat": 438, "Streamer Helmet": 173,
+      "Stretched Jeans": 194, "Striped Blue Shirt": 88, "Striped Red Shirt": 137, "Striped Yellow Shirt": 138, "Summer Top": 139, "Sun Scarab Amulet": 356, "Sun Spots": 51,
+      "Sunburst Potion": 140, "Sunflorian Armor": 335, "Sunflorian Crown": 379, "Sunflorian Helmet": 337, "Sunflorian Medallion": 391, "Sunflorian Pants": 338,
+      "Sunflorian Quiver": 387, "Sunflorian Sabatons": 339, "Sunflorian Shield": 383, "Sunflorian Sword": 336, "Sunflower Amulet": 27, "Sunflower Rod": 240, "Sunflower Shield": 31,
+      "Surprised Eyes": 545, "Sweet Devil Dress": 495, "Sweet Devil Horns": 490, "Sweet Devil Wings": 497, "Tackle Box": 241, "Tangerine Hair": 150, "Tattered Jacket": 185,
+      "Tattered Slacks": 187, "Teal Mohawk": 54, "Tiger Onesie": 107, "Tiki Armor": 247, "Tiki Mask": 248, "Tiki Pants": 249, "Tofu Mask": 319, "Tomato Apron": 416,
+      "Training Whistle": 501, "Traveller's Backpack": 152, "Traveller's Pants": 153, "Traveller's Shirt": 154, "Trial Tee": 144, "Trick and Treat": 491, "Tropical Sarong": 113,
+      "Turd Topper": 476, "Two-toned Layered": 487, "Ugly Christmas Sweater": 260, "Underworld Stimpack": 496, "Unicorn Hat": 213, "Unicorn Horn": 212,
+      "Valentine's Field Background": 306, "Valoria Wreath": 215, "Victoria's Apron": 521, "Victorian Hat": 196, "Walrus Onesie": 518, "Warrior Helmet": 26, "Warrior Pants": 21,
+      "Warrior Shirt": 17, "Water Gourd": 365, "Water Gun": 141, "Wavy Pants": 142, "Weather Hat": 425, "Whale Hat": 207, "White Long Hair": 52, "White Sheep Onesie": 401,
+      "White Turtle Neck": 143, "Wink Eyes": 546, "Winter Jacket": 273, "Wise Beard": 177, "Wise Book": 179, "Wise Hair": 180, "Wise Robes": 181, "Wise Slacks": 182,
+      "Wise Staff": 183, "Wisp Aura": 498, "Witch's Broom": 156, "Witches' Eve Tee": 176, "Witching Wardrobe": 155, "Wooly Dress": 482, "Xmas Top Hat": 506, "Yellow Boots": 41,
+      "Yellow Farmer Shirt": 14,
+    };
+
     let _liveObCache = {}; // session cache for live orderbook fetches: "collection:id" → data (+_t)
     async function renderSales(data) {
       const app = document.getElementById("app");
@@ -12825,6 +12910,7 @@
         // Resolve item_id for the live orderbook. Collectibles/wearables carry id in sfl.world /nfts;
         // pets are 1-of-1 NFTs whose token id is in the listing name ("Pet #262" → 262).
         let nftId = market.nfts[itemName]?.id || null;
+        if (!nftId && collection === "wearables") nftId = WEARABLE_IDS[itemName] || null; // sfl.world /nfts misses some wearables (e.g. Luna's Crescent)
         if (!nftId && collection === "pets") { const _m = String(itemName).match(/#(\d+)/); if (_m) nftId = parseInt(_m[1]); }
 
         const entry = {
@@ -12920,7 +13006,7 @@
         return `<div class="sales-listing">
           <img class="sales-listing-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">
           <div class="sales-listing-info">
-            <div class="sales-listing-name">${escHTML(l.itemName)}${l.qty > 1 ? ` x${fmtQty(l.qty)}` : ""} ${badges.join("")}</div>
+            <div class="sales-listing-name">${escHTML(l.itemName)}${l.qty > 1 ? ` x${fmtQty(l.qty)}` : ""} ${badges.join("")}${(isSell && l.nftId && l.collection) ? ` <a href="https://sunflower-land.com/play/#/marketplace/${l.collection}/${l.nftId}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open in marketplace — adjust price / re-list" style="text-decoration:none;margin-left:2px">🔗</a>` : ""}</div>
             <div class="sales-listing-detail">${formatAge(l.age)} ago · ${l.tradeType || l.collection}${l.marketPrice > 0 ? ` · market: ${fmtSfl(l.marketPrice)} ${sflIcon()}/${l.priceSource}` : ""}</div>
             ${isSell && !l.soldAt && l.nftId ? `<div class="sales-live" id="sales-live-${l.id}"><span class="sales-live-load"><span class="sales-spin">⟳</span> live market…</span></div>` : ""}
           </div>
