@@ -5592,7 +5592,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.64</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.65</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5619,6 +5619,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.65", items: [
+          { t: "feat", text: "Pet listings now show their REAL per-pet image (https://pets.sunflower-land.com/marketplace/<id>.webp) instead of the generic '?' placeholder sfl.world serves for every pet. getItemIcon also resolves any 'Pet #<id>' name to the pet CDN. Note: brand-new collectibles/wearables can still briefly show no icon — the game bundles those images and sfl.world (our public source) re-hosts them by name with a lag; there's no public id-based CDN for them to fall back to." },
+        ]},
         { ver: "v3.64", items: [
           { t: "feat", text: "Active Listings are now bucketed (once live data loads) into big labelled groups, each sorted by price high→low: 1) 💰 OFFER WITHIN 5% — a live bid is within 5% of (or above) your ask, worth selling into; 2) ⚠️ NOT FIRST — someone undercut you; 3) ✓ FIRST / no close offer. Lets you act on the money-makers and the undercut ones first." },
         ]},
@@ -11666,6 +11669,9 @@
       "White Sheep Onesie": GITHUB_ASSETS+"/wearables/401.webp",
     };
     function getItemIcon(name) {
+      // Pet NFTs ("Pet #262") have real per-token images on the SFL pet CDN (sfl.world only has a generic placeholder).
+      const pet = /^Pet #(\d+)$/.exec(name);
+      if (pet) return `https://pets.sunflower-land.com/marketplace/${pet[1]}.webp`;
       return ITEM_IMAGE_MAP[name] || (ITEM_ICON_BASE + encodeURIComponent(name) + ".png");
     }
     function formatSFL(v) {
@@ -13001,7 +13007,7 @@
 
       // Render listing rows helper
       const renderListingRow = (l, isSell) => {
-        const imgUrl = getItemIcon(l.itemName);
+        const imgUrl = (l.collection === "pets" && l.nftId) ? `https://pets.sunflower-land.com/marketplace/${l.nftId}.webp` : getItemIcon(l.itemName);
         const badges = [];
         // Note: the live orderbook line (filled async below) is authoritative for seller rank.
         // We intentionally DON'T show a floor-proxy "1ST" badge here — it disagreed with the
