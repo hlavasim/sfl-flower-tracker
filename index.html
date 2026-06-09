@@ -5584,7 +5584,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.60</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.61</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5611,6 +5611,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.61", items: [
+          { t: "fix", text: "Sales live-market fixes: (1) removed the instant floor-proxy '🥇 1ST' badge + 'AT FLOOR' tile — they contradicted the real live rank (floor could match your price while someone was 1 SFL cheaper → actually #2). The async live line is now the single source of truth. (2) Rate-limiting: live fetches are now sequential + paced (~2.5/s) with 429 backoff/retry instead of 3-way concurrent bursts that were getting throttled. (3) Pets now work — their token id is parsed from the listing name ('Pet #262' → pets/262); since pets are 1-of-1 they show '🥇 only listing' plus any live offers on that specific pet." },
+        ]},
         { ver: "v3.60", items: [
           { t: "feat", text: "Sales page Active Listings now show LIVE marketplace data per listing: your exact seller rank (🥇 1ST of N, or #rank/N with the current cheapest), and the nearest offer (highest live bid + how far below your ask, or '💰 ≥ your ask!' when an offer already meets your price). Fetched on-demand via the authenticated SFL marketplace API (Bearer token in SFL_GAME_TOKEN env, used ONLY here — no scheduled scraping), concurrency-capped to 3 and cached 2 min. Works for collectibles/wearables (id resolved from sfl.world /nfts); pets are 1-of-1 so 'rank' is trivial and resources/buds need separate id resolution (not wired yet)." },
         ]},
@@ -12813,8 +12816,10 @@
 
         const delta = marketPrice > 0 ? ((unitPrice - marketPrice) / marketPrice) * 100 : 0;
 
-        // Resolve item_id for the live orderbook (collectibles/wearables carry id in sfl.world /nfts).
-        const nftId = market.nfts[itemName]?.id || null;
+        // Resolve item_id for the live orderbook. Collectibles/wearables carry id in sfl.world /nfts;
+        // pets are 1-of-1 NFTs whose token id is in the listing name ("Pet #262" → 262).
+        let nftId = market.nfts[itemName]?.id || null;
+        if (!nftId && collection === "pets") { const _m = String(itemName).match(/#(\d+)/); if (_m) nftId = parseInt(_m[1]); }
 
         const entry = {
           id, itemName, qty, priceSFL, unitPrice, createdAt, age,
@@ -12875,7 +12880,6 @@
       const totalOfferSFL = activeOffers.reduce((s, o) => s + o.priceSFL, 0);
       const overpricedCount = activeListings.filter(l => l.delta > 20).length;
       const staleCount = activeListings.filter(l => l.age > 7 * 24 * 3600000).length;
-      const firstCount = activeListings.filter(l => l.marketPrice > 0 && l.qty > 0 && l.delta <= 0.1).length;
 
       let content = "";
 
@@ -12883,7 +12887,6 @@
       content += `<div class="sales-summary-grid pixel-font">
         ${readyToClaim > 0 ? `<div class="sales-stat" style="background:linear-gradient(135deg,rgba(46,204,113,0.2),rgba(46,204,113,0.05));border:2px solid var(--green)"><div class="sales-stat-label" style="color:var(--green)">READY TO CLAIM</div><div class="sales-stat-value" style="color:var(--green);font-size:1.5rem">${readyToClaim}</div></div>` : ""}
         <div class="sales-stat"><div class="sales-stat-label">ACTIVE LISTINGS</div><div class="sales-stat-value">${activeListings.length}</div></div>
-        <div class="sales-stat"><div class="sales-stat-label">🥇 AT FLOOR</div><div class="sales-stat-value" style="color:var(--sunpetal)">${firstCount}/${activeListings.length}</div></div>
         <div class="sales-stat"><div class="sales-stat-label">TOTAL LISTED</div><div class="sales-stat-value">${totalListedSFL.toFixed(1)} ${sflIcon()}</div></div>
         <div class="sales-stat"><div class="sales-stat-label">OVERPRICED</div><div class="sales-stat-value" style="color:${overpricedCount > 0 ? 'var(--red)' : 'var(--green)'}">${overpricedCount}</div></div>
         <div class="sales-stat"><div class="sales-stat-label">STALE (>7d)</div><div class="sales-stat-value" style="color:${staleCount > 0 ? 'var(--yellow)' : 'var(--green)'}">${staleCount}</div></div>
@@ -12900,13 +12903,11 @@
       const renderListingRow = (l, isSell) => {
         const imgUrl = getItemIcon(l.itemName);
         const badges = [];
-        // "1ST" = your unit price is at/below the market floor. For NFTs the sfl.world floor
-        // IS the lowest live ask, so at-floor = you're the cheapest seller (tied or below).
-        // For resources it's at/below the P2P rate (looser proxy). Cached floor may lag a fresh undercut.
-        const atFloor = isSell && l.marketPrice > 0 && l.qty > 0 && l.delta <= 0.1;
-        if (atFloor) badges.push(`<span class="sales-badge first" title="Your price is at/below the market floor — you have the lowest ask (cheapest seller). Floor data may lag a very recent undercut.">🥇 1ST</span>`);
+        // Note: the live orderbook line (filled async below) is authoritative for seller rank.
+        // We intentionally DON'T show a floor-proxy "1ST" badge here — it disagreed with the
+        // real rank (e.g. floor matched your price but someone was 1 SFL cheaper → actually #2).
         if (isSell && l.delta > 20) badges.push(`<span class="sales-badge overpriced">+${Math.round(l.delta)}%</span>`);
-        else if (isSell && !atFloor && l.delta < -10) badges.push(`<span class="sales-badge good">${Math.round(l.delta)}%</span>`);
+        else if (isSell && l.delta < -10) badges.push(`<span class="sales-badge good">${Math.round(l.delta)}%</span>`);
         if (l.age > 7 * 24 * 3600000) badges.push(`<span class="sales-badge stale">STALE</span>`);
         if (l.soldAt) badges.push(`<span class="sales-badge sold">SOLD</span>`);
 
@@ -12945,28 +12946,30 @@
         } else parts.push(`<span style="color:var(--text-dim)">no offers</span>`);
         return parts.join(" · ");
       };
+      const _sleep = (ms) => new Promise(r => setTimeout(r, ms));
+      // Sequential + paced (~2.5 req/s) with 429 backoff — gentle on the SFL API to avoid bans/limits.
       const _fillLiveOffers = async (rows) => {
         const queue = rows.filter(l => l.nftId && l.collection);
-        let idx = 0;
-        const worker = async () => {
-          while (idx < queue.length) {
-            const l = queue[idx++];
-            const el = document.getElementById(`sales-live-${l.id}`);
-            if (!el) continue;
-            const key = `${l.collection}:${l.nftId}`;
+        for (const l of queue) {
+          const el = document.getElementById(`sales-live-${l.id}`);
+          if (!el) continue;
+          const key = `${l.collection}:${l.nftId}`;
+          const cached = _liveObCache[key];
+          if (cached && Date.now() - cached._t < 120000) { el.innerHTML = _renderLiveOffer(l, cached); continue; }
+          let done = false;
+          for (let attempt = 0; attempt < 4 && !done; attempt++) {
+            if (attempt > 0) { el.innerHTML = `<span class="sales-live-load">⟳ retrying…</span>`; await _sleep(1500 * attempt); }
             try {
-              let d = _liveObCache[key];
-              if (!d || Date.now() - d._t > 120000) {
-                const r = await fetch(`/api/marketplace-orderbook?live=1&collection=${encodeURIComponent(l.collection)}&item_id=${l.nftId}`);
-                if (r.status === 429) { el.innerHTML = `<span style="color:var(--yellow)">⏳ rate limited — refresh later</span>`; continue; }
-                if (!r.ok) { el.innerHTML = ""; continue; }
-                d = await r.json(); d._t = Date.now(); _liveObCache[key] = d;
-              }
-              el.innerHTML = _renderLiveOffer(l, d);
-            } catch { el.innerHTML = ""; }
+              const r = await fetch(`/api/marketplace-orderbook?live=1&collection=${encodeURIComponent(l.collection)}&item_id=${l.nftId}`);
+              if (r.status === 429) continue; // retry with backoff
+              if (!r.ok) { el.innerHTML = ""; done = true; break; }
+              const d = await r.json(); d._t = Date.now(); _liveObCache[key] = d;
+              el.innerHTML = _renderLiveOffer(l, d); done = true;
+            } catch { el.innerHTML = ""; done = true; }
           }
-        };
-        await Promise.all([worker(), worker(), worker()]);
+          if (!done) el.innerHTML = `<span style="color:var(--yellow)">⏳ market busy — reopen later</span>`;
+          await _sleep(400);
+        }
       };
 
       // Market Overview container (async-filled)
