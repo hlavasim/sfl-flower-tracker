@@ -1248,6 +1248,8 @@
     .sales-badge.overpriced { color: var(--red); border-color: var(--red); }
     .sales-badge.good { color: var(--green); border-color: var(--green); }
     .sales-badge.first { color: #1a1205; background: var(--sunpetal); border-color: var(--sunpetal); font-weight: bold; }
+    .sales-live { font-size: 0.5625rem; margin-top: 3px; line-height: 1.5; color: var(--text-secondary); }
+    .sales-live-load { color: var(--text-dim); opacity: 0.6; }
     .sales-badge.stale { color: var(--yellow); border-color: var(--yellow); }
     .sales-badge.sold { color: var(--blue); border-color: var(--blue); }
     .sales-summary-grid {
@@ -5582,7 +5584,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.59</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.60</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5609,6 +5611,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.60", items: [
+          { t: "feat", text: "Sales page Active Listings now show LIVE marketplace data per listing: your exact seller rank (🥇 1ST of N, or #rank/N with the current cheapest), and the nearest offer (highest live bid + how far below your ask, or '💰 ≥ your ask!' when an offer already meets your price). Fetched on-demand via the authenticated SFL marketplace API (Bearer token in SFL_GAME_TOKEN env, used ONLY here — no scheduled scraping), concurrency-capped to 3 and cached 2 min. Works for collectibles/wearables (id resolved from sfl.world /nfts); pets are 1-of-1 so 'rank' is trivial and resources/buds need separate id resolution (not wired yet)." },
+        ]},
         { ver: "v3.59", items: [
           { t: "feat", text: "Sales page Active Listings now flag '🥇 1ST' when your unit price is at/below the market floor — i.e. you hold the lowest ask (cheapest seller). For NFTs this is exact (sfl.world floor = lowest live ask); for resources it's at/below the P2P rate (looser proxy), and a cached floor can lag a very recent undercut. New '🥇 AT FLOOR x/n' summary tile for a quick overview. Live nearest-offer / full orderbook still needs the (expired) game token, so not included." },
         ]},
@@ -12086,10 +12091,10 @@
 
       const nfts = {};
       for (const c of (nftData.collectibles || [])) {
-        if (c.name) nfts[c.name] = { floor: parseFloat(c.floor) || 0, lastSale: parseFloat(c.lastSalePrice) || 0, type: "collectible" };
+        if (c.name) nfts[c.name] = { floor: parseFloat(c.floor) || 0, lastSale: parseFloat(c.lastSalePrice) || 0, type: "collectible", id: c.id, collection: "collectibles" };
       }
       for (const w of (nftData.wearables || [])) {
-        if (w.name) nfts[w.name] = { floor: parseFloat(w.floor) || 0, lastSale: parseFloat(w.lastSalePrice) || 0, type: "wearable" };
+        if (w.name) nfts[w.name] = { floor: parseFloat(w.floor) || 0, lastSale: parseFloat(w.lastSalePrice) || 0, type: "wearable", id: w.id, collection: "wearables" };
       }
 
       const p2p = priceData?.data?.p2p || {};
@@ -12747,6 +12752,7 @@
       }
     }
 
+    let _liveObCache = {}; // session cache for live orderbook fetches: "collection:id" → data (+_t)
     async function renderSales(data) {
       const app = document.getElementById("app");
       const { trades } = data;
@@ -12807,9 +12813,12 @@
 
         const delta = marketPrice > 0 ? ((unitPrice - marketPrice) / marketPrice) * 100 : 0;
 
+        // Resolve item_id for the live orderbook (collectibles/wearables carry id in sfl.world /nfts).
+        const nftId = market.nfts[itemName]?.id || null;
+
         const entry = {
           id, itemName, qty, priceSFL, unitPrice, createdAt, age,
-          marketPrice, priceSource, delta, collection,
+          marketPrice, priceSource, delta, collection, nftId,
           tradeType: listing.tradeType || "onchain",
         };
 
@@ -12906,12 +12915,58 @@
           <div class="sales-listing-info">
             <div class="sales-listing-name">${escHTML(l.itemName)}${l.qty > 1 ? ` x${fmtQty(l.qty)}` : ""} ${badges.join("")}</div>
             <div class="sales-listing-detail">${formatAge(l.age)} ago · ${l.tradeType || l.collection}${l.marketPrice > 0 ? ` · market: ${fmtSfl(l.marketPrice)} ${sflIcon()}/${l.priceSource}` : ""}</div>
+            ${isSell && !l.soldAt && l.nftId ? `<div class="sales-live" id="sales-live-${l.id}"><span class="sales-live-load">⟳ checking live market…</span></div>` : ""}
           </div>
           <div class="sales-listing-prices">
             <div class="sales-price-yours">${fmtSfl(l.priceSFL)} ${sflIcon()}</div>
             ${l.marketPrice > 0 && l.qty > 0 ? `<div class="sales-price-market">${fmtSfl(l.unitPrice)}/ea vs ${fmtSfl(l.marketPrice)} <span style="color:${l.delta > 5 ? 'var(--red)' : l.delta < -5 ? 'var(--green)' : 'var(--text-dim)'};font-weight:bold">${l.delta > 0 ? "+" : ""}${Math.round(l.delta)}%</span></div>` : ""}
           </div>
         </div>`;
+      };
+
+      // ── Live marketplace orderbook (on-demand, only for the items YOU have listed) ──
+      // Real-time listings/offers per item via the authenticated proxy → nearest offer + your
+      // exact rank among sellers. Concurrency-capped (3) + 2-min cached. Never runs on a schedule.
+      const _renderLiveOffer = (l, d) => {
+        const myUnit = l.unitPrice;
+        const asks = (d.listings || []).map(x => (x.qty > 0 ? x.sfl / x.qty : x.sfl)).filter(v => isFinite(v) && v > 0).sort((a, b) => a - b);
+        const bids = (d.offers || []).map(x => (x.qty > 0 ? x.sfl / x.qty : x.sfl)).filter(v => isFinite(v) && v > 0);
+        const total = asks.length;
+        const cheaper = asks.filter(v => v < myUnit - 1e-9).length;
+        const rank = cheaper + 1;
+        const parts = [];
+        if (total <= 1) parts.push(`<span style="color:var(--sunpetal);font-weight:bold">🥇 only listing</span>`);
+        else if (cheaper === 0) parts.push(`<span style="color:var(--sunpetal);font-weight:bold">🥇 1ST</span> <span style="color:var(--text-dim)">of ${total}</span>`);
+        else parts.push(`<span style="color:#ff8c42;font-weight:bold">#${rank}/${total}</span> <span style="color:var(--text-dim)">cheapest ${fmtSfl(asks[0])} ${sflIcon(9)}</span>`);
+        const bestBid = bids.length ? Math.max(...bids) : 0;
+        if (bestBid > 0) {
+          if (bestBid >= myUnit - 1e-9) parts.push(`<span style="color:var(--green);font-weight:bold">💰 best offer ${fmtSfl(bestBid)} ≥ your ask!</span>`);
+          else { const gap = ((myUnit - bestBid) / myUnit) * 100; parts.push(`best offer <b>${fmtSfl(bestBid)}</b> ${sflIcon(9)} <span style="color:var(--text-dim)">(−${gap.toFixed(0)}%, ${bids.length} bid${bids.length !== 1 ? "s" : ""})</span>`); }
+        } else parts.push(`<span style="color:var(--text-dim)">no offers</span>`);
+        return parts.join(" · ");
+      };
+      const _fillLiveOffers = async (rows) => {
+        const queue = rows.filter(l => l.nftId && l.collection);
+        let idx = 0;
+        const worker = async () => {
+          while (idx < queue.length) {
+            const l = queue[idx++];
+            const el = document.getElementById(`sales-live-${l.id}`);
+            if (!el) continue;
+            const key = `${l.collection}:${l.nftId}`;
+            try {
+              let d = _liveObCache[key];
+              if (!d || Date.now() - d._t > 120000) {
+                const r = await fetch(`/api/marketplace-orderbook?live=1&collection=${encodeURIComponent(l.collection)}&item_id=${l.nftId}`);
+                if (r.status === 429) { el.innerHTML = `<span style="color:var(--yellow)">⏳ rate limited — refresh later</span>`; continue; }
+                if (!r.ok) { el.innerHTML = ""; continue; }
+                d = await r.json(); d._t = Date.now(); _liveObCache[key] = d;
+              }
+              el.innerHTML = _renderLiveOffer(l, d);
+            } catch { el.innerHTML = ""; }
+          }
+        };
+        await Promise.all([worker(), worker(), worker()]);
       };
 
       // Market Overview container (async-filled)
@@ -13011,6 +13066,7 @@
       _renderMarketOverview(document.getElementById("market-overview-container"));
       _renderVolumeLeaders(document.getElementById("volume-leaders-container"));
       _renderTokenCard(document.getElementById("token-card-container"));
+      _fillLiveOffers(activeListings); // live nearest-offer + seller rank (on-demand)
     }
 
     // ═══════════════════════════════════════
