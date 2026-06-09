@@ -1247,6 +1247,7 @@
     }
     .sales-badge.overpriced { color: var(--red); border-color: var(--red); }
     .sales-badge.good { color: var(--green); border-color: var(--green); }
+    .sales-badge.first { color: #1a1205; background: var(--sunpetal); border-color: var(--sunpetal); font-weight: bold; }
     .sales-badge.stale { color: var(--yellow); border-color: var(--yellow); }
     .sales-badge.sold { color: var(--blue); border-color: var(--blue); }
     .sales-summary-grid {
@@ -5581,7 +5582,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.58</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.59</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5608,6 +5609,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.59", items: [
+          { t: "feat", text: "Sales page Active Listings now flag '🥇 1ST' when your unit price is at/below the market floor — i.e. you hold the lowest ask (cheapest seller). For NFTs this is exact (sfl.world floor = lowest live ask); for resources it's at/below the P2P rate (looser proxy), and a cached floor can lag a very recent undercut. New '🥇 AT FLOOR x/n' summary tile for a quick overview. Live nearest-offer / full orderbook still needs the (expired) game token, so not included." },
+        ]},
         { ver: "v3.58", items: [
           { t: "fix", text: "ROI page sheep/cows/chickens were still wrong: animal yield got login-frequency-capped (round-up cap meant for short-cycle crops) but feed/sickness costs did NOT, so a boosted animal's net collapsed toward zero/negative even though real production is much higher. Animals are now NOT login-capped — an active player collects each 13–24h cycle, so gross matches the full-cycle production (e.g. sfl.world). With all boosts the sheep figure jumps from ~10 (no-boost baseline) to ~30/day; without boosts net is correctly near-zero/negative (feed ≥ wool)." },
           { t: "feat", text: "Treasury PETS now defaults to 2000 ⚀ per NFT pet when no purchase price is entered on the Power-page Pets panel (prices you enter still win). Per-type market floors aren't derivable — marketplace_trades stores only token id, not pet breed." },
@@ -12862,6 +12866,7 @@
       const totalOfferSFL = activeOffers.reduce((s, o) => s + o.priceSFL, 0);
       const overpricedCount = activeListings.filter(l => l.delta > 20).length;
       const staleCount = activeListings.filter(l => l.age > 7 * 24 * 3600000).length;
+      const firstCount = activeListings.filter(l => l.marketPrice > 0 && l.qty > 0 && l.delta <= 0.1).length;
 
       let content = "";
 
@@ -12869,6 +12874,7 @@
       content += `<div class="sales-summary-grid pixel-font">
         ${readyToClaim > 0 ? `<div class="sales-stat" style="background:linear-gradient(135deg,rgba(46,204,113,0.2),rgba(46,204,113,0.05));border:2px solid var(--green)"><div class="sales-stat-label" style="color:var(--green)">READY TO CLAIM</div><div class="sales-stat-value" style="color:var(--green);font-size:1.5rem">${readyToClaim}</div></div>` : ""}
         <div class="sales-stat"><div class="sales-stat-label">ACTIVE LISTINGS</div><div class="sales-stat-value">${activeListings.length}</div></div>
+        <div class="sales-stat"><div class="sales-stat-label">🥇 AT FLOOR</div><div class="sales-stat-value" style="color:var(--sunpetal)">${firstCount}/${activeListings.length}</div></div>
         <div class="sales-stat"><div class="sales-stat-label">TOTAL LISTED</div><div class="sales-stat-value">${totalListedSFL.toFixed(1)} ${sflIcon()}</div></div>
         <div class="sales-stat"><div class="sales-stat-label">OVERPRICED</div><div class="sales-stat-value" style="color:${overpricedCount > 0 ? 'var(--red)' : 'var(--green)'}">${overpricedCount}</div></div>
         <div class="sales-stat"><div class="sales-stat-label">STALE (>7d)</div><div class="sales-stat-value" style="color:${staleCount > 0 ? 'var(--yellow)' : 'var(--green)'}">${staleCount}</div></div>
@@ -12885,8 +12891,13 @@
       const renderListingRow = (l, isSell) => {
         const imgUrl = getItemIcon(l.itemName);
         const badges = [];
+        // "1ST" = your unit price is at/below the market floor. For NFTs the sfl.world floor
+        // IS the lowest live ask, so at-floor = you're the cheapest seller (tied or below).
+        // For resources it's at/below the P2P rate (looser proxy). Cached floor may lag a fresh undercut.
+        const atFloor = isSell && l.marketPrice > 0 && l.qty > 0 && l.delta <= 0.1;
+        if (atFloor) badges.push(`<span class="sales-badge first" title="Your price is at/below the market floor — you have the lowest ask (cheapest seller). Floor data may lag a very recent undercut.">🥇 1ST</span>`);
         if (isSell && l.delta > 20) badges.push(`<span class="sales-badge overpriced">+${Math.round(l.delta)}%</span>`);
-        else if (isSell && l.delta < -10) badges.push(`<span class="sales-badge good">${Math.round(l.delta)}%</span>`);
+        else if (isSell && !atFloor && l.delta < -10) badges.push(`<span class="sales-badge good">${Math.round(l.delta)}%</span>`);
         if (l.age > 7 * 24 * 3600000) badges.push(`<span class="sales-badge stale">STALE</span>`);
         if (l.soldAt) badges.push(`<span class="sales-badge sold">SOLD</span>`);
 
