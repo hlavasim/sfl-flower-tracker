@@ -5595,7 +5595,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.68</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.69</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5622,6 +5622,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.69", items: [
+          { t: "feat", text: "Sales page: new 💸 WHAT CAN I SELL section — everything in your inventory/wardrobe with a market value that is NOT already in an active listing. Resources valued at p2p (qty × price), collectibles at floor, wearables at lastSale/floor. MIN VALUE slider (default ≥10 ⚀, steps 0–5000, persisted) filters small stuff; rows sorted by total value high→low, each with icon, unit price and a 🔗 marketplace link for NFTs. Pets aren't included (no public floor; yours are all listed anyway)." },
+        ]},
         { ver: "v3.68", items: [
           { t: "fix", text: "Treasury (and the diff-page Investment Tracker that reads its total) double-counted any collectible/wearable you had up for sale: a listed NFT stays in your inventory/wardrobe while it waits to sell, so it was counted once in Collectibles/Wearables AND again in the v3.56 LISTINGS category. Now LISTINGS only counts fungible resources (the only things actually deducted from inventory when listed); NFTs are counted solely in their own category. On the current farm this removed ~150.5k SFL of phantom value (16 collectibles + 11 wearables). Pets were never affected (they had no marketplace price in LISTINGS)." },
         ]},
@@ -13149,6 +13152,75 @@
       }
       content += `</div></div>`;
 
+      // ── What can I sell? — unlisted inventory/wardrobe items with market value ──
+      // Resources at p2p, collectibles at floor, wearables at lastSale/floor. Items already
+      // sitting in an active listing are excluded (by name). Threshold slider (min total value)
+      // persists in localStorage; rows sorted by total value high → low.
+      const SELL_MIN_STEPS = [0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
+      const listedNames = new Set(activeListings.map(x => x.itemName));
+      const _invSell = data.inventory || data.farm?.inventory || {};
+      const _wardSell = data.farm?.wardrobe || {};
+      const sellableRows = [];
+      for (const [name, price] of Object.entries(market.p2p)) {
+        const p = parseFloat(price) || 0;
+        const qty = getCount(_invSell, name);
+        if (qty <= 0 || p <= 0 || listedNames.has(name)) continue;
+        sellableRows.push({ name, qty, unitPrice: p, total: qty * p, collection: "resources", nftId: null });
+      }
+      for (const [name, nft] of Object.entries(market.nfts)) {
+        if (listedNames.has(name)) continue;
+        const isWear = nft.collection === "wearables";
+        const qty = isWear ? (parseFloat(_wardSell[name]) || 0) : getCount(_invSell, name);
+        const p = isWear ? (nft.lastSale || nft.floor) : nft.floor;
+        if (qty <= 0 || !p || p <= 0) continue;
+        sellableRows.push({ name, qty, unitPrice: p, total: qty * p, collection: nft.collection, nftId: nft.id || null });
+      }
+      sellableRows.sort((a, b) => b.total - a.total);
+
+      const _sellMinGet = () => { const v = parseFloat(localStorage.getItem("sfl_sales_sell_min")); return isFinite(v) ? v : 10; };
+      const _renderSellList = () => {
+        const wrap = document.getElementById("sellable-list");
+        const cnt = document.getElementById("sellable-count");
+        if (!wrap) return;
+        const min = _sellMinGet();
+        const rows = sellableRows.filter(r => r.total >= min);
+        if (cnt) cnt.textContent = `${rows.length} items`;
+        if (rows.length === 0) { wrap.innerHTML = `<div style="padding:14px;text-align:center;font-size:0.625rem;color:var(--text-dim)">Nothing unlisted worth ≥ ${min} ⚀</div>`; return; }
+        wrap.innerHTML = rows.map(r => `
+          <div class="sales-listing">
+            <img class="sales-listing-img" src="${getItemIcon(r.name)}" onerror="this.style.display='none'" alt="">
+            <div class="sales-listing-info">
+              <div class="sales-listing-name">${escHTML(r.name)}${r.qty > 1 ? ` x${fmtQty(r.qty)}` : ""}${(r.nftId && (r.collection === "collectibles" || r.collection === "wearables")) ? ` <a href="https://sunflower-land.com/play/#/marketplace/${r.collection}/${r.nftId}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open in marketplace — list it" style="text-decoration:none;margin-left:2px">🔗</a>` : ""}</div>
+              <div class="sales-listing-detail">${r.collection} · ${fmtSfl(r.unitPrice)} ${sflIcon()}/ea</div>
+            </div>
+            <div class="sales-listing-prices"><div class="sales-price-yours">${fmtSfl(r.total)} ${sflIcon()}</div></div>
+          </div>`).join("");
+      };
+      window._sellMinSlide = (idx) => {
+        const v = SELL_MIN_STEPS[parseInt(idx)] ?? 10;
+        localStorage.setItem("sfl_sales_sell_min", String(v));
+        const lab = document.getElementById("sell-min-label");
+        if (lab) lab.textContent = `≥ ${v} ⚀`;
+        _renderSellList();
+      };
+      const _sellMin0 = _sellMinGet();
+      let _sellIdx0 = SELL_MIN_STEPS.findIndex(s => s >= _sellMin0);
+      if (_sellIdx0 < 0) _sellIdx0 = SELL_MIN_STEPS.length - 1;
+      content += `<div style="margin-bottom:16px">
+        <div class="sales-section-header pixel-font" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+          <h3>💸 WHAT CAN I SELL</h3>
+          <span class="sales-section-count" id="sellable-count"></span>
+        </div>
+        <div class="sales-section-body">
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.07)">
+            <span class="pixel-font" style="font-size:0.5rem;color:var(--text-secondary);white-space:nowrap">MIN VALUE</span>
+            <input type="range" min="0" max="${SELL_MIN_STEPS.length - 1}" step="1" value="${_sellIdx0}" oninput="_sellMinSlide(this.value)" style="flex:1;max-width:260px">
+            <span id="sell-min-label" class="pixel-font" style="font-size:0.5625rem;color:var(--sunpetal);white-space:nowrap">≥ ${SELL_MIN_STEPS[_sellIdx0]} ⚀</span>
+          </div>
+          <div id="sellable-list"></div>
+        </div>
+      </div>`;
+
       // Active Offers section
       if (activeOffers.length > 0) {
         content += `<div style="margin-bottom:16px">
@@ -13229,6 +13301,7 @@
       _renderMarketOverview(document.getElementById("market-overview-container"));
       _renderVolumeLeaders(document.getElementById("volume-leaders-container"));
       _renderTokenCard(document.getElementById("token-card-container"));
+      _renderSellList(); // what-can-I-sell list (threshold from localStorage)
       _fillLiveOffers(activeListings); // live nearest-offer + seller rank (on-demand)
     }
 
