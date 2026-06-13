@@ -5595,7 +5595,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.72</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.73</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5622,6 +5622,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.73", items: [
+          { t: "feat", text: "Pets now get undercut detection on the Sales page. Since pets are 1-of-1, rank is computed within the same TYPE (breed): a single /marketplace?filters=pets call (via proxy) gives every pet's floor, mapped to breed via an embedded PET_TYPES table (1750 ids), so each pet listing shows '🥇 1ST Wolf of N' or '#3/34 Wolf · cheapest X 🌸 (−Y)'. Offers are intentionally omitted for pets. Same logic added to the Telegram watcher (10-min pet sweep, NOT-FIRST alerts only)." },
+        ]},
         { ver: "v3.72", items: [
           { t: "fix", text: "Reverted v3.71's named-tab marketplace links — they broke on mobile (a named target / window.open doesn't reuse tabs there, so the 2nd tap did nothing). Links are plain target=_blank again. For no-reload on mobile, install the SFL game as a PWA: the OS then deep-links a direct marketplace URL into the already-running app." },
         ]},
@@ -12902,6 +12905,130 @@
       "Yam": 260, "Zucchini": 259,
     };
 
+    // Pet NFT token id -> type (breed), from sunflower-land PETS_NFT_DATA.
+    // Used to group 1-of-1 pets by type for undercut detection.
+    const PET_TYPES = {
+      1:"Griffin",2:"Phoenix",3:"Phoenix",4:"Ram",5:"Griffin",6:"Ram",7:"Warthog",8:"Wolf",9:"Warthog",10:"Warthog",11:"Bear",12:"Bear",13:"Warthog",14:"Bear",15:"Dragon",16:"Griffin",17:"Ram",
+      18:"Wolf",19:"Bear",20:"Griffin",21:"Dragon",22:"Griffin",23:"Ram",24:"Warthog",25:"Wolf",26:"Wolf",27:"Wolf",28:"Wolf",29:"Wolf",30:"Phoenix",31:"Bear",32:"Bear",33:"Ram",34:"Ram",35:"Bear",
+      36:"Warthog",37:"Griffin",38:"Dragon",39:"Wolf",40:"Warthog",41:"Phoenix",42:"Griffin",43:"Ram",44:"Ram",45:"Wolf",46:"Bear",47:"Griffin",48:"Phoenix",49:"Bear",50:"Wolf",51:"Griffin",
+      52:"Warthog",53:"Wolf",54:"Warthog",55:"Ram",56:"Wolf",57:"Griffin",58:"Wolf",59:"Bear",60:"Warthog",61:"Griffin",62:"Griffin",63:"Bear",64:"Phoenix",65:"Phoenix",66:"Bear",67:"Bear",
+      68:"Griffin",69:"Griffin",70:"Ram",71:"Wolf",72:"Ram",73:"Warthog",74:"Phoenix",75:"Warthog",76:"Griffin",77:"Warthog",78:"Wolf",79:"Bear",80:"Wolf",81:"Warthog",82:"Bear",83:"Phoenix",84:"Ram",
+      85:"Bear",86:"Wolf",87:"Warthog",88:"Wolf",89:"Ram",90:"Ram",91:"Warthog",92:"Phoenix",93:"Ram",94:"Wolf",95:"Phoenix",96:"Ram",97:"Griffin",98:"Bear",99:"Dragon",100:"Phoenix",101:"Phoenix",
+      102:"Ram",103:"Bear",104:"Ram",105:"Warthog",106:"Phoenix",107:"Ram",108:"Wolf",109:"Wolf",110:"Phoenix",111:"Dragon",112:"Warthog",113:"Phoenix",114:"Phoenix",115:"Phoenix",116:"Phoenix",
+      117:"Bear",118:"Griffin",119:"Griffin",120:"Ram",121:"Dragon",122:"Griffin",123:"Griffin",124:"Griffin",125:"Ram",126:"Warthog",127:"Ram",128:"Dragon",129:"Dragon",130:"Warthog",131:"Griffin",
+      132:"Griffin",133:"Phoenix",134:"Griffin",135:"Griffin",136:"Warthog",137:"Wolf",138:"Warthog",139:"Wolf",140:"Ram",141:"Ram",142:"Griffin",143:"Griffin",144:"Warthog",145:"Warthog",146:"Wolf",
+      147:"Phoenix",148:"Griffin",149:"Warthog",150:"Bear",151:"Wolf",152:"Griffin",153:"Dragon",154:"Phoenix",155:"Dragon",156:"Phoenix",157:"Phoenix",158:"Wolf",159:"Dragon",160:"Wolf",161:"Wolf",
+      162:"Phoenix",163:"Bear",164:"Wolf",165:"Wolf",166:"Wolf",167:"Ram",168:"Bear",169:"Phoenix",170:"Griffin",171:"Wolf",172:"Wolf",173:"Phoenix",174:"Dragon",175:"Ram",176:"Bear",177:"Wolf",
+      178:"Ram",179:"Wolf",180:"Bear",181:"Griffin",182:"Ram",183:"Bear",184:"Bear",185:"Warthog",186:"Wolf",187:"Ram",188:"Phoenix",189:"Phoenix",190:"Ram",191:"Phoenix",192:"Dragon",193:"Griffin",
+      194:"Ram",195:"Bear",196:"Bear",197:"Wolf",198:"Ram",199:"Warthog",200:"Ram",201:"Wolf",202:"Ram",203:"Ram",204:"Phoenix",205:"Dragon",206:"Warthog",207:"Griffin",208:"Warthog",209:"Ram",
+      210:"Griffin",211:"Dragon",212:"Bear",213:"Phoenix",214:"Bear",215:"Wolf",216:"Ram",217:"Warthog",218:"Wolf",219:"Dragon",220:"Griffin",221:"Bear",222:"Warthog",223:"Warthog",224:"Warthog",
+      225:"Warthog",226:"Dragon",227:"Bear",228:"Bear",229:"Ram",230:"Wolf",231:"Phoenix",232:"Dragon",233:"Bear",234:"Wolf",235:"Dragon",236:"Bear",237:"Warthog",238:"Phoenix",239:"Bear",
+      240:"Warthog",241:"Griffin",242:"Wolf",243:"Ram",244:"Dragon",245:"Phoenix",246:"Warthog",247:"Phoenix",248:"Wolf",249:"Bear",250:"Phoenix",251:"Phoenix",252:"Phoenix",253:"Dragon",254:"Wolf",
+      255:"Dragon",256:"Warthog",257:"Bear",258:"Warthog",259:"Griffin",260:"Warthog",261:"Warthog",262:"Wolf",263:"Wolf",264:"Ram",265:"Ram",266:"Ram",267:"Dragon",268:"Phoenix",269:"Ram",
+      270:"Dragon",271:"Dragon",272:"Dragon",273:"Warthog",274:"Phoenix",275:"Bear",276:"Warthog",277:"Ram",278:"Wolf",279:"Griffin",280:"Ram",281:"Phoenix",282:"Phoenix",283:"Warthog",284:"Bear",
+      285:"Bear",286:"Warthog",287:"Bear",288:"Phoenix",289:"Wolf",290:"Griffin",291:"Phoenix",292:"Warthog",293:"Bear",294:"Ram",295:"Griffin",296:"Bear",297:"Wolf",298:"Griffin",299:"Ram",
+      300:"Wolf",301:"Griffin",302:"Phoenix",303:"Warthog",304:"Ram",305:"Griffin",306:"Bear",307:"Phoenix",308:"Phoenix",309:"Wolf",310:"Phoenix",311:"Griffin",312:"Warthog",313:"Phoenix",
+      314:"Phoenix",315:"Griffin",316:"Wolf",317:"Ram",318:"Dragon",319:"Bear",320:"Wolf",321:"Phoenix",322:"Griffin",323:"Griffin",324:"Phoenix",325:"Ram",326:"Warthog",327:"Phoenix",328:"Wolf",
+      329:"Ram",330:"Ram",331:"Wolf",332:"Wolf",333:"Wolf",334:"Warthog",335:"Griffin",336:"Ram",337:"Warthog",338:"Griffin",339:"Warthog",340:"Ram",341:"Griffin",342:"Dragon",343:"Bear",
+      344:"Phoenix",345:"Wolf",346:"Griffin",347:"Wolf",348:"Dragon",349:"Dragon",350:"Wolf",351:"Ram",352:"Griffin",353:"Phoenix",354:"Bear",355:"Warthog",356:"Warthog",357:"Bear",358:"Wolf",
+      359:"Phoenix",360:"Ram",361:"Griffin",362:"Ram",363:"Warthog",364:"Bear",365:"Dragon",366:"Dragon",367:"Ram",368:"Warthog",369:"Ram",370:"Bear",371:"Bear",372:"Wolf",373:"Warthog",374:"Wolf",
+      375:"Bear",376:"Bear",377:"Phoenix",378:"Wolf",379:"Phoenix",380:"Griffin",381:"Ram",382:"Dragon",383:"Phoenix",384:"Griffin",385:"Bear",386:"Warthog",387:"Ram",388:"Phoenix",389:"Warthog",
+      390:"Ram",391:"Dragon",392:"Griffin",393:"Wolf",394:"Warthog",395:"Ram",396:"Wolf",397:"Dragon",398:"Wolf",399:"Bear",400:"Dragon",401:"Griffin",402:"Bear",403:"Warthog",404:"Griffin",
+      405:"Warthog",406:"Phoenix",407:"Phoenix",408:"Phoenix",409:"Griffin",410:"Phoenix",411:"Bear",412:"Griffin",413:"Dragon",414:"Griffin",415:"Wolf",416:"Warthog",417:"Wolf",418:"Phoenix",
+      419:"Warthog",420:"Ram",421:"Griffin",422:"Phoenix",423:"Bear",424:"Phoenix",425:"Griffin",426:"Warthog",427:"Griffin",428:"Warthog",429:"Wolf",430:"Ram",431:"Ram",432:"Warthog",433:"Wolf",
+      434:"Griffin",435:"Dragon",436:"Dragon",437:"Bear",438:"Phoenix",439:"Phoenix",440:"Warthog",441:"Griffin",442:"Ram",443:"Ram",444:"Warthog",445:"Griffin",446:"Warthog",447:"Bear",448:"Warthog",
+      449:"Warthog",450:"Phoenix",451:"Wolf",452:"Griffin",453:"Wolf",454:"Wolf",455:"Wolf",456:"Bear",457:"Wolf",458:"Dragon",459:"Phoenix",460:"Phoenix",461:"Ram",462:"Bear",463:"Warthog",
+      464:"Dragon",465:"Phoenix",466:"Ram",467:"Dragon",468:"Warthog",469:"Warthog",470:"Phoenix",471:"Phoenix",472:"Dragon",473:"Ram",474:"Wolf",475:"Griffin",476:"Bear",477:"Dragon",478:"Griffin",
+      479:"Bear",480:"Phoenix",481:"Griffin",482:"Griffin",483:"Warthog",484:"Wolf",485:"Wolf",486:"Phoenix",487:"Ram",488:"Phoenix",489:"Wolf",490:"Dragon",491:"Griffin",492:"Phoenix",493:"Ram",
+      494:"Wolf",495:"Phoenix",496:"Warthog",497:"Dragon",498:"Griffin",499:"Dragon",500:"Phoenix",501:"Wolf",502:"Griffin",503:"Warthog",504:"Dragon",505:"Warthog",506:"Ram",507:"Ram",508:"Ram",
+      509:"Warthog",510:"Ram",511:"Bear",512:"Phoenix",513:"Bear",514:"Warthog",515:"Bear",516:"Warthog",517:"Griffin",518:"Dragon",519:"Phoenix",520:"Warthog",521:"Warthog",522:"Bear",523:"Wolf",
+      524:"Ram",525:"Bear",526:"Phoenix",527:"Wolf",528:"Dragon",529:"Warthog",530:"Dragon",531:"Phoenix",532:"Bear",533:"Dragon",534:"Ram",535:"Dragon",536:"Griffin",537:"Bear",538:"Bear",539:"Wolf",
+      540:"Bear",541:"Bear",542:"Ram",543:"Wolf",544:"Ram",545:"Ram",546:"Griffin",547:"Bear",548:"Bear",549:"Dragon",550:"Wolf",551:"Dragon",552:"Ram",553:"Wolf",554:"Phoenix",555:"Phoenix",
+      556:"Dragon",557:"Warthog",558:"Dragon",559:"Ram",560:"Bear",561:"Bear",562:"Bear",563:"Phoenix",564:"Wolf",565:"Wolf",566:"Warthog",567:"Bear",568:"Warthog",569:"Wolf",570:"Griffin",571:"Bear",
+      572:"Ram",573:"Dragon",574:"Warthog",575:"Phoenix",576:"Warthog",577:"Phoenix",578:"Warthog",579:"Phoenix",580:"Dragon",581:"Griffin",582:"Warthog",583:"Ram",584:"Bear",585:"Griffin",
+      586:"Griffin",587:"Griffin",588:"Dragon",589:"Griffin",590:"Dragon",591:"Bear",592:"Dragon",593:"Bear",594:"Dragon",595:"Phoenix",596:"Phoenix",597:"Phoenix",598:"Ram",599:"Griffin",
+      600:"Warthog",601:"Griffin",602:"Wolf",603:"Ram",604:"Wolf",605:"Phoenix",606:"Wolf",607:"Ram",608:"Ram",609:"Ram",610:"Bear",611:"Ram",612:"Dragon",613:"Griffin",614:"Ram",615:"Griffin",
+      616:"Phoenix",617:"Griffin",618:"Phoenix",619:"Wolf",620:"Dragon",621:"Bear",622:"Bear",623:"Warthog",624:"Ram",625:"Dragon",626:"Phoenix",627:"Ram",628:"Bear",629:"Griffin",630:"Wolf",
+      631:"Ram",632:"Warthog",633:"Griffin",634:"Ram",635:"Dragon",636:"Phoenix",637:"Griffin",638:"Griffin",639:"Bear",640:"Bear",641:"Wolf",642:"Wolf",643:"Bear",644:"Bear",645:"Warthog",646:"Bear",
+      647:"Bear",648:"Ram",649:"Wolf",650:"Warthog",651:"Griffin",652:"Griffin",653:"Warthog",654:"Bear",655:"Bear",656:"Wolf",657:"Ram",658:"Bear",659:"Warthog",660:"Griffin",661:"Wolf",
+      662:"Phoenix",663:"Phoenix",664:"Warthog",665:"Dragon",666:"Ram",667:"Warthog",668:"Bear",669:"Griffin",670:"Wolf",671:"Phoenix",672:"Phoenix",673:"Phoenix",674:"Bear",675:"Wolf",676:"Phoenix",
+      677:"Ram",678:"Griffin",679:"Phoenix",680:"Warthog",681:"Phoenix",682:"Warthog",683:"Griffin",684:"Warthog",685:"Phoenix",686:"Warthog",687:"Wolf",688:"Bear",689:"Ram",690:"Warthog",691:"Bear",
+      692:"Ram",693:"Griffin",694:"Dragon",695:"Wolf",696:"Warthog",697:"Warthog",698:"Griffin",699:"Phoenix",700:"Bear",701:"Bear",702:"Warthog",703:"Warthog",704:"Warthog",705:"Griffin",706:"Ram",
+      707:"Ram",708:"Dragon",709:"Dragon",710:"Ram",711:"Ram",712:"Bear",713:"Warthog",714:"Ram",715:"Phoenix",716:"Bear",717:"Ram",718:"Griffin",719:"Wolf",720:"Wolf",721:"Bear",722:"Bear",
+      723:"Bear",724:"Wolf",725:"Dragon",726:"Phoenix",727:"Ram",728:"Bear",729:"Phoenix",730:"Dragon",731:"Dragon",732:"Wolf",733:"Ram",734:"Wolf",735:"Griffin",736:"Wolf",737:"Ram",738:"Bear",
+      739:"Griffin",740:"Wolf",741:"Phoenix",742:"Ram",743:"Griffin",744:"Warthog",745:"Wolf",746:"Phoenix",747:"Bear",748:"Dragon",749:"Warthog",750:"Griffin",751:"Dragon",752:"Phoenix",
+      753:"Griffin",754:"Phoenix",755:"Warthog",756:"Wolf",757:"Phoenix",758:"Wolf",759:"Bear",760:"Wolf",761:"Griffin",762:"Dragon",763:"Warthog",764:"Phoenix",765:"Griffin",766:"Dragon",767:"Bear",
+      768:"Dragon",769:"Ram",770:"Bear",771:"Ram",772:"Warthog",773:"Wolf",774:"Warthog",775:"Griffin",776:"Wolf",777:"Warthog",778:"Dragon",779:"Wolf",780:"Ram",781:"Bear",782:"Warthog",
+      783:"Phoenix",784:"Griffin",785:"Griffin",786:"Bear",787:"Wolf",788:"Griffin",789:"Wolf",790:"Bear",791:"Bear",792:"Ram",793:"Wolf",794:"Ram",795:"Ram",796:"Bear",797:"Dragon",798:"Warthog",
+      799:"Griffin",800:"Bear",801:"Ram",802:"Wolf",803:"Griffin",804:"Ram",805:"Griffin",806:"Bear",807:"Warthog",808:"Dragon",809:"Ram",810:"Warthog",811:"Warthog",812:"Warthog",813:"Warthog",
+      814:"Phoenix",815:"Wolf",816:"Dragon",817:"Ram",818:"Ram",819:"Phoenix",820:"Phoenix",821:"Warthog",822:"Phoenix",823:"Wolf",824:"Griffin",825:"Wolf",826:"Wolf",827:"Griffin",828:"Phoenix",
+      829:"Warthog",830:"Bear",831:"Bear",832:"Warthog",833:"Griffin",834:"Phoenix",835:"Griffin",836:"Wolf",837:"Warthog",838:"Warthog",839:"Bear",840:"Phoenix",841:"Griffin",842:"Bear",
+      843:"Griffin",844:"Dragon",845:"Griffin",846:"Ram",847:"Ram",848:"Phoenix",849:"Griffin",850:"Ram",851:"Phoenix",852:"Bear",853:"Warthog",854:"Wolf",855:"Griffin",856:"Griffin",857:"Bear",
+      858:"Bear",859:"Bear",860:"Dragon",861:"Bear",862:"Griffin",863:"Phoenix",864:"Warthog",865:"Phoenix",866:"Dragon",867:"Ram",868:"Dragon",869:"Bear",870:"Griffin",871:"Phoenix",872:"Dragon",
+      873:"Phoenix",874:"Phoenix",875:"Griffin",876:"Warthog",877:"Bear",878:"Bear",879:"Griffin",880:"Bear",881:"Warthog",882:"Phoenix",883:"Griffin",884:"Griffin",885:"Ram",886:"Ram",887:"Ram",
+      888:"Warthog",889:"Bear",890:"Dragon",891:"Wolf",892:"Phoenix",893:"Dragon",894:"Wolf",895:"Griffin",896:"Ram",897:"Ram",898:"Phoenix",899:"Griffin",900:"Dragon",901:"Ram",902:"Bear",903:"Wolf",
+      904:"Wolf",905:"Phoenix",906:"Warthog",907:"Warthog",908:"Wolf",909:"Ram",910:"Warthog",911:"Phoenix",912:"Bear",913:"Wolf",914:"Bear",915:"Griffin",916:"Wolf",917:"Bear",918:"Wolf",919:"Bear",
+      920:"Dragon",921:"Phoenix",922:"Bear",923:"Bear",924:"Bear",925:"Griffin",926:"Phoenix",927:"Phoenix",928:"Dragon",929:"Griffin",930:"Ram",931:"Wolf",932:"Wolf",933:"Bear",934:"Ram",935:"Wolf",
+      936:"Griffin",937:"Griffin",938:"Warthog",939:"Wolf",940:"Dragon",941:"Griffin",942:"Ram",943:"Ram",944:"Bear",945:"Wolf",946:"Wolf",947:"Ram",948:"Wolf",949:"Bear",950:"Dragon",951:"Griffin",
+      952:"Bear",953:"Bear",954:"Phoenix",955:"Ram",956:"Wolf",957:"Warthog",958:"Warthog",959:"Warthog",960:"Griffin",961:"Wolf",962:"Phoenix",963:"Dragon",964:"Griffin",965:"Phoenix",966:"Griffin",
+      967:"Griffin",968:"Bear",969:"Warthog",970:"Ram",971:"Warthog",972:"Warthog",973:"Griffin",974:"Ram",975:"Dragon",976:"Ram",977:"Phoenix",978:"Warthog",979:"Griffin",980:"Wolf",981:"Dragon",
+      982:"Phoenix",983:"Warthog",984:"Ram",985:"Dragon",986:"Ram",987:"Ram",988:"Phoenix",989:"Griffin",990:"Wolf",991:"Phoenix",992:"Ram",993:"Wolf",994:"Warthog",995:"Warthog",996:"Phoenix",
+      997:"Ram",998:"Ram",999:"Dragon",1000:"Griffin",1001:"Bear",1002:"Wolf",1003:"Dragon",1004:"Ram",1005:"Dragon",1006:"Wolf",1007:"Ram",1008:"Bear",1009:"Dragon",1010:"Griffin",1011:"Griffin",
+      1012:"Dragon",1013:"Dragon",1014:"Wolf",1015:"Wolf",1016:"Bear",1017:"Wolf",1018:"Phoenix",1019:"Warthog",1020:"Wolf",1021:"Phoenix",1022:"Griffin",1023:"Ram",1024:"Griffin",1025:"Dragon",
+      1026:"Dragon",1027:"Griffin",1028:"Griffin",1029:"Bear",1030:"Griffin",1031:"Phoenix",1032:"Griffin",1033:"Ram",1034:"Ram",1035:"Wolf",1036:"Phoenix",1037:"Wolf",1038:"Phoenix",1039:"Phoenix",
+      1040:"Phoenix",1041:"Phoenix",1042:"Warthog",1043:"Warthog",1044:"Warthog",1045:"Bear",1046:"Bear",1047:"Griffin",1048:"Warthog",1049:"Ram",1050:"Warthog",1051:"Ram",1052:"Ram",1053:"Phoenix",
+      1054:"Wolf",1055:"Griffin",1056:"Warthog",1057:"Ram",1058:"Phoenix",1059:"Bear",1060:"Warthog",1061:"Dragon",1062:"Dragon",1063:"Ram",1064:"Griffin",1065:"Phoenix",1066:"Warthog",1067:"Warthog",
+      1068:"Griffin",1069:"Warthog",1070:"Wolf",1071:"Wolf",1072:"Phoenix",1073:"Bear",1074:"Bear",1075:"Ram",1076:"Ram",1077:"Warthog",1078:"Ram",1079:"Warthog",1080:"Warthog",1081:"Ram",
+      1082:"Warthog",1083:"Bear",1084:"Wolf",1085:"Wolf",1086:"Griffin",1087:"Phoenix",1088:"Phoenix",1089:"Dragon",1090:"Wolf",1091:"Phoenix",1092:"Dragon",1093:"Wolf",1094:"Warthog",1095:"Dragon",
+      1096:"Bear",1097:"Ram",1098:"Warthog",1099:"Ram",1100:"Warthog",1101:"Bear",1102:"Bear",1103:"Dragon",1104:"Phoenix",1105:"Phoenix",1106:"Ram",1107:"Ram",1108:"Phoenix",1109:"Griffin",
+      1110:"Phoenix",1111:"Griffin",1112:"Bear",1113:"Bear",1114:"Warthog",1115:"Warthog",1116:"Dragon",1117:"Phoenix",1118:"Bear",1119:"Griffin",1120:"Warthog",1121:"Warthog",1122:"Ram",1123:"Wolf",
+      1124:"Warthog",1125:"Warthog",1126:"Wolf",1127:"Ram",1128:"Wolf",1129:"Dragon",1130:"Wolf",1131:"Phoenix",1132:"Warthog",1133:"Ram",1134:"Wolf",1135:"Ram",1136:"Phoenix",1137:"Griffin",
+      1138:"Bear",1139:"Bear",1140:"Wolf",1141:"Ram",1142:"Bear",1143:"Ram",1144:"Wolf",1145:"Phoenix",1146:"Griffin",1147:"Dragon",1148:"Griffin",1149:"Bear",1150:"Wolf",1151:"Bear",1152:"Ram",
+      1153:"Griffin",1154:"Warthog",1155:"Griffin",1156:"Dragon",1157:"Bear",1158:"Wolf",1159:"Bear",1160:"Ram",1161:"Warthog",1162:"Wolf",1163:"Wolf",1164:"Dragon",1165:"Wolf",1166:"Dragon",
+      1167:"Griffin",1168:"Phoenix",1169:"Griffin",1170:"Ram",1171:"Phoenix",1172:"Bear",1173:"Ram",1174:"Warthog",1175:"Dragon",1176:"Warthog",1177:"Bear",1178:"Warthog",1179:"Dragon",1180:"Bear",
+      1181:"Warthog",1182:"Wolf",1183:"Phoenix",1184:"Warthog",1185:"Wolf",1186:"Griffin",1187:"Phoenix",1188:"Wolf",1189:"Dragon",1190:"Bear",1191:"Warthog",1192:"Bear",1193:"Warthog",1194:"Dragon",
+      1195:"Bear",1196:"Phoenix",1197:"Griffin",1198:"Warthog",1199:"Griffin",1200:"Griffin",1201:"Griffin",1202:"Phoenix",1203:"Griffin",1204:"Phoenix",1205:"Bear",1206:"Phoenix",1207:"Ram",
+      1208:"Phoenix",1209:"Bear",1210:"Wolf",1211:"Phoenix",1212:"Phoenix",1213:"Phoenix",1214:"Wolf",1215:"Bear",1216:"Phoenix",1217:"Griffin",1218:"Wolf",1219:"Ram",1220:"Griffin",1221:"Bear",
+      1222:"Warthog",1223:"Dragon",1224:"Wolf",1225:"Ram",1226:"Warthog",1227:"Wolf",1228:"Bear",1229:"Ram",1230:"Griffin",1231:"Griffin",1232:"Ram",1233:"Dragon",1234:"Wolf",1235:"Griffin",
+      1236:"Phoenix",1237:"Griffin",1238:"Ram",1239:"Phoenix",1240:"Bear",1241:"Griffin",1242:"Ram",1243:"Bear",1244:"Wolf",1245:"Bear",1246:"Dragon",1247:"Griffin",1248:"Ram",1249:"Griffin",
+      1250:"Ram",2501:"Wolf",2502:"Phoenix",2503:"Dragon",2504:"Bear",2505:"Phoenix",2506:"Bear",2507:"Ram",2508:"Griffin",2509:"Dragon",2510:"Ram",2511:"Ram",2512:"Bear",2513:"Ram",2514:"Dragon",
+      2515:"Phoenix",2516:"Warthog",2517:"Bear",2518:"Bear",2519:"Wolf",2520:"Dragon",2521:"Griffin",2522:"Griffin",2523:"Ram",2524:"Wolf",2525:"Warthog",2526:"Phoenix",2527:"Phoenix",2528:"Warthog",
+      2529:"Wolf",2530:"Griffin",2531:"Bear",2532:"Bear",2533:"Dragon",2534:"Bear",2535:"Warthog",2536:"Phoenix",2537:"Bear",2538:"Warthog",2539:"Ram",2540:"Bear",2541:"Phoenix",2542:"Ram",
+      2543:"Bear",2544:"Bear",2545:"Ram",2546:"Bear",2547:"Dragon",2548:"Phoenix",2549:"Warthog",2550:"Ram",2551:"Bear",2552:"Bear",2553:"Ram",2554:"Griffin",2555:"Bear",2556:"Wolf",2557:"Phoenix",
+      2558:"Bear",2559:"Dragon",2560:"Warthog",2561:"Dragon",2562:"Wolf",2563:"Wolf",2564:"Dragon",2565:"Ram",2566:"Wolf",2567:"Griffin",2568:"Warthog",2569:"Griffin",2570:"Dragon",2571:"Warthog",
+      2572:"Phoenix",2573:"Phoenix",2574:"Wolf",2575:"Phoenix",2576:"Wolf",2577:"Phoenix",2578:"Wolf",2579:"Warthog",2580:"Phoenix",2581:"Warthog",2582:"Ram",2583:"Wolf",2584:"Phoenix",2585:"Wolf",
+      2586:"Bear",2587:"Dragon",2588:"Ram",2589:"Phoenix",2590:"Bear",2591:"Dragon",2592:"Warthog",2593:"Bear",2594:"Bear",2595:"Bear",2596:"Bear",2597:"Ram",2598:"Griffin",2599:"Dragon",
+      2600:"Griffin",2601:"Warthog",2602:"Phoenix",2603:"Griffin",2604:"Phoenix",2605:"Warthog",2606:"Ram",2607:"Wolf",2608:"Dragon",2609:"Bear",2610:"Ram",2611:"Wolf",2612:"Wolf",2613:"Warthog",
+      2614:"Phoenix",2615:"Bear",2616:"Dragon",2617:"Warthog",2618:"Dragon",2619:"Griffin",2620:"Wolf",2621:"Griffin",2622:"Griffin",2623:"Bear",2624:"Warthog",2625:"Bear",2626:"Griffin",2627:"Ram",
+      2628:"Warthog",2629:"Ram",2630:"Ram",2631:"Bear",2632:"Griffin",2633:"Griffin",2634:"Dragon",2635:"Bear",2636:"Wolf",2637:"Griffin",2638:"Warthog",2639:"Wolf",2640:"Bear",2641:"Ram",2642:"Wolf",
+      2643:"Wolf",2644:"Ram",2645:"Ram",2646:"Warthog",2647:"Griffin",2648:"Dragon",2649:"Griffin",2650:"Warthog",2651:"Ram",2652:"Ram",2653:"Wolf",2654:"Ram",2655:"Griffin",2656:"Phoenix",
+      2657:"Griffin",2658:"Phoenix",2659:"Dragon",2660:"Wolf",2661:"Bear",2662:"Warthog",2663:"Wolf",2664:"Wolf",2665:"Warthog",2666:"Griffin",2667:"Bear",2668:"Warthog",2669:"Phoenix",2670:"Dragon",
+      2671:"Griffin",2672:"Dragon",2673:"Bear",2674:"Griffin",2675:"Griffin",2676:"Dragon",2677:"Dragon",2678:"Phoenix",2679:"Warthog",2680:"Phoenix",2681:"Wolf",2682:"Ram",2683:"Warthog",2684:"Bear",
+      2685:"Phoenix",2686:"Phoenix",2687:"Dragon",2688:"Ram",2689:"Griffin",2690:"Wolf",2691:"Warthog",2692:"Phoenix",2693:"Ram",2694:"Phoenix",2695:"Griffin",2696:"Wolf",2697:"Warthog",2698:"Wolf",
+      2699:"Griffin",2700:"Phoenix",2701:"Wolf",2702:"Warthog",2703:"Bear",2704:"Griffin",2705:"Warthog",2706:"Bear",2707:"Ram",2708:"Ram",2709:"Wolf",2710:"Phoenix",2711:"Warthog",2712:"Phoenix",
+      2713:"Phoenix",2714:"Ram",2715:"Wolf",2716:"Phoenix",2717:"Griffin",2718:"Griffin",2719:"Griffin",2720:"Warthog",2721:"Wolf",2722:"Ram",2723:"Wolf",2724:"Bear",2725:"Phoenix",2726:"Dragon",
+      2727:"Griffin",2728:"Bear",2729:"Ram",2730:"Warthog",2731:"Griffin",2732:"Warthog",2733:"Griffin",2734:"Ram",2735:"Warthog",2736:"Griffin",2737:"Bear",2738:"Warthog",2739:"Warthog",2740:"Wolf",
+      2741:"Griffin",2742:"Ram",2743:"Ram",2744:"Wolf",2745:"Wolf",2746:"Ram",2747:"Phoenix",2748:"Phoenix",2749:"Griffin",2750:"Phoenix",2751:"Bear",2752:"Ram",2753:"Wolf",2754:"Warthog",2755:"Ram",
+      2756:"Griffin",2757:"Warthog",2758:"Ram",2759:"Ram",2760:"Griffin",2761:"Bear",2762:"Phoenix",2763:"Dragon",2764:"Dragon",2765:"Warthog",2766:"Warthog",2767:"Warthog",2768:"Griffin",2769:"Ram",
+      2770:"Wolf",2771:"Phoenix",2772:"Phoenix",2773:"Ram",2774:"Dragon",2775:"Phoenix",2776:"Warthog",2777:"Wolf",2778:"Ram",2779:"Griffin",2780:"Bear",2781:"Griffin",2782:"Griffin",2783:"Griffin",
+      2784:"Wolf",2785:"Warthog",2786:"Phoenix",2787:"Griffin",2788:"Bear",2789:"Ram",2790:"Wolf",2791:"Phoenix",2792:"Ram",2793:"Ram",2794:"Warthog",2795:"Wolf",2796:"Bear",2797:"Wolf",
+      2798:"Griffin",2799:"Wolf",2800:"Dragon",2801:"Warthog",2802:"Phoenix",2803:"Griffin",2804:"Ram",2805:"Griffin",2806:"Dragon",2807:"Ram",2808:"Phoenix",2809:"Dragon",2810:"Phoenix",2811:"Ram",
+      2812:"Griffin",2813:"Warthog",2814:"Griffin",2815:"Wolf",2816:"Warthog",2817:"Wolf",2818:"Phoenix",2819:"Bear",2820:"Phoenix",2821:"Wolf",2822:"Warthog",2823:"Ram",2824:"Bear",2825:"Bear",
+      2826:"Bear",2827:"Dragon",2828:"Bear",2829:"Ram",2830:"Dragon",2831:"Dragon",2832:"Bear",2833:"Phoenix",2834:"Dragon",2835:"Wolf",2836:"Ram",2837:"Griffin",2838:"Ram",2839:"Phoenix",2840:"Bear",
+      2841:"Bear",2842:"Griffin",2843:"Bear",2844:"Ram",2845:"Ram",2846:"Dragon",2847:"Ram",2848:"Wolf",2849:"Ram",2850:"Griffin",2851:"Warthog",2852:"Bear",2853:"Wolf",2854:"Griffin",2855:"Dragon",
+      2856:"Griffin",2857:"Ram",2858:"Phoenix",2859:"Ram",2860:"Dragon",2861:"Dragon",2862:"Warthog",2863:"Bear",2864:"Griffin",2865:"Phoenix",2866:"Warthog",2867:"Phoenix",2868:"Ram",2869:"Dragon",
+      2870:"Bear",2871:"Ram",2872:"Griffin",2873:"Phoenix",2874:"Ram",2875:"Warthog",2876:"Dragon",2877:"Ram",2878:"Warthog",2879:"Ram",2880:"Warthog",2881:"Warthog",2882:"Bear",2883:"Phoenix",
+      2884:"Griffin",2885:"Wolf",2886:"Dragon",2887:"Bear",2888:"Bear",2889:"Wolf",2890:"Phoenix",2891:"Warthog",2892:"Bear",2893:"Warthog",2894:"Wolf",2895:"Phoenix",2896:"Phoenix",2897:"Dragon",
+      2898:"Bear",2899:"Griffin",2900:"Ram",2901:"Wolf",2902:"Griffin",2903:"Wolf",2904:"Griffin",2905:"Warthog",2906:"Griffin",2907:"Dragon",2908:"Griffin",2909:"Warthog",2910:"Bear",2911:"Griffin",
+      2912:"Warthog",2913:"Bear",2914:"Phoenix",2915:"Ram",2916:"Wolf",2917:"Wolf",2918:"Phoenix",2919:"Wolf",2920:"Ram",2921:"Warthog",2922:"Ram",2923:"Griffin",2924:"Griffin",2925:"Phoenix",
+      2926:"Dragon",2927:"Bear",2928:"Wolf",2929:"Bear",2930:"Wolf",2931:"Wolf",2932:"Phoenix",2933:"Phoenix",2934:"Ram",2935:"Warthog",2936:"Warthog",2937:"Phoenix",2938:"Phoenix",2939:"Phoenix",
+      2940:"Griffin",2941:"Bear",2942:"Ram",2943:"Ram",2944:"Warthog",2945:"Warthog",2946:"Wolf",2947:"Wolf",2948:"Phoenix",2949:"Warthog",2950:"Dragon",2951:"Wolf",2952:"Griffin",2953:"Griffin",
+      2954:"Wolf",2955:"Phoenix",2956:"Bear",2957:"Warthog",2958:"Ram",2959:"Warthog",2960:"Ram",2961:"Griffin",2962:"Griffin",2963:"Bear",2964:"Phoenix",2965:"Wolf",2966:"Ram",2967:"Griffin",
+      2968:"Griffin",2969:"Phoenix",2970:"Wolf",2971:"Phoenix",2972:"Dragon",2973:"Wolf",2974:"Warthog",2975:"Bear",2976:"Warthog",2977:"Wolf",2978:"Wolf",2979:"Griffin",2980:"Bear",2981:"Warthog",
+      2982:"Warthog",2983:"Phoenix",2984:"Wolf",2985:"Warthog",2986:"Bear",2987:"Wolf",2988:"Bear",2989:"Warthog",2990:"Phoenix",2991:"Dragon",2992:"Phoenix",2993:"Wolf",2994:"Bear",2995:"Bear",
+      2996:"Dragon",2997:"Phoenix",2998:"Bear",2999:"Dragon",3000:"Wolf",
+    };
+
     let _liveObCache = {}; // session cache for live orderbook fetches: "collection:id" → data (+_t)
     async function renderSales(data) {
       const app = document.getElementById("app");
@@ -13098,6 +13225,13 @@
         return { total: asks.length, rank: cheaper + 1, isFirst: cheaper === 0, cheapest: asks[0] || 0, bestBid, gap, nBids: bids.length, goodOffer: bestBid > 0 && gap <= 5 };
       };
       const _liveLine = (l, m) => {
+        if (m.isPet) {
+          // Pets are 1-of-1 → rank within the same TYPE (breed). No offers (irrelevant for pets).
+          if (m.total <= 1) return `<span style="color:var(--sunpetal);font-weight:bold">🥇 only ${m.type || "pet"} listed</span>`;
+          if (m.isFirst) return `<span style="color:var(--sunpetal);font-weight:bold">🥇 1ST ${m.type}</span> <span style="color:var(--text-dim)">of ${m.total}</span>`;
+          const diff = m.cheapest - l.unitPrice;
+          return `<span style="color:#ff8c42;font-weight:bold">#${m.rank}/${m.total} ${m.type}</span> <span style="color:var(--text-dim)">cheapest ${fmtSfl(m.cheapest)} ${sflIcon(9)} (${diff < 0 ? "-" : "+"}${fmtSfl(Math.abs(diff))})</span>`;
+        }
         const parts = [];
         if (m.total <= 1) parts.push(`<span style="color:var(--sunpetal);font-weight:bold">🥇 only listing</span>`);
         else if (m.isFirst) parts.push(`<span style="color:var(--sunpetal);font-weight:bold">🥇 1ST</span> <span style="color:var(--text-dim)">of ${m.total}</span>`);
@@ -13127,6 +13261,16 @@
         }
         body.innerHTML = html;
       };
+      // Pet undercut uses per-TYPE floors (1-of-1 NFTs). One call covers all types.
+      const _petMetrics = (l, byType) => {
+        const t = PET_TYPES[l.nftId];
+        const my = l.unitPrice;
+        const same = (byType[t] || []).filter(x => x.id !== l.nftId);
+        const floors = same.map(x => x.floor).sort((a, b) => a - b);
+        const cheaper = floors.filter(v => v < my - 1e-9).length;
+        return { isPet: true, type: t || "pet", total: same.length + 1, rank: cheaper + 1,
+                 isFirst: cheaper === 0, cheapest: floors[0] || 0, bestBid: 0, gap: null, nBids: 0, goodOffer: false };
+      };
       const _sleep = (ms) => new Promise(r => setTimeout(r, ms));
       // Sequential + paced (~2.5 req/s) with 429 backoff — gentle on the SFL API to avoid bans/limits.
       const _fillLiveOffers = async (rows) => {
@@ -13136,8 +13280,28 @@
         let loaded = 0;
         const setProg = () => { if (prog) prog.innerHTML = loaded < total ? `<span class="sales-spin">⟳</span> live ${loaded}/${total}` : `✓ live market — sorted`; };
         if (total > 0) setProg();
+        // Pets: fetch per-type floors once (covers every pet listing).
+        let petByType = null;
+        if (queue.some(l => l.collection === "pets")) {
+          try {
+            const pr = await fetch("/api/marketplace-orderbook?petfloors=1");
+            if (pr.ok) {
+              petByType = {};
+              for (const it of ((await pr.json()).items || [])) {
+                const t = PET_TYPES[it.id];
+                if (t && it.floor) (petByType[t] = petByType[t] || []).push({ id: it.id, floor: it.floor });
+              }
+            }
+          } catch {}
+        }
         for (const l of queue) {
           const el = document.getElementById(`sales-live-${l.id}`);
+          if (l.collection === "pets") {
+            if (petByType) { l._live = _petMetrics(l, petByType); if (el) el.innerHTML = _liveLine(l, l._live); }
+            else if (el) el.innerHTML = `<span style="color:var(--text-dim)">pet market unavailable</span>`;
+            loaded++; setProg();
+            continue; // no per-item orderbook for pets
+          }
           const liveColl = l.mkt || l.collection; // resources live under the collectibles collection
           const key = `${liveColl}:${l.nftId}`;
           const cached = _liveObCache[key];
