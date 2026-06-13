@@ -35,6 +35,29 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── Pet floors mode: all pet listings (id + floor) so the caller can compute
+  // per-type (breed) floors for 1-of-1 pets. One call covers every pet type.
+  if (req.query.petfloors === "1") {
+    const token = process.env.SFL_GAME_TOKEN;
+    if (!token) return res.status(503).json({ error: "no game token configured" });
+    try {
+      const r = await fetch(
+        "https://api.sunflower-land.com/marketplace?filters=pets",
+        { headers: { "Content-Type": "application/json;charset=UTF-8", "Authorization": `Bearer ${token}` } }
+      );
+      if (r.status === 429) return res.status(429).json({ error: "rate limited by SFL API" });
+      if (!r.ok) return res.status(502).json({ error: `SFL API ${r.status}` });
+      const d = await r.json();
+      const items = (d.items || [])
+        .filter((i) => (i.floor || 0) > 0)
+        .map((i) => ({ id: i.id, floor: i.floor }));
+      res.setHeader("Cache-Control", "s-maxage=120, stale-while-revalidate=240");
+      return res.status(200).json({ pets: true, items });
+    } catch (e) {
+      return res.status(500).json({ error: String(e.message || e) });
+    }
+  }
+
   const pool = getPool();
 
   try {
