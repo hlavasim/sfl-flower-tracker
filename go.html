@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Opening in game…</title>
+</head>
+<body style="font-family:system-ui,Segoe UI,sans-serif;background:#2a1050;color:#fff;text-align:center;padding:42px 16px">
+<script>
+  (function () {
+    var to = new URLSearchParams(location.search).get("to") || "";
+    // Only allow "<collection>/<id>" — no open-redirect to arbitrary URLs.
+    var safe = /^[a-z]+\/\d+$/.test(to) ? to : "";
+    window._gameUrl = "https://sunflower-land.com/play/#/marketplace/" + safe;
+    window._go = function () { try { window.open(window._gameUrl, "sunflower_game"); } catch (e) {} };
+    // Reuses an existing "sunflower_game" tab — only the hash changes, so the game does NOT reload.
+    // First time (no such tab yet) it opens one; popup blockers may need the button tap below.
+    window._go();
+  })();
+</script>
+<h2>🌻 Opening in your game tab…</h2>
+<p style="opacity:.85">If it didn't open, tap:</p>
+<p><a href="#" onclick="window._go();return false;"
+      style="font-size:1.5rem;color:#ffd700;font-weight:bold;text-decoration:none">▶ Open in game</a></p>
+<p style="opacity:.55;font-size:.85rem;margin-top:34px">You can close this tab.<br>
+Next links reuse the same game tab — no reload.</p>
+</body></html>

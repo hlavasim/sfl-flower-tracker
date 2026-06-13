@@ -5595,7 +5595,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.70</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.71</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5622,6 +5622,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.71", items: [
+          { t: "feat", text: "Marketplace 🔗 links now open in a single reused game tab (target=\"sunflower_game\") instead of a new tab each time. Since the game uses hash routing, jumping to another item only changes the URL hash — the game does NOT cold-reload (after the first open). Also added /go.html, a tiny redirector that does the same window reuse for links opened from outside the app (e.g. Telegram alerts)." },
+        ]},
         { ver: "v3.70", items: [
           { t: "feat", text: "Boost text everywhere on the Sales page: every NFT row (Active Listings, Active Offers, Sold, What Can I Sell) now shows a ⚡ line with what the item actually does (sfl.world boost_text), so you can judge whether to sell it." },
           { t: "feat", text: "Resources got marketplace 🔗 links too — embedded RESOURCE_IDS map (64 tradeable resources from the game's KNOWN_IDS; resources live under the collectibles path, e.g. Wool → collectibles/642). Bonus: resource LISTINGS (e.g. Merino Wool) now also get the live seller-rank + nearest-offer line, verified working via the live orderbook API." },
@@ -13068,7 +13071,7 @@
             ? `<div class="sales-listing-img pet-frame" style="background-image:url('${imgUrl}')" title="${escHTML(l.itemName)}"></div>`
             : `<img class="sales-listing-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">`}
           <div class="sales-listing-info">
-            <div class="sales-listing-name">${escHTML(l.itemName)}${l.qty > 1 ? ` x${fmtQty(l.qty)}` : ""} ${badges.join("")}${(isSell && l.nftId && l.collection) ? ` <a href="https://sunflower-land.com/play/#/marketplace/${l.mkt || l.collection}/${l.nftId}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open in marketplace — adjust price / re-list" style="text-decoration:none;margin-left:2px">🔗</a>` : ""}</div>
+            <div class="sales-listing-name">${escHTML(l.itemName)}${l.qty > 1 ? ` x${fmtQty(l.qty)}` : ""} ${badges.join("")}${(isSell && l.nftId && l.collection) ? ` <a href="https://sunflower-land.com/play/#/marketplace/${l.mkt || l.collection}/${l.nftId}" target="sunflower_game" onclick="event.stopPropagation()" title="Open in your game tab (reuses it — no reload)" style="text-decoration:none;margin-left:2px">🔗</a>` : ""}</div>
             <div class="sales-listing-detail">${formatAge(l.age)} ago · ${l.tradeType || l.collection}${l.marketPrice > 0 ? ` · market: ${fmtSfl(l.marketPrice)} ${sflIcon()}/${l.priceSource}` : ""}</div>
             ${l.boost ? `<div class="sales-listing-detail" style="color:var(--lily)">⚡ ${escHTML(String(l.boost).replace(/\n+/g, " / "))}</div>` : ""}
             ${isSell && !l.soldAt && l.nftId ? `<div class="sales-live" id="sales-live-${l.id}">${l._live ? _liveLine(l, l._live) : `<span class="sales-live-load"><span class="sales-spin">⟳</span> live market…</span>`}</div>` : ""}
@@ -13213,7 +13216,7 @@
           <div class="sales-listing">
             <img class="sales-listing-img" src="${getItemIcon(r.name)}" onerror="this.style.display='none'" alt="">
             <div class="sales-listing-info">
-              <div class="sales-listing-name">${escHTML(r.name)}${r.qty > 1 ? ` x${fmtQty(r.qty)}` : ""}${r.nftId ? ` <a href="https://sunflower-land.com/play/#/marketplace/${r.collection === "resources" ? "collectibles" : r.collection}/${r.nftId}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open in marketplace — list it" style="text-decoration:none;margin-left:2px">🔗</a>` : ""}</div>
+              <div class="sales-listing-name">${escHTML(r.name)}${r.qty > 1 ? ` x${fmtQty(r.qty)}` : ""}${r.nftId ? ` <a href="https://sunflower-land.com/play/#/marketplace/${r.collection === "resources" ? "collectibles" : r.collection}/${r.nftId}" target="sunflower_game" onclick="event.stopPropagation()" title="Open in your game tab (reuses it — no reload)" style="text-decoration:none;margin-left:2px">🔗</a>` : ""}</div>
               <div class="sales-listing-detail">${r.collection} · ${fmtSfl(r.unitPrice)} ${sflIcon()}/ea</div>
               ${r.boost ? `<div class="sales-listing-detail" style="color:var(--lily)">⚡ ${escHTML(String(r.boost).replace(/\n+/g, " / "))}</div>` : ""}
             </div>
