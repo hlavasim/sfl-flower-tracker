@@ -5595,7 +5595,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.73</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.74</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5622,6 +5622,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.74", items: [
+          { t: "feat", text: "Pet listings now also show OFFERS again (someone bidding on your specific pet) — fetched from the per-item orderbook on top of the per-breed rank. So a pet row shows e.g. '#3/34 Wolf · cheapest X 🌸 · best offer Y 🌸 (−Z%)', and an offer within 5% of (or above) your ask flags it 💰 / buckets it into OFFER WITHIN 5%. Same added to the Telegram watcher (NOT-FIRST alerts include the best offer; ACCEPT NOW fires for pets too)." },
+        ]},
         { ver: "v3.73", items: [
           { t: "feat", text: "Pets now get undercut detection on the Sales page. Since pets are 1-of-1, rank is computed within the same TYPE (breed): a single /marketplace?filters=pets call (via proxy) gives every pet's floor, mapped to breed via an embedded PET_TYPES table (1750 ids), so each pet listing shows '🥇 1ST Wolf of N' or '#3/34 Wolf · cheapest X 🌸 (−Y)'. Offers are intentionally omitted for pets. Same logic added to the Telegram watcher (10-min pet sweep, NOT-FIRST alerts only)." },
         ]},
@@ -13226,11 +13229,17 @@
       };
       const _liveLine = (l, m) => {
         if (m.isPet) {
-          // Pets are 1-of-1 → rank within the same TYPE (breed). No offers (irrelevant for pets).
-          if (m.total <= 1) return `<span style="color:var(--sunpetal);font-weight:bold">🥇 only ${m.type || "pet"} listed</span>`;
-          if (m.isFirst) return `<span style="color:var(--sunpetal);font-weight:bold">🥇 1ST ${m.type}</span> <span style="color:var(--text-dim)">of ${m.total}</span>`;
-          const diff = m.cheapest - l.unitPrice;
-          return `<span style="color:#ff8c42;font-weight:bold">#${m.rank}/${m.total} ${m.type}</span> <span style="color:var(--text-dim)">cheapest ${fmtSfl(m.cheapest)} ${sflIcon(9)} (${diff < 0 ? "-" : "+"}${fmtSfl(Math.abs(diff))})</span>`;
+          // Pets are 1-of-1 → rank within the same TYPE (breed); offers are per-token (a buyer
+          // wanting YOUR specific pet) from the per-item orderbook.
+          const parts = [];
+          if (m.total <= 1) parts.push(`<span style="color:var(--sunpetal);font-weight:bold">🥇 only ${m.type || "pet"} listed</span>`);
+          else if (m.isFirst) parts.push(`<span style="color:var(--sunpetal);font-weight:bold">🥇 1ST ${m.type}</span> <span style="color:var(--text-dim)">of ${m.total}</span>`);
+          else { const diff = m.cheapest - l.unitPrice; parts.push(`<span style="color:#ff8c42;font-weight:bold">#${m.rank}/${m.total} ${m.type}</span> <span style="color:var(--text-dim)">cheapest ${fmtSfl(m.cheapest)} ${sflIcon(9)} (${diff < 0 ? "-" : "+"}${fmtSfl(Math.abs(diff))})</span>`); }
+          if (m.bestBid > 0) {
+            if (m.bestBid >= l.unitPrice - 1e-9) parts.push(`<span style="color:var(--green);font-weight:bold">💰 best offer ${fmtSfl(m.bestBid)} ≥ your ask!</span>`);
+            else parts.push(`best offer <b>${fmtSfl(m.bestBid)}</b> ${sflIcon(9)} <span style="color:var(--text-dim)">(−${m.gap.toFixed(0)}%, ${m.nBids} bid${m.nBids !== 1 ? "s" : ""})</span>`);
+          } else parts.push(`<span style="color:var(--text-dim)">no offers</span>`);
+          return parts.join(" · ");
         }
         const parts = [];
         if (m.total <= 1) parts.push(`<span style="color:var(--sunpetal);font-weight:bold">🥇 only listing</span>`);
@@ -13297,10 +13306,21 @@
         for (const l of queue) {
           const el = document.getElementById(`sales-live-${l.id}`);
           if (l.collection === "pets") {
-            if (petByType) { l._live = _petMetrics(l, petByType); if (el) el.innerHTML = _liveLine(l, l._live); }
-            else if (el) el.innerHTML = `<span style="color:var(--text-dim)">pet market unavailable</span>`;
+            const m = petByType ? _petMetrics(l, petByType)
+              : { isPet: true, type: PET_TYPES[l.nftId] || "pet", total: 1, rank: 1, isFirst: true, cheapest: 0, bestBid: 0, gap: null, nBids: 0, goodOffer: false };
+            // Offers are per-token (a buyer wanting YOUR specific pet) → per-item orderbook.
+            try {
+              const r = await fetch(`/api/marketplace-orderbook?live=1&collection=pets&item_id=${l.nftId}`);
+              if (r.ok) {
+                const bids = ((await r.json()).offers || []).map(x => x.qty > 0 ? x.sfl / x.qty : x.sfl).filter(v => isFinite(v) && v > 0);
+                if (bids.length) { const bb = Math.max(...bids); m.bestBid = bb; m.nBids = bids.length; m.gap = ((l.unitPrice - bb) / l.unitPrice) * 100; m.goodOffer = m.gap <= 5; }
+              }
+            } catch {}
+            l._live = m;
+            if (el) el.innerHTML = _liveLine(l, m);
             loaded++; setProg();
-            continue; // no per-item orderbook for pets
+            await _sleep(400);
+            continue;
           }
           const liveColl = l.mkt || l.collection; // resources live under the collectibles collection
           const key = `${liveColl}:${l.nftId}`;
