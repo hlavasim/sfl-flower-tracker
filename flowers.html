@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.81</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.82</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.82", items: [
+          { t: "feat", text: "ROADMAP profitability section now includes Salt Farm and Crop Machine. Salt Farm: nodes raked on their live recharge cycle (median nextChargeAt-claimedAt), salt sold at p2p minus rake cost (3 Wood + coins, coins free >10k, yield per rake via computeSaltYieldPerRake incl. Wide Rakes / Salt Cave background). Crop Machine: best available crop via cropMachineBestCrop/calcCropMachineDaily (revenue minus oil minus seed cost, with the user\'s plots/speed/oil skills; seeds free when coins are free). Both shown as net FLOWER/day, green/red like the other activities." },
+        ]},
         { ver: "v3.81", items: [
           { t: "fix", text: "ROADMAP efficiency was reading far too low (e.g. sheep 54%, crimstone 57%) — root cause was session-counting on sparsely-sampled history: the collector ran only ~2x/day before late May with ~20h gaps, so most harvests never landed on a stored snapshot and the sessions/day count collapsed. Replaced with a density-robust THROUGHPUT metric: total _h.* harvested per day (cumulative diffs, so sampling gaps don\'t matter) ÷ theoretical/day = effective node count (sumMergedNodes, tier-weighted) × boosted cycles/day (applyBoosts). Window is the last 35 days excluding the current 7 days. Capped at 100%. Now reads ~86-100% for actively-farmed categories (stones 89, iron 90, trees 86, crops ~100). Obsidian keeps its 1/week valuation (eff factor 1)." },
         ]},
@@ -15612,6 +15615,29 @@
       return { total, breakdown };
     }
 
+    // Salt Farm net FLOWER/day: nodes raked on their recharge cycle, salt sold at p2p,
+    // minus rake cost (3 Wood + coins; coins free when you hold a big pile).
+    function roadmapSaltNet(settings) {
+      const { farm, p2pPrices, exchangeRates } = powerState;
+      const sf = farm && farm.saltFarm;
+      if (!sf || !sf.nodes) return null;
+      const nodes = Object.values(sf.nodes);
+      if (nodes.length === 0) return null;
+      const cyc = nodes.map(x => (x.salt && x.salt.nextChargeAt && x.salt.claimedAt) ? (x.salt.nextChargeAt - x.salt.claimedAt) : 0).filter(v => v > 0).sort((a, b) => a - b);
+      let cycleMs = cyc.length ? cyc[Math.floor(cyc.length / 2)] : 6 * 3600000;
+      cycleMs = Math.min(48 * 3600000, Math.max(3600000, cycleMs));
+      const rakesPerDay = nodes.length * (86400000 / cycleMs);
+      let yieldPerRake = 10, coinMult = 1;
+      try { yieldPerRake = computeSaltYieldPerRake(farm); } catch {}
+      try { coinMult = computeSaltRakeCoinMult(farm); } catch {}
+      const gross = rakesPerDay * yieldPerRake * (p2pPrices["Salt"] || 0);
+      const coinSFL = roadmapCoinsFree(settings) ? 0 : (exchangeRates.coinsPerSFL > 0 ? (SALT_RAKE_COST.coins * coinMult) / exchangeRates.coinsPerSFL : 0);
+      let matSFL = 0;
+      for (const [m, q] of Object.entries(SALT_RAKE_COST.materials)) matSFL += (p2pPrices[m] || 0) * q;
+      const cost = rakesPerDay * (coinSFL + matSFL);
+      return gross - cost;
+    }
+
     // "What should I farm/mine now" — net FLOWER/day per activity at full activity, green/red.
     function roadmapProfitabilityHtml(settings) {
       const rows = [];
@@ -15630,6 +15656,12 @@
       if (getCapacityCount("greenhouse", powerState.capacity) > 0) {
         for (const g of Object.keys(GREENHOUSE_GROW_DATA)) rows.push({ label: g, icon: g, net: roadmapProductNet("greenhouse", g, settings), sub: "greenhouse" });
       }
+      if (typeof farmHasCropMachine === "function" && farmHasCropMachine(powerState.farm)) {
+        const er = roadmapCoinsFree(settings) ? Object.assign({}, powerState.exchangeRates, { coinsPerSFL: Infinity }) : powerState.exchangeRates;
+        const best = cropMachineBestCrop(powerState.farm, powerState.p2pPrices, er);
+        if (best && isFinite(best.net)) rows.push({ label: "Crop Machine", icon: best.crop, net: best.net, sub: "auto · " + best.crop });
+      }
+      { const sn = roadmapSaltNet(settings); if (sn !== null && isFinite(sn)) rows.push({ label: "Salt Farm", icon: "Salt", net: sn, sub: "rake" }); }
       rows.sort((a, b) => b.net - a.net);
 
       const cf = roadmapCoinsFree(settings);
