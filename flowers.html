@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.79</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.80</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.80", items: [
+          { t: "feat", text: "ROADMAP: new WHAT TO FARM / MINE NOW section at the top — net FLOWER/day at full activity per category (trees, mining, animals, fruits, flowers…), per individual crop, and per greenhouse product, green (worth doing) / red (loss-making), sorted. Plus two economics fixes baked into the whole net model: (1) Coins are treated as FREE when you hold >10k (coin-priced axes/seeds cost 0, since coins aren\'t directly FLOWER-convertible — the Betty rate is irrelevant for a big coin pile) — so trees and other coin-only activities get cheaper; toggle in controls. (2) Obsidian can only be liquidated ~1/week, so its income is capped at (1 obsidian − 1 ignition fuel)/7 per day — ROI drops to the bottom as expected." },
+        ]},
         { ver: "v3.79", items: [
           { t: "fix", text: "ROADMAP now includes ONLY boost-bearing NFTs. A no-boost decoration/collectible (have_boost=0 — Coin Aura, banners, bears, etc.) generates no FLOWER, so it is excluded from the plan AND the cost/time totals; the count of excluded no-boost items is shown as a footnote. This is the correct fix for the inflated total (Coin Aura had no boost yet its 88.8M troll floor was being summed). Of ~709 tradeable NFTs only ~225 carry a boost. Boost NFTs whose boost has no FLOWER value (qualitative / net <= 0) are still counted and listed last." },
         ]},
@@ -15511,6 +15514,7 @@
         incWearables: s.incWearables !== false,
         showCosmetic: !!s.showCosmetic,
         maxPrice: (typeof s.maxPrice === "number" && s.maxPrice >= 0) ? s.maxPrice : 0,
+        coinsFree: (s.coinsFree === true || s.coinsFree === false) ? s.coinsFree : undefined,
       };
     }
     function saveRoadmapSettings(patch) {
@@ -15532,13 +15536,31 @@
       return powerState.boostItems.filter(b => b.has).flatMap(b => b.effects.filter(e => e.cat === cat));
     }
 
+    // Coins are "free" when you hold a big pile of them — they're not directly convertible
+    // to FLOWER, so coin-denominated costs (tools, seeds) shouldn't be priced at the Betty rate.
+    // Auto-on above 10k coins; explicit toggle overrides.
+    function roadmapCoinsFree(settings) {
+      if (settings && settings.coinsFree === true) return true;
+      if (settings && settings.coinsFree === false) return false;
+      return (parseFloat(powerState.farm && powerState.farm.coins) || 0) > 10000;
+    }
+
     // NET FLOWER/day for a category given an effect set: gross production − running costs
     // (feed, sickness, seed, tools, lava). Mirrors the ROI/Power full-cost model — so a
     // loss-making activity (e.g. low-level animals where feed ≥ produce) nets ≤ 0.
-    function roadmapCatNet(cat, effects) {
+    function roadmapCatNet(cat, effects, settings) {
       const { capacity, p2pPrices, savedProducts, exchangeRates, stockMods, season } = powerState;
       const skills = (powerState.farm && powerState.farm.bumpkin && powerState.farm.bumpkin.skills) || {};
       const product = savedProducts[cat] || getDefaultProduct(cat);
+      const er = roadmapCoinsFree(settings) ? Object.assign({}, exchangeRates, { coinsPerSFL: Infinity }) : exchangeRates;
+      // Obsidian can only be liquidated ~1×/week → income = (1 obsidian − 1 ignition's fuel) / 7 days.
+      if (cat === "obsidian") {
+        if (getCapacityCount("obsidian", capacity) <= 0) return 0;
+        const price = p2pPrices["Obsidian"] || 0;
+        let ign = 0;
+        try { ign = (calcLavaPitCostPerDay(capacity, p2pPrices, season).costPerIgnition) || 0; } catch {}
+        return (price - ign) / 7;
+      }
       let gross = 0, cost = 0;
       try {
         if (isAnimalCat(cat)) {
@@ -15548,14 +15570,26 @@
         } else {
           gross = unitToSfl(applyBoosts(cat, product, capacity, effects).unitsPerDay, getPriceProduct(cat, product), p2pPrices) || 0;
           if (cat === "crops" || cat === "fruits" || cat === "greenhouse" || cat === "flowers") {
-            cost += (calcSeedCostPerDay(cat, product, capacity, exchangeRates, stockMods, effects, p2pPrices).costPerDay) || 0;
+            cost += (calcSeedCostPerDay(cat, product, capacity, er, stockMods, effects, p2pPrices).costPerDay) || 0;
           }
           if (cat === "trees" || cat === "stone" || cat === "iron" || cat === "gold" || cat === "crimstone" || cat === "oil") {
-            cost += (calcToolCostPerDay(cat, capacity, exchangeRates, p2pPrices, stockMods, false).costPerDay) || 0;
+            cost += (calcToolCostPerDay(cat, capacity, er, p2pPrices, stockMods, false).costPerDay) || 0;
           }
-          if (cat === "obsidian") {
-            cost += (calcLavaPitCostPerDay(capacity, p2pPrices, season).costPerDay) || 0;
-          }
+        }
+      } catch {}
+      return gross - cost;
+    }
+
+    // NET FLOWER/day for a single product (one crop / greenhouse item) at full plots.
+    function roadmapProductNet(cat, product, settings) {
+      const { capacity, p2pPrices, exchangeRates, stockMods } = powerState;
+      const er = roadmapCoinsFree(settings) ? Object.assign({}, exchangeRates, { coinsPerSFL: Infinity }) : exchangeRates;
+      const ownedEff = roadmapOwnedEffects(cat);
+      let gross = 0, cost = 0;
+      try {
+        gross = unitToSfl(applyBoosts(cat, product, capacity, ownedEff).unitsPerDay, getPriceProduct(cat, product), p2pPrices) || 0;
+        if (cat === "crops" || cat === "fruits" || cat === "greenhouse" || cat === "flowers") {
+          cost += (calcSeedCostPerDay(cat, product, capacity, er, stockMods, ownedEff, p2pPrices).costPerDay) || 0;
         }
       } catch {}
       return gross - cost;
@@ -15567,12 +15601,52 @@
       let total = 0; const breakdown = [];
       for (const [cat, meta] of Object.entries(POWER_CATEGORIES)) {
         if (!meta.quantifiable) continue;
-        const net = roadmapCatNet(cat, roadmapOwnedEffects(cat));
+        const net = roadmapCatNet(cat, roadmapOwnedEffects(cat), settings);
         const v = Math.max(0, net) * roadmapEffFactor(cat, settings);
         if (v > 0) { total += v; breakdown.push({ cat, sfl: v }); }
       }
       breakdown.sort((a, b) => b.sfl - a.sfl);
       return { total, breakdown };
+    }
+
+    // "What should I farm/mine now" — net FLOWER/day per activity at full activity, green/red.
+    function roadmapProfitabilityHtml(settings) {
+      const rows = [];
+      const CAT_ROWS = [
+        ["trees","Wood"],["stone","Stone"],["iron","Iron"],["gold","Gold"],["crimstone","Crimstone"],
+        ["oil","Oil"],["obsidian","Obsidian"],["chickens","Egg"],["cows","Milk"],["sheep","Wool"],
+        ["fruits","Blueberry"],["flowers","Red Pansy"],["bees","Honey"],["fishing","Fish"],
+      ];
+      for (const [cat, icon] of CAT_ROWS) {
+        if (cat !== "fishing" && getCapacityCount(cat, powerState.capacity) <= 0) continue;
+        rows.push({ label: (POWER_CATEGORIES[cat] ? POWER_CATEGORIES[cat].label : cat), icon, net: roadmapCatNet(cat, roadmapOwnedEffects(cat), settings) });
+      }
+      if (getCapacityCount("crops", powerState.capacity) > 0) {
+        for (const crop of Object.keys(CROP_GROW_DATA)) rows.push({ label: crop, icon: crop, net: roadmapProductNet("crops", crop, settings), sub: "crop" });
+      }
+      if (getCapacityCount("greenhouse", powerState.capacity) > 0) {
+        for (const g of Object.keys(GREENHOUSE_GROW_DATA)) rows.push({ label: g, icon: g, net: roadmapProductNet("greenhouse", g, settings), sub: "greenhouse" });
+      }
+      rows.sort((a, b) => b.net - a.net);
+
+      const cf = roadmapCoinsFree(settings);
+      const coins = Math.round(parseFloat(powerState.farm && powerState.farm.coins) || 0);
+      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
+      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">WHAT TO FARM / MINE NOW</div>`;
+      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:10px;line-height:1.6">Net FLOWER/day at full activity with your current boosts &amp; prices. <span style="color:var(--green)">green = worth doing</span>, <span style="color:var(--red)">red = loss-making (skip)</span>. ${cf ? `Coins treated as FREE (you hold ${coins.toLocaleString()} > 10k, not FLOWER-convertible).` : `Coin costs counted at Betty rate (you hold ${coins.toLocaleString()}).`} Obsidian = sells ~1/week.</div>`;
+      h += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(195px,1fr));gap:3px 16px">`;
+      for (const r of rows) {
+        const neutral = Math.abs(r.net) < 0.01;
+        const col = neutral ? "var(--text-dim)" : (r.net > 0 ? "var(--green)" : "var(--red)");
+        const txt = neutral ? "≈0" : (r.net > 0 ? "+" : "−") + roadmapFmtFlower(Math.abs(r.net));
+        h += `<div style="display:flex;align-items:center;gap:6px;font-size:0.6rem;padding:2px 0;border-bottom:1px solid #1c1c1c">
+          <img class="inline-icon" src="${getItemIcon(r.icon)}" onerror="this.style.display='none'" alt="">
+          <span style="flex:1;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHTML(r.label)}${r.sub ? ` <span style="color:var(--text-dim);font-size:0.5rem">${r.sub}</span>` : ""}</span>
+          <span style="color:${col};font-weight:bold;white-space:nowrap">${txt}</span>
+        </div>`;
+      }
+      h += `</div></div>`;
+      return h;
     }
 
     // Marginal realistic NET FLOWER/day a boost adds, given current owned+bought set.
@@ -15585,8 +15659,8 @@
         const itemEff = clone.effects.filter(e => e.cat === cat);
         if (itemEff.length === 0) continue;
         const ownedEff = catBoostsW[cat].filter(b => b.has && !b.isDisabled).flatMap(b => b.effects.filter(e => e.cat === cat));
-        const without = Math.max(0, roadmapCatNet(cat, ownedEff));
-        const withIt = Math.max(0, roadmapCatNet(cat, ownedEff.concat(itemEff)));
+        const without = Math.max(0, roadmapCatNet(cat, ownedEff, settings));
+        const withIt = Math.max(0, roadmapCatNet(cat, ownedEff.concat(itemEff), settings));
         const delta = withIt - without;
         if (delta > 0) total += delta * roadmapEffFactor(cat, settings);
       }
@@ -15801,6 +15875,9 @@
       h += card("FLOWER/DAY", roadmapFmtFlower(startIncome), "→ " + roadmapFmtFlower(sim.finalRate) + " after boosts");
       h += `</div>`;
 
+      // ── What to farm / mine now (per-category profitability) ──
+      h += roadmapProfitabilityHtml(settings);
+
       // ── Controls ──
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:16px;font-size:0.62rem;color:var(--text-secondary)">`;
       h += `<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center">`;
@@ -15808,6 +15885,7 @@
       h += `<label>Efficiency: <select onchange="_roadmapSetEffMode(this.value)"><option value="real"${settings.effMode === "real" ? " selected" : ""}>Real (May 2026)</option><option value="theoretical"${settings.effMode === "theoretical" ? " selected" : ""}>Theoretical 100%</option></select></label>`;
       h += `<label><input type="checkbox" ${settings.incCollectibles ? "checked" : ""} onchange="_roadmapToggle('incCollectibles',this.checked)"> Collectibles</label>`;
       h += `<label><input type="checkbox" ${settings.incWearables ? "checked" : ""} onchange="_roadmapToggle('incWearables',this.checked)"> Wearables</label>`;
+      h += `<label title="Treat coin-denominated costs (axes, seeds…) as free — coins aren't directly convertible to FLOWER. Auto-on when you hold >10k coins."><input type="checkbox" ${roadmapCoinsFree(settings) ? "checked" : ""} onchange="_roadmapToggle('coinsFree',this.checked)"> Coins free</label>`;
       h += `<label><input type="checkbox" ${settings.showCosmetic ? "checked" : ""} onchange="_roadmapToggle('showCosmetic',this.checked)"> Show no-value boosts</label>`;
       h += `<label title="Skip NFTs above this floor price (0 = no cap). Items priced over 500k FLOWER are always dropped as troll/no-liquidity listings.">Max price: <input type="number" value="${settings.maxPrice || 0}" step="100" min="0" style="width:88px" onchange="_roadmapSetMaxPrice(this.value)"> ${settings.maxPrice ? "" : "(no cap)"}</label>`;
       h += `<button onclick="refresh()" title="Re-fetch your live farm (new purchases) + current marketplace floor prices, then rebuild the whole roadmap" style="margin-left:auto;font-size:0.6rem;padding:4px 10px;cursor:pointer">↻ Refresh live data</button>`;
@@ -15895,6 +15973,8 @@
       h += `<div class="pixel-panel" style="margin-top:18px;padding:12px;font-size:0.55rem;color:var(--text-dim);line-height:1.7">
         <div class="pixel-font" style="font-size:0.5rem;color:var(--text-secondary);margin-bottom:6px">HOW THIS IS CALCULATED</div>
         • <b>Order</b> = greedy by ROI payback (cost ÷ realistic FLOWER/day it adds). Cheapest-fastest first so income compounds — exactly why a 10-FLOWER/+0.09 item beats a 1000-FLOWER/+1 item early on.<br>
+        • <b>Coins are free</b> (when you hold &gt;10k) — coin-priced costs like axes &amp; seeds aren't charged, since coins don't convert to FLOWER. So coin-only activities like trees get cheaper.<br>
+        • <b>Obsidian</b> sells only ~1/week, so its income is capped at one obsidian (minus a lava ignition) per week — its ROI lands near the bottom.<br>
         • <b>Net, not gross</b> — every category subtracts its running costs (animal feed &amp; sickness, crop/fruit/flower seeds, mining tools, lava-pit fuel) before counting. A loss-making activity (e.g. low-level sheep where feed ≥ wool) nets 0, and an animal boost only scores once it actually flips that category positive.<br>
         • <b>Boost value</b> = the floored net FLOWER/day the boost adds, vs what you already own (stacking synergy included) × your real harvest efficiency.<br>
         • <b>Efficiency</b> = your actual May-2026 harvest sessions/day ÷ theoretical, computed per category from history — crops, flowers, fruits, greenhouse, animals, trees &amp; all mining. A category you didn\'t harvest in May scores 0% (its NFTs aren\'t profit for you); bees/fishing (no session signal) use your average activity.<br>
