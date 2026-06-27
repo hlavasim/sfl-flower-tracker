@@ -5467,6 +5467,7 @@
       ];
       const overflow = [
         { id: "power", label: "POWER" },
+        { id: "roadmap", label: "ROADMAP" },
         { id: "nodes", label: "NODES" },
         { id: "roi", label: "ROI" },
         { id: "shrines", label: "SHRINES" },
@@ -5595,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.74</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.75</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5622,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.75", items: [
+          { t: "feat", text: "New ROADMAP page (?page=roadmap) — ROI-ordered path to every buyable NFT you do not own. Combines real May-2026 mining efficiency (NODES _h.* harvest sessions/day over theoretical, per resource) with each NFT boost value + multiplicative synergy (POWER calcBoostValue). Greedy simulation buys the lowest-payback (cost over realistic FLOWER/day) boost first so income compounds, recomputing same-category marginals after every purchase (diminishing-returns synergy). Builds a full timeline: cumulative cost, growing FLOWER/day, ETA date per item. Cosmetic / no-boost NFTs listed last (cheapest first). Editable start income (auto = efficiency-adjusted current production), Real/Theoretical efficiency toggle, other-category activity slider, collectible/wearable filters. Reuses buildPowerState (extracted from renderPower)." },
+        ]},
         { ver: "v3.74", items: [
           { t: "feat", text: "Pet listings now also show OFFERS again (someone bidding on your specific pet) — fetched from the per-item orderbook on top of the per-breed rank. So a pet row shows e.g. '#3/34 Wolf · cheapest X 🌸 · best offer Y 🌸 (−Z%)', and an offer within 5% of (or above) your ask flags it 💰 / buckets it into OFFER WITHIN 5%. Same added to the Telegram watcher (NOT-FIRST alerts include the best offer; ACCEPT NOW fires for pets too)." },
         ]},
@@ -15260,8 +15264,22 @@
       html += `<div id="power-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading boost data...</div></div></div>`;
       app.innerHTML = html;
 
+      try {
+        await buildPowerState(data);
+      } catch (err) {
+        document.getElementById("power-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load: ${escHTML(err.message)}</p></div>`;
+        return;
+      }
+      renderPowerContent();
+    }
+
+    // Build powerState — shared by POWER and ROADMAP pages. Throws on fetch failure (no DOM writes).
+    async function buildPowerState(data) {
+      const { inventory, farm } = data;
+      const wardrobe = farm.wardrobe || {};
+      const skills = farm.bumpkin?.skills || {};
       // Fetch NFT data + P2P prices + exchange rates in parallel
-      let nftData, p2pPrices = {}, exchangeRates = { coinsPerSFL: 320, gemsPerSFL: 0 };
+      let nftData, p2pPrices = {}, exchangeRates = { coinsPerSFL: 320, gemsPerSFL: 0, sflUsd: 0 };
       try {
         const proxyFetch = async (url) => {
           try {
@@ -15299,10 +15317,11 @@
             const best = gemTiers.reduce((a, b) => (b.gem / (b.sfl * 0.7)) > (a.gem / (a.sfl * 0.7)) ? b : a);
             exchangeRates.gemsPerSFL = best.gem / (best.sfl * 0.7);
           }
+          const _sflUsd = rateResp?.sfl?.usd || rateResp?.data?.sfl?.usd || 0;
+          if (_sflUsd > 0) exchangeRates.sflUsd = _sflUsd;
         }
       } catch (err) {
-        document.getElementById("power-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load: ${escHTML(err.message)}</p></div>`;
-        return;
+        throw err;
       }
 
       // Detect farm capacity
@@ -15448,11 +15467,390 @@
       const season = (farm.season?.season || "").toLowerCase();
 
       // Store state for interactive updates
-      powerState = { boostItems, catBoosts, capacity, p2pPrices, savedProducts, farm, skillCostInfo, exchangeRates, stockMods, season };
+      powerState = { boostItems, catBoosts, capacity, p2pPrices, savedProducts, farm, skillCostInfo, exchangeRates, stockMods, season, nftData, inventory };
 
-      // Render
-      renderPowerContent();
+
+      return powerState;
     }
+
+
+    // ═══════════════════════════════════════════════════════════════
+    //  ROADMAP — fastest ROI-ordered path to every buyable NFT
+    //  Combines real May-2026 mining efficiency (NODES) with each NFT's
+    //  boost value + synergy (POWER), then greedily simulates the buy
+    //  order that compounds FLOWER income fastest.
+    // ═══════════════════════════════════════════════════════════════
+    let roadmapState = null;
+
+    function getRoadmapSettings() {
+      let s = {};
+      try { s = JSON.parse(localStorage.getItem("sfl_roadmap_settings") || "{}"); } catch {}
+      return {
+        effMode: s.effMode === "theoretical" ? "theoretical" : "real",
+        globalActivity: (typeof s.globalActivity === "number") ? s.globalActivity : null,
+        startIncome: (typeof s.startIncome === "number" && s.startIncome >= 0) ? s.startIncome : null,
+        incCollectibles: s.incCollectibles !== false,
+        incWearables: s.incWearables !== false,
+        showCosmetic: !!s.showCosmetic,
+      };
+    }
+    function saveRoadmapSettings(patch) {
+      const next = Object.assign({}, getRoadmapSettings(), patch);
+      try { localStorage.setItem("sfl_roadmap_settings", JSON.stringify(next)); } catch {}
+    }
+
+    function roadmapEffFactor(cat, settings) {
+      if (settings.effMode === "theoretical") return 1;
+      const eb = roadmapState.effByCat;
+      if (EFFICIENCY_RESOURCE_MAP[cat] && eb[cat] && typeof eb[cat].ratio === "number") return eb[cat].ratio;
+      return (settings.globalActivity != null) ? settings.globalActivity : roadmapState.globalActivityDefault;
+    }
+
+    function roadmapOwnedEffects(cat) {
+      return powerState.boostItems.filter(b => b.has).flatMap(b => b.effects.filter(e => e.cat === cat));
+    }
+
+    // Realistic current daily production value (FLOWER/day), efficiency-adjusted
+    function roadmapCurrentProduction(settings) {
+      const { capacity, p2pPrices, savedProducts } = powerState;
+      let total = 0; const breakdown = [];
+      for (const [cat, meta] of Object.entries(POWER_CATEGORIES)) {
+        if (!meta.quantifiable) continue;
+        const f = roadmapEffFactor(cat, settings);
+        let sfl = 0;
+        if (isAnimalCat(cat)) {
+          const r = getAnimalCatSfl(cat, capacity, roadmapOwnedEffects(cat), p2pPrices);
+          sfl = (r && r.totalSfl) || 0;
+        } else {
+          const product = savedProducts[cat] || getDefaultProduct(cat);
+          const r = applyBoosts(cat, product, capacity, roadmapOwnedEffects(cat));
+          sfl = unitToSfl(r.unitsPerDay, getPriceProduct(cat, product), p2pPrices) || 0;
+        }
+        sfl *= f;
+        if (sfl > 0) { total += sfl; breakdown.push({ cat, sfl }); }
+      }
+      breakdown.sort((a, b) => b.sfl - a.sfl);
+      return { total, breakdown };
+    }
+
+    // Marginal realistic FLOWER/day a boost adds given current owned+bought set
+    function roadmapItemValue(clone, catBoostsW, settings) {
+      if (!clone) return 0;
+      let total = 0;
+      for (const cat of clone.categories) {
+        if (!POWER_CATEGORIES[cat] || !POWER_CATEGORIES[cat].quantifiable) continue;
+        const product = powerState.savedProducts[cat] || getDefaultProduct(cat);
+        let v = null;
+        try { v = calcBoostValue(clone, cat, product, powerState.capacity, powerState.p2pPrices, catBoostsW[cat], false); } catch {}
+        if (v && v.synergy > 0) total += v.synergy * roadmapEffFactor(cat, settings);
+      }
+      return total;
+    }
+
+    // May 2026 mining efficiency (actual harvest sessions/day ÷ theoretical), per nodes logic
+    async function roadmapComputeMayEfficiency() {
+      const out = { effByCat: {}, meta: { snaps: 0, days: 0, available: false } };
+      let rows = null;
+      try {
+        const url = `/api/farm-history?farm=${FARM_ID}&from=2026-05-01&to=2026-06-01&limit=1000`;
+        const r = await fetch(url);
+        if (r.ok) { const d = await r.json(); rows = d.snapshots || []; }
+      } catch {}
+      if (!rows || rows.length < 2) return out;
+      const sortedAll = rows.filter(s => s.captured_at && s.diff).sort((a, b) => new Date(a.captured_at) - new Date(b.captured_at));
+      const v2Start = sortedAll.findIndex(s => Object.keys(s.diff || {}).some(k => k.startsWith("_h.")));
+      const sorted = v2Start >= 0 ? sortedAll.slice(v2Start) : [];
+      if (sorted.length < 2) return out;
+      const pDays = (new Date(sorted[sorted.length - 1].captured_at) - new Date(sorted[0].captured_at)) / 86400000;
+      out.meta = { snaps: sorted.length, days: pDays, available: pDays > 0.5 };
+      if (pDays <= 0.5) return out;
+      for (const [catId, resInfo] of Object.entries(EFFICIENCY_RESOURCE_MAP)) {
+        const digTimes = [];
+        for (const snap of sorted) { const c = (snap.diff || {})[resInfo.hKey]; if (c > 0) digTimes.push(new Date(snap.captured_at).getTime()); }
+        const sessions = [];
+        if (digTimes.length > 0) {
+          let s0 = digTimes[0], se = digTimes[0];
+          for (let i = 1; i < digTimes.length; i++) { if (digTimes[i] - se <= 1800000) se = digTimes[i]; else { sessions.push(s0); s0 = digTimes[i]; se = digTimes[i]; } }
+          sessions.push(s0);
+        }
+        const boosted = applyBoosts(catId, getDefaultProduct(catId), powerState.capacity, roadmapOwnedEffects(catId));
+        const ec = boosted.effectiveCycle || 0;
+        const theoPerDay = ec > 0 ? 86400 / ec : 0;
+        const actualPerDay = sessions.length / pDays;
+        let ratio = theoPerDay > 0 ? actualPerDay / theoPerDay : 0;
+        if (ratio > 1.5) ratio = 1.5;
+        out.effByCat[catId] = { ratio, sessions: sessions.length, actualPerDay, theoPerDay };
+      }
+      return out;
+    }
+
+    function roadmapBuildClones() {
+      const clones = powerState.boostItems.map(b => Object.assign({}, b));
+      const byName = {};
+      clones.forEach(c => { byName[c.name] = c; });
+      const catBoostsW = {};
+      for (const cat of Object.keys(POWER_CATEGORIES)) catBoostsW[cat] = clones.filter(c => c.categories.includes(cat));
+      return { byName, catBoostsW };
+    }
+
+    function roadmapBuildMissing(byName, settings) {
+      const { nftData, inventory, farm } = powerState;
+      const wardrobe = farm.wardrobe || {};
+      const out = [];
+      const seen = new Set();
+      const add = (item, type) => {
+        const name = item && item.name;
+        if (!name || seen.has(name)) return;
+        seen.add(name);
+        const has = type === "Wearable"
+          ? (wardrobe[name] || 0) > 0
+          : (getCount(inventory, name) > 0 || findCollectible(farm, name).length > 0);
+        if (has) return;
+        const clone = byName[name] || null;
+        const floor = clone ? clone.floor : (parseFloat(item.floor) || 0);
+        out.push({ name, type, floor, clone, boost: (item.boost_text || (clone && clone.boost) || ""), supply: item.supply || 0 });
+      };
+      if (settings.incCollectibles && nftData) for (const it of (nftData.collectibles || [])) add(it, "Collectible");
+      if (settings.incWearables && nftData) for (const it of (nftData.wearables || [])) add(it, "Wearable");
+      return out;
+    }
+
+    // Greedy: buy lowest-payback (best ROI) economic boost first; income compounds;
+    // recompute marginals of same-category items after each buy (synergy/diminishing returns).
+    function roadmapSimulate(settings, startIncome) {
+      const { byName, catBoostsW } = roadmapBuildClones();
+      const missing = roadmapBuildMissing(byName, settings);
+      const econ = [], cosmetic = [], untradeable = [];
+      for (const m of missing) {
+        if (!(m.floor > 0)) { untradeable.push(m); continue; }
+        const economic = m.clone && !m.clone.isDisabled && m.clone.categories.some(c => POWER_CATEGORIES[c] && POWER_CATEGORIES[c].quantifiable);
+        if (economic) econ.push(m); else cosmetic.push(m);
+      }
+      for (const m of econ) { m.marginal = roadmapItemValue(m.clone, catBoostsW, settings); m.roi = m.marginal > 0 ? m.floor / m.marginal : Infinity; }
+      const remaining = econ.filter(m => m.marginal > 0);
+      for (const m of econ) if (!(m.marginal > 0)) cosmetic.push(m);
+
+      const timeline = [];
+      let rate = startIncome > 0 ? startIncome : 0;
+      let cumDays = 0, guard = 0;
+      while (remaining.length && guard++ < 5000) {
+        let bi = 0;
+        for (let i = 1; i < remaining.length; i++) if (remaining[i].roi < remaining[bi].roi) bi = i;
+        const next = remaining.splice(bi, 1)[0];
+        if (!(next.marginal > 0)) { cosmetic.push(next); continue; }
+        const days = rate > 0 ? next.floor / rate : Infinity;
+        cumDays += days;
+        next.clone.has = true;
+        rate += next.marginal;
+        timeline.push({ name: next.name, type: next.type, boost: next.boost, floor: next.floor, marginal: next.marginal, roi: next.roi, atDay: cumDays, rateAfter: rate, kind: "econ" });
+        const cats = new Set(next.clone.categories);
+        for (const m of remaining) {
+          if (m.clone.categories.some(c => cats.has(c))) { m.marginal = roadmapItemValue(m.clone, catBoostsW, settings); m.roi = m.marginal > 0 ? m.floor / m.marginal : Infinity; }
+        }
+      }
+      const econSteps = timeline.length;
+      const econCost = timeline.reduce((s, t) => s + t.floor, 0);
+      const finalRate = rate;
+
+      cosmetic.sort((a, b) => a.floor - b.floor);
+      for (const m of cosmetic) {
+        const days = rate > 0 ? m.floor / rate : Infinity;
+        cumDays += days;
+        timeline.push({ name: m.name, type: m.type, boost: m.boost, floor: m.floor, marginal: 0, roi: Infinity, atDay: cumDays, rateAfter: rate, kind: "cosmetic" });
+      }
+      const totalCost = timeline.reduce((s, t) => s + t.floor, 0);
+      return { timeline, econSteps, cosmeticCount: cosmetic.length, econCost, untradeable, startRate: startIncome, finalRate, totalDays: cumDays, totalCost };
+    }
+
+    function roadmapFmtDays(d) {
+      if (!isFinite(d)) return "∞";
+      if (d < 1) return Math.max(1, Math.round(d * 24)) + "h";
+      if (d < 60) return d.toFixed(d < 10 ? 1 : 0) + "d";
+      if (d < 730) return (d / 30.44).toFixed(1) + "mo";
+      return (d / 365.25).toFixed(1) + "y";
+    }
+    function roadmapFmtDate(d) {
+      if (!isFinite(d)) return "—";
+      return new Date(Date.now() + d * 86400000).toISOString().slice(0, 10);
+    }
+    function roadmapFmtFlower(v) {
+      if (!isFinite(v)) return "∞";
+      if (v >= 1e6) return (v / 1e6).toFixed(2) + "M";
+      if (v >= 1e4) return Math.round(v).toLocaleString();
+      if (v >= 100) return v.toFixed(0);
+      if (v >= 1) return v.toFixed(2);
+      return v.toFixed(3);
+    }
+
+    async function renderRoadmap(data) {
+      const app = document.getElementById("app");
+      let html = `<div class="header pixel-panel pixel-font">
+        <h1>NFT ROADMAP</h1>
+        <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
+      </div>`;
+      html += `<div class="under-dev-banner pixel-font" style="background:linear-gradient(180deg,#3b1768,#2a1050);padding:8px 12px;border:3px solid #000;margin-bottom:16px;text-align:center;font-size:0.5625rem;color:var(--lily)">
+        ⚠️ UNDER DEVELOPMENT ⚠️
+        <div style="margin-top:6px;font-size:0.5rem;color:var(--text-secondary);line-height:1.5">
+          Fastest ROI-ordered path to collect every buyable NFT you don't own.<br>
+          Real May-2026 harvest efficiency (NODES) × each NFT's boost value &amp; synergy (POWER).<br>
+          Cheap high-ROI boosts first → income compounds → everything else gets faster.
+        </div>
+      </div>`;
+      html += `<div id="roadmap-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Building roadmap…</div></div></div>`;
+      app.innerHTML = html;
+
+      try {
+        await buildPowerState(data);
+      } catch (err) {
+        document.getElementById("roadmap-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load: ${escHTML(err.message)}</p></div>`;
+        return;
+      }
+
+      const eff = await roadmapComputeMayEfficiency();
+      const ratios = Object.values(eff.effByCat).map(e => e.ratio).filter(r => r > 0);
+      let gDefault = ratios.length ? ratios.reduce((a, b) => a + b, 0) / ratios.length : 0.3;
+      gDefault = Math.min(1.5, Math.max(0.05, gDefault));
+
+      roadmapState = { effByCat: eff.effByCat, effMeta: eff.meta, globalActivityDefault: gDefault };
+      const settings = getRoadmapSettings();
+      const prod = roadmapCurrentProduction(settings);
+      roadmapState.currentProdDefault = prod.total;
+      roadmapState.prodBreakdown = prod.breakdown;
+
+      renderRoadmapContent();
+    }
+
+    function renderRoadmapContent() {
+      const el = document.getElementById("roadmap-content");
+      if (!el || !roadmapState) return;
+      const settings = getRoadmapSettings();
+      const prod = roadmapCurrentProduction(settings);
+      roadmapState.currentProdDefault = prod.total;
+      roadmapState.prodBreakdown = prod.breakdown;
+
+      const startIncome = (settings.startIncome != null) ? settings.startIncome : roadmapState.currentProdDefault;
+      const sim = roadmapSimulate(settings, startIncome);
+      const sflUsd = (powerState.exchangeRates && powerState.exchangeRates.sflUsd) || 0;
+      const usd = v => sflUsd > 0 ? ` <span style="color:var(--text-dim)">($${(v * sflUsd).toLocaleString(undefined, { maximumFractionDigits: 0 })})</span>` : "";
+
+      let h = "";
+
+      // ── Summary cards ──
+      h += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px">`;
+      const card = (label, val, sub) => `<div class="pixel-panel" style="padding:10px;text-align:center"><div class="pixel-font" style="font-size:0.5rem;color:var(--text-secondary);margin-bottom:6px">${label}</div><div style="font-size:0.95rem;color:var(--text-primary);font-weight:bold">${val}</div>${sub ? `<div style="font-size:0.55rem;color:var(--text-dim);margin-top:4px">${sub}</div>` : ""}</div>`;
+      h += card("NFTs TO COLLECT", (sim.econSteps + sim.cosmeticCount).toLocaleString(), `${sim.econSteps} boost · ${sim.cosmeticCount} cosmetic`);
+      h += card("TOTAL COST", roadmapFmtFlower(sim.totalCost) + " " + sflIcon() + usd(sim.totalCost), "to own them all");
+      h += card("TIME TO ALL", roadmapFmtDays(sim.totalDays), "ETA " + roadmapFmtDate(sim.totalDays));
+      h += card("FLOWER/DAY", roadmapFmtFlower(startIncome), "→ " + roadmapFmtFlower(sim.finalRate) + " after boosts");
+      h += `</div>`;
+
+      // ── Controls ──
+      h += `<div class="pixel-panel" style="padding:12px;margin-bottom:16px;font-size:0.62rem;color:var(--text-secondary)">`;
+      h += `<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center">`;
+      h += `<label>Start FLOWER/day: <input type="number" id="rm-income" value="${startIncome.toFixed(2)}" step="1" min="0" style="width:88px" onchange="_roadmapSetIncome(this.value)"> <span style="color:var(--text-dim)">auto ${roadmapFmtFlower(roadmapState.currentProdDefault)}</span> <button onclick="_roadmapResetIncome()" style="font-size:0.55rem">reset</button></label>`;
+      h += `<label>Efficiency: <select onchange="_roadmapSetEffMode(this.value)"><option value="real"${settings.effMode === "real" ? " selected" : ""}>Real (May 2026)</option><option value="theoretical"${settings.effMode === "theoretical" ? " selected" : ""}>Theoretical 100%</option></select></label>`;
+      const gAct = (settings.globalActivity != null) ? settings.globalActivity : roadmapState.globalActivityDefault;
+      h += `<label title="Activity factor for non-mining categories (crops, animals, flowers…) where per-resource May data isn't tracked">Other-cat activity: <input type="range" min="5" max="150" value="${Math.round(gAct * 100)}" onchange="_roadmapSetGlobal(this.value)" ${settings.effMode === "theoretical" ? "disabled" : ""}> ${Math.round(gAct * 100)}%</label>`;
+      h += `<label><input type="checkbox" ${settings.incCollectibles ? "checked" : ""} onchange="_roadmapToggle('incCollectibles',this.checked)"> Collectibles</label>`;
+      h += `<label><input type="checkbox" ${settings.incWearables ? "checked" : ""} onchange="_roadmapToggle('incWearables',this.checked)"> Wearables</label>`;
+      h += `<label><input type="checkbox" ${settings.showCosmetic ? "checked" : ""} onchange="_roadmapToggle('showCosmetic',this.checked)"> Show cosmetic rows</label>`;
+      h += `<button onclick="refresh()" title="Re-fetch your live farm (new purchases) + current marketplace floor prices, then rebuild the whole roadmap" style="margin-left:auto;font-size:0.6rem;padding:4px 10px;cursor:pointer">↻ Refresh live data</button>`;
+      h += `</div>`;
+      if (roadmapState.effMeta && roadmapState.effMeta.available) {
+        const parts = [];
+        for (const [cat, e] of Object.entries(roadmapState.effByCat)) parts.push(`${POWER_CATEGORIES[cat] ? POWER_CATEGORIES[cat].label : cat} ${Math.round(e.ratio * 100)}%`);
+        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--text-dim)">May 2026 mining efficiency (${roadmapState.effMeta.snaps} snapshots / ${roadmapState.effMeta.days.toFixed(1)}d): ${parts.join(" · ")}</div>`;
+      } else {
+        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--yellow)">No May 2026 history available — using ${settings.effMode === "theoretical" ? "theoretical" : "global activity"} rates only.</div>`;
+      }
+      h += `</div>`;
+
+      if (!(startIncome > 0)) {
+        h += `<div class="pixel-panel" style="padding:10px;margin-bottom:14px;color:var(--yellow);font-size:0.6rem">Set a positive "Start FLOWER/day" to get time estimates. The ORDER below is still correct (sorted by ROI payback).</div>`;
+      }
+
+      // ── Roadmap table ──
+      h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.6rem">`;
+      h += `<thead><tr style="color:var(--text-secondary);text-align:left">
+        <th style="padding:4px 6px">#</th>
+        <th style="padding:4px 6px">NFT</th>
+        <th style="padding:4px 6px">Boost</th>
+        <th style="padding:4px 6px;text-align:right">Cost</th>
+        <th style="padding:4px 6px;text-align:right">+FL/day</th>
+        <th style="padding:4px 6px;text-align:right">Payback</th>
+        <th style="padding:4px 6px;text-align:right">&Sigma; Cost</th>
+        <th style="padding:4px 6px;text-align:right">FL/day</th>
+        <th style="padding:4px 6px;text-align:right">ETA</th>
+      </tr></thead><tbody>`;
+
+      const typeBadge = ty => `<span style="font-size:0.5rem;padding:1px 4px;border-radius:3px;background:${ty === "Wearable" ? "#2a3a5a" : "#3a2a5a"};color:var(--text-dim)">${ty === "Wearable" ? "W" : "C"}</span>`;
+      let cum = 0, rank = 0, cosmeticShown = 0, dividerDone = false;
+      const COSMETIC_CAP = 100;
+      for (const tr of sim.timeline) {
+        if (tr.kind === "cosmetic") {
+          if (!settings.showCosmetic) continue;
+          if (!dividerDone) {
+            h += `<tr><td colspan="9" style="padding:6px;color:var(--text-secondary);background:#1a1226;font-size:0.55rem">── No measurable income boost — buy last, cheapest first ──</td></tr>`;
+            dividerDone = true;
+          }
+          if (cosmeticShown >= COSMETIC_CAP) continue;
+          cosmeticShown++;
+        }
+        cum += tr.floor;
+        rank++;
+        const payback = tr.kind === "econ" ? roadmapFmtDays(tr.roi) : "—";
+        const marg = tr.kind === "econ" ? "+" + roadmapFmtFlower(tr.marginal) : "—";
+        const margColor = tr.kind === "econ" ? "var(--green)" : "var(--text-dim)";
+        const boostTxt = escHTML((tr.boost || "").split("\n").join(" · "));
+        h += `<tr style="border-top:1px solid #222">
+          <td style="padding:3px 6px;color:var(--text-dim)">${rank}</td>
+          <td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(tr.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(tr.name)} ${typeBadge(tr.type)}</td>
+          <td style="padding:3px 6px;color:var(--text-dim);max-width:240px">${boostTxt}</td>
+          <td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(tr.floor)}</td>
+          <td style="padding:3px 6px;text-align:right;color:${margColor}">${marg}</td>
+          <td style="padding:3px 6px;text-align:right">${payback}</td>
+          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${roadmapFmtFlower(cum)}</td>
+          <td style="padding:3px 6px;text-align:right;color:var(--sunpetal)">${roadmapFmtFlower(tr.rateAfter)}</td>
+          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${roadmapFmtDate(tr.atDay)}</td>
+        </tr>`;
+      }
+      if (settings.showCosmetic && sim.cosmeticCount > cosmeticShown) {
+        h += `<tr><td colspan="9" style="padding:6px;color:var(--text-dim);font-size:0.55rem">… and ${sim.cosmeticCount - cosmeticShown} more cosmetic NFTs (included in totals above)</td></tr>`;
+      }
+      h += `</tbody></table></div>`;
+
+      if (!settings.showCosmetic && sim.cosmeticCount > 0) {
+        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--text-dim)">+ ${sim.cosmeticCount} cosmetic NFTs (no income boost) hidden — tick "Show cosmetic rows" to list them. They're still counted in the totals.</div>`;
+      }
+
+      // ── Untradeable ──
+      if (sim.untradeable && sim.untradeable.length) {
+        h += `<div style="margin-top:14px"><span style="cursor:pointer;font-size:0.6rem;color:var(--text-secondary)" onclick="_roadmapToggleUntradeable()">▸ ${sim.untradeable.length} NFTs with no marketplace price (can't buy right now)</span>`;
+        h += `<div id="rm-untradeable" style="display:none;margin-top:6px;font-size:0.55rem;color:var(--text-dim);line-height:1.7">${sim.untradeable.map(u => escHTML(u.name)).join(" · ")}</div></div>`;
+      }
+
+      // ── Model notes ──
+      h += `<div class="pixel-panel" style="margin-top:18px;padding:12px;font-size:0.55rem;color:var(--text-dim);line-height:1.7">
+        <div class="pixel-font" style="font-size:0.5rem;color:var(--text-secondary);margin-bottom:6px">HOW THIS IS CALCULATED</div>
+        • <b>Order</b> = greedy by ROI payback (cost ÷ realistic FLOWER/day it adds). Cheapest-fastest first so income compounds — exactly why a 10-FLOWER/+0.09 item beats a 1000-FLOWER/+1 item early on.<br>
+        • <b>Boost value</b> = POWER-page synergy value (marginal FLOWER/day vs what you already own, multiplicative stacking included) × your real harvest efficiency.<br>
+        • <b>Efficiency</b> = your actual May-2026 mining sessions/day ÷ theoretical, per resource (from NODES). Non-mining categories use the adjustable "other-cat activity" factor.<br>
+        • <b>Synergy</b> — after each simulated purchase, every same-category item's marginal is recomputed, so diminishing returns between stacking boosts are captured.<br>
+        • <b>Timeline</b> — you save FLOWER at the current rate, buy the next item, its boost raises the rate, repeat. Cosmetic / no-boost NFTs are bought last (cheapest first) since they don't speed anything up.<br>
+        • <b>Always live</b> — ownership is read from your farm and floor prices from the marketplace on every load. Buy an item (or a price moves) and hit ↻ Refresh: it drops off the list, income &amp; ETAs recompute, and the buy order re-sorts automatically.<br>
+        • Costs are marketplace floor in FLOWER. Estimates assume you reinvest all FLOWER into NFTs.
+      </div>`;
+
+      el.innerHTML = h;
+    }
+
+    window._roadmapSetIncome = function(v) { const n = parseFloat(v); saveRoadmapSettings({ startIncome: isFinite(n) && n >= 0 ? n : null }); renderRoadmapContent(); };
+    window._roadmapResetIncome = function() { saveRoadmapSettings({ startIncome: null }); renderRoadmapContent(); };
+    window._roadmapSetEffMode = function(v) { saveRoadmapSettings({ effMode: v === "theoretical" ? "theoretical" : "real" }); renderRoadmapContent(); };
+    window._roadmapSetGlobal = function(v) { const n = parseFloat(v) / 100; saveRoadmapSettings({ globalActivity: isFinite(n) ? n : null }); renderRoadmapContent(); };
+    window._roadmapToggle = function(key, val) { const p = {}; p[key] = !!val; saveRoadmapSettings(p); renderRoadmapContent(); };
+    window._roadmapToggleUntradeable = function() { const e = document.getElementById("rm-untradeable"); if (e) e.style.display = e.style.display === "none" ? "block" : "none"; };
+
 
     // Restock UI event handlers (called from inline onclick/onchange)
     window._setRestockMode = function(mode) {
@@ -23514,6 +23912,7 @@
           case "treasury": renderTreasury(data); break;
           case "sales": renderSales(data); break;
           case "power": renderPower(data); break;
+          case "roadmap": renderRoadmap(data); break;
           case "nodes": renderNodes(data); break;
           case "roi": renderRoi(data); break;
           case "shrines": renderShrines(data); break;
