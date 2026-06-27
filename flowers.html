@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.75</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.76</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.76", items: [
+          { t: "feat", text: "ROADMAP efficiency now real per-category for ALL profit categories, not just the 6 mining resources. Full May-2026 history exposes _h.* harvest-session signals for crops, flowers (flowerBeds), fruits (fruitPatches), greenhouse, trees, chickens, cows, sheep and obsidian (lavaPits) too — each gets actual sessions/day ÷ theoretical (applyBoosts effectiveCycle). A category you did not harvest in May scores 0% so its NFTs rank as non-profit for you. Only bees/fishing (no session signal) fall back to your average measured activity. Removed the generic other-cat activity slider." },
+        ]},
         { ver: "v3.75", items: [
           { t: "feat", text: "New ROADMAP page (?page=roadmap) — ROI-ordered path to every buyable NFT you do not own. Combines real May-2026 mining efficiency (NODES _h.* harvest sessions/day over theoretical, per resource) with each NFT boost value + multiplicative synergy (POWER calcBoostValue). Greedy simulation buys the lowest-payback (cost over realistic FLOWER/day) boost first so income compounds, recomputing same-category marginals after every purchase (diminishing-returns synergy). Builds a full timeline: cumulative cost, growing FLOWER/day, ETA date per item. Cosmetic / no-boost NFTs listed last (cheapest first). Editable start income (auto = efficiency-adjusted current production), Real/Theoretical efficiency toggle, other-category activity slider, collectible/wearable filters. Reuses buildPowerState (extracted from renderPower)." },
         ]},
@@ -15481,6 +15484,12 @@
     //  order that compounds FLOWER income fastest.
     // ═══════════════════════════════════════════════════════════════
     let roadmapState = null;
+    // Every quantifiable category that emits a harvest-session signal in farm-history diffs.
+    const ROADMAP_EFF_HKEY = {
+      crops: "_h.crops", flowers: "_h.flowerBeds", fruits: "_h.fruitPatches", greenhouse: "_h.greenhouse",
+      trees: "_h.trees", stone: "_h.stones", iron: "_h.iron", gold: "_h.gold", crimstone: "_h.crimstones",
+      oil: "_h.oilReserves", obsidian: "_h.lavaPits", chickens: "_h.chickens", cows: "_h.cows", sheep: "_h.sheep",
+    };
 
     function getRoadmapSettings() {
       let s = {};
@@ -15502,8 +15511,11 @@
     function roadmapEffFactor(cat, settings) {
       if (settings.effMode === "theoretical") return 1;
       const eb = roadmapState.effByCat;
-      if (EFFICIENCY_RESOURCE_MAP[cat] && eb[cat] && typeof eb[cat].ratio === "number") return eb[cat].ratio;
-      return (settings.globalActivity != null) ? settings.globalActivity : roadmapState.globalActivityDefault;
+      // Categories with their own May harvest-session signal use the measured ratio
+      // (0 = you simply didn't harvest it in May, so its NFTs aren't profit for you).
+      if (eb[cat] && eb[cat].measured) return eb[cat].ratio;
+      // bees / fishing have no per-category session signal → use overall average activity
+      return roadmapState.meanRatio;
     }
 
     function roadmapOwnedEffects(cat) {
@@ -15564,9 +15576,10 @@
       const pDays = (new Date(sorted[sorted.length - 1].captured_at) - new Date(sorted[0].captured_at)) / 86400000;
       out.meta = { snaps: sorted.length, days: pDays, available: pDays > 0.5 };
       if (pDays <= 0.5) return out;
-      for (const [catId, resInfo] of Object.entries(EFFICIENCY_RESOURCE_MAP)) {
+      const measuredRatios = [];
+      for (const [catId, hKey] of Object.entries(ROADMAP_EFF_HKEY)) {
         const digTimes = [];
-        for (const snap of sorted) { const c = (snap.diff || {})[resInfo.hKey]; if (c > 0) digTimes.push(new Date(snap.captured_at).getTime()); }
+        for (const snap of sorted) { const c = (snap.diff || {})[hKey]; if (c > 0) digTimes.push(new Date(snap.captured_at).getTime()); }
         const sessions = [];
         if (digTimes.length > 0) {
           let s0 = digTimes[0], se = digTimes[0];
@@ -15579,8 +15592,11 @@
         const actualPerDay = sessions.length / pDays;
         let ratio = theoPerDay > 0 ? actualPerDay / theoPerDay : 0;
         if (ratio > 1.5) ratio = 1.5;
-        out.effByCat[catId] = { ratio, sessions: sessions.length, actualPerDay, theoPerDay };
+        const measured = theoPerDay > 0;
+        out.effByCat[catId] = { ratio, sessions: sessions.length, actualPerDay, theoPerDay, measured };
+        if (measured && sessions.length > 0) measuredRatios.push(ratio);
       }
+      out.meanRatio = measuredRatios.length ? measuredRatios.reduce((a, b) => a + b, 0) / measuredRatios.length : 0.3;
       return out;
     }
 
@@ -15711,7 +15727,7 @@
       let gDefault = ratios.length ? ratios.reduce((a, b) => a + b, 0) / ratios.length : 0.3;
       gDefault = Math.min(1.5, Math.max(0.05, gDefault));
 
-      roadmapState = { effByCat: eff.effByCat, effMeta: eff.meta, globalActivityDefault: gDefault };
+      roadmapState = { effByCat: eff.effByCat, effMeta: eff.meta, globalActivityDefault: gDefault, meanRatio: (typeof eff.meanRatio === "number" ? eff.meanRatio : gDefault) };
       const settings = getRoadmapSettings();
       const prod = roadmapCurrentProduction(settings);
       roadmapState.currentProdDefault = prod.total;
@@ -15749,8 +15765,6 @@
       h += `<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center">`;
       h += `<label>Start FLOWER/day: <input type="number" id="rm-income" value="${startIncome.toFixed(2)}" step="1" min="0" style="width:88px" onchange="_roadmapSetIncome(this.value)"> <span style="color:var(--text-dim)">auto ${roadmapFmtFlower(roadmapState.currentProdDefault)}</span> <button onclick="_roadmapResetIncome()" style="font-size:0.55rem">reset</button></label>`;
       h += `<label>Efficiency: <select onchange="_roadmapSetEffMode(this.value)"><option value="real"${settings.effMode === "real" ? " selected" : ""}>Real (May 2026)</option><option value="theoretical"${settings.effMode === "theoretical" ? " selected" : ""}>Theoretical 100%</option></select></label>`;
-      const gAct = (settings.globalActivity != null) ? settings.globalActivity : roadmapState.globalActivityDefault;
-      h += `<label title="Activity factor for non-mining categories (crops, animals, flowers…) where per-resource May data isn't tracked">Other-cat activity: <input type="range" min="5" max="150" value="${Math.round(gAct * 100)}" onchange="_roadmapSetGlobal(this.value)" ${settings.effMode === "theoretical" ? "disabled" : ""}> ${Math.round(gAct * 100)}%</label>`;
       h += `<label><input type="checkbox" ${settings.incCollectibles ? "checked" : ""} onchange="_roadmapToggle('incCollectibles',this.checked)"> Collectibles</label>`;
       h += `<label><input type="checkbox" ${settings.incWearables ? "checked" : ""} onchange="_roadmapToggle('incWearables',this.checked)"> Wearables</label>`;
       h += `<label><input type="checkbox" ${settings.showCosmetic ? "checked" : ""} onchange="_roadmapToggle('showCosmetic',this.checked)"> Show cosmetic rows</label>`;
@@ -15758,10 +15772,10 @@
       h += `</div>`;
       if (roadmapState.effMeta && roadmapState.effMeta.available) {
         const parts = [];
-        for (const [cat, e] of Object.entries(roadmapState.effByCat)) parts.push(`${POWER_CATEGORIES[cat] ? POWER_CATEGORIES[cat].label : cat} ${Math.round(e.ratio * 100)}%`);
-        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--text-dim)">May 2026 mining efficiency (${roadmapState.effMeta.snaps} snapshots / ${roadmapState.effMeta.days.toFixed(1)}d): ${parts.join(" · ")}</div>`;
+        for (const [cat, e] of Object.entries(roadmapState.effByCat)) { if (!e.sessions) continue; parts.push(`${POWER_CATEGORIES[cat] ? POWER_CATEGORIES[cat].label : cat} ${Math.round(e.ratio * 100)}%`); }
+        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--text-dim)">May 2026 harvest efficiency (${roadmapState.effMeta.snaps} snapshots / ${roadmapState.effMeta.days.toFixed(1)}d): ${parts.join(" · ")}${parts.length ? "" : "no harvests recorded"} · bees/fishing use avg ${Math.round((roadmapState.meanRatio || 0) * 100)}%</div>`;
       } else {
-        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--yellow)">No May 2026 history available — using ${settings.effMode === "theoretical" ? "theoretical" : "global activity"} rates only.</div>`;
+        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--yellow)">No May 2026 history available — using ${settings.effMode === "theoretical" ? "theoretical" : "average activity"} rates only.</div>`;
       }
       h += `</div>`;
 
@@ -15834,7 +15848,7 @@
         <div class="pixel-font" style="font-size:0.5rem;color:var(--text-secondary);margin-bottom:6px">HOW THIS IS CALCULATED</div>
         • <b>Order</b> = greedy by ROI payback (cost ÷ realistic FLOWER/day it adds). Cheapest-fastest first so income compounds — exactly why a 10-FLOWER/+0.09 item beats a 1000-FLOWER/+1 item early on.<br>
         • <b>Boost value</b> = POWER-page synergy value (marginal FLOWER/day vs what you already own, multiplicative stacking included) × your real harvest efficiency.<br>
-        • <b>Efficiency</b> = your actual May-2026 mining sessions/day ÷ theoretical, per resource (from NODES). Non-mining categories use the adjustable "other-cat activity" factor.<br>
+        • <b>Efficiency</b> = your actual May-2026 harvest sessions/day ÷ theoretical, computed per category from history — crops, flowers, fruits, greenhouse, animals, trees &amp; all mining. A category you didn\'t harvest in May scores 0% (its NFTs aren\'t profit for you); bees/fishing (no session signal) use your average activity.<br>
         • <b>Synergy</b> — after each simulated purchase, every same-category item's marginal is recomputed, so diminishing returns between stacking boosts are captured.<br>
         • <b>Timeline</b> — you save FLOWER at the current rate, buy the next item, its boost raises the rate, repeat. Cosmetic / no-boost NFTs are bought last (cheapest first) since they don't speed anything up.<br>
         • <b>Always live</b> — ownership is read from your farm and floor prices from the marketplace on every load. Buy an item (or a price moves) and hit ↻ Refresh: it drops off the list, income &amp; ETAs recompute, and the buy order re-sorts automatically.<br>
