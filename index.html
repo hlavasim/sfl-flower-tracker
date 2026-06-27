@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.82</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.83</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.83", items: [
+          { t: "feat", text: "ROADMAP profitability section reworked: rows GROUPED by type (Mining & Trees / Animals / Crops per-crop / Greenhouse / Crop Machine per-crop / Other), and each row now shows gives/day (gross sale value) minus cost/day = net/day instead of a bare net, so you can see WHY something is green or red. Crop Machine now lists every available crop (not just the best). Net fns refactored to return {gross,cost,net}. Note: animals correctly subtract feed + sickness and you no longer own the golden animals (free-feed), so chickens/sheep land near break-even; mining/crops look green mostly because coins are treated free (their only cost is coin-priced tools/seeds) \u2014 toggle Coins-free off to price those at the Betty rate." },
+        ]},
         { ver: "v3.82", items: [
           { t: "feat", text: "ROADMAP profitability section now includes Salt Farm and Crop Machine. Salt Farm: nodes raked on their live recharge cycle (median nextChargeAt-claimedAt), salt sold at p2p minus rake cost (3 Wood + coins, coins free >10k, yield per rake via computeSaltYieldPerRake incl. Wide Rakes / Salt Cave background). Crop Machine: best available crop via cropMachineBestCrop/calcCropMachineDaily (revenue minus oil minus seed cost, with the user\'s plots/speed/oil skills; seeds free when coins are free). Both shown as net FLOWER/day, green/red like the other activities." },
         ]},
@@ -15554,18 +15557,18 @@
     // NET FLOWER/day for a category given an effect set: gross production − running costs
     // (feed, sickness, seed, tools, lava). Mirrors the ROI/Power full-cost model — so a
     // loss-making activity (e.g. low-level animals where feed ≥ produce) nets ≤ 0.
-    function roadmapCatNet(cat, effects, settings) {
+    function roadmapCatBreakdown(cat, effects, settings) {
       const { capacity, p2pPrices, savedProducts, exchangeRates, stockMods, season } = powerState;
       const skills = (powerState.farm && powerState.farm.bumpkin && powerState.farm.bumpkin.skills) || {};
       const product = savedProducts[cat] || getDefaultProduct(cat);
       const er = roadmapCoinsFree(settings) ? Object.assign({}, exchangeRates, { coinsPerSFL: Infinity }) : exchangeRates;
       // Obsidian can only be liquidated ~1×/week → income = (1 obsidian − 1 ignition's fuel) / 7 days.
       if (cat === "obsidian") {
-        if (getCapacityCount("obsidian", capacity) <= 0) return 0;
+        if (getCapacityCount("obsidian", capacity) <= 0) return { gross: 0, cost: 0, net: 0 };
         const price = p2pPrices["Obsidian"] || 0;
         let ign = 0;
         try { ign = (calcLavaPitCostPerDay(capacity, p2pPrices, season).costPerIgnition) || 0; } catch {}
-        return (price - ign) / 7;
+        return { gross: price / 7, cost: ign / 7, net: (price - ign) / 7 };
       }
       let gross = 0, cost = 0;
       try {
@@ -15583,11 +15586,12 @@
           }
         }
       } catch {}
-      return gross - cost;
+      return { gross, cost, net: gross - cost };
     }
+    function roadmapCatNet(cat, effects, settings) { return roadmapCatBreakdown(cat, effects, settings).net; }
 
     // NET FLOWER/day for a single product (one crop / greenhouse item) at full plots.
-    function roadmapProductNet(cat, product, settings) {
+    function roadmapProductBreakdown(cat, product, settings) {
       const { capacity, p2pPrices, exchangeRates, stockMods } = powerState;
       const er = roadmapCoinsFree(settings) ? Object.assign({}, exchangeRates, { coinsPerSFL: Infinity }) : exchangeRates;
       const ownedEff = roadmapOwnedEffects(cat);
@@ -15598,8 +15602,9 @@
           cost += (calcSeedCostPerDay(cat, product, capacity, er, stockMods, ownedEff, p2pPrices).costPerDay) || 0;
         }
       } catch {}
-      return gross - cost;
+      return { gross, cost, net: gross - cost };
     }
+    function roadmapProductNet(cat, product, settings) { return roadmapProductBreakdown(cat, product, settings).net; }
 
     // Realistic current daily NET production value (FLOWER/day), efficiency-adjusted.
     // Loss-making categories floor at 0 (a rational player just won't run them).
@@ -15617,7 +15622,7 @@
 
     // Salt Farm net FLOWER/day: nodes raked on their recharge cycle, salt sold at p2p,
     // minus rake cost (3 Wood + coins; coins free when you hold a big pile).
-    function roadmapSaltNet(settings) {
+    function roadmapSaltBreakdown(settings) {
       const { farm, p2pPrices, exchangeRates } = powerState;
       const sf = farm && farm.saltFarm;
       if (!sf || !sf.nodes) return null;
@@ -15635,51 +15640,70 @@
       let matSFL = 0;
       for (const [m, q] of Object.entries(SALT_RAKE_COST.materials)) matSFL += (p2pPrices[m] || 0) * q;
       const cost = rakesPerDay * (coinSFL + matSFL);
-      return gross - cost;
+      return { gross, cost, net: gross - cost };
     }
 
     // "What should I farm/mine now" — net FLOWER/day per activity at full activity, green/red.
     function roadmapProfitabilityHtml(settings) {
-      const rows = [];
-      const CAT_ROWS = [
-        ["trees","Wood"],["stone","Stone"],["iron","Iron"],["gold","Gold"],["crimstone","Crimstone"],
-        ["oil","Oil"],["obsidian","Obsidian"],["chickens","Egg"],["cows","Milk"],["sheep","Wool"],
-        ["fruits","Blueberry"],["flowers","Red Pansy"],["bees","Honey"],["fishing","Fish"],
-      ];
-      for (const [cat, icon] of CAT_ROWS) {
-        if (cat !== "fishing" && getCapacityCount(cat, powerState.capacity) <= 0) continue;
-        rows.push({ label: (POWER_CATEGORIES[cat] ? POWER_CATEGORIES[cat].label : cat), icon, net: roadmapCatNet(cat, roadmapOwnedEffects(cat), settings) });
-      }
-      if (getCapacityCount("crops", powerState.capacity) > 0) {
-        for (const crop of Object.keys(CROP_GROW_DATA)) rows.push({ label: crop, icon: crop, net: roadmapProductNet("crops", crop, settings), sub: "crop" });
-      }
-      if (getCapacityCount("greenhouse", powerState.capacity) > 0) {
-        for (const g of Object.keys(GREENHOUSE_GROW_DATA)) rows.push({ label: g, icon: g, net: roadmapProductNet("greenhouse", g, settings), sub: "greenhouse" });
-      }
-      if (typeof farmHasCropMachine === "function" && farmHasCropMachine(powerState.farm)) {
-        const er = roadmapCoinsFree(settings) ? Object.assign({}, powerState.exchangeRates, { coinsPerSFL: Infinity }) : powerState.exchangeRates;
-        const best = cropMachineBestCrop(powerState.farm, powerState.p2pPrices, er);
-        if (best && isFinite(best.net)) rows.push({ label: "Crop Machine", icon: best.crop, net: best.net, sub: "auto · " + best.crop });
-      }
-      { const sn = roadmapSaltNet(settings); if (sn !== null && isFinite(sn)) rows.push({ label: "Salt Farm", icon: "Salt", net: sn, sub: "rake" }); }
-      rows.sort((a, b) => b.net - a.net);
-
       const cf = roadmapCoinsFree(settings);
       const coins = Math.round(parseFloat(powerState.farm && powerState.farm.coins) || 0);
+      const er = cf ? Object.assign({}, powerState.exchangeRates, { coinsPerSFL: Infinity }) : powerState.exchangeRates;
+      const cap = powerState.capacity;
+      const groups = [];
+      const mk = (title) => { const g = { title, rows: [] }; groups.push(g); return g; };
+      const gMine = mk("\u26cf\ufe0f MINING & TREES");
+      const gAni = mk("\ud83d\udc2e ANIMALS");
+      const gCrop = mk("\ud83c\udf3e CROPS \u2014 net if all plots grow this one");
+      const gGh = mk("\ud83c\udfe0 GREENHOUSE");
+      const gCm = mk("\u2699\ufe0f CROP MACHINE \u2014 auto, per crop");
+      const gOther = mk("\u2728 OTHER");
+      const addBd = (g, label, icon, bd, sub) => { if (bd && isFinite(bd.net)) g.rows.push({ label, icon, gross: bd.gross || 0, cost: bd.cost || 0, net: bd.net, sub }); };
+
+      for (const [cat, icon] of [["trees","Wood"],["stone","Stone"],["iron","Iron"],["gold","Gold"],["crimstone","Crimstone"],["oil","Oil"],["obsidian","Obsidian"]]) {
+        if (getCapacityCount(cat, cap) <= 0) continue;
+        addBd(gMine, (POWER_CATEGORIES[cat] ? POWER_CATEGORIES[cat].label : cat), icon, roadmapCatBreakdown(cat, roadmapOwnedEffects(cat), settings), cat === "obsidian" ? "1/wk" : "");
+      }
+      for (const [cat, icon] of [["chickens","Egg"],["cows","Milk"],["sheep","Wool"]]) {
+        if (getCapacityCount(cat, cap) <= 0) continue;
+        const n = (cap.animalDetails && cap.animalDetails[cat]) ? cap.animalDetails[cat].length : 0;
+        addBd(gAni, POWER_CATEGORIES[cat].label, icon, roadmapCatBreakdown(cat, roadmapOwnedEffects(cat), settings), n ? n + "\u00d7" : "");
+      }
+      if (getCapacityCount("crops", cap) > 0) for (const crop of Object.keys(CROP_GROW_DATA)) addBd(gCrop, crop, crop, roadmapProductBreakdown("crops", crop, settings));
+      if (getCapacityCount("greenhouse", cap) > 0) for (const gp of Object.keys(GREENHOUSE_GROW_DATA)) addBd(gGh, gp, gp, roadmapProductBreakdown("greenhouse", gp, settings));
+      if (typeof farmHasCropMachine === "function" && farmHasCropMachine(powerState.farm)) {
+        for (const crop of cropMachineCrops(powerState.farm)) {
+          const r = calcCropMachineDaily(powerState.farm, crop, powerState.p2pPrices, er, false);
+          if (r) addBd(gCm, crop, crop, { gross: r.revenue, cost: (r.oilCost || 0) + (r.seedCostPerDay || 0), net: r.net });
+        }
+      }
+      for (const [cat, icon] of [["fruits","Blueberry"],["flowers","Red Pansy"],["bees","Honey"],["fishing","Fish"]]) {
+        if (cat !== "fishing" && getCapacityCount(cat, cap) <= 0) continue;
+        addBd(gOther, POWER_CATEGORIES[cat].label, icon, roadmapCatBreakdown(cat, roadmapOwnedEffects(cat), settings));
+      }
+      addBd(gOther, "Salt Farm", "Salt", roadmapSaltBreakdown(settings), "rake");
+
       let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
       h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">WHAT TO FARM / MINE NOW</div>`;
-      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:10px;line-height:1.6">Net FLOWER/day at full activity with your current boosts &amp; prices. <span style="color:var(--green)">green = worth doing</span>, <span style="color:var(--red)">red = loss-making (skip)</span>. ${cf ? `Coins treated as FREE (you hold ${coins.toLocaleString()} > 10k, not FLOWER-convertible).` : `Coin costs counted at Betty rate (you hold ${coins.toLocaleString()}).`} Obsidian = sells ~1/week.</div>`;
-      h += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(195px,1fr));gap:3px 16px">`;
-      for (const r of rows) {
-        const neutral = Math.abs(r.net) < 0.01;
-        const col = neutral ? "var(--text-dim)" : (r.net > 0 ? "var(--green)" : "var(--red)");
-        const txt = neutral ? "≈0" : (r.net > 0 ? "+" : "−") + roadmapFmtFlower(Math.abs(r.net));
-        h += `<div style="display:flex;align-items:center;gap:6px;font-size:0.6rem;padding:2px 0;border-bottom:1px solid #1c1c1c">
-          <img class="inline-icon" src="${getItemIcon(r.icon)}" onerror="this.style.display='none'" alt="">
-          <span style="flex:1;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHTML(r.label)}${r.sub ? ` <span style="color:var(--text-dim);font-size:0.5rem">${r.sub}</span>` : ""}</span>
-          <span style="color:${col};font-weight:bold;white-space:nowrap">${txt}</span>
-        </div>`;
+      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Per-day economics at full activity: <span style="color:var(--green)">gives</span> minus <span style="color:var(--red)">costs</span> = net. ${cf ? `Coins are FREE (you hold ${coins.toLocaleString()} &gt; 10k) so coin-priced tools/seeds cost 0 \u2014 only real resource costs count (animal feed &amp; sickness, salt wood, crop-machine oil).` : `Coin costs at Betty rate (you hold ${coins.toLocaleString()}).`} Obsidian sells ~1/week.</div>`;
+      for (const g of groups) {
+        if (!g.rows.length) continue;
+        g.rows.sort((a, b) => b.net - a.net);
+        h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin:12px 0 3px">${g.title}</div>`;
+        h += `<table style="width:100%;border-collapse:collapse;font-size:0.58rem"><tr style="color:var(--text-dim);font-size:0.5rem"><td></td><td style="text-align:right;padding:0 6px">gives/d</td><td style="text-align:right;padding:0 6px">cost/d</td><td style="text-align:right">net/d</td></tr>`;
+        for (const r of g.rows) {
+          const pos = r.net > 0.001, neg = r.net < -0.001;
+          const ncol = pos ? "var(--green)" : (neg ? "var(--red)" : "var(--text-dim)");
+          const nt = (pos ? "+" : (neg ? "\u2212" : "")) + roadmapFmtFlower(Math.abs(r.net));
+          h += `<tr style="border-bottom:1px solid #1b1b1b">
+            <td style="padding:2px 6px 2px 0;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(r.icon)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.label)}${r.sub ? ` <span style="color:var(--text-dim);font-size:0.5rem">${r.sub}</span>` : ""}</td>
+            <td style="padding:2px 6px;text-align:right;color:var(--green)">${roadmapFmtFlower(r.gross)}</td>
+            <td style="padding:2px 6px;text-align:right;color:var(--red)">${r.cost > 0.001 ? "\u2212" + roadmapFmtFlower(r.cost) : "0"}</td>
+            <td style="padding:2px 0 2px 6px;text-align:right;color:${ncol};font-weight:bold">${nt}</td>
+          </tr>`;
+        }
+        h += `</table>`;
       }
+      h += `<div style="margin-top:8px;font-size:0.5rem;color:var(--text-dim)">gives = gross sale value of a day's production; cost = feed+sickness (animals) / oil+seeds (crop machine) / wood (salt) / tools+seeds (mining,crops \u2014 free when coins are free). At full activity (not scaled by your harvest frequency).</div>`;
       h += `</div></div>`;
       return h;
     }
