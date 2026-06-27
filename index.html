@@ -2661,7 +2661,7 @@
     const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
     const IMG_BASE = "https://sfl.world/img/flowers/";
-    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "nodes", "roi", "shrines", "buds", "pets", "marks", "diff", "json"];
+    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "marks", "diff", "json"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.76</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.77</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.77", items: [
+          { t: "fix", text: "ROADMAP page was falling through to Dashboard — the page id \"roadmap\" was missing from the PAGES whitelist in getPage(), so the URL ?page=roadmap was rejected and defaulted back. Added it; the nav button and routing now work." },
+        ]},
         { ver: "v3.76", items: [
           { t: "feat", text: "ROADMAP efficiency now real per-category for ALL profit categories, not just the 6 mining resources. Full May-2026 history exposes _h.* harvest-session signals for crops, flowers (flowerBeds), fruits (fruitPatches), greenhouse, trees, chickens, cows, sheep and obsidian (lavaPits) too — each gets actual sessions/day ÷ theoretical (applyBoosts effectiveCycle). A category you did not harvest in May scores 0% so its NFTs rank as non-profit for you. Only bees/fishing (no session signal) fall back to your average measured activity. Removed the generic other-cat activity slider." },
         ]},
