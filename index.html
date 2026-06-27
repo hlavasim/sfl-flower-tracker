@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.83</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.84</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.84", items: [
+          { t: "feat", text: "ROADMAP profitability now realistic for planting: (1) RESTOCK CAP \u2014 each crop daily yield is capped at restocksPerDay \u00d7 Betty-restock-amount seeds (default 2 restocks/day, editable), since fast crops like Sunflower are seed-limited not plot-limited. Applied to classic crops and per-crop Crop Machine. Fixes wildly-overstated full-activity yields. (2) SEASONAL \u2014 only crops plantable in the current season (from SEASONAL_SEEDS, mirrored from game source; current = winter) are shown normally; out-of-season crops are faded and sorted below. Greenhouse (Rice/Olive/Grape) is every season." },
+        ]},
         { ver: "v3.83", items: [
           { t: "feat", text: "ROADMAP profitability section reworked: rows GROUPED by type (Mining & Trees / Animals / Crops per-crop / Greenhouse / Crop Machine per-crop / Other), and each row now shows gives/day (gross sale value) minus cost/day = net/day instead of a bare net, so you can see WHY something is green or red. Crop Machine now lists every available crop (not just the best). Net fns refactored to return {gross,cost,net}. Note: animals correctly subtract feed + sickness and you no longer own the golden animals (free-feed), so chickens/sheep land near break-even; mining/crops look green mostly because coins are treated free (their only cost is coin-priced tools/seeds) \u2014 toggle Coins-free off to price those at the Betty rate." },
         ]},
@@ -15511,6 +15514,20 @@
       trees: "_h.trees", stone: "_h.stones", iron: "_h.iron", gold: "_h.gold", crimstone: "_h.crimstones",
       oil: "_h.oilReserves", obsidian: "_h.lavaPits", chickens: "_h.chickens", cows: "_h.cows", sheep: "_h.sheep",
     };
+    // Which crops/fruits/greenhouse products are plantable per season (mirror of SEASONAL_SEEDS in
+    // sunflower-land/src/features/game/types/seeds.ts). Greenhouse (Rice/Olive/Grape) is every season.
+    const SEASON_CROPS = {
+      spring: ["Sunflower","Rhubarb","Carrot","Cabbage","Soybean","Corn","Wheat","Kale","Barley","Tomato","Blueberry","Orange","Rice","Olive","Grape"],
+      summer: ["Sunflower","Potato","Zucchini","Pepper","Beetroot","Cauliflower","Eggplant","Radish","Wheat","Lemon","Orange","Banana","Rice","Olive","Grape"],
+      autumn: ["Potato","Pumpkin","Carrot","Yam","Broccoli","Soybean","Wheat","Barley","Artichoke","Tomato","Apple","Banana","Rice","Olive","Grape"],
+      winter: ["Potato","Cabbage","Beetroot","Cauliflower","Parsnip","Onion","Turnip","Wheat","Kale","Lemon","Blueberry","Apple","Rice","Olive","Grape"],
+    };
+    function roadmapInSeason(product) {
+      const s = ((powerState.farm && powerState.farm.season && powerState.farm.season.season) || "").toLowerCase();
+      const list = SEASON_CROPS[s];
+      if (!list) return true;
+      return list.includes(product);
+    }
 
     function getRoadmapSettings() {
       let s = {};
@@ -15524,6 +15541,7 @@
         showCosmetic: !!s.showCosmetic,
         maxPrice: (typeof s.maxPrice === "number" && s.maxPrice >= 0) ? s.maxPrice : 0,
         coinsFree: (s.coinsFree === true || s.coinsFree === false) ? s.coinsFree : undefined,
+        restocksPerDay: (typeof s.restocksPerDay === "number" && s.restocksPerDay > 0) ? s.restocksPerDay : 2,
       };
     }
     function saveRoadmapSettings(patch) {
@@ -15597,9 +15615,16 @@
       const ownedEff = roadmapOwnedEffects(cat);
       let gross = 0, cost = 0;
       try {
-        gross = unitToSfl(applyBoosts(cat, product, capacity, ownedEff).unitsPerDay, getPriceProduct(cat, product), p2pPrices) || 0;
+        const ab = applyBoosts(cat, product, capacity, ownedEff);
+        gross = unitToSfl(ab.unitsPerDay, getPriceProduct(cat, product), p2pPrices) || 0;
         if (cat === "crops" || cat === "fruits" || cat === "greenhouse" || cat === "flowers") {
           cost += (calcSeedCostPerDay(cat, product, capacity, er, stockMods, ownedEff, p2pPrices).costPerDay) || 0;
+        }
+        // Seed-restock cap: you can only plant restocksPerDay × Betty-restock seeds/day of a crop.
+        if (cat === "crops") {
+          const theoSeedsPerDay = getCapacityCount("crops", capacity) * (ab.effectiveCycle > 0 ? 86400 / ab.effectiveCycle : 0);
+          const capSeeds = (settings.restocksPerDay || 2) * (cmGetSeedRestockCount(powerState.farm, product) || 0);
+          if (theoSeedsPerDay > 0 && capSeeds < theoSeedsPerDay) { const sf = capSeeds / theoSeedsPerDay; gross *= sf; cost *= sf; }
         }
       } catch {}
       return { gross, cost, net: gross - cost };
@@ -15668,12 +15693,20 @@
         const n = (cap.animalDetails && cap.animalDetails[cat]) ? cap.animalDetails[cat].length : 0;
         addBd(gAni, POWER_CATEGORIES[cat].label, icon, roadmapCatBreakdown(cat, roadmapOwnedEffects(cat), settings), n ? n + "\u00d7" : "");
       }
-      if (getCapacityCount("crops", cap) > 0) for (const crop of Object.keys(CROP_GROW_DATA)) addBd(gCrop, crop, crop, roadmapProductBreakdown("crops", crop, settings));
+      const rpd = settings.restocksPerDay || 2;
+      if (getCapacityCount("crops", cap) > 0) for (const crop of Object.keys(CROP_GROW_DATA)) {
+        const bd = roadmapProductBreakdown("crops", crop, settings);
+        if (bd && isFinite(bd.net)) gCrop.rows.push({ label: crop, icon: crop, gross: bd.gross || 0, cost: bd.cost || 0, net: bd.net, fade: !roadmapInSeason(crop) });
+      }
       if (getCapacityCount("greenhouse", cap) > 0) for (const gp of Object.keys(GREENHOUSE_GROW_DATA)) addBd(gGh, gp, gp, roadmapProductBreakdown("greenhouse", gp, settings));
       if (typeof farmHasCropMachine === "function" && farmHasCropMachine(powerState.farm)) {
         for (const crop of cropMachineCrops(powerState.farm)) {
           const r = calcCropMachineDaily(powerState.farm, crop, powerState.p2pPrices, er, false);
-          if (r) addBd(gCm, crop, crop, { gross: r.revenue, cost: (r.oilCost || 0) + (r.seedCostPerDay || 0), net: r.net });
+          if (!r) continue;
+          let gross = r.revenue, cost = (r.oilCost || 0) + (r.seedCostPerDay || 0), net = r.net;
+          const capSeeds = rpd * (cmGetSeedRestockCount(powerState.farm, crop) || 0);
+          if (r.cropsPerDay > 0 && capSeeds < r.cropsPerDay) { const sf = capSeeds / r.cropsPerDay; gross *= sf; cost *= sf; net *= sf; }
+          if (isFinite(net)) gCm.rows.push({ label: crop, icon: crop, gross, cost, net, fade: !roadmapInSeason(crop) });
         }
       }
       for (const [cat, icon] of [["fruits","Blueberry"],["flowers","Red Pansy"],["bees","Honey"],["fishing","Fish"]]) {
@@ -15684,17 +15717,17 @@
 
       let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
       h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">WHAT TO FARM / MINE NOW</div>`;
-      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Per-day economics at full activity: <span style="color:var(--green)">gives</span> minus <span style="color:var(--red)">costs</span> = net. ${cf ? `Coins are FREE (you hold ${coins.toLocaleString()} &gt; 10k) so coin-priced tools/seeds cost 0 \u2014 only real resource costs count (animal feed &amp; sickness, salt wood, crop-machine oil).` : `Coin costs at Betty rate (you hold ${coins.toLocaleString()}).`} Obsidian sells ~1/week.</div>`;
+      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Per-day economics: <span style="color:var(--green)">gives</span> minus <span style="color:var(--red)">costs</span> = net. Mining/animals at full activity; crops &amp; crop machine capped to your ${settings.restocksPerDay}\u00d7 daily restocks. Out-of-season crops are faded. ${cf ? `Coins are FREE (you hold ${coins.toLocaleString()} &gt; 10k) so coin-priced tools/seeds cost 0 \u2014 only real resource costs count (animal feed &amp; sickness, salt wood, crop-machine oil).` : `Coin costs at Betty rate (you hold ${coins.toLocaleString()}).`} Obsidian sells ~1/week.</div>`;
       for (const g of groups) {
         if (!g.rows.length) continue;
-        g.rows.sort((a, b) => b.net - a.net);
+        g.rows.sort((a, b) => ((a.fade ? 1 : 0) - (b.fade ? 1 : 0)) || (b.net - a.net));
         h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin:12px 0 3px">${g.title}</div>`;
         h += `<table style="width:100%;border-collapse:collapse;font-size:0.58rem"><tr style="color:var(--text-dim);font-size:0.5rem"><td></td><td style="text-align:right;padding:0 6px">gives/d</td><td style="text-align:right;padding:0 6px">cost/d</td><td style="text-align:right">net/d</td></tr>`;
         for (const r of g.rows) {
           const pos = r.net > 0.001, neg = r.net < -0.001;
           const ncol = pos ? "var(--green)" : (neg ? "var(--red)" : "var(--text-dim)");
           const nt = (pos ? "+" : (neg ? "\u2212" : "")) + roadmapFmtFlower(Math.abs(r.net));
-          h += `<tr style="border-bottom:1px solid #1b1b1b">
+          h += `<tr style="border-bottom:1px solid #1b1b1b${r.fade ? ';opacity:0.4' : ''}">
             <td style="padding:2px 6px 2px 0;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(r.icon)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.label)}${r.sub ? ` <span style="color:var(--text-dim);font-size:0.5rem">${r.sub}</span>` : ""}</td>
             <td style="padding:2px 6px;text-align:right;color:var(--green)">${roadmapFmtFlower(r.gross)}</td>
             <td style="padding:2px 6px;text-align:right;color:var(--red)">${r.cost > 0.001 ? "\u2212" + roadmapFmtFlower(r.cost) : "0"}</td>
@@ -15945,6 +15978,7 @@
       h += `<label><input type="checkbox" ${settings.incCollectibles ? "checked" : ""} onchange="_roadmapToggle('incCollectibles',this.checked)"> Collectibles</label>`;
       h += `<label><input type="checkbox" ${settings.incWearables ? "checked" : ""} onchange="_roadmapToggle('incWearables',this.checked)"> Wearables</label>`;
       h += `<label title="Treat coin-denominated costs (axes, seeds…) as free — coins aren't directly convertible to FLOWER. Auto-on when you hold >10k coins."><input type="checkbox" ${roadmapCoinsFree(settings) ? "checked" : ""} onchange="_roadmapToggle('coinsFree',this.checked)"> Coins free</label>`;
+      h += `<label title="Betty seed restocks you do per day. Caps how much you can plant; fast crops (Sunflower) are seed-limited not plot-limited.">Restocks/day: <input type="number" value="${settings.restocksPerDay}" min="1" step="1" style="width:46px" onchange="_roadmapSetRestocks(this.value)"></label>`;
       h += `<label><input type="checkbox" ${settings.showCosmetic ? "checked" : ""} onchange="_roadmapToggle('showCosmetic',this.checked)"> Show no-value boosts</label>`;
       h += `<label title="Skip NFTs above this floor price (0 = no cap). Items priced over 500k FLOWER are always dropped as troll/no-liquidity listings.">Max price: <input type="number" value="${settings.maxPrice || 0}" step="100" min="0" style="width:88px" onchange="_roadmapSetMaxPrice(this.value)"> ${settings.maxPrice ? "" : "(no cap)"}</label>`;
       h += `<button onclick="refresh()" title="Re-fetch your live farm (new purchases) + current marketplace floor prices, then rebuild the whole roadmap" style="margin-left:auto;font-size:0.6rem;padding:4px 10px;cursor:pointer">↻ Refresh live data</button>`;
@@ -16052,6 +16086,7 @@
     window._roadmapSetGlobal = function(v) { const n = parseFloat(v) / 100; saveRoadmapSettings({ globalActivity: isFinite(n) ? n : null }); renderRoadmapContent(); };
     window._roadmapToggle = function(key, val) { const p = {}; p[key] = !!val; saveRoadmapSettings(p); renderRoadmapContent(); };
     window._roadmapSetMaxPrice = function(v) { const n = parseFloat(v); saveRoadmapSettings({ maxPrice: isFinite(n) && n >= 0 ? n : 0 }); renderRoadmapContent(); };
+    window._roadmapSetRestocks = function(v) { const n = parseFloat(v); saveRoadmapSettings({ restocksPerDay: isFinite(n) && n > 0 ? n : 2 }); renderRoadmapContent(); };
     window._roadmapToggleUntradeable = function() { const e = document.getElementById("rm-untradeable"); if (e) e.style.display = e.style.display === "none" ? "block" : "none"; };
 
 
