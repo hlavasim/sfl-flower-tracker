@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.78</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.79</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.79", items: [
+          { t: "fix", text: "ROADMAP now includes ONLY boost-bearing NFTs. A no-boost decoration/collectible (have_boost=0 — Coin Aura, banners, bears, etc.) generates no FLOWER, so it is excluded from the plan AND the cost/time totals; the count of excluded no-boost items is shown as a footnote. This is the correct fix for the inflated total (Coin Aura had no boost yet its 88.8M troll floor was being summed). Of ~709 tradeable NFTs only ~225 carry a boost. Boost NFTs whose boost has no FLOWER value (qualitative / net <= 0) are still counted and listed last." },
+        ]},
         { ver: "v3.78", items: [
           { t: "fix", text: "ROADMAP now values categories NET of running costs (animal feed + sickness via calcAnimalFeedCost/calcSicknessCost, crop/fruit/flower seeds via calcSeedCostPerDay, mining tools via calcToolCostPerDay, lava fuel via calcLavaPitCostPerDay), floored at 0 per category — replacing the gross calcBoostValue path. So loss-making animals (feed >= produce at your levels) contribute ~0 to income instead of an inflated gross figure, and an animal NFT only earns ROI credit once it actually flips that category net-positive. Boost marginal = floored net WITH minus floored net WITHOUT, per category. Also fixed the absurd TOTAL COST: floors above 500k FLOWER (more than half of all FLOWER supply — Coin Aura @ 88.8M etc.) are troll/no-liquidity and now dropped from the plan; added an optional Max-price cap to park other pricey items out of the totals." },
         ]},
@@ -15668,12 +15671,14 @@
       const { byName, catBoostsW } = roadmapBuildClones();
       const missing = roadmapBuildMissing(byName, settings);
       const econ = [], cosmetic = [], untradeable = [], tail = [];
+      let noBoostCount = 0;
       const TROLL = 500000; // floors above this are troll listings / no real liquidity (SFL supply ~50M)
       const maxP = (settings.maxPrice && settings.maxPrice > 0) ? settings.maxPrice : Infinity;
       for (const m of missing) {
         if (!(m.floor > 0) || m.floor > TROLL) { untradeable.push(m); continue; }
+        if (!m.clone) { noBoostCount++; continue; } // no boost at all (pure decoration) → not part of the profit roadmap
         if (m.floor > maxP) { tail.push(m); continue; }
-        const economic = m.clone && !m.clone.isDisabled && m.clone.categories.some(c => POWER_CATEGORIES[c] && POWER_CATEGORIES[c].quantifiable);
+        const economic = !m.clone.isDisabled && m.clone.categories.some(c => POWER_CATEGORIES[c] && POWER_CATEGORIES[c].quantifiable);
         if (economic) econ.push(m); else cosmetic.push(m);
       }
       tail.sort((a, b) => a.floor - b.floor);
@@ -15711,7 +15716,7 @@
         timeline.push({ name: m.name, type: m.type, boost: m.boost, floor: m.floor, marginal: 0, roi: Infinity, atDay: cumDays, rateAfter: rate, kind: "cosmetic" });
       }
       const totalCost = timeline.reduce((s, t) => s + t.floor, 0);
-      return { timeline, econSteps, cosmeticCount: cosmetic.length, econCost, untradeable, tail, tailCost, startRate: startIncome, finalRate, totalDays: cumDays, totalCost };
+      return { timeline, econSteps, cosmeticCount: cosmetic.length, econCost, untradeable, tail, tailCost, noBoostCount, startRate: startIncome, finalRate, totalDays: cumDays, totalCost };
     }
 
     function roadmapFmtDays(d) {
@@ -15743,7 +15748,7 @@
       html += `<div class="under-dev-banner pixel-font" style="background:linear-gradient(180deg,#3b1768,#2a1050);padding:8px 12px;border:3px solid #000;margin-bottom:16px;text-align:center;font-size:0.5625rem;color:var(--lily)">
         ⚠️ UNDER DEVELOPMENT ⚠️
         <div style="margin-top:6px;font-size:0.5rem;color:var(--text-secondary);line-height:1.5">
-          Fastest ROI-ordered path to collect every buyable NFT you don't own.<br>
+          Fastest ROI-ordered path through every boost-bearing NFT you don't own.<br>
           Real May-2026 harvest efficiency (NODES) × each NFT's boost value &amp; synergy (POWER).<br>
           Cheap high-ROI boosts first → income compounds → everything else gets faster.
         </div>
@@ -15790,7 +15795,7 @@
       // ── Summary cards ──
       h += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px">`;
       const card = (label, val, sub) => `<div class="pixel-panel" style="padding:10px;text-align:center"><div class="pixel-font" style="font-size:0.5rem;color:var(--text-secondary);margin-bottom:6px">${label}</div><div style="font-size:0.95rem;color:var(--text-primary);font-weight:bold">${val}</div>${sub ? `<div style="font-size:0.55rem;color:var(--text-dim);margin-top:4px">${sub}</div>` : ""}</div>`;
-      h += card("NFTs TO COLLECT", (sim.econSteps + sim.cosmeticCount).toLocaleString(), `${sim.econSteps} boost · ${sim.cosmeticCount} cosmetic`);
+      h += card("BOOST NFTs TO GET", (sim.econSteps + sim.cosmeticCount).toLocaleString(), `${sim.econSteps} earning · ${sim.cosmeticCount} no-value boost`);
       h += card("TOTAL COST", roadmapFmtFlower(sim.totalCost) + " " + sflIcon() + usd(sim.totalCost), "to own them all");
       h += card("TIME TO ALL", roadmapFmtDays(sim.totalDays), "ETA " + roadmapFmtDate(sim.totalDays));
       h += card("FLOWER/DAY", roadmapFmtFlower(startIncome), "→ " + roadmapFmtFlower(sim.finalRate) + " after boosts");
@@ -15803,7 +15808,7 @@
       h += `<label>Efficiency: <select onchange="_roadmapSetEffMode(this.value)"><option value="real"${settings.effMode === "real" ? " selected" : ""}>Real (May 2026)</option><option value="theoretical"${settings.effMode === "theoretical" ? " selected" : ""}>Theoretical 100%</option></select></label>`;
       h += `<label><input type="checkbox" ${settings.incCollectibles ? "checked" : ""} onchange="_roadmapToggle('incCollectibles',this.checked)"> Collectibles</label>`;
       h += `<label><input type="checkbox" ${settings.incWearables ? "checked" : ""} onchange="_roadmapToggle('incWearables',this.checked)"> Wearables</label>`;
-      h += `<label><input type="checkbox" ${settings.showCosmetic ? "checked" : ""} onchange="_roadmapToggle('showCosmetic',this.checked)"> Show cosmetic rows</label>`;
+      h += `<label><input type="checkbox" ${settings.showCosmetic ? "checked" : ""} onchange="_roadmapToggle('showCosmetic',this.checked)"> Show no-value boosts</label>`;
       h += `<label title="Skip NFTs above this floor price (0 = no cap). Items priced over 500k FLOWER are always dropped as troll/no-liquidity listings.">Max price: <input type="number" value="${settings.maxPrice || 0}" step="100" min="0" style="width:88px" onchange="_roadmapSetMaxPrice(this.value)"> ${settings.maxPrice ? "" : "(no cap)"}</label>`;
       h += `<button onclick="refresh()" title="Re-fetch your live farm (new purchases) + current marketplace floor prices, then rebuild the whole roadmap" style="margin-left:auto;font-size:0.6rem;padding:4px 10px;cursor:pointer">↻ Refresh live data</button>`;
       h += `</div>`;
@@ -15841,7 +15846,7 @@
         if (tr.kind === "cosmetic") {
           if (!settings.showCosmetic) continue;
           if (!dividerDone) {
-            h += `<tr><td colspan="9" style="padding:6px;color:var(--text-secondary);background:#1a1226;font-size:0.55rem">── No measurable income boost — buy last, cheapest first ──</td></tr>`;
+            h += `<tr><td colspan="9" style="padding:6px;color:var(--text-secondary);background:#1a1226;font-size:0.55rem">── Boost present but no FLOWER value (qualitative / net ≤ 0) — buy last, cheapest first ──</td></tr>`;
             dividerDone = true;
           }
           if (cosmeticShown >= COSMETIC_CAP) continue;
@@ -15871,7 +15876,10 @@
       h += `</tbody></table></div>`;
 
       if (!settings.showCosmetic && sim.cosmeticCount > 0) {
-        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--text-dim)">+ ${sim.cosmeticCount} cosmetic NFTs (no income boost) hidden — tick "Show cosmetic rows" to list them. They're still counted in the totals.</div>`;
+        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--text-dim)">+ ${sim.cosmeticCount} boost NFTs with no FLOWER value hidden — tick "Show no-value boosts" to list them. Still counted in the totals (they do carry a boost).</div>`;
+      }
+      if (sim.noBoostCount) {
+        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--text-dim)">Excluded ${sim.noBoostCount} no-boost collectibles / decorations (Coin Aura, banners, bears…) — they generate no FLOWER, so they're not part of this profit roadmap.</div>`;
       }
       if (sim.tail && sim.tail.length) {
         h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--text-dim)">+ ${sim.tail.length} NFTs above your ${roadmapFmtFlower(settings.maxPrice)} ${sflIcon()} price cap (${roadmapFmtFlower(sim.tailCost)} ${sflIcon()} total) — excluded from the plan &amp; totals above.</div>`;
@@ -15891,7 +15899,7 @@
         • <b>Boost value</b> = the floored net FLOWER/day the boost adds, vs what you already own (stacking synergy included) × your real harvest efficiency.<br>
         • <b>Efficiency</b> = your actual May-2026 harvest sessions/day ÷ theoretical, computed per category from history — crops, flowers, fruits, greenhouse, animals, trees &amp; all mining. A category you didn\'t harvest in May scores 0% (its NFTs aren\'t profit for you); bees/fishing (no session signal) use your average activity.<br>
         • <b>Synergy</b> — after each simulated purchase, every same-category item's marginal is recomputed, so diminishing returns between stacking boosts are captured.<br>
-        • <b>Timeline</b> — you save FLOWER at the current rate, buy the next item, its boost raises the rate, repeat. Cosmetic / no-boost NFTs are bought last (cheapest first) since they don't speed anything up.<br>
+        • <b>Scope</b> — only NFTs that carry a boost are on the path; a no-boost decoration (Coin Aura, banners, bears) generates no FLOWER so it's excluded from the plan and the totals. Boost NFTs with no measurable FLOWER value (pet XP, cheers, net ≤ 0) are bought last, cheapest first.<br>
         • <b>Always live</b> — ownership is read from your farm and floor prices from the marketplace on every load. Buy an item (or a price moves) and hit ↻ Refresh: it drops off the list, income &amp; ETAs recompute, and the buy order re-sorts automatically.<br>
         • <b>Prices</b> are marketplace floor in FLOWER. Listings above 500k FLOWER (more than half of all FLOWER in existence) are treated as troll / no-liquidity and dropped; use the Max-price cap to also park other expensive items out of the plan. Estimates assume you reinvest all FLOWER into NFTs.
       </div>`;
