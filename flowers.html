@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.84</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.85</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.85", items: [
+          { t: "feat", text: "ROADMAP profitability: (1) FRUITS now broken out per-fruit (Apple/Blueberry/Orange/Banana/Lemon/Tomato) in their own group, with seasonal fade (no restock cap \u2014 fruit trees give many harvests per plant). (2) CROP MACHINE no longer season-faded (it can grow its unlocked crops any season) and now shows its OIL cost: oil is not p2p-traded, so its unit value is derived in buildPowerState from drill cost / boosted yield (cached as the Power page does) \u2014 previously oil priced 0 so crop-machine cost showed blank. (3) ANIMAL rows now show a gain/cost breakdown line: each product (Egg/Feather, Wool/Merino, Milk/Leather) plus feed and sickness, so you can see exactly how the net is built." },
+        ]},
         { ver: "v3.84", items: [
           { t: "feat", text: "ROADMAP profitability now realistic for planting: (1) RESTOCK CAP \u2014 each crop daily yield is capped at restocksPerDay \u00d7 Betty-restock-amount seeds (default 2 restocks/day, editable), since fast crops like Sunflower are seed-limited not plot-limited. Applied to classic crops and per-crop Crop Machine. Fixes wildly-overstated full-activity yields. (2) SEASONAL \u2014 only crops plantable in the current season (from SEASONAL_SEEDS, mirrored from game source; current = winter) are shown normally; out-of-season crops are faded and sorted below. Greenhouse (Rice/Olive/Grape) is every season." },
         ]},
@@ -15494,6 +15497,14 @@
       const season = (farm.season?.season || "").toLowerCase();
 
       // Store state for interactive updates
+      // Oil isn't p2p-traded — derive its unit value from drill cost / boosted yield (like the Power page),
+      // so Crop Machine + greenhouse oil costs show up. Priced at real coin cost (oil is a mined resource).
+      try {
+        const _oilEff = (catBoosts["oil"] || []).filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, "oil"));
+        const _oilYield = applyBoosts("oil", "Oil", capacity, _oilEff).unitsPerDay;
+        const _oilTool = calcToolCostPerDay("oil", capacity, exchangeRates, p2pPrices, stockMods);
+        if (_oilYield > 0 && _oilTool.costPerDay > 0) p2pPrices["Oil"] = _oilTool.costPerDay / _oilYield;
+      } catch {}
       powerState = { boostItems, catBoosts, capacity, p2pPrices, savedProducts, farm, skillCostInfo, exchangeRates, stockMods, season, nftData, inventory };
 
 
@@ -15680,6 +15691,7 @@
       const gAni = mk("\ud83d\udc2e ANIMALS");
       const gCrop = mk("\ud83c\udf3e CROPS \u2014 net if all plots grow this one");
       const gGh = mk("\ud83c\udfe0 GREENHOUSE");
+      const gFruit = mk("\ud83c\udf4e FRUITS");
       const gCm = mk("\u2699\ufe0f CROP MACHINE \u2014 auto, per crop");
       const gOther = mk("\u2728 OTHER");
       const addBd = (g, label, icon, bd, sub) => { if (bd && isFinite(bd.net)) g.rows.push({ label, icon, gross: bd.gross || 0, cost: bd.cost || 0, net: bd.net, sub }); };
@@ -15691,7 +15703,20 @@
       for (const [cat, icon] of [["chickens","Egg"],["cows","Milk"],["sheep","Wool"]]) {
         if (getCapacityCount(cat, cap) <= 0) continue;
         const n = (cap.animalDetails && cap.animalDetails[cat]) ? cap.animalDetails[cat].length : 0;
-        addBd(gAni, POWER_CATEGORIES[cat].label, icon, roadmapCatBreakdown(cat, roadmapOwnedEffects(cat), settings), n ? n + "\u00d7" : "");
+        const oeff = roadmapOwnedEffects(cat);
+        const bd = roadmapCatBreakdown(cat, oeff, settings);
+        let detail = "";
+        try {
+          const ani = getAnimalCatSfl(cat, cap, oeff, powerState.p2pPrices);
+          const feed = calcAnimalFeedCost(cat, cap, powerState.p2pPrices, oeff, powerState.stockMods);
+          const skl = (powerState.farm.bumpkin && powerState.farm.bumpkin.skills) || {};
+          const sick = calcSicknessCost(cat, cap, powerState.p2pPrices, powerState.boostItems, skl);
+          const parts = (ani.breakdown || []).filter(b => b.sfl > 0.0001).map(b => `${b.product} +${roadmapFmtFlower(b.sfl)}`);
+          if ((feed.costPerDay || 0) > 0.0001) parts.push(`feed \u2212${roadmapFmtFlower(feed.costPerDay)}`);
+          if ((sick.costPerDay || 0) > 0.0001) parts.push(`sick \u2212${roadmapFmtFlower(sick.costPerDay)}`);
+          detail = parts.join(" \u00b7 ");
+        } catch {}
+        if (bd && isFinite(bd.net)) gAni.rows.push({ label: POWER_CATEGORIES[cat].label, icon, gross: bd.gross || 0, cost: bd.cost || 0, net: bd.net, sub: n ? n + "\u00d7" : "", detail });
       }
       const rpd = settings.restocksPerDay || 2;
       if (getCapacityCount("crops", cap) > 0) for (const crop of Object.keys(CROP_GROW_DATA)) {
@@ -15706,10 +15731,14 @@
           let gross = r.revenue, cost = (r.oilCost || 0) + (r.seedCostPerDay || 0), net = r.net;
           const capSeeds = rpd * (cmGetSeedRestockCount(powerState.farm, crop) || 0);
           if (r.cropsPerDay > 0 && capSeeds < r.cropsPerDay) { const sf = capSeeds / r.cropsPerDay; gross *= sf; cost *= sf; net *= sf; }
-          if (isFinite(net)) gCm.rows.push({ label: crop, icon: crop, gross, cost, net, fade: !roadmapInSeason(crop) });
+          if (isFinite(net)) gCm.rows.push({ label: crop, icon: crop, gross, cost, net });
         }
       }
-      for (const [cat, icon] of [["fruits","Blueberry"],["flowers","Red Pansy"],["bees","Honey"],["fishing","Fish"]]) {
+      if (getCapacityCount("fruits", cap) > 0) for (const fr of Object.keys(FRUIT_GROW_DATA)) {
+        const bd = roadmapProductBreakdown("fruits", fr, settings);
+        if (bd && isFinite(bd.net)) gFruit.rows.push({ label: fr, icon: fr, gross: bd.gross || 0, cost: bd.cost || 0, net: bd.net, fade: !roadmapInSeason(fr) });
+      }
+      for (const [cat, icon] of [["flowers","Red Pansy"],["bees","Honey"],["fishing","Fish"]]) {
         if (cat !== "fishing" && getCapacityCount(cat, cap) <= 0) continue;
         addBd(gOther, POWER_CATEGORIES[cat].label, icon, roadmapCatBreakdown(cat, roadmapOwnedEffects(cat), settings));
       }
@@ -15728,7 +15757,7 @@
           const ncol = pos ? "var(--green)" : (neg ? "var(--red)" : "var(--text-dim)");
           const nt = (pos ? "+" : (neg ? "\u2212" : "")) + roadmapFmtFlower(Math.abs(r.net));
           h += `<tr style="border-bottom:1px solid #1b1b1b${r.fade ? ';opacity:0.4' : ''}">
-            <td style="padding:2px 6px 2px 0;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(r.icon)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.label)}${r.sub ? ` <span style="color:var(--text-dim);font-size:0.5rem">${r.sub}</span>` : ""}</td>
+            <td style="padding:2px 6px 2px 0"><img class="inline-icon" src="${getItemIcon(r.icon)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.label)}${r.sub ? ` <span style="color:var(--text-dim);font-size:0.5rem">${r.sub}</span>` : ""}${r.detail ? `<div style="font-size:0.48rem;color:var(--text-dim)">${escHTML(r.detail)}</div>` : ""}</td>
             <td style="padding:2px 6px;text-align:right;color:var(--green)">${roadmapFmtFlower(r.gross)}</td>
             <td style="padding:2px 6px;text-align:right;color:var(--red)">${r.cost > 0.001 ? "\u2212" + roadmapFmtFlower(r.cost) : "0"}</td>
             <td style="padding:2px 0 2px 6px;text-align:right;color:${ncol};font-weight:bold">${nt}</td>
