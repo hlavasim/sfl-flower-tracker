@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.89</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.90</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.90", items: [
+          { t: "feat", text: "ROADMAP: new MINING STRATEGY box. Each pickaxe is crafted from lower resources (Pickaxe 3 Wood, Stone Pickaxe 3 Wood + 5 Stone, Iron Pickaxe 3 Wood + 5 Iron, Gold Pickaxe 3 Wood + 3 Gold), so it computes net/unit = sell price minus the tool resource cost (at sell prices), efficiency-adjusted. Verdict per tier: sell raw / mine and sell / tools cost more than ore. At current prices Wood is sell-raw, Stone ~break-even, and Iron/Gold/Crimstone are net-NEGATIVE (their pickaxes eat more Wood/Stone/Iron than the ore is worth) — so the box recommends selling Wood/Stone raw and skipping the chain to Crimstone, with a Wood-flow note (limited Wood caps how many pickaxes you can craft). Exactly the user case: pushing 500 Wood up to Crimstone for 2 FLOWER is a loss vs selling the Wood." },
+        ]},
         { ver: "v3.89", items: [
           { t: "fix", text: "MAJOR animal feed-cost fix (matches sfl.world boost page + game feedAnimal.ts). Feed per production cycle scales with level: completing a cycle needs cycleXP worth of feeding, and each feeding grants the food XP, so noOfFeed = ceil(cycleXP / favFoodXp) and total food = noOfFeed x REQUIRED_FOOD_QTY. At L15 that is 4 Mixed Grain/cycle for a chicken, 24 for a sheep (8x3), 60 for a cow (12x5) — verified against sfl.world (cow Total x60, sheep Total x24). Our calc was using just REQUIRED_FOOD_QTY (1/3/5), i.e. 4-12x too little feed, which is why animals showed a profit when they are actually loss-making. Fix is in the shared calcAnimalFeedCost so Power, ROI and Roadmap all correct. Side effect: free-feed boosts (Golden Sheep/Gold Egg/Golden Cow) now show large ROI since they remove this big feed cost." },
         ]},
@@ -15713,6 +15716,74 @@
       return { gross, cost, net: gross - cost };
     }
 
+    // ⛏️ MINING STRATEGY — net value per resource AFTER the tool's resource ingredients.
+    // Each pickaxe is crafted from lower resources, so pushing up the chain (Wood→Stone→…→Crimstone)
+    // only pays if the ore is worth more than the inputs its tool eats. Efficiency-adjusted, shared-Wood aware.
+    function roadmapMiningStrategyHtml(settings) {
+      const { p2pPrices, capacity, exchangeRates } = powerState;
+      const cf = roadmapCoinsFree(settings);
+      const coinsPerSFL = exchangeRates.coinsPerSFL || 320;
+      const CHAIN = [
+        { cat: "trees", product: "Wood", tool: "Axe" },
+        { cat: "stone", product: "Stone", tool: "Pickaxe" },
+        { cat: "iron", product: "Iron", tool: "Stone Pickaxe" },
+        { cat: "gold", product: "Gold", tool: "Iron Pickaxe" },
+        { cat: "crimstone", product: "Crimstone", tool: "Gold Pickaxe" },
+      ];
+      const rows = [];
+      for (const link of CHAIN) {
+        if (getCapacityCount(link.cat, capacity) <= 0) continue;
+        const ab = applyBoosts(link.cat, link.product, capacity, roadmapOwnedEffects(link.cat));
+        const yieldPerAction = getBaseYield(link.cat) * (ab.yieldMult || 1) + (ab.yieldFlat || 0);
+        if (!(yieldPerAction > 0)) continue;
+        const tool = TOOL_COSTS[link.tool] || { coins: 0 };
+        let toolMat = 0;
+        for (const [m, q] of Object.entries(tool.materials || {})) toolMat += (p2pPrices[m] || 0) * q;
+        const toolCoin = cf ? 0 : (coinsPerSFL > 0 ? (tool.coins || 0) / coinsPerSFL : 0);
+        const toolCostPerUnit = (toolMat + toolCoin) / yieldPerAction;
+        const price = p2pPrices[link.product] || 0;
+        const netPerUnit = price - toolCostPerUnit;
+        const realUnits = (ab.unitsPerDay || 0) * roadmapEffFactor(link.cat, settings);
+        rows.push({
+          cat: link.cat, product: link.product, yieldPerAction, toolCostPerUnit, price, netPerUnit,
+          realUnits, sellRaw: realUnits * price, dailyNet: realUnits * netPerUnit,
+          woodPerUnit: (((tool.materials && tool.materials.Wood) || 0) / yieldPerAction),
+        });
+      }
+      if (!rows.length) return "";
+
+      let recTotal = 0; const recParts = []; const skip = [];
+      for (const r of rows) {
+        if (r.cat === "trees") { recTotal += r.sellRaw; recParts.push(`sell Wood +${roadmapFmtFlower(r.sellRaw)}`); }
+        else if (r.netPerUnit > 0) { recTotal += r.dailyNet; recParts.push(`mine ${r.product} +${roadmapFmtFlower(r.dailyNet)}`); }
+        else skip.push(r.product);
+      }
+
+      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
+      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">⛏️ MINING STRATEGY — sell raw, or push up the chain?</div>`;
+      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Pickaxes are crafted from lower resources (Pickaxe = 3 Wood; Stone Pickaxe = 3 Wood + 5 Stone; Iron Pickaxe = 3 Wood + 5 Iron; Gold Pickaxe = 3 Wood + 3 Gold). <b>net/unit</b> = sell price minus the tool's resource cost (valued at sell prices). <span style="color:var(--red)">Red = the ore is worth LESS than the inputs its tool eats</span> → sell the inputs instead of mining it.</div>`;
+      h += `<table style="width:100%;border-collapse:collapse;font-size:0.58rem"><tr style="color:var(--text-dim);font-size:0.5rem"><td></td><td style="text-align:right;padding:0 6px">harvest/d</td><td style="text-align:right;padding:0 6px">tool/unit</td><td style="text-align:right;padding:0 6px">net/unit</td><td style="text-align:right;padding:0 6px">net/day</td><td style="padding-left:6px">verdict</td></tr>`;
+      for (const r of rows) {
+        const pos = r.netPerUnit > 0.0003, neg = r.netPerUnit < -0.0003;
+        const col = pos ? "var(--green)" : (neg ? "var(--red)" : "var(--text-dim)");
+        const verdict = r.cat === "trees" ? "✅ sell raw" : (pos ? "✅ mine & sell" : (neg ? "❌ tools cost more than ore" : "⚠️ break-even"));
+        h += `<tr style="border-bottom:1px solid #1b1b1b">
+          <td style="padding:2px 6px 2px 0;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(r.product)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.product)}</td>
+          <td style="padding:2px 6px;text-align:right">${roadmapFmtFlower(r.realUnits)}</td>
+          <td style="padding:2px 6px;text-align:right;color:var(--text-dim)">${r.cat === "trees" ? "—" : roadmapFmtFlower(r.toolCostPerUnit)}</td>
+          <td style="padding:2px 6px;text-align:right;color:${col}">${r.netPerUnit >= 0 ? "+" : "−"}${roadmapFmtFlower(Math.abs(r.netPerUnit))}</td>
+          <td style="padding:2px 6px;text-align:right;color:${col};font-weight:bold">${r.dailyNet >= 0 ? "+" : "−"}${roadmapFmtFlower(Math.abs(r.dailyNet))}</td>
+          <td style="padding:2px 0 2px 6px;color:${col};font-size:0.52rem">${verdict}</td>
+        </tr>`;
+      }
+      h += `</table>`;
+      h += `<div style="margin-top:8px;font-size:0.56rem;color:var(--text-secondary)"><b>→ Recommended:</b> ${recParts.join(" · ")}${skip.length ? ` · <span style="color:var(--red)">skip ${skip.join("/")} (lose money)</span>` : ""}. Total ≈ <b style="color:var(--green)">${roadmapFmtFlower(recTotal)} ${sflIcon()}/day</b>.</div>`;
+      const woodRow = rows.find(r => r.cat === "trees");
+      if (woodRow) h += `<div style="margin-top:4px;font-size:0.5rem;color:var(--text-dim)">Wood flow: you harvest ~${roadmapFmtFlower(woodRow.realUnits)} Wood/day → enough for ~${Math.floor(woodRow.realUnits / 3)} pickaxes (3 Wood each). Every higher tier also eats Wood, so even a worthwhile tier is Wood-limited — you can't max all of them at once.</div>`;
+      h += `</div>`;
+      return h;
+    }
+
     // "What should I farm/mine now" — net FLOWER/day per activity at full activity, green/red.
     function roadmapProfitabilityHtml(settings) {
       const cf = roadmapCoinsFree(settings);
@@ -16043,6 +16114,7 @@
 
       // ── What to farm / mine now (per-category profitability) ──
       h += roadmapProfitabilityHtml(settings);
+      h += roadmapMiningStrategyHtml(settings);
 
       // ── Controls ──
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:16px;font-size:0.62rem;color:var(--text-secondary)">`;
