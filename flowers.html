@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.90</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.91</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.91", items: [
+          { t: "feat", text: "ROADMAP buy-order is now OPTIMISED, not just greedy. Objective: maximise total FLOWER income integrated over a horizon (editable, default 100 years) with reinvestment + dynamic synergy. Starts from the greedy ROI-payback order (Smith-rule optimal for independent items), then runs a local search (adjacent swaps) keeping any swap that raises total FLOWER over the horizon — exactly the user case where buying a cheap booster slightly earlier compounds into more total (B-then-A beats A-then-B). Shows the % gain vs the plain ROI order. Capped at 140 economic items / 8 passes for speed." },
+        ]},
         { ver: "v3.90", items: [
           { t: "feat", text: "ROADMAP: new MINING STRATEGY box. Each pickaxe is crafted from lower resources (Pickaxe 3 Wood, Stone Pickaxe 3 Wood + 5 Stone, Iron Pickaxe 3 Wood + 5 Iron, Gold Pickaxe 3 Wood + 3 Gold), so it computes net/unit = sell price minus the tool resource cost (at sell prices), efficiency-adjusted. Verdict per tier: sell raw / mine and sell / tools cost more than ore. At current prices Wood is sell-raw, Stone ~break-even, and Iron/Gold/Crimstone are net-NEGATIVE (their pickaxes eat more Wood/Stone/Iron than the ore is worth) — so the box recommends selling Wood/Stone raw and skipping the chain to Crimstone, with a Wood-flow note (limited Wood caps how many pickaxes you can craft). Exactly the user case: pushing 500 Wood up to Crimstone for 2 FLOWER is a loss vs selling the Wood." },
         ]},
@@ -15589,6 +15592,8 @@
         maxPrice: (typeof s.maxPrice === "number" && s.maxPrice >= 0) ? s.maxPrice : 0,
         coinsFree: (s.coinsFree === true || s.coinsFree === false) ? s.coinsFree : undefined,
         restocksPerDay: (typeof s.restocksPerDay === "number" && s.restocksPerDay > 0) ? s.restocksPerDay : 2,
+        horizonYears: (typeof s.horizonYears === "number" && s.horizonYears > 0) ? s.horizonYears : 100,
+        optimizeOrder: s.optimizeOrder !== false,
       };
     }
     function saveRoadmapSettings(patch) {
@@ -15994,28 +15999,72 @@
       }
       tail.sort((a, b) => a.floor - b.floor);
       const tailCost = tail.reduce((s, m) => s + m.floor, 0);
-      for (const m of econ) { m.marginal = roadmapItemValue(m.clone, catBoostsW, settings); m.roi = m.marginal > 0 ? m.floor / m.marginal : Infinity; }
-      const remaining = econ.filter(m => m.marginal > 0);
-      for (const m of econ) if (!(m.marginal > 0)) cosmetic.push(m);
+      // Snapshot the original owned state so we can re-simulate any order from scratch.
+      const origHas = [];
+      for (const cat of Object.keys(catBoostsW)) for (const c of catBoostsW[cat]) origHas.push([c, c.has]);
+      const resetClones = () => { for (const [c, h] of origHas) c.has = h; };
 
-      const timeline = [];
-      let rate = startIncome > 0 ? startIncome : 0;
-      let cumDays = 0, guard = 0;
-      while (remaining.length && guard++ < 5000) {
-        let bi = 0;
-        for (let i = 1; i < remaining.length; i++) if (remaining[i].roi < remaining[bi].roi) bi = i;
-        const next = remaining.splice(bi, 1)[0];
-        if (!(next.marginal > 0)) { cosmetic.push(next); continue; }
-        const days = rate > 0 ? next.floor / rate : Infinity;
-        cumDays += days;
-        next.clone.has = true;
-        rate += next.marginal;
-        timeline.push({ name: next.name, type: next.type, boost: next.boost, floor: next.floor, marginal: next.marginal, roi: next.roi, atDay: cumDays, rateAfter: rate, kind: "econ" });
-        const cats = new Set(next.clone.categories);
-        for (const m of remaining) {
-          if (m.clone.categories.some(c => cats.has(c))) { m.marginal = roadmapItemValue(m.clone, catBoostsW, settings); m.roi = m.marginal > 0 ? m.floor / m.marginal : Infinity; }
+      const econPos = [];
+      for (const m of econ) { m.marginal = roadmapItemValue(m.clone, catBoostsW, settings); if (m.marginal > 0) econPos.push(m); else cosmetic.push(m); }
+
+      // Simulate a buy ORDER with reinvestment + dynamic synergy. Returns the step timeline,
+      // final rate, total days, and the total FLOWER income integrated over horizon H (objective).
+      const simOrder = (order, H) => {
+        resetClones();
+        let r = startIncome > 0 ? startIncome : 0, day = 0, integral = 0;
+        const steps = [];
+        for (const m of order) {
+          const marg = Math.max(0, roadmapItemValue(m.clone, catBoostsW, settings));
+          const dd = r > 0 ? m.floor / r : Infinity;
+          if (isFinite(dd)) integral += r * dd;
+          day += dd; m.clone.has = true; r += marg;
+          steps.push({ m, marg, atDay: day, rateAfter: r });
+        }
+        if (H > 0 && isFinite(day)) integral += r * Math.max(0, H - day);
+        return { steps, finalRate: r, totalDays: day, integral };
+      };
+
+      // Greedy start: lowest payback first, recomputing synergy after each buy.
+      const greedyOrder = () => {
+        resetClones();
+        const rem = econPos.slice();
+        for (const m of rem) { m._mg = roadmapItemValue(m.clone, catBoostsW, settings); m._roi = m._mg > 0 ? m.floor / m._mg : Infinity; }
+        const ord = []; let g = 0;
+        while (rem.length && g++ < 5000) {
+          let bi = 0; for (let i = 1; i < rem.length; i++) if (rem[i]._roi < rem[bi]._roi) bi = i;
+          const nx = rem.splice(bi, 1)[0];
+          if (!(nx._mg > 0)) continue;
+          nx.clone.has = true; ord.push(nx);
+          const cats = new Set(nx.clone.categories);
+          for (const m of rem) if (m.clone.categories.some(c => cats.has(c))) { m._mg = roadmapItemValue(m.clone, catBoostsW, settings); m._roi = m._mg > 0 ? m.floor / m._mg : Infinity; }
+        }
+        return ord;
+      };
+
+      let order = greedyOrder();
+      const H = (settings.horizonYears || 100) * 365;
+      const greedyVal = order.length ? simOrder(order, H).integral : 0;
+      // Local-search refinement: adjacent swaps that raise total FLOWER over the horizon. Greedy
+      // ROI is optimal for independent items; this catches reinvestment cases where buying a cheap
+      // booster slightly earlier compounds into more total FLOWER (the user's "B then A" case).
+      if (settings.optimizeOrder !== false && order.length > 1 && order.length <= 140) {
+        let best = greedyVal, improved = true, passes = 0;
+        while (improved && passes++ < 8) {
+          improved = false;
+          for (let i = 0; i < order.length - 1; i++) {
+            const sw = order.slice(); const tmp = sw[i]; sw[i] = sw[i + 1]; sw[i + 1] = tmp;
+            const v = simOrder(sw, H).integral;
+            if (v > best + Math.abs(best) * 1e-9 + 1e-6) { order = sw; best = v; improved = true; }
+          }
         }
       }
+      const fin = simOrder(order, H);
+      const optGainPct = greedyVal > 0 ? (fin.integral / greedyVal - 1) * 100 : 0;
+
+      const timeline = [];
+      for (const s of fin.steps) timeline.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, marginal: s.marg, roi: s.marg > 0 ? s.m.floor / s.marg : Infinity, atDay: s.atDay, rateAfter: s.rateAfter, kind: "econ" });
+      let rate = fin.finalRate;
+      let cumDays = fin.totalDays;
       const econSteps = timeline.length;
       const econCost = timeline.reduce((s, t) => s + t.floor, 0);
       const finalRate = rate;
@@ -16027,7 +16076,7 @@
         timeline.push({ name: m.name, type: m.type, boost: m.boost, floor: m.floor, marginal: 0, roi: Infinity, atDay: cumDays, rateAfter: rate, kind: "cosmetic" });
       }
       const totalCost = timeline.reduce((s, t) => s + t.floor, 0);
-      return { timeline, econSteps, cosmeticCount: cosmetic.length, econCost, untradeable, tail, tailCost, noBoostCount, startRate: startIncome, finalRate, totalDays: cumDays, totalCost };
+      return { timeline, econSteps, cosmeticCount: cosmetic.length, econCost, untradeable, tail, tailCost, noBoostCount, startRate: startIncome, finalRate, totalDays: cumDays, totalCost, optGainPct, horizonYears: (settings.horizonYears || 100) };
     }
 
     function roadmapFmtDays(d) {
@@ -16125,6 +16174,7 @@
       h += `<label><input type="checkbox" ${settings.incWearables ? "checked" : ""} onchange="_roadmapToggle('incWearables',this.checked)"> Wearables</label>`;
       h += `<label title="Treat coin-denominated costs (axes, seeds…) as free — coins aren't directly convertible to FLOWER. Auto-on when you hold >10k coins."><input type="checkbox" ${roadmapCoinsFree(settings) ? "checked" : ""} onchange="_roadmapToggle('coinsFree',this.checked)"> Coins free</label>`;
       h += `<label title="Betty seed restocks you do per day. Caps how much you can plant; fast crops (Sunflower) are seed-limited not plot-limited.">Restocks/day: <input type="number" value="${settings.restocksPerDay}" min="1" step="1" style="width:46px" onchange="_roadmapSetRestocks(this.value)"></label>`;
+      h += `<label title="Optimise the buy order to maximise total FLOWER earned over this many years (reinvestment + synergy aware).">Optimise over: <input type="number" value="${settings.horizonYears}" min="1" step="10" style="width:54px" onchange="_roadmapSetHorizon(this.value)"> yr${sim.optGainPct > 0.05 ? ` <span style="color:var(--green)">+${sim.optGainPct.toFixed(1)}% vs ROI-order</span>` : ""}</label>`;
       h += `<label><input type="checkbox" ${settings.showCosmetic ? "checked" : ""} onchange="_roadmapToggle('showCosmetic',this.checked)"> Show no-value boosts</label>`;
       h += `<label title="Skip NFTs above this floor price (0 = no cap). Items priced over 500k FLOWER are always dropped as troll/no-liquidity listings.">Max price: <input type="number" value="${settings.maxPrice || 0}" step="100" min="0" style="width:88px" onchange="_roadmapSetMaxPrice(this.value)"> ${settings.maxPrice ? "" : "(no cap)"}</label>`;
       h += `<button onclick="refresh()" title="Re-fetch your live farm (new purchases) + current marketplace floor prices, then rebuild the whole roadmap" style="margin-left:auto;font-size:0.6rem;padding:4px 10px;cursor:pointer">↻ Refresh live data</button>`;
@@ -16211,7 +16261,7 @@
       // ── Model notes ──
       h += `<div class="pixel-panel" style="margin-top:18px;padding:12px;font-size:0.55rem;color:var(--text-dim);line-height:1.7">
         <div class="pixel-font" style="font-size:0.5rem;color:var(--text-secondary);margin-bottom:6px">HOW THIS IS CALCULATED</div>
-        • <b>Order</b> = greedy by ROI payback (cost ÷ realistic FLOWER/day it adds). Cheapest-fastest first so income compounds — exactly why a 10-FLOWER/+0.09 item beats a 1000-FLOWER/+1 item early on.<br>
+        • <b>Order</b> = optimised to maximise TOTAL FLOWER earned over your horizon (default 100y). Starts from greedy ROI payback (cheapest-fastest first so income compounds), then a local search swaps adjacent buys whenever that yields more total FLOWER over the horizon — catching reinvestment cases where buying a cheap booster slightly earlier compounds into more (your "B then A" example).<br>
         • <b>Coins are free</b> (when you hold &gt;10k) — coin-priced costs like axes &amp; seeds aren't charged, since coins don't convert to FLOWER. So coin-only activities like trees get cheaper.<br>
         • <b>Obsidian</b> sells only ~1/week, so its income is capped at one obsidian (minus a lava ignition) per week — its ROI lands near the bottom.<br>
         • <b>Net, not gross</b> — every category subtracts its running costs (animal feed &amp; sickness, crop/fruit/flower seeds, mining tools, lava-pit fuel) before counting. A loss-making activity (e.g. low-level sheep where feed ≥ wool) nets 0, and an animal boost only scores once it actually flips that category positive.<br>
@@ -16233,6 +16283,7 @@
     window._roadmapToggle = function(key, val) { const p = {}; p[key] = !!val; saveRoadmapSettings(p); renderRoadmapContent(); };
     window._roadmapSetMaxPrice = function(v) { const n = parseFloat(v); saveRoadmapSettings({ maxPrice: isFinite(n) && n >= 0 ? n : 0 }); renderRoadmapContent(); };
     window._roadmapSetRestocks = function(v) { const n = parseFloat(v); saveRoadmapSettings({ restocksPerDay: isFinite(n) && n > 0 ? n : 2 }); renderRoadmapContent(); };
+    window._roadmapSetHorizon = function(v) { const n = parseFloat(v); saveRoadmapSettings({ horizonYears: isFinite(n) && n > 0 ? n : 100 }); renderRoadmapContent(); };
     window._roadmapToggleUntradeable = function() { const e = document.getElementById("rm-untradeable"); if (e) e.style.display = e.style.display === "none" ? "block" : "none"; };
 
 
