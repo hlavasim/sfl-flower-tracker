@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.87</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.88</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.88", items: [
+          { t: "fix", text: "ROADMAP: animals are no longer scaled by the (broken) throughput efficiency. The _h.* sums for animals are not in the same units as their theoretical production, so the metric read a bogus ~20-28% and crushed animal income + animal-boost values to a fifth. Animals are 24h-cycle stockpilers (the egg/wool waits until collected), so a player logging in even once a day catches ~all of it — efficiency is now treated as ~100% for chickens/cows/sheep (mining/trees/crops keep their real cycle-based efficiency). This roughly 5x-es animal contribution to the FLOWER/day headline and to animal-boost ROI, which were both reading far too low." },
+        ]},
         { ver: "v3.87", items: [
           { t: "fix", text: "ROADMAP WHAT-TO-FARM/MINE section now actually reflects the harvest efficiency (it was stuck at full activity, so the v3.86 efficiency fix did not change it). gives/cost/net for mining, trees, animals, fruits, greenhouse, flowers, bees, fishing and salt are now multiplied by each category real efficiency (e.g. trees ~25%, iron ~75%, gold/crim ~100%); the per-animal Egg/Feather/feed/sick breakdown is scaled too. Crops and Crop Machine stay restock-capped (their realistic constraint), obsidian stays 1/week. So mining gives now drops to your realistic daily amount instead of the theoretical maximum." },
         ]},
@@ -15569,6 +15572,7 @@
     function roadmapEffFactor(cat, settings) {
       if (settings.effMode === "theoretical") return 1;
       if (cat === "obsidian") return 1; // obsidian net already capped at 1 sale/week
+      if (isAnimalCat(cat)) return 1; // animals are 24h-cycle stockpilers — caught each daily login (~full); _h.* units don't match here
       const eb = roadmapState.effByCat;
       // Categories with their own harvest signal use the measured throughput ratio.
       if (eb[cat] && eb[cat].measured) return eb[cat].ratio;
