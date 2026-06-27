@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.80</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.81</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.81", items: [
+          { t: "fix", text: "ROADMAP efficiency was reading far too low (e.g. sheep 54%, crimstone 57%) — root cause was session-counting on sparsely-sampled history: the collector ran only ~2x/day before late May with ~20h gaps, so most harvests never landed on a stored snapshot and the sessions/day count collapsed. Replaced with a density-robust THROUGHPUT metric: total _h.* harvested per day (cumulative diffs, so sampling gaps don\'t matter) ÷ theoretical/day = effective node count (sumMergedNodes, tier-weighted) × boosted cycles/day (applyBoosts). Window is the last 35 days excluding the current 7 days. Capped at 100%. Now reads ~86-100% for actively-farmed categories (stones 89, iron 90, trees 86, crops ~100). Obsidian keeps its 1/week valuation (eff factor 1)." },
+        ]},
         { ver: "v3.80", items: [
           { t: "feat", text: "ROADMAP: new WHAT TO FARM / MINE NOW section at the top — net FLOWER/day at full activity per category (trees, mining, animals, fruits, flowers…), per individual crop, and per greenhouse product, green (worth doing) / red (loss-making), sorted. Plus two economics fixes baked into the whole net model: (1) Coins are treated as FREE when you hold >10k (coin-priced axes/seeds cost 0, since coins aren\'t directly FLOWER-convertible — the Betty rate is irrelevant for a big coin pile) — so trees and other coin-only activities get cheaper; toggle in controls. (2) Obsidian can only be liquidated ~1/week, so its income is capped at (1 obsidian − 1 ignition fuel)/7 per day — ROI drops to the bottom as expected." },
         ]},
@@ -15524,11 +15527,11 @@
 
     function roadmapEffFactor(cat, settings) {
       if (settings.effMode === "theoretical") return 1;
+      if (cat === "obsidian") return 1; // obsidian net already capped at 1 sale/week
       const eb = roadmapState.effByCat;
-      // Categories with their own May harvest-session signal use the measured ratio
-      // (0 = you simply didn't harvest it in May, so its NFTs aren't profit for you).
+      // Categories with their own harvest signal use the measured throughput ratio.
       if (eb[cat] && eb[cat].measured) return eb[cat].ratio;
-      // bees / fishing have no per-category session signal → use overall average activity
+      // bees / fishing have no per-category signal → use overall average activity
       return roadmapState.meanRatio;
     }
 
@@ -15667,44 +15670,44 @@
       return total;
     }
 
-    // May 2026 mining efficiency (actual harvest sessions/day ÷ theoretical), per nodes logic
+    // THROUGHPUT efficiency = harvested/day ÷ theoretical/day (effective node count × boosted
+    // cycles/day), over a recent representative window EXCLUDING the current week. The _h.* sums
+    // are cumulative, so this is robust to sparse-sampling stretches (session-counting was not —
+    // early periods where the collector ran only ~2×/day made it read far too low).
     async function roadmapComputeMayEfficiency() {
-      const out = { effByCat: {}, meta: { snaps: 0, days: 0, available: false } };
+      const out = { effByCat: {}, meta: { snaps: 0, days: 0, available: false, from: "", to: "" } };
       let rows = null;
+      const fromD = new Date(Date.now() - 35 * 86400000).toISOString().slice(0, 10);
+      const toD = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10); // exclude current week
       try {
-        const url = `/api/farm-history?farm=${FARM_ID}&from=2026-05-01&to=2026-06-01&limit=1000`;
+        const url = `/api/farm-history?farm=${FARM_ID}&from=${fromD}&to=${toD}&limit=2000`;
         const r = await fetch(url);
         if (r.ok) { const d = await r.json(); rows = d.snapshots || []; }
       } catch {}
       if (!rows || rows.length < 2) return out;
-      const sortedAll = rows.filter(s => s.captured_at && s.diff).sort((a, b) => new Date(a.captured_at) - new Date(b.captured_at));
-      const v2Start = sortedAll.findIndex(s => Object.keys(s.diff || {}).some(k => k.startsWith("_h.")));
-      const sorted = v2Start >= 0 ? sortedAll.slice(v2Start) : [];
+      const sorted = rows.filter(s => s.captured_at && s.diff && Object.keys(s.diff).some(k => k.startsWith("_h.")))
+        .sort((a, b) => new Date(a.captured_at) - new Date(b.captured_at));
       if (sorted.length < 2) return out;
       const pDays = (new Date(sorted[sorted.length - 1].captured_at) - new Date(sorted[0].captured_at)) / 86400000;
-      out.meta = { snaps: sorted.length, days: pDays, available: pDays > 0.5 };
-      if (pDays <= 0.5) return out;
+      out.meta = { snaps: sorted.length, days: pDays, available: pDays > 1, from: sorted[0].captured_at.slice(0, 10), to: sorted[sorted.length - 1].captured_at.slice(0, 10) };
+      if (pDays <= 1) return out;
       const measuredRatios = [];
       for (const [catId, hKey] of Object.entries(ROADMAP_EFF_HKEY)) {
-        const digTimes = [];
-        for (const snap of sorted) { const c = (snap.diff || {})[hKey]; if (c > 0) digTimes.push(new Date(snap.captured_at).getTime()); }
-        const sessions = [];
-        if (digTimes.length > 0) {
-          let s0 = digTimes[0], se = digTimes[0];
-          for (let i = 1; i < digTimes.length; i++) { if (digTimes[i] - se <= 1800000) se = digTimes[i]; else { sessions.push(s0); s0 = digTimes[i]; se = digTimes[i]; } }
-          sessions.push(s0);
-        }
+        if (catId === "obsidian") continue; // obsidian valued separately (sells ~1/week)
+        let total = 0;
+        for (const snap of sorted) { const c = (snap.diff || {})[hKey]; if (c > 0) total += c; }
+        const nodeCount = getCapacityCount(catId, powerState.capacity);
         const boosted = applyBoosts(catId, getDefaultProduct(catId), powerState.capacity, roadmapOwnedEffects(catId));
         const ec = boosted.effectiveCycle || 0;
-        const theoPerDay = ec > 0 ? 86400 / ec : 0;
-        const actualPerDay = sessions.length / pDays;
+        const theoPerDay = (ec > 0 && nodeCount > 0) ? nodeCount * (86400 / ec) : 0;
+        const actualPerDay = total / pDays;
         let ratio = theoPerDay > 0 ? actualPerDay / theoPerDay : 0;
-        if (ratio > 1.5) ratio = 1.5;
-        const measured = theoPerDay > 0;
-        out.effByCat[catId] = { ratio, sessions: sessions.length, actualPerDay, theoPerDay, measured };
-        if (measured && sessions.length > 0) measuredRatios.push(ratio);
+        if (ratio > 1) ratio = 1; // can't realize more than 100% of theoretical
+        const measured = theoPerDay > 0 && total > 0;
+        out.effByCat[catId] = { ratio, total, actualPerDay, theoPerDay, nodeCount, measured };
+        if (measured) measuredRatios.push(ratio);
       }
-      out.meanRatio = measuredRatios.length ? measuredRatios.reduce((a, b) => a + b, 0) / measuredRatios.length : 0.3;
+      out.meanRatio = measuredRatios.length ? measuredRatios.reduce((a, b) => a + b, 0) / measuredRatios.length : 0.5;
       return out;
     }
 
@@ -15892,10 +15895,10 @@
       h += `</div>`;
       if (roadmapState.effMeta && roadmapState.effMeta.available) {
         const parts = [];
-        for (const [cat, e] of Object.entries(roadmapState.effByCat)) { if (!e.sessions) continue; parts.push(`${POWER_CATEGORIES[cat] ? POWER_CATEGORIES[cat].label : cat} ${Math.round(e.ratio * 100)}%`); }
-        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--text-dim)">May 2026 harvest efficiency (${roadmapState.effMeta.snaps} snapshots / ${roadmapState.effMeta.days.toFixed(1)}d): ${parts.join(" · ")}${parts.length ? "" : "no harvests recorded"} · bees/fishing use avg ${Math.round((roadmapState.meanRatio || 0) * 100)}%</div>`;
+        for (const [cat, e] of Object.entries(roadmapState.effByCat)) { if (!e.measured) continue; parts.push(`${POWER_CATEGORIES[cat] ? POWER_CATEGORIES[cat].label : cat} ${Math.round(e.ratio * 100)}%`); }
+        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--text-dim)">Harvest efficiency (throughput vs theoretical), ${roadmapState.effMeta.from} → ${roadmapState.effMeta.to}, excl. current week, ${roadmapState.effMeta.snaps} snaps: ${parts.join(" · ")}${parts.length ? "" : "no harvests recorded"} · bees/fishing use avg ${Math.round((roadmapState.meanRatio || 0) * 100)}%</div>`;
       } else {
-        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--yellow)">No May 2026 history available — using ${settings.effMode === "theoretical" ? "theoretical" : "average activity"} rates only.</div>`;
+        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--yellow)">No recent history available — using ${settings.effMode === "theoretical" ? "theoretical" : "average activity"} rates only.</div>`;
       }
       h += `</div>`;
 
