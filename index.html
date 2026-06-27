@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.88</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.89</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.89", items: [
+          { t: "fix", text: "MAJOR animal feed-cost fix (matches sfl.world boost page + game feedAnimal.ts). Feed per production cycle scales with level: completing a cycle needs cycleXP worth of feeding, and each feeding grants the food XP, so noOfFeed = ceil(cycleXP / favFoodXp) and total food = noOfFeed x REQUIRED_FOOD_QTY. At L15 that is 4 Mixed Grain/cycle for a chicken, 24 for a sheep (8x3), 60 for a cow (12x5) — verified against sfl.world (cow Total x60, sheep Total x24). Our calc was using just REQUIRED_FOOD_QTY (1/3/5), i.e. 4-12x too little feed, which is why animals showed a profit when they are actually loss-making. Fix is in the shared calcAnimalFeedCost so Power, ROI and Roadmap all correct. Side effect: free-feed boosts (Golden Sheep/Gold Egg/Golden Cow) now show large ROI since they remove this big feed cost." },
+        ]},
         { ver: "v3.88", items: [
           { t: "fix", text: "ROADMAP: animals are no longer scaled by the (broken) throughput efficiency. The _h.* sums for animals are not in the same units as their theoretical production, so the metric read a bogus ~20-28% and crushed animal income + animal-boost values to a fifth. Animals are 24h-cycle stockpilers (the egg/wool waits until collected), so a player logging in even once a day catches ~all of it — efficiency is now treated as ~100% for chickens/cows/sheep (mining/trees/crops keep their real cycle-based efficiency). This roughly 5x-es animal contribution to the FLOWER/day headline and to animal-boost ROI, which were both reading far too low." },
         ]},
@@ -14357,6 +14360,18 @@
       return Math.max(0, mult);
     }
 
+    // Highest-XP ("favourite") food for a level + its XP — the food used to complete a cycle.
+    function getFavFoodForLevel(level) {
+      for (const row of FEED_XP_TABLE) {
+        if (level >= row.min && level <= row.max) {
+          let best = null, bestXp = 0;
+          for (const [f, xp] of Object.entries(row.xp)) { if (xp > bestXp) { bestXp = xp; best = f; } }
+          return { food: best || "Mixed Grain", xp: bestXp || 1 };
+        }
+      }
+      return { food: "Mixed Grain", xp: 80 };
+    }
+
     // Main animal feed cost function (analogous to calcSeedCostPerDay / calcToolCostPerDay)
     function calcAnimalFeedCost(catId, capacity, p2pPrices, boostEffects, stockMods) {
       const animalType = ANIMAL_CAT_MAP[catId];
@@ -14393,16 +14408,25 @@
       let totalCostPerCycle = 0;
       const feedBreakdown = {}; // { foodName: { count, costPerUnit, totalUnits } }
 
+      // Food per PRODUCTION cycle scales with level: completing a cycle needs `xpPerCycle` XP,
+      // each feeding grants the food's XP, so noOfFeed = ceil(xpPerCycle / foodXp) and total food =
+      // noOfFeed x REQUIRED_FOOD_QTY. (game: feedAnimal.ts). At L15 a cow eats 12x5=60 Mixed Grain/cycle.
+      const lvls = ANIMAL_LEVELS[animalType];
       for (const animal of animals) {
-        const preferred = getPreferredFeed(animal.level);
-        const foodName = preferred || cheapest.food;
+        const lvl = animal.level;
+        let xpPerCycle;
+        if (lvl >= 15) xpPerCycle = (lvls[15] - lvls[14]);
+        else xpPerCycle = ((lvls[lvl + 1] || lvls[15]) - lvls[lvl]);
+        const fav = getFavFoodForLevel(lvl);
+        const foodName = fav.food;
+        const noOfFeed = Math.max(1, Math.ceil(xpPerCycle / (fav.xp || 1)));
+        const unitsThisAnimal = noOfFeed * effectiveFeedQty;
         const costPerUnit = getFeedCostPerUnit(foodName, p2pPrices, stockMods);
-        const costPerAnimal = effectiveFeedQty * costPerUnit;
-        totalCostPerCycle += costPerAnimal;
+        totalCostPerCycle += unitsThisAnimal * costPerUnit;
 
         if (!feedBreakdown[foodName]) feedBreakdown[foodName] = { count: 0, costPerUnit, totalUnits: 0 };
         feedBreakdown[foodName].count++;
-        feedBreakdown[foodName].totalUnits += effectiveFeedQty;
+        feedBreakdown[foodName].totalUnits += unitsThisAnimal;
       }
 
       const costPerDay = totalCostPerCycle * cyclesPerDay;
