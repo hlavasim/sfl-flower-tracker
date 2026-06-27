@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.86</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.87</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.87", items: [
+          { t: "fix", text: "ROADMAP WHAT-TO-FARM/MINE section now actually reflects the harvest efficiency (it was stuck at full activity, so the v3.86 efficiency fix did not change it). gives/cost/net for mining, trees, animals, fruits, greenhouse, flowers, bees, fishing and salt are now multiplied by each category real efficiency (e.g. trees ~25%, iron ~75%, gold/crim ~100%); the per-animal Egg/Feather/feed/sick breakdown is scaled too. Crops and Crop Machine stay restock-capped (their realistic constraint), obsidian stays 1/week. So mining gives now drops to your realistic daily amount instead of the theoretical maximum." },
+        ]},
         { ver: "v3.86", items: [
           { t: "fix", text: "ROADMAP efficiency was still too flat/high (everything ~86-100%). Root cause: the _h.* harvest sums are in resource UNITS (yield-per-harvest already baked in), but the theoretical was computed as harvest-EVENTS (nodes × cycles/day), missing the yield factor. Fixed: theoretical = boosted units/day = applyBoosts(...).unitsPerDay (nodes × cycles × yield), animals sum getAnimalCatSfl per-product unitsPerDay. Now matches reality and the cycle-length gradient: trees ~25% (fast 2h respawn, can not keep up), stone ~39%, iron ~75%, gold & crimstone ~100% (24h, caught each daily login). Verified against the user expectations (trees 20-30, stone 50, iron 70, gold/crim 90)." },
         ]},
@@ -15698,25 +15701,27 @@
       const gCm = mk("\u2699\ufe0f CROP MACHINE \u2014 auto, per crop");
       const gOther = mk("\u2728 OTHER");
       const addBd = (g, label, icon, bd, sub) => { if (bd && isFinite(bd.net)) g.rows.push({ label, icon, gross: bd.gross || 0, cost: bd.cost || 0, net: bd.net, sub }); };
+      const sBd = (bd, f) => bd ? { gross: (bd.gross || 0) * f, cost: (bd.cost || 0) * f, net: (bd.net || 0) * f } : bd;
 
       for (const [cat, icon] of [["trees","Wood"],["stone","Stone"],["iron","Iron"],["gold","Gold"],["crimstone","Crimstone"],["oil","Oil"],["obsidian","Obsidian"]]) {
         if (getCapacityCount(cat, cap) <= 0) continue;
-        addBd(gMine, (POWER_CATEGORIES[cat] ? POWER_CATEGORIES[cat].label : cat), icon, roadmapCatBreakdown(cat, roadmapOwnedEffects(cat), settings), cat === "obsidian" ? "1/wk" : "");
+        addBd(gMine, (POWER_CATEGORIES[cat] ? POWER_CATEGORIES[cat].label : cat), icon, sBd(roadmapCatBreakdown(cat, roadmapOwnedEffects(cat), settings), roadmapEffFactor(cat, settings)), cat === "obsidian" ? "1/wk" : "");
       }
       for (const [cat, icon] of [["chickens","Egg"],["cows","Milk"],["sheep","Wool"]]) {
         if (getCapacityCount(cat, cap) <= 0) continue;
         const n = (cap.animalDetails && cap.animalDetails[cat]) ? cap.animalDetails[cat].length : 0;
         const oeff = roadmapOwnedEffects(cat);
-        const bd = roadmapCatBreakdown(cat, oeff, settings);
+        const f = roadmapEffFactor(cat, settings);
+        const bd = sBd(roadmapCatBreakdown(cat, oeff, settings), f);
         let detail = "";
         try {
           const ani = getAnimalCatSfl(cat, cap, oeff, powerState.p2pPrices);
           const feed = calcAnimalFeedCost(cat, cap, powerState.p2pPrices, oeff, powerState.stockMods);
           const skl = (powerState.farm.bumpkin && powerState.farm.bumpkin.skills) || {};
           const sick = calcSicknessCost(cat, cap, powerState.p2pPrices, powerState.boostItems, skl);
-          const parts = (ani.breakdown || []).filter(b => b.sfl > 0.0001).map(b => `${b.product} +${roadmapFmtFlower(b.sfl)}`);
-          if ((feed.costPerDay || 0) > 0.0001) parts.push(`feed \u2212${roadmapFmtFlower(feed.costPerDay)}`);
-          if ((sick.costPerDay || 0) > 0.0001) parts.push(`sick \u2212${roadmapFmtFlower(sick.costPerDay)}`);
+          const parts = (ani.breakdown || []).filter(b => b.sfl > 0.0001).map(b => `${b.product} +${roadmapFmtFlower(b.sfl * f)}`);
+          if ((feed.costPerDay || 0) > 0.0001) parts.push(`feed \u2212${roadmapFmtFlower(feed.costPerDay * f)}`);
+          if ((sick.costPerDay || 0) > 0.0001) parts.push(`sick \u2212${roadmapFmtFlower(sick.costPerDay * f)}`);
           detail = parts.join(" \u00b7 ");
         } catch {}
         if (bd && isFinite(bd.net)) gAni.rows.push({ label: POWER_CATEGORIES[cat].label, icon, gross: bd.gross || 0, cost: bd.cost || 0, net: bd.net, sub: n ? n + "\u00d7" : "", detail });
@@ -15726,7 +15731,7 @@
         const bd = roadmapProductBreakdown("crops", crop, settings);
         if (bd && isFinite(bd.net)) gCrop.rows.push({ label: crop, icon: crop, gross: bd.gross || 0, cost: bd.cost || 0, net: bd.net, fade: !roadmapInSeason(crop) });
       }
-      if (getCapacityCount("greenhouse", cap) > 0) for (const gp of Object.keys(GREENHOUSE_GROW_DATA)) addBd(gGh, gp, gp, roadmapProductBreakdown("greenhouse", gp, settings));
+      if (getCapacityCount("greenhouse", cap) > 0) for (const gp of Object.keys(GREENHOUSE_GROW_DATA)) addBd(gGh, gp, gp, sBd(roadmapProductBreakdown("greenhouse", gp, settings), roadmapEffFactor("greenhouse", settings)));
       if (typeof farmHasCropMachine === "function" && farmHasCropMachine(powerState.farm)) {
         for (const crop of cropMachineCrops(powerState.farm)) {
           const r = calcCropMachineDaily(powerState.farm, crop, powerState.p2pPrices, er, false);
@@ -15738,18 +15743,18 @@
         }
       }
       if (getCapacityCount("fruits", cap) > 0) for (const fr of Object.keys(FRUIT_GROW_DATA)) {
-        const bd = roadmapProductBreakdown("fruits", fr, settings);
+        const bd = sBd(roadmapProductBreakdown("fruits", fr, settings), roadmapEffFactor("fruits", settings));
         if (bd && isFinite(bd.net)) gFruit.rows.push({ label: fr, icon: fr, gross: bd.gross || 0, cost: bd.cost || 0, net: bd.net, fade: !roadmapInSeason(fr) });
       }
       for (const [cat, icon] of [["flowers","Red Pansy"],["bees","Honey"],["fishing","Fish"]]) {
         if (cat !== "fishing" && getCapacityCount(cat, cap) <= 0) continue;
-        addBd(gOther, POWER_CATEGORIES[cat].label, icon, roadmapCatBreakdown(cat, roadmapOwnedEffects(cat), settings));
+        addBd(gOther, POWER_CATEGORIES[cat].label, icon, sBd(roadmapCatBreakdown(cat, roadmapOwnedEffects(cat), settings), roadmapEffFactor(cat, settings)));
       }
-      addBd(gOther, "Salt Farm", "Salt", roadmapSaltBreakdown(settings), "rake");
+      addBd(gOther, "Salt Farm", "Salt", sBd(roadmapSaltBreakdown(settings), roadmapEffFactor("salt", settings)), "rake");
 
       let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
       h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">WHAT TO FARM / MINE NOW</div>`;
-      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Per-day economics: <span style="color:var(--green)">gives</span> minus <span style="color:var(--red)">costs</span> = net. Mining/animals at full activity; crops &amp; crop machine capped to your ${settings.restocksPerDay}\u00d7 daily restocks. Out-of-season crops are faded. ${cf ? `Coins are FREE (you hold ${coins.toLocaleString()} &gt; 10k) so coin-priced tools/seeds cost 0 \u2014 only real resource costs count (animal feed &amp; sickness, salt wood, crop-machine oil).` : `Coin costs at Betty rate (you hold ${coins.toLocaleString()}).`} Obsidian sells ~1/week.</div>`;
+      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Per-day economics: <span style="color:var(--green)">gives</span> minus <span style="color:var(--red)">costs</span> = net. Scaled by your real harvest efficiency (mining/animals/fruits/greenhouse \u2014 see the efficiency line above); crops &amp; crop machine capped to your ${settings.restocksPerDay}\u00d7 daily restocks. Out-of-season crops faded. ${cf ? `Coins are FREE (you hold ${coins.toLocaleString()} &gt; 10k) so coin-priced tools/seeds cost 0 \u2014 only real resource costs count (animal feed &amp; sickness, salt wood, crop-machine oil).` : `Coin costs at Betty rate (you hold ${coins.toLocaleString()}).`} Obsidian sells ~1/week.</div>`;
       for (const g of groups) {
         if (!g.rows.length) continue;
         g.rows.sort((a, b) => ((a.fade ? 1 : 0) - (b.fade ? 1 : 0)) || (b.net - a.net));
