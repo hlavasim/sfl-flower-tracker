@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.85</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.86</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.86", items: [
+          { t: "fix", text: "ROADMAP efficiency was still too flat/high (everything ~86-100%). Root cause: the _h.* harvest sums are in resource UNITS (yield-per-harvest already baked in), but the theoretical was computed as harvest-EVENTS (nodes × cycles/day), missing the yield factor. Fixed: theoretical = boosted units/day = applyBoosts(...).unitsPerDay (nodes × cycles × yield), animals sum getAnimalCatSfl per-product unitsPerDay. Now matches reality and the cycle-length gradient: trees ~25% (fast 2h respawn, can not keep up), stone ~39%, iron ~75%, gold & crimstone ~100% (24h, caught each daily login). Verified against the user expectations (trees 20-30, stone 50, iron 70, gold/crim 90)." },
+        ]},
         { ver: "v3.85", items: [
           { t: "feat", text: "ROADMAP profitability: (1) FRUITS now broken out per-fruit (Apple/Blueberry/Orange/Banana/Lemon/Tomato) in their own group, with seasonal fade (no restock cap \u2014 fruit trees give many harvests per plant). (2) CROP MACHINE no longer season-faded (it can grow its unlocked crops any season) and now shows its OIL cost: oil is not p2p-traded, so its unit value is derived in buildPowerState from drill cost / boosted yield (cached as the Power page does) \u2014 previously oil priced 0 so crop-machine cost showed blank. (3) ANIMAL rows now show a gain/cost breakdown line: each product (Egg/Feather, Wool/Merino, Milk/Leather) plus feed and sickness, so you can see exactly how the net is built." },
         ]},
@@ -15815,9 +15818,18 @@
         let total = 0;
         for (const snap of sorted) { const c = (snap.diff || {})[hKey]; if (c > 0) total += c; }
         const nodeCount = getCapacityCount(catId, powerState.capacity);
-        const boosted = applyBoosts(catId, getDefaultProduct(catId), powerState.capacity, roadmapOwnedEffects(catId));
-        const ec = boosted.effectiveCycle || 0;
-        const theoPerDay = (ec > 0 && nodeCount > 0) ? nodeCount * (86400 / ec) : 0;
+        const oeff = roadmapOwnedEffects(catId);
+        // _h.* sums are in resource UNITS (yield already included), so the theoretical must be
+        // boosted units/day = nodes × cycles/day × yield-per-harvest = applyBoosts.unitsPerDay.
+        // This is why a fast-respawn resource (trees, 2h) reads low (you cannot keep up) while a
+        // slow one (gold/crimstone, 24h) reads near 100%. Animals sum their per-product unitsPerDay.
+        let theoPerDay;
+        if (isAnimalCat(catId)) {
+          const _ani = getAnimalCatSfl(catId, powerState.capacity, oeff, powerState.p2pPrices);
+          theoPerDay = (_ani.breakdown || []).reduce((s, b) => s + (b.unitsPerDay || 0), 0);
+        } else {
+          theoPerDay = applyBoosts(catId, getDefaultProduct(catId), powerState.capacity, oeff).unitsPerDay || 0;
+        }
         const actualPerDay = total / pDays;
         let ratio = theoPerDay > 0 ? actualPerDay / theoPerDay : 0;
         if (ratio > 1) ratio = 1; // can't realize more than 100% of theoretical
