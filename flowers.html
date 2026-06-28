@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.93</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.94</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.94", items: [
+          { t: "fix", text: "Yield engine port (3/n): RESOURCES structural reconciliation. The game computes each resource per node as (base 1 x multiplicatives + additives) x node.multiplier + tier bonus (+0.5 tier2 / +2.5 tier3); our old model used a flat base yield (Wood 3, Stone 2.2...) x effective-node-count with no tier bonus and the wrong base. New gameResYield/gameResUnitsPerDay port the exact per-node structure (chop.ts / *Mine.ts) incl. the user boosts: wood gets Tough Tree x1.2, Lumberjack Extra, Squirrel, Nightshade Shield +0.25, Native +0.2; stone/iron/gold get their beetles + Volcano Gnome + Native. Used in the mining-strategy box, the profitability mining rows and the efficiency baseline. Crops/fruits/animals already matched; greenhouse next." },
+        ]},
         { ver: "v3.93", items: [
           { t: "fix", text: "Yield engine port (2/n): FRUITS. gameExtraEffects now also injects fruit-yield boosts the NFT API omits (game fruitHarvested.ts): Faction Quiver +0.25 all fruit, Macaw +0.1 (or +0.2 with Loyal Macaw skill), Fruit Picker Apron +0.1 and Camel Onesie +0.1 (if equipped on bumpkin or any farm hand), plus per-fruit Black Bearry +1 Blueberry, Lady Bug +0.25 Apple, Banana Chicken/Banana Amulet, Lemon Shark/Reveling Lemon, Tomato Bombard. The user owns Macaw (+0.2) + Fruit Picker Apron + Nightshade Quiver, so fruit yields rise accordingly. Crops + animals already match sfl.world; resources need a structural rework (game uses per-node-tier base 1 + tier bonuses + multiplicative chains, our model uses a flat base yield) and are next." },
         ]},
@@ -15359,6 +15362,72 @@
       return false;
     }
     const FACTION_WINGS = { bumpkins: "Bumpkin Quiver", goblins: "Goblin Quiver", nightshades: "Nightshade Quiver", sunflorians: "Sunflorian Quiver" };
+    const FACTION_SHIELDS = { bumpkins: "Bumpkin Shield", goblins: "Goblin Shield", nightshades: "Nightshade Shield", sunflorians: "Sunflorian Shield" };
+    const RES_FARMKEY = { trees: "trees", stone: "stones", iron: "iron", gold: "gold", crimstone: "crimstones" };
+
+    // Per-node boosted base (base 1 x multiplicatives + additives) — faithful to the game's
+    // chop.ts / *Mine.ts. Chance boosts use expected value (Native +1 @ 1/5 = +0.2, Tough Tree x3 @ 1/10 = x1.2).
+    function gameResBoostedBase(farm, cat) {
+      const skills = (farm.bumpkin && farm.bumpkin.skills) || {};
+      const inv = farm.inventory || {};
+      const has = (n) => findCollectible(farm, n).length > 0;
+      const faction = (farm.faction && farm.faction.name) || "";
+      const shieldEq = FACTION_SHIELDS[faction] && farmWearableEquipped(farm, FACTION_SHIELDS[faction]);
+      let mult = 1, add = 0;
+      if (cat !== "crimstone") add += 0.2; // Native +1 @ 1/5 (trees/stone/iron/gold)
+      if (cat === "trees") {
+        if (has("Woody the Beaver") || has("Apprentice Beaver") || has("Foreman Beaver")) mult *= 1.2;
+        if (inv["Lumberjack"]) mult *= 1.1;
+        if (skills["Tough Tree"]) mult *= 1.2;
+        if (skills["Lumberjack's Extra"]) add += 0.1;
+        if (has("Wood Nymph Wendy")) add += 0.2;
+        if (has("Tiki Totem")) add += 0.1;
+        if (has("Squirrel")) add += 0.1;
+        if (shieldEq) add += 0.25;
+      } else if (cat === "stone") {
+        if (has("Stone Beetle")) add += 0.1;
+        if (has("Volcano Gnome")) add += 0.1;
+        if (has("Tin Turtle")) add += 0.1;
+      } else if (cat === "iron") {
+        if (has("Iron Beetle")) add += 0.1;
+        if (has("Volcano Gnome")) add += 0.1;
+        if (has("Iron Idol")) add += 1;
+      } else if (cat === "gold") {
+        if (has("Gold Beetle")) add += 0.1;
+        if (has("Volcano Gnome")) add += 0.1;
+        if (has("Nugget")) add += 0.1;
+      } else if (cat === "crimstone") {
+        if (has("Crim Peckster")) add += 0.1;
+        if (has("Crimson Carp")) add += 0.05;
+      }
+      return 1 * mult + add;
+    }
+    // Total resource units per full harvest-round (all nodes): Sum_node bb x multiplier + tierBonus.
+    function gameResYield(farm, cat) {
+      const bb = gameResBoostedBase(farm, cat);
+      const obj = farm[RES_FARMKEY[cat]] || {};
+      let total = 0;
+      for (const node of Object.values(obj)) {
+        const m = (node && node.multiplier) || 1;
+        const tier = (node && node.tier) || (m >= 16 ? 3 : (m >= 4 ? 2 : 1));
+        total += bb * m + (tier === 3 ? 2.5 : (tier === 2 ? 0.5 : 0));
+      }
+      return total;
+    }
+    function gameResUnitsPerDay(cat, farm, capacity) {
+      if (!RES_FARMKEY[cat]) return 0;
+      const ab = applyBoosts(cat, getDefaultProduct(cat), capacity, roadmapOwnedEffects(cat));
+      const ec = ab.effectiveCycle || getCycleSec(cat, getDefaultProduct(cat));
+      return ec > 0 ? gameResYield(farm, cat) * (86400 / ec) : 0;
+    }
+    // Average resource per single node-harvest (per tool used) — for the mining-strategy tool cost.
+    function gameResYieldPerTool(farm, cat) {
+      const obj = farm[RES_FARMKEY[cat]] || {};
+      const n = Object.keys(obj).length;
+      return n > 0 ? gameResYield(farm, cat) / n : gameResBoostedBase(farm, cat);
+    }
+
+    const FACTION_WINGS_END = true;
 
     // Boost EFFECTS the marketplace NFT API (/api/v1/nfts) does not expose but the game applies.
     // Faithful port of the game's yield logic (getCropYieldAmount) for the items a farm owns.
@@ -15711,7 +15780,8 @@
           cost += (calcAnimalFeedCost(cat, capacity, p2pPrices, effects, stockMods).costPerDay) || 0;
           cost += (calcSicknessCost(cat, capacity, p2pPrices, powerState.boostItems, skills).costPerDay) || 0;
         } else {
-          gross = unitToSfl(applyBoosts(cat, product, capacity, effects).unitsPerDay, getPriceProduct(cat, product), p2pPrices) || 0;
+          if (RES_FARMKEY[cat]) gross = unitToSfl(gameResUnitsPerDay(cat, powerState.farm, capacity), getPriceProduct(cat, product), p2pPrices) || 0;
+          else gross = unitToSfl(applyBoosts(cat, product, capacity, effects).unitsPerDay, getPriceProduct(cat, product), p2pPrices) || 0;
           if (cat === "crops" || cat === "fruits" || cat === "greenhouse" || cat === "flowers") {
             cost += (calcSeedCostPerDay(cat, product, capacity, er, stockMods, effects, p2pPrices).costPerDay) || 0;
           }
@@ -15802,7 +15872,7 @@
       for (const link of CHAIN) {
         if (getCapacityCount(link.cat, capacity) <= 0) continue;
         const ab = applyBoosts(link.cat, link.product, capacity, roadmapOwnedEffects(link.cat));
-        const yieldPerAction = getBaseYield(link.cat) * (ab.yieldMult || 1) + (ab.yieldFlat || 0);
+        const yieldPerAction = gameResYieldPerTool(powerState.farm, link.cat);
         if (!(yieldPerAction > 0)) continue;
         const tool = TOOL_COSTS[link.tool] || { coins: 0 };
         let toolMat = 0;
@@ -15811,7 +15881,7 @@
         const toolCostPerUnit = (toolMat + toolCoin) / yieldPerAction;
         const price = p2pPrices[link.product] || 0;
         const netPerUnit = price - toolCostPerUnit;
-        const realUnits = (ab.unitsPerDay || 0) * roadmapEffFactor(link.cat, settings);
+        const realUnits = gameResUnitsPerDay(link.cat, powerState.farm, capacity) * roadmapEffFactor(link.cat, settings);
         rows.push({
           cat: link.cat, product: link.product, yieldPerAction, toolCostPerUnit, price, netPerUnit,
           realUnits, sellRaw: realUnits * price, dailyNet: realUnits * netPerUnit,
@@ -15999,6 +16069,8 @@
         if (isAnimalCat(catId)) {
           const _ani = getAnimalCatSfl(catId, powerState.capacity, oeff, powerState.p2pPrices);
           theoPerDay = (_ani.breakdown || []).reduce((s, b) => s + (b.unitsPerDay || 0), 0);
+        } else if (RES_FARMKEY[catId]) {
+          theoPerDay = gameResUnitsPerDay(catId, powerState.farm, powerState.capacity);
         } else {
           theoPerDay = applyBoosts(catId, getDefaultProduct(catId), powerState.capacity, oeff).unitsPerDay || 0;
         }
