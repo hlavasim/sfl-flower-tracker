@@ -5689,7 +5689,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.24</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.25</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5716,6 +5716,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.25", items: [
+          { t: "fix", text: "Big mining-engine audit + rebuild (Phase 1). There were TWO resource-yield engines that disagreed: the detail card baked in wrong base yields (Wood 3 / Stone 2.2; the real game base is 1) and overcounted Wood ~2.5x. They are now ONE engine. Also: the Native +0.2 crit was credited to EVERY farm — now gated on the Native skill (you don’t have it, so Wood/Stone/Iron/Gold drop ~17% to the honest value); Crimstone gained its missing +0.4 streak bonus. Tool cost was billing the merge-weighted node count (a t3 rock = 16 pickaxes/cycle!) and ignoring speed boosts — now it’s one tool per PHYSICAL rock at your BOOSTED recovery cycle (e.g. your Stone tool cost halved). Net: income is a bit lower but finally correct, and every view shows the same number." },
+          { t: "feat", text: "MINING CHAIN model (Phase 2 — your design). Pickaxes eat real resources, so each tier now shows SELL / USE / SKIP from a recursive sell-vs-use valuation: SELL = sell it raw, USE = burn it into the next tier, SKIP = mining loses vs selling the inputs. A tier can be USE even if selling it loses money, when a more profitable tier above makes feeding it worth more — e.g. on your farm Wood→Stone→Iron→Gold are all USE and you SELL the Gold, while Crimstone/Oil are SKIP (sell the Gold/inputs instead). The Δ column is the real per-day gain of mining a tier vs just selling its inputs. Income hero, what-to-mine and the new Mining Chain table all use this one model." },
+        ]},
         { ver: "v4.24", items: [
           { t: "fix", text: "Corrected the mining model \u2014 you were right that \u201ctools are free\u201d is nonsense. A pickaxe eats real Wood/Iron you could have sold, so mining a resource now correctly costs the sell-value of its tool\u2019s inputs (full tool cost), charged the SAME way in the income and what-to-mine views so they finally agree. If a resource\u2019s net is negative \u2014 the ore is worth LESS than the inputs its pickaxe eats \u2014 you should NOT mine it, you should sell the inputs raw (e.g. sell Wood instead of mining Stone). The Mining Strategy table is back with that verdict per resource (green = mine & sell, red = tools cost more than the ore \u2192 sell the inputs). (Briefly shipped a \u201cself-made tools are free\u201d build \u2014 reverted.)" },
         ]},
@@ -14180,6 +14184,9 @@
         unitsPerDay = 20 + yieldFlat; // flat estimate for fishing
       } else if (catId === "bees") {
         unitsPerDay = n * (baseYield * yieldMult + yieldFlat); // simplified for bees
+      } else if (RES_FARMKEY[catId] && typeof powerState !== "undefined" && powerState && powerState.farm) {
+        // Unify with the faithful per-node engine (correct base + tier flats); cycle stays boosted.
+        unitsPerDay = gameResYield(powerState.farm, catId, boostEffects) * cyclesPerDay;
       } else {
         unitsPerDay = n * cyclesPerDay * outputPerCycle;
       }
@@ -14418,6 +14425,18 @@
 
     // Calculate tool cost per day for a resource category
     // skipDiscount: if true, ignore coin discounts (for base cost calculation)
+    // Tools consumed per day = one tool per PHYSICAL rock per BOOSTED recovery cycle. A merged rock is
+    // still ONE rock (one tool, multiplied yield); faster recovery = more tools. Falls back before powerState.
+    function miningToolsPerDay(catId, capacity) {
+      const fkMap = { trees: "trees", stone: "stones", iron: "iron", gold: "gold", crimstone: "crimstones", oil: "oilReserves" };
+      const fk = fkMap[catId];
+      const pf = (typeof powerState !== "undefined" && powerState && powerState.farm) ? powerState.farm : null;
+      const physN = (pf && fk) ? Object.keys(pf[fk] || {}).length : (capacity[fk] || 0);
+      let ec = 0;
+      try { ec = applyBoosts(catId, getDefaultProduct(catId), capacity, roadmapOwnedEffects(catId)).effectiveCycle || 0; } catch {}
+      if (!(ec > 0)) { const rk = { trees:"Wood", stone:"Stone", iron:"Iron", gold:"Gold", crimstone:"Crimstone", oil:"Oil" }[catId]; const d = RESOURCE_RESPAWN_DATA[rk]; ec = d ? d.respawnSec : 0; }
+      return ec > 0 ? physN * (86400 / ec) : 0;
+    }
     function calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods, skipDiscount) {
       const toolName = Object.keys(TOOL_TO_CAT).find(t => TOOL_TO_CAT[t] === catId);
       if (!toolName) return { costPerDay: 0, toolSfl: 0, restockPerDay: 0 };
@@ -14431,25 +14450,25 @@
           const rKey = "Stone";
           const d = RESOURCE_RESPAWN_DATA[rKey];
           const n = capacity.stones || 0;
-          const toolsPerDay = d ? n * (86400 / d.respawnSec) : 0;
+          const toolsPerDay = miningToolsPerDay(catId, capacity);
           return { costPerDay: 0, toolSfl: 0, restockPerDay: 0, toolsPerDay, stock: 0, freeTool: true, freeToolSource: "Quarry" };
         }
         if (catId === "trees" && stockMods.hasForeman) {
           const d = RESOURCE_RESPAWN_DATA["Wood"];
           const n = capacity.trees || 0;
-          const toolsPerDay = d ? n * (86400 / d.respawnSec) : 0;
+          const toolsPerDay = miningToolsPerDay(catId, capacity);
           return { costPerDay: 0, toolSfl: 0, restockPerDay: 0, toolsPerDay, stock: 0, freeTool: true, freeToolSource: "Foreman Beaver" };
         }
         if (catId === "oil" && stockMods.hasInfernalDrill) {
           const d = RESOURCE_RESPAWN_DATA["Oil"];
           const n = capacity.oilReserves || 0;
-          const toolsPerDay = d ? n * (86400 / d.respawnSec) : 0;
+          const toolsPerDay = miningToolsPerDay(catId, capacity);
           return { costPerDay: 0, toolSfl: 0, restockPerDay: 0, toolsPerDay, stock: 0, freeTool: true, freeToolSource: "Infernal Drill" };
         }
         if (catId === "crimstone" && stockMods.hasCrimstoneSpikesHair) {
           const d = RESOURCE_RESPAWN_DATA["Crimstone"];
           const n = capacity.crimstones || 0;
-          const toolsPerDay = d ? n * (86400 / d.respawnSec) : 0;
+          const toolsPerDay = miningToolsPerDay(catId, capacity);
           return { costPerDay: 0, toolSfl: 0, restockPerDay: 0, toolsPerDay, stock: 0, freeTool: true, freeToolSource: "Crimstone Spikes Hair" };
         }
       }
@@ -14489,7 +14508,7 @@
       const n = capacity[capKey] || 0;
       if (n === 0) return { costPerDay: 0, toolSfl, restockPerDay: 0 };
       const cyclesPerDay = 86400 / d.respawnSec;
-      const toolsPerDay = n * cyclesPerDay; // 1 tool per node per cycle
+      const toolsPerDay = miningToolsPerDay(catId, capacity); // physical rocks x boosted cycle
       const costPerDay = toolSfl * toolsPerDay;
 
       // Stock info (restock cost calculated separately in shared restock system)
@@ -15559,7 +15578,9 @@
       const faction = (farm.faction && farm.faction.name) || "";
       const shieldEq = FACTION_SHIELDS[faction] && farmWearableEquipped(farm, FACTION_SHIELDS[faction]);
       let mult = 1, add = 0;
-      if (cat !== "crimstone") add += 0.2; // Native +1 @ 1/5 (trees/stone/iron/gold) — game-only
+      const skills = (farm.bumpkin && farm.bumpkin.skills) || {};
+      if (cat === "crimstone") add += 0.4; // no Native crit; +2 every 5th dig ~= +0.4 avg streak
+      else if (skills["Native"]) add += 0.2; // Native skill (20% chance +1) - was wrongly credited to every farm
       if (cat === "trees") {
         if (has("Lumberjack")) mult *= 1.1;   // collectible — absent from the NFT API
         if (has("Squirrel")) add += 0.1;       // absent from the NFT API
@@ -16022,6 +16043,127 @@
       const er = roadmapCoinsFree(settings) ? Object.assign({}, exchangeRates, { coinsPerSFL: Infinity }) : exchangeRates;
       try { return (calcToolCostPerDay(cat, capacity, er, p2p, stockMods, false).costPerDay) || 0; } catch { return 0; }
     }
+    // ── Mining CHAIN model (recursive sell-vs-use) ──────────────────────────────────────────────────
+    // Tools are never free: a pickaxe eats real lower resources. Each resource gets a true value
+    //   V[R] = max( sell at p2p , use it to feed the next tier ),  solved as a fixed point up the chain.
+    // A tier is mined when mining it (inputs valued at V) beats selling those inputs; even a sell-negative
+    // tier (Stone) gets mined if a boosted tier above (Iron) makes its USE value exceed its sell price.
+    // Income = each resource's sellable surplus (produced - eaten by your mined tools) x p2p; inputs are
+    // netted out of their PRODUCER, never double-charged to the consumer. effOverride[cat] swaps a cat's
+    // effects (used by the marginal toggle); default = owned.
+    const MINE_CHAIN = ["trees", "stone", "iron", "gold", "crimstone", "oil"];
+    const MINE_RES = { trees: "Wood", stone: "Stone", iron: "Iron", gold: "Gold", crimstone: "Crimstone", oil: "Oil" };
+    const MINE_TOOL = {
+      stone:     { chain: { trees: 3 },           mat: {},            coins: 20 },
+      iron:      { chain: { trees: 3, stone: 5 },  mat: {},            coins: 20 },
+      gold:      { chain: { trees: 3, iron: 5 },   mat: {},            coins: 80 },
+      crimstone: { chain: { trees: 3, gold: 3 },   mat: {},            coins: 100 },
+      oil:       { chain: { trees: 20, iron: 9 },  mat: { Leather: 10 }, coins: 100 },
+    };
+    function roadmapMiningChain(settings, effOverride) {
+      const farm = powerState.farm, cap = powerState.capacity;
+      const p2p = roadmapPrices(settings), sm = powerState.stockMods;
+      const cf = roadmapCoinsFree(settings);
+      const er = cf ? Object.assign({}, powerState.exchangeRates, { coinsPerSFL: Infinity }) : powerState.exchangeRates;
+      const eff = (c) => (effOverride && effOverride[c]) || roadmapOwnedEffects(c);
+      const P = {}, tools = {}, price = {}, free = {};
+      for (const c of MINE_CHAIN) {
+        const e = eff(c);
+        P[c] = RES_FARMKEY[c] ? gameResUnitsPerDay(c, farm, cap, e) : (applyBoosts(c, MINE_RES[c], cap, e).unitsPerDay || 0);
+        tools[c] = miningToolsPerDay(c, cap);
+        price[c] = p2p[MINE_RES[c]] || 0;
+        try { free[c] = !!calcToolCostPerDay(c, cap, er, p2p, sm, false).freeTool; } catch { free[c] = false; }
+      }
+      // own (non-chain) tool cost per day: leather/wool + coins
+      const ownCost = (c) => {
+        if (!MINE_TOOL[c] || free[c]) return 0;
+        let mats = MINE_TOOL[c].mat || {};
+        if (c === "oil" && sm.oilRigActive) { mats = { Wool: 20 }; }
+        let m = 0; for (const k in mats) m += (p2p[k] || 0) * mats[k];
+        const coin = cf ? 0 : (er.coinsPerSFL > 0 ? (MINE_TOOL[c].coins || 0) / er.coinsPerSFL : 0);
+        return (m + coin) * (tools[c] || 0);
+      };
+      // fixed-point V
+      const V = {}, feeds = {}; for (const c of MINE_CHAIN) V[c] = price[c];
+      for (let it = 0; it < 8; it++) {
+        let changed = false;
+        for (const c of ["crimstone", "gold", "iron", "oil", "stone"]) {
+          const T = MINE_TOOL[c]; if (!T || free[c] || !(tools[c] > 0) || !(P[c] > 0)) continue;
+          const ytool = P[c] / tools[c];
+          const cycleVal = ytool * V[c];
+          let chainCost = 0; for (const i in T.chain) chainCost += T.chain[i] * price[i]; // inputs at SELL price (abundant)
+          let matCost = 0; { let mats = (c === "oil" && sm.oilRigActive) ? { Wool: 20 } : (T.mat || {}); for (const k in mats) matCost += (p2p[k] || 0) * mats[k]; }
+          const coin = cf ? 0 : (er.coinsPerSFL > 0 ? (T.coins || 0) / er.coinsPerSFL : 0);
+          if (cycleVal - chainCost - matCost - coin > 1e-9) {
+            for (const i in T.chain) {
+              const u = (cycleVal - (chainCost - T.chain[i] * price[i]) - matCost - coin) / T.chain[i];
+              if (u > V[i] + 1e-9) { V[i] = u; feeds[i] = c; changed = true; }
+            }
+          }
+        }
+        if (!changed) break;
+      }
+      // mined set: base wood always; a tier is mined if its V-profit/day > 0
+      const mined = {}, dailyProfit = {};
+      mined.trees = P.trees > 0;
+      for (const c of ["stone", "iron", "gold", "crimstone", "oil"]) {
+        const T = MINE_TOOL[c];
+        if (!T || !(tools[c] > 0) || !(P[c] > 0)) { mined[c] = false; dailyProfit[c] = 0; continue; }
+        let inSfl = 0; if (!free[c]) for (const i in T.chain) inSfl += T.chain[i] * price[i] * tools[c]; // inputs at SELL price
+        const pd = P[c] * V[c] - inSfl - ownCost(c);
+        dailyProfit[c] = pd; mined[c] = pd > 1e-9;
+      }
+      // consumption by mined tiers
+      const consumed = {}; for (const c of MINE_CHAIN) consumed[c] = 0;
+      for (const c of ["stone", "iron", "gold", "crimstone", "oil"]) {
+        if (!mined[c] || free[c]) continue;
+        for (const i in MINE_TOOL[c].chain) consumed[i] += MINE_TOOL[c].chain[i] * (tools[c] || 0);
+      }
+      // per-resource net + verdict
+      const byCat = {}; let total = 0;
+      for (const c of MINE_CHAIN) {
+        const sellable = mined[c] ? Math.max(0, P[c] - consumed[c]) : 0;
+        const net = sellable * price[c] - (mined[c] ? ownCost(c) : 0);
+        const gross = P[c] * price[c];
+        const inputLimited = consumed[c] > P[c] + 1e-6 && mined[c];
+        let verdict;
+        if (!mined[c]) verdict = "skip";
+        else if (consumed[c] > sellable + 1e-6) verdict = "use";   // most of it feeds your own tools
+        else verdict = "sell";
+        byCat[c] = { gross, net, V: V[c], price: price[c], verdict, feeds: feeds[c] || null,
+          mined: mined[c], sellable, consumed: consumed[c], produced: P[c], dailyProfit: dailyProfit[c] || 0, inputLimited };
+        if (mined[c]) total += net;
+      }
+      return { byCat, total };
+    }
+    function roadmapMiningChainHtml(settings) {
+      const ch = roadmapMiningChain(settings);
+      const order = ["trees", "stone", "iron", "gold", "crimstone", "oil"];
+      const ICON = { sell: ["SELL", "#7fe0a0", "#1f3a2a"], use: ["USE", "#5DADE2", "#16314a"], skip: ["SKIP", "#e8a060", "#3a2c18"] };
+      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
+      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">⛏️ MINING CHAIN — sell, or mine up the chain?</div>`;
+      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Pickaxes eat real resources, so a tier is worth mining only if its ore beats the inputs it burns — and a tier can be worth mining purely to FEED a more profitable tier above it. <b style="color:#7fe0a0">SELL</b> = sell it raw · <b style="color:#5DADE2">USE</b> = burn it into the next tier · <b style="color:#e8a060">SKIP</b> = mining loses vs selling the inputs (sell those instead). <b>Δ</b> = the per-day gain from mining this vs just selling its inputs.</div>`;
+      h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.58rem"><thead><tr style="color:var(--text-dim);font-size:0.5rem;text-align:left"><th style="padding:2px 6px">resource</th><th style="padding:2px 6px">do</th><th style="padding:2px 6px;text-align:right">produce/d</th><th style="padding:2px 6px;text-align:right">sell / use</th><th style="padding:2px 6px;text-align:right">Δ vs sell-inputs</th><th style="padding:2px 6px;text-align:right">net/d</th></tr></thead><tbody>`;
+      for (const c of order) {
+        const r = ch.byCat[c]; if (!r || (!r.mined && !(r.produced > 0))) continue;
+        const ic = ICON[r.verdict] || ICON.sell;
+        const feed = (r.verdict === "use" && r.feeds) ? (" → " + escHTML(MINE_RES[r.feeds] || r.feeds)) : "";
+        const badge = `<span style="font-size:0.5rem;padding:1px 5px;border-radius:3px;background:${ic[2]};color:${ic[1]};font-weight:bold">${ic[0]}${feed}</span>`;
+        const dcol = r.dailyProfit > 0.003 ? "var(--green)" : (r.dailyProfit < -0.003 ? "var(--red)" : "var(--text-dim)");
+        const il = r.inputLimited ? ` <span style="color:var(--yellow);font-size:0.45rem" title="you can't produce enough of a lower resource to feed this fully">input-limited</span>` : "";
+        h += `<tr style="border-top:1px solid #1b1b1b">
+          <td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(MINE_RES[c])}" onerror="this.style.display='none'" alt=""> ${escHTML(MINE_RES[c])}</td>
+          <td style="padding:3px 6px;white-space:nowrap">${badge}${il}</td>
+          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${roadmapFmtFlower(r.produced)}</td>
+          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${r.mined ? (roadmapFmtFlower(r.sellable) + " / " + roadmapFmtFlower(r.consumed)) : "—"}</td>
+          <td style="padding:3px 6px;text-align:right;color:${dcol}">${r.dailyProfit >= 0 ? "+" : "−"}${roadmapFmtFlower(Math.abs(r.dailyProfit))}</td>
+          <td style="padding:3px 6px;text-align:right;color:var(--sunpetal);font-weight:bold">${r.mined ? roadmapFmtFlower(r.net) : "0"}</td>
+        </tr>`;
+      }
+      h += `</tbody></table></div>`;
+      h += `<div style="margin-top:8px;font-size:0.56rem;color:var(--text-secondary)">Total mining income ≈ <b style="color:var(--green)">${roadmapFmtFlower(ch.total)} ${sflIcon()}/day</b> — the optimal sell/use mix above.</div>`;
+      return h;
+    }
     function roadmapCatBreakdown(cat, effects, settings) {
       const { capacity, savedProducts, exchangeRates, stockMods, season } = powerState;
       const p2pPrices = roadmapPrices(settings);
@@ -16045,14 +16187,14 @@
         } else if (cat === "crops" || cat === "fruits" || cat === "greenhouse") {
           const mix = roadmapCatMix(cat, effects, settings);
           gross = mix.gross; cost += mix.cost;
+        } else if (ROADMAP_MINING_CATS.indexOf(cat) >= 0) {
+          // Mining chain (sell-vs-use). effOverride routes a boost toggle through for marginals.
+          const r = roadmapMiningChain(settings, { [cat]: effects }).byCat[cat] || { gross: 0, net: 0 };
+          gross = r.gross; cost = r.gross - r.net;
         } else {
-          if (RES_FARMKEY[cat]) gross = unitToSfl(gameResUnitsPerDay(cat, powerState.farm, capacity, effects), getPriceProduct(cat, product), p2pPrices) || 0;
-          else gross = unitToSfl(applyBoosts(cat, product, capacity, effects).unitsPerDay, getPriceProduct(cat, product), p2pPrices) || 0;
+          gross = unitToSfl(applyBoosts(cat, product, capacity, effects).unitsPerDay, getPriceProduct(cat, product), p2pPrices) || 0;
           if (cat === "flowers") {
             cost += (calcSeedCostPerDay(cat, product, capacity, er, stockMods, effects, p2pPrices).costPerDay) || 0;
-          }
-          if (ROADMAP_MINING_CATS.indexOf(cat) >= 0) {
-            cost += roadmapMiningNetCost(cat, settings);
           }
         }
       } catch {}
@@ -17253,7 +17395,7 @@
       // ── What to farm / mine now (per-category profitability) ──
       const _rmCollapse = (title, inner) => inner ? `<details style="margin-bottom:12px"><summary style="cursor:pointer;padding:9px 12px;background:#1c160f;border:1px solid var(--border-brown);border-radius:8px;font-family:'Press Start 2P',monospace;font-size:0.55rem;color:var(--sunpetal)">\u25b8 ${title}</summary><div style="margin-top:8px">${inner}</div></details>` : "";
       h += roadmapProfitabilityHtml(settings);
-      h += _rmCollapse("MINING STRATEGY - sell raw, or mine up the chain?", roadmapMiningStrategyHtml(settings));
+      h += roadmapMiningChainHtml(settings);
       h += _rmCollapse("ANIMAL FEEDING \u2014 what to feed, worth it?", roadmapAnimalFeedHtml(settings));
       h += _rmCollapse("ANIMAL LIFECYCLE \u2014 net per level", roadmapAnimalLifecycleHtml(settings));
       h += roadmapGiftsHtml(settings);
