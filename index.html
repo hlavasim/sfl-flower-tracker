@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.03</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.04</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.04", items: [
+          { t: "feat", text: "FLOWER GIFTS \u2192 KEYS section. Per NPC it shows the best flower to gift (points incl. Blossom Bonding), the repeating reward, its value (keys at labeled estimates Treasure 5 / Rare 25 / Luxury 80, coins/seeds at market), and the steady FLOWER/day if you gift daily = reward value \u00d7 points-per-gift \u00f7 repeat threshold. Sorted by value/day, with a daily-growable (\u2264 24h) flower suggested per NPC and a feasibility note on whether your flower beds can keep up. Key values are rough averages \u2014 chest contents are backend data." },
+        ]},
         { ver: "v4.03", items: [
           { t: "feat", text: "SKILLS folded into the roadmap. Every unlearned skill with a positive FLOWER/day gain now sits in the single buy order, costed as skill points \u00d7 SFL-per-level (the cooking-XP cost) \u2014 so the plan tells you whether it pays to burn resources for XP to level up for another skill. New SKILLS box: your level + cost per point, the top skills to take by payback, and RESET candidates \u2014 owned skills that add \u2264 0 FLOWER/day for your farm (debuff cancels the buff, or you don\u2019t run that activity), whose points a reset could re-allocate. Toggle skills on/off with the new Skills checkbox." },
         ]},
@@ -15996,6 +15999,73 @@
     }
 
     // "What should I farm/mine now" — net FLOWER/day per activity at full activity, green/red.
+    // Rough key values (chest EV is backend data) — labeled estimates the user can mentally adjust.
+    const ROADMAP_KEY_VALUE_SFL = { "Treasure Key": 5, "Rare Key": 25, "Luxury Key": 80 };
+    function roadmapGiftRewardValue(reward, nftFloor) {
+      const { p2pPrices, exchangeRates } = powerState;
+      let v = 0;
+      if (reward.coins && exchangeRates.coinsPerSFL > 0) v += reward.coins / exchangeRates.coinsPerSFL;
+      for (const [item, qty] of Object.entries(reward.items || {})) v += (ROADMAP_KEY_VALUE_SFL[item] || p2pPrices[item] || nftFloor(item) || 0) * qty;
+      for (const [w, qty] of Object.entries(reward.wearables || {})) v += (nftFloor(w) || 0) * qty;
+      return v;
+    }
+    function roadmapGiftRewardLabel(reward) {
+      const parts = [];
+      for (const [i, q] of Object.entries(reward.items || {})) parts.push(q + "\u00d7 " + i);
+      if (reward.coins) parts.push(reward.coins.toLocaleString() + " coins");
+      for (const [w, q] of Object.entries(reward.wearables || {})) parts.push(q + "\u00d7 " + w);
+      return parts.join(", ") || "\u2014";
+    }
+    // Flowers -> NPC gifts -> keys: steady FLOWER/day from gifting each NPC daily, and feasibility.
+    function roadmapGiftsHtml(settings) {
+      const { farm, capacity } = powerState;
+      const skills = (farm.bumpkin && farm.bumpkin.skills) || {};
+      const hasBB = !!skills["Blossom Bonding"];
+      const nftFloor = (name) => { const nd = powerState.nftData || {}; for (const tk of ["collectibles", "wearables"]) for (const it of (nd[tk] || [])) if (it.name === name) return parseFloat(it.floor) || 0; return 0; };
+      const flowers = Object.keys(DEFAULT_FLOWER_POINTS);
+      const rows = [];
+      for (const [npc, data] of Object.entries(BUMPKIN_GIFTS_DATA)) {
+        if (!data.repeats) continue;
+        let bestPts = 0, bestFlower = "", feasPts = 0, feasFlower = "", feasHrs = 0;
+        for (const f of flowers) {
+          const pts = getFlowerGiftPoints(npc, f, hasBB);
+          if (pts > bestPts) { bestPts = pts; bestFlower = f; }
+          let hrs = 0; try { hrs = getFlowerChainHours(f); } catch {}
+          if (hrs > 0 && hrs <= 24 && pts > feasPts) { feasPts = pts; feasFlower = f; feasHrs = hrs; }
+        }
+        const repu = data.repeats;
+        const repVal = roadmapGiftRewardValue(repu, nftFloor);
+        const giftsPerReward = bestPts > 0 ? repu.fp / bestPts : Infinity;
+        const perDay = (repVal > 0 && isFinite(giftsPerReward) && giftsPerReward > 0) ? repVal / giftsPerReward : 0;
+        rows.push({ npc, bestFlower, bestPts, feasFlower, feasPts, feasHrs, repVal, repLabel: roadmapGiftRewardLabel(repu), giftsPerReward, perDay });
+      }
+      if (!rows.length) return "";
+      rows.sort((a, b) => b.perDay - a.perDay);
+      const worth = rows.filter(r => r.perDay > 0.2).length;
+      const beds = getCapacityCount("flowers", capacity) || 0;
+      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
+      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">FLOWER GIFTS \u2192 KEYS \u2014 who to gift &amp; whether you can keep up</div>`;
+      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Gift a flower to an NPC once per day to build friendship; at each repeat threshold they hand back a key/coins. <b>FL/day</b> = reward value \u00d7 (points-per-gift \u00f7 repeat threshold) if you gift daily. Key values are estimates (Treasure ${ROADMAP_KEY_VALUE_SFL["Treasure Key"]} / Rare ${ROADMAP_KEY_VALUE_SFL["Rare Key"]} / Luxury ${ROADMAP_KEY_VALUE_SFL["Luxury Key"]} ${sflIcon()}). Use the best flower for points, but a flower that grows in \u2264 24h to actually sustain a daily gift.</div>`;
+      h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.58rem"><thead><tr style="color:var(--text-dim);text-align:left;font-size:0.5rem"><th style="padding:2px 6px">NPC</th><th style="padding:2px 6px">best flower (pts)</th><th style="padding:2px 6px">repeat reward</th><th style="padding:2px 6px;text-align:right">value</th><th style="padding:2px 6px;text-align:right">FL/day</th><th style="padding:2px 6px;text-align:right">days/reward</th><th style="padding:2px 6px">daily-grow flower</th></tr></thead><tbody>`;
+      for (const r of rows) {
+        const pos = r.perDay > 0.2;
+        const ncol = pos ? "var(--green)" : "var(--text-dim)";
+        h += `<tr style="border-top:1px solid #222">
+          <td style="padding:3px 6px;white-space:nowrap">${escHTML(r.npc)}</td>
+          <td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(r.bestFlower)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.bestFlower)} <span style="color:var(--text-dim);font-size:0.5rem">${r.bestPts}pt</span></td>
+          <td style="padding:3px 6px;color:var(--text-dim)">${escHTML(r.repLabel)}</td>
+          <td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(r.repVal)}</td>
+          <td style="padding:3px 6px;text-align:right;color:${ncol};font-weight:bold">${r.perDay > 0.0001 ? "+" + roadmapFmtFlower(r.perDay) : "0"}</td>
+          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${isFinite(r.giftsPerReward) ? Math.ceil(r.giftsPerReward) : "\u2014"}</td>
+          <td style="padding:3px 6px;color:var(--text-dim);white-space:nowrap">${r.feasFlower ? escHTML(r.feasFlower) + " (" + r.feasPts + "pt, " + r.feasHrs.toFixed(0) + "h)" : "\u2014"}</td>
+        </tr>`;
+      }
+      h += `</tbody></table></div>`;
+      h += `<div style="margin-top:8px;font-size:0.5rem;color:var(--text-dim)">Keeping up: gifting the ${worth} worthwhile NPCs daily needs ${worth} flowers/day. You have <b>${beds} flower bed${beds === 1 ? "" : "s"}</b> \u2014 each bed grows ~1 flower per its chain time, so prioritise the highest FL/day NPCs your beds can feed. Keys are spent on chests; values shown are rough averages.</div>`;
+      h += `</div>`;
+      return h;
+    }
+
     // SKILLS advisory: level + cost-per-point, and RESET advice (owned skills that add <= 0 FLOWER/day
     // for your farm because their debuff cancels the buff). The skills themselves are ranked in the
     // main buy order; this box surfaces the reset opportunity the buy order can't (it only adds skills).
@@ -16604,6 +16674,7 @@
       h += roadmapMiningStrategyHtml(settings);
       h += roadmapAnimalFeedHtml(settings);
       h += roadmapSkillsHtml(settings);
+      h += roadmapGiftsHtml(settings);
 
       // ── Controls ──
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:16px;font-size:0.62rem;color:var(--text-secondary)">`;
