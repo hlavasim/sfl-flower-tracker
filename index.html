@@ -2715,10 +2715,9 @@
             const edges = (fd.edges||[]).map((e)=>Object.assign({}, e, { style:{ stroke:C.goldb, strokeWidth:2.5 }, markerEnd:{ type:"arrowclosed", color:C.goldb }, animated:e.animated!==false }));
             if (roots[elId]) { try { roots[elId].unmount(); } catch (e) {} }
             const root = createRoot(el); roots[elId] = root;
-            root.render(h(ReactFlow, { nodes:fd.nodes, edges:edges, nodeTypes:nodeTypes, fitView:false, defaultViewport:{ x:120, y:26, zoom:0.95 }, minZoom:0.2, maxZoom:1.6, proOptions:{ hideAttribution:true }, defaultEdgeOptions:{ type:"smoothstep" }, nodesDraggable:true, panOnScroll:true, panOnScrollSpeed:0.85, zoomOnScroll:false, zoomOnPinch:true, zoomOnDoubleClick:true },
+            root.render(h(ReactFlow, { nodes:fd.nodes, edges:edges, nodeTypes:nodeTypes, fitView:false, defaultViewport:{ x:40, y:30, zoom:1 }, minZoom:0.4, maxZoom:1.4, proOptions:{ hideAttribution:true }, defaultEdgeOptions:{ type:"smoothstep" }, nodesDraggable:true, panOnScroll:true, panOnScrollSpeed:0.9, zoomOnScroll:false, zoomOnPinch:true, zoomOnDoubleClick:false, onInit:(inst)=>{ try { inst.setViewport({ x:40, y:30, zoom:1 }, { duration:0 }); } catch (e) {} } },
               h(Background, { color:"#3a2a1a", gap:24, size:1 }),
-              h(Controls, { showInteractive:false }),
-              h(MiniMap, { pannable:true, zoomable:true, nodeColor:()=>C.goldb, nodeStrokeColor:()=>C.gold, maskColor:"rgba(0,0,0,.6)", style:{ background:C.panel, border:"1px solid "+C.brown } })));
+              h(Controls, { showInteractive:false })));
           } catch (e) { errBox("render: " + ((e && e.message) || e)); }
         };
         window.__flowReady = true;
@@ -5786,7 +5785,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.11</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.12</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5813,6 +5812,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.12", items: [
+          { t: "fix", text: "Graph opened zoomed all the way out (millimetre nodes) because ReactFlow was fitting the whole tall path into the box. Now the viewport is forced to zoom 1 on init so the cards open at full readable size at the top of the path, and the minimap is gone. Scroll moves down the path, +/\u2212 zooms if you want." },
+        ]},
         { ver: "v4.11", items: [
           { t: "fix", text: "Visual roadmap rebuilt as a vertical noodle of big WoW-tooltip CARDS going down \u2014 the tile IS the tooltip, so every card always shows the effect, +FLOWER/day, cost, payback (ROI), ready-in (days), running spend and income-after, no hover needed. Skill cards now show their TREE and TIER (e.g. Greenhouse · Tier 2) so you can find them in-game. Deliver tiles show the ticket count (14 tickets ×3) so the net is transparent \u2014 ticket value (3 FLOWER each) is a rough estimate driving those figures. Scroll moves down the path." },
         ]},
