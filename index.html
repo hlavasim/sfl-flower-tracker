@@ -5689,7 +5689,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.25</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.26</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5716,6 +5716,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.26", items: [
+          { t: "fix", text: "Two mining tables were disagreeing. Removed the duplicate MINING & TREES rows from the What-to-farm/mine table — those showed the chain’s net-surplus attribution out of context (Crimstone looked like +8 because its Gold-Pickaxe cost is netted out of Gold, which then looked bad). Mining now lives in ONE place, the MINING CHAIN table, which is now scaled by your real harvest efficiency so it matches the income hero. Obsidian (its own lava-pit economics) stays in the farm table." },
+        ]},
         { ver: "v4.25", items: [
           { t: "fix", text: "Big mining-engine audit + rebuild (Phase 1). There were TWO resource-yield engines that disagreed: the detail card baked in wrong base yields (Wood 3 / Stone 2.2; the real game base is 1) and overcounted Wood ~2.5x. They are now ONE engine. Also: the Native +0.2 crit was credited to EVERY farm — now gated on the Native skill (you don’t have it, so Wood/Stone/Iron/Gold drop ~17% to the honest value); Crimstone gained its missing +0.4 streak bonus. Tool cost was billing the merge-weighted node count (a t3 rock = 16 pickaxes/cycle!) and ignoring speed boosts — now it’s one tool per PHYSICAL rock at your BOOSTED recovery cycle (e.g. your Stone tool cost halved). Net: income is a bit lower but finally correct, and every view shows the same number." },
           { t: "feat", text: "MINING CHAIN model (Phase 2 — your design). Pickaxes eat real resources, so each tier now shows SELL / USE / SKIP from a recursive sell-vs-use valuation: SELL = sell it raw, USE = burn it into the next tier, SKIP = mining loses vs selling the inputs. A tier can be USE even if selling it loses money, when a more profitable tier above makes feeding it worth more — e.g. on your farm Wood→Stone→Iron→Gold are all USE and you SELL the Gold, while Crimstone/Oil are SKIP (sell the Gold/inputs instead). The Δ column is the real per-day gain of mining a tier vs just selling its inputs. Income hero, what-to-mine and the new Mining Chain table all use this one model." },
@@ -16144,8 +16147,10 @@
       h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">⛏️ MINING CHAIN — sell, or mine up the chain?</div>`;
       h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Pickaxes eat real resources, so a tier is worth mining only if its ore beats the inputs it burns — and a tier can be worth mining purely to FEED a more profitable tier above it. <b style="color:#7fe0a0">SELL</b> = sell it raw · <b style="color:#5DADE2">USE</b> = burn it into the next tier · <b style="color:#e8a060">SKIP</b> = mining loses vs selling the inputs (sell those instead). <b>Δ</b> = the per-day gain from mining this vs just selling its inputs.</div>`;
       h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.58rem"><thead><tr style="color:var(--text-dim);font-size:0.5rem;text-align:left"><th style="padding:2px 6px">resource</th><th style="padding:2px 6px">do</th><th style="padding:2px 6px;text-align:right">produce/d</th><th style="padding:2px 6px;text-align:right">sell / use</th><th style="padding:2px 6px;text-align:right">Δ vs sell-inputs</th><th style="padding:2px 6px;text-align:right">net/d</th></tr></thead><tbody>`;
+      let tot = 0;
       for (const c of order) {
         const r = ch.byCat[c]; if (!r || (!r.mined && !(r.produced > 0))) continue;
+        const f = roadmapEffFactor(c, settings); tot += r.mined ? r.net * f : 0;
         const ic = ICON[r.verdict] || ICON.sell;
         const feed = (r.verdict === "use" && r.feeds) ? (" → " + escHTML(MINE_RES[r.feeds] || r.feeds)) : "";
         const badge = `<span style="font-size:0.5rem;padding:1px 5px;border-radius:3px;background:${ic[2]};color:${ic[1]};font-weight:bold">${ic[0]}${feed}</span>`;
@@ -16154,14 +16159,14 @@
         h += `<tr style="border-top:1px solid #1b1b1b">
           <td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(MINE_RES[c])}" onerror="this.style.display='none'" alt=""> ${escHTML(MINE_RES[c])}</td>
           <td style="padding:3px 6px;white-space:nowrap">${badge}${il}</td>
-          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${roadmapFmtFlower(r.produced)}</td>
-          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${r.mined ? (roadmapFmtFlower(r.sellable) + " / " + roadmapFmtFlower(r.consumed)) : "—"}</td>
-          <td style="padding:3px 6px;text-align:right;color:${dcol}">${r.dailyProfit >= 0 ? "+" : "−"}${roadmapFmtFlower(Math.abs(r.dailyProfit))}</td>
-          <td style="padding:3px 6px;text-align:right;color:var(--sunpetal);font-weight:bold">${r.mined ? roadmapFmtFlower(r.net) : "0"}</td>
+          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${roadmapFmtFlower(r.produced * f)}</td>
+          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${r.mined ? (roadmapFmtFlower(r.sellable * f) + " / " + roadmapFmtFlower(r.consumed * f)) : "—"}</td>
+          <td style="padding:3px 6px;text-align:right;color:${dcol}">${r.dailyProfit >= 0 ? "+" : "−"}${roadmapFmtFlower(Math.abs(r.dailyProfit * f))}</td>
+          <td style="padding:3px 6px;text-align:right;color:var(--sunpetal);font-weight:bold">${r.mined ? roadmapFmtFlower(r.net * f) : "0"}</td>
         </tr>`;
       }
       h += `</tbody></table></div>`;
-      h += `<div style="margin-top:8px;font-size:0.56rem;color:var(--text-secondary)">Total mining income ≈ <b style="color:var(--green)">${roadmapFmtFlower(ch.total)} ${sflIcon()}/day</b> — the optimal sell/use mix above.</div>`;
+      h += `<div style="margin-top:8px;font-size:0.56rem;color:var(--text-secondary)">Total mining income ≈ <b style="color:var(--green)">${roadmapFmtFlower(tot)} ${sflIcon()}/day</b> — the optimal sell/use mix above, scaled by your real harvest efficiency (matches the income).</div>`;
       return h;
     }
     function roadmapCatBreakdown(cat, effects, settings) {
@@ -16765,9 +16770,11 @@
       const addBd = (g, label, icon, bd, sub) => { if (bd && isFinite(bd.net)) g.rows.push({ label, icon, gross: bd.gross || 0, cost: bd.cost || 0, net: bd.net, sub }); };
       const sBd = (bd, f) => bd ? { gross: (bd.gross || 0) * f, cost: (bd.cost || 0) * f, net: (bd.net || 0) * f } : bd;
 
-      for (const [cat, icon] of [["trees","Wood"],["stone","Stone"],["iron","Iron"],["gold","Gold"],["crimstone","Crimstone"],["oil","Oil"],["obsidian","Obsidian"]]) {
+      // trees/stone/iron/gold/crimstone/oil now live in the dedicated MINING CHAIN table (sell/use/skip);
+      // only Obsidian (its own lava-pit economics) stays in this farm table.
+      for (const [cat, icon] of [["obsidian","Obsidian"]]) {
         if (getCapacityCount(cat, cap) <= 0) continue;
-        addBd(gMine, (POWER_CATEGORIES[cat] ? POWER_CATEGORIES[cat].label : cat), icon, sBd(roadmapCatBreakdown(cat, roadmapOwnedEffects(cat), settings), roadmapEffFactor(cat, settings)), cat === "obsidian" ? "1/wk" : "");
+        addBd(gOther, (POWER_CATEGORIES[cat] ? POWER_CATEGORIES[cat].label : cat), icon, sBd(roadmapCatBreakdown(cat, roadmapOwnedEffects(cat), settings), roadmapEffFactor(cat, settings)), "1/wk");
       }
       for (const [cat, icon] of [["chickens","Egg"],["cows","Milk"],["sheep","Wool"]]) {
         if (getCapacityCount(cat, cap) <= 0) continue;
