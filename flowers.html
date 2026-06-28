@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.00</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.02</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,12 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.02", items: [
+          { t: "feat", text: "NODE expansion + Obsidian MERGING are now part of the single buy order. Every available merge (4 tier-1 \u2192 tier-2 and 4 tier-2 \u2192 tier-3, each +0.5 yield per cycle) and each new node you could buy with Sunstone is a candidate with a real SFL cost \u2014 Obsidian and Sunstone are priced at market sale value, so a merge has to beat just selling the Obsidian. They are ranked by ROI right next to the NFT boosts, so the roadmap shows whether and when merging/expanding nodes is worth it. Reuses the nodes-page math." },
+        ]},
+        { ver: "v4.01", items: [
+          { t: "feat", text: "ANIMAL FEEDING advisor added to the roadmap (folding in the pets page). Per pen it shows produce \u2212 feed \u2212 sickness per day, with a row for every food (Kernel Blend / Hay / NutriBarley / Mixed Grain). Food only changes the feed cost (produce is level-based), so the table stars the cheapest food for your animals levels: green = feeding is net-positive, red = you lose FLOWER feeding them (don\u2019t bother). Reuses the exact pets-page math." },
+        ]},
         { ver: "v4.00", items: [
           { t: "fix", text: "Nothing is omitted any more. A boost that scores 0 in the optimal-mix marginal — because it boosts a crop you would only grow by choice, or a category still below break-even (crimstone) — now gets a SITUATIONAL value: what it would add if you ran that activity at full seed-capped scale. These appear in a new \"Situational boosts\" table (with payback + the condition that unlocks them), separate from the income-driving buy list so the headline FLOWER/day stays honest. So Hoot/Maximus/Black Bearry/crimstone boosts etc. are all visible and ranked, exactly as you asked — minus-now items kept, just prioritised." },
         ]},
@@ -15986,6 +15992,74 @@
     }
 
     // "What should I farm/mine now" — net FLOWER/day per activity at full activity, green/red.
+    // XP a specific food grants at a given animal level (FEED_XP_TABLE) — for the food comparison.
+    function feedFoodXpAtLevel(food, lvl) {
+      for (const row of FEED_XP_TABLE) if (lvl >= row.min && lvl <= row.max) return row.xp[food] || 0;
+      const last = FEED_XP_TABLE[FEED_XP_TABLE.length - 1];
+      return (last && last.xp[food]) || 0;
+    }
+
+    // Animal feeding advisor: per pen, is it net-positive to feed-and-sell? Food only changes the FEED
+    // cost (produce is level-based), so we show every food's net/day and star the cheapest; if even the
+    // best is red, the pen loses FLOWER and shouldn't be run.
+    function roadmapAnimalFeedHtml(settings) {
+      const { capacity, p2pPrices, stockMods } = powerState;
+      const skills = (powerState.farm.bumpkin && powerState.farm.bumpkin.skills) || {};
+      const cats = [["chickens", "Chicken"], ["cows", "Cow"], ["sheep", "Sheep"]];
+      const blocks = [];
+      for (const [cat, animalType] of cats) {
+        const animals = (capacity.animalDetails && capacity.animalDetails[cat]) || [];
+        if (!animals.length) continue;
+        const oeff = roadmapOwnedEffects(cat);
+        const produce = (getAnimalCatSfl(cat, capacity, oeff, p2pPrices).totalSfl) || 0;
+        const sick = (calcSicknessCost(cat, capacity, p2pPrices, powerState.boostItems, skills).costPerDay) || 0;
+        const fc = calcAnimalFeedCost(cat, capacity, p2pPrices, oeff, stockMods);
+        const cyclesPerDay = fc.cyclesPerDay || 0, effFeedQty = fc.effectiveFeedQty || (FEED_QTY[animalType] || 1);
+        const lvls = ANIMAL_LEVELS[animalType];
+        const golden = !!fc.isGolden;
+        const rows = [];
+        for (const food of Object.keys(FEED_RECIPES)) {
+          let costCycle = 0;
+          for (const a of animals) {
+            const lvl = a.level;
+            const xpPerCycle = lvl >= 15 ? (lvls[15] - lvls[14]) : ((lvls[lvl + 1] || lvls[15]) - lvls[lvl]);
+            const foodXp = feedFoodXpAtLevel(food, lvl) || 1;
+            const noOfFeed = Math.max(1, Math.ceil(xpPerCycle / foodXp));
+            costCycle += noOfFeed * effFeedQty * getFeedCostPerUnit(food, p2pPrices, stockMods);
+          }
+          const feedDay = golden ? 0 : costCycle * cyclesPerDay;
+          rows.push({ food, feedDay, net: produce - sick - feedDay });
+        }
+        rows.sort((a, b) => b.net - a.net);
+        blocks.push({ animalType, count: animals.length, produce, sick, golden, rows, best: rows[0] });
+      }
+      if (!blocks.length) return "";
+      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
+      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">ANIMAL FEEDING — WHAT TO FEED (and whether to bother)</div>`;
+      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Produce sold at p2p minus feed minus sickness, per day. Food changes only the FEED cost (produce is level-based), so the cheapest food for your animals\u2019 levels wins. <span style="color:var(--green)">Green = feeding is net-positive</span>; <span style="color:var(--red)">red = you lose FLOWER feeding them, don\u2019t bother</span>. \u2605 = best food.</div>`;
+      for (const b of blocks) {
+        const verdict = b.best.net > 0.001
+          ? `<span style="color:var(--green)">feed ${escHTML(b.best.food)} \u2192 +${roadmapFmtFlower(b.best.net)}/d</span>`
+          : `<span style="color:var(--red)">loss-making \u2014 best is ${roadmapFmtFlower(b.best.net)}/d, don\u2019t feed</span>`;
+        h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin:10px 0 3px">${b.animalType.toUpperCase()}S \u00d7${b.count}${b.golden ? " (golden \u2014 free feed)" : ""} \u00b7 produce +${roadmapFmtFlower(b.produce)}/d \u00b7 sick \u2212${roadmapFmtFlower(b.sick)}/d \u00b7 ${verdict}</div>`;
+        h += `<table style="width:100%;border-collapse:collapse;font-size:0.58rem"><tr style="color:var(--text-dim);font-size:0.5rem"><td>food</td><td style="text-align:right;padding:0 6px">feed/d</td><td style="text-align:right">net/d</td></tr>`;
+        for (const r of b.rows) {
+          const pos = r.net > 0.001, neg = r.net < -0.001;
+          const ncol = pos ? "var(--green)" : (neg ? "var(--red)" : "var(--text-dim)");
+          const isBest = r.food === b.best.food;
+          h += `<tr style="border-bottom:1px solid #1b1b1b${isBest ? ";background:#14240f" : ""}">
+            <td style="padding:2px 6px 2px 0">${isBest ? "\u2605 " : ""}<img class="inline-icon" src="${getItemIcon(r.food)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.food)}</td>
+            <td style="padding:2px 6px;text-align:right;color:var(--red)">${r.feedDay > 0.001 ? "\u2212" + roadmapFmtFlower(r.feedDay) : "0"}</td>
+            <td style="padding:2px 0 2px 6px;text-align:right;color:${ncol};font-weight:bold">${(pos ? "+" : (neg ? "\u2212" : "")) + roadmapFmtFlower(Math.abs(r.net))}</td>
+          </tr>`;
+        }
+        h += `</table>`;
+      }
+      h += `<div style="margin-top:8px;font-size:0.5rem;color:var(--text-dim)">Feed cost scales with animal level (higher levels eat more per cycle). Sickness = expected Barn Delight cure cost/day. Produce includes both drops (egg+feather / milk+leather / wool+merino) at your boosts.</div>`;
+      h += `</div>`;
+      return h;
+    }
+
     function roadmapProfitabilityHtml(settings) {
       const cf = roadmapCoinsFree(settings);
       const coins = Math.round(parseFloat(powerState.farm && powerState.farm.coins) || 0);
@@ -16082,6 +16156,7 @@
     // = floored net WITH the boost − floored net WITHOUT, per affected category.
     function roadmapItemValue(clone, catBoostsW, settings) {
       if (!clone) return 0;
+      if (clone.fixedMarginal !== undefined) return clone.fixedMarginal; // node merge/expand actions
       let total = 0;
       for (const cat of clone.categories) {
         if (!POWER_CATEGORIES[cat] || !POWER_CATEGORIES[cat].quantifiable) continue;
@@ -16221,6 +16296,60 @@
 
     // Greedy: buy lowest-payback (best ROI) economic boost first; income compounds;
     // recompute marginals of same-category items after each buy (synergy/diminishing returns).
+    // Node expansion + Obsidian merging as fixed-marginal roadmap candidates (reuses nodes-page math).
+    function roadmapNodeCandidates(settings) {
+      const out = [];
+      const { capacity, p2pPrices, exchangeRates, farm } = powerState;
+      const obsidianP = p2pPrices["Obsidian"] || 0;
+      if (!(obsidianP > 0)) return out;               // can't price Obsidian → skip node actions
+      const sunstoneP = obsidianP * 3;                 // 1 Sunstone = 3 Obsidian
+      const coinsFree = roadmapCoinsFree(settings);
+      const er = coinsFree ? Object.assign({}, exchangeRates, { coinsPerSFL: Infinity }) : exchangeRates;
+      const coinSfl = (coins) => coinsFree ? 0 : (er.coinsPerSFL > 0 ? coins / er.coinsPerSFL : 0);
+      const islandType = ((farm.island && farm.island.type) || "basic").toLowerCase();
+      const baseNodes = (typeof BASE_NODE_COUNTS !== "undefined" && (BASE_NODE_COUNTS[islandType] || BASE_NODE_COUNTS.basic)) || {};
+      const mkItem = (name, cost, cat, marg, desc) => ({ name, type: "Node", floor: cost, boost: desc, supply: 0,
+        clone: { name, categories: [cat], effects: [], fixedMarginal: marg, has: false, isDisabled: false } });
+      const MERGEKEY_CAT = { trees: "trees", stones: "stone", iron: "iron", gold: "gold" };
+      const cyclesFor = (cat) => { const oeff = roadmapOwnedEffects(cat); const ab = applyBoosts(cat, getDefaultProduct(cat), capacity, oeff); return ab.effectiveCycle > 0 ? 86400 / ab.effectiveCycle : 0; };
+
+      // A. Obsidian merges (4× t1 -> t2, 4× t2 -> t3) — each +0.5 yield/cycle.
+      for (const [mk, mc] of Object.entries(MERGE_COSTS)) {
+        const cat = MERGEKEY_CAT[mk]; const fk = RES_FARMKEY[cat]; if (!cat || !fk) continue;
+        const tiers = countNodeTiers(farm[fk] || {});
+        const price = p2pPrices[getDefaultProduct(cat)] || 0;
+        const marg = 0.5 * cyclesFor(cat) * price * roadmapEffFactor(cat, settings);
+        if (!(marg > 0)) continue;
+        const label = (typeof NODE_PRICES !== "undefined" && NODE_PRICES[mk] && NODE_PRICES[mk].label) || cat;
+        const nT2 = Math.floor((tiers.t1 || 0) / 4);
+        const costT2 = mc.t2.obsidian * obsidianP + coinSfl(mc.t2.coins);
+        for (let i = 0; i < Math.min(nT2, 20); i++) out.push(mkItem("Merge " + label + " \u2192 tier 2", costT2, cat, marg, "4\u00d7 t1 \u2192 t2 \u00b7 +0.5/cycle \u00b7 " + mc.t2.obsidian + " Obsidian" + (coinsFree ? "" : " + " + (mc.t2.coins / 1000) + "k coins")));
+        const nT3 = Math.floor((tiers.t2 || 0) / 4);
+        const costT3 = mc.t3.obsidian * obsidianP + coinSfl(mc.t3.coins);
+        for (let i = 0; i < Math.min(nT3, 10); i++) out.push(mkItem("Merge " + label + " \u2192 tier 3", costT3, cat, marg, "4\u00d7 t2 \u2192 t3 \u00b7 +0.5/cycle \u00b7 " + mc.t3.obsidian + " Obsidian" + (coinsFree ? "" : " + " + (mc.t3.coins / 1000) + "k coins")));
+      }
+
+      // B. Buy new nodes with Sunstone (next 3 per resource; escalating cost).
+      if (typeof NODE_PRICES !== "undefined") for (const [nk, np] of Object.entries(NODE_PRICES)) {
+        const cat = np.catId; const fk = RES_FARMKEY[cat]; if (!fk) continue; // mineable/tree nodes only
+        const tiers = countNodeTiers(farm[fk] || {});
+        const purchased = Math.max(0, tiers.effective - (baseNodes[nk] || 0));
+        const oeff = roadmapOwnedEffects(cat);
+        const price = p2pPrices[getDefaultProduct(cat)] || 0;
+        const perNodeBase = gameResBoostedBase(farm, cat, oeff);   // one fresh t1 node, yield/cycle
+        const grossDay = perNodeBase * cyclesFor(cat) * price;
+        let toolPerNode = 0;
+        try { const tc = (calcToolCostPerDay(cat, capacity, er, p2pPrices, powerState.stockMods, false).costPerDay) || 0; const nN = Object.keys(farm[fk] || {}).length; toolPerNode = nN > 0 ? tc / nN : 0; } catch {}
+        const marg = Math.max(0, grossDay - toolPerNode) * roadmapEffFactor(cat, settings);
+        if (!(marg > 0)) continue;
+        for (let i = 0; i < 3; i++) {
+          const nextSun = np.base + (purchased + i) * np.increase;
+          out.push(mkItem("Buy " + np.label + " node", nextSun * sunstoneP, cat, marg, "+1 node \u00b7 " + nextSun + " Sunstone (" + (nextSun * 3) + " Obsidian)"));
+        }
+      }
+      return out;
+    }
+
     function roadmapSimulate(settings, startIncome) {
       const { byName, catBoostsW } = roadmapBuildClones();
       const missing = roadmapBuildMissing(byName, settings);
@@ -16235,11 +16364,15 @@
         const economic = !m.clone.isDisabled && m.clone.categories.some(c => POWER_CATEGORIES[c] && POWER_CATEGORIES[c].quantifiable);
         if (economic) econ.push(m); else cosmetic.push(m);
       }
+      // Fold in node expansion / Obsidian-merge actions (respect the price cap).
+      const nodeCands = roadmapNodeCandidates(settings);
+      for (const nc of nodeCands) { if (nc.floor > 0 && nc.floor <= maxP) econ.push(nc); }
       tail.sort((a, b) => a.floor - b.floor);
       const tailCost = tail.reduce((s, m) => s + m.floor, 0);
       // Snapshot the original owned state so we can re-simulate any order from scratch.
       const origHas = [];
       for (const cat of Object.keys(catBoostsW)) for (const c of catBoostsW[cat]) origHas.push([c, c.has]);
+      for (const nc of nodeCands) origHas.push([nc.clone, nc.clone.has]);
       const resetClones = () => { for (const [c, h] of origHas) c.has = h; };
 
       const econPos = [], situational = [];
@@ -16409,6 +16542,7 @@
       // ── What to farm / mine now (per-category profitability) ──
       h += roadmapProfitabilityHtml(settings);
       h += roadmapMiningStrategyHtml(settings);
+      h += roadmapAnimalFeedHtml(settings);
 
       // ── Controls ──
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:16px;font-size:0.62rem;color:var(--text-secondary)">`;
