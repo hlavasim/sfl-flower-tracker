@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.95</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.00</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,21 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.00", items: [
+          { t: "fix", text: "Nothing is omitted any more. A boost that scores 0 in the optimal-mix marginal — because it boosts a crop you would only grow by choice, or a category still below break-even (crimstone) — now gets a SITUATIONAL value: what it would add if you ran that activity at full seed-capped scale. These appear in a new \"Situational boosts\" table (with payback + the condition that unlocks them), separate from the income-driving buy list so the headline FLOWER/day stays honest. So Hoot/Maximus/Black Bearry/crimstone boosts etc. are all visible and ranked, exactly as you asked — minus-now items kept, just prioritised." },
+        ]},
+        { ver: "v3.99", items: [
+          { t: "fix", text: "Crops/fruits/greenhouse value the OPTIMAL mix over ALL in-season crops (filled under your 2-restocks/day seed cap, so you grow several crops before a restock — exactly as the game forces), NOT just what you happen to be planting right now. Reverts v3.98: your current crop isnt necessarily the best one, and a new NFT can make a different crop more profitable — the model now finds that. Per-crop/fruit boosts that would lift a crop into the profitable mix are credited; ones for crops that never beat the mix are surfaced separately (next) so nothing is hidden." },
+        ]},
+        { ver: "v3.98", items: [
+          { t: "fix", text: "Crop/fruit boost values now reflect what you ACTUALLY grow, not a theoretical optimum. The seed-capped optimum picked ~Beetroot and never Kale, so a boost to the crop you really plant scored 0 (Hoot, etc. looked worthless). Now crops/fruits/greenhouse read your live plantings (all 68 plots Kale, 18 patches Apple, 4 pots Rice right now) scaled to capacity, so Hoot (+Kale/+Rice), Lady Bug (+Apple) and friends carry the marginal they are genuinely worth to your farm. If a category is empty it falls back to the best in-season seed-capped mix." },
+        ]},
+        { ver: "v3.97", items: [
+          { t: "fix", text: "ROADMAP crop & fruit boosts were invisible for the same reason resources were: the category net was computed off ONE default product (Kale/Blueberry/Grape), so a per-crop or per-fruit boost (Hoot +Wheat/Radish/Kale/Rice/Barley, Black Bearry +Blueberry, Lemon Shark +Lemon, Tomato Bombard, Scary Mike/Laurie tier AOE…) changed nothing and scored 0. Now crops/fruits/greenhouse value the realistic PLOT-FILLING MIX: fill your plots with the most profitable in-season products, each capped by its daily Betty seed-restock rate (you cannot plant unlimited of one crop), so several crops are grown and a boost to any of them produces a real marginal. The headline FLOWER/day also rises because the mix beats a single default crop." },
+        ]},
+        { ver: "v3.96", items: [
+          { t: "fix", text: "ROADMAP resource boosts were ALL invisible (no wood/stone/iron/gold/crimstone items in the buy list). Cause: the resource yield helper ignored the candidate boost being tested, so every mining/tree boost scored a 0 marginal and got dumped in the cosmetic tail. The per-node boosted base now folds the boost being evaluated (beavers, beetles, Wood Nymph, Tin Turtle, Iron Idol, Nugget, Crim Peckster, Volcano Gnome) and the cycle reflects recovery-time boosts, so a faster-respawn boost also compounds the existing yield (the synergy you described). Bonus accuracy: stone/iron/gold now include the Mining-tree trade-off skills (Rock-N-Roll, Rocky Favor, Ferrous Favor, Golden Touch, Iron Bumpkin) the old structural model silently dropped. Wood verified unchanged (9.92/tool). Crops/fruits per-product marginals are next." },
+        ]},
         { ver: "v3.95", items: [
           { t: "feat", text: "Yield engine port COMPLETE (5/5). Greenhouse added to gameExtraEffects (Pharaoh Gnome +2, Rice Panda +0.25, Non La Hat +1 Rice, Olive Shield +1 / Olive Royalty Shirt +0.25 Olive); the user owns none so their greenhouse already matched (Grape/Rice/Olive 1.35 from Glass Room +0.1 + Greenhouse Gamble +0.25, skills parsed). Full status vs sfl.world (Node-harness verified on the live farm): crops Sunflower/Potato 1.85, fruits Blueberry 1.65, animals Wool 4.40/cycle, resources Wood 9.92/tool & 793/day, greenhouse 1.35 — all matching. Root fix across all: the marketplace NFT API exposed boosts for only ~6 of 180 owned items; gameExtraEffects + the resource per-node-tier model port what the API omits." },
         ]},
@@ -15368,46 +15383,35 @@
     const FACTION_SHIELDS = { bumpkins: "Bumpkin Shield", goblins: "Goblin Shield", nightshades: "Nightshade Shield", sunflorians: "Sunflorian Shield" };
     const RES_FARMKEY = { trees: "trees", stone: "stones", iron: "iron", gold: "gold", crimstone: "crimstones" };
 
-    // Per-node boosted base (base 1 x multiplicatives + additives) — faithful to the game's
-    // chop.ts / *Mine.ts. Chance boosts use expected value (Native +1 @ 1/5 = +0.2, Tough Tree x3 @ 1/10 = x1.2).
-    function gameResBoostedBase(farm, cat) {
-      const skills = (farm.bumpkin && farm.bumpkin.skills) || {};
-      const inv = farm.inventory || {};
+    // Per-node boosted base = (1 x multiplicatives + additives), faithful to chop.ts / *Mine.ts.
+    // The yield BOOSTS (beavers, beetles, Wood Nymph, Tin Turtle, Iron Idol, Nugget, Volcano Gnome,
+    // + every Mining/Trees skill) are FOLDED FROM THE PASSED EFFECT SET so a with-vs-without delta
+    // produces a real marginal for the roadmap. The structural part keeps ONLY what the NFT API does
+    // NOT expose (and therefore can never appear in `effects`, so no double count): Native +0.2,
+    // Squirrel +0.1, the Lumberjack collectible x1.1, and the faction shield +0.25.
+    function gameResBoostedBase(farm, cat, effects) {
       const has = (n) => findCollectible(farm, n).length > 0;
       const faction = (farm.faction && farm.faction.name) || "";
       const shieldEq = FACTION_SHIELDS[faction] && farmWearableEquipped(farm, FACTION_SHIELDS[faction]);
       let mult = 1, add = 0;
-      if (cat !== "crimstone") add += 0.2; // Native +1 @ 1/5 (trees/stone/iron/gold)
+      if (cat !== "crimstone") add += 0.2; // Native +1 @ 1/5 (trees/stone/iron/gold) — game-only
       if (cat === "trees") {
-        if (has("Woody the Beaver") || has("Apprentice Beaver") || has("Foreman Beaver")) mult *= 1.2;
-        if (inv["Lumberjack"]) mult *= 1.1;
-        if (skills["Tough Tree"]) mult *= 1.2;
-        if (skills["Lumberjack's Extra"]) add += 0.1;
-        if (has("Wood Nymph Wendy")) add += 0.2;
-        if (has("Tiki Totem")) add += 0.1;
-        if (has("Squirrel")) add += 0.1;
-        if (shieldEq) add += 0.25;
-      } else if (cat === "stone") {
-        if (has("Stone Beetle")) add += 0.1;
-        if (has("Volcano Gnome")) add += 0.1;
-        if (has("Tin Turtle")) add += 0.1;
-      } else if (cat === "iron") {
-        if (has("Iron Beetle")) add += 0.1;
-        if (has("Volcano Gnome")) add += 0.1;
-        if (has("Iron Idol")) add += 1;
-      } else if (cat === "gold") {
-        if (has("Gold Beetle")) add += 0.1;
-        if (has("Volcano Gnome")) add += 0.1;
-        if (has("Nugget")) add += 0.1;
-      } else if (cat === "crimstone") {
-        if (has("Crim Peckster")) add += 0.1;
-        if (has("Crimson Carp")) add += 0.05;
+        if (has("Lumberjack")) mult *= 1.1;   // collectible — absent from the NFT API
+        if (has("Squirrel")) add += 0.1;       // absent from the NFT API
+        if (shieldEq) add += 0.25;             // faction shield — game-only
+      }
+      // Fold the parsed boost effects (API/EXTRA collectibles + skills) for this resource.
+      for (const e of (effects || [])) {
+        if (e.cat !== cat) continue;
+        if (e.type === "yield_flat") add += (e.value || 0);
+        else if (e.type === "yield_pct") mult *= (1 + (e.value || 0) / 100);
+        else if (e.type === "yield_mult") mult *= (e.value || 1);
       }
       return 1 * mult + add;
     }
     // Total resource units per full harvest-round (all nodes): Sum_node bb x multiplier + tierBonus.
-    function gameResYield(farm, cat) {
-      const bb = gameResBoostedBase(farm, cat);
+    function gameResYield(farm, cat, effects) {
+      const bb = gameResBoostedBase(farm, cat, effects);
       const obj = farm[RES_FARMKEY[cat]] || {};
       let total = 0;
       for (const node of Object.values(obj)) {
@@ -15417,17 +15421,19 @@
       }
       return total;
     }
-    function gameResUnitsPerDay(cat, farm, capacity) {
+    function gameResUnitsPerDay(cat, farm, capacity, effects) {
       if (!RES_FARMKEY[cat]) return 0;
-      const ab = applyBoosts(cat, getDefaultProduct(cat), capacity, roadmapOwnedEffects(cat));
+      const eff = effects || roadmapOwnedEffects(cat);
+      const ab = applyBoosts(cat, getDefaultProduct(cat), capacity, eff);
       const ec = ab.effectiveCycle || getCycleSec(cat, getDefaultProduct(cat));
-      return ec > 0 ? gameResYield(farm, cat) * (86400 / ec) : 0;
+      return ec > 0 ? gameResYield(farm, cat, eff) * (86400 / ec) : 0;
     }
     // Average resource per single node-harvest (per tool used) — for the mining-strategy tool cost.
-    function gameResYieldPerTool(farm, cat) {
+    function gameResYieldPerTool(farm, cat, effects) {
+      const eff = effects || roadmapOwnedEffects(cat);
       const obj = farm[RES_FARMKEY[cat]] || {};
       const n = Object.keys(obj).length;
-      return n > 0 ? gameResYield(farm, cat) / n : gameResBoostedBase(farm, cat);
+      return n > 0 ? gameResYield(farm, cat, eff) / n : gameResBoostedBase(farm, cat, eff);
     }
 
     const FACTION_WINGS_END = true;
@@ -15770,6 +15776,50 @@
     // NET FLOWER/day for a category given an effect set: gross production − running costs
     // (feed, sickness, seed, tools, lava). Mirrors the ROI/Power full-cost model — so a
     // loss-making activity (e.g. low-level animals where feed ≥ produce) nets ≤ 0.
+    // Per-plot economics of growing product p (one crop/fruit/greenhouse item) under an effect set.
+    // Returns per-plot gross & cost (all-plots figure ÷ plots) plus its seed-restock plot cap.
+    function roadmapPerPlot(cat, p, effects, settings) {
+      const { capacity, p2pPrices, exchangeRates, stockMods } = powerState;
+      const plots = getCapacityCount(cat, capacity);
+      if (!(plots > 0)) return null;
+      const er = roadmapCoinsFree(settings) ? Object.assign({}, exchangeRates, { coinsPerSFL: Infinity }) : exchangeRates;
+      let ab; try { ab = applyBoosts(cat, p, capacity, effects); } catch { return null; }
+      if (!ab || !(ab.unitsPerDay > 0)) return null;
+      const grossAll = unitToSfl(ab.unitsPerDay, getPriceProduct(cat, p), p2pPrices) || 0;
+      let costAll = 0;
+      try { costAll = (calcSeedCostPerDay(cat, p, capacity, er, stockMods, effects, p2pPrices).costPerDay) || 0; } catch {}
+      const cyclesPerDay = ab.effectiveCycle > 0 ? 86400 / ab.effectiveCycle : 0;
+      // Seed-restock cap → plots that product p can keep continuously planted from daily Betty restocks.
+      let maxPlots = plots;
+      const capSeeds = (settings.restocksPerDay || 2) * (cmGetSeedRestockCount(powerState.farm, p) || 0);
+      if (capSeeds > 0 && cyclesPerDay > 0) maxPlots = Math.min(plots, capSeeds / cyclesPerDay);
+      return { gpp: grossAll / plots, cpp: costAll / plots, plots, maxPlots, cyclesPerDay };
+    }
+
+    // Category net for crops/fruits/greenhouse = the OPTIMAL mix over ALL in-season products, filling
+    // the farm's plots by descending net-per-plot under each product's 2-restock/day seed cap (so you
+    // typically grow a few crops before a restock, exactly as the game forces). A boost that lifts a
+    // crop into the profitable mix is captured as a real improvement here. Returns { gross, cost }.
+    function roadmapCatMix(cat, effects, settings) {
+      const plots = getCapacityCount(cat, powerState.capacity);
+      if (!(plots > 0)) return { gross: 0, cost: 0 };
+      const table = cat === "crops" ? CROP_GROW_DATA : (cat === "fruits" ? FRUIT_GROW_DATA : GREENHOUSE_GROW_DATA);
+      const rows = [];
+      for (const p of Object.keys(table)) {
+        if ((cat === "crops" || cat === "fruits") && !roadmapInSeason(p)) continue;
+        const pp = roadmapPerPlot(cat, p, effects, settings); if (!pp) continue;
+        rows.push({ netPerPlot: pp.gpp - pp.cpp, grossPerPlot: pp.gpp, costPerPlot: pp.cpp, maxPlots: pp.maxPlots });
+      }
+      rows.sort((a, b) => b.netPerPlot - a.netPerPlot);
+      let rem = plots, gross = 0, cost = 0;
+      for (const r of rows) {
+        if (rem <= 1e-9 || !(r.netPerPlot > 0)) break;
+        const take = Math.min(rem, r.maxPlots); if (take <= 0) continue;
+        gross += r.grossPerPlot * take; cost += r.costPerPlot * take; rem -= take;
+      }
+      return { gross, cost };
+    }
+
     function roadmapCatBreakdown(cat, effects, settings) {
       const { capacity, p2pPrices, savedProducts, exchangeRates, stockMods, season } = powerState;
       const skills = (powerState.farm && powerState.farm.bumpkin && powerState.farm.bumpkin.skills) || {};
@@ -15789,10 +15839,13 @@
           gross = (getAnimalCatSfl(cat, capacity, effects, p2pPrices).totalSfl) || 0;
           cost += (calcAnimalFeedCost(cat, capacity, p2pPrices, effects, stockMods).costPerDay) || 0;
           cost += (calcSicknessCost(cat, capacity, p2pPrices, powerState.boostItems, skills).costPerDay) || 0;
+        } else if (cat === "crops" || cat === "fruits" || cat === "greenhouse") {
+          const mix = roadmapCatMix(cat, effects, settings);
+          gross = mix.gross; cost += mix.cost;
         } else {
-          if (RES_FARMKEY[cat]) gross = unitToSfl(gameResUnitsPerDay(cat, powerState.farm, capacity), getPriceProduct(cat, product), p2pPrices) || 0;
+          if (RES_FARMKEY[cat]) gross = unitToSfl(gameResUnitsPerDay(cat, powerState.farm, capacity, effects), getPriceProduct(cat, product), p2pPrices) || 0;
           else gross = unitToSfl(applyBoosts(cat, product, capacity, effects).unitsPerDay, getPriceProduct(cat, product), p2pPrices) || 0;
-          if (cat === "crops" || cat === "fruits" || cat === "greenhouse" || cat === "flowers") {
+          if (cat === "flowers") {
             cost += (calcSeedCostPerDay(cat, product, capacity, er, stockMods, effects, p2pPrices).costPerDay) || 0;
           }
           if (cat === "trees" || cat === "stone" || cat === "iron" || cat === "gold" || cat === "crimstone" || cat === "oil") {
@@ -15882,7 +15935,7 @@
       for (const link of CHAIN) {
         if (getCapacityCount(link.cat, capacity) <= 0) continue;
         const ab = applyBoosts(link.cat, link.product, capacity, roadmapOwnedEffects(link.cat));
-        const yieldPerAction = gameResYieldPerTool(powerState.farm, link.cat);
+        const yieldPerAction = gameResYieldPerTool(powerState.farm, link.cat, roadmapOwnedEffects(link.cat));
         if (!(yieldPerAction > 0)) continue;
         const tool = TOOL_COSTS[link.tool] || { coins: 0 };
         let toolMat = 0;
@@ -15891,7 +15944,7 @@
         const toolCostPerUnit = (toolMat + toolCoin) / yieldPerAction;
         const price = p2pPrices[link.product] || 0;
         const netPerUnit = price - toolCostPerUnit;
-        const realUnits = gameResUnitsPerDay(link.cat, powerState.farm, capacity) * roadmapEffFactor(link.cat, settings);
+        const realUnits = gameResUnitsPerDay(link.cat, powerState.farm, capacity, roadmapOwnedEffects(link.cat)) * roadmapEffFactor(link.cat, settings);
         rows.push({
           cat: link.cat, product: link.product, yieldPerAction, toolCostPerUnit, price, netPerUnit,
           realUnits, sellRaw: realUnits * price, dailyNet: realUnits * netPerUnit,
@@ -16043,6 +16096,46 @@
       return total;
     }
 
+    // "Situational" value: what a boost is worth if you DID run the activity it touches, even when that
+    // activity isn't in your current profit-optimal setup. Crops/fruits/greenhouse → grow the boosted
+    // product on its seed-capped plots and take the best single deployment. Resources/animals → the
+    // unfloored category improvement (so a boost to a still-loss-making category like crimstone still
+    // registers). Returns { value, reason } — used only to surface 0-marginal boosts, never income.
+    function roadmapItemSituational(clone, catBoostsW, settings) {
+      if (!clone) return { value: 0, reason: "" };
+      let total = 0; const reasons = [];
+      for (const cat of clone.categories) {
+        if (!POWER_CATEGORIES[cat] || !POWER_CATEGORIES[cat].quantifiable) continue;
+        const itemEff = clone.effects.filter(e => e.cat === cat);
+        if (!itemEff.length) continue;
+        const ownedEff = catBoostsW[cat].filter(b => b.has && !b.isDisabled).flatMap(b => b.effects.filter(e => e.cat === cat));
+        let v = 0;
+        if (cat === "crops" || cat === "fruits" || cat === "greenhouse") {
+          const table = cat === "crops" ? CROP_GROW_DATA : (cat === "fruits" ? FRUIT_GROW_DATA : GREENHOUSE_GROW_DATA);
+          let prods = Array.from(new Set(itemEff.filter(e => e.product).map(e => e.product)));
+          if (!prods.length) prods = Object.keys(table); // AOE/global → best of any product
+          let best = 0, bestP = "";
+          for (const p of prods) {
+            if (!table[p]) continue;
+            const a = roadmapPerPlot(cat, p, ownedEff.concat(itemEff), settings);
+            const b = roadmapPerPlot(cat, p, ownedEff, settings);
+            if (!a || !b) continue;
+            const plotsP = Math.min(a.plots, a.maxPlots);
+            const d = ((a.gpp - a.cpp) - (b.gpp - b.cpp)) * plotsP;
+            if (d > best) { best = d; bestP = p; }
+          }
+          v = best;
+          if (best > 0 && bestP) reasons.push("if you grow " + bestP);
+        } else {
+          const d = roadmapCatNet(cat, ownedEff.concat(itemEff), settings) - roadmapCatNet(cat, ownedEff, settings);
+          v = Math.max(0, d);
+          if (v > 0) reasons.push((POWER_CATEGORIES[cat].label || cat) + " (still below break-even)");
+        }
+        total += v * roadmapEffFactor(cat, settings);
+      }
+      return { value: total, reason: reasons.join(", ") };
+    }
+
     // THROUGHPUT efficiency = harvested/day ÷ theoretical/day (effective node count × boosted
     // cycles/day), over a recent representative window EXCLUDING the current week. The _h.* sums
     // are cumulative, so this is robust to sparse-sampling stretches (session-counting was not —
@@ -16080,7 +16173,7 @@
           const _ani = getAnimalCatSfl(catId, powerState.capacity, oeff, powerState.p2pPrices);
           theoPerDay = (_ani.breakdown || []).reduce((s, b) => s + (b.unitsPerDay || 0), 0);
         } else if (RES_FARMKEY[catId]) {
-          theoPerDay = gameResUnitsPerDay(catId, powerState.farm, powerState.capacity);
+          theoPerDay = gameResUnitsPerDay(catId, powerState.farm, powerState.capacity, oeff);
         } else {
           theoPerDay = applyBoosts(catId, getDefaultProduct(catId), powerState.capacity, oeff).unitsPerDay || 0;
         }
@@ -16149,8 +16242,15 @@
       for (const cat of Object.keys(catBoostsW)) for (const c of catBoostsW[cat]) origHas.push([c, c.has]);
       const resetClones = () => { for (const [c, h] of origHas) c.has = h; };
 
-      const econPos = [];
-      for (const m of econ) { m.marginal = roadmapItemValue(m.clone, catBoostsW, settings); if (m.marginal > 0) econPos.push(m); else cosmetic.push(m); }
+      const econPos = [], situational = [];
+      for (const m of econ) {
+        m.marginal = roadmapItemValue(m.clone, catBoostsW, settings);
+        if (m.marginal > 0) { econPos.push(m); continue; }
+        const sit = roadmapItemSituational(m.clone, catBoostsW, settings);
+        if (sit.value > 0.0001) { m.sitValue = sit.value; m.sitReason = sit.reason; situational.push(m); }
+        else cosmetic.push(m);
+      }
+      situational.sort((a, b) => (a.floor / (a.sitValue || 1e-9)) - (b.floor / (b.sitValue || 1e-9)));
 
       // Simulate a buy ORDER with reinvestment + dynamic synergy. Returns the step timeline,
       // final rate, total days, and the total FLOWER income integrated over horizon H (objective).
@@ -16221,7 +16321,7 @@
         timeline.push({ name: m.name, type: m.type, boost: m.boost, floor: m.floor, marginal: 0, roi: Infinity, atDay: cumDays, rateAfter: rate, kind: "cosmetic" });
       }
       const totalCost = timeline.reduce((s, t) => s + t.floor, 0);
-      return { timeline, econSteps, cosmeticCount: cosmetic.length, econCost, untradeable, tail, tailCost, noBoostCount, startRate: startIncome, finalRate, totalDays: cumDays, totalCost, optGainPct, horizonYears: (settings.horizonYears || 100) };
+      return { timeline, econSteps, cosmeticCount: cosmetic.length, econCost, untradeable, tail, tailCost, noBoostCount, situational, startRate: startIncome, finalRate, totalDays: cumDays, totalCost, optGainPct, horizonYears: (settings.horizonYears || 100) };
     }
 
     function roadmapFmtDays(d) {
@@ -16386,6 +16486,28 @@
         h += `<tr><td colspan="9" style="padding:6px;color:var(--text-dim);font-size:0.55rem">… and ${sim.cosmeticCount - cosmeticShown} more cosmetic NFTs (included in totals above)</td></tr>`;
       }
       h += `</tbody></table></div>`;
+
+      if (sim.situational && sim.situational.length) {
+        h += `<div style="margin-top:16px"><div class="pixel-font" style="font-size:0.55rem;color:var(--lily);margin-bottom:4px">SITUATIONAL BOOSTS — not in your optimal setup (yet)</div>`;
+        h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Each of these boosts a real activity that isn't part of your profit-optimal mix right now — a crop/fruit you'd only grow by choice, or a category still below break-even (e.g. crimstone). The <span style="color:var(--green)">+FL/day</span> is what it would add IF you ran that activity at full seed-capped scale. They are <b>not</b> counted in the income above (you'd have to change what you grow/mine to realise them), but they're listed so nothing is hidden.</div>`;
+        h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.58rem"><thead><tr style="color:var(--text-secondary);text-align:left"><th style="padding:3px 6px">NFT</th><th style="padding:3px 6px">Boost</th><th style="padding:3px 6px;text-align:right">Cost</th><th style="padding:3px 6px;text-align:right">+FL/day if used</th><th style="padding:3px 6px;text-align:right">Payback</th><th style="padding:3px 6px">When it pays off</th></tr></thead><tbody>`;
+        let sShown = 0;
+        for (const m of sim.situational) {
+          if (sShown++ >= 80) break;
+          const roi = m.sitValue > 0 ? m.floor / m.sitValue : Infinity;
+          h += `<tr style="border-top:1px solid #222">
+            <td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(m.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(m.name)} ${typeBadge(m.type)}</td>
+            <td style="padding:3px 6px;color:var(--text-dim);max-width:220px">${escHTML((m.boost || "").split("\n").join(" · "))}</td>
+            <td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(m.floor)}</td>
+            <td style="padding:3px 6px;text-align:right;color:var(--green)">+${roadmapFmtFlower(m.sitValue)}</td>
+            <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${roadmapFmtDays(roi)}</td>
+            <td style="padding:3px 6px;color:var(--text-dim)">${escHTML(m.sitReason || "")}</td>
+          </tr>`;
+        }
+        h += `</tbody></table></div>`;
+        if (sim.situational.length > sShown) h += `<div style="margin-top:6px;font-size:0.55rem;color:var(--text-dim)">… and ${sim.situational.length - sShown} more situational boosts.</div>`;
+        h += `</div>`;
+      }
 
       if (!settings.showCosmetic && sim.cosmeticCount > 0) {
         h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--text-dim)">+ ${sim.cosmeticCount} boost NFTs with no FLOWER value hidden — tick "Show no-value boosts" to list them. Still counted in the totals (they do carry a boost).</div>`;
