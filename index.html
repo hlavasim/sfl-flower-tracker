@@ -5686,7 +5686,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.16</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.17</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5713,6 +5713,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.17", items: [
+          { t: "fix", text: "Big research pass. (1) Delivery/gift item costs now use the COOKING_INGREDIENTS-aware coster (_resolveItemSfl) so cooked foods like Goblin Brunch, Bumpkin Roast, Cabbers n Mash cost their real recipe instead of 0 \u2014 the dashboard estimateItemSfl only read RECIPE_INGREDIENTS and missed them. (2) Keys are valued by the actual chest drop tables (game source chests.ts), live: gems at your exchange rate, coins 0 (free), sunstone via Obsidian \u2014 and apportioned per gift. (3) Gifts pick the optimal flower by points-per-grow-day INCLUDING each NPC\u2019s liked-flower bonus, show the liked flower for context, the value each gift adds, days-to-key and bed feasibility (reusing the Flower page math). (4) Brought back the full WHAT-TO-FARM/MINE table (all categories) and kept gifts + deliveries expanded; the limited today-tiles are gone." },
+        ]},
         { ver: "v4.16", items: [
           { t: "feat", text: "Deliver tiles now show the whole trade \u2014 what you GIVE, what you GET and the net (e.g. guria: give Purple Daffodil \u00d71 \u00b7 get 1.15 \u00b7 net +1.15). And the heavy reference tables (what-to-farm/mine, mining strategy, animal feed, lifecycle, gifts, deliveries) are kept but COLLAPSED by default, so the graph + today tiles are the main view \u2014 click a header to expand." },
         ]},
@@ -16139,12 +16142,39 @@
 
     // "What should I farm/mine now" — net FLOWER/day per activity at full activity, green/red.
     // Rough key values (chest EV is backend data) — labeled estimates the user can mentally adjust.
-    const ROADMAP_KEY_VALUE_SFL = { "Treasure Key": 5, "Rare Key": 25, "Luxury Key": 80 };
+    // Average chest payout per key (game source chests.ts). Coins dominate but are free when you hold a
+    // big pile, so the real value is mostly gems + sunstone + the odd item. Valued live.
+    const KEY_CHEST = {
+      "Treasure Key": { gems: 2, coins: 3000, sunstone: 0, misc: 0.3 },
+      "Rare Key": { gems: 6, coins: 6000, sunstone: 0.05, misc: 0.6 },
+      "Luxury Key": { gems: 16, coins: 9000, sunstone: 0.1, misc: 1.2 },
+    };
+    function roadmapKeyValue(name) {
+      const c = KEY_CHEST[name]; if (!c) return 0;
+      const er = powerState.exchangeRates || {}, p2p = powerState.p2pPrices || {};
+      const coinsFree = (parseFloat(powerState.farm && powerState.farm.coins) || 0) > 10000;
+      const gemSfl = er.gemsPerSFL > 0 ? c.gems / er.gemsPerSFL : 0;
+      const coinSfl = coinsFree ? 0 : (er.coinsPerSFL > 0 ? c.coins / er.coinsPerSFL : 0);
+      const sunSfl = (c.sunstone || 0) * 3 * (p2p["Obsidian"] || 0);
+      return gemSfl + coinSfl + sunSfl + (c.misc || 0);
+    }
+    // Real SFL cost of ANY item, COOKING_INGREDIENTS-aware via _resolveItemSfl (recursive) so cooked
+    // foods (Goblin Brunch = 5 Boiled Eggs + 1 Goblin\u2019s Treat, Bumpkin Roast, Cabbers n Mash, ...)
+    // price their actual recipe instead of 0.
+    function roadmapItemCost(name) {
+      if (name === "coins") return 0;
+      const er = powerState.exchangeRates || {}, p2p = powerState.p2pPrices || {};
+      const skills = (powerState.farm && powerState.farm.bumpkin && powerState.farm.bumpkin.skills) || {};
+      try { const r = _resolveItemSfl(name, p2p, er.coinsPerSFL, skills); if (r && r.price > 0) return r.price; } catch (e) {}
+      try { if (typeof window !== "undefined" && window.estimateItemSfl) { const v = window.estimateItemSfl(name, p2p, null, er); if (v > 0) return v; } } catch (e) {}
+      return p2p[name] || 0;
+    }
     function roadmapGiftRewardValue(reward, nftFloor) {
       const { p2pPrices, exchangeRates } = powerState;
+      const coinsFree = (parseFloat(powerState.farm && powerState.farm.coins) || 0) > 10000;
       let v = 0;
-      if (reward.coins && exchangeRates.coinsPerSFL > 0) v += reward.coins / exchangeRates.coinsPerSFL;
-      for (const [item, qty] of Object.entries(reward.items || {})) v += (ROADMAP_KEY_VALUE_SFL[item] || p2pPrices[item] || nftFloor(item) || 0) * qty;
+      if (reward.coins && !coinsFree && exchangeRates.coinsPerSFL > 0) v += reward.coins / exchangeRates.coinsPerSFL;
+      for (const [item, qty] of Object.entries(reward.items || {})) v += (KEY_CHEST[item] ? roadmapKeyValue(item) : (p2pPrices[item] || roadmapItemCost(item) || nftFloor(item) || 0)) * qty;
       for (const [w, qty] of Object.entries(reward.wearables || {})) v += (nftFloor(w) || 0) * qty;
       return v;
     }
@@ -16163,7 +16193,7 @@
       const now = Date.now();
       const cFree = roadmapCoinsFree(settings);
       const estFn = (typeof window !== "undefined" && window.estimateItemSfl) ? window.estimateItemSfl : (typeof estimateItemSfl === "function" ? estimateItemSfl : null);
-      const estItem = (name) => { try { return estFn ? (estFn(name, p2pPrices, [], exchangeRates) || 0) : (p2pPrices[name] || 0); } catch { return p2pPrices[name] || 0; } };
+      const estItem = (name) => roadmapItemCost(name);
       let chapter = {}; try { chapter = dashGetCurrentChapter(now) || {}; } catch {}
       const ticketName = chapter.ticket || "";
       const TV = (typeof settings.ticketValueSfl === "number" ? settings.ticketValueSfl : 0);
@@ -16177,7 +16207,7 @@
         let rv = (r.sfl || 0) + coinSfl(r.coins || 0);
         let tickets = 0; try { tickets = dashCalculateDeliveryTickets(o.from, farm, now) || 0; } catch {}
         rv += tickets * TV;
-        for (const [it, q] of Object.entries(r.items || {})) { if (it === ticketName) continue; rv += (ROADMAP_KEY_VALUE_SFL[it] || p2pPrices[it] || estItem(it) || 0) * q; }
+        for (const [it, q] of Object.entries(r.items || {})) { if (it === ticketName) continue; rv += (KEY_CHEST[it] ? roadmapKeyValue(it) : (p2pPrices[it] || estItem(it) || 0)) * q; }
         dels.push({ from: o.from, needs: Object.entries(o.items || {}).map(([i, q]) => i === "coins" ? (q.toLocaleString() + " coins") : (q + "\u00d7 " + i)).join(", "), cost, tickets, rv, net: rv - cost });
       }
       dels.sort((a, b) => b.net - a.net);
@@ -16190,7 +16220,7 @@
         for (const [it, q] of Object.entries(req.items || {})) {
           if (it === ticketName) { tickets += q; rv += q * TV; }
           else if (it === "Mark") { marks += q; rv += marksToSfl(q); }
-          else rv += (ROADMAP_KEY_VALUE_SFL[it] || p2pPrices[it] || estItem(it) || 0) * q;
+          else rv += (KEY_CHEST[it] ? roadmapKeyValue(it) : (p2pPrices[it] || estItem(it) || 0)) * q;
         }
         const cost = estItem(req.name) || 0;
         bos.push({ name: req.name, rv, cost, tickets, marks, net: rv - cost });
@@ -16230,42 +16260,40 @@
       const rows = [];
       for (const [npc, data] of Object.entries(BUMPKIN_GIFTS_DATA)) {
         if (!data.repeats) continue;
-        let best = null; // most POINTS PER GROW-DAY (gift once/day; 1 bed = 1 flower per grow cycle)
-        for (const f of flowers) {
-          const pts = getFlowerGiftPoints(npc, f, hasBB);
-          const days = Math.max(1, growH[f] / 24);
-          const eff = pts / days;
-          if (!best || eff > best.eff) best = { f, pts, days, eff };
-        }
+        let best = null;
+        for (const f of flowers) { const pts = getFlowerGiftPoints(npc, f, hasBB); const days = Math.max(1, growH[f] / 24); const eff = pts / days; if (!best || eff > best.eff) best = { f, pts, days, eff }; }
+        const bonusMap = (typeof BUMPKIN_FLOWER_BONUSES !== "undefined" && BUMPKIN_FLOWER_BONUSES[npc]) || {};
+        let liked = null; for (const f of Object.keys(bonusMap)) { const pts = getFlowerGiftPoints(npc, f, hasBB); const days = Math.max(1, growH[f] / 24); if (!liked || pts > liked.pts) liked = { f, pts, days }; }
         const repu = data.repeats;
         const repVal = roadmapGiftRewardValue(repu, nftFloor);
+        const perGift = repu.fp > 0 ? repVal * best.pts / repu.fp : 0;
         const daysToReward = best.eff > 0 ? repu.fp / best.eff : Infinity;
         const perDay = (repVal > 0 && isFinite(daysToReward) && daysToReward > 0) ? repVal / daysToReward : 0;
-        rows.push({ npc, flower: best.f, pts: best.pts, growDays: best.days, repVal, repLabel: roadmapGiftRewardLabel(repu), daysToReward, perDay });
+        rows.push({ npc, flower: best.f, pts: best.pts, growDays: best.days, liked, repVal, repLabel: roadmapGiftRewardLabel(repu), perGift, daysToReward, perDay });
       }
       if (!rows.length) return "";
       rows.sort((a, b) => b.perDay - a.perDay);
       const beds = getCapacityCount("flowers", capacity) || 0;
       let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
-      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">FLOWER GIFTS → KEYS — grow-time aware</div>`;
-      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">You gift each NPC at most <b>once a day</b>, and one flower bed makes one flower per its <b>FULL grow time</b> (a rare Primula Enigma takes <b>14 days</b>, a Pansy <b>1 day</b>). So the best flower is the one with the most <b>points per grow-day</b>, NOT the most points — a 1-day Pansy beats a 14-day Primula for sustained gifting. <b>FL/day</b> = key value × points-per-grow-day ÷ repeat threshold. Each NPC you gift ties up ~1 bed, so you can sustain about your bed count. Key values are rough estimates (Treasure ${ROADMAP_KEY_VALUE_SFL["Treasure Key"]} / Rare ${ROADMAP_KEY_VALUE_SFL["Rare Key"]} / Luxury ${ROADMAP_KEY_VALUE_SFL["Luxury Key"]} ${sflIcon()}).</div>`;
-      h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.58rem"><thead><tr style="color:var(--text-dim);text-align:left;font-size:0.5rem"><th style="padding:2px 6px">NPC</th><th style="padding:2px 6px">best flower (pts · grow)</th><th style="padding:2px 6px">repeat reward</th><th style="padding:2px 6px;text-align:right">value</th><th style="padding:2px 6px;text-align:right">FL/day</th><th style="padding:2px 6px;text-align:right">days/key</th><th style="padding:2px 6px;text-align:center">bed</th></tr></thead><tbody>`;
+      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">FLOWER GIFTS \u2192 KEYS</div>`;
+      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Gift each NPC once a day. <b>Best flower</b> = most friendship points per grow-day (1 bed grows 1 flower per its full chain time \u2014 Pansy 1d, Primula 14d). <b>Likes</b> = the flower this NPC bonuses (more points, usually slower). <b>/gift</b> = value one gift adds toward the key (key value \u00d7 points \u00f7 threshold). Key value = the live average chest payout (mostly gems + sunstone for you, coins are free): Treasure ~${roadmapFmtFlower(roadmapKeyValue("Treasure Key"))} / Rare ~${roadmapFmtFlower(roadmapKeyValue("Rare Key"))} / Luxury ~${roadmapFmtFlower(roadmapKeyValue("Luxury Key"))} ${sflIcon()}. You have <b>${beds} bed${beds === 1 ? "" : "s"}</b> \u2192 gift the top ${beds} (\u2713), one bed each.</div>`;
+      h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.58rem"><thead><tr style="color:var(--text-dim);text-align:left;font-size:0.5rem"><th style="padding:2px 6px">NPC</th><th style="padding:2px 6px">best flower</th><th style="padding:2px 6px">likes</th><th style="padding:2px 6px">repeat reward</th><th style="padding:2px 6px;text-align:right">value</th><th style="padding:2px 6px;text-align:right">/gift</th><th style="padding:2px 6px;text-align:right">days/key</th><th style="padding:2px 6px;text-align:right">FL/day</th><th style="padding:2px 6px;text-align:center">bed</th></tr></thead><tbody>`;
       rows.forEach((r, i) => {
-        const within = i < beds;
-        const pos = r.perDay > 0.05;
-        const ncol = pos ? "var(--green)" : "var(--text-dim)";
+        const within = i < beds; const pos = r.perDay > 0.02;
         h += `<tr style="border-top:1px solid #222${within ? "" : ";opacity:0.45"}">
           <td style="padding:3px 6px;white-space:nowrap">${escHTML(r.npc)}</td>
-          <td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(r.flower)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.flower)} <span style="color:var(--text-dim);font-size:0.5rem">${r.pts}pt · ${r.growDays.toFixed(0)}d</span></td>
+          <td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(r.flower)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.flower)} <span style="color:var(--text-dim);font-size:0.5rem">${r.pts}pt\u00b7${r.growDays.toFixed(0)}d</span></td>
+          <td style="padding:3px 6px;white-space:nowrap;color:var(--text-dim)">${r.liked ? escHTML(r.liked.f) + ' <span style="font-size:0.5rem">' + r.liked.pts + 'pt\u00b7' + r.liked.days.toFixed(0) + 'd</span>' : "\u2014"}</td>
           <td style="padding:3px 6px;color:var(--text-dim)">${escHTML(r.repLabel)}</td>
           <td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(r.repVal)}</td>
-          <td style="padding:3px 6px;text-align:right;color:${ncol};font-weight:bold">${r.perDay > 0.0001 ? "+" + roadmapFmtFlower(r.perDay) : "0"}</td>
-          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${isFinite(r.daysToReward) ? Math.ceil(r.daysToReward) : "—"}</td>
-          <td style="padding:3px 6px;text-align:center">${within ? '<span style="color:var(--green)">✓</span>' : "—"}</td>
+          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">+${roadmapFmtFlower(r.perGift)}</td>
+          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${isFinite(r.daysToReward) ? Math.ceil(r.daysToReward) : "\u2014"}</td>
+          <td style="padding:3px 6px;text-align:right;color:${pos ? "var(--green)" : "var(--text-dim)"};font-weight:bold">${r.perDay > 0.0001 ? "+" + roadmapFmtFlower(r.perDay) : "0"}</td>
+          <td style="padding:3px 6px;text-align:center">${within ? '<span style="color:var(--green)">\u2713</span>' : "\u2014"}</td>
         </tr>`;
       });
       h += `</tbody></table></div>`;
-      h += `<div style="margin-top:8px;font-size:0.5rem;color:var(--text-dim)">You have <b>${beds} flower bed${beds === 1 ? "" : "s"}</b> → gift the top ${beds} NPCs (✓), one bed each growing their best flower. The faded rows have no bed to spare. days/key assumes one bed per NPC at its grow rate (dedicate more beds to one NPC to gift it daily and get the key faster). Keys open chests — value estimated.</div>`;
+      h += `<div style="margin-top:8px;font-size:0.5rem;color:var(--text-dim)">days/key uses 1 bed per NPC at its grow rate. The NPC\u2019s liked flower gives more points but usually grows slower, so the best points-per-grow-day flower (often a 1-day Pansy/Cosmos) reaches the key faster. Keys are random chest opens \u2014 value shown is the average.</div>`;
       h += `</div>`;
       return h;
     }
@@ -16991,7 +17019,7 @@
       if (gr.length) branches.push({ label: "GIFTS", icon: roadmapFlowIcon("Red Pansy"), actions: gr.slice(0, 4).map(g => ({ label: "Gift " + g.bf + " \u2192 " + g.npc, sub: "+" + roadmapFmtFlower(g.pd) + "/day \u00b7 " + g.days.toFixed(0) + "d grow", good: true, icon: roadmapFlowIcon(g.bf) })) });
       // DELIVER — best pending deliveries
       const now = Date.now(), estFn = (typeof window !== "undefined" && window.estimateItemSfl) ? window.estimateItemSfl : null;
-      const estItem = (n) => { try { return estFn ? (estFn(n, p2p, [], er) || 0) : (p2p[n] || 0); } catch { return p2p[n] || 0; } };
+      const estItem = (n) => roadmapItemCost(n);
       const cFree = roadmapCoinsFree(settings), dr = [];
       for (const o of ((farm.delivery && farm.delivery.orders) || [])) {
         if (o.completedAt) continue;
@@ -17096,8 +17124,6 @@
       h += card("FLOWER/DAY", roadmapFmtFlower(startIncome), "→ " + roadmapFmtFlower(sim.finalRate) + " after boosts");
       h += `</div>`;
 
-      h += roadmapTodoTilesHtml(settings);
-
       // ── Visual roadmap (ReactFlow): the full investment PATH (NFTs + node merges/expansion + skills + leveling) ──
       h += `<div class="pixel-panel" style="padding:10px;margin-bottom:16px">`;
       h += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">`;
@@ -17110,12 +17136,12 @@
 
       // ── What to farm / mine now (per-category profitability) ──
       const _rmCollapse = (title, inner) => inner ? `<details style="margin-bottom:12px"><summary style="cursor:pointer;padding:9px 12px;background:#1c160f;border:1px solid var(--border-brown);border-radius:8px;font-family:'Press Start 2P',monospace;font-size:0.55rem;color:var(--sunpetal)">\u25b8 ${title}</summary><div style="margin-top:8px">${inner}</div></details>` : "";
-      h += _rmCollapse("WHAT TO FARM / MINE NOW", roadmapProfitabilityHtml(settings));
+      h += roadmapProfitabilityHtml(settings);
       h += _rmCollapse("MINING STRATEGY \u2014 sell raw vs convert up", roadmapMiningStrategyHtml(settings));
       h += _rmCollapse("ANIMAL FEEDING \u2014 what to feed, worth it?", roadmapAnimalFeedHtml(settings));
       h += _rmCollapse("ANIMAL LIFECYCLE \u2014 net per level", roadmapAnimalLifecycleHtml(settings));
-      h += _rmCollapse("FLOWER GIFTS \u2192 KEYS", roadmapGiftsHtml(settings));
-      h += _rmCollapse("DELIVERIES, BOUNTIES \u0026 TICKETS", roadmapDeliveriesHtml(settings));
+      h += roadmapGiftsHtml(settings);
+      h += roadmapDeliveriesHtml(settings);
 
       // ── Controls ──
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:16px;font-size:0.62rem;color:var(--text-secondary)">`;
