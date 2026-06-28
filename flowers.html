@@ -2657,6 +2657,89 @@
         const { Background, Controls, MiniMap, Handle, Position } = RF;
         if (!ReactFlow) throw new Error("ReactFlow component missing from module");
         const h = React.createElement;
+        const C = { gold:"#FFD700", green:"#30D158", red:"#FF6B6B", lily:"#B07CD8", blue:"#5DADE2", yellow:"#FFD60A", dim:"#9a8060", text:"#f0e6d2", sec:"#c4a882", panel:"#1c160f", brown:"#5c3a1e", goldb:"#8b6914" };
+        const PF = "'Press Start 2P',monospace", CF = "'Courier New',monospace";
+        const fmt = (n) => { n = +n || 0; const a = Math.abs(n); if (a >= 1000) return (n/1000).toFixed(1)+"k"; if (a >= 100) return n.toFixed(0); if (a >= 1) return n.toFixed(2); return n.toFixed(3); };
+        const days = (d) => !isFinite(d) ? "—" : (d >= 365 ? (d/365).toFixed(1)+"y" : Math.round(d)+"d");
+        const hideImg = (e) => { e.target.style.display = "none"; };
+        const handles = () => [ h(Handle, { key:"t", type:"target", position:Position.Top, style:{ opacity:0, border:0 } }), h(Handle, { key:"s", type:"source", position:Position.Bottom, style:{ opacity:0, border:0 } }) ];
+        // A WoW-style tooltip card — all info always visible (the tile IS the tooltip).
+        function Card({ accent, icon, emoji, title, subline, idx, effect, rows, foot }) {
+          const [hv, setHv] = React.useState(false);
+          return h("div", { onMouseEnter:()=>setHv(true), onMouseLeave:()=>setHv(false), style:{ width:344, background:"linear-gradient(165deg,#201810,#13100a)", border:"2px solid "+accent, borderRadius:10, padding:"10px 12px", boxShadow:(hv?"0 0 26px ":"0 0 13px ")+accent+"55, 0 3px 12px rgba(0,0,0,.55)", transition:"box-shadow .15s" } },
+            handles(),
+            h("div", { style:{ display:"flex", alignItems:"center", gap:9, borderBottom:"1px solid "+C.brown, paddingBottom:7 } },
+              icon ? h("img", { src:icon, onError:hideImg, style:{ width:38, height:38, imageRendering:"pixelated" } }) : (emoji ? h("div", { style:{ fontSize:26, width:38, textAlign:"center" } }, emoji) : null),
+              h("div", { style:{ flex:1 } },
+                h("div", { style:{ fontFamily:CF, fontSize:14, fontWeight:"bold", color:accent, lineHeight:1.15 } }, title),
+                subline ? h("div", { style:{ fontFamily:CF, fontSize:11, color:C.sec, marginTop:3 } }, subline) : null),
+              h("div", { style:{ fontFamily:PF, fontSize:9, color:C.dim } }, "#"+idx)),
+            effect ? h("div", { style:{ fontFamily:CF, fontSize:11.5, color:C.yellow, margin:"7px 0", lineHeight:1.35 } }, effect) : null,
+            h("div", { style:{ marginTop:effect?0:7 } }, rows.map((r,i) => h("div", { key:i, style:{ display:"flex", justifyContent:"space-between", fontFamily:CF, fontSize:12, lineHeight:1.8 } }, h("span", { style:{ color:C.dim } }, r.k), h("span", { style:{ color:r.c||C.text, fontWeight:"bold" } }, r.v)))),
+            foot ? h("div", { style:{ marginTop:7, paddingTop:6, borderTop:"1px solid "+C.brown, fontFamily:CF, fontSize:10, color:C.dim, display:"flex", justifyContent:"space-between" } }, h("span", null, foot.l||""), h("span", null, foot.r||"")) : null);
+        }
+        function WowItem({ data }) {
+          const good = (+data.marginal) > 0;
+          const ac = data.itype === "Skill" ? C.lily : (data.itype === "Node" ? C.blue : C.gold);
+          return h(Card, { accent:ac, icon:data.icon, title:data.label, subline:data.itype, idx:data.idx, effect:data.boost||null,
+            rows: [
+              { k:"FLOWER / day", v:(good?"+":"")+fmt(data.marginal), c:good?C.green:C.red },
+              { k:"Cost", v:fmt(data.cost)+" ◈", c:C.sec },
+              { k:"Payback", v:days(data.roi), c:C.gold },
+              { k:"Ready in", v:"~"+Math.round(data.atDay||0)+" days", c:C.blue } ],
+            foot:{ l:"Σ spent "+fmt(data.cumCost)+" ◈", r:"income → "+fmt(data.rateAfter)+"/d" } });
+        }
+        function SkillNode({ data }) {
+          const good = (+data.marginal) > 0;
+          const sub = (data.tree || "Skill") + (data.tier ? (" · Tier " + data.tier) : "");
+          return h(Card, { accent:C.lily, emoji:"🧠", title:"Skill: "+data.label, subline:sub, idx:data.idx, effect:data.boost||null,
+            rows: [
+              { k:"FLOWER / day", v:(good?"+":"")+fmt(data.marginal), c:good?C.green:C.red },
+              { k:"Cost", v:data.free?("FREE — uses 1 unused point"):(data.pts+" skill point"+(data.pts>1?"s":"")), c:data.free?C.green:C.sec },
+              { k:"Skill points", v:String(data.pts), c:C.lily },
+              { k:"Ready in", v:"~"+Math.round(data.atDay||0)+" days", c:C.blue } ],
+            foot:{ l:"find it in: "+sub, r:"" } });
+        }
+        function LevelNode({ data }) {
+          return h(Card, { accent:C.blue, emoji:"⬆️", title:"Level up → +1 point", subline:"reach level "+data.level, idx:data.idx,
+            effect:"Cook "+data.cakes+"× "+data.recipe+" and eat them",
+            rows: [ { k:"Cost (ingredients)", v:"~"+fmt(data.cost)+" ◈", c:C.sec }, { k:"Gives", v:"+1 skill point", c:C.green } ],
+            foot:{ l:"Σ spent "+fmt(data.cumCost)+" ◈", r:"" } });
+        }
+        const nodeTypes = { wowItem:WowItem, skillNode:SkillNode, levelNode:LevelNode };
+        const roots = {};
+        window.__mountFlow = function(elId, kind) {
+          const el = document.getElementById(elId); if (!el) return;
+          try {
+            const fd = (window.__roadmapFlowData && window.__roadmapFlowData[kind]) || { nodes:[], edges:[] };
+            const edges = (fd.edges||[]).map((e)=>Object.assign({}, e, { style:{ stroke:C.goldb, strokeWidth:2.5 }, markerEnd:{ type:"arrowclosed", color:C.goldb }, animated:e.animated!==false }));
+            if (roots[elId]) { try { roots[elId].unmount(); } catch (e) {} }
+            const root = createRoot(el); roots[elId] = root;
+            root.render(h(ReactFlow, { nodes:fd.nodes, edges:edges, nodeTypes:nodeTypes, fitView:false, defaultViewport:{ x:120, y:26, zoom:0.95 }, minZoom:0.2, maxZoom:1.6, proOptions:{ hideAttribution:true }, defaultEdgeOptions:{ type:"smoothstep" }, nodesDraggable:true, panOnScroll:true, panOnScrollSpeed:0.85, zoomOnScroll:false, zoomOnPinch:true, zoomOnDoubleClick:true },
+              h(Background, { color:"#3a2a1a", gap:24, size:1 }),
+              h(Controls, { showInteractive:false }),
+              h(MiniMap, { pannable:true, zoomable:true, nodeColor:()=>C.goldb, nodeStrokeColor:()=>C.gold, maskColor:"rgba(0,0,0,.6)", style:{ background:C.panel, border:"1px solid "+C.brown } })));
+          } catch (e) { errBox("render: " + ((e && e.message) || e)); }
+        };
+        window.__flowReady = true;
+        if (typeof window._roadmapMountFlow === "function") window._roadmapMountFlow(0);
+      } catch (e) {
+        window.__flowError = String((e && e.message) || e);
+        errBox("load: " + window.__flowError + "<br><span style=\"color:#9a8060\">(the tables below have the same data)</span>");
+      }
+    })();
+  </script>
+  <script type="module">
+    (async () => {
+      const errBox = (msg) => { const el = document.getElementById("rf-graph"); if (el) el.innerHTML = '<div style="padding:16px;color:#FF6B6B;font-family:Courier New,monospace;font-size:12px;line-height:1.6">Graph engine error:<br>' + msg + '</div>'; };
+      try {
+        const React = (await import("react")).default;
+        const { createRoot } = await import("react-dom/client");
+        const RF = await import("https://esm.sh/reactflow@11.11.4?external=react,react-dom");
+        const ReactFlow = RF.default || RF.ReactFlow;
+        const { Background, Controls, MiniMap, Handle, Position } = RF;
+        if (!ReactFlow) throw new Error("ReactFlow component missing from module");
+        const h = React.createElement;
         const C = { gold:"#FFD700", green:"#30D158", red:"#FF6B6B", lily:"#B07CD8", blue:"#5DADE2", yellow:"#FFD60A", dim:"#9a8060", text:"#f0e6d2", sec:"#c4a882", panel:"#1c160f", panel2:"#251c12", brown:"#5c3a1e", goldb:"#8b6914" };
         const fmt = (n) => { n = +n || 0; const a = Math.abs(n); if (a >= 1000) return (n/1000).toFixed(1)+"k"; if (a >= 100) return n.toFixed(0); if (a >= 1) return n.toFixed(2); return n.toFixed(3); };
         const days = (d) => !isFinite(d) ? "—" : (d >= 365 ? (d/365).toFixed(1)+"y" : Math.round(d)+"d");
@@ -5703,7 +5786,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.10</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.11</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5730,6 +5813,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.11", items: [
+          { t: "fix", text: "Visual roadmap rebuilt as a vertical noodle of big WoW-tooltip CARDS going down \u2014 the tile IS the tooltip, so every card always shows the effect, +FLOWER/day, cost, payback (ROI), ready-in (days), running spend and income-after, no hover needed. Skill cards now show their TREE and TIER (e.g. Greenhouse · Tier 2) so you can find them in-game. Deliver tiles show the ticket count (14 tickets ×3) so the net is transparent \u2014 ticket value (3 FLOWER each) is a rough estimate driving those figures. Scroll moves down the path." },
+        ]},
         { ver: "v4.10", items: [
           { t: "fix", text: "The visual roadmap graph was rendering blank \u2014 ReactFlow was loading its own second copy of React from the CDN, so the hooks in the custom node tiles threw and nothing painted. Fixed with an import map + ?external=react,react-dom so there is a single React instance, loaded via dynamic import with full error handling that now prints any failure into the graph box instead of leaving it empty." },
         ]},
@@ -16787,7 +16873,7 @@
           const pts = u.c.skillPoints || 1;
           let free = false; if (freePts >= pts) { free = true; freePts -= pts; }
           const cost = free ? 0.01 : u.c.floor;
-          if (cost <= maxP) econ.push({ name: u.c.name, type: "Skill", floor: cost, boost: u.c.boost, supply: 0, clone: u.c, skillFree: free, skillPoints: pts });
+          if (cost <= maxP) econ.push({ name: u.c.name, type: "Skill", floor: cost, boost: u.c.boost, supply: 0, clone: u.c, skillFree: free, skillPoints: pts, skillTree: u.c.skillTree, skillTier: u.c.skillTier });
         }
       }
       tail.sort((a, b) => a.floor - b.floor);
@@ -16863,7 +16949,7 @@
       const optGainPct = greedyVal > 0 ? (fin.integral / greedyVal - 1) * 100 : 0;
 
       const timeline = [];
-      for (const s of fin.steps) timeline.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, marginal: s.marg, roi: s.marg > 0 ? s.m.floor / s.marg : Infinity, atDay: s.atDay, rateAfter: s.rateAfter, kind: "econ", skillFree: s.m.skillFree, skillPoints: s.m.skillPoints });
+      for (const s of fin.steps) timeline.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, marginal: s.marg, roi: s.marg > 0 ? s.m.floor / s.marg : Infinity, atDay: s.atDay, rateAfter: s.rateAfter, kind: "econ", skillFree: s.m.skillFree, skillPoints: s.m.skillPoints, skillTree: s.m.skillTree, skillTier: s.m.skillTier });
       let rate = fin.finalRate;
       let cumDays = fin.totalDays;
       const econSteps = timeline.length;
@@ -16994,10 +17080,10 @@
         let cost = 0; for (const [it, q] of Object.entries(o.items || {})) cost += (it === "coins") ? (cFree ? 0 : (er.coinsPerSFL > 0 ? q / er.coinsPerSFL : 0)) : estItem(it) * q;
         const r = o.reward || {}; let rv = (r.sfl || 0) + ((r.coins || 0) > 0 && er.coinsPerSFL > 0 ? r.coins / er.coinsPerSFL : 0);
         let tk = 0; try { tk = dashCalculateDeliveryTickets(o.from, farm, now) || 0; } catch {}
-        rv += tk * 3; dr.push({ from: o.from, net: rv - cost });
+        rv += tk * 3; dr.push({ from: o.from, net: rv - cost, tickets: tk });
       }
       dr.sort((a, b) => b.net - a.net);
-      if (dr.length) branches.push({ label: "DELIVER", icon: roadmapFlowIcon("Pancakes"), actions: dr.slice(0, 4).map(d => ({ label: "Deliver \u2192 " + d.from, sub: (d.net >= 0 ? "+" : "") + roadmapFmtFlower(d.net) + " net", good: d.net > 0 })) });
+      if (dr.length) branches.push({ label: "DELIVER", icon: roadmapFlowIcon("Pancakes"), actions: dr.slice(0, 4).map(d => ({ label: "Deliver \u2192 " + d.from, sub: (d.net >= 0 ? "+" : "") + roadmapFmtFlower(d.net) + " net" + (d.tickets ? (" · " + d.tickets + " tickets ×3") : ""), good: d.net > 0 })) });
 
       return branches;
     }
@@ -17055,11 +17141,12 @@
         }
       }
 
+      let cum = 0;
       path.forEach((p, i) => {
-        const pos = { x: i * 210, y: 180 + Math.sin(i * 0.5) * 120 }, id = "b" + i;
-        if (p.k === "item") { const s = p.s; rmNodes.push({ id, type: "wowItem", position: pos, data: { label: s.name, icon: roadmapFlowIcon(s.name), cost: s.floor, marginal: s.marginal, roi: s.roi, boost: s.boost || "", itype: s.type, idx: i + 1, rateAfter: s.rateAfter, atDay: s.atDay } }); }
-        else if (p.k === "skill") { rmNodes.push({ id, type: "skillNode", position: pos, data: { label: p.s.name, free: p.free, pts: p.pts, marginal: p.s.marginal, boost: p.s.boost || "", idx: i + 1, rateAfter: p.s.rateAfter, atDay: p.s.atDay } }); }
-        else { rmNodes.push({ id, type: "levelNode", position: pos, data: { cakes: p.cakes, recipe: p.recipe, cost: p.cost, level: p.level, idx: i + 1 } }); }
+        const pos = { x: 0, y: i * 210 }, id = "b" + i;
+        if (p.k === "item") { const s = p.s; cum += (s.floor || 0); rmNodes.push({ id, type: "wowItem", position: pos, data: { label: s.name, icon: roadmapFlowIcon(s.name), cost: s.floor, marginal: s.marginal, roi: s.roi, boost: (s.boost || "").split("\n").join(" \u00b7 "), itype: s.type, idx: i + 1, rateAfter: s.rateAfter, atDay: s.atDay, cumCost: cum } }); }
+        else if (p.k === "skill") { rmNodes.push({ id, type: "skillNode", position: pos, data: { label: p.s.name, free: p.free, pts: p.pts, marginal: p.s.marginal, boost: (p.s.boost || "").split("\n").join(" \u00b7 "), tree: p.s.skillTree, tier: p.s.skillTier, idx: i + 1, rateAfter: p.s.rateAfter, atDay: p.s.atDay, cumCost: cum } }); }
+        else { cum += (p.cost || 0); rmNodes.push({ id, type: "levelNode", position: pos, data: { cakes: p.cakes, recipe: p.recipe, cost: p.cost, level: p.level, idx: i + 1, cumCost: cum } }); }
         if (i > 0) rmEdges.push({ id: "be" + i, source: "b" + (i - 1), target: id, animated: true, type: "smoothstep" });
       });
 
@@ -17096,9 +17183,9 @@
       h += `<div class="pixel-panel" style="padding:10px;margin-bottom:16px">`;
       h += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">`;
       h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal)">VISUAL ROADMAP \u2014 buy path (skills + leveling included)</div>`;
-      h += `<span style="margin-left:auto;font-size:0.5rem;color:var(--text-dim)">drag to pan \u00b7 scroll to zoom \u00b7 hover a tile for details</span>`;
+      h += `<span style="margin-left:auto;font-size:0.5rem;color:var(--text-dim)">scroll = move down the path \u00b7 drag to pan \u00b7 +/\u2212 to zoom</span>`;
       h += `</div>`;
-      h += `<div id="rf-graph" style="height:540px;width:100%;border:1px solid var(--border-brown);border-radius:8px;background:radial-gradient(circle at 50% 40%, #1a130b, #0e0a06);overflow:hidden"></div>`;
+      h += `<div id="rf-graph" style="height:760px;width:100%;border:1px solid var(--border-brown);border-radius:8px;background:radial-gradient(circle at 50% 22%, #1a130b, #0e0a06);overflow:hidden"></div>`;
       h += `<div id="rf-fallback" style="display:none;padding:14px;font-size:0.6rem;color:var(--text-dim)">Loading the graph engine\u2026 if this stays, your browser/network blocked the CDN \u2014 the tables below have the same data.</div>`;
       h += `</div>`;
 
