@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.91</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.92</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.92", items: [
+          { t: "fix", text: "Yield engine port (1/n): the marketplace NFT API only exposes boosts for ~6 of a typical farm 180 items, so we were under-counting crop yields vs sfl.world (Sunflower 1.60 vs 1.85). New gameExtraEffects(farm) faithfully ports the game crop-yield boosts the API omits and injects them in buildPowerState (shared by Power/Nodes/Roadmap): Faction Quiver +0.25 all crops (if the faction wings are equipped on the bumpkin or any farm hand), Scary Mike/Horror Mike +0.2/0.3 medium-crop AOE, Laurie +0.2/0.3 advanced-crop AOE, Sir Goldensnout +0.5, Infernal Pitchfork +3, Cabbage Boy/Girl, Karkinos, Pablo, Maximus, Giant Yam/Kale, Sheaf of Plenty. Verified via a Node harness against the live farm. Fruits / resources / animals to follow." },
+        ]},
         { ver: "v3.91", items: [
           { t: "feat", text: "ROADMAP buy-order is now OPTIMISED, not just greedy. Objective: maximise total FLOWER income integrated over a horizon (editable, default 100 years) with reinvestment + dynamic synergy. Starts from the greedy ROI-payback order (Smith-rule optimal for independent items), then runs a local search (adjacent swaps) keeping any swap that raises total FLOWER over the horizon — exactly the user case where buying a cheap booster slightly earlier compounds into more total (B-then-A beats A-then-B). Shows the % gain vs the plain ROI order. Capped at 140 economic items / 8 passes for speed." },
         ]},
@@ -15342,6 +15345,45 @@
       renderPowerContent();
     }
 
+    // Wearable equipped on the main bumpkin OR any farm hand (game's isWearableActive).
+    function farmWearableEquipped(farm, name) {
+      const eq = (farm.bumpkin && farm.bumpkin.equipped) || {};
+      if (Object.values(eq).indexOf(name) >= 0) return true;
+      const hands = (farm.farmHands && farm.farmHands.bumpkins) || {};
+      for (const h of Object.values(hands)) {
+        if (h && h.equipped && Object.values(h.equipped).indexOf(name) >= 0) return true;
+      }
+      return false;
+    }
+    const FACTION_WINGS = { bumpkins: "Bumpkin Quiver", goblins: "Goblin Quiver", nightshades: "Nightshade Quiver", sunflorians: "Sunflorian Quiver" };
+
+    // Boost EFFECTS the marketplace NFT API (/api/v1/nfts) does not expose but the game applies.
+    // Faithful port of the game's yield logic (getCropYieldAmount) for the items a farm owns.
+    // Extended incrementally — currently crops. AOE crop boosters assume coverage (as sfl.world shows).
+    function gameExtraEffects(farm) {
+      const out = [];
+      const skills = (farm.bumpkin && farm.bumpkin.skills) || {};
+      const ownsC = (n) => findCollectible(farm, n).length > 0;
+      // Faction Quiver — +0.25 to ALL crops if the faction's wings wearable is equipped anywhere.
+      const faction = (farm.faction && farm.faction.name) || "";
+      const wings = FACTION_WINGS[faction];
+      if (wings && farmWearableEquipped(farm, wings)) out.push({ type: "yield_flat", value: 0.25, cat: "crops", raw: "Faction Quiver +0.25 crops" });
+      // AOE crop yield collectibles (game uses plot positions; we assume covered, like sfl.world's display).
+      if (ownsC("Scary Mike")) out.push({ type: "yield_flat", value: skills["Horror Mike"] ? 0.3 : 0.2, cat: "crops", cropTier: "medium", raw: (skills["Horror Mike"] ? "Horror Mike +0.3" : "Scary Mike +0.2") + " medium crops" });
+      if (ownsC("Laurie the Chuckle Crow")) out.push({ type: "yield_flat", value: skills["Laurie's Gains"] ? 0.3 : 0.2, cat: "crops", cropTier: "advanced", raw: (skills["Laurie's Gains"] ? "Laurie's Gains +0.3" : "Laurie +0.2") + " advanced crops" });
+      if (ownsC("Sir Goldensnout")) out.push({ type: "yield_flat", value: 0.5, cat: "crops", raw: "Sir Goldensnout +0.5 crops (AOE)" });
+      // Global crop additions
+      if (farmWearableEquipped(farm, "Infernal Pitchfork")) out.push({ type: "yield_flat", value: 3, cat: "crops", raw: "Infernal Pitchfork +3 crops" });
+      if (ownsC("Cabbage Boy")) { out.push({ type: "yield_flat", value: 0.25, cat: "crops", product: "Cabbage", raw: "Cabbage Boy +0.25" }); if (ownsC("Cabbage Girl")) out.push({ type: "yield_flat", value: 0.25, cat: "crops", product: "Cabbage", raw: "Cabbage Girl +0.25" }); }
+      else if (ownsC("Karkinos")) out.push({ type: "yield_flat", value: 0.1, cat: "crops", product: "Cabbage", raw: "Karkinos +0.1 Cabbage" });
+      if (ownsC("Pablo The Bunny")) out.push({ type: "yield_flat", value: 0.1, cat: "crops", product: "Carrot", raw: "Pablo +0.1 Carrot" });
+      if (ownsC("Maximus")) out.push({ type: "yield_flat", value: 1, cat: "crops", product: "Eggplant", raw: "Maximus +1 Eggplant" });
+      if (ownsC("Giant Yam")) out.push({ type: "yield_flat", value: 0.5, cat: "crops", product: "Yam", raw: "Giant Yam +0.5" });
+      if (ownsC("Giant Kale")) out.push({ type: "yield_flat", value: 2, cat: "crops", product: "Kale", raw: "Giant Kale +2" });
+      if (ownsC("Sheaf of Plenty")) out.push({ type: "yield_flat", value: 2, cat: "crops", product: "Barley", raw: "Sheaf of Plenty +2 Barley" });
+      return out;
+    }
+
     // Build powerState — shared by POWER and ROADMAP pages. Throws on fetch failure (no DOM writes).
     async function buildPowerState(data) {
       const { inventory, farm } = data;
@@ -15522,6 +15564,10 @@
 
       // Load saved product selections
       const savedProducts = getSavedPowerProducts();
+
+      // Inject boosts the marketplace NFT API doesn't expose but the game applies (faithful port).
+      const _extraEff = gameExtraEffects(farm);
+      if (_extraEff.length) boostItems.push({ name: "Game boosts (API-missing)", type: "Game", boost: _extraEff.map(e => e.raw).join(" \u00b7 "), floor: 0, supply: 0, has: true, effects: _extraEff, categories: classifyToCategories(_extraEff), markCost: 0 });
 
       // Build category → boosts mapping
       const catBoosts = {};
