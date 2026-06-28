@@ -2715,107 +2715,8 @@
             const edges = (fd.edges||[]).map((e)=>Object.assign({}, e, { style:{ stroke:C.goldb, strokeWidth:2.5 }, markerEnd:{ type:"arrowclosed", color:C.goldb }, animated:e.animated!==false }));
             if (roots[elId]) { try { roots[elId].unmount(); } catch (e) {} }
             const root = createRoot(el); roots[elId] = root;
-            root.render(h(ReactFlow, { nodes:fd.nodes, edges:edges, nodeTypes:nodeTypes, fitView:false, defaultViewport:{ x:40, y:30, zoom:1 }, minZoom:0.4, maxZoom:1.4, proOptions:{ hideAttribution:true }, defaultEdgeOptions:{ type:"smoothstep" }, nodesDraggable:true, panOnScroll:true, panOnScrollSpeed:0.9, zoomOnScroll:false, zoomOnPinch:true, zoomOnDoubleClick:false, onInit:(inst)=>{ try { inst.setViewport({ x:40, y:30, zoom:1 }, { duration:0 }); } catch (e) {} } },
-              h(Background, { color:"#3a2a1a", gap:24, size:1 }),
-              h(Controls, { showInteractive:false })));
-          } catch (e) { errBox("render: " + ((e && e.message) || e)); }
-        };
-        window.__flowReady = true;
-        if (typeof window._roadmapMountFlow === "function") window._roadmapMountFlow(0);
-      } catch (e) {
-        window.__flowError = String((e && e.message) || e);
-        errBox("load: " + window.__flowError + "<br><span style=\"color:#9a8060\">(the tables below have the same data)</span>");
-      }
-    })();
-  </script>
-  <script type="module">
-    (async () => {
-      const errBox = (msg) => { const el = document.getElementById("rf-graph"); if (el) el.innerHTML = '<div style="padding:16px;color:#FF6B6B;font-family:Courier New,monospace;font-size:12px;line-height:1.6">Graph engine error:<br>' + msg + '</div>'; };
-      try {
-        const React = (await import("react")).default;
-        const { createRoot } = await import("react-dom/client");
-        const RF = await import("https://esm.sh/reactflow@11.11.4?external=react,react-dom");
-        const ReactFlow = RF.default || RF.ReactFlow;
-        const { Background, Controls, MiniMap, Handle, Position } = RF;
-        if (!ReactFlow) throw new Error("ReactFlow component missing from module");
-        const h = React.createElement;
-        const C = { gold:"#FFD700", green:"#30D158", red:"#FF6B6B", lily:"#B07CD8", blue:"#5DADE2", yellow:"#FFD60A", dim:"#9a8060", text:"#f0e6d2", sec:"#c4a882", panel:"#1c160f", panel2:"#251c12", brown:"#5c3a1e", goldb:"#8b6914" };
-        const fmt = (n) => { n = +n || 0; const a = Math.abs(n); if (a >= 1000) return (n/1000).toFixed(1)+"k"; if (a >= 100) return n.toFixed(0); if (a >= 1) return n.toFixed(2); return n.toFixed(3); };
-        const days = (d) => !isFinite(d) ? "—" : (d >= 365 ? (d/365).toFixed(1)+"y" : Math.round(d)+"d");
-        const px = { imageRendering:"pixelated" };
-        function Tip({ rows, title, accent }) {
-          return h("div", { style:{ position:"absolute", bottom:"calc(100% + 8px)", left:"50%", transform:"translateX(-50%)", zIndex:50, minWidth:184, background:"#0d0a06", border:"2px solid "+(accent||C.goldb), borderRadius:6, padding:"8px 10px", boxShadow:"0 6px 24px rgba(0,0,0,0.7)", pointerEvents:"none" } },
-            h("div", { style:{ fontFamily:"'Press Start 2P',monospace", fontSize:9, color:accent||C.gold, marginBottom:6, lineHeight:1.4 } }, title),
-            rows.map((r,i) => h("div", { key:i, style:{ display:"flex", justifyContent:"space-between", gap:14, fontSize:11, fontFamily:"'Courier New',monospace", color:r.c||C.sec, lineHeight:1.65 } }, h("span", null, r.k), h("span", { style:{ color:r.vc||C.text, fontWeight:"bold", textAlign:"right" } }, r.v))));
-        }
-        function WowItem({ data }) {
-          const [hv, setHv] = React.useState(false);
-          const good = (+data.marginal) > 0;
-          const ac = data.itype === "Skill" ? C.lily : (data.itype === "Node" ? C.blue : C.gold);
-          return h("div", { onMouseEnter:()=>setHv(true), onMouseLeave:()=>setHv(false), style:{ position:"relative", width:174, background:"linear-gradient(160deg,"+C.panel2+","+C.panel+")", border:"2px solid "+(hv?ac:C.brown), borderRadius:8, padding:"7px 9px", cursor:"pointer", transition:"all .15s", boxShadow:hv?("0 0 18px "+ac+"66, 0 4px 14px rgba(0,0,0,.5)"):"0 2px 8px rgba(0,0,0,.4)", transform:hv?"translateY(-2px)":"none" } },
-            h(Handle, { type:"target", position:Position.Left, style:{ opacity:0, border:0 } }),
-            h(Handle, { type:"source", position:Position.Right, style:{ opacity:0, border:0 } }),
-            h("div", { style:{ display:"flex", alignItems:"center", gap:7 } },
-              h("div", { style:{ minWidth:18, height:18, borderRadius:4, background:ac, color:"#1a120a", fontFamily:"'Press Start 2P',monospace", fontSize:8, display:"flex", alignItems:"center", justifyContent:"center", padding:"0 3px" } }, data.idx),
-              data.icon ? h("img", { src:data.icon, onError:(e)=>{ e.target.style.display="none"; }, style:Object.assign({ width:30, height:30 }, px) }) : null,
-              h("div", { style:{ flex:1, fontFamily:"'Courier New',monospace", fontSize:11.5, fontWeight:"bold", color:C.text, lineHeight:1.15 } }, data.label)),
-            h("div", { style:{ display:"flex", justifyContent:"space-between", marginTop:5, fontFamily:"'Courier New',monospace", fontSize:11 } },
-              h("span", { style:{ color:good?C.green:C.dim, fontWeight:"bold" } }, (good?"+":"")+fmt(data.marginal)+"/d"),
-              h("span", { style:{ color:C.sec } }, fmt(data.cost)+"◈")),
-            hv ? h(Tip, { accent:ac, title:data.label, rows:[
-              { k:"Boost", v:data.boost||"—", vc:C.yellow },
-              { k:"+FLOWER/day", v:(good?"+":"")+fmt(data.marginal), vc:good?C.green:C.red },
-              { k:"Cost", v:fmt(data.cost)+" FLOWER" },
-              { k:"Payback", v:days(data.roi) },
-              { k:"Rate after", v:fmt(data.rateAfter)+"/d" },
-              { k:"ETA", v:days(data.atDay) },
-              { k:"Type", v:data.itype }
-            ] }) : null);
-        }
-        function SkillNode({ data }) {
-          const [hv,setHv]=React.useState(false); const good=(+data.marginal)>0;
-          return h("div",{onMouseEnter:()=>setHv(true),onMouseLeave:()=>setHv(false),style:{position:"relative",width:180,background:"linear-gradient(160deg,#241832,#160f20)",border:"2px solid "+(hv?C.lily:"#4a3360"),borderRadius:8,padding:"7px 9px",cursor:"pointer",transition:"all .15s",boxShadow:hv?("0 0 18px "+C.lily+"66, 0 4px 14px rgba(0,0,0,.5)"):"0 2px 8px rgba(0,0,0,.4)",transform:hv?"translateY(-2px)":"none"}},
-            h(Handle,{type:"target",position:Position.Left,style:{opacity:0,border:0}}),
-            h(Handle,{type:"source",position:Position.Right,style:{opacity:0,border:0}}),
-            h("div",{style:{display:"flex",alignItems:"center",gap:7}},
-              h("div",{style:{minWidth:18,height:18,borderRadius:4,background:C.lily,color:"#160f20",fontFamily:"'Press Start 2P',monospace",fontSize:8,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}},data.idx),
-              h("div",{style:{fontSize:14}},"🧠"),
-              h("div",{style:{flex:1,fontFamily:"'Courier New',monospace",fontSize:11.5,fontWeight:"bold",color:C.text,lineHeight:1.15}},"Skill: "+data.label)),
-            h("div",{style:{display:"flex",justifyContent:"space-between",marginTop:5,fontFamily:"'Courier New',monospace",fontSize:11}},
-              h("span",{style:{color:good?C.green:C.dim,fontWeight:"bold"}},(good?"+":"")+fmt(data.marginal)+"/d"),
-              h("span",{style:{color:data.free?C.green:C.sec}},data.free?("FREE · "+data.pts+"pt"):(data.pts+" point"+(data.pts>1?"s":"")))),
-            hv?h(Tip,{accent:C.lily,title:"Skill: "+data.label,rows:[
-              {k:"Effect",v:data.boost||"—",vc:C.yellow},
-              {k:"+FLOWER/day",v:(good?"+":"")+fmt(data.marginal),vc:good?C.green:C.red},
-              {k:"Cost",v:data.free?("FREE — uses "+data.pts+" unused point"+(data.pts>1?"s":"")):(data.pts+" point"+(data.pts>1?"s":"")+" — level up first")},
-              {k:"Rate after",v:fmt(data.rateAfter)+"/d"},{k:"ETA",v:days(data.atDay)}]}):null);
-        }
-        function LevelNode({ data }) {
-          const [hv,setHv]=React.useState(false);
-          return h("div",{onMouseEnter:()=>setHv(true),onMouseLeave:()=>setHv(false),style:{position:"relative",width:180,background:"linear-gradient(160deg,#10283a,#0c1a26)",border:"2px solid "+(hv?C.blue:"#2a4a60"),borderRadius:8,padding:"7px 9px",cursor:"pointer",transition:"all .15s",boxShadow:hv?("0 0 18px "+C.blue+"66, 0 4px 14px rgba(0,0,0,.5)"):"0 2px 8px rgba(0,0,0,.4)",transform:hv?"translateY(-2px)":"none"}},
-            h(Handle,{type:"target",position:Position.Left,style:{opacity:0,border:0}}),
-            h(Handle,{type:"source",position:Position.Right,style:{opacity:0,border:0}}),
-            h("div",{style:{display:"flex",alignItems:"center",gap:7}},
-              h("div",{style:{fontSize:15}},"⬆️"),
-              h("div",{style:{flex:1,fontFamily:"'Courier New',monospace",fontSize:11.5,fontWeight:"bold",color:C.blue,lineHeight:1.15}},"Level up → +1 point")),
-            h("div",{style:{fontFamily:"'Courier New',monospace",fontSize:10.5,color:C.sec,marginTop:4}},"cook "+data.cakes+"× "+data.recipe+" & eat"),
-            h("div",{style:{fontFamily:"'Courier New',monospace",fontSize:10,color:C.dim,marginTop:2}},"→ L"+data.level+" · ~"+fmt(data.cost)+"◈"),
-            hv?h(Tip,{accent:C.blue,title:"Level up to "+data.level,rows:[
-              {k:"Cook & eat",v:data.cakes+"× "+data.recipe},{k:"Cost",v:fmt(data.cost)+" FLOWER"},{k:"Gives",v:"+1 skill point"}]}):null);
-        }
-        const nodeTypes = { wowItem:WowItem, skillNode:SkillNode, levelNode:LevelNode };
-        const roots = {};
-        window.__mountFlow = function(elId, kind) {
-          const el = document.getElementById(elId); if (!el) return;
-          try {
-            const fd = (window.__roadmapFlowData && window.__roadmapFlowData[kind]) || { nodes:[], edges:[] };
-            const edges = (fd.edges||[]).map((e)=>Object.assign({}, e, { style:{ stroke:C.goldb, strokeWidth:2 }, markerEnd:{ type:"arrowclosed", color:C.goldb }, animated:e.animated!==false }));
-            if (roots[elId]) { try { roots[elId].unmount(); } catch (e) {} }
-            const root = createRoot(el); roots[elId] = root;
-            root.render(h(ReactFlow, { nodes:fd.nodes, edges:edges, nodeTypes:nodeTypes, fitView:true, fitViewOptions:{ padding:0.2 }, minZoom:0.12, maxZoom:1.8, proOptions:{ hideAttribution:true }, defaultEdgeOptions:{ type:"smoothstep" }, nodesDraggable:true },
-              h(Background, { color:"#3a2a1a", gap:22, size:1 }),
-              h(Controls, { showInteractive:false }),
-              h(MiniMap, { pannable:true, zoomable:true, nodeColor:()=>C.goldb, nodeStrokeColor:()=>C.gold, maskColor:"rgba(0,0,0,.6)", style:{ background:C.panel, border:"1px solid "+C.brown } })));
+            root.render(h(ReactFlow, { nodes:fd.nodes, edges:edges, nodeTypes:nodeTypes, fitView:false, defaultViewport:{ x:40, y:30, zoom:1 }, minZoom:1, maxZoom:1, proOptions:{ hideAttribution:true }, defaultEdgeOptions:{ type:"smoothstep" }, nodesDraggable:true, panOnDrag:true, panOnScroll:true, panOnScrollSpeed:0.9, zoomOnScroll:false, zoomOnPinch:false, zoomOnDoubleClick:false, onInit:(inst)=>{ try { inst.setViewport({ x:40, y:30, zoom:1 }, { duration:0 }); } catch (e) {} } },
+              h(Background, { color:"#3a2a1a", gap:24, size:1 })));
           } catch (e) { errBox("render: " + ((e && e.message) || e)); }
         };
         window.__flowReady = true;
@@ -5785,7 +5686,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.12</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.13</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5812,6 +5713,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.13", items: [
+          { t: "fix", text: "The graph really is fixed now. The reason nothing changed across v4.11/v4.12 was a DUPLICATE <script type=module> \u2014 a stale old graph module was loading last and overriding the new one, so you kept seeing the tiny-node + minimap version. Removed the duplicate. Zoom is now LOCKED at 1 (cards always full size), the zoom +/\u2212 controls and minimap are gone; scroll or drag to move down the vertical path." },
+        ]},
         { ver: "v4.12", items: [
           { t: "fix", text: "Graph opened zoomed all the way out (millimetre nodes) because ReactFlow was fitting the whole tall path into the box. Now the viewport is forced to zoom 1 on init so the cards open at full readable size at the top of the path, and the minimap is gone. Scroll moves down the path, +/\u2212 zooms if you want." },
         ]},
