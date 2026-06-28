@@ -5689,7 +5689,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.21</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.22</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5716,6 +5716,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.22", items: [
+          { t: "fix", text: "Downstream chain line now shows the PER-DAY saving across your nodes (e.g. Wood \u2192 Stone \u22127.68/d, Iron \u22125.98/d, Gold \u22122.98/d, Crimstone \u22122.53/d; Gold \u2192 Crimstone \u22127.98/d) instead of per-unit \u2014 hover for the per-unit figures." },
+        ]},
         { ver: "v4.21", items: [
           { t: "feat", text: "Power page: every mining/tree yield boost (Wood/Stone/Iron/Gold) now shows a small DOWNSTREAM line \u2014 how much cheaper it makes each later resource per unit through the tool-crafting chain (each pickaxe is made from the resources above it). Compounding: improving Wood cheapens Stone (its Pickaxe is 3 Wood), and that feeds Iron (Stone Pickaxe = Wood + Stone), Gold, Crimstone. e.g. Wood \u2192 Stone \u22120.014/u, Iron \u22120.044/u, Gold \u22120.103/u, Crimstone \u22120.192/u; Gold \u2192 Crimstone \u22120.61/u. The number is what that downstream resource\u2019s per-unit cost would drop by if you self-supply this one (you out-produce all of these, so you do); hover for the per-day totals across your nodes." },
         ]},
@@ -18589,8 +18592,8 @@
         const ds = hasYield ? powerChainDownstream(catId) : null;
         if (ds) {
           const fmt = (x) => x < 0.1 ? x.toFixed(4) : x.toFixed(3);
-          const title = "Per-day across your nodes: " + ds.map(d => d.res + " \u2212" + d.perDay.toFixed(2) + "/d").join(", ");
-          downstreamHtml = `<div class="power-boost-chain" title="${title}" style="font-size:0.5rem;color:var(--lily);margin-top:2px">\u26d3\ufe0f also cheapens (if self-supplied): ${ds.map(d => `${escHTML(d.res)} <b>\u2212${fmt(d.perUnit)}</b>/u`).join(" \u00b7 ")}</div>`;
+          const title = "Per unit: " + ds.map(d => d.res + " \u2212" + fmt(d.perUnit) + "/u").join(", ");
+          downstreamHtml = `<div class="power-boost-chain" title="${title}" style="font-size:0.5rem;color:var(--lily);margin-top:2px">\u26d3\ufe0f also cheapens (if self-supplied): ${ds.map(d => `${escHTML(d.res)} <b>\u2212${d.perDay.toFixed(2)}</b>/d`).join(" \u00b7 ")}</div>`;
         }
       }
       const imgUrl = b.type !== "Skill" ? getItemIcon(b.name) : "";
