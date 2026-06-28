@@ -5686,7 +5686,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.14</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.16</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5713,6 +5713,12 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.16", items: [
+          { t: "feat", text: "Deliver tiles now show the whole trade \u2014 what you GIVE, what you GET and the net (e.g. guria: give Purple Daffodil \u00d71 \u00b7 get 1.15 \u00b7 net +1.15). And the heavy reference tables (what-to-farm/mine, mining strategy, animal feed, lifecycle, gifts, deliveries) are kept but COLLAPSED by default, so the graph + today tiles are the main view \u2014 click a header to expand." },
+        ]},
+        { ver: "v4.15", items: [
+          { t: "fix", text: "Flower gifts were nonsense \u2014 they suggested the highest-POINT flower (e.g. Primula Enigma) and assumed you could gift it daily, ignoring that it takes 14 DAYS to grow one. Fixed: the gift advisor now uses the Flower-page grow times and picks the flower with the most POINTS PER GROW-DAY (a 1-day Pansy = 5 pts/day for tywin beats a 14-day Primula at 1.5), shows the realistic days-to-key, and ties each gifted NPC to ~1 flower bed (so it only recommends as many NPCs as you have beds). The \u201cwhat to do today\u201d gift tiles show the grow time too." },
+        ]},
         { ver: "v4.14", items: [
           { t: "fix", text: "Cards were overlapping (vertical gap was smaller than the card height) so they stacked on top of each other and the connecting edges were hidden. Tripled the gap, shrank the cards a little and brightened/thickened the edges \u2014 each whole card is now clearly separated and visible. Also: ticket value defaults to 0 with the honest reason \u2014 the game-source Megastore shows this chapter\u2019s tickets only buy temporary Hourglasses + cosmetics + the Spa ticket-boost set, no permanent FLOWER boost, so delivering for tickets has ~0 FLOWER ROI (it\u2019s for season collection). Set Ticket value in the controls if you value the season items." },
         ]},
@@ -16220,45 +16226,46 @@
       const hasBB = !!skills["Blossom Bonding"];
       const nftFloor = (name) => { const nd = powerState.nftData || {}; for (const tk of ["collectibles", "wearables"]) for (const it of (nd[tk] || [])) if (it.name === name) return parseFloat(it.floor) || 0; return 0; };
       const flowers = Object.keys(DEFAULT_FLOWER_POINTS);
+      const growH = {}; for (const f of flowers) { let hrs = 0; try { hrs = getFlowerChainHours(f); } catch {} growH[f] = hrs > 0 ? hrs : 24; }
       const rows = [];
       for (const [npc, data] of Object.entries(BUMPKIN_GIFTS_DATA)) {
         if (!data.repeats) continue;
-        let bestPts = 0, bestFlower = "", feasPts = 0, feasFlower = "", feasHrs = 0;
+        let best = null; // most POINTS PER GROW-DAY (gift once/day; 1 bed = 1 flower per grow cycle)
         for (const f of flowers) {
           const pts = getFlowerGiftPoints(npc, f, hasBB);
-          if (pts > bestPts) { bestPts = pts; bestFlower = f; }
-          let hrs = 0; try { hrs = getFlowerChainHours(f); } catch {}
-          if (hrs > 0 && hrs <= 24 && pts > feasPts) { feasPts = pts; feasFlower = f; feasHrs = hrs; }
+          const days = Math.max(1, growH[f] / 24);
+          const eff = pts / days;
+          if (!best || eff > best.eff) best = { f, pts, days, eff };
         }
         const repu = data.repeats;
         const repVal = roadmapGiftRewardValue(repu, nftFloor);
-        const giftsPerReward = bestPts > 0 ? repu.fp / bestPts : Infinity;
-        const perDay = (repVal > 0 && isFinite(giftsPerReward) && giftsPerReward > 0) ? repVal / giftsPerReward : 0;
-        rows.push({ npc, bestFlower, bestPts, feasFlower, feasPts, feasHrs, repVal, repLabel: roadmapGiftRewardLabel(repu), giftsPerReward, perDay });
+        const daysToReward = best.eff > 0 ? repu.fp / best.eff : Infinity;
+        const perDay = (repVal > 0 && isFinite(daysToReward) && daysToReward > 0) ? repVal / daysToReward : 0;
+        rows.push({ npc, flower: best.f, pts: best.pts, growDays: best.days, repVal, repLabel: roadmapGiftRewardLabel(repu), daysToReward, perDay });
       }
       if (!rows.length) return "";
       rows.sort((a, b) => b.perDay - a.perDay);
-      const worth = rows.filter(r => r.perDay > 0.2).length;
       const beds = getCapacityCount("flowers", capacity) || 0;
       let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
-      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">FLOWER GIFTS \u2192 KEYS \u2014 who to gift &amp; whether you can keep up</div>`;
-      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Gift a flower to an NPC once per day to build friendship; at each repeat threshold they hand back a key/coins. <b>FL/day</b> = reward value \u00d7 (points-per-gift \u00f7 repeat threshold) if you gift daily. Key values are estimates (Treasure ${ROADMAP_KEY_VALUE_SFL["Treasure Key"]} / Rare ${ROADMAP_KEY_VALUE_SFL["Rare Key"]} / Luxury ${ROADMAP_KEY_VALUE_SFL["Luxury Key"]} ${sflIcon()}). Use the best flower for points, but a flower that grows in \u2264 24h to actually sustain a daily gift.</div>`;
-      h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.58rem"><thead><tr style="color:var(--text-dim);text-align:left;font-size:0.5rem"><th style="padding:2px 6px">NPC</th><th style="padding:2px 6px">best flower (pts)</th><th style="padding:2px 6px">repeat reward</th><th style="padding:2px 6px;text-align:right">value</th><th style="padding:2px 6px;text-align:right">FL/day</th><th style="padding:2px 6px;text-align:right">days/reward</th><th style="padding:2px 6px">daily-grow flower</th></tr></thead><tbody>`;
-      for (const r of rows) {
-        const pos = r.perDay > 0.2;
+      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">FLOWER GIFTS → KEYS — grow-time aware</div>`;
+      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">You gift each NPC at most <b>once a day</b>, and one flower bed makes one flower per its <b>FULL grow time</b> (a rare Primula Enigma takes <b>14 days</b>, a Pansy <b>1 day</b>). So the best flower is the one with the most <b>points per grow-day</b>, NOT the most points — a 1-day Pansy beats a 14-day Primula for sustained gifting. <b>FL/day</b> = key value × points-per-grow-day ÷ repeat threshold. Each NPC you gift ties up ~1 bed, so you can sustain about your bed count. Key values are rough estimates (Treasure ${ROADMAP_KEY_VALUE_SFL["Treasure Key"]} / Rare ${ROADMAP_KEY_VALUE_SFL["Rare Key"]} / Luxury ${ROADMAP_KEY_VALUE_SFL["Luxury Key"]} ${sflIcon()}).</div>`;
+      h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.58rem"><thead><tr style="color:var(--text-dim);text-align:left;font-size:0.5rem"><th style="padding:2px 6px">NPC</th><th style="padding:2px 6px">best flower (pts · grow)</th><th style="padding:2px 6px">repeat reward</th><th style="padding:2px 6px;text-align:right">value</th><th style="padding:2px 6px;text-align:right">FL/day</th><th style="padding:2px 6px;text-align:right">days/key</th><th style="padding:2px 6px;text-align:center">bed</th></tr></thead><tbody>`;
+      rows.forEach((r, i) => {
+        const within = i < beds;
+        const pos = r.perDay > 0.05;
         const ncol = pos ? "var(--green)" : "var(--text-dim)";
-        h += `<tr style="border-top:1px solid #222">
+        h += `<tr style="border-top:1px solid #222${within ? "" : ";opacity:0.45"}">
           <td style="padding:3px 6px;white-space:nowrap">${escHTML(r.npc)}</td>
-          <td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(r.bestFlower)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.bestFlower)} <span style="color:var(--text-dim);font-size:0.5rem">${r.bestPts}pt</span></td>
+          <td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(r.flower)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.flower)} <span style="color:var(--text-dim);font-size:0.5rem">${r.pts}pt · ${r.growDays.toFixed(0)}d</span></td>
           <td style="padding:3px 6px;color:var(--text-dim)">${escHTML(r.repLabel)}</td>
           <td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(r.repVal)}</td>
           <td style="padding:3px 6px;text-align:right;color:${ncol};font-weight:bold">${r.perDay > 0.0001 ? "+" + roadmapFmtFlower(r.perDay) : "0"}</td>
-          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${isFinite(r.giftsPerReward) ? Math.ceil(r.giftsPerReward) : "\u2014"}</td>
-          <td style="padding:3px 6px;color:var(--text-dim);white-space:nowrap">${r.feasFlower ? escHTML(r.feasFlower) + " (" + r.feasPts + "pt, " + r.feasHrs.toFixed(0) + "h)" : "\u2014"}</td>
+          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${isFinite(r.daysToReward) ? Math.ceil(r.daysToReward) : "—"}</td>
+          <td style="padding:3px 6px;text-align:center">${within ? '<span style="color:var(--green)">✓</span>' : "—"}</td>
         </tr>`;
-      }
+      });
       h += `</tbody></table></div>`;
-      h += `<div style="margin-top:8px;font-size:0.5rem;color:var(--text-dim)">Keeping up: gifting the ${worth} worthwhile NPCs daily needs ${worth} flowers/day. You have <b>${beds} flower bed${beds === 1 ? "" : "s"}</b> \u2014 each bed grows ~1 flower per its chain time, so prioritise the highest FL/day NPCs your beds can feed. Keys are spent on chests; values shown are rough averages.</div>`;
+      h += `<div style="margin-top:8px;font-size:0.5rem;color:var(--text-dim)">You have <b>${beds} flower bed${beds === 1 ? "" : "s"}</b> → gift the top ${beds} NPCs (✓), one bed each growing their best flower. The faded rows have no bed to spare. days/key assumes one bed per NPC at its grow rate (dedicate more beds to one NPC to gift it daily and get the key faster). Keys open chests — value estimated.</div>`;
       h += `</div>`;
       return h;
     }
@@ -16975,12 +16982,13 @@
       const gl = Object.keys(DEFAULT_FLOWER_POINTS), gr = [];
       for (const [npc, data] of Object.entries(BUMPKIN_GIFTS_DATA)) {
         if (!data.repeats) continue;
-        let bp = 0, bf = ""; for (const f of gl) { const p = getFlowerGiftPoints(npc, f, hasBB); if (p > bp) { bp = p; bf = f; } }
-        const rv = roadmapGiftRewardValue(data.repeats, () => 0), gpr = bp > 0 ? data.repeats.fp / bp : Infinity, pd = (rv > 0 && isFinite(gpr)) ? rv / gpr : 0;
-        if (pd > 0.2) gr.push({ npc, bf, pd });
+        let best = null;
+        for (const f of gl) { const p = getFlowerGiftPoints(npc, f, hasBB); let hrs = 0; try { hrs = getFlowerChainHours(f); } catch {} const days = Math.max(1, (hrs || 24) / 24); const eff = p / days; if (!best || eff > best.eff) best = { f, p, days, eff }; }
+        const rv = roadmapGiftRewardValue(data.repeats, () => 0), pd = (rv > 0 && best.eff > 0) ? rv * best.eff / data.repeats.fp : 0;
+        if (pd > 0.05) gr.push({ npc, bf: best.f, days: best.days, pd });
       }
       gr.sort((a, b) => b.pd - a.pd);
-      if (gr.length) branches.push({ label: "GIFTS", icon: roadmapFlowIcon("Red Pansy"), actions: gr.slice(0, 4).map(g => ({ label: "Gift " + g.bf + " \u2192 " + g.npc, sub: "+" + roadmapFmtFlower(g.pd) + "/day", good: true, icon: roadmapFlowIcon(g.bf) })) });
+      if (gr.length) branches.push({ label: "GIFTS", icon: roadmapFlowIcon("Red Pansy"), actions: gr.slice(0, 4).map(g => ({ label: "Gift " + g.bf + " \u2192 " + g.npc, sub: "+" + roadmapFmtFlower(g.pd) + "/day \u00b7 " + g.days.toFixed(0) + "d grow", good: true, icon: roadmapFlowIcon(g.bf) })) });
       // DELIVER — best pending deliveries
       const now = Date.now(), estFn = (typeof window !== "undefined" && window.estimateItemSfl) ? window.estimateItemSfl : null;
       const estItem = (n) => { try { return estFn ? (estFn(n, p2p, [], er) || 0) : (p2p[n] || 0); } catch { return p2p[n] || 0; } };
@@ -16988,13 +16996,14 @@
       for (const o of ((farm.delivery && farm.delivery.orders) || [])) {
         if (o.completedAt) continue;
         let cost = 0; for (const [it, q] of Object.entries(o.items || {})) cost += (it === "coins") ? (cFree ? 0 : (er.coinsPerSFL > 0 ? q / er.coinsPerSFL : 0)) : estItem(it) * q;
+        const give = Object.entries(o.items || {}).map(([it, q]) => it === "coins" ? (q.toLocaleString() + " coins") : (q + "\u00d7 " + it)).join(", ");
         const r = o.reward || {}; let rv = (r.sfl || 0) + ((r.coins || 0) > 0 && er.coinsPerSFL > 0 ? r.coins / er.coinsPerSFL : 0);
         let tk = 0; try { tk = dashCalculateDeliveryTickets(o.from, farm, now) || 0; } catch {}
-        rv += tk * (typeof settings.ticketValueSfl === "number" ? settings.ticketValueSfl : 1); dr.push({ from: o.from, net: rv - cost, tickets: tk });
+        rv += tk * (typeof settings.ticketValueSfl === "number" ? settings.ticketValueSfl : 1);
+        dr.push({ from: o.from, give, cost, rewardVal: rv, tickets: tk, net: rv - cost });
       }
       dr.sort((a, b) => b.net - a.net);
-      if (dr.length) branches.push({ label: "DELIVER", icon: roadmapFlowIcon("Pancakes"), actions: dr.slice(0, 4).map(d => ({ label: "Deliver \u2192 " + d.from, sub: (d.net >= 0 ? "+" : "") + roadmapFmtFlower(d.net) + " net" + (d.tickets ? (" · " + d.tickets + " tickets") : ""), good: d.net > 0 })) });
-
+      if (dr.length) branches.push({ label: "DELIVER", icon: roadmapFlowIcon("Pancakes"), actions: dr.slice(0, 4).map(d => ({ label: "Deliver \u2192 " + d.from, sub: "give " + (d.give || "?") + " \u00b7 get " + roadmapFmtFlower(d.rewardVal) + (d.tickets ? (" (" + d.tickets + "tk)") : "") + (d.cost > 0.001 ? (" \u00b7 cost " + roadmapFmtFlower(d.cost)) : "") + " \u00b7 net " + (d.net >= 0 ? "+" : "\u2212") + roadmapFmtFlower(Math.abs(d.net)), good: d.net > 0 })) });
       return branches;
     }
 
@@ -17100,12 +17109,13 @@
       h += `</div>`;
 
       // ── What to farm / mine now (per-category profitability) ──
-      h += roadmapProfitabilityHtml(settings);
-      h += roadmapMiningStrategyHtml(settings);
-      h += roadmapAnimalFeedHtml(settings);
-      h += roadmapAnimalLifecycleHtml(settings);
-      h += roadmapGiftsHtml(settings);
-      h += roadmapDeliveriesHtml(settings);
+      const _rmCollapse = (title, inner) => inner ? `<details style="margin-bottom:12px"><summary style="cursor:pointer;padding:9px 12px;background:#1c160f;border:1px solid var(--border-brown);border-radius:8px;font-family:'Press Start 2P',monospace;font-size:0.55rem;color:var(--sunpetal)">\u25b8 ${title}</summary><div style="margin-top:8px">${inner}</div></details>` : "";
+      h += _rmCollapse("WHAT TO FARM / MINE NOW", roadmapProfitabilityHtml(settings));
+      h += _rmCollapse("MINING STRATEGY \u2014 sell raw vs convert up", roadmapMiningStrategyHtml(settings));
+      h += _rmCollapse("ANIMAL FEEDING \u2014 what to feed, worth it?", roadmapAnimalFeedHtml(settings));
+      h += _rmCollapse("ANIMAL LIFECYCLE \u2014 net per level", roadmapAnimalLifecycleHtml(settings));
+      h += _rmCollapse("FLOWER GIFTS \u2192 KEYS", roadmapGiftsHtml(settings));
+      h += _rmCollapse("DELIVERIES, BOUNTIES \u0026 TICKETS", roadmapDeliveriesHtml(settings));
 
       // ── Controls ──
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:16px;font-size:0.62rem;color:var(--text-secondary)">`;
