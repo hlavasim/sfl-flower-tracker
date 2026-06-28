@@ -5689,7 +5689,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.26</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.27</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5716,6 +5716,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.27", items: [
+          { t: "feat", text: "Mining is back in the What-to-farm/mine table — one table now. Each resource (Wood/Stone/Iron/Gold/Crimstone/Oil) is a clickable row with its SELL / USE→next / SKIP badge and net/day; click it to expand the full chain detail: what it feeds, the sell-vs-use split, the +Δ/day you gain by mining it vs just selling the inputs it eats, and the tool recipe. The separate Mining Chain table is gone." },
+        ]},
         { ver: "v4.26", items: [
           { t: "fix", text: "Two mining tables were disagreeing. Removed the duplicate MINING & TREES rows from the What-to-farm/mine table — those showed the chain’s net-surplus attribution out of context (Crimstone looked like +8 because its Gold-Pickaxe cost is netted out of Gold, which then looked bad). Mining now lives in ONE place, the MINING CHAIN table, which is now scaled by your real harvest efficiency so it matches the income hero. Obsidian (its own lava-pit economics) stays in the farm table." },
         ]},
@@ -16753,6 +16756,26 @@
       return h;
     }
 
+    function roadmapMiningDetail(c, r, f) {
+      const res = MINE_RES[c], T = MINE_TOOL[c];
+      const toolName = Object.keys(TOOL_TO_CAT).find(k => TOOL_TO_CAT[k] === c) || "tool";
+      let h = `<div style="font-size:0.52rem;color:var(--text-secondary);line-height:1.8">`;
+      if (!r.mined) {
+        h += `<b style="color:#e8a060">SKIP.</b> Mining ${escHTML(res)} loses <b style="color:var(--red)">${roadmapFmtFlower(Math.abs(r.dailyProfit * f))}/day</b> vs just selling the inputs its ${escHTML(toolName)} eats — so don't mine it, sell those instead.`;
+      } else if (r.verdict === "use") {
+        const fed = escHTML(MINE_RES[r.feeds] || r.feeds || "");
+        h += `<b style="color:#5DADE2">USE → ${fed}.</b> You produce ${roadmapFmtFlower(r.produced * f)} ${escHTML(res)}/day; <b>${roadmapFmtFlower(r.consumed * f)}</b> feeds your ${fed} pickaxes and you sell the remaining <b>${roadmapFmtFlower(r.sellable * f)}</b>.`;
+      } else {
+        h += `<b style="color:#7fe0a0">SELL.</b> You produce ${roadmapFmtFlower(r.produced * f)} ${escHTML(res)}/day and sell it all (nothing above it is worth feeding it into).`;
+      }
+      if (r.mined && T) {
+        const parts = []; for (const i in T.chain) parts.push(T.chain[i] + " " + escHTML(MINE_RES[i])); for (const m in (T.mat || {})) parts.push(T.mat[m] + " " + escHTML(m));
+        const dc = r.dailyProfit >= 0 ? "var(--green)" : "var(--red)";
+        h += `<br>Mining it nets <b style="color:${dc}">${r.dailyProfit >= 0 ? "+" : "−"}${roadmapFmtFlower(Math.abs(r.dailyProfit * f))}/day</b> vs selling the inputs it eats. Each ${escHTML(toolName)} = ${parts.join(" + ")}${r.inputLimited ? ` <span style="color:var(--yellow)">— input-limited (you can't make enough of a lower resource)</span>` : ""}.`;
+      }
+      h += `</div>`;
+      return h;
+    }
     function roadmapProfitabilityHtml(settings) {
       const cf = roadmapCoinsFree(settings);
       const coins = Math.round(parseFloat(powerState.farm && powerState.farm.coins) || 0);
@@ -16770,9 +16793,17 @@
       const addBd = (g, label, icon, bd, sub) => { if (bd && isFinite(bd.net)) g.rows.push({ label, icon, gross: bd.gross || 0, cost: bd.cost || 0, net: bd.net, sub }); };
       const sBd = (bd, f) => bd ? { gross: (bd.gross || 0) * f, cost: (bd.cost || 0) * f, net: (bd.net || 0) * f } : bd;
 
-      // trees/stone/iron/gold/crimstone/oil now live in the dedicated MINING CHAIN table (sell/use/skip);
-      // only Obsidian (its own lava-pit economics) stays in this farm table.
-      for (const [cat, icon] of [["obsidian","Obsidian"]]) {
+      // Mining chain (trees->crimstone + oil) as expandable rows; obsidian (lava-pit) stays in OTHER.
+      const _miCh = roadmapMiningChain(settings);
+      for (const cat of ["trees", "stone", "iron", "gold", "crimstone", "oil"]) {
+        if (getCapacityCount(cat, cap) <= 0) continue;
+        const r = _miCh.byCat[cat]; if (!r) continue;
+        const f = roadmapEffFactor(cat, settings);
+        const VB = { sell: ["SELL", "#7fe0a0"], use: ["USE", "#5DADE2"], skip: ["SKIP", "#e8a060"] }[r.verdict] || ["", "#999"];
+        const badge = `<span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1c160f;color:${VB[1]};font-weight:bold">${VB[0]}${r.verdict === "use" && r.feeds ? ("→" + escHTML(MINE_RES[r.feeds] || r.feeds)) : ""}</span>`;
+        gMine.rows.push({ label: MINE_RES[cat], icon: MINE_RES[cat], gross: r.gross * f, cost: (r.gross - r.net) * f, net: r.net * f, badge, expandHtml: roadmapMiningDetail(cat, r, f) });
+      }
+      for (const [cat, icon] of [["obsidian", "Obsidian"]]) {
         if (getCapacityCount(cat, cap) <= 0) continue;
         addBd(gOther, (POWER_CATEGORIES[cat] ? POWER_CATEGORIES[cat].label : cat), icon, sBd(roadmapCatBreakdown(cat, roadmapOwnedEffects(cat), settings), roadmapEffFactor(cat, settings)), "1/wk");
       }
@@ -16832,13 +16863,15 @@
         for (const r of g.rows) {
           const pos = r.net > 0.001, neg = r.net < -0.001;
           const ncol = pos ? "var(--green)" : (neg ? "var(--red)" : "var(--text-dim)");
-          const nt = (pos ? "+" : (neg ? "\u2212" : "")) + roadmapFmtFlower(Math.abs(r.net));
-          h += `<tr style="border-bottom:1px solid #1b1b1b${r.fade ? ';opacity:0.4' : ''}">
-            <td style="padding:2px 6px 2px 0"><img class="inline-icon" src="${getItemIcon(r.icon)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.label)}${r.sub ? ` <span style="color:var(--text-dim);font-size:0.5rem">${r.sub}</span>` : ""}${r.detail ? `<div style="font-size:0.48rem;color:var(--text-dim)">${escHTML(r.detail)}</div>` : ""}</td>
+          const nt = (pos ? "+" : (neg ? "−" : "")) + roadmapFmtFlower(Math.abs(r.net));
+          const clk = r.expandHtml ? ` onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'table-row':'none';" style="cursor:pointer;border-bottom:1px solid #1b1b1b${r.fade ? ';opacity:0.4' : ''}"` : ` style="border-bottom:1px solid #1b1b1b${r.fade ? ';opacity:0.4' : ''}"`;
+          h += `<tr${clk}>
+            <td style="padding:2px 6px 2px 0">${r.expandHtml ? '<span style="color:var(--text-dim);font-size:0.5rem">▸</span> ' : ''}<img class="inline-icon" src="${getItemIcon(r.icon)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.label)}${r.badge ? (" " + r.badge) : ""}${r.sub ? ` <span style="color:var(--text-dim);font-size:0.5rem">${r.sub}</span>` : ""}${r.detail ? `<div style="font-size:0.48rem;color:var(--text-dim)">${escHTML(r.detail)}</div>` : ""}</td>
             <td style="padding:2px 6px;text-align:right;color:var(--green)">${roadmapFmtFlower(r.gross)}</td>
-            <td style="padding:2px 6px;text-align:right;color:var(--red)">${r.cost > 0.001 ? "\u2212" + roadmapFmtFlower(r.cost) : "0"}</td>
+            <td style="padding:2px 6px;text-align:right;color:var(--red)">${r.cost > 0.001 ? "−" + roadmapFmtFlower(r.cost) : "0"}</td>
             <td style="padding:2px 0 2px 6px;text-align:right;color:${ncol};font-weight:bold">${nt}</td>
           </tr>`;
+          if (r.expandHtml) h += `<tr style="display:none"><td colspan="4" style="padding:3px 8px 8px 18px;background:#140f0a">${r.expandHtml}</td></tr>`;
         }
         h += `</table>`;
       }
@@ -17402,7 +17435,6 @@
       // ── What to farm / mine now (per-category profitability) ──
       const _rmCollapse = (title, inner) => inner ? `<details style="margin-bottom:12px"><summary style="cursor:pointer;padding:9px 12px;background:#1c160f;border:1px solid var(--border-brown);border-radius:8px;font-family:'Press Start 2P',monospace;font-size:0.55rem;color:var(--sunpetal)">\u25b8 ${title}</summary><div style="margin-top:8px">${inner}</div></details>` : "";
       h += roadmapProfitabilityHtml(settings);
-      h += roadmapMiningChainHtml(settings);
       h += _rmCollapse("ANIMAL FEEDING \u2014 what to feed, worth it?", roadmapAnimalFeedHtml(settings));
       h += _rmCollapse("ANIMAL LIFECYCLE \u2014 net per level", roadmapAnimalLifecycleHtml(settings));
       h += roadmapGiftsHtml(settings);
