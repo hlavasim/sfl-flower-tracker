@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.04</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.05</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.05", items: [
+          { t: "feat", text: "DELIVERIES, BOUNTIES & TICKETS section (resources -> coins and resources -> tickets -> boosts). Every pending delivery and open bounty shows reward value (SFL + coins + seasonal tickets + marks/keys) minus the cost of the items you hand over = net, green when worth doing, red when the items are worth more than the reward. Shows the current chapter ticket and what it buys; ticket value is a labeled estimate. Item costs reuse the dashboard pricing (estimateItemSfl)." },
+        ]},
         { ver: "v4.04", items: [
           { t: "feat", text: "FLOWER GIFTS \u2192 KEYS section. Per NPC it shows the best flower to gift (points incl. Blossom Bonding), the repeating reward, its value (keys at labeled estimates Treasure 5 / Rare 25 / Luxury 80, coins/seeds at market), and the steady FLOWER/day if you gift daily = reward value \u00d7 points-per-gift \u00f7 repeat threshold. Sorted by value/day, with a daily-growable (\u2264 24h) flower suggested per NPC and a feasibility note on whether your flower beds can keep up. Key values are rough averages \u2014 chest contents are backend data." },
         ]},
@@ -16016,6 +16019,70 @@
       for (const [w, q] of Object.entries(reward.wearables || {})) parts.push(q + "\u00d7 " + w);
       return parts.join(", ") || "\u2014";
     }
+    // Rough seasonal-ticket value (ticket-shop EV is backend) — labeled estimate, adjust mentally.
+    const ROADMAP_TICKET_VALUE_SFL = 3;
+    // Deliveries + bounties: reward value (SFL/coins/tickets/marks/keys) minus the items you give.
+    function roadmapDeliveriesHtml(settings) {
+      const { farm, p2pPrices, exchangeRates } = powerState;
+      const now = Date.now();
+      const cFree = roadmapCoinsFree(settings);
+      const estFn = (typeof window !== "undefined" && window.estimateItemSfl) ? window.estimateItemSfl : (typeof estimateItemSfl === "function" ? estimateItemSfl : null);
+      const estItem = (name) => { try { return estFn ? (estFn(name, p2pPrices, [], exchangeRates) || 0) : (p2pPrices[name] || 0); } catch { return p2pPrices[name] || 0; } };
+      let chapter = {}; try { chapter = dashGetCurrentChapter(now) || {}; } catch {}
+      const ticketName = chapter.ticket || "";
+      const TV = ROADMAP_TICKET_VALUE_SFL;
+      const coinSfl = (c) => (c > 0 && exchangeRates.coinsPerSFL > 0) ? c / exchangeRates.coinsPerSFL : 0;
+
+      const dels = [];
+      for (const o of ((farm.delivery && farm.delivery.orders) || [])) {
+        if (o.completedAt) continue;
+        let cost = 0; for (const [it, q] of Object.entries(o.items || {})) cost += (it === "coins") ? (cFree ? 0 : coinSfl(q)) : estItem(it) * q;
+        const r = o.reward || {};
+        let rv = (r.sfl || 0) + coinSfl(r.coins || 0);
+        let tickets = 0; try { tickets = dashCalculateDeliveryTickets(o.from, farm, now) || 0; } catch {}
+        rv += tickets * TV;
+        for (const [it, q] of Object.entries(r.items || {})) { if (it === ticketName) continue; rv += (ROADMAP_KEY_VALUE_SFL[it] || p2pPrices[it] || estItem(it) || 0) * q; }
+        dels.push({ from: o.from, needs: Object.entries(o.items || {}).map(([i, q]) => i === "coins" ? (q.toLocaleString() + " coins") : (q + "\u00d7 " + i)).join(", "), cost, tickets, rv, net: rv - cost });
+      }
+      dels.sort((a, b) => b.net - a.net);
+
+      const completed = new Set(((farm.bounties && farm.bounties.completed) || []).map(x => typeof x === "string" ? x : (x && x.id)));
+      const bos = [];
+      for (const req of ((farm.bounties && farm.bounties.requests) || [])) {
+        if (completed.has(req.id)) continue;
+        let rv = coinSfl(req.coins || 0), tickets = 0, marks = 0;
+        for (const [it, q] of Object.entries(req.items || {})) {
+          if (it === ticketName) { tickets += q; rv += q * TV; }
+          else if (it === "Mark") { marks += q; rv += marksToSfl(q); }
+          else rv += (ROADMAP_KEY_VALUE_SFL[it] || p2pPrices[it] || estItem(it) || 0) * q;
+        }
+        const cost = estItem(req.name) || 0;
+        bos.push({ name: req.name, rv, cost, tickets, marks, net: rv - cost });
+      }
+      bos.sort((a, b) => b.net - a.net);
+      if (!dels.length && !bos.length) return "";
+
+      const fmtNet = (n) => { const pos = n > 0.001, neg = n < -0.001; const col = pos ? "var(--green)" : (neg ? "var(--red)" : "var(--text-dim)"); return `<span style="color:${col};font-weight:bold">${(pos ? "+" : (neg ? "\u2212" : "")) + roadmapFmtFlower(Math.abs(n))}</span>`; };
+      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
+      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">DELIVERIES, BOUNTIES &amp; TICKETS \u2014 what to fulfil</div>`;
+      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Reward value (SFL + coins + tickets + marks/keys) minus the cost of the items you hand over = net. <span style="color:var(--green)">Green = worth doing</span>, <span style="color:var(--red)">red = the items are worth more than the reward</span>. Chapter: <b>${escHTML(chapter.name || "?")}</b> \u00b7 ticket <b>${escHTML(ticketName || "?")}</b> (est ${TV} ${sflIcon()} each \u2014 spend on ${chapter.boosts ? escHTML(chapter.boosts.join(", ")) : "season boosts"}). Detailed per-item costs are on the dashboard.</div>`;
+      if (dels.length) {
+        h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin:6px 0 3px">DELIVERIES (${dels.length} pending)</div>`;
+        h += `<table style="width:100%;border-collapse:collapse;font-size:0.58rem"><tr style="color:var(--text-dim);font-size:0.5rem"><td style="padding:0 6px">from</td><td style="padding:0 6px">give</td><td style="padding:0 6px;text-align:right">reward</td><td style="padding:0 6px;text-align:right">cost</td><td style="padding:0 6px;text-align:right">tickets</td><td style="text-align:right">net</td></tr>`;
+        for (const d of dels.slice(0, 14)) h += `<tr style="border-top:1px solid #1b1b1b"><td style="padding:2px 6px;white-space:nowrap">${escHTML(d.from)}</td><td style="padding:2px 6px;color:var(--text-dim)">${escHTML(d.needs)}</td><td style="padding:2px 6px;text-align:right;color:var(--green)">${roadmapFmtFlower(d.rv)}</td><td style="padding:2px 6px;text-align:right;color:var(--red)">${d.cost > 0.001 ? "\u2212" + roadmapFmtFlower(d.cost) : "0"}</td><td style="padding:2px 6px;text-align:right;color:var(--sunpetal)">${d.tickets || ""}</td><td style="padding:2px 0 2px 6px;text-align:right">${fmtNet(d.net)}</td></tr>`;
+        h += `</table>`;
+      }
+      if (bos.length) {
+        h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin:10px 0 3px">BOUNTY BOARD (${bos.length} open)</div>`;
+        h += `<table style="width:100%;border-collapse:collapse;font-size:0.58rem"><tr style="color:var(--text-dim);font-size:0.5rem"><td style="padding:0 6px">give</td><td style="padding:0 6px;text-align:right">reward</td><td style="padding:0 6px;text-align:right">cost</td><td style="padding:0 6px;text-align:right">tickets</td><td style="padding:0 6px;text-align:right">marks</td><td style="text-align:right">net</td></tr>`;
+        for (const b of bos.slice(0, 14)) h += `<tr style="border-top:1px solid #1b1b1b"><td style="padding:2px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(b.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(b.name)}</td><td style="padding:2px 6px;text-align:right;color:var(--green)">${roadmapFmtFlower(b.rv)}</td><td style="padding:2px 6px;text-align:right;color:var(--red)">${b.cost > 0.001 ? "\u2212" + roadmapFmtFlower(b.cost) : "0"}</td><td style="padding:2px 6px;text-align:right;color:var(--sunpetal)">${b.tickets || ""}</td><td style="padding:2px 6px;text-align:right;color:var(--text-dim)">${b.marks || ""}</td><td style="padding:2px 0 2px 6px;text-align:right">${fmtNet(b.net)}</td></tr>`;
+        h += `</table>`;
+      }
+      h += `<div style="margin-top:8px;font-size:0.5rem;color:var(--text-dim)">Ticket value is an estimate (${TV} ${sflIcon()}) \u2014 tickets buy season boosts whose worth varies. Bounty item cost uses the same pricing as the dashboard; animals/some items may read 0 if not priceable.</div>`;
+      h += `</div>`;
+      return h;
+    }
+
     // Flowers -> NPC gifts -> keys: steady FLOWER/day from gifting each NPC daily, and feasibility.
     function roadmapGiftsHtml(settings) {
       const { farm, capacity } = powerState;
@@ -16675,6 +16742,7 @@
       h += roadmapAnimalFeedHtml(settings);
       h += roadmapSkillsHtml(settings);
       h += roadmapGiftsHtml(settings);
+      h += roadmapDeliveriesHtml(settings);
 
       // ── Controls ──
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:16px;font-size:0.62rem;color:var(--text-secondary)">`;
