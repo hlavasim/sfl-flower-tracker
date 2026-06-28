@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.92</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.93</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.93", items: [
+          { t: "fix", text: "Yield engine port (2/n): FRUITS. gameExtraEffects now also injects fruit-yield boosts the NFT API omits (game fruitHarvested.ts): Faction Quiver +0.25 all fruit, Macaw +0.1 (or +0.2 with Loyal Macaw skill), Fruit Picker Apron +0.1 and Camel Onesie +0.1 (if equipped on bumpkin or any farm hand), plus per-fruit Black Bearry +1 Blueberry, Lady Bug +0.25 Apple, Banana Chicken/Banana Amulet, Lemon Shark/Reveling Lemon, Tomato Bombard. The user owns Macaw (+0.2) + Fruit Picker Apron + Nightshade Quiver, so fruit yields rise accordingly. Crops + animals already match sfl.world; resources need a structural rework (game uses per-node-tier base 1 + tier bonuses + multiplicative chains, our model uses a flat base yield) and are next." },
+        ]},
         { ver: "v3.92", items: [
           { t: "fix", text: "Yield engine port (1/n): the marketplace NFT API only exposes boosts for ~6 of a typical farm 180 items, so we were under-counting crop yields vs sfl.world (Sunflower 1.60 vs 1.85). New gameExtraEffects(farm) faithfully ports the game crop-yield boosts the API omits and injects them in buildPowerState (shared by Power/Nodes/Roadmap): Faction Quiver +0.25 all crops (if the faction wings are equipped on the bumpkin or any farm hand), Scary Mike/Horror Mike +0.2/0.3 medium-crop AOE, Laurie +0.2/0.3 advanced-crop AOE, Sir Goldensnout +0.5, Infernal Pitchfork +3, Cabbage Boy/Girl, Karkinos, Pablo, Maximus, Giant Yam/Kale, Sheaf of Plenty. Verified via a Node harness against the live farm. Fruits / resources / animals to follow." },
         ]},
@@ -15381,6 +15384,20 @@
       if (ownsC("Giant Yam")) out.push({ type: "yield_flat", value: 0.5, cat: "crops", product: "Yam", raw: "Giant Yam +0.5" });
       if (ownsC("Giant Kale")) out.push({ type: "yield_flat", value: 2, cat: "crops", product: "Kale", raw: "Giant Kale +2" });
       if (ownsC("Sheaf of Plenty")) out.push({ type: "yield_flat", value: 2, cat: "crops", product: "Barley", raw: "Sheaf of Plenty +2 Barley" });
+
+      // ── FRUITS (game fruitHarvested.ts) ──
+      const _wingsEq = wings && farmWearableEquipped(farm, wings);
+      if (_wingsEq) out.push({ type: "yield_flat", value: 0.25, cat: "fruits", raw: "Faction Quiver +0.25 fruit" });
+      if (ownsC("Macaw")) out.push({ type: "yield_flat", value: skills["Loyal Macaw"] ? 0.2 : 0.1, cat: "fruits", raw: (skills["Loyal Macaw"] ? "Loyal Macaw +0.2" : "Macaw +0.1") + " fruit" });
+      if (farmWearableEquipped(farm, "Fruit Picker Apron")) out.push({ type: "yield_flat", value: 0.1, cat: "fruits", raw: "Fruit Picker Apron +0.1 fruit" });
+      if (farmWearableEquipped(farm, "Camel Onesie")) out.push({ type: "yield_flat", value: 0.1, cat: "fruits", raw: "Camel Onesie +0.1 fruit" });
+      if (ownsC("Black Bearry")) out.push({ type: "yield_flat", value: 1, cat: "fruits", product: "Blueberry", raw: "Black Bearry +1 Blueberry" });
+      if (ownsC("Lady Bug")) out.push({ type: "yield_flat", value: 0.25, cat: "fruits", product: "Apple", raw: "Lady Bug +0.25 Apple" });
+      if (ownsC("Banana Chicken")) out.push({ type: "yield_flat", value: 0.1, cat: "fruits", product: "Banana", raw: "Banana Chicken +0.1 Banana" });
+      if (farmWearableEquipped(farm, "Banana Amulet")) out.push({ type: "yield_flat", value: 0.5, cat: "fruits", product: "Banana", raw: "Banana Amulet +0.5 Banana" });
+      if (ownsC("Lemon Shark")) out.push({ type: "yield_flat", value: 0.2, cat: "fruits", product: "Lemon", raw: "Lemon Shark +0.2 Lemon" });
+      if (ownsC("Reveling Lemon")) out.push({ type: "yield_flat", value: 0.25, cat: "fruits", product: "Lemon", raw: "Reveling Lemon +0.25 Lemon" });
+      if (ownsC("Tomato Bombard")) out.push({ type: "yield_flat", value: 1, cat: "fruits", product: "Tomato", raw: "Tomato Bombard +1 Tomato" });
       return out;
     }
 
