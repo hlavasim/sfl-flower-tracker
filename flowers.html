@@ -5686,7 +5686,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.17</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.18</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5713,6 +5713,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.18", items: [
+          { t: "feat", text: "Income-engine reframe (your pick). The page now LEADS with YOUR INCOME RIGHT NOW \u2014 a big FLOWER/day number, a colour breakdown bar by source (trees/gold/crops/\u2026) and where it grows to after the plan \u2014 then ONE prioritised BIGGEST LEVERS list: the top buys/skills/nodes that permanently add income (by payback) plus the free daily moves you should already be doing (best delivery, what to plant/mine, a gift, and any stop-loss). The 4 scattered summary cards are gone; Settings + the efficiency sliders moved into a collapsed drawer so they\u2019re not mid-page. The full ranked plan, daily tables and graph stay below." },
+        ]},
         { ver: "v4.17", items: [
           { t: "fix", text: "Big research pass. (1) Delivery/gift item costs now use the COOKING_INGREDIENTS-aware coster (_resolveItemSfl) so cooked foods like Goblin Brunch, Bumpkin Roast, Cabbers n Mash cost their real recipe instead of 0 \u2014 the dashboard estimateItemSfl only read RECIPE_INGREDIENTS and missed them. (2) Keys are valued by the actual chest drop tables (game source chests.ts), live: gems at your exchange rate, coins 0 (free), sunstone via Obsidian \u2014 and apportioned per gift. (3) Gifts pick the optimal flower by points-per-grow-day INCLUDING each NPC\u2019s liked-flower bonus, show the liked flower for context, the value each gift adds, days-to-key and bed feasibility (reusing the Flower page math). (4) Brought back the full WHAT-TO-FARM/MINE table (all categories) and kept gifts + deliveries expanded; the limited today-tiles are gone." },
         ]},
@@ -16497,6 +16500,44 @@
       return h;
     }
 
+    // Income-engine hero: current FLOWER/day + source breakdown + the biggest levers (buys + free moves).
+    function roadmapIncomeHeroHtml(settings, sim, startIncome) {
+      const prod = roadmapCurrentProduction(settings);
+      const total = startIncome > 0 ? startIncome : (prod.total || 0);
+      const bd = (prod.breakdown || []).filter(b => b.sfl > 0.01).sort((a, b) => b.sfl - a.sfl);
+      const catColor = { trees:"#63c74d", stone:"#9a8060", iron:"#c4a882", gold:"#FFD700", crimstone:"#FF6B6B", crops:"#30D158", fruits:"#FF69B4", greenhouse:"#5DADE2", chickens:"#FFD60A", cows:"#C8A2C8", sheep:"#B07CD8", bees:"#FFD700", fishing:"#5DADE2", obsidian:"#8b6914", flowers:"#FF69B4", oil:"#8b6914" };
+      const lbl = (c) => (POWER_CATEGORIES[c] && POWER_CATEGORIES[c].label) || c;
+      let bar = "", legend = "";
+      for (const b of bd) { const pct = total > 0 ? Math.max(1, b.sfl / total * 100) : 0; const c = catColor[b.cat] || "#8b6914"; bar += `<div style="width:${pct}%;background:${c}" title="${lbl(b.cat)} ${roadmapFmtFlower(b.sfl)}/d"></div>`; legend += `<span style="white-space:nowrap;margin-right:12px"><span style="display:inline-block;width:8px;height:8px;background:${c};border-radius:2px;vertical-align:middle"></span> ${escHTML(lbl(b.cat))} ${roadmapFmtFlower(b.sfl)}</span>`; }
+      let h = `<div class="pixel-panel" style="padding:14px;margin-bottom:16px">`;
+      h += `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-secondary);margin-bottom:8px">YOUR INCOME RIGHT NOW</div>`;
+      h += `<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:10px"><div style="font-size:1.7rem;font-weight:bold;color:var(--sunpetal);line-height:1">${roadmapFmtFlower(total)} ${sflIcon()}<span style="font-size:0.65rem;color:var(--text-dim)"> /day</span></div><div style="font-size:0.6rem;color:var(--text-dim)">\u2192 grows to <b style="color:var(--green)">${roadmapFmtFlower(sim.finalRate)}/day</b> after the ${sim.econSteps} buys in the plan (\u2248${roadmapFmtFlower(sim.totalCost)} ${sflIcon()}, ~${roadmapFmtDays(sim.totalDays)})</div></div>`;
+      if (bd.length) { h += `<div style="display:flex;height:16px;border-radius:4px;overflow:hidden;border:1px solid var(--border-brown);margin-bottom:6px">${bar}</div><div style="font-size:0.5rem;color:var(--text-dim);line-height:1.9">${legend}</div>`; }
+      const buys = (sim.timeline || []).filter(s => s.kind === "econ").slice(0, 8);
+      const branches = (typeof roadmapTodoBranches === "function") ? roadmapTodoBranches(settings) : [];
+      const pick = (l) => { const b = branches.find(x => x.label === l); return (b && b.actions && b.actions[0]) || null; };
+      const freeRows = [];
+      const fd = pick("DELIVER"); if (fd) freeRows.push(fd);
+      const ff = pick("FARM"); if (ff) freeRows.push(ff);
+      const fm = pick("MINE"); if (fm) freeRows.push(fm);
+      const fg = pick("GIFTS"); if (fg) freeRows.push(fg);
+      const ani = branches.find(x => x.label === "ANIMALS"); if (ani && ani.actions) { const bad = ani.actions.find(a => !a.good); if (bad) freeRows.push(bad); }
+      const badge = (txt, col) => `<span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:${col};color:#1a120a;font-weight:bold">${txt}</span>`;
+      h += `<div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin:16px 0 4px">BIGGEST LEVERS TO GROW IT</div>`;
+      h += `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px">Buy these for a permanent +income (top by payback) \u00b7 plus the free daily moves you should already be doing. Full ranked plan + ETA dates in the table further down.</div>`;
+      h += `<table style="width:100%;border-collapse:collapse;font-size:0.6rem"><tbody>`;
+      for (const s of buys) {
+        const b = s.type === "Skill" ? badge("SKILL", "#B07CD8") : (s.type === "Node" ? badge("NODE", "#5DADE2") : badge("BUY", "#FFD700"));
+        h += `<tr style="border-top:1px solid #1b1b1b"><td style="padding:3px 6px;white-space:nowrap">${b} <img class="inline-icon" src="${getItemIcon(s.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(s.name)}</td><td style="padding:3px 6px;text-align:right;color:var(--green);font-weight:bold">+${roadmapFmtFlower(s.marginal)}/d</td><td style="padding:3px 6px;text-align:right;color:var(--text-secondary)">${roadmapFmtFlower(s.floor)}\u25c8</td><td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${roadmapFmtDays(s.roi)}</td></tr>`;
+      }
+      for (const a of freeRows) {
+        const good = a.good !== false;
+        h += `<tr style="border-top:1px solid #1b1b1b"><td style="padding:3px 6px;white-space:nowrap">${badge("DO", "#30D158")} ${a.icon ? `<img class="inline-icon" src="${a.icon}" onerror="this.style.display='none'" alt="">` : ""} ${escHTML(a.label)}</td><td colspan="2" style="padding:3px 6px;text-align:right;color:${good ? "var(--green)" : "var(--red)"};font-weight:bold">${escHTML(a.sub)}</td><td style="padding:3px 6px;text-align:right;color:var(--text-dim)">daily</td></tr>`;
+      }
+      h += `</tbody></table></div>`;
+      return h;
+    }
+
     function roadmapProfitabilityHtml(settings) {
       const cf = roadmapCoinsFree(settings);
       const coins = Math.round(parseFloat(powerState.farm && powerState.farm.coins) || 0);
@@ -17115,14 +17156,7 @@
 
       let h = "";
 
-      // ── Summary cards ──
-      h += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px">`;
-      const card = (label, val, sub) => `<div class="pixel-panel" style="padding:10px;text-align:center"><div class="pixel-font" style="font-size:0.5rem;color:var(--text-secondary);margin-bottom:6px">${label}</div><div style="font-size:0.95rem;color:var(--text-primary);font-weight:bold">${val}</div>${sub ? `<div style="font-size:0.55rem;color:var(--text-dim);margin-top:4px">${sub}</div>` : ""}</div>`;
-      h += card("BOOST NFTs TO GET", (sim.econSteps + sim.cosmeticCount).toLocaleString(), `${sim.econSteps} earning · ${sim.cosmeticCount} no-value boost`);
-      h += card("TOTAL COST", roadmapFmtFlower(sim.totalCost) + " " + sflIcon() + usd(sim.totalCost), "to own them all");
-      h += card("TIME TO ALL", roadmapFmtDays(sim.totalDays), "ETA " + roadmapFmtDate(sim.totalDays));
-      h += card("FLOWER/DAY", roadmapFmtFlower(startIncome), "→ " + roadmapFmtFlower(sim.finalRate) + " after boosts");
-      h += `</div>`;
+      h += roadmapIncomeHeroHtml(settings, sim, startIncome);
 
       // ── Visual roadmap (ReactFlow): the full investment PATH (NFTs + node merges/expansion + skills + leveling) ──
       h += `<div class="pixel-panel" style="padding:10px;margin-bottom:16px">`;
@@ -17144,6 +17178,7 @@
       h += roadmapDeliveriesHtml(settings);
 
       // ── Controls ──
+      h += `<details style="margin-bottom:14px"><summary style="cursor:pointer;padding:9px 12px;background:#1c160f;border:1px solid var(--border-brown);border-radius:8px;font-family:'Press Start 2P',monospace;font-size:0.55rem;color:var(--text-secondary)">⚙ SETTINGS &amp; ASSUMPTIONS — income source, efficiency sliders, restocks, ticket value, filters</summary><div style="margin-top:8px">`;
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:16px;font-size:0.62rem;color:var(--text-secondary)">`;
       h += `<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center">`;
       h += `<label>Start FLOWER/day: <input type="number" id="rm-income" value="${startIncome.toFixed(2)}" step="1" min="0" style="width:88px" onchange="_roadmapSetIncome(this.value)"> <span style="color:var(--text-dim)">auto ${roadmapFmtFlower(roadmapState.currentProdDefault)}</span> <button onclick="_roadmapResetIncome()" style="font-size:0.55rem">reset</button></label>`;
@@ -17169,6 +17204,7 @@
       h += `</div>`;
 
       h += roadmapEfficiencyPanel(settings);
+      h += `</div></details>`;
 
       if (!(startIncome > 0)) {
         h += `<div class="pixel-panel" style="padding:10px;margin-bottom:14px;color:var(--yellow);font-size:0.6rem">Set a positive "Start FLOWER/day" to get time estimates. The ORDER below is still correct (sorted by ROI payback).</div>`;
