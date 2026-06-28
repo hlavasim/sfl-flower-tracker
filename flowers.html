@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.05</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.06</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.06", items: [
+          { t: "feat", text: "ANIMAL LIFECYCLE: net FLOWER/day per level for a single animal (produce \u2212 feed \u2212 sickness), shown as a level 1\u201315 strip with the peak starred and your current avg level marked. Feed scales with level faster than produce, so net peaks then goes negative \u2014 this shows exactly the level past which feeding stops paying (your earlier ask: feed up to level X then it isn\u2019t worth it). Reuses the exact per-animal helpers." },
+        ]},
         { ver: "v4.05", items: [
           { t: "feat", text: "DELIVERIES, BOUNTIES & TICKETS section (resources -> coins and resources -> tickets -> boosts). Every pending delivery and open bounty shows reward value (SFL + coins + seasonal tickets + marks/keys) minus the cost of the items you hand over = net, green when worth doing, red when the items are worth more than the reward. Shows the current chapter ticket and what it buys; ticket value is a labeled estimate. Item costs reuse the dashboard pricing (estimateItemSfl)." },
         ]},
@@ -16246,6 +16249,55 @@
       return h;
     }
 
+    // Net FLOWER/day for ONE animal at each level — reuses the exact per-animal helpers on a synthetic
+    // single-animal capacity. Shows where feeding stops paying ("feed up to level X then it goes red").
+    function roadmapAnimalLifecycleHtml(settings) {
+      const { capacity, p2pPrices, stockMods } = powerState;
+      const skills = (powerState.farm.bumpkin && powerState.farm.bumpkin.skills) || {};
+      const cats = [["chickens", "Chicken"], ["cows", "Cow"], ["sheep", "Sheep"]];
+      const blocks = [];
+      for (const [cat, animalType] of cats) {
+        const have = (capacity.animalDetails && capacity.animalDetails[cat]) || [];
+        if (!have.length) continue;
+        const oeff = roadmapOwnedEffects(cat);
+        const per = [];
+        for (let L = 1; L <= 15; L++) {
+          const fakeCap = Object.assign({}, capacity, { animalDetails: Object.assign({}, capacity.animalDetails, { [cat]: [{ level: L, experience: 0 }] }) });
+          let produce = 0, feed = 0, sick = 0;
+          try { produce = (getAnimalCatSfl(cat, fakeCap, oeff, p2pPrices).totalSfl) || 0; } catch {}
+          try { feed = (calcAnimalFeedCost(cat, fakeCap, p2pPrices, oeff, stockMods).costPerDay) || 0; } catch {}
+          try { sick = (calcSicknessCost(cat, fakeCap, p2pPrices, powerState.boostItems, skills).costPerDay) || 0; } catch {}
+          per.push({ L, net: produce - feed - sick });
+        }
+        let peak = per[0], lastPos = 0;
+        for (const p of per) { if (p.net > peak.net) peak = p; if (p.net > 0.0001) lastPos = p.L; }
+        const avgL = Math.round(have.reduce((s, a) => s + (a.level || 0), 0) / have.length);
+        blocks.push({ animalType, per, peak, lastPos, avgL });
+      }
+      if (!blocks.length) return "";
+      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
+      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">ANIMAL LIFECYCLE — net per level (feed up to where?)</div>`;
+      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Net FLOWER/day for a SINGLE animal at each level (produce \u2212 feed \u2212 sickness, your boosts). Feed scales with level faster than produce, so net usually peaks then turns negative \u2014 \u2605 marks the peak. If your animals are past the break-even level and red, feeding them loses FLOWER; consider running them only to that level (or replacing leveled animals with fresh ones if you want the produce cycle to stay profitable).</div>`;
+      for (const b of blocks) {
+        const verdict = b.lastPos > 0
+          ? `<span style="color:var(--green)">profitable to L${b.lastPos}</span>, peak L${b.peak.L} (+${roadmapFmtFlower(b.peak.net)}/d)`
+          : `<span style="color:var(--red)">never net-positive at any level</span>`;
+        h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin:10px 0 3px">${b.animalType.toUpperCase()} \u00b7 your avg level ${b.avgL} \u00b7 ${verdict}</div>`;
+        h += `<div style="display:flex;flex-wrap:wrap;gap:3px">`;
+        for (const p of b.per) {
+          const pos = p.net > 0.0001, neg = p.net < -0.0001;
+          const col = pos ? "var(--green)" : (neg ? "var(--red)" : "var(--text-dim)");
+          const star = p.L === b.peak.L;
+          const cur = p.L === b.avgL;
+          h += `<div title="Level ${p.L}: ${p.net >= 0 ? "+" : "\u2212"}${roadmapFmtFlower(Math.abs(p.net))}/day" style="min-width:38px;text-align:center;font-size:0.5rem;padding:2px 3px;border:1px solid ${cur ? "var(--sunpetal)" : "#222"};border-radius:3px;background:${star ? "#14240f" : "transparent"}"><div style="color:var(--text-dim)">${star ? "\u2605" : ""}L${p.L}</div><div style="color:${col};font-weight:bold">${p.net >= 0 ? "+" : "\u2212"}${roadmapFmtFlower(Math.abs(p.net))}</div></div>`;
+        }
+        h += `</div>`;
+      }
+      h += `<div style="margin-top:8px;font-size:0.5rem;color:var(--text-dim)">Orange border = your current average level. Per single animal; multiply by your pen size. Note SFL doesn\u2019t let you un-level an animal \u2014 this shows where the produce cycle stops being worth the feed.</div>`;
+      h += `</div>`;
+      return h;
+    }
+
     function roadmapProfitabilityHtml(settings) {
       const cf = roadmapCoinsFree(settings);
       const coins = Math.round(parseFloat(powerState.farm && powerState.farm.coins) || 0);
@@ -16740,6 +16792,7 @@
       h += roadmapProfitabilityHtml(settings);
       h += roadmapMiningStrategyHtml(settings);
       h += roadmapAnimalFeedHtml(settings);
+      h += roadmapAnimalLifecycleHtml(settings);
       h += roadmapSkillsHtml(settings);
       h += roadmapGiftsHtml(settings);
       h += roadmapDeliveriesHtml(settings);
