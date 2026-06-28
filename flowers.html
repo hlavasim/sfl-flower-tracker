@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.06</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.07</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.07", items: [
+          { t: "feat", text: "HARVEST EFFICIENCY sliders. A new panel lets you set, per category (Trees/Stone/Iron/Gold/Crimstone/Oil/Crops/Fruits/Greenhouse), how often you really harvest \u2014 with plain-language text translating the % into an interval (e.g. Trees 100% = harvest every ~3h day &amp; night incl. overnight; 50% = every ~6h). The slider overrides the measured throughput, rescales that category\u2019s income everywhere on the page, and is saved to your browser (localStorage). [auto] reverts a category to the measured value." },
+        ]},
         { ver: "v4.06", items: [
           { t: "feat", text: "ANIMAL LIFECYCLE: net FLOWER/day per level for a single animal (produce \u2212 feed \u2212 sickness), shown as a level 1\u201315 strip with the peak starred and your current avg level marked. Feed scales with level faster than produce, so net peaks then goes negative \u2014 this shows exactly the level past which feeding stops paying (your earlier ask: feed up to level X then it isn\u2019t worth it). Reuses the exact per-animal helpers." },
         ]},
@@ -15761,6 +15764,7 @@
         restocksPerDay: (typeof s.restocksPerDay === "number" && s.restocksPerDay > 0) ? s.restocksPerDay : 2,
         horizonYears: (typeof s.horizonYears === "number" && s.horizonYears > 0) ? s.horizonYears : 100,
         optimizeOrder: s.optimizeOrder !== false,
+        effOverrides: (s.effOverrides && typeof s.effOverrides === "object") ? s.effOverrides : {},
       };
     }
     function saveRoadmapSettings(patch) {
@@ -15769,6 +15773,8 @@
     }
 
     function roadmapEffFactor(cat, settings) {
+      const ov = settings.effOverrides && settings.effOverrides[cat];
+      if (typeof ov === "number" && isFinite(ov)) return Math.max(0, Math.min(1, ov)); // manual slider
       if (settings.effMode === "theoretical") return 1;
       if (cat === "obsidian") return 1; // obsidian net already capped at 1 sale/week
       if (isAnimalCat(cat)) return 1; // animals are 24h-cycle stockpilers — caught each daily login (~full); _h.* units don't match here
@@ -15777,6 +15783,15 @@
       if (eb[cat] && eb[cat].measured) return eb[cat].ratio;
       // bees / fishing have no per-category signal → use overall average activity
       return roadmapState.meanRatio;
+    }
+
+    // Effective harvest-cycle length (hours) for one node/plot of a category, with the user's speed
+    // boosts — used to translate an efficiency % into a real-world harvest interval.
+    function roadmapCatCycleHours(cat) {
+      if (isAnimalCat(cat)) return 24;
+      if (cat === "obsidian") return (RESOURCE_RESPAWN_DATA["Obsidian"] ? RESOURCE_RESPAWN_DATA["Obsidian"].respawnSec : 259200) / 3600;
+      try { const ab = applyBoosts(cat, getDefaultProduct(cat), powerState.capacity, roadmapOwnedEffects(cat)); if (ab && ab.effectiveCycle > 0) return ab.effectiveCycle / 3600; } catch {}
+      return 0;
     }
 
     function roadmapOwnedEffects(cat) {
@@ -16294,6 +16309,43 @@
         h += `</div>`;
       }
       h += `<div style="margin-top:8px;font-size:0.5rem;color:var(--text-dim)">Orange border = your current average level. Per single animal; multiply by your pen size. Note SFL doesn\u2019t let you un-level an animal \u2014 this shows where the produce cycle stops being worth the feed.</div>`;
+      h += `</div>`;
+      return h;
+    }
+
+    function roadmapEffFmtH(x) {
+      if (!isFinite(x)) return "never";
+      if (x >= 48) return (x / 24).toFixed(1) + " days";
+      if (x >= 10) return Math.round(x) + "h";
+      return x.toFixed(1) + "h";
+    }
+    // Per-category harvest-efficiency sliders + what each % means as a harvest interval.
+    function roadmapEfficiencyPanel(settings) {
+      const cats = [["trees", "Trees"], ["stone", "Stone"], ["iron", "Iron"], ["gold", "Gold"], ["crimstone", "Crimstone"], ["oil", "Oil"], ["crops", "Crops"], ["fruits", "Fruits"], ["greenhouse", "Greenhouse"]];
+      const rows = [];
+      for (const [cat, label] of cats) {
+        if (getCapacityCount(cat, powerState.capacity) <= 0) continue;
+        const C = roadmapCatCycleHours(cat); if (!(C > 0)) continue;
+        rows.push({ cat, label, C });
+      }
+      if (!rows.length) return "";
+      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
+      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">HARVEST EFFICIENCY \u2014 how often you really harvest</div>`;
+      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:10px;line-height:1.6">Each resource respawns on a timer; you only get the full yield if you collect it every time it\u2019s ready. <b style="color:var(--green)">100%</b> = you harvest every cycle around the clock (incl. overnight); <b>50%</b> = you catch it half as often, so ~half the income. Drag a slider to match how you actually play \u2014 it rescales that category\u2019s income everywhere on this page and is saved to your browser. <span style="cursor:pointer;color:var(--lily)" onclick="_roadmapResetAllEff()">[reset all to measured]</span></div>`;
+      for (const r of rows) {
+        const factor = roadmapEffFactor(r.cat, settings);
+        const pct = Math.round(factor * 100);
+        const interval = factor > 0 ? r.C / factor : Infinity;
+        const eb = (roadmapState && roadmapState.effByCat) ? roadmapState.effByCat[r.cat] : null;
+        const measured = (eb && eb.measured) ? Math.round(eb.ratio * 100) : null;
+        const overridden = !!(settings.effOverrides && typeof settings.effOverrides[r.cat] === "number");
+        h += `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0;font-size:0.58rem">`;
+        h += `<div style="min-width:84px"><img class="inline-icon" src="${getItemIcon(getDefaultProduct(r.cat))}" onerror="this.style.display='none'" alt=""> ${r.label}</div>`;
+        h += `<input type="range" min="0" max="100" step="1" value="${pct}" style="accent-color:var(--green);width:170px" oninput="_roadmapEffPreview('${r.cat}',this.value,${r.C.toFixed(3)})" onchange="_roadmapSetEffOverride('${r.cat}',this.value)">`;
+        h += `<div style="min-width:40px;text-align:right"><b id="eff-pct-${r.cat}" style="color:${overridden ? "var(--sunpetal)" : "var(--green)"}">${pct}%</b></div>`;
+        h += `<div style="color:var(--text-dim);flex:1;min-width:230px">100% = every ${roadmapEffFmtH(r.C)} day &amp; night \u00b7 now \u2248 every <b id="eff-int-${r.cat}">${roadmapEffFmtH(interval)}</b>${measured != null ? ` \u00b7 measured ${measured}%` : ""}${overridden ? ` \u00b7 <span style="cursor:pointer;color:var(--lily)" onclick="_roadmapResetEffOverride('${r.cat}')">[auto]</span>` : ""}</div>`;
+        h += `</div>`;
+      }
       h += `</div>`;
       return h;
     }
@@ -16821,6 +16873,8 @@
       }
       h += `</div>`;
 
+      h += roadmapEfficiencyPanel(settings);
+
       if (!(startIncome > 0)) {
         h += `<div class="pixel-panel" style="padding:10px;margin-bottom:14px;color:var(--yellow);font-size:0.6rem">Set a positive "Start FLOWER/day" to get time estimates. The ORDER below is still correct (sorted by ROI payback).</div>`;
       }
@@ -16934,6 +16988,15 @@
     window._roadmapSetIncome = function(v) { const n = parseFloat(v); saveRoadmapSettings({ startIncome: isFinite(n) && n >= 0 ? n : null }); renderRoadmapContent(); };
     window._roadmapResetIncome = function() { saveRoadmapSettings({ startIncome: null }); renderRoadmapContent(); };
     window._roadmapSetEffMode = function(v) { saveRoadmapSettings({ effMode: v === "theoretical" ? "theoretical" : "real" }); renderRoadmapContent(); };
+    window._roadmapSetEffOverride = function(cat, v) { const n = parseFloat(v) / 100; const cur = Object.assign({}, getRoadmapSettings().effOverrides || {}); cur[cat] = Math.max(0, Math.min(1, isFinite(n) ? n : 1)); saveRoadmapSettings({ effOverrides: cur }); renderRoadmapContent(); };
+    window._roadmapResetEffOverride = function(cat) { const cur = Object.assign({}, getRoadmapSettings().effOverrides || {}); delete cur[cat]; saveRoadmapSettings({ effOverrides: cur }); renderRoadmapContent(); };
+    window._roadmapResetAllEff = function() { saveRoadmapSettings({ effOverrides: {} }); renderRoadmapContent(); };
+    window._roadmapEffPreview = function(cat, v, C) {
+      const pct = Math.round(parseFloat(v));
+      const p = document.getElementById("eff-pct-" + cat); if (p) { p.textContent = pct + "%"; p.style.color = "var(--sunpetal)"; }
+      const i = document.getElementById("eff-int-" + cat);
+      if (i) { const f = pct / 100; const iv = f > 0 ? (parseFloat(C) / f) : Infinity; i.textContent = !isFinite(iv) ? "never" : (iv >= 48 ? (iv / 24).toFixed(1) + " days" : (iv >= 10 ? Math.round(iv) + "h" : iv.toFixed(1) + "h")); }
+    };
     window._roadmapSetGlobal = function(v) { const n = parseFloat(v) / 100; saveRoadmapSettings({ globalActivity: isFinite(n) ? n : null }); renderRoadmapContent(); };
     window._roadmapToggle = function(key, val) { const p = {}; p[key] = !!val; saveRoadmapSettings(p); renderRoadmapContent(); };
     window._roadmapSetMaxPrice = function(v) { const n = parseFloat(v); saveRoadmapSettings({ maxPrice: isFinite(n) && n >= 0 ? n : 0 }); renderRoadmapContent(); };
