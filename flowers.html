@@ -2666,7 +2666,7 @@
         // A WoW-style tooltip card — all info always visible (the tile IS the tooltip).
         function Card({ accent, icon, emoji, title, subline, idx, effect, rows, foot }) {
           const [hv, setHv] = React.useState(false);
-          return h("div", { onMouseEnter:()=>setHv(true), onMouseLeave:()=>setHv(false), style:{ width:344, background:"linear-gradient(165deg,#201810,#13100a)", border:"2px solid "+accent, borderRadius:10, padding:"10px 12px", boxShadow:(hv?"0 0 26px ":"0 0 13px ")+accent+"55, 0 3px 12px rgba(0,0,0,.55)", transition:"box-shadow .15s" } },
+          return h("div", { onMouseEnter:()=>setHv(true), onMouseLeave:()=>setHv(false), style:{ width:316, background:"linear-gradient(165deg,#201810,#13100a)", border:"2px solid "+accent, borderRadius:10, padding:"8px 11px", boxShadow:(hv?"0 0 26px ":"0 0 13px ")+accent+"55, 0 3px 12px rgba(0,0,0,.55)", transition:"box-shadow .15s" } },
             handles(),
             h("div", { style:{ display:"flex", alignItems:"center", gap:9, borderBottom:"1px solid "+C.brown, paddingBottom:7 } },
               icon ? h("img", { src:icon, onError:hideImg, style:{ width:38, height:38, imageRendering:"pixelated" } }) : (emoji ? h("div", { style:{ fontSize:26, width:38, textAlign:"center" } }, emoji) : null),
@@ -2674,8 +2674,8 @@
                 h("div", { style:{ fontFamily:CF, fontSize:14, fontWeight:"bold", color:accent, lineHeight:1.15 } }, title),
                 subline ? h("div", { style:{ fontFamily:CF, fontSize:11, color:C.sec, marginTop:3 } }, subline) : null),
               h("div", { style:{ fontFamily:PF, fontSize:9, color:C.dim } }, "#"+idx)),
-            effect ? h("div", { style:{ fontFamily:CF, fontSize:11.5, color:C.yellow, margin:"7px 0", lineHeight:1.35 } }, effect) : null,
-            h("div", { style:{ marginTop:effect?0:7 } }, rows.map((r,i) => h("div", { key:i, style:{ display:"flex", justifyContent:"space-between", fontFamily:CF, fontSize:12, lineHeight:1.8 } }, h("span", { style:{ color:C.dim } }, r.k), h("span", { style:{ color:r.c||C.text, fontWeight:"bold" } }, r.v)))),
+            effect ? h("div", { style:{ fontFamily:CF, fontSize:11, color:C.yellow, margin:"5px 0 3px", lineHeight:1.3 } }, effect) : null,
+            h("div", { style:{ marginTop:effect?0:7 } }, rows.map((r,i) => h("div", { key:i, style:{ display:"flex", justifyContent:"space-between", fontFamily:CF, fontSize:11.5, lineHeight:1.55 } }, h("span", { style:{ color:C.dim } }, r.k), h("span", { style:{ color:r.c||C.text, fontWeight:"bold" } }, r.v)))),
             foot ? h("div", { style:{ marginTop:7, paddingTop:6, borderTop:"1px solid "+C.brown, fontFamily:CF, fontSize:10, color:C.dim, display:"flex", justifyContent:"space-between" } }, h("span", null, foot.l||""), h("span", null, foot.r||"")) : null);
         }
         function WowItem({ data }) {
@@ -2712,7 +2712,7 @@
           const el = document.getElementById(elId); if (!el) return;
           try {
             const fd = (window.__roadmapFlowData && window.__roadmapFlowData[kind]) || { nodes:[], edges:[] };
-            const edges = (fd.edges||[]).map((e)=>Object.assign({}, e, { style:{ stroke:C.goldb, strokeWidth:2.5 }, markerEnd:{ type:"arrowclosed", color:C.goldb }, animated:e.animated!==false }));
+            const edges = (fd.edges||[]).map((e)=>Object.assign({}, e, { style:{ stroke:C.gold, strokeWidth:3 }, markerEnd:{ type:"arrowclosed", color:C.gold }, animated:e.animated!==false }));
             if (roots[elId]) { try { roots[elId].unmount(); } catch (e) {} }
             const root = createRoot(el); roots[elId] = root;
             root.render(h(ReactFlow, { nodes:fd.nodes, edges:edges, nodeTypes:nodeTypes, fitView:false, defaultViewport:{ x:40, y:30, zoom:1 }, minZoom:1, maxZoom:1, proOptions:{ hideAttribution:true }, defaultEdgeOptions:{ type:"smoothstep" }, nodesDraggable:true, panOnDrag:true, panOnScroll:true, panOnScrollSpeed:0.9, zoomOnScroll:false, zoomOnPinch:false, zoomOnDoubleClick:false, onInit:(inst)=>{ try { inst.setViewport({ x:40, y:30, zoom:1 }, { duration:0 }); } catch (e) {} } },
@@ -5686,7 +5686,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.13</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.14</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5713,6 +5713,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.14", items: [
+          { t: "fix", text: "Cards were overlapping (vertical gap was smaller than the card height) so they stacked on top of each other and the connecting edges were hidden. Tripled the gap, shrank the cards a little and brightened/thickened the edges \u2014 each whole card is now clearly separated and visible. Also: ticket value defaults to 0 with the honest reason \u2014 the game-source Megastore shows this chapter\u2019s tickets only buy temporary Hourglasses + cosmetics + the Spa ticket-boost set, no permanent FLOWER boost, so delivering for tickets has ~0 FLOWER ROI (it\u2019s for season collection). Set Ticket value in the controls if you value the season items." },
+        ]},
         { ver: "v4.13", items: [
           { t: "fix", text: "The graph really is fixed now. The reason nothing changed across v4.11/v4.12 was a DUPLICATE <script type=module> \u2014 a stale old graph module was loading last and overriding the new one, so you kept seeing the tiny-node + minimap version. Removed the duplicate. Zoom is now LOCKED at 1 (cards always full size), the zoom +/\u2212 controls and minimap are gone; scroll or drag to move down the vertical path." },
         ]},
@@ -15873,6 +15876,7 @@
         horizonYears: (typeof s.horizonYears === "number" && s.horizonYears > 0) ? s.horizonYears : 100,
         optimizeOrder: s.optimizeOrder !== false,
         effOverrides: (s.effOverrides && typeof s.effOverrides === "object") ? s.effOverrides : {},
+        ticketValueSfl: (typeof s.ticketValueSfl === "number" && s.ticketValueSfl >= 0) ? s.ticketValueSfl : 0,
       };
     }
     function saveRoadmapSettings(patch) {
@@ -16156,7 +16160,7 @@
       const estItem = (name) => { try { return estFn ? (estFn(name, p2pPrices, [], exchangeRates) || 0) : (p2pPrices[name] || 0); } catch { return p2pPrices[name] || 0; } };
       let chapter = {}; try { chapter = dashGetCurrentChapter(now) || {}; } catch {}
       const ticketName = chapter.ticket || "";
-      const TV = ROADMAP_TICKET_VALUE_SFL;
+      const TV = (typeof settings.ticketValueSfl === "number" ? settings.ticketValueSfl : 0);
       const coinSfl = (c) => (c > 0 && exchangeRates.coinsPerSFL > 0) ? c / exchangeRates.coinsPerSFL : 0;
 
       const dels = [];
@@ -16191,7 +16195,7 @@
       const fmtNet = (n) => { const pos = n > 0.001, neg = n < -0.001; const col = pos ? "var(--green)" : (neg ? "var(--red)" : "var(--text-dim)"); return `<span style="color:${col};font-weight:bold">${(pos ? "+" : (neg ? "\u2212" : "")) + roadmapFmtFlower(Math.abs(n))}</span>`; };
       let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
       h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">DELIVERIES, BOUNTIES &amp; TICKETS \u2014 what to fulfil</div>`;
-      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Reward value (SFL + coins + tickets + marks/keys) minus the cost of the items you hand over = net. <span style="color:var(--green)">Green = worth doing</span>, <span style="color:var(--red)">red = the items are worth more than the reward</span>. Chapter: <b>${escHTML(chapter.name || "?")}</b> \u00b7 ticket <b>${escHTML(ticketName || "?")}</b> (est ${TV} ${sflIcon()} each \u2014 spend on ${chapter.boosts ? escHTML(chapter.boosts.join(", ")) : "season boosts"}). Detailed per-item costs are on the dashboard.</div>`;
+      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Net = reward (SFL + coins + marks/keys + tickets\u00d7value) \u2212 the items you hand over. <span style="color:var(--green)">Green = worth doing</span>, <span style="color:var(--red)">red = the items are worth more than the reward</span>. <b style="color:var(--yellow)">Tickets can\u2019t be sold and have no FLOWER price.</b> Checked the game source (Megastore): this chapter\u2019s ${escHTML(ticketName || "tickets")} buy only <b>temporary Hourglasses</b> (Gourmet 100, Blossom 150, Timber/Orchard 200, Ore 400), <b>cosmetics</b> (Dino Egg Trophy 250, Crystal Altar 3k, background 6k, Bubble Aura 10k) and the Spa ticket-boost set \u2014 <b>no permanent FLOWER-yield boost</b>. So a ticket is worth ~0 FLOWER for ROI and they count as <b>${TV} ${sflIcon()}</b> here. Delivering for tickets is for season collection / temporary boosts, not FLOWER. Raise \u201cTicket value\u201d if you value the season items. Tickets earned shown per row.</div>`;
       if (dels.length) {
         h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin:6px 0 3px">DELIVERIES (${dels.length} pending)</div>`;
         h += `<table style="width:100%;border-collapse:collapse;font-size:0.58rem"><tr style="color:var(--text-dim);font-size:0.5rem"><td style="padding:0 6px">from</td><td style="padding:0 6px">give</td><td style="padding:0 6px;text-align:right">reward</td><td style="padding:0 6px;text-align:right">cost</td><td style="padding:0 6px;text-align:right">tickets</td><td style="text-align:right">net</td></tr>`;
@@ -16986,10 +16990,10 @@
         let cost = 0; for (const [it, q] of Object.entries(o.items || {})) cost += (it === "coins") ? (cFree ? 0 : (er.coinsPerSFL > 0 ? q / er.coinsPerSFL : 0)) : estItem(it) * q;
         const r = o.reward || {}; let rv = (r.sfl || 0) + ((r.coins || 0) > 0 && er.coinsPerSFL > 0 ? r.coins / er.coinsPerSFL : 0);
         let tk = 0; try { tk = dashCalculateDeliveryTickets(o.from, farm, now) || 0; } catch {}
-        rv += tk * 3; dr.push({ from: o.from, net: rv - cost, tickets: tk });
+        rv += tk * (typeof settings.ticketValueSfl === "number" ? settings.ticketValueSfl : 1); dr.push({ from: o.from, net: rv - cost, tickets: tk });
       }
       dr.sort((a, b) => b.net - a.net);
-      if (dr.length) branches.push({ label: "DELIVER", icon: roadmapFlowIcon("Pancakes"), actions: dr.slice(0, 4).map(d => ({ label: "Deliver \u2192 " + d.from, sub: (d.net >= 0 ? "+" : "") + roadmapFmtFlower(d.net) + " net" + (d.tickets ? (" · " + d.tickets + " tickets ×3") : ""), good: d.net > 0 })) });
+      if (dr.length) branches.push({ label: "DELIVER", icon: roadmapFlowIcon("Pancakes"), actions: dr.slice(0, 4).map(d => ({ label: "Deliver \u2192 " + d.from, sub: (d.net >= 0 ? "+" : "") + roadmapFmtFlower(d.net) + " net" + (d.tickets ? (" · " + d.tickets + " tickets") : ""), good: d.net > 0 })) });
 
       return branches;
     }
@@ -17049,7 +17053,7 @@
 
       let cum = 0;
       path.forEach((p, i) => {
-        const pos = { x: 0, y: i * 210 }, id = "b" + i;
+        const pos = { x: 0, y: i * 300 }, id = "b" + i;
         if (p.k === "item") { const s = p.s; cum += (s.floor || 0); rmNodes.push({ id, type: "wowItem", position: pos, data: { label: s.name, icon: roadmapFlowIcon(s.name), cost: s.floor, marginal: s.marginal, roi: s.roi, boost: (s.boost || "").split("\n").join(" \u00b7 "), itype: s.type, idx: i + 1, rateAfter: s.rateAfter, atDay: s.atDay, cumCost: cum } }); }
         else if (p.k === "skill") { rmNodes.push({ id, type: "skillNode", position: pos, data: { label: p.s.name, free: p.free, pts: p.pts, marginal: p.s.marginal, boost: (p.s.boost || "").split("\n").join(" \u00b7 "), tree: p.s.skillTree, tier: p.s.skillTier, idx: i + 1, rateAfter: p.s.rateAfter, atDay: p.s.atDay, cumCost: cum } }); }
         else { cum += (p.cost || 0); rmNodes.push({ id, type: "levelNode", position: pos, data: { cakes: p.cakes, recipe: p.recipe, cost: p.cost, level: p.level, idx: i + 1, cumCost: cum } }); }
@@ -17113,6 +17117,7 @@
       h += `<label title="Include unlearned skills as candidates (cost = skill points priced as cooking XP)."><input type="checkbox" ${settings.incSkills ? "checked" : ""} onchange="_roadmapToggle('incSkills',this.checked)"> Skills</label>`;
       h += `<label title="Treat coin-denominated costs (axes, seeds…) as free — coins aren't directly convertible to FLOWER. Auto-on when you hold >10k coins."><input type="checkbox" ${roadmapCoinsFree(settings) ? "checked" : ""} onchange="_roadmapToggle('coinsFree',this.checked)"> Coins free</label>`;
       h += `<label title="Betty seed restocks you do per day. Caps how much you can plant; fast crops (Sunflower) are seed-limited not plot-limited.">Restocks/day: <input type="number" value="${settings.restocksPerDay}" min="1" step="1" style="width:46px" onchange="_roadmapSetRestocks(this.value)"></label>`;
+      h += `<label title="What one seasonal delivery ticket is worth to YOU in FLOWER. Tickets only buy season-shop items and expire — set 0 to ignore ticket rewards in deliveries.">Ticket value: <input type="number" value="${settings.ticketValueSfl}" min="0" step="0.5" style="width:52px" onchange="_roadmapSetTicketValue(this.value)"> ${sflIcon()}</label>`;
       h += `<label title="Optimise the buy order to maximise total FLOWER earned over this many years (reinvestment + synergy aware).">Optimise over: <input type="number" value="${settings.horizonYears}" min="1" step="10" style="width:54px" onchange="_roadmapSetHorizon(this.value)"> yr${sim.optGainPct > 0.05 ? ` <span style="color:var(--green)">+${sim.optGainPct.toFixed(1)}% vs ROI-order</span>` : ""}</label>`;
       h += `<label><input type="checkbox" ${settings.showCosmetic ? "checked" : ""} onchange="_roadmapToggle('showCosmetic',this.checked)"> Show no-value boosts</label>`;
       h += `<label title="Skip NFTs above this floor price (0 = no cap). Items priced over 500k FLOWER are always dropped as troll/no-liquidity listings.">Max price: <input type="number" value="${settings.maxPrice || 0}" step="100" min="0" style="width:88px" onchange="_roadmapSetMaxPrice(this.value)"> ${settings.maxPrice ? "" : "(no cap)"}</label>`;
@@ -17257,6 +17262,7 @@
     window._roadmapToggle = function(key, val) { const p = {}; p[key] = !!val; saveRoadmapSettings(p); renderRoadmapContent(); };
     window._roadmapSetMaxPrice = function(v) { const n = parseFloat(v); saveRoadmapSettings({ maxPrice: isFinite(n) && n >= 0 ? n : 0 }); renderRoadmapContent(); };
     window._roadmapSetRestocks = function(v) { const n = parseFloat(v); saveRoadmapSettings({ restocksPerDay: isFinite(n) && n > 0 ? n : 2 }); renderRoadmapContent(); };
+    window._roadmapSetTicketValue = function(v) { const n = parseFloat(v); saveRoadmapSettings({ ticketValueSfl: isFinite(n) && n >= 0 ? n : 1 }); renderRoadmapContent(); };
     window._roadmapSetHorizon = function(v) { const n = parseFloat(v); saveRoadmapSettings({ horizonYears: isFinite(n) && n > 0 ? n : 100 }); renderRoadmapContent(); };
     window._roadmapToggleUntradeable = function() { const e = document.getElementById("rm-untradeable"); if (e) e.style.display = e.style.display === "none" ? "block" : "none"; };
     window._roadmapMountFlow = function(attempt) {
