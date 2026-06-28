@@ -5112,6 +5112,9 @@
         fn: m => ({ type: "qualitative", cat: "other", raw: m[0] }) },
       { rx: /oil\s+tank\s+in\s+crop/i,
         fn: m => ({ type: "qualitative", cat: "other", raw: m[0] }) },
+      // "+N% Oil consumption" (Greasy Plants) → greenhouse burns more oil per seed = a COST penalty, not oil yield
+      { rx: /([+-]?\d+)%\s+Oil\s+consumption/i,
+        fn: m => ({ type: "oil_consumption_pct", value: parseInt(m[1]), cat: "greenhouse", raw: m[0] }) },
       // "seed stock" / "seed cost" → not yield (e.g. "+10 Tomato and Lemon seed stock")
       { rx: /\bseed\s+stock\b/i,
         fn: m => ({ type: "qualitative", cat: "other", raw: m[0] }) },
@@ -5686,7 +5689,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.18</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.19</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5713,6 +5716,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.19", items: [
+          { t: "fix", text: "Two fixes you flagged. (1) The gift \u201clikes\u201d flower now shows the NPC\u2019s best LIKED flower by points-per-grow-day, not raw points \u2014 e.g. tywin now shows Celestial Frostbloom (20pt\u00b75d = 4.0/day), not Primula (21pt\u00b714d = 1.5/day) which is hopeless to grow. (2) Greasy Plants (+1 Greenhouse yield / +100% Oil consumption) was over-valued because the +100% Oil consumption debuff was mis-read as +100% oil YIELD; it now correctly doubles the greenhouse oil COST, so the skill\u2019s real net (extra yield minus the doubled oil) is what the plan ranks \u2014 which drops it well down the list once oil is priced." },
+        ]},
         { ver: "v4.18", items: [
           { t: "feat", text: "Income-engine reframe (your pick). The page now LEADS with YOUR INCOME RIGHT NOW \u2014 a big FLOWER/day number, a colour breakdown bar by source (trees/gold/crops/\u2026) and where it grows to after the plan \u2014 then ONE prioritised BIGGEST LEVERS list: the top buys/skills/nodes that permanently add income (by payback) plus the free daily moves you should already be doing (best delivery, what to plant/mine, a gift, and any stop-loss). The 4 scattered summary cards are gone; Settings + the efficiency sliders moved into a collapsed drawer so they\u2019re not mid-page. The full ranked plan, daily tables and graph stay below." },
         ]},
@@ -14382,6 +14388,9 @@
       if (catId === "greenhouse" && GREENHOUSE_OIL_COSTS[product]) {
         oilPerSeed = GREENHOUSE_OIL_COSTS[product];
         if (stockMods.slickSaver) oilPerSeed = Math.max(0, oilPerSeed - 1);
+        // "+N% Oil consumption" debuffs (e.g. Greasy Plants) multiply greenhouse oil use — a real cost.
+        const _oilConsPct = (boostEffects || []).filter(e => e && e.type === "oil_consumption_pct").reduce((s, e) => s + (e.value || 0), 0);
+        if (_oilConsPct) oilPerSeed *= (1 + _oilConsPct / 100);
         oilSflPerSeed = oilPerSeed * ((p2pPrices && p2pPrices["Oil"]) || 0);
         oilCostPerDay = oilSflPerSeed * seedsPerDay;
         costPerDay += oilCostPerDay;
@@ -16266,7 +16275,7 @@
         let best = null;
         for (const f of flowers) { const pts = getFlowerGiftPoints(npc, f, hasBB); const days = Math.max(1, growH[f] / 24); const eff = pts / days; if (!best || eff > best.eff) best = { f, pts, days, eff }; }
         const bonusMap = (typeof BUMPKIN_FLOWER_BONUSES !== "undefined" && BUMPKIN_FLOWER_BONUSES[npc]) || {};
-        let liked = null; for (const f of Object.keys(bonusMap)) { const pts = getFlowerGiftPoints(npc, f, hasBB); const days = Math.max(1, growH[f] / 24); if (!liked || pts > liked.pts) liked = { f, pts, days }; }
+        let liked = null; for (const f of Object.keys(bonusMap)) { const pts = getFlowerGiftPoints(npc, f, hasBB); const days = Math.max(1, growH[f] / 24); const eff = pts / days; if (!liked || eff > liked.eff) liked = { f, pts, days, eff }; }
         const repu = data.repeats;
         const repVal = roadmapGiftRewardValue(repu, nftFloor);
         const perGift = repu.fp > 0 ? repVal * best.pts / repu.fp : 0;
