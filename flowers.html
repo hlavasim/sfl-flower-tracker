@@ -5689,7 +5689,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.19</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.20</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5716,6 +5716,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.20", items: [
+          { t: "feat", text: "Roadmap reframe (researched + agreed). (1) PER-RESOURCE USE-VALUE: a new Settings block lets you set what each resource (Crimstone, Sunstone, Obsidian, Oil, Gold, Iron, Stone, Wood) is really worth to YOU \u2014 used everywhere the roadmap prices it, as income AND as a tool cost. This fixes the crimstone case: mining it reads as a loss only because every Gold Pickaxe\u2019s 3 Gold is valued at full p2p as if you\u2019d sold it; drop surplus Gold (or raise Crimstone\u2019s craft value) and crimstone turns net-positive, pulling Crimstone Armor and the other crimstone boosts into the plan. Default = live p2p, so nothing changes until you tune it. (2) ONE RANKED LIST: the separate buy-order and \u2018situational\u2019 tables are merged into a single list sorted by payback, every row tagged IN PLAN (your reinvestment order, with \u03a3 cost + ETA) or CONDITIONAL (boosts a category not yet profitable \u2014 ranked by what it would add, with the reason inline). No more good-ROI items vanishing into a table below. No-boost cosmetics drop into a small collapsed tail." },
+        ]},
         { ver: "v4.19", items: [
           { t: "fix", text: "Two fixes you flagged. (1) The gift \u201clikes\u201d flower now shows the NPC\u2019s best LIKED flower by points-per-grow-day, not raw points \u2014 e.g. tywin now shows Celestial Frostbloom (20pt\u00b75d = 4.0/day), not Primula (21pt\u00b714d = 1.5/day) which is hopeless to grow. (2) Greasy Plants (+1 Greenhouse yield / +100% Oil consumption) was over-valued because the +100% Oil consumption debuff was mis-read as +100% oil YIELD; it now correctly doubles the greenhouse oil COST, so the skill\u2019s real net (extra yield minus the doubled oil) is what the plan ranks \u2014 which drops it well down the list once oil is priced." },
         ]},
@@ -15898,11 +15901,21 @@
         optimizeOrder: s.optimizeOrder !== false,
         effOverrides: (s.effOverrides && typeof s.effOverrides === "object") ? s.effOverrides : {},
         ticketValueSfl: (typeof s.ticketValueSfl === "number" && s.ticketValueSfl >= 0) ? s.ticketValueSfl : 0,
+        resourceUseValue: (s.resourceUseValue && typeof s.resourceUseValue === "object") ? s.resourceUseValue : {},
       };
     }
     function saveRoadmapSettings(patch) {
       const next = Object.assign({}, getRoadmapSettings(), patch);
       try { localStorage.setItem("sfl_roadmap_settings", JSON.stringify(next)); } catch {}
+    }
+    // Merge the user's per-resource use-value overrides over live p2p. Roadmap-only (Power page untouched).
+    function roadmapPrices(settings) {
+      const base = powerState.p2pPrices || {};
+      const ov = (settings && settings.resourceUseValue) || null;
+      if (!ov) return base;
+      let out = null;
+      for (const k of Object.keys(ov)) { const nx = parseFloat(ov[k]); if (isFinite(nx) && nx >= 0) { if (!out) out = Object.assign({}, base); out[k] = nx; } }
+      return out || base;
     }
 
     function roadmapEffFactor(cat, settings) {
@@ -15946,7 +15959,8 @@
     // Per-plot economics of growing product p (one crop/fruit/greenhouse item) under an effect set.
     // Returns per-plot gross & cost (all-plots figure ÷ plots) plus its seed-restock plot cap.
     function roadmapPerPlot(cat, p, effects, settings) {
-      const { capacity, p2pPrices, exchangeRates, stockMods } = powerState;
+      const { capacity, exchangeRates, stockMods } = powerState;
+      const p2pPrices = roadmapPrices(settings);
       const plots = getCapacityCount(cat, capacity);
       if (!(plots > 0)) return null;
       const er = roadmapCoinsFree(settings) ? Object.assign({}, exchangeRates, { coinsPerSFL: Infinity }) : exchangeRates;
@@ -15988,7 +16002,8 @@
     }
 
     function roadmapCatBreakdown(cat, effects, settings) {
-      const { capacity, p2pPrices, savedProducts, exchangeRates, stockMods, season } = powerState;
+      const { capacity, savedProducts, exchangeRates, stockMods, season } = powerState;
+      const p2pPrices = roadmapPrices(settings);
       const skills = (powerState.farm && powerState.farm.bumpkin && powerState.farm.bumpkin.skills) || {};
       const product = savedProducts[cat] || getDefaultProduct(cat);
       const er = roadmapCoinsFree(settings) ? Object.assign({}, exchangeRates, { coinsPerSFL: Infinity }) : exchangeRates;
@@ -16026,7 +16041,8 @@
 
     // NET FLOWER/day for a single product (one crop / greenhouse item) at full plots.
     function roadmapProductBreakdown(cat, product, settings) {
-      const { capacity, p2pPrices, exchangeRates, stockMods } = powerState;
+      const { capacity, exchangeRates, stockMods } = powerState;
+      const p2pPrices = roadmapPrices(settings);
       const er = roadmapCoinsFree(settings) ? Object.assign({}, exchangeRates, { coinsPerSFL: Infinity }) : exchangeRates;
       const ownedEff = roadmapOwnedEffects(cat);
       let gross = 0, cost = 0;
@@ -16088,7 +16104,8 @@
     // Each pickaxe is crafted from lower resources, so pushing up the chain (Wood→Stone→…→Crimstone)
     // only pays if the ore is worth more than the inputs its tool eats. Efficiency-adjusted, shared-Wood aware.
     function roadmapMiningStrategyHtml(settings) {
-      const { p2pPrices, capacity, exchangeRates } = powerState;
+      const { capacity, exchangeRates } = powerState;
+      const p2pPrices = roadmapPrices(settings);
       const cf = roadmapCoinsFree(settings);
       const coinsPerSFL = exchangeRates.coinsPerSFL || 320;
       const CHAIN = [
@@ -16479,6 +16496,26 @@
       return x.toFixed(1) + "h";
     }
     // Per-category harvest-efficiency sliders + what each % means as a harvest interval.
+    function roadmapResourceValuePanel(settings) {
+      const RES = ["Crimstone", "Sunstone", "Obsidian", "Oil", "Gold", "Iron", "Stone", "Wood"];
+      const p2p = powerState.p2pPrices || {};
+      const ov = settings.resourceUseValue || {};
+      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px;font-size:0.6rem;color:var(--text-secondary)">`;
+      h += `<div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-bottom:6px">RESOURCE USE-VALUE</div>`;
+      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">What each resource is worth to YOU in ${sflIcon()}, used everywhere the roadmap prices it \u2014 as income when you sell/keep it AND as a cost when a tool eats it. Blank = live p2p. Raise a resource you mine to <b>use</b> (Crimstone/Sunstone/Obsidian for crafting) above p2p, or drop one you <b>over-produce</b> (surplus Gold/Wood you can\u2019t actually sell) below p2p \u2014 cheaper Gold makes Crimstone\u2019s Gold-Pickaxe cost fall, so its boosts move from CONDITIONAL into the plan.</div>`;
+      h += `<div style="display:flex;flex-wrap:wrap;gap:12px">`;
+      for (const r of RES) {
+        const live = p2p[r];
+        const cur = (ov[r] !== undefined) ? ov[r] : "";
+        const liveTxt = live > 0 ? roadmapFmtFlower(live) : "n/a";
+        const tag = (ov[r] !== undefined) ? `<span style="color:var(--green)" title="overridden (live ${liveTxt})">\u25cf</span>` : `<span style="color:var(--text-dim)" title="using live p2p ${liveTxt}">p2p</span>`;
+        h += `<label style="display:inline-flex;align-items:center;gap:4px"><img class="inline-icon" src="${getItemIcon(r)}" onerror="this.style.display='none'" alt=""> ${escHTML(r)} <input type="number" step="0.01" min="0" placeholder="${liveTxt}" value="${cur}" style="width:62px" onchange="_roadmapSetResVal('${r}',this.value)"> ${tag}</label>`;
+      }
+      h += `</div>`;
+      if (Object.keys(ov).length) h += `<button onclick="_roadmapResetResVal()" style="margin-top:8px;font-size:0.55rem">reset all to p2p</button>`;
+      h += `</div>`;
+      return h;
+    }
     function roadmapEfficiencyPanel(settings) {
       const cats = [["trees", "Trees"], ["stone", "Stone"], ["iron", "Iron"], ["gold", "Gold"], ["crimstone", "Crimstone"], ["oil", "Oil"], ["crops", "Crops"], ["fruits", "Fruits"], ["greenhouse", "Greenhouse"]];
       const rows = [];
@@ -16786,7 +16823,8 @@
     // Node expansion + Obsidian merging as fixed-marginal roadmap candidates (reuses nodes-page math).
     function roadmapNodeCandidates(settings) {
       const out = [];
-      const { capacity, p2pPrices, exchangeRates, farm } = powerState;
+      const { capacity, exchangeRates, farm } = powerState;
+      const p2pPrices = roadmapPrices(settings);
       const obsidianP = p2pPrices["Obsidian"] || 0;
       if (!(obsidianP > 0)) return out;               // can't price Obsidian → skip node actions
       const sunstoneP = obsidianP * 3;                 // 1 Sunstone = 3 Obsidian
@@ -16893,14 +16931,14 @@
       // final rate, total days, and the total FLOWER income integrated over horizon H (objective).
       const simOrder = (order, H) => {
         resetClones();
-        let r = startIncome > 0 ? startIncome : 0, day = 0, integral = 0;
+        let r = startIncome > 0 ? startIncome : 0, day = 0, integral = 0, cumc = 0;
         const steps = [];
         for (const m of order) {
           const marg = Math.max(0, roadmapItemValue(m.clone, catBoostsW, settings));
           const dd = r > 0 ? m.floor / r : Infinity;
           if (isFinite(dd)) integral += r * dd;
           day += dd; m.clone.has = true; r += marg;
-          steps.push({ m, marg, atDay: day, rateAfter: r });
+          cumc += m.floor; steps.push({ m, marg, atDay: day, rateAfter: r, cumCost: cumc });
         }
         if (H > 0 && isFinite(day)) integral += r * Math.max(0, H - day);
         return { steps, finalRate: r, totalDays: day, integral };
@@ -16958,7 +16996,12 @@
         timeline.push({ name: m.name, type: m.type, boost: m.boost, floor: m.floor, marginal: 0, roi: Infinity, atDay: cumDays, rateAfter: rate, kind: "cosmetic" });
       }
       const totalCost = timeline.reduce((s, t) => s + t.floor, 0);
-      return { timeline, econSteps, cosmeticCount: cosmetic.length, econCost, untradeable, tail, tailCost, noBoostCount, situational, startRate: startIncome, finalRate, totalDays: cumDays, totalCost, optGainPct, horizonYears: (settings.horizonYears || 100) };
+      // Unified ranked list: in-plan steps + conditional (situational), sorted by payback (ROI).
+      const ranked = [];
+      for (const s of fin.steps) ranked.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, value: s.marg, roi: s.marg > 0 ? s.m.floor / s.marg : Infinity, status: "plan", atDay: s.atDay, rateAfter: s.rateAfter, cumCost: s.cumCost, skillFree: s.m.skillFree, skillTree: s.m.skillTree, skillTier: s.m.skillTier });
+      for (const m of situational) ranked.push({ name: m.name, type: m.type, boost: m.boost, floor: m.floor, value: m.sitValue, roi: m.sitValue > 0 ? m.floor / m.sitValue : Infinity, status: "conditional", reason: m.sitReason });
+      ranked.sort((a, b) => a.roi - b.roi);
+      return { timeline, ranked, econSteps, cosmeticCount: cosmetic.length, econCost, untradeable, tail, tailCost, noBoostCount, situational, startRate: startIncome, finalRate, totalDays: cumDays, totalCost, optGainPct, horizonYears: (settings.horizonYears || 100) };
     }
 
     function roadmapFmtDays(d) {
@@ -17212,6 +17255,7 @@
       }
       h += `</div>`;
 
+      h += roadmapResourceValuePanel(settings);
       h += roadmapEfficiencyPanel(settings);
       h += `</div></details>`;
 
@@ -17219,11 +17263,11 @@
         h += `<div class="pixel-panel" style="padding:10px;margin-bottom:14px;color:var(--yellow);font-size:0.6rem">Set a positive "Start FLOWER/day" to get time estimates. The ORDER below is still correct (sorted by ROI payback).</div>`;
       }
 
-      // ── Roadmap table ──
+      // \u2500\u2500 Unified ranked list: IN PLAN + CONDITIONAL by payback; cosmetics in a tail \u2500\u2500
       h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.6rem">`;
       h += `<thead><tr style="color:var(--text-secondary);text-align:left">
         <th style="padding:4px 6px">#</th>
-        <th style="padding:4px 6px">NFT</th>
+        <th style="padding:4px 6px">Item</th>
         <th style="padding:4px 6px">Boost</th>
         <th style="padding:4px 6px;text-align:right">Cost</th>
         <th style="padding:4px 6px;text-align:right">+FL/day</th>
@@ -17232,68 +17276,45 @@
         <th style="padding:4px 6px;text-align:right">FL/day</th>
         <th style="padding:4px 6px;text-align:right">ETA</th>
       </tr></thead><tbody>`;
-
-      const typeBadge = ty => `<span style="font-size:0.5rem;padding:1px 4px;border-radius:3px;background:${ty === "Wearable" ? "#2a3a5a" : "#3a2a5a"};color:var(--text-dim)">${ty === "Wearable" ? "W" : "C"}</span>`;
-      let cum = 0, rank = 0, cosmeticShown = 0, dividerDone = false;
-      const COSMETIC_CAP = 100;
-      for (const tr of sim.timeline) {
-        if (tr.kind === "cosmetic") {
-          if (!settings.showCosmetic) continue;
-          if (!dividerDone) {
-            h += `<tr><td colspan="9" style="padding:6px;color:var(--text-secondary);background:#1a1226;font-size:0.55rem">── Boost present but no FLOWER value (qualitative / net ≤ 0) — buy last, cheapest first ──</td></tr>`;
-            dividerDone = true;
-          }
-          if (cosmeticShown >= COSMETIC_CAP) continue;
-          cosmeticShown++;
-        }
-        cum += tr.floor;
+      const typeBadge = ty => `<span style="font-size:0.5rem;padding:1px 4px;border-radius:3px;background:${ty === "Wearable" ? "#2a3a5a" : (ty === "Node" ? "#1f3a2a" : "#3a2a5a")};color:var(--text-dim)">${ty === "Wearable" ? "W" : (ty === "Skill" ? "SKILL" : (ty === "Node" ? "NODE" : "C"))}</span>`;
+      let rank = 0;
+      for (const r of (sim.ranked || [])) {
         rank++;
-        const payback = tr.kind === "econ" ? roadmapFmtDays(tr.roi) : "—";
-        const marg = tr.kind === "econ" ? "+" + roadmapFmtFlower(tr.marginal) : "—";
-        const margColor = tr.kind === "econ" ? "var(--green)" : "var(--text-dim)";
-        const boostTxt = escHTML((tr.boost || "").split("\n").join(" · "));
+        const isPlan = r.status === "plan";
+        const stBadge = isPlan
+          ? `<span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1f3a2a;color:#7fe0a0;font-weight:bold">IN PLAN</span>`
+          : `<span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#3a3220;color:#e8c060;font-weight:bold" title="${escHTML(r.reason || "")}">CONDITIONAL</span>`;
+        const boostTxt = escHTML((r.boost || "").split("\n").join(" \u00b7 ")) + (isPlan ? "" : ` <span style="color:var(--lily)">\u00b7 ${escHTML(r.reason || "only if you run that activity")}</span>`);
+        const marg = `+${roadmapFmtFlower(r.value)}` + (isPlan ? "" : ` <span style="color:var(--text-dim)">if used</span>`);
         h += `<tr style="border-top:1px solid #222">
           <td style="padding:3px 6px;color:var(--text-dim)">${rank}</td>
-          <td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(tr.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(tr.name)} ${typeBadge(tr.type)}</td>
+          <td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(r.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.name)} ${typeBadge(r.type)} ${stBadge}</td>
           <td style="padding:3px 6px;color:var(--text-dim);max-width:240px">${boostTxt}</td>
-          <td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(tr.floor)}</td>
-          <td style="padding:3px 6px;text-align:right;color:${margColor}">${marg}</td>
-          <td style="padding:3px 6px;text-align:right">${payback}</td>
-          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${roadmapFmtFlower(cum)}</td>
-          <td style="padding:3px 6px;text-align:right;color:var(--sunpetal)">${roadmapFmtFlower(tr.rateAfter)}</td>
-          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${roadmapFmtDate(tr.atDay)}</td>
+          <td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(r.floor)}</td>
+          <td style="padding:3px 6px;text-align:right;color:var(--green)">${marg}</td>
+          <td style="padding:3px 6px;text-align:right">${roadmapFmtDays(r.roi)}</td>
+          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${isPlan ? roadmapFmtFlower(r.cumCost) : "\u2014"}</td>
+          <td style="padding:3px 6px;text-align:right;color:var(--sunpetal)">${isPlan ? roadmapFmtFlower(r.rateAfter) : "\u2014"}</td>
+          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${isPlan ? roadmapFmtDate(r.atDay) : "\u2014"}</td>
         </tr>`;
       }
-      if (settings.showCosmetic && sim.cosmeticCount > cosmeticShown) {
-        h += `<tr><td colspan="9" style="padding:6px;color:var(--text-dim);font-size:0.55rem">… and ${sim.cosmeticCount - cosmeticShown} more cosmetic NFTs (included in totals above)</td></tr>`;
-      }
       h += `</tbody></table></div>`;
+      h += `<div style="margin-top:6px;font-size:0.55rem;color:var(--text-dim);line-height:1.6">One list ranked by payback. <b style="color:#7fe0a0">IN PLAN</b> = your profit-optimal buy order (\u03a3 Cost + ETA assume you reinvest income in this order). <b style="color:#e8c060">CONDITIONAL</b> = boosts a category not in your profitable mix yet (e.g. crimstone below break-even) \u2014 ranked by what it WOULD add at full scale, so nothing is hidden. Set that resource\u2019s use-value in Settings to pull its boosts into the plan.</div>`;
 
-      if (sim.situational && sim.situational.length) {
-        h += `<div style="margin-top:16px"><div class="pixel-font" style="font-size:0.55rem;color:var(--lily);margin-bottom:4px">SITUATIONAL BOOSTS — not in your optimal setup (yet)</div>`;
-        h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Each of these boosts a real activity that isn't part of your profit-optimal mix right now — a crop/fruit you'd only grow by choice, or a category still below break-even (e.g. crimstone). The <span style="color:var(--green)">+FL/day</span> is what it would add IF you ran that activity at full seed-capped scale. They are <b>not</b> counted in the income above (you'd have to change what you grow/mine to realise them), but they're listed so nothing is hidden.</div>`;
-        h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.58rem"><thead><tr style="color:var(--text-secondary);text-align:left"><th style="padding:3px 6px">NFT</th><th style="padding:3px 6px">Boost</th><th style="padding:3px 6px;text-align:right">Cost</th><th style="padding:3px 6px;text-align:right">+FL/day if used</th><th style="padding:3px 6px;text-align:right">Payback</th><th style="padding:3px 6px">When it pays off</th></tr></thead><tbody>`;
-        let sShown = 0;
-        for (const m of sim.situational) {
-          if (sShown++ >= 80) break;
-          const roi = m.sitValue > 0 ? m.floor / m.sitValue : Infinity;
-          h += `<tr style="border-top:1px solid #222">
-            <td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(m.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(m.name)} ${typeBadge(m.type)}</td>
-            <td style="padding:3px 6px;color:var(--text-dim);max-width:220px">${escHTML((m.boost || "").split("\n").join(" · "))}</td>
-            <td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(m.floor)}</td>
-            <td style="padding:3px 6px;text-align:right;color:var(--green)">+${roadmapFmtFlower(m.sitValue)}</td>
-            <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${roadmapFmtDays(roi)}</td>
-            <td style="padding:3px 6px;color:var(--text-dim)">${escHTML(m.sitReason || "")}</td>
-          </tr>`;
+      // Cosmetic tail (boost present but no FLOWER value) \u2014 collapsed
+      const cosmeticRows = (sim.timeline || []).filter(x => x.kind === "cosmetic");
+      if (cosmeticRows.length) {
+        if (settings.showCosmetic) {
+          h += `<details style="margin-top:12px"><summary style="cursor:pointer;font-size:0.55rem;color:var(--text-secondary)">${cosmeticRows.length} no-FLOWER-value boost NFTs (qualitative / net \u2264 0) \u2014 cheapest first</summary><div style="overflow-x:auto;margin-top:6px"><table style="width:100%;border-collapse:collapse;font-size:0.58rem"><tbody>`;
+          for (const m of cosmeticRows.slice(0, 100)) {
+            h += `<tr style="border-top:1px solid #222"><td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(m.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(m.name)} ${typeBadge(m.type)}</td><td style="padding:3px 6px;color:var(--text-dim);max-width:260px">${escHTML((m.boost || "").split("\n").join(" \u00b7 "))}</td><td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(m.floor)}</td></tr>`;
+          }
+          h += `</tbody></table></div></details>`;
+        } else {
+          h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--text-dim)">+ ${cosmeticRows.length} boost NFTs with no FLOWER value hidden \u2014 tick \u201cShow no-value boosts\u201d in Settings to list them.</div>`;
         }
-        h += `</tbody></table></div>`;
-        if (sim.situational.length > sShown) h += `<div style="margin-top:6px;font-size:0.55rem;color:var(--text-dim)">… and ${sim.situational.length - sShown} more situational boosts.</div>`;
-        h += `</div>`;
       }
 
-      if (!settings.showCosmetic && sim.cosmeticCount > 0) {
-        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--text-dim)">+ ${sim.cosmeticCount} boost NFTs with no FLOWER value hidden — tick "Show no-value boosts" to list them. Still counted in the totals (they do carry a boost).</div>`;
-      }
       if (sim.noBoostCount) {
         h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--text-dim)">Excluded ${sim.noBoostCount} no-boost collectibles / decorations (Coin Aura, banners, bears…) — they generate no FLOWER, so they're not part of this profit roadmap.</div>`;
       }
@@ -17333,6 +17354,8 @@
     window._roadmapSetEffOverride = function(cat, v) { const n = parseFloat(v) / 100; const cur = Object.assign({}, getRoadmapSettings().effOverrides || {}); cur[cat] = Math.max(0, Math.min(1, isFinite(n) ? n : 1)); saveRoadmapSettings({ effOverrides: cur }); renderRoadmapContent(); };
     window._roadmapResetEffOverride = function(cat) { const cur = Object.assign({}, getRoadmapSettings().effOverrides || {}); delete cur[cat]; saveRoadmapSettings({ effOverrides: cur }); renderRoadmapContent(); };
     window._roadmapResetAllEff = function() { saveRoadmapSettings({ effOverrides: {} }); renderRoadmapContent(); };
+    window._roadmapSetResVal = function(res, v) { const cur = Object.assign({}, getRoadmapSettings().resourceUseValue || {}); const nx = parseFloat(v); if (v !== "" && isFinite(nx) && nx >= 0) cur[res] = nx; else delete cur[res]; saveRoadmapSettings({ resourceUseValue: cur }); renderRoadmapContent(); };
+    window._roadmapResetResVal = function() { saveRoadmapSettings({ resourceUseValue: {} }); renderRoadmapContent(); };
     window._roadmapEffPreview = function(cat, v, C) {
       const pct = Math.round(parseFloat(v));
       const p = document.getElementById("eff-pct-" + cat); if (p) { p.textContent = pct + "%"; p.style.color = "var(--sunpetal)"; }
