@@ -5689,7 +5689,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.23</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.24</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5716,8 +5716,8 @@
 
     function renderChangelog() {
       const log = [
-        { ver: "v4.23", items: [
-          { t: "fix", text: "Mining income fixed + made consistent. You craft pickaxes from resources you produce yourself, so the model no longer charges their MATERIAL cost (the \u201clost Wood/Iron profit\u201d) against the resource they mine \u2014 only the coin cost counts, which is free for you. So mining tool cost \u2248 0, income and what-to-mine now show the SAME number (the redundant mining-strategy view, which used a third cost model, was removed), crimstone reads its true positive value instead of a fake \u22121.67, and total mining income goes UP. Also: the \u201cgrows to X\u201d headline now summarises the worth-it core (payback < 2y, ~tens of k) instead of all buys including 100k+ troll-priced items that added almost nothing." },
+        { ver: "v4.24", items: [
+          { t: "fix", text: "Corrected the mining model \u2014 you were right that \u201ctools are free\u201d is nonsense. A pickaxe eats real Wood/Iron you could have sold, so mining a resource now correctly costs the sell-value of its tool\u2019s inputs (full tool cost), charged the SAME way in the income and what-to-mine views so they finally agree. If a resource\u2019s net is negative \u2014 the ore is worth LESS than the inputs its pickaxe eats \u2014 you should NOT mine it, you should sell the inputs raw (e.g. sell Wood instead of mining Stone). The Mining Strategy table is back with that verdict per resource (green = mine & sell, red = tools cost more than the ore \u2192 sell the inputs). (Briefly shipped a \u201cself-made tools are free\u201d build \u2014 reverted.)" },
         ]},
         { ver: "v4.22", items: [
           { t: "fix", text: "Downstream chain line now shows the PER-DAY saving across your nodes (e.g. Wood \u2192 Stone \u22127.68/d, Iron \u22125.98/d, Gold \u22122.98/d, Crimstone \u22122.53/d; Gold \u2192 Crimstone \u22127.98/d) instead of per-unit \u2014 hover for the per-unit figures." },
@@ -16010,21 +16010,17 @@
       return { gross, cost };
     }
 
-    // Self-made tools: you craft pickaxes/drills from resources you produce yourself, so their MATERIAL
-    // cost is not a cash outflow \u2014 only the coin cost is (free when you hold coins). So a mining
-    // category's only real tool cost is coins. This stops double-charging the chain (Stone for its Wood,
-    // Iron for its Stone, \u2026) and makes every view use the same gross\u2212coin number.
+    // Tools are NEVER free: a pickaxe eats real Wood/Iron you could have sold, so mining a resource costs
+    // the sell-value of its tool's inputs. Each mining category's net = gross \u2212 full tool cost (materials
+    // priced at sell value + coins). If that net is negative the ore is worth LESS than the inputs its pickaxe
+    // eats \u2192 you should sell the inputs raw, not mine it (flagged in Mining Strategy). One helper so the
+    // income hero and what-to-mine agree.
     const ROADMAP_MINING_CATS = ["trees", "stone", "iron", "gold", "crimstone", "oil"];
     function roadmapMiningNetCost(cat, settings) {
-      if (roadmapCoinsFree(settings)) return 0;                 // coins free \u2192 tools effectively free
       const { capacity, exchangeRates, stockMods } = powerState;
       const p2p = roadmapPrices(settings);
-      let tcd; try { tcd = calcToolCostPerDay(cat, capacity, exchangeRates, p2p, stockMods, false) || {}; } catch { tcd = {}; }
-      if (tcd.freeTool) return 0;
-      const toolName = Object.keys(TOOL_TO_CAT).find(k => TOOL_TO_CAT[k] === cat);
-      const tool = toolName ? TOOL_COSTS[toolName] : null;
-      const coin = (tool && exchangeRates.coinsPerSFL > 0) ? (tool.coins || 0) / exchangeRates.coinsPerSFL : 0;
-      return coin * (tcd.toolsPerDay || 0);
+      const er = roadmapCoinsFree(settings) ? Object.assign({}, exchangeRates, { coinsPerSFL: Infinity }) : exchangeRates;
+      try { return (calcToolCostPerDay(cat, capacity, er, p2p, stockMods, false).costPerDay) || 0; } catch { return 0; }
     }
     function roadmapCatBreakdown(cat, effects, settings) {
       const { capacity, savedProducts, exchangeRates, stockMods, season } = powerState;
@@ -17257,6 +17253,7 @@
       // ── What to farm / mine now (per-category profitability) ──
       const _rmCollapse = (title, inner) => inner ? `<details style="margin-bottom:12px"><summary style="cursor:pointer;padding:9px 12px;background:#1c160f;border:1px solid var(--border-brown);border-radius:8px;font-family:'Press Start 2P',monospace;font-size:0.55rem;color:var(--sunpetal)">\u25b8 ${title}</summary><div style="margin-top:8px">${inner}</div></details>` : "";
       h += roadmapProfitabilityHtml(settings);
+      h += _rmCollapse("MINING STRATEGY - sell raw, or mine up the chain?", roadmapMiningStrategyHtml(settings));
       h += _rmCollapse("ANIMAL FEEDING \u2014 what to feed, worth it?", roadmapAnimalFeedHtml(settings));
       h += _rmCollapse("ANIMAL LIFECYCLE \u2014 net per level", roadmapAnimalLifecycleHtml(settings));
       h += roadmapGiftsHtml(settings);
