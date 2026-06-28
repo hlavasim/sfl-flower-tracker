@@ -2637,6 +2637,113 @@
 
 </style>
   <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/reactflow@11.11.4/dist/style.css">
+  <script type="importmap">
+  { "imports": {
+    "react": "https://esm.sh/react@18.3.1",
+    "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
+    "react-dom": "https://esm.sh/react-dom@18.3.1",
+    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client"
+  }}
+  </script>
+  <script type="module">
+    (async () => {
+      const errBox = (msg) => { const el = document.getElementById("rf-graph"); if (el) el.innerHTML = '<div style="padding:16px;color:#FF6B6B;font-family:Courier New,monospace;font-size:12px;line-height:1.6">Graph engine error:<br>' + msg + '</div>'; };
+      try {
+        const React = (await import("react")).default;
+        const { createRoot } = await import("react-dom/client");
+        const RF = await import("https://esm.sh/reactflow@11.11.4?external=react,react-dom");
+        const ReactFlow = RF.default || RF.ReactFlow;
+        const { Background, Controls, MiniMap, Handle, Position } = RF;
+        if (!ReactFlow) throw new Error("ReactFlow component missing from module");
+        const h = React.createElement;
+        const C = { gold:"#FFD700", green:"#30D158", red:"#FF6B6B", lily:"#B07CD8", blue:"#5DADE2", yellow:"#FFD60A", dim:"#9a8060", text:"#f0e6d2", sec:"#c4a882", panel:"#1c160f", panel2:"#251c12", brown:"#5c3a1e", goldb:"#8b6914" };
+        const fmt = (n) => { n = +n || 0; const a = Math.abs(n); if (a >= 1000) return (n/1000).toFixed(1)+"k"; if (a >= 100) return n.toFixed(0); if (a >= 1) return n.toFixed(2); return n.toFixed(3); };
+        const days = (d) => !isFinite(d) ? "—" : (d >= 365 ? (d/365).toFixed(1)+"y" : Math.round(d)+"d");
+        const px = { imageRendering:"pixelated" };
+        function Tip({ rows, title, accent }) {
+          return h("div", { style:{ position:"absolute", bottom:"calc(100% + 8px)", left:"50%", transform:"translateX(-50%)", zIndex:50, minWidth:184, background:"#0d0a06", border:"2px solid "+(accent||C.goldb), borderRadius:6, padding:"8px 10px", boxShadow:"0 6px 24px rgba(0,0,0,0.7)", pointerEvents:"none" } },
+            h("div", { style:{ fontFamily:"'Press Start 2P',monospace", fontSize:9, color:accent||C.gold, marginBottom:6, lineHeight:1.4 } }, title),
+            rows.map((r,i) => h("div", { key:i, style:{ display:"flex", justifyContent:"space-between", gap:14, fontSize:11, fontFamily:"'Courier New',monospace", color:r.c||C.sec, lineHeight:1.65 } }, h("span", null, r.k), h("span", { style:{ color:r.vc||C.text, fontWeight:"bold", textAlign:"right" } }, r.v))));
+        }
+        function WowItem({ data }) {
+          const [hv, setHv] = React.useState(false);
+          const good = (+data.marginal) > 0;
+          const ac = data.itype === "Skill" ? C.lily : (data.itype === "Node" ? C.blue : C.gold);
+          return h("div", { onMouseEnter:()=>setHv(true), onMouseLeave:()=>setHv(false), style:{ position:"relative", width:174, background:"linear-gradient(160deg,"+C.panel2+","+C.panel+")", border:"2px solid "+(hv?ac:C.brown), borderRadius:8, padding:"7px 9px", cursor:"pointer", transition:"all .15s", boxShadow:hv?("0 0 18px "+ac+"66, 0 4px 14px rgba(0,0,0,.5)"):"0 2px 8px rgba(0,0,0,.4)", transform:hv?"translateY(-2px)":"none" } },
+            h(Handle, { type:"target", position:Position.Left, style:{ opacity:0, border:0 } }),
+            h(Handle, { type:"source", position:Position.Right, style:{ opacity:0, border:0 } }),
+            h("div", { style:{ display:"flex", alignItems:"center", gap:7 } },
+              h("div", { style:{ minWidth:18, height:18, borderRadius:4, background:ac, color:"#1a120a", fontFamily:"'Press Start 2P',monospace", fontSize:8, display:"flex", alignItems:"center", justifyContent:"center", padding:"0 3px" } }, data.idx),
+              data.icon ? h("img", { src:data.icon, onError:(e)=>{ e.target.style.display="none"; }, style:Object.assign({ width:30, height:30 }, px) }) : null,
+              h("div", { style:{ flex:1, fontFamily:"'Courier New',monospace", fontSize:11.5, fontWeight:"bold", color:C.text, lineHeight:1.15 } }, data.label)),
+            h("div", { style:{ display:"flex", justifyContent:"space-between", marginTop:5, fontFamily:"'Courier New',monospace", fontSize:11 } },
+              h("span", { style:{ color:good?C.green:C.dim, fontWeight:"bold" } }, (good?"+":"")+fmt(data.marginal)+"/d"),
+              h("span", { style:{ color:C.sec } }, fmt(data.cost)+"◈")),
+            hv ? h(Tip, { accent:ac, title:data.label, rows:[
+              { k:"Boost", v:data.boost||"—", vc:C.yellow },
+              { k:"+FLOWER/day", v:(good?"+":"")+fmt(data.marginal), vc:good?C.green:C.red },
+              { k:"Cost", v:fmt(data.cost)+" FLOWER" },
+              { k:"Payback", v:days(data.roi) },
+              { k:"Rate after", v:fmt(data.rateAfter)+"/d" },
+              { k:"ETA", v:days(data.atDay) },
+              { k:"Type", v:data.itype }
+            ] }) : null);
+        }
+        function SkillNode({ data }) {
+          const [hv,setHv]=React.useState(false); const good=(+data.marginal)>0;
+          return h("div",{onMouseEnter:()=>setHv(true),onMouseLeave:()=>setHv(false),style:{position:"relative",width:180,background:"linear-gradient(160deg,#241832,#160f20)",border:"2px solid "+(hv?C.lily:"#4a3360"),borderRadius:8,padding:"7px 9px",cursor:"pointer",transition:"all .15s",boxShadow:hv?("0 0 18px "+C.lily+"66, 0 4px 14px rgba(0,0,0,.5)"):"0 2px 8px rgba(0,0,0,.4)",transform:hv?"translateY(-2px)":"none"}},
+            h(Handle,{type:"target",position:Position.Left,style:{opacity:0,border:0}}),
+            h(Handle,{type:"source",position:Position.Right,style:{opacity:0,border:0}}),
+            h("div",{style:{display:"flex",alignItems:"center",gap:7}},
+              h("div",{style:{minWidth:18,height:18,borderRadius:4,background:C.lily,color:"#160f20",fontFamily:"'Press Start 2P',monospace",fontSize:8,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}},data.idx),
+              h("div",{style:{fontSize:14}},"🧠"),
+              h("div",{style:{flex:1,fontFamily:"'Courier New',monospace",fontSize:11.5,fontWeight:"bold",color:C.text,lineHeight:1.15}},"Skill: "+data.label)),
+            h("div",{style:{display:"flex",justifyContent:"space-between",marginTop:5,fontFamily:"'Courier New',monospace",fontSize:11}},
+              h("span",{style:{color:good?C.green:C.dim,fontWeight:"bold"}},(good?"+":"")+fmt(data.marginal)+"/d"),
+              h("span",{style:{color:data.free?C.green:C.sec}},data.free?("FREE · "+data.pts+"pt"):(data.pts+" point"+(data.pts>1?"s":"")))),
+            hv?h(Tip,{accent:C.lily,title:"Skill: "+data.label,rows:[
+              {k:"Effect",v:data.boost||"—",vc:C.yellow},
+              {k:"+FLOWER/day",v:(good?"+":"")+fmt(data.marginal),vc:good?C.green:C.red},
+              {k:"Cost",v:data.free?("FREE — uses "+data.pts+" unused point"+(data.pts>1?"s":"")):(data.pts+" point"+(data.pts>1?"s":"")+" — level up first")},
+              {k:"Rate after",v:fmt(data.rateAfter)+"/d"},{k:"ETA",v:days(data.atDay)}]}):null);
+        }
+        function LevelNode({ data }) {
+          const [hv,setHv]=React.useState(false);
+          return h("div",{onMouseEnter:()=>setHv(true),onMouseLeave:()=>setHv(false),style:{position:"relative",width:180,background:"linear-gradient(160deg,#10283a,#0c1a26)",border:"2px solid "+(hv?C.blue:"#2a4a60"),borderRadius:8,padding:"7px 9px",cursor:"pointer",transition:"all .15s",boxShadow:hv?("0 0 18px "+C.blue+"66, 0 4px 14px rgba(0,0,0,.5)"):"0 2px 8px rgba(0,0,0,.4)",transform:hv?"translateY(-2px)":"none"}},
+            h(Handle,{type:"target",position:Position.Left,style:{opacity:0,border:0}}),
+            h(Handle,{type:"source",position:Position.Right,style:{opacity:0,border:0}}),
+            h("div",{style:{display:"flex",alignItems:"center",gap:7}},
+              h("div",{style:{fontSize:15}},"⬆️"),
+              h("div",{style:{flex:1,fontFamily:"'Courier New',monospace",fontSize:11.5,fontWeight:"bold",color:C.blue,lineHeight:1.15}},"Level up → +1 point")),
+            h("div",{style:{fontFamily:"'Courier New',monospace",fontSize:10.5,color:C.sec,marginTop:4}},"cook "+data.cakes+"× "+data.recipe+" & eat"),
+            h("div",{style:{fontFamily:"'Courier New',monospace",fontSize:10,color:C.dim,marginTop:2}},"→ L"+data.level+" · ~"+fmt(data.cost)+"◈"),
+            hv?h(Tip,{accent:C.blue,title:"Level up to "+data.level,rows:[
+              {k:"Cook & eat",v:data.cakes+"× "+data.recipe},{k:"Cost",v:fmt(data.cost)+" FLOWER"},{k:"Gives",v:"+1 skill point"}]}):null);
+        }
+        const nodeTypes = { wowItem:WowItem, skillNode:SkillNode, levelNode:LevelNode };
+        const roots = {};
+        window.__mountFlow = function(elId, kind) {
+          const el = document.getElementById(elId); if (!el) return;
+          try {
+            const fd = (window.__roadmapFlowData && window.__roadmapFlowData[kind]) || { nodes:[], edges:[] };
+            const edges = (fd.edges||[]).map((e)=>Object.assign({}, e, { style:{ stroke:C.goldb, strokeWidth:2 }, markerEnd:{ type:"arrowclosed", color:C.goldb }, animated:e.animated!==false }));
+            if (roots[elId]) { try { roots[elId].unmount(); } catch (e) {} }
+            const root = createRoot(el); roots[elId] = root;
+            root.render(h(ReactFlow, { nodes:fd.nodes, edges:edges, nodeTypes:nodeTypes, fitView:true, fitViewOptions:{ padding:0.2 }, minZoom:0.12, maxZoom:1.8, proOptions:{ hideAttribution:true }, defaultEdgeOptions:{ type:"smoothstep" }, nodesDraggable:true },
+              h(Background, { color:"#3a2a1a", gap:22, size:1 }),
+              h(Controls, { showInteractive:false }),
+              h(MiniMap, { pannable:true, zoomable:true, nodeColor:()=>C.goldb, nodeStrokeColor:()=>C.gold, maskColor:"rgba(0,0,0,.6)", style:{ background:C.panel, border:"1px solid "+C.brown } })));
+          } catch (e) { errBox("render: " + ((e && e.message) || e)); }
+        };
+        window.__flowReady = true;
+        if (typeof window._roadmapMountFlow === "function") window._roadmapMountFlow(0);
+      } catch (e) {
+        window.__flowError = String((e && e.message) || e);
+        errBox("load: " + window.__flowError + "<br><span style=\"color:#9a8060\">(the tables below have the same data)</span>");
+      }
+    })();
+  </script>
   <script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
@@ -5596,7 +5703,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.07</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.10</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5730,15 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.10", items: [
+          { t: "fix", text: "The visual roadmap graph was rendering blank \u2014 ReactFlow was loading its own second copy of React from the CDN, so the hooks in the custom node tiles threw and nothing painted. Fixed with an import map + ?external=react,react-dom so there is a single React instance, loaded via dynamic import with full error handling that now prints any failure into the graph box instead of leaving it empty." },
+        ]},
+        { ver: "v4.09", items: [
+          { t: "feat", text: "Skills + the leveling to afford them are now IN the buy-path graph (no more solo skills section). A skill you can afford with unused points shows as a FREE purple node; a skill that needs a point is preceded by a blue Level-up node telling you to cook N cakes & eat for +1 point \u2014 all interleaved with NFT/node buys in ROI order. And WHAT TO DO NOW is now a grid of TODO TILES (plant X, mine Y, gift to Z, skip the loss-makers) instead of a node path." },
+        ]},
+        { ver: "v4.08", items: [
+          { t: "feat", text: "VISUAL ROADMAP \u2014 an interactive node graph (ReactFlow, loaded free from CDN like the price charts). Two tabs: BUY PATH renders your whole buy order as a flowing wave of WoW-style item tiles (hover any tile for a tooltip with boost, +FLOWER/day, cost, payback, rate-after, ETA), and WHAT TO DO NOW is an action tree branching from a DO-NOW core into Farm / Mine / Animals / Gifts / Deliver with the concrete top action in each (plant Potato +15/d, mine Wood +14/d, skip Sheep -49/d, gift Primula Enigma to tywin +10.5/d, best delivery). Pan, zoom, minimap, animated edges, neon glow \u2014 all styled to the page. Tables stay below as a fallback." },
+        ]},
         { ver: "v4.07", items: [
           { t: "feat", text: "HARVEST EFFICIENCY sliders. A new panel lets you set, per category (Trees/Stone/Iron/Gold/Crimstone/Oil/Crops/Fruits/Greenhouse), how often you really harvest \u2014 with plain-language text translating the % into an interval (e.g. Trees 100% = harvest every ~3h day &amp; night incl. overnight; 50% = every ~6h). The slider overrides the measured throughput, rescales that category\u2019s income everywhere on the page, and is saved to your browser (localStorage). [auto] reverts a category to the measured value." },
         ]},
@@ -16660,12 +16776,18 @@
       // Fold in unlearned SKILLS (cost = points x SFL/level = the XP/leveling cost). Clones already
       // live in catBoostsW, so the reset snapshot + marginal recompute cover them automatically.
       if (settings.incSkills !== false) {
-        const seenSk = new Set();
-        for (const cat of Object.keys(catBoostsW)) for (const c of catBoostsW[cat]) {
-          if (c.type === "Skill" && !c.has && !seenSk.has(c.name)) {
-            seenSk.add(c.name);
-            if (c.floor > 0 && c.floor <= maxP) econ.push({ name: c.name, type: "Skill", floor: c.floor, boost: c.boost, supply: 0, clone: c });
-          }
+        const lvl = getBumpkinLevel((powerState.farm.bumpkin && powerState.farm.bumpkin.experience) || 0);
+        let spent = 0; const seenO = new Set();
+        for (const cat of Object.keys(catBoostsW)) for (const c of catBoostsW[cat]) { if (c.type === "Skill" && c.has && !seenO.has(c.name)) { seenO.add(c.name); spent += (c.skillPoints || 0); } }
+        let freePts = Math.max(0, (lvl - 1) - spent);
+        const unl = []; const seenU = new Set();
+        for (const cat of Object.keys(catBoostsW)) for (const c of catBoostsW[cat]) { if (c.type === "Skill" && !c.has && !seenU.has(c.name)) { seenU.add(c.name); const mv = roadmapItemValue(c, catBoostsW, settings); if (mv > 0) unl.push({ c, mv }); } }
+        unl.sort((a, b) => (b.mv / (b.c.skillPoints || 1)) - (a.mv / (a.c.skillPoints || 1)));
+        for (const u of unl) {
+          const pts = u.c.skillPoints || 1;
+          let free = false; if (freePts >= pts) { free = true; freePts -= pts; }
+          const cost = free ? 0.01 : u.c.floor;
+          if (cost <= maxP) econ.push({ name: u.c.name, type: "Skill", floor: cost, boost: u.c.boost, supply: 0, clone: u.c, skillFree: free, skillPoints: pts });
         }
       }
       tail.sort((a, b) => a.floor - b.floor);
@@ -16741,7 +16863,7 @@
       const optGainPct = greedyVal > 0 ? (fin.integral / greedyVal - 1) * 100 : 0;
 
       const timeline = [];
-      for (const s of fin.steps) timeline.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, marginal: s.marg, roi: s.marg > 0 ? s.m.floor / s.marg : Infinity, atDay: s.atDay, rateAfter: s.rateAfter, kind: "econ" });
+      for (const s of fin.steps) timeline.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, marginal: s.marg, roi: s.marg > 0 ? s.m.floor / s.marg : Infinity, atDay: s.atDay, rateAfter: s.rateAfter, kind: "econ", skillFree: s.m.skillFree, skillPoints: s.m.skillPoints });
       let rate = fin.finalRate;
       let cumDays = fin.totalDays;
       const econSteps = timeline.length;
@@ -16816,6 +16938,134 @@
       renderRoadmapContent();
     }
 
+    function roadmapFlowIcon(name) { try { return getItemIcon(name); } catch { return ""; } }
+
+    // Build node/edge data for the two ReactFlow graphs (pure data — the React layer renders it).
+    // Top actionable "what to do today" moves per category.
+    function roadmapTodoBranches(settings) {
+      const cap = powerState.capacity, p2p = powerState.p2pPrices, er = powerState.exchangeRates, farm = powerState.farm;
+      const branches = [];
+      // FARM — best in-season crops to plant
+      if (getCapacityCount("crops", cap) > 0) {
+        const oeff = roadmapOwnedEffects("crops"), plots = getCapacityCount("crops", cap), cr = [];
+        for (const c of Object.keys(CROP_GROW_DATA)) { if (!roadmapInSeason(c)) continue; const pp = roadmapPerPlot("crops", c, oeff, settings); if (pp) cr.push({ c, net: (pp.gpp - pp.cpp) }); }
+        cr.sort((a, b) => b.net - a.net);
+        const acts = cr.slice(0, 3).map(r => ({ label: "Plant " + r.c, sub: "+" + roadmapFmtFlower(r.net * plots) + "/day", good: r.net > 0, icon: roadmapFlowIcon(r.c) }));
+        if (acts.length) branches.push({ label: "FARM", icon: roadmapFlowIcon("Kale"), actions: acts });
+      }
+      // MINE — resources worth actively harvesting
+      const mine = [];
+      for (const [catx, prod] of [["trees", "Wood"], ["stone", "Stone"], ["iron", "Iron"], ["gold", "Gold"], ["crimstone", "Crimstone"]]) {
+        if (getCapacityCount(catx, cap) <= 0) continue;
+        const bd = roadmapCatBreakdown(catx, roadmapOwnedEffects(catx), settings);
+        const net = (bd ? bd.net : 0) * roadmapEffFactor(catx, settings);
+        if (net > 0.001) mine.push({ label: "Mine " + prod, sub: "+" + roadmapFmtFlower(net) + "/day", good: true, icon: roadmapFlowIcon(prod), net });
+      }
+      mine.sort((a, b) => b.net - a.net);
+      if (mine.length) branches.push({ label: "MINE", icon: roadmapFlowIcon("Pickaxe"), actions: mine.slice(0, 4) });
+      // ANIMALS — feed or skip
+      const ani = [];
+      for (const [catA, typ, drop] of [["chickens", "Chicken", "Egg"], ["cows", "Cow", "Milk"], ["sheep", "Sheep", "Wool"]]) {
+        const animals = (cap.animalDetails && cap.animalDetails[catA]) || []; if (!animals.length) continue;
+        const oeff = roadmapOwnedEffects(catA);
+        const produce = (getAnimalCatSfl(catA, cap, oeff, p2p).totalSfl) || 0;
+        let feed = 0; try { feed = (calcAnimalFeedCost(catA, cap, p2p, oeff, powerState.stockMods).costPerDay) || 0; } catch {}
+        const net = produce - feed;
+        ani.push({ label: (net > 0 ? "Feed " : "Skip ") + typ + "s", sub: (net > 0 ? "+" : "") + roadmapFmtFlower(net) + "/day", good: net > 0, icon: roadmapFlowIcon(drop) });
+      }
+      if (ani.length) branches.push({ label: "ANIMALS", icon: roadmapFlowIcon("Egg"), actions: ani });
+      // GIFTS — top NPCs to gift flowers
+      const hasBB = !!(farm.bumpkin && farm.bumpkin.skills && farm.bumpkin.skills["Blossom Bonding"]);
+      const gl = Object.keys(DEFAULT_FLOWER_POINTS), gr = [];
+      for (const [npc, data] of Object.entries(BUMPKIN_GIFTS_DATA)) {
+        if (!data.repeats) continue;
+        let bp = 0, bf = ""; for (const f of gl) { const p = getFlowerGiftPoints(npc, f, hasBB); if (p > bp) { bp = p; bf = f; } }
+        const rv = roadmapGiftRewardValue(data.repeats, () => 0), gpr = bp > 0 ? data.repeats.fp / bp : Infinity, pd = (rv > 0 && isFinite(gpr)) ? rv / gpr : 0;
+        if (pd > 0.2) gr.push({ npc, bf, pd });
+      }
+      gr.sort((a, b) => b.pd - a.pd);
+      if (gr.length) branches.push({ label: "GIFTS", icon: roadmapFlowIcon("Red Pansy"), actions: gr.slice(0, 4).map(g => ({ label: "Gift " + g.bf + " \u2192 " + g.npc, sub: "+" + roadmapFmtFlower(g.pd) + "/day", good: true, icon: roadmapFlowIcon(g.bf) })) });
+      // DELIVER — best pending deliveries
+      const now = Date.now(), estFn = (typeof window !== "undefined" && window.estimateItemSfl) ? window.estimateItemSfl : null;
+      const estItem = (n) => { try { return estFn ? (estFn(n, p2p, [], er) || 0) : (p2p[n] || 0); } catch { return p2p[n] || 0; } };
+      const cFree = roadmapCoinsFree(settings), dr = [];
+      for (const o of ((farm.delivery && farm.delivery.orders) || [])) {
+        if (o.completedAt) continue;
+        let cost = 0; for (const [it, q] of Object.entries(o.items || {})) cost += (it === "coins") ? (cFree ? 0 : (er.coinsPerSFL > 0 ? q / er.coinsPerSFL : 0)) : estItem(it) * q;
+        const r = o.reward || {}; let rv = (r.sfl || 0) + ((r.coins || 0) > 0 && er.coinsPerSFL > 0 ? r.coins / er.coinsPerSFL : 0);
+        let tk = 0; try { tk = dashCalculateDeliveryTickets(o.from, farm, now) || 0; } catch {}
+        rv += tk * 3; dr.push({ from: o.from, net: rv - cost });
+      }
+      dr.sort((a, b) => b.net - a.net);
+      if (dr.length) branches.push({ label: "DELIVER", icon: roadmapFlowIcon("Pancakes"), actions: dr.slice(0, 4).map(d => ({ label: "Deliver \u2192 " + d.from, sub: (d.net >= 0 ? "+" : "") + roadmapFmtFlower(d.net) + " net", good: d.net > 0 })) });
+
+      return branches;
+    }
+
+    // What-to-do-today TILES (a grid of the best concrete actions, not a path).
+    function roadmapTodoTilesHtml(settings) {
+      const branches = roadmapTodoBranches(settings);
+      if (!branches.length) return "";
+      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
+      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">WHAT TO DO TODAY</div>`;
+      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:10px;line-height:1.6">The best concrete moves right now, by category. <span style="color:var(--green)">Green</span> = do it, <span style="color:var(--red)">red</span> = skip (loses FLOWER).</div>`;
+      h += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:10px">`;
+      for (const br of branches) {
+        h += `<div style="background:linear-gradient(160deg,#251c12,#1c160f);border:1px solid var(--border-brown);border-radius:8px;padding:9px 11px">`;
+        h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin-bottom:6px;display:flex;align-items:center;gap:6px"><img class="inline-icon" src="${br.icon}" onerror="this.style.display='none'" alt=""> ${escHTML(br.label)}</div>`;
+        for (const a of br.actions.slice(0, 4)) {
+          h += `<div style="display:flex;align-items:center;gap:6px;padding:3px 0 3px 7px;border-left:3px solid ${a.good ? "var(--green)" : "var(--red)"};margin-bottom:3px">`;
+          h += `${a.icon ? `<img class="inline-icon" src="${a.icon}" onerror="this.style.display='none'" alt="">` : ""}`;
+          h += `<div style="flex:1"><div style="font-size:0.6rem;color:var(--text-primary);font-family:'Courier New',monospace">${escHTML(a.label)}</div><div style="font-size:0.55rem;color:${a.good ? "var(--green)" : "var(--red)"};font-family:'Courier New',monospace">${escHTML(a.sub)}</div></div>`;
+          h += `</div>`;
+        }
+        h += `</div>`;
+      }
+      h += `</div></div>`;
+      return h;
+    }
+
+    // Buy-path graph data: the econ buy order with SKILLS + the LEVELING for them expanded into their
+    // own nodes (a free skill uses an unused point; a paid skill is preceded by "cook N cakes -> +1 point").
+    function roadmapBuildFlowData(sim, settings) {
+      const farm = powerState.farm, p2p = powerState.p2pPrices;
+      const rmNodes = [], rmEdges = [];
+      const econSteps = (sim.timeline || []).filter(s => s.kind === "econ").slice(0, 48);
+      let ski = {}; try { ski = calcSkillPointCost(farm.bumpkin, p2p, farm) || {}; } catch {}
+      const recipeName = (ski.bestRecipe && ski.bestRecipe.name) || "Pizza Margherita";
+      const recipeXP = (ski.bestRecipe && ski.bestRecipe.boostedXP) || 0;
+      const recipeCost = (ski.bestRecipe && ski.bestRecipe.cost) || 0;
+      let curLevel = ski.level || getBumpkinLevel((farm.bumpkin && farm.bumpkin.experience) || 0);
+
+      const path = [];
+      for (const s of econSteps) {
+        if (s.type === "Skill") {
+          const pts = s.skillPoints || 1;
+          if (!s.skillFree) {
+            for (let j = 0; j < pts; j++) {
+              const xpNeed = (BUMPKIN_XP_TABLE[curLevel] || 0) - (BUMPKIN_XP_TABLE[curLevel - 1] || 0);
+              const cakes = recipeXP > 0 ? Math.max(1, Math.ceil(xpNeed / recipeXP)) : 0;
+              path.push({ k: "level", cakes, recipe: recipeName, cost: cakes * recipeCost, level: curLevel + 1 });
+              curLevel++;
+            }
+          }
+          path.push({ k: "skill", s, free: !!s.skillFree, pts });
+        } else {
+          path.push({ k: "item", s });
+        }
+      }
+
+      path.forEach((p, i) => {
+        const pos = { x: i * 210, y: 180 + Math.sin(i * 0.5) * 120 }, id = "b" + i;
+        if (p.k === "item") { const s = p.s; rmNodes.push({ id, type: "wowItem", position: pos, data: { label: s.name, icon: roadmapFlowIcon(s.name), cost: s.floor, marginal: s.marginal, roi: s.roi, boost: s.boost || "", itype: s.type, idx: i + 1, rateAfter: s.rateAfter, atDay: s.atDay } }); }
+        else if (p.k === "skill") { rmNodes.push({ id, type: "skillNode", position: pos, data: { label: p.s.name, free: p.free, pts: p.pts, marginal: p.s.marginal, boost: p.s.boost || "", idx: i + 1, rateAfter: p.s.rateAfter, atDay: p.s.atDay } }); }
+        else { rmNodes.push({ id, type: "levelNode", position: pos, data: { cakes: p.cakes, recipe: p.recipe, cost: p.cost, level: p.level, idx: i + 1 } }); }
+        if (i > 0) rmEdges.push({ id: "be" + i, source: "b" + (i - 1), target: id, animated: true, type: "smoothstep" });
+      });
+
+      return { roadmap: { nodes: rmNodes, edges: rmEdges } };
+    }
+
     function renderRoadmapContent() {
       const el = document.getElementById("roadmap-content");
       if (!el || !roadmapState) return;
@@ -16840,12 +17090,23 @@
       h += card("FLOWER/DAY", roadmapFmtFlower(startIncome), "→ " + roadmapFmtFlower(sim.finalRate) + " after boosts");
       h += `</div>`;
 
+      h += roadmapTodoTilesHtml(settings);
+
+      // ── Visual roadmap (ReactFlow): the full investment PATH (NFTs + node merges/expansion + skills + leveling) ──
+      h += `<div class="pixel-panel" style="padding:10px;margin-bottom:16px">`;
+      h += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">`;
+      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal)">VISUAL ROADMAP \u2014 buy path (skills + leveling included)</div>`;
+      h += `<span style="margin-left:auto;font-size:0.5rem;color:var(--text-dim)">drag to pan \u00b7 scroll to zoom \u00b7 hover a tile for details</span>`;
+      h += `</div>`;
+      h += `<div id="rf-graph" style="height:540px;width:100%;border:1px solid var(--border-brown);border-radius:8px;background:radial-gradient(circle at 50% 40%, #1a130b, #0e0a06);overflow:hidden"></div>`;
+      h += `<div id="rf-fallback" style="display:none;padding:14px;font-size:0.6rem;color:var(--text-dim)">Loading the graph engine\u2026 if this stays, your browser/network blocked the CDN \u2014 the tables below have the same data.</div>`;
+      h += `</div>`;
+
       // ── What to farm / mine now (per-category profitability) ──
       h += roadmapProfitabilityHtml(settings);
       h += roadmapMiningStrategyHtml(settings);
       h += roadmapAnimalFeedHtml(settings);
       h += roadmapAnimalLifecycleHtml(settings);
-      h += roadmapSkillsHtml(settings);
       h += roadmapGiftsHtml(settings);
       h += roadmapDeliveriesHtml(settings);
 
@@ -16982,7 +17243,9 @@
         • <b>Prices</b> are marketplace floor in FLOWER. Listings above 500k FLOWER (more than half of all FLOWER in existence) are treated as troll / no-liquidity and dropped; use the Max-price cap to also park other expensive items out of the plan. Estimates assume you reinvest all FLOWER into NFTs.
       </div>`;
 
+      try { window.__roadmapFlowData = roadmapBuildFlowData(sim, settings); } catch (e) { window.__roadmapFlowData = { roadmap: { nodes: [], edges: [] }, todo: { nodes: [], edges: [] } }; }
       el.innerHTML = h;
+      _roadmapMountFlow(0);
     }
 
     window._roadmapSetIncome = function(v) { const n = parseFloat(v); saveRoadmapSettings({ startIncome: isFinite(n) && n >= 0 ? n : null }); renderRoadmapContent(); };
@@ -17003,6 +17266,22 @@
     window._roadmapSetRestocks = function(v) { const n = parseFloat(v); saveRoadmapSettings({ restocksPerDay: isFinite(n) && n > 0 ? n : 2 }); renderRoadmapContent(); };
     window._roadmapSetHorizon = function(v) { const n = parseFloat(v); saveRoadmapSettings({ horizonYears: isFinite(n) && n > 0 ? n : 100 }); renderRoadmapContent(); };
     window._roadmapToggleUntradeable = function() { const e = document.getElementById("rm-untradeable"); if (e) e.style.display = e.style.display === "none" ? "block" : "none"; };
+    window._roadmapMountFlow = function(attempt) {
+      const g = document.getElementById("rf-graph"); if (!g) return;
+      if (window.__flowError) { g.innerHTML = '<div style="padding:14px;color:var(--red);font-size:0.6rem">Graph engine failed: ' + window.__flowError + '</div>'; return; }
+      if (window.__mountFlow) { try { window.__mountFlow("rf-graph", window.__flowKind || "roadmap"); } catch (e) { g.innerHTML = '<div style="padding:14px;color:var(--red);font-size:0.6rem">Render error: ' + ((e && e.message) || e) + '</div>'; } return; }
+      if (attempt < 80) { setTimeout(() => window._roadmapMountFlow(attempt + 1), 150); }
+      else { const f = document.getElementById("rf-fallback"); if (f) f.style.display = "block"; }
+    };
+    window._roadmapFlowTab = function(kind) {
+      window.__flowKind = kind;
+      const a = document.getElementById("rf-tab-roadmap"), b = document.getElementById("rf-tab-todo");
+      if (a && b) {
+        a.style.background = kind === "roadmap" ? "var(--sunpetal)" : "#241a10"; a.style.color = kind === "roadmap" ? "#1a120a" : "var(--text-secondary)";
+        b.style.background = kind === "todo" ? "var(--sunpetal)" : "#241a10"; b.style.color = kind === "todo" ? "#1a120a" : "var(--text-secondary)";
+      }
+      if (window.__mountFlow) { try { window.__mountFlow("rf-graph", kind); } catch (e) {} }
+    };
 
 
     // Restock UI event handlers (called from inline onclick/onchange)
