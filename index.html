@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.02</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.03</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.03", items: [
+          { t: "feat", text: "SKILLS folded into the roadmap. Every unlearned skill with a positive FLOWER/day gain now sits in the single buy order, costed as skill points \u00d7 SFL-per-level (the cooking-XP cost) \u2014 so the plan tells you whether it pays to burn resources for XP to level up for another skill. New SKILLS box: your level + cost per point, the top skills to take by payback, and RESET candidates \u2014 owned skills that add \u2264 0 FLOWER/day for your farm (debuff cancels the buff, or you don\u2019t run that activity), whose points a reset could re-allocate. Toggle skills on/off with the new Skills checkbox." },
+        ]},
         { ver: "v4.02", items: [
           { t: "feat", text: "NODE expansion + Obsidian MERGING are now part of the single buy order. Every available merge (4 tier-1 \u2192 tier-2 and 4 tier-2 \u2192 tier-3, each +0.5 yield per cycle) and each new node you could buy with Sunstone is a candidate with a real SFL cost \u2014 Obsidian and Sunstone are priced at market sale value, so a merge has to beat just selling the Obsidian. They are ranked by ROI right next to the NFT boosts, so the roadmap shows whether and when merging/expanding nodes is worth it. Reuses the nodes-page math." },
         ]},
@@ -15742,6 +15745,7 @@
         startIncome: (typeof s.startIncome === "number" && s.startIncome >= 0) ? s.startIncome : null,
         incCollectibles: s.incCollectibles !== false,
         incWearables: s.incWearables !== false,
+        incSkills: s.incSkills !== false,
         showCosmetic: !!s.showCosmetic,
         maxPrice: (typeof s.maxPrice === "number" && s.maxPrice >= 0) ? s.maxPrice : 0,
         coinsFree: (s.coinsFree === true || s.coinsFree === false) ? s.coinsFree : undefined,
@@ -15992,6 +15996,51 @@
     }
 
     // "What should I farm/mine now" — net FLOWER/day per activity at full activity, green/red.
+    // SKILLS advisory: level + cost-per-point, and RESET advice (owned skills that add <= 0 FLOWER/day
+    // for your farm because their debuff cancels the buff). The skills themselves are ranked in the
+    // main buy order; this box surfaces the reset opportunity the buy order can't (it only adds skills).
+    function roadmapSkillsHtml(settings) {
+      const farm = powerState.farm; const bumpkin = farm.bumpkin || {};
+      let info = {}; try { info = calcSkillPointCost(bumpkin, powerState.p2pPrices, farm) || {}; } catch {}
+      const { byName, catBoostsW } = roadmapBuildClones();
+      const drop = [], topTake = []; let freeCount = 0, freePts = 0;
+      for (const name in byName) {
+        const c = byName[name];
+        if (c.type !== "Skill") continue;
+        if (c.has) {
+          c.has = false; const v = roadmapItemValue(c, catBoostsW, settings); c.has = true;
+          if (v < -0.0001) drop.push({ name, pts: c.skillPoints || 0, tree: c.skillTree || "", v }); // actively hurting
+          else if (v <= 0.0001) { freeCount++; freePts += (c.skillPoints || 0); } // inactive → points could be redeployed
+        } else {
+          const v = roadmapItemValue(c, catBoostsW, settings);
+          if (v > 0) topTake.push({ name, v, floor: c.floor, pts: c.skillPoints || 0, tree: c.skillTree || "", roi: c.floor > 0 ? c.floor / v : 0 });
+        }
+      }
+      topTake.sort((a, b) => a.roi - b.roi);
+      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
+      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">SKILLS \u2014 what to take &amp; what to reset</div>`;
+      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Level ${info.level || "?"} \u00b7 1 skill point \u2248 ${roadmapFmtFlower(info.sflPerPoint || 0)} ${sflIcon()} of cooking XP. Unlearned skills with a positive FLOWER/day gain are already ranked in the buy order above (their cost = points \u00d7 that XP cost \u2014 i.e. whether it pays to burn resources for XP to level up). If you have unspent points, treat the top ones as free.</div>`;
+      if (topTake.length) {
+        h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin:6px 0 3px">TOP SKILLS TO TAKE (by payback)</div>`;
+        h += `<table style="width:100%;border-collapse:collapse;font-size:0.58rem"><tr style="color:var(--text-dim);font-size:0.5rem"><td>skill</td><td style="text-align:right;padding:0 6px">pts</td><td style="text-align:right;padding:0 6px">+FL/day</td><td style="text-align:right">payback</td></tr>`;
+        for (const s of topTake.slice(0, 10)) h += `<tr style="border-bottom:1px solid #1b1b1b"><td style="padding:2px 6px 2px 0">${escHTML(s.name)} <span style="color:var(--text-dim);font-size:0.5rem">${escHTML(s.tree)}</span></td><td style="padding:2px 6px;text-align:right;color:var(--text-dim)">${s.pts}</td><td style="padding:2px 6px;text-align:right;color:var(--green)">+${roadmapFmtFlower(s.v)}</td><td style="padding:2px 0 2px 6px;text-align:right">${roadmapFmtDays(s.roi)}</td></tr>`;
+        h += `</table>`;
+      }
+      if (drop.length) {
+        h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--red);margin:10px 0 3px">RESET THESE \u2014 owned skills HURTING your FLOWER/day (debuff &gt; buff)</div>`;
+        h += `<div style="font-size:0.55rem;color:var(--text-dim);line-height:1.7">${drop.map(d => `${escHTML(d.name)} <span style="color:var(--red);font-size:0.5rem">${roadmapFmtFlower(d.v)}/d</span> <span style="color:var(--text-dim);font-size:0.5rem">(${d.pts}pt ${escHTML(d.tree)})</span>`).join(" \u00b7 ")}</div>`;
+      }
+      const potential = topTake.reduce((s, x) => s + x.v, 0);
+      if (freePts > 0 && topTake.length) {
+        h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin:10px 0 3px">FREEABLE POINTS</div>`;
+        h += `<div style="font-size:0.55rem;color:var(--text-dim);line-height:1.6">You hold <b>${freePts} points</b> in ${freeCount} skills that add 0 FLOWER/day (they\u2019re for activities you don\u2019t run for profit). A reset could redeploy them to the top skills above for up to <span style="color:var(--green)">+${roadmapFmtFlower(potential)}/day</span> \u2014 but weigh that against any non-FLOWER value (XP rate, Petal Blessed cooldown, fishing, cooking). Watch tree-tier prerequisites.</div>`;
+      } else if (!drop.length && !topTake.length) {
+        h += `<div style="font-size:0.55rem;color:var(--green)">Your skill allocation is already optimal for FLOWER \u2014 nothing worth changing.</div>`;
+      }
+      h += `</div>`;
+      return h;
+    }
+
     // XP a specific food grants at a given animal level (FEED_XP_TABLE) — for the food comparison.
     function feedFoodXpAtLevel(food, lvl) {
       for (const row of FEED_XP_TABLE) if (lvl >= row.min && lvl <= row.max) return row.xp[food] || 0;
@@ -16367,6 +16416,17 @@
       // Fold in node expansion / Obsidian-merge actions (respect the price cap).
       const nodeCands = roadmapNodeCandidates(settings);
       for (const nc of nodeCands) { if (nc.floor > 0 && nc.floor <= maxP) econ.push(nc); }
+      // Fold in unlearned SKILLS (cost = points x SFL/level = the XP/leveling cost). Clones already
+      // live in catBoostsW, so the reset snapshot + marginal recompute cover them automatically.
+      if (settings.incSkills !== false) {
+        const seenSk = new Set();
+        for (const cat of Object.keys(catBoostsW)) for (const c of catBoostsW[cat]) {
+          if (c.type === "Skill" && !c.has && !seenSk.has(c.name)) {
+            seenSk.add(c.name);
+            if (c.floor > 0 && c.floor <= maxP) econ.push({ name: c.name, type: "Skill", floor: c.floor, boost: c.boost, supply: 0, clone: c });
+          }
+        }
+      }
       tail.sort((a, b) => a.floor - b.floor);
       const tailCost = tail.reduce((s, m) => s + m.floor, 0);
       // Snapshot the original owned state so we can re-simulate any order from scratch.
@@ -16543,6 +16603,7 @@
       h += roadmapProfitabilityHtml(settings);
       h += roadmapMiningStrategyHtml(settings);
       h += roadmapAnimalFeedHtml(settings);
+      h += roadmapSkillsHtml(settings);
 
       // ── Controls ──
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:16px;font-size:0.62rem;color:var(--text-secondary)">`;
@@ -16551,6 +16612,7 @@
       h += `<label>Efficiency: <select onchange="_roadmapSetEffMode(this.value)"><option value="real"${settings.effMode === "real" ? " selected" : ""}>Real (May 2026)</option><option value="theoretical"${settings.effMode === "theoretical" ? " selected" : ""}>Theoretical 100%</option></select></label>`;
       h += `<label><input type="checkbox" ${settings.incCollectibles ? "checked" : ""} onchange="_roadmapToggle('incCollectibles',this.checked)"> Collectibles</label>`;
       h += `<label><input type="checkbox" ${settings.incWearables ? "checked" : ""} onchange="_roadmapToggle('incWearables',this.checked)"> Wearables</label>`;
+      h += `<label title="Include unlearned skills as candidates (cost = skill points priced as cooking XP)."><input type="checkbox" ${settings.incSkills ? "checked" : ""} onchange="_roadmapToggle('incSkills',this.checked)"> Skills</label>`;
       h += `<label title="Treat coin-denominated costs (axes, seeds…) as free — coins aren't directly convertible to FLOWER. Auto-on when you hold >10k coins."><input type="checkbox" ${roadmapCoinsFree(settings) ? "checked" : ""} onchange="_roadmapToggle('coinsFree',this.checked)"> Coins free</label>`;
       h += `<label title="Betty seed restocks you do per day. Caps how much you can plant; fast crops (Sunflower) are seed-limited not plot-limited.">Restocks/day: <input type="number" value="${settings.restocksPerDay}" min="1" step="1" style="width:46px" onchange="_roadmapSetRestocks(this.value)"></label>`;
       h += `<label title="Optimise the buy order to maximise total FLOWER earned over this many years (reinvestment + synergy aware).">Optimise over: <input type="number" value="${settings.horizonYears}" min="1" step="10" style="width:54px" onchange="_roadmapSetHorizon(this.value)"> yr${sim.optGainPct > 0.05 ? ` <span style="color:var(--green)">+${sim.optGainPct.toFixed(1)}% vs ROI-order</span>` : ""}</label>`;
