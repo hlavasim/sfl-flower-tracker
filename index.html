@@ -5689,7 +5689,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.20</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.21</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5716,6 +5716,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.21", items: [
+          { t: "feat", text: "Power page: every mining/tree yield boost (Wood/Stone/Iron/Gold) now shows a small DOWNSTREAM line \u2014 how much cheaper it makes each later resource per unit through the tool-crafting chain (each pickaxe is made from the resources above it). Compounding: improving Wood cheapens Stone (its Pickaxe is 3 Wood), and that feeds Iron (Stone Pickaxe = Wood + Stone), Gold, Crimstone. e.g. Wood \u2192 Stone \u22120.014/u, Iron \u22120.044/u, Gold \u22120.103/u, Crimstone \u22120.192/u; Gold \u2192 Crimstone \u22120.61/u. The number is what that downstream resource\u2019s per-unit cost would drop by if you self-supply this one (you out-produce all of these, so you do); hover for the per-day totals across your nodes." },
+        ]},
         { ver: "v4.20", items: [
           { t: "feat", text: "Roadmap reframe (researched + agreed). (1) PER-RESOURCE USE-VALUE: a new Settings block lets you set what each resource (Crimstone, Sunstone, Obsidian, Oil, Gold, Iron, Stone, Wood) is really worth to YOU \u2014 used everywhere the roadmap prices it, as income AND as a tool cost. This fixes the crimstone case: mining it reads as a loss only because every Gold Pickaxe\u2019s 3 Gold is valued at full p2p as if you\u2019d sold it; drop surplus Gold (or raise Crimstone\u2019s craft value) and crimstone turns net-positive, pulling Crimstone Armor and the other crimstone boosts into the plan. Default = live p2p, so nothing changes until you tune it. (2) ONE RANKED LIST: the separate buy-order and \u2018situational\u2019 tables are merged into a single list sorted by payback, every row tagged IN PLAN (your reinvestment order, with \u03a3 cost + ETA) or CONDITIONAL (boosts a category not yet profitable \u2014 ranked by what it would add, with the reason inline). No more good-ROI items vanishing into a table below. No-boost cosmetics drop into a small collapsed tail." },
         ]},
@@ -17421,6 +17424,7 @@
     };
 
     function renderPowerContent() {
+      _powerChainCache = null;
       const { boostItems, catBoosts, capacity, p2pPrices, savedProducts, exchangeRates, stockMods, season } = powerState;
 
       const ownedCount = boostItems.filter(b => b.has).length;
@@ -18541,7 +18545,54 @@
       }
     }
 
+    // Mining/tree tool-crafting chain: each resource's pickaxe eats the ones above it, so improving (self-
+    // supplying) a resource makes every DOWNSTREAM resource cheaper per unit. Returns [{res, perUnit, perDay}].
+    const POWER_CHAIN = ["trees", "stone", "iron", "gold", "crimstone"];
+    const POWER_CHAIN_RES = { trees: "Wood", stone: "Stone", iron: "Iron", gold: "Gold", crimstone: "Crimstone" };
+    const POWER_CHAIN_TOOLMAT = { trees: {}, stone: { Wood: 3 }, iron: { Wood: 3, Stone: 5 }, gold: { Wood: 3, Iron: 5 }, crimstone: { Wood: 3, Gold: 3 } };
+    let _powerChainCache = null;
+    function powerChainDownstream(catId) {
+      const i = POWER_CHAIN.indexOf(catId);
+      if (i < 0 || i >= POWER_CHAIN.length - 1) return null;
+      if (!_powerChainCache) {
+        const { capacity, p2pPrices, exchangeRates, stockMods } = powerState;
+        const er = Object.assign({}, exchangeRates, { coinsPerSFL: Infinity });
+        const resCat = { Wood: "trees", Stone: "stone", Iron: "iron", Gold: "gold", Crimstone: "crimstone" };
+        const yc = {}, upd = {};
+        for (const cat of POWER_CHAIN) {
+          const res = POWER_CHAIN_RES[cat];
+          let units = 0; try { units = applyBoosts(cat, res, capacity, roadmapOwnedEffects(cat)).unitsPerDay || 0; } catch {}
+          upd[cat] = units;
+          let tpd = 0; try { tpd = calcToolCostPerDay(cat, capacity, er, p2pPrices, stockMods, false).toolsPerDay || 0; } catch {}
+          yc[cat] = tpd > 0 ? units / tpd : 0;
+        }
+        const embed = (Dcat, Cres) => {
+          const mats = POWER_CHAIN_TOOLMAT[Dcat] || {}; const y = yc[Dcat] || 1; let u = 0;
+          for (const m in mats) { const perD = mats[m] / y; if (m === Cres) u += perD; else if (resCat[m]) u += perD * embed(resCat[m], Cres); }
+          return u;
+        };
+        _powerChainCache = { yc, upd, embed, p2p: p2pPrices };
+      }
+      const C = _powerChainCache, Cres = POWER_CHAIN_RES[catId], out = [];
+      for (let j = i + 1; j < POWER_CHAIN.length; j++) {
+        const Dcat = POWER_CHAIN[j];
+        const perUnit = C.embed(Dcat, Cres) * (C.p2p[Cres] || 0);
+        if (perUnit > 1e-6) out.push({ res: POWER_CHAIN_RES[Dcat], perUnit, perDay: perUnit * (C.upd[Dcat] || 0) });
+      }
+      return out.length ? out : null;
+    }
     function renderPowerBoostRow(b, catId, product, val, isOwned) {
+      let downstreamHtml = "";
+      if (POWER_CHAIN.indexOf(catId) >= 0) {
+        let hasYield = false;
+        try { hasYield = getEffectsForCategory(b, catId).some(e => e.type && (e.type.indexOf("yield") >= 0 || e.type.indexOf("chance") >= 0)); } catch {}
+        const ds = hasYield ? powerChainDownstream(catId) : null;
+        if (ds) {
+          const fmt = (x) => x < 0.1 ? x.toFixed(4) : x.toFixed(3);
+          const title = "Per-day across your nodes: " + ds.map(d => d.res + " \u2212" + d.perDay.toFixed(2) + "/d").join(", ");
+          downstreamHtml = `<div class="power-boost-chain" title="${title}" style="font-size:0.5rem;color:var(--lily);margin-top:2px">\u26d3\ufe0f also cheapens (if self-supplied): ${ds.map(d => `${escHTML(d.res)} <b>\u2212${fmt(d.perUnit)}</b>/u`).join(" \u00b7 ")}</div>`;
+        }
+      }
       const imgUrl = b.type !== "Skill" ? getItemIcon(b.name) : "";
       let sflText;
       if (val.disabled) {
@@ -18585,6 +18636,7 @@
         <div class="power-boost-info">
           <div class="power-boost-name">${escHTML(b.name)} <span class="power-boost-type">${escHTML(typeLabel)}</span></div>
           <div class="power-boost-text">${escHTML(b.boost)}</div>
+          ${downstreamHtml}
           ${disabledNote}
         </div>
         <div class="power-boost-value">
