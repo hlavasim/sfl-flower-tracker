@@ -5596,7 +5596,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.94</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v3.95</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5623,6 +5623,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v3.95", items: [
+          { t: "feat", text: "Yield engine port COMPLETE (5/5). Greenhouse added to gameExtraEffects (Pharaoh Gnome +2, Rice Panda +0.25, Non La Hat +1 Rice, Olive Shield +1 / Olive Royalty Shirt +0.25 Olive); the user owns none so their greenhouse already matched (Grape/Rice/Olive 1.35 from Glass Room +0.1 + Greenhouse Gamble +0.25, skills parsed). Full status vs sfl.world (Node-harness verified on the live farm): crops Sunflower/Potato 1.85, fruits Blueberry 1.65, animals Wool 4.40/cycle, resources Wood 9.92/tool & 793/day, greenhouse 1.35 — all matching. Root fix across all: the marketplace NFT API exposed boosts for only ~6 of 180 owned items; gameExtraEffects + the resource per-node-tier model port what the API omits." },
+        ]},
         { ver: "v3.94", items: [
           { t: "fix", text: "Yield engine port (3/n): RESOURCES structural reconciliation. The game computes each resource per node as (base 1 x multiplicatives + additives) x node.multiplier + tier bonus (+0.5 tier2 / +2.5 tier3); our old model used a flat base yield (Wood 3, Stone 2.2...) x effective-node-count with no tier bonus and the wrong base. New gameResYield/gameResUnitsPerDay port the exact per-node structure (chop.ts / *Mine.ts) incl. the user boosts: wood gets Tough Tree x1.2, Lumberjack Extra, Squirrel, Nightshade Shield +0.25, Native +0.2; stone/iron/gold get their beetles + Volcano Gnome + Native. Used in the mining-strategy box, the profitability mining rows and the efficiency baseline. Crops/fruits/animals already matched; greenhouse next." },
         ]},
@@ -15467,6 +15470,13 @@
       if (ownsC("Lemon Shark")) out.push({ type: "yield_flat", value: 0.2, cat: "fruits", product: "Lemon", raw: "Lemon Shark +0.2 Lemon" });
       if (ownsC("Reveling Lemon")) out.push({ type: "yield_flat", value: 0.25, cat: "fruits", product: "Lemon", raw: "Reveling Lemon +0.25 Lemon" });
       if (ownsC("Tomato Bombard")) out.push({ type: "yield_flat", value: 1, cat: "fruits", product: "Tomato", raw: "Tomato Bombard +1 Tomato" });
+
+      // ── GREENHOUSE (game harvestGreenHouse.ts) — collectible/wearable boosts the API omits (skills parsed separately) ──
+      if (ownsC("Pharaoh Gnome")) out.push({ type: "yield_flat", value: 2, cat: "greenhouse", raw: "Pharaoh Gnome +2 greenhouse" });
+      if (ownsC("Rice Panda")) out.push({ type: "yield_flat", value: 0.25, cat: "greenhouse", product: "Rice", raw: "Rice Panda +0.25 Rice" });
+      if (farmWearableEquipped(farm, "Non La Hat")) out.push({ type: "yield_flat", value: 1, cat: "greenhouse", product: "Rice", raw: "Non La Hat +1 Rice" });
+      if (farmWearableEquipped(farm, "Olive Shield")) out.push({ type: "yield_flat", value: 1, cat: "greenhouse", product: "Olive", raw: "Olive Shield +1 Olive" });
+      if (farmWearableEquipped(farm, "Olive Royalty Shirt")) out.push({ type: "yield_flat", value: 0.25, cat: "greenhouse", product: "Olive", raw: "Olive Royalty Shirt +0.25 Olive" });
       return out;
     }
 
