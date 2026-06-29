@@ -5743,7 +5743,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.44</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.45</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5770,6 +5770,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.45", items: [
+          { t: "feat", text: "Roadmap page reorganised: it now leads with YOUR INCOME RIGHT NOW, then WHAT TO FARM / MINE NOW, then YOUR BUY PATH with a <b>Visual / Table</b> toggle (same buy order, your choice of view) \u2014 and the rest (Gifts, Deliveries, Animal feeding/lifecycle, Settings) are tucked into collapsed sections below so the page isn\u2019t a wall of tables." },
+        ]},
         { ver: "v4.44", items: [
           { t: "fix", text: "Skill recommendations were over-counting your FREE skill points (it only subtracted boost-carrying skills, missing e.g. the whole Salt tree it doesn’t know), so it marked far more skills as free than you can actually take. Now it counts ALL your owned skills, and there’s a <b>Skill pts free</b> box in Settings — set your real unspent points (e.g. 4) and the plan marks only that many skills free; the rest correctly cost the XP to level up for the point." },
         ]},
@@ -17487,55 +17490,18 @@
 
       h += roadmapIncomeHeroHtml(settings, sim, startIncome);
 
-      // ── Visual roadmap (ReactFlow): the full investment PATH (NFTs + node merges/expansion + skills + leveling) ──
-      h += `<div class="pixel-panel" style="padding:10px;margin-bottom:16px">`;
-      h += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">`;
-      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal)">VISUAL ROADMAP \u2014 buy path (skills + leveling included)</div>`;
-      h += `<span style="margin-left:auto;font-size:0.5rem;color:var(--text-dim)">scroll = move down the path \u00b7 drag to pan \u00b7 +/\u2212 to zoom</span>`;
-      h += `</div>`;
-      h += `<div id="rf-graph" style="height:760px;width:100%;border:1px solid var(--border-brown);border-radius:8px;background:radial-gradient(circle at 50% 22%, #1a130b, #0e0a06);overflow:hidden"></div>`;
-      h += `<div id="rf-fallback" style="display:none;padding:14px;font-size:0.6rem;color:var(--text-dim)">Loading the graph engine\u2026 if this stays, your browser/network blocked the CDN \u2014 the tables below have the same data.</div>`;
-      h += `</div>`;
-
       // ── What to farm / mine now (per-category profitability) ──
       const _rmCollapse = (title, inner) => inner ? `<details style="margin-bottom:12px"><summary style="cursor:pointer;padding:9px 12px;background:#1c160f;border:1px solid var(--border-brown);border-radius:8px;font-family:'Press Start 2P',monospace;font-size:0.55rem;color:var(--sunpetal)">\u25b8 ${title}</summary><div style="margin-top:8px">${inner}</div></details>` : "";
       h += roadmapProfitabilityHtml(settings);
-      h += _rmCollapse("ANIMAL FEEDING \u2014 what to feed, worth it?", roadmapAnimalFeedHtml(settings));
-      h += _rmCollapse("ANIMAL LIFECYCLE \u2014 net per level", roadmapAnimalLifecycleHtml(settings));
-      h += roadmapGiftsHtml(settings);
-      h += roadmapDeliveriesHtml(settings);
-
-      // ── Controls ──
-      h += `<details style="margin-bottom:14px"><summary style="cursor:pointer;padding:9px 12px;background:#1c160f;border:1px solid var(--border-brown);border-radius:8px;font-family:'Press Start 2P',monospace;font-size:0.55rem;color:var(--text-secondary)">⚙ SETTINGS &amp; ASSUMPTIONS — income source, efficiency sliders, restocks, ticket value, filters</summary><div style="margin-top:8px">`;
-      h += `<div class="pixel-panel" style="padding:12px;margin-bottom:16px;font-size:0.62rem;color:var(--text-secondary)">`;
-      h += `<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center">`;
-      h += `<label>Start FLOWER/day: <input type="number" id="rm-income" value="${startIncome.toFixed(2)}" step="1" min="0" style="width:88px" onchange="_roadmapSetIncome(this.value)"> <span style="color:var(--text-dim)">auto ${roadmapFmtFlower(roadmapState.currentProdDefault)}</span> <button onclick="_roadmapResetIncome()" style="font-size:0.55rem">reset</button></label>`;
-      h += `<label>Efficiency: <select onchange="_roadmapSetEffMode(this.value)"><option value="real"${settings.effMode === "real" ? " selected" : ""}>Last 7 days (actual)</option><option value="theoretical"${settings.effMode === "theoretical" ? " selected" : ""}>100% (theoretical)</option></select></label>`;
-      h += `<label><input type="checkbox" ${settings.incCollectibles ? "checked" : ""} onchange="_roadmapToggle('incCollectibles',this.checked)"> Collectibles</label>`;
-      h += `<label><input type="checkbox" ${settings.incWearables ? "checked" : ""} onchange="_roadmapToggle('incWearables',this.checked)"> Wearables</label>`;
-      h += `<label title="Include unlearned skills as candidates (cost = skill points priced as cooking XP)."><input type="checkbox" ${settings.incSkills ? "checked" : ""} onchange="_roadmapToggle('incSkills',this.checked)"> Skills</label>`;
-      h += `<label title="Your UNSPENT skill points. The plan marks this many top skills FREE (take them now); beyond that a skill costs the XP to level up for the point. Blank = auto-estimate from your level &amp; owned skills (can over-count if you have skills this tool doesn't know, e.g. Salt tree).">Skill pts free: <input type="number" min="0" step="1" value="${settings.skillPts != null ? settings.skillPts : ''}" placeholder="auto" style="width:46px" onchange="_roadmapSetSkillPts(this.value)"></label>`;
-      h += `<label title="Treat coin-denominated costs (axes, seeds…) as free — coins aren't directly convertible to FLOWER. Auto-on when you hold >10k coins."><input type="checkbox" ${roadmapCoinsFree(settings) ? "checked" : ""} onchange="_roadmapToggle('coinsFree',this.checked)"> Coins free</label>`;
-      h += `<label title="Betty seed restocks you do per day. Caps how much you can plant; fast crops (Sunflower) are seed-limited not plot-limited.">Restocks/day: <input type="number" value="${settings.restocksPerDay}" min="1" step="1" style="width:46px" onchange="_roadmapSetRestocks(this.value)"></label>`;
-      h += `<label title="What one seasonal delivery ticket is worth to YOU in FLOWER. Tickets only buy season-shop items and expire — set 0 to ignore ticket rewards in deliveries.">Ticket value: <input type="number" value="${settings.ticketValueSfl}" min="0" step="0.5" style="width:52px" onchange="_roadmapSetTicketValue(this.value)"> ${sflIcon()}</label>`;
-      h += `<label title="Optimise the buy order to maximise total FLOWER earned over this many years (reinvestment + synergy aware).">Optimise over: <input type="number" value="${settings.horizonYears}" min="1" step="10" style="width:54px" onchange="_roadmapSetHorizon(this.value)"> yr${sim.optGainPct > 0.05 ? ` <span style="color:var(--green)">+${sim.optGainPct.toFixed(1)}% vs ROI-order</span>` : ""}</label>`;
-      h += `<label><input type="checkbox" ${settings.showCosmetic ? "checked" : ""} onchange="_roadmapToggle('showCosmetic',this.checked)"> Show no-value boosts</label>`;
-      h += `<label title="Skip NFTs above this floor price (0 = no cap). Items priced over 500k FLOWER are always dropped as troll/no-liquidity listings.">Max price: <input type="number" value="${settings.maxPrice || 0}" step="100" min="0" style="width:88px" onchange="_roadmapSetMaxPrice(this.value)"> ${settings.maxPrice ? "" : "(no cap)"}</label>`;
-      h += `<button onclick="refresh()" title="Re-fetch your live farm (new purchases) + current marketplace floor prices, then rebuild the whole roadmap" style="margin-left:auto;font-size:0.6rem;padding:4px 10px;cursor:pointer">↻ Refresh live data</button>`;
+      // ── Buy path: Visual graph or Table (toggle) ──
+      h += `<div style="margin-bottom:16px">`;
+      h += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal)">YOUR BUY PATH — what to buy next, in order</div><div style="margin-left:auto;display:flex;gap:4px"><button id="bp-tab-graph" onclick="_roadmapBuyView('graph')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:var(--sunpetal);color:#1a120a;cursor:pointer;font-weight:bold">▣ Visual</button><button id="bp-tab-table" onclick="_roadmapBuyView('table')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:#241a10;color:var(--text-secondary);cursor:pointer">☰ Table</button></div></div>`;
+      h += `<div id="buy-graph">`;
+      h += `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px">scroll = move down the path · drag to pan · +/− to zoom</div>`;
+      h += `<div id="rf-graph" style="height:760px;width:100%;border:1px solid var(--border-brown);border-radius:8px;background:radial-gradient(circle at 50% 22%, #1a130b, #0e0a06);overflow:hidden"></div>`;
+      h += `<div id="rf-fallback" style="display:none;padding:14px;font-size:0.6rem;color:var(--text-dim)">Loading the graph engine… if this stays, your browser/network blocked the CDN — use the Table view.</div>`;
       h += `</div>`;
-      if (roadmapState.effMeta && roadmapState.effMeta.available) {
-        const parts = [];
-        for (const [cat, e] of Object.entries(roadmapState.effByCat)) { if (!e.measured) continue; parts.push(`${POWER_CATEGORIES[cat] ? POWER_CATEGORIES[cat].label : cat} ${Math.round(e.ratio * 100)}%`); }
-        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--text-dim)">Harvest efficiency (throughput vs theoretical), ${roadmapState.effMeta.from} → ${roadmapState.effMeta.to}, last 7 days, ${roadmapState.effMeta.snaps} snaps: ${parts.join(" · ")}${parts.length ? "" : "no harvests recorded"} · bees/fishing use avg ${Math.round((roadmapState.meanRatio || 0) * 100)}%</div>`;
-      } else {
-        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--yellow)">No recent history available — using ${settings.effMode === "theoretical" ? "theoretical" : "average activity"} rates only.</div>`;
-      }
-      h += `</div>`;
-
-      h += roadmapResourceValuePanel(settings);
-      h += roadmapEfficiencyPanel(settings);
-      h += `</div></details>`;
-
+      h += `<div id="buy-table" style="display:none">`;
       if (!(startIncome > 0)) {
         h += `<div class="pixel-panel" style="padding:10px;margin-bottom:14px;color:var(--yellow);font-size:0.6rem">Set a positive "Start FLOWER/day" to get time estimates. The ORDER below is still correct (sorted by ROI payback).</div>`;
       }
@@ -17620,6 +17586,43 @@
         • <b>Prices</b> are marketplace floor in FLOWER. Listings above 500k FLOWER (more than half of all FLOWER in existence) are treated as troll / no-liquidity and dropped; use the Max-price cap to also park other expensive items out of the plan. Estimates assume you reinvest all FLOWER into NFTs.
       </div>`;
 
+      h += `</div>`;
+      h += `</div>`;
+      h += _rmCollapse("🎁 GIFTS — best NPC flower gifts", roadmapGiftsHtml(settings));
+      h += _rmCollapse("🚚 DELIVERIES — which are worth doing", roadmapDeliveriesHtml(settings));
+      h += _rmCollapse("ANIMAL FEEDING \u2014 what to feed, worth it?", roadmapAnimalFeedHtml(settings));
+      h += _rmCollapse("ANIMAL LIFECYCLE \u2014 net per level", roadmapAnimalLifecycleHtml(settings));
+      // ── Controls ──
+      h += `<details style="margin-bottom:14px"><summary style="cursor:pointer;padding:9px 12px;background:#1c160f;border:1px solid var(--border-brown);border-radius:8px;font-family:'Press Start 2P',monospace;font-size:0.55rem;color:var(--text-secondary)">⚙ SETTINGS &amp; ASSUMPTIONS — income source, efficiency sliders, restocks, ticket value, filters</summary><div style="margin-top:8px">`;
+      h += `<div class="pixel-panel" style="padding:12px;margin-bottom:16px;font-size:0.62rem;color:var(--text-secondary)">`;
+      h += `<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center">`;
+      h += `<label>Start FLOWER/day: <input type="number" id="rm-income" value="${startIncome.toFixed(2)}" step="1" min="0" style="width:88px" onchange="_roadmapSetIncome(this.value)"> <span style="color:var(--text-dim)">auto ${roadmapFmtFlower(roadmapState.currentProdDefault)}</span> <button onclick="_roadmapResetIncome()" style="font-size:0.55rem">reset</button></label>`;
+      h += `<label>Efficiency: <select onchange="_roadmapSetEffMode(this.value)"><option value="real"${settings.effMode === "real" ? " selected" : ""}>Last 7 days (actual)</option><option value="theoretical"${settings.effMode === "theoretical" ? " selected" : ""}>100% (theoretical)</option></select></label>`;
+      h += `<label><input type="checkbox" ${settings.incCollectibles ? "checked" : ""} onchange="_roadmapToggle('incCollectibles',this.checked)"> Collectibles</label>`;
+      h += `<label><input type="checkbox" ${settings.incWearables ? "checked" : ""} onchange="_roadmapToggle('incWearables',this.checked)"> Wearables</label>`;
+      h += `<label title="Include unlearned skills as candidates (cost = skill points priced as cooking XP)."><input type="checkbox" ${settings.incSkills ? "checked" : ""} onchange="_roadmapToggle('incSkills',this.checked)"> Skills</label>`;
+      h += `<label title="Your UNSPENT skill points. The plan marks this many top skills FREE (take them now); beyond that a skill costs the XP to level up for the point. Blank = auto-estimate from your level &amp; owned skills (can over-count if you have skills this tool doesn't know, e.g. Salt tree).">Skill pts free: <input type="number" min="0" step="1" value="${settings.skillPts != null ? settings.skillPts : ''}" placeholder="auto" style="width:46px" onchange="_roadmapSetSkillPts(this.value)"></label>`;
+      h += `<label title="Treat coin-denominated costs (axes, seeds…) as free — coins aren't directly convertible to FLOWER. Auto-on when you hold >10k coins."><input type="checkbox" ${roadmapCoinsFree(settings) ? "checked" : ""} onchange="_roadmapToggle('coinsFree',this.checked)"> Coins free</label>`;
+      h += `<label title="Betty seed restocks you do per day. Caps how much you can plant; fast crops (Sunflower) are seed-limited not plot-limited.">Restocks/day: <input type="number" value="${settings.restocksPerDay}" min="1" step="1" style="width:46px" onchange="_roadmapSetRestocks(this.value)"></label>`;
+      h += `<label title="What one seasonal delivery ticket is worth to YOU in FLOWER. Tickets only buy season-shop items and expire — set 0 to ignore ticket rewards in deliveries.">Ticket value: <input type="number" value="${settings.ticketValueSfl}" min="0" step="0.5" style="width:52px" onchange="_roadmapSetTicketValue(this.value)"> ${sflIcon()}</label>`;
+      h += `<label title="Optimise the buy order to maximise total FLOWER earned over this many years (reinvestment + synergy aware).">Optimise over: <input type="number" value="${settings.horizonYears}" min="1" step="10" style="width:54px" onchange="_roadmapSetHorizon(this.value)"> yr${sim.optGainPct > 0.05 ? ` <span style="color:var(--green)">+${sim.optGainPct.toFixed(1)}% vs ROI-order</span>` : ""}</label>`;
+      h += `<label><input type="checkbox" ${settings.showCosmetic ? "checked" : ""} onchange="_roadmapToggle('showCosmetic',this.checked)"> Show no-value boosts</label>`;
+      h += `<label title="Skip NFTs above this floor price (0 = no cap). Items priced over 500k FLOWER are always dropped as troll/no-liquidity listings.">Max price: <input type="number" value="${settings.maxPrice || 0}" step="100" min="0" style="width:88px" onchange="_roadmapSetMaxPrice(this.value)"> ${settings.maxPrice ? "" : "(no cap)"}</label>`;
+      h += `<button onclick="refresh()" title="Re-fetch your live farm (new purchases) + current marketplace floor prices, then rebuild the whole roadmap" style="margin-left:auto;font-size:0.6rem;padding:4px 10px;cursor:pointer">↻ Refresh live data</button>`;
+      h += `</div>`;
+      if (roadmapState.effMeta && roadmapState.effMeta.available) {
+        const parts = [];
+        for (const [cat, e] of Object.entries(roadmapState.effByCat)) { if (!e.measured) continue; parts.push(`${POWER_CATEGORIES[cat] ? POWER_CATEGORIES[cat].label : cat} ${Math.round(e.ratio * 100)}%`); }
+        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--text-dim)">Harvest efficiency (throughput vs theoretical), ${roadmapState.effMeta.from} → ${roadmapState.effMeta.to}, last 7 days, ${roadmapState.effMeta.snaps} snaps: ${parts.join(" · ")}${parts.length ? "" : "no harvests recorded"} · bees/fishing use avg ${Math.round((roadmapState.meanRatio || 0) * 100)}%</div>`;
+      } else {
+        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--yellow)">No recent history available — using ${settings.effMode === "theoretical" ? "theoretical" : "average activity"} rates only.</div>`;
+      }
+      h += `</div>`;
+
+      h += roadmapResourceValuePanel(settings);
+      h += roadmapEfficiencyPanel(settings);
+      h += `</div></details>`;
+
       try { window.__roadmapFlowData = roadmapBuildFlowData(sim, settings); } catch (e) { window.__roadmapFlowData = { roadmap: { nodes: [], edges: [] }, todo: { nodes: [], edges: [] } }; }
       try { window.__roadmapFlowData.mineChain = roadmapBuildMineFlowData(settings); } catch (e) { if (window.__roadmapFlowData) window.__roadmapFlowData.mineChain = { nodes: [], edges: [] }; }
       el.innerHTML = h;
@@ -17654,6 +17657,18 @@
       if (window.__mountFlow) { try { window.__mountFlow("rf-graph", window.__flowKind || "roadmap"); } catch (e) { g.innerHTML = '<div style="padding:14px;color:var(--red);font-size:0.6rem">Render error: ' + ((e && e.message) || e) + '</div>'; } const mg = document.getElementById("rf-mine"); if (mg) { try { window.__mountFlow("rf-mine", "mineChain"); } catch (e) {} } return; }
       if (attempt < 80) { setTimeout(() => window._roadmapMountFlow(attempt + 1), 150); }
       else { const f = document.getElementById("rf-fallback"); if (f) f.style.display = "block"; }
+    };
+    window._roadmapBuyView = function(v) {
+      const g = document.getElementById("buy-graph"), tb = document.getElementById("buy-table");
+      const ta = document.getElementById("bp-tab-graph"), tt = document.getElementById("bp-tab-table");
+      if (!g || !tb) return;
+      const showG = v !== "table";
+      g.style.display = showG ? "block" : "none"; tb.style.display = showG ? "none" : "block";
+      if (ta && tt) {
+        ta.style.background = showG ? "var(--sunpetal)" : "#241a10"; ta.style.color = showG ? "#1a120a" : "var(--text-secondary)"; ta.style.fontWeight = showG ? "bold" : "normal";
+        tt.style.background = !showG ? "var(--sunpetal)" : "#241a10"; tt.style.color = !showG ? "#1a120a" : "var(--text-secondary)"; tt.style.fontWeight = !showG ? "bold" : "normal";
+      }
+      if (showG && window.__mountFlow) { try { window.__mountFlow("rf-graph", window.__flowKind || "roadmap"); } catch (e) {} }
     };
     window._roadmapFlowTab = function(kind) {
       window.__flowKind = kind;
