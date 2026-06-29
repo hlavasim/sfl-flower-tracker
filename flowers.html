@@ -5743,7 +5743,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.43</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.44</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5770,6 +5770,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.44", items: [
+          { t: "fix", text: "Skill recommendations were over-counting your FREE skill points (it only subtracted boost-carrying skills, missing e.g. the whole Salt tree it doesn’t know), so it marked far more skills as free than you can actually take. Now it counts ALL your owned skills, and there’s a <b>Skill pts free</b> box in Settings — set your real unspent points (e.g. 4) and the plan marks only that many skills free; the rest correctly cost the XP to level up for the point." },
+        ]},
         { ver: "v4.43", items: [
           { t: "fix", text: "Income panel trimmed to just YOUR INCOME RIGHT NOW (the BIGGEST LEVERS list is gone — the full ranked plan is still in the buy table). WHAT TO FARM / MINE columns (gives/cost/net) now line up across every category group. And each mining row now also shows its SOLO net — what the ore nets if you BUY its direct inputs at market instead of self-mining the whole chain (e.g. Gold: chain +0.98 self-mined vs solo +2.25 if you buy the Iron)." },
         ]},
@@ -15934,6 +15937,7 @@
         incCollectibles: s.incCollectibles !== false,
         incWearables: s.incWearables !== false,
         incSkills: s.incSkills !== false,
+        skillPts: (typeof s.skillPts === "number" && s.skillPts >= 0) ? s.skillPts : null,
         showCosmetic: !!s.showCosmetic,
         maxPrice: (typeof s.maxPrice === "number" && s.maxPrice >= 0) ? s.maxPrice : 0,
         coinsFree: (s.coinsFree === true || s.coinsFree === false) ? s.coinsFree : undefined,
@@ -17130,9 +17134,10 @@
       // live in catBoostsW, so the reset snapshot + marginal recompute cover them automatically.
       if (settings.incSkills !== false) {
         const lvl = getBumpkinLevel((powerState.farm.bumpkin && powerState.farm.bumpkin.experience) || 0);
-        let spent = 0; const seenO = new Set();
-        for (const cat of Object.keys(catBoostsW)) for (const c of catBoostsW[cat]) { if (c.type === "Skill" && c.has && !seenO.has(c.name)) { seenO.add(c.name); spent += (c.skillPoints || 0); } }
-        let freePts = Math.max(0, (lvl - 1) - spent);
+        let spent = 0; const _ownSk = (powerState.farm.bumpkin && powerState.farm.bumpkin.skills) || {};
+        for (const _sn of Object.keys(_ownSk)) { const _sd = SKILL_TREE_DATA[_sn]; spent += _sd ? (_sd.points || 0) : 0; }
+        const _autoFree = Math.max(0, (lvl - 1) - spent);
+        let freePts = (settings.skillPts != null && isFinite(settings.skillPts)) ? Math.max(0, settings.skillPts) : _autoFree;
         const unl = []; const seenU = new Set();
         for (const cat of Object.keys(catBoostsW)) for (const c of catBoostsW[cat]) { if (c.type === "Skill" && !c.has && !seenU.has(c.name)) { seenU.add(c.name); const mv = roadmapItemValue(c, catBoostsW, settings); if (mv > 0) unl.push({ c, mv }); } }
         unl.sort((a, b) => (b.mv / (b.c.skillPoints || 1)) - (a.mv / (a.c.skillPoints || 1)));
@@ -17509,6 +17514,7 @@
       h += `<label><input type="checkbox" ${settings.incCollectibles ? "checked" : ""} onchange="_roadmapToggle('incCollectibles',this.checked)"> Collectibles</label>`;
       h += `<label><input type="checkbox" ${settings.incWearables ? "checked" : ""} onchange="_roadmapToggle('incWearables',this.checked)"> Wearables</label>`;
       h += `<label title="Include unlearned skills as candidates (cost = skill points priced as cooking XP)."><input type="checkbox" ${settings.incSkills ? "checked" : ""} onchange="_roadmapToggle('incSkills',this.checked)"> Skills</label>`;
+      h += `<label title="Your UNSPENT skill points. The plan marks this many top skills FREE (take them now); beyond that a skill costs the XP to level up for the point. Blank = auto-estimate from your level &amp; owned skills (can over-count if you have skills this tool doesn't know, e.g. Salt tree).">Skill pts free: <input type="number" min="0" step="1" value="${settings.skillPts != null ? settings.skillPts : ''}" placeholder="auto" style="width:46px" onchange="_roadmapSetSkillPts(this.value)"></label>`;
       h += `<label title="Treat coin-denominated costs (axes, seeds…) as free — coins aren't directly convertible to FLOWER. Auto-on when you hold >10k coins."><input type="checkbox" ${roadmapCoinsFree(settings) ? "checked" : ""} onchange="_roadmapToggle('coinsFree',this.checked)"> Coins free</label>`;
       h += `<label title="Betty seed restocks you do per day. Caps how much you can plant; fast crops (Sunflower) are seed-limited not plot-limited.">Restocks/day: <input type="number" value="${settings.restocksPerDay}" min="1" step="1" style="width:46px" onchange="_roadmapSetRestocks(this.value)"></label>`;
       h += `<label title="What one seasonal delivery ticket is worth to YOU in FLOWER. Tickets only buy season-shop items and expire — set 0 to ignore ticket rewards in deliveries.">Ticket value: <input type="number" value="${settings.ticketValueSfl}" min="0" step="0.5" style="width:52px" onchange="_roadmapSetTicketValue(this.value)"> ${sflIcon()}</label>`;
@@ -17636,6 +17642,7 @@
     };
     window._roadmapSetGlobal = function(v) { const n = parseFloat(v) / 100; saveRoadmapSettings({ globalActivity: isFinite(n) ? n : null }); renderRoadmapContent(); };
     window._roadmapToggle = function(key, val) { const p = {}; p[key] = !!val; saveRoadmapSettings(p); renderRoadmapContent(); };
+    window._roadmapSetSkillPts = function(v) { const n = parseFloat(v); saveRoadmapSettings({ skillPts: (v !== "" && isFinite(n) && n >= 0) ? Math.floor(n) : null }); renderRoadmapContent(); };
     window._roadmapSetMaxPrice = function(v) { const n = parseFloat(v); saveRoadmapSettings({ maxPrice: isFinite(n) && n >= 0 ? n : 0 }); renderRoadmapContent(); };
     window._roadmapSetRestocks = function(v) { const n = parseFloat(v); saveRoadmapSettings({ restocksPerDay: isFinite(n) && n > 0 ? n : 2 }); renderRoadmapContent(); };
     window._roadmapSetTicketValue = function(v) { const n = parseFloat(v); saveRoadmapSettings({ ticketValueSfl: isFinite(n) && n >= 0 ? n : 1 }); renderRoadmapContent(); };
