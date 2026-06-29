@@ -2729,12 +2729,15 @@
                 h("span", { style:{ fontFamily:CF, fontSize:14, fontWeight:"bold", color:C.green, marginLeft:"auto" } }, "= " + fmt(data.valuePerMine) + " ◈")),
               base
                 ? h("div", { style:{ fontFamily:CF, fontSize:10.5, color:C.green, marginTop:6, paddingTop:6, borderTop:"1px dashed "+C.brown } }, "✅ no tool cost — just a free Axe")
-                : h("div", { style:{ display:"flex", alignItems:"center", gap:7, flexWrap:"wrap", marginTop:6, paddingTop:6, borderTop:"1px dashed "+C.brown } },
-                    h("span", { style:{ fontFamily:CF, fontSize:9.5, color:C.dim, textTransform:"uppercase" } }, "its tool eats"),
-                    data.inputs.map((inp, i) => h("span", { key:i, style:{ display:"inline-flex", alignItems:"center", gap:2, background:"#241a10", borderRadius:4, padding:"1px 4px" } },
-                      h("span", { style:{ fontFamily:CF, fontSize:12, fontWeight:"bold", color:C.red } }, inp.qty + "×"),
-                      inp.icon ? h("img", { src:inp.icon, onError:hideImg, style:{ width:16, height:16, imageRendering:"pixelated" } }) : null,
-                      h("span", { style:{ fontFamily:CF, fontSize:10, color:C.sec } }, inp.res)))),
+                : h("div", { style:{ marginTop:6, paddingTop:6, borderTop:"1px dashed "+C.brown } },
+                    h("div", { style:{ display:"flex", alignItems:"baseline" } },
+                      h("span", { style:{ fontFamily:CF, fontSize:9.5, color:C.dim, textTransform:"uppercase" } }, "its tool eats"),
+                      h("span", { style:{ marginLeft:"auto", fontFamily:CF, fontSize:13, fontWeight:"bold", color:C.red } }, "= " + fmt(data.eatCost) + " ◈")),
+                    h("div", { style:{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", marginTop:3 } },
+                      data.inputs.map((inp, i) => h("span", { key:i, style:{ display:"inline-flex", alignItems:"center", gap:2, background:"#241a10", borderRadius:4, padding:"1px 4px" } },
+                        h("span", { style:{ fontFamily:CF, fontSize:12, fontWeight:"bold", color:C.red } }, inp.qty + "×"),
+                        inp.icon ? h("img", { src:inp.icon, onError:hideImg, style:{ width:16, height:16, imageRendering:"pixelated" } }) : null,
+                        h("span", { style:{ fontFamily:CF, fontSize:10, color:C.sec } }, inp.res))))),
               h("div", { style:{ marginTop:8, padding:"6px 8px", borderRadius:7, background:(good?C.green:C.red)+"22", border:"1px solid "+(good?C.green:C.red)+"66", textAlign:"center" } },
                 base
                   ? h("span", { style:{ fontFamily:CF, fontSize:11, fontWeight:"bold", color:C.green } }, "▲ free to mine — always worth it")
@@ -2752,7 +2755,7 @@
             if (roots[elId]) { try { roots[elId].unmount(); } catch (e) {} }
             const root = createRoot(el); roots[elId] = root;
             const isMine = kind === "mineChain";
-            const common = { nodes:fd.nodes, edges:edges, nodeTypes:nodeTypes, proOptions:{ hideAttribution:true }, defaultEdgeOptions:{ type:"smoothstep" }, nodesDraggable:true, panOnDrag:true };
+            const common = { nodes:fd.nodes, edges:edges, nodeTypes:nodeTypes, proOptions:{ hideAttribution:true }, defaultEdgeOptions:{ type:"smoothstep" }, nodesDraggable:true, nodesConnectable:false, elementsSelectable:true, panOnDrag:true };
             const rfProps = isMine
               ? Object.assign({}, common, { fitView:true, fitViewOptions:{ padding:0.16 }, minZoom:0.2, maxZoom:2.5, panOnScroll:false, zoomOnScroll:true, zoomOnPinch:true, zoomOnDoubleClick:true })
               : Object.assign({}, common, { fitView:false, defaultViewport:{ x:40, y:30, zoom:1 }, minZoom:1, maxZoom:1, panOnScroll:true, panOnScrollSpeed:0.9, zoomOnScroll:false, zoomOnPinch:false, zoomOnDoubleClick:false, onInit:(inst)=>{ try { inst.setViewport({ x:40, y:30, zoom:1 }, { duration:0 }); } catch (e) {} } });
@@ -5731,7 +5734,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.36</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.37</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5758,6 +5761,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.37", items: [
+          { t: "feat", text: "Mining-chain tiles now show the SELL-VALUE of what each tool eats (red, next to \u201cits tool eats\u201d), right beside the green value of what the mine gives \u2014 so you can see at a glance when the inputs are worth more than the ore (e.g. Crimstone gives ~1.08\u25c8 but its 3 Wood + 3 Gold are worth ~1.2\u25c8 \u2192 don\u2019t mine). Removed Oil from the graph (it cluttered it). Tiles can now be dragged around to rearrange the layout." },
+        ]},
         { ver: "v4.36", items: [
           { t: "fix", text: "Mining-chain graph reworked. WOOD now sits on top with lines fanning down into every resource \u2014 because Wood goes into every pickaxe & drill \u2014 while the tier chain (Stone\u2192Iron\u2192Gold\u2192Crimstone, +Oil) runs in the row below. The graph is now zoomable (scroll, pinch, or the +/\u2212 buttons) and auto-fits so the whole thing \u2014 every tile, arrow and label \u2014 is visible at once, and the tiles are spread out so the arrow labels no longer overlap them." },
         ]},
@@ -16847,8 +16853,8 @@
       h += `<div style="margin:2px 0 14px">
         <div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin-bottom:5px">⛏️ MINING CHAIN — does climbing the chain pay?</div>
         ${_verdict ? `<div style="font-size:0.62rem;color:var(--text-primary);background:#1a140c;border:1px solid var(--border-brown);border-left:3px solid var(--green);border-radius:6px;padding:7px 10px;margin-bottom:7px;line-height:1.5">${_verdict}</div>` : ``}
-        <div id="rf-mine" style="height:520px;border:1px solid var(--border-brown);border-radius:8px;background:#13100a;overflow:hidden"></div>
-        <div style="font-size:0.52rem;color:var(--text-dim);margin-top:4px;line-height:1.6">Each tile = <b>one mine</b> of that resource — what it yields (+ its FLOWER value) and what its tool eats. <b style="color:var(--green)">Green ▲</b> = worth mining (beats selling its inputs) · <b style="color:var(--red)">red ▼</b> = a loss, sell the inputs instead. <b>Wood sits on top</b> — its lines fan down into every tool; the row below is the tier chain Stone → Iron → Gold → Crimstone (+ Oil). Arrows are labelled with what each step consumes. <b>Scroll / pinch / the +/− buttons to zoom</b>, drag to pan.</div>
+        <div id="rf-mine" style="height:430px;border:1px solid var(--border-brown);border-radius:8px;background:#13100a;overflow:hidden"></div>
+        <div style="font-size:0.52rem;color:var(--text-dim);margin-top:4px;line-height:1.6">Each tile = <b>one mine</b> of that resource — what it yields (+ its FLOWER value) and what its tool eats. <b style="color:var(--green)">Green ▲</b> = worth mining (beats selling its inputs) · <b style="color:var(--red)">red ▼</b> = a loss, sell the inputs instead. <b>Wood sits on top</b> — its lines fan down into every tool; the row below is the tier chain Stone → Iron → Gold → Crimstone. Each tile shows the green <b>output value</b> vs the red <b>sell-value of what its tool eats</b> \u2014 if the red is bigger, don\u2019t mine it. Arrows are labelled with what each step consumes. <b>Scroll / pinch / the +/− buttons to zoom</b>, drag the background to pan or drag a tile to move it.</div>
       </div>`;
       for (const g of groups) {
         if (!g.rows.length) continue;
@@ -17377,11 +17383,11 @@
       const ch = roadmapMiningChain(settings);
       const cap = powerState.capacity, p2p = roadmapPrices(settings);
       // Wood on top (feeds every tool); the rest in a row below = the tier chain; Oil branches under Iron.
-      const POS = { trees:{x:688,y:0}, stone:{x:0,y:300}, iron:{x:344,y:300}, gold:{x:688,y:300}, crimstone:{x:1032,y:300}, oil:{x:344,y:600} };
-      const NONWOOD = { iron:"stone", gold:"iron", crimstone:"gold", oil:"iron" };
+      const POS = { trees:{x:688,y:0}, stone:{x:0,y:300}, iron:{x:344,y:300}, gold:{x:688,y:300}, crimstone:{x:1032,y:300} };
+      const NONWOOD = { iron:"stone", gold:"iron", crimstone:"gold" };
       const nodes = [], edges = [];
       const E = (src, tgt, sh, th, lbl, tgtMined) => edges.push({ id: tgt + "<" + src + "@" + sh, source: src, target: tgt, sourceHandle: sh, targetHandle: th, label: lbl, stroke: tgtMined ? "#30D158" : "#FF6B6B", dashed: !tgtMined, animated: !!tgtMined });
-      for (const cat of ["trees", "stone", "iron", "gold", "crimstone", "oil"]) {
+      for (const cat of ["trees", "stone", "iron", "gold", "crimstone"]) {
         const r = ch.byCat[cat]; if (!r || !(r.produced > 0)) continue;
         let tpd = 0; try { tpd = miningToolsPerDay(cat, cap); } catch {}
         const yieldPerMine = tpd > 0 ? r.produced / tpd : r.produced;
@@ -17390,7 +17396,7 @@
                             .concat(Object.entries(T.mat || {}).map(([m, q]) => ({ res: m, qty: q, icon: getItemIcon(m) }))) : [];
         nodes.push({ id: cat, type: "mineNode", position: POS[cat] || { x: 0, y: 0 }, data: {
           res: MINE_RES[cat], icon: getItemIcon(MINE_RES[cat]), yieldPerMine, valuePerMine: yieldPerMine * (p2p[MINE_RES[cat]] || 0),
-          inputs, verdict: r.verdict, mined: r.mined, feeds: r.feeds ? MINE_RES[r.feeds] : null, dailyProfit: r.dailyProfit } });
+          inputs, eatCost: inputs.reduce((s, i) => s + i.qty * (p2p[i.res] || 0), 0), verdict: r.verdict, mined: r.mined, feeds: r.feeds ? MINE_RES[r.feeds] : null, dailyProfit: r.dailyProfit } });
         if (cat === "trees" || !T || !T.chain) continue;
         const oilCat = cat === "oil";
         // Wood feeds every tool — a line down from Wood into this resource
