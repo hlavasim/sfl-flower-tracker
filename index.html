@@ -5743,7 +5743,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.55</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.56</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5770,6 +5770,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.56", items: [
+          { t: "fix", text: "Skills view now FLOORS loss-making categories like the income engine does. A skill that only softens a still-negative activity (e.g. Sheepwise Diet when sheep are −50/d → −23/d — still a loss) no longer shows a fake +21/day; it adds 0 real FLOWER and moves to a new ◆ ONLY IF YOU FIX THAT ACTIVITY group that shows the absolute net so you can see it is still below break-even." },
+        ]},
         { ver: "v4.55", items: [
           { t: "feat", text: "New <b>Skills</b> view on the roadmap (3rd toggle next to Visual / Table). Every Bumpkin skill with the FLOWER/day it would add (or cost) on YOUR farm, at your chosen efficiency. Skills that boost one resource and nerf another show BOTH sides as chips (e.g. Iron +0.55/d, Stone \u22120.13/d) and the net. Grouped into \u2b50 worth-getting (not owned, positive), \u2713 owned (what each gives now), and a collapsed list of no-impact skills. Data from the full skill tree (sfl.world/tools/skills)." },
         ]},
@@ -17075,8 +17078,8 @@
     // Stone down, and the true net (which can be negative -> a skill not worth taking). Works for owned skills
     // too: it removes the skill from the baseline by NAME, so you see what it currently contributes.
     function roadmapSkillBreakdown(clone, catBoostsW, settings) {
-      if (!clone) return { parts: [], net: 0 };
-      const parts = [];
+      if (!clone) return { parts: [], net: 0, cond: [] };
+      const parts = [], cond = [];
       const _exV = (settings.excludeCats || []);
       const nm = clone.name;
       const ownedNo = (cat) => (catBoostsW[cat] || []).filter(b => b.has && !b.isDisabled && b.name !== nm).flatMap(b => b.effects.filter(e => e.cat === cat));
@@ -17098,19 +17101,24 @@
           if (Math.abs(d) > 1e-6) parts.push({ cat, label: lbl(cat), delta: d });
         }
       }
-      // Non-mining categories: signed per-category delta (NOT floored).
+      // Non-mining: FLOOR each side at 0 — a loss-making category nets 0 in the income engine (you wouldn't
+      // run it), so a skill that only SOFTENS a still-negative category adds no real FLOWER. Such cases go to
+      // `cond` with the absolute net so the UI can show "still below break-even".
       for (const cat of clone.categories) {
         if (ROADMAP_MINING_CATS.indexOf(cat) >= 0) continue;
         if (_exV.indexOf(cat) >= 0) continue;
         if (!POWER_CATEGORIES[cat] || !POWER_CATEGORIES[cat].quantifiable) continue;
         const itemEff = clone.effects.filter(e => e.cat === cat);
         if (!itemEff.length) continue;
-        const base = ownedNo(cat);
-        const d = (roadmapCatNet(cat, base.concat(itemEff), settings) - roadmapCatNet(cat, base, settings)) * roadmapEffFactor(cat, settings);
-        if (Math.abs(d) > 1e-6) parts.push({ cat, label: lbl(cat), delta: d });
+        const base = ownedNo(cat), ef = roadmapEffFactor(cat, settings);
+        const nw = roadmapCatNet(cat, base, settings), ni = roadmapCatNet(cat, base.concat(itemEff), settings);
+        const real = (Math.max(0, ni) - Math.max(0, nw)) * ef;
+        const raw = (ni - nw) * ef;
+        if (Math.abs(real) > 1e-6) parts.push({ cat, label: lbl(cat), delta: real });
+        else if (Math.abs(raw) > 1e-6 && ni < 0) cond.push({ cat, label: lbl(cat), netWith: ni * ef, netWithout: nw * ef, raw });
       }
       const net = parts.reduce((s, p) => s + p.delta, 0);
-      return { parts, net };
+      return { parts, net, cond };
     }
 
     function roadmapSkillsHtml(settings) {
@@ -17120,7 +17128,8 @@
       const rows = skills.map(c => ({ c, bd: roadmapSkillBreakdown(c, catBoostsW, settings) }));
       const owned = rows.filter(r => r.c.has).sort((a, b) => b.bd.net - a.bd.net);
       const reco = rows.filter(r => !r.c.has && r.bd.net > EPS).sort((a, b) => b.bd.net - a.bd.net);
-      const meh = rows.filter(r => !r.c.has && r.bd.net <= EPS).sort((a, b) => b.bd.net - a.bd.net);
+      const condR = rows.filter(r => !r.c.has && r.bd.net <= EPS && r.bd.cond && r.bd.cond.length).sort((a, b) => (b.bd.cond[0].raw || 0) - (a.bd.cond[0].raw || 0));
+      const meh = rows.filter(r => !r.c.has && r.bd.net <= EPS && !(r.bd.cond && r.bd.cond.length)).sort((a, b) => b.bd.net - a.bd.net);
       const fmt = (v) => (v >= 0 ? "+" : "−") + roadmapFmtFlower(Math.abs(v));
       const effLbl = settings.effMode === "real" ? "your Last-7-days activity" : "100% theoretical (full-time)";
       const TREE_COLOR = { "Crops": "#7fe0a0", "Trees": "#b98a5a", "Mining": "#9aa6b2", "Cooking": "#e8a060", "Animals": "#e6c25a", "Fishing": "#6ab0e0", "Greenhouse": "#8fd98f", "Fruit Patch": "#e89a5a", "Bees & Flowers": "#e08fd0", "Machinery": "#c0a0e0" };
@@ -17141,6 +17150,7 @@
             </div>
             <div style="font-size:0.54rem;color:var(--text-dim);margin-top:3px;line-height:1.45">${escHTML((c.boost || "").split("\n").join(" · "))}</div>
             ${ps.length ? `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">${ps.map(chip).join("")}</div>` : ``}
+            ${(bd.cond && bd.cond.length) ? `<div style="font-size:0.5rem;color:#e8a060;margin-top:5px;line-height:1.5">⚠ ${bd.cond.map(cn => `${escHTML(cn.label)} now <b>${fmt(cn.netWith)}/d</b> (was ${fmt(cn.netWithout)})`).join(", ")} — still loss-making, so no real FLOWER until that activity is profitable.</div>` : ``}
           </div>
           <div style="text-align:right;min-width:74px">
             <div style="font-size:0.95rem;font-weight:bold;color:${netColor}">${fmt(bd.net)}</div>
@@ -17152,7 +17162,12 @@
       h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:12px;line-height:1.6">Every Bumpkin skill and the FLOWER/day it adds (or costs) on <b>your</b> farm — at <b>${effLbl}</b> efficiency (change it above). A skill that boosts one resource and nerfs another shows both sides and the net. <a href="https://sfl.world/tools/skills/" target="_blank" style="color:var(--sunpetal);text-decoration:none">full skill tree ↗</a></div>`;
       h += `<div class="pixel-font" style="font-size:0.55rem;color:var(--green);margin:4px 0 8px">⭐ WORTH GETTING — not owned, positive impact (${reco.length})</div>`;
       h += reco.length ? reco.map(card).join("") : `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px">None right now — every impactful skill is already yours.</div>`;
-      const ownImp = owned.filter(r => Math.abs(r.bd.net) > EPS), ownZero = owned.filter(r => Math.abs(r.bd.net) <= EPS);
+      if (condR.length) {
+        h += `<div class="pixel-font" style="font-size:0.55rem;color:#e8a060;margin:18px 0 6px">◆ ONLY IF YOU FIX THAT ACTIVITY — touches a loss-making category (${condR.length})</div>`;
+        h += `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px">These soften an animal/crop type that currently LOSES FLOWER on your farm — so they add nothing until you make it profitable (better levels/boosts) or you simply don't run it. The red number is where that category still sits.</div>`;
+        h += condR.map(card).join("");
+      }
+      const ownImp = owned.filter(r => Math.abs(r.bd.net) > EPS || (r.bd.cond && r.bd.cond.length)), ownZero = owned.filter(r => Math.abs(r.bd.net) <= EPS && !(r.bd.cond && r.bd.cond.length));
       h += `<div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin:18px 0 8px">✓ OWNED — what each adds (or costs) right now (${owned.length})</div>`;
       h += ownImp.length ? ownImp.map(card).join("") : `<div style="font-size:0.55rem;color:var(--text-dim)">No owned skill has a measurable FLOWER/day impact.</div>`;
       if (ownZero.length) h += `<details style="margin:6px 0 0"><summary style="cursor:pointer;font-size:0.52rem;color:var(--text-dim)">+ ${ownZero.length} owned skills with no FLOWER/day impact (cosmetic / XP / activity you don’t run)</summary><div style="margin-top:6px">` + ownZero.map(card).join("") + `</div></details>`;
