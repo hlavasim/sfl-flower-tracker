@@ -2706,7 +2706,14 @@
             rows: [ { k:"Cost (ingredients)", v:"~"+fmt(data.cost)+" ◈", c:C.sec }, { k:"Gives", v:"+1 skill point", c:C.green } ],
             foot:{ l:"Σ spent "+fmt(data.cumCost)+" ◈", r:"" } });
         }
-        const mineHandles = () => [ h(Handle, { key:"t", id:"t", type:"target", position:Position.Top, style:{ opacity:0, border:0 } }), h(Handle, { key:"b", id:"b", type:"source", position:Position.Bottom, style:{ opacity:0, border:0 } }), h(Handle, { key:"l", id:"l", type:"target", position:Position.Left, style:{ opacity:0, border:0 } }), h(Handle, { key:"r", id:"r", type:"source", position:Position.Right, style:{ opacity:0, border:0 } }) ];
+        const mineHandles = () => [
+          h(Handle, { key:"t", id:"t", type:"target", position:Position.Top, style:{ opacity:0, border:0 } }),
+          h(Handle, { key:"l", id:"l", type:"target", position:Position.Left, style:{ opacity:0, border:0 } }),
+          h(Handle, { key:"r", id:"r", type:"source", position:Position.Right, style:{ opacity:0, border:0 } }),
+          h(Handle, { key:"b0", id:"b0", type:"source", position:Position.Bottom, style:{ opacity:0, border:0, left:"12%" } }),
+          h(Handle, { key:"b1", id:"b1", type:"source", position:Position.Bottom, style:{ opacity:0, border:0, left:"38%" } }),
+          h(Handle, { key:"b2", id:"b2", type:"source", position:Position.Bottom, style:{ opacity:0, border:0, left:"62%" } }),
+          h(Handle, { key:"b3", id:"b3", type:"source", position:Position.Bottom, style:{ opacity:0, border:0, left:"88%" } }) ];
         function MineNode({ data }) {
           const vc = data.verdict === "sell" ? C.green : (data.verdict === "use" ? C.blue : C.red);
           const vlabel = data.verdict === "sell" ? "✓ MINE, THEN SELL" : (data.verdict === "use" ? ("MINE → FEEDS " + (data.feeds || "").toUpperCase()) : "✗ DO NOT MINE");
@@ -5734,7 +5741,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.38</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.39</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5761,6 +5768,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.39", items: [
+          { t: "fix", text: "Mine-graph Wood edges no longer overlap \u2014 Wood now has 4 separate exit points across its base (one per resource, ordered left\u2192right) and the Wood lines curve out as a fan instead of stacking on top of each other. Wood is centred over the row." },
+        ]},
         { ver: "v4.38", items: [
           { t: "fix", text: "BIG mining-cost correction. The game charges a merged Tier-N node N tools per mine (a Tier-3 stone eats 16 Pickaxes, confirmed in the game source), so tool cost is now charged on your EFFECTIVE (multiplier-weighted) node count, not the physical count. This also makes the per-mine numbers normalise to a single T1 node (Stone now reads ~1.9/mine, not the merge-inflated 5.08), so \u201cyields X for 3 Wood\u201d is finally apples-to-apples. Honest effect: theoretical mining income drops (it was being over-counted)." },
           { t: "fix", text: "Efficiency now matches the Nodes page 1:1 \u2014 the roadmap uses the exact same session-based formula (harvest sessions \u00f7 theoretical cycles, 30-min merge, clamp 1.5) over the last 7 days, instead of the old throughput number. Toggle relabelled \u201cLast 7 days (actual)\u201d / \u201c100% (theoretical)\u201d." },
@@ -17390,10 +17400,11 @@
       const cap = powerState.capacity, p2p = roadmapPrices(settings);
       const _cf = roadmapCoinsFree(settings), _er = powerState.exchangeRates;
       // Wood on top (feeds every tool); the rest in a row below = the tier chain; Oil branches under Iron.
-      const POS = { trees:{x:688,y:0}, stone:{x:0,y:300}, iron:{x:344,y:300}, gold:{x:688,y:300}, crimstone:{x:1032,y:300} };
+      const POS = { trees:{x:516,y:0}, stone:{x:0,y:300}, iron:{x:344,y:300}, gold:{x:688,y:300}, crimstone:{x:1032,y:300} };
       const NONWOOD = { iron:"stone", gold:"iron", crimstone:"gold" };
+      const WOOD_SH = { stone:"b0", iron:"b1", gold:"b2", crimstone:"b3" };
       const nodes = [], edges = [];
-      const E = (src, tgt, sh, th, lbl, tgtMined) => edges.push({ id: tgt + "<" + src + "@" + sh, source: src, target: tgt, sourceHandle: sh, targetHandle: th, label: lbl, stroke: tgtMined ? "#30D158" : "#FF6B6B", dashed: !tgtMined, animated: !!tgtMined });
+      const E = (src, tgt, sh, th, lbl, tgtMined, type) => edges.push({ id: tgt + "<" + src + "@" + sh, source: src, target: tgt, sourceHandle: sh, targetHandle: th, label: lbl, stroke: tgtMined ? "#30D158" : "#FF6B6B", dashed: !tgtMined, animated: !!tgtMined, type: type });
       for (const cat of ["trees", "stone", "iron", "gold", "crimstone"]) {
         const r = ch.byCat[cat]; if (!r || !(r.produced > 0)) continue;
         let tpd = 0; try { tpd = miningToolsPerDay(cat, cap); } catch {}
@@ -17407,7 +17418,7 @@
         if (cat === "trees" || !T || !T.chain) continue;
         const oilCat = cat === "oil";
         // Wood feeds every tool — a line down from Wood into this resource
-        if (T.chain.trees && ch.byCat.trees) E("trees", cat, "b", oilCat ? "l" : "t", T.chain.trees + "× Wood", r.mined);
+        if (T.chain.trees && ch.byCat.trees) E("trees", cat, WOOD_SH[cat] || "b0", "t", T.chain.trees + "× Wood", r.mined, "default");
         // tier progression (the non-Wood ingredient): chain link in the row, or vertical down to Oil
         const pr = NONWOOD[cat];
         if (pr && ch.byCat[pr] && T.chain[pr]) E(pr, cat, oilCat ? "b" : "r", oilCat ? "t" : "l", T.chain[pr] + "× " + MINE_RES[pr], r.mined);
