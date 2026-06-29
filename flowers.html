@@ -5689,7 +5689,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.29</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.30</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5716,6 +5716,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.30", items: [
+          { t: "fix", text: "Power and Roadmap now share ONE value engine (unification step 2). The Power page used to value boosts from raw GROSS yield (no tool/seed cost), while the roadmap used the full NET (mining chain, tool cost, seed caps) — so the same NFT showed different numbers on each page. Now calcBoostValue delegates to the same roadmapCatNet / mining-chain engine, so every yield + tool boost reads identically on both (verified exact: Gold Beetle, Quarry, Iron Idol, multi-category Emerald Turtle). Free-tool boosts are valued via the chain on both pages. This also fixed two bugs: disabled boosts leaking into the synergy calc, and a buggy animal path that read 0 for some boosts. So a fix to the engine now fixes both pages. (Rare cost-reduction / lava / fruit-stump effects still use the Power-side special-case — the next engine keystones.)" },
+        ]},
         { ver: "v4.29", items: [
           { t: "feat", text: "Default harvest efficiency now uses the LAST 7 DAYS of your history (same window as the Nodes page), instead of the old 35-days-excluding-the-current-week window. So income + boost values reflect your RECENT activity. For fast-respawn resources (trees 2h, stone 4h) this reads lower — you realistically chop ~3x/day, not every 2h around the clock — which is the honest number; slow resources (gold/crimstone, 24h) stay near full. Use the per-category efficiency sliders in Settings to override any of them." },
         ]},
@@ -15080,20 +15083,6 @@
         return { solo: 0, synergy: 0, roi: Infinity, disabled: true, disabledByName: boostItem.disabledByName };
       }
 
-      // Handle free_tool effects (Quarry, Foreman Beaver — zero tool cost)
-      const freeToolEffects = catEffects.filter(e => e.type === "free_tool");
-      if (freeToolEffects.length > 0) {
-        const { exchangeRates, stockMods } = powerState;
-        if (["trees", "stone", "iron", "gold", "crimstone", "oil"].includes(catId)) {
-          // Savings = entire base tool cost per day (100% reduction)
-          const baseCost = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods, true);
-          const solo = baseCost.costPerDay;
-          const roi = (boostItem.floor > 0 && solo > 0) ? boostItem.floor / solo : Infinity;
-          return { solo, synergy: solo, roi, isFreeTool: true };
-        }
-        return { solo: 0, synergy: 0, roi: Infinity };
-      }
-
       // Handle cost_reduction effects (e.g., Feller's Discount, Frugal Miner)
       const costEffects = catEffects.filter(e => e.type === "cost_reduction");
       if (costEffects.length > 0) {
@@ -15165,95 +15154,24 @@
         return { solo: stumpValue, synergy: stumpValue, roi, isFruitStump: true };
       }
 
-      // For animals, sum across all products (including sickness cost savings)
-      if (isAnimalCat(catId)) {
-        const baseInfo = getAnimalCatSfl(catId, capacity, [], p2pPrices);
-        const soloInfo = getAnimalCatSfl(catId, capacity, catEffects, p2pPrices);
-        let solo = soloInfo.totalSfl - baseInfo.totalSfl;
-
-        // Add sickness cost savings for sickness-related items
-        const hasSicknessEffect = catEffects.some(e => e.type === "sickness_reduction" || e.type === "sickness_prevention");
-        if (hasSicknessEffect) {
-          const skills = powerState?.farm?.bumpkin?.skills || {};
-          const sicknessValue = calcSicknessBoostSavings(boostItem, catId, capacity, p2pPrices, powerState?.boostItems || [], skills);
-          solo += sicknessValue;
-        }
-
-        const allEffects = [];
-        const allEffectsWithout = [];
-        for (const b of allCatBoosts) {
-          const eff = getEffectsForCategory(b, catId);
-          if (b.has && !b.isDisabled) {
-            allEffects.push(...eff);
-            if (b.name !== boostItem.name) allEffectsWithout.push(...eff);
-          }
-        }
-
-        let synergy;
-        if (isOwned) {
-          const withAll = getAnimalCatSfl(catId, capacity, allEffects, p2pPrices);
-          const without = getAnimalCatSfl(catId, capacity, allEffectsWithout, p2pPrices);
-          synergy = withAll.totalSfl - without.totalSfl;
-        } else {
-          const ownedEffects = allCatBoosts.filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId));
-          const withThis = [...ownedEffects, ...catEffects];
-          const withResult = getAnimalCatSfl(catId, capacity, withThis, p2pPrices);
-          const ownedResult = getAnimalCatSfl(catId, capacity, ownedEffects, p2pPrices);
-          synergy = withResult.totalSfl - ownedResult.totalSfl;
-        }
-
-        // Add sickness cost savings to synergy for sickness items
-        if (hasSicknessEffect) {
-          const skills = powerState?.farm?.bumpkin?.skills || {};
-          const sicknessValue = calcSicknessBoostSavings(boostItem, catId, capacity, p2pPrices, powerState?.boostItems || [], skills);
-          synergy += sicknessValue;
-        }
-
-        const roi = (boostItem.floor > 0 && synergy > 0) ? boostItem.floor / synergy : Infinity;
-        return { solo, synergy, roi };
-      }
-
-      // Non-animal categories: original logic
-      const priceProduct = getPriceProduct(catId, product);
-      const baseResult = applyBoosts(catId, product, capacity, []);
-      const baseSfl = unitToSfl(baseResult.unitsPerDay, priceProduct, p2pPrices);
-
-      // Solo: just this boost
-      const soloResult = applyBoosts(catId, product, capacity, catEffects);
-      const soloSfl = unitToSfl(soloResult.unitsPerDay, priceProduct, p2pPrices);
-      const solo = soloSfl - baseSfl;
-
-      // Synergy: all owned boosts ± this one
-      const allEffects = [];
-      const allEffectsWithout = [];
-      for (const b of allCatBoosts) {
-        const eff = getEffectsForCategory(b, catId);
-        if (b.has) {
-          allEffects.push(...eff);
-          if (b.name !== boostItem.name) allEffectsWithout.push(...eff);
-        } else if (b.name === boostItem.name) {
-          // For missing boost: add it to "with" set
-        }
-      }
-
-      let synergy;
-      if (isOwned) {
-        // Marginal: allOwned - allOwned\this
-        const withAll = applyBoosts(catId, product, capacity, allEffects);
-        const without = applyBoosts(catId, product, capacity, allEffectsWithout);
-        synergy = unitToSfl(withAll.unitsPerDay, priceProduct, p2pPrices) - unitToSfl(without.unitsPerDay, priceProduct, p2pPrices);
+      // Non-animal categories: value via the SHARED roadmap engine (NET — with tool/seed cost + the mining
+      // chain — at theoretical efficiency), so the Power page and the roadmap agree on every yield/tool boost.
+      const _s = Object.assign({}, getRoadmapSettings(), { effMode: "theoretical", effOverrides: {} });
+      const ownedEff = allCatBoosts.filter(b => b.has && !b.isDisabled && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId));
+      let synergy, solo;
+      if (ROADMAP_MINING_CATS.indexOf(catId) >= 0) {
+        const mk = (ef) => { const o = {}; o[catId] = ef; return roadmapMiningChain(_s, o).total; };
+        synergy = mk(ownedEff.concat(catEffects)) - mk(ownedEff);
+        solo = mk(catEffects) - mk([]);
       } else {
-        // For missing: allOwned∪this - allOwned
-        const ownedEffects = allCatBoosts.filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId));
-        const withThis = [...ownedEffects, ...catEffects];
-        const withResult = applyBoosts(catId, product, capacity, withThis);
-        const ownedResult = applyBoosts(catId, product, capacity, ownedEffects);
-        synergy = unitToSfl(withResult.unitsPerDay, priceProduct, p2pPrices) - unitToSfl(ownedResult.unitsPerDay, priceProduct, p2pPrices);
+        const net = (ef) => Math.max(0, roadmapCatNet(catId, ef, _s));
+        synergy = net(ownedEff.concat(catEffects)) - net(ownedEff);
+        solo = net(catEffects) - net([]);
       }
-
       const roi = (boostItem.floor > 0 && synergy > 0) ? boostItem.floor / synergy : Infinity;
-
-      return { solo, synergy, roi };
+      const out = { solo, synergy, roi };
+      if (catEffects.some(e => e.type === "free_tool")) out.isFreeTool = true;
+      return out;
     }
 
     // Get the product name used for P2P price lookup
@@ -15966,11 +15884,12 @@
       if (settings.effMode === "theoretical") return 1;
       if (cat === "obsidian") return 1; // obsidian net already capped at 1 sale/week
       if (isAnimalCat(cat)) return 1; // animals are 24h-cycle stockpilers — caught each daily login (~full); _h.* units don't match here
+      if (!roadmapState || !roadmapState.effByCat) return 1; // no measured history loaded (e.g. Power page) → theoretical
       const eb = roadmapState.effByCat;
       // Categories with their own harvest signal use the measured throughput ratio.
       if (eb[cat] && eb[cat].measured) return eb[cat].ratio;
       // bees / fishing have no per-category signal → use overall average activity
-      return roadmapState.meanRatio;
+      return roadmapState.meanRatio || 1;
     }
 
     // Effective harvest-cycle length (hours) for one node/plot of a category, with the user's speed
