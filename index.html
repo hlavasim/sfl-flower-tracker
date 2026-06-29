@@ -2751,7 +2751,7 @@
                   : data.verdict === "step"
                     ? h("span", { style:{ fontFamily:CF, fontSize:9.5, fontWeight:"bold", color:C.blue, lineHeight:1.35 } }, "↑ a step to " + (data.feeds || "") + " — loses " + fmt(Math.abs(p)) + "/day alone, paid back when you sell " + (data.feeds || ""))
                     : data.verdict === "sell"
-                      ? h("span", { style:{ fontFamily:CF, fontSize:10.5, fontWeight:"bold", color:(p>=0?C.green:C.red) } }, (p>=0?"▲ +":"▼ −") + fmt(Math.abs(p)) + " \u25c8/day \u2014 the chain to here PAYS" + (data.rowReturn ? "  (×" + (+data.rowReturn).toFixed(2) + " your Wood)" : ""))
+                      ? h("span", { style:{ fontFamily:CF, fontSize:10.5, fontWeight:"bold", color:(p>=0?C.green:C.red) } }, (p>=0?"▲ +":"▼ −") + fmt(Math.abs(p)) + " \u25c8/day \u2014 chain PAYS" + (data.rowReturn ? " (×" + (+data.rowReturn).toFixed(2) + " Wood)" : "") + ((data.soloNet !== undefined && Math.abs(data.soloNet - p) > 0.005) ? " · solo " + (data.soloNet>=0?"+":"\u2212") + fmt(Math.abs(data.soloNet)) : ""))
                       : h("span", { style:{ fontFamily:CF, fontSize:10, fontWeight:"bold", color:C.red } }, "▼ not worth it \u2014 costs more Wood than the ore sells for"))));
         }
                 const nodeTypes = { wowItem:WowItem, skillNode:SkillNode, levelNode:LevelNode, mineNode:MineNode };
@@ -5743,7 +5743,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.42</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.43</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5770,6 +5770,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.43", items: [
+          { t: "fix", text: "Income panel trimmed to just YOUR INCOME RIGHT NOW (the BIGGEST LEVERS list is gone — the full ranked plan is still in the buy table). WHAT TO FARM / MINE columns (gives/cost/net) now line up across every category group. And each mining row now also shows its SOLO net — what the ore nets if you BUY its direct inputs at market instead of self-mining the whole chain (e.g. Gold: chain +0.98 self-mined vs solo +2.25 if you buy the Iron)." },
+        ]},
         { ver: "v4.42", items: [
           { t: "fix", text: "The MINING & TREES table now reads in CHAIN ORDER (Wood\u2192Stone\u2192Iron\u2192Gold\u2192Crimstone, Oil last) instead of being sorted by net. Each row\u2019s net/d is now what you\u2019d net if you STOP and sell at that resource \u2014 so the Stone/Iron step-losses are visible \u2014 with a STEP/SELL/SKIP badge and a \u2605 on the best stopping point. A note explains the rows are alternative stops, not additive." },
         ]},
@@ -16105,9 +16108,12 @@
         embWood[c] = w / yieldOf[c];
       }
       // per-unit net vs selling the embedded wood; per-day profit; mine if positive
-      const mined = {}, dailyProfit = {}, netPerUnit = {};
+      const mined = {}, dailyProfit = {}, netPerUnit = {}, soloNet = {};
       let treeToolCost = 0; try { const _tt = calcToolCostPerDay("trees", cap, er, p2p, sm, false); treeToolCost = _tt.freeTool ? 0 : (_tt.costPerDay || 0); } catch {}
       for (const c of MINE_CHAIN) {
+        // SOLO net: mine c & sell it, buying its DIRECT recipe inputs at p2p (vs the chain's self-mined all-in wood).
+        let _inSolo = 0; const _Ts = MINE_TOOL[c]; if (_Ts && !free[c]) for (const i in _Ts.chain) _inSolo += _Ts.chain[i] * price[i] * (tools[c] || 0);
+        soloNet[c] = P[c] * price[c] - _inSolo - (c === "trees" ? treeToolCost : ownCost(c));
         if (c === "trees") { netPerUnit[c] = woodPrice; dailyProfit[c] = P[c] * woodPrice - treeToolCost; mined[c] = dailyProfit[c] > 1e-9; continue; }
         const costPerUnit = embWood[c] * woodPrice;          // wood baked in, per unit
         netPerUnit[c] = price[c] - costPerUnit;
@@ -16135,7 +16141,7 @@
         const net = (v === "sell") ? dailyProfit[c] : 0;   // Wood + the peak; steps' cost is inside the peak's embWood
         byCat[c] = { gross: P[c] * price[c], net, V: price[c], price: price[c], verdict: v,
           feeds: (v === "step" && peak) ? peak : null, mined: v !== "skip", produced: P[c],
-          dailyProfit: dailyProfit[c] || 0, embWood: embWood[c] || 0, netPerUnit: netPerUnit[c] || 0,
+          dailyProfit: dailyProfit[c] || 0, soloNet: soloNet[c] || 0, embWood: embWood[c] || 0, netPerUnit: netPerUnit[c] || 0,
           woodCostPerUnit: (embWood[c] || 0) * woodPrice, rowReturn: rowReturn[c] || 0, isPeak: c === peak,
           sellable: (v === "sell") ? P[c] : 0, consumed: 0, inputLimited: false };
         if (v === "sell") total += net;
@@ -16748,28 +16754,7 @@
       h += `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-secondary);margin-bottom:8px">YOUR INCOME RIGHT NOW</div>`;
       h += `<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:10px"><div style="font-size:1.7rem;font-weight:bold;color:var(--sunpetal);line-height:1">${roadmapFmtFlower(total)} ${sflIcon()}<span style="font-size:0.65rem;color:var(--text-dim)"> /day</span></div><div style="font-size:0.6rem;color:var(--text-dim)">\u2192 grows to <b style="color:var(--green)">${roadmapFmtFlower(sim.coreRate)}/day</b> after the ${sim.coreCount} worth-it buys (\u2248${roadmapFmtFlower(sim.coreCost)} ${sflIcon()}, ~${roadmapFmtDays(sim.coreDays)}) <span style="color:var(--text-dim);font-size:0.5rem">+ ${sim.econSteps - sim.coreCount} niche buys reach ${roadmapFmtFlower(sim.finalRate)}/day, up to ${roadmapFmtFlower(sim.totalCost)}</span></div></div>`;
       if (bd.length) { h += `<div style="display:flex;height:16px;border-radius:4px;overflow:hidden;border:1px solid var(--border-brown);margin-bottom:6px">${bar}</div><div style="font-size:0.5rem;color:var(--text-dim);line-height:1.9">${legend}</div>`; }
-      const buys = (sim.timeline || []).filter(s => s.kind === "econ").slice(0, 8);
-      const branches = (typeof roadmapTodoBranches === "function") ? roadmapTodoBranches(settings) : [];
-      const pick = (l) => { const b = branches.find(x => x.label === l); return (b && b.actions && b.actions[0]) || null; };
-      const freeRows = [];
-      const fd = pick("DELIVER"); if (fd) freeRows.push(fd);
-      const ff = pick("FARM"); if (ff) freeRows.push(ff);
-      const fm = pick("MINE"); if (fm) freeRows.push(fm);
-      const fg = pick("GIFTS"); if (fg) freeRows.push(fg);
-      const ani = branches.find(x => x.label === "ANIMALS"); if (ani && ani.actions) { const bad = ani.actions.find(a => !a.good); if (bad) freeRows.push(bad); }
-      const badge = (txt, col) => `<span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:${col};color:#1a120a;font-weight:bold">${txt}</span>`;
-      h += `<div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin:16px 0 4px">BIGGEST LEVERS TO GROW IT</div>`;
-      h += `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px">Buy these for a permanent +income (top by payback) \u00b7 plus the free daily moves you should already be doing. Full ranked plan + ETA dates in the table further down.</div>`;
-      h += `<table style="width:100%;border-collapse:collapse;font-size:0.6rem"><tbody>`;
-      for (const s of buys) {
-        const b = s.type === "Skill" ? badge("SKILL", "#B07CD8") : (s.type === "Node" ? badge("NODE", "#5DADE2") : badge("BUY", "#FFD700"));
-        h += `<tr style="border-top:1px solid #1b1b1b"><td style="padding:3px 6px;white-space:nowrap">${b} <img class="inline-icon" src="${getItemIcon(s.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(s.name)}</td><td style="padding:3px 6px;text-align:right;color:var(--green);font-weight:bold">+${roadmapFmtFlower(s.marginal)}/d</td><td style="padding:3px 6px;text-align:right;color:var(--text-secondary)">${roadmapFmtFlower(s.floor)}\u25c8</td><td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${roadmapFmtDays(s.roi)}</td></tr>`;
-      }
-      for (const a of freeRows) {
-        const good = a.good !== false;
-        h += `<tr style="border-top:1px solid #1b1b1b"><td style="padding:3px 6px;white-space:nowrap">${badge("DO", "#30D158")} ${a.icon ? `<img class="inline-icon" src="${a.icon}" onerror="this.style.display='none'" alt="">` : ""} ${escHTML(a.label)}</td><td colspan="2" style="padding:3px 6px;text-align:right;color:${good ? "var(--green)" : "var(--red)"};font-weight:bold">${escHTML(a.sub)}</td><td style="padding:3px 6px;text-align:right;color:var(--text-dim)">daily</td></tr>`;
-      }
-      h += `</tbody></table></div>`;
+      h += `</div>`;
       return h;
     }
 
@@ -16801,7 +16786,7 @@
       const cap = powerState.capacity;
       const groups = [];
       const mk = (title) => { const g = { title, rows: [] }; groups.push(g); return g; };
-      const gMine = mk("\u26cf\ufe0f MINING & TREES"); gMine.keepOrder = true; gMine.note = "Chain order Wood to Crimstone (Oil last). <b>net/d = what you net if you STOP and sell at that resource</b> - alternative stopping points, not additive: pick the best one (the intermediate steps lose alone but are paid back by it).";
+      const gMine = mk("\u26cf\ufe0f MINING & TREES"); gMine.keepOrder = true; gMine.note = "Chain order Wood to Crimstone (Oil last). <b>net/d = what you net if you STOP and sell at that resource</b> - alternative stopping points, not additive: pick the best one (the intermediate steps lose alone but are paid back by it). <b>solo</b> = if you instead BUY its direct inputs at market (not self-mining the chain).";
       const gAni = mk("\ud83d\udc2e ANIMALS");
       const gCrop = mk("\ud83c\udf3e CROPS \u2014 net if all plots grow this one");
       const gGh = mk("\ud83c\udfe0 GREENHOUSE");
@@ -16819,7 +16804,7 @@
         const f = roadmapEffFactor(cat, settings);
         const VB = { sell: ["SELL", "#7fe0a0"], step: ["STEP", "#5DADE2"], skip: ["SKIP", "#e8a060"] }[r.verdict] || ["", "#999"];
         const badge = `<span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1c160f;color:${VB[1]};font-weight:bold">${VB[0]}${r.verdict === "step" && r.feeds ? ("→" + escHTML(MINE_RES[r.feeds] || r.feeds)) : ""}</span>${r.isPeak ? ' <span style="font-size:0.45rem;color:var(--sunpetal);font-weight:bold">★ best stop</span>' : ""}`;
-        gMine.rows.push({ label: MINE_RES[cat], icon: MINE_RES[cat], gross: r.gross * f, cost: (r.gross - r.dailyProfit) * f, net: r.dailyProfit * f, badge, isPeak: r.isPeak, expandHtml: roadmapMiningDetail(cat, r, f) });
+        gMine.rows.push({ label: MINE_RES[cat], icon: MINE_RES[cat], gross: r.gross * f, cost: (r.gross - r.dailyProfit) * f, net: r.dailyProfit * f, soloNet: r.soloNet * f, badge, isPeak: r.isPeak, expandHtml: roadmapMiningDetail(cat, r, f) });
       }
       for (const [cat, icon] of [["obsidian", "Obsidian"]]) {
         if (getCapacityCount(cat, cap) <= 0) continue;
@@ -16897,7 +16882,7 @@
         if (!g.keepOrder) g.rows.sort((a, b) => ((a.fade ? 1 : 0) - (b.fade ? 1 : 0)) || (b.net - a.net));
         h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin:12px 0 3px">${g.title}</div>`;
         if (g.note) h += `<div style="font-size:0.5rem;color:var(--text-dim);margin:0 0 4px;line-height:1.5">${g.note}</div>`;
-        h += `<table style="width:100%;border-collapse:collapse;font-size:0.58rem"><tr style="color:var(--text-dim);font-size:0.5rem"><td></td><td style="text-align:right;padding:0 6px">gives/d</td><td style="text-align:right;padding:0 6px">cost/d</td><td style="text-align:right">net/d</td></tr>`;
+        h += `<table style="width:100%;border-collapse:collapse;font-size:0.58rem;table-layout:fixed"><colgroup><col style="width:auto"><col style="width:74px"><col style="width:74px"><col style="width:74px"></colgroup><tr style="color:var(--text-dim);font-size:0.5rem"><td></td><td style="text-align:right;padding:0 6px">gives/d</td><td style="text-align:right;padding:0 6px">cost/d</td><td style="text-align:right">net/d</td></tr>`;
         for (const r of g.rows) {
           const pos = r.net > 0.001, neg = r.net < -0.001;
           const ncol = pos ? "var(--green)" : (neg ? "var(--red)" : "var(--text-dim)");
@@ -16907,7 +16892,7 @@
             <td style="padding:2px 6px 2px 0">${r.expandHtml ? '<span style="color:var(--text-dim);font-size:0.5rem">▸</span> ' : ''}<img class="inline-icon" src="${getItemIcon(r.icon)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.label)}${r.badge ? (" " + r.badge) : ""}${r.sub ? ` <span style="color:var(--text-dim);font-size:0.5rem">${r.sub}</span>` : ""}${r.detail ? `<div style="font-size:0.48rem;color:var(--text-dim)">${escHTML(r.detail)}</div>` : ""}</td>
             <td style="padding:2px 6px;text-align:right;color:var(--green)">${roadmapFmtFlower(r.gross)}</td>
             <td style="padding:2px 6px;text-align:right;color:var(--red)">${r.cost > 0.001 ? "−" + roadmapFmtFlower(r.cost) : "0"}</td>
-            <td style="padding:2px 0 2px 6px;text-align:right;color:${ncol};font-weight:bold">${nt}</td>
+            <td style="padding:2px 0 2px 6px;text-align:right;color:${ncol};font-weight:bold">${nt}${(r.soloNet !== undefined && Math.abs(r.soloNet - r.net) > 0.005) ? `<div style="font-size:0.48rem;color:var(--text-dim);font-weight:normal">solo ${r.soloNet >= 0 ? "+" : "\u2212"}${roadmapFmtFlower(Math.abs(r.soloNet))}</div>` : ""}</td>
           </tr>`;
           if (r.expandHtml) h += `<tr style="display:none"><td colspan="4" style="padding:3px 8px 8px 18px;background:#140f0a">${r.expandHtml}</td></tr>`;
         }
@@ -17429,7 +17414,7 @@
                             .concat(Object.entries(T.mat || {}).map(([m, q]) => ({ res: m, qty: q, icon: getItemIcon(m) }))) : [];
         nodes.push({ id: cat, type: "mineNode", position: POS[cat] || { x: 0, y: 0 }, data: {
           res: MINE_RES[cat], icon: getItemIcon(MINE_RES[cat]), yieldPerMine, valuePerMine: yieldPerMine * (p2p[MINE_RES[cat]] || 0),
-          inputs, eatCost: (r.woodCostPerUnit || 0) * yieldPerMine + (_cf || !(_er.coinsPerSFL > 0) ? 0 : ((TOOL_COSTS[Object.keys(TOOL_TO_CAT).find(k => TOOL_TO_CAT[k] === cat)] || {}).coins || 0) / _er.coinsPerSFL), woodAllIn: (r.embWood || 0) * yieldPerMine, verdict: r.verdict, mined: r.mined, feeds: r.feeds ? MINE_RES[r.feeds] : null, dailyProfit: r.dailyProfit, rowReturn: r.rowReturn, isPeak: r.isPeak } });
+          inputs, eatCost: (r.woodCostPerUnit || 0) * yieldPerMine + (_cf || !(_er.coinsPerSFL > 0) ? 0 : ((TOOL_COSTS[Object.keys(TOOL_TO_CAT).find(k => TOOL_TO_CAT[k] === cat)] || {}).coins || 0) / _er.coinsPerSFL), woodAllIn: (r.embWood || 0) * yieldPerMine, verdict: r.verdict, mined: r.mined, feeds: r.feeds ? MINE_RES[r.feeds] : null, dailyProfit: r.dailyProfit, soloNet: r.soloNet, rowReturn: r.rowReturn, isPeak: r.isPeak } });
         if (cat === "trees" || !T || !T.chain) continue;
         const oilCat = cat === "oil";
         // Wood feeds every tool — a line down from Wood into this resource
