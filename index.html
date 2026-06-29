@@ -2738,8 +2738,8 @@
                 ? h("div", { style:{ fontFamily:CF, fontSize:10.5, color:C.green, marginTop:6, paddingTop:6, borderTop:"1px dashed "+C.brown } }, "✅ no tool cost — just a free Axe")
                 : h("div", { style:{ marginTop:6, paddingTop:6, borderTop:"1px dashed "+C.brown } },
                     h("div", { style:{ display:"flex", alignItems:"baseline" } },
-                      h("span", { style:{ fontFamily:CF, fontSize:9.5, color:C.dim, textTransform:"uppercase" } }, "its tool eats"),
-                      h("span", { style:{ marginLeft:"auto", fontFamily:CF, fontSize:13, fontWeight:"bold", color:C.red } }, "= " + fmt(data.eatCost) + " ◈")),
+                      h("span", { style:{ fontFamily:CF, fontSize:9, color:C.dim, textTransform:"uppercase" } }, "all-in cost (wood baked in)"),
+                      h("span", { style:{ marginLeft:"auto", fontFamily:CF, fontSize:13, fontWeight:"bold", color:C.red } }, "= " + fmt(data.eatCost) + " ◈" + (data.woodAllIn ? "  ·  " + fmt(data.woodAllIn) + "w" : ""))),
                     h("div", { style:{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", marginTop:3 } },
                       data.inputs.map((inp, i) => h("span", { key:i, style:{ display:"inline-flex", alignItems:"center", gap:2, background:"#241a10", borderRadius:4, padding:"1px 4px" } },
                         h("span", { style:{ fontFamily:CF, fontSize:12, fontWeight:"bold", color:C.red } }, inp.qty + "×"),
@@ -5741,7 +5741,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.39</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.40</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5768,6 +5768,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.40", items: [
+          { t: "fix", text: "Rebuilt the mining verdict around the right question: <b>is an ore worth more than the Wood baked into it?</b> Everything is ultimately made from Wood (Gold needs Iron pickaxes, Iron needs Stone pickaxes, Stone needs Wood), and you mine the intermediates yourself \u2014 so an ore\u2019s true cost is the TOTAL Wood in its whole chain, not the spot price of its direct inputs. Each tile now shows that all-in Wood cost. Result for a typical farm: <b>selling Wood is ~90%+ of your mining income</b>; Gold barely clears its Wood cost; Stone, Iron and Crimstone all cost more Wood than the ore sells for \u2014 don\u2019t mine them. (Earlier builds today wrongly priced the intermediates at market \u2014 fixed.)" },
+        ]},
         { ver: "v4.39", items: [
           { t: "fix", text: "Mine-graph Wood edges no longer overlap \u2014 Wood now has 4 separate exit points across its base (one per resource, ordered left\u2192right) and the Wood lines curve out as a fan instead of stacking on top of each other. Wood is centred over the row." },
         ]},
@@ -16081,56 +16084,36 @@
         const coin = cf ? 0 : (er.coinsPerSFL > 0 ? (MINE_TOOL[c].coins || 0) / er.coinsPerSFL : 0);
         return (m + coin) * (tools[c] || 0);
       };
-      // fixed-point V
-      const V = {}, feeds = {}; for (const c of MINE_CHAIN) V[c] = price[c];
-      for (let it = 0; it < 8; it++) {
-        let changed = false;
-        for (const c of ["crimstone", "gold", "iron", "oil", "stone"]) {
-          const T = MINE_TOOL[c]; if (!T || free[c] || !(tools[c] > 0) || !(P[c] > 0)) continue;
-          const ytool = P[c] / tools[c];
-          const cycleVal = ytool * V[c];
-          let chainCost = 0; for (const i in T.chain) chainCost += T.chain[i] * price[i]; // inputs at SELL price (abundant)
-          let matCost = 0; { let mats = (c === "oil" && sm.oilRigActive) ? { Wool: 20 } : (T.mat || {}); for (const k in mats) matCost += (p2p[k] || 0) * mats[k]; }
-          const coin = cf ? 0 : (er.coinsPerSFL > 0 ? (T.coins || 0) / er.coinsPerSFL : 0);
-          if (cycleVal - chainCost - matCost - coin > 1e-9) {
-            for (const i in T.chain) {
-              const u = (cycleVal - (chainCost - T.chain[i] * price[i]) - matCost - coin) / T.chain[i];
-              if (u > V[i] + 1e-9) { V[i] = u; feeds[i] = c; changed = true; }
-            }
-          }
-        }
-        if (!changed) break;
-      }
-      // mined set: base wood always; a tier is mined if its V-profit/day > 0
-      const mined = {}, dailyProfit = {};
-      mined.trees = P.trees > 0;
+      // EMBEDDED-WOOD valuation. Wood is the base you produce; every ore is made FROM wood through its whole
+      // pickaxe chain. To mine an ore you must mine its intermediates yourself, so its true cost is the TOTAL
+      // wood baked in. embWood[c] = wood consumed per unit of c (recursive). Mine & sell c only if price > that.
+      const woodPrice = price.trees || 0;
+      const yieldOf = {}; for (const c of MINE_CHAIN) yieldOf[c] = (tools[c] > 0) ? P[c] / tools[c] : 0;
+      const embWood = { trees: 1 };
       for (const c of ["stone", "iron", "gold", "crimstone", "oil"]) {
         const T = MINE_TOOL[c];
-        if (!T || !(tools[c] > 0) || !(P[c] > 0)) { mined[c] = false; dailyProfit[c] = 0; continue; }
-        let inSfl = 0; if (!free[c]) for (const i in T.chain) inSfl += T.chain[i] * price[i] * tools[c]; // inputs at SELL price
-        const pd = P[c] * V[c] - inSfl - ownCost(c);
-        dailyProfit[c] = pd; mined[c] = pd > 1e-9;
+        if (!T || free[c] || !(yieldOf[c] > 0)) { embWood[c] = 0; continue; }
+        let w = 0; for (const i in T.chain) w += T.chain[i] * (embWood[i] != null ? embWood[i] : (woodPrice > 0 ? (price[i] / woodPrice) : 0));
+        embWood[c] = w / yieldOf[c];
       }
-      // consumption by mined tiers
-      const consumed = {}; for (const c of MINE_CHAIN) consumed[c] = 0;
-      for (const c of ["stone", "iron", "gold", "crimstone", "oil"]) {
-        if (!mined[c] || free[c]) continue;
-        for (const i in MINE_TOOL[c].chain) consumed[i] += MINE_TOOL[c].chain[i] * (tools[c] || 0);
+      // per-unit net vs selling the embedded wood; per-day profit; mine if positive
+      const mined = {}, dailyProfit = {}, netPerUnit = {};
+      let treeToolCost = 0; try { const _tt = calcToolCostPerDay("trees", cap, er, p2p, sm, false); treeToolCost = _tt.freeTool ? 0 : (_tt.costPerDay || 0); } catch {}
+      for (const c of MINE_CHAIN) {
+        if (c === "trees") { netPerUnit[c] = woodPrice; dailyProfit[c] = P[c] * woodPrice - treeToolCost; mined[c] = dailyProfit[c] > 1e-9; continue; }
+        const costPerUnit = embWood[c] * woodPrice;          // wood baked in, per unit
+        netPerUnit[c] = price[c] - costPerUnit;
+        dailyProfit[c] = P[c] * netPerUnit[c] - ownCost(c);   // own = leather/wool + coins per day (≈0 for coins-free)
+        mined[c] = dailyProfit[c] > 1e-9;
       }
-      // per-resource net + verdict
       const byCat = {}; let total = 0;
       for (const c of MINE_CHAIN) {
-        const sellable = mined[c] ? Math.max(0, P[c] - consumed[c]) : 0;
-        const net = sellable * price[c] - (mined[c] ? ownCost(c) : 0);
         const gross = P[c] * price[c];
-        const inputLimited = consumed[c] > P[c] + 1e-6 && mined[c];
-        let verdict;
-        if (!mined[c]) verdict = "skip";
-        else if (consumed[c] > sellable + 1e-6) verdict = "use";   // most of it feeds your own tools
-        else verdict = "sell";
-        byCat[c] = { gross, net, V: V[c], price: price[c], verdict, feeds: feeds[c] || null,
-          mined: mined[c], sellable, consumed: consumed[c], produced: P[c], dailyProfit: dailyProfit[c] || 0, inputLimited };
-        if (mined[c]) total += net;
+        byCat[c] = { gross, net: mined[c] ? dailyProfit[c] : 0, V: price[c], price: price[c],
+          verdict: mined[c] ? "sell" : "skip", feeds: null, mined: mined[c], produced: P[c],
+          dailyProfit: dailyProfit[c] || 0, embWood: embWood[c] || 0, netPerUnit: netPerUnit[c] || 0,
+          woodCostPerUnit: (embWood[c] || 0) * woodPrice, sellable: mined[c] ? P[c] : 0, consumed: 0, inputLimited: false };
+        if (mined[c]) total += byCat[c].net;
       }
       return { byCat, total };
     }
@@ -16867,16 +16850,18 @@
       const _mc = roadmapMiningChain(settings);
       const _ord = ["trees", "stone", "iron", "gold", "crimstone", "oil"];
       const _nm = c => MINE_RES[c];
-      const _mineThese = _ord.filter(c => _mc.byCat[c] && _mc.byCat[c].mined);
-      const _sellAt = _ord.filter(c => _mc.byCat[c] && _mc.byCat[c].verdict === "sell");
-      const _skipC = _ord.filter(c => _mc.byCat[c] && _mc.byCat[c].produced > 0 && !_mc.byCat[c].mined);
+      const _ores = ["stone", "iron", "gold", "crimstone"];
+      const _oreSell = _ores.filter(c => _mc.byCat[c] && _mc.byCat[c].mined);
+      const _skipC = _ores.filter(c => _mc.byCat[c] && _mc.byCat[c].produced > 0 && !_mc.byCat[c].mined);
+      const _woodNet = (_mc.byCat.trees && _mc.byCat.trees.net) || 0;
+      const _woodPct = _mc.total > 0 ? Math.round(_woodNet / _mc.total * 100) : 0;
       let _verdict = "";
-      if (_mineThese.length) _verdict = "Right now: <b style=\"color:var(--green)\">mine " + _mineThese.map(_nm).join(" → ") + "</b>" + (_sellAt.length ? ", <b style=\"color:var(--green)\">sell the " + _sellAt.map(_nm).join(" &amp; ") + "</b>" : "") + (_skipC.length ? " — <b style=\"color:var(--red)\">skip " + _skipC.map(_nm).join(" &amp; ") + "</b> (sell their inputs raw instead)." : ".");
+      if (_mc.byCat.trees && _mc.byCat.trees.mined) _verdict = "<b style=\"color:var(--green)\">Selling your Wood is ~" + _woodPct + "% of your mining income.</b> Every ore is made FROM Wood, so it only pays if it sells for more than the Wood baked into its whole pickaxe chain. " + (_skipC.length ? "<b style=\"color:var(--red)\">Don't mine " + _skipC.map(_nm).join(", ") + "</b> — their chain eats more Wood than the ore is worth. " : "") + (_oreSell.length ? "Only <b style=\"color:var(--green)\">" + _oreSell.map(_nm).join(" &amp; ") + "</b> clear" + (_oreSell.length === 1 ? "s" : "") + " that bar — and only just." : "No ore clears that bar — just sell the Wood.");
       h += `<div style="margin:2px 0 14px">
-        <div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin-bottom:5px">⛏️ MINING CHAIN — does climbing the chain pay?</div>
+        <div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin-bottom:5px">⛏️ MINING — is any ore worth more than the Wood baked into it?</div>
         ${_verdict ? `<div style="font-size:0.62rem;color:var(--text-primary);background:#1a140c;border:1px solid var(--border-brown);border-left:3px solid var(--green);border-radius:6px;padding:7px 10px;margin-bottom:7px;line-height:1.5">${_verdict}</div>` : ``}
         <div id="rf-mine" style="height:430px;border:1px solid var(--border-brown);border-radius:8px;background:#13100a;overflow:hidden"></div>
-        <div style="font-size:0.52rem;color:var(--text-dim);margin-top:4px;line-height:1.6">Each tile = <b>one mine</b> of that resource — what it yields (+ its FLOWER value) and what its tool eats. <b style="color:var(--green)">Green ▲</b> = worth mining (beats selling its inputs) · <b style="color:var(--red)">red ▼</b> = a loss, sell the inputs instead. <b>Wood sits on top</b> — its lines fan down into every tool; the row below is the tier chain Stone → Iron → Gold → Crimstone. Each tile shows the green <b>output value</b> vs the red <b>sell-value of what its tool eats</b> \u2014 if the red is bigger, don\u2019t mine it. Arrows are labelled with what each step consumes. <b>Scroll / pinch / the +/− buttons to zoom</b>, drag the background to pan or drag a tile to move it.</div>
+        <div style="font-size:0.52rem;color:var(--text-dim);margin-top:4px;line-height:1.6">Each tile = <b>one mine</b> of that resource — what it yields (+ its FLOWER value) and what its tool eats. <b style="color:var(--green)">Green ▲</b> = the ore beats the Wood baked into it · <b style="color:var(--red)">red ▼</b> = a loss, sell the inputs instead. <b>Wood sits on top</b> — its lines fan down into every tool; the row below is the tier chain Stone → Iron → Gold → Crimstone. Each tile shows the green <b>output value</b> vs the red <b>all-in Wood cost</b> (total Wood baked into its whole pickaxe chain) \u2014 if the red is bigger, don\u2019t mine it. Arrows are labelled with what each step consumes. <b>Scroll / pinch / the +/− buttons to zoom</b>, drag the background to pan or drag a tile to move it.</div>
       </div>`;
       for (const g of groups) {
         if (!g.rows.length) continue;
@@ -17414,7 +17399,7 @@
                             .concat(Object.entries(T.mat || {}).map(([m, q]) => ({ res: m, qty: q, icon: getItemIcon(m) }))) : [];
         nodes.push({ id: cat, type: "mineNode", position: POS[cat] || { x: 0, y: 0 }, data: {
           res: MINE_RES[cat], icon: getItemIcon(MINE_RES[cat]), yieldPerMine, valuePerMine: yieldPerMine * (p2p[MINE_RES[cat]] || 0),
-          inputs, eatCost: inputs.reduce((s, i) => s + i.qty * (p2p[i.res] || 0), 0) + (_cf || !(_er.coinsPerSFL > 0) ? 0 : ((TOOL_COSTS[Object.keys(TOOL_TO_CAT).find(k => TOOL_TO_CAT[k] === cat)] || {}).coins || 0) / _er.coinsPerSFL), verdict: r.verdict, mined: r.mined, feeds: r.feeds ? MINE_RES[r.feeds] : null, dailyProfit: r.dailyProfit } });
+          inputs, eatCost: (r.woodCostPerUnit || 0) * yieldPerMine + (_cf || !(_er.coinsPerSFL > 0) ? 0 : ((TOOL_COSTS[Object.keys(TOOL_TO_CAT).find(k => TOOL_TO_CAT[k] === cat)] || {}).coins || 0) / _er.coinsPerSFL), woodAllIn: (r.embWood || 0) * yieldPerMine, verdict: r.verdict, mined: r.mined, feeds: r.feeds ? MINE_RES[r.feeds] : null, dailyProfit: r.dailyProfit } });
         if (cat === "trees" || !T || !T.chain) continue;
         const oilCat = cat === "oil";
         // Wood feeds every tool — a line down from Wood into this resource
