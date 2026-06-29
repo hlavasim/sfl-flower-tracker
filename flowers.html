@@ -4469,6 +4469,18 @@
       "Root Rocket":        { tree: "Compost", points: 2, tier: 2, buff: "Rapid Root on all plots", debuff: null, power: true },
       "Composting Overhaul":{ tree: "Compost", points: 3, tier: 3, buff: "+2 Worms", debuff: "-5 fertilisers" },
       "Composting Revamp":  { tree: "Compost", points: 3, tier: 3, buff: "+5 fertilisers", debuff: "-3 Worms" },
+      // -- Aging (Salt) -- from sunflower-land bumpkinSkills.ts (tree "Aging"). Wide/Cheap Rakes buffs verified
+      // from the live farm; others are concise (exact strings live behind i18n keys; salt income is minor).
+      "Wide Rakes":         { tree: "Aging", points: 1, tier: 1, buff: "+2 Salt", debuff: null },
+      "Cheap Rakes":        { tree: "Aging", points: 1, tier: 1, buff: "-20% Salt Rake cost", debuff: null },
+      "Salty Seas":         { tree: "Aging", points: 1, tier: 1, buff: "Faster Salt recovery", debuff: null },
+      "Speedy Aging":       { tree: "Aging", points: 1, tier: 1, buff: "Faster aging in the Aging Shed", debuff: null },
+      "Bacalhau":           { tree: "Aging", points: 1, tier: 1, buff: "Unlocks the Bacalhau dish", debuff: null },
+      "Fish Smoking":       { tree: "Aging", points: 2, tier: 2, buff: "Smoke fish for a preservation bonus", debuff: null },
+      "Refiner":            { tree: "Aging", points: 2, tier: 2, buff: "Salt refining bonus", debuff: null },
+      "Sea Blessed":        { tree: "Aging", points: 2, tier: 2, buff: "Bonus Salt", debuff: null },
+      "Ager":               { tree: "Aging", points: 3, tier: 3, buff: "Aging Shed bonus", debuff: null },
+      "Salt Surge":         { tree: "Aging", points: 3, tier: 3, buff: "Instant Salt surge", debuff: null, power: true },
     };
 
     // Recipe ingredients for skill cost calculation — verified from sfl.world/info/cooking
@@ -5743,7 +5755,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.59</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.60</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5770,6 +5782,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.60", items: [
+          { t: "fix", text: "Added the SALT skill tree (the game calls it \u201cAging\u201d: Wide Rakes, Cheap Rakes, Salty Seas, Speedy Aging, Bacalhau, Fish Smoking, Refiner, Sea Blessed, Ager, Salt Surge) from the sunflower-land source, so the Skills view now knows about them. This fixes the free-skill-points estimate \u2014 your owned salt skills (13 points) were previously uncounted, so the estimate read ~13 too high." },
+        ]},
         { ver: "v4.59", items: [
           { t: "feat", text: "Skills view is now laid out by TREE &amp; TIER like the in-game skill tree, and has a summary up top: your level, your free skill points (estimate + an override box), the SFL-of-XP each point costs, a ◆ CONSIDER RESETTING list (owned skills hurting your FLOWER/day, with the loss they cause &amp; points they free), and a ⭐ TOP TO TAKE shortlist. Every skill row shows its point cost (pts · SFL), owned state, the per-resource value chips and the net FLOWER/day." },
         ]},
@@ -17189,7 +17204,7 @@
       const EPS = 0.01;
       const cps = (powerState.exchangeRates && powerState.exchangeRates.coinsPerSFL) || 1500;
       const effLbl = settings.effMode === "real" ? "your Last-7-days activity" : "100% theoretical";
-      const TREE_COLOR = { "Crops": "#7fe0a0", "Trees": "#b98a5a", "Mining": "#9aa6b2", "Cooking": "#e8a060", "Animals": "#e6c25a", "Fishing": "#6ab0e0", "Greenhouse": "#8fd98f", "Fruit Patch": "#e89a5a", "Bees & Flowers": "#e08fd0", "Machinery": "#c0a0e0", "Compost": "#9a8a6a" };
+      const TREE_COLOR = { "Crops": "#7fe0a0", "Trees": "#b98a5a", "Mining": "#9aa6b2", "Cooking": "#e8a060", "Animals": "#e6c25a", "Fishing": "#6ab0e0", "Greenhouse": "#8fd98f", "Fruit Patch": "#e89a5a", "Bees & Flowers": "#e08fd0", "Machinery": "#c0a0e0", "Compost": "#9a8a6a", "Aging": "#d8c89a" };
       const farm = powerState.farm, bumpkin = farm.bumpkin || {};
       let info = {}; try { info = calcSkillPointCost(bumpkin, powerState.p2pPrices, farm) || {}; } catch (e) {}
       const level = info.level || (typeof getBumpkinLevel === "function" ? getBumpkinLevel(bumpkin.experience || 0) : 1);
