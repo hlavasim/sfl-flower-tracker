@@ -5743,7 +5743,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.56</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.57</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5770,6 +5770,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.57", items: [
+          { t: "feat", text: "Skills are gone from the buy-path Visual graph &amp; Table — they live only in the new Skills tab now. Skills cost skill POINTS, not FLOWER, so they never fit a FLOWER reinvestment buy order; the Visual / Table now show only NFTs &amp; node expansions. (The old Skills / Skill-pts settings toggles were removed too.)" },
+        ]},
         { ver: "v4.56", items: [
           { t: "fix", text: "Skills view now FLOORS loss-making categories like the income engine does. A skill that only softens a still-negative activity (e.g. Sheepwise Diet when sheep are −50/d → −23/d — still a loss) no longer shows a fake +21/day; it adds 0 real FLOWER and moves to a new ◆ ONLY IF YOU FIX THAT ACTIVITY group that shows the absolute net so you can see it is still below break-even." },
         ]},
@@ -17328,24 +17331,8 @@
       // Fold in node expansion / Obsidian-merge actions (respect the price cap).
       const nodeCands = roadmapNodeCandidates(settings);
       for (const nc of nodeCands) { if (nc.floor > 0 && nc.floor <= maxP) econ.push(nc); }
-      // Fold in unlearned SKILLS (cost = points x SFL/level = the XP/leveling cost). Clones already
-      // live in catBoostsW, so the reset snapshot + marginal recompute cover them automatically.
-      if (settings.incSkills !== false) {
-        const lvl = getBumpkinLevel((powerState.farm.bumpkin && powerState.farm.bumpkin.experience) || 0);
-        let spent = 0; const _ownSk = (powerState.farm.bumpkin && powerState.farm.bumpkin.skills) || {};
-        for (const _sn of Object.keys(_ownSk)) { const _sd = SKILL_TREE_DATA[_sn]; spent += _sd ? (_sd.points || 0) : 0; }
-        const _autoFree = Math.max(0, (lvl - 1) - spent);
-        let freePts = (settings.skillPts != null && isFinite(settings.skillPts)) ? Math.max(0, settings.skillPts) : _autoFree;
-        const unl = []; const seenU = new Set();
-        for (const cat of Object.keys(catBoostsW)) for (const c of catBoostsW[cat]) { if (c.type === "Skill" && !c.has && !seenU.has(c.name)) { seenU.add(c.name); const mv = roadmapItemValue(c, catBoostsW, settings); if (mv > 0) unl.push({ c, mv }); } }
-        unl.sort((a, b) => (b.mv / (b.c.skillPoints || 1)) - (a.mv / (a.c.skillPoints || 1)));
-        for (const u of unl) {
-          const pts = u.c.skillPoints || 1;
-          let free = false; if (freePts >= pts) { free = true; freePts -= pts; }
-          const cost = free ? 0.01 : u.c.floor;
-          if (cost <= maxP) econ.push({ name: u.c.name, type: "Skill", floor: cost, boost: u.c.boost, supply: 0, clone: u.c, skillFree: free, skillPoints: pts, skillTree: u.c.skillTree, skillTier: u.c.skillTier });
-        }
-      }
+      // Skills are NOT part of the buy path (Visual / Table) — they live in their own Skills tab. They cost
+      // skill POINTS, not FLOWER, so they don't belong in a FLOWER reinvestment-ordered buy order.
       tail.sort((a, b) => a.floor - b.floor);
       const tailCost = tail.reduce((s, m) => s + m.floor, 0);
       // Snapshot the original owned state so we can re-simulate any order from scratch.
@@ -17809,8 +17796,6 @@
       h += `<label>Efficiency: <select onchange="_roadmapSetEffMode(this.value)"><option value="real"${settings.effMode === "real" ? " selected" : ""}>Last 7 days (actual)</option><option value="theoretical"${settings.effMode === "theoretical" ? " selected" : ""}>100% (theoretical)</option></select></label>`;
       h += `<label><input type="checkbox" ${settings.incCollectibles ? "checked" : ""} onchange="_roadmapToggle('incCollectibles',this.checked)"> Collectibles</label>`;
       h += `<label><input type="checkbox" ${settings.incWearables ? "checked" : ""} onchange="_roadmapToggle('incWearables',this.checked)"> Wearables</label>`;
-      h += `<label title="Include unlearned skills as candidates (cost = skill points priced as cooking XP)."><input type="checkbox" ${settings.incSkills ? "checked" : ""} onchange="_roadmapToggle('incSkills',this.checked)"> Skills</label>`;
-      h += `<label title="Your UNSPENT skill points. The plan marks this many top skills FREE (take them now); beyond that a skill costs the XP to level up for the point. Blank = auto-estimate from your level &amp; owned skills (can over-count if you have skills this tool doesn't know, e.g. Salt tree).">Skill pts free: <input type="number" min="0" step="1" value="${settings.skillPts != null ? settings.skillPts : ''}" placeholder="auto" style="width:46px" onchange="_roadmapSetSkillPts(this.value)"></label>`;
       h += `<label title="Treat coin-denominated costs (axes, seeds…) as free — coins aren't directly convertible to FLOWER. Auto-on when you hold >10k coins."><input type="checkbox" ${roadmapCoinsFree(settings) ? "checked" : ""} onchange="_roadmapToggle('coinsFree',this.checked)"> Coins free</label>`;
       h += `<label title="Betty seed restocks you do per day. Caps how much you can plant; fast crops (Sunflower) are seed-limited not plot-limited.">Restocks/day: <input type="number" value="${settings.restocksPerDay}" min="1" step="1" style="width:46px" onchange="_roadmapSetRestocks(this.value)"></label>`;
       h += `<label title="What one seasonal delivery ticket is worth to YOU in FLOWER. Tickets only buy season-shop items and expire — set 0 to ignore ticket rewards in deliveries.">Ticket value: <input type="number" value="${settings.ticketValueSfl}" min="0" step="0.5" style="width:52px" onchange="_roadmapSetTicketValue(this.value)"> ${sflIcon()}</label>`;
