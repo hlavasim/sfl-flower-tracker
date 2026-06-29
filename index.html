@@ -5743,7 +5743,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.54</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.55</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5770,6 +5770,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.55", items: [
+          { t: "feat", text: "New <b>Skills</b> view on the roadmap (3rd toggle next to Visual / Table). Every Bumpkin skill with the FLOWER/day it would add (or cost) on YOUR farm, at your chosen efficiency. Skills that boost one resource and nerf another show BOTH sides as chips (e.g. Iron +0.55/d, Stone \u22120.13/d) and the net. Grouped into \u2b50 worth-getting (not owned, positive), \u2713 owned (what each gives now), and a collapsed list of no-impact skills. Data from the full skill tree (sfl.world/tools/skills)." },
+        ]},
         { ver: "v4.54", items: [
           { t: "feat", text: "The efficiency toggle is now right at the top of YOUR BUY PATH (it was buried in Settings). Numbers default to <b>your Last-7-days activity</b> \u2014 so Tiki Totem reads ~0.23/day (realistic) not 0.64 (full-time). It shows your actual harvest efficiency per resource (Wood/Crops/Stone %) and you can flip to 100% theoretical to see full-time potential. The mode applies to every number on the page (income, what-to-farm, buy-path)." },
         ]},
@@ -17066,6 +17069,99 @@
       return { value: total, reason: reasons.join(", ") };
     }
 
+    // Per-skill (or any boost) SIGNED breakdown: the FLOWER/day each affected category GAINS or LOSES if you
+    // had this skill, efficiency-applied. Unlike roadmapItemValue (which floors negatives and lumps all mining
+    // into one chain number) this keeps the sign per resource, so a "+1 Iron, -0.5 Stone" skill shows Iron up,
+    // Stone down, and the true net (which can be negative -> a skill not worth taking). Works for owned skills
+    // too: it removes the skill from the baseline by NAME, so you see what it currently contributes.
+    function roadmapSkillBreakdown(clone, catBoostsW, settings) {
+      if (!clone) return { parts: [], net: 0 };
+      const parts = [];
+      const _exV = (settings.excludeCats || []);
+      const nm = clone.name;
+      const ownedNo = (cat) => (catBoostsW[cat] || []).filter(b => b.has && !b.isDisabled && b.name !== nm).flatMap(b => b.effects.filter(e => e.cat === cat));
+      const lbl = (cat) => (POWER_CATEGORIES[cat] && POWER_CATEGORIES[cat].label) || cat;
+      // Mining categories: per-resource signed delta via the WHOLE chain (captures tool-cost interplay).
+      const mineCats = clone.categories.filter(c => ROADMAP_MINING_CATS.indexOf(c) >= 0 && POWER_CATEGORIES[c] && POWER_CATEGORIES[c].quantifiable && clone.effects.some(e => e.cat === c) && _exV.indexOf(c) < 0);
+      if (mineCats.length) {
+        const ovNo = {}, ovYes = {};
+        for (const cat of MINE_CHAIN) {
+          if (_exV.indexOf(cat) >= 0) continue;
+          const base = ownedNo(cat);
+          ovNo[cat] = base;
+          ovYes[cat] = base.concat(clone.effects.filter(e => e.cat === cat));
+        }
+        const chYes = roadmapMiningChain(settings, ovYes), chNo = roadmapMiningChain(settings, ovNo);
+        for (const cat of MINE_CHAIN) {
+          if (_exV.indexOf(cat) >= 0) continue;
+          const d = (((chYes.byCat[cat] || {}).net || 0) - ((chNo.byCat[cat] || {}).net || 0)) * roadmapEffFactor(cat, settings);
+          if (Math.abs(d) > 1e-6) parts.push({ cat, label: lbl(cat), delta: d });
+        }
+      }
+      // Non-mining categories: signed per-category delta (NOT floored).
+      for (const cat of clone.categories) {
+        if (ROADMAP_MINING_CATS.indexOf(cat) >= 0) continue;
+        if (_exV.indexOf(cat) >= 0) continue;
+        if (!POWER_CATEGORIES[cat] || !POWER_CATEGORIES[cat].quantifiable) continue;
+        const itemEff = clone.effects.filter(e => e.cat === cat);
+        if (!itemEff.length) continue;
+        const base = ownedNo(cat);
+        const d = (roadmapCatNet(cat, base.concat(itemEff), settings) - roadmapCatNet(cat, base, settings)) * roadmapEffFactor(cat, settings);
+        if (Math.abs(d) > 1e-6) parts.push({ cat, label: lbl(cat), delta: d });
+      }
+      const net = parts.reduce((s, p) => s + p.delta, 0);
+      return { parts, net };
+    }
+
+    function roadmapSkillsHtml(settings) {
+      const { byName, catBoostsW } = roadmapBuildClones();
+      const skills = Object.values(byName).filter(c => c.type === "Skill");
+      const EPS = 0.01;
+      const rows = skills.map(c => ({ c, bd: roadmapSkillBreakdown(c, catBoostsW, settings) }));
+      const owned = rows.filter(r => r.c.has).sort((a, b) => b.bd.net - a.bd.net);
+      const reco = rows.filter(r => !r.c.has && r.bd.net > EPS).sort((a, b) => b.bd.net - a.bd.net);
+      const meh = rows.filter(r => !r.c.has && r.bd.net <= EPS).sort((a, b) => b.bd.net - a.bd.net);
+      const fmt = (v) => (v >= 0 ? "+" : "−") + roadmapFmtFlower(Math.abs(v));
+      const effLbl = settings.effMode === "real" ? "your Last-7-days activity" : "100% theoretical (full-time)";
+      const TREE_COLOR = { "Crops": "#7fe0a0", "Trees": "#b98a5a", "Mining": "#9aa6b2", "Cooking": "#e8a060", "Animals": "#e6c25a", "Fishing": "#6ab0e0", "Greenhouse": "#8fd98f", "Fruit Patch": "#e89a5a", "Bees & Flowers": "#e08fd0", "Machinery": "#c0a0e0" };
+      const chip = (p) => { const pos = p.delta >= 0; return `<span style="font-size:0.5rem;padding:1px 6px;border-radius:10px;background:${pos ? "#16301f" : "#311616"};color:${pos ? "var(--green)" : "var(--red)"};border:1px solid ${pos ? "#27502f" : "#502727"}">${escHTML(p.label)} ${pos ? "+" : "−"}${roadmapFmtFlower(Math.abs(p.delta))}/d</span>`; };
+      const card = (r) => {
+        const c = r.c, bd = r.bd;
+        const netColor = bd.net > EPS ? "var(--green)" : (bd.net < -EPS ? "var(--red)" : "var(--text-dim)");
+        const tc = TREE_COLOR[c.skillTree] || "#8a7a5a";
+        const ps = bd.parts.slice().sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+        return `<div style="display:flex;gap:10px;align-items:center;padding:8px 11px;border:1px solid var(--border-brown);border-left:3px solid ${netColor};border-radius:8px;background:#1a140c;margin-bottom:6px">
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+              <img class="inline-icon" src="${getItemIcon(c.name)}" onerror="this.style.display='none'" alt="">
+              <span style="font-weight:bold;font-size:0.66rem">${escHTML(c.name)}</span>
+              <span style="font-size:0.46rem;padding:1px 5px;border-radius:3px;background:${tc}22;color:${tc};border:1px solid ${tc}55">${escHTML(c.skillTree || "")}${c.skillTier ? " · T" + c.skillTier : ""}</span>
+              <span style="font-size:0.46rem;padding:1px 5px;border-radius:3px;background:#2a2418;color:var(--text-dim)">${c.skillPoints || 1} pt${(c.skillPoints || 1) > 1 ? "s" : ""}</span>
+              ${c.has ? `<span style="font-size:0.46rem;padding:1px 5px;border-radius:3px;background:#16301f;color:var(--green)">✓ OWNED</span>` : ``}
+            </div>
+            <div style="font-size:0.54rem;color:var(--text-dim);margin-top:3px;line-height:1.45">${escHTML((c.boost || "").split("\n").join(" · "))}</div>
+            ${ps.length ? `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">${ps.map(chip).join("")}</div>` : ``}
+          </div>
+          <div style="text-align:right;min-width:74px">
+            <div style="font-size:0.95rem;font-weight:bold;color:${netColor}">${fmt(bd.net)}</div>
+            <div style="font-size:0.46rem;color:var(--text-dim)">FLOWER / day</div>
+          </div>
+        </div>`;
+      };
+      let h = "";
+      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:12px;line-height:1.6">Every Bumpkin skill and the FLOWER/day it adds (or costs) on <b>your</b> farm — at <b>${effLbl}</b> efficiency (change it above). A skill that boosts one resource and nerfs another shows both sides and the net. <a href="https://sfl.world/tools/skills/" target="_blank" style="color:var(--sunpetal);text-decoration:none">full skill tree ↗</a></div>`;
+      h += `<div class="pixel-font" style="font-size:0.55rem;color:var(--green);margin:4px 0 8px">⭐ WORTH GETTING — not owned, positive impact (${reco.length})</div>`;
+      h += reco.length ? reco.map(card).join("") : `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px">None right now — every impactful skill is already yours.</div>`;
+      const ownImp = owned.filter(r => Math.abs(r.bd.net) > EPS), ownZero = owned.filter(r => Math.abs(r.bd.net) <= EPS);
+      h += `<div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin:18px 0 8px">✓ OWNED — what each adds (or costs) right now (${owned.length})</div>`;
+      h += ownImp.length ? ownImp.map(card).join("") : `<div style="font-size:0.55rem;color:var(--text-dim)">No owned skill has a measurable FLOWER/day impact.</div>`;
+      if (ownZero.length) h += `<details style="margin:6px 0 0"><summary style="cursor:pointer;font-size:0.52rem;color:var(--text-dim)">+ ${ownZero.length} owned skills with no FLOWER/day impact (cosmetic / XP / activity you don’t run)</summary><div style="margin-top:6px">` + ownZero.map(card).join("") + `</div></details>`;
+      h += `<details style="margin-top:18px"><summary style="cursor:pointer;font-size:0.55rem;color:var(--text-secondary)">➖ ${meh.length} skills with no FLOWER/day impact for you — cosmetic, XP-only, or an activity you don't run (click to show)</summary><div style="margin-top:8px">`;
+      h += meh.length ? meh.map(card).join("") : `<div style="font-size:0.55rem;color:var(--text-dim)">—</div>`;
+      h += `</div></details>`;
+      return h;
+    }
+
     // SESSION-BASED efficiency — IDENTICAL to the Nodes page so the two pages' numbers match 1:1.
     // Per category: count harvest SESSIONS (consecutive _h.* snapshots merged within 30 min) per day, divide
     // by theoretical cycles/day (86400 / boosted respawn). Clamp 1.5. Window = last 7 days (through today).
@@ -17587,7 +17683,7 @@
       h += roadmapProfitabilityHtml(settings);
       // ── Buy path: Visual graph or Table (toggle) ──
       h += `<div style="margin-bottom:16px">`;
-      h += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal)">YOUR BUY PATH — what to buy next, in order</div><div style="margin-left:auto;display:flex;gap:4px"><button id="bp-tab-graph" onclick="_roadmapBuyView('graph')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:var(--sunpetal);color:#1a120a;cursor:pointer;font-weight:bold">▣ Visual</button><button id="bp-tab-table" onclick="_roadmapBuyView('table')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:#241a10;color:var(--text-secondary);cursor:pointer">☰ Table</button></div></div>`;
+      h += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal)">YOUR BUY PATH — what to buy next, in order</div><div style="margin-left:auto;display:flex;gap:4px"><button id="bp-tab-graph" onclick="_roadmapBuyView('graph')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:var(--sunpetal);color:#1a120a;cursor:pointer;font-weight:bold">▣ Visual</button><button id="bp-tab-table" onclick="_roadmapBuyView('table')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:#241a10;color:var(--text-secondary);cursor:pointer">☰ Table</button><button id="bp-tab-skills" onclick="_roadmapBuyView('skills')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:#241a10;color:var(--text-secondary);cursor:pointer">⭐ Skills</button></div></div>`;
       {
         const _effReal = settings.effMode === "real";
         const _pct = (c) => Math.round(roadmapEffFactor(c, settings) * 100);
@@ -17684,6 +17780,7 @@
       </div>`;
 
       h += `</div>`;
+      h += `<div id="buy-skills" style="display:none">` + roadmapSkillsHtml(settings) + `</div>`;
       h += `</div>`;
       h += _rmCollapse("🎁 GIFTS — best NPC flower gifts", roadmapGiftsHtml(settings));
       h += _rmCollapse("🚚 DELIVERIES — which are worth doing", roadmapDeliveriesHtml(settings));
@@ -17764,16 +17861,15 @@
       else { const f = document.getElementById("rf-fallback"); if (f) f.style.display = "block"; }
     };
     window._roadmapBuyView = function(v) {
-      const g = document.getElementById("buy-graph"), tb = document.getElementById("buy-table");
-      const ta = document.getElementById("bp-tab-graph"), tt = document.getElementById("bp-tab-table");
-      if (!g || !tb) return;
-      const showG = v !== "table";
-      g.style.display = showG ? "block" : "none"; tb.style.display = showG ? "none" : "block";
-      if (ta && tt) {
-        ta.style.background = showG ? "var(--sunpetal)" : "#241a10"; ta.style.color = showG ? "#1a120a" : "var(--text-secondary)"; ta.style.fontWeight = showG ? "bold" : "normal";
-        tt.style.background = !showG ? "var(--sunpetal)" : "#241a10"; tt.style.color = !showG ? "#1a120a" : "var(--text-secondary)"; tt.style.fontWeight = !showG ? "bold" : "normal";
+      const divs = { graph: document.getElementById("buy-graph"), table: document.getElementById("buy-table"), skills: document.getElementById("buy-skills") };
+      const tabs = { graph: document.getElementById("bp-tab-graph"), table: document.getElementById("bp-tab-table"), skills: document.getElementById("bp-tab-skills") };
+      if (!divs.graph || !divs.table) return;
+      const view = (v === "table" || v === "skills") ? v : "graph";
+      for (const k of ["graph", "table", "skills"]) {
+        if (divs[k]) divs[k].style.display = (k === view) ? "block" : "none";
+        const tb = tabs[k]; if (tb) { const on = (k === view); tb.style.background = on ? "var(--sunpetal)" : "#241a10"; tb.style.color = on ? "#1a120a" : "var(--text-secondary)"; tb.style.fontWeight = on ? "bold" : "normal"; }
       }
-      if (showG && window.__mountFlow) { try { window.__mountFlow("rf-graph", window.__flowKind || "roadmap"); } catch (e) {} }
+      if (view === "graph" && window.__mountFlow) { try { window.__mountFlow("rf-graph", window.__flowKind || "roadmap"); } catch (e) {} }
     };
     window._roadmapFlowTab = function(kind) {
       window.__flowKind = kind;
