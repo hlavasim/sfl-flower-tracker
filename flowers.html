@@ -5734,7 +5734,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.37</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.38</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5761,6 +5761,11 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.38", items: [
+          { t: "fix", text: "BIG mining-cost correction. The game charges a merged Tier-N node N tools per mine (a Tier-3 stone eats 16 Pickaxes, confirmed in the game source), so tool cost is now charged on your EFFECTIVE (multiplier-weighted) node count, not the physical count. This also makes the per-mine numbers normalise to a single T1 node (Stone now reads ~1.9/mine, not the merge-inflated 5.08), so \u201cyields X for 3 Wood\u201d is finally apples-to-apples. Honest effect: theoretical mining income drops (it was being over-counted)." },
+          { t: "fix", text: "Efficiency now matches the Nodes page 1:1 \u2014 the roadmap uses the exact same session-based formula (harvest sessions \u00f7 theoretical cycles, 30-min merge, clamp 1.5) over the last 7 days, instead of the old throughput number. Toggle relabelled \u201cLast 7 days (actual)\u201d / \u201c100% (theoretical)\u201d." },
+          { t: "fix", text: "Mine-graph \u201ctool eats\u201d cost now includes the tool\u2019s coin cost when coins aren\u2019t free, so the tiles respond to the Free-coins toggle." },
+        ]},
         { ver: "v4.37", items: [
           { t: "feat", text: "Mining-chain tiles now show the SELL-VALUE of what each tool eats (red, next to \u201cits tool eats\u201d), right beside the green value of what the mine gives \u2014 so you can see at a glance when the inputs are worth more than the ore (e.g. Crimstone gives ~1.08\u25c8 but its 3 Wood + 3 Gold are worth ~1.2\u25c8 \u2192 don\u2019t mine). Removed Oil from the graph (it cluttered it). Tiles can now be dragged around to rearrange the layout." },
         ]},
@@ -14515,11 +14520,18 @@
       const fkMap = { trees: "trees", stone: "stones", iron: "iron", gold: "gold", crimstone: "crimstones", oil: "oilReserves" };
       const fk = fkMap[catId];
       const pf = (typeof powerState !== "undefined" && powerState && powerState.farm) ? powerState.farm : null;
-      const physN = (pf && fk) ? Object.keys(pf[fk] || {}).length : (capacity[fk] || 0);
+      // Tools eaten per mine = node.multiplier for trees/stone/iron/gold (merged tier-N node eats N tools);
+      // crimstone & oil always eat exactly 1 tool per mine regardless of multiplier (game: mineCrimstone/oil).
+      const oneToolPerNode = (catId === "crimstone" || catId === "oil");
+      let toolNodes;
+      if (pf && fk) {
+        const ns = Object.values(pf[fk] || {});
+        toolNodes = oneToolPerNode ? ns.length : ns.reduce((s, n) => s + ((n && n.multiplier) || 1), 0);
+      } else { toolNodes = capacity[fk] || 0; }
       let ec = 0;
       try { ec = applyBoosts(catId, getDefaultProduct(catId), capacity, roadmapOwnedEffects(catId)).effectiveCycle || 0; } catch {}
       if (!(ec > 0)) { const rk = { trees:"Wood", stone:"Stone", iron:"Iron", gold:"Gold", crimstone:"Crimstone", oil:"Oil" }[catId]; const d = RESOURCE_RESPAWN_DATA[rk]; ec = d ? d.respawnSec : 0; }
-      return ec > 0 ? physN * (86400 / ec) : 0;
+      return ec > 0 ? toolNodes * (86400 / ec) : 0;
     }
     function calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods, skipDiscount) {
       const toolName = Object.keys(TOOL_TO_CAT).find(t => TOOL_TO_CAT[t] === catId);
@@ -16953,15 +16965,14 @@
       return { value: total, reason: reasons.join(", ") };
     }
 
-    // THROUGHPUT efficiency = harvested/day ÷ theoretical/day (effective node count × boosted
-    // cycles/day), over a recent representative window EXCLUDING the current week. The _h.* sums
-    // are cumulative, so this is robust to sparse-sampling stretches (session-counting was not —
-    // early periods where the collector ran only ~2×/day made it read far too low).
+    // SESSION-BASED efficiency — IDENTICAL to the Nodes page so the two pages' numbers match 1:1.
+    // Per category: count harvest SESSIONS (consecutive _h.* snapshots merged within 30 min) per day, divide
+    // by theoretical cycles/day (86400 / boosted respawn). Clamp 1.5. Window = last 7 days (through today).
     async function roadmapComputeMayEfficiency() {
       const out = { effByCat: {}, meta: { snaps: 0, days: 0, available: false, from: "", to: "" } };
       let rows = null;
       const fromD = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
-      const toD = new Date(Date.now()).toISOString().slice(0, 10); // last 7 days (same window as the Nodes page)
+      const toD = new Date(Date.now() + 86400000).toISOString().slice(0, 10); // through today (same window as the Nodes page)
       try {
         const url = `/api/farm-history?farm=${FARM_ID}&from=${fromD}&to=${toD}&limit=2000`;
         const r = await fetch(url);
@@ -16977,28 +16988,23 @@
       const measuredRatios = [];
       for (const [catId, hKey] of Object.entries(ROADMAP_EFF_HKEY)) {
         if (catId === "obsidian") continue; // obsidian valued separately (sells ~1/week)
-        let total = 0;
-        for (const snap of sorted) { const c = (snap.diff || {})[hKey]; if (c > 0) total += c; }
-        const nodeCount = getCapacityCount(catId, powerState.capacity);
         const oeff = roadmapOwnedEffects(catId);
-        // _h.* sums are in resource UNITS (yield already included), so the theoretical must be
-        // boosted units/day = nodes × cycles/day × yield-per-harvest = applyBoosts.unitsPerDay.
-        // This is why a fast-respawn resource (trees, 2h) reads low (you cannot keep up) while a
-        // slow one (gold/crimstone, 24h) reads near 100%. Animals sum their per-product unitsPerDay.
-        let theoPerDay;
-        if (isAnimalCat(catId)) {
-          const _ani = getAnimalCatSfl(catId, powerState.capacity, oeff, powerState.p2pPrices);
-          theoPerDay = (_ani.breakdown || []).reduce((s, b) => s + (b.unitsPerDay || 0), 0);
-        } else if (RES_FARMKEY[catId]) {
-          theoPerDay = gameResUnitsPerDay(catId, powerState.farm, powerState.capacity, oeff);
-        } else {
-          theoPerDay = applyBoosts(catId, getDefaultProduct(catId), powerState.capacity, oeff).unitsPerDay || 0;
-        }
-        const actualPerDay = total / pDays;
+        const nodeCount = getCapacityCount(catId, powerState.capacity);
+        // Harvest timestamps (+ cumulative units) from the _h.* history.
+        let total = 0; const digTimes = [];
+        for (const snap of sorted) { const c = (snap.diff || {})[hKey]; if (c > 0) { total += c; digTimes.push(new Date(snap.captured_at).getTime()); } }
+        // Merge digs within 30 min into one session (exactly like the Nodes page).
+        const sessions = [];
+        if (digTimes.length) { let ss = digTimes[0], se = digTimes[0]; for (let i = 1; i < digTimes.length; i++) { if (digTimes[i] - se <= 1800000) se = digTimes[i]; else { sessions.push(ss); ss = digTimes[i]; se = digTimes[i]; } } sessions.push(ss); }
+        // Theoretical cycles/day from the boosted respawn (animals have none → unmeasured; roadmapEffFactor returns 1 for them).
+        let effectiveCycle = 0;
+        try { effectiveCycle = applyBoosts(catId, getDefaultProduct(catId), powerState.capacity, oeff).effectiveCycle || 0; } catch {}
+        const theoPerDay = effectiveCycle > 0 ? 86400 / effectiveCycle : 0;
+        const actualPerDay = sessions.length / pDays;
         let ratio = theoPerDay > 0 ? actualPerDay / theoPerDay : 0;
-        if (ratio > 1) ratio = 1; // can't realize more than 100% of theoretical
-        const measured = theoPerDay > 0 && total > 0;
-        out.effByCat[catId] = { ratio, total, actualPerDay, theoPerDay, nodeCount, measured };
+        if (ratio > 1.5) ratio = 1.5; // same clamp as the Nodes page
+        const measured = theoPerDay > 0 && sessions.length > 0;
+        out.effByCat[catId] = { ratio, total, actualPerDay, theoPerDay, sessions: sessions.length, nodeCount, measured };
         if (measured) measuredRatios.push(ratio);
       }
       out.meanRatio = measuredRatios.length ? measuredRatios.reduce((a, b) => a + b, 0) / measuredRatios.length : 0.5;
@@ -17382,6 +17388,7 @@
     function roadmapBuildMineFlowData(settings) {
       const ch = roadmapMiningChain(settings);
       const cap = powerState.capacity, p2p = roadmapPrices(settings);
+      const _cf = roadmapCoinsFree(settings), _er = powerState.exchangeRates;
       // Wood on top (feeds every tool); the rest in a row below = the tier chain; Oil branches under Iron.
       const POS = { trees:{x:688,y:0}, stone:{x:0,y:300}, iron:{x:344,y:300}, gold:{x:688,y:300}, crimstone:{x:1032,y:300} };
       const NONWOOD = { iron:"stone", gold:"iron", crimstone:"gold" };
@@ -17396,7 +17403,7 @@
                             .concat(Object.entries(T.mat || {}).map(([m, q]) => ({ res: m, qty: q, icon: getItemIcon(m) }))) : [];
         nodes.push({ id: cat, type: "mineNode", position: POS[cat] || { x: 0, y: 0 }, data: {
           res: MINE_RES[cat], icon: getItemIcon(MINE_RES[cat]), yieldPerMine, valuePerMine: yieldPerMine * (p2p[MINE_RES[cat]] || 0),
-          inputs, eatCost: inputs.reduce((s, i) => s + i.qty * (p2p[i.res] || 0), 0), verdict: r.verdict, mined: r.mined, feeds: r.feeds ? MINE_RES[r.feeds] : null, dailyProfit: r.dailyProfit } });
+          inputs, eatCost: inputs.reduce((s, i) => s + i.qty * (p2p[i.res] || 0), 0) + (_cf || !(_er.coinsPerSFL > 0) ? 0 : ((TOOL_COSTS[Object.keys(TOOL_TO_CAT).find(k => TOOL_TO_CAT[k] === cat)] || {}).coins || 0) / _er.coinsPerSFL), verdict: r.verdict, mined: r.mined, feeds: r.feeds ? MINE_RES[r.feeds] : null, dailyProfit: r.dailyProfit } });
         if (cat === "trees" || !T || !T.chain) continue;
         const oilCat = cat === "oil";
         // Wood feeds every tool — a line down from Wood into this resource
@@ -17487,7 +17494,7 @@
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:16px;font-size:0.62rem;color:var(--text-secondary)">`;
       h += `<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center">`;
       h += `<label>Start FLOWER/day: <input type="number" id="rm-income" value="${startIncome.toFixed(2)}" step="1" min="0" style="width:88px" onchange="_roadmapSetIncome(this.value)"> <span style="color:var(--text-dim)">auto ${roadmapFmtFlower(roadmapState.currentProdDefault)}</span> <button onclick="_roadmapResetIncome()" style="font-size:0.55rem">reset</button></label>`;
-      h += `<label>Efficiency: <select onchange="_roadmapSetEffMode(this.value)"><option value="real"${settings.effMode === "real" ? " selected" : ""}>Real (May 2026)</option><option value="theoretical"${settings.effMode === "theoretical" ? " selected" : ""}>Theoretical 100%</option></select></label>`;
+      h += `<label>Efficiency: <select onchange="_roadmapSetEffMode(this.value)"><option value="real"${settings.effMode === "real" ? " selected" : ""}>Last 7 days (actual)</option><option value="theoretical"${settings.effMode === "theoretical" ? " selected" : ""}>100% (theoretical)</option></select></label>`;
       h += `<label><input type="checkbox" ${settings.incCollectibles ? "checked" : ""} onchange="_roadmapToggle('incCollectibles',this.checked)"> Collectibles</label>`;
       h += `<label><input type="checkbox" ${settings.incWearables ? "checked" : ""} onchange="_roadmapToggle('incWearables',this.checked)"> Wearables</label>`;
       h += `<label title="Include unlearned skills as candidates (cost = skill points priced as cooking XP)."><input type="checkbox" ${settings.incSkills ? "checked" : ""} onchange="_roadmapToggle('incSkills',this.checked)"> Skills</label>`;
