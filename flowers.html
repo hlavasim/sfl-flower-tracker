@@ -5743,7 +5743,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.58</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.59</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5770,6 +5770,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.59", items: [
+          { t: "feat", text: "Skills view is now laid out by TREE &amp; TIER like the in-game skill tree, and has a summary up top: your level, your free skill points (estimate + an override box), the SFL-of-XP each point costs, a ◆ CONSIDER RESETTING list (owned skills hurting your FLOWER/day, with the loss they cause &amp; points they free), and a ⭐ TOP TO TAKE shortlist. Every skill row shows its point cost (pts · SFL), owned state, the per-resource value chips and the net FLOWER/day." },
+        ]},
         { ver: "v4.58", items: [
           { t: "feat", text: "Skills view now covers coins &amp; cost cuts, not just yield. Cheaper-cost skills (\u201320% axe, \u201310% fruit seeds\u2026) and flat-coin skills (Money Tree) are priced in FLOWER/day (coins at the marketplace rate) and rank in WORTH GETTING. Effects we can\u2019t put a clean number on are now shown in labeled groups \u2014 COINS &amp; DELIVERIES (with a per-1,000-coins FLOWER estimate), XP &amp; LEVELING, FASTER (cook/grow time), DAILY LIMITS &amp; STOCK, OTHER EFFECTS \u2014 so no skill is hidden." },
         ]},
@@ -17185,86 +17188,80 @@
       const skills = Object.values(byName).filter(c => c.type === "Skill");
       const EPS = 0.01;
       const cps = (powerState.exchangeRates && powerState.exchangeRates.coinsPerSFL) || 1500;
-      const effLbl = settings.effMode === "real" ? "your Last-7-days activity" : "100% theoretical (full-time)";
+      const effLbl = settings.effMode === "real" ? "your Last-7-days activity" : "100% theoretical";
       const TREE_COLOR = { "Crops": "#7fe0a0", "Trees": "#b98a5a", "Mining": "#9aa6b2", "Cooking": "#e8a060", "Animals": "#e6c25a", "Fishing": "#6ab0e0", "Greenhouse": "#8fd98f", "Fruit Patch": "#e89a5a", "Bees & Flowers": "#e08fd0", "Machinery": "#c0a0e0", "Compost": "#9a8a6a" };
-      const fmt = (v) => (v >= 0 ? "+" : "−") + roadmapFmtFlower(Math.abs(v));
+      const farm = powerState.farm, bumpkin = farm.bumpkin || {};
+      let info = {}; try { info = calcSkillPointCost(bumpkin, powerState.p2pPrices, farm) || {}; } catch (e) {}
+      const level = info.level || (typeof getBumpkinLevel === "function" ? getBumpkinLevel(bumpkin.experience || 0) : 1);
+      const sflPerPt = info.sflPerPoint || 0;
+      let spent = 0; const ownSk = bumpkin.skills || {};
+      for (const sn in ownSk) { const sd = SKILL_TREE_DATA[sn]; spent += sd ? (sd.points || 0) : 0; }
+      const autoFree = Math.max(0, (level - 1) - spent);
+      const freePts = (settings.skillPts != null && isFinite(settings.skillPts)) ? Math.max(0, settings.skillPts) : autoFree;
       const rows = skills.map(c => {
         const bd = roadmapSkillBreakdown(c, catBoostsW, settings);
         const ex = roadmapSkillExtraFlow(c, settings);
-        const flowNet = ex.flow.reduce((s, f) => s + f.delta, 0);
-        return { c, bd, ex, net: bd.net + flowNet, allParts: bd.parts.concat(ex.flow), cond: bd.cond || [], tags: ex.tags || [] };
+        const net = bd.net + ex.flow.reduce((s, f) => s + f.delta, 0);
+        return { c, net, allParts: bd.parts.concat(ex.flow), cond: bd.cond || [], tags: ex.tags || [] };
       });
-      const reco = [], condR = [], ownedImp = [], qualRows = [], ownedZero = [], meh = [];
-      for (const r of rows) {
-        const has = r.c.has, impact = Math.abs(r.net) > EPS, cond = r.cond.length > 0;
-        if (!has && r.net > EPS) reco.push(r);
-        else if (!has && cond) condR.push(r);
-        else if (has && (impact || cond)) ownedImp.push(r);
-        else if (r.tags.length) qualRows.push(r);
-        else if (has) ownedZero.push(r);
-        else meh.push(r);
-      }
-      reco.sort((a, b) => b.net - a.net); ownedImp.sort((a, b) => b.net - a.net);
-      condR.sort((a, b) => (b.cond[0].raw || 0) - (a.cond[0].raw || 0));
-      const chip = (p) => {
-        let bg, col, br, sign = "+";
-        if (p.kind === "cost") { bg = "#16263a"; col = "#6ab0e0"; br = "#27405a"; }
-        else if (p.kind === "coin") { bg = "#2a2410"; col = "#e6c25a"; br = "#50451f"; }
-        else { const pos = p.delta >= 0; bg = pos ? "#16301f" : "#311616"; col = pos ? "var(--green)" : "var(--red)"; br = pos ? "#27502f" : "#502727"; sign = pos ? "+" : "−"; }
-        return `<span style="font-size:0.5rem;padding:1px 6px;border-radius:10px;background:${bg};color:${col};border:1px solid ${br}">${escHTML(p.label)} ${sign}${roadmapFmtFlower(Math.abs(p.delta))}/d</span>`;
+      const resetList = rows.filter(r => r.c.has && r.net < -EPS).sort((a, b) => a.net - b.net);
+      const picks = rows.filter(r => !r.c.has && r.net > EPS).sort((a, b) => b.net - a.net).slice(0, 8);
+      const valTag = (r) => {
+        if (r.net > EPS) return `<span style="color:var(--green);font-weight:bold">+${roadmapFmtFlower(r.net)}/d</span>`;
+        if (r.net < -EPS) return `<span style="color:var(--red);font-weight:bold">−${roadmapFmtFlower(-r.net)}/d</span>${r.c.has ? ` <span style="color:#e8a060;font-size:0.45rem">reset?</span>` : ""}`;
+        const coinT = r.tags.find(t => t.group === "coins");
+        if (coinT) return `<span style="color:#e6c25a">coins${coinT.ref ? " ≈+" + roadmapFmtFlower(coinT.ref) + "/1k" : ""}</span>`;
+        if (r.tags.length) { const g = r.tags[0].group; return `<span style="color:var(--text-dim)">${g === "xp" ? "XP" : g === "speed" ? "faster" : g === "limit" ? "limit+" : "minor"}</span>`; }
+        return `<span style="color:var(--text-dim)">—</span>`;
       };
-      const card = (r) => {
-        const c = r.c, netColor = r.net > EPS ? "var(--green)" : (r.net < -EPS ? "var(--red)" : "var(--text-dim)");
-        const tc = TREE_COLOR[c.skillTree] || "#8a7a5a";
+      const chip = (p) => { const col = p.kind === "cost" ? "#6ab0e0" : p.kind === "coin" ? "#e6c25a" : (p.delta >= 0 ? "var(--green)" : "var(--red)"); const sign = (p.kind === "cost" || p.kind === "coin") ? "+" : (p.delta >= 0 ? "+" : "−"); return `<span style="font-size:0.46rem;color:${col};white-space:nowrap;margin-right:8px">${escHTML(p.label)} ${sign}${roadmapFmtFlower(Math.abs(p.delta))}/d</span>`; };
+      const skillRow = (r) => {
+        const c = r.c, pts = c.skillPoints || 1, sfl = sflPerPt * pts;
         const ps = r.allParts.slice().sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
-        const tagTxt = r.tags.map(t => t.text).join(" · ");
-        return `<div style="display:flex;gap:10px;align-items:center;padding:8px 11px;border:1px solid var(--border-brown);border-left:3px solid ${netColor};border-radius:8px;background:#1a140c;margin-bottom:6px">
+        const condNote = (r.cond && r.cond.length) ? `<div style="font-size:0.45rem;color:#e8a060;margin-top:1px">⚠ ${escHTML(r.cond.map(cn => cn.label).join(", "))} still loss-making</div>` : "";
+        return `<div style="display:flex;gap:8px;align-items:flex-start;padding:5px 8px;border-bottom:1px solid #20190f;${c.has ? "background:#13180f" : ""}">
           <div style="flex:1;min-width:0">
-            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-              <img class="inline-icon" src="${getItemIcon(c.name)}" onerror="this.style.display='none'" alt="">
-              <span style="font-weight:bold;font-size:0.66rem">${escHTML(c.name)}</span>
-              <span style="font-size:0.46rem;padding:1px 5px;border-radius:3px;background:${tc}22;color:${tc};border:1px solid ${tc}55">${escHTML(c.skillTree || "")}${c.skillTier ? " · T" + c.skillTier : ""}</span>
-              <span style="font-size:0.46rem;padding:1px 5px;border-radius:3px;background:#2a2418;color:var(--text-dim)">${c.skillPoints || 1} pt${(c.skillPoints || 1) > 1 ? "s" : ""}</span>
-              ${c.has ? `<span style="font-size:0.46rem;padding:1px 5px;border-radius:3px;background:#16301f;color:var(--green)">✓ OWNED</span>` : ``}
-            </div>
-            <div style="font-size:0.54rem;color:var(--text-dim);margin-top:3px;line-height:1.45">${escHTML((c.boost || "").split("\n").join(" · "))}</div>
-            ${ps.length ? `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">${ps.map(chip).join("")}</div>` : ``}
-            ${(r.cond && r.cond.length) ? `<div style="font-size:0.5rem;color:#e8a060;margin-top:5px;line-height:1.5">⚠ ${r.cond.map(cn => `${escHTML(cn.label)} now <b>${fmt(cn.netWith)}/d</b> (was ${fmt(cn.netWithout)})`).join(", ")} — still loss-making, so no real FLOWER until that activity is profitable.</div>` : ``}
-            ${tagTxt ? `<div style="font-size:0.48rem;color:var(--text-dim);margin-top:4px">also: ${escHTML(tagTxt)}</div>` : ``}
+            <div style="font-size:0.55rem"><b style="${c.has ? "" : "color:var(--text-secondary)"}">${escHTML(c.name)}</b> <span style="font-size:0.45rem;color:var(--text-dim);white-space:nowrap">${pts}pt${sfl > 0 ? " · " + roadmapFmtFlower(sfl) + " SFL" : ""}</span>${c.has ? ` <span style="color:var(--green);font-size:0.46rem">✓ owned</span>` : (r.net > EPS ? ` <span style="color:var(--lily);font-size:0.45rem">take</span>` : "")}</div>
+            <div style="font-size:0.48rem;color:var(--text-dim);margin-top:1px">${escHTML((c.boost || "").split("\n").join(" · "))}</div>
+            ${ps.length ? `<div style="margin-top:2px">${ps.map(chip).join("")}</div>` : ""}
+            ${condNote}
           </div>
-          <div style="text-align:right;min-width:74px">
-            <div style="font-size:0.95rem;font-weight:bold;color:${netColor}">${fmt(r.net)}</div>
-            <div style="font-size:0.46rem;color:var(--text-dim)">FLOWER / day</div>
-          </div>
+          <div style="text-align:right;min-width:58px;font-size:0.55rem">${valTag(r)}</div>
         </div>`;
       };
-      const qrow = (r, t) => `<div style="display:flex;gap:7px;align-items:baseline;padding:4px 8px;border-bottom:1px solid #221c12;font-size:0.55rem;flex-wrap:wrap"><span style="color:${TREE_COLOR[r.c.skillTree] || '#8a7a5a'};min-width:84px;font-size:0.45rem">${escHTML(r.c.skillTree || '')}${r.c.skillTier ? ' T' + r.c.skillTier : ''}</span><b>${escHTML(r.c.name)}</b>${r.c.has ? ` <span style="color:var(--green);font-size:0.45rem">✓ owned</span>` : ''}<span style="color:var(--text-secondary)">${escHTML(t.text)}</span>${t.ref ? ` <span style="color:#e6c25a;font-size:0.48rem">≈ +${roadmapFmtFlower(t.ref)} FLOWER / 1,000 coins a day</span>` : ''}</div>`;
       let h = "";
-      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:12px;line-height:1.6">Every Bumpkin skill and the FLOWER/day it adds (or costs) on <b>your</b> farm — at <b>${effLbl}</b> efficiency (change it above). Yield, cheaper costs and coin gains are all priced in FLOWER (coins at ${Math.round(cps)}/FLOWER); effects we can't put a number on (XP, cook/fish speed, delivery volume) are listed below with their text. <a href="https://sfl.world/tools/skills/" target="_blank" style="color:var(--sunpetal);text-decoration:none">full skill tree ↗</a></div>`;
-      h += `<div class="pixel-font" style="font-size:0.55rem;color:var(--green);margin:4px 0 8px">⭐ WORTH GETTING — not owned, positive FLOWER/day (${reco.length})</div>`;
-      h += reco.length ? reco.map(card).join("") : `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px">None right now.</div>`;
-      if (condR.length) {
-        h += `<div class="pixel-font" style="font-size:0.55rem;color:#e8a060;margin:18px 0 6px">◆ ONLY IF YOU FIX THAT ACTIVITY — touches a loss-making category (${condR.length})</div>`;
-        h += `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px">These soften an animal/crop type that currently LOSES FLOWER on your farm — they add nothing until you make it profitable (or you don't run it). The red number is where that category still sits.</div>`;
-        h += condR.map(card).join("");
+      h += `<div class="pixel-panel" style="padding:11px;margin-bottom:14px">`;
+      h += `<div style="font-size:0.6rem;color:var(--sunpetal);display:flex;gap:8px;align-items:center;flex-wrap:wrap">Level ${level} · <b style="color:var(--green)">≈${freePts} free skill point${freePts === 1 ? "" : "s"}</b>${sflPerPt > 0 ? ` · 1 point ≈ ${roadmapFmtFlower(sflPerPt)} SFL of XP` : ""}<label style="font-size:0.48rem;color:var(--text-dim)">set: <input type="number" min="0" placeholder="auto" value="${settings.skillPts != null ? settings.skillPts : ''}" style="width:42px;font-size:0.55rem" onchange="_roadmapSetSkillPts(this.value)" title="Override the free-points estimate (it can read high if you own Salt / Fish-Smoking skills this tool doesn't track)."></label></div>`;
+      if (resetList.length) {
+        const loss = resetList.reduce((s, r) => s - r.net, 0), freed = resetList.reduce((s, r) => s + (r.c.skillPoints || 1), 0);
+        h += `<div style="margin-top:9px;font-size:0.52rem;color:var(--red)"><b>◆ CONSIDER RESETTING (${resetList.length})</b> — owned skills hurting your FLOWER/day:</div>`;
+        h += `<div style="font-size:0.52rem;color:var(--text-dim);line-height:1.7">${resetList.map(r => `${escHTML(r.c.name)} <span style="color:var(--red)">${roadmapFmtFlower(r.net)}/d</span> <span style="font-size:0.45rem">(${r.c.skillPoints || 1}pt, ${escHTML(r.c.skillTree || "")})</span>`).join(" · ")}</div>`;
+        h += `<div style="font-size:0.47rem;color:var(--text-dim);margin-top:2px">Removing all of them stops a <b style="color:var(--green)">${roadmapFmtFlower(loss)}/d</b> loss and frees ${freed} points. (In-game resets cost SFL &amp; have a cooldown.)</div>`;
       }
-      h += `<div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin:18px 0 8px">✓ OWNED — what each adds (or costs) now (${ownedImp.length})</div>`;
-      h += ownedImp.length ? ownedImp.map(card).join("") : `<div style="font-size:0.55rem;color:var(--text-dim)">No owned skill has a measurable FLOWER/day impact.</div>`;
-      const buckets = { coins: [], xp: [], speed: [], limit: [], misc: [] };
-      for (const r of qualRows) for (const t of r.tags) if (buckets[t.group]) buckets[t.group].push({ r, t });
-      const QG = [["coins", "COINS & DELIVERIES", "#e6c25a", "Boost coin income (deliveries, market, bounties). Coins are ~1 FLOWER per " + Math.round(cps) + " coins, but the FLOWER/day depends on how many coins you earn from each source (not tracked) — a per-1,000-coins estimate is shown."],
-        ["xp", "XP & LEVELING", "#b98ad0", "Faster XP → levels → skill points & unlocks. No direct FLOWER value."],
-        ["speed", "FASTER (cook / grow time)", "#6ab0e0", "Time savings — worth more the more you cook/grow; not priced here."],
-        ["limit", "DAILY LIMITS & STOCK", "#8fd98f", "More daily headroom (fishing casts, tool stock). Only matters if you hit the cap."],
-        ["misc", "OTHER EFFECTS", "#9aa6b2", "Misc effects with no FLOWER/day value on your farm."]];
-      for (const g of QG) {
-        const b = buckets[g[0]]; if (!b.length) continue;
-        h += `<div class="pixel-font" style="font-size:0.5rem;color:${g[2]};margin:18px 0 4px">${g[1]} (${b.length})</div>`;
-        h += `<div style="font-size:0.48rem;color:var(--text-dim);margin-bottom:5px">${g[3]}</div>`;
-        h += `<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;overflow:hidden">${b.map(x => qrow(x.r, x.t)).join("")}</div>`;
+      if (picks.length) {
+        h += `<div style="margin-top:9px;font-size:0.52rem;color:var(--lily)"><b>⭐ TOP TO TAKE</b> — best FLOWER/day you don't own:</div>`;
+        h += `<div style="font-size:0.52rem;color:var(--text-dim);line-height:1.7">${picks.map(r => `${escHTML(r.c.name)} <span style="color:var(--green)">+${roadmapFmtFlower(r.net)}/d</span> <span style="font-size:0.45rem">(${r.c.skillPoints || 1}pt, ${escHTML(r.c.skillTree || "")})</span>`).join(" · ")}</div>`;
       }
-      if (ownedZero.length) h += `<details style="margin-top:14px"><summary style="cursor:pointer;font-size:0.52rem;color:var(--text-dim)">+ ${ownedZero.length} owned skills with no FLOWER/day impact</summary><div style="margin-top:6px">` + ownedZero.map(card).join("") + `</div></details>`;
-      if (meh.length) { h += `<details style="margin-top:10px"><summary style="cursor:pointer;font-size:0.55rem;color:var(--text-secondary)">➖ ${meh.length} more skills with no measurable effect for you</summary><div style="margin-top:8px">` + meh.map(card).join("") + `</div></details>`; }
+      h += `</div>`;
+      h += `<div style="font-size:0.52rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">All skills by tree &amp; tier (like the in-game tree). FLOWER/day each adds on <b>your</b> farm at <b>${effLbl}</b> efficiency; yield, cheaper costs &amp; coins are priced (coins at ${Math.round(cps)}/FLOWER), XP / speed / limits show their kind. Pts column = skill points (and the SFL of XP to earn them). <a href="https://sfl.world/tools/skills/" target="_blank" style="color:var(--sunpetal);text-decoration:none">skill tree ↗</a></div>`;
+      const byTree = {};
+      for (const r of rows) { const tr = r.c.skillTree || "Other"; (byTree[tr] = byTree[tr] || []).push(r); }
+      const treeNames = Object.keys(byTree).sort((a, b) => {
+        const va = byTree[a].reduce((m, r) => (!r.c.has && r.net > m) ? r.net : m, 0);
+        const vb = byTree[b].reduce((m, r) => (!r.c.has && r.net > m) ? r.net : m, 0);
+        return vb - va || a.localeCompare(b);
+      });
+      for (const tr of treeNames) {
+        const trows = byTree[tr], ownedN = trows.filter(r => r.c.has).length, col = TREE_COLOR[tr] || "#8a7a5a";
+        h += `<div style="margin-top:14px"><div class="pixel-font" style="font-size:0.55rem;color:${col};border-bottom:2px solid ${col}55;padding-bottom:3px">${escHTML(tr)} <span style="font-size:0.45rem;color:var(--text-dim)">· ${ownedN}/${trows.length} owned</span></div>`;
+        const tiers = Array.from(new Set(trows.map(r => Number(r.c.skillTier) || 1))).sort((a, b) => a - b);
+        for (const ti of tiers) {
+          const tier = trows.filter(r => (Number(r.c.skillTier) || 1) === ti).sort((a, b) => b.net - a.net);
+          h += `<div style="font-size:0.45rem;color:var(--text-dim);margin:6px 0 2px;letter-spacing:0.05em">TIER ${ti}</div>`;
+          h += `<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;overflow:hidden">${tier.map(skillRow).join("")}</div>`;
+        }
+        h += `</div>`;
+      }
       return h;
     }
 
