@@ -5743,7 +5743,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.52</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.53</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5770,6 +5770,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.53", items: [
+          { t: "fix", text: "Buy-path +FL/day is now each item\u2019s value added to your CURRENT farm \u2014 not its value after everything above it in the plan is already bought. Before, e.g. Tiki Totem (+0.1 Wood) was evaluated AFTER the Beavers doubled your Wood respawn, so it read +7.10/day instead of its real +0.64. The \u03a3 Cost / FL/day columns are now a clean running total in the shown order (no more 12,000-cost jumps), and the visual graph uses the same numbers as the table." },
+        ]},
         { ver: "v4.52", items: [
           { t: "fix", text: "Service-worker cache bump so the v4.51 p2p-pricing fix actually reaches you. If the buy-path table still showed an inflated +FL/day (e.g. Tiki Totem +7.3) while the Power page was correct, you were running a cached older build — hard-reload (Ctrl+Shift+R) and the footer should now read v4.52." },
         ]},
@@ -17301,10 +17304,16 @@
       const fin = simOrder(order, H);
       const optGainPct = greedyVal > 0 ? (fin.integral / greedyVal - 1) * 100 : 0;
 
+      // DISPLAY uses each item's marginal vs your CURRENT farm (s.m.marginal) — NOT its buy-ORDER
+      // position. Otherwise a boost bought after big synergistic ones (e.g. Tiki Totem after the Beavers
+      // double Wood respawn) shows an inflated, order-dependent number. Cumulative cost / income / ETA
+      // are a running total in the shown order, so the columns add up to the per-row +FL/day.
       const timeline = [];
-      for (const s of fin.steps) timeline.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, marginal: s.marg, roi: s.marg > 0 ? s.m.floor / s.marg : Infinity, atDay: s.atDay, rateAfter: s.rateAfter, kind: "econ", skillFree: s.m.skillFree, skillPoints: s.m.skillPoints, skillTree: s.m.skillTree, skillTier: s.m.skillTier });
-      let rate = fin.finalRate;
-      let cumDays = fin.totalDays;
+      { let ri = (startIncome > 0 ? startIncome : 0), rd = 0;
+        for (const s of fin.steps) { const bm = Math.max(0, s.m.marginal || 0); const dd = ri > 0 ? s.m.floor / ri : Infinity; if (isFinite(dd)) rd += dd; ri += bm;
+          timeline.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, marginal: bm, roi: bm > 0 ? s.m.floor / bm : Infinity, atDay: rd, rateAfter: ri, kind: "econ", skillFree: s.m.skillFree, skillPoints: s.m.skillPoints, skillTree: s.m.skillTree, skillTier: s.m.skillTier }); } }
+      let rate = (startIncome > 0 ? startIncome : 0) + fin.steps.reduce((a, s) => a + Math.max(0, s.m.marginal || 0), 0);
+      let cumDays = timeline.length ? timeline[timeline.length - 1].atDay : 0;
       const econSteps = timeline.length;
       const econCost = timeline.reduce((s, t) => s + t.floor, 0);
       const finalRate = rate;
@@ -17319,16 +17328,18 @@
       // Worthwhile core: the good-payback buys (the ones actually worth doing) vs the expensive long tail.
       const CORE_ROI_DAYS = 730; // 2 years
       let coreCost = 0, coreMarg = 0, coreCount = 0, coreDays = 0;
-      for (const s of fin.steps) {
-        const roi = s.marg > 0 ? s.m.floor / s.marg : Infinity;
-        if (roi <= CORE_ROI_DAYS) { coreCost += s.m.floor; coreMarg += s.marg; coreCount++; coreDays = Math.max(coreDays, s.atDay); }
+      for (const t of timeline) {
+        if (t.kind !== "econ") continue;
+        if (t.roi <= CORE_ROI_DAYS) { coreCost += t.floor; coreMarg += t.marginal; coreCount++; coreDays = Math.max(coreDays, t.atDay); }
       }
       const coreRate = (startIncome > 0 ? startIncome : 0) + coreMarg;
       // Unified ranked list: in-plan steps + conditional (situational), sorted by payback (ROI).
       const ranked = [];
-      for (const s of fin.steps) ranked.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, value: s.marg, roi: s.marg > 0 ? s.m.floor / s.marg : Infinity, status: "plan", atDay: s.atDay, rateAfter: s.rateAfter, cumCost: s.cumCost, skillFree: s.m.skillFree, skillTree: s.m.skillTree, skillTier: s.m.skillTier });
+      for (const s of fin.steps) { const bm = Math.max(0, s.m.marginal || 0); ranked.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, value: bm, roi: bm > 0 ? s.m.floor / bm : Infinity, status: "plan", skillFree: s.m.skillFree, skillTree: s.m.skillTree, skillTier: s.m.skillTier }); }
       for (const m of situational) ranked.push({ name: m.name, type: m.type, boost: m.boost, floor: m.floor, value: m.sitValue, roi: m.sitValue > 0 ? m.floor / m.sitValue : Infinity, status: "conditional", reason: m.sitReason });
       ranked.sort((a, b) => a.roi - b.roi);
+      { let rc = 0, ri = (startIncome > 0 ? startIncome : 0), rd = 0;
+        for (const r of ranked) { if (r.status !== "plan") continue; const dd = ri > 0 ? r.floor / ri : Infinity; if (isFinite(dd)) rd += dd; rc += r.floor; ri += r.value; r.cumCost = rc; r.rateAfter = ri; r.atDay = rd; } }
       return { timeline, ranked, coreCount, coreCost, coreRate, coreDays, econSteps, cosmeticCount: cosmetic.length, econCost, untradeable, tail, tailCost, noBoostCount, situational, startRate: startIncome, finalRate, totalDays: cumDays, totalCost, optGainPct, horizonYears: (settings.horizonYears || 100) };
     }
 
@@ -17620,7 +17631,7 @@
         </tr>`;
       }
       h += `</tbody></table></div>`;
-      h += `<div style="margin-top:6px;font-size:0.55rem;color:var(--text-dim);line-height:1.6">One list ranked by payback. <b style="color:#7fe0a0">IN PLAN</b> = your profit-optimal buy order (\u03a3 Cost + ETA assume you reinvest income in this order). <b style="color:#e8c060">CONDITIONAL</b> = boosts a category not in your profitable mix yet (e.g. crimstone below break-even) \u2014 ranked by what it WOULD add at full scale, so nothing is hidden. Set that resource\u2019s use-value in Settings to pull its boosts into the plan.</div>`;
+      h += `<div style="margin-top:6px;font-size:0.55rem;color:var(--text-dim);line-height:1.6">One list ranked by payback. <b style="color:#7fe0a0">IN PLAN</b> = your profit-optimal buy order (\u03a3 Cost + ETA assume you reinvest income in this order). <b style="color:#e8c060">CONDITIONAL</b> = boosts a category not in your profitable mix yet (e.g. crimstone below break-even) \u2014 ranked by what it WOULD add at full scale, so nothing is hidden. <b>+FL/day is each item\u2019s value added to your CURRENT farm</b>, so it doesn\u2019t depend on what you buy first (\u03a3 Cost &amp; ETA then assume you buy down the list, reinvesting income).</div>`;
 
       // Cosmetic tail (boost present but no FLOWER value) \u2014 collapsed
       const cosmeticRows = (sim.timeline || []).filter(x => x.kind === "cosmetic");
