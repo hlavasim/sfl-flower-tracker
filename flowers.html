@@ -5298,7 +5298,7 @@
           const animal = m[2] || m[3];
           const key = animal.charAt(0).toUpperCase() + animal.slice(1).toLowerCase();
           const animalCats = { "Chicken": "chickens", "Cow": "cows", "Sheep": "sheep" };
-          return { type: "feed_reduction", value: pct / 100, cat: animalCats[key] || "other" };
+          return { type: "feed_reduction", value: -Math.abs(pct) / 100, cat: animalCats[key] || "other" };
         }},
       // Specific animal time: "-10% Chicken Time", "-25% Sheep Production Time"
       { rx: /([+-]?\d+\.?\d*)%\s+(Chicken|Cow|Sheep)\s+.*(?:Time|time)/i,
@@ -5336,7 +5336,7 @@
       { rx: /(\d+\.?\d*)%\s+[Cc]hance.*?\+(\d+\.?\d*)\s+([\w\s]+?)(?:\s+yield)?$/i,
         fn: m => {
           const prodRaw = m[3].trim();
-          const prodClean = prodRaw.replace(/\s+from\s+.+$/i, '').trim();
+          const prodClean = prodRaw.replace(/\s+(from|per|when|while|on)\s+.+$/i, '').trim();
           const CHANCE_CAT_MAP = {
             "flower": "flowers", "fruit": "fruits", "greenhouse": "greenhouse",
             "greenhouse produce": "greenhouse",
@@ -5689,7 +5689,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.31</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.32</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5716,6 +5716,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.32", items: [
+          { t: "fix", text: "Phase 3 boost-parsing fixes — in the shared functions, so both Power and Roadmap get them: fishing “+N daily” boosts (daily_flat) are now valued instead of silently dropped; feed-reduction boosts written without a minus sign no longer flip into a feed COST increase; “+1 Egg per animal”-style chance boosts no longer mis-categorize to “other” (the trailing “per/when/while/on …” is now stripped); and a product-less “+0.25 Animal Produce” flat now boosts the PRIMARY product only, not Egg+Feather / Wool+Merino double." },
+        ]},
         { ver: "v4.31", items: [
           { t: "fix", text: "Engine keystones: the shared engine now values lava-cost-reduction (Lava Swimwear) and fruit-stump (No Axe No Worries / Fruity Woody) boosts from their effects, so Power and Roadmap agree on those too — Lava Swimwear reads +1.05/day on both. (No Axe No Worries correctly reads slightly NEGATIVE for a coins-free farm: you save the already-free axe but lose the stump’s Wood.) Removed the matching Power-side special-cases. With this, every boost type goes through one engine; cost-reduction is 0 for coins-free (consistent) and sickness boosts read 0 on both pending the animal-sickness fix." },
         ]},
@@ -14183,6 +14186,9 @@
           case "extra_harvest":
             extraHarvest += eff.value;
             break;
+          case "daily_flat":
+            yieldFlat += eff.value; // fishing: unitsPerDay = 20 + yieldFlat (per-day), so this lands per-day
+            break;
           case "free_tool":
           case "cost_reduction":
           case "fruit_free_chop":
@@ -14930,7 +14936,7 @@
             if (eff.cat !== catId) continue;
             if (eff.product && PRODUCT_TO_CATEGORY[eff.product] === catId && eff.product !== prod) continue;
             if (eff.type === "yield_pct") yieldMult *= (1 + eff.value / 100);
-            else if (eff.type === "yield_flat") yieldFlat += eff.value;
+            else if (eff.type === "yield_flat") { if (eff.product || prod === animal.products[0]) yieldFlat += eff.value; } // product-less flat = primary product only
             else if (eff.type === "chance") yieldFlat += (eff.pct / 100) * eff.extra;
           }
           // Sum production across all animals at their individual levels
