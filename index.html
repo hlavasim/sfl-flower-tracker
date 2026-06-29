@@ -5743,7 +5743,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.46</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.47</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5770,6 +5770,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.47", items: [
+          { t: "feat", text: "The WHAT I FARM / MINE filter is now PER-CROP (and per-fruit, per-greenhouse): untick e.g. Sunflower and it leaves the table and every boost\u2019s value \u2014 so a Sunflower-only booster stops being recommended if you don\u2019t grow it, while a general +all-crops booster stays as long as you keep any crop. Each group has all / none links so you can clear a whole group and re-tick just the one you grow." },
+        ]},
         { ver: "v4.46", items: [
           { t: "feat", text: "New <b>WHAT I FARM / MINE</b> filter at the top of the farm table (saved): untick the activities you don\u2019t do and they vanish from BOTH the table and the buy path \u2014 so the plan stops recommending e.g. fishing or animal NFTs if you don\u2019t fish or keep animals. General boosts are respected: a +0.1-all-crops booster stays as long as Crops is ticked, even if you only grow one crop." },
         ]},
@@ -16039,7 +16042,9 @@
       if (!(plots > 0)) return { gross: 0, cost: 0 };
       const table = cat === "crops" ? CROP_GROW_DATA : (cat === "fruits" ? FRUIT_GROW_DATA : GREENHOUSE_GROW_DATA);
       const rows = [];
+      const _exM = (settings.excludeCats || []);
       for (const p of Object.keys(table)) {
+        if (_exM.indexOf(p) >= 0) continue;
         if ((cat === "crops" || cat === "fruits") && !roadmapInSeason(p)) continue;
         const pp = roadmapPerPlot(cat, p, effects, settings); if (!pp) continue;
         rows.push({ netPerPlot: pp.gpp - pp.cpp, grossPerPlot: pp.gpp, costPerPlot: pp.cpp, maxPlots: pp.maxPlots });
@@ -16842,13 +16847,14 @@
         if (bd && isFinite(bd.net)) gAni.rows.push({ label: POWER_CATEGORIES[cat].label, icon, gross: bd.gross || 0, cost: bd.cost || 0, net: bd.net, sub: n ? n + "\u00d7" : "", detail });
       }
       const rpd = settings.restocksPerDay || 2;
-      if (getCapacityCount("crops", cap) > 0 && !_excl("crops")) for (const crop of Object.keys(CROP_GROW_DATA)) {
+      if (getCapacityCount("crops", cap) > 0) for (const crop of Object.keys(CROP_GROW_DATA)) { if (_excl(crop)) continue;
         const bd = roadmapProductBreakdown("crops", crop, settings);
         if (bd && isFinite(bd.net)) gCrop.rows.push({ label: crop, icon: crop, gross: bd.gross || 0, cost: bd.cost || 0, net: bd.net, fade: !roadmapInSeason(crop) });
       }
-      if (getCapacityCount("greenhouse", cap) > 0 && !_excl("greenhouse")) for (const gp of Object.keys(GREENHOUSE_GROW_DATA)) addBd(gGh, gp, gp, sBd(roadmapProductBreakdown("greenhouse", gp, settings), roadmapEffFactor("greenhouse", settings)));
-      if (typeof farmHasCropMachine === "function" && farmHasCropMachine(powerState.farm) && !_excl("crops")) {
+      if (getCapacityCount("greenhouse", cap) > 0) for (const gp of Object.keys(GREENHOUSE_GROW_DATA)) { if (_excl(gp)) continue; addBd(gGh, gp, gp, sBd(roadmapProductBreakdown("greenhouse", gp, settings), roadmapEffFactor("greenhouse", settings))); }
+      if (typeof farmHasCropMachine === "function" && farmHasCropMachine(powerState.farm)) {
         for (const crop of cropMachineCrops(powerState.farm)) {
+          if (_excl(crop)) continue;
           const r = calcCropMachineDaily(powerState.farm, crop, powerState.p2pPrices, er, false);
           if (!r) continue;
           let gross = r.revenue, cost = (r.oilCost || 0) + (r.seedCostPerDay || 0), net = r.net;
@@ -16857,7 +16863,7 @@
           if (isFinite(net)) gCm.rows.push({ label: crop, icon: crop, gross, cost, net });
         }
       }
-      if (getCapacityCount("fruits", cap) > 0 && !_excl("fruits")) for (const fr of Object.keys(FRUIT_GROW_DATA)) {
+      if (getCapacityCount("fruits", cap) > 0) for (const fr of Object.keys(FRUIT_GROW_DATA)) { if (_excl(fr)) continue;
         const bd = sBd(roadmapProductBreakdown("fruits", fr, settings), roadmapEffFactor("fruits", settings));
         if (bd && isFinite(bd.net)) gFruit.rows.push({ label: fr, icon: fr, gross: bd.gross || 0, cost: bd.cost || 0, net: bd.net, fade: !roadmapInSeason(fr) });
       }
@@ -16871,18 +16877,24 @@
       h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">WHAT TO FARM / MINE NOW</div>`;
       h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Per-day economics: <span style="color:var(--green)">gives</span> minus <span style="color:var(--red)">costs</span> = net. Scaled by your real harvest efficiency (mining/animals/fruits/greenhouse \u2014 see the efficiency line above); crops &amp; crop machine capped to your ${settings.restocksPerDay}\u00d7 daily restocks. Out-of-season crops faded. ${cf ? `Coins are FREE (you hold ${coins.toLocaleString()} &gt; 10k) so coin-priced tools/seeds cost 0 \u2014 only real resource costs count (animal feed &amp; sickness, salt wood, crop-machine oil).` : `Coin costs at Betty rate (you hold ${coins.toLocaleString()}).`} Obsidian sells ~1/week.</div>`;
       {
-        const _FFG = [["Mining & Trees", [["trees","Wood"],["stone","Stone"],["iron","Iron"],["gold","Gold"],["crimstone","Crimstone"],["oil","Oil"]]],
-          ["Crops", [["crops","Crops"]]], ["Fruits", [["fruits","Fruits"]]], ["Greenhouse", [["greenhouse","Greenhouse"]]],
+        const _single = [["Mining & Trees", [["trees","Wood"],["stone","Stone"],["iron","Iron"],["gold","Gold"],["crimstone","Crimstone"],["oil","Oil"]]],
           ["Animals", [["chickens","Chickens"],["cows","Cows"],["sheep","Sheep"]]],
           ["Other", [["flowers","Flowers"],["bees","Bees"],["fishing","Fishing"],["salt","Salt"],["obsidian","Obsidian"]]]];
+        const _multi = [["Crops", Object.keys(CROP_GROW_DATA)], ["Fruits", Object.keys(FRUIT_GROW_DATA)], ["Greenhouse", Object.keys(GREENHOUSE_GROW_DATA)]];
         const _nEx = (settings.excludeCats || []).length;
-        let _ff = `<details${_nEx ? " open" : ""} style="margin:2px 0 10px;border:1px solid var(--border-brown);border-radius:8px;background:#1a140c"><summary style="cursor:pointer;padding:6px 10px;font-family:'Press Start 2P',monospace;font-size:0.5rem;color:var(--sunpetal)">\u2699 WHAT I FARM / MINE${_nEx ? ` — ${_nEx} hidden` : ""}</summary><div style="padding:4px 10px 8px;font-size:0.55rem;line-height:2">`;
-        for (const [gn, cats] of _FFG) {
-          _ff += `<div><span style="color:var(--text-dim);font-size:0.5rem;display:inline-block;width:96px">${gn}:</span>`;
+        const _alln = (g) => `<span style="font-size:0.46rem;color:var(--text-dim)"> <a onclick="_roadmapFilterGroup('${g}',true)" style="cursor:pointer;color:var(--sunpetal)">all</a>/<a onclick="_roadmapFilterGroup('${g}',false)" style="cursor:pointer;color:var(--red)">none</a></span>`;
+        let _ff = `<details${_nEx ? " open" : ""} style="margin:2px 0 10px;border:1px solid var(--border-brown);border-radius:8px;background:#1a140c"><summary style="cursor:pointer;padding:6px 10px;font-family:'Press Start 2P',monospace;font-size:0.5rem;color:var(--sunpetal)">\u2699 WHAT I FARM / MINE${_nEx ? ` — ${_nEx} hidden` : ""}</summary><div style="padding:4px 10px 8px;font-size:0.55rem;line-height:1.9">`;
+        for (const [gn, cats] of _single) {
+          _ff += `<div><span style="color:var(--text-dim);font-size:0.5rem;display:inline-block;width:96px;vertical-align:top">${gn}:</span>`;
           for (const [c, lbl] of cats) { const on = !_excl(c); _ff += `<label style="margin-right:11px;white-space:nowrap;${on ? "" : "opacity:0.45"}"><input type="checkbox" ${on ? "checked" : ""} onchange="_roadmapToggleCat('${c}',this.checked)"> ${lbl}</label>`; }
           _ff += `</div>`;
         }
-        _ff += `<div style="font-size:0.5rem;color:var(--text-dim);margin-top:5px">Unchecked = removed from the table AND the buy path below. A general boost (e.g. +0.1 all crops) stays as long as that category is checked.</div></div></details>`;
+        for (const [gn, items] of _multi) {
+          _ff += `<div style="margin-top:2px"><span style="color:var(--text-dim);font-size:0.5rem;display:inline-block;width:96px;vertical-align:top">${gn}:${_alln(gn.toLowerCase())}</span>`;
+          for (const it of items) { const on = !_excl(it); _ff += `<label style="margin-right:10px;white-space:nowrap;${on ? "" : "opacity:0.45"}"><input type="checkbox" ${on ? "checked" : ""} onchange="_roadmapToggleCat('${it}',this.checked)"> ${escHTML(it)}</label>`; }
+          _ff += `</div>`;
+        }
+        _ff += `<div style="font-size:0.5rem;color:var(--text-dim);margin-top:5px">Unchecked = removed from the table AND the buy path. A general boost (e.g. +0.1 all crops) stays as long as at least one crop is checked.</div></div></details>`;
         h += _ff;
       }
       const _mc = roadmapMiningChain(settings);
@@ -17668,6 +17680,12 @@
     };
     window._roadmapSetGlobal = function(v) { const n = parseFloat(v) / 100; saveRoadmapSettings({ globalActivity: isFinite(n) ? n : null }); renderRoadmapContent(); };
     window._roadmapToggle = function(key, val) { const p = {}; p[key] = !!val; saveRoadmapSettings(p); renderRoadmapContent(); };
+    window._roadmapFilterGroup = function(group, on) {
+      const map = { crops: Object.keys(CROP_GROW_DATA), fruits: Object.keys(FRUIT_GROW_DATA), greenhouse: Object.keys(GREENHOUSE_GROW_DATA) };
+      const items = map[group] || []; const cur = ((getRoadmapSettings().excludeCats) || []).slice();
+      for (const it of items) { const i = cur.indexOf(it); if (on) { if (i >= 0) cur.splice(i, 1); } else { if (i < 0) cur.push(it); } }
+      saveRoadmapSettings({ excludeCats: cur }); renderRoadmapContent();
+    };
     window._roadmapToggleCat = function(cat, on) { const cur = ((getRoadmapSettings().excludeCats) || []).slice(); const i = cur.indexOf(cat); if (on) { if (i >= 0) cur.splice(i, 1); } else { if (i < 0) cur.push(cat); } saveRoadmapSettings({ excludeCats: cur }); renderRoadmapContent(); };
     window._roadmapSetSkillPts = function(v) { const n = parseFloat(v); saveRoadmapSettings({ skillPts: (v !== "" && isFinite(n) && n >= 0) ? Math.floor(n) : null }); renderRoadmapContent(); };
     window._roadmapSetMaxPrice = function(v) { const n = parseFloat(v); saveRoadmapSettings({ maxPrice: isFinite(n) && n >= 0 ? n : 0 }); renderRoadmapContent(); };
