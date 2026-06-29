@@ -5743,7 +5743,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.47</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.48</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5770,6 +5770,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.48", items: [
+          { t: "fix", text: "Mining now has TWO cost models with a toggle (default = Market price). <b>Market price</b> = the right one: a tool\u2019s inputs cost their marketplace SELL value (after a fee you can set), no matter how cheap they were to mine \u2014 so a free Quarry makes Stone pure profit but does NOT make Iron look cheap (Iron still loses because its 5 Stone are worth real money). Each ore is judged on its own. <b>Self-mine chain</b> keeps the old embedded-Wood view (climb Wood\u2192Gold). The toggle &amp; fee sit above the graph; it flows through the graph, the table, the income and every boost value." },
+        ]},
         { ver: "v4.47", items: [
           { t: "feat", text: "The WHAT I FARM / MINE filter is now PER-CROP (and per-fruit, per-greenhouse): untick e.g. Sunflower and it leaves the table and every boost\u2019s value \u2014 so a Sunflower-only booster stops being recommended if you don\u2019t grow it, while a general +all-crops booster stays as long as you keep any crop. Each group has all / none links so you can clear a whole group and re-tick just the one you grow." },
         ]},
@@ -15947,6 +15950,8 @@
         incWearables: s.incWearables !== false,
         incSkills: s.incSkills !== false,
         excludeCats: Array.isArray(s.excludeCats) ? s.excludeCats.filter(x => typeof x === "string") : [],
+        miningCostMode: s.miningCostMode === "production" ? "production" : "market",
+        marketFee: (typeof s.marketFee === "number" && s.marketFee >= 0) ? s.marketFee : 10,
         skillPts: (typeof s.skillPts === "number" && s.skillPts >= 0) ? s.skillPts : null,
         showCosmetic: !!s.showCosmetic,
         maxPrice: (typeof s.maxPrice === "number" && s.maxPrice >= 0) ? s.maxPrice : 0,
@@ -16151,18 +16156,42 @@
         else if (i === peakIdx) verdict[c] = "sell";  // best stopping point — sell here
         else verdict[c] = "skip";                      // one step too far
       }
+      // ── MARKET (opportunity-cost) net: output & the tool's DIRECT inputs valued at marketplace sell, after
+      //    fee. Free tool => no inputs charged (pure profit). Independent of how the inputs were produced.
+      const _mode = settings.miningCostMode === "production" ? "production" : "market";
+      const _fee = _mode === "market" ? Math.max(0, Math.min(0.6, (settings.marketFee != null ? +settings.marketFee : 10) / 100)) : 0;
+      const marketNet = {};
+      for (const c of MINE_CHAIN) {
+        const _T = MINE_TOOL[c];
+        let resCost = 0;
+        if (_T && !free[c]) {
+          for (const i in _T.chain) resCost += _T.chain[i] * price[i];
+          const mats = (c === "oil" && sm.oilRigActive) ? { Wool: 20 } : (_T.mat || {});
+          for (const m in mats) resCost += (p2p[m] || 0) * mats[m];
+          resCost *= (tools[c] || 0);
+        }
+        let coin = 0;
+        if (c === "trees") coin = treeToolCost;
+        else if (_T && !free[c] && !cf && er.coinsPerSFL > 0) coin = ((_T.coins || 0) / er.coinsPerSFL) * (tools[c] || 0);
+        marketNet[c] = (P[c] * price[c] - resCost) * (1 - _fee) - coin;
+      }
       const byCat = {}; let total = 0;
       for (const c of MINE_CHAIN) {
-        const v = verdict[c] || "skip";
-        const net = (v === "sell") ? dailyProfit[c] : 0;   // Wood + the peak; steps' cost is inside the peak's embWood
+        let v, net, dp, isP, feedsC;
+        if (_mode === "market") {
+          dp = marketNet[c]; v = dp > 1e-9 ? "sell" : "skip"; net = dp > 1e-9 ? dp : 0; isP = false; feedsC = null;
+        } else {
+          v = verdict[c] || "skip"; dp = dailyProfit[c] || 0; net = (v === "sell") ? dailyProfit[c] : 0; isP = (c === peak); feedsC = (v === "step" && peak) ? peak : null;
+        }
         byCat[c] = { gross: P[c] * price[c], net, V: price[c], price: price[c], verdict: v,
-          feeds: (v === "step" && peak) ? peak : null, mined: v !== "skip", produced: P[c],
-          dailyProfit: dailyProfit[c] || 0, soloNet: soloNet[c] || 0, embWood: embWood[c] || 0, netPerUnit: netPerUnit[c] || 0,
-          woodCostPerUnit: (embWood[c] || 0) * woodPrice, rowReturn: rowReturn[c] || 0, isPeak: c === peak,
+          feeds: feedsC, mined: v !== "skip", produced: P[c],
+          dailyProfit: dp, marketNet: marketNet[c] || 0, prodNet: dailyProfit[c] || 0, soloNet: soloNet[c] || 0,
+          embWood: embWood[c] || 0, netPerUnit: netPerUnit[c] || 0,
+          woodCostPerUnit: (embWood[c] || 0) * woodPrice, rowReturn: rowReturn[c] || 0, isPeak: isP,
           sellable: (v === "sell") ? P[c] : 0, consumed: 0, inputLimited: false };
         if (v === "sell") total += net;
       }
-      return { byCat, total, peak: peak };
+      return { byCat, total, peak: _mode === "production" ? peak : null, mode: _mode, fee: _fee };
     }
     function roadmapMiningChainHtml(settings) {
       const ch = roadmapMiningChain(settings);
@@ -16907,11 +16936,16 @@
       const _woodPct = _mc.total > 0 ? Math.round(_woodNet / _mc.total * 100) : 0;
       const _peakNet = (_peak && _mc.byCat[_peak]) ? _mc.byCat[_peak].dailyProfit : 0;
       const _peakR = (_peak && _mc.byCat[_peak]) ? _mc.byCat[_peak].rowReturn : 0;
+      const _sellOres = ["stone", "iron", "gold", "crimstone"].filter(c => _mc.byCat[c] && _mc.byCat[c].verdict === "sell");
       let _verdict = "";
-      if (_peak) _verdict = "<b style=\"color:var(--green)\">Climb Wood" + _steps.map(c => " → " + _nm(c)).join("") + " → " + _nm(_peak) + ", then SELL the " + _nm(_peak) + ".</b> " + (_steps.length ? ("Mining " + _steps.map(_nm).join(" &amp; ") + " loses on its own, but selling " + _nm(_peak) + " covers those losses") : ("Selling " + _nm(_peak))) + " — the whole chain nets <b style=\"color:var(--green)\">+" + (+_peakNet).toFixed(2) + " FLOWER/day</b> (×" + (+_peakR).toFixed(2) + " your Wood). " + (_skipC.length ? ("<b style=\"color:var(--red)\">Stop there — don't go on to " + _skipC.map(_nm).join(" &amp; ") + "</b> (one step too far, no better than stopping at " + _nm(_peak) + "). ") : "") + "Plus your raw Wood is ~" + _woodPct + "% of mining income.";
+      if (_mc.mode === "market") {
+        const _ms = ["trees"].concat(_sellOres).filter(c => _mc.byCat[c] && _mc.byCat[c].mined);
+        _verdict = "<b style=\"color:var(--green)\">Mine &amp; sell " + (_ms.map(_nm).join(", ") || "nothing") + "</b>" + (_skipC.length ? " \u2014 <b style=\"color:var(--red)\">don't mine " + _skipC.map(_nm).join(", ") + "</b> (at market their inputs are worth more than the ore \u2014 sell the inputs instead)." : ".") + " <span style=\"color:var(--text-dim)\">Each ore stands alone: its output vs its tool's inputs at marketplace price" + (_mc.fee ? (" (after " + Math.round(_mc.fee * 100) + "% fee)") : "") + ". A free tool (Quarry/Foreman\u2026) makes THAT ore pure profit but doesn't change the others.</span>";
+      } else if (_peak) _verdict = "<b style=\"color:var(--green)\">Climb Wood" + _steps.map(c => " → " + _nm(c)).join("") + " → " + _nm(_peak) + ", then SELL the " + _nm(_peak) + ".</b> " + (_steps.length ? ("Mining " + _steps.map(_nm).join(" &amp; ") + " loses on its own, but selling " + _nm(_peak) + " covers those losses") : ("Selling " + _nm(_peak))) + " — the whole chain nets <b style=\"color:var(--green)\">+" + (+_peakNet).toFixed(2) + " FLOWER/day</b> (×" + (+_peakR).toFixed(2) + " your Wood). " + (_skipC.length ? ("<b style=\"color:var(--red)\">Stop there — don't go on to " + _skipC.map(_nm).join(" &amp; ") + "</b> (one step too far, no better than stopping at " + _nm(_peak) + "). ") : "") + "Plus your raw Wood is ~" + _woodPct + "% of mining income.";
       else _verdict = "<b style=\"color:var(--red)\">No ore beats just selling your Wood</b> — every chain eats more Wood than the ore sells for. Just sell the Wood.";
       h += `<div style="margin:2px 0 14px">
-        <div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin-bottom:5px">⛏️ MINING — how far up the chain is worth it?</div>
+        <div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin-bottom:5px">⛏️ MINING — ${_mc.mode === "market" ? "is each ore worth more than its inputs at market?" : "how far up the chain if you self-mine?"}</div>
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap"><span style="font-size:0.5rem;color:var(--text-dim)">cost basis:</span><button onclick="_roadmapSetMineMode('market')" style="font-size:0.5rem;padding:2px 8px;border:1px solid var(--border-brown);border-radius:4px;cursor:pointer;background:${_mc.mode === "market" ? "var(--sunpetal)" : "#241a10"};color:${_mc.mode === "market" ? "#1a120a" : "var(--text-secondary)"};font-weight:${_mc.mode === "market" ? "bold" : "normal"}" title="Opportunity cost: a tool's inputs cost their marketplace sell value, no matter how cheap they were to mine (Quarry-correct).">Market price</button><button onclick="_roadmapSetMineMode('production')" style="font-size:0.5rem;padding:2px 8px;border:1px solid var(--border-brown);border-radius:4px;cursor:pointer;background:${_mc.mode === "production" ? "var(--sunpetal)" : "#241a10"};color:${_mc.mode === "production" ? "#1a120a" : "var(--text-secondary)"};font-weight:${_mc.mode === "production" ? "bold" : "normal"}" title="Self-mine: an ore costs the Wood baked into its whole chain (climb to the best stop).">Self-mine chain</button>${_mc.mode === "market" ? ` <label style="font-size:0.5rem;color:var(--text-dim)" title="Marketplace fee on sales. Scales income; doesn\u2019t change which ores are worth mining.">fee <input type="number" value="${settings.marketFee != null ? settings.marketFee : 10}" min="0" max="50" step="0.5" style="width:42px" onchange="_roadmapSetMarketFee(this.value)">%</label>` : ``}</div>
         ${_verdict ? `<div style="font-size:0.62rem;color:var(--text-primary);background:#1a140c;border:1px solid var(--border-brown);border-left:3px solid var(--green);border-radius:6px;padding:7px 10px;margin-bottom:7px;line-height:1.5">${_verdict}</div>` : ``}
         <div id="rf-mine" style="height:430px;border:1px solid var(--border-brown);border-radius:8px;background:#13100a;overflow:hidden"></div>
         <div style="font-size:0.52rem;color:var(--text-dim);margin-top:4px;line-height:1.6">Each tile = <b>one mine</b> of that resource — what it yields (+ its FLOWER value) and what its tool eats. <b style="color:var(--green)">Green ▲</b> = the ore beats the Wood baked into it · <b style="color:var(--red)">red ▼</b> = a loss, sell the inputs instead. <b>Wood sits on top</b> — its lines fan down into every tool; the row below is the tier chain Stone → Iron → Gold → Crimstone. Each tile shows the green <b>output value</b> vs the red <b>all-in Wood cost</b> (total Wood baked into its whole pickaxe chain) \u2014 if the red is bigger, don\u2019t mine it. Arrows are labelled with what each step consumes. <b style="color:#5DADE2">Blue STEP</b> tiles lose on their own \u2014 you mine them only to reach the best ore (the green <b>BEST STOP</b>); <b style="color:var(--red)">red SKIP</b> is one step too far. <b>Scroll / pinch / the +/− buttons to zoom</b>, drag the background to pan or drag a tile to move it.</div>
@@ -17686,6 +17720,8 @@
       for (const it of items) { const i = cur.indexOf(it); if (on) { if (i >= 0) cur.splice(i, 1); } else { if (i < 0) cur.push(it); } }
       saveRoadmapSettings({ excludeCats: cur }); renderRoadmapContent();
     };
+    window._roadmapSetMineMode = function(m) { saveRoadmapSettings({ miningCostMode: m === "production" ? "production" : "market" }); renderRoadmapContent(); };
+    window._roadmapSetMarketFee = function(v) { const n = parseFloat(v); saveRoadmapSettings({ marketFee: isFinite(n) && n >= 0 ? n : 10 }); renderRoadmapContent(); };
     window._roadmapToggleCat = function(cat, on) { const cur = ((getRoadmapSettings().excludeCats) || []).slice(); const i = cur.indexOf(cat); if (on) { if (i >= 0) cur.splice(i, 1); } else { if (i < 0) cur.push(cat); } saveRoadmapSettings({ excludeCats: cur }); renderRoadmapContent(); };
     window._roadmapSetSkillPts = function(v) { const n = parseFloat(v); saveRoadmapSettings({ skillPts: (v !== "" && isFinite(n) && n >= 0) ? Math.floor(n) : null }); renderRoadmapContent(); };
     window._roadmapSetMaxPrice = function(v) { const n = parseFloat(v); saveRoadmapSettings({ maxPrice: isFinite(n) && n >= 0 ? n : 0 }); renderRoadmapContent(); };
