@@ -5689,7 +5689,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.30</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.31</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5716,6 +5716,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.31", items: [
+          { t: "fix", text: "Engine keystones: the shared engine now values lava-cost-reduction (Lava Swimwear) and fruit-stump (No Axe No Worries / Fruity Woody) boosts from their effects, so Power and Roadmap agree on those too — Lava Swimwear reads +1.05/day on both. (No Axe No Worries correctly reads slightly NEGATIVE for a coins-free farm: you save the already-free axe but lose the stump’s Wood.) Removed the matching Power-side special-cases. With this, every boost type goes through one engine; cost-reduction is 0 for coins-free (consistent) and sickness boosts read 0 on both pending the animal-sickness fix." },
+        ]},
         { ver: "v4.30", items: [
           { t: "fix", text: "Power and Roadmap now share ONE value engine (unification step 2). The Power page used to value boosts from raw GROSS yield (no tool/seed cost), while the roadmap used the full NET (mining chain, tool cost, seed caps) — so the same NFT showed different numbers on each page. Now calcBoostValue delegates to the same roadmapCatNet / mining-chain engine, so every yield + tool boost reads identically on both (verified exact: Gold Beetle, Quarry, Iron Idol, multi-category Emerald Turtle). Free-tool boosts are valued via the chain on both pages. This also fixed two bugs: disabled boosts leaking into the synergy calc, and a buggy animal path that read 0 for some boosts. So a fix to the engine now fixes both pages. (Rare cost-reduction / lava / fruit-stump effects still use the Power-side special-case — the next engine keystones.)" },
         ]},
@@ -15113,47 +15116,6 @@
         return { solo: 0, synergy: 0, roi: Infinity };
       }
 
-      // Handle lava_cost_reduction effects (Lava Swimwear — reduce lava pit material cost)
-      const lavaCostEffects = catEffects.filter(e => e.type === "lava_cost_reduction");
-      if (lavaCostEffects.length > 0 && catId === "obsidian") {
-        const { season } = powerState;
-        const costMult = lavaCostEffects.reduce((acc, e) => acc * (1 - e.value), 1);
-        const baseCost = calcLavaPitCostPerDay(capacity, p2pPrices, season);
-        const reducedCost = calcLavaPitCostPerDay(capacity, p2pPrices, season, costMult);
-        const savings = baseCost.costPerDay - reducedCost.costPerDay;
-        const roi = (boostItem.floor > 0 && savings > 0) ? boostItem.floor / savings : Infinity;
-        return { solo: savings, synergy: savings, roi, isLavaCostReduction: true };
-      }
-
-      // Handle fruit stump effects (No Axe No Worries, Fruity Woody)
-      // Fruit trees: plant → harvest N times → chop stump (1 Axe, yields 1 Wood) → replant
-      const fruitStumpWood = catEffects.filter(e => e.type === "fruit_stump_wood");
-      const fruitFreeChop = catEffects.filter(e => e.type === "fruit_free_chop");
-      if ((fruitStumpWood.length > 0 || fruitFreeChop.length > 0) && catId === "fruits") {
-        const { exchangeRates } = powerState;
-        const harvestCount = FRUIT_HARVEST_COUNT[product] || 3;
-        const growSec = FRUIT_GROW_DATA[product] || 43200;
-        const lifecycleSec = harvestCount * growSec;
-        const n = getCapacityCount("fruits", capacity);
-        const lifecyclesPerDay = n * (86400 / lifecycleSec);
-        let stumpValue = 0;
-        // Wood gain/loss from stumps
-        const woodPrice = p2pPrices["Wood"] || 0;
-        for (const eff of fruitStumpWood) {
-          stumpValue += lifecyclesPerDay * eff.value * woodPrice;
-        }
-        // Free chop = saves 1 axe per stump
-        if (fruitFreeChop.length > 0 && exchangeRates.coinsPerSFL > 0) {
-          const axeTool = TOOL_COSTS["Axe"];
-          if (axeTool) {
-            const axeSfl = axeTool.coins / exchangeRates.coinsPerSFL;
-            stumpValue += lifecyclesPerDay * axeSfl;
-          }
-        }
-        const roi = (boostItem.floor > 0 && stumpValue > 0) ? boostItem.floor / stumpValue : Infinity;
-        return { solo: stumpValue, synergy: stumpValue, roi, isFruitStump: true };
-      }
-
       // Non-animal categories: value via the SHARED roadmap engine (NET — with tool/seed cost + the mining
       // chain — at theoretical efficiency), so the Power page and the roadmap agree on every yield/tool boost.
       const _s = Object.assign({}, getRoadmapSettings(), { effMode: "theoretical", effOverrides: {} });
@@ -15171,6 +15133,8 @@
       const roi = (boostItem.floor > 0 && synergy > 0) ? boostItem.floor / synergy : Infinity;
       const out = { solo, synergy, roi };
       if (catEffects.some(e => e.type === "free_tool")) out.isFreeTool = true;
+      else if (catEffects.some(e => e.type === "lava_cost_reduction")) out.isLavaCostReduction = true;
+      else if (catEffects.some(e => e.type === "fruit_stump_wood" || e.type === "fruit_free_chop")) out.isFruitStump = true;
       return out;
     }
 
@@ -16107,8 +16071,10 @@
       if (cat === "obsidian") {
         if (getCapacityCount("obsidian", capacity) <= 0) return { gross: 0, cost: 0, net: 0 };
         const price = p2pPrices["Obsidian"] || 0;
+        let lavaMult = 1;
+        for (const e of (effects || [])) if (e.type === "lava_cost_reduction" && e.cat === "obsidian") lavaMult *= (1 - (e.value || 0));
         let ign = 0;
-        try { ign = (calcLavaPitCostPerDay(capacity, p2pPrices, season).costPerIgnition) || 0; } catch {}
+        try { ign = (calcLavaPitCostPerDay(capacity, p2pPrices, season, lavaMult).costPerIgnition) || 0; } catch {}
         return { gross: price / 7, cost: ign / 7, net: (price - ign) / 7 };
       }
       let gross = 0, cost = 0;
@@ -16120,6 +16086,21 @@
         } else if (cat === "crops" || cat === "fruits" || cat === "greenhouse") {
           const mix = roadmapCatMix(cat, effects, settings);
           gross = mix.gross; cost += mix.cost;
+          if (cat === "fruits") {
+            // Fruit-stump boosts (No Axe No Worries / Fruity Woody): wood gained + axe saved per lifecycle.
+            const sw = (effects || []).filter(e => e.type === "fruit_stump_wood");
+            const fc = (effects || []).filter(e => e.type === "fruit_free_chop");
+            if (sw.length || fc.length) {
+              const prod = savedProducts.fruits || getDefaultProduct("fruits");
+              const hc = (typeof FRUIT_HARVEST_COUNT !== "undefined" && FRUIT_HARVEST_COUNT[prod]) || 3;
+              const gs = (typeof FRUIT_GROW_DATA !== "undefined" && FRUIT_GROW_DATA[prod]) || 43200;
+              const lc = getCapacityCount("fruits", capacity) * (86400 / (hc * gs));
+              let sv = 0;
+              for (const e of sw) sv += lc * (e.value || 0) * (p2pPrices["Wood"] || 0);
+              if (fc.length && er.coinsPerSFL > 0) { const axe = TOOL_COSTS["Axe"]; if (axe) sv += lc * (axe.coins / er.coinsPerSFL); }
+              gross += sv;
+            }
+          }
         } else if (ROADMAP_MINING_CATS.indexOf(cat) >= 0) {
           // Mining chain (sell-vs-use). effOverride routes a boost toggle through for marginals.
           const r = roadmapMiningChain(settings, { [cat]: effects }).byCat[cat] || { gross: 0, net: 0 };
