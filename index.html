@@ -5743,7 +5743,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.41</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.42</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5770,6 +5770,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.42", items: [
+          { t: "fix", text: "The MINING & TREES table now reads in CHAIN ORDER (Wood\u2192Stone\u2192Iron\u2192Gold\u2192Crimstone, Oil last) instead of being sorted by net. Each row\u2019s net/d is now what you\u2019d net if you STOP and sell at that resource \u2014 so the Stone/Iron step-losses are visible \u2014 with a STEP/SELL/SKIP badge and a \u2605 on the best stopping point. A note explains the rows are alternative stops, not additive." },
+        ]},
         { ver: "v4.41", items: [
           { t: "feat", text: "The mine graph now shows the CHAIN decision: how far up to convert your Wood before selling. It finds the best stopping point (the ore with the highest return on your Wood) and marks the path: Wood + that ore = green SELL; the intermediate ores below it = <b>blue STEP</b> (they lose on their own, but you must mine them to reach the good one — and selling it covers their losses); anything past the best stop = red SKIP (one step too far). So you can finally see e.g. \u201cmine Stone &amp; Iron at a loss to reach Gold, sell the Gold (the chain pays), don\u2019t bother with Crimstone\u201d \u2014 with the exact \u00d7return-on-Wood on each tile." },
         ]},
@@ -16773,31 +16776,32 @@
     function roadmapMiningDetail(c, r, f) {
       const res = MINE_RES[c], T = MINE_TOOL[c];
       const toolName = Object.keys(TOOL_TO_CAT).find(k => TOOL_TO_CAT[k] === c) || "tool";
+      const dp = r.dailyProfit * f, sdp = (dp >= 0 ? "+" : "\u2212") + roadmapFmtFlower(Math.abs(dp));
       let h = `<div style="font-size:0.52rem;color:var(--text-secondary);line-height:1.8">`;
-      if (!r.mined) {
-        h += `<b style="color:#e8a060">SKIP.</b> Mining ${escHTML(res)} loses <b style="color:var(--red)">${roadmapFmtFlower(Math.abs(r.dailyProfit * f))}/day</b> vs just selling the inputs its ${escHTML(toolName)} eats — so don't mine it, sell those instead.`;
-      } else if (r.verdict === "use") {
-        const fed = escHTML(MINE_RES[r.feeds] || r.feeds || "");
-        h += `<b style="color:#5DADE2">USE → ${fed}.</b> You produce ${roadmapFmtFlower(r.produced * f)} ${escHTML(res)}/day; <b>${roadmapFmtFlower(r.consumed * f)}</b> feeds your ${fed} pickaxes and you sell the remaining <b>${roadmapFmtFlower(r.sellable * f)}</b>.`;
+      if (r.verdict === "skip") {
+        h += `<b style="color:#e8a060">SKIP.</b> Going as far as ${escHTML(res)} and selling nets <b style="color:${dp < 0 ? 'var(--red)' : 'var(--text-dim)'}">${sdp}/day</b> ${dp < 0 ? "\u2014 the Wood baked into it is worth more than the ore sells for" : "\u2014 no better than stopping earlier"}. Don't go this far.`;
+      } else if (r.verdict === "step") {
+        const fed = escHTML(MINE_RES[r.feeds] || r.feeds || "the next tier");
+        h += `<b style="color:#5DADE2">STEP \u2192 ${fed}.</b> Selling ${escHTML(res)} on its own loses <b style="color:var(--red)">${roadmapFmtFlower(Math.abs(dp))}/day</b>, but you must mine it to craft ${fed} pickaxes \u2014 and selling ${fed} (the best stop) more than pays it back. ${escHTML(res)}'s cost is already baked into ${fed}'s all-in Wood.`;
       } else {
-        h += `<b style="color:#7fe0a0">SELL.</b> You produce ${roadmapFmtFlower(r.produced * f)} ${escHTML(res)}/day and sell it all (nothing above it is worth feeding it into).`;
+        h += `<b style="color:#7fe0a0">SELL${r.isPeak ? " \u2605 best stop" : ""}.</b> Converting your Wood up to ${escHTML(res)} and selling it nets <b style="color:var(--green)">${sdp}/day</b>${r.rowReturn ? ` \u2014 \u00d7${(+r.rowReturn).toFixed(2)} what that Wood is worth on its own` : ""}.`;
       }
-      if (r.mined && T) {
+      if (T && r.mined) {
         const parts = []; for (const i in T.chain) parts.push(T.chain[i] + " " + escHTML(MINE_RES[i])); for (const m in (T.mat || {})) parts.push(T.mat[m] + " " + escHTML(m));
-        const dc = r.dailyProfit >= 0 ? "var(--green)" : "var(--red)";
-        h += `<br>Mining it nets <b style="color:${dc}">${r.dailyProfit >= 0 ? "+" : "−"}${roadmapFmtFlower(Math.abs(r.dailyProfit * f))}/day</b> vs selling the inputs it eats. Each ${escHTML(toolName)} = ${parts.join(" + ")}${r.inputLimited ? ` <span style="color:var(--yellow)">— input-limited (you can't make enough of a lower resource)</span>` : ""}.`;
+        const woodUnits = (r.embWood || 0) * (r.produced || 0) * f;
+        h += `<br>Each ${escHTML(toolName)} = ${parts.join(" + ")}. All-in that is <b>${roadmapFmtFlower(woodUnits)} Wood/day</b> (\u2248${roadmapFmtFlower((r.woodCostPerUnit || 0) * (r.produced || 0) * f)} \u25c8) baked into your ${escHTML(res)}.`;
       }
       h += `</div>`;
       return h;
     }
-    function roadmapProfitabilityHtml(settings) {
+        function roadmapProfitabilityHtml(settings) {
       const cf = roadmapCoinsFree(settings);
       const coins = Math.round(parseFloat(powerState.farm && powerState.farm.coins) || 0);
       const er = cf ? Object.assign({}, powerState.exchangeRates, { coinsPerSFL: Infinity }) : powerState.exchangeRates;
       const cap = powerState.capacity;
       const groups = [];
       const mk = (title) => { const g = { title, rows: [] }; groups.push(g); return g; };
-      const gMine = mk("\u26cf\ufe0f MINING & TREES");
+      const gMine = mk("\u26cf\ufe0f MINING & TREES"); gMine.keepOrder = true; gMine.note = "Chain order Wood to Crimstone (Oil last). <b>net/d = what you net if you STOP and sell at that resource</b> - alternative stopping points, not additive: pick the best one (the intermediate steps lose alone but are paid back by it).";
       const gAni = mk("\ud83d\udc2e ANIMALS");
       const gCrop = mk("\ud83c\udf3e CROPS \u2014 net if all plots grow this one");
       const gGh = mk("\ud83c\udfe0 GREENHOUSE");
@@ -16813,9 +16817,9 @@
         if (getCapacityCount(cat, cap) <= 0) continue;
         const r = _miCh.byCat[cat]; if (!r) continue;
         const f = roadmapEffFactor(cat, settings);
-        const VB = { sell: ["SELL", "#7fe0a0"], use: ["USE", "#5DADE2"], skip: ["SKIP", "#e8a060"] }[r.verdict] || ["", "#999"];
-        const badge = `<span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1c160f;color:${VB[1]};font-weight:bold">${VB[0]}${r.verdict === "use" && r.feeds ? ("→" + escHTML(MINE_RES[r.feeds] || r.feeds)) : ""}</span>`;
-        gMine.rows.push({ label: MINE_RES[cat], icon: MINE_RES[cat], gross: r.gross * f, cost: (r.gross - r.net) * f, net: r.net * f, badge, expandHtml: roadmapMiningDetail(cat, r, f) });
+        const VB = { sell: ["SELL", "#7fe0a0"], step: ["STEP", "#5DADE2"], skip: ["SKIP", "#e8a060"] }[r.verdict] || ["", "#999"];
+        const badge = `<span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1c160f;color:${VB[1]};font-weight:bold">${VB[0]}${r.verdict === "step" && r.feeds ? ("→" + escHTML(MINE_RES[r.feeds] || r.feeds)) : ""}</span>${r.isPeak ? ' <span style="font-size:0.45rem;color:var(--sunpetal);font-weight:bold">★ best stop</span>' : ""}`;
+        gMine.rows.push({ label: MINE_RES[cat], icon: MINE_RES[cat], gross: r.gross * f, cost: (r.gross - r.dailyProfit) * f, net: r.dailyProfit * f, badge, isPeak: r.isPeak, expandHtml: roadmapMiningDetail(cat, r, f) });
       }
       for (const [cat, icon] of [["obsidian", "Obsidian"]]) {
         if (getCapacityCount(cat, cap) <= 0) continue;
@@ -16890,8 +16894,9 @@
       </div>`;
       for (const g of groups) {
         if (!g.rows.length) continue;
-        g.rows.sort((a, b) => ((a.fade ? 1 : 0) - (b.fade ? 1 : 0)) || (b.net - a.net));
+        if (!g.keepOrder) g.rows.sort((a, b) => ((a.fade ? 1 : 0) - (b.fade ? 1 : 0)) || (b.net - a.net));
         h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin:12px 0 3px">${g.title}</div>`;
+        if (g.note) h += `<div style="font-size:0.5rem;color:var(--text-dim);margin:0 0 4px;line-height:1.5">${g.note}</div>`;
         h += `<table style="width:100%;border-collapse:collapse;font-size:0.58rem"><tr style="color:var(--text-dim);font-size:0.5rem"><td></td><td style="text-align:right;padding:0 6px">gives/d</td><td style="text-align:right;padding:0 6px">cost/d</td><td style="text-align:right">net/d</td></tr>`;
         for (const r of g.rows) {
           const pos = r.net > 0.001, neg = r.net < -0.001;
