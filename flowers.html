@@ -5689,7 +5689,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.28</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.29</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5716,6 +5716,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.29", items: [
+          { t: "feat", text: "Default harvest efficiency now uses the LAST 7 DAYS of your history (same window as the Nodes page), instead of the old 35-days-excluding-the-current-week window. So income + boost values reflect your RECENT activity. For fast-respawn resources (trees 2h, stone 4h) this reads lower — you realistically chop ~3x/day, not every 2h around the clock — which is the honest number; slow resources (gold/crimstone, 24h) stay near full. Use the per-category efficiency sliders in Settings to override any of them." },
+        ]},
         { ver: "v4.28", items: [
           { t: "fix", text: "The roadmap was silently valuing your best TOOL NFTs at ZERO. Free-tool boosts (Quarry, Crimstone Spikes Hair, Foreman Beaver, Infernal Drill) are detected from your farm, not from boost effects, so the marginal calc never saw them. Now every mining boost is valued by recomputing the WHOLE mining chain with vs without it — so a free tool is credited for the upstream resource it stops eating: Quarry +3.6/day (saves the Wood its pickaxes would burn), and Crimstone Spikes Hair +8.9/day because it lets you mine crimstone with no Gold Pickaxes, turning crimstone from SKIP into a real income source (and unlocking all the crimstone boosts behind it). This is also the keystone for making the Power and Roadmap pages share one identical value engine." },
         ]},
@@ -16962,8 +16965,8 @@
     async function roadmapComputeMayEfficiency() {
       const out = { effByCat: {}, meta: { snaps: 0, days: 0, available: false, from: "", to: "" } };
       let rows = null;
-      const fromD = new Date(Date.now() - 35 * 86400000).toISOString().slice(0, 10);
-      const toD = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10); // exclude current week
+      const fromD = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+      const toD = new Date(Date.now()).toISOString().slice(0, 10); // last 7 days (same window as the Nodes page)
       try {
         const url = `/api/farm-history?farm=${FARM_ID}&from=${fromD}&to=${toD}&limit=2000`;
         const r = await fetch(url);
@@ -17476,7 +17479,7 @@
       if (roadmapState.effMeta && roadmapState.effMeta.available) {
         const parts = [];
         for (const [cat, e] of Object.entries(roadmapState.effByCat)) { if (!e.measured) continue; parts.push(`${POWER_CATEGORIES[cat] ? POWER_CATEGORIES[cat].label : cat} ${Math.round(e.ratio * 100)}%`); }
-        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--text-dim)">Harvest efficiency (throughput vs theoretical), ${roadmapState.effMeta.from} → ${roadmapState.effMeta.to}, excl. current week, ${roadmapState.effMeta.snaps} snaps: ${parts.join(" · ")}${parts.length ? "" : "no harvests recorded"} · bees/fishing use avg ${Math.round((roadmapState.meanRatio || 0) * 100)}%</div>`;
+        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--text-dim)">Harvest efficiency (throughput vs theoretical), ${roadmapState.effMeta.from} → ${roadmapState.effMeta.to}, last 7 days, ${roadmapState.effMeta.snaps} snaps: ${parts.join(" · ")}${parts.length ? "" : "no harvests recorded"} · bees/fishing use avg ${Math.round((roadmapState.meanRatio || 0) * 100)}%</div>`;
       } else {
         h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--yellow)">No recent history available — using ${settings.effMode === "theoretical" ? "theoretical" : "average activity"} rates only.</div>`;
       }
