@@ -5689,7 +5689,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.27</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.28</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5716,6 +5716,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.28", items: [
+          { t: "fix", text: "The roadmap was silently valuing your best TOOL NFTs at ZERO. Free-tool boosts (Quarry, Crimstone Spikes Hair, Foreman Beaver, Infernal Drill) are detected from your farm, not from boost effects, so the marginal calc never saw them. Now every mining boost is valued by recomputing the WHOLE mining chain with vs without it — so a free tool is credited for the upstream resource it stops eating: Quarry +3.6/day (saves the Wood its pickaxes would burn), and Crimstone Spikes Hair +8.9/day because it lets you mine crimstone with no Gold Pickaxes, turning crimstone from SKIP into a real income source (and unlocking all the crimstone boosts behind it). This is also the keystone for making the Power and Roadmap pages share one identical value engine." },
+        ]},
         { ver: "v4.27", items: [
           { t: "feat", text: "Mining is back in the What-to-farm/mine table — one table now. Each resource (Wood/Stone/Iron/Gold/Crimstone/Oil) is a clickable row with its SELL / USE→next / SKIP badge and net/day; click it to expand the full chain detail: what it feeds, the sell-vs-use split, the +Δ/day you gain by mining it vs just selling the inputs it eats, and the tool recipe. The separate Mining Chain table is gone." },
         ]},
@@ -16078,7 +16081,7 @@
         P[c] = RES_FARMKEY[c] ? gameResUnitsPerDay(c, farm, cap, e) : (applyBoosts(c, MINE_RES[c], cap, e).unitsPerDay || 0);
         tools[c] = miningToolsPerDay(c, cap);
         price[c] = p2p[MINE_RES[c]] || 0;
-        try { free[c] = !!calcToolCostPerDay(c, cap, er, p2p, sm, false).freeTool; } catch { free[c] = false; }
+        try { free[c] = !!calcToolCostPerDay(c, cap, er, p2p, sm, false).freeTool || (eff(c) || []).some(e => e.type === "free_tool"); } catch { free[c] = (eff(c) || []).some(e => e.type === "free_tool"); }
       }
       // own (non-chain) tool cost per day: leather/wool + coins
       const ownCost = (c) => {
@@ -16886,7 +16889,20 @@
       if (!clone) return 0;
       if (clone.fixedMarginal !== undefined) return clone.fixedMarginal; // node merge/expand actions
       let total = 0;
+      const mineCats = clone.categories.filter(c => ROADMAP_MINING_CATS.indexOf(c) >= 0 && POWER_CATEGORIES[c] && POWER_CATEGORIES[c].quantifiable && clone.effects.some(e => e.cat === c));
+      // Mining boosts use the WHOLE-CHAIN delta: a tool/yield boost on one tier shifts other tiers' nets
+      // (e.g. a free tool frees the upstream resource it would have eaten) — a per-category delta misses that.
+      if (mineCats.length) {
+        const override = {};
+        for (const cat of mineCats) {
+          const ownedEff = catBoostsW[cat].filter(b => b.has && !b.isDisabled).flatMap(b => b.effects.filter(e => e.cat === cat));
+          override[cat] = ownedEff.concat(clone.effects.filter(e => e.cat === cat));
+        }
+        const d = roadmapMiningChain(settings, override).total - roadmapMiningChain(settings).total;
+        if (d > 0) total += d * roadmapEffFactor(mineCats[0], settings);
+      }
       for (const cat of clone.categories) {
+        if (ROADMAP_MINING_CATS.indexOf(cat) >= 0) continue; // handled by the chain delta above
         if (!POWER_CATEGORIES[cat] || !POWER_CATEGORIES[cat].quantifiable) continue;
         const itemEff = clone.effects.filter(e => e.cat === cat);
         if (itemEff.length === 0) continue;
