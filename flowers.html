@@ -2708,28 +2708,47 @@
         }
         const mineHandles = () => [ h(Handle, { key:"l", type:"target", position:Position.Left, style:{ opacity:0, border:0 } }), h(Handle, { key:"r", type:"source", position:Position.Right, style:{ opacity:0, border:0 } }) ];
         function MineNode({ data }) {
-          const vc = data.verdict === "sell" ? C.green : (data.verdict === "use" ? C.blue : C.yellow);
-          const vlabel = data.verdict === "sell" ? "SELL" : (data.verdict === "use" ? ("USE → " + (data.feeds || "")) : "SKIP");
-          return h("div", { style:{ width:208, background:"linear-gradient(165deg,#201810,#13100a)", border:"2px solid "+vc, borderRadius:9, padding:"7px 9px", boxShadow:"0 0 11px "+vc+"44" } },
+          const vc = data.verdict === "sell" ? C.green : (data.verdict === "use" ? C.blue : C.red);
+          const vlabel = data.verdict === "sell" ? "✓ MINE, THEN SELL" : (data.verdict === "use" ? ("MINE → FEEDS " + (data.feeds || "").toUpperCase()) : "✗ DO NOT MINE");
+          const p = +data.dailyProfit || 0;
+          const base = !(data.inputs && data.inputs.length);
+          const good = base || p >= 0;
+          return h("div", { style:{ width:228, background:"#13100a", border:"2.5px solid "+vc, borderRadius:11, overflow:"hidden", boxShadow:"0 0 15px "+vc+"55" } },
             mineHandles(),
-            h("div", { style:{ display:"flex", alignItems:"center", gap:7, borderBottom:"1px solid "+C.brown, paddingBottom:5 } },
-              data.icon ? h("img", { src:data.icon, onError:hideImg, style:{ width:26, height:26, imageRendering:"pixelated" } }) : null,
-              h("div", { style:{ flex:1, fontFamily:CF, fontSize:13, fontWeight:"bold", color:vc } }, data.res),
-              h("div", { style:{ fontFamily:PF, fontSize:7, color:"#1a120a", background:vc, borderRadius:3, padding:"3px 4px" } }, vlabel)),
-            h("div", { style:{ fontFamily:CF, fontSize:11, marginTop:5, lineHeight:1.5 } },
-              h("div", { style:{ color:C.text } }, "1 mine → ", h("b", { style:{ color:C.gold } }, fmt(data.yieldPerMine) + " " + data.res), " = ", h("b", { style:{ color:C.green } }, fmt(data.valuePerMine) + " ◈")),
-              h("div", { style:{ color:C.dim, marginTop:2 } }, "needs: " + data.recipe),
-              h("div", { style:{ marginTop:4 } }, data.mined
-                ? h("span", { style:{ color:(data.dailyProfit >= 0 ? C.green : C.red), fontWeight:"bold" } }, "mining nets " + (data.dailyProfit >= 0 ? "+" : "−") + fmt(Math.abs(data.dailyProfit)) + "/day")
-                : h("span", { style:{ color:C.yellow, fontWeight:"bold" } }, "✗ skip — sell the inputs"))));
+            h("div", { style:{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", background:vc+"22", borderBottom:"1px solid "+vc+"55" } },
+              data.icon ? h("img", { src:data.icon, onError:hideImg, style:{ width:30, height:30, imageRendering:"pixelated" } }) : null,
+              h("div", { style:{ flex:1 } },
+                h("div", { style:{ fontFamily:CF, fontSize:14, fontWeight:"bold", color:C.text } }, data.res),
+                h("div", { style:{ fontFamily:PF, fontSize:7, color:vc, marginTop:3 } }, vlabel))),
+            h("div", { style:{ padding:"8px 10px 9px" } },
+              h("div", { style:{ fontFamily:CF, fontSize:9.5, color:C.dim, textTransform:"uppercase", letterSpacing:0.5 } }, "⛏ one mine gives"),
+              h("div", { style:{ display:"flex", alignItems:"center", gap:6, margin:"3px 0 2px" } },
+                data.icon ? h("img", { src:data.icon, onError:hideImg, style:{ width:20, height:20, imageRendering:"pixelated" } }) : null,
+                h("span", { style:{ fontFamily:CF, fontSize:16, fontWeight:"bold", color:C.gold } }, fmt(data.yieldPerMine)),
+                h("span", { style:{ fontFamily:CF, fontSize:11, color:C.dim } }, data.res),
+                h("span", { style:{ fontFamily:CF, fontSize:14, fontWeight:"bold", color:C.green, marginLeft:"auto" } }, "= " + fmt(data.valuePerMine) + " ◈")),
+              base
+                ? h("div", { style:{ fontFamily:CF, fontSize:10.5, color:C.green, marginTop:6, paddingTop:6, borderTop:"1px dashed "+C.brown } }, "✅ no tool cost — just a free Axe")
+                : h("div", { style:{ display:"flex", alignItems:"center", gap:7, flexWrap:"wrap", marginTop:6, paddingTop:6, borderTop:"1px dashed "+C.brown } },
+                    h("span", { style:{ fontFamily:CF, fontSize:9.5, color:C.dim, textTransform:"uppercase" } }, "its tool eats"),
+                    data.inputs.map((inp, i) => h("span", { key:i, style:{ display:"inline-flex", alignItems:"center", gap:2, background:"#241a10", borderRadius:4, padding:"1px 4px" } },
+                      h("span", { style:{ fontFamily:CF, fontSize:12, fontWeight:"bold", color:C.red } }, inp.qty + "×"),
+                      inp.icon ? h("img", { src:inp.icon, onError:hideImg, style:{ width:16, height:16, imageRendering:"pixelated" } }) : null,
+                      h("span", { style:{ fontFamily:CF, fontSize:10, color:C.sec } }, inp.res)))),
+              h("div", { style:{ marginTop:8, padding:"6px 8px", borderRadius:7, background:(good?C.green:C.red)+"22", border:"1px solid "+(good?C.green:C.red)+"66", textAlign:"center" } },
+                base
+                  ? h("span", { style:{ fontFamily:CF, fontSize:11, fontWeight:"bold", color:C.green } }, "▲ free to mine — always worth it")
+                  : (data.mined
+                      ? h("span", { style:{ fontFamily:CF, fontSize:11, fontWeight:"bold", color:(p>=0?C.green:C.red) } }, (p>=0?"▲ +":"▼ −") + fmt(Math.abs(p)) + " ◈/day  vs selling the inputs")
+                      : h("span", { style:{ fontFamily:CF, fontSize:10.5, fontWeight:"bold", color:C.red } }, "▼ loses " + fmt(Math.abs(p)) + "/day — sell its inputs instead")))));
         }
-        const nodeTypes = { wowItem:WowItem, skillNode:SkillNode, levelNode:LevelNode, mineNode:MineNode };
+                const nodeTypes = { wowItem:WowItem, skillNode:SkillNode, levelNode:LevelNode, mineNode:MineNode };
         const roots = {};
         window.__mountFlow = function(elId, kind) {
           const el = document.getElementById(elId); if (!el) return;
           try {
             const fd = (window.__roadmapFlowData && window.__roadmapFlowData[kind]) || { nodes:[], edges:[] };
-            const edges = (fd.edges||[]).map((e)=>Object.assign({}, e, { style:{ stroke:C.gold, strokeWidth:3 }, markerEnd:{ type:"arrowclosed", color:C.gold }, animated:e.animated!==false }));
+            const edges = (fd.edges||[]).map((e)=>Object.assign({}, e, { style:{ stroke:(e.stroke||C.gold), strokeWidth:3, strokeDasharray:(e.dashed?"7 4":null) }, markerEnd:{ type:"arrowclosed", color:(e.stroke||C.gold) }, animated:e.animated!==false, labelStyle:{ fill:"#f5ead2", fontFamily:CF, fontSize:11, fontWeight:"bold" }, labelBgStyle:{ fill:"#1c160f", fillOpacity:0.92, stroke:(e.stroke||C.gold) }, labelBgPadding:[5,3], labelBgBorderRadius:5 }));
             if (roots[elId]) { try { roots[elId].unmount(); } catch (e) {} }
             const root = createRoot(el); roots[elId] = root;
             root.render(h(ReactFlow, { nodes:fd.nodes, edges:edges, nodeTypes:nodeTypes, fitView:false, defaultViewport:{ x:40, y:30, zoom:1 }, minZoom:1, maxZoom:1, proOptions:{ hideAttribution:true }, defaultEdgeOptions:{ type:"smoothstep" }, nodesDraggable:true, panOnDrag:true, panOnScroll:true, panOnScrollSpeed:0.9, zoomOnScroll:false, zoomOnPinch:false, zoomOnDoubleClick:false, onInit:(inst)=>{ try { inst.setViewport({ x:40, y:30, zoom:1 }, { duration:0 }); } catch (e) {} } },
@@ -5706,7 +5725,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.34</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.35</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5733,6 +5752,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.35", items: [
+          { t: "feat", text: "Made the MINING CHAIN graph far more visual & self-explaining. Each resource tile now has a coloured verdict ribbon (MINE & SELL / MINE → FEEDS NEXT / DO NOT MINE), the big per-mine yield + its FLOWER value, the tool recipe shown as ICONS (3× Wood, 3× Gold …), and a green/red bar with the exact ◈/day you gain by mining it vs selling its inputs. The arrows are now colour-coded (green = profitable climb, red dashed = a loss) and labelled with what each step consumes. Above the graph a one-line plain-language verdict spells out exactly what to mine, what to sell, and what to skip on YOUR farm." },
+        ]},
         { ver: "v4.34", items: [
           { t: "feat", text: "New visual at the top of WHAT TO FARM / MINE: a MINING CHAIN graph (ReactFlow). Each resource is a tile showing what ONE mine yields and its FLOWER value, what its tool eats, its SELL / USE / SKIP verdict, and the per-day gain of mining vs selling the inputs — e.g. Crimstone: 1 mine → 1.6 Crimstone = 1.08◈, needs 3 Wood + 3 Gold, SKIP (−0.92/day). Arrows show the chain Wood→Stone→Iron→Gold→Crimstone (+Oil branch), so you can SEE that climbing pays up to Gold (sell it) and Crimstone/Oil are a loss. Drag to pan." },
         ]},
@@ -16805,7 +16827,20 @@
       let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
       h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">WHAT TO FARM / MINE NOW</div>`;
       h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Per-day economics: <span style="color:var(--green)">gives</span> minus <span style="color:var(--red)">costs</span> = net. Scaled by your real harvest efficiency (mining/animals/fruits/greenhouse \u2014 see the efficiency line above); crops &amp; crop machine capped to your ${settings.restocksPerDay}\u00d7 daily restocks. Out-of-season crops faded. ${cf ? `Coins are FREE (you hold ${coins.toLocaleString()} &gt; 10k) so coin-priced tools/seeds cost 0 \u2014 only real resource costs count (animal feed &amp; sickness, salt wood, crop-machine oil).` : `Coin costs at Betty rate (you hold ${coins.toLocaleString()}).`} Obsidian sells ~1/week.</div>`;
-      h += `<div style="margin:2px 0 12px"><div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin-bottom:4px">⛏️ MINING CHAIN — one mine of each: does climbing pay?</div><div id="rf-mine" style="height:380px;border:1px solid var(--border-brown);border-radius:8px;background:#13100a;overflow:hidden"></div><div style="font-size:0.5rem;color:var(--text-dim);margin-top:3px">Drag to pan. Each tile = one mine of that resource (what it yields &amp; what its tool eats), arrows = the chain, and whether mining beats selling the inputs.</div></div>`;
+      const _mc = roadmapMiningChain(settings);
+      const _ord = ["trees", "stone", "iron", "gold", "crimstone", "oil"];
+      const _nm = c => MINE_RES[c];
+      const _mineThese = _ord.filter(c => _mc.byCat[c] && _mc.byCat[c].mined);
+      const _sellAt = _ord.filter(c => _mc.byCat[c] && _mc.byCat[c].verdict === "sell");
+      const _skipC = _ord.filter(c => _mc.byCat[c] && _mc.byCat[c].produced > 0 && !_mc.byCat[c].mined);
+      let _verdict = "";
+      if (_mineThese.length) _verdict = "Right now: <b style=\"color:var(--green)\">mine " + _mineThese.map(_nm).join(" → ") + "</b>" + (_sellAt.length ? ", <b style=\"color:var(--green)\">sell the " + _sellAt.map(_nm).join(" &amp; ") + "</b>" : "") + (_skipC.length ? " — <b style=\"color:var(--red)\">skip " + _skipC.map(_nm).join(" &amp; ") + "</b> (sell their inputs raw instead)." : ".");
+      h += `<div style="margin:2px 0 14px">
+        <div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin-bottom:5px">⛏️ MINING CHAIN — does climbing the chain pay?</div>
+        ${_verdict ? `<div style="font-size:0.62rem;color:var(--text-primary);background:#1a140c;border:1px solid var(--border-brown);border-left:3px solid var(--green);border-radius:6px;padding:7px 10px;margin-bottom:7px;line-height:1.5">${_verdict}</div>` : ``}
+        <div id="rf-mine" style="height:400px;border:1px solid var(--border-brown);border-radius:8px;background:#13100a;overflow:hidden"></div>
+        <div style="font-size:0.52rem;color:var(--text-dim);margin-top:4px;line-height:1.6">Each tile = <b>one mine</b> of that resource — what it yields (+ its FLOWER value) and what its tool eats. <b style="color:var(--green)">Green ▲</b> = worth mining (beats selling its inputs) · <b style="color:var(--red)">red ▼</b> = a loss, sell the inputs instead. Arrows are the chain, labelled with what each step consumes. Drag to pan.</div>
+      </div>`;
       for (const g of groups) {
         if (!g.rows.length) continue;
         g.rows.sort((a, b) => ((a.fade ? 1 : 0) - (b.fade ? 1 : 0)) || (b.net - a.net));
@@ -17332,19 +17367,24 @@
     function roadmapBuildMineFlowData(settings) {
       const ch = roadmapMiningChain(settings);
       const cap = powerState.capacity, p2p = roadmapPrices(settings);
-      const POS = { trees:{x:0,y:30}, stone:{x:250,y:30}, iron:{x:500,y:30}, gold:{x:750,y:30}, crimstone:{x:1000,y:30}, oil:{x:500,y:240} };
+      const POS = { trees:{x:0,y:40}, stone:{x:264,y:40}, iron:{x:528,y:40}, gold:{x:792,y:40}, crimstone:{x:1056,y:40}, oil:{x:528,y:290} };
       const PRIMARY = { stone:"trees", iron:"stone", gold:"iron", crimstone:"gold", oil:"iron" };
       const nodes = [], edges = [];
-      for (const cat of ["trees","stone","iron","gold","crimstone","oil"]) {
+      for (const cat of ["trees", "stone", "iron", "gold", "crimstone", "oil"]) {
         const r = ch.byCat[cat]; if (!r || !(r.produced > 0)) continue;
         let tpd = 0; try { tpd = miningToolsPerDay(cat, cap); } catch {}
         const yieldPerMine = tpd > 0 ? r.produced / tpd : r.produced;
         const T = MINE_TOOL[cat];
-        const recipe = T ? Object.entries(T.chain || {}).map(([i, q]) => q + " " + MINE_RES[i]).concat(Object.entries(T.mat || {}).map(([m, q]) => q + " " + m)).join(" + ") : "nothing (free Axe)";
+        const inputs = T ? Object.entries(T.chain || {}).map(([i, q]) => ({ res: MINE_RES[i], qty: q, icon: getItemIcon(MINE_RES[i]) }))
+                            .concat(Object.entries(T.mat || {}).map(([m, q]) => ({ res: m, qty: q, icon: getItemIcon(m) }))) : [];
         nodes.push({ id: cat, type: "mineNode", position: POS[cat] || { x: 0, y: 0 }, data: {
           res: MINE_RES[cat], icon: getItemIcon(MINE_RES[cat]), yieldPerMine, valuePerMine: yieldPerMine * (p2p[MINE_RES[cat]] || 0),
-          recipe: recipe || "nothing (free Axe)", verdict: r.verdict, mined: r.mined, feeds: r.feeds ? MINE_RES[r.feeds] : null, dailyProfit: r.dailyProfit } });
-        if (PRIMARY[cat] && ch.byCat[PRIMARY[cat]]) edges.push({ id: cat + "<" + PRIMARY[cat], source: PRIMARY[cat], target: cat, animated: true });
+          inputs, verdict: r.verdict, mined: r.mined, feeds: r.feeds ? MINE_RES[r.feeds] : null, dailyProfit: r.dailyProfit } });
+        if (PRIMARY[cat] && ch.byCat[PRIMARY[cat]]) {
+          const src = PRIMARY[cat], qty = (T && T.chain && T.chain[src]) || 0;
+          edges.push({ id: cat + "<" + src, source: src, target: cat, label: qty + "× " + MINE_RES[src],
+            stroke: r.mined ? "#30D158" : "#FF6B6B", dashed: !r.mined, animated: !!r.mined });
+        }
       }
       return { nodes, edges };
     }
