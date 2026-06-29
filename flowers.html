@@ -5743,7 +5743,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.51</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.52</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5770,6 +5770,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.52", items: [
+          { t: "fix", text: "Service-worker cache bump so the v4.51 p2p-pricing fix actually reaches you. If the buy-path table still showed an inflated +FL/day (e.g. Tiki Totem +7.3) while the Power page was correct, you were running a cached older build — hard-reload (Ctrl+Shift+R) and the footer should now read v4.52." },
+        ]},
         { ver: "v4.51", items: [
           { t: "fix", text: "Removed the per-resource use-value override — resources are now ALWAYS priced at p2p (marketplace), in the table and the graph. A leftover Wood=0.2 override (~13× the market price) had been inflating every wood-boost marginal, e.g. Tiki Totem showed +7.2/day instead of its real ~+0.6. The override panel is gone and any saved value is ignored." },
         ]},
