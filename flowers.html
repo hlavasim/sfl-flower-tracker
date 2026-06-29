@@ -5743,7 +5743,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.53</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.54</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5770,6 +5770,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.54", items: [
+          { t: "feat", text: "The efficiency toggle is now right at the top of YOUR BUY PATH (it was buried in Settings). Numbers default to <b>your Last-7-days activity</b> \u2014 so Tiki Totem reads ~0.23/day (realistic) not 0.64 (full-time). It shows your actual harvest efficiency per resource (Wood/Crops/Stone %) and you can flip to 100% theoretical to see full-time potential. The mode applies to every number on the page (income, what-to-farm, buy-path)." },
+        ]},
         { ver: "v4.53", items: [
           { t: "fix", text: "Buy-path +FL/day is now each item\u2019s value added to your CURRENT farm \u2014 not its value after everything above it in the plan is already bought. Before, e.g. Tiki Totem (+0.1 Wood) was evaluated AFTER the Beavers doubled your Wood respawn, so it read +7.10/day instead of its real +0.64. The \u03a3 Cost / FL/day columns are now a clean running total in the shown order (no more 12,000-cost jumps), and the visual graph uses the same numbers as the table." },
         ]},
@@ -17585,6 +17588,11 @@
       // ── Buy path: Visual graph or Table (toggle) ──
       h += `<div style="margin-bottom:16px">`;
       h += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal)">YOUR BUY PATH — what to buy next, in order</div><div style="margin-left:auto;display:flex;gap:4px"><button id="bp-tab-graph" onclick="_roadmapBuyView('graph')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:var(--sunpetal);color:#1a120a;cursor:pointer;font-weight:bold">▣ Visual</button><button id="bp-tab-table" onclick="_roadmapBuyView('table')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:#241a10;color:var(--text-secondary);cursor:pointer">☰ Table</button></div></div>`;
+      {
+        const _effReal = settings.effMode === "real";
+        const _pct = (c) => Math.round(roadmapEffFactor(c, settings) * 100);
+        h += `<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap;font-size:0.55rem;color:var(--text-dim)"><span>+FL/day &amp; income shown at</span><select onchange="_roadmapSetEffMode(this.value)" style="font-size:0.55rem;padding:2px 6px;background:#241a10;color:var(--text-secondary);border:1px solid var(--border-brown);border-radius:4px;cursor:pointer"><option value="real"${_effReal ? " selected" : ""}>your Last-7-days activity</option><option value="theoretical"${!_effReal ? " selected" : ""}>100% theoretical (full-time)</option></select>${_effReal ? `<span>— how often you actually harvest (Wood ${_pct("trees")}%, Crops ${_pct("crops")}%, Stone ${_pct("stone")}% of max). Applies to every number on this page.</span>` : `<span style="color:var(--yellow)">— full-time potential (you'd have to harvest every node the instant it's ready). Switch to Last-7-days for realistic numbers.</span>`}</div>`;
+      }
       h += `<div id="buy-graph">`;
       h += `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px">scroll = move down the path · drag to pan · +/− to zoom</div>`;
       h += `<div id="rf-graph" style="height:760px;width:100%;border:1px solid var(--border-brown);border-radius:8px;background:radial-gradient(circle at 50% 22%, #1a130b, #0e0a06);overflow:hidden"></div>`;
