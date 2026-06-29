@@ -5743,7 +5743,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.49</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.50</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5770,6 +5770,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.50", items: [
+          { t: "fix", text: "Per-crop filter now also cleans the buy path’s CONDITIONAL rows. Before, unticking a crop hid it from the table but a boost specific to it (e.g. Obie — -25% Eggplant) still showed as “if you grow Eggplant”. Now the situational value drops your filtered-out crops/fruits, so those single-crop boosts disappear, while a general +all-crops boost still counts for the crops you kept." },
+        ]},
         { ver: "v4.49", items: [
           { t: "fix", text: "Two missing mining-yield boosts found by cross-checking andrei’s breakdown: (1) the base <b>Native +0.2</b> (20% chance +1) is a DEFAULT everyone gets — I had wrongly gated it on a skill, so Wood/Stone/Iron/Gold were ~0.2 low; (2) the <b>faction shield</b> (Nightshade etc.) gives <b>+0.25 to every ore</b>, but I was only applying it to Wood. Fixed both — per-T1 yields now match exactly (Wood 1.85, Stone 2.25, Iron 2.25, Gold 2.15). Lifts mining income accordingly." },
         ]},
@@ -17032,6 +17035,7 @@
           const table = cat === "crops" ? CROP_GROW_DATA : (cat === "fruits" ? FRUIT_GROW_DATA : GREENHOUSE_GROW_DATA);
           let prods = Array.from(new Set(itemEff.filter(e => e.product).map(e => e.product)));
           if (!prods.length) prods = Object.keys(table); // AOE/global → best of any product
+          prods = prods.filter(p => (settings.excludeCats || []).indexOf(p) < 0); // drop crops/fruits the user filtered out
           let best = 0, bestP = "";
           for (const p of prods) {
             if (!table[p]) continue;
