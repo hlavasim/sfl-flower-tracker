@@ -3715,7 +3715,7 @@
       "Clucky Grazing":       { chickens: -0.25, cows: 0.50, sheep: 0.50 },
       "Sheepwise Diet":       { chickens: 0.50, cows: 0.50, sheep: -0.25 },
       "Cow-Smart Nutrition":  { chickens: 0.50, cows: -0.25, sheep: 0.50 },
-      "Chonky Feed":          { chickens: 0.50, cows: 0.50, sheep: 0.50 },
+      "Chonky Feed":          { chickens: -0.25, cows: -0.25, sheep: -0.25 }, // net of +50% food x 2x XP (half feedings) = x0.75
     };
 
     // ── Animal Sickness System ──
@@ -5689,7 +5689,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.32</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.33</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5716,6 +5716,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.33", items: [
+          { t: "fix", text: "Phase 5 animal fixes (shared, both pages). Feed cost now picks the cheapest TOTAL food per animal — it tries every food (the favourite needs the fewest feedings but a cheaper low-XP food can still cost less overall) — so the income net matches the feed advisor instead of disagreeing. (For your farm Mixed Grain is already the cheapest, so no change, but it’s now correct for any price mix.) And Chonky Feed is modeled as its true net effect (−25%: +50% food but 2× XP halves the feedings = ×0.75) instead of the +50% debuff alone, which had it reading as a feed-cost increase." },
+        ]},
         { ver: "v4.32", items: [
           { t: "fix", text: "Phase 3 boost-parsing fixes — in the shared functions, so both Power and Roadmap get them: fishing “+N daily” boosts (daily_flat) are now valued instead of silently dropped; feed-reduction boosts written without a minus sign no longer flip into a feed COST increase; “+1 Egg per animal”-style chance boosts no longer mis-categorize to “other” (the trailing “per/when/while/on …” is now stripped); and a product-less “+0.25 Animal Produce” flat now boosts the PRIMARY product only, not Egg+Feather / Wool+Merino double." },
         ]},
@@ -14613,6 +14616,23 @@
       return { food: "Mixed Grain", xp: 80 };
     }
 
+    // Cheapest-TOTAL feed for an animal's cycle: try every food (favourite minimises feedings but may cost
+    // more per unit; a cheap low-XP food needs more feedings) and pick min noOfFeed x qty x cost. Matches the
+    // feed advisor, so the income net and the advisor agree.
+    function getOptimalFeedForLevel(level, xpPerCycle, feedQty, p2pPrices, stockMods) {
+      let row = null;
+      for (const r of FEED_XP_TABLE) { if (level >= r.min && level <= r.max) { row = r; break; } }
+      const foods = row ? Object.keys(row.xp) : ["Mixed Grain"];
+      let bestFood = null, bestCost = Infinity, bestN = 1;
+      for (const food of foods) {
+        const xp = (row && row.xp[food]) || 1; if (!(xp > 0)) continue;
+        const noOfFeed = Math.max(1, Math.ceil(xpPerCycle / xp));
+        const cost = noOfFeed * feedQty * getFeedCostPerUnit(food, p2pPrices, stockMods);
+        if (cost < bestCost) { bestCost = cost; bestFood = food; bestN = noOfFeed; }
+      }
+      return { food: bestFood || "Mixed Grain", costPerCycle: bestCost === Infinity ? 0 : bestCost, noOfFeed: bestN };
+    }
+
     // Main animal feed cost function (analogous to calcSeedCostPerDay / calcToolCostPerDay)
     function calcAnimalFeedCost(catId, capacity, p2pPrices, boostEffects, stockMods) {
       const animalType = ANIMAL_CAT_MAP[catId];
@@ -14642,7 +14662,6 @@
       const baseFeedQty = FEED_QTY[animalType] || 1;
       const effectiveFeedQty = baseFeedQty * feedReductionMult;
 
-      const cheapest = getCheapestFeed(p2pPrices, stockMods);
       const levelDist = getAnimalLevelDistribution(animals);
 
       // Compute per-animal feed cost
@@ -14658,12 +14677,11 @@
         let xpPerCycle;
         if (lvl >= 15) xpPerCycle = (lvls[15] - lvls[14]);
         else xpPerCycle = ((lvls[lvl + 1] || lvls[15]) - lvls[lvl]);
-        const fav = getFavFoodForLevel(lvl);
-        const foodName = fav.food;
-        const noOfFeed = Math.max(1, Math.ceil(xpPerCycle / (fav.xp || 1)));
-        const unitsThisAnimal = noOfFeed * effectiveFeedQty;
+        const opt = getOptimalFeedForLevel(lvl, xpPerCycle, effectiveFeedQty, p2pPrices, stockMods);
+        const foodName = opt.food;
         const costPerUnit = getFeedCostPerUnit(foodName, p2pPrices, stockMods);
-        totalCostPerCycle += unitsThisAnimal * costPerUnit;
+        const unitsThisAnimal = opt.noOfFeed * effectiveFeedQty;
+        totalCostPerCycle += opt.costPerCycle;
 
         if (!feedBreakdown[foodName]) feedBreakdown[foodName] = { count: 0, costPerUnit, totalUnits: 0 };
         feedBreakdown[foodName].count++;
