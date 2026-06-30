@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sfl-tracker-v460';
+const CACHE_NAME = 'sfl-tracker-v461';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',

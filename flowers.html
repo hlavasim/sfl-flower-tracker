@@ -5755,7 +5755,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.60</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.61</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5782,6 +5782,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.61", items: [
+          { t: "feat", text: "Skills view: mining YIELD skills on an ore you don\u2019t profitably mine (stone/iron are loss-making to mine on many farms) used to show \u201c\u2014\u201d. Now they show the situational <b>+X/d if mined</b> so you see the potential, with a note that a +1 keystone (e.g. Rocky Favor) flips the ore profitable first. Also added a <b>Best rebuild order</b> button \u2014 greedy from a full reset (empty all skills, add best FLOWER/day-per-point first, recomputed each step) so conflicts &amp; synergies resolve and you get the real bundled values to re-add in order." },
+        ]},
         { ver: "v4.60", items: [
           { t: "fix", text: "Added the SALT skill tree (the game calls it \u201cAging\u201d: Wide Rakes, Cheap Rakes, Salty Seas, Speedy Aging, Bacalhau, Fish Smoking, Refiner, Sea Blessed, Ager, Salt Surge) from the sunflower-land source, so the Skills view now knows about them. This fixes the free-skill-points estimate \u2014 your owned salt skills (13 points) were previously uncounted, so the estimate read ~13 too high." },
         ]},
@@ -17174,8 +17177,12 @@
         const chYes = roadmapMiningChain(settings, ovYes), chNo = roadmapMiningChain(settings, ovNo);
         for (const cat of MINE_CHAIN) {
           if (_exV.indexOf(cat) >= 0) continue;
-          const d = (((chYes.byCat[cat] || {}).net || 0) - ((chNo.byCat[cat] || {}).net || 0)) * roadmapEffFactor(cat, settings);
-          if (Math.abs(d) > 1e-6) parts.push({ cat, label: lbl(cat), delta: d });
+          const wB = chYes.byCat[cat] || {}, nB = chNo.byCat[cat] || {}, ef = roadmapEffFactor(cat, settings);
+          const d = ((wB.net || 0) - (nB.net || 0)) * ef;
+          if (Math.abs(d) > 1e-6) { parts.push({ cat, label: lbl(cat), delta: d }); continue; }
+          // ore is currently SKIP (not worth mining on this farm) — show the gain IF it were mined
+          const sd = ((wB.marketNet || 0) - (nB.marketNet || 0)) * ef;
+          if (sd > 1e-6) cond.push({ cat, label: lbl(cat), sit: sd, mining: true });
         }
       }
       // Non-mining: FLOOR each side at 0 — a loss-making category nets 0 in the income engine (you wouldn't
@@ -17196,6 +17203,40 @@
       }
       const net = parts.reduce((s, p) => s + p.delta, 0);
       return { parts, net, cond };
+    }
+
+    // Greedy "rebuild from a full reset": empty all skills, add the best FLOWER/day-per-point first,
+    // recomputing each step (so conflicts like Rocky vs Ferrous Favor and skip->profitable synergies resolve).
+    function roadmapSkillRebuildHtml(settings) {
+      const { byName, catBoostsW } = roadmapBuildClones();
+      const skills = Object.values(byName).filter(c => c.type === "Skill");
+      for (const c of skills) c.has = false;
+      let level = 1; try { level = calcSkillPointCost(powerState.farm.bumpkin, powerState.p2pPrices, powerState.farm).level || 1; } catch (e) { try { level = getBumpkinLevel((powerState.farm.bumpkin || {}).experience || 0); } catch (e2) {} }
+      let budget = level - 1;
+      const val = (c) => { const bd = roadmapSkillBreakdown(c, catBoostsW, settings); const ex = roadmapSkillExtraFlow(c, settings); return bd.net + ex.flow.reduce((s, f) => s + f.delta, 0); };
+      const cache = {}; let dirty = null;
+      const order = []; let spent = 0, guard = 0, totV = 0;
+      while (guard++ < 250 && budget > 0) {
+        let best = null, bestRoi = -1, bestVal = 0;
+        for (const c of skills) {
+          if (c.has) continue; const pts = c.skillPoints || 1; if (pts > budget) continue;
+          let v;
+          if (cache[c.name] !== undefined && dirty && !(c.categories || []).some(cat => dirty.has(cat))) v = cache[c.name];
+          else { v = val(c); cache[c.name] = v; }
+          if (v <= 0.001) continue;
+          const roi = v / pts; if (roi > bestRoi) { bestRoi = roi; best = c; bestVal = v; }
+        }
+        if (!best) break;
+        best.has = true; const pts = best.skillPoints || 1; spent += pts; budget -= pts; totV += bestVal;
+        order.push({ c: best, v: bestVal, pts, cum: spent });
+        dirty = new Set(best.categories || []);
+      }
+      const TC = { "Crops": "#7fe0a0", "Trees": "#b98a5a", "Mining": "#9aa6b2", "Cooking": "#e8a060", "Animals": "#e6c25a", "Fishing": "#6ab0e0", "Greenhouse": "#8fd98f", "Fruit Patch": "#e89a5a", "Bees & Flowers": "#e08fd0", "Machinery": "#c0a0e0", "Compost": "#9a8a6a", "Aging": "#d8c89a" };
+      let h = `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Order to RE-ADD after a full reset for the most FLOWER/day per point (recomputed each step, so conflicts &amp; skip\u2192profitable synergies are handled). <b>${order.length} skills \u00b7 ${spent} of ${level - 1} points \u00b7 +${roadmapFmtFlower(totV)}/day.</b> Your other ${Math.max(0, level - 1 - spent)} points go to fishing / cooking / salt / deliveries (no FLOWER value \u2014 take what you play). The game makes you fill a tree\u2019s lower tiers first.</div>`;
+      h += `<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;overflow:hidden">`;
+      order.forEach((o, i) => { const col = TC[o.c.skillTree] || "#8a7a5a"; h += `<div style="display:flex;gap:8px;align-items:baseline;padding:4px 8px;border-bottom:1px solid #20190f;font-size:0.55rem"><span style="color:var(--text-dim);min-width:22px">${i + 1}.</span><b style="flex:1;min-width:0">${escHTML(o.c.name)}</b><span style="color:${col};font-size:0.45rem;min-width:104px">${escHTML(o.c.skillTree || "")} T${o.c.skillTier || "?"} \u00b7 ${o.pts}pt</span><span style="color:var(--green);font-weight:bold;min-width:58px;text-align:right">+${roadmapFmtFlower(o.v)}/d</span><span style="color:var(--text-dim);font-size:0.45rem;min-width:42px;text-align:right">${o.cum}pt</span></div>`; });
+      h += `</div>`;
+      return h;
     }
 
     function roadmapSkillsViewHtml(settings) {
@@ -17224,6 +17265,8 @@
       const valTag = (r) => {
         if (r.net > EPS) return `<span style="color:var(--green);font-weight:bold">+${roadmapFmtFlower(r.net)}/d</span>`;
         if (r.net < -EPS) return `<span style="color:var(--red);font-weight:bold">−${roadmapFmtFlower(-r.net)}/d</span>${r.c.has ? ` <span style="color:#e8a060;font-size:0.45rem">reset?</span>` : ""}`;
+        const sitMin = (r.cond || []).filter(c => c.mining && c.sit > EPS);
+        if (sitMin.length) return `<span style="color:#e8a060">+${roadmapFmtFlower(sitMin.reduce((a, c) => a + c.sit, 0))}/d <span style="font-size:0.44rem">if mined</span></span>`;
         const coinT = r.tags.find(t => t.group === "coins");
         if (coinT) return `<span style="color:#e6c25a">coins${coinT.ref ? " ≈+" + roadmapFmtFlower(coinT.ref) + "/1k" : ""}</span>`;
         if (r.tags.length) { const g = r.tags[0].group; return `<span style="color:var(--text-dim)">${g === "xp" ? "XP" : g === "speed" ? "faster" : g === "limit" ? "limit+" : "minor"}</span>`; }
@@ -17233,7 +17276,13 @@
       const skillRow = (r) => {
         const c = r.c, pts = c.skillPoints || 1, sfl = sflPerPt * pts;
         const ps = r.allParts.slice().sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
-        const condNote = (r.cond && r.cond.length) ? `<div style="font-size:0.45rem;color:#e8a060;margin-top:1px">⚠ ${escHTML(r.cond.map(cn => cn.label).join(", "))} still loss-making</div>` : "";
+        let condNote = "";
+        if (r.cond && r.cond.length) {
+          const mn = r.cond.filter(c => c.mining), an = r.cond.filter(c => !c.mining), bits = [];
+          if (mn.length) bits.push(mn.map(c => `${escHTML(c.label)} isn't worth mining solo on your farm — worth +${roadmapFmtFlower(c.sit)}/d once you mine ${escHTML(c.label)} profitably (a +1 ${escHTML(c.label)} keystone flips it)`).join("; "));
+          if (an.length) bits.push(escHTML(an.map(c => c.label).join(", ")) + " still loss-making");
+          condNote = `<div style="font-size:0.45rem;color:#e8a060;margin-top:1px">⚠ ${bits.join(" · ")}</div>`;
+        }
         return `<div style="display:flex;gap:8px;align-items:flex-start;padding:5px 8px;border-bottom:1px solid #20190f;${c.has ? "background:#13180f" : ""}">
           <div style="flex:1;min-width:0">
             <div style="font-size:0.55rem"><b style="${c.has ? "" : "color:var(--text-secondary)"}">${escHTML(c.name)}</b> <span style="font-size:0.45rem;color:var(--text-dim);white-space:nowrap">${pts}pt${sfl > 0 ? " · " + roadmapFmtFlower(sfl) + " SFL" : ""}</span>${c.has ? ` <span style="color:var(--green);font-size:0.46rem">✓ owned</span>` : (r.net > EPS ? ` <span style="color:var(--lily);font-size:0.45rem">take</span>` : "")}</div>
@@ -17258,6 +17307,7 @@
         h += `<div style="font-size:0.52rem;color:var(--text-dim);line-height:1.7">${picks.map(r => `${escHTML(r.c.name)} <span style="color:var(--green)">+${roadmapFmtFlower(r.net)}/d</span> <span style="font-size:0.45rem">(${r.c.skillPoints || 1}pt, ${escHTML(r.c.skillTree || "")})</span>`).join(" · ")}</div>`;
       }
       h += `</div>`;
+      h += `<div style="margin-bottom:10px"><button onclick="_roadmapSkillRebuild()" style="font-size:0.52rem;padding:4px 12px;border:1px solid var(--border-brown);border-radius:6px;background:#241a10;color:var(--sunpetal);cursor:pointer">\u2699 Best rebuild order (after a full reset)</button><div id="skill-rebuild" style="margin-top:8px"></div></div>`;
       h += `<div style="font-size:0.52rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">All skills by tree &amp; tier (like the in-game tree). FLOWER/day each adds on <b>your</b> farm at <b>${effLbl}</b> efficiency; yield, cheaper costs &amp; coins are priced (coins at ${Math.round(cps)}/FLOWER), XP / speed / limits show their kind. Pts column = skill points (and the SFL of XP to earn them). <a href="https://sfl.world/tools/skills/" target="_blank" style="color:var(--sunpetal);text-decoration:none">skill tree ↗</a></div>`;
       const byTree = {};
       for (const r of rows) { const tr = r.c.skillTree || "Other"; (byTree[tr] = byTree[tr] || []).push(r); }
@@ -17948,6 +17998,7 @@
     window._roadmapSetMarketFee = function(v) { const n = parseFloat(v); saveRoadmapSettings({ marketFee: isFinite(n) && n >= 0 ? n : 10 }); renderRoadmapContent(); };
     window._roadmapToggleCat = function(cat, on) { const cur = ((getRoadmapSettings().excludeCats) || []).slice(); const i = cur.indexOf(cat); if (on) { if (i >= 0) cur.splice(i, 1); } else { if (i < 0) cur.push(cat); } saveRoadmapSettings({ excludeCats: cur }); renderRoadmapContent(); };
     window._roadmapSetSkillPts = function(v) { const n = parseFloat(v); saveRoadmapSettings({ skillPts: (v !== "" && isFinite(n) && n >= 0) ? Math.floor(n) : null }); renderRoadmapContent(); };
+    window._roadmapSkillRebuild = function() { const el = document.getElementById("skill-rebuild"); if (!el) return; el.innerHTML = `<div style="font-size:0.52rem;color:var(--text-dim)">computing\u2026</div>`; setTimeout(function() { try { el.innerHTML = roadmapSkillRebuildHtml(getRoadmapSettings()); } catch (e) { el.innerHTML = `<div style="color:var(--red);font-size:0.52rem">error: ${(e && e.message) || e}</div>`; } }, 30); };
     window._roadmapSetMaxPrice = function(v) { const n = parseFloat(v); saveRoadmapSettings({ maxPrice: isFinite(n) && n >= 0 ? n : 0 }); renderRoadmapContent(); };
     window._roadmapSetRestocks = function(v) { const n = parseFloat(v); saveRoadmapSettings({ restocksPerDay: isFinite(n) && n > 0 ? n : 2 }); renderRoadmapContent(); };
     window._roadmapSetTicketValue = function(v) { const n = parseFloat(v); saveRoadmapSettings({ ticketValueSfl: isFinite(n) && n >= 0 ? n : 1 }); renderRoadmapContent(); };
