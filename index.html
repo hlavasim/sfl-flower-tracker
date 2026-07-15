@@ -5827,7 +5827,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.63</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.64</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5854,6 +5854,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.64", items: [
+          { t: "fix", text: "Ascension rank rows printed raw HTML in their description (the row escapes the boost text, so the markup showed literally). Rank text is now plain: “Level 2: +0.15 yield (was +0.1 yield)”." },
+        ]},
         { ver: "v4.63", items: [
           { t: "fix", text: "Ascension ranks now render as their OWN rows (\u201c&lt;Skill&gt; \u2014 Level 2 / Level 3\u201d, indented under the base skill) instead of a cramped inline line \u2014 each with its own +FLOWER/day, <b>ROI in days</b>, and cost. ROI prices the skill points (points \u00d7 SFL-per-point, same basis as every other skill row); the Ascension Shards have no market price so they\u2019re shown in the cost label (e.g. \u201c~233 \u25c8 (3pt + 1\u25c6)\u201d) rather than faked into the payback." },
         ]},
@@ -19358,7 +19361,7 @@
           default: return "+" + x;
         }
       };
-      return "Level " + lvl + ": " + f(up.ranks[lvl - 1]) + ' <span style="opacity:0.65">(was ' + f(up.ranks[lvl - 2]) + ")</span>";
+      return "Level " + lvl + ": " + f(up.ranks[lvl - 1]) + " (was " + f(up.ranks[lvl - 2]) + ")";
     }
     // Each Ascension rank as its OWN row, so it reads like a separate skill with its own value + ROI.
     // Cost = tier*3 skill points (priced via sflPerPoint) + tier Ascension Shards (no market price -> label only).
