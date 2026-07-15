@@ -5827,7 +5827,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.62</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.63</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5854,6 +5854,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.63", items: [
+          { t: "fix", text: "Ascension ranks now render as their OWN rows (\u201c&lt;Skill&gt; \u2014 Level 2 / Level 3\u201d, indented under the base skill) instead of a cramped inline line \u2014 each with its own +FLOWER/day, <b>ROI in days</b>, and cost. ROI prices the skill points (points \u00d7 SFL-per-point, same basis as every other skill row); the Ascension Shards have no market price so they\u2019re shown in the cost label (e.g. \u201c~233 \u25c8 (3pt + 1\u25c6)\u201d) rather than faked into the payback." },
+        ]},
         { ver: "v4.62", items: [
           { t: "feat", text: "Power now shows the upcoming <b>Ascension skill ranks</b> (Rank II / III), ported verbatim from the sunflower-land source \u2014 they aren\u2019t activatable in-game yet. Each skill row shows what each rank-up would ADD per day and its payback per skill point. Cost comes from the game\u2019s own formula: a rank-up is <b>tier</b> Ascension Shards + <b>tier\u00d73</b> skill points (T1 = 1\u25c6+3pt, T2 = 2\u25c6+6pt, T3 = 3\u25c6+9pt) \u2014 so maxing a T3 skill costs 6 shards + 18 points. Shards aren\u2019t tradable, so payback is per skill point, not FLOWER. 66 skills carry rank data; 43 are priced, the rest list their ranks (XP / cook-time / limits) with no fake FLOWER number." },
         ]},
@@ -18794,8 +18797,8 @@
           content += `<div class="power-subsection-label">✅ OWNED (${owned.length})</div>`;
           for (const b of owned) {
             const val = calcBoostValue(b, catId, product, capacity, p2pPrices, items, true);
-            const rks = powerSkillRankVals(b, catId, product, capacity, p2pPrices, items, true);
-            content += renderPowerBoostRow(b, catId, product, val, true, rks);
+            content += renderPowerBoostRow(b, catId, product, val, true);
+            content += renderPowerSkillRankRows(b, catId, product, capacity, p2pPrices, items, true);
           }
         }
 
@@ -18803,13 +18806,13 @@
         if (missing.length > 0) {
           const missingWithVal = missing.map(b => {
             const val = calcBoostValue(b, catId, product, capacity, p2pPrices, items, false);
-            const ranks = powerSkillRankVals(b, catId, product, capacity, p2pPrices, items, false);
-            return { b, val, ranks };
+            return { b, val };
           }).sort((a, b) => a.val.roi - b.val.roi);
 
           content += `<div class="power-subsection-label">❌ MISSING (${missing.length})</div>`;
-          for (const { b, val, ranks } of missingWithVal) {
-            content += renderPowerBoostRow(b, catId, product, val, false, ranks);
+          for (const { b, val } of missingWithVal) {
+            content += renderPowerBoostRow(b, catId, product, val, false);
+            content += renderPowerSkillRankRows(b, catId, product, capacity, p2pPrices, items, false);
           }
         }
 
@@ -19324,7 +19327,7 @@
       const cost = skillUpgradeCost(up.tier);
       const priceable = SKILL_RANK_PRICEABLE.indexOf(up.kind) >= 0;
       const out = { up, cost, priceable, rows: [] };
-      if (!priceable) return out;
+      if (!priceable) { for (let lvl = 2; lvl <= up.maxLevel; lvl++) out.rows.push({ lvl, delta: 0, shards: cost.shards, points: cost.points }); return out; }
       const valAt = (lvl) => {
         const f = skillRankFactor(up, lvl);
         const sb = Object.assign({}, b, { effects: (b.effects || []).map(e => (typeof e.value === "number") ? Object.assign({}, e, { value: e.value * f }) : e) });
@@ -19335,7 +19338,56 @@
       return out;
     }
 
-    function renderPowerBoostRow(b, catId, product, val, isOwned, ranks) {
+    // Human text for what a rank changes (kind-aware), e.g. "Level 2: -6% growth time (was -5%)".
+    function skillRankText(up, lvl) {
+      const f = (x) => {
+        switch (up.kind) {
+          case "growthMultiplier": return "−" + (+((1 - x) * 100).toFixed(2)) + "% growth time";
+          case "costMultiplier": return "−" + (+((1 - x) * 100).toFixed(2)) + "% cost";
+          case "coinBonus": return "+" + (+(x * 100).toFixed(0)) + "% coins";
+          case "xpBonus": return "+" + (+(x * 100).toFixed(0)) + "% XP";
+          case "timeReduction": return "−" + (+(x * 100).toFixed(0)) + "% time";
+          case "oilReduction": return "−" + (+(x * 100).toFixed(0)) + "% oil";
+          case "multiplier": return x + "× effect";
+          case "flatDebuff": return "debuff " + x;
+          case "flatReduction": return "−" + x;
+          case "dailyLimit": return "+" + x + " daily limit";
+          case "flatBonus": return "+" + x;
+          case "chance": return x + "% chance";
+          case "additiveYield": return "+" + x + " yield";
+          default: return "+" + x;
+        }
+      };
+      return "Level " + lvl + ": " + f(up.ranks[lvl - 1]) + ' <span style="opacity:0.65">(was ' + f(up.ranks[lvl - 2]) + ")</span>";
+    }
+    // Each Ascension rank as its OWN row, so it reads like a separate skill with its own value + ROI.
+    // Cost = tier*3 skill points (priced via sflPerPoint) + tier Ascension Shards (no market price -> label only).
+    function renderPowerSkillRankRows(b, catId, product, capacity, p2pPrices, allCatBoosts, isOwned) {
+      const r = powerSkillRankVals(b, catId, product, capacity, p2pPrices, allCatBoosts, isOwned);
+      if (!r || !r.up || !r.rows.length) return "";
+      let sflPerPt = 0;
+      try { sflPerPt = (calcSkillPointCost(powerState.farm.bumpkin, powerState.p2pPrices, powerState.farm) || {}).sflPerPoint || 0; } catch (e) {}
+      let out = "";
+      for (const row of r.rows) {
+        const sflCost = sflPerPt * row.points;
+        const rb = Object.assign({}, b, {
+          name: b.name + " — Level " + row.lvl,
+          boost: skillRankText(r.up, row.lvl),
+          floor: sflCost,
+          skillPoints: row.points,
+          rankShards: row.shards,
+        });
+        const rv = {
+          synergy: row.delta,
+          roi: (row.delta > 0.0001 && sflCost > 0) ? sflCost / row.delta : Infinity,
+          disabled: false, redundantFreeTool: false,
+        };
+        out += renderPowerBoostRow(rb, catId, product, rv, isOwned);
+      }
+      return out ? `<div style="margin-left:14px;border-left:2px solid #3a3220;padding-left:4px" title="Ascension ranks — not activatable in-game yet. Each rank-up costs ${r.cost.shards} Ascension Shard${r.cost.shards > 1 ? "s" : ""} + ${r.cost.points} skill points (tier ${r.up.tier}). Shards aren't tradable, so ROI prices only the skill points.">${out}</div>` : "";
+    }
+
+    function renderPowerBoostRow(b, catId, product, val, isOwned) {
       let downstreamHtml = "";
       if (POWER_CHAIN.indexOf(catId) >= 0) {
         let hasYield = false;
@@ -19373,7 +19425,7 @@
       const typeLabel = b.type === "Skill" ? `Skill (${b.skillTree}, ${b.skillPoints}pt)` : b.type;
       let costLabel;
       if (b.type === "Skill" && b.floor > 0) {
-        costLabel = `~${b.floor.toFixed(0)} ${sflIcon()} (${b.skillPoints}pt)`;
+        costLabel = `~${b.floor.toFixed(0)} ${sflIcon()} (${b.skillPoints}pt${b.rankShards ? " + " + b.rankShards + "◆" : ""})`;
       } else if (b.markCost > 0) {
         costLabel = `${b.floor.toFixed(0)} ${sflIcon()} (${(b.markCost/1000).toFixed(0)}k⚔️)`;
       } else if (b.floor > 0) {
@@ -19384,19 +19436,6 @@
       const disabledNote = val.disabled ? `<div style="color:var(--red);font-size:0.5rem">⛔ Superseded by ${escHTML(val.disabledByName || "stronger item")}</div>`
         : val.redundantFreeTool ? `<div style="color:var(--text-dim);font-size:0.5rem">🆓 No effect — tools already free</div>` : "";
 
-      let ranksHtml = "";
-      if (ranks && ranks.up && !val.disabled) {
-        const c = ranks.cost, RN = { 2: "II", 3: "III", 4: "IV" };
-        const each = `each ${c.shards}◆ + ${c.points}pt`;
-        const tip = `Ascension ranks — not activatable in-game yet. Each rank-up costs ${c.shards} Ascension Shard${c.shards > 1 ? "s" : ""} + ${c.points} skill points (tier ${ranks.up.tier}). Shards aren't tradable, so payback is shown per skill point.`;
-        if (ranks.priceable) {
-          const bits = ranks.rows.filter(r => Math.abs(r.delta) > 0.0001).map(r =>
-            `<b>R${RN[r.lvl] || r.lvl}</b> ${r.delta >= 0 ? "+" : "−"}${Math.abs(r.delta).toFixed(2)}/d <span style="color:var(--text-dim)">(${(r.delta / r.points).toFixed(3)}/pt)</span>`);
-          if (bits.length) ranksHtml = `<div style="font-size:0.5rem;color:#d8c89a;margin-top:2px" title="${tip}">⬆ ranks: ${bits.join(" · ")} <span style="color:var(--text-dim)">— ${each}</span></div>`;
-        } else {
-          ranksHtml = `<div style="font-size:0.5rem;color:var(--text-dim);margin-top:2px" title="${tip}">⬆ ranks: ${ranks.up.ranks.join(" → ")} <span style="color:var(--text-dim)">(${escHTML(ranks.up.kind)} — no FLOWER value) — ${each}</span></div>`;
-        }
-      }
       const dimmed = val.disabled || val.redundantFreeTool;
       return `<div class="power-boost-row ${isOwned ? "has-it" : "missing"}${dimmed ? " disabled-boost" : ""}" onclick="togglePowerDetail(this,'${escHTML(b.name).replace(/'/g, "\\'")}','${catId}')" style="${dimmed ? 'opacity:0.5' : ''}">
         ${imgUrl ? `<img class="power-boost-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">` : `<span class="power-boost-icon">🧠</span>`}
@@ -19404,7 +19443,6 @@
           <div class="power-boost-name">${escHTML(b.name)} <span class="power-boost-type">${escHTML(typeLabel)}</span></div>
           <div class="power-boost-text">${escHTML(b.boost)}</div>
           ${downstreamHtml}
-          ${ranksHtml}
           ${disabledNote}
         </div>
         <div class="power-boost-value">
@@ -19420,7 +19458,7 @@
       const typeLabel = b.type === "Skill" ? `Skill (${b.skillTree}, ${b.skillPoints}pt)` : b.type;
       let costLabel;
       if (b.type === "Skill" && b.floor > 0) {
-        costLabel = `~${b.floor.toFixed(0)} ${sflIcon()} (${b.skillPoints}pt)`;
+        costLabel = `~${b.floor.toFixed(0)} ${sflIcon()} (${b.skillPoints}pt${b.rankShards ? " + " + b.rankShards + "◆" : ""})`;
       } else if (b.markCost > 0) {
         costLabel = `${b.floor.toFixed(0)} ${sflIcon()} (${(b.markCost/1000).toFixed(0)}k⚔️)`;
       } else if (b.floor > 0) {
