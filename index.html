@@ -5827,7 +5827,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.64</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.65</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5854,6 +5854,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.65", items: [
+          { t: "fix", text: "Chance-based skills (Tough Tree “10% chance x3 Wood”, Fiery Jackpot, Fishy Roll… — 9 skills) now price their Ascension ranks instead of showing “—”. Their odds are already folded into an expected value by the boost parser (10% × the +2 extra = +0.2/harvest), and expected value is linear in the chance, so a rank that lifts 10% → 20% → 30% doubles then triples that. Tough Tree’s ranks turn out to be some of the BEST value in the tree." },
+        ]},
         { ver: "v4.64", items: [
           { t: "fix", text: "Ascension rank rows printed raw HTML in their description (the row escapes the boost text, so the markup showed literally). Rank text is now plain: “Level 2: +0.15 yield (was +0.1 yield)”." },
         ]},
@@ -19320,7 +19323,7 @@
       return skillRankMag(up.kind, r[rank - 1]) / base;
     }
     // Kinds whose magnitude maps onto an effect our value engine already prices.
-    const SKILL_RANK_PRICEABLE = ["additiveYield", "growthMultiplier", "costMultiplier", "coinBonus", "flatDebuff", "oilReduction", "multiplier", "flatReduction"];
+    const SKILL_RANK_PRICEABLE = ["additiveYield", "growthMultiplier", "costMultiplier", "coinBonus", "flatDebuff", "oilReduction", "multiplier", "flatReduction", "chance"];
     // Per-rank value of a skill for ONE category: re-run calcBoostValue with the skill's effects scaled to
     // the rank's magnitude, so growth/yield stay exact. rows[] = the MARGINAL of each rank-up.
     function powerSkillRankVals(b, catId, product, capacity, p2pPrices, allCatBoosts, isOwned) {
