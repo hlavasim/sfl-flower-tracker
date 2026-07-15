@@ -4483,6 +4483,78 @@
       "Salt Surge":         { tree: "Aging", points: 3, tier: 3, buff: "Instant Salt surge", debuff: null, power: true },
     };
 
+    // Ascension skill RANKS — ported verbatim from sunflower-land bumpkinSkills.ts (BUMPKIN_REVAMP_SKILL_TREE
+    // .upgrade). ranks[] is the skill's effect magnitude AT that rank (index = level-1), not a delta.
+    // Rank-up cost is derived from tier: { shards: tier, points: tier * 3 } (getSkillUpgradeCost).
+    const SKILL_UPGRADES = {
+      "Betty's Friend":          { tier: 1, maxLevel: 3, kind: "coinBonus",       ranks: [0.3, 0.45, 0.6] },
+      "Coin Swindler":           { tier: 2, maxLevel: 3, kind: "coinBonus",       ranks: [0.1, 0.2, 0.3] },
+      "Drive-Through Deli":      { tier: 2, maxLevel: 3, kind: "xpBonus",         ranks: [0.15, 0.2, 0.25] },
+      "Efficiency Extension Module": { tier: 3, maxLevel: 3, kind: "oilReduction",    ranks: [0.3, 0.4, 0.5] },
+      "Experienced Farmer":      { tier: 1, maxLevel: 3, kind: "additiveYield",   ranks: [0.1, 0.125, 0.15] },
+      "Fast Feasts":             { tier: 1, maxLevel: 3, kind: "timeReduction",   ranks: [0.1, 0.15, 0.2] },
+      "Feller's Discount":       { tier: 2, maxLevel: 3, kind: "costMultiplier",  ranks: [0.8, 0.75, 0.7] },
+      "Field Expansion Module":  { tier: 3, maxLevel: 3, kind: "flatBonus",       ranks: [5, 7, 10] },
+      "Field Extension Module":  { tier: 3, maxLevel: 3, kind: "flatBonus",       ranks: [5, 7, 10] },
+      "Fiery Jackpot":           { tier: 3, maxLevel: 3, kind: "chance",          ranks: [20, 35, 50] },
+      "Fire Kissed":             { tier: 2, maxLevel: 3, kind: "additiveYield",   ranks: [1, 1.35, 1.75] },
+      "Fireside Alchemist":      { tier: 3, maxLevel: 3, kind: "growthMultiplier", ranks: [0.85, 0.75, 0.6] },
+      "Fisherman's 10 Fold":     { tier: 2, maxLevel: 3, kind: "dailyLimit",      ranks: [10, 18, 25] },
+      "Fisherman's 5 Fold":      { tier: 1, maxLevel: 3, kind: "dailyLimit",      ranks: [5, 7, 10] },
+      "Fishy Chance":            { tier: 1, maxLevel: 3, kind: "chance",          ranks: [10, 12.5, 15] },
+      "Fishy Feast":             { tier: 3, maxLevel: 3, kind: "xpBonus",         ranks: [0.2, 0.3, 0.4] },
+      "Fishy Fortune":           { tier: 2, maxLevel: 3, kind: "coinBonus",       ranks: [1, 1.25, 1.5] },
+      "Fishy Gamble":            { tier: 2, maxLevel: 3, kind: "chance",          ranks: [20, 25, 30] },
+      "Fishy Roll":              { tier: 1, maxLevel: 3, kind: "chance",          ranks: [10, 12.5, 15] },
+      "Forge-Ward Profits":      { tier: 1, maxLevel: 3, kind: "coinBonus",       ranks: [0.2, 0.3, 0.4] },
+      "Frosted Cakes":           { tier: 2, maxLevel: 3, kind: "timeReduction",   ranks: [0.1, 0.2, 0.3] },
+      "Frugal Miner":            { tier: 2, maxLevel: 3, kind: "costMultiplier",  ranks: [0.8, 0.7, 0.6] },
+      "Fruitful Fumble":         { tier: 1, maxLevel: 3, kind: "additiveYield",   ranks: [0.1, 0.15, 0.2] },
+      "Fruity Heaven":           { tier: 1, maxLevel: 3, kind: "costMultiplier",  ranks: [0.9, 0.85, 0.8] },
+      "Fruity Profit":           { tier: 1, maxLevel: 3, kind: "coinBonus",       ranks: [0.5, 0.75, 1] },
+      "Fruity Woody":            { tier: 2, maxLevel: 3, kind: "additiveYield",   ranks: [1, 1.5, 2] },
+      "Fry Frenzy":              { tier: 3, maxLevel: 3, kind: "timeReduction",   ranks: [0.6, 0.65, 0.7] },
+      "Generous Orchard":        { tier: 3, maxLevel: 3, kind: "chance",          ranks: [20, 30, 50] },
+      "Glass Room":              { tier: 1, maxLevel: 3, kind: "additiveYield",   ranks: [0.1, 0.15, 0.2] },
+      "Golden Touch":            { tier: 3, maxLevel: 3, kind: "additiveYield",   ranks: [0.5, 0.75, 1] },
+      "Green Thumb":             { tier: 1, maxLevel: 3, kind: "growthMultiplier", ranks: [0.95, 0.94, 0.925] },
+      "Greenhouse Gamble":       { tier: 3, maxLevel: 3, kind: "chance",          ranks: [25, 35, 45] },
+      "Iron Bumpkin":            { tier: 1, maxLevel: 3, kind: "additiveYield",   ranks: [0.1, 0.15, 0.2] },
+      "Iron Hustle":             { tier: 2, maxLevel: 3, kind: "growthMultiplier", ranks: [0.7, 0.65, 0.6] },
+      "Juicy Boost":             { tier: 2, maxLevel: 3, kind: "xpBonus",         ranks: [0.1, 0.2, 0.3] },
+      "Leak-Proof Tank":         { tier: 1, maxLevel: 3, kind: "multiplier",      ranks: [3, 4, 5] },
+      "Lumberjack's Extra":      { tier: 1, maxLevel: 3, kind: "additiveYield",   ranks: [0.1, 0.15, 0.2] },
+      "Midas Rush":              { tier: 3, maxLevel: 3, kind: "growthMultiplier", ranks: [0.8, 0.75, 0.7] },
+      "Midas Sprint":            { tier: 2, maxLevel: 3, kind: "growthMultiplier", ranks: [0.9, 0.875, 0.85] },
+      "Money Tree":              { tier: 2, maxLevel: 3, kind: "chance",          ranks: [1, 2, 3] },
+      "More With Less":          { tier: 3, maxLevel: 3, kind: "dailyLimit",      ranks: [10, 25, 50] },
+      "Munching Mastery":        { tier: 1, maxLevel: 3, kind: "xpBonus",         ranks: [0.05, 0.075, 0.1] },
+      "No Axe No Worries":       { tier: 1, maxLevel: 3, kind: "flatDebuff",      ranks: [1, 0.75, 0.5] },
+      "Nom Nom":                 { tier: 1, maxLevel: 3, kind: "coinBonus",       ranks: [0.1, 0.3, 0.5] },
+      "Oil Be Back":             { tier: 2, maxLevel: 3, kind: "growthMultiplier", ranks: [0.8, 0.7, 0.6] },
+      "Oil Extraction":          { tier: 1, maxLevel: 3, kind: "additiveYield",   ranks: [1, 1.5, 2] },
+      "Oil Gadget":              { tier: 1, maxLevel: 3, kind: "oilReduction",    ranks: [0.1, 0.15, 0.2] },
+      "Old Farmer":              { tier: 1, maxLevel: 3, kind: "additiveYield",   ranks: [0.1, 0.125, 0.15] },
+      "Olive Express":           { tier: 2, maxLevel: 3, kind: "growthMultiplier", ranks: [0.9, 0.85, 0.8] },
+      "Pear Turbocharge":        { tier: 2, maxLevel: 3, kind: "multiplier",      ranks: [2, 3, 4] },
+      "Reel Deal":               { tier: 1, maxLevel: 3, kind: "costMultiplier",  ranks: [0.5, 0.45, 0.4] },
+      "Rice Rocket":             { tier: 2, maxLevel: 3, kind: "growthMultiplier", ranks: [0.9, 0.85, 0.8] },
+      "Rice and Shine":          { tier: 1, maxLevel: 3, kind: "growthMultiplier", ranks: [0.95, 0.94, 0.925] },
+      "Rock'N'Roll":             { tier: 1, maxLevel: 3, kind: "additiveYield",   ranks: [0.1, 0.15, 0.2] },
+      "Seedy Business":          { tier: 1, maxLevel: 3, kind: "costMultiplier",  ranks: [0.85, 0.8, 0.75] },
+      "Slick Saver":             { tier: 3, maxLevel: 3, kind: "flatReduction",   ranks: [1, 1.5, 2] },
+      "Speed Miner":             { tier: 1, maxLevel: 3, kind: "growthMultiplier", ranks: [0.8, 0.75, 0.7] },
+      "Strong Roots":            { tier: 2, maxLevel: 3, kind: "growthMultiplier", ranks: [0.9, 0.875, 0.85] },
+      "Swift Sizzle":            { tier: 1, maxLevel: 3, kind: "timeReduction",   ranks: [0.4, 0.45, 0.5] },
+      "Tough Tree":              { tier: 2, maxLevel: 3, kind: "chance",          ranks: [10, 20, 30] },
+      "Tree Charge":             { tier: 1, maxLevel: 3, kind: "growthMultiplier", ranks: [0.9, 0.875, 0.85] },
+      "Tree Turnaround":         { tier: 3, maxLevel: 3, kind: "chance",          ranks: [15, 25, 40] },
+      "Turbo Fry":               { tier: 2, maxLevel: 3, kind: "timeReduction",   ranks: [0.5, 0.55, 0.6] },
+      "Victoria's Secretary":    { tier: 1, maxLevel: 3, kind: "coinBonus",       ranks: [0.5, 0.75, 1] },
+      "Vine Velocity":           { tier: 2, maxLevel: 3, kind: "growthMultiplier", ranks: [0.9, 0.85, 0.8] },
+      "Young Farmer":            { tier: 1, maxLevel: 3, kind: "additiveYield",   ranks: [0.1, 0.125, 0.15] },
+    };
+
     // Recipe ingredients for skill cost calculation — verified from sfl.world/info/cooking
     // XP values come from COOKING_RECIPES_DATA at runtime
     // Only recipes with P2P-tradeable ingredients (+ Cheese derived from Milk)
@@ -5755,7 +5827,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.61</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.62</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5782,6 +5854,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.62", items: [
+          { t: "feat", text: "Power now shows the upcoming <b>Ascension skill ranks</b> (Rank II / III), ported verbatim from the sunflower-land source \u2014 they aren\u2019t activatable in-game yet. Each skill row shows what each rank-up would ADD per day and its payback per skill point. Cost comes from the game\u2019s own formula: a rank-up is <b>tier</b> Ascension Shards + <b>tier\u00d73</b> skill points (T1 = 1\u25c6+3pt, T2 = 2\u25c6+6pt, T3 = 3\u25c6+9pt) \u2014 so maxing a T3 skill costs 6 shards + 18 points. Shards aren\u2019t tradable, so payback is per skill point, not FLOWER. 66 skills carry rank data; 43 are priced, the rest list their ranks (XP / cook-time / limits) with no fake FLOWER number." },
+        ]},
         { ver: "v4.61", items: [
           { t: "feat", text: "Skills view: mining YIELD skills on an ore you don\u2019t profitably mine (stone/iron are loss-making to mine on many farms) used to show \u201c\u2014\u201d. Now they show the situational <b>+X/d if mined</b> so you see the potential, with a note that a +1 keystone (e.g. Rocky Favor) flips the ore profitable first. Also added a <b>Best rebuild order</b> button \u2014 greedy from a full reset (empty all skills, add best FLOWER/day-per-point first, recomputed each step) so conflicts &amp; synergies resolve and you get the real bundled values to re-add in order." },
         ]},
@@ -18719,7 +18794,8 @@
           content += `<div class="power-subsection-label">✅ OWNED (${owned.length})</div>`;
           for (const b of owned) {
             const val = calcBoostValue(b, catId, product, capacity, p2pPrices, items, true);
-            content += renderPowerBoostRow(b, catId, product, val, true);
+            const rks = powerSkillRankVals(b, catId, product, capacity, p2pPrices, items, true);
+            content += renderPowerBoostRow(b, catId, product, val, true, rks);
           }
         }
 
@@ -18727,12 +18803,13 @@
         if (missing.length > 0) {
           const missingWithVal = missing.map(b => {
             const val = calcBoostValue(b, catId, product, capacity, p2pPrices, items, false);
-            return { b, val };
+            const ranks = powerSkillRankVals(b, catId, product, capacity, p2pPrices, items, false);
+            return { b, val, ranks };
           }).sort((a, b) => a.val.roi - b.val.roi);
 
           content += `<div class="power-subsection-label">❌ MISSING (${missing.length})</div>`;
-          for (const { b, val } of missingWithVal) {
-            content += renderPowerBoostRow(b, catId, product, val, false);
+          for (const { b, val, ranks } of missingWithVal) {
+            content += renderPowerBoostRow(b, catId, product, val, false, ranks);
           }
         }
 
@@ -19224,7 +19301,41 @@
       }
       return out.length ? out : null;
     }
-    function renderPowerBoostRow(b, catId, product, val, isOwned) {
+    // ── Ascension skill ranks ────────────────────────────────────────────────────────────────────
+    // Cost of ONE rank-up, from the game's getSkillUpgradeCost(tier): flat per tier.
+    function skillUpgradeCost(tier) { return { shards: tier, points: tier * 3 }; }
+    // growthMultiplier / costMultiplier store the REMAINING fraction (0.95 = -5%), so the magnitude that
+    // matters is the reduction (1 - v). Every other kind stores the magnitude directly.
+    function skillRankMag(kind, v) { return (kind === "growthMultiplier" || kind === "costMultiplier") ? (1 - v) : v; }
+    function skillRankFactor(up, rank) {
+      const r = up && up.ranks; if (!r || rank < 1 || rank > r.length) return 1;
+      const base = skillRankMag(up.kind, r[0]);
+      if (!(Math.abs(base) > 1e-9)) return 1;
+      return skillRankMag(up.kind, r[rank - 1]) / base;
+    }
+    // Kinds whose magnitude maps onto an effect our value engine already prices.
+    const SKILL_RANK_PRICEABLE = ["additiveYield", "growthMultiplier", "costMultiplier", "coinBonus", "flatDebuff", "oilReduction", "multiplier", "flatReduction"];
+    // Per-rank value of a skill for ONE category: re-run calcBoostValue with the skill's effects scaled to
+    // the rank's magnitude, so growth/yield stay exact. rows[] = the MARGINAL of each rank-up.
+    function powerSkillRankVals(b, catId, product, capacity, p2pPrices, allCatBoosts, isOwned) {
+      if (!b || b.type !== "Skill" || typeof SKILL_UPGRADES === "undefined") return null;
+      const up = SKILL_UPGRADES[b.name];
+      if (!up || !up.ranks || !(up.maxLevel > 1)) return null;
+      const cost = skillUpgradeCost(up.tier);
+      const priceable = SKILL_RANK_PRICEABLE.indexOf(up.kind) >= 0;
+      const out = { up, cost, priceable, rows: [] };
+      if (!priceable) return out;
+      const valAt = (lvl) => {
+        const f = skillRankFactor(up, lvl);
+        const sb = Object.assign({}, b, { effects: (b.effects || []).map(e => (typeof e.value === "number") ? Object.assign({}, e, { value: e.value * f }) : e) });
+        try { const v = calcBoostValue(sb, catId, product, capacity, p2pPrices, allCatBoosts, isOwned); return (v && isFinite(v.synergy)) ? v.synergy : 0; } catch (e) { return 0; }
+      };
+      let prev = valAt(1);
+      for (let lvl = 2; lvl <= up.maxLevel; lvl++) { const v = valAt(lvl); out.rows.push({ lvl, delta: v - prev, shards: cost.shards, points: cost.points }); prev = v; }
+      return out;
+    }
+
+    function renderPowerBoostRow(b, catId, product, val, isOwned, ranks) {
       let downstreamHtml = "";
       if (POWER_CHAIN.indexOf(catId) >= 0) {
         let hasYield = false;
@@ -19273,6 +19384,19 @@
       const disabledNote = val.disabled ? `<div style="color:var(--red);font-size:0.5rem">⛔ Superseded by ${escHTML(val.disabledByName || "stronger item")}</div>`
         : val.redundantFreeTool ? `<div style="color:var(--text-dim);font-size:0.5rem">🆓 No effect — tools already free</div>` : "";
 
+      let ranksHtml = "";
+      if (ranks && ranks.up && !val.disabled) {
+        const c = ranks.cost, RN = { 2: "II", 3: "III", 4: "IV" };
+        const each = `each ${c.shards}◆ + ${c.points}pt`;
+        const tip = `Ascension ranks — not activatable in-game yet. Each rank-up costs ${c.shards} Ascension Shard${c.shards > 1 ? "s" : ""} + ${c.points} skill points (tier ${ranks.up.tier}). Shards aren't tradable, so payback is shown per skill point.`;
+        if (ranks.priceable) {
+          const bits = ranks.rows.filter(r => Math.abs(r.delta) > 0.0001).map(r =>
+            `<b>R${RN[r.lvl] || r.lvl}</b> ${r.delta >= 0 ? "+" : "−"}${Math.abs(r.delta).toFixed(2)}/d <span style="color:var(--text-dim)">(${(r.delta / r.points).toFixed(3)}/pt)</span>`);
+          if (bits.length) ranksHtml = `<div style="font-size:0.5rem;color:#d8c89a;margin-top:2px" title="${tip}">⬆ ranks: ${bits.join(" · ")} <span style="color:var(--text-dim)">— ${each}</span></div>`;
+        } else {
+          ranksHtml = `<div style="font-size:0.5rem;color:var(--text-dim);margin-top:2px" title="${tip}">⬆ ranks: ${ranks.up.ranks.join(" → ")} <span style="color:var(--text-dim)">(${escHTML(ranks.up.kind)} — no FLOWER value) — ${each}</span></div>`;
+        }
+      }
       const dimmed = val.disabled || val.redundantFreeTool;
       return `<div class="power-boost-row ${isOwned ? "has-it" : "missing"}${dimmed ? " disabled-boost" : ""}" onclick="togglePowerDetail(this,'${escHTML(b.name).replace(/'/g, "\\'")}','${catId}')" style="${dimmed ? 'opacity:0.5' : ''}">
         ${imgUrl ? `<img class="power-boost-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">` : `<span class="power-boost-icon">🧠</span>`}
@@ -19280,6 +19404,7 @@
           <div class="power-boost-name">${escHTML(b.name)} <span class="power-boost-type">${escHTML(typeLabel)}</span></div>
           <div class="power-boost-text">${escHTML(b.boost)}</div>
           ${downstreamHtml}
+          ${ranksHtml}
           ${disabledNote}
         </div>
         <div class="power-boost-value">
