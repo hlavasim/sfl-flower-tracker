@@ -19,11 +19,20 @@
         presets: [SwaggerUIBundle.presets.apis],
         layout: "BaseLayout",
         // The spec's `servers` entry is the production host (correct for external
-        // consumers). When this page itself is served from somewhere else — e.g. the
-        // local dev server — "Try it out" would otherwise call production instead of
-        // wherever /swagger.html is actually running. Rewrite requests to this page's
-        // own origin; in production that origin already equals the spec's server, so
-        // this is a no-op there.
+        // consumers). When this page is served from anywhere else — the local dev
+        // server, a Vercel preview — "Try it out" would call production instead of the
+        // deployment you are looking at. And api/compute.mjs sends no CORS headers
+        // (nor does vercel.json), so such a cross-origin call cannot work at all: it
+        // fails, it does not merely target the wrong host. So: rewrite to this page's
+        // own origin. In production that origin already equals the spec's server, so
+        // it is a no-op; on a preview it correctly exercises that preview's own API.
+        //
+        // SCOPE — this rewrites EVERY request Swagger UI makes, not just /api/compute:
+        //  - if `servers` ever lists more than one entry, the UI's server picker is
+        //    silently overridden — revisit this before adding a second server;
+        //  - it also redirects the validator-badge ping (validator.swagger.io) to this
+        //    origin, so that badge 404s. Cosmetic, and the alternative is calling out
+        //    to a third party from a docs page.
         requestInterceptor: (req) => {
           req.url = req.url.replace(/^https?:\/\/[^/]+/, window.location.origin);
           return req;
