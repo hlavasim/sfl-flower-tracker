@@ -10,10 +10,22 @@ const DATA_DIR = new URL("../../core/data/", import.meta.url);
 const pageLines = () => readFileSync(PAGE, "utf8").split("\n");
 
 // Part 1 of the inventory: tables declared as an object/array literal.
+// NOTE: this matches on SHAPE, not meaning — any UPPER_SNAKE object/array literal
+// anywhere in flowers.html looks like a game table to it, including a UI constant
+// declared inside a render function. That is deliberate (it must not miss a real
+// table), so the convention is: UI-only constants use lowerCamelCase. See the
+// failure message below, which says so.
 function scanPageTables() {
   const re = /^\s*(?:const|let|var)\s+([A-Z][A-Z0-9_]{3,})\s*=\s*[{[]/;
   return new Set(pageLines().map((l) => (l.match(re) || [])[1]).filter(Boolean));
 }
+
+const HOW_TO_FIX =
+  "\n  → If it IS a game data table: regenerate core/data/_inventory.mjs " +
+  "(snippet in docs/superpowers/plans/2026-07-16-api-surface-visibility.md, Step 1).\n" +
+  "  → If it is NOT a game table (a UI/render constant that just happens to be " +
+  "UPPER_SNAKE): rename it to lowerCamelCase. This scan matches on shape, not meaning, " +
+  "so UPPER_SNAKE object/array literals in flowers.html are read as game tables.";
 
 // Every non-function export of core/data/*.mjs — what core CLAIMS to own.
 async function coreDataExports() {
@@ -40,7 +52,7 @@ test("inventory matches a fresh scan of flowers.html", () => {
   const scanned = scanPageTables();
   const listed = new Set(TABLE_INVENTORY.map((t) => t.name));
   const missing = [...scanned].filter((n) => !listed.has(n));
-  assert.deepEqual(missing, [], `tables in flowers.html but not in _inventory.mjs: ${missing}`);
+  assert.deepEqual(missing, [], `tables in flowers.html but not in _inventory.mjs: ${missing}${HOW_TO_FIX}`);
 });
 
 // The scan above cannot see a non-table-shaped constant, which is exactly how
