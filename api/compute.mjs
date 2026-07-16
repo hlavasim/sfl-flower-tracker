@@ -1,6 +1,7 @@
 import { buildCookingSection } from "../core/sections/cooking.mjs";
 import { buildConstantsSection } from "../core/sections/constants.mjs";
 import { computeBettyRate } from "../core/engine/prices.mjs";
+import { API_SPEC } from "../core/api-spec.mjs";
 
 const PROXY = process.env.PROXY_ORIGIN || "https://sunflower.sajmonium.quest";
 const PRICES_URL = "https://sfl.world/api/v1/prices";
@@ -25,6 +26,7 @@ export default async function handler(req, res) {
   if (section === "constants") {
     return res.status(200).json({ section, computedAt: new Date().toISOString(), data: buildConstantsSection() });
   }
+  if (section === "openapi") return res.status(200).json(API_SPEC);
   if (!farmId) return res.status(400).json({ error: "farm required" });
   try {
     const sflUrl = `https://api.sunflower-land.com/community/farms/${farmId}`;
