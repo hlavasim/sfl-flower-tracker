@@ -2805,7 +2805,7 @@
     const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
     const IMG_BASE = "https://sfl.world/img/flowers/";
-    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "marks", "diff", "json"];
+    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "marks", "diff", "json", "constants"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -5706,6 +5706,7 @@
         { id: "pets", label: "PETS" },
         { id: "json", label: "JSON" },
         { id: "marks", label: "MARKS" },
+        { id: "constants", label: "CONSTANTS" },
       ];
       if (["155498", "1260204733777858"].includes(FARM_ID)) overflow.push({ id: "diff", label: "DIFF" });
       let html = '<div class="nav-bar pixel-panel">';
@@ -6872,6 +6873,111 @@
       }
       _bumpkinCookingLoading = null;
       if (cachedFarmData && getPage() === "bumpkin") renderBumpkin(cachedFarmData);
+    }
+
+    // ── Constants payload cache (/api/compute?section=constants) ──
+    // Task 13b: renders the core/data migration coverage (Task 13a). Farm-independent —
+    // no farm param, no upstream farm fetch — so one cached payload serves every farm for
+    // the whole page lifetime. Same cache-then-rerender shape as the cooking payload above;
+    // refresh() clears this too (see refresh()).
+    let _constantsData = null;     // data from the last successful fetch
+    let _constantsErr = null;      // error message from the last failed fetch
+    let _constantsLoading = false; // fetch in flight
+
+    async function _fetchConstants() {
+      if (_constantsLoading) return;
+      _constantsLoading = true;
+      try {
+        const resp = await fetch(`/api/compute?section=constants`);
+        if (!resp.ok) throw new Error(`compute ${resp.status}`);
+        _constantsData = (await resp.json()).data;
+        _constantsErr = null;
+      } catch (e) {
+        console.warn("constants compute fetch:", e);
+        _constantsErr = (e && e.message) || String(e);
+      }
+      _constantsLoading = false;
+      if (getPage() === "constants") renderConstants(cachedFarmData);
+    }
+
+    function renderConstants(data) {
+      const app = document.getElementById("app");
+      let html = `<div class="header pixel-panel pixel-font">
+        <h1>CONSTANTS</h1>
+        <div class="farm-id">core/ vs flowers.html migration coverage</div>
+      </div>`;
+
+      if (!_constantsData) {
+        if (!_constantsLoading && !_constantsErr) _fetchConstants();
+        html += `<div class="pixel-panel pixel-font" style="padding:24px;text-align:center;font-size:0.6875rem;color:${_constantsErr ? "var(--yellow)" : "var(--text-dim)"}">
+          ${_constantsErr
+            ? `Constants data unavailable — ${escHTML(_constantsErr)}. Press REFRESH to retry.`
+            : "Loading constants..."}
+        </div>`;
+        html += `<div class="footer">
+          <button class="refresh-btn" onclick="refresh()">REFRESH</button>
+          <div class="timestamp pixel-font">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
+        </div>`;
+        app.innerHTML = html;
+        return;
+      }
+
+      const { summary, coverage, tables } = _constantsData;
+
+      html += `<div class="summary-bar pixel-panel pixel-font">
+        <div class="summary-stat"><div class="label">TOTAL</div><div class="value">${escHTML(summary.total)}</div></div>
+        <div class="summary-stat"><div class="label">CORE</div><div class="value complete">${escHTML(summary.core)} ✅</div></div>
+        <div class="summary-stat"><div class="label">DUPLICATED</div><div class="value pending">${escHTML(summary.duplicated)} ⚠</div></div>
+        <div class="summary-stat"><div class="label">INLINE</div><div class="value" style="color:var(--red)">${escHTML(summary.inline)} ⏳</div></div>
+      </div>`;
+
+      // Coverage list — work remaining reads first: inline, then duplicated, then core.
+      const statusOrder = { inline: 0, duplicated: 1, core: 2 };
+      const statusBadge = {
+        core: `<span style="color:var(--green)">✅ core</span>`,
+        duplicated: `<span style="color:var(--yellow)">⚠ duplicated</span>`,
+        inline: `<span style="color:var(--red)">⏳ inline</span>`,
+      };
+      const sortedCoverage = coverage.slice().sort((a, b) =>
+        statusOrder[a.status] - statusOrder[b.status] || a.name.localeCompare(b.name));
+
+      html += `<div class="pixel-panel pixel-font" style="padding:12px;margin-bottom:16px">
+        <div style="font-size:0.6875rem;color:var(--sunpetal);margin-bottom:8px">COVERAGE (${sortedCoverage.length})</div>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.625rem">
+          <thead><tr style="color:var(--text-dim);text-align:left">
+            <th style="padding:4px 6px">NAME</th>
+            <th style="padding:4px 6px">LINES</th>
+            <th style="padding:4px 6px">STATUS</th>
+            <th style="padding:4px 6px">FILE</th>
+          </tr></thead>
+          <tbody>
+            ${sortedCoverage.map(c => `<tr style="border-top:1px solid var(--border-brown)">
+              <td style="padding:4px 6px;font-family:'Courier New',monospace">${escHTML(c.name)}</td>
+              <td style="padding:4px 6px">${c.lines != null ? escHTML(c.lines) : "—"}</td>
+              <td style="padding:4px 6px">${statusBadge[c.status] || escHTML(c.status)}</td>
+              <td style="padding:4px 6px;color:var(--text-dim)">${escHTML(c.file)}</td>
+            </tr>`).join("")}
+          </tbody>
+        </table></div>
+      </div>`;
+
+      // Tables — collapsed <details> per entry; COOKING_RECIPES_DATA alone is 119 recipes,
+      // ITEM_IMAGE_MAP (1220 lines, still inline) will land here once migrated.
+      const tableNames = Object.keys(tables).sort();
+      html += `<div class="pixel-panel pixel-font" style="padding:12px">
+        <div style="font-size:0.6875rem;color:var(--sunpetal);margin-bottom:8px">CORE DATA TABLES (${tableNames.length})</div>
+        ${tableNames.map(name => `<details style="margin:2px 0 10px;border:1px solid var(--border-brown);border-radius:8px;background:#1a140c">
+          <summary style="cursor:pointer;padding:6px 10px;font-family:'Press Start 2P',monospace;font-size:0.5rem;color:var(--sunpetal)">${escHTML(name)}</summary>
+          <pre style="padding:8px 10px;margin:0;font-size:0.625rem;line-height:1.5;overflow-x:auto;white-space:pre-wrap;word-break:break-word;color:var(--text-secondary);font-family:'Courier New',monospace">${escHTML(JSON.stringify(tables[name], null, 2))}</pre>
+        </details>`).join("")}
+      </div>`;
+
+      html += `<div class="footer">
+        <button class="refresh-btn" onclick="refresh()">REFRESH</button>
+        <div class="timestamp pixel-font">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
+      </div>`;
+
+      app.innerHTML = html;
     }
 
     // Recursive ingredient SFL resolver — returns {price, source} or null if unknown.
@@ -22952,6 +23058,8 @@
       // silently leave XP/day, costs and banked food frozen at their first-load values.
       _bumpkinCooking = null;
       _bumpkinCookingErrKey = null;
+      _constantsData = null;
+      _constantsErr = null;
       main();
     }
 
@@ -26465,6 +26573,7 @@
           case "diff": renderDiff(data); break;
           case "json": renderJsonExplorer(data); break;
           case "marks": renderMarks(data); break;
+          case "constants": renderConstants(data); break;
           default: renderDashboard(data);
         }
 
