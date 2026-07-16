@@ -72,4 +72,6 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => console.log(`dev server → http://localhost:${PORT}  (proxying other /api/* to ${PROD})`));
+// Bind loopback only: this serves any file under the repo root (including .env and .git/),
+// so it must not be reachable from the LAN.
+server.listen(PORT, "127.0.0.1", () => console.log(`dev server → http://localhost:${PORT}  (proxying other /api/* to ${PROD})`));

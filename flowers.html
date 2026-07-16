@@ -17535,7 +17535,15 @@
         const _cr = await fetch(`/api/compute?farm=${fid}&section=cooking&petSimulate=${petSim}&recipes=${_recipes}`);
         if (_cr.ok) {
           const cp = (await _cr.json()).data;
-          cooking = { buildings: cp.buildings, totalXpPerDay: cp.totalXpPerDay, petStreakWeeks: cp.petStreak.weeks, petStreakActiveThisWeek: cp.petStreak.activeThisWeek, petStreakMult: cp.petStreak.mult, xpBoosts: cp.xpBoosts };
+          // Project the five fields this summary actually reports. The payload also carries the
+          // per-building `recipes[]` (119 of them, each with its ingredient-cost breakdown) for the
+          // Bumpkin page — POSTing that whole object shipped 47KB where 761 bytes are read, and
+          // farm-history stores it in KV for 14 days.
+          const _bmap = {};
+          for (const [_bd, _b] of Object.entries(cp.buildings)) {
+            _bmap[_bd] = { recipe: _b.recipe, cookMinutes: _b.cookMinutes, xpPerCook: _b.xpPerCook, buildingCount: _b.buildingCount, xpPerDay: _b.xpPerDay };
+          }
+          cooking = { buildings: _bmap, totalXpPerDay: cp.totalXpPerDay, petStreakWeeks: cp.petStreak.weeks, petStreakActiveThisWeek: cp.petStreak.activeThisWeek, petStreakMult: cp.petStreak.mult, xpBoosts: cp.xpBoosts };
         }
       } catch (eC) {}
       return { farm: fid, computedAt: new Date().toISOString(), efficiencyWindow: (eff && eff.meta) || null, income, cooking, perCategory: per };
