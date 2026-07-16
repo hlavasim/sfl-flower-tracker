@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SFL Tracker API — /api/compute</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui.css">
+  <style>body { margin: 0; }</style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-bundle.js" crossorigin></script>
+  <script>
+    window.onload = () => {
+      window.ui = SwaggerUIBundle({
+        url: "/api/compute?section=openapi",
+        dom_id: "#swagger-ui",
+        deepLinking: true,
+        presets: [SwaggerUIBundle.presets.apis],
+        layout: "BaseLayout",
+        // The spec's `servers` entry is the production host (correct for external
+        // consumers). When this page itself is served from somewhere else — e.g. the
+        // local dev server — "Try it out" would otherwise call production instead of
+        // wherever /swagger.html is actually running. Rewrite requests to this page's
+        // own origin; in production that origin already equals the spec's server, so
+        // this is a no-op there.
+        requestInterceptor: (req) => {
+          req.url = req.url.replace(/^https?:\/\/[^/]+/, window.location.origin);
+          return req;
+        },
+      });
+    };
+  </script>
+</body>
+</html>
