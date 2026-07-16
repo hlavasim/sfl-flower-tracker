@@ -183,6 +183,10 @@ export const COOKING_INGREDIENTS = {
   "Slow Juice":           { "Grape": 10, "Kale": 100 },
 };
 
+// ── Salt mining (Salt Rake consumed per harvest) ──
+export const SALT_RAKE_COST = { coins: 20, materials: { Wood: 3 } };
+export const SALT_BASE_YIELD = 10;
+
 export const COOKING_BUILDING_NAMES = ["Fire Pit", "Kitchen", "Bakery", "Deli", "Smoothie Shack", "Aging Shed"];
 export const COOKING_BUILDING_EMOJI = { "Fire Pit": "🔥", "Kitchen": "🍳", "Bakery": "🧁", "Deli": "🥩", "Smoothie Shack": "🥤", "Aging Shed": "🧂" };
 
