@@ -5827,7 +5827,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.72</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.73</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5854,6 +5854,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.73", items: [
+          { t: "feat", text: "<b>Active shrines are now baked into Power &amp; Roadmap</b> — any shrine actually placed &amp; un-expired on your farm folds its boost into that category’s income (Sparrow/Toucan/Collie/Badger/Mole/Bantam/Tortoise speed, Moth &amp; Stag speed+yield, Bear honey, Legendary +1 harvests), so the numbers reflect what you really have right now and drop back automatically when the shrine expires. The Shrines page keeps its own shrine-free “should I craft this” math, so its per-shrine profit is unchanged. (Cooking/crafting/pet/trading shrines don’t flow through the resource engine and are unaffected here.)" },
+        ]},
         { ver: "v4.72", items: [
           { t: "fix", text: "power-summary: <b>chickens / cows / sheep</b> now report real production <b>per product</b> (Egg/Feather, Milk/Leather, Wool/Merino Wool) — theoretical/day at your animal levels &amp; boosts, plus effective/day &amp; efficiency from your harvest sessions — instead of all-null. <b>Salt</b> now reports theoretical/day (rakes/day × yield/rake) and <b>Bees</b> reports Honey/day. Flowers stay category-level (one bed, many types)." },
         ]},
@@ -15100,7 +15103,7 @@
           const catId = qId; // crops, fruits, greenhouse
           const product = qDef.getProduct(savedProducts);
           const n = getCapacityCount(catId, capacity);
-          const ownedEffects = (catBoosts[catId] || []).filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId));
+          const ownedEffects = (catBoosts[catId] || []).filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId)).concat(activeShrineEffects(catId));
           const result = applyBoosts(catId, product, capacity, ownedEffects);
           const effectiveCycle = result.effectiveCycle || getCycleSec(catId, product);
           const cyclesPerDay = effectiveCycle > 0 ? 86400 / effectiveCycle : 0;
@@ -15120,7 +15123,7 @@
           const catId = qDef.catId;
           const n = getCapacityCount(catId, capacity);
           const d = RESOURCE_RESPAWN_DATA[Object.keys(PRODUCT_TO_CATEGORY).find(p => PRODUCT_TO_CATEGORY[p] === catId)];
-          const ownedEffects = (catBoosts[catId] || []).filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId));
+          const ownedEffects = (catBoosts[catId] || []).filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId)).concat(activeShrineEffects(catId));
           const result = applyBoosts(catId, catId === "oil" ? "Oil" : Object.keys(PRODUCT_TO_CATEGORY).find(p => PRODUCT_TO_CATEGORY[p] === catId), capacity, ownedEffects);
           const effectiveCycle = result.effectiveCycle || (d ? d.respawnSec : 0);
           const toolsPerDay = effectiveCycle > 0 ? (86400 / effectiveCycle) * n : 0;
@@ -15259,7 +15262,7 @@
     // Build detailed production breakdown HTML for a category
     function buildProductionBreakdown(catId, product, capacity, p2pPrices, catBoosts) {
       const n = getCapacityCount(catId, capacity);
-      const ownedEffects = catBoosts.filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId));
+      const ownedEffects = catBoosts.filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId)).concat(activeShrineEffects(catId));
 
       if (n === 0 && catId !== "fishing") {
         return `<div style="padding:8px 12px;font-size: 0.625rem;color:var(--text-dim)">No capacity detected on farm.</div>`;
@@ -15407,7 +15410,7 @@
       // Non-animal categories: value via the SHARED roadmap engine (NET — with tool/seed cost + the mining
       // chain — at theoretical efficiency), so the Power page and the roadmap agree on every yield/tool boost.
       const _s = Object.assign({}, getRoadmapSettings(), { effMode: "theoretical", effOverrides: {} });
-      const ownedEff = allCatBoosts.filter(b => b.has && !b.isDisabled && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId));
+      const ownedEff = allCatBoosts.filter(b => b.has && !b.isDisabled && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId)).concat(activeShrineEffects(catId));
       let synergy, solo;
       if (ROADMAP_MINING_CATS.indexOf(catId) >= 0) {
         const mk = (ef) => { const o = {}; o[catId] = ef; return roadmapMiningChain(_s, o).total; };
@@ -15615,10 +15618,10 @@
           const soloDelta = soloInfo.totalSfl - baseInfo.totalSfl;
           h += `<div style="margin-bottom:4px"><strong>Solo:</strong> ${soloInfo.totalSfl.toFixed(4)} ${sflIcon()}/day (<span style="color:var(--green)">+${soloDelta.toFixed(4)}</span>)</div>`;
 
-          const ownedEffects = allCatBoosts.filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId));
+          const ownedEffects = allCatBoosts.filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId)).concat(activeShrineEffects(catId));
           if (boostItem.has) {
             const allInfo = getAnimalCatSfl(catId, capacity, ownedEffects, p2pPrices);
-            const withoutEffects = allCatBoosts.filter(b => b.has && !b.isDisabled && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId));
+            const withoutEffects = allCatBoosts.filter(b => b.has && !b.isDisabled && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId)).concat(activeShrineEffects(catId));
             const withoutInfo = getAnimalCatSfl(catId, capacity, withoutEffects, p2pPrices);
             const marginal = allInfo.totalSfl - withoutInfo.totalSfl;
             h += `<div style="margin-bottom:4px"><strong>Marginal (${ownedEffects.length} effects):</strong> <span style="color:var(--green)">+${marginal.toFixed(4)} ${sflIcon()}/day</span></div>`;
@@ -15652,10 +15655,10 @@
           if (soloResult.yieldFlat) h += ` +${soloResult.yieldFlat.toFixed(2)}/cycle`;
           h += ` → ${soloSfl.toFixed(4)} ${sflIcon()}/day (<span style="color:var(--green)">+${soloDelta.toFixed(4)}</span>)</div>`;
 
-          const ownedEffects = allCatBoosts.filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId));
+          const ownedEffects = allCatBoosts.filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId)).concat(activeShrineEffects(catId));
           if (boostItem.has) {
             const allResult = applyBoosts(catId, product, capacity, ownedEffects);
-            const withoutEffects = allCatBoosts.filter(b => b.has && !b.isDisabled && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId));
+            const withoutEffects = allCatBoosts.filter(b => b.has && !b.isDisabled && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId)).concat(activeShrineEffects(catId));
             const withoutResult = applyBoosts(catId, product, capacity, withoutEffects);
             const allSfl = unitToSfl(allResult.unitsPerDay, priceProduct, p2pPrices);
             const withoutSfl = unitToSfl(withoutResult.unitsPerDay, priceProduct, p2pPrices);
@@ -16154,8 +16157,40 @@
       return 0;
     }
 
+    // ── Active-shrine boosts baked into Power & Roadmap (reflects the shrines actually placed on the farm) ──
+    // A placed, un-expired shrine's speed/yield boost is folded into the per-category effect list so Power and
+    // Roadmap income match reality; it drops out automatically once the shrine expires. The SHRINES page builds
+    // its own shrine-FREE base (buildRoiBoostItems) for its "should I craft this" marginal math, so it is
+    // deliberately unaffected by these injections.
+    function _shrineActiveNow(farm, name) {
+      const sh = SHRINE_DATA[name];
+      if (!sh || !farm) return false;
+      const placed = farm.collectibles || {}, placedHome = (farm.home && farm.home.collectibles) || {};
+      return _shrineStatus(name, placed, placedHome, sh.duration_d).kind === "active";
+    }
+    function activeShrineEffects(catId) {
+      const farm = (typeof powerState !== "undefined" && powerState) ? powerState.farm : null;
+      if (!farm || !catId) return [];
+      const out = [];
+      for (const name in SHRINE_DATA) {
+        const sh = SHRINE_DATA[name];
+        if (!_shrineActiveNow(farm, name)) continue;
+        const cats = [sh.catId].concat(sh.alsoCats || []);
+        if ((sh.effectKind === "speed" || sh.effectKind === "speed_and_yield") && cats.indexOf(catId) >= 0)
+          out.push({ cat: catId, type: "speed_mult", value: sh.speed, shrine: name });
+        if (sh.effectKind === "speed_and_yield" && catId === "flowers" && sh.chance)
+          out.push({ cat: catId, type: "yield_flat", value: sh.chance, shrine: name });                 // Moth: 25% chance +1 flower = +0.25 EV
+        if (sh.effectKind === "speed_and_yield" && catId === "oil" && sh.oil3rdDrillBonus)
+          out.push({ cat: catId, type: "yield_flat", value: sh.oil3rdDrillBonus / 3, shrine: name });    // Stag: +15 oil every 3rd drill = +5/drill
+        if (sh.effectKind === "yield_flat" && cats.indexOf(catId) >= 0)
+          out.push({ cat: catId, type: "yield_flat", value: sh.flat, shrine: name });                    // Bear: +0.5 honey/hive
+        if (sh.effectKind === "yield_flat_multi" && (sh.targets || []).indexOf(catId) >= 0)
+          out.push({ cat: catId, type: "yield_flat", value: sh.flat, shrine: name });                    // Legendary: +1 to targets
+      }
+      return out;
+    }
     function roadmapOwnedEffects(cat) {
-      return powerState.boostItems.filter(b => b.has).flatMap(b => b.effects.filter(e => e.cat === cat));
+      return powerState.boostItems.filter(b => b.has).flatMap(b => b.effects.filter(e => e.cat === cat)).concat(activeShrineEffects(cat));
     }
 
     // Coins are "free" when you hold a big pile of them — they're not directly convertible
@@ -18339,7 +18374,7 @@
       for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
         if (!catDef.quantifiable) continue;
         const product = savedProducts[catId] || getDefaultProduct(catId);
-        const ownedEffects = catBoosts[catId].filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId));
+        const ownedEffects = catBoosts[catId].filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId)).concat(activeShrineEffects(catId));
 
         let baseSfl, boostedSfl, boostedUnitsPerDay = 0;
         let animalBreakdown = null;
@@ -19196,7 +19231,7 @@
             const animalType = ANIMAL_CAT_MAP[catId];
             const animals = capacity.animalDetails[catId];
             const dist = getAnimalLevelDistribution(animals);
-            const ownedEffects = (catBoosts[catId] || []).filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId));
+            const ownedEffects = (catBoosts[catId] || []).filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId)).concat(activeShrineEffects(catId));
             const fc = calcAnimalFeedCost(catId, capacity, p2pPrices, ownedEffects, stockMods);
             const isGolden = fc.isGolden;
             const feedNames = Object.keys(fc.feedBreakdown || {}).join(", ") || "—";
