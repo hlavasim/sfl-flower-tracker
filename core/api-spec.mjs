@@ -81,10 +81,21 @@ export const API_SPEC = {
         responses: {
           200: {
             description:
-              "Section payload. Shape depends on `section`: data sections include `farm` " +
-              "and `computedAt`; `constants`/`openapi` omit `farm`.",
+              "The response shape depends on `section` — there are THREE, and they are not " +
+              "variations of one envelope:\n" +
+              "- `section=cooking` → `{ farm, computedAt, section, data }`.\n" +
+              "- `section=constants` → `{ computedAt, section, data }` — no `farm` (it needs none).\n" +
+              "- `section=openapi` → **this document itself, unwrapped**: top-level `openapi`, " +
+              "`info`, `servers`, `paths`. There is NO `data`/`section`/`computedAt` key — reading " +
+              "`.data` gives `undefined`. It is served raw because a Swagger UI `url:` must resolve " +
+              "to the OpenAPI document itself.",
             content: {
               "application/json": {
+                // Deliberately unconstrained: the three shapes above differ at the top level, and
+                // OpenAPI cannot key a schema off a query parameter's value. The prose is the
+                // contract here — keep it accurate. (An earlier wording said constants/openapi
+                // merely "omit farm", which was true word-by-word and still misled: it implied
+                // openapi keeps the envelope. It does not.)
                 schema: { type: "object" },
                 examples: {
                   cooking: {
