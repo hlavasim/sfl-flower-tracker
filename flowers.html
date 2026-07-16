@@ -5827,7 +5827,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.65</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.66</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5854,6 +5854,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.66", items: [
+          { t: "feat", text: "Power ROI is now colour-graded by payback length \u2014 green for a fast payback, fading to white at <b>2 years</b> and to full red at <b>4 years</b> and beyond. Makes a good buy (e.g. Tough Tree\u2019s ranks at 173d) pop green and a dud (1,600d+) read red at a glance, without parsing the number." },
+        ]},
         { ver: "v4.65", items: [
           { t: "fix", text: "Chance-based skills (Tough Tree “10% chance x3 Wood”, Fiery Jackpot, Fishy Roll… — 9 skills) now price their Ascension ranks instead of showing “—”. Their odds are already folded into an expected value by the boost parser (10% × the +2 extra = +0.2/harvest), and expected value is linear in the chance, so a rank that lifts 10% → 20% → 30% doubles then triples that. Tough Tree’s ranks turn out to be some of the BEST value in the tree." },
         ]},
@@ -19368,6 +19371,19 @@
     }
     // Each Ascension rank as its OWN row, so it reads like a separate skill with its own value + ROI.
     // Cost = tier*3 skill points (priced via sflPerPoint) + tier Ascension Shards (no market price -> label only).
+    // ROI colour ramp: green (fast) -> white at 2 years -> fully red at 4 years+. Anchors match the
+    // palette (--green #30D158, --red #FF6B6B) so it reads as one system.
+    function roiColorFor(days) {
+      if (!isFinite(days) || !(days > 0)) return "";
+      const WHITE_D = 730, RED_D = 1460;
+      const G = [48, 209, 88], W = [255, 255, 255], R = [255, 107, 107];
+      const mix = (a, b, u) => a.map((v, i) => Math.round(v + (b[i] - v) * u));
+      const c = days <= WHITE_D
+        ? mix(G, W, days / WHITE_D)
+        : mix(W, R, Math.min(1, (days - WHITE_D) / (RED_D - WHITE_D)));
+      return "rgb(" + c[0] + "," + c[1] + "," + c[2] + ")";
+    }
+
     function renderPowerSkillRankRows(b, catId, product, capacity, p2pPrices, allCatBoosts, isOwned) {
       const r = powerSkillRankVals(b, catId, product, capacity, p2pPrices, allCatBoosts, isOwned);
       if (!r || !r.up || !r.rows.length) return "";
@@ -19453,7 +19469,7 @@
         </div>
         <div class="power-boost-value">
           <div class="power-boost-sfl">${sflText}</div>
-          ${roiText ? `<div class="power-boost-roi" style="${roiText === 'LOSS' ? 'color:var(--red)' : ''}">${roiText}${roiText === 'LOSS' ? '' : ' ROI'}</div>` : ""}
+          ${roiText ? `<div class="power-boost-roi" style="${roiText === 'LOSS' ? 'color:var(--red);font-weight:bold' : `color:${roiColorFor(val.roi)};font-weight:bold`}" title="${roiText === 'LOSS' ? 'Never pays back' : `Payback ${roiText} — green = fast, white \u2248 2 years, red \u2265 4 years`}">${roiText}${roiText === 'LOSS' ? '' : ' ROI'}</div>` : ""}
           ${costLabel ? `<div class="power-boost-floor">${costLabel}</div>` : ""}
         </div>
       </div>`;
