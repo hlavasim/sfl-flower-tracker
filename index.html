@@ -5827,7 +5827,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.67</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.68</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5854,6 +5854,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.68", items: [
+          { t: "fix", text: "The /api/power-summary was only refreshed from the Roadmap page. Now it publishes from any page that loads your power data (Power tab too), computing efficiency in the background if needed — so the endpoint updates whenever you open the tracker, not only the roadmap." },
+        ]},
         { ver: "v4.67", items: [
           { t: "feat", text: "New <b>/api/power-summary?farm=&lt;id&gt;</b> endpoint. Every time the roadmap loads it publishes a per-category summary \u2014 theoretical units/day, your Last-7-days efficiency, effective units/day, and how often you harvest \u2014 so it can be shown elsewhere. Mineable resources (Wood/Stone/Iron/Gold/Crimstone/Oil) carry a units/day figure; categories with no harvest signal (fishing/bees/salt) report efficiency <b>null</b> so a consumer knows it\u2019s unmeasured. GET the JSON from that URL." },
         ]},
@@ -15718,6 +15721,7 @@
         return;
       }
       renderPowerContent();
+      _maybePushPowerSummary();
     }
 
     // Wearable equipped on the main bumpkin OR any farm hand (game's isWearableActive).
@@ -17462,6 +17466,19 @@
         fetch(`/api/power-summary?farm=${data.farm}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data), keepalive: true }).catch(() => {});
       } catch (e) {}
     }
+    // Publish the summary once per page load, from WHATEVER page built powerState (Power, Roadmap, ...).
+    // Reuses the roadmap's efficiency if already computed, else computes it in the background.
+    let _summaryPushed = false;
+    async function _maybePushPowerSummary() {
+      if (_summaryPushed || !powerState || !powerState.farm) return;
+      _summaryPushed = true;
+      try {
+        let eff;
+        if (roadmapState && roadmapState.effByCat) eff = { effByCat: roadmapState.effByCat, meta: roadmapState.effMeta, meanRatio: roadmapState.meanRatio };
+        else { eff = await roadmapComputeMayEfficiency(); if (!roadmapState) roadmapState = { effByCat: eff.effByCat, effMeta: eff.meta, meanRatio: (typeof eff.meanRatio === "number" ? eff.meanRatio : 0.3) }; }
+        _pushPowerSummary(eff);
+      } catch (e) { _summaryPushed = false; }
+    }
 
     async function roadmapComputeMayEfficiency() {
       const out = { effByCat: {}, meta: { snaps: 0, days: 0, available: false, from: "", to: "" } };
@@ -17774,7 +17791,7 @@
       gDefault = Math.min(1.5, Math.max(0.05, gDefault));
 
       roadmapState = { effByCat: eff.effByCat, effMeta: eff.meta, globalActivityDefault: gDefault, meanRatio: (typeof eff.meanRatio === "number" ? eff.meanRatio : gDefault) };
-      _pushPowerSummary(eff);   // publish a per-category power/efficiency summary to /api/power-summary
+      _maybePushPowerSummary();  // publish a per-category power/efficiency summary to /api/power-summary
       const settings = getRoadmapSettings();
       const prod = roadmapCurrentProduction(settings);
       roadmapState.currentProdDefault = prod.total;
