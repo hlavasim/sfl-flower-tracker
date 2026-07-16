@@ -5827,7 +5827,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.71</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.72</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5854,6 +5854,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.72", items: [
+          { t: "fix", text: "power-summary: <b>chickens / cows / sheep</b> now report real production <b>per product</b> (Egg/Feather, Milk/Leather, Wool/Merino Wool) — theoretical/day at your animal levels &amp; boosts, plus effective/day &amp; efficiency from your harvest sessions — instead of all-null. <b>Salt</b> now reports theoretical/day (rakes/day × yield/rake) and <b>Bees</b> reports Honey/day. Flowers stay category-level (one bed, many types)." },
+        ]},
         { ver: "v4.71", items: [
           { t: "fix", text: "Cooking XP/day now counts your <b>Pet’s Streak</b> from its streak level (e.g. 3 weeks = ×1.1) even when this week isn’t active yet, and honours the Simulate ×1.5 toggle (petStreakMult / petStreakWeeks in the summary). Also uses the queue’s real readyAt cook time and Double Nom’s 2× food." },
         ]},
@@ -17470,15 +17473,41 @@
         }
         per[cat] = { label: label(cat), harvestsPerDay: sessions, plots: getCapacityCount(cat, cap), products };
       }
-      // Flowers + animals — category-level efficiency; drops are per-type / multi-product so units left null.
-      for (const cat of ["flowers", "chickens", "cows", "sheep"]) {
-        const s = effOf(cat);
-        per[cat] = { label: label(cat), theoreticalPerDay: null, efficiency: s.ratio, effectivePerDay: null, harvestsPerDay: s.harvestsPerDay, theoreticalCyclesPerDay: s.theoreticalCyclesPerDay };
+      // Animals — PER PRODUCT (Egg/Feather, Milk/Leather, Wool/Merino Wool). theoretical = 24/7 drops at your
+      // animal levels + boosts; effective = units-per-harvest x your harvest sessions/day (same model as crops).
+      for (const cat of ["chickens", "cows", "sheep"]) {
+        const s = effOf(cat), sessions = s.harvestsPerDay, products = {};
+        let bd = [];
+        try { bd = (getAnimalCatSfl(cat, cap, roadmapOwnedEffects(cat), powerState.p2pPrices || {}).breakdown) || []; } catch (eA) {}
+        for (const p of bd) {
+          const theo = p.unitsPerDay || 0, cyc = p.effectiveCycle || 0;
+          const perHarvest = cyc > 0 ? theo * cyc / 86400 : 0;
+          const effective = (sessions != null) ? perHarvest * sessions : null;
+          products[p.product] = { theoreticalPerDay: rnd(theo), efficiency: (sessions != null && theo > 0) ? rnd(effective / theo) : null, effectivePerDay: rnd(effective) };
+        }
+        per[cat] = { label: label(cat), harvestsPerDay: sessions, animals: getCapacityCount(cat, cap), products };
       }
-      // No harvest signal at all — efficiency genuinely unmeasured.
-      for (const cat of ["fishing", "bees", "salt"]) {
-        per[cat] = { label: label(cat), theoreticalPerDay: null, efficiency: null, effectivePerDay: null, harvestsPerDay: null, theoreticalCyclesPerDay: null };
+      // Flowers — category-level efficiency (one bed grows many flower types, so a single units/day isn't meaningful).
+      { const s = effOf("flowers"); per.flowers = { label: label("flowers"), theoreticalPerDay: null, efficiency: s.ratio, effectivePerDay: null, harvestsPerDay: s.harvestsPerDay, theoreticalCyclesPerDay: s.theoreticalCyclesPerDay }; }
+      // Salt — manual rake mining: theoretical/day = rakes/day (from node recharge cycle) x yield/rake.
+      {
+        let saltTheo = null;
+        try {
+          const sf = farm.saltFarm, nodes = (sf && sf.nodes) ? Object.values(sf.nodes) : [];
+          if (nodes.length) {
+            const cyc = nodes.map(x => (x.salt && x.salt.nextChargeAt && x.salt.claimedAt) ? (x.salt.nextChargeAt - x.salt.claimedAt) : 0).filter(v => v > 0).sort((a, b) => a - b);
+            let cycleMs = cyc.length ? cyc[Math.floor(cyc.length / 2)] : 6 * 3600000;
+            cycleMs = Math.min(48 * 3600000, Math.max(3600000, cycleMs));
+            saltTheo = nodes.length * (86400000 / cycleMs) * computeSaltYieldPerRake(farm);
+          }
+        } catch (eS) {}
+        const s = effOf("salt");
+        per.salt = { label: "SALT", theoreticalPerDay: rnd(saltTheo), efficiency: s.ratio, effectivePerDay: (saltTheo != null && s.ratio != null) ? rnd(saltTheo * s.ratio) : null, harvestsPerDay: s.harvestsPerDay };
       }
+      // Bees — Honey/day from hives (no harvest-session signal, so efficiency stays unmeasured).
+      { let theo = 0; try { theo = applyBoosts("bees", "Honey", cap, roadmapOwnedEffects("bees")).unitsPerDay || 0; } catch (eB) {} per.bees = { label: label("bees"), theoreticalPerDay: rnd(theo), efficiency: null, effectivePerDay: null, harvestsPerDay: null }; }
+      // Fishing — no continuous cycle; genuinely unmeasured.
+      per.fishing = { label: label("fishing"), theoreticalPerDay: null, efficiency: null, effectivePerDay: null, harvestsPerDay: null, theoreticalCyclesPerDay: null };
       let income = null;
       try { income = { effectiveSflPerDay: rnd(roadmapCurrentProduction(getRoadmapSettings()).total) }; } catch (e3) {}
       // Cooking: per building, the recipe currently queued and the XP/day it yields at your boosts.
