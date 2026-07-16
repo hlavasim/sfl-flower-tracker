@@ -5827,7 +5827,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.68</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.69</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5854,6 +5854,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.69", items: [
+          { t: "fix", text: "power-summary: <b>Obsidian</b> now reports its real mining rate (lava pits) + efficiency instead of all-null. <b>Crops / fruits / greenhouse</b> are now broken out <b>per product</b> under a `products` map (a category units/day was meaningless) \u2014 each with theoretical/day (24/7 max), your harvest efficiency, and effective/day = plots \u00d7 yield \u00d7 your harvest sessions/day (so fast &amp; slow crops both read realistically)." },
+        ]},
         { ver: "v4.68", items: [
           { t: "fix", text: "The /api/power-summary was only refreshed from the Roadmap page. Now it publishes from any page that loads your power data (Power tab too), computing efficiency in the background if needed — so the endpoint updates whenever you open the tracker, not only the roadmap." },
         ]},
@@ -17438,16 +17441,31 @@
       const label = (cat) => (POWER_CATEGORIES[cat] && POWER_CATEGORIES[cat].label) || cat;
       const effOf = (cat) => { const e = effBy[cat]; const m = !!(e && e.measured); return { e, measured: m, ratio: m ? e.ratio : null, harvestsPerDay: e ? rnd(e.actualPerDay) : null, theoreticalCyclesPerDay: e ? rnd(e.theoPerDay) : null }; };
       const per = {};
-      // Mineable resources — a clean units/day per category.
-      const RES = { trees: "Wood", stone: "Stone", iron: "Iron", gold: "Gold", crimstone: "Crimstone", oil: "Oil" };
+      // Mineable resources (incl. obsidian/lava pits) — a clean units/day per category.
+      const RES = { trees: "Wood", stone: "Stone", iron: "Iron", gold: "Gold", crimstone: "Crimstone", oil: "Oil", obsidian: "Obsidian" };
       for (const cat of Object.keys(RES)) {
         let theo = 0;
         try { theo = RES_FARMKEY[cat] ? gameResUnitsPerDay(cat, farm, cap, roadmapOwnedEffects(cat)) : (applyBoosts(cat, RES[cat], cap, roadmapOwnedEffects(cat)).unitsPerDay || 0); } catch (e2) {}
         const s = effOf(cat);
         per[cat] = { label: RES[cat], theoreticalPerDay: rnd(theo), efficiency: s.ratio, effectivePerDay: s.ratio != null ? rnd(theo * s.ratio) : null, harvestsPerDay: s.harvestsPerDay, theoreticalCyclesPerDay: s.theoreticalCyclesPerDay };
       }
-      // Aggregate/per-product categories — efficiency is meaningful, but "units/day" isn't a single number.
-      for (const cat of ["obsidian", "crops", "fruits", "greenhouse", "flowers", "chickens", "cows", "sheep"]) {
+      // Crops / fruits / greenhouse — PER PRODUCT (a single category number is meaningless). theoretical = 24/7
+      // max; effective = plots x yield x your harvest sessions/day (grow-time cancels, so fast & slow crops are
+      // both realistic); per-product efficiency = effective / theoretical.
+      for (const catTab of [["crops", CROP_GROW_DATA], ["fruits", FRUIT_GROW_DATA], ["greenhouse", GREENHOUSE_GROW_DATA]]) {
+        const cat = catTab[0], table = catTab[1], s = effOf(cat), sessions = s.harvestsPerDay, oe = roadmapOwnedEffects(cat), products = {};
+        for (const prod of Object.keys(table)) {
+          if ((cat === "crops" || cat === "fruits") && !roadmapInSeason(prod)) continue;
+          let ab; try { ab = applyBoosts(cat, prod, cap, oe); } catch (e4) { continue; }
+          const theo = ab.unitsPerDay || 0, cyc = ab.effectiveCycle || 0;
+          const perHarvest = cyc > 0 ? theo * cyc / 86400 : 0;             // units per harvest across all plots
+          const effective = (sessions != null) ? perHarvest * sessions : null;
+          products[prod] = { theoreticalPerDay: rnd(theo), efficiency: (sessions != null && theo > 0) ? rnd(effective / theo) : null, effectivePerDay: rnd(effective) };
+        }
+        per[cat] = { label: label(cat), harvestsPerDay: sessions, plots: getCapacityCount(cat, cap), products };
+      }
+      // Flowers + animals — category-level efficiency; drops are per-type / multi-product so units left null.
+      for (const cat of ["flowers", "chickens", "cows", "sheep"]) {
         const s = effOf(cat);
         per[cat] = { label: label(cat), theoreticalPerDay: null, efficiency: s.ratio, effectivePerDay: null, harvestsPerDay: s.harvestsPerDay, theoreticalCyclesPerDay: s.theoreticalCyclesPerDay };
       }
@@ -17499,7 +17517,6 @@
       if (pDays <= 1) return out;
       const measuredRatios = [];
       for (const [catId, hKey] of Object.entries(ROADMAP_EFF_HKEY)) {
-        if (catId === "obsidian") continue; // obsidian valued separately (sells ~1/week)
         const oeff = roadmapOwnedEffects(catId);
         const nodeCount = getCapacityCount(catId, powerState.capacity);
         // Harvest timestamps (+ cumulative units) from the _h.* history.
@@ -17517,7 +17534,7 @@
         if (ratio > 1.5) ratio = 1.5; // same clamp as the Nodes page
         const measured = theoPerDay > 0 && sessions.length > 0;
         out.effByCat[catId] = { ratio, total, actualPerDay, theoPerDay, sessions: sessions.length, nodeCount, measured };
-        if (measured) measuredRatios.push(ratio);
+        if (measured && catId !== "obsidian") measuredRatios.push(ratio);
       }
       out.meanRatio = measuredRatios.length ? measuredRatios.reduce((a, b) => a + b, 0) / measuredRatios.length : 0.5;
       return out;
