@@ -17,12 +17,29 @@ test("defaults + Simulate x1.5 reproduce the v4.74-verified per-building XP/day"
   assert.ok(Math.abs(p.buildings["Kitchen"].xpPerDay - 186007.84) < 1, `Kitchen ${p.buildings["Kitchen"].xpPerDay}`);
   assert.ok(Math.abs(p.buildings["Bakery"].xpPerDay - 223209.41) < 1, `Bakery ${p.buildings["Bakery"].xpPerDay}`);
   assert.ok(Math.abs(p.buildings["Deli"].xpPerDay - 264712.41) < 1, `Deli ${p.buildings["Deli"].xpPerDay}`);
+  assert.ok(Math.abs(p.buildings["Smoothie Shack"].xpPerDay - 167407.06) < 1, `Smoothie Shack ${p.buildings["Smoothie Shack"].xpPerDay}`);
 });
 
-test("no Aging Shed key (not one of the 5 main buildings; regression guard for Task 5b)", () => {
+// ── Task 11d: Aging Shed was dropping 16% of cooking XP/day (COOKING_BUILDING_NAMES
+// has 6 buildings; core only served 5). Values below are the to-the-cent acceptance
+// gate from .superpowers/sdd/bumpkin-baseline-155498.md, captured from the LIVE
+// pre-migration page — NOT derived from this code (see that file's warning on this).
+test("Aging Shed is now served, with the level-clamped slot count (not placed-building count)", () => {
   const p = buildCookingSection(farm, {}, { savedRecipes: {}, petSimulate: true });
-  assert.equal(p.buildings["Aging Shed"], undefined);
-  assert.equal(Object.keys(p.buildings).length, 5, `expected exactly 5 buildings, got ${Object.keys(p.buildings).length}`);
+  assert.equal(Object.keys(p.buildings).length, 6, `expected exactly 6 buildings, got ${Object.keys(p.buildings).length}`);
+  const shed = p.buildings["Aging Shed"];
+  assert.ok(shed, "Aging Shed should be present");
+  assert.equal(shed.recipe, "Aged Tuna");
+  assert.equal(shed.buildingCount, 6, `count should be clamp(agingShed.level,1,6)=6, got ${shed.buildingCount}`);
+  assert.ok(Math.abs(shed.xpPerCook - 1801.51) < 0.01, `xpPerCook was ${shed.xpPerCook}`);
+  assert.equal(shed.cookMinutes, 76, `cookMinutes was ${shed.cookMinutes}`);
+  assert.ok(Math.abs(shed.xpPerDay - 204803.25) < 1, `xpPerDay was ${shed.xpPerDay}`);
+  assert.equal(shed.recipes.length, 35, `recipes.length was ${shed.recipes.length}`);
+});
+
+test("totalXpPerDay now includes Aging Shed (was under-reporting by 16%)", () => {
+  const p = buildCookingSection(farm, {}, { savedRecipes: {}, petSimulate: true });
+  assert.ok(Math.abs(p.totalXpPerDay - 1278649.78) < 1, `totalXpPerDay was ${p.totalXpPerDay}`);
 });
 
 test("total equals the sum of the emitted buildings", () => {
@@ -72,6 +89,47 @@ test("a known unpriced recipe (Mushroom Soup) has cost null and xpPerSfl 0", () 
   assert.ok(r, "Mushroom Soup should be in Fire Pit recipes");
   assert.equal(r.cost, null, `Mushroom Soup cost should be null, was ${r.cost}`);
   assert.equal(r.xpPerSfl, 0);
+});
+
+// ── Task 11d: cost breakdown (items/hasUnpriced) on each recipes[] entry — the page's
+// Cost/cook tooltip (flowers.html:10802 costTip) and "+self" badge (flowers.html:10854)
+// cannot be reproduced from a bare `cost` total.
+test("recipes[].items carries the per-ingredient cost breakdown (Pizza Margherita tooltip)", () => {
+  const p = buildCookingSection(farm, p2p, { savedRecipes: {}, petSimulate: true, coinsPerSFL: COINS_PER_SFL });
+  const r = p.buildings["Fire Pit"].recipes.find((x) => x.name === "Pizza Margherita");
+  assert.ok(r, "Pizza Margherita should be in Fire Pit recipes");
+  assert.equal(r.hasUnpriced, false);
+  const byName = Object.fromEntries(r.items.map((i) => [i.name, i]));
+  // "30x Tomato = 0.1500 SFL" — the exact tooltip line format from the live page.
+  assert.equal(byName["Tomato"].qty, 30);
+  assert.ok(Math.abs(byName["Tomato"].cost - 0.15) < 1e-9, `Tomato cost was ${byName["Tomato"].cost}`);
+  assert.equal(byName["Tomato"].source, "P2P");
+  assert.equal(byName["Cheese"].source, "recipe");
+  assert.equal(byName["Wheat"].source, "P2P");
+});
+
+test("recipes[].hasUnpriced is true and items carries a selfProduced entry (Mushroom Soup / +self badge)", () => {
+  const p = buildCookingSection(farm, p2p, { savedRecipes: {}, petSimulate: true, coinsPerSFL: COINS_PER_SFL });
+  const r = p.buildings["Fire Pit"].recipes.find((x) => x.name === "Mushroom Soup");
+  assert.equal(r.hasUnpriced, true);
+  assert.ok(Array.isArray(r.items) && r.items.length > 0);
+  const wm = r.items.find((i) => i.name === "Wild Mushroom");
+  assert.ok(wm && wm.selfProduced, "Wild Mushroom should be flagged selfProduced (no P2P price)");
+});
+
+test("recipes[].items still resolves (all selfProduced) and hasUnpriced is true when the price map is empty (fetch-failure fallback)", () => {
+  const p = buildCookingSection(farm, {}, { savedRecipes: {}, petSimulate: true });
+  const r = p.buildings["Fire Pit"].recipes.find((x) => x.name === "Pizza Margherita");
+  assert.ok(Array.isArray(r.items) && r.items.length > 0);
+  assert.ok(r.items.every((i) => i.selfProduced), "every item should be selfProduced with no prices available");
+  assert.equal(r.hasUnpriced, true);
+});
+
+test("recipes[].items/hasUnpriced are genuinely null/false only when prices is explicitly falsy (null)", () => {
+  const p = buildCookingSection(farm, null, { savedRecipes: {}, petSimulate: true });
+  const r = p.buildings["Fire Pit"].recipes.find((x) => x.name === "Pizza Margherita");
+  assert.equal(r.items, null);
+  assert.equal(r.hasUnpriced, false);
 });
 
 test("isInstant is true for a cookSec === 0 recipe (Furikake Sprinkle)", () => {

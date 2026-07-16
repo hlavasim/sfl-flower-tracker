@@ -1,8 +1,7 @@
-import { COOKING_RECIPES_DATA, BUMPKIN_DEFAULT_RECIPES } from "../data/cooking.mjs";
+import { COOKING_RECIPES_DATA, BUMPKIN_DEFAULT_RECIPES, COOKING_BUILDING_NAMES } from "../data/cooking.mjs";
 import { detectCookingBoosts, computeFoodXP, computeCookTime } from "../engine/cooking.mjs";
 import { computeRecipeCost, computeSaltYieldPerRake, computeSaltRakeCoinMult, computeFishYieldPerCast } from "../engine/cooking-cost.mjs";
 
-const MAIN_BUILDINGS = ["Fire Pit", "Kitchen", "Bakery", "Deli", "Smoothie Shack"];
 const rnd = (x) => (x == null || !isFinite(x)) ? null : Math.round(x * 1000) / 1000;
 // Mirrors flowers.html:6595 (getCount) — inventory quantities can arrive as strings.
 const getCount = (inv, name) => {
@@ -33,8 +32,13 @@ export function buildCookingSection(farm, prices = {}, settings = {}) {
   };
   const buildings = {};
   let total = 0;
-  for (const bd of MAIN_BUILDINGS) {
-    const count = ((farm.buildings || {})[bd] || []).length;
+  for (const bd of COOKING_BUILDING_NAMES) {
+    // Aging Shed slot count scales with its level (1-6), NOT the placed-building count —
+    // verbatim from flowers.html:10743 (Bumpkin page) and the pre-migration power-summary
+    // (git show 04de877:flowers.html ~:17561); the two agree (clamp(agingShed.level, 1, 6)).
+    const count = (bd === "Aging Shed")
+      ? Math.min(Math.max((farm.agingShed && farm.agingShed.level) || 1, 1), 6)
+      : ((farm.buildings || {})[bd] || []).length;
     if (count === 0) continue;
     const selName = (savedRecipes[bd] !== undefined) ? savedRecipes[bd] : (BUMPKIN_DEFAULT_RECIPES[bd] || "");
     // Mirrors flowers.html:10746-10764 — per-building recipe list with XP/h + cost.
@@ -48,7 +52,11 @@ export function buildCookingSection(farm, prices = {}, settings = {}) {
         const rc = p2p ? computeRecipeCost(name, p2p, coinsPerSFL, skills, extras) : null;
         const cost = (rc && rc.total > 0) ? rc.total : null;
         const xpPerSfl = (cost && cost > 0) ? xp / cost : 0;
-        return { name, xp, time, xpPerHour, cost, xpPerSfl, isInstant };
+        // Cost breakdown for the page's Cost/cook tooltip (items) and +self badge
+        // (hasUnpriced) — flowers.html:10802 (costTip) and :10854 (+self badge).
+        const items = rc ? rc.items : null;
+        const hasUnpriced = rc ? rc.hasUnpriced : false;
+        return { name, xp, time, xpPerHour, cost, xpPerSfl, isInstant, items, hasUnpriced };
       });
     const rd = selName ? COOKING_RECIPES_DATA[selName] : null;
     if (!rd) { buildings[bd] = { recipe: null, cookMinutes: null, xpPerCook: 0, buildingCount: count, xpPerDay: 0, recipes }; continue; }
