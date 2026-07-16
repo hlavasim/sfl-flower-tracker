@@ -75,6 +75,27 @@ export default async function handler(req, res) {
   }
   // ─── End Investment Tracker branch ────────────────────────────
 
+  // Power/efficiency summary (computed by the tracker page, served for external display).
+  if (req.query.type === "power-summary") {
+    const farm = parseInt(req.query.farm, 10);
+    if (!Number.isFinite(farm) || farm <= 0) return res.status(400).json({ error: "?farm= required" });
+    try {
+      await pool.query(`CREATE TABLE IF NOT EXISTS power_summary (farm_id BIGINT PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+      if ((req.method || "GET").toUpperCase() === "POST") {
+        if (!ALLOWED_FARMS.has(farm)) return res.status(403).json({ error: "writes disallowed for this farm" });
+        const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+        if (!body || typeof body !== "object" || !body.perCategory) return res.status(400).json({ error: "body must be the summary JSON (needs perCategory)" });
+        await pool.query(`INSERT INTO power_summary (farm_id, data, updated_at) VALUES ($1, $2, now()) ON CONFLICT (farm_id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`, [farm, JSON.stringify(body)]);
+        return res.status(200).json({ ok: true, farm });
+      }
+      const r = await pool.query(`SELECT data, updated_at FROM power_summary WHERE farm_id = $1`, [farm]);
+      if (!r.rows.length) return res.status(404).json({ error: "no summary stored yet - open the tracker roadmap for this farm once to populate it" });
+      return res.status(200).json(Object.assign({}, r.rows[0].data, { storedAt: r.rows[0].updated_at }));
+    } catch (err) {
+      return res.status(500).json({ error: "power-summary error", detail: String((err && err.message) || err) });
+    }
+  }
+
   const farmId = parseInt(req.query.farm);
   if (isNaN(farmId) || !ALLOWED_FARMS.has(farmId)) {
     return res.status(400).json({ error: "Invalid or disallowed farm ID" });
