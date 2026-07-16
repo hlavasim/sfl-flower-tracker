@@ -84,10 +84,21 @@ test("rod cost per cast = coins/rate + materials, Reel Deal halves the coin part
 
 test("Salt prices off the rake cost and honours yield/coin-mult extras", () => {
   const extras = { saltYieldPerRake: 12, saltRakeCoinMult: 0.8 };
-  const base = computeRecipeCost("Aged Tuna", p2p, COINS_PER_SFL, skills, extras);
-  // Aged Fish recipes are not in core COOKING_INGREDIENTS yet (Aging Shed deferred),
-  // so this returns null — asserting it documents the known gap rather than hiding it.
-  assert.equal(base, null);
+  const rc = computeRecipeCost("Aged Tuna", p2p, COINS_PER_SFL, skills, extras);
+  // Task 5b: Aged Fish recipes are now generated into COOKING_INGREDIENTS, so this
+  // resolves (fixes Task 7 concern 1, which pinned this as null).
+  assert.ok(rc, "Aged Tuna cost should resolve now that Aged recipes exist");
+  assert.ok(!rc.hasUnpriced, "Aged Tuna should be fully priced (fish priced via rod cost, salt via rake cost)");
+  const byName = Object.fromEntries(rc.items.map((i) => [i.name, i]));
+  assert.equal(byName["Tuna"].source, "fish-rod", "Aging Shed fish is priced as rod cost / yield-per-cast");
+  assert.equal(byName["Salt"].source, "salt");
+  // Aged Tuna needs 12 Salt: baseXP=200 -> maxXP=600 -> saltCost=round(600/50)=12.
+  assert.equal(byName["Salt"].qty, 12, `Salt qty was ${byName["Salt"].qty}`);
+  // Salt Rake cost = 20 coins * 0.8 coinMult / COINS_PER_SFL + 3 Wood (P2P), divided by
+  // the 12-salt yield-per-rake extra (core/data/cooking.mjs SALT_RAKE_COST = 20 coins + 3 Wood).
+  const saltRakeCost = ((20 * 0.8) / COINS_PER_SFL + p2p["Wood"] * 3) / 12;
+  assert.ok(Math.abs(byName["Salt"].price - saltRakeCost) < 1e-9, `Salt price was ${byName["Salt"].price}`);
+  assert.ok(rc.total > 0);
 });
 
 test("salt/fish yield helpers respond to skills and collectibles", () => {

@@ -19,9 +19,10 @@ test("defaults + Simulate x1.5 reproduce the v4.74-verified per-building XP/day"
   assert.ok(Math.abs(p.buildings["Deli"].xpPerDay - 264712.41) < 1, `Deli ${p.buildings["Deli"].xpPerDay}`);
 });
 
-test("no Aging Shed key (deferred to Wave B)", () => {
+test("no Aging Shed key (not one of the 5 main buildings; regression guard for Task 5b)", () => {
   const p = buildCookingSection(farm, {}, { savedRecipes: {}, petSimulate: true });
   assert.equal(p.buildings["Aging Shed"], undefined);
+  assert.equal(Object.keys(p.buildings).length, 5, `expected exactly 5 buildings, got ${Object.keys(p.buildings).length}`);
 });
 
 test("total equals the sum of the emitted buildings", () => {
@@ -142,10 +143,48 @@ test("back-compat: xpBoosts (string[]) and petStreak keep their exact previous s
 
 test("bankedFood sums XP across ALL recipes owned in inventory, attributed to recipe.building", () => {
   const p = buildCookingSection(farm, {}, { savedRecipes: {}, petSimulate: true });
-  assert.equal(p.bankedFood.items.length, 81, `items.length was ${p.bankedFood.items.length}`);
-  assert.ok(Math.abs(p.bankedFood.totalXp - 7827323.818978125) < 1, `totalXp was ${p.bankedFood.totalXp}`);
+  // 81 static-recipe items + 10 Aged Fish stacks the fixture actually holds (Task 5b).
+  // The fixture also holds 1 "Aged Saw Shark" — Saw Shark is not in FISH_BASE_XP (not an
+  // Aging Shed fish), so it never gets a generated recipe and stays uncounted, same as
+  // the live page: 11 distinct "Aged *" stacks - 1 unrecognized = +10 items.
+  assert.equal(p.bankedFood.items.length, 91, `items.length was ${p.bankedFood.items.length}`);
   const mashedPotato = p.bankedFood.items.find((i) => i.name === "Mashed Potato");
   assert.ok(mashedPotato, "Mashed Potato should be in bankedFood.items");
   assert.equal(mashedPotato.qty, 90);
   assert.ok(Math.abs(mashedPotato.xpEach - 6.0031125) < 0.0001, `xpEach was ${mashedPotato.xpEach}`);
+
+  // totalXp independently derived below (NOT by calling buildCookingSection/computeFoodXP) —
+  // see .superpowers/sdd/task-5b-report.md for the full derivation. Sum of
+  // maxXP(baseXP)*qty across the fixture's 10 recognized Aged-Fish stacks, times the
+  // same per-farm boost multiplier already pinned by the Mashed Potato assertion above
+  // (2.0010375 = Munching Mastery x Observatory x Blossombeard x Lifetime Farmer Banner x
+  // Pet's Streak simulate) times the three Aging-Shed-only boosts this fixture qualifies
+  // for (Prime Aged avg factor 1.042 @ Salt Sculpture L6/no Fish Smoking = 14% chance;
+  // Skill Shrimpy +20%; Fishy Feast +20%).
+  const agedFishBaseXpAndQty = [
+    { baseXP: 310, qty: 3 },  // Cobia
+    { baseXP: 250, qty: 27 }, // Porgy
+    { baseXP: 210, qty: 27 }, // Weakfish
+    { baseXP: 200, qty: 25 }, // Tuna
+    { baseXP: 220, qty: 6 },  // Oarfish
+    { baseXP: 320, qty: 8 },  // Rock Blackfish
+    { baseXP: 250, qty: 4 },  // Muskellunge
+    { baseXP: 200, qty: 13 }, // Blue Marlin
+    { baseXP: 200, qty: 12 }, // Sunfish
+    { baseXP: 240, qty: 12 }, // Sea Horse
+  ];
+  const maxXP = (b) => (b <= 200 ? b * 3 : b <= 330 ? b * 4 : b * 5);
+  const generalMult = 1.05 * 1.05 * 1.1 * 1.1 * 1.5;
+  const primeFactor = 1 + 0.14 * (1.3 - 1); // Salt Sculpture L6 (+4%), Fish Smoking absent
+  const agingMult = generalMult * primeFactor * 1.2 * 1.2;
+  const addedXP = agedFishBaseXpAndQty.reduce((sum, { baseXP, qty }) => sum + maxXP(baseXP) * agingMult * qty, 0);
+  const expectedTotalXp = 7827323.818978125 + addedXP; // old (pre-fix) pinned total + the Aged Fish gap
+  assert.ok(
+    Math.abs(p.bankedFood.totalXp - expectedTotalXp) < 1,
+    `totalXp was ${p.bankedFood.totalXp}, expected ~${expectedTotalXp}`
+  );
+  // Direction/size sanity check independent of the exact XP math above: items must
+  // increase by exactly the 10 distinct recognized Aged Fish stacks.
+  const agedItems = p.bankedFood.items.filter((i) => i.name.startsWith("Aged "));
+  assert.equal(agedItems.length, 10, `expected 10 Aged Fish line items, got ${agedItems.length}`);
 });

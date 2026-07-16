@@ -90,6 +90,33 @@ export const COOKING_RECIPES_DATA = {
   "Slow Juice":           { building: "Smoothie Shack", xp: 7500,  cookSec: 86400,  usesHoney: false },
 };
 
+// ── Aging Shed formulas (from sunflower-land/agingFormulas.ts; verbatim from flowers.html:4876-4886) ──
+export function getAgingMaxXP(baseXP) {
+  if (baseXP <= 200) return baseXP * 3;
+  if (baseXP <= 330) return baseXP * 4;
+  return baseXP * 5;
+}
+export function getAgingSaltCost(baseXP) { return Math.round(getAgingMaxXP(baseXP) / 50); }
+export function getAgingTimeSec(baseXP) {
+  const maxXP = getAgingMaxXP(baseXP);
+  const j = baseXP <= 200 ? 300 : baseXP <= 330 ? 500 : 1000;
+  return ((maxXP - baseXP) / j) * 3600;
+}
+
+// Base XP per fish (from game consumables FISH record; verbatim from flowers.html:4889-4900)
+export const FISH_BASE_XP = {
+  "Anchovy": 80, "Butterflyfish": 110, "Blowfish": 170, "Clownfish": 210,
+  "Sea Bass": 140, "Sea Horse": 240, "Horse Mackerel": 250, "Squid": 250,
+  "Red Snapper": 100, "Moray Eel": 220, "Olive Flounder": 180,
+  "Napoleanfish": 180, "Surgeonfish": 210, "Zebra Turkeyfish": 220,
+  "Ray": 430, "Hammerhead Shark": 750, "Barred Knifejaw": 580,
+  "Tuna": 200, "Mahi Mahi": 200, "Blue Marlin": 200, "Oarfish": 220,
+  "Football Fish": 200, "Sunfish": 200, "Coelacanth": 410,
+  "Angelfish": 250, "Halibut": 220, "Parrotfish": 440, "Porgy": 250,
+  "Muskellunge": 250, "Trout": 330, "Walleye": 210, "Weakfish": 210,
+  "Rock Blackfish": 320, "Cobia": 310, "Tilapia": 190
+};
+
 // Ingredient lists for cost calculation (from sfl.world/info/cooking)
 export const COOKING_INGREDIENTS = {
   // ── Fire Pit ──
@@ -182,6 +209,20 @@ export const COOKING_INGREDIENTS = {
   "Grape Juice":          { "Grape": 5, "Radish": 20 },
   "Slow Juice":           { "Grape": 10, "Kale": 100 },
 };
+
+// Generate Aged Fish recipes from FISH_BASE_XP (1 fish + N salt → 1 Aged Fish).
+// Mirrors flowers.html:4944-4955 — runs at module load, mutating the two exported
+// tables above additively (35 recipes: 84 static + 35 = 119). XP stored here is the
+// regular-aged value (= maxXP); the prime-aged weighted average is applied per-farm
+// via the "Prime Aged chance" xpBoost in detectCookingBoosts (core/engine/cooking.mjs).
+for (const [_fish, _baseXP] of Object.entries(FISH_BASE_XP)) {
+  const _aged = "Aged " + _fish;
+  const _maxXP = getAgingMaxXP(_baseXP);
+  const _saltN = getAgingSaltCost(_baseXP);
+  const _timeS = getAgingTimeSec(_baseXP);
+  COOKING_RECIPES_DATA[_aged] = { building: "Aging Shed", xp: _maxXP, cookSec: _timeS, usesHoney: false };
+  COOKING_INGREDIENTS[_aged] = { [_fish]: 1, "Salt": _saltN };
+}
 
 // ── Salt mining (Salt Rake consumed per harvest) ──
 export const SALT_RAKE_COST = { coins: 20, materials: { Wood: 3 } };
