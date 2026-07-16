@@ -58,22 +58,60 @@
 
 - [ ] **Step 1: Generate the inventory from the real file**
 
-Run this and paste the output into `core/data/_inventory.mjs`:
+Run this and paste the output into `core/data/_inventory.mjs`. It has **two parts** — the
+table-shaped scan alone is not enough (see the note below it):
 
-```bash
-node -e "
-const fs=require('fs');const L=fs.readFileSync('flowers.html','utf8').split('\n');
-const re=/^\s*(?:const|let|var)\s+([A-Z][A-Z0-9_]{3,})\s*=\s*[\{\[]/;
-const rows=[];
-for(let i=0;i<L.length;i++){const m=L[i].match(re); if(!m)continue;
-  let d=0,e=i; for(;e<L.length;e++){for(const c of L[e]){if('{['.includes(c))d++;if('}]'.includes(c))d--;} if(e>i&&d<=0)break;}
-  rows.push({name:m[1],lines:e-i+1});
+```js
+// node gen-inventory.mjs > out.txt   (ESM: it must import core/data to know what core claims)
+import { readFileSync, readdirSync } from "node:fs";
+const PAGE = new URL("flowers.html", import.meta.url);
+const DATA_DIR = new URL("core/data/", import.meta.url);
+const L = readFileSync(PAGE, "utf8").split("\n");
+
+// Part 1 — the table-shaped scan: const NAME = { … } / [ … ]
+const re = /^\s*(?:const|let|var)\s+([A-Z][A-Z0-9_]{3,})\s*=\s*[{[]/;
+const rows = [];
+for (let i = 0; i < L.length; i++) {
+  const m = L[i].match(re); if (!m) continue;
+  let d = 0, e = i;
+  for (; e < L.length; e++) {
+    for (const c of L[e]) { if ("{[".includes(c)) d++; if ("}]".includes(c)) d--; }
+    if (e > i && d <= 0) break;
+  }
+  rows.push({ name: m[1], lines: e - i + 1 });
 }
-rows.sort((a,b)=>a.name.localeCompare(b.name));
-console.log('export const TABLE_INVENTORY = ' + JSON.stringify(rows,null,2) + ';');
-"
+const scanned = new Set(rows.map((r) => r.name));
+
+// Part 2 — per-name check for every core/data export part 1 cannot see.
+const files = readdirSync(DATA_DIR).filter((f) => f.endsWith(".mjs") && !f.startsWith("_"));
+const coreNames = [];
+for (const f of files) {
+  const mod = await import(new URL(f, DATA_DIR));
+  for (const [n, v] of Object.entries(mod)) if (typeof v !== "function") coreNames.push(n);
+}
+const extra = [];
+for (const name of coreNames) {
+  if (scanned.has(name)) continue;
+  const declRe = new RegExp(`^\\s*(?:const|let|var)\\s+${name}\\s*=`);
+  const idx = L.findIndex((l) => declRe.test(l));
+  if (idx === -1) continue; // genuinely not inline → truly freed
+  extra.push({ name, lines: /;\s*(\/\/.*)?$/.test(L[idx]) ? 1 : null });
+}
+
+const all = [...rows, ...extra].sort((a, b) => a.name.localeCompare(b.name));
+console.log("export const TABLE_INVENTORY = " + JSON.stringify(all, null, 2) + ";");
 ```
-Expected: ~160 entries (`ITEM_IMAGE_MAP` ~1220 lines, `BOOST_PARSE_RULES` ~347, `SKILL_TREE_DATA` ~168). The exact count is whatever the file says — do not hand-edit the list.
+Expected: **161 entries** = 160 table-shaped (`ITEM_IMAGE_MAP` 1220 lines, `BOOST_PARSE_RULES` 347,
+`SKILL_TREE_DATA` 168) + 1 from part 2 (`SALT_BASE_YIELD`, `lines: 1`). The exact count is whatever
+the file says — do not hand-edit the list.
+
+**Why part 2 exists (found 2026-07-16 while implementing this task).** `SALT_BASE_YIELD` is a scalar
+(`flowers.html:4842`, `const SALT_BASE_YIELD = 10;`), so the table-shaped regex cannot see it — yet
+`core/data/cooking.mjs` also exports it, so it is genuinely **duplicated**. With part 1 alone it fell
+out of the inventory entirely and the composer reported it `"core"`, i.e. *migrated and freed*. That
+single false entry was the ledger's "1 truly freed" table. The real score is **18 duplicated, 0
+freed** — the pilot freed nothing. Coverage is only honest if `inPage` is decided per name, not by
+table shape.
 
 Header the file:
 ```js

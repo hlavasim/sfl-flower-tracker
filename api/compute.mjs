@@ -1,4 +1,5 @@
 import { buildCookingSection } from "../core/sections/cooking.mjs";
+import { buildConstantsSection } from "../core/sections/constants.mjs";
 import { computeBettyRate } from "../core/engine/prices.mjs";
 
 const PROXY = process.env.PROXY_ORIGIN || "https://sunflower.sajmonium.quest";
@@ -20,6 +21,10 @@ async function fetchPrices() {
 export default async function handler(req, res) {
   const farmId = (req.query && req.query.farm) || "";
   const section = (req.query && req.query.section) || "cooking";
+  // Sections that describe the API itself need no farm — must branch before the farm guard.
+  if (section === "constants") {
+    return res.status(200).json({ section, computedAt: new Date().toISOString(), data: buildConstantsSection() });
+  }
   if (!farmId) return res.status(400).json({ error: "farm required" });
   try {
     const sflUrl = `https://api.sunflower-land.com/community/farms/${farmId}`;
