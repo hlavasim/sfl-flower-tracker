@@ -17480,9 +17480,10 @@
     // ── Power/efficiency summary published to /api/power-summary (consumed elsewhere) ──────────────
     // Per category: theoretical units/day (boosted), Last-7-days efficiency (ratio, or null when there's no
     // harvest signal), effective units/day = theoretical x efficiency, and how often you harvest.
-    function _powerSummaryData(eff) {
+    async function _powerSummaryData(eff) {
       if (!powerState || !powerState.farm) return null;
       const farm = powerState.farm, cap = powerState.capacity;
+      const fid = (typeof FARM_ID !== "undefined" && FARM_ID) || (farm && farm.id) || null;
       const effBy = (eff && eff.effByCat) || {};
       const rnd = (x) => (x == null || !isFinite(x)) ? null : Math.round(x * 1000) / 1000;
       const label = (cat) => (POWER_CATEGORIES[cat] && POWER_CATEGORIES[cat].label) || cat;
@@ -17548,38 +17549,25 @@
       per.fishing = { label: label("fishing"), theoreticalPerDay: null, efficiency: null, effectivePerDay: null, harvestsPerDay: null, theoreticalCyclesPerDay: null };
       let income = null;
       try { income = { effectiveSflPerDay: rnd(roadmapCurrentProduction(getRoadmapSettings()).total) }; } catch (e3) {}
-      // Cooking: per building, the recipe currently queued and the XP/day it yields at your boosts.
+      // Cooking: fetched from the unified engine at /api/compute?section=cooking — the single source of truth,
+      // so this summary and the Bumpkin page read the identical computed payload (no duplicated cook math).
+      // (Aging Shed is not yet served by that endpoint; it is omitted here — it contributed 0 for farms not
+      // cooking in it.)
       let cooking = null;
       try {
-        // Mirror the Bumpkin page 1:1: your SELECTED recipe per building (saved choice or the page default —
-        // NOT the live crafting queue), computeFoodXP x cooks/day, cooks/day = (86400 / computeCookTime) x count.
-        // computeCookTime already folds in Double Nom (a time boost) and computeFoodXP folds in your xp boosts
-        // (incl. the pet streak when active/simulated), so these numbers match the Bumpkin cards exactly.
-        const boosts = detectCookingBoosts(farm);
-        const savedRecipes = getSavedBumpkinRecipes();
-        const bmap = {}; let total = 0;
-        for (const bd of COOKING_BUILDING_NAMES) {
-          const count = (bd === "Aging Shed") ? Math.min(Math.max((farm.agingShed && farm.agingShed.level) || 1, 1), 6) : ((farm.buildings || {})[bd] || []).length;
-          if (count === 0) continue;
-          const selName = (savedRecipes[bd] !== undefined) ? savedRecipes[bd] : (BUMPKIN_DEFAULT_RECIPES[bd] || "");
-          const rd = selName ? COOKING_RECIPES_DATA[selName] : null;
-          if (!rd) { bmap[bd] = { recipe: null, cookMinutes: null, xpPerCook: 0, buildingCount: count, xpPerDay: 0 }; continue; }
-          const xp = computeFoodXP(selName, rd, bd, boosts);
-          const time = computeCookTime(rd.cookSec, bd, boosts);            // seconds (Double Nom folded in)
-          const cooksPerDay = time > 0 ? (86400 / time) * count : 0;
-          const xpPerDay = xp * cooksPerDay;
-          bmap[bd] = { recipe: selName, cookMinutes: time > 0 ? Math.round(time / 6) / 10 : null, xpPerCook: rnd(xp), buildingCount: count, xpPerDay: rnd(xpPerDay) };
-          total += xpPerDay;
+        const petSim = (typeof localStorage !== "undefined" && localStorage.getItem("sfl_pet_streak") === "1") ? "1" : "0";
+        const _recipes = encodeURIComponent(JSON.stringify(getSavedBumpkinRecipes()));
+        const _cr = await fetch(`/api/compute?farm=${fid}&section=cooking&petSimulate=${petSim}&recipes=${_recipes}`);
+        if (_cr.ok) {
+          const cp = (await _cr.json()).data;
+          cooking = { buildings: cp.buildings, totalXpPerDay: cp.totalXpPerDay, petStreakWeeks: cp.petStreak.weeks, petStreakActiveThisWeek: cp.petStreak.activeThisWeek, petStreakMult: cp.petStreak.mult, xpBoosts: cp.xpBoosts };
         }
-        const pi = boosts.petStreakInfo || {};
-        cooking = { buildings: bmap, totalXpPerDay: rnd(total), petStreakWeeks: pi.streak || 0, petStreakActiveThisWeek: !!pi.thisWeekActive, petStreakMult: pi.manualOverride ? 1.5 : (pi.multiplier || 1), xpBoosts: (boosts.xpBoosts || []).filter(b => !b.petStreak).map(b => b.name) };
       } catch (eC) {}
-      const fid = (typeof FARM_ID !== "undefined" && FARM_ID) || (farm && farm.id) || null;
       return { farm: fid, computedAt: new Date().toISOString(), efficiencyWindow: (eff && eff.meta) || null, income, cooking, perCategory: per };
     }
-    function _pushPowerSummary(eff) {
+    async function _pushPowerSummary(eff) {
       try {
-        const data = _powerSummaryData(eff); if (!data || !data.farm) return;
+        const data = await _powerSummaryData(eff); if (!data || !data.farm) return;
         fetch(`/api/power-summary?farm=${data.farm}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data), keepalive: true }).catch(() => {});
       } catch (e) {}
     }
