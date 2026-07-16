@@ -6833,36 +6833,12 @@
     }
 
 
-    // ── P2P price cache for bumpkin cost calculation ──
-    let _bumpkinP2P = null;
-    let _bumpkinCoinsPerSFL = 0;
-    let _bumpkinP2PLoading = false;
-
-    async function _fetchBumpkinP2P() {
-      if (_bumpkinP2PLoading) return;
-      _bumpkinP2PLoading = true;
-      try {
-        const resp = await fetch("/api/proxy?url=" + encodeURIComponent("https://sfl.world/api/v1/prices"));
-        if (resp.ok) {
-          const data = await resp.json();
-          _bumpkinP2P = data?.data?.p2p || {};
-          // Compute coinsPerSFL from Betty rate (used for rod cost conversion)
-          if (typeof computeBettyRate === "function") {
-            const betty = computeBettyRate(_bumpkinP2P);
-            _bumpkinCoinsPerSFL = betty.rate || 0;
-          }
-          if (cachedFarmData && getPage() === "bumpkin") renderBumpkin(cachedFarmData);
-        }
-      } catch(e) { console.warn("P2P prices fetch:", e); }
-      _bumpkinP2PLoading = false;
-    }
-
     // ── Cooking payload cache (/api/compute?section=cooking) ──
     // The Bumpkin page renders cooking from the unified engine — the same payload the
     // power-summary reads (:17557) — so the cook math lives in exactly one place.
     // Cached per query (farm + petSimulate + selected recipes); changing any of those
-    // is a new key and re-fetches. Mirrors the _fetchBumpkinP2P cache-then-rerender
-    // pattern above, which keeps renderBumpkin synchronous for all of its call sites.
+    // is a new key and re-fetches. Cache-then-rerender, which keeps renderBumpkin
+    // synchronous for all of its call sites. refresh() must clear this (see :23000).
     let _bumpkinCooking = null;        // { key, data } for the last successful fetch
     let _bumpkinCookingErrKey = null;  // key whose fetch failed (do not auto-retry it)
     let _bumpkinCookingLoading = null; // key currently in flight
