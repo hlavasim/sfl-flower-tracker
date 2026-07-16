@@ -6867,6 +6867,47 @@
       _bumpkinP2PLoading = false;
     }
 
+    // ── Cooking payload cache (/api/compute?section=cooking) ──
+    // The Bumpkin page renders cooking from the unified engine — the same payload the
+    // power-summary reads (:17557) — so the cook math lives in exactly one place.
+    // Cached per query (farm + petSimulate + selected recipes); changing any of those
+    // is a new key and re-fetches. Mirrors the _fetchBumpkinP2P cache-then-rerender
+    // pattern above, which keeps renderBumpkin synchronous for all of its call sites.
+    let _bumpkinCooking = null;        // { key, data } for the last successful fetch
+    let _bumpkinCookingErrKey = null;  // key whose fetch failed (do not auto-retry it)
+    let _bumpkinCookingLoading = null; // key currently in flight
+
+    function _bumpkinCookingQuery() {
+      const petSim = (localStorage.getItem("sfl_pet_streak") === "1") ? "1" : "0";
+      const recipes = encodeURIComponent(JSON.stringify(getSavedBumpkinRecipes()));
+      return `farm=${FARM_ID}&section=cooking&petSimulate=${petSim}&recipes=${recipes}`;
+    }
+
+    async function _fetchBumpkinCooking(key) {
+      if (_bumpkinCookingLoading) return;
+      _bumpkinCookingLoading = key;
+      // The upstream farm fetch behind /api/compute is intermittently flaky (502), so a
+      // single miss must not strand the page on the error state — retry briefly first.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const resp = await fetch(`/api/compute?${key}`);
+          if (!resp.ok) throw new Error(`compute ${resp.status}`);
+          _bumpkinCooking = { key, data: (await resp.json()).data };
+          _bumpkinCookingErrKey = null;
+          break;
+        } catch (e) {
+          if (attempt === 2) {
+            console.warn("cooking compute fetch:", e);
+            _bumpkinCookingErrKey = key;
+          } else {
+            await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+          }
+        }
+      }
+      _bumpkinCookingLoading = null;
+      if (cachedFarmData && getPage() === "bumpkin") renderBumpkin(cachedFarmData);
+    }
+
     // Recursive ingredient SFL resolver — returns {price, source} or null if unknown.
     // Resolution order: P2P → FISH_DATA → bait worm → COOKING_INGREDIENTS recursion → CRAFTED_INGREDIENT_RECIPES → null
     function _resolveItemSfl(itemName, p2p, coinsPerSFL, skills, _seen, extras) {
@@ -10584,39 +10625,15 @@
       const levelProgress = currentLevel >= 200 ? 100 :
         Math.round(((currentXP - prevLevelXP) / (nextLevelXP - prevLevelXP)) * 100);
 
-      // Detect owned cooking buildings
-      const ownedBuildings = {};
-      for (const name of COOKING_BUILDING_NAMES) {
-        const count = (buildings?.[name] || []).length;
-        if (count > 0) ownedBuildings[name] = count;
-      }
+      // All cooking numbers come from the unified engine (/api/compute?section=cooking),
+      // cached per query above — nothing on this page recomputes cook XP/time/cost.
+      const cookKey = _bumpkinCookingQuery();
+      const cook = (_bumpkinCooking && _bumpkinCooking.key === cookKey) ? _bumpkinCooking.data : null;
+      const cookFailed = (_bumpkinCookingErrKey === cookKey);
+      if (!cook && !cookFailed && _bumpkinCookingLoading !== cookKey) _fetchBumpkinCooking(cookKey);
 
-      // Detect cooking boosts
-      const boosts = detectCookingBoosts(farm);
-
-      // P2P prices for cost calculation (async-loaded)
-      const p2p = _bumpkinP2P;
-      const coinsPerSFL = _bumpkinCoinsPerSFL || 0;
-      const skills = farm?.bumpkin?.skills || {};
-      if (!p2p && !_bumpkinP2PLoading) _fetchBumpkinP2P();
       const savedRecipes = getSavedBumpkinRecipes();
       const sortMode = localStorage.getItem("sfl_bumpkin_sort") || "xpPerHour"; // xpPerHour | xpPerSfl | sflPerCook
-
-      // Calculate XP banked in food inventory
-      const inventory = data.inventory || {};
-      const foodInInventory = [];
-      let bankedXP = 0;
-      for (const [foodName, recipe] of Object.entries(COOKING_RECIPES_DATA)) {
-        const qty = getCount(inventory, foodName);
-        if (qty > 0) {
-          const xpEach = computeFoodXP(foodName, recipe, recipe.building, boosts);
-          const totalFoodXP = xpEach * qty;
-          bankedXP += totalFoodXP;
-          foodInInventory.push({ name: foodName, qty, xpEach, totalFoodXP });
-        }
-      }
-      foodInInventory.sort((a, b) => b.totalFoodXP - a.totalFoodXP);
-      const xpAfterFood = Math.max(0, xpRemaining - bankedXP);
 
       let html = "";
 
@@ -10641,6 +10658,30 @@
         <div style="font-size: 0.5625rem;color:var(--text-dim);margin-top:2px">${xpPctTarget.toFixed(1)}% to level ${targetLevel}</div>
         ${currentLevel < 200 ? `<div style="margin-top:6px;font-size: 0.5625rem;color:var(--text-dim)">Level ${currentLevel} → ${currentLevel + 1}: ${levelProgress}%</div>` : ""}
       </div>`;
+
+      // Everything below needs the cooking payload. The level section above does not, so it
+      // stays on screen while the fetch is in flight or if the API is unreachable.
+      if (!cook) {
+        html += `<div class="bumpkin-summary pixel-panel pixel-font">
+          <div style="font-size: 0.6875rem;color:${cookFailed ? "var(--yellow)" : "var(--text-dim)"}">${cookFailed
+            ? "Cooking data unavailable — check your connection, then press REFRESH."
+            : "Loading cooking data..."}</div>
+        </div>`;
+        html += `<div class="footer">
+          <button class="refresh-btn" onclick="refresh()">REFRESH</button>
+          <div class="timestamp pixel-font">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
+        </div>`;
+        app.innerHTML = html;
+        return;
+      }
+
+      // Cooking boosts, banked food and per-building stats — all read from the payload.
+      const boosts = cook.boosts;
+      const bankedXP = cook.bankedFood.totalXp;
+      // The payload is deliberately unsorted (COOKING_RECIPES_DATA insertion order);
+      // ordering is presentation and stays client-side.
+      const foodInInventory = (cook.bankedFood.items || []).slice().sort((a, b) => b.totalFoodXP - a.totalFoodXP);
+      const xpAfterFood = Math.max(0, xpRemaining - bankedXP);
 
       // Food in inventory
       if (bankedXP > 0) {
@@ -10718,7 +10759,7 @@
       }
 
       // Building cards
-      const buildingEntries = Object.entries(ownedBuildings);
+      const buildingEntries = Object.entries(cook.buildings);
       if (buildingEntries.length === 0) {
         html += `<div class="bumpkin-summary pixel-panel pixel-font">
           <div style="font-size: 0.6875rem;color:var(--text-dim)">No cooking buildings detected.</div>
@@ -10738,30 +10779,11 @@
         let totalCostPerDay = 0;
         const buildingStats = [];
 
-        for (const [buildingName, _placedCount] of buildingEntries) {
-          // Aging Shed slots scale with its level (1-6), not number of buildings placed
-          const count = (buildingName === "Aging Shed")
-            ? Math.min(Math.max(farm.agingShed?.level || 1, 1), 6)
-            : _placedCount;
-          const recipes = Object.entries(COOKING_RECIPES_DATA)
-            .filter(([, r]) => r.building === buildingName)
-            .map(([name, r]) => {
-              const xp = computeFoodXP(name, r, buildingName, boosts);
-              const time = computeCookTime(r.cookSec, buildingName, boosts);
-              const xpPerHour = time > 0 ? (xp / time) * 3600 : 0;
-              const isInstant = r.cookSec === 0;
-              const _saltY = computeSaltYieldPerRake(farm);
-              const _saltCoinMult = computeSaltRakeCoinMult(farm);
-              const _fishYieldByTier = {
-                basic: computeFishYieldPerCast(farm, "basic"),
-                advanced: computeFishYieldPerCast(farm, "advanced"),
-                expert: computeFishYieldPerCast(farm, "expert"),
-              };
-              const rc = p2p ? computeRecipeCost(name, p2p, coinsPerSFL, skills, { saltYieldPerRake: _saltY, saltRakeCoinMult: _saltCoinMult, fishYieldByTier: _fishYieldByTier }) : null;
-              const cost = (rc && rc.total > 0) ? rc.total : null;
-              const xpPerSfl = (cost && cost > 0) ? xp / cost : 0;
-              return { name, xp, time, xpPerHour, cost, xpPerSfl, isInstant };
-            });
+        for (const [buildingName, bStats] of buildingEntries) {
+          // Slot count comes from the payload (for the Aging Shed it is its level, 1-6,
+          // not the number of buildings placed — the engine owns that rule).
+          const count = bStats.buildingCount;
+          const recipes = (bStats.recipes || []).slice();
           if (sortMode === "xpPerSfl") {
             recipes.sort((a, b) => b.xpPerSfl - a.xpPerSfl);
           } else if (sortMode === "sflPerCook") {
@@ -10777,7 +10799,7 @@
 
           if (selected && selected.time > 0) {
             cooksPerDay = (86400 / selected.time) * count;
-            xpPerDay = selected.xp * cooksPerDay;
+            xpPerDay = bStats.xpPerDay;
             totalXPPerDay += xpPerDay;
             daysNeeded = xpAfterFood > 0 ? Math.ceil(xpAfterFood / xpPerDay) : 0;
           }
@@ -10785,14 +10807,8 @@
           const emoji = COOKING_BUILDING_EMOJI[buildingName] || "🏠";
           const fmtXP = (v) => v % 1 === 0 ? v.toLocaleString() : v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-          const _saltY2 = computeSaltYieldPerRake(farm);
-          const _saltCoinMult2 = computeSaltRakeCoinMult(farm);
-          const _fishYieldByTier2 = {
-            basic: computeFishYieldPerCast(farm, "basic"),
-            advanced: computeFishYieldPerCast(farm, "advanced"),
-            expert: computeFishYieldPerCast(farm, "expert"),
-          };
-          const recipeCost = selected ? computeRecipeCost(selected.name, p2p, coinsPerSFL, skills, { saltYieldPerRake: _saltY2, saltRakeCoinMult: _saltCoinMult2, fishYieldByTier: _fishYieldByTier2 }) : null;
+          // Cost breakdown for the selected recipe — straight from the payload.
+          const recipeCost = (selected && selected.items) ? { total: selected.cost || 0, items: selected.items, hasUnpriced: selected.hasUnpriced } : null;
           const costPerCook = recipeCost ? recipeCost.total : 0;
           const costPerDay = costPerCook * cooksPerDay;
           totalCostPerDay += costPerDay;
@@ -10831,7 +10847,8 @@
               }
             }
           }
-          const _agingLvl = (buildingName === "Aging Shed") ? Math.min(Math.max(farm.agingShed?.level || 1, 1), 6) : 0;
+          // Aging Shed: slots == its level (1-6), so the payload's buildingCount is both.
+          const _agingLvl = count;
           const headerExtra = (buildingName === "Aging Shed")
             ? `<span class="bumpkin-building-count">L${_agingLvl} (\u00d7${count} slots)</span>`
             : (count > 1 ? `<span class="bumpkin-building-count">\u00d7${count}</span>` : "");
@@ -10884,7 +10901,7 @@
           ${buildingStats.length > 1 ? `<div style="margin-top:12px;font-size: 0.5625rem;color:var(--text-dim);line-height:2">
             ${buildingStats.map(b => `${COOKING_BUILDING_EMOJI[b.buildingName] || ""} ${escHTML(b.buildingName)}${b.count > 1 ? " \u00d7" + b.count : ""}: ${Math.round(b.xpPerDay).toLocaleString()} XP/day${b.costPerDay > 0 ? " \u00b7 " + formatSFL(b.costPerDay) + " SFL/day" : ""}`).join("<br>")}
           </div>` : ""}
-          ${p2p && totalCostPerDay > 0 ? `
+          ${totalCostPerDay > 0 ? `
             <div style="margin-top:12px;padding-top:8px;border-top:2px solid rgba(92,58,30,0.4)">
               <div style="font-size: 0.6875rem;color:var(--yellow);margin-bottom:4px">${sflIcon("0.75rem")} INGREDIENT COST (P2P)</div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;font-size: 0.625rem">
@@ -10930,7 +10947,6 @@
                   + '</tr></thead><tbody>' + tblRows + '</tbody></table></div>';
               })() : ""}
             </div>` : ""}
-          ${p2p === null ? `<div style="margin-top:8px;font-size: 0.5625rem;color:var(--text-dim)">Loading ingredient prices...</div>` : ""}
         </div>`;
       }
 
@@ -23000,6 +23016,7 @@
 
     function refresh() {
       cachedFarmData = null;
+      _bumpkinCookingErrKey = null; // let REFRESH actually retry a failed cooking fetch
       main();
     }
 
