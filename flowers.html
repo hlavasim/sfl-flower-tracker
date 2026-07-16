@@ -5827,7 +5827,7 @@
           <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.69</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.71</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5854,6 +5854,12 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.71", items: [
+          { t: "fix", text: "Cooking XP/day now counts your <b>Pet’s Streak</b> from its streak level (e.g. 3 weeks = ×1.1) even when this week isn’t active yet, and honours the Simulate ×1.5 toggle (petStreakMult / petStreakWeeks in the summary). Also uses the queue’s real readyAt cook time and Double Nom’s 2× food." },
+        ]},
+        { ver: "v4.70", items: [
+          { t: "feat", text: "power-summary now includes a <b>cooking</b> block: per building (Fire Pit / Kitchen / Bakery / Deli / Smoothie Shack) what you\u2019re currently cooking (from the queue), the effective cook time, and the <b>XP/day</b> it yields at your boosts \u2014 plus a total XP/day. Uses the app\u2019s cook-time model (Double Nom\u2019s +1 food is folded in) and your bumpkin-XP boosts (Pan, Observatory, building-specific, \u2026)." },
+        ]},
         { ver: "v4.69", items: [
           { t: "fix", text: "power-summary: <b>Obsidian</b> now reports its real mining rate (lava pits) + efficiency instead of all-null. <b>Crops / fruits / greenhouse</b> are now broken out <b>per product</b> under a `products` map (a category units/day was meaningless) \u2014 each with theoretical/day (24/7 max), your harvest efficiency, and effective/day = plots \u00d7 yield \u00d7 your harvest sessions/day (so fast &amp; slow crops both read realistically)." },
         ]},
@@ -17475,14 +17481,59 @@
       }
       let income = null;
       try { income = { effectiveSflPerDay: rnd(roadmapCurrentProduction(getRoadmapSettings()).total) }; } catch (e3) {}
+      // Cooking: per building, the recipe currently queued and the XP/day it yields at your boosts.
+      let cooking = null;
+      try {
+        const boosts = detectCookingBoosts(farm);
+        const dn = (boosts.timeBoosts || []).some(b => b.name === "Double Nom");         // +1 food/cook -> 2x XP
+        const boostsNoDN = Object.assign({}, boosts, { timeBoosts: (boosts.timeBoosts || []).filter(b => b.name !== "Double Nom") });
+        const foodMult = dn ? 2 : 1;
+        const pi = boosts.petStreakInfo || {};
+        const petMult = pi.manualOverride ? 1.5 : (pi.multiplier || 1);   // count the pet streak even if this week is inactive
+        const BLD = ["Fire Pit", "Kitchen", "Bakery", "Deli", "Smoothie Shack"];
+        const bmap = {}; let total = 0;
+        for (const bd of BLD) {
+          const arr = (farm.buildings || {})[bd] || [];
+          let recipe = null, xp = 0, cookMin = null;
+          for (const inst of arr) {
+            const q = (inst && inst.crafting) || [];
+            if (!q.length) continue;
+            const rd = COOKING_RECIPES_DATA[q[0].name];
+            if (!rd) continue;
+            recipe = q[0].name;
+            // Real cook time = the queue's readyAt gap (ground truth) if >=2 items queued; else the app's model
+            // with Double Nom removed (it is a food buff, not a time buff), so foodMult applies once, cleanly.
+            let cookSec;
+            if (q.length >= 2 && q[q.length - 1].readyAt > q[0].readyAt) cookSec = ((q[q.length - 1].readyAt - q[0].readyAt) / 1000) / (q.length - 1);
+            else cookSec = computeCookTime(rd.cookSec, bd, boostsNoDN);
+            cookMin = cookSec > 0 ? Math.round(cookSec / 6) / 10 : null;
+            if (cookSec > 0) xp += foodMult * petMult * rd.xp * _cookXpMult(bd, rd.usesHoney, boosts) * 86400 / cookSec;
+          }
+          bmap[bd] = { recipe, cookMinutes: cookMin, xpPerDay: rnd(xp) };
+          total += xp;
+        }
+        cooking = { buildings: bmap, totalXpPerDay: rnd(total), doubleNom: dn, petStreakMult: petMult, petStreakWeeks: pi.streak || 0, petStreakActiveThisWeek: !!pi.thisWeekActive, xpBoosts: (boosts.xpBoosts || []).filter(b => !b.petStreak).map(b => b.name) };
+      } catch (eC) {}
       const fid = (typeof FARM_ID !== "undefined" && FARM_ID) || (farm && farm.id) || null;
-      return { farm: fid, computedAt: new Date().toISOString(), efficiencyWindow: (eff && eff.meta) || null, income, perCategory: per };
+      return { farm: fid, computedAt: new Date().toISOString(), efficiencyWindow: (eff && eff.meta) || null, income, cooking, perCategory: per };
     }
     function _pushPowerSummary(eff) {
       try {
         const data = _powerSummaryData(eff); if (!data || !data.farm) return;
         fetch(`/api/power-summary?farm=${data.farm}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data), keepalive: true }).catch(() => {});
       } catch (e) {}
+    }
+    // Product of the bumpkin-XP boosts that apply to a recipe cooked in `building`.
+    function _cookXpMult(building, usesHoney, boosts) {
+      let m = 1;
+      for (const b of (boosts.xpBoosts || [])) {
+        if (b.petStreak) continue;   // pet streak applied separately (below), so it counts even when this week is inactive
+        if (b.buildings && b.buildings.indexOf(building) < 0) continue;
+        if (b.excludeBuildings && b.excludeBuildings.indexOf(building) >= 0) continue;
+        if (b.honeyOnly && !usesHoney) continue;
+        m *= (b.multiplier || 1);
+      }
+      return m;
     }
     // Publish the summary once per page load, from WHATEVER page built powerState (Power, Roadmap, ...).
     // Reuses the roadmap's efficiency if already computed, else computes it in the background.
