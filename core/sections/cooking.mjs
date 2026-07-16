@@ -33,12 +33,16 @@ export function buildCookingSection(farm, prices = {}, settings = {}) {
   const buildings = {};
   let total = 0;
   for (const bd of COOKING_BUILDING_NAMES) {
-    // Aging Shed slot count scales with its level (1-6), NOT the placed-building count —
-    // verbatim from flowers.html:10743 (Bumpkin page) and the pre-migration power-summary
-    // (git show 04de877:flowers.html ~:17561); the two agree (clamp(agingShed.level, 1, 6)).
+    // The Aging Shed must still be PLACED to count, but once placed its slots scale with its
+    // level (1-6) rather than with how many are placed — flowers.html:10588-10592 builds
+    // `ownedBuildings` from placed count > 0, then :10743 overrides the count with the level.
+    // The pre-migration power-summary (git show 04de877:flowers.html ~:17561) got this WRONG:
+    // it used clamp(level, 1, 6) unguarded, which is always >= 1, so it served a phantom Aging
+    // Shed to every farm that does not own one. The Bumpkin page is the correct copy; follow it.
+    const placed = ((farm.buildings || {})[bd] || []).length;
     const count = (bd === "Aging Shed")
-      ? Math.min(Math.max((farm.agingShed && farm.agingShed.level) || 1, 1), 6)
-      : ((farm.buildings || {})[bd] || []).length;
+      ? (placed > 0 ? Math.min(Math.max((farm.agingShed && farm.agingShed.level) || 1, 1), 6) : 0)
+      : placed;
     if (count === 0) continue;
     const selName = (savedRecipes[bd] !== undefined) ? savedRecipes[bd] : (BUMPKIN_DEFAULT_RECIPES[bd] || "");
     // Mirrors flowers.html:10746-10764 — per-building recipe list with XP/h + cost.

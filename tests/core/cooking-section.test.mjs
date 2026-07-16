@@ -246,3 +246,48 @@ test("bankedFood sums XP across ALL recipes owned in inventory, attributed to re
   const agedItems = p.bankedFood.items.filter((i) => i.name.startsWith("Aged "));
   assert.equal(agedItems.length, 10, `expected 10 Aged Fish line items, got ${agedItems.length}`);
 });
+
+// --- Aging Shed ownership -------------------------------------------------
+// The fixture farm OWNS an Aging Shed, so it can never catch a bug in the
+// "does this farm have one?" branch. These use a synthetic shed-less farm.
+// Regression: `clamp(agingShed.level, 1, 6)` is ALWAYS >= 1, so an unguarded
+// version served a phantom Aging Shed (Aged Tuna, count 1, +34,133.875 XP/day)
+// to every farm without one. flowers.html:10588-10592 requires the building to
+// be PLACED; the pre-migration power-summary did not. The page is the correct copy.
+
+const shedless = (() => {
+  const f = JSON.parse(JSON.stringify(farm));
+  delete f.agingShed;
+  if (f.buildings) delete f.buildings["Aging Shed"];
+  return f;
+})();
+
+test("a farm with no Aging Shed gets no Aging Shed", () => {
+  const p = buildCookingSection(shedless, p2p, { savedRecipes: {}, petSimulate: true, coinsPerSFL: COINS_PER_SFL });
+  assert.equal(p.buildings["Aging Shed"], undefined, "phantom Aging Shed served to a farm that owns none");
+  assert.equal(Object.keys(p.buildings).length, 5);
+});
+
+test("the phantom Aging Shed's XP is not in totalXpPerDay either", () => {
+  const p = buildCookingSection(shedless, p2p, { savedRecipes: {}, petSimulate: true, coinsPerSFL: COINS_PER_SFL });
+  // The five real buildings, summed from their own pinned per-building values.
+  const expected = 232509.804 + 186007.843 + 223209.412 + 264712.412 + 167407.059;
+  assert.ok(Math.abs(p.totalXpPerDay - expected) < 0.01, `total ${p.totalXpPerDay}, expected ~${expected}`);
+});
+
+test("agingShed state without the placed building is still no Aging Shed", () => {
+  // Mirrors flowers.html:10588-10592: ownedBuildings is keyed off the PLACED count,
+  // so leftover agingShed state alone must not conjure a card.
+  const f = JSON.parse(JSON.stringify(farm));
+  if (f.buildings) delete f.buildings["Aging Shed"];   // state kept, building removed
+  const p = buildCookingSection(f, p2p, { savedRecipes: {}, petSimulate: true, coinsPerSFL: COINS_PER_SFL });
+  assert.equal(p.buildings["Aging Shed"], undefined);
+});
+
+test("the placed Aging Shed is unaffected: still 6 slots and 204,803.25 XP/day", () => {
+  const p = buildCookingSection(farm, p2p, { savedRecipes: {}, petSimulate: true, coinsPerSFL: COINS_PER_SFL });
+  const a = p.buildings["Aging Shed"];
+  assert.equal(a.buildingCount, 6, "slots come from agingShed.level, not the placed count");
+  assert.ok(Math.abs(a.xpPerDay - 204803.25) < 1, `Aging Shed ${a.xpPerDay}`);
+  assert.ok(Math.abs(p.totalXpPerDay - 1278649.78) < 1, `total ${p.totalXpPerDay}`);
+});
