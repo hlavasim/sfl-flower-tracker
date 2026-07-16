@@ -17567,8 +17567,7 @@
       try { income = { effectiveSflPerDay: rnd(roadmapCurrentProduction(getRoadmapSettings()).total) }; } catch (e3) {}
       // Cooking: fetched from the unified engine at /api/compute?section=cooking — the single source of truth,
       // so this summary and the Bumpkin page read the identical computed payload (no duplicated cook math).
-      // (Aging Shed is not yet served by that endpoint; it is omitted here — it contributed 0 for farms not
-      // cooking in it.)
+      // All six cooking buildings are served, Aging Shed included.
       let cooking = null;
       try {
         const petSim = (typeof localStorage !== "undefined" && localStorage.getItem("sfl_pet_streak") === "1") ? "1" : "0";
@@ -23016,7 +23015,11 @@
 
     function refresh() {
       cachedFarmData = null;
-      _bumpkinCookingErrKey = null; // let REFRESH actually retry a failed cooking fetch
+      // Drop BOTH cooking caches: the key is farm+petSimulate+recipes, none of which REFRESH
+      // changes, so a kept payload would survive the whole page lifetime and REFRESH would
+      // silently leave XP/day, costs and banked food frozen at their first-load values.
+      _bumpkinCooking = null;
+      _bumpkinCookingErrKey = null;
       main();
     }
 
