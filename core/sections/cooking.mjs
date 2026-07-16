@@ -4,6 +4,12 @@ import { computeRecipeCost, computeSaltYieldPerRake, computeSaltRakeCoinMult, co
 
 const MAIN_BUILDINGS = ["Fire Pit", "Kitchen", "Bakery", "Deli", "Smoothie Shack"];
 const rnd = (x) => (x == null || !isFinite(x)) ? null : Math.round(x * 1000) / 1000;
+// Mirrors flowers.html:6595 (getCount) — inventory quantities can arrive as strings.
+const getCount = (inv, name) => {
+  const v = inv[name];
+  if (v === undefined || v === null) return 0;
+  return Math.floor(parseFloat(v));
+};
 
 // settings = { savedRecipes?: object, petSimulate?: boolean, coinsPerSFL?: number }
 // prices = p2p price map (sfl.world/api/v1/prices .data.p2p), or {} if unavailable —
@@ -54,10 +60,29 @@ export function buildCookingSection(farm, prices = {}, settings = {}) {
     total += xpPerDay;
   }
   const pi = boosts.petStreakInfo || {};
+  // Mirrors flowers.html:10606-10617 — XP banked in the food inventory, summed across
+  // ALL recipes (not just the 5 main buildings), attributed to each recipe's own
+  // `.building` (not the loop variable above).
+  const inventory = farm.inventory || {};
+  const foodInInventory = [];
+  let bankedXP = 0;
+  for (const [foodName, recipe] of Object.entries(COOKING_RECIPES_DATA)) {
+    const qty = getCount(inventory, foodName);
+    if (qty > 0) {
+      const xpEach = computeFoodXP(foodName, recipe, recipe.building, boosts);
+      const totalFoodXP = xpEach * qty;
+      bankedXP += totalFoodXP;
+      foodInInventory.push({ name: foodName, qty, xpEach, totalFoodXP });
+    }
+  }
   return {
     buildings,
     totalXpPerDay: rnd(total),
     petStreak: { weeks: pi.streak || 0, activeThisWeek: !!pi.thisWeekActive, mult: pi.manualOverride ? 1.5 : (pi.multiplier || 1) },
     xpBoosts: (boosts.xpBoosts || []).filter((b) => !b.petStreak).map((b) => b.name),
+    // Full boost objects (unfiltered — includes pet-streak entries), for the Bumpkin
+    // page's boost lists (flowers.html:10707-10717) and xpLabel() building/honey tags.
+    boosts: { xpBoosts: boosts.xpBoosts || [], timeBoosts: boosts.timeBoosts || [], petStreakInfo: pi },
+    bankedFood: { totalXp: bankedXP, items: foodInInventory },
   };
 }

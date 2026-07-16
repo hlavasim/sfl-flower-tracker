@@ -87,3 +87,65 @@ test("missing/empty prices does not throw and yields null costs (fetch-failure f
   assert.equal(r.cost, null);
   assert.equal(r.xpPerSfl, 0);
 });
+
+// ── Task 11b: boosts detail, bankedFood, xpPerHour pin ──
+// Acceptance gate from .superpowers/sdd/task-11b-brief.md.
+
+test("xpPerHour is computed per-hour (×3600), pinned to the live Bumpkin page value", () => {
+  const p = buildCookingSection(farm, p2p, { savedRecipes: {}, petSimulate: true, coinsPerSFL: COINS_PER_SFL });
+  const r = p.buildings["Fire Pit"].recipes.find((x) => x.name === "Pizza Margherita");
+  assert.ok(Math.abs(r.xpPerHour - 9687.91) < 0.01, `xpPerHour was ${r.xpPerHour}`);
+});
+
+test("boosts.timeBoosts carries full objects with exact multipliers and buildings", () => {
+  const p = buildCookingSection(farm, {}, { savedRecipes: {}, petSimulate: true });
+  const byName = Object.fromEntries(p.boosts.timeBoosts.map((b) => [b.name, b]));
+  assert.equal(byName["Double Nom"].multiplier, 0.5);
+  assert.equal(byName["Fast Feasts"].multiplier, 0.9);
+  assert.deepEqual(byName["Fast Feasts"].buildings, ["Fire Pit", "Kitchen"]);
+  assert.equal(byName["Frosted Cakes"].multiplier, 0.9);
+  assert.deepEqual(byName["Frosted Cakes"].buildings, ["Bakery"]);
+  assert.equal(byName["Desert Gnome"].multiplier, 0.9);
+  assert.equal(byName["Nightshade Medallion"].multiplier, 0.75);
+  assert.equal(byName["Master Chefs Cleaver"].multiplier, 0.85);
+});
+
+test("boosts.xpBoosts carries full objects (unfiltered) with exact multipliers", () => {
+  const p = buildCookingSection(farm, {}, { savedRecipes: {}, petSimulate: true });
+  const byName = Object.fromEntries(p.boosts.xpBoosts.map((b) => [b.name, b]));
+  assert.equal(byName["Munching Mastery"].multiplier, 1.05);
+  assert.equal(byName["Drive-Through Deli"].multiplier, 1.15);
+  assert.deepEqual(byName["Drive-Through Deli"].buildings, ["Deli"]);
+  assert.equal(byName["Buzzworthy Treats"].multiplier, 1.1);
+  assert.equal(byName["Buzzworthy Treats"].honeyOnly, true);
+  assert.equal(byName["Observatory"].multiplier, 1.05);
+  assert.equal(byName["Blossombeard"].multiplier, 1.1);
+  assert.equal(byName["Grain Grinder"].multiplier, 1.2);
+  assert.deepEqual(byName["Grain Grinder"].buildings, ["Bakery"]);
+  assert.equal(byName["Lifetime Farmer Banner"].multiplier, 1.1);
+});
+
+test("boosts.petStreakInfo exposes the full object (fixture + petSimulate:true)", () => {
+  const p = buildCookingSection(farm, {}, { savedRecipes: {}, petSimulate: true });
+  assert.equal(p.boosts.petStreakInfo.streak, 3);
+  assert.equal(p.boosts.petStreakInfo.thisWeekActive, false);
+  assert.equal(p.boosts.petStreakInfo.manualOverride, true);
+});
+
+test("back-compat: xpBoosts (string[]) and petStreak keep their exact previous shape/values", () => {
+  const p = buildCookingSection(farm, {}, { savedRecipes: {}, petSimulate: true });
+  assert.ok(Array.isArray(p.xpBoosts), "xpBoosts must stay a string[]");
+  for (const name of p.xpBoosts) assert.equal(typeof name, "string");
+  assert.ok(!p.xpBoosts.includes("Pet's Streak (simulate)"), "petStreak entries must stay filtered out of xpBoosts");
+  assert.deepEqual(p.petStreak, { weeks: 3, activeThisWeek: false, mult: 1.5 });
+});
+
+test("bankedFood sums XP across ALL recipes owned in inventory, attributed to recipe.building", () => {
+  const p = buildCookingSection(farm, {}, { savedRecipes: {}, petSimulate: true });
+  assert.equal(p.bankedFood.items.length, 81, `items.length was ${p.bankedFood.items.length}`);
+  assert.ok(Math.abs(p.bankedFood.totalXp - 7827323.818978125) < 1, `totalXp was ${p.bankedFood.totalXp}`);
+  const mashedPotato = p.bankedFood.items.find((i) => i.name === "Mashed Potato");
+  assert.ok(mashedPotato, "Mashed Potato should be in bankedFood.items");
+  assert.equal(mashedPotato.qty, 90);
+  assert.ok(Math.abs(mashedPotato.xpEach - 6.0031125) < 0.0001, `xpEach was ${mashedPotato.xpEach}`);
+});
