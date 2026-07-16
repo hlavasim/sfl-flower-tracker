@@ -122,60 +122,40 @@ Header the file:
 
 - [ ] **Step 2: Write the failing tests**
 
-```js
-// tests/core/constants.test.mjs
-import { test } from "node:test";
-import assert from "node:assert";
-import { readFileSync, readdirSync } from "node:fs";
-import { buildConstantsSection } from "../../core/sections/constants.mjs";
-import { TABLE_INVENTORY } from "../../core/data/_inventory.mjs";
-
-const PAGE = new URL("../../flowers.html", import.meta.url);
-const DATA_DIR = new URL("../../core/data/", import.meta.url);
-
-function scanPageTables() {
-  const L = readFileSync(PAGE, "utf8").split("\n");
-  const re = /^\s*(?:const|let|var)\s+([A-Z][A-Z0-9_]{3,})\s*=\s*[{[]/;
-  return new Set(L.map((l) => (l.match(re) || [])[1]).filter(Boolean));
-}
-
-test("inventory matches a fresh scan of flowers.html", () => {
-  const scanned = scanPageTables();
-  const listed = new Set(TABLE_INVENTORY.map((t) => t.name));
-  const missing = [...scanned].filter((n) => !listed.has(n));
-  const stale = [...listed].filter((n) => !scanned.has(n));
-  assert.deepEqual(missing, [], `tables in flowers.html but not in _inventory.mjs: ${missing}`);
-  assert.deepEqual(stale, [], `tables in _inventory.mjs but no longer in flowers.html: ${stale}`);
-});
-
-test("every core/data export is served in tables", async () => {
-  const p = buildConstantsSection();
-  const files = readdirSync(DATA_DIR).filter((f) => f.endsWith(".mjs") && !f.startsWith("_"));
-  for (const f of files) {
-    const mod = await import(new URL(f, DATA_DIR));
-    for (const [name, value] of Object.entries(mod)) {
-      if (typeof value === "function") continue;
-      assert.ok(name in p.tables, `${name} (${f}) missing from the constants payload`);
-    }
-  }
-});
-
-test("COOKING_RECIPES_DATA round-trips with all 119 recipes", () => {
-  const p = buildConstantsSection();
-  assert.equal(Object.keys(p.tables.COOKING_RECIPES_DATA).length, 119);
-  assert.equal(p.tables.COOKING_RECIPES_DATA["Pizza Margherita"].building, "Fire Pit");
-});
-
-test("coverage marks a core+inline table as duplicated, and an unmigrated one as inline", () => {
-  const p = buildConstantsSection();
-  const byName = Object.fromEntries(p.coverage.map((c) => [c.name, c]));
-  // FISH_DATA is in core/data/fishing.mjs AND still live in flowers.html (F2 debt)
-  assert.equal(byName.FISH_DATA.status, "duplicated");
-  // ITEM_IMAGE_MAP has not been migrated at all
-  assert.equal(byName.ITEM_IMAGE_MAP.status, "inline");
-  assert.equal(p.summary.total, TABLE_INVENTORY.length);
-});
-```
+> ⚠ **IMPLEMENTED — the source of truth is `tests/core/constants.test.mjs` (8 tests, commit
+> `ac6defd`). Do NOT regenerate the suite from this document.**
+>
+> This step originally pasted a 4-test suite here. Implementing the task **proved that suite was
+> structurally incapable of catching the very bug this feature exists to expose**: `SALT_BASE_YIELD`
+> is a scalar (`flowers.html:4842`, `const SALT_BASE_YIELD = 10;`) that `core/data/cooking.mjs` also
+> exports, so it is genuinely duplicated — but the table-shaped regex cannot see it, so it never
+> entered the scan, and the composer reported it `"core"` = migrated and freed. Deleting it from the
+> inventory **still passed** that original scan test. It was the ledger's "1 truly freed" table; the
+> real score is **18 duplicated, 0 freed**.
+>
+> Pasting test code into a plan is what let this rot: the listing here drifted from the committed
+> file the moment the design was corrected. Requirements belong in a plan; assertions belong in the
+> suite. What the suite MUST cover (all present in the committed file):
+> 1. the inventory matches a fresh table-shaped scan of `flowers.html` (nothing missing, nothing stale);
+> 2. the inventory ALSO lists every `core/data` export still declared inline — the **per-name** check
+>    (`/(?:const|let|var)\s+NAME\s*=/`), which is what the table scan cannot do;
+> 3. no inventory entry is stale — every listed name really is in `flowers.html`;
+> 4. every `core/data` export is served in `tables`;
+> 5. `COOKING_RECIPES_DATA` round-trips with all **119** recipes (84 static + 35 generated Aged Fish
+>    since `041a752` — an earlier draft of this plan said 84);
+> 6. `FISH_DATA` → `duplicated`, `ITEM_IMAGE_MAP` → `inline`;
+> 7. **`SALT_BASE_YIELD` → `duplicated`, not freed** — the regression pin for the bug above;
+> 8. `summary` counts match an INDEPENDENT count of the page and of `core/data` — never a number read
+>    back out of `buildConstantsSection()`.
+>
+> Anti-tautology rule (this project has shipped green-but-wrong suites twice): no expected value may
+> be derived by running the code under test. Ground truth comes from re-scanning `flowers.html` or
+> from `readdirSync`+`import` of `core/data/*.mjs`.
+>
+> Known blind spot, shared by both the scan and the per-name check (`tests/core/constants.test.mjs:35`):
+> both are line-anchored, so `const A = 1, NAME = 2;` or a declaration split across lines
+> false-negatives. All 18 core-claimed names are simple single-line declarations today. **F2 migrators:
+> if a table you move is declared in either shape, coverage will silently call it freed.**
 
 - [ ] **Step 3: Run the tests to verify they fail**
 
