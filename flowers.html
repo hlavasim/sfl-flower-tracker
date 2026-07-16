@@ -6790,16 +6790,6 @@
       return xp;
     }
 
-    function computeCookTime(baseSec, buildingName, boosts) {
-      let time = baseSec;
-      for (const b of boosts.timeBoosts) {
-        if (b.buildings && !b.buildings.includes(buildingName)) continue;
-        if (b.excludeBuildings && b.excludeBuildings.includes(buildingName)) continue;
-        time *= b.multiplier;
-      }
-      return time;
-    }
-
     function formatCookTime(seconds) {
       if (seconds <= 0) return "Instant";
       const h = Math.floor(seconds / 3600);
@@ -7028,36 +7018,6 @@
       // Skipped here since it requires sflPerXP rate which we don't have at call-time.
 
       return null;
-    }
-
-    // Compute total SFL cost per cook (resolves fish, bait, chained recipes recursively)
-    // Returns: { total, items, hasUnpriced } where items[i] = { name, qty, price, cost, source, selfProduced? }
-    function computeRecipeCost(recipeName, p2p, coinsPerSFL, skills, extras) {
-      if (!p2p) return null;
-      const ingredients = COOKING_INGREDIENTS[recipeName];
-      if (!ingredients) return null;
-      let total = 0;
-      const items = [];
-      let hasUnpriced = false;
-      coinsPerSFL = coinsPerSFL || 0;
-      skills = skills || {};
-      // Auto-derive extras for Aging Shed recipes (fish counted as rod cost)
-      const _recData = COOKING_RECIPES_DATA[recipeName];
-      if (_recData && _recData.building === "Aging Shed") {
-        extras = Object.assign({ fishAsRod: true }, extras || {});
-      }
-      for (const [itemName, qty] of Object.entries(ingredients)) {
-        const r = _resolveItemSfl(itemName, p2p, coinsPerSFL, skills, undefined, extras);
-        if (r) {
-          const cost = r.price * qty;
-          total += cost;
-          items.push({ name: itemName, qty, price: r.price, cost, source: r.source, fc: r.fc });
-        } else {
-          hasUnpriced = true;
-          items.push({ name: itemName, qty, price: 0, cost: 0, selfProduced: true });
-        }
-      }
-      return { total, items, hasUnpriced };
     }
 
     function toggleFoodInventory() {
@@ -17585,18 +17545,6 @@
         const data = await _powerSummaryData(eff); if (!data || !data.farm) return;
         fetch(`/api/power-summary?farm=${data.farm}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data), keepalive: true }).catch(() => {});
       } catch (e) {}
-    }
-    // Product of the bumpkin-XP boosts that apply to a recipe cooked in `building`.
-    function _cookXpMult(building, usesHoney, boosts) {
-      let m = 1;
-      for (const b of (boosts.xpBoosts || [])) {
-        if (b.petStreak) continue;   // pet streak applied separately (below), so it counts even when this week is inactive
-        if (b.buildings && b.buildings.indexOf(building) < 0) continue;
-        if (b.excludeBuildings && b.excludeBuildings.indexOf(building) >= 0) continue;
-        if (b.honeyOnly && !usesHoney) continue;
-        m *= (b.multiplier || 1);
-      }
-      return m;
     }
     // Publish the summary once per page load, from WHATEVER page built powerState (Power, Roadmap, ...).
     // Reuses the roadmap's efficiency if already computed, else computes it in the background.
