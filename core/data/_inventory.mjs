@@ -234,10 +234,6 @@ export const TABLE_INVENTORY = [
     "lines": 8
   },
   {
-    "name": "EXOTIC_CROPS_TICKET_COST",
-    "lines": 9
-  },
-  {
     "name": "EXTRA_BOOST_ITEMS",
     "lines": 7
   },
@@ -328,10 +324,6 @@ export const TABLE_INVENTORY = [
   {
     "name": "GEAR_BST",
     "lines": 2
-  },
-  {
-    "name": "GIANT_FRUIT_SELL_PRICES",
-    "lines": 5
   },
   {
     "name": "GIANT_ITEM_COIN_PRICES",
@@ -456,10 +448,6 @@ export const TABLE_INVENTORY = [
   {
     "name": "PLURAL_FIXES",
     "lines": 12
-  },
-  {
-    "name": "POTION_TICKET_COIN_VALUE",
-    "lines": null
   },
   {
     "name": "POWER_CATEGORIES",

@@ -4279,29 +4279,6 @@
     }
 
     // ── Tool costs (coins + optional materials per tool) ──
-    // Eins (Potion House) buy price in Potion Tickets — from SFL collectibles.ts
-    // POTION_HOUSE_EXOTIC_CROPS. This is the *acquisition* cost (player → NPC,
-    // you pay tickets to GET the item), which is what matters when valuing what
-    // you'd give to a bounty. The sellPrice (NPC → player) from beans.ts
-    // EXOTIC_CROPS would be the wrong direction — what you'd get if you JUST
-    // sold, not what it cost to acquire.
-    const POTION_TICKET_COIN_VALUE = 15;   // 1 Potion Ticket ≈ 15 coins
-    const EXOTIC_CROPS_TICKET_COST = {
-      "Black Magic":         8000,
-      "Golden Helios":       4000,
-      "Chiogga":             2000,
-      "Purple Cauliflower":  800,
-      "Adirondack Potato":   600,
-      "Warty Goblin Pumpkin":400,
-      "White Carrot":        200,
-    };
-    // Giant fruits aren't sold at Eins — they're a random chance from growing
-    // fruit trees. Use sellPrice as the closest proxy for "value to a farmer".
-    const GIANT_FRUIT_SELL_PRICES = {
-      "Giant Orange": 800,
-      "Giant Apple":  2000,
-      "Giant Banana": 5000,
-    };
 
     const TOOL_COSTS = {
       "Axe":            { coins: 20 },

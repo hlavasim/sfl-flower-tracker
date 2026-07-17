@@ -88,14 +88,22 @@ test("COOKING_RECIPES_DATA round-trips with all 119 recipes", () => {
   assert.equal(p.tables.COOKING_RECIPES_DATA["Pizza Margherita"].building, "Fire Pit");
 });
 
-test("coverage marks a core+inline table as duplicated, and an unmigrated one as inline", () => {
+test("coverage marks a core+inline table as duplicated, an unmigrated one as inline, and a freed one as core", () => {
   const p = buildConstantsSection();
   const byName = Object.fromEntries(p.coverage.map((c) => [c.name, c]));
   // FISH_DATA is in core/data/fishing.mjs AND still live in flowers.html (F2 debt)
   assert.equal(byName.FISH_DATA.status, "duplicated");
   // ITEM_IMAGE_MAP has not been migrated at all
   assert.equal(byName.ITEM_IMAGE_MAP.status, "inline");
-  assert.equal(p.summary.total, TABLE_INVENTORY.length);
+  // POTION_TICKET_COIN_VALUE was FREED by F2-2h: deleted from flowers.html (its only inline
+  // consumer, the estimateItemSfl resolver, was deleted) and removed from _inventory.mjs, so
+  // it now lives ONLY in core/data/economy.mjs. Reintroducing it inline flips this to
+  // "duplicated" — this is the first table the pilot actually freed.
+  assert.equal(byName.POTION_TICKET_COIN_VALUE.status, "core");
+  // total = the inventory (still-inline tables) PLUS the core-only tables the inventory omits.
+  // Before any table was freed, core was 0 and total equalled TABLE_INVENTORY.length; that
+  // precondition no longer holds now that freed tables exist.
+  assert.equal(p.summary.total, TABLE_INVENTORY.length + p.summary.core);
 });
 
 // Regression pin for the blind spot this tab was built to expose. SALT_BASE_YIELD is
