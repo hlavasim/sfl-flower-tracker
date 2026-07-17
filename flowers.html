@@ -6901,6 +6901,73 @@
       if (getPage() === "constants") renderConstants(cachedFarmData);
     }
 
+    // ── Price-map cache (/api/compute?section=prices) ──
+    // Precomputed marketValue/productionCost maps from the item-value engine, one map per
+    // rate profile (coinsPerSFL, sflPerXP, season, treasureBoost, gemsPerSFL — see
+    // core/engine/item-value.mjs). At most ~4 profiles are live: no rates (marks,
+    // deliveries), dashRates (dashboard), exchangeRates (roadmap), all five (ROI). Keyed by
+    // farm + JSON.stringify(rates) since the same farm needs a different map per profile.
+    // No consumer reads PRICES() yet — this cache is inert infrastructure until a later
+    // task wires a call site to it (see .superpowers/sdd/task-F2-2b-brief.md).
+    // Cache-then-rerender, same shape as the cooking cache above. Unlike that single-page
+    // cache, this one may end up serving several different pages, so arrival redraws via
+    // main() (which redispatches to whichever page is current) rather than one render
+    // function. refresh() must clear this too, or (like the cooking cache once did, fixed
+    // in 5a1d9a9) REFRESH would silently keep serving first-load prices for the rest of
+    // the page's lifetime — the key is farm+rates, neither of which REFRESH changes.
+    const PRICES_CACHE_LIMIT = 8; // ~4 live profiles expected; guards against unbounded growth
+    const _pricesCache = new Map();   // key -> { marketValue, productionCost }
+    const _pricesErrKeys = new Set(); // keys whose fetch failed (do not auto-retry)
+    const _pricesLoading = new Set(); // keys currently in flight
+
+    function _pricesKey(rates) {
+      return `${FARM_ID}|${JSON.stringify(rates || null)}`;
+    }
+
+    async function _fetchPrices(rates) {
+      const key = _pricesKey(rates);
+      if (_pricesLoading.has(key)) return;
+      _pricesLoading.add(key);
+      // The upstream farm fetch behind /api/compute is intermittently flaky (502), so a
+      // single miss must not strand a consumer on the error state — retry briefly first.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          let url = `/api/compute?farm=${FARM_ID}&section=prices`;
+          if (rates) url += `&rates=${encodeURIComponent(JSON.stringify(rates))}`;
+          const resp = await fetch(url);
+          if (!resp.ok) throw new Error(`compute ${resp.status}`);
+          const data = (await resp.json()).data;
+          if (!_pricesCache.has(key) && _pricesCache.size >= PRICES_CACHE_LIMIT) {
+            // Defensive only: the ~4 live profiles never approach this cap. Evict oldest.
+            _pricesCache.delete(_pricesCache.keys().next().value);
+          }
+          _pricesCache.set(key, data);
+          _pricesErrKeys.delete(key);
+          break;
+        } catch (e) {
+          if (attempt === 2) {
+            console.warn("prices compute fetch:", e);
+            _pricesErrKeys.add(key);
+          } else {
+            await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+          }
+        }
+      }
+      _pricesLoading.delete(key);
+      if (cachedFarmData) main();
+    }
+
+    // Synchronous accessor: PRICES(rates).marketValue[name] once loaded. Returns null (not
+    // an empty map) until the fetch for this profile resolves, and triggers that fetch as
+    // a side effect — same read-triggers-fetch shape as the cooking cache's consumer check.
+    function PRICES(rates) {
+      const key = _pricesKey(rates);
+      const cached = _pricesCache.get(key);
+      if (cached) return cached;
+      if (!_pricesErrKeys.has(key) && !_pricesLoading.has(key)) _fetchPrices(rates);
+      return null;
+    }
+
     function renderConstants(data) {
       const app = document.getElementById("app");
       let html = `<div class="header pixel-panel pixel-font">
@@ -23061,6 +23128,11 @@
       _bumpkinCookingErrKey = null;
       _constantsData = null;
       _constantsErr = null;
+      // Same reasoning for the price-map cache: its key is farm+rates, and REFRESH changes
+      // neither, so a kept entry would silently serve first-load prices for the rest of the
+      // page's lifetime (the exact bug the cooking cache shipped once, fixed in 5a1d9a9).
+      _pricesCache.clear();
+      _pricesErrKeys.clear();
       main();
     }
 
