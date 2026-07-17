@@ -19,17 +19,25 @@ import { readFileSync, readdirSync } from "node:fs";
 // So: assert that every guarded name is actually reachable in the file that guards it.
 // A dropped import becomes a red test instead of a silently wrong number.
 
-const CORE = new URL("../../core/", import.meta.url);
-const DIRS = ["engine", "sections", "derive", "data"];
+// SCOPE, stated honestly: this matches `typeof NAME` where NAME is ALL_CAPS — the
+// convention for the data tables, and it covers all 20 guards that exist today. It
+// deliberately does not chase every spelling; a guard written some other way is
+// invisible to it. The regex accepts `!==`/`===`, either quote style, and optional
+// parens, because those are cheap. Non-ALL_CAPS names are out of scope on purpose:
+// widening to any identifier would false-positive on function parameters (e.g.
+// `typeof extras !== "undefined"`), which are not imports and cannot be checked here.
 
-function coreFiles() {
+const CORE = new URL("../../core/", import.meta.url);
+
+function coreFiles(dir = CORE, prefix = "core") {
   const out = [];
-  for (const d of DIRS) {
-    const dir = new URL(d + "/", CORE);
-    let entries;
-    try { entries = readdirSync(dir); } catch { continue; }
-    for (const f of entries) {
-      if (f.endsWith(".mjs")) out.push({ path: `core/${d}/${f}`, src: readFileSync(new URL(f, dir), "utf8") });
+  let entries;
+  try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return out; }
+  for (const e of entries) {
+    if (e.isDirectory()) {
+      out.push(...coreFiles(new URL(e.name + "/", dir), `${prefix}/${e.name}`));
+    } else if (e.name.endsWith(".mjs")) {
+      out.push({ path: `${prefix}/${e.name}`, src: readFileSync(new URL(e.name, dir), "utf8") });
     }
   }
   return out;
@@ -40,7 +48,7 @@ test("every `typeof X !== \"undefined\"` guard in core/ names something the file
   let guardCount = 0;
 
   for (const { path, src } of coreFiles()) {
-    const guarded = [...src.matchAll(/typeof\s+([A-Z_][A-Z_0-9]*)\s*!==\s*"undefined"/g)].map((m) => m[1]);
+    const guarded = [...src.matchAll(/typeof\s*\(?\s*([A-Z_][A-Z_0-9]*)\s*\)?\s*[!=]==\s*['"]undefined['"]/g)].map((m) => m[1]);
     if (!guarded.length) continue;
 
     // Names this file can see: anything named in an import, or declared locally.
