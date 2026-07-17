@@ -2027,39 +2027,80 @@
       color: var(--text);
       border-color: #555;
     }
-    .diff-price-explain .pe-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.5rem;
+    /* task-TRACE4: the panel is now a list of items (not a table) — each item has a
+       market+production summary row and a collapsed "Show calculation" step tree per side. */
+    .diff-price-explain .pe-list {
       margin-top: 4px;
     }
-    .diff-price-explain .pe-table th {
-      text-align: left;
+    .diff-price-explain .pe-item {
       padding: 4px 6px;
-      border-bottom: 2px solid #444;
-      color: var(--text-dim);
-      font-weight: normal;
-      position: sticky;
-      top: 0;
-      background: var(--bg);
-    }
-    .diff-price-explain .pe-table td {
-      padding: 3px 6px;
       border-bottom: 1px solid #222;
-      vertical-align: top;
     }
-    .diff-price-explain .pe-table tr:hover td {
+    .diff-price-explain .pe-item:hover {
       background: rgba(255,255,255,0.03);
     }
-    .diff-price-explain .pe-method {
-      color: #8b8bcd;
+    .diff-price-explain .pe-item-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 10px;
+      font-size: 0.5rem;
+    }
+    .diff-price-explain .pe-item-name {
+      color: var(--text);
+      min-width: 110px;
+    }
+    .diff-price-explain .pe-item-price {
+      color: var(--text-dim);
       white-space: nowrap;
+    }
+    .diff-price-explain .pe-item-method {
+      color: #8b8bcd;
       font-size: 0.45rem;
     }
-    .diff-price-explain .pe-detail {
+    .diff-price-explain .pe-calc {
+      margin-top: 3px;
+    }
+    .diff-price-explain .pe-calc summary {
+      cursor: pointer;
       color: var(--text-dim);
       font-size: 0.45rem;
+      padding: 2px 0;
+      border: none;
+      background: none;
+    }
+    .diff-price-explain .pe-calc summary:hover {
+      color: var(--text);
+    }
+    .diff-price-explain .pe-trace-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      margin-top: 4px;
+    }
+    .diff-price-explain .pe-trace-col-title {
+      color: var(--text-dim);
+      font-size: 0.45rem;
+      font-weight: bold;
+      margin-bottom: 2px;
+    }
+    .diff-price-explain .pe-step {
+      font-size: 0.45rem;
+      color: var(--text-dim);
+      line-height: 1.5;
       word-break: break-word;
+    }
+    .diff-price-explain .pe-step-method {
+      color: #8b8bcd;
+    }
+    .diff-price-explain .pe-step-value {
+      color: var(--text);
+    }
+    .diff-price-explain .pe-step-empty {
+      font-size: 0.45rem;
+      color: var(--text-dim);
+      opacity: 0.6;
+      font-style: italic;
     }
 .diff-nodes-table {
   width: 100%;
@@ -2079,14 +2120,6 @@
 .diff-nodes-table .dn-zero { color: var(--text-dim); opacity: 0.5; }
 .diff-nodes-table .dn-s { color: var(--text-dim); opacity: 0.7; }
 .diff-nodes-table .dn-s img { height: 10px; vertical-align: middle; opacity: 0.6; }
-
-    .diff-price-explain .pe-cat-hdr td {
-      padding-top: 8px;
-      font-weight: bold;
-      color: var(--text);
-      font-size: 0.5rem;
-      border-bottom: 1px solid #555;
-    }
 
     .diff-bar.positive .diff-bar-val {
       bottom: calc(100% + 2px);
@@ -6972,6 +7005,56 @@
       const cached = _pricesCache.get(key);
       if (cached) return cached;
       if (!_pricesErrKeys.has(key) && !_pricesLoading.has(key)) _fetchPrices(rates);
+      return null;
+    }
+
+    // ── Price-trace cache (/api/compute?section=prices&explain=1) — task-TRACE4 ──
+    // Sibling to the PRICES() cache above: identical key/fetch/retry shape, but for a
+    // different URL (adds &explain=1) and a different payload (marketTrace/productionTrace
+    // instead of marketValue/productionCost). Kept as its own Map rather than folded into
+    // _pricesCache because the two payloads answer different questions (a price vs. its
+    // derivation) and only the diff page's "Pricing methods" panel ever needs traces — the
+    // other PRICES() consumers (marks, dashboard, roadmap, ROI) must not pay for them.
+    const _priceTracesCache = new Map();   // key -> { marketTrace, productionTrace }
+    const _priceTracesErrKeys = new Set(); // keys whose fetch failed (do not auto-retry)
+    const _priceTracesLoading = new Set(); // keys currently in flight
+
+    async function _fetchPriceTraces(rates) {
+      const key = _pricesKey(rates);
+      if (_priceTracesLoading.has(key)) return;
+      _priceTracesLoading.add(key);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          let url = `/api/compute?farm=${FARM_ID}&section=prices&explain=1`;
+          if (rates) url += `&rates=${encodeURIComponent(JSON.stringify(rates))}`;
+          const resp = await fetch(url);
+          if (!resp.ok) throw new Error(`compute ${resp.status}`);
+          const body = await resp.json();
+          if (body.pricesOk === false) throw new Error("prices not loaded (pricesOk:false)");
+          const data = body.data;
+          _priceTracesCache.set(key, { marketTrace: data.marketTrace || {}, productionTrace: data.productionTrace || {} });
+          _priceTracesErrKeys.delete(key);
+          break;
+        } catch (e) {
+          if (attempt === 2) {
+            console.warn("price-trace compute fetch:", e);
+            _priceTracesErrKeys.add(key);
+          } else {
+            await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+          }
+        }
+      }
+      _priceTracesLoading.delete(key);
+      if (cachedFarmData) main();
+    }
+
+    // Synchronous accessor: PRICE_TRACES(rates).marketTrace[name] once loaded. Returns null
+    // until the fetch for this profile resolves (same read-triggers-fetch shape as PRICES()).
+    function PRICE_TRACES(rates) {
+      const key = _pricesKey(rates);
+      const cached = _priceTracesCache.get(key);
+      if (cached) return cached;
+      if (!_priceTracesErrKeys.has(key) && !_priceTracesLoading.has(key)) _fetchPriceTraces(rates);
       return null;
     }
 
@@ -23151,6 +23234,9 @@
       // page's lifetime (the exact bug the cooking cache shipped once, fixed in 5a1d9a9).
       _pricesCache.clear();
       _pricesErrKeys.clear();
+      // task-TRACE4: same reasoning — the trace cache is keyed by farm+rates too.
+      _priceTracesCache.clear();
+      _priceTracesErrKeys.clear();
       main();
     }
 
@@ -23398,319 +23484,50 @@
     // is called further down in main(), so dashP2PCost will see it.
     window.estimateItemSfl = estimateItemSfl;
 
-    // Returns { price, method, detail } explaining how the price was derived
-    // Returns null for items with direct P2P prices (those are from API)
-    function explainItemSfl(itemName, p2pPrices, rates) {
-      const coinsPerSFL = rates?.coinsPerSFL || 0;
-      const sflPerXP = rates?.sflPerXP || 0;
-      const fNum = (v) => v < 0.001 ? v.toFixed(6) : v < 1 ? v.toFixed(4) : v.toFixed(2);
+    // task-TRACE4: explainItemSfl (a third, parallel copy of the pricing branch logic) is
+    // DELETED. The "Pricing methods" panel now renders the SAME traces the real calculation
+    // produces (core/engine/item-value.mjs, via /api/compute?section=prices&explain=1) \u2014
+    // see collectDerivedPriceItems/renderPriceTraceNode below, and the panel markup in
+    // renderDiff's renderContent (~search "Pricing methods").
 
-      // Skip items with direct P2P prices
-      if (p2pPrices[itemName]) return null;
-
-      // Oil (special: localStorage or farm data)
-      if (itemName === "Oil") {
-        const cached = parseFloat(localStorage.getItem("sfl_oil_price"));
-        if (!isNaN(cached) && cached >= 0) {
-          return { price: cached, method: "Power page", detail: `toolCostPerDay / boostedYieldPerDay = ${fNum(cached)} (cached from Power page with all NFT boosts)` };
-        }
-        return { price: 0, method: "Power page", detail: "Visit Power page first to compute Oil price with your boosts" };
-      }
-
-      // Crafted ingredient (Cheese = 3 Milk)
-      if (typeof CRAFTED_INGREDIENT_RECIPES !== "undefined" && CRAFTED_INGREDIENT_RECIPES[itemName]) {
-        const recipe = CRAFTED_INGREDIENT_RECIPES[itemName];
-        let parts = [], total = 0;
-        for (const [ing, qty] of Object.entries(recipe)) {
-          const p = estimateItemSfl(ing, p2pPrices, null, rates);
-          parts.push(`${qty}\u00d7 ${ing} (${fNum(p)})`);
-          total += p * qty;
-        }
-        return { price: total, method: "Crafted recipe", detail: parts.join(" + ") + ` = ${fNum(total)}` };
-      }
-
-      // Food recipe (RECIPE_INGREDIENTS)
-      if (typeof RECIPE_INGREDIENTS !== "undefined" && RECIPE_INGREDIENTS[itemName]) {
-        const recipe = RECIPE_INGREDIENTS[itemName];
-        let parts = [], total = 0;
-        for (const [ing, qty] of Object.entries(recipe)) {
-          const p = estimateItemSfl(ing, p2pPrices, null, rates);
-          const src = p2pPrices[ing] ? "P2P" : "derived";
-          parts.push(`${qty}\u00d7 ${ing} (${fNum(p)} ${src})`);
-          total += p * qty;
-        }
-        return { price: total, method: "Cooking recipe", detail: parts.join(" + ") + ` = ${fNum(total)}` };
-      }
-
-      // Barn Delight
-      if (itemName === "Barn Delight") {
-        const lemon = p2pPrices["Lemon"] || 0;
-        const honey = p2pPrices["Honey"] || 0;
-        const total = 5 * lemon + 3 * honey;
-        return { price: total, method: "Special recipe", detail: `5\u00d7 Lemon (${fNum(lemon)} P2P) + 3\u00d7 Honey (${fNum(honey)} P2P) = ${fNum(total)}` };
-      }
-
-      // Doll recipes
-      if (typeof DOLL_RECIPES !== "undefined" && DOLL_RECIPES[itemName]) {
-        const recipe = DOLL_RECIPES[itemName];
-        if (recipe.length === 0) return { price: 0, method: "Doll", detail: "No recipe data" };
-        let parts = [], total = 0;
-        for (const { item, qty } of recipe) {
-          const p = estimateItemSfl(item, p2pPrices, null, rates);
-          const src = p2pPrices[item] ? "P2P" : "derived";
-          parts.push(`${qty}\u00d7 ${item} (${fNum(p)} ${src})`);
-          total += p * qty;
-        }
-        return { price: total, method: "Doll recipe", detail: parts.join(" + ") + ` = ${fNum(total)}` };
-      }
-
-      // Tool costs
-      if (typeof TOOL_COSTS !== "undefined" && TOOL_COSTS[itemName] && coinsPerSFL > 0) {
-        const tool = TOOL_COSTS[itemName];
-        let coinPart = tool.coins / coinsPerSFL;
-        let parts = [`${tool.coins}c / ${coinsPerSFL.toFixed(0)} c/SFL = ${fNum(coinPart)}`];
-        let total = coinPart;
-        if (tool.materials) {
-          for (const [mat, qty] of Object.entries(tool.materials)) {
-            const p = estimateItemSfl(mat, p2pPrices, null, rates);
-            const src = p2pPrices[mat] ? "P2P" : "derived";
-            parts.push(`${qty}\u00d7 ${mat} (${fNum(p)} ${src})`);
-            total += p * qty;
-          }
-        }
-        return { price: total, method: "Tool cost", detail: parts.join(" + ") + ` = ${fNum(total)}` };
-      }
-
-      // Seed costs (crop/fruit seeds, including "X Plant" like Banana Plant)
-      if (typeof SEED_COSTS !== "undefined" && coinsPerSFL > 0) {
-        const cropName = itemName.endsWith(" Seed") ? itemName.slice(0, -5) : itemName.endsWith(" Plant") ? itemName.slice(0, -6) : itemName;
-        if (SEED_COSTS[cropName]) {
-          const coins = SEED_COSTS[cropName];
-          const price = coins / coinsPerSFL;
-          const seedLabel = itemName.endsWith(" Plant") ? `${cropName} Plant` : `${cropName} Seed`;
-          return { price, method: "Seed (coins)", detail: `${seedLabel}: ${coins}c / ${coinsPerSFL.toFixed(0)} c/SFL = ${fNum(price)}` };
-        }
-      }
-
-      // Love Charm
-      if (itemName === "Love Charm") {
-        return { price: 1/50, method: "Fixed rate", detail: `50 Love Charm = 1 SFL \u2192 1 LC = ${fNum(1/50)}` };
-      }
-
-      // Flower seed coin costs
-      if (typeof FLOWER_SEED_COIN_COSTS !== "undefined" && FLOWER_SEED_COIN_COSTS[itemName] && coinsPerSFL > 0) {
-        const coins = FLOWER_SEED_COIN_COSTS[itemName];
-        const price = coins / coinsPerSFL;
-        return { price, method: "Flower seed (coins)", detail: `${itemName}: ${coins}c / ${coinsPerSFL.toFixed(0)} c/SFL = ${fNum(price)}` };
-      }
-
-      // Flowers -> seed cost
-      if (typeof FLOWER_RECIPES !== "undefined" && FLOWER_RECIPES[itemName]) {
-        const seedName = FLOWER_RECIPES[itemName].seed;
-        if (typeof FLOWER_SEED_COIN_COSTS !== "undefined" && FLOWER_SEED_COIN_COSTS[seedName] && coinsPerSFL > 0) {
-          const coins = FLOWER_SEED_COIN_COSTS[seedName];
-          const price = coins / coinsPerSFL;
-          return { price, method: "Flower (seed cost)", detail: `${itemName} \u2192 ${seedName} (${coins}c) / ${coinsPerSFL.toFixed(0)} c/SFL = ${fNum(price)}` };
-        }
-      }
-
-      // Treasure sell prices (with boosts)
-      if (typeof TREASURE_SELL_PRICES !== "undefined" && TREASURE_SELL_PRICES[itemName] && coinsPerSFL > 0) {
-        const baseCoins = TREASURE_SELL_PRICES[itemName];
-        const tb = rates?.treasureBoost || 1;
-        const boostedCoins = baseCoins * tb;
-        const price = boostedCoins / coinsPerSFL;
-        const boostNote = tb > 1 ? ` \u00d7${tb.toFixed(1)} boost` : "";
-        return { price, method: "Treasure (sell price)", detail: `sell ${baseCoins}c${boostNote} = ${boostedCoins.toFixed(0)}c / ${coinsPerSFL.toFixed(0)} c/SFL = ${fNum(price)}` };
-      }
-
-      // Fish/food XP pricing
-      if (typeof ITEM_XP_VALUES !== "undefined" && ITEM_XP_VALUES[itemName] && sflPerXP > 0) {
-        const xp = ITEM_XP_VALUES[itemName];
-        const price = xp * sflPerXP;
-        return { price, method: "XP value", detail: `${xp} XP \u00d7 ${sflPerXP.toFixed(6)} SFL/XP = ${fNum(price)}` };
-      }
-
-      // Giant item coin prices
-      if (typeof GIANT_ITEM_COIN_PRICES !== "undefined" && GIANT_ITEM_COIN_PRICES[itemName] && coinsPerSFL > 0) {
-        const coins = GIANT_ITEM_COIN_PRICES[itemName];
-        const price = coins / coinsPerSFL;
-        return { price, method: "Giant (sell price)", detail: `sell ${coins}c / ${coinsPerSFL.toFixed(0)} c/SFL = ${fNum(price)}` };
-      }
-
-      // Omnifeed (1 Gem)
-      if (itemName === "Omnifeed") {
-        const gemsPerSFL = rates?.gemsPerSFL || 0;
-        if (gemsPerSFL > 0) {
-          const price = 1 / gemsPerSFL;
-          return { price, method: "Gem cost", detail: `1 Gem / ${gemsPerSFL.toFixed(2)} Gems/SFL = ${fNum(price)}` };
-        }
-        return { price: 0, method: "Gem cost", detail: "1 Gem (exchange rate unknown)" };
-      }
-
-      // Crustaceans
-      if (typeof CRUSTACEAN_RECIPES !== "undefined" && CRUSTACEAN_RECIPES[itemName]) {
-        const cr = CRUSTACEAN_RECIPES[itemName];
-        const potPrice = estimateItemSfl(cr.pot, p2pPrices, null, rates);
-        let parts = [`${cr.pot} (${fNum(potPrice)})`];
-        let chumCost = 0;
-        if (cr.chum && cr.qty > 0) {
-          const chumPrice = estimateItemSfl(cr.chum, p2pPrices, null, rates);
-          chumCost = chumPrice * cr.qty;
-          let chumDetail = `${cr.qty}\u00d7 ${cr.chum} (${fNum(chumPrice)})`;
-          if (cr.alt) {
-            const altParts = cr.alt.match(/^(.+?)\s*x(\d+)$/);
-            if (altParts) {
-              const altItemPrice = estimateItemSfl(altParts[1], p2pPrices, null, rates);
-              const altCost = altItemPrice * parseInt(altParts[2]);
-              if (altCost > 0 && (chumCost <= 0 || altCost < chumCost)) {
-                chumCost = altCost;
-                chumDetail = `${altParts[2]}\u00d7 ${altParts[1]} (${fNum(altItemPrice)}) [cheaper alt]`;
-              }
-            }
-          }
-          parts.push(chumDetail);
-        }
-        const total = potPrice + chumCost;
-        return { price: total, method: "Crustacean (pot+chum)", detail: parts.join(" + ") + ` = ${fNum(total)}` };
-      }
-
-      // Mark
-      if (itemName === "Mark") {
-        return { price: 0.01, method: "Fixed rate", detail: "1 Mark = 0.01 SFL (faction shop rate)" };
-      }
-
-      // Acorn (pet energy opportunity cost)
-      if (itemName === "Acorn" && typeof PET_FETCH_DATA !== "undefined") {
-        let bestRatio = 0, bestRes = "";
-        for (const entries of Object.values(PET_FETCH_DATA)) {
-          for (const e of entries) {
-            if (e.res === "Acorn") continue;
-            const p = p2pPrices[e.res] || 0;
-            if (p > 0 && p / e.energy > bestRatio) { bestRatio = p / e.energy; bestRes = e.res; }
-          }
-        }
-        if (bestRatio > 0) {
-          const price = bestRatio * 100;
-          return { price, method: "Pet energy cost", detail: `100 energy \u00d7 best ratio ${bestRatio.toFixed(6)} SFL/\u26a1 (${bestRes}) = ${fNum(price)}` };
-        }
-        return { price: 0, method: "Pet energy cost", detail: "No pet resources with P2P prices" };
-      }
-
-      // Fish Market recipes (season-dependent)
-      if (typeof FISH_MARKET_RECIPES !== "undefined" && FISH_MARKET_RECIPES[itemName]) {
-        const seasonRecipes = FISH_MARKET_RECIPES[itemName];
-        const s = rates?.season || "";
-        const season = s || Object.keys(seasonRecipes)[0];
-        const recipe = seasonRecipes[season] || Object.values(seasonRecipes)[0];
-        if (recipe) {
-          let parts = [], total = 0;
-          for (const [ing, qty] of Object.entries(recipe)) {
-            const p = estimateItemSfl(ing, p2pPrices, null, rates);
-            const src = p2pPrices[ing] ? "P2P" : "derived";
-            parts.push(`${qty}\u00d7 ${ing} (${fNum(p)} ${src})`);
-            total += p * qty;
-          }
-          const seasonLabel = season.charAt(0).toUpperCase() + season.slice(1);
-          return { price: total, method: `Fish Market (${seasonLabel})`, detail: parts.join(" + ") + ` = ${fNum(total)}` };
-        }
-      }
-
-      // Compost products
-      if (typeof COMPOST_RECIPES !== "undefined") {
-        for (const [composter, data] of Object.entries(COMPOST_RECIPES)) {
-          if (data.outputs[itemName] !== undefined) {
-            const s = rates?.season || "";
-            const season = s || Object.keys(data.inputs)[0];
-            const inputs = data.inputs[season] || Object.values(data.inputs)[0];
-            let inputParts = [], batchCost = 0;
-            for (const [ing, qty] of Object.entries(inputs)) {
-              const p = estimateItemSfl(ing, p2pPrices, null, rates);
-              const src = p2pPrices[ing] ? "P2P" : "derived";
-              inputParts.push(`${qty}\u00d7 ${ing} (${fNum(p)} ${src})`);
-              batchCost += p * qty;
-            }
-            const totalUnits = Object.values(data.outputs).reduce((sum, q) => sum + q, 0);
-            const outputList = Object.entries(data.outputs).map(([n, q]) => `${q}\u00d7 ${n}`).join(" + ");
-            const unitCost = totalUnits > 0 ? batchCost / totalUnits : 0;
-            const seasonLabel = season.charAt(0).toUpperCase() + season.slice(1);
-            return {
-              price: unitCost,
-              method: `Compost (${seasonLabel})`,
-              detail: `${composter}: ${inputParts.join(" + ")} = batch ${fNum(batchCost)} \u00f7 ${totalUnits} units (${outputList}) = ${fNum(unitCost)}/unit`
-            };
-          }
-        }
-      }
-
-      return null;
+    // Merges the API's marketTrace/productionTrace maps (task-TRACE3) into a sorted list of
+    // derived item names for the panel. A name may appear in only one of the two maps (an
+    // item can resolve via a derived method on one path \u2014 market or production \u2014 and a
+    // direct P2P/fixed-rate on the other), so this is a union, not an intersection. Pure
+    // merge/sort \u2014 no price derivation happens here anymore.
+    function collectDerivedPriceItems(marketTrace, productionTrace) {
+      const names = new Set([
+        ...Object.keys(marketTrace || {}),
+        ...Object.keys(productionTrace || {}),
+      ]);
+      return Array.from(names).sort((a, b) => a.localeCompare(b));
     }
 
-    // Collect all items that have derived prices (not from P2P/NFT API)
-    function collectDerivedPriceItems(p2pPrices, rates) {
-      const items = new Map(); // name -> { method, category }
-      const addItems = (source, category) => {
-        if (typeof source === "undefined" || !source) return;
-        for (const name of Object.keys(source)) {
-          if (!items.has(name)) items.set(name, category);
-        }
-      };
+    // Raw-SFL formatter for trace step values, matching the precision the engine's own
+    // formula strings already bake in (core/engine/item-value.mjs's toFixed(5) roughly).
+    function _priceTraceFNum(v) {
+      if (typeof v !== "number" || !isFinite(v)) return String(v);
+      return v < 0.001 ? v.toFixed(6) : v < 1 ? v.toFixed(4) : v.toFixed(2);
+    }
 
-      // Collect from all pricing tables
-      addItems(typeof CRAFTED_INGREDIENT_RECIPES !== "undefined" ? CRAFTED_INGREDIENT_RECIPES : null, "Crafted");
-      addItems(typeof RECIPE_INGREDIENTS !== "undefined" ? RECIPE_INGREDIENTS : null, "Food");
-      addItems(typeof DOLL_RECIPES !== "undefined" ? DOLL_RECIPES : null, "Dolls");
-      addItems(typeof TOOL_COSTS !== "undefined" ? TOOL_COSTS : null, "Tools");
-      addItems(typeof FLOWER_SEED_COIN_COSTS !== "undefined" ? FLOWER_SEED_COIN_COSTS : null, "Flower seeds");
-      addItems(typeof FLOWER_RECIPES !== "undefined" ? FLOWER_RECIPES : null, "Flowers");
-      addItems(typeof TREASURE_SELL_PRICES !== "undefined" ? TREASURE_SELL_PRICES : null, "Treasures");
-      addItems(typeof ITEM_XP_VALUES !== "undefined" ? ITEM_XP_VALUES : null, "Fish/XP");
-      addItems(typeof GIANT_ITEM_COIN_PRICES !== "undefined" ? GIANT_ITEM_COIN_PRICES : null, "Giants");
-      addItems(typeof CRUSTACEAN_RECIPES !== "undefined" ? CRUSTACEAN_RECIPES : null, "Crustaceans");
-
-      // Fish Market recipes
-      addItems(typeof FISH_MARKET_RECIPES !== "undefined" ? FISH_MARKET_RECIPES : null, "Fish Market");
-
-      // Compost products
-      if (typeof COMPOST_RECIPES !== "undefined") {
-        for (const data of Object.values(COMPOST_RECIPES)) {
-          for (const name of Object.keys(data.outputs)) {
-            if (!items.has(name)) items.set(name, "Compost");
-          }
-        }
+    // Renders one trace node \u2014 { item, method, formula, value, steps? }, the canonical shape
+    // core/engine/item-value.mjs emits (task-TRACE1-2) \u2014 as an expandable step tree.
+    // Indentation mirrors recursion depth, so the tree IS the call structure that produced
+    // the number (steps are child nodes from the SAME recursive calls, not a re-derivation).
+    // Values are left in raw SFL (matching the formula text, which already bakes in SFL
+    // numbers) \u2014 currency conversion is applied only to the panel's per-item summary line.
+    function renderPriceTraceNode(node, depth) {
+      if (!node) return "";
+      const d = depth || 0;
+      let html = `<div class="pe-step" style="margin-left:${d * 14}px">`;
+      html += `<span class="pe-step-method">${escHTML(node.method)}</span> `;
+      html += `<span class="pe-step-formula">${escHTML(node.formula)}</span>`;
+      html += ` <span class="pe-step-value">= ${_priceTraceFNum(node.value)} SFL</span>`;
+      html += `</div>`;
+      if (node.steps && node.steps.length) {
+        for (const child of node.steps) html += renderPriceTraceNode(child, d + 1);
       }
-
-      // Special items
-      items.set("Oil", "Resources");
-      items.set("Love Charm", "Special");
-      items.set("Barn Delight", "Food");
-      items.set("Mark", "Special");
-      items.set("Acorn", "Pets");
-      items.set("Omnifeed", "Feed");
-
-      // Seed items from SEED_COSTS (keyed by crop name, but items appear as "X Seed")
-      if (typeof SEED_COSTS !== "undefined") {
-        for (const cropName of Object.keys(SEED_COSTS)) {
-          const seedName = cropName + " Seed";
-          if (!items.has(seedName)) items.set(seedName, "Seeds");
-        }
-      }
-
-      // Now compute explanations, skip P2P items
-      const results = [];
-      for (const [name, cat] of items) {
-        const ex = explainItemSfl(name, p2pPrices, rates);
-        if (ex) results.push({ name, category: cat, ...ex });
-      }
-
-      // Sort by category then name
-      const catOrder = ["Tools", "Seeds", "Flower seeds", "Flowers", "Food", "Feed", "Crafted", "Dolls", "Fish/XP", "Fish Market", "Compost", "Treasures", "Crustaceans", "Giants", "Pets", "Resources", "Special"];
-      results.sort((a, b) => {
-        const ca = catOrder.indexOf(a.category), cb = catOrder.indexOf(b.category);
-        if (ca !== cb) return (ca === -1 ? 99 : ca) - (cb === -1 ? 99 : cb);
-        return a.name.localeCompare(b.name);
-      });
-      return results;
+      return html;
     }
 
 
@@ -26201,29 +26018,48 @@
           out += `</div>`;
         }
 
-        // Pricing explanation table (collapsed)
-        const priceExplanations = collectDerivedPriceItems(p2pPrices, { coinsPerSFL, sflPerXP, season: currentSeason, treasureBoost, gemsPerSFL });
-        if (priceExplanations.length > 0) {
-          const _cm = getCurMult();
-          const _cl = getCurLabel();
-          out += `<details class="diff-price-explain pixel-font">`;
-          out += `<summary>Pricing methods (${priceExplanations.length} derived items)</summary>`;
-          out += `<table class="pe-table"><thead><tr><th>Item</th><th>${_cl} Price</th><th>Method</th><th>Calculation</th></tr></thead><tbody>`;
-          let lastCat = "";
-          for (const item of priceExplanations) {
-            if (item.category !== lastCat) {
-              lastCat = item.category;
-              out += `<tr class="pe-cat-hdr"><td colspan="4">${escHTML(item.category)}</td></tr>`;
+        // Pricing methods panel (task-TRACE4): thin renderer over
+        // /api/compute?section=prices&explain=1's marketTrace/productionTrace (task-TRACE3) \u2014
+        // no client-side price derivation (explainItemSfl deleted). Fetched via roiRates, the
+        // same all-5-rates profile roiPriceMap already uses above, so it shares that cache
+        // key. PRICE_TRACES(roiRates) is null until the fetch resolves; show a loading line
+        // until then (arrival triggers main() \u2192 renderDiff() \u2192 renderContent() again, same
+        // as PRICES()). Shows BOTH the market and production trace per item, side by side, so
+        // a viewer can see when they disagree (the C6/C8/C9 discrepancy detector).
+        const priceTraces = PRICE_TRACES(roiRates);
+        if (priceTraces === null) {
+          out += `<div class="diff-price-explain pixel-font" style="padding:8px 12px;font-size:0.5625rem;color:var(--text-dim)">Loading pricing methods\u2026</div>`;
+        } else {
+          const marketTrace = priceTraces.marketTrace || {};
+          const productionTrace = priceTraces.productionTrace || {};
+          const priceExplanations = collectDerivedPriceItems(marketTrace, productionTrace);
+          if (priceExplanations.length > 0) {
+            const _cl = getCurLabel();
+            out += `<details class="diff-price-explain pixel-font">`;
+            out += `<summary>Pricing methods (${priceExplanations.length} derived items)</summary>`;
+            out += `<div class="pe-list">`;
+            for (const name of priceExplanations) {
+              const mNode = marketTrace[name] || null;
+              const pNode = productionTrace[name] || null;
+              const mStr = mNode ? `${fmtCur(mNode.value, 4)} ${_cl} <span class="pe-item-method">(${escHTML(mNode.method)})</span>` : "\u2014";
+              const pStr = pNode ? `${fmtCur(pNode.value, 4)} ${_cl} <span class="pe-item-method">(${escHTML(pNode.method)})</span>` : "\u2014";
+              out += `<div class="pe-item">`;
+              out += `<div class="pe-item-row">`;
+              out += `<span class="pe-item-name">${escHTML(name)}</span>`;
+              out += `<span class="pe-item-price">Market: ${mStr}</span>`;
+              out += `<span class="pe-item-price">Production: ${pStr}</span>`;
+              out += `</div>`;
+              out += `<details class="pe-calc"><summary>Show calculation</summary>`;
+              out += `<div class="pe-trace-grid">`;
+              out += `<div class="pe-trace-col"><div class="pe-trace-col-title">Market value</div>${mNode ? renderPriceTraceNode(mNode, 0) : `<div class="pe-step-empty">No market derivation</div>`}</div>`;
+              out += `<div class="pe-trace-col"><div class="pe-trace-col-title">Production cost</div>${pNode ? renderPriceTraceNode(pNode, 0) : `<div class="pe-step-empty">No production derivation</div>`}</div>`;
+              out += `</div>`;
+              out += `</details>`;
+              out += `</div>`;
             }
-            const priceStr = item.price > 0 ? (item.price * _cm).toFixed(4) : "\u2014";
-            out += `<tr>`;
-            out += `<td>${escHTML(item.name)}</td>`;
-            out += `<td>${priceStr}</td>`;
-            out += `<td class="pe-method">${escHTML(item.method)}</td>`;
-            out += `<td class="pe-detail">${escHTML(item.detail)}</td>`;
-            out += `</tr>`;
+            out += `</div>`;
+            out += `</details>`;
           }
-          out += `</tbody></table></details>`;
         }
 
         document.getElementById("diff-content").innerHTML = out;
