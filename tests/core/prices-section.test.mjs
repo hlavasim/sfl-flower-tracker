@@ -3,6 +3,7 @@ import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { buildPricesSection } from "../../core/sections/prices.mjs";
 import { itemMarketValue } from "../../core/engine/item-value.mjs";
+import * as pets from "../../core/data/pets.mjs";
 
 const wrap = JSON.parse(readFileSync(new URL("../fixtures/farm-155498.json", import.meta.url)));
 const farm = wrap.farm || wrap;
@@ -20,6 +21,49 @@ test("an unpriceable item is ABSENT, never 0 — callers must tell unknown from 
   assert.equal("Definitely Not An Item" in p.marketValue, false);
   // Mushroom is unpriced by BOTH resolvers today (spec §1) — it must not appear as 0.
   assert.equal(p.marketValue["Mushroom"], undefined);
+});
+
+// item-value.mjs prices Mark/Love Charm/Acorn/Barn Delight through hardcoded
+// `itemName === "X"` branches with no data-table backing — buildItemUniverse used to
+// have no way to discover these names, so they were silently ABSENT from the served
+// map even though they're priceable (task-F2-1d-fix-report.md). Expected values below
+// are derived independently of buildPricesSection/itemMarketValue, straight from the
+// resolver's documented formulas + fixture data, not by running the code under test:
+//   Mark: fixed 0.01 SFL (item-value.mjs:157)
+//   Love Charm: fixed 1/50 SFL (item-value.mjs:101)
+//   Barn Delight: 5*Lemon + 3*Honey (item-value.mjs:46-49)
+//   Acorn: max over PET_FETCH_DATA of (p2p[res]/energy) * 100, excluding Acorn itself
+//     (item-value.mjs:159-170) — independently walked here, not called through the resolver.
+test("Mark/Love Charm/Acorn/Barn Delight are present in the served map with the resolver's values", () => {
+  const p = buildPricesSection(farm, p2p, S);
+
+  assert.equal(p.marketValue["Mark"], 0.01);
+  assert.equal(p.marketValue["Love Charm"], 1 / 50);
+
+  const wantBarnDelight = 5 * p2p["Lemon"] + 3 * p2p["Honey"];
+  assert.equal(p.marketValue["Barn Delight"], wantBarnDelight);
+
+  let bestRatio = 0;
+  for (const entries of Object.values(pets.PET_FETCH_DATA)) {
+    for (const e of entries) {
+      if (e.res === "Acorn") continue;
+      const price = p2p[e.res] || 0;
+      if (price > 0) bestRatio = Math.max(bestRatio, price / e.energy);
+    }
+  }
+  const wantAcorn = bestRatio * 100;
+  assert.equal(p.marketValue["Acorn"], wantAcorn);
+  assert.ok(wantAcorn > 0, "sanity: the independent Acorn derivation must be nonzero given this fixture");
+});
+
+// Omnifeed is also a hardcoded branch (item-value.mjs:133) but this fixture's settings
+// (S, above) carry no gemsPerSFL rate, so the resolver legitimately cannot price it.
+// It must be considered — not silently defaulted to 0 — and end up ABSENT either way.
+// This is the "absence ≠ zero" contract applied to a hardcoded-branch item specifically.
+test("Omnifeed (a hardcoded-branch item) is still absent, not 0, when unpriceable", () => {
+  const p = buildPricesSection(farm, p2p, S);
+  assert.equal("Omnifeed" in p.marketValue, false);
+  assert.equal(p.marketValue["Omnifeed"], undefined);
 });
 
 test("the maps agree with the engine item by item", () => {

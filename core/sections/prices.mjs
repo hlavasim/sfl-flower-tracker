@@ -20,9 +20,24 @@ const ITEM_KEYED_TABLES = [
   FLOWER_SEED_COIN_COSTS, ITEM_XP_VALUES, GIANT_ITEM_COIN_PRICES, SEED_COSTS,
 ];
 
-// Unions the keys of every core/data table the resolvers can key an item by, plus
-// the live P2P market's own keys (items priced ONLY on the market, e.g. Tuna, Rod).
-function buildItemUniverse(prices) {
+// item-value.mjs's two resolvers also price some items through hardcoded
+// `itemName === "X"` branches that have no table backing at all — grep item-value.mjs
+// for `itemName === "` to see them. Those names can never enter the universe via
+// ITEM_KEYED_TABLES/COMPOST_RECIPES, and must not rely on the live P2P market
+// happening to also trade them (Salt used to "work" only because the fixture p2p
+// data includes it — an empty/different market would have silently dropped it too).
+// So they are listed here explicitly. tests/core/price-universe-drift.test.mjs scans
+// item-value.mjs by regex for every `itemName === "..."` literal and fails if this
+// list falls out of sync with the branches that actually exist there — do not let
+// this list and that file's branches drift apart.
+const HARDCODED_BRANCH_ITEM_NAMES = [
+  "Barn Delight", "Love Charm", "Omnifeed", "Mark", "Acorn", "Salt",
+];
+
+// Unions the keys of every core/data table the resolvers can key an item by, the
+// hardcoded-branch names above, plus the live P2P market's own keys (items priced
+// ONLY on the market, e.g. Tuna, Rod).
+export function buildItemUniverse(prices) {
   const names = new Set();
   for (const table of ITEM_KEYED_TABLES) {
     for (const name of Object.keys(table)) names.add(name);
@@ -30,6 +45,7 @@ function buildItemUniverse(prices) {
   for (const data of Object.values(COMPOST_RECIPES)) {
     for (const name of Object.keys(data.outputs)) names.add(name);
   }
+  for (const name of HARDCODED_BRANCH_ITEM_NAMES) names.add(name);
   for (const name of Object.keys(prices || {})) names.add(name);
   return names;
 }
