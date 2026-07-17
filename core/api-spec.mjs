@@ -75,6 +75,24 @@ export const API_SPEC = {
               "→ BUMPKIN_DEFAULT_RECIPES is used for every building.",
           },
           {
+            name: "rates",
+            in: "query",
+            required: false,
+            schema: { type: "string" },
+            description:
+              "URL-encoded JSON object of rate-profile overrides, forwarded verbatim to " +
+              "the item-value resolver for `section=prices` — e.g. " +
+              "`{\"coinsPerSFL\":1061,\"sflPerXP\":0.0001,\"treasureBoost\":1.2,\"gemsPerSFL\":4000,\"season\":\"summer\"}`. " +
+              "Exists because different consumers legitimately need different profiles: " +
+              "some pass no rates at all, others pass only coinsPerSFL/gemsPerSFL, others " +
+              "the full set — and the resulting values differ (e.g. treasure items scale " +
+              "by `treasureBoost`, and some fish are only priceable once `sflPerXP` is " +
+              "given). Any key also matches a field `coinsPerSFL` derives server-side " +
+              "(below) overrides it. Absent or unparseable → falls back to `{}`, so " +
+              "omitting it reproduces the map exactly as when this parameter did not " +
+              "exist.",
+          },
+          {
             name: "petSimulate",
             in: "query",
             required: false,

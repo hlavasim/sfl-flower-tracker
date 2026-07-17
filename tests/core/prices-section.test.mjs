@@ -97,6 +97,31 @@ test("productionCost ignores the market; marketValue follows it — the two ques
   assert.notEqual(p.productionCost["Salt"], p.marketValue["Salt"]);
 });
 
+// The whole reason `rates` exists as a parameter: marks/deliveries pass none, dashboard
+// passes dashRates, roadmap exchangeRates, ROI all five — and the resulting SFL values
+// genuinely differ across those profiles (task-F2-2a brief, measured 2026-07-17). Pin
+// that buildPricesSection's third argument really is forwarded as the full rates object,
+// not just coinsPerSFL, using expectations derived from the treasure table and the boost
+// factor directly — never by running buildPricesSection/itemMarketValue itself.
+test("treasureBoost changes treasure prices — the rates parameter is load-bearing", () => {
+  const bare = buildPricesSection(farm, p2p, { coinsPerSFL: 1061.0079575596817 });
+  const boosted = buildPricesSection(farm, p2p, { coinsPerSFL: 1061.0079575596817, treasureBoost: 1.2 });
+  // Pirate Bounty: confirmed present in TREASURE_SELL_PRICES (core/data/crafting.mjs) and
+  // priced by the `TREASURE_SELL_PRICES[itemName] * (rates.treasureBoost || 1)` branch
+  // (core/engine/item-value.mjs) — not derived by running either resolver.
+  const t = "Pirate Bounty";
+  assert.ok(bare.marketValue[t] > 0, `${t} must be priced at all`);
+  assert.ok(Math.abs(boosted.marketValue[t] - bare.marketValue[t] * 1.2) < 1e-9,
+    `boosted ${boosted.marketValue[t]} != bare ${bare.marketValue[t]} * 1.2`);
+});
+
+test("sflPerXP makes fish priceable that otherwise are not", () => {
+  const bare = buildPricesSection(farm, p2p, { coinsPerSFL: 1061.0079575596817 });
+  const withXp = buildPricesSection(farm, p2p, { coinsPerSFL: 1061.0079575596817, sflPerXP: 0.0001 });
+  const fishOnlyInXp = Object.keys(withXp.marketValue).filter((k) => !(k in bare.marketValue));
+  assert.ok(fishOnlyInXp.length > 0, "sflPerXP must unlock items that are otherwise unpriceable");
+});
+
 // productionCost is PER-FARM. The bug that produced the wrong number above was exactly a
 // silent failure to pass `extras`, which fell back to SALT_BASE_YIELD/mult 1 and priced a
 // farm that does not exist — with no test noticing. So pin that the farm's rake boosts

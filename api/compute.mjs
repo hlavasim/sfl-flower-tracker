@@ -41,10 +41,19 @@ export default async function handler(req, res) {
     const coinsPerSFL = req.query.coinsPerSFL !== undefined
       ? Number(req.query.coinsPerSFL)
       : (computeBettyRate(p2p).rate || 0);
+    // Rate-profile override for section=prices: different consumers (marks/deliveries,
+    // dashboard, roadmap, ROI) use different rate profiles today (task-F2-2a). Unparseable
+    // or absent must fall back to {} — never a 500 — so today's coinsPerSFL-only behaviour
+    // is unaffected when a caller doesn't send it.
+    let rates = {};
+    if (req.query.rates) {
+      try { rates = JSON.parse(req.query.rates); } catch { rates = {}; }
+    }
     const settings = {
       savedRecipes: req.query.recipes ? JSON.parse(req.query.recipes) : {},
       petSimulate: req.query.petSimulate === "1",
       coinsPerSFL,
+      ...rates,
     };
     let data;
     if (section === "cooking") data = buildCookingSection(farm, p2p, settings);

@@ -50,8 +50,14 @@ export function buildItemUniverse(prices) {
   return names;
 }
 
-// settings = { coinsPerSFL? } — forwarded verbatim as `rates` to itemMarketValue,
-// matching every existing caller's shape (see core/sections/cooking.mjs).
+// settings = { coinsPerSFL?, ...anyOtherRate } — forwarded VERBATIM as `rates` to
+// itemMarketValue, so it is not limited to coinsPerSFL: sflPerXP, treasureBoost,
+// gemsPerSFL, season all reach the resolver the same way (item-value.mjs reads them off
+// `rates.*`). This is how api/compute.mjs's `?rates=` query param takes effect for
+// section=prices — it is merged into `settings` before this function runs. Only
+// `coinsPerSFL` is also read directly below, for productionCost, which takes a bare
+// number rather than a rates object. Absent extra fields reproduces today's map
+// byte-for-byte (the existing tests pin this) — nothing about that contract changed.
 // prices = p2p price map (sfl.world/api/v1/prices .data.p2p), or {} if unavailable.
 export function buildPricesSection(farm, prices = {}, settings = {}) {
   const p2p = prices || {};
