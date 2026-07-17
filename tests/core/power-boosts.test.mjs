@@ -10,7 +10,8 @@ test("percent yield boost on a resource → yield_pct in that category", () => {
   assert.equal(e.length, 1);
   assert.equal(e[0].cat, "trees");
   assert.equal(e[0].type, "yield_pct");
-  assert.equal(e[0].amount, 10);
+  assert.equal(e[0].value, 10);
+  assert.equal(e[0].product, "Wood");
   assert.deepEqual(classifyToCategories(e), ["trees"]);
 });
 
@@ -18,7 +19,7 @@ test("flat yield boost on a resource → yield_flat", () => {
   const e = parseBoostEffects("+0.1 Wood", "X");
   assert.equal(e[0].cat, "trees");
   assert.equal(e[0].type, "yield_flat");
-  assert.equal(e[0].amount, 0.1);
+  assert.equal(e[0].value, 0.1);
 });
 
 test("a non-resource buff (Bumpkin XP) is not miscategorised as a yield", () => {
