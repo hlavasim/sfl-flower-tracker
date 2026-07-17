@@ -47,7 +47,7 @@ export function itemMarketValue(itemName, p2pPrices, _visited, rates, trace) {
         return 0;
       }
       total += ingPrice * qty;
-      if (trace) parts.push(`${qty + 1} × ${ing} @ ${ingPrice.toFixed(5)}`);
+      if (trace) parts.push(`${qty} × ${ing} @ ${ingPrice.toFixed(5)}`);
     }
     if (trace) return emit(trace, { item: itemName, method: "crafted recipe", formula: parts.join(" + "), value: total, steps: kids });
     return total;
