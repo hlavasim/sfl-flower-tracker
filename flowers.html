@@ -23842,6 +23842,13 @@
         }
       } catch(e) { console.warn("P2P prices fetch failed:", e); }
 
+      // F2-2c: marks passes no rates, so it reads the no-rates market-value profile from
+      // the shared price map (/api/compute?section=prices) instead of calling
+      // estimateItemSfl directly. PRICES(null) is null until the first fetch resolves;
+      // guard to {} so lookups fall through to the existing "|| 0" absence handling
+      // rather than throwing, and the arrival rerender (via main()) repaints with real data.
+      const _marksPriceMap = (PRICES(null) || {}).marketValue || {};
+
       // Use LIVE farm data for strategy (not stale snapshot)
       const liveFarm = liveData?.farm || null;
       if (liveFarm) {
@@ -23918,7 +23925,7 @@
         const allSources = [];
         for (const ka of kitchenAnalysis) {
           {
-            const kitchenCost = (estimateItemSfl(ka.item, _marksP2pPrices) || 0) * ka.amount;
+            const kitchenCost = (_marksPriceMap[ka.item] || 0) * ka.amount;
             allSources.push({
               type: "kitchen",
               label: `Donate ${ka.amount}\u00D7 ${ka.item}`, icon: ka.item,
@@ -23936,11 +23943,11 @@
         for (const pa of petAnalysis) {
           if (pa.dlv > 0) {
             // estimateItemSfl may fail for foods — fallback: compute from RECIPE_INGREDIENTS directly
-            let petUnitCost = estimateItemSfl(pa.food, _marksP2pPrices) || 0;
+            let petUnitCost = _marksPriceMap[pa.food] || 0;
             if (petUnitCost <= 0 && RECIPE_INGREDIENTS[pa.food]) {
               let rc = 0;
               for (const [ing, qty] of Object.entries(RECIPE_INGREDIENTS[pa.food])) {
-                const ip = _marksP2pPrices[ing] || estimateItemSfl(ing, _marksP2pPrices) || 0;
+                const ip = _marksP2pPrices[ing] || _marksPriceMap[ing] || 0;
                 rc += ip * qty;
               }
               petUnitCost = rc;
@@ -24250,7 +24257,7 @@
           // Simpler: for each resource, cost per delivery and marks per delivery
           // Use greedy: always pick the cheapest SFL/mark next delivery
           const resources = _kitReqs.map(r => {
-            const price = (estimateItemSfl(r.item, _marksP2pPrices) || 0) * r.amount;
+            const price = (_marksPriceMap[r.item] || 0) * r.amount;
             const stock = parseFloat(_inv[r.item] || 0) || 0;
             const haveDeliveries = r.amount > 0 ? Math.floor(stock / r.amount) : 0;
             const fulfilled = r.dailyFulfilled?.[_dayStr] || 0;
