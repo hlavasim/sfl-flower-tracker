@@ -24,7 +24,10 @@ and disagree in production today:
 
 ```
 Earthworm   _resolveItemSfl=0.008341   estimateItemSfl=0.001098   ×7.6
-Salt        _resolveItemSfl=0.006077   estimateItemSfl=0.004182   ×1.45
+Salt        _resolveItemSfl=0.006077   estimateItemSfl=0.004182   ← see the CORRECTION below:
+                                                                    0.006077 is an artifact of my
+                                                                    calling it without `extras`;
+                                                                    this farm really pays 0.003216
 Tuna        0.61892                    0            (only one prices fish)
 Rod         null                       0.087662     (only one prices tools)
 Sand Shovel null                       0.073687
@@ -45,7 +48,32 @@ Analysis of the branch order (the decisive finding):
 - **`estimateItemSfl`** checks **direct P2P first** (`:23112`), so it returns the market price.
 
 Verified against the price fixture: market Salt = `0.00416071`; `estimateItemSfl` returned `0.004182`
-(the market price, modulo drift) while `_resolveItemSfl` returned `0.006077` (the rake cost).
+(the market price, modulo drift) while `_resolveItemSfl` derived it from the rake.
+
+> **⚠ CORRECTION (2026-07-17) — the `0.006077` this section originally quoted was MY measurement
+> error, and the conclusion drawn from it was the wrong SHAPE.** I measured it by calling
+> `_resolveItemSfl(name, p2p, rate, skills)` in the browser — **omitting `extras`** — so the Salt
+> branch fell back to `SALT_BASE_YIELD` (10) and `coinMult` 1, pricing Salt as if the farm had no rake
+> boosts. Farm 155498 has Wide Rakes + Cheap Rakes + Salt Sculpture L6 + the Deep Sea Salt Cave
+> Background: `yieldPerRake=17`, `coinMult=0.72`. Real numbers:
+>
+> | | production | market |
+> |---|---|---|
+> | farm with NO rake boosts (what I accidentally measured) | 0.005995 | 0.004161 |
+> | **farm 155498, as it actually is** | **0.003216** | 0.004161 |
+>
+> **This farm rakes Salt CHEAPER than it can buy it** — the opposite of what I wrote. And the
+> direction is **farm-dependent**: a player flips the inequality by acquiring rake boosts. So
+> "production > market" was never a valid claim to make, for any farm.
+>
+> **The design is unaffected — the evidence for it was just wrong.** The two questions still give
+> different answers (0.003216 ≠ 0.004161) and `productionCost` still deliberately ignores the market.
+> What changes is how you PIN it: never assert a magnitude or a direction. Plant an absurd market
+> price and assert who moves — `marketValue["Salt"]` follows it to 999, `productionCost["Salt"]`
+> does not budge. That holds for every farm, boosted or not.
+>
+> Caught by the F2-1d implementer refusing to force the brief's failing test. It is the fourth time
+> on this project that a number nobody re-derived turned out to be an artifact of how it was measured.
 
 **So Salt is NOT a bug.** They answer two different questions:
 - *"What is this item worth?"* → market price when one exists. (Dashboard, Treasury, ROI.)

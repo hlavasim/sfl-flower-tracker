@@ -236,16 +236,26 @@ module; what stays separate is the policy.
 
 - [ ] **Step 1: Write the failing test — pin the divergence deliberately**
 
+> ⚠ **This step originally asserted `cost.price > market` — that was WRONG.** The `0.006077` it
+> rested on was measured by calling the resolver without `extras`, i.e. pricing a farm with no rake
+> boosts. Farm 155498 has them (`yieldPerRake=17`, `coinMult=0.72`) and really pays **0.003216** —
+> CHEAPER than the market's 0.004161. Worse, the direction is **farm-dependent**: a player flips it
+> by acquiring Wide Rakes / Cheap Rakes / Salt Sculpture. Never assert a magnitude or a direction
+> here. Pin the SEMANTIC instead — plant an absurd market price and assert who moves:
+
 ```js
-test("productionCost ignores the market for Salt; marketValue does not — on purpose", () => {
-  // Salt is on the market (0.00416071) but you rake your own, so a cooking cost must use
-  // the rake's cost, not the price. This asymmetry IS the feature; if it ever collapses,
-  // one of the two questions has been silently answered with the other's answer.
+test("productionCost ignores the market; marketValue follows it — the two questions stay two", () => {
   const market = itemMarketValue("Salt", p2p, null, RATES);
   const cost = itemProductionCost("Salt", p2p, RATES.coinsPerSFL, {}, undefined, {});
   assert.equal(market, p2p["Salt"]);
   assert.equal(cost.source, "salt");
-  assert.ok(cost.price > market, `production ${cost.price} should exceed market ${market}`);
+
+  // Plant an absurd market price: marketValue must follow it, productionCost must not budge.
+  // Holds for ANY farm, boosted or not, because it never asks which number is larger.
+  const absurd = { ...p2p, Salt: 999 };
+  assert.equal(itemMarketValue("Salt", absurd, null, RATES), 999);
+  assert.equal(itemProductionCost("Salt", absurd, RATES.coinsPerSFL, {}, undefined, {}).price, cost.price);
+  assert.notEqual(cost.price, market);
 });
 
 test("productionCost returns null for something you cannot make", () => {
