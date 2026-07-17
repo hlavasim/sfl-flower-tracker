@@ -1,11 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
-import { itemMarketValue } from "../../core/engine/item-value.mjs";
+import { itemMarketValue, itemProductionCost } from "../../core/engine/item-value.mjs";
 import { CRAFTED_INGREDIENT_RECIPES, TREASURE_SELL_PRICES, CRUSTACEAN_RECIPES } from "../../core/data/crafting.mjs";
 import { FLOWER_RECIPES, DOLL_RECIPES, RECIPE_INGREDIENTS } from "../../core/data/recipes.mjs";
 import { SEED_COSTS, EXOTIC_CROPS_TICKET_COST, GIANT_FRUIT_SELL_PRICES, TOOL_COSTS, FLOWER_SEED_COIN_COSTS, ITEM_XP_VALUES, GIANT_ITEM_COIN_PRICES } from "../../core/data/economy.mjs";
-import { FISH_MARKET_RECIPES, BAIT_WORM_YIELD } from "../../core/data/fishing.mjs";
+import { FISH_MARKET_RECIPES, FISH_DATA, BAIT_WORM_YIELD } from "../../core/data/fishing.mjs";
+import { COOKING_INGREDIENTS, SALT_RAKE_COST, SALT_BASE_YIELD } from "../../core/data/cooking.mjs";
 
 const p2p = JSON.parse(readFileSync(new URL("../fixtures/p2p-prices.json", import.meta.url)));
 const R = { coinsPerSFL: 1061.0079575596817 };
@@ -32,9 +33,37 @@ test("the trace parameter is inert when absent (value unchanged)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Hand-computed formula pin — the value-equals test below is tautological (two
+// Task 2: itemProductionCost trace sink
+// ---------------------------------------------------------------------------
+
+test("productionCost trace explains the Salt rake derivation, value matches", () => {
+  const plain = itemProductionCost("Salt", p2p, R.coinsPerSFL, {}, undefined, {});
+  const trace = [];
+  const traced = itemProductionCost("Salt", p2p, R.coinsPerSFL, {}, undefined, {}, trace);
+  assert.equal(traced.price, plain.price);
+  assert.equal(trace[0].value, plain.price);
+  assert.equal(trace[0].method, "salt rake");
+  assert.match(trace[0].formula, /rake/i);
+});
+
+test("the trace parameter is inert for itemProductionCost when absent (value unchanged)", () => {
+  const a = itemProductionCost("Salt", p2p, R.coinsPerSFL, {}, undefined, {});
+  const b = itemProductionCost("Salt", p2p, R.coinsPerSFL, {}, undefined, {}, undefined);
+  assert.equal(a.price, b.price);
+  assert.equal(a.source, b.source);
+});
+
+test("a null (unpriceable) production result emits no trace node", () => {
+  const trace = [];
+  const result = itemProductionCost("Definitely Not An Item", p2p, R.coinsPerSFL, {}, undefined, {}, trace);
+  assert.equal(result, null);
+  assert.equal(trace.length, 0, "no value to explain, so nothing is pushed");
+});
+
+// ---------------------------------------------------------------------------
+// Hand-computed formula pins — the value-equals test below is tautological (two
 // calls of the same function); it does NOT prove the FORMULA text reflects the
-// real numbers. This pins the exact string for a known, hand-computed derivation.
+// real numbers. These pin the exact string for two known, hand-computed derivations.
 // ---------------------------------------------------------------------------
 
 test("Cheese market trace formula pins the real numbers: 3 x Milk @ market price", () => {
@@ -50,9 +79,21 @@ test("Cheese market trace formula pins the real numbers: 3 x Milk @ market price
   assert.equal(trace[0].steps[0].value, p2p["Milk"]);
 });
 
+test("Salt production trace formula pins the rake numbers: coins + Wood material / yield", () => {
+  const trace = [];
+  const result = itemProductionCost("Salt", p2p, R.coinsPerSFL, {}, undefined, {}, trace);
+  const coinSFL = SALT_RAKE_COST.coins / R.coinsPerSFL;
+  const wood = p2p["Wood"];
+  const expectedPrice = (coinSFL + wood * 3) / SALT_BASE_YIELD;
+  assert.ok(Math.abs(result.price - expectedPrice) < 1e-9);
+  const expectedFormula = `Salt Rake: (${SALT_RAKE_COST.coins}c × 1.00 / ${R.coinsPerSFL.toFixed(0)} c/SFL + 3 × Wood @ ${wood.toFixed(5)}) / ${SALT_BASE_YIELD} yield`;
+  assert.equal(trace[0].formula, expectedFormula);
+  assert.equal(trace[0].value, result.price);
+});
+
 // ---------------------------------------------------------------------------
 // Value-can't-lie: over MANY items (built from the raw data tables — an
-// independent source, not from calling the resolver itself), the traced
+// independent source, not from calling the resolvers themselves), the traced
 // call's top-level value must equal the untraced return. Zero mismatches.
 // ---------------------------------------------------------------------------
 
@@ -91,4 +132,38 @@ test(`itemMarketValue: trace[0].value equals the untraced return, across ${marke
     checked++;
   }
   assert.ok(checked > 100, `expected a broad item spread, only checked ${checked}`);
+});
+
+const productionItems = new Set([
+  "Salt",
+  ...Object.keys(p2p),
+  ...Object.keys(FISH_DATA),
+  ...Object.keys(BAIT_WORM_YIELD),
+  ...Object.keys(FISH_MARKET_RECIPES),
+  ...Object.keys(COOKING_INGREDIENTS),
+  ...Object.keys(CRAFTED_INGREDIENT_RECIPES),
+  ...Object.keys(CRUSTACEAN_RECIPES),
+  ...Object.keys(TREASURE_SELL_PRICES),
+  "Definitely Not An Item",
+]);
+
+test(`itemProductionCost: trace[0].value equals plain.price across ${productionItems.size} items, null stays untraced`, () => {
+  let checked = 0, priced = 0;
+  for (const item of productionItems) {
+    const plain = itemProductionCost(item, p2p, RATES_FULL.coinsPerSFL, {}, undefined, {});
+    const trace = [];
+    const traced = itemProductionCost(item, p2p, RATES_FULL.coinsPerSFL, {}, undefined, {}, trace);
+    if (plain === null) {
+      assert.equal(traced, null, `expected null for ${item}`);
+      assert.equal(trace.length, 0, `expected no trace node for unpriceable ${item}`);
+    } else {
+      assert.equal(traced.price, plain.price, `traced price mismatch for ${item}`);
+      assert.equal(trace.length, 1, `expected exactly one top-level trace node for ${item}`);
+      assert.equal(trace[0].value, plain.price, `trace[0].value mismatch for ${item}`);
+      priced++;
+    }
+    checked++;
+  }
+  assert.ok(checked > 50, `expected a broad item spread, only checked ${checked}`);
+  assert.ok(priced > 10, `expected a good number of items to actually price, only ${priced} did`);
 });

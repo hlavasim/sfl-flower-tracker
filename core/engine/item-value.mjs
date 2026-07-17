@@ -334,7 +334,12 @@ export function itemMarketValue(itemName, p2pPrices, _visited, rates, trace) {
 // Resolution order: Salt (rake) → P2P → FISH_DATA → bait worm → Fish Market recipe →
 // COOKING_INGREDIENTS recursion → CRAFTED_INGREDIENT_RECIPES → CRUSTACEAN_RECIPES →
 // TREASURE_SELL_PRICES → null
-export function itemProductionCost(itemName, p2p, coinsPerSFL, skills, _seen, extras) {
+//
+// Returns {price, source}|null — that shape is unchanged by tracing. A null return means
+// "unpriceable" and is never traced (there is no value to explain); every return that
+// resolves to a real object records ONE trace node, when a sink is passed, describing how
+// `price` was derived (value: result.price).
+export function itemProductionCost(itemName, p2p, coinsPerSFL, skills, _seen, extras, trace) {
   _seen = _seen || new Set();
   if (_seen.has(itemName)) return null;
   _seen.add(itemName);
@@ -345,16 +350,26 @@ export function itemProductionCost(itemName, p2p, coinsPerSFL, skills, _seen, ex
     const coinMult = (extras && typeof extras.saltRakeCoinMult === "number") ? extras.saltRakeCoinMult : 1;
     const coinSFL = coinsPerSFL > 0 ? (SALT_RAKE_COST.coins * coinMult) / coinsPerSFL : 0;
     let matSFL = 0;
+    const matParts = trace ? [] : undefined;
     for (const [m, q] of Object.entries(SALT_RAKE_COST.materials)) {
-      matSFL += (parseFloat(p2p[m]) || 0) * q;
+      const mp = parseFloat(p2p[m]) || 0;
+      matSFL += mp * q;
+      if (trace) matParts.push(`${q} × ${m} @ ${mp.toFixed(5)}`);
     }
     const cost = (coinSFL + matSFL) / yieldPerRake;
-    return cost > 0 ? { price: cost, source: "salt" } : null;
+    if (cost <= 0) return null;
+    const result = { price: cost, source: "salt" };
+    if (trace) emit(trace, { item: itemName, method: "salt rake", formula: `Salt Rake: (${SALT_RAKE_COST.coins}c × ${coinMult.toFixed(2)} / ${coinsPerSFL.toFixed(0)} c/SFL + ${matParts.join(" + ")}) / ${yieldPerRake} yield`, value: cost });
+    return result;
   }
 
   // 1. Direct P2P
   const direct = parseFloat(p2p[itemName]) || 0;
-  if (direct > 0) return { price: direct, source: "P2P" };
+  if (direct > 0) {
+    const result = { price: direct, source: "P2P" };
+    if (trace) emit(trace, { item: itemName, method: "market price", formula: "P2P", value: direct });
+    return result;
+  }
 
   // 2. Fish — for Aging Shed (extras.fishAsRod) treat as rod cost / yield-per-cast;
   //    otherwise use empirical fishing cost (rod + bait + chum / probability)
@@ -364,17 +379,25 @@ export function itemProductionCost(itemName, p2p, coinsPerSFL, skills, _seen, ex
       const tier = FISH_TIER_MAP[itemName];
       const yieldByTier = (extras && extras.fishYieldByTier) || {};
       const yieldPerCast = (tier && yieldByTier[tier]) || 1;
-      return rod > 0 ? { price: rod / yieldPerCast, source: "fish-rod" } : null;
+      if (rod <= 0) return null;
+      const result = { price: rod / yieldPerCast, source: "fish-rod" };
+      if (trace) emit(trace, { item: itemName, method: "fish rod", formula: `rod ${rod.toFixed(5)} SFL / ${yieldPerCast} yield`, value: result.price });
+      return result;
     }
     const fc = computeFishEffectiveCost(itemName, p2p, coinsPerSFL, skills);
-    if (fc) return { price: fc.sfl, source: "fish", fc };
-    return null;
+    if (!fc) return null;
+    const result = { price: fc.sfl, source: "fish", fc };
+    if (trace) emit(trace, { item: itemName, method: "fish rod+bait", formula: `rod ${fc.rodSFL.toFixed(5)} + bait ${fc.baitSFL.toFixed(5)}${fc.chumCostPerCast ? ` + chum ${fc.chumCostPerCast.toFixed(5)}` : ""} / ${fc.prob} prob`, value: result.price });
+    return result;
   }
 
   // 3. Worm-bait (Earthworm/Grub/Red Wiggler from COMPOST_RECIPES)
   if (BAIT_WORM_YIELD[itemName]) {
     const c = computeBaitCostSFL(itemName, p2p);
-    return c > 0 ? { price: c, source: "bait" } : null;
+    if (c <= 0) return null;
+    const result = { price: c, source: "bait" };
+    if (trace) emit(trace, { item: itemName, method: "bait", formula: `avg composter cost / ${BAIT_WORM_YIELD[itemName]} worm yield`, value: c });
+    return result;
   }
 
   // 3b. Fish Market processed (Fish Flake / Fish Stick / Fish Oil / Crab Stick)
@@ -382,41 +405,62 @@ export function itemProductionCost(itemName, p2p, coinsPerSFL, skills, _seen, ex
     const seasonRecipes = FISH_MARKET_RECIPES[itemName];
     // Use cheapest season (best player can do)
     let bestCost = null;
+    let bestFormula = trace ? null : undefined;
+    let bestKids;
     for (const s of Object.keys(seasonRecipes)) {
       const recipe = seasonRecipes[s];
       let total = 0, missing = false;
+      const seasonKids = trace ? [] : undefined;
+      const parts = trace ? [] : undefined;
       for (const [sub, q] of Object.entries(recipe)) {
-        const r = itemProductionCost(sub, p2p, coinsPerSFL, skills, _seen, extras);
+        const r = itemProductionCost(sub, p2p, coinsPerSFL, skills, _seen, extras, seasonKids);
         if (!r) { missing = true; break; }
         total += r.price * q;
+        if (trace) parts.push(`${q} × ${sub} @ ${r.price.toFixed(5)}`);
       }
-      if (!missing && (bestCost == null || total < bestCost)) bestCost = total;
+      if (!missing && (bestCost == null || total < bestCost)) {
+        bestCost = total;
+        if (trace) { bestFormula = `${s}: ${parts.join(" + ")}`; bestKids = seasonKids; }
+      }
     }
-    return bestCost != null ? { price: bestCost, source: "fish-market" } : null;
+    if (bestCost == null) return null;
+    const result = { price: bestCost, source: "fish-market" };
+    if (trace) emit(trace, { item: itemName, method: "fish market", formula: bestFormula, value: bestCost, steps: bestKids });
+    return result;
   }
 
   // 4. Recipe ingredient (chained recipes like Cabbers n Mash → Mashed Potato)
   const recipe = COOKING_INGREDIENTS[itemName];
   if (recipe) {
     let total = 0;
+    const kids = trace ? [] : undefined;
+    const parts = trace ? [] : undefined;
     for (const [sub, q] of Object.entries(recipe)) {
-      const r = itemProductionCost(sub, p2p, coinsPerSFL, skills, _seen, extras);
+      const r = itemProductionCost(sub, p2p, coinsPerSFL, skills, _seen, extras, kids);
       if (!r) return null;
       total += r.price * q;
+      if (trace) parts.push(`${q} × ${sub} @ ${r.price.toFixed(5)}`);
     }
-    return { price: total, source: "recipe" };
+    const result = { price: total, source: "recipe" };
+    if (trace) emit(trace, { item: itemName, method: "cooking recipe", formula: parts.join(" + "), value: total, steps: kids });
+    return result;
   }
 
   // 5. Crafted ingredient (Cheese, Kernel Blend, Hay, etc.)
   if (typeof CRAFTED_INGREDIENT_RECIPES !== "undefined" && CRAFTED_INGREDIENT_RECIPES[itemName]) {
     const recipe = CRAFTED_INGREDIENT_RECIPES[itemName];
     let total = 0;
+    const kids = trace ? [] : undefined;
+    const parts = trace ? [] : undefined;
     for (const [sub, q] of Object.entries(recipe)) {
-      const r = itemProductionCost(sub, p2p, coinsPerSFL, skills, _seen, extras);
+      const r = itemProductionCost(sub, p2p, coinsPerSFL, skills, _seen, extras, kids);
       if (!r) return null;
       total += r.price * q;
+      if (trace) parts.push(`${q} × ${sub} @ ${r.price.toFixed(5)}`);
     }
-    return { price: total, source: "crafted" };
+    const result = { price: total, source: "crafted" };
+    if (trace) emit(trace, { item: itemName, method: "crafted recipe", formula: parts.join(" + "), value: total, steps: kids });
+    return result;
   }
 
   // 6. Crustacean (Blue Crab, Lobster, etc. via Crab Pot + chum)
@@ -424,27 +468,42 @@ export function itemProductionCost(itemName, p2p, coinsPerSFL, skills, _seen, ex
     const cr = CRUSTACEAN_RECIPES[itemName];
     // Pot price (one-time setup, but treat as per-catch since we lack pot-cycle accounting)
     let total = 0;
+    const kids = trace ? [] : undefined;
+    let chumLabel = trace ? "" : undefined;
     if (cr.chum && cr.qty > 0) {
-      const chumR = itemProductionCost(cr.chum, p2p, coinsPerSFL, skills, _seen, extras);
-      if (chumR) total += chumR.price * cr.qty;
+      const chumR = itemProductionCost(cr.chum, p2p, coinsPerSFL, skills, _seen, extras, kids);
+      if (chumR) {
+        total += chumR.price * cr.qty;
+        if (trace) chumLabel = `${cr.qty} × ${cr.chum} @ ${chumR.price.toFixed(5)}`;
+      }
       // Try cheaper alternate chum
       if (cr.alt) {
         const altMatch = cr.alt.match(/^(.+?)\s*x(\d+)$/);
         if (altMatch) {
-          const altR = itemProductionCost(altMatch[1], p2p, coinsPerSFL, skills, _seen, extras);
+          const altR = itemProductionCost(altMatch[1], p2p, coinsPerSFL, skills, _seen, extras, kids);
           if (altR) {
             const altCost = altR.price * parseInt(altMatch[2]);
-            if (altCost > 0 && (total <= 0 || altCost < total)) total = altCost;
+            if (altCost > 0 && (total <= 0 || altCost < total)) {
+              total = altCost;
+              if (trace) chumLabel = `${altMatch[2]} × ${altMatch[1]} @ ${altR.price.toFixed(5)} (alt)`;
+            }
           }
         }
       }
     }
-    return total > 0 ? { price: total, source: "crustacean" } : null;
+    if (total <= 0) return null;
+    const result = { price: total, source: "crustacean" };
+    if (trace) emit(trace, { item: itemName, method: "crustacean", formula: chumLabel || "no priceable chum", value: total, steps: kids });
+    return result;
   }
 
   // 7. Treasure / coin-priced items (Crab, Sea Cucumber, etc. → coins / coinsPerSFL)
   if (typeof TREASURE_SELL_PRICES !== "undefined" && TREASURE_SELL_PRICES[itemName] && coinsPerSFL > 0) {
-    return { price: TREASURE_SELL_PRICES[itemName] / coinsPerSFL, source: "treasure" };
+    const coins = TREASURE_SELL_PRICES[itemName];
+    const value = coins / coinsPerSFL;
+    const result = { price: value, source: "treasure" };
+    if (trace) emit(trace, { item: itemName, method: "treasure", formula: `${coins}c / ${coinsPerSFL.toFixed(0)} c/SFL`, value });
+    return result;
   }
 
   // 8. Generic fish XP-based fallback (if not in FISH_DATA but in ITEM_XP_VALUES)
