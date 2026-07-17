@@ -47,7 +47,12 @@ export function computeFishYieldPerCast(farm, tier) {
 
 // Compute total SFL cost per cook (resolves fish, bait, chained recipes recursively)
 // Returns: { total, items, hasUnpriced } where items[i] = { name, qty, price, cost, source, selfProduced? }
-export function computeRecipeCost(recipeName, p2p, coinsPerSFL, skills, extras) {
+// The optional `trace` sink (an array) makes this EXPLAIN as it computes: when present it
+// pushes one {item, method, formula, value, unit, steps} node — the recipe cost as
+// Σ (qty × ingredient production cost) — each ingredient step carrying itemProductionCost's
+// OWN derivation as its child, so crafted ingredients expand. Absent, value/behaviour are
+// unchanged. Mirrors the opt-in trace in item-value.mjs and cooking.mjs.
+export function computeRecipeCost(recipeName, p2p, coinsPerSFL, skills, extras, trace) {
   if (!p2p) return null;
   const ingredients = COOKING_INGREDIENTS[recipeName];
   if (!ingredients) return null;
@@ -61,16 +66,28 @@ export function computeRecipeCost(recipeName, p2p, coinsPerSFL, skills, extras) 
   if (_recData && _recData.building === "Aging Shed") {
     extras = Object.assign({ fishAsRod: true }, extras || {});
   }
+  const parts = trace ? [] : null;
+  const kids = trace ? [] : null;
   for (const [itemName, qty] of Object.entries(ingredients)) {
-    const r = itemProductionCost(itemName, p2p, coinsPerSFL, skills, undefined, extras);
+    const ingTrace = trace ? [] : undefined;
+    const r = itemProductionCost(itemName, p2p, coinsPerSFL, skills, undefined, extras, ingTrace);
     if (r) {
       const cost = r.price * qty;
       total += cost;
       items.push({ name: itemName, qty, price: r.price, cost, source: r.source, fc: r.fc });
+      if (trace) {
+        parts.push(`${qty} × ${itemName} @ ${r.price.toFixed(5)}`);
+        kids.push({ item: itemName, method: "ingredient", formula: `${qty} × @ ${r.price.toFixed(5)}`, value: cost, unit: "SFL", steps: ingTrace });
+      }
     } else {
       hasUnpriced = true;
       items.push({ name: itemName, qty, price: 0, cost: 0, selfProduced: true });
+      if (trace) {
+        parts.push(`${itemName} (self)`);
+        kids.push({ item: itemName, method: "ingredient", formula: "self-produced (unpriced)", value: 0, unit: "SFL" });
+      }
     }
   }
+  if (trace) trace.push({ item: recipeName, method: "recipe cost", formula: parts.join(" + "), value: total, unit: "SFL", steps: kids });
   return { total, items, hasUnpriced };
 }

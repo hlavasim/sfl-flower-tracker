@@ -32,6 +32,7 @@ export function buildCookingSection(farm, prices = {}, settings = {}) {
   };
   const buildings = {};
   const cookingTrace = {};   // per-building xp/day derivation, only filled when settings.explain
+  const costTrace = {};      // per-building selected-recipe cost/cook derivation (explain only)
   let total = 0;
   for (const bd of COOKING_BUILDING_NAMES) {
     // The Aging Shed must still be PLACED to count, but once placed its slots scale with its
@@ -90,6 +91,11 @@ export function buildCookingSection(farm, prices = {}, settings = {}) {
           { item: "cooks/day", method: "throughput", formula: `86400s / ${Math.round(time)}s` + (count > 1 ? ` × ${count} buildings` : ""), value: cooksPerDay, unit: "cooks/day" },
         ],
       };
+      // Cost/cook derivation for the selected recipe (Σ ingredient production costs). p2p may
+      // be {} (unavailable) → computeRecipeCost returns null and no cost trace is attached.
+      const costSink = [];
+      if (p2p) computeRecipeCost(selName, p2p, coinsPerSFL, skills, extras, costSink);
+      if (costSink.length) costTrace[bd] = costSink[0];
     }
   }
   const pi = boosts.petStreakInfo || {};
@@ -117,6 +123,6 @@ export function buildCookingSection(farm, prices = {}, settings = {}) {
     // page's boost lists (flowers.html:10707-10717) and xpLabel() building/honey tags.
     boosts: { xpBoosts: boosts.xpBoosts || [], timeBoosts: boosts.timeBoosts || [], petStreakInfo: pi },
     bankedFood: { totalXp: bankedXP, items: foodInInventory },
-    ...(settings.explain ? { cookingTrace } : {}),
+    ...(settings.explain ? { cookingTrace, costTrace } : {}),
   };
 }
