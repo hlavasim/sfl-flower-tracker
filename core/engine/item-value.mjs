@@ -5,28 +5,51 @@ import { CRAFTED_INGREDIENT_RECIPES, TREASURE_SELL_PRICES, COMPOST_RECIPES, CRUS
 import { FISH_MARKET_RECIPES, FISH_DATA, FISH_TIER_MAP, BAIT_WORM_YIELD, FISHING_ROD_COST } from "../data/fishing.mjs";
 import { COOKING_INGREDIENTS, SALT_RAKE_COST, SALT_BASE_YIELD } from "../data/cooking.mjs";
 
+// Trace sink for the item-value resolvers. When a caller passes a `trace` array as the
+// last argument, each traced function pushes ONE node per return path describing how
+// that value was derived: { item, method, formula, value, steps? } — steps are child
+// nodes from recursive ingredient calls, so the tree mirrors the actual recursion.
+// Every call site only builds the node (and any child sink) inside `if (trace)`, so the
+// hot, no-trace path is unchanged: the same value computation, plus a single falsy check
+// per return, with no extra string/array allocation.
+function emit(trace, node) { if (trace) trace.push(node); return node.value; }
+
 // Market-first item value resolver — moved verbatim from flowers.html's estimateItemSfl
 // (~:23110-23300). Prefers a direct P2P market price; falls back through a fixed chain of
 // derivations (crafted/food recipes, dolls, tools, exotic crops, seeds, treasure, XP, etc.)
 // when no market price exists. 0 means "unknown" — ~29 call sites depend on that contract.
-export function itemMarketValue(itemName, p2pPrices, _visited, rates) {
+export function itemMarketValue(itemName, p2pPrices, _visited, rates, trace) {
   // Direct P2P price
-  if (p2pPrices[itemName]) return p2pPrices[itemName];
+  if (p2pPrices[itemName]) {
+    const value = p2pPrices[itemName];
+    if (trace) return emit(trace, { item: itemName, method: "market price", formula: "P2P", value });
+    return value;
+  }
 
   // Prevent infinite recursion
   const visited = _visited || new Set();
-  if (visited.has(itemName)) return 0;
+  if (visited.has(itemName)) {
+    if (trace) return emit(trace, { item: itemName, method: "cycle", formula: "circular reference (already visited)", value: 0 });
+    return 0;
+  }
   visited.add(itemName);
 
   // Crafted ingredient (e.g., Cheese = 3 Milk)
   const craftedRecipe = CRAFTED_INGREDIENT_RECIPES[itemName];
   if (craftedRecipe) {
     let total = 0;
+    const kids = trace ? [] : undefined;
+    const parts = trace ? [] : undefined;
     for (const [ing, qty] of Object.entries(craftedRecipe)) {
-      const ingPrice = itemMarketValue(ing, p2pPrices, visited, rates);
-      if (ingPrice <= 0) return 0;
+      const ingPrice = itemMarketValue(ing, p2pPrices, visited, rates, kids);
+      if (ingPrice <= 0) {
+        if (trace) return emit(trace, { item: itemName, method: "crafted recipe", formula: `unpriceable ingredient: ${ing}`, value: 0, steps: kids });
+        return 0;
+      }
       total += ingPrice * qty;
+      if (trace) parts.push(`${qty} × ${ing} @ ${ingPrice.toFixed(5)}`);
     }
+    if (trace) return emit(trace, { item: itemName, method: "crafted recipe", formula: parts.join(" + "), value: total, steps: kids });
     return total;
   }
 
@@ -34,11 +57,18 @@ export function itemMarketValue(itemName, p2pPrices, _visited, rates) {
   const foodRecipe = RECIPE_INGREDIENTS[itemName];
   if (foodRecipe) {
     let total = 0;
+    const kids = trace ? [] : undefined;
+    const parts = trace ? [] : undefined;
     for (const [ing, qty] of Object.entries(foodRecipe)) {
-      const ingPrice = itemMarketValue(ing, p2pPrices, visited, rates);
-      if (ingPrice <= 0) return 0;
+      const ingPrice = itemMarketValue(ing, p2pPrices, visited, rates, kids);
+      if (ingPrice <= 0) {
+        if (trace) return emit(trace, { item: itemName, method: "food recipe", formula: `unpriceable ingredient: ${ing}`, value: 0, steps: kids });
+        return 0;
+      }
       total += ingPrice * qty;
+      if (trace) parts.push(`${qty} × ${ing} @ ${ingPrice.toFixed(5)}`);
     }
+    if (trace) return emit(trace, { item: itemName, method: "food recipe", formula: parts.join(" + "), value: total, steps: kids });
     return total;
   }
 
@@ -46,20 +76,35 @@ export function itemMarketValue(itemName, p2pPrices, _visited, rates) {
   if (itemName === "Barn Delight") {
     const lemon = p2pPrices["Lemon"] || 0;
     const honey = p2pPrices["Honey"] || 0;
-    if (lemon > 0 && honey > 0) return 5 * lemon + 3 * honey;
+    if (lemon > 0 && honey > 0) {
+      const value = 5 * lemon + 3 * honey;
+      if (trace) return emit(trace, { item: itemName, method: "food recipe", formula: `5 × Lemon @ ${lemon.toFixed(5)} + 3 × Honey @ ${honey.toFixed(5)}`, value });
+      return value;
+    }
+    if (trace) return emit(trace, { item: itemName, method: "food recipe", formula: "Lemon or Honey unpriced", value: 0 });
     return 0;
   }
 
   // Doll recipes
   if (typeof DOLL_RECIPES !== "undefined" && DOLL_RECIPES[itemName]) {
     const recipe = DOLL_RECIPES[itemName];
-    if (recipe.length === 0) return 0;
-    let total = 0;
-    for (const { item, qty } of recipe) {
-      const ingPrice = itemMarketValue(item, p2pPrices, visited, rates);
-      if (ingPrice <= 0) return 0;
-      total += ingPrice * qty;
+    if (recipe.length === 0) {
+      if (trace) return emit(trace, { item: itemName, method: "doll recipe", formula: "empty recipe", value: 0 });
+      return 0;
     }
+    let total = 0;
+    const kids = trace ? [] : undefined;
+    const parts = trace ? [] : undefined;
+    for (const { item, qty } of recipe) {
+      const ingPrice = itemMarketValue(item, p2pPrices, visited, rates, kids);
+      if (ingPrice <= 0) {
+        if (trace) return emit(trace, { item: itemName, method: "doll recipe", formula: `unpriceable ingredient: ${item}`, value: 0, steps: kids });
+        return 0;
+      }
+      total += ingPrice * qty;
+      if (trace) parts.push(`${qty} × ${item} @ ${ingPrice.toFixed(5)}`);
+    }
+    if (trace) return emit(trace, { item: itemName, method: "doll recipe", formula: parts.join(" + "), value: total, steps: kids });
     return total;
   }
 
@@ -67,12 +112,16 @@ export function itemMarketValue(itemName, p2pPrices, _visited, rates) {
   if (typeof TOOL_COSTS !== "undefined" && TOOL_COSTS[itemName] && rates && rates.coinsPerSFL > 0) {
     const tool = TOOL_COSTS[itemName];
     let total = tool.coins / rates.coinsPerSFL;
+    const kids = trace ? [] : undefined;
+    const parts = trace ? [`${tool.coins}c / ${rates.coinsPerSFL.toFixed(0)} c/SFL`] : undefined;
     if (tool.materials) {
       for (const [mat, qty] of Object.entries(tool.materials)) {
-        const matPrice = itemMarketValue(mat, p2pPrices, visited, rates);
+        const matPrice = itemMarketValue(mat, p2pPrices, visited, rates, kids);
         total += matPrice * qty;
+        if (trace) parts.push(`${qty} × ${mat} @ ${matPrice.toFixed(5)}`);
       }
     }
+    if (trace) return emit(trace, { item: itemName, method: "tool cost", formula: parts.join(" + "), value: total, steps: kids });
     return total;
   }
 
@@ -81,92 +130,151 @@ export function itemMarketValue(itemName, p2pPrices, _visited, rates) {
   if (typeof EXOTIC_CROPS_TICKET_COST !== "undefined"
       && EXOTIC_CROPS_TICKET_COST[itemName]
       && rates && rates.coinsPerSFL > 0) {
-    return (EXOTIC_CROPS_TICKET_COST[itemName] * POTION_TICKET_COIN_VALUE) / rates.coinsPerSFL;
+    const tickets = EXOTIC_CROPS_TICKET_COST[itemName];
+    const value = (tickets * POTION_TICKET_COIN_VALUE) / rates.coinsPerSFL;
+    if (trace) return emit(trace, { item: itemName, method: "exotic crop", formula: `${tickets} tickets × ${POTION_TICKET_COIN_VALUE}c / ${rates.coinsPerSFL.toFixed(0)} c/SFL`, value });
+    return value;
   }
   // Giant fruits — random chance from fruit trees, not buyable. Approximate
   // via NPC sellPrice as a rough "value to farmer" proxy.
   if (typeof GIANT_FRUIT_SELL_PRICES !== "undefined"
       && GIANT_FRUIT_SELL_PRICES[itemName]
       && rates && rates.coinsPerSFL > 0) {
-    return GIANT_FRUIT_SELL_PRICES[itemName] / rates.coinsPerSFL;
+    const coins = GIANT_FRUIT_SELL_PRICES[itemName];
+    const value = coins / rates.coinsPerSFL;
+    if (trace) return emit(trace, { item: itemName, method: "giant fruit", formula: `${coins}c / ${rates.coinsPerSFL.toFixed(0)} c/SFL`, value });
+    return value;
   }
 
   // Seed costs (coins only) — SEED_COSTS keyed by crop name, items come as "X Seed" or "X Plant"
   if (typeof SEED_COSTS !== "undefined" && rates && rates.coinsPerSFL > 0) {
     const cropName = itemName.endsWith(" Seed") ? itemName.slice(0, -5) : itemName.endsWith(" Plant") ? itemName.slice(0, -6) : itemName;
-    if (SEED_COSTS[cropName]) return SEED_COSTS[cropName] / rates.coinsPerSFL;
+    if (SEED_COSTS[cropName]) {
+      const coins = SEED_COSTS[cropName];
+      const value = coins / rates.coinsPerSFL;
+      if (trace) return emit(trace, { item: itemName, method: "seed cost", formula: `${coins}c / ${rates.coinsPerSFL.toFixed(0)} c/SFL`, value });
+      return value;
+    }
   }
 
   // Love Charm: 50 LC = 1 SFL
-  if (itemName === "Love Charm") return 1 / 50;
+  if (itemName === "Love Charm") {
+    if (trace) return emit(trace, { item: itemName, method: "love charm", formula: "50 LC / SFL", value: 1 / 50 });
+    return 1 / 50;
+  }
 
   // Flower seed coin costs
   if (typeof FLOWER_SEED_COIN_COSTS !== "undefined" && FLOWER_SEED_COIN_COSTS[itemName] && rates && rates.coinsPerSFL > 0) {
-    return FLOWER_SEED_COIN_COSTS[itemName] / rates.coinsPerSFL;
+    const coins = FLOWER_SEED_COIN_COSTS[itemName];
+    const value = coins / rates.coinsPerSFL;
+    if (trace) return emit(trace, { item: itemName, method: "flower seed", formula: `${coins}c / ${rates.coinsPerSFL.toFixed(0)} c/SFL`, value });
+    return value;
   }
 
   // Flowers → seed cost (via FLOWER_RECIPES; input flower not counted as it appears separately in diff)
   if (typeof FLOWER_RECIPES !== "undefined" && FLOWER_RECIPES[itemName]) {
     const seedName = FLOWER_RECIPES[itemName].seed;
     if (typeof FLOWER_SEED_COIN_COSTS !== "undefined" && FLOWER_SEED_COIN_COSTS[seedName] && rates && rates.coinsPerSFL > 0) {
-      return FLOWER_SEED_COIN_COSTS[seedName] / rates.coinsPerSFL;
+      const coins = FLOWER_SEED_COIN_COSTS[seedName];
+      const value = coins / rates.coinsPerSFL;
+      if (trace) return emit(trace, { item: itemName, method: "flower", formula: `${seedName} seed: ${coins}c / ${rates.coinsPerSFL.toFixed(0)} c/SFL`, value });
+      return value;
     }
   }
 
   // Treasure sell prices (coins → SFL, with boosts: Treasure Map +20%, Camel +30%)
   if (typeof TREASURE_SELL_PRICES !== "undefined" && TREASURE_SELL_PRICES[itemName] && rates && rates.coinsPerSFL > 0) {
     const tb = rates.treasureBoost || 1;
-    return (TREASURE_SELL_PRICES[itemName] * tb) / rates.coinsPerSFL;
+    const coins = TREASURE_SELL_PRICES[itemName];
+    const value = (coins * tb) / rates.coinsPerSFL;
+    if (trace) return emit(trace, { item: itemName, method: "treasure", formula: `${coins}c × ${tb.toFixed(2)} boost / ${rates.coinsPerSFL.toFixed(0)} c/SFL`, value });
+    return value;
   }
 
   // Fish/food XP-based pricing (sflPerXP from bumpkin best cooking recipe)
   if (typeof ITEM_XP_VALUES !== "undefined" && ITEM_XP_VALUES[itemName] && rates && rates.sflPerXP > 0) {
-    return ITEM_XP_VALUES[itemName] * rates.sflPerXP;
+    const xp = ITEM_XP_VALUES[itemName];
+    const value = xp * rates.sflPerXP;
+    if (trace) return emit(trace, { item: itemName, method: "XP value", formula: `${xp} XP × ${rates.sflPerXP.toFixed(6)} SFL/XP`, value });
+    return value;
   }
 
   // Giant item coin sell prices
   if (typeof GIANT_ITEM_COIN_PRICES !== "undefined" && GIANT_ITEM_COIN_PRICES[itemName] && rates && rates.coinsPerSFL > 0) {
-    return GIANT_ITEM_COIN_PRICES[itemName] / rates.coinsPerSFL;
+    const coins = GIANT_ITEM_COIN_PRICES[itemName];
+    const value = coins / rates.coinsPerSFL;
+    if (trace) return emit(trace, { item: itemName, method: "giant", formula: `${coins}c / ${rates.coinsPerSFL.toFixed(0)} c/SFL`, value });
+    return value;
   }
 
   // Omnifeed: costs 1 Gem
   if (itemName === "Omnifeed") {
     const gemsPerSFL = rates?.gemsPerSFL || 0;
-    if (gemsPerSFL > 0) return 1 / gemsPerSFL;
+    if (gemsPerSFL > 0) {
+      const value = 1 / gemsPerSFL;
+      if (trace) return emit(trace, { item: itemName, method: "gem", formula: `1 gem / ${gemsPerSFL.toFixed(4)} gems/SFL`, value });
+      return value;
+    }
   }
 
   // Crustaceans (pot + chum cost from CRUSTACEAN_RECIPES)
   if (typeof CRUSTACEAN_RECIPES !== "undefined" && CRUSTACEAN_RECIPES[itemName]) {
     const cr = CRUSTACEAN_RECIPES[itemName];
-    const potPrice = itemMarketValue(cr.pot, p2pPrices, visited, rates);
+    const kids = trace ? [] : undefined;
+    const potPrice = itemMarketValue(cr.pot, p2pPrices, visited, rates, kids);
     let chumCost = 0;
+    let chumLabel = trace ? "" : undefined;
     if (cr.chum && cr.qty > 0) {
-      chumCost = itemMarketValue(cr.chum, p2pPrices, visited, rates) * cr.qty;
+      const chumPrice = itemMarketValue(cr.chum, p2pPrices, visited, rates, kids);
+      chumCost = chumPrice * cr.qty;
+      if (trace) chumLabel = ` + ${cr.qty} × ${cr.chum} @ ${chumPrice.toFixed(5)}`;
       if (cr.alt) {
         const altParts = cr.alt.match(/^(.+?)\s*x(\d+)$/);
         if (altParts) {
-          const altCost = itemMarketValue(altParts[1], p2pPrices, visited, rates) * parseInt(altParts[2]);
-          if (altCost > 0 && (chumCost <= 0 || altCost < chumCost)) chumCost = altCost;
+          const altPrice = itemMarketValue(altParts[1], p2pPrices, visited, rates, kids);
+          const altCost = altPrice * parseInt(altParts[2]);
+          if (altCost > 0 && (chumCost <= 0 || altCost < chumCost)) {
+            chumCost = altCost;
+            if (trace) chumLabel = ` + ${altParts[2]} × ${altParts[1]} @ ${altPrice.toFixed(5)} (alt)`;
+          }
         }
       }
     }
-    if (potPrice > 0) return potPrice + chumCost;
+    if (potPrice > 0) {
+      const value = potPrice + chumCost;
+      if (trace) return emit(trace, { item: itemName, method: "crustacean", formula: `${cr.pot} @ ${potPrice.toFixed(5)}${chumLabel}`, value, steps: kids });
+      return value;
+    }
   }
 
   // Mark: fixed 0.01 SFL (from treasury/faction shop)
-  if (itemName === "Mark") return 0.01;
+  if (itemName === "Mark") {
+    if (trace) return emit(trace, { item: itemName, method: "mark", formula: "fixed 0.01 SFL", value: 0.01 });
+    return 0.01;
+  }
 
   // Acorn: opportunity cost = best pet resource SFL/energy ratio * 100 energy
   if (itemName === "Acorn" && typeof PET_FETCH_DATA !== "undefined") {
     let bestRatio = 0;
+    let bestRes = trace ? "" : undefined;
     for (const entries of Object.values(PET_FETCH_DATA)) {
       for (const e of entries) {
         if (e.res === "Acorn") continue;
         const p = p2pPrices[e.res] || 0;
-        if (p > 0) bestRatio = Math.max(bestRatio, p / e.energy);
+        if (p > 0) {
+          const ratio = p / e.energy;
+          if (ratio > bestRatio) {
+            bestRatio = ratio;
+            if (trace) bestRes = e.res;
+          }
+        }
       }
     }
-    if (bestRatio > 0) return bestRatio * 100;
+    if (bestRatio > 0) {
+      const value = bestRatio * 100;
+      if (trace) return emit(trace, { item: itemName, method: "acorn", formula: `best pet ratio ${bestRes} @ ${bestRatio.toFixed(5)}/energy × 100 energy`, value });
+      return value;
+    }
   }
 
   // Fish Market recipes (season-dependent: Crab Stick, Fish Flake, Fish Stick, Fish Oil)
@@ -176,10 +284,17 @@ export function itemMarketValue(itemName, p2pPrices, _visited, rates) {
     const recipe = seasonRecipes[s] || Object.values(seasonRecipes)[0];
     if (recipe) {
       let total = 0;
+      const kids = trace ? [] : undefined;
+      const parts = trace ? [] : undefined;
       for (const [ing, qty] of Object.entries(recipe)) {
-        total += itemMarketValue(ing, p2pPrices, visited, rates) * qty;
+        const p = itemMarketValue(ing, p2pPrices, visited, rates, kids);
+        total += p * qty;
+        if (trace) parts.push(`${qty} × ${ing} @ ${p.toFixed(5)}`);
       }
-      if (total > 0) return total;
+      if (total > 0) {
+        if (trace) return emit(trace, { item: itemName, method: "fish market", formula: parts.join(" + "), value: total, steps: kids });
+        return total;
+      }
     }
   }
 
@@ -190,15 +305,24 @@ export function itemMarketValue(itemName, p2pPrices, _visited, rates) {
         const s = rates?.season || "";
         const inputs = data.inputs[s] || Object.values(data.inputs)[0];
         let batchCost = 0;
+        const kids = trace ? [] : undefined;
+        const parts = trace ? [] : undefined;
         for (const [ing, qty] of Object.entries(inputs)) {
-          batchCost += itemMarketValue(ing, p2pPrices, visited, rates) * qty;
+          const p = itemMarketValue(ing, p2pPrices, visited, rates, kids);
+          batchCost += p * qty;
+          if (trace) parts.push(`${qty} × ${ing} @ ${p.toFixed(5)}`);
         }
         const totalUnits = Object.values(data.outputs).reduce((sum, q) => sum + q, 0);
-        if (batchCost > 0 && totalUnits > 0) return batchCost / totalUnits;
+        if (batchCost > 0 && totalUnits > 0) {
+          const value = batchCost / totalUnits;
+          if (trace) return emit(trace, { item: itemName, method: "compost", formula: `(${parts.join(" + ")}) / ${totalUnits} units`, value, steps: kids });
+          return value;
+        }
       }
     }
   }
 
+  if (trace) return emit(trace, { item: itemName, method: "unpriced", formula: "no derivation available", value: 0 });
   return 0;
 }
 
