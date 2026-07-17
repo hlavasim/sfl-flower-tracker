@@ -107,9 +107,34 @@ itemProductionCost(item, prices, skills, extras)  -> {price, source} | null
 - Both return types are preserved as-is so their existing callers are untouched by the move
   (`estimateItemSfl`'s `0`-means-unknown; `_resolveItemSfl`'s `{price, source}` — the `source` tag
   feeds the Bumpkin cost tooltip and its `fc` fish-breakdown).
-- The data tables `estimateItemSfl` needs and `core/data` lacks (`RECIPE_INGREDIENTS` 58 keys,
-  `TOOL_COSTS` 11, `DOLL_RECIPES` 23, `FLOWER_RECIPES` 53 — verify at implementation time) move into
-  `core/data/` verbatim, as F1 did.
+- The data tables `estimateItemSfl` needs and `core/data` lacks move into `core/data/` verbatim, as
+  F1 did. **MEASURED 2026-07-17 (an earlier draft of this spec guessed 4 — it is 12, 244 lines):**
+
+  | table | at | lines |
+  |---|---|---|
+  | `RECIPE_INGREDIENTS` | `flowers.html:4561` | 65 |
+  | `FLOWER_RECIPES` | `:2958` | 61 |
+  | `DOLL_RECIPES` | `:3373` | 25 |
+  | `PET_FETCH_DATA` | `:22388` | 18 |
+  | `ITEM_XP_VALUES` | `:4726` | 17 |
+  | `SEED_COSTS` | `:3977` | 13 |
+  | `TOOL_COSTS` | `:4273` | 13 |
+  | `POTION_TICKET_COIN_VALUE` | `:4255` | 10 |
+  | `EXOTIC_CROPS_TICKET_COST` | `:4256` | 9 |
+  | `FLOWER_SEED_COIN_COSTS` | `:4719` | 5 |
+  | `GIANT_FRUIT_SELL_PRICES` | `:4267` | 5 |
+  | `GIANT_ITEM_COIN_PRICES` | `:4745` | 3 |
+
+  (Already in `core/data`: `COMPOST_RECIPES`, `CRAFTED_INGREDIENT_RECIPES`, `CRUSTACEAN_RECIPES`,
+  `FISH_MARKET_RECIPES`, `TREASURE_SELL_PRICES`.)
+
+  **What that list means matters more than its length.** `PET_FETCH_DATA`, `GIANT_FRUIT_SELL_PRICES`,
+  `FLOWER_RECIPES`, `DOLL_RECIPES`, `SEED_COSTS`, `POTION_TICKET_COIN_VALUE`,
+  `EXOTIC_CROPS_TICKET_COST` — this resolver reaches into **pets, giants, flowers, dolls, seeds,
+  potions and exotic crops**. It is not an isolated pricing utility; it is a hub wired into most of
+  the game's domains. Extracting it drags those tables into `core/data` ahead of their own domains'
+  migrations — which is acceptable (data moves are cheap and the CONSTANTS tab will show them as
+  `duplicated` until their consumers follow) but it must be a conscious choice, not a surprise.
 
 ### 4.2 Transport: `?section=prices&farm=<id>` — a precomputed map, not a remote call
 
@@ -167,7 +192,13 @@ them.** They must be found and converted deliberately.
 ## 7. Risks
 
 - **Size.** ~30 call sites across 6+ domains — twice the whole cooking pilot, whose 6 planned tasks
-  became 12 because plan premises did not hold against the code. Expect the same ratio.
+  became 12 because plan premises did not hold against the code. Expect the same ratio. And it has
+  already happened once *inside this spec*: the table count was drafted as 4 and measured as **12**.
+- **Domain entanglement.** The 12 tables belong to pets, giants, flowers, dolls, seeds, potions and
+  exotic crops (§4.1). This work therefore front-loads part of those domains' data migration whether
+  or not we want it. The alternative — a resolver in `core/` importing tables from `flowers.html` —
+  is impossible (the page is not a module and the dependency points the wrong way), so there is no
+  way to keep the price layer's blast radius smaller than its data closure.
 - **The two entry points may not cleanly cover every caller.** Some of the 29 may want a third
   policy nobody has articulated. Surface it during step 3 rather than forcing a fit.
 - **`productionCost` for unmakeable items** (NFTs, wearables) has no meaning — it returns `null`
