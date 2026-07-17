@@ -1,5 +1,6 @@
 import { buildCookingSection } from "../core/sections/cooking.mjs";
 import { buildConstantsSection } from "../core/sections/constants.mjs";
+import { buildPricesSection } from "../core/sections/prices.mjs";
 import { computeBettyRate } from "../core/engine/prices.mjs";
 import { API_SPEC } from "../core/api-spec.mjs";
 
@@ -47,6 +48,9 @@ export default async function handler(req, res) {
     };
     let data;
     if (section === "cooking") data = buildCookingSection(farm, p2p, settings);
+    // `prices` needs a farm (productionCost is per-farm: skills, salt/fish yield), so
+    // unlike constants/openapi its branch belongs here, after the farm-required guard.
+    else if (section === "prices") data = buildPricesSection(farm, p2p, settings);
     else return res.status(400).json({ error: `unknown section: ${section}` });
     return res.status(200).json({ farm: farmId, computedAt: new Date().toISOString(), section, data });
   } catch (e) {

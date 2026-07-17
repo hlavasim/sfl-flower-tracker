@@ -29,11 +29,18 @@ export const API_SPEC = {
             name: "section",
             in: "query",
             required: false,
-            schema: { type: "string", enum: ["constants", "cooking", "openapi"], default: "cooking" },
+            schema: { type: "string", enum: ["constants", "cooking", "openapi", "prices"], default: "cooking" },
             description:
               "Which computation to run. `constants`: the canonical core/data game tables " +
               "plus flowers.html migration-coverage status, no farm needed. `cooking`: " +
-              "per-building cooking XP/time/cost for the given farm. `openapi`: this " +
+              "per-building cooking XP/time/cost for the given farm. `prices`: precomputed " +
+              "item-value maps for the given farm — `marketValue` (what an item is WORTH: " +
+              "market price first, derived only when the market has none; farm-independent) " +
+              "and `productionCost` (what it costs YOU to make: e.g. Salt is derived from " +
+              "the Salt Rake's cost and deliberately ignores its market price, so this map " +
+              "is per-farm — it depends on skills and salt/fish yield). An item neither can " +
+              "price is ABSENT from that map rather than `0`, so a consumer can tell " +
+              "\"unpriced\" from \"free\". `openapi`: this " +
               "document, no farm needed. Defaults to `cooking` when omitted.",
           },
           {
@@ -42,8 +49,8 @@ export const API_SPEC = {
             required: false,
             schema: { type: "string" },
             description:
-              "Sunflower Land farm ID. Required for data sections (currently `cooking`); " +
-              "NOT required for `constants` or `openapi`, whose branches run before the " +
+              "Sunflower Land farm ID. Required for data sections (currently `cooking` and " +
+              "`prices`); NOT required for `constants` or `openapi`, whose branches run before the " +
               "farm-required guard. Omitting it for a section that needs it returns 400.",
           },
           {
@@ -83,7 +90,7 @@ export const API_SPEC = {
             description:
               "The response shape depends on `section` — there are THREE, and they are not " +
               "variations of one envelope:\n" +
-              "- `section=cooking` → `{ farm, computedAt, section, data }`.\n" +
+              "- `section=cooking` and `section=prices` → `{ farm, computedAt, section, data }`.\n" +
               "- `section=constants` → `{ computedAt, section, data }` — no `farm` (it needs none).\n" +
               "- `section=openapi` → **this document itself, unwrapped**: top-level `openapi`, " +
               "`info`, `servers`, `paths`. There is NO `data`/`section`/`computedAt` key — reading " +

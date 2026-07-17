@@ -1,0 +1,67 @@
+import { COOKING_INGREDIENTS } from "../data/cooking.mjs";
+import {
+  SEED_COSTS, EXOTIC_CROPS_TICKET_COST, GIANT_FRUIT_SELL_PRICES, TOOL_COSTS,
+  FLOWER_SEED_COIN_COSTS, ITEM_XP_VALUES, GIANT_ITEM_COIN_PRICES,
+} from "../data/economy.mjs";
+import { FLOWER_RECIPES, DOLL_RECIPES, RECIPE_INGREDIENTS } from "../data/recipes.mjs";
+import { CRAFTED_INGREDIENT_RECIPES, TREASURE_SELL_PRICES, COMPOST_RECIPES, CRUSTACEAN_RECIPES } from "../data/crafting.mjs";
+import { FISH_MARKET_RECIPES, FISH_DATA, FISH_TIER_MAP, BAIT_WORM_YIELD } from "../data/fishing.mjs";
+import { itemMarketValue, itemProductionCost } from "../engine/item-value.mjs";
+import { computeSaltYieldPerRake, computeSaltRakeCoinMult, computeFishYieldPerCast } from "../engine/cooking-cost.mjs";
+
+// Every item-name-keyed table item-value.mjs's two resolvers dispatch on directly.
+// COMPOST_RECIPES is deliberately excluded here — its top-level keys are composter
+// names ("Compost Bin"), not items; its items are the nested `.outputs` (handled below).
+const ITEM_KEYED_TABLES = [
+  COOKING_INGREDIENTS, RECIPE_INGREDIENTS, FLOWER_RECIPES, DOLL_RECIPES,
+  CRAFTED_INGREDIENT_RECIPES, TREASURE_SELL_PRICES, CRUSTACEAN_RECIPES,
+  FISH_MARKET_RECIPES, FISH_DATA, FISH_TIER_MAP, BAIT_WORM_YIELD,
+  TOOL_COSTS, EXOTIC_CROPS_TICKET_COST, GIANT_FRUIT_SELL_PRICES,
+  FLOWER_SEED_COIN_COSTS, ITEM_XP_VALUES, GIANT_ITEM_COIN_PRICES, SEED_COSTS,
+];
+
+// Unions the keys of every core/data table the resolvers can key an item by, plus
+// the live P2P market's own keys (items priced ONLY on the market, e.g. Tuna, Rod).
+function buildItemUniverse(prices) {
+  const names = new Set();
+  for (const table of ITEM_KEYED_TABLES) {
+    for (const name of Object.keys(table)) names.add(name);
+  }
+  for (const data of Object.values(COMPOST_RECIPES)) {
+    for (const name of Object.keys(data.outputs)) names.add(name);
+  }
+  for (const name of Object.keys(prices || {})) names.add(name);
+  return names;
+}
+
+// settings = { coinsPerSFL? } — forwarded verbatim as `rates` to itemMarketValue,
+// matching every existing caller's shape (see core/sections/cooking.mjs).
+// prices = p2p price map (sfl.world/api/v1/prices .data.p2p), or {} if unavailable.
+export function buildPricesSection(farm, prices = {}, settings = {}) {
+  const p2p = prices || {};
+  const coinsPerSFL = settings.coinsPerSFL || 0;
+  const skills = farm?.bumpkin?.skills || {};
+  // Mirrors core/sections/cooking.mjs — these depend only on `farm`, not on the
+  // item being priced, so computed once and reused across the whole universe.
+  const extras = {
+    saltYieldPerRake: computeSaltYieldPerRake(farm),
+    saltRakeCoinMult: computeSaltRakeCoinMult(farm),
+    fishYieldByTier: {
+      basic: computeFishYieldPerCast(farm, "basic"),
+      advanced: computeFishYieldPerCast(farm, "advanced"),
+      expert: computeFishYieldPerCast(farm, "expert"),
+    },
+  };
+  const universe = buildItemUniverse(p2p);
+  const marketValue = {};
+  const productionCost = {};
+  for (const name of universe) {
+    // Absence means "cannot price" — 0/null must NOT be written as 0, or a
+    // consumer could not tell "unpriced" from "free".
+    const mv = itemMarketValue(name, p2p, null, settings);
+    if (mv > 0) marketValue[name] = mv;
+    const pc = itemProductionCost(name, p2p, coinsPerSFL, skills, undefined, extras);
+    if (pc && pc.price > 0) productionCost[name] = pc.price;
+  }
+  return { marketValue, productionCost };
+}
