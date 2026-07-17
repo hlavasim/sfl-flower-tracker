@@ -1,10 +1,18 @@
-import { test } from "node:test";
+import { test, beforeEach } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
-import handler from "../../api/compute.mjs";
+import handler, { _clearCacheForTests } from "../../api/compute.mjs";
 
 const fixtureText = readFileSync(new URL("../fixtures/farm-155498.json", import.meta.url), "utf8");
 const p2pText = readFileSync(new URL("../fixtures/p2p-prices.json", import.meta.url), "utf8");
+
+// The handler now caches the farm/prices fetches for a short TTL (task F2-2-cache). These
+// tests swap globalThis.fetch per test to exercise different upstream outcomes against the
+// same farmId, so the module-level cache must be cleared between tests or a later test would
+// silently observe an earlier test's cached (and differently-mocked) result.
+beforeEach(() => {
+  _clearCacheForTests();
+});
 
 // Mock fetch that routes by the proxied `url=` target: farm API vs sfl.world prices.
 function mockFetchWithPrices() {

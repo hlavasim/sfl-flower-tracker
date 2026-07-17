@@ -7,17 +7,83 @@ import { API_SPEC } from "../core/api-spec.mjs";
 const PROXY = process.env.PROXY_ORIGIN || "https://sunflower.sajmonium.quest";
 const PRICES_URL = "https://sfl.world/api/v1/prices";
 
+// --- Short-TTL in-process cache for the two upstream fetches -------------------------------
+// /api/compute is a pure read. Each migrated consumer on a page (marks today, more sections
+// to follow) makes its own call to this endpoint, and each call re-fetches the same farm and
+// the same prices from upstream. The upstream rate-limits aggressively (429, surfaced to us
+// as a 502 through the proxy), so N consumers on one page load can turn into N upstream hits
+// — and when one gets rate-limited, a page ends up half-priced (task F2-2-cache).
+//
+// Caching the parsed farm (keyed by farmId) and the parsed prices (single key — prices take
+// no farm) lets near-simultaneous requests for the same farm share ONE upstream hit apiece
+// instead of N. 10s TTL: comfortably covers the ~4-5 consumer calls a single page load fires
+// today, short enough that "current farm state" is never meaningfully stale.
+//
+// Plain module-level Maps — not a distributed cache. On Vercel, each function instance keeps
+// its own cache and a cold start drops it; that's expected and fine, because Fluid Compute
+// reuses a warm instance across the concurrent/near-simultaneous requests one page load
+// produces, which is exactly the case this is deduping.
+//
+// The cache stores the in-flight PROMISE, not just the resolved value. A page load's 4-5
+// consumer calls arrive close enough together that a "check cache, fetch, cache the result"
+// cache would let every one of them miss before the first fetch resolves (a stampede) — only
+// callers that arrive strictly after a previous fetch finished would ever see a hit. Caching
+// the promise itself, synchronously, before it's awaited, means callers that arrive while a
+// fetch is still in flight share that same fetch instead of starting their own.
+const CACHE_TTL_MS = 10_000;
+const farmCache = new Map(); // farmId -> { promise, expiresAt }
+const pricesCache = new Map(); // "prices" -> { promise, expiresAt } — single entry, no farm key
+
+// Runs `run()` at most once per TTL per key, sharing the in-flight promise across callers
+// that arrive before it settles. `run()` must resolve to `{ ok, ... }`; a `{ ok: false }`
+// result (or a rejection) is evicted immediately so the very next call retries against
+// upstream instead of replaying the failure for the rest of the TTL.
+function cachedFetch(cache, key, run) {
+  const hit = cache.get(key);
+  if (hit && hit.expiresAt > Date.now()) return hit.promise;
+  const promise = run();
+  cache.set(key, { promise, expiresAt: Date.now() + CACHE_TTL_MS });
+  promise.then(
+    (result) => { if (!result.ok) cache.delete(key); },
+    () => cache.delete(key)
+  );
+  return promise;
+}
+
+async function fetchFarm(farmId) {
+  return cachedFetch(farmCache, farmId, async () => {
+    const sflUrl = `https://api.sunflower-land.com/community/farms/${farmId}`;
+    const r = await fetch(`${PROXY}/api/proxy?url=${encodeURIComponent(sflUrl)}`);
+    if (!r.ok) return { ok: false, status: r.status };
+    const wrap = await r.json();
+    return { ok: true, data: wrap };
+  });
+}
+
 // Prices are best-effort: a failed/erroring fetch must not fail the whole endpoint
-// (costs come back null/unpriced instead), unlike the farm fetch which still 502s.
+// (costs come back null/unpriced instead), unlike the farm fetch which still 502s. Unwrapped
+// to the bare p2p map for callers — {} both on failure and (in principle) on a genuinely
+// empty upstream response; only the failure case is excluded from the cache.
 async function fetchPrices() {
-  try {
-    const r = await fetch(`${PROXY}/api/proxy?url=${encodeURIComponent(PRICES_URL)}`);
-    if (!r.ok) return {};
-    const json = await r.json();
-    return json?.data?.p2p || {};
-  } catch {
-    return {};
-  }
+  const result = await cachedFetch(pricesCache, "prices", async () => {
+    try {
+      const r = await fetch(`${PROXY}/api/proxy?url=${encodeURIComponent(PRICES_URL)}`);
+      if (!r.ok) return { ok: false, data: {} };
+      const json = await r.json();
+      return { ok: true, data: json?.data?.p2p || {} };
+    } catch {
+      return { ok: false, data: {} };
+    }
+  });
+  return result.data;
+}
+
+// Test-only hook: node:test imports this module once and runs every test in a file against
+// that same instance, so the module-level caches above persist across tests unless cleared.
+// Production callers never call this.
+export function _clearCacheForTests() {
+  farmCache.clear();
+  pricesCache.clear();
 }
 
 export default async function handler(req, res) {
@@ -30,13 +96,12 @@ export default async function handler(req, res) {
   if (section === "openapi") return res.status(200).json(API_SPEC);
   if (!farmId) return res.status(400).json({ error: "farm required" });
   try {
-    const sflUrl = `https://api.sunflower-land.com/community/farms/${farmId}`;
-    const [r, p2p] = await Promise.all([
-      fetch(`${PROXY}/api/proxy?url=${encodeURIComponent(sflUrl)}`),
+    const [farmResult, p2p] = await Promise.all([
+      fetchFarm(farmId),
       fetchPrices(),
     ]);
-    if (!r.ok) return res.status(502).json({ error: `farm fetch failed: ${r.status}` });
-    const wrap = await r.json();
+    if (!farmResult.ok) return res.status(502).json({ error: `farm fetch failed: ${farmResult.status}` });
+    const wrap = farmResult.data;
     const farm = wrap.farm || wrap;
     const coinsPerSFL = req.query.coinsPerSFL !== undefined
       ? Number(req.query.coinsPerSFL)
