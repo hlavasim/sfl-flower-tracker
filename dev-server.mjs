@@ -2,11 +2,23 @@
 // server-side API functions locally, and reverse-proxies every other /api/* to
 // production so the app is fully functional offline of Vercel.
 //
-//   node dev-server.mjs           → http://localhost:3000
-//   PORT=8080 node dev-server.mjs
+//   node --watch dev-server.mjs   → http://localhost:3000   ← USE THIS
+//   npm run dev                   → same
+//   PORT=8080 node --watch dev-server.mjs
 //
-// Local API routes are loaded fresh on every request (cache-busted import) so editing
-// api/*.mjs or core/*.mjs takes effect without restarting the server.
+// ⚠ WITHOUT --watch, EDITS TO core/ DO NOT TAKE EFFECT.
+// The `?t=${Date.now()}` below cache-busts the handler file (api/compute.mjs) only. Its
+// own imports — `import { buildCookingSection } from "../core/sections/cooking.mjs"` — are
+// static and carry no query string, so they resolve to the same specifier every time and
+// come straight back out of Node's ESM cache. Edit api/*.mjs and you see it; edit core/*.mjs
+// and you are testing the code you had when the process started.
+//
+// This comment used to claim the opposite ("editing api/*.mjs or core/*.mjs takes effect
+// without restarting"). Six agents and the controller lost hours to it — verifying fixes
+// against stale modules and, once, reporting a fix that had never taken effect. Almost all
+// the work on this project is in core/, i.e. exactly the half that was never reloading.
+//
+// `--watch` restarts the whole process on any file change, which reloads everything.
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
@@ -37,7 +49,9 @@ const server = createServer(async (req, res) => {
   try {
     // 1) Local API function
     if (LOCAL_API[path]) {
-      const mod = await import(`${LOCAL_API[path]}?t=${Date.now()}`); // fresh import per request
+      // Reloads THIS file only — its static core/* imports stay cached. See the header:
+      // run under --watch if you are editing core/, which is where the logic lives.
+      const mod = await import(`${LOCAL_API[path]}?t=${Date.now()}`);
       req.query = Object.fromEntries(url.searchParams);
       if (!["GET", "HEAD"].includes(req.method)) req.body = await readBody(req);
       res.status = (c) => { res.statusCode = c; return res; };
@@ -74,4 +88,17 @@ const server = createServer(async (req, res) => {
 
 // Bind loopback only: this serves any file under the repo root (including .env and .git/),
 // so it must not be reachable from the LAN.
-server.listen(PORT, "127.0.0.1", () => console.log(`dev server → http://localhost:${PORT}  (proxying other /api/* to ${PROD})`));
+server.listen(PORT, "127.0.0.1", () => {
+  console.log(`dev server → http://localhost:${PORT}  (proxying other /api/* to ${PROD})`);
+  // Loud on purpose: silently serving stale core/ modules is this server's one nasty trap.
+  // `node --watch` re-execs a child WITHOUT the flag, so process.execArgv is empty here and
+  // cannot be used to detect it (my first attempt did, and cried wolf under the correct setup —
+  // a warning that fires when you did the right thing is worse than none). The child does get
+  // WATCH_REPORT_DEPENDENCIES=1. That is an internal detail, not public API: if a future Node
+  // drops it this warning goes back to always firing, which is noisy but never wrong in the
+  // dangerous direction.
+  if (!process.env.WATCH_REPORT_DEPENDENCIES) {
+    console.log("⚠  not running under --watch: edits to core/ will NOT take effect until you restart.");
+    console.log("   use `npm run dev` (node --watch dev-server.mjs) instead.");
+  }
+});
