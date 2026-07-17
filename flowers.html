@@ -6785,7 +6785,7 @@
     function _bumpkinCookingQuery() {
       const petSim = (localStorage.getItem("sfl_pet_streak") === "1") ? "1" : "0";
       const recipes = encodeURIComponent(JSON.stringify(getSavedBumpkinRecipes()));
-      return `farm=${FARM_ID}&section=cooking&petSimulate=${petSim}&recipes=${recipes}`;
+      return `farm=${FARM_ID}&section=cooking&petSimulate=${petSim}&recipes=${recipes}&explain=1`;
     }
 
     async function _fetchBumpkinCooking(key) {
@@ -10837,6 +10837,16 @@
           const headerExtra = (buildingName === "Aging Shed")
             ? `<span class="bumpkin-building-count">L${_agingLvl} (\u00d7${count} slots)</span>`
             : (count > 1 ? `<span class="bumpkin-building-count">\u00d7${count}</span>` : "");
+          // "Show calculation" toggle \u2014 expands the building's XP/day step-by-step
+          // derivation via the shared price-trace renderer. Only shown when the engine
+          // returned a trace for this building (i.e. a recipe is selected). Same
+          // interaction + styling as the shrine-card toggle (:21701).
+          const cookTrace = cook && cook.cookingTrace ? cook.cookingTrace[buildingName] : null;
+          const cookDetailId = `cook-detail-${buildingName.replace(/\s+/g, "-").toLowerCase()}`;
+          const cookDetail = cookTrace
+            ? `<div onclick="document.getElementById('${cookDetailId}').style.display=document.getElementById('${cookDetailId}').style.display==='none'?'block':'none';this.querySelector('.arrow').textContent=document.getElementById('${cookDetailId}').style.display==='none'?'\u25b6':'\u25bc'" class="pixel-font" style="margin-top:8px;cursor:pointer;font-size:0.5rem;color:var(--lily);user-select:none"><span class="arrow">\u25b6</span> Show calculation</div>
+            <div id="${cookDetailId}" style="display:none;margin-top:8px;padding:10px;background:rgba(0,0,0,0.3);border-left:2px solid var(--sunpetal);font-family:'Courier New',monospace;font-size:0.6875rem;color:var(--text-secondary);line-height:1.6">${renderPriceTraceNode(cookTrace, 0)}</div>`
+            : "";
           html += `<div class="bumpkin-building-card pixel-panel">
             <div class="bumpkin-building-header pixel-font">
               <span style="font-size: 1.25rem">${emoji}</span>
@@ -10859,6 +10869,7 @@
               ${xpRemaining > 0 ? `Solo days to ${targetLevel}: <span style="color:var(--text-dim)">${daysNeeded.toLocaleString()}d</span>` : ""}
               ${fishBreakdownHTML}
             </div>` : `<div style="font-size: 0.625rem;color:var(--text-dim)">${recipes.length > 0 ? "Not cooking" : "No recipes available"}</div>`}
+            ${cookDetail}
           </div>`;
         }
 
@@ -23103,7 +23114,7 @@
       let html = `<div class="pe-step" style="margin-left:${d * 14}px">`;
       html += `<span class="pe-step-method">${escHTML(node.method)}</span> `;
       html += `<span class="pe-step-formula">${escHTML(node.formula)}</span>`;
-      html += ` <span class="pe-step-value">= ${_priceTraceFNum(node.value)} SFL</span>`;
+      html += ` <span class="pe-step-value">= ${_priceTraceFNum(node.value)} ${escHTML(node.unit || "SFL")}</span>`;
       html += `</div>`;
       if (node.steps && node.steps.length) {
         for (const child of node.steps) html += renderPriceTraceNode(child, d + 1);
