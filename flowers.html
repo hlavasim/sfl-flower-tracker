@@ -16754,15 +16754,23 @@
       const sunSfl = (c.sunstone || 0) * 3 * (p2p["Obsidian"] || 0);
       return gemSfl + coinSfl + sunSfl + (c.misc || 0);
     }
-    // Real SFL cost of ANY item, COOKING_INGREDIENTS-aware via _resolveItemSfl (recursive) so cooked
-    // foods (Goblin Brunch = 5 Boiled Eggs + 1 Goblin\u2019s Treat, Bumpkin Roast, Cabbers n Mash, ...)
-    // price their actual recipe instead of 0.
+    // Real SFL cost of ANY item, recipe-aware (cooked foods like Goblin Brunch = 5 Boiled Eggs +
+    // 1 Goblin\u2019s Treat, Bumpkin Roast, Cabbers n Mash, ...) via the served productionCost map
+    // (computed server-side by the recursive _resolveItemSfl resolver) so they price their actual
+    // recipe instead of 0.
     function roadmapItemCost(name) {
       if (name === "coins") return 0;
-      const er = powerState.exchangeRates || {}, p2p = powerState.p2pPrices || {};
-      const skills = (powerState.farm && powerState.farm.bumpkin && powerState.farm.bumpkin.skills) || {};
-      try { const r = _resolveItemSfl(name, p2p, er.coinsPerSFL, skills); if (r && r.price > 0) return r.price; } catch (e) {}
-      try { if (typeof window !== "undefined" && window.estimateItemSfl) { const v = window.estimateItemSfl(name, p2p, null, er); if (v > 0) return v; } } catch (e) {}
+      const p2p = powerState.p2pPrices || {};
+      // F2-2f: roadmap reads the shared price map (/api/compute?section=prices), priced with the
+      // exchangeRates profile, instead of calling _resolveItemSfl/estimateItemSfl directly.
+      // Precedence preserved verbatim (C6): production cost first (if >0), else market value (if
+      // >0), else raw p2p. PRICES(...) is null until this profile's fetch resolves; guard to {} so
+      // lookups fall through to the existing "|| 0" absence handling below, and the arrival
+      // rerender (via main()) repaints with real data once the map lands.
+      const maps = PRICES(powerState.exchangeRates) || {};
+      const prodMap = maps.productionCost || {}, mktMap = maps.marketValue || {};
+      if (prodMap[name] > 0) return prodMap[name];
+      if (mktMap[name] > 0) return mktMap[name];
       return p2p[name] || 0;
     }
     function roadmapGiftRewardValue(reward, nftFloor) {
