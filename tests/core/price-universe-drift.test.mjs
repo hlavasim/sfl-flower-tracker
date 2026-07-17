@@ -22,7 +22,14 @@ import { buildItemUniverse } from "../../core/sections/prices.mjs";
 const SRC = readFileSync(new URL("../../core/engine/item-value.mjs", import.meta.url), "utf8");
 
 function hardcodedBranchNames(src) {
-  return [...new Set([...src.matchAll(/itemName\s*===\s*"([^"]+)"/g)].map((m) => m[1]))];
+  // Match `itemName === "X"`, `itemName === 'X'`, and the reversed `"X" === itemName`.
+  // The point of this guard is to catch a NEW branch whose item the universe forgets, so it
+  // must not itself be blind to the ordinary ways someone writes that comparison — a
+  // single-quote or reversed branch would otherwise re-open the exact hole this test closes.
+  const names = new Set();
+  for (const m of src.matchAll(/itemName\s*===\s*(['"])([^'"]+)\1/g)) names.add(m[2]);
+  for (const m of src.matchAll(/(['"])([^'"]+)\1\s*===\s*itemName/g)) names.add(m[2]);
+  return [...names];
 }
 
 test("the regex still finds item-value.mjs's known hardcoded-branch names (sanity)", () => {
