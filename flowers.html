@@ -10842,10 +10842,11 @@
           // returned a trace for this building (i.e. a recipe is selected). Same
           // interaction + styling as the shrine-card toggle (:21701).
           const cookTrace = cook && cook.cookingTrace ? cook.cookingTrace[buildingName] : null;
+          const costTr = cook && cook.costTrace ? cook.costTrace[buildingName] : null;
           const cookDetailId = `cook-detail-${buildingName.replace(/\s+/g, "-").toLowerCase()}`;
           const cookDetail = cookTrace
             ? `<div onclick="document.getElementById('${cookDetailId}').style.display=document.getElementById('${cookDetailId}').style.display==='none'?'block':'none';this.querySelector('.arrow').textContent=document.getElementById('${cookDetailId}').style.display==='none'?'\u25b6':'\u25bc'" class="pixel-font" style="margin-top:8px;cursor:pointer;font-size:0.5rem;color:var(--lily);user-select:none"><span class="arrow">\u25b6</span> Show calculation</div>
-            <div id="${cookDetailId}" style="display:none;margin-top:8px;padding:10px;background:rgba(0,0,0,0.3);border-left:2px solid var(--sunpetal);font-family:'Courier New',monospace;font-size:0.6875rem;color:var(--text-secondary);line-height:1.6">${renderPriceTraceNode(cookTrace, 0)}</div>`
+            <div id="${cookDetailId}" style="display:none;margin-top:8px;padding:10px;background:rgba(0,0,0,0.3);border-left:2px solid var(--sunpetal);font-family:'Courier New',monospace;font-size:0.6875rem;color:var(--text-secondary);line-height:1.6"><div style="color:var(--green);font-weight:bold;margin-bottom:4px">XP/day</div>${renderPriceTraceNode(cookTrace, 0)}${costTr ? `<div style="color:var(--yellow);font-weight:bold;margin:8px 0 4px">Cost/cook</div>${renderPriceTraceNode(costTr, 0)}` : ""}</div>`
             : "";
           html += `<div class="bumpkin-building-card pixel-panel">
             <div class="bumpkin-building-header pixel-font">
