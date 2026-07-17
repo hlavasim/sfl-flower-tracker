@@ -2,9 +2,8 @@ import { FLOWER_RECIPES, DOLL_RECIPES, RECIPE_INGREDIENTS } from "../data/recipe
 import { SEED_COSTS, POTION_TICKET_COIN_VALUE, EXOTIC_CROPS_TICKET_COST, GIANT_FRUIT_SELL_PRICES, TOOL_COSTS, FLOWER_SEED_COIN_COSTS, ITEM_XP_VALUES, GIANT_ITEM_COIN_PRICES } from "../data/economy.mjs";
 import { PET_FETCH_DATA } from "../data/pets.mjs";
 import { CRAFTED_INGREDIENT_RECIPES, TREASURE_SELL_PRICES, COMPOST_RECIPES, CRUSTACEAN_RECIPES } from "../data/crafting.mjs";
-import { FISH_MARKET_RECIPES, FISH_DATA, FISH_TIER_MAP, BAIT_WORM_YIELD } from "../data/fishing.mjs";
+import { FISH_MARKET_RECIPES, FISH_DATA, FISH_TIER_MAP, BAIT_WORM_YIELD, FISHING_ROD_COST } from "../data/fishing.mjs";
 import { COOKING_INGREDIENTS, SALT_RAKE_COST, SALT_BASE_YIELD } from "../data/cooking.mjs";
-import { computeRodCostSFL, computeFishEffectiveCost, computeBaitCostSFL } from "./cooking-cost.mjs";
 
 // Market-first item value resolver — moved verbatim from flowers.html's estimateItemSfl
 // (~:23110-23300). Prefers a direct P2P market price; falls back through a fixed chain of
@@ -329,4 +328,72 @@ export function itemProductionCost(itemName, p2p, coinsPerSFL, skills, _seen, ex
   // Skipped here since it requires sflPerXP rate which we don't have at call-time.
 
   return null;
+}
+
+// SFL cost per worm-bait, averaged across seasons (uses existing COMPOST_RECIPES)
+export function computeBaitCostSFL(baitName, p2pPrices) {
+  const data = Object.values(COMPOST_RECIPES || {}).find(d => d.outputs && d.outputs[baitName] !== undefined);
+  if (!data) return 0;
+  const seasons = Object.keys(data.inputs);
+  let total = 0, n = 0;
+  for (const s of seasons) {
+    let seasonCost = 0, missing = false;
+    for (const [ing, qty] of Object.entries(data.inputs[s])) {
+      const p = p2pPrices[ing] || 0;
+      if (p === 0) { missing = true; break; }
+      seasonCost += p * qty;
+    }
+    if (!missing) { total += seasonCost; n++; }
+  }
+  if (n === 0) return 0;
+  const avgComposterCost = total / n;
+  const wormYield = BAIT_WORM_YIELD[baitName] || 1;
+  return avgComposterCost / wormYield;
+}
+
+// SFL rod cost per cast — Reel Deal skill applies to COIN part only (skill text: "-50% rod coin cost")
+export function computeRodCostSFL(p2pPrices, coinsPerSFL, skills) {
+  const reelDealCoinMult = (skills && skills["Reel Deal"]) ? 0.5 : 1;
+  const coinSFL = coinsPerSFL > 0 ? (FISHING_ROD_COST.coins * reelDealCoinMult) / coinsPerSFL : 0;
+  let matSFL = 0;
+  for (const [m, q] of Object.entries(FISHING_ROD_COST.materials)) {
+    matSFL += (p2pPrices[m] || 0) * q;
+  }
+  return coinSFL + matSFL;
+}
+
+// Effective SFL cost per 1 fish: cheapest of all paths (no-chum vs guaranteed-chum).
+// Each path: per-cast cost (rod + bait + optional chum*qty) / prob.
+// Empirical no-chum probs from sfl.world; guaranteed-chum prob = 1.0 (likes mechanic).
+export function computeFishEffectiveCost(fishName, p2pPrices, coinsPerSFL, skills) {
+  const fd = FISH_DATA[fishName];
+  if (!fd || !fd.paths || fd.paths.length === 0) return null;
+  const rodSFL = computeRodCostSFL(p2pPrices, coinsPerSFL, skills);
+
+  let best = null;
+  for (const p of fd.paths) {
+    const baitSFL = computeBaitCostSFL(p.bait, p2pPrices);
+    if (baitSFL <= 0) continue;
+    const chumP = p.chum ? (p2pPrices[p.chum] || 0) : 0;
+    if (p.chum && chumP <= 0) continue;  // can't price chum
+    const chumCostPerCast = chumP * (p.chumQty || 0);
+    const prob = p.chum ? 1.0 : (p.prob || 0);
+    if (prob <= 0) continue;
+    const costPerCast = rodSFL + baitSFL + chumCostPerCast;
+    const sfl = costPerCast / prob;
+    if (best === null || sfl < best.sfl) {
+      best = { sfl, path: p, baitSFL, rodSFL, chumCostPerCast, prob, useChum: !!p.chum };
+    }
+  }
+  if (!best) return null;
+  // Backwards-compat shape: expose fd-like fields used by detail card
+  return {
+    sfl: best.sfl,
+    useChum: best.useChum,
+    fd: { bait: best.path.bait, chum: best.path.chum || null, chumQty: best.path.chumQty || 0 },
+    baitSFL: best.baitSFL,
+    rodSFL: best.rodSFL,
+    chumCostPerCast: best.chumCostPerCast,
+    prob: best.prob,
+  };
 }

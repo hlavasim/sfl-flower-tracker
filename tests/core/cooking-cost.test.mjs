@@ -6,8 +6,8 @@ import {
   computeSaltYieldPerRake,
   computeSaltRakeCoinMult,
   computeFishYieldPerCast,
-  computeRodCostSFL,
 } from "../../core/engine/cooking-cost.mjs";
+import { computeRodCostSFL } from "../../core/engine/item-value.mjs";
 
 const wrap = JSON.parse(readFileSync(new URL("../fixtures/farm-155498.json", import.meta.url)));
 const farm = wrap.farm || wrap;

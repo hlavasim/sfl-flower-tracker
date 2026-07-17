@@ -1,7 +1,5 @@
 import { findCollectible, isWearableEquipped } from "../derive/items.mjs";
 import { COOKING_INGREDIENTS, COOKING_RECIPES_DATA, SALT_BASE_YIELD } from "../data/cooking.mjs";
-import { FISHING_ROD_COST, FISH_DATA, BAIT_WORM_YIELD } from "../data/fishing.mjs";
-import { COMPOST_RECIPES } from "../data/crafting.mjs";
 import { itemProductionCost } from "./item-value.mjs";
 
 export function computeSaltYieldPerRake(farm) {
@@ -45,74 +43,6 @@ export function computeFishYieldPerCast(farm, tier) {
     if (skills["Fishy Gamble"]) y += 0.20;     // 20% chance +1 expert
   }
   return y;
-}
-
-// SFL cost per worm-bait, averaged across seasons (uses existing COMPOST_RECIPES)
-export function computeBaitCostSFL(baitName, p2pPrices) {
-  const data = Object.values(COMPOST_RECIPES || {}).find(d => d.outputs && d.outputs[baitName] !== undefined);
-  if (!data) return 0;
-  const seasons = Object.keys(data.inputs);
-  let total = 0, n = 0;
-  for (const s of seasons) {
-    let seasonCost = 0, missing = false;
-    for (const [ing, qty] of Object.entries(data.inputs[s])) {
-      const p = p2pPrices[ing] || 0;
-      if (p === 0) { missing = true; break; }
-      seasonCost += p * qty;
-    }
-    if (!missing) { total += seasonCost; n++; }
-  }
-  if (n === 0) return 0;
-  const avgComposterCost = total / n;
-  const wormYield = BAIT_WORM_YIELD[baitName] || 1;
-  return avgComposterCost / wormYield;
-}
-
-// SFL rod cost per cast — Reel Deal skill applies to COIN part only (skill text: "-50% rod coin cost")
-export function computeRodCostSFL(p2pPrices, coinsPerSFL, skills) {
-  const reelDealCoinMult = (skills && skills["Reel Deal"]) ? 0.5 : 1;
-  const coinSFL = coinsPerSFL > 0 ? (FISHING_ROD_COST.coins * reelDealCoinMult) / coinsPerSFL : 0;
-  let matSFL = 0;
-  for (const [m, q] of Object.entries(FISHING_ROD_COST.materials)) {
-    matSFL += (p2pPrices[m] || 0) * q;
-  }
-  return coinSFL + matSFL;
-}
-
-// Effective SFL cost per 1 fish: cheapest of all paths (no-chum vs guaranteed-chum).
-// Each path: per-cast cost (rod + bait + optional chum*qty) / prob.
-// Empirical no-chum probs from sfl.world; guaranteed-chum prob = 1.0 (likes mechanic).
-export function computeFishEffectiveCost(fishName, p2pPrices, coinsPerSFL, skills) {
-  const fd = FISH_DATA[fishName];
-  if (!fd || !fd.paths || fd.paths.length === 0) return null;
-  const rodSFL = computeRodCostSFL(p2pPrices, coinsPerSFL, skills);
-
-  let best = null;
-  for (const p of fd.paths) {
-    const baitSFL = computeBaitCostSFL(p.bait, p2pPrices);
-    if (baitSFL <= 0) continue;
-    const chumP = p.chum ? (p2pPrices[p.chum] || 0) : 0;
-    if (p.chum && chumP <= 0) continue;  // can't price chum
-    const chumCostPerCast = chumP * (p.chumQty || 0);
-    const prob = p.chum ? 1.0 : (p.prob || 0);
-    if (prob <= 0) continue;
-    const costPerCast = rodSFL + baitSFL + chumCostPerCast;
-    const sfl = costPerCast / prob;
-    if (best === null || sfl < best.sfl) {
-      best = { sfl, path: p, baitSFL, rodSFL, chumCostPerCast, prob, useChum: !!p.chum };
-    }
-  }
-  if (!best) return null;
-  // Backwards-compat shape: expose fd-like fields used by detail card
-  return {
-    sfl: best.sfl,
-    useChum: best.useChum,
-    fd: { bait: best.path.bait, chum: best.path.chum || null, chumQty: best.path.chumQty || 0 },
-    baitSFL: best.baitSFL,
-    rodSFL: best.rodSFL,
-    chumCostPerCast: best.chumCostPerCast,
-    prob: best.prob,
-  };
 }
 
 // Compute total SFL cost per cook (resolves fish, bait, chained recipes recursively)
