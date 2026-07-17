@@ -47,7 +47,7 @@ export function itemMarketValue(itemName, p2pPrices, _visited, rates, trace) {
         return 0;
       }
       total += ingPrice * qty;
-      if (trace) parts.push(`${qty} × ${ing} @ ${ingPrice.toFixed(5)}`);
+      if (trace) parts.push(`${qty + 1} × ${ing} @ ${ingPrice.toFixed(5)}`);
     }
     if (trace) return emit(trace, { item: itemName, method: "crafted recipe", formula: parts.join(" + "), value: total, steps: kids });
     return total;
@@ -357,7 +357,7 @@ export function itemProductionCost(itemName, p2p, coinsPerSFL, skills, _seen, ex
       if (trace) matParts.push(`${q} × ${m} @ ${mp.toFixed(5)}`);
     }
     const cost = (coinSFL + matSFL) / yieldPerRake;
-    if (cost <= 0) return null;
+    if (!(cost > 0)) return null;
     const result = { price: cost, source: "salt" };
     if (trace) emit(trace, { item: itemName, method: "salt rake", formula: `Salt Rake: (${SALT_RAKE_COST.coins}c × ${coinMult.toFixed(2)} / ${coinsPerSFL.toFixed(0)} c/SFL + ${matParts.join(" + ")}) / ${yieldPerRake} yield`, value: cost });
     return result;
@@ -379,7 +379,7 @@ export function itemProductionCost(itemName, p2p, coinsPerSFL, skills, _seen, ex
       const tier = FISH_TIER_MAP[itemName];
       const yieldByTier = (extras && extras.fishYieldByTier) || {};
       const yieldPerCast = (tier && yieldByTier[tier]) || 1;
-      if (rod <= 0) return null;
+      if (!(rod > 0)) return null;
       const result = { price: rod / yieldPerCast, source: "fish-rod" };
       if (trace) emit(trace, { item: itemName, method: "fish rod", formula: `rod ${rod.toFixed(5)} SFL / ${yieldPerCast} yield`, value: result.price });
       return result;
@@ -394,7 +394,7 @@ export function itemProductionCost(itemName, p2p, coinsPerSFL, skills, _seen, ex
   // 3. Worm-bait (Earthworm/Grub/Red Wiggler from COMPOST_RECIPES)
   if (BAIT_WORM_YIELD[itemName]) {
     const c = computeBaitCostSFL(itemName, p2p);
-    if (c <= 0) return null;
+    if (!(c > 0)) return null;
     const result = { price: c, source: "bait" };
     if (trace) emit(trace, { item: itemName, method: "bait", formula: `avg composter cost / ${BAIT_WORM_YIELD[itemName]} worm yield`, value: c });
     return result;
@@ -491,7 +491,7 @@ export function itemProductionCost(itemName, p2p, coinsPerSFL, skills, _seen, ex
         }
       }
     }
-    if (total <= 0) return null;
+    if (!(total > 0)) return null;
     const result = { price: total, source: "crustacean" };
     if (trace) emit(trace, { item: itemName, method: "crustacean", formula: chumLabel || "no priceable chum", value: total, steps: kids });
     return result;
