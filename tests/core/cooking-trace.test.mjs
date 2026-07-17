@@ -22,6 +22,7 @@ test("computeFoodXP trace pins the base × boosts formula and the value", () => 
   assert.equal(trace.length, 1);
   assert.equal(trace[0].item, "Test Food");
   assert.equal(trace[0].value, 131.25);
+  assert.equal(trace[0].unit, "XP");
   assert.equal(trace[0].formula, "100 base × 1.05 (Munching Mastery) × 1.25 (Pan)");
   assert.equal(trace[0].steps.length, 3);                  // base + 2 boosts
 });
@@ -85,8 +86,13 @@ test("cooking payload is unchanged when explain is absent (no cookingTrace key)"
 test("Fire Pit trace: xp/cook × cooks/day multiplies out to its xpPerDay", () => {
   const p = buildCookingSection(farm, {}, { savedRecipes: {}, petSimulate: true, explain: true });
   const node = p.cookingTrace["Fire Pit"];
-  const xpNode = node.steps[0], cooksNode = node.steps[2];
+  const xpNode = node.steps[0], timeNode = node.steps[1], cooksNode = node.steps[2];
   assert.equal(xpNode.method, "food xp");
   assert.equal(cooksNode.item, "cooks/day");
   assert.ok(Math.abs(xpNode.value * cooksNode.value - node.value) < 1e-6, "xp/cook × cooks/day = xp/day");
+  // units label each node so a shared renderer shows the right suffix (not "SFL")
+  assert.equal(node.unit, "XP/day");
+  assert.equal(xpNode.unit, "XP");
+  assert.equal(timeNode.unit, "s");
+  assert.equal(cooksNode.unit, "cooks/day");
 });

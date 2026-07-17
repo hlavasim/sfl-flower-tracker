@@ -120,7 +120,7 @@ export function detectCookingBoosts(farm, settings = {}) {
 export function computeFoodXP(foodName, food, buildingName, boosts, trace) {
   let xp = food.xp;
   const parts = trace ? [`${food.xp} base`] : null;
-  const kids = trace ? [{ item: `${foodName} base`, method: "recipe base", formula: "recipe base XP", value: food.xp }] : null;
+  const kids = trace ? [{ item: `${foodName} base`, method: "recipe base", formula: "recipe base XP", value: food.xp, unit: "XP" }] : null;
   for (const b of boosts.xpBoosts) {
     if (b.buildings && !b.buildings.includes(buildingName)) continue;
     if (b.excludeBuildings && b.excludeBuildings.includes(buildingName)) continue;
@@ -128,26 +128,26 @@ export function computeFoodXP(foodName, food, buildingName, boosts, trace) {
     xp *= b.multiplier;
     if (trace && b.multiplier !== 1) {
       parts.push(`× ${b.multiplier} (${b.name})`);
-      kids.push({ item: b.name, method: "xp boost", formula: `× ${b.multiplier}`, value: xp });
+      kids.push({ item: b.name, method: "xp boost", formula: `× ${b.multiplier}`, value: xp, unit: "XP" });
     }
   }
-  if (trace) trace.push({ item: foodName, method: "food xp", formula: parts.join(" "), value: xp, steps: kids });
+  if (trace) trace.push({ item: foodName, method: "food xp", formula: parts.join(" "), value: xp, unit: "XP", steps: kids });
   return xp;
 }
 
 export function computeCookTime(baseSec, buildingName, boosts, trace) {
   let time = baseSec;
   const parts = trace ? [`${baseSec}s base`] : null;
-  const kids = trace ? [{ item: "base time", method: "recipe base", formula: `${baseSec}s`, value: baseSec }] : null;
+  const kids = trace ? [{ item: "base time", method: "recipe base", formula: `${baseSec}s`, value: baseSec, unit: "s" }] : null;
   for (const b of boosts.timeBoosts) {
     if (b.buildings && !b.buildings.includes(buildingName)) continue;
     if (b.excludeBuildings && b.excludeBuildings.includes(buildingName)) continue;
     time *= b.multiplier;
     if (trace && b.multiplier !== 1) {
       parts.push(`× ${b.multiplier} (${b.name})`);
-      kids.push({ item: b.name, method: "time boost", formula: `× ${b.multiplier}`, value: time });
+      kids.push({ item: b.name, method: "time boost", formula: `× ${b.multiplier}`, value: time, unit: "s" });
     }
   }
-  if (trace) trace.push({ item: "cook time", method: "cook time", formula: parts.join(" "), value: time, steps: kids });
+  if (trace) trace.push({ item: "cook time", method: "cook time", formula: parts.join(" "), value: time, unit: "s", steps: kids });
   return time;
 }

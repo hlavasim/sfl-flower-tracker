@@ -83,10 +83,11 @@ export function buildCookingSection(farm, prices = {}, settings = {}) {
         method: "xp/day",
         formula: `${rnd(xp)} XP/cook × ${rnd(cooksPerDay)} cooks/day` + (count > 1 ? ` (${count} buildings)` : ""),
         value: xpPerDay,
+        unit: "XP/day",
         steps: [
           xpTrace[0],
           timeTrace[0],
-          { item: "cooks/day", method: "throughput", formula: `86400s / ${Math.round(time)}s` + (count > 1 ? ` × ${count} buildings` : ""), value: cooksPerDay },
+          { item: "cooks/day", method: "throughput", formula: `86400s / ${Math.round(time)}s` + (count > 1 ? ` × ${count} buildings` : ""), value: cooksPerDay, unit: "cooks/day" },
         ],
       };
     }
