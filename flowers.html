@@ -25735,6 +25735,16 @@
       if (findCollectible(data.farm, "Treasure Map").length > 0) treasureBoost += 0.2;
       if (getCount(data.farm?.inventory || {}, "Camel") > 0 || findCollectible(data.farm, "Camel").length > 0) treasureBoost += 0.3;
 
+      // F2-2g: ROI/diff inventory-item valuation reads the shared price map
+      // (/api/compute?section=prices), priced with the all-five-rates profile, instead of
+      // calling estimateItemSfl directly. Built ONCE here (not per item) — PRICES() is keyed
+      // by farm + JSON.stringify(rates), so a per-item rebuild would thrash the same key.
+      // PRICES(roiRates) is null until this profile's fetch resolves; guard to {} so lookups
+      // fall through to the same "|| 0" absence handling the old call's "|| 0" had, and the
+      // arrival rerender (via main()) repaints with real data once the map lands.
+      const roiRates = { coinsPerSFL, sflPerXP, season: currentSeason, treasureBoost, gemsPerSFL };
+      const roiPriceMap = (PRICES(roiRates) || {}).marketValue || {};
+
       // Render the Investment Tracker mount BEFORE the diff body so the user sees it first.
       const invMount = document.createElement("div");
       invMount.id = "investment-tracker";
@@ -25800,7 +25810,7 @@
             sflValue = gemsPerSFL > 0 ? d / gemsPerSFL : 0;
           } else if (key.startsWith("inventory.")) {
             itemName = key.substring(10); category = "inventory";
-            const price = estimateItemSfl(itemName, p2pPrices, null, { coinsPerSFL, sflPerXP, season: currentSeason, treasureBoost, gemsPerSFL });
+            const price = roiPriceMap[itemName] || 0;
             sflValue = d * price;
           } else if (key.startsWith("wardrobe.")) {
             itemName = key.substring(9); category = "wardrobe";
