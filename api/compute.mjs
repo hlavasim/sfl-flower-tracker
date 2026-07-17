@@ -1,6 +1,7 @@
 import { buildCookingSection } from "../core/sections/cooking.mjs";
 import { buildConstantsSection } from "../core/sections/constants.mjs";
 import { buildPricesSection } from "../core/sections/prices.mjs";
+import { valueDiff } from "../core/sections/diff.mjs";
 import { computeBettyRate } from "../core/engine/prices.mjs";
 import { API_SPEC } from "../core/api-spec.mjs";
 
@@ -138,6 +139,25 @@ export default async function handler(req, res) {
     // `prices` needs a farm (productionCost is per-farm: skills, salt/fish yield), so
     // unlike constants/openapi its branch belongs here, after the farm-required guard.
     else if (section === "prices") data = buildPricesSection(farm, p2p, settings);
+    // `diff`: VALUE a batch of already-fetched delta maps. The client POSTs the diffs it got
+    // from /api/farm-history or /api/farm-diff-agg (the diff itself is produced upstream by the
+    // snapshot collector and stored); we only apply the market price map built above from the
+    // SAME rate profile the client passes, replacing the inline processDiff. compute stays
+    // DB-free — data lives in the DB endpoints, valuation lives here. explain=1 attaches a
+    // per-snapshot net-SFL trace. Body: { snapshots: [{ capturedAt, diff }, ...] }.
+    else if (section === "diff") {
+      const priceMap = (buildPricesSection(farm, p2p, settings).marketValue) || {};
+      let input = {};
+      try { input = req.body ? JSON.parse(req.body.toString()) : {}; } catch { input = {}; }
+      const list = Array.isArray(input.snapshots) ? input.snapshots : [];
+      const snapshots = list.map((s) => {
+        const dm = (s && s.diff) || {};
+        const trace = settings.explain ? [] : undefined;
+        const { items, netSfl } = valueDiff(dm, priceMap, settings, trace);
+        return { capturedAt: s.capturedAt ?? s.time ?? null, netSfl, items, ...(settings.explain ? { trace: trace[0] } : {}) };
+      });
+      data = { snapshots };
+    }
     else return res.status(400).json({ error: `unknown section: ${section}` });
     const payload = { farm: farmId, computedAt: new Date().toISOString(), section, data };
     // section=prices only (task F2-2e-fix): fetchPrices() above is best-effort and silently

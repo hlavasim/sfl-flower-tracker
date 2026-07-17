@@ -29,7 +29,7 @@ export const API_SPEC = {
             name: "section",
             in: "query",
             required: false,
-            schema: { type: "string", enum: ["constants", "cooking", "openapi", "prices"], default: "cooking" },
+            schema: { type: "string", enum: ["constants", "cooking", "diff", "openapi", "prices"], default: "cooking" },
             description:
               "Which computation to run. `constants`: the canonical core/data game tables " +
               "plus flowers.html migration-coverage status, no farm needed. `cooking`: " +
@@ -40,8 +40,12 @@ export const API_SPEC = {
               "the Salt Rake's cost and deliberately ignores its market price, so this map " +
               "is per-farm — it depends on skills and salt/fish yield). An item neither can " +
               "price is ABSENT from that map rather than `0`, so a consumer can tell " +
-              "\"unpriced\" from \"free\". `openapi`: this " +
-              "document, no farm needed. Defaults to `cooking` when omitted.",
+              "\"unpriced\" from \"free\". `diff`: POST-only — VALUES a batch of already-fetched " +
+              "farm-snapshot delta maps (from /api/farm-history or /api/farm-diff-agg) into " +
+              "per-item SFL contributions + a net total, using the `marketValue` map priced " +
+              "with the posted `rates`. Body: `{ snapshots: [{ diff }, ...] }`; response " +
+              "`data.snapshots[]` carries `{ netSfl, items }` (+ a `trace` when `explain=1`). " +
+              "`openapi`: this document, no farm needed. Defaults to `cooking` when omitted.",
           },
           {
             name: "farm",

@@ -25145,15 +25145,12 @@
       if (findCollectible(data.farm, "Treasure Map").length > 0) treasureBoost += 0.2;
       if (getCount(data.farm?.inventory || {}, "Camel") > 0 || findCollectible(data.farm, "Camel").length > 0) treasureBoost += 0.3;
 
-      // F2-2g: ROI/diff inventory-item valuation reads the shared price map
-      // (/api/compute?section=prices), priced with the all-five-rates profile, instead of
-      // calling estimateItemSfl directly. Built ONCE here (not per item) — PRICES() is keyed
-      // by farm + JSON.stringify(rates), so a per-item rebuild would thrash the same key.
-      // PRICES(roiRates) is null until this profile's fetch resolves; guard to {} so lookups
-      // fall through to the same "|| 0" absence handling the old call's "|| 0" had, and the
-      // arrival rerender (via main()) repaints with real data once the map lands.
+      // The all-five-rates profile the diff page prices with. Passed to
+      // /api/compute?section=diff (server-side valuation — see valueDiffs/fetchData below) and
+      // to the "Pricing methods" panel's PRICE_TRACES(roiRates). The per-item diff valuation
+      // itself now lives in core (core/sections/diff.mjs valueDiff), not inline — one tested
+      // place, priced with this same profile server-side.
       const roiRates = { coinsPerSFL, sflPerXP, season: currentSeason, treasureBoost, gemsPerSFL };
-      const roiPriceMap = (PRICES(roiRates) || {}).marketValue || {};
 
       // Render the Investment Tracker mount BEFORE the diff body so the user sees it first.
       const invMount = document.createElement("div");
@@ -25197,42 +25194,25 @@
 
       const noPrices = Object.keys(p2pPrices).length === 0;
 
-      // ── Process a diff object into items + netSfl ──
-      function processDiff(diff) {
-        let netSfl = 0;
-        const items = [];
-        for (const [key, rawDelta] of Object.entries(diff)) {
-          if (key === "nodes" || key === "_v" || key.startsWith("_h.") || key.startsWith("_c.")) continue;
-          const d = typeof rawDelta === "number" ? rawDelta : parseFloat(rawDelta);
-          if (isNaN(d) || Math.abs(d) < 0.0001) continue;
-
-          let category = "other";
-          let itemName = key;
-          let sflValue = 0;
-
-          if (key === "balance") {
-            category = "sfl"; itemName = "SFL Balance"; sflValue = d;
-          } else if (key === "coins") {
-            category = "coins"; itemName = "Coins";
-            sflValue = coinsPerSFL > 0 ? d / coinsPerSFL : 0;
-          } else if (key === "gems" || key === "inventory.Gem") {
-            category = "gems"; itemName = key === "gems" ? "Gems" : "Gem";
-            sflValue = gemsPerSFL > 0 ? d / gemsPerSFL : 0;
-          } else if (key.startsWith("inventory.")) {
-            itemName = key.substring(10); category = "inventory";
-            const price = roiPriceMap[itemName] || 0;
-            sflValue = d * price;
-          } else if (key.startsWith("wardrobe.")) {
-            itemName = key.substring(9); category = "wardrobe";
-          } else if (key.startsWith("stock.")) {
-            continue;
-          }
-
-          items.push({ key, itemName, category, delta: d, sflValue, hasPrice: sflValue !== 0 || category === "sfl" || category === "coins" || category === "gems" });
-          netSfl += sflValue;
+      // ── Value a batch of diff maps via core (/api/compute?section=diff) ──
+      // The per-item valuation used to live here (processDiff); it now lives in
+      // core/sections/diff.mjs (valueDiff) and runs server-side with the market price map built
+      // from roiRates — one tested place. We POST the already-fetched delta maps and get back
+      // { netSfl, items } per snapshot, in input order. A few retries ride out the upstream 429
+      // (compute builds the price map from a live farm fetch, which the proxy rate-limits).
+      async function valueDiffs(rawList) {
+        if (!rawList.length) return [];
+        const body = JSON.stringify({ snapshots: rawList.map(r => ({ diff: r.diff || {} })) });
+        const url = `/api/compute?farm=${FARM_ID}&section=diff&rates=${encodeURIComponent(JSON.stringify(roiRates))}`;
+        let lastErr;
+        for (let a = 0; a < 3; a++) {
+          try {
+            const rp = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body });
+            if (!rp.ok) throw new Error(`compute diff ${rp.status}`);
+            return ((await rp.json()).data || {}).snapshots || [];
+          } catch (e) { lastErr = e; if (a < 2) await new Promise(r => setTimeout(r, 500 * (a + 1))); }
         }
-        items.sort((a, b) => Math.abs(b.sflValue) - Math.abs(a.sflValue) || a.itemName.localeCompare(b.itemName));
-        return { items, netSfl };
+        throw lastErr;
       }
 
       // ── State ──
@@ -25278,10 +25258,17 @@
             return;
           }
           const snapshots = (res.data.snapshots || []).reverse();
-          processed = snapshots.map(snap => {
+          let valued;
+          try { valued = await valueDiffs(snapshots); }
+          catch (e) {
+            loading = false;
+            document.getElementById("diff-content").innerHTML = renderGroupSelector() +
+              `<div class="pixel-panel pixel-font" style="padding:20px;text-align:center;color:var(--red)">Failed to value changes: ${escHTML(e.message)}<br><button class="pixel-font" style="margin-top:10px;padding:8px 16px;cursor:pointer" onclick="window._diffSetGroup('all')">Retry</button></div>`;
+            return;
+          }
+          processed = snapshots.map((snap, i) => {
             const rawDiff = snap.diff || {};
-            const { items, netSfl } = processDiff(rawDiff);
-            return { time: new Date(snap.captured_at), netSfl, items, count: 1, nodes: rawDiff.nodes || null };
+            return { time: new Date(snap.captured_at), netSfl: (valued[i] || {}).netSfl || 0, items: (valued[i] || {}).items || [], count: 1, nodes: rawDiff.nodes || null };
           });
         } else {
           const groupMap = { hours: "hour", days: "day", weeks: "week", months: "month", years: "year" };
@@ -25292,9 +25279,17 @@
               `<div class="pixel-panel pixel-font" style="padding:20px;text-align:center;color:var(--red)">Failed to load: ${escHTML(res.error)}<br><button class="pixel-font" style="margin-top:10px;padding:8px 16px;cursor:pointer" onclick="window._diffSetGroup('${escHTML(mode)}')">Retry</button></div>`;
             return;
           }
-          processed = (res.data.periods || []).map(p => {
+          const periods = res.data.periods || [];
+          let valuedG;
+          try { valuedG = await valueDiffs(periods); }
+          catch (e) {
+            loading = false;
+            document.getElementById("diff-content").innerHTML = renderGroupSelector() +
+              `<div class="pixel-panel pixel-font" style="padding:20px;text-align:center;color:var(--red)">Failed to value changes: ${escHTML(e.message)}<br><button class="pixel-font" style="margin-top:10px;padding:8px 16px;cursor:pointer" onclick="window._diffSetGroup('${escHTML(mode)}')">Retry</button></div>`;
+            return;
+          }
+          processed = periods.map((p, i) => {
             const rawDiff = p.diff || {};
-            const { items, netSfl } = processDiff(rawDiff);
             // Reconstruct node harvests from flat _h.*/_c.* keys (aggregated sums)
             let nodes = rawDiff.nodes || null;
             const hKeys = Object.entries(rawDiff).filter(([k]) => k.startsWith("_h.") || k.startsWith("_c."));
@@ -25307,7 +25302,7 @@
                 if (k.startsWith("_c.")) nodes[type].cured = Math.round(v);
               }
             }
-            return { time: new Date(p.period), netSfl, items, count: p.count, nodes };
+            return { time: new Date(p.period), netSfl: (valuedG[i] || {}).netSfl || 0, items: (valuedG[i] || {}).items || [], count: p.count, nodes };
           });
         }
 
