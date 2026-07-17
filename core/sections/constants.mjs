@@ -2,6 +2,9 @@ import * as cooking from "../data/cooking.mjs";
 import * as crafting from "../data/crafting.mjs";
 import * as fishing from "../data/fishing.mjs";
 import * as prices from "../data/prices.mjs";
+import * as recipes from "../data/recipes.mjs";
+import * as economy from "../data/economy.mjs";
+import * as pets from "../data/pets.mjs";
 import { TABLE_INVENTORY } from "../data/_inventory.mjs";
 
 // Every core/data module. Adding one here is the ONLY manual step; the test in
@@ -11,6 +14,9 @@ const MODULES = {
   "core/data/crafting.mjs": crafting,
   "core/data/fishing.mjs": fishing,
   "core/data/prices.mjs": prices,
+  "core/data/recipes.mjs": recipes,
+  "core/data/economy.mjs": economy,
+  "core/data/pets.mjs": pets,
 };
 
 export function buildConstantsSection() {

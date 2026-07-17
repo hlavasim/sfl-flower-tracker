@@ -458,6 +458,10 @@ export const TABLE_INVENTORY = [
     "lines": 12
   },
   {
+    "name": "POTION_TICKET_COIN_VALUE",
+    "lines": null
+  },
+  {
     "name": "POWER_CATEGORIES",
     "lines": 25
   },
