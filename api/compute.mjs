@@ -31,6 +31,7 @@ const PRICES_URL = "https://sfl.world/api/v1/prices";
 // the promise itself, synchronously, before it's awaited, means callers that arrive while a
 // fetch is still in flight share that same fetch instead of starting their own.
 const CACHE_TTL_MS = 10_000;
+const CACHE_MAX_ENTRIES = 64; // sweep expired entries past this — bounds a warm instance's farmCache
 const farmCache = new Map(); // farmId -> { promise, expiresAt }
 const pricesCache = new Map(); // "prices" -> { promise, expiresAt } — single entry, no farm key
 
@@ -39,15 +40,25 @@ const pricesCache = new Map(); // "prices" -> { promise, expiresAt } — single 
 // result (or a rejection) is evicted immediately so the very next call retries against
 // upstream instead of replaying the failure for the rest of the TTL.
 function cachedFetch(cache, key, run) {
+  // Opportunistic sweep: drop successful-but-expired entries so a warm instance serving many
+  // distinct farmIds does not grow the Map without bound (only failures self-evict below).
+  if (cache.size > CACHE_MAX_ENTRIES) {
+    const now = Date.now();
+    for (const [k, v] of cache) if (v.expiresAt <= now) cache.delete(k);
+  }
   const hit = cache.get(key);
   if (hit && hit.expiresAt > Date.now()) return hit.promise;
-  const promise = run();
-  cache.set(key, { promise, expiresAt: Date.now() + CACHE_TTL_MS });
-  promise.then(
-    (result) => { if (!result.ok) cache.delete(key); },
-    () => cache.delete(key)
+  const entry = { promise: run(), expiresAt: Date.now() + CACHE_TTL_MS };
+  cache.set(key, entry);
+  // Evict on failure — but ONLY if this exact entry is still the cached one. A slow promise
+  // can settle after the TTL lapsed and a newer request already replaced it; deleting
+  // unconditionally would wipe that newer, still-valid entry and reintroduce the stampede.
+  const evictIfMine = () => { if (cache.get(key) === entry) cache.delete(key); };
+  entry.promise.then(
+    (result) => { if (!result.ok) evictIfMine(); },
+    evictIfMine
   );
-  return promise;
+  return entry.promise;
 }
 
 async function fetchFarm(farmId) {
