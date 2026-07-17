@@ -34,6 +34,16 @@ const HARDCODED_BRANCH_ITEM_NAMES = [
   "Barn Delight", "Love Charm", "Omnifeed", "Mark", "Acorn", "Salt",
 ];
 
+// Some resolver branches accept an item under a SUFFIXED alias and strip it before
+// looking up the base table. item-value.mjs's SEED_COSTS branch prices "Pumpkin Seed"
+// and "Pumpkin Plant" by stripping " Seed"/" Plant" and reading SEED_COSTS["Pumpkin"].
+// The base table's keys ("Pumpkin") are already unioned via ITEM_KEYED_TABLES, but the
+// ALIAS forms the caller actually passes ("Pumpkin Seed") are not — so the map had no
+// entry for them and dashboard chore costs (which query "<crop> Seed") silently read 0.
+// Generate both alias forms for every SEED_COSTS key. tests/core/price-universe-drift.test.mjs
+// pins that these suffixes match the branch in item-value.mjs.
+const SEED_ALIAS_SUFFIXES = [" Seed", " Plant"];
+
 // Unions the keys of every core/data table the resolvers can key an item by, the
 // hardcoded-branch names above, plus the live P2P market's own keys (items priced
 // ONLY on the market, e.g. Tuna, Rod).
@@ -46,6 +56,10 @@ export function buildItemUniverse(prices) {
     for (const name of Object.keys(data.outputs)) names.add(name);
   }
   for (const name of HARDCODED_BRANCH_ITEM_NAMES) names.add(name);
+  // Seed/Plant aliases: the resolver prices "<crop> Seed"/"<crop> Plant" via SEED_COSTS[<crop>].
+  for (const crop of Object.keys(SEED_COSTS)) {
+    for (const suffix of SEED_ALIAS_SUFFIXES) names.add(crop + suffix);
+  }
   for (const name of Object.keys(prices || {})) names.add(name);
   return names;
 }

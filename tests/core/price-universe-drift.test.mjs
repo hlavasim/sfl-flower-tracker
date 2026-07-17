@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { buildItemUniverse } from "../../core/sections/prices.mjs";
+import { SEED_COSTS } from "../../core/data/economy.mjs";
 
 // core/engine/item-value.mjs's itemMarketValue/itemProductionCost price some items
 // through hardcoded `itemName === "X"` branches that have no data-table backing at
@@ -67,4 +68,32 @@ test("every itemName === \"...\" branch in item-value.mjs is in the price univer
 test("a hardcoded-branch item that resolves to unpriceable is still considered, just absent from the map", () => {
   const universe = buildItemUniverse({});
   assert.ok(universe.has("Omnifeed"), "Omnifeed must be in the universe even when it prices to 0/absent");
+});
+
+// A SECOND blind-spot class, found when the dashboard regressed 4 chore costs to 0 (F2-2e):
+// the SEED_COSTS branch prices an item passed as "<crop> Seed"/"<crop> Plant" by stripping the
+// suffix and reading SEED_COSTS[<crop>]. The base keys are unioned, but the ALIAS forms the
+// callers actually pass were not — so the served map lacked them and the lookup read 0. This
+// pins that (a) the resolver really does strip exactly these suffixes, re-derived from source
+// so the test can't drift from the code, and (b) every alias form is in the universe.
+test("the SEED_COSTS suffix-strip branch still strips exactly the suffixes the universe generates", () => {
+  // Re-derive the suffixes from item-value.mjs rather than hard-coding them here.
+  const stripped = [...SRC.matchAll(/endsWith\(\s*(['"])(\s[A-Za-z]+)\1\s*\)/g)].map((m) => m[2]);
+  const seedBranch = /SEED_COSTS/.test(SRC) ? stripped : [];
+  assert.ok(seedBranch.includes(" Seed") && seedBranch.includes(" Plant"),
+    `item-value.mjs's SEED_COSTS branch strips ${JSON.stringify(seedBranch)} — the universe generates ` +
+    "' Seed' and ' Plant' aliases; if the branch changed its suffixes, update SEED_ALIAS_SUFFIXES in " +
+    "core/sections/prices.mjs to match.");
+});
+
+test("every '<crop> Seed'/'<crop> Plant' alias the resolver can price is in the price universe", () => {
+  const universe = buildItemUniverse({});
+  const missing = [];
+  for (const crop of Object.keys(SEED_COSTS)) {
+    for (const suffix of [" Seed", " Plant"]) {
+      if (!universe.has(crop + suffix)) missing.push(crop + suffix);
+    }
+  }
+  assert.deepEqual(missing, [],
+    `these seed aliases are priceable by item-value.mjs but missing from buildItemUniverse: ${missing.join(", ")}`);
 });
