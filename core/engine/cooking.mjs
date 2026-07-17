@@ -111,23 +111,43 @@ export function detectCookingBoosts(farm, settings = {}) {
   return { xpBoosts, timeBoosts, petStreakInfo };
 }
 
-export function computeFoodXP(foodName, food, buildingName, boosts) {
+// The optional `trace` sink (an array) makes this function EXPLAIN as it computes:
+// when present it pushes ONE node {item, method, formula, value, steps} describing the
+// base XP and every value-affecting boost, mirroring core/engine/item-value.mjs. Absent,
+// behaviour and value are exactly as before (a single skipped null check per boost). ×1
+// informational boosts (salt/fish-yield entries) don't change XP and are left out of the
+// trace so it shows only steps that actually move the number.
+export function computeFoodXP(foodName, food, buildingName, boosts, trace) {
   let xp = food.xp;
+  const parts = trace ? [`${food.xp} base`] : null;
+  const kids = trace ? [{ item: `${foodName} base`, method: "recipe base", formula: "recipe base XP", value: food.xp }] : null;
   for (const b of boosts.xpBoosts) {
     if (b.buildings && !b.buildings.includes(buildingName)) continue;
     if (b.excludeBuildings && b.excludeBuildings.includes(buildingName)) continue;
     if (b.honeyOnly && !food.usesHoney) continue;
     xp *= b.multiplier;
+    if (trace && b.multiplier !== 1) {
+      parts.push(`× ${b.multiplier} (${b.name})`);
+      kids.push({ item: b.name, method: "xp boost", formula: `× ${b.multiplier}`, value: xp });
+    }
   }
+  if (trace) trace.push({ item: foodName, method: "food xp", formula: parts.join(" "), value: xp, steps: kids });
   return xp;
 }
 
-export function computeCookTime(baseSec, buildingName, boosts) {
+export function computeCookTime(baseSec, buildingName, boosts, trace) {
   let time = baseSec;
+  const parts = trace ? [`${baseSec}s base`] : null;
+  const kids = trace ? [{ item: "base time", method: "recipe base", formula: `${baseSec}s`, value: baseSec }] : null;
   for (const b of boosts.timeBoosts) {
     if (b.buildings && !b.buildings.includes(buildingName)) continue;
     if (b.excludeBuildings && b.excludeBuildings.includes(buildingName)) continue;
     time *= b.multiplier;
+    if (trace && b.multiplier !== 1) {
+      parts.push(`× ${b.multiplier} (${b.name})`);
+      kids.push({ item: b.name, method: "time boost", formula: `× ${b.multiplier}`, value: time });
+    }
   }
+  if (trace) trace.push({ item: "cook time", method: "cook time", formula: parts.join(" "), value: time, steps: kids });
   return time;
 }

@@ -31,6 +31,7 @@ export function buildCookingSection(farm, prices = {}, settings = {}) {
     },
   };
   const buildings = {};
+  const cookingTrace = {};   // per-building xp/day derivation, only filled when settings.explain
   let total = 0;
   for (const bd of COOKING_BUILDING_NAMES) {
     // The Aging Shed must still be PLACED to count, but once placed its slots scale with its
@@ -70,6 +71,25 @@ export function buildCookingSection(farm, prices = {}, settings = {}) {
     const xpPerDay = xp * cooksPerDay;
     buildings[bd] = { recipe: selName, cookMinutes: time > 0 ? Math.round(time / 6) / 10 : null, xpPerCook: rnd(xp), buildingCount: count, xpPerDay: rnd(xpPerDay), recipes };
     total += xpPerDay;
+    if (settings.explain) {
+      // Recompute the SAME xp/time with a trace sink so the derivation mirrors the value
+      // exactly (same code path); mirrors item-value.mjs's opt-in trace. Children carry the
+      // boost breakdown; the top formula multiplies xp/cook by cooks/day.
+      const xpTrace = [], timeTrace = [];
+      computeFoodXP(selName, rd, bd, boosts, xpTrace);
+      computeCookTime(rd.cookSec, bd, boosts, timeTrace);
+      cookingTrace[bd] = {
+        item: bd,
+        method: "xp/day",
+        formula: `${rnd(xp)} XP/cook × ${rnd(cooksPerDay)} cooks/day` + (count > 1 ? ` (${count} buildings)` : ""),
+        value: xpPerDay,
+        steps: [
+          xpTrace[0],
+          timeTrace[0],
+          { item: "cooks/day", method: "throughput", formula: `86400s / ${Math.round(time)}s` + (count > 1 ? ` × ${count} buildings` : ""), value: cooksPerDay },
+        ],
+      };
+    }
   }
   const pi = boosts.petStreakInfo || {};
   // Mirrors flowers.html:10606-10617 — XP banked in the food inventory, summed across
@@ -96,5 +116,6 @@ export function buildCookingSection(farm, prices = {}, settings = {}) {
     // page's boost lists (flowers.html:10707-10717) and xpLabel() building/honey tags.
     boosts: { xpBoosts: boosts.xpBoosts || [], timeBoosts: boosts.timeBoosts || [], petStreakInfo: pi },
     bankedFood: { totalXp: bankedXP, items: foodInInventory },
+    ...(settings.explain ? { cookingTrace } : {}),
   };
 }
