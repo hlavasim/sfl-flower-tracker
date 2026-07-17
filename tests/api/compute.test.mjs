@@ -129,6 +129,47 @@ test("prices fetch failure still returns cooking data (null costs), not a 500", 
   }
 });
 
+test("section=prices reports pricesOk:true when the upstream prices fetch resolves", async () => {
+  const orig = globalThis.fetch;
+  globalThis.fetch = mockFetchWithPrices();
+  try {
+    const req = { query: { farm: "155498", section: "prices" } };
+    const res = mockRes();
+    await handler(req, res);
+    assert.equal(res._status, 200);
+    assert.equal(res._json.pricesOk, true);
+    assert.ok(Object.keys(res._json.data.marketValue).length > 250);
+  } finally {
+    globalThis.fetch = orig;
+  }
+});
+
+// task F2-2e-fix: fetchPrices() falls back to {} on ANY upstream failure and the handler
+// still returns 200 (prices are best-effort, must not fail the whole endpoint). Without an
+// explicit signal, the client's PRICES() cache (no TTL) cannot tell this near-empty map
+// apart from a genuine success and would cache it forever. pricesOk:false is that signal.
+test("section=prices reports pricesOk:false when the upstream prices fetch fails, without 500ing", async () => {
+  const orig = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("sfl.world")) throw new Error("network down");
+    return { ok: true, status: 200, json: async () => JSON.parse(fixtureText) };
+  };
+  try {
+    const req = { query: { farm: "155498", section: "prices" } };
+    const res = mockRes();
+    await handler(req, res);
+    assert.equal(res._status, 200);
+    assert.equal(res._json.pricesOk, false);
+    // Near-empty, not literally {}: a few items (Mark, Love Charm) price via a fixed
+    // constant regardless of p2p (item-value.mjs) — but the ~250+ market-priced items
+    // from the happy-path test above are all gone.
+    assert.ok(Object.keys(res._json.data.marketValue).length < 10,
+      `expected a near-empty map, got ${Object.keys(res._json.data.marketValue).length} items`);
+  } finally {
+    globalThis.fetch = orig;
+  }
+});
+
 test("farm fetch failure still 502s even if prices fetch succeeds", async () => {
   const orig = globalThis.fetch;
   globalThis.fetch = async (url) => {

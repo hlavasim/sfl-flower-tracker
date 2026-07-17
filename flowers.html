@@ -6936,7 +6936,14 @@
           if (rates) url += `&rates=${encodeURIComponent(JSON.stringify(rates))}`;
           const resp = await fetch(url);
           if (!resp.ok) throw new Error(`compute ${resp.status}`);
-          const data = (await resp.json()).data;
+          const body = await resp.json();
+          // pricesOk:false means the SERVER's own upstream prices fetch fell back to {} (task
+          // F2-2e-fix) — data.marketValue is then near-empty but the HTTP status is still 200.
+          // Treat it exactly like an HTTP failure (falls into the catch below, retries, and —
+          // if still failing after the loop — lands in the existing error state) rather than
+          // caching the degraded map as durable success.
+          if (body.pricesOk === false) throw new Error("prices not loaded (pricesOk:false)");
+          const data = body.data;
           if (!_pricesCache.has(key) && _pricesCache.size >= PRICES_CACHE_LIMIT) {
             // Defensive only: the ~4 live profiles never approach this cap. Evict oldest.
             _pricesCache.delete(_pricesCache.keys().next().value);

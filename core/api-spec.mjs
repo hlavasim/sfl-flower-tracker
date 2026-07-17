@@ -108,7 +108,10 @@ export const API_SPEC = {
             description:
               "The response shape depends on `section` — there are THREE, and they are not " +
               "variations of one envelope:\n" +
-              "- `section=cooking` and `section=prices` → `{ farm, computedAt, section, data }`.\n" +
+              "- `section=cooking` and `section=prices` → `{ farm, computedAt, section, data }`. " +
+              "`section=prices` additionally carries `pricesOk: boolean` — false when the " +
+              "server's own upstream P2P prices fetch failed and `data.marketValue` is " +
+              "therefore near-empty (best-effort, not a 4xx/5xx); true when it loaded.\n" +
               "- `section=constants` → `{ computedAt, section, data }` — no `farm` (it needs none).\n" +
               "- `section=openapi` → **this document itself, unwrapped**: top-level `openapi`, " +
               "`info`, `servers`, `paths`. There is NO `data`/`section`/`computedAt` key — reading " +

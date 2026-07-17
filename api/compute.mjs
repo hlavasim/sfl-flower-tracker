@@ -137,7 +137,15 @@ export default async function handler(req, res) {
     // unlike constants/openapi its branch belongs here, after the farm-required guard.
     else if (section === "prices") data = buildPricesSection(farm, p2p, settings);
     else return res.status(400).json({ error: `unknown section: ${section}` });
-    return res.status(200).json({ farm: farmId, computedAt: new Date().toISOString(), section, data });
+    const payload = { farm: farmId, computedAt: new Date().toISOString(), section, data };
+    // section=prices only (task F2-2e-fix): fetchPrices() above is best-effort and silently
+    // falls back to {} on any upstream failure, so a 200 alone cannot tell the client "prices
+    // genuinely loaded" from "upstream was rate-limited, data.marketValue is near-empty". The
+    // client's PRICES() cache has no TTL, so caching the latter as if it were the former reads
+    // 0 for every migrated price for the rest of the session. pricesOk lets the client tell
+    // the two apart and treat a false as retryable instead of durable success.
+    if (section === "prices") payload.pricesOk = Object.keys(p2p).length > 0;
+    return res.status(200).json(payload);
   } catch (e) {
     return res.status(500).json({ error: String((e && e.message) || e) });
   }
