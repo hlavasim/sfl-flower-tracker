@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
-import { itemMarketValue } from "../../core/engine/item-value.mjs";
+import { itemMarketValue, itemProductionCost } from "../../core/engine/item-value.mjs";
 
 const p2p = JSON.parse(readFileSync(new URL("../fixtures/p2p-prices.json", import.meta.url)));
 const RATES = { coinsPerSFL: 1061.0079575596817 };
@@ -55,4 +55,19 @@ test("a recipe whose ingredient is unpriceable collapses to 0, not a partial sum
   const noMilk = { ...p2p };
   delete noMilk["Milk"];
   assert.equal(itemMarketValue("Cheese", noMilk, null, RATES), 0);
+});
+
+test("productionCost ignores the market for Salt; marketValue does not — on purpose", () => {
+  // Salt is on the market (0.00416071) but you rake your own, so a cooking cost must use
+  // the rake's cost, not the price. This asymmetry IS the feature; if it ever collapses,
+  // one of the two questions has been silently answered with the other's answer.
+  const market = itemMarketValue("Salt", p2p, null, RATES);
+  const cost = itemProductionCost("Salt", p2p, RATES.coinsPerSFL, {}, undefined, {});
+  assert.equal(market, p2p["Salt"]);
+  assert.equal(cost.source, "salt");
+  assert.ok(cost.price > market, `production ${cost.price} should exceed market ${market}`);
+});
+
+test("productionCost returns null for something you cannot make", () => {
+  assert.equal(itemProductionCost("Definitely Not An Item", p2p, RATES.coinsPerSFL, {}, undefined, {}), null);
 });
