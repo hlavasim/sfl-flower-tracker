@@ -151,3 +151,66 @@ test("productionCost['Salt'] really uses the farm's rake extras, not the unboost
   // The two must actually differ, or neither assertion above proves the extras arrived.
   assert.notEqual(boosted.productionCost["Salt"], unboosted.productionCost["Salt"]);
 });
+
+// task-TRACE3: settings.explain attaches marketTrace/productionTrace maps. The trace's top
+// `value` is asserted equal to the corresponding map value for EVERY item in the maps — the
+// property that makes the explanation trustworthy (spec §5). This is not tautological for
+// the FORMULA text (a separate field the resolver could still get wrong) but IS expected to
+// hold for `value` by construction, since buildPricesSection passes one sink into the exact
+// call that produces the map entry rather than deriving the trace from a second call.
+test("explain mode attaches traces whose values equal the map values", () => {
+  const p = buildPricesSection(farm, p2p, { coinsPerSFL: 1061.0079575596817, explain: true });
+  assert.ok(p.marketTrace && p.productionTrace, "traces present in explain mode");
+  for (const [item, node] of Object.entries(p.marketTrace)) {
+    assert.equal(node.value, p.marketValue[item], `marketTrace[${item}] value must equal the map`);
+  }
+  for (const [item, node] of Object.entries(p.productionTrace)) {
+    assert.equal(node.value, p.productionCost[item], `productionTrace[${item}] value must equal the map`);
+  }
+});
+
+test("no explain flag → no traces, map byte-identical to today", () => {
+  const p = buildPricesSection(farm, p2p, { coinsPerSFL: 1061.0079575596817 });
+  assert.equal(p.marketTrace, undefined);
+  assert.equal(p.productionTrace, undefined);
+  assert.equal(Object.keys(p.marketValue).length, 352);
+});
+
+// Bounding the explain payload: only DERIVED items (method !== "market price") get a trace
+// entry — a bare P2P lookup needs no explanation. Milk is priced directly off the fixture's
+// p2p map (a "market price" leaf), so it must be ABSENT from both trace maps even though it
+// is present (and > 0) in both value maps. Cheese has no direct p2p entry in the fixture, so
+// both resolvers must derive it and therefore trace it.
+test("explain trace maps are bounded to derived items — bare market-price items are excluded", () => {
+  const p = buildPricesSection(farm, p2p, { coinsPerSFL: 1061.0079575596817, explain: true });
+  assert.ok(p.marketValue["Milk"] > 0, "sanity: Milk must be priced");
+  assert.equal("Milk" in p.marketTrace, false, "Milk is a bare market-price lookup, must not be traced");
+  assert.equal("Cheese" in p.marketTrace, true, "Cheese is derived (crafted recipe), must be traced");
+  assert.equal("Cheese" in p.productionTrace, true, "Cheese is derived (cooking recipe), must be traced");
+});
+
+// Formula spot-check, hand-computed independently of the code under test (per spec §5 — a
+// value-equals-map assertion alone cannot catch a wrong FORMULA string, only a wrong VALUE).
+// core/data/crafting.mjs's CRAFTED_INGREDIENT_RECIPES pins "Cheese": { "Milk": 3 }; the
+// fixture's p2p map prices Milk at 0.11007 (tests/fixtures/p2p-prices.json). item-value.mjs's
+// crafted-recipe branch formats a single-ingredient formula as "<qty> × <ingredient> @
+// <price.toFixed(5)>" with no join separator needed for one term, so the hand-computed
+// expectation is "3 × Milk @ 0.11007" with value 3 × 0.11007 = 0.33021 — computed here from
+// the raw fixture data, never by calling buildPricesSection/itemMarketValue.
+test("Cheese's marketTrace formula matches the hand-computed crafted-recipe derivation", () => {
+  const p = buildPricesSection(farm, p2p, { coinsPerSFL: 1061.0079575596817, explain: true });
+  const milkPrice = p2p["Milk"];
+  const wantValue = 3 * milkPrice;
+  const wantFormula = `3 × Milk @ ${milkPrice.toFixed(5)}`;
+  const node = p.marketTrace["Cheese"];
+  assert.ok(node, "Cheese must have a marketTrace entry");
+  assert.equal(node.method, "crafted recipe");
+  assert.equal(node.formula, wantFormula);
+  assert.equal(node.value, wantValue);
+  assert.equal(node.value, p.marketValue["Cheese"]);
+  // Recursive: the child step for Milk itself is a bare market-price leaf.
+  assert.ok(Array.isArray(node.steps) && node.steps.length === 1);
+  assert.equal(node.steps[0].item, "Milk");
+  assert.equal(node.steps[0].method, "market price");
+  assert.equal(node.steps[0].value, milkPrice);
+});

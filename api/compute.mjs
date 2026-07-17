@@ -129,6 +129,8 @@ export default async function handler(req, res) {
       savedRecipes: req.query.recipes ? JSON.parse(req.query.recipes) : {},
       petSimulate: req.query.petSimulate === "1",
       coinsPerSFL,
+      // section=prices only (task-TRACE3): attaches marketTrace/productionTrace when "1".
+      explain: req.query.explain === "1",
       ...rates,
     };
     let data;

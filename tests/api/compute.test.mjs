@@ -170,6 +170,42 @@ test("section=prices reports pricesOk:false when the upstream prices fetch fails
   }
 });
 
+// task-TRACE3: ?explain=1 wires req.query.explain into settings.explain, which
+// buildPricesSection turns into marketTrace/productionTrace on the returned data.
+test("section=prices with explain=1 attaches marketTrace/productionTrace to data", async () => {
+  const orig = globalThis.fetch;
+  globalThis.fetch = mockFetchWithPrices();
+  try {
+    const req = { query: { farm: "155498", section: "prices", explain: "1" } };
+    const res = mockRes();
+    await handler(req, res);
+    assert.equal(res._status, 200);
+    assert.ok(res._json.data.marketTrace, "marketTrace present when explain=1");
+    assert.ok(res._json.data.productionTrace, "productionTrace present when explain=1");
+    const [item, node] = Object.entries(res._json.data.marketTrace)[0];
+    assert.equal(node.value, res._json.data.marketValue[item], `marketTrace[${item}] must equal marketValue`);
+  } finally {
+    globalThis.fetch = orig;
+  }
+});
+
+// Absent (or any value other than the literal "1") must reproduce today's payload with no
+// trace keys at all — explain is opt-in, not default-on.
+test("section=prices without explain → no trace keys", async () => {
+  const orig = globalThis.fetch;
+  globalThis.fetch = mockFetchWithPrices();
+  try {
+    const req = { query: { farm: "155498", section: "prices" } };
+    const res = mockRes();
+    await handler(req, res);
+    assert.equal(res._status, 200);
+    assert.equal(res._json.data.marketTrace, undefined);
+    assert.equal(res._json.data.productionTrace, undefined);
+  } finally {
+    globalThis.fetch = orig;
+  }
+});
+
 test("farm fetch failure still 502s even if prices fetch succeeds", async () => {
   const orig = globalThis.fetch;
   globalThis.fetch = async (url) => {

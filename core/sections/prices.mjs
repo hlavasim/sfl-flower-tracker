@@ -64,7 +64,7 @@ export function buildItemUniverse(prices) {
   return names;
 }
 
-// settings = { coinsPerSFL?, ...anyOtherRate } — forwarded VERBATIM as `rates` to
+// settings = { coinsPerSFL?, explain?, ...anyOtherRate } — forwarded VERBATIM as `rates` to
 // itemMarketValue, so it is not limited to coinsPerSFL: sflPerXP, treasureBoost,
 // gemsPerSFL, season all reach the resolver the same way (item-value.mjs reads them off
 // `rates.*`). This is how api/compute.mjs's `?rates=` query param takes effect for
@@ -73,10 +73,20 @@ export function buildItemUniverse(prices) {
 // number rather than a rates object. Absent extra fields reproduces today's map
 // byte-for-byte (the existing tests pin this) — nothing about that contract changed.
 // prices = p2p price map (sfl.world/api/v1/prices .data.p2p), or {} if unavailable.
+//
+// settings.explain (task-TRACE3): when truthy, also collects `marketTrace`/`productionTrace`
+// — maps keyed by item name, each value the trace NODE (core/engine/item-value.mjs §emit)
+// for that item, obtained by passing a fresh one-item sink into the SAME resolver call that
+// produces the map value (not a second call), so the trace's `value` is the map value by
+// construction. Bounded to DERIVED items (`method !== "market price"`) — a bare market
+// lookup needs no derivation shown, and the universe is ~350 items so tracing everything
+// would needlessly bloat the explain payload. When `explain` is falsy, resolvers are called
+// exactly as before (no sink argument), so the no-explain payload is unchanged.
 export function buildPricesSection(farm, prices = {}, settings = {}) {
   const p2p = prices || {};
   const coinsPerSFL = settings.coinsPerSFL || 0;
   const skills = farm?.bumpkin?.skills || {};
+  const explain = !!settings.explain;
   // Mirrors core/sections/cooking.mjs — these depend only on `farm`, not on the
   // item being priced, so computed once and reused across the whole universe.
   const extras = {
@@ -91,13 +101,28 @@ export function buildPricesSection(farm, prices = {}, settings = {}) {
   const universe = buildItemUniverse(p2p);
   const marketValue = {};
   const productionCost = {};
+  const marketTrace = explain ? {} : undefined;
+  const productionTrace = explain ? {} : undefined;
   for (const name of universe) {
     // Absence means "cannot price" — 0/null must NOT be written as 0, or a
     // consumer could not tell "unpriced" from "free".
-    const mv = itemMarketValue(name, p2p, null, settings);
-    if (mv > 0) marketValue[name] = mv;
-    const pc = itemProductionCost(name, p2p, coinsPerSFL, skills, undefined, extras);
-    if (pc && pc.price > 0) productionCost[name] = pc.price;
+    const mvSink = explain ? [] : undefined;
+    const mv = itemMarketValue(name, p2p, null, settings, mvSink);
+    if (mv > 0) {
+      marketValue[name] = mv;
+      if (explain && mvSink[0] && mvSink[0].method !== "market price") marketTrace[name] = mvSink[0];
+    }
+    const pcSink = explain ? [] : undefined;
+    const pc = itemProductionCost(name, p2p, coinsPerSFL, skills, undefined, extras, pcSink);
+    if (pc && pc.price > 0) {
+      productionCost[name] = pc.price;
+      if (explain && pcSink[0] && pcSink[0].method !== "market price") productionTrace[name] = pcSink[0];
+    }
   }
-  return { marketValue, productionCost };
+  const result = { marketValue, productionCost };
+  if (explain) {
+    result.marketTrace = marketTrace;
+    result.productionTrace = productionTrace;
+  }
+  return result;
 }

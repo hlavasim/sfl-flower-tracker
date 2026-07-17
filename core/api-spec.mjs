@@ -102,6 +102,22 @@ export const API_SPEC = {
               "regardless of the farm's real streak state. Any other value (or absence) " +
               "leaves the real streak state in effect.",
           },
+          {
+            name: "explain",
+            in: "query",
+            required: false,
+            schema: { type: "string", enum: ["1"] },
+            description:
+              "`1` attaches per-item derivation traces to section=prices; off by default. " +
+              "When set, the response's `data` also carries `marketTrace`/`productionTrace` " +
+              "— maps keyed by item name, each value a trace node `{item, method, formula, " +
+              "value, steps?}` describing how that item's `marketValue`/`productionCost` " +
+              "entry was derived, produced by the SAME resolver call that computed the map " +
+              "value (so the trace's `value` always equals the map's). Bounded to DERIVED " +
+              "items (`method !== \"market price\"`) — a bare market lookup needs no " +
+              "explanation. Ignored by every other section. Any value other than \"1\", or " +
+              "omitting it, reproduces today's payload with no trace keys at all.",
+          },
         ],
         responses: {
           200: {
