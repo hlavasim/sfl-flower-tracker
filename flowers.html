@@ -8042,19 +8042,22 @@
     function dashP2PCost(items) {
       let total = 0;
       const arr = Array.isArray(items) ? items : Object.entries(items).map(([n,q]) => ({name:n, qty:q}));
+      // F2-2e: dashboard reads the shared price map (/api/compute?section=prices), priced
+      // with the dashRates profile (coinsPerSFL, gemsPerSFL), instead of calling
+      // estimateItemSfl directly. Read once per call, reuse for every item in the loop —
+      // handles direct P2P, crafted ingredients, food recipes, tool costs (Crab Pot /
+      // Mariner Pot etc.), seed costs, doll recipes, crustaceans, same as estimateItemSfl did.
+      // PRICES(dashRates) is null until that profile's fetch resolves; guard to {} so lookups
+      // fall through to the same "|| 0" absence handling the old call's "|| 0" had, and
+      // the arrival rerender (via main()) repaints with real data once the map lands.
+      const priceMap = (PRICES(dashRates) || {}).marketValue || {};
       for (const {name, qty} of arr) {
         let unit;
         if (name === "coins") {
           // Some deliveries (e.g. tywin) consume coins as part of payment.
           unit = dashRates?.coinsPerSFL > 0 ? 1 / dashRates.coinsPerSFL : 0;
-        } else if (typeof window !== "undefined" && typeof window.estimateItemSfl === "function") {
-          // estimateItemSfl lives inside main()'s scope; main exposes it on
-          // window. Handles direct P2P, crafted ingredients, food recipes,
-          // tool costs (Crab Pot / Mariner Pot etc.), seed costs, doll
-          // recipes, crustaceans (Oyster = Crab Pot + 2 Fish Stick) …
-          unit = window.estimateItemSfl(name, dashP2P, null, dashRates) || 0;
         } else {
-          unit = dashP2P[name] || 0;
+          unit = priceMap[name] || 0;
         }
         total += unit * qty;
       }
