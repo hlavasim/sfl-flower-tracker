@@ -24059,7 +24059,7 @@
           </div></div>`;
 
         // Store data for slider callback
-        window._marksShopCtx = { kitchenAnalysis, petAnalysis, mult: myMult, petMult: myPetMult, p2p: _marksP2pPrices };
+        window._marksShopCtx = { kitchenAnalysis, petAnalysis, mult: myMult, petMult: myPetMult, p2p: _marksP2pPrices, priceMap: _marksPriceMap };
       }
 
       // ── Marks Over Time Chart ──
@@ -24695,7 +24695,7 @@
 
       const ctx = window._marksShopCtx;
       if (!ctx) return;
-      const { kitchenAnalysis, petAnalysis, mult, petMult, p2p } = ctx;
+      const { kitchenAnalysis, petAnalysis, mult, petMult, p2p, priceMap } = ctx;
 
       // Simulate: for each resource, how many deliveries can we do today under budget?
       // Diminishing: delivery i gives max(20 - fulfilled*2, 1) raw marks × mult
@@ -24705,7 +24705,7 @@
       let totalMarks = 0, totalCost = 0, totalDlv = 0;
 
       for (const ka of kitchenAnalysis) {
-        const costPerDlv = (estimateItemSfl(ka.item, p2p) || 0) * ka.amount;
+        const costPerDlv = (priceMap[ka.item] || 0) * ka.amount;
         if (costPerDlv <= 0) continue;
         let dlvCount = 0, marks = 0, cost = 0;
         let ful = ka.fulfilled; // start from today's actual fulfilled
@@ -24738,11 +24738,11 @@
       }
 
       for (const pa of petAnalysis) {
-        let petUnit = estimateItemSfl(pa.food, p2p) || 0;
+        let petUnit = priceMap[pa.food] || 0;
         if (petUnit <= 0 && typeof RECIPE_INGREDIENTS !== "undefined" && RECIPE_INGREDIENTS[pa.food]) {
           let rc = 0;
           for (const [ing, qty] of Object.entries(RECIPE_INGREDIENTS[pa.food])) {
-            rc += (p2p[ing] || estimateItemSfl(ing, p2p) || 0) * qty;
+            rc += (p2p[ing] || priceMap[ing] || 0) * qty;
           }
           petUnit = rc;
         }
