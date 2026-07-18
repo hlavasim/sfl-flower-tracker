@@ -31,6 +31,7 @@ import {
   unitToSfl, calcSeedCostPerDay, calcAnimalFeedCost, calcSicknessCost,
   calcLavaPitCostPerDay, getAnimalCatSfl, getPriceProduct, activeShrineEffects,
 } from "../engine/power-costs.mjs";
+import { _setPowerContext, calcBoostValue } from "../engine/roadmap.mjs";
 
 export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   const inventory = farm.inventory || {};
@@ -331,5 +332,29 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   // pipeline only — exactly the part the page's loop computed before its restock block.
   const categories = { catSummaries, totalBaseSfl, totalBoostedSfl, totalCostSfl, oilPrice: p2pPrices["Oil"] };
 
-  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories };
+  // ── boostValues: per-(boost, category) solo/synergy/ROI via the roadmap engine
+  // (core/engine/roadmap.mjs), replacing renderPowerContent's three calcBoostValue call
+  // sites. Placed AFTER the categories block so the engine sees the render-time Oil
+  // price mutation, exactly like the page. `roadmapSettingsRaw` = the client's
+  // localStorage sfl_roadmap_settings (query `roadmap`) — marketFee/coinsFree/… feed
+  // into the valuations even though calcBoostValue forces effMode theoretical.
+  // roi: Infinity is JSON-unrepresentable → null on the wire (client maps back).
+  _setPowerContext({ farm, capacity, exchangeRates, stockMods, p2pPrices, boostItems, savedProducts, season, roadmapSettingsRaw: settings.roadmapSettings || {} });
+  const boostValues = {};
+  for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
+    if (!catDef.quantifiable) continue;
+    const product = savedProducts[catId] || getDefaultProduct(catId);
+    boostValues[catId] = {};
+    for (const b of catBoosts[catId]) {
+      try {
+        const v = calcBoostValue(b, catId, product, capacity, p2pPrices, catBoosts[catId], b.has);
+        if (!isFinite(v.roi)) v.roi = null;
+        if (!isFinite(v.solo)) v.solo = 0;
+        if (!isFinite(v.synergy)) v.synergy = 0;
+        boostValues[catId][b.name] = v;
+      } catch {}
+    }
+  }
+
+  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues };
 }

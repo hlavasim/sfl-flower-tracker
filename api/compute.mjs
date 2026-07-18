@@ -259,7 +259,11 @@ export default async function handler(req, res) {
       const [nftResult, exchange] = await Promise.all([fetchNfts(), fetchExchange()]);
       if (!nftResult.ok) return res.status(502).json({ error: `nfts fetch failed: ${nftResult.status}` });
       // `products` mirrors the page's per-category product selectors (same param as buds).
-      data = buildPowerSection(farm, p2p, nftResult.data, exchange, { ...settings, savedProducts: req.query.products ? JSON.parse(req.query.products) : {} });
+      // `roadmap` = the client's raw sfl_roadmap_settings (localStorage) — feeds the
+      // boostValues engine; absent → defaults, matching a fresh browser.
+      let roadmapSettings = {};
+      try { roadmapSettings = req.query.roadmap ? JSON.parse(req.query.roadmap) : {}; } catch { roadmapSettings = {}; }
+      data = buildPowerSection(farm, p2p, nftResult.data, exchange, { ...settings, roadmapSettings, savedProducts: req.query.products ? JSON.parse(req.query.products) : {} });
     }
     // `roi`: the ROI page's state — the page's own copy of the power fetch+rate block
     // (plus a 4th upstream, BTC/USD) and its own boost-item/pet builders. Same 502

@@ -52,7 +52,8 @@ export const API_SPEC = {
               "`exchangeRates` (Betty coins rate + gems + USD), `stockMods`, `season`, " +
               "`categories` (per-category production + cost summary — the page's former " +
               "renderPowerContent pipeline: base/boosted SFL/day, seed/tool/feed/sickness " +
-              "costs, honoring the `products` selections), and " +
+              "costs, honoring the `products` selections), `boostValues` (per-boost-per-category " +
+              "solo/synergy/ROI from the roadmap engine; roi Infinity → null on the wire), and " +
               "a slim `nftData` ({collectibles, wearables} with name/floor/boost_text/supply). Fetches the sfl.world NFT " +
               "list server-side; a failed NFT fetch is a 502 like a failed farm fetch. " +
               "`roi`: the ROI-vs-login-frequency page's state — its own boost-item list " +
@@ -108,6 +109,18 @@ export const API_SPEC = {
               "product-specific boosts the way the page's product selectors do. Any " +
               "category omitted falls back to that category's default product. Ignored " +
               "by other sections.",
+          },
+          {
+            name: "roadmap",
+            in: "query",
+            required: false,
+            schema: { type: "string" },
+            description:
+              "URL-encoded JSON of the client's roadmap settings (the page's localStorage " +
+              "`sfl_roadmap_settings`), consumed by `section=power`'s boostValues engine — " +
+              "marketFee, coinsFree, miningCostMode, excludeCats etc. shift per-boost " +
+              "valuations. Absent or unparseable → defaults (a fresh browser). Ignored by " +
+              "other sections.",
           },
           {
             name: "rates",

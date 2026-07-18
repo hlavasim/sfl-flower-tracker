@@ -15809,7 +15809,7 @@
     // serialized catBoosts would be per-category COPIES, breaking that).
     async function buildPowerState(data) {
       const { inventory, farm } = data;
-      const url = `/api/compute?farm=${FARM_ID}&section=power&products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}`;
+      const url = `/api/compute?farm=${FARM_ID}&section=power&products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}&roadmap=${encodeURIComponent(localStorage.getItem("sfl_roadmap_settings") || "{}")}`;
       let payload, lastErr;
       for (let a = 0; a < 3; a++) {
         try {
@@ -18435,6 +18435,14 @@
         </div>`;
       }
 
+      // Per-boost values — computed by section=power's roadmap engine (boostValues);
+      // roi arrives as null for Infinity (JSON). The skill-rank ladder still computes
+      // its rank-scaled variants client-side (synthetic boost items).
+      const _powerBoostVal = (catId, b) => {
+        const v = (powerState.boostValues && powerState.boostValues[catId] && powerState.boostValues[catId][b.name]) || { solo: 0, synergy: 0, roi: null };
+        return Object.assign({}, v, { roi: (v.roi == null ? Infinity : v.roi) });
+      };
+
       // Best Buys: top 10 missing boosts by ROI
       const bestBuys = [];
       for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
@@ -18442,7 +18450,7 @@
         const product = savedProducts[catId] || getDefaultProduct(catId);
         const missingInCat = catBoosts[catId].filter(b => !b.has && !b.isDisabled && b.floor > 0);
         for (const b of missingInCat) {
-          const val = calcBoostValue(b, catId, product, capacity, p2pPrices, catBoosts[catId], false);
+          const val = _powerBoostVal(catId, b);
           if (val.synergy > 0.0001) {
             bestBuys.push({ boost: b, catId, catLabel: catDef.label, synergy: val.synergy, roi: val.roi, floor: b.floor });
           }
@@ -18665,7 +18673,7 @@
         if (owned.length > 0) {
           content += `<div class="power-subsection-label">✅ OWNED (${owned.length})</div>`;
           for (const b of owned) {
-            const val = calcBoostValue(b, catId, product, capacity, p2pPrices, items, true);
+            const val = _powerBoostVal(catId, b);
             content += renderPowerBoostRow(b, catId, product, val, true);
             content += renderPowerSkillRankRows(b, catId, product, capacity, p2pPrices, items, true);
           }
@@ -18674,7 +18682,7 @@
         // Missing boosts
         if (missing.length > 0) {
           const missingWithVal = missing.map(b => {
-            const val = calcBoostValue(b, catId, product, capacity, p2pPrices, items, false);
+            const val = _powerBoostVal(catId, b);
             return { b, val };
           }).sort((a, b) => a.val.roi - b.val.roi);
 

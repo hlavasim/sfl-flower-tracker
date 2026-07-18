@@ -133,3 +133,21 @@ test("categories — mining cats use the per-node engine (render-time semantics)
   assert.ok(Math.abs(out.categories.catSummaries.trees.baseSfl - expected) < 1e-9,
     `trees base ${out.categories.catSummaries.trees.baseSfl} != per-node ${expected}`);
 });
+
+test("boostValues — per-boost solo/synergy/ROI from the roadmap engine", () => {
+  const bv = out.boostValues;
+  assert.ok(bv && bv.trees, "boostValues.trees present");
+  // Foreman Beaver (owned, free_tool for trees): synergy from the mining chain, flagged
+  const fb = bv.trees["Foreman Beaver"];
+  assert.ok(fb, "Foreman Beaver valued in trees");
+  assert.equal(fb.isFreeTool, true);
+  // fixture's Test Unowned Statue (+0.1 Wood, floor 42) must have a finite ROI or null — never Infinity
+  for (const cat of Object.keys(bv)) {
+    for (const v of Object.values(bv[cat])) {
+      assert.ok(v.roi === null || isFinite(v.roi), "roi must be JSON-safe");
+      assert.ok(isFinite(v.solo) && isFinite(v.synergy));
+    }
+  }
+  // skills carry values too (they participate via SKILL_TREE parsing)
+  assert.ok(Object.keys(bv.crops).length > 0);
+});
