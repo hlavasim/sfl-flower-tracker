@@ -3,6 +3,7 @@ import { buildConstantsSection } from "../core/sections/constants.mjs";
 import { buildPricesSection } from "../core/sections/prices.mjs";
 import { valueDiff } from "../core/sections/diff.mjs";
 import { buildPowerSection } from "../core/sections/power.mjs";
+import { buildRoiSection } from "../core/sections/roi.mjs";
 import { computeBettyRate } from "../core/engine/prices.mjs";
 import { API_SPEC } from "../core/api-spec.mjs";
 
@@ -10,6 +11,7 @@ const PROXY = process.env.PROXY_ORIGIN || "https://sunflower.sajmonium.quest";
 const PRICES_URL = "https://sfl.world/api/v1/prices";
 const NFTS_URL = "https://sfl.world/api/v1/nfts";
 const EXCHANGE_URL = "https://sfl.world/api/v1.1/exchange";
+const BTC_URL = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd";
 
 // --- Short-TTL in-process cache for the two upstream fetches -------------------------------
 // /api/compute is a pure read. Each migrated consumer on a page (marks today, more sections
@@ -39,7 +41,8 @@ const CACHE_MAX_ENTRIES = 64; // sweep expired entries past this — bounds a wa
 const farmCache = new Map(); // farmId -> { promise, expiresAt }
 const pricesCache = new Map(); // "prices" -> { promise, expiresAt } — single entry, no farm key
 const nftsCache = new Map(); // "nfts" -> { promise, expiresAt } — section=power only
-const exchangeCache = new Map(); // "exchange" -> { promise, expiresAt } — section=power only
+const exchangeCache = new Map(); // "exchange" -> { promise, expiresAt } — sections power+roi
+const btcCache = new Map(); // "btc" -> { promise, expiresAt } — section=roi only
 
 // Runs `run()` at most once per TTL per key, sharing the in-flight promise across callers
 // that arrive before it settles. `run()` must resolve to `{ ok, ... }`; a `{ ok: false }`
@@ -106,6 +109,22 @@ async function fetchNfts() {
   });
 }
 
+// BTC/USD for the ROI page's currency toggle — best-effort exactly like the page
+// (its coingecko fetch had .catch(() => null) → btcUsd 0).
+async function fetchBtc() {
+  const result = await cachedFetch(btcCache, "btc", async () => {
+    try {
+      const r = await fetch(`${PROXY}/api/proxy?url=${encodeURIComponent(BTC_URL)}`);
+      if (!r.ok) return { ok: false, data: 0 };
+      const json = await r.json();
+      return { ok: true, data: json?.bitcoin?.usd || 0 };
+    } catch {
+      return { ok: false, data: 0 };
+    }
+  });
+  return result.data;
+}
+
 async function fetchExchange() {
   const result = await cachedFetch(exchangeCache, "exchange", async () => {
     try {
@@ -127,6 +146,7 @@ export function _clearCacheForTests() {
   pricesCache.clear();
   nftsCache.clear();
   exchangeCache.clear();
+  btcCache.clear();
 }
 
 export default async function handler(req, res) {
@@ -197,6 +217,14 @@ export default async function handler(req, res) {
       const [nftResult, exchange] = await Promise.all([fetchNfts(), fetchExchange()]);
       if (!nftResult.ok) return res.status(502).json({ error: `nfts fetch failed: ${nftResult.status}` });
       data = buildPowerSection(farm, p2p, nftResult.data, exchange, settings);
+    }
+    // `roi`: the ROI page's state — the page's own copy of the power fetch+rate block
+    // (plus a 4th upstream, BTC/USD) and its own boost-item/pet builders. Same 502
+    // semantics for the NFT list as section=power; btc is best-effort (0 on failure).
+    else if (section === "roi") {
+      const [nftResult, exchange, btcUsd] = await Promise.all([fetchNfts(), fetchExchange(), fetchBtc()]);
+      if (!nftResult.ok) return res.status(502).json({ error: `nfts fetch failed: ${nftResult.status}` });
+      data = buildRoiSection(farm, p2p, nftResult.data, exchange, btcUsd, settings);
     }
     else return res.status(400).json({ error: `unknown section: ${section}` });
     const payload = { farm: farmId, computedAt: new Date().toISOString(), section, data };

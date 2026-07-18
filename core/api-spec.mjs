@@ -29,7 +29,7 @@ export const API_SPEC = {
             name: "section",
             in: "query",
             required: false,
-            schema: { type: "string", enum: ["constants", "cooking", "diff", "openapi", "power", "prices"], default: "cooking" },
+            schema: { type: "string", enum: ["constants", "cooking", "diff", "openapi", "power", "prices", "roi"], default: "cooking" },
             description:
               "Which computation to run. `constants`: the canonical core/data game tables " +
               "plus flowers.html migration-coverage status, no farm needed. `cooking`: " +
@@ -52,6 +52,10 @@ export const API_SPEC = {
               "`exchangeRates` (Betty coins rate + gems + USD), `stockMods`, `season`, and " +
               "a slim `nftData` ({collectibles, wearables} with name/floor/boost_text/supply). Fetches the sfl.world NFT " +
               "list server-side; a failed NFT fetch is a 502 like a failed farm fetch. " +
+              "`roi`: the ROI-vs-login-frequency page's state — its own boost-item list " +
+              "(with quantCats/isSellable flags), `pets`, `capacity`, `p2pPrices`, `sflUsd`, " +
+              "`btcUsd` (coingecko, best-effort 0), `exchangeRates`, `stockMods`, `season`. " +
+              "Same NFT-fetch 502 semantics as `power`. " +
               "`openapi`: this document, no farm needed. Defaults to `cooking` when omitted.",
           },
           {

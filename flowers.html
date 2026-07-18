@@ -20950,51 +20950,17 @@
       html += `<div id="roi-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading...</div></div></div>`;
       app.innerHTML = html;
 
-      let nftData, p2pPrices = {}, exchangeRates = { coinsPerSFL: 320, gemsPerSFL: 0 };
-      let sflUsd = 0, btcUsd = 0;
+      // ROI state — MIGRATED to core/sections/roi.mjs, served by /api/compute?section=roi
+      // (the server does the nfts/prices/exchange/btc fetches). The client re-attaches farm.
       try {
-        const proxyFetch = async (url) => {
-          try { const r = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`); if (r.ok) return r.json(); } catch {}
-          return (await fetch(url)).json();
-        };
-        const [nftResp, priceResp, rateResp, btcResp] = await Promise.all([
-          proxyFetch("https://sfl.world/api/v1/nfts"),
-          proxyFetch("https://sfl.world/api/v1/prices"),
-          proxyFetch("https://sfl.world/api/v1.1/exchange").catch(() => null),
-          proxyFetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd").catch(() => null),
-        ]);
-        nftData = nftResp;
-        const priceData = priceResp?.data?.p2p || priceResp?.p2p || {};
-        for (const [k, v] of Object.entries(priceData)) p2pPrices[k] = parseFloat(v) || 0;
-        sflUsd = rateResp?.sfl?.usd || 0;
-        btcUsd = btcResp?.bitcoin?.usd || 0;
-
-        const betty = computeBettyRate(p2pPrices);
-        if (betty.rate > 0) { exchangeRates.coinsPerSFL = betty.rate; }
-        if (rateResp) {
-          const coinTiers = Object.values(rateResp?.coins || {});
-          const gemTiers = Object.values(rateResp?.gems || {});
-          if (!betty.rate && coinTiers.length > 0) {
-            const best = coinTiers.reduce((a, b) => (b.coin / b.sfl) > (a.coin / a.sfl) ? b : a);
-            exchangeRates.coinsPerSFL = best.coin / best.sfl;
-          }
-          if (gemTiers.length > 0) {
-            const best = gemTiers.reduce((a, b) => (b.gem / (b.sfl * 0.7)) > (a.gem / (a.sfl * 0.7)) ? b : a);
-            exchangeRates.gemsPerSFL = best.gem / (best.sfl * 0.7);
-          }
-        }
+        const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=roi`);
+        if (!rp.ok) throw new Error(`compute roi ${rp.status}`);
+        const payload = await rp.json();
+        roiState = { ...(payload.data || {}), farm };
       } catch (err) {
         document.getElementById("roi-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load: ${escHTML(err.message)}</p></div>`;
         return;
       }
-
-      const capacity = detectFarmCapacity(farm);
-      const stockMods = detectStockModifiers(farm);
-      const season = (farm.season?.season || "").toLowerCase();
-      const boostItems = buildRoiBoostItems(farm, inventory, wardrobe, skills, nftData);
-      const pets = parseRoiPets(farm);
-
-      roiState = { boostItems, capacity, p2pPrices, sflUsd, btcUsd, exchangeRates, stockMods, season, pets, farm };
       renderRoiContent();
     }
 
