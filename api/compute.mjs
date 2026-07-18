@@ -40,9 +40,15 @@ const BTC_URL = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_cu
 // fetch is still in flight share that same fetch instead of starting their own.
 const CACHE_TTL_MS = 10_000;
 const CACHE_MAX_ENTRIES = 64; // sweep expired entries past this — bounds a warm instance's farmCache
-const farmCache = new Map(); // farmId -> { promise, expiresAt }
-const pricesCache = new Map(); // "prices" -> { promise, expiresAt } — single entry, no farm key
-const nftsCache = new Map(); // "nfts" -> { promise, expiresAt } — sections power+roi
+// The caches live on globalThis, not as bare module-level Maps: the dev server
+// (dev-server.mjs) cache-busts THIS module with `?t=Date.now()` on every request, so a
+// fresh module instance — and empty module-level caches — would be created per request,
+// silently disabling the TTL dedupe and the stale fallback exactly where they get
+// exercised most. On Vercel there is one instance either way; globalThis is a no-op there.
+const G = globalThis.__computeShared ??= {};
+const farmCache = G.farmCache ??= new Map(); // farmId -> { promise, expiresAt }
+const pricesCache = G.pricesCache ??= new Map(); // "prices" -> { promise, expiresAt } — single entry, no farm key
+const nftsCache = G.nftsCache ??= new Map(); // "nfts" -> { promise, expiresAt } — sections power+roi
 // Slow-moving upstreams get longer TTLs than the 10s farm/prices default. Observed in
 // Playwright runs: page loads that re-fetch nfts/exchange/btc every 10s trip sfl.world /
 // coingecko rate limits (502 through the proxy) — yet NFT floors and exchange tiers move
@@ -51,8 +57,8 @@ const nftsCache = new Map(); // "nfts" -> { promise, expiresAt } — sections po
 const NFTS_TTL_MS = 5 * 60_000;
 const EXCHANGE_TTL_MS = 60_000;
 const BTC_TTL_MS = 60_000;
-const exchangeCache = new Map(); // "exchange" -> { promise, expiresAt } — sections power+roi
-const btcCache = new Map(); // "btc" -> { promise, expiresAt } — section=roi only
+const exchangeCache = G.exchangeCache ??= new Map(); // "exchange" -> { promise, expiresAt } — sections power+roi
+const btcCache = G.btcCache ??= new Map(); // "btc" -> { promise, expiresAt } — section=roi only
 
 // Runs `run()` at most once per TTL per key, sharing the in-flight promise across callers
 // that arrive before it settles. `run()` must resolve to `{ ok, ... }`; a `{ ok: false }`
@@ -86,8 +92,8 @@ function cachedFetch(cache, key, run, ttlMs = CACHE_TTL_MS) {
 // than a dead page for a read-only dashboard — so when the live fetch fails but we have
 // EVER succeeded for this farm on this instance, serve that instead. Same for nfts
 // (single key). Prices/exchange/btc are already best-effort by design.
-const lastGoodFarm = new Map(); // farmId -> wrap
-const lastGoodNfts = { data: null };
+const lastGoodFarm = G.lastGoodFarm ??= new Map(); // farmId -> wrap
+const lastGoodNfts = G.lastGoodNfts ??= { data: null };
 
 async function fetchFarm(farmId) {
   const result = await cachedFetch(farmCache, farmId, async () => {
