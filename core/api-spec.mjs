@@ -49,7 +49,10 @@ export const API_SPEC = {
               "`boostItems` (every boost collectible/wearable/skill with parsed effects, " +
               "categories, floor price and ownership), `capacity` (per-category plot/node/animal " +
               "counts), `p2pPrices` (incl. the derived Oil price), `skillCostInfo`, " +
-              "`exchangeRates` (Betty coins rate + gems + USD), `stockMods`, `season`, and " +
+              "`exchangeRates` (Betty coins rate + gems + USD), `stockMods`, `season`, " +
+              "`categories` (per-category production + cost summary — the page's former " +
+              "renderPowerContent pipeline: base/boosted SFL/day, seed/tool/feed/sickness " +
+              "costs, honoring the `products` selections), and " +
               "a slim `nftData` ({collectibles, wearables} with name/floor/boost_text/supply). Fetches the sfl.world NFT " +
               "list server-side; a failed NFT fetch is a 502 like a failed farm fetch. " +
               "`roi`: the ROI-vs-login-frequency page's state — its own boost-item list " +
@@ -101,7 +104,7 @@ export const API_SPEC = {
             schema: { type: "string" },
             description:
               "URL-encoded JSON object mapping power-category id to the selected product " +
-              "name (e.g. `{\"crops\":\"Kale\"}`), used by `section=buds` to price " +
+              "name (e.g. `{\"crops\":\"Kale\"}`), used by `section=buds` and `section=power` (its `categories` block) to price " +
               "product-specific boosts the way the page's product selectors do. Any " +
               "category omitted falls back to that category's default product. Ignored " +
               "by other sections.",

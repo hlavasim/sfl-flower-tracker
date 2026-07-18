@@ -258,7 +258,8 @@ export default async function handler(req, res) {
     else if (section === "power") {
       const [nftResult, exchange] = await Promise.all([fetchNfts(), fetchExchange()]);
       if (!nftResult.ok) return res.status(502).json({ error: `nfts fetch failed: ${nftResult.status}` });
-      data = buildPowerSection(farm, p2p, nftResult.data, exchange, settings);
+      // `products` mirrors the page's per-category product selectors (same param as buds).
+      data = buildPowerSection(farm, p2p, nftResult.data, exchange, { ...settings, savedProducts: req.query.products ? JSON.parse(req.query.products) : {} });
     }
     // `roi`: the ROI page's state — the page's own copy of the power fetch+rate block
     // (plus a 4th upstream, BTC/USD) and its own boost-item/pet builders. Same 502

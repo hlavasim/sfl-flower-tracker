@@ -978,7 +978,8 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
 
 export {
   SEED_DATA, findCollectible, BUMPKIN_XP_TABLE,
-  ANIMAL_CYCLE_DATA, ANIMAL_LEVELS, GOLDEN_ANIMALS, getAnimalLevel,
+  ANIMAL_CYCLE_DATA, ANIMAL_LEVELS, GOLDEN_ANIMALS, getAnimalLevel, isAnimalCat, getAnimalData,
+  ANIMAL_CAT_MAP,
   RESOURCE_RESPAWN_DATA, TOOL_TO_CAT, BASE_STOCK, SKILL_TREE_DATA, CROP_TIERS,
   FACTION_MARK_PRICES, FACTION_KEYWORDS, getFactionMarkCost, marksToSfl,
   calcSkillPointCost, POWER_CATEGORIES, getCount,

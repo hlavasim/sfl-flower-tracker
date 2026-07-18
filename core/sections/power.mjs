@@ -23,9 +23,14 @@ import { computeBettyRate } from "../engine/prices.mjs";
 import {
   findCollectible, getCount, getFactionMarkCost, marksToSfl,
   calcSkillPointCost, SKILL_TREE_DATA, POWER_CATEGORIES,
-  detectFarmCapacity, detectStockModifiers,
+  detectFarmCapacity, detectStockModifiers, isAnimalCat,
   getEffectsForCategory, applyBoosts, calcToolCostPerDay, gameExtraEffects,
+  getDefaultProduct,
 } from "../engine/power-helpers.mjs";
+import {
+  unitToSfl, calcSeedCostPerDay, calcAnimalFeedCost, calcSicknessCost,
+  calcLavaPitCostPerDay, getAnimalCatSfl, getPriceProduct, activeShrineEffects,
+} from "../engine/power-costs.mjs";
 
 export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   const inventory = farm.inventory || {};
@@ -227,5 +232,97 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     }));
   }
 
-  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim };
+  // ── categories: renderPowerContent's per-category summary pipeline (page ~18100-18190),
+  // ported VERBATIM with powerState reads parameterized. Runs on the same catBoosts built
+  // above; `settings.savedProducts` mirrors the page's product selectors (query `products`).
+  const savedProducts = settings.savedProducts || {};
+
+  // Derive Oil unit cost from actual drill cost / actual boosted yield
+  // Uses farm's real boosts (Infernal Drill = free, yield boosts, speed boosts)
+  const oilOwnedEffects = (catBoosts["oil"] || []).filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, "oil"));
+  const oilBoostedResult = applyBoosts("oil", "Oil", capacity, oilOwnedEffects);
+  const oilToolInfo = calcToolCostPerDay("oil", capacity, exchangeRates, p2pPrices, stockMods);
+  if (oilBoostedResult.unitsPerDay > 0 && oilToolInfo.costPerDay > 0) {
+    p2pPrices["Oil"] = oilToolInfo.costPerDay / oilBoostedResult.unitsPerDay;
+  } else if (oilBoostedResult.unitsPerDay > 0) {
+    p2pPrices["Oil"] = 0; // free drilling (Infernal Drill) → oil is free
+  }
+
+  let totalBaseSfl = 0, totalBoostedSfl = 0, totalCostSfl = 0;
+  const catSummaries = {};
+  for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
+    if (!catDef.quantifiable) continue;
+    const product = savedProducts[catId] || getDefaultProduct(catId);
+    const ownedEffects = catBoosts[catId].filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId)).concat(activeShrineEffects(farm, catId));
+
+    let baseSfl, boostedSfl, boostedUnitsPerDay = 0;
+    let animalBreakdown = null;
+    if (isAnimalCat(catId)) {
+      const baseInfo = getAnimalCatSfl(catId, capacity, [], p2pPrices);
+      const boostedInfo = getAnimalCatSfl(catId, capacity, ownedEffects, p2pPrices);
+      baseSfl = baseInfo.totalSfl;
+      boostedSfl = boostedInfo.totalSfl;
+      animalBreakdown = boostedInfo.breakdown;
+    } else {
+      const priceProduct = getPriceProduct(catId, product);
+      const baseResult = applyBoosts(catId, product, capacity, []);
+      baseSfl = unitToSfl(baseResult.unitsPerDay, priceProduct, p2pPrices);
+      const boostedResult = applyBoosts(catId, product, capacity, ownedEffects);
+      boostedSfl = unitToSfl(boostedResult.unitsPerDay, priceProduct, p2pPrices);
+      boostedUnitsPerDay = boostedResult.unitsPerDay;
+    }
+
+    // Calculate production costs (with and without discounts)
+    let costPerDay = 0, restockPerDay = 0, costDetails = null;
+    let baseCostPerDay = 0; // cost WITHOUT skill discounts
+    if (catId === "crops" || catId === "fruits" || catId === "greenhouse") {
+      const c = calcSeedCostPerDay(catId, product, capacity, exchangeRates, stockMods, ownedEffects, p2pPrices);
+      costPerDay = c.costPerDay;
+      baseCostPerDay = c.costPerDay; // seeds have no skill discount
+      restockPerDay = c.restockPerDay;
+      costDetails = c;
+    } else if (catId === "obsidian") {
+      // Check for lava cost reduction effects (e.g., Lava Swimwear -50%)
+      const lavaCostMult = ownedEffects
+        .filter(e => e.type === "lava_cost_reduction")
+        .reduce((acc, e) => acc * (1 - e.value), 1);
+      const c = calcLavaPitCostPerDay(capacity, p2pPrices, season, lavaCostMult);
+      const cBase = calcLavaPitCostPerDay(capacity, p2pPrices, season);
+      costPerDay = c.costPerDay;
+      baseCostPerDay = cBase.costPerDay;
+      costDetails = c;
+    } else if (["trees", "stone", "iron", "gold", "crimstone", "oil"].includes(catId)) {
+      const c = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods);
+      const cBase = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods, true);
+      costPerDay = c.costPerDay;
+      baseCostPerDay = cBase.costPerDay;
+      restockPerDay = c.restockPerDay;
+      costDetails = c;
+      costDetails.baseCostPerDay = cBase.costPerDay;
+      costDetails.baseToolSfl = cBase.toolSfl;
+    } else if (isAnimalCat(catId)) {
+      const c = calcAnimalFeedCost(catId, capacity, p2pPrices, ownedEffects, stockMods);
+      const cBase = calcAnimalFeedCost(catId, capacity, p2pPrices, [], stockMods);
+      // Add sickness cost
+      const sc = calcSicknessCost(catId, capacity, p2pPrices, boostItems, skills);
+      const scBase = calcSicknessCost(catId, capacity, p2pPrices, [], {});
+      costPerDay = c.costPerDay + sc.costPerDay;
+      baseCostPerDay = cBase.costPerDay + scBase.costPerDay;
+      costDetails = c;
+      costDetails.sicknessCost = sc;
+      costDetails.sicknessBaseCost = scBase;
+    }
+    const totalCatCost = costPerDay + restockPerDay;
+    const totalCatBaseCost = baseCostPerDay + restockPerDay;
+    totalCostSfl += totalCatCost;
+
+    totalBaseSfl += baseSfl;
+    totalBoostedSfl += boostedSfl;
+    catSummaries[catId] = { baseSfl, boostedSfl, delta: boostedSfl - baseSfl, product, boostedUnitsPerDay, animalBreakdown, costPerDay: totalCatCost, baseCostPerDay: totalCatBaseCost, costSavings: totalCatBaseCost - totalCatCost, costDetails };
+  }
+  // Restock (localStorage settings) stays client-side; totals here cover the per-category
+  // pipeline only — exactly the part the page's loop computed before its restock block.
+  const categories = { catSummaries, totalBaseSfl, totalBoostedSfl, totalCostSfl, oilPrice: p2pPrices["Oil"] };
+
+  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories };
 }

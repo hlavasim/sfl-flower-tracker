@@ -16,7 +16,7 @@
       "Lemon": 14400, "Tomato": 7200,
     };
     // Number of harvests before fruit tree becomes a stump (chop for 1 Wood, costs 1 Axe)
-    const FRUIT_HARVEST_COUNT = {
+    export const FRUIT_HARVEST_COUNT = {
       "Tomato": 4, "Lemon": 4, "Blueberry": 4,
       "Orange": 4, "Apple": 4, "Banana": 4,
     };

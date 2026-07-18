@@ -101,3 +101,23 @@ test("season + serializability", () => {
   assert.equal(out.season, "autumn");
   JSON.stringify(out); // must be a pure-data payload
 });
+
+test("categories — per-category summary computed server-side (phase B)", () => {
+  const c = out.categories;
+  assert.ok(c && c.catSummaries, "categories block present");
+  // every quantifiable POWER category appears
+  for (const cat of ["crops", "fruits", "trees", "stone", "iron", "gold", "chickens", "sheep", "oil"]) {
+    assert.ok(cat in c.catSummaries, `missing ${cat}`);
+  }
+  const crops = c.catSummaries.crops;
+  assert.equal(crops.product, "Kale"); // default product
+  assert.ok(crops.boostedSfl >= crops.baseSfl, "owned boosts can only add");
+  assert.ok(c.totalBoostedSfl > 0);
+  assert.ok(c.totalCostSfl >= 0);
+  // sheep have animals on this farm → feed cost breakdown exists
+  const sheep = c.catSummaries.sheep;
+  assert.ok(sheep.costDetails && sheep.costDetails.animalCount === 35);
+  // products override flows through (page's product selector semantics)
+  const alt = buildPowerSection(farm, p2p, nfts, null, { savedProducts: { crops: "Wheat" } });
+  assert.equal(alt.categories.catSummaries.crops.product, "Wheat");
+});

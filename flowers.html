@@ -15809,7 +15809,7 @@
     // serialized catBoosts would be per-category COPIES, breaking that).
     async function buildPowerState(data) {
       const { inventory, farm } = data;
-      const url = `/api/compute?farm=${FARM_ID}&section=power`;
+      const url = `/api/compute?farm=${FARM_ID}&section=power&products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}`;
       let payload, lastErr;
       for (let a = 0; a < 3; a++) {
         try {
@@ -18097,95 +18097,18 @@
       const ownedCount = boostItems.filter(b => b.has).length;
       const totalCount = boostItems.length;
 
-      // Derive Oil unit cost from actual drill cost / actual boosted yield
-      // Uses farm's real boosts (Infernal Drill = free, yield boosts, speed boosts)
-      const oilOwnedEffects = (catBoosts["oil"] || []).filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, "oil"));
-      const oilBoostedResult = applyBoosts("oil", "Oil", capacity, oilOwnedEffects);
-      const oilToolInfo = calcToolCostPerDay("oil", capacity, exchangeRates, p2pPrices, stockMods);
-      if (oilBoostedResult.unitsPerDay > 0 && oilToolInfo.costPerDay > 0) {
-        p2pPrices["Oil"] = oilToolInfo.costPerDay / oilBoostedResult.unitsPerDay;
-      } else if (oilBoostedResult.unitsPerDay > 0) {
-        p2pPrices["Oil"] = 0; // free drilling (Infernal Drill) → oil is free
+      // Per-category production/cost summary — MIGRATED to core (section=power's
+      // `categories` block, computed by the same verbatim pipeline in
+      // core/engine/power-costs.mjs). The page keeps only the restock system below
+      // (its settings live in localStorage). Product selectors refetch (selectPowerProduct).
+      const _cats = powerState.categories || { catSummaries: {}, totalBaseSfl: 0, totalBoostedSfl: 0, totalCostSfl: 0 };
+      if (_cats.oilPrice !== undefined) {
+        p2pPrices["Oil"] = _cats.oilPrice;
+        // Cache Oil price for diff page (includes all real boosts)
+        localStorage.setItem("sfl_oil_price", String(_cats.oilPrice));
       }
-      // Cache Oil price for diff page (includes all real boosts)
-      if (p2pPrices["Oil"] !== undefined) {
-        localStorage.setItem("sfl_oil_price", String(p2pPrices["Oil"]));
-      }
-
-      // Calculate total boost value + costs across all quantifiable categories
-      let totalBaseSfl = 0, totalBoostedSfl = 0, totalCostSfl = 0;
-      const catSummaries = {};
-      for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
-        if (!catDef.quantifiable) continue;
-        const product = savedProducts[catId] || getDefaultProduct(catId);
-        const ownedEffects = catBoosts[catId].filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId)).concat(activeShrineEffects(catId));
-
-        let baseSfl, boostedSfl, boostedUnitsPerDay = 0;
-        let animalBreakdown = null;
-        if (isAnimalCat(catId)) {
-          const baseInfo = getAnimalCatSfl(catId, capacity, [], p2pPrices);
-          const boostedInfo = getAnimalCatSfl(catId, capacity, ownedEffects, p2pPrices);
-          baseSfl = baseInfo.totalSfl;
-          boostedSfl = boostedInfo.totalSfl;
-          animalBreakdown = boostedInfo.breakdown;
-        } else {
-          const priceProduct = getPriceProduct(catId, product);
-          const baseResult = applyBoosts(catId, product, capacity, []);
-          baseSfl = unitToSfl(baseResult.unitsPerDay, priceProduct, p2pPrices);
-          const boostedResult = applyBoosts(catId, product, capacity, ownedEffects);
-          boostedSfl = unitToSfl(boostedResult.unitsPerDay, priceProduct, p2pPrices);
-          boostedUnitsPerDay = boostedResult.unitsPerDay;
-        }
-
-        // Calculate production costs (with and without discounts)
-        let costPerDay = 0, restockPerDay = 0, costDetails = null;
-        let baseCostPerDay = 0; // cost WITHOUT skill discounts
-        if (catId === "crops" || catId === "fruits" || catId === "greenhouse") {
-          const c = calcSeedCostPerDay(catId, product, capacity, exchangeRates, stockMods, ownedEffects, p2pPrices);
-          costPerDay = c.costPerDay;
-          baseCostPerDay = c.costPerDay; // seeds have no skill discount
-          restockPerDay = c.restockPerDay;
-          costDetails = c;
-        } else if (catId === "obsidian") {
-          // Check for lava cost reduction effects (e.g., Lava Swimwear -50%)
-          const lavaCostMult = ownedEffects
-            .filter(e => e.type === "lava_cost_reduction")
-            .reduce((acc, e) => acc * (1 - e.value), 1);
-          const c = calcLavaPitCostPerDay(capacity, p2pPrices, season, lavaCostMult);
-          const cBase = calcLavaPitCostPerDay(capacity, p2pPrices, season);
-          costPerDay = c.costPerDay;
-          baseCostPerDay = cBase.costPerDay;
-          costDetails = c;
-        } else if (["trees", "stone", "iron", "gold", "crimstone", "oil"].includes(catId)) {
-          const c = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods);
-          const cBase = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods, true);
-          costPerDay = c.costPerDay;
-          baseCostPerDay = cBase.costPerDay;
-          restockPerDay = c.restockPerDay;
-          costDetails = c;
-          costDetails.baseCostPerDay = cBase.costPerDay;
-          costDetails.baseToolSfl = cBase.toolSfl;
-        } else if (isAnimalCat(catId)) {
-          const c = calcAnimalFeedCost(catId, capacity, p2pPrices, ownedEffects, stockMods);
-          const cBase = calcAnimalFeedCost(catId, capacity, p2pPrices, [], stockMods);
-          // Add sickness cost
-          const skills = powerState?.farm?.bumpkin?.skills || {};
-          const sc = calcSicknessCost(catId, capacity, p2pPrices, powerState?.boostItems || [], skills);
-          const scBase = calcSicknessCost(catId, capacity, p2pPrices, [], {});
-          costPerDay = c.costPerDay + sc.costPerDay;
-          baseCostPerDay = cBase.costPerDay + scBase.costPerDay;
-          costDetails = c;
-          costDetails.sicknessCost = sc;
-          costDetails.sicknessBaseCost = scBase;
-        }
-        const totalCatCost = costPerDay + restockPerDay;
-        const totalCatBaseCost = baseCostPerDay + restockPerDay;
-        totalCostSfl += totalCatCost;
-
-        totalBaseSfl += baseSfl;
-        totalBoostedSfl += boostedSfl;
-        catSummaries[catId] = { baseSfl, boostedSfl, delta: boostedSfl - baseSfl, product, boostedUnitsPerDay, animalBreakdown, costPerDay: totalCatCost, baseCostPerDay: totalCatBaseCost, costSavings: totalCatBaseCost - totalCatCost, costDetails };
-      }
+      let totalBaseSfl = _cats.totalBaseSfl, totalBoostedSfl = _cats.totalBoostedSfl, totalCostSfl = _cats.totalCostSfl;
+      const catSummaries = _cats.catSummaries;
 
       // ── Shared Restock Calculation ──
       const restockSettings = getRestockSettings() || getDefaultRestockSettings();
@@ -19498,10 +19421,12 @@
       row.after(detail);
     }
 
-    function selectPowerProduct(catId, product) {
+    async function selectPowerProduct(catId, product) {
       savePowerProduct(catId, product);
       powerState.savedProducts[catId] = product;
       const scrollY = window.scrollY;
+      // categories are computed by section=power now — refetch with the new selection
+      try { await buildPowerState({ farm: powerState.farm, inventory: powerState.inventory }); } catch {}
       renderPowerContent();
       window.scrollTo(0, scrollY);
     }
