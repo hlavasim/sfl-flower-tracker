@@ -22268,6 +22268,7 @@
       </div>`;
 
       // ── NFT Pets Collection ──
+      const nftPets = farm.pets?.nfts || {}; // raw map still needed here (traits by id); section=pets ships the parsed list
       const ownedNftBreeds = {};
       for (const [id, pet] of Object.entries(nftPets)) {
         const breed = pet.traits?.type || "Unknown";
