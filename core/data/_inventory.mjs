@@ -234,10 +234,6 @@ export const TABLE_INVENTORY = [
     "lines": 8
   },
   {
-    "name": "EXTRA_BOOST_ITEMS",
-    "lines": 7
-  },
-  {
     "name": "FACTION_KEYWORDS",
     "lines": 10
   },
@@ -628,10 +624,6 @@ export const TABLE_INVENTORY = [
   {
     "name": "TREE_COLOR",
     "lines": 2
-  },
-  {
-    "name": "TREE_TO_CATS",
-    "lines": 11
   },
   {
     "name": "WEARABLE_IDS",

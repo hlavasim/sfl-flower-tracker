@@ -30,9 +30,15 @@ const HOW_TO_FIX =
 // Every non-function export of core/data/*.mjs — what core CLAIMS to own.
 async function coreDataExports() {
   const files = readdirSync(DATA_DIR).filter((f) => f.endsWith(".mjs") && !f.startsWith("_"));
+  const mods = [];
+  for (const f of files) mods.push(await import(new URL(f, DATA_DIR)));
+  // The power migration duplicates its tables into ENGINE modules, not data/ files; the
+  // composer counts their exported tables the same way (see constants.mjs MODULES), so
+  // this independent scan must too or the two definitions of "in core" drift apart.
+  mods.push(await import(new URL("../engine/power-boosts.mjs", DATA_DIR)));
+  mods.push(await import(new URL("../engine/power-helpers.mjs", DATA_DIR)));
   const names = [];
-  for (const f of files) {
-    const mod = await import(new URL(f, DATA_DIR));
+  for (const mod of mods) {
     for (const [name, value] of Object.entries(mod)) {
       if (typeof value === "function") continue;
       names.push(name);
