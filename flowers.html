@@ -15875,214 +15875,34 @@
     }
 
     // Build powerState — shared by POWER and ROADMAP pages. Throws on fetch failure (no DOM writes).
+    // buildPowerState — MIGRATED to core/sections/power.mjs, served by
+    // /api/compute?section=power (the server fetches nfts/prices/exchange itself).
+    // The response carries { boostItems, capacity, p2pPrices, skillCostInfo,
+    // exchangeRates, stockMods, season, nftFloors }; the client re-attaches what only
+    // it has (farm, inventory, localStorage savedProducts) and rebuilds catBoosts
+    // locally so every category entry shares object identity with boostItems (a
+    // serialized catBoosts would be per-category COPIES, breaking that).
     async function buildPowerState(data) {
       const { inventory, farm } = data;
-      const wardrobe = farm.wardrobe || {};
-      const skills = farm.bumpkin?.skills || {};
-      // Fetch NFT data + P2P prices + exchange rates in parallel
-      let nftData, p2pPrices = {}, exchangeRates = { coinsPerSFL: 320, gemsPerSFL: 0, sflUsd: 0 };
-      try {
-        const proxyFetch = async (url) => {
-          try {
-            const resp = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
-            if (resp.ok) return resp.json();
-          } catch {}
-          return (await fetch(url)).json();
-        };
-        const [nftResp, priceResp, rateResp] = await Promise.all([
-          proxyFetch("https://sfl.world/api/v1/nfts"),
-          proxyFetch("https://sfl.world/api/v1/prices"),
-          proxyFetch("https://sfl.world/api/v1.1/exchange").catch(() => null),
-        ]);
-        nftData = nftResp;
-        const priceData = priceResp?.data?.p2p || priceResp?.p2p || {};
-        for (const [k, v] of Object.entries(priceData)) {
-          p2pPrices[k] = parseFloat(v) || 0;
-        }
-        // Extract exchange rates for cost calculations
-        // Use Betty rate for coins→SFL (more accurate than API exchange rate)
-        const betty = computeBettyRate(p2pPrices);
-        if (betty.rate > 0) {
-          exchangeRates.coinsPerSFL = betty.rate;
-          exchangeRates.bettyItem = betty.item;
-        }
-        if (rateResp) {
-          const coinTiers = Object.values(rateResp?.coins || rateResp?.data?.coins || {});
-          const gemTiers = Object.values(rateResp?.gems || rateResp?.data?.gems || {});
-          // Fallback to API rate if Betty rate failed
-          if (!betty.rate && coinTiers.length > 0) {
-            const best = coinTiers.reduce((a, b) => (b.coin / b.sfl) > (a.coin / a.sfl) ? b : a);
-            exchangeRates.coinsPerSFL = best.coin / best.sfl;
-          }
-          if (gemTiers.length > 0) {
-            const best = gemTiers.reduce((a, b) => (b.gem / (b.sfl * 0.7)) > (a.gem / (a.sfl * 0.7)) ? b : a);
-            exchangeRates.gemsPerSFL = best.gem / (best.sfl * 0.7);
-          }
-          const _sflUsd = rateResp?.sfl?.usd || rateResp?.data?.sfl?.usd || 0;
-          if (_sflUsd > 0) exchangeRates.sflUsd = _sflUsd;
-        }
-      } catch (err) {
-        throw err;
+      const url = `/api/compute?farm=${FARM_ID}&section=power`;
+      let payload, lastErr;
+      for (let a = 0; a < 3; a++) {
+        try {
+          const rp = await fetch(url);
+          if (!rp.ok) throw new Error(`compute power ${rp.status}`);
+          payload = await rp.json();
+          break;
+        } catch (e) { lastErr = e; if (a < 2) await new Promise(r => setTimeout(r, 500 * (a + 1))); }
       }
-
-      // Detect farm capacity
-      const capacity = detectFarmCapacity(farm);
-
-      // Build boost items with parsed effects
-      const boostItems = [];
-
-      for (const item of (nftData.collectibles || [])) {
-        if (!item.have_boost || !item.name || !item.boost_text) continue;
-        const has = getCount(inventory, item.name) > 0 || findCollectible(farm, item.name).length > 0;
-        const effects = parseBoostEffects(item.boost_text, item.name);
-        const categories = classifyToCategories(effects);
-        let floor = parseFloat(item.floor) || 0;
-        const markCost = getFactionMarkCost(item.name);
-        if (markCost > 0) floor = marksToSfl(markCost);
-        boostItems.push({
-          name: item.name, type: "Collectible", boost: item.boost_text,
-          floor, supply: item.supply || 0,
-          has, effects, categories, markCost,
-        });
-      }
-
-      for (const item of (nftData.wearables || [])) {
-        if (!item.have_boost || !item.name || !item.boost_text) continue;
-        const has = (wardrobe[item.name] || 0) > 0;
-        const effects = parseBoostEffects(item.boost_text, item.name);
-        const categories = classifyToCategories(effects);
-        let floor = parseFloat(item.floor) || 0;
-        const markCost = getFactionMarkCost(item.name);
-        if (markCost > 0) floor = marksToSfl(markCost);
-        boostItems.push({
-          name: item.name, type: "Wearable", boost: item.boost_text,
-          floor, supply: item.supply || 0,
-          has, effects, categories, markCost,
-        });
-      }
-
-      // Inject non-NFT boost items (Helios Blacksmith, event decorations, etc.)
-      // cost: { coins, materials } → converted to SFL as floor price
-      const EXTRA_BOOST_ITEMS = [
-        { name: "Gold Beetle", boost: "+0.1 Gold", type: "Collectible", cost: { coins: 10000, materials: { Gold: 20 } } },
-        { name: "Stone Beetle", boost: "+0.1 Stone", type: "Collectible", cost: { coins: 1000, materials: { Stone: 20 } } },
-        { name: "Iron Beetle", boost: "+0.1 Iron", type: "Collectible", cost: { coins: 2000, materials: { Iron: 20 } } },
-        { name: "Gilded Swordfish", boost: "+0.1 Gold", type: "Collectible", cost: null }, // fishing reward, no craft cost
-        { name: "Volcano Gnome", boost: "+0.1 Stone, Iron & Gold (Volcano Island)", type: "Collectible", cost: null }, // free (Volcano Island reward)
-      ];
-      for (const extra of EXTRA_BOOST_ITEMS) {
-        if (boostItems.some(b => b.name === extra.name)) continue;
-        const has = getCount(inventory, extra.name) > 0 || findCollectible(farm, extra.name).length > 0;
-        const effects = parseBoostEffects(extra.boost, extra.name);
-        const categories = classifyToCategories(effects);
-        // Calculate craft cost in SFL
-        let floor = 0;
-        if (extra.cost && exchangeRates.coinsPerSFL > 0) {
-          floor = (extra.cost.coins || 0) / exchangeRates.coinsPerSFL;
-          if (extra.cost.materials) {
-            for (const [mat, qty] of Object.entries(extra.cost.materials)) {
-              floor += (p2pPrices[mat] || 0) * qty;
-            }
-          }
-        }
-        boostItems.push({
-          name: extra.name, type: extra.type, boost: extra.boost,
-          floor, supply: 0, has, effects, categories, markCost: 0,
-        });
-      }
-
-      // Add skill boosts from full skill tree
-      const skillCostInfo = calcSkillPointCost(farm.bumpkin, p2pPrices, farm);
-      for (const [skillName, skill] of Object.entries(SKILL_TREE_DATA)) {
-        const has = skills[skillName] !== undefined;
-        const boostText = skill.buff + (skill.debuff ? "\n" + skill.debuff : "");
-        const effects = parseBoostEffects(boostText);
-        // Inject feed reduction effects for named animal skills
-        if (SKILL_FEED_EFFECTS[skillName]) {
-          for (const [cat, value] of Object.entries(SKILL_FEED_EFFECTS[skillName])) {
-            effects.push({ type: "feed_reduction", value, cat });
-          }
-        }
-        const categories = classifyToCategories(effects);
-        // Add tree-based categories ONLY for skills the parser couldn't classify (ended up as "other" only)
-        const hasOnlyOther = categories.length === 1 && categories[0] === "other";
-        if (hasOnlyOther) {
-          const TREE_TO_CATS = {
-            "Animals": ["chickens", "cows", "sheep"],
-            "Crops": ["crops"],
-            "Fruit Patch": ["fruits"],
-            "Greenhouse": ["greenhouse"],
-            "Fishing": ["fishing"],
-            "Mining": ["stone", "iron", "gold", "crimstone"],
-            "Trees": ["trees"],
-            "Bees & Flowers": ["bees", "flowers"],
-            "Cooking": ["cooking"],
-          };
-          const treeCats = TREE_TO_CATS[skill.tree];
-          if (treeCats) {
-            categories.length = 0; // clear "other"
-            categories.push(...treeCats);
-          }
-        }
-        // Skill cost = skill points × SFL per skill point
-        const skillFloor = skillCostInfo.sflPerPoint > 0 ? skill.points * skillCostInfo.sflPerPoint : 0;
-        boostItems.push({
-          name: skillName, type: "Skill", boost: boostText,
-          floor: skillFloor, supply: 0, has, effects, categories,
-          skillPoints: skill.points, skillTree: skill.tree, skillTier: skill.tier,
-          isPower: skill.power || false,
-        });
-      }
-
-      // Process "Disabled if X Active" — mark items superseded by stronger owned items
-      for (const b of boostItems) {
-        const disabledByEffects = b.effects.filter(e => e.type === "disabled_by");
-        if (disabledByEffects.length > 0) {
-          b.disabledBy = disabledByEffects.flatMap(e => e.names);
-          b.effects = b.effects.filter(e => e.type !== "disabled_by"); // remove meta-effects
-          // Check if any superseding item is active on this farm
-          const activeSuperseder = b.disabledBy.find(name =>
-            getCount(inventory, name) > 0 || findCollectible(farm, name).length > 0
-            || (wardrobe[name] || 0) > 0 || skills[name] !== undefined
-          );
-          if (activeSuperseder) {
-            b.isDisabled = true;
-            b.disabledByName = activeSuperseder;
-          }
-        }
-      }
-
-      // Load saved product selections
-      const savedProducts = getSavedPowerProducts();
-
-      // Inject boosts the marketplace NFT API doesn't expose but the game applies (faithful port).
-      const _extraEff = gameExtraEffects(farm);
-      if (_extraEff.length) boostItems.push({ name: "Game boosts (API-missing)", type: "Game", boost: _extraEff.map(e => e.raw).join(" \u00b7 "), floor: 0, supply: 0, has: true, effects: _extraEff, categories: classifyToCategories(_extraEff), markCost: 0 });
-
-      // Build category → boosts mapping
+      if (!payload) throw lastErr;
+      const d = payload.data || {};
+      // Rebuild category → boosts mapping (shared refs into boostItems)
       const catBoosts = {};
       for (const catId of Object.keys(POWER_CATEGORIES)) {
-        catBoosts[catId] = boostItems.filter(b => b.categories.includes(catId));
+        catBoosts[catId] = d.boostItems.filter(b => b.categories.includes(catId));
       }
-
-      // Detect stock modifiers for cost calculations
-      const stockMods = detectStockModifiers(farm);
-
-      // Detect current season
-      const season = (farm.season?.season || "").toLowerCase();
-
-      // Store state for interactive updates
-      // Oil isn't p2p-traded — derive its unit value from drill cost / boosted yield (like the Power page),
-      // so Crop Machine + greenhouse oil costs show up. Priced at real coin cost (oil is a mined resource).
-      try {
-        const _oilEff = (catBoosts["oil"] || []).filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, "oil"));
-        const _oilYield = applyBoosts("oil", "Oil", capacity, _oilEff).unitsPerDay;
-        const _oilTool = calcToolCostPerDay("oil", capacity, exchangeRates, p2pPrices, stockMods);
-        if (_oilYield > 0 && _oilTool.costPerDay > 0) p2pPrices["Oil"] = _oilTool.costPerDay / _oilYield;
-      } catch {}
-      powerState = { boostItems, catBoosts, capacity, p2pPrices, savedProducts, farm, skillCostInfo, exchangeRates, stockMods, season, nftData, inventory };
-
-
+      const savedProducts = getSavedPowerProducts();
+      powerState = { ...d, catBoosts, savedProducts, farm, inventory };
       return powerState;
     }
 
@@ -16734,7 +16554,7 @@
       const { farm, capacity } = powerState;
       const skills = (farm.bumpkin && farm.bumpkin.skills) || {};
       const hasBB = !!skills["Blossom Bonding"];
-      const nftFloor = (name) => { const nd = powerState.nftData || {}; for (const tk of ["collectibles", "wearables"]) for (const it of (nd[tk] || [])) if (it.name === name) return parseFloat(it.floor) || 0; return 0; };
+      const nftFloor = (name) => (powerState.nftFloors || {})[name] || 0; // floors map shipped by section=power (nftData no longer retained)
       const flowers = Object.keys(DEFAULT_FLOWER_POINTS);
       const growH = {}; for (const f of flowers) { let hrs = 0; try { hrs = getFlowerChainHours(f); } catch {} growH[f] = hrs > 0 ? hrs : 24; }
       const rows = [];
