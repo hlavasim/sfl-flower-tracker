@@ -234,19 +234,7 @@ export const TABLE_INVENTORY = [
     "lines": 8
   },
   {
-    "name": "FACTION_KEYWORDS",
-    "lines": 10
-  },
-  {
-    "name": "FACTION_MARK_PRICES",
-    "lines": 15
-  },
-  {
     "name": "FACTION_SHIELDS",
-    "lines": 2
-  },
-  {
-    "name": "FACTION_WINGS",
     "lines": 2
   },
   {

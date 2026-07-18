@@ -4690,33 +4690,6 @@
       return { id, type: BUD_TYPE_NAMES[typeIdx], stem: BUD_STEM_NAMES[stemIdx], aura: BUD_AURA_NAMES[auraIdx] };
     }
 
-    // Faction shop items priced in Marks (from factionShop.ts)
-    // 100 Marks = 1 SFL (1 Mark = 0.01 SFL)
-    const FACTION_MARK_PRICES = {
-      // Wearables (faction variants: Goblin/Bumpkin/Sunflorian/Nightshade)
-      "Crown": 210000,     // + requires Helmet (burned)
-      "Shield": 240000,
-      "Quiver": 240000,
-      "Medallion": 240000,
-      "Armor": 112500,
-      "Helmet": 56250,
-      "Sword": 56250,
-      "Axe": 56250,
-      "Pants": 37500,
-      "Sabatons": 37500,
-      // Collectibles
-      "Throne": 75000,
-    };
-    const FACTION_KEYWORDS = ["Goblin", "Bumpkin", "Sunflorian", "Nightshade"];
-    function getFactionMarkCost(itemName) {
-      for (const [suffix, marks] of Object.entries(FACTION_MARK_PRICES)) {
-        if (itemName.endsWith(" " + suffix)) {
-          const prefix = itemName.slice(0, -(suffix.length + 1));
-          if (FACTION_KEYWORDS.includes(prefix)) return marks;
-        }
-      }
-      return 0;
-    }
     function marksToSfl(marks) { return marks / 100; }
 
     // Crafted ingredient recipes — derive price from sub-ingredients
@@ -15765,7 +15738,6 @@
       }
       return false;
     }
-    const FACTION_WINGS = { bumpkins: "Bumpkin Quiver", goblins: "Goblin Quiver", nightshades: "Nightshade Quiver", sunflorians: "Sunflorian Quiver" };
     const FACTION_SHIELDS = { bumpkins: "Bumpkin Shield", goblins: "Goblin Shield", nightshades: "Nightshade Shield", sunflorians: "Sunflorian Shield" };
     const RES_FARMKEY = { trees: "trees", stone: "stones", iron: "iron", gold: "gold", crimstone: "crimstones" };
 
@@ -15826,53 +15798,6 @@
 
     const FACTION_WINGS_END = true;
 
-    // Boost EFFECTS the marketplace NFT API (/api/v1/nfts) does not expose but the game applies.
-    // Faithful port of the game's yield logic (getCropYieldAmount) for the items a farm owns.
-    // Extended incrementally — currently crops. AOE crop boosters assume coverage (as sfl.world shows).
-    function gameExtraEffects(farm) {
-      const out = [];
-      const skills = (farm.bumpkin && farm.bumpkin.skills) || {};
-      const ownsC = (n) => findCollectible(farm, n).length > 0;
-      // Faction Quiver — +0.25 to ALL crops if the faction's wings wearable is equipped anywhere.
-      const faction = (farm.faction && farm.faction.name) || "";
-      const wings = FACTION_WINGS[faction];
-      if (wings && farmWearableEquipped(farm, wings)) out.push({ type: "yield_flat", value: 0.25, cat: "crops", raw: "Faction Quiver +0.25 crops" });
-      // AOE crop yield collectibles (game uses plot positions; we assume covered, like sfl.world's display).
-      if (ownsC("Scary Mike")) out.push({ type: "yield_flat", value: skills["Horror Mike"] ? 0.3 : 0.2, cat: "crops", cropTier: "medium", raw: (skills["Horror Mike"] ? "Horror Mike +0.3" : "Scary Mike +0.2") + " medium crops" });
-      if (ownsC("Laurie the Chuckle Crow")) out.push({ type: "yield_flat", value: skills["Laurie's Gains"] ? 0.3 : 0.2, cat: "crops", cropTier: "advanced", raw: (skills["Laurie's Gains"] ? "Laurie's Gains +0.3" : "Laurie +0.2") + " advanced crops" });
-      if (ownsC("Sir Goldensnout")) out.push({ type: "yield_flat", value: 0.5, cat: "crops", raw: "Sir Goldensnout +0.5 crops (AOE)" });
-      // Global crop additions
-      if (farmWearableEquipped(farm, "Infernal Pitchfork")) out.push({ type: "yield_flat", value: 3, cat: "crops", raw: "Infernal Pitchfork +3 crops" });
-      if (ownsC("Cabbage Boy")) { out.push({ type: "yield_flat", value: 0.25, cat: "crops", product: "Cabbage", raw: "Cabbage Boy +0.25" }); if (ownsC("Cabbage Girl")) out.push({ type: "yield_flat", value: 0.25, cat: "crops", product: "Cabbage", raw: "Cabbage Girl +0.25" }); }
-      else if (ownsC("Karkinos")) out.push({ type: "yield_flat", value: 0.1, cat: "crops", product: "Cabbage", raw: "Karkinos +0.1 Cabbage" });
-      if (ownsC("Pablo The Bunny")) out.push({ type: "yield_flat", value: 0.1, cat: "crops", product: "Carrot", raw: "Pablo +0.1 Carrot" });
-      if (ownsC("Maximus")) out.push({ type: "yield_flat", value: 1, cat: "crops", product: "Eggplant", raw: "Maximus +1 Eggplant" });
-      if (ownsC("Giant Yam")) out.push({ type: "yield_flat", value: 0.5, cat: "crops", product: "Yam", raw: "Giant Yam +0.5" });
-      if (ownsC("Giant Kale")) out.push({ type: "yield_flat", value: 2, cat: "crops", product: "Kale", raw: "Giant Kale +2" });
-      if (ownsC("Sheaf of Plenty")) out.push({ type: "yield_flat", value: 2, cat: "crops", product: "Barley", raw: "Sheaf of Plenty +2 Barley" });
-
-      // ── FRUITS (game fruitHarvested.ts) ──
-      const _wingsEq = wings && farmWearableEquipped(farm, wings);
-      if (_wingsEq) out.push({ type: "yield_flat", value: 0.25, cat: "fruits", raw: "Faction Quiver +0.25 fruit" });
-      if (ownsC("Macaw")) out.push({ type: "yield_flat", value: skills["Loyal Macaw"] ? 0.2 : 0.1, cat: "fruits", raw: (skills["Loyal Macaw"] ? "Loyal Macaw +0.2" : "Macaw +0.1") + " fruit" });
-      if (farmWearableEquipped(farm, "Fruit Picker Apron")) out.push({ type: "yield_flat", value: 0.1, cat: "fruits", raw: "Fruit Picker Apron +0.1 fruit" });
-      if (farmWearableEquipped(farm, "Camel Onesie")) out.push({ type: "yield_flat", value: 0.1, cat: "fruits", raw: "Camel Onesie +0.1 fruit" });
-      if (ownsC("Black Bearry")) out.push({ type: "yield_flat", value: 1, cat: "fruits", product: "Blueberry", raw: "Black Bearry +1 Blueberry" });
-      if (ownsC("Lady Bug")) out.push({ type: "yield_flat", value: 0.25, cat: "fruits", product: "Apple", raw: "Lady Bug +0.25 Apple" });
-      if (ownsC("Banana Chicken")) out.push({ type: "yield_flat", value: 0.1, cat: "fruits", product: "Banana", raw: "Banana Chicken +0.1 Banana" });
-      if (farmWearableEquipped(farm, "Banana Amulet")) out.push({ type: "yield_flat", value: 0.5, cat: "fruits", product: "Banana", raw: "Banana Amulet +0.5 Banana" });
-      if (ownsC("Lemon Shark")) out.push({ type: "yield_flat", value: 0.2, cat: "fruits", product: "Lemon", raw: "Lemon Shark +0.2 Lemon" });
-      if (ownsC("Reveling Lemon")) out.push({ type: "yield_flat", value: 0.25, cat: "fruits", product: "Lemon", raw: "Reveling Lemon +0.25 Lemon" });
-      if (ownsC("Tomato Bombard")) out.push({ type: "yield_flat", value: 1, cat: "fruits", product: "Tomato", raw: "Tomato Bombard +1 Tomato" });
-
-      // ── GREENHOUSE (game harvestGreenHouse.ts) — collectible/wearable boosts the API omits (skills parsed separately) ──
-      if (ownsC("Pharaoh Gnome")) out.push({ type: "yield_flat", value: 2, cat: "greenhouse", raw: "Pharaoh Gnome +2 greenhouse" });
-      if (ownsC("Rice Panda")) out.push({ type: "yield_flat", value: 0.25, cat: "greenhouse", product: "Rice", raw: "Rice Panda +0.25 Rice" });
-      if (farmWearableEquipped(farm, "Non La Hat")) out.push({ type: "yield_flat", value: 1, cat: "greenhouse", product: "Rice", raw: "Non La Hat +1 Rice" });
-      if (farmWearableEquipped(farm, "Olive Shield")) out.push({ type: "yield_flat", value: 1, cat: "greenhouse", product: "Olive", raw: "Olive Shield +1 Olive" });
-      if (farmWearableEquipped(farm, "Olive Royalty Shirt")) out.push({ type: "yield_flat", value: 0.25, cat: "greenhouse", product: "Olive", raw: "Olive Royalty Shirt +0.25 Olive" });
-      return out;
-    }
 
     // Build powerState — shared by POWER and ROADMAP pages. Throws on fetch failure (no DOM writes).
     // buildPowerState — MIGRATED to core/sections/power.mjs, served by
@@ -20639,66 +20564,6 @@
       }
     }
 
-    function buildRoiBoostItems(farm, inventory, wardrobe, skills, nftData) {
-      const boostItems = [];
-      if (nftData) {
-        for (const item of (nftData.collectibles || [])) {
-          if (!item.have_boost || !item.name || !item.boost_text) continue;
-          const has = getCount(inventory, item.name) > 0 || findCollectible(farm, item.name).length > 0;
-          const effects = parseBoostEffects(item.boost_text, item.name);
-          const categories = classifyToCategories(effects);
-          let floor = parseFloat(item.floor) || 0;
-          const markCost = getFactionMarkCost(item.name);
-          if (markCost > 0) floor = marksToSfl(markCost);
-          boostItems.push({ name: item.name, type: "Collectible", boost: item.boost_text, floor, has, effects, categories });
-        }
-        for (const item of (nftData.wearables || [])) {
-          if (!item.have_boost || !item.name || !item.boost_text) continue;
-          const has = (wardrobe[item.name] || 0) > 0;
-          const effects = parseBoostEffects(item.boost_text, item.name);
-          const categories = classifyToCategories(effects);
-          let floor = parseFloat(item.floor) || 0;
-          const lastSale = parseFloat(item.lastSalePrice) || 0;
-          if (floor <= 0 && lastSale > 0) floor = lastSale;
-          const markCost = getFactionMarkCost(item.name);
-          if (markCost > 0) floor = marksToSfl(markCost);
-          boostItems.push({ name: item.name, type: "Wearable", boost: item.boost_text, floor, has, effects, categories });
-        }
-      }
-      // Skills — non-sellable, included so their boost effects participate in yield calc
-      for (const [skillName, skill] of Object.entries(SKILL_TREE_DATA)) {
-        const has = skills[skillName] !== undefined;
-        const boostText = skill.buff + (skill.debuff ? "\n" + skill.debuff : "");
-        const effects = parseBoostEffects(boostText);
-        if (SKILL_FEED_EFFECTS[skillName]) {
-          for (const [cat, value] of Object.entries(SKILL_FEED_EFFECTS[skillName])) {
-            effects.push({ type: "feed_reduction", value, cat });
-          }
-        }
-        const categories = classifyToCategories(effects);
-        boostItems.push({ name: skillName, type: "Skill", boost: boostText, floor: 0, has, effects, categories });
-      }
-      // Disabled-by detection
-      for (const b of boostItems) {
-        const disabledByEffects = b.effects.filter(e => e.type === "disabled_by");
-        if (disabledByEffects.length > 0) {
-          b.disabledBy = disabledByEffects.flatMap(e => e.names);
-          b.effects = b.effects.filter(e => e.type !== "disabled_by");
-          const activeSuperseder = b.disabledBy.find(name =>
-            getCount(inventory, name) > 0 || findCollectible(farm, name).length > 0
-            || (wardrobe[name] || 0) > 0 || skills[name] !== undefined
-          );
-          if (activeSuperseder) { b.isDisabled = true; b.disabledByName = activeSuperseder; }
-        }
-      }
-      // Mark quant categories, multi-cat, sellable
-      for (const b of boostItems) {
-        b.quantCats = b.categories.filter(c => ROI_QUANT_CATS.includes(c));
-        b.isMultiCat = b.quantCats.length > 1;
-        b.isSellable = b.type !== "Skill" && b.floor > 0;
-      }
-      return boostItems;
-    }
 
     function roiPickProduct(catId) {
       if (catId === "pets") return "Pet Fetch";
