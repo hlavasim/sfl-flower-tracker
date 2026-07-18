@@ -4,6 +4,8 @@ import { buildPricesSection } from "../core/sections/prices.mjs";
 import { valueDiff } from "../core/sections/diff.mjs";
 import { buildPowerSection } from "../core/sections/power.mjs";
 import { buildRoiSection } from "../core/sections/roi.mjs";
+import { buildBudsSection } from "../core/sections/buds.mjs";
+import { buildPetsSection } from "../core/sections/pets.mjs";
 import { computeBettyRate } from "../core/engine/prices.mjs";
 import { API_SPEC } from "../core/api-spec.mjs";
 
@@ -234,6 +236,13 @@ export default async function handler(req, res) {
       if (!nftResult.ok) return res.status(502).json({ error: `nfts fetch failed: ${nftResult.status}` });
       data = buildRoiSection(farm, p2p, nftResult.data, exchange, btcUsd, settings);
     }
+    // `buds`: valuation table over all 2621 encoded buds (SFL/day per bud, ownership).
+    // `products` query param carries the client's per-category product selections
+    // (localStorage), reusing the recipes-style pass-through: settings.savedProducts.
+    else if (section === "buds") data = buildBudsSection(farm, p2p, { ...settings, savedProducts: req.query.products ? JSON.parse(req.query.products) : {} });
+    // `pets`: the pet advisor's per-pet daily economics + raw p2p prices for the
+    // page's resource tables.
+    else if (section === "pets") data = buildPetsSection(farm, p2p, settings);
     else return res.status(400).json({ error: `unknown section: ${section}` });
     const payload = { farm: farmId, computedAt: new Date().toISOString(), section, data };
     // section=prices only (task F2-2e-fix): fetchPrices() above is best-effort and silently

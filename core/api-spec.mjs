@@ -29,7 +29,7 @@ export const API_SPEC = {
             name: "section",
             in: "query",
             required: false,
-            schema: { type: "string", enum: ["constants", "cooking", "diff", "openapi", "power", "prices", "roi"], default: "cooking" },
+            schema: { type: "string", enum: ["buds", "constants", "cooking", "diff", "openapi", "pets", "power", "prices", "roi"], default: "cooking" },
             description:
               "Which computation to run. `constants`: the canonical core/data game tables " +
               "plus flowers.html migration-coverage status, no farm needed. `cooking`: " +
@@ -56,6 +56,11 @@ export const API_SPEC = {
               "(with quantCats/isSellable flags), `pets`, `capacity`, `p2pPrices`, `sflUsd`, " +
               "`btcUsd` (coingecko, best-effort 0), `exchangeRates`, `stockMods`, `season`. " +
               "Same NFT-fetch 502 semantics as `power`. " +
+              "`buds`: SFL/day valuation of all 2621 bud NFTs against the farm's capacity " +
+              "(rows: id/type/stem/aura/owned/sflPerDay/breakdown; `products` query param " +
+              "overrides the per-category product like the page's selector). " +
+              "`pets`: the pet advisor's per-pet daily economics (level, energy, best fetch, " +
+              "SFL/day) + feed boosts + the raw p2p price map its tables use. " +
               "`openapi`: this document, no farm needed. Defaults to `cooking` when omitted.",
           },
           {
@@ -88,6 +93,18 @@ export const API_SPEC = {
               "for that building, e.g. `{\"Fire Pit\":\"Pizza Margherita\"}`. Any building " +
               "omitted from the map falls back to BUMPKIN_DEFAULT_RECIPES. Absent entirely " +
               "→ BUMPKIN_DEFAULT_RECIPES is used for every building.",
+          },
+          {
+            name: "products",
+            in: "query",
+            required: false,
+            schema: { type: "string" },
+            description:
+              "URL-encoded JSON object mapping power-category id to the selected product " +
+              "name (e.g. `{\"crops\":\"Kale\"}`), used by `section=buds` to price " +
+              "product-specific boosts the way the page's product selectors do. Any " +
+              "category omitted falls back to that category's default product. Ignored " +
+              "by other sections.",
           },
           {
             name: "rates",

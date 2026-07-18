@@ -21854,36 +21854,31 @@
       html += `<div id="buds-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading prices...</div></div></div>`;
       app.innerHTML = html;
 
-      // Fetch P2P prices only (bud data is hardcoded)
-      let p2pPrices = {};
+      // Bud valuation — MIGRATED to core/sections/buds.mjs (compute?section=buds).
+      // The server prices all 2621 buds against this farm's capacity; the client keeps
+      // only the display bits (describeBudBoosts icons, breakdown formatting).
+      let budRows = [];
       try {
-        const resp = await fetch(`/api/proxy?url=${encodeURIComponent("https://sfl.world/api/v1/prices")}`);
-        if (resp.ok) {
-          const priceResp = await resp.json();
-          const priceData = priceResp?.data?.p2p || priceResp?.p2p || {};
-          for (const [k, v] of Object.entries(priceData)) p2pPrices[k] = parseFloat(v) || 0;
+        let payload, lastErr;
+        for (let a = 0; a < 3; a++) {
+          try {
+            const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=buds&products=${encodeURIComponent(JSON.stringify(savedProducts))}`);
+            if (!rp.ok) throw new Error(`compute buds ${rp.status}`);
+            payload = await rp.json();
+            break;
+          } catch (e) { lastErr = e; if (a < 2) await new Promise(r => setTimeout(r, 1000 * (a + 1))); }
         }
-      } catch {}
-
-      // Check which buds the user owns
-      const ownedBudIds = new Set();
-      const farmBuds = farm.buds || {};
-      for (const [budId] of Object.entries(farmBuds)) ownedBudIds.add(parseInt(budId));
-
-      // Build all bud data from hardcoded encoded strings
-      const budRows = [];
-      for (let id = 1; id <= BUD_COUNT; id++) {
-        const bud = decodeBud(id);
-        if (!bud) continue;
-        const result = calcBudSflPerDay(bud, capacity, p2pPrices, savedProducts);
-        const boostDescs = describeBudBoosts(bud);
-        const owned = ownedBudIds.has(id);
-        const breakdownDesc = result.breakdown.map(b => {
-          const cat = POWER_CATEGORIES[b.catId];
-          return `${catIcon(b.catId, "1em")} ${b.sflPerDay.toFixed(4)}`;
-        }).join(" · ");
-        budRows.push({ id, type: bud.type, stem: bud.stem, aura: bud.aura,
-          boostDescs, breakdownDesc, sflPerDay: result.totalSfl, sflPerYear: result.totalSfl * 365, owned });
+        if (!payload) throw lastErr;
+        budRows = ((payload.data || {}).rows || []).map(r => {
+          const bud = { type: r.type, stem: r.stem, aura: r.aura };
+          const breakdownDesc = r.breakdown.map(b => `${catIcon(b.catId, "1em")} ${b.sflPerDay.toFixed(4)}`).join(" · ");
+          return { id: r.id, type: r.type, stem: r.stem, aura: r.aura,
+            boostDescs: describeBudBoosts(bud), breakdownDesc,
+            sflPerDay: r.sflPerDay, sflPerYear: r.sflPerDay * 365, owned: r.owned };
+        });
+      } catch (err) {
+        document.getElementById("buds-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load: ${escHTML(err.message)}</p></div>`;
+        return;
       }
 
       // Sort: owned first, then by SFL/day descending
@@ -22211,47 +22206,31 @@
       app.innerHTML = html;
 
       // Fetch P2P prices
-      let p2pPrices = {};
+      // Pet state — MIGRATED to core/sections/pets.mjs (compute?section=pets): boost
+      // detection, pet parsing + per-pet daily calc run server-side; raw p2pPrices come
+      // back for the page's resource tables.
+      let p2pPrices = {}, pets = [], feedMultiplier = 1.0, hasPetBowls = false, hasVictoriasApron = false;
       try {
-        const resp = await fetch(`/api/proxy?url=${encodeURIComponent("https://sfl.world/api/v1/prices")}`);
-        if (resp.ok) {
-          const priceResp = await resp.json();
-          const priceData = priceResp?.data?.p2p || priceResp?.p2p || {};
-          for (const [k, v] of Object.entries(priceData)) p2pPrices[k] = parseFloat(v) || 0;
+        let payload, lastErr;
+        for (let a = 0; a < 3; a++) {
+          try {
+            const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=pets`);
+            if (!rp.ok) throw new Error(`compute pets ${rp.status}`);
+            payload = await rp.json();
+            break;
+          } catch (e) { lastErr = e; if (a < 2) await new Promise(r => setTimeout(r, 1000 * (a + 1))); }
         }
-      } catch {}
-
-      // Detect pet boosts
-      const hasVictoriasApron = (farm.wardrobe?.["Victoria's Apron"] > 0) || isWearableEquipped(farm, "Victoria's Apron");
-      const hasPetBowls = findCollectible(farm, "Pet Bowls").length > 0;
-      const feedMultiplier = hasVictoriasApron ? 1.5 : 1.0;
-
-      // Parse pets from farm data
-      const pets = [];
-      const commonPets = farm.pets?.common || {};
-      for (const [name, pet] of Object.entries(commonPets)) {
-        const xp = pet.experience || 0;
-        const level = petLevel(xp);
-        const energy = pet.energy || 0;
-        const foods = pet.requests?.food || [];
-        const species = PET_NAME_SPECIES[name] || null;
-        pets.push({ name, petType: species, species, level, xp, energy, foods, isNft: false, nftId: null });
+        if (!payload) throw lastErr;
+        const d = payload.data || {};
+        p2pPrices = d.p2pPrices || {};
+        pets = d.pets || [];
+        feedMultiplier = d.feedMultiplier || 1.0;
+        hasPetBowls = !!d.hasPetBowls;
+        hasVictoriasApron = !!d.hasVictoriasApron;
+      } catch (err) {
+        document.getElementById("pets-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load: ${escHTML(err.message)}</p></div>`;
+        return;
       }
-      const nftPets = farm.pets?.nfts || {};
-      for (const [id, pet] of Object.entries(nftPets)) {
-        const xp = pet.experience || 0;
-        const level = petLevel(xp);
-        const energy = pet.energy || 0;
-        const foods = pet.requests?.food || [];
-        const petType = pet.traits?.type || "Unknown";
-        pets.push({ name: petType, petType, species: petType, level, xp, energy, foods, isNft: true, nftId: id });
-      }
-
-      // Sort: NFT first, then common; within each group by level desc
-      pets.sort((a, b) => {
-        if (a.isNft !== b.isNft) return a.isNft ? -1 : 1;
-        return b.level - a.level;
-      });
 
       // Empty state
       if (pets.length === 0) {
@@ -22459,7 +22438,7 @@
         }
 
         // ── SFL/DAY + XP + PERKS ──
-        const calc = petDailyCalc(pet, p2pPrices, feedMultiplier, hasPetBowls);
+        const calc = pet.calc; // precomputed by section=pets
 
         // Active boosts line
         {
@@ -22626,7 +22605,7 @@
       let totalDailySfl = 0;
       const dailyCards = [];
       for (const pet of pets) {
-        const calc = petDailyCalc(pet, p2pPrices, feedMultiplier, hasPetBowls);
+        const calc = pet.calc; // precomputed by section=pets
         if (calc.dailySfl > 0) {
           totalDailySfl += calc.dailySfl;
           dailyCards.push({ name: pet.name, sfl: calc.dailySfl, res: calc.bestRes?.res || "?" });
