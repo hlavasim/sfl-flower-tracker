@@ -15892,7 +15892,7 @@
           if (!rp.ok) throw new Error(`compute power ${rp.status}`);
           payload = await rp.json();
           break;
-        } catch (e) { lastErr = e; if (a < 2) await new Promise(r => setTimeout(r, 500 * (a + 1))); }
+        } catch (e) { lastErr = e; if (a < 2) await new Promise(r => setTimeout(r, 1000 * (a + 1))); }
       }
       if (!payload) throw lastErr;
       const d = payload.data || {};
@@ -20953,9 +20953,16 @@
       // ROI state — MIGRATED to core/sections/roi.mjs, served by /api/compute?section=roi
       // (the server does the nfts/prices/exchange/btc fetches). The client re-attaches farm.
       try {
-        const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=roi`);
-        if (!rp.ok) throw new Error(`compute roi ${rp.status}`);
-        const payload = await rp.json();
+        let payload, lastErr;
+        for (let a = 0; a < 3; a++) {
+          try {
+            const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=roi`);
+            if (!rp.ok) throw new Error(`compute roi ${rp.status}`);
+            payload = await rp.json();
+            break;
+          } catch (e) { lastErr = e; if (a < 2) await new Promise(r => setTimeout(r, 1000 * (a + 1))); }
+        }
+        if (!payload) throw lastErr;
         roiState = { ...(payload.data || {}), farm };
       } catch (err) {
         document.getElementById("roi-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load: ${escHTML(err.message)}</p></div>`;
@@ -21346,35 +21353,30 @@
       html += `<div id="shrines-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Computing shrine ROI…</div></div></div>`;
       app.innerHTML = html;
 
-      // Fetch p2p prices + exchange rates + NFT boost data
-      let p2pPrices = {}, sflUsd = 0, btcUsd = 0, nftData = null;
+      // Prices/rates/NFT boost items — MIGRATED: one compute?section=roi call replaces
+      // the page's THIRD copy of the prices/exchange/btc/nfts fetch + buildRoiBoostItems
+      // (the server runs the same builder in core/sections/roi.mjs).
+      let p2pPrices = {}, sflUsd = 0, btcUsd = 0, boostItems = [];
       try {
-        const proxyFetch = async (url) => {
-          try { const r = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`); if (r.ok) return r.json(); } catch {}
-          return (await fetch(url)).json();
-        };
-        const [priceResp, rateResp, btcResp, nftResp] = await Promise.all([
-          proxyFetch("https://sfl.world/api/v1/prices"),
-          proxyFetch("https://sfl.world/api/v1.1/exchange").catch(() => null),
-          proxyFetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd").catch(() => null),
-          proxyFetch("https://sfl.world/api/v1/nfts").catch(() => null),
-        ]);
-        const priceData = priceResp?.data?.p2p || priceResp?.p2p || {};
-        for (const [k, v] of Object.entries(priceData)) p2pPrices[k] = parseFloat(v) || 0;
-        sflUsd = rateResp?.sfl?.usd || 0;
-        btcUsd = btcResp?.bitcoin?.usd || 0;
-        nftData = nftResp;
+        let payload, lastErr;
+        for (let a = 0; a < 3; a++) {
+          try {
+            const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=roi`);
+            if (!rp.ok) throw new Error(`compute roi ${rp.status}`);
+            payload = await rp.json();
+            break;
+          } catch (e) { lastErr = e; if (a < 2) await new Promise(r => setTimeout(r, 1000 * (a + 1))); }
+        }
+        if (!payload) throw lastErr;
+        const d = payload.data || {};
+        p2pPrices = d.p2pPrices || {};
+        sflUsd = d.sflUsd || 0;
+        btcUsd = d.btcUsd || 0;
+        boostItems = d.boostItems || [];
       } catch (err) {
         document.getElementById("shrines-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load prices: ${escHTML(err.message)}</p></div>`;
         return;
       }
-
-      // Build owned boost effects from NFTs + skills (same logic as ROI/Power pages)
-      const wardrobe = farm.wardrobe || {};
-      const skills = farm.bumpkin?.skills || {};
-      const boostItems = (typeof buildRoiBoostItems === "function")
-        ? buildRoiBoostItems(farm, inventory, wardrobe, skills, nftData)
-        : [];
       const ownedEffects = boostItems.filter(b => b.has && !b.isDisabled).flatMap(b => b.effects || []);
 
       const capacity = detectFarmCapacity(farm);
@@ -24996,7 +24998,7 @@
             const rp = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body });
             if (!rp.ok) throw new Error(`compute diff ${rp.status}`);
             return ((await rp.json()).data || {}).snapshots || [];
-          } catch (e) { lastErr = e; if (a < 2) await new Promise(r => setTimeout(r, 500 * (a + 1))); }
+          } catch (e) { lastErr = e; if (a < 2) await new Promise(r => setTimeout(r, 1000 * (a + 1))); }
         }
         throw lastErr;
       }

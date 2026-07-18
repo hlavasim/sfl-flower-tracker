@@ -40,7 +40,15 @@ const CACHE_TTL_MS = 10_000;
 const CACHE_MAX_ENTRIES = 64; // sweep expired entries past this — bounds a warm instance's farmCache
 const farmCache = new Map(); // farmId -> { promise, expiresAt }
 const pricesCache = new Map(); // "prices" -> { promise, expiresAt } — single entry, no farm key
-const nftsCache = new Map(); // "nfts" -> { promise, expiresAt } — section=power only
+const nftsCache = new Map(); // "nfts" -> { promise, expiresAt } — sections power+roi
+// Slow-moving upstreams get longer TTLs than the 10s farm/prices default. Observed in
+// Playwright runs: page loads that re-fetch nfts/exchange/btc every 10s trip sfl.world /
+// coingecko rate limits (502 through the proxy) — yet NFT floors and exchange tiers move
+// on minutes-to-hours timescales, so serving them minutes-stale is strictly better than
+// serving a 502. Farm and p2p prices KEEP 10s (they are what "current state" means here).
+const NFTS_TTL_MS = 5 * 60_000;
+const EXCHANGE_TTL_MS = 60_000;
+const BTC_TTL_MS = 60_000;
 const exchangeCache = new Map(); // "exchange" -> { promise, expiresAt } — sections power+roi
 const btcCache = new Map(); // "btc" -> { promise, expiresAt } — section=roi only
 
@@ -48,7 +56,7 @@ const btcCache = new Map(); // "btc" -> { promise, expiresAt } — section=roi o
 // that arrive before it settles. `run()` must resolve to `{ ok, ... }`; a `{ ok: false }`
 // result (or a rejection) is evicted immediately so the very next call retries against
 // upstream instead of replaying the failure for the rest of the TTL.
-function cachedFetch(cache, key, run) {
+function cachedFetch(cache, key, run, ttlMs = CACHE_TTL_MS) {
   // Opportunistic sweep: drop successful-but-expired entries so a warm instance serving many
   // distinct farmIds does not grow the Map without bound (only failures self-evict below).
   if (cache.size > CACHE_MAX_ENTRIES) {
@@ -57,7 +65,7 @@ function cachedFetch(cache, key, run) {
   }
   const hit = cache.get(key);
   if (hit && hit.expiresAt > Date.now()) return hit.promise;
-  const entry = { promise: run(), expiresAt: Date.now() + CACHE_TTL_MS };
+  const entry = { promise: run(), expiresAt: Date.now() + ttlMs };
   cache.set(key, entry);
   // Evict on failure — but ONLY if this exact entry is still the cached one. A slow promise
   // can settle after the TTL lapsed and a newer request already replaced it; deleting
@@ -106,7 +114,7 @@ async function fetchNfts() {
     const r = await fetch(`${PROXY}/api/proxy?url=${encodeURIComponent(NFTS_URL)}`);
     if (!r.ok) return { ok: false, status: r.status };
     return { ok: true, data: await r.json() };
-  });
+  }, NFTS_TTL_MS);
 }
 
 // BTC/USD for the ROI page's currency toggle — best-effort exactly like the page
@@ -121,7 +129,7 @@ async function fetchBtc() {
     } catch {
       return { ok: false, data: 0 };
     }
-  });
+  }, BTC_TTL_MS);
   return result.data;
 }
 
@@ -134,7 +142,7 @@ async function fetchExchange() {
     } catch {
       return { ok: false, data: null };
     }
-  });
+  }, EXCHANGE_TTL_MS);
   return result.data;
 }
 
