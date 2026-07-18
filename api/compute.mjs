@@ -2,11 +2,14 @@ import { buildCookingSection } from "../core/sections/cooking.mjs";
 import { buildConstantsSection } from "../core/sections/constants.mjs";
 import { buildPricesSection } from "../core/sections/prices.mjs";
 import { valueDiff } from "../core/sections/diff.mjs";
+import { buildPowerSection } from "../core/sections/power.mjs";
 import { computeBettyRate } from "../core/engine/prices.mjs";
 import { API_SPEC } from "../core/api-spec.mjs";
 
 const PROXY = process.env.PROXY_ORIGIN || "https://sunflower.sajmonium.quest";
 const PRICES_URL = "https://sfl.world/api/v1/prices";
+const NFTS_URL = "https://sfl.world/api/v1/nfts";
+const EXCHANGE_URL = "https://sfl.world/api/v1.1/exchange";
 
 // --- Short-TTL in-process cache for the two upstream fetches -------------------------------
 // /api/compute is a pure read. Each migrated consumer on a page (marks today, more sections
@@ -35,6 +38,8 @@ const CACHE_TTL_MS = 10_000;
 const CACHE_MAX_ENTRIES = 64; // sweep expired entries past this — bounds a warm instance's farmCache
 const farmCache = new Map(); // farmId -> { promise, expiresAt }
 const pricesCache = new Map(); // "prices" -> { promise, expiresAt } — single entry, no farm key
+const nftsCache = new Map(); // "nfts" -> { promise, expiresAt } — section=power only
+const exchangeCache = new Map(); // "exchange" -> { promise, expiresAt } — section=power only
 
 // Runs `run()` at most once per TTL per key, sharing the in-flight promise across callers
 // that arrive before it settles. `run()` must resolve to `{ ok, ... }`; a `{ ok: false }`
@@ -90,12 +95,38 @@ async function fetchPrices() {
   return result.data;
 }
 
+// Section=power upstreams. Nfts must load (the section is ABOUT the boost NFTs) → not ok
+// fails the request like the farm fetch. Exchange is best-effort like prices: on failure
+// the page's own behaviour was to keep the Betty rate and gemsPerSFL 0, so null suffices.
+async function fetchNfts() {
+  return cachedFetch(nftsCache, "nfts", async () => {
+    const r = await fetch(`${PROXY}/api/proxy?url=${encodeURIComponent(NFTS_URL)}`);
+    if (!r.ok) return { ok: false, status: r.status };
+    return { ok: true, data: await r.json() };
+  });
+}
+
+async function fetchExchange() {
+  const result = await cachedFetch(exchangeCache, "exchange", async () => {
+    try {
+      const r = await fetch(`${PROXY}/api/proxy?url=${encodeURIComponent(EXCHANGE_URL)}`);
+      if (!r.ok) return { ok: false, data: null };
+      return { ok: true, data: await r.json() };
+    } catch {
+      return { ok: false, data: null };
+    }
+  });
+  return result.data;
+}
+
 // Test-only hook: node:test imports this module once and runs every test in a file against
 // that same instance, so the module-level caches above persist across tests unless cleared.
 // Production callers never call this.
 export function _clearCacheForTests() {
   farmCache.clear();
   pricesCache.clear();
+  nftsCache.clear();
+  exchangeCache.clear();
 }
 
 export default async function handler(req, res) {
@@ -157,6 +188,15 @@ export default async function handler(req, res) {
         return { capturedAt: s.capturedAt ?? s.time ?? null, netSfl, items, ...(settings.explain ? { trace: trace[0] } : {}) };
       });
       data = { snapshots };
+    }
+    // `power`: the POWER/ROADMAP pages' shared boost state (task: power migration). Needs
+    // two extra upstreams the other sections don't: the sfl.world NFT list (the section is
+    // an analysis OF those boost NFTs — a failed fetch is a 502, same as the farm) and the
+    // exchange rates (best-effort — null keeps the Betty rate, exactly the page's fallback).
+    else if (section === "power") {
+      const [nftResult, exchange] = await Promise.all([fetchNfts(), fetchExchange()]);
+      if (!nftResult.ok) return res.status(502).json({ error: `nfts fetch failed: ${nftResult.status}` });
+      data = buildPowerSection(farm, p2p, nftResult.data, exchange, settings);
     }
     else return res.status(400).json({ error: `unknown section: ${section}` });
     const payload = { farm: farmId, computedAt: new Date().toISOString(), section, data };

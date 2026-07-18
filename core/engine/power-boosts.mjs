@@ -2,7 +2,7 @@
 // section. Data tables (grow-data, boost rules) are duplicated in core here; the inline
 // copies stay until their other consumers migrate. DOM-free.
 
-    const CROP_GROW_DATA = {
+    export const CROP_GROW_DATA = {
       "Sunflower": 60, "Potato": 300, "Rhubarb": 600, "Pumpkin": 1800, "Zucchini": 1800,
       "Carrot": 3600, "Yam": 3600, "Cabbage": 7200, "Broccoli": 7200, "Soybean": 10800,
       "Beetroot": 14400, "Pepper": 14400, "Cauliflower": 28800, "Parsnip": 43200,
@@ -11,7 +11,7 @@
       "Kale": 129600, "Artichoke": 129600, "Barley": 172800,
     };
 
-    const FRUIT_GROW_DATA = {
+    export const FRUIT_GROW_DATA = {
       "Apple": 43200, "Blueberry": 21600, "Orange": 28800, "Banana": 43200,
       "Lemon": 14400, "Tomato": 7200,
     };
@@ -21,11 +21,11 @@
       "Orange": 4, "Apple": 4, "Banana": 4,
     };
 
-    const GREENHOUSE_GROW_DATA = {
+    export const GREENHOUSE_GROW_DATA = {
       "Grape": 43200, "Rice": 115200, "Olive": 158400,
     };
 
-    const SKILL_FEED_EFFECTS = {
+    export const SKILL_FEED_EFFECTS = {
       "Efficient Feeding":    { chickens: -0.05, cows: -0.05, sheep: -0.05 },
       "Clucky Grazing":       { chickens: -0.25, cows: 0.50, sheep: 0.50 },
       "Sheepwise Diet":       { chickens: 0.50, cows: 0.50, sheep: -0.25 },
@@ -33,7 +33,7 @@
       "Chonky Feed":          { chickens: -0.25, cows: -0.25, sheep: -0.25 }, // net of +50% food x 2x XP (half feedings) = x0.75
     };
 
-    const PRODUCT_TO_CATEGORY = {};
+    export const PRODUCT_TO_CATEGORY = {};
     Object.keys(CROP_GROW_DATA).forEach(k => PRODUCT_TO_CATEGORY[k] = "crops");
     Object.keys(FRUIT_GROW_DATA).forEach(k => PRODUCT_TO_CATEGORY[k] = "fruits");
     Object.keys(GREENHOUSE_GROW_DATA).forEach(k => PRODUCT_TO_CATEGORY[k] = "greenhouse");

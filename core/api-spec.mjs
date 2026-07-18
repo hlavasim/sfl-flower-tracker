@@ -29,7 +29,7 @@ export const API_SPEC = {
             name: "section",
             in: "query",
             required: false,
-            schema: { type: "string", enum: ["constants", "cooking", "diff", "openapi", "prices"], default: "cooking" },
+            schema: { type: "string", enum: ["constants", "cooking", "diff", "openapi", "power", "prices"], default: "cooking" },
             description:
               "Which computation to run. `constants`: the canonical core/data game tables " +
               "plus flowers.html migration-coverage status, no farm needed. `cooking`: " +
@@ -45,6 +45,13 @@ export const API_SPEC = {
               "per-item SFL contributions + a net total, using the `marketValue` map priced " +
               "with the posted `rates`. Body: `{ snapshots: [{ diff }, ...] }`; response " +
               "`data.snapshots[]` carries `{ netSfl, items }` (+ a `trace` when `explain=1`). " +
+              "`power`: the POWER/ROADMAP pages' shared boost state for the given farm — " +
+              "`boostItems` (every boost collectible/wearable/skill with parsed effects, " +
+              "categories, floor price and ownership), `capacity` (per-category plot/node/animal " +
+              "counts), `p2pPrices` (incl. the derived Oil price), `skillCostInfo`, " +
+              "`exchangeRates` (Betty coins rate + gems + USD), `stockMods`, `season`, and " +
+              "`nftFloors` (name → floor for every marketplace NFT). Fetches the sfl.world NFT " +
+              "list server-side; a failed NFT fetch is a 502 like a failed farm fetch. " +
               "`openapi`: this document, no farm needed. Defaults to `cooking` when omitted.",
           },
           {
