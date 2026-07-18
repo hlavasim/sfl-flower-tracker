@@ -50,7 +50,7 @@ export const API_SPEC = {
               "categories, floor price and ownership), `capacity` (per-category plot/node/animal " +
               "counts), `p2pPrices` (incl. the derived Oil price), `skillCostInfo`, " +
               "`exchangeRates` (Betty coins rate + gems + USD), `stockMods`, `season`, and " +
-              "`nftFloors` (name → floor for every marketplace NFT). Fetches the sfl.world NFT " +
+              "a slim `nftData` ({collectibles, wearables} with name/floor/boost_text/supply). Fetches the sfl.world NFT " +
               "list server-side; a failed NFT fetch is a 502 like a failed farm fetch. " +
               "`openapi`: this document, no farm needed. Defaults to `cooking` when omitted.",
           },

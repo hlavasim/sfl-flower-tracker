@@ -15878,7 +15878,7 @@
     // buildPowerState — MIGRATED to core/sections/power.mjs, served by
     // /api/compute?section=power (the server fetches nfts/prices/exchange itself).
     // The response carries { boostItems, capacity, p2pPrices, skillCostInfo,
-    // exchangeRates, stockMods, season, nftFloors }; the client re-attaches what only
+    // exchangeRates, stockMods, season, nftData (slim) }; the client re-attaches what only
     // it has (farm, inventory, localStorage savedProducts) and rebuilds catBoosts
     // locally so every category entry shares object identity with boostItems (a
     // serialized catBoosts would be per-category COPIES, breaking that).
@@ -16554,7 +16554,7 @@
       const { farm, capacity } = powerState;
       const skills = (farm.bumpkin && farm.bumpkin.skills) || {};
       const hasBB = !!skills["Blossom Bonding"];
-      const nftFloor = (name) => (powerState.nftFloors || {})[name] || 0; // floors map shipped by section=power (nftData no longer retained)
+      const nftFloor = (name) => { const nd = powerState.nftData || {}; for (const tk of ["collectibles", "wearables"]) for (const it of (nd[tk] || [])) if (it.name === name) return parseFloat(it.floor) || 0; return 0; };
       const flowers = Object.keys(DEFAULT_FLOWER_POINTS);
       const growH = {}; for (const f of flowers) { let hrs = 0; try { hrs = getFlowerChainHours(f); } catch {} growH[f] = hrs > 0 ? hrs : 24; }
       const rows = [];

@@ -12,10 +12,10 @@
 //     object identity the page relies on. The client rebuilds it from boostItems with
 //     the same filter loop.
 //   - The returned object therefore carries { boostItems, capacity, p2pPrices,
-//     skillCostInfo, exchangeRates, stockMods, season } and NOT farm/inventory/nftData
-//     (the client already has farm+inventory; nftFloors covers the roadmap's nftData use).
-//   - nftFloors: name → floor for every NFT (the page keeps whole nftData for roadmap's
-//     nftFloor lookup; shipping just the floors map is far smaller).
+//     skillCostInfo, exchangeRates, stockMods, season, nftData } and NOT farm/inventory
+//     (the client already has both).
+//   - nftData is SLIM: same {collectibles, wearables} shape but only the four fields the
+//     page's consumers (roadmapBuildMissing, nftFloor) actually read.
 import {
   parseBoostEffects, classifyToCategories, SKILL_FEED_EFFECTS,
 } from "../engine/power-boosts.mjs";
@@ -216,14 +216,16 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     if (_oilYield > 0 && _oilTool.costPerDay > 0) p2pPrices["Oil"] = _oilTool.costPerDay / _oilYield;
   } catch {}
 
-  // name → floor for EVERY nft (not just have_boost — the roadmap's nftFloor() is called
-  // with arbitrary chest-reward names), replacing the page's whole-nftData retention.
-  const nftFloors = {};
+  // Slim nftData for the client — the page kept the WHOLE upstream response on
+  // powerState.nftData, but its two remaining consumers (roadmapBuildMissing iterating
+  // collectibles/wearables; nftFloor reading floors) touch exactly these four fields.
+  // Same shape, so both consumers work verbatim on the slim copy.
+  const nftSlim = {};
   for (const tk of ["collectibles", "wearables"]) {
-    for (const it of (nftData[tk] || [])) {
-      if (it && it.name) nftFloors[it.name] = parseFloat(it.floor) || 0;
-    }
+    nftSlim[tk] = (nftData[tk] || []).filter((it) => it && it.name).map((it) => ({
+      name: it.name, floor: it.floor, boost_text: it.boost_text, supply: it.supply,
+    }));
   }
 
-  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftFloors };
+  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim };
 }

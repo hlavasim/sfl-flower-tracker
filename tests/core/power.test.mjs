@@ -46,10 +46,14 @@ test("boostItems — owned collectible detected via home.collectibles, unowned n
   assert.equal(out.boostItems.find((b) => b.name === "Rocket Statue"), undefined);
 });
 
-test("nftFloors — carries EVERY nft (roadmap looks up arbitrary reward names)", () => {
-  assert.equal(out.nftFloors["Foreman Beaver"], 1200);
-  assert.equal(out.nftFloors["Rocket Statue"], 3); // …but still has a floor entry
-  assert.equal(out.nftFloors["Fruit Picker Apron"], 2.5);
+test("nftData — slim copy carries EVERY nft with the 4 consumer-read fields", () => {
+  // roadmapBuildMissing iterates these lists and nftFloor scans floors, so non-boost
+  // NFTs (Rocket Statue) must survive the slimming even though boostItems drops them.
+  const byName = Object.fromEntries(out.nftData.collectibles.map((it) => [it.name, it]));
+  assert.equal(byName["Foreman Beaver"].floor, "1200");
+  assert.equal(byName["Rocket Statue"].floor, "3");
+  assert.deepEqual(Object.keys(byName["Foreman Beaver"]).sort(), ["boost_text", "floor", "name", "supply"]);
+  assert.equal(out.nftData.wearables[0].name, "Fruit Picker Apron");
 });
 
 test("skills — every SKILL_TREE_DATA entry becomes a boostItem, ownership from farm", () => {
