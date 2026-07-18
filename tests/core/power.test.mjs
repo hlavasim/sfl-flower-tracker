@@ -121,3 +121,15 @@ test("categories — per-category summary computed server-side (phase B)", () =>
   const alt = buildPowerSection(farm, p2p, nfts, null, { savedProducts: { crops: "Wheat" } });
   assert.equal(alt.categories.catSummaries.crops.product, "Wheat");
 });
+
+test("categories — mining cats use the per-node engine (render-time semantics)", async () => {
+  // The page computed its summary AFTER powerState was set, so applyBoosts took the
+  // gameResYield(farm,…) path for trees/stone/iron/gold/crimstone. Recompute trees'
+  // base through the engine helpers directly — if the section stops passing `farm`,
+  // it falls back to n × cycles × yield and this pin breaks.
+  const { gameResYield } = await import("../../core/engine/power-helpers.mjs");
+  const wood = parseFloat(p2p["Wood"]) || 0;
+  const expected = gameResYield(farm, "trees", []) * (86400 / 7200) * wood;
+  assert.ok(Math.abs(out.categories.catSummaries.trees.baseSfl - expected) < 1e-9,
+    `trees base ${out.categories.catSummaries.trees.baseSfl} != per-node ${expected}`);
+});

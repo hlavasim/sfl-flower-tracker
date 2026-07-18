@@ -236,12 +236,19 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   // ported VERBATIM with powerState reads parameterized. Runs on the same catBoosts built
   // above; `settings.savedProducts` mirrors the page's product selectors (query `products`).
   const savedProducts = settings.savedProducts || {};
+  // Page's roadmapOwnedEffects verbatim: has-only (NOT filtered on isDisabled), plus
+  // active shrine effects. miningToolsPerDay/calcToolCostPerDay consumed THIS set at
+  // render time via the powerState global — the summary loop's own ownedEffects
+  // (has && !isDisabled) is a different, narrower set used only for applyBoosts.
+  const roadmapOwnedEff = (cat) => boostItems.filter(b => b.has).flatMap(b => b.effects.filter(e => e.cat === cat)).concat(activeShrineEffects(farm, cat));
 
   // Derive Oil unit cost from actual drill cost / actual boosted yield
   // Uses farm's real boosts (Infernal Drill = free, yield boosts, speed boosts)
   const oilOwnedEffects = (catBoosts["oil"] || []).filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, "oil"));
   const oilBoostedResult = applyBoosts("oil", "Oil", capacity, oilOwnedEffects);
-  const oilToolInfo = calcToolCostPerDay("oil", capacity, exchangeRates, p2pPrices, stockMods);
+  // render-time semantics: powerState was SET on the page here, so the tool calc saw the
+  // farm's physical nodes and the roadmap-owned boosted cycle — pass both explicitly.
+  const oilToolInfo = calcToolCostPerDay("oil", capacity, exchangeRates, p2pPrices, stockMods, undefined, farm, roadmapOwnedEff("oil"));
   if (oilBoostedResult.unitsPerDay > 0 && oilToolInfo.costPerDay > 0) {
     p2pPrices["Oil"] = oilToolInfo.costPerDay / oilBoostedResult.unitsPerDay;
   } else if (oilBoostedResult.unitsPerDay > 0) {
@@ -265,9 +272,9 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
       animalBreakdown = boostedInfo.breakdown;
     } else {
       const priceProduct = getPriceProduct(catId, product);
-      const baseResult = applyBoosts(catId, product, capacity, []);
+      const baseResult = applyBoosts(catId, product, capacity, [], farm);
       baseSfl = unitToSfl(baseResult.unitsPerDay, priceProduct, p2pPrices);
-      const boostedResult = applyBoosts(catId, product, capacity, ownedEffects);
+      const boostedResult = applyBoosts(catId, product, capacity, ownedEffects, farm);
       boostedSfl = unitToSfl(boostedResult.unitsPerDay, priceProduct, p2pPrices);
       boostedUnitsPerDay = boostedResult.unitsPerDay;
     }
@@ -292,8 +299,8 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
       baseCostPerDay = cBase.costPerDay;
       costDetails = c;
     } else if (["trees", "stone", "iron", "gold", "crimstone", "oil"].includes(catId)) {
-      const c = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods);
-      const cBase = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods, true);
+      const c = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods, undefined, farm, roadmapOwnedEff(catId));
+      const cBase = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods, true, farm, roadmapOwnedEff(catId));
       costPerDay = c.costPerDay;
       baseCostPerDay = cBase.costPerDay;
       restockPerDay = c.restockPerDay;
