@@ -80,14 +80,31 @@ function cachedFetch(cache, key, run, ttlMs = CACHE_TTL_MS) {
   return entry.promise;
 }
 
+// Last SUCCESSFUL results, kept indefinitely (bounded), as a stale fallback: the SFL
+// farm API throttles hard enough that a page navigating between sections routinely hits
+// a 429 window, and every section 502s with it. A minutes-stale farm is strictly better
+// than a dead page for a read-only dashboard — so when the live fetch fails but we have
+// EVER succeeded for this farm on this instance, serve that instead. Same for nfts
+// (single key). Prices/exchange/btc are already best-effort by design.
+const lastGoodFarm = new Map(); // farmId -> wrap
+const lastGoodNfts = { data: null };
+
 async function fetchFarm(farmId) {
-  return cachedFetch(farmCache, farmId, async () => {
+  const result = await cachedFetch(farmCache, farmId, async () => {
     const sflUrl = `https://api.sunflower-land.com/community/farms/${farmId}`;
     const r = await fetch(`${PROXY}/api/proxy?url=${encodeURIComponent(sflUrl)}`);
     if (!r.ok) return { ok: false, status: r.status };
     const wrap = await r.json();
     return { ok: true, data: wrap };
   });
+  if (result.ok) {
+    if (lastGoodFarm.size > CACHE_MAX_ENTRIES) lastGoodFarm.delete(lastGoodFarm.keys().next().value);
+    lastGoodFarm.set(farmId, result.data);
+    return result;
+  }
+  const stale = lastGoodFarm.get(farmId);
+  if (stale) return { ok: true, data: stale, stale: true };
+  return result;
 }
 
 // Prices are best-effort: a failed/erroring fetch must not fail the whole endpoint
@@ -112,11 +129,14 @@ async function fetchPrices() {
 // fails the request like the farm fetch. Exchange is best-effort like prices: on failure
 // the page's own behaviour was to keep the Betty rate and gemsPerSFL 0, so null suffices.
 async function fetchNfts() {
-  return cachedFetch(nftsCache, "nfts", async () => {
+  const result = await cachedFetch(nftsCache, "nfts", async () => {
     const r = await fetch(`${PROXY}/api/proxy?url=${encodeURIComponent(NFTS_URL)}`);
     if (!r.ok) return { ok: false, status: r.status };
     return { ok: true, data: await r.json() };
   }, NFTS_TTL_MS);
+  if (result.ok) { lastGoodNfts.data = result.data; return result; }
+  if (lastGoodNfts.data) return { ok: true, data: lastGoodNfts.data, stale: true };
+  return result;
 }
 
 // BTC/USD for the ROI page's currency toggle — best-effort exactly like the page
@@ -151,7 +171,13 @@ async function fetchExchange() {
 // Test-only hook: node:test imports this module once and runs every test in a file against
 // that same instance, so the module-level caches above persist across tests unless cleared.
 // Production callers never call this.
-export function _clearCacheForTests() {
+export function _clearCacheForTests(opts = {}) {
+  // opts.keepLastGood: clear only the TTL caches — lets a test open the throttle-window
+  // path (TTL miss + upstream failure) while the stale fallback still has data.
+  if (!opts.keepLastGood) {
+    lastGoodFarm.clear();
+    lastGoodNfts.data = null;
+  }
   farmCache.clear();
   pricesCache.clear();
   nftsCache.clear();

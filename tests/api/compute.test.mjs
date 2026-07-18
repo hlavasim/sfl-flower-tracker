@@ -222,3 +222,39 @@ test("farm fetch failure still 502s even if prices fetch succeeds", async () => 
     globalThis.fetch = orig;
   }
 });
+
+// Stale-farm fallback: after ONE successful fetch for a farm, a TTL-expired re-fetch
+// that fails upstream must serve the remembered farm instead of 502ing the section
+// (the SFL API's throttle windows routinely killed page navigations otherwise).
+// _clearCacheForTests({ keepLastGood: true }) simulates the window: TTL caches gone,
+// lastGood intact.
+test("farm fetch failure after a success serves the stale farm instead of 502", async () => {
+  const orig = globalThis.fetch;
+  try {
+    globalThis.fetch = mockFetchWithPrices();
+    let res = mockRes();
+    await handler({ query: { farm: "155498", section: "cooking", petSimulate: "1" } }, res);
+    assert.equal(res._status, 200);
+
+    _clearCacheForTests({ keepLastGood: true }); // expire TTL caches only
+    globalThis.fetch = async (url) => {
+      if (String(url).includes("sfl.world")) {
+        return { ok: true, status: 200, json: async () => ({ data: { p2p: JSON.parse(p2pText) } }) };
+      }
+      return { ok: false, status: 429, json: async () => ({}) };
+    };
+    res = mockRes();
+    await handler({ query: { farm: "155498", section: "cooking", petSimulate: "1" } }, res);
+    assert.equal(res._status, 200, "stale farm must be served during the throttle window");
+    assert.ok(res._json.data.buildings["Fire Pit"], "payload computed from the stale farm");
+
+    // Control: with lastGood ALSO cleared, the same failure is a 502 — pins that the
+    // 200 above really came from the stale path, not some other cache.
+    _clearCacheForTests();
+    res = mockRes();
+    await handler({ query: { farm: "155498", section: "cooking", petSimulate: "1" } }, res);
+    assert.equal(res._status, 502);
+  } finally {
+    globalThis.fetch = orig;
+  }
+});
