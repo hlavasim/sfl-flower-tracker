@@ -362,10 +362,6 @@ export const TABLE_INVENTORY = [
     "lines": 6
   },
   {
-    "name": "MERGEKEY_CAT",
-    "lines": 2
-  },
-  {
     "name": "MINE_CHAIN",
     "lines": 2
   },
@@ -500,10 +496,6 @@ export const TABLE_INVENTORY = [
   {
     "name": "ROADMAP_MINING_CATS",
     "lines": 7
-  },
-  {
-    "name": "ROI_FIXED_PRODUCTS",
-    "lines": 2
   },
   {
     "name": "ROI_QUANT_CATS",
