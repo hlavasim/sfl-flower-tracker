@@ -20,7 +20,15 @@ import {
 } from "../engine/ascension.mjs";
 
 const RES3 = ["Crimstone", "Oil", "Obsidian"];
-const NODE_TO_RES = { "Crimstone Rock": "Crimstone", "Oil Reserve": "Oil", "Lava Pit": "Obsidian" };
+// Pre-ascension expansions also cost Wood/Stone/Iron/Gold — the power + eff
+// engines measure those categories too, so they are fully simulated alongside
+// RES3. Gem has no production and stays a stock-only check (extraCost).
+const PRE_RES = ["Wood", "Stone", "Iron", "Gold"];
+const SIM_RES = [...RES3, ...PRE_RES];
+const NODE_TO_RES = {
+  "Crimstone Rock": "Crimstone", "Oil Reserve": "Oil", "Lava Pit": "Obsidian",
+  "Tree": "Wood", "Stone Rock": "Stone", "Iron Rock": "Iron", "Gold Rock": "Gold",
+};
 // Continuous-expand build schedule start (MIGRATION.md §2.5).
 const CONTINUOUS_EXPAND_START_MS = Date.UTC(2026, 7, 3); // 3.8.2026
 
@@ -51,7 +59,8 @@ export function buildPreAscensionSteps(islandType, basicLand, grinx) {
     for (let e = from + 1; e <= prog.max; e++) {
       const req = table[e];
       if (!req) continue;
-      const cost = { Crimstone: 0, Oil: 0, Obsidian: 0, Coins: req.coins || 0 };
+      const cost = { Coins: req.coins || 0 };
+      for (const r of SIM_RES) cost[r] = 0;
       const extraCost = {};
       for (const [r, q] of Object.entries(req.resources || {})) {
         const v = grinx ? q / 2 : q; // Grinx halves expansion resource costs (not coins)
@@ -64,7 +73,8 @@ export function buildPreAscensionSteps(islandType, basicLand, grinx) {
     }
     if (!prog.next) break;
     // island upgrade: expansions complete + flat item cost, no build time, no level gate
-    const upCost = { Crimstone: 0, Oil: 0, Obsidian: 0, Coins: 0 };
+    const upCost = { Coins: 0 };
+    for (const r of SIM_RES) upCost[r] = 0;
     const upExtra = {};
     for (const [r, q] of Object.entries(prog.upgradeItems)) {
       if (r in upCost) upCost[r] = q; else upExtra[r] = q;
@@ -127,10 +137,8 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
   const experienceEff = experience + bankedFoodXp;
 
   // ── current state (§2.7 `current`) ──
-  const stock = {
-    Crimstone: getCount(inv, "Crimstone"), Oil: getCount(inv, "Oil"),
-    Obsidian: getCount(inv, "Obsidian"), Coins: parseFloat(farm.coins) || 0,
-  };
+  const stock = { Coins: parseFloat(farm.coins) || 0 };
+  for (const r of SIM_RES) stock[r] = getCount(inv, r);
   if (grinx) { /* grinx halves COSTS, not stock */ }
   const bandStandings = {};
   for (let a = 1; a <= maxAsc; a++) bandStandings[a] = ascensionStanding(experienceEff, a);
@@ -138,6 +146,10 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
     Crimstone: Object.keys(farm.crimstones || {}).length,
     Oil: Object.keys(farm.oilReserves || {}).length,
     Obsidian: Object.keys(farm.lavaPits || {}).length,
+    Wood: Object.keys(farm.trees || {}).length,
+    Stone: Object.keys(farm.stones || {}).length,
+    Iron: Object.keys(farm.iron || {}).length,
+    Gold: Object.keys(farm.gold || {}).length,
   };
   const current = {
     island: island.type || "basic", ascensionLevel, basicLand, stock, experience,
@@ -155,9 +167,9 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
   // ── rates (§2.7 `rates`): theoretical from the power categories, effective ×ratio ──
   const cats = (powerData && powerData.categories && powerData.categories.catSummaries) || {};
   const effBy = (eff && eff.effByCat) || {};
-  const CAT_OF = { Crimstone: "crimstone", Oil: "oil", Obsidian: "obsidian" };
+  const CAT_OF = { Crimstone: "crimstone", Oil: "oil", Obsidian: "obsidian", Wood: "trees", Stone: "stone", Iron: "iron", Gold: "gold" };
   const rates = { xpPerDay: cookingTotalXp || 0, windowDays: (eff && eff.meta && eff.meta.days) || 0 };
-  for (const r of RES3) {
+  for (const r of SIM_RES) {
     const cat = CAT_OF[r];
     const theo = (cats[cat] && cats[cat].boostedUnitsPerDay) || 0;
     const ratio = (effBy[cat] && effBy[cat].measured) ? effBy[cat].ratio : 0;
@@ -196,22 +208,23 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
     if (!(r in current.extraStock)) current.extraStock[r] = getCount(inv, r);
 
   // cumulative costs over PENDING steps (frontier walks these, §2.6)
-  const cum = { Crimstone: 0, Oil: 0, Obsidian: 0, Coins: 0 };
+  const cum = { Coins: 0 };
+  for (const r of SIM_RES) cum[r] = 0;
   for (const s of pending) {
-    for (const r of [...RES3, "Coins"]) cum[r] += s.cost[r] || 0;
+    for (const r of [...SIM_RES, "Coins"]) cum[r] += s.cost[r] || 0;
     s.cum = { ...cum };
   }
 
   // ── frontier / bottleneck (stock-only, §2.6) ──
   let frontier = null, bottleneck = null;
   for (const s of pending) {
-    const short = [...RES3, "Coins"].find((r) => (s.cum[r] || 0) > stock[r]);
+    const short = [...SIM_RES, "Coins"].find((r) => (s.cum[r] || 0) > stock[r]);
     if (short) { bottleneck = short; break; }
     frontier = { asc: s.asc, expansion: s.expansion, kind: s.kind, island: s.island || null };
   }
   // per-resource reach: how many pending steps each resource alone covers
   const reach = {};
-  for (const r of [...RES3, "Coins"]) {
+  for (const r of [...SIM_RES, "Coins"]) {
     let n = 0;
     for (const s of pending) { if ((s.cum[r] || 0) <= stock[r]) n++; else break; }
     reach[r] = n;
@@ -227,18 +240,19 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
   for (const mode of ["eff", "theo"]) {
     const counts = { ...nodeCounts };
     const yields = {};
-    for (const r of RES3) yields[r] = counts[r] > 0 ? (rates[r][mode] || 0) / counts[r] : 0;
+    for (const r of SIM_RES) yields[r] = counts[r] > 0 ? (rates[r][mode] || 0) / counts[r] : 0;
     const prod = { ...stock };
-    const cumc = { Crimstone: 0, Oil: 0, Obsidian: 0 };
+    const cumc = {};
+    for (const r of SIM_RES) cumc[r] = 0;
     let t = 0, blocked = false;
     for (const s of pending) {
       if (!s.sim) s.sim = {};
       if (blocked) { s.sim[mode] = { all: null, blocked: true }; continue; }
       const rate = {};
-      for (const r of RES3) rate[r] = counts[r] * yields[r];
+      for (const r of SIM_RES) rate[r] = counts[r] * yields[r];
       let dt = 0, bad = false;
       const resEta = {};
-      for (const r of RES3) {
+      for (const r of SIM_RES) {
         const need = (cumc[r] + (s.cost[r] || 0)) - prod[r];
         if (need > 0) {
           if (!(rate[r] > 0)) { bad = true; break; }
@@ -250,10 +264,10 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
       if (bad) { blocked = true; s.sim[mode] = { all: null, blocked: true }; continue; }
       // rates are units/DAY, so dt/t/resEta are already DAYS — no seconds conversion.
       t += dt;
-      for (const r of RES3) { prod[r] += rate[r] * dt; cumc[r] += s.cost[r] || 0; }
+      for (const r of SIM_RES) { prod[r] += rate[r] * dt; cumc[r] += s.cost[r] || 0; }
       const lEta = levelEta(s, rates.xpPerDay);
       s.sim[mode] = {
-        res: { Crimstone: resEta.Crimstone, Oil: resEta.Oil, Obsidian: resEta.Obsidian },
+        res: { ...resEta },
         all: t,
         levelEtaDays: lEta == null ? null : lEta,
         farmEtaDays: Math.max(t, lEta == null ? 0 : lEta),

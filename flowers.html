@@ -18886,8 +18886,8 @@
           const sim = s.sim && s.sim[mode];
           const resOk = {};
           let allRes = true;
-          for (const r of ["Crimstone", "Oil", "Obsidian", "Coins"]) {
-            resOk[r] = (s.cum[r] || 0) <= cur.stock[r];
+          for (const r of Object.keys(s.cum || {})) {
+            resOk[r] = (s.cum[r] || 0) <= (cur.stock[r] ?? 0);
             if (!resOk[r]) allRes = false;
           }
           // pre-steps: the non-simulated resources must be in stock too for 🟢
@@ -18912,7 +18912,7 @@
           // pre-step cost cell: every resource as icon+qty, colored by availability
           const costBits = [];
           if (isPre) {
-            for (const r of ["Crimstone", "Oil", "Obsidian"]) {
+            for (const r of ["Wood", "Stone", "Iron", "Gold", "Crimstone", "Oil", "Obsidian"]) {
               const c = s.cost[r] || 0;
               if (!c) continue;
               const eta = sim && sim.res && sim.res[r];

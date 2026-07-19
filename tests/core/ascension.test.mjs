@@ -172,7 +172,11 @@ test("mid-volcano farm: remaining volcano expansions precede A1, game-table cost
   assert.equal(e30.cost.Oil, 300);
   assert.equal(e30.cost.Obsidian, 42);
   assert.equal(e30.cost.Coins, 60000);
-  assert.deepEqual(e30.extraCost, { Wood: 1500, Stone: 600, Iron: 70, Gold: 50, Gem: 225 });
+  assert.equal(e30.cost.Wood, 1500);
+  assert.equal(e30.cost.Stone, 600);
+  assert.equal(e30.cost.Iron, 70);
+  assert.equal(e30.cost.Gold, 50);
+  assert.deepEqual(e30.extraCost, { Gem: 225 }); // Gem has no production - stock-only
   assert.equal(e30.time, 259200);
   assert.equal(e30.band, 120); // absolute level gate
   assert.equal(e30.levelMet, true); // fixture is level 150
@@ -209,7 +213,8 @@ test("grinx halves pre-step resources (incl. extraCost) but not coins", () => {
   const g = buildAscensionSection(f, powerData, cooking.totalXpPerDay, eff, { max: 1, grinx: true });
   const e30 = g.steps.find((s) => s.asc === 0 && s.expansion === 30);
   assert.equal(e30.cost.Crimstone, 62.5);
-  assert.equal(e30.extraCost.Wood, 750);
+  assert.equal(e30.cost.Wood, 750);
+  assert.equal(e30.extraCost.Gem, 112.5);
   assert.equal(e30.cost.Coins, 60000);
 });
 
