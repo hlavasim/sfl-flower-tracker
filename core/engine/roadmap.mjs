@@ -27,11 +27,14 @@ import {
   CROP_GROW_DATA, FRUIT_GROW_DATA, GREENHOUSE_GROW_DATA, FRUIT_HARVEST_COUNT,
 } from "./power-boosts.mjs";
 import { TOOL_COSTS } from "../data/economy.mjs";
+import { SALT_RAKE_COST } from "../data/cooking.mjs";
+import { computeSaltYieldPerRake, computeSaltRakeCoinMult } from "./cooking-cost.mjs";
 
 // Deviation 1: the page global, module-scoped. Set before any calc.
 let powerState = null;
 let roadmapState = null; // deviation 3: no measured history server-side
 export function _setPowerContext(ps) { powerState = ps; }
+export function _getPowerContext() { return powerState; }
 function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives from the caller
 
 
@@ -841,8 +844,58 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       return { timeline, ranked, coreCount, coreCost, coreRate, coreDays, econSteps, cosmeticCount: cosmetic.length, econCost, untradeable, tail, tailCost, noBoostCount, situational, startRate: startIncome, finalRate, totalDays: cumDays, totalCost, optGainPct, horizonYears: (settings.horizonYears || 100) };
     }
 
+
+    // ── flowers.html 16144-16166: roadmapProductBreakdown + roadmapProductNet ──
+    function roadmapProductBreakdown(cat, product, settings) {
+      const { capacity, exchangeRates, stockMods } = powerState;
+      const p2pPrices = roadmapPrices(settings);
+      const er = roadmapCoinsFree(settings) ? Object.assign({}, exchangeRates, { coinsPerSFL: Infinity }) : exchangeRates;
+      const ownedEff = roadmapOwnedEffects(cat);
+      if (ROADMAP_MINING_CATS.indexOf(cat) >= 0) return roadmapCatBreakdown(cat, ownedEff, settings);
+      let gross = 0, cost = 0;
+      try {
+        const ab = applyBoosts(cat, product, capacity, ownedEff);
+        gross = unitToSfl(ab.unitsPerDay, getPriceProduct(cat, product), p2pPrices) || 0;
+        if (cat === "crops" || cat === "fruits" || cat === "greenhouse" || cat === "flowers") {
+          cost += (calcSeedCostPerDay(cat, product, capacity, er, stockMods, ownedEff, p2pPrices).costPerDay) || 0;
+        }
+        // Seed-restock cap: you can only plant restocksPerDay × Betty-restock seeds/day of a crop.
+        if (cat === "crops") {
+          const theoSeedsPerDay = getCapacityCount("crops", capacity) * (ab.effectiveCycle > 0 ? 86400 / ab.effectiveCycle : 0);
+          const capSeeds = (settings.restocksPerDay || 2) * (cmGetSeedRestockCount(powerState.farm, product) || 0);
+          if (theoSeedsPerDay > 0 && capSeeds < theoSeedsPerDay) { const sf = capSeeds / theoSeedsPerDay; gross *= sf; cost *= sf; }
+        }
+      } catch {}
+      return { gross, cost, net: gross - cost };
+    }
+    function roadmapProductNet(cat, product, settings) { return roadmapProductBreakdown(cat, product, settings).net; }
+
+
+    // ── flowers.html 16182-16206: roadmapSaltBreakdown ──
+    function roadmapSaltBreakdown(settings) {
+      const { farm, p2pPrices, exchangeRates } = powerState;
+      const sf = farm && farm.saltFarm;
+      if (!sf || !sf.nodes) return null;
+      const nodes = Object.values(sf.nodes);
+      if (nodes.length === 0) return null;
+      const cyc = nodes.map(x => (x.salt && x.salt.nextChargeAt && x.salt.claimedAt) ? (x.salt.nextChargeAt - x.salt.claimedAt) : 0).filter(v => v > 0).sort((a, b) => a - b);
+      let cycleMs = cyc.length ? cyc[Math.floor(cyc.length / 2)] : 6 * 3600000;
+      cycleMs = Math.min(48 * 3600000, Math.max(3600000, cycleMs));
+      const rakesPerDay = nodes.length * (86400000 / cycleMs);
+      let yieldPerRake = 10, coinMult = 1;
+      try { yieldPerRake = computeSaltYieldPerRake(farm); } catch {}
+      try { coinMult = computeSaltRakeCoinMult(farm); } catch {}
+      const gross = rakesPerDay * yieldPerRake * (p2pPrices["Salt"] || 0);
+      const coinSFL = roadmapCoinsFree(settings) ? 0 : (exchangeRates.coinsPerSFL > 0 ? (SALT_RAKE_COST.coins * coinMult) / exchangeRates.coinsPerSFL : 0);
+      let matSFL = 0;
+      for (const [m, q] of Object.entries(SALT_RAKE_COST.materials)) matSFL += (p2pPrices[m] || 0) * q;
+      const cost = rakesPerDay * (coinSFL + matSFL);
+      return { gross, cost, net: gross - cost };
+    }
+
 export {
-  BASE_NODE_COUNTS, MERGE_COSTS, countNodeTiers, roadmapCurrentProduction,
+  roadmapProductBreakdown, roadmapSaltBreakdown, roadmapEffFactor,
+  roadmapCoinsFree, roadmapInSeason, MINE_RES,   BASE_NODE_COUNTS, MERGE_COSTS, countNodeTiers, roadmapCurrentProduction,
   roadmapItemValue, roadmapItemSituational, roadmapSimulate, _setRoadmapState,
   ROADMAP_EFF_HKEY, roadmapComputeEfficiency,
   getRoadmapSettings, roadmapOwnedEffects, roadmapCatBreakdown, roadmapCatNet,

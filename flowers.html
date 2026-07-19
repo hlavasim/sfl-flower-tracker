@@ -16699,77 +16699,25 @@
       const coins = Math.round(parseFloat(powerState.farm && powerState.farm.coins) || 0);
       const er = cf ? Object.assign({}, powerState.exchangeRates, { coinsPerSFL: Infinity }) : powerState.exchangeRates;
       const cap = powerState.capacity;
+      // Rows — MIGRATED: computed by section=roadmap's profitability block (same loops,
+      // in core). This function keeps only presentation: titles/notes, badges, expand
+      // detail html and the group rendering below.
+      const _pf = (_roadmapServer && _roadmapServer.profitability) || { groups: [], miningChain: { byCat: {} } };
+      const _pfMap = {}; for (const g of _pf.groups) _pfMap[g.id] = g;
       const groups = [];
-      const mk = (title) => { const g = { title, rows: [] }; groups.push(g); return g; };
-      const gMine = mk("\u26cf\ufe0f MINING & TREES"); gMine.keepOrder = true; gMine.note = "Chain order Wood to Crimstone (Oil last). <b>net/d = what you net if you STOP and sell at that resource</b> - alternative stopping points, not additive: pick the best one (the intermediate steps lose alone but are paid back by it). <b>solo</b> = if you instead BUY its direct inputs at market (not self-mining the chain).";
-      const gAni = mk("\ud83d\udc2e ANIMALS");
-      const gCrop = mk("\ud83c\udf3e CROPS \u2014 net if all plots grow this one");
-      const gGh = mk("\ud83c\udfe0 GREENHOUSE");
-      const gFruit = mk("\ud83c\udf4e FRUITS");
-      const gCm = mk("\u2699\ufe0f CROP MACHINE \u2014 auto, per crop");
-      const gOther = mk("\u2728 OTHER");
-      const addBd = (g, label, icon, bd, sub) => { if (bd && isFinite(bd.net)) g.rows.push({ label, icon, gross: bd.gross || 0, cost: bd.cost || 0, net: bd.net, sub }); };
-      const sBd = (bd, f) => bd ? { gross: (bd.gross || 0) * f, cost: (bd.cost || 0) * f, net: (bd.net || 0) * f } : bd;
-
-      // Mining chain (trees->crimstone + oil) as expandable rows; obsidian (lava-pit) stays in OTHER.
-      const _miCh = roadmapMiningChain(settings);
-      for (const cat of ["trees", "stone", "iron", "gold", "crimstone", "oil"]) {
-        if (getCapacityCount(cat, cap) <= 0 || _excl(cat)) continue;
-        const r = _miCh.byCat[cat]; if (!r) continue;
-        const f = roadmapEffFactor(cat, settings);
-        const VB = { sell: ["SELL", "#7fe0a0"], step: ["STEP", "#5DADE2"], skip: ["SKIP", "#e8a060"] }[r.verdict] || ["", "#999"];
-        const badge = `<span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1c160f;color:${VB[1]};font-weight:bold">${VB[0]}${r.verdict === "step" && r.feeds ? ("→" + escHTML(MINE_RES[r.feeds] || r.feeds)) : ""}</span>${r.isPeak ? ' <span style="font-size:0.45rem;color:var(--sunpetal);font-weight:bold">★ best stop</span>' : ""}`;
-        gMine.rows.push({ label: MINE_RES[cat], icon: MINE_RES[cat], gross: r.gross * f, cost: (r.gross - r.dailyProfit) * f, net: r.dailyProfit * f, soloNet: r.soloNet * f, badge, isPeak: r.isPeak, expandHtml: roadmapMiningDetail(cat, r, f) });
+      const mk = (id, title) => { const src = _pfMap[id] || { rows: [] }; const g = { title, rows: src.rows.map(r => Object.assign({}, r)), keepOrder: src.keepOrder }; groups.push(g); return g; };
+      const gMine = mk("mine", "⛏️ MINING & TREES"); gMine.keepOrder = true; gMine.note = "Chain order Wood to Crimstone (Oil last). <b>net/d = what you net if you STOP and sell at that resource</b> - alternative stopping points, not additive: pick the best one (the intermediate steps lose alone but are paid back by it). <b>solo</b> = if you instead BUY its direct inputs at market (not self-mining the chain).";
+      const gAni = mk("animals", "🐮 ANIMALS");
+      const gCrop = mk("crops", "🌾 CROPS — net if all plots grow this one");
+      const gGh = mk("greenhouse", "🏠 GREENHOUSE");
+      const gFruit = mk("fruits", "🍎 FRUITS");
+      const gCm = mk("cropMachine", "⚙️ CROP MACHINE — auto, per crop");
+      const gOther = mk("other", "✨ OTHER");
+      for (const row of gMine.rows) {
+        const VB = { sell: ["SELL", "#7fe0a0"], step: ["STEP", "#5DADE2"], skip: ["SKIP", "#e8a060"] }[row.verdict] || ["", "#999"];
+        row.badge = `<span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1c160f;color:${VB[1]};font-weight:bold">${VB[0]}${row.verdict === "step" && row.feeds ? ("→" + escHTML(MINE_RES[row.feeds] || row.feeds)) : ""}</span>${row.isPeak ? ' <span style="font-size:0.45rem;color:var(--sunpetal);font-weight:bold">★ best stop</span>' : ""}`;
+        try { row.expandHtml = roadmapMiningDetail(row.cat, row.chain, row.eff); } catch {}
       }
-      for (const [cat, icon] of [["obsidian", "Obsidian"]]) {
-        if (getCapacityCount(cat, cap) <= 0 || _excl(cat)) continue;
-        addBd(gOther, (POWER_CATEGORIES[cat] ? POWER_CATEGORIES[cat].label : cat), icon, sBd(roadmapCatBreakdown(cat, roadmapOwnedEffects(cat), settings), roadmapEffFactor(cat, settings)), "1/wk");
-      }
-      for (const [cat, icon] of [["chickens","Egg"],["cows","Milk"],["sheep","Wool"]]) {
-        if (getCapacityCount(cat, cap) <= 0 || _excl(cat)) continue;
-        const n = (cap.animalDetails && cap.animalDetails[cat]) ? cap.animalDetails[cat].length : 0;
-        const oeff = roadmapOwnedEffects(cat);
-        const f = roadmapEffFactor(cat, settings);
-        const bd = sBd(roadmapCatBreakdown(cat, oeff, settings), f);
-        let detail = "";
-        try {
-          const ani = getAnimalCatSfl(cat, cap, oeff, powerState.p2pPrices);
-          const feed = calcAnimalFeedCost(cat, cap, powerState.p2pPrices, oeff, powerState.stockMods);
-          const skl = (powerState.farm.bumpkin && powerState.farm.bumpkin.skills) || {};
-          const sick = calcSicknessCost(cat, cap, powerState.p2pPrices, powerState.boostItems, skl);
-          const parts = (ani.breakdown || []).filter(b => b.sfl > 0.0001).map(b => `${b.product} +${roadmapFmtFlower(b.sfl * f)}`);
-          if ((feed.costPerDay || 0) > 0.0001) parts.push(`feed \u2212${roadmapFmtFlower(feed.costPerDay * f)}`);
-          if ((sick.costPerDay || 0) > 0.0001) parts.push(`sick \u2212${roadmapFmtFlower(sick.costPerDay * f)}`);
-          detail = parts.join(" \u00b7 ");
-        } catch {}
-        if (bd && isFinite(bd.net)) gAni.rows.push({ label: POWER_CATEGORIES[cat].label, icon, gross: bd.gross || 0, cost: bd.cost || 0, net: bd.net, sub: n ? n + "\u00d7" : "", detail });
-      }
-      const rpd = settings.restocksPerDay || 2;
-      if (getCapacityCount("crops", cap) > 0) for (const crop of Object.keys(CROP_GROW_DATA)) { if (_excl(crop)) continue;
-        const bd = roadmapProductBreakdown("crops", crop, settings);
-        if (bd && isFinite(bd.net)) gCrop.rows.push({ label: crop, icon: crop, gross: bd.gross || 0, cost: bd.cost || 0, net: bd.net, fade: !roadmapInSeason(crop) });
-      }
-      if (getCapacityCount("greenhouse", cap) > 0) for (const gp of Object.keys(GREENHOUSE_GROW_DATA)) { if (_excl(gp)) continue; addBd(gGh, gp, gp, sBd(roadmapProductBreakdown("greenhouse", gp, settings), roadmapEffFactor("greenhouse", settings))); }
-      if (typeof farmHasCropMachine === "function" && farmHasCropMachine(powerState.farm)) {
-        for (const crop of cropMachineCrops(powerState.farm)) {
-          if (_excl(crop)) continue;
-          const r = calcCropMachineDaily(powerState.farm, crop, powerState.p2pPrices, er, false);
-          if (!r) continue;
-          let gross = r.revenue, cost = (r.oilCost || 0) + (r.seedCostPerDay || 0), net = r.net;
-          const capSeeds = rpd * (cmGetSeedRestockCount(powerState.farm, crop) || 0);
-          if (r.cropsPerDay > 0 && capSeeds < r.cropsPerDay) { const sf = capSeeds / r.cropsPerDay; gross *= sf; cost *= sf; net *= sf; }
-          if (isFinite(net)) gCm.rows.push({ label: crop, icon: crop, gross, cost, net });
-        }
-      }
-      if (getCapacityCount("fruits", cap) > 0) for (const fr of Object.keys(FRUIT_GROW_DATA)) { if (_excl(fr)) continue;
-        const bd = sBd(roadmapProductBreakdown("fruits", fr, settings), roadmapEffFactor("fruits", settings));
-        if (bd && isFinite(bd.net)) gFruit.rows.push({ label: fr, icon: fr, gross: bd.gross || 0, cost: bd.cost || 0, net: bd.net, fade: !roadmapInSeason(fr) });
-      }
-      for (const [cat, icon] of [["flowers","Red Pansy"],["bees","Honey"],["fishing","Fish"]]) {
-        if ((cat !== "fishing" && getCapacityCount(cat, cap) <= 0) || _excl(cat)) continue;
-        addBd(gOther, POWER_CATEGORIES[cat].label, icon, sBd(roadmapCatBreakdown(cat, roadmapOwnedEffects(cat), settings), roadmapEffFactor(cat, settings)));
-      }
-      if (!_excl("salt")) addBd(gOther, "Salt Farm", "Salt", sBd(roadmapSaltBreakdown(settings), roadmapEffFactor("salt", settings)), "rake");
 
       let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
       h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">WHAT TO FARM / MINE NOW</div>`;
@@ -16795,7 +16743,7 @@
         _ff += `<div style="font-size:0.5rem;color:var(--text-dim);margin-top:5px">Unchecked = removed from the table AND the buy path. A general boost (e.g. +0.1 all crops) stays as long as at least one crop is checked.</div></div></details>`;
         h += _ff;
       }
-      const _mc = roadmapMiningChain(settings);
+      const _mc = _pf.miningChain || { byCat: {} }; // served by section=roadmap
       const _ord = ["trees", "stone", "iron", "gold", "crimstone", "oil"];
       const _nm = c => MINE_RES[c];
       const _peak = _mc.peak;
