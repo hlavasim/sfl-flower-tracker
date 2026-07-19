@@ -19483,76 +19483,34 @@
         } catch { return null; }
       })();
 
-      // ── Fetch prices ──
-      let p2pPrices = {}, exchangeRates = { coinsPerSFL: 320, gemsPerSFL: 0 };
-      let nftData;
+      // Upstream state — MIGRATED: one compute?section=power call replaces the page's
+      // FOURTH copy of the nfts/prices/exchange fetch + rate math + boost assembly.
+      // boostItems are filtered to owned (the page never built unowned ones here);
+      // superseded items stay INCLUDED, matching this page's original behaviour (it
+      // never ran disabled-by processing — power's inert disabled_by meta-effects and
+      // isDisabled flags don't change any applyBoosts result).
+      let p2pPrices = {}, exchangeRates = { coinsPerSFL: 320, gemsPerSFL: 0 }, boostItems = [];
       try {
-        const proxyFetch = async (url) => {
-          try { const r = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`); if (r.ok) return r.json(); } catch {}
-          return (await fetch(url)).json();
-        };
-        const [nftResp, priceResp, rateResp] = await Promise.all([
-          proxyFetch("https://sfl.world/api/v1/nfts"),
-          proxyFetch("https://sfl.world/api/v1/prices"),
-          proxyFetch("https://sfl.world/api/v1.1/exchange").catch(() => null),
-        ]);
-        nftData = nftResp;
-        const priceData = priceResp?.data?.p2p || priceResp?.p2p || {};
-        for (const [k, v] of Object.entries(priceData)) p2pPrices[k] = parseFloat(v) || 0;
-
-        const betty = computeBettyRate(p2pPrices);
-        if (betty.rate > 0) { exchangeRates.coinsPerSFL = betty.rate; exchangeRates.bettyItem = betty.item; }
-        if (rateResp) {
-          const coinTiers = Object.values(rateResp?.coins || rateResp?.data?.coins || {});
-          const gemTiers = Object.values(rateResp?.gems || rateResp?.data?.gems || {});
-          if (!betty.rate && coinTiers.length > 0) {
-            const best = coinTiers.reduce((a, b) => (b.coin / b.sfl) > (a.coin / a.sfl) ? b : a);
-            exchangeRates.coinsPerSFL = best.coin / best.sfl;
-          }
-          if (gemTiers.length > 0) {
-            const best = gemTiers.reduce((a, b) => (b.gem / (b.sfl * 0.7)) > (a.gem / (a.sfl * 0.7)) ? b : a);
-            exchangeRates.gemsPerSFL = best.gem / (best.sfl * 0.7);
-          }
+        let payload, lastErr;
+        for (let a = 0; a < 3; a++) {
+          try {
+            const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=power&products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}`);
+            if (!rp.ok) throw new Error(`compute power ${rp.status}`);
+            payload = await rp.json();
+            break;
+          } catch (e) { lastErr = e; if (a < 2) await new Promise(r => setTimeout(r, 1000 * (a + 1))); }
         }
+        if (!payload) throw lastErr;
+        const d = payload.data || {};
+        p2pPrices = d.p2pPrices || {};
+        exchangeRates = d.exchangeRates || exchangeRates;
+        boostItems = (d.boostItems || []).filter(b => b.has).map(b => ({ name: b.name, has: true, effects: b.effects }));
       } catch (err) {
         document.getElementById("nodes-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load: ${escHTML(err.message)}</p></div>`;
         return;
       }
-
-      // ── Build boost effects (same as power page) ──
       const wardrobe = farm.wardrobe || {};
       const skills = farm.bumpkin?.skills || {};
-      const boostItems = [];
-
-      if (nftData) {
-        for (const item of (nftData.collectibles || [])) {
-          if (!item.have_boost || !item.name || !item.boost_text) continue;
-          const has = getCount(inventory, item.name) > 0 || findCollectible(farm, item.name).length > 0;
-          if (!has) continue; // only owned boosts matter for production calc
-          const effects = parseBoostEffects(item.boost_text, item.name);
-          boostItems.push({ name: item.name, has, effects });
-        }
-        for (const item of (nftData.wearables || [])) {
-          if (!item.have_boost || !item.name || !item.boost_text) continue;
-          const has = (wardrobe[item.name] || 0) > 0;
-          if (!has) continue;
-          const effects = parseBoostEffects(item.boost_text, item.name);
-          boostItems.push({ name: item.name, has, effects });
-        }
-      }
-
-      // Add skill boosts
-      for (const [skillName, skill] of Object.entries(SKILL_TREE_DATA)) {
-        if (skills[skillName] === undefined) continue;
-        const boostText = skill.buff + (skill.debuff ? "\n" + skill.debuff : "");
-        const effects = parseBoostEffects(boostText);
-        if (SKILL_FEED_EFFECTS[skillName]) {
-          for (const [cat, value] of Object.entries(SKILL_FEED_EFFECTS[skillName])) {
-            effects.push({ type: "feed_reduction", value, cat });
-          }
-        }
-        boostItems.push({ name: skillName, has: true, effects });
-      }
 
       // Flatten owned effects per category
       function getOwnedEffects(catId) {
