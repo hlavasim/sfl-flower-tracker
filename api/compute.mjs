@@ -5,6 +5,7 @@ import { valueDiff } from "../core/sections/diff.mjs";
 import { buildPowerSection } from "../core/sections/power.mjs";
 import { buildRoiSection } from "../core/sections/roi.mjs";
 import { roadmapComputeEfficiency } from "../core/engine/roadmap.mjs";
+import { buildTreasurySection } from "../core/sections/treasury.mjs";
 import { buildBudsSection } from "../core/sections/buds.mjs";
 import { buildPetsSection } from "../core/sections/pets.mjs";
 import { computeBettyRate } from "../core/engine/prices.mjs";
@@ -297,6 +298,16 @@ export default async function handler(req, res) {
     // `pets`: the pet advisor's per-pet daily economics + raw p2p prices for the
     // page's resource tables.
     else if (section === "pets") data = buildPetsSection(farm, p2p, settings);
+    // `treasury`: full-farm liquidation valuation (td rates + computeFarmValue).
+    // `coinMode` (betty|api|off) picks the coins→SFL rate; `petprices` carries the
+    // client's user-entered NFT pet purchase prices (localStorage).
+    else if (section === "treasury") {
+      const [nftResult, exchange, btcUsd] = await Promise.all([fetchNfts(), fetchExchange(), fetchBtc()]);
+      if (!nftResult.ok) return res.status(502).json({ error: `nfts fetch failed: ${nftResult.status}` });
+      let petPrices = {};
+      try { petPrices = req.query.petprices ? JSON.parse(req.query.petprices) : {}; } catch { petPrices = {}; }
+      data = buildTreasurySection(farm, p2p, nftResult.data, exchange, btcUsd, { coinMode: req.query.coinMode || "betty", petPrices });
+    }
     else return res.status(400).json({ error: `unknown section: ${section}` });
     const payload = { farm: farmId, computedAt: new Date().toISOString(), section, data };
     // section=prices only (task F2-2e-fix): fetchPrices() above is best-effort and silently

@@ -29,7 +29,7 @@ export const API_SPEC = {
             name: "section",
             in: "query",
             required: false,
-            schema: { type: "string", enum: ["buds", "constants", "cooking", "diff", "eff", "openapi", "pets", "power", "prices", "roi"], default: "cooking" },
+            schema: { type: "string", enum: ["buds", "constants", "cooking", "diff", "eff", "openapi", "pets", "power", "prices", "roi", "treasury"], default: "cooking" },
             description:
               "Which computation to run. `constants`: the canonical core/data game tables " +
               "plus flowers.html migration-coverage status, no farm needed. `cooking`: " +
@@ -71,6 +71,9 @@ export const API_SPEC = {
               "snapshot rows the client posts (body `{ snapshots: [{ captured_at, diff }] }`); " +
               "returns `{ effByCat, meta, meanRatio }` with theoretical cycles from the same " +
               "boosted engine as `power`. " +
+              "`treasury`: full-farm liquidation valuation — `td` (nft floors + p2p + coin/gem/" +
+              "USD/BTC rates) and `value` (computeFarmValue: resources/treasures/collectibles/" +
+              "wearables/pets/listings/liquid + totals) for the requested `coinMode`. " +
               "`openapi`: this document, no farm needed. Defaults to `cooking` when omitted.",
           },
           {
@@ -115,6 +118,25 @@ export const API_SPEC = {
               "product-specific boosts the way the page's product selectors do. Any " +
               "category omitted falls back to that category's default product. Ignored " +
               "by other sections.",
+          },
+          {
+            name: "coinMode",
+            in: "query",
+            required: false,
+            schema: { type: "string", enum: ["betty", "api", "off"] },
+            description:
+              "section=treasury only: which coins→SFL rate values the coin balance — " +
+              "`betty` (best crop sale, default), `api` (exchange tier), anything else = 0.",
+          },
+          {
+            name: "petprices",
+            in: "query",
+            required: false,
+            schema: { type: "string" },
+            description:
+              "section=treasury only: URL-encoded JSON of user-entered NFT pet purchase " +
+              "prices keyed `nft-<id>` (the page's localStorage sfl_pet_prices_v1); a pet " +
+              "without an entry is valued at the flat 2000 fallback.",
           },
           {
             name: "multicat",

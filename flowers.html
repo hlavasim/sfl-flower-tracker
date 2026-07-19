@@ -12239,50 +12239,27 @@
       return "₿" + v.toFixed(8);
     }
 
+    // Treasury data + valuation — MIGRATED to core/sections/treasury.mjs
+    // (compute?section=treasury): the FIFTH copy of the nfts/prices/exchange/btc fetch
+    // block dies. Returns td (same shape as before — the diff-page value chart still
+    // runs the inline computeFarmValue over historic snapshot farms with it) and
+    // stashes the server-computed live-farm valuation for renderTreasuryWithData.
+    let _treasuryServerValue = null; // { coinMode, value } from the last section fetch
     async function fetchTreasuryData() {
-      const proxyFetch = async (url) => {
+      const petprices = encodeURIComponent(localStorage.getItem("sfl_pet_prices_v1") || "{}");
+      let payload, lastErr;
+      for (let a = 0; a < 3; a++) {
         try {
-          const resp = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
-          if (resp.ok) return resp.json();
-        } catch {}
-        const resp = await fetch(url);
-        if (!resp.ok) throw new Error(`Fetch ${url} failed: ${resp.status}`);
-        return resp.json();
-      };
-
-      const [nftData, priceData, exchangeData, btcData] = await Promise.all([
-        proxyFetch("https://sfl.world/api/v1/nfts"),
-        proxyFetch("https://sfl.world/api/v1/prices"),
-        proxyFetch("https://sfl.world/api/v1.1/exchange"),
-        proxyFetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"),
-      ]);
-
-      const nftCollectibles = {};
-      for (const c of (nftData.collectibles || [])) {
-        nftCollectibles[c.name] = c;
+          const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=treasury&coinMode=${encodeURIComponent(treasuryCoinMode)}&petprices=${petprices}`);
+          if (!rp.ok) throw new Error(`compute treasury ${rp.status}`);
+          payload = await rp.json();
+          break;
+        } catch (e) { lastErr = e; if (a < 2) await new Promise(r => setTimeout(r, 1000 * (a + 1))); }
       }
-      const nftWearables = {};
-      for (const w of (nftData.wearables || [])) {
-        nftWearables[w.name] = w;
-      }
-
-      const p2pPrices = priceData?.data?.p2p || {};
-      const sflUsd = exchangeData?.sfl?.usd || 0;
-      const btcUsd = btcData?.bitcoin?.usd || 0;
-
-      // Coins: API rate (best tier) + Betty rate (best crop to sell)
-      const coinTiers = Object.values(exchangeData?.coins || {});
-      const bestCoinTier = coinTiers.reduce((best, t) => (!best || (t.coin / t.sfl) > (best.coin / best.sfl)) ? t : best, null);
-      const coinsPerSFL_api = bestCoinTier ? (bestCoinTier.coin / bestCoinTier.sfl) : 320;
-      const betty = computeBettyRate(p2pPrices);
-      const coinsPerSFL_betty = betty.rate;
-
-      // Gems: best-value tier with -30% pack discount applied
-      const gemTiers = Object.values(exchangeData?.gems || {});
-      const bestGemTier = gemTiers.reduce((best, t) => (!best || (t.gem / t.sfl) > (best.gem / best.sfl)) ? t : best, null);
-      const gemsPerSFL = bestGemTier ? (bestGemTier.gem / (bestGemTier.sfl * 0.7)) : 0;
-
-      return { nftCollectibles, nftWearables, p2pPrices, sflUsd, coinsPerSFL_api, coinsPerSFL_betty, bettyItem: betty.item, gemsPerSFL, btcUsd };
+      if (!payload) throw lastErr;
+      const d = payload.data || {};
+      _treasuryServerValue = { coinMode: d.coinMode, value: d.value };
+      return d.td;
     }
 
     function computeFarmValue(farm, td, coinMode) {
@@ -12440,10 +12417,11 @@
     let treasuryCoinMode = localStorage.getItem("sfl_coin_mode") || "betty";
     let cachedTreasuryData = null;
 
-    function setCoinMode(mode) {
+    async function setCoinMode(mode) {
       treasuryCoinMode = mode;
       localStorage.setItem("sfl_coin_mode", mode);
       if (cachedTreasuryData && cachedFarmData) {
+        try { cachedTreasuryData = await fetchTreasuryData(); } catch {}
         renderTreasuryWithData(cachedFarmData, cachedTreasuryData);
       }
     }
@@ -12532,7 +12510,11 @@
     function renderTreasuryWithData(data, td) {
       const app = document.getElementById("app");
       const farm = data.farm;
-      const val = computeFarmValue(farm, td, treasuryCoinMode);
+      // Server-computed for the current mode (section=treasury); inline recompute only
+      // as a fallback if the mode changed without a refetch having landed yet.
+      const val = (_treasuryServerValue && _treasuryServerValue.coinMode === treasuryCoinMode)
+        ? _treasuryServerValue.value
+        : computeFarmValue(farm, td, treasuryCoinMode);
       const { totals, rates, resources, treasures, collectibles, wearables, pets, listings, liquid, treasureBoost } = val;
 
       const usdTotal = totals.grand * rates.sflUsd;
