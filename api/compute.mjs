@@ -271,7 +271,10 @@ export default async function handler(req, res) {
     else if (section === "roi") {
       const [nftResult, exchange, btcUsd] = await Promise.all([fetchNfts(), fetchExchange(), fetchBtc()]);
       if (!nftResult.ok) return res.status(502).json({ error: `nfts fetch failed: ${nftResult.status}` });
-      data = buildRoiSection(farm, p2p, nftResult.data, exchange, btcUsd, settings);
+      // `multicat` = the client's localStorage multi-category assignments (roi page).
+      let multicat = {};
+      try { multicat = req.query.multicat ? JSON.parse(req.query.multicat) : {}; } catch { multicat = {}; }
+      data = buildRoiSection(farm, p2p, nftResult.data, exchange, btcUsd, { ...settings, multicat });
     }
     // `buds`: valuation table over all 2621 encoded buds (SFL/day per bud, ownership).
     // `products` query param carries the client's per-category product selections

@@ -20754,7 +20754,7 @@
         let payload, lastErr;
         for (let a = 0; a < 3; a++) {
           try {
-            const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=roi`);
+            const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=roi&multicat=${encodeURIComponent(localStorage.getItem("sfl_roi_multicat_assignment") || "{}")}`);
             if (!rp.ok) throw new Error(`compute roi ${rp.status}`);
             payload = await rp.json();
             break;
@@ -20803,13 +20803,10 @@
         </div>
       </div>`;
 
-      // Compute and sort rows
-      const farmSkills = roiState.farm?.bumpkin?.skills || {};
-      const rows = [];
-      for (const X of ROI_QUANT_CATS) {
-        const row = roiComputeCategory(X, boostItems, capacity, p2pPrices, L, multicat, exchangeRates, stockMods, season, farmSkills, pets);
-        if (row) rows.push(row);
-      }
+      // Rows — precomputed by section=roi for all four login frequencies
+      // (rowsByLogins); null roiYears = JSON-serialized NaN/Infinity → treat as ∞.
+      const rows = ((roiState.rowsByLogins || {})[L] || []).map(r =>
+        Object.assign({}, r, { roiYears: (r.roiYears == null ? Infinity : r.roiYears) }));
       // Display rows: include any category with sellable NFTs, external assignments, OR (pets only) actual pets present
       const displayRows = rows.filter(r => r.sellableInCat.length > 0 || r.externallyAssigned.length > 0 || (r.catId === "pets" && r.nodeCount > 0));
 
@@ -21115,7 +21112,15 @@
     // Event handlers (window-scoped so onclick can find them)
     window._roiSetLogins = function(n) { roiSetLoginsPerDay(n); renderRoiContent(); };
     window._roiSetCurrency = function(c) { roiSetCurrency(c); renderRoiContent(); };
-    window._roiSetMulticat = function(name, cat) { roiSetMulticatAssignment(name, cat); renderRoiContent(); };
+    window._roiSetMulticat = async function(name, cat) {
+      roiSetMulticatAssignment(name, cat);
+      // rows are computed by section=roi from the multicat assignment — refetch
+      try {
+        const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=roi&multicat=${encodeURIComponent(localStorage.getItem("sfl_roi_multicat_assignment") || "{}")}`);
+        if (rp.ok) { const payload = await rp.json(); roiState = { ...(payload.data || {}), farm: roiState.farm }; }
+      } catch {}
+      renderRoiContent();
+    };
     window._roiToggleSell = function(catId) { roiToggleSellSelection(catId); renderRoiContent(); };
     window._roiClearSell = function() { roiClearSellSelection(); renderRoiContent(); };
     window._roiToggleRow = function(catId) {
@@ -21159,7 +21164,7 @@
         let payload, lastErr;
         for (let a = 0; a < 3; a++) {
           try {
-            const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=roi`);
+            const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=roi&multicat=${encodeURIComponent(localStorage.getItem("sfl_roi_multicat_assignment") || "{}")}`);
             if (!rp.ok) throw new Error(`compute roi ${rp.status}`);
             payload = await rp.json();
             break;

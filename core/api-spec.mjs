@@ -58,7 +58,9 @@ export const API_SPEC = {
               "list server-side; a failed NFT fetch is a 502 like a failed farm fetch. " +
               "`roi`: the ROI-vs-login-frequency page's state — its own boost-item list " +
               "(with quantCats/isSellable flags), `pets`, `capacity`, `p2pPrices`, `sflUsd`, " +
-              "`btcUsd` (coingecko, best-effort 0), `exchangeRates`, `stockMods`, `season`. " +
+              "`btcUsd` (coingecko, best-effort 0), `exchangeRates`, `stockMods`, `season`, and " +
+              "`rowsByLogins` (the page's per-category keep-vs-sell rows precomputed for all " +
+              "four login frequencies; non-finite roiYears → null on the wire). " +
               "Same NFT-fetch 502 semantics as `power`. " +
               "`buds`: SFL/day valuation of all 2621 bud NFTs against the farm's capacity " +
               "(rows: id/type/stem/aura/owned/sflPerDay/breakdown; `products` query param " +
@@ -109,6 +111,17 @@ export const API_SPEC = {
               "product-specific boosts the way the page's product selectors do. Any " +
               "category omitted falls back to that category's default product. Ignored " +
               "by other sections.",
+          },
+          {
+            name: "multicat",
+            in: "query",
+            required: false,
+            schema: { type: "string" },
+            description:
+              "URL-encoded JSON mapping multi-category NFT name → the category its sale " +
+              "value is attributed to (the roi page's localStorage assignment), consumed " +
+              "by `section=roi`'s precomputed rows. Absent → each NFT's first quantifiable " +
+              "category. Ignored by other sections.",
           },
           {
             name: "roadmap",

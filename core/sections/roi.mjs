@@ -17,6 +17,7 @@ import {
   SKILL_TREE_DATA, detectFarmCapacity, detectStockModifiers,
 } from "../engine/power-helpers.mjs";
 import { PET_NAME_SPECIES, petLevel } from "../engine/pets.mjs";
+import { roiComputeCategory } from "../engine/roi-calc.mjs";
 
     const ROI_QUANT_CATS = ["trees", "stone", "iron", "gold", "crimstone", "obsidian", "oil",
                             "crops", "fruits", "greenhouse", "flowers",
@@ -138,5 +139,26 @@ export function buildRoiSection(farm, p2p, nftData, exchange, btcUsd, settings =
   const boostItems = buildRoiBoostItems(farm, inventory, wardrobe, skills, nftData);
   const pets = parseRoiPets(farm);
 
-  return { boostItems, capacity, p2pPrices, sflUsd, btcUsd: btcUsd || 0, exchangeRates, stockMods, season, pets };
+  // ── rowsByLogins: renderRoiContent's per-category computation (roiComputeCategory,
+  // now in core/engine/roi-calc.mjs), precomputed for ALL FOUR login frequencies so the
+  // page's 1×-4× toggle re-renders with no refetch. `settings.multicat` mirrors the
+  // page's localStorage multicat assignment (query `multicat`); non-finite roiYears
+  // (NaN=no-nfts, Infinity=no-nodes) become null on the wire — the client maps null
+  // back to Infinity, display-equivalent ("∞") for both.
+  const farmSkills = farm.bumpkin?.skills || {};
+  const multicat = settings.multicat || {};
+  const rowsByLogins = {};
+  for (const L of [1, 2, 3, 4]) {
+    const rows = [];
+    for (const X of ROI_QUANT_CATS) {
+      const row = roiComputeCategory(X, boostItems, capacity, p2pPrices, L, multicat, exchangeRates, stockMods, season, farmSkills, pets);
+      if (row) {
+        if (!isFinite(row.roiYears)) row.roiYears = null;
+        rows.push(row);
+      }
+    }
+    rowsByLogins[L] = rows;
+  }
+
+  return { boostItems, capacity, p2pPrices, sflUsd, btcUsd: btcUsd || 0, exchangeRates, stockMods, season, pets, rowsByLogins };
 }

@@ -45,3 +45,20 @@ test("capacity/stockMods identical to section=power's (same helpers)", () => {
   assert.equal(out.capacity.trees, 30);
   assert.equal(out.stockMods.moreAxes, true);
 });
+
+test("rowsByLogins — precomputed for all four login frequencies, JSON-safe roiYears", () => {
+  const rb = out.rowsByLogins;
+  assert.deepEqual(Object.keys(rb).sort(), ["1", "2", "3", "4"]);
+  for (const L of [1, 2, 3, 4]) {
+    assert.ok(rb[L].length > 0);
+    for (const r of rb[L]) {
+      assert.ok(r.roiYears === null || isFinite(r.roiYears), `roiYears JSON-safe (${r.catId})`);
+      assert.ok(typeof r.verdict === "string");
+    }
+  }
+  // login frequency actually changes the numbers for cycle-capped categories
+  const t1 = rb[1].find((r) => r.catId === "stone");
+  const t4 = rb[4].find((r) => r.catId === "stone");
+  assert.ok(t1 && t4);
+  assert.ok(t1.netKeepSfl !== t4.netKeepSfl, "stone net must differ between 1x and 4x logins");
+});
