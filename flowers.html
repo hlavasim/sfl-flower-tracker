@@ -4088,17 +4088,6 @@
         revenue, oilPerDay, oilCost, seedCostPerDay, net,
       };
     }
-    // Pick the most profitable available crop for the user's Crop Machine.
-    function cropMachineBestCrop(farm, p2pPrices, exchangeRates) {
-      const crops = cropMachineCrops(farm);
-      let best = null;
-      for (const c of crops) {
-        const r = calcCropMachineDaily(farm, c, p2pPrices, exchangeRates, false);
-        if (!r) continue;
-        if (!best || r.net > best.net) best = r;
-      }
-      return best;
-    }
     function farmHasCropMachine(farm) {
       return ((farm.buildings || {})["Crop Machine"] || []).length > 0;
     }
@@ -15690,12 +15679,6 @@
     // eats \u2192 you should sell the inputs raw, not mine it (flagged in Mining Strategy). One helper so the
     // income hero and what-to-mine agree.
     const ROADMAP_MINING_CATS = ["trees", "stone", "iron", "gold", "crimstone", "oil"];
-    function roadmapMiningNetCost(cat, settings) {
-      const { capacity, exchangeRates, stockMods } = powerState;
-      const p2p = roadmapPrices(settings);
-      const er = roadmapCoinsFree(settings) ? Object.assign({}, exchangeRates, { coinsPerSFL: Infinity }) : exchangeRates;
-      try { return (calcToolCostPerDay(cat, capacity, er, p2p, stockMods, false).costPerDay) || 0; } catch { return 0; }
-    }
     // ── Mining CHAIN model (recursive sell-vs-use) ──────────────────────────────────────────────────
     // Tools are never free: a pickaxe eats real lower resources. Each resource gets a true value
     //   V[R] = max( sell at p2p , use it to feed the next tier ),  solved as a fixed point up the chain.
@@ -15921,7 +15904,6 @@
       } catch {}
       return { gross, cost, net: gross - cost };
     }
-    function roadmapProductNet(cat, product, settings) { return roadmapProductBreakdown(cat, product, settings).net; }
 
     // Realistic current daily NET production value (FLOWER/day), efficiency-adjusted.
     // Loss-making categories floor at 0 (a rational player just won't run them).
@@ -15937,28 +15919,6 @@
       return { total, breakdown };
     }
 
-    // Salt Farm net FLOWER/day: nodes raked on their recharge cycle, salt sold at p2p,
-    // minus rake cost (3 Wood + coins; coins free when you hold a big pile).
-    function roadmapSaltBreakdown(settings) {
-      const { farm, p2pPrices, exchangeRates } = powerState;
-      const sf = farm && farm.saltFarm;
-      if (!sf || !sf.nodes) return null;
-      const nodes = Object.values(sf.nodes);
-      if (nodes.length === 0) return null;
-      const cyc = nodes.map(x => (x.salt && x.salt.nextChargeAt && x.salt.claimedAt) ? (x.salt.nextChargeAt - x.salt.claimedAt) : 0).filter(v => v > 0).sort((a, b) => a - b);
-      let cycleMs = cyc.length ? cyc[Math.floor(cyc.length / 2)] : 6 * 3600000;
-      cycleMs = Math.min(48 * 3600000, Math.max(3600000, cycleMs));
-      const rakesPerDay = nodes.length * (86400000 / cycleMs);
-      let yieldPerRake = 10, coinMult = 1;
-      try { yieldPerRake = computeSaltYieldPerRake(farm); } catch {}
-      try { coinMult = computeSaltRakeCoinMult(farm); } catch {}
-      const gross = rakesPerDay * yieldPerRake * (p2pPrices["Salt"] || 0);
-      const coinSFL = roadmapCoinsFree(settings) ? 0 : (exchangeRates.coinsPerSFL > 0 ? (SALT_RAKE_COST.coins * coinMult) / exchangeRates.coinsPerSFL : 0);
-      let matSFL = 0;
-      for (const [m, q] of Object.entries(SALT_RAKE_COST.materials)) matSFL += (p2pPrices[m] || 0) * q;
-      const cost = rakesPerDay * (coinSFL + matSFL);
-      return { gross, cost, net: gross - cost };
-    }
 
     // ⛏️ MINING STRATEGY — net value per resource AFTER the tool's resource ingredients.
     // Each pickaxe is crafted from lower resources, so pushing up the chain (Wood→Stone→…→Crimstone)
