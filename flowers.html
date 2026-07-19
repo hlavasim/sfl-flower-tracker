@@ -18820,9 +18820,9 @@
         }
       </style>`;
       h += `<div class="asc-legend"><span><span style="color:#7fe0a0">■</span> mám kumulativně (zdroje i level)</span><span><span style="color:#e8c060">■</span> dofarmím včas (ETA ≤ slot)</span><span><span style="color:#ff6b6b">■</span> zásek — nestíhám build slot</span></div>`;
-      const NODE_EMOJI = { "Crop Plot": "🌾", "Tree": "🌳", "Stone Rock": "🪨", "Iron Rock": "⛏️", "Gold Rock": "🥇", "Fruit Patch": "🍎", "Crimstone Rock": "💎", "Sunstone Rock": "🌞", "Oil Reserve": "🛢️", "Lava Pit": "🌋", "Beehive": "🐝", "Flower Bed": "🌸" };
-      const RES_ICON = { Crimstone: "Crimstone", Oil: "Oil", Obsidian: "Obsidian" };
-      const resIcon = (r) => r === "Coins" ? "🪙" : `<img class="inline-icon" src="${getItemIcon(RES_ICON[r])}" onerror="this.style.display='none'" alt="">`;
+      const _ascNodeEmoji = { "Crop Plot": "🌾", "Tree": "🌳", "Stone Rock": "🪨", "Iron Rock": "⛏️", "Gold Rock": "🥇", "Fruit Patch": "🍎", "Crimstone Rock": "💎", "Sunstone Rock": "🌞", "Oil Reserve": "🛢️", "Lava Pit": "🌋", "Beehive": "🐝", "Flower Bed": "🌸" };
+      const _ascResIcon = { Crimstone: "Crimstone", Oil: "Oil", Obsidian: "Obsidian" };
+      const resIcon = (r) => r === "Coins" ? "🪙" : `<img class="inline-icon" src="${getItemIcon(_ascResIcon[r])}" onerror="this.style.display='none'" alt="">`;
       const byAsc = {};
       for (const s of d.steps) (byAsc[s.asc] = byAsc[s.asc] || []).push(s);
       for (const [a, steps] of Object.entries(byAsc)) {
@@ -18851,7 +18851,7 @@
             return `<div class="asc-res ${resOk[r] ? "have" : "miss"}" data-r="${r}">${r === "Coins" ? Math.round(c).toLocaleString() : Math.round(c)}${showEta ? `<span class="asc-eta">🕒 ${fmtEta(eta)}</span>` : ""}</div>`;
           };
           // ALL dripped nodes + crystals
-          const nodeBits = Object.entries(s.nodesAdded || {}).map(([n, q]) => `+${q}${NODE_EMOJI[n] || ""}<span style="color:var(--text-dim);font-size:0.44rem">${NODE_EMOJI[n] ? "" : n}</span>`);
+          const nodeBits = Object.entries(s.nodesAdded || {}).map(([n, q]) => `+${q}${_ascNodeEmoji[n] || ""}<span style="color:var(--text-dim);font-size:0.44rem">${_ascNodeEmoji[n] ? "" : n}</span>`);
           if (s.crystals) nodeBits.unshift(`💎×${s.crystals} <span style="color:var(--text-dim)">(✨${s.shards})</span>`);
           const farmTxt = sim ? (sim.blocked ? '<span style="color:#ff8888">∞</span>' : fmtEta(sim.farmEtaDays)) : "?";
           const slotTxt = fmtEta(s.buildSlotDays);
