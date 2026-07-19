@@ -18816,17 +18816,14 @@
         .asc-btime{color:var(--text-dim);font-size:0.46rem}
         @media (max-width: 760px){
           .asc-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;padding:7px 9px}
-          .asc-row.hdr{display:none}
+          .asc-row.hdr{display:none} /* column labels only — cards carry icons/labels inline */
           .asc-step-cell{order:1;font-size:0.6rem}
-          .asc-btime{display:none}
           .asc-status{order:2;margin-left:auto;font-size:0.55rem}
           .asc-lvl-cell{order:3;width:100%;font-size:0.5rem}
-          .asc-lvl-cell.met{display:none}
           .asc-costs{display:flex;order:4;width:100%;gap:4px 14px;flex-wrap:wrap;margin-top:2px}
           .asc-res{text-align:left;font-size:0.58rem}
-          .asc-eta{display:none}
+          .asc-eta{display:inline;margin-left:3px} /* per-resource farm ETA stays visible */
           .asc-nodes{order:5;width:100%;font-size:0.48rem;color:var(--text-dim);margin-top:1px}
-          .asc-nodes.empty{display:none}
         }
       </style>`;
       h += `<div class="asc-legend"><span><span style="color:#7fe0a0">■</span> mám kumulativně (zdroje i level)</span><span><span style="color:#e8c060">■</span> dofarmím včas (ETA ≤ slot)</span><span><span style="color:#ff6b6b">■</span> zásek — nestíhám build slot</span></div>`;
