@@ -311,7 +311,7 @@ export default async function handler(req, res) {
       let input = {};
       try { input = req.body ? JSON.parse(req.body.toString()) : {}; } catch { input = {}; }
       const effData = roadmapComputeEfficiency(Array.isArray(input.snapshots) ? input.snapshots : []);
-      data = buildAscensionSection(farm, powerData, cooking.totalXpPerDay, effData, { grinx: req.query.grinx === "1", max: req.query.max });
+      data = buildAscensionSection(farm, powerData, cooking, effData, { grinx: req.query.grinx === "1", max: req.query.max });
     }
     // `wishlist`: the cockpit's wishlist math — boosted-NFT catalog with ownership +
     // per-priority cumulative costs vs the farm's FLOWER balance. `list` query param =

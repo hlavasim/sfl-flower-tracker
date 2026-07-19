@@ -18771,7 +18771,7 @@
       h += `<div class="pixel-panel pixel-font" style="padding:12px;margin-bottom:14px;font-size:0.6rem;line-height:2">
         <div>🏝️ <strong>${escHTML(cur.island)}</strong> · Basic Land <strong>${cur.basicLand}</strong> · Ascension <strong>A${cur.ascensionLevel}</strong>
           ${cur.readyToAscend ? '<span style="color:var(--green);font-weight:bold"> · READY TO ASCEND</span>' : ""}</div>
-        <div>🧬 Standings: ${standings} · XP/day from cooking: <strong>${rates.xpPerDay > 0 ? Math.round(rates.xpPerDay).toLocaleString() : '<span style="color:var(--yellow)">⚠️ 0 — level ETAs unavailable, showing remaining XP</span>'}</strong>${cur.bankedFoodXp > 0 ? ` · 🍲 uvařeno v zásobě: <strong>+${(cur.bankedFoodXp / 1e6).toFixed(1)}M XP</strong> <span style="color:var(--text-dim)">(s ×1.5 pet, započteno do levelů)</span>` : ""}</div>
+        <div>🧬 Standings: ${standings} · XP/day from cooking: <strong>${rates.xpPerDay > 0 ? Math.round(rates.xpPerDay).toLocaleString() : '<span style="color:var(--yellow)">⚠️ 0 — level ETAs unavailable, showing remaining XP</span>'}</strong>${cur.bankedFoodXp > 0 ? ` · 🍲 uvařeno v zásobě: <strong>+${(cur.bankedFoodXp / 1e6).toFixed(1)}M XP</strong> <span style="color:var(--text-dim)">(s ×1.5 pet, započteno do levelů)</span>` : ""}${rates.farmSflPerDay > 0 ? ` · 🌻 farmení: <strong>${rates.farmSflPerDay.toFixed(1)} FLOWER/den</strong>` : ""}</div>
         <div>✨ Shards: <strong>${cur.shards}</strong> · 💎 Crystals: <strong>${cur.crystals}</strong> · 📦 Stock: ${["Crimstone","Oil","Obsidian"].map(r => `${r} <strong>${Math.floor(cur.stock[r])}</strong>`).join(" · ")} · Coins <strong>${Math.round(cur.stock.Coins).toLocaleString()}</strong></div>
       </div>`;
       // ── toggles ──
@@ -18871,6 +18871,8 @@
           <th>krok</th><th>level</th>
           <th class="nl">náklady</th>
           <th class="nl">+nodes</th>
+          <th>+🌻/d</th>
+          <th>ROI</th>
           <th>farm</th>
           <th>slot</th>` : `
           <th>krok</th><th>level</th>
@@ -18879,6 +18881,8 @@
           <th>${gi("Obsidian")}<span class="asc-hlbl">Obsidian</span></th>
           <th>${gi("Coins")}<span class="asc-hlbl">Coins</span></th>
           <th class="nl">+nodes</th>
+          <th>+🌻/d</th>
+          <th>ROI</th>
           <th>farm</th>
           <th>slot</th>`}
         </tr></thead><tbody>`;
@@ -18926,12 +18930,16 @@
           const nodeBits = Object.entries(s.nodesAdded || {}).map(([n, q]) => `${q > 1 ? q + "×" : "+"}${gi(n)}`);
           if (s.crystals) nodeBits.unshift(`${gi("Ascension Crystal")}<span class="asc-shards" style="font-size:0.42rem">${gi("Ascension Shard")}${s.shards}</span>`);
           const farmCell = sim ? (sim.blocked ? '<span class="miss">∞</span>' : (state === "ok" ? '<span class="have">✓</span>' : fmtEta(sim.farmEtaDays))) : "?";
+          const gainCell = s.flowerPerDay > 0.005 ? `+${s.flowerPerDay.toFixed(2)}` : "—";
+          const roiCell = s.roiDays != null ? `${s.costUnpriced ? "≥" : ""}${fmtEta(s.roiDays)}` : "—";
           const krokCell = `<td>${s.asc === 0 ? (s.kind === "upgrade" ? `<strong>⬆ ${escHTML(s.next)}</strong>` : `${escHTML(s.island)} <strong>${s.expansion}</strong>`) : s.kind === "upgrade" ? `<strong>⬆ A${s.asc}</strong>` : `exp <strong>${s.expansion}</strong>`} <span style="color:var(--text-dim);font-size:0.42rem">${s.time ? (s.time >= 3600 ? +(s.time / 3600).toFixed(1) + "h" : s.time + "s") : ""}</span></td>`;
           h += isPre ? `<tr class="${state}">
             ${krokCell}
             <td>${lvlCell}</td>
             <td class="nl costs">${costBits.join(" ") || "—"}</td>
             <td class="nl nodes">${nodeBits.join(" ") || "—"}</td>
+            <td>${gainCell}</td>
+            <td>${roiCell}</td>
             <td>${farmCell}</td>
             <td class="${(sim ? sim.stuck : s.stuck) ? "miss" : ""}">${fmtEta(s.buildSlotDays)}</td>
           </tr>` : `<tr class="${state}">
@@ -18939,6 +18947,8 @@
             <td>${lvlCell}</td>
             ${resCell("Crimstone")}${resCell("Oil")}${resCell("Obsidian")}${resCell("Coins")}
             <td class="nl nodes">${nodeBits.join(" ") || "—"}</td>
+            <td>${gainCell}</td>
+            <td>${roiCell}</td>
             <td>${farmCell}</td>
             <td class="${(sim ? sim.stuck : s.stuck) ? "miss" : ""}">${fmtEta(s.buildSlotDays)}</td>
           </tr>`;

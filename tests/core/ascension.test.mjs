@@ -121,6 +121,21 @@ test("node-aware sim: adding nodes speeds later steps up (eff mode, days units)"
   assert.ok(prev > 30 && prev < 10000, `total farm days ${prev}`);
 });
 
+test("per-resource ETAs are independent: cumulative need / own rate, no cross-resource waits", () => {
+  for (const s of out.steps) {
+    const sim = s.sim && s.sim.eff;
+    if (!sim || sim.blocked) continue;
+    for (const r of ["Crimstone", "Oil", "Obsidian", "Wood"]) {
+      const eta = sim.res[r];
+      if (eta == null || eta === 0) continue;
+      const rate = out.rates[r].eff;
+      const expect = (s.cum[r] - out.current.stock[r]) / rate;
+      // rate may have grown via added nodes, so eta <= flat-rate expectation
+      assert.ok(eta <= expect + 1e-6, `${r} A${s.asc} e${s.expansion}: ${eta} > ${expect}`);
+    }
+  }
+});
+
 test("stuck is per-mode: verdict always matches that mode's own farm ETA vs slot", () => {
   for (const s of out.steps) {
     for (const mode of ["eff", "theo"]) {
@@ -216,6 +231,24 @@ test("grinx halves pre-step resources (incl. extraCost) but not coins", () => {
   assert.equal(e30.cost.Wood, 750);
   assert.equal(e30.extraCost.Gem, 112.5);
   assert.equal(e30.cost.Coins, 60000);
+});
+
+test("flower economics: node gains valued from power categories, ROI includes leveling cost", () => {
+  const o = buildAscensionSection(farm, powerData, cooking, eff, { max: 2 });
+  assert.ok(o.rates.farmSflPerDay > 0, "current farm FLOWER/day served");
+  assert.ok(o.rates.costPerXp > 0 && o.rates.costPerXp < 0.001, "cooking cost per XP sane");
+  const e31 = o.steps.find((s) => s.asc === 1 && s.expansion === 31);
+  assert.ok(e31.flowerPerDay > 0, "A1 e31 adds producing nodes");
+  assert.ok(e31.costSfl > 0);
+  assert.ok(e31.roiDays > 0 && e31.roiDays < 10000);
+  assert.ok(Math.abs(e31.roiDays - (e31.costSfl + e31.levelCostSfl) / e31.flowerPerDay) < 1e-9);
+  // upgrade step adds no nodes -> no ROI
+  const up = o.steps.find((s) => s.asc === 1 && s.kind === "upgrade");
+  assert.equal(up.roiDays, null);
+  // legacy numeric 3rd param still works (no cooking object -> no costPerXp)
+  const legacy = buildAscensionSection(farm, powerData, cooking.totalXpPerDay, eff, { max: 1 });
+  assert.equal(legacy.rates.costPerXp, null);
+  assert.equal(legacy.rates.xpPerDay, cooking.totalXpPerDay);
 });
 
 // ── wishlist section (same fixture set) ──

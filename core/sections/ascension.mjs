@@ -45,9 +45,8 @@ const xpForLevel = (lvl) => lvl <= 1 ? 0 : BUMPKIN_XP_TABLE[lvl - 2] ?? BUMPKIN_
 // finish the next... through volcano 30 (upgradeFarm.ts chain). asc: 0 marks
 // them; level gates are absolute bumpkin levels. nodesAdded comes from the
 // game's island layouts (deriveExpansionNodes deltas), so the sim gains
-// production nodes through these steps too. One deviation (documented):
-// non-tracked resources (Wood, Stone, Iron, Gold, Gem) are carried in
-// extraCost for stock have/miss display only, not simulated over time.
+// production nodes through these steps too. Wood/Stone/Iron/Gold are fully
+// simulated (SIM_RES); only Gem (no production) stays a stock-only extraCost.
 export function buildPreAscensionSteps(islandType, basicLand, grinx) {
   const startIdx = ISLAND_PROGRESSION.findIndex((p) => p.island === islandType);
   if (startIdx === -1) return []; // already an ascension island
@@ -114,6 +113,10 @@ export function buildAscensionSteps(grinx, maxAsc) {
 }
 
 export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, settings = {}) {
+  // 3rd param: either the plain xp/day number (legacy) or the whole cooking
+  // section object — the latter also carries recipe costs for the leveling ROI.
+  const cookingObj = cookingTotalXp && typeof cookingTotalXp === "object" ? cookingTotalXp : null;
+  if (cookingObj) cookingTotalXp = cookingObj.totalXpPerDay || 0;
   const grinx = !!settings.grinx;
   const maxAsc = Math.min(Math.max(parseInt(settings.max) || 10, 1), 10);
   const inv = farm.inventory || {};
@@ -257,9 +260,14 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
         if (need > 0) {
           if (!(rate[r] > 0)) { bad = true; break; }
           const d = need / rate[r];
-          resEta[r] = t + d;
           if (d > dt) dt = d;
-        } else resEta[r] = t;
+        }
+        // displayed per-resource ETA is INDEPENDENT: every resource farms in
+        // parallel all the time, so its ETA is just cumulative need ÷ its own
+        // rate from NOW — never inflated by other resources' waits in earlier
+        // steps (the shared timeline t below still drives the farm column).
+        const needTotal = (cumc[r] + (s.cost[r] || 0)) - stock[r];
+        resEta[r] = needTotal > 0 ? (rate[r] > 0 ? needTotal / rate[r] : null) : 0;
       }
       if (bad) { blocked = true; s.sim[mode] = { all: null, blocked: true }; continue; }
       // rates are units/DAY, so dt/t/resEta are already DAYS — no seconds conversion.
@@ -298,6 +306,80 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
     s.stuck = s.sim && s.sim.eff ? s.sim.eff.stuck : true;
     if (s.stuck && !stuck) stuck = { asc: s.asc, expansion: s.expansion, kind: s.kind, island: s.island || null, buildSlotDays: s.buildSlotDays, farmEtaDays: farmEta };
     slotMs += (s.time || 0) * 1000;
+  }
+
+  // ── FLOWER economics per step: daily production gain of the added nodes + ROI ──
+  // Value of one node of a category = the power context's boosted SFL/day for the
+  // category ÷ current node count (approximation: today's boosts and prices).
+  // Cost of a step = resources at P2P prices + coins/coinsPerSFL (+ gems/gemsPerSFL)
+  // + the INCREMENTAL leveling cost: XP still missing to its level gate beyond what
+  // earlier steps already require, priced at the cooking engine's cost per XP
+  // (selected recipes). Resources without a P2P price flag costUnpriced (cost is
+  // then a lower bound). ROI = payback days = cost / daily gain.
+  const p2pP = powerData && powerData.p2pPrices ? powerData.p2pPrices : {};
+  const xr = (powerData && powerData.exchangeRates) || { coinsPerSFL: 320, gemsPerSFL: 0 };
+  const NODE_CAT = {
+    "Crop Plot": "crops", "Fruit Patch": "fruits", "Tree": "trees", "Stone Rock": "stone",
+    "Iron Rock": "iron", "Gold Rock": "gold", "Crimstone Rock": "crimstone",
+    "Oil Reserve": "oil", "Lava Pit": "obsidian", "Beehive": "bees", "Flower Bed": "flowers",
+  };
+  const catNodeCount = {
+    crops: Object.keys(farm.crops || {}).length,
+    fruits: Object.keys(farm.fruitPatches || {}).length,
+    trees: Object.keys(farm.trees || {}).length,
+    stone: Object.keys(farm.stones || {}).length,
+    iron: Object.keys(farm.iron || {}).length,
+    gold: Object.keys(farm.gold || {}).length,
+    crimstone: Object.keys(farm.crimstones || {}).length,
+    oil: Object.keys(farm.oilReserves || {}).length,
+    obsidian: Object.keys(farm.lavaPits || {}).length,
+    bees: Object.keys(farm.beehives || {}).length,
+    flowers: Object.keys((farm.flowers && farm.flowers.flowerBeds) || {}).length,
+  };
+  const perNodeSfl = {};
+  for (const [cat, n] of Object.entries(catNodeCount)) {
+    const sfl = (cats[cat] && cats[cat].boostedSfl) || 0;
+    perNodeSfl[cat] = n > 0 ? sfl / n : 0;
+  }
+  // cooking cost per XP from the selected recipe of each building, xp/day-weighted
+  let costPerXp = null;
+  if (cookingObj && cookingObj.buildings) {
+    let costDay = 0, xpDay = 0, priced = true;
+    for (const b of Object.values(cookingObj.buildings)) {
+      if (!(b.xpPerDay > 0)) continue;
+      const r = (b.recipes || []).find((x) => x.name === b.recipe);
+      if (!r || !(r.xp > 0) || r.cost == null) { priced = false; continue; }
+      costDay += (r.cost / r.xp) * b.xpPerDay;
+      xpDay += b.xpPerDay;
+    }
+    if (xpDay > 0 && priced) costPerXp = costDay / xpDay;
+    else if (xpDay > 0) costPerXp = costDay / xpDay; // partial: lower bound
+  }
+  rates.farmSflPerDay = (powerData && powerData.categories && powerData.categories.totalBoostedSfl) || 0;
+  rates.costPerXp = costPerXp;
+  let maxXpReq = experienceEff;
+  for (const s of pending) {
+    let gain = 0;
+    for (const [node, n] of Object.entries(s.nodesAdded || {})) {
+      const cat = NODE_CAT[node];
+      if (cat) gain += n * (perNodeSfl[cat] || 0);
+    }
+    s.flowerPerDay = gain;
+    let cost = 0, unpriced = false;
+    for (const [r, q] of Object.entries({ ...s.cost, ...s.extraCost })) {
+      if (!q) continue;
+      if (r === "Coins") cost += xr.coinsPerSFL > 0 ? q / xr.coinsPerSFL : 0;
+      else if (r === "Gem") { if (xr.gemsPerSFL > 0) cost += q / xr.gemsPerSFL; else unpriced = true; }
+      else if (p2pP[r] > 0) cost += q * p2pP[r];
+      else unpriced = true;
+    }
+    const incXp = Math.max(0, (s.levelXpNeeded || 0) - maxXpReq);
+    maxXpReq = Math.max(maxXpReq, s.levelXpNeeded || 0);
+    s.levelCostSfl = costPerXp != null ? incXp * costPerXp : (incXp > 0 ? null : 0);
+    s.costSfl = cost;
+    s.costUnpriced = unpriced || (incXp > 0 && costPerXp == null);
+    const totalCost = cost + (s.levelCostSfl || 0);
+    s.roiDays = gain > 0 ? totalCost / gain : null;
   }
 
   return { current, rates, steps: pending, frontier, bottleneck, reach, nodeCounts, grinx, maxAsc };
