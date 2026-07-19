@@ -30,6 +30,7 @@ import {
 import {
   unitToSfl, calcSeedCostPerDay, calcAnimalFeedCost, calcSicknessCost,
   calcLavaPitCostPerDay, getAnimalCatSfl, getPriceProduct, activeShrineEffects,
+  buildQueueData,
 } from "../engine/power-costs.mjs";
 import { _setPowerContext, calcBoostValue } from "../engine/roadmap.mjs";
 
@@ -332,6 +333,12 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   // pipeline only — exactly the part the page's loop computed before its restock block.
   const categories = { catSummaries, totalBaseSfl, totalBoostedSfl, totalCostSfl, oilPrice: p2pPrices["Oil"] };
 
+  // ── restockQueues: buildQueueData verbatim (page ~18114). The page's restock
+  // SETTINGS (mode/trigger/activeQueues) are localStorage-only interactive state and
+  // calcRestockCost on them is trivial — queues are the computed part, so THEY ship;
+  // the client keeps calcRestockCost so toggles stay instant with no refetch.
+  const restockQueues = buildQueueData(savedProducts, capacity, exchangeRates, stockMods, catBoosts, p2pPrices, farm);
+
   // ── boostValues: per-(boost, category) solo/synergy/ROI via the roadmap engine
   // (core/engine/roadmap.mjs), replacing renderPowerContent's three calcBoostValue call
   // sites. Placed AFTER the categories block so the engine sees the render-time Oil
@@ -356,5 +363,5 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     }
   }
 
-  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues };
+  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, restockQueues };
 }

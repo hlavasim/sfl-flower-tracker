@@ -151,3 +151,17 @@ test("boostValues — per-boost solo/synergy/ROI from the roadmap engine", () =>
   // skills carry values too (they participate via SKILL_TREE parsing)
   assert.ok(Object.keys(bv.crops).length > 0);
 });
+
+test("restockQueues — buildQueueData shipped; JSON-safe daysUntilEmpty semantics", () => {
+  const q = out.restockQueues;
+  assert.ok(q && q.crops && q.Axe, "seed + tool queues present");
+  assert.equal(q.crops.group, "seeds");
+  assert.equal(q.crops.product, "Kale");
+  assert.ok(q.crops.usePerDay > 0);
+  // trees have Foreman Beaver on this farm → Axe queue is a free tool, use 0
+  assert.equal(q.Axe.freeTool, true);
+  assert.equal(q.Axe.usePerDay, 0);
+  // its daysUntilEmpty is Infinity in-process; over the wire it becomes null — the
+  // client's consumers treat null as ∞ (pinned here so the shape stays JSON-safe)
+  assert.equal(JSON.parse(JSON.stringify(q.Axe)).daysUntilEmpty, null);
+});

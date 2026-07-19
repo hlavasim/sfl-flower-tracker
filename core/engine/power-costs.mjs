@@ -539,7 +539,77 @@ import { SEED_COSTS, TOOL_COSTS } from "../data/economy.mjs";
       return out;
     }
 
+
+    // ── flowers.html 4299: RESTOCK_GEM_COSTS ──
+    const RESTOCK_GEM_COSTS = { seeds: 15, tools: 10, both: 20 };
+
+    // ── flowers.html 15058-15070: RESTOCK_QUEUE_DEFS ──
+    const RESTOCK_QUEUE_DEFS = {
+      // Seed queues (one per seed category — all plots/patches/pots share)
+      crops:      { group: "seeds", label: "Crops", getProduct: sp => sp.crops || getDefaultProduct("crops") },
+      fruits:     { group: "seeds", label: "Fruits", getProduct: sp => sp.fruits || getDefaultProduct("fruits") },
+      greenhouse: { group: "seeds", label: "Greenhouse", getProduct: sp => sp.greenhouse || getDefaultProduct("greenhouse") },
+      // Tool queues (independent — one per tool type)
+      Axe:            { group: "tools", label: "Axe (trees)",     catId: "trees" },
+      Pickaxe:        { group: "tools", label: "Pickaxe (stone)",  catId: "stone" },
+      "Stone Pickaxe": { group: "tools", label: "Stone Pick (iron)", catId: "iron" },
+      "Iron Pickaxe":  { group: "tools", label: "Iron Pick (gold)",  catId: "gold" },
+      "Gold Pickaxe":  { group: "tools", label: "Gold Pick (crimstone)", catId: "crimstone" },
+      "Oil Drill":     { group: "tools", label: "Oil Drill (oil)", catId: "oil" },
+    };
+
+    // ── flowers.html 15087-15133: buildQueueData ──
+    // Build queue data: stock, usePerDay, daysUntilEmpty for each queue
+    // Deviation (see header): trailing `farm` param feeds activeShrineEffects (page global).
+    function buildQueueData(savedProducts, capacity, exchangeRates, stockMods, catBoosts, p2pPrices, farm) {
+      const queues = {};
+      for (const [qId, qDef] of Object.entries(RESTOCK_QUEUE_DEFS)) {
+        if (qDef.group === "seeds") {
+          const catId = qId; // crops, fruits, greenhouse
+          const product = qDef.getProduct(savedProducts);
+          const n = getCapacityCount(catId, capacity);
+          const ownedEffects = (catBoosts[catId] || []).filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId)).concat(activeShrineEffects(farm, catId));
+          const result = applyBoosts(catId, product, capacity, ownedEffects);
+          const effectiveCycle = result.effectiveCycle || getCycleSec(catId, product);
+          const cyclesPerDay = effectiveCycle > 0 ? 86400 / effectiveCycle : 0;
+          let effectiveHarvests = 1;
+          if (catId === "fruits") {
+            const baseH = FRUIT_HARVEST_COUNT[product] || 4;
+            effectiveHarvests = baseH + (result.extraHarvest || 0);
+          }
+          const seedsPerDay = cyclesPerDay * n / effectiveHarvests;
+          const seedName = product + " Seed";
+          const stock = getEffectiveStock(seedName, stockMods);
+          const daysUntilEmpty = seedsPerDay > 0 ? stock / seedsPerDay : Infinity;
+          queues[qId] = { stock, usePerDay: seedsPerDay, daysUntilEmpty, product, group: "seeds", label: `${qDef.label} (${product})`, capacity: n };
+        } else {
+          // Tool queue
+          const toolName = qId;
+          const catId = qDef.catId;
+          const n = getCapacityCount(catId, capacity);
+          const d = RESOURCE_RESPAWN_DATA[Object.keys(PRODUCT_TO_CATEGORY).find(p => PRODUCT_TO_CATEGORY[p] === catId)];
+          const ownedEffects = (catBoosts[catId] || []).filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId)).concat(activeShrineEffects(farm, catId));
+          const result = applyBoosts(catId, catId === "oil" ? "Oil" : Object.keys(PRODUCT_TO_CATEGORY).find(p => PRODUCT_TO_CATEGORY[p] === catId), capacity, ownedEffects);
+          const effectiveCycle = result.effectiveCycle || (d ? d.respawnSec : 0);
+          const toolsPerDay = effectiveCycle > 0 ? (86400 / effectiveCycle) * n : 0;
+          const stock = getEffectiveStock(toolName, stockMods);
+          // Check for free tool sources
+          let freeTool = false;
+          if (catId === "stone" && stockMods.hasQuarry) freeTool = true;
+          if (catId === "trees" && stockMods.hasForeman) freeTool = true;
+          if (catId === "oil" && stockMods.hasInfernalDrill) freeTool = true;
+          if (catId === "crimstone" && stockMods.hasCrimstoneSpikesHair) freeTool = true;
+          const effectiveUse = freeTool ? 0 : toolsPerDay;
+          const daysUntilEmpty = effectiveUse > 0 ? stock / effectiveUse : Infinity;
+          queues[qId] = { stock, usePerDay: effectiveUse, daysUntilEmpty, toolName, group: "tools", label: qDef.label, capacity: n, freeTool };
+        }
+      }
+      return queues;
+    }
+
+
 export {
+  RESTOCK_GEM_COSTS, RESTOCK_QUEUE_DEFS, buildQueueData,
   FEED_RECIPES, FEED_QTY, FEED_XP_TABLE, SICKNESS_RATE_BY_LEVEL,
   BARN_DELIGHT_RECIPE, BARN_DELIGHT_RECIPE_ALT, SICKNESS_PREVENTION,
   SHRINE_DATA, LAVA_PIT_REQUIREMENTS, GREENHOUSE_OIL_COSTS,

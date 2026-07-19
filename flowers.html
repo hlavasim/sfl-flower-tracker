@@ -15147,7 +15147,7 @@
           return { restockPerDay: 0, restockFrequencyDays: Infinity, triggerQueue: trigger, gemCost, restockSfl: 0 };
         }
       }
-      if (!tq || tq.daysUntilEmpty === Infinity || tq.usePerDay === 0) {
+      if (!tq || tq.daysUntilEmpty == null || tq.daysUntilEmpty === Infinity || tq.usePerDay === 0) {
         return { restockPerDay: 0, restockFrequencyDays: Infinity, triggerQueue: trigger, gemCost, restockSfl: 0 };
       }
       const restockFrequencyDays = tq.daysUntilEmpty;
@@ -18112,7 +18112,7 @@
 
       // ── Shared Restock Calculation ──
       const restockSettings = getRestockSettings() || getDefaultRestockSettings();
-      const queueData = buildQueueData(savedProducts, capacity, exchangeRates, stockMods, catBoosts, p2pPrices);
+      const queueData = powerState.restockQueues || {}; // computed by section=power (buildQueueData in core)
       const restockResult = calcRestockCost(restockSettings, queueData, exchangeRates);
       totalCostSfl += restockResult.restockPerDay;
 
@@ -18575,7 +18575,7 @@
             } else {
               content += `<div>Seed cost/day: <strong style="color:var(--red)">${(cd.costPerDay || 0).toFixed(4)} ${sflIcon()}/day</strong></div>`;
             }
-            if (cd.stock > 0) content += `<div>Stock: ${cd.stock} seeds${stockMods.hasWarehouse ? " (Warehouse ×1.2)" : ""} — lasts ${cd.daysUntilEmpty === Infinity ? "∞" : cd.daysUntilEmpty.toFixed(1)} days</div>`;
+            if (cd.stock > 0) content += `<div>Stock: ${cd.stock} seeds${stockMods.hasWarehouse ? " (Warehouse ×1.2)" : ""} — lasts ${cd.daysUntilEmpty == null || cd.daysUntilEmpty === Infinity ? "∞" : cd.daysUntilEmpty.toFixed(1)} days</div>`;
             if (cd.effectiveHarvests > 1) content += `<div style="color:var(--green)">🍎 Fruit harvests: ${cd.effectiveHarvests}× per seed (1 seed lasts ${cd.effectiveHarvests} cycles)</div>`;
           } else if (cd.freeTool) {
             // Free tool (Quarry / Foreman Beaver) → no tool cost
@@ -18609,7 +18609,7 @@
               content += `<div>Tool cost: ${cd.toolSfl.toFixed(4)} ${sflIcon()} per use (${cd.baseCoins} coins)</div>`;
               content += `<div>Tool cost/day: ${cd.toolSfl.toFixed(4)} × ${(cd.toolsPerDay || 0).toFixed(2)} = <strong style="color:var(--red)">${(cd.costPerDay || 0).toFixed(4)} ${sflIcon()}/day</strong></div>`;
             }
-            if (cd.stock > 0) content += `<div>Stock: ${cd.stock} tools${stockMods.hasToolshed ? " (Toolshed ×1.5)" : ""} — lasts ${cd.daysUntilEmpty === Infinity ? "∞" : cd.daysUntilEmpty.toFixed(1)} days</div>`;
+            if (cd.stock > 0) content += `<div>Stock: ${cd.stock} tools${stockMods.hasToolshed ? " (Toolshed ×1.5)" : ""} — lasts ${cd.daysUntilEmpty == null || cd.daysUntilEmpty === Infinity ? "∞" : cd.daysUntilEmpty.toFixed(1)} days</div>`;
           } else if (cd.feedBreakdown !== undefined || cd.isGolden) {
             // Animal feed cost display
             if (cd.isGolden) {
@@ -18979,7 +18979,7 @@
               const q = queueData[qId];
               const isActive = restockSettings.activeQueues.includes(qId);
               const isTrigger = restockSettings.trigger === qId;
-              const daysStr = q.daysUntilEmpty === Infinity ? "∞" : q.daysUntilEmpty.toFixed(1);
+              const daysStr = q.daysUntilEmpty == null || q.daysUntilEmpty === Infinity ? "∞" : q.daysUntilEmpty.toFixed(1); // null = JSON-serialized Infinity
               const daysStyle = isTrigger ? "color:var(--sunpetal);font-weight:bold" : "";
               const dimStyle = !isActive ? "opacity:0.4" : "";
               content += `<tr style="border-bottom:1px solid rgba(92,58,30,0.15);${dimStyle}">
@@ -19009,7 +19009,7 @@
               const q = queueData[qId];
               const isActive = restockSettings.activeQueues.includes(qId);
               const isTrigger = restockSettings.trigger === qId;
-              const daysStr = q.daysUntilEmpty === Infinity ? "∞" : q.daysUntilEmpty.toFixed(1);
+              const daysStr = q.daysUntilEmpty == null || q.daysUntilEmpty === Infinity ? "∞" : q.daysUntilEmpty.toFixed(1); // null = JSON-serialized Infinity
               const daysStyle = isTrigger ? "color:var(--sunpetal);font-weight:bold" : "";
               const dimStyle = !isActive ? "opacity:0.4" : "";
               const freeNote = q.freeTool ? ` <span style="color:var(--green);font-size:0.4375rem">(free)</span>` : "";
