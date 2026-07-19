@@ -7846,12 +7846,18 @@
 
     let dashP2P = {};
     let dashRates = { coinsPerSFL: null, gemsPerSFL: null };
+    // Dashboard P2P + rates — MIGRATED: both derive from compute?section=treasury's td
+    // (raw p2pPrices + the same api/betty/gem rate derivations, computed in core). One
+    // shared in-flight promise so both callers cost one compute call per page load.
+    let _dashTdPromise = null;
+    function _dashTd() {
+      if (!_dashTdPromise) _dashTdPromise = fetchTreasuryData().catch((e) => { _dashTdPromise = null; throw e; });
+      return _dashTdPromise;
+    }
     async function dashFetchP2P() {
       try {
-        const resp = await fetch("/api/proxy?url=" + encodeURIComponent("https://sfl.world/api/v1/prices"));
-        const d = await resp.json();
-        const raw = d?.data?.p2p || d?.p2p || {};
-        for (const [k, v] of Object.entries(raw)) {
+        const td = await _dashTd();
+        for (const [k, v] of Object.entries(td.p2pPrices || {})) {
           dashP2P[k] = parseFloat(v) || 0;
         }
         console.log("[Dashboard] P2P prices loaded:", Object.keys(dashP2P).length, "items");
@@ -7859,25 +7865,14 @@
     }
     async function dashFetchRates() {
       try {
-        // sfl.world exchange returns coins/gems as tier objects, not flat numbers.
-        const r = await fetch("/api/proxy?url=" + encodeURIComponent("https://sfl.world/api/v1.1/exchange"));
-        const j = await r.json();
-        const coinTiers = Object.values(j?.coins || {});
-        const bestCoin = coinTiers.reduce((b, t) => (!b || (t.coin / t.sfl) > (b.coin / b.sfl)) ? t : b, null);
-        const apiRate = bestCoin ? (bestCoin.coin / bestCoin.sfl) : null;
-        const gemTiers = Object.values(j?.gems || {});
-        const bestGem = gemTiers.reduce((b, t) => (!b || (t.gem / t.sfl) > (b.gem / b.sfl)) ? t : b, null);
-        dashRates.gemsPerSFL = bestGem ? (bestGem.gem / (bestGem.sfl * 0.7)) : null;
-
+        const td = await _dashTd();
+        const apiRate = td.coinsPerSFL_api || null;
+        dashRates.gemsPerSFL = td.gemsPerSFL || null;
         // Coins valuation: use the Betty crop-sell rate (~2000 coins/SFL),
         // which reflects what coins actually cost a farmer in opportunity terms.
         // The API rate (~320) is the gem-pack purchase rate — the worst way
         // to convert SFL→coins and not representative of farm economy.
-        let bettyRate = 0;
-        if (typeof computeBettyRate === "function" && Object.keys(dashP2P).length > 0) {
-          const betty = computeBettyRate(dashP2P);
-          bettyRate = betty.rate || 0;
-        }
+        const bettyRate = td.coinsPerSFL_betty || 0;
         dashRates.coinsPerSFL_api = apiRate;
         dashRates.coinsPerSFL_betty = bettyRate || null;
         dashRates.coinsPerSFL = bettyRate > 0 ? bettyRate : apiRate;
@@ -22739,11 +22734,8 @@
       // Fetch P2P prices for cost calculation
       let _marksP2pPrices = {};
       try {
-        const p2pResp = await fetch("/api/proxy?url=" + encodeURIComponent("https://sfl.world/api/v1/prices"));
-        if (p2pResp.ok) {
-          const p2pData = await p2pResp.json();
-          _marksP2pPrices = (p2pData.data && p2pData.data.p2p) || p2pData.p2p || {};
-        }
+        // MIGRATED: raw p2p comes from section=treasury's td (last direct sfl.world fetch dies)
+        _marksP2pPrices = (await fetchTreasuryData()).p2pPrices || {};
       } catch(e) { console.warn("P2P prices fetch failed:", e); }
 
       // F2-2c: marks passes no rates, so it reads the no-rates market-value profile from
@@ -24559,26 +24551,21 @@
       const warnings = [];
       const proxyUrl = (u) => `/api/proxy?url=${encodeURIComponent(u)}`;
 
-      const [priceRes, exchangeRes, czkRes] = await Promise.all([
-        fetchRetry(proxyUrl("https://sfl.world/api/v1/prices"), "P2P prices"),
-        fetchRetry(proxyUrl("https://sfl.world/api/v1.1/exchange"), "Exchange rates"),
+      // Prices/rates — MIGRATED: section=treasury's td replaces the page's LAST direct
+      // sfl.world fetch pair (same betty/gem derivations, computed in core). The CZK
+      // conversion is a different upstream (jsdelivr currency API) and stays client-side.
+      const [tdRes, czkRes] = await Promise.all([
+        fetchTreasuryData().then((td) => ({ ok: true, td })).catch((e) => ({ ok: false, error: String(e && e.message || e) })),
         fetchRetry("https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json", "USD/CZK"),
       ]);
 
-      if (priceRes.ok) {
-        const raw = priceRes.data?.data?.p2p || priceRes.data?.p2p || {};
-        for (const [k, v] of Object.entries(raw)) p2pPrices[k] = parseFloat(v) || 0;
-      } else { warnings.push(`P2P prices: ${priceRes.error}`); }
-
-      if (exchangeRes.ok) {
-        const ed = exchangeRes.data;
-        sflToUsd = ed?.sfl?.usd || 0;
-        const betty = computeBettyRate(p2pPrices);
-        coinsPerSFL = betty.rate || 320;
-        const gemTiers = Object.values(ed?.gems || {});
-        const bestGemTier = gemTiers.reduce((best, t) => (!best || (t.gem / t.sfl) > (best.gem / best.sfl)) ? t : best, null);
-        gemsPerSFL = bestGemTier ? (bestGemTier.gem / (bestGemTier.sfl * 0.7)) : 0;
-      } else { warnings.push(`Exchange rates: ${exchangeRes.error}`); }
+      if (tdRes.ok) {
+        const td = tdRes.td;
+        for (const [k, v] of Object.entries(td.p2pPrices || {})) p2pPrices[k] = parseFloat(v) || 0;
+        sflToUsd = td.sflUsd || 0;
+        coinsPerSFL = td.coinsPerSFL_betty || 320;
+        gemsPerSFL = td.gemsPerSFL || 0;
+      } else { warnings.push(`Prices/rates: ${tdRes.error}`); }
 
       if (czkRes.ok) {
         usdToCzk = czkRes.data?.usd?.czk || 0;
