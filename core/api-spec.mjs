@@ -29,7 +29,7 @@ export const API_SPEC = {
             name: "section",
             in: "query",
             required: false,
-            schema: { type: "string", enum: ["buds", "constants", "cooking", "diff", "eff", "openapi", "pets", "power", "prices", "roadmap", "roi", "treasury"], default: "cooking" },
+            schema: { type: "string", enum: ["ascension", "buds", "constants", "cooking", "diff", "eff", "openapi", "pets", "power", "prices", "roadmap", "roi", "treasury"], default: "cooking" },
             description:
               "Which computation to run. `constants`: the canonical core/data game tables " +
               "plus flowers.html migration-coverage status, no farm needed. `cooking`: " +
@@ -79,6 +79,11 @@ export const API_SPEC = {
               "real efficiency), and `sim` (the reinvestment-ordered buy path: timeline, " +
               "ranked list, core/cosmetic/tail splits; non-finite roi/atDay → null). Honors " +
               "the `roadmap` and `products` query params. " +
+              "`ascension`: POST-only prestige-loop calculator — pending upgrade/expansion steps " +
+              "with game-formula costs/levels/crystals, node-aware production simulation " +
+              "(eff/theo), stock frontier + bottleneck, continuous-expand build slots. " +
+              "Query `grinx=1` halves Crimstone/Oil/Obsidian costs, `max` caps ascensions. " +
+              "Body `{ snapshots }` like `eff`. " +
               "`openapi`: this document, no farm needed. Defaults to `cooking` when omitted.",
           },
           {
@@ -143,6 +148,20 @@ export const API_SPEC = {
               "section=power only: the category the requested formula panel is opened " +
               "under (a power category id, or `qual` for the qualitative list). Used " +
               "with `formulaFor`.",
+          },
+          {
+            name: "grinx",
+            in: "query",
+            required: false,
+            schema: { type: "string", enum: ["1"] },
+            description: "section=ascension only: \"1\" halves Crimstone/Oil/Obsidian costs (Grinx's Hammer).",
+          },
+          {
+            name: "max",
+            in: "query",
+            required: false,
+            schema: { type: "string" },
+            description: "section=ascension only: how many ascensions to project (1-10, default 10).",
           },
           {
             name: "coinMode",

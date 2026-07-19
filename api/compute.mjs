@@ -7,6 +7,8 @@ import { buildRoiSection } from "../core/sections/roi.mjs";
 import { roadmapComputeEfficiency } from "../core/engine/roadmap.mjs";
 import { buildTreasurySection } from "../core/sections/treasury.mjs";
 import { buildRoadmapSection } from "../core/sections/roadmap.mjs";
+import { buildAscensionSection } from "../core/sections/ascension.mjs";
+import { buildCookingSection as _cookingForAscension } from "../core/sections/cooking.mjs";
 import { buildBudsSection } from "../core/sections/buds.mjs";
 import { buildPetsSection } from "../core/sections/pets.mjs";
 import { computeBettyRate } from "../core/engine/prices.mjs";
@@ -295,6 +297,20 @@ export default async function handler(req, res) {
       let input = {};
       try { input = req.body ? JSON.parse(req.body.toString()) : {}; } catch { input = {}; }
       data = buildRoadmapSection(Array.isArray(input.snapshots) ? input.snapshots : [], { roadmapSettings, farm, p2p });
+    }
+    // `ascension`: the prestige-loop calculator (replaces the external cockpit that
+    // read /api/power-summary): costs/levels/crystals from the game-formula port,
+    // production rates from the power context, xpPerDay from the cooking engine,
+    // efficiency from POSTed farm-history snapshots. Query: grinx=0|1, max=1..10.
+    else if (section === "ascension") {
+      const [nftResult, exchange] = await Promise.all([fetchNfts(), fetchExchange()]);
+      if (!nftResult.ok) return res.status(502).json({ error: `nfts fetch failed: ${nftResult.status}` });
+      const powerData = buildPowerSection(farm, p2p, nftResult.data, exchange, settings);
+      const cooking = _cookingForAscension(farm, p2p, settings);
+      let input = {};
+      try { input = req.body ? JSON.parse(req.body.toString()) : {}; } catch { input = {}; }
+      const effData = roadmapComputeEfficiency(Array.isArray(input.snapshots) ? input.snapshots : []);
+      data = buildAscensionSection(farm, powerData, cooking.totalXpPerDay, effData, { grinx: req.query.grinx === "1", max: req.query.max });
     }
     // `roi`: the ROI page's state — the page's own copy of the power fetch+rate block
     // (plus a 4th upstream, BTC/USD) and its own boost-item/pet builders. Same 502
