@@ -35,12 +35,11 @@ const xpForLevel = (lvl) => lvl <= 1 ? 0 : BUMPKIN_XP_TABLE[lvl - 2] ?? BUMPKIN_
 
 // Steps still missing BEFORE ascension: finish the current island, upgrade,
 // finish the next... through volcano 30 (upgradeFarm.ts chain). asc: 0 marks
-// them; level gates are absolute bumpkin levels. Deviations from the ascension
-// steps (documented): nodesAdded stays {} (pre-ascension expansion node
-// layouts not ported — the sim keeps current production rates through these
-// steps, slightly pessimistic), and non-tracked resources (Wood, Stone, Iron,
-// Gold, Gem) are carried in extraCost for stock have/miss display only, not
-// simulated over time.
+// them; level gates are absolute bumpkin levels. nodesAdded comes from the
+// game's island layouts (deriveExpansionNodes deltas), so the sim gains
+// production nodes through these steps too. One deviation (documented):
+// non-tracked resources (Wood, Stone, Iron, Gold, Gem) are carried in
+// extraCost for stock have/miss display only, not simulated over time.
 export function buildPreAscensionSteps(islandType, basicLand, grinx) {
   const startIdx = ISLAND_PROGRESSION.findIndex((p) => p.island === islandType);
   if (startIdx === -1) return []; // already an ascension island
@@ -60,7 +59,7 @@ export function buildPreAscensionSteps(islandType, basicLand, grinx) {
       }
       steps.push({
         kind: "exp", asc: 0, island: prog.island, expansion: e, band: req.level, absLevel: req.level,
-        cost, extraCost, time: req.seconds, nodesAdded: {}, crystals: 0, shards: 0,
+        cost, extraCost, time: req.seconds, nodesAdded: req.nodes || {}, crystals: 0, shards: 0,
       });
     }
     if (!prog.next) break;
@@ -208,7 +207,7 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
   for (const s of pending) {
     const short = [...RES3, "Coins"].find((r) => (s.cum[r] || 0) > stock[r]);
     if (short) { bottleneck = short; break; }
-    frontier = { asc: s.asc, expansion: s.expansion, kind: s.kind };
+    frontier = { asc: s.asc, expansion: s.expansion, kind: s.kind, island: s.island || null };
   }
   // per-resource reach: how many pending steps each resource alone covers
   const reach = {};
@@ -283,7 +282,7 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
     }
     const farmEta = s.sim && s.sim.eff ? s.sim.eff.farmEtaDays : null;
     s.stuck = s.sim && s.sim.eff ? s.sim.eff.stuck : true;
-    if (s.stuck && !stuck) stuck = { asc: s.asc, expansion: s.expansion, kind: s.kind, buildSlotDays: s.buildSlotDays, farmEtaDays: farmEta };
+    if (s.stuck && !stuck) stuck = { asc: s.asc, expansion: s.expansion, kind: s.kind, island: s.island || null, buildSlotDays: s.buildSlotDays, farmEtaDays: farmEta };
     slotMs += (s.time || 0) * 1000;
   }
 

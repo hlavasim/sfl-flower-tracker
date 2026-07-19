@@ -1,7 +1,9 @@
-// Pre-ascension land expansion requirements — extracted VERBATIM from the game
-// source (sunflower-land@main src/features/game/types/expansions.ts,
-// EXPANSION_REQUIREMENTS) on 2026-07-19. bumpkinLevel {ascension,level} objects
-// are flattened to the plain level number (all pre-ascension rows have
+// Pre-ascension land expansion requirements + node gains — extracted VERBATIM
+// from the game source (sunflower-land@main src/features/game/types/expansions.ts)
+// on 2026-07-19: EXPANSION_REQUIREMENTS for costs, and per-expansion node deltas
+// computed by running the game's own deriveExpansionNodes over the island
+// layouts (TOTAL_EXPANSION_NODES[e] − [e−1]). bumpkinLevel {ascension,level}
+// objects are flattened to the plain level number (all pre-ascension rows have
 // ascension: 0). Legacy refund rows past each island's upgrade gate (basic
 // 10-23) are omitted; caps and the progression chain come from the game's
 // upgradeFarm.ts ISLAND_UPGRADE / ISLAND_SETUP tables.
@@ -14,7 +16,13 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 0,
       "sfl": 0,
       "seconds": 5,
-      "level": 1
+      "level": 1,
+      "nodes": {
+        "Crop Plot": 9,
+        "Tree": 2,
+        "Stone Rock": 1,
+        "Iron Rock": 1
+      }
     },
     "5": {
       "resources": {
@@ -23,7 +31,14 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 0.25,
       "sfl": 0,
       "seconds": 5,
-      "level": 1
+      "level": 1,
+      "nodes": {
+        "Crop Plot": 8,
+        "Tree": 1,
+        "Stone Rock": 1,
+        "Iron Rock": 1,
+        "Gold Rock": 1
+      }
     },
     "6": {
       "resources": {
@@ -32,7 +47,12 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 60,
       "sfl": 0,
       "seconds": 60,
-      "level": 2
+      "level": 2,
+      "nodes": {
+        "Crop Plot": 8,
+        "Tree": 1,
+        "Stone Rock": 1
+      }
     },
     "7": {
       "resources": {
@@ -42,7 +62,13 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 100,
       "sfl": 0,
       "seconds": 1800,
-      "level": 5
+      "level": 5,
+      "nodes": {
+        "Crop Plot": 2,
+        "Tree": 1,
+        "Stone Rock": 1,
+        "Iron Rock": 1
+      }
     },
     "8": {
       "resources": {
@@ -52,7 +78,13 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 200,
       "sfl": 0,
       "seconds": 14400,
-      "level": 8
+      "level": 8,
+      "nodes": {
+        "Crop Plot": 2,
+        "Tree": 1,
+        "Stone Rock": 1,
+        "Gold Rock": 1
+      }
     },
     "9": {
       "resources": {
@@ -63,7 +95,11 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 300,
       "sfl": 0,
       "seconds": 43200,
-      "level": 11
+      "level": 11,
+      "nodes": {
+        "Crop Plot": 2,
+        "Iron Rock": 1
+      }
     }
   },
   "spring": {
@@ -74,7 +110,15 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 100,
       "sfl": 0,
       "seconds": 60,
-      "level": 11
+      "level": 11,
+      "nodes": {
+        "Crop Plot": 2,
+        "Fruit Patch": 1,
+        "Tree": 2,
+        "Stone Rock": 2,
+        "Iron Rock": 1,
+        "Gold Rock": 1
+      }
     },
     "6": {
       "resources": {
@@ -85,7 +129,14 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 200,
       "sfl": 0,
       "seconds": 300,
-      "level": 13
+      "level": 13,
+      "nodes": {
+        "Fruit Patch": 1,
+        "Tree": 1,
+        "Stone Rock": 1,
+        "Beehive": 1,
+        "Flower Bed": 1
+      }
     },
     "7": {
       "resources": {
@@ -97,7 +148,13 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 300,
       "sfl": 0,
       "seconds": 1800,
-      "level": 16
+      "level": 16,
+      "nodes": {
+        "Crop Plot": 2,
+        "Tree": 1,
+        "Stone Rock": 1,
+        "Crimstone Rock": 1
+      }
     },
     "8": {
       "resources": {
@@ -108,7 +165,14 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 400,
       "sfl": 0,
       "seconds": 7200,
-      "level": 20
+      "level": 20,
+      "nodes": {
+        "Crop Plot": 2,
+        "Fruit Patch": 1,
+        "Stone Rock": 1,
+        "Iron Rock": 1,
+        "Gold Rock": 1
+      }
     },
     "9": {
       "resources": {
@@ -119,7 +183,12 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 500,
       "sfl": 0,
       "seconds": 7200,
-      "level": 23
+      "level": 23,
+      "nodes": {
+        "Fruit Patch": 1,
+        "Tree": 1,
+        "Sunstone Rock": 1
+      }
     },
     "10": {
       "resources": {
@@ -130,7 +199,14 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 500,
       "sfl": 0,
       "seconds": 14400,
-      "level": 25
+      "level": 25,
+      "nodes": {
+        "Fruit Patch": 1,
+        "Iron Rock": 1,
+        "Gold Rock": 1,
+        "Beehive": 1,
+        "Flower Bed": 1
+      }
     },
     "11": {
       "resources": {
@@ -143,7 +219,13 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 500,
       "sfl": 0,
       "seconds": 28800,
-      "level": 27
+      "level": 27,
+      "nodes": {
+        "Crop Plot": 2,
+        "Fruit Patch": 1,
+        "Tree": 1,
+        "Stone Rock": 1
+      }
     },
     "12": {
       "resources": {
@@ -155,7 +237,10 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 500,
       "sfl": 0,
       "seconds": 43200,
-      "level": 29
+      "level": 29,
+      "nodes": {
+        "Crop Plot": 2
+      }
     },
     "13": {
       "resources": {
@@ -168,7 +253,14 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 500,
       "sfl": 0,
       "seconds": 43200,
-      "level": 32
+      "level": 32,
+      "nodes": {
+        "Fruit Patch": 1,
+        "Tree": 1,
+        "Stone Rock": 1,
+        "Iron Rock": 1,
+        "Sunstone Rock": 1
+      }
     },
     "14": {
       "resources": {
@@ -180,7 +272,11 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 500,
       "sfl": 0,
       "seconds": 86400,
-      "level": 36
+      "level": 36,
+      "nodes": {
+        "Crop Plot": 2,
+        "Fruit Patch": 1
+      }
     },
     "15": {
       "resources": {
@@ -194,7 +290,15 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 500,
       "sfl": 0,
       "seconds": 86400,
-      "level": 40
+      "level": 40,
+      "nodes": {
+        "Crop Plot": 1,
+        "Fruit Patch": 1,
+        "Tree": 1,
+        "Stone Rock": 1,
+        "Iron Rock": 1,
+        "Crimstone Rock": 1
+      }
     },
     "16": {
       "resources": {
@@ -207,7 +311,14 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 500,
       "sfl": 0,
       "seconds": 86400,
-      "level": 43
+      "level": 43,
+      "nodes": {
+        "Crop Plot": 1,
+        "Tree": 1,
+        "Gold Rock": 1,
+        "Beehive": 1,
+        "Flower Bed": 1
+      }
     }
   },
   "desert": {
@@ -221,7 +332,13 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 500,
       "sfl": 0,
       "seconds": 60,
-      "level": 40
+      "level": 40,
+      "nodes": {
+        "Crop Plot": 1,
+        "Stone Rock": 1,
+        "Iron Rock": 1,
+        "Oil Reserve": 1
+      }
     },
     "6": {
       "resources": {
@@ -233,7 +350,11 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 500,
       "sfl": 0,
       "seconds": 300,
-      "level": 40
+      "level": 40,
+      "nodes": {
+        "Fruit Patch": 1,
+        "Sunstone Rock": 1
+      }
     },
     "7": {
       "resources": {
@@ -246,7 +367,11 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 500,
       "sfl": 0,
       "seconds": 1800,
-      "level": 41
+      "level": 41,
+      "nodes": {
+        "Crop Plot": 2,
+        "Crimstone Rock": 1
+      }
     },
     "8": {
       "resources": {
@@ -261,7 +386,11 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 500,
       "sfl": 0,
       "seconds": 7200,
-      "level": 42
+      "level": 42,
+      "nodes": {
+        "Crop Plot": 2,
+        "Sunstone Rock": 1
+      }
     },
     "9": {
       "resources": {
@@ -276,7 +405,11 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 500,
       "sfl": 0,
       "seconds": 7200,
-      "level": 43
+      "level": 43,
+      "nodes": {
+        "Tree": 1,
+        "Stone Rock": 1
+      }
     },
     "10": {
       "resources": {
@@ -291,7 +424,11 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 384,
       "sfl": 0,
       "seconds": 28800,
-      "level": 44
+      "level": 44,
+      "nodes": {
+        "Crop Plot": 1,
+        "Iron Rock": 1
+      }
     },
     "11": {
       "resources": {
@@ -306,7 +443,11 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 768,
       "sfl": 0,
       "seconds": 43200,
-      "level": 45
+      "level": 45,
+      "nodes": {
+        "Crop Plot": 1,
+        "Fruit Patch": 1
+      }
     },
     "12": {
       "resources": {
@@ -321,7 +462,10 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 1536,
       "sfl": 0,
       "seconds": 43200,
-      "level": 47
+      "level": 47,
+      "nodes": {
+        "Crop Plot": 2
+      }
     },
     "13": {
       "resources": {
@@ -336,7 +480,10 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 3072,
       "sfl": 0,
       "seconds": 86400,
-      "level": 50
+      "level": 50,
+      "nodes": {
+        "Tree": 1
+      }
     },
     "14": {
       "resources": {
@@ -351,7 +498,11 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 3840,
       "sfl": 0,
       "seconds": 86400,
-      "level": 53
+      "level": 53,
+      "nodes": {
+        "Crop Plot": 1,
+        "Stone Rock": 1
+      }
     },
     "15": {
       "resources": {
@@ -366,7 +517,11 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 3840,
       "sfl": 0,
       "seconds": 86400,
-      "level": 56
+      "level": 56,
+      "nodes": {
+        "Crop Plot": 1,
+        "Oil Reserve": 1
+      }
     },
     "16": {
       "resources": {
@@ -381,7 +536,11 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 3840,
       "sfl": 0,
       "seconds": 129600,
-      "level": 58
+      "level": 58,
+      "nodes": {
+        "Crop Plot": 1,
+        "Tree": 1
+      }
     },
     "17": {
       "resources": {
@@ -396,7 +555,10 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 5760,
       "sfl": 0,
       "seconds": 129600,
-      "level": 60
+      "level": 60,
+      "nodes": {
+        "Crop Plot": 2
+      }
     },
     "18": {
       "resources": {
@@ -411,7 +573,11 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 5760,
       "sfl": 0,
       "seconds": 129600,
-      "level": 63
+      "level": 63,
+      "nodes": {
+        "Crop Plot": 1,
+        "Gold Rock": 1
+      }
     },
     "19": {
       "resources": {
@@ -426,7 +592,11 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 7680,
       "sfl": 0,
       "seconds": 129600,
-      "level": 65
+      "level": 65,
+      "nodes": {
+        "Crop Plot": 1,
+        "Fruit Patch": 1
+      }
     },
     "20": {
       "resources": {
@@ -441,7 +611,12 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 7680,
       "sfl": 0,
       "seconds": 172800,
-      "level": 68
+      "level": 68,
+      "nodes": {
+        "Tree": 1,
+        "Stone Rock": 1,
+        "Oil Reserve": 1
+      }
     },
     "21": {
       "resources": {
@@ -456,7 +631,12 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 9600,
       "sfl": 0,
       "seconds": 172800,
-      "level": 70
+      "level": 70,
+      "nodes": {
+        "Crop Plot": 1,
+        "Iron Rock": 1,
+        "Sunstone Rock": 1
+      }
     },
     "22": {
       "resources": {
@@ -471,7 +651,11 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 9600,
       "sfl": 0,
       "seconds": 172800,
-      "level": 72
+      "level": 72,
+      "nodes": {
+        "Fruit Patch": 1,
+        "Tree": 1
+      }
     },
     "23": {
       "resources": {
@@ -486,7 +670,11 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 9600,
       "sfl": 0,
       "seconds": 216000,
-      "level": 73
+      "level": 73,
+      "nodes": {
+        "Crop Plot": 1,
+        "Crimstone Rock": 1
+      }
     },
     "24": {
       "resources": {
@@ -501,7 +689,11 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 11520,
       "sfl": 0,
       "seconds": 216000,
-      "level": 74
+      "level": 74,
+      "nodes": {
+        "Crop Plot": 1,
+        "Sunstone Rock": 1
+      }
     },
     "25": {
       "resources": {
@@ -516,7 +708,11 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 13440,
       "sfl": 0,
       "seconds": 216000,
-      "level": 75
+      "level": 75,
+      "nodes": {
+        "Crop Plot": 1,
+        "Stone Rock": 1
+      }
     }
   },
   "volcano": {
@@ -530,7 +726,8 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 500,
       "sfl": 0,
       "seconds": 10,
-      "level": 70
+      "level": 70,
+      "nodes": {}
     },
     "7": {
       "resources": {
@@ -545,7 +742,10 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 384,
       "sfl": 0,
       "seconds": 300,
-      "level": 72
+      "level": 72,
+      "nodes": {
+        "Lava Pit": 1
+      }
     },
     "8": {
       "resources": {
@@ -560,7 +760,10 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 768,
       "sfl": 0,
       "seconds": 1800,
-      "level": 74
+      "level": 74,
+      "nodes": {
+        "Sunstone Rock": 1
+      }
     },
     "9": {
       "resources": {
@@ -575,7 +778,8 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 1152,
       "sfl": 0,
       "seconds": 3600,
-      "level": 76
+      "level": 76,
+      "nodes": {}
     },
     "10": {
       "resources": {
@@ -591,7 +795,10 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 1920,
       "sfl": 0,
       "seconds": 7200,
-      "level": 78
+      "level": 78,
+      "nodes": {
+        "Gold Rock": 1
+      }
     },
     "11": {
       "resources": {
@@ -606,7 +813,8 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 3000,
       "sfl": 0,
       "seconds": 14400,
-      "level": 80
+      "level": 80,
+      "nodes": {}
     },
     "12": {
       "resources": {
@@ -622,7 +830,10 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 3840,
       "sfl": 0,
       "seconds": 28800,
-      "level": 82
+      "level": 82,
+      "nodes": {
+        "Sunstone Rock": 1
+      }
     },
     "13": {
       "resources": {
@@ -637,7 +848,8 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 4800,
       "sfl": 0,
       "seconds": 43200,
-      "level": 84
+      "level": 84,
+      "nodes": {}
     },
     "14": {
       "resources": {
@@ -653,7 +865,8 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 5760,
       "sfl": 0,
       "seconds": 43200,
-      "level": 86
+      "level": 86,
+      "nodes": {}
     },
     "15": {
       "resources": {
@@ -669,7 +882,10 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 6720,
       "sfl": 0,
       "seconds": 86400,
-      "level": 88
+      "level": 88,
+      "nodes": {
+        "Lava Pit": 1
+      }
     },
     "16": {
       "resources": {
@@ -685,7 +901,10 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 7680,
       "sfl": 0,
       "seconds": 86400,
-      "level": 90
+      "level": 90,
+      "nodes": {
+        "Oil Reserve": 1
+      }
     },
     "17": {
       "resources": {
@@ -701,7 +920,10 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 9600,
       "sfl": 0,
       "seconds": 86400,
-      "level": 92
+      "level": 92,
+      "nodes": {
+        "Sunstone Rock": 1
+      }
     },
     "18": {
       "resources": {
@@ -717,7 +939,8 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 12000,
       "sfl": 0,
       "seconds": 129600,
-      "level": 94
+      "level": 94,
+      "nodes": {}
     },
     "19": {
       "resources": {
@@ -733,7 +956,10 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 15360,
       "sfl": 0,
       "seconds": 129600,
-      "level": 96
+      "level": 96,
+      "nodes": {
+        "Sunstone Rock": 1
+      }
     },
     "20": {
       "resources": {
@@ -749,7 +975,8 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 18000,
       "sfl": 0,
       "seconds": 172800,
-      "level": 98
+      "level": 98,
+      "nodes": {}
     },
     "21": {
       "resources": {
@@ -765,7 +992,10 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 21600,
       "sfl": 0,
       "seconds": 172800,
-      "level": 100
+      "level": 100,
+      "nodes": {
+        "Sunstone Rock": 1
+      }
     },
     "22": {
       "resources": {
@@ -781,7 +1011,8 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 25200,
       "sfl": 0,
       "seconds": 172800,
-      "level": 102
+      "level": 102,
+      "nodes": {}
     },
     "23": {
       "resources": {
@@ -797,7 +1028,10 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 30000,
       "sfl": 0,
       "seconds": 172800,
-      "level": 104
+      "level": 104,
+      "nodes": {
+        "Iron Rock": 1
+      }
     },
     "24": {
       "resources": {
@@ -813,7 +1047,10 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 33600,
       "sfl": 0,
       "seconds": 172800,
-      "level": 106
+      "level": 106,
+      "nodes": {
+        "Lava Pit": 1
+      }
     },
     "25": {
       "resources": {
@@ -829,7 +1066,10 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 38400,
       "sfl": 0,
       "seconds": 216000,
-      "level": 108
+      "level": 108,
+      "nodes": {
+        "Crimstone Rock": 1
+      }
     },
     "26": {
       "resources": {
@@ -845,7 +1085,8 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 42000,
       "sfl": 0,
       "seconds": 216000,
-      "level": 110
+      "level": 110,
+      "nodes": {}
     },
     "27": {
       "resources": {
@@ -861,7 +1102,8 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 45600,
       "sfl": 0,
       "seconds": 216000,
-      "level": 112
+      "level": 112,
+      "nodes": {}
     },
     "28": {
       "resources": {
@@ -877,7 +1119,10 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 50400,
       "sfl": 0,
       "seconds": 216000,
-      "level": 114
+      "level": 114,
+      "nodes": {
+        "Sunstone Rock": 1
+      }
     },
     "29": {
       "resources": {
@@ -893,7 +1138,8 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 54000,
       "sfl": 0,
       "seconds": 259200,
-      "level": 116
+      "level": 116,
+      "nodes": {}
     },
     "30": {
       "resources": {
@@ -909,7 +1155,10 @@ export const PRE_EXPANSION_REQUIREMENTS = {
       "coins": 60000,
       "sfl": 0,
       "seconds": 259200,
-      "level": 120
+      "level": 120,
+      "nodes": {
+        "Sunstone Rock": 1
+      }
     }
   }
 };

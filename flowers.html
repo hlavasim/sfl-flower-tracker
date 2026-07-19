@@ -18791,11 +18791,11 @@
       // ── frontier + continuous-expand banners ──
       const fr = d.frontier;
       h += `<div class="pixel-panel pixel-font" style="padding:10px;margin-bottom:14px;font-size:0.6rem">
-        ${fr ? `🎯 Stock alone (no farming) covers through <strong>${fr.kind === "upgrade" ? "the A" + fr.asc + " upgrade" : "A" + fr.asc + "·exp" + fr.expansion}</strong>` : "🛑 Stock alone covers no pending step"}${d.bottleneck ? ` — <strong style="color:var(--red)">${d.bottleneck}</strong> is the first you'd need to farm. Farming until each build slot IS counted in the table.` : "."}</div>`;
+        ${fr ? `🎯 Stock alone (no farming) covers through <strong>${fr.asc === 0 ? (fr.kind === "upgrade" ? fr.island + " upgrade" : fr.island + "·exp" + fr.expansion) : fr.kind === "upgrade" ? "the A" + fr.asc + " upgrade" : "A" + fr.asc + "·exp" + fr.expansion}</strong>` : "🛑 Stock alone covers no pending step"}${d.bottleneck ? ` — <strong style="color:var(--red)">${d.bottleneck}</strong> is the first you'd need to farm. Farming until each build slot IS counted in the table.` : "."}</div>`;
       const isStuck = (s) => s.sim && s.sim[mode] ? s.sim[mode].stuck : s.stuck;
       const firstStuck = d.steps.find(isStuck);
       h += `<div class="pixel-panel pixel-font" style="padding:10px;margin-bottom:14px;font-size:0.6rem">
-        ${firstStuck ? `⚠️ Continuous expand (from 3.8.2026) <strong>jams at ${firstStuck.kind === "upgrade" ? "A" + firstStuck.asc + " upgrade" : "A" + firstStuck.asc + "·exp" + firstStuck.expansion}</strong> — build slot ${fmtEta(firstStuck.buildSlotDays)} vs farm ETA ${fmtEta(firstStuck.sim && firstStuck.sim[mode] && firstStuck.sim[mode].farmEtaDays)}.` : `📅 You keep continuous-expand pace through A${d.maxAsc} at ${mode} production.`}</div>`;
+        ${firstStuck ? `⚠️ Continuous expand (from 3.8.2026) <strong>jams at ${firstStuck.asc === 0 ? (firstStuck.kind === "upgrade" ? firstStuck.island + " upgrade" : firstStuck.island + "·exp" + firstStuck.expansion) : firstStuck.kind === "upgrade" ? "A" + firstStuck.asc + " upgrade" : "A" + firstStuck.asc + "·exp" + firstStuck.expansion}</strong> — build slot ${fmtEta(firstStuck.buildSlotDays)} vs farm ETA ${fmtEta(firstStuck.sim && firstStuck.sim[mode] && firstStuck.sim[mode].farmEtaDays)}.` : `📅 You keep continuous-expand pace through A${d.maxAsc} at ${mode} production.`}</div>`;
       // ── per-ascension step tables ──
       // A real aligned TABLE on every viewport (user: "víc jako tabulku, žádný
       // skrývání"): icon column headers, per-step rows tinted by state
@@ -18823,6 +18823,7 @@
         .asc-eta{display:block;font-size:0.44rem;color:var(--text-dim);font-weight:normal}
         .asc-t .icn{height:1.15em;vertical-align:-0.2em}
         .asc-t td.nodes img{height:1.1em;vertical-align:-0.18em}
+        .asc-t td.costs{white-space:normal;line-height:1.8}
         .asc-t .icn-asc{filter:hue-rotate(255deg) saturate(1.6)}
         .asc-t .asc-shards{color:#d98fff}
         .asc-hlbl{display:block;font-size:0.4rem}
@@ -18860,9 +18861,18 @@
       const byAsc = {};
       for (const s of d.steps) (byAsc[s.asc] = byAsc[s.asc] || []).push(s);
       for (const [a, steps] of Object.entries(byAsc)) {
-        h += `<div class="pixel-panel" style="padding:10px;margin-bottom:12px"><div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:6px">${a === "0" ? `ISLAND COMPLETION <span style="color:var(--text-dim);font-size:0.5rem">· dokončení ostrovů před Ascension 1</span>` : `ASCENSION ${a} <span style="color:var(--text-dim);font-size:0.5rem">· band L1–L50 · abs. ${150 + (a - 1) * 50}+</span>`}</div>
+        // The island-completion group (asc 0) gets its own layout: expansion costs
+        // span many resources (Wood, Stone, ..., Gem), so they live in ONE wrapping
+        // "náklady" cell; +nodes shows only the nodes the expansion actually adds.
+        const isPre = a === "0";
+        h += `<div class="pixel-panel" style="padding:10px;margin-bottom:12px"><div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:6px">${isPre ? `ISLAND COMPLETION <span style="color:var(--text-dim);font-size:0.5rem">· dokončení ostrovů před Ascension 1</span>` : `ASCENSION ${a} <span style="color:var(--text-dim);font-size:0.5rem">· band L1–L50 · abs. ${150 + (a - 1) * 50}+</span>`}</div>
         <div style="overflow-x:auto"><table class="asc-t">
-        <thead><tr>
+        <thead><tr>${isPre ? `
+          <th>krok</th><th>level</th>
+          <th class="nl">náklady</th>
+          <th class="nl">+nodes</th>
+          <th>farm</th>
+          <th>slot</th>` : `
           <th>krok</th><th>level</th>
           <th>${gi("Crimstone")}<span class="asc-hlbl">Crimstone</span></th>
           <th>${gi("Oil")}<span class="asc-hlbl">Oil</span></th>
@@ -18870,7 +18880,7 @@
           <th>${gi("Coins")}<span class="asc-hlbl">Coins</span></th>
           <th class="nl">+nodes</th>
           <th>farm</th>
-          <th>slot</th>
+          <th>slot</th>`}
         </tr></thead><tbody>`;
         for (const s of steps) {
           const sim = s.sim && s.sim[mode];
@@ -18880,11 +18890,17 @@
             resOk[r] = (s.cum[r] || 0) <= cur.stock[r];
             if (!resOk[r]) allRes = false;
           }
+          // pre-steps: the non-simulated resources must be in stock too for 🟢
+          const extraOk = {};
+          for (const [r, q] of Object.entries(s.extraCost || {})) {
+            extraOk[r] = ((cur.extraStock || {})[r] ?? 0) >= q;
+            if (!extraOk[r]) allRes = false;
+          }
           const state = (allRes && s.levelMet) ? "ok" : ((sim ? sim.stuck : s.stuck) || (sim && sim.blocked)) ? "stuck" : "pace";
           const xpLeft = Math.max(0, (s.levelXpNeeded || 0) - cur.experience);
           const lvlMiss = rates.xpPerDay > 0 ? fmtEta(xpLeft / rates.xpPerDay) : Math.round(xpLeft / 1e6) + "M XP";
           const lvlCell = s.kind === "upgrade"
-            ? (s.levelMet ? '<span class="have">band ✓</span>' : `<span class="miss">band<span class="asc-eta">za ${lvlMiss}</span></span>`)
+            ? (s.asc === 0 ? "—" : s.levelMet ? '<span class="have">band ✓</span>' : `<span class="miss">band<span class="asc-eta">za ${lvlMiss}</span></span>`)
             : (s.levelMet ? `<span class="have">L${s.band} ✓</span>` : `<span class="miss">L${s.band}<span class="asc-eta">za ${lvlMiss}</span></span>`);
           const resCell = (r) => {
             const c = s.cost[r] || 0;
@@ -18893,15 +18909,30 @@
             const showEta = !resOk[r] && eta != null && eta > 0;
             return `<td class="${resOk[r] ? "have" : "miss"}">${r === "Coins" ? kFmt(c) : Math.round(c)}${showEta ? `<span class="asc-eta">~${fmtEta(eta)}</span>` : ""}</td>`;
           };
-          const nodeBits = Object.entries(s.nodesAdded || {}).map(([n, q]) => `${q > 1 ? q + "×" : "+"}${gi(n)}`);
-          for (const [r, q] of Object.entries(s.extraCost || {})) {
-            const have = ((cur.extraStock || {})[r] ?? 0) >= q;
-            nodeBits.push(`<span class="${have ? "have" : "miss"}">${gi(r)}${Math.round(q)}</span>`);
+          // pre-step cost cell: every resource as icon+qty, colored by availability
+          const costBits = [];
+          if (isPre) {
+            for (const r of ["Crimstone", "Oil", "Obsidian"]) {
+              const c = s.cost[r] || 0;
+              if (c) costBits.push(`<span class="${resOk[r] ? "have" : "miss"}">${gi(r)}${Math.round(c)}</span>`);
+            }
+            if (s.cost.Coins) costBits.push(`<span class="${resOk.Coins ? "have" : "miss"}">${gi("Coins")}${kFmt(s.cost.Coins)}</span>`);
+            for (const [r, q] of Object.entries(s.extraCost || {}))
+              costBits.push(`<span class="${extraOk[r] ? "have" : "miss"}">${gi(r)}${Math.round(q)}</span>`);
           }
+          const nodeBits = Object.entries(s.nodesAdded || {}).map(([n, q]) => `${q > 1 ? q + "×" : "+"}${gi(n)}`);
           if (s.crystals) nodeBits.unshift(`${gi("Ascension Crystal")}<span class="asc-shards" style="font-size:0.42rem">${gi("Ascension Shard")}${s.shards}</span>`);
           const farmCell = sim ? (sim.blocked ? '<span class="miss">∞</span>' : (state === "ok" ? '<span class="have">✓</span>' : fmtEta(sim.farmEtaDays))) : "?";
-          h += `<tr class="${state}">
-            <td>${s.asc === 0 ? (s.kind === "upgrade" ? `<strong>⬆ ${escHTML(s.next)}</strong>` : `${escHTML(s.island)} <strong>${s.expansion}</strong>`) : s.kind === "upgrade" ? `<strong>⬆ A${s.asc}</strong>` : `exp <strong>${s.expansion}</strong>`} <span style="color:var(--text-dim);font-size:0.42rem">${s.time ? (s.time >= 3600 ? +(s.time / 3600).toFixed(1) + "h" : s.time + "s") : ""}</span></td>
+          const krokCell = `<td>${s.asc === 0 ? (s.kind === "upgrade" ? `<strong>⬆ ${escHTML(s.next)}</strong>` : `${escHTML(s.island)} <strong>${s.expansion}</strong>`) : s.kind === "upgrade" ? `<strong>⬆ A${s.asc}</strong>` : `exp <strong>${s.expansion}</strong>`} <span style="color:var(--text-dim);font-size:0.42rem">${s.time ? (s.time >= 3600 ? +(s.time / 3600).toFixed(1) + "h" : s.time + "s") : ""}</span></td>`;
+          h += isPre ? `<tr class="${state}">
+            ${krokCell}
+            <td>${lvlCell}</td>
+            <td class="nl costs">${costBits.join(" ") || "—"}</td>
+            <td class="nl nodes">${nodeBits.join(" ") || "—"}</td>
+            <td>${farmCell}</td>
+            <td class="${(sim ? sim.stuck : s.stuck) ? "miss" : ""}">${fmtEta(s.buildSlotDays)}</td>
+          </tr>` : `<tr class="${state}">
+            ${krokCell}
             <td>${lvlCell}</td>
             ${resCell("Crimstone")}${resCell("Oil")}${resCell("Obsidian")}${resCell("Coins")}
             <td class="nl nodes">${nodeBits.join(" ") || "—"}</td>
