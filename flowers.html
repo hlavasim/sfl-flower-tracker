@@ -15390,7 +15390,6 @@
         return;
       }
       renderPowerContent();
-      _maybePushPowerSummary();
     }
 
     // Wearable equipped on the main bumpkin OR any farm hand (game's isWearableActive).
@@ -15905,19 +15904,6 @@
       return { gross, cost, net: gross - cost };
     }
 
-    // Realistic current daily NET production value (FLOWER/day), efficiency-adjusted.
-    // Loss-making categories floor at 0 (a rational player just won't run them).
-    function roadmapCurrentProduction(settings) {
-      let total = 0; const breakdown = [];
-      for (const [cat, meta] of Object.entries(POWER_CATEGORIES)) {
-        if (!meta.quantifiable) continue;
-        const net = roadmapCatNet(cat, roadmapOwnedEffects(cat), settings);
-        const v = Math.max(0, net) * roadmapEffFactor(cat, settings);
-        if (v > 0) { total += v; breakdown.push({ cat, sfl: v }); }
-      }
-      breakdown.sort((a, b) => b.sfl - a.sfl);
-      return { total, breakdown };
-    }
 
 
     // ⛏️ MINING STRATEGY — net value per resource AFTER the tool's resource ingredients.
@@ -16375,7 +16361,8 @@
 
     // Income-engine hero: current FLOWER/day + source breakdown + the biggest levers (buys + free moves).
     function roadmapIncomeHeroHtml(settings, sim, startIncome) {
-      const prod = roadmapCurrentProduction(settings);
+      // currentProd is served by section=roadmap (same engine that computed sim)
+      const prod = (_roadmapServer && _roadmapServer.currentProd) || { total: 0, breakdown: [] };
       const total = startIncome > 0 ? startIncome : (prod.total || 0);
       const bd = (prod.breakdown || []).filter(b => b.sfl > 0.01).sort((a, b) => b.sfl - a.sfl);
       const catColor = { trees:"#63c74d", stone:"#9a8060", iron:"#c4a882", gold:"#FFD700", crimstone:"#FF6B6B", crops:"#30D158", fruits:"#FF69B4", greenhouse:"#5DADE2", chickens:"#FFD60A", cows:"#C8A2C8", sheep:"#B07CD8", bees:"#FFD700", fishing:"#5DADE2", obsidian:"#8b6914", flowers:"#FF69B4", oil:"#8b6914" };
@@ -16777,148 +16764,7 @@
       return h;
     }
 
-    // SESSION-BASED efficiency — IDENTICAL to the Nodes page so the two pages' numbers match 1:1.
-    // Per category: count harvest SESSIONS (consecutive _h.* snapshots merged within 30 min) per day, divide
-    // by theoretical cycles/day (86400 / boosted respawn). Clamp 1.5. Window = last 7 days (through today).
-    // ── Power/efficiency summary published to /api/power-summary (consumed elsewhere) ──────────────
-    // Per category: theoretical units/day (boosted), Last-7-days efficiency (ratio, or null when there's no
-    // harvest signal), effective units/day = theoretical x efficiency, and how often you harvest.
-    async function _powerSummaryData(eff) {
-      if (!powerState || !powerState.farm) return null;
-      const farm = powerState.farm, cap = powerState.capacity;
-      const fid = (typeof FARM_ID !== "undefined" && FARM_ID) || (farm && farm.id) || null;
-      const effBy = (eff && eff.effByCat) || {};
-      const rnd = (x) => (x == null || !isFinite(x)) ? null : Math.round(x * 1000) / 1000;
-      const label = (cat) => (POWER_CATEGORIES[cat] && POWER_CATEGORIES[cat].label) || cat;
-      const effOf = (cat) => { const e = effBy[cat]; const m = !!(e && e.measured); return { e, measured: m, ratio: m ? e.ratio : null, harvestsPerDay: e ? rnd(e.actualPerDay) : null, theoreticalCyclesPerDay: e ? rnd(e.theoPerDay) : null }; };
-      const per = {};
-      // Mineable resources (incl. obsidian/lava pits) — a clean units/day per category.
-      const RES = { trees: "Wood", stone: "Stone", iron: "Iron", gold: "Gold", crimstone: "Crimstone", oil: "Oil", obsidian: "Obsidian" };
-      for (const cat of Object.keys(RES)) {
-        let theo = 0;
-        try { theo = RES_FARMKEY[cat] ? gameResUnitsPerDay(cat, farm, cap, roadmapOwnedEffects(cat)) : (applyBoosts(cat, RES[cat], cap, roadmapOwnedEffects(cat)).unitsPerDay || 0); } catch (e2) {}
-        const s = effOf(cat);
-        per[cat] = { label: RES[cat], theoreticalPerDay: rnd(theo), efficiency: s.ratio, effectivePerDay: s.ratio != null ? rnd(theo * s.ratio) : null, harvestsPerDay: s.harvestsPerDay, theoreticalCyclesPerDay: s.theoreticalCyclesPerDay };
-      }
-      // Crops / fruits / greenhouse — PER PRODUCT (a single category number is meaningless). theoretical = 24/7
-      // max; effective = plots x yield x your harvest sessions/day (grow-time cancels, so fast & slow crops are
-      // both realistic); per-product efficiency = effective / theoretical.
-      for (const catTab of [["crops", CROP_GROW_DATA], ["fruits", FRUIT_GROW_DATA], ["greenhouse", GREENHOUSE_GROW_DATA]]) {
-        const cat = catTab[0], table = catTab[1], s = effOf(cat), sessions = s.harvestsPerDay, oe = roadmapOwnedEffects(cat), products = {};
-        for (const prod of Object.keys(table)) {
-          if ((cat === "crops" || cat === "fruits") && !roadmapInSeason(prod)) continue;
-          let ab; try { ab = applyBoosts(cat, prod, cap, oe); } catch (e4) { continue; }
-          const theo = ab.unitsPerDay || 0, cyc = ab.effectiveCycle || 0;
-          const perHarvest = cyc > 0 ? theo * cyc / 86400 : 0;             // units per harvest across all plots
-          const effective = (sessions != null) ? perHarvest * sessions : null;
-          products[prod] = { theoreticalPerDay: rnd(theo), efficiency: (sessions != null && theo > 0) ? rnd(effective / theo) : null, effectivePerDay: rnd(effective) };
-        }
-        per[cat] = { label: label(cat), harvestsPerDay: sessions, plots: getCapacityCount(cat, cap), products };
-      }
-      // Animals — PER PRODUCT (Egg/Feather, Milk/Leather, Wool/Merino Wool). theoretical = 24/7 drops at your
-      // animal levels + boosts; effective = units-per-harvest x your harvest sessions/day (same model as crops).
-      for (const cat of ["chickens", "cows", "sheep"]) {
-        const s = effOf(cat), sessions = s.harvestsPerDay, products = {};
-        let bd = [];
-        try { bd = (getAnimalCatSfl(cat, cap, roadmapOwnedEffects(cat), powerState.p2pPrices || {}).breakdown) || []; } catch (eA) {}
-        for (const p of bd) {
-          const theo = p.unitsPerDay || 0, cyc = p.effectiveCycle || 0;
-          const perHarvest = cyc > 0 ? theo * cyc / 86400 : 0;
-          const effective = (sessions != null) ? perHarvest * sessions : null;
-          products[p.product] = { theoreticalPerDay: rnd(theo), efficiency: (sessions != null && theo > 0) ? rnd(effective / theo) : null, effectivePerDay: rnd(effective) };
-        }
-        per[cat] = { label: label(cat), harvestsPerDay: sessions, animals: getCapacityCount(cat, cap), products };
-      }
-      // Flowers — category-level efficiency (one bed grows many flower types, so a single units/day isn't meaningful).
-      { const s = effOf("flowers"); per.flowers = { label: label("flowers"), theoreticalPerDay: null, efficiency: s.ratio, effectivePerDay: null, harvestsPerDay: s.harvestsPerDay, theoreticalCyclesPerDay: s.theoreticalCyclesPerDay }; }
-      // Salt — manual rake mining: theoretical/day = rakes/day (from node recharge cycle) x yield/rake.
-      {
-        let saltTheo = null;
-        try {
-          const sf = farm.saltFarm, nodes = (sf && sf.nodes) ? Object.values(sf.nodes) : [];
-          if (nodes.length) {
-            const cyc = nodes.map(x => (x.salt && x.salt.nextChargeAt && x.salt.claimedAt) ? (x.salt.nextChargeAt - x.salt.claimedAt) : 0).filter(v => v > 0).sort((a, b) => a - b);
-            let cycleMs = cyc.length ? cyc[Math.floor(cyc.length / 2)] : 6 * 3600000;
-            cycleMs = Math.min(48 * 3600000, Math.max(3600000, cycleMs));
-            saltTheo = nodes.length * (86400000 / cycleMs) * computeSaltYieldPerRake(farm);
-          }
-        } catch (eS) {}
-        const s = effOf("salt");
-        per.salt = { label: "SALT", theoreticalPerDay: rnd(saltTheo), efficiency: s.ratio, effectivePerDay: (saltTheo != null && s.ratio != null) ? rnd(saltTheo * s.ratio) : null, harvestsPerDay: s.harvestsPerDay };
-      }
-      // Bees — Honey/day from hives (no harvest-session signal, so efficiency stays unmeasured).
-      { let theo = 0; try { theo = applyBoosts("bees", "Honey", cap, roadmapOwnedEffects("bees")).unitsPerDay || 0; } catch (eB) {} per.bees = { label: label("bees"), theoreticalPerDay: rnd(theo), efficiency: null, effectivePerDay: null, harvestsPerDay: null }; }
-      // Fishing — no continuous cycle; genuinely unmeasured.
-      per.fishing = { label: label("fishing"), theoreticalPerDay: null, efficiency: null, effectivePerDay: null, harvestsPerDay: null, theoreticalCyclesPerDay: null };
-      let income = null;
-      try { income = { effectiveSflPerDay: rnd(roadmapCurrentProduction(getRoadmapSettings()).total) }; } catch (e3) {}
-      // Cooking: fetched from the unified engine at /api/compute?section=cooking — the single source of truth,
-      // so this summary and the Bumpkin page read the identical computed payload (no duplicated cook math).
-      // All six cooking buildings are served, Aging Shed included.
-      let cooking = null;
-      try {
-        const petSim = (typeof localStorage !== "undefined" && localStorage.getItem("sfl_pet_streak") === "1") ? "1" : "0";
-        const _recipes = encodeURIComponent(JSON.stringify(getSavedBumpkinRecipes()));
-        const _cr = await fetch(`/api/compute?farm=${fid}&section=cooking&petSimulate=${petSim}&recipes=${_recipes}`);
-        if (_cr.ok) {
-          const cp = (await _cr.json()).data;
-          // Project the five fields this summary actually reports. The payload also carries the
-          // per-building `recipes[]` (119 of them, each with its ingredient-cost breakdown) for the
-          // Bumpkin page — POSTing that whole object shipped 47KB where 761 bytes are read, and
-          // farm-history stores it in KV for 14 days.
-          const _bmap = {};
-          for (const [_bd, _b] of Object.entries(cp.buildings)) {
-            _bmap[_bd] = { recipe: _b.recipe, cookMinutes: _b.cookMinutes, xpPerCook: _b.xpPerCook, buildingCount: _b.buildingCount, xpPerDay: _b.xpPerDay };
-          }
-          cooking = { buildings: _bmap, totalXpPerDay: cp.totalXpPerDay, petStreakWeeks: cp.petStreak.weeks, petStreakActiveThisWeek: cp.petStreak.activeThisWeek, petStreakMult: cp.petStreak.mult, xpBoosts: cp.xpBoosts };
-        }
-      } catch (eC) {}
-      return { farm: fid, computedAt: new Date().toISOString(), efficiencyWindow: (eff && eff.meta) || null, income, cooking, perCategory: per };
-    }
-    async function _pushPowerSummary(eff) {
-      try {
-        const data = await _powerSummaryData(eff); if (!data || !data.farm) return;
-        fetch(`/api/power-summary?farm=${data.farm}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data), keepalive: true }).catch(() => {});
-      } catch (e) {}
-    }
-    // Publish the summary once per page load, from WHATEVER page built powerState (Power, Roadmap, ...).
-    // Reuses the roadmap's efficiency if already computed, else computes it in the background.
-    let _summaryPushed = false;
-    async function _maybePushPowerSummary() {
-      if (_summaryPushed || !powerState || !powerState.farm) return;
-      _summaryPushed = true;
-      try {
-        let eff;
-        if (roadmapState && roadmapState.effByCat) eff = { effByCat: roadmapState.effByCat, meta: roadmapState.effMeta, meanRatio: roadmapState.meanRatio };
-        else { eff = await roadmapComputeMayEfficiency(); if (!roadmapState) roadmapState = { effByCat: eff.effByCat, effMeta: eff.meta, meanRatio: (typeof eff.meanRatio === "number" ? eff.meanRatio : 0.3) }; }
-        _pushPowerSummary(eff);
-      } catch (e) { _summaryPushed = false; }
-    }
 
-    // Efficiency math MIGRATED to core (compute?section=eff, POST — diff-page pattern).
-    // This keeps the farm-history fetch (data plane) and posts only the _h.* slices.
-    async function roadmapComputeMayEfficiency() {
-      const out = { effByCat: {}, meta: { snaps: 0, days: 0, available: false, from: "", to: "" } };
-      let rows = null;
-      const fromD = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
-      const toD = new Date(Date.now() + 86400000).toISOString().slice(0, 10); // through today (same window as the Nodes page)
-      try {
-        const url = `/api/farm-history?farm=${FARM_ID}&from=${fromD}&to=${toD}&limit=2000`;
-        const r = await fetch(url);
-        if (r.ok) { const d = await r.json(); rows = d.snapshots || []; }
-      } catch {}
-      if (!rows || rows.length < 2) return out;
-      try {
-        const slim = rows.map(sn => ({ captured_at: sn.captured_at,
-          diff: Object.fromEntries(Object.entries(sn.diff || {}).filter(([k]) => k.startsWith("_h."))) }));
-        const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=eff`, {
-          method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ snapshots: slim }),
-        });
-        if (!rp.ok) throw new Error(`compute eff ${rp.status}`);
-        return (await rp.json()).data || out;
-      } catch { return out; }
-    }
 
     function roadmapBuildClones() {
       const clones = powerState.boostItems.map(b => Object.assign({}, b));
@@ -16980,7 +16826,6 @@
       // eff + production + simulation server-side on every settings change.
       _roadmapSnapshotsCache = await _roadmapFetchHistorySlim();
       await renderRoadmapContent();
-      _maybePushPowerSummary();  // publish a per-category power/efficiency summary to /api/power-summary
     }
 
     // farm-history rows slimmed to the _h.* diff slices section=roadmap/eff consume.
