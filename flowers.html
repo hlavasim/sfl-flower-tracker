@@ -18817,6 +18817,8 @@
         .asc-eta{display:block;font-size:0.44rem;color:var(--text-dim);font-weight:normal}
         .asc-t .icn{height:1.15em;vertical-align:-0.2em}
         .asc-t td.nodes img{height:1.1em;vertical-align:-0.18em}
+        .asc-t .icn-asc{filter:hue-rotate(255deg) saturate(1.6)}
+        .asc-t .asc-shards{color:#d98fff}
         .asc-hlbl{display:block;font-size:0.4rem}
         @media (max-width: 760px){
           .asc-t{font-size:0.48rem}
@@ -18847,7 +18849,7 @@
         "Ascension Crystal": `${_jsd}/resources/sunstone/sunstone_rock_1.webp`,
         "Ascension Shard": `${_jsd}/resources/sunstone/sunstone.png`,
       };
-      const gi = (n) => `<img class="icn" src="${_ascIconUrl[n] || getItemIcon(n)}" onerror="this.style.display='none'" alt="${escHTML(n)}" title="${escHTML(n)}">`;
+      const gi = (n) => `<img class="icn${n.startsWith("Ascension") ? " icn-asc" : ""}" src="${_ascIconUrl[n] || getItemIcon(n)}" onerror="this.style.display='none'" alt="${escHTML(n)}" title="${escHTML(n)}">`;
       const kFmt = (v) => v >= 10000 ? (v / 1000).toFixed(v >= 100000 ? 0 : 1) + "k" : Math.round(v).toLocaleString();
       const byAsc = {};
       for (const s of d.steps) (byAsc[s.asc] = byAsc[s.asc] || []).push(s);
@@ -18886,7 +18888,7 @@
             return `<td class="${resOk[r] ? "have" : "miss"}">${r === "Coins" ? kFmt(c) : Math.round(c)}${showEta ? `<span class="asc-eta">~${fmtEta(eta)}</span>` : ""}</td>`;
           };
           const nodeBits = Object.entries(s.nodesAdded || {}).map(([n, q]) => `${q > 1 ? q + "×" : "+"}${gi(n)}`);
-          if (s.crystals) nodeBits.unshift(`${gi("Ascension Crystal")}<span style="color:var(--text-dim);font-size:0.42rem">${gi("Ascension Shard")}${s.shards}</span>`);
+          if (s.crystals) nodeBits.unshift(`${gi("Ascension Crystal")}<span class="asc-shards" style="font-size:0.42rem">${gi("Ascension Shard")}${s.shards}</span>`);
           const farmCell = sim ? (sim.blocked ? '<span class="miss">∞</span>' : (state === "ok" ? '<span class="have">✓</span>' : fmtEta(sim.farmEtaDays))) : "?";
           h += `<tr class="${state}">
             <td>${s.kind === "upgrade" ? `<strong>⬆ A${s.asc}</strong>` : `exp <strong>${s.expansion}</strong>`} <span style="color:var(--text-dim);font-size:0.42rem">${s.time ? s.time / 3600 + "h" : ""}</span></td>
