@@ -12636,32 +12636,19 @@
     //  RENDER: SALES
     // ═══════════════════════════════════════
 
+    // Market prices — MIGRATED: derived from compute?section=treasury's td (the SIXTH
+    // copy of the nfts/prices fetch block dies). The name→{floor,lastSale,…} mapping is
+    // the old body verbatim, applied to td's full nft objects; numbers are unchanged.
     async function fetchMarketPrices() {
-      const proxyFetch = async (url) => {
-        try {
-          const resp = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
-          if (resp.ok) return resp.json();
-        } catch {}
-        const resp = await fetch(url);
-        if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
-        return resp.json();
-      };
-
-      const [nftData, priceData] = await Promise.all([
-        proxyFetch("https://sfl.world/api/v1/nfts"),
-        proxyFetch("https://sfl.world/api/v1/prices"),
-      ]);
-
+      const td = await fetchTreasuryData();
       const nfts = {};
-      for (const c of (nftData.collectibles || [])) {
-        if (c.name) nfts[c.name] = { floor: parseFloat(c.floor) || 0, lastSale: parseFloat(c.lastSalePrice) || 0, type: "collectible", id: c.id, collection: "collectibles", boost: c.boost_text || "" };
+      for (const [name, c] of Object.entries(td.nftCollectibles || {})) {
+        nfts[name] = { floor: parseFloat(c.floor) || 0, lastSale: parseFloat(c.lastSalePrice) || 0, type: "collectible", id: c.id, collection: "collectibles", boost: c.boost_text || "" };
       }
-      for (const w of (nftData.wearables || [])) {
-        if (w.name) nfts[w.name] = { floor: parseFloat(w.floor) || 0, lastSale: parseFloat(w.lastSalePrice) || 0, type: "wearable", id: w.id, collection: "wearables", boost: w.boost_text || "" };
+      for (const [name, w] of Object.entries(td.nftWearables || {})) {
+        nfts[name] = { floor: parseFloat(w.floor) || 0, lastSale: parseFloat(w.lastSalePrice) || 0, type: "wearable", id: w.id, collection: "wearables", boost: w.boost_text || "" };
       }
-
-      const p2p = priceData?.data?.p2p || {};
-      return { nfts, p2p };
+      return { nfts, p2p: td.p2pPrices || {} };
     }
 
     function formatAge(ms) {
