@@ -2833,7 +2833,7 @@
     const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
     const IMG_BASE = "https://sfl.world/img/flowers/";
-    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "marks", "diff", "json", "constants"];
+    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "marks", "diff", "json", "constants", "ascension"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -5599,6 +5599,7 @@
         { id: "power", label: "POWER" },
         { id: "roadmap", label: "ROADMAP" },
         { id: "nodes", label: "NODES" },
+        { id: "ascension", label: "ASCENSION" },
         { id: "roi", label: "ROI" },
         { id: "shrines", label: "SHRINES" },
         { id: "buds", label: "BUDS" },
@@ -18615,6 +18616,120 @@
       if (cachedFarmData) renderNodes(cachedFarmData);
     };
 
+    // ═══════════════════════════════════════
+    //  RENDER: ASCENSION (compute?section=ascension — cockpit fold-in)
+    // ═══════════════════════════════════════
+    let _ascServer = null;
+    function _ascGetSettings() {
+      try { return JSON.parse(localStorage.getItem("sfl_ascension_settings") || "{}"); } catch { return {}; }
+    }
+    window._ascSet = function(key, val) {
+      const st = _ascGetSettings(); st[key] = val;
+      localStorage.setItem("sfl_ascension_settings", JSON.stringify(st));
+      renderAscensionContent();
+    };
+    async function renderAscension(data) {
+      const app = document.getElementById("app");
+      app.innerHTML = `<div class="header pixel-panel pixel-font">
+        <h1>ASCENSION</h1>
+        <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
+      </div>
+      <div class="under-dev-banner pixel-font" style="background:linear-gradient(180deg,#3b1768,#2a1050);padding:8px 12px;border:3px solid #000;margin-bottom:16px;text-align:center;font-size:0.5625rem;color:var(--lily)">
+        ♾️ PRESTIGE LOOP CALCULATOR ♾️
+        <div style="margin-top:6px;font-size:0.5rem;color:var(--text-secondary);line-height:1.5">
+          A1→A10: costs, levels, crystals from the game formulas · node-aware farm ETAs from YOUR real production · continuous-expand schedule from 3.8.2026.
+        </div>
+      </div>
+      <div id="ascension-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Computing ascension plan…</div></div></div>`;
+      await renderAscensionContent();
+    }
+    async function renderAscensionContent() {
+      const el = document.getElementById("ascension-content");
+      if (!el) return;
+      const st = _ascGetSettings();
+      const grinx = st.grinx ? 1 : 0;
+      try {
+        if (!_roadmapSnapshotsCache) _roadmapSnapshotsCache = await _roadmapFetchHistorySlim();
+        const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=ascension&grinx=${grinx}&max=10`, {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [] }),
+        });
+        if (!rp.ok) throw new Error(`compute ascension ${rp.status}`);
+        _ascServer = (await rp.json()).data || null;
+      } catch (e) {
+        if (!_ascServer) { el.innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load: ${escHTML(e.message)}</p></div>`; return; }
+      }
+      const d = _ascServer;
+      const mode = st.mode === "theo" ? "theo" : "eff";
+      const cur = d.current, rates = d.rates;
+      const fd = (v, dec) => (v == null || !isFinite(v)) ? "∞" : v.toFixed(dec == null ? 1 : dec);
+      const fmtEta = (days) => days == null ? "?" : (days <= 0 ? "✓" : (days < 1 ? (days * 24).toFixed(1) + "h" : days.toFixed(1) + "d"));
+      let h = "";
+      // ── header panel ──
+      const standings = Object.entries(cur.bandStandings).filter(([, l]) => l > 0).map(([a, l]) => `A${a} L${l}`).join(" · ") || "—";
+      h += `<div class="pixel-panel pixel-font" style="padding:12px;margin-bottom:14px;font-size:0.6rem;line-height:2">
+        <div>🏝️ <strong>${escHTML(cur.island)}</strong> · Basic Land <strong>${cur.basicLand}</strong> · Ascension <strong>A${cur.ascensionLevel}</strong>
+          ${cur.readyToAscend ? '<span style="color:var(--green);font-weight:bold"> · READY TO ASCEND</span>' : ""}</div>
+        <div>🧬 Standings: ${standings} · XP/day from cooking: <strong>${rates.xpPerDay > 0 ? Math.round(rates.xpPerDay).toLocaleString() : '<span style="color:var(--yellow)">⚠️ 0 — level ETAs unavailable, showing remaining XP</span>'}</strong></div>
+        <div>✨ Shards: <strong>${cur.shards}</strong> · 💎 Crystals: <strong>${cur.crystals}</strong> · 📦 Stock: ${["Crimstone","Oil","Obsidian"].map(r => `${r} <strong>${Math.floor(cur.stock[r])}</strong>`).join(" · ")} · Coins <strong>${Math.round(cur.stock.Coins).toLocaleString()}</strong></div>
+      </div>`;
+      // ── toggles ──
+      h += `<div class="pixel-panel pixel-font" style="padding:10px;margin-bottom:14px;font-size:0.55rem;display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+        <label><input type="checkbox" ${st.grinx ? "checked" : ""} onchange="_ascSet('grinx', this.checked)"> 🔨 Grinx's Hammer (−50% Crim/Oil/Obs costs)${cur.grinx ? ' <span style="color:var(--green)">(owned)</span>' : ""}</label>
+        <span>Production: <button class="roi-pill${mode === "eff" ? " active" : ""}" onclick="_ascSet('mode','eff')">📊 real (last ${fd(rates.windowDays, 0)}d)</button>
+        <button class="roi-pill${mode === "theo" ? " active" : ""}" onclick="_ascSet('mode','theo')">🎯 theoretical</button></span>
+      </div>`;
+      // ── resource summary ──
+      h += `<div class="pixel-panel pixel-font" style="padding:10px;margin-bottom:14px;font-size:0.55rem;line-height:1.9">
+        <div style="color:var(--sunpetal);margin-bottom:4px">RESOURCE REACH (stock only, no farming)</div>`;
+      for (const r of ["Crimstone", "Oil", "Obsidian", "Coins"]) {
+        const rr = rates[r];
+        h += `<div>${r}: covers <strong>${d.reach[r]}</strong> of ${d.steps.length} pending steps${rr ? ` · +${fd(rr[mode], 2)}/day (${mode})` : ""}${r === d.bottleneck ? ' <span style="color:var(--red);font-weight:bold">← bottleneck</span>' : ""}</div>`;
+      }
+      h += `<div style="color:var(--text-dim);margin-top:4px">Nodes grow as you expand (${["Crimstone","Oil","Obsidian"].map(r => `${r} ${d.nodeCounts[r]}`).join(" · ")}) — mining compounds, later steps come faster.</div></div>`;
+      // ── frontier + continuous-expand banners ──
+      const fr = d.frontier;
+      h += `<div class="pixel-panel pixel-font" style="padding:10px;margin-bottom:14px;font-size:0.6rem">
+        ${fr ? `🎯 Stock gets you to <strong>${fr.kind === "upgrade" ? "the A" + fr.asc + " upgrade" : "A" + fr.asc + "·exp" + fr.expansion}</strong>` : "🛑 Stock covers no pending step"}${d.bottleneck ? ` — then <strong style="color:var(--red)">${d.bottleneck}</strong> runs out.` : "."}</div>`;
+      const firstStuck = d.steps.find(s => s.stuck);
+      h += `<div class="pixel-panel pixel-font" style="padding:10px;margin-bottom:14px;font-size:0.6rem">
+        ${firstStuck ? `⚠️ Continuous expand (from 3.8.2026) <strong>jams at ${firstStuck.kind === "upgrade" ? "A" + firstStuck.asc + " upgrade" : "A" + firstStuck.asc + "·exp" + firstStuck.expansion}</strong> — build slot ${fmtEta(firstStuck.buildSlotDays)} vs farm ETA ${fmtEta(firstStuck.sim && firstStuck.sim[mode] && firstStuck.sim[mode].farmEtaDays)}.` : `📅 You keep continuous-expand pace through A${d.maxAsc} at ${mode} production.`}</div>`;
+      // ── per-ascension tables ──
+      const byAsc = {};
+      for (const s of d.steps) (byAsc[s.asc] = byAsc[s.asc] || []).push(s);
+      for (const [a, steps] of Object.entries(byAsc)) {
+        h += `<div class="pixel-panel" style="padding:10px;margin-bottom:12px"><div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:6px">ASCENSION ${a}</div>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.55rem">
+        <thead><tr style="color:var(--text-dim);text-align:right"><th style="text-align:left;padding:2px 6px">step</th><th style="text-align:left">level</th><th>Crimstone</th><th>Oil</th><th>Obsidian</th><th>Coins</th><th>⏱ build</th><th>farm ETA</th><th>📅 slot</th><th>✨</th></tr></thead><tbody>`;
+        for (const s of steps) {
+          const sim = s.sim && s.sim[mode];
+          const lvlCell = s.kind === "upgrade"
+            ? (s.levelMet ? "✓ ready" : `needs prev band${rates.xpPerDay > 0 ? " · " + fmtEta((s.levelXpNeeded - cur.experience) / rates.xpPerDay) : " · " + Math.round(Math.max(0, s.levelXpNeeded - cur.experience) / 1e6) + "M XP"}`)
+            : (s.levelMet ? `L${s.band} ✓` : `L${s.band}${rates.xpPerDay > 0 ? " · " + fmtEta((s.levelXpNeeded - cur.experience) / rates.xpPerDay) : " · " + Math.round(Math.max(0, s.levelXpNeeded - cur.experience) / 1e6) + "M XP"}`);
+          const resCell = (r) => {
+            const c = s.cost[r] || 0;
+            if (!c) return "—";
+            const eta = sim && sim.res && sim.res[r];
+            const short = (s.cum[r] || 0) > cur.stock[r];
+            return `${Math.round(c)}${short && eta != null ? ` <span style="color:var(--text-dim)">🕒${fmtEta(eta)}</span>` : ""}`;
+          };
+          const slotBadge = s.stuck ? `<span style="color:var(--red)">⚠️ ${fmtEta(s.buildSlotDays)}</span>` : `<span style="color:var(--green)">📅 ${fmtEta(s.buildSlotDays)}</span>`;
+          h += `<tr style="border-top:1px solid #222;text-align:right">
+            <td style="text-align:left;padding:2px 6px">${s.kind === "upgrade" ? `<strong>⬆ upgrade → A${s.asc}</strong>` : `exp ${s.expansion}`}</td>
+            <td style="text-align:left">${lvlCell}</td>
+            <td>${resCell("Crimstone")}</td><td>${resCell("Oil")}</td><td>${resCell("Obsidian")}</td>
+            <td>${s.cost.Coins ? Math.round(s.cost.Coins).toLocaleString() : "—"}</td>
+            <td>${s.time ? (s.time / 3600) + "h" : "—"}</td>
+            <td>${sim ? (sim.blocked ? '<span style="color:var(--red)">∞</span>' : fmtEta(sim.farmEtaDays)) : "?"}</td>
+            <td>${slotBadge}</td>
+            <td>${s.crystals ? "💎" + (Object.keys(s.nodesAdded || {}).length ? " " : "") : ""}${Object.entries(s.nodesAdded || {}).filter(([n]) => ["Crimstone Rock","Oil Reserve","Lava Pit"].includes(n)).map(([n, q]) => `+${q} ${n.split(" ")[0]}`).join(" ") || ""}</td>
+          </tr>`;
+        }
+        h += `</tbody></table></div></div>`;
+      }
+      el.innerHTML = h;
+    }
+
     async function renderNodes(data) {
       const app = document.getElementById("app");
       const { inventory, farm } = data;
@@ -24538,6 +24653,7 @@
           case "power": renderPower(data); break;
           case "roadmap": renderRoadmap(data); break;
           case "nodes": renderNodes(data); break;
+          case "ascension": renderAscension(data); break;
           case "roi": renderRoi(data); break;
           case "shrines": renderShrines(data); break;
           case "buds": renderBuds(data); break;
