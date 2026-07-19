@@ -1,5 +1,5 @@
 import { FLOWER_RECIPES, DOLL_RECIPES, RECIPE_INGREDIENTS } from "../data/recipes.mjs";
-import { SEED_COSTS, POTION_TICKET_COIN_VALUE, EXOTIC_CROPS_TICKET_COST, GIANT_FRUIT_SELL_PRICES, TOOL_COSTS, FLOWER_SEED_COIN_COSTS, ITEM_XP_VALUES, GIANT_ITEM_COIN_PRICES } from "../data/economy.mjs";
+import { SEED_COSTS, POTION_TICKET_COIN_FLOOR, EXOTIC_CROPS_TICKET_COST, GIANT_FRUIT_SELL_PRICES, TOOL_COSTS, FLOWER_SEED_COIN_COSTS, ITEM_XP_VALUES, GIANT_ITEM_COIN_PRICES } from "../data/economy.mjs";
 import { PET_FETCH_DATA } from "../data/pets.mjs";
 import { CRAFTED_INGREDIENT_RECIPES, TREASURE_SELL_PRICES, COMPOST_RECIPES, CRUSTACEAN_RECIPES } from "../data/crafting.mjs";
 import { FISH_MARKET_RECIPES, FISH_DATA, FISH_TIER_MAP, BAIT_WORM_YIELD, FISHING_ROD_COST } from "../data/fishing.mjs";
@@ -13,6 +13,22 @@ import { COOKING_INGREDIENTS, SALT_RAKE_COST, SALT_BASE_YIELD } from "../data/co
 // hot, no-trace path is unchanged: the same value computation, plus a single falsy check
 // per return, with no extra string/array allocation.
 function emit(trace, node) { if (trace) trace.push(node); return node.value; }
+
+// C7 (audit): coin cost of 1 Potion Ticket, derived from the FARM'S OWN Potion House
+// score history. Source-proven: a game costs GAME_FEE=320 coins x multiplier, pays up
+// to 50 tickets x multiplier (multiplier cancels) -> hard floor 6.4 c/ticket at
+// perfect play. The reward-vs-score formula lives server-side; we assume linear
+// (reward = 50 * score/100) — the reading the max-reward label implies. All-bombed or
+// empty history -> the floor (labeled fallback, not a claim about that player).
+export function computePotionTicketCoinCost(farm) {
+  const hist = farm?.potionHouse?.history || {};
+  let games = 0, scoreSum = 0;
+  for (const [score, count] of Object.entries(hist)) { games += count; scoreSum += Number(score) * count; }
+  const avg = games > 0 ? scoreSum / games : 0;
+  const reward = 50 * (avg / 100);
+  if (!(reward > 0)) return POTION_TICKET_COIN_FLOOR;
+  return Math.max(POTION_TICKET_COIN_FLOOR, 320 / reward);
+}
 
 // Market-first item value resolver — moved verbatim from flowers.html's estimateItemSfl
 // (~:23110-23300). Prefers a direct P2P market price; falls back through a fixed chain of
@@ -131,8 +147,11 @@ export function itemMarketValue(itemName, p2pPrices, _visited, rates, trace) {
       && EXOTIC_CROPS_TICKET_COST[itemName]
       && rates && rates.coinsPerSFL > 0) {
     const tickets = EXOTIC_CROPS_TICKET_COST[itemName];
-    const value = (tickets * POTION_TICKET_COIN_VALUE) / rates.coinsPerSFL;
-    if (trace) return emit(trace, { item: itemName, method: "exotic crop", formula: `${tickets} tickets × ${POTION_TICKET_COIN_VALUE}c / ${rates.coinsPerSFL.toFixed(0)} c/SFL`, value });
+    // C7: per-farm ticket cost arrives via rates (buildPricesSection derives it from
+    // potionHouse.history); floor fallback for callers that pass no farm-derived rates.
+    const ticketCoin = (rates.potionTicketCoinCost > 0) ? rates.potionTicketCoinCost : POTION_TICKET_COIN_FLOOR;
+    const value = (tickets * ticketCoin) / rates.coinsPerSFL;
+    if (trace) return emit(trace, { item: itemName, method: "exotic crop", formula: `${tickets} tickets × ${ticketCoin.toFixed(2)}c (potion-house derived) / ${rates.coinsPerSFL.toFixed(0)} c/SFL`, value });
     return value;
   }
   // Giant fruits — random chance from fruit trees, not buyable. Approximate

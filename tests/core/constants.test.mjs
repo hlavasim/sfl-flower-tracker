@@ -102,11 +102,11 @@ test("coverage marks a core+inline table as duplicated, an unmigrated one as inl
   assert.equal(byName.FISH_DATA.status, "duplicated");
   // ITEM_IMAGE_MAP has not been migrated at all
   assert.equal(byName.ITEM_IMAGE_MAP.status, "inline");
-  // POTION_TICKET_COIN_VALUE was FREED by F2-2h: deleted from flowers.html (its only inline
-  // consumer, the estimateItemSfl resolver, was deleted) and removed from _inventory.mjs, so
-  // it now lives ONLY in core/data/economy.mjs. Reintroducing it inline flips this to
-  // "duplicated" — this is the first table the pilot actually freed.
-  assert.equal(byName.POTION_TICKET_COIN_VALUE.status, "core");
+  // POTION_TICKET_COIN_VALUE was FREED by F2-2h (first table the pilot freed) and then
+  // RENAMED to POTION_TICKET_COIN_FLOOR by the C7 audit fix (the 15 became a source-proven
+  // 6.4 floor; the real cost derives per-farm from potionHouse.history). Same milestone:
+  // core-only, no inline twin.
+  assert.equal(byName.POTION_TICKET_COIN_FLOOR.status, "core");
   // total = the inventory (still-inline tables) PLUS the core-only tables the inventory omits.
   // Before any table was freed, core was 0 and total equalled TABLE_INVENTORY.length; that
   // precondition no longer holds now that freed tables exist.

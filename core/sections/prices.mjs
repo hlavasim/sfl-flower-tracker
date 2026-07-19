@@ -8,6 +8,7 @@ import { CRAFTED_INGREDIENT_RECIPES, TREASURE_SELL_PRICES, COMPOST_RECIPES, CRUS
 import { FISH_MARKET_RECIPES, FISH_DATA, FISH_TIER_MAP, BAIT_WORM_YIELD } from "../data/fishing.mjs";
 import { itemMarketValue, itemProductionCost } from "../engine/item-value.mjs";
 import { computeSaltYieldPerRake, computeSaltRakeCoinMult, computeFishYieldPerCast } from "../engine/cooking-cost.mjs";
+import { computePotionTicketCoinCost } from "../engine/item-value.mjs";
 
 // Every item-name-keyed table item-value.mjs's two resolvers dispatch on directly.
 // COMPOST_RECIPES is deliberately excluded here — its top-level keys are composter
@@ -98,6 +99,9 @@ export function buildPricesSection(farm, prices = {}, settings = {}) {
       expert: computeFishYieldPerCast(farm, "expert"),
     },
   };
+  // C7 (audit): exotic crops price via the farm's own Potion House history, not the
+  // old hardcoded 15 c/ticket. An explicit rates.potionTicketCoinCost still wins.
+  const resolverRates = { ...settings, potionTicketCoinCost: settings.potionTicketCoinCost > 0 ? settings.potionTicketCoinCost : computePotionTicketCoinCost(farm) };
   const universe = buildItemUniverse(p2p);
   const marketValue = {};
   const productionCost = {};
@@ -107,7 +111,7 @@ export function buildPricesSection(farm, prices = {}, settings = {}) {
     // Absence means "cannot price" — 0/null must NOT be written as 0, or a
     // consumer could not tell "unpriced" from "free".
     const mvSink = explain ? [] : undefined;
-    const mv = itemMarketValue(name, p2p, null, settings, mvSink);
+    const mv = itemMarketValue(name, p2p, null, resolverRates, mvSink);
     if (mv > 0) {
       marketValue[name] = mv;
       if (explain && mvSink[0] && mvSink[0].method !== "market price") marketTrace[name] = mvSink[0];

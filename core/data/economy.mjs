@@ -19,7 +19,13 @@ export const SEED_COSTS = {
 // you'd give to a bounty. The sellPrice (NPC → player) from beans.ts
 // EXOTIC_CROPS would be the wrong direction — what you'd get if you JUST
 // sold, not what it cost to acquire.
-export const POTION_TICKET_COIN_VALUE = 15;   // 1 Potion Ticket ≈ 15 coins
+// C7 (audit 2026-07-19): the old hardcoded 15 c/ticket overstated every exotic crop
+// ~2x. Proven from the sunflower-land source (startPotion.ts GAME_FEE=320,
+// Experiment.tsx SINGLE_MULTIPLIER_MAX_REWARD=50, multiplier cancels): perfect play
+// costs 320/50 = 6.4 coins/ticket — a hard floor. The per-farm cost is derived from
+// farm.potionHouse.history (item-value.mjs computePotionTicketCoinCost); this floor is
+// the fallback for farms with no history.
+export const POTION_TICKET_COIN_FLOOR = 6.4;
 export const EXOTIC_CROPS_TICKET_COST = {
   "Black Magic":         8000,
   "Golden Helios":       4000,

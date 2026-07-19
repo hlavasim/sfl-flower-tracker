@@ -66,10 +66,14 @@ test("Omnifeed (a hardcoded-branch item) is still absent, not 0, when unpriceabl
   assert.equal(p.marketValue["Omnifeed"], undefined);
 });
 
-test("the maps agree with the engine item by item", () => {
+test("the maps agree with the engine item by item", async () => {
+  const { computePotionTicketCoinCost } = await import("../../core/engine/item-value.mjs");
   const p = buildPricesSection(farm, p2p, S);
+  // C7: the section injects the farm-derived potion-ticket cost into the rates it hands
+  // the resolver — the direct engine call must mirror that to compare like for like.
+  const rates = { ...S, potionTicketCoinCost: computePotionTicketCoinCost(farm) };
   for (const [name, v] of Object.entries(p.marketValue)) {
-    assert.equal(v, itemMarketValue(name, p2p, null, S), `marketValue[${name}]`);
+    assert.equal(v, itemMarketValue(name, p2p, null, rates), `marketValue[${name}]`);
   }
 });
 
@@ -213,4 +217,21 @@ test("Cheese's marketTrace formula matches the hand-computed crafted-recipe deri
   assert.equal(node.steps[0].item, "Milk");
   assert.equal(node.steps[0].method, "market price");
   assert.equal(node.steps[0].value, milkPrice);
+});
+
+// C7 (audit): exotic crops price via the farm's own Potion House history. Fixture farm
+// 155498's histogram averages 80.526/100 → 320 / (50×0.80526) = 7.9477 c/ticket
+// (vs the old hardcoded 15 — which overstated Black Magic by ~89%).
+test("C7 — potion ticket cost derives from potionHouse.history; Black Magic repriced", async () => {
+  const { computePotionTicketCoinCost } = await import("../../core/engine/item-value.mjs");
+  const cost = computePotionTicketCoinCost(farm);
+  assert.ok(Math.abs(cost - 320 / (50 * (1530 / 19 / 100))) < 1e-9, `cost ${cost}`);
+  assert.ok(Math.abs(cost - 7.9477) < 0.001);
+  // floor for farms with no history — and the floor is source-proven 6.4
+  assert.equal(computePotionTicketCoinCost({}), 6.4);
+  assert.equal(computePotionTicketCoinCost({ potionHouse: { history: { 0: 5 } } }), 6.4);
+  // the map uses it: Black Magic = 8000 × cost / coinsPerSFL
+  const p = buildPricesSection(farm, p2p, S);
+  const expected = (8000 * cost) / S.coinsPerSFL;
+  assert.ok(Math.abs(p.marketValue["Black Magic"] - expected) < 1e-9, `BM ${p.marketValue["Black Magic"]} vs ${expected}`);
 });
