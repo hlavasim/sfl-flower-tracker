@@ -125,6 +125,26 @@ export const API_SPEC = {
               "by other sections.",
           },
           {
+            name: "formulaFor",
+            in: "query",
+            required: false,
+            schema: { type: "string" },
+            description:
+              "section=power only: name of ONE boost item whose expandable derivation " +
+              "panel to compute — the response gains `data.formulaHtml` (the page's " +
+              "formula explainer, rendered server-side). Absent → no panel is computed.",
+          },
+          {
+            name: "formulaCat",
+            in: "query",
+            required: false,
+            schema: { type: "string" },
+            description:
+              "section=power only: the category the requested formula panel is opened " +
+              "under (a power category id, or `qual` for the qualitative list). Used " +
+              "with `formulaFor`.",
+          },
+          {
             name: "coinMode",
             in: "query",
             required: false,

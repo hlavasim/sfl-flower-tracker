@@ -266,7 +266,8 @@ export default async function handler(req, res) {
       // boostValues engine; absent → defaults, matching a fresh browser.
       let roadmapSettings = {};
       try { roadmapSettings = req.query.roadmap ? JSON.parse(req.query.roadmap) : {}; } catch { roadmapSettings = {}; }
-      data = buildPowerSection(farm, p2p, nftResult.data, exchange, { ...settings, roadmapSettings, savedProducts: req.query.products ? JSON.parse(req.query.products) : {} });
+      // formulaFor/formulaCat: on-demand derivation panel for one boost (page click).
+      data = buildPowerSection(farm, p2p, nftResult.data, exchange, { ...settings, roadmapSettings, formulaFor: req.query.formulaFor, formulaCat: req.query.formulaCat, savedProducts: req.query.products ? JSON.parse(req.query.products) : {} });
     }
     // `eff`: POST-only — measured harvest EFFICIENCY per category from farm-history
     // snapshot rows the client already fetched (diff-page pattern: compute stays

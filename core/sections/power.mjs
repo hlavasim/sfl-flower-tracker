@@ -33,6 +33,7 @@ import {
   buildQueueData,
 } from "../engine/power-costs.mjs";
 import { _setPowerContext, calcBoostValue } from "../engine/roadmap.mjs";
+import { buildFormulaHTML } from "../engine/power-formula.mjs";
 
 export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   const inventory = farm.inventory || {};
@@ -363,5 +364,20 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     }
   }
 
-  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, restockQueues };
+  // On-demand formula panel (the page's buildFormulaHTML, now in core): computed only
+  // for the one requested boost — precomputing all ~380 panels would be megabytes.
+  let formulaHtml;
+  if (settings.formulaFor) {
+    const isQual = settings.formulaCat === "qual";
+    const bi = isQual
+      ? boostItems.find(b => b.name === settings.formulaFor)
+      : (catBoosts[settings.formulaCat] || []).find(b => b.name === settings.formulaFor);
+    if (bi) {
+      const fc = isQual ? ((bi.categories || ["other"])[0]) : settings.formulaCat;
+      const product = savedProducts[fc] || getDefaultProduct(fc);
+      try { formulaHtml = buildFormulaHTML(bi, fc, product, capacity, p2pPrices, catBoosts[fc] || []); } catch {}
+    }
+  }
+
+  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, restockQueues, ...(formulaHtml !== undefined ? { formulaHtml } : {}) };
 }

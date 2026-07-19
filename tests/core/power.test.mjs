@@ -165,3 +165,29 @@ test("restockQueues — buildQueueData shipped; JSON-safe daysUntilEmpty semanti
   // client's consumers treat null as ∞ (pinned here so the shape stays JSON-safe)
   assert.equal(JSON.parse(JSON.stringify(q.Axe)).daysUntilEmpty, null);
 });
+
+test("formula panels — every (boost, category) pair renders without throwing", async () => {
+  // buildPowerSection wraps buildFormulaHTML in a silent try/catch (a broken panel must
+  // not 500 the section) — so THIS sweep is the regression net for missing imports.
+  const { buildFormulaHTML } = await import("../../core/engine/power-formula.mjs");
+  let ok = 0;
+  for (const bi of out.boostItems) {
+    for (const cat of bi.categories) {
+      const cs = out.categories.catSummaries[cat];
+      if (!cs) continue;
+      const html = buildFormulaHTML(bi, cat, cs.product, out.capacity, out.p2pPrices,
+        out.boostItems.filter((b) => b.categories.includes(cat)));
+      assert.ok(typeof html === "string" && html.length > 50, `${bi.name}/${cat}`);
+      ok++;
+    }
+  }
+  assert.ok(ok > 100, `swept ${ok} panels`);
+});
+
+test("formulaFor settings produce data.formulaHtml", () => {
+  const withFormula = buildPowerSection(farm, p2p, nfts, null, { formulaFor: "Foreman Beaver", formulaCat: "trees" });
+  assert.ok(withFormula.formulaHtml && withFormula.formulaHtml.includes("Foreman Beaver"));
+  // qual routing resolves the item's first category
+  const q = buildPowerSection(farm, p2p, nfts, null, { formulaFor: "Green Thumb", formulaCat: "qual" });
+  assert.ok(q.formulaHtml && q.formulaHtml.includes("Green Thumb"));
+});
