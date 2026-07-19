@@ -18914,7 +18914,10 @@
           if (isPre) {
             for (const r of ["Crimstone", "Oil", "Obsidian"]) {
               const c = s.cost[r] || 0;
-              if (c) costBits.push(`<span class="${resOk[r] ? "have" : "miss"}">${gi(r)}${Math.round(c)}</span>`);
+              if (!c) continue;
+              const eta = sim && sim.res && sim.res[r];
+              const showEta = !resOk[r] && eta != null && eta > 0;
+              costBits.push(`<span class="${resOk[r] ? "have" : "miss"}">${gi(r)}${Math.round(c)}${showEta ? `<span class="asc-eta" style="display:inline"> ~${fmtEta(eta)}</span>` : ""}</span>`);
             }
             if (s.cost.Coins) costBits.push(`<span class="${resOk.Coins ? "have" : "miss"}">${gi("Coins")}${kFmt(s.cost.Coins)}</span>`);
             for (const [r, q] of Object.entries(s.extraCost || {}))
