@@ -10,6 +10,8 @@
 // POST-only (snapshots for efficiency); query grinx=0|1, max=1..10.
 import { COOKING_RECIPES_DATA } from "../data/cooking.mjs";
 import { detectCookingBoosts, computeFoodXP } from "../engine/cooking.mjs";
+import { PRE_EXPANSION_REQUIREMENTS, ISLAND_PROGRESSION } from "../data/expansions.mjs";
+import { BUMPKIN_XP_TABLE } from "../engine/power-helpers.mjs";
 import {
   SWAMP_BASE_EXPANSION, SWAMP_EXPANSIONS_PER_ASCENSION, HOURS_PER_EXPANSION,
   getAscensionUpgradeCost, getAscensionExpansionRequirements, getExpansionCrystalCount,
@@ -27,6 +29,55 @@ const getCount = (inv, name) => {
   if (v === undefined || v === null) return 0;
   return parseFloat(v) || 0;
 };
+
+// XP threshold for an ABSOLUTE bumpkin level (pre-ascension gates, 1..150).
+const xpForLevel = (lvl) => lvl <= 1 ? 0 : BUMPKIN_XP_TABLE[lvl - 2] ?? BUMPKIN_XP_TABLE[BUMPKIN_XP_TABLE.length - 1];
+
+// Steps still missing BEFORE ascension: finish the current island, upgrade,
+// finish the next... through volcano 30 (upgradeFarm.ts chain). asc: 0 marks
+// them; level gates are absolute bumpkin levels. Deviations from the ascension
+// steps (documented): nodesAdded stays {} (pre-ascension expansion node
+// layouts not ported — the sim keeps current production rates through these
+// steps, slightly pessimistic), and non-tracked resources (Wood, Stone, Iron,
+// Gold, Gem) are carried in extraCost for stock have/miss display only, not
+// simulated over time.
+export function buildPreAscensionSteps(islandType, basicLand, grinx) {
+  const startIdx = ISLAND_PROGRESSION.findIndex((p) => p.island === islandType);
+  if (startIdx === -1) return []; // already an ascension island
+  const steps = [];
+  let from = basicLand;
+  for (let i = startIdx; i < ISLAND_PROGRESSION.length; i++) {
+    const prog = ISLAND_PROGRESSION[i];
+    const table = PRE_EXPANSION_REQUIREMENTS[prog.island] || {};
+    for (let e = from + 1; e <= prog.max; e++) {
+      const req = table[e];
+      if (!req) continue;
+      const cost = { Crimstone: 0, Oil: 0, Obsidian: 0, Coins: req.coins || 0 };
+      const extraCost = {};
+      for (const [r, q] of Object.entries(req.resources || {})) {
+        const v = grinx ? q / 2 : q; // Grinx halves expansion resource costs (not coins)
+        if (r in cost) cost[r] = v; else extraCost[r] = v;
+      }
+      steps.push({
+        kind: "exp", asc: 0, island: prog.island, expansion: e, band: req.level, absLevel: req.level,
+        cost, extraCost, time: req.seconds, nodesAdded: {}, crystals: 0, shards: 0,
+      });
+    }
+    if (!prog.next) break;
+    // island upgrade: expansions complete + flat item cost, no build time, no level gate
+    const upCost = { Crimstone: 0, Oil: 0, Obsidian: 0, Coins: 0 };
+    const upExtra = {};
+    for (const [r, q] of Object.entries(prog.upgradeItems)) {
+      if (r in upCost) upCost[r] = q; else upExtra[r] = q;
+    }
+    steps.push({
+      kind: "upgrade", asc: 0, island: prog.island, next: prog.next, expansion: null, band: 0, absLevel: 0,
+      cost: upCost, extraCost: upExtra, time: 0, nodesAdded: {}, crystals: 0, shards: 0,
+    });
+    from = ISLAND_PROGRESSION[i + 1] ? prog.nextStart ?? 0 : 0;
+  }
+  return steps;
+}
 
 // steps for a = 1..maxAsc: one upgrade step + 12 expansion steps each (§2.2).
 export function buildAscensionSteps(grinx, maxAsc) {
@@ -115,8 +166,18 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
   }
 
   // ── steps + done-marking (steps already built on this farm) ──
-  const steps = buildAscensionSteps(grinx, maxAsc);
+  // Pre-ascension remainder first (finish current island → ... → volcano 30),
+  // then the ascension ladder. Ascension islands have no pre-steps.
+  const preSteps = ascensionLevel === 0 ? buildPreAscensionSteps(island.type || "basic", basicLand, grinx) : [];
+  const steps = [...preSteps, ...buildAscensionSteps(grinx, maxAsc)];
   for (const s of steps) {
+    if (s.asc === 0) {
+      s.done = false; // built only for the not-yet-completed range
+      s.standing = 0;
+      s.levelMet = experienceEff >= xpForLevel(s.band);
+      s.levelXpNeeded = xpForLevel(s.band);
+      continue;
+    }
     s.done = s.asc < ascensionLevel
       || (s.asc === ascensionLevel && s.kind === "upgrade")
       || (s.asc === ascensionLevel && s.kind === "exp" && s.expansion <= basicLand);
@@ -130,6 +191,10 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
   }
   // pending = not built yet, in order
   const pending = steps.filter((s) => !s.done);
+  // stock of the non-simulated pre-step resources (Wood, Stone, ...) for UI have/miss
+  current.extraStock = {};
+  for (const s of pending) for (const r of Object.keys(s.extraCost || {}))
+    if (!(r in current.extraStock)) current.extraStock[r] = getCount(inv, r);
 
   // cumulative costs over PENDING steps (frontier walks these, §2.6)
   const cum = { Crimstone: 0, Oil: 0, Obsidian: 0, Coins: 0 };
@@ -203,9 +268,12 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
 
   // ── continuous-expand deadline (§2.5): sequential build slots from the start date ──
   const nowMs = Date.now();
-  let slotMs = Math.max(CONTINUOUS_EXPAND_START_MS, nowMs);
+  // pre-ascension steps (asc 0) build under the normal rules starting NOW;
+  // only the ascension ladder waits for the continuous-expand start date.
+  let slotMs = nowMs;
   let stuck = null;
   for (const s of pending) {
+    if (s.asc >= 1 && slotMs < CONTINUOUS_EXPAND_START_MS) slotMs = CONTINUOUS_EXPAND_START_MS;
     s.buildSlotDays = (slotMs - nowMs) / 86400000;
     // stuck is per-mode: the UI shows one mode's ETAs, so the jam verdict must come
     // from the SAME mode (an eff-only flag next to theo ETAs reads "jams 14d vs 8h").

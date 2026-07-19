@@ -18860,7 +18860,7 @@
       const byAsc = {};
       for (const s of d.steps) (byAsc[s.asc] = byAsc[s.asc] || []).push(s);
       for (const [a, steps] of Object.entries(byAsc)) {
-        h += `<div class="pixel-panel" style="padding:10px;margin-bottom:12px"><div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:6px">ASCENSION ${a} <span style="color:var(--text-dim);font-size:0.5rem">· band L1–L50 · abs. ${150 + (a - 1) * 50}+</span></div>
+        h += `<div class="pixel-panel" style="padding:10px;margin-bottom:12px"><div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:6px">${a === "0" ? `ISLAND COMPLETION <span style="color:var(--text-dim);font-size:0.5rem">· dokončení ostrovů před Ascension 1</span>` : `ASCENSION ${a} <span style="color:var(--text-dim);font-size:0.5rem">· band L1–L50 · abs. ${150 + (a - 1) * 50}+</span>`}</div>
         <div style="overflow-x:auto"><table class="asc-t">
         <thead><tr>
           <th>krok</th><th>level</th>
@@ -18894,10 +18894,14 @@
             return `<td class="${resOk[r] ? "have" : "miss"}">${r === "Coins" ? kFmt(c) : Math.round(c)}${showEta ? `<span class="asc-eta">~${fmtEta(eta)}</span>` : ""}</td>`;
           };
           const nodeBits = Object.entries(s.nodesAdded || {}).map(([n, q]) => `${q > 1 ? q + "×" : "+"}${gi(n)}`);
+          for (const [r, q] of Object.entries(s.extraCost || {})) {
+            const have = ((cur.extraStock || {})[r] ?? 0) >= q;
+            nodeBits.push(`<span class="${have ? "have" : "miss"}">${gi(r)}${Math.round(q)}</span>`);
+          }
           if (s.crystals) nodeBits.unshift(`${gi("Ascension Crystal")}<span class="asc-shards" style="font-size:0.42rem">${gi("Ascension Shard")}${s.shards}</span>`);
           const farmCell = sim ? (sim.blocked ? '<span class="miss">∞</span>' : (state === "ok" ? '<span class="have">✓</span>' : fmtEta(sim.farmEtaDays))) : "?";
           h += `<tr class="${state}">
-            <td>${s.kind === "upgrade" ? `<strong>⬆ A${s.asc}</strong>` : `exp <strong>${s.expansion}</strong>`} <span style="color:var(--text-dim);font-size:0.42rem">${s.time ? s.time / 3600 + "h" : ""}</span></td>
+            <td>${s.asc === 0 ? (s.kind === "upgrade" ? `<strong>⬆ ${escHTML(s.next)}</strong>` : `${escHTML(s.island)} <strong>${s.expansion}</strong>`) : s.kind === "upgrade" ? `<strong>⬆ A${s.asc}</strong>` : `exp <strong>${s.expansion}</strong>`} <span style="color:var(--text-dim);font-size:0.42rem">${s.time ? (s.time >= 3600 ? +(s.time / 3600).toFixed(1) + "h" : s.time + "s") : ""}</span></td>
             <td>${lvlCell}</td>
             ${resCell("Crimstone")}${resCell("Oil")}${resCell("Obsidian")}${resCell("Coins")}
             <td class="nl nodes">${nodeBits.join(" ") || "—"}</td>

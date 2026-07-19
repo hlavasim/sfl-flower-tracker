@@ -5,6 +5,7 @@ import * as prices from "../data/prices.mjs";
 import * as recipes from "../data/recipes.mjs";
 import * as economy from "../data/economy.mjs";
 import * as pets from "../data/pets.mjs";
+import * as expansions from "../data/expansions.mjs";
 // Engine modules whose EXPORTED tables are duplicated core copies of page tables (the
 // power migration duplicates its closure's tables into engine files rather than data/
 // files — same scoreboard semantics: exported table present here = "duplicated").
@@ -26,6 +27,7 @@ const MODULES = {
   "core/data/prices.mjs": prices,
   "core/data/recipes.mjs": recipes,
   "core/data/economy.mjs": economy,
+  "core/data/expansions.mjs": expansions,
   "core/data/pets.mjs": pets,
   "core/engine/power-boosts.mjs": powerBoosts,
   "core/engine/power-helpers.mjs": powerHelpers,

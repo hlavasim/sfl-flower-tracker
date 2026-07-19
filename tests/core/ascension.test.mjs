@@ -152,6 +152,67 @@ test("grinx halves the three resource costs but not coins", () => {
   assert.equal(s0.cost.Coins, n0.cost.Coins);
 });
 
+// ── pre-ascension island completion steps (asc: 0) ──
+
+test("complete volcano farm gets no pre-steps; plan starts at the A1 upgrade", () => {
+  assert.equal(out.steps[0].kind, "upgrade");
+  assert.equal(out.steps[0].asc, 1);
+  assert.ok(!out.steps.some((s) => s.asc === 0));
+});
+
+test("mid-volcano farm: remaining volcano expansions precede A1, game-table costs, slots first", () => {
+  const f = structuredClone(farm);
+  f.inventory["Basic Land"] = "28";
+  const o = buildAscensionSection(f, powerData, cooking.totalXpPerDay, eff, { max: 2 });
+  const pre = o.steps.filter((s) => s.asc === 0);
+  assert.deepEqual(pre.map((s) => `${s.island} e${s.expansion}`), ["volcano e29", "volcano e30"]);
+  // VOLCANO_LAND_30_REQUIREMENTS pinned from expansions.ts
+  const e30 = pre[1];
+  assert.equal(e30.cost.Crimstone, 125);
+  assert.equal(e30.cost.Oil, 300);
+  assert.equal(e30.cost.Obsidian, 42);
+  assert.equal(e30.cost.Coins, 60000);
+  assert.deepEqual(e30.extraCost, { Wood: 1500, Stone: 600, Iron: 70, Gold: 50, Gem: 225 });
+  assert.equal(e30.time, 259200);
+  assert.equal(e30.band, 120); // absolute level gate
+  assert.equal(e30.levelMet, true); // fixture is level 150
+  // pre-steps occupy the first continuous-expand build slots, before the A1 upgrade
+  assert.equal(o.steps[0].asc, 0);
+  const a1 = o.steps.find((s) => s.asc === 1 && s.kind === "upgrade");
+  assert.ok(a1.buildSlotDays >= e30.buildSlotDays + 259200 / 86400 - 1e-9);
+  // cumulative costs include the pre-steps
+  assert.ok(a1.cum.Crimstone >= 125 + 30);
+});
+
+test("desert farm: chain runs desert remainder → volcano upgrade (200 Oil) → volcano 6..30", () => {
+  const f = structuredClone(farm);
+  f.island = { type: "desert" };
+  f.inventory["Basic Land"] = "24";
+  const o = buildAscensionSection(f, powerData, cooking.totalXpPerDay, eff, { max: 1 });
+  const pre = o.steps.filter((s) => s.asc === 0);
+  assert.equal(pre[0].island, "desert");
+  assert.equal(pre[0].expansion, 25);
+  const up = pre.find((s) => s.kind === "upgrade");
+  assert.equal(up.island, "desert");
+  assert.equal(up.next, "volcano");
+  assert.equal(up.cost.Oil, 200);
+  // volcano starts at 5 Basic Land → first volcano step is expansion 6
+  const afterUp = pre[pre.indexOf(up) + 1];
+  assert.equal(afterUp.island, "volcano");
+  assert.equal(afterUp.expansion, 6);
+  assert.equal(pre[pre.length - 1].expansion, 30);
+});
+
+test("grinx halves pre-step resources (incl. extraCost) but not coins", () => {
+  const f = structuredClone(farm);
+  f.inventory["Basic Land"] = "28";
+  const g = buildAscensionSection(f, powerData, cooking.totalXpPerDay, eff, { max: 1, grinx: true });
+  const e30 = g.steps.find((s) => s.asc === 0 && s.expansion === 30);
+  assert.equal(e30.cost.Crimstone, 62.5);
+  assert.equal(e30.extraCost.Wood, 750);
+  assert.equal(e30.cost.Coins, 60000);
+});
+
 // ── wishlist section (same fixture set) ──
 test("wishlist — catalog ownership, auto-prune of active items, priority cumulative costs", async () => {
   const { buildWishlistSection } = await import("../../core/sections/wishlist.mjs");
