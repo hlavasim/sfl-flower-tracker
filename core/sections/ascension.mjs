@@ -207,8 +207,14 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
   let stuck = null;
   for (const s of pending) {
     s.buildSlotDays = (slotMs - nowMs) / 86400000;
+    // stuck is per-mode: the UI shows one mode's ETAs, so the jam verdict must come
+    // from the SAME mode (an eff-only flag next to theo ETAs reads "jams 14d vs 8h").
+    for (const mode of ["eff", "theo"]) {
+      const sim = s.sim && s.sim[mode];
+      if (sim) sim.stuck = sim.farmEtaDays == null ? true : sim.farmEtaDays > s.buildSlotDays + 1e-9;
+    }
     const farmEta = s.sim && s.sim.eff ? s.sim.eff.farmEtaDays : null;
-    s.stuck = farmEta == null ? true : farmEta > s.buildSlotDays + 1e-9;
+    s.stuck = s.sim && s.sim.eff ? s.sim.eff.stuck : true;
     if (s.stuck && !stuck) stuck = { asc: s.asc, expansion: s.expansion, kind: s.kind, buildSlotDays: s.buildSlotDays, farmEtaDays: farmEta };
     slotMs += (s.time || 0) * 1000;
   }

@@ -18746,10 +18746,15 @@
       const grinx = st.grinx ? 1 : 0;
       try {
         if (!_roadmapSnapshotsCache) _roadmapSnapshotsCache = await _roadmapFetchHistorySlim();
-        const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=ascension&grinx=${grinx}&max=10`, {
-          method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [] }),
-        });
+        let rp;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          rp = await fetch(`/api/compute?farm=${FARM_ID}&section=ascension&grinx=${grinx}&max=10`, {
+            method: "POST", headers: { "content-type": "application/json" },
+            body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [] }),
+          });
+          if (rp.ok || attempt === 3) break;
+          await new Promise((r) => setTimeout(r, 1000 * attempt));
+        }
         if (!rp.ok) throw new Error(`compute ascension ${rp.status}`);
         _ascServer = (await rp.json()).data || null;
       } catch (e) {
@@ -18786,8 +18791,9 @@
       // ── frontier + continuous-expand banners ──
       const fr = d.frontier;
       h += `<div class="pixel-panel pixel-font" style="padding:10px;margin-bottom:14px;font-size:0.6rem">
-        ${fr ? `🎯 Stock gets you to <strong>${fr.kind === "upgrade" ? "the A" + fr.asc + " upgrade" : "A" + fr.asc + "·exp" + fr.expansion}</strong>` : "🛑 Stock covers no pending step"}${d.bottleneck ? ` — then <strong style="color:var(--red)">${d.bottleneck}</strong> runs out.` : "."}</div>`;
-      const firstStuck = d.steps.find(s => s.stuck);
+        ${fr ? `🎯 Stock alone (no farming) covers through <strong>${fr.kind === "upgrade" ? "the A" + fr.asc + " upgrade" : "A" + fr.asc + "·exp" + fr.expansion}</strong>` : "🛑 Stock alone covers no pending step"}${d.bottleneck ? ` — <strong style="color:var(--red)">${d.bottleneck}</strong> is the first you'd need to farm. Farming until each build slot IS counted in the table.` : "."}</div>`;
+      const isStuck = (s) => s.sim && s.sim[mode] ? s.sim[mode].stuck : s.stuck;
+      const firstStuck = d.steps.find(isStuck);
       h += `<div class="pixel-panel pixel-font" style="padding:10px;margin-bottom:14px;font-size:0.6rem">
         ${firstStuck ? `⚠️ Continuous expand (from 3.8.2026) <strong>jams at ${firstStuck.kind === "upgrade" ? "A" + firstStuck.asc + " upgrade" : "A" + firstStuck.asc + "·exp" + firstStuck.expansion}</strong> — build slot ${fmtEta(firstStuck.buildSlotDays)} vs farm ETA ${fmtEta(firstStuck.sim && firstStuck.sim[mode] && firstStuck.sim[mode].farmEtaDays)}.` : `📅 You keep continuous-expand pace through A${d.maxAsc} at ${mode} production.`}</div>`;
       // ── per-ascension step tables ──
@@ -18874,7 +18880,7 @@
             resOk[r] = (s.cum[r] || 0) <= cur.stock[r];
             if (!resOk[r]) allRes = false;
           }
-          const state = (allRes && s.levelMet) ? "ok" : (s.stuck || (sim && sim.blocked)) ? "stuck" : "pace";
+          const state = (allRes && s.levelMet) ? "ok" : ((sim ? sim.stuck : s.stuck) || (sim && sim.blocked)) ? "stuck" : "pace";
           const xpLeft = Math.max(0, (s.levelXpNeeded || 0) - cur.experience);
           const lvlMiss = rates.xpPerDay > 0 ? fmtEta(xpLeft / rates.xpPerDay) : Math.round(xpLeft / 1e6) + "M XP";
           const lvlCell = s.kind === "upgrade"
@@ -18896,7 +18902,7 @@
             ${resCell("Crimstone")}${resCell("Oil")}${resCell("Obsidian")}${resCell("Coins")}
             <td class="nl nodes">${nodeBits.join(" ") || "—"}</td>
             <td>${farmCell}</td>
-            <td class="${s.stuck ? "miss" : ""}">${fmtEta(s.buildSlotDays)}</td>
+            <td class="${(sim ? sim.stuck : s.stuck) ? "miss" : ""}">${fmtEta(s.buildSlotDays)}</td>
           </tr>`;
         }
         h += `</tbody></table></div></div>`;

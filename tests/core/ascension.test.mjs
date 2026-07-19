@@ -121,6 +121,21 @@ test("node-aware sim: adding nodes speeds later steps up (eff mode, days units)"
   assert.ok(prev > 30 && prev < 10000, `total farm days ${prev}`);
 });
 
+test("stuck is per-mode: verdict always matches that mode's own farm ETA vs slot", () => {
+  for (const s of out.steps) {
+    for (const mode of ["eff", "theo"]) {
+      const sim = s.sim && s.sim[mode];
+      if (!sim) continue;
+      const expect = sim.farmEtaDays == null ? true : sim.farmEtaDays > s.buildSlotDays + 1e-9;
+      assert.equal(sim.stuck, expect, `${mode} A${s.asc} e${s.expansion}`);
+    }
+  }
+  // theo production ≥ eff → the theo jam can never come before the eff jam
+  const firstEff = out.steps.findIndex((s) => s.sim?.eff?.stuck);
+  const firstTheo = out.steps.findIndex((s) => s.sim?.theo?.stuck);
+  if (firstEff !== -1 && firstTheo !== -1) assert.ok(firstTheo >= firstEff);
+});
+
 test("continuous-expand: build slots increase by each step's build time; stuck flagged", () => {
   const withSlots = out.steps.filter((s) => typeof s.buildSlotDays === "number");
   assert.equal(withSlots.length, out.steps.length);
