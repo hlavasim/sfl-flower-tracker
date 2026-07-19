@@ -8,6 +8,7 @@ import { roadmapComputeEfficiency } from "../core/engine/roadmap.mjs";
 import { buildTreasurySection } from "../core/sections/treasury.mjs";
 import { buildRoadmapSection } from "../core/sections/roadmap.mjs";
 import { buildAscensionSection } from "../core/sections/ascension.mjs";
+import { buildWishlistSection } from "../core/sections/wishlist.mjs";
 import { buildCookingSection as _cookingForAscension } from "../core/sections/cooking.mjs";
 import { buildBudsSection } from "../core/sections/buds.mjs";
 import { buildPetsSection } from "../core/sections/pets.mjs";
@@ -311,6 +312,16 @@ export default async function handler(req, res) {
       try { input = req.body ? JSON.parse(req.body.toString()) : {}; } catch { input = {}; }
       const effData = roadmapComputeEfficiency(Array.isArray(input.snapshots) ? input.snapshots : []);
       data = buildAscensionSection(farm, powerData, cooking.totalXpPerDay, effData, { grinx: req.query.grinx === "1", max: req.query.max });
+    }
+    // `wishlist`: the cockpit's wishlist math — boosted-NFT catalog with ownership +
+    // per-priority cumulative costs vs the farm's FLOWER balance. `list` query param =
+    // the client's localStorage wishlist ({ "collection:name": 1|2|3 }).
+    else if (section === "wishlist") {
+      const nftResult = await fetchNfts();
+      if (!nftResult.ok) return res.status(502).json({ error: `nfts fetch failed: ${nftResult.status}` });
+      let list = {};
+      try { list = req.query.list ? JSON.parse(req.query.list) : {}; } catch { list = {}; }
+      data = buildWishlistSection(farm, nftResult.data, { list });
     }
     // `roi`: the ROI page's state — the page's own copy of the power fetch+rate block
     // (plus a 4th upstream, BTC/USD) and its own boost-item/pet builders. Same 502

@@ -13505,6 +13505,100 @@
     };
 
     let _liveObCache = {}; // session cache for live orderbook fetches: "collection:id" → data (+_t)
+    // ═══════════════════════════════════════
+    //  WISHLIST (sales page, compute?section=wishlist — cockpit fold-in)
+    // ═══════════════════════════════════════
+    function _wlGet() {
+      try { return JSON.parse(localStorage.getItem("sfl_wishlist_v1") || "{}"); } catch { return {}; }
+    }
+    function _wlSave(list) { localStorage.setItem("sfl_wishlist_v1", JSON.stringify(list)); }
+    window._wlSetPrio = function(key, p) {
+      const l = _wlGet(); l[key] = p; _wlSave(l); renderWishlistPanel();
+    };
+    window._wlRemove = function(key) {
+      const l = _wlGet(); delete l[key]; _wlSave(l); renderWishlistPanel();
+    };
+    window._wlAddFromPicker = function() {
+      const inp = document.getElementById("wl-picker");
+      const name = inp && inp.value.trim();
+      if (!name || !_wlCatalog) return;
+      const it = _wlCatalog.find(c => c.name.toLowerCase() === name.toLowerCase());
+      if (!it) { inp.style.borderColor = "var(--red)"; return; }
+      const l = _wlGet(); l[`${it.collection}:${it.name}`] = 2; _wlSave(l);
+      inp.value = "";
+      renderWishlistPanel();
+    };
+    let _wlCatalog = null;
+    async function renderWishlistPanel() {
+      const el = document.getElementById("wishlist-panel");
+      if (!el) return;
+      let d;
+      try {
+        let payload, lastErr;
+        for (let a = 0; a < 3; a++) {
+          try {
+            const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=wishlist&list=${encodeURIComponent(JSON.stringify(_wlGet()))}`);
+            if (!rp.ok) throw new Error(`compute wishlist ${rp.status}`);
+            payload = await rp.json();
+            break;
+          } catch (e2) { lastErr = e2; if (a < 2) await new Promise(r => setTimeout(r, 1000 * (a + 1))); }
+        }
+        if (!payload) throw lastErr;
+        d = payload.data || {};
+      } catch (e) {
+        el.innerHTML = `<div class="pixel-panel pixel-font" style="padding:10px;color:var(--red);font-size:0.55rem">Wishlist failed to load: ${escHTML(e.message)}</div>`;
+        return;
+      }
+      // auto-prune took effect server-side — reflect it in localStorage too (§1.3)
+      if (d.pruned && d.pruned.length) {
+        const l = _wlGet();
+        for (const k of d.pruned) delete l[k];
+        _wlSave(l);
+      }
+      _wlCatalog = d.catalog || [];
+      const _wlPrio = { 1: ["🔴", "now"], 2: ["🟡", "soon"], 3: ["🟢", "later"] };
+      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
+      h += `<div class="pixel-font" style="font-size:0.6875rem;color:var(--lily);font-weight:bold;margin-bottom:8px">⭐ WISHLIST</div>`;
+      // summary
+      const p1 = d.byPriority[1], p2 = d.byPriority[2], p3 = d.byPriority[3];
+      h += `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-secondary);margin-bottom:8px;line-height:1.9">
+        Balance: <strong>${d.balance.toFixed(1)} ${sflIcon()}</strong> ·
+        ${[1, 2, 3].map(p => { const b = d.byPriority[p]; return `${_wlPrio[p][0]} P${p}: ${b.unowned}× = ${b.cost.toFixed(1)} (kumulativně ${b.cumulative.toFixed(1)} ${b.affordable ? "✅" : "❌"})`; }).join(" · ")}
+      </div>`;
+      if (d.pruned && d.pruned.length) {
+        h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--green);margin-bottom:6px">Auto-pruned (placed/worn): ${d.pruned.map(k => escHTML(k.split(":")[1])).join(", ")}</div>`;
+      }
+      // rows
+      if (d.rows.length) {
+        h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.55rem">
+          <thead><tr style="color:var(--text-dim);text-align:left"><th style="padding:2px 6px">priorita</th><th>item</th><th style="text-align:right">buy now (floor)</th><th style="text-align:right">last sale</th><th style="text-align:right">kumulativně</th><th style="text-align:center">na to mám?</th><th></th></tr></thead><tbody>`;
+        let cum = 0;
+        for (const r of d.rows) {
+          if (!r.owned) cum += r.floor;
+          h += `<tr style="border-top:1px solid #222">
+            <td style="padding:3px 6px;white-space:nowrap">${[1, 2, 3].map(p => `<span onclick="_wlSetPrio('${escHTML(r.key)}',${p})" style="cursor:pointer;opacity:${r.priority === p ? 1 : 0.3}">${_wlPrio[p][0]}</span>`).join(" ")}</td>
+            <td style="white-space:nowrap"><img class="inline-icon" src="${getItemIcon(r.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.name)}${r.owned ? ' <span style="font-size:0.45rem;color:var(--green)">📦 owned</span>' : ""}</td>
+            <td style="text-align:right">${r.floor > 0 ? r.floor.toFixed(1) : "—"}</td>
+            <td style="text-align:right;color:var(--text-dim)">${r.lastSale > 0 ? r.lastSale.toFixed(1) : "—"}</td>
+            <td style="text-align:right;color:var(--text-dim)">${r.owned ? "—" : cum.toFixed(1)}</td>
+            <td style="text-align:center">${r.owned ? "—" : (d.balance >= cum ? "✅" : "❌")}</td>
+            <td style="text-align:right"><span onclick="_wlRemove('${escHTML(r.key)}')" style="cursor:pointer;color:var(--red)">✕</span></td>
+          </tr>`;
+        }
+        h += `</tbody></table></div>`;
+      } else {
+        h += `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim)">Wishlist je prázdný — přidej boostované NFT níž.</div>`;
+      }
+      // picker (datalist over the boosted catalog)
+      h += `<div style="margin-top:10px;display:flex;gap:6px;align-items:center">
+        <input id="wl-picker" list="wl-catalog" placeholder="přidat NFT… (${_wlCatalog.length} boosted items)" style="flex:1;font-size:0.55rem;padding:4px 6px;background:var(--bg-input,#1a140c);color:var(--text-primary);border:1px solid var(--border-dark)">
+        <button class="pixel-font" onclick="_wlAddFromPicker()" style="font-size:0.55rem;padding:4px 10px;cursor:pointer">+ přidat</button>
+      </div>
+      <datalist id="wl-catalog">${_wlCatalog.filter(c => !c.active).map(c => `<option value="${escHTML(c.name)}">${c.floor > 0 ? c.floor.toFixed(1) + " ⚀ · " : ""}${escHTML((c.boost || "").split("\n")[0])}</option>`).join("")}</datalist>`;
+      h += `</div>`;
+      el.innerHTML = h;
+    }
+
     async function renderSales(data) {
       const app = document.getElementById("app");
       const { trades } = data;
@@ -13521,8 +13615,10 @@
       </div>`;
 
       // Show loading while fetching market data
+      html += `<div id="wishlist-panel"></div>`;
       html += `<div id="sales-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading market prices...</div></div></div>`;
       app.innerHTML = html;
+      renderWishlistPanel(); // async — fills the panel from compute?section=wishlist
 
       // Fetch market data + P2P history in parallel
       let market, p2pPrices = [];

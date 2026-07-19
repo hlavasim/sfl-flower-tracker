@@ -29,7 +29,7 @@ export const API_SPEC = {
             name: "section",
             in: "query",
             required: false,
-            schema: { type: "string", enum: ["ascension", "buds", "constants", "cooking", "diff", "eff", "openapi", "pets", "power", "prices", "roadmap", "roi", "treasury"], default: "cooking" },
+            schema: { type: "string", enum: ["ascension", "buds", "constants", "cooking", "diff", "eff", "openapi", "pets", "power", "prices", "roadmap", "roi", "treasury", "wishlist"], default: "cooking" },
             description:
               "Which computation to run. `constants`: the canonical core/data game tables " +
               "plus flowers.html migration-coverage status, no farm needed. `cooking`: " +
@@ -84,6 +84,10 @@ export const API_SPEC = {
               "(eff/theo), stock frontier + bottleneck, continuous-expand build slots. " +
               "Query `grinx=1` halves Crimstone/Oil/Obsidian costs, `max` caps ascensions. " +
               "Body `{ snapshots }` like `eff`. " +
+              "`wishlist`: boosted-NFT catalog (floor/lastSale/supply/boost + owned/active from " +
+              "the farm) and the wishlist's per-priority cumulative costs vs the FLOWER " +
+              "balance; `list` query param carries the client's priorities; placed/worn " +
+              "items auto-prune. " +
               "`openapi`: this document, no farm needed. Defaults to `cooking` when omitted.",
           },
           {
@@ -148,6 +152,13 @@ export const API_SPEC = {
               "section=power only: the category the requested formula panel is opened " +
               "under (a power category id, or `qual` for the qualitative list). Used " +
               "with `formulaFor`.",
+          },
+          {
+            name: "list",
+            in: "query",
+            required: false,
+            schema: { type: "string" },
+            description: "section=wishlist only: URL-encoded JSON { \"collection:name\": priority(1|2|3) } — the client's wishlist.",
           },
           {
             name: "grinx",

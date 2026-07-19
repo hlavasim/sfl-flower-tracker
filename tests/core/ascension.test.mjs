@@ -127,3 +127,21 @@ test("grinx halves the three resource costs but not coins", () => {
   assert.equal(s0.cost.Crimstone, n0.cost.Crimstone / 2);
   assert.equal(s0.cost.Coins, n0.cost.Coins);
 });
+
+// ── wishlist section (same fixture set) ──
+test("wishlist — catalog ownership, auto-prune of active items, priority cumulative costs", async () => {
+  const { buildWishlistSection } = await import("../../core/sections/wishlist.mjs");
+  const w = buildWishlistSection(farm, nfts, { list: {
+    "collectibles:Foreman Beaver": 1,      // active on farm → pruned
+    "collectibles:Test Unowned Statue": 1, // unowned, floor 42
+    "collectibles:Immortal Pear": 2,       // ACTIVE (home island) → pruned
+  } });
+  assert.ok(w.catalog.length >= 3);
+  assert.deepEqual(w.pruned.sort(), ["collectibles:Foreman Beaver", "collectibles:Immortal Pear"]);
+  assert.equal(w.rows.length, 1);
+  assert.equal(w.rows[0].name, "Test Unowned Statue");
+  assert.equal(w.byPriority[1].cost, 42);
+  assert.equal(w.byPriority[1].cumulative, 42);
+  assert.equal(w.byPriority[2].cumulative, 42); // cumulative carries P1 down
+  assert.equal(w.byPriority[1].affordable, parseFloat(farm.balance) >= 42);
+});
