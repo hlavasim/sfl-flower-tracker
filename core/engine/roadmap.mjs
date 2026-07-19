@@ -895,7 +895,8 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
 
 export {
   roadmapProductBreakdown, roadmapSaltBreakdown, roadmapEffFactor,
-  roadmapCoinsFree, roadmapInSeason, MINE_RES,   BASE_NODE_COUNTS, MERGE_COSTS, countNodeTiers, roadmapCurrentProduction,
+  roadmapCoinsFree, roadmapInSeason, MINE_RES,
+  roadmapPerPlot,   BASE_NODE_COUNTS, MERGE_COSTS, countNodeTiers, roadmapCurrentProduction,
   roadmapItemValue, roadmapItemSituational, roadmapSimulate, _setRoadmapState,
   ROADMAP_EFF_HKEY, roadmapComputeEfficiency,
   getRoadmapSettings, roadmapOwnedEffects, roadmapCatBreakdown, roadmapCatNet,

@@ -293,7 +293,7 @@ export default async function handler(req, res) {
       buildPowerSection(farm, p2p, nftResult.data, exchange, { ...settings, roadmapSettings, savedProducts: req.query.products ? JSON.parse(req.query.products) : {} });
       let input = {};
       try { input = req.body ? JSON.parse(req.body.toString()) : {}; } catch { input = {}; }
-      data = buildRoadmapSection(Array.isArray(input.snapshots) ? input.snapshots : [], { roadmapSettings });
+      data = buildRoadmapSection(Array.isArray(input.snapshots) ? input.snapshots : [], { roadmapSettings, farm, p2p });
     }
     // `roi`: the ROI page's state — the page's own copy of the power fetch+rate block
     // (plus a 4th upstream, BTC/USD) and its own boost-item/pet builders. Same 502

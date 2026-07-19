@@ -16,6 +16,12 @@ import { getCapacityCount, POWER_CATEGORIES } from "../engine/power-helpers.mjs"
 import { getAnimalCatSfl, calcAnimalFeedCost, calcSicknessCost } from "../engine/power-costs.mjs";
 import { CROP_GROW_DATA, FRUIT_GROW_DATA, GREENHOUSE_GROW_DATA } from "../engine/power-boosts.mjs";
 import { farmHasCropMachine, cropMachineCrops, calcCropMachineDaily } from "../engine/crop-machine.mjs";
+import { roadmapPerPlot } from "../engine/roadmap.mjs";
+import {
+  DEFAULT_FLOWER_POINTS, BUMPKIN_GIFTS_DATA, getFlowerGiftPoints, getFlowerChainHours,
+  dashCalculateDeliveryTickets, roadmapItemCost, roadmapGiftRewardValue, _setItemCostMaps,
+} from "../engine/gifts-deliveries.mjs";
+import { buildPricesSection } from "./prices.mjs";
 
 const _nf = (v) => (typeof v === "number" && !isFinite(v) ? null : v);
 const _strip = (m) => ({ name: m.name, type: m.type, floor: m.floor, boost: m.boost, supply: m.supply });
@@ -45,8 +51,96 @@ export function buildRoadmapSection(snapshots, settings = {}) {
   // row for the client's expand detail. detail strings are plain text (no markup).
   const profitability = buildProfitability(rs);
 
-  return { eff, currentProd, startIncome, sim, profitability };
+  // ── todo: roadmapTodoBranches ported verbatim (page 17287-17347) minus
+  // roadmapFlowIcon (DOM) — actions carry iconName, the client wraps them in <img>.
+  // roadmapItemCost's PRICES() client cache becomes the same maps built server-side
+  // (buildPricesSection priced with the exchangeRates profile) via _setItemCostMaps.
+  // roadmapItemCost precedence needs the section=prices maps priced with the
+  // exchangeRates profile — built from the RAW p2p (before the Oil injection), exactly
+  // what the client cache held. farm/p2p arrive via settings from the handler.
+  if (settings.farm && settings.p2p) {
+    const _er = _getPowerContext().exchangeRates || {};
+    _setItemCostMaps(buildPricesSection(settings.farm, settings.p2p, { ..._er }));
+  } else {
+    _setItemCostMaps({ productionCost: {}, marketValue: {} });
+  }
+  const todo = buildTodo(rs);
+
+  return { eff, currentProd, startIncome, sim, profitability, todo };
 }
+
+function _fmtFlower(v) {
+  if (!isFinite(v)) return "∞";
+  if (v >= 1e6) return (v / 1e6).toFixed(2) + "M";
+  if (v >= 1e4) return Math.round(v).toLocaleString();
+  if (v >= 100) return v.toFixed(0);
+  if (v >= 1) return v.toFixed(2);
+  return v.toFixed(3);
+}
+
+function buildTodo(settings) {
+  const powerState = _getPowerContext();
+  const cap = powerState.capacity, p2p = powerState.p2pPrices, er = powerState.exchangeRates, farm = powerState.farm;
+  const branches = [];
+  // FARM — best in-season crops to plant
+  if (getCapacityCount("crops", cap) > 0) {
+    const oeff = roadmapOwnedEffects("crops"), plots = getCapacityCount("crops", cap), cr = [];
+    for (const c of Object.keys(CROP_GROW_DATA)) { if (!roadmapInSeason(c)) continue; const pp = roadmapPerPlot("crops", c, oeff, settings); if (pp) cr.push({ c, net: (pp.gpp - pp.cpp) }); }
+    cr.sort((a, b) => b.net - a.net);
+    const acts = cr.slice(0, 3).map(r => ({ label: "Plant " + r.c, sub: "+" + _fmtFlower(r.net * plots) + "/day", good: r.net > 0, iconName: r.c }));
+    if (acts.length) branches.push({ label: "FARM", iconName: "Kale", actions: acts });
+  }
+  // MINE — resources worth actively harvesting
+  const mine = [];
+  for (const [catx, prod] of [["trees", "Wood"], ["stone", "Stone"], ["iron", "Iron"], ["gold", "Gold"], ["crimstone", "Crimstone"]]) {
+    if (getCapacityCount(catx, cap) <= 0) continue;
+    const bd = roadmapCatBreakdown(catx, roadmapOwnedEffects(catx), settings);
+    const net = (bd ? bd.net : 0) * roadmapEffFactor(catx, settings);
+    if (net > 0.001) mine.push({ label: "Mine " + prod, sub: "+" + _fmtFlower(net) + "/day", good: true, iconName: prod, net });
+  }
+  mine.sort((a, b) => b.net - a.net);
+  if (mine.length) branches.push({ label: "MINE", iconName: "Pickaxe", actions: mine.slice(0, 4) });
+  // ANIMALS — feed or skip
+  const ani = [];
+  for (const [catA, typ, drop] of [["chickens", "Chicken", "Egg"], ["cows", "Cow", "Milk"], ["sheep", "Sheep", "Wool"]]) {
+    const animals = (cap.animalDetails && cap.animalDetails[catA]) || []; if (!animals.length) continue;
+    const oeff = roadmapOwnedEffects(catA);
+    const produce = (getAnimalCatSfl(catA, cap, oeff, p2p).totalSfl) || 0;
+    let feed = 0; try { feed = (calcAnimalFeedCost(catA, cap, p2p, oeff, powerState.stockMods).costPerDay) || 0; } catch {}
+    const net = produce - feed;
+    ani.push({ label: (net > 0 ? "Feed " : "Skip ") + typ + "s", sub: (net > 0 ? "+" : "") + _fmtFlower(net) + "/day", good: net > 0, iconName: drop });
+  }
+  if (ani.length) branches.push({ label: "ANIMALS", iconName: "Egg", actions: ani });
+  // GIFTS — top NPCs to gift flowers
+  const hasBB = !!(farm.bumpkin && farm.bumpkin.skills && farm.bumpkin.skills["Blossom Bonding"]);
+  const gl = Object.keys(DEFAULT_FLOWER_POINTS), gr = [];
+  for (const [npc, data] of Object.entries(BUMPKIN_GIFTS_DATA)) {
+    if (!data.repeats) continue;
+    let best = null;
+    for (const f of gl) { const p = getFlowerGiftPoints(npc, f, hasBB); let hrs = 0; try { hrs = getFlowerChainHours(f); } catch {} const days = Math.max(1, (hrs || 24) / 24); const eff = p / days; if (!best || eff > best.eff) best = { f, p, days, eff }; }
+    const rv = roadmapGiftRewardValue(data.repeats, () => 0), pd = (rv > 0 && best.eff > 0) ? rv * best.eff / data.repeats.fp : 0;
+    if (pd > 0.05) gr.push({ npc, bf: best.f, days: best.days, pd });
+  }
+  gr.sort((a, b) => b.pd - a.pd);
+  if (gr.length) branches.push({ label: "GIFTS", iconName: "Red Pansy", actions: gr.slice(0, 4).map(g => ({ label: "Gift " + g.bf + " → " + g.npc, sub: "+" + _fmtFlower(g.pd) + "/day · " + g.days.toFixed(0) + "d grow", good: true, iconName: g.bf })) });
+  // DELIVER — best pending deliveries
+  const now = Date.now();
+  const estItem = (n) => roadmapItemCost(n);
+  const cFree = roadmapCoinsFree(settings), dr = [];
+  for (const o of ((farm.delivery && farm.delivery.orders) || [])) {
+    if (o.completedAt) continue;
+    let cost = 0; for (const [it, q] of Object.entries(o.items || {})) cost += (it === "coins") ? (cFree ? 0 : (er.coinsPerSFL > 0 ? q / er.coinsPerSFL : 0)) : estItem(it) * q;
+    const give = Object.entries(o.items || {}).map(([it, q]) => it === "coins" ? (q.toLocaleString() + " coins") : (q + "× " + it)).join(", ");
+    const r = o.reward || {}; let rv = (r.sfl || 0) + ((r.coins || 0) > 0 && er.coinsPerSFL > 0 ? r.coins / er.coinsPerSFL : 0);
+    let tk = 0; try { tk = dashCalculateDeliveryTickets(o.from, farm, now) || 0; } catch {}
+    rv += tk * (typeof settings.ticketValueSfl === "number" ? settings.ticketValueSfl : 1);
+    dr.push({ from: o.from, give, cost, rewardVal: rv, tickets: tk, net: rv - cost });
+  }
+  dr.sort((a, b) => b.net - a.net);
+  if (dr.length) branches.push({ label: "DELIVER", iconName: "Pancakes", actions: dr.slice(0, 4).map(d => ({ label: "Deliver → " + d.from, sub: "give " + (d.give || "?") + " · get " + _fmtFlower(d.rewardVal) + (d.tickets ? (" (" + d.tickets + "tk)") : "") + (d.cost > 0.001 ? (" · cost " + _fmtFlower(d.cost)) : "") + " · net " + (d.net >= 0 ? "+" : "−") + _fmtFlower(Math.abs(d.net)), good: d.net > 0 })) });
+  return branches;
+}
+
 
 function _fmtFl(v) { return (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2)); }
 
