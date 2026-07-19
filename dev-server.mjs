@@ -88,8 +88,10 @@ const server = createServer(async (req, res) => {
 
 // Bind loopback only: this serves any file under the repo root (including .env and .git/),
 // so it must not be reachable from the LAN.
-server.listen(PORT, "127.0.0.1", () => {
-  console.log(`dev server → http://localhost:${PORT}  (proxying other /api/* to ${PROD})`);
+// HOST=0.0.0.0 exposes the dev server beyond localhost (e.g. for Tailscale testing).
+const HOST = process.env.HOST || "127.0.0.1";
+server.listen(PORT, HOST, () => {
+  console.log(`dev server → http://${HOST === "0.0.0.0" ? "<any-interface>" : "localhost"}:${PORT}  (proxying other /api/* to ${PROD})`);
   // Loud on purpose: silently serving stale core/ modules is this server's one nasty trap.
   // `node --watch` re-execs a child WITHOUT the flag, so process.execArgv is empty here and
   // cannot be used to detect it (my first attempt did, and cried wolf under the correct setup —
