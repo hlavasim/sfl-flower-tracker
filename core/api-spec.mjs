@@ -29,7 +29,7 @@ export const API_SPEC = {
             name: "section",
             in: "query",
             required: false,
-            schema: { type: "string", enum: ["buds", "constants", "cooking", "diff", "eff", "openapi", "pets", "power", "prices", "roi", "treasury"], default: "cooking" },
+            schema: { type: "string", enum: ["buds", "constants", "cooking", "diff", "eff", "openapi", "pets", "power", "prices", "roadmap", "roi", "treasury"], default: "cooking" },
             description:
               "Which computation to run. `constants`: the canonical core/data game tables " +
               "plus flowers.html migration-coverage status, no farm needed. `cooking`: " +
@@ -74,6 +74,11 @@ export const API_SPEC = {
               "`treasury`: full-farm liquidation valuation — `td` (nft floors + p2p + coin/gem/" +
               "USD/BTC rates) and `value` (computeFarmValue: resources/treasures/collectibles/" +
               "wearables/pets/listings/liquid + totals) for the requested `coinMode`. " +
+              "`roadmap`: POST-only — the roadmap page's computed layer: measured efficiency " +
+              "(body `{ snapshots }` like `eff`), `currentProd` (net income by category at " +
+              "real efficiency), and `sim` (the reinvestment-ordered buy path: timeline, " +
+              "ranked list, core/cosmetic/tail splits; non-finite roi/atDay → null). Honors " +
+              "the `roadmap` and `products` query params. " +
               "`openapi`: this document, no farm needed. Defaults to `cooking` when omitted.",
           },
           {

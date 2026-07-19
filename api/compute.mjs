@@ -6,6 +6,7 @@ import { buildPowerSection } from "../core/sections/power.mjs";
 import { buildRoiSection } from "../core/sections/roi.mjs";
 import { roadmapComputeEfficiency } from "../core/engine/roadmap.mjs";
 import { buildTreasurySection } from "../core/sections/treasury.mjs";
+import { buildRoadmapSection } from "../core/sections/roadmap.mjs";
 import { buildBudsSection } from "../core/sections/buds.mjs";
 import { buildPetsSection } from "../core/sections/pets.mjs";
 import { computeBettyRate } from "../core/engine/prices.mjs";
@@ -279,6 +280,20 @@ export default async function handler(req, res) {
       let input = {};
       try { input = req.body ? JSON.parse(req.body.toString()) : {}; } catch { input = {}; }
       data = roadmapComputeEfficiency(Array.isArray(input.snapshots) ? input.snapshots : []);
+    }
+    // `roadmap`: POST-only — the roadmap page's whole computed layer: efficiency from
+    // posted farm-history snapshots + current production + the buy-path simulation.
+    // buildPowerSection runs first to set the shared power/roadmap context (boost items,
+    // capacity, rates) — its own payload is discarded, only the context matters here.
+    else if (section === "roadmap") {
+      const [nftResult, exchange] = await Promise.all([fetchNfts(), fetchExchange()]);
+      if (!nftResult.ok) return res.status(502).json({ error: `nfts fetch failed: ${nftResult.status}` });
+      let roadmapSettings = {};
+      try { roadmapSettings = req.query.roadmap ? JSON.parse(req.query.roadmap) : {}; } catch { roadmapSettings = {}; }
+      buildPowerSection(farm, p2p, nftResult.data, exchange, { ...settings, roadmapSettings, savedProducts: req.query.products ? JSON.parse(req.query.products) : {} });
+      let input = {};
+      try { input = req.body ? JSON.parse(req.body.toString()) : {}; } catch { input = {}; }
+      data = buildRoadmapSection(Array.isArray(input.snapshots) ? input.snapshots : [], { roadmapSettings });
     }
     // `roi`: the ROI page's state — the page's own copy of the power fetch+rate block
     // (plus a 4th upstream, BTC/USD) and its own boost-item/pet builders. Same 502

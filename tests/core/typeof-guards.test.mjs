@@ -57,7 +57,8 @@ test("every `typeof X !== \"undefined\"` guard in core/ names something the file
 
     for (const name of [...new Set(guarded)]) {
       guardCount++;
-      const declaredLocally = new RegExp(`^(?:export\\s+)?(?:const|let|var|function)\\s+${name}\\b`, "m").test(src);
+      // \s* prefix: verbatim page extractions keep their 4-space indentation.
+      const declaredLocally = new RegExp(`^\\s*(?:export\\s+)?(?:const|let|var|function)\\s+${name}\\b`, "m").test(src);
       if (!imported.includes(name) && !declaredLocally) {
         offenders.push(`${path}: guards \`${name}\` but never imports or declares it — that branch is dead and returns 0/null silently`);
       }

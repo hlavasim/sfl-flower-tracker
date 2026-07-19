@@ -17603,19 +17603,26 @@
         return;
       }
 
-      const eff = await roadmapComputeMayEfficiency();
-      const ratios = Object.values(eff.effByCat).map(e => e.ratio).filter(r => r > 0);
-      let gDefault = ratios.length ? ratios.reduce((a, b) => a + b, 0) / ratios.length : 0.3;
-      gDefault = Math.min(1.5, Math.max(0.05, gDefault));
-
-      roadmapState = { effByCat: eff.effByCat, effMeta: eff.meta, globalActivityDefault: gDefault, meanRatio: (typeof eff.meanRatio === "number" ? eff.meanRatio : gDefault) };
+      // History slice for the eff computation — fetched ONCE; section=roadmap recomputes
+      // eff + production + simulation server-side on every settings change.
+      _roadmapSnapshotsCache = await _roadmapFetchHistorySlim();
+      await renderRoadmapContent();
       _maybePushPowerSummary();  // publish a per-category power/efficiency summary to /api/power-summary
-      const settings = getRoadmapSettings();
-      const prod = roadmapCurrentProduction(settings);
-      roadmapState.currentProdDefault = prod.total;
-      roadmapState.prodBreakdown = prod.breakdown;
+    }
 
-      renderRoadmapContent();
+    // farm-history rows slimmed to the _h.* diff slices section=roadmap/eff consume.
+    let _roadmapSnapshotsCache = null;
+    let _roadmapServer = null; // last section=roadmap payload { eff, currentProd, startIncome, sim }
+    async function _roadmapFetchHistorySlim() {
+      try {
+        const fromD = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+        const toD = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+        const r = await fetch(`/api/farm-history?farm=${FARM_ID}&from=${fromD}&to=${toD}&limit=2000`);
+        if (!r.ok) return [];
+        const d = await r.json();
+        return (d.snapshots || []).map(sn => ({ captured_at: sn.captured_at,
+          diff: Object.fromEntries(Object.entries(sn.diff || {}).filter(([k]) => k.startsWith("_h."))) }));
+      } catch { return []; }
     }
 
     function roadmapFlowIcon(name) { try { return getItemIcon(name); } catch { return ""; } }
@@ -17779,16 +17786,47 @@
       return { roadmap: { nodes: rmNodes, edges: rmEdges } };
     }
 
-    function renderRoadmapContent() {
+    // MIGRATED: eff + production + the buy-path simulation come from POST
+    // compute?section=roadmap (core/sections/roadmap.mjs). This wrapper fetches (every
+    // settings change re-runs it → fresh server compute) and hands the payload to the
+    // renderer below; roadmapState is refreshed from the served eff so the inline
+    // profitability/label helpers keep working. null roi/atDay = serialized Infinity.
+    async function renderRoadmapContent() {
+      const el = document.getElementById("roadmap-content");
+      if (!el) return;
+      try {
+        const q = `products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}&roadmap=${encodeURIComponent(localStorage.getItem("sfl_roadmap_settings") || "{}")}`;
+        const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=roadmap&${q}`, {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [] }),
+        });
+        if (!rp.ok) throw new Error(`compute roadmap ${rp.status}`);
+        const d = (await rp.json()).data || {};
+        const inf = (v) => (v == null ? Infinity : v);
+        for (const t of (d.sim.timeline || [])) { t.roi = inf(t.roi); t.atDay = inf(t.atDay); }
+        for (const r of (d.sim.ranked || [])) { r.roi = inf(r.roi); r.atDay = inf(r.atDay); }
+        d.sim.totalDays = inf(d.sim.totalDays);
+        d.sim.coreDays = inf(d.sim.coreDays);
+        _roadmapServer = d;
+        const eff = d.eff || { effByCat: {}, meta: {} };
+        const ratios = Object.values(eff.effByCat || {}).map(e => e.ratio).filter(r => r > 0);
+        let gDefault = ratios.length ? ratios.reduce((a, b) => a + b, 0) / ratios.length : 0.3;
+        gDefault = Math.min(1.5, Math.max(0.05, gDefault));
+        roadmapState = { effByCat: eff.effByCat || {}, effMeta: eff.meta, globalActivityDefault: gDefault,
+          meanRatio: (typeof eff.meanRatio === "number" ? eff.meanRatio : gDefault),
+          currentProdDefault: d.currentProd.total, prodBreakdown: d.currentProd.breakdown };
+      } catch (err) {
+        if (!_roadmapServer) { el.innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load: ${escHTML(err.message)}</p></div>`; return; }
+      }
+      _renderRoadmapContentWith(_roadmapServer);
+    }
+
+    function _renderRoadmapContentWith(server) {
       const el = document.getElementById("roadmap-content");
       if (!el || !roadmapState) return;
       const settings = getRoadmapSettings();
-      const prod = roadmapCurrentProduction(settings);
-      roadmapState.currentProdDefault = prod.total;
-      roadmapState.prodBreakdown = prod.breakdown;
-
-      const startIncome = (settings.startIncome != null) ? settings.startIncome : roadmapState.currentProdDefault;
-      const sim = roadmapSimulate(settings, startIncome);
+      const startIncome = server.startIncome;
+      const sim = server.sim;
       const sflUsd = (powerState.exchangeRates && powerState.exchangeRates.sflUsd) || 0;
       const usd = v => sflUsd > 0 ? ` <span style="color:var(--text-dim)">($${(v * sflUsd).toLocaleString(undefined, { maximumFractionDigits: 0 })})</span>` : "";
 

@@ -14,8 +14,9 @@
 //   4. activeShrineEffects/miningToolsPerDay get powerState.farm passed explicitly
 //      (they read the global on the page).
 import {
-  RES_FARMKEY, gameResYield, applyBoosts, miningToolsPerDay, calcToolCostPerDay,
-  getCycleSec, getCapacityCount, getDefaultProduct, isAnimalCat,
+  RES_FARMKEY, gameResYield, gameResBoostedBase, applyBoosts, miningToolsPerDay, calcToolCostPerDay,
+  getCycleSec, getCapacityCount, getDefaultProduct, isAnimalCat, POWER_CATEGORIES,
+  getCount, findCollectible,
   getEffectsForCategory, TOOL_TO_CAT,
 } from "./power-helpers.mjs";
 import {
@@ -31,6 +32,7 @@ import { TOOL_COSTS } from "../data/economy.mjs";
 let powerState = null;
 let roadmapState = null; // deviation 3: no measured history server-side
 export function _setPowerContext(ps) { powerState = ps; }
+function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives from the caller
 
 
     // ── flowers.html 4114-4121: BETTY_RESTOCK_AMOUNT ──
@@ -488,7 +490,360 @@ export function _setPowerContext(ps) { powerState = ps; }
     }
 
 
+
+    // ── flowers.html 3934-3945: NODE_PRICES ──
+    const NODE_PRICES = {
+      trees:       { base: 4,  increase: 3,  farmKey: "trees",       catId: "trees",    label: "Tree" },
+      stones:      { base: 4,  increase: 3,  farmKey: "stones",      catId: "stone",    label: "Stone" },
+      iron:        { base: 7,  increase: 5,  farmKey: "iron",        catId: "iron",     label: "Iron" },
+      gold:        { base: 10, increase: 6,  farmKey: "gold",        catId: "gold",     label: "Gold" },
+      crimstones:  { base: 20, increase: 20, farmKey: "crimstones",  catId: "crimstone", label: "Crimstone" },
+      oilReserves: { base: 40, increase: 20, farmKey: "oilReserves", catId: "oil",      label: "Oil Reserve" },
+      crops:       { base: 3,  increase: 2,  farmKey: "crops",       catId: "crops",    label: "Crop Plot" },
+      fruitPatches:{ base: 5,  increase: 5,  farmKey: "fruitPatches", catId: "fruits",  label: "Fruit Patch" },
+      flowers:     { base: 30, increase: 25, farmKey: "flowers",     catId: "flowers",  label: "Flower Bed" },
+    };
+
+
+    // ── flowers.html 3959-3973: BASE_NODE_COUNTS + MERGE_COSTS ──
+    const BASE_NODE_COUNTS = {
+      basic:          { crops:31, trees:9,  stones:7,  iron:4,  gold:2, crimstones:0, oilReserves:0, lavaPits:0, fruitPatches:0, flowers:0 },
+      spring:         { crops:45, trees:18, stones:15, iron:9,  gold:6, crimstones:2, oilReserves:0, lavaPits:0, fruitPatches:11, flowers:3 },
+      desert:         { crops:65, trees:23, stones:20, iron:12, gold:7, crimstones:4, oilReserves:3, lavaPits:0, fruitPatches:15, flowers:3 },
+      volcano:        { crops:65, trees:23, stones:20, iron:13, gold:8, crimstones:5, oilReserves:4, lavaPits:3, fruitPatches:15, flowers:3 },
+    };
+
+    // ── Merge costs (4×t1→t2, 4×t2→t3) ──
+    const MERGE_COSTS = {
+      trees:  { t2: { obsidian:3,  coins:25000  }, t3: { obsidian:5,  coins:50000  }, yieldBonus: { t2:0.5, t3:2.5 } },
+      stones: { t2: { obsidian:5,  coins:50000  }, t3: { obsidian:10, coins:100000 }, yieldBonus: { t2:0.5, t3:2.5 } },
+      iron:   { t2: { obsidian:10, coins:100000 }, t3: { obsidian:15, coins:200000 }, yieldBonus: { t2:0.5, t3:2.5 } },
+      gold:   { t2: { obsidian:15, coins:200000 }, t3: { obsidian:20, coins:350000 }, yieldBonus: { t2:0.5, t3:2.5 } },
+    };
+
+
+    // ── flowers.html 19396-19404: countNodeTiers ──
+    function countNodeTiers(resourceObj) {
+      let t1 = 0, t2 = 0, t3 = 0;
+      for (const node of Object.values(resourceObj || {})) {
+        const m = node.multiplier || 1;
+        if (m >= 16) t3++; else if (m >= 4) t2++; else t1++;
+      }
+      return { physical: t1 + t2 + t3, t1, t2, t3, effective: t1 + t2 * 4 + t3 * 16 };
+    }
+
+
+    // ── flowers.html 16216-16227: roadmapCurrentProduction ──
+    function roadmapCurrentProduction(settings) {
+      let total = 0; const breakdown = [];
+      for (const [cat, meta] of Object.entries(POWER_CATEGORIES)) {
+        if (!meta.quantifiable) continue;
+        const net = roadmapCatNet(cat, roadmapOwnedEffects(cat), settings);
+        const v = Math.max(0, net) * roadmapEffFactor(cat, settings);
+        if (v > 0) { total += v; breakdown.push({ cat, sfl: v }); }
+      }
+      breakdown.sort((a, b) => b.sfl - a.sfl);
+      return { total, breakdown };
+    }
+
+
+    // ── flowers.html 16896-16968: roadmapItemValue + roadmapItemSituational ──
+    function roadmapItemValue(clone, catBoostsW, settings) {
+      if (!clone) return 0;
+      if (clone.fixedMarginal !== undefined) return clone.fixedMarginal; // node merge/expand actions
+      let total = 0;
+      const _exV = (settings.excludeCats || []);
+      const mineCats = clone.categories.filter(c => ROADMAP_MINING_CATS.indexOf(c) >= 0 && POWER_CATEGORIES[c] && POWER_CATEGORIES[c].quantifiable && clone.effects.some(e => e.cat === c) && _exV.indexOf(c) < 0);
+      // Mining boosts use the WHOLE-CHAIN delta: a tool/yield boost on one tier shifts other tiers' nets
+      // (e.g. a free tool frees the upstream resource it would have eaten) — a per-category delta misses that.
+      if (mineCats.length) {
+        const override = {};
+        for (const cat of mineCats) {
+          const ownedEff = catBoostsW[cat].filter(b => b.has && !b.isDisabled).flatMap(b => b.effects.filter(e => e.cat === cat));
+          override[cat] = ownedEff.concat(clone.effects.filter(e => e.cat === cat));
+        }
+        const d = roadmapMiningChain(settings, override).total - roadmapMiningChain(settings).total;
+        if (d > 0) total += d * roadmapEffFactor(mineCats[0], settings);
+      }
+      for (const cat of clone.categories) {
+        if (ROADMAP_MINING_CATS.indexOf(cat) >= 0) continue; // handled by the chain delta above
+        if (_exV.indexOf(cat) >= 0) continue; // user filtered this activity out
+        if (!POWER_CATEGORIES[cat] || !POWER_CATEGORIES[cat].quantifiable) continue;
+        const itemEff = clone.effects.filter(e => e.cat === cat);
+        if (itemEff.length === 0) continue;
+        const ownedEff = catBoostsW[cat].filter(b => b.has && !b.isDisabled).flatMap(b => b.effects.filter(e => e.cat === cat));
+        const without = Math.max(0, roadmapCatNet(cat, ownedEff, settings));
+        const withIt = Math.max(0, roadmapCatNet(cat, ownedEff.concat(itemEff), settings));
+        const delta = withIt - without;
+        if (delta > 0) total += delta * roadmapEffFactor(cat, settings);
+      }
+      return total;
+    }
+
+    // "Situational" value: what a boost is worth if you DID run the activity it touches, even when that
+    // activity isn't in your current profit-optimal setup. Crops/fruits/greenhouse → grow the boosted
+    // product on its seed-capped plots and take the best single deployment. Resources/animals → the
+    // unfloored category improvement (so a boost to a still-loss-making category like crimstone still
+    // registers). Returns { value, reason } — used only to surface 0-marginal boosts, never income.
+    function roadmapItemSituational(clone, catBoostsW, settings) {
+      if (!clone) return { value: 0, reason: "" };
+      let total = 0; const reasons = [];
+      for (const cat of clone.categories) {
+        if (!POWER_CATEGORIES[cat] || !POWER_CATEGORIES[cat].quantifiable) continue;
+        if ((settings.excludeCats || []).indexOf(cat) >= 0) continue;
+        const itemEff = clone.effects.filter(e => e.cat === cat);
+        if (!itemEff.length) continue;
+        const ownedEff = catBoostsW[cat].filter(b => b.has && !b.isDisabled).flatMap(b => b.effects.filter(e => e.cat === cat));
+        let v = 0;
+        if (cat === "crops" || cat === "fruits" || cat === "greenhouse") {
+          const table = cat === "crops" ? CROP_GROW_DATA : (cat === "fruits" ? FRUIT_GROW_DATA : GREENHOUSE_GROW_DATA);
+          let prods = Array.from(new Set(itemEff.filter(e => e.product).map(e => e.product)));
+          if (!prods.length) prods = Object.keys(table); // AOE/global → best of any product
+          prods = prods.filter(p => (settings.excludeCats || []).indexOf(p) < 0); // drop crops/fruits the user filtered out
+          let best = 0, bestP = "";
+          for (const p of prods) {
+            if (!table[p]) continue;
+            const a = roadmapPerPlot(cat, p, ownedEff.concat(itemEff), settings);
+            const b = roadmapPerPlot(cat, p, ownedEff, settings);
+            if (!a || !b) continue;
+            const plotsP = Math.min(a.plots, a.maxPlots);
+            const d = ((a.gpp - a.cpp) - (b.gpp - b.cpp)) * plotsP;
+            if (d > best) { best = d; bestP = p; }
+          }
+          v = best;
+          if (best > 0 && bestP) reasons.push("if you grow " + bestP);
+        } else {
+          const d = roadmapCatNet(cat, ownedEff.concat(itemEff), settings) - roadmapCatNet(cat, ownedEff, settings);
+          v = Math.max(0, d);
+          if (v > 0) reasons.push((POWER_CATEGORIES[cat].label || cat) + " (still below break-even)");
+        }
+        total += v * roadmapEffFactor(cat, settings);
+      }
+      return { value: total, reason: reasons.join(", ") };
+    }
+
+    // ── flowers.html 17344-17373: roadmapBuildClones + roadmapBuildMissing ──
+    function roadmapBuildClones() {
+      const clones = powerState.boostItems.map(b => Object.assign({}, b));
+      const byName = {};
+      clones.forEach(c => { byName[c.name] = c; });
+      const catBoostsW = {};
+      for (const cat of Object.keys(POWER_CATEGORIES)) catBoostsW[cat] = clones.filter(c => c.categories.includes(cat));
+      return { byName, catBoostsW };
+    }
+
+    function roadmapBuildMissing(byName, settings) {
+      const { nftData, inventory, farm } = powerState;
+      const wardrobe = farm.wardrobe || {};
+      const out = [];
+      const seen = new Set();
+      const add = (item, type) => {
+        const name = item && item.name;
+        if (!name || seen.has(name)) return;
+        seen.add(name);
+        const has = type === "Wearable"
+          ? (wardrobe[name] || 0) > 0
+          : (getCount(inventory, name) > 0 || findCollectible(farm, name).length > 0);
+        if (has) return;
+        const clone = byName[name] || null;
+        const floor = clone ? clone.floor : (parseFloat(item.floor) || 0);
+        out.push({ name, type, floor, clone, boost: (item.boost_text || (clone && clone.boost) || ""), supply: item.supply || 0 });
+      };
+      if (settings.incCollectibles && nftData) for (const it of (nftData.collectibles || [])) add(it, "Collectible");
+      if (settings.incWearables && nftData) for (const it of (nftData.wearables || [])) add(it, "Wearable");
+      return out;
+    }
+
+    // ── flowers.html 17378-17431: roadmapNodeCandidates ──
+    function roadmapNodeCandidates(settings) {
+      const out = [];
+      const { capacity, exchangeRates, farm } = powerState;
+      const p2pPrices = roadmapPrices(settings);
+      const obsidianP = p2pPrices["Obsidian"] || 0;
+      if (!(obsidianP > 0)) return out;               // can't price Obsidian → skip node actions
+      const sunstoneP = obsidianP * 3;                 // 1 Sunstone = 3 Obsidian
+      const coinsFree = roadmapCoinsFree(settings);
+      const er = coinsFree ? Object.assign({}, exchangeRates, { coinsPerSFL: Infinity }) : exchangeRates;
+      const coinSfl = (coins) => coinsFree ? 0 : (er.coinsPerSFL > 0 ? coins / er.coinsPerSFL : 0);
+      const islandType = ((farm.island && farm.island.type) || "basic").toLowerCase();
+      const baseNodes = (typeof BASE_NODE_COUNTS !== "undefined" && (BASE_NODE_COUNTS[islandType] || BASE_NODE_COUNTS.basic)) || {};
+      const mkItem = (name, cost, cat, marg, desc) => ({ name, type: "Node", floor: cost, boost: desc, supply: 0,
+        clone: { name, categories: [cat], effects: [], fixedMarginal: marg, has: false, isDisabled: false } });
+      const MERGEKEY_CAT = { trees: "trees", stones: "stone", iron: "iron", gold: "gold" };
+      const cyclesFor = (cat) => { const oeff = roadmapOwnedEffects(cat); const ab = applyBoosts(cat, getDefaultProduct(cat), capacity, oeff); return ab.effectiveCycle > 0 ? 86400 / ab.effectiveCycle : 0; };
+
+      // A. Obsidian merges (4× t1 -> t2, 4× t2 -> t3) — each +0.5 yield/cycle.
+      for (const [mk, mc] of Object.entries(MERGE_COSTS)) {
+        const cat = MERGEKEY_CAT[mk]; const fk = RES_FARMKEY[cat]; if (!cat || !fk) continue;
+        const tiers = countNodeTiers(farm[fk] || {});
+        const price = p2pPrices[getDefaultProduct(cat)] || 0;
+        const marg = 0.5 * cyclesFor(cat) * price * roadmapEffFactor(cat, settings);
+        if (!(marg > 0)) continue;
+        const label = (typeof NODE_PRICES !== "undefined" && NODE_PRICES[mk] && NODE_PRICES[mk].label) || cat;
+        const nT2 = Math.floor((tiers.t1 || 0) / 4);
+        const costT2 = mc.t2.obsidian * obsidianP + coinSfl(mc.t2.coins);
+        for (let i = 0; i < Math.min(nT2, 20); i++) out.push(mkItem("Merge " + label + " \u2192 tier 2", costT2, cat, marg, "4\u00d7 t1 \u2192 t2 \u00b7 +0.5/cycle \u00b7 " + mc.t2.obsidian + " Obsidian" + (coinsFree ? "" : " + " + (mc.t2.coins / 1000) + "k coins")));
+        const nT3 = Math.floor((tiers.t2 || 0) / 4);
+        const costT3 = mc.t3.obsidian * obsidianP + coinSfl(mc.t3.coins);
+        for (let i = 0; i < Math.min(nT3, 10); i++) out.push(mkItem("Merge " + label + " \u2192 tier 3", costT3, cat, marg, "4\u00d7 t2 \u2192 t3 \u00b7 +0.5/cycle \u00b7 " + mc.t3.obsidian + " Obsidian" + (coinsFree ? "" : " + " + (mc.t3.coins / 1000) + "k coins")));
+      }
+
+      // B. Buy new nodes with Sunstone (next 3 per resource; escalating cost).
+      if (typeof NODE_PRICES !== "undefined") for (const [nk, np] of Object.entries(NODE_PRICES)) {
+        const cat = np.catId; const fk = RES_FARMKEY[cat]; if (!fk) continue; // mineable/tree nodes only
+        const tiers = countNodeTiers(farm[fk] || {});
+        const purchased = Math.max(0, tiers.effective - (baseNodes[nk] || 0));
+        const oeff = roadmapOwnedEffects(cat);
+        const price = p2pPrices[getDefaultProduct(cat)] || 0;
+        const perNodeBase = gameResBoostedBase(farm, cat, oeff);   // one fresh t1 node, yield/cycle
+        const grossDay = perNodeBase * cyclesFor(cat) * price;
+        let toolPerNode = 0;
+        try { const tc = (calcToolCostPerDay(cat, capacity, er, p2pPrices, powerState.stockMods, false).costPerDay) || 0; const nN = Object.keys(farm[fk] || {}).length; toolPerNode = nN > 0 ? tc / nN : 0; } catch {}
+        const marg = Math.max(0, grossDay - toolPerNode) * roadmapEffFactor(cat, settings);
+        if (!(marg > 0)) continue;
+        for (let i = 0; i < 3; i++) {
+          const nextSun = np.base + (purchased + i) * np.increase;
+          out.push(mkItem("Buy " + np.label + " node", nextSun * sunstoneP, cat, marg, "+1 node \u00b7 " + nextSun + " Sunstone (" + (nextSun * 3) + " Obsidian)"));
+        }
+      }
+      return out;
+    }
+
+
+    // ── flowers.html 17432-17560: roadmapSimulate ──
+    function roadmapSimulate(settings, startIncome) {
+      const { byName, catBoostsW } = roadmapBuildClones();
+      const missing = roadmapBuildMissing(byName, settings);
+      const econ = [], cosmetic = [], untradeable = [], tail = [];
+      let noBoostCount = 0;
+      const TROLL = 500000; // floors above this are troll listings / no real liquidity (SFL supply ~50M)
+      const maxP = (settings.maxPrice && settings.maxPrice > 0) ? settings.maxPrice : Infinity;
+      for (const m of missing) {
+        if (!(m.floor > 0) || m.floor > TROLL) { untradeable.push(m); continue; }
+        if (!m.clone) { noBoostCount++; continue; } // no boost at all (pure decoration) → not part of the profit roadmap
+        if (m.floor > maxP) { tail.push(m); continue; }
+        const economic = !m.clone.isDisabled && m.clone.categories.some(c => POWER_CATEGORIES[c] && POWER_CATEGORIES[c].quantifiable);
+        if (economic) econ.push(m); else cosmetic.push(m);
+      }
+      // Fold in node expansion / Obsidian-merge actions (respect the price cap).
+      const nodeCands = roadmapNodeCandidates(settings);
+      for (const nc of nodeCands) { if (nc.floor > 0 && nc.floor <= maxP) econ.push(nc); }
+      // Skills are NOT part of the buy path (Visual / Table) — they live in their own Skills tab. They cost
+      // skill POINTS, not FLOWER, so they don't belong in a FLOWER reinvestment-ordered buy order.
+      tail.sort((a, b) => a.floor - b.floor);
+      const tailCost = tail.reduce((s, m) => s + m.floor, 0);
+      // Snapshot the original owned state so we can re-simulate any order from scratch.
+      const origHas = [];
+      for (const cat of Object.keys(catBoostsW)) for (const c of catBoostsW[cat]) origHas.push([c, c.has]);
+      for (const nc of nodeCands) origHas.push([nc.clone, nc.clone.has]);
+      const resetClones = () => { for (const [c, h] of origHas) c.has = h; };
+
+      const econPos = [], situational = [];
+      for (const m of econ) {
+        m.marginal = roadmapItemValue(m.clone, catBoostsW, settings);
+        if (m.marginal > 0) { econPos.push(m); continue; }
+        const sit = roadmapItemSituational(m.clone, catBoostsW, settings);
+        if (sit.value > 0.0001) { m.sitValue = sit.value; m.sitReason = sit.reason; situational.push(m); }
+        else cosmetic.push(m);
+      }
+      situational.sort((a, b) => (a.floor / (a.sitValue || 1e-9)) - (b.floor / (b.sitValue || 1e-9)));
+
+      // Simulate a buy ORDER with reinvestment + dynamic synergy. Returns the step timeline,
+      // final rate, total days, and the total FLOWER income integrated over horizon H (objective).
+      const simOrder = (order, H) => {
+        resetClones();
+        let r = startIncome > 0 ? startIncome : 0, day = 0, integral = 0, cumc = 0;
+        const steps = [];
+        for (const m of order) {
+          const marg = Math.max(0, roadmapItemValue(m.clone, catBoostsW, settings));
+          const dd = r > 0 ? m.floor / r : Infinity;
+          if (isFinite(dd)) integral += r * dd;
+          day += dd; m.clone.has = true; r += marg;
+          cumc += m.floor; steps.push({ m, marg, atDay: day, rateAfter: r, cumCost: cumc });
+        }
+        if (H > 0 && isFinite(day)) integral += r * Math.max(0, H - day);
+        return { steps, finalRate: r, totalDays: day, integral };
+      };
+
+      // Greedy start: lowest payback first, recomputing synergy after each buy.
+      const greedyOrder = () => {
+        resetClones();
+        const rem = econPos.slice();
+        for (const m of rem) { m._mg = roadmapItemValue(m.clone, catBoostsW, settings); m._roi = m._mg > 0 ? m.floor / m._mg : Infinity; }
+        const ord = []; let g = 0;
+        while (rem.length && g++ < 5000) {
+          let bi = 0; for (let i = 1; i < rem.length; i++) if (rem[i]._roi < rem[bi]._roi) bi = i;
+          const nx = rem.splice(bi, 1)[0];
+          if (!(nx._mg > 0)) continue;
+          nx.clone.has = true; ord.push(nx);
+          const cats = new Set(nx.clone.categories);
+          for (const m of rem) if (m.clone.categories.some(c => cats.has(c))) { m._mg = roadmapItemValue(m.clone, catBoostsW, settings); m._roi = m._mg > 0 ? m.floor / m._mg : Infinity; }
+        }
+        return ord;
+      };
+
+      let order = greedyOrder();
+      const H = (settings.horizonYears || 100) * 365;
+      const greedyVal = order.length ? simOrder(order, H).integral : 0;
+      // Local-search refinement: adjacent swaps that raise total FLOWER over the horizon. Greedy
+      // ROI is optimal for independent items; this catches reinvestment cases where buying a cheap
+      // booster slightly earlier compounds into more total FLOWER (the user's "B then A" case).
+      if (settings.optimizeOrder !== false && order.length > 1 && order.length <= 140) {
+        let best = greedyVal, improved = true, passes = 0;
+        while (improved && passes++ < 8) {
+          improved = false;
+          for (let i = 0; i < order.length - 1; i++) {
+            const sw = order.slice(); const tmp = sw[i]; sw[i] = sw[i + 1]; sw[i + 1] = tmp;
+            const v = simOrder(sw, H).integral;
+            if (v > best + Math.abs(best) * 1e-9 + 1e-6) { order = sw; best = v; improved = true; }
+          }
+        }
+      }
+      const fin = simOrder(order, H);
+      const optGainPct = greedyVal > 0 ? (fin.integral / greedyVal - 1) * 100 : 0;
+
+      // DISPLAY uses each item's marginal vs your CURRENT farm (s.m.marginal) — NOT its buy-ORDER
+      // position. Otherwise a boost bought after big synergistic ones (e.g. Tiki Totem after the Beavers
+      // double Wood respawn) shows an inflated, order-dependent number. Cumulative cost / income / ETA
+      // are a running total in the shown order, so the columns add up to the per-row +FL/day.
+      const timeline = [];
+      { let ri = (startIncome > 0 ? startIncome : 0), rd = 0;
+        for (const s of fin.steps) { const bm = Math.max(0, s.m.marginal || 0); const dd = ri > 0 ? s.m.floor / ri : Infinity; if (isFinite(dd)) rd += dd; ri += bm;
+          timeline.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, marginal: bm, roi: bm > 0 ? s.m.floor / bm : Infinity, atDay: rd, rateAfter: ri, kind: "econ", skillFree: s.m.skillFree, skillPoints: s.m.skillPoints, skillTree: s.m.skillTree, skillTier: s.m.skillTier }); } }
+      let rate = (startIncome > 0 ? startIncome : 0) + fin.steps.reduce((a, s) => a + Math.max(0, s.m.marginal || 0), 0);
+      let cumDays = timeline.length ? timeline[timeline.length - 1].atDay : 0;
+      const econSteps = timeline.length;
+      const econCost = timeline.reduce((s, t) => s + t.floor, 0);
+      const finalRate = rate;
+
+      cosmetic.sort((a, b) => a.floor - b.floor);
+      for (const m of cosmetic) {
+        const days = rate > 0 ? m.floor / rate : Infinity;
+        cumDays += days;
+        timeline.push({ name: m.name, type: m.type, boost: m.boost, floor: m.floor, marginal: 0, roi: Infinity, atDay: cumDays, rateAfter: rate, kind: "cosmetic" });
+      }
+      const totalCost = timeline.reduce((s, t) => s + t.floor, 0);
+      // Worthwhile core: the good-payback buys (the ones actually worth doing) vs the expensive long tail.
+      const CORE_ROI_DAYS = 730; // 2 years
+      let coreCost = 0, coreMarg = 0, coreCount = 0, coreDays = 0;
+      for (const t of timeline) {
+        if (t.kind !== "econ") continue;
+        if (t.roi <= CORE_ROI_DAYS) { coreCost += t.floor; coreMarg += t.marginal; coreCount++; coreDays = Math.max(coreDays, t.atDay); }
+      }
+      const coreRate = (startIncome > 0 ? startIncome : 0) + coreMarg;
+      // Unified ranked list: in-plan steps + conditional (situational), sorted by payback (ROI).
+      const ranked = [];
+      for (const s of fin.steps) { const bm = Math.max(0, s.m.marginal || 0); ranked.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, value: bm, roi: bm > 0 ? s.m.floor / bm : Infinity, status: "plan", skillFree: s.m.skillFree, skillTree: s.m.skillTree, skillTier: s.m.skillTier }); }
+      for (const m of situational) ranked.push({ name: m.name, type: m.type, boost: m.boost, floor: m.floor, value: m.sitValue, roi: m.sitValue > 0 ? m.floor / m.sitValue : Infinity, status: "conditional", reason: m.sitReason });
+      ranked.sort((a, b) => a.roi - b.roi);
+      { let rc = 0, ri = (startIncome > 0 ? startIncome : 0), rd = 0;
+        for (const r of ranked) { if (r.status !== "plan") continue; const dd = ri > 0 ? r.floor / ri : Infinity; if (isFinite(dd)) rd += dd; rc += r.floor; ri += r.value; r.cumCost = rc; r.rateAfter = ri; r.atDay = rd; } }
+      return { timeline, ranked, coreCount, coreCost, coreRate, coreDays, econSteps, cosmeticCount: cosmetic.length, econCost, untradeable, tail, tailCost, noBoostCount, situational, startRate: startIncome, finalRate, totalDays: cumDays, totalCost, optGainPct, horizonYears: (settings.horizonYears || 100) };
+    }
+
 export {
+  BASE_NODE_COUNTS, MERGE_COSTS, countNodeTiers, roadmapCurrentProduction,
+  roadmapItemValue, roadmapItemSituational, roadmapSimulate, _setRoadmapState,
   ROADMAP_EFF_HKEY, roadmapComputeEfficiency,
   getRoadmapSettings, roadmapOwnedEffects, roadmapCatBreakdown, roadmapCatNet,
   roadmapMiningChain, ROADMAP_MINING_CATS, calcBoostValue, cmGetSeedRestockCount,

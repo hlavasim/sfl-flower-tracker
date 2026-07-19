@@ -346,7 +346,7 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   // localStorage sfl_roadmap_settings (query `roadmap`) — marketFee/coinsFree/… feed
   // into the valuations even though calcBoostValue forces effMode theoretical.
   // roi: Infinity is JSON-unrepresentable → null on the wire (client maps back).
-  _setPowerContext({ farm, capacity, exchangeRates, stockMods, p2pPrices, boostItems, savedProducts, season, roadmapSettingsRaw: settings.roadmapSettings || {} });
+  _setPowerContext({ farm, inventory, capacity, exchangeRates, stockMods, p2pPrices, boostItems, savedProducts, season, nftData: nftSlim, roadmapSettingsRaw: settings.roadmapSettings || {} });
   const boostValues = {};
   for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
     if (!catDef.quantifiable) continue;
