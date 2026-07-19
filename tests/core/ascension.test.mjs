@@ -82,7 +82,16 @@ test("current state: pre-swamp farm is ready to ascend, standings served", () =>
   assert.equal(out.current.basicLand, 30);
   assert.equal(out.current.readyToAscend, true);
   assert.equal(out.current.bandStandings[1], 50);
-  assert.equal(out.current.bandStandings[2], 28);
+  // raw XP alone gives A2 L28 (pinned above); the cooked food sitting in the
+  // fixture inventory banks ~8.17M more XP (valued WITH the ×1.5 pet-streak
+  // boost, since that's how it will be eaten) and lifts the standing to L33.
+  assert.equal(out.current.bandStandings[2], 33);
+});
+
+test("banked food XP: cooked inventory counts toward levels, valued with pet boost", () => {
+  assert.equal(Math.round(out.current.bankedFoodXp), 8170932);
+  // the pin would fail if the pet ×1.5 were dropped: without it the bank is ~⅔ of this
+  assert.ok(out.current.bankedFoodXp > 0);
 });
 
 test("rates: theoretical from power categories, effective = theo × measured ratio", () => {

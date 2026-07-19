@@ -18766,7 +18766,7 @@
       h += `<div class="pixel-panel pixel-font" style="padding:12px;margin-bottom:14px;font-size:0.6rem;line-height:2">
         <div>🏝️ <strong>${escHTML(cur.island)}</strong> · Basic Land <strong>${cur.basicLand}</strong> · Ascension <strong>A${cur.ascensionLevel}</strong>
           ${cur.readyToAscend ? '<span style="color:var(--green);font-weight:bold"> · READY TO ASCEND</span>' : ""}</div>
-        <div>🧬 Standings: ${standings} · XP/day from cooking: <strong>${rates.xpPerDay > 0 ? Math.round(rates.xpPerDay).toLocaleString() : '<span style="color:var(--yellow)">⚠️ 0 — level ETAs unavailable, showing remaining XP</span>'}</strong></div>
+        <div>🧬 Standings: ${standings} · XP/day from cooking: <strong>${rates.xpPerDay > 0 ? Math.round(rates.xpPerDay).toLocaleString() : '<span style="color:var(--yellow)">⚠️ 0 — level ETAs unavailable, showing remaining XP</span>'}</strong>${cur.bankedFoodXp > 0 ? ` · 🍲 uvařeno v zásobě: <strong>+${(cur.bankedFoodXp / 1e6).toFixed(1)}M XP</strong> <span style="color:var(--text-dim)">(s ×1.5 pet, započteno do levelů)</span>` : ""}</div>
         <div>✨ Shards: <strong>${cur.shards}</strong> · 💎 Crystals: <strong>${cur.crystals}</strong> · 📦 Stock: ${["Crimstone","Oil","Obsidian"].map(r => `${r} <strong>${Math.floor(cur.stock[r])}</strong>`).join(" · ")} · Coins <strong>${Math.round(cur.stock.Coins).toLocaleString()}</strong></div>
       </div>`;
       // ── toggles ──
@@ -18827,7 +18827,27 @@
         }
       </style>`;
       h += `<div class="asc-legend"><span><span style="color:#7fe0a0">■</span> mám kumulativně (zdroje i level)</span><span><span style="color:#e8c060">■</span> dofarmím včas (ETA ≤ slot)</span><span><span style="color:#ff6b6b">■</span> zásek — nestíhám build slot</span></div>`;
-      const gi = (n) => `<img class="icn" src="${getItemIcon(n)}" onerror="this.style.display='none'" alt="${escHTML(n)}" title="${escHTML(n)}">`;
+      // sfl.world serves "?" placeholders for node types — use the GAME's own sprites
+      // (the same art images.ts maps: crystal = sunstone rock, shard = sunstone).
+      const _gassets = "https://sunflower-land.com/game-assets";
+      const _jsd = "https://cdn.jsdelivr.net/gh/sunflower-land/sunflower-land@main/src/assets";
+      const _ascIconUrl = {
+        "Coins": `${_jsd}/icons/coins.webp`,
+        "Crop Plot": `${_gassets}/resources/plot.png`,
+        "Fruit Patch": `${_gassets}/resources/fruit_patch.png`,
+        "Stone Rock": `${_gassets}/resources/stone_rock.png`,
+        "Iron Rock": `${_jsd}/resources/iron_rock.png`,
+        "Gold Rock": `${_jsd}/resources/gold_rock.png`,
+        "Crimstone Rock": `${_jsd}/resources/crimstone/crimstone_rock_5.webp`,
+        "Sunstone Rock": `${_jsd}/resources/sunstone/sunstone_rock_1.webp`,
+        "Oil Reserve": `${_jsd}/resources/oil/oil_reserve_full.webp`,
+        "Lava Pit": `${_jsd}/resources/lava/lava_pit.webp`,
+        "Beehive": `${_jsd}/sfts/beehive.webp`,
+        "Flower Bed": `${_jsd}/flowers/empty.webp`,
+        "Ascension Crystal": `${_jsd}/resources/sunstone/sunstone_rock_1.webp`,
+        "Ascension Shard": `${_jsd}/resources/sunstone/sunstone.png`,
+      };
+      const gi = (n) => `<img class="icn" src="${_ascIconUrl[n] || getItemIcon(n)}" onerror="this.style.display='none'" alt="${escHTML(n)}" title="${escHTML(n)}">`;
       const kFmt = (v) => v >= 10000 ? (v / 1000).toFixed(v >= 100000 ? 0 : 1) + "k" : Math.round(v).toLocaleString();
       const byAsc = {};
       for (const s of d.steps) (byAsc[s.asc] = byAsc[s.asc] || []).push(s);
@@ -18840,9 +18860,9 @@
           <th>${gi("Oil")}<span class="asc-hlbl">Oil</span></th>
           <th>${gi("Obsidian")}<span class="asc-hlbl">Obsidian</span></th>
           <th>${gi("Coins")}<span class="asc-hlbl">Coins</span></th>
-          <th class="nl">+nodes / ${gi("Ascension Crystal")}</th>
-          <th>⏱<span class="asc-hlbl">farm ETA</span></th>
-          <th>📅<span class="asc-hlbl">slot</span></th>
+          <th class="nl">+nodes</th>
+          <th>farm</th>
+          <th>slot</th>
         </tr></thead><tbody>`;
         for (const s of steps) {
           const sim = s.sim && s.sim[mode];
@@ -18863,10 +18883,10 @@
             if (!c) return "<td>—</td>";
             const eta = sim && sim.res && sim.res[r];
             const showEta = !resOk[r] && eta != null && eta > 0;
-            return `<td class="${resOk[r] ? "have" : "miss"}">${r === "Coins" ? kFmt(c) : Math.round(c)}${showEta ? `<span class="asc-eta">🕒${fmtEta(eta)}</span>` : ""}</td>`;
+            return `<td class="${resOk[r] ? "have" : "miss"}">${r === "Coins" ? kFmt(c) : Math.round(c)}${showEta ? `<span class="asc-eta">~${fmtEta(eta)}</span>` : ""}</td>`;
           };
           const nodeBits = Object.entries(s.nodesAdded || {}).map(([n, q]) => `${q > 1 ? q + "×" : "+"}${gi(n)}`);
-          if (s.crystals) nodeBits.unshift(`${gi("Ascension Crystal")}<span style="color:var(--text-dim);font-size:0.42rem">✨${s.shards}</span>`);
+          if (s.crystals) nodeBits.unshift(`${gi("Ascension Crystal")}<span style="color:var(--text-dim);font-size:0.42rem">${gi("Ascension Shard")}${s.shards}</span>`);
           const farmCell = sim ? (sim.blocked ? '<span class="miss">∞</span>' : (state === "ok" ? '<span class="have">✓</span>' : fmtEta(sim.farmEtaDays))) : "?";
           h += `<tr class="${state}">
             <td>${s.kind === "upgrade" ? `<strong>⬆ A${s.asc}</strong>` : `exp <strong>${s.expansion}</strong>`} <span style="color:var(--text-dim);font-size:0.42rem">${s.time ? s.time / 3600 + "h" : ""}</span></td>

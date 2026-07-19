@@ -8,6 +8,8 @@
 //     same roadmapComputeEfficiency as sections eff/roadmap) for the effective mode;
 //   - xpPerDay: buildCookingSection's totalXpPerDay (the verified cooking engine).
 // POST-only (snapshots for efficiency); query grinx=0|1, max=1..10.
+import { COOKING_RECIPES_DATA } from "../data/cooking.mjs";
+import { detectCookingBoosts, computeFoodXP } from "../engine/cooking.mjs";
 import {
   SWAMP_BASE_EXPANSION, SWAMP_EXPANSIONS_PER_ASCENSION, HOURS_PER_EXPANSION,
   getAscensionUpgradeCost, getAscensionExpansionRequirements, getExpansionCrystalCount,
@@ -60,6 +62,20 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
   const basicLand = getCount(inv, "Basic Land");
   const experience = farm.bumpkin?.experience || 0;
 
+  // ── banked food XP: everything already COOKED and sitting in the inventory is XP
+  // waiting to be eaten — and the user eats with the ×1.5 pet-streak boost active, so
+  // it is valued with petSimulate boosts (the same computeFoodXP the Bumpkin page
+  // uses). Level gates and ETAs below run on experience + this bank.
+  let bankedFoodXp = 0;
+  {
+    const boosts = detectCookingBoosts(farm, { petSimulate: true });
+    for (const [food, data] of Object.entries(COOKING_RECIPES_DATA)) {
+      const qty = getCount(inv, food);
+      if (qty > 0) bankedFoodXp += qty * computeFoodXP(food, data, data.building, boosts);
+    }
+  }
+  const experienceEff = experience + bankedFoodXp;
+
   // ── current state (§2.7 `current`) ──
   const stock = {
     Crimstone: getCount(inv, "Crimstone"), Oil: getCount(inv, "Oil"),
@@ -67,7 +83,7 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
   };
   if (grinx) { /* grinx halves COSTS, not stock */ }
   const bandStandings = {};
-  for (let a = 1; a <= maxAsc; a++) bandStandings[a] = ascensionStanding(experience, a);
+  for (let a = 1; a <= maxAsc; a++) bandStandings[a] = ascensionStanding(experienceEff, a);
   const nodeCounts = {
     Crimstone: Object.keys(farm.crimstones || {}).length,
     Oil: Object.keys(farm.oilReserves || {}).length,
@@ -76,8 +92,10 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
   const current = {
     island: island.type || "basic", ascensionLevel, basicLand, stock, experience,
     bumpkinLevel: experience >= V150_XP ? 150 : null,
+    bankedFoodXp,
     // ready to ascend into the NEXT band = current band complete = its baseline reached
-    readyToAscend: ascensionLevel === 0 ? experience >= V150_XP : experience >= ascensionBaseline(ascensionLevel + 1),
+    // (banked cooked food counts — it will be eaten with the pet boost before ascending)
+    readyToAscend: ascensionLevel === 0 ? experienceEff >= V150_XP : experienceEff >= ascensionBaseline(ascensionLevel + 1),
     bandStandings,
     crystals: getCount(inv, "Ascension Crystal"),
     shards: getCount(inv, "Ascension Shard"),
@@ -104,7 +122,7 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
       || (s.asc === ascensionLevel && s.kind === "exp" && s.expansion <= basicLand);
     s.standing = bandStandings[s.asc] || 0;
     s.levelMet = s.kind === "upgrade"
-      ? (s.asc === 1 ? experience >= V150_XP : (bandStandings[s.asc - 1] || 0) >= LEVELS_PER_ASCENSION)
+      ? (s.asc === 1 ? experienceEff >= V150_XP : (bandStandings[s.asc - 1] || 0) >= LEVELS_PER_ASCENSION)
       : (s.standing >= s.band);
     // exp step: XP threshold of its within-band level; upgrade step: previous band
     // complete == baseline of THIS ascension reached (baseline(1) = level-150 XP).
@@ -137,7 +155,7 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
 
   // ── node-aware production simulation (§2.4), eff + theo ──
   const levelEta = (s, xpPerDay) => {
-    const need = (s.levelXpNeeded || 0) - experience;
+    const need = (s.levelXpNeeded || 0) - experienceEff; // banked food already counted
     if (need <= 0) return 0;
     if (!(xpPerDay > 0)) return null; // fallback: show remaining XP (§2.3)
     return need / xpPerDay;
