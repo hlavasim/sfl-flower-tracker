@@ -4,6 +4,7 @@ import { buildPricesSection } from "../core/sections/prices.mjs";
 import { valueDiff } from "../core/sections/diff.mjs";
 import { buildPowerSection } from "../core/sections/power.mjs";
 import { buildRoiSection } from "../core/sections/roi.mjs";
+import { roadmapComputeEfficiency } from "../core/engine/roadmap.mjs";
 import { buildBudsSection } from "../core/sections/buds.mjs";
 import { buildPetsSection } from "../core/sections/pets.mjs";
 import { computeBettyRate } from "../core/engine/prices.mjs";
@@ -264,6 +265,19 @@ export default async function handler(req, res) {
       let roadmapSettings = {};
       try { roadmapSettings = req.query.roadmap ? JSON.parse(req.query.roadmap) : {}; } catch { roadmapSettings = {}; }
       data = buildPowerSection(farm, p2p, nftResult.data, exchange, { ...settings, roadmapSettings, savedProducts: req.query.products ? JSON.parse(req.query.products) : {} });
+    }
+    // `eff`: POST-only — measured harvest EFFICIENCY per category from farm-history
+    // snapshot rows the client already fetched (diff-page pattern: compute stays
+    // DB-free). Uses the power context (boost effects, capacity) that
+    // buildPowerSection sets, so the theoretical cycles match section=power's.
+    // Body: { snapshots: [{ captured_at, diff }, ...] }.
+    else if (section === "eff") {
+      const [nftResult, exchange] = await Promise.all([fetchNfts(), fetchExchange()]);
+      if (!nftResult.ok) return res.status(502).json({ error: `nfts fetch failed: ${nftResult.status}` });
+      buildPowerSection(farm, p2p, nftResult.data, exchange, settings); // sets the roadmap context
+      let input = {};
+      try { input = req.body ? JSON.parse(req.body.toString()) : {}; } catch { input = {}; }
+      data = roadmapComputeEfficiency(Array.isArray(input.snapshots) ? input.snapshots : []);
     }
     // `roi`: the ROI page's state — the page's own copy of the power fetch+rate block
     // (plus a 4th upstream, BTC/USD) and its own boost-item/pet builders. Same 502

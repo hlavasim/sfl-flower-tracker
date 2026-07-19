@@ -29,7 +29,7 @@ export const API_SPEC = {
             name: "section",
             in: "query",
             required: false,
-            schema: { type: "string", enum: ["buds", "constants", "cooking", "diff", "openapi", "pets", "power", "prices", "roi"], default: "cooking" },
+            schema: { type: "string", enum: ["buds", "constants", "cooking", "diff", "eff", "openapi", "pets", "power", "prices", "roi"], default: "cooking" },
             description:
               "Which computation to run. `constants`: the canonical core/data game tables " +
               "plus flowers.html migration-coverage status, no farm needed. `cooking`: " +
@@ -67,6 +67,10 @@ export const API_SPEC = {
               "overrides the per-category product like the page's selector). " +
               "`pets`: the pet advisor's per-pet daily economics (level, energy, best fetch, " +
               "SFL/day) + feed boosts + the raw p2p price map its tables use. " +
+              "`eff`: POST-only — measured harvest efficiency per category from farm-history " +
+              "snapshot rows the client posts (body `{ snapshots: [{ captured_at, diff }] }`); " +
+              "returns `{ effByCat, meta, meanRatio }` with theoretical cycles from the same " +
+              "boosted engine as `power`. " +
               "`openapi`: this document, no farm needed. Defaults to `cooking` when omitted.",
           },
           {

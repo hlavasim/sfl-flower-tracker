@@ -10,6 +10,11 @@ import * as pets from "../data/pets.mjs";
 // files — same scoreboard semantics: exported table present here = "duplicated").
 import * as powerBoosts from "../engine/power-boosts.mjs";
 import * as powerHelpers from "../engine/power-helpers.mjs";
+import * as powerCosts from "../engine/power-costs.mjs";
+import * as roadmapEngine from "../engine/roadmap.mjs";
+import * as roiCalc from "../engine/roi-calc.mjs";
+import * as petsEngine from "../engine/pets.mjs";
+import * as budsEngine from "../engine/buds.mjs";
 import { TABLE_INVENTORY } from "../data/_inventory.mjs";
 
 // Every core/data module. Adding one here is the ONLY manual step; the test in
@@ -24,6 +29,11 @@ const MODULES = {
   "core/data/pets.mjs": pets,
   "core/engine/power-boosts.mjs": powerBoosts,
   "core/engine/power-helpers.mjs": powerHelpers,
+  "core/engine/power-costs.mjs": powerCosts,
+  "core/engine/roadmap.mjs": roadmapEngine,
+  "core/engine/roi-calc.mjs": roiCalc,
+  "core/engine/pets.mjs": petsEngine,
+  "core/engine/buds.mjs": budsEngine,
 };
 
 export function buildConstantsSection() {

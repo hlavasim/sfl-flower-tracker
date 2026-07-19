@@ -441,7 +441,55 @@ export function _setPowerContext(ps) { powerState = ps; }
       return out;
     }
 
+
+    // ── flowers.html 15843-15847: ROADMAP_EFF_HKEY ──
+    const ROADMAP_EFF_HKEY = {
+      crops: "_h.crops", flowers: "_h.flowerBeds", fruits: "_h.fruitPatches", greenhouse: "_h.greenhouse",
+      trees: "_h.trees", stone: "_h.stones", iron: "_h.iron", gold: "_h.gold", crimstone: "_h.crimstones",
+      oil: "_h.oilReserves", obsidian: "_h.lavaPits", chickens: "_h.chickens", cows: "_h.cows", sheep: "_h.sheep",
+    };
+
+    // ── flowers.html 17360-17399: roadmapComputeMayEfficiency, fetch removed ──
+    // The page fetched /api/farm-history itself; here the caller POSTs those snapshot
+    // rows (diff-page pattern — compute stays DB-free). Body verbatim from the `if
+    // (!rows...)` guard down; applyBoosts gets powerState.farm (deviation 4).
+    function roadmapComputeEfficiency(rows) {
+      const out = { effByCat: {}, meta: { snaps: 0, days: 0, available: false, from: "", to: "" } };
+      if (!rows || rows.length < 2) return out;
+      const sorted = rows.filter(s => s.captured_at && s.diff && Object.keys(s.diff).some(k => k.startsWith("_h.")))
+        .sort((a, b) => new Date(a.captured_at) - new Date(b.captured_at));
+      if (sorted.length < 2) return out;
+      const pDays = (new Date(sorted[sorted.length - 1].captured_at) - new Date(sorted[0].captured_at)) / 86400000;
+      out.meta = { snaps: sorted.length, days: pDays, available: pDays > 1, from: sorted[0].captured_at.slice(0, 10), to: sorted[sorted.length - 1].captured_at.slice(0, 10) };
+      if (pDays <= 1) return out;
+      const measuredRatios = [];
+      for (const [catId, hKey] of Object.entries(ROADMAP_EFF_HKEY)) {
+        const oeff = roadmapOwnedEffects(catId);
+        const nodeCount = getCapacityCount(catId, powerState.capacity);
+        // Harvest timestamps (+ cumulative units) from the _h.* history.
+        let total = 0; const digTimes = [];
+        for (const snap of sorted) { const c = (snap.diff || {})[hKey]; if (c > 0) { total += c; digTimes.push(new Date(snap.captured_at).getTime()); } }
+        // Merge digs within 30 min into one session (exactly like the Nodes page).
+        const sessions = [];
+        if (digTimes.length) { let ss = digTimes[0], se = digTimes[0]; for (let i = 1; i < digTimes.length; i++) { if (digTimes[i] - se <= 1800000) se = digTimes[i]; else { sessions.push(ss); ss = digTimes[i]; se = digTimes[i]; } } sessions.push(ss); }
+        // Theoretical cycles/day from the boosted respawn (animals have none → unmeasured; roadmapEffFactor returns 1 for them).
+        let effectiveCycle = 0;
+        try { effectiveCycle = applyBoosts(catId, getDefaultProduct(catId), powerState.capacity, oeff, powerState.farm).effectiveCycle || 0; } catch {}
+        const theoPerDay = effectiveCycle > 0 ? 86400 / effectiveCycle : 0;
+        const actualPerDay = sessions.length / pDays;
+        let ratio = theoPerDay > 0 ? actualPerDay / theoPerDay : 0;
+        if (ratio > 1.5) ratio = 1.5; // same clamp as the Nodes page
+        const measured = theoPerDay > 0 && sessions.length > 0;
+        out.effByCat[catId] = { ratio, total, actualPerDay, theoPerDay, sessions: sessions.length, nodeCount, measured };
+        if (measured && catId !== "obsidian") measuredRatios.push(ratio);
+      }
+      out.meanRatio = measuredRatios.length ? measuredRatios.reduce((a, b) => a + b, 0) / measuredRatios.length : 0.5;
+      return out;
+    }
+
+
 export {
+  ROADMAP_EFF_HKEY, roadmapComputeEfficiency,
   getRoadmapSettings, roadmapOwnedEffects, roadmapCatBreakdown, roadmapCatNet,
   roadmapMiningChain, ROADMAP_MINING_CATS, calcBoostValue, cmGetSeedRestockCount,
 };

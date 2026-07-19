@@ -62,6 +62,10 @@ export const TABLE_INVENTORY = [
     "lines": 347
   },
   {
+    "name": "BUD_COUNT",
+    "lines": 1
+  },
+  {
     "name": "BUD_AURA_MULTIPLIERS",
     "lines": 2
   },
@@ -492,10 +496,6 @@ export const TABLE_INVENTORY = [
   {
     "name": "RESTOCK_QUEUE_DEFS",
     "lines": 13
-  },
-  {
-    "name": "ROADMAP_EFF_HKEY",
-    "lines": 5
   },
   {
     "name": "ROADMAP_MINING_CATS",

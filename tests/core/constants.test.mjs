@@ -35,8 +35,9 @@ async function coreDataExports() {
   // The power migration duplicates its tables into ENGINE modules, not data/ files; the
   // composer counts their exported tables the same way (see constants.mjs MODULES), so
   // this independent scan must too or the two definitions of "in core" drift apart.
-  mods.push(await import(new URL("../engine/power-boosts.mjs", DATA_DIR)));
-  mods.push(await import(new URL("../engine/power-helpers.mjs", DATA_DIR)));
+  for (const f of ["power-boosts", "power-helpers", "power-costs", "roadmap", "roi-calc", "pets", "buds"]) {
+    mods.push(await import(new URL(`../engine/${f}.mjs`, DATA_DIR)));
+  }
   const names = [];
   for (const mod of mods) {
     for (const [name, value] of Object.entries(mod)) {
