@@ -177,7 +177,10 @@ test("no explain flag → no traces, map byte-identical to today", () => {
   const p = buildPricesSection(farm, p2p, { coinsPerSFL: 1061.0079575596817 });
   assert.equal(p.marketTrace, undefined);
   assert.equal(p.productionTrace, undefined);
-  assert.equal(Object.keys(p.marketValue).length, 352);
+  // 353 = the pre-C1 352 + Grubby Doll, whose recipe repeats an ingredient across
+  // sibling branches: the old shared visited-set zeroed the second occurrence and the
+  // doll never priced at all. With backtracking (C1) it prices legitimately.
+  assert.equal(Object.keys(p.marketValue).length, 353);
 });
 
 // Bounding the explain payload: only DERIVED items (method !== "market price") get a trace
@@ -234,4 +237,18 @@ test("C7 — potion ticket cost derives from potionHouse.history; Black Magic re
   const p = buildPricesSection(farm, p2p, S);
   const expected = (8000 * cost) / S.coinsPerSFL;
   assert.ok(Math.abs(p.marketValue["Black Magic"] - expected) < 1e-9, `BM ${p.marketValue["Black Magic"]} vs ${expected}`);
+});
+
+// C1 (audit): an ingredient appearing in TWO sibling branches of one recipe tree must
+// be priced BOTH times — the old shared visited-set returned 0 for the second
+// occurrence (measured: Horseshoe Crab 4.64 under-counted vs 9.61 true). Pin the
+// mechanism directly: resolving twice from one shared set must equal resolving fresh.
+test("C1 — sibling branches re-price a shared ingredient (visited-set backtracks)", () => {
+  const shared = new Set();
+  const first = itemMarketValue("Crab", p2p, shared, S);
+  const second = itemMarketValue("Crab", p2p, shared, S);
+  const fresh = itemMarketValue("Crab", p2p, null, S);
+  assert.ok(first > 0);
+  assert.equal(second, first, "second sibling resolve must not be treated as a cycle");
+  assert.equal(first, fresh);
 });

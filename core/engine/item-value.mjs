@@ -34,7 +34,18 @@ export function computePotionTicketCoinCost(farm) {
 // (~:23110-23300). Prefers a direct P2P market price; falls back through a fixed chain of
 // derivations (crafted/food recipes, dolls, tools, exotic crops, seeds, treasure, XP, etc.)
 // when no market price exists. 0 means "unknown" — ~29 call sites depend on that contract.
+// C1 (audit 2026-07-19): the visited-set used to be SHARED across sibling branches of
+// one resolve, so an ingredient appearing twice in a recipe tree priced once and
+// returned 0 ("cycle") the second time — under-counting the true cost. Cycle-breaking
+// only needs the set along the PATH: these wrappers backtrack (delete on return), so
+// siblings re-price while genuine cycles still break. Measured impact on the fixture:
+// exactly two crustacean recipes (Horseshoe Crab 4.64→9.61, Crab Stick 2.66→4.47).
 export function itemMarketValue(itemName, p2pPrices, _visited, rates, trace) {
+  const r = _mvInner(itemName, p2pPrices, _visited, rates, trace);
+  if (_visited) _visited.delete(itemName);
+  return r;
+}
+function _mvInner(itemName, p2pPrices, _visited, rates, trace) {
   // Direct P2P price
   if (p2pPrices[itemName]) {
     const value = p2pPrices[itemName];
@@ -358,7 +369,13 @@ export function itemMarketValue(itemName, p2pPrices, _visited, rates, trace) {
 // "unpriceable" and is never traced (there is no value to explain); every return that
 // resolves to a real object records ONE trace node, when a sink is passed, describing how
 // `price` was derived (value: result.price).
+// C1: same backtracking wrapper as itemMarketValue above.
 export function itemProductionCost(itemName, p2p, coinsPerSFL, skills, _seen, extras, trace) {
+  const r = _pcInner(itemName, p2p, coinsPerSFL, skills, _seen, extras, trace);
+  if (_seen) _seen.delete(itemName);
+  return r;
+}
+function _pcInner(itemName, p2p, coinsPerSFL, skills, _seen, extras, trace) {
   _seen = _seen || new Set();
   if (_seen.has(itemName)) return null;
   _seen.add(itemName);
