@@ -18790,52 +18790,60 @@
       const firstStuck = d.steps.find(s => s.stuck);
       h += `<div class="pixel-panel pixel-font" style="padding:10px;margin-bottom:14px;font-size:0.6rem">
         ${firstStuck ? `⚠️ Continuous expand (from 3.8.2026) <strong>jams at ${firstStuck.kind === "upgrade" ? "A" + firstStuck.asc + " upgrade" : "A" + firstStuck.asc + "·exp" + firstStuck.expansion}</strong> — build slot ${fmtEta(firstStuck.buildSlotDays)} vs farm ETA ${fmtEta(firstStuck.sim && firstStuck.sim[mode] && firstStuck.sim[mode].farmEtaDays)}.` : `📅 You keep continuous-expand pace through A${d.maxAsc} at ${mode} production.`}</div>`;
-      // ── per-ascension step lists ──
-      // Row state: 🟢 ready = cumulative stock covers ALL costs AND the level gate;
-      // 🟡 on pace = needs farming but farm ETA ≤ its continuous-expand build slot;
-      // 🔴 stuck = farm ETA misses the slot (or production is blocked).
-      // Desktop = 7-column grid (via display:contents on the cost wrapper); mobile
-      // (≤760px) = calm 2-3 line cards: "step … status", one icon+number resource
-      // line, muted nodes line. Noise (met-level ✓ chips, per-resource ETAs, build
-      // hours, header row) is hidden on mobile.
+      // ── per-ascension step tables ──
+      // A real aligned TABLE on every viewport (user: "víc jako tabulku, žádný
+      // skrývání"): icon column headers, per-step rows tinted by state
+      // (🟢 cumulative stock + level cover it now / 🟡 farmable before its
+      // continuous-expand build slot / 🔴 misses the slot). All data visible on
+      // mobile too — compact type + k-formatted coins keep it inside 390px, with
+      // overflow-x as a safety net. Icons are the GAME's own sprites via
+      // getItemIcon (sfl.world/source covers node types and Ascension Crystal).
       h += `<style>
         .asc-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:0.5rem;color:var(--text-dim);margin-bottom:10px}
-        .asc-grid{display:flex;flex-direction:column;gap:3px}
-        .asc-costs{display:contents}
-        .asc-row{display:grid;grid-template-columns:118px 110px repeat(4,minmax(62px,1fr)) 150px minmax(90px,1.2fr);gap:6px;align-items:center;padding:5px 8px;border-left:4px solid #444;border-radius:4px;background:rgba(0,0,0,0.18);font-size:0.55rem}
-        .asc-row.hdr{background:rgba(0,0,0,0.4);color:var(--text-dim);font-size:0.48rem;border-left-color:transparent}
-        .asc-row.ok{border-left-color:#7fe0a0;background:rgba(31,58,42,0.35)}
-        .asc-row.pace{border-left-color:#e8c060;background:rgba(58,50,32,0.30)}
-        .asc-row.stuck{border-left-color:#ff6b6b;background:rgba(58,26,26,0.30)}
-        .asc-res{text-align:right;white-space:nowrap}
-        .asc-res.have{color:#7fe0a0}
-        .asc-res.miss{color:#ff8888}
-        .asc-eta{font-size:0.46rem;color:var(--text-dim);display:block}
-        .asc-nodes{font-size:0.52rem;white-space:normal;line-height:1.6;color:var(--text-secondary)}
-        .asc-status{text-align:right;white-space:nowrap;font-size:0.5rem}
-        .asc-btime{color:var(--text-dim);font-size:0.46rem}
+        .asc-t{width:100%;border-collapse:collapse;font-size:0.55rem}
+        .asc-t th{font-size:0.46rem;color:var(--text-dim);padding:3px 4px;text-align:right;border-bottom:1px solid var(--border-dark);white-space:nowrap}
+        .asc-t th:first-child,.asc-t th:nth-child(2),.asc-t th.nl{text-align:left}
+        .asc-t td{padding:3px 4px;text-align:right;white-space:nowrap;border-top:1px solid #1d1710}
+        .asc-t td:first-child{text-align:left;border-left:4px solid #444}
+        .asc-t td:nth-child(2),.asc-t td.nl{text-align:left}
+        .asc-t tr.ok td:first-child{border-left-color:#7fe0a0}
+        .asc-t tr.pace td:first-child{border-left-color:#e8c060}
+        .asc-t tr.stuck td:first-child{border-left-color:#ff6b6b}
+        .asc-t tr.ok{background:rgba(31,58,42,0.35)}
+        .asc-t tr.pace{background:rgba(58,50,32,0.28)}
+        .asc-t tr.stuck{background:rgba(58,26,26,0.30)}
+        .asc-t .have{color:#7fe0a0}
+        .asc-t .miss{color:#ff8888}
+        .asc-eta{display:block;font-size:0.44rem;color:var(--text-dim);font-weight:normal}
+        .asc-t .icn{height:1.15em;vertical-align:-0.2em}
+        .asc-t td.nodes img{height:1.1em;vertical-align:-0.18em}
+        .asc-hlbl{display:block;font-size:0.4rem}
         @media (max-width: 760px){
-          .asc-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;padding:7px 9px}
-          .asc-row.hdr{display:none} /* column labels only — cards carry icons/labels inline */
-          .asc-step-cell{order:1;font-size:0.6rem}
-          .asc-status{order:2;margin-left:auto;font-size:0.55rem}
-          .asc-lvl-cell{order:3;width:100%;font-size:0.5rem}
-          .asc-costs{display:flex;order:4;width:100%;gap:4px 14px;flex-wrap:wrap;margin-top:2px}
-          .asc-res{text-align:left;font-size:0.58rem}
-          .asc-eta{display:inline;margin-left:3px} /* per-resource farm ETA stays visible */
-          .asc-nodes{order:5;width:100%;font-size:0.48rem;color:var(--text-dim);margin-top:1px}
+          .asc-t{font-size:0.48rem}
+          .asc-t th{font-size:0.42rem;padding:2px 2px}
+          .asc-t td{padding:3px 2px}
+          .asc-hlbl{display:none} /* header text — the game icon IS the label */
+          .asc-eta{font-size:0.4rem}
         }
       </style>`;
       h += `<div class="asc-legend"><span><span style="color:#7fe0a0">■</span> mám kumulativně (zdroje i level)</span><span><span style="color:#e8c060">■</span> dofarmím včas (ETA ≤ slot)</span><span><span style="color:#ff6b6b">■</span> zásek — nestíhám build slot</span></div>`;
-      const _ascNodeEmoji = { "Crop Plot": "🌾", "Tree": "🌳", "Stone Rock": "🪨", "Iron Rock": "⛏️", "Gold Rock": "🥇", "Fruit Patch": "🍎", "Crimstone Rock": "💎", "Sunstone Rock": "🌞", "Oil Reserve": "🛢️", "Lava Pit": "🌋", "Beehive": "🐝", "Flower Bed": "🌸" };
-      const _ascResIcon = { Crimstone: "Crimstone", Oil: "Oil", Obsidian: "Obsidian" };
-      const resIcon = (r) => r === "Coins" ? "🪙" : `<img class="inline-icon" src="${getItemIcon(_ascResIcon[r])}" onerror="this.style.display='none'" alt="${r}">`;
+      const gi = (n) => `<img class="icn" src="${getItemIcon(n)}" onerror="this.style.display='none'" alt="${escHTML(n)}" title="${escHTML(n)}">`;
+      const kFmt = (v) => v >= 10000 ? (v / 1000).toFixed(v >= 100000 ? 0 : 1) + "k" : Math.round(v).toLocaleString();
       const byAsc = {};
       for (const s of d.steps) (byAsc[s.asc] = byAsc[s.asc] || []).push(s);
       for (const [a, steps] of Object.entries(byAsc)) {
         h += `<div class="pixel-panel" style="padding:10px;margin-bottom:12px"><div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:6px">ASCENSION ${a} <span style="color:var(--text-dim);font-size:0.5rem">· band L1–L50 · abs. ${150 + (a - 1) * 50}+</span></div>
-        <div class="asc-grid">
-        <div class="asc-row hdr"><div class="asc-step-cell">krok</div><div class="asc-lvl-cell">level</div><div class="asc-costs"><div class="asc-res">Crimstone</div><div class="asc-res">Oil</div><div class="asc-res">Obsidian</div><div class="asc-res">Coins</div></div><div class="asc-nodes">+nodes / ✨</div><div class="asc-status">farm ⏱ / slot 📅</div></div>`;
+        <div style="overflow-x:auto"><table class="asc-t">
+        <thead><tr>
+          <th>krok</th><th>level</th>
+          <th>${gi("Crimstone")}<span class="asc-hlbl">Crimstone</span></th>
+          <th>${gi("Oil")}<span class="asc-hlbl">Oil</span></th>
+          <th>${gi("Obsidian")}<span class="asc-hlbl">Obsidian</span></th>
+          <th>${gi("Coins")}<span class="asc-hlbl">Coins</span></th>
+          <th class="nl">+nodes / ${gi("Ascension Crystal")}</th>
+          <th>⏱<span class="asc-hlbl">farm ETA</span></th>
+          <th>📅<span class="asc-hlbl">slot</span></th>
+        </tr></thead><tbody>`;
         for (const s of steps) {
           const sim = s.sim && s.sim[mode];
           const resOk = {};
@@ -18846,33 +18854,30 @@
           }
           const state = (allRes && s.levelMet) ? "ok" : (s.stuck || (sim && sim.blocked)) ? "stuck" : "pace";
           const xpLeft = Math.max(0, (s.levelXpNeeded || 0) - cur.experience);
-          const lvlMissTxt = rates.xpPerDay > 0 ? "za " + fmtEta(xpLeft / rates.xpPerDay) : "chybí " + Math.round(xpLeft / 1e6) + "M XP";
+          const lvlMiss = rates.xpPerDay > 0 ? fmtEta(xpLeft / rates.xpPerDay) : Math.round(xpLeft / 1e6) + "M XP";
           const lvlCell = s.kind === "upgrade"
-            ? (s.levelMet ? `<div class="asc-lvl-cell met"><span style="color:#7fe0a0">band ✓</span></div>` : `<div class="asc-lvl-cell"><span style="color:#ff8888">⛔ band nedokončen · ${lvlMissTxt}</span></div>`)
-            : (s.levelMet ? `<div class="asc-lvl-cell met"><span style="color:#7fe0a0">L${s.band} ✓</span></div>` : `<div class="asc-lvl-cell"><span style="color:#ff8888">⛔ level L${s.band} · ${lvlMissTxt}</span></div>`);
+            ? (s.levelMet ? '<span class="have">band ✓</span>' : `<span class="miss">band<span class="asc-eta">za ${lvlMiss}</span></span>`)
+            : (s.levelMet ? `<span class="have">L${s.band} ✓</span>` : `<span class="miss">L${s.band}<span class="asc-eta">za ${lvlMiss}</span></span>`);
           const resCell = (r) => {
             const c = s.cost[r] || 0;
-            if (!c) return `<div class="asc-res">—</div>`;
+            if (!c) return "<td>—</td>";
             const eta = sim && sim.res && sim.res[r];
             const showEta = !resOk[r] && eta != null && eta > 0;
-            return `<div class="asc-res ${resOk[r] ? "have" : "miss"}">${resIcon(r)} ${r === "Coins" ? Math.round(c).toLocaleString() : Math.round(c)}${showEta ? `<span class="asc-eta">🕒 ${fmtEta(eta)}</span>` : ""}</div>`;
+            return `<td class="${resOk[r] ? "have" : "miss"}">${r === "Coins" ? kFmt(c) : Math.round(c)}${showEta ? `<span class="asc-eta">🕒${fmtEta(eta)}</span>` : ""}</td>`;
           };
-          const nodeBits = Object.entries(s.nodesAdded || {}).map(([n, q]) => `+${q}${_ascNodeEmoji[n] || (" " + n)}`);
-          if (s.crystals) nodeBits.unshift(`💎×${s.crystals}(✨${s.shards})`);
-          const statusTxt = state === "ok"
-            ? '<span style="color:#7fe0a0">✓ hned</span>'
-            : state === "stuck"
-              ? `<span style="color:#ff8888">⚠ ${sim && !sim.blocked ? fmtEta(sim.farmEtaDays) : "∞"} > 📅${fmtEta(s.buildSlotDays)}</span>`
-              : `<span style="color:#e8c060">⏱ ${sim ? fmtEta(sim.farmEtaDays) : "?"}</span> <span style="color:var(--text-dim)">📅${fmtEta(s.buildSlotDays)}</span>`;
-          h += `<div class="asc-row ${state}">
-            <div class="asc-step-cell">${s.kind === "upgrade" ? `<strong>⬆ A${s.asc} upgrade</strong>` : `exp <strong>${s.expansion}</strong> <span class="asc-btime">${s.time / 3600}h</span>`}</div>
-            ${lvlCell}
-            <div class="asc-costs">${resCell("Crimstone")}${resCell("Oil")}${resCell("Obsidian")}${resCell("Coins")}</div>
-            <div class="asc-nodes${nodeBits.length ? "" : " empty"}">${nodeBits.join(" ") || "—"}</div>
-            <div class="asc-status">${statusTxt}</div>
-          </div>`;
+          const nodeBits = Object.entries(s.nodesAdded || {}).map(([n, q]) => `${q > 1 ? q + "×" : "+"}${gi(n)}`);
+          if (s.crystals) nodeBits.unshift(`${gi("Ascension Crystal")}<span style="color:var(--text-dim);font-size:0.42rem">✨${s.shards}</span>`);
+          const farmCell = sim ? (sim.blocked ? '<span class="miss">∞</span>' : (state === "ok" ? '<span class="have">✓</span>' : fmtEta(sim.farmEtaDays))) : "?";
+          h += `<tr class="${state}">
+            <td>${s.kind === "upgrade" ? `<strong>⬆ A${s.asc}</strong>` : `exp <strong>${s.expansion}</strong>`} <span style="color:var(--text-dim);font-size:0.42rem">${s.time ? s.time / 3600 + "h" : ""}</span></td>
+            <td>${lvlCell}</td>
+            ${resCell("Crimstone")}${resCell("Oil")}${resCell("Obsidian")}${resCell("Coins")}
+            <td class="nl nodes">${nodeBits.join(" ") || "—"}</td>
+            <td>${farmCell}</td>
+            <td class="${s.stuck ? "miss" : ""}">${fmtEta(s.buildSlotDays)}</td>
+          </tr>`;
         }
-        h += `</div></div>`;
+        h += `</tbody></table></div></div>`;
       }
 
       el.innerHTML = h;
