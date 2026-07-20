@@ -2833,7 +2833,7 @@
     const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
     const IMG_BASE = "https://sfl.world/img/flowers/";
-    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "marks", "diff", "json", "constants", "ascension"];
+    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "marks", "diff", "json", "constants", "ascension"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -5604,6 +5604,7 @@
         { id: "shrines", label: "SHRINES" },
         { id: "buds", label: "BUDS" },
         { id: "pets", label: "PETS" },
+        { id: "flips", label: "💱 FLIPS" },
         { id: "json", label: "JSON" },
         { id: "marks", label: "MARKS" },
         { id: "constants", label: "CONSTANTS" },
@@ -13961,12 +13962,15 @@
       sellableRows.sort((a, b) => b.total - a.total);
 
       const _sellMinGet = () => { const v = parseFloat(localStorage.getItem("sfl_sales_sell_min")); return isFinite(v) ? v : 10; };
+      // type filter: both | nft | resources (persisted)
+      const _sellTypeGet = () => { const t = localStorage.getItem("sfl_sales_sell_type"); return ["both", "nft", "resources"].includes(t) ? t : "both"; };
+      const _sellTypeMatch = (r) => { const t = _sellTypeGet(); return t === "both" || (t === "resources" ? r.collection === "resources" : r.collection !== "resources"); };
       const _renderSellList = () => {
         const wrap = document.getElementById("sellable-list");
         const cnt = document.getElementById("sellable-count");
         if (!wrap) return;
         const min = _sellMinGet();
-        const rows = sellableRows.filter(r => r.total >= min);
+        const rows = sellableRows.filter(r => r.total >= min && _sellTypeMatch(r));
         if (cnt) cnt.textContent = `${rows.length} items`;
         if (rows.length === 0) { wrap.innerHTML = `<div style="padding:14px;text-align:center;font-size:0.625rem;color:var(--text-dim)">Nothing unlisted worth ≥ ${min} ⚀</div>`; return; }
         wrap.innerHTML = rows.map(r => `
@@ -13987,6 +13991,11 @@
         if (lab) lab.textContent = `≥ ${v} ⚀`;
         _renderSellList();
       };
+      window._sellTypeSet = (t) => {
+        localStorage.setItem("sfl_sales_sell_type", t);
+        document.querySelectorAll("#sell-type-toggle .roi-pill").forEach(b => b.classList.toggle("active", b.dataset.t === t));
+        _renderSellList();
+      };
       const _sellMin0 = _sellMinGet();
       let _sellIdx0 = SELL_MIN_STEPS.findIndex(s => s >= _sellMin0);
       if (_sellIdx0 < 0) _sellIdx0 = SELL_MIN_STEPS.length - 1;
@@ -13996,7 +14005,12 @@
           <span class="sales-section-count" id="sellable-count"></span>
         </div>
         <div class="sales-section-body">
-          <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.07)">
+          <div id="sell-type-toggle" style="display:flex;align-items:center;gap:6px;padding:10px 14px 4px;flex-wrap:wrap">
+            <span class="pixel-font" style="font-size:0.5rem;color:var(--text-secondary);white-space:nowrap;margin-right:4px">SHOW</span>
+            ${[["both", "Both"], ["nft", "🎴 NFT"], ["resources", "⛏️ Resources"]].map(([t, lbl]) =>
+              `<button class="roi-pill${_sellTypeGet() === t ? " active" : ""}" data-t="${t}" onclick="_sellTypeSet('${t}')">${lbl}</button>`).join("")}
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 14px 10px;border-bottom:1px solid rgba(255,255,255,0.07)">
             <span class="pixel-font" style="font-size:0.5rem;color:var(--text-secondary);white-space:nowrap">MIN VALUE</span>
             <input type="range" min="0" max="${SELL_MIN_STEPS.length - 1}" step="1" value="${_sellIdx0}" oninput="_sellMinSlide(this.value)" style="flex:1;max-width:260px">
             <span id="sell-min-label" class="pixel-font" style="font-size:0.5625rem;color:var(--sunpetal);white-space:nowrap">≥ ${SELL_MIN_STEPS[_sellIdx0]} ⚀</span>
@@ -21888,6 +21902,7 @@
           case "shrines": renderShrines(data); break;
           case "buds": renderBuds(data); break;
           case "pets": renderPets(data); break;
+          case "flips": renderFlips(data); break;
           case "diff": renderDiff(data); break;
           case "json": renderJsonExplorer(data); break;
           case "marks": renderMarks(data); break;
@@ -21976,6 +21991,74 @@
       return html;
     }
 
+
+    // ══════════════════════════════════════════════════════════════
+    // FLIP OPPORTUNITIES (orderbook — MIGRATION.md §4.2/4.5)
+    // ══════════════════════════════════════════════════════════════
+    // Reads /api/orderbook-flips (historized boosted-NFT orderbook). Buy on the
+    // bid, relist on the ask; net = ask×0.9 − bid (after 10% fee). Sort chips
+    // pick the ranking. Farm-independent — `data` is ignored.
+    const _flipSorts = [["score", "🔥 Score"], ["margin", "% Margin"], ["net", "Net"], ["spread", "Spread"], ["liquidity", "Liquidity"], ["pressure", "Pressure"], ["floor", "Floor"]];
+    function _flipSort() { const s = localStorage.getItem("sfl_flip_sort"); return _flipSorts.some(([k]) => k === s) ? s : "score"; }
+    window._flipSetSort = (s) => { localStorage.setItem("sfl_flip_sort", s); renderFlips(); };
+    window._flipSearch = (v) => { window._flipQ = v; clearTimeout(window._flipT); window._flipT = setTimeout(() => renderFlips(), 300); };
+
+    async function renderFlips() {
+      const app = document.getElementById("app");
+      const sort = _flipSort();
+      const q = window._flipQ || "";
+      app.innerHTML = `<div class="header pixel-panel pixel-font"><h1>💱 FLIP OPPORTUNITIES</h1>
+        <div class="farm-id">boosted NFT orderbook · buy bid → relist ask (−10% fee)</div></div>
+        <div id="flips-root" class="pixel-font" style="padding:8px 0"><div style="text-align:center;padding:40px;color:var(--text-dim)">Loading orderbook…</div></div>`;
+      let d;
+      try {
+        const r = await fetch(`/api/orderbook-flips?sort=${encodeURIComponent(sort)}${q ? "&q=" + encodeURIComponent(q) : ""}`);
+        if (!r.ok) throw new Error(`orderbook ${r.status}`);
+        d = await r.json();
+      } catch (e) {
+        document.getElementById("flips-root").innerHTML = `<div class="pixel-panel" style="padding:20px;color:var(--yellow);font-size:0.6rem">Orderbook data unavailable (${escHTML(e.message)}). The collector runs hourly — try later.</div>`;
+        return;
+      }
+      const kf = (v) => v == null ? "—" : Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + "k" : (Math.abs(v) >= 1 ? v.toFixed(0) : v.toFixed(2));
+      let h = `<style>
+        .flip-ctrl{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+        .flip-t{width:100%;border-collapse:collapse;font-size:0.58rem}
+        .flip-t th{font-size:0.48rem;color:var(--text-dim);text-align:right;padding:4px 6px;border-bottom:1px solid var(--border-dark);white-space:nowrap}
+        .flip-t th:first-child{text-align:left}
+        .flip-t td{padding:5px 6px;text-align:right;white-space:nowrap;border-top:1px solid #1d1710}
+        .flip-t td:first-child{text-align:left}
+        .flip-t tr:hover{background:rgba(255,255,255,0.04)}
+        .flip-t .icn{height:1.3em;vertical-align:-0.25em;margin-right:3px}
+        .flip-good{color:#7fe0a0}.flip-bad{color:#ff8888}.flip-dim{color:var(--text-dim)}
+        .flip-name{color:var(--text-primary)}
+      </style>`;
+      h += `<div class="flip-ctrl">`;
+      h += `<input type="text" placeholder="🔎 search NFT" value="${escHTML(q)}" oninput="_flipSearch(this.value)" style="background:#1c160f;border:1px solid var(--border-brown);color:var(--text-primary);border-radius:5px;padding:4px 8px;font-size:0.6rem;font-family:'Courier New',monospace;min-width:140px">`;
+      for (const [k, lbl] of _flipSorts) h += `<button class="roi-pill${sort === k ? " active" : ""}" onclick="_flipSetSort('${k}')">${lbl}</button>`;
+      h += `</div>`;
+      h += `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px">${d.count} boostovaných NFT s bid i ask · <span class="flip-good">zelená</span> marže ≥15 % (zdravý flip) · <span class="flip-bad">červená</span> net ≤0 (spread nepokryje poplatek)</div>`;
+      h += `<div style="overflow-x:auto"><table class="flip-t"><thead><tr>
+        <th>NFT</th><th>bid→ask</th><th>avg10</th><th>spread</th><th>net</th><th>marže</th><th>obch.</th><th>tlak o/l</th>
+      </tr></thead><tbody>`;
+      for (const it of d.items.slice(0, 200)) {
+        const good = it.margin >= 15, bad = it.net <= 0;
+        const link = `https://sunflower-land.com/play/#/marketplace/${it.collection}/${it.itemId}`;
+        h += `<tr>
+          <td><a href="${link}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><img class="icn" src="${getItemIcon(it.name)}" onerror="this.style.display='none'" alt=""><span class="flip-name">${escHTML(it.name || "#" + it.itemId)}</span> 🔗</a>${it.boost ? `<div class="flip-dim" style="font-size:0.46rem">⚡ ${escHTML(String(it.boost).replace(/\n+/g, " / "))}</div>` : ""}</td>
+          <td>${kf(it.bestOffer)}→${kf(it.bestListing)}</td>
+          <td class="flip-dim">${kf(it.avgTrade10)}</td>
+          <td>${it.spreadPct != null ? it.spreadPct.toFixed(0) + "%" : "—"}</td>
+          <td class="${bad ? "flip-bad" : "flip-good"}">${kf(it.net)}</td>
+          <td class="${good ? "flip-good" : bad ? "flip-bad" : ""}">${it.margin.toFixed(0)}%</td>
+          <td class="flip-dim">${it.tradesToday || 0}<span style="font-size:0.44rem">/d</span> ${it.nTrades10 || 0}<span style="font-size:0.44rem">/10</span></td>
+          <td class="flip-dim">${it.offerPressure || 0}/${it.listingPressure || 0}</td>
+        </tr>`;
+      }
+      h += `</tbody></table></div>`;
+      const upd = d.items[0]?.updatedAt;
+      h += `<div class="flip-dim" style="font-size:0.5rem;margin-top:8px">Sběr každou hodinu${upd ? " · poslední: " + new Date(upd).toLocaleString("cs-CZ") : ""}</div>`;
+      document.getElementById("flips-root").innerHTML = h;
+    }
 
     // ══════════════════════════════════════════════════════════════
     // MARKS WAR TRACKER
@@ -24936,9 +25019,36 @@
       if (e.key === "Enter" && e.target.closest(".config-bar")) applyConfig();
     });
 
+    // ── Collector-health banner ──────────────────────────────────────────────
+    // The background collectors (farm/price/nft/orderbook snapshots, marketplace
+    // trades) and the game token once broke silently for months. This surfaces a
+    // slim warning bar at the top ONLY when something is stale or the token is
+    // about to expire — otherwise it's invisible. Dismissible per session.
+    async function renderHealthBanner() {
+      if (sessionStorage.getItem("sfl_health_dismissed") === "1") return;
+      let d;
+      try {
+        const r = await fetch("/api/collector-health");
+        if (!r.ok) return;
+        d = await r.json();
+      } catch { return; }
+      if (!d || d.ok) return; // all healthy → say nothing
+      const parts = [];
+      if (d.warnings?.token) parts.push(`🔑 game token ${escHTML(d.warnings.token)}`);
+      if (d.warnings?.staleCollectors?.length) parts.push(`⚠️ stale: ${d.warnings.staleCollectors.map(escHTML).join(", ")}`);
+      if (!parts.length) return;
+      const bar = document.createElement("div");
+      bar.id = "health-banner";
+      bar.style.cssText = "background:#3a1a1a;border-bottom:1px solid #ff6b6b;color:#ffbaba;font-size:0.62rem;padding:6px 12px;display:flex;align-items:center;gap:10px;font-family:'Courier New',monospace;position:sticky;top:0;z-index:9999";
+      bar.innerHTML = `<span style="flex:1">🛰️ Data collection: ${parts.join(" · ")}</span>
+        <button onclick="sessionStorage.setItem('sfl_health_dismissed','1');this.parentElement.remove()" style="background:none;border:1px solid #ff6b6b;color:#ffbaba;border-radius:4px;cursor:pointer;font-size:0.6rem;padding:1px 7px">✕</button>`;
+      document.body.insertBefore(bar, document.body.firstChild);
+    }
+
     // Init
     migrateApiKey();
     main();
+    renderHealthBanner();
   </script>
 </body>
 </html>
