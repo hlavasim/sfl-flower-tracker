@@ -13961,12 +13961,15 @@
       sellableRows.sort((a, b) => b.total - a.total);
 
       const _sellMinGet = () => { const v = parseFloat(localStorage.getItem("sfl_sales_sell_min")); return isFinite(v) ? v : 10; };
+      // type filter: both | nft | resources (persisted)
+      const _sellTypeGet = () => { const t = localStorage.getItem("sfl_sales_sell_type"); return ["both", "nft", "resources"].includes(t) ? t : "both"; };
+      const _sellTypeMatch = (r) => { const t = _sellTypeGet(); return t === "both" || (t === "resources" ? r.collection === "resources" : r.collection !== "resources"); };
       const _renderSellList = () => {
         const wrap = document.getElementById("sellable-list");
         const cnt = document.getElementById("sellable-count");
         if (!wrap) return;
         const min = _sellMinGet();
-        const rows = sellableRows.filter(r => r.total >= min);
+        const rows = sellableRows.filter(r => r.total >= min && _sellTypeMatch(r));
         if (cnt) cnt.textContent = `${rows.length} items`;
         if (rows.length === 0) { wrap.innerHTML = `<div style="padding:14px;text-align:center;font-size:0.625rem;color:var(--text-dim)">Nothing unlisted worth ≥ ${min} ⚀</div>`; return; }
         wrap.innerHTML = rows.map(r => `
@@ -13987,6 +13990,11 @@
         if (lab) lab.textContent = `≥ ${v} ⚀`;
         _renderSellList();
       };
+      window._sellTypeSet = (t) => {
+        localStorage.setItem("sfl_sales_sell_type", t);
+        document.querySelectorAll("#sell-type-toggle .roi-pill").forEach(b => b.classList.toggle("active", b.dataset.t === t));
+        _renderSellList();
+      };
       const _sellMin0 = _sellMinGet();
       let _sellIdx0 = SELL_MIN_STEPS.findIndex(s => s >= _sellMin0);
       if (_sellIdx0 < 0) _sellIdx0 = SELL_MIN_STEPS.length - 1;
@@ -13996,7 +14004,12 @@
           <span class="sales-section-count" id="sellable-count"></span>
         </div>
         <div class="sales-section-body">
-          <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.07)">
+          <div id="sell-type-toggle" style="display:flex;align-items:center;gap:6px;padding:10px 14px 4px;flex-wrap:wrap">
+            <span class="pixel-font" style="font-size:0.5rem;color:var(--text-secondary);white-space:nowrap;margin-right:4px">SHOW</span>
+            ${[["both", "Both"], ["nft", "🎴 NFT"], ["resources", "⛏️ Resources"]].map(([t, lbl]) =>
+              `<button class="roi-pill${_sellTypeGet() === t ? " active" : ""}" data-t="${t}" onclick="_sellTypeSet('${t}')">${lbl}</button>`).join("")}
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 14px 10px;border-bottom:1px solid rgba(255,255,255,0.07)">
             <span class="pixel-font" style="font-size:0.5rem;color:var(--text-secondary);white-space:nowrap">MIN VALUE</span>
             <input type="range" min="0" max="${SELL_MIN_STEPS.length - 1}" step="1" value="${_sellIdx0}" oninput="_sellMinSlide(this.value)" style="flex:1;max-width:260px">
             <span id="sell-min-label" class="pixel-font" style="font-size:0.5625rem;color:var(--sunpetal);white-space:nowrap">≥ ${SELL_MIN_STEPS[_sellIdx0]} ⚀</span>
