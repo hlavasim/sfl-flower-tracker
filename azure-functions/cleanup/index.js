@@ -34,12 +34,8 @@ module.exports = async function (context) {
     `);
     context.log(`Deleted ${nftDelete.rowCount} old NFT records`);
 
-    // Prune marketplace_trades older than 1 year
-    const mktTradesDelete = await pool.query(`
-      DELETE FROM marketplace_trades WHERE fulfilled_at < NOW() - INTERVAL '365 days'
-    `);
-    context.log(`Deleted ${mktTradesDelete.rowCount} old marketplace trade records`);
-
+    // marketplace_trades: KEPT FOREVER (real trade history, feeds the orderbook
+    // analytics + is_mine ledger — retention removed 2026-07-20 per "never delete").
     // marketplace_orderbook: only latest snapshot kept (overwritten each run, no cleanup needed)
     // marketplace_daily + marketplace_totals: keep forever (small data)
 
@@ -60,15 +56,9 @@ module.exports = async function (context) {
     } catch (e) {
       context.log.error(`Marks cleanup error: ${e.message}`);
     }
-    // Prune orderbook history older than 180 days (ob_last is tiny, keep all)
-    try {
-      const obDelete = await pool.query(`
-        DELETE FROM ob_snap WHERE ts < NOW() - INTERVAL '180 days'
-      `);
-      context.log(`Deleted ${obDelete.rowCount} old orderbook snapshots`);
-    } catch (e) {
-      context.log.error(`ob_snap cleanup error: ${e.message}`);
-    }
+    // ob_snap + ob_last: KEPT FOREVER — orderbook price-movement history must never
+    // be pruned (gaps can't be backfilled). Boosted-only keeps growth modest
+    // (~200 rows/hour ≈ 1.7M rows/year, a few hundred MB).
   } catch (err) {
     context.log.error(`Cleanup error: ${err.message}`);
   }
