@@ -121,18 +121,31 @@ test("node-aware sim: adding nodes speeds later steps up (eff mode, days units)"
   assert.ok(prev > 30 && prev < 10000, `total farm days ${prev}`);
 });
 
-test("per-resource ETAs are independent: cumulative need / own rate, no cross-resource waits", () => {
-  for (const s of out.steps) {
-    const sim = s.sim && s.sim.eff;
-    if (!sim || sim.blocked) continue;
-    for (const r of ["Crimstone", "Oil", "Obsidian", "Wood"]) {
+test("per-resource ETAs are monotonic (node-growth aware) and never below a flat-rate bound", () => {
+  for (const r of ["Crimstone", "Oil", "Obsidian", "Wood"]) {
+    let prev = -1;
+    for (const s of out.steps) {
+      const sim = s.sim && s.sim.eff;
+      if (!sim || sim.blocked) continue;
       const eta = sim.res[r];
       if (eta == null || eta === 0) continue;
-      const rate = out.rates[r].eff;
-      const expect = (s.cum[r] - out.current.stock[r]) / rate;
-      // rate may have grown via added nodes, so eta <= flat-rate expectation
-      assert.ok(eta <= expect + 1e-6, `${r} A${s.asc} e${s.expansion}: ${eta} > ${expect}`);
+      // monotonic: a later step's cumulative cost is higher, so its time can't drop
+      assert.ok(eta >= prev - 1e-6, `${r} non-monotonic: ${prev} -> ${eta} at A${s.asc} e${s.expansion}`);
+      prev = eta;
+      // node growth only speeds farming up, so eta <= farming the whole need at today's rate
+      const flat = (s.cum[r] - out.current.stock[r]) / out.rates[r].eff;
+      assert.ok(eta <= flat + 1e-6, `${r} eta ${eta} exceeds flat-rate bound ${flat}`);
     }
+  }
+});
+
+test("farm ETA never precedes the level ETA (need the resources AND the level)", () => {
+  for (const s of out.steps) {
+    const sim = s.sim && s.sim.eff;
+    if (!sim || sim.blocked || sim.levelEtaDays == null) continue;
+    assert.ok(sim.farmEtaDays >= sim.levelEtaDays - 1e-6,
+      `A${s.asc} e${s.expansion}: farm ${sim.farmEtaDays} < level ${sim.levelEtaDays}`);
+    assert.ok(sim.farmEtaDays >= sim.all - 1e-6); // and >= max resource time
   }
 });
 

@@ -18906,7 +18906,10 @@
             if (!extraOk[r]) allRes = false;
           }
           const state = (allRes && s.levelMet) ? "ok" : ((sim ? sim.stuck : s.stuck) || (sim && sim.blocked)) ? "stuck" : "pace";
-          const xpLeft = Math.max(0, (s.levelXpNeeded || 0) - cur.experience);
+          // count banked cooked food (eaten with the pet boost) toward the level gate,
+          // exactly like the core's farm ETA — otherwise the level line reads a longer
+          // time than the farm column that already banked it.
+          const xpLeft = Math.max(0, (s.levelXpNeeded || 0) - cur.experience - (cur.bankedFoodXp || 0));
           const lvlMiss = rates.xpPerDay > 0 ? fmtEta(xpLeft / rates.xpPerDay) : Math.round(xpLeft / 1e6) + "M XP";
           const lvlCell = s.kind === "upgrade"
             ? (s.asc === 0 ? "—" : s.levelMet ? '<span class="have">band ✓</span>' : `<span class="miss">band<span class="asc-eta">za ${lvlMiss}</span></span>`)

@@ -234,55 +234,59 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
   }
 
   // ── node-aware production simulation (§2.4), eff + theo ──
+  // level ETA counts banked cooked food (experienceEff), consistent with the
+  // level cell in the UI.
   const levelEta = (s, xpPerDay) => {
-    const need = (s.levelXpNeeded || 0) - experienceEff; // banked food already counted
+    const need = (s.levelXpNeeded || 0) - experienceEff;
     if (need <= 0) return 0;
     if (!(xpPerDay > 0)) return null; // fallback: show remaining XP (§2.3)
     return need / xpPerDay;
   };
+  // Per-resource INDEPENDENT timelines: each resource farms continuously and its
+  // rate GROWS as that resource's own nodes are added by expansions — but a
+  // resource never waits on another. resEta[r] for a step = the point on r's own
+  // monotonic timeline where cumulative production (stock + Σ rate·dt across the
+  // node-growth schedule) first covers that step's cumulative cost. Monotonic by
+  // construction (cumulative cost ↑, time ↑), so a later step can never show a
+  // smaller time than an earlier one. Farm ETA of a step = max over resources of
+  // resEta plus the level ETA (you need every resource AND the level).
   for (const mode of ["eff", "theo"]) {
-    const counts = { ...nodeCounts };
-    const yields = {};
-    for (const r of SIM_RES) yields[r] = counts[r] > 0 ? (rates[r][mode] || 0) / counts[r] : 0;
-    const prod = { ...stock };
-    const cumc = {};
-    for (const r of SIM_RES) cumc[r] = 0;
-    let t = 0, blocked = false;
+    const nodes = { ...nodeCounts };
+    const perNode = {};
+    for (const r of SIM_RES) perNode[r] = nodeCounts[r] > 0 ? (rates[r][mode] || 0) / nodeCounts[r] : 0;
+    const prod = { ...stock };  // total produced so far (incl. starting stock)
+    const tR = {}; for (const r of SIM_RES) tR[r] = 0;
+    const blockedR = {}; for (const r of SIM_RES) blockedR[r] = false;
     for (const s of pending) {
       if (!s.sim) s.sim = {};
-      if (blocked) { s.sim[mode] = { all: null, blocked: true }; continue; }
-      const rate = {};
-      for (const r of SIM_RES) rate[r] = counts[r] * yields[r];
-      let dt = 0, bad = false;
       const resEta = {};
       for (const r of SIM_RES) {
-        const need = (cumc[r] + (s.cost[r] || 0)) - prod[r];
-        if (need > 0) {
-          if (!(rate[r] > 0)) { bad = true; break; }
-          const d = need / rate[r];
-          if (d > dt) dt = d;
+        const cumNeed = s.cum[r] || 0;
+        if (cumNeed <= stock[r]) { resEta[r] = 0; continue; }  // stock alone covers it
+        if (blockedR[r]) { resEta[r] = null; continue; }        // no production, unreachable
+        const rate = nodes[r] * perNode[r];
+        if (prod[r] < cumNeed) {
+          if (!(rate > 0)) { blockedR[r] = true; resEta[r] = null; continue; }
+          tR[r] += (cumNeed - prod[r]) / rate;  // advance r's own clock to cover cumNeed
+          prod[r] = cumNeed;
         }
-        // displayed per-resource ETA is INDEPENDENT: every resource farms in
-        // parallel all the time, so its ETA is just cumulative need ÷ its own
-        // rate from NOW — never inflated by other resources' waits in earlier
-        // steps (the shared timeline t below still drives the farm column).
-        const needTotal = (cumc[r] + (s.cost[r] || 0)) - stock[r];
-        resEta[r] = needTotal > 0 ? (rate[r] > 0 ? needTotal / rate[r] : null) : 0;
+        resEta[r] = tR[r];
       }
-      if (bad) { blocked = true; s.sim[mode] = { all: null, blocked: true }; continue; }
-      // rates are units/DAY, so dt/t/resEta are already DAYS — no seconds conversion.
-      t += dt;
-      for (const r of SIM_RES) { prod[r] += rate[r] * dt; cumc[r] += s.cost[r] || 0; }
       const lEta = levelEta(s, rates.xpPerDay);
+      const times = SIM_RES.map((r) => resEta[r]);
+      const blocked = times.some((v) => v == null);
+      const maxRes = blocked ? null : Math.max(0, ...times);
       s.sim[mode] = {
         res: { ...resEta },
-        all: t,
+        all: maxRes,
+        blocked,
         levelEtaDays: lEta == null ? null : lEta,
-        farmEtaDays: Math.max(t, lEta == null ? 0 : lEta),
+        farmEtaDays: blocked ? null : Math.max(maxRes, lEta == null ? 0 : lEta),
       };
+      // built expansion adds its nodes for SUBSEQUENT steps (higher rate onward)
       for (const [node, n] of Object.entries(s.nodesAdded || {})) {
         const r = NODE_TO_RES[node];
-        if (r) counts[r] += n;
+        if (r) nodes[r] += n;
       }
     }
   }
