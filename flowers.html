@@ -13515,15 +13515,34 @@
     // ═══════════════════════════════════════
     //  WISHLIST (sales page, compute?section=wishlist — cockpit fold-in)
     // ═══════════════════════════════════════
+    // Wishlist is stored SERVER-SIDE (DB) per farm so it persists across devices
+    // and can be seeded/edited server-side. localStorage is a cache/offline
+    // fallback. _wlCache holds the loaded list so _wlGet() stays synchronous for
+    // its many call sites; mutations update the cache + POST the change.
+    let _wlCache = null;
+    let _wlLoaded = false;
     function _wlGet() {
+      if (_wlCache) return _wlCache;
       try { return JSON.parse(localStorage.getItem("sfl_wishlist_v1") || "{}"); } catch { return {}; }
     }
-    function _wlSave(list) { localStorage.setItem("sfl_wishlist_v1", JSON.stringify(list)); }
+    function _wlSave(list) { _wlCache = list; try { localStorage.setItem("sfl_wishlist_v1", JSON.stringify(list)); } catch {} }
+    async function _wlLoadFromDb() {
+      try {
+        const r = await fetch(`/api/marketplace-orderbook?wishlist=1&farm=${FARM_ID}`);
+        if (r.ok) { const d = await r.json(); _wlCache = d.list || {}; try { localStorage.setItem("sfl_wishlist_v1", JSON.stringify(_wlCache)); } catch {} return; }
+      } catch {}
+      try { _wlCache = JSON.parse(localStorage.getItem("sfl_wishlist_v1") || "{}"); } catch { _wlCache = {}; }
+    }
+    // fire-and-forget write to the DB (owner farm only; others stay localStorage-only)
+    function _wlPost(payload) {
+      fetch(`/api/marketplace-orderbook?wishlist=1`, { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ farm: FARM_ID, ...payload }) }).catch(() => {});
+    }
     window._wlSetPrio = function(key, p) {
-      const l = _wlGet(); l[key] = p; _wlSave(l); renderWishlistPanel();
+      const l = _wlGet(); l[key] = p; _wlSave(l); _wlPost({ key, priority: p }); renderWishlistPanel();
     };
     window._wlRemove = function(key) {
-      const l = _wlGet(); delete l[key]; _wlSave(l); renderWishlistPanel();
+      const l = _wlGet(); delete l[key]; _wlSave(l); _wlPost({ remove: key }); renderWishlistPanel();
     };
     window._wlAddFromPicker = function() {
       const inp = document.getElementById("wl-picker");
@@ -13531,7 +13550,8 @@
       if (!name || !_wlCatalog) return;
       const it = _wlCatalog.find(c => c.name.toLowerCase() === name.toLowerCase());
       if (!it) { inp.style.borderColor = "var(--red)"; return; }
-      const l = _wlGet(); l[`${it.collection}:${it.name}`] = 2; _wlSave(l);
+      const key = `${it.collection}:${it.name}`;
+      const l = _wlGet(); l[key] = 2; _wlSave(l); _wlPost({ key, priority: 2 });
       inp.value = "";
       renderWishlistPanel();
     };
@@ -13552,7 +13572,7 @@
         if (hit) { const k = `${hit.collection}:${hit.name}`; if (!l[k]) added++; l[k] = l[k] || 2; }
         else unmatched.push(line.slice(0, 24));
       }
-      _wlSave(l);
+      _wlSave(l); _wlPost({ list: l });
       ta.value = "";
       window._wlImportMsg = `<span style="color:var(--green)">+${added} přidáno</span>${unmatched.length ? ` · <span style="color:var(--yellow)">nenalezeno: ${escHTML(unmatched.slice(0, 6).join(", "))}</span>` : ""}`;
       await renderWishlistPanel();
@@ -13561,6 +13581,7 @@
     async function renderWishlistPanel() {
       const el = document.getElementById("wishlist-panel");
       if (!el) return;
+      if (!_wlLoaded) { await _wlLoadFromDb(); _wlLoaded = true; }
       let d;
       try {
         let payload, lastErr;

@@ -196,3 +196,13 @@ CREATE TABLE IF NOT EXISTS btc_transactions (
 CREATE INDEX IF NOT EXISTS idx_btc_tx_farm ON btc_transactions(farm_id, tx_date DESC);
 GRANT SELECT, INSERT, DELETE ON btc_transactions TO sfl_reader;
 GRANT USAGE, SELECT ON SEQUENCE btc_transactions_id_seq TO sfl_reader;
+
+-- Server-side wishlist (per farm; replaces browser localStorage).
+CREATE TABLE wishlist (
+  farm_id BIGINT NOT NULL,
+  item_key TEXT NOT NULL,
+  priority INTEGER NOT NULL DEFAULT 2,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (farm_id, item_key)
+);
+CREATE INDEX idx_wishlist_farm ON wishlist(farm_id);

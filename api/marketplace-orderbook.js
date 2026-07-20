@@ -47,6 +47,60 @@ async function handleHealth(pool, res) {
     warnings: { token: tokenWarn ? (token.present === false ? "missing" : token.expired ? "expired" : `expires in ${token.daysLeft}d`) : null, staleCollectors } });
 }
 
+const WISHLIST_OWNER = 155498; // only the owner's wishlist is writable (personal tool)
+function _parseBody(body) {
+  if (!body) return {};
+  if (Buffer.isBuffer(body)) { try { return JSON.parse(body.toString()); } catch { return {}; } }
+  if (typeof body === "string") { try { return JSON.parse(body); } catch { return {}; } }
+  return body;
+}
+
+// GET  ?wishlist=1&farm=N              → { list: { "coll:Name": priority } }
+// POST ?wishlist=1  { farm, ...op }    → op is one of:
+//   { key, priority }  upsert one item   |   { remove }  delete one item
+//   { list: {...} }    replace the whole list (import)
+// Writes are gated to the owner farm; reads are open (empty for others).
+async function handleWishlist(pool, req, res) {
+  if (req.method === "GET") {
+    const farm = parseInt(req.query.farm);
+    if (!farm) return res.status(400).json({ error: "farm required" });
+    const { rows } = await pool.query("SELECT item_key, priority FROM wishlist WHERE farm_id = $1", [farm]);
+    const list = {};
+    for (const r of rows) list[r.item_key] = r.priority;
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(200).json({ farm, list });
+  }
+  if (req.method === "POST") {
+    const body = _parseBody(req.body);
+    const farm = parseInt(body.farm);
+    if (farm !== WISHLIST_OWNER) return res.status(403).json({ error: "wishlist is read-only for this farm" });
+    if (body.list && typeof body.list === "object") {
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query("DELETE FROM wishlist WHERE farm_id = $1", [farm]);
+        for (const [key, prio] of Object.entries(body.list)) {
+          const p = Math.min(Math.max(parseInt(prio) || 2, 1), 3);
+          await client.query("INSERT INTO wishlist (farm_id, item_key, priority) VALUES ($1,$2,$3) ON CONFLICT (farm_id,item_key) DO UPDATE SET priority = EXCLUDED.priority, updated_at = NOW()", [farm, key, p]);
+        }
+        await client.query("COMMIT");
+      } catch (e) { await client.query("ROLLBACK").catch(() => {}); throw e; } finally { client.release(); }
+      return res.status(200).json({ ok: true, count: Object.keys(body.list).length });
+    }
+    if (body.remove) {
+      await pool.query("DELETE FROM wishlist WHERE farm_id = $1 AND item_key = $2", [farm, String(body.remove)]);
+      return res.status(200).json({ ok: true });
+    }
+    if (body.key) {
+      const p = Math.min(Math.max(parseInt(body.priority) || 2, 1), 3);
+      await pool.query("INSERT INTO wishlist (farm_id, item_key, priority) VALUES ($1,$2,$3) ON CONFLICT (farm_id,item_key) DO UPDATE SET priority = EXCLUDED.priority, updated_at = NOW()", [farm, String(body.key), p]);
+      return res.status(200).json({ ok: true });
+    }
+    return res.status(400).json({ error: "provide key+priority, remove, or list" });
+  }
+  return res.status(405).json({ error: "method not allowed" });
+}
+
 async function handleFlips(pool, req, res) {
   const sortKey = FLIP_SORTS[req.query.sort] || "score";
   const minPrice = parseFloat(req.query.minprice) || 0;
@@ -87,11 +141,12 @@ async function handleFlips(pool, req, res) {
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "*");
   if (req.method === "OPTIONS") return res.status(200).end();
 
   // Folded-in modes (see top-of-file note).
+  if (req.query.wishlist === "1") { try { return await handleWishlist(getPool(), req, res); } catch (e) { console.error("wishlist:", e.message); return res.status(500).json({ error: String(e.message || e) }); } }
   if (req.query.health === "1") { try { return await handleHealth(getPool(), res); } catch (e) { return res.status(500).json({ error: String(e.message || e) }); } }
   if (req.query.flips === "1") { try { return await handleFlips(getPool(), req, res); } catch (e) { console.error("flips:", e.message); return res.status(500).json({ error: String(e.message || e) }); } }
 
