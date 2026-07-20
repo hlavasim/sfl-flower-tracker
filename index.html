@@ -17353,6 +17353,8 @@
       try { window.__roadmapFlowData = roadmapBuildFlowData(sim, settings); } catch (e) { window.__roadmapFlowData = { roadmap: { nodes: [], edges: [] }, todo: { nodes: [], edges: [] } }; }
       try { window.__roadmapFlowData.mineChain = roadmapBuildMineFlowData(settings); } catch (e) { if (window.__roadmapFlowData) window.__roadmapFlowData.mineChain = { nodes: [], edges: [] }; }
       el.innerHTML = h;
+      el.insertAdjacentHTML("afterbegin", '<div id="nodeacq-roadmap"></div>');
+      _mountNodeAcq("nodeacq-roadmap");
       _roadmapMountFlow(0);
     }
 
@@ -19085,6 +19087,58 @@
       el.innerHTML = h;
     }
 
+    // ── Node acquisition: EXPAND vs BUY (obsidian/sunstones) — from section=ascension ──
+    // Shown on the Nodes and Roadmap pages. Fetches the ascension plan (reusing the
+    // roadmap snapshots) and renders the per-profit-node cost comparison.
+    let _nodeAcqCache = null;
+    async function _fetchNodeAcq() {
+      if (_nodeAcqCache) return _nodeAcqCache;
+      try {
+        if (!_roadmapSnapshotsCache) _roadmapSnapshotsCache = await _roadmapFetchHistorySlim();
+        const st = (() => { try { return JSON.parse(localStorage.getItem("sfl_ascension_settings") || "{}"); } catch { return {}; } })();
+        const grinx = st.grinx ? 1 : 0;
+        const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=ascension&grinx=${grinx}&max=10`, {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [] }),
+        });
+        if (!rp.ok) return null;
+        _nodeAcqCache = ((await rp.json()).data || {}).nodeAcq || null;
+        return _nodeAcqCache;
+      } catch { return null; }
+    }
+    function _renderNodeAcqPanel(na) {
+      if (!na || !na.perType) return "";
+      const kf = (v) => v == null ? "—" : Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + "k" : v.toFixed(0);
+      const fmtEta = (d) => d == null ? "?" : (d < 1 ? (d * 24).toFixed(1) + "h" : d.toFixed(1) + "d");
+      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">🌱 CENA ZA NODE: EXPANDOVAT vs KOUPIT</div>
+        <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">
+          Expanze dá bundle nodů — mrtvé expanze (bez profit-node) se nasčítají do ceny dalšího profit-node, rozdělené rovným dílem. Koupě = ${na.obsidianPrice ? na.obsidianPrice.toFixed(1) : "?"} FLOWER/obsidian · tvá těžba <strong>${na.obsidianPerDay ? na.obsidianPerDay.toFixed(1) : "0"} obsidian/den</strong>. <span class="flip-good" style="color:#7fe0a0">Zelená</span> = levnější cesta.</div>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.56rem">
+          <thead><tr style="color:var(--text-dim);text-align:right"><th style="text-align:left;padding:3px 5px">node</th><th>profit/d</th><th>EXPAND (další)</th><th>za kdy</th><th>KOUPIT</th><th>obsidian (za kdy)</th></tr></thead><tbody>`;
+      const gi = (n) => `<img src="${getItemIcon(n)}" onerror="this.style.display='none'" style="height:1.2em;vertical-align:-0.2em;margin-right:2px" alt="">`;
+      for (const [node, d] of Object.entries(na.perType)) {
+        const ex = d.expand[0], bu = d.buy[0];
+        const exCost = ex ? ex.cost : null, buCost = bu ? bu.costSfl : null;
+        const exCheaper = exCost != null && (buCost == null || exCost <= buCost);
+        h += `<tr style="border-top:1px solid #1d1710">
+          <td style="text-align:left;padding:4px 5px;white-space:nowrap">${gi(node)}${escHTML(node)}</td>
+          <td style="text-align:right;color:var(--text-dim)">${d.profitPerDay.toFixed(2)}</td>
+          <td style="text-align:right;${exCheaper ? "color:#7fe0a0;font-weight:bold" : ""}">${ex ? `${kf(exCost)}${ex.unpriced ? "≥" : ""} <span style="color:var(--text-dim);font-size:0.46rem">${escHTML(ex.label)}</span>` : "—"}</td>
+          <td style="text-align:right;color:var(--text-dim)">${ex ? fmtEta(ex.farmEtaDays) : "—"}</td>
+          <td style="text-align:right;${!exCheaper && buCost != null ? "color:#7fe0a0;font-weight:bold" : ""}">${buCost != null ? kf(buCost) : "?"}</td>
+          <td style="text-align:right;color:var(--text-dim)">${bu ? `${bu.obsidian} (${fmtEta(bu.obsidianDays)})` : "—"}</td>
+        </tr>`;
+      }
+      h += `</tbody></table></div></div>`;
+      return h;
+    }
+    async function _mountNodeAcq(containerId) {
+      const na = await _fetchNodeAcq();
+      const el = document.getElementById(containerId);
+      if (el) el.innerHTML = na ? _renderNodeAcqPanel(na) : "";
+    }
+
     async function renderNodes(data) {
       const app = document.getElementById("app");
       const { inventory, farm } = data;
@@ -19977,6 +20031,8 @@
       content += `</table></div>`;
 
       document.getElementById("nodes-content").innerHTML = content;
+      document.getElementById("nodes-content").insertAdjacentHTML("afterbegin", '<div id="nodeacq-nodes"></div>');
+      _mountNodeAcq("nodeacq-nodes");
     }
 
     // ═══════════════════════════════════════

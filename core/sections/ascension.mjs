@@ -386,5 +386,55 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
     s.roiDays = gain > 0 ? totalCost / gain : null;
   }
 
-  return { current, rates, steps: pending, frontier, bottleneck, reach, nodeCounts, grinx, maxAsc };
+  // ── node acquisition cost: expand vs buy-with-sunstones (per profit node) ──
+  // "Profit" nodes generate FLOWER income by selling their resource: crops,
+  // fruits, trees, stone, iron, gold, crimstone. Oil/Beehive/Sunstone Rock/Lava
+  // Pit/Flower Bed/crystals are excluded (currency or non-income, user's call).
+  //
+  // EXPAND cost per node (rolling): walk the pending expansions; an expansion
+  // with no profit node is "dead" and its full FLOWER cost (resources+coins+XP
+  // leveling) carries forward; the next expansion WITH profit node(s) costs
+  // (carried dead cost + its own), split EQUALLY among the profit nodes it adds.
+  // BUY cost per node: the N-th bought node costs base+idx×increase Sunstones =
+  // ×3 Obsidian, priced at the Obsidian market price; time = Obsidian ÷ eff/day.
+  const PROFIT_NODES = new Set(["Crop Plot", "Fruit Patch", "Tree", "Stone Rock", "Iron Rock", "Gold Rock", "Crimstone Rock"]);
+  const NODE_BUY = {
+    "Crop Plot": { base: 3, inc: 2, fk: "crops" }, "Fruit Patch": { base: 5, inc: 5, fk: "fruitPatches" },
+    "Tree": { base: 4, inc: 3, fk: "trees" }, "Stone Rock": { base: 4, inc: 3, fk: "stones" },
+    "Iron Rock": { base: 7, inc: 5, fk: "iron" }, "Gold Rock": { base: 10, inc: 6, fk: "gold" },
+    "Crimstone Rock": { base: 20, inc: 20, fk: "crimstones" },
+  };
+  const NODE_TO_CAT = { "Crop Plot": "crops", "Fruit Patch": "fruits", "Tree": "trees", "Stone Rock": "stone", "Iron Rock": "iron", "Gold Rock": "gold", "Crimstone Rock": "crimstone" };
+  const obsidianPrice = p2pP["Obsidian"] || 0;
+  const obsidianPerDay = (rates.Obsidian && rates.Obsidian.eff) || 0;
+  // EXPAND: rolling dead-cost accumulation
+  const expandAcq = {};
+  let deadCost = 0, deadUnpriced = false;
+  for (const s of pending) {
+    const stepCost = (s.costSfl || 0) + (s.levelCostSfl || 0);
+    const prof = [];
+    for (const [node, q] of Object.entries(s.nodesAdded || {})) if (PROFIT_NODES.has(node)) for (let i = 0; i < q; i++) prof.push(node);
+    if (!prof.length) { deadCost += stepCost; if (s.costUnpriced) deadUnpriced = true; continue; }
+    const total = deadCost + stepCost, unpriced = deadUnpriced || s.costUnpriced;
+    deadCost = 0; deadUnpriced = false;
+    const perNode = total / prof.length;
+    const label = s.asc === 0 ? `${s.island} e${s.expansion}` : (s.kind === "upgrade" ? `A${s.asc}` : `A${s.asc}·e${s.expansion}`);
+    for (const node of prof) (expandAcq[node] = expandAcq[node] || []).push({ cost: perNode, unpriced, label, farmEtaDays: s.sim && s.sim.eff ? s.sim.eff.farmEtaDays : null, buildSlotDays: s.buildSlotDays });
+  }
+  // BUY: next few purchases per node type
+  const nodeAcq = { obsidianPerDay, obsidianPrice, costPerXp, perType: {} };
+  for (const node of PROFIT_NODES) {
+    const cat = NODE_TO_CAT[node];
+    const profitPerDay = perNodeSfl[cat] || 0;
+    const np = NODE_BUY[node];
+    const idx = Object.keys(farm[np.fk] || {}).length; // current count (proxy for purchase escalation)
+    const buy = [];
+    for (let i = 0; i < 3; i++) {
+      const sun = np.base + (idx + i) * np.inc, obs = sun * 3;
+      buy.push({ sunstones: sun, obsidian: obs, costSfl: obsidianPrice > 0 ? obs * obsidianPrice : null, obsidianDays: obsidianPerDay > 0 ? obs / obsidianPerDay : null });
+    }
+    nodeAcq.perType[node] = { profitPerDay, expand: (expandAcq[node] || []).slice(0, 4), buy, currentCount: idx };
+  }
+
+  return { current, rates, steps: pending, frontier, bottleneck, reach, nodeCounts, grinx, maxAsc, nodeAcq };
 }

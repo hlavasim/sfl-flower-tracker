@@ -180,6 +180,21 @@ test("grinx halves the three resource costs but not coins", () => {
   assert.equal(s0.cost.Coins, n0.cost.Coins);
 });
 
+test("node acquisition: expand (rolling dead-cost, equal split) vs buy (sunstones)", () => {
+  const na = out.nodeAcq;
+  assert.ok(na && na.perType, "nodeAcq present");
+  // only the 7 profit nodes; no Oil/Beehive/Lava/Flower/Sunstone
+  assert.deepEqual(Object.keys(na.perType).sort(),
+    ["Crimstone Rock", "Crop Plot", "Fruit Patch", "Gold Rock", "Iron Rock", "Stone Rock", "Tree"]);
+  // buy cost = sunstones×3 obsidian × obsidian price; escalates by node increase
+  const tree = na.perType.Tree;
+  assert.equal(tree.buy[0].obsidian, tree.buy[0].sunstones * 3);
+  assert.ok(tree.buy[1].sunstones > tree.buy[0].sunstones, "buy price escalates");
+  assert.ok(Math.abs(tree.buy[0].costSfl - tree.buy[0].obsidian * na.obsidianPrice) < 1e-6);
+  // expand acquisitions carry a cost and a step label
+  assert.ok(tree.expand.length > 0 && tree.expand[0].cost > 0 && tree.expand[0].label);
+});
+
 // ── pre-ascension island completion steps (asc: 0) ──
 
 test("complete volcano farm gets no pre-steps; plan starts at the A1 upgrade", () => {
