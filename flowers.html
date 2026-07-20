@@ -24949,9 +24949,36 @@
       if (e.key === "Enter" && e.target.closest(".config-bar")) applyConfig();
     });
 
+    // ── Collector-health banner ──────────────────────────────────────────────
+    // The background collectors (farm/price/nft/orderbook snapshots, marketplace
+    // trades) and the game token once broke silently for months. This surfaces a
+    // slim warning bar at the top ONLY when something is stale or the token is
+    // about to expire — otherwise it's invisible. Dismissible per session.
+    async function renderHealthBanner() {
+      if (sessionStorage.getItem("sfl_health_dismissed") === "1") return;
+      let d;
+      try {
+        const r = await fetch("/api/collector-health");
+        if (!r.ok) return;
+        d = await r.json();
+      } catch { return; }
+      if (!d || d.ok) return; // all healthy → say nothing
+      const parts = [];
+      if (d.warnings?.token) parts.push(`🔑 game token ${escHTML(d.warnings.token)}`);
+      if (d.warnings?.staleCollectors?.length) parts.push(`⚠️ stale: ${d.warnings.staleCollectors.map(escHTML).join(", ")}`);
+      if (!parts.length) return;
+      const bar = document.createElement("div");
+      bar.id = "health-banner";
+      bar.style.cssText = "background:#3a1a1a;border-bottom:1px solid #ff6b6b;color:#ffbaba;font-size:0.62rem;padding:6px 12px;display:flex;align-items:center;gap:10px;font-family:'Courier New',monospace;position:sticky;top:0;z-index:9999";
+      bar.innerHTML = `<span style="flex:1">🛰️ Data collection: ${parts.join(" · ")}</span>
+        <button onclick="sessionStorage.setItem('sfl_health_dismissed','1');this.parentElement.remove()" style="background:none;border:1px solid #ff6b6b;color:#ffbaba;border-radius:4px;cursor:pointer;font-size:0.6rem;padding:1px 7px">✕</button>`;
+      document.body.insertBefore(bar, document.body.firstChild);
+    }
+
     // Init
     migrateApiKey();
     main();
+    renderHealthBanner();
   </script>
 </body>
 </html>
