@@ -12,6 +12,50 @@ export default async function handler(req, res) {
     const limit = Math.min(parseInt(req.query.limit) || 50, 500);
     const days = Math.min(parseInt(req.query.days) || 30, 365);
 
+    // My-trades / P&L mode — every trade where MY farm was initiator or fulfiller
+    // (full history, not just the is_mine-flagged rows). my_side derived here:
+    //   fulfilled LISTING → initiator sold, fulfiller bought
+    //   fulfilled OFFER   → initiator bought, fulfiller sold
+    if (req.query.mytrades === "1") {
+      const ME = 155498;
+      const { rows } = await pool.query(
+        `SELECT mt.collection, mt.item_id, mt.sfl, mt.quantity, mt.source, mt.fulfilled_at,
+                mt.initiated_by_id, mt.fulfilled_by_id, mt.initiated_by_name, mt.fulfilled_by_name,
+                ol.name, ol.boost_text
+         FROM marketplace_trades mt
+         LEFT JOIN ob_last ol ON ol.collection = mt.collection AND ol.item_id = mt.item_id
+         WHERE mt.initiated_by_id = $1 OR mt.fulfilled_by_id = $1
+         ORDER BY mt.fulfilled_at DESC`, [ME]);
+      const byItem = new Map();
+      let boughtSfl = 0, soldSfl = 0, buyCount = 0, sellCount = 0;
+      const trades = rows.map((r) => {
+        const iAmInit = Number(r.initiated_by_id) === ME;
+        const side = r.source === "offer" ? (iAmInit ? "buy" : "sell") : (iAmInit ? "sell" : "buy");
+        const sfl = Number(r.sfl) || 0, qty = Number(r.quantity) || 1;
+        const key = `${r.collection}:${r.item_id}`;
+        let g = byItem.get(key);
+        if (!g) { g = { collection: r.collection, itemId: r.item_id, name: r.name, boost: r.boost_text, boughtQty: 0, boughtSfl: 0, soldQty: 0, soldSfl: 0 }; byItem.set(key, g); }
+        if (side === "buy") { g.boughtQty += qty; g.boughtSfl += sfl; boughtSfl += sfl; buyCount++; }
+        else { g.soldQty += qty; g.soldSfl += sfl; soldSfl += sfl; sellCount++; }
+        const counterparty = iAmInit ? r.fulfilled_by_name : r.initiated_by_name;
+        return { date: r.fulfilled_at, collection: r.collection, itemId: r.item_id, name: r.name, boost: r.boost_text,
+          side, sfl, qty, unitPrice: qty > 0 ? sfl / qty : sfl, counterparty };
+      });
+      const items = [...byItem.values()].map((g) => {
+        const avgBuy = g.boughtQty > 0 ? g.boughtSfl / g.boughtQty : null;
+        const avgSell = g.soldQty > 0 ? g.soldSfl / g.soldQty : null;
+        const matched = Math.min(g.boughtQty, g.soldQty);
+        const realized = avgBuy != null && avgSell != null ? matched * (avgSell - avgBuy) : null;
+        return { ...g, avgBuy, avgSell, cashNet: g.soldSfl - g.boughtSfl, realized };
+      }).sort((a, b) => (b.soldSfl + b.boughtSfl) - (a.soldSfl + a.boughtSfl));
+      res.setHeader("Cache-Control", "s-maxage=120, stale-while-revalidate=300");
+      return res.status(200).json({
+        totals: { boughtSfl: Math.round(boughtSfl * 100) / 100, soldSfl: Math.round(soldSfl * 100) / 100,
+          cashNet: Math.round((soldSfl - boughtSfl) * 100) / 100, buyCount, sellCount, tradeCount: trades.length },
+        items, trades: trades.slice(0, 200),
+      });
+    }
+
     // Count mode — return row counts per table
     if (req.query.count) {
       const [trades, orderbook, daily, totals] = await Promise.all([
