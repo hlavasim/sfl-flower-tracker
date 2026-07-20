@@ -13535,6 +13535,28 @@
       inp.value = "";
       renderWishlistPanel();
     };
+    // Bulk import: paste a list (names, one per line — extra columns/🔗 tolerated).
+    // Each line is matched against the boosted catalog by the longest catalog name
+    // it starts with; matched items are added at priority 2 (🟡).
+    window._wlImportMsg = null;
+    window._wlImport = async function() {
+      const ta = document.getElementById("wl-import");
+      if (!ta || !_wlCatalog) return;
+      const lines = ta.value.split(/[\n;]+/).map(s => s.replace(/🔗/g, "").trim()).filter(Boolean);
+      const l = _wlGet();
+      let added = 0; const unmatched = [];
+      for (const line of lines) {
+        const low = line.toLowerCase();
+        const hit = _wlCatalog.filter(c => low.startsWith(c.name.toLowerCase())).sort((a, b) => b.name.length - a.name.length)[0]
+          || _wlCatalog.find(c => c.name.toLowerCase() === low);
+        if (hit) { const k = `${hit.collection}:${hit.name}`; if (!l[k]) added++; l[k] = l[k] || 2; }
+        else unmatched.push(line.slice(0, 24));
+      }
+      _wlSave(l);
+      ta.value = "";
+      window._wlImportMsg = `<span style="color:var(--green)">+${added} přidáno</span>${unmatched.length ? ` · <span style="color:var(--yellow)">nenalezeno: ${escHTML(unmatched.slice(0, 6).join(", "))}</span>` : ""}`;
+      await renderWishlistPanel();
+    };
     let _wlCatalog = null;
     async function renderWishlistPanel() {
       const el = document.getElementById("wishlist-panel");
@@ -13602,6 +13624,15 @@
         <button class="pixel-font" onclick="_wlAddFromPicker()" style="font-size:0.55rem;padding:4px 10px;cursor:pointer">+ přidat</button>
       </div>
       <datalist id="wl-catalog">${_wlCatalog.filter(c => !c.active).map(c => `<option value="${escHTML(c.name)}">${c.floor > 0 ? c.floor.toFixed(1) + " ⚀ · " : ""}${escHTML((c.boost || "").split("\n")[0])}</option>`).join("")}</datalist>`;
+      // bulk import (paste a list of names)
+      h += `<details style="margin-top:8px"${window._wlImportMsg ? " open" : ""}><summary style="cursor:pointer;font-size:0.52rem;color:var(--text-dim)">📋 hromadný import (vlož seznam názvů)</summary>
+        <div style="margin-top:6px">
+          <textarea id="wl-import" rows="4" placeholder="Oil Gallon&#10;Golden Spatula&#10;Humming Bird&#10;…jeden název na řádek (sloupce/🔗 se ignorují)" style="width:100%;box-sizing:border-box;font-size:0.55rem;padding:5px 6px;background:var(--bg-input,#1a140c);color:var(--text-primary);border:1px solid var(--border-dark);font-family:'Courier New',monospace"></textarea>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:5px">
+            <button class="pixel-font" onclick="_wlImport()" style="font-size:0.55rem;padding:4px 10px;cursor:pointer">📥 importovat</button>
+            <span id="wl-import-status" style="font-size:0.52rem">${window._wlImportMsg || ""}</span>
+          </div>
+        </div></details>`;
       h += `</div>`;
       el.innerHTML = h;
     }
