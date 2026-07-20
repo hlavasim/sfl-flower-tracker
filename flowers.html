@@ -22012,7 +22012,7 @@
         <div id="flips-root" class="pixel-font" style="padding:8px 0"><div style="text-align:center;padding:40px;color:var(--text-dim)">Loading orderbook…</div></div>`;
       let d;
       try {
-        const r = await fetch(`/api/orderbook-flips?sort=${encodeURIComponent(sort)}${q ? "&q=" + encodeURIComponent(q) : ""}`);
+        const r = await fetch(`/api/marketplace-orderbook?flips=1&sort=${encodeURIComponent(sort)}${q ? "&q=" + encodeURIComponent(q) : ""}`);
         if (!r.ok) throw new Error(`orderbook ${r.status}`);
         d = await r.json();
       } catch (e) {
@@ -25028,7 +25028,7 @@
       if (sessionStorage.getItem("sfl_health_dismissed") === "1") return;
       let d;
       try {
-        const r = await fetch("/api/collector-health");
+        const r = await fetch("/api/marketplace-orderbook?health=1");
         if (!r.ok) return;
         d = await r.json();
       } catch { return; }
