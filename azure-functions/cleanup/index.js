@@ -23,16 +23,8 @@ module.exports = async function (context) {
     `);
     context.log(`Deleted ${deleteResult.rowCount} old snapshots`);
 
-    // Also prune very old price/nft changes (keep 1 year)
-    const priceDelete = await pool.query(`
-      DELETE FROM price_changes WHERE captured_at < NOW() - INTERVAL '365 days'
-    `);
-    context.log(`Deleted ${priceDelete.rowCount} old price records`);
-
-    const nftDelete = await pool.query(`
-      DELETE FROM nft_changes WHERE captured_at < NOW() - INTERVAL '365 days'
-    `);
-    context.log(`Deleted ${nftDelete.rowCount} old NFT records`);
+    // price_changes + nft_changes: KEPT FOREVER — these are the price/NFT diffs
+    // (compact numeric rows), retention removed 2026-07-20 per "diffs never delete".
 
     // marketplace_trades: KEPT FOREVER (real trade history, feeds the orderbook
     // analytics + is_mine ledger — retention removed 2026-07-20 per "never delete").
