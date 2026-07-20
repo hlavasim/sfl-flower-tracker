@@ -100,6 +100,8 @@ CREATE TABLE marketplace_trades (
   initiated_by_name TEXT,
   fulfilled_by_id BIGINT,
   fulfilled_by_name TEXT,
+  is_mine BOOLEAN NOT NULL DEFAULT FALSE,
+  my_side TEXT,
   captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX idx_mt_coll_item ON marketplace_trades(collection, item_id, fulfilled_at DESC);
@@ -121,6 +123,55 @@ CREATE TABLE marketplace_orderbook (
   UNIQUE (collection, item_id, side, order_id)
 );
 CREATE INDEX idx_mo_coll_item ON marketplace_orderbook(collection, item_id, side);
+
+-- Orderbook historization for BOOSTED NFTs (orderbook-snapshot fn, hourly).
+-- Historized metrics + price ladders per item per run (append-only).
+CREATE TABLE ob_snap (
+  id BIGSERIAL PRIMARY KEY,
+  collection TEXT NOT NULL,
+  item_id INTEGER NOT NULL,
+  ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  best_offer DOUBLE PRECISION,
+  best_listing DOUBLE PRECISION,
+  spread DOUBLE PRECISION,
+  spread_pct DOUBLE PRECISION,
+  offer_count INTEGER NOT NULL DEFAULT 0,
+  listing_count INTEGER NOT NULL DEFAULT 0,
+  offer_pressure INTEGER NOT NULL DEFAULT 0,
+  listing_pressure INTEGER NOT NULL DEFAULT 0,
+  avg_trade10 DOUBLE PRECISION,
+  n_trades10 INTEGER NOT NULL DEFAULT 0,
+  offer_ladder JSONB,
+  listing_ladder JSONB
+);
+CREATE INDEX idx_obs_item_ts ON ob_snap(collection, item_id, ts DESC);
+CREATE INDEX idx_obs_ts ON ob_snap(ts DESC);
+
+-- Latest orderbook state per boosted item (upsert every run).
+CREATE TABLE ob_last (
+  collection TEXT NOT NULL,
+  item_id INTEGER NOT NULL,
+  ts TIMESTAMPTZ NOT NULL,
+  name TEXT,
+  boost_text TEXT,
+  floor DOUBLE PRECISION,
+  last_sale DOUBLE PRECISION,
+  supply INTEGER,
+  best_offer DOUBLE PRECISION,
+  best_listing DOUBLE PRECISION,
+  spread DOUBLE PRECISION,
+  spread_pct DOUBLE PRECISION,
+  offer_count INTEGER NOT NULL DEFAULT 0,
+  listing_count INTEGER NOT NULL DEFAULT 0,
+  offer_pressure INTEGER NOT NULL DEFAULT 0,
+  listing_pressure INTEGER NOT NULL DEFAULT 0,
+  avg_trade10 DOUBLE PRECISION,
+  n_trades10 INTEGER NOT NULL DEFAULT 0,
+  balance DOUBLE PRECISION,
+  offer_ladder JSONB,
+  listing_ladder JSONB,
+  PRIMARY KEY (collection, item_id)
+);
 
 -- Optional: read-only user for Vercel
 -- CREATE USER sfl_reader WITH PASSWORD 'your_password';

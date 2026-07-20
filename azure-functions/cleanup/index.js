@@ -60,6 +60,15 @@ module.exports = async function (context) {
     } catch (e) {
       context.log.error(`Marks cleanup error: ${e.message}`);
     }
+    // Prune orderbook history older than 180 days (ob_last is tiny, keep all)
+    try {
+      const obDelete = await pool.query(`
+        DELETE FROM ob_snap WHERE ts < NOW() - INTERVAL '180 days'
+      `);
+      context.log(`Deleted ${obDelete.rowCount} old orderbook snapshots`);
+    } catch (e) {
+      context.log.error(`ob_snap cleanup error: ${e.message}`);
+    }
   } catch (err) {
     context.log.error(`Cleanup error: ${err.message}`);
   }
