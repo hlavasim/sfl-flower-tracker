@@ -2833,7 +2833,7 @@
     const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
     const IMG_BASE = "https://sfl.world/img/flowers/";
-    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "marks", "diff", "json", "constants", "ascension"];
+    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "mytrades", "marks", "diff", "json", "constants", "ascension"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -5605,6 +5605,7 @@
         { id: "buds", label: "BUDS" },
         { id: "pets", label: "PETS" },
         { id: "flips", label: "💱 FLIPS" },
+        { id: "mytrades", label: "💰 MY TRADES" },
         { id: "json", label: "JSON" },
         { id: "marks", label: "MARKS" },
         { id: "constants", label: "CONSTANTS" },
@@ -13534,6 +13535,28 @@
       inp.value = "";
       renderWishlistPanel();
     };
+    // Bulk import: paste a list (names, one per line — extra columns/🔗 tolerated).
+    // Each line is matched against the boosted catalog by the longest catalog name
+    // it starts with; matched items are added at priority 2 (🟡).
+    window._wlImportMsg = null;
+    window._wlImport = async function() {
+      const ta = document.getElementById("wl-import");
+      if (!ta || !_wlCatalog) return;
+      const lines = ta.value.split(/[\n;]+/).map(s => s.replace(/🔗/g, "").trim()).filter(Boolean);
+      const l = _wlGet();
+      let added = 0; const unmatched = [];
+      for (const line of lines) {
+        const low = line.toLowerCase();
+        const hit = _wlCatalog.filter(c => low.startsWith(c.name.toLowerCase())).sort((a, b) => b.name.length - a.name.length)[0]
+          || _wlCatalog.find(c => c.name.toLowerCase() === low);
+        if (hit) { const k = `${hit.collection}:${hit.name}`; if (!l[k]) added++; l[k] = l[k] || 2; }
+        else unmatched.push(line.slice(0, 24));
+      }
+      _wlSave(l);
+      ta.value = "";
+      window._wlImportMsg = `<span style="color:var(--green)">+${added} přidáno</span>${unmatched.length ? ` · <span style="color:var(--yellow)">nenalezeno: ${escHTML(unmatched.slice(0, 6).join(", "))}</span>` : ""}`;
+      await renderWishlistPanel();
+    };
     let _wlCatalog = null;
     async function renderWishlistPanel() {
       const el = document.getElementById("wishlist-panel");
@@ -13601,6 +13624,15 @@
         <button class="pixel-font" onclick="_wlAddFromPicker()" style="font-size:0.55rem;padding:4px 10px;cursor:pointer">+ přidat</button>
       </div>
       <datalist id="wl-catalog">${_wlCatalog.filter(c => !c.active).map(c => `<option value="${escHTML(c.name)}">${c.floor > 0 ? c.floor.toFixed(1) + " ⚀ · " : ""}${escHTML((c.boost || "").split("\n")[0])}</option>`).join("")}</datalist>`;
+      // bulk import (paste a list of names)
+      h += `<details style="margin-top:8px"${window._wlImportMsg ? " open" : ""}><summary style="cursor:pointer;font-size:0.52rem;color:var(--text-dim)">📋 hromadný import (vlož seznam názvů)</summary>
+        <div style="margin-top:6px">
+          <textarea id="wl-import" rows="4" placeholder="Oil Gallon&#10;Golden Spatula&#10;Humming Bird&#10;…jeden název na řádek (sloupce/🔗 se ignorují)" style="width:100%;box-sizing:border-box;font-size:0.55rem;padding:5px 6px;background:var(--bg-input,#1a140c);color:var(--text-primary);border:1px solid var(--border-dark);font-family:'Courier New',monospace"></textarea>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:5px">
+            <button class="pixel-font" onclick="_wlImport()" style="font-size:0.55rem;padding:4px 10px;cursor:pointer">📥 importovat</button>
+            <span id="wl-import-status" style="font-size:0.52rem">${window._wlImportMsg || ""}</span>
+          </div>
+        </div></details>`;
       h += `</div>`;
       el.innerHTML = h;
     }
@@ -21903,6 +21935,7 @@
           case "buds": renderBuds(data); break;
           case "pets": renderPets(data); break;
           case "flips": renderFlips(data); break;
+          case "mytrades": renderMyTrades(data); break;
           case "diff": renderDiff(data); break;
           case "json": renderJsonExplorer(data); break;
           case "marks": renderMarks(data); break;
@@ -22058,6 +22091,78 @@
       const upd = d.items[0]?.updatedAt;
       h += `<div class="flip-dim" style="font-size:0.5rem;margin-top:8px">Sběr každou hodinu${upd ? " · poslední: " + new Date(upd).toLocaleString("cs-CZ") : ""}</div>`;
       document.getElementById("flips-root").innerHTML = h;
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // MY TRADES / P&L (marketplace_trades where I was a party — §4 ledger)
+    // ══════════════════════════════════════════════════════════════
+    async function renderMyTrades() {
+      const app = document.getElementById("app");
+      app.innerHTML = `<div class="header pixel-panel pixel-font"><h1>💰 MY TRADES</h1>
+        <div class="farm-id">every marketplace trade you were part of · buy / sell ledger</div></div>
+        <div id="mt-root" class="pixel-font" style="padding:8px 0"><div style="text-align:center;padding:40px;color:var(--text-dim)">Loading your trades…</div></div>`;
+      let d;
+      try {
+        const r = await fetch("/api/marketplace-trades?mytrades=1");
+        if (!r.ok) throw new Error(`trades ${r.status}`);
+        d = await r.json();
+      } catch (e) {
+        document.getElementById("mt-root").innerHTML = `<div class="pixel-panel" style="padding:20px;color:var(--yellow);font-size:0.6rem">Trade history unavailable (${escHTML(e.message)}).</div>`;
+        return;
+      }
+      const kf = (v) => v == null ? "—" : (Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + "k" : (Math.abs(v) >= 1 ? v.toFixed(0) : v.toFixed(2)));
+      const t = d.totals || {};
+      const sfl = () => sflIcon();
+      let h = `<style>
+        .mt-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:14px}
+        .mt-card{background:linear-gradient(160deg,#251c12,#1c160f);border:1px solid var(--border-brown);border-radius:8px;padding:10px 12px}
+        .mt-card .lbl{font-size:0.5rem;color:var(--text-dim)}
+        .mt-card .val{font-size:0.85rem;font-family:'Courier New',monospace;margin-top:2px}
+        .mt-t{width:100%;border-collapse:collapse;font-size:0.58rem}
+        .mt-t th{font-size:0.48rem;color:var(--text-dim);text-align:right;padding:4px 6px;border-bottom:1px solid var(--border-dark);white-space:nowrap}
+        .mt-t th:first-child{text-align:left}
+        .mt-t td{padding:5px 6px;text-align:right;white-space:nowrap;border-top:1px solid #1d1710}
+        .mt-t td:first-child{text-align:left}
+        .mt-t .icn{height:1.3em;vertical-align:-0.25em;margin-right:3px}
+        .g{color:#7fe0a0}.r{color:#ff8888}.dim{color:var(--text-dim)}
+      </style>`;
+      h += `<div class="mt-cards">
+        <div class="mt-card"><div class="lbl">💸 Nakoupeno (${t.buyCount || 0}×)</div><div class="val r">${kf(t.boughtSfl)} ${sfl()}</div></div>
+        <div class="mt-card"><div class="lbl">💰 Prodáno (${t.sellCount || 0}×)</div><div class="val g">${kf(t.soldSfl)} ${sfl()}</div></div>
+        <div class="mt-card"><div class="lbl">📊 Cash net</div><div class="val ${(t.cashNet || 0) >= 0 ? "g" : "r"}">${(t.cashNet || 0) >= 0 ? "+" : ""}${kf(t.cashNet)} ${sfl()}</div></div>
+        <div class="mt-card"><div class="lbl">🔁 Obchodů</div><div class="val">${t.tradeCount || 0}</div></div>
+      </div>`;
+      // per-item ledger
+      h += `<div class="pixel-panel" style="padding:10px;margin-bottom:14px"><div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:6px">PER ITEM</div>
+        <div style="overflow-x:auto"><table class="mt-t"><thead><tr>
+          <th>NFT</th><th>koupeno</th><th>ø koup</th><th>prodáno</th><th>ø prodej</th><th>realized</th><th>cash net</th>
+        </tr></thead><tbody>`;
+      for (const it of (d.items || []).slice(0, 100)) {
+        h += `<tr>
+          <td><img class="icn" src="${getItemIcon(it.name || "")}" onerror="this.style.display='none'" alt=""><span>${escHTML(it.name || "#" + it.itemId)}</span></td>
+          <td class="dim">${it.boughtQty || 0}×</td><td class="dim">${it.avgBuy != null ? kf(it.avgBuy) : "—"}</td>
+          <td class="dim">${it.soldQty || 0}×</td><td class="dim">${it.avgSell != null ? kf(it.avgSell) : "—"}</td>
+          <td class="${it.realized == null ? "dim" : it.realized >= 0 ? "g" : "r"}">${it.realized == null ? "—" : (it.realized >= 0 ? "+" : "") + kf(it.realized)}</td>
+          <td class="${(it.cashNet || 0) >= 0 ? "g" : "r"}">${(it.cashNet || 0) >= 0 ? "+" : ""}${kf(it.cashNet)}</td>
+        </tr>`;
+      }
+      h += `</tbody></table></div></div>`;
+      // recent trades
+      h += `<div class="pixel-panel" style="padding:10px"><div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:6px">POSLEDNÍ OBCHODY</div>
+        <div style="overflow-x:auto"><table class="mt-t"><thead><tr><th>datum</th><th>NFT</th><th>směr</th><th>cena/ks</th><th>ks</th><th>celkem</th><th>protistrana</th></tr></thead><tbody>`;
+      for (const tr of (d.trades || []).slice(0, 80)) {
+        const buy = tr.side === "buy";
+        h += `<tr>
+          <td class="dim">${new Date(tr.date).toLocaleDateString("cs-CZ")}</td>
+          <td><img class="icn" src="${getItemIcon(tr.name || "")}" onerror="this.style.display='none'" alt=""><span>${escHTML(tr.name || "#" + tr.itemId)}</span></td>
+          <td class="${buy ? "r" : "g"}">${buy ? "koupil" : "prodal"}</td>
+          <td class="dim">${kf(tr.unitPrice)}</td><td class="dim">${tr.qty}</td>
+          <td class="${buy ? "r" : "g"}">${buy ? "−" : "+"}${kf(tr.sfl)}</td>
+          <td class="dim">${escHTML(tr.counterparty || "?")}</td>
+        </tr>`;
+      }
+      h += `</tbody></table></div></div>`;
+      document.getElementById("mt-root").innerHTML = h;
     }
 
     // ══════════════════════════════════════════════════════════════
