@@ -5729,7 +5729,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.74</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.75</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5756,6 +5756,11 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.75", items: [
+          { t: "feat", text: "<b>All calculations moved server-side</b> to a DOM-free core served via <code>/api/compute</code> (power, roadmap, cooking, prices, treasury, ROI, diff, buds, pets, wishlist, ascension…). Same numbers, computed once on the backend instead of in your browser." },
+          { t: "feat", text: "New <b>ASCENSION</b> page (prestige-loop calculator): per-step costs, level gates, crystals &amp; node drip from the game formulas, node-aware production ETAs from <b>your</b> real farming rates, continuous-expand build schedule. Counts <b>banked cooked food</b> (eaten later with the ×1.5 pet boost) toward levels, includes the remaining pre-ascension island expansions, and shows <b>+FLOWER/day &amp; ROI</b> per step (resource + leveling cost)." },
+          { t: "feat", text: "Sales page: <b>⭐ Wishlist</b> panel (boosted-NFT catalog, priority toggles, cumulative affordability vs your balance) folded in from the retired external cockpit." },
+        ]},
         { ver: "v4.74", items: [
           { t: "fix", text: "power-summary <b>cooking now matches the Bumpkin page 1:1</b>. It was reading the live crafting queue (so it showed whatever was mid-cook, e.g. Deli “Cheese”) and using its own XP math. Now it uses your <b>selected recipe per building</b> (your saved choice or the page default) with the exact Bumpkin formula — computeFoodXP × (86400 / computeCookTime) × building count — so cook times, XP/cook and XP/day line up to the cent (incl. Double Nom via cook time, your xp boosts, and the Pet’s Streak / Simulate ×1.5 toggle). Also reports xpPerCook &amp; buildingCount, and includes the Aging Shed." },
         ]},
