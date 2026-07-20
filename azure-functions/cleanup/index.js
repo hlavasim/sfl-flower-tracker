@@ -1,4 +1,5 @@
 const { getPool } = require("../shared/db");
+const { computeFarmDiff } = require("../shared/diff");
 
 module.exports = async function (context) {
   const pool = getPool();
@@ -13,6 +14,7 @@ module.exports = async function (context) {
         WHERE captured_at < NOW() - INTERVAL '30 days' AND NOT is_retained
         ORDER BY farm_id, DATE(captured_at), captured_at ASC
       )
+      RETURNING id, farm_id, captured_at
     `);
     context.log(`Marked ${markResult.rowCount} snapshots as retained`);
 
@@ -22,6 +24,29 @@ module.exports = async function (context) {
       WHERE captured_at < NOW() - INTERVAL '30 days' AND NOT is_retained
     `);
     context.log(`Deleted ${deleteResult.rowCount} old snapshots`);
+
+    // Downsampling drops the intra-day 5-min rows, so each newly-retained daily
+    // row's `diff` (originally a 5-min increment) would no longer represent its
+    // day. Recompute it as the FULL change since the previous retained day, so
+    // the diff column stays a consistent incremental series (5-min recent +
+    // daily older) that still sums to total production. game_data is untouched.
+    let recomputed = 0;
+    for (const row of markResult.rows) {
+      const cur = await pool.query("SELECT game_data FROM farm_snapshots WHERE id = $1", [row.id]);
+      if (!cur.rows.length) continue;
+      const prev = await pool.query(
+        `SELECT game_data FROM farm_snapshots
+         WHERE farm_id = $1 AND is_retained AND captured_at < $2
+         ORDER BY captured_at DESC LIMIT 1`,
+        [row.farm_id, row.captured_at]
+      );
+      if (!prev.rows.length) continue; // first retained day for this farm: no prior day to diff against
+      const d = computeFarmDiff(prev.rows[0].game_data, cur.rows[0].game_data);
+      await pool.query("UPDATE farm_snapshots SET diff = $1 WHERE id = $2",
+        [d ? JSON.stringify(d) : null, row.id]);
+      recomputed++;
+    }
+    if (recomputed) context.log(`Recomputed ${recomputed} daily diffs`);
 
     // price_changes + nft_changes: KEPT FOREVER — these are the price/NFT diffs
     // (compact numeric rows), retention removed 2026-07-20 per "diffs never delete".
