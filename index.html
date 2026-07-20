@@ -13533,6 +13533,34 @@
       } catch {}
       try { _wlCache = JSON.parse(localStorage.getItem("sfl_wishlist_v1") || "{}"); } catch { _wlCache = {}; }
     }
+    // Bud catalog for the wishlist: mineral-boosting buds that are CURRENTLY listed
+    // (buyable), joining marketplace floors (budfloors) with section=buds traits.
+    // Buds are 1-of-1 so each is its own catalog entry keyed by id. Cached per page.
+    let _wlBudCache = null;
+    async function _wlLoadBudCatalog() {
+      if (_wlBudCache) return _wlBudCache;
+      try {
+        const [fR, bR] = await Promise.all([
+          fetch("/api/marketplace-orderbook?budfloors=1"),
+          fetch(`/api/compute?farm=${FARM_ID}&section=buds`),
+        ]);
+        if (!fR.ok || !bR.ok) return (_wlBudCache = []);
+        const floors = {}; for (const i of (await fR.json()).items || []) floors[i.id] = i.floor;
+        const rows = ((await bR.json()).data || {}).rows || [];
+        const MIN = new Set(["stone", "iron", "gold", "crimstone"]);
+        const cat = [];
+        for (const r of rows) {
+          const cats = [...new Set((r.breakdown || []).map(b => b.catId).filter(c => MIN.has(c)))];
+          if (!cats.length) continue;
+          const floor = floors[r.id];
+          if (!floor) continue; // only currently-listed buds can be bought
+          cat.push({ name: String(r.id), collection: "buds", floor, boost: `+${cats.join("+")} · ${r.spd ? "" : ""}${(r.sflPerDay || 0).toFixed(2)} sfl/d`,
+            label: `🌱 #${r.id} ${r.type}/${r.stem} +${cats.join("+")}` });
+        }
+        cat.sort((a, b) => a.floor - b.floor);
+        return (_wlBudCache = cat);
+      } catch { return (_wlBudCache = []); }
+    }
     // fire-and-forget write to the DB (owner farm only; others stay localStorage-only)
     function _wlPost(payload) {
       fetch(`/api/marketplace-orderbook?wishlist=1`, { method: "POST", headers: { "content-type": "application/json" },
@@ -13606,6 +13634,29 @@
         _wlSave(l);
       }
       _wlCatalog = d.catalog || [];
+      // ── buds: 1-of-1 NFTs, so priced per-id. Merge the mineral-boosting listed
+      // buds into the catalog (pickable) and resolve any "buds:<id>" wishlist rows
+      // here (the core section only knows collectibles/wearables). Same table, not
+      // a separate section. Bud costs are folded into the summary below.
+      const budCat = await _wlLoadBudCatalog();
+      for (const bc of budCat) _wlCatalog.push(bc);
+      const wl = _wlGet();
+      const budCatById = {}; for (const bc of budCat) budCatById[bc.name] = bc;
+      for (const [key, prio] of Object.entries(wl)) {
+        if (!key.startsWith("buds:")) continue;
+        const nm = key.slice(5);
+        const bc = budCatById[nm] || _wlCatalog.find(c => c.collection === "buds" && c.name === nm);
+        d.rows.push({ key, name: bc ? bc.label : `🌱 Bud #${nm}`, floor: bc ? bc.floor : 0, lastSale: bc ? (bc.lastSale || 0) : 0, priority: prio, owned: false, boost: bc ? bc.boost : "" });
+      }
+      // recompute the per-priority summary so buds are counted too
+      d.rows.sort((a, b) => (a.priority - b.priority) || (b.floor - a.floor));
+      let _cc = 0;
+      for (const p of [1, 2, 3]) {
+        const rp = d.rows.filter(r => r.priority === p && !r.owned);
+        const cost = rp.reduce((s, r) => s + (r.floor || 0), 0);
+        _cc += cost;
+        d.byPriority[p] = { count: rp.length, unowned: rp.length, cost, cumulative: _cc, affordable: d.balance >= _cc };
+      }
       const _wlPrio = { 1: ["🔴", "now"], 2: ["🟡", "soon"], 3: ["🟢", "later"] };
       let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
       h += `<div class="pixel-font" style="font-size:0.6875rem;color:var(--lily);font-weight:bold;margin-bottom:8px">⭐ WISHLIST</div>`;
