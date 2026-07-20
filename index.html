@@ -21868,6 +21868,59 @@
         FLOWER_BEDS = Math.max(1, Object.keys(data.flowerBeds).length);
         applyFlowerBoosts(data.flowerMultiplier);
 
+        switch (page) {
+          case "dashboard": renderDashboard(data); break;
+          case "hub": renderHub(data); break;
+          case "flowers": renderFlowers(data); break;
+          case "dolls": renderDolls(data); break;
+          case "crustaceans": renderCrustaceans(data); break;
+          case "bumpkin": renderBumpkin(data); break;
+          case "treasury": renderTreasury(data); break;
+          case "sales": renderSales(data); break;
+          case "power": renderPower(data); break;
+          case "roadmap": renderRoadmap(data); break;
+          case "nodes": renderNodes(data); break;
+          case "ascension": renderAscension(data); break;
+          case "roi": renderRoi(data); break;
+          case "shrines": renderShrines(data); break;
+          case "buds": renderBuds(data); break;
+          case "pets": renderPets(data); break;
+          case "diff": renderDiff(data); break;
+          case "json": renderJsonExplorer(data); break;
+          case "marks": renderMarks(data); break;
+          case "constants": renderConstants(data); break;
+          default: renderDashboard(data);
+        }
+
+        if (page === "dashboard") {
+          startGrowingTimers();
+        }
+        if (page === "flowers") {
+          startPBTimer();
+          startGrowingTimers();
+        }
+        if (page === "dolls" && data.craftingBox?.readyAt) {
+          startGrowingTimers();
+        }
+
+        fetch(`/api/track?farm=${FARM_ID}&page=${page}`).catch(() => {});
+      } catch (err) {
+        console.error(err);
+        const needsConfig = !FARM_ID;
+        app.innerHTML = `<div class="error-screen pixel-panel pixel-font">
+          <div class="icon">${needsConfig ? "👆" : "⚠️"}</div>
+          <h2>${needsConfig ? "Enter your Farm ID above" : "Failed to load data"}</h2>
+          <p>${escHTML(err.message)}</p>
+          ${needsConfig ? `<p style="font-size: 0.625rem;color:var(--text-dim)">
+            Enter your farm number to get started.<br>
+            Your settings will be saved in the URL for bookmarking.
+          </p>` : ""}
+          <button class="refresh-btn" onclick="refresh()">RETRY</button>
+        </div>`;
+      }
+    }
+
+
 
     // ═══════════════════════════════════════
     //  DIFF PAGE (farm 155498 only)
@@ -24873,58 +24926,6 @@
       toast.textContent = "Copied: " + path;
       toast.classList.add("show");
       setTimeout(() => toast.classList.remove("show"), 1500);
-    }
-
-        switch (page) {
-          case "dashboard": renderDashboard(data); break;
-          case "hub": renderHub(data); break;
-          case "flowers": renderFlowers(data); break;
-          case "dolls": renderDolls(data); break;
-          case "crustaceans": renderCrustaceans(data); break;
-          case "bumpkin": renderBumpkin(data); break;
-          case "treasury": renderTreasury(data); break;
-          case "sales": renderSales(data); break;
-          case "power": renderPower(data); break;
-          case "roadmap": renderRoadmap(data); break;
-          case "nodes": renderNodes(data); break;
-          case "ascension": renderAscension(data); break;
-          case "roi": renderRoi(data); break;
-          case "shrines": renderShrines(data); break;
-          case "buds": renderBuds(data); break;
-          case "pets": renderPets(data); break;
-          case "diff": renderDiff(data); break;
-          case "json": renderJsonExplorer(data); break;
-          case "marks": renderMarks(data); break;
-          case "constants": renderConstants(data); break;
-          default: renderDashboard(data);
-        }
-
-        if (page === "dashboard") {
-          startGrowingTimers();
-        }
-        if (page === "flowers") {
-          startPBTimer();
-          startGrowingTimers();
-        }
-        if (page === "dolls" && data.craftingBox?.readyAt) {
-          startGrowingTimers();
-        }
-
-        fetch(`/api/track?farm=${FARM_ID}&page=${page}`).catch(() => {});
-      } catch (err) {
-        console.error(err);
-        const needsConfig = !FARM_ID;
-        app.innerHTML = `<div class="error-screen pixel-panel pixel-font">
-          <div class="icon">${needsConfig ? "👆" : "⚠️"}</div>
-          <h2>${needsConfig ? "Enter your Farm ID above" : "Failed to load data"}</h2>
-          <p>${escHTML(err.message)}</p>
-          ${needsConfig ? `<p style="font-size: 0.625rem;color:var(--text-dim)">
-            Enter your farm number to get started.<br>
-            Your settings will be saved in the URL for bookmarking.
-          </p>` : ""}
-          <button class="refresh-btn" onclick="refresh()">RETRY</button>
-        </div>`;
-      }
     }
 
     // Enter key in config inputs triggers load
