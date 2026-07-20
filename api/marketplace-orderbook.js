@@ -13,6 +13,15 @@ const HEALTH_COLLECTORS = [
   { table: "marks_snapshots", col: "captured_at", label: "Marks", staleH: 30 },
 ];
 
+async function _redisGameToken() {
+  const url = process.env.KV_REST_API_URL, tok = process.env.KV_REST_API_TOKEN;
+  if (!url || !tok) return null;
+  try {
+    const r = await fetch(`${url}/get/game_token:155498`, { headers: { Authorization: `Bearer ${tok}` } });
+    return (await r.json()).result || null;
+  } catch { return null; }
+}
+
 async function _tokenStatus() {
   const url = process.env.KV_REST_API_URL, tok = process.env.KV_REST_API_TOKEN;
   if (!url || !tok) return { configured: false };
@@ -204,8 +213,9 @@ export default async function handler(req, res) {
 
   // Bud floors: all currently-listed buds (id → floor). Buds are 1-of-1, so the
   // caller joins these against section=buds (id → traits/boost) to price a bud.
+  // Token comes from Redis (kept fresh) — the SFL_GAME_TOKEN env var goes stale.
   if (req.query.budfloors === "1") {
-    const token = process.env.SFL_GAME_TOKEN;
+    const token = await _redisGameToken() || process.env.SFL_GAME_TOKEN;
     if (!token) return res.status(503).json({ error: "no game token configured" });
     try {
       const r = await fetch(
