@@ -15,6 +15,17 @@ import { buildPetsSection } from "../core/sections/pets.mjs";
 import { computeBettyRate } from "../core/engine/prices.mjs";
 import { API_SPEC } from "../core/api-spec.mjs";
 
+// Vercel auto-parses a JSON POST body into an object; the local dev-server passes
+// the raw Buffer. Handle both (and a stringified body) so POST sections don't lose
+// their { snapshots } payload — a mismatch here silently dropped ascension/roadmap
+// efficiency on prod (windowDays 0 -> no ETAs).
+function _parseBody(body) {
+  if (!body) return {};
+  if (Buffer.isBuffer(body)) { try { return JSON.parse(body.toString()); } catch { return {}; } }
+  if (typeof body === "string") { try { return JSON.parse(body); } catch { return {}; } }
+  return body;
+}
+
 const PROXY = process.env.PROXY_ORIGIN || "https://sunflower.sajmonium.quest";
 const PRICES_URL = "https://sfl.world/api/v1/prices";
 const NFTS_URL = "https://sfl.world/api/v1/nfts";
@@ -247,7 +258,7 @@ export default async function handler(req, res) {
     else if (section === "diff") {
       const priceMap = (buildPricesSection(farm, p2p, settings).marketValue) || {};
       let input = {};
-      try { input = req.body ? JSON.parse(req.body.toString()) : {}; } catch { input = {}; }
+      input = _parseBody(req.body);
       const list = Array.isArray(input.snapshots) ? input.snapshots : [];
       const snapshots = list.map((s) => {
         const dm = (s && s.diff) || {};
@@ -282,7 +293,7 @@ export default async function handler(req, res) {
       if (!nftResult.ok) return res.status(502).json({ error: `nfts fetch failed: ${nftResult.status}` });
       buildPowerSection(farm, p2p, nftResult.data, exchange, settings); // sets the roadmap context
       let input = {};
-      try { input = req.body ? JSON.parse(req.body.toString()) : {}; } catch { input = {}; }
+      input = _parseBody(req.body);
       data = roadmapComputeEfficiency(Array.isArray(input.snapshots) ? input.snapshots : []);
     }
     // `roadmap`: POST-only — the roadmap page's whole computed layer: efficiency from
@@ -296,7 +307,7 @@ export default async function handler(req, res) {
       try { roadmapSettings = req.query.roadmap ? JSON.parse(req.query.roadmap) : {}; } catch { roadmapSettings = {}; }
       buildPowerSection(farm, p2p, nftResult.data, exchange, { ...settings, roadmapSettings, savedProducts: req.query.products ? JSON.parse(req.query.products) : {} });
       let input = {};
-      try { input = req.body ? JSON.parse(req.body.toString()) : {}; } catch { input = {}; }
+      input = _parseBody(req.body);
       data = buildRoadmapSection(Array.isArray(input.snapshots) ? input.snapshots : [], { roadmapSettings, farm, p2p });
     }
     // `ascension`: the prestige-loop calculator (replaces the external cockpit that
@@ -309,7 +320,7 @@ export default async function handler(req, res) {
       const powerData = buildPowerSection(farm, p2p, nftResult.data, exchange, settings);
       const cooking = _cookingForAscension(farm, p2p, settings);
       let input = {};
-      try { input = req.body ? JSON.parse(req.body.toString()) : {}; } catch { input = {}; }
+      input = _parseBody(req.body);
       const effData = roadmapComputeEfficiency(Array.isArray(input.snapshots) ? input.snapshots : []);
       data = buildAscensionSection(farm, powerData, cooking, effData, { grinx: req.query.grinx === "1", max: req.query.max });
     }
