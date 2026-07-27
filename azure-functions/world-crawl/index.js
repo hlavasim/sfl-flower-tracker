@@ -50,6 +50,7 @@ const COL_TYPES = {
   farm_id: "bigint", nft_id: "bigint", username: "text", created_at: "timestamptz",
   island_type: "text", island_biome: "text", ascension_level: "integer",
   expansions: "integer", island_upgraded_at: "timestamptz", xp: "double precision",
+  total_level: "integer",
   balance: "double precision", coins: "double precision", gems: "double precision",
   ban_status: "text", verified: "boolean", vip_until: "timestamptz", inventory: "jsonb",
 };
@@ -93,6 +94,7 @@ async function persistPage(pool, rows, sweep) {
        island_type=EXCLUDED.island_type, island_biome=EXCLUDED.island_biome,
        ascension_level=EXCLUDED.ascension_level, expansions=EXCLUDED.expansions,
        island_upgraded_at=EXCLUDED.island_upgraded_at, xp=EXCLUDED.xp,
+       total_level=EXCLUDED.total_level,
        balance=EXCLUDED.balance, coins=EXCLUDED.coins, gems=EXCLUDED.gems,
        ban_status=EXCLUDED.ban_status, verified=EXCLUDED.verified,
        vip_until=EXCLUDED.vip_until, inventory=EXCLUDED.inventory,

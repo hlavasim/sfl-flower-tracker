@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS farm_world (
   expansions         INTEGER,       -- inventory["Basic Land"]
   island_upgraded_at TIMESTAMPTZ,
   xp                 DOUBLE PRECISION,
+  total_level        INTEGER,       -- xp+ascension_level -> level, uncapped past 200
+                                     -- (see azure-functions/shared/world-extract.js)
   balance            DOUBLE PRECISION,  -- SFL
   coins              DOUBLE PRECISION,
   gems               DOUBLE PRECISION,
@@ -34,6 +36,8 @@ CREATE INDEX IF NOT EXISTS idx_fw_island   ON farm_world(island_type);
 CREATE INDEX IF NOT EXISTS idx_fw_ban      ON farm_world(ban_status);
 CREATE INDEX IF NOT EXISTS idx_fw_asc      ON farm_world(ascension_level);
 CREATE INDEX IF NOT EXISTS idx_fw_exp      ON farm_world(expansions);
+ALTER TABLE farm_world ADD COLUMN IF NOT EXISTS total_level INTEGER;
+CREATE INDEX IF NOT EXISTS idx_fw_level    ON farm_world(total_level);
 CREATE INDEX IF NOT EXISTS idx_fw_seen     ON farm_world(last_seen_at DESC);
 CREATE INDEX IF NOT EXISTS idx_fw_changed  ON farm_world(last_changed_at DESC);
 

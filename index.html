@@ -18870,12 +18870,12 @@
 
     let _worldData = null, _worldErr = null, _worldLoading = false;
 
-    /** Rounded-top, square-baseline bar path (dataviz mark spec: 4px top radius). */
-    function _roundTopRectPath(x, y, w, h, r) {
-      r = Math.min(r, w / 2, h);
-      if (h <= 0) return "";
+    /** Rounded-right, square-baseline bar path for a HORIZONTAL bar (4px tip radius). */
+    function _roundRightRectPath(x, y, w, h, r) {
+      r = Math.min(r, w, h / 2);
+      if (w <= 0) return "";
       if (r <= 0) return `M${x},${y} h${w} v${h} h${-w} Z`;
-      return `M${x},${y + r} Q${x},${y} ${x + r},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h} H${x} Z`;
+      return `M${x},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h - r} Q${x + w},${y + h} ${x + w - r},${y + h} H${x} Z`;
     }
 
     function _chartTipShow(evt, html) {
@@ -18902,43 +18902,47 @@
     };
 
     /**
-     * Bar chart: rows = [{ key, n }], opts.colorFor(row,i) -> hex, opts.xLabel(row) -> string.
-     * A per-mark hover tooltip is always present (dataviz interaction rule); direct
-     * value labels above each bar are shown only when there is room for them (<=12
-     * bars) — past that, the tooltip is the label, so it never gets denser than
-     * "a number on every point" would allow.
+     * Horizontal bar chart: one row per array entry, top to bottom, bars growing
+     * right from a shared baseline. rows = [{ key, n }]; opts.colorFor(row,i) -> hex,
+     * opts.label(row) -> string, opts.rowHeight (default 20, use smaller for long
+     * dense lists), opts.maxHeight caps the chart in a scroll container so a long
+     * list (e.g. one row per Bumpkin level) stays reachable without blowing up the
+     * page. A per-mark hover tooltip is always present; the value is also labeled
+     * at each bar's tip — safe here because each mark owns its own row, so there is
+     * no overlap risk the way there would be packing labels into a narrow x-axis.
      */
     function _svgBarChart(rows, opts = {}) {
       if (!rows.length) return `<div class="pixel-font" style="font-size:0.5625rem;color:var(--text-dim);padding:12px 0">No data yet.</div>`;
-      const W = 640, H = opts.height || 180;
-      const padL = 6, padR = 6, padT = 20, padB = 26;
-      const plotW = W - padL - padR, plotH = H - padT - padB;
-      const n = rows.length;
-      const slot = plotW / n;
-      const barW = Math.max(4, Math.min(24, slot - 3));
+      const rowH = opts.rowHeight || 20;
+      const barH = Math.min(24, rowH - 4);
+      const labelW = opts.labelWidth || 64;
+      const W = 640;
+      const padR = 46, padTop = 4;
+      const plotW = W - labelW - padR;
+      const H = padTop * 2 + rows.length * rowH;
       const maxV = Math.max(1, ...rows.map((r) => r.n));
-      const labelAll = n <= 12;
       const total = rows.reduce((a, r) => a + r.n, 0);
 
       let marks = "";
       rows.forEach((r, i) => {
-        const h = Math.max(1, Math.round((r.n / maxV) * plotH));
-        const x = padL + i * slot + (slot - barW) / 2;
-        const y = padT + plotH - h;
+        const rowY = padTop + i * rowH;
+        const barY = rowY + (rowH - barH) / 2;
+        const w = Math.max(r.n > 0 ? 2 : 0, Math.round((r.n / maxV) * plotW));
         const color = opts.colorFor ? opts.colorFor(r, i) : LEVEL_BAR_COLOR;
-        const xLabel = opts.xLabel ? opts.xLabel(r) : String(r.key);
+        const label = opts.label ? opts.label(r) : String(r.key);
         const pct = total ? (r.n / total) * 100 : 0;
-        const tip = `<b>${escHTML(xLabel)}</b><br>${_fmtNum(r.n)} farms (${pct.toFixed(1)}%)`;
-        marks += `<path d="${_roundTopRectPath(x, y, barW, h, 4)}" fill="${color}" data-tip="${escHTML(tip)}" style="cursor:pointer"/>`;
-        if (labelAll || r.n === maxV) {
-          marks += `<text x="${x + barW / 2}" y="${y - 4}" text-anchor="middle" font-size="9" fill="var(--text-secondary)" font-family="'Courier New',monospace">${_fmtNum(r.n)}</text>`;
+        const tip = `<b>${escHTML(label)}</b><br>${_fmtNum(r.n)} farms (${pct.toFixed(1)}%)`;
+        marks += `<text x="${labelW - 6}" y="${rowY + rowH / 2 + 3}" text-anchor="end" font-size="9" fill="var(--text-dim)" font-family="'Courier New',monospace">${escHTML(label)}</text>`;
+        if (w > 0) {
+          marks += `<path d="${_roundRightRectPath(labelW, barY, w, barH, 4)}" fill="${color}" data-tip="${escHTML(tip)}" style="cursor:pointer"/>`;
         }
-        marks += `<text x="${x + barW / 2}" y="${H - padB + 13}" text-anchor="middle" font-size="8" fill="var(--text-dim)" font-family="'Courier New',monospace">${escHTML(xLabel)}</text>`;
+        marks += `<text x="${labelW + w + 5}" y="${rowY + rowH / 2 + 3}" font-size="9" fill="var(--text-secondary)" font-family="'Courier New',monospace">${_fmtNum(r.n)}</text>`;
       });
-      const baseline = `<line x1="${padL}" y1="${padT + plotH}" x2="${W - padR}" y2="${padT + plotH}" stroke="var(--border-brown)" stroke-width="1"/>`;
-      return `<div onmousemove="_chartHover(event)" onmouseleave="_chartTipHide()">
-        <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;overflow:visible">${baseline}${marks}</svg>
-      </div>`;
+      const baseline = `<line x1="${labelW}" y1="${padTop}" x2="${labelW}" y2="${H - padTop}" stroke="var(--border-brown)" stroke-width="1"/>`;
+      const svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;display:block">${baseline}${marks}</svg>`;
+      const maxH = opts.maxHeight;
+      const scroll = maxH && H > maxH ? `overflow-y:auto;max-height:${maxH}px` : "";
+      return `<div onmousemove="_chartHover(event)" onmouseleave="_chartTipHide()" style="${scroll}">${svg}</div>`;
     }
 
     function _fmtDur(ms) {
@@ -18959,7 +18963,7 @@
         const [stats, islandAgg, levelAgg, ...breakdowns] = await Promise.all([
           getJson(`${WORLD_API}&mode=stats`),
           getJson(`${WORLD_API}&mode=agg&group=island_type`).catch(() => ({ rows: [] })),
-          getJson(`${WORLD_API}&mode=agg&group=bumpkin_level_band`).catch(() => ({ rows: [] })),
+          getJson(`${WORLD_API}&mode=agg&group=total_level&limit=1000`).catch(() => ({ rows: [] })),
           ...worldBreakdowns.map((b) =>
             getJson(`${WORLD_API}&mode=agg&group=${encodeURIComponent(b.key)}`)
               .then((j) => ({ ...b, rows: j.rows || [] }))
@@ -18973,12 +18977,15 @@
         const islandByKey = new Map((islandAgg.rows || []).map((r) => [r.key, r.n]));
         const islandRows = islandOrder.map((key) => ({ key, n: islandByKey.get(key) || 0 }));
 
-        // Level bands come back only for bands with data, already sorted by count —
-        // re-sort by band number so the x-axis reads left-to-right as level order.
-        const levelRows = (levelAgg.rows || [])
-          .filter((r) => r.key != null)
-          .map((r) => ({ key: Number(r.key), n: r.n }))
-          .sort((a, b) => a.key - b.key);
+        // One row per exact level, not banded — level has no ceiling (ascension bands
+        // stack past 200), so gaps are filled with zero-count rows from level 1 up to
+        // whatever the crawl has found so far, rather than only showing levels with data.
+        const levelByKey = new Map(
+          (levelAgg.rows || []).filter((r) => r.key != null).map((r) => [Number(r.key), r.n])
+        );
+        const maxLevel = levelByKey.size ? Math.max(...levelByKey.keys()) : 0;
+        const levelRows = [];
+        for (let lvl = 1; lvl <= maxLevel; lvl++) levelRows.push({ key: lvl, n: levelByKey.get(lvl) || 0 });
 
         _worldData = { stats, islandRows, levelRows, breakdowns };
       } catch (e) {
@@ -19053,14 +19060,16 @@
       html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
         <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY ISLAND</div>
         <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">of ${_fmtNum(_worldData.islandRows.reduce((a, r) => a + r.n, 0))} farms crawled so far</div>
-        ${_svgBarChart(_worldData.islandRows, { colorFor: (r) => islandColors[r.key] || LEVEL_BAR_COLOR, xLabel: (r) => r.key })}
+        ${_svgBarChart(_worldData.islandRows, { colorFor: (r) => islandColors[r.key] || LEVEL_BAR_COLOR, label: (r) => r.key, rowHeight: 28 })}
       </div>`;
 
-      // Players by bumpkin level, banded in tens — single ordered series, one hue.
+      // Players by exact Bumpkin level (not banded) — level has no ceiling past 200,
+      // ascension bands keep stacking, so this runs one row per level from 1 up to
+      // whatever the crawl has found so far. Long list -> scroll, not truncation.
       html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
         <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY BUMPKIN LEVEL</div>
-        <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">level derived from bumpkin XP, banded in 10s</div>
-        ${_svgBarChart(_worldData.levelRows, { colorFor: () => LEVEL_BAR_COLOR, xLabel: (r) => `${r.key}-${r.key + 9}` })}
+        <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">one row per level, 1 through the highest level found so far (ascension keeps this uncapped past 200)</div>
+        ${_svgBarChart(_worldData.levelRows, { colorFor: () => LEVEL_BAR_COLOR, label: (r) => `Lv ${r.key}`, rowHeight: 14, labelWidth: 46, maxHeight: 420 })}
       </div>`;
 
       // Breakdowns — these are the point of the crawl.
