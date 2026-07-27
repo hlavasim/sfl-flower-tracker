@@ -18853,7 +18853,7 @@
     ];
 
     // Island type is a fixed-order categorical chart, not a generic list row, so it
-    // is fetched separately from worldBreakdowns and drawn with _svgBarChart.
+    // is fetched separately from worldBreakdowns and drawn with _barChart.
     // Colors are dark-mode categorical slots 1/2/3/4/5 from the dataviz skill's
     // validated palette, re-validated against this app's actual surface
     // (#1a0e08) with `validate_palette.js "#3987e5,#d95926,#199e70,#c98500,#d55181"
@@ -18869,14 +18869,6 @@
     const LEVEL_BAR_COLOR = "#3987e5";
 
     let _worldData = null, _worldErr = null, _worldLoading = false;
-
-    /** Rounded-right, square-baseline bar path for a HORIZONTAL bar (4px tip radius). */
-    function _roundRightRectPath(x, y, w, h, r) {
-      r = Math.min(r, w, h / 2);
-      if (w <= 0) return "";
-      if (r <= 0) return `M${x},${y} h${w} v${h} h${-w} Z`;
-      return `M${x},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h - r} Q${x + w},${y + h} ${x + w - r},${y + h} H${x} Z`;
-    }
 
     function _chartTipShow(evt, html) {
       let t = document.getElementById("_chart-tooltip");
@@ -18907,42 +18899,52 @@
      * opts.label(row) -> string, opts.rowHeight (default 20, use smaller for long
      * dense lists), opts.maxHeight caps the chart in a scroll container so a long
      * list (e.g. one row per Bumpkin level) stays reachable without blowing up the
-     * page. A per-mark hover tooltip is always present; the value is also labeled
-     * at each bar's tip — safe here because each mark owns its own row, so there is
-     * no overlap risk the way there would be packing labels into a narrow x-axis.
+     * page. A per-mark hover tooltip is always present; the value is labeled at each
+     * bar's tip — safe here because each mark owns its own row, so there is no
+     * overlap risk the way there would be packing labels onto a narrow x-axis.
+     *
+     * Built from HTML/CSS rather than one big SVG on purpose. A fixed viewBox does
+     * not survive a phone: with viewBox="0 0 640 H" and height pinned to H px, a
+     * 350px-wide screen makes preserveAspectRatio scale the drawing to 55% and
+     * CENTRE it vertically, so a 150-row chart rendered a ~478px band of nothing
+     * above the content and the scroll window showed only that empty band. Rows in
+     * real pixels keep their height at any width.
      */
-    function _svgBarChart(rows, opts = {}) {
+    function _barChart(rows, opts = {}) {
       if (!rows.length) return `<div class="pixel-font" style="font-size:0.5625rem;color:var(--text-dim);padding:12px 0">No data yet.</div>`;
       const rowH = opts.rowHeight || 20;
       const barH = Math.min(24, rowH - 4);
       const labelW = opts.labelWidth || 64;
-      const W = 640;
-      const padR = 46, padTop = 4;
-      const plotW = W - labelW - padR;
-      const H = padTop * 2 + rows.length * rowH;
       const maxV = Math.max(1, ...rows.map((r) => r.n));
       const total = rows.reduce((a, r) => a + r.n, 0);
+      const mono = "'Courier New',monospace";
+      // Room kept clear at the right of every track for the value label at the tip.
+      const VALUE_GUTTER = 46;
 
-      let marks = "";
-      rows.forEach((r, i) => {
-        const rowY = padTop + i * rowH;
-        const barY = rowY + (rowH - barH) / 2;
-        const w = Math.max(r.n > 0 ? 2 : 0, Math.round((r.n / maxV) * plotW));
+      const body = rows.map((r, i) => {
+        const w = r.n > 0 ? Math.max(0.6, (r.n / maxV) * 100) : 0;
         const color = opts.colorFor ? opts.colorFor(r, i) : LEVEL_BAR_COLOR;
         const label = opts.label ? opts.label(r) : String(r.key);
-        const pct = total ? (r.n / total) * 100 : 0;
-        const tip = `<b>${escHTML(label)}</b><br>${_fmtNum(r.n)} farms (${pct.toFixed(1)}%)`;
-        marks += `<text x="${labelW - 6}" y="${rowY + rowH / 2 + 3}" text-anchor="end" font-size="9" fill="var(--text-dim)" font-family="'Courier New',monospace">${escHTML(label)}</text>`;
-        if (w > 0) {
-          marks += `<path d="${_roundRightRectPath(labelW, barY, w, barH, 4)}" fill="${color}" data-tip="${escHTML(tip)}" style="cursor:pointer"/>`;
-        }
-        marks += `<text x="${labelW + w + 5}" y="${rowY + rowH / 2 + 3}" font-size="9" fill="var(--text-secondary)" font-family="'Courier New',monospace">${_fmtNum(r.n)}</text>`;
-      });
-      const baseline = `<line x1="${labelW}" y1="${padTop}" x2="${labelW}" y2="${H - padTop}" stroke="var(--border-brown)" stroke-width="1"/>`;
-      const svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;display:block">${baseline}${marks}</svg>`;
+        const share = total ? (r.n / total) * 100 : 0;
+        const tip = escHTML(`<b>${escHTML(label)}</b><br>${_fmtNum(r.n)} farms (${share.toFixed(1)}%)`);
+        const val = `<span style="font-family:${mono};font-size:0.5625rem;color:var(--text-secondary);white-space:nowrap">${_fmtNum(r.n)}</span>`;
+        // The track is inset from the right by VALUE_GUTTER so a full-length bar's
+        // value label still has somewhere to go. Without it the longest bar's number
+        // ends flush on the container edge (measured: right=390 in a 390px viewport),
+        // which reads as clipped next to a scrollbar.
+        return `<div style="display:grid;grid-template-columns:${labelW}px 1fr;align-items:center;height:${rowH}px">
+          <div style="font-family:${mono};font-size:0.5625rem;color:var(--text-dim);text-align:right;padding-right:6px;overflow:hidden;white-space:nowrap">${escHTML(label)}</div>
+          <div style="position:relative;height:${barH}px;margin-right:${VALUE_GUTTER}px;border-left:1px solid var(--border-brown)">
+            ${w > 0 ? `<div data-tip="${tip}" style="position:absolute;left:0;top:0;height:100%;width:${w}%;background:${color};border-radius:0 4px 4px 0;cursor:pointer"></div>` : ""}
+            <div style="position:absolute;top:0;height:100%;left:${w}%;padding-left:5px;display:flex;align-items:center">${val}</div>
+          </div>
+        </div>`;
+      }).join("");
+
       const maxH = opts.maxHeight;
-      const scroll = maxH && H > maxH ? `overflow-y:auto;max-height:${maxH}px` : "";
-      return `<div onmousemove="_chartHover(event)" onmouseleave="_chartTipHide()" style="${scroll}">${svg}</div>`;
+      const contentH = rows.length * rowH;
+      const scroll = maxH && contentH > maxH ? `overflow-y:auto;max-height:${maxH}px` : "";
+      return `<div onmousemove="_chartHover(event)" onmouseleave="_chartTipHide()" style="${scroll}">${body}</div>`;
     }
 
     function _fmtDur(ms) {
@@ -19086,7 +19088,7 @@
       html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
         <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY ISLAND</div>
         <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">of ${_fmtNum(_worldData.islandRows.reduce((a, r) => a + r.n, 0))} farms crawled so far</div>
-        ${_svgBarChart(_worldData.islandRows, { colorFor: (r) => islandColors[r.key] || LEVEL_BAR_COLOR, label: (r) => r.key, rowHeight: 28 })}
+        ${_barChart(_worldData.islandRows, { colorFor: (r) => islandColors[r.key] || LEVEL_BAR_COLOR, label: (r) => r.key, rowHeight: 28 })}
       </div>`;
 
       // Players by exact Bumpkin level (not banded) — level has no ceiling past 200,
@@ -19095,7 +19097,7 @@
       html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
         <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY BUMPKIN LEVEL</div>
         <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">one row per level, 1 through the highest level found so far (ascension keeps this uncapped past 200)</div>
-        ${_svgBarChart(_worldData.levelRows, { colorFor: () => LEVEL_BAR_COLOR, label: (r) => `Lv ${r.key}`, rowHeight: 14, labelWidth: 46, maxHeight: 420 })}
+        ${_barChart(_worldData.levelRows, { colorFor: () => LEVEL_BAR_COLOR, label: (r) => `Lv ${r.key}`, rowHeight: 14, labelWidth: 46, maxHeight: 420 })}
       </div>`;
 
       // Breakdowns — these are the point of the crawl.
