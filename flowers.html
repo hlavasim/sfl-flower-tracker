@@ -19021,7 +19021,7 @@
       html += `<div class="summary-bar pixel-panel pixel-font">
         <div class="summary-stat"><div class="label">CRAWLED</div><div class="value">${_fmtNum(s.stored.farms)}</div></div>
         <div class="summary-stat"><div class="label">THIS SWEEP</div><div class="value">${_fmtNum(done)}</div></div>
-        <div class="summary-stat"><div class="label">SPEED</div><div class="value time">${_fmtNum(s.farms_per_hour)}/h</div></div>
+        <div class="summary-stat"><div class="label">SPEED (10 MIN)</div><div class="value time">${_fmtNum(s.farms_per_hour)}/h</div></div>
         <div class="summary-stat"><div class="label">ETA</div><div class="value pending">${_fmtDur(s.eta_ms)}</div></div>
         <div class="summary-stat"><div class="label">FULL SWEEP</div><div class="value ${completed.length ? "complete" : ""}">${_fmtDur(completed.length ? completed[0].duration_ms : s.full_sweep_ms)}</div></div>
       </div>`;
@@ -19036,6 +19036,32 @@
           <div style="height:100%;width:${pct}%;background:var(--sunpetal)"></div>
         </div>
       </div>`;
+
+      // Coverage. The id space is tiled into chunks and a chunk is only marked done
+      // after paging actually crossed its upper bound, so this is a real coverage
+      // figure — and tiling_violations proves the tiles leave no gap to miss farms in.
+      const ch = s.chunks;
+      if (ch) {
+        const cpct = ch.total ? (ch.done / ch.total) * 100 : 0;
+        const cur = ch.current;
+        html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+          <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">ID-SPACE COVERAGE</div>
+          <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 8px">
+            ${ch.done} / ${ch.total} ranges complete — a range counts only once paging passed its upper bound
+          </div>
+          <div style="height:14px;background:var(--bg-card);border:2px solid var(--border-dark);margin-bottom:8px">
+            <div style="height:100%;width:${cpct}%;background:var(--clover)"></div>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-family:'Courier New',monospace;font-size:0.75rem">
+            <tr><td>Complete</td><td style="text-align:right;color:var(--green)">${ch.done}</td></tr>
+            <tr><td>Pending</td><td style="text-align:right">${ch.pending}</td></tr>
+            <tr><td>Running</td><td style="text-align:right">${ch.running}</td></tr>
+            <tr><td>Blocked (upstream won't serve)</td><td style="text-align:right;color:${ch.blocked ? "var(--yellow)" : "var(--text-dim)"}">${ch.blocked}</td></tr>
+            <tr><td>Coverage gaps / overlaps</td><td style="text-align:right;color:${ch.tiling_violations ? "var(--red)" : "var(--green)"}">${ch.tiling_violations === 0 ? "none ✓" : ch.tiling_violations}</td></tr>
+            ${cur ? `<tr><td>Now crawling ids</td><td style="text-align:right">${_fmtNum(cur.from_id)} – ${cur.to_id == null ? "∞" : _fmtNum(cur.to_id)} (${_fmtNum(cur.farms)} farms)</td></tr>` : ""}
+          </table>
+        </div>`;
+      }
 
       // Crawl health. A 5xx here is usually the upstream refusing an oversized page,
       // not an outage — the crawler resizes and retries.

@@ -124,6 +124,13 @@ async function rollSweep(pool, s, context) {
   );
   context.log(`Sweep ${s.sweep} complete: ${s.farms_this_sweep} farms, ` +
     `${s.req_ok} ok / ${s.req_429} rate-limited / ${s.req_5xx} 5xx / ${s.skipped} skipped`);
+  // Re-arm every chunk, including ones left 'blocked' — a record the upstream could
+  // not serve last time may well be servable now, and blocked chunks must not decay
+  // into permanently-unvisited holes.
+  await pool.query(
+    `UPDATE crawl_chunks SET status='pending', cursor=NULL, farms=0, fail_streak=0,
+       started_at=NULL, finished_at=NULL, note=NULL`
+  );
   s.sweep += 1;
   s.cursor = null;
   s.last_id = null;
@@ -131,6 +138,64 @@ async function rollSweep(pool, s, context) {
   s.farms_this_sweep = 0;
   s.req_ok = 0; s.req_429 = 0; s.req_5xx = 0; s.skipped = 0; s.stuck_count = 0;
   s.window_size = WIN_MAX;
+}
+
+/* ── Chunk work queue ────────────────────────────────────────────────────────
+ * A chunk owns the id range [from_id, to_id). Its cursor is the resume point
+ * INSIDE that range; a fresh chunk starts at base64(from_id - 1) because the
+ * upstream cursor is exclusive (verified: cursor=b64(50) returns id 51).
+ * A chunk reaches 'done' only when paging actually produced an id >= to_id, or
+ * the upstream reported end-of-data — never on a timeout or an error, so
+ * "all chunks done" really does mean the whole id space was visited.
+ */
+
+// Consecutive single-record failures before a chunk is parked as 'blocked' rather
+// than ground on forever. In the dense legacy range each such failure is progress
+// (it identifies and records one unservable id), so this only has to be low enough
+// to escape the pathological case: a bad record sitting in front of one of the
+// web2 tail's billion-id gaps, where stepping one id at a time would never finish.
+const MAX_FAIL_STREAK = 100;
+
+async function pickChunk(pool) {
+  const r = await pool.query(
+    `SELECT from_id, to_id, cursor, status, farms, fail_streak
+       FROM crawl_chunks WHERE status <> 'done'
+      ORDER BY priority, from_id LIMIT 1`
+  );
+  if (!r.rows.length) return null;
+  const c = r.rows[0];
+  return {
+    from_id: Number(c.from_id),
+    to_id: c.to_id == null ? null : Number(c.to_id),
+    cursor: c.cursor,
+    farms: Number(c.farms),
+    fail_streak: Number(c.fail_streak),
+  };
+}
+
+/** Cursor to resume (or start) this chunk from. */
+function chunkCursor(chunk) {
+  if (chunk.cursor) return chunk.cursor;
+  return chunk.from_id > 0 ? encodeCursor(chunk.from_id - 1) : null;
+}
+
+async function saveChunk(pool, chunk) {
+  await pool.query(
+    `UPDATE crawl_chunks SET cursor=$2, farms=$3, fail_streak=$4, status='running',
+       started_at=COALESCE(started_at, NOW())
+     WHERE from_id=$1`,
+    [chunk.from_id, chunk.cursor, chunk.farms, chunk.fail_streak]
+  );
+}
+
+async function closeChunk(pool, chunk, status, note, context) {
+  await pool.query(
+    `UPDATE crawl_chunks SET status=$2, note=$3, finished_at=NOW(), fail_streak=0
+     WHERE from_id=$1`,
+    [chunk.from_id, status, note ? String(note).slice(0, 300) : null]
+  );
+  context.log(`Chunk [${chunk.from_id}, ${chunk.to_id ?? "∞"}) -> ${status}` +
+    ` (${chunk.farms} farms)${note ? ` — ${note}` : ""}`);
 }
 
 module.exports = async function (context) {
@@ -156,12 +221,36 @@ module.exports = async function (context) {
   // so the estimate alone would keep re-proposing a window that cannot succeed.
   let ceiling = WIN_MAX;
 
+  let chunk = await pickChunk(pool);
+  if (!chunk) {
+    await rollSweep(pool, s, context);
+    await saveState(pool, s);
+    chunk = await pickChunk(pool);
+  }
+
   while (Date.now() - t0 < BUDGET_MS) {
+    if (!chunk) {
+      await rollSweep(pool, s, context);
+      await saveState(pool, s);
+      chunk = await pickChunk(pool);
+      if (!chunk) { context.log.error("no chunks — run the crawl-chunks migration"); break; }
+    }
+
+    s.cursor = chunkCursor(chunk);
+    s.last_id = decodeCursor(s.cursor);
+
     // Step over known-bad ids sitting directly at the cursor — free, no request.
     while (s.last_id != null && badSet.has(Number(s.last_id) + 1)) {
       s.last_id = Number(s.last_id) + 1;
       s.cursor = encodeCursor(s.last_id);
+      chunk.cursor = s.cursor;
       freeSkips++;
+    }
+    // A free-skip run can walk straight past the chunk's upper bound.
+    if (chunk.to_id != null && s.last_id != null && Number(s.last_id) >= chunk.to_id) {
+      await closeChunk(pool, chunk, "done", "boundary reached while skipping known-bad ids", context);
+      chunk = await pickChunk(pool);
+      continue;
     }
 
     // Size the page from observed bytes, then stop it short of the next known-bad id
@@ -218,10 +307,17 @@ module.exports = async function (context) {
         // Recording one id per failure self-corrects: if the guess was an id that does
         // not exist, the next request simply succeeds and the entry is harmless.
         if (s.last_id == null) {
+          // Only the very first chunk starts with no cursor, so there is no id to
+          // count from — retry, and park the chunk if it never recovers.
+          chunk.fail_streak += 1;
           s.stuck_count = Number(s.stuck_count) + 1;
-          s.last_error = `${status} at sweep start, attempt ${s.stuck_count}`;
-          context.log(`HTTP ${status} at sweep start (attempt ${s.stuck_count}) — retrying`);
+          s.last_error = `${status} at chunk start, attempt ${chunk.fail_streak}`;
+          await saveChunk(pool, chunk);
           await saveState(pool, s);
+          if (chunk.fail_streak >= MAX_FAIL_STREAK) {
+            await closeChunk(pool, chunk, "blocked", `${status} at chunk start`, context);
+            chunk = await pickChunk(pool);
+          }
           await sleep(GAP_MS);
           continue;
         }
@@ -241,9 +337,23 @@ module.exports = async function (context) {
         s.skipped = Number(s.skipped) + 1;
         s.cursor = encodeCursor(bad);
         s.last_id = bad;
+        chunk.cursor = s.cursor;
+        chunk.fail_streak += 1;
         s.last_error = `unservable id ${bad} — recorded and stepped over`;
         context.log(`HTTP ${status} at limit=1 after id ${from} — id ${bad} recorded as unservable`);
+        await saveChunk(pool, chunk);
         await saveState(pool, s);
+        // Stepping one id at a time is exact but cannot cross the web2 tail's huge
+        // id gaps. Park the chunk instead of grinding forever; the next sweep re-arms
+        // it, and until then it stays visibly NOT done rather than a silent hole.
+        if (chunk.fail_streak >= MAX_FAIL_STREAK) {
+          await closeChunk(pool, chunk, "blocked",
+            `${MAX_FAIL_STREAK} consecutive unservable ids from ${bad}`, context);
+          chunk = await pickChunk(pool);
+        } else if (chunk.to_id != null && bad >= chunk.to_id) {
+          await closeChunk(pool, chunk, "done", "boundary reached", context);
+          chunk = await pickChunk(pool);
+        }
         await sleep(GAP_MS);
         continue;
       }
@@ -256,47 +366,69 @@ module.exports = async function (context) {
     }
 
     const list = page.farms || [];
-    if (!list.length || !page.next_cursor) {
-      if (list.length) {
-        const rows = list.map(extractFarm);
-        changes += await persistPage(pool, rows, s.sweep);
-        s.farms_this_sweep = Number(s.farms_this_sweep) + rows.length;
-        farms += rows.length;
+
+    // Everything fetched is real data, so persist it all even if part of the page
+    // spills past this chunk's upper bound — the upsert is idempotent and the
+    // alternative is throwing away farms we already paid a request for.
+    let rows = [];
+    if (list.length) {
+      rows = list.map(extractFarm);
+      changes += await persistPage(pool, rows, s.sweep);
+      s.farms_this_sweep = Number(s.farms_this_sweep) + rows.length;
+      chunk.farms += rows.length;
+      farms += rows.length;
+      pages++;
+
+      // Relax the failure ceiling after each good page so a one-off whale does not
+      // pin the window small for the rest of the tick.
+      ceiling = Math.min(WIN_MAX, Math.max(ceiling + 1, Math.ceil(ceiling * 1.5)));
+      if (page.__bytes) {
+        const seen = page.__bytes / rows.length;
+        s.avg_farm_bytes = s.avg_farm_bytes
+          ? EWMA_ALPHA * seen + (1 - EWMA_ALPHA) * Number(s.avg_farm_bytes)
+          : seen;
       }
-      await rollSweep(pool, s, context);
+      s.last_error = null;
+      s.stuck_count = 0;
+      chunk.fail_streak = 0;
+      backoff = 30000;
+    }
+
+    // End of the whole dataset: nothing at or past this chunk's range exists, so it
+    // (and any later chunk) has nothing left to find.
+    if (!list.length || !page.next_cursor) {
+      s.cursor = page.next_cursor || s.cursor;
       await saveState(pool, s);
+      await closeChunk(pool, chunk, "done", "end of upstream data", context);
+      chunk = await pickChunk(pool);
       await sleep(GAP_MS);
       continue;
     }
 
-    const rows = list.map(extractFarm);
-    changes += await persistPage(pool, rows, s.sweep);
-
     s.cursor = page.next_cursor;
     s.last_id = decodeCursor(page.next_cursor) ?? s.last_id;
-    s.farms_this_sweep = Number(s.farms_this_sweep) + rows.length;
-    // Relax the failure ceiling after each good page so a one-off whale does not pin
-    // the window small for the rest of the tick.
-    ceiling = Math.min(WIN_MAX, Math.max(ceiling + 1, Math.ceil(ceiling * 1.5)));
+    chunk.cursor = s.cursor;
 
-    // Feed observed size back into the EWMA so the next window targets TARGET_BYTES.
-    if (page.__bytes && rows.length) {
-      const seen = page.__bytes / rows.length;
-      s.avg_farm_bytes = s.avg_farm_bytes
-        ? EWMA_ALPHA * seen + (1 - EWMA_ALPHA) * Number(s.avg_farm_bytes)
-        : seen;
-    }
-    s.last_error = null;
-    s.stuck_count = 0;
-    backoff = 30000;
-    pages++; farms += rows.length;
-
+    // Chunk is complete once a fetched id actually landed at or past its upper
+    // bound — the one condition that proves the range was covered end to end.
+    const crossed = chunk.to_id != null &&
+      rows.some((r) => Number(r.farm_id) >= chunk.to_id);
     await saveState(pool, s);
+    if (crossed) {
+      await closeChunk(pool, chunk, "done", null, context);
+      chunk = await pickChunk(pool);
+    } else {
+      await saveChunk(pool, chunk);
+    }
     await sleep(GAP_MS);
   }
 
+  const prog = await pool.query(
+    `SELECT status, COUNT(*)::int n FROM crawl_chunks GROUP BY status ORDER BY status`
+  );
   context.log(`Crawl tick: ${pages} pages, ${farms} farms, ${changes} changed, ` +
-    `${freeSkips} bad ids stepped over for free | sweep ${s.sweep} at id ${s.last_id} ` +
+    `${freeSkips} bad ids stepped over for free | sweep ${s.sweep} ` +
     `(${s.farms_this_sweep} farms this sweep) | window ${s.window_size} @ ` +
-    `${Math.round((Number(s.avg_farm_bytes) || 0) / 1024)}KB/farm`);
+    `${Math.round((Number(s.avg_farm_bytes) || 0) / 1024)}KB/farm | chunks ` +
+    prog.rows.map((r) => `${r.status}=${r.n}`).join(" "));
 };

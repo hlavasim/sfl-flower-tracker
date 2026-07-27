@@ -105,7 +105,7 @@ async function itemHolders(pool, q) {
 
 /** Crawl progress: how far the current sweep is, how fast, and the ETA. */
 async function crawlStats(pool) {
-  const [state, sweeps, totals, skips] = await Promise.all([
+  const [state, sweeps, totals, skips, chunks, running, tiling, recent] = await Promise.all([
     pool.query("SELECT * FROM crawl_state WHERE id = 1"),
     pool.query("SELECT * FROM crawl_sweeps ORDER BY sweep DESC LIMIT 10"),
     pool.query(`SELECT COUNT(*)::bigint AS farms,
@@ -115,6 +115,26 @@ async function crawlStats(pool) {
                        MIN(last_seen_at) AS oldest
                   FROM farm_world`),
     pool.query("SELECT COUNT(*)::bigint AS n, COALESCE(SUM(to_id - from_id),0)::bigint AS ids FROM crawl_skips"),
+    pool.query(`SELECT status, COUNT(*)::int AS n, COALESCE(SUM(farms),0)::bigint AS farms
+                  FROM crawl_chunks GROUP BY status`),
+    pool.query(`SELECT from_id, to_id, farms, fail_streak FROM crawl_chunks
+                 WHERE status = 'running' ORDER BY priority LIMIT 1`),
+    // The coverage invariant: chunks must tile the id space with no gap and no
+    // overlap, exactly one unbounded tail. Non-zero here means the crawl could
+    // silently miss farms, so it is surfaced rather than assumed.
+    pool.query(`SELECT COUNT(*)::int AS violations FROM (
+                  SELECT from_id, to_id, LEAD(from_id) OVER (ORDER BY from_id) AS next_from
+                    FROM crawl_chunks
+                ) t
+                WHERE (next_from IS NOT NULL AND to_id IS DISTINCT FROM next_from)
+                   OR (next_from IS NULL AND to_id IS NOT NULL)
+                   OR (next_from IS NOT NULL AND to_id IS NULL)`),
+    // Recent throughput. The sweep average is useless while the crawl moves between
+    // the sparse web2 tail (~16k farms/hour) and the dense legacy head (~100/hour) —
+    // it would report a number matching neither. Counting rows actually written in
+    // the last 10 minutes gives the rate the crawl is running at right now.
+    pool.query(`SELECT COUNT(*)::bigint AS n FROM farm_world
+                 WHERE last_seen_at > NOW() - INTERVAL '10 minutes'`),
   ]);
 
   const s = state.rows[0] || {};
@@ -130,7 +150,14 @@ async function crawlStats(pool) {
   const measuredTotal = completed.length ? Number(completed[0].farms) : null;
   const total = measuredTotal || Number(process.env.WORLD_FARMS_ESTIMATE || 656066);
   const remaining = Math.max(0, total - done);
-  const etaMs = perHour > 0 ? (remaining / perHour) * 3600000 : null;
+  // Prefer the recent rate for the ETA — the sweep average spans two ranges whose
+  // throughput differs by ~150x, so it predicts neither of them.
+  const perHourRecent = Number(recent.rows[0].n) * 6;
+  const etaRate = perHourRecent > 0 ? perHourRecent : perHour;
+  const etaMs = etaRate > 0 ? (remaining / etaRate) * 3600000 : null;
+
+  const chunkBy = chunks.rows.map((r) => ({ status: r.status, n: Number(r.n) }));
+  const byStatus = (st) => chunkBy.find((r) => r.status === st)?.n || 0;
 
   return {
     sweep: s.sweep,
@@ -144,11 +171,30 @@ async function crawlStats(pool) {
     total,
     total_is_measured: measuredTotal != null,
     pct: total > 0 ? (done / total) * 100 : 0,
-    farms_per_hour: perHour,
+    farms_per_hour: perHourRecent,
+    farms_per_hour_sweep_avg: perHour,
     eta_ms: etaMs,
-    full_sweep_ms: perHour > 0 ? (total / perHour) * 3600000 : null,
+    full_sweep_ms: etaRate > 0 ? (total / etaRate) * 3600000 : null,
     requests: { ok: Number(s.req_ok || 0), rate_limited: Number(s.req_429 || 0), server_error: Number(s.req_5xx || 0) },
     skips: { events: Number(skips.rows[0].n), ids: Number(skips.rows[0].ids) },
+    chunks: {
+      // A chunk only reaches 'done' after paging actually crossed its upper bound,
+      // so done/total here is a real coverage figure, not an estimate.
+      total: chunkBy.reduce((a, r) => a + r.n, 0),
+      done: byStatus("done"),
+      pending: byStatus("pending"),
+      running: byStatus("running"),
+      blocked: byStatus("blocked"),
+      tiling_violations: Number(tiling.rows[0].violations),
+      current: running.rows.length
+        ? {
+            from_id: Number(running.rows[0].from_id),
+            to_id: running.rows[0].to_id == null ? null : Number(running.rows[0].to_id),
+            farms: Number(running.rows[0].farms),
+            fail_streak: Number(running.rows[0].fail_streak),
+          }
+        : null,
+    },
     stored: {
       farms: Number(t.farms || 0),
       banned: Number(t.banned || 0),
