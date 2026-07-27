@@ -19146,25 +19146,25 @@
       // ascension bands keep stacking, so this runs one row per level from 1 up to
       // whatever the crawl has found so far. Long list -> scroll, not truncation.
       html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
-        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY BUMPKIN LEVEL</div>
-        <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">Level from XP <b>as it stands now</b> — food still sitting uneaten does not count. Counted as skill points earned. One row per level from 1 up, no ceiling: <b>the game's table ends at 200</b>, so above that its own x1.03-per-level curve is extrapolated, keeping extreme farms distinguishable instead of all reading 200.</div>
-        ${_barChart(_worldData.levelRows, { colorFor: () => LEVEL_BAR_COLOR, label: (r) => `Lv ${r.key}`, rowHeight: 14, labelWidth: 46, maxHeight: 420 })}
+        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY SKILL POINTS</div>
+        <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">Skill points earned from XP <b>as it stands now</b> — food still sitting uneaten does not count. This is the game's getTotalBumpkinLevel (1 point per level, ascension bands included), so post-ascension reads 150 + 50 per completed band + the level within it. <b>Caveat above 200:</b> the game caps pre-ascension skill points there, so higher values are this curve (x1.03 XP per level) extrapolated — they keep extreme farms distinguishable but are not points the game grants.</div>
+        ${_barChart(_worldData.levelRows, { colorFor: () => LEVEL_BAR_COLOR, label: (r) => `${r.key} sp`, rowHeight: 14, labelWidth: 46, maxHeight: 420 })}
       </div>`;
 
       // The same ladder, but counting food the farm has cooked and not yet eaten —
       // valued with that farm's own cooking boosts and a simulated x1.5 pet streak,
       // because a player waits for the streak before eating a stockpile.
       html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
-        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY LEVEL — AFTER EATING BANKED FOOD</div>
+        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY SKILL POINTS — AFTER EATING BANKED FOOD</div>
         <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px;line-height:1.6">
-          Level each farm would reach by eating the food it already has cooked. The bank is
+          Skill points each farm would have after eating the food it already has cooked. The bank is
           valued with that farm's <b>real cooking boosts</b> (skills, items, sculptures) and a
           <b>simulated x1.5 pet streak</b> — players wait for the streak before eating a
           stockpile, so anything less understates it. Compare with the chart above to see how
-          much level is sitting in inventories. Same skill-point scale, likewise
-          extrapolated above level 200.
+          much level is sitting in inventories. Same scale and the same above-200 caveat as
+          the chart above.
         </div>
-        ${_barChart(_worldData.effLevelRows, { colorFor: () => REACH_ASC_COLOR, label: (r) => `Lv ${r.key}`, rowHeight: 14, labelWidth: 46, maxHeight: 420 })}
+        ${_barChart(_worldData.effLevelRows, { colorFor: () => REACH_ASC_COLOR, label: (r) => `${r.key} sp`, rowHeight: 14, labelWidth: 46, maxHeight: 420 })}
       </div>`;
 
       // How far each farm COULD expand with what it already has banked — not where it
