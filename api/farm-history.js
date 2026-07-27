@@ -1,4 +1,5 @@
 import { getPool } from "./_db.js";
+import { handleWorld } from "./_world.js";
 
 const ALLOWED_FARMS = new Set([155498, 1260204733777858]);
 
@@ -9,6 +10,19 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
 
   const pool = getPool();
+
+  // ─── World crawl: progress + generic aggregation over farm_world ───
+  // Folded in here rather than given its own file because Vercel's Hobby plan
+  // caps the project at 12 serverless functions and we are already at 12.
+  if (req.query.type === "world") {
+    try {
+      const out = await handleWorld(pool, req.query);
+      res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+      return res.status(200).json(out);
+    } catch (e) {
+      return res.status(400).json({ error: e.message });
+    }
+  }
 
   // ─── Investment Tracker: btc_transactions CRUD ─────────────────
   if (req.query.type === "btc-tx") {

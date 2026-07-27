@@ -2833,7 +2833,7 @@
     const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
     const IMG_BASE = "https://sfl.world/img/flowers/";
-    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "mytrades", "marks", "diff", "json", "constants", "ascension"];
+    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "mytrades", "marks", "diff", "json", "constants", "ascension", "world"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -5609,6 +5609,7 @@
         { id: "json", label: "JSON" },
         { id: "marks", label: "MARKS" },
         { id: "constants", label: "CONSTANTS" },
+        { id: "world", label: "🌍 WORLD" },
       ];
       if (["155498", "1260204733777858"].includes(FARM_ID)) overflow.push({ id: "diff", label: "DIFF" });
       let html = '<div class="nav-bar pixel-panel">';
@@ -18838,6 +18839,281 @@
     };
 
     // ═══════════════════════════════════════
+    //  RENDER: WORLD (farm-history?type=world — every farm in the game)
+    // ═══════════════════════════════════════
+    // The backend exposes a generic, allowlisted aggregation builder rather than
+    // one endpoint per statistic, so a new breakdown here is a worldBreakdowns
+    // entry — no backend change, no deploy of api/.
+    const WORLD_API = "/api/farm-history?type=world";
+
+    const worldBreakdowns = [
+      { key: "ascension_level", label: "ASCENSION", note: "0 = never ascended" },
+      { key: "ban_status", label: "BAN STATUS", note: "from farm.ban.status" },
+      { key: "verified", label: "VERIFIED", note: "farm.verified" },
+    ];
+
+    // Island type is a fixed-order categorical chart, not a generic list row, so it
+    // is fetched separately from worldBreakdowns and drawn with _svgBarChart.
+    // Colors are dark-mode categorical slots 1/2/3/4/5 from the dataviz skill's
+    // validated palette, re-validated against this app's actual surface
+    // (#1a0e08) with `validate_palette.js "#3987e5,#d95926,#199e70,#c98500,#d55181"
+    // --mode dark --surface "#1a0e08"` — all five checks pass. Order is fixed
+    // (never reassigned when the surviving set changes) and is the same order
+    // wherever island type appears on this page.
+    const islandOrder = ["basic", "spring", "desert", "volcano", "swamp"];
+    const islandColors = { basic: "#3987e5", spring: "#d95926", desert: "#199e70", volcano: "#c98500", swamp: "#d55181" };
+
+    // Bumpkin level is a single ordered series (position on the x-axis already
+    // encodes order), so it uses one hue — the dataviz skill's default sequential
+    // blue — rather than a categorical set.
+    const LEVEL_BAR_COLOR = "#3987e5";
+
+    let _worldData = null, _worldErr = null, _worldLoading = false;
+
+    /** Rounded-top, square-baseline bar path (dataviz mark spec: 4px top radius). */
+    function _roundTopRectPath(x, y, w, h, r) {
+      r = Math.min(r, w / 2, h);
+      if (h <= 0) return "";
+      if (r <= 0) return `M${x},${y} h${w} v${h} h${-w} Z`;
+      return `M${x},${y + r} Q${x},${y} ${x + r},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h} H${x} Z`;
+    }
+
+    function _chartTipShow(evt, html) {
+      let t = document.getElementById("_chart-tooltip");
+      if (!t) {
+        t = document.createElement("div");
+        t.id = "_chart-tooltip";
+        t.style.cssText = "position:fixed;pointer-events:none;z-index:9999;background:#000;color:var(--text-primary);border:2px solid var(--border-dark);padding:4px 8px;font-family:'Courier New',monospace;font-size:0.7rem;border-radius:3px;box-shadow:0 2px 6px rgba(0,0,0,.5);white-space:nowrap";
+        document.body.appendChild(t);
+      }
+      t.innerHTML = html;
+      t.style.left = `${evt.clientX + 14}px`;
+      t.style.top = `${evt.clientY - 12}px`;
+      t.style.display = "block";
+    }
+    function _chartTipHide() {
+      const t = document.getElementById("_chart-tooltip");
+      if (t) t.style.display = "none";
+    }
+    window._chartHover = function (evt) {
+      const el = evt.target.closest("[data-tip]");
+      if (el) _chartTipShow(evt, el.getAttribute("data-tip"));
+      else _chartTipHide();
+    };
+
+    /**
+     * Bar chart: rows = [{ key, n }], opts.colorFor(row,i) -> hex, opts.xLabel(row) -> string.
+     * A per-mark hover tooltip is always present (dataviz interaction rule); direct
+     * value labels above each bar are shown only when there is room for them (<=12
+     * bars) — past that, the tooltip is the label, so it never gets denser than
+     * "a number on every point" would allow.
+     */
+    function _svgBarChart(rows, opts = {}) {
+      if (!rows.length) return `<div class="pixel-font" style="font-size:0.5625rem;color:var(--text-dim);padding:12px 0">No data yet.</div>`;
+      const W = 640, H = opts.height || 180;
+      const padL = 6, padR = 6, padT = 20, padB = 26;
+      const plotW = W - padL - padR, plotH = H - padT - padB;
+      const n = rows.length;
+      const slot = plotW / n;
+      const barW = Math.max(4, Math.min(24, slot - 3));
+      const maxV = Math.max(1, ...rows.map((r) => r.n));
+      const labelAll = n <= 12;
+      const total = rows.reduce((a, r) => a + r.n, 0);
+
+      let marks = "";
+      rows.forEach((r, i) => {
+        const h = Math.max(1, Math.round((r.n / maxV) * plotH));
+        const x = padL + i * slot + (slot - barW) / 2;
+        const y = padT + plotH - h;
+        const color = opts.colorFor ? opts.colorFor(r, i) : LEVEL_BAR_COLOR;
+        const xLabel = opts.xLabel ? opts.xLabel(r) : String(r.key);
+        const pct = total ? (r.n / total) * 100 : 0;
+        const tip = `<b>${escHTML(xLabel)}</b><br>${_fmtNum(r.n)} farms (${pct.toFixed(1)}%)`;
+        marks += `<path d="${_roundTopRectPath(x, y, barW, h, 4)}" fill="${color}" data-tip="${escHTML(tip)}" style="cursor:pointer"/>`;
+        if (labelAll || r.n === maxV) {
+          marks += `<text x="${x + barW / 2}" y="${y - 4}" text-anchor="middle" font-size="9" fill="var(--text-secondary)" font-family="'Courier New',monospace">${_fmtNum(r.n)}</text>`;
+        }
+        marks += `<text x="${x + barW / 2}" y="${H - padB + 13}" text-anchor="middle" font-size="8" fill="var(--text-dim)" font-family="'Courier New',monospace">${escHTML(xLabel)}</text>`;
+      });
+      const baseline = `<line x1="${padL}" y1="${padT + plotH}" x2="${W - padR}" y2="${padT + plotH}" stroke="var(--border-brown)" stroke-width="1"/>`;
+      return `<div onmousemove="_chartHover(event)" onmouseleave="_chartTipHide()">
+        <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;overflow:visible">${baseline}${marks}</svg>
+      </div>`;
+    }
+
+    function _fmtDur(ms) {
+      if (ms == null || !isFinite(ms) || ms <= 0) return "—";
+      const h = ms / 3600000;
+      if (h < 1) return `${Math.round(ms / 60000)} min`;
+      if (h < 48) return `${h.toFixed(1)} h`;
+      return `${(h / 24).toFixed(1)} d`;
+    }
+    function _fmtNum(n) {
+      return n == null ? "—" : Math.round(n).toLocaleString("cs-CZ");
+    }
+
+    async function _fetchWorld() {
+      _worldLoading = true; _worldErr = null;
+      try {
+        const getJson = (url) => fetch(url).then((r) => r.json());
+        const [stats, islandAgg, levelAgg, ...breakdowns] = await Promise.all([
+          getJson(`${WORLD_API}&mode=stats`),
+          getJson(`${WORLD_API}&mode=agg&group=island_type`).catch(() => ({ rows: [] })),
+          getJson(`${WORLD_API}&mode=agg&group=bumpkin_level_band`).catch(() => ({ rows: [] })),
+          ...worldBreakdowns.map((b) =>
+            getJson(`${WORLD_API}&mode=agg&group=${encodeURIComponent(b.key)}`)
+              .then((j) => ({ ...b, rows: j.rows || [] }))
+              .catch(() => ({ ...b, rows: [] }))
+          ),
+        ]);
+        if (stats.error) throw new Error(stats.error);
+
+        // Fixed island order regardless of what the DB returns sorted by count,
+        // and any island type the crawl hasn't seen yet still gets a zero bar.
+        const islandByKey = new Map((islandAgg.rows || []).map((r) => [r.key, r.n]));
+        const islandRows = islandOrder.map((key) => ({ key, n: islandByKey.get(key) || 0 }));
+
+        // Level bands come back only for bands with data, already sorted by count —
+        // re-sort by band number so the x-axis reads left-to-right as level order.
+        const levelRows = (levelAgg.rows || [])
+          .filter((r) => r.key != null)
+          .map((r) => ({ key: Number(r.key), n: r.n }))
+          .sort((a, b) => a.key - b.key);
+
+        _worldData = { stats, islandRows, levelRows, breakdowns };
+      } catch (e) {
+        _worldErr = e.message || String(e);
+      } finally {
+        _worldLoading = false;
+        if (getPage() === "world") renderWorld();
+      }
+    }
+
+    function renderWorld() {
+      const app = document.getElementById("app");
+      let html = `<div class="header pixel-panel pixel-font">
+        <h1>WORLD</h1>
+        <div class="farm-id">Crawl of every farm in the game</div>
+      </div>`;
+
+      if (!_worldData) {
+        if (!_worldLoading && !_worldErr) _fetchWorld();
+        html += `<div class="pixel-panel pixel-font" style="padding:24px;text-align:center;font-size:0.6875rem;color:${_worldErr ? "var(--yellow)" : "var(--text-dim)"}">
+          ${_worldErr ? `World data unavailable — ${escHTML(_worldErr)}. Press REFRESH to retry.` : "Loading crawl stats..."}
+        </div>
+        <div class="footer"><button class="refresh-btn" onclick="_worldData=null;_worldErr=null;renderWorld()">REFRESH</button></div>`;
+        app.innerHTML = html;
+        return;
+      }
+
+      const s = _worldData.stats;
+      const done = s.done || 0;
+      const pct = Math.max(0, Math.min(100, s.pct || 0));
+      const completed = (s.sweeps || []).filter((x) => x.finished_at);
+
+      html += `<div class="summary-bar pixel-panel pixel-font">
+        <div class="summary-stat"><div class="label">CRAWLED</div><div class="value">${_fmtNum(s.stored.farms)}</div></div>
+        <div class="summary-stat"><div class="label">THIS SWEEP</div><div class="value">${_fmtNum(done)}</div></div>
+        <div class="summary-stat"><div class="label">SPEED</div><div class="value time">${_fmtNum(s.farms_per_hour)}/h</div></div>
+        <div class="summary-stat"><div class="label">ETA</div><div class="value pending">${_fmtDur(s.eta_ms)}</div></div>
+        <div class="summary-stat"><div class="label">FULL SWEEP</div><div class="value ${completed.length ? "complete" : ""}">${_fmtDur(completed.length ? completed[0].duration_ms : s.full_sweep_ms)}</div></div>
+      </div>`;
+
+      // Progress bar against the expected population.
+      html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.5625rem;color:var(--text-secondary);margin-bottom:6px">
+          SWEEP ${escHTML(s.sweep)} · ${_fmtNum(done)} / ${_fmtNum(s.total)} farms
+          (${pct.toFixed(2)}%) · total ${s.total_is_measured ? "measured from last full sweep" : "estimated — no full sweep yet"}
+        </div>
+        <div style="height:14px;background:var(--bg-card);border:2px solid var(--border-dark)">
+          <div style="height:100%;width:${pct}%;background:var(--sunpetal)"></div>
+        </div>
+      </div>`;
+
+      // Crawl health. A 5xx here is usually the upstream refusing an oversized page,
+      // not an outage — the crawler resizes and retries.
+      const r = s.requests;
+      html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px;margin-bottom:8px">CRAWLER HEALTH</div>
+        <table style="width:100%;border-collapse:collapse;font-family:'Courier New',monospace;font-size:0.75rem">
+          <tr><td>Requests OK</td><td style="text-align:right;color:var(--green)">${_fmtNum(r.ok)}</td></tr>
+          <tr><td>Rate limited (429)</td><td style="text-align:right;color:${r.rate_limited ? "var(--yellow)" : "var(--text-dim)"}">${_fmtNum(r.rate_limited)}</td></tr>
+          <tr><td>Upstream 5xx (page too big / bad record)</td><td style="text-align:right;color:${r.server_error ? "var(--yellow)" : "var(--text-dim)"}">${_fmtNum(r.server_error)}</td></tr>
+          <tr><td>Unservable ids stepped over</td><td style="text-align:right">${_fmtNum(s.skips.events)}</td></tr>
+          <tr><td>Page size / avg farm</td><td style="text-align:right">${_fmtNum(s.window_size)} farms</td></tr>
+          <tr><td>Position (last farm id)</td><td style="text-align:right">${s.last_id == null ? "—" : escHTML(String(s.last_id))}</td></tr>
+          <tr><td>Last updated</td><td style="text-align:right">${s.updated_at ? new Date(s.updated_at).toLocaleString("cs-CZ") : "—"}</td></tr>
+        </table>
+        ${s.last_error ? `<div class="pixel-font" style="font-size:0.5rem;color:var(--yellow);margin-top:8px">last: ${escHTML(s.last_error)}</div>` : ""}
+      </div>`;
+
+      // Players by island type — fixed-order categorical chart. Bars are already
+      // x-axis-labeled with the island name, so no separate color legend (that
+      // would just repeat the label the bar already carries).
+      html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY ISLAND</div>
+        <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">of ${_fmtNum(_worldData.islandRows.reduce((a, r) => a + r.n, 0))} farms crawled so far</div>
+        ${_svgBarChart(_worldData.islandRows, { colorFor: (r) => islandColors[r.key] || LEVEL_BAR_COLOR, xLabel: (r) => r.key })}
+      </div>`;
+
+      // Players by bumpkin level, banded in tens — single ordered series, one hue.
+      html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY BUMPKIN LEVEL</div>
+        <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">level derived from bumpkin XP, banded in 10s</div>
+        ${_svgBarChart(_worldData.levelRows, { colorFor: () => LEVEL_BAR_COLOR, xLabel: (r) => `${r.key}-${r.key + 9}` })}
+      </div>`;
+
+      // Breakdowns — these are the point of the crawl.
+      for (const b of _worldData.breakdowns) {
+        if (!b.rows.length) continue;
+        const total = b.rows.reduce((a, x) => a + x.n, 0);
+        html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+          <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">${escHTML(b.label)}</div>
+          <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 8px">${escHTML(b.note)}</div>
+          <table style="width:100%;border-collapse:collapse;font-family:'Courier New',monospace;font-size:0.75rem">
+            ${b.rows.map((x) => {
+              const share = total ? (x.n / total) * 100 : 0;
+              return `<tr>
+                <td style="padding:2px 0">${escHTML(x.key === null ? "(none)" : String(x.key))}</td>
+                <td style="text-align:right;padding:2px 8px">${_fmtNum(x.n)}</td>
+                <td style="width:35%">
+                  <div style="height:8px;background:var(--bg-card)"><div style="height:100%;width:${share}%;background:var(--blue)"></div></div>
+                </td>
+                <td style="text-align:right;width:52px;color:var(--text-dim)">${share.toFixed(1)}%</td>
+              </tr>`;
+            }).join("")}
+          </table>
+        </div>`;
+      }
+
+      // Completed sweeps — the only source of a real full-sweep duration.
+      if (completed.length) {
+        html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+          <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px;margin-bottom:8px">COMPLETED SWEEPS</div>
+          <table style="width:100%;border-collapse:collapse;font-family:'Courier New',monospace;font-size:0.75rem">
+            <tr class="pixel-font" style="font-size:0.5rem;color:var(--text-dim)">
+              <td>#</td><td style="text-align:right">FARMS</td><td style="text-align:right">DURATION</td><td style="text-align:right">429</td><td style="text-align:right">5xx</td><td style="text-align:right">SKIPPED</td>
+            </tr>
+            ${completed.map((x) => `<tr>
+              <td>${escHTML(x.sweep)}</td>
+              <td style="text-align:right">${_fmtNum(x.farms)}</td>
+              <td style="text-align:right">${_fmtDur(x.duration_ms)}</td>
+              <td style="text-align:right">${_fmtNum(x.req_429)}</td>
+              <td style="text-align:right">${_fmtNum(x.req_5xx)}</td>
+              <td style="text-align:right">${_fmtNum(x.skipped)}</td>
+            </tr>`).join("")}
+          </table>
+        </div>`;
+      }
+
+      html += `<div class="footer">
+        <button class="refresh-btn" onclick="_worldData=null;_worldErr=null;renderWorld()">REFRESH</button>
+        <div class="timestamp pixel-font">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
+      </div>`;
+      app.innerHTML = html;
+    }
+
+    // ═══════════════════════════════════════
     //  RENDER: ASCENSION (compute?section=ascension — cockpit fold-in)
     // ═══════════════════════════════════════
     let _ascServer = null;
@@ -22017,6 +22293,10 @@
 
       renderNavBar(page);
       renderDonate();
+
+      // WORLD describes every farm in the game, not the configured one, so it renders
+      // without a farm id and without paying for the personal farm fetch.
+      if (page === "world") { renderConfigBar(page); renderWorld(); return; }
 
       if (!FARM_ID) {
         renderConfigBar("hub");

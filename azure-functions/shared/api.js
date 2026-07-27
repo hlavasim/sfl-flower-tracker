@@ -18,6 +18,39 @@ async function fetchFarmData(farmId, apiKey) {
 }
 
 /**
+ * Fetch a page of farms from the batch endpoint.
+ * The cursor is base64(lastFarmId) without padding, so pages can also be
+ * synthesised to jump over farms the API refuses to serve.
+ * @returns {{farms: Array, next_cursor: string}}
+ * @throws {Error & {status:number}} 429 when rate limited, 5xx when the page is
+ *   too large for the upstream response limit (~6 MB) or a record is broken.
+ */
+async function fetchFarmsBatch(cursor, limit, apiKey) {
+  const key = apiKey || DEFAULT_API_KEY;
+  const url = `https://api.sunflower-land.com/community/farms?limit=${limit}` +
+    (cursor ? `&cursor=${encodeURIComponent(cursor)}` : "");
+  const resp = await fetch(url, { headers: { "x-api-key": key } });
+  const text = await resp.text();
+  if (!resp.ok) {
+    const err = new Error(`Farms batch ${resp.status}: ${text.slice(0, 120)}`);
+    err.status = resp.status;
+    throw err;
+  }
+  const json = JSON.parse(text);
+  // Byte size is returned so the caller can size the next page against the upstream
+  // response cap instead of discovering it by triggering a 500.
+  json.__bytes = Buffer.byteLength(text);
+  return json;
+}
+
+const encodeCursor = (id) => Buffer.from(String(id)).toString("base64").replace(/=+$/, "");
+const decodeCursor = (c) => {
+  if (!c) return null;
+  const n = parseInt(Buffer.from(c, "base64").toString(), 10);
+  return Number.isFinite(n) ? n : null;
+};
+
+/**
  * Fetch P2P prices from sfl.world.
  * Returns object like { "Sunflower": 0.001, "Rice": 0.05, ... }
  */
@@ -91,4 +124,4 @@ async function fetchLeaderboard(farmId) {
   return resp.json();
 }
 
-module.exports = { fetchFarmData, fetchPrices, fetchNfts, fetchMarketplaceActivity, fetchCollectionItem, fetchLeaderboard };
+module.exports = { fetchFarmData, fetchFarmsBatch, encodeCursor, decodeCursor, fetchPrices, fetchNfts, fetchMarketplaceActivity, fetchCollectionItem, fetchLeaderboard };
