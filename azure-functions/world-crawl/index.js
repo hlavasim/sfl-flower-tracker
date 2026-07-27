@@ -1,6 +1,7 @@
 const { getPool } = require("../shared/db");
 const { fetchFarmsBatch, encodeCursor, decodeCursor } = require("../shared/api");
-const { extractFarm, diffFarm, SCALARS } = require("../shared/world-extract");
+const { extractFarm } = require("../shared/world-extract");
+const { persistFarmRows } = require("../shared/world-persist");
 const { loadCookingEngine } = require("../shared/cooking-xp");
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -44,74 +45,6 @@ async function saveState(pool, s) {
     [s.cursor, s.last_id, s.window_size, s.sweep, s.sweep_started_at, s.farms_this_sweep,
      s.req_ok, s.req_429, s.req_5xx, s.skipped, s.stuck_count, s.avg_farm_bytes, s.last_error]
   );
-}
-
-// Types are spelled out because parameters in an untyped VALUES list arrive as text.
-const COL_TYPES = {
-  farm_id: "bigint", nft_id: "bigint", username: "text", created_at: "timestamptz",
-  island_type: "text", island_biome: "text", ascension_level: "integer",
-  expansions: "integer", island_upgraded_at: "timestamptz", xp: "double precision",
-  total_level: "integer",
-  balance: "double precision", coins: "double precision", gems: "double precision",
-  ban_status: "text", verified: "boolean", vip_until: "timestamptz", inventory: "jsonb",
-  game_data: "jsonb", reach_slot: "integer", effective_level: "integer",
-};
-const COLS = Object.keys(COL_TYPES);
-const CAST_LIST = COLS.map((c) => `${c}::${COL_TYPES[c]}`).join(",");
-const UPDATE_COLS = COLS.filter((c) => c !== "farm_id" && c !== "first_seen_at");
-
-/** Upsert a page of farms and append a change-log row for each one that moved. */
-async function persistPage(pool, rows, sweep) {
-  const ids = rows.map((r) => r.farm_id);
-  // Deliberately selects only SCALARS, not inventory/game_data — pulling the wide
-  // JSONB columns for every row of every page just to diff scalars would dominate
-  // the crawler's DB traffic.
-  const prevRes = await pool.query(
-    `SELECT farm_id, ${SCALARS.join(", ")} FROM farm_world WHERE farm_id = ANY($1::bigint[])`,
-    [ids]
-  );
-  const prev = new Map(prevRes.rows.map((r) => [String(r.farm_id), r]));
-
-  const changed = [];
-  for (const row of rows) {
-    const d = diffFarm(prev.get(String(row.farm_id)), row);
-    if (d) changed.push({ farm_id: row.farm_id, diff: d });
-  }
-  const changedIds = new Set(changed.map((c) => String(c.farm_id)));
-
-  const params = [];
-  const tuples = rows.map((row) => {
-    const base = params.length;
-    for (const c of COLS) params.push(COL_TYPES[c] === "jsonb" ? JSON.stringify(row[c] || {}) : row[c]);
-    params.push(changedIds.has(String(row.farm_id)));
-    params.push(sweep);
-    return `(${COLS.map((_, i) => `$${base + i + 1}`).join(",")},$${base + COLS.length + 1},$${base + COLS.length + 2})`;
-  });
-
-  await pool.query(
-    `INSERT INTO farm_world (${COLS.join(",")}, last_changed_at, sweep)
-     SELECT ${CAST_LIST}, CASE WHEN chg::boolean THEN NOW() END, sweep::integer FROM (
-       VALUES ${tuples.join(",")}
-     ) AS v(${COLS.join(",")}, chg, sweep)
-     ON CONFLICT (farm_id) DO UPDATE SET
-       ${UPDATE_COLS.map((c) => `${c}=EXCLUDED.${c}`).join(", ")},
-       last_seen_at=NOW(),
-       last_changed_at=COALESCE(EXCLUDED.last_changed_at, farm_world.last_changed_at)`,
-    params
-  );
-
-  if (changed.length) {
-    const cp = [];
-    const ct = changed.map((c, i) => {
-      cp.push(c.farm_id, sweep, JSON.stringify(c.diff));
-      return `($${i * 3 + 1},$${i * 3 + 2},$${i * 3 + 3})`;
-    });
-    await pool.query(
-      `INSERT INTO farm_world_changes (farm_id, sweep, diff) VALUES ${ct.join(",")}`,
-      cp
-    );
-  }
-  return changed.length;
 }
 
 async function rollSweep(pool, s, context) {
@@ -210,6 +143,13 @@ module.exports = async function (context) {
   // in core/, which is vendored into this function app by scripts/copy-core.mjs — if
   // that step was skipped the import fails, and writing understated levels for every
   // farm would be worse than not writing at all, so bail loudly instead.
+  // world-refresh holds the shared rate-limit budget for its window; racing it would
+  // just produce 429s on both sides.
+  if (s.refresh_until && new Date(s.refresh_until) > new Date()) {
+    context.log(`world-refresh holds the API window until ${s.refresh_until} — skipping this tick`);
+    return;
+  }
+
   const cooking = await loadCookingEngine();
   if (!cooking.ok) {
     context.log.error(`cooking engine unavailable (${cooking.error}) — did you run ` +
@@ -249,6 +189,17 @@ module.exports = async function (context) {
       await saveState(pool, s);
       chunk = await pickChunk(pool);
       if (!chunk) { context.log.error("no chunks — run the crawl-chunks migration"); break; }
+    }
+
+    // Re-check the refresh claim mid-tick: a start-of-tick check alone would only
+    // work while the two timers stay lined up the way they are today.
+    if (pages > 0 && pages % 8 === 0) {
+      const held = await pool.query(
+        "SELECT refresh_until FROM crawl_state WHERE id = 1 AND refresh_until > NOW()");
+      if (held.rows.length) {
+        context.log("world-refresh claimed the API window mid-tick — yielding");
+        break;
+      }
     }
 
     s.cursor = chunkCursor(chunk);
@@ -388,7 +339,7 @@ module.exports = async function (context) {
     let rows = [];
     if (list.length) {
       rows = list.map((entry) => extractFarm(entry, cooking.bankedFoodXp));
-      changes += await persistPage(pool, rows, s.sweep);
+      changes += await persistFarmRows(pool, rows, s.sweep);
       s.farms_this_sweep = Number(s.farms_this_sweep) + rows.length;
       chunk.farms += rows.length;
       farms += rows.length;

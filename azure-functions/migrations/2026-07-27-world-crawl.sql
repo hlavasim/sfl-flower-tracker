@@ -146,3 +146,9 @@ CREATE INDEX IF NOT EXISTS idx_fw_reach ON farm_world(reach_slot);
 -- un-fed level; this is the fed one.
 ALTER TABLE farm_world ADD COLUMN IF NOT EXISTS effective_level INTEGER;
 CREATE INDEX IF NOT EXISTS idx_fw_efflevel ON farm_world(effective_level);
+
+-- world-crawl and world-refresh share one API key and therefore one rate limit, so
+-- they must not run at once — concurrently they would just trade 429s and burn the
+-- budget on backoff sleeps. world-refresh claims this window; world-crawl skips its
+-- tick while it is held, giving a predictable split instead of contention.
+ALTER TABLE crawl_state ADD COLUMN IF NOT EXISTS refresh_until TIMESTAMPTZ;

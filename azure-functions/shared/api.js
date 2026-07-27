@@ -43,6 +43,50 @@ async function fetchFarmsBatch(cursor, limit, apiKey) {
   return json;
 }
 
+/**
+ * Fetch specific farms by id via POST /community/getFarms.
+ *
+ * Measured 2026-07-27:
+ *   - hard cap of 100 ids; 101 returns 500 in ~300ms (a validation reject, not payload)
+ *   - ids that do not exist come back listed in `skipped`, harmlessly
+ *   - an id the upstream cannot serve (e.g. 54) still 500s the WHOLE batch, exactly
+ *     like the cursor endpoint — so callers must exclude known-bad ids and bisect to
+ *     find new ones
+ *   - rate limited: at a 3s interval 3 of 5 calls returned 429, so keep the same ~16s
+ *     spacing as the cursor path
+ *   - the response carries `warning: "This endpoint is deprecated. Please use
+ *     pagination"`. It works today, but every caller must be able to fall back to the
+ *     cursor path, because this can disappear without notice.
+ *
+ * @returns {{farms: Record<string, object>, skipped: number[], deprecated: boolean}}
+ */
+const GET_FARMS_MAX_IDS = 100;
+
+async function fetchFarmsByIds(ids, apiKey) {
+  if (ids.length > GET_FARMS_MAX_IDS) {
+    throw new Error(`getFarms accepts at most ${GET_FARMS_MAX_IDS} ids, got ${ids.length}`);
+  }
+  const key = apiKey || DEFAULT_API_KEY;
+  const resp = await fetch("https://api.sunflower-land.com/community/getFarms", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-api-key": key },
+    body: JSON.stringify({ ids }),
+  });
+  const text = await resp.text();
+  if (!resp.ok) {
+    const err = new Error(`getFarms ${resp.status}: ${text.slice(0, 120)}`);
+    err.status = resp.status;
+    throw err;
+  }
+  const json = JSON.parse(text);
+  return {
+    farms: json.farms || {},
+    skipped: json.skipped || [],
+    deprecated: !!json.warning,
+    __bytes: Buffer.byteLength(text),
+  };
+}
+
 const encodeCursor = (id) => Buffer.from(String(id)).toString("base64").replace(/=+$/, "");
 const decodeCursor = (c) => {
   if (!c) return null;
@@ -124,4 +168,4 @@ async function fetchLeaderboard(farmId) {
   return resp.json();
 }
 
-module.exports = { fetchFarmData, fetchFarmsBatch, encodeCursor, decodeCursor, fetchPrices, fetchNfts, fetchMarketplaceActivity, fetchCollectionItem, fetchLeaderboard };
+module.exports = { fetchFarmData, fetchFarmsBatch, fetchFarmsByIds, GET_FARMS_MAX_IDS, encodeCursor, decodeCursor, fetchPrices, fetchNfts, fetchMarketplaceActivity, fetchCollectionItem, fetchLeaderboard };
