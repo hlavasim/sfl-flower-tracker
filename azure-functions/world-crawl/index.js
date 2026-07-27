@@ -53,15 +53,18 @@ const COL_TYPES = {
   total_level: "integer",
   balance: "double precision", coins: "double precision", gems: "double precision",
   ban_status: "text", verified: "boolean", vip_until: "timestamptz", inventory: "jsonb",
+  game_data: "jsonb",
 };
 const COLS = Object.keys(COL_TYPES);
 const CAST_LIST = COLS.map((c) => `${c}::${COL_TYPES[c]}`).join(",");
+const UPDATE_COLS = COLS.filter((c) => c !== "farm_id" && c !== "first_seen_at");
 
 /** Upsert a page of farms and append a change-log row for each one that moved. */
 async function persistPage(pool, rows, sweep) {
   const ids = rows.map((r) => r.farm_id);
-  // Deliberately excludes `inventory` — pulling 40 × ~70 KB of JSONB per page just to
-  // diff scalars would dominate the crawler's DB traffic.
+  // Deliberately selects only SCALARS, not inventory/game_data — pulling the wide
+  // JSONB columns for every row of every page just to diff scalars would dominate
+  // the crawler's DB traffic.
   const prevRes = await pool.query(
     `SELECT farm_id, ${SCALARS.join(", ")} FROM farm_world WHERE farm_id = ANY($1::bigint[])`,
     [ids]
@@ -78,7 +81,7 @@ async function persistPage(pool, rows, sweep) {
   const params = [];
   const tuples = rows.map((row) => {
     const base = params.length;
-    for (const c of COLS) params.push(c === "inventory" ? JSON.stringify(row[c] || {}) : row[c]);
+    for (const c of COLS) params.push(COL_TYPES[c] === "jsonb" ? JSON.stringify(row[c] || {}) : row[c]);
     params.push(changedIds.has(String(row.farm_id)));
     params.push(sweep);
     return `(${COLS.map((_, i) => `$${base + i + 1}`).join(",")},$${base + COLS.length + 1},$${base + COLS.length + 2})`;
@@ -90,15 +93,8 @@ async function persistPage(pool, rows, sweep) {
        VALUES ${tuples.join(",")}
      ) AS v(${COLS.join(",")}, chg, sweep)
      ON CONFLICT (farm_id) DO UPDATE SET
-       nft_id=EXCLUDED.nft_id, username=EXCLUDED.username, created_at=EXCLUDED.created_at,
-       island_type=EXCLUDED.island_type, island_biome=EXCLUDED.island_biome,
-       ascension_level=EXCLUDED.ascension_level, expansions=EXCLUDED.expansions,
-       island_upgraded_at=EXCLUDED.island_upgraded_at, xp=EXCLUDED.xp,
-       total_level=EXCLUDED.total_level,
-       balance=EXCLUDED.balance, coins=EXCLUDED.coins, gems=EXCLUDED.gems,
-       ban_status=EXCLUDED.ban_status, verified=EXCLUDED.verified,
-       vip_until=EXCLUDED.vip_until, inventory=EXCLUDED.inventory,
-       last_seen_at=NOW(), sweep=EXCLUDED.sweep,
+       ${UPDATE_COLS.map((c) => `${c}=EXCLUDED.${c}`).join(", ")},
+       last_seen_at=NOW(),
        last_changed_at=COALESCE(EXCLUDED.last_changed_at, farm_world.last_changed_at)`,
     params
   );

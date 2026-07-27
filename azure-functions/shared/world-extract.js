@@ -119,12 +119,22 @@ const SCALARS = [
   "verified", "vip_until",
 ];
 
+// Fields dropped from the stored game_data: the game keeps these as "before the
+// last optimistic update" shadow copies of inventory/wardrobe/balance for its own
+// client-side rollback/anti-cheat check (confirmed in the game's game.ts — they sit
+// right next to the field they shadow with no other purpose). They are near-
+// duplicates of a field we already keep (inventory, wardrobe) by construction, so
+// dropping them loses no information, only ~6-7% of raw farm size.
+const DROP_FROM_GAME_DATA = ["previousInventory", "previousWardrobe", "previousBalance"];
+
 function extractFarm(entry) {
   const f = entry.farm || {};
   const island = f.island || {};
   const inv = f.inventory || {};
   const ascensionLevel = island.ascensionLevel ?? 0;
   const xp = num(f.bumpkin?.experience) ?? 0;
+  const gameData = { ...f };
+  for (const k of DROP_FROM_GAME_DATA) delete gameData[k];
   return {
     farm_id: entry.id,
     nft_id: entry.nftId ?? null,
@@ -144,6 +154,12 @@ function extractFarm(entry) {
     verified: typeof f.verified === "boolean" ? f.verified : null,
     vip_until: ts(f.vip?.expiresAt),
     inventory: inv,
+    // Full per-farm state (minus the shadow fields above) so a future stat doesn't
+    // need a code change + redeploy + a full sweep to become available — see the
+    // storage note in migrations/2026-07-27-world-crawl.sql. Not scalar-diffed
+    // (SCALARS below): diffing whole JSON blobs sweep-to-sweep would be expensive
+    // and isn't meaningful the way a level-up or a ban flip is.
+    game_data: gameData,
   };
 }
 

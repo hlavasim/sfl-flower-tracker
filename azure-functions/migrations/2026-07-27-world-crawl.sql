@@ -1,10 +1,19 @@
 -- World crawl: every farm in the game, swept continuously via the batch
 -- /community/farms endpoint (cursor = base64(lastId), verified 2026-07-27).
 --
--- Storage note: farm_snapshots stores the FULL game_data and costs ~74 KB/row.
--- At ~250k farms that would be ~18 GB per generation, so the world crawl keeps
--- only a narrow extract per farm (upserted in place) plus an append-only diff
--- log of the scalar fields. Nothing here writes to farm_snapshots.
+-- Storage note: farm_world stores BOTH a narrow set of scalar columns AND the
+-- full per-farm JSON (game_data). The scalars exist so hot queries (group by
+-- island, filter by ban status, sort by level) don't need a jsonb path
+-- extraction on every one of 656k+ rows; game_data exists so a stat nobody
+-- thought of yet doesn't need a code change + redeploy + a full new sweep to
+-- become available — it's already sitting there. This is affordable: measured
+-- on this exact data, Postgres's lz4 TOAST compression runs ~2.3-2.4x, and farm
+-- size across the live id range averages ~17-26 KB raw (2026-07-27 sample) —
+-- 656k farms compressed lands around 6-11 GB, comfortably inside the 32 GB
+-- instance (~750 MB used before this feature). This is upserted CURRENT STATE,
+-- one row per farm, not a snapshot log — it does not grow with every sweep.
+-- Nothing here writes to farm_snapshots (that table is the separate, full-
+-- history log for the small whitelist of farms tracked individually).
 
 -- ── Current state, one row per farm (upsert on every visit) ──
 CREATE TABLE IF NOT EXISTS farm_world (
@@ -26,7 +35,10 @@ CREATE TABLE IF NOT EXISTS farm_world (
   ban_status         TEXT,          -- ok | investigating | permanent
   verified           BOOLEAN,
   vip_until          TIMESTAMPTZ,
-  inventory          JSONB,         -- full item map; the only wide column
+  inventory          JSONB,         -- item map alone, kept separate from game_data
+                                     -- so the item-holders query (api/_world.js
+                                     -- mode=item) reads a small column, not the
+                                     -- whole farm, on every row it scans
   first_seen_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   last_seen_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   last_changed_at    TIMESTAMPTZ,
@@ -38,6 +50,10 @@ CREATE INDEX IF NOT EXISTS idx_fw_asc      ON farm_world(ascension_level);
 CREATE INDEX IF NOT EXISTS idx_fw_exp      ON farm_world(expansions);
 ALTER TABLE farm_world ADD COLUMN IF NOT EXISTS total_level INTEGER;
 CREATE INDEX IF NOT EXISTS idx_fw_level    ON farm_world(total_level);
+-- Full per-farm state (minus previousInventory/previousWardrobe/previousBalance —
+-- pure shadow copies of fields already kept, see shared/world-extract.js) so a
+-- future stat is a query, not a redeploy + a full new sweep.
+ALTER TABLE farm_world ADD COLUMN IF NOT EXISTS game_data JSONB;
 CREATE INDEX IF NOT EXISTS idx_fw_seen     ON farm_world(last_seen_at DESC);
 CREATE INDEX IF NOT EXISTS idx_fw_changed  ON farm_world(last_changed_at DESC);
 
