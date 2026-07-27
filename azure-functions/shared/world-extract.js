@@ -15,15 +15,24 @@ const ts = (v) => {
   return ms > 0 && ms < 253370764800000 ? new Date(ms) : null;
 };
 
-// ── Bumpkin total level: xp -> level, uncapped past 200 ──────────────────────
-// Ported from the game's src/features/game/lib/level.ts (read 2026-07-27). The
-// table caps a Bumpkin at level 200, but that is only the PRE-ascension cap: once
-// SWAMP_ASCENSION is live (it is — our own ascension.mjs already models this
-// system) the practical cap is level 150, and every ascension after that adds a
-// 50-level band on top with its own, ever-growing XP cost (bandXp grows ×1.45 per
-// ascension), so total level has no ceiling. This is why "level" needs computing
-// here at crawl time rather than a SQL bucket — a SQL width_bucket only handled
-// the pre-ascension table and silently capped every ascended player at 200.
+// ── Bumpkin total level: the game's getTotalBumpkinLevel, i.e. SKILL POINTS ──
+// Ported from src/features/game/lib/level.ts (read 2026-07-27).
+//
+// The level cap depends on a feature flag, and getting this wrong is what made the
+// chart top out at 150. In the game:
+//
+//   getMaxBumpkinLevel = hasFeatureAccess(game, "SWAMP_ASCENSION") ? 150 : 200
+//   SWAMP_ASCENSION: betaFeatureFlag
+//   betaFeatureFlag  = CONFIG.NETWORK === "amoy" || inventory["Beta Pass"] > 0
+//
+// So on mainnet the 150 cap applies ONLY to farms holding a Beta Pass. For everyone
+// else the cap is 200 — verified against farm 155498, which has no Beta Pass and
+// 179,301,665 xp: the table puts it at level 186 (needs 178,408,176) and the owner
+// confirms the game shows 186. Capping at 150 understated every farm above it.
+//
+// A farm that HAS ascended (island.ascensionLevel >= 1) necessarily has the flag, so
+// that branch keeps the 150 baseline plus 50 per completed band plus the within-band
+// level — which is also why this has to be computed here rather than as a SQL bucket.
 //
 // Same 200 xp thresholds as core/engine/power-helpers.mjs BUMPKIN_XP_TABLE and
 // api/_world.js's (now removed) copy — thresholds[i] (0-indexed) = xp required
@@ -50,7 +59,8 @@ const BUMPKIN_XP_TABLE = [
   160772132, 164093963, 167515448, 171039577, 174669429, 178408176, 182259085, 186225521, 190310950, 194518941,
   198853171, 203317427, 207915610, 212651738, 217529949, 222554506, 227729799, 233060350, 238550817, 244206000,
 ];
-const PRE_ASCENSION_MAX_LEVEL = 150;
+const PRE_ASCENSION_MAX_LEVEL = 150;   // cap only for Beta Pass holders
+const MAX_BUMPKIN_LEVEL = 200;         // cap for everyone else (mainnet, no Beta Pass)
 const LEVELS_PER_ASCENSION = 50;
 const ASCENSION_BAND_XP_BASE = 50_000_000;
 const ASCENSION_BAND_XP_GROWTH = 1.45;
@@ -101,14 +111,24 @@ function withinAscensionLevel(xp, a) {
 }
 
 /**
- * Total Bumpkin level: the pre-ascension table level (capped at 150 — the current
- * live cap once SWAMP_ASCENSION is on) plus 50 for every completed ascension band
- * plus the current within-band level. A1 L1 -> 151, A1 L50 -> 200, A2 L25 -> 225,
- * unbounded as ascensionLevel grows.
+ * Total Bumpkin level = the game's getTotalBumpkinLevel, i.e. how many skill points
+ * the farm has earned over its whole life (1 per level, ascension bands included).
+ *
+ * Not ascended: the plain table level, capped at 200. Ascended: 150 + 50 per
+ * completed band + the within-band level, so A1 L1 -> 151, A1 L50 -> 200,
+ * A2 L25 -> 225, unbounded as ascensionLevel grows.
+ *
+ * Note the discontinuity, which is the game's and not ours: an unascended farm at
+ * 179.3M xp reads 186, but the same xp on a farm that has ascended into A1 reads
+ * 151, because ascending rebases the count at 150. Nothing here can smooth that
+ * over without diverging from getTotalBumpkinLevel.
  */
 function totalBumpkinLevel(xp, ascensionLevel) {
   const a = Math.max(0, Math.floor(ascensionLevel) || 0);
-  if (a < 1) return bumpkinLevelFromXp(xp, PRE_ASCENSION_MAX_LEVEL);
+  // Not ascended: plain table level. The cap is 200, not 150 — the 150 cap only
+  // applies to Beta Pass holders (see the flag note above), and a farm on the 150
+  // cap that had actually ascended takes the branch below instead.
+  if (a < 1) return bumpkinLevelFromXp(xp, MAX_BUMPKIN_LEVEL);
   return PRE_ASCENSION_MAX_LEVEL + (a - 1) * LEVELS_PER_ASCENSION + withinAscensionLevel(xp, a);
 }
 
