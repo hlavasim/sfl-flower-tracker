@@ -19147,7 +19147,7 @@
       // whatever the crawl has found so far. Long list -> scroll, not truncation.
       html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
         <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY BUMPKIN LEVEL</div>
-        <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">Level from XP <b>as it stands now</b> — food still sitting uneaten does not count. One row per level, 1 through the highest found (ascension keeps this uncapped past 200).</div>
+        <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">Level from XP <b>as it stands now</b> — food still sitting uneaten does not count. Counted as skill points earned. One row per level from 1 up, no ceiling: <b>the game's table ends at 200</b>, so above that its own x1.03-per-level curve is extrapolated, keeping extreme farms distinguishable instead of all reading 200.</div>
         ${_barChart(_worldData.levelRows, { colorFor: () => LEVEL_BAR_COLOR, label: (r) => `Lv ${r.key}`, rowHeight: 14, labelWidth: 46, maxHeight: 420 })}
       </div>`;
 
@@ -19161,7 +19161,8 @@
           valued with that farm's <b>real cooking boosts</b> (skills, items, sculptures) and a
           <b>simulated x1.5 pet streak</b> — players wait for the streak before eating a
           stockpile, so anything less understates it. Compare with the chart above to see how
-          much level is sitting in inventories.
+          much level is sitting in inventories. Same skill-point scale, likewise
+          extrapolated above level 200.
         </div>
         ${_barChart(_worldData.effLevelRows, { colorFor: () => REACH_ASC_COLOR, label: (r) => `Lv ${r.key}`, rowHeight: 14, labelWidth: 46, maxHeight: 420 })}
       </div>`;

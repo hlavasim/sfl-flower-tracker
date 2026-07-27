@@ -25,10 +25,11 @@ const ts = (v) => {
 //   SWAMP_ASCENSION: betaFeatureFlag
 //   betaFeatureFlag  = CONFIG.NETWORK === "amoy" || inventory["Beta Pass"] > 0
 //
-// So on mainnet the 150 cap applies ONLY to farms holding a Beta Pass. For everyone
-// else the cap is 200 — verified against farm 155498, which has no Beta Pass and
-// 179,301,665 xp: the table puts it at level 186 (needs 178,408,176) and the owner
-// confirms the game shows 186. Capping at 150 understated every farm above it.
+// So on mainnet the 150 cap applies ONLY to farms holding a Beta Pass — verified
+// against farm 155498, which has no Beta Pass and 179,301,665 xp: the table puts it at
+// level 186 (needs 178,408,176) and the owner confirms the game shows 186. Capping at
+// 150 understated every farm above it. Neither cap is applied here at all now; see the
+// extrapolation note below.
 //
 // A farm that HAS ascended (island.ascensionLevel >= 1) necessarily has the flag, so
 // that branch keeps the 150 baseline plus 50 per completed band plus the within-band
@@ -60,7 +61,7 @@ const BUMPKIN_XP_TABLE = [
   198853171, 203317427, 207915610, 212651738, 217529949, 222554506, 227729799, 233060350, 238550817, 244206000,
 ];
 const PRE_ASCENSION_MAX_LEVEL = 150;   // cap only for Beta Pass holders
-const MAX_BUMPKIN_LEVEL = 200;         // cap for everyone else (mainnet, no Beta Pass)
+const MAX_BUMPKIN_LEVEL = 200;         // end of the game table; not a cap here (see below)
 const LEVELS_PER_ASCENSION = 50;
 const ASCENSION_BAND_XP_BASE = 50_000_000;
 const ASCENSION_BAND_XP_GROWTH = 1.45;
@@ -70,13 +71,37 @@ const ASCENSION_LEVEL_UPS = LEVELS_PER_ASCENSION - 1; // 49
 const ASCENSION_TOTAL_WEIGHT = ASCENSION_LEVEL_UPS +
   ASCENSION_LEVEL_WEIGHT_PER_LEVEL * ((ASCENSION_LEVEL_UPS * LEVELS_PER_ASCENSION) / 2); // 85.75
 
-/** Level from xp, capped at maxLevel — table lookup, same rule as the game's getBumpkinLevel. */
+// Past the end of the table the curve is CONTINUED rather than clamped, so a farm with
+// absurd xp still gets a distinguishing number instead of everyone piling up on 200.
+// This is a faithful extrapolation, not a guess: the table's own per-level xp delta
+// grows by exactly x1.03, continuously from level 152 through 200 (verified against
+// every tail entry), so the same factor is carried onward.
+//
+// Be clear about what this means: the GAME has no level above 200 for an unascended
+// farm — LEVEL_EXPERIENCE simply stops there. Levels above 200 here are "what this xp
+// would be worth if the curve kept going", which is what makes whales comparable
+// instead of all reading 200. The charts say so.
+const XP_DELTA_GROWTH = 1.03;
+const LEVEL_EXTRAPOLATION_LIMIT = 10000; // loop bound; nothing real comes close
+
+/** Level from xp. Uses the table to 200, then extrapolates the same curve upward. */
 function bumpkinLevelFromXp(xp, maxLevel) {
-  if (xp >= BUMPKIN_XP_TABLE[maxLevel - 1]) return maxLevel;
+  const cap = maxLevel || Infinity;
+  const tableTop = Math.min(BUMPKIN_XP_TABLE.length, cap);
   let level = 1;
-  for (let i = 0; i < maxLevel; i++) {
+  for (let i = 0; i < tableTop; i++) {
     if (xp >= BUMPKIN_XP_TABLE[i]) level = i + 1;
-    else break;
+    else return level;
+  }
+  if (cap <= BUMPKIN_XP_TABLE.length) return cap;
+
+  let threshold = BUMPKIN_XP_TABLE[BUMPKIN_XP_TABLE.length - 1];
+  let delta = threshold - BUMPKIN_XP_TABLE[BUMPKIN_XP_TABLE.length - 2];
+  while (level < cap && level < LEVEL_EXTRAPOLATION_LIMIT) {
+    delta *= XP_DELTA_GROWTH;
+    threshold += delta;
+    if (xp < threshold) break;
+    level++;
   }
   return level;
 }
@@ -114,9 +139,11 @@ function withinAscensionLevel(xp, a) {
  * Total Bumpkin level = the game's getTotalBumpkinLevel, i.e. how many skill points
  * the farm has earned over its whole life (1 per level, ascension bands included).
  *
- * Not ascended: the plain table level, capped at 200. Ascended: 150 + 50 per
- * completed band + the within-band level, so A1 L1 -> 151, A1 L50 -> 200,
- * A2 L25 -> 225, unbounded as ascensionLevel grows.
+ * Not ascended: the table level, UNCAPPED — past level 200 the table's own x1.03
+ * per-level curve is extrapolated, so 3.8B xp reads ~300 rather than clamping to 200
+ * and making every whale look identical. Ascended: 150 + 50 per completed band + the
+ * within-band level, so A1 L1 -> 151, A1 L50 -> 200, A2 L25 -> 225. Neither branch
+ * has a ceiling.
  *
  * Note the discontinuity, which is the game's and not ours: an unascended farm at
  * 179.3M xp reads 186, but the same xp on a farm that has ascended into A1 reads
@@ -125,10 +152,9 @@ function withinAscensionLevel(xp, a) {
  */
 function totalBumpkinLevel(xp, ascensionLevel) {
   const a = Math.max(0, Math.floor(ascensionLevel) || 0);
-  // Not ascended: plain table level. The cap is 200, not 150 — the 150 cap only
-  // applies to Beta Pass holders (see the flag note above), and a farm on the 150
-  // cap that had actually ascended takes the branch below instead.
-  if (a < 1) return bumpkinLevelFromXp(xp, MAX_BUMPKIN_LEVEL);
+  // Not ascended: table level, UNCAPPED — the curve is extrapolated past 200 so an
+  // extreme farm reads its real standing instead of piling onto the cap.
+  if (a < 1) return bumpkinLevelFromXp(xp);
   return PRE_ASCENSION_MAX_LEVEL + (a - 1) * LEVELS_PER_ASCENSION + withinAscensionLevel(xp, a);
 }
 

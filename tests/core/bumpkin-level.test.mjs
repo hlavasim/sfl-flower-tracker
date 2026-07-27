@@ -14,12 +14,24 @@ test("anchor — farm 155498 (no Beta Pass, 179,301,665 xp) is level 186", () =>
   assert.equal(totalBumpkinLevel(179301665, 0), 186);
 });
 
-test("unascended farms are capped at 200, not 150", () => {
-  assert.equal(totalBumpkinLevel(94333905, 0), 150, "level-150 threshold still reads 150");
-  assert.equal(totalBumpkinLevel(94333906, 0), 150, "but does not STOP at 150");
+test("unascended level is not capped at 150 and not capped at 200 either", () => {
+  assert.equal(totalBumpkinLevel(94333905, 0), 150, "level-150 threshold reads 150");
   assert.ok(totalBumpkinLevel(200000000, 0) > 150, "past 150 must keep climbing");
-  assert.equal(totalBumpkinLevel(244206000, 0), 200, "level-200 threshold");
-  assert.equal(totalBumpkinLevel(9e9, 0), 200, "and 200 is the real cap when unascended");
+  assert.equal(totalBumpkinLevel(244206000, 0), 200, "level-200 threshold, end of the table");
+  // Past the table the x1.03 curve continues, so whales stay distinguishable instead
+  // of all reading 200.
+  assert.ok(totalBumpkinLevel(9e9, 0) > 200, "must not clamp at the end of the table");
+  assert.equal(totalBumpkinLevel(3.8e9, 0), 300, "3.8B xp extrapolates to level 300");
+});
+
+test("extrapolation is monotonic — no gaps or regressions anywhere", () => {
+  let prev = 0;
+  for (let xp = 0; xp < 6e9; xp += 5e6) {
+    const l = totalBumpkinLevel(xp, 0);
+    assert.ok(l >= prev, `level went backwards at xp ${xp}: ${prev} -> ${l}`);
+    prev = l;
+  }
+  assert.ok(prev > 300, `should be well past 300 at 6B xp, got ${prev}`);
 });
 
 test("level boundaries are exact", () => {
