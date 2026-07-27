@@ -142,6 +142,9 @@ async function crawlStats(pool) {
     pool.query(`SELECT COUNT(*)::bigint AS farms,
                        COUNT(last_activity)::bigint AS with_activity,
                        COUNT(*) FILTER (WHERE is_blacklisted)::bigint AS blacklisted,
+                       -- isBlacklisted is only sent for ~46% of farms and does not track
+                       -- NFT ownership, so its denominator has to travel with it.
+                       COUNT(is_blacklisted)::bigint AS with_blacklist,
                        COUNT(*) FILTER (WHERE ban_status = 'permanent')::bigint AS banned,
                        COUNT(*) FILTER (WHERE verified)::bigint AS verified,
                        MAX(last_activity) AS newest_activity
@@ -170,6 +173,7 @@ async function crawlStats(pool) {
       duration_ms: durationMs,
       records_done: Number(i.records_done || 0),
       changed: Number(i.changed || 0),
+      unchanged: Number(i.unchanged || 0),
       unparseable: Number(i.bad || 0),
       complete: !!i.complete,
       last_error: i.last_error || null,
@@ -179,6 +183,7 @@ async function crawlStats(pool) {
       farms: Number(t.farms || 0),
       with_activity: Number(t.with_activity || 0),
       blacklisted: Number(t.blacklisted || 0),
+      with_blacklist: Number(t.with_blacklist || 0),
       banned: Number(t.banned || 0),
       verified: Number(t.verified || 0),
       newest_activity: t.newest_activity || null,

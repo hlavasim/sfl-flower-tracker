@@ -51,8 +51,8 @@ function dumpUrl(path) {
  * @param {number}   [opts.deadlineMs]  wall-clock budget; stops cleanly when reached
  * @param {number}   [opts.skip]        records to skip before ingesting (resume)
  * @param {Function} [opts.onProgress]  called every batch with running counters
- * @returns {Promise<{records:number, ingested:number, changed:number, skipped:number,
- *                    bad:number, complete:boolean}>}
+ * @returns {Promise<{records:number, ingested:number, unchanged:number, changed:number,
+ *                    skipped:number, bad:number, complete:boolean}>}
  */
 async function ingestStream(pool, opts) {
   const {
@@ -64,16 +64,56 @@ async function ingestStream(pool, opts) {
     crlfDelay: Infinity,
   });
 
-  let records = 0, ingested = 0, changed = 0, bad = 0;
+  let records = 0, ingested = 0, changed = 0, bad = 0, unchanged = 0;
   let batch = [];
   let complete = true;
 
+  /*
+   * Only farms that actually played get the expensive treatment.
+   *
+   * lastActivity is authoritative: if it has not moved since our stored value the player
+   * has not played, so the farm state is identical and there is nothing to rewrite. That
+   * lets a daily re-ingest skip both the per-farm work (expansion reach, boost-aware
+   * banked-food XP — the CPU cost that held the first Azure run to 46 records/second) and
+   * the ~44 KB game_data write. Skipped farms still get last_seen_at bumped so it keeps
+   * meaning "when we last confirmed this row".
+   */
   const flush = async () => {
     if (!batch.length) return;
-    changed += await persistFarmRows(pool, batch, null);
-    ingested += batch.length;
+    const ids = batch.map((b) => b.id);
+    const prev = await pool.query(
+      "SELECT farm_id, last_activity FROM farm_world WHERE farm_id = ANY($1::bigint[])", [ids]
+    );
+    const seen = new Map(prev.rows.map((r) =>
+      [String(r.farm_id), r.last_activity ? new Date(r.last_activity).getTime() : null]));
+
+    const stale = [], fresh = [];
+    for (const b of batch) {
+      const before = seen.get(String(b.id));
+      // Unchanged only when we have a stored value AND it matches exactly. A new farm
+      // (no stored value) always goes down the full path.
+      if (before !== undefined && before !== null && b.lastActivity !== null && before === b.lastActivity) stale.push(b.id);
+      else fresh.push(b);
+    }
+
+    if (stale.length) {
+      await pool.query(
+        "UPDATE farm_world SET last_seen_at = NOW() WHERE farm_id = ANY($1::bigint[])", [stale]
+      );
+      unchanged += stale.length;
+    }
+    if (fresh.length) {
+      const rows = [];
+      for (const b of fresh) {
+        try { rows.push(extractFarm(b.entry, bankedFoodXp)); } catch { bad++; }
+      }
+      if (rows.length) {
+        changed += await persistFarmRows(pool, rows, null);
+        ingested += rows.length;
+      }
+    }
     batch = [];
-    if (onProgress) onProgress({ records, ingested, changed, bad, elapsedMs: Date.now() - t0 });
+    if (onProgress) onProgress({ records, ingested, unchanged, changed, bad, elapsedMs: Date.now() - t0 });
   };
 
   for await (const line of rl) {
@@ -90,12 +130,9 @@ async function ingestStream(pool, opts) {
     }
     if (!entry || entry.id === undefined || !entry.farm) { bad++; continue; }
 
-    try {
-      batch.push(extractFarm(entry, bankedFoodXp));
-    } catch {
-      bad++;
-      continue;
-    }
+    const la = Number(entry.lastActivity);
+    batch.push({ id: entry.id, lastActivity: Number.isFinite(la) ? la : null, entry });
+
     if (batch.length >= batchSize) {
       await flush();
       if (deadlineMs && Date.now() - t0 > deadlineMs) {
@@ -109,7 +146,7 @@ async function ingestStream(pool, opts) {
   rl.close();
   if (typeof source.destroy === "function" && !complete) source.destroy();
 
-  return { records, ingested, changed, skipped: skip, bad, complete };
+  return { records, ingested, unchanged, changed, skipped: skip, bad, complete };
 }
 
 module.exports = { CDN_BASE, listDumps, latestDump, dumpUrl, ingestStream };

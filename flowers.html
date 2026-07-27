@@ -19114,7 +19114,7 @@
         <div class="summary-stat"><div class="label">PLAYED 7D</div><div class="value time">${_fmtNum(act.d7)}</div></div>
         <div class="summary-stat"><div class="label">PLAYED 30D</div><div class="value">${_fmtNum(act.d30)}</div></div>
         <div class="summary-stat"><div class="label">PLAYED 90D</div><div class="value">${_fmtNum(act.d90)}</div></div>
-        <div class="summary-stat"><div class="label">BLACKLISTED</div><div class="value pending">${_fmtNum(s.stored.blacklisted)}</div></div>
+        <div class="summary-stat"><div class="label">BANNED</div><div class="value pending">${_fmtNum(s.stored.banned)}</div></div>
       </div>`;
 
       // Dataset provenance. This replaced a crawl-progress panel: there is no sweep or
@@ -19132,12 +19132,14 @@
           <tr><td>Age</td><td style="text-align:right;color:${d.age_ms != null && d.age_ms > 36 * 3600000 ? "var(--yellow)" : "var(--text-secondary)"}">${_fmtDur(d.age_ms)}</td></tr>
           <tr><td>Records loaded</td><td style="text-align:right">${_fmtNum(d.records_done)}</td></tr>
           <tr><td>Farms changed</td><td style="text-align:right">${_fmtNum(d.changed)}</td></tr>
+          <tr><td>Skipped (had not played)</td><td style="text-align:right">${_fmtNum(d.unchanged)}</td></tr>
           <tr><td>Unparseable lines</td><td style="text-align:right;color:${d.unparseable ? "var(--yellow)" : "var(--text-dim)"}">${_fmtNum(d.unparseable)}</td></tr>
           <tr><td>Load time</td><td style="text-align:right">${_fmtDur(d.duration_ms)}</td></tr>
           <tr><td>Status</td><td style="text-align:right;color:${d.complete ? "var(--green)" : "var(--yellow)"}">${d.complete ? "complete ✓" : "in progress / partial"}</td></tr>
           <tr><td>Newest activity in data</td><td style="text-align:right">${s.stored.newest_activity ? new Date(s.stored.newest_activity).toLocaleString("cs-CZ") : "—"}</td></tr>
           <tr><td>With activity data</td><td style="text-align:right">${_fmtNum(s.stored.with_activity)} / ${_fmtNum(s.stored.farms)}</td></tr>
-          <tr><td>Permanently banned</td><td style="text-align:right">${_fmtNum(s.stored.banned)}</td></tr>
+          <tr><td>Permanently banned (farm.ban.status)</td><td style="text-align:right">${_fmtNum(s.stored.banned)} / ${_fmtNum(s.stored.farms)}</td></tr>
+          <tr><td>Flagged isBlacklisted</td><td style="text-align:right">${_fmtNum(s.stored.blacklisted)} / ${_fmtNum(s.stored.with_blacklist)} known</td></tr>
         </table>
         ${d.last_error ? `<div class="pixel-font" style="font-size:0.5rem;color:var(--yellow);margin-top:8px">last error: ${escHTML(d.last_error)}</div>` : ""}
       </div>`;

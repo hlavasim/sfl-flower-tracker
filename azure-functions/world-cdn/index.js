@@ -84,18 +84,20 @@ module.exports = async function (context) {
     onProgress: (p) => {
       if (p.elapsedMs - lastLog < 30000) return;
       lastLog = p.elapsedMs;
-      context.log(`  ${p.records} read / ${p.ingested} written / ${p.changed} changed ` +
-        `(${Math.round(p.elapsedMs / 1000)}s)`);
+      context.log(`  ${p.records} read / ${p.ingested} written / ${p.unchanged} skipped ` +
+        `(unplayed) / ${p.changed} changed (${Math.round(p.elapsedMs / 1000)}s)`);
     },
   });
 
   await pool.query(
     `UPDATE cdn_ingest_state SET records_done = $1, changed = COALESCE(changed,0) + $2,
+       unchanged = COALESCE(unchanged,0) + $5,
        bad = $3, complete = $4, finished_at = CASE WHEN $4 THEN NOW() END, updated_at = NOW()
      WHERE id = 1`,
-    [out.records, out.changed, out.bad, out.complete]
+    [out.records, out.changed, out.bad, out.complete, out.unchanged]
   );
 
   context.log(`CDN ingest ${out.complete ? "COMPLETE" : "PARTIAL (will resume next run)"}: ` +
-    `${out.records} records read, ${out.ingested} written, ${out.changed} changed, ${out.bad} unparseable`);
+    `${out.records} read, ${out.ingested} written, ${out.unchanged} skipped as unplayed, ` +
+    `${out.changed} changed, ${out.bad} unparseable`);
 };

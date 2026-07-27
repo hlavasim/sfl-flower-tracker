@@ -202,3 +202,8 @@ CREATE TABLE IF NOT EXISTS cdn_ingest_state (
 );
 INSERT INTO cdn_ingest_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 GRANT SELECT ON cdn_ingest_state TO sfl_reader;
+
+-- How many farms a run skipped because lastActivity had not moved (so nothing about the
+-- farm could have changed). This is the measure of how much cheaper a daily re-ingest is
+-- than a first load.
+ALTER TABLE cdn_ingest_state ADD COLUMN IF NOT EXISTS unchanged BIGINT NOT NULL DEFAULT 0;
