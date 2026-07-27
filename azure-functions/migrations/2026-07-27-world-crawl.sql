@@ -133,3 +133,9 @@ CREATE INDEX IF NOT EXISTS idx_bad_active ON crawl_bad_ids(farm_id) WHERE recove
 
 -- Vercel reads through sfl_reader (read-only by default, granted per table).
 GRANT SELECT ON farm_world, farm_world_changes, crawl_state, crawl_sweeps, crawl_skips, crawl_bad_ids TO sfl_reader;
+
+-- Furthest expansion a farm could reach right now with what it has banked, encoded as
+-- an integer slot (phase*1000 + expansions) so it sorts numerically — a text label
+-- would put "A1-10" before "A1-2". See azure-functions/shared/expansion-reach.js.
+ALTER TABLE farm_world ADD COLUMN IF NOT EXISTS reach_slot INTEGER;
+CREATE INDEX IF NOT EXISTS idx_fw_reach ON farm_world(reach_slot);

@@ -20,13 +20,17 @@ const DIMS = {
   // pre-ascension table and silently cap every ascended player at 200), which is
   // not something a single SQL expression can do cleanly.
   total_level: "total_level",
+  // Furthest expansion the farm could reach with what it has banked, as an integer
+  // slot so it sorts numerically (phase*1000 + expansions). Computed at crawl time —
+  // see azure-functions/shared/expansion-reach.js.
+  reach_slot: "reach_slot",
   // Bucketed dimensions for histogram-style breakdowns.
   xp_bucket: "width_bucket(xp, 0, 200000000, 20)",
   level_bucket: "least(floor(expansions / 5) * 5, 100)",
 };
 
 // Columns that may be aggregated.
-const MEASURES = { xp: "xp", balance: "balance", coins: "coins", gems: "gems", expansions: "expansions", ascension_level: "ascension_level", total_level: "total_level" };
+const MEASURES = { xp: "xp", balance: "balance", coins: "coins", gems: "gems", expansions: "expansions", ascension_level: "ascension_level", total_level: "total_level", reach_slot: "reach_slot" };
 const FUNCS = { count: null, sum: "SUM", avg: "AVG", min: "MIN", max: "MAX", median: "PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY" };
 const OPS = { eq: "=", ne: "<>", gt: ">", gte: ">=", lt: "<", lte: "<=" };
 

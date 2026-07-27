@@ -18868,6 +18868,26 @@
     // blue — rather than a categorical set.
     const LEVEL_BAR_COLOR = "#3987e5";
 
+    // Expansion reach: the slot integer is decoded here for labels only. Ordering is
+    // ALWAYS done on the integer — sorting the labels as text would put "A1-10" before
+    // "A1-2" and "Spring-9" after "Spring-16".
+    // Mirrors decodeSlot() in azure-functions/shared/expansion-reach.js; keep in sync.
+    const reachPhases = ["basic", "spring", "desert", "volcano"];
+    function decodeReachSlot(slot) {
+      const phase = Math.floor(slot / 1000);
+      const expansions = slot % 1000;
+      if (phase < reachPhases.length) {
+        const isl = reachPhases[phase];
+        return { phase, expansions, ascension: 0, label: `${isl[0].toUpperCase()}${isl.slice(1)}-${expansions}` };
+      }
+      const ascension = phase - (reachPhases.length - 1);
+      return { phase, expansions, ascension, label: `A${ascension}-${expansions}` };
+    }
+    // Ascension bands get their own hue so the pre-ascension ladder and the swamp
+    // bands read as different regimes rather than one undifferentiated run of bars.
+    const REACH_PRE_COLOR = "#3987e5";
+    const REACH_ASC_COLOR = "#d55181";
+
     let _worldData = null, _worldErr = null, _worldLoading = false;
 
     function _chartTipShow(evt, html) {
@@ -18962,10 +18982,11 @@
       _worldLoading = true; _worldErr = null;
       try {
         const getJson = (url) => fetch(url).then((r) => r.json());
-        const [stats, islandAgg, levelAgg, ...breakdowns] = await Promise.all([
+        const [stats, islandAgg, levelAgg, reachAgg, ...breakdowns] = await Promise.all([
           getJson(`${WORLD_API}&mode=stats`),
           getJson(`${WORLD_API}&mode=agg&group=island_type`).catch(() => ({ rows: [] })),
           getJson(`${WORLD_API}&mode=agg&group=total_level&limit=1000`).catch(() => ({ rows: [] })),
+          getJson(`${WORLD_API}&mode=agg&group=reach_slot&limit=1000`).catch(() => ({ rows: [] })),
           ...worldBreakdowns.map((b) =>
             getJson(`${WORLD_API}&mode=agg&group=${encodeURIComponent(b.key)}`)
               .then((j) => ({ ...b, rows: j.rows || [] }))
@@ -18989,7 +19010,28 @@
         const levelRows = [];
         for (let lvl = 1; lvl <= maxLevel; lvl++) levelRows.push({ key: lvl, n: levelByKey.get(lvl) || 0 });
 
-        _worldData = { stats, islandRows, levelRows, breakdowns };
+        // Reach slots: sort on the INTEGER, then gap-fill within each phase so the
+        // ladder reads continuously (Spring-4, Spring-5, ... A1-31, A1-32, ...). Gaps
+        // are only filled between observed slots of the same phase — no island's
+        // expansion range is hardcoded here, so this cannot invent slots that the
+        // game does not have.
+        const reachSeen = new Map(
+          (reachAgg.rows || []).filter((r) => r.key != null).map((r) => [Number(r.key), r.n])
+        );
+        const reachKeys = [...reachSeen.keys()].sort((a, b) => a - b);
+        const reachRows = [];
+        for (let i = 0; i < reachKeys.length; i++) {
+          const k = reachKeys[i];
+          reachRows.push({ key: k, n: reachSeen.get(k) });
+          const next = reachKeys[i + 1];
+          if (next == null) continue;
+          const samePhase = Math.floor(k / 1000) === Math.floor(next / 1000);
+          if (samePhase) {
+            for (let f = k + 1; f < next; f++) reachRows.push({ key: f, n: 0 });
+          }
+        }
+
+        _worldData = { stats, islandRows, levelRows, reachRows, breakdowns };
       } catch (e) {
         _worldErr = e.message || String(e);
       } finally {
@@ -19098,6 +19140,30 @@
         <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY BUMPKIN LEVEL</div>
         <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">one row per level, 1 through the highest level found so far (ascension keeps this uncapped past 200)</div>
         ${_barChart(_worldData.levelRows, { colorFor: () => LEVEL_BAR_COLOR, label: (r) => `Lv ${r.key}`, rowHeight: 14, labelWidth: 46, maxHeight: 420 })}
+      </div>`;
+
+      // How far each farm COULD expand with what it already has banked — not where it
+      // currently sits. The definition is spelled out because the number is only
+      // meaningful if you know what was counted and what was deliberately ignored.
+      html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">EXPANSION REACH</div>
+        <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 8px;line-height:1.6">
+          Furthest expansion each farm could reach <b>right now</b>, buying one expansion after
+          another and deducting cumulatively — including island upgrades and ascensions.
+          Not its current position.<br>
+          <span style="color:var(--text-secondary)">Counted:</span> Bumpkin level (XP <b>plus</b> cooked
+          food still sitting in the inventory), and <b>Oil</b> + <b>Obsidian</b>.
+          <span style="color:var(--text-secondary)">Ignored:</span> coins and every other resource
+          (Wood, Stone, Iron, Gold, Crimstone, Gem) — those can simply be bought, so counting
+          them would measure spending power instead of progress.<br>
+          Ladder runs Basic → Spring → Desert → Volcano → A1 → A2 …; bars sorted by position,
+          never alphabetically.
+        </div>
+        ${_barChart(_worldData.reachRows, {
+          colorFor: (r) => (decodeReachSlot(r.key).ascension >= 1 ? REACH_ASC_COLOR : REACH_PRE_COLOR),
+          label: (r) => decodeReachSlot(r.key).label,
+          rowHeight: 14, labelWidth: 72, maxHeight: 420,
+        })}
       </div>`;
 
       // Breakdowns — these are the point of the crawl.

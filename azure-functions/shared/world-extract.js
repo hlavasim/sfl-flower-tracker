@@ -154,6 +154,10 @@ function extractFarm(entry) {
     verified: typeof f.verified === "boolean" ? f.verified : null,
     vip_until: ts(f.vip?.expiresAt),
     inventory: inv,
+    // Furthest expansion this farm could reach right now with what it has banked.
+    // Required lazily: expansion-reach.js needs the level helpers from THIS module,
+    // so a top-level require would be a cycle.
+    reach_slot: require("./expansion-reach").computeReach(f).slot,
     // Full per-farm state (minus the shadow fields above) so a future stat doesn't
     // need a code change + redeploy + a full sweep to become available — see the
     // storage note in migrations/2026-07-27-world-crawl.sql. Not scalar-diffed
@@ -185,4 +189,4 @@ function diffFarm(prev, next) {
   return Object.keys(d).length ? d : null;
 }
 
-module.exports = { extractFarm, diffFarm, SCALARS, totalBumpkinLevel };
+module.exports = { extractFarm, diffFarm, SCALARS, totalBumpkinLevel, withinAscensionLevel };
