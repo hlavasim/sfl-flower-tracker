@@ -133,6 +133,15 @@ async function closeChunk(pool, chunk, status, note, context) {
 }
 
 module.exports = async function (context) {
+  // Superseded by world-cdn: the community CDN publishes the whole public dataset daily
+  // as jsonl.gz, with no rate limit, no unservable-record grinding, and two fields this
+  // cursor crawl could never see (lastActivity, isBlacklisted). Kept in the repo as a
+  // fallback because the CDN is still described as "available for testing".
+  if (process.env.WORLD_CRAWL_ENABLED !== "true") {
+    context.log("world-crawl disabled — the CDN ingest (world-cdn) is the data source. " +
+      "Set WORLD_CRAWL_ENABLED=true to fall back to cursor crawling.");
+    return;
+  }
   const pool = getPool();
   const apiKey = process.env.WORLD_CRAWL_KEY || process.env.SFL_API_KEY;
   const t0 = Date.now();

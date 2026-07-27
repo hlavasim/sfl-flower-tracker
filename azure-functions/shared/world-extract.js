@@ -203,6 +203,11 @@ const SCALARS = [
 // dropping them loses no information, only ~6-7% of raw farm size.
 const DROP_FROM_GAME_DATA = ["previousInventory", "previousWardrobe", "previousBalance"];
 
+/**
+ * @param {object} entry  wrapper around one farm. The cursor/getFarms endpoints give
+ *        {id, nftId, farm}; the community CDN dump additionally gives lastActivity and
+ *        isBlacklisted, which no API endpoint returns.
+ */
 function extractFarm(entry, bankedFoodXp) {
   const f = entry.farm || {};
   const island = f.island || {};
@@ -234,6 +239,9 @@ function extractFarm(entry, bankedFoodXp) {
     vip_until: ts(f.vip?.expiresAt),
     inventory: inv,
     inventory_hash: inventoryHash(inv),
+    // CDN-only fields; null when the row came from an API endpoint instead.
+    last_activity: ts(entry.lastActivity),
+    is_blacklisted: typeof entry.isBlacklisted === "boolean" ? entry.isBlacklisted : null,
     // Furthest expansion this farm could reach right now with what it has banked.
     // Required lazily: expansion-reach.js needs the level helpers from THIS module,
     // so a top-level require would be a cycle.

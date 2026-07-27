@@ -27,6 +27,7 @@ const DIMS = {
   // Level after eating the food the farm already has cooked, valued with that farm's
   // own cooking boosts and a simulated x1.5 pet streak. total_level is the un-fed one.
   effective_level: "effective_level",
+  is_blacklisted: "is_blacklisted",
   // Bucketed dimensions for histogram-style breakdowns.
   xp_bucket: "width_bucket(xp, 0, 200000000, 20)",
   level_bucket: "least(floor(expansions / 5) * 5, 100)",
@@ -36,6 +37,20 @@ const DIMS = {
 const MEASURES = { xp: "xp", balance: "balance", coins: "coins", gems: "gems", expansions: "expansions", ascension_level: "ascension_level", total_level: "total_level", reach_slot: "reach_slot", effective_level: "effective_level" };
 const FUNCS = { count: null, sum: "SUM", avg: "AVG", min: "MIN", max: "MAX", median: "PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY" };
 const OPS = { eq: "=", ne: "<>", gt: ">", gte: ">=", lt: "<", lte: "<=" };
+
+/**
+ * Activity window shared by every aggregation, so the charts can be scoped to
+ * "everything / played in the last 90 days / last 30 days" from one control.
+ * last_activity comes from the community CDN dump (the public API never exposed it),
+ * so rows never touched by a CDN ingest have it NULL and are excluded by any window —
+ * which is correct: we have no evidence they were active.
+ */
+function activityClause(activeDays, params) {
+  const d = Number(activeDays);
+  if (!Number.isFinite(d) || d <= 0) return null;
+  params.push(Math.min(Math.round(d), 3650));
+  return `last_activity > NOW() - ($${params.length} || ' days')::interval`;
+}
 
 /** Parse `col:op:value` filters into a WHERE clause + params. */
 function buildWhere(filters, params) {
@@ -65,7 +80,9 @@ function buildWhere(filters, params) {
 async function aggregate(pool, q) {
   const params = [];
   const filters = [].concat(q.filter || []);
-  const where = buildWhere(filters, params);
+  let where = buildWhere(filters, params);
+  const active = activityClause(q.active_days, params);
+  if (active) where = where ? `${where} AND ${active}` : `WHERE ${active}`;
 
   const groupKey = q.group ? DIMS[q.group] : null;
   if (q.group && !groupKey) throw new Error(`bad group: ${q.group}`);
@@ -98,128 +115,112 @@ async function itemHolders(pool, q) {
   const item = String(q.item || "");
   if (!item || item.length > 100) throw new Error("item required");
   const min = Number(q.min) || 0;
+  const params = [item, min];
+  const active = activityClause(q.active_days, params);
   const r = await pool.query(
     `SELECT COUNT(*)::bigint AS holders,
             SUM((inventory ->> $1)::numeric) AS total,
             MAX((inventory ->> $1)::numeric) AS max
        FROM farm_world
-      WHERE inventory ? $1 AND (inventory ->> $1)::numeric > $2`,
-    [item, min]
+      WHERE inventory ? $1 AND (inventory ->> $1)::numeric > $2` +
+    (active ? ` AND ${active}` : ""),
+    params
   );
   const row = r.rows[0];
   return { item, holders: Number(row.holders), total: row.total === null ? 0 : Number(row.total), max: row.max === null ? 0 : Number(row.max) };
 }
 
-/** Crawl progress: how far the current sweep is, how fast, and the ETA. */
+/**
+ * Dataset status. The cursor crawl this used to describe (sweep progress, ETA, chunk
+ * coverage) is retired — the data now comes from the community CDN's daily dump, so the
+ * meaningful facts are which dump is loaded, how fresh it is, and how much of the
+ * population is actually active.
+ */
 async function crawlStats(pool) {
-  const [state, sweeps, totals, skips, chunks, running, tiling, recent] = await Promise.all([
-    pool.query("SELECT * FROM crawl_state WHERE id = 1"),
-    pool.query("SELECT * FROM crawl_sweeps ORDER BY sweep DESC LIMIT 10"),
+  const [ingest, totals, buckets] = await Promise.all([
+    pool.query("SELECT * FROM cdn_ingest_state WHERE id = 1"),
     pool.query(`SELECT COUNT(*)::bigint AS farms,
+                       COUNT(last_activity)::bigint AS with_activity,
+                       COUNT(*) FILTER (WHERE is_blacklisted)::bigint AS blacklisted,
                        COUNT(*) FILTER (WHERE ban_status = 'permanent')::bigint AS banned,
                        COUNT(*) FILTER (WHERE verified)::bigint AS verified,
-                       MAX(last_seen_at) AS newest,
-                       MIN(last_seen_at) AS oldest
+                       MAX(last_activity) AS newest_activity
                   FROM farm_world`),
-    pool.query("SELECT COUNT(*)::bigint AS n, COALESCE(SUM(to_id - from_id),0)::bigint AS ids FROM crawl_skips"),
-    pool.query(`SELECT status, COUNT(*)::int AS n, COALESCE(SUM(farms),0)::bigint AS farms
-                  FROM crawl_chunks GROUP BY status`),
-    pool.query(`SELECT from_id, to_id, farms, fail_streak FROM crawl_chunks
-                 WHERE status = 'running' ORDER BY priority LIMIT 1`),
-    // The coverage invariant: chunks must tile the id space with no gap and no
-    // overlap, exactly one unbounded tail. Non-zero here means the crawl could
-    // silently miss farms, so it is surfaced rather than assumed.
-    pool.query(`SELECT COUNT(*)::int AS violations FROM (
-                  SELECT from_id, to_id, LEAD(from_id) OVER (ORDER BY from_id) AS next_from
-                    FROM crawl_chunks
-                ) t
-                WHERE (next_from IS NOT NULL AND to_id IS DISTINCT FROM next_from)
-                   OR (next_from IS NULL AND to_id IS NOT NULL)
-                   OR (next_from IS NOT NULL AND to_id IS NULL)`),
-    // Recent throughput. The sweep average is useless while the crawl moves between
-    // the sparse web2 tail (~16k farms/hour) and the dense legacy head (~100/hour) —
-    // it would report a number matching neither. Counting rows actually written in
-    // the last 10 minutes gives the rate the crawl is running at right now.
-    pool.query(`SELECT COUNT(*)::bigint AS n FROM farm_world
-                 WHERE last_seen_at > NOW() - INTERVAL '10 minutes'`),
+    pool.query(`SELECT
+        COUNT(*) FILTER (WHERE last_activity > NOW() - INTERVAL '1 day')::bigint  AS d1,
+        COUNT(*) FILTER (WHERE last_activity > NOW() - INTERVAL '7 days')::bigint AS d7,
+        COUNT(*) FILTER (WHERE last_activity > NOW() - INTERVAL '30 days')::bigint AS d30,
+        COUNT(*) FILTER (WHERE last_activity > NOW() - INTERVAL '90 days')::bigint AS d90
+      FROM farm_world`),
   ]);
 
-  const s = state.rows[0] || {};
+  const i = ingest.rows[0] || {};
   const t = totals.rows[0] || {};
-  const done = Number(s.farms_this_sweep || 0);
-  const startedAt = s.sweep_started_at ? new Date(s.sweep_started_at).getTime() : null;
-  const elapsedMs = startedAt ? Date.now() - startedAt : 0;
-  const perHour = elapsedMs > 0 ? done / (elapsedMs / 3600000) : 0;
-
-  // Total farm count: measured from the last completed sweep once one exists,
-  // otherwise the known population size so the first sweep still shows an ETA.
-  const completed = sweeps.rows.filter((r) => r.finished_at);
-  const measuredTotal = completed.length ? Number(completed[0].farms) : null;
-  const total = measuredTotal || Number(process.env.WORLD_FARMS_ESTIMATE || 656066);
-  const remaining = Math.max(0, total - done);
-  // Prefer the recent rate for the ETA — the sweep average spans two ranges whose
-  // throughput differs by ~150x, so it predicts neither of them.
-  const perHourRecent = Number(recent.rows[0].n) * 6;
-  const etaRate = perHourRecent > 0 ? perHourRecent : perHour;
-  const etaMs = etaRate > 0 ? (remaining / etaRate) * 3600000 : null;
-
-  const chunkBy = chunks.rows.map((r) => ({ status: r.status, n: Number(r.n) }));
-  const byStatus = (st) => chunkBy.find((r) => r.status === st)?.n || 0;
+  const b = buckets.rows[0] || {};
+  const durationMs = i.started_at && i.finished_at
+    ? new Date(i.finished_at) - new Date(i.started_at) : null;
 
   return {
-    sweep: s.sweep,
-    cursor: s.cursor,
-    last_id: s.last_id == null ? null : Number(s.last_id),
-    window_size: s.window_size,
-    sweep_started_at: s.sweep_started_at,
-    updated_at: s.updated_at,
-    last_error: s.last_error,
-    done,
-    total,
-    total_is_measured: measuredTotal != null,
-    pct: total > 0 ? (done / total) * 100 : 0,
-    farms_per_hour: perHourRecent,
-    farms_per_hour_sweep_avg: perHour,
-    eta_ms: etaMs,
-    full_sweep_ms: etaRate > 0 ? (total / etaRate) * 3600000 : null,
-    requests: { ok: Number(s.req_ok || 0), rate_limited: Number(s.req_429 || 0), server_error: Number(s.req_5xx || 0) },
-    skips: { events: Number(skips.rows[0].n), ids: Number(skips.rows[0].ids) },
-    chunks: {
-      // A chunk only reaches 'done' after paging actually crossed its upper bound,
-      // so done/total here is a real coverage figure, not an estimate.
-      total: chunkBy.reduce((a, r) => a + r.n, 0),
-      done: byStatus("done"),
-      pending: byStatus("pending"),
-      running: byStatus("running"),
-      blocked: byStatus("blocked"),
-      tiling_violations: Number(tiling.rows[0].violations),
-      current: running.rows.length
-        ? {
-            from_id: Number(running.rows[0].from_id),
-            to_id: running.rows[0].to_id == null ? null : Number(running.rows[0].to_id),
-            farms: Number(running.rows[0].farms),
-            fail_streak: Number(running.rows[0].fail_streak),
-          }
-        : null,
+    source: "community CDN daily dump",
+    dump: {
+      path: i.dump_path || null,
+      generated_at: i.dump_modified_at || null,
+      started_at: i.started_at || null,
+      finished_at: i.finished_at || null,
+      duration_ms: durationMs,
+      records_done: Number(i.records_done || 0),
+      changed: Number(i.changed || 0),
+      unparseable: Number(i.bad || 0),
+      complete: !!i.complete,
+      last_error: i.last_error || null,
+      age_ms: i.dump_modified_at ? Date.now() - new Date(i.dump_modified_at).getTime() : null,
     },
     stored: {
       farms: Number(t.farms || 0),
+      with_activity: Number(t.with_activity || 0),
+      blacklisted: Number(t.blacklisted || 0),
       banned: Number(t.banned || 0),
       verified: Number(t.verified || 0),
-      oldest_seen: t.oldest,
-      newest_seen: t.newest,
+      newest_activity: t.newest_activity || null,
     },
-    sweeps: sweeps.rows.map((r) => ({
-      sweep: r.sweep,
-      started_at: r.started_at,
-      finished_at: r.finished_at,
-      farms: Number(r.farms || 0),
-      duration_ms: r.finished_at && r.started_at ? new Date(r.finished_at) - new Date(r.started_at) : null,
-      req_ok: Number(r.req_ok || 0),
-      req_429: Number(r.req_429 || 0),
-      req_5xx: Number(r.req_5xx || 0),
-      skipped: Number(r.skipped || 0),
-    })),
+    active: {
+      d1: Number(b.d1 || 0),
+      d7: Number(b.d7 || 0),
+      d30: Number(b.d30 || 0),
+      d90: Number(b.d90 || 0),
+    },
+  };
+}
+
+/**
+ * One farm's position on each chart, so the page can highlight the viewer's own bar.
+ * Returns nulls (not an error) for a farm that is not in the dataset — an unknown farm
+ * should leave the charts unhighlighted, not break the page.
+ */
+async function farmPosition(pool, q) {
+  const id = String(q.farm || "").trim();
+  if (!/^\d{1,20}$/.test(id)) throw new Error("farm must be a numeric id");
+  const r = await pool.query(
+    `SELECT farm_id, username, island_type, total_level, effective_level, reach_slot,
+            ascension_level, expansions, last_activity, is_blacklisted, ban_status
+       FROM farm_world WHERE farm_id = $1`,
+    [id]
+  );
+  if (!r.rows.length) return { found: false, farm_id: Number(id) };
+  const row = r.rows[0];
+  return {
+    found: true,
+    farm_id: Number(row.farm_id),
+    username: row.username,
+    island_type: row.island_type,
+    total_level: row.total_level == null ? null : Number(row.total_level),
+    effective_level: row.effective_level == null ? null : Number(row.effective_level),
+    reach_slot: row.reach_slot == null ? null : Number(row.reach_slot),
+    ascension_level: row.ascension_level == null ? null : Number(row.ascension_level),
+    expansions: row.expansions == null ? null : Number(row.expansions),
+    last_activity: row.last_activity,
+    is_blacklisted: row.is_blacklisted,
+    ban_status: row.ban_status,
   };
 }
 
@@ -228,6 +229,7 @@ async function handleWorld(pool, q) {
     case "stats": return crawlStats(pool);
     case "agg": return { rows: await aggregate(pool, q) };
     case "item": return await itemHolders(pool, q);
+    case "farm": return await farmPosition(pool, q);
     case "dims": return { dims: Object.keys(DIMS), measures: Object.keys(MEASURES), funcs: Object.keys(FUNCS), ops: Object.keys(OPS) };
     default: throw new Error(`bad mode: ${q.mode}`);
   }

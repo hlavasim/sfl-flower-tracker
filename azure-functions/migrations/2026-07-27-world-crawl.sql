@@ -175,3 +175,30 @@ ALTER TABLE crawl_state ADD COLUMN IF NOT EXISTS refresh_until TIMESTAMPTZ;
 -- played. Must be backfilled when added: comparing NULL against a fresh hash would mark
 -- every farm changed on its next visit and reset everyone's activity window at once.
 ALTER TABLE farm_world ADD COLUMN IF NOT EXISTS inventory_hash TEXT;
+
+-- Two fields the community CDN dump carries on the wrapper that no public API endpoint
+-- exposes. last_activity is the real "last played" time — it replaces the
+-- COALESCE(last_changed_at, first_seen_at) heuristic the refresh loop had to invent
+-- because neither batch endpoint returned it.
+ALTER TABLE farm_world ADD COLUMN IF NOT EXISTS last_activity TIMESTAMPTZ;
+ALTER TABLE farm_world ADD COLUMN IF NOT EXISTS is_blacklisted BOOLEAN;
+CREATE INDEX IF NOT EXISTS idx_fw_last_activity ON farm_world(last_activity DESC);
+
+-- Progress of the daily community-CDN ingest (world-cdn). records_done lets a run cut
+-- short by the host's 10-minute timeout resume at the next record instead of restarting;
+-- it is reset whenever a new day's dump appears.
+CREATE TABLE IF NOT EXISTS cdn_ingest_state (
+  id               INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  dump_path        TEXT,
+  dump_modified_at TIMESTAMPTZ,
+  started_at       TIMESTAMPTZ,
+  finished_at      TIMESTAMPTZ,
+  records_done     BIGINT NOT NULL DEFAULT 0,
+  changed          BIGINT NOT NULL DEFAULT 0,
+  bad              BIGINT NOT NULL DEFAULT 0,
+  complete         BOOLEAN NOT NULL DEFAULT FALSE,
+  last_error       TEXT,
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+INSERT INTO cdn_ingest_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+GRANT SELECT ON cdn_ingest_state TO sfl_reader;

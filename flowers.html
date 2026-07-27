@@ -18889,6 +18889,15 @@
     const REACH_ASC_COLOR = "#d55181";
 
     let _worldData = null, _worldErr = null, _worldLoading = false;
+    // Activity window scoping every chart. null = whole dataset. The dump only contains
+    // farms played in the last 90 days, so 90 is the widest window with real meaning;
+    // "ALL" additionally includes farms carried over from before the CDN switch.
+    let _worldActive = null;
+    window._worldSetActive = function (days) {
+      _worldActive = days === "all" ? null : Number(days);
+      _worldData = null; _worldErr = null;
+      renderWorld();
+    };
 
     function _chartTipShow(evt, html) {
       let t = document.getElementById("_chart-tooltip");
@@ -18941,6 +18950,10 @@
       // Room kept clear at the right of every track for the value label at the tip.
       const VALUE_GUTTER = 46;
 
+      // The viewer's own bar is marked with an outline, a caret and a YOU tag rather than
+      // a fourth hue: adding a colour would break the validated palette, and a shape /
+      // label cue survives colour-blindness and greyscale printing anyway.
+      const isMine = opts.highlight || (() => false);
       const body = rows.map((r, i) => {
         const w = r.n > 0 ? Math.max(0.6, (r.n / maxV) * 100) : 0;
         const color = opts.colorFor ? opts.colorFor(r, i) : LEVEL_BAR_COLOR;
@@ -18952,11 +18965,12 @@
         // value label still has somewhere to go. Without it the longest bar's number
         // ends flush on the container edge (measured: right=390 in a 390px viewport),
         // which reads as clipped next to a scrollbar.
-        return `<div style="display:grid;grid-template-columns:${labelW}px 1fr;align-items:center;height:${rowH}px">
-          <div style="font-family:${mono};font-size:0.5625rem;color:var(--text-dim);text-align:right;padding-right:6px;overflow:hidden;white-space:nowrap">${escHTML(label)}</div>
+        const mine = isMine(r, i);
+        return `<div style="display:grid;grid-template-columns:${labelW}px 1fr;align-items:center;height:${rowH}px${mine ? ";background:rgba(255,215,0,0.10)" : ""}">
+          <div style="font-family:${mono};font-size:0.5625rem;color:${mine ? "var(--sunpetal)" : "var(--text-dim)"};text-align:right;padding-right:6px;overflow:hidden;white-space:nowrap">${mine ? "▶" : ""}${escHTML(label)}</div>
           <div style="position:relative;height:${barH}px;margin-right:${VALUE_GUTTER}px;border-left:1px solid var(--border-brown)">
-            ${w > 0 ? `<div data-tip="${tip}" style="position:absolute;left:0;top:0;height:100%;width:${w}%;background:${color};border-radius:0 4px 4px 0;cursor:pointer"></div>` : ""}
-            <div style="position:absolute;top:0;height:100%;left:${w}%;padding-left:5px;display:flex;align-items:center">${val}</div>
+            ${w > 0 ? `<div data-tip="${tip}" style="position:absolute;left:0;top:0;height:100%;width:${w}%;background:${color};border-radius:0 4px 4px 0;cursor:pointer${mine ? ";outline:2px solid var(--sunpetal);outline-offset:1px" : ""}"></div>` : ""}
+            <div style="position:absolute;top:0;height:100%;left:${w}%;padding-left:5px;display:flex;align-items:center;gap:5px">${val}${mine ? `<span class="pixel-font" style="font-size:0.5rem;color:var(--sunpetal)">YOU</span>` : ""}</div>
           </div>
         </div>`;
       }).join("");
@@ -18982,14 +18996,18 @@
       _worldLoading = true; _worldErr = null;
       try {
         const getJson = (url) => fetch(url).then((r) => r.json());
-        const [stats, islandAgg, levelAgg, reachAgg, effLevelAgg, ...breakdowns] = await Promise.all([
+        const act = _worldActive ? `&active_days=${_worldActive}` : "";
+        const [stats, islandAgg, levelAgg, reachAgg, effLevelAgg, me, ...breakdowns] = await Promise.all([
           getJson(`${WORLD_API}&mode=stats`),
-          getJson(`${WORLD_API}&mode=agg&group=island_type`).catch(() => ({ rows: [] })),
-          getJson(`${WORLD_API}&mode=agg&group=total_level&limit=1000`).catch(() => ({ rows: [] })),
-          getJson(`${WORLD_API}&mode=agg&group=reach_slot&limit=1000`).catch(() => ({ rows: [] })),
-          getJson(`${WORLD_API}&mode=agg&group=effective_level&limit=1000`).catch(() => ({ rows: [] })),
+          getJson(`${WORLD_API}&mode=agg&group=island_type${act}`).catch(() => ({ rows: [] })),
+          getJson(`${WORLD_API}&mode=agg&group=total_level&limit=1000${act}`).catch(() => ({ rows: [] })),
+          getJson(`${WORLD_API}&mode=agg&group=reach_slot&limit=1000${act}`).catch(() => ({ rows: [] })),
+          getJson(`${WORLD_API}&mode=agg&group=effective_level&limit=1000${act}`).catch(() => ({ rows: [] })),
+          // The viewer's own farm, so its bar can be marked. Never fatal: an unknown or
+          // unconfigured farm just leaves the charts unhighlighted.
+          FARM_ID ? getJson(`${WORLD_API}&mode=farm&farm=${encodeURIComponent(FARM_ID)}`).catch(() => null) : Promise.resolve(null),
           ...worldBreakdowns.map((b) =>
-            getJson(`${WORLD_API}&mode=agg&group=${encodeURIComponent(b.key)}`)
+            getJson(`${WORLD_API}&mode=agg&group=${encodeURIComponent(b.key)}${act}`)
               .then((j) => ({ ...b, rows: j.rows || [] }))
               .catch(() => ({ ...b, rows: [] }))
           ),
@@ -19040,7 +19058,7 @@
         const effLevelRows = [];
         for (let lvl = 1; lvl <= effMax; lvl++) effLevelRows.push({ key: lvl, n: effSeen.get(lvl) || 0 });
 
-        _worldData = { stats, islandRows, levelRows, reachRows, effLevelRows, breakdowns };
+        _worldData = { stats, islandRows, levelRows, reachRows, effLevelRows, me, breakdowns };
       } catch (e) {
         _worldErr = e.message || String(e);
       } finally {
@@ -19067,70 +19085,61 @@
       }
 
       const s = _worldData.stats;
-      const done = s.done || 0;
-      const pct = Math.max(0, Math.min(100, s.pct || 0));
-      const completed = (s.sweeps || []).filter((x) => x.finished_at);
+      const me = _worldData.me && _worldData.me.found ? _worldData.me : null;
+      const d = s.dump || {};
+      const act = s.active || {};
+      const win = _worldActive;
+
+      // Activity scope. The dump only contains farms played in the last 90 days, so 90 is
+      // the widest window that means anything; ALL additionally shows farms carried over
+      // from before the CDN switch, which have no last_activity and so appear in no window.
+      const scopes = [["all", "ALL"], [90, "ACTIVE 90D"], [30, "ACTIVE 30D"]];
+      html += `<div class="pixel-panel pixel-font" style="padding:10px 14px;margin-bottom:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <span style="font-size:0.5625rem;color:var(--text-dim)">SHOW:</span>
+        ${scopes.map(([v, lbl]) => {
+          const on = (v === "all" && win == null) || v === win;
+          return `<button onclick="_worldSetActive('${v}')" class="pixel-font" style="
+            font-size:0.5625rem;padding:5px 10px;cursor:pointer;border:2px solid var(--border-dark);
+            background:${on ? "var(--sunpetal)" : "var(--bg-card)"};
+            color:${on ? "#000" : "var(--text-secondary)"}">${lbl}</button>`;
+        }).join("")}
+        <span style="font-size:0.5rem;color:var(--text-dim)">${
+          win == null ? "every farm in the dataset" : `farms that played within ${win} days`
+        }</span>
+      </div>`;
 
       html += `<div class="summary-bar pixel-panel pixel-font">
-        <div class="summary-stat"><div class="label">CRAWLED</div><div class="value">${_fmtNum(s.stored.farms)}</div></div>
-        <div class="summary-stat"><div class="label">THIS SWEEP</div><div class="value">${_fmtNum(done)}</div></div>
-        <div class="summary-stat"><div class="label">SPEED (10 MIN)</div><div class="value time">${_fmtNum(s.farms_per_hour)}/h</div></div>
-        <div class="summary-stat"><div class="label">ETA</div><div class="value pending">${_fmtDur(s.eta_ms)}</div></div>
-        <div class="summary-stat"><div class="label">FULL SWEEP</div><div class="value ${completed.length ? "complete" : ""}">${_fmtDur(completed.length ? completed[0].duration_ms : s.full_sweep_ms)}</div></div>
+        <div class="summary-stat"><div class="label">FARMS</div><div class="value">${_fmtNum(s.stored.farms)}</div></div>
+        <div class="summary-stat"><div class="label">PLAYED 24H</div><div class="value complete">${_fmtNum(act.d1)}</div></div>
+        <div class="summary-stat"><div class="label">PLAYED 7D</div><div class="value time">${_fmtNum(act.d7)}</div></div>
+        <div class="summary-stat"><div class="label">PLAYED 30D</div><div class="value">${_fmtNum(act.d30)}</div></div>
+        <div class="summary-stat"><div class="label">PLAYED 90D</div><div class="value">${_fmtNum(act.d90)}</div></div>
+        <div class="summary-stat"><div class="label">BLACKLISTED</div><div class="value pending">${_fmtNum(s.stored.blacklisted)}</div></div>
       </div>`;
 
-      // Progress bar against the expected population.
+      // Dataset provenance. This replaced a crawl-progress panel: there is no sweep or
+      // ETA any more, the data arrives as one daily file.
       html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
-        <div class="pixel-font" style="font-size:0.5625rem;color:var(--text-secondary);margin-bottom:6px">
-          SWEEP ${escHTML(s.sweep)} · ${_fmtNum(done)} / ${_fmtNum(s.total)} farms
-          (${pct.toFixed(2)}%) · total ${s.total_is_measured ? "measured from last full sweep" : "estimated — no full sweep yet"}
+        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">DATASET</div>
+        <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 8px;line-height:1.6">
+          Source: <b>${escHTML(s.source || "community CDN daily dump")}</b> — the whole public dataset,
+          published once a day as gzipped JSONL. It also carries <b>lastActivity</b> and
+          <b>isBlacklisted</b>, which no public API endpoint returns.
         </div>
-        <div style="height:14px;background:var(--bg-card);border:2px solid var(--border-dark)">
-          <div style="height:100%;width:${pct}%;background:var(--sunpetal)"></div>
-        </div>
-      </div>`;
-
-      // Coverage. The id space is tiled into chunks and a chunk is only marked done
-      // after paging actually crossed its upper bound, so this is a real coverage
-      // figure — and tiling_violations proves the tiles leave no gap to miss farms in.
-      const ch = s.chunks;
-      if (ch) {
-        const cpct = ch.total ? (ch.done / ch.total) * 100 : 0;
-        const cur = ch.current;
-        html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
-          <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">ID-SPACE COVERAGE</div>
-          <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 8px">
-            ${ch.done} / ${ch.total} ranges complete — a range counts only once paging passed its upper bound
-          </div>
-          <div style="height:14px;background:var(--bg-card);border:2px solid var(--border-dark);margin-bottom:8px">
-            <div style="height:100%;width:${cpct}%;background:var(--clover)"></div>
-          </div>
-          <table style="width:100%;border-collapse:collapse;font-family:'Courier New',monospace;font-size:0.75rem">
-            <tr><td>Complete</td><td style="text-align:right;color:var(--green)">${ch.done}</td></tr>
-            <tr><td>Pending</td><td style="text-align:right">${ch.pending}</td></tr>
-            <tr><td>Running</td><td style="text-align:right">${ch.running}</td></tr>
-            <tr><td>Blocked (upstream won't serve)</td><td style="text-align:right;color:${ch.blocked ? "var(--yellow)" : "var(--text-dim)"}">${ch.blocked}</td></tr>
-            <tr><td>Coverage gaps / overlaps</td><td style="text-align:right;color:${ch.tiling_violations ? "var(--red)" : "var(--green)"}">${ch.tiling_violations === 0 ? "none ✓" : ch.tiling_violations}</td></tr>
-            ${cur ? `<tr><td>Now crawling ids</td><td style="text-align:right">${_fmtNum(cur.from_id)} – ${cur.to_id == null ? "∞" : _fmtNum(cur.to_id)} (${_fmtNum(cur.farms)} farms)</td></tr>` : ""}
-          </table>
-        </div>`;
-      }
-
-      // Crawl health. A 5xx here is usually the upstream refusing an oversized page,
-      // not an outage — the crawler resizes and retries.
-      const r = s.requests;
-      html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
-        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px;margin-bottom:8px">CRAWLER HEALTH</div>
         <table style="width:100%;border-collapse:collapse;font-family:'Courier New',monospace;font-size:0.75rem">
-          <tr><td>Requests OK</td><td style="text-align:right;color:var(--green)">${_fmtNum(r.ok)}</td></tr>
-          <tr><td>Rate limited (429)</td><td style="text-align:right;color:${r.rate_limited ? "var(--yellow)" : "var(--text-dim)"}">${_fmtNum(r.rate_limited)}</td></tr>
-          <tr><td>Upstream 5xx (page too big / bad record)</td><td style="text-align:right;color:${r.server_error ? "var(--yellow)" : "var(--text-dim)"}">${_fmtNum(r.server_error)}</td></tr>
-          <tr><td>Unservable ids stepped over</td><td style="text-align:right">${_fmtNum(s.skips.events)}</td></tr>
-          <tr><td>Page size / avg farm</td><td style="text-align:right">${_fmtNum(s.window_size)} farms</td></tr>
-          <tr><td>Position (last farm id)</td><td style="text-align:right">${s.last_id == null ? "—" : escHTML(String(s.last_id))}</td></tr>
-          <tr><td>Last updated</td><td style="text-align:right">${s.updated_at ? new Date(s.updated_at).toLocaleString("cs-CZ") : "—"}</td></tr>
+          <tr><td>Dump</td><td style="text-align:right">${d.path ? escHTML(d.path) : "—"}</td></tr>
+          <tr><td>Generated</td><td style="text-align:right">${d.generated_at ? new Date(d.generated_at).toLocaleString("cs-CZ") : "—"}</td></tr>
+          <tr><td>Age</td><td style="text-align:right;color:${d.age_ms != null && d.age_ms > 36 * 3600000 ? "var(--yellow)" : "var(--text-secondary)"}">${_fmtDur(d.age_ms)}</td></tr>
+          <tr><td>Records loaded</td><td style="text-align:right">${_fmtNum(d.records_done)}</td></tr>
+          <tr><td>Farms changed</td><td style="text-align:right">${_fmtNum(d.changed)}</td></tr>
+          <tr><td>Unparseable lines</td><td style="text-align:right;color:${d.unparseable ? "var(--yellow)" : "var(--text-dim)"}">${_fmtNum(d.unparseable)}</td></tr>
+          <tr><td>Load time</td><td style="text-align:right">${_fmtDur(d.duration_ms)}</td></tr>
+          <tr><td>Status</td><td style="text-align:right;color:${d.complete ? "var(--green)" : "var(--yellow)"}">${d.complete ? "complete ✓" : "in progress / partial"}</td></tr>
+          <tr><td>Newest activity in data</td><td style="text-align:right">${s.stored.newest_activity ? new Date(s.stored.newest_activity).toLocaleString("cs-CZ") : "—"}</td></tr>
+          <tr><td>With activity data</td><td style="text-align:right">${_fmtNum(s.stored.with_activity)} / ${_fmtNum(s.stored.farms)}</td></tr>
+          <tr><td>Permanently banned</td><td style="text-align:right">${_fmtNum(s.stored.banned)}</td></tr>
         </table>
-        ${s.last_error ? `<div class="pixel-font" style="font-size:0.5rem;color:var(--yellow);margin-top:8px">last: ${escHTML(s.last_error)}</div>` : ""}
+        ${d.last_error ? `<div class="pixel-font" style="font-size:0.5rem;color:var(--yellow);margin-top:8px">last error: ${escHTML(d.last_error)}</div>` : ""}
       </div>`;
 
       // Players by island type — fixed-order categorical chart. Bars are already
@@ -19138,8 +19147,8 @@
       // would just repeat the label the bar already carries).
       html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
         <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY ISLAND</div>
-        <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">of ${_fmtNum(_worldData.islandRows.reduce((a, r) => a + r.n, 0))} farms crawled so far</div>
-        ${_barChart(_worldData.islandRows, { colorFor: (r) => islandColors[r.key] || LEVEL_BAR_COLOR, label: (r) => r.key, rowHeight: 28 })}
+        <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">of ${_fmtNum(_worldData.islandRows.reduce((a, r) => a + r.n, 0))} farms in the current scope</div>
+        ${_barChart(_worldData.islandRows, { colorFor: (r) => islandColors[r.key] || LEVEL_BAR_COLOR, label: (r) => r.key, rowHeight: 28, highlight: (r) => me && me.island_type === r.key })}
       </div>`;
 
       // Players by exact Bumpkin level (not banded) — level has no ceiling past 200,
@@ -19148,7 +19157,7 @@
       html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
         <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY SKILL POINTS</div>
         <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">Skill points earned from XP <b>as it stands now</b> — food still sitting uneaten does not count. This is the game's getTotalBumpkinLevel (1 point per level, ascension bands included), so post-ascension reads 150 + 50 per completed band + the level within it. <b>Caveat above 200:</b> the game caps pre-ascension skill points there, so higher values are this curve (x1.03 XP per level) extrapolated — they keep extreme farms distinguishable but are not points the game grants.</div>
-        ${_barChart(_worldData.levelRows, { colorFor: () => LEVEL_BAR_COLOR, label: (r) => `${r.key} sp`, rowHeight: 14, labelWidth: 46, maxHeight: 420 })}
+        ${_barChart(_worldData.levelRows, { colorFor: () => LEVEL_BAR_COLOR, label: (r) => `${r.key} sp`, rowHeight: 14, labelWidth: 46, maxHeight: 420, highlight: (r) => me && me.total_level === r.key })}
       </div>`;
 
       // The same ladder, but counting food the farm has cooked and not yet eaten —
@@ -19164,7 +19173,7 @@
           much level is sitting in inventories. Same scale and the same above-200 caveat as
           the chart above.
         </div>
-        ${_barChart(_worldData.effLevelRows, { colorFor: () => REACH_ASC_COLOR, label: (r) => `${r.key} sp`, rowHeight: 14, labelWidth: 46, maxHeight: 420 })}
+        ${_barChart(_worldData.effLevelRows, { colorFor: () => REACH_ASC_COLOR, label: (r) => `${r.key} sp`, rowHeight: 14, labelWidth: 46, maxHeight: 420, highlight: (r) => me && me.effective_level === r.key })}
       </div>`;
 
       // How far each farm COULD expand with what it already has banked — not where it
@@ -19188,6 +19197,7 @@
           colorFor: (r) => (decodeReachSlot(r.key).ascension >= 1 ? REACH_ASC_COLOR : REACH_PRE_COLOR),
           label: (r) => decodeReachSlot(r.key).label,
           rowHeight: 14, labelWidth: 72, maxHeight: 420,
+          highlight: (r) => me && me.reach_slot === r.key,
         })}
       </div>`;
 
@@ -19210,26 +19220,6 @@
                 <td style="text-align:right;width:52px;color:var(--text-dim)">${share.toFixed(1)}%</td>
               </tr>`;
             }).join("")}
-          </table>
-        </div>`;
-      }
-
-      // Completed sweeps — the only source of a real full-sweep duration.
-      if (completed.length) {
-        html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
-          <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px;margin-bottom:8px">COMPLETED SWEEPS</div>
-          <table style="width:100%;border-collapse:collapse;font-family:'Courier New',monospace;font-size:0.75rem">
-            <tr class="pixel-font" style="font-size:0.5rem;color:var(--text-dim)">
-              <td>#</td><td style="text-align:right">FARMS</td><td style="text-align:right">DURATION</td><td style="text-align:right">429</td><td style="text-align:right">5xx</td><td style="text-align:right">SKIPPED</td>
-            </tr>
-            ${completed.map((x) => `<tr>
-              <td>${escHTML(x.sweep)}</td>
-              <td style="text-align:right">${_fmtNum(x.farms)}</td>
-              <td style="text-align:right">${_fmtDur(x.duration_ms)}</td>
-              <td style="text-align:right">${_fmtNum(x.req_429)}</td>
-              <td style="text-align:right">${_fmtNum(x.req_5xx)}</td>
-              <td style="text-align:right">${_fmtNum(x.skipped)}</td>
-            </tr>`).join("")}
           </table>
         </div>`;
       }

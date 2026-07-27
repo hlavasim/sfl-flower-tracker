@@ -12,11 +12,14 @@ const COL_TYPES = {
   total_level: "integer", effective_level: "integer",
   balance: "double precision", coins: "double precision", gems: "double precision",
   ban_status: "text", verified: "boolean", vip_until: "timestamptz", inventory: "jsonb", inventory_hash: "text",
+  last_activity: "timestamptz", is_blacklisted: "boolean",
   game_data: "jsonb", reach_slot: "integer",
 };
 const COLS = Object.keys(COL_TYPES);
 const CAST_LIST = COLS.map((c) => `${c}::${COL_TYPES[c]}`).join(",");
-const UPDATE_COLS = COLS.filter((c) => c !== "farm_id");
+const UPDATE_COLS = COLS.filter((c) => c !== "farm_id" &&
+  // handled explicitly with COALESCE below, since only the CDN provides them
+  c !== "last_activity" && c !== "is_blacklisted");
 
 /**
  * Upsert farm rows and append a change-log row for each one whose tracked scalars moved.
@@ -62,6 +65,9 @@ async function persistFarmRows(pool, rows, sweep) {
        -- COALESCE keeps the refresh path (sweep = NULL) from wiping the sweep marker
        -- that discovery set, and from clearing an earlier last_changed_at.
        sweep=COALESCE(EXCLUDED.sweep, farm_world.sweep),
+       -- Only the CDN supplies these, so an API-sourced upsert must not erase them.
+       last_activity=COALESCE(EXCLUDED.last_activity, farm_world.last_activity),
+       is_blacklisted=COALESCE(EXCLUDED.is_blacklisted, farm_world.is_blacklisted),
        last_changed_at=COALESCE(EXCLUDED.last_changed_at, farm_world.last_changed_at)`,
     params
   );
