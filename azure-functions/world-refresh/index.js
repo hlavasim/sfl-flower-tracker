@@ -32,6 +32,21 @@ const GAP_MS = 16000;                 // same rate limit as the cursor endpoint
 // observed so that costs a smaller request rather than a failed one plus a bisect.
 const TARGET_BYTES = 4.5e6;
 const MIN_BATCH = 10;
+
+// Only re-refresh farms that still look alive, so the cycle shortens as dead farms fall
+// out of the window instead of the loop dragging all 656k around forever.
+//
+// The signal is our own observation, not a game field: the batch payloads carry no
+// last-played time (the wrapper `updatedAt` that does is single-farm only, and
+// `bumpkin.updatedAt` means "bumpkin last modified" — it reads 2023 on a farm played
+// daily). So COALESCE(last_changed_at, first_seen_at) is used: the last time we had any
+// evidence the farm was alive. A freshly discovered farm is always included, because
+// first_seen_at is recent and we do not yet know either way — the filter only drops
+// farms we have positively watched sit still for the whole window.
+//
+// A farm that comes back after the window is missed here by design; the full cursor
+// sweep re-visits everything, notices the change, and it re-enters this pool.
+const ACTIVE_DAYS = Number(process.env.WORLD_REFRESH_ACTIVE_DAYS || 30);
 const BUDGET_MS = 4 * 60 * 1000;      // timer is every 15 min, host allows 10
 const MAX_BACKOFF_MS = 120000;
 
@@ -114,11 +129,15 @@ module.exports = async function (context) {
       `SELECT f.farm_id FROM farm_world f
          LEFT JOIN crawl_bad_ids b ON b.farm_id = f.farm_id AND b.recovered_at IS NULL
         WHERE b.farm_id IS NULL
+          AND COALESCE(f.last_changed_at, f.first_seen_at) > NOW() - ($2 || ' days')::interval
         ORDER BY f.last_seen_at ASC
         LIMIT $1`,
-      [batchSize]
+      [batchSize, ACTIVE_DAYS]
     );
-    if (!rows.length) { context.log("nothing to refresh"); break; }
+    if (!rows.length) {
+      context.log(`nothing to refresh — no known farm has shown activity within ${ACTIVE_DAYS} days`);
+      break;
+    }
     const ids = rows.map((r) => Number(r.farm_id));
 
     let farms = null;
@@ -168,7 +187,7 @@ module.exports = async function (context) {
   // resume on its very next tick.
   await pool.query("UPDATE crawl_state SET refresh_until = NULL WHERE id = 1");
 
-  context.log(`Refresh tick: ${batches} batches, ${refreshed} farms refreshed, ` +
+  context.log(`Refresh tick (active window ${ACTIVE_DAYS}d): ${batches} batches, ${refreshed} farms refreshed, ` +
     `${changes} changed, ${newBad} new unservable ids, ${rateLimited} rate-limited` +
     ` | ${Math.round(bytesPerFarm / 1024)}KB/farm`);
 };

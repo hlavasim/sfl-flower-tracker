@@ -152,3 +152,19 @@ CREATE INDEX IF NOT EXISTS idx_fw_efflevel ON farm_world(effective_level);
 -- budget on backoff sleeps. world-refresh claims this window; world-crawl skips its
 -- tick while it is held, giving a predictable split instead of contention.
 ALTER TABLE crawl_state ADD COLUMN IF NOT EXISTS refresh_until TIMESTAMPTZ;
+
+-- Activity filter for the refresh loop.
+--
+-- No extra index: EXPLAIN ANALYZE on the real query shows the planner walking
+-- idx_fw_seen (the ORDER BY last_seen_at path) and applying the COALESCE as a filter,
+-- stopping at LIMIT 100 — 0.3 ms. An index on the COALESCE expression went unused, so
+-- it would only add write cost on every one of 656k rows.
+--
+-- There is no usable game-side "last played" field in the batch payloads: the wrapper
+-- `updatedAt` (which IS last-played) is only returned by the single-farm endpoint, and
+-- `bumpkin.updatedAt` means "bumpkin last modified" — it reads 2023-06-06 on farm
+-- 155498, which is played daily, so filtering on it would drop active farms. So
+-- activity is taken from our OWN observations instead: last_changed_at is set whenever
+-- a farm's tracked scalars move, and first_seen_at bounds farms we have never yet seen
+-- change. COALESCE(last_changed_at, first_seen_at) is therefore "the last time we had
+-- any evidence this farm was alive".
