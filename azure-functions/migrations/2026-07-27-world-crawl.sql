@@ -139,3 +139,10 @@ GRANT SELECT ON farm_world, farm_world_changes, crawl_state, crawl_sweeps, crawl
 -- would put "A1-10" before "A1-2". See azure-functions/shared/expansion-reach.js.
 ALTER TABLE farm_world ADD COLUMN IF NOT EXISTS reach_slot INTEGER;
 CREATE INDEX IF NOT EXISTS idx_fw_reach ON farm_world(reach_slot);
+
+-- Level a farm would be at after eating the food it already has cooked, valued with
+-- that farm's own cooking boosts and a simulated x1.5 pet streak (the boosts come
+-- from core/engine/cooking.mjs via shared/cooking-xp.js). total_level is the plain,
+-- un-fed level; this is the fed one.
+ALTER TABLE farm_world ADD COLUMN IF NOT EXISTS effective_level INTEGER;
+CREATE INDEX IF NOT EXISTS idx_fw_efflevel ON farm_world(effective_level);

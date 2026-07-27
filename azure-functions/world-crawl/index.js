@@ -1,6 +1,7 @@
 const { getPool } = require("../shared/db");
 const { fetchFarmsBatch, encodeCursor, decodeCursor } = require("../shared/api");
 const { extractFarm, diffFarm, SCALARS } = require("../shared/world-extract");
+const { loadCookingEngine } = require("../shared/cooking-xp");
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -53,7 +54,7 @@ const COL_TYPES = {
   total_level: "integer",
   balance: "double precision", coins: "double precision", gems: "double precision",
   ban_status: "text", verified: "boolean", vip_until: "timestamptz", inventory: "jsonb",
-  game_data: "jsonb", reach_slot: "integer",
+  game_data: "jsonb", reach_slot: "integer", effective_level: "integer",
 };
 const COLS = Object.keys(COL_TYPES);
 const CAST_LIST = COLS.map((c) => `${c}::${COL_TYPES[c]}`).join(",");
@@ -204,6 +205,20 @@ module.exports = async function (context) {
   const t0 = Date.now();
   const s = await loadState(pool);
   if (!s) { context.log.error("crawl_state row missing — run the migration"); return; }
+
+  // Boost-aware banked-food XP feeds effective_level and the expansion reach. It lives
+  // in core/, which is vendored into this function app by scripts/copy-core.mjs — if
+  // that step was skipped the import fails, and writing understated levels for every
+  // farm would be worse than not writing at all, so bail loudly instead.
+  const cooking = await loadCookingEngine();
+  if (!cooking.ok) {
+    context.log.error(`cooking engine unavailable (${cooking.error}) — did you run ` +
+      `scripts/copy-core.mjs before publishing? Refusing to crawl rather than store ` +
+      `understated levels.`);
+    s.last_error = `cooking engine unavailable: ${cooking.error}`;
+    await saveState(pool, s);
+    return;
+  }
 
   // Ids the upstream has already proven it cannot serve. Kept in memory for the tick
   // so stepping over them costs no HTTP request and no query.
@@ -372,7 +387,7 @@ module.exports = async function (context) {
     // alternative is throwing away farms we already paid a request for.
     let rows = [];
     if (list.length) {
-      rows = list.map(extractFarm);
+      rows = list.map((entry) => extractFarm(entry, cooking.bankedFoodXp));
       changes += await persistPage(pool, rows, s.sweep);
       s.farms_this_sweep = Number(s.farms_this_sweep) + rows.length;
       chunk.farms += rows.length;

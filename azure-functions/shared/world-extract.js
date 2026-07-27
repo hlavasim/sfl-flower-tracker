@@ -115,8 +115,8 @@ function totalBumpkinLevel(xp, ascensionLevel) {
 /** Scalar fields tracked in the change log, in insert order. */
 const SCALARS = [
   "username", "island_type", "island_biome", "ascension_level", "expansions",
-  "island_upgraded_at", "xp", "total_level", "balance", "coins", "gems", "ban_status",
-  "verified", "vip_until",
+  "island_upgraded_at", "xp", "total_level", "effective_level", "balance", "coins",
+  "gems", "ban_status", "verified", "vip_until",
 ];
 
 // Fields dropped from the stored game_data: the game keeps these as "before the
@@ -127,7 +127,7 @@ const SCALARS = [
 // dropping them loses no information, only ~6-7% of raw farm size.
 const DROP_FROM_GAME_DATA = ["previousInventory", "previousWardrobe", "previousBalance"];
 
-function extractFarm(entry) {
+function extractFarm(entry, bankedFoodXp) {
   const f = entry.farm || {};
   const island = f.island || {};
   const inv = f.inventory || {};
@@ -135,6 +135,9 @@ function extractFarm(entry) {
   const xp = num(f.bumpkin?.experience) ?? 0;
   const gameData = { ...f };
   for (const k of DROP_FROM_GAME_DATA) delete gameData[k];
+  // Required lazily: expansion-reach needs the level helpers from THIS module, so a
+  // top-level require would be a cycle.
+  const reach = require("./expansion-reach").computeReach(f, bankedFoodXp);
   return {
     farm_id: entry.id,
     nft_id: entry.nftId ?? null,
@@ -157,7 +160,11 @@ function extractFarm(entry) {
     // Furthest expansion this farm could reach right now with what it has banked.
     // Required lazily: expansion-reach.js needs the level helpers from THIS module,
     // so a top-level require would be a cycle.
-    reach_slot: require("./expansion-reach").computeReach(f).slot,
+    reach_slot: reach.slot,
+    // Level from xp PLUS boost-aware banked food XP — the level a farm would be at
+    // after eating what it already has cooked, with its own cooking boosts and a
+    // simulated x1.5 pet streak. total_level above is the plain, un-fed level.
+    effective_level: totalBumpkinLevel(reach.xp, ascensionLevel),
     // Full per-farm state (minus the shadow fields above) so a future stat doesn't
     // need a code change + redeploy + a full sweep to become available — see the
     // storage note in migrations/2026-07-27-world-crawl.sql. Not scalar-diffed

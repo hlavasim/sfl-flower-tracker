@@ -18982,11 +18982,12 @@
       _worldLoading = true; _worldErr = null;
       try {
         const getJson = (url) => fetch(url).then((r) => r.json());
-        const [stats, islandAgg, levelAgg, reachAgg, ...breakdowns] = await Promise.all([
+        const [stats, islandAgg, levelAgg, reachAgg, effLevelAgg, ...breakdowns] = await Promise.all([
           getJson(`${WORLD_API}&mode=stats`),
           getJson(`${WORLD_API}&mode=agg&group=island_type`).catch(() => ({ rows: [] })),
           getJson(`${WORLD_API}&mode=agg&group=total_level&limit=1000`).catch(() => ({ rows: [] })),
           getJson(`${WORLD_API}&mode=agg&group=reach_slot&limit=1000`).catch(() => ({ rows: [] })),
+          getJson(`${WORLD_API}&mode=agg&group=effective_level&limit=1000`).catch(() => ({ rows: [] })),
           ...worldBreakdowns.map((b) =>
             getJson(`${WORLD_API}&mode=agg&group=${encodeURIComponent(b.key)}`)
               .then((j) => ({ ...b, rows: j.rows || [] }))
@@ -19031,7 +19032,15 @@
           }
         }
 
-        _worldData = { stats, islandRows, levelRows, reachRows, breakdowns };
+        // Same one-row-per-level gap fill as the plain level chart.
+        const effSeen = new Map(
+          (effLevelAgg.rows || []).filter((r) => r.key != null).map((r) => [Number(r.key), r.n])
+        );
+        const effMax = effSeen.size ? Math.max(...effSeen.keys()) : 0;
+        const effLevelRows = [];
+        for (let lvl = 1; lvl <= effMax; lvl++) effLevelRows.push({ key: lvl, n: effSeen.get(lvl) || 0 });
+
+        _worldData = { stats, islandRows, levelRows, reachRows, effLevelRows, breakdowns };
       } catch (e) {
         _worldErr = e.message || String(e);
       } finally {
@@ -19138,8 +19147,23 @@
       // whatever the crawl has found so far. Long list -> scroll, not truncation.
       html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
         <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY BUMPKIN LEVEL</div>
-        <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">one row per level, 1 through the highest level found so far (ascension keeps this uncapped past 200)</div>
+        <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">Level from XP <b>as it stands now</b> — food still sitting uneaten does not count. One row per level, 1 through the highest found (ascension keeps this uncapped past 200).</div>
         ${_barChart(_worldData.levelRows, { colorFor: () => LEVEL_BAR_COLOR, label: (r) => `Lv ${r.key}`, rowHeight: 14, labelWidth: 46, maxHeight: 420 })}
+      </div>`;
+
+      // The same ladder, but counting food the farm has cooked and not yet eaten —
+      // valued with that farm's own cooking boosts and a simulated x1.5 pet streak,
+      // because a player waits for the streak before eating a stockpile.
+      html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY LEVEL — AFTER EATING BANKED FOOD</div>
+        <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px;line-height:1.6">
+          Level each farm would reach by eating the food it already has cooked. The bank is
+          valued with that farm's <b>real cooking boosts</b> (skills, items, sculptures) and a
+          <b>simulated x1.5 pet streak</b> — players wait for the streak before eating a
+          stockpile, so anything less understates it. Compare with the chart above to see how
+          much level is sitting in inventories.
+        </div>
+        ${_barChart(_worldData.effLevelRows, { colorFor: () => REACH_ASC_COLOR, label: (r) => `Lv ${r.key}`, rowHeight: 14, labelWidth: 46, maxHeight: 420 })}
       </div>`;
 
       // How far each farm COULD expand with what it already has banked — not where it

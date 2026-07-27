@@ -82,15 +82,19 @@ function encodeSlot(island, ascension, expansions) {
 
 /**
  * Bumpkin XP including food already cooked and sitting in the inventory but not yet
- * eaten — the user asked for that to count, since eating it is a formality.
- * Uses BASE recipe XP: the game's real value also depends on per-farm cooking boosts
- * (skills, collectibles, pet streak), and detecting those per farm across 656k farms
- * would pull in a large slice of the boost engine for an aggregate distribution. So
- * this is a floor, not an exact figure.
+ * eaten, since eating it is a formality.
+ *
+ * `bankedFoodXp` is injected (see shared/cooking-xp.js) so the real, boost-aware
+ * value from core/engine/cooking.mjs is used — the farm's cooking skills, items,
+ * sculptures and a simulated x1.5 pet streak all change what the bank is worth.
+ * If no function is passed, this falls back to BASE recipe XP, which understates
+ * every boosted farm; callers that care pass the real one.
  */
-function effectiveXp(farm) {
+function effectiveXp(farm, bankedFoodXp) {
+  const base = Number(farm.bumpkin?.experience) || 0;
+  if (typeof bankedFoodXp === "function") return base + bankedFoodXp(farm);
   const inv = farm.inventory || {};
-  let xp = Number(farm.bumpkin?.experience) || 0;
+  let xp = base;
   for (const [food, foodXp] of Object.entries(DATA.cookingXp)) {
     const n = qty(inv, food);
     if (n > 0) xp += n * foodXp;
@@ -117,16 +121,19 @@ function spend(stock, cost) {
 }
 
 /**
- * @returns {{slot:number, steps:number, blockedBy:string}} reach of this farm
+ * @param {object} farm  the farm game_data
+ * @param {(farm:any)=>number} [bankedFoodXp]  boost-aware banked-food XP; omit only
+ *        where an understated, unboosted floor is acceptable
+ * @returns {{slot:number, startSlot:number, steps:number, blockedBy:string, xp:number}}
  */
-function computeReach(farm) {
+function computeReach(farm, bankedFoodXp) {
   const inv = farm.inventory || {};
   const island0 = farm.island?.type || "basic";
   let ascension = Math.max(0, Math.floor(farm.island?.ascensionLevel || 0));
   let island = ascension >= 1 ? "swamp" : (PHASES.includes(island0) ? island0 : "basic");
   let expansions = qty(inv, "Basic Land");
 
-  const xp = effectiveXp(farm);
+  const xp = effectiveXp(farm, bankedFoodXp);
   // Pre-ascension gates read the plain Bumpkin level; swamp gates read the level
   // WITHIN the current band, which drops when a farm ascends (the band baseline
   // moves up while xp stays put), so it is recomputed per ascension below.
@@ -206,7 +213,7 @@ function computeReach(farm) {
     steps++;
   }
 
-  return { slot: encodeSlot(island, ascension, expansions), startSlot, steps, blockedBy };
+  return { slot: encodeSlot(island, ascension, expansions), startSlot, steps, blockedBy, xp };
 }
 
-module.exports = { computeReach, decodeSlot, encodeSlot, GATING_RESOURCES, GATE_COINS };
+module.exports = { computeReach, decodeSlot, encodeSlot, effectiveXp, GATING_RESOURCES, GATE_COINS };

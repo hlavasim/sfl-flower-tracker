@@ -24,13 +24,16 @@ const DIMS = {
   // slot so it sorts numerically (phase*1000 + expansions). Computed at crawl time —
   // see azure-functions/shared/expansion-reach.js.
   reach_slot: "reach_slot",
+  // Level after eating the food the farm already has cooked, valued with that farm's
+  // own cooking boosts and a simulated x1.5 pet streak. total_level is the un-fed one.
+  effective_level: "effective_level",
   // Bucketed dimensions for histogram-style breakdowns.
   xp_bucket: "width_bucket(xp, 0, 200000000, 20)",
   level_bucket: "least(floor(expansions / 5) * 5, 100)",
 };
 
 // Columns that may be aggregated.
-const MEASURES = { xp: "xp", balance: "balance", coins: "coins", gems: "gems", expansions: "expansions", ascension_level: "ascension_level", total_level: "total_level", reach_slot: "reach_slot" };
+const MEASURES = { xp: "xp", balance: "balance", coins: "coins", gems: "gems", expansions: "expansions", ascension_level: "ascension_level", total_level: "total_level", reach_slot: "reach_slot", effective_level: "effective_level" };
 const FUNCS = { count: null, sum: "SUM", avg: "AVG", min: "MIN", max: "MAX", median: "PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY" };
 const OPS = { eq: "=", ne: "<>", gt: ">", gte: ">=", lt: "<", lte: "<=" };
 

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { computeReach, decodeSlot, encodeSlot } =
+const { computeReach, decodeSlot, encodeSlot, effectiveXp } =
   require("../../azure-functions/shared/expansion-reach.js");
 
 /**
@@ -115,4 +115,40 @@ test("encode/decode round-trips", () => {
     assert.equal(d.expansions, e);
     assert.equal(d.ascension, a);
   }
+});
+
+/**
+ * The boost-aware path. The crawler feeds computeReach a bankedFoodXp function backed
+ * by core/engine/cooking.mjs; this imports core/ DIRECTLY (not the vendored copy the
+ * function app gets) so the test fails if core/ and the reach contract drift apart.
+ */
+test("boost-aware banked food XP is worth more than base recipe XP", async () => {
+  const { detectCookingBoosts, computeFoodXP } = await import("../../core/engine/cooking.mjs");
+  const { COOKING_RECIPES_DATA } = await import("../../core/data/cooking.mjs");
+  const bankedFoodXp = (farm) => {
+    const inv = farm.inventory || {};
+    const boosts = detectCookingBoosts(farm, { petSimulate: true });
+    let total = 0;
+    for (const [food, recipe] of Object.entries(COOKING_RECIPES_DATA)) {
+      const n = Math.floor(parseFloat(inv[food] ?? 0));
+      if (Number.isFinite(n) && n > 0) total += n * computeFoodXP(food, recipe, recipe.building, boosts);
+    }
+    return total;
+  };
+
+  // A farm holding cooked food, with a cooking XP boost equipped.
+  const farm = {
+    island: { type: "basic" }, coins: 0,
+    bumpkin: { experience: 0, equipped: { tool: "Pan" } },
+    inventory: { "Basic Land": "4", "Pumpkin Soup": "1000" },
+  };
+  const boosted = effectiveXp(farm, bankedFoodXp);
+  const base = effectiveXp(farm);
+  assert.ok(boosted > base,
+    `Pan (+25% XP) and the simulated pet streak must raise the bank: ${base} -> ${boosted}`);
+
+  // And the simulated pet streak alone is worth x1.5 on an unboosted farm.
+  const plain = { ...farm, bumpkin: { experience: 0 } };
+  assert.ok(effectiveXp(plain, bankedFoodXp) > effectiveXp(plain),
+    "petSimulate should apply even with no items or skills");
 });
