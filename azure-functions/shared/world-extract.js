@@ -3,6 +3,33 @@
 // isBlacklisted NOR updatedAt (unlike the single-farm endpoint); ban state is
 // read from farm.ban.status instead. Verified against live data 2026-07-27.
 
+const crypto = require("crypto");
+
+/**
+ * Order-independent fingerprint of an inventory, so inventory movement counts as
+ * activity without the diff having to read the whole JSONB column on every row.
+ *
+ * Normalisation matters more than the hash here:
+ *  - keys are sorted, because JSON key order is not guaranteed stable between responses
+ *  - entries that are zero or unparseable are dropped, so a farm the API sometimes sends
+ *    `"Wood": "0"` for and sometimes omits does not look like it changed
+ *  - values are hashed as String(raw), NOT as parsed floats: quantities arrive as
+ *    strings like "1935.0131743333386759" and round-tripping them through a double
+ *    would lose digits. String() still collapses the string/number distinction if the
+ *    API ever switches representation.
+ */
+function inventoryHash(inv) {
+  const parts = [];
+  for (const k of Object.keys(inv || {}).sort()) {
+    const raw = inv[k];
+    const n = typeof raw === "string" ? parseFloat(raw) : raw;
+    if (!Number.isFinite(n) || n === 0) continue;
+    parts.push(`${k}=${String(raw)}`);
+  }
+  // 16 hex chars is 64 bits — ample for change detection, and cheap to store/compare.
+  return crypto.createHash("sha1").update(parts.join("|")).digest("hex").slice(0, 16);
+}
+
 const num = (v) => {
   const n = typeof v === "string" ? parseFloat(v) : v;
   return Number.isFinite(n) ? n : null;
@@ -163,6 +190,9 @@ const SCALARS = [
   "username", "island_type", "island_biome", "ascension_level", "expansions",
   "island_upgraded_at", "xp", "total_level", "effective_level", "balance", "coins",
   "gems", "ban_status", "verified", "vip_until",
+  // Included so a farm that only moves items — planting seeds, shuffling stock — still
+  // registers as active, which the scalar columns alone would miss.
+  "inventory_hash",
 ];
 
 // Fields dropped from the stored game_data: the game keeps these as "before the
@@ -203,6 +233,7 @@ function extractFarm(entry, bankedFoodXp) {
     verified: typeof f.verified === "boolean" ? f.verified : null,
     vip_until: ts(f.vip?.expiresAt),
     inventory: inv,
+    inventory_hash: inventoryHash(inv),
     // Furthest expansion this farm could reach right now with what it has banked.
     // Required lazily: expansion-reach.js needs the level helpers from THIS module,
     // so a top-level require would be a cycle.
@@ -242,4 +273,4 @@ function diffFarm(prev, next) {
   return Object.keys(d).length ? d : null;
 }
 
-module.exports = { extractFarm, diffFarm, SCALARS, totalBumpkinLevel, withinAscensionLevel };
+module.exports = { extractFarm, diffFarm, SCALARS, totalBumpkinLevel, withinAscensionLevel, inventoryHash };

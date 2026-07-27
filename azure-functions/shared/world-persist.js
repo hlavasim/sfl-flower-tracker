@@ -11,7 +11,7 @@ const COL_TYPES = {
   expansions: "integer", island_upgraded_at: "timestamptz", xp: "double precision",
   total_level: "integer", effective_level: "integer",
   balance: "double precision", coins: "double precision", gems: "double precision",
-  ban_status: "text", verified: "boolean", vip_until: "timestamptz", inventory: "jsonb",
+  ban_status: "text", verified: "boolean", vip_until: "timestamptz", inventory: "jsonb", inventory_hash: "text",
   game_data: "jsonb", reach_slot: "integer",
 };
 const COLS = Object.keys(COL_TYPES);

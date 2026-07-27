@@ -168,3 +168,10 @@ ALTER TABLE crawl_state ADD COLUMN IF NOT EXISTS refresh_until TIMESTAMPTZ;
 -- a farm's tracked scalars move, and first_seen_at bounds farms we have never yet seen
 -- change. COALESCE(last_changed_at, first_seen_at) is therefore "the last time we had
 -- any evidence this farm was alive".
+
+-- Fingerprint of the inventory, tracked as a scalar so item movement counts as activity.
+-- Without it a farm that only plants seeds (inventory down, xp/coins unmoved) reads as
+-- unchanged, which would let the refresh window drop farms that are actually being
+-- played. Must be backfilled when added: comparing NULL against a fresh hash would mark
+-- every farm changed on its next visit and reset everyone's activity window at once.
+ALTER TABLE farm_world ADD COLUMN IF NOT EXISTS inventory_hash TEXT;
