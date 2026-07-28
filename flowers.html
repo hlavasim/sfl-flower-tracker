@@ -18976,11 +18976,11 @@
       // resolved promise settles in a microtask, so a warm switch never flashes.
       if (!_nodeDistCache.has(`${key}|${_worldActive || "all"}`)) {
         _worldNodeLoading = true;
-        renderWorld();
+        _worldRepaintNodePanel();   // shows the selected button + "načítám…" immediately
       }
       const j = await _fetchNodeDist(key);
       _worldNodeLoading = false;
-      if (_worldNode === key) { _applyNodeDist(j); renderWorld(); }
+      if (_worldNode === key) { _applyNodeDist(j); _worldRepaintNodePanel(); }
     };
 
     /*
@@ -19065,6 +19065,9 @@
     }
 
     let _worldData = null, _worldErr = null, _worldLoading = false;
+    // True while an activity-scope change is in flight. The old charts stay on screen and
+    // this only drives a small indicator, instead of wiping the page to a loading panel.
+    let _worldScopeLoading = false;
     // Activity window scoping every chart. null = whole dataset. The dump only contains
     // farms played in the last 90 days, so 90 is the widest window with real meaning;
     // "ALL" additionally includes farms carried over from before the CDN switch.
@@ -19075,8 +19078,17 @@
       // remaining requests would be wasted DB work competing with the reload below.
       // Safe to touch directly — this only ever runs from a click, long after init.
       _prefetchToken++;
-      _worldData = null; _worldErr = null;
-      renderWorld();
+      /*
+       * _worldData is deliberately NOT cleared. Clearing it dropped the page to a "Loading
+       * crawl stats..." panel and then rebuilt everything — a visible blink. Now the current
+       * charts stay on screen, greyed, until the new scope's data arrives and replaces them
+       * in one paint; with the aggregation cache that is ~0.2 s.
+       */
+      _worldErr = null;
+      _worldScopeLoading = true;
+      renderWorld();   // scope buttons show the new selection; old charts stay visible
+      // Explicit: renderWorld no longer triggers a fetch, because _worldData is still set.
+      _fetchWorld();
     };
 
     function _chartTipShow(evt, html) {
@@ -19312,6 +19324,7 @@
         _worldErr = e.message || String(e);
       } finally {
         _worldLoading = false;
+        _worldScopeLoading = false;
         if (getPage() === "world") renderWorld();
         // Warm the other node types once the page is on screen, so switching is instant.
         // Deliberately not awaited: the page must not wait on it.
@@ -19355,6 +19368,7 @@
             background:${on ? "var(--sunpetal)" : "var(--bg-card)"};
             color:${on ? "#000" : "var(--text-secondary)"}">${lbl}</button>`;
         }).join("")}
+        ${_worldScopeLoading ? `<span style="font-size:0.5rem;color:var(--text-dim)">načítám…</span>` : ""}
         <span style="font-size:0.5rem;color:var(--text-dim)">${
           win == null ? "every farm in the dataset" : `farms that played within ${win} days`
         }</span>
@@ -19466,16 +19480,54 @@
        * actually acquired — it measures cost, not output (a merged node yields slightly
        * more than the four it replaced).
        */
+      // Rendered into its own container so switching node type replaces just this subtree
+      // instead of rebuilding the page — see _worldRepaintNodePanel.
+      html += `<div id="world-node-panel">${_worldNodePanelHtml()}</div>`;
+
+      // Breakdowns — these are the point of the crawl.
+      for (const b of _worldData.breakdowns) {
+        if (!b.rows.length) continue;
+        const total = b.rows.reduce((a, x) => a + x.n, 0);
+        html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+          <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">${escHTML(b.label)}</div>
+          <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 8px">${escHTML(b.note)}</div>
+          <table style="width:100%;border-collapse:collapse;font-family:'Courier New',monospace;font-size:0.75rem">
+            ${b.rows.map((x) => {
+              const share = total ? (x.n / total) * 100 : 0;
+              return `<tr>
+                <td style="padding:2px 0">${escHTML(x.key === null ? "(none)" : String(x.key))}</td>
+                <td style="text-align:right;padding:2px 8px">${_fmtNum(x.n)}</td>
+                <td style="width:35%">
+                  <div style="height:8px;background:var(--bg-card)"><div style="height:100%;width:${share}%;background:var(--blue)"></div></div>
+                </td>
+                <td style="text-align:right;width:52px;color:var(--text-dim)">${share.toFixed(1)}%</td>
+              </tr>`;
+            }).join("")}
+          </table>
+        </div>`;
+      }
+      _worldRenderTail(html, app);
+    }
+
+    /*
+     * The node-distribution panel, built on its own so a type switch can repaint only this
+     * container. Previously the switch called renderWorld(), which does app.innerHTML = …
+     * for the whole page — the charts all blinked and every scrollable chart body jumped
+     * back to the top, for a change that affects one panel.
+     */
+    function _worldNodePanelHtml() {
+      if (!_worldData) return "";
+      const me = _worldData.me && _worldData.me.found ? _worldData.me : null;
+      const nm = _worldData.nodeMeta;
+      const def = buyableNodes.find((n) => n.key === (nm ? nm.node : _worldNode)) || buyableNodes[1];
+      const rows = _worldData.nodeRows || [];
       {
-        const nm = _worldData.nodeMeta;
-        const def = buyableNodes.find((n) => n.key === (nm ? nm.node : _worldNode)) || buyableNodes[1];
-        const rows = _worldData.nodeRows || [];
         const tot = rows.reduce((a, r) => a + r.n, 0);
         const withT2 = rows.reduce((a, r) => a + r.segments[1].n, 0);
         const withT3 = rows.reduce((a, r) => a + r.segments[2].n, 0);
         const meEff = nm && nm.me ? nm.me.eff : null;
         const pct = (v) => tot ? ((v / tot) * 100).toFixed(v / tot < 0.01 ? 2 : 1) + " %" : "—";
-        html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+        return `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
           <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">NODY KE KOUPI ZA OBSIDIAN${_worldNodeLoading ? ` <span style="color:var(--text-dim)">· načítám…</span>` : ""}</div>
           <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 8px;line-height:1.6">
             Kolik nodů daného typu farmy mají, v <b>T1-ekvivalentu</b> (<code>t1 + 4·t2 + 16·t3</code>) —
@@ -19517,35 +19569,21 @@
           })}
         </div>`;
       }
+    }
 
-      // Breakdowns — these are the point of the crawl.
-      for (const b of _worldData.breakdowns) {
-        if (!b.rows.length) continue;
-        const total = b.rows.reduce((a, x) => a + x.n, 0);
-        html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
-          <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">${escHTML(b.label)}</div>
-          <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 8px">${escHTML(b.note)}</div>
-          <table style="width:100%;border-collapse:collapse;font-family:'Courier New',monospace;font-size:0.75rem">
-            ${b.rows.map((x) => {
-              const share = total ? (x.n / total) * 100 : 0;
-              return `<tr>
-                <td style="padding:2px 0">${escHTML(x.key === null ? "(none)" : String(x.key))}</td>
-                <td style="text-align:right;padding:2px 8px">${_fmtNum(x.n)}</td>
-                <td style="width:35%">
-                  <div style="height:8px;background:var(--bg-card)"><div style="height:100%;width:${share}%;background:var(--blue)"></div></div>
-                </td>
-                <td style="text-align:right;width:52px;color:var(--text-dim)">${share.toFixed(1)}%</td>
-              </tr>`;
-            }).join("")}
-          </table>
-        </div>`;
-      }
-
+    function _worldRenderTail(html, app) {
       html += `<div class="footer">
         <button class="refresh-btn" onclick="_worldData=null;_worldErr=null;renderWorld()">REFRESH</button>
         <div class="timestamp pixel-font">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
       </div>`;
       app.innerHTML = html;
+    }
+
+    /** Repaint only the node panel — no page rebuild, no scroll jump. */
+    function _worldRepaintNodePanel() {
+      const el = document.getElementById("world-node-panel");
+      if (!el) { renderWorld(); return; }   // not on the page (or mid-load) — fall back
+      el.innerHTML = _worldNodePanelHtml();
     }
 
     // ═══════════════════════════════════════
