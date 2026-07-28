@@ -18952,12 +18952,11 @@
       return `#${_fmtNum(rk.rank)} of ${_fmtNum(rk.of)} · top ${pct}%`;
     }
 
-    /** One-line "where you stand" caption under a chart. */
-    function _youLine(label, value, rk) {
-      if (rk == null) return "";
-      return `<div class="pixel-font" style="font-size:0.5625rem;color:var(--sunpetal);margin:6px 0 2px">
-        ▶ YOU — ${escHTML(String(value))} · ${escHTML(_fmtRank(rk))}
-      </div>`;
+    /** Compact tag rendered on the viewer's own bar: "YOU (top 0.02% · #149)". */
+    function _youTag(rk) {
+      if (!rk) return "YOU";
+      const pct = rk.pct < 0.1 ? rk.pct.toFixed(2) : rk.pct.toFixed(1);
+      return `YOU (top ${pct}% · #${_fmtNum(rk.rank)})`;
     }
 
     /**
@@ -18985,8 +18984,12 @@
       const maxV = Math.max(1, ...rows.map((r) => r.n));
       const total = rows.reduce((a, r) => a + r.n, 0);
       const mono = "'Courier New',monospace";
-      // Room kept clear at the right of every track for the value label at the tip.
-      const VALUE_GUTTER = 46;
+      // Room kept clear at the right of every track for the value label at the tip. When
+      // a rank tag is shown it needs far more room, and the gutter widens for EVERY row —
+      // shrinking only the highlighted row's track would make its bar incomparable with
+      // the rest, which is the one thing a bar chart may not do.
+      const rankTag = opts.rankTag || null;
+      const VALUE_GUTTER = rankTag ? 150 : 46;
 
       // The viewer's own bar is marked with an outline, a caret and a YOU tag rather than
       // a fourth hue: adding a colour would break the validated palette, and a shape /
@@ -19008,7 +19011,7 @@
           <div style="font-family:${mono};font-size:0.5625rem;color:${mine ? "var(--sunpetal)" : "var(--text-dim)"};text-align:right;padding-right:6px;overflow:hidden;white-space:nowrap">${mine ? "▶" : ""}${escHTML(label)}</div>
           <div style="position:relative;height:${barH}px;margin-right:${VALUE_GUTTER}px;border-left:1px solid var(--border-brown)">
             ${w > 0 ? `<div data-tip="${tip}" style="position:absolute;left:0;top:0;height:100%;width:${w}%;background:${color};border-radius:0 4px 4px 0;cursor:pointer${mine ? ";outline:2px solid var(--sunpetal);outline-offset:1px" : ""}"></div>` : ""}
-            <div style="position:absolute;top:0;height:100%;left:${w}%;padding-left:5px;display:flex;align-items:center;gap:5px">${val}${mine ? `<span class="pixel-font" style="font-size:0.5rem;color:var(--sunpetal)">YOU</span>` : ""}</div>
+            <div style="position:absolute;top:0;height:100%;left:${w}%;padding-left:5px;display:flex;align-items:center;gap:5px">${val}${mine ? `<span class="pixel-font" style="font-size:0.5rem;color:var(--sunpetal);white-space:nowrap">${escHTML(rankTag || "YOU")}</span>` : ""}</div>
           </div>
         </div>`;
       }).join("");
@@ -19188,10 +19191,9 @@
       html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
         <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY ISLAND</div>
         <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">of ${_fmtNum(_worldData.islandRows.reduce((a, r) => a + r.n, 0))} farms in the current scope</div>
-        ${_barChart(_worldData.islandRows, { colorFor: (r) => islandColors[r.key] || LEVEL_BAR_COLOR, label: (r) => r.key, rowHeight: 28, highlight: (r) => me && me.island_type === r.key })}
-        ${me ? _youLine("island", me.island_type,
-            _rankIn(_worldData.islandRows, me.island_type,
-              (r) => islandOrder.indexOf(r.key) > islandOrder.indexOf(me.island_type))) : ""}
+        ${_barChart(_worldData.islandRows, { colorFor: (r) => islandColors[r.key] || LEVEL_BAR_COLOR, label: (r) => r.key, rowHeight: 28, highlight: (r) => me && me.island_type === r.key,
+          rankTag: me ? _youTag(_rankIn(_worldData.islandRows, me.island_type,
+            (r) => islandOrder.indexOf(r.key) > islandOrder.indexOf(me.island_type))) : null })}
       </div>`;
 
       // Players by exact Bumpkin level (not banded) — level has no ceiling past 200,
@@ -19200,9 +19202,8 @@
       html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
         <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY SKILL POINTS</div>
         <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">Skill points earned from XP <b>as it stands now</b> — food still sitting uneaten does not count. This is the game's getTotalBumpkinLevel (1 point per level, ascension bands included), so post-ascension reads 150 + 50 per completed band + the level within it. <b>Caveat above 200:</b> the game caps pre-ascension skill points there, so higher values are this curve (x1.03 XP per level) extrapolated — they keep extreme farms distinguishable but are not points the game grants.</div>
-        ${_barChart(_worldData.levelRows, { colorFor: () => LEVEL_BAR_COLOR, label: (r) => `${r.key} sp`, rowHeight: 14, labelWidth: 46, maxHeight: 420, highlight: (r) => me && me.total_level === r.key })}
-        ${me ? _youLine("skill points", `${_fmtNum(me.total_level)} sp`,
-            _rankIn(_worldData.levelRows, me.total_level, (r) => r.key > me.total_level)) : ""}
+        ${_barChart(_worldData.levelRows, { colorFor: () => LEVEL_BAR_COLOR, label: (r) => `${r.key} sp`, rowHeight: 14, labelWidth: 46, maxHeight: 420, highlight: (r) => me && me.total_level === r.key,
+          rankTag: me ? _youTag(_rankIn(_worldData.levelRows, me.total_level, (r) => r.key > me.total_level)) : null })}
       </div>`;
 
       // The same ladder, but counting food the farm has cooked and not yet eaten —
@@ -19218,9 +19219,8 @@
           much level is sitting in inventories. Same scale and the same above-200 caveat as
           the chart above.
         </div>
-        ${_barChart(_worldData.effLevelRows, { colorFor: () => REACH_ASC_COLOR, label: (r) => `${r.key} sp`, rowHeight: 14, labelWidth: 46, maxHeight: 420, highlight: (r) => me && me.effective_level === r.key })}
-        ${me ? _youLine("skill points after food", `${_fmtNum(me.effective_level)} sp`,
-            _rankIn(_worldData.effLevelRows, me.effective_level, (r) => r.key > me.effective_level)) : ""}
+        ${_barChart(_worldData.effLevelRows, { colorFor: () => REACH_ASC_COLOR, label: (r) => `${r.key} sp`, rowHeight: 14, labelWidth: 46, maxHeight: 420, highlight: (r) => me && me.effective_level === r.key,
+          rankTag: me ? _youTag(_rankIn(_worldData.effLevelRows, me.effective_level, (r) => r.key > me.effective_level)) : null })}
       </div>`;
 
       // How far each farm COULD expand with what it already has banked — not where it
@@ -19245,9 +19245,8 @@
           label: (r) => decodeReachSlot(r.key).label,
           rowHeight: 14, labelWidth: 72, maxHeight: 420,
           highlight: (r) => me && me.reach_slot === r.key,
+          rankTag: me ? _youTag(_rankIn(_worldData.reachRows, me.reach_slot, (r) => r.key > me.reach_slot)) : null,
         })}
-        ${me ? _youLine("reach", decodeReachSlot(me.reach_slot).label,
-            _rankIn(_worldData.reachRows, me.reach_slot, (r) => r.key > me.reach_slot)) : ""}
       </div>`;
 
       // Breakdowns — these are the point of the crawl.
