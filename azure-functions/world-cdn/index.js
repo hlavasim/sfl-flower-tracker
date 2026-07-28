@@ -1,6 +1,7 @@
 const { getPool } = require("../shared/db");
 const { loadCookingEngine } = require("../shared/cooking-xp");
 const { latestDump, dumpUrl, ingestStream } = require("../shared/cdn-ingest");
+const { warmWorldAgg } = require("../shared/world-warm");
 
 /*
  * Daily ingest of the community CDN's `active.jsonl.gz` — farms played in the last 90
@@ -49,7 +50,13 @@ module.exports = async function (context) {
   const resuming = state && state.dump_path === dump.path && !state.complete;
   const skip = resuming ? Number(state.records_done || 0) : 0;
   if (state && state.dump_path === dump.path && state.complete) {
-    context.log(`${dump.path} already fully ingested (${state.records_done} records) — nothing to do`);
+    context.log(`${dump.path} already fully ingested (${state.records_done} records)`);
+    // The ingest is done, so the World page's charts are stale for this generation. Warming
+    // them here rather than leaving it to whoever loads the page first: the "all" scope
+    // costs ~19 s per chart against 656k rows, and that should not land on a visitor.
+    // Idempotent — it skips whatever is already cached, so the 15-minute poll finishes the
+    // job across invocations if one run runs out of budget.
+    await warmWorldAgg(pool, (m) => context.log(m));
     return;
   }
   context.log(`ingesting ${dump.path} (${(dump.size / 1e6).toFixed(0)} MB, generated ` +
