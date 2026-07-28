@@ -19068,6 +19068,9 @@
     // True while an activity-scope change is in flight. The old charts stay on screen and
     // this only drives a small indicator, instead of wiping the page to a loading panel.
     let _worldScopeLoading = false;
+    // Scroll offset to restore once a scope change has finished painting; null = nothing to
+    // restore (first load, or the reader is where they want to be).
+    let _worldRestoreY = null;
     // Activity window scoping every chart. null = whole dataset. The dump only contains
     // farms played in the last 90 days, so 90 is the widest window with real meaning;
     // "ALL" additionally includes farms carried over from before the CDN switch.
@@ -19086,6 +19089,14 @@
        */
       _worldErr = null;
       _worldScopeLoading = true;
+      /*
+       * Remember where the reader is and restore it only once the new data has been painted.
+       * Restoring around each individual paint was not enough: the scope change repaints
+       * twice (selection first, data second) and the offset read at the second paint was
+       * already 0, so it "restored" 0. Measured: 300 -> 0 with per-paint restore, held with
+       * this.
+       */
+      _worldRestoreY = (document.scrollingElement || document.documentElement).scrollTop;
       renderWorld();   // scope buttons show the new selection; old charts stay visible
       // Explicit: renderWorld no longer triggers a fetch, because _worldData is still set.
       _fetchWorld();
@@ -19325,7 +19336,20 @@
       } finally {
         _worldLoading = false;
         _worldScopeLoading = false;
-        if (getPage() === "world") renderWorld();
+        if (getPage() === "world") {
+          renderWorld();
+          // Put the reader back where they were before the scope change. Two frames: the
+          // first lets layout settle after the repaint, the second catches content that is
+          // still growing.
+          if (_worldRestoreY) {
+            const y = _worldRestoreY;
+            _worldRestoreY = null;
+            const se = document.scrollingElement || document.documentElement;
+            const put = () => { if (se.scrollTop !== y) se.scrollTop = y; };
+            put();
+            requestAnimationFrame(() => { put(); requestAnimationFrame(put); });
+          }
+        }
         // Warm the other node types once the page is on screen, so switching is instant.
         // Deliberately not awaited: the page must not wait on it.
         if (!_worldErr) _prefetchNodeDists();
