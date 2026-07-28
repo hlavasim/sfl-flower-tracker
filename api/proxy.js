@@ -19,16 +19,27 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: "Domain not allowed" });
   }
 
-  // Cache external API responses (not per-user farm data)
-  const CACHEABLE = [
-    "https://sfl.world/",
-    "https://api.coingecko.com/",
+  /*
+   * Shared cache for external API responses, with a per-target TTL.
+   *
+   * The farm endpoint is cached too, briefly. One page load fires several /api/compute calls
+   * in parallel (power, prices, cooking, treasury, roi …); each lands on a different
+   * serverless instance whose in-process cache is empty, so each fetched the same farm again
+   * and the upstream started answering 502. Measured on a cold load: two 502s on
+   * section=treasury and a ~9 s page. A 20-second shared TTL collapses them into one upstream
+   * fetch while still being far fresher than anything a user would notice — and this proxy
+   * already serves that exact response to any caller, so nothing new is exposed.
+   */
+  const CACHE_RULES = [
+    { prefix: "https://sfl.world/", ttl: 300 },
+    { prefix: "https://api.coingecko.com/", ttl: 300 },
+    { prefix: "https://api.sunflower-land.com/community/farms/", ttl: 20 },
   ];
-  const shouldCache = CACHEABLE.some(prefix => url.startsWith(prefix));
+  const rule = CACHE_RULES.find(r => url.startsWith(r.prefix));
   const apiUrl = process.env.KV_REST_API_URL;
   const token = process.env.KV_REST_API_TOKEN;
-  const canCache = shouldCache && apiUrl && token;
-  const CACHE_TTL = 300; // 5 minutes
+  const canCache = !!rule && !!apiUrl && !!token;
+  const CACHE_TTL = rule ? rule.ttl : 0;
 
   if (canCache) {
     try {
