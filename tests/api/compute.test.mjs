@@ -258,3 +258,54 @@ test("farm fetch failure after a success serves the stale farm instead of 502", 
     globalThis.fetch = orig;
   }
 });
+
+// Routes every upstream the ascension section touches: farm, p2p prices, nfts, exchange.
+function mockFetchForAscension() {
+  const nfts = readFileSync(new URL("../fixtures/nfts-sample.json", import.meta.url), "utf8");
+  return async (url) => {
+    const u = String(url);
+    if (u.includes("v1/prices")) return { ok: true, status: 200, json: async () => ({ data: { p2p: JSON.parse(p2pText) } }) };
+    if (u.includes("v1/nfts")) return { ok: true, status: 200, json: async () => ({ data: JSON.parse(nfts) }) };
+    if (u.includes("exchange")) return { ok: true, status: 200, json: async () => ({ data: {} }) };
+    if (u.includes("coingecko")) return { ok: true, status: 200, json: async () => ({}) };
+    return { ok: true, status: 200, json: async () => JSON.parse(fixtureText) };
+  };
+}
+
+async function ascensionRates(query) {
+  _clearCacheForTests();
+  const res = mockRes();
+  await handler({ query: { farm: "155498", section: "ascension", ...query }, body: { snapshots: [] } }, res);
+  assert.equal(res._status, 200, "ascension section responded");
+  return res._json.data;
+}
+
+test("section=ascension rates XP with the pet boost even when petSimulate is not requested", async () => {
+  const orig = globalThis.fetch;
+  globalThis.fetch = mockFetchForAscension();
+  try {
+    // The section's banked-food XP hardcodes the x1.5 pet streak. If the XP RATE were left
+    // to the query param, the page (which does not send it) would value food already owned
+    // at x1.5 while rating food still to be cooked unboosted — inflating every level ETA.
+    const off = await ascensionRates({});
+    const on = await ascensionRates({ petSimulate: "1" });
+    assert.ok(off.rates.xpPerDay > 0, "an XP rate is reported");
+    assert.equal(off.rates.xpPerDay, on.rates.xpPerDay,
+      "petSimulate must not change the ascension XP rate — it is forced on");
+
+    // Not vacuous: the same farm rated WITHOUT the pet boost is genuinely slower, so the
+    // equality above is the boost being applied rather than the fixture having no pet.
+    _clearCacheForTests();
+    const plain = mockRes();
+    await handler({ query: { farm: "155498", section: "cooking" } }, plain);
+    assert.equal(plain._status, 200);
+    assert.ok(plain._json.data.totalXpPerDay < off.rates.xpPerDay,
+      `unboosted cooking rate ${plain._json.data.totalXpPerDay} must be below the ` +
+      `pet-boosted ascension rate ${off.rates.xpPerDay}`);
+
+    // And the bank it is compared against is pet-boosted, which is the whole point.
+    assert.ok(off.current.bankedFoodXp > 0, "banked food XP is reported for the level gates");
+  } finally {
+    globalThis.fetch = orig;
+  }
+});

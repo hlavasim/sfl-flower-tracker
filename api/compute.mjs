@@ -318,7 +318,19 @@ export default async function handler(req, res) {
       const [nftResult, exchange] = await Promise.all([fetchNfts(), fetchExchange()]);
       if (!nftResult.ok) return res.status(502).json({ error: `nfts fetch failed: ${nftResult.status}` });
       const powerData = buildPowerSection(farm, p2p, nftResult.data, exchange, settings);
-      const cooking = _cookingForAscension(farm, p2p, settings);
+      /*
+       * petSimulate is forced on for the ascension section's XP rate, not left to the
+       * query param. The section's banked-food XP hardcodes the pet boost (ascension.mjs:
+       * "the user eats with the x1.5 pet-streak boost active"), so with the param off the
+       * page valued the food you ALREADY have optimistically at x1.5 while rating the food
+       * you will COOK at the unboosted rate. That mismatch only inflated level ETAs: on a
+       * real farm the next band read 16.4h instead of 10.9h, because xpPerDay came out
+       * 620,609 instead of 930,913 against the same 19.19M pet-boosted bank.
+       *
+       * Forcing it here rather than adding `&petSimulate=1` at the call sites keeps the two
+       * halves consistent for every caller, so a third fetch cannot reintroduce the skew.
+       */
+      const cooking = _cookingForAscension(farm, p2p, { ...settings, petSimulate: true });
       let input = {};
       input = _parseBody(req.body);
       const effData = roadmapComputeEfficiency(Array.isArray(input.snapshots) ? input.snapshots : []);
