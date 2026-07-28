@@ -15748,16 +15748,7 @@
     async function buildPowerState(data) {
       const { inventory, farm } = data;
       const url = `/api/compute?farm=${FARM_ID}&section=power&products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}&roadmap=${encodeURIComponent(localStorage.getItem("sfl_roadmap_settings") || "{}")}`;
-      let payload, lastErr;
-      for (let a = 0; a < 3; a++) {
-        try {
-          const rp = await fetch(url);
-          if (!rp.ok) throw new Error(`compute power ${rp.status}`);
-          payload = await rp.json();
-          break;
-        } catch (e) { lastErr = e; if (a < 2) await new Promise(r => setTimeout(r, 1000 * (a + 1))); }
-      }
-      if (!payload) throw lastErr;
+      const payload = await _fetchCompute(url);
       const d = payload.data || {};
       // Rebuild category → boosts mapping (shared refs into boostItems)
       const catBoosts = {};
@@ -18845,9 +18836,9 @@
       (async () => {
         try {
           const q = `products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}&roadmap=${encodeURIComponent(localStorage.getItem("sfl_roadmap_settings") || "{}")}`;
-          const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=power&${q}&formulaFor=${encodeURIComponent(boostName)}&formulaCat=${encodeURIComponent(catId)}`);
-          if (!rp.ok) throw new Error(`compute power ${rp.status}`);
-          const d = (await rp.json()).data || {};
+          const d = (await _fetchCompute(
+            `/api/compute?farm=${FARM_ID}&section=power&${q}&formulaFor=${encodeURIComponent(boostName)}&formulaCat=${encodeURIComponent(catId)}`,
+            { tries: 2 })).data || {};
           detail.innerHTML = d.formulaHtml || `<div class="power-formula pixel-font" style="color:var(--red)">No derivation available.</div>`;
         } catch (e) {
           detail.innerHTML = `<div class="power-formula pixel-font" style="color:var(--red)">Failed to load derivation: ${escHTML(e.message)}</div>`;
@@ -19802,6 +19793,38 @@
       el.innerHTML = h;
     }
 
+    /*
+     * /api/compute wrapped in a retry that reports WHAT failed.
+     *
+     * The handler answers 502 when an upstream it cannot do without fails — the SFL farm API
+     * or sfl.world's NFT list. It keeps a last-good copy of both, but those live in the
+     * serverless instance's memory, so a cold start during an upstream blip has nothing to
+     * fall back on and the page showed a bare "compute power 502".
+     *
+     * Two changes: read the error body, so the message names the real cause instead of the
+     * status alone, and give a transient blip more room (4 tries, 1s/2s/4s) than the previous
+     * 3 tries over 3 seconds.
+     */
+    async function _fetchCompute(url, opts = {}) {
+      const tries = opts.tries || 4;
+      let lastErr;
+      for (let a = 0; a < tries; a++) {
+        try {
+          const rp = await fetch(url, opts.init);
+          if (!rp.ok) {
+            let why = "";
+            try { why = ((await rp.json()) || {}).error || ""; } catch {}
+            throw new Error(`compute ${rp.status}${why ? ` — ${why}` : ""}`);
+          }
+          return await rp.json();
+        } catch (e) {
+          lastErr = e;
+          if (a < tries - 1) await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, a)));
+        }
+      }
+      throw lastErr;
+    }
+
     // ── Node acquisition: EXPAND vs BUY (obsidian/sunstones) — from section=ascension ──
     // Shown on the Nodes and Roadmap pages. Fetches the ascension plan (reusing the
     // roadmap snapshots) and renders the per-profit-node cost comparison.
@@ -20008,16 +20031,8 @@
       // isDisabled flags don't change any applyBoosts result).
       let p2pPrices = {}, exchangeRates = { coinsPerSFL: 320, gemsPerSFL: 0 }, boostItems = [];
       try {
-        let payload, lastErr;
-        for (let a = 0; a < 3; a++) {
-          try {
-            const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=power&products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}`);
-            if (!rp.ok) throw new Error(`compute power ${rp.status}`);
-            payload = await rp.json();
-            break;
-          } catch (e) { lastErr = e; if (a < 2) await new Promise(r => setTimeout(r, 1000 * (a + 1))); }
-        }
-        if (!payload) throw lastErr;
+        const payload = await _fetchCompute(
+          `/api/compute?farm=${FARM_ID}&section=power&products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}`);
         const d = payload.data || {};
         p2pPrices = d.p2pPrices || {};
         exchangeRates = d.exchangeRates || exchangeRates;
