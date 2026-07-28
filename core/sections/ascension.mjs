@@ -340,10 +340,33 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
     bees: Object.keys(farm.beehives || {}).length,
     flowers: Object.keys((farm.flowers && farm.flowers.flowerBeds) || {}).length,
   };
-  const perNodeSfl = {};
+  /*
+   * Measured throughput efficiency, mirroring roadmapEffFactor in core/engine/roadmap.mjs:
+   * the measured ratio where the category has its own harvest signal, the farm's mean
+   * activity where it does not (bees), and 1 with no history at all. Obsidian is excluded
+   * for the reason given there — its value is already capped at one sale per week, so
+   * scaling it again double-counts the same limit.
+   */
+  const effRatioFor = (cat) => {
+    if (cat === "obsidian") return 1;
+    const e = effBy[cat];
+    if (e && e.measured) return e.ratio;
+    const mean = eff && typeof eff.meanRatio === "number" ? eff.meanRatio : 0;
+    return mean > 0 ? mean : 1;
+  };
+  /*
+   * What one node of a category is worth per day. boostedSfl is GROSS revenue and the
+   * category's production inputs (seeds, mining tools) sit in costPerDay, so the value has
+   * to be net of them; and it has to carry the same efficiency correction the resource
+   * rates below already apply, or the plan compares a theoretical income against realistic
+   * costs. Gross is kept alongside for reference.
+   */
+  const perNodeSfl = {}, grossPerNodeSfl = {};
   for (const [cat, n] of Object.entries(catNodeCount)) {
-    const sfl = (cats[cat] && cats[cat].boostedSfl) || 0;
-    perNodeSfl[cat] = n > 0 ? sfl / n : 0;
+    const cs = cats[cat] || {};
+    grossPerNodeSfl[cat] = n > 0 ? (cs.boostedSfl || 0) / n : 0;
+    const net = n > 0 ? Math.max(0, (cs.boostedSfl || 0) - (cs.costPerDay || 0)) / n : 0;
+    perNodeSfl[cat] = net * effRatioFor(cat);
   }
   // cooking cost per XP from the selected recipe of each building, xp/day-weighted
   let costPerXp = null;
@@ -491,37 +514,17 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
       farmEtaDays: s.sim && s.sim.eff ? s.sim.eff.farmEtaDays : null, buildSlotDays: s.buildSlotDays,
     });
   }
-  /*
-   * What one node of this type is actually worth per day. Two corrections over the plain
-   * perNodeSfl used by the step ROI above (left untouched on purpose — changing it would
-   * move the ascension plan's own numbers):
-   *
-   *   net — boostedSfl is GROSS revenue; the category's production inputs (seeds, tools)
-   *         live in costPerDay. Labelling gross revenue "profit" overstates it.
-   *   eff — the measured throughput ratio, the same correction obsidianPerDay beside it
-   *         already applies. Quoting one column theoretical and the other measured makes
-   *         them not comparable.
-   *
-   * Mirrors roadmapEffFactor / roadmap.mjs: measured ratio when the category has its own
-   * harvest signal, the farm's mean activity otherwise, and 1 with no history at all.
-   */
-  const effRatioFor = (cat) => {
-    const e = effBy[cat];
-    if (e && e.measured) return e.ratio;
-    const mean = eff && typeof eff.meanRatio === "number" ? eff.meanRatio : 0;
-    return mean > 0 ? mean : 1;
-  };
   // BUY: next few purchases per node type
   const nodeAcq = { obsidianPerDay, obsidianPrice, costPerXp, prodCost,
     obsidianPerSunstone: OBSIDIAN_PER_SUNSTONE, perType: {} };
   for (const node of PROFIT_NODES) {
     const cat = NODE_TO_CAT[node];
-    const cs = cats[cat] || {};
-    const nOwned = catNodeCount[cat] || 0;
-    const grossPerNode = perNodeSfl[cat] || 0;
-    const netPerNode = nOwned > 0 ? Math.max(0, (cs.boostedSfl || 0) - (cs.costPerDay || 0)) / nOwned : 0;
+    // Same figure the plan's step ROI uses — one source, so the table and the plan cannot
+    // disagree about what a node earns.
+    const profitPerDay = perNodeSfl[cat] || 0;
     const effRatio = effRatioFor(cat);
-    const profitPerDay = netPerNode * effRatio;
+    const grossPerNode = grossPerNodeSfl[cat] || 0;
+    const netPerNode = effRatio > 0 ? profitPerDay / effRatio : 0;
     const np = NODE_BUY[node];
     const owned = Object.keys(farm[np.fk] || {}).length;
     // The real escalation input: how many of this node the farm has BOUGHT.

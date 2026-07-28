@@ -269,7 +269,9 @@ test("node acquisition: per-node profit is NET of production cost and efficiency
     const n = Object.keys(farm[counts[cat]] || {}).length;
     const wantNet = Math.max(0, cs.boostedSfl - cs.costPerDay) / n;
     assert.ok(Math.abs(d.netPerNode - wantNet) < 1e-9, `${node}: net = (gross - cost) / nodes`);
-    assert.ok(Math.abs(d.profitPerDay - d.netPerNode * d.effRatio) < 1e-9, `${node}: profit = net x eff`);
+    // Against cats, NOT against d.netPerNode — netPerNode is derived back out of
+    // profitPerDay, so comparing the two would be circular and prove nothing.
+    assert.ok(Math.abs(d.profitPerDay - wantNet * d.effRatio) < 1e-9, `${node}: profit = net x eff`);
     // Gross is kept for reference and must never be the reported profit when either
     // correction actually bites.
     if (cs.costPerDay > 0) { sawCost = true; assert.ok(d.netPerNode < d.grossPerNode, `${node}: cost reduces net`); }
@@ -277,6 +279,40 @@ test("node acquisition: per-node profit is NET of production cost and efficiency
   }
   assert.ok(sawCost, "at least one category has a production cost, else the net check is vacuous");
   assert.ok(sawEff, "at least one category has a non-unit efficiency, else the eff check is vacuous");
+});
+
+test("the plan's step income uses the same corrected per-node value, not gross theoretical", () => {
+  // flowerPerDay drives every step's roiDays. Feeding it gross theoretical income while
+  // the costs are real made expansions look like they pay back sooner than they do.
+  const cats = powerData.categories.catSummaries;
+  const NODE_CAT = { "Crop Plot": "crops", "Fruit Patch": "fruits", Tree: "trees", "Stone Rock": "stone", "Iron Rock": "iron", "Gold Rock": "gold", "Crimstone Rock": "crimstone", "Oil Reserve": "oil", "Lava Pit": "obsidian", Beehive: "bees", "Flower Bed": "flowers" };
+  const perType = out.nodeAcq.perType;
+
+  let checked = 0, sawDrop = false;
+  for (const s of out.steps) {
+    let want = 0, gross = 0;
+    for (const [node, n] of Object.entries(s.nodesAdded || {})) {
+      const cat = NODE_CAT[node];
+      if (!cat) continue;
+      // For the seven profit nodes the value is the one the table reports, so table and
+      // plan are provably reading the same number.
+      if (perType[node]) { want += n * perType[node].profitPerDay; gross += n * perType[node].grossPerNode; }
+      else { want = NaN; break; }
+    }
+    if (!Number.isFinite(want) || want === 0) continue;
+    checked++;
+    assert.ok(Math.abs(s.flowerPerDay - want) < 1e-9,
+      `step ${s.island || ""} a${s.asc}e${s.expansion}: flowerPerDay ${s.flowerPerDay} should be the corrected ${want}`);
+    if (gross > want + 1e-9) sawDrop = true;
+    // ROI must be derived from that same corrected income.
+    if (s.roiDays != null && want > 0) {
+      const cost = (s.costSfl || 0) + (s.levelCostSfl || 0);
+      assert.ok(Math.abs(s.roiDays - cost / want) < 1e-6, "roiDays = cost / corrected income");
+    }
+  }
+  assert.ok(checked > 0, "at least one step adds a profit node, else nothing was verified");
+  assert.ok(sawDrop, "the correction must actually reduce income somewhere, else it is a no-op");
+  assert.ok(cats.trees, "sanity: category summaries present");
 });
 
 test("node acquisition: expand reports the UNDIVIDED cost of the whole expansion too", () => {

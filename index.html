@@ -19645,6 +19645,11 @@
         const mark = (side, who) => side === who ? `<span style="color:${WIN}">✓</span> ` : "";
         const col = (side, who) => side === who ? `color:${WIN};font-weight:bold` : "";
         const dim = "color:var(--text-dim);font-size:0.5rem";
+        // Which expansion the expand figures come from, and where the buy path's obsidian
+        // count comes from. Both were a second row under every node, which is more visual
+        // weight than provenance deserves — they hang off the cells they describe instead.
+        const exTip = ex ? tip(`${ex.label}${ex.bundle > 1 ? ` — dá ${ex.bundle} nody` : ""}${ex.farmEtaDays == null ? "" : ex.farmEtaDays > 0 ? `, materiál dofarmíš za ${fmtEta(ex.farmEtaDays)}` : ", materiál už máš"}`) : "";
+        const buTip = bu ? tip(`${bu.sunstones} sunstone × ${na.obsidianPerSunstone || 3} obsidiany = ${bu.obsidian} obsidianu`) : "";
 
         let verdict, vcol = "var(--text-dim)";
         if (!ex) { verdict = "jen koupit (žádná expanze v plánu)"; }
@@ -19660,21 +19665,15 @@
         h += `<tr style="border-top:1px solid #1d1710">
           <td style="text-align:left;padding:5px 6px;white-space:nowrap">${gi(node)}${escHTML(node)}<span style="color:var(--text-dim);font-size:0.46rem"> ${d.currentCount}&nbsp;ks</span></td>
           <td style="text-align:right;padding:5px 6px;color:var(--text-dim);white-space:nowrap">${d.profitPerDay.toFixed(2)}${FLOWER}${d.effRatio != null ? ` <span style="font-size:0.46rem;opacity:.7">×${d.effRatio.toFixed(2)}${d.effMeasured ? "" : "~"}</span>` : ""}</td>
-          <td style="text-align:right;padding:5px 6px;background:#17120c;white-space:nowrap;${col("expand", obsWin)}">${ex ? `${mark("expand", obsWin)}${exObs > 0 ? `${kf(exObs)}${OBS} <span style="color:var(--text-dim);font-size:0.46rem">(${fmtEta(ex.totalObsidianDays)})</span>` : `0${OBS}`}` : "—"}</td>
-          <td style="text-align:right;padding:5px 6px;background:#17120c;white-space:nowrap;${dim}">${ex ? `${ex.obsidian > 0 ? kf(ex.obsidian) : "0"}${OBS}` : "—"}</td>
-          <td style="text-align:right;padding:5px 6px;background:#17120c;white-space:nowrap;${col("buy", obsWin)}">${bu ? `${mark("buy", obsWin)}${buObs}${OBS} <span style="color:var(--text-dim);font-size:0.46rem">(${fmtEta(bu.obsidianDays)})</span>` : "—"}</td>
-          <td style="text-align:right;padding:5px 6px;white-space:nowrap;${col("expand", matWin)}">${ex ? `${mark("expand", matWin)}${kf(ex.totalMatSfl)}${ex.totalMatUnpriced ? "≥" : ""}${FLOWER}` : "—"}</td>
-          <td style="text-align:right;padding:5px 6px;white-space:nowrap;${dim}">${ex ? `${kf(ex.matSfl)}${ex.matUnpriced ? "≥" : ""}${FLOWER}` : "—"}</td>
-          <td style="text-align:right;padding:5px 6px;white-space:nowrap;${col("buy", matWin)}">${buMat != null ? `${mark("buy", matWin)}${kf(buMat)}${FLOWER}` : "?"}</td>
+          <td title="${exTip}" style="text-align:right;padding:5px 6px;background:#17120c;white-space:nowrap;cursor:help;${col("expand", obsWin)}">${ex ? `${mark("expand", obsWin)}${exObs > 0 ? `${kf(exObs)}${OBS} <span style="color:var(--text-dim);font-size:0.46rem">(${fmtEta(ex.totalObsidianDays)})</span>` : `0${OBS}`}` : "—"}</td>
+          <td title="${exTip}" style="text-align:right;padding:5px 6px;background:#17120c;white-space:nowrap;cursor:help;${dim}">${ex ? `${ex.obsidian > 0 ? kf(ex.obsidian) : "0"}${OBS}` : "—"}</td>
+          <td title="${buTip}" style="text-align:right;padding:5px 6px;background:#17120c;white-space:nowrap;cursor:help;${col("buy", obsWin)}">${bu ? `${mark("buy", obsWin)}${buObs}${OBS} <span style="color:var(--text-dim);font-size:0.46rem">(${fmtEta(bu.obsidianDays)})</span>` : "—"}</td>
+          <td title="${exTip}" style="text-align:right;padding:5px 6px;white-space:nowrap;cursor:help;${col("expand", matWin)}">${ex ? `${mark("expand", matWin)}${kf(ex.totalMatSfl)}${ex.totalMatUnpriced ? "≥" : ""}${FLOWER}` : "—"}</td>
+          <td title="${exTip}" style="text-align:right;padding:5px 6px;white-space:nowrap;cursor:help;${dim}">${ex ? `${kf(ex.matSfl)}${ex.matUnpriced ? "≥" : ""}${FLOWER}` : "—"}</td>
+          <td title="${buTip}" style="text-align:right;padding:5px 6px;white-space:nowrap;cursor:help;${col("buy", matWin)}">${buMat != null ? `${mark("buy", matWin)}${kf(buMat)}${FLOWER}` : "?"}</td>
           <td style="text-align:left;padding:5px 6px;color:${vcol};font-size:0.5rem">${escHTML(verdict)}</td>
         </tr>`;
 
-        // Detail row: where the buy path's obsidian figure comes from, and which expansion
-        // the expand figures belong to. No material list — see the note above.
-        h += `<tr><td></td><td></td>
-          <td colspan="3" style="padding:0 6px 6px;background:#17120c;color:var(--text-dim);font-size:0.46rem;text-align:right">${bu ? `${bu.sunstones}${ui("Sunstone")} × ${na.obsidianPerSunstone || 3}${OBS}` : ""}</td>
-          <td colspan="4" style="padding:0 6px 6px;color:var(--text-dim);font-size:0.46rem">${ex ? `${escHTML(ex.label)}${ex.bundle > 1 ? ` · dá ${ex.bundle} nody` : ""}${ex.farmEtaDays == null ? "" : ex.farmEtaDays > 0 ? ` · za ${fmtEta(ex.farmEtaDays)}` : " · materiál už máš"}` : ""}</td>
-        </tr>`;
       }
       h += `</tbody></table></div></div>`;
       return h;
