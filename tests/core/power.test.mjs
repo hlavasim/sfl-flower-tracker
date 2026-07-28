@@ -219,3 +219,23 @@ test("non-sellable resources produce no FLOWER income, but keep their units and 
   assert.ok(Math.abs(out.categories.totalBoostedSfl - sellable) < 1e-9,
     "totalBoostedSfl excludes the non-sellable categories");
 });
+
+test("the page's NON_SELLABLE_PRODUCTS matches the core port's", () => {
+  // core/engine/power-costs.mjs is a PORT of flowers.html's unitToSfl; each file keeps its
+  // own copy. Patching only core left the Nodes advisor still quoting +23.9 FLOWER/day for
+  // a Lava Pit while the API reported 0 — this pins the two together so the next edit to
+  // one cannot silently leave the other behind.
+  const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
+  const grab = (src, where) => {
+    const m = src.match(/NON_SELLABLE_PRODUCTS\s*=\s*new Set\(\[([\s\S]*?)\]\)/);
+    assert.ok(m, `NON_SELLABLE_PRODUCTS not found in ${where}`);
+    return [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]).sort();
+  };
+  const page = grab(read("../../flowers.html"), "flowers.html");
+  const core = grab(read("../../core/engine/power-costs.mjs"), "core/engine/power-costs.mjs");
+  assert.ok(page.length > 0, "the set is not empty");
+  assert.deepEqual(page, core, "flowers.html and the core port must list the same resources");
+  // Obsidian is the one that actually mattered; keep it named so a well-meaning trim of the
+  // list cannot quietly reintroduce the bug this was written for.
+  assert.ok(page.includes("Obsidian") && page.includes("Oil"), "obsidian and oil are excluded");
+});
