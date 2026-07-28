@@ -19192,7 +19192,14 @@
       // shrinking only the highlighted row's track would make its bar incomparable with
       // the rest, which is the one thing a bar chart may not do.
       const rankTag = opts.rankTag || null;
-      const VALUE_GUTTER = rankTag ? 150 : 46;
+      /*
+       * Sized from the tag's actual length, not a fixed 150px. "YOU (top 3.3% · #158)" is 21
+       * characters — about 105px at this type size — and with the value and gaps it needed
+       * ~162px, so the row's highlight ended mid-"%" and the rank number fell outside it.
+       * Both are painted after the track, so anything the gutter does not reserve escapes
+       * the row box entirely.
+       */
+      const VALUE_GUTTER = rankTag ? Math.ceil(rankTag.length * 5.4) + 64 : 46;
 
       // The viewer's own bar is marked with an outline, a caret and a YOU tag rather than
       // a fourth hue: adding a colour would break the validated palette, and a shape /
