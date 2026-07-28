@@ -183,9 +183,15 @@ test("grinx halves the three resource costs but not coins", () => {
 test("node acquisition: expand (rolling dead-cost, equal split) vs buy (sunstones)", () => {
   const na = out.nodeAcq;
   assert.ok(na && na.perType, "nodeAcq present");
-  // only the 7 profit nodes; no Oil/Beehive/Lava/Flower/Sunstone
+  // The seven sellable profit nodes plus Lava Pit — included despite earning no FLOWER
+  // because obsidian is the currency this whole comparison is denominated in, so the pit is
+  // the one purchase that unlocks the others. Still no Oil/Beehive/Flower/Sunstone.
   assert.deepEqual(Object.keys(na.perType).sort(),
-    ["Crimstone Rock", "Crop Plot", "Fruit Patch", "Gold Rock", "Iron Rock", "Stone Rock", "Tree"]);
+    ["Crimstone Rock", "Crop Plot", "Fruit Patch", "Gold Rock", "Iron Rock", "Lava Pit", "Stone Rock", "Tree"]);
+  assert.equal(na.perType["Lava Pit"].sellable, false, "Lava Pit output cannot be sold");
+  assert.ok(na.perType["Lava Pit"].unitsPerNode > 0, "so its return is reported in units/day");
+  assert.equal(na.perType["Lava Pit"].profitPerDay, 0, "and its FLOWER income is zero");
+  assert.equal(na.perType.Tree.sellable, true, "wood, by contrast, is sellable");
   // Buying pays SUNSTONE (buyResource.ts), and sunstone is bought with obsidian 3:1
   // (exchangeObsidian.ts). What the old test got wrong was not the x3 — that is real —
   // but the escalation input, which it never checked at all.
@@ -260,8 +266,8 @@ test("node acquisition: per-node profit is NET of production cost and efficiency
   // profit as theoretical gross made the two columns non-comparable — and calling gross
   // revenue "profit" overstated it (tools/seeds sit in the category's costPerDay).
   const cats = powerData.categories.catSummaries;
-  const NODE_CAT = { "Crop Plot": "crops", "Fruit Patch": "fruits", Tree: "trees", "Stone Rock": "stone", "Iron Rock": "iron", "Gold Rock": "gold", "Crimstone Rock": "crimstone" };
-  const counts = { crops: "crops", fruits: "fruitPatches", trees: "trees", stone: "stones", iron: "iron", gold: "gold", crimstone: "crimstones" };
+  const NODE_CAT = { "Crop Plot": "crops", "Fruit Patch": "fruits", Tree: "trees", "Stone Rock": "stone", "Iron Rock": "iron", "Gold Rock": "gold", "Crimstone Rock": "crimstone", "Lava Pit": "obsidian" };
+  const counts = { crops: "crops", fruits: "fruitPatches", trees: "trees", stone: "stones", iron: "iron", gold: "gold", crimstone: "crimstones", obsidian: "lavaPits" };
 
   let sawCost = false, sawEff = false;
   for (const [node, d] of Object.entries(out.nodeAcq.perType)) {
@@ -274,7 +280,13 @@ test("node acquisition: per-node profit is NET of production cost and efficiency
     assert.ok(Math.abs(d.profitPerDay - wantNet * d.effRatio) < 1e-9, `${node}: profit = net x eff`);
     // Gross is kept for reference and must never be the reported profit when either
     // correction actually bites.
-    if (cs.costPerDay > 0) { sawCost = true; assert.ok(d.netPerNode < d.grossPerNode, `${node}: cost reduces net`); }
+    // Only meaningful where there IS revenue to reduce: a non-sellable category has gross
+    // and net both structurally zero (see the non-sellable test in power.test.mjs).
+    if (cs.costPerDay > 0 && d.sellable) { sawCost = true; assert.ok(d.netPerNode < d.grossPerNode, `${node}: cost reduces net`); }
+    if (!d.sellable) {
+      assert.equal(d.grossPerNode, 0, `${node}: non-sellable output earns nothing`);
+      assert.equal(d.profitPerDay, 0, `${node}: and contributes no profit`);
+    }
     if (d.effRatio !== 1) { sawEff = true; assert.ok(Math.abs(d.profitPerDay - d.netPerNode) > 1e-12, `${node}: eff moves profit`); }
   }
   assert.ok(sawCost, "at least one category has a production cost, else the net check is vacuous");

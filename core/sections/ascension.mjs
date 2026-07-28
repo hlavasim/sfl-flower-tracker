@@ -420,16 +420,27 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
   // (carried dead cost + its own), split EQUALLY among the profit nodes it adds.
   // BUY cost per node: the N-th bought node costs base+idx×increase Sunstones =
   // ×3 Obsidian, priced at the Obsidian market price; time = Obsidian ÷ eff/day.
-  const PROFIT_NODES = new Set(["Crop Plot", "Fruit Patch", "Tree", "Stone Rock", "Iron Rock", "Gold Rock", "Crimstone Rock"]);
+  /*
+   * Nodes the acquisition table covers. Lava Pit is included even though it earns no
+   * FLOWER — obsidian cannot be sold (TradeResource in the game's tradeLimits.ts excludes
+   * it), and the pit is the only source of the very resource this comparison is denominated
+   * in, so leaving it out made the table silent about the one purchase that unlocks the
+   * others. Its return is reported in obsidian/day instead of FLOWER/day.
+   */
+  const PROFIT_NODES = new Set(["Crop Plot", "Fruit Patch", "Tree", "Stone Rock", "Iron Rock", "Gold Rock", "Crimstone Rock", "Lava Pit"]);
   // exchangeObsidian.ts OBSIDIAN_PRICE — 3 obsidian buys 1 sunstone, on click.
   const OBSIDIAN_PER_SUNSTONE = 3;
+  // Prices from the game's RESOURCE_NODE_PRICES (events/landExpansion/buyResource.ts).
   const NODE_BUY = {
     "Crop Plot": { base: 3, inc: 2, fk: "crops" }, "Fruit Patch": { base: 5, inc: 5, fk: "fruitPatches" },
     "Tree": { base: 4, inc: 3, fk: "trees" }, "Stone Rock": { base: 4, inc: 3, fk: "stones" },
     "Iron Rock": { base: 7, inc: 5, fk: "iron" }, "Gold Rock": { base: 10, inc: 6, fk: "gold" },
     "Crimstone Rock": { base: 20, inc: 20, fk: "crimstones" },
+    "Lava Pit": { base: 40, inc: 40, fk: "lavaPits" },
   };
-  const NODE_TO_CAT = { "Crop Plot": "crops", "Fruit Patch": "fruits", "Tree": "trees", "Stone Rock": "stone", "Iron Rock": "iron", "Gold Rock": "gold", "Crimstone Rock": "crimstone" };
+  const NODE_TO_CAT = { "Crop Plot": "crops", "Fruit Patch": "fruits", "Tree": "trees", "Stone Rock": "stone", "Iron Rock": "iron", "Gold Rock": "gold", "Crimstone Rock": "crimstone", "Lava Pit": "obsidian" };
+  // Categories whose output cannot be sold — reported in units/day, never as FLOWER income.
+  const NON_SELLABLE_CATS = new Set(["obsidian", "oil"]);
   const obsidianPrice = p2pP["Obsidian"] || 0;
   const obsidianPerDay = (rates.Obsidian && rates.Obsidian.eff) || 0;
 
@@ -525,6 +536,12 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
     const effRatio = effRatioFor(cat);
     const grossPerNode = grossPerNodeSfl[cat] || 0;
     const netPerNode = effRatio > 0 ? profitPerDay / effRatio : 0;
+    // For a category that cannot be sold, FLOWER/day is structurally zero and meaningless;
+    // what one node returns is units of the resource itself.
+    const sellable = !NON_SELLABLE_CATS.has(cat);
+    const catCount = catNodeCount[cat] || 0;
+    const unitsPerNode = catCount > 0
+      ? (((cats[cat] || {}).boostedUnitsPerDay || 0) / catCount) * effRatio : 0;
     const np = NODE_BUY[node];
     const owned = Object.keys(farm[np.fk] || {}).length;
     // The real escalation input: how many of this node the farm has BOUGHT.
@@ -552,6 +569,7 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
       });
     }
     nodeAcq.perType[node] = { profitPerDay, grossPerNode, netPerNode, effRatio, effMeasured: !!(effBy[cat] && effBy[cat].measured),
+      sellable, unitsPerNode, unitName: (cats[cat] || {}).product || null,
       expand: (expandAcq[node] || []).slice(0, 4), buy, currentCount: owned, bought };
   }
 

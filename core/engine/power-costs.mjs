@@ -148,8 +148,33 @@ import { SEED_COSTS, TOOL_COSTS } from "../data/economy.mjs";
       return ts < 1e12 ? ts * 1000 : ts;
     }
 
+    /*
+     * Resources the game does not let you sell, so producing them is not income.
+     *
+     * Authority: TradeResource in src/features/game/actions/tradeLimits.ts excludes these
+     * from the P2P marketplace (and TRADE_LIMITS has no entry for them), while SELLABLE in
+     * events/landExpansion/sellCrop.ts is crops + fruit only — so there is no coin sale
+     * either. sfl.world nevertheless publishes a p2p price for Obsidian (~20 FLOWER), and
+     * taking it at face value was reporting 103 FLOWER/day of unrealisable income on a real
+     * farm: 37% of its total.
+     *
+     * Excluding them is also what avoids DOUBLE COUNTING. Their value is not lost, it is
+     * embedded in what they enable: obsidian buys nodes whose output is sellable, oil feeds
+     * greenhouse production that is sellable. Counting the intermediate and the product
+     * would bill the same FLOWER twice.
+     *
+     * This is about REVENUE only. These resources still have prices for costing purposes —
+     * the cost functions read p2pPrices directly — and every unitToSfl call site converts
+     * production output, never an input.
+     */
+    const NON_SELLABLE_PRODUCTS = new Set([
+      "Obsidian", "Oil", "Sunstone", "Diamond", "Ascension Shard", "Refined Salt",
+      "Wild Mushroom", "Magic Mushroom",
+    ]);
+
     // ── flowers.html 14474-14478: unitToSfl ──
     function unitToSfl(unitsPerDay, product, p2pPrices) {
+      if (NON_SELLABLE_PRODUCTS.has(product)) return 0;
       const price = p2pPrices[product] || 0;
       return unitsPerDay * price;
     }

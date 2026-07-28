@@ -191,3 +191,31 @@ test("formulaFor settings produce data.formulaHtml", () => {
   const q = buildPowerSection(farm, p2p, nfts, null, { formulaFor: "Green Thumb", formulaCat: "qual" });
   assert.ok(q.formulaHtml && q.formulaHtml.includes("Green Thumb"));
 });
+
+test("non-sellable resources produce no FLOWER income, but keep their units and costs", () => {
+  const cs = out.categories.catSummaries;
+
+  // Obsidian and oil cannot be sold: TradeResource (tradeLimits.ts) excludes them from the
+  // P2P marketplace and SELLABLE (sellCrop.ts) is crops + fruit only, so there is no coin
+  // sale either. sfl.world still publishes an Obsidian p2p price and taking it at face
+  // value reported 103 FLOWER/day of unrealisable income on a real farm — 37% of its total.
+  for (const cat of ["obsidian", "oil"]) {
+    assert.equal(cs[cat].boostedSfl, 0, `${cat} must contribute no income`);
+    assert.equal(cs[cat].baseSfl, 0, `${cat} must contribute no base income either`);
+    // Not vacuous: the farm really does produce the stuff, so the zero is the exclusion
+    // rather than an absence of production.
+    assert.ok(cs[cat].boostedUnitsPerDay > 0, `${cat} still reports units/day`);
+    // And the cost of producing it is still charged — it is a real outgoing.
+    assert.ok(cs[cat].costPerDay > 0, `${cat} still reports its production cost`);
+  }
+
+  // A sellable category must still earn, else the check above would pass by zeroing all.
+  assert.ok(cs.trees.boostedSfl > 0 && cs.stone.boostedSfl > 0, "sellable categories still earn");
+
+  // The headline total is the sum of the sellable categories only.
+  const sellable = Object.entries(cs)
+    .filter(([k]) => k !== "obsidian" && k !== "oil")
+    .reduce((a, [, v]) => a + (v.boostedSfl || 0), 0);
+  assert.ok(Math.abs(out.categories.totalBoostedSfl - sellable) < 1e-9,
+    "totalBoostedSfl excludes the non-sellable categories");
+});

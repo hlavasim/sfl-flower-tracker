@@ -19865,7 +19865,13 @@
 
         h += `<tr style="border-top:1px solid #1d1710">
           <td style="text-align:left;padding:5px 6px;white-space:nowrap">${gi(node)}${escHTML(node)}<span style="color:var(--text-dim);font-size:0.46rem"> ${d.currentCount}&nbsp;ks</span></td>
-          <td style="text-align:right;padding:5px 6px;color:var(--text-dim);white-space:nowrap">${d.profitPerDay.toFixed(2)}${FLOWER}${d.effRatio != null ? ` <span style="font-size:0.46rem;opacity:.7">×${d.effRatio.toFixed(2)}${d.effMeasured ? "" : "~"}</span>` : ""}</td>
+          <td style="text-align:right;padding:5px 6px;color:var(--text-dim);white-space:nowrap" title="${d.sellable === false ? tip(`${escHTML(d.unitName || "Tento zdroj")} nelze prodat (ani P2P, ani za coiny), takže FLOWER/den by u něj bylo vymyšlené číslo. Výnos je proto v kusech za den.`) : ""}">${
+            // A non-sellable resource has no FLOWER income by construction; showing 0,00
+            // FLOWER would read as "worthless" when the node is in fact what buys the others.
+            d.sellable === false
+              ? `${d.unitsPerNode.toFixed(2)} <span style="font-size:0.46rem">${escHTML(d.unitName || "ks")}/den</span>`
+              : `${d.profitPerDay.toFixed(2)}${FLOWER}`
+          }${d.effRatio != null ? ` <span style="font-size:0.46rem;opacity:.7">×${d.effRatio.toFixed(2)}${d.effMeasured ? "" : "~"}</span>` : ""}</td>
           <td title="${exTip}" style="text-align:right;padding:5px 6px;background:#17120c;white-space:nowrap;cursor:help;${col("expand", obsWin)}">${ex ? `${mark("expand", obsWin)}${exObs > 0 ? `${kf(exObs)}${OBS} <span style="color:var(--text-dim);font-size:0.46rem">(${fmtEta(ex.totalObsidianDays)})</span>` : `0${OBS}`}` : "—"}</td>
           <td title="${exTip}" style="text-align:right;padding:5px 6px;background:#17120c;white-space:nowrap;cursor:help;${dim}">${ex ? `${ex.obsidian > 0 ? kf(ex.obsidian) : "0"}${OBS}` : "—"}</td>
           <td title="${buTip}" style="text-align:right;padding:5px 6px;background:#17120c;white-space:nowrap;cursor:help;${col("buy", obsWin)}">${bu ? `${mark("buy", obsWin)}${buObs}${OBS} <span style="color:var(--text-dim);font-size:0.46rem">(${fmtEta(bu.obsidianDays)})</span>` : "—"}</td>
