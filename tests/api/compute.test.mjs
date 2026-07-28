@@ -309,3 +309,31 @@ test("section=ascension rates XP with the pet boost even when petSimulate is not
     globalThis.fetch = orig;
   }
 });
+
+test("section=ascension honours the Bumpkin page's recipe selection", async () => {
+  const orig = globalThis.fetch;
+  globalThis.fetch = mockFetchForAscension();
+  try {
+    // Without a selection the server rates ALL kitchens on BUMPKIN_DEFAULT_RECIPES. A farm
+    // that only cooks in some of them is then rated far too fast, and XP/day is the
+    // denominator of every level ETA — so this plumbing has to work end to end.
+    const all = await ascensionRates({});
+    const idle = { "Smoothie Shack": "", "Aging Shed": "" }; // "" = I don't cook here
+    const some = await ascensionRates({ recipes: JSON.stringify(idle) });
+
+    assert.ok(all.rates.xpPerDay > 0 && some.rates.xpPerDay > 0, "both report a rate");
+    assert.ok(some.rates.xpPerDay < all.rates.xpPerDay,
+      `standing two kitchens down must lower XP/day (${some.rates.xpPerDay} vs ${all.rates.xpPerDay})`);
+
+    // And the level ETAs must actually move with it, since that is the point.
+    const pick = (d) => (d.steps || []).find((s) => !s.levelMet);
+    const a = pick(all), b = pick(some);
+    if (a && b && a.levelXpNeeded === b.levelXpNeeded) {
+      const left = (d, s) => Math.max(0, s.levelXpNeeded - d.current.experience - (d.current.bankedFoodXp || 0));
+      assert.ok(left(some, b) / some.rates.xpPerDay > left(all, a) / all.rates.xpPerDay,
+        "cooking in fewer kitchens must push the level ETA out, not leave it unchanged");
+    }
+  } finally {
+    globalThis.fetch = orig;
+  }
+});

@@ -19303,6 +19303,21 @@
     }
 
     // ═══════════════════════════════════════
+    /*
+     * Every section=ascension call must carry the Bumpkin page's recipe selection. Without
+     * it the server falls back to BUMPKIN_DEFAULT_RECIPES for ALL six kitchens, so a farm
+     * that only cooks in four was rated 930,913 XP/day instead of its real 677,328 — and
+     * XP/day is the denominator of every level ETA, so the whole plan ran fast.
+     *
+     * A selection of "" means "I don't cook here" and zeroes that building server-side
+     * (cooking.mjs: no selName -> xpPerDay 0), which is how the two idle kitchens drop out.
+     *
+     * Shared helper on purpose: two call sites already drifted apart once here, which is
+     * how the gap survived.
+     */
+    const _ascRecipesParam = () =>
+      `&recipes=${encodeURIComponent(JSON.stringify(getSavedBumpkinRecipes()))}`;
+
     //  RENDER: ASCENSION (compute?section=ascension — cockpit fold-in)
     // ═══════════════════════════════════════
     let _ascServer = null;
@@ -19338,7 +19353,7 @@
         if (!_roadmapSnapshotsCache) _roadmapSnapshotsCache = await _roadmapFetchHistorySlim();
         let rp;
         for (let attempt = 1; attempt <= 3; attempt++) {
-          rp = await fetch(`/api/compute?farm=${FARM_ID}&section=ascension&grinx=${grinx}&max=10`, {
+          rp = await fetch(`/api/compute?farm=${FARM_ID}&section=ascension&grinx=${grinx}&max=10${_ascRecipesParam()}`, {
             method: "POST", headers: { "content-type": "application/json" },
             body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [] }),
           });
@@ -19542,7 +19557,7 @@
         if (!_roadmapSnapshotsCache) _roadmapSnapshotsCache = await _roadmapFetchHistorySlim();
         const st = (() => { try { return JSON.parse(localStorage.getItem("sfl_ascension_settings") || "{}"); } catch { return {}; } })();
         const grinx = st.grinx ? 1 : 0;
-        const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=ascension&grinx=${grinx}&max=10`, {
+        const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=ascension&grinx=${grinx}&max=10${_ascRecipesParam()}`, {
           method: "POST", headers: { "content-type": "application/json" },
           body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [] }),
         });
