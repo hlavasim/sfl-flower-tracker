@@ -18981,10 +18981,12 @@
     window._worldSetNode = async function (key) {
       if (!buyableNodes.some((n) => n.key === key) || key === _worldNode) return;
       _worldNode = key;
-      const cached = _nodeDistCache.get(`${key}|${_worldActive || "all"}`);
-      if (cached) { _applyNodeDist(cached); renderWorld(); return; }
-      _worldNodeLoading = true;
-      renderWorld();
+      // Only show a loading state for a type that is not already warm — an awaited
+      // resolved promise settles in a microtask, so a warm switch never flashes.
+      if (!_nodeDistCache.has(`${key}|${_worldActive || "all"}`)) {
+        _worldNodeLoading = true;
+        renderWorld();
+      }
       const j = await _fetchNodeDist(key);
       _worldNodeLoading = false;
       if (_worldNode === key) { _applyNodeDist(j); renderWorld(); }
@@ -19027,13 +19029,48 @@
       _worldData.nodeMeta = nodeMeta;
     }
 
-    async function _fetchNodeDist(key) {
-      const act = _worldActive ? `&active_days=${_worldActive}` : "";
+    /*
+     * The cache holds PROMISES, not results, so a click that lands while the background
+     * prefetch is already fetching that type waits on the same request instead of firing a
+     * second one.
+     */
+    function _fetchNodeDist(key, scope = _worldActive) {
+      const ck = `${key}|${scope || "all"}`;
+      const hit = _nodeDistCache.get(ck);
+      if (hit) return hit;
+      const act = scope ? `&active_days=${scope}` : "";
       const url = `${WORLD_API}&mode=nodes&node=${encodeURIComponent(key)}${act}` +
         (FARM_ID ? `&farm=${encodeURIComponent(FARM_ID)}` : "");
-      const j = await fetch(url).then((r) => r.json()).catch(() => null);
-      if (j && !j.error) _nodeDistCache.set(`${key}|${_worldActive || "all"}`, j);
-      return j;
+      const p = fetch(url).then((r) => r.json()).catch(() => null)
+        // A failed or error response must not stay cached, or the type stays broken until
+        // reload.
+        .then((j) => { if (!j || j.error) _nodeDistCache.delete(ck); return j; });
+      _nodeDistCache.set(ck, p);
+      return p;
+    }
+
+    /*
+     * Warm every other node type after the page is usable, so switching is instant.
+     * Sequential on purpose: at the "all" scope one of these queries takes ~19 s against
+     * 656k rows, and firing ten at once would starve the very page load that just finished.
+     * `_prefetchToken` cancels the run when the activity scope changes, since every cached
+     * entry is scope-specific and the old work would be wasted.
+     *
+     * This is a stopgap. Precomputing the aggregations after the daily ingest removes the
+     * need for it entirely.
+     */
+    let _prefetchToken = 0;
+    async function _prefetchNodeDists() {
+      const token = ++_prefetchToken;
+      const scope = _worldActive;
+      for (const n of buyableNodes) {
+        if (token !== _prefetchToken) return;             // scope changed — abandon
+        if (_nodeDistCache.has(`${n.key}|${scope || "all"}`)) continue;
+        await _fetchNodeDist(n.key, scope);
+        if (token !== _prefetchToken) return;
+        // Yield between requests so a user-initiated fetch is not queued behind ours.
+        await new Promise((r) => setTimeout(r, 250));
+      }
     }
 
     let _worldData = null, _worldErr = null, _worldLoading = false;
@@ -19043,6 +19080,10 @@
     let _worldActive = null;
     window._worldSetActive = function (days) {
       _worldActive = days === "all" ? null : Number(days);
+      // Cancel any node-type prefetch immediately: its entries are scope-specific, so the
+      // remaining requests would be wasted DB work competing with the reload below.
+      // Safe to touch directly — this only ever runs from a click, long after init.
+      _prefetchToken++;
       _worldData = null; _worldErr = null;
       renderWorld();
     };
@@ -19270,7 +19311,10 @@
         for (let lvl = 1; lvl <= effMax; lvl++) effLevelRows.push({ key: lvl, n: effSeen.get(lvl) || 0 });
 
         const { nodeRows, nodeMeta } = _nodeDistRows(nodeDist);
-        if (nodeDist && !nodeDist.error) _nodeDistCache.set(`${_worldNode}|${_worldActive || "all"}`, nodeDist);
+        // Seed the cache with the type the page loaded with; the cache stores promises.
+        if (nodeDist && !nodeDist.error) {
+          _nodeDistCache.set(`${_worldNode}|${_worldActive || "all"}`, Promise.resolve(nodeDist));
+        }
 
         _worldData = { stats, islandRows, levelRows, reachRows, effLevelRows, me, breakdowns, nodeRows, nodeMeta };
       } catch (e) {
@@ -19278,6 +19322,9 @@
       } finally {
         _worldLoading = false;
         if (getPage() === "world") renderWorld();
+        // Warm the other node types once the page is on screen, so switching is instant.
+        // Deliberately not awaited: the page must not wait on it.
+        if (!_worldErr) _prefetchNodeDists();
       }
     }
 
