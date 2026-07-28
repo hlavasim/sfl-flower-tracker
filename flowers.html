@@ -19590,6 +19590,7 @@
         <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:10px;line-height:1.7">
           Dvě samostatná srovnání. <strong style="color:var(--text)">OBSIDIAN</strong> = co tě reálně blokuje: koupě nodu se platí sunstonem a ten se kupuje za <strong>${na.obsidianPerSunstone || 3}&nbsp;obsidiany</strong> na klik, takže koupě je celá jen obsidian; expanze ho chce jen někdy. Přepočteno tvou těžbou <strong style="color:var(--text)">${na.obsidianPerDay ? na.obsidianPerDay.toFixed(1) : "0"} obsidian/den</strong>.
           <strong style="color:var(--text)">MATERIÁL</strong> = kolik to stojí: co se dá koupit za nákupní cenu, obsidian a oil (koupit nejdou) za <strong>výrobní</strong> cenu${prodNote ? ` — ${prodNote} FLOWER/ks` : ""}.
+          <strong style="color:var(--text)">Net profit</strong> = výnos nodu po odečtení nákladů na produkci (semínka, nástroje) a přenásobený tvou <strong>naměřenou efektivitou</strong> (uvedená za číslem, <span style="opacity:.7">~</span> = nenaměřeno, použit tvůj průměr) — tedy stejná korekce, jakou už používá ta těžba obsidianu vedle.
           U expandu jsou dvě čísla: <strong style="color:var(--text)">celkem</strong> = celá expanze, tj. co zaplatíš, když chceš právě tenhle node a na ostatní z bundle kašleš (+ přičtené expanze bez profit-nodu) — podle toho se rozhoduje <span style="color:${WIN}">✓</span>; <strong style="color:var(--text)">na node</strong> = tatáž cena dělená mezi všechny nody v bundle, platí jen když využiješ všechny.</div>
         <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.56rem">
           <thead>
@@ -19601,7 +19602,7 @@
             </tr>
             <tr style="color:var(--text-dim);text-align:right;font-size:0.5rem">
               <th style="text-align:left;padding:3px 6px">node</th>
-              <th style="padding:3px 6px">profit/den</th>
+              <th style="padding:3px 6px">net profit/den</th>
               <th style="padding:3px 6px;background:#17120c">expand celkem</th>
               <th style="padding:3px 6px;background:#17120c">└ na node</th>
               <th style="padding:3px 6px;background:#17120c">koupit</th>
@@ -19643,7 +19644,7 @@
 
         h += `<tr style="border-top:1px solid #1d1710">
           <td style="text-align:left;padding:5px 6px;white-space:nowrap">${gi(node)}${escHTML(node)}<span style="color:var(--text-dim);font-size:0.46rem"> ${d.currentCount}&nbsp;ks</span></td>
-          <td style="text-align:right;padding:5px 6px;color:var(--text-dim);white-space:nowrap">${d.profitPerDay.toFixed(2)}</td>
+          <td style="text-align:right;padding:5px 6px;color:var(--text-dim);white-space:nowrap">${d.profitPerDay.toFixed(2)}${d.effRatio != null ? ` <span style="font-size:0.46rem;opacity:.7">×${d.effRatio.toFixed(2)}${d.effMeasured ? "" : "~"}</span>` : ""}</td>
           <td style="text-align:right;padding:5px 6px;background:#17120c;white-space:nowrap;${col("expand", obsWin)}">${ex ? `${mark("expand", obsWin)}${exObs > 0 ? `${kf(exObs)} <span style="color:var(--text-dim);font-size:0.46rem">(${fmtEta(ex.totalObsidianDays)})</span>` : "0"}` : "—"}</td>
           <td style="text-align:right;padding:5px 6px;background:#17120c;white-space:nowrap;${dim}">${ex ? (ex.obsidian > 0 ? kf(ex.obsidian) : "0") : "—"}</td>
           <td style="text-align:right;padding:5px 6px;background:#17120c;white-space:nowrap;${col("buy", obsWin)}">${bu ? `${mark("buy", obsWin)}${buObs} <span style="color:var(--text-dim);font-size:0.46rem">(${fmtEta(bu.obsidianDays)})</span>` : "—"}</td>

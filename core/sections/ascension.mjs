@@ -491,12 +491,37 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
       farmEtaDays: s.sim && s.sim.eff ? s.sim.eff.farmEtaDays : null, buildSlotDays: s.buildSlotDays,
     });
   }
+  /*
+   * What one node of this type is actually worth per day. Two corrections over the plain
+   * perNodeSfl used by the step ROI above (left untouched on purpose — changing it would
+   * move the ascension plan's own numbers):
+   *
+   *   net — boostedSfl is GROSS revenue; the category's production inputs (seeds, tools)
+   *         live in costPerDay. Labelling gross revenue "profit" overstates it.
+   *   eff — the measured throughput ratio, the same correction obsidianPerDay beside it
+   *         already applies. Quoting one column theoretical and the other measured makes
+   *         them not comparable.
+   *
+   * Mirrors roadmapEffFactor / roadmap.mjs: measured ratio when the category has its own
+   * harvest signal, the farm's mean activity otherwise, and 1 with no history at all.
+   */
+  const effRatioFor = (cat) => {
+    const e = effBy[cat];
+    if (e && e.measured) return e.ratio;
+    const mean = eff && typeof eff.meanRatio === "number" ? eff.meanRatio : 0;
+    return mean > 0 ? mean : 1;
+  };
   // BUY: next few purchases per node type
   const nodeAcq = { obsidianPerDay, obsidianPrice, costPerXp, prodCost,
     obsidianPerSunstone: OBSIDIAN_PER_SUNSTONE, perType: {} };
   for (const node of PROFIT_NODES) {
     const cat = NODE_TO_CAT[node];
-    const profitPerDay = perNodeSfl[cat] || 0;
+    const cs = cats[cat] || {};
+    const nOwned = catNodeCount[cat] || 0;
+    const grossPerNode = perNodeSfl[cat] || 0;
+    const netPerNode = nOwned > 0 ? Math.max(0, (cs.boostedSfl || 0) - (cs.costPerDay || 0)) / nOwned : 0;
+    const effRatio = effRatioFor(cat);
+    const profitPerDay = netPerNode * effRatio;
     const np = NODE_BUY[node];
     const owned = Object.keys(farm[np.fk] || {}).length;
     // The real escalation input: how many of this node the farm has BOUGHT.
@@ -523,7 +548,8 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
         matUnpriced: !(prodCost["Obsidian"] > 0),
       });
     }
-    nodeAcq.perType[node] = { profitPerDay, expand: (expandAcq[node] || []).slice(0, 4), buy, currentCount: owned, bought };
+    nodeAcq.perType[node] = { profitPerDay, grossPerNode, netPerNode, effRatio, effMeasured: !!(effBy[cat] && effBy[cat].measured),
+      expand: (expandAcq[node] || []).slice(0, 4), buy, currentCount: owned, bought };
   }
   // Effective unit price of every resource that shows up in a reported expand bag, so the
   // UI can order the material breakdown by what actually dominates the cost.

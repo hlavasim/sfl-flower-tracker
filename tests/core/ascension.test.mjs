@@ -255,6 +255,30 @@ test("node acquisition: obsidian and oil are valued at PRODUCTION cost, not thei
   }
 });
 
+test("node acquisition: per-node profit is NET of production cost and efficiency-adjusted", () => {
+  // The obsidian mining rate in the same table is already efficiency-adjusted, so quoting
+  // profit as theoretical gross made the two columns non-comparable — and calling gross
+  // revenue "profit" overstated it (tools/seeds sit in the category's costPerDay).
+  const cats = powerData.categories.catSummaries;
+  const NODE_CAT = { "Crop Plot": "crops", "Fruit Patch": "fruits", Tree: "trees", "Stone Rock": "stone", "Iron Rock": "iron", "Gold Rock": "gold", "Crimstone Rock": "crimstone" };
+  const counts = { crops: "crops", fruits: "fruitPatches", trees: "trees", stone: "stones", iron: "iron", gold: "gold", crimstone: "crimstones" };
+
+  let sawCost = false, sawEff = false;
+  for (const [node, d] of Object.entries(out.nodeAcq.perType)) {
+    const cat = NODE_CAT[node], cs = cats[cat];
+    const n = Object.keys(farm[counts[cat]] || {}).length;
+    const wantNet = Math.max(0, cs.boostedSfl - cs.costPerDay) / n;
+    assert.ok(Math.abs(d.netPerNode - wantNet) < 1e-9, `${node}: net = (gross - cost) / nodes`);
+    assert.ok(Math.abs(d.profitPerDay - d.netPerNode * d.effRatio) < 1e-9, `${node}: profit = net x eff`);
+    // Gross is kept for reference and must never be the reported profit when either
+    // correction actually bites.
+    if (cs.costPerDay > 0) { sawCost = true; assert.ok(d.netPerNode < d.grossPerNode, `${node}: cost reduces net`); }
+    if (d.effRatio !== 1) { sawEff = true; assert.ok(Math.abs(d.profitPerDay - d.netPerNode) > 1e-12, `${node}: eff moves profit`); }
+  }
+  assert.ok(sawCost, "at least one category has a production cost, else the net check is vacuous");
+  assert.ok(sawEff, "at least one category has a non-unit efficiency, else the eff check is vacuous");
+});
+
 test("node acquisition: expand reports the UNDIVIDED cost of the whole expansion too", () => {
   // Wanting one specific node means paying for the whole expansion, whatever else it
   // hands you — so the per-node split alone understates a targeted purchase.
