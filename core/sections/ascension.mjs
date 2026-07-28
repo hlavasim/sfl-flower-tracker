@@ -409,6 +409,38 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
   const NODE_TO_CAT = { "Crop Plot": "crops", "Fruit Patch": "fruits", "Tree": "trees", "Stone Rock": "stone", "Iron Rock": "iron", "Gold Rock": "gold", "Crimstone Rock": "crimstone" };
   const obsidianPrice = p2pP["Obsidian"] || 0;
   const obsidianPerDay = (rates.Obsidian && rates.Obsidian.eff) || 0;
+
+  /*
+   * Valuation rule: anything you can BUY is worth its purchase price; anything you can
+   * only PRODUCE is worth what producing it costs. Obsidian and oil are the two that
+   * cannot be bought, and pricing obsidian at its marketplace quote is what made the old
+   * table nonsense — the quote (~20 FLOWER) is ~12x its production cost (~1.7), so the
+   * buy-with-sunstones path looked absurdly expensive.
+   *
+   * Both production models already exist in power.mjs and are reused, not rebuilt:
+   *   obsidian — calcLavaPitCostPerDay: lava pit recipe inputs per ignition
+   *   oil      — calcToolCostPerDay: Oil Drill inputs (coins + wood/iron/leather)
+   * Each arrives here as its category's costPerDay / boostedUnitsPerDay.
+   */
+  const PRODUCED_CAT = { Obsidian: "obsidian", Oil: "oil" };
+  const prodCost = {};
+  for (const [res, cat] of Object.entries(PRODUCED_CAT)) {
+    const cs = cats[cat];
+    if (cs && cs.costPerDay > 0 && cs.boostedUnitsPerDay > 0) prodCost[res] = cs.costPerDay / cs.boostedUnitsPerDay;
+  }
+  /** Price a resource bag in FLOWER under the rule above. */
+  const priceRes = (res) => {
+    let sfl = 0, unpriced = false;
+    for (const [r, q] of Object.entries(res || {})) {
+      if (!q) continue;
+      if (r === "Coins") sfl += xr.coinsPerSFL > 0 ? q / xr.coinsPerSFL : 0;
+      else if (r === "Gem") { if (xr.gemsPerSFL > 0) sfl += q / xr.gemsPerSFL; else unpriced = true; }
+      else if (prodCost[r] > 0) sfl += q * prodCost[r];
+      else if (p2pP[r] > 0) sfl += q * p2pP[r];
+      else unpriced = true;
+    }
+    return { sfl, unpriced };
+  };
   // EXPAND: rolling dead-cost accumulation
   const expandAcq = {};
   let deadCost = 0, deadUnpriced = false;
@@ -426,21 +458,41 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
     for (const [node, q] of Object.entries(s.nodesAdded || {})) if (PROFIT_NODES.has(node)) for (let i = 0; i < q; i++) prof.push(node);
     if (!prof.length) {
       deadCost += stepCost;
-      addRes(deadRes, s.cost);
+      addRes(deadRes, s.cost); addRes(deadRes, s.extraCost);
       if (s.costUnpriced) deadUnpriced = true;
       continue;
     }
     const total = deadCost + stepCost, unpriced = deadUnpriced || s.costUnpriced;
-    const totalRes = addRes(addRes({}, deadRes), s.cost);
+    const totalRes = addRes(addRes(addRes({}, deadRes), s.cost), s.extraCost);
     deadCost = 0; deadUnpriced = false; deadRes = {};
     const perNode = total / prof.length;
     const resPerNode = {};
-    for (const [r, q] of Object.entries(totalRes)) resPerNode[r] = q / prof.length;
+    for (const [r, q] of Object.entries(totalRes)) if (q) resPerNode[r] = q / prof.length;
+    // Material cost under the production-cost rule. Distinct from `cost`, which values
+    // every resource at its marketplace quote — kept so the level/XP part stays visible.
+    const priced = priceRes(resPerNode);
+    const levelPerNode = (s.levelCostSfl || 0) / prof.length;
+    const obsidian = resPerNode["Obsidian"] || 0;
+    /*
+     * The same figures UNDIVIDED. The per-node split is the fair price only if you want
+     * every node the expansion hands you; if you want one specific node and the rest is
+     * incidental, you still pay the whole expansion. Both are reported because they answer
+     * different questions, and the split alone understates a targeted purchase.
+     */
+    const totalPriced = priceRes(totalRes);
+    const totalObsidian = totalRes["Obsidian"] || 0;
     const label = s.asc === 0 ? `${s.island} e${s.expansion}` : (s.kind === "upgrade" ? `A${s.asc}` : `A${s.asc}·e${s.expansion}`);
-    for (const node of prof) (expandAcq[node] = expandAcq[node] || []).push({ cost: perNode, res: resPerNode, bundle: prof.length, unpriced, label, farmEtaDays: s.sim && s.sim.eff ? s.sim.eff.farmEtaDays : null, buildSlotDays: s.buildSlotDays });
+    for (const node of prof) (expandAcq[node] = expandAcq[node] || []).push({
+      cost: perNode, res: resPerNode, bundle: prof.length, unpriced, label,
+      matSfl: priced.sfl, matUnpriced: priced.unpriced, levelSfl: levelPerNode,
+      obsidian, obsidianDays: obsidianPerDay > 0 ? obsidian / obsidianPerDay : null,
+      totalRes, totalMatSfl: totalPriced.sfl, totalMatUnpriced: totalPriced.unpriced,
+      totalObsidian, totalObsidianDays: obsidianPerDay > 0 ? totalObsidian / obsidianPerDay : null,
+      farmEtaDays: s.sim && s.sim.eff ? s.sim.eff.farmEtaDays : null, buildSlotDays: s.buildSlotDays,
+    });
   }
   // BUY: next few purchases per node type
-  const nodeAcq = { obsidianPerDay, obsidianPrice, costPerXp,
+  const nodeAcq = { obsidianPerDay, obsidianPrice, costPerXp, prodCost,
     obsidianPerSunstone: OBSIDIAN_PER_SUNSTONE, perType: {} };
   for (const node of PROFIT_NODES) {
     const cat = NODE_TO_CAT[node];
@@ -465,9 +517,25 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
         sunstones: sun,
         obsidian: obs,
         obsidianDays: obsidianPerDay > 0 ? obs / obsidianPerDay : null,
+        // Obsidian is the ONLY input of the buy path, so its material cost is entirely
+        // obsidian priced at production cost.
+        matSfl: prodCost["Obsidian"] > 0 ? obs * prodCost["Obsidian"] : null,
+        matUnpriced: !(prodCost["Obsidian"] > 0),
       });
     }
     nodeAcq.perType[node] = { profitPerDay, expand: (expandAcq[node] || []).slice(0, 4), buy, currentCount: owned, bought };
+  }
+  // Effective unit price of every resource that shows up in a reported expand bag, so the
+  // UI can order the material breakdown by what actually dominates the cost.
+  nodeAcq.unitPrice = {};
+  for (const d of Object.values(nodeAcq.perType)) {
+    for (const e of d.expand) {
+      for (const r of Object.keys(e.res)) {
+        if (r === "Coins" || nodeAcq.unitPrice[r] !== undefined) continue;
+        const p = prodCost[r] > 0 ? prodCost[r] : (p2pP[r] > 0 ? p2pP[r] : 0);
+        nodeAcq.unitPrice[r] = p;
+      }
+    }
   }
 
   return { current, rates, steps: pending, frontier, bottleneck, reach, nodeCounts, grinx, maxAsc, nodeAcq };

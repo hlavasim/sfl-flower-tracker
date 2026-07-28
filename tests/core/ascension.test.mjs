@@ -211,6 +211,69 @@ test("node acquisition: expand (rolling dead-cost, equal split) vs buy (sunstone
   assert.ok(tree.expand[0].bundle >= 1, "bundle size the cost was split across");
 });
 
+test("node acquisition: obsidian and oil are valued at PRODUCTION cost, not their market quote", () => {
+  const na = out.nodeAcq;
+  // The two resources that cannot be bought. Their cost models already exist in
+  // power.mjs (lava pit recipe / Oil Drill inputs) and are reused here.
+  assert.ok(na.prodCost.Obsidian > 0, "obsidian production cost derived");
+  assert.ok(na.prodCost.Oil > 0, "oil production cost derived");
+
+  // The defect this pins: pricing obsidian at its marketplace quote. The two valuations
+  // must stay far enough apart that the assertions below can tell them apart at all.
+  const quote = na.obsidianPrice;
+  assert.ok(quote > 0 && Math.abs(quote - na.prodCost.Obsidian) / quote > 0.1,
+    `market quote (${quote}) and production cost (${na.prodCost.Obsidian}) must differ ` +
+    "materially, else this test proves nothing");
+
+  // BUY: the only input is obsidian, so its material cost is exactly obsidian x prod cost.
+  const b = na.perType.Tree.buy[0];
+  assert.ok(Math.abs(b.matSfl - b.obsidian * na.prodCost.Obsidian) < 1e-9,
+    "buy cost = obsidian x production cost");
+  assert.ok(Math.abs(b.matSfl - b.obsidian * quote) > 1e-6,
+    "and is NOT the market-quote valuation");
+
+  /*
+   * EXPAND goes through the shared pricing helper, so this is where a regression to
+   * market pricing would actually hide. Recompute the bag independently from the rule as
+   * stated — buyable at its purchase price, obsidian and oil at production cost — and
+   * require an exact match. Charging obsidian at the quote breaks this by construction.
+   */
+  const coinsPerSFL = powerData.exchangeRates.coinsPerSFL;
+  const priced = Object.values(na.perType).flatMap((d) => d.expand).filter((e) =>
+    !e.matUnpriced && (e.res.Obsidian || 0) > 0 && !e.res.Gem);
+  assert.ok(priced.length > 0, "at least one expand step needs obsidian (else nothing to check)");
+  for (const e of priced) {
+    let want = 0;
+    for (const [r, q] of Object.entries(e.res)) {
+      if (r === "Coins") want += q / coinsPerSFL;
+      else if (na.prodCost[r] > 0) want += q * na.prodCost[r];
+      else want += q * (p2p[r] || 0);
+    }
+    assert.ok(Math.abs(e.matSfl - want) < 1e-6,
+      `${e.label}: matSfl ${e.matSfl} should equal rule-priced ${want}`);
+    assert.equal(e.obsidian, e.res.Obsidian, "obsidian gate mirrors the raw bag");
+  }
+});
+
+test("node acquisition: expand reports the UNDIVIDED cost of the whole expansion too", () => {
+  // Wanting one specific node means paying for the whole expansion, whatever else it
+  // hands you — so the per-node split alone understates a targeted purchase.
+  for (const [node, d] of Object.entries(out.nodeAcq.perType)) {
+    for (const e of d.expand) {
+      assert.ok(Math.abs(e.totalObsidian - e.obsidian * e.bundle) < 1e-9,
+        `${node} ${e.label}: total obsidian is the per-node share x bundle`);
+      assert.ok(Math.abs(e.totalMatSfl - e.matSfl * e.bundle) < 1e-6,
+        `${node} ${e.label}: total material cost is the per-node share x bundle`);
+      for (const [r, q] of Object.entries(e.res)) {
+        assert.ok(Math.abs(e.totalRes[r] - q * e.bundle) < 1e-6,
+          `${node} ${e.label}: ${r} total is the per-node share x bundle`);
+      }
+      // A bundle of 2 must not make the expansion look half price.
+      if (e.bundle > 1) assert.ok(e.totalMatSfl > e.matSfl, "undivided cost exceeds the split");
+    }
+  }
+});
+
 // ── pre-ascension island completion steps (asc: 0) ──
 
 test("complete volcano farm gets no pre-steps; plan starts at the A1 upgrade", () => {

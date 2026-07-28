@@ -19548,28 +19548,116 @@
         return _nodeAcqCache;
       } catch { return null; }
     }
+    /*
+     * Two comparisons, deliberately kept apart — the previous single-number table was
+     * unreadable because it mixed them:
+     *
+     *   1. OBSIDIAN — the gate. Buying a node pays sunstone, and sunstone is bought with
+     *      obsidian 3:1, so obsidian is the buy path's whole currency; expansions need it
+     *      only sometimes. This is the comparison that decides what you can actually do
+     *      next, and it is in units and days, not FLOWER.
+     *   2. MATERIÁL — what it costs. Buyable resources at their purchase price; obsidian
+     *      and oil cannot be bought, so they are charged what producing them costs (lava
+     *      pit recipe / Oil Drill inputs, both reused from the power page). Obsidian's
+     *      marketplace quote is far above its production cost, and using it was what made
+     *      the buy path look absurd.
+     */
     function _renderNodeAcqPanel(na) {
       if (!na || !na.perType) return "";
-      const kf = (v) => v == null ? "—" : Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + "k" : v.toFixed(0);
-      const fmtEta = (d) => d == null ? "?" : (d < 1 ? (d * 24).toFixed(1) + "h" : d.toFixed(1) + "d");
-      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">
-        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">🌱 CENA ZA NODE: EXPANDOVAT vs KOUPIT</div>
-        <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">
-          Expanze dá bundle nodů — mrtvé expanze (bez profit-node) se nasčítají do ceny dalšího profit-node, rozdělené rovným dílem. Koupě = ${na.obsidianPrice ? na.obsidianPrice.toFixed(1) : "?"} FLOWER/obsidian · tvá těžba <strong>${na.obsidianPerDay ? na.obsidianPerDay.toFixed(1) : "0"} obsidian/den</strong>. <span class="flip-good" style="color:#7fe0a0">Zelená</span> = levnější cesta.</div>
-        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.56rem">
-          <thead><tr style="color:var(--text-dim);text-align:right"><th style="text-align:left;padding:3px 5px">node</th><th>profit/d</th><th>EXPAND (další)</th><th>za kdy</th><th>KOUPIT</th><th>obsidian (za kdy)</th></tr></thead><tbody>`;
+      const kf = (v) => v == null ? "—" : Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + "k" : Math.abs(v) >= 10 ? v.toFixed(0) : v.toFixed(1);
+      const fmtEta = (d) => d == null ? "?" : (d < 1 ? (d * 24).toFixed(0) + "h" : d < 100 ? d.toFixed(1) + "d" : d.toFixed(0) + "d");
       const gi = (n) => `<img src="${getItemIcon(n)}" onerror="this.style.display='none'" style="height:1.2em;vertical-align:-0.2em;margin-right:2px" alt="">`;
+      const WIN = "#7fe0a0";
+      const pc = na.prodCost || {};
+      // Materials behind an expand step, biggest FLOWER contribution first.
+      const resDetail = (res) => {
+        const parts = Object.entries(res || {}).filter(([r, q]) => q > 0 && r !== "Coins")
+          .map(([r, q]) => ({ r, q, w: q * ((na.unitPrice && na.unitPrice[r]) || 0) }))
+          .sort((a, b) => b.w - a.w).slice(0, 3)
+          .map(({ r, q }) => `${q >= 1000 ? (q / 1000).toFixed(1) + "k" : q.toFixed(q < 10 ? 1 : 0)} ${escHTML(r)}`);
+        const coins = (res || {}).Coins || 0;
+        if (coins > 0) parts.push(`${coins >= 1000 ? (coins / 1000).toFixed(0) + "k" : coins.toFixed(0)} coins`);
+        return parts.join(" · ") || "—";
+      };
+
+      const prodNote = [
+        pc.Obsidian > 0 ? `obsidian ${pc.Obsidian.toFixed(2)}` : null,
+        pc.Oil > 0 ? `oil ${pc.Oil.toFixed(3)}` : null,
+      ].filter(Boolean).join(" · ");
+
+      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:6px">🌱 NOVÝ NODE: EXPANDOVAT vs KOUPIT</div>
+        <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:10px;line-height:1.7">
+          Dvě samostatná srovnání. <strong style="color:var(--text)">OBSIDIAN</strong> = co tě reálně blokuje: koupě nodu se platí sunstonem a ten se kupuje za <strong>${na.obsidianPerSunstone || 3}&nbsp;obsidiany</strong> na klik, takže koupě je celá jen obsidian; expanze ho chce jen někdy. Přepočteno tvou těžbou <strong style="color:var(--text)">${na.obsidianPerDay ? na.obsidianPerDay.toFixed(1) : "0"} obsidian/den</strong>.
+          <strong style="color:var(--text)">MATERIÁL</strong> = kolik to stojí: co se dá koupit za nákupní cenu, obsidian a oil (koupit nejdou) za <strong>výrobní</strong> cenu${prodNote ? ` — ${prodNote} FLOWER/ks` : ""}.
+          U expandu jsou dvě čísla: <strong style="color:var(--text)">celkem</strong> = celá expanze, tj. co zaplatíš, když chceš právě tenhle node a na ostatní z bundle kašleš (+ přičtené expanze bez profit-nodu) — podle toho se rozhoduje <span style="color:${WIN}">✓</span>; <strong style="color:var(--text)">na node</strong> = tatáž cena dělená mezi všechny nody v bundle, platí jen když využiješ všechny.</div>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.56rem">
+          <thead>
+            <tr style="color:var(--text-dim);font-size:0.5rem">
+              <th style="text-align:left;padding:3px 6px"></th><th></th>
+              <th colspan="3" style="padding:3px 6px;background:#17120c;border-radius:3px 3px 0 0">OBSIDIAN (gate)</th>
+              <th colspan="3" style="padding:3px 6px">MATERIÁL (FLOWER)</th>
+              <th></th>
+            </tr>
+            <tr style="color:var(--text-dim);text-align:right;font-size:0.5rem">
+              <th style="text-align:left;padding:3px 6px">node</th>
+              <th style="padding:3px 6px">profit/den</th>
+              <th style="padding:3px 6px;background:#17120c">expand celkem</th>
+              <th style="padding:3px 6px;background:#17120c">└ na node</th>
+              <th style="padding:3px 6px;background:#17120c">koupit</th>
+              <th style="padding:3px 6px">expand celkem</th>
+              <th style="padding:3px 6px">└ na node</th>
+              <th style="padding:3px 6px">koupit</th>
+              <th style="text-align:left;padding:3px 6px">verdikt</th>
+            </tr>
+          </thead><tbody>`;
+
       for (const [node, d] of Object.entries(na.perType)) {
-        const ex = d.expand[0], bu = d.buy[0];
-        const exCost = ex ? ex.cost : null, buCost = bu ? bu.costSfl : null;
-        const exCheaper = exCost != null && (buCost == null || exCost <= buCost);
+        const ex = d.expand && d.expand[0], bu = d.buy && d.buy[0];
+        /*
+         * The decision is made on the ABSOLUTE expand figures, not the per-node split:
+         * wanting one specific node means paying for the whole expansion regardless of
+         * what else it hands you. The split is shown beside it as context for when the
+         * rest of the bundle is genuinely wanted.
+         */
+        const exObs = ex ? ex.totalObsidian : null, buObs = bu ? bu.obsidian : null;
+        const obsWin = exObs == null ? "buy" : buObs == null ? "expand" : (exObs <= buObs ? "expand" : "buy");
+        // An unpriced expand bag is only a lower bound, so it cannot claim a win.
+        const exMat = ex && !ex.totalMatUnpriced ? ex.totalMatSfl : null;
+        const buMat = bu ? bu.matSfl : null;
+        const matWin = exMat == null ? (buMat == null ? null : "buy") : buMat == null ? "expand" : (exMat <= buMat ? "expand" : "buy");
+        const mark = (side, who) => side === who ? `<span style="color:${WIN}">✓</span> ` : "";
+        const col = (side, who) => side === who ? `color:${WIN};font-weight:bold` : "";
+        const dim = "color:var(--text-dim);font-size:0.5rem";
+
+        let verdict, vcol = "var(--text-dim)";
+        if (!ex) { verdict = "jen koupit (žádná expanze v plánu)"; }
+        else if (obsWin === matWin) {
+          const saved = obsWin === "expand" ? (buObs - exObs) : (exObs - buObs);
+          verdict = `${obsWin === "expand" ? "EXPANDOVAT" : "KOUPIT"}${saved > 0 ? ` — o ${kf(saved)} obsidianu méně` : ""}`;
+          vcol = WIN;
+        } else {
+          // Obsidian is the gate, so it wins the tie-break; the cost side is a caveat.
+          verdict = `${obsWin === "expand" ? "EXPANDOVAT" : "KOUPIT"} (méně obsidianu), ale ${matWin === "expand" ? "expanze" : "koupě"} je materiálově levnější`;
+        }
+
         h += `<tr style="border-top:1px solid #1d1710">
-          <td style="text-align:left;padding:4px 5px;white-space:nowrap">${gi(node)}${escHTML(node)}</td>
-          <td style="text-align:right;color:var(--text-dim)">${d.profitPerDay.toFixed(2)}</td>
-          <td style="text-align:right;${exCheaper ? "color:#7fe0a0;font-weight:bold" : ""}">${ex ? `${kf(exCost)}${ex.unpriced ? "≥" : ""} <span style="color:var(--text-dim);font-size:0.46rem">${escHTML(ex.label)}</span>` : "—"}</td>
-          <td style="text-align:right;color:var(--text-dim)">${ex ? fmtEta(ex.farmEtaDays) : "—"}</td>
-          <td style="text-align:right;${!exCheaper && buCost != null ? "color:#7fe0a0;font-weight:bold" : ""}">${buCost != null ? kf(buCost) : "?"}</td>
-          <td style="text-align:right;color:var(--text-dim)">${bu ? `${bu.obsidian} (${fmtEta(bu.obsidianDays)})` : "—"}</td>
+          <td style="text-align:left;padding:5px 6px;white-space:nowrap">${gi(node)}${escHTML(node)}<span style="color:var(--text-dim);font-size:0.46rem"> ${d.currentCount}&nbsp;ks</span></td>
+          <td style="text-align:right;padding:5px 6px;color:var(--text-dim);white-space:nowrap">${d.profitPerDay.toFixed(2)}</td>
+          <td style="text-align:right;padding:5px 6px;background:#17120c;white-space:nowrap;${col("expand", obsWin)}">${ex ? `${mark("expand", obsWin)}${exObs > 0 ? `${kf(exObs)} <span style="color:var(--text-dim);font-size:0.46rem">(${fmtEta(ex.totalObsidianDays)})</span>` : "0"}` : "—"}</td>
+          <td style="text-align:right;padding:5px 6px;background:#17120c;white-space:nowrap;${dim}">${ex ? (ex.obsidian > 0 ? kf(ex.obsidian) : "0") : "—"}</td>
+          <td style="text-align:right;padding:5px 6px;background:#17120c;white-space:nowrap;${col("buy", obsWin)}">${bu ? `${mark("buy", obsWin)}${buObs} <span style="color:var(--text-dim);font-size:0.46rem">(${fmtEta(bu.obsidianDays)})</span>` : "—"}</td>
+          <td style="text-align:right;padding:5px 6px;white-space:nowrap;${col("expand", matWin)}">${ex ? `${mark("expand", matWin)}${kf(ex.totalMatSfl)}${ex.totalMatUnpriced ? "≥" : ""}` : "—"}</td>
+          <td style="text-align:right;padding:5px 6px;white-space:nowrap;${dim}">${ex ? `${kf(ex.matSfl)}${ex.matUnpriced ? "≥" : ""}` : "—"}</td>
+          <td style="text-align:right;padding:5px 6px;white-space:nowrap;${col("buy", matWin)}">${buMat != null ? `${mark("buy", matWin)}${kf(buMat)}` : "?"}</td>
+          <td style="text-align:left;padding:5px 6px;color:${vcol};font-size:0.5rem">${escHTML(verdict)}</td>
+        </tr>`;
+
+        // Detail row: what the expand path is actually made of, and what the buy quote is.
+        // Materials listed are the WHOLE expansion, matching the "celkem" columns.
+        h += `<tr><td></td><td></td>
+          <td colspan="3" style="padding:0 6px 6px;background:#17120c;color:var(--text-dim);font-size:0.46rem;text-align:right">${bu ? `${bu.sunstones} sunstone × ${na.obsidianPerSunstone || 3}` : ""}</td>
+          <td colspan="4" style="padding:0 6px 6px;color:var(--text-dim);font-size:0.46rem">${ex ? `${escHTML(ex.label)}${ex.bundle > 1 ? ` · dá ${ex.bundle} nody` : ""} · celá expanze: ${resDetail(ex.totalRes)}${ex.farmEtaDays == null ? "" : ex.farmEtaDays > 0 ? ` · za ${fmtEta(ex.farmEtaDays)}` : " · materiál už máš"}` : ""}</td>
         </tr>`;
       }
       h += `</tbody></table></div></div>`;
