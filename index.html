@@ -22677,7 +22677,7 @@
         <div id="mt-root" class="pixel-font" style="padding:8px 0"><div style="text-align:center;padding:40px;color:var(--text-dim)">Loading your trades…</div></div>`;
       let d;
       try {
-        const r = await fetch("/api/marketplace-trades?mytrades=1");
+        const r = await fetch(`/api/marketplace-trades?mytrades=1&farm=${encodeURIComponent(FARM_ID)}`);
         if (!r.ok) throw new Error(`trades ${r.status}`);
         d = await r.json();
       } catch (e) {

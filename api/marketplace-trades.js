@@ -17,7 +17,14 @@ export default async function handler(req, res) {
     //   fulfilled LISTING → initiator sold, fulfiller bought
     //   fulfilled OFFER   → initiator bought, fulfiller sold
     if (req.query.mytrades === "1") {
-      const ME = 155498;
+      // The farm MUST come from the request. This used to be a hardcoded 155498 from when
+      // the tool was single-user, which meant every visitor was served the owner's full
+      // trade ledger, P&L and counterparty names no matter what farm they had configured.
+      // Rejecting a missing id rather than defaulting keeps that from silently returning.
+      const ME = parseInt(req.query.farm, 10);
+      if (!Number.isFinite(ME) || ME <= 0) {
+        return res.status(400).json({ error: "farm required" });
+      }
       const { rows } = await pool.query(
         `SELECT mt.collection, mt.item_id, mt.sfl, mt.quantity, mt.source, mt.fulfilled_at,
                 mt.initiated_by_id, mt.fulfilled_by_id, mt.initiated_by_name, mt.fulfilled_by_name,
@@ -48,7 +55,9 @@ export default async function handler(req, res) {
         const realized = avgBuy != null && avgSell != null ? matched * (avgSell - avgBuy) : null;
         return { ...g, avgBuy, avgSell, cashNet: g.soldSfl - g.boughtSfl, realized };
       }).sort((a, b) => (b.soldSfl + b.boughtSfl) - (a.soldSfl + a.boughtSfl));
-      res.setHeader("Cache-Control", "s-maxage=120, stale-while-revalidate=300");
+      // Safe to share-cache only because `farm` is part of the URL and therefore of the
+      // CDN cache key; a farm taken from a header or body would leak between users here.
+      res.setHeader("Cache-Control", "private, max-age=60");
       return res.status(200).json({
         totals: { boughtSfl: Math.round(boughtSfl * 100) / 100, soldSfl: Math.round(soldSfl * 100) / 100,
           cashNet: Math.round((soldSfl - boughtSfl) * 100) / 100, buyCount, sellCount, tradeCount: trades.length },
