@@ -410,30 +410,57 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
   // EXPAND: rolling dead-cost accumulation
   const expandAcq = {};
   let deadCost = 0, deadUnpriced = false;
+  // RAW resources are rolled up alongside the FLOWER figure. Obsidian is the gating
+  // resource for both paths, and comparing paths through a P2P sell price hides that —
+  // so the per-node requirement is also reported in actual materials.
+  let deadRes = {};
+  const addRes = (into, from) => {
+    for (const [r, q] of Object.entries(from || {})) into[r] = (into[r] || 0) + (Number(q) || 0);
+    return into;
+  };
   for (const s of pending) {
     const stepCost = (s.costSfl || 0) + (s.levelCostSfl || 0);
     const prof = [];
     for (const [node, q] of Object.entries(s.nodesAdded || {})) if (PROFIT_NODES.has(node)) for (let i = 0; i < q; i++) prof.push(node);
-    if (!prof.length) { deadCost += stepCost; if (s.costUnpriced) deadUnpriced = true; continue; }
+    if (!prof.length) {
+      deadCost += stepCost;
+      addRes(deadRes, s.cost);
+      if (s.costUnpriced) deadUnpriced = true;
+      continue;
+    }
     const total = deadCost + stepCost, unpriced = deadUnpriced || s.costUnpriced;
-    deadCost = 0; deadUnpriced = false;
+    const totalRes = addRes(addRes({}, deadRes), s.cost);
+    deadCost = 0; deadUnpriced = false; deadRes = {};
     const perNode = total / prof.length;
+    const resPerNode = {};
+    for (const [r, q] of Object.entries(totalRes)) resPerNode[r] = q / prof.length;
     const label = s.asc === 0 ? `${s.island} e${s.expansion}` : (s.kind === "upgrade" ? `A${s.asc}` : `A${s.asc}·e${s.expansion}`);
-    for (const node of prof) (expandAcq[node] = expandAcq[node] || []).push({ cost: perNode, unpriced, label, farmEtaDays: s.sim && s.sim.eff ? s.sim.eff.farmEtaDays : null, buildSlotDays: s.buildSlotDays });
+    for (const node of prof) (expandAcq[node] = expandAcq[node] || []).push({ cost: perNode, res: resPerNode, bundle: prof.length, unpriced, label, farmEtaDays: s.sim && s.sim.eff ? s.sim.eff.farmEtaDays : null, buildSlotDays: s.buildSlotDays });
   }
   // BUY: next few purchases per node type
-  const nodeAcq = { obsidianPerDay, obsidianPrice, costPerXp, perType: {} };
+  const sunstonePerDay = (rates.Sunstone && rates.Sunstone.eff) || 0;
+  const nodeAcq = { obsidianPerDay, sunstonePerDay, obsidianPrice, costPerXp, perType: {} };
   for (const node of PROFIT_NODES) {
     const cat = NODE_TO_CAT[node];
     const profitPerDay = perNodeSfl[cat] || 0;
     const np = NODE_BUY[node];
-    const idx = Object.keys(farm[np.fk] || {}).length; // current count (proxy for purchase escalation)
+    const owned = Object.keys(farm[np.fk] || {}).length;
+    // The real escalation input: how many of this node the farm has BOUGHT.
+    const bought = Math.floor(Number((farm.farmActivity || {})[`${node} Bought`]) || 0);
     const buy = [];
     for (let i = 0; i < 3; i++) {
-      const sun = np.base + (idx + i) * np.inc, obs = sun * 3;
-      buy.push({ sunstones: sun, obsidian: obs, costSfl: obsidianPrice > 0 ? obs * obsidianPrice : null, obsidianDays: obsidianPerDay > 0 ? obs / obsidianPerDay : null });
+      // Buying a node deducts SUNSTONE and nothing else — verified in the game's
+      // buyResource.ts, which does inventory.Sunstone.sub(price) and touches no other
+      // resource. An earlier version here invented an obsidian cost (sunstones x3) and
+      // priced the buy path through the obsidian P2P rate; that was fiction.
+      //
+      // Escalation is per PURCHASE, not per node owned: getResourcePrice reads
+      // farmActivity["<Node> Bought"]. Using the node count overstated the price by up
+      // to 15.4x on a real farm (Crop Plot: 9 sunstones actual vs 139 reported).
+      const sun = np.base + (bought + i) * np.inc;
+      buy.push({ sunstones: sun, sunstoneDays: sunstonePerDay > 0 ? sun / sunstonePerDay : null });
     }
-    nodeAcq.perType[node] = { profitPerDay, expand: (expandAcq[node] || []).slice(0, 4), buy, currentCount: idx };
+    nodeAcq.perType[node] = { profitPerDay, expand: (expandAcq[node] || []).slice(0, 4), buy, currentCount: owned, bought };
   }
 
   return { current, rates, steps: pending, frontier, bottleneck, reach, nodeCounts, grinx, maxAsc, nodeAcq };

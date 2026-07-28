@@ -186,13 +186,27 @@ test("node acquisition: expand (rolling dead-cost, equal split) vs buy (sunstone
   // only the 7 profit nodes; no Oil/Beehive/Lava/Flower/Sunstone
   assert.deepEqual(Object.keys(na.perType).sort(),
     ["Crimstone Rock", "Crop Plot", "Fruit Patch", "Gold Rock", "Iron Rock", "Stone Rock", "Tree"]);
-  // buy cost = sunstones×3 obsidian × obsidian price; escalates by node increase
+  // Buying a node costs SUNSTONE and nothing else. This test previously asserted
+  // buy[0].obsidian === sunstones * 3 and priced the path through the obsidian P2P rate,
+  // which locked in a fabrication: the game's buyResource.ts only does
+  // inventory.Sunstone.sub(price). No obsidian field should exist any more.
   const tree = na.perType.Tree;
-  assert.equal(tree.buy[0].obsidian, tree.buy[0].sunstones * 3);
-  assert.ok(tree.buy[1].sunstones > tree.buy[0].sunstones, "buy price escalates");
-  assert.ok(Math.abs(tree.buy[0].costSfl - tree.buy[0].obsidian * na.obsidianPrice) < 1e-6);
-  // expand acquisitions carry a cost and a step label
+  assert.equal(tree.buy[0].obsidian, undefined, "buy must not invent an obsidian cost");
+  assert.equal(tree.buy[0].costSfl, undefined, "buy must not be priced via obsidian P2P");
+  assert.ok(tree.buy[0].sunstones > 0, "buy is quoted in sunstones");
+
+  // Escalation is per PURCHASE (farmActivity["Tree Bought"]), not per node owned —
+  // using the owned count overstated prices by up to 15.4x on a real farm.
+  const bought = Math.floor(Number((farm.farmActivity || {})["Tree Bought"]) || 0);
+  assert.equal(tree.bought, bought, "escalation input comes from farmActivity");
+  assert.equal(tree.buy[0].sunstones, 4 + bought * 3, "Tree: base 4, +3 per purchase");
+  assert.equal(tree.buy[1].sunstones, 4 + (bought + 1) * 3, "next purchase costs one step more");
+
+  // expand acquisitions carry a FLOWER cost, the raw materials behind it, and a label
   assert.ok(tree.expand.length > 0 && tree.expand[0].cost > 0 && tree.expand[0].label);
+  assert.ok(tree.expand[0].res && typeof tree.expand[0].res === "object",
+    "raw per-node materials are exposed, not just the FLOWER conversion");
+  assert.ok(tree.expand[0].bundle >= 1, "bundle size the cost was split across");
 });
 
 // ── pre-ascension island completion steps (asc: 0) ──
