@@ -1,12 +1,12 @@
 import { getPool } from "./_db.js";
-import ITEM_NAMES from "./_item-names.json" with { type: "json" };
+import ITEM_NAMES from "./_item-names.js";
 
 /**
  * Marketplace id -> display name.
  *
  * ob_last is preferred when present because it also carries boost_text, but the
  * orderbook collector only fills it for BOOSTED NFTs (225 rows), which is why MY TRADES
- * showed bare ids for most items. _item-names.json (generated from the game's KNOWN_IDS
+ * showed bare ids for most items. _item-names.js (generated from the game's KNOWN_IDS
  * and ITEM_IDS) covers the rest.
  *
  * Keyed per collection deliberately: the two id ranges overlap, so id 201 is "Sunflower"
