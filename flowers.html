@@ -18911,6 +18911,41 @@
     const REACH_PRE_COLOR = "#3987e5";
     const REACH_ASC_COLOR = "#d55181";
 
+    /*
+     * Merge tiers are an ORDERED progression (t1 -> t2 -> t3), so they get a sequential
+     * ramp of one hue rather than three categorical colours. Validated with the dataviz
+     * skill's checker against the dark surface #1a0e08: lightness monotonic, worst adjacent
+     * pair ΔE 14.9 under CVD / 16.7 normal vision, all three steps >= 3:1 contrast. The
+     * checker's lightness-band and chroma-floor checks are categorical-only criteria and a
+     * ramp cannot satisfy them by definition — its light end is necessarily low-chroma.
+     * The rarest tier is the brightest so it stays visible at a few percent of a bar.
+     */
+    const nodeTierColors = ["#3378c4", "#5fb0f5", "#b9dffd"];
+
+    // Nodes that can be bought with sunstones, and therefore with obsidian at 3:1 — the
+    // game's RESOURCE_NODE_PRICES (buyResource.ts), with the sunstone price of the first
+    // purchase and the island that gates it. Only the first four can be MERGED.
+    const buyableNodes = [
+      { key: "crops", label: "Crop Plot", icon: "Crop Plot", price: 3, island: "basic", merge: false },
+      { key: "trees", label: "Tree", icon: "Tree", price: 4, island: "basic", merge: true },
+      { key: "stones", label: "Stone Rock", icon: "Stone Rock", price: 4, island: "basic", merge: true },
+      { key: "iron", label: "Iron Rock", icon: "Iron Rock", price: 7, island: "basic", merge: true },
+      { key: "gold", label: "Gold Rock", icon: "Gold Rock", price: 10, island: "basic", merge: true },
+      { key: "fruitPatches", label: "Fruit Patch", icon: "Fruit Patch", price: 5, island: "spring", merge: false },
+      { key: "crimstones", label: "Crimstone Rock", icon: "Crimstone Rock", price: 20, island: "spring", merge: false },
+      { key: "flowers", label: "Flower Bed", icon: "Flower Bed", price: 30, island: "spring", merge: false },
+      { key: "oilReserves", label: "Oil Reserve", icon: "Oil Reserve", price: 40, island: "desert", merge: false },
+      { key: "lavaPits", label: "Lava Pit", icon: "Lava Pit", price: 40, island: "volcano", merge: false },
+    ];
+    let _worldNode = "trees";
+    window._worldSetNode = function (key) {
+      if (!buyableNodes.some((n) => n.key === key)) return;
+      _worldNode = key;
+      _worldData = null;
+      _fetchWorld();
+      renderWorld();
+    };
+
     let _worldData = null, _worldErr = null, _worldLoading = false;
     // Activity window scoping every chart. null = whole dataset. The dump only contains
     // farms played in the last 90 days, so 90 is the widest window with real meaning;
@@ -19030,10 +19065,27 @@
         // ends flush on the container edge (measured: right=390 in a 390px viewport),
         // which reads as clipped next to a scrollbar.
         const mine = isMine(r, i);
+        /*
+         * Stacked rows: r.segments = [{ n, color, label }], smallest-to-largest along the
+         * bar, with r.n the total. Segments are separated by a 2px surface-coloured gap so
+         * two adjacent fills never touch — the sequential ramp used for merge tiers has
+         * deliberately close steps, and the gap is what keeps them readable.
+         */
+        const segs = r.segments && r.segments.length ? r.segments.filter((s) => s.n > 0) : null;
+        const fill = segs
+          ? segs.map((s, si) => {
+              const sw = (s.n / maxV) * 100;
+              const sTip = escHTML(`<b>${escHTML(label)} — ${escHTML(s.label)}</b><br>${_fmtNum(s.n)} farms (${r.n ? ((s.n / r.n) * 100).toFixed(1) : "0"}% z tohoto baru)`);
+              const last = si === segs.length - 1;
+              return `<div data-tip="${sTip}" style="height:100%;width:${sw}%;background:${s.color};cursor:pointer;${last ? "border-radius:0 4px 4px 0;" : "margin-right:2px;"}"></div>`;
+            }).join("")
+          : "";
         return `<div style="display:grid;grid-template-columns:${labelW}px 1fr;align-items:center;height:${rowH}px${mine ? ";background:rgba(255,215,0,0.10)" : ""}">
           <div style="font-family:${mono};font-size:0.5625rem;color:${mine ? "var(--sunpetal)" : "var(--text-dim)"};text-align:right;padding-right:6px;overflow:hidden;white-space:nowrap">${mine ? "▶" : ""}${escHTML(label)}</div>
           <div style="position:relative;height:${barH}px;margin-right:${VALUE_GUTTER}px;border-left:1px solid var(--border-brown)">
-            ${w > 0 ? `<div data-tip="${tip}" style="position:absolute;left:0;top:0;height:100%;width:${w}%;background:${color};border-radius:0 4px 4px 0;cursor:pointer${mine ? ";outline:2px solid var(--sunpetal);outline-offset:1px" : ""}"></div>` : ""}
+            ${segs
+              ? `<div style="position:absolute;left:0;top:0;height:100%;width:100%;display:flex${mine ? ";outline:2px solid var(--sunpetal);outline-offset:1px" : ""}">${fill}</div>`
+              : w > 0 ? `<div data-tip="${tip}" style="position:absolute;left:0;top:0;height:100%;width:${w}%;background:${color};border-radius:0 4px 4px 0;cursor:pointer${mine ? ";outline:2px solid var(--sunpetal);outline-offset:1px" : ""}"></div>` : ""}
             <div style="position:absolute;top:0;height:100%;left:${w}%;padding-left:5px;display:flex;align-items:center;gap:5px">${val}${mine ? `<span class="pixel-font" style="font-size:0.5rem;color:var(--sunpetal);white-space:nowrap">${escHTML(rankTag || "YOU")}</span>` : ""}</div>
           </div>
         </div>`;
@@ -19061,7 +19113,7 @@
       try {
         const getJson = (url) => fetch(url).then((r) => r.json());
         const act = _worldActive ? `&active_days=${_worldActive}` : "";
-        const [stats, islandAgg, levelAgg, reachAgg, effLevelAgg, me, ...breakdowns] = await Promise.all([
+        const [stats, islandAgg, levelAgg, reachAgg, effLevelAgg, me, nodeDist, ...breakdowns] = await Promise.all([
           getJson(`${WORLD_API}&mode=stats`),
           getJson(`${WORLD_API}&mode=agg&group=island_type${act}`).catch(() => ({ rows: [] })),
           getJson(`${WORLD_API}&mode=agg&group=total_level&limit=1000${act}`).catch(() => ({ rows: [] })),
@@ -19070,6 +19122,11 @@
           // The viewer's own farm, so its bar can be marked. Never fatal: an unknown or
           // unconfigured farm just leaves the charts unhighlighted.
           FARM_ID ? getJson(`${WORLD_API}&mode=farm&farm=${encodeURIComponent(FARM_ID)}`).catch(() => null) : Promise.resolve(null),
+          // Buyable-node distribution for the currently selected type. One type at a time:
+          // ten stacked charts down the page would be unreadable, and nine of them would
+          // be scrolled past.
+          getJson(`${WORLD_API}&mode=nodes&node=${encodeURIComponent(_worldNode)}${act}` +
+            (FARM_ID ? `&farm=${encodeURIComponent(FARM_ID)}` : "")).catch(() => null),
           ...worldBreakdowns.map((b) =>
             getJson(`${WORLD_API}&mode=agg&group=${encodeURIComponent(b.key)}${act}`)
               .then((j) => ({ ...b, rows: j.rows || [] }))
@@ -19122,7 +19179,36 @@
         const effLevelRows = [];
         for (let lvl = 1; lvl <= effMax; lvl++) effLevelRows.push({ key: lvl, n: effSeen.get(lvl) || 0 });
 
-        _worldData = { stats, islandRows, levelRows, reachRows, effLevelRows, me, breakdowns };
+        /*
+         * Buyable-node bars: one row per T1-equivalent count, gap-filled so the axis reads
+         * continuously, each split into the three mutually exclusive merge classes. The
+         * classes partition FARMS (only t1 / has t2 but no t3 / has t3), so the segments of
+         * a bar always sum to that bar's farm count.
+         */
+        let nodeRows = [], nodeMeta = null;
+        if (nodeDist && Array.isArray(nodeDist.rows)) {
+          const byEff = new Map();
+          for (const r of nodeDist.rows) {
+            if (!byEff.has(r.eff)) byEff.set(r.eff, { 1: 0, 2: 0, 3: 0 });
+            byEff.get(r.eff)[r.cls] = r.n;
+          }
+          const effs = [...byEff.keys()].sort((a, b) => a - b);
+          const hi = effs.length ? effs[effs.length - 1] : 0;
+          for (let e = effs.length ? Math.min(1, effs[0]) : 1; e <= hi; e++) {
+            const c = byEff.get(e) || { 1: 0, 2: 0, 3: 0 };
+            nodeRows.push({
+              key: e, n: c[1] + c[2] + c[3],
+              segments: [
+                { n: c[1], color: nodeTierColors[0], label: "jen T1" },
+                { n: c[2], color: nodeTierColors[1], label: "má T2, ne T3" },
+                { n: c[3], color: nodeTierColors[2], label: "má T3" },
+              ],
+            });
+          }
+          nodeMeta = { node: nodeDist.node, zero: nodeDist.zero, me: nodeDist.me, coverage: nodeDist.coverage };
+        }
+
+        _worldData = { stats, islandRows, levelRows, reachRows, effLevelRows, me, breakdowns, nodeRows, nodeMeta };
       } catch (e) {
         _worldErr = e.message || String(e);
       } finally {
@@ -19271,6 +19357,64 @@
           rankTag: me ? _youTag(_rankIn(_worldData.reachRows, me.reach_slot, (r) => r.key > me.reach_slot)) : null,
         })}
       </div>`;
+
+      /*
+       * How many of each SUNSTONE-BUYABLE node farms have. The axis is the T1 equivalent
+       * because merging consumes four nodes of the tier below, so that is what a farm
+       * actually acquired — it measures cost, not output (a merged node yields slightly
+       * more than the four it replaced).
+       */
+      {
+        const nm = _worldData.nodeMeta;
+        const def = buyableNodes.find((n) => n.key === (nm ? nm.node : _worldNode)) || buyableNodes[1];
+        const rows = _worldData.nodeRows || [];
+        const tot = rows.reduce((a, r) => a + r.n, 0);
+        const withT2 = rows.reduce((a, r) => a + r.segments[1].n, 0);
+        const withT3 = rows.reduce((a, r) => a + r.segments[2].n, 0);
+        const meEff = nm && nm.me ? nm.me.eff : null;
+        const pct = (v) => tot ? ((v / tot) * 100).toFixed(v / tot < 0.01 ? 2 : 1) + " %" : "—";
+        html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+          <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">NODY KE KOUPI ZA OBSIDIAN</div>
+          <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 8px;line-height:1.6">
+            Kolik nodů daného typu farmy mají, v <b>T1-ekvivalentu</b> (<code>t1 + 4·t2 + 16·t3</code>) —
+            merge spotřebuje 4 nody nižšího tieru, takže tohle je počet, který farma reálně
+            <b>pořídila</b>. Měří to cenu, ne výnos: mergnutý node dává o trochu víc než ty čtyři,
+            které nahradil.<br>
+            Bar je rozdělený na tři skupiny farem, které se vzájemně vylučují —
+            <span style="color:${nodeTierColors[0]}">■</span> jen T1 ·
+            <span style="color:${nodeTierColors[1]}">■</span> má aspoň jeden T2, žádný T3 ·
+            <span style="color:${nodeTierColors[2]}">■</span> má T3.
+            ${def.merge
+              ? `Mergovat lze jen Tree, Stone, Iron a Gold.`
+              : `<b>${escHTML(def.label)} mergovat nejde</b>, takže je celý bar jen T1.`}
+            Koupě prvního kusu stojí <b>${def.price} sunstonů</b> = ${def.price * 3} obsidianů, každý další víc; typ je vázaný na ostrov <b>${escHTML(def.island)}</b>.
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">
+            ${buyableNodes.map((n) => `<button onclick="_worldSetNode('${n.key}')" class="pixel-font" style="
+              font-size:0.5rem;padding:3px 7px;cursor:pointer;border:2px solid #000;
+              background:${n.key === (nm ? nm.node : _worldNode) ? "var(--sunpetal)" : "#241a12"};
+              color:${n.key === (nm ? nm.node : _worldNode) ? "#1a0e08" : "var(--text-secondary)"}">${escHTML(n.label)}${n.merge ? "" : " ·"}</button>`).join("")}
+          </div>
+          ${(() => {
+            // node_tiers is backfilled progressively; say so rather than letting a partial
+            // dataset read as the whole world.
+            const c = nm && nm.coverage;
+            if (!c || !c.total || c.filled >= c.total) return "";
+            return `<div class="pixel-font" style="font-size:0.5rem;color:var(--yellow);margin-bottom:6px">
+              ⚠️ Dopočítáno pro ${_fmtNum(c.filled)} z ${_fmtNum(c.total)} farem (${((c.filled / c.total) * 100).toFixed(1)} %) — graf zatím pokrývá jen tuhle část, doplňuje se po nejaktivnějších.</div>`;
+          })()}
+          <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px">
+            ${_fmtNum(tot)} farem má aspoň jeden${nm && nm.zero ? ` · ${_fmtNum(nm.zero)} nemá žádný` : ""}
+            ${def.merge ? ` · s T2: ${_fmtNum(withT2)} (${pct(withT2)}) · s T3: ${_fmtNum(withT3)} (${pct(withT3)})` : ""}
+            ${nm && nm.me ? ` · <span style="color:var(--sunpetal)">ty: ${nm.me.eff} T1-ekv (${nm.me.t1}×T1${nm.me.t2 ? ` + ${nm.me.t2}×T2` : ""}${nm.me.t3 ? ` + ${nm.me.t3}×T3` : ""})</span>` : ""}
+          </div>
+          ${_barChart(rows, {
+            label: (r) => `${r.key}`, rowHeight: 14, labelWidth: 46, maxHeight: 420,
+            highlight: (r) => meEff != null && r.key === meEff,
+            rankTag: meEff != null ? _youTag(_rankIn(rows, meEff, (r) => r.key > meEff)) : null,
+          })}
+        </div>`;
+      }
 
       // Breakdowns — these are the point of the crawl.
       for (const b of _worldData.breakdowns) {

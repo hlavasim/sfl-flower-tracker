@@ -13,7 +13,7 @@ const COL_TYPES = {
   balance: "double precision", coins: "double precision", gems: "double precision",
   ban_status: "text", verified: "boolean", vip_until: "timestamptz", inventory: "jsonb", inventory_hash: "text",
   last_activity: "timestamptz", is_blacklisted: "boolean",
-  game_data: "jsonb", reach_slot: "integer",
+  game_data: "jsonb", reach_slot: "integer", node_tiers: "jsonb",
 };
 const COLS = Object.keys(COL_TYPES);
 const CAST_LIST = COLS.map((c) => `${c}::${COL_TYPES[c]}`).join(",");

@@ -208,6 +208,43 @@ const DROP_FROM_GAME_DATA = ["previousInventory", "previousWardrobe", "previousB
  *        {id, nftId, farm}; the community CDN dump additionally gives lastActivity and
  *        isBlacklisted, which no API endpoint returns.
  */
+/*
+ * Nodes that can be bought with sunstones (and therefore with obsidian, 3:1) — the exact
+ * set and the farm key each lives under. From the game's RESOURCE_NODE_PRICES
+ * (events/landExpansion/buyResource.ts): price/increase per purchase, gated by island.
+ *
+ * Only trees, stones, iron and gold can be MERGED (4x tier N -> 1x tier N+1, stored as
+ * `multiplier` 4 then 16). Verified against the whole active population: the other six
+ * types have no node with multiplier > 1 anywhere, so their t2/t3 are structurally zero.
+ */
+const BUYABLE_NODE_KEYS = [
+  "crops", "trees", "stones", "fruitPatches", "iron", "gold",
+  "crimstones", "flowers", "oilReserves", "lavaPits",
+];
+
+/**
+ * Per-type [t1, t2, t3] physical node counts.
+ *
+ * Stored as its own small column rather than derived from game_data at query time: the
+ * charts need to GROUP BY this across every farm, and game_data averages ~44 KB and lives
+ * in TOAST, so a full scan has to decompress every row — measured at over 10 minutes for
+ * the active population alone. A ~200 byte column stays in the heap and scans quickly.
+ */
+function nodeTiers(f) {
+  const out = {};
+  for (const key of BUYABLE_NODE_KEYS) {
+    // Flower beds are nested; every other type sits at the top level.
+    const obj = key === "flowers" ? (f.flowers && f.flowers.flowerBeds) : f[key];
+    let t1 = 0, t2 = 0, t3 = 0;
+    for (const node of Object.values(obj || {})) {
+      const m = num(node && node.multiplier) || 1;
+      if (m >= 16) t3++; else if (m >= 4) t2++; else t1++;
+    }
+    out[key] = [t1, t2, t3];
+  }
+  return out;
+}
+
 function extractFarm(entry, bankedFoodXp) {
   const f = entry.farm || {};
   const island = f.island || {};
@@ -239,6 +276,8 @@ function extractFarm(entry, bankedFoodXp) {
     vip_until: ts(f.vip?.expiresAt),
     inventory: inv,
     inventory_hash: inventoryHash(inv),
+    // Per-type [t1, t2, t3] counts for the sunstone-buyable nodes — see nodeTiers.
+    node_tiers: nodeTiers(f),
     // CDN-only fields; null when the row came from an API endpoint instead.
     last_activity: ts(entry.lastActivity),
     is_blacklisted: typeof entry.isBlacklisted === "boolean" ? entry.isBlacklisted : null,

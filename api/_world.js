@@ -229,12 +229,97 @@ async function farmPosition(pool, q) {
   };
 }
 
+/*
+ * GET ?type=world&mode=nodes&node=trees — distribution of how many of one buyable node
+ * type farms have, split by how far they have MERGED it.
+ *
+ * Its own mode rather than a DIMS entry because the chart is a stacked bar and therefore
+ * needs two dimensions at once (count on the axis, merge class as the stack), which
+ * `agg` deliberately does not do.
+ *
+ * The axis is the T1 EQUIVALENT (t1 + 4*t2 + 16*t3): merging consumes 4 nodes of the tier
+ * below, so this is what the farm actually acquired. Note it slightly understates value —
+ * a merged node yields a little more than the four it replaced — so it measures cost, not
+ * output.
+ *
+ * Farms with none of that node are excluded from the bars (they would all pile up at zero
+ * and swamp the distribution) and reported separately as `zero`, which matters because
+ * several types are island-gated: only volcano farms can have a Lava Pit at all.
+ */
+const NODE_KEYS = new Set(["crops", "trees", "stones", "fruitPatches", "iron", "gold",
+  "crimstones", "flowers", "oilReserves", "lavaPits"]);
+
+async function nodeDistribution(pool, q) {
+  const node = String(q.node || "trees");
+  if (!NODE_KEYS.has(node)) throw new Error(`bad node: ${node}`);
+  const params = [node];
+  const filters = [].concat(q.filter || []);
+  let where = buildWhere(filters, params);
+  const active = activityClause(q.active_days, params);
+  if (active) where = where ? `${where} AND ${active}` : `WHERE ${active}`;
+  // node_tiers is NULL only on rows the backfill has not reached yet; excluding them keeps
+  // a partial backfill from reading as "these farms own nothing".
+  where = where ? `${where} AND node_tiers IS NOT NULL` : "WHERE node_tiers IS NOT NULL";
+
+  const tiers = `SELECT COALESCE((node_tiers->$1->>0)::int, 0) AS t1,
+                        COALESCE((node_tiers->$1->>1)::int, 0) AS t2,
+                        COALESCE((node_tiers->$1->>2)::int, 0) AS t3
+                   FROM farm_world ${where}`;
+  const r = await pool.query(
+    `WITH s AS (${tiers})
+     SELECT (t1 + 4*t2 + 16*t3) AS eff,
+            CASE WHEN t3 > 0 THEN 3 WHEN t2 > 0 THEN 2 ELSE 1 END AS cls,
+            COUNT(*)::bigint AS n
+       FROM s WHERE t1 + t2 + t3 > 0
+      GROUP BY 1, 2 ORDER BY 1, 2`, params);
+  const zero = await pool.query(
+    `WITH s AS (${tiers}) SELECT COUNT(*)::bigint AS n FROM s WHERE t1 + t2 + t3 = 0`, params);
+
+  /*
+   * Coverage, because node_tiers is backfilled progressively: the bars only describe rows
+   * that already have it. Without this the chart would read as "the world has 20k farms"
+   * mid-backfill, which is worse than showing nothing. The counts share the same scope
+   * filters as the bars, minus the IS NOT NULL condition.
+   */
+  const scope = [];
+  const cParams = [];
+  const cWhere = buildWhere(filters, cParams);
+  if (cWhere) scope.push(cWhere.replace(/^WHERE /, ""));
+  const cActive = activityClause(q.active_days, cParams);
+  if (cActive) scope.push(cActive);
+  const cov = await pool.query(
+    `SELECT COUNT(*)::bigint AS total, COUNT(node_tiers)::bigint AS filled
+       FROM farm_world ${scope.length ? "WHERE " + scope.join(" AND ") : ""}`, cParams);
+
+  // The viewer's own position, so the chart can mark it and rank it.
+  let me = null;
+  const id = String(q.farm || "").trim();
+  if (/^\d{1,20}$/.test(id)) {
+    const mr = await pool.query(
+      `SELECT COALESCE((node_tiers->$2->>0)::int,0) t1, COALESCE((node_tiers->$2->>1)::int,0) t2,
+              COALESCE((node_tiers->$2->>2)::int,0) t3
+         FROM farm_world WHERE farm_id = $1 AND node_tiers IS NOT NULL`, [id, node]);
+    if (mr.rows.length) {
+      const { t1, t2, t3 } = mr.rows[0];
+      me = { t1, t2, t3, eff: t1 + 4 * t2 + 16 * t3, cls: t3 > 0 ? 3 : t2 > 0 ? 2 : 1 };
+    }
+  }
+  return {
+    node,
+    rows: r.rows.map((x) => ({ eff: Number(x.eff), cls: Number(x.cls), n: Number(x.n) })),
+    zero: Number(zero.rows[0].n),
+    coverage: { total: Number(cov.rows[0].total), filled: Number(cov.rows[0].filled) },
+    me,
+  };
+}
+
 async function handleWorld(pool, q) {
   switch (q.mode || "stats") {
     case "stats": return crawlStats(pool);
     case "agg": return { rows: await aggregate(pool, q) };
     case "item": return await itemHolders(pool, q);
     case "farm": return await farmPosition(pool, q);
+    case "nodes": return await nodeDistribution(pool, q);
     case "dims": return { dims: Object.keys(DIMS), measures: Object.keys(MEASURES), funcs: Object.keys(FUNCS), ops: Object.keys(OPS) };
     default: throw new Error(`bad mode: ${q.mode}`);
   }
