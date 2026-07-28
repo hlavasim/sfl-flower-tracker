@@ -77,6 +77,58 @@ function buildWhere(filters, params) {
  * GET ?type=world&mode=agg&group=island_type&func=count&measure=xp&filter=ban_status:eq:ok
  * Returns [{ key, n, value }] ordered by n desc.
  */
+/*
+ * Precomputed-chart cache (table world_agg).
+ *
+ * A chart's GROUP BY over farm_world costs up to ~19 s at the full 656k rows, for data the
+ * daily CDN ingest changes once a day. So every chart response is stored under the ingest
+ * GENERATION it describes and served from there until a new dump lands.
+ *
+ * There is deliberately no separate refresh routine: computing on a miss and writing the
+ * result back IS the refresh. A scheduler only has to call the same public endpoints the
+ * page calls, so the SQL behind each chart exists in exactly one place.
+ */
+let _genCache = { at: 0, gen: null };
+
+async function currentGen(pool) {
+  // The generation only changes when a new dump starts, so a short memo is enough to keep
+  // this off the hot path without ever serving a stale generation for long.
+  if (Date.now() - _genCache.at < 60_000 && _genCache.gen !== null) return _genCache.gen;
+  const r = await pool.query("SELECT dump_path FROM cdn_ingest_state WHERE id = 1");
+  const gen = (r.rows[0] && r.rows[0].dump_path) || "none";
+  _genCache = { at: Date.now(), gen };
+  return gen;
+}
+
+/**
+ * Serve `dim` for `scope` from world_agg, computing and storing it on a miss.
+ * A failed write is swallowed: the caller still gets correct data, just uncached.
+ */
+async function cachedChart(pool, scope, dim, compute) {
+  const gen = await currentGen(pool);
+  try {
+    const hit = await pool.query(
+      "SELECT payload FROM world_agg WHERE gen = $1 AND scope = $2 AND dim = $3", [gen, scope, dim]);
+    if (hit.rows.length) return { ...hit.rows[0].payload, cached: true, gen };
+  } catch { /* table missing or unreadable — fall through to live */ }
+
+  const fresh = await compute();
+  try {
+    await pool.query(
+      `INSERT INTO world_agg (gen, scope, dim, payload) VALUES ($1, $2, $3, $4::jsonb)
+       ON CONFLICT (gen, scope, dim) DO UPDATE SET payload = EXCLUDED.payload, computed_at = NOW()`,
+      [gen, scope, dim, JSON.stringify(fresh)]);
+    // Yesterday's payloads can never be read again — drop them rather than grow forever.
+    await pool.query("DELETE FROM world_agg WHERE gen <> $1", [gen]);
+  } catch { /* read-only or racing writer — not worth failing the request over */ }
+  return { ...fresh, cached: false, gen };
+}
+
+const scopeKey = (q) => {
+  const d = Number(q.active_days);
+  return Number.isFinite(d) && d > 0 ? String(Math.min(Math.round(d), 3650)) : "all";
+};
+
 async function aggregate(pool, q) {
   const params = [];
   const filters = [].concat(q.filter || []);
@@ -252,6 +304,29 @@ const NODE_KEYS = new Set(["crops", "trees", "stones", "fruitPatches", "iron", "
 async function nodeDistribution(pool, q) {
   const node = String(q.node || "trees");
   if (!NODE_KEYS.has(node)) throw new Error(`bad node: ${node}`);
+  const extra = [].concat(q.filter || []).length > 0;
+  // The distribution is shared by everyone; `me` is this viewer's own position and must stay
+  // live, so it is fetched separately and never cached.
+  const me = await nodeDistMe(pool, q, node);
+  if (extra) return { ...(await nodeDistShared(pool, q, node)), me };
+  const shared = await cachedChart(pool, scopeKey(q), `nodes:${node}`, () => nodeDistShared(pool, q, node));
+  return { ...shared, me };
+}
+
+/** This farm's own tier counts for one node type — a single primary-key lookup. */
+async function nodeDistMe(pool, q, node) {
+  const id = String(q.farm || "").trim();
+  if (!/^\d{1,20}$/.test(id)) return null;
+  const mr = await pool.query(
+    `SELECT COALESCE((node_tiers->$2->>0)::int,0) t1, COALESCE((node_tiers->$2->>1)::int,0) t2,
+            COALESCE((node_tiers->$2->>2)::int,0) t3
+       FROM farm_world WHERE farm_id = $1 AND node_tiers IS NOT NULL`, [id, node]);
+  if (!mr.rows.length) return null;
+  const { t1, t2, t3 } = mr.rows[0];
+  return { t1, t2, t3, eff: t1 + 4 * t2 + 16 * t3, cls: t3 > 0 ? 3 : t2 > 0 ? 2 : 1 };
+}
+
+async function nodeDistShared(pool, q, node) {
   const params = [node];
   const filters = [].concat(q.filter || []);
   let where = buildWhere(filters, params);
@@ -291,32 +366,28 @@ async function nodeDistribution(pool, q) {
     `SELECT COUNT(*)::bigint AS total, COUNT(node_tiers)::bigint AS filled
        FROM farm_world ${scope.length ? "WHERE " + scope.join(" AND ") : ""}`, cParams);
 
-  // The viewer's own position, so the chart can mark it and rank it.
-  let me = null;
-  const id = String(q.farm || "").trim();
-  if (/^\d{1,20}$/.test(id)) {
-    const mr = await pool.query(
-      `SELECT COALESCE((node_tiers->$2->>0)::int,0) t1, COALESCE((node_tiers->$2->>1)::int,0) t2,
-              COALESCE((node_tiers->$2->>2)::int,0) t3
-         FROM farm_world WHERE farm_id = $1 AND node_tiers IS NOT NULL`, [id, node]);
-    if (mr.rows.length) {
-      const { t1, t2, t3 } = mr.rows[0];
-      me = { t1, t2, t3, eff: t1 + 4 * t2 + 16 * t3, cls: t3 > 0 ? 3 : t2 > 0 ? 2 : 1 };
-    }
-  }
   return {
     node,
     rows: r.rows.map((x) => ({ eff: Number(x.eff), cls: Number(x.cls), n: Number(x.n) })),
     zero: Number(zero.rows[0].n),
     coverage: { total: Number(cov.rows[0].total), filled: Number(cov.rows[0].filled) },
-    me,
   };
 }
 
 async function handleWorld(pool, q) {
   switch (q.mode || "stats") {
     case "stats": return crawlStats(pool);
-    case "agg": return { rows: await aggregate(pool, q) };
+    /*
+     * Only the unfiltered shape is cached — group + activity scope, which is exactly what
+     * the page asks for. An ad-hoc `filter=` from the API is computed live every time
+     * rather than filling the table with one-off combinations.
+     */
+    case "agg": {
+      const extra = [].concat(q.filter || []).length > 0;
+      if (extra || !q.group) return { rows: await aggregate(pool, q) };
+      const got = await cachedChart(pool, scopeKey(q), q.group, async () => ({ rows: await aggregate(pool, q) }));
+      return got;
+    }
     case "item": return await itemHolders(pool, q);
     case "farm": return await farmPosition(pool, q);
     case "nodes": return await nodeDistribution(pool, q);
