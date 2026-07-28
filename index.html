@@ -19582,7 +19582,18 @@
       const se = document.scrollingElement || document.documentElement;
       const y = se.scrollTop;
       paint();
-      if (y && se.scrollTop !== y) se.scrollTop = y;   // clamped by the browser if shorter
+      if (!y) return;                     // first load starts at the top; leave it there
+      /*
+       * Force a layout read before restoring. Replacing #app's innerHTML momentarily
+       * collapses the document to zero height, and a scrollTop written before the browser
+       * has re-laid out is clamped straight back to 0 — which is exactly what the scope
+       * switch did (300 -> 0) while the smaller node-panel swap survived.
+       */
+      void document.body.offsetHeight;
+      se.scrollTop = y;
+      // Belt and braces: if the new content is still growing (images, fonts), re-apply on
+      // the next frame. Skipped if the reader has since scrolled themselves.
+      requestAnimationFrame(() => { if (se.scrollTop !== y && se.scrollTop === 0) se.scrollTop = y; });
     }
 
     function _worldRenderTail(html, app) {
