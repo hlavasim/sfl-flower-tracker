@@ -3938,6 +3938,14 @@
       gold:        { base: 10, increase: 6,  farmKey: "gold",        catId: "gold",     label: "Gold" },
       crimstones:  { base: 20, increase: 20, farmKey: "crimstones",  catId: "crimstone", label: "Crimstone" },
       oilReserves: { base: 40, increase: 20, farmKey: "oilReserves", catId: "oil",      label: "Oil Reserve" },
+      // Lava Pit was missing from this table, so the advisor silently never offered it —
+      // even though everything behind it was already in place: calcMarginalForProduct has
+      // an explicit `catId === "obsidian"` branch that nets out the pit's ingredients via
+      // calcLavaPitCostPerDay, power-helpers maps the category to capacity.lavaPits, and
+      // BASE_NODE_COUNTS already carries the per-island starting count. Price 40 / +40 per
+      // purchase, volcano-gated (game: RESOURCE_NODE_PRICES in buyResource.ts).
+      // Not in MERGE_COSTS on purpose — lava pits cannot be merged.
+      lavaPits:    { base: 40, increase: 40, farmKey: "lavaPits",    catId: "obsidian", label: "Lava Pit" },
       crops:       { base: 3,  increase: 2,  farmKey: "crops",       catId: "crops",    label: "Crop Plot" },
       fruitPatches:{ base: 5,  increase: 5,  farmKey: "fruitPatches", catId: "fruits",  label: "Fruit Patch" },
       flowers:     { base: 30, increase: 25, farmKey: "flowers",     catId: "flowers",  label: "Flower Bed" },
