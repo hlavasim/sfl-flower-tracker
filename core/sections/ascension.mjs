@@ -551,18 +551,6 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
     nodeAcq.perType[node] = { profitPerDay, grossPerNode, netPerNode, effRatio, effMeasured: !!(effBy[cat] && effBy[cat].measured),
       expand: (expandAcq[node] || []).slice(0, 4), buy, currentCount: owned, bought };
   }
-  // Effective unit price of every resource that shows up in a reported expand bag, so the
-  // UI can order the material breakdown by what actually dominates the cost.
-  nodeAcq.unitPrice = {};
-  for (const d of Object.values(nodeAcq.perType)) {
-    for (const e of d.expand) {
-      for (const r of Object.keys(e.res)) {
-        if (r === "Coins" || nodeAcq.unitPrice[r] !== undefined) continue;
-        const p = prodCost[r] > 0 ? prodCost[r] : (p2pP[r] > 0 ? p2pP[r] : 0);
-        nodeAcq.unitPrice[r] = p;
-      }
-    }
-  }
 
   return { current, rates, steps: pending, frontier, bottleneck, reach, nodeCounts, grinx, maxAsc, nodeAcq };
 }
