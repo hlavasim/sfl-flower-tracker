@@ -12217,6 +12217,29 @@
       if (wid) return `https://cdn.jsdelivr.net/gh/sunflower-land/sunflower-land@main/src/assets/wearables/${wid}.webp`;
       return ITEM_ICON_BASE + encodeURIComponent(name) + ".png";
     }
+    // sfl.world serves "?" placeholders for node/plot types, so getItemIcon cannot be used
+    // for them — these are the GAME's own sprites (the same art images.ts maps: crystal =
+    // sunstone rock, shard = sunstone). Shared by the ascension plan and the node
+    // acquisition panel; keeping a second copy is what left the panel showing "?".
+    const _gassets = "https://sunflower-land.com/game-assets";
+    const _jsdAssets = "https://cdn.jsdelivr.net/gh/sunflower-land/sunflower-land@main/src/assets";
+    const nodeIconUrl = {
+      "Coins": `${_jsdAssets}/icons/coins.webp`,
+      "Crop Plot": `${_gassets}/resources/plot.png`,
+      "Fruit Patch": `${_gassets}/resources/fruit_patch.png`,
+      "Tree": `${_gassets}/resources/tree.png`,
+      "Stone Rock": `${_gassets}/resources/stone_rock.png`,
+      "Iron Rock": `${_jsdAssets}/resources/iron_rock.png`,
+      "Gold Rock": `${_jsdAssets}/resources/gold_rock.png`,
+      "Crimstone Rock": `${_jsdAssets}/resources/crimstone/crimstone_rock_5.webp`,
+      "Sunstone Rock": `${_jsdAssets}/resources/sunstone/sunstone_rock_1.webp`,
+      "Oil Reserve": `${_jsdAssets}/resources/oil/oil_reserve_full.webp`,
+      "Lava Pit": `${_jsdAssets}/resources/lava/lava_pit.webp`,
+      "Beehive": `${_jsdAssets}/sfts/beehive.webp`,
+      "Flower Bed": `${_jsdAssets}/flowers/empty.webp`,
+      "Ascension Crystal": `${_jsdAssets}/resources/sunstone/sunstone_rock_1.webp`,
+      "Ascension Shard": `${_jsdAssets}/resources/sunstone/sunstone.png`,
+    };
     function formatSFL(v) {
       if (v >= 1e6) return (v / 1e6).toFixed(2) + "M";
       if (v >= 1e4) return Math.round(v).toLocaleString();
@@ -19403,27 +19426,7 @@
         }
       </style>`;
       h += `<div class="asc-legend"><span><span style="color:#7fe0a0">■</span> mám kumulativně (zdroje i level)</span><span><span style="color:#e8c060">■</span> dofarmím včas (ETA ≤ slot)</span><span><span style="color:#ff6b6b">■</span> zásek — nestíhám build slot</span></div>`;
-      // sfl.world serves "?" placeholders for node types — use the GAME's own sprites
-      // (the same art images.ts maps: crystal = sunstone rock, shard = sunstone).
-      const _gassets = "https://sunflower-land.com/game-assets";
-      const _jsd = "https://cdn.jsdelivr.net/gh/sunflower-land/sunflower-land@main/src/assets";
-      const _ascIconUrl = {
-        "Coins": `${_jsd}/icons/coins.webp`,
-        "Crop Plot": `${_gassets}/resources/plot.png`,
-        "Fruit Patch": `${_gassets}/resources/fruit_patch.png`,
-        "Stone Rock": `${_gassets}/resources/stone_rock.png`,
-        "Iron Rock": `${_jsd}/resources/iron_rock.png`,
-        "Gold Rock": `${_jsd}/resources/gold_rock.png`,
-        "Crimstone Rock": `${_jsd}/resources/crimstone/crimstone_rock_5.webp`,
-        "Sunstone Rock": `${_jsd}/resources/sunstone/sunstone_rock_1.webp`,
-        "Oil Reserve": `${_jsd}/resources/oil/oil_reserve_full.webp`,
-        "Lava Pit": `${_jsd}/resources/lava/lava_pit.webp`,
-        "Beehive": `${_jsd}/sfts/beehive.webp`,
-        "Flower Bed": `${_jsd}/flowers/empty.webp`,
-        "Ascension Crystal": `${_jsd}/resources/sunstone/sunstone_rock_1.webp`,
-        "Ascension Shard": `${_jsd}/resources/sunstone/sunstone.png`,
-      };
-      const gi = (n) => `<img class="icn${n.startsWith("Ascension") ? " icn-asc" : ""}" src="${_ascIconUrl[n] || getItemIcon(n)}" onerror="this.style.display='none'" alt="${escHTML(n)}" title="${escHTML(n)}">`;
+      const gi = (n) => `<img class="icn${n.startsWith("Ascension") ? " icn-asc" : ""}" src="${nodeIconUrl[n] || getItemIcon(n)}" onerror="this.style.display='none'" alt="${escHTML(n)}" title="${escHTML(n)}">`;
       const kFmt = (v) => v >= 10000 ? (v / 1000).toFixed(v >= 100000 ? 0 : 1) + "k" : Math.round(v).toLocaleString();
       const byAsc = {};
       for (const s of d.steps) (byAsc[s.asc] = byAsc[s.asc] || []).push(s);
@@ -19566,17 +19569,31 @@
       if (!na || !na.perType) return "";
       const kf = (v) => v == null ? "—" : Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + "k" : Math.abs(v) >= 10 ? v.toFixed(0) : v.toFixed(1);
       const fmtEta = (d) => d == null ? "?" : (d < 1 ? (d * 24).toFixed(0) + "h" : d < 100 ? d.toFixed(1) + "d" : d.toFixed(0) + "d");
-      const gi = (n) => `<img src="${getItemIcon(n)}" onerror="this.style.display='none'" style="height:1.2em;vertical-align:-0.2em;margin-right:2px" alt="">`;
+      // nodeIconUrl, not getItemIcon: sfl.world has no art for node types and serves a
+      // "?" placeholder for them.
+      const gi = (n) => `<img src="${nodeIconUrl[n] || getItemIcon(n)}" onerror="this.style.display='none'" style="height:1.2em;vertical-align:-0.2em;margin-right:2px" alt="" title="${escHTML(n)}">`;
       const WIN = "#7fe0a0";
       const pc = na.prodCost || {};
+      /*
+       * Unit icons carry the identity so the quantity does not need a spelled-out name
+       * beside it — the name stays reachable as the icon's tooltip. Resources go through
+       * getItemIcon (sfl.world has real art for inventory items; only node/plot TYPES get
+       * a "?" placeholder there, which is what nodeIconUrl exists for).
+       */
+      const ui = (n, url) => `<img src="${url || getItemIcon(n)}" onerror="this.style.display='none'" style="height:1.15em;vertical-align:-0.22em;margin-left:2px" alt="${escHTML(n)}" title="${escHTML(n)}">`;
+      const FLOWER = ui("FLOWER", SFL_ICON_URL);
+      const OBS = ui("Obsidian");
+      const qty = (q) => q >= 1000 ? (q / 1000).toFixed(1) + "k" : q.toFixed(q < 10 && q % 1 !== 0 ? 1 : 0);
       // Materials behind an expand step, biggest FLOWER contribution first.
       const resDetail = (res) => {
         const parts = Object.entries(res || {}).filter(([r, q]) => q > 0 && r !== "Coins")
           .map(([r, q]) => ({ r, q, w: q * ((na.unitPrice && na.unitPrice[r]) || 0) }))
           .sort((a, b) => b.w - a.w).slice(0, 3)
-          .map(({ r, q }) => `${q >= 1000 ? (q / 1000).toFixed(1) + "k" : q.toFixed(q < 10 ? 1 : 0)} ${escHTML(r)}`);
+          // Name kept alongside the icon here: at this row's font size the icons are too
+          // small to tell oil, crimstone and obsidian apart on their own.
+          .map(({ r, q }) => `${qty(q)} ${escHTML(r)}${ui(r)}`);
         const coins = (res || {}).Coins || 0;
-        if (coins > 0) parts.push(`${coins >= 1000 ? (coins / 1000).toFixed(0) + "k" : coins.toFixed(0)} coins`);
+        if (coins > 0) parts.push(`${qty(coins)} coins${ui("Coins", nodeIconUrl.Coins)}`);
         return parts.join(" · ") || "—";
       };
 
@@ -19585,29 +19602,36 @@
         pc.Oil > 0 ? `oil ${pc.Oil.toFixed(3)}` : null,
       ].filter(Boolean).join(" · ");
 
+      /*
+       * The explanations live in header tooltips rather than a prose block above the table
+       * — the block was longer than the data it explained. Anything a reader cannot infer
+       * from a column label must still be reachable, so nothing was dropped, only moved.
+       */
+      const tip = (t) => escHTML(t).replace(/"/g, "&quot;");
+      const T_OBS = tip(`Obsidian je to, co tě reálně blokuje. Koupě nodu se platí sunstonem a ten se kupuje za ${na.obsidianPerSunstone || 3} obsidiany na klik, takže koupě je celá jen obsidian; expanze ho chce jen někdy. V závorce je čas při tvé těžbě ${na.obsidianPerDay ? na.obsidianPerDay.toFixed(1) : "0"} obsidian/den.`);
+      const T_MAT = tip(`Cena materiálu: co se dá koupit za nákupní cenu, obsidian a oil (koupit nejdou) za VÝROBNÍ cenu${prodNote ? ` — ${prodNote} FLOWER/ks` : ""}.`);
+      const T_PROFIT = tip("Výnos jednoho nodu po odečtení nákladů na produkci (semínka, nástroje) a přenásobený tvou naměřenou efektivitou (za číslem, ~ = nenaměřeno, použit tvůj průměr).");
+      const T_TOTAL = tip("Celá expanze — co zaplatíš, když chceš právě tenhle node a na ostatní z bundle kašleš (včetně přičtených expanzí bez profit-nodu). Podle tohoto sloupce se rozhoduje ✓.");
+      const T_SHARE = tip("Tatáž cena dělená mezi všechny nody, které expanze dá. Platí jen když využiješ všechny.");
+
       let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">
-        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:6px">🌱 NOVÝ NODE: EXPANDOVAT vs KOUPIT</div>
-        <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:10px;line-height:1.7">
-          Dvě samostatná srovnání. <strong style="color:var(--text)">OBSIDIAN</strong> = co tě reálně blokuje: koupě nodu se platí sunstonem a ten se kupuje za <strong>${na.obsidianPerSunstone || 3}&nbsp;obsidiany</strong> na klik, takže koupě je celá jen obsidian; expanze ho chce jen někdy. Přepočteno tvou těžbou <strong style="color:var(--text)">${na.obsidianPerDay ? na.obsidianPerDay.toFixed(1) : "0"} obsidian/den</strong>.
-          <strong style="color:var(--text)">MATERIÁL</strong> = kolik to stojí: co se dá koupit za nákupní cenu, obsidian a oil (koupit nejdou) za <strong>výrobní</strong> cenu${prodNote ? ` — ${prodNote} FLOWER/ks` : ""}.
-          <strong style="color:var(--text)">Net profit</strong> = výnos nodu po odečtení nákladů na produkci (semínka, nástroje) a přenásobený tvou <strong>naměřenou efektivitou</strong> (uvedená za číslem, <span style="opacity:.7">~</span> = nenaměřeno, použit tvůj průměr) — tedy stejná korekce, jakou už používá ta těžba obsidianu vedle.
-          U expandu jsou dvě čísla: <strong style="color:var(--text)">celkem</strong> = celá expanze, tj. co zaplatíš, když chceš právě tenhle node a na ostatní z bundle kašleš (+ přičtené expanze bez profit-nodu) — podle toho se rozhoduje <span style="color:${WIN}">✓</span>; <strong style="color:var(--text)">na node</strong> = tatáž cena dělená mezi všechny nody v bundle, platí jen když využiješ všechny.</div>
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:8px">🌱 NOVÝ NODE: EXPANDOVAT vs KOUPIT</div>
         <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.56rem">
           <thead>
             <tr style="color:var(--text-dim);font-size:0.5rem">
               <th style="text-align:left;padding:3px 6px"></th><th></th>
-              <th colspan="3" style="padding:3px 6px;background:#17120c;border-radius:3px 3px 0 0">OBSIDIAN (gate)</th>
-              <th colspan="3" style="padding:3px 6px">MATERIÁL (FLOWER)</th>
+              <th colspan="3" style="padding:3px 6px;background:#17120c;border-radius:3px 3px 0 0;cursor:help" title="${T_OBS}">OBSIDIAN${OBS} <span style="opacity:.7">(gate)</span></th>
+              <th colspan="3" style="padding:3px 6px;cursor:help" title="${T_MAT}">MATERIÁL${FLOWER}</th>
               <th></th>
             </tr>
             <tr style="color:var(--text-dim);text-align:right;font-size:0.5rem">
               <th style="text-align:left;padding:3px 6px">node</th>
-              <th style="padding:3px 6px">net profit/den</th>
-              <th style="padding:3px 6px;background:#17120c">expand celkem</th>
-              <th style="padding:3px 6px;background:#17120c">└ na node</th>
+              <th style="padding:3px 6px;cursor:help" title="${T_PROFIT}">net profit/den${FLOWER}</th>
+              <th style="padding:3px 6px;background:#17120c;cursor:help" title="${T_TOTAL}">expand celkem</th>
+              <th style="padding:3px 6px;background:#17120c;cursor:help" title="${T_SHARE}">└ na node</th>
               <th style="padding:3px 6px;background:#17120c">koupit</th>
-              <th style="padding:3px 6px">expand celkem</th>
-              <th style="padding:3px 6px">└ na node</th>
+              <th style="padding:3px 6px;cursor:help" title="${T_TOTAL}">expand celkem</th>
+              <th style="padding:3px 6px;cursor:help" title="${T_SHARE}">└ na node</th>
               <th style="padding:3px 6px">koupit</th>
               <th style="text-align:left;padding:3px 6px">verdikt</th>
             </tr>
@@ -19657,7 +19681,7 @@
         // Detail row: what the expand path is actually made of, and what the buy quote is.
         // Materials listed are the WHOLE expansion, matching the "celkem" columns.
         h += `<tr><td></td><td></td>
-          <td colspan="3" style="padding:0 6px 6px;background:#17120c;color:var(--text-dim);font-size:0.46rem;text-align:right">${bu ? `${bu.sunstones} sunstone × ${na.obsidianPerSunstone || 3}` : ""}</td>
+          <td colspan="3" style="padding:0 6px 6px;background:#17120c;color:var(--text-dim);font-size:0.46rem;text-align:right">${bu ? `${bu.sunstones}${ui("Sunstone")} × ${na.obsidianPerSunstone || 3}${OBS}` : ""}</td>
           <td colspan="4" style="padding:0 6px 6px;color:var(--text-dim);font-size:0.46rem">${ex ? `${escHTML(ex.label)}${ex.bundle > 1 ? ` · dá ${ex.bundle} nody` : ""} · celá expanze: ${resDetail(ex.totalRes)}${ex.farmEtaDays == null ? "" : ex.farmEtaDays > 0 ? ` · za ${fmtEta(ex.farmEtaDays)}` : " · materiál už máš"}` : ""}</td>
         </tr>`;
       }
