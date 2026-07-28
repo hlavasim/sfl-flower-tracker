@@ -18923,6 +18923,44 @@
     };
 
     /**
+     * Where the viewer sits in a chart, computed from the chart's OWN rows rather than a
+     * database query. The buckets already carry every count, so summing the ones ranked
+     * above the viewer is exact, costs nothing, and — the real reason — can never
+     * disagree with the bars actually on screen the way a separate query could. (A
+     * server-side version of this measured 16s against 656k rows; this is free.)
+     *
+     * Standard competition ranking: rank = 1 + (farms strictly better), so ties share a
+     * rank. `better` decides what "above" means for that particular chart.
+     */
+    function _rankIn(rows, mine, better) {
+      if (mine == null || !rows || !rows.length) return null;
+      let above = 0, total = 0, found = false;
+      for (const r of rows) {
+        total += r.n;
+        if (better(r)) above += r.n;
+        if (r.key === mine) found = true;
+      }
+      if (!found || !total) return null;
+      const rank = above + 1;
+      return { rank, of: total, pct: (rank / total) * 100 };
+    }
+
+    /** "#158 of 4,790 · top 3.3%" — extra precision when the percentile is tiny. */
+    function _fmtRank(rk) {
+      if (!rk) return "";
+      const pct = rk.pct < 0.1 ? rk.pct.toFixed(2) : rk.pct.toFixed(1);
+      return `#${_fmtNum(rk.rank)} of ${_fmtNum(rk.of)} · top ${pct}%`;
+    }
+
+    /** One-line "where you stand" caption under a chart. */
+    function _youLine(label, value, rk) {
+      if (rk == null) return "";
+      return `<div class="pixel-font" style="font-size:0.5625rem;color:var(--sunpetal);margin:6px 0 2px">
+        ▶ YOU — ${escHTML(String(value))} · ${escHTML(_fmtRank(rk))}
+      </div>`;
+    }
+
+    /**
      * Horizontal bar chart: one row per array entry, top to bottom, bars growing
      * right from a shared baseline. rows = [{ key, n }]; opts.colorFor(row,i) -> hex,
      * opts.label(row) -> string, opts.rowHeight (default 20, use smaller for long
@@ -19151,6 +19189,9 @@
         <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY ISLAND</div>
         <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">of ${_fmtNum(_worldData.islandRows.reduce((a, r) => a + r.n, 0))} farms in the current scope</div>
         ${_barChart(_worldData.islandRows, { colorFor: (r) => islandColors[r.key] || LEVEL_BAR_COLOR, label: (r) => r.key, rowHeight: 28, highlight: (r) => me && me.island_type === r.key })}
+        ${me ? _youLine("island", me.island_type,
+            _rankIn(_worldData.islandRows, me.island_type,
+              (r) => islandOrder.indexOf(r.key) > islandOrder.indexOf(me.island_type))) : ""}
       </div>`;
 
       // Players by exact Bumpkin level (not banded) — level has no ceiling past 200,
@@ -19160,6 +19201,8 @@
         <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY SKILL POINTS</div>
         <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">Skill points earned from XP <b>as it stands now</b> — food still sitting uneaten does not count. This is the game's getTotalBumpkinLevel (1 point per level, ascension bands included), so post-ascension reads 150 + 50 per completed band + the level within it. <b>Caveat above 200:</b> the game caps pre-ascension skill points there, so higher values are this curve (x1.03 XP per level) extrapolated — they keep extreme farms distinguishable but are not points the game grants.</div>
         ${_barChart(_worldData.levelRows, { colorFor: () => LEVEL_BAR_COLOR, label: (r) => `${r.key} sp`, rowHeight: 14, labelWidth: 46, maxHeight: 420, highlight: (r) => me && me.total_level === r.key })}
+        ${me ? _youLine("skill points", `${_fmtNum(me.total_level)} sp`,
+            _rankIn(_worldData.levelRows, me.total_level, (r) => r.key > me.total_level)) : ""}
       </div>`;
 
       // The same ladder, but counting food the farm has cooked and not yet eaten —
@@ -19176,6 +19219,8 @@
           the chart above.
         </div>
         ${_barChart(_worldData.effLevelRows, { colorFor: () => REACH_ASC_COLOR, label: (r) => `${r.key} sp`, rowHeight: 14, labelWidth: 46, maxHeight: 420, highlight: (r) => me && me.effective_level === r.key })}
+        ${me ? _youLine("skill points after food", `${_fmtNum(me.effective_level)} sp`,
+            _rankIn(_worldData.effLevelRows, me.effective_level, (r) => r.key > me.effective_level)) : ""}
       </div>`;
 
       // How far each farm COULD expand with what it already has banked — not where it
@@ -19201,6 +19246,8 @@
           rowHeight: 14, labelWidth: 72, maxHeight: 420,
           highlight: (r) => me && me.reach_slot === r.key,
         })}
+        ${me ? _youLine("reach", decodeReachSlot(me.reach_slot).label,
+            _rankIn(_worldData.reachRows, me.reach_slot, (r) => r.key > me.reach_slot)) : ""}
       </div>`;
 
       // Breakdowns — these are the point of the crawl.
