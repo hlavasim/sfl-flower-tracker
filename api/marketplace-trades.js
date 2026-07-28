@@ -1,4 +1,26 @@
 import { getPool } from "./_db.js";
+import ITEM_NAMES from "./_item-names.json" with { type: "json" };
+
+/**
+ * Marketplace id -> display name.
+ *
+ * ob_last is preferred when present because it also carries boost_text, but the
+ * orderbook collector only fills it for BOOSTED NFTs (225 rows), which is why MY TRADES
+ * showed bare ids for most items. _item-names.json (generated from the game's KNOWN_IDS
+ * and ITEM_IDS) covers the rest.
+ *
+ * Keyed per collection deliberately: the two id ranges overlap, so id 201 is "Sunflower"
+ * as a collectible but "Ash Ponytail" as a wearable. pets and buds are individual NFTs
+ * with no name table at all, so they get an explicit "#n" label rather than a wrong name.
+ */
+function itemName(collection, itemId, obLastName) {
+  if (obLastName) return obLastName;
+  const table = ITEM_NAMES[collection];
+  if (table && table[itemId]) return table[itemId];
+  if (collection === "pets") return `Pet #${itemId}`;
+  if (collection === "buds") return `Bud #${itemId}`;
+  return `#${itemId}`;
+}
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -41,11 +63,12 @@ export default async function handler(req, res) {
         const sfl = Number(r.sfl) || 0, qty = Number(r.quantity) || 1;
         const key = `${r.collection}:${r.item_id}`;
         let g = byItem.get(key);
-        if (!g) { g = { collection: r.collection, itemId: r.item_id, name: r.name, boost: r.boost_text, boughtQty: 0, boughtSfl: 0, soldQty: 0, soldSfl: 0 }; byItem.set(key, g); }
+        if (!g) { g = { collection: r.collection, itemId: r.item_id, name: itemName(r.collection, r.item_id, r.name), boost: r.boost_text, boughtQty: 0, boughtSfl: 0, soldQty: 0, soldSfl: 0 }; byItem.set(key, g); }
         if (side === "buy") { g.boughtQty += qty; g.boughtSfl += sfl; boughtSfl += sfl; buyCount++; }
         else { g.soldQty += qty; g.soldSfl += sfl; soldSfl += sfl; sellCount++; }
         const counterparty = iAmInit ? r.fulfilled_by_name : r.initiated_by_name;
-        return { date: r.fulfilled_at, collection: r.collection, itemId: r.item_id, name: r.name, boost: r.boost_text,
+        return { date: r.fulfilled_at, collection: r.collection, itemId: r.item_id,
+          name: itemName(r.collection, r.item_id, r.name), boost: r.boost_text,
           side, sfl, qty, unitPrice: qty > 0 ? sfl / qty : sfl, counterparty };
       });
       const items = [...byItem.values()].map((g) => {
