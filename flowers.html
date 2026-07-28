@@ -19571,19 +19571,33 @@
       }
     }
 
+    /*
+     * Replacing markup changes the document height — different node types have different
+     * numbers of bars — and the viewport moves with it. Measured on a real page: a node-type
+     * switch threw the scroll from 700 to 2186, and a scope switch reset it to 0. Both put
+     * the reader somewhere they did not ask to be, so the offset is restored around any
+     * repaint.
+     */
+    function _worldKeepScroll(paint) {
+      const se = document.scrollingElement || document.documentElement;
+      const y = se.scrollTop;
+      paint();
+      if (y && se.scrollTop !== y) se.scrollTop = y;   // clamped by the browser if shorter
+    }
+
     function _worldRenderTail(html, app) {
       html += `<div class="footer">
         <button class="refresh-btn" onclick="_worldData=null;_worldErr=null;renderWorld()">REFRESH</button>
         <div class="timestamp pixel-font">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
       </div>`;
-      app.innerHTML = html;
+      _worldKeepScroll(() => { app.innerHTML = html; });
     }
 
     /** Repaint only the node panel — no page rebuild, no scroll jump. */
     function _worldRepaintNodePanel() {
       const el = document.getElementById("world-node-panel");
       if (!el) { renderWorld(); return; }   // not on the page (or mid-load) — fall back
-      el.innerHTML = _worldNodePanelHtml();
+      _worldKeepScroll(() => { el.innerHTML = _worldNodePanelHtml(); });
     }
 
     // ═══════════════════════════════════════
