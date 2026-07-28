@@ -18946,13 +18946,73 @@
       { key: "lavaPits", label: "Lava Pit", icon: "Lava Pit", price: 40, island: "volcano", merge: false },
     ];
     let _worldNode = "trees";
-    window._worldSetNode = function (key) {
-      if (!buyableNodes.some((n) => n.key === key)) return;
+    // Cache per (node, scope): the underlying data changes once a day, so flipping back to
+    // a type already looked at must not re-query.
+    const _nodeDistCache = new Map();
+    let _worldNodeLoading = false;
+
+    /*
+     * Switching node type refetches ONLY the node chart. It used to clear _worldData and
+     * re-run every world query — ten aggregations, the slowest of which takes 19 s over the
+     * full 656k rows — to update one panel that none of the others depend on.
+     */
+    window._worldSetNode = async function (key) {
+      if (!buyableNodes.some((n) => n.key === key) || key === _worldNode) return;
       _worldNode = key;
-      _worldData = null;
-      _fetchWorld();
+      const cached = _nodeDistCache.get(`${key}|${_worldActive || "all"}`);
+      if (cached) { _applyNodeDist(cached); renderWorld(); return; }
+      _worldNodeLoading = true;
       renderWorld();
+      const j = await _fetchNodeDist(key);
+      _worldNodeLoading = false;
+      if (_worldNode === key) { _applyNodeDist(j); renderWorld(); }
     };
+
+    /*
+     * Buyable-node bars: one row per T1-equivalent count, gap-filled so the axis reads
+     * continuously, each split into the three mutually exclusive merge classes. The classes
+     * partition FARMS (only t1 / has t2 but no t3 / has t3), so a bar's segments always sum
+     * to its farm count.
+     */
+    function _nodeDistRows(j) {
+      if (!j || j.error || !Array.isArray(j.rows)) return { nodeRows: [], nodeMeta: null };
+      const byEff = new Map();
+      for (const r of j.rows) {
+        if (!byEff.has(r.eff)) byEff.set(r.eff, { 1: 0, 2: 0, 3: 0 });
+        byEff.get(r.eff)[r.cls] = r.n;
+      }
+      const effs = [...byEff.keys()].sort((a, b) => a - b);
+      const hi = effs.length ? effs[effs.length - 1] : 0;
+      const nodeRows = [];
+      for (let e = effs.length ? Math.min(1, effs[0]) : 1; e <= hi; e++) {
+        const c = byEff.get(e) || { 1: 0, 2: 0, 3: 0 };
+        nodeRows.push({
+          key: e, n: c[1] + c[2] + c[3],
+          segments: [
+            { n: c[1], color: nodeTierColors[0], label: "jen T1" },
+            { n: c[2], color: nodeTierColors[1], label: "má T2, ne T3" },
+            { n: c[3], color: nodeTierColors[2], label: "má T3" },
+          ],
+        });
+      }
+      return { nodeRows, nodeMeta: { node: j.node, zero: j.zero, me: j.me, coverage: j.coverage } };
+    }
+
+    function _applyNodeDist(j) {
+      if (!_worldData) return;
+      const { nodeRows, nodeMeta } = _nodeDistRows(j);
+      _worldData.nodeRows = nodeRows;
+      _worldData.nodeMeta = nodeMeta;
+    }
+
+    async function _fetchNodeDist(key) {
+      const act = _worldActive ? `&active_days=${_worldActive}` : "";
+      const url = `${WORLD_API}&mode=nodes&node=${encodeURIComponent(key)}${act}` +
+        (FARM_ID ? `&farm=${encodeURIComponent(FARM_ID)}` : "");
+      const j = await fetch(url).then((r) => r.json()).catch(() => null);
+      if (j && !j.error) _nodeDistCache.set(`${key}|${_worldActive || "all"}`, j);
+      return j;
+    }
 
     let _worldData = null, _worldErr = null, _worldLoading = false;
     // Activity window scoping every chart. null = whole dataset. The dump only contains
@@ -19187,34 +19247,8 @@
         const effLevelRows = [];
         for (let lvl = 1; lvl <= effMax; lvl++) effLevelRows.push({ key: lvl, n: effSeen.get(lvl) || 0 });
 
-        /*
-         * Buyable-node bars: one row per T1-equivalent count, gap-filled so the axis reads
-         * continuously, each split into the three mutually exclusive merge classes. The
-         * classes partition FARMS (only t1 / has t2 but no t3 / has t3), so the segments of
-         * a bar always sum to that bar's farm count.
-         */
-        let nodeRows = [], nodeMeta = null;
-        if (nodeDist && Array.isArray(nodeDist.rows)) {
-          const byEff = new Map();
-          for (const r of nodeDist.rows) {
-            if (!byEff.has(r.eff)) byEff.set(r.eff, { 1: 0, 2: 0, 3: 0 });
-            byEff.get(r.eff)[r.cls] = r.n;
-          }
-          const effs = [...byEff.keys()].sort((a, b) => a - b);
-          const hi = effs.length ? effs[effs.length - 1] : 0;
-          for (let e = effs.length ? Math.min(1, effs[0]) : 1; e <= hi; e++) {
-            const c = byEff.get(e) || { 1: 0, 2: 0, 3: 0 };
-            nodeRows.push({
-              key: e, n: c[1] + c[2] + c[3],
-              segments: [
-                { n: c[1], color: nodeTierColors[0], label: "jen T1" },
-                { n: c[2], color: nodeTierColors[1], label: "má T2, ne T3" },
-                { n: c[3], color: nodeTierColors[2], label: "má T3" },
-              ],
-            });
-          }
-          nodeMeta = { node: nodeDist.node, zero: nodeDist.zero, me: nodeDist.me, coverage: nodeDist.coverage };
-        }
+        const { nodeRows, nodeMeta } = _nodeDistRows(nodeDist);
+        if (nodeDist && !nodeDist.error) _nodeDistCache.set(`${_worldNode}|${_worldActive || "all"}`, nodeDist);
 
         _worldData = { stats, islandRows, levelRows, reachRows, effLevelRows, me, breakdowns, nodeRows, nodeMeta };
       } catch (e) {
@@ -19382,7 +19416,7 @@
         const meEff = nm && nm.me ? nm.me.eff : null;
         const pct = (v) => tot ? ((v / tot) * 100).toFixed(v / tot < 0.01 ? 2 : 1) + " %" : "—";
         html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
-          <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">NODY KE KOUPI ZA OBSIDIAN</div>
+          <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">NODY KE KOUPI ZA OBSIDIAN${_worldNodeLoading ? ` <span style="color:var(--text-dim)">· načítám…</span>` : ""}</div>
           <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 8px;line-height:1.6">
             Kolik nodů daného typu farmy mají, v <b>T1-ekvivalentu</b> (<code>t1 + 4·t2 + 16·t3</code>) —
             merge spotřebuje 4 nody nižšího tieru, takže tohle je počet, který farma reálně
