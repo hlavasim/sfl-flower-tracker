@@ -186,14 +186,16 @@ test("node acquisition: expand (rolling dead-cost, equal split) vs buy (sunstone
   // only the 7 profit nodes; no Oil/Beehive/Lava/Flower/Sunstone
   assert.deepEqual(Object.keys(na.perType).sort(),
     ["Crimstone Rock", "Crop Plot", "Fruit Patch", "Gold Rock", "Iron Rock", "Stone Rock", "Tree"]);
-  // Buying a node costs SUNSTONE and nothing else. This test previously asserted
-  // buy[0].obsidian === sunstones * 3 and priced the path through the obsidian P2P rate,
-  // which locked in a fabrication: the game's buyResource.ts only does
-  // inventory.Sunstone.sub(price). No obsidian field should exist any more.
+  // Buying pays SUNSTONE (buyResource.ts), and sunstone is bought with obsidian 3:1
+  // (exchangeObsidian.ts). What the old test got wrong was not the x3 — that is real —
+  // but the escalation input, which it never checked at all.
   const tree = na.perType.Tree;
-  assert.equal(tree.buy[0].obsidian, undefined, "buy must not invent an obsidian cost");
-  assert.equal(tree.buy[0].costSfl, undefined, "buy must not be priced via obsidian P2P");
   assert.ok(tree.buy[0].sunstones > 0, "buy is quoted in sunstones");
+  // Sunstone is itself bought with obsidian at a fixed 3:1 (exchangeObsidian.ts
+  // OBSIDIAN_PRICE), so obsidian is the buy path's real currency and the gate shared
+  // with the expand path.
+  assert.equal(na.obsidianPerSunstone, 3);
+  assert.equal(tree.buy[0].obsidian, tree.buy[0].sunstones * 3);
 
   // Escalation is per PURCHASE (farmActivity["Tree Bought"]), not per node owned —
   // using the owned count overstated prices by up to 15.4x on a real farm.

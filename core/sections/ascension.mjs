@@ -398,6 +398,8 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
   // BUY cost per node: the N-th bought node costs base+idx×increase Sunstones =
   // ×3 Obsidian, priced at the Obsidian market price; time = Obsidian ÷ eff/day.
   const PROFIT_NODES = new Set(["Crop Plot", "Fruit Patch", "Tree", "Stone Rock", "Iron Rock", "Gold Rock", "Crimstone Rock"]);
+  // exchangeObsidian.ts OBSIDIAN_PRICE — 3 obsidian buys 1 sunstone, on click.
+  const OBSIDIAN_PER_SUNSTONE = 3;
   const NODE_BUY = {
     "Crop Plot": { base: 3, inc: 2, fk: "crops" }, "Fruit Patch": { base: 5, inc: 5, fk: "fruitPatches" },
     "Tree": { base: 4, inc: 3, fk: "trees" }, "Stone Rock": { base: 4, inc: 3, fk: "stones" },
@@ -438,8 +440,8 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
     for (const node of prof) (expandAcq[node] = expandAcq[node] || []).push({ cost: perNode, res: resPerNode, bundle: prof.length, unpriced, label, farmEtaDays: s.sim && s.sim.eff ? s.sim.eff.farmEtaDays : null, buildSlotDays: s.buildSlotDays });
   }
   // BUY: next few purchases per node type
-  const sunstonePerDay = (rates.Sunstone && rates.Sunstone.eff) || 0;
-  const nodeAcq = { obsidianPerDay, sunstonePerDay, obsidianPrice, costPerXp, perType: {} };
+  const nodeAcq = { obsidianPerDay, obsidianPrice, costPerXp,
+    obsidianPerSunstone: OBSIDIAN_PER_SUNSTONE, perType: {} };
   for (const node of PROFIT_NODES) {
     const cat = NODE_TO_CAT[node];
     const profitPerDay = perNodeSfl[cat] || 0;
@@ -449,16 +451,21 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
     const bought = Math.floor(Number((farm.farmActivity || {})[`${node} Bought`]) || 0);
     const buy = [];
     for (let i = 0; i < 3; i++) {
-      // Buying a node deducts SUNSTONE and nothing else — verified in the game's
-      // buyResource.ts, which does inventory.Sunstone.sub(price) and touches no other
-      // resource. An earlier version here invented an obsidian cost (sunstones x3) and
-      // priced the buy path through the obsidian P2P rate; that was fiction.
+      // buyResource.ts pays in SUNSTONE, and sunstone is itself bought with obsidian at
+      // a fixed rate — exchangeObsidian.ts: OBSIDIAN_PRICE = 3, one sunstone per 3
+      // obsidian, on click. So obsidian is the real currency of the buy path, which makes
+      // it the gating resource for BOTH paths and lets them be compared directly.
       //
       // Escalation is per PURCHASE, not per node owned: getResourcePrice reads
-      // farmActivity["<Node> Bought"]. Using the node count overstated the price by up
-      // to 15.4x on a real farm (Crop Plot: 9 sunstones actual vs 139 reported).
+      // farmActivity["<Node> Bought"]. Using the owned count overstated prices by up to
+      // 15.4x on a real farm (Crop Plot: 9 sunstones actual, 139 reported).
       const sun = np.base + (bought + i) * np.inc;
-      buy.push({ sunstones: sun, sunstoneDays: sunstonePerDay > 0 ? sun / sunstonePerDay : null });
+      const obs = sun * OBSIDIAN_PER_SUNSTONE;
+      buy.push({
+        sunstones: sun,
+        obsidian: obs,
+        obsidianDays: obsidianPerDay > 0 ? obs / obsidianPerDay : null,
+      });
     }
     nodeAcq.perType[node] = { profitPerDay, expand: (expandAcq[node] || []).slice(0, 4), buy, currentCount: owned, bought };
   }
