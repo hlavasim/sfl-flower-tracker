@@ -32,7 +32,7 @@ import {
   calcLavaPitCostPerDay, getAnimalCatSfl, getPriceProduct, activeShrineEffects,
   buildQueueData,
 } from "../engine/power-costs.mjs";
-import { _setPowerContext, calcBoostValue } from "../engine/roadmap.mjs";
+import { _setPowerContext, calcBoostValue, roadmapEffFactor, getRoadmapSettings } from "../engine/roadmap.mjs";
 import { SKILL_UPGRADES, powerSkillRankVals, skillRankText } from "../engine/skill-ranks.mjs";
 import { buildFormulaHTML } from "../engine/power-formula.mjs";
 
@@ -349,6 +349,33 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   // into the valuations even though calcBoostValue forces effMode theoretical.
   // roi: Infinity is JSON-unrepresentable → null on the wire (client maps back).
   _setPowerContext({ farm, inventory, capacity, exchangeRates, stockMods, p2pPrices, boostItems, savedProducts, season, nftData: nftSlim, roadmapSettingsRaw: settings.roadmapSettings || {} });
+  /*
+   * `settings.measured` = value everything at this farm's OBSERVED throughput instead of the
+   * theoretical ceiling. It only means anything when the caller POSTed farm-history snapshots
+   * (api/compute sets the roadmap state from them first); without that roadmapEffFactor falls
+   * back and the two bases coincide.
+   *
+   * Declared HERE, above the first consumer. Putting it after this loop made every
+   * calcBoostValue call throw a ReferenceError which the surrounding try/catch swallowed —
+   * boostValues came back empty and four tests failed with "cannot read synergy of undefined"
+   * rather than pointing at the real cause.
+   */
+  const effMode = settings.measured ? "measured" : undefined;
+  /*
+   * Scaling to measured throughput has to happen HERE, not by asking calcBoostValue for it.
+   *
+   * calcBoostValue takes an effMode, but neither roadmapCatBreakdown nor roadmapMiningChain —
+   * the two functions that actually produce its numbers — ever calls roadmapEffFactor. So the
+   * flag changes nothing downstream and every value it returns is theoretical. (That is also
+   * why the wishlist's "dle efektivity" column is identical to the theoretical one for
+   * collectibles and wearables: a separate, older bug, untouched here.)
+   *
+   * So the per-category value is multiplied by that category's measured ratio, which is what
+   * the roadmap's own skills view does to its parts. Categories with no harvest signal fall
+   * back inside roadmapEffFactor, so animals and obsidian stay at 1 rather than being guessed.
+   */
+  const effRs = getRoadmapSettings(settings.roadmapSettings || {});
+  const effScale = (catId) => (settings.measured ? roadmapEffFactor(catId, effRs) : 1);
   const boostValues = {};
   for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
     if (!catDef.quantifiable) continue;
@@ -356,10 +383,17 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     boostValues[catId] = {};
     for (const b of catBoosts[catId]) {
       try {
-        const v = calcBoostValue(b, catId, product, capacity, p2pPrices, catBoosts[catId], b.has);
+        const v = calcBoostValue(b, catId, product, capacity, p2pPrices, catBoosts[catId], b.has, effMode);
         if (!isFinite(v.roi)) v.roi = null;
         if (!isFinite(v.solo)) v.solo = 0;
         if (!isFinite(v.synergy)) v.synergy = 0;
+        // Measured basis: scale to this category's observed throughput, then re-derive the ROI
+        // from the scaled value so cost/value stay consistent.
+        const f = effScale(catId);
+        if (f !== 1) {
+          v.solo *= f; v.synergy *= f;
+          v.roi = (b.floor > 0 && v.synergy > 0) ? b.floor / v.synergy : null;
+        }
         boostValues[catId][b.name] = v;
       } catch {}
     }
@@ -388,12 +422,13 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     for (const catId of cats) {
       const product = savedProducts[catId] || getDefaultProduct(catId);
       let r = null;
-      try { r = powerSkillRankVals(b, catId, product, capacity, p2pPrices, catBoosts[catId] || [], b.has); } catch { r = null; }
+      try { r = powerSkillRankVals(b, catId, product, capacity, p2pPrices, catBoosts[catId] || [], b.has, effMode); } catch { r = null; }
       if (!r || !r.rows.length) continue;
       info = info || r;
       for (const row of r.rows) {
         const cur = byLvl.get(row.lvl) || { lvl: row.lvl, delta: 0, byCat: {}, points: row.points, shards: row.shards };
-        if (isFinite(row.delta) && row.delta !== 0) { cur.delta += row.delta; cur.byCat[catId] = row.delta; }
+        const d = (isFinite(row.delta) ? row.delta : 0) * effScale(catId);
+        if (d !== 0) { cur.delta += d; cur.byCat[catId] = d; }
         byLvl.set(row.lvl, cur);
       }
     }
@@ -465,5 +500,5 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     }
   }
 
-  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, skillRanks, restockQueues, ...(boostValuesEff ? { boostValuesEff } : {}), ...(formulaHtml !== undefined ? { formulaHtml } : {}) };
+  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, skillRanks, valueBasis: settings.measured ? "measured" : "theoretical", restockQueues, ...(boostValuesEff ? { boostValuesEff } : {}), ...(formulaHtml !== undefined ? { formulaHtml } : {}) };
 }

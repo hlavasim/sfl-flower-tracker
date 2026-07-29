@@ -281,7 +281,33 @@ export default async function handler(req, res) {
       let roadmapSettings = {};
       try { roadmapSettings = req.query.roadmap ? JSON.parse(req.query.roadmap) : {}; } catch { roadmapSettings = {}; }
       // formulaFor/formulaCat: on-demand derivation panel for one boost (page click).
-      data = buildPowerSection(farm, p2p, nftResult.data, exchange, { ...settings, roadmapSettings, formulaFor: req.query.formulaFor, formulaCat: req.query.formulaCat, savedProducts: req.query.products ? JSON.parse(req.query.products) : {} });
+      const pwSettings = { ...settings, roadmapSettings, formulaFor: req.query.formulaFor, formulaCat: req.query.formulaCat, savedProducts: req.query.products ? JSON.parse(req.query.products) : {} };
+      /*
+       * Optional POST body { snapshots } → value everything at this farm's MEASURED throughput
+       * instead of the theoretical ceiling, so the roadmap's skill advice can be honest about
+       * what the boosts will actually earn here. Absent → theoretical, exactly as before, so a
+       * plain GET is unchanged for every existing caller.
+       *
+       * The double pass is load-bearing and the order is the one section=wishlist got wrong:
+       * roadmapComputeEfficiency READS powerState (roadmapOwnedEffects → boostItems, capacity,
+       * farm), so a context pass has to run first — otherwise it throws on a cold instance and,
+       * worse, silently measures against whichever farm the warm instance served last. Then the
+       * roadmap state is set, then the real pass consumes it.
+       */
+      const pwBody = _parseBody(req.body);
+      const pwSnaps = Array.isArray(pwBody.snapshots) ? pwBody.snapshots : [];
+      if (pwSnaps.length) {
+        buildPowerSection(farm, p2p, nftResult.data, exchange, pwSettings); // context only
+        const pwEff = roadmapComputeEfficiency(pwSnaps);
+        _setRoadmapState({
+          effByCat: pwEff.effByCat || {}, effMeta: pwEff.meta,
+          meanRatio: typeof pwEff.meanRatio === "number" ? pwEff.meanRatio : 0.5,
+        });
+        pwSettings.measured = true;
+        pwSettings.effMeta = pwEff.meta;
+      }
+      data = buildPowerSection(farm, p2p, nftResult.data, exchange, pwSettings);
+      if (pwSettings.effMeta) data.effMeta = pwSettings.effMeta;
     }
     // `eff`: POST-only — measured harvest EFFICIENCY per category from farm-history
     // snapshot rows the client already fetched (diff-page pattern: compute stays

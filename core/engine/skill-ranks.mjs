@@ -95,7 +95,7 @@ function skillRankFactor(up, rank) {
 const SKILL_RANK_PRICEABLE = ["additiveYield", "growthMultiplier", "costMultiplier", "coinBonus", "flatDebuff", "oilReduction", "multiplier", "flatReduction", "chance"];
 
 // Per-rank value of a skill for ONE category. rows[] = the MARGINAL of each rank-up.
-function powerSkillRankVals(b, catId, product, capacity, p2pPrices, allCatBoosts, isOwned) {
+function powerSkillRankVals(b, catId, product, capacity, p2pPrices, allCatBoosts, isOwned, effMode) {
   if (!b || b.type !== "Skill" || typeof SKILL_UPGRADES === "undefined") return null;
   const up = SKILL_UPGRADES[b.name];
   if (!up || !up.ranks || !(up.maxLevel > 1)) return null;
@@ -106,7 +106,7 @@ function powerSkillRankVals(b, catId, product, capacity, p2pPrices, allCatBoosts
   const valAt = (lvl) => {
     const f = skillRankFactor(up, lvl);
     const sb = Object.assign({}, b, { effects: (b.effects || []).map(e => (typeof e.value === "number") ? Object.assign({}, e, { value: e.value * f }) : e) });
-    try { const v = calcBoostValue(sb, catId, product, capacity, p2pPrices, allCatBoosts, isOwned); return (v && isFinite(v.synergy)) ? v.synergy : 0; } catch (e) { return 0; }
+    try { const v = calcBoostValue(sb, catId, product, capacity, p2pPrices, allCatBoosts, isOwned, effMode); return (v && isFinite(v.synergy)) ? v.synergy : 0; } catch (e) { return 0; }
   };
   let prev = valAt(1);
   for (let lvl = 2; lvl <= up.maxLevel; lvl++) { const v = valAt(lvl); out.rows.push({ lvl, delta: v - prev, shards: cost.shards, points: cost.points }); prev = v; }

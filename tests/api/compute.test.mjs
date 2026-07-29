@@ -589,3 +589,61 @@ test("section=wishlist handles a category with nothing listed, and an unknown on
     globalThis.fetch = orig;
   }
 });
+
+test("section=power prices at MEASURED throughput when snapshots are posted", async () => {
+  const orig = globalThis.fetch;
+  globalThis.fetch = mockFetchForAscension();
+  try {
+    /*
+     * The roadmap's skill advice has to say what a boost will really earn on this farm, not its
+     * theoretical ceiling. A plain GET must stay theoretical (every existing caller relies on
+     * that), and a POST with history must actually move the numbers.
+     *
+     * The context ordering is the trap section=wishlist fell into: roadmapComputeEfficiency
+     * reads powerState, so it throws on a cold instance unless a context pass runs first.
+     * _setPowerContext(null) here reproduces exactly that cold instance.
+     */
+    const { _setPowerContext } = await import("../../core/engine/roadmap.mjs");
+    const snapshots = [
+      { captured_at: "2026-07-18T08:00:00.000Z", diff: { "_h.trees": 3, "_h.stones": 2, "_h.iron": 1 } },
+      { captured_at: "2026-07-24T08:00:00.000Z", diff: { "_h.trees": 4, "_h.stones": 2, "_h.iron": 1 } },
+    ];
+
+    _clearCacheForTests(); _setPowerContext(null);
+    const theo = mockRes();
+    await handler({ query: { farm: "155498", section: "power" } }, theo);
+    assert.equal(theo._status, 200, "plain GET still works");
+    assert.equal(theo._json.data.valueBasis, "theoretical", "no body → theoretical, unchanged");
+
+    _clearCacheForTests(); _setPowerContext(null);
+    const meas = mockRes();
+    await handler({ query: { farm: "155498", section: "power" }, body: { snapshots } }, meas);
+    assert.equal(meas._status, 200,
+      `POST must not 500 on a cold instance: ${JSON.stringify(meas._json).slice(0, 200)}`);
+    assert.equal(meas._json.data.valueBasis, "measured");
+    assert.ok(meas._json.data.effMeta && meas._json.data.effMeta.snaps === 2, "the history is reported back");
+
+    // Not vacuous: a measured pass on a farm that harvests a few times a week must value a
+    // tree boost BELOW its theoretical ceiling. If these ever match, the flag does nothing.
+    const treeVal = (d) => {
+      const cat = (d.boostValues || {}).trees || {};
+      const names = Object.keys(cat).filter((n) => cat[n].synergy > 0);
+      return names.reduce((s, n) => s + cat[n].synergy, 0);
+    };
+    const t = treeVal(theo._json.data), m = treeVal(meas._json.data);
+    assert.ok(t > 0, "the fixture values some tree boosts theoretically");
+    assert.ok(m < t, `measured tree value ${m} must sit below theoretical ${t}`);
+
+    // Ranks follow the same basis — they run through the same calcBoostValue.
+    const rank = (d) => {
+      const r = (d.skillRanks || {})["Tough Tree"];
+      return r && r.rows.length ? r.rows[0].delta : null;
+    };
+    const rt = rank(theo._json.data), rm = rank(meas._json.data);
+    if (rt != null && rm != null && rt > 0) {
+      assert.ok(rm < rt, `a rank must be discounted too (${rm} vs ${rt})`);
+    }
+  } finally {
+    globalThis.fetch = orig;
+  }
+});

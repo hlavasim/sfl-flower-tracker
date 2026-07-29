@@ -15869,7 +15869,17 @@
     async function buildPowerState(data) {
       const { inventory, farm } = data;
       const url = `/api/compute?farm=${FARM_ID}&section=power&products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}&roadmap=${encodeURIComponent(localStorage.getItem("sfl_roadmap_settings") || "{}")}`;
-      const payload = await _fetchCompute(url);
+      /*
+       * POST the farm-history snapshots so every boost value is priced at this farm's MEASURED
+       * throughput rather than the theoretical ceiling. Same pattern as the roadmap, ascension
+       * and wishlist calls. If the history fetch fails we send nothing and the server falls
+       * back to theoretical — `valueBasis` in the response says which one you got.
+       */
+      if (!_roadmapSnapshotsCache) { try { _roadmapSnapshotsCache = await _roadmapFetchHistorySlim(); } catch (e) { _roadmapSnapshotsCache = []; } }
+      const payload = await _fetchCompute(url, (_roadmapSnapshotsCache && _roadmapSnapshotsCache.length)
+        ? { init: { method: "POST", headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ snapshots: _roadmapSnapshotsCache }) } }
+        : undefined);
       const d = payload.data || {};
       // Rebuild category → boosts mapping (shared refs into boostItems)
       const catBoosts = {};
@@ -17054,11 +17064,16 @@
       const shardsHave = Math.floor((ps.inventory && parseFloat(ps.inventory["Ascension Shard"])) || 0);
 
       // L1 value = the synergy the Power page shows, summed over the categories it pays out in.
-      const l1Value = (name) => {
-        let t = 0, found = false;
-        for (const cat of Object.keys(bv)) { const v = bv[cat] && bv[cat][name]; if (v && isFinite(v.synergy)) { t += v.synergy; found = true; } }
-        return found ? t : null;
+      // byCat is kept so the expanded detail can show WHERE the number comes from.
+      const l1Parts = (name) => {
+        let t = 0, found = false; const byCat = {};
+        for (const cat of Object.keys(bv)) {
+          const v = bv[cat] && bv[cat][name];
+          if (v && isFinite(v.synergy)) { t += v.synergy; found = true; if (Math.abs(v.synergy) > 1e-6) byCat[cat] = v.synergy; }
+        }
+        return found ? { total: t, byCat } : null;
       };
+      const l1Value = (name) => { const p = l1Parts(name); return p ? p.total : null; };
       // Tier gate: a tier only opens once enough points sit in that tree, and tier-3 spending
       // never counts (game: getUnlockedTierForTree). Flagged, not silently ordered around.
       const inTree = {};
@@ -17074,9 +17089,9 @@
       const stepFor = (b) => {
         const cur = at[b.name];
         if (cur === 0) {
-          const v = l1Value(b.name), pts = b.skillPoints || 1;
-          if (v == null || !(v > 0.0001)) return null;
-          return { lvl: 1, delta: v, points: pts, shards: 0, text: b.boost, gap: gateGap(b) };
+          const p = l1Parts(b.name), pts = b.skillPoints || 1;
+          if (!p || !(p.total > 0.0001)) return null;
+          return { lvl: 1, delta: p.total, points: pts, shards: 0, text: b.boost, byCat: p.byCat, gap: gateGap(b) };
         }
         const s = sr[b.name];
         if (!s || cur >= s.maxLevel) return null;
@@ -17110,7 +17125,9 @@
       // whichever binds first — with 0 shards banked, every rank is beyond it by definition.
       const affordable = order.filter(o => o.cPts <= freePts && o.cSh <= shardsHave).length;
 
-      let h = `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Every upgrade you can still take — buying a skill (L1) and each rank above it — best payback first, walked as a ladder so nothing sits above what it needs. <b>${order.length} steps · ${cPts} skill points · ${cSh} Ascension Shards · +${roadmapFmtFlower(cGain)}/day</b> if you took the lot. You have <b style="color:var(--green)">${freePts} point${freePts === 1 ? "" : "s"}</b> and <b style="color:${shardsHave ? "var(--green)" : "var(--red)"}">${shardsHave} shard${shardsHave === 1 ? "" : "s"}</b>. ROI prices points only — shards are not tradable, so they have no price. Values are the POWER page's, theoretical throughput; the roadmap's efficiency toggle is not applied to them.</div>`;
+      let h = `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Every upgrade you can still take — buying a skill (L1) and each rank above it — best payback first, walked as a ladder so nothing sits above what it needs. <b>${order.length} steps · ${cPts} skill points · ${cSh} Ascension Shards · +${roadmapFmtFlower(cGain)}/day</b> if you took the lot. You have <b style="color:var(--green)">${freePts} point${freePts === 1 ? "" : "s"}</b> and <b style="color:${shardsHave ? "var(--green)" : "var(--red)"}">${shardsHave} shard${shardsHave === 1 ? "" : "s"}</b>. ROI prices points only — shards are not tradable, so they have no price. ${ps.valueBasis === "measured"
+        ? `Values are priced at your <b>measured</b> throughput${ps.effMeta && ps.effMeta.days > 1 ? ` (${ps.effMeta.snaps} snapshots over ${ps.effMeta.days.toFixed(1)} days)` : ""}, not the theoretical ceiling.`
+        : `Values are at <b>theoretical</b> throughput — no farm history reached the server, so measured could not be computed.`}</div>`;
       h += `<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;overflow:hidden">`;
       h += `<div style="display:flex;gap:8px;padding:3px 8px;border-bottom:1px solid #20190f;font-size:0.44rem;color:var(--text-dim)"><span style="min-width:22px"></span><span style="flex:1;min-width:0">skill</span><span style="min-width:118px">tree · cost</span><span style="min-width:58px;text-align:right">FLOWER/d</span><span style="min-width:42px;text-align:right">ROI</span><span style="min-width:78px;text-align:right">cumulative</span></div>`;
       order.forEach((r, i) => {
@@ -17123,7 +17140,27 @@
         const roiTxt = r.roi < 400 ? Math.round(r.roi) + "d" : (r.roi / 365).toFixed(1) + "r";
         const dim = i >= affordable ? "opacity:0.55;" : "";
         const gate = r.gap > 0 ? ` <span style="color:#e8a060;font-size:0.42rem" title="This tier only opens once ${r.gap} more point${r.gap === 1 ? "" : "s"} sit in ${escHTML(r.tree)} (tier-3 points do not count)">🔒${r.gap}pt</span>` : "";
-        h += `<div style="display:flex;gap:8px;align-items:baseline;padding:4px 8px;border-bottom:1px solid #20190f;font-size:0.55rem;${dim}"><span style="color:var(--text-dim);min-width:22px">${i + 1}.</span><b style="flex:1;min-width:0">${escHTML(r.name)} <span style="color:var(--text-dim);font-weight:normal">L${r.lvl}</span>${gate}</b><span style="color:${col};font-size:0.45rem;min-width:118px" title="${escHTML(r.text || "")}">${escHTML(r.tree || "")} · ${r.points}pt${r.shards ? " + " + r.shards + "◆" : ""}</span><span style="color:var(--green);font-weight:bold;min-width:58px;text-align:right">+${roadmapFmtFlower(r.delta)}/d</span><span style="color:${roiColorFor(r.roi)};font-size:0.45rem;min-width:42px;text-align:right">${roiTxt}</span><span style="color:var(--text-dim);font-size:0.45rem;min-width:78px;text-align:right">${r.cPts}pt${r.cSh ? " · " + r.cSh + "◆" : ""}</span></div>`;
+        /*
+         * Click a row to see what the skill actually does. The toggle walks to the next
+         * sibling instead of taking the skill name as an argument — several skill names carry
+         * an apostrophe (Betty's Friend, Lumberjack's Extra, Laurie's Gains) and putting one
+         * into a single-quoted JS string inside an HTML attribute is exactly the bug that made
+         * the wishlist's ✕ silently dead. No name, no escaping problem.
+         */
+        const TOGGLE = "var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none';";
+        h += `<div onclick="${TOGGLE}" title="klikni pro detail" style="display:flex;gap:8px;align-items:baseline;padding:4px 8px;border-bottom:1px solid #20190f;font-size:0.55rem;cursor:pointer;${dim}"><span style="color:var(--text-dim);min-width:22px">${i + 1}.</span><b style="flex:1;min-width:0">${escHTML(r.name)} <span style="color:var(--text-dim);font-weight:normal">L${r.lvl}</span>${gate}</b><span style="color:${col};font-size:0.45rem;min-width:118px">${escHTML(r.tree || "")} · ${r.points}pt${r.shards ? " + " + r.shards + "◆" : ""}</span><span style="color:var(--green);font-weight:bold;min-width:58px;text-align:right">+${roadmapFmtFlower(r.delta)}/d</span><span style="color:${roiColorFor(r.roi)};font-size:0.45rem;min-width:42px;text-align:right">${roiTxt}</span><span style="color:var(--text-dim);font-size:0.45rem;min-width:78px;text-align:right">${r.cPts}pt${r.cSh ? " · " + r.cSh + "◆" : ""}</span></div>`;
+
+        const catRows = Object.entries(r.byCat || {}).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+        const sd = SKILL_TREE_DATA[r.name] || {};
+        h += `<div style="display:none;padding:6px 10px 8px 30px;border-bottom:1px solid #20190f;background:#120d07;font-size:0.47rem;color:var(--text-secondary);line-height:1.8">
+          <div><span style="color:var(--text-dim)">co to dělá:</span> <b>${escHTML(r.text || sd.buff || "—")}</b></div>
+          ${r.lvl === 1 && sd.debuff ? `<div><span style="color:var(--text-dim)">nevýhoda:</span> <span style="color:var(--red)">${escHTML(sd.debuff)}</span></div>` : ""}
+          ${r.lvl > 1 ? `<div style="color:var(--text-dim)">rank ${r.lvl} z ${(sr[r.name] || {}).maxLevel || "?"} · ${r.points} bodů + ${r.shards} shard${r.shards === 1 ? "" : "ů"}</div>`
+                      : `<div style="color:var(--text-dim)">koupě skillu · tier ${r.tier || 1} · ${r.points} bod${r.points === 1 ? "" : "ů"}</div>`}
+          ${catRows.length ? `<div><span style="color:var(--text-dim)">rozpad:</span> ${catRows.map(([c, v]) => `${escHTML((POWER_CATEGORIES[c] && POWER_CATEGORIES[c].label) || c)} <b style="color:${v >= 0 ? "var(--green)" : "var(--red)"}">${v >= 0 ? "+" : "−"}${roadmapFmtFlower(Math.abs(v))}/d</b>`).join(" · ")}</div>` : ""}
+          <div style="color:var(--text-dim)">cena bodů ≈ ${roadmapFmtFlower(sflPerPt * r.points)} ${sflIcon()} · zaplatí se za ${roiTxt}</div>
+          ${r.gap > 0 ? `<div style="color:#e8a060">🔒 tier zatím není otevřený — chybí ${r.gap} bod${r.gap === 1 ? "" : "ů"} ve stromě ${escHTML(r.tree)} (body za tier 3 se nepočítají)</div>` : ""}
+        </div>`;
       });
       h += `</div>`;
       h += `<div style="font-size:0.47rem;color:var(--text-dim);margin-top:6px;line-height:1.7;border-top:1px solid #20190f;padding-top:6px">🔒 marks a tier that is not open yet — the game needs that many more points in the tree first (tier-3 points never count towards it). Not listed at all: upgrades worth 0 FLOWER/day here — XP, daily-limit and cooking-speed kinds carry no production value, and neither does a boost this farm already makes redundant.</div>`;
@@ -18830,7 +18867,7 @@
     const SKILL_RANK_PRICEABLE = ["additiveYield", "growthMultiplier", "costMultiplier", "coinBonus", "flatDebuff", "oilReduction", "multiplier", "flatReduction", "chance"];
     // Per-rank value of a skill for ONE category: re-run calcBoostValue with the skill's effects scaled to
     // the rank's magnitude, so growth/yield stay exact. rows[] = the MARGINAL of each rank-up.
-    function powerSkillRankVals(b, catId, product, capacity, p2pPrices, allCatBoosts, isOwned) {
+    function powerSkillRankVals(b, catId, product, capacity, p2pPrices, allCatBoosts, isOwned, effMode) {
       if (!b || b.type !== "Skill" || typeof SKILL_UPGRADES === "undefined") return null;
       const up = SKILL_UPGRADES[b.name];
       if (!up || !up.ranks || !(up.maxLevel > 1)) return null;
@@ -18841,7 +18878,7 @@
       const valAt = (lvl) => {
         const f = skillRankFactor(up, lvl);
         const sb = Object.assign({}, b, { effects: (b.effects || []).map(e => (typeof e.value === "number") ? Object.assign({}, e, { value: e.value * f }) : e) });
-        try { const v = calcBoostValue(sb, catId, product, capacity, p2pPrices, allCatBoosts, isOwned); return (v && isFinite(v.synergy)) ? v.synergy : 0; } catch (e) { return 0; }
+        try { const v = calcBoostValue(sb, catId, product, capacity, p2pPrices, allCatBoosts, isOwned, effMode); return (v && isFinite(v.synergy)) ? v.synergy : 0; } catch (e) { return 0; }
       };
       let prev = valAt(1);
       for (let lvl = 2; lvl <= up.maxLevel; lvl++) { const v = valAt(lvl); out.rows.push({ lvl, delta: v - prev, shards: cost.shards, points: cost.points }); prev = v; }
