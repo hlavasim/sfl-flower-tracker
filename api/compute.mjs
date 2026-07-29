@@ -373,8 +373,16 @@ export default async function handler(req, res) {
       });
       const powerData = buildPowerSection(farm, p2p, nftResult.data, exchange,
         { ...settings, roadmapSettings: wlRoadmap, effectiveFor: wishNames });
+      /*
+       * `buds:<id>` rows are resolved here too, instead of being appended client-side after
+       * the response — that is what left every bud row without perDay/roiDays. `p2p` and the
+       * farm give the bud engine the same inputs section=buds uses; `budFloors` is POSTed by
+       * the client because per-id marketplace asks live in the DB and compute stays DB-free.
+       */
       data = buildWishlistSection(farm, nftResult.data, {
         list, boostValues: powerData.boostValues, boostValuesEff: powerData.boostValuesEff,
+        p2p, roadmapSettings: wlRoadmap,
+        budFloors: (wlBody.budFloors && typeof wlBody.budFloors === "object") ? wlBody.budFloors : {},
       });
     }
     // `roi`: the ROI page's state — the page's own copy of the power fetch+rate block

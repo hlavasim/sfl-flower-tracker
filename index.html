@@ -13580,7 +13580,11 @@
     // Bud catalog for the wishlist: mineral-boosting buds that are CURRENTLY listed
     // (buyable), joining marketplace floors (budfloors) with section=buds traits.
     // Buds are 1-of-1 so each is its own catalog entry keyed by id. Cached per page.
+    // _wlBudFloors keeps the RAW floors map (every listed bud, not just the mineral ones the
+    // picker offers): the wishlist POSTs the floors of its own bud rows to compute, which
+    // cannot read the marketplace DB itself.
     let _wlBudCache = null;
+    let _wlBudFloors = {};
     async function _wlLoadBudCatalog() {
       if (_wlBudCache) return _wlBudCache;
       try {
@@ -13590,6 +13594,7 @@
         ]);
         if (!fR.ok || !bR.ok) return (_wlBudCache = []);
         const floors = {}; for (const i of (await fR.json()).items || []) floors[i.id] = i.floor;
+        _wlBudFloors = floors;
         const rows = ((await bR.json()).data || {}).rows || [];
         const MIN = new Set(["stone", "iron", "gold", "crimstone"]);
         const cat = [];
@@ -13654,18 +13659,31 @@
       const el = document.getElementById("wishlist-panel");
       if (!el) return;
       if (!_wlLoaded) { await _wlLoadFromDb(); _wlLoaded = true; }
+      /*
+       * The bud catalog is loaded BEFORE the compute call, not after it: the server resolves
+       * "buds:<id>" wishlist rows itself now, and it needs their marketplace floors, which
+       * only this DB endpoint has.
+       */
+      const budCat = await _wlLoadBudCatalog();
       let d;
       try {
         /*
          * POSTs the farm-history snapshots, like the roadmap and ascension calls: measured
          * efficiency exists on the server only if they are supplied, and without them the
-         * "dle efektivity" column came out identical to the theoretical one.
+         * "dle efektivity" column came out identical to the theoretical one. `budFloors`
+         * rides along for the same reason the snapshots do — compute stays DB-free.
          */
         if (!_roadmapSnapshotsCache) _roadmapSnapshotsCache = await _roadmapFetchHistorySlim();
+        const budFloors = {};
+        for (const k of Object.keys(_wlGet())) {
+          if (!k.startsWith("buds:")) continue;
+          const id = k.slice(5);
+          if (_wlBudFloors[id] != null) budFloors[id] = _wlBudFloors[id];
+        }
         const payload = await _fetchCompute(
           `/api/compute?farm=${FARM_ID}&section=wishlist&list=${encodeURIComponent(JSON.stringify(_wlGet()))}`,
           { init: { method: "POST", headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [] }) } });
+                    body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [], budFloors }) } });
         d = payload.data || {};
       } catch (e) {
         el.innerHTML = `<div class="pixel-panel pixel-font" style="padding:10px;color:var(--red);font-size:0.55rem">Wishlist failed to load: ${escHTML(e.message)}</div>`;
@@ -13678,29 +13696,11 @@
         _wlSave(l);
       }
       _wlCatalog = d.catalog || [];
-      // ── buds: 1-of-1 NFTs, so priced per-id. Merge the mineral-boosting listed
-      // buds into the catalog (pickable) and resolve any "buds:<id>" wishlist rows
-      // here (the core section only knows collectibles/wearables). Same table, not
-      // a separate section. Bud costs are folded into the summary below.
-      const budCat = await _wlLoadBudCatalog();
+      // ── buds: 1-of-1 NFTs, so priced per-id. Only the PICKER is assembled here — the
+      // mineral-boosting listed buds, merged in so they can be wishlisted. The rows
+      // themselves (and their FLOWER/day, ROI and per-priority costs) come from the server
+      // like every other item; appending them here is exactly what left them without an ROI.
       for (const bc of budCat) _wlCatalog.push(bc);
-      const wl = _wlGet();
-      const budCatById = {}; for (const bc of budCat) budCatById[bc.name] = bc;
-      for (const [key, prio] of Object.entries(wl)) {
-        if (!key.startsWith("buds:")) continue;
-        const nm = key.slice(5);
-        const bc = budCatById[nm] || _wlCatalog.find(c => c.collection === "buds" && c.name === nm);
-        d.rows.push({ key, name: bc ? bc.label : `🌱 Bud #${nm}`, floor: bc ? bc.floor : 0, lastSale: bc ? (bc.lastSale || 0) : 0, priority: prio, owned: false, boost: bc ? bc.boost : "" });
-      }
-      // recompute the per-priority summary so buds are counted too
-      d.rows.sort((a, b) => (a.priority - b.priority) || (b.floor - a.floor));
-      let _cc = 0;
-      for (const p of [1, 2, 3]) {
-        const rp = d.rows.filter(r => r.priority === p && !r.owned);
-        const cost = rp.reduce((s, r) => s + (r.floor || 0), 0);
-        _cc += cost;
-        d.byPriority[p] = { count: rp.length, unowned: rp.length, cost, cumulative: _cc, affordable: d.balance >= _cc };
-      }
       const _wlPrio = { 1: ["🔴", "now"], 2: ["🟡", "soon"], 3: ["🟢", "later"] };
       let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
       h += `<div class="pixel-font" style="font-size:0.6875rem;color:var(--lily);font-weight:bold;margin-bottom:8px">⭐ WISHLIST</div>`;
@@ -13732,20 +13732,42 @@
       // rows
       if (d.rows.length) {
         h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.55rem">
-          <thead><tr style="color:var(--text-dim);text-align:left"><th style="padding:2px 6px">priorita</th><th>item</th><th style="text-align:right">buy now (floor)</th><th style="text-align:right">last sale</th><th style="text-align:right;cursor:help" title="${_wlTip}">FLOWER/den</th><th style="text-align:right;cursor:help" title="Za jak dlouho se položka zaplatí: floor ÷ FLOWER/den.">ROI</th><th style="text-align:right">kumulativně</th><th style="text-align:center">na to mám?</th><th></th></tr></thead><tbody>`;
+          <thead><tr style="color:var(--text-dim);text-align:left"><th style="padding:2px 6px">priorita</th><th>item</th><th style="text-align:right">buy now (floor)</th><th style="text-align:right">last sale</th><th style="text-align:right;cursor:help" title="${_wlTip}">FLOWER/den</th><th style="text-align:right;cursor:help" title="Za jak dlouho se položka zaplatí: floor ÷ FLOWER/den. „—“ = spočítáno, ale nevydělá nic. „?“ = neumíme ocenit.">ROI</th><th style="text-align:right">kumulativně</th><th style="text-align:center">na to mám?</th><th></th></tr></thead><tbody>`;
         let cum = 0;
         for (const r of d.rows) {
           if (!r.owned) cum += r.floor;
           // Both figures come from the server in one payload, so the toggle never refetches.
           const perDay = _wlEff ? r.perDayEff : r.perDay;
           const roi = _wlEff ? r.roiDaysEff : r.roiDays;
+          /*
+           * "—" and "?" are different answers and used to render the same.
+           *
+           * null means we could not value the item at all — it is not among the boosts the
+           * engine models (a cosmetic, a boost whose text we do not parse, a bud we could not
+           * price). 0 means we DID value it and it is worth nothing ON THIS FARM: Eggplant
+           * Onesie's "+0.1 Eggplant" is a real boost, it just pays nothing to a farm that does
+           * not grow Eggplant. Showing "—" for both read as "worthless" and quietly buried the
+           * cases where the tool simply has no opinion.
+           */
+          const unknown = perDay == null;
+          const perDayCell = unknown
+            ? `<span title="Tuhle položku neumíme ocenit — není mezi boosty, které engine modeluje.">?</span>`
+            : perDay > 0 ? "+" + perDay.toFixed(2)
+            : `<span title="Spočítáno: na téhle farmě ti to nepřinese nic (např. boost na plodinu, kterou nepěstuješ).">—</span>`;
+          const roiCell = unknown
+            ? `<span title="Bez FLOWER/den nejde ROI spočítat.">?</span>`
+            : !(r.floor > 0)
+            ? `<span title="Položka není nikde v prodeji, takže není z čeho ROI počítat.">?</span>`
+            : roi != null && isFinite(roi)
+            ? (roi < 1 ? (roi * 24).toFixed(0) + "h" : roi < 400 ? roi.toFixed(0) + "d" : (roi / 365).toFixed(1) + "r")
+            : `<span title="Nevydělá nic, takže se nikdy nezaplatí.">—</span>`;
           h += `<tr style="border-top:1px solid #222">
             <td style="padding:3px 6px;white-space:nowrap">${[1, 2, 3].map(p => `<span onclick="_wlSetPrio('${escHTML(r.key)}',${p})" style="cursor:pointer;opacity:${r.priority === p ? 1 : 0.3}">${_wlPrio[p][0]}</span>`).join(" ")}</td>
             <td style="white-space:nowrap"><img class="inline-icon" src="${getItemIcon(r.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.name)}${r.owned ? ' <span style="font-size:0.45rem;color:var(--green)">📦 owned</span>' : ""}</td>
             <td style="text-align:right">${r.floor > 0 ? r.floor.toFixed(1) : "—"}</td>
             <td style="text-align:right;color:var(--text-dim)">${r.lastSale > 0 ? r.lastSale.toFixed(1) : "—"}</td>
-            <td style="text-align:right;color:${perDay > 0 ? "var(--green)" : "var(--text-dim)"}">${perDay > 0 ? "+" + perDay.toFixed(2) : "—"}</td>
-            <td style="text-align:right;color:var(--text-dim)">${roi != null && isFinite(roi) ? (roi < 1 ? (roi * 24).toFixed(0) + "h" : roi < 400 ? roi.toFixed(0) + "d" : (roi / 365).toFixed(1) + "r") : "—"}</td>
+            <td style="text-align:right;color:${perDay > 0 ? "var(--green)" : unknown ? "var(--yellow)" : "var(--text-dim)"}">${perDayCell}</td>
+            <td style="text-align:right;color:${unknown ? "var(--yellow)" : "var(--text-dim)"}">${roiCell}</td>
             <td style="text-align:right;color:var(--text-dim)">${r.owned ? "—" : cum.toFixed(1)}</td>
             <td style="text-align:center">${r.owned ? "—" : (d.balance >= cum ? "✅" : "❌")}</td>
             <td style="text-align:right"><span onclick="_wlRemove('${escHTML(r.key)}')" style="cursor:pointer;color:var(--red)">✕</span></td>
@@ -15157,8 +15179,13 @@
       const animals = capacity.animalDetails?.[catId] || [];
       if (animals.length === 0) return { costPerDay: 0, animalCount: 0 };
 
-      // Check golden animal → free feeding
-      if (capacity.goldenAnimals?.[animalType]) {
+      // Check golden animal → free feeding. A `free_feed` effect counts as well as the
+      // ownership flag: a Gold Egg / Golden Cow / Golden Sheep the farm does NOT own yet
+      // reaches this function only as that effect, so without it the entire boost of a
+      // 12k-FLOWER item was worth exactly 0 to every valuation that asks "what if I buy it"
+      // (the Power page, the roadmap and the wishlist all difference this cost).
+      if (capacity.goldenAnimals?.[animalType]
+          || (boostEffects || []).some(e => e.type === "free_feed" && e.cat === catId)) {
         const goldenItem = Object.keys(GOLDEN_ANIMALS).find(k => GOLDEN_ANIMALS[k] === animalType);
         return { costPerDay: 0, isGolden: true, goldenItem, animalCount: animals.length };
       }
@@ -15620,9 +15647,23 @@
         synergy = mk(ownedEff.concat(catEffects)) - mk(ownedEff);
         solo = mk(catEffects) - mk([]);
       } else {
-        const net = (ef) => Math.max(0, roadmapCatNet(catId, ef, _s));
-        synergy = net(ownedEff.concat(catEffects)) - net(ownedEff);
-        solo = net(catEffects) - net([]);
+        /*
+         * Clamp the DIFFERENCE, not each side of it.
+         *
+         * Clamping both nets first made every boost on a loss-making category read exactly
+         * 0. On a real farm chickens net -0.87 FLOWER/day (gross 1.05 vs 1.92 of feed and
+         * sickness), so max(0, ·) flattened both sides to 0 and took the marginal with it:
+         * Rich Chicken's +0.016/day of extra eggs and Fat Chicken's +0.168/day of saved feed
+         * both reported as worthless. It also overstated the reverse case — a boost that
+         * turns a loss-maker profitable scored its whole net instead of the part it added.
+         *
+         * The mining branch above already differences raw nets; this now matches it. A boost
+         * that makes a category WORSE (Speed Chicken: faster cycles on a loss-maker) still
+         * reports 0 rather than a negative number.
+         */
+        const net = (ef) => roadmapCatNet(catId, ef, _s);
+        synergy = Math.max(0, net(ownedEff.concat(catEffects)) - net(ownedEff));
+        solo = Math.max(0, net(catEffects) - net([]));
       }
       const roi = (boostItem.floor > 0 && synergy > 0) ? boostItem.floor / synergy : Infinity;
       const out = { solo, synergy, roi };
@@ -19663,19 +19704,35 @@
     function _worldKeepScroll(paint) {
       const se = document.scrollingElement || document.documentElement;
       const y = se.scrollTop;
-      paint();
-      if (!y) return;                     // first load starts at the top; leave it there
+      const app = document.getElementById("app");
       /*
-       * Force a layout read before restoring. Replacing #app's innerHTML momentarily
-       * collapses the document to zero height, and a scrollTop written before the browser
-       * has re-laid out is clamped straight back to 0 — which is exactly what the scope
-       * switch did (300 -> 0) while the smaller node-panel swap survived.
+       * Hold a floor under the page height across the swap.
+       *
+       * Three earlier attempts all tried to put the scroll BACK after the paint — restoring
+       * around each paint, forcing layout first, capturing the offset on click and re-applying
+       * it over three frames — and none of them held: the scope switch measured 300 -> 0 every
+       * time. They could not work. Assigning innerHTML collapses the document, and the browser
+       * clamps the scroll position at that moment; by the time any restore runs the offset is
+       * already gone, and re-applying it just races whatever grows the page afterwards.
+       *
+       * Pinning min-height attacks the clamp instead of its aftermath: the document never gets
+       * short enough for the browser to clamp anything, so the scroll position survives the
+       * swap on its own. That is also why the node-panel swap already worked — it is small
+       * enough that the page never shrank past the reader's offset.
        */
-      void document.body.offsetHeight;
-      se.scrollTop = y;
-      // Belt and braces: if the new content is still growing (images, fonts), re-apply on
-      // the next frame. Skipped if the reader has since scrolled themselves.
-      requestAnimationFrame(() => { if (se.scrollTop !== y && se.scrollTop === 0) se.scrollTop = y; });
+      const prevMinHeight = app ? app.style.minHeight : "";
+      if (app && app.offsetHeight > 0) app.style.minHeight = app.offsetHeight + "px";
+      paint();
+      if (y) {
+        void document.body.offsetHeight;  // settle layout before reading/writing scrollTop
+        if (se.scrollTop !== y) se.scrollTop = y;
+      }
+      /*
+       * Release the floor once the new content has been laid out and can carry its own height.
+       * If the new page is genuinely shorter the scroll will settle then — that is the honest
+       * outcome, not a jump to the top.
+       */
+      if (app) requestAnimationFrame(() => { app.style.minHeight = prevMinHeight || ""; });
     }
 
     function _worldRenderTail(html, app) {

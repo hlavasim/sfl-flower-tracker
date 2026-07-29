@@ -388,3 +388,83 @@ test("section=wishlist reports FLOWER/day and ROI, theoretical and at measured e
     globalThis.fetch = orig;
   }
 });
+
+test("section=wishlist prices wishlisted buds instead of leaving their ROI unreachable", async () => {
+  const orig = globalThis.fetch;
+  globalThis.fetch = mockFetchForAscension();
+  try {
+    // Buds are 1-of-1s, absent from the NFT feed the catalog is built from. They used to be
+    // appended to `rows` by the page AFTER the response, so the section never saw them and
+    // every bud arrived with perDay/roiDays undefined. Pick a bud the section itself values,
+    // so the test cannot go vacuous on a fixture whose prices moved.
+    _clearCacheForTests();
+    const bres = mockRes();
+    await handler({ query: { farm: "155498", section: "buds" } }, bres);
+    assert.equal(bres._status, 200, `buds section responded: ${JSON.stringify(bres._json).slice(0, 200)}`);
+    const bud = bres._json.data.rows.find((r) => r.sflPerDay > 0);
+    assert.ok(bud, "the fixture values at least one bud");
+
+    const FLOOR = 100;
+    _clearCacheForTests();
+    const res = mockRes();
+    await handler({
+      query: { farm: "155498", section: "wishlist", list: JSON.stringify({ [`buds:${bud.id}`]: 1 }) },
+      body: { snapshots: [], budFloors: { [String(bud.id)]: FLOOR } },
+    }, res);
+    assert.equal(res._status, 200, `wishlist responded: ${JSON.stringify(res._json).slice(0, 200)}`);
+
+    const row = res._json.data.rows.find((r) => r.key === `buds:${bud.id}`);
+    assert.ok(row, "the wishlisted bud reaches the rows the page renders");
+    assert.equal(row.floor, FLOOR, "the POSTed marketplace floor is the row's buy-now price");
+    // Valued by the bud engine, so the row cannot disagree with the BUDS page or the picker.
+    assert.ok(Math.abs(row.perDay - bud.sflPerDay) < 1e-9,
+      `bud FLOWER/day ${row.perDay} must equal section=buds' ${bud.sflPerDay}`);
+    assert.ok(row.perDay > 0, "and it is actually worth something");
+    assert.ok(Math.abs(row.roiDays - FLOOR / row.perDay) < 1e-9, "ROI = floor / FLOWER-per-day");
+    // The measured column exists for buds too and is never above the theoretical ceiling.
+    // (With no history posted it is not equal to it: roadmapEffFactor falls back to the
+    // meanRatio default, exactly as it does for the collectible rows.)
+    assert.ok(row.perDayEff > 0 && row.perDayEff <= row.perDay,
+      `measured ${row.perDayEff} sits at or below theoretical ${row.perDay}`);
+    assert.ok(Math.abs(row.roiDaysEff - FLOOR / row.perDayEff) < 1e-9, "measured ROI = floor / measured");
+    // And the bud is charged for in the per-priority summary, which is what the header shows.
+    assert.ok(res._json.data.byPriority[1].cost >= FLOOR, "the bud's floor is in the P1 cost");
+  } finally {
+    globalThis.fetch = orig;
+  }
+});
+
+test("section=wishlist bud rows follow the farm's measured efficiency", async () => {
+  const orig = globalThis.fetch;
+  globalThis.fetch = mockFetchForAscension();
+  try {
+    // The point of the eff toggle: a bud on an idle farm is worth less than its theoretical
+    // ceiling. Pinning this stops the two columns from silently becoming the same number
+    // again, which is how the collectible rows broke before.
+    _clearCacheForTests();
+    const bres = mockRes();
+    await handler({ query: { farm: "155498", section: "buds" } }, bres);
+    const bud = bres._json.data.rows.find((r) => r.sflPerDay > 0);
+    assert.ok(bud, "the fixture values at least one bud");
+
+    // effOverrides is roadmapEffFactor's manual slider — half throughput on every category
+    // the bud pays out in, which must halve its measured FLOWER/day and double its ROI.
+    const cats = [...new Set(bud.breakdown.map((b) => b.catId))];
+    const roadmap = JSON.stringify({ effOverrides: Object.fromEntries(cats.map((c) => [c, 0.5])) });
+    _clearCacheForTests();
+    const res = mockRes();
+    await handler({
+      query: { farm: "155498", section: "wishlist", roadmap, list: JSON.stringify({ [`buds:${bud.id}`]: 1 }) },
+      body: { snapshots: [], budFloors: { [String(bud.id)]: 100 } },
+    }, res);
+    assert.equal(res._status, 200);
+    const row = res._json.data.rows.find((r) => r.key === `buds:${bud.id}`);
+    assert.ok(row, "the wishlisted bud reaches the rows");
+    assert.ok(Math.abs(row.perDay - bud.sflPerDay) < 1e-9, "theoretical column is untouched by the override");
+    assert.ok(Math.abs(row.perDayEff - bud.sflPerDay / 2) < 1e-9,
+      `half throughput must halve the measured value (${row.perDayEff} vs ${bud.sflPerDay / 2})`);
+    assert.ok(Math.abs(row.roiDaysEff - 2 * row.roiDays) < 1e-9, "and double the measured ROI");
+  } finally {
+    globalThis.fetch = orig;
+  }
+});

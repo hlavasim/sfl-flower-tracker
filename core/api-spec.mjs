@@ -87,7 +87,11 @@ export const API_SPEC = {
               "`wishlist`: boosted-NFT catalog (floor/lastSale/supply/boost + owned/active from " +
               "the farm) and the wishlist's per-priority cumulative costs vs the FLOWER " +
               "balance; `list` query param carries the client's priorities; placed/worn " +
-              "items auto-prune. " +
+              "items auto-prune. Rows carry FLOWER/day + ROI, theoretical and at measured " +
+              "efficiency. Optional body `{ snapshots, budFloors }`: snapshots like `eff` " +
+              "(absent → measured collapses onto theoretical), `budFloors` = { \"<bud id>\": " +
+              "floor } for any `buds:<id>` entry in `list`, since per-id marketplace asks " +
+              "live in the DB and this endpoint stays DB-free. " +
               "`openapi`: this document, no farm needed. Defaults to `cooking` when omitted.",
           },
           {

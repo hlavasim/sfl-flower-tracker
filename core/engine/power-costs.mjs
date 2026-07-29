@@ -287,8 +287,13 @@ import { SEED_COSTS, TOOL_COSTS } from "../data/economy.mjs";
       const animals = capacity.animalDetails?.[catId] || [];
       if (animals.length === 0) return { costPerDay: 0, animalCount: 0 };
 
-      // Check golden animal → free feeding
-      if (capacity.goldenAnimals?.[animalType]) {
+      // Check golden animal → free feeding. A `free_feed` effect counts as well as the
+      // ownership flag: a Gold Egg / Golden Cow / Golden Sheep the farm does NOT own yet
+      // reaches this function only as that effect, so without it the entire boost of a
+      // 12k-FLOWER item was worth exactly 0 to every valuation that asks "what if I buy it"
+      // (the Power page, the roadmap and the wishlist all difference this cost).
+      if (capacity.goldenAnimals?.[animalType]
+          || (boostEffects || []).some(e => e.type === "free_feed" && e.cat === catId)) {
         const goldenItem = Object.keys(GOLDEN_ANIMALS).find(k => GOLDEN_ANIMALS[k] === animalType);
         return { costPerDay: 0, isGolden: true, goldenItem, animalCount: animals.length };
       }

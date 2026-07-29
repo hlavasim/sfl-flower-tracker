@@ -443,9 +443,23 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         synergy = mk(ownedEff.concat(catEffects)) - mk(ownedEff);
         solo = mk(catEffects) - mk([]);
       } else {
-        const net = (ef) => Math.max(0, roadmapCatNet(catId, ef, _s));
-        synergy = net(ownedEff.concat(catEffects)) - net(ownedEff);
-        solo = net(catEffects) - net([]);
+        /*
+         * Clamp the DIFFERENCE, not each side of it.
+         *
+         * Clamping both nets first made every boost on a loss-making category read exactly
+         * 0. On a real farm chickens net -0.87 FLOWER/day (gross 1.05 vs 1.92 of feed and
+         * sickness), so max(0, ·) flattened both sides to 0 and took the marginal with it:
+         * Rich Chicken's +0.016/day of extra eggs and Fat Chicken's +0.168/day of saved feed
+         * both reported as worthless. It also overstated the reverse case — a boost that
+         * turns a loss-maker profitable scored its whole net instead of the part it added.
+         *
+         * The mining branch above already differences raw nets; this now matches it. A boost
+         * that makes a category WORSE (Speed Chicken: faster cycles on a loss-maker) still
+         * reports 0 rather than a negative number.
+         */
+        const net = (ef) => roadmapCatNet(catId, ef, _s);
+        synergy = Math.max(0, net(ownedEff.concat(catEffects)) - net(ownedEff));
+        solo = Math.max(0, net(catEffects) - net([]));
       }
       const roi = (boostItem.floor > 0 && synergy > 0) ? boostItem.floor / synergy : Infinity;
       const out = { solo, synergy, roi };
