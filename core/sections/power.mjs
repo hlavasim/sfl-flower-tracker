@@ -33,6 +33,7 @@ import {
   buildQueueData,
 } from "../engine/power-costs.mjs";
 import { _setPowerContext, calcBoostValue } from "../engine/roadmap.mjs";
+import { SKILL_UPGRADES, powerSkillRankVals, skillRankText } from "../engine/skill-ranks.mjs";
 import { buildFormulaHTML } from "../engine/power-formula.mjs";
 
 export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
@@ -365,6 +366,53 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   }
 
   /*
+   * Ascension RANKS (Level 2 / Level 3), computed here rather than on the page.
+   *
+   * The rank layer used to live inline in flowers.html only, so anything else that wanted
+   * "what is Level 2 worth" had nothing to read and re-derived it — the roadmap priced Frugal
+   * Miner at +10.00/day where this says +0.31. Serving it means one number, one engine.
+   *
+   * A rank's value is the MARGINAL of the rank-up: calcBoostValue re-run with the effects
+   * scaled to that rank, minus the same at the rank below. A skill can pay out in several
+   * categories, so `delta` sums them, exactly as a multi-category boost is summed elsewhere.
+   *
+   * Cost prices the SKILL POINTS only (points × the farm's cheapest XP recipe). Ascension
+   * Shards are reported but not valued: they are not tradable, so there is no price to use.
+   */
+  const skillRanks = {};
+  for (const b of boostItems) {
+    if (b.type !== "Skill" || !SKILL_UPGRADES[b.name]) continue;
+    const cats = (b.categories || []).filter((c) => POWER_CATEGORIES[c] && POWER_CATEGORIES[c].quantifiable);
+    let info = null;
+    const byLvl = new Map();
+    for (const catId of cats) {
+      const product = savedProducts[catId] || getDefaultProduct(catId);
+      let r = null;
+      try { r = powerSkillRankVals(b, catId, product, capacity, p2pPrices, catBoosts[catId] || [], b.has); } catch { r = null; }
+      if (!r || !r.rows.length) continue;
+      info = info || r;
+      for (const row of r.rows) {
+        const cur = byLvl.get(row.lvl) || { lvl: row.lvl, delta: 0, byCat: {}, points: row.points, shards: row.shards };
+        if (isFinite(row.delta) && row.delta !== 0) { cur.delta += row.delta; cur.byCat[catId] = row.delta; }
+        byLvl.set(row.lvl, cur);
+      }
+    }
+    if (!info) continue;
+    const sflPerPoint = skillCostInfo.sflPerPoint || 0;
+    const rows = [...byLvl.values()].sort((x, y) => x.lvl - y.lvl).map((r) => {
+      const sflCost = sflPerPoint * r.points;
+      // roi: Infinity is JSON-unrepresentable → null on the wire, same rule as boostValues.
+      const roi = (r.delta > 0.0001 && sflCost > 0) ? sflCost / r.delta : null;
+      return { ...r, text: skillRankText(info.up, r.lvl), sflCost, roi };
+    });
+    skillRanks[b.name] = {
+      tier: info.up.tier, maxLevel: info.up.maxLevel, kind: info.up.kind,
+      priceable: info.priceable, cost: info.cost,
+      skillTree: b.skillTree || null, has: !!b.has, rows,
+    };
+  }
+
+  /*
    * Second pass at MEASURED efficiency, for a named subset only.
    *
    * boostValues above is theoretical by construction (calcBoostValue's default), which is
@@ -408,5 +456,5 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     }
   }
 
-  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, restockQueues, ...(boostValuesEff ? { boostValuesEff } : {}), ...(formulaHtml !== undefined ? { formulaHtml } : {}) };
+  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, skillRanks, restockQueues, ...(boostValuesEff ? { boostValuesEff } : {}), ...(formulaHtml !== undefined ? { formulaHtml } : {}) };
 }
