@@ -13656,16 +13656,16 @@
       if (!_wlLoaded) { await _wlLoadFromDb(); _wlLoaded = true; }
       let d;
       try {
-        let payload, lastErr;
-        for (let a = 0; a < 3; a++) {
-          try {
-            const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=wishlist&list=${encodeURIComponent(JSON.stringify(_wlGet()))}`);
-            if (!rp.ok) throw new Error(`compute wishlist ${rp.status}`);
-            payload = await rp.json();
-            break;
-          } catch (e2) { lastErr = e2; if (a < 2) await new Promise(r => setTimeout(r, 1000 * (a + 1))); }
-        }
-        if (!payload) throw lastErr;
+        /*
+         * POSTs the farm-history snapshots, like the roadmap and ascension calls: measured
+         * efficiency exists on the server only if they are supplied, and without them the
+         * "dle efektivity" column came out identical to the theoretical one.
+         */
+        if (!_roadmapSnapshotsCache) _roadmapSnapshotsCache = await _roadmapFetchHistorySlim();
+        const payload = await _fetchCompute(
+          `/api/compute?farm=${FARM_ID}&section=wishlist&list=${encodeURIComponent(JSON.stringify(_wlGet()))}`,
+          { init: { method: "POST", headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [] }) } });
         d = payload.data || {};
       } catch (e) {
         el.innerHTML = `<div class="pixel-panel pixel-font" style="padding:10px;color:var(--red);font-size:0.55rem">Wishlist failed to load: ${escHTML(e.message)}</div>`;

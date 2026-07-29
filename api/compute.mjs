@@ -4,7 +4,7 @@ import { buildPricesSection } from "../core/sections/prices.mjs";
 import { valueDiff } from "../core/sections/diff.mjs";
 import { buildPowerSection } from "../core/sections/power.mjs";
 import { buildRoiSection } from "../core/sections/roi.mjs";
-import { roadmapComputeEfficiency } from "../core/engine/roadmap.mjs";
+import { roadmapComputeEfficiency, _setRoadmapState } from "../core/engine/roadmap.mjs";
 import { buildTreasurySection } from "../core/sections/treasury.mjs";
 import { buildRoadmapSection } from "../core/sections/roadmap.mjs";
 import { buildAscensionSection } from "../core/sections/ascension.mjs";
@@ -356,6 +356,21 @@ export default async function handler(req, res) {
       // Parsed here, not shared: the other branches declare their own block-scoped copy.
       let wlRoadmap = {};
       try { wlRoadmap = req.query.roadmap ? JSON.parse(req.query.roadmap) : {}; } catch { wlRoadmap = {}; }
+      /*
+       * Measured efficiency only exists if the caller POSTs its farm-history snapshots, the
+       * same way section=ascension and section=roadmap do — roadmapEffFactor returns 1 when no
+       * history is loaded. Without this the wishlist's "measured" column came out identical to
+       * the theoretical one, making the toggle look broken.
+       *
+       * Set before buildPowerSection because the measured pass runs inside it. The two context
+       * setters are independent (powerState vs roadmapState), so this survives that call.
+       */
+      const wlBody = _parseBody(req.body);
+      const wlEff = roadmapComputeEfficiency(Array.isArray(wlBody.snapshots) ? wlBody.snapshots : []);
+      _setRoadmapState({
+        effByCat: wlEff.effByCat || {}, effMeta: wlEff.meta,
+        meanRatio: typeof wlEff.meanRatio === "number" ? wlEff.meanRatio : 0.5,
+      });
       const powerData = buildPowerSection(farm, p2p, nftResult.data, exchange,
         { ...settings, roadmapSettings: wlRoadmap, effectiveFor: wishNames });
       data = buildWishlistSection(farm, nftResult.data, {
