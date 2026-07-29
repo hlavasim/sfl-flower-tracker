@@ -62,9 +62,15 @@ test("a tier-3 skill's points never count towards a gate", () => {
   // Both places that add to the per-tree total must exclude tier 3.
   const adds = body.match(/inTree\[[^\]]+\]\s*=\s*\(inTree\[[^\]]+\]\s*\|\|\s*0\)\s*\+/g) || [];
   assert.equal(adds.length, 2, "two places accumulate per-tree points");
-  // Three sites must be guarded: the two accumulations and the filler pool. Match either
-  // polarity — the pool skips with `=== 3`, the accumulations add with `!== 3` — so this
-  // pins the invariant rather than one particular way of writing it.
-  assert.equal((body.match(/tierOf\(\w+\) [!=]== 3/g) || []).length, 3,
-    "each accumulation, and the filler pool, must exclude tier 3");
+  /*
+   * Four sites must be guarded: the two accumulations, the filler pool, and the leftover
+   * reachability probe that reports why a skill was not listed. Match either polarity — some
+   * skip with `=== 3`, some add with `!== 3` — so this pins the invariant, not the phrasing.
+   *
+   * An exact count rather than "at least one": a new place that sums per-tree points without
+   * the guard is exactly the regression this is here to catch, and it would not move a
+   * minimum. If you add a legitimate fifth site, raise this number deliberately.
+   */
+  assert.equal((body.match(/tierOf\(\w+\) [!=]== 3/g) || []).length, 4,
+    "every place that counts per-tree points must exclude tier 3");
 });
