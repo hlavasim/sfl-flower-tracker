@@ -6552,6 +6552,22 @@
     function escHTML(s) {
       return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
     }
+    /*
+     * For a value that lands inside a SINGLE-QUOTED JS STRING within an HTML attribute,
+     * e.g. onclick="doThing('<here>')".
+     *
+     * escHTML alone is not enough there: it does not touch the apostrophe, so a key like
+     * `collectibles:Grinx's Hammer` closed the JS string early and the handler became a
+     * syntax error — the wishlist's ✕ and its priority dots silently did nothing for every
+     * item with an apostrophe in its name (5 of the boosted NFTs: Grinx's Hammer,
+     * Reelmaster's Chair, Victoria's Apron, Autumn's Embrace, Luna's Hat).
+     *
+     * Backslash first, then the quote, then HTML-escape — the attribute is decoded before the
+     * JS is parsed, so the parser sees \' and reads a literal apostrophe.
+     */
+    function escJsAttr(s) {
+      return escHTML(String(s).replace(/\\/g, "\\\\").replace(/'/g, "\\'"));
+    }
 
     // ═══════════════════════════════════════
     //  BUMPKIN HELPERS
@@ -13766,7 +13782,7 @@
             ? (roi < 1 ? (roi * 24).toFixed(0) + "h" : roi < 400 ? roi.toFixed(0) + "d" : (roi / 365).toFixed(1) + "r")
             : `<span title="Nevydělá nic, takže se nikdy nezaplatí.">—</span>`;
           h += `<tr style="border-top:1px solid #222">
-            <td style="padding:3px 6px;white-space:nowrap">${[1, 2, 3].map(p => `<span onclick="_wlSetPrio('${escHTML(r.key)}',${p})" style="cursor:pointer;opacity:${r.priority === p ? 1 : 0.3}">${_wlPrio[p][0]}</span>`).join(" ")}</td>
+            <td style="padding:3px 6px;white-space:nowrap">${[1, 2, 3].map(p => `<span onclick="_wlSetPrio('${escJsAttr(r.key)}',${p})" style="cursor:pointer;opacity:${r.priority === p ? 1 : 0.3}">${_wlPrio[p][0]}</span>`).join(" ")}</td>
             <td style="white-space:nowrap"><img class="inline-icon" src="${getItemIcon(r.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.name)}${r.owned ? ' <span style="font-size:0.45rem;color:var(--green)">📦 owned</span>' : ""}</td>
             <td style="text-align:right">${r.floor > 0 ? r.floor.toFixed(1) : "—"}</td>
             <td style="text-align:right;color:var(--text-dim)">${r.lastSale > 0 ? r.lastSale.toFixed(1) : "—"}</td>
@@ -13774,7 +13790,7 @@
             <td style="text-align:right;color:${unknown ? "var(--yellow)" : "var(--text-dim)"}">${roiCell}</td>
             <td style="text-align:right;color:var(--text-dim)">${r.owned ? "—" : cum.toFixed(1)}</td>
             <td style="text-align:center">${r.owned ? "—" : (d.balance >= cum ? "✅" : "❌")}</td>
-            <td style="text-align:right"><span onclick="_wlRemove('${escHTML(r.key)}')" style="cursor:pointer;color:var(--red)">✕</span></td>
+            <td style="text-align:right"><span onclick="_wlRemove('${escJsAttr(r.key)}')" style="cursor:pointer;color:var(--red)">✕</span></td>
           </tr>`;
         }
         h += `</tbody></table></div>`;
