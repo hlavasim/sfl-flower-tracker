@@ -558,6 +558,10 @@ export const TABLE_INVENTORY = [
     "lines": 2
   },
   {
+    "name": "SKILL_POINTS_PER_TIER",
+    "lines": 14
+  },
+  {
     "name": "SKILL_TREE_DATA",
     "lines": 168
   },

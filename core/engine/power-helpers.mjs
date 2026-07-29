@@ -155,6 +155,33 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
       "Iron Pickaxe": 5, "Gold Pickaxe": 5, "Oil Drill": 5,
     };
 
+    /*
+     * Points that must already be spent IN THAT TREE before a tier unlocks.
+     * Verbatim from the game: SKILL_POINTS_PER_TIER in
+     * src/features/game/events/landExpansion/choseSkill.ts. Tier 1 is always free.
+     *
+     * Two things that are easy to get wrong and are load-bearing for the buy-order advice:
+     *   1. The thresholds are PER TREE, not global — Animals needs 4/8, Crops and Mining
+     *      3/7, most others 2/5.
+     *   2. Points spent on TIER-3 skills do NOT count towards the total (the game's
+     *      getUnlockedTierForTree skips `requirements.tier !== 3`), so buying a tier-3
+     *      skill never helps unlock anything.
+     */
+    const SKILL_POINTS_PER_TIER = {
+      "Crops":          { 2: 3, 3: 7 },
+      "Trees":          { 2: 2, 3: 5 },
+      "Fishing":        { 2: 2, 3: 5 },
+      "Mining":         { 2: 3, 3: 7 },
+      "Cooking":        { 2: 2, 3: 5 },
+      "Compost":        { 2: 3, 3: 7 },
+      "Fruit Patch":    { 2: 2, 3: 5 },
+      "Animals":        { 2: 4, 3: 8 },
+      "Bees & Flowers": { 2: 2, 3: 5 },
+      "Greenhouse":     { 2: 2, 3: 5 },
+      "Machinery":      { 2: 2, 3: 5 },
+      "Aging":          { 2: 3, 3: 7 },
+    };
+
     // ── flowers.html 4322-4489: SKILL_TREE_DATA ──
     const SKILL_TREE_DATA = {
       // ── Crops ──
@@ -980,7 +1007,7 @@ export {
   SEED_DATA, findCollectible, BUMPKIN_XP_TABLE,
   ANIMAL_CYCLE_DATA, ANIMAL_LEVELS, GOLDEN_ANIMALS, getAnimalLevel, isAnimalCat, getAnimalData,
   ANIMAL_CAT_MAP,
-  RESOURCE_RESPAWN_DATA, TOOL_TO_CAT, BASE_STOCK, SKILL_TREE_DATA, CROP_TIERS,
+  RESOURCE_RESPAWN_DATA, TOOL_TO_CAT, BASE_STOCK, SKILL_TREE_DATA, SKILL_POINTS_PER_TIER, CROP_TIERS,
   FACTION_MARK_PRICES, FACTION_KEYWORDS, getFactionMarkCost, marksToSfl,
   calcSkillPointCost, POWER_CATEGORIES, getCount,
   getBumpkinLevel, getAllEquippedWearables, isWearableEquipped,
