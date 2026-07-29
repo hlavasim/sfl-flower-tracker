@@ -511,3 +511,81 @@ test("section=wishlist survives a cold start with real snapshots posted", async 
     globalThis.fetch = orig;
   }
 });
+
+test("section=wishlist resolves a bud-boost category to the cheapest listing", async () => {
+  const orig = globalThis.fetch;
+  globalThis.fetch = mockFetchForAscension();
+  try {
+    // Pick three listed Minerals buds (Cave type or Diamond Gem stem) and price the MIDDLE
+    // one lowest, so "cheapest" cannot be satisfied by first-in-map or by id order.
+    const { decodeBud, budHasBoostFilter, BUD_COUNT } = await import("../../core/engine/buds.mjs");
+    const mineral = [];
+    for (let id = 1; id <= BUD_COUNT && mineral.length < 3; id++) {
+      const b = decodeBud(id);
+      if (b && budHasBoostFilter(b, "Minerals")) mineral.push(id);
+    }
+    assert.equal(mineral.length, 3, "the encoded set contains Minerals buds");
+    const budFloors = { [mineral[0]]: 900, [mineral[1]]: 100, [mineral[2]]: 500 };
+
+    _clearCacheForTests();
+    const res = mockRes();
+    await handler({
+      query: { farm: "155498", section: "wishlist", list: JSON.stringify({ "budboost:Minerals": 1 }) },
+      body: { snapshots: [], budFloors },
+    }, res);
+    assert.equal(res._status, 200, `wishlist responded: ${JSON.stringify(res._json).slice(0, 200)}`);
+
+    const row = res._json.data.rows.find((r) => r.key === "budboost:Minerals");
+    assert.ok(row, "the category reaches the rows the page renders");
+    assert.equal(row.floor, 100, "it must price the CHEAPEST listing, not the first or lowest id");
+    assert.equal(row.id, mineral[1], "and name the bud it picked");
+    assert.match(row.name, /Minerals →/, "the row says which bud stands in for the category");
+
+    // It behaves exactly like pinning that id by hand — same value, same ROI formula.
+    _clearCacheForTests();
+    const pinned = mockRes();
+    await handler({
+      query: { farm: "155498", section: "wishlist", list: JSON.stringify({ [`buds:${mineral[1]}`]: 1 }) },
+      body: { snapshots: [], budFloors },
+    }, pinned);
+    const direct = pinned._json.data.rows.find((r) => r.key === `buds:${mineral[1]}`);
+    assert.equal(row.perDay, direct.perDay, "category row carries the chosen bud's own FLOWER/day");
+    assert.equal(row.roiDays, direct.roiDays, "and its ROI");
+
+    // The picker offers every filter, keyed so the client needs no copy of the taxonomy.
+    const offer = res._json.data.catalog.find((c) => c.key === "budboost:Minerals");
+    assert.ok(offer, "Minerals is offered in the catalog");
+    assert.equal(offer.floor, 100, "priced at the cheapest listing too");
+    assert.equal(offer.supply, 3, "and reports how many are on sale");
+  } finally {
+    globalThis.fetch = orig;
+  }
+});
+
+test("section=wishlist handles a category with nothing listed, and an unknown one", async () => {
+  const orig = globalThis.fetch;
+  globalThis.fetch = mockFetchForAscension();
+  try {
+    _clearCacheForTests();
+    const res = mockRes();
+    await handler({
+      query: { farm: "155498", section: "wishlist",
+               list: JSON.stringify({ "budboost:Minerals": 1, "budboost:Nonsense": 2 }) },
+      body: { snapshots: [], budFloors: {} }, // nothing on sale at all
+    }, res);
+    assert.equal(res._status, 200);
+    const rows = res._json.data.rows;
+
+    const empty = rows.find((r) => r.key === "budboost:Minerals");
+    assert.ok(empty, "a category with no listings still appears rather than vanishing");
+    assert.equal(empty.floor, 0);
+    assert.equal(empty.perDay, null, "unpriceable → null, which the page renders as ?");
+    assert.match(empty.name, /nic v prodeji/);
+
+    const bogus = rows.find((r) => r.key === "budboost:Nonsense");
+    assert.ok(bogus, "an unknown filter does not throw");
+    assert.match(bogus.name, /neznámý boost/);
+  } finally {
+    globalThis.fetch = orig;
+  }
+});

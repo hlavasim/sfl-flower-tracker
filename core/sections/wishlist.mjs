@@ -10,7 +10,7 @@
 // per-priority cumulative-cost + affordability model is ported intact. Auto-prune
 // (§1.3): items that became active are excluded from costs and reported in `pruned`.
 import { findCollectible, isWearableEquipped, getCount, detectFarmCapacity } from "../engine/power-helpers.mjs";
-import { decodeBud, calcBudSflPerDay } from "../engine/buds.mjs";
+import { decodeBud, calcBudSflPerDay, BUD_BOOST_FILTERS, budHasBoostFilter } from "../engine/buds.mjs";
 import { roadmapEffFactor, getRoadmapSettings } from "../engine/roadmap.mjs";
 
 export function buildWishlistSection(farm, nftData, settings = {}) {
@@ -79,34 +79,80 @@ export function buildWishlistSection(farm, nftData, settings = {}) {
   // fallback when no farm history was posted).
   const budEffSettings = getRoadmapSettings(settings.roadmapSettings || {});
   const budVals = {}; // wishlist key → [theoretical, at measured efficiency]
+
+  /** Value one decoded bud. Traits come from the id alone; only the money needs prices. */
+  const valueBud = (bud) => {
+    if (!bud || !settings.p2p) return { theo: null, eff: null, cats: [] };
+    if (!budCapacity) budCapacity = detectFarmCapacity(farm);
+    try {
+      const v = calcBudSflPerDay(bud, budCapacity, budPrices, settings.savedProducts || {});
+      return {
+        theo: v.totalSfl,
+        eff: (v.breakdown || []).reduce((s, b) => s + b.sflPerDay * roadmapEffFactor(b.catId, budEffSettings), 0),
+        cats: (v.breakdown || []).map((b) => b.catId),
+      };
+    } catch { return { theo: null, eff: null, cats: [] }; }
+  };
+  const budLabel = (bud, cats) => `#${bud.id} ${bud.type}/${bud.stem}${cats.length ? " +" + cats.join("+") : ""}`;
+
+  /*
+   * Listed buds, cheapest first. `budFloors` is the whole marketplace floor map the client
+   * already fetches for the picker, not just the wishlisted ids — a category row has to see
+   * every bud on sale to find the cheapest one.
+   */
+  const listedBuds = Object.entries(budFloors)
+    .map(([idStr, floor]) => ({ bud: decodeBud(parseInt(idStr, 10)), floor: parseFloat(floor) || 0 }))
+    .filter((x) => x.bud && x.floor > 0)
+    .sort((a, b) => a.floor - b.floor);
+
   for (const [key, prio] of Object.entries(list)) {
-    if (!key.startsWith("buds:")) continue;
-    const idStr = key.slice(5);
-    const bud = decodeBud(parseInt(idStr, 10));
-    let theo = null, eff = null, cats = [];
-    // Traits come from the id alone; only the valuation needs prices, so a price outage
-    // still leaves a properly labelled row rather than "Bud #123".
-    if (bud && settings.p2p) {
-      if (!budCapacity) budCapacity = detectFarmCapacity(farm);
-      try {
-        const v = calcBudSflPerDay(bud, budCapacity, budPrices, settings.savedProducts || {});
-        theo = v.totalSfl;
-        eff = (v.breakdown || []).reduce((s, b) => s + b.sflPerDay * roadmapEffFactor(b.catId, budEffSettings), 0);
-        cats = (v.breakdown || []).map((b) => b.catId);
-      } catch { theo = null; eff = null; }
+    const priority = [1, 2, 3].includes(prio) ? prio : 2;
+
+    if (key.startsWith("buds:")) {
+      const idStr = key.slice(5);
+      const bud = decodeBud(parseInt(idStr, 10));
+      const { theo, eff, cats } = valueBud(bud);
+      budVals[key] = [theo, eff];
+      rows.push({
+        key, collection: "buds", id: bud ? bud.id : null,
+        name: bud ? `🌱 ${budLabel(bud, cats)}` : `🌱 Bud #${idStr}`,
+        floor: parseFloat(budFloors[idStr]) || 0,
+        lastSale: 0, supply: 1,
+        boost: cats.length ? `+${cats.join("+")}` : "",
+        // Ownership is deliberately not asserted for buds — the client never did either, and
+        // pruning an owned bud out of the list (§1.3) is a separate decision from pricing it.
+        owned: false, active: false, priority,
+      });
+      continue;
     }
-    budVals[key] = [theo, eff];
-    rows.push({
-      key, collection: "buds", id: bud ? bud.id : null,
-      name: bud ? `🌱 #${bud.id} ${bud.type}/${bud.stem}${cats.length ? " +" + cats.join("+") : ""}` : `🌱 Bud #${idStr}`,
-      floor: parseFloat(budFloors[idStr]) || 0,
-      lastSale: 0, supply: 1,
-      boost: cats.length ? `+${cats.join("+")}` : "",
-      // Ownership is deliberately not asserted for buds — the client never did either, and
-      // pruning an owned bud out of the list (§1.3) is a separate decision from pricing it.
-      owned: false, active: false,
-      priority: [1, 2, 3].includes(prio) ? prio : 2,
-    });
+
+    /*
+     * `budboost:<filter>` — "I want ANY bud with this boost", using the game's own
+     * Marketplace → Bud NFTs → Boost taxonomy. The row stands for the CHEAPEST bud currently
+     * listed with that boost and reports that bud's own floor, FLOWER/day and ROI, so it
+     * behaves exactly like pinning that id by hand — it just re-picks as listings change.
+     *
+     * Cheapest, not best-ROI: that is what was asked for. Be aware the two often differ by a
+     * lot (on 2026-07-29 the cheapest iron bud paid back in 3008 days and one 38% dearer in
+     * 1526), so a category row is a floor-price probe, not a recommendation.
+     */
+    if (key.startsWith("budboost:")) {
+      const filter = key.slice(9);
+      const known = Object.prototype.hasOwnProperty.call(BUD_BOOST_FILTERS, filter);
+      const hit = known ? listedBuds.find((x) => budHasBoostFilter(x.bud, filter)) : null;
+      const { theo, eff, cats } = hit ? valueBud(hit.bud) : { theo: null, eff: null, cats: [] };
+      budVals[key] = [theo, eff];
+      rows.push({
+        key, collection: "budboost", id: hit ? hit.bud.id : null,
+        name: hit
+          ? `🌱 ${filter} → ${budLabel(hit.bud, cats)}`
+          : `🌱 ${filter}${known ? " — nic v prodeji" : " — neznámý boost"}`,
+        floor: hit ? hit.floor : 0,
+        lastSale: 0, supply: 0,
+        boost: cats.length ? `+${cats.join("+")}` : "",
+        owned: false, active: false, priority,
+      });
+    }
   }
   rows.sort((a, b) => a.priority - b.priority || b.floor - a.floor);
 
@@ -140,10 +186,27 @@ export function buildWishlistSection(farm, nftData, settings = {}) {
     }
     return found ? total : null;
   };
+  /*
+   * Offer the boost filters in the picker. They go into the catalog the client already
+   * renders, each carrying its own `key`, so the page needs no copy of the taxonomy — it just
+   * lists what the server sends. `floor` is the cheapest listing, which is what the row would
+   * cost today; a filter with nothing on sale still appears, priced 0, rather than vanishing.
+   */
+  for (const filter of Object.keys(BUD_BOOST_FILTERS)) {
+    const hit = listedBuds.find((x) => budHasBoostFilter(x.bud, filter));
+    const n = listedBuds.filter((x) => budHasBoostFilter(x.bud, filter)).length;
+    catalog.push({
+      name: `${filter} (bud boost)`, key: `budboost:${filter}`, collection: "budboost",
+      id: null, floor: hit ? hit.floor : 0, lastSale: 0, supply: n,
+      boost: n ? `nejlevnější z ${n} v prodeji` : "nic v prodeji",
+      owned: false, active: false,
+    });
+  }
+
   for (const r of rows) {
     // Buds were valued above by the bud engine; everything else by calcBoostValue's synergy.
     // Same fields, same ROI formula, one path.
-    const [theo, eff] = r.collection === "buds"
+    const [theo, eff] = r.collection === "buds" || r.collection === "budboost"
       ? (budVals[r.key] || [null, null])
       : [sumSynergy(bv, r.name), sumSynergy(bvEff, r.name)];
     r.perDay = theo;

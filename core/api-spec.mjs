@@ -89,9 +89,12 @@ export const API_SPEC = {
               "balance; `list` query param carries the client's priorities; placed/worn " +
               "items auto-prune. Rows carry FLOWER/day + ROI, theoretical and at measured " +
               "efficiency. Optional body `{ snapshots, budFloors }`: snapshots like `eff` " +
-              "(absent → measured collapses onto theoretical), `budFloors` = { \"<bud id>\": " +
-              "floor } for any `buds:<id>` entry in `list`, since per-id marketplace asks " +
-              "live in the DB and this endpoint stays DB-free. " +
+              "(absent → measured collapses onto theoretical), `budFloors` = the whole " +
+              "{ \"<bud id>\": floor } marketplace map, since per-id asks live in the DB and " +
+              "this endpoint stays DB-free. `list` accepts `buds:<id>` for one bud and " +
+              "`budboost:<filter>` for a category from the game's Bud NFTs → Boost taxonomy " +
+              "(e.g. `budboost:Minerals`), which resolves to the CHEAPEST bud listed with " +
+              "that boost; the response `catalog` offers every filter with its own `key`. " +
               "`openapi`: this document, no farm needed. Defaults to `cooking` when omitted.",
           },
           {

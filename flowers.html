@@ -13631,7 +13631,9 @@
       if (!name || !_wlCatalog) return;
       const it = _wlCatalog.find(c => c.name.toLowerCase() === name.toLowerCase());
       if (!it) { inp.style.borderColor = "var(--red)"; return; }
-      const key = `${it.collection}:${it.name}`;
+      // Catalog entries may carry their own key — the bud-boost categories do, because their
+      // display name ("Minerals (bud boost)") is not the key ("budboost:Minerals").
+      const key = it.key || `${it.collection}:${it.name}`;
       const l = _wlGet(); l[key] = 2; _wlSave(l); _wlPost({ key, priority: 2 });
       inp.value = "";
       renderWishlistPanel();
@@ -13650,7 +13652,7 @@
         const low = line.toLowerCase();
         const hit = _wlCatalog.filter(c => low.startsWith(c.name.toLowerCase())).sort((a, b) => b.name.length - a.name.length)[0]
           || _wlCatalog.find(c => c.name.toLowerCase() === low);
-        if (hit) { const k = `${hit.collection}:${hit.name}`; if (!l[k]) added++; l[k] = l[k] || 2; }
+        if (hit) { const k = hit.key || `${hit.collection}:${hit.name}`; if (!l[k]) added++; l[k] = l[k] || 2; }
         else unmatched.push(line.slice(0, 24));
       }
       _wlSave(l); _wlPost({ list: l });
@@ -13678,12 +13680,10 @@
          * rides along for the same reason the snapshots do — compute stays DB-free.
          */
         if (!_roadmapSnapshotsCache) _roadmapSnapshotsCache = await _roadmapFetchHistorySlim();
-        const budFloors = {};
-        for (const k of Object.keys(_wlGet())) {
-          if (!k.startsWith("buds:")) continue;
-          const id = k.slice(5);
-          if (_wlBudFloors[id] != null) budFloors[id] = _wlBudFloors[id];
-        }
+        // The WHOLE floor map, not just wishlisted ids: a `budboost:` row stands for the
+        // cheapest listed bud with that boost, so the server has to see every listing to
+        // pick it. ~200 entries of {id: price}.
+        const budFloors = _wlBudFloors;
         const payload = await _fetchCompute(
           `/api/compute?farm=${FARM_ID}&section=wishlist&list=${encodeURIComponent(JSON.stringify(_wlGet()))}`,
           { init: { method: "POST", headers: { "content-type": "application/json" },
