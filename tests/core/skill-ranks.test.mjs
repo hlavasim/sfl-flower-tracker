@@ -97,3 +97,27 @@ test("the page no longer carries its own copy of the rank table", () => {
   const inline = Object.keys(SKILL_UPGRADES).filter((n) => !page.includes(`"${n}":`));
   assert.deepEqual(inline, [], "every core-served skill exists in the page table too");
 });
+
+test("the current rank is served, so a consumer can offer only the NEXT one", () => {
+  /*
+   * bumpkin.skills stores the LEVEL as a number, not a presence flag. Without it the roadmap
+   * panel listed every rank and put "Tough Tree L3" above "Tough Tree L2" — an order the game
+   * will not let you buy, since ranks are sequential.
+   */
+  const owned = Object.entries(out.skillRanks).filter(([, s]) => s.has);
+  assert.ok(owned.length > 5, "the fixture farm owns several rankable skills");
+  for (const [name, s] of owned) {
+    assert.equal(typeof s.level, "number", `${name}: current level served`);
+    assert.equal(s.level, Number(farm.bumpkin.skills[name]) || 0, `${name}: level comes from the farm`);
+    if (s.level < s.maxLevel) {
+      assert.equal(s.nextLevel, s.level + 1, `${name}: next rank is exactly one above`);
+      assert.ok(s.rows.some((r) => r.lvl === s.nextLevel), `${name}: that rank is in rows`);
+    } else {
+      assert.equal(s.nextLevel, null, `${name}: maxed out has no next rank`);
+    }
+  }
+  // A skill you do not own has no next rank either — you must buy the skill first.
+  for (const [name, s] of Object.entries(out.skillRanks)) {
+    if (!s.has) assert.equal(s.nextLevel, null, `${name}: unowned skills offer no rank-up`);
+  }
+});

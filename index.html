@@ -17042,11 +17042,18 @@
       if (!Object.keys(sr).length) {
         return `<div style="font-size:0.5rem;color:var(--text-dim)">No rank data in this payload — reload the page so section=power runs.</div>`;
       }
-      const rows = []; let unownedWithValue = 0, worthless = 0, unpriced = 0;
+      /*
+       * Only the NEXT rank of each skill. Ranks are sequential — Level 3 cannot be bought
+       * before Level 2 — so listing every rank produced an order you could not follow, with
+       * "Tough Tree L3" sitting above "Tough Tree L2". `nextLevel` is level + 1 from the rank
+       * the farm is actually at, which section=power reads off bumpkin.skills.
+       */
+      const rows = []; let unownedWithValue = 0, worthless = 0, unpriced = 0, laterRank = 0;
       for (const [name, s] of Object.entries(sr)) {
         for (const r of (s.rows || [])) {
+          if (!s.has) { if (r.delta > 0.0001) unownedWithValue++; continue; }
+          if (r.lvl !== s.nextLevel) { if (r.delta > 0.0001) laterRank++; continue; }
           if (!(r.delta > 0.0001)) { worthless++; continue; }
-          if (!s.has) { unownedWithValue++; continue; }
           if (r.roi == null) { unpriced++; continue; }
           rows.push({ name, tree: s.skillTree, ...r });
         }
@@ -17057,6 +17064,7 @@
       const foot = () => {
         const bits = [];
         if (worthless) bits.push(`<b>${worthless}</b> rank-up${worthless === 1 ? "" : "s"} add nothing on this farm (XP / limit kinds, or a boost already redundant here)`);
+        if (laterRank) bits.push(`<b>${laterRank}</b> are a rank FURTHER up the same skill — take the one listed here first, then they become buyable`);
         if (unownedWithValue) bits.push(`<b>${unownedWithValue}</b> would pay off but you do not own the base skill yet — buy the skill first, then the rank`);
         if (unpriced) bits.push(`<b>${unpriced}</b> could not be priced (no skill-point cost known)`);
         return bits.length ? `<div style="font-size:0.47rem;color:var(--text-dim);margin-top:6px;line-height:1.7;border-top:1px solid #20190f;padding-top:6px">Not listed: ${bits.join(" · ")}.</div>` : "";

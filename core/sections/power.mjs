@@ -405,10 +405,19 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
       const roi = (r.delta > 0.0001 && sflCost > 0) ? sflCost / r.delta : null;
       return { ...r, text: skillRankText(info.up, r.lvl), sflCost, roi };
     });
+    /*
+     * `level` is the rank the farm is ALREADY at — bumpkin.skills stores it as a number, not a
+     * flag. Ranks are sequential, so the only one that can be bought next is level + 1; a
+     * consumer building a buy order must not offer Level 3 before Level 2. The full rows[] is
+     * still served because the Power page lists every rank as reference.
+     */
+    const level = Number(skills[b.name]) || 0;
     skillRanks[b.name] = {
       tier: info.up.tier, maxLevel: info.up.maxLevel, kind: info.up.kind,
       priceable: info.priceable, cost: info.cost,
-      skillTree: b.skillTree || null, has: !!b.has, rows,
+      skillTree: b.skillTree || null, has: !!b.has, level,
+      nextLevel: b.has && level < info.up.maxLevel ? level + 1 : null,
+      rows,
     };
   }
 
