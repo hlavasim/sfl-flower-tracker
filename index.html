@@ -17027,81 +17027,109 @@
 
     // Greedy "rebuild from a full reset": empty all skills, add the best FLOWER/day-per-point first,
     /*
-     * Level 2 and Level 3 rank-ups as a BUY ORDER — what an ascension's skill points buy.
+     * Every skill upgrade there is — buying the skill (L1) and each rank above it (L2, L3) —
+     * ranked by payback, with the line where your points or shards run out drawn across it.
      *
-     * This function computes no valuations. Every FLOWER figure is read out of
-     * powerState.skillRanks, which section=power fills in core using the same calcBoostValue
-     * the Power page's rows use. An earlier attempt ran its own engine and reported Frugal
-     * Miner at +10.00/day where Power said +0.31; that mistake is not repeatable here.
+     * No valuation happens here. L1 comes from powerState.boostValues and the ranks from
+     * powerState.skillRanks, both computed once in core by section=power with the same
+     * calcBoostValue. An earlier version of this panel ran its own engine and put Frugal Miner
+     * at +10.00/day against Power's +0.31; that cannot recur while this only reads.
      *
-     * What it does do is sequence them. Ranks are sequential — Level 3 is unbuyable until
-     * Level 2 is taken — so this walks the ladder: at each step take the cheapest-payback rank
-     * that is available NOW, which then makes that skill's next rank available. Listing every
-     * rank at once (the previous version) put "Tough Tree L3" above "Tough Tree L2", an order
-     * the game rejects; listing only the next rank of each skill (the version after that) hid
-     * every Level 3 entirely. This shows both, in an order you can actually follow.
+     * Steps are walked as a ladder per skill (L1 -> L2 -> L3) because they are sequential, and
+     * at each step the cheapest-payback step available NOW is taken. So an entry always sits
+     * below whatever it depends on, and the cumulative column is a real running total.
      */
-    function roadmapRankUpsHtml() {
-      const sr = (powerState && powerState.skillRanks) || {};
-      if (!Object.keys(sr).length) {
-        return `<div style="font-size:0.5rem;color:var(--text-dim)">No rank data in this payload — reload the page so section=power runs.</div>`;
-      }
-      // Mutable ladder position per skill; only skills you own can be upgraded at all.
-      const at = {}, skipped = { worthless: 0, unowned: 0, unpriced: 0 };
-      for (const [name, s] of Object.entries(sr)) {
-        if (!s.has) { skipped.unowned += (s.rows || []).filter(r => r.delta > 0.0001).length; continue; }
-        at[name] = s.level || 1;
-      }
-      const rowAt = (name, lvl) => ((sr[name].rows || []).find(r => r.lvl === lvl) || null);
+    function roadmapAllUpgradesHtml(settings) {
+      const ps = powerState || {};
+      const sr = ps.skillRanks || {}, bv = ps.boostValues || {};
+      const items = (ps.boostItems || []).filter(b => b.type === "Skill");
+      if (!items.length) return `<div style="font-size:0.5rem;color:var(--text-dim)">No skill data — reload so section=power runs.</div>`;
 
-      const order = [];
-      let cumPts = 0, cumShards = 0, cumGain = 0, guard = 0;
-      while (guard++ < 400) {
+      const sflPerPt = (ps.skillCostInfo && ps.skillCostInfo.sflPerPoint) || 0;
+      const level = (ps.skillCostInfo && ps.skillCostInfo.level) || 1;
+      let spent = 0;
+      for (const b of items) if (b.has) spent += (b.skillPoints || 1);
+      const autoFree = Math.max(0, (level - 1) - spent);
+      const freePts = (settings.skillPts != null && isFinite(settings.skillPts)) ? Math.max(0, settings.skillPts) : autoFree;
+      const shardsHave = Math.floor((ps.inventory && parseFloat(ps.inventory["Ascension Shard"])) || 0);
+
+      // L1 value = the synergy the Power page shows, summed over the categories it pays out in.
+      const l1Value = (name) => {
+        let t = 0, found = false;
+        for (const cat of Object.keys(bv)) { const v = bv[cat] && bv[cat][name]; if (v && isFinite(v.synergy)) { t += v.synergy; found = true; } }
+        return found ? t : null;
+      };
+      // Tier gate: a tier only opens once enough points sit in that tree, and tier-3 spending
+      // never counts (game: getUnlockedTierForTree). Flagged, not silently ordered around.
+      const inTree = {};
+      for (const b of items) if (b.has && (Number(b.skillTier) || 1) !== 3) inTree[b.skillTree] = (inTree[b.skillTree] || 0) + (b.skillPoints || 1);
+      const gateGap = (b) => {
+        const need = (SKILL_POINTS_PER_TIER[b.skillTree] || {})[Number(b.skillTier) || 1] || 0;
+        return Math.max(0, need - (inTree[b.skillTree] || 0));
+      };
+
+      // Ladder position per skill: 0 = not owned yet, else the rank it sits at.
+      const at = {}, skip = { noValue: 0, unpriced: 0 };
+      for (const b of items) at[b.name] = b.has ? ((sr[b.name] && sr[b.name].level) || 1) : 0;
+      const stepFor = (b) => {
+        const cur = at[b.name];
+        if (cur === 0) {
+          const v = l1Value(b.name), pts = b.skillPoints || 1;
+          if (v == null || !(v > 0.0001)) return null;
+          return { lvl: 1, delta: v, points: pts, shards: 0, text: b.boost, gap: gateGap(b) };
+        }
+        const s = sr[b.name];
+        if (!s || cur >= s.maxLevel) return null;
+        const r = (s.rows || []).find(x => x.lvl === cur + 1);
+        if (!r || !(r.delta > 0.0001)) return null;
+        return { lvl: r.lvl, delta: r.delta, points: r.points, shards: r.shards, text: r.text, byCat: r.byCat, gap: 0 };
+      };
+
+      const order = []; let cPts = 0, cSh = 0, cGain = 0, guard = 0;
+      while (guard++ < 500) {
         let best = null;
-        for (const name of Object.keys(at)) {
-          const s = sr[name], next = at[name] + 1;
-          if (next > s.maxLevel) continue;
-          const r = rowAt(name, next);
-          if (!r) continue;
-          if (!(r.delta > 0.0001)) continue;      // counted once the ladder stops, below
-          if (r.roi == null) continue;
-          if (!best || r.roi < best.r.roi) best = { name, s, r };
+        for (const b of items) {
+          const st = stepFor(b);
+          if (!st) continue;
+          const sfl = sflPerPt * st.points;
+          if (!(sfl > 0)) { continue; }
+          const roi = sfl / st.delta;
+          if (!best || roi < best.roi) best = { b, st, roi };
         }
         if (!best) break;
-        at[best.name] = best.r.lvl;
-        cumPts += best.r.points; cumShards += best.r.shards; cumGain += best.r.delta;
-        order.push({ name: best.name, tree: best.s.skillTree, ...best.r, cumPts, cumShards, cumGain });
+        at[best.b.name] = best.st.lvl;
+        cPts += best.st.points; cSh += best.st.shards; cGain += best.st.delta;
+        order.push({ name: best.b.name, tree: best.b.skillTree, tier: best.b.skillTier, roi: best.roi, ...best.st, cPts, cSh, cGain });
       }
-      // Anything still unbought on an owned skill: it is a dead rank, not a locked one.
-      for (const [name, lvl] of Object.entries(at)) {
-        for (const r of (sr[name].rows || [])) {
-          if (r.lvl <= lvl) continue;
-          if (!(r.delta > 0.0001)) skipped.worthless++; else if (r.roi == null) skipped.unpriced++;
-        }
-      }
+      for (const b of items) { const st = stepFor(b); if (!st) { if (at[b.name] === 0 && l1Value(b.name) != null) skip.noValue++; } }
 
       const TC = { "Crops": "#7fe0a0", "Trees": "#b98a5a", "Mining": "#9aa6b2", "Cooking": "#e8a060", "Animals": "#e6c25a", "Fishing": "#6ab0e0", "Greenhouse": "#8fd98f", "Fruit Patch": "#e89a5a", "Bees & Flowers": "#e08fd0", "Machinery": "#c0a0e0", "Compost": "#9a8a6a", "Aging": "#d8c89a" };
-      const foot = () => {
-        const bits = [];
-        if (skipped.worthless) bits.push(`<b>${skipped.worthless}</b> rank-up${skipped.worthless === 1 ? "" : "s"} add nothing on this farm — XP, daily-limit and cooking-speed kinds carry no FLOWER value, and neither does a boost already redundant here`);
-        if (skipped.unowned) bits.push(`<b>${skipped.unowned}</b> would pay off but you do not own the base skill — buy the skill first (the rebuild order above ranks those), then its ranks appear here`);
-        if (skipped.unpriced) bits.push(`<b>${skipped.unpriced}</b> could not be priced (no skill-point cost known)`);
-        return bits.length ? `<div style="font-size:0.47rem;color:var(--text-dim);margin-top:6px;line-height:1.7;border-top:1px solid #20190f;padding-top:6px">Not listed: ${bits.join(" · ")}.</div>` : "";
-      };
-      if (!order.length) return `<div style="font-size:0.5rem;color:var(--text-dim)">No rank-up on a skill you own pays back right now.</div>${foot()}`;
+      if (!order.length) return `<div style="font-size:0.5rem;color:var(--text-dim)">Nothing pays back right now.</div>`;
 
-      let h = `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Buy order for Level 2 and Level 3 of skills you already own, best payback first. Taking a rank unlocks the next one on that skill, so the ladder is walked in order — an entry always sits below the rank it needs. <b>${order.length} rank-ups · ${cumPts} skill points · ${cumShards} Ascension Shards · +${roadmapFmtFlower(cumGain)}/day at the end.</b> ROI prices the <b>points only</b>: shards are not tradable, so there is no price to put on them. Same numbers as the POWER page — they arrive computed from the API.</div>`;
+      // Where the money runs out. Points and shards are separate currencies, so the cut is
+      // whichever binds first — with 0 shards banked, every rank is beyond it by definition.
+      const affordable = order.filter(o => o.cPts <= freePts && o.cSh <= shardsHave).length;
+
+      let h = `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Every upgrade you can still take — buying a skill (L1) and each rank above it — best payback first, walked as a ladder so nothing sits above what it needs. <b>${order.length} steps · ${cPts} skill points · ${cSh} Ascension Shards · +${roadmapFmtFlower(cGain)}/day</b> if you took the lot. You have <b style="color:var(--green)">${freePts} point${freePts === 1 ? "" : "s"}</b> and <b style="color:${shardsHave ? "var(--green)" : "var(--red)"}">${shardsHave} shard${shardsHave === 1 ? "" : "s"}</b>. ROI prices points only — shards are not tradable, so they have no price. Values are the POWER page's, theoretical throughput; the roadmap's efficiency toggle is not applied to them.</div>`;
       h += `<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;overflow:hidden">`;
-      h += `<div style="display:flex;gap:8px;padding:3px 8px;border-bottom:1px solid #20190f;font-size:0.44rem;color:var(--text-dim)"><span style="min-width:22px"></span><span style="flex:1;min-width:0">skill</span><span style="min-width:120px">tree · cost</span><span style="min-width:58px;text-align:right">FLOWER/d</span><span style="min-width:42px;text-align:right">ROI</span><span style="min-width:78px;text-align:right">cumulative</span></div>`;
+      h += `<div style="display:flex;gap:8px;padding:3px 8px;border-bottom:1px solid #20190f;font-size:0.44rem;color:var(--text-dim)"><span style="min-width:22px"></span><span style="flex:1;min-width:0">skill</span><span style="min-width:118px">tree · cost</span><span style="min-width:58px;text-align:right">FLOWER/d</span><span style="min-width:42px;text-align:right">ROI</span><span style="min-width:78px;text-align:right">cumulative</span></div>`;
       order.forEach((r, i) => {
+        if (i === affordable) {
+          const why = cSh > shardsHave && order[i].cSh > shardsHave && order[i].cPts <= freePts
+            ? `out of Ascension Shards (${shardsHave} banked)` : `out of skill points (${freePts} free)`;
+          h += `<div style="padding:4px 8px;background:#2a1410;border-top:2px solid var(--red);border-bottom:1px solid #20190f;font-size:0.47rem;color:var(--red)">— from here on you cannot pay yet: ${why} —</div>`;
+        }
         const col = TC[r.tree] || "#8a7a5a";
         const roiTxt = r.roi < 400 ? Math.round(r.roi) + "d" : (r.roi / 365).toFixed(1) + "r";
-        const cats = Object.keys(r.byCat || {}).join(", ");
-        h += `<div style="display:flex;gap:8px;align-items:baseline;padding:4px 8px;border-bottom:1px solid #20190f;font-size:0.55rem"><span style="color:var(--text-dim);min-width:22px">${i + 1}.</span><b style="flex:1;min-width:0">${escHTML(r.name)} <span style="color:var(--text-dim);font-weight:normal">L${r.lvl}</span></b><span style="color:${col};font-size:0.45rem;min-width:120px" title="${escHTML(r.text)}">${escHTML(r.tree || "")} · ${r.points}pt + ${r.shards}◆</span><span style="color:var(--green);font-weight:bold;min-width:58px;text-align:right">+${roadmapFmtFlower(r.delta)}/d</span><span style="color:${roiColorFor(r.roi)};font-size:0.45rem;min-width:42px;text-align:right" title="${escHTML(r.text)}${cats ? " — " + escHTML(cats) : ""}">${roiTxt}</span><span style="color:var(--text-dim);font-size:0.45rem;min-width:78px;text-align:right" title="Running total if you buy everything down to this line">${r.cumPts}pt · ${r.cumShards}◆</span></div>`;
+        const dim = i >= affordable ? "opacity:0.55;" : "";
+        const gate = r.gap > 0 ? ` <span style="color:#e8a060;font-size:0.42rem" title="This tier only opens once ${r.gap} more point${r.gap === 1 ? "" : "s"} sit in ${escHTML(r.tree)} (tier-3 points do not count)">🔒${r.gap}pt</span>` : "";
+        h += `<div style="display:flex;gap:8px;align-items:baseline;padding:4px 8px;border-bottom:1px solid #20190f;font-size:0.55rem;${dim}"><span style="color:var(--text-dim);min-width:22px">${i + 1}.</span><b style="flex:1;min-width:0">${escHTML(r.name)} <span style="color:var(--text-dim);font-weight:normal">L${r.lvl}</span>${gate}</b><span style="color:${col};font-size:0.45rem;min-width:118px" title="${escHTML(r.text || "")}">${escHTML(r.tree || "")} · ${r.points}pt${r.shards ? " + " + r.shards + "◆" : ""}</span><span style="color:var(--green);font-weight:bold;min-width:58px;text-align:right">+${roadmapFmtFlower(r.delta)}/d</span><span style="color:${roiColorFor(r.roi)};font-size:0.45rem;min-width:42px;text-align:right">${roiTxt}</span><span style="color:var(--text-dim);font-size:0.45rem;min-width:78px;text-align:right">${r.cPts}pt${r.cSh ? " · " + r.cSh + "◆" : ""}</span></div>`;
       });
-      h += `</div>` + foot();
+      h += `</div>`;
+      h += `<div style="font-size:0.47rem;color:var(--text-dim);margin-top:6px;line-height:1.7;border-top:1px solid #20190f;padding-top:6px">🔒 marks a tier that is not open yet — the game needs that many more points in the tree first (tier-3 points never count towards it). Not listed at all: upgrades worth 0 FLOWER/day here — XP, daily-limit and cooking-speed kinds carry no production value, and neither does a boost this farm already makes redundant.</div>`;
       return h;
     }
+
     // recomputing each step (so conflicts like Rocky vs Ferrous Favor and skip->profitable synergies resolve).
     function roadmapSkillRebuildHtml(settings) {
       const { byName, catBoostsW } = roadmapBuildClones();
@@ -17203,7 +17231,7 @@
         h += `<div style="font-size:0.52rem;color:var(--text-dim);line-height:1.7">${picks.map(r => `${escHTML(r.c.name)} <span style="color:var(--green)">+${roadmapFmtFlower(r.net)}/d</span> <span style="font-size:0.45rem">(${r.c.skillPoints || 1}pt, ${escHTML(r.c.skillTree || "")})</span>`).join(" · ")}</div>`;
       }
       h += `</div>`;
-      h += `<div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap"><button onclick="_roadmapSkillRebuild()" style="font-size:0.52rem;padding:4px 12px;border:1px solid var(--border-brown);border-radius:6px;background:#241a10;color:var(--sunpetal);cursor:pointer">\u2699 Best rebuild order (after a full reset)</button><button onclick="_roadmapRankUps()" style="font-size:0.52rem;padding:4px 12px;border:1px solid var(--border-brown);border-radius:6px;background:#241a10;color:var(--sunpetal);cursor:pointer" title="Level 2 / Level 3 upgrady skill\u016f se\u0159azen\u00e9 podle n\u00e1vratnosti. \u010c\u00edsla jsou ta sam\u00e1, kter\u00e1 po\u010d\u00edt\u00e1 str\u00e1nka POWER \u2014 chod\u00ed hotov\u00e1 z API.">\u2b50 Best rank-ups (Level 2/3 after an ascension)</button></div><div id="skill-rebuild" style="margin-bottom:10px"></div><div id="skill-rank-ups" style="margin-bottom:10px"></div>`;
+      h += `<div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap"><button onclick="_roadmapSkillRebuild()" style="font-size:0.52rem;padding:4px 12px;border:1px solid var(--border-brown);border-radius:6px;background:#241a10;color:var(--sunpetal);cursor:pointer">\u2699 Best rebuild order (after a full reset)</button><button onclick="_roadmapAllUpgrades()" style="font-size:0.52rem;padding:4px 12px;border:1px solid var(--border-brown);border-radius:6px;background:#241a10;color:var(--sunpetal);cursor:pointer" title="Level 2 / Level 3 upgrady skill\u016f se\u0159azen\u00e9 podle n\u00e1vratnosti. \u010c\u00edsla jsou ta sam\u00e1, kter\u00e1 po\u010d\u00edt\u00e1 str\u00e1nka POWER \u2014 chod\u00ed hotov\u00e1 z API.">\u2b50 Best rank-ups (Level 2/3 after an ascension)</button></div><div id="skill-rebuild" style="margin-bottom:10px"></div><div id="skill-all-upgrades" style="margin-bottom:10px"></div>`;
       h += `<div style="font-size:0.52rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">All skills by tree &amp; tier (like the in-game tree). FLOWER/day each adds on <b>your</b> farm at <b>${effLbl}</b> efficiency; yield, cheaper costs &amp; coins are priced (coins at ${Math.round(cps)}/FLOWER), XP / speed / limits show their kind. Pts column = skill points (and the SFL of XP to earn them). <a href="https://sfl.world/tools/skills/" target="_blank" style="color:var(--sunpetal);text-decoration:none">skill tree ↗</a></div>`;
       const byTree = {};
       for (const r of rows) { const tr = r.c.skillTree || "Other"; (byTree[tr] = byTree[tr] || []).push(r); }
@@ -17627,7 +17655,7 @@
     window._roadmapToggleCat = function(cat, on) { const cur = ((getRoadmapSettings().excludeCats) || []).slice(); const i = cur.indexOf(cat); if (on) { if (i >= 0) cur.splice(i, 1); } else { if (i < 0) cur.push(cat); } saveRoadmapSettings({ excludeCats: cur }); renderRoadmapContent(); };
     window._roadmapSetSkillPts = function(v) { const n = parseFloat(v); saveRoadmapSettings({ skillPts: (v !== "" && isFinite(n) && n >= 0) ? Math.floor(n) : null }); renderRoadmapContent(); };
     window._roadmapSkillRebuild = function() { const el = document.getElementById("skill-rebuild"); if (!el) return; el.innerHTML = `<div style="font-size:0.52rem;color:var(--text-dim)">computing\u2026</div>`; setTimeout(function() { try { el.innerHTML = roadmapSkillRebuildHtml(getRoadmapSettings()); } catch (e) { el.innerHTML = `<div style="color:var(--red);font-size:0.52rem">error: ${(e && e.message) || e}</div>`; } }, 30); };
-    window._roadmapRankUps = function() { const el = document.getElementById("skill-rank-ups"); if (!el) return; try { el.innerHTML = roadmapRankUpsHtml(); } catch (e) { el.innerHTML = `<div style="color:var(--red);font-size:0.52rem">error: ${(e && e.message) || e}</div>`; } };
+    window._roadmapAllUpgrades = function() { const el = document.getElementById("skill-all-upgrades"); if (!el) return; try { el.innerHTML = roadmapAllUpgradesHtml(getRoadmapSettings()); } catch (e) { el.innerHTML = `<div style="color:var(--red);font-size:0.52rem">error: ${(e && e.message) || e}</div>`; } };
     window._roadmapSetMaxPrice = function(v) { const n = parseFloat(v); saveRoadmapSettings({ maxPrice: isFinite(n) && n >= 0 ? n : 0 }); renderRoadmapContent(); };
     window._roadmapSetRestocks = function(v) { const n = parseFloat(v); saveRoadmapSettings({ restocksPerDay: isFinite(n) && n > 0 ? n : 2 }); renderRoadmapContent(); };
     window._roadmapSetTicketValue = function(v) { const n = parseFloat(v); saveRoadmapSettings({ ticketValueSfl: isFinite(n) && n >= 0 ? n : 1 }); renderRoadmapContent(); };
