@@ -19704,35 +19704,19 @@
     function _worldKeepScroll(paint) {
       const se = document.scrollingElement || document.documentElement;
       const y = se.scrollTop;
-      const app = document.getElementById("app");
-      /*
-       * Hold a floor under the page height across the swap.
-       *
-       * Three earlier attempts all tried to put the scroll BACK after the paint — restoring
-       * around each paint, forcing layout first, capturing the offset on click and re-applying
-       * it over three frames — and none of them held: the scope switch measured 300 -> 0 every
-       * time. They could not work. Assigning innerHTML collapses the document, and the browser
-       * clamps the scroll position at that moment; by the time any restore runs the offset is
-       * already gone, and re-applying it just races whatever grows the page afterwards.
-       *
-       * Pinning min-height attacks the clamp instead of its aftermath: the document never gets
-       * short enough for the browser to clamp anything, so the scroll position survives the
-       * swap on its own. That is also why the node-panel swap already worked — it is small
-       * enough that the page never shrank past the reader's offset.
-       */
-      const prevMinHeight = app ? app.style.minHeight : "";
-      if (app && app.offsetHeight > 0) app.style.minHeight = app.offsetHeight + "px";
       paint();
-      if (y) {
-        void document.body.offsetHeight;  // settle layout before reading/writing scrollTop
-        if (se.scrollTop !== y) se.scrollTop = y;
-      }
+      if (!y) return;                     // first load starts at the top; leave it there
       /*
-       * Release the floor once the new content has been laid out and can carry its own height.
-       * If the new page is genuinely shorter the scroll will settle then — that is the honest
-       * outcome, not a jump to the top.
+       * Force a layout read before restoring. Replacing #app's innerHTML momentarily
+       * collapses the document to zero height, and a scrollTop written before the browser
+       * has re-laid out is clamped straight back to 0 — which is exactly what the scope
+       * switch did (300 -> 0) while the smaller node-panel swap survived.
        */
-      if (app) requestAnimationFrame(() => { app.style.minHeight = prevMinHeight || ""; });
+      void document.body.offsetHeight;
+      se.scrollTop = y;
+      // Belt and braces: if the new content is still growing (images, fonts), re-apply on
+      // the next frame. Skipped if the reader has since scrolled themselves.
+      requestAnimationFrame(() => { if (se.scrollTop !== y && se.scrollTop === 0) se.scrollTop = y; });
     }
 
     function _worldRenderTail(html, app) {
