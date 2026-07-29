@@ -17027,62 +17027,81 @@
 
     // Greedy "rebuild from a full reset": empty all skills, add the best FLOWER/day-per-point first,
     /*
-     * Level 2 / Level 3 rank-ups, best payback first — what an ascension's skill points buy.
+     * Level 2 and Level 3 rank-ups as a BUY ORDER — what an ascension's skill points buy.
      *
-     * This function computes NOTHING. Every figure here is read straight out of
-     * powerState.skillRanks, which section=power fills in core with the same calcBoostValue
-     * the Power page's rows use. That is deliberate: the previous attempt at this panel ran
-     * its own valuation and reported Frugal Miner at +10.00/day where Power said +0.31.
+     * This function computes no valuations. Every FLOWER figure is read out of
+     * powerState.skillRanks, which section=power fills in core using the same calcBoostValue
+     * the Power page's rows use. An earlier attempt ran its own engine and reported Frugal
+     * Miner at +10.00/day where Power said +0.31; that mistake is not repeatable here.
      *
-     * Only skills you already OWN are listed: a rank-up is an upgrade, so the base skill has
-     * to be there first. The rest are counted in the footer instead of silently dropped.
+     * What it does do is sequence them. Ranks are sequential — Level 3 is unbuyable until
+     * Level 2 is taken — so this walks the ladder: at each step take the cheapest-payback rank
+     * that is available NOW, which then makes that skill's next rank available. Listing every
+     * rank at once (the previous version) put "Tough Tree L3" above "Tough Tree L2", an order
+     * the game rejects; listing only the next rank of each skill (the version after that) hid
+     * every Level 3 entirely. This shows both, in an order you can actually follow.
      */
     function roadmapRankUpsHtml() {
       const sr = (powerState && powerState.skillRanks) || {};
       if (!Object.keys(sr).length) {
         return `<div style="font-size:0.5rem;color:var(--text-dim)">No rank data in this payload — reload the page so section=power runs.</div>`;
       }
-      /*
-       * Only the NEXT rank of each skill. Ranks are sequential — Level 3 cannot be bought
-       * before Level 2 — so listing every rank produced an order you could not follow, with
-       * "Tough Tree L3" sitting above "Tough Tree L2". `nextLevel` is level + 1 from the rank
-       * the farm is actually at, which section=power reads off bumpkin.skills.
-       */
-      const rows = []; let unownedWithValue = 0, worthless = 0, unpriced = 0, laterRank = 0;
+      // Mutable ladder position per skill; only skills you own can be upgraded at all.
+      const at = {}, skipped = { worthless: 0, unowned: 0, unpriced: 0 };
       for (const [name, s] of Object.entries(sr)) {
-        for (const r of (s.rows || [])) {
-          if (!s.has) { if (r.delta > 0.0001) unownedWithValue++; continue; }
-          if (r.lvl !== s.nextLevel) { if (r.delta > 0.0001) laterRank++; continue; }
-          if (!(r.delta > 0.0001)) { worthless++; continue; }
-          if (r.roi == null) { unpriced++; continue; }
-          rows.push({ name, tree: s.skillTree, ...r });
+        if (!s.has) { skipped.unowned += (s.rows || []).filter(r => r.delta > 0.0001).length; continue; }
+        at[name] = s.level || 1;
+      }
+      const rowAt = (name, lvl) => ((sr[name].rows || []).find(r => r.lvl === lvl) || null);
+
+      const order = [];
+      let cumPts = 0, cumShards = 0, cumGain = 0, guard = 0;
+      while (guard++ < 400) {
+        let best = null;
+        for (const name of Object.keys(at)) {
+          const s = sr[name], next = at[name] + 1;
+          if (next > s.maxLevel) continue;
+          const r = rowAt(name, next);
+          if (!r) continue;
+          if (!(r.delta > 0.0001)) continue;      // counted once the ladder stops, below
+          if (r.roi == null) continue;
+          if (!best || r.roi < best.r.roi) best = { name, s, r };
+        }
+        if (!best) break;
+        at[best.name] = best.r.lvl;
+        cumPts += best.r.points; cumShards += best.r.shards; cumGain += best.r.delta;
+        order.push({ name: best.name, tree: best.s.skillTree, ...best.r, cumPts, cumShards, cumGain });
+      }
+      // Anything still unbought on an owned skill: it is a dead rank, not a locked one.
+      for (const [name, lvl] of Object.entries(at)) {
+        for (const r of (sr[name].rows || [])) {
+          if (r.lvl <= lvl) continue;
+          if (!(r.delta > 0.0001)) skipped.worthless++; else if (r.roi == null) skipped.unpriced++;
         }
       }
-      rows.sort((a, b) => a.roi - b.roi);
 
       const TC = { "Crops": "#7fe0a0", "Trees": "#b98a5a", "Mining": "#9aa6b2", "Cooking": "#e8a060", "Animals": "#e6c25a", "Fishing": "#6ab0e0", "Greenhouse": "#8fd98f", "Fruit Patch": "#e89a5a", "Bees & Flowers": "#e08fd0", "Machinery": "#c0a0e0", "Compost": "#9a8a6a", "Aging": "#d8c89a" };
       const foot = () => {
         const bits = [];
-        if (worthless) bits.push(`<b>${worthless}</b> rank-up${worthless === 1 ? "" : "s"} add nothing on this farm (XP / limit kinds, or a boost already redundant here)`);
-        if (laterRank) bits.push(`<b>${laterRank}</b> are a rank FURTHER up the same skill — take the one listed here first, then they become buyable`);
-        if (unownedWithValue) bits.push(`<b>${unownedWithValue}</b> would pay off but you do not own the base skill yet — buy the skill first, then the rank`);
-        if (unpriced) bits.push(`<b>${unpriced}</b> could not be priced (no skill-point cost known)`);
+        if (skipped.worthless) bits.push(`<b>${skipped.worthless}</b> rank-up${skipped.worthless === 1 ? "" : "s"} add nothing on this farm — XP, daily-limit and cooking-speed kinds carry no FLOWER value, and neither does a boost already redundant here`);
+        if (skipped.unowned) bits.push(`<b>${skipped.unowned}</b> would pay off but you do not own the base skill — buy the skill first (the rebuild order above ranks those), then its ranks appear here`);
+        if (skipped.unpriced) bits.push(`<b>${skipped.unpriced}</b> could not be priced (no skill-point cost known)`);
         return bits.length ? `<div style="font-size:0.47rem;color:var(--text-dim);margin-top:6px;line-height:1.7;border-top:1px solid #20190f;padding-top:6px">Not listed: ${bits.join(" · ")}.</div>` : "";
       };
-      if (!rows.length) return `<div style="font-size:0.5rem;color:var(--text-dim)">No rank-up on a skill you own pays back right now.</div>${foot()}`;
+      if (!order.length) return `<div style="font-size:0.5rem;color:var(--text-dim)">No rank-up on a skill you own pays back right now.</div>${foot()}`;
 
-      let h = `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Level 2/3 upgrades of skills you already own, best payback first. <b>${rows.length}</b> worth taking. Each costs its tier x3 skill points plus Ascension Shards — the ROI prices the <b>points only</b>, because shards are not tradable and have no market price. Same numbers as the POWER page; they arrive computed from the API.</div>`;
+      let h = `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Buy order for Level 2 and Level 3 of skills you already own, best payback first. Taking a rank unlocks the next one on that skill, so the ladder is walked in order — an entry always sits below the rank it needs. <b>${order.length} rank-ups · ${cumPts} skill points · ${cumShards} Ascension Shards · +${roadmapFmtFlower(cumGain)}/day at the end.</b> ROI prices the <b>points only</b>: shards are not tradable, so there is no price to put on them. Same numbers as the POWER page — they arrive computed from the API.</div>`;
       h += `<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;overflow:hidden">`;
-      rows.forEach((r, i) => {
+      h += `<div style="display:flex;gap:8px;padding:3px 8px;border-bottom:1px solid #20190f;font-size:0.44rem;color:var(--text-dim)"><span style="min-width:22px"></span><span style="flex:1;min-width:0">skill</span><span style="min-width:120px">tree · cost</span><span style="min-width:58px;text-align:right">FLOWER/d</span><span style="min-width:42px;text-align:right">ROI</span><span style="min-width:78px;text-align:right">cumulative</span></div>`;
+      order.forEach((r, i) => {
         const col = TC[r.tree] || "#8a7a5a";
         const roiTxt = r.roi < 400 ? Math.round(r.roi) + "d" : (r.roi / 365).toFixed(1) + "r";
         const cats = Object.keys(r.byCat || {}).join(", ");
-        h += `<div style="display:flex;gap:8px;align-items:baseline;padding:4px 8px;border-bottom:1px solid #20190f;font-size:0.55rem"><span style="color:var(--text-dim);min-width:22px">${i + 1}.</span><b style="flex:1;min-width:0">${escHTML(r.name)} <span style="color:var(--text-dim);font-weight:normal">L${r.lvl}</span></b><span style="color:${col};font-size:0.45rem;min-width:120px" title="${escHTML(r.text)}">${escHTML(r.tree || "")} · ${r.points}pt + ${r.shards}◆</span><span style="color:var(--green);font-weight:bold;min-width:58px;text-align:right">+${roadmapFmtFlower(r.delta)}/d</span><span style="color:${roiColorFor(r.roi)};font-size:0.45rem;min-width:42px;text-align:right" title="${escHTML(r.text)}${cats ? " — " + escHTML(cats) : ""}">${roiTxt}</span></div>`;
+        h += `<div style="display:flex;gap:8px;align-items:baseline;padding:4px 8px;border-bottom:1px solid #20190f;font-size:0.55rem"><span style="color:var(--text-dim);min-width:22px">${i + 1}.</span><b style="flex:1;min-width:0">${escHTML(r.name)} <span style="color:var(--text-dim);font-weight:normal">L${r.lvl}</span></b><span style="color:${col};font-size:0.45rem;min-width:120px" title="${escHTML(r.text)}">${escHTML(r.tree || "")} · ${r.points}pt + ${r.shards}◆</span><span style="color:var(--green);font-weight:bold;min-width:58px;text-align:right">+${roadmapFmtFlower(r.delta)}/d</span><span style="color:${roiColorFor(r.roi)};font-size:0.45rem;min-width:42px;text-align:right" title="${escHTML(r.text)}${cats ? " — " + escHTML(cats) : ""}">${roiTxt}</span><span style="color:var(--text-dim);font-size:0.45rem;min-width:78px;text-align:right" title="Running total if you buy everything down to this line">${r.cumPts}pt · ${r.cumShards}◆</span></div>`;
       });
       h += `</div>` + foot();
       return h;
     }
-
     // recomputing each step (so conflicts like Rocky vs Ferrous Favor and skip->profitable synergies resolve).
     function roadmapSkillRebuildHtml(settings) {
       const { byName, catBoostsW } = roadmapBuildClones();
