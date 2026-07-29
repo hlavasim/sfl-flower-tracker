@@ -62,7 +62,9 @@ test("a tier-3 skill's points never count towards a gate", () => {
   // Both places that add to the per-tree total must exclude tier 3.
   const adds = body.match(/inTree\[[^\]]+\]\s*=\s*\(inTree\[[^\]]+\]\s*\|\|\s*0\)\s*\+/g) || [];
   assert.equal(adds.length, 2, "two places accumulate per-tree points");
-  for (const m of body.matchAll(/tierOf\((\w+)\) !== 3/g)) assert.ok(m, "guard present");
-  assert.equal((body.match(/tierOf\(\w+\) !== 3/g) || []).length, 3,
+  // Three sites must be guarded: the two accumulations and the filler pool. Match either
+  // polarity — the pool skips with `=== 3`, the accumulations add with `!== 3` — so this
+  // pins the invariant rather than one particular way of writing it.
+  assert.equal((body.match(/tierOf\(\w+\) [!=]== 3/g) || []).length, 3,
     "each accumulation, and the filler pool, must exclude tier 3");
 });

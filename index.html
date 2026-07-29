@@ -17070,36 +17070,50 @@
       };
 
       /*
-       * Cheapest way to reach `need` counting points in `tree`, using skills not yet owned.
-       * Tier-3 skills cannot be fillers — their points do not count. Ordered by points first
-       * (a gate only cares about the count) and by value second, so when two fillers cost the
-       * same we take the one that is actually worth something.
+       * Everything below is precomputed ONCE PER STEP on purpose.
+       *
+       * roadmapSkillBreakdown is expensive, and the obvious shape — resolve a candidate's
+       * prerequisites inside the loop over candidates, sorting the tree's pool with valueOf in
+       * the comparator — calls it hundreds of thousands of times per step and simply hangs the
+       * page. Values first, then one sorted pool per tree, then one filler set per (tree,tier).
+       * That is ~150 valuations a step instead, nearly all of them cache hits.
        */
-      const fillersFor = (tree, need) => {
-        let have = inTree[tree] || 0;
-        if (have >= need) return [];
-        const pool = skills.filter(c => !c.has && c.skillTree === tree && tierOf(c) !== 3)
-          .sort((a, b) => ptsOf(a) - ptsOf(b) || valueOf(b) - valueOf(a));
-        const out = [];
-        for (const f of pool) { if (have >= need) break; out.push(f); have += ptsOf(f); }
-        return have >= need ? out : null;   // tree cannot reach the gate at all
-      };
-
       const order = []; let guard = 0, totV = 0, totPts = 0;
       while (guard++ < 120 && budget > 0) {
+        const v = new Map();
+        for (const c of skills) if (!c.has) v.set(c, valueOf(c));
+
+        const poolByTree = {};
+        for (const c of skills) {
+          if (c.has || tierOf(c) === 3) continue;           // tier-3 points never open a gate
+          (poolByTree[c.skillTree] = poolByTree[c.skillTree] || []).push(c);
+        }
+        // Points first — a gate only counts them — then value, so a tie goes to a useful skill.
+        for (const t in poolByTree) poolByTree[t].sort((a, b) => ptsOf(a) - ptsOf(b) || v.get(b) - v.get(a));
+
+        const fillerCache = {};
+        const fillersFor = (tree, need) => {
+          const k = tree + "|" + need;
+          if (k in fillerCache) return fillerCache[k];
+          let have = inTree[tree] || 0;
+          if (have >= need) return (fillerCache[k] = []);
+          const out = [];
+          for (const f of (poolByTree[tree] || [])) { if (have >= need) break; out.push(f); have += ptsOf(f); }
+          return (fillerCache[k] = have >= need ? out : null); // null = tree cannot reach the gate
+        };
+
         let best = null;
         for (const c of skills) {
           if (c.has || tierOf(c) < 2) continue;
           const need = (SKILL_POINTS_PER_TIER[c.skillTree] || {})[tierOf(c)] || 0;
           const pre = fillersFor(c.skillTree, need);
           if (pre === null) continue;                       // unreachable tree
-          const group = pre.concat([c]);
-          const pts = group.reduce((s, g) => s + ptsOf(g), 0);
+          const pts = pre.reduce((s, g) => s + ptsOf(g), 0) + ptsOf(c);
           if (pts > budget) continue;
-          const gain = group.reduce((s, g) => s + valueOf(g), 0);
+          const gain = pre.reduce((s, g) => s + (v.get(g) || 0), 0) + (v.get(c) || 0);
           if (gain <= 0.001) continue;                      // no payback → not advice
           const roi = (sflPerPt * pts) / gain;              // days to pay the points back
-          if (!best || roi < best.roi) best = { c, pre, pts, gain, roi };
+          if (!best || roi < best.roi) best = { c, pre, pts, gain, roi, pv: new Map(pre.map(p => [p, v.get(p)])) };
         }
         if (!best) break;
         for (const g of best.pre.concat([best.c])) { g.has = true; if (tierOf(g) !== 3) inTree[g.skillTree] = (inTree[g.skillTree] || 0) + ptsOf(g); }
@@ -17119,7 +17133,9 @@
         const roiTxt = sflPerPt > 0 ? (o.roi < 400 ? Math.round(o.roi) + "d" : (o.roi / 365).toFixed(1) + "r") : "—";
         h += `<div style="display:flex;gap:8px;align-items:baseline;padding:4px 8px;border-bottom:1px solid #20190f;font-size:0.55rem"><span style="color:var(--text-dim);min-width:22px">${i + 1}.</span><b style="flex:1;min-width:0">${escHTML(o.c.name)}</b><span style="color:${col};font-size:0.45rem;min-width:104px">${escHTML(o.c.skillTree || "")} T${tierOf(o.c)} · ${o.pts}pt</span><span style="color:var(--green);font-weight:bold;min-width:58px;text-align:right">+${roadmapFmtFlower(o.gain)}/d</span><span style="color:var(--sunpetal);font-size:0.45rem;min-width:42px;text-align:right" title="Cena bodů ÷ přírůstek za den">${roiTxt}</span></div>`;
         if (o.pre.length) {
-          h += `<div style="padding:2px 8px 5px 30px;border-bottom:1px solid #20190f;font-size:0.45rem;color:var(--text-dim)">└ unlocks the tier first: ${o.pre.map(p => `${escHTML(p.name)} <span style="color:#8a7a5a">(T${tierOf(p)}, ${ptsOf(p)}pt${valueOf(p) > 0.001 ? `, +${roadmapFmtFlower(valueOf(p))}/d` : ""})</span>`).join(" · ")}</div>`;
+          // Values as they stood WHEN THE PICK WAS MADE (o.pv) — recomputing here would price
+          // them against a state that already includes them.
+          h += `<div style="padding:2px 8px 5px 30px;border-bottom:1px solid #20190f;font-size:0.45rem;color:var(--text-dim)">└ unlocks the tier first: ${o.pre.map(p => { const pv = o.pv.get(p) || 0; return `${escHTML(p.name)} <span style="color:#8a7a5a">(T${tierOf(p)}, ${ptsOf(p)}pt${pv > 0.001 ? `, +${roadmapFmtFlower(pv)}/d` : ""})</span>`; }).join(" · ")}</div>`;
         }
       });
       h += `</div>`;
