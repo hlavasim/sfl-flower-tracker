@@ -19433,6 +19433,24 @@
             color:${on ? "#000" : "var(--text-secondary)"}">${lbl}</button>`;
         }).join("")}
         ${_worldScopeLoading ? `<span style="font-size:0.5rem;color:var(--text-dim)">načítám…</span>` : ""}
+        ${(() => {
+          /*
+           * When the data is from. The dump is generated once a day (2 h before the game's
+           * reset), so every number on this page is that old at most — worth stating outright
+           * rather than letting it read as live.
+           */
+          const dp = s.dump || {};
+          const gen = dp.generated_at ? new Date(dp.generated_at) : null;
+          if (!gen || isNaN(gen)) return "";
+          const ageH = (Date.now() - gen) / 3600000;
+          return `<span style="font-size:0.5rem;color:var(--text-dim);margin-left:auto" title="${
+            `Zdroj: ${escHTML(dp.path || "denní dump")}` +
+            (dp.finished_at ? ` · naimportováno ${new Date(dp.finished_at).toLocaleString("cs-CZ")}` : "") +
+            (dp.complete ? "" : " · import ještě neproběhl celý")
+          }">data z <strong style="color:var(--text-secondary)">${gen.toLocaleString("cs-CZ")}</strong> (${
+            ageH < 48 ? Math.round(ageH) + " h" : (ageH / 24).toFixed(1) + " d"
+          } stará)${dp.complete ? "" : " ⚠️"}</span>`;
+        })()}
         <span style="font-size:0.5rem;color:var(--text-dim)">${
           win == null ? "every farm in the dataset" : `farms that played within ${win} days`
         }</span>
