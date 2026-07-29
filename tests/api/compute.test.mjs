@@ -263,9 +263,15 @@ test("farm fetch failure after a success serves the stale farm instead of 502", 
 function mockFetchForAscension() {
   const nfts = readFileSync(new URL("../fixtures/nfts-sample.json", import.meta.url), "utf8");
   return async (url) => {
-    const u = String(url);
+    // The handler calls these THROUGH /api/proxy?url=<encoded>, so match on the DECODED
+    // form: "v1/nfts" never appears literally in "v1%2Fnfts", so every nfts request was
+    // being answered with the farm fixture instead.
+    const u = decodeURIComponent(String(url));
     if (u.includes("v1/prices")) return { ok: true, status: 200, json: async () => ({ data: { p2p: JSON.parse(p2pText) } }) };
-    if (u.includes("v1/nfts")) return { ok: true, status: 200, json: async () => ({ data: JSON.parse(nfts) }) };
+    // The handler passes this response straight through, so it must NOT be wrapped in {data}
+    // the way the prices endpoint is — wrapping it left nftData.collectibles undefined and
+    // the wishlist catalog empty.
+    if (u.includes("v1/nfts")) return { ok: true, status: 200, json: async () => JSON.parse(nfts) };
     if (u.includes("exchange")) return { ok: true, status: 200, json: async () => ({ data: {} }) };
     if (u.includes("coingecko")) return { ok: true, status: 200, json: async () => ({}) };
     return { ok: true, status: 200, json: async () => JSON.parse(fixtureText) };
@@ -333,6 +339,51 @@ test("section=ascension honours the Bumpkin page's recipe selection", async () =
       assert.ok(left(some, b) / some.rates.xpPerDay > left(all, a) / all.rates.xpPerDay,
         "cooking in fewer kitchens must push the level ETA out, not leave it unchanged");
     }
+  } finally {
+    globalThis.fetch = orig;
+  }
+});
+
+test("section=wishlist reports FLOWER/day and ROI, theoretical and at measured efficiency", async () => {
+  const orig = globalThis.fetch;
+  globalThis.fetch = mockFetchForAscension();
+  try {
+    // Names come from the section's own catalog rather than being hardcoded: the wishlist
+    // prunes anything already placed or worn, so a fixed pick can silently prune to nothing
+    // (which is how the first version of this test failed).
+    _clearCacheForTests();
+    const probe = mockRes();
+    await handler({ query: { farm: "155498", section: "wishlist", list: "{}" } }, probe);
+    assert.equal(probe._status, 200, `catalog probe: ${JSON.stringify(probe._json).slice(0, 200)}`);
+    const pick = probe._json.data.catalog.filter((c) => !c.active && c.floor > 0).slice(0, 6);
+    // The NFT fixture is deliberately tiny (4 collectibles), so one usable row is enough to
+    // exercise the whole path.
+    assert.ok(pick.length >= 1, `the fixture offers an unplaced boosted NFT (catalog: ${probe._json.data.catalog.map((c) => c.name + (c.active ? " [active]" : "")).join(", ")})`);
+    const list = JSON.stringify(Object.fromEntries(pick.map((c, i) => [`${c.collection}:${c.name}`, i < 3 ? 1 : 2])));
+
+    _clearCacheForTests();
+    const res = mockRes();
+    await handler({ query: { farm: "155498", section: "wishlist", list } }, res);
+    assert.equal(res._status, 200, `wishlist responded: ${JSON.stringify(res._json).slice(0, 200)}`);
+    const rows = res._json.data.rows;
+    assert.ok(rows.length > 0, "at least one wishlist row survived the prune");
+
+    // Every row carries both figures (null is allowed — a boost may be worth nothing here).
+    for (const r of rows) {
+      assert.ok("perDay" in r && "perDayEff" in r, `${r.name}: both per-day figures present`);
+      assert.ok("roiDays" in r && "roiDaysEff" in r, `${r.name}: both ROI figures present`);
+      // ROI must be derived from the SAME figure it is labelled with, and from the floor
+      // price the cost columns charge.
+      if (r.perDay > 0 && r.floor > 0) {
+        assert.ok(Math.abs(r.roiDays - r.floor / r.perDay) < 1e-9, `${r.name}: roi = floor / perDay`);
+      }
+      if (r.perDayEff > 0 && r.floor > 0) {
+        assert.ok(Math.abs(r.roiDaysEff - r.floor / r.perDayEff) < 1e-9, `${r.name}: effective roi likewise`);
+      }
+    }
+    // Not vacuous: at least one row must actually be worth something, else the assertions
+    // above would pass on a payload of nulls.
+    assert.ok(rows.some((r) => r.perDay > 0), "some wishlisted boost has a per-day value");
   } finally {
     globalThis.fetch = orig;
   }

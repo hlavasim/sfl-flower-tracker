@@ -13545,6 +13545,18 @@
 
     let _liveObCache = {}; // session cache for live orderbook fetches: "collection:id" → data (+_t)
     // ═══════════════════════════════════════
+    /*
+     * Wishlist FLOWER/day + ROI display mode. Both figures come from the server together, so
+     * flipping this repaints from data already in hand.
+     */
+    let _wlEff = (() => { try { return localStorage.getItem("sfl_wl_eff") === "1"; } catch { return false; } })();
+    window._wlSetEff = function (on) {
+      _wlEff = !!on;
+      try { localStorage.setItem("sfl_wl_eff", _wlEff ? "1" : "0"); } catch {}
+      renderWishlistPanel();
+    };
+    const _wlTip = "Co ti ta položka přidá za den, v FLOWER. Bere se SYNERGICKÁ hodnota — tedy co přidá nad to, co už na farmě máš, ne co by dala samostatně. Stejný výpočet (calcBoostValue), jaký používá stránka POWER, takže si ta čísla nemohou odporovat. Boost působící na víc kategorií je sečtený přes všechny.";
+
     //  WISHLIST (sales page, compute?section=wishlist — cockpit fold-in)
     // ═══════════════════════════════════════
     // Wishlist is stored SERVER-SIDE (DB) per farm so it persists across devices
@@ -13701,18 +13713,39 @@
       if (d.pruned && d.pruned.length) {
         h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--green);margin-bottom:6px">Auto-pruned (placed/worn): ${d.pruned.map(k => escHTML(k.split(":")[1])).join(", ")}</div>`;
       }
+      /*
+       * Theoretical vs measured. Both numbers arrive in the same payload, so this only
+       * chooses which column to show — no refetch. Worth offering both rather than picking
+       * one: theoretical is what the boost can do, measured is what it will do at this
+       * farm's observed harvest rate, and for an idle category those differ by a lot.
+       */
+      h += `<div class="pixel-font" style="font-size:0.5rem;margin-bottom:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span style="color:var(--text-dim)">FLOWER/den a ROI:</span>
+        ${[[false, "teoreticky"], [true, "dle efektivity"]].map(([v, lbl]) => `<button onclick="_wlSetEff(${v})" class="pixel-font" style="
+          font-size:0.5rem;padding:3px 8px;cursor:pointer;border:2px solid #000;
+          background:${_wlEff === v ? "var(--lily)" : "#241a12"};
+          color:${_wlEff === v ? "#1a0e08" : "var(--text-secondary)"}">${lbl}</button>`).join("")}
+        <span style="color:var(--text-dim);font-size:0.46rem">${_wlEff
+          ? "podle tvého naměřeného výběru — co ten boost reálně přinese"
+          : "při plné sklizni každého nodu — strop, ne odhad"}</span>
+      </div>`;
       // rows
       if (d.rows.length) {
         h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.55rem">
-          <thead><tr style="color:var(--text-dim);text-align:left"><th style="padding:2px 6px">priorita</th><th>item</th><th style="text-align:right">buy now (floor)</th><th style="text-align:right">last sale</th><th style="text-align:right">kumulativně</th><th style="text-align:center">na to mám?</th><th></th></tr></thead><tbody>`;
+          <thead><tr style="color:var(--text-dim);text-align:left"><th style="padding:2px 6px">priorita</th><th>item</th><th style="text-align:right">buy now (floor)</th><th style="text-align:right">last sale</th><th style="text-align:right;cursor:help" title="${_wlTip}">FLOWER/den</th><th style="text-align:right;cursor:help" title="Za jak dlouho se položka zaplatí: floor ÷ FLOWER/den.">ROI</th><th style="text-align:right">kumulativně</th><th style="text-align:center">na to mám?</th><th></th></tr></thead><tbody>`;
         let cum = 0;
         for (const r of d.rows) {
           if (!r.owned) cum += r.floor;
+          // Both figures come from the server in one payload, so the toggle never refetches.
+          const perDay = _wlEff ? r.perDayEff : r.perDay;
+          const roi = _wlEff ? r.roiDaysEff : r.roiDays;
           h += `<tr style="border-top:1px solid #222">
             <td style="padding:3px 6px;white-space:nowrap">${[1, 2, 3].map(p => `<span onclick="_wlSetPrio('${escHTML(r.key)}',${p})" style="cursor:pointer;opacity:${r.priority === p ? 1 : 0.3}">${_wlPrio[p][0]}</span>`).join(" ")}</td>
             <td style="white-space:nowrap"><img class="inline-icon" src="${getItemIcon(r.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.name)}${r.owned ? ' <span style="font-size:0.45rem;color:var(--green)">📦 owned</span>' : ""}</td>
             <td style="text-align:right">${r.floor > 0 ? r.floor.toFixed(1) : "—"}</td>
             <td style="text-align:right;color:var(--text-dim)">${r.lastSale > 0 ? r.lastSale.toFixed(1) : "—"}</td>
+            <td style="text-align:right;color:${perDay > 0 ? "var(--green)" : "var(--text-dim)"}">${perDay > 0 ? "+" + perDay.toFixed(2) : "—"}</td>
+            <td style="text-align:right;color:var(--text-dim)">${roi != null && isFinite(roi) ? (roi < 1 ? (roi * 24).toFixed(0) + "h" : roi < 400 ? roi.toFixed(0) + "d" : (roi / 365).toFixed(1) + "r") : "—"}</td>
             <td style="text-align:right;color:var(--text-dim)">${r.owned ? "—" : cum.toFixed(1)}</td>
             <td style="text-align:center">${r.owned ? "—" : (d.balance >= cum ? "✅" : "❌")}</td>
             <td style="text-align:right"><span onclick="_wlRemove('${escHTML(r.key)}')" style="cursor:pointer;color:var(--red)">✕</span></td>

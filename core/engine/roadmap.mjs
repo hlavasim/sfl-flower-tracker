@@ -385,7 +385,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
 
 
     // ── flowers.html 15360-15419: calcBoostValue ──
-    function calcBoostValue(boostItem, catId, product, capacity, p2pPrices, allCatBoosts, isOwned) {
+    function calcBoostValue(boostItem, catId, product, capacity, p2pPrices, allCatBoosts, isOwned, effMode) {
       const catEffects = getEffectsForCategory(boostItem, catId);
       if (catEffects.length === 0) return { solo: 0, synergy: 0, roi: Infinity };
 
@@ -426,7 +426,16 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
 
       // Non-animal categories: value via the SHARED roadmap engine (NET — with tool/seed cost + the mining
       // chain — at theoretical efficiency), so the Power page and the roadmap agree on every yield/tool boost.
-      const _s = Object.assign({}, getRoadmapSettings(powerState.roadmapSettingsRaw), { effMode: "theoretical", effOverrides: {} }); // deviations 1+2
+      /*
+       * effMode defaults to "theoretical" — deviations 1+2, so the Power page and the
+       * roadmap agree on every yield/tool boost. A caller can ask for "measured" instead to
+       * get what the boost is worth at this farm's OBSERVED throughput, which is what the
+       * wishlist's efficiency toggle shows. Only the explicit opt-in changes behaviour;
+       * every existing caller keeps the theoretical figure it had.
+       */
+      const _s = effMode === "measured"
+        ? getRoadmapSettings(powerState.roadmapSettingsRaw)
+        : Object.assign({}, getRoadmapSettings(powerState.roadmapSettingsRaw), { effMode: "theoretical", effOverrides: {} });
       const ownedEff = allCatBoosts.filter(b => b.has && !b.isDisabled && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId)).concat(activeShrineEffects(powerState.farm, catId)); // deviation 4
       let synergy, solo;
       if (ROADMAP_MINING_CATS.indexOf(catId) >= 0) {

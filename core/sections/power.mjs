@@ -364,6 +364,35 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     }
   }
 
+  /*
+   * Second pass at MEASURED efficiency, for a named subset only.
+   *
+   * boostValues above is theoretical by construction (calcBoostValue's default), which is
+   * what the Power page wants. The wishlist also wants to know what a boost is worth at this
+   * farm's observed throughput, so it asks for those items by name. Restricted to the subset
+   * because the theoretical pass already covers ~380 items across every category and doing
+   * that twice for a handful of wishlist rows would be pure waste.
+   */
+  let boostValuesEff;
+  const effFor = Array.isArray(settings.effectiveFor) ? new Set(settings.effectiveFor) : null;
+  if (effFor && effFor.size) {
+    boostValuesEff = {};
+    for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
+      if (!catDef.quantifiable) continue;
+      const product = savedProducts[catId] || getDefaultProduct(catId);
+      for (const b of catBoosts[catId]) {
+        if (!effFor.has(b.name)) continue;
+        try {
+          const v = calcBoostValue(b, catId, product, capacity, p2pPrices, catBoosts[catId], b.has, "measured");
+          if (!isFinite(v.roi)) v.roi = null;
+          if (!isFinite(v.solo)) v.solo = 0;
+          if (!isFinite(v.synergy)) v.synergy = 0;
+          (boostValuesEff[catId] = boostValuesEff[catId] || {})[b.name] = v;
+        } catch {}
+      }
+    }
+  }
+
   // On-demand formula panel (the page's buildFormulaHTML, now in core): computed only
   // for the one requested boost — precomputing all ~380 panels would be megabytes.
   let formulaHtml;
@@ -379,5 +408,5 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     }
   }
 
-  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, restockQueues, ...(formulaHtml !== undefined ? { formulaHtml } : {}) };
+  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, restockQueues, ...(boostValuesEff ? { boostValuesEff } : {}), ...(formulaHtml !== undefined ? { formulaHtml } : {}) };
 }

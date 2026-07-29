@@ -49,6 +49,46 @@ export function buildWishlistSection(farm, nftData, settings = {}) {
   }
   rows.sort((a, b) => a.priority - b.priority || b.floor - a.floor);
 
+  /*
+   * What each wishlisted boost is worth per day, and how long it takes to pay for itself.
+   *
+   * The numbers come from the power section's own calcBoostValue, not a second model, so the
+   * wishlist cannot disagree with the Power page about what a boost does. Two figures per
+   * row: `theo` at theoretical throughput (every node harvested the moment it respawns) and
+   * `eff` at this farm's MEASURED throughput. The gap between them is the farm's own
+   * activity, which is why the page offers both rather than picking one.
+   *
+   * A boost can affect several categories, so the per-day value is the sum of its SYNERGY
+   * value across them — synergy, not solo, because that is what the boost adds on top of what
+   * the farm already owns, which is what the buyer actually gains.
+   *
+   * ROI is computed here rather than taken from calcBoostValue's own `roi`: that one divides
+   * by a single category's synergy, so for a multi-category item it would overstate the
+   * payback time.
+   */
+  const bv = settings.boostValues || null;
+  const bvEff = settings.boostValuesEff || null;
+  const sumSynergy = (src, name) => {
+    if (!src) return null;
+    let total = 0, found = false;
+    for (const cat of Object.values(src)) {
+      const v = cat && cat[name];
+      if (!v || !isFinite(v.synergy)) continue;
+      found = true;
+      total += v.synergy;
+    }
+    return found ? total : null;
+  };
+  for (const r of rows) {
+    const theo = sumSynergy(bv, r.name);
+    const eff = sumSynergy(bvEff, r.name);
+    r.perDay = theo;
+    r.perDayEff = eff;
+    // Priced at the floor ask, matching what the cost columns already charge for the item.
+    r.roiDays = theo > 0 && r.floor > 0 ? r.floor / theo : null;
+    r.roiDaysEff = eff > 0 && r.floor > 0 ? r.floor / eff : null;
+  }
+
   // ── per-priority costs (§1.4): pay only for UNOWNED; cumulative includes higher prios ──
   const byPriority = {};
   let cumulative = 0;

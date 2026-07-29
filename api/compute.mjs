@@ -340,11 +340,27 @@ export default async function handler(req, res) {
     // per-priority cumulative costs vs the farm's FLOWER balance. `list` query param =
     // the client's localStorage wishlist ({ "collection:name": 1|2|3 }).
     else if (section === "wishlist") {
-      const nftResult = await fetchNfts();
+      const [nftResult, exchange] = await Promise.all([fetchNfts(), fetchExchange()]);
       if (!nftResult.ok) return res.status(502).json({ error: `nfts fetch failed: ${nftResult.status}` });
       let list = {};
       try { list = req.query.list ? JSON.parse(req.query.list) : {}; } catch { list = {}; }
-      data = buildWishlistSection(farm, nftResult.data, { list });
+      /*
+       * The FLOWER/day and ROI columns come from the power section's calcBoostValue, so the
+       * wishlist cannot disagree with the Power page about what a boost is worth. Power runs
+       * first because it also establishes the roadmap/power context calcBoostValue needs.
+       *
+       * effectiveFor names only the wishlisted items, so the measured-efficiency pass covers
+       * those instead of re-valuing all ~380 boosts across every category.
+       */
+      const wishNames = [...new Set(Object.keys(list).map((k) => k.slice(k.indexOf(":") + 1)))];
+      // Parsed here, not shared: the other branches declare their own block-scoped copy.
+      let wlRoadmap = {};
+      try { wlRoadmap = req.query.roadmap ? JSON.parse(req.query.roadmap) : {}; } catch { wlRoadmap = {}; }
+      const powerData = buildPowerSection(farm, p2p, nftResult.data, exchange,
+        { ...settings, roadmapSettings: wlRoadmap, effectiveFor: wishNames });
+      data = buildWishlistSection(farm, nftResult.data, {
+        list, boostValues: powerData.boostValues, boostValuesEff: powerData.boostValuesEff,
+      });
     }
     // `roi`: the ROI page's state — the page's own copy of the power fetch+rate block
     // (plus a 4th upstream, BTC/USD) and its own boost-item/pet builders. Same 502
