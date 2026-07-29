@@ -5277,11 +5277,15 @@
       // "Drill oil without Oil Drills" (Infernal Drill) → free tool for oil
       { rx: /drill\s+oil\s+without/i,
         fn: m => ({ type: "free_tool", cat: "oil" }) },
-      // "-20% Oil refill time" (Oil Be Back skill), "-50% Oil recovery time" (Dev Wrench)
-      { rx: /([+-]?\d+\.?\d*)%\s+Oil\s+(?:refill|recovery|respawn)\s+time/i,
+      // "-20% Oil refill time" (Oil Be Back skill), "-50% Oil Regeneration Time" (Dev Wrench).
+      // `regeneration` is the wording sfl.world actually ships — and as of 2026-07-29 the ONLY
+      // one it uses after "Oil … time", so without it this rule matched nothing in the live
+      // feed. Dev Wrench then fell through to the generic "N% <Product>" rule and became
+      // yield_pct -50, i.e. HALF the oil, inverting a boost that halves the regeneration TIME.
+      { rx: /([+-]?\d+\.?\d*)%\s+Oil\s+(?:refill|recovery|respawn|regen(?:eration)?)\s+time/i,
         fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "oil" }) },
       // "×0.5 Oil recovery time" (Dev Wrench multiplier form)
-      { rx: /[×x](\d+\.?\d*)\s+Oil\s+(?:refill|recovery|respawn)\s+time/i,
+      { rx: /[×x](\d+\.?\d*)\s+Oil\s+(?:refill|recovery|respawn|regen(?:eration)?)\s+time/i,
         fn: m => ({ type: "speed_mult", value: parseFloat(m[1]), cat: "oil" }) },
       // "Oil Drill uses Wool instead of Leather" (Oil Rig skill) → qualitative
       { rx: /Oil\s+Drill\s+uses\s+Wool/i,

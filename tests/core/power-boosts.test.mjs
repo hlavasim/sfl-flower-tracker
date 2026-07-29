@@ -35,3 +35,34 @@ test("empty boost text → no effects", () => {
 test("classifyToCategories defaults to 'other' when nothing categorised", () => {
   assert.deepEqual(classifyToCategories([{ type: "qualitative", raw: "x" }]), ["other"]);
 });
+
+/*
+ * "-50% Oil Regeneration Time" (Dev Wrench, floor ~8,300 FLOWER).
+ *
+ * The rule only listed refill/recovery/respawn, but `regeneration` is the wording sfl.world
+ * actually ships — and the only one it uses after "Oil … time", so the rule matched nothing
+ * in the live feed. Dev Wrench fell through to the generic "N% <Product>" rule and parsed as
+ * yield_pct -50: HALF the oil, from a boost that halves the regeneration TIME. On the fixture
+ * farm that inverted its value from +11.26 to -0.47 FLOWER/day.
+ */
+test("oil regeneration time is a SPEED boost, not a yield cut", () => {
+  const e = parseBoostEffects("-50% Oil Regeneration Time", "Dev Wrench");
+  assert.equal(e.length, 1);
+  assert.equal(e[0].cat, "oil");
+  assert.equal(e[0].type, "speed_pct", `parsed as ${e[0].type} — a yield_pct here halves the oil instead of the timer`);
+  assert.equal(e[0].value, -50);
+  assert.deepEqual(classifyToCategories(e), ["oil"]);
+});
+
+test("the older refill/recovery/respawn wordings still parse the same way", () => {
+  // Widening the rule must not have cost it the strings it already handled.
+  for (const txt of ["-20% Oil refill time", "-25% Oil recovery time", "-30% Oil respawn time"]) {
+    const e = parseBoostEffects(txt, "X");
+    assert.equal(e[0].type, "speed_pct", txt);
+    assert.equal(e[0].cat, "oil", txt);
+  }
+  // And the multiplier form, which shares the same alternation.
+  const m = parseBoostEffects("×0.5 Oil Regeneration Time", "X");
+  assert.equal(m[0].type, "speed_mult");
+  assert.equal(m[0].value, 0.5);
+});
