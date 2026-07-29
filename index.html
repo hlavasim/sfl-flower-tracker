@@ -17122,9 +17122,44 @@
         dirty = new Set(best.pre.concat([best.c]).flatMap(g => g.categories || []));
       }
 
+      /*
+       * Why the list stops. It usually leaves most of the budget unspent, and without saying
+       * why that reads as broken — the first question asked of it was "why are only 37 of 97
+       * points used?". So account for every tier-2/3 skill that was NOT taken.
+       *
+       * Nearly all of them are worth exactly 0 here, and legitimately: the FLOWER model prices
+       * production, so XP / cooking / fishing / limit skills score nothing, and neither does a
+       * discount the farm already gets for free (every animal-feed skill is 0 on a farm with a
+       * Golden Sheep and no chickens or cows). That is an answer, not a gap, and it belongs on
+       * screen next to the number it explains.
+       */
+      const leftovers = { zero: 0, negative: 0, tooDear: 0, locked: 0 };
+      for (const c of skills) {
+        if (c.has || tierOf(c) < 2) continue;
+        const v = valueOf(c);
+        if (v < -0.001) leftovers.negative++;
+        else if (v <= 0.001) leftovers.zero++;
+        else {
+          const need = (SKILL_POINTS_PER_TIER[c.skillTree] || {})[tierOf(c)] || 0;
+          let have = inTree[c.skillTree] || 0, extra = 0;
+          for (const f of skills) { if (have + extra >= need) break; if (!f.has && f.skillTree === c.skillTree && tierOf(f) !== 3) extra += ptsOf(f); }
+          if (have + extra < need) leftovers.locked++;
+          else leftovers.tooDear++;
+        }
+      }
+
       const TC = { "Crops": "#7fe0a0", "Trees": "#b98a5a", "Mining": "#9aa6b2", "Cooking": "#e8a060", "Animals": "#e6c25a", "Fishing": "#6ab0e0", "Greenhouse": "#8fd98f", "Fruit Patch": "#e89a5a", "Bees & Flowers": "#e08fd0", "Machinery": "#c0a0e0", "Compost": "#9a8a6a", "Aging": "#d8c89a" };
+      const leftoverNote = () => {
+        const bits = [];
+        if (leftovers.zero) bits.push(`<b>${leftovers.zero}</b> are worth 0 FLOWER/day here — XP, cooking, fishing and limit skills carry no production value, and neither does a discount you already get free (every animal-feed skill is 0 with a Golden Sheep and no chickens or cows)`);
+        if (leftovers.negative) bits.push(`<b>${leftovers.negative}</b> would make you POORER (e.g. a debuff that outweighs its buff on your farm)`);
+        if (leftovers.tooDear) bits.push(`<b>${leftovers.tooDear}</b> pay something but no longer fit the remaining points`);
+        if (leftovers.locked) bits.push(`<b>${leftovers.locked}</b> sit in a tree that cannot reach their tier at all`);
+        if (!bits.length) return "";
+        return `<div style="font-size:0.47rem;color:var(--text-dim);margin-top:6px;line-height:1.7;border-top:1px solid #20190f;padding-top:6px">Not listed, and why: ${bits.join(" · ")}. <b>${budget}</b> point${budget === 1 ? "" : "s"} therefore stay${budget === 1 ? "s" : ""} unspent by this ranking — put them where you actually play (fishing, cooking, deliveries), which this page cannot price.</div>`;
+      };
       if (!order.length) {
-        return `<div style="font-size:0.5rem;color:var(--text-dim);line-height:1.6">Nothing to buy: ${budget} free point${budget === 1 ? "" : "s"}, and no tier 2/3 skill (with its tier prerequisites) both fits and pays back.</div>`;
+        return `<div style="font-size:0.5rem;color:var(--text-dim);line-height:1.6">Nothing to buy: ${budget} free point${budget === 1 ? "" : "s"}, and no tier 2/3 skill (with its tier prerequisites) both fits and pays back.</div>${leftoverNote()}`;
       }
       let h = `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Buy order for tier 2/3, best payback first. A tier opens only once enough points sit in THAT tree (Animals 4/8, Crops &amp; Mining 3/7, most others 2/5 — and tier-3 points never count), so any prerequisite is listed under its skill and charged into its ROI. <b>${order.length} pick${order.length === 1 ? "" : "s"} · ${totPts} of ${budget + totPts} points · +${roadmapFmtFlower(totV)}/day.</b>${sflPerPt > 0 ? ` A point costs ≈${roadmapFmtFlower(sflPerPt)} (your cheapest XP recipe).` : " Point cost unknown, so ROI is hidden."}</div>`;
       h += `<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;overflow:hidden">`;
@@ -17139,6 +17174,7 @@
         }
       });
       h += `</div>`;
+      h += leftoverNote();
       return h;
     }
 
