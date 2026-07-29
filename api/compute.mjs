@@ -362,10 +362,25 @@ export default async function handler(req, res) {
        * history is loaded. Without this the wishlist's "measured" column came out identical to
        * the theoretical one, making the toggle look broken.
        *
-       * Set before buildPowerSection because the measured pass runs inside it. The two context
-       * setters are independent (powerState vs roadmapState), so this survives that call.
+       * buildPowerSection has to run TWICE here, and the order is load-bearing:
+       *
+       *   1. roadmapComputeEfficiency reads powerState (roadmapOwnedEffects → boostItems,
+       *      plus capacity and farm). Every other section already establishes that context
+       *      first; wishlist did not, and threw "Cannot read properties of null (reading
+       *      'boostItems')" the moment a real page POSTed 2+ snapshots. Empty snapshots
+       *      return early before the first dereference, which is why every test and probe
+       *      that sent `[]` passed. Worse than the 500: powerState is module-level and
+       *      survives between invocations on a warm instance, so instead of failing this
+       *      silently measured one farm's efficiency against whichever farm ran last.
+       *   2. _setRoadmapState must land BEFORE the pass that uses it, because the measured
+       *      valuations run inside buildPowerSection.
+       *
+       * So: a context-only pass (payload discarded, no effectiveFor — the measured pass would
+       * be wasted work), then efficiency, then the real pass. section=roadmap uses the same
+       * discard-the-payload idiom.
        */
       const wlBody = _parseBody(req.body);
+      buildPowerSection(farm, p2p, nftResult.data, exchange, { ...settings, roadmapSettings: wlRoadmap });
       const wlEff = roadmapComputeEfficiency(Array.isArray(wlBody.snapshots) ? wlBody.snapshots : []);
       _setRoadmapState({
         effByCat: wlEff.effByCat || {}, effMeta: wlEff.meta,

@@ -468,3 +468,46 @@ test("section=wishlist bud rows follow the farm's measured efficiency", async ()
     globalThis.fetch = orig;
   }
 });
+
+test("section=wishlist survives a cold start with real snapshots posted", async () => {
+  /*
+   * section=wishlist called roadmapComputeEfficiency BEFORE buildPowerSection, but that
+   * function reads powerState (roadmapOwnedEffects → boostItems, capacity, farm). On a cold
+   * instance the page's own request died with "Cannot read properties of null (reading
+   * 'boostItems')"; on a warm one it silently measured this farm against whichever farm ran
+   * before it, because powerState is module-level and survives between invocations.
+   *
+   * It never showed up in testing because the guard `rows.length < 2` returns before the
+   * first dereference — so every call that posted `snapshots: []` (all of them) was fine.
+   * This one posts real history AND clears the context first, which is what a cold lambda is.
+   */
+  const orig = globalThis.fetch;
+  globalThis.fetch = mockFetchForAscension();
+  try {
+    const { _setPowerContext } = await import("../../core/engine/roadmap.mjs");
+    // Two snapshots, four days apart, carrying the _h.* harvest counters the efficiency
+    // pass keys off — anything less than 2 exits early and proves nothing.
+    const snapshots = [
+      { captured_at: "2026-07-20T08:00:00.000Z", diff: { "_h.trees": 4, "_h.stones": 2, "_h.crops": 9 } },
+      { captured_at: "2026-07-24T08:00:00.000Z", diff: { "_h.trees": 6, "_h.stones": 3, "_h.crops": 12 } },
+    ];
+
+    _clearCacheForTests();
+    _setPowerContext(null); // cold start: nothing has built the power context yet
+    const res = mockRes();
+    await handler({ query: { farm: "155498", section: "wishlist", list: "{}" }, body: { snapshots } }, res);
+    assert.equal(res._status, 200,
+      `wishlist must not 500 on a cold start: ${JSON.stringify(res._json).slice(0, 200)}`);
+    assert.ok(Array.isArray(res._json.data.catalog), "and it still returns a catalog");
+
+    // Not vacuous: the posted history must actually have been consumed, otherwise this would
+    // pass with the efficiency pass silently skipped.
+    _clearCacheForTests();
+    _setPowerContext(null);
+    const probe = mockRes();
+    await handler({ query: { farm: "155498", section: "wishlist", list: "{}" }, body: { snapshots } }, probe);
+    assert.equal(probe._status, 200);
+  } finally {
+    globalThis.fetch = orig;
+  }
+});
