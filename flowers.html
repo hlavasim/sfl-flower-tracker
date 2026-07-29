@@ -17026,158 +17026,6 @@
     }
 
     // Greedy "rebuild from a full reset": empty all skills, add the best FLOWER/day-per-point first,
-    /*
-     * "What to buy next, and in what order" — for the points an ascension hands you.
-     *
-     * Unlike the rebuild button this starts from the skills you ALREADY own and only chases
-     * tier 2 and tier 3, which is where the points go once the cheap tier-1 picks are taken.
-     *
-     * The whole difficulty is the gate: a tier only opens once enough points are spent in
-     * THAT tree (SKILL_POINTS_PER_TIER — per-tree, and tier-3 spending does not count towards
-     * it). So a tier-3 skill is rarely its sticker price: it may drag several lower-tier
-     * skills in with it. Those prerequisites are priced INTO its ROI and listed under it,
-     * rather than quietly ignored — ignoring them is what would make the order unbuyable.
-     *
-     * Greedy on ROI, recomputed each step, so synergies and conflicts resolve the same way
-     * the rebuild button handles them.
-     */
-    function roadmapNextTiersHtml(settings) {
-      const { byName, catBoostsW } = roadmapBuildClones();
-      const skills = Object.values(byName).filter(c => c.type === "Skill");
-      const tierOf = (c) => Number(c.skillTier) || 1;
-      const ptsOf = (c) => c.skillPoints || 1;
-
-      const farm = powerState.farm, bumpkin = farm.bumpkin || {};
-      let info = {}; try { info = calcSkillPointCost(bumpkin, powerState.p2pPrices, farm) || {}; } catch (e) {}
-      const level = info.level || (typeof getBumpkinLevel === "function" ? getBumpkinLevel(bumpkin.experience || 0) : 1);
-      const sflPerPt = info.sflPerPoint || 0;
-
-      // Points already committed, and — per tree — how many of them COUNT towards a gate.
-      let spent = 0; const inTree = {};
-      for (const c of skills) {
-        if (!c.has) continue;
-        const p = ptsOf(c); spent += p;
-        if (tierOf(c) !== 3) inTree[c.skillTree] = (inTree[c.skillTree] || 0) + p;
-      }
-      const autoFree = Math.max(0, (level - 1) - spent);
-      let budget = (settings.skillPts != null && isFinite(settings.skillPts)) ? Math.max(0, settings.skillPts) : autoFree;
-
-      const val = (c) => { const bd = roadmapSkillBreakdown(c, catBoostsW, settings); const ex = roadmapSkillExtraFlow(c, settings); return bd.net + ex.flow.reduce((s, f) => s + f.delta, 0); };
-      const cache = {}; let dirty = null;
-      const valueOf = (c) => {
-        if (cache[c.name] !== undefined && dirty && !(c.categories || []).some(cat => dirty.has(cat))) return cache[c.name];
-        return (cache[c.name] = val(c));
-      };
-
-      /*
-       * Everything below is precomputed ONCE PER STEP on purpose.
-       *
-       * roadmapSkillBreakdown is expensive, and the obvious shape — resolve a candidate's
-       * prerequisites inside the loop over candidates, sorting the tree's pool with valueOf in
-       * the comparator — calls it hundreds of thousands of times per step and simply hangs the
-       * page. Values first, then one sorted pool per tree, then one filler set per (tree,tier).
-       * That is ~150 valuations a step instead, nearly all of them cache hits.
-       */
-      const order = []; let guard = 0, totV = 0, totPts = 0;
-      while (guard++ < 120 && budget > 0) {
-        const v = new Map();
-        for (const c of skills) if (!c.has) v.set(c, valueOf(c));
-
-        const poolByTree = {};
-        for (const c of skills) {
-          if (c.has || tierOf(c) === 3) continue;           // tier-3 points never open a gate
-          (poolByTree[c.skillTree] = poolByTree[c.skillTree] || []).push(c);
-        }
-        // Points first — a gate only counts them — then value, so a tie goes to a useful skill.
-        for (const t in poolByTree) poolByTree[t].sort((a, b) => ptsOf(a) - ptsOf(b) || v.get(b) - v.get(a));
-
-        const fillerCache = {};
-        const fillersFor = (tree, need) => {
-          const k = tree + "|" + need;
-          if (k in fillerCache) return fillerCache[k];
-          let have = inTree[tree] || 0;
-          if (have >= need) return (fillerCache[k] = []);
-          const out = [];
-          for (const f of (poolByTree[tree] || [])) { if (have >= need) break; out.push(f); have += ptsOf(f); }
-          return (fillerCache[k] = have >= need ? out : null); // null = tree cannot reach the gate
-        };
-
-        let best = null;
-        for (const c of skills) {
-          if (c.has || tierOf(c) < 2) continue;
-          const need = (SKILL_POINTS_PER_TIER[c.skillTree] || {})[tierOf(c)] || 0;
-          const pre = fillersFor(c.skillTree, need);
-          if (pre === null) continue;                       // unreachable tree
-          const pts = pre.reduce((s, g) => s + ptsOf(g), 0) + ptsOf(c);
-          if (pts > budget) continue;
-          const gain = pre.reduce((s, g) => s + (v.get(g) || 0), 0) + (v.get(c) || 0);
-          if (gain <= 0.001) continue;                      // no payback → not advice
-          const roi = (sflPerPt * pts) / gain;              // days to pay the points back
-          if (!best || roi < best.roi) best = { c, pre, pts, gain, roi, pv: new Map(pre.map(p => [p, v.get(p)])) };
-        }
-        if (!best) break;
-        for (const g of best.pre.concat([best.c])) { g.has = true; if (tierOf(g) !== 3) inTree[g.skillTree] = (inTree[g.skillTree] || 0) + ptsOf(g); }
-        budget -= best.pts; totV += best.gain; totPts += best.pts;
-        order.push(best);
-        dirty = new Set(best.pre.concat([best.c]).flatMap(g => g.categories || []));
-      }
-
-      /*
-       * Why the list stops. It usually leaves most of the budget unspent, and without saying
-       * why that reads as broken — the first question asked of it was "why are only 37 of 97
-       * points used?". So account for every tier-2/3 skill that was NOT taken.
-       *
-       * Nearly all of them are worth exactly 0 here, and legitimately: the FLOWER model prices
-       * production, so XP / cooking / fishing / limit skills score nothing, and neither does a
-       * discount the farm already gets for free (every animal-feed skill is 0 on a farm with a
-       * Golden Sheep and no chickens or cows). That is an answer, not a gap, and it belongs on
-       * screen next to the number it explains.
-       */
-      const leftovers = { zero: 0, negative: 0, tooDear: 0, locked: 0 };
-      for (const c of skills) {
-        if (c.has || tierOf(c) < 2) continue;
-        const v = valueOf(c);
-        if (v < -0.001) leftovers.negative++;
-        else if (v <= 0.001) leftovers.zero++;
-        else {
-          const need = (SKILL_POINTS_PER_TIER[c.skillTree] || {})[tierOf(c)] || 0;
-          let have = inTree[c.skillTree] || 0, extra = 0;
-          for (const f of skills) { if (have + extra >= need) break; if (!f.has && f.skillTree === c.skillTree && tierOf(f) !== 3) extra += ptsOf(f); }
-          if (have + extra < need) leftovers.locked++;
-          else leftovers.tooDear++;
-        }
-      }
-
-      const TC = { "Crops": "#7fe0a0", "Trees": "#b98a5a", "Mining": "#9aa6b2", "Cooking": "#e8a060", "Animals": "#e6c25a", "Fishing": "#6ab0e0", "Greenhouse": "#8fd98f", "Fruit Patch": "#e89a5a", "Bees & Flowers": "#e08fd0", "Machinery": "#c0a0e0", "Compost": "#9a8a6a", "Aging": "#d8c89a" };
-      const leftoverNote = () => {
-        const bits = [];
-        if (leftovers.zero) bits.push(`<b>${leftovers.zero}</b> are worth 0 FLOWER/day here — XP, cooking, fishing and limit skills carry no production value, and neither does a discount you already get free (every animal-feed skill is 0 with a Golden Sheep and no chickens or cows)`);
-        if (leftovers.negative) bits.push(`<b>${leftovers.negative}</b> would make you POORER (e.g. a debuff that outweighs its buff on your farm)`);
-        if (leftovers.tooDear) bits.push(`<b>${leftovers.tooDear}</b> pay something but no longer fit the remaining points`);
-        if (leftovers.locked) bits.push(`<b>${leftovers.locked}</b> sit in a tree that cannot reach their tier at all`);
-        if (!bits.length) return "";
-        return `<div style="font-size:0.47rem;color:var(--text-dim);margin-top:6px;line-height:1.7;border-top:1px solid #20190f;padding-top:6px">Not listed, and why: ${bits.join(" · ")}. <b>${budget}</b> point${budget === 1 ? "" : "s"} therefore stay${budget === 1 ? "s" : ""} unspent by this ranking — put them where you actually play (fishing, cooking, deliveries), which this page cannot price.</div>`;
-      };
-      if (!order.length) {
-        return `<div style="font-size:0.5rem;color:var(--text-dim);line-height:1.6">Nothing to buy: ${budget} free point${budget === 1 ? "" : "s"}, and no tier 2/3 skill (with its tier prerequisites) both fits and pays back.</div>${leftoverNote()}`;
-      }
-      let h = `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Buy order for tier 2/3, best payback first. A tier opens only once enough points sit in THAT tree (Animals 4/8, Crops &amp; Mining 3/7, most others 2/5 — and tier-3 points never count), so any prerequisite is listed under its skill and charged into its ROI. <b>${order.length} pick${order.length === 1 ? "" : "s"} · ${totPts} of ${budget + totPts} points · +${roadmapFmtFlower(totV)}/day.</b>${sflPerPt > 0 ? ` A point costs ≈${roadmapFmtFlower(sflPerPt)} (your cheapest XP recipe).` : " Point cost unknown, so ROI is hidden."}</div>`;
-      h += `<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;overflow:hidden">`;
-      order.forEach((o, i) => {
-        const col = TC[o.c.skillTree] || "#8a7a5a";
-        const roiTxt = sflPerPt > 0 ? (o.roi < 400 ? Math.round(o.roi) + "d" : (o.roi / 365).toFixed(1) + "r") : "—";
-        h += `<div style="display:flex;gap:8px;align-items:baseline;padding:4px 8px;border-bottom:1px solid #20190f;font-size:0.55rem"><span style="color:var(--text-dim);min-width:22px">${i + 1}.</span><b style="flex:1;min-width:0">${escHTML(o.c.name)}</b><span style="color:${col};font-size:0.45rem;min-width:104px">${escHTML(o.c.skillTree || "")} T${tierOf(o.c)} · ${o.pts}pt</span><span style="color:var(--green);font-weight:bold;min-width:58px;text-align:right">+${roadmapFmtFlower(o.gain)}/d</span><span style="color:var(--sunpetal);font-size:0.45rem;min-width:42px;text-align:right" title="Cena bodů ÷ přírůstek za den">${roiTxt}</span></div>`;
-        if (o.pre.length) {
-          // Values as they stood WHEN THE PICK WAS MADE (o.pv) — recomputing here would price
-          // them against a state that already includes them.
-          h += `<div style="padding:2px 8px 5px 30px;border-bottom:1px solid #20190f;font-size:0.45rem;color:var(--text-dim)">└ unlocks the tier first: ${o.pre.map(p => { const pv = o.pv.get(p) || 0; return `${escHTML(p.name)} <span style="color:#8a7a5a">(T${tierOf(p)}, ${ptsOf(p)}pt${pv > 0.001 ? `, +${roadmapFmtFlower(pv)}/d` : ""})</span>`; }).join(" · ")}</div>`;
-        }
-      });
-      h += `</div>`;
-      h += leftoverNote();
-      return h;
-    }
-
     // recomputing each step (so conflicts like Rocky vs Ferrous Favor and skip->profitable synergies resolve).
     function roadmapSkillRebuildHtml(settings) {
       const { byName, catBoostsW } = roadmapBuildClones();
@@ -17279,7 +17127,7 @@
         h += `<div style="font-size:0.52rem;color:var(--text-dim);line-height:1.7">${picks.map(r => `${escHTML(r.c.name)} <span style="color:var(--green)">+${roadmapFmtFlower(r.net)}/d</span> <span style="font-size:0.45rem">(${r.c.skillPoints || 1}pt, ${escHTML(r.c.skillTree || "")})</span>`).join(" · ")}</div>`;
       }
       h += `</div>`;
-      h += `<div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap"><button onclick="_roadmapSkillRebuild()" style="font-size:0.52rem;padding:4px 12px;border:1px solid var(--border-brown);border-radius:6px;background:#241a10;color:var(--sunpetal);cursor:pointer">\u2699 Best rebuild order (after a full reset)</button><button onclick="_roadmapNextTiers()" style="font-size:0.52rem;padding:4px 12px;border:1px solid var(--border-brown);border-radius:6px;background:#241a10;color:var(--sunpetal);cursor:pointer" title="Co koupit za body z ascension: tier 2 a 3 se\u0159azen\u00e9 podle n\u00e1vratnosti, v\u010detn\u011b skill\u016f, kter\u00e9 ten tier teprve odemknou">\u2b06 Best next tiers (skills to buy after an ascension)</button></div><div id="skill-rebuild" style="margin-bottom:10px"></div><div id="skill-next-tiers" style="margin-bottom:10px"></div>`;
+      h += `<div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap"><button onclick="_roadmapSkillRebuild()" style="font-size:0.52rem;padding:4px 12px;border:1px solid var(--border-brown);border-radius:6px;background:#241a10;color:var(--sunpetal);cursor:pointer">\u2699 Best rebuild order (after a full reset)</button></div><div id="skill-rebuild" style="margin-bottom:10px"></div>`;
       h += `<div style="font-size:0.52rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">All skills by tree &amp; tier (like the in-game tree). FLOWER/day each adds on <b>your</b> farm at <b>${effLbl}</b> efficiency; yield, cheaper costs &amp; coins are priced (coins at ${Math.round(cps)}/FLOWER), XP / speed / limits show their kind. Pts column = skill points (and the SFL of XP to earn them). <a href="https://sfl.world/tools/skills/" target="_blank" style="color:var(--sunpetal);text-decoration:none">skill tree ↗</a></div>`;
       const byTree = {};
       for (const r of rows) { const tr = r.c.skillTree || "Other"; (byTree[tr] = byTree[tr] || []).push(r); }
@@ -17703,7 +17551,6 @@
     window._roadmapToggleCat = function(cat, on) { const cur = ((getRoadmapSettings().excludeCats) || []).slice(); const i = cur.indexOf(cat); if (on) { if (i >= 0) cur.splice(i, 1); } else { if (i < 0) cur.push(cat); } saveRoadmapSettings({ excludeCats: cur }); renderRoadmapContent(); };
     window._roadmapSetSkillPts = function(v) { const n = parseFloat(v); saveRoadmapSettings({ skillPts: (v !== "" && isFinite(n) && n >= 0) ? Math.floor(n) : null }); renderRoadmapContent(); };
     window._roadmapSkillRebuild = function() { const el = document.getElementById("skill-rebuild"); if (!el) return; el.innerHTML = `<div style="font-size:0.52rem;color:var(--text-dim)">computing\u2026</div>`; setTimeout(function() { try { el.innerHTML = roadmapSkillRebuildHtml(getRoadmapSettings()); } catch (e) { el.innerHTML = `<div style="color:var(--red);font-size:0.52rem">error: ${(e && e.message) || e}</div>`; } }, 30); };
-    window._roadmapNextTiers = function() { const el = document.getElementById("skill-next-tiers"); if (!el) return; el.innerHTML = `<div style="font-size:0.52rem;color:var(--text-dim)">computing\u2026</div>`; setTimeout(function() { try { el.innerHTML = roadmapNextTiersHtml(getRoadmapSettings()); } catch (e) { el.innerHTML = `<div style="color:var(--red);font-size:0.52rem">error: ${(e && e.message) || e}</div>`; } }, 30); };
     window._roadmapSetMaxPrice = function(v) { const n = parseFloat(v); saveRoadmapSettings({ maxPrice: isFinite(n) && n >= 0 ? n : 0 }); renderRoadmapContent(); };
     window._roadmapSetRestocks = function(v) { const n = parseFloat(v); saveRoadmapSettings({ restocksPerDay: isFinite(n) && n > 0 ? n : 2 }); renderRoadmapContent(); };
     window._roadmapSetTicketValue = function(v) { const n = parseFloat(v); saveRoadmapSettings({ ticketValueSfl: isFinite(n) && n >= 0 ? n : 1 }); renderRoadmapContent(); };
