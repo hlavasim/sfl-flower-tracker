@@ -1366,6 +1366,31 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       for (const sc of skillCands) { if (sc.floor <= maxP) econ.push(sc); }
       // Ascension expansions and upgrades, on the same terms.
       for (const ac of roadmapAscensionCandidates(settings)) { if (ac.floor <= maxP) econ.push(ac); }
+      /*
+       * SCENARIOS — activities the farm does not run yet, switched on by the user.
+       *
+       * These rows do not exist in the buy path by construction: a boost on a dead category is
+       * worth nothing until the category is above water, so it never becomes a candidate and the
+       * question "what do I buy to START this" can never be answered by filtering what is already
+       * here. That is why the toggle has to change what goes INTO the simulation.
+       *
+       * Once folded in they are ordinary rows: same ranking, same cumulative FLOWER/day — which
+       * starts lower, because you pay before the activity earns, and climbs as the enabling
+       * purchases land. That progression IS the answer.
+       */
+      const scen = settings.scenarios || [];
+      if (scen.length) {
+        for (const plan of roadmapStartupPlans(settings, byName, catBoostsW)) {
+          if (!scen.includes(plan.cat) && !scen.includes(plan.product)) continue;
+          for (const x of (plan.picked || [])) {
+            const clone = byName[x.name];
+            if (!clone || clone.has || x.floor > maxP) continue;
+            econ.push({ name: x.name, type: "Scenario", floor: x.floor, supply: 0,
+              boost: `${plan.label}: ${x.boost || ""}`.trim(), clone,
+              scenarioCat: plan.cat });
+          }
+        }
+      }
       // Skills are NOT part of the buy path (Visual / Table) — they live in their own Skills tab. They cost
       // skill POINTS, not FLOWER, so they don't belong in a FLOWER reinvestment-ordered buy order.
       tail.sort((a, b) => a.floor - b.floor);
@@ -1464,7 +1489,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       const timeline = [];
       { let ri = (startIncome > 0 ? startIncome : 0), rd = 0;
         for (const s of fin.steps) { const bm = Math.max(0, s.m.marginal || 0); const dd = ri > 0 ? s.m.floor / ri : Infinity; if (isFinite(dd)) rd += dd; ri += bm;
-          timeline.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, marginal: bm, roi: bm > 0 ? s.m.floor / bm : Infinity, atDay: rd, rateAfter: ri, kind: "econ", skillFree: s.m.skillFree, skillPoints: s.m.skillPoints, skillTakeNow: s.m.skillTakeNow, skillRank: s.m.skillRank, shards: s.m.shards, shardSfl: s.m.shardSfl, shardNote: s.m.shardNote, skillTree: s.m.skillTree, skillTier: s.m.skillTier, chainId: s.m.chainId, chainSeq: s.m.chainSeq }); } }
+          timeline.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, marginal: bm, roi: bm > 0 ? s.m.floor / bm : Infinity, atDay: rd, rateAfter: ri, kind: "econ", skillFree: s.m.skillFree, skillPoints: s.m.skillPoints, skillTakeNow: s.m.skillTakeNow, skillRank: s.m.skillRank, shards: s.m.shards, shardSfl: s.m.shardSfl, shardNote: s.m.shardNote, skillTree: s.m.skillTree, skillTier: s.m.skillTier, chainId: s.m.chainId, chainSeq: s.m.chainSeq, scenarioCat: s.m.scenarioCat }); } }
       let rate = (startIncome > 0 ? startIncome : 0) + fin.steps.reduce((a, s) => a + Math.max(0, s.m.marginal || 0), 0);
       let cumDays = timeline.length ? timeline[timeline.length - 1].atDay : 0;
       const econSteps = timeline.length;
@@ -1488,7 +1513,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       const coreRate = (startIncome > 0 ? startIncome : 0) + coreMarg;
       // Unified ranked list: in-plan steps + conditional (situational), sorted by payback (ROI).
       const ranked = [];
-      for (const s of fin.steps) { const bm = Math.max(0, s.m.marginal || 0); ranked.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, value: bm, roi: bm > 0 ? s.m.floor / bm : Infinity, status: "plan", skillFree: s.m.skillFree, skillPoints: s.m.skillPoints, skillTakeNow: s.m.skillTakeNow, skillRank: s.m.skillRank, shards: s.m.shards, shardSfl: s.m.shardSfl, shardNote: s.m.shardNote, skillTree: s.m.skillTree, skillTier: s.m.skillTier, chainId: s.m.chainId, chainSeq: s.m.chainSeq }); }
+      for (const s of fin.steps) { const bm = Math.max(0, s.m.marginal || 0); ranked.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, value: bm, roi: bm > 0 ? s.m.floor / bm : Infinity, status: "plan", skillFree: s.m.skillFree, skillPoints: s.m.skillPoints, skillTakeNow: s.m.skillTakeNow, skillRank: s.m.skillRank, shards: s.m.shards, shardSfl: s.m.shardSfl, shardNote: s.m.shardNote, skillTree: s.m.skillTree, skillTier: s.m.skillTier, chainId: s.m.chainId, chainSeq: s.m.chainSeq, scenarioCat: s.m.scenarioCat }); }
       for (const m of situational) ranked.push({ name: m.name, type: m.type, boost: m.boost, floor: m.floor, value: m.sitValue, roi: m.sitValue > 0 ? m.floor / m.sitValue : Infinity, status: "conditional", reason: m.sitReason });
       ranked.sort((a, b) => a.roi - b.roi);
       /*

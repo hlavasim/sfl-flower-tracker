@@ -17477,6 +17477,54 @@
      * efficiency of an activity you never do is 0 by construction, and 0 chickens earn 0 whatever
      * you buy, so both would answer the question with a tautology.
      */
+    /*
+     * SCENARIOS — "co kdybych rozjel i tohle".
+     *
+     * Replaces the old CO JEŠTĚ NEDĚLÁM panel, which was a second implementation of the buy path:
+     * its own ordering, its own cumulative column, its own little table. One table, one ranking,
+     * one cumulative FLOWER/day — the toggle just decides what is IN it.
+     */
+    const LS_ROADMAP_SCENARIOS = "sfl_roadmap_scenarios";
+    function _roadmapScenarios() {
+      try {
+        const v = JSON.parse(localStorage.getItem(LS_ROADMAP_SCENARIOS) || "[]");
+        return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+      } catch { return []; }
+    }
+    window._roadmapToggleScenario = function (cat) {
+      const on = new Set(_roadmapScenarios());
+      if (on.has(cat)) on.delete(cat); else on.add(cat);
+      try { localStorage.setItem(LS_ROADMAP_SCENARIOS, JSON.stringify([...on])); } catch {}
+      // Re-fetch, not re-render: the scenario changes the simulation input.
+      renderRoadmapContent();
+    };
+    /*
+     * The toggle row. "Reality" is the farm as it stands and is always on — it is shown as a fixed
+     * chip rather than a switch so the row reads as "reality PLUS what you turn on".
+     */
+    function roadmapScenarioBarHtml() {
+      const rows = (_roadmapServer && _roadmapServer.startup) || [];
+      if (!rows.length) return "";
+      const on = new Set(_roadmapScenarios());
+      const fl = (v) => `${v >= 0 ? "+" : "\u2212"}${Math.abs(v).toFixed(2)}`;
+      let h = `<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:8px">`;
+      h += `<span style="font-size:0.5rem;color:var(--text-dim)">Po\u010d\u00edtat s:</span>`;
+      h += `<span class="dash-toggle-btn on" style="cursor:default" title="Co farma d\u011bl\u00e1 te\u010f. V\u017edy zapnut\u00e9.">\u2611 Realita</span>`;
+      for (const r of rows) {
+        // Only offer what can actually be started. unpriced / no room are facts no purchase fixes.
+        if (!r.flips) continue;
+        const isOn = on.has(r.cat);
+        const tip = `${r.label}: te\u010f ${fl(r.nowNet)} FLOWER/den, po nákupech za ${roadmapFmtFlower(r.cost)} FLOWER ${fl(r.net)}/den. Zapnut\u00edm se ty n\u00e1kupy p\u0159idaj\u00ed do t\u00e9hle tabulky a do kumulativn\u00edho sou\u010dtu.`;
+        h += `<button class="dash-toggle-btn ${isOn ? "on" : ""}" onclick='_roadmapToggleScenario("${r.cat}")' title="${escHTML(tip)}">${isOn ? "\u2611" : "\u2610"} \u{1F331} ${escHTML(r.label)} <span style="opacity:0.6">${fl(r.net)}/d</span></button>`;
+      }
+      const blocked = rows.filter((r) => !r.flips);
+      if (blocked.length) {
+        h += `<span style="font-size:0.45rem;color:var(--text-dim)" title="${escHTML(blocked.map((b) => `${b.label}: ${b.blocked}`).join(" \u00b7 "))}">nelze rozjet: ${blocked.map((b) => escHTML(b.label)).join(", ")}</span>`;
+      }
+      h += `</div>`;
+      return h;
+    }
+
     function roadmapStartupHtml() {
       const rows = (_roadmapServer && _roadmapServer.startup) || [];
       if (!rows.length) return "";
@@ -17942,7 +17990,14 @@
       const el = document.getElementById("roadmap-content");
       if (!el) return;
       try {
-        const q = `products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}&roadmap=${encodeURIComponent(localStorage.getItem("sfl_roadmap_settings") || "{}")}`;
+        /*
+         * Scenarios go in the REQUEST, not into a post-filter. An activity the farm does not run
+         * has no rows in the buy path at all — a boost on it is worth nothing until the category is
+         * above water — so switching one on has to change what the simulator considers.
+         */
+        const _sc = _roadmapScenarios();
+        const q = `products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}&roadmap=${encodeURIComponent(localStorage.getItem("sfl_roadmap_settings") || "{}")}`
+          + (_sc.length ? `&scenarios=${encodeURIComponent(_sc.join(","))}` : "");
         const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=roadmap&${q}`, {
           method: "POST", headers: { "content-type": "application/json" },
           body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [] }),
@@ -17986,7 +18041,6 @@
       h += roadmapProfitabilityHtml(settings);
       // ── Buy path: Visual graph or Table (toggle) ──
       h += `<div style="margin-bottom:16px">`;
-      h += roadmapStartupHtml();
       h += roadmapPeriodicHtml();
       h += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal)">YOUR BUY PATH — what to buy next, in order</div><div style="margin-left:auto;display:flex;gap:4px"><button id="bp-tab-graph" onclick="_roadmapBuyView('graph')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:#241a10;color:var(--text-secondary);cursor:pointer">▣ Visual</button><button id="bp-tab-table" onclick="_roadmapBuyView('table')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:var(--sunpetal);color:#1a120a;cursor:pointer;font-weight:bold">☰ Table</button><button id="bp-tab-skills" onclick="_roadmapBuyView('skills')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:#241a10;color:var(--text-secondary);cursor:pointer">⭐ Skills</button></div></div>`;
       {
@@ -18019,6 +18073,8 @@
         Skill:       { label: "SKILL", full: "Skilly a ascension ranky",  bg: "#3a2a5a", icon: "\u2b50" },
         Node:        { label: "NODE",  full: "Nody (koupit / slou\u010dit)", bg: "#1f3a2a", icon: "\u26cf\ufe0f" },
         Ascension:   { label: "EXP",   full: "Ascension expanze",         bg: "#4a2a2a", icon: "\ud83d\uddfa\ufe0f" },
+        // Rows that exist only because a scenario is switched on \u2014 an activity you do not run yet.
+        Scenario:    { label: "START", full: "Rozjezd nov\u00e9 \u010dinnosti",   bg: "#1f3a2a", icon: "\ud83c\udf31" },
       };
       /*
        * Row icon. Every row used to call getItemIcon(r.name), which only resolves for real items \u2014
@@ -18053,6 +18109,7 @@
        * answer rather than the view — and the row numbers stay the true positions so it is visible
        * that something was skipped.
        */
+      h += roadmapScenarioBarHtml();
       const _rmHidden = _roadmapHiddenTypes();
       const _rmCounts = {};
       for (const r of (sim.ranked || [])) { const t = r.type || "Collectible"; _rmCounts[t] = (_rmCounts[t] || 0) + 1; }
@@ -19638,7 +19695,14 @@
       row.after(detail);
       (async () => {
         try {
-          const q = `products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}&roadmap=${encodeURIComponent(localStorage.getItem("sfl_roadmap_settings") || "{}")}`;
+          /*
+         * Scenarios go in the REQUEST, not into a post-filter. An activity the farm does not run
+         * has no rows in the buy path at all — a boost on it is worth nothing until the category is
+         * above water — so switching one on has to change what the simulator considers.
+         */
+        const _sc = _roadmapScenarios();
+        const q = `products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}&roadmap=${encodeURIComponent(localStorage.getItem("sfl_roadmap_settings") || "{}")}`
+          + (_sc.length ? `&scenarios=${encodeURIComponent(_sc.join(","))}` : "");
           const d = (await _fetchCompute(
             `/api/compute?farm=${FARM_ID}&section=power&${q}&formulaFor=${encodeURIComponent(boostName)}&formulaCat=${encodeURIComponent(catId)}`,
             { tries: 2 })).data || {};

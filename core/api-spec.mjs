@@ -168,6 +168,16 @@ export const API_SPEC = {
             description: "section=wishlist only: URL-encoded JSON { \"collection:name\": priority(1|2|3) } — the client's wishlist.",
           },
           {
+            name: "scenarios",
+            in: "query",
+            required: false,
+            schema: { type: "string" },
+            description: "section=roadmap only: comma-separated categories the farm does NOT run yet "
+              + "(e.g. \"greenhouse,chickens\"). Each one folds the purchases that would make that "
+              + "activity profitable into the buy path itself, so the ranking and the cumulative "
+              + "FLOWER/day account for starting it — it changes the simulation, not just the view.",
+          },
+          {
             name: "grinx",
             in: "query",
             required: false,

@@ -347,7 +347,10 @@ export default async function handler(req, res) {
         const rmCooking = _cookingForAscension(farm, p2p, { ...settings, petSimulate: true });
         rmAsc = buildAscensionSection(farm, rmPower, rmCooking, roadmapComputeEfficiency(rmSnaps), { grinx: req.query.grinx === "1", max: req.query.max });
       } catch (e) { rmAsc = null; }   // the buy path still works without it
-      data = buildRoadmapSection(rmSnaps, { roadmapSettings, farm, p2p, ascension: rmAsc });
+      // scenarios=greenhouse,chickens — activities the farm does not run yet that the user asked
+      // to plan for. They change what the simulator considers, so they belong in the request.
+      const rmScen = String(req.query.scenarios || "").split(",").map((x) => x.trim()).filter(Boolean);
+      data = buildRoadmapSection(rmSnaps, { roadmapSettings, farm, p2p, ascension: rmAsc, scenarios: rmScen });
     }
     // `ascension`: the prestige-loop calculator (replaces the external cockpit that
     // read /api/power-summary): costs/levels/crystals from the game-formula port,

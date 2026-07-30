@@ -40,6 +40,8 @@ export function buildRoadmapSection(snapshots, settings = {}) {
   _setRoadmapState({ effByCat: eff.effByCat || {}, effMeta: eff.meta, meanRatio, ascension: settings.ascension || null });
 
   const rs = getRoadmapSettings(settings.roadmapSettings || {});
+  // Which not-yet-run activities the user switched on. Straight through to the simulator.
+  rs.scenarios = Array.isArray(settings.scenarios) ? settings.scenarios : [];
   const currentProd = roadmapCurrentProduction(rs);
   const startIncome = (rs.startIncome != null) ? rs.startIncome : currentProd.total;
   const sim = roadmapSimulate(rs, startIncome);
