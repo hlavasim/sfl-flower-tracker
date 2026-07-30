@@ -17522,13 +17522,55 @@
         // the toggle key the server matches, the category only when there is no crop choice.
         const key = r.product || r.cat;
         const isOn = sel.includes(key);
-        const tip = `${r.label}: teď ${fl(r.nowNet)} FLOWER/den, po nákupech za ${roadmapFmtFlower(r.cost)} FLOWER ${fl(r.net)}/den. Přepnutím se ty nákupy přidají do téhle tabulky a do kumulativního součtu.`;
+        const tip = `${r.label}: teď ${fl(r.nowNet)} FLOWER/den, po nákupech za ${roadmapFmtFlower(r.cost)} FLOWER ${fl(r.net)}/den. Přepnutím se tabulka přepne jen na věci, které tuhle činnost rozjedou.`;
         h += `<button class="dash-toggle-btn ${isOn ? "on" : ""}" onclick='_roadmapToggleScenario("${key}")' title="${escHTML(tip)}">${isOn ? "\u25c9" : "\u25cb"} \u{1F331} ${escHTML(r.label)} <span style="opacity:0.6">${fl(r.net)}/d</span></button>`;
       }
       const blocked = rows.filter((r) => !r.flips);
       if (blocked.length) {
         h += `<span style="font-size:0.45rem;color:var(--text-dim)" title="${escHTML(blocked.map((b) => `${b.label}: ${b.blocked}`).join(" \u00b7 "))}">nelze rozjet: ${blocked.map((b) => escHTML(b.label)).join(", ")}</span>`;
       }
+      h += `</div>`;
+      return h;
+    }
+
+    /*
+     * The SCENARIO table — the buy path of ONE activity you do not run yet. It REPLACES the
+     * reality table: only purchases that move THAT activity appear ("ty jiný než realita by měli
+     * zobrazovat pouze věci co ovlivňují jen je"), and the running column is the activity's own
+     * net/day, from the red start through the flip. Wood skills and expansions stay behind the
+     * Realita switch — they do not move this activity.
+     */
+    function roadmapScenarioTableHtml(plan) {
+      const fl = (v) => `${v >= 0 ? "+" : "\u2212"}${Math.abs(v).toFixed(3)}`;
+      const col = (v) => v > 0 ? "var(--green)" : v < 0 ? "var(--red)" : "var(--text-dim)";
+      let h = `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:14px">`;
+      h += `<div class="pixel-font" style="font-size:0.62rem;color:var(--lily);margin-bottom:4px">\u{1F331} ${escHTML(plan.label)} \u2014 co koupit, abys mohl za\u010d\u00edt</div>`;
+      h += `<div style="font-size:0.55rem;margin-bottom:8px">te\u010f <b style="color:${col(plan.nowNet)}">${fl(plan.nowNet)}</b> ${sflIcon("0.65em")}/den \u2192 po ${plan.picked.length} n\u00e1kupech za <b>${roadmapFmtFlower(plan.cost)}</b> ${sflIcon("0.65em")} <b style="color:${col(plan.net)}">${fl(plan.net)}</b> ${sflIcon("0.65em")}/den`
+        + `<span style="color:var(--text-dim);font-size:0.47rem"> \u00b7 te\u010f ${plan.count}${plan.atMax > plan.count ? `, po\u010d\u00edt\u00e1no na max ${plan.atMax}` : ""}</span></div>`;
+      h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.6rem">`;
+      h += `<thead><tr style="color:var(--text-secondary);text-align:left">
+        <th style="padding:4px 6px">#</th>
+        <th style="padding:4px 6px">Koupit</th>
+        <th style="padding:4px 6px">Boost</th>
+        <th style="padding:4px 6px;text-align:right">Cena ${sflIcon()}</th>
+        <th style="padding:4px 6px;text-align:right" title="Kumulativn\u00ed cena, kdy\u017e kupuje\u0161 shora dol\u016f.">&Sigma; Cena ${sflIcon()}</th>
+        <th style="padding:4px 6px;text-align:right" title="\u010cist\u00fd v\u00fdd\u011blek T\u00c9HLE \u010dinnosti za den po tomhle n\u00e1kupu \u2014 teoreticky a na pln\u00fd stav.">${sflIcon()}/den pot\u00e9</th>
+      </tr></thead><tbody>`;
+      h += `<tr style="border-top:1px solid #222"><td style="padding:3px 6px;color:var(--text-dim)">0</td><td style="padding:3px 6px;color:var(--text-dim)">te\u010f (bez n\u00e1kup\u016f)</td><td></td><td></td><td></td><td style="padding:3px 6px;text-align:right;color:${col(plan.nowNet)};font-weight:bold">${fl(plan.nowNet)}</td></tr>`;
+      for (let i = 0; i < plan.picked.length; i++) {
+        const x = plan.picked[i];
+        const after = x.netAfter == null ? null : x.netAfter;
+        h += `<tr style="border-top:1px solid #222${x.crosses ? ";background:rgba(46,160,67,0.10)" : ""}">
+          <td style="padding:3px 6px;color:var(--text-dim)">${i + 1}</td>
+          <td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(x.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(x.name)}${x.crosses ? ` <span style="color:var(--green);font-size:0.45rem">\u2190 tady p\u0159ekl\u00e1p\u00ed do plusu</span>` : ""}</td>
+          <td style="padding:3px 6px;color:var(--text-dim);max-width:240px">${escHTML((x.boost || "").split("\n").join(" \u00b7 "))}</td>
+          <td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(x.floor)}</td>
+          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${x.cumCost == null ? "" : roadmapFmtFlower(x.cumCost)}</td>
+          <td style="padding:3px 6px;text-align:right;color:${col(after == null ? 0 : after)};font-weight:bold">${after == null ? "\u2014" : fl(after)}</td>
+        </tr>`;
+      }
+      h += `</tbody></table></div>`;
+      h += `<div style="margin-top:6px;font-size:0.5rem;color:var(--text-dim);line-height:1.6">Po\u010d\u00edt\u00e1no <b>teoreticky a na pln\u00fd stav</b> \u2014 nam\u011b\u0159en\u00e1 efektivita \u010dinnosti, kterou ned\u011bl\u00e1\u0161, je z definice 0. Ceny jsou marketplace floor; po\u0159ad\u00ed = nejv\u011bt\u0161\u00ed p\u0159\u00ednos za FLOWER, p\u0159epo\u010d\u00edt\u00e1van\u00fd po ka\u017ed\u00e9m kroku.</div>`;
       h += `</div>`;
       return h;
     }
@@ -17939,14 +17981,9 @@
       const el = document.getElementById("roadmap-content");
       if (!el) return;
       try {
-        /*
-         * Scenarios go in the REQUEST, not into a post-filter. An activity the farm does not run
-         * has no rows in the buy path at all — a boost on it is worth nothing until the category is
-         * above water — so switching one on has to change what the simulator considers.
-         */
-        const _sc = _roadmapScenarios();
-        const q = `products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}&roadmap=${encodeURIComponent(localStorage.getItem("sfl_roadmap_settings") || "{}")}`
-          + (_sc.length ? `&scenarios=${encodeURIComponent(_sc.join(","))}` : "");
+        // The scenario view renders client-side from `startup` — the simulation stays pure
+        // reality, so no scenario parameter travels with the request.
+        const q = `products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}&roadmap=${encodeURIComponent(localStorage.getItem("sfl_roadmap_settings") || "{}")}`;
         const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=roadmap&${q}`, {
           method: "POST", headers: { "content-type": "application/json" },
           body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [] }),
@@ -18059,6 +18096,12 @@
        * that something was skipped.
        */
       h += roadmapScenarioBarHtml();
+      // A chosen scenario REPLACES the reality table — only what moves that one activity.
+      const _scSel = _roadmapScenarios();
+      const _scPlan = _scSel.length ? (((_roadmapServer && _roadmapServer.startup) || []).find(p => (p.product || p.cat) === _scSel[0]) || null) : null;
+      if (_scPlan) {
+        h += roadmapScenarioTableHtml(_scPlan);
+      } else {
       const _rmHidden = _roadmapHiddenTypes();
       const _rmCounts = {};
       for (const r of (sim.ranked || [])) { const t = r.type || "Collectible"; _rmCounts[t] = (_rmCounts[t] || 0) + 1; }
@@ -18163,6 +18206,7 @@
         • <b>Always live</b> — ownership is read from your farm and floor prices from the marketplace on every load. Buy an item (or a price moves) and hit ↻ Refresh: it drops off the list, income &amp; ETAs recompute, and the buy order re-sorts automatically.<br>
         • <b>Prices</b> are marketplace floor in FLOWER. Listings above 500k FLOWER (more than half of all FLOWER in existence) are treated as troll / no-liquidity and dropped; use the Max-price cap to also park other expensive items out of the plan. Estimates assume you reinvest all FLOWER into NFTs.
       </div>`;
+      }
 
       h += `</div>`;
       h += `<div id="buy-skills" style="display:none">` + roadmapSkillsViewHtml(settings) + `</div>`;
@@ -19644,14 +19688,9 @@
       row.after(detail);
       (async () => {
         try {
-          /*
-         * Scenarios go in the REQUEST, not into a post-filter. An activity the farm does not run
-         * has no rows in the buy path at all — a boost on it is worth nothing until the category is
-         * above water — so switching one on has to change what the simulator considers.
-         */
-        const _sc = _roadmapScenarios();
-        const q = `products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}&roadmap=${encodeURIComponent(localStorage.getItem("sfl_roadmap_settings") || "{}")}`
-          + (_sc.length ? `&scenarios=${encodeURIComponent(_sc.join(","))}` : "");
+          // The scenario view renders client-side from `startup` — the simulation stays pure
+        // reality, so no scenario parameter travels with the request.
+        const q = `products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}&roadmap=${encodeURIComponent(localStorage.getItem("sfl_roadmap_settings") || "{}")}`;
           const d = (await _fetchCompute(
             `/api/compute?farm=${FARM_ID}&section=power&${q}&formulaFor=${encodeURIComponent(boostName)}&formulaCat=${encodeURIComponent(catId)}`,
             { tries: 2 })).data || {};
