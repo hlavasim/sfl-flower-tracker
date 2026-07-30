@@ -631,6 +631,13 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       let total = 0; const breakdown = [];
       for (const [cat, meta] of Object.entries(POWER_CATEGORIES)) {
         if (!meta.quantifiable) continue;
+        /*
+         * Deliberately roadmapCatNet, not the plot-aware roadmapAnyCatNet. A blanket rename caught
+         * this call site by accident and it must not change: this is the farm's CURRENT income,
+         * which feeds startIncome and therefore every ETA on the page. Making it plot-aware would
+         * very likely be an improvement — roadmapCatNet reports 0 for greenhouse — but that is a
+         * separate, deliberate change with its own measurement, not a side effect of this one.
+         */
         const net = roadmapCatNet(cat, roadmapOwnedEffects(cat), settings);
         const v = Math.max(0, net) * roadmapEffFactor(cat, settings);
         if (v > 0) { total += v; breakdown.push({ cat, sfl: v }); }
@@ -1004,6 +1011,52 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
      * can be unflippable with anything on the market. Both are reported as such rather than omitted,
      * because "nothing will fix this" is an answer and an empty row is not.
      */
+    /*
+     * Net per day for ONE category, whichever kind it is.
+     *
+     * roadmapCatNet does not handle PLOT categories — crops, fruits and greenhouse go through
+     * roadmapPerPlot instead, which is exactly why roadmapItemSituational carries a separate branch
+     * for them. Calling roadmapCatNet for everything silently valued all three at zero, so a
+     * greenhouse losing 1.73 FLOWER a day looked idle rather than loss-making.
+     *
+     * For a plot category the product matters, so every product it can grow is tried and the best
+     * net wins — the startup question is "what is the best this could do", not "what is it set to".
+     */
+    const PLOT_CATS = { crops: 1, fruits: 1, greenhouse: 1 };
+    function roadmapAnyCatNet(cat, effects, settings) {
+      if (!PLOT_CATS[cat]) return roadmapCatNet(cat, effects, settings);
+      const l = roadmapCatProductNets(cat, effects, settings);
+      return l.length ? l[0].net : 0;
+    }
+    /*
+     * Every product the category can grow, best first — not just the winner.
+     *
+     * "Should I run the greenhouse" is really "which of Grape / Olive / Rice pays, and by how
+     * much"; one aggregate number hides that Olive nets -0.44 where Grape nets -1.73, which is the
+     * difference between a near miss and a dead end. So the whole list travels and the caller can
+     * show it.
+     */
+    function roadmapCatProductNets(cat, effects, settings) {
+      if (!PLOT_CATS[cat]) return [];
+      const table = cat === "crops" ? CROP_GROW_DATA : (cat === "fruits" ? FRUIT_GROW_DATA : GREENHOUSE_GROW_DATA);
+      const out = [];
+      for (const prod of Object.keys(table)) {
+        if ((settings.excludeCats || []).indexOf(prod) >= 0) continue;
+        const a = roadmapPerPlot(cat, prod, effects, settings);
+        if (!a) continue;
+        const plots = Math.min(a.plots, a.maxPlots);
+        out.push({ product: prod, net: (a.gpp - a.cpp) * plots, perPlot: a.gpp - a.cpp, plots,
+          gross: a.gpp * plots, cost: a.cpp * plots });
+      }
+      out.sort((x, y) => y.net - x.net);
+      return out;
+    }
+    /** The product that best net came from, for the row to name what you would grow. */
+    function roadmapBestCatProduct(cat, effects, settings) {
+      const l = roadmapCatProductNets(cat, effects, settings);
+      return l.length ? l[0].product : null;
+    }
+
     function roadmapStartupPlans(userSettings, byName, catBoostsW) {
       /*
        * THEORETICAL, always — and this is the whole reason the first version answered nothing.
@@ -1019,6 +1072,19 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
        * a category you ignore would defeat the same purpose in the same way.
        */
       const settings = Object.assign({}, userSettings, { effMode: "theoretical", effOverrides: null });
+      /*
+       * Effects must be read from the CLONES, not from powerState.
+       *
+       * roadmapOwnedEffects filters powerState.boostItems, and this planner toggles `has` on the
+       * clones in catBoostsW — so every "what if I owned this" probe changed nothing the net could
+       * see, every gain came out as 0, and every category was declared unflippable. The catalogue
+       * had 21 unowned greenhouse boosts available the whole time. Same pattern
+       * roadmapItemSituational uses, plus the shrine effects roadmapOwnedEffects also folds in.
+       */
+      const effectsFor = (cat) => (catBoostsW[cat] || [])
+        .filter((b) => b.has && !b.isDisabled)
+        .flatMap((b) => b.effects.filter((e) => e.cat === cat))
+        .concat(activeShrineEffects(powerState.farm, cat));
       const out = [];
       const { capacity } = powerState;
       const maxP = (settings.maxPrice && settings.maxPrice > 0) ? settings.maxPrice : Infinity;
@@ -1026,9 +1092,9 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       for (const [cat, def] of Object.entries(POWER_CATEGORIES)) {
         if (!def || !def.quantifiable) continue;
         if ((settings.excludeCats || []).indexOf(cat) >= 0) continue;
-        const owned = roadmapOwnedEffects(cat);
+        const owned = effectsFor(cat);
         let nowNet = 0;
-        try { nowNet = roadmapCatNet(cat, owned, settings); } catch (e) { continue; }
+        try { nowNet = roadmapAnyCatNet(cat, owned, settings); } catch (e) { continue; }
         if (nowNet > 0.0001) continue;                 // already earning — the buy path covers it
 
         // No capacity at all is a different problem: you need the building or the animals first,
@@ -1055,7 +1121,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
               const c = cands[i];
               c.has = true;
               let after = net;
-              try { after = roadmapCatNet(cat, roadmapOwnedEffects(cat), settings); } catch (e) {}
+              try { after = roadmapAnyCatNet(cat, effectsFor(cat), settings); } catch (e) {}
               c.has = false;
               const gain = after - net;
               if (!(gain > 0)) continue;
@@ -1067,7 +1133,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
             c.has = true; restore.push(c);
             picked.push({ name: c.name, floor: c.floor, gain: bestGain, boost: c.boost || "" });
             cost += c.floor;
-            try { net = roadmapCatNet(cat, roadmapOwnedEffects(cat), settings); } catch (e) {}
+            try { net = roadmapAnyCatNet(cat, effectsFor(cat), settings); } catch (e) {}
           }
         }
         for (const c of restore) c.has = false;         // never leak state into the buy path
@@ -1089,6 +1155,9 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
 
         out.push({
           cat, label: def.label || cat, count, nowNet, unpriced, unitsPerDay: produces,
+          // Which product the figures assume, when the category has a choice.
+          // Every product, best first, both as it stands now and after the plan's purchases.
+          productsBefore: (() => { try { return roadmapCatProductNets(cat, owned, settings); } catch (e) { return []; } })(),
           picked, cost, net,
           // Why it is not actionable, when it is not.
           blocked: unpriced ? "unpriced" : count === 0 ? "capacity" : (net <= 0 ? "unflippable" : null),
