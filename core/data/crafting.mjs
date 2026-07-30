@@ -17,6 +17,42 @@ export const CRUSTACEAN_RECIPES = {
   "Barnacle":     { pot: "Mariner Pot", chum: null, qty: 0, alt: null, time: "8h" },
 };
 
+/*
+ * What a fertiliser actually DOES. The app priced the fertilisers (item-value.mjs derives a
+ * production cost from COMPOST_RECIPES) but modelled no effect at all, so a composter could not
+ * be judged worth its yield bonus — the bonus side did not exist — and the whole Compost skill
+ * tree valued at exactly 0, Sprout Surge included.
+ *
+ * Every number verified in the game source, not inferred:
+ *   Sprout Mix     events/landExpansion/harvest.ts   `amount += 0.2`, and a further
+ *                  `amount += 0.2` when Knowledge Crab is built — so the collectible DOUBLES it.
+ *                  Sproutroot Surprise behaves identically.
+ *   Fruitful Blend types/fertilisers.ts              base fruit-patch yield 0.1, before the
+ *                  Fruitful Bounty skill multiplier.
+ *   Rapid Root     events/landExpansion/plant.ts     `seconds = seconds * 0.5`.
+ *
+ * CAVEAT on Rapid Root, worth reading before trusting it: that 0.5 is the LEGACY path. Under
+ * the SPEED_BOOSTS feature flag it becomes a windowed 2x speed boost via
+ * getCropFertiliserWindows, which is a different thing — a window, not a flat halving. Modelled
+ * as the flat 0.5 here because that is the number the source states plainly; if the flag is on
+ * in production this OVERSTATES it, since a window does not cover the whole growth.
+ *
+ * Per PLOT per HARVEST, not per day: a fertiliser is consumed by one plot for one cycle.
+ */
+export const FERTILISER_EFFECTS = {
+  "Sprout Mix":           { cat: "crops",  kind: "yield_flat", value: 0.2, doubledBy: "Knowledge Crab" },
+  "Sproutroot Surprise":  { cat: "crops",  kind: "yield_flat", value: 0.2, doubledBy: "Knowledge Crab" },
+  "Fruitful Blend":       { cat: "fruits", kind: "yield_flat", value: 0.1, skillMultiplier: "Fruitful Bounty" },
+  "Rapid Root":           { cat: "crops",  kind: "growth_mult", value: 0.5, legacyOnly: true },
+};
+
+// Units produced per batch and the hours a batch takes (types/composters.ts composterDetails).
+// The recipes' seasonal inputs live in COMPOST_RECIPES above.
+export const COMPOSTER_CYCLE = {
+  "Compost Bin":       { hours: 6 },
+  "Turbo Composter":   { hours: 8 },
+  "Premium Composter": { hours: 12 },
+};
 // Compost recipes: season-dependent inputs, base output amounts (from composterDetails)
 export const COMPOST_RECIPES = {
   "Compost Bin": {
