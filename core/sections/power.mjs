@@ -37,7 +37,7 @@ import { SKILL_UPGRADES, powerSkillRankVals, skillRankText } from "../engine/ski
 import { buildFormulaHTML } from "../engine/power-formula.mjs";
 // A composter is a PERIODIC action — cycle + inputs — so it is served as a per-day net here
 // rather than folded into the permanent-upgrade valuations.
-import { composterVerdicts } from "../engine/compost.mjs";
+import { composterVerdicts, compostSkillValues } from "../engine/compost.mjs";
 
 export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   const inventory = farm.inventory || {};
@@ -403,6 +403,29 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   }
 
   /*
+   * COMPOST tree, folded into boostValues so the existing skill UI reads it with no render
+   * change. calcBoostValue works off the applyBoosts effect stack, and no compost skill has an
+   * effect there — a composter's output is not a category boost — so the whole tree came out at
+   * exactly 0 and read as worthless.
+   *
+   * Only the per-DAY rows go in. The three power skills ("Sprout Mix on all plots") are worth a
+   * figure per ACTIVATION, and how often you press it is a player habit this app does not
+   * measure; putting a guessed daily rate into the same column as measured ones would corrupt
+   * the column. They travel in `compostSkills` instead, where the page can show them as what
+   * they are.
+   */
+  const compostSkills = compostSkillValues(farm, p2pPrices, season, { savedProducts, capacity });
+  for (const r of compostSkills) {
+    if (r.value == null || !isFinite(r.value)) continue;   // unpriced or per-activation only
+    const cat = r.item === "Fruitful Blend" ? "fruits" : "crops";
+    if (!boostValues[cat]) continue;
+    // solo === synergy: a composter's output does not stack with the category's other boosts,
+    // so there is no diminishing return to model here.
+    boostValues[cat][r.skill] = { solo: r.value, synergy: r.value, roi: null,
+      conditional: r.conditional || null, harmful: !!r.harmful };
+  }
+
+  /*
    * Ascension RANKS (Level 2 / Level 3), computed here rather than on the page.
    *
    * The rank layer used to live inline in flowers.html only, so anything else that wanted
@@ -503,5 +526,5 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     }
   }
 
-  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, skillRanks, composters: composterVerdicts(farm, p2pPrices, season, { savedProducts }), shrines: shrineStatuses(farm), weather: weatherProtection(farm), valueBasis: settings.measured ? "measured" : "theoretical", restockQueues, ...(boostValuesEff ? { boostValuesEff } : {}), ...(formulaHtml !== undefined ? { formulaHtml } : {}) };
+  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, skillRanks, composters: composterVerdicts(farm, p2pPrices, season, { savedProducts }), shrines: shrineStatuses(farm), weather: weatherProtection(farm), compostSkills, valueBasis: settings.measured ? "measured" : "theoretical", restockQueues, ...(boostValuesEff ? { boostValuesEff } : {}), ...(formulaHtml !== undefined ? { formulaHtml } : {}) };
 }

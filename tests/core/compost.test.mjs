@@ -16,8 +16,21 @@ test("a fertiliser is valued per plot per harvest, not per day", () => {
   const sm = fertiliserValue("Sprout Mix", farm, p2p, {});
   assert.equal(sm.units, 0.2, "harvest.ts: amount += 0.2");
   assert.ok(Math.abs(sm.value - 0.2 * p2p[sm.product]) < 1e-12, "value = units x the product's price");
+  /*
+   * Fruitful Blend is 0.1 at BASE — and the fixture farm holds Fruitful Bounty, which doubles it.
+   * This test used to pin 0.1 against a farm that should read 0.2, because fertiliserValue never
+   * looked at the `skillMultiplier` field the data has always carried. Both cases are pinned now,
+   * so the multiplier cannot silently come or go.
+   */
+  assert.equal(FERTILISER_EFFECTS["Fruitful Blend"].skillMultiplier, "Fruitful Bounty");
+  assert.equal(farm.bumpkin.skills["Fruitful Bounty"], 1, "the fixture farm has the skill");
   const fb = fertiliserValue("Fruitful Blend", farm, p2p, {});
-  assert.equal(fb.units, 0.1);
+  assert.equal(fb.units, 0.2, "0.1 base, doubled by Fruitful Bounty");
+  assert.equal(fb.skillDoubled, true);
+  const noSkill = { ...farm, bumpkin: { ...farm.bumpkin, skills: {} } };
+  const fbBase = fertiliserValue("Fruitful Blend", noSkill, p2p, {});
+  assert.equal(fbBase.units, 0.1, "and 0.1 without it");
+  assert.equal(fbBase.skillDoubled, false);
   assert.equal(FERTILISER_EFFECTS["Fruitful Blend"].cat, "fruits");
   assert.notEqual(fb.product, sm.product, "and each is valued in ITS own category's product");
 });
@@ -205,4 +218,56 @@ test("partial cover is distinct from none: one spent instance out of two still p
   assert.equal(w.spent, 1);
   assert.equal(w.active, 1);
   assert.equal(w.owned, 2, "owned is the placed count, which the coverage note divides by");
+});
+
+test("the Compost tree is no longer worth exactly zero, and the reasons are kept apart", async () => {
+  /*
+   * The whole tree valued at 0 for two unrelated causes, and only one was a missing model:
+   *   - most of it changes a composter's OUTPUT, which had no effect model at all;
+   *   - three are POWER skills that change how a fertiliser is APPLIED, which has no per-DAY rate
+   *     without a model of how often you press it.
+   * Conflating them is what made "0" look like a single answer.
+   */
+  const { compostSkillValues } = await import("../../core/engine/compost.mjs");
+  const { buildPowerSection } = await import("../../core/sections/power.mjs");
+  const nfts = JSON.parse(readFileSync(new URL("../fixtures/nfts-sample.json", import.meta.url)));
+  const pd = buildPowerSection(farm, p2p, nfts, null, {});
+  const rows = compostSkillValues(farm, pd.p2pPrices, pd.season, { capacity: pd.capacity });
+  const by = {};
+  for (const r of rows) by[r.skill] = r;
+
+  // 1. Output skills now carry a real per-day figure, priced off the composter that makes the item.
+  assert.equal(by["Efficient Bin"].composter, "Compost Bin", "+5 Sprout Mix lands in the Compost Bin's batch");
+  assert.ok(by["Efficient Bin"].value > 0, `Efficient Bin: ${by["Efficient Bin"].value}`);
+  // 5 extra mix per batch x 4 batches a day x what one mix is worth — no magic in the arithmetic.
+  const oneMix = fertiliserValue("Sprout Mix", farm, pd.p2pPrices, {}).value;
+  assert.ok(Math.abs(by["Efficient Bin"].value - 5 * oneMix * 4) < 1e-9, "5 x 4 batches x one mix");
+  assert.ok(by["Efficient Bin"].conditional, "and it says it only counts if the composter runs");
+
+  // 2. A speed skill on a LOSS-MAKING composter is harmful, and says so rather than clamping to 0.
+  //    All three composters net negative on this farm, so faster batches lose money faster.
+  assert.ok(by["Swift Decomposer"].value < 0, `Swift Decomposer: ${by["Swift Decomposer"].value}`);
+  assert.equal(by["Swift Decomposer"].harmful, true);
+
+  // 3. Bait is not a fertiliser. Unpriced, NOT zero — zero reads as "worthless".
+  assert.equal(by["Wormy Treat"].value, null);
+  assert.equal(by["Wormy Treat"].unpriced, true);
+
+  // 4. The power skills report a per-ACTIVATION gain and no per-day value at all.
+  for (const s of ["Sprout Surge", "Blend-tastic", "Root Rocket"]) {
+    assert.equal(by[s].value, null, `${s}: no invented daily rate`);
+    assert.ok(by[s].perActivation > 0, `${s}: but a real per-activation figure`);
+    assert.ok(by[s].plots > 1, `${s}: which is the extra plots one application now covers`);
+  }
+  // Sprout Surge covers every crop plot but the one you would have fertilised anyway.
+  assert.ok(Math.abs(by["Sprout Surge"].perActivation - oneMix * (by["Sprout Surge"].plots - 1)) < 1e-9);
+
+  // 5. And the per-day ones reach the UI, which reads boostValues — that is where the 0 was shown.
+  assert.ok(pd.boostValues.crops["Efficient Bin"], "Efficient Bin is in boostValues");
+  assert.equal(pd.boostValues.crops["Efficient Bin"].synergy, by["Efficient Bin"].value);
+  assert.ok(pd.boostValues.crops["Swift Decomposer"].synergy < 0, "including the harmful one");
+  // The per-activation ones must NOT be in that column: a guessed daily rate beside measured ones
+  // would corrupt it.
+  assert.equal(pd.boostValues.crops["Sprout Surge"], undefined, "power skills stay out of boostValues");
+  assert.ok(pd.compostSkills.some((r) => r.skill === "Sprout Surge" && r.perActivation > 0), "they travel separately");
 });

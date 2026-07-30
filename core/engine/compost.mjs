@@ -27,7 +27,16 @@ export function fertiliserValue(name, farm, p2pPrices, opts = {}) {
     // doubles the mix, which nothing in the app knew.
     const doubled = eff.doubledBy && findCollectible(farm, eff.doubledBy).length > 0;
     if (doubled) units *= 2;
-    return { value: units * price, units, product, doubled: !!doubled };
+    /*
+     * And the SKILL multiplier, which this ignored — FERTILISER_EFFECTS has carried
+     * `skillMultiplier: "Fruitful Bounty"` on Fruitful Blend since the data went in, and nothing
+     * read it. Anyone holding that skill had every Fruitful Blend, and therefore the Turbo
+     * Composter's whole output, valued at half. bumpkin.skills stores the LEVEL as a number, so
+     * presence is `> 0`, not `in`.
+     */
+    const skillDoubled = !!(eff.skillMultiplier && hasSkill(farm, eff.skillMultiplier));
+    if (skillDoubled) units *= 2;
+    return { value: units * price, units, product, doubled: !!doubled, skillDoubled };
   }
 
   if (eff.kind === "growth_mult") {
@@ -98,4 +107,118 @@ export function composterVerdicts(farm, p2pPrices, season, opts = {}) {
     .map((n) => composterVerdict(n, farm, p2pPrices, season, opts))
     .filter(Boolean)
     .sort((a, b) => b.netPerDay - a.netPerDay);
+}
+
+/** bumpkin.skills stores the current LEVEL as a number, never a presence flag. */
+function hasSkill(farm, name) {
+  return (Number(((farm && farm.bumpkin && farm.bumpkin.skills) || {})[name]) || 0) > 0;
+}
+
+/*
+ * What the COMPOST skill tree is worth.
+ *
+ * The whole tree valued at exactly 0, and for two unrelated reasons — worth separating, because
+ * only one of them was a missing model:
+ *
+ *   1. Most of the tree changes a composter's OUTPUT ("+5 Sprout Mix", "-10% compost time"). With
+ *      no fertiliser effect there was nothing to value; FERTILISER_EFFECTS and composterVerdict
+ *      supply it now, so these become ordinary per-day figures.
+ *   2. Three are POWER skills that change how a fertiliser is APPLIED ("Sprout Mix on all
+ *      plots"). Those have no per-day rate at all without a model of how often you activate them,
+ *      and inventing one would be worse than reporting the per-activation gain, which is exact.
+ *
+ * Every value here is CONDITIONAL on actually running the composter, and that is the point rather
+ * than a caveat: on a farm where a composter nets negative — which is all three on the reference
+ * farm — a skill that improves its output is worth nothing until you run it, and a skill that
+ * makes it FASTER is actively worse. Nothing is clamped to zero.
+ */
+const COMPOST_SKILL_OUTPUT = {
+  // "+N <item>" — more of one output per batch. Which composter is inferred from its recipe.
+  "Efficient Bin":  { addOutput: { "Sprout Mix": 5 } },
+  "Turbo Charged":  { addOutput: { "Fruitful Blend": 5 } },
+  "Premium Worms":  { addOutput: { "Rapid Root": 10 } },
+  "Wormy Treat":    { addOutput: { "Earthworm": 1 } },
+  // Speed: more batches a day, which cuts both ways.
+  "Swift Decomposer": { timeMult: 0.9 },
+};
+const COMPOST_SKILL_APPLY = {
+  "Sprout Surge": "Sprout Mix",
+  "Blend-tastic": "Fruitful Blend",
+  "Root Rocket":  "Rapid Root",
+};
+
+/**
+ * Per-skill valuation for the Compost tree. Returns one row per skill it can model, each saying
+ * what the figure is worth and what it depends on.
+ */
+export function compostSkillValues(farm, p2pPrices, season, opts = {}) {
+  const verdicts = {};
+  for (const v of composterVerdicts(farm, p2pPrices, season, opts)) verdicts[v.name] = v;
+  // Which composter produces a given item, so "+5 Sprout Mix" knows whose batch it lands in.
+  const producerOf = {};
+  for (const [cName, r] of Object.entries(COMPOST_RECIPES)) {
+    for (const item of Object.keys(r.outputs || {})) if (!producerOf[item]) producerOf[item] = cName;
+  }
+  const rows = [];
+
+  for (const [skill, def] of Object.entries(COMPOST_SKILL_OUTPUT)) {
+    const has = hasSkill(farm, skill);
+    if (def.addOutput) {
+      const [item, qty] = Object.entries(def.addOutput)[0];
+      const composter = producerOf[item];
+      const v = composter && verdicts[composter];
+      const fv = fertiliserValue(item, farm, p2pPrices, opts);
+      if (!v) { rows.push({ skill, has, value: null, unpriced: true, note: `no composter produces ${item}` }); continue; }
+      if (!fv) {
+        // Baits are fishing items, not fertilisers. Unpriced is the honest answer, not 0 —
+        // reporting 0 reads as "worthless" for something that does have a use.
+        rows.push({ skill, has, value: null, unpriced: true, composter: composter,
+          note: `${item} is fishing bait, not a fertiliser — no effect model, so no FLOWER figure` });
+        continue;
+      }
+      rows.push({
+        skill, has, composter, item, qty,
+        perBatch: fv.value * qty, value: fv.value * qty * v.batchesPerDay,
+        unpriced: !!fv.unpriced, approximate: !!fv.approximate,
+        // The condition, stated: this is only real if the composter runs, and running it is
+        // itself a loss here.
+        conditional: `pouze když ${composter} běží (ten teď nese ${v.netPerDay.toFixed(3)} FLOWER/den)`,
+        composterNetPerDay: v.netPerDay,
+      });
+    } else if (def.timeMult) {
+      /*
+       * Faster batches scale the composter's whole net, including a negative one. A speed skill on
+       * a loss-making composter increases the loss, and showing that is the point — the previous
+       * behaviour (0 for everything) hid it.
+       */
+      const parts = [];
+      for (const v of Object.values(verdicts)) parts.push({ composter: v.name, delta: v.netPerDay * (1 / def.timeMult - 1) });
+      const total = parts.reduce((s, x) => s + x.delta, 0);
+      rows.push({ skill, has: hasSkill(farm, skill), value: total, parts,
+        conditional: "pouze u composterů, které skutečně necháváš běžet",
+        harmful: total < 0 });
+    }
+  }
+
+  for (const [skill, item] of Object.entries(COMPOST_SKILL_APPLY)) {
+    const fv = fertiliserValue(item, farm, p2pPrices, opts);
+    const eff = FERTILISER_EFFECTS[item];
+    const cat = eff && eff.cat;
+    const plots = cat ? (getCapacityCount(cat, opts.capacity || {}) || 0) : 0;
+    const held = getCount(farm.inventory || {}, item);
+    rows.push({
+      skill, has: hasSkill(farm, skill), item, plots, held,
+      /*
+       * One activation fertilises every plot instead of one, so the gain is the extra plots. It is
+       * a PER-ACTIVATION figure, not per day: how often you press it is a player habit this app
+       * does not measure, and multiplying by a guessed frequency would turn an exact number into
+       * an invented one.
+       */
+      perActivation: fv && plots > 1 ? fv.value * (plots - 1) : 0,
+      value: null, perDay: false,
+      unpriced: !(fv && fv.value > 0),
+      conditional: `na jedno použití, ${plots} ${cat} plotů · potřebuje Sprout/Blend zásobu (máš ${held})`,
+    });
+  }
+  return rows;
 }
