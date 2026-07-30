@@ -1383,10 +1383,21 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         for (const plan of roadmapStartupPlans(settings, byName, catBoostsW)) {
           if (!scen.includes(plan.cat) && !scen.includes(plan.product)) continue;
           for (const x of (plan.picked || [])) {
-            const clone = byName[x.name];
-            if (!clone || clone.has || x.floor > maxP) continue;
+            const src = byName[x.name];
+            if (!src || src.has || x.floor > maxP) continue;
+            /*
+             * A SYNTHETIC clone carrying fixedMarginal, not the real one.
+             *
+             * Passing the real clone put the row in and the simulator threw it straight back out:
+             * roadmapItemValue prices it against the CURRENT farm, where the category is dead, so
+             * the marginal is 0 and `m.marginal > 0` drops it — the very reason these rows are
+             * missing from the buy path in the first place. The gain that matters is the one the
+             * scenario computes (theoretical, at max capacity), which is what x.gain already is.
+             */
             econ.push({ name: x.name, type: "Scenario", floor: x.floor, supply: 0,
-              boost: `${plan.label}: ${x.boost || ""}`.trim(), clone,
+              boost: `${plan.label}: ${x.boost || ""}`.trim(),
+              clone: { name: x.name, categories: [plan.cat], effects: [], fixedMarginal: x.gain,
+                has: false, isDisabled: false },
               scenarioCat: plan.cat });
           }
         }
