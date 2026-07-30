@@ -17359,22 +17359,16 @@
         } catch (e) {}
         shRows.push({ x, sh, cost, perDay, netTotal });
       }
-      // Only offer what actually pays back over one placement. The rest is reported as a count
-      // rather than as rows, so 'not worth it' is visible without six dead lines.
+      // Only what actually pays back over one placement. The ones that do not are simply not
+      // listed — a to-do list that spends lines telling you what NOT to do is noise, and this
+      // one had three such rows for every two real ones.
       const worth = shRows.filter((r) => r.netTotal != null && r.netTotal > 0 && r.x.kind === 'expired');
-      const notWorth = shRows.filter((r) => r.x.kind === 'expired' && !(r.netTotal != null && r.netTotal > 0));
       worth.sort((a, b) => (b.perDay || 0) - (a.perDay || 0));
       for (const r of worth) {
         const ing = Object.entries(r.sh.ingredients || {}).map(([k, v]) => `${v}x ${escHTML(k)}`).join(', ');
         rows.push({
           what: `Obnovit ${escHTML(r.x.name)}`, now: true, warn: true, gain: r.perDay, unit: null,
           note: `${escHTML(r.sh.effect)} — za ${r.sh.duration_d} dní vydělá ${roadmapFmtFlower(r.perDay * r.sh.duration_d)}, stojí ${roadmapFmtFlower(r.cost)}${ing ? ` (${ing})` : ''}, čistě +${roadmapFmtFlower(r.netTotal)}`,
-        });
-      }
-      if (notWorth.length) {
-        rows.push({
-          what: `${notWorth.length}x vypršelá svatyně se nevyplatí`, now: false, gain: null, unit: null,
-          note: `${notWorth.map((r) => escHTML(r.x.name).replace(' Shrine', '')).join(', ')} — buď nic nepřinesou (speed-only při tvé frekvenci přihlášení, nebo kategorie, kterou nemáš), nebo se cena za ${notWorth[0].sh.duration_d} dní nevrátí`,
         });
       }
       // A running one with little left, so a short remainder shows BEFORE it lapses.
