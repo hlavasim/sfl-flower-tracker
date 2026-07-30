@@ -986,6 +986,95 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       return out;
     }
 
+    /*
+     * "Co koupit, abych s tímhle vůbec mohl začít."
+     *
+     * The buy path answers "what next", which is only useful for things you already do. A category
+     * you do NOT run — greenhouse, chickens, crop machine, pets — never surfaces there, because a
+     * boost for it is worth nothing until the category itself is above water, so every such item
+     * sinks to the bottom as CONDITIONAL and the question "how do I start?" is never answered.
+     *
+     * This answers it directly: for each category that is idle or loss-making, find the cheapest set
+     * of unowned boosts that flips it POSITIVE, by adding them in best-value-per-FLOWER order and
+     * recomputing the category net after each one — the same synergy-aware recompute the buy path
+     * uses, so a set that claims to flip the category really does.
+     *
+     * Two honest outcomes besides a plan: a category can be structurally impossible to price (no
+     * capacity at all, e.g. no Greenhouse built — the app cannot buy you a building), and a category
+     * can be unflippable with anything on the market. Both are reported as such rather than omitted,
+     * because "nothing will fix this" is an answer and an empty row is not.
+     */
+    function roadmapStartupPlans(settings, byName, catBoostsW) {
+      const out = [];
+      const { capacity } = powerState;
+      const maxP = (settings.maxPrice && settings.maxPrice > 0) ? settings.maxPrice : Infinity;
+      const TROLL = 500000;
+      for (const [cat, def] of Object.entries(POWER_CATEGORIES)) {
+        if (!def || !def.quantifiable) continue;
+        if ((settings.excludeCats || []).indexOf(cat) >= 0) continue;
+        const owned = roadmapOwnedEffects(cat);
+        let nowNet = 0;
+        try { nowNet = roadmapCatNet(cat, owned, settings); } catch (e) { continue; }
+        if (nowNet > 0.0001) continue;                 // already earning — the buy path covers it
+
+        // No capacity at all is a different problem: you need the building or the animals first,
+        // and no marketplace item substitutes for that.
+        let count = 0;
+        try { count = getCapacityCount(cat, capacity) || 0; } catch (e) { count = 0; }
+
+        // Candidates: unowned, priced, boost-bearing items that touch this category.
+        const cands = [];
+        for (const c of (catBoostsW[cat] || [])) {
+          if (c.has || c.isDisabled) continue;
+          if (!(c.floor > 0) || c.floor > TROLL || c.floor > maxP) continue;
+          cands.push(c);
+        }
+
+        const picked = []; let net = nowNet; let cost = 0;
+        const restore = [];
+        if (count > 0) {
+          for (let guard = 0; guard < 40 && net <= 0 && cands.length; guard++) {
+            // Value each remaining candidate by what it adds to THIS category right now, then take
+            // the best per FLOWER. Recomputed every round, so stacking effects are not double-counted.
+            let bi = -1, bestRatio = 0, bestGain = 0;
+            for (let i = 0; i < cands.length; i++) {
+              const c = cands[i];
+              c.has = true;
+              let after = net;
+              try { after = roadmapCatNet(cat, roadmapOwnedEffects(cat), settings); } catch (e) {}
+              c.has = false;
+              const gain = after - net;
+              if (!(gain > 0)) continue;
+              const ratio = gain / c.floor;
+              if (ratio > bestRatio) { bi = i; bestRatio = ratio; bestGain = gain; }
+            }
+            if (bi < 0) break;                          // nothing left that helps
+            const c = cands.splice(bi, 1)[0];
+            c.has = true; restore.push(c);
+            picked.push({ name: c.name, floor: c.floor, gain: bestGain, boost: c.boost || "" });
+            cost += c.floor;
+            try { net = roadmapCatNet(cat, roadmapOwnedEffects(cat), settings); } catch (e) {}
+          }
+        }
+        for (const c of restore) c.has = false;         // never leak state into the buy path
+
+        out.push({
+          cat, label: def.label || cat, count, nowNet,
+          picked, cost, net,
+          // Why it is not actionable, when it is not.
+          blocked: count === 0 ? "capacity" : (net <= 0 ? "unflippable" : null),
+          flips: net > 0 && picked.length > 0,
+        });
+      }
+      // Cheapest route to a working category first — that is the one worth starting.
+      out.sort((a, b) => {
+        if (a.flips !== b.flips) return a.flips ? -1 : 1;
+        if (a.flips) return a.cost - b.cost;
+        return (a.blocked === "capacity" ? 1 : 0) - (b.blocked === "capacity" ? 1 : 0);
+      });
+      return out;
+    }
+
     // ── flowers.html 17378-17431: roadmapNodeCandidates ──
     /*
      * NODE_PRICES is keyed by farm key and LABELLED for display ("Stone", "Gold"), but
@@ -1349,7 +1438,7 @@ export {
   roadmapItemValue, roadmapItemSituational, roadmapSimulate, _setRoadmapState,
   // Exported for testing: the node actions the buy path folds in. Its escalation has to match
   // nodeAcq's, and a test that re-derives the rule instead of calling this proves nothing.
-  roadmapNodeCandidates, roadmapSkillCandidates, roadmapAscensionCandidates,
+  roadmapNodeCandidates, roadmapSkillCandidates, roadmapAscensionCandidates, roadmapStartupPlans,
   ROADMAP_EFF_HKEY, roadmapComputeEfficiency,
   getRoadmapSettings, roadmapOwnedEffects, roadmapCatBreakdown, roadmapCatNet,
   roadmapMiningChain, roadmapCatMix, ROADMAP_MINING_CATS, calcBoostValue, cmGetSeedRestockCount,
