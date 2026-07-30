@@ -17491,34 +17491,39 @@
         return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
       } catch { return []; }
     }
-    window._roadmapToggleScenario = function (cat) {
-      const on = new Set(_roadmapScenarios());
-      if (on.has(cat)) on.delete(cat); else on.add(cat);
-      try { localStorage.setItem(LS_ROADMAP_SCENARIOS, JSON.stringify([...on])); } catch {}
+    window._roadmapToggleScenario = function (key) {
+      /*
+       * RADIO, not checkboxes — one counterfactual at a time. Stacking several scenarios summed
+       * enabling purchases of unrelated activities into one cumulative column, which answers a
+       * question nobody asked. Clicking the active one returns to Realita; so does the Realita
+       * button itself (empty key).
+       */
+      const cur = _roadmapScenarios();
+      const next = (key && !(cur.length === 1 && cur[0] === key)) ? [key] : [];
+      try { localStorage.setItem(LS_ROADMAP_SCENARIOS, JSON.stringify(next)); } catch {}
       // Re-fetch, not re-render: the scenario changes the simulation input.
       renderRoadmapContent();
     };
     /*
-     * The toggle row. "Reality" is the farm as it stands and is always on — it is shown as a fixed
-     * chip rather than a switch so the row reads as "reality PLUS what you turn on".
+     * The switch row. "Realita" is the farm as it stands — selected whenever no scenario is.
      */
     function roadmapScenarioBarHtml() {
       const rows = (_roadmapServer && _roadmapServer.startup) || [];
       if (!rows.length) return "";
-      const on = new Set(_roadmapScenarios());
+      const sel = _roadmapScenarios();
       const fl = (v) => `${v >= 0 ? "+" : "\u2212"}${Math.abs(v).toFixed(2)}`;
       let h = `<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:8px">`;
-      h += `<span style="font-size:0.5rem;color:var(--text-dim)">Po\u010d\u00edtat s:</span>`;
-      h += `<span class="dash-toggle-btn on" style="cursor:default" title="Co farma d\u011bl\u00e1 te\u010f. V\u017edy zapnut\u00e9.">\u2611 Realita</span>`;
+      h += `<span style="font-size:0.5rem;color:var(--text-dim)">Počítat s:</span>`;
+      h += `<button class="dash-toggle-btn ${sel.length ? "" : "on"}" onclick='_roadmapToggleScenario("")' title="Co farma dělá teď, bez scénářů.">${sel.length ? "\u25cb" : "\u25c9"} Realita</button>`;
       for (const r of rows) {
         // Only offer what can actually be started. unpriced / no room are facts no purchase fixes.
         if (!r.flips) continue;
         // Per PRODUCT where the plan is per product (Rice, not GREENHOUSE) — the product name is
         // the toggle key the server matches, the category only when there is no crop choice.
         const key = r.product || r.cat;
-        const isOn = on.has(key);
-        const tip = `${r.label}: te\u010f ${fl(r.nowNet)} FLOWER/den, po nákupech za ${roadmapFmtFlower(r.cost)} FLOWER ${fl(r.net)}/den. Zapnut\u00edm se ty n\u00e1kupy p\u0159idaj\u00ed do t\u00e9hle tabulky a do kumulativn\u00edho sou\u010dtu.`;
-        h += `<button class="dash-toggle-btn ${isOn ? "on" : ""}" onclick='_roadmapToggleScenario("${key}")' title="${escHTML(tip)}">${isOn ? "\u2611" : "\u2610"} \u{1F331} ${escHTML(r.label)} <span style="opacity:0.6">${fl(r.net)}/d</span></button>`;
+        const isOn = sel.includes(key);
+        const tip = `${r.label}: teď ${fl(r.nowNet)} FLOWER/den, po nákupech za ${roadmapFmtFlower(r.cost)} FLOWER ${fl(r.net)}/den. Přepnutím se ty nákupy přidají do téhle tabulky a do kumulativního součtu.`;
+        h += `<button class="dash-toggle-btn ${isOn ? "on" : ""}" onclick='_roadmapToggleScenario("${key}")' title="${escHTML(tip)}">${isOn ? "\u25c9" : "\u25cb"} \u{1F331} ${escHTML(r.label)} <span style="opacity:0.6">${fl(r.net)}/d</span></button>`;
       }
       const blocked = rows.filter((r) => !r.flips);
       if (blocked.length) {
