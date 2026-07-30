@@ -167,6 +167,27 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
     // the farm's plots by descending net-per-plot under each product's 2-restock/day seed cap (so you
     // typically grow a few crops before a restock, exactly as the game forces). A boost that lifts a
     // crop into the profitable mix is captured as a real improvement here. Returns { gross, cost }.
+    /*
+     * Which products fill the plots, and what that grosses and costs.
+     *
+     * Two bases. The default is unchanged: only what is in season RIGHT NOW competes, which is
+     * the honest answer to "what am I earning this week".
+     *
+     * `seasonBasis: "annual"` — set by calcBoostValue, the PERMANENT-value path — answers a
+     * different question, because a boost is bought once and kept. The in-season gate was wrong
+     * there in both directions: a boost tied to Banana (summer + autumn) scored 100% for half a
+     * year and 0% for the other half, and the 13 single-season products scored 100% for a
+     * quarter of it. Up to a 4x overstatement on the exact number a buy decision is made from.
+     *
+     * It is annualised by running the selection ONCE PER SEASON and averaging the four results.
+     * Not by weighting each product by its share of the year and selecting once — that was the
+     * first attempt and it was worse than the bug: a weighted Corn never beats year-round Wheat
+     * for a plot, so every Corn-specific boost collapsed to exactly 0 instead of a quarter of
+     * its value. In Corn's own season Corn does win, and that value is real.
+     *
+     * Cost of doing it properly is near zero: roadmapPerPlot does not depend on the season, so
+     * it still runs once per product. Only the fill — a sort and a loop — repeats four times.
+     */
     function roadmapCatMix(cat, effects, settings) {
       const plots = getCapacityCount(cat, powerState.capacity);
       if (!(plots > 0)) return { gross: 0, cost: 0 };
@@ -175,18 +196,33 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       const _exM = (settings.excludeCats || []);
       for (const p of Object.keys(table)) {
         if (_exM.indexOf(p) >= 0) continue;
-        if ((cat === "crops" || cat === "fruits") && !roadmapInSeason(p)) continue;
         const pp = roadmapPerPlot(cat, p, effects, settings); if (!pp) continue;
-        rows.push({ netPerPlot: pp.gpp - pp.cpp, grossPerPlot: pp.gpp, costPerPlot: pp.cpp, maxPlots: pp.maxPlots });
+        rows.push({ p, netPerPlot: pp.gpp - pp.cpp, grossPerPlot: pp.gpp, costPerPlot: pp.cpp, maxPlots: pp.maxPlots });
       }
-      rows.sort((a, b) => b.netPerPlot - a.netPerPlot);
-      let rem = plots, gross = 0, cost = 0;
-      for (const r of rows) {
-        if (rem <= 1e-9 || !(r.netPerPlot > 0)) break;
-        const take = Math.min(rem, r.maxPlots); if (take <= 0) continue;
-        gross += r.grossPerPlot * take; cost += r.costPerPlot * take; rem -= take;
+      // Fill the plots with the best available, richest first. `allow` decides what is available.
+      const fill = (allow) => {
+        const rs = (allow ? rows.filter((r) => allow(r.p)) : rows).slice().sort((a, b) => b.netPerPlot - a.netPerPlot);
+        let rem = plots, gross = 0, cost = 0;
+        for (const r of rs) {
+          if (rem <= 1e-9 || !(r.netPerPlot > 0)) break;
+          const take = Math.min(rem, r.maxPlots); if (take <= 0) continue;
+          gross += r.grossPerPlot * take; cost += r.costPerPlot * take; rem -= take;
+        }
+        return { gross, cost };
+      };
+      const seasonal = (cat === "crops" || cat === "fruits");
+      if (!seasonal) return fill(null);
+      if (settings.seasonBasis !== "annual") return fill((p) => roadmapInSeason(p));
+      const names = Object.keys(SEASON_CROPS);
+      let g = 0, c = 0;
+      for (const sName of names) {
+        const list = SEASON_CROPS[sName] || [];
+        // A product in no season table at all is year-round (greenhouse items reaching here).
+        const inAny = (p) => names.some((x) => (SEASON_CROPS[x] || []).indexOf(p) >= 0);
+        const r = fill((p) => (list.indexOf(p) >= 0) || !inAny(p));
+        g += r.gross; c += r.cost;
       }
-      return { gross, cost };
+      return { gross: g / names.length, cost: c / names.length };
     }
 
     // Tools are NEVER free: a pickaxe eats real Wood/Iron you could have sold, so mining a resource costs
@@ -433,9 +469,10 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
        * wishlist's efficiency toggle shows. Only the explicit opt-in changes behaviour;
        * every existing caller keeps the theoretical figure it had.
        */
+      // seasonBasis "annual": bought once and kept, so valued over the whole year.
       const _s = effMode === "measured"
-        ? getRoadmapSettings(powerState.roadmapSettingsRaw)
-        : Object.assign({}, getRoadmapSettings(powerState.roadmapSettingsRaw), { effMode: "theoretical", effOverrides: {} });
+        ? Object.assign({}, getRoadmapSettings(powerState.roadmapSettingsRaw), { seasonBasis: "annual" })
+        : Object.assign({}, getRoadmapSettings(powerState.roadmapSettingsRaw), { effMode: "theoretical", effOverrides: {}, seasonBasis: "annual" });
       const ownedEff = allCatBoosts.filter(b => b.has && !b.isDisabled && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId)).concat(activeShrineEffects(powerState.farm, catId)); // deviation 4
       let synergy, solo;
       if (ROADMAP_MINING_CATS.indexOf(catId) >= 0) {
@@ -953,5 +990,5 @@ export {
   roadmapItemValue, roadmapItemSituational, roadmapSimulate, _setRoadmapState,
   ROADMAP_EFF_HKEY, roadmapComputeEfficiency,
   getRoadmapSettings, roadmapOwnedEffects, roadmapCatBreakdown, roadmapCatNet,
-  roadmapMiningChain, ROADMAP_MINING_CATS, calcBoostValue, cmGetSeedRestockCount,
+  roadmapMiningChain, roadmapCatMix, ROADMAP_MINING_CATS, calcBoostValue, cmGetSeedRestockCount,
 };
