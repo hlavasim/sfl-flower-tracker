@@ -132,12 +132,27 @@ function hasSkill(farm, name) {
  * farm — a skill that improves its output is worth nothing until you run it, and a skill that
  * makes it FASTER is actively worse. Nothing is clamped to zero.
  */
+/*
+ * Verified against events/landExpansion/startComposter.ts getCompostAmount, the only place a
+ * composter's produce count is decided:
+ *
+ *   - the three "+N" skills are each gated to ONE building (`&& building === "Compost Bin"` and so
+ *     on), which is what makes inferring the building from the output item safe here;
+ *   - Composting Revamp has NO building check, so its +N lands on whichever composter you run;
+ *   - Composting Overhaul does not appear in getCompostAmount AT ALL. Its buff table here reads
+ *     "-5 fertilisers" and the source applies no such penalty to the produce count — it only adds
+ *     worms (composterBait.ts). So no penalty is modelled: inventing one the game does not apply
+ *     would be worse than the gap. It stays worms-only, i.e. unpriced.
+ */
 const COMPOST_SKILL_OUTPUT = {
-  // "+N <item>" — more of one output per batch. Which composter is inferred from its recipe.
+  // "+N <item>" — more of one output per batch. The composter is inferred from its recipe, which is
+  // sound because the game gates each of these to exactly that building.
   "Efficient Bin":  { addOutput: { "Sprout Mix": 5 } },
   "Turbo Charged":  { addOutput: { "Fruitful Blend": 5 } },
   "Premium Worms":  { addOutput: { "Rapid Root": 10 } },
   "Wormy Treat":    { addOutput: { "Earthworm": 1 } },
+  // Any composter — so it is worth whichever one you actually run, never the sum of all three.
+  "Composting Revamp": { allComposters: 5 },
   // Speed: more batches a day, which cuts both ways.
   "Swift Decomposer": { timeMult: 0.9 },
 };
@@ -185,6 +200,27 @@ export function compostSkillValues(farm, p2pPrices, season, opts = {}) {
         conditional: `pouze když ${composter} běží (ten teď nese ${v.netPerDay.toFixed(3)} FLOWER/den)`,
         composterNetPerDay: v.netPerDay,
       });
+    } else if (def.allComposters) {
+      /*
+       * +N fertilisers on ANY composter. Worth the best one you would actually run, NOT the sum
+       * across all three: you run one batch at a time, and adding them up would count a single
+       * skill three times.
+       */
+      let best = null;
+      for (const v of Object.values(verdicts)) {
+        const out0 = (v.outputs || [])[0];
+        if (!out0) continue;
+        const fv = fertiliserValue(out0.item, farm, p2pPrices, opts);
+        if (!fv || !(fv.value > 0)) continue;
+        const val = def.allComposters * fv.value * v.batchesPerDay;
+        if (!best || val > best.value) best = { value: val, composter: v.name, item: out0.item, netPerDay: v.netPerDay };
+      }
+      rows.push(best
+        ? { skill, has, composter: best.composter, item: best.item, qty: def.allComposters, value: best.value,
+            perBatch: best.value / (verdicts[best.composter].batchesPerDay || 1),
+            conditional: `platí na kterýkoliv composter — počítáno pro ${best.composter} (nejlepší, net ${best.netPerDay.toFixed(3)} FLOWER/den); nesčítá se přes všechny, batch běží po jednom`,
+            composterNetPerDay: best.netPerDay }
+        : { skill, has, value: null, unpriced: true, note: "žádné ocenitelné hnojivo, ke kterému přidat" });
     } else if (def.timeMult) {
       /*
        * Faster batches scale the composter's whole net, including a negative one. A speed skill on
