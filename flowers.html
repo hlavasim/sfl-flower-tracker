@@ -17500,7 +17500,28 @@
           + ` <span style="color:${col(r.nowNet)};font-size:0.5rem">${fl(r.nowNet)} ${sflIcon("0.65em")}/den</span></div>`;
         if (r.flips) {
           h += `<div style="font-size:0.52rem;color:var(--green);margin-top:2px">Koupit za <b>${roadmapFmtFlower(r.cost)}</b> ${sflIcon("0.65em")} \u2192 <b>${fl(r.net)}</b> ${sflIcon("0.65em")}/den</div>`;
-          h += `<div style="font-size:0.5rem;color:var(--text-secondary);line-height:1.7">${r.picked.map((x) => `${escHTML(x.name)} <span style="color:var(--text-dim)">${roadmapFmtFlower(x.floor)}</span> <span style="color:var(--green)">+${x.gain.toFixed(3)}</span>`).join(" \u00b7 ")}</div>`;
+          /*
+           * The MICRO-ROADMAP: where the category stops losing money, step by step.
+           *
+           * Endpoints alone ("\u22120.31/day becomes +0.31/day for 192 FLOWER") hide which single item
+           * crosses zero \u2014 and that is the one you would buy first if you only bought one. So every
+           * step shows the running net, and the crossing is marked.
+           */
+          h += `<table style="width:100%;border-collapse:collapse;font-size:0.5rem;margin-top:4px">`;
+          h += `<tr style="color:var(--text-dim);font-size:0.45rem;text-align:left"><th style="padding:1px 4px">#</th><th style="padding:1px 4px">koupit</th><th style="padding:1px 4px;text-align:right">cena</th><th style="padding:1px 4px;text-align:right">celkem</th><th style="padding:1px 4px;text-align:right">${sflIcon("0.6em")}/den pot\u00e9</th></tr>`;
+          h += `<tr><td style="padding:1px 4px;color:var(--text-dim)">0</td><td style="padding:1px 4px;color:var(--text-dim)">te\u010f</td><td></td><td></td><td style="padding:1px 4px;text-align:right;color:${col(r.nowNet)}">${fl(r.nowNet)}</td></tr>`;
+          for (let i = 0; i < r.picked.length; i++) {
+            const x = r.picked[i];
+            const after = x.netAfter == null ? null : x.netAfter;
+            h += `<tr${x.crosses ? ` style="background:rgba(46,160,67,0.10)"` : ""}>
+              <td style="padding:1px 4px;color:var(--text-dim)">${i + 1}</td>
+              <td style="padding:1px 4px">${escHTML(x.name)}${x.crosses ? ` <span style="color:var(--green);font-size:0.44rem">\u2190 tady p\u0159ekl\u00e1p\u00ed do plusu</span>` : ""}</td>
+              <td style="padding:1px 4px;text-align:right;color:var(--text-dim)">${roadmapFmtFlower(x.floor)}</td>
+              <td style="padding:1px 4px;text-align:right;color:var(--text-dim)">${x.cumCost == null ? "" : roadmapFmtFlower(x.cumCost)}</td>
+              <td style="padding:1px 4px;text-align:right;color:${col(after == null ? 0 : after)};font-weight:bold">${after == null ? "\u2014" : fl(after)}</td>
+            </tr>`;
+          }
+          h += `</table>`;
         } else {
           h += `<div style="font-size:0.5rem;color:var(--yellow);margin-top:2px">${escHTML(WHY[r.blocked] || r.blocked || "")}</div>`;
         }
