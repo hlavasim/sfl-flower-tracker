@@ -17348,30 +17348,57 @@
         });
       }
       /*
-       * Shrines. A 7-day consumable, so lapsing is silent and expensive: one expired while this
-       * page was being written and the only symptom was every mining marginal dropping 25%.
-       * Badger (trees+stone) and Mole (iron/gold/crimstone) are both speed 0.75, which is a
-       * quarter off the recovery of the categories that pay best.
+       * Shrines, VALUED. The first version listed every lapsed shrine with no figure, which
+       * offered Hound (pet XP) and Bantam (chickens — this farm has none) as if they mattered.
        *
-       * Not valued in FLOWER: the gain is a speed multiplier on a category, and turning that
-       * into a per-day figure means re-running the whole chain with and without it. The row
-       * says WHAT it does and lets that stand rather than inventing a number.
+       * The numbers are not recomputed here. The SHRINES page already models this properly:
+       * _shrineIngredientCostSfl for the craft cost, _shrineMarginalSflPerDay for the
+       * efficiency-adjusted gain at your login frequency, and net over the full duration. Those
+       * are the same helpers, called with the same power context — building a second opinion is
+       * exactly what produced this codebase's worst bugs.
+       *
+       * Speed-only shrines are usually zero at a typical login interval; yield-flat ones
+       * (Legendary, Bear, Stag, Moth) are usually the ones worth rebuilding. That is why the
+       * value has to be shown rather than assumed.
        */
       const shrines = ps.shrines || [];
-      const lapsed = shrines.filter((x) => x.kind === 'expired');
-      const running = shrines.filter((x) => x.kind === 'active');
-      for (const x of lapsed) {
-        const ing = Object.entries(x.ingredients || {}).map(([k, v]) => `${v}x ${escHTML(k)}`).join(', ');
+      const shRows = [];
+      for (const x of shrines) {
+        if (x.kind === 'never') continue;                       // nothing to renew
+        const sh = (typeof SHRINE_DATA !== 'undefined') && SHRINE_DATA[x.name];
+        if (!sh) continue;
+        let cost = null, perDay = null, netTotal = null;
+        try {
+          cost = _shrineIngredientCostSfl(sh.ingredients, ps.p2pPrices || {}, ps.p2pPrices || {});
+          const m = _shrineMarginalSflPerDay(sh, ps.capacity, ps.p2pPrices || {}, getOwnedEffects(sh.catId), null);
+          perDay = m && isFinite(m.sflPerDay) ? m.sflPerDay : null;
+          if (perDay != null && cost != null) netTotal = perDay * sh.duration_d - cost;
+        } catch (e) {}
+        shRows.push({ x, sh, cost, perDay, netTotal });
+      }
+      // Only offer what actually pays back over one placement. The rest is reported as a count
+      // rather than as rows, so 'not worth it' is visible without six dead lines.
+      const worth = shRows.filter((r) => r.netTotal != null && r.netTotal > 0 && r.x.kind === 'expired');
+      const notWorth = shRows.filter((r) => r.x.kind === 'expired' && !(r.netTotal != null && r.netTotal > 0));
+      worth.sort((a, b) => (b.perDay || 0) - (a.perDay || 0));
+      for (const r of worth) {
+        const ing = Object.entries(r.sh.ingredients || {}).map(([k, v]) => `${v}x ${escHTML(k)}`).join(', ');
         rows.push({
-          what: `Obnovit ${escHTML(x.name)}`, now: true, warn: true, gain: null, unit: null,
-          note: `vypršela — ${escHTML(x.effect)}. Platí ${x.durationDays} dní${ing ? `, stojí ${ing}` : ''}`,
+          what: `Obnovit ${escHTML(r.x.name)}`, now: true, warn: true, gain: r.perDay, unit: null,
+          note: `${escHTML(r.sh.effect)} — za ${r.sh.duration_d} dní vydělá ${roadmapFmtFlower(r.perDay * r.sh.duration_d)}, stojí ${roadmapFmtFlower(r.cost)}${ing ? ` (${ing})` : ''}, čistě +${roadmapFmtFlower(r.netTotal)}`,
         });
       }
-      // Running ones are listed too, so a short remainder is visible BEFORE it lapses.
-      for (const x of running.filter((x) => x.hoursLeft != null && x.hoursLeft < 48)) {
+      if (notWorth.length) {
         rows.push({
-          what: `${escHTML(x.name)} dobíhá`, now: false, gain: null, unit: null,
-          note: `zbývá ${x.hoursLeft < 1 ? 'necelá hodina' : x.hoursLeft.toFixed(0) + ' h'} — ${escHTML(x.effect)}`,
+          what: `${notWorth.length}x vypršelá svatyně se nevyplatí`, now: false, gain: null, unit: null,
+          note: `${notWorth.map((r) => escHTML(r.x.name).replace(' Shrine', '')).join(', ')} — buď nic nepřinesou (speed-only při tvé frekvenci přihlášení, nebo kategorie, kterou nemáš), nebo se cena za ${notWorth[0].sh.duration_d} dní nevrátí`,
+        });
+      }
+      // A running one with little left, so a short remainder shows BEFORE it lapses.
+      for (const r of shRows.filter((r) => r.x.kind === 'active' && r.x.hoursLeft != null && r.x.hoursLeft < 48)) {
+        rows.push({
+          what: `${escHTML(r.x.name)} dobíhá`, now: false, gain: r.perDay, unit: null,
+          note: `zbývá ${r.x.hoursLeft < 1 ? 'necelá hodina' : r.x.hoursLeft.toFixed(0) + ' h'} — ${escHTML(r.sh.effect)}`,
         });
       }
       // 3. Restock. Already computed by section=power (buildQueueData); daysUntilEmpty null = never.
