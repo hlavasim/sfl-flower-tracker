@@ -642,7 +642,15 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
         bonus, gainPerDay: bonus * cyclesPerDay * price * eff,
         // The game needs four of the lower tier in hand; below that it is not yet actionable.
         have, need: 4, ready: have >= 4,
-        matSfl: prodCost["Obsidian"] > 0 ? c.obsidian * prodCost["Obsidian"] : null,
+        /*
+         * Obsidian AND coins, because the coins are the larger half by an order of magnitude:
+         * a gold T3 merge is 20 obsidian (~34 FLOWER at production cost) plus 350k coins
+         * (~330 FLOWER at ~1061 c/FLOWER). Serving the obsidian alone made every merge look
+         * roughly ten times cheaper than it is, which is not a basis a page can render.
+         */
+        coinSfl: xr.coinsPerSFL > 0 ? c.coins / xr.coinsPerSFL : null,
+        matSfl: (prodCost["Obsidian"] > 0 && xr.coinsPerSFL > 0)
+          ? c.obsidian * prodCost["Obsidian"] + c.coins / xr.coinsPerSFL : null,
       });
     }
     return { mergeKey, cat, tiers, merges: out };
@@ -668,7 +676,15 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
     // The real escalation input: how many of this node the farm has BOUGHT.
     const bought = Math.floor(Number((farm.farmActivity || {})[`${node} Bought`]) || 0);
     const buy = [];
-    for (let i = 0; i < 3; i++) {
+    /*
+     * Deep enough for a purchase PLAN, not just the next purchase. The NODES page walks a greedy
+     * order over these until ROI passes its cap, and with three entries it would have had to
+     * re-derive the escalation itself — which is exactly the second engine being removed. Eight
+     * is past the point where escalation pushes any node beyond a two-year payback on a real
+     * farm; the page stops and says so if it ever runs out, rather than silently truncating.
+     */
+    const BUY_DEPTH = 8;
+    for (let i = 0; i < BUY_DEPTH; i++) {
       // buyResource.ts pays in SUNSTONE, and sunstone is itself bought with obsidian at
       // a fixed rate — exchangeObsidian.ts: OBSIDIAN_PRICE = 3, one sunstone per 3
       // obsidian, on click. So obsidian is the real currency of the buy path, which makes

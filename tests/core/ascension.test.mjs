@@ -680,3 +680,37 @@ test("the measurement is served, and it is the SAME ratio the per-node profit us
   // Not vacuous: the fixture measures crimstone/oil/obsidian, so at least one node is measured.
   assert.ok(Object.values(out.nodeAcq.perType).some((d) => d.effMeasured), "some node is measured on this fixture");
 });
+
+test("merge cost is obsidian AND coins, and the coin half is never negligible", () => {
+  /*
+   * The served merge cost was obsidian only, so every merge came out cheaper than it is — a gold
+   * T3 wants 350k coins on top of its 20 obsidian. How the two halves compare depends on what
+   * obsidian costs to produce (14.4 FLOWER on this fixture, well under 2 on some real farms), so
+   * neither half can be called dominant in general; what CAN be pinned is that dropping the
+   * coins shifts the cost enough to change decisions.
+   */
+  const cps = powerData.exchangeRates.coinsPerSFL;
+  assert.ok(cps > 0, "the fixture has a coin rate");
+  for (const t of out.nodeAcq.merge) {
+    for (const x of t.merges) {
+      assert.ok(Math.abs(x.coinSfl - x.coins / cps) < 1e-9, `${t.mergeKey} T${x.tier}: coins priced at the exchange rate`);
+      const obsHalf = x.obsidian * out.nodeAcq.prodCost.Obsidian;
+      assert.ok(Math.abs(x.matSfl - (obsHalf + x.coinSfl)) < 1e-9, `${t.mergeKey} T${x.tier}: matSfl is both halves`);
+      assert.ok(x.coinSfl / x.matSfl > 0.1, `${t.mergeKey} T${x.tier}: coins are >10% of the cost, so omitting them mattered (${(100 * x.coinSfl / x.matSfl).toFixed(0)}%)`);
+    }
+  }
+});
+
+test("the buy list is deep enough to plan with, and escalates linearly", () => {
+  // The NODES page walks a greedy purchase order over these. With three entries it had to
+  // re-derive the escalation, which is the duplicate engine being removed.
+  for (const [node, d] of Object.entries(out.nodeAcq.perType)) {
+    assert.equal(d.buy.length, 8, `${node}: eight purchases served`);
+    const step = d.buy[1].sunstones - d.buy[0].sunstones;
+    for (let i = 1; i < d.buy.length; i++) {
+      assert.equal(d.buy[i].sunstones - d.buy[i - 1].sunstones, step, `${node}: purchase ${i} escalates by the same increment`);
+      assert.equal(d.buy[i].obsidian, d.buy[i].sunstones * out.nodeAcq.obsidianPerSunstone, `${node}: obsidian follows the sunstone count`);
+    }
+    assert.ok(step > 0, `${node}: each purchase costs more than the last`);
+  }
+});
