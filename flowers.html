@@ -16988,7 +16988,7 @@
       const prod = (_roadmapServer && _roadmapServer.currentProd) || { total: 0, breakdown: [] };
       const total = startIncome > 0 ? startIncome : (prod.total || 0);
       const bd = (prod.breakdown || []).filter(b => b.sfl > 0.01).sort((a, b) => b.sfl - a.sfl);
-      const catColor = { trees:"#63c74d", stone:"#9a8060", iron:"#c4a882", gold:"#FFD700", crimstone:"#FF6B6B", crops:"#30D158", fruits:"#FF69B4", greenhouse:"#5DADE2", chickens:"#FFD60A", cows:"#C8A2C8", sheep:"#B07CD8", bees:"#FFD700", fishing:"#5DADE2", obsidian:"#8b6914", flowers:"#FF69B4", oil:"#8b6914" };
+      const catColor = { trees:"#63c74d", stone:"#9a8060", iron:"#c4a882", gold:"#FFD700", crimstone:"#FF6B6B", crops:"#30D158", fruits:"#FF69B4", greenhouse:"#5DADE2", chickens:"#FFD60A", cows:"#C8A2C8", sheep:"#B07CD8", bees:"#FFD700", fishing:"#5DADE2", obsidian:"#8b6914", flowers:"#FF69B4", oil:"#8b6914", pets:"#F5A9BC" };
       const lbl = (c) => (POWER_CATEGORIES[c] && POWER_CATEGORIES[c].label) || c;
       let bar = "", legend = "";
       for (const b of bd) { const pct = total > 0 ? Math.max(1, b.sfl / total * 100) : 0; const c = catColor[b.cat] || "#8b6914"; bar += `<div style="width:${pct}%;background:${c}" title="${lbl(b.cat)} ${roadmapFmtFlower(b.sfl)}/d"></div>`; legend += `<span style="white-space:nowrap;margin-right:12px"><span style="display:inline-block;width:8px;height:8px;background:${c};border-radius:2px;vertical-align:middle"></span> ${escHTML(lbl(b.cat))} ${roadmapFmtFlower(b.sfl)}</span>`; }
@@ -17513,9 +17513,12 @@
       for (const r of rows) {
         // Only offer what can actually be started. unpriced / no room are facts no purchase fixes.
         if (!r.flips) continue;
-        const isOn = on.has(r.cat);
+        // Per PRODUCT where the plan is per product (Rice, not GREENHOUSE) — the product name is
+        // the toggle key the server matches, the category only when there is no crop choice.
+        const key = r.product || r.cat;
+        const isOn = on.has(key);
         const tip = `${r.label}: te\u010f ${fl(r.nowNet)} FLOWER/den, po nákupech za ${roadmapFmtFlower(r.cost)} FLOWER ${fl(r.net)}/den. Zapnut\u00edm se ty n\u00e1kupy p\u0159idaj\u00ed do t\u00e9hle tabulky a do kumulativn\u00edho sou\u010dtu.`;
-        h += `<button class="dash-toggle-btn ${isOn ? "on" : ""}" onclick='_roadmapToggleScenario("${r.cat}")' title="${escHTML(tip)}">${isOn ? "\u2611" : "\u2610"} \u{1F331} ${escHTML(r.label)} <span style="opacity:0.6">${fl(r.net)}/d</span></button>`;
+        h += `<button class="dash-toggle-btn ${isOn ? "on" : ""}" onclick='_roadmapToggleScenario("${key}")' title="${escHTML(tip)}">${isOn ? "\u2611" : "\u2610"} \u{1F331} ${escHTML(r.label)} <span style="opacity:0.6">${fl(r.net)}/d</span></button>`;
       }
       const blocked = rows.filter((r) => !r.flips);
       if (blocked.length) {

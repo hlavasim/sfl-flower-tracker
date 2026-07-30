@@ -1156,82 +1156,108 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
           if (atMax > count) { capRestore = capacity[cat]; capacity[cat] = atMax; }
         }
 
-        // Candidates: unowned, priced, boost-bearing items that touch this category.
-        const cands = [];
-        for (const c of (catBoostsW[cat] || [])) {
-          if (c.has || c.isDisabled) continue;
-          if (!(c.floor > 0) || c.floor > TROLL || c.floor > maxP) continue;
-          cands.push(c);
-        }
-
-        const picked = []; let net = nowNet; let cost = 0;
-        const restore = [];
-        if (atMax > 0) {
-          for (let guard = 0; guard < 40 && net <= 0 && cands.length; guard++) {
-            // Value each remaining candidate by what it adds to THIS category right now, then take
-            // the best per FLOWER. Recomputed every round, so stacking effects are not double-counted.
-            let bi = -1, bestRatio = 0, bestGain = 0;
-            for (let i = 0; i < cands.length; i++) {
-              const c = cands[i];
-              c.has = true;
-              let after = net;
-              try { after = roadmapAnyCatNet(cat, effectsFor(cat), settings); } catch (e) {}
-              c.has = false;
-              const gain = after - net;
-              if (!(gain > 0)) continue;
-              const ratio = gain / c.floor;
-              if (ratio > bestRatio) { bi = i; bestRatio = ratio; bestGain = gain; }
-            }
-            if (bi < 0) break;                          // nothing left that helps
-            const c = cands.splice(bi, 1)[0];
-            c.has = true; restore.push(c);
-            const netBefore = net;
-            const step = { name: c.name, floor: c.floor, gain: bestGain, boost: c.boost || "",
-              netBefore, type: c.type || null };
-            picked.push(step);
-            cost += c.floor;
-            try { net = roadmapAnyCatNet(cat, effectsFor(cat), settings); } catch (e) {}
-            /*
-             * The running net after this purchase, so a consumer can show WHERE the category stops
-             * losing money instead of only the endpoints. "-0.31/day becomes +0.31/day for 192
-             * FLOWER" hides which single item crosses zero, which is the one you would buy first if
-             * you only bought one.
-             */
-            step.netAfter = net;
-            step.cumCost = cost;
-            step.crosses = step.netBefore <= 0 && net > 0;
-          }
-        }
-        for (const c of restore) c.has = false;         // never leak state into the buy path
-        if (capRestore != null) capacity[cat] = capRestore;   // and never leak the inflated capacity
-
         /*
-         * "Cannot be flipped" and "cannot be PRICED" are different answers and looked identical.
-         * Flowers are the case: the category produces ~8 units a day and no flower has a price in
-         * the p2p feed at all, so its FLOWER figure is structurally 0 and no boost can ever move it.
-         * Reporting that as unflippable blames the farm for a gap in the price data.
+         * Per PRODUCT where the category is a crop choice ("Greenhouse není správně, protože to by
+         * mělo být spíš Rice, Olive, Grape"). Starting the greenhouse is not one decision: Rice,
+         * Olive and Grape each have their own economics and their own cheapest set of boosts, and a
+         * single "GREENHOUSE" plan answers a question nobody asks. Categories without a crop choice
+         * make one pass with prod = null and behave exactly as before.
          */
+        let prodList = PLOT_CATS[cat]
+          ? (() => { try { return roadmapCatProductNets(cat, owned, settings).map((p) => p.product); } catch (e) { return []; } })()
+          : [null];
+        if (!prodList.length) prodList = [null];
         const summary = ((powerState.categories || {}).catSummaries || {})[cat] || null;
-        let produces = 0, grosses = 0;
-        try {
-          const ab = applyBoosts(cat, getDefaultProduct(cat), capacity, owned);
-          produces = (ab && ab.unitsPerDay) || 0;
-          grosses = unitToSfl(produces, getPriceProduct(cat, getDefaultProduct(cat)), roadmapPrices(settings)) || 0;
-        } catch (e) {}
-        const unpriced = produces > 0 && !(grosses > 0);
 
-        out.push({
-          cat, label: def.label || cat, count, nowNet, unpriced, unitsPerDay: produces,
-          // What the figures assume you would run, and where that ceiling comes from.
-          atMax, capacity: animalCap, roomBlocked,
-          // Which product the figures assume, when the category has a choice.
-          // Every product, best first, both as it stands now and after the plan's purchases.
-          productsBefore: (() => { try { return roadmapCatProductNets(cat, owned, settings); } catch (e) { return []; } })(),
-          picked, cost, net,
-          // Why it is not actionable, when it is not.
-          blocked: unpriced ? "unpriced" : roomBlocked ? "no-room" : (atMax <= 0 ? "capacity" : (net <= 0 ? "unflippable" : null)),
-          flips: net > 0 && picked.length > 0,
-        });
+        for (const prod of prodList) {
+          // The number this pass optimizes: the chosen product's plots when there is a choice,
+          // the category's best otherwise. The greedy loop values candidates against the same target.
+          const netFor = (eff) => {
+            if (!prod) return roadmapAnyCatNet(cat, eff, settings);
+            const a = roadmapPerPlot(cat, prod, eff, settings);
+            return a ? (a.gpp - a.cpp) * Math.min(a.plots, a.maxPlots) : 0;
+          };
+          const nowNetP = prod ? netFor(owned) : nowNet;
+
+          // Candidates: unowned, priced, boost-bearing items that touch this category.
+          const cands = [];
+          for (const c of (catBoostsW[cat] || [])) {
+            if (c.has || c.isDisabled) continue;
+            if (!(c.floor > 0) || c.floor > TROLL || c.floor > maxP) continue;
+            cands.push(c);
+          }
+
+          const picked = []; let net = nowNetP; let cost = 0;
+          const restore = [];
+          if (atMax > 0) {
+            for (let guard = 0; guard < 40 && net <= 0 && cands.length; guard++) {
+              // Value each remaining candidate by what it adds to THIS category right now, then take
+              // the best per FLOWER. Recomputed every round, so stacking effects are not double-counted.
+              let bi = -1, bestRatio = 0, bestGain = 0;
+              for (let i = 0; i < cands.length; i++) {
+                const c = cands[i];
+                c.has = true;
+                let after = net;
+                try { after = netFor(effectsFor(cat)); } catch (e) {}
+                c.has = false;
+                const gain = after - net;
+                if (!(gain > 0)) continue;
+                const ratio = gain / c.floor;
+                if (ratio > bestRatio) { bi = i; bestRatio = ratio; bestGain = gain; }
+              }
+              if (bi < 0) break;                          // nothing left that helps
+              const c = cands.splice(bi, 1)[0];
+              c.has = true; restore.push(c);
+              const netBefore = net;
+              const step = { name: c.name, floor: c.floor, gain: bestGain, boost: c.boost || "",
+                netBefore, type: c.type || null };
+              picked.push(step);
+              cost += c.floor;
+              try { net = netFor(effectsFor(cat)); } catch (e) {}
+              /*
+               * The running net after this purchase, so a consumer can show WHERE the category stops
+               * losing money instead of only the endpoints. "-0.31/day becomes +0.31/day for 192
+               * FLOWER" hides which single item crosses zero, which is the one you would buy first if
+               * you only bought one.
+               */
+              step.netAfter = net;
+              step.cumCost = cost;
+              step.crosses = step.netBefore <= 0 && net > 0;
+            }
+          }
+          for (const c of restore) c.has = false;         // never leak state into the buy path
+
+          /*
+           * "Cannot be flipped" and "cannot be PRICED" are different answers and looked identical.
+           * Flowers are the case: the category produces ~8 units a day and no flower has a price in
+           * the p2p feed at all, so its FLOWER figure is structurally 0 and no boost can ever move it.
+           * Reporting that as unflippable blames the farm for a gap in the price data.
+           */
+          let produces = 0, grosses = 0;
+          try {
+            const pr = prod || getDefaultProduct(cat);
+            const ab = applyBoosts(cat, pr, capacity, owned);
+            produces = (ab && ab.unitsPerDay) || 0;
+            grosses = unitToSfl(produces, getPriceProduct(cat, pr), roadmapPrices(settings)) || 0;
+          } catch (e) {}
+          const unpriced = produces > 0 && !(grosses > 0);
+
+          out.push({
+            cat, product: prod || null,
+            label: prod ? prod.toUpperCase() : (def.label || cat),
+            count, nowNet: nowNetP, unpriced, unitsPerDay: produces,
+            // What the figures assume you would run, and where that ceiling comes from.
+            atMax, capacity: animalCap, roomBlocked,
+            // Which product the figures assume, when the category has a choice.
+            // Every product, best first, both as it stands now and after the plan's purchases.
+            productsBefore: (() => { try { return roadmapCatProductNets(cat, owned, settings); } catch (e) { return []; } })(),
+            picked, cost, net,
+            // Why it is not actionable, when it is not.
+            blocked: unpriced ? "unpriced" : roomBlocked ? "no-room" : (atMax <= 0 ? "capacity" : (net <= 0 ? "unflippable" : null)),
+            flips: net > 0 && picked.length > 0,
+          });
+        }
+        if (capRestore != null) capacity[cat] = capRestore;   // and never leak the inflated capacity
       }
       // Cheapest route to a working category first — that is the one worth starting.
       out.sort((a, b) => {
@@ -1380,11 +1406,19 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
        */
       const scen = settings.scenarios || [];
       if (scen.length) {
+        /*
+         * Plans are per PRODUCT now (Rice / Olive / Grape, not one GREENHOUSE), and a category-wide
+         * toggle — or two products of the same greenhouse — selects plans whose cheapest sets
+         * overlap. The same item must not enter the buy path twice, so first plan wins.
+         */
+        const scenSeen = new Set();
         for (const plan of roadmapStartupPlans(settings, byName, catBoostsW)) {
           if (!scen.includes(plan.cat) && !scen.includes(plan.product)) continue;
           for (const x of (plan.picked || [])) {
             const src = byName[x.name];
             if (!src || src.has || x.floor > maxP) continue;
+            if (scenSeen.has(x.name)) continue;
+            scenSeen.add(x.name);
             /*
              * A SYNTHETIC clone carrying fixedMarginal, not the real one.
              *
