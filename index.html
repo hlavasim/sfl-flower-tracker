@@ -6954,7 +6954,9 @@
         }
       }
       _pricesLoading.delete(key);
-      if (cachedFarmData) main();
+      // Repaint only if a render actually went out WITHOUT prices. Unconditional repaints
+      // re-ran every compute section the page needs (the roadmap paid for power+roadmap twice).
+      if (cachedFarmData && _pricesMissed) { _pricesMissed = false; main(); }
     }
 
     // Synchronous accessor: PRICES(rates).marketValue[name] once loaded. Returns null (not
@@ -6965,7 +6967,28 @@
       const cached = _pricesCache.get(key);
       if (cached) return cached;
       if (!_pricesErrKeys.has(key) && !_pricesLoading.has(key)) _fetchPrices(rates);
+      /*
+       * Record that SOMETHING rendered without prices. The arrival rerender used to fire
+       * unconditionally, so every page paid for a full main() repaint when the map landed —
+       * including pages that never read a price. Now it only repaints when a render actually
+       * consumed a null map, which is the only case where the first paint was stale.
+       */
+      _pricesMissed = true;
       return null;
+    }
+    let _pricesMissed = false;
+    /*
+     * Await the price map instead of rendering without it. A page that renders once with real
+     * prices is strictly better than one that renders wrong and repaints — the repaint re-runs
+     * every compute section the page needs, not just the prices.
+     */
+    async function _pricesReady(rates) {
+      const key = _pricesKey(rates);
+      if (_pricesCache.has(key) || _pricesErrKeys.has(key)) return;
+      // _fetchPrices dedupes on _pricesLoading, so calling it while one is in flight is safe;
+      // poll for the result rather than restructuring its retry loop into a promise.
+      _fetchPrices(rates);
+      for (let i = 0; i < 200 && _pricesLoading.has(key); i++) await new Promise((r) => setTimeout(r, 50));
     }
 
     // ── Price-trace cache (/api/compute?section=prices&explain=1) — task-TRACE4 ──
@@ -17613,6 +17636,21 @@
         document.getElementById("roadmap-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load: ${escHTML(err.message)}</p></div>`;
         return;
       }
+
+      /*
+       * Wait for the price map BEFORE rendering, so this page renders once.
+       *
+       * roadmapItemCost reads PRICES(exchangeRates), which returns null until its fetch resolves
+       * and triggers that fetch as a side effect. So the roadmap used to render with no prices,
+       * the map would land, and the arrival rerender would call main() — which re-ran
+       * section=power AND section=roadmap from scratch. Measured: renderRoadmap twice, 5.4 s
+       * apart, compute sequence `power, roadmap, prices, ascension, power, roadmap`. The first
+       * pass was also simply WRONG (obsidian/day 0), which is why the flash was visible.
+       *
+       * The key needs powerState.exchangeRates, so this can only happen after buildPowerState —
+       * which is exactly here.
+       */
+      await _pricesReady(powerState.exchangeRates);
 
       // History slice for the eff computation — fetched ONCE; section=roadmap recomputes
       // eff + production + simulation server-side on every settings change.
