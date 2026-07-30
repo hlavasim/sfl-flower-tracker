@@ -15877,6 +15877,75 @@
     // Global state for power page
     let powerState = null;
 
+    /*
+     * "Vyplati se to?" for the two repeatable activities the app can price but never showed:
+     * digging and the composters.
+     *
+     * Both were computed and served (section=power -> digging / composters) and nothing rendered
+     * them, so the work was invisible. These are NOT to-do rows \u2014 the owner cut those from the
+     * periodic section as useless \u2014 they are verdicts on whether an activity earns back its
+     * inputs, which is the question that was actually asked of the composters.
+     *
+     * Everything here is READ from powerState. Nothing is recomputed.
+     */
+    function _powerActivityVerdictHtml() {
+      const ps = powerState || {};
+      const dg = ps.digging || null, comps = ps.composters || [];
+      if (!dg && !comps.length) return "";
+      const fl = (v, d) => v == null ? "\u2014" : `${v >= 0 ? "+" : "\u2212"}${Math.abs(v).toFixed(d == null ? 3 : d)}`;
+      const col = (v) => v == null ? "var(--text-dim)" : v > 0 ? "var(--green)" : v < 0 ? "var(--red)" : "var(--text-dim)";
+      let h = `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:16px">`;
+      h += `<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">\u26cf\ufe0f VYPLAT\u00cd SE? \u2014 kop\u00e1n\u00ed a composterty</div>`;
+      h += `<div style="font-size:0.47rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Opakovan\u00e9 \u010dinnosti, kter\u00e9 spot\u0159ebov\u00e1vaj\u00ed vstupy \u2014 tady je jen odpov\u011bd, jestli se vr\u00e1t\u00ed. \u010c\u00edsla chod\u00ed hotov\u00e1 z API, nepo\u010d\u00edtaj\u00ed se tu podruh\u00e9.</div>`;
+
+      if (dg) {
+        if (!dg.measured) {
+          // No sample means no answer. A guess from a treasure table would be an invented number.
+          h += `<div style="font-size:0.52rem;color:var(--text-dim)">\u{1F3DC}\ufe0f <b>Kop\u00e1n\u00ed</b> \u2014 je\u0161t\u011b jsi nekopal, tak\u017ee nen\u00ed z \u010deho m\u011b\u0159it.</div>`;
+        } else {
+          const pd = dg.perDig || {};
+          /*
+           * Two nets, never merged. Treasures sell for COINS and this app treats coins as free
+           * above 10k, so the coin conversion is an assumption \u2014 the gap between the two figures
+           * IS its weight, and showing only one would hide that.
+           */
+          h += `<div style="font-size:0.55rem;margin-bottom:3px">\u{1F3DC}\ufe0f <b>Kop\u00e1n\u00ed</b> <span style="color:var(--text-dim);font-size:0.47rem">nam\u011b\u0159eno z ${dg.digs} d\u011br, kter\u00e9 jsi vykopal \u2014 ne z modelu pravd\u011bpodobnosti</span></div>`;
+          h += `<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:0.52rem;margin-bottom:4px">
+            <span>na d\u00edru s coiny: <b style="color:${col(pd.netWithCoins)}">${fl(pd.netWithCoins, 4)}</b> ${sflIcon("0.7em")}</span>
+            <span>bez coin\u016f (jen trh): <b style="color:${col(pd.netMarketOnly)}">${fl(pd.netMarketOnly, 4)}</b> ${sflIcon("0.7em")}</span>
+            <span style="color:var(--text-dim)">cel\u00fd site: ${dg.coins.toFixed(0)} coin\u016f \u00b7 lopaty ${dg.costSfl.toFixed(2)} ${sflIcon("0.7em")}</span>
+            ${dg.remaining > 0 ? `<span style="color:var(--sunpetal)">zb\u00fdv\u00e1 ${dg.remaining} d\u011br</span>` : ""}
+          </div>`;
+          h += `<div style="font-size:0.45rem;color:var(--text-dim);margin-bottom:4px;line-height:1.6">${escHTML(dg.coinAssumption || "")}</div>`;
+          const top = (dg.items || []).slice(0, 6).map(i => `${escHTML(i.item)} \u00d7${i.qty}${i.sellCoins ? ` <span style="opacity:0.6">${i.sellCoins.toFixed(0)}c</span>` : ""}`).join(" \u00b7 ");
+          if (top) h += `<div style="font-size:0.47rem;color:var(--text-secondary);margin-bottom:3px">nejcenn\u011bj\u0161\u00ed n\u00e1lezy: ${top}</div>`;
+          // Unpriced is not zero \u2014 an item with no sell price and no market quote is unknown, and
+          // calling it worthless is the mistake this app keeps having to undo elsewhere.
+          if ((dg.unpriced || []).length) h += `<div style="font-size:0.45rem;color:var(--yellow)">\u26a0 bez ceny (nezapo\u010d\u00edt\u00e1no, ne nulov\u00e9): ${dg.unpriced.map(escHTML).join(", ")}</div>`;
+        }
+      }
+
+      if (comps.length) {
+        h += `<div style="margin-top:10px;font-size:0.55rem;margin-bottom:3px">\u{1F41B} <b>Composterty</b> <span style="color:var(--text-dim);font-size:0.47rem">net za den p\u0159i nep\u0159eru\u0161ovan\u00e9m b\u011bhu, vstupy podle sez\u00f3ny</span></div>`;
+        h += `<table class="node-res-table" style="font-size:0.5rem"><tr><th>COMPOSTER</th><th style="text-align:right">D\u00c1VEK/DEN</th><th style="text-align:right">HNOJIVO ${sflIcon("0.7em")}/D</th><th style="text-align:right">VSTUPY ${sflIcon("0.7em")}/D</th><th style="text-align:right">NET ${sflIcon("0.7em")}/D</th></tr>`;
+        for (const c of comps) {
+          h += `<tr>
+            <td>${escHTML(c.name)}${c.built ? "" : ` <span style="color:var(--text-dim);font-size:0.45rem">nem\u00e1\u0161</span>`}${c.unpriced ? ` <span style="color:var(--yellow)" title="\u010c\u00e1st vstup\u016f nebo v\u00fdstup\u016f nem\u00e1 cenu \u2014 net je proto jen doln\u00ed hranice.">\u26a0</span>` : ""}</td>
+            <td style="text-align:right;color:var(--text-dim)">${c.batchesPerDay}</td>
+            <td style="text-align:right">${c.grossPerDay.toFixed(3)}</td>
+            <td style="text-align:right;color:var(--text-dim)">${c.costPerDay.toFixed(3)}</td>
+            <td style="text-align:right;color:${col(c.netPerDay)};font-weight:bold">${fl(c.netPerDay, 3)}</td>
+          </tr>`;
+        }
+        h += `</table>`;
+        const anyPos = comps.some(c => c.netPerDay > 0);
+        h += `<div style="font-size:0.45rem;color:${anyPos ? "var(--text-dim)" : "var(--red)"};margin-top:4px;line-height:1.6">${anyPos
+          ? "Kladn\u00fd net = hnojivo, kter\u00e9 vyrob\u00ed\u0161, m\u00e1 v\u011bt\u0161\u00ed cenu ne\u017e plodiny, kter\u00e9 to se\u017ere."
+          : "V\u0161echny composterty jsou v m\u00ednusu \u2014 plodiny na vstupu maj\u00ed v\u011bt\u0161\u00ed cenu ne\u017e hnojivo na v\u00fdstupu. Proto i skill, kter\u00fd je zrychl\u00ed (Swift Decomposer), vych\u00e1z\u00ed z\u00e1porn\u011b \u2014 ztr\u00e1c\u00ed\u0161 rychleji."}</div>`;
+      }
+      h += `</div>`;
+      return h;
+    }
     async function renderPower(data) {
       const app = document.getElementById("app");
       const { inventory, farm } = data;
@@ -17928,7 +17997,7 @@
         const marg = `+${roadmapFmtFlower(r.value)}` + (isPlan ? "" : ` <span style="color:var(--text-dim)">if used</span>`);
         h += `<tr style="border-top:1px solid #222">
           <td style="padding:3px 6px;color:var(--text-dim)">${rank}</td>
-          <td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(r.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.name)} ${typeBadge(r.type)} ${stBadge}</td>
+          <td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(r.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.name)} ${typeBadge(r.type)} ${stBadge}${r.skillTakeNow ? ` <span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1f3a2a;color:#7fe0a0" title="Skill pointy na tohle už máš — můžeš vzít hned. Cena je i tak spočtená z XP, které ten point stál: držet point ho nedělá zdarma, stejně jako držet FLOWER nedělá NFT zdarma.">MůžEŠ HNED</span>` : ""}</td>
           <td style="padding:3px 6px;color:var(--text-dim);max-width:240px">${boostTxt}</td>
           <td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(r.floor)}</td>
           <td style="padding:3px 6px;text-align:right;color:var(--green)">${marg}</td>
@@ -19129,6 +19198,9 @@
           <td style="padding:3px 6px;border:1px solid var(--border-dark)">${effectsDesc || "<em>none</em>"}</td>
         </tr>`;
       }
+
+      // Two repeatable activities the app could price but never showed an answer for.
+      content += _powerActivityVerdictHtml();
 
       content += `</tbody></table></div></div>`;
 
