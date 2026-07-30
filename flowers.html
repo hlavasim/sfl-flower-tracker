@@ -17989,7 +17989,8 @@
         <span style="font-size:0.5rem;color:var(--text-dim)">Zobrazit:</span>
         ${Object.keys(rowTypeMeta).filter(t => _rmCounts[t]).map(t => {
           const on = !_rmHidden.has(t);
-          return `<button class="dash-toggle-btn ${on ? "on" : ""}" onclick="_roadmapToggleType('${t}')" title="${escHTML(rowTypeMeta[t].full)}">${on ? "\u2611" : "\u2610"} ${escHTML(rowTypeMeta[t].full)} <span style="opacity:0.6">${_rmCounts[t]}</span></button>`;
+          // The emoji goes on the button too, so the filter row doubles as the icon legend.
+          return `<button class="dash-toggle-btn ${on ? "on" : ""}" onclick="_roadmapToggleType('${t}')" title="${escHTML(rowTypeMeta[t].full)}">${on ? "\u2611" : "\u2610"} ${rowTypeMeta[t].icon} ${escHTML(rowTypeMeta[t].full)} <span style="opacity:0.6">${_rmCounts[t]}</span></button>`;
         }).join("")}
         ${_rmHidden.size ? `<span style="font-size:0.47rem;color:var(--sunpetal)">skryto ${(sim.ranked || []).length - _rmShown} z ${(sim.ranked || []).length} \u2014 po\u0159ad\u00ed, \u03a3 Cost i ETA se po\u010d\u00edtaj\u00ed z cel\u00e9ho seznamu</span>` : ""}
       </div>`;
