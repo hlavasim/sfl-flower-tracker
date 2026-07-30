@@ -3931,6 +3931,9 @@
     }
 
     // ── Node purchase prices (Sunstone cost: base + purchased × increase) ──
+    // UNUSED since the NODES page started reading nodeAcq from compute?section=ascension.
+    // The live copy is core/sections/ascension.mjs NODE_BUY. Left in place rather than deleted; if
+    // anything is ever wired back to it, it will silently disagree with every other page.
     const NODE_PRICES = {
       trees:       { base: 4,  increase: 3,  farmKey: "trees",       catId: "trees",    label: "Tree" },
       stones:      { base: 4,  increase: 3,  farmKey: "stones",      catId: "stone",    label: "Stone" },
@@ -3964,6 +3967,9 @@
     };
 
     // ── Base node counts per island type (default before purchases) ──
+    // UNUSED since the NODES page started reading nodeAcq from compute?section=ascension.
+    // The live copy is core/engine/roadmap.mjs (node counts come from the farm itself now). Left in place rather than deleted; if
+    // anything is ever wired back to it, it will silently disagree with every other page.
     const BASE_NODE_COUNTS = {
       basic:          { crops:31, trees:9,  stones:7,  iron:4,  gold:2, crimstones:0, oilReserves:0, lavaPits:0, fruitPatches:0, flowers:0 },
       spring:         { crops:45, trees:18, stones:15, iron:9,  gold:6, crimstones:2, oilReserves:0, lavaPits:0, fruitPatches:11, flowers:3 },
@@ -3972,6 +3978,9 @@
     };
 
     // ── Merge costs (4×t1→t2, 4×t2→t3) ──
+    // UNUSED since the NODES page started reading nodeAcq from compute?section=ascension.
+    // The live copy is core/engine/roadmap.mjs MERGE_COSTS, served via nodeAcq.merge. Left in place rather than deleted; if
+    // anything is ever wired back to it, it will silently disagree with every other page.
     const MERGE_COSTS = {
       trees:  { t2: { obsidian:3,  coins:25000  }, t3: { obsidian:5,  coins:50000  }, yieldBonus: { t2:0.5, t3:2.5 } },
       stones: { t2: { obsidian:5,  coins:50000  }, t3: { obsidian:10, coins:100000 }, yieldBonus: { t2:0.5, t3:2.5 } },
@@ -19337,6 +19346,9 @@
     //  NODES INVESTMENT ADVISOR
     // ═══════════════════════════════════════
 
+    // UNUSED since the NODES page started reading nodeAcq from compute?section=ascension.
+    // The live copy is core/engine/roadmap.mjs, served as nodeAcq.perType[node].tiers. Left in place rather than deleted; if
+    // anything is ever wired back to it, it will silently disagree with every other page.
     function countNodeTiers(resourceObj) {
       let t1 = 0, t2 = 0, t3 = 0;
       for (const node of Object.values(resourceObj || {})) {
@@ -20510,12 +20522,15 @@
          * what else it hands you. The split is shown beside it as context for when the
          * rest of the bundle is genuinely wanted.
          */
-        const exObs = ex ? ex.totalObsidian : null, buObs = bu ? bu.obsidian : null;
-        const obsWin = exObs == null ? "buy" : buObs == null ? "expand" : (exObs <= buObs ? "expand" : "buy");
-        // An unpriced expand bag is only a lower bound, so it cannot claim a win.
-        const exMat = ex && !ex.totalMatUnpriced ? ex.totalMatSfl : null;
-        const buMat = bu ? bu.matSfl : null;
-        const matWin = exMat == null ? (buMat == null ? null : "buy") : buMat == null ? "expand" : (exMat <= buMat ? "expand" : "buy");
+        /*
+         * The verdict is DECIDED in core (nodeAcq.perType[].verdict) and only read here. It was
+         * computed in this render, which made it another engine purely by accident of where it
+         * lived — and meant this panel could disagree with the rest of the page about which side
+         * wins. Obsidian decides, because it gates both paths; the material comparison is a
+         * caveat, and an expand bag we cannot fully price is a lower bound that cannot claim a win.
+         */
+        const v = d.verdict || {};
+        const { exObs = null, buObs = null, obsWin, matWin = null, exMat = null, buMat = null } = v;
         const mark = (side, who) => side === who ? `<span style="color:${WIN}">✓</span> ` : "";
         const col = (side, who) => side === who ? `color:${WIN};font-weight:bold` : "";
         const dim = "color:var(--text-dim);font-size:0.5rem";
@@ -20528,7 +20543,7 @@
         let verdict, vcol = "var(--text-dim)";
         if (!ex) { verdict = "jen koupit (žádná expanze v plánu)"; }
         else if (obsWin === matWin) {
-          const saved = obsWin === "expand" ? (buObs - exObs) : (exObs - buObs);
+          const saved = v.obsSaved; // served, not re-differenced here
           verdict = `${obsWin === "expand" ? "EXPANDOVAT" : "KOUPIT"}${saved > 0 ? ` — o ${kf(saved)} obsidianu méně` : ""}`;
           vcol = WIN;
         } else {
@@ -20594,545 +20609,118 @@
       html += `<div id="nodes-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Calculating investments...</div></div></div>`;
       app.innerHTML = html;
 
-      // ── Fetch farm history for efficiency analysis (fire early, await later) ──
-      const historyPromise = (async () => {
-        try {
-          const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
-          const today = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-          const baseUrl = `/api/farm-history?farm=${FARM_ID}&from=${weekAgo}&to=${today}&limit=1000`;
-          const r = await fetch(baseUrl);
-          if (!r.ok) return null;
-          const data = await r.json();
-          let allSnaps = data.snapshots || [];
-          if (data.total > 1000 && allSnaps.length >= 1000) {
-            try {
-              const r2 = await fetch(baseUrl + "&offset=1000");
-              if (r2.ok) { const d2 = await r2.json(); allSnaps = allSnaps.concat(d2.snapshots || []); }
-            } catch {}
-          }
-          return allSnaps;
-        } catch { return null; }
-      })();
-
-      // Upstream state — MIGRATED: one compute?section=power call replaces the page's
-      // FOURTH copy of the nfts/prices/exchange fetch + rate math + boost assembly.
-      // boostItems are filtered to owned (the page never built unowned ones here);
-      // superseded items stay INCLUDED, matching this page's original behaviour (it
-      // never ran disabled-by processing — power's inert disabled_by meta-effects and
-      // isDisabled flags don't change any applyBoosts result).
-      let p2pPrices = {}, exchangeRates = { coinsPerSFL: 320, gemsPerSFL: 0 }, boostItems = [];
-      try {
-        const payload = await _fetchCompute(
-          `/api/compute?farm=${FARM_ID}&section=power&products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}`);
-        const d = payload.data || {};
-        p2pPrices = d.p2pPrices || {};
-        exchangeRates = d.exchangeRates || exchangeRates;
-        boostItems = (d.boostItems || []).filter(b => b.has).map(b => ({ name: b.name, has: true, effects: b.effects }));
-      } catch (err) {
-        document.getElementById("nodes-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load: ${escHTML(err.message)}</p></div>`;
+      /*
+       * ONE SOURCE. Everything below is READ from compute?section=ascension (nodeAcq): what a
+       * node earns, what the next one costs, the measured efficiency, tier counts, merge gains
+       * and the expand-vs-buy verdict.
+       *
+       * This page used to compute all of it a second time — calcMarginalForProduct /
+       * getMarginalNetSfl re-ran the whole boost stack, two MERGE_COSTS loops re-derived merge
+       * gains, getNodeTiers re-counted tiers, and a local dig-session pass produced a SECOND
+       * efficiency ratio. Three consequences, all of them visible:
+       *
+       *   - the ratio was applied TWICE (once inside the marginal, again as "REAL = theo × eff"),
+       *     so every "real" income and ROI on this page was scaled by efficiency squared;
+       *   - purchase prices escalated off the OWNED count instead of the game's
+       *     farmActivity["<Node> Bought"], overstating them by up to 15x (Crop Plot: 9 sunstones
+       *     actual, 139 shown);
+       *   - the same gold node came out unprofitable here while the roadmap and the ascension
+       *     plan called it profitable.
+       *
+       * So the numbers on this page MOVED, deliberately, and they now agree with the other two.
+       */
+      const acq = await _fetchNodeAcq();
+      if (!acq || !acq.perType) {
+        document.getElementById("nodes-content").innerHTML = `<div class="error-screen pixel-panel pixel-font">
+          <p>Nepodařilo se načíst výpočet nodů.</p>
+          <div style="font-size:0.5rem;color:var(--text-secondary);line-height:1.6;margin-top:6px">Tahle stránka už nic nepočítá sama — všechna čísla chodí hotová z API (compute?section=ascension), aby nemohla nesouhlasit s roadmapou a ascension plánem. Bez API tu proto není co ukázat. Zkus obnovit stránku.</div>
+        </div>`;
         return;
       }
-      const wardrobe = farm.wardrobe || {};
-      const skills = farm.bumpkin?.skills || {};
 
-      // Flatten owned effects per category
-      function getOwnedEffects(catId) {
-        const out = [];
-        for (const b of boostItems) {
-          for (const e of b.effects) {
-            if (e.cat === catId) out.push(e);
-          }
-        }
-        return out;
-      }
-
-      // ── Farm capacity & stock mods ──
-      const capacity = detectFarmCapacity(farm);
-      const stockMods = detectStockModifiers(farm);
-      const season = (farm.season?.season || "").toLowerCase();
-      const savedProducts = getSavedPowerProducts();
       const islandType = (farm.island?.type || "basic").toLowerCase();
-
-      // ── Derive Oil price (same as power page) ──
-      const oilEffects = getOwnedEffects("oil");
-      const oilBoosted = applyBoosts("oil", "Oil", capacity, oilEffects);
-      const oilToolInfo = calcToolCostPerDay("oil", capacity, exchangeRates, p2pPrices, stockMods);
-      if (oilBoosted.unitsPerDay > 0 && oilToolInfo.costPerDay > 0) {
-        p2pPrices["Oil"] = oilToolInfo.costPerDay / oilBoosted.unitsPerDay;
-      } else if (oilBoosted.unitsPerDay > 0) {
-        p2pPrices["Oil"] = 0;
-      }
-
-      // ── Compute obsidian production cost ──
-      const lavaCostMult = getOwnedEffects("obsidian")
-        .filter(e => e.type === "lava_cost_reduction")
-        .reduce((acc, e) => acc * (1 - e.value), 1);
-      const lavaInfo = calcLavaPitCostPerDay(capacity, p2pPrices, season, lavaCostMult);
-      const obsResult = applyBoosts("obsidian", "Obsidian", capacity, getOwnedEffects("obsidian"));
-      let obsidianCostSfl = p2pPrices["Obsidian"] || 0; // fallback
-      if (obsResult.unitsPerDay > 0) {
-        obsidianCostSfl = lavaInfo.costPerDay / obsResult.unitsPerDay;
-      }
-      const sunstoneCostSfl = obsidianCostSfl * 3;
-
-      // Player resources
       const playerObsidian = parseFloat(inventory["Obsidian"]) || 0;
       const playerSunstones = parseFloat(inventory["Sunstone"]) || 0;
       const playerCoins = farm.coins || 0;
+      const obsidianSfl = (acq.prodCost || {}).Obsidian || 0;
+      const obsPerSun = acq.obsidianPerSunstone || 3;
+      const sunstoneCostSfl = obsidianSfl * obsPerSun;
+      const effMeta = (acq.eff && acq.eff.meta) || null;
+      const effDataAvailable = !!(effMeta && effMeta.available);
 
-      // ── Restock cost per consumed seed/tool (amortized gem cost) ──
-      // 1 restock = gemCost gems, refills effectiveStock items.
-      // Cost per item consumed = (gemCost / gemsPerSFL) / effectiveStock
-      function restockCostPerUnit(seedOrTool, mode) {
-        if (exchangeRates.gemsPerSFL <= 0) return 0;
-        const gemCost = mode === "seeds" ? RESTOCK_GEM_COSTS.seeds
-                      : mode === "tools" ? RESTOCK_GEM_COSTS.tools
-                      : RESTOCK_GEM_COSTS.both;
-        const stock = getEffectiveStock(seedOrTool, stockMods);
-        if (stock <= 0) return 0;
-        return (gemCost / exchangeRates.gemsPerSFL) / stock;
-      }
+      // The served escalation rule: the k-th further purchase of this node costs this many
+      // sunstones (game: RESOURCE_NODE_PRICES, counted off farmActivity["<Node> Bought"]).
+      const _sun = (r, k) => r.base + (r.bought + k) * r.inc;
+      const _sunSfl = (sun) => sun * obsPerSun * obsidianSfl;
 
-      // ── Compute marginal net SFL/day for 1 extra node (single product) ──
-      function calcMarginalForProduct(catId, product, farmKey, ownedEffects) {
-        const priceProduct = getPriceProduct(catId, product);
-        const n = getCapacityCount(catId, capacity);
-        const useCap = n > 0 ? capacity : (() => { const c = { ...capacity }; c[farmKey] = 1; return c; })();
-        const useN = n > 0 ? n : 1;
+      // Merge keys are the farm's resource keys; the served per-node figures are keyed by the
+      // game's node names.
+      const mergeNodeName = { trees: "Tree", stones: "Stone Rock", iron: "Iron Rock", gold: "Gold Rock" };
 
-        const boosted = applyBoosts(catId, product, useCap, ownedEffects);
-        const grossPerNode = unitToSfl(boosted.unitsPerDay, priceProduct, p2pPrices) / useN;
-
-        let costPerNode = 0;
-
-        if (catId === "obsidian") {
-          const c = n > 0 ? lavaInfo : calcLavaPitCostPerDay(useCap, p2pPrices, season, lavaCostMult);
-          costPerNode = c.costPerDay / useN;
-        } else if (["trees", "stone", "iron", "gold", "crimstone", "oil"].includes(catId)) {
-          // Tool cost per node
-          const c = calcToolCostPerDay(catId, useCap, exchangeRates, p2pPrices, stockMods);
-          costPerNode = c.costPerDay / useN;
-          // Restock cost: tools consumed per node per day × restock cost per tool
-          if (c.toolsPerDay > 0 && !c.freeTool) {
-            const toolName = Object.keys(TOOL_TO_CAT).find(t => TOOL_TO_CAT[t] === catId);
-            if (toolName) {
-              const toolsPerNodePerDay = c.toolsPerDay / useN;
-              costPerNode += toolsPerNodePerDay * restockCostPerUnit(toolName, "tools");
-            }
-          }
-        } else if (["crops", "fruits", "greenhouse"].includes(catId)) {
-          // Seed cost per node
-          const c = calcSeedCostPerDay(catId, product, useCap, exchangeRates, stockMods, ownedEffects, p2pPrices);
-          costPerNode = c.costPerDay / useN;
-          // Restock cost: seeds consumed per node per day × restock cost per seed
-          const seedName = product + " Seed";
-          const seedsPerNodePerDay = (c.seedsPerDay || 0) / useN;
-          if (seedsPerNodePerDay > 0) {
-            costPerNode += seedsPerNodePerDay * restockCostPerUnit(seedName, "seeds");
-          }
-        }
-
-        return grossPerNode - costPerNode;
-      }
-
-      // Product lists per category (for auto-best selection)
-      const PRODUCT_LISTS = {
-        crops: Object.keys(CROP_GROW_DATA),
-        fruits: Object.keys(FRUIT_GROW_DATA),
-        greenhouse: Object.keys(GREENHOUSE_GROW_DATA),
-        flowers: Object.keys(SEED_DATA),
-      };
-
-      // Fixed products for node ROI (hardcoded best choices)
-      const NODE_FIXED_PRODUCTS = {
-        crops: "Wheat",
-      };
-
-      // ── Find best product & marginal net SFL/day for a node type ──
-      /*
-       * One efficiency factor for BOTH options in this table. roadmapEffFactor is a measured
-       * ratio, not a discount — it can exceed 1 (gold sat at 1.50 on a real farm, the ratio>1.5
-       * clamp in roadmapComputeEfficiency; trees at 0.54) — so this is not a uniform haircut.
-       */
-      const mergeEff = (catId) => {
-        try { const f = roadmapEffFactor(catId, getRoadmapSettings()); return isFinite(f) && f > 0 ? f : 1; }
-        catch (e) { return 1; }
-      };
-      function getMarginalNetSfl(nodeKey) {
-        const np = NODE_PRICES[nodeKey];
-        if (!np) return { marginal: 0, product: null };
-        const catId = np.catId;
-        const ownedEffects = getOwnedEffects(catId);
-
-        // Hardcoded product override
-        if (NODE_FIXED_PRODUCTS[catId]) {
-          const product = NODE_FIXED_PRODUCTS[catId];
-          const m = calcMarginalForProduct(catId, product, np.farmKey, ownedEffects);
-          return { marginal: m, product };
-        }
-
-        // For categories with multiple products, try all and pick best
-        const products = PRODUCT_LISTS[catId];
-        if (products && products.length > 1) {
-          let bestMarginal = -Infinity, bestProduct = products[0];
-          for (const prod of products) {
-            const m = calcMarginalForProduct(catId, prod, np.farmKey, ownedEffects);
-            if (m > bestMarginal) { bestMarginal = m; bestProduct = prod; }
-          }
-          return { marginal: bestMarginal, product: bestProduct };
-        }
-
-        // Single-product categories
-        const product = getDefaultProduct(catId);
-        const m = calcMarginalForProduct(catId, product, np.farmKey, ownedEffects);
-        return { marginal: m, product };
-      }
-
-      // ── Count physical nodes by tier ──
-      const FARM_RESOURCE_KEYS = {
-        trees: "trees", stones: "stones", iron: "iron", gold: "gold",
-        crimstones: "crimstones", oilReserves: "oilReserves", lavaPits: "lavaPits",
-        crops: "crops", fruitPatches: "fruitPatches", flowers: "flowers",
-      };
-      // For crops/fruits/flowers, no multiplier exists — all t1
-      function getNodeTiers(nodeKey) {
-        const farmObjKey = FARM_RESOURCE_KEYS[nodeKey];
-        if (!farmObjKey) return { physical: 0, t1: 0, t2: 0, t3: 0, effective: 0 };
-        if (["crops", "fruitPatches", "flowers"].includes(nodeKey)) {
-          let objs;
-          if (nodeKey === "flowers") objs = farm.flowers?.flowerBeds || {};
-          else objs = farm[farmObjKey] || {};
-          const n = Object.keys(objs).length;
-          return { physical: n, t1: n, t2: 0, t3: 0, effective: n };
-        }
-        return countNodeTiers(farm[farmObjKey]);
-      }
-
-      // ── Base node counts for this island ──
-      const baseNodes = BASE_NODE_COUNTS[islandType] || BASE_NODE_COUNTS["basic"];
-
-      // ── Build investment options ──
-      const options = [];
-
-      // A. Buy new node (Sunstone purchase)
-      for (const [nodeKey, np] of Object.entries(NODE_PRICES)) {
-        const tiers = getNodeTiers(nodeKey);
-        const baseCount = baseNodes[nodeKey] || 0;
-        // Use effective count (t2=4, t3=16) — game prices by effective nodes
-        const purchased = Math.max(0, tiers.effective - baseCount);
-        const nextSunstoneCost = np.base + purchased * np.increase;
-        const costSfl = nextSunstoneCost * sunstoneCostSfl;
-        // x eff on this side too. Adding it to merge alone would have matched the shape and
-        // broken the basis: the table presents these as directly comparable, so both are now
-        // what this farm actually harvests rather than a theoretical ceiling.
-        const { marginal: marginalTheo, product: bestProduct } = getMarginalNetSfl(nodeKey);
-        const marginal = marginalTheo * mergeEff(np.catId);
-        const roiDays = (marginal > 0 && costSfl > 0) ? costSfl / marginal : Infinity;
-        const sunstonesNeeded = nextSunstoneCost;
-        const obsNeeded = sunstonesNeeded * 3; // 1 sunstone = 3 obsidian
-        const canAfford = playerSunstones >= sunstonesNeeded || playerObsidian >= obsNeeded;
-
-        options.push({
-          action: `Buy ${np.label}`,
-          type: "buy",
-          nodeKey,
-          costSfl,
-          costDetail: `${nextSunstoneCost} Sunstones`,
-          marginal,
-          roiDays,
-          canAfford,
-          need: canAfford ? "" : `Need ${Math.max(0, Math.ceil(obsNeeded - playerObsidian))} more Obsidian`,
-          currentNodes: tiers.physical,
-          purchased,
-          bestProduct,
-        });
-      }
-
-      // B. Merge t1→t2
-      for (const [mergeKey, mc] of Object.entries(MERGE_COSTS)) {
-        const tiers = getNodeTiers(mergeKey);
-        // Always include the option, even if t1 < 4 — show as not-yet-actionable
-        const np = NODE_PRICES[mergeKey === "stones" ? "stones" : mergeKey];
-        if (!np) continue;
-        const catId = np.catId;
-        const product = savedProducts[catId] || getDefaultProduct(catId);
-        const priceProduct = getPriceProduct(catId, product);
-        const rKey = catId === "stone" ? "Stone" : catId === "iron" ? "Iron" : catId === "gold" ? "Gold" : "Wood";
-        const respawn = RESOURCE_RESPAWN_DATA[rKey];
-        if (!respawn) continue;
-        /*
-         * Merge and buy sit in the same table as directly comparable options, so they have to
-         * be on the same basis. They were not: buy went through calcMarginalForProduct (boosts,
-         * tool cost, restock) while merge used the BASE respawn and no corrections at all. That
-         * is why the roadmap recommended merging gold to T2 where the NODES page rated a new
-         * node twice as good.
-         *
-         * Boosted cycle, not base: speed boosts and shrines (Badger for trees+stone, Mole for
-         * iron/gold/crimstone, both 0.75) mean more digs per day, so more bonuses.
-         *
-         * No tool term, and that is deliberate — verified in the game source rather than
-         * assumed. chop.ts: getRequiredAxeAmount() returns 1 * multiplier and the yield is
-         * amount.mul(multiplier), so a multiplier-4 node costs FOUR tools per dig and pays four
-         * times. Tool cost per unit of yield is identical to four separate T1 nodes, so it
-         * cancels out of the comparison. Merging buys the flat yieldBonus and nothing else.
-         *
-         * The bonus is a FLAT add, so percentage yield boosts must not multiply it — that is the
-         * one place merge legitimately differs from buy and must not be "unified" away.
-         */
-        let cyclesPerDay = 86400 / respawn.respawnSec;
-        try {
-          const ab = applyBoosts(catId, product, capacity, getOwnedEffects(catId));
-          if (ab && ab.effectiveCycle > 0) cyclesPerDay = 86400 / ab.effectiveCycle;
-        } catch (e) {}
-        const price = p2pPrices[priceProduct] || 0;
-
-        // Merge cost in SFL
-        const obsCost = mc.t2.obsidian * obsidianCostSfl;
-        const coinCost = mc.t2.coins / exchangeRates.coinsPerSFL;
-        const costSfl = obsCost + coinCost;
-
-        // Marginal benefit: 1 merged node gets +0.5 yield/dig/cycle.
-        // Before: 4 t1 nodes, each bonus=0. After: 1 t2 with bonus=+0.5. Effective capacity is
-        // unchanged (4→4) and so is tool cost per unit (see above), so the bonus IS the gain.
-        // x eff: you only collect the bonus on digs you actually make.
-        const marginal = 0.5 * cyclesPerDay * price * mergeEff(catId);
-        const roiDays = (marginal > 0 && costSfl > 0) ? costSfl / marginal : Infinity;
-
-        const hasObs = playerObsidian >= mc.t2.obsidian;
-        const hasCoins = playerCoins >= mc.t2.coins;
-        const hasT1 = tiers.t1 >= 4;
-        const canAfford = hasObs && hasCoins && hasT1;
-
-        let need = "";
-        if (!hasT1) need = `Need ${4 - tiers.t1} more T1 ${np.label.toLowerCase()}${4 - tiers.t1 > 1 ? 's' : ''}`;
-        else if (!hasObs) need = `Need ${mc.t2.obsidian - Math.floor(playerObsidian)} Obsidian`;
-        else if (!hasCoins) need = `Need ${(mc.t2.coins - playerCoins).toLocaleString()} coins`;
-
-        options.push({
-          action: `Merge ${np.label} → t2`,
-          type: "merge_t2",
-          nodeKey: mergeKey,
-          costSfl,
-          costDetail: `${mc.t2.obsidian} Obs + ${(mc.t2.coins / 1000).toFixed(0)}k coins`,
-          marginal,
-          roiDays,
-          canAfford,
-          need,
-          t1Available: tiers.t1,
-        });
-      }
-
-      // C. Merge t2→t3
-      for (const [mergeKey, mc] of Object.entries(MERGE_COSTS)) {
-        const tiers = getNodeTiers(mergeKey);
-        // Always include the option, even if t2 < 4 — show as not-yet-actionable
-        const np = NODE_PRICES[mergeKey === "stones" ? "stones" : mergeKey];
-        if (!np) continue;
-        const catId = np.catId;
-        const product = savedProducts[catId] || getDefaultProduct(catId);
-        const priceProduct = getPriceProduct(catId, product);
-        const rKey = catId === "stone" ? "Stone" : catId === "iron" ? "Iron" : catId === "gold" ? "Gold" : "Wood";
-        const respawn = RESOURCE_RESPAWN_DATA[rKey];
-        if (!respawn) continue;
-        /*
-         * Merge and buy sit in the same table as directly comparable options, so they have to
-         * be on the same basis. They were not: buy went through calcMarginalForProduct (boosts,
-         * tool cost, restock) while merge used the BASE respawn and no corrections at all. That
-         * is why the roadmap recommended merging gold to T2 where the NODES page rated a new
-         * node twice as good.
-         *
-         * Boosted cycle, not base: speed boosts and shrines (Badger for trees+stone, Mole for
-         * iron/gold/crimstone, both 0.75) mean more digs per day, so more bonuses.
-         *
-         * No tool term, and that is deliberate — verified in the game source rather than
-         * assumed. chop.ts: getRequiredAxeAmount() returns 1 * multiplier and the yield is
-         * amount.mul(multiplier), so a multiplier-4 node costs FOUR tools per dig and pays four
-         * times. Tool cost per unit of yield is identical to four separate T1 nodes, so it
-         * cancels out of the comparison. Merging buys the flat yieldBonus and nothing else.
-         *
-         * The bonus is a FLAT add, so percentage yield boosts must not multiply it — that is the
-         * one place merge legitimately differs from buy and must not be "unified" away.
-         */
-        let cyclesPerDay = 86400 / respawn.respawnSec;
-        try {
-          const ab = applyBoosts(catId, product, capacity, getOwnedEffects(catId));
-          if (ab && ab.effectiveCycle > 0) cyclesPerDay = 86400 / ab.effectiveCycle;
-        } catch (e) {}
-        const price = p2pPrices[priceProduct] || 0;
-
-        const obsCost = mc.t3.obsidian * obsidianCostSfl;
-        const coinCost = mc.t3.coins / exchangeRates.coinsPerSFL;
-        const costSfl = obsCost + coinCost;
-
-        // 4×t2 (each +0.5) → 1×t3 (+2.5). Delta = 2.5 - 4×0.5 = +0.5 per cycle
-        // x eff on this side too, same basis as T2 above and as the buy option.
-        const marginal = 0.5 * cyclesPerDay * price * mergeEff(catId);
-        const roiDays = (marginal > 0 && costSfl > 0) ? costSfl / marginal : Infinity;
-
-        const hasObs = playerObsidian >= mc.t3.obsidian;
-        const hasCoins = playerCoins >= mc.t3.coins;
-        const hasT2 = tiers.t2 >= 4;
-        const canAfford = hasObs && hasCoins && hasT2;
-
-        let need = "";
-        if (!hasT2) need = `Need ${4 - tiers.t2} more T2 ${np.label.toLowerCase()}${4 - tiers.t2 > 1 ? 's' : ''}`;
-        else if (!hasObs) need = `Need ${mc.t3.obsidian - Math.floor(playerObsidian)} Obsidian`;
-        else if (!hasCoins) need = `Need ${(mc.t3.coins - playerCoins).toLocaleString()} coins`;
-
-        options.push({
-          action: `Merge ${np.label} → t3`,
-          type: "merge_t3",
-          nodeKey: mergeKey,
-          costSfl,
-          costDetail: `${mc.t3.obsidian} Obs + ${(mc.t3.coins / 1000).toFixed(0)}k coins`,
-          marginal,
-          roiDays,
-          canAfford,
-          need,
-          t2Available: tiers.t2,
-        });
-      }
-
-      // ── Compute efficiency from farm history (dig-session approach) ──
-      // A "dig" = a snapshot where inventory.{Resource} increased.
-      // Consecutive digs within 30min are merged into one session.
-      // Efficiency = actual sessions/day vs theoretical sessions/day.
-      const efficiencyMap = {};
-      let effDataAvailable = false;
-      let effSnapCount = 0, effPeriodDays = 0;
-      const historySnapshots = await historyPromise;
-      if (historySnapshots && historySnapshots.length >= 2) {
-        const allSorted = [...historySnapshots]
-          .filter(s => s.captured_at && s.diff !== null && s.diff !== undefined)
-          .sort((a, b) => new Date(a.captured_at) - new Date(b.captured_at));
-
-        // Only use v2 snapshots (those with _h.* keys) — find first one
-        const v2Start = allSorted.findIndex(s => {
-          const diff = s.diff || {};
-          return Object.keys(diff).some(k => k.startsWith("_h."));
-        });
-        const sorted = v2Start >= 0 ? allSorted.slice(v2Start) : [];
-
-        if (sorted.length < 2) {
-          // Not enough v2 data yet
-        } else {
-        const pDays = (new Date(sorted[sorted.length - 1].captured_at) - new Date(sorted[0].captured_at)) / 86400000;
-        effSnapCount = sorted.length;
-        effPeriodDays = pDays;
-
-        if (pDays > 0.5) {
-          effDataAvailable = true;
-
-          for (const [catId, resInfo] of Object.entries(EFFICIENCY_RESOURCE_MAP)) {
-            // 1. Find timestamps where resource was harvested (precise _h.* only)
-            const digTimes = [];
-            let totalHarvested = 0;
-            for (const snap of sorted) {
-              const diff = snap.diff || {};
-              const hCount = diff[resInfo.hKey];
-              if (hCount > 0) {
-                digTimes.push(new Date(snap.captured_at).getTime());
-                totalHarvested += hCount;
-              }
-            }
-
-            // 2. Merge consecutive digs within 30min into one session
-            const sessions = [];
-            if (digTimes.length > 0) {
-              let sessionStart = digTimes[0];
-              let sessionEnd = digTimes[0];
-              for (let i = 1; i < digTimes.length; i++) {
-                if (digTimes[i] - sessionEnd <= 1800000) {
-                  sessionEnd = digTimes[i];
-                } else {
-                  sessions.push(sessionStart);
-                  sessionStart = digTimes[i];
-                  sessionEnd = digTimes[i];
-                }
-              }
-              sessions.push(sessionStart);
-            }
-
-            // 3. Theoretical digs per day (using boosted respawn)
-            const product = getDefaultProduct(catId);
-            const ownedEff = getOwnedEffects(catId);
-            const boosted = applyBoosts(catId, product, capacity, ownedEff);
-            const effectiveCycle = boosted.effectiveCycle || 0;
-            const theoreticalPerDay = effectiveCycle > 0 ? 86400 / effectiveCycle : 0;
-
-            // 4. Actual digs per day
-            const actualPerDay = sessions.length / pDays;
-
-            // 5. Efficiency = actual / theoretical
-            let ratio = theoreticalPerDay > 0 ? actualPerDay / theoreticalPerDay : 0;
-            if (ratio > 1.5) ratio = 1.5;
-
-            // 6. Avg gap between sessions
-            let avgGapH = 0;
-            if (sessions.length >= 2) {
-              let totalGap = 0;
-              for (let i = 1; i < sessions.length; i++) totalGap += sessions[i] - sessions[i - 1];
-              avgGapH = (totalGap / (sessions.length - 1)) / 3600000;
-            }
-
-            // 7. Harvest accuracy: total nodes harvested vs theoretical
-            const nk = resInfo.nodeKey === "stones" ? "stones" : resInfo.nodeKey;
-            const totalNodes = getNodeTiers(nk).effective;
-            const theoreticalHarvests = Math.round(theoreticalPerDay * pDays * totalNodes);
-
-            efficiencyMap[catId] = {
-              ratio,
-              sessions: sessions.length,
-              theoreticalPerDay,
-              actualPerDay,
-              avgGapH,
-              optimalGapH: effectiveCycle / 3600,
-              totalHarvested: totalHarvested || null,
-              theoreticalHarvests: theoreticalHarvests || null,
-              totalNodes,
-            };
-          }
-        }
-        } // end: sorted.length >= 2
-      }
-
-      // Helper: get efficiency ratio for a catId, or null if not available
-      function getEffRatio(catId) {
-        return efficiencyMap[catId] ? efficiencyMap[catId].ratio : null;
-      }
-
-      // Helper: format efficiency as colored percentage
-      function fmtEff(catId) {
-        const e = efficiencyMap[catId];
-        if (!e) return '<span style="color:var(--text-dim)">\u2014</span>';
-        const pct = Math.round(e.ratio * 100);
+      // Efficiency, straight from the measurement that already scaled every figure above.
+      // Nothing here recomputes it — the point of the column is to show WHY the real income
+      // differs from the theoretical one, and it would be a lie if it came from elsewhere.
+      const effDetail = (cat) => ((acq.eff && acq.eff.byCat) || {})[cat] || null;
+      function fmtEffCell(d) {
+        if (d.effRatio == null) return '<span style="color:var(--text-dim)">—</span>';
+        const pct = Math.round(d.effRatio * 100);
         const color = pct >= 80 ? "var(--green)" : pct >= 40 ? "var(--sunpetal)" : "var(--red)";
-        let tip = `${e.sessions} sessions \u00b7 avg ${e.avgGapH.toFixed(1)}h (optimal ${e.optimalGapH.toFixed(1)}h)`;
-        if (e.totalHarvested) tip += ` \u00b7 ${e.totalHarvested} harvested (theoretical ${e.theoreticalHarvests || '?'})`;
-        return `<span style="color:${color};font-weight:bold" title="${tip}">${pct}%</span>`;
+        const e = effDetail(d.cat);
+        let tip = d.effMeasured
+          ? `Naměřeno: ${e && e.sessions != null ? `${e.sessions} sklizní` : "z historie"}${e && e.actualPerDay ? ` · ${e.actualPerDay.toFixed(1)}/den proti teoretickým ${(e.theoPerDay || 0).toFixed(1)}` : ""}`
+          : "Nenaměřeno u téhle kategorie — použit tvůj průměr přes ostatní.";
+        if (effMeta && effMeta.days) tip += ` (okno ${effMeta.days.toFixed(1)} d, ${effMeta.snaps} snapshotů)`;
+        return `<span style="color:${color};font-weight:bold" title="${escHTML(tip)}">${pct}%${d.effMeasured ? "" : "~"}</span>`;
       }
 
-      // Helper: get real ROI for a category (efficiency-adjusted)
-      function getRealRoi(costSfl, marginal, catId) {
-        const eff = getEffRatio(catId);
-        if (eff !== null && eff > 0) return costSfl / (marginal * eff);
-        return costSfl / marginal; // fallback to theoretical
+      /*
+       * ── Options: the next single action of each kind ──
+       * profitPerDay and gainPerDay both already carry the efficiency ratio, so they are on one
+       * basis and directly comparable — which is the whole reason merge moved into core.
+       */
+      const options = [];
+      for (const [node, d] of Object.entries(acq.perType)) {
+        const bu = (d.buy || [])[0];
+        if (!bu) continue;
+        const costSfl = bu.matSfl;
+        const canAfford = playerSunstones >= bu.sunstones || playerObsidian >= bu.obsidian;
+        options.push({
+          action: `Buy ${node}`, node, cat: d.cat, isMerge: false,
+          costSfl, costDetail: `${bu.sunstones} ☀`, sunstoneCost: bu.sunstones,
+          theo: d.netPerNode, real: d.profitPerDay, effRatio: d.effRatio, effMeasured: d.effMeasured,
+          roiDays: (d.profitPerDay > 0 && costSfl > 0) ? costSfl / d.profitPerDay : Infinity,
+          canAfford, need: canAfford ? "" : `Need ${Math.max(0, Math.ceil(bu.obsidian - playerObsidian))} more Obsidian`,
+          unitName: d.unitName, unpriced: d.unpriced, sellable: d.sellable !== false, unitsPerNode: d.unitsPerNode,
+        });
       }
-
-      // Sort by real ROI days ascending (fastest payback first)
-      for (const o of options) {
-        const oCatId = NODE_PRICES[o.nodeKey]?.catId;
-        o.realRoiDays = (o.marginal > 0 && o.costSfl > 0 && oCatId) ? getRealRoi(o.costSfl, o.marginal, oCatId) : Infinity;
+      for (const t of acq.merge || []) {
+        const node = mergeNodeName[t.mergeKey] || t.mergeKey;
+        for (const x of t.merges) {
+          const hasSrc = x.ready, hasObs = playerObsidian >= x.obsidian, hasCoins = playerCoins >= x.coins;
+          options.push({
+            action: `Merge ${node} → t${x.tier}`, node, cat: t.cat, isMerge: true, tier: x.tier,
+            costSfl: x.matSfl, costDetail: `${x.obsidian} Obs + ${(x.coins / 1000).toFixed(0)}k coins`, sunstoneCost: 0,
+            // The flat yield bonus is what merging buys; core divides the ratio out for THEO.
+            theo: x.effRatio > 0 ? x.gainPerDay / x.effRatio : null,
+            real: x.gainPerDay, effRatio: x.effRatio, effMeasured: true,
+            roiDays: (x.gainPerDay > 0 && x.matSfl > 0) ? x.matSfl / x.gainPerDay : Infinity,
+            canAfford: hasSrc && hasObs && hasCoins,
+            need: !hasSrc ? `Need ${x.need - x.have} more T${x.tier - 1}`
+                : !hasObs ? `Need ${x.obsidian - Math.floor(playerObsidian)} Obsidian`
+                : !hasCoins ? `Need ${(x.coins - playerCoins).toLocaleString()} coins` : "",
+            ready: x.ready, sellable: true,
+          });
+        }
       }
-      options.sort((a, b) => a.realRoiDays - b.realRoiDays);
+      // ROI is cost / real income. There is no second efficiency step here: the income already
+      // has it, and applying it again is precisely the bug this rewrite removes.
+      options.sort((a, b) => a.roiDays - b.roiDays);
 
       // ── Greedy purchase plan ──
-      // Simulate ideal purchase order by REAL ROI. Affordability is NOT a gate —
-      // the plan shows what to save for next, not what's instantly buyable today
-      // (cumulative cost tells you how much investment is needed). After each
-      // "purchase" the next node of that type costs more sunstones, so its ROI
-      // naturally degrades and other node types eventually win the next slot.
-      // ROI cap controlled by user toggle (sfl_nodes_roi_cap): "1y" | "2y" | "all".
+      // Ideal save-up order by ROI, not gated by what you can afford today. Each simulated
+      // purchase makes the next of that type cost more (served escalation rule), so its ROI
+      // degrades and another node type eventually wins the slot.
+      // ROI cap controlled by the user toggle (sfl_nodes_roi_cap): "1y" | "2y" | "all".
       const _nodesRoiCap = (() => {
         const v = localStorage.getItem("sfl_nodes_roi_cap");
         if (v === "1y") return 365;
@@ -21140,102 +20728,58 @@
         return 730; // default 2y
       })();
       const plan = [];
-      const marginals = {}; // nodeKey → { marginal, product }
-      const purchasedSim = {}; // nodeKey → simulated purchased count
-      for (const [nodeKey, np] of Object.entries(NODE_PRICES)) {
-        marginals[nodeKey] = getMarginalNetSfl(nodeKey);
-        const tiers = getNodeTiers(nodeKey);
-        const baseCount = baseNodes[nodeKey] || 0;
-        purchasedSim[nodeKey] = Math.max(0, tiers.effective - baseCount);
-      }
-
-      let cumCostSfl = 0, cumSflPerDay = 0;
-
-      for (let step = 0; step < 50; step++) { // safety cap
-        let bestKey = null, bestRoi = Infinity, bestCostSun = 0, bestCostSfl = 0, bestMarginal = 0;
-        for (const [nodeKey, np] of Object.entries(NODE_PRICES)) {
-          const m = marginals[nodeKey].marginal;
-          if (m <= 0) continue;
-          const nextSun = np.base + purchasedSim[nodeKey] * np.increase;
-          const costSfl = nextSun * sunstoneCostSfl;
-          const roi = getRealRoi(costSfl, m, np.catId);
-          if (roi < bestRoi) {
-            bestKey = nodeKey; bestRoi = roi; bestCostSun = nextSun; bestCostSfl = costSfl; bestMarginal = m;
-          }
+      const planned = {}; // node → purchases already in the plan
+      // A safety cap, not an answer. When it is what stopped the plan, the page has to SAY so:
+      // a truncated list reads as "these are all the purchases worth making" when it is not.
+      const PLAN_STEP_CAP = 50;
+      let planCapped = false;
+      for (let step = 0; step < PLAN_STEP_CAP; step++) {
+        let best = null;
+        for (const [node, d] of Object.entries(acq.perType)) {
+          if (!(d.profitPerDay > 0) || !d.buyRule) continue;
+          const sun = _sun(d.buyRule, planned[node] || 0);
+          const costSfl = _sunSfl(sun);
+          if (!(costSfl > 0)) continue;
+          const roi = costSfl / d.profitPerDay;
+          if (!best || roi < best.roi) best = { node, d, sun, costSfl, roi };
         }
-        if (!bestKey || bestRoi === Infinity) break;
-        // Stop once ROI exceeds the user-selected cap (default 2y, or 1y / All).
-        if (bestRoi > _nodesRoiCap) break;
-
-        purchasedSim[bestKey]++;
-        cumCostSfl += bestCostSfl;
-        cumSflPerDay += bestMarginal;
-
-        const np = NODE_PRICES[bestKey];
+        if (!best || best.roi > _nodesRoiCap) break;
+        if (step === PLAN_STEP_CAP - 1) planCapped = true;
+        planned[best.node] = (planned[best.node] || 0) + 1;
         plan.push({
-          label: np.label,
-          product: marginals[bestKey].product,
-          catId: np.catId,
-          sunstoneCost: bestCostSun,
-          costSfl: bestCostSfl,
-          marginal: bestMarginal,
-          roi: bestRoi,
-          cumCost: cumCostSfl,
-          cumSflPerDay,
+          label: `Buy ${best.node}`, node: best.node, cat: best.d.cat, isMerge: false,
+          sunstoneCost: best.sun, costSfl: best.costSfl,
+          theo: best.d.netPerNode, real: best.d.profitPerDay,
+          effRatio: best.d.effRatio, effMeasured: best.d.effMeasured, roi: best.roi,
         });
       }
-
-      // Merge options (one-shot, not repeated). Resource cost (obs/coins) is NOT
-      // a gate — saving for it is fine — but the structural prereq (4×t1 for a
-      // t2 merge, 4×t2 for a t3 merge) IS, since you literally can't perform
-      // the merge without source nodes. Let ROI sort decide order in the plan.
-      for (const o of options.filter(o => {
-        if (!o.type.startsWith("merge") || o.marginal <= 0) return false;
-        if (o.type === "merge_t2" && (o.t1Available || 0) < 4) return false;
-        if (o.type === "merge_t3" && (o.t2Available || 0) < 4) return false;
-        return true;
-      })) {
-        const mergeCatId = NODE_PRICES[o.nodeKey]?.catId || null;
-        const mergeRoi = (o.marginal > 0 && o.costSfl > 0 && mergeCatId) ? getRealRoi(o.costSfl, o.marginal, mergeCatId) : o.roiDays;
+      // Merges are one-shot. Resource cost is not a gate — saving up is fine — but the
+      // structural prereq is: you cannot merge without four of the lower tier in hand.
+      for (const o of options.filter((o) => o.isMerge && o.ready && o.real > 0 && isFinite(o.roiDays))) {
         plan.push({
-          label: o.action,
-          product: null,
-          catId: mergeCatId,
-          sunstoneCost: 0,
-          costSfl: o.costSfl,
-          marginal: o.marginal,
-          roi: mergeRoi,
-          cumCost: cumCostSfl + o.costSfl,
-          cumSflPerDay: cumSflPerDay + o.marginal,
-          isMerge: true,
-          costDetail: o.costDetail,
+          label: o.action, node: o.node, cat: o.cat, isMerge: true,
+          sunstoneCost: 0, costSfl: o.costSfl, costDetail: o.costDetail,
+          theo: o.theo, real: o.real, effRatio: o.effRatio, effMeasured: o.effMeasured, roi: o.roiDays,
         });
-        cumCostSfl += o.costSfl;
-        cumSflPerDay += o.marginal;
       }
-
-      // Sort plan by ROI then drop anything beyond the user-selected cap
-      // (covers merges too — they bypass the greedy loop's early-stop).
       plan.sort((a, b) => a.roi - b.roi);
       while (plan.length > 0 && plan[plan.length - 1].roi > _nodesRoiCap) plan.pop();
-
-      // Recompute cumulative values after sorting
-      let runCost = 0, runSfl = 0;
+      let cumCostSfl = 0, cumRealPerDay = 0, cumTheoPerDay = 0;
       for (const p of plan) {
-        runCost += p.costSfl;
-        runSfl += p.marginal;
-        p.cumCost = runCost;
-        p.cumSflPerDay = runSfl;
+        cumCostSfl += p.costSfl;
+        cumRealPerDay += p.real;
+        cumTheoPerDay += p.theo == null ? p.real : p.theo;
+        p.cumCost = cumCostSfl;
+        p.cumReal = cumRealPerDay;
       }
 
       // ── Render ──
       let content = "";
 
-      // ── Summary bar ──
       content += `<div class="summary-bar pixel-panel">
         <div class="summary-stat">
           <div class="label pixel-font">SUNSTONE COST</div>
-          <div class="value" style="color:var(--sunpetal);font-size:0.8125rem">${sunstoneCostSfl.toFixed(4)} ${sflIcon("0.75em")}</div>
+          <div class="value" style="color:var(--sunpetal);font-size:0.8125rem" title="${escHTML(`${obsPerSun} obsidianu za sunstone, obsidian za výrobní cenu ${obsidianSfl.toFixed(3)} FLOWER`)}">${sunstoneCostSfl.toFixed(4)} ${sflIcon("0.75em")}</div>
         </div>
         <div class="summary-stat">
           <div class="label pixel-font">OBSIDIAN</div>
@@ -21255,27 +20799,12 @@
         </div>
         <div class="summary-stat">
           <div class="label pixel-font">EFFICIENCY</div>
-          <div class="value" style="font-size:0.6875rem;color:${effDataAvailable ? 'var(--green)' : 'var(--text-dim)'}">${effDataAvailable ? `${effPeriodDays.toFixed(1)}d · ${effSnapCount} snaps` : 'No history'}</div>
+          <div class="value" style="font-size:0.6875rem;color:${effDataAvailable ? 'var(--green)' : 'var(--text-dim)'}">${effMeta && effMeta.snaps ? `${(effMeta.days || 0).toFixed(1)}d · ${effMeta.snaps} snaps` : 'No history'}</div>
         </div>
       </div>`;
 
       // ── RECOMMENDED PURCHASE PLAN ──
       if (plan.length > 0) {
-        // Eff-adjust per-plan marginals and recompute cumulative.
-        // Each row's +SFL/DAY now reflects what you'll REALLY earn at your harvest cadence
-        // (using getEffRatio per category — same data that drives the EFFICIENCY column on
-        // the per-node summary table). Theoretical 24/7 numbers were unrealistic.
-        let realCum = 0;
-        for (const p of plan) {
-          const e = (p.catId && getEffRatio(p.catId));
-          const eff = (e !== null && e !== undefined) ? e : 1;
-          p.realMarginal = p.marginal * eff;
-          p.eff = eff;
-          realCum += p.realMarginal;
-          p.realCumSflPerDay = realCum;
-        }
-        const realTotalSflPerDay = realCum;
-
         const _capLabel = _nodesRoiCap === 365 ? "1y" : (_nodesRoiCap === Infinity ? "all" : "2y");
         const _capBtn = (val, label) => `<button class="dash-toggle-btn ${_capLabel === val ? "on" : ""}" onclick="nodesSetRoiCap('${val}')">${label}</button>`;
         content += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
@@ -21286,9 +20815,9 @@
               ${_capBtn("1y","1Y")}${_capBtn("2y","2Y")}${_capBtn("all","All")}
             </div>
           </div>
-          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px">Greedy order by REAL ROI — scaled by efficiency. Not gated by current resources (plan shows the ideal save-up order; use CUM REAL ${sflIcon("0.65em")}/D and the cumulative cost below to see how far each step gets you).</div>
+          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Greedy order podle ROI. Není omezeno tím, na co teď máš — plán říká, na co spořit; kolik to celkem stojí, ukazuje cumulative pod tabulkou. Čísla chodí hotová z API (stejný zdroj jako roadmapa), tady se nic nepřepočítává.</div>
           <table class="node-res-table">
-            <tr><th>#</th><th>BUY</th><th style="text-align:right">COST</th><th style="text-align:right" title="Theoretical SFL/day at 24/7 harvest cadence">THEO ${sflIcon("0.75em")}/D</th><th style="text-align:right">EFF</th><th style="text-align:right" title="Real SFL/day = theoretical × efficiency">REAL ${sflIcon("0.75em")}/D</th><th style="text-align:right">ROI</th><th style="text-align:right" title="Cumulative REAL SFL/day after this purchase">CUM REAL ${sflIcon("0.75em")}/D</th></tr>`;
+            <tr><th>#</th><th>BUY</th><th style="text-align:right">COST</th><th style="text-align:right" title="Bez korekce na efektivitu — teoretický strop při nepřerušené sklizni">THEO ${sflIcon("0.75em")}/D</th><th style="text-align:right">EFF</th><th style="text-align:right" title="Co reálně vyděláš při své naměřené kadenci sklizně. Tímhle se dělí ROI.">REAL ${sflIcon("0.75em")}/D</th><th style="text-align:right">ROI</th><th style="text-align:right" title="Kumulativní REAL po tomhle kroku">CUM REAL ${sflIcon("0.75em")}/D</th></tr>`;
 
         for (let i = 0; i < plan.length; i++) {
           const p = plan[i];
@@ -21297,63 +20826,46 @@
           const costStr = p.isMerge
             ? `<span style="font-size:0.5625rem">${escHTML(p.costDetail)}</span>`
             : `${p.sunstoneCost} ☀`;
-          const productHint = p.product && PRODUCT_LISTS[p.catId] ? ` <span style="color:var(--text-dim);font-size:0.5625rem">(${escHTML(p.product)})</span>` : "";
-          const effPct = Math.round(p.eff * 100);
-          const effColor = effPct >= 80 ? "var(--green)" : effPct >= 40 ? "var(--sunpetal)" : "var(--red)";
-          const effDisplay = (efficiencyMap[p.catId]) ? `${effPct}%` : '<span style="color:var(--text-dim)">—</span>';
-
           content += `<tr>
             <td style="color:var(--text-dim)">${i + 1}</td>
-            <td>${escHTML(p.label)}${productHint}</td>
+            <td>${escHTML(p.label)}</td>
             <td style="text-align:right;white-space:nowrap">${costStr}</td>
-            <td style="text-align:right;color:var(--text-dim)">+${p.marginal.toFixed(4)}</td>
-            <td style="text-align:right;color:${effColor};font-weight:bold">${effDisplay}</td>
-            <td style="text-align:right;color:var(--green);font-weight:bold">+${p.realMarginal.toFixed(4)}</td>
+            <td style="text-align:right;color:var(--text-dim)">${p.theo == null ? "—" : "+" + p.theo.toFixed(4)}</td>
+            <td style="text-align:right">${fmtEffCell(p)}</td>
+            <td style="text-align:right;color:var(--green);font-weight:bold">+${p.real.toFixed(4)}</td>
             <td style="text-align:right;color:${roiColor};font-weight:bold">${roiStr}</td>
-            <td style="text-align:right;color:var(--sunpetal)">+${p.realCumSflPerDay.toFixed(4)}</td>
+            <td style="text-align:right;color:var(--sunpetal)">+${p.cumReal.toFixed(4)}</td>
           </tr>`;
         }
         content += `</table>`;
         content += `<div style="margin-top:8px;font-size:0.6875rem;color:var(--text-secondary);line-height:1.6">
-          Total: <strong>${plan.length}</strong> purchases · <strong style="color:var(--sunpetal)">${cumCostSfl.toFixed(1)} ${sflIcon("0.75em")}</strong> invested · <strong style="color:var(--green)">+${realTotalSflPerDay.toFixed(4)} ${sflIcon("0.75em")}/day</strong> realistic gain (theo +${cumSflPerDay.toFixed(2)} ${sflIcon("0.75em")}/d)
+${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8px">⚠ Seznam je zastavený na ${PLAN_STEP_CAP} nákupech — při tomhle ROI capu by pokračoval dál. Není to „víc už se nevyplácí“, jen strop téhle tabulky.</div>` : ""}
+          Total: <strong>${plan.length}</strong> purchases · <strong style="color:var(--sunpetal)">${cumCostSfl.toFixed(1)} ${sflIcon("0.75em")}</strong> invested · <strong style="color:var(--green)">+${cumRealPerDay.toFixed(4)} ${sflIcon("0.75em")}/day</strong> realistic gain (theo +${cumTheoPerDay.toFixed(2)} ${sflIcon("0.75em")}/d)
         </div>`;
         content += `</div>`;
       }
 
-      // ── Next best (all single options for reference) ──
-      const profitable = options.filter(o => o.marginal > 0);
-      const unprofitable = options.filter(o => o.marginal <= 0);
+      // ── ALL OPTIONS (next action of each kind) ──
+      const profitable = options.filter((o) => o.real > 0);
+      const unprofitable = options.filter((o) => !(o.real > 0));
 
       if (profitable.length > 0) {
         content += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
           <div style="font-size:0.6875rem;color:var(--sunpetal);margin-bottom:8px;font-weight:bold" class="pixel-font">ALL OPTIONS (next node only)</div>
           <table class="node-res-table">
-            <tr><th>ACTION</th><th style="text-align:right">COST</th><th style="text-align:right" title="24/7 theoretical">THEO ${sflIcon("0.75em")}/D</th><th style="text-align:right">EFF</th><th style="text-align:right" title="theoretical × efficiency">REAL ${sflIcon("0.75em")}/D</th><th style="text-align:right">ROI</th></tr>`;
+            <tr><th>ACTION</th><th style="text-align:right">COST</th><th style="text-align:right" title="Bez korekce na efektivitu">THEO ${sflIcon("0.75em")}/D</th><th style="text-align:right">EFF</th><th style="text-align:right" title="Teoretické × efektivita — tímhle se dělí ROI">REAL ${sflIcon("0.75em")}/D</th><th style="text-align:right">ROI</th></tr>`;
 
         for (const o of profitable) {
-          const roiColor = o.roiDays <= 30 ? "var(--green)" : o.roiDays <= 90 ? "var(--sunpetal)" : o.roiDays <= 365 ? "var(--text-secondary)" : "var(--text-dim)";
-          const productHint = o.bestProduct && PRODUCT_LISTS[NODE_PRICES[o.nodeKey]?.catId] ? ` <span style="color:var(--text-dim);font-size:0.5625rem">(${escHTML(o.bestProduct)})</span>` : "";
           const needHint = (!o.canAfford && o.need) ? ` <span style="color:var(--text-dim);font-size:0.5625rem">— ${escHTML(o.need)}</span>` : "";
-
-          const oCatId = NODE_PRICES[o.nodeKey]?.catId || null;
-          const oEffRatio = (oCatId && getEffRatio(oCatId));
-          const oEff = (oEffRatio !== null && oEffRatio !== undefined) ? oEffRatio : 1;
-          const oRealMarginal = o.marginal * oEff;
-          const oEffPct = Math.round(oEff * 100);
-          const oEffColor = oEffPct >= 80 ? "var(--green)" : oEffPct >= 40 ? "var(--sunpetal)" : "var(--red)";
-          const oEffDisplay = (oCatId && efficiencyMap[oCatId]) ? `${oEffPct}%` : '<span style="color:var(--text-dim)">—</span>';
-
-          const optRoiDisplay = o.realRoiDays >= 9999 ? "9999+" : Math.ceil(o.realRoiDays) + "d";
-          const optRoiColor = o.realRoiDays <= 30 ? "var(--green)" : o.realRoiDays <= 90 ? "var(--sunpetal)" : o.realRoiDays <= 365 ? "var(--text-secondary)" : "var(--text-dim)";
-          const rowOpacity = o.canAfford ? "" : "opacity:0.65;";
-
-          content += `<tr style="${rowOpacity}">
-            <td>${escHTML(o.action)}${productHint}${needHint}</td>
-            <td style="text-align:right;white-space:nowrap">${o.costSfl.toFixed(1)} ${sflIcon("0.75em")}</td>
-            <td style="text-align:right;color:var(--text-dim)">+${o.marginal.toFixed(4)}</td>
-            <td style="text-align:right;color:${oEffColor};font-weight:bold">${oEffDisplay}</td>
-            <td style="text-align:right;color:var(--green);font-weight:bold">+${oRealMarginal.toFixed(4)}</td>
-            <td style="text-align:right;color:${optRoiColor};font-weight:bold">${optRoiDisplay}</td>
+          const roiStr = o.roiDays >= 9999 ? "9999+" : Math.ceil(o.roiDays) + "d";
+          const roiColor = o.roiDays <= 30 ? "var(--green)" : o.roiDays <= 90 ? "var(--sunpetal)" : o.roiDays <= 365 ? "var(--text-secondary)" : "var(--text-dim)";
+          content += `<tr style="${o.canAfford ? "" : "opacity:0.65;"}">
+            <td>${escHTML(o.action)}${needHint}</td>
+            <td style="text-align:right;white-space:nowrap">${o.costSfl == null ? "?" : o.costSfl.toFixed(1) + " " + sflIcon("0.75em")}</td>
+            <td style="text-align:right;color:var(--text-dim)">${o.theo == null ? "—" : "+" + o.theo.toFixed(4)}</td>
+            <td style="text-align:right">${fmtEffCell(o)}</td>
+            <td style="text-align:right;color:var(--green);font-weight:bold">+${o.real.toFixed(4)}</td>
+            <td style="text-align:right;color:${roiColor};font-weight:bold">${roiStr}</td>
           </tr>`;
         }
         content += `</table></div>`;
@@ -21365,56 +20877,46 @@
         const roadRows = [];
         let roadTotalSfl = 0, roadTotalSunstones = 0, roadTotalObsidian = 0, roadTotalCoins = 0;
 
-        for (const [mergeKey, mc] of Object.entries(MERGE_COSTS)) {
-          const np = NODE_PRICES[mergeKey];
-          if (!np) continue;
-          const tiers = getNodeTiers(mergeKey);
-          const baseCount = baseNodes[mergeKey] || 0;
+        for (const t of acq.merge || []) {
+          const node = mergeNodeName[t.mergeKey];
+          const d = acq.perType[node];
+          if (!d || !d.buyRule) continue;
+          const tiers = t.tiers;
+          const m2 = t.merges.find((x) => x.tier === 2), m3 = t.merges.find((x) => x.tier === 3);
+          if (!m2 || !m3) continue;
 
           const t3ToMake = Math.max(0, ROAD_TARGET_T3 - tiers.t3);
-          const t2NeededTotal = 4 * t3ToMake;
-          const t2ToCreate = Math.max(0, t2NeededTotal - tiers.t2);
-          const t1NeededTotal = 4 * t2ToCreate;
-          const t1ToBuy = Math.max(0, t1NeededTotal - tiers.t1);
+          const t2ToCreate = Math.max(0, 4 * t3ToMake - tiers.t2);
+          const t1ToBuy = Math.max(0, 4 * t2ToCreate - tiers.t1);
 
-          let purchasedSoFar = Math.max(0, tiers.effective - baseCount);
+          // Walks the served escalation rule — up to 32 purchases, which is why the rule is
+          // served rather than a fixed list of prices.
           let sunstones = 0;
-          for (let i = 0; i < t1ToBuy; i++) {
-            sunstones += np.base + purchasedSoFar * np.increase;
-            purchasedSoFar++;
-          }
-          const buyCostSfl = sunstones * sunstoneCostSfl;
+          for (let i = 0; i < t1ToBuy; i++) sunstones += _sun(d.buyRule, i);
+          const buyCostSfl = _sunSfl(sunstones);
 
-          const t2MergeObs = t2ToCreate * mc.t2.obsidian;
-          const t2MergeCoins = t2ToCreate * mc.t2.coins;
-          const t2MergeSfl = t2MergeObs * obsidianCostSfl + (exchangeRates.coinsPerSFL > 0 ? t2MergeCoins / exchangeRates.coinsPerSFL : 0);
-
-          const t3MergeObs = t3ToMake * mc.t3.obsidian;
-          const t3MergeCoins = t3ToMake * mc.t3.coins;
-          const t3MergeSfl = t3MergeObs * obsidianCostSfl + (exchangeRates.coinsPerSFL > 0 ? t3MergeCoins / exchangeRates.coinsPerSFL : 0);
-
+          const t2MergeObs = t2ToCreate * m2.obsidian, t2MergeCoins = t2ToCreate * m2.coins;
+          const t3MergeObs = t3ToMake * m3.obsidian, t3MergeCoins = t3ToMake * m3.coins;
+          const t2MergeSfl = t2ToCreate * (m2.matSfl || 0), t3MergeSfl = t3ToMake * (m3.matSfl || 0);
           const totalSfl = buyCostSfl + t2MergeSfl + t3MergeSfl;
-          const totalObs = t2MergeObs + t3MergeObs;
-          const totalCoins = t2MergeCoins + t3MergeCoins;
 
           roadTotalSfl += totalSfl;
           roadTotalSunstones += sunstones;
-          roadTotalObsidian += totalObs;
-          roadTotalCoins += totalCoins;
+          roadTotalObsidian += t2MergeObs + t3MergeObs;
+          roadTotalCoins += t2MergeCoins + t3MergeCoins;
 
           roadRows.push({
-            label: np.label, current: tiers,
+            label: node, current: tiers,
             t1ToBuy, sunstones, buyCostSfl,
-            t2ToCreate, t2MergeObs, t2MergeCoins, t2MergeSfl,
-            t3ToMake, t3MergeObs, t3MergeCoins, t3MergeSfl,
-            totalSfl, totalObs, totalCoins,
-            done: t3ToMake === 0 && t2ToCreate === 0 && t1ToBuy === 0,
+            t2ToCreate, t2MergeObs, t2MergeCoins,
+            t3ToMake, t3MergeObs, t3MergeCoins,
+            totalSfl, done: t3ToMake === 0 && t2ToCreate === 0 && t1ToBuy === 0,
           });
         }
 
         content += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
           <div style="font-size:0.6875rem;color:var(--lily);margin-bottom:4px;font-weight:bold" class="pixel-font">ROAD TO 2× T3 OF EACH</div>
-          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px">What's still needed to have 2 T3 nodes of each mergeable type and nothing else. Sunstone purchase cost grows per node bought.</div>
+          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px">Co ještě chybí, abys měl 2 T3 nody každého slučitelného typu. Cena nákupu roste s každým koupeným nodem, takže sloupec BUY T1 už tuhle eskalaci obsahuje.</div>
           <table class="node-res-table">
             <tr>
               <th>RESOURCE</th>
@@ -21469,15 +20971,22 @@
       if (unprofitable.length > 0) {
         content += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px;opacity:0.6">
           <div style="font-size:0.6875rem;color:var(--text-dim);margin-bottom:8px;font-weight:bold" class="pixel-font">UNPROFITABLE</div>
+          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px">Nic se tu neclampuje na nulu a nic se neskrývá: mínus znamená, že node spotřebuje víc (nástroje, semínka), než se z něj dá prodat. U zdrojů bez ceny v p2p feedu je místo FLOWER počet kusů za den — vyrábí, jen to neumíme přepočítat.</div>
           <table class="node-res-table">
             <tr><th>ACTION</th><th style="text-align:right">COST</th><th style="text-align:right">${sflIcon("0.75em")}/DAY</th></tr>`;
 
         for (const o of unprofitable) {
-          const productHint = o.bestProduct && PRODUCT_LISTS[NODE_PRICES[o.nodeKey]?.catId] ? ` <span style="color:var(--text-dim);font-size:0.5625rem">(${escHTML(o.bestProduct)})</span>` : "";
+          // Three distinct answers that used to look like two: earns nothing, cannot be sold at
+          // all, or sells fine but has no price in the feed.
+          const val = !o.sellable
+            ? `<span style="color:var(--text-dim)">${(o.unitsPerNode || 0).toFixed(2)} ${escHTML(o.unitName || "ks")}/den</span>`
+            : o.unpriced
+            ? `<span style="color:var(--yellow)">${(o.unitsPerNode || 0).toFixed(2)} ${escHTML(o.unitName || "ks")}/den ⚠</span>`
+            : `<span style="color:var(--red)">${(o.real || 0).toFixed(4)}</span>`;
           content += `<tr>
-            <td>${escHTML(o.action)}${productHint}</td>
-            <td style="text-align:right;white-space:nowrap">${o.costSfl.toFixed(1)} ${sflIcon("0.75em")}</td>
-            <td style="text-align:right;color:var(--red)">${o.marginal.toFixed(4)}</td>
+            <td>${escHTML(o.action)}</td>
+            <td style="text-align:right;white-space:nowrap">${o.costSfl == null ? "?" : o.costSfl.toFixed(1) + " " + sflIcon("0.75em")}</td>
+            <td style="text-align:right">${val}</td>
           </tr>`;
         }
         content += `</table></div>`;
@@ -21487,32 +20996,38 @@
       content += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
         <div style="font-size:0.6875rem;color:var(--lily);margin-bottom:8px;font-weight:bold" class="pixel-font">CURRENT NODES</div>
         <table class="node-res-table">
-          <tr><th>RESOURCE</th><th style="text-align:center">NODES</th><th style="text-align:center">TIERS</th><th style="text-align:right">NET ${sflIcon("0.75em")}/DAY</th><th style="text-align:right">PER NODE</th>${effDataAvailable ? '<th style="text-align:center">EFF.</th><th style="text-align:right">REAL ' + sflIcon("0.75em") + '/D</th>' : ''}</tr>`;
+          <tr><th>RESOURCE</th><th style="text-align:center" title="Efektivní počet — T2 se počítá za 4 nody, T3 za 16">NODES</th><th style="text-align:center">TIERS</th><th style="text-align:right">NET ${sflIcon("0.75em")}/DAY</th><th style="text-align:right">PER NODE</th><th style="text-align:center">EFF.</th><th style="text-align:right">REAL ${sflIcon("0.75em")}/D</th></tr>`;
 
-      for (const [nodeKey, np] of Object.entries(NODE_PRICES)) {
-        const tiers = getNodeTiers(nodeKey);
-        const baseCount = baseNodes[nodeKey] || 0;
-        const purchased = Math.max(0, tiers.effective - baseCount);
-        const { marginal: perNode, product: bestProduct } = getMarginalNetSfl(nodeKey);
-        const currentN = getCapacityCount(np.catId, capacity);
-        const totalNet = perNode * currentN;
-        const netColor = totalNet > 0 ? "var(--green)" : totalNet < 0 ? "var(--red)" : "var(--text-dim)";
-        const perColor = perNode > 0 ? "var(--green)" : perNode < 0 ? "var(--red)" : "var(--text-dim)";
-        const boughtStr = purchased > 0 ? `<span style="color:var(--sunpetal)"> +${purchased}</span>` : "";
+      for (const [node, d] of Object.entries(acq.perType)) {
+        const tiers = d.tiers || { t1: 0, t2: 0, t3: 0, effective: 0 };
+        const totalNet = d.netPerNode * tiers.effective;
+        const realTotal = d.profitPerDay * tiers.effective;
+        const col = (v) => v > 0 ? "var(--green)" : v < 0 ? "var(--red)" : "var(--text-dim)";
+        // `bought` is the game's own purchase counter (farmActivity), not "owned minus the
+        // island's base count" — that guess was what made purchase prices up to 15x too high.
+        const boughtStr = d.bought > 0 ? `<span style="color:var(--sunpetal)" title="koupeno za sunstony"> +${d.bought}</span>` : "";
         const tierStr = tiers.t2 > 0 || tiers.t3 > 0 ? `<span style="color:var(--text-dim);font-size:0.5625rem">${tiers.t1}/${tiers.t2}/${tiers.t3}</span>` : "";
-        const productHint = bestProduct && PRODUCT_LISTS[np.catId] ? ` <span style="color:var(--text-dim);font-size:0.5625rem">${escHTML(bestProduct)}</span>` : "";
-
-        const nodeEff = getEffRatio(np.catId);
-        const realSflDay = nodeEff !== null ? totalNet * nodeEff : null;
-        const realSflColor = realSflDay !== null ? (realSflDay > 0 ? "var(--green)" : realSflDay < 0 ? "var(--red)" : "var(--text-dim)") : "var(--text-dim)";
+        const unitHint = d.unitName ? ` <span style="color:var(--text-dim);font-size:0.5625rem">${escHTML(d.unitName)}</span>` : "";
+        /*
+         * Oil, obsidian and flowers have no FLOWER figure — the first two cannot be sold at all
+         * and no flower has a price in the p2p feed — so this column used to print 0.00 for a node
+         * that produces 27 oil a day. A plain zero reads as "worthless". Units instead, with ⚠ for
+         * the case where the resource DOES sell and only the price is missing.
+         */
+        const units = (!d.sellable || d.unpriced) ? {
+          per: `${(d.unitsPerNode || 0).toFixed(2)}${d.unpriced ? " ⚠" : ""}`,
+          total: `${((d.unitsPerNode || 0) * tiers.effective / (d.effRatio || 1)).toFixed(1)} ${escHTML(d.unitName || "ks")}/d`,
+          real: `${((d.unitsPerNode || 0) * tiers.effective).toFixed(1)} ${escHTML(d.unitName || "ks")}/d`,
+        } : null;
 
         content += `<tr>
-          <td>${escHTML(np.label)}${productHint}</td>
+          <td>${escHTML(node)}${unitHint}</td>
           <td style="text-align:center">${tiers.effective}${boughtStr}</td>
           <td style="text-align:center">${tierStr}</td>
-          <td style="text-align:right;color:${netColor};font-weight:bold">${totalNet.toFixed(2)}</td>
-          <td style="text-align:right;color:${perColor}">${perNode.toFixed(4)}</td>
-          ${effDataAvailable ? `<td style="text-align:center">${fmtEff(np.catId)}</td><td style="text-align:right;color:${realSflColor};font-weight:bold">${realSflDay !== null ? realSflDay.toFixed(2) : '\u2014'}</td>` : ''}
+          <td style="text-align:right;${units ? "color:var(--text-dim);font-size:0.5rem" : `color:${col(totalNet)};font-weight:bold`}">${units ? units.total : totalNet.toFixed(2)}</td>
+          <td style="text-align:right;${units ? "color:var(--text-dim);font-size:0.5rem" : `color:${col(d.netPerNode)}`}">${units ? units.per : d.netPerNode.toFixed(4)}</td>
+          <td style="text-align:center">${fmtEffCell(d)}</td>
+          <td style="text-align:right;${units ? "color:var(--text-dim);font-size:0.5rem" : `color:${col(realTotal)};font-weight:bold`}">${units ? units.real : realTotal.toFixed(2)}</td>
         </tr>`;
       }
 

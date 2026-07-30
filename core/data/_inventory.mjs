@@ -242,10 +242,6 @@ export const TABLE_INVENTORY = [
     "lines": 2
   },
   {
-    "name": "FARM_RESOURCE_KEYS",
-    "lines": 5
-  },
-  {
     "name": "FEED_QTY",
     "lines": 2
   },
@@ -382,10 +378,6 @@ export const TABLE_INVENTORY = [
     "lines": 2
   },
   {
-    "name": "NODE_FIXED_PRODUCTS",
-    "lines": 3
-  },
-  {
     "name": "NODE_PRICES",
     "lines": 11
   },
@@ -448,10 +440,6 @@ export const TABLE_INVENTORY = [
   {
     "name": "POWER_CHAIN_TOOLMAT",
     "lines": 2
-  },
-  {
-    "name": "PRODUCT_LISTS",
-    "lines": 6
   },
   {
     "name": "PRODUCT_TO_CATEGORY",
