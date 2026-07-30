@@ -17614,18 +17614,23 @@
       h += roadmapProfitabilityHtml(settings);
       // ── Buy path: Visual graph or Table (toggle) ──
       h += `<div style="margin-bottom:16px">`;
-      h += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal)">YOUR BUY PATH — what to buy next, in order</div><div style="margin-left:auto;display:flex;gap:4px"><button id="bp-tab-graph" onclick="_roadmapBuyView('graph')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:var(--sunpetal);color:#1a120a;cursor:pointer;font-weight:bold">▣ Visual</button><button id="bp-tab-table" onclick="_roadmapBuyView('table')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:#241a10;color:var(--text-secondary);cursor:pointer">☰ Table</button><button id="bp-tab-skills" onclick="_roadmapBuyView('skills')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:#241a10;color:var(--text-secondary);cursor:pointer">⭐ Skills</button></div></div>`;
+      h += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal)">YOUR BUY PATH — what to buy next, in order</div><div style="margin-left:auto;display:flex;gap:4px"><button id="bp-tab-graph" onclick="_roadmapBuyView('graph')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:#241a10;color:var(--text-secondary);cursor:pointer">▣ Visual</button><button id="bp-tab-table" onclick="_roadmapBuyView('table')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:var(--sunpetal);color:#1a120a;cursor:pointer;font-weight:bold">☰ Table</button><button id="bp-tab-skills" onclick="_roadmapBuyView('skills')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:#241a10;color:var(--text-secondary);cursor:pointer">⭐ Skills</button></div></div>`;
       {
         const _effReal = settings.effMode === "real";
         const _pct = (c) => Math.round(roadmapEffFactor(c, settings) * 100);
         h += `<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap;font-size:0.55rem;color:var(--text-dim)"><span>+FL/day &amp; income shown at</span><select onchange="_roadmapSetEffMode(this.value)" style="font-size:0.55rem;padding:2px 6px;background:#241a10;color:var(--text-secondary);border:1px solid var(--border-brown);border-radius:4px;cursor:pointer"><option value="real"${_effReal ? " selected" : ""}>your Last-7-days activity</option><option value="theoretical"${!_effReal ? " selected" : ""}>100% theoretical (full-time)</option></select>${_effReal ? `<span>— how often you actually harvest (Wood ${_pct("trees")}%, Crops ${_pct("crops")}%, Stone ${_pct("stone")}% of max). Applies to every number on this page.</span>` : `<span style="color:var(--yellow)">— full-time potential (you'd have to harvest every node the instant it's ready). Switch to Last-7-days for realistic numbers.</span>`}</div>`;
       }
-      h += `<div id="buy-graph">`;
+      /*
+       * Table is the default view, not Visual. The table is the one that carries the actual
+       * numbers — cost, FLOWER/day, ROI, cumulative — and the graph is a picture of the same
+       * order. Opening on the picture meant every visit started with a click.
+       */
+      h += `<div id="buy-graph" style="display:none">`;
       h += `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px">scroll = move down the path · drag to pan · +/− to zoom</div>`;
       h += `<div id="rf-graph" style="height:760px;width:100%;border:1px solid var(--border-brown);border-radius:8px;background:radial-gradient(circle at 50% 22%, #1a130b, #0e0a06);overflow:hidden"></div>`;
       h += `<div id="rf-fallback" style="display:none;padding:14px;font-size:0.6rem;color:var(--text-dim)">Loading the graph engine… if this stays, your browser/network blocked the CDN — use the Table view.</div>`;
       h += `</div>`;
-      h += `<div id="buy-table" style="display:none">`;
+      h += `<div id="buy-table">`;
       if (!(startIncome > 0)) {
         h += `<div class="pixel-panel" style="padding:10px;margin-bottom:14px;color:var(--yellow);font-size:0.6rem">Set a positive "Start FLOWER/day" to get time estimates. The ORDER below is still correct (sorted by ROI payback).</div>`;
       }
@@ -17636,10 +17641,10 @@
         <th style="padding:4px 6px">#</th>
         <th style="padding:4px 6px">Item</th>
         <th style="padding:4px 6px">Boost</th>
-        <th style="padding:4px 6px;text-align:right">Cost</th>
-        <th style="padding:4px 6px;text-align:right">+FL/day</th>
+        <th style="padding:4px 6px;text-align:right" title="Kupní cena v FLOWER — floor na marketplace, u craftu odvozená z materiálu.">Cost ${sflIcon()}</th>
+        <th style="padding:4px 6px;text-align:right" title="Kolik ti ta položka přidá za den, v FLOWER.">+${sflIcon()}/day</th>
         <th style="padding:4px 6px;text-align:right">Payback</th>
-        <th style="padding:4px 6px;text-align:right">&Sigma; Cost</th>
+        <th style="padding:4px 6px;text-align:right" title="Kumulativní cena v FLOWER, když kupuješ shora dolů.">&Sigma; Cost ${sflIcon()}</th>
         <th style="padding:4px 6px;text-align:right">FL/day</th>
         <th style="padding:4px 6px;text-align:right">ETA</th>
       </tr></thead><tbody>`;
@@ -17795,7 +17800,9 @@
       const divs = { graph: document.getElementById("buy-graph"), table: document.getElementById("buy-table"), skills: document.getElementById("buy-skills") };
       const tabs = { graph: document.getElementById("bp-tab-graph"), table: document.getElementById("bp-tab-table"), skills: document.getElementById("bp-tab-skills") };
       if (!divs.graph || !divs.table) return;
-      const view = (v === "table" || v === "skills") ? v : "graph";
+      // Falls back to "table" to match the markup's default — they must not disagree, or the
+      // first click on an already-active tab would blank the section.
+      const view = (v === "graph" || v === "skills") ? v : "table";
       for (const k of ["graph", "table", "skills"]) {
         if (divs[k]) divs[k].style.display = (k === view) ? "block" : "none";
         const tb = tabs[k]; if (tb) { const on = (k === view); tb.style.background = on ? "var(--sunpetal)" : "#241a10"; tb.style.color = on ? "#1a120a" : "var(--text-secondary)"; tb.style.fontWeight = on ? "bold" : "normal"; }
