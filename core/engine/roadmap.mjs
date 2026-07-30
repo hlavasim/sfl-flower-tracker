@@ -1084,7 +1084,11 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         const hh = farm.henHouse || {};
         const lvl = Math.max(1, Number(hh.level) || 1);
         const held = Object.keys(hh.animals || {}).length;
-        return { total: Math.max(base(lvl) + (built("Chicken Coop") ? 5 * lvl : 0), held), held, free: 0, shared: null };
+        const total = Math.max(base(lvl) + (built("Chicken Coop") ? 5 * lvl : 0), held);
+        // What a Chicken Coop would raise the ceiling to — the item is CAPACITY, not just a boost.
+        // At hen house level 3 that is +15 birds (20 → 35), which is most of what the item is for.
+        const boostedTotal = built("Chicken Coop") ? total : Math.max(base(lvl) + 5 * lvl, held);
+        return { total, held, free: 0, shared: null, booster: "Chicken Coop", boostedTotal };
       }
       if (cat === "cows" || cat === "sheep") {
         const bn = farm.barn || {};
@@ -1093,8 +1097,10 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         const held = animals.length;
         const mine = animals.filter((a) => (a.type || "").toLowerCase() === (cat === "cows" ? "cow" : "sheep")).length;
         const total = Math.max(base(lvl) + (built("Barn Blueprint") ? 5 * lvl : 0), held);
+        // Same capacity-booster shape as the hen house: Barn Blueprint adds 5 × level stalls.
+        const boostedTotal = built("Barn Blueprint") ? total : Math.max(base(lvl) + 5 * lvl, held);
         // Free slots are what the OTHER species has left you.
-        return { total, held, free: Math.max(0, total - held), mine, shared: "barn" };
+        return { total, held, free: Math.max(0, total - held), mine, shared: "barn", booster: "Barn Blueprint", boostedTotal };
       }
       return null;
     }
@@ -1220,6 +1226,25 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
            */
           const picked = []; let net = nowNetP; let cost = 0;
           const restore = [];
+          /*
+           * CAPACITY BOOSTERS (Chicken Coop, Barn Blueprint) add STALLS, not an effect — at hen
+           * house level 3 the Coop is +15 birds (20 → 35), which is most of what the item costs
+           * money for. So its probe (and its pick) grows the synthetic herd too. The recomputing
+           * greedy prices that honestly: more unboosted animals eat more, so early on the extra
+           * stalls can be worth little — the item rises once the per-animal net turns positive.
+           */
+          let herdNow = atMax;
+          const herd = (n) => Array.from({ length: n }, () => ({ level: 15 }));
+          const capBump = (c) => {
+            if (!animalCap || animalCap.booster !== c.name) return 0;
+            const others = animalCap.total - atMax;   // stalls the other species keeps in a shared barn
+            return Math.max(0, animalCap.boostedTotal - others - herdNow);
+          };
+          const growHerd = (n) => {
+            if (capRestore === null) capRestore = capacity[cat];
+            capacity[cat] = n;
+            if (capacity.animalDetails) capacity.animalDetails[cat] = herd(n);
+          };
           if (atMax > 0) {
             for (let guard = 0; guard < 120 && cands.length; guard++) {
               // Value each remaining candidate by what it adds to THIS category right now, then take
@@ -1227,10 +1252,13 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
               let bi = -1, bestRatio = 0, bestGain = 0;
               for (let i = 0; i < cands.length; i++) {
                 const c = cands[i];
+                const bump = capBump(c);
+                if (bump) growHerd(herdNow + bump);
                 c.has = true;
                 let after = net;
                 try { after = netFor(effectsFor(cat)); } catch (e) {}
                 c.has = false;
+                if (bump) growHerd(herdNow);
                 const gain = after - net;
                 if (!(gain > 0)) continue;
                 const ratio = gain / c.floor;
@@ -1239,8 +1267,11 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
               if (bi < 0) break;                          // nothing left that helps
               const c = cands.splice(bi, 1)[0];
               c.has = true; restore.push(c);
+              const bump = capBump(c);
+              if (bump) { herdNow += bump; growHerd(herdNow); }
               const netBefore = net;
-              const step = { name: c.name, floor: c.floor, gain: bestGain, boost: c.boost || "",
+              const step = { name: c.name, floor: c.floor, gain: bestGain,
+                boost: (c.boost || "") + (bump ? ` · +${bump} míst (kapacita ${herdNow})` : ""),
                 netBefore, type: c.type || null };
               picked.push(step);
               cost += c.floor;

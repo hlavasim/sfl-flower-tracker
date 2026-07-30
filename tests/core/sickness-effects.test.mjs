@@ -43,6 +43,24 @@ test("with an effects list, owned item NAMES are not double-counted", () => {
   assert.ok(Math.abs(noList.costPerDay - base.costPerDay / 2) < 1e-12);
 });
 
+test("Chicken Coop is CAPACITY — +5 × hen-house level birds, herd grows when picked", () => {
+  // The fixture NFT sample has no Chicken Coop, so one is injected with a token boost. Its real
+  // worth is the stalls: hen house level 3 → +15 birds (20 → 35). Reverting the capBump/growHerd
+  // handling drops the "+15 míst" note and prices the item at its token effect alone.
+  const wrap = JSON.parse(readFileSync(new URL("../fixtures/farm-155498.json", import.meta.url)));
+  const farm = wrap.farm || wrap;
+  const fxP2p = JSON.parse(readFileSync(new URL("../fixtures/p2p-prices.json", import.meta.url)));
+  const nfts = JSON.parse(readFileSync(new URL("../fixtures/nfts-sample.json", import.meta.url)));
+  const withCoop = { ...nfts, collectibles: [...(nfts.collectibles || []),
+    { name: "Chicken Coop", have_boost: true, boost_text: "+1 Egg yield", floor: "3000", supply: 1 }] };
+  buildPowerSection(farm, fxP2p, withCoop, null, {});
+  const out = buildRoadmapSection([], { roadmapSettings: {}, farm, p2p: fxP2p });
+  const ch = out.startup.find((p) => p.cat === "chickens");
+  const coop = (ch.picked || []).find((x) => x.name === "Chicken Coop");
+  assert.ok(coop, "Chicken Coop is picked once the birds are worth scaling");
+  assert.match(coop.boost, /\+15 míst \(kapacita 35\)/);
+});
+
 test("startup counterfactual feeds a level-15 herd — feed items gain, baseline goes red", () => {
   const wrap = JSON.parse(readFileSync(new URL("../fixtures/farm-155498.json", import.meta.url)));
   const farm = wrap.farm || wrap;
