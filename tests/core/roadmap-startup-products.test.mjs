@@ -44,3 +44,18 @@ test("a dead greenhouse plans per product (Rice / Olive / Grape), not as one cat
     assert.equal(r.product, null);
   }
 });
+
+test("excludeCats does not reach the startup planner — it would hide exactly what it asks about", () => {
+  // The owner unchecks activities he does not run in the profitability filter — reasonable —
+  // and the planner honored it: chickens vanished, greenhouse lost all three products, fell back
+  // to a single "GREENHOUSE" pass over zero products and reported unflippable. Reproduced live.
+  const cheapCrops = { ...p2p, Rice: "0.0001", Olive: "0.0001", Grape: "0.0001" };
+  buildPowerSection(farm, cheapCrops, nfts, null, {});
+  const out = buildRoadmapSection([], {
+    roadmapSettings: { excludeCats: ["chickens", "Rice", "Olive", "Grape"] }, farm, p2p: cheapCrops,
+  });
+  assert.ok(out.startup.some((r) => r.cat === "chickens"), "excluded chickens still get a plan");
+  const gh = out.startup.filter((r) => r.cat === "greenhouse");
+  assert.ok(gh.length >= 2, `excluded greenhouse crops still plan per product, got ${gh.length}`);
+  assert.ok(gh.every((r) => r.product), "no fallback single GREENHOUSE row");
+});

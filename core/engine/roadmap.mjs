@@ -1111,7 +1111,15 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
        * to be asked at full efficiency. effOverrides is dropped too: a manual slider parked at 0 for
        * a category you ignore would defeat the same purpose in the same way.
        */
-      const settings = Object.assign({}, userSettings, { effMode: "theoretical", effOverrides: null });
+      /*
+       * excludeCats is dropped for the same reason as effMode/effOverrides below: the filter means
+       * "hide what I don't run from MY tables" — and what the user does not run is EXACTLY what
+       * this planner is about. Honoring it made the bar show only "nelze rozjet": chickens
+       * (excluded) vanished entirely, and greenhouse — with Rice/Olive/Grape excluded as products —
+       * lost its whole product list, fell back to a single "GREENHOUSE" pass over zero products,
+       * and reported unflippable. Reproduced live before the fix.
+       */
+      const settings = Object.assign({}, userSettings, { effMode: "theoretical", effOverrides: null, excludeCats: [] });
       /*
        * Effects must be read from the CLONES, not from powerState.
        *
