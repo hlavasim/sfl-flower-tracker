@@ -379,7 +379,9 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         if (isAnimalCat(cat)) {
           gross = (getAnimalCatSfl(cat, capacity, effects, p2pPrices).totalSfl) || 0;
           cost += (calcAnimalFeedCost(cat, capacity, p2pPrices, effects, stockMods).costPerDay) || 0;
-          cost += (calcSicknessCost(cat, capacity, p2pPrices, powerState.boostItems, skills).costPerDay) || 0;
+          // `effects` reaches the sickness calc too — an unowned Sleepy Chicken / Medic Apron only
+          // exists in a what-if probe as its effect, and matching owned item names scored them 0.
+          cost += (calcSicknessCost(cat, capacity, p2pPrices, powerState.boostItems, skills, effects || []).costPerDay) || 0;
         } else if (cat === "crops" || cat === "fruits" || cat === "greenhouse") {
           const mix = roadmapCatMix(cat, effects, settings);
           gross = mix.gross; cost += mix.cost;
@@ -1156,12 +1158,26 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
          * restored afterwards, so nothing else on the page sees it.
          */
         const animalCap = roadmapAnimalCapacity(cat);
-        let atMax = count, capRestore = null, roomBlocked = false;
+        let atMax = count, capRestore = null, adRestore, adSwapped = false, roomBlocked = false;
         if (animalCap) {
           atMax = animalCap.shared === "barn" ? (animalCap.mine || 0) + animalCap.free : animalCap.total;
           // A barn already full of the other species is the real blocker, and boosts cannot fix it.
           roomBlocked = atMax <= 0;
           if (atMax > count) { capRestore = capacity[cat]; capacity[cat] = atMax; }
+          /*
+           * SYNTHETIC HERD AT LEVEL 15 ("počítej s chickens jen na 15 levelu"). Swapping the COUNT
+           * was not enough: yield AND feed AND sickness all iterate capacity.animalDetails — the
+           * REAL animals — so on a farm with zero chickens the counterfactual had 20 birds that ate
+           * nothing (yield fell back to the count, feed and sickness saw an empty list). Every
+           * feed/sickness item then valued 0 (Gold Egg, Fat Chicken, Cluckulator, Sleepy Chicken…),
+           * and the "at max" net was overstated by the whole feed bill. The baseline recomputes
+           * after the swap so the micro-roadmap starts from 20 hungry level-15 animals, not from 0.
+           */
+          if (atMax > 0 && capacity.animalDetails) {
+            adRestore = capacity.animalDetails[cat]; adSwapped = true;
+            capacity.animalDetails[cat] = Array.from({ length: atMax }, () => ({ level: 15 }));
+            try { nowNet = roadmapAnyCatNet(cat, owned, settings); } catch (e) {}
+          }
         }
 
         /*
@@ -1275,6 +1291,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
           });
         }
         if (capRestore != null) capacity[cat] = capRestore;   // and never leak the inflated capacity
+        if (adSwapped) capacity.animalDetails[cat] = adRestore;   // nor the synthetic herd
       }
       // Cheapest route to a working category first — that is the one worth starting.
       out.sort((a, b) => {

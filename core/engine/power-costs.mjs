@@ -355,9 +355,16 @@ import { SEED_COSTS, TOOL_COSTS } from "../data/economy.mjs";
     }
 
     // ── flowers.html 14967-15036: calcSicknessCost ──
-    function calcSicknessCost(catId, capacity, p2pPrices, boostItems, skills) {
+    /*
+     * `effects` (optional): sickness_prevention / sickness_reduction effects from a WHAT-IF probe.
+     * Same reason free_feed reaches calcAnimalFeedCost as an effect: an unowned Sleepy Chicken or
+     * Medic Apron reaches a valuation only as its parsed effect — matching on owned item NAMES
+     * below means every "what if I buy it" question scored those items exactly 0.
+     */
+    function calcSicknessCost(catId, capacity, p2pPrices, boostItems, skills, effects) {
       const animals = capacity.animalDetails?.[catId] || [];
       if (animals.length === 0) return { costPerDay: 0, avgRate: 0, barnDelightSfl: 0, reductions: [], perLevel: [] };
+      const probeEff = (effects || []).filter(e => e.cat === catId);
 
       const reductions = [];
 
@@ -369,9 +376,19 @@ import { SEED_COSTS, TOOL_COSTS } from "../data/economy.mjs";
       const honeyPrice = p2pPrices["Honey"] || 0;
       const barnDelightSfl = (recipe.Lemon * lemonPrice) + (recipe.Honey * honeyPrice);
 
-      // Check prevention items (full immunity for this category)
+      /*
+       * When an effects list arrives it is the ONLY source for item-borne relief — the caller
+       * built it from what is owned PLUS what is being probed, so also matching owned item names
+       * would count the same item twice. Callers that pass no effects keep the name checks.
+       */
+      const effectMode = effects != null;
       let prevented = false;
-      if (boostItems) {
+      if (effectMode) {
+        if (probeEff.some(e => e.type === "sickness_prevention")) {
+          prevented = true;
+          reductions.push({ name: "sickness prevention", desc: "Full prevention" });
+        }
+      } else if (boostItems) {
         for (const item of boostItems) {
           if (!item.has) continue;
           const prevCat = SICKNESS_PREVENTION[item.name];
@@ -394,16 +411,23 @@ import { SEED_COSTS, TOOL_COSTS } from "../data/economy.mjs";
 
       // Cure cost modifiers
       let cureCostMult = 1;
-      const hasOracleSyringe = boostItems && boostItems.some(b => b.name === "Oracle Syringe" && b.has);
-      if (hasOracleSyringe) {
-        cureCostMult = 0;
-        reductions.push({ name: "Oracle Syringe", desc: "Free cure" });
-      }
-      if (cureCostMult > 0) {
-        const hasMedicApron = boostItems && boostItems.some(b => b.name === "Medic Apron" && b.has);
-        if (hasMedicApron) {
-          cureCostMult *= 0.5;
-          reductions.push({ name: "Medic Apron", desc: "-50% Barn Delight cost" });
+      if (effectMode) {
+        // Oracle Syringe parses as sickness_reduction 1.0, so "free cure" needs no special case.
+        for (const e of probeEff) {
+          if (e.type === "sickness_reduction") { cureCostMult *= (1 - (e.value || 0)); reductions.push({ name: e.raw || "sickness reduction", desc: `-${Math.round((e.value || 0) * 100)}% cure cost` }); }
+        }
+      } else {
+        const hasOracleSyringe = boostItems && boostItems.some(b => b.name === "Oracle Syringe" && b.has);
+        if (hasOracleSyringe) {
+          cureCostMult = 0;
+          reductions.push({ name: "Oracle Syringe", desc: "Free cure" });
+        }
+        if (cureCostMult > 0) {
+          const hasMedicApron = boostItems && boostItems.some(b => b.name === "Medic Apron" && b.has);
+          if (hasMedicApron) {
+            cureCostMult *= 0.5;
+            reductions.push({ name: "Medic Apron", desc: "-50% Barn Delight cost" });
+          }
         }
       }
 
