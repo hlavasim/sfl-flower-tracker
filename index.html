@@ -17331,6 +17331,23 @@
       }
 
       /*
+       * Weather protection. Not a timer — the game stamps the instance `used: true` when its
+       * event fires, so a spent item sits there looking identical to a working one and the next
+       * tornado costs you the crops it would have saved. Renewal cost is the Weather Shop price,
+       * which is not in this repo, so the row says what is exposed and no more.
+       */
+      for (const w of (ps.weather || [])) {
+        if (w.kind === 'ready') continue;
+        const spentAll = w.kind === 'spent';
+        rows.push({
+          what: w.kind === 'none' ? `Chybí ${escHTML(w.name)}` : `Obnovit ${escHTML(w.name)}`,
+          now: spentAll, warn: spentAll, gain: null, unit: null,
+          note: w.kind === 'none'
+            ? `nemáš žádný — ${escHTML(w.prevents)} tě zasáhne bez ochrany`
+            : `${w.spent} z ${w.owned} spotřebovaných${spentAll ? ' — proti ' + escHTML(w.prevents) + ' teď nejsi krytý' : `, krytí zbývá ${w.owned - w.spent}x`}`,
+        });
+      }
+      /*
        * Shrines. A 7-day consumable, so lapsing is silent and expensive: one expired while this
        * page was being written and the only symptom was every mining marginal dropping 25%.
        * Badger (trees+stone) and Mole (iron/gold/crimstone) are both speed 0.75, which is a

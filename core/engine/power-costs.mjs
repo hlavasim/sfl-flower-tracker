@@ -567,6 +567,42 @@ import { SEED_COSTS, TOOL_COSTS } from "../data/economy.mjs";
       }
       return out;
     }
+
+    /*
+     * Weather protections, and whether they are still protecting anything.
+     *
+     * These are NOT on a timer — that was the assumption worth checking. The game consumes one
+     * when its event fires and stamps the instance `used: true`
+     * (events/landExpansion/renewWeatherCollectible.ts renews it only `if (collectibleToRenew.used)`
+     * and clears the flag). So a spent pinwheel sits on the farm looking exactly like a working
+     * one, and the next tornado costs you the crops it would have saved.
+     *
+     * Renewal costs the Weather Shop price + ingredients (getWeatherShop()). Not priced here:
+     * that table is not in this repo, and guessing the cost of the one row whose whole point is
+     * 'go spend coins' would be worse than saying it is unknown.
+     */
+    const WEATHER_PROTECTION = {
+      "Tornado Pinwheel":     "tornado",
+      "Mangrove":             "tsunami",
+      "Thermal Stone":        "great freeze",
+      "Protective Pesticide": "insect plague",
+    };
+    function weatherProtection(farm) {
+      if (!farm) return [];
+      const placed = farm.collectibles || {}, home = (farm.home && farm.home.collectibles) || {};
+      const out = [];
+      for (const name in WEATHER_PROTECTION) {
+        const all = [...(placed[name] || []), ...(home[name] || [])];
+        if (!all.length) { out.push({ name, prevents: WEATHER_PROTECTION[name], owned: 0, spent: 0, kind: "none" }); continue; }
+        const spent = all.filter((i) => i && i.used === true).length;
+        out.push({
+          name, prevents: WEATHER_PROTECTION[name], owned: all.length, spent,
+          // `partial` matters: one spent instance out of two still leaves you covered once.
+          kind: spent === 0 ? "ready" : (spent < all.length ? "partial" : "spent"),
+        });
+      }
+      return out;
+    }
     // ── flowers.html 15926-15954: _shrineActiveNow + activeShrineEffects ──
     function _shrineActiveNow(farm, name) {
       const sh = SHRINE_DATA[name];
@@ -670,7 +706,7 @@ export {
   FEED_RECIPES, FEED_QTY, FEED_XP_TABLE, SICKNESS_RATE_BY_LEVEL,
   BARN_DELIGHT_RECIPE, BARN_DELIGHT_RECIPE_ALT, SICKNESS_PREVENTION,
   SHRINE_DATA, LAVA_PIT_REQUIREMENTS, GREENHOUSE_OIL_COSTS,
-  getAnimalDropsPerCycle, getAnimalLevelDistribution, toMs, unitToSfl, shrineStatuses,
+  getAnimalDropsPerCycle, getAnimalLevelDistribution, toMs, unitToSfl, shrineStatuses, weatherProtection, WEATHER_PROTECTION,
   calcSeedCostPerDay, calcAnimalFeedCost, calcSicknessCost, calcLavaPitCostPerDay,
   getAnimalCatSfl, getPriceProduct, _shrineStatus, _shrineActiveNow, activeShrineEffects,
 };

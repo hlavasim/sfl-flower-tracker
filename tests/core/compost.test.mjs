@@ -69,3 +69,54 @@ test("the verdict is honest about what it cannot price", () => {
     assert.ok(all[i - 1].netPerDay >= all[i].netPerDay, "sorted best net first");
   }
 });
+
+// ── periodic-section inputs: shrines and weather protection ──
+import { shrineStatuses, weatherProtection } from "../../core/engine/power-costs.mjs";
+
+test("shrine statuses distinguish never / active / expired", () => {
+  /*
+   * _shrineActiveNow only ever answered a yes/no for the valuation path, so nothing could tell
+   * the player a shrine had LAPSED. One expired mid-session and the only symptom was every
+   * mining marginal dropping 25% — which then contaminated a measurement.
+   */
+  const all = shrineStatuses(farm);
+  assert.ok(all.length > 10, `every shrine gets a status, got ${all.length}`);
+  for (const s of all) {
+    assert.ok(["never", "active", "expired"].includes(s.kind), `${s.name}: ${s.kind}`);
+    assert.ok(s.durationDays > 0, `${s.name}: carries its duration`);
+    assert.ok(typeof s.effect === "string" && s.effect.length > 0, `${s.name}: says what it does`);
+    if (s.kind === "active") assert.ok(s.hoursLeft > 0, `${s.name}: active means time left`);
+    else assert.equal(s.hoursLeft, null, `${s.name}: only active shrines carry hoursLeft`);
+  }
+  // The fixture has lapsed ones, which is the case worth surfacing.
+  assert.ok(all.some((s) => s.kind === "expired"), "the fixture farm has expired shrines");
+  // Badger and Mole are the pair that quietly cost 25% on the best-paying categories.
+  for (const n of ["Badger Shrine", "Mole Shrine"]) {
+    assert.ok(all.find((s) => s.name === n), `${n} is tracked`);
+  }
+});
+
+test("weather protection is spent by an event, not by a timer", () => {
+  /*
+   * The assumption worth checking, and it was wrong: these are not timed. The game stamps the
+   * instance `used: true` when its event fires (renewWeatherCollectible.ts renews only
+   * `if (collectibleToRenew.used)`), so a spent item looks identical to a working one on the
+   * farm and the next tornado costs you the crops it would have saved.
+   */
+  const before = weatherProtection(farm);
+  assert.equal(before.length, 4, "four protections tracked");
+  const pin = before.find((w) => w.name === "Tornado Pinwheel");
+  assert.equal(pin.prevents, "tornado");
+  assert.equal(pin.kind, "ready", "the fixture farm's pinwheel is unspent");
+  assert.equal(pin.spent, 0);
+
+  // Flip one instance's `used` and the status must follow — that flag is the whole mechanic.
+  const spent = JSON.parse(JSON.stringify(farm));
+  const inst = (spent.collectibles || {})["Tornado Pinwheel"] || ((spent.home || {}).collectibles || {})["Tornado Pinwheel"];
+  assert.ok(inst && inst[0], "the fixture has a placed pinwheel to mark");
+  inst[0].used = true;
+  const after = weatherProtection(spent).find((w) => w.name === "Tornado Pinwheel");
+  assert.equal(after.kind, "spent");
+  assert.equal(after.spent, 1);
+  assert.equal(after.owned, pin.owned, "owning it is unchanged — only its usefulness is gone");
+});
