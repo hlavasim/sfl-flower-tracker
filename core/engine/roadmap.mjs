@@ -1236,23 +1236,57 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       for (const m of situational) ranked.push({ name: m.name, type: m.type, boost: m.boost, floor: m.floor, value: m.sitValue, roi: m.sitValue > 0 ? m.floor / m.sitValue : Infinity, status: "conditional", reason: m.sitReason });
       ranked.sort((a, b) => a.roi - b.roi);
       /*
-       * The display sort is by payback, and on its own it scrambles every chain — that is exactly how
-       * a first version came to show "A2 Expansion 32" above "A1 Expansion 31" even though the PLANNER
-       * had ordered them correctly, and it would do the same to a skill's Level 3 and Level 2.
+       * The table is ranked by PAYBACK, and a chain has to stay in ladder order inside it — you
+       * cannot take a skill's Level 3 before its Level 2, or A2 before A1.
        *
-       * Exempting chains from the sort would pin them to one end of the table, which is worse. So keep
-       * the SLOTS the payback sort gave each chain and put that chain back in order within exactly
-       * those slots: the set of positions is unchanged, only which step sits in each.
+       * The first attempt kept the SLOTS the payback sort gave each chain and refilled them in ladder
+       * order. That was wrong in a way only the rendered table showed: the chain's first step lands in
+       * the BEST slot any of its members earned, the second step in the second best, and so on — so
+       * the early ladder is hoisted to the top regardless of its own payback. On a real farm that put
+       * "A1 Expansion 36" (2.0 YEARS) at row 5 of 163 and "A1 Expansion 38" (7.6 years) at row 7,
+       * above everything worth buying. The sort said one thing and the table showed another.
+       *
+       * A chain is one decision, so it gets ONE position: the whole chain is placed as a contiguous
+       * block at the payback its FIRST step earns, because that first step is the only one you can
+       * actually act on next. The rows inside the block keep ladder order and their own paybacks,
+       * which vary — that is honest, and it is what a sequence looks like.
        */
-      const chainSlots = {};
-      for (let i = 0; i < ranked.length; i++) {
-        const id = ranked[i].chainId;
-        if (id) (chainSlots[id] = chainSlots[id] || []).push(i);
-      }
-      for (const slots of Object.values(chainSlots)) {
-        if (slots.length < 2) continue;
-        const chain = slots.map((i) => ranked[i]).sort((a, b) => a.chainSeq - b.chainSeq);
-        slots.forEach((slot, k) => { ranked[slot] = chain[k]; });
+      const chains = {};
+      for (const r of ranked) if (r.chainId) (chains[r.chainId] = chains[r.chainId] || []).push(r);
+      if (Object.keys(chains).length) {
+        /*
+         * A chain row is placed by its PREFIX payback: what it costs to get there including every
+         * step you must do first, over what you earn once you have them all.
+         *
+         * Anchoring the whole chain on its first step was the previous attempt and it was still
+         * wrong — the ascension ladder's first step pays back in 61 days, so all 31 rows sat above
+         * every NFT, including the ones that pay back in 30 years. A sequence is not one decision.
+         *
+         * The prefix figure is the honest one: "A1 Expansion 38" is not a 7.6-year purchase, it is
+         * the far end of a run you must buy through, and that run's cumulative payback is what
+         * decides whether it belongs above or below the next NFT. Taking a running MAX also makes
+         * the value non-decreasing along the chain, which is what keeps the ladder in order once
+         * everything is sorted together — order is a property of the sort key, not a patch after it.
+         *
+         * Each row still DISPLAYS its own cost, gain and payback. Only the position uses the prefix.
+         */
+        for (const rows of Object.values(chains)) {
+          rows.sort((a, b) => a.chainSeq - b.chainSeq);
+          let cost = 0, gain = 0, worst = 0;
+          for (const r of rows) {
+            cost += r.floor; gain += r.value;
+            const prefix = gain > 0 ? cost / gain : Infinity;
+            // Strictly increasing along the chain: a running max alone produces TIES, and ties fall
+            // back on the payback order the array already had, which reordered 17 rows.
+            worst = Math.max(worst, prefix);
+            r.sortRoi = worst + r.chainSeq * 1e-9;
+            r.prefixRoi = prefix;          // served so the page can explain the placement
+            r.prefixCost = cost;
+          }
+        }
+        for (const r of ranked) if (r.sortRoi == null) r.sortRoi = r.roi;
+        // Stable by construction: equal keys keep the order the payback sort already gave them.
+        ranked.sort((a, b) => a.sortRoi - b.sortRoi);
       }
       { let rc = 0, ri = (startIncome > 0 ? startIncome : 0), rd = 0;
         for (const r of ranked) { if (r.status !== "plan") continue; const dd = ri > 0 ? r.floor / ri : Infinity; if (isFinite(dd)) rd += dd; rc += r.floor; ri += r.value; r.cumCost = rc; r.rateAfter = ri; r.atDay = rd; } }

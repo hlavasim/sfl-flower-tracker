@@ -18003,7 +18003,7 @@
         <th style="padding:4px 6px">Boost</th>
         <th style="padding:4px 6px;text-align:right" title="Kupní cena v FLOWER — floor na marketplace, u craftu odvozená z materiálu.">Cost ${sflIcon()}</th>
         <th style="padding:4px 6px;text-align:right" title="Kolik ti ta položka přidá za den, v FLOWER.">+${sflIcon()}/day</th>
-        <th style="padding:4px 6px;text-align:right">Payback</th>
+        <th style="padding:4px 6px;text-align:right" title="Řazeno podle návratnosti. U kroků, které tvoří řadu (ascension expanze, Level 2 → 3), se řadí podle návratnosti CELÉ řady až sem — ten krok nejde koupit dřív než ty před ním. Tahle hodnota je pak pod vlastní návratností jako ‚v řadě‘.">Payback</th>
         <th style="padding:4px 6px;text-align:right" title="Kumulativní cena v FLOWER, když kupuješ shora dolů.">&Sigma; Cost ${sflIcon()}</th>
         <th style="padding:4px 6px;text-align:right">FL/day</th>
         <th style="padding:4px 6px;text-align:right">ETA</th>
@@ -18025,7 +18025,17 @@
           <td style="padding:3px 6px;color:var(--text-dim);max-width:240px">${boostTxt}</td>
           <td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(r.floor)}</td>
           <td style="padding:3px 6px;text-align:right;color:var(--green)">${marg}</td>
-          <td style="padding:3px 6px;text-align:right">${roadmapFmtDays(r.roi)}</td>
+          <td style="padding:3px 6px;text-align:right">${roadmapFmtDays(r.roi)}${
+            /*
+             * A chain row is POSITIONED by its prefix payback — what it costs to get here including
+             * every step you must do first — not by its own. Without showing that, the column looks
+             * unsorted: "A1 Expansion 33" reads 28d sitting below a 61d row, and the table appears
+             * to be lying. The second figure is the one the order actually uses.
+             */
+            (r.prefixRoi != null && Math.abs(r.prefixRoi - r.roi) > 1)
+              ? `<div style="font-size:0.45rem;color:var(--text-dim)" title="Řadí se podle návratnosti CELÉ řady až sem: ${roadmapFmtFlower(r.prefixCost)} FLOWER za všechny kroky včetně tohohle. Vlastní návratnost tohohle kroku je ${roadmapFmtDays(r.roi)}, ale nejde ho koupit dřív než ty před ním.">v řadě ${roadmapFmtDays(r.sortRoi)}</div>`
+              : ""
+          }</td>
           <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${isPlan ? roadmapFmtFlower(r.cumCost) : "\u2014"}</td>
           <td style="padding:3px 6px;text-align:right;color:var(--sunpetal)">${isPlan ? roadmapFmtFlower(r.rateAfter) : "\u2014"}</td>
           <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${isPlan ? roadmapFmtDate(r.atDay) : "\u2014"}</td>
