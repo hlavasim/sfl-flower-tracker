@@ -23,6 +23,7 @@ import {
   dashCalculateDeliveryTickets, roadmapItemCost, roadmapGiftRewardValue, _setItemCostMaps,
 } from "../engine/gifts-deliveries.mjs";
 import { buildPricesSection } from "./prices.mjs";
+import { buildPetsSection } from "./pets.mjs";
 
 const _nf = (v) => (typeof v === "number" && !isFinite(v) ? null : v);
 const _strip = (m) => ({ name: m.name, type: m.type, floor: m.floor, boost: m.boost, supply: m.supply });
@@ -43,6 +44,27 @@ export function buildRoadmapSection(snapshots, settings = {}) {
   // Which not-yet-run activities the user switched on. Straight through to the simulator.
   rs.scenarios = Array.isArray(settings.scenarios) ? settings.scenarios : [];
   const currentProd = roadmapCurrentProduction(rs);
+  /*
+   * PETS — income the roadmap could not see. The category is in POWER_CATEGORIES but is not
+   * `quantifiable` (yield is fetch-energy driven, not node × cycle), so roadmapCurrentProduction
+   * skips it — and startIncome prices every ETA and reinvestment date on the page, so all of them
+   * ran low by whatever the pets actually fetch. The farm HAS pets; this is not a scenario.
+   * Same daily model the PETS page ships (buildPetsSection → petDailyCalc). The eff factor is the
+   * one any category without its own harvest signal gets: pet feeds do not stockpile — a missed
+   * login is a lost feed — so overall measured activity is the honest scale, not 1.
+   * No try/catch: a throw here is a bug in this file, and swallowing it is how a number ships
+   * silently wrong with a green suite.
+   */
+  {
+    const ps = _getPowerContext();
+    const petsSfl = buildPetsSection(ps.farm, ps.p2pPrices).pets
+      .reduce((s, p) => s + ((p.calc && p.calc.dailySfl) || 0), 0) * roadmapEffFactor("pets", rs);
+    if (petsSfl > 0) {
+      currentProd.total += petsSfl;
+      currentProd.breakdown.push({ cat: "pets", sfl: petsSfl });
+      currentProd.breakdown.sort((a, b) => b.sfl - a.sfl);
+    }
+  }
   const startIncome = (rs.startIncome != null) ? rs.startIncome : currentProd.total;
   const sim = roadmapSimulate(rs, startIncome);
   /*
