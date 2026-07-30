@@ -1004,7 +1004,21 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
      * can be unflippable with anything on the market. Both are reported as such rather than omitted,
      * because "nothing will fix this" is an answer and an empty row is not.
      */
-    function roadmapStartupPlans(settings, byName, catBoostsW) {
+    function roadmapStartupPlans(userSettings, byName, catBoostsW) {
+      /*
+       * THEORETICAL, always — and this is the whole reason the first version answered nothing.
+       *
+       * Measured efficiency is "how much of the theoretical maximum did you actually harvest", and
+       * for an activity you do not do it is 0 by construction. So every figure in a dead category
+       * was multiplied by zero: the category net came out at exactly 0.000, every candidate boost
+       * showed a gain of 0, nothing could ever flip anything, and the honest-looking verdict
+       * "unflippable" was an artefact of the question being asked in the wrong basis.
+       *
+       * The question here is counterfactual — "IF I started doing this, would it pay?" — so it has
+       * to be asked at full efficiency. effOverrides is dropped too: a manual slider parked at 0 for
+       * a category you ignore would defeat the same purpose in the same way.
+       */
+      const settings = Object.assign({}, userSettings, { effMode: "theoretical", effOverrides: null });
       const out = [];
       const { capacity } = powerState;
       const maxP = (settings.maxPrice && settings.maxPrice > 0) ? settings.maxPrice : Infinity;
