@@ -17220,6 +17220,23 @@
      * at each step the cheapest-payback step available NOW is taken. So an entry always sits
      * below whatever it depends on, and the cumulative column is a real running total.
      */
+    // Which row types the Table view hides. Persisted like the other roadmap toggles so the
+    // choice survives a reload; unknown names are ignored rather than trusted.
+    const LS_ROADMAP_HIDDEN_TYPES = "sfl_roadmap_hidden_types";
+    function _roadmapHiddenTypes() {
+      try {
+        const v = JSON.parse(localStorage.getItem(LS_ROADMAP_HIDDEN_TYPES) || "[]");
+        return new Set(Array.isArray(v) ? v.filter(x => typeof x === "string") : []);
+      } catch { return new Set(); }
+    }
+    window._roadmapToggleType = function (ty) {
+      const h = _roadmapHiddenTypes();
+      if (h.has(ty)) h.delete(ty); else h.add(ty);
+      try { localStorage.setItem(LS_ROADMAP_HIDDEN_TYPES, JSON.stringify([...h])); } catch {}
+      // Re-render the view only. The plan is unchanged, so nothing needs recomputing.
+      renderRoadmapContent();
+    };
+
     function roadmapAllUpgradesHtml(settings) {
       const ps = powerState || {};
       const sr = ps.skillRanks || {}, bv = ps.boostValues || {};
@@ -17851,6 +17868,40 @@
         h += `<div class="pixel-panel" style="padding:10px;margin-bottom:14px;color:var(--yellow);font-size:0.6rem">Set a positive "Start FLOWER/day" to get time estimates. The ORDER below is still correct (sorted by ROI payback).</div>`;
       }
 
+      /*
+       * One entry per type. The badge fell through to "C" for anything it did not know, so an
+       * ascension expansion was labelled a Collectible.
+       */
+      const rowTypeMeta = {
+        Collectible: { label: "C",     full: "NFT collectibles",          bg: "#3a2a5a" },
+        Wearable:    { label: "W",     full: "Wearables",                 bg: "#2a3a5a" },
+        Skill:       { label: "SKILL", full: "Skilly a ascension ranky",  bg: "#3a2a5a" },
+        Node:        { label: "NODE",  full: "Nody (koupit / slou\u010dit)", bg: "#1f3a2a" },
+        Ascension:   { label: "EXP",   full: "Ascension expanze",         bg: "#4a2a2a" },
+      };
+      /*
+       * Type filters. The list mixes five kinds of action now (NFTs, wearables, skills, nodes,
+       * ascension expansions) and on a high-level farm the skills alone are 30+ rows, so hiding a
+       * kind is the difference between a usable list and scrolling past them to reach the NFTs.
+       *
+       * Hidden types are dropped from the RENDER only. The order, the cumulative cost and the ETAs
+       * still come from the full list, because filtering the plan itself would quietly change the
+       * answer rather than the view — and the row numbers stay the true positions so it is visible
+       * that something was skipped.
+       */
+      const _rmHidden = _roadmapHiddenTypes();
+      const _rmCounts = {};
+      for (const r of (sim.ranked || [])) { const t = r.type || "Collectible"; _rmCounts[t] = (_rmCounts[t] || 0) + 1; }
+      const _rmShown = (sim.ranked || []).filter(r => !_rmHidden.has(r.type || "Collectible")).length;
+      h += `<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+        <span style="font-size:0.5rem;color:var(--text-dim)">Zobrazit:</span>
+        ${Object.keys(rowTypeMeta).filter(t => _rmCounts[t]).map(t => {
+          const on = !_rmHidden.has(t);
+          return `<button class="dash-toggle-btn ${on ? "on" : ""}" onclick="_roadmapToggleType('${t}')" title="${escHTML(rowTypeMeta[t].full)}">${on ? "\u2611" : "\u2610"} ${escHTML(rowTypeMeta[t].full)} <span style="opacity:0.6">${_rmCounts[t]}</span></button>`;
+        }).join("")}
+        ${_rmHidden.size ? `<span style="font-size:0.47rem;color:var(--sunpetal)">skryto ${(sim.ranked || []).length - _rmShown} z ${(sim.ranked || []).length} \u2014 po\u0159ad\u00ed, \u03a3 Cost i ETA se po\u010d\u00edtaj\u00ed z cel\u00e9ho seznamu</span>` : ""}
+      </div>`;
+
       // \u2500\u2500 Unified ranked list: IN PLAN + CONDITIONAL by payback; cosmetics in a tail \u2500\u2500
       h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.6rem">`;
       h += `<thead><tr style="color:var(--text-secondary);text-align:left">
@@ -17864,10 +17915,11 @@
         <th style="padding:4px 6px;text-align:right">FL/day</th>
         <th style="padding:4px 6px;text-align:right">ETA</th>
       </tr></thead><tbody>`;
-      const typeBadge = ty => `<span style="font-size:0.5rem;padding:1px 4px;border-radius:3px;background:${ty === "Wearable" ? "#2a3a5a" : (ty === "Node" ? "#1f3a2a" : "#3a2a5a")};color:var(--text-dim)">${ty === "Wearable" ? "W" : (ty === "Skill" ? "SKILL" : (ty === "Node" ? "NODE" : "C"))}</span>`;
+      const typeBadge = ty => { const d = rowTypeMeta[ty] || rowTypeMeta.Collectible; return `<span style="font-size:0.5rem;padding:1px 4px;border-radius:3px;background:${d.bg};color:var(--text-dim)" title="${escHTML(d.full)}">${d.label}</span>`; };
       let rank = 0;
       for (const r of (sim.ranked || [])) {
-        rank++;
+        rank++;   // counts the FULL order, so a visible row keeps its real position
+        if (_rmHidden.has(r.type || "Collectible")) continue;
         const isPlan = r.status === "plan";
         const stBadge = isPlan
           ? `<span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1f3a2a;color:#7fe0a0;font-weight:bold">IN PLAN</span>`
