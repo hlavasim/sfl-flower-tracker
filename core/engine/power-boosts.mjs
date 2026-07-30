@@ -354,6 +354,27 @@
         }},
 
       // ── CHANCE RULES (BEFORE yield rules to prevent "X% chance +N Fruit yield" being caught as flat yield) ──
+      /*
+       * "1% chance +200 Coins chopping trees" (Money Tree) and friends. Must sit BEFORE the
+       * generic chance rule, which swallowed it as a yield of a product literally named
+       * "Coins chopping trees" in category "other" — and "other" is not quantifiable, so
+       * calcBoostValue was never called for it and the skill valued at exactly 0. The
+       * roadmap's skills view DID price it (0.756/day on a real farm) through its own
+       * raw-text pass, which is the kind of divergence this consolidation removes.
+       *
+       * Coins are not FLOWER; the engine converts at coinsPerSFL where it prices this.
+       */
+      { rx: /(\d+\.?\d*)%\s+chance\s+\+(\d+\.?\d*)\s+Coins?\s*(chopping|mining|digging)?\s*([\w\s]*)/i,
+        fn: m => {
+          const what = ((m[4] || "") + " " + (m[3] || "")).toLowerCase();
+          const cat = /tree|chop/.test(what) ? "trees"
+            : /iron/.test(what) ? "iron"
+            : /gold/.test(what) ? "gold"
+            : /crimstone/.test(what) ? "crimstone"
+            : /stone|rock|mining/.test(what) ? "stone" : null;
+          if (!cat) return { type: "qualitative", cat: "coins", raw: m[0] };
+          return { type: "coin_chance", pct: parseFloat(m[1]), coins: parseFloat(m[2]), cat, raw: m[0] };
+        } },
       // "N% chance +N food from Building" (cooking-related chance) — BEFORE generic
       { rx: /(\d+\.?\d*)%\s+chance\s+\+(\d+\.?\d*)\s+food/i,
         fn: m => ({ type: "chance", pct: parseFloat(m[1]), extra: parseFloat(m[2]), cat: "cooking", product: "food" }) },

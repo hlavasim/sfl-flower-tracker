@@ -453,13 +453,43 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
          * both reported as worthless. It also overstated the reverse case — a boost that
          * turns a loss-maker profitable scored its whole net instead of the part it added.
          *
-         * The mining branch above already differences raw nets; this now matches it. A boost
-         * that makes a category WORSE (Speed Chicken: faster cycles on a loss-maker) still
-         * reports 0 rather than a negative number.
+         * The mining branch above already differences raw nets; this matches it.
+         *
+         * And the difference is NOT clamped either, as of the unclamp pass: a boost that makes
+         * a category worse reports the negative. Measured on a real farm before shipping it —
+         * 6 of 277 valued items move, none of them owned, and what they gain is a warning:
+         * Acre Farm reads -0.74/day there because its -0.5 Advanced Crop debuff outweighs its
+         * buff on that crop mix, where a clamped 0.00 read as merely uninteresting.
          */
         const net = (ef) => roadmapCatNet(catId, ef, _s);
-        synergy = Math.max(0, net(ownedEff.concat(catEffects)) - net(ownedEff));
-        solo = Math.max(0, net(catEffects) - net([]));
+        synergy = net(ownedEff.concat(catEffects)) - net(ownedEff);
+        solo = net(catEffects) - net([]);
+      }
+      /*
+       * Coin drops per harvest (coin_chance): Money Tree's "1% chance +200 Coins chopping
+       * trees". Neither the chain nor roadmapCatNet models coins, so this is additive on top
+       * of whatever the category's production came to — it is extra revenue per harvest event,
+       * not a change to the yield.
+       *
+       * Added here because it was the one component the roadmap's skills view priced and this
+       * engine did not: Money Tree read 0.756/day there and exactly 0 on the Power page.
+       * Converted through coinsPerSFL, and scaled by the harvest rate the same cost model uses
+       * for tools, so a category you barely touch earns proportionally less from it.
+       */
+      const coinEffects = catEffects.filter(e => e.type === "coin_chance");
+      if (coinEffects.length) {
+        const { capacity, exchangeRates } = powerState;
+        const cps = exchangeRates && exchangeRates.coinsPerSFL;
+        if (cps > 0) {
+          let harvests = 0;
+          try { harvests = miningToolsPerDay(catId, capacity, powerState.farm, ownedEff) || 0; } catch (e) { harvests = 0; }
+          if (harvests > 0) {
+            let add = 0;
+            for (const e of coinEffects) add += ((e.pct || 0) / 100) * (e.coins || 0) * harvests / cps;
+            synergy += add;
+            solo += add;
+          }
+        }
       }
       const roi = (boostItem.floor > 0 && synergy > 0) ? boostItem.floor / synergy : Infinity;
       const out = { solo, synergy, roi };

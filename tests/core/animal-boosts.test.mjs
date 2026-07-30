@@ -53,9 +53,14 @@ test("boostValues — a boost on a loss-making category is worth what it adds, n
   // A ROI follows from a non-zero value, which is the whole point of the wishlist column.
   assert.ok(isFinite(bv["Fat Chicken"].roi) && bv["Fat Chicken"].roi > 0, "and it yields a finite ROI");
 
-  // Not a blanket "everything is positive now": speeding up a loss-maker makes the loss
-  // bigger, and that still reports 0 rather than a negative number.
-  assert.equal(bv["Speed Chicken"].synergy, 0, "a boost that deepens the loss stays at 0");
+  /*
+   * Not a blanket "everything is positive now": speeding up a loss-maker makes the loss
+   * BIGGER, and since the unclamp pass that is reported as a negative rather than hidden at 0.
+   * Faster chicken cycles on a farm where feed already outruns the eggs costs real money, and
+   * a 0.00 read as "merely uninteresting" when it should read "do not buy this".
+   */
+  assert.ok(bv["Speed Chicken"].synergy < 0,
+    `a boost that deepens the loss must show the negative, got ${bv["Speed Chicken"].synergy}`);
 });
 
 test("boostValues — free_feed is priced, not silently ignored", () => {
@@ -74,4 +79,32 @@ test("boostValues — free_feed is priced, not silently ignored", () => {
   // The farm does not own a Gold Egg, so this is the "what if I buy it" path — the one the
   // wishlist and the Power page both use.
   assert.equal(chickenOut.boostItems.find((b) => b.name === "Gold Egg").has, false);
+});
+
+test("a per-harvest coin drop is priced, not left at zero", () => {
+  /*
+   * Money Tree: "1% chance +200 Coins chopping trees". It used to parse as a yield of a product
+   * literally named "Coins chopping trees" in category "other" — not quantifiable, so
+   * calcBoostValue was never called and the skill valued at exactly 0, while the roadmap's own
+   * skills view priced it at 0.756/day through a separate raw-text pass. That divergence is
+   * what the coin_chance effect type removes.
+   */
+  const coinNfts = { collectibles: [], wearables: [] };
+  const co = buildPowerSection(farm, p2p, coinNfts, null, {});
+  const mt = co.boostItems.find((b) => b.name === "Money Tree");
+  assert.ok(mt, "Money Tree is a skill boost item");
+  assert.deepEqual(mt.categories, ["trees"], "it must land in a QUANTIFIABLE category, not 'other'");
+  const eff = mt.effects.find((e) => e.type === "coin_chance");
+  assert.ok(eff, `parsed as coin_chance, got ${JSON.stringify(mt.effects)}`);
+  assert.equal(eff.pct, 1);
+  assert.equal(eff.coins, 200);
+
+  const v = co.boostValues.trees["Money Tree"];
+  assert.ok(v && v.synergy > 0, `and it is now worth something (${v && v.synergy})`);
+
+  // Priced through coinsPerSFL, so it is FLOWER-comparable rather than a raw coin figure —
+  // 1% of 200 coins per chop, over the day's chops, divided by the coin rate.
+  assert.ok(co.exchangeRates.coinsPerSFL > 0, "there is a coin rate to convert through");
+  assert.ok(v.synergy < 200 / co.exchangeRates.coinsPerSFL * 1000,
+    "sane magnitude — a 1% chance cannot be worth the full drop every chop");
 });

@@ -126,13 +126,13 @@ test("KNOWN_DEVIATIONS lists nothing that has since been re-synced", () => {
  * Two sites the function-level sweep cannot reach: one inside an allow-listed function, one in
  * a top-level table. Both were hand-patched into flowers.html this session, so both get pinned.
  */
-test("calcBoostValue's clamp is the same in both copies", () => {
+test("calcBoostValue takes the raw difference, identically in both copies", () => {
   // calcBoostValue is allow-listed for its `effMode` param, so its body is not compared —
   // but the clamp is what makes a boost on a loss-making category worth anything, and it is
   // identical in both copies. Clamping each side instead of the difference zeroes them again.
-  const rx = /const net = \(ef\) => roadmapCatNet\(catId, ef, _s\);\s*synergy = Math\.max\(0, net\(ownedEff\.concat\(catEffects\)\) - net\(ownedEff\)\);\s*solo = Math\.max\(0, net\(catEffects\) - net\(\[\]\)\);/;
-  assert.match(page, rx, "flowers.html: clamp must apply to the difference");
-  assert.match(read("core/engine/roadmap.mjs"), rx, "core: clamp must apply to the difference");
+  const rx = /const net = \(ef\) => roadmapCatNet\(catId, ef, _s\);\s*synergy = net\(ownedEff\.concat\(catEffects\)\) - net\(ownedEff\);\s*solo = net\(catEffects\) - net\(\[\]\);/;
+  assert.match(page, rx, "flowers.html: the difference must be taken raw, unclamped");
+  assert.match(read("core/engine/roadmap.mjs"), rx, "core: likewise");
 });
 
 test("the oil regeneration parse rules are the same in both copies", () => {
