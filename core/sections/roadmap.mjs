@@ -48,11 +48,53 @@ export function buildRoadmapSection(snapshots, settings = {}) {
    * cannot answer for: a boost on a dead category is worth nothing until the category is above
    * water, so it sinks to the bottom as CONDITIONAL and the question never gets an answer.
    */
-  let startup = [];
+  let startup = [], startupError = null;
   try {
     const { byName, catBoostsW } = roadmapBuildClones();
     startup = roadmapStartupPlans(rs, byName, catBoostsW);
-  } catch (e) { startup = []; }
+    /*
+     * CROP MACHINE, added here rather than inside roadmapStartupPlans because it is NOT a
+     * POWER_CATEGORIES entry — it has its own engine (crop-machine.mjs) with its own inputs (oil
+     * per hour, seeds in coins) and its own plot count. I wrongly told the owner it "cannot
+     * appear"; the model was there all along, it just is not in the table the planner walks.
+     *
+     * No boost search: the machine has no boost items of its own, so the honest answer is WHICH
+     * CROP pays, which is the decision you actually make with it. If the best crop is already
+     * positive the row is dropped like any other earning category.
+     */
+    /*
+     * _getPowerContext(), not a bare `powerState` — that identifier does not exist in this module's
+     * top-level scope (buildTodo fetches it explicitly for the same reason). Written wrong first
+     * time and the try/catch around this block SWALLOWED the ReferenceError, so the whole startup
+     * panel would have gone silently empty while the tests stayed green. A catch that hides a
+     * programming error is worse than no catch.
+     */
+    const ps = _getPowerContext();
+    if (farmHasCropMachine(ps.farm)) {
+      const er = ps.exchangeRates;
+      const rows = [];
+      for (const crop of cropMachineCrops(ps.farm)) {
+        const r = calcCropMachineDaily(ps.farm, crop, ps.p2pPrices, er, false);
+        if (!r || !isFinite(r.net)) continue;
+        rows.push({ product: crop, net: r.net, gross: r.revenue,
+          cost: (r.oilCost || 0) + (r.seedCostPerDay || 0), plots: r.plots });
+      }
+      rows.sort((a, b) => b.net - a.net);
+      if (rows.length && rows[0].net <= 0) {
+        startup.push({
+          cat: "cropMachine", label: "CROP MACHINE", count: rows[0].plots, atMax: rows[0].plots,
+          nowNet: rows[0].net, unpriced: false, picked: [], cost: 0, net: rows[0].net,
+          productsBefore: rows, flips: false, blocked: "crop-choice", capacity: null, roomBlocked: false,
+        });
+      }
+    }
+  } catch (e) {
+    // The panel is optional — the buy path must still render — but a ReferenceError/TypeError here
+    // is a bug in this file, not a data problem, and silently swallowing it is how the panel would
+    // ship empty with a green suite. Surface it in the payload instead of vanishing.
+    startup = [];
+    startupError = String((e && e.message) || e);
+  }
 
   // JSON-safe: strip clone refs, null non-finite numbers.
   sim.untradeable = (sim.untradeable || []).map(_strip);
@@ -83,7 +125,7 @@ export function buildRoadmapSection(snapshots, settings = {}) {
   }
   const todo = buildTodo(rs);
 
-  return { eff, currentProd, startIncome, sim, profitability, todo, startup };
+  return { eff, currentProd, startIncome, sim, profitability, todo, startup, startupError };
 }
 
 function _fmtFlower(v) {
