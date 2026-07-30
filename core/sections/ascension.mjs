@@ -9,9 +9,13 @@
 //   - xpPerDay: buildCookingSection's totalXpPerDay (the verified cooking engine).
 // POST-only (snapshots for efficiency); query grinx=0|1, max=1..10.
 import { COOKING_RECIPES_DATA } from "../data/cooking.mjs";
+// Merge lives here now, not in flowers.html. nodeAcq was the only place computing buy and
+// expand, so the NODES page kept a THIRD engine for merges — which is how the same gold node
+// came out negative on one page and positive on two others. One source or none.
+import { MERGE_COSTS, countNodeTiers, roadmapEffFactor, getRoadmapSettings } from "../engine/roadmap.mjs";
 import { detectCookingBoosts, computeFoodXP } from "../engine/cooking.mjs";
 import { PRE_EXPANSION_REQUIREMENTS, ISLAND_PROGRESSION } from "../data/expansions.mjs";
-import { BUMPKIN_XP_TABLE, findCollectible } from "../engine/power-helpers.mjs";
+import { BUMPKIN_XP_TABLE, findCollectible, miningToolsPerDay } from "../engine/power-helpers.mjs";
 // Treasures sell to an NPC at a fixed coin price — the same table and boosts the treasury
 // section uses, so the two cannot disagree about what a dig pile is worth.
 import { TREASURE_SELL_PRICES } from "../data/crafting.mjs";
@@ -583,6 +587,54 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
   // BUY: next few purchases per node type
   const nodeAcq = { obsidianPerDay, obsidianPrice, costPerXp, prodCost,
     obsidianPerSunstone: OBSIDIAN_PER_SUNSTONE, perType: {} };
+  /*
+   * MERGE: four T1 nodes become one T2 (and four T2 become one T3).
+   *
+   * Effective capacity is unchanged — a T2 counts as four nodes — and so is tool cost per unit
+   * of yield: chop.ts's getRequiredAxeAmount() returns `1 * multiplier` while the yield is
+   * `amount.mul(multiplier)`, so a multiplier-4 node costs four tools per dig and pays four
+   * times. Verified in the game source, not assumed. What merging actually buys is the flat
+   * yieldBonus, and nothing else.
+   *
+   * The bonus is FLAT, so percentage yield boosts must not multiply it. That is the one place
+   * merge legitimately differs from buy and must not be unified away.
+   */
+  const MERGE_TO_FARMKEY = { trees: "trees", stones: "stones", iron: "iron", gold: "gold" };
+  const MERGE_TO_CAT = { trees: "trees", stones: "stone", iron: "iron", gold: "gold" };
+  const mergeSettings = getRoadmapSettings(settings.roadmapSettings || {});
+  const mergeFor = (mergeKey) => {
+    const mc = MERGE_COSTS[mergeKey];
+    const cat = MERGE_TO_CAT[mergeKey];
+    if (!mc || !cat) return null;
+    const tiers = countNodeTiers(farm[MERGE_TO_FARMKEY[mergeKey]] || {});
+    const price = p2pP[(cats[cat] || {}).product] || 0;
+    /*
+     * DIGS per day, not units per day. The bonus is a flat add per dig, so multiplying it by
+     * output would double-count every yield boost the node already has — boostedUnitsPerDay
+     * includes them. miningToolsPerDay is the dig count, and it is what the buy side prices
+     * tools from, so both stay on one basis.
+     */
+    let cyclesPerDay = 0;
+    try { cyclesPerDay = (miningToolsPerDay(cat, powerData.capacity, farm, []) || 0) / Math.max(1, catNodeCount[cat] || 1); } catch (e) { cyclesPerDay = 0; }
+    const eff = effRatioFor(cat);
+    const out = [];
+    for (const tier of [2, 3]) {
+      const c = mc[`t${tier}`];
+      if (!c) continue;
+      // Delta at T3 is 2.5 - 4x0.5 = +0.5: four T2s already carried half a bonus each.
+      const bonus = tier === 2 ? mc.yieldBonus.t2 : (mc.yieldBonus.t3 - 4 * mc.yieldBonus.t2);
+      const have = tier === 2 ? tiers.t1 : tiers.t2;
+      out.push({
+        tier, obsidian: c.obsidian, coins: c.coins,
+        bonus, gainPerDay: bonus * cyclesPerDay * price * eff,
+        // The game needs four of the lower tier in hand; below that it is not yet actionable.
+        have, need: 4, ready: have >= 4,
+        matSfl: prodCost["Obsidian"] > 0 ? c.obsidian * prodCost["Obsidian"] : null,
+      });
+    }
+    return { mergeKey, cat, tiers, merges: out };
+  };
+  nodeAcq.merge = Object.keys(MERGE_COSTS).map(mergeFor).filter(Boolean);
   for (const node of PROFIT_NODES) {
     const cat = NODE_TO_CAT[node];
     // Same figure the plan's step ROI uses — one source, so the table and the plan cannot

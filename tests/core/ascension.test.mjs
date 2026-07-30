@@ -542,3 +542,33 @@ test("coin stock includes treasures you could sell, reported separately", async 
     assert.ok(c.treasureCoins.items[i - 1].coins >= c.treasureCoins.items[i].coins, "sorted by value");
   }
 });
+
+test("merge is modelled in core, on the same basis as buy", () => {
+  /*
+   * Merge used to exist ONLY in flowers.html, so the NODES page carried a third engine and the
+   * same gold node came out negative there while the roadmap and ascension called it positive.
+   * It lives here now; the pages are meant to render this, not recompute it.
+   */
+  const m = out.nodeAcq.merge;
+  assert.ok(Array.isArray(m) && m.length === 4, `four mergeable trees, got ${m && m.length}`);
+  for (const t of m) {
+    assert.ok(t.tiers && typeof t.tiers.t1 === "number", `${t.mergeKey}: tier counts present`);
+    assert.deepEqual(t.merges.map((x) => x.tier), [2, 3], `${t.mergeKey}: both merge steps`);
+    for (const x of t.merges) {
+      assert.ok(x.obsidian > 0 && x.coins > 0, `${t.mergeKey} T${x.tier}: costs something`);
+      assert.equal(x.need, 4, "the game consumes four of the lower tier");
+      assert.equal(x.ready, x.have >= 4, `${t.mergeKey} T${x.tier}: ready follows the count`);
+      assert.ok(isFinite(x.gainPerDay), `${t.mergeKey} T${x.tier}: a finite gain`);
+    }
+    /*
+     * The T3 delta is +0.5, not +2.5: four T2s already carried half a bonus each, so
+     * 2.5 - 4x0.5 = 0.5. Quoting the raw t3 figure would overstate a T3 merge fivefold.
+     */
+    assert.equal(t.merges[1].bonus, 0.5, `${t.mergeKey}: T3 delta nets out the four T2 bonuses`);
+    assert.equal(t.merges[0].bonus, 0.5, `${t.mergeKey}: T2 bonus`);
+  }
+  // Gold is merged with obsidian and coins, and T3 costs more than T2 — cheap sanity that the
+  // cost table is being read per tier rather than reused.
+  const gold = m.find((x) => x.mergeKey === "gold");
+  assert.ok(gold.merges[1].obsidian > gold.merges[0].obsidian, "T3 costs more obsidian than T2");
+});
