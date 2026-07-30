@@ -875,6 +875,89 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       return out;
     }
 
+    /*
+     * ASCENSION EXPANSIONS AND UPGRADES IN THE BUY PATH.
+     *
+     * They have exactly the shape the rest of the path has: a cost in materials, and an income,
+     * because every expansion hands you profit nodes. Leaving them out meant the page could tell
+     * you to buy a gold node while an expansion three steps away would have handed you four of
+     * them cheaper — which is the comparison the ascension page makes in isolation and nothing
+     * else could see.
+     *
+     * Costs follow the section's own valuation rule, not the marketplace: anything you can BUY is
+     * worth its purchase price, and obsidian and oil (which you cannot) are worth what producing
+     * them costs. That rule and the numbers behind it come from nodeAcq.prodCost, so this cannot
+     * disagree with the ascension page about what an expansion costs.
+     *
+     * Income is what the nodes it GRANTS earn, taken from nodeAcq.perType — the same per-node
+     * figures the NODES page renders. Steps are strictly ORDERED (you cannot do A2 before A1), so
+     * they are offered as a prefix of the plan rather than as free-floating options, and each row
+     * says which step it is.
+     */
+    function roadmapAscensionCandidates(settings) {
+      const out = [];
+      const asc = roadmapState && roadmapState.ascension;
+      if (!asc || !Array.isArray(asc.steps) || !asc.nodeAcq) return out;
+      const prodCost = asc.nodeAcq.prodCost || {};
+      const perType = asc.nodeAcq.perType || {};
+      const p2pPrices = roadmapPrices(settings);
+      const coinsFree = roadmapCoinsFree(settings);
+      const cps = (powerState.exchangeRates && powerState.exchangeRates.coinsPerSFL) || 0;
+      // Same rule as the ascension section: produce-only resources at production cost, everything
+      // else at its purchase price. A resource we cannot price at all makes the cost a FLOOR, and
+      // a floor must not be allowed to win a comparison, so the step is skipped rather than shown
+      // cheap.
+      const priceRes = (res) => {
+        let sfl = 0, unpriced = false;
+        for (const [item, qty] of Object.entries(res || {})) {
+          if (!qty) continue;
+          if (item === "Coins") { if (!coinsFree && cps > 0) sfl += qty / cps; continue; }
+          const unit = prodCost[item] > 0 ? prodCost[item] : (p2pPrices[item] || 0);
+          if (!(unit > 0)) { unpriced = true; continue; }
+          sfl += unit * qty;
+        }
+        return { sfl, unpriced };
+      };
+      /*
+       * ONE row: the next step that actually earns something, carrying the cost of every step you
+       * must do to reach it.
+       *
+       * The first version offered every pending step and let the ROI sort order them, which
+       * produced an order you cannot follow — A2 e32 above A1 e31, A4 above A2 — because ascension
+       * steps are strictly sequential. Cumulative rows for every milestone would double-count
+       * (A1 e31 and A1 e33 overlap), so the honest offer is the NEXT one. Steps that grant no
+       * earning node (island upgrades, expansions of only decorative slots) are not skipped past
+       * silently: their cost is rolled into the row, because reaching the earning step means paying
+       * for them too. The full plan stays on the ascension page, which is where a plan belongs.
+       */
+      let cum = 0; const via = [];
+      for (const st of asc.steps) {
+        const priced = priceRes(Object.assign({}, st.cost, st.extraCost));
+        if (priced.unpriced) return out;   // cannot price the path this far — a floor must not compete
+        cum += priced.sfl;
+        let marg = 0; const gained = [];
+        for (const [node, n] of Object.entries(st.nodesAdded || {})) {
+          const d = perType[node];
+          if (!d || !n) continue;
+          marg += (d.profitPerDay || 0) * n;
+          gained.push(`${n}x ${node}`);
+        }
+        const label = st.asc === 0
+          ? (st.kind === "upgrade" ? `Upgrade na ${st.next || "?"}` : `${st.island || "?"} e${st.expansion}`)
+          : (st.kind === "upgrade" ? `Ascension A${st.asc}` : `A${st.asc} · e${st.expansion}`);
+        if (!(marg > 0)) { via.push(label); continue; }   // no income yet: roll its cost forward
+        if (!(cum > 0)) return out;
+        out.push({
+          name: label, type: "Ascension", floor: cum, supply: 0,
+          boost: `${gained.join(" + ")}${via.length ? ` · přes ${via.join(", ")}` : ""}${st.absLevel ? ` · level ${st.absLevel}` : ""}`,
+          clone: { name: label, categories: ["crops"], effects: [], fixedMarginal: marg, has: false, isDisabled: false },
+          ascStep: { asc: st.asc, expansion: st.expansion, kind: st.kind, via, nodesAdded: st.nodesAdded || {} },
+        });
+        return out;   // only the next one is an action you can actually take
+      }
+      return out;
+    }
+
     // ── flowers.html 17378-17431: roadmapNodeCandidates ──
     /*
      * NODE_PRICES is keyed by farm key and LABELLED for display ("Stone", "Gold"), but
@@ -980,6 +1063,8 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
        */
       const skillCands = roadmapSkillCandidates(settings, byName, catBoostsW);
       for (const sc of skillCands) { if (sc.floor <= maxP) econ.push(sc); }
+      // Ascension expansions and upgrades, on the same terms.
+      for (const ac of roadmapAscensionCandidates(settings)) { if (ac.floor <= maxP) econ.push(ac); }
       // Skills are NOT part of the buy path (Visual / Table) — they live in their own Skills tab. They cost
       // skill POINTS, not FLOWER, so they don't belong in a FLOWER reinvestment-ordered buy order.
       tail.sort((a, b) => a.floor - b.floor);
@@ -1149,7 +1234,7 @@ export {
   roadmapItemValue, roadmapItemSituational, roadmapSimulate, _setRoadmapState,
   // Exported for testing: the node actions the buy path folds in. Its escalation has to match
   // nodeAcq's, and a test that re-derives the rule instead of calling this proves nothing.
-  roadmapNodeCandidates, roadmapSkillCandidates,
+  roadmapNodeCandidates, roadmapSkillCandidates, roadmapAscensionCandidates,
   ROADMAP_EFF_HKEY, roadmapComputeEfficiency,
   getRoadmapSettings, roadmapOwnedEffects, roadmapCatBreakdown, roadmapCatNet,
   roadmapMiningChain, roadmapCatMix, ROADMAP_MINING_CATS, calcBoostValue, cmGetSeedRestockCount,

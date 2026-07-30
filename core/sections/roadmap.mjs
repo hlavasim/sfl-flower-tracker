@@ -30,7 +30,13 @@ export function buildRoadmapSection(snapshots, settings = {}) {
   const eff = roadmapComputeEfficiency(snapshots || []);
   // Same shape renderRoadmap builds client-side from section=eff.
   const meanRatio = typeof eff.meanRatio === "number" ? eff.meanRatio : 0.5;
-  _setRoadmapState({ effByCat: eff.effByCat || {}, effMeta: eff.meta, meanRatio });
+  /*
+   * The ascension plan travels with the state so its EXPANSIONS and UPGRADES can compete in the
+   * buy path. They belong there: an expansion costs materials and hands you profit nodes, which
+   * is the same shape as buying a node or an NFT. The caller passes it because building it here
+   * would mean this section rebuilding the cooking engine and the power context a second time.
+   */
+  _setRoadmapState({ effByCat: eff.effByCat || {}, effMeta: eff.meta, meanRatio, ascension: settings.ascension || null });
 
   const rs = getRoadmapSettings(settings.roadmapSettings || {});
   const currentProd = roadmapCurrentProduction(rs);

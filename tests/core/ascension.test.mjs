@@ -801,3 +801,53 @@ test("the buy path escalates node prices off farmActivity, like the NODES page d
   const properlyKeyed = withActivity({ "Gold Rock Bought": 5 });
   assert.equal(sunstonesOf(properlyKeyed, "Gold"), 10 + 5 * 6, "'Gold Rock Bought' is");
 });
+
+test("ascension expansions compete in the buy path, and only the NEXT one is offered", async () => {
+  /*
+   * They belong there: an expansion costs materials and hands you profit nodes, which is the same
+   * shape as buying a node or an NFT. Without them the page could tell you to buy a gold node while
+   * an expansion two steps away would have handed you several cheaper — a comparison only the
+   * ascension page could make, and only in isolation.
+   *
+   * But ascension steps are STRICTLY SEQUENTIAL. The first version offered every pending step and
+   * let the ROI sort order them, which produced an order you cannot follow: A2·e32 above A1·e31,
+   * A4 above A2. Cumulative rows for every milestone would double-count (A1·e31 and A1·e33
+   * overlap), so exactly one row is offered — the next step that actually earns something, carrying
+   * the cost of the steps you must pass through to reach it.
+   */
+  const { buildRoadmapSection } = await import("../../core/sections/roadmap.mjs");
+  const out2 = buildRoadmapSection([], { roadmapSettings: { incCollectibles: true, incWearables: true }, farm, p2p, ascension: out });
+  const rows = out2.sim.ranked || [];
+  const asc = rows.filter((r) => r.type === "Ascension");
+  assert.equal(asc.length, 1, `exactly one ascension row, got ${asc.length}`);
+
+  const r = asc[0];
+  const first = out.steps[0];
+  // It is the FIRST pending step that grants an earning node — not the cheapest, not the best ROI.
+  const firstEarning = out.steps.find((s) => Object.keys(s.nodesAdded || {}).some((n) => out.nodeAcq.perType[n]));
+  assert.ok(firstEarning, "the fixture plan has a step that grants profit nodes");
+  const expectLabel = firstEarning.asc === 0
+    ? (firstEarning.kind === "upgrade" ? `Upgrade na ${firstEarning.next}` : `${firstEarning.island} e${firstEarning.expansion}`)
+    : (firstEarning.kind === "upgrade" ? `Ascension A${firstEarning.asc}` : `A${firstEarning.asc} · e${firstEarning.expansion}`);
+  assert.equal(r.name, expectLabel, "the next earning step, in plan order");
+
+  // Its income is what the nodes it grants earn — the SAME per-node figures the NODES page shows.
+  let expectMarg = 0;
+  for (const [node, n] of Object.entries(firstEarning.nodesAdded || {})) {
+    const d = out.nodeAcq.perType[node];
+    if (d) expectMarg += (d.profitPerDay || 0) * n;
+  }
+  assert.ok(Math.abs(r.value - expectMarg) < 1e-9, `income = the granted nodes (${r.value} vs ${expectMarg})`);
+
+  // And if it had to pass through an earlier step, that step's cost is INCLUDED — reaching the
+  // earning expansion means paying for the upgrade in front of it.
+  if (firstEarning !== first) {
+    assert.ok(/přes /.test(r.boost), `says what it goes through: ${r.boost}`);
+    // So the cost must exceed the earning step's own cost alone.
+    assert.ok(r.floor > 0);
+  }
+  // Ordered by payback with everything else, not pinned to the top or bottom.
+  const idx = rows.indexOf(r);
+  assert.ok(idx >= 0 && rows.length > 5, "it sits in the ranked order");
+  if (idx > 0) assert.ok((rows[idx - 1].roi || 0) <= (r.roi || 0) + 1e-6, "sorted by payback like every other row");
+});

@@ -331,10 +331,23 @@ export default async function handler(req, res) {
       if (!nftResult.ok) return res.status(502).json({ error: `nfts fetch failed: ${nftResult.status}` });
       let roadmapSettings = {};
       try { roadmapSettings = req.query.roadmap ? JSON.parse(req.query.roadmap) : {}; } catch { roadmapSettings = {}; }
-      buildPowerSection(farm, p2p, nftResult.data, exchange, { ...settings, roadmapSettings, savedProducts: req.query.products ? JSON.parse(req.query.products) : {} });
+      const rmPower = buildPowerSection(farm, p2p, nftResult.data, exchange, { ...settings, roadmapSettings, savedProducts: req.query.products ? JSON.parse(req.query.products) : {} });
       let input = {};
       input = _parseBody(req.body);
-      data = buildRoadmapSection(Array.isArray(input.snapshots) ? input.snapshots : [], { roadmapSettings, farm, p2p });
+      const rmSnaps = Array.isArray(input.snapshots) ? input.snapshots : [];
+      /*
+       * The ascension plan, built here so its expansions and upgrades can compete in the buy
+       * path. Same inputs the section=ascension branch uses, including the forced petSimulate
+       * (see the note there) so the two cannot disagree about the XP rate. It is built here
+       * rather than inside buildRoadmapSection because that would rebuild the cooking engine
+       * and the power context a second time in one request.
+       */
+      let rmAsc = null;
+      try {
+        const rmCooking = _cookingForAscension(farm, p2p, { ...settings, petSimulate: true });
+        rmAsc = buildAscensionSection(farm, rmPower, rmCooking, roadmapComputeEfficiency(rmSnaps), { grinx: req.query.grinx === "1", max: req.query.max });
+      } catch (e) { rmAsc = null; }   // the buy path still works without it
+      data = buildRoadmapSection(rmSnaps, { roadmapSettings, farm, p2p, ascension: rmAsc });
     }
     // `ascension`: the prestige-loop calculator (replaces the external cockpit that
     // read /api/power-summary): costs/levels/crystals from the game-formula port,
