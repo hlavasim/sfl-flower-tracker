@@ -1185,9 +1185,21 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
             if (bi < 0) break;                          // nothing left that helps
             const c = cands.splice(bi, 1)[0];
             c.has = true; restore.push(c);
-            picked.push({ name: c.name, floor: c.floor, gain: bestGain, boost: c.boost || "" });
+            const netBefore = net;
+            const step = { name: c.name, floor: c.floor, gain: bestGain, boost: c.boost || "",
+              netBefore, type: c.type || null };
+            picked.push(step);
             cost += c.floor;
             try { net = roadmapAnyCatNet(cat, effectsFor(cat), settings); } catch (e) {}
+            /*
+             * The running net after this purchase, so a consumer can show WHERE the category stops
+             * losing money instead of only the endpoints. "-0.31/day becomes +0.31/day for 192
+             * FLOWER" hides which single item crosses zero, which is the one you would buy first if
+             * you only bought one.
+             */
+            step.netAfter = net;
+            step.cumCost = cost;
+            step.crosses = step.netBefore <= 0 && net > 0;
           }
         }
         for (const c of restore) c.has = false;         // never leak state into the buy path
