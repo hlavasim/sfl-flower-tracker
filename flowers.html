@@ -17401,6 +17401,32 @@
           note: `zbývá ${r.x.hoursLeft < 1 ? 'necelá hodina' : r.x.hoursLeft.toFixed(0) + ' h'} — ${escHTML(r.sh.effect)}`,
         });
       }
+      /*
+       * Deliveries — and to WHOM, which was the point.
+       *
+       * Uses the DASHBOARD's parser, dashParseDeliveryOrders, not the roadmap's own DELIVER
+       * branch. Both exist; the dashboard one is the better model and picking the weaker
+       * duplicate would have been the same mistake as the shrines. It computes the tickets for
+       * NPCs whose reward comes back empty from the API (dashCalculateDeliveryTickets), prices
+       * the inputs at p2p, derives an `efficiency`, and honours the animal / faction filters.
+       *
+       * An order is a one-off, which is the other reason this section ranks per day rather than
+       * by ROI — a payback period for a single delivery is meaningless.
+       */
+      try {
+        const dOrders = (typeof dashParseDeliveryOrders === 'function' && powerState && powerState.farm)
+          ? dashParseDeliveryOrders(powerState.farm) : [];
+        // Best first when the dashboard scored them; it sorts by its own efficiency measure.
+        for (const a of dOrders.slice(0, 4)) {
+          const who = escHTML(String(a.npc || a.from || a.title || 'NPC').replace(/^Deliver.*?\u2192\s*/, ''));
+          const detail = escHTML(String(a.detail || (a.detailParts || []).join(' \u00b7 ') || ''));
+          rows.push({
+            what: `Doru\u010dit \u2192 ${who}`, now: true, gain: null,
+            unit: a.efficiency != null && isFinite(a.efficiency) ? `${(a.efficiency).toFixed(2)}x` : null,
+            note: detail || 'objedn\u00e1vka \u010dek\u00e1',
+          });
+        }
+      } catch (e) {}
       // 3. Restock. Already computed by section=power (buildQueueData); daysUntilEmpty null = never.
       const q = ps.restockQueues || {};
       const soon = Object.entries(q)
