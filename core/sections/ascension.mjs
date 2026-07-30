@@ -427,7 +427,16 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
    * in, so leaving it out made the table silent about the one purchase that unlocks the
    * others. Its return is reported in obsidian/day instead of FLOWER/day.
    */
-  const PROFIT_NODES = new Set(["Crop Plot", "Fruit Patch", "Tree", "Stone Rock", "Iron Rock", "Gold Rock", "Crimstone Rock", "Lava Pit"]);
+  /*
+   * Oil Reserve was missing here exactly the way Lava Pit once was, and for the same reason:
+   * everything behind it was already in place (NON_SELLABLE_CATS knows "oil", so the
+   * units/day path works) but the node itself was never listed, so the expand-vs-buy table
+   * and every per-node section below it silently had no oil row at all.
+   *
+   * Price 40 / +20 per purchase, desert-gated — verified against RESOURCE_NODE_PRICES in the
+   * game's events/landExpansion/buyResource.ts, not copied from our own inline table.
+   */
+  const PROFIT_NODES = new Set(["Crop Plot", "Fruit Patch", "Tree", "Stone Rock", "Iron Rock", "Gold Rock", "Crimstone Rock", "Oil Reserve", "Lava Pit"]);
   // exchangeObsidian.ts OBSIDIAN_PRICE — 3 obsidian buys 1 sunstone, on click.
   const OBSIDIAN_PER_SUNSTONE = 3;
   // Prices from the game's RESOURCE_NODE_PRICES (events/landExpansion/buyResource.ts).
@@ -436,9 +445,10 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
     "Tree": { base: 4, inc: 3, fk: "trees" }, "Stone Rock": { base: 4, inc: 3, fk: "stones" },
     "Iron Rock": { base: 7, inc: 5, fk: "iron" }, "Gold Rock": { base: 10, inc: 6, fk: "gold" },
     "Crimstone Rock": { base: 20, inc: 20, fk: "crimstones" },
+    "Oil Reserve": { base: 40, inc: 20, fk: "oilReserves" },
     "Lava Pit": { base: 40, inc: 40, fk: "lavaPits" },
   };
-  const NODE_TO_CAT = { "Crop Plot": "crops", "Fruit Patch": "fruits", "Tree": "trees", "Stone Rock": "stone", "Iron Rock": "iron", "Gold Rock": "gold", "Crimstone Rock": "crimstone", "Lava Pit": "obsidian" };
+  const NODE_TO_CAT = { "Crop Plot": "crops", "Fruit Patch": "fruits", "Tree": "trees", "Stone Rock": "stone", "Iron Rock": "iron", "Gold Rock": "gold", "Crimstone Rock": "crimstone", "Oil Reserve": "oil", "Lava Pit": "obsidian" };
   // Categories whose output cannot be sold — reported in units/day, never as FLOWER income.
   const NON_SELLABLE_CATS = new Set(["obsidian", "oil"]);
   const obsidianPrice = p2pP["Obsidian"] || 0;

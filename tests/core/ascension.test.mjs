@@ -183,11 +183,26 @@ test("grinx halves the three resource costs but not coins", () => {
 test("node acquisition: expand (rolling dead-cost, equal split) vs buy (sunstones)", () => {
   const na = out.nodeAcq;
   assert.ok(na && na.perType, "nodeAcq present");
-  // The seven sellable profit nodes plus Lava Pit — included despite earning no FLOWER
-  // because obsidian is the currency this whole comparison is denominated in, so the pit is
-  // the one purchase that unlocks the others. Still no Oil/Beehive/Flower/Sunstone.
+  /*
+   * The seven sellable profit nodes plus the two that earn no FLOWER but are still real
+   * purchases: Lava Pit (obsidian is the currency this whole comparison is denominated in)
+   * and Oil Reserve.
+   *
+   * Oil Reserve used to be excluded here on purpose, and that was wrong: the game sells it
+   * like any other node (RESOURCE_NODE_PRICES, 40 / +20, desert-gated) and its output feeds
+   * the greenhouse and crop machine, so leaving it out meant the expand-vs-buy table and
+   * every per-node section below it simply had no oil row — which is what a user noticed.
+   * It reports units/day rather than FLOWER, exactly like the pit.
+   *
+   * Beehive / Flower Bed / Sunstone stay out.
+   */
   assert.deepEqual(Object.keys(na.perType).sort(),
-    ["Crimstone Rock", "Crop Plot", "Fruit Patch", "Gold Rock", "Iron Rock", "Lava Pit", "Stone Rock", "Tree"]);
+    ["Crimstone Rock", "Crop Plot", "Fruit Patch", "Gold Rock", "Iron Rock", "Lava Pit", "Oil Reserve", "Stone Rock", "Tree"]);
+  assert.equal(na.perType["Oil Reserve"].sellable, false, "oil cannot be sold either");
+  assert.ok(na.perType["Oil Reserve"].unitsPerNode > 0, "so a reserve's return is oil/day");
+  assert.equal(na.perType["Oil Reserve"].profitPerDay, 0, "and its FLOWER income is zero");
+  assert.equal(na.perType["Oil Reserve"].buy[0].sunstones, 40 + na.perType["Oil Reserve"].bought * 20,
+    "Oil Reserve: base 40, +20 per purchase (buyResource.ts)");
   assert.equal(na.perType["Lava Pit"].sellable, false, "Lava Pit output cannot be sold");
   assert.ok(na.perType["Lava Pit"].unitsPerNode > 0, "so its return is reported in units/day");
   assert.equal(na.perType["Lava Pit"].profitPerDay, 0, "and its FLOWER income is zero");
@@ -266,8 +281,14 @@ test("node acquisition: per-node profit is NET of production cost and efficiency
   // profit as theoretical gross made the two columns non-comparable — and calling gross
   // revenue "profit" overstated it (tools/seeds sit in the category's costPerDay).
   const cats = powerData.categories.catSummaries;
-  const NODE_CAT = { "Crop Plot": "crops", "Fruit Patch": "fruits", Tree: "trees", "Stone Rock": "stone", "Iron Rock": "iron", "Gold Rock": "gold", "Crimstone Rock": "crimstone", "Lava Pit": "obsidian" };
-  const counts = { crops: "crops", fruits: "fruitPatches", trees: "trees", stone: "stones", iron: "iron", gold: "gold", crimstone: "crimstones", obsidian: "lavaPits" };
+  const NODE_CAT = { "Crop Plot": "crops", "Fruit Patch": "fruits", Tree: "trees", "Stone Rock": "stone", "Iron Rock": "iron", "Gold Rock": "gold", "Crimstone Rock": "crimstone", "Oil Reserve": "oil", "Lava Pit": "obsidian" };
+  const counts = { crops: "crops", fruits: "fruitPatches", trees: "trees", stone: "stones", iron: "iron", gold: "gold", crimstone: "crimstones", oil: "oilReserves", obsidian: "lavaPits" };
+  // Guard the maps themselves: a node added to the section without being added here would
+  // otherwise crash on cats[undefined] instead of failing with something readable.
+  for (const node of Object.keys(out.nodeAcq.perType)) {
+    assert.ok(NODE_CAT[node], `${node} is served but this test has no category for it`);
+    assert.ok(counts[NODE_CAT[node]], `${node}: no farm-key mapping`);
+  }
 
   let sawCost = false, sawEff = false;
   for (const [node, d] of Object.entries(out.nodeAcq.perType)) {
@@ -287,7 +308,11 @@ test("node acquisition: per-node profit is NET of production cost and efficiency
       assert.equal(d.grossPerNode, 0, `${node}: non-sellable output earns nothing`);
       assert.equal(d.profitPerDay, 0, `${node}: and contributes no profit`);
     }
-    if (d.effRatio !== 1) { sawEff = true; assert.ok(Math.abs(d.profitPerDay - d.netPerNode) > 1e-12, `${node}: eff moves profit`); }
+    // Only where there IS profit for efficiency to scale. For a non-sellable node (Oil
+    // Reserve, Lava Pit) profitPerDay and netPerNode are both structurally zero, so they
+    // cannot differ however far effRatio sits from 1 — the check would be asserting that
+    // 0 !== 0. Its return shows up in unitsPerNode instead, covered above.
+    if (d.effRatio !== 1 && d.sellable) { sawEff = true; assert.ok(Math.abs(d.profitPerDay - d.netPerNode) > 1e-12, `${node}: eff moves profit`); }
   }
   assert.ok(sawCost, "at least one category has a production cost, else the net check is vacuous");
   assert.ok(sawEff, "at least one category has a non-unit efficiency, else the eff check is vacuous");
