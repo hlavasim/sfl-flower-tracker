@@ -120,3 +120,89 @@ test("weather protection is spent by an event, not by a timer", () => {
   assert.equal(after.spent, 1);
   assert.equal(after.owned, pin.owned, "owning it is unchanged — only its usefulness is gone");
 });
+
+test("weather protection is found in the house interior, where the game actually keeps it now", () => {
+  /*
+   * THE reported bug. The game places collectibles in four separate maps and
+   * getCollectiblesAcrossLocations reads all of them; this read only the farm and the legacy
+   * `home.collectibles`. On a current save home.collectibles is EMPTY — the house layout change
+   * moved everything to interior.ground.collectibles — so a farm with all four items placed
+   * reported all four MISSING, which is exactly what the owner saw.
+   */
+  const bare = { island: { type: "volcano" }, inventory: { "Tornado Pinwheel": "1" }, home: { collectibles: {} } };
+
+  // The live shape: nothing on the farm, nothing in home, everything in the interior ground floor.
+  const interior = { ...bare, interior: { ground: { collectibles: { "Tornado Pinwheel": [{ id: "a", coordinates: { x: -7, y: 5 } }] } } } };
+  const pin = weatherProtection(interior).find((w) => w.name === "Tornado Pinwheel");
+  assert.equal(pin.kind, "ready", "an item placed in the interior protects you");
+  assert.equal(pin.placed, 1);
+  assert.equal(pin.active, 1);
+
+  // The upper floor is a separate map again, and also counts.
+  const upstairs = { ...bare, interior: { level_one: { collectibles: { "Tornado Pinwheel": [{ id: "b", coordinates: { x: 0, y: 0 } }] } } } };
+  assert.equal(weatherProtection(upstairs).find((w) => w.name === "Tornado Pinwheel").active, 1, "level_one counts too");
+
+  // And with nothing placed anywhere, holding one in the chest is NOT protection — but it is a
+  // different answer from owning none, because the fix is "place it" rather than "buy one".
+  const chest = weatherProtection(bare).find((w) => w.name === "Tornado Pinwheel");
+  assert.equal(chest.kind, "none");
+  assert.equal(chest.placed, 0);
+  assert.equal(chest.held, 1, "held reports the chest copy");
+});
+
+test("placed means it has coordinates, and ready means readyAt has passed", () => {
+  // markWeatherCollectibleUsed protects `if (placed.coordinates && isReady && !placed.used)` —
+  // an instance with no coordinates was removed from the map (placeCollectible.test.ts says so
+  // explicitly) and one still building protects nothing. Counting either was wrong.
+  const at = (insts) => ({ island: { type: "basic" }, inventory: {}, interior: { ground: { collectibles: { Mangrove: insts } } } });
+
+  const noCoords = weatherProtection(at([{ id: "a" }])).find((w) => w.name === "Mangrove");
+  assert.equal(noCoords.placed, 0, "no coordinates = in the chest, not placed");
+  assert.equal(noCoords.kind, "none");
+
+  const now = 1_800_000_000_000;
+  const building = weatherProtection(at([{ id: "a", coordinates: { x: 0, y: 0 }, readyAt: now + 3600_000 }]), now).find((w) => w.name === "Mangrove");
+  assert.equal(building.pending, 1, "still building");
+  assert.equal(building.active, 0, "and therefore not protecting");
+  assert.equal(building.kind, "spent", "no active cover — the row has to say so");
+
+  const done = weatherProtection(at([{ id: "a", coordinates: { x: 0, y: 0 }, readyAt: now - 1 }]), now).find((w) => w.name === "Mangrove");
+  assert.equal(done.active, 1);
+  assert.equal(done.kind, "ready");
+});
+
+test("renewal cost is the shop price scaled by island, so the row can say what it costs", () => {
+  /*
+   * Previously reported as unknown ("that table is not in this repo"). It is
+   * WEATHER_SHOP_ITEM_COSTS × getMultiplier(islandType), and renewWeatherCollectible.ts charges
+   * exactly that — craft-time discounts deliberately not applied.
+   */
+  const mk = (island) => ({ island: { type: island }, inventory: {}, interior: { ground: { collectibles: {} } } });
+  const base = weatherProtection(mk("spring")).find((w) => w.name === "Tornado Pinwheel");
+  assert.equal(base.renew.coins, 100);
+  assert.deepEqual(base.renew.ingredients, { Wood: 30, Leather: 5 });
+
+  const volcano = weatherProtection(mk("volcano")).find((w) => w.name === "Tornado Pinwheel");
+  assert.equal(volcano.renew.islandMult, 2.5);
+  assert.equal(volcano.renew.coins, 250);
+  assert.deepEqual(volcano.renew.ingredients, { Wood: 75, Leather: 12.5 });
+
+  const desert = weatherProtection(mk("desert")).find((w) => w.name === "Thermal Stone");
+  assert.deepEqual(desert.renew.ingredients, { Stone: 10, Wool: 10 });
+  assert.equal(desert.renew.coins, 200);
+});
+
+test("partial cover is distinct from none: one spent instance out of two still protects once", () => {
+  const two = {
+    island: { type: "volcano" }, inventory: {},
+    interior: { ground: { collectibles: { "Thermal Stone": [
+      { id: "a", coordinates: { x: 0, y: 0 }, used: true },
+      { id: "b", coordinates: { x: 1, y: 0 } },
+    ] } } },
+  };
+  const w = weatherProtection(two).find((x) => x.name === "Thermal Stone");
+  assert.equal(w.kind, "partial");
+  assert.equal(w.spent, 1);
+  assert.equal(w.active, 1);
+  assert.equal(w.owned, 2, "owned is the placed count, which the coverage note divides by");
+});

@@ -8783,13 +8783,40 @@
       "Thermal Stone":       "great freeze",
       "Protective Pesticide":"insect plague",
     };
-    // Is the item placed on the farm? Checks farm.collectibles[name] / farm.home.collectibles[name]
-    function dashIsPlaced(farm, name) {
-      const placed = (farm.collectibles || {})[name];
-      if (placed && placed.length > 0) return true;
-      const placedHome = (farm.home?.collectibles || {})[name];
-      if (placedHome && placedHome.length > 0) return true;
-      return false;
+    /*
+     * Twin of weatherPlacedInstances in core/engine/power-costs.mjs — the game keeps placed
+     * collectibles in FOUR maps (getCollectiblesAcrossLocations): the farm, the legacy home, and
+     * the house interior's two floors. This read only the first two, and on a current save
+     * home.collectibles is empty because the house layout change moved everything to
+     * interior.ground.collectibles — so this card called all four items MISSING on a farm that
+     * has all four placed.
+     */
+    function weatherPlacedInstances(farm, name) {
+      if (!farm) return [];
+      const interior = farm.interior || {};
+      const maps = [
+        farm.collectibles,
+        farm.home && farm.home.collectibles,
+        interior.ground && interior.ground.collectibles,
+        interior.level_one && interior.level_one.collectibles,
+      ];
+      const out = [];
+      for (const m of maps) for (const inst of ((m || {})[name] || [])) if (inst) out.push(inst);
+      return out;
+    }
+    /*
+     * Three states, not two. A weather item is consumed by its event and STAYS placed looking
+     * identical to a working one (markWeatherCollectibleUsed sets `used: true` rather than
+     * deleting it), so "placed" was never the right question — a green tick on a spent pinwheel
+     * is worse than no card at all. Placement also requires coordinates (no coordinates = in the
+     * chest) and readyAt in the past (still building protects nothing).
+     */
+    function dashWeatherState(farm, name) {
+      const placed = weatherPlacedInstances(farm, name).filter((i) => i.coordinates);
+      if (!placed.length) return "none";
+      const now = Date.now();
+      const active = placed.filter((i) => i.used !== true && (i.readyAt || 0) <= now).length;
+      return active === 0 ? "spent" : (active < placed.length ? "partial" : "ok");
     }
     // Faction-item detector. Used to filter dashboard rows when showFaction = false.
     // Treats anything paying a Faction Mark (reward.items["Mark"]) as faction-related.
@@ -9400,15 +9427,26 @@
       // Weather Shop placement status — needs all 4 placed (Tornado Pinwheel /
       // Mangrove / Thermal Stone / Protective Pesticide) to be protected against
       // all 4 disasters. Show a status card so missing protection is obvious.
-      const _wPlaced = DASH_WEATHER_ITEMS.filter(w => dashIsPlaced(farm, w));
-      const _wMissing = DASH_WEATHER_ITEMS.filter(w => !dashIsPlaced(farm, w));
-      const _wAllOk = _wMissing.length === 0;
+      const _wState = {};
+      for (const w of DASH_WEATHER_ITEMS) _wState[w] = dashWeatherState(farm, w);
+      const _wUncovered = DASH_WEATHER_ITEMS.filter(w => _wState[w] === "none" || _wState[w] === "spent");
+      const _wAllOk = _wUncovered.length === 0;
       const _wCardCls = _wAllOk ? "ready" : "upcoming";
-      const _wTitle = _wAllOk ? "ALL 4 WEATHER ITEMS PLACED" : `${_wMissing.length}/4 WEATHER ITEM${_wMissing.length === 1 ? "" : "S"} MISSING`;
+      const _wTitle = _wAllOk
+        ? "ALL 4 WEATHER ITEMS ACTIVE"
+        : `${_wUncovered.length}/4 NEKRYTÝCH — ${_wUncovered.map(w => DASH_WEATHER_PREVENTS[w]).join(", ")}`;
       const _wPills = DASH_WEATHER_ITEMS.map(w => {
-        const ok = _wPlaced.includes(w);
-        return `<span class="dash-weather-pill ${ok ? "ok" : "miss"}" title="prevents ${escHTML(DASH_WEATHER_PREVENTS[w])}">
-          ${_dashIcon(w)}${escHTML(w)} <b>${ok ? "✓" : "✗"}</b>
+        const st = _wState[w];
+        // "spent" is the case worth shouting about: it is placed, it looks fine, and it will not
+        // save a single crop until it is renewed.
+        const mark = st === "ok" ? "✓" : st === "partial" ? "✓/⚠" : st === "spent" ? "⚠ spotřebovaný" : "✗";
+        const tip = st === "spent"
+          ? `Postavený, ale spotřebovaný předchozí ${DASH_WEATHER_PREVENTS[w]} — musíš ho obnovit ve Weather Shopu, jinak tě další zasáhne.`
+          : st === "none" ? `Nemáš postavený — ${DASH_WEATHER_PREVENTS[w]} tě zasáhne bez ochrany.`
+          : st === "partial" ? `Krytí zbývá, ale část kusů je spotřebovaná.`
+          : `Aktivní — chrání proti ${DASH_WEATHER_PREVENTS[w]}.`;
+        return `<span class="dash-weather-pill ${st === "none" || st === "spent" ? "miss" : "ok"}" title="${escHTML(tip)}">
+          ${_dashIcon(w)}${escHTML(w)} <b>${escHTML(mark)}</b>
           <span style="opacity:0.7;font-size:0.55rem">${escHTML(DASH_WEATHER_PREVENTS[w])}</span>
         </span>`;
       }).join("");
@@ -17325,18 +17363,36 @@
       /*
        * Weather protection. Not a timer — the game stamps the instance `used: true` when its
        * event fires, so a spent item sits there looking identical to a working one and the next
-       * tornado costs you the crops it would have saved. Renewal cost is the Weather Shop price,
-       * which is not in this repo, so the row says what is exposed and no more.
+       * tornado costs you the crops it would have saved.
+       *
+       * Renewal cost used to be reported as unknown. It is WEATHER_SHOP_ITEM_COSTS scaled by
+       * island (volcano ×2.5), which core now serves as w.renew — priced through the same
+       * _shrineIngredientCostSfl the shrine rows use, so the two cannot disagree about what a
+       * pile of Wood is worth. Coins stay in coins: this app treats them as free once you hold
+       * more than 10k, and quietly converting them here would contradict that.
        */
       for (const w of (ps.weather || [])) {
         if (w.kind === 'ready') continue;
-        const spentAll = w.kind === 'spent';
+        const uncovered = w.kind === 'spent';
+        let costSfl = null;
+        try {
+          const ing = (w.renew && w.renew.ingredients) || null;
+          if (ing) costSfl = _shrineIngredientCostSfl(ing, ps.p2pPrices || {}, ps.p2pPrices || {});
+        } catch (e) {}
+        const costStr = w.renew
+          ? `${Object.entries(w.renew.ingredients).map(([k, v]) => `${v}× ${escHTML(k)}`).join(' + ')} + ${w.renew.coins.toLocaleString()} coins${costSfl != null ? ` (≈${costSfl.toFixed(2)} FLOWER v materiálu)` : ''}`
+          : null;
+        // "Nemáš postavený" and "nemáš vůbec" are different jobs: one is a click, the other a
+        // trip to the shop. held comes from the inventory, placed from the four collectible maps.
+        const missingButHeld = w.kind === 'none' && w.held > 0;
         rows.push({
-          what: w.kind === 'none' ? `Chybí ${escHTML(w.name)}` : `Obnovit ${escHTML(w.name)}`,
-          now: spentAll, warn: spentAll, gain: null, unit: null,
+          what: w.kind === 'none' ? (missingButHeld ? `Postavit ${escHTML(w.name)}` : `Koupit ${escHTML(w.name)}`) : `Obnovit ${escHTML(w.name)}`,
+          now: uncovered || missingButHeld, warn: uncovered || w.kind === 'none', gain: null, unit: null,
           note: w.kind === 'none'
-            ? `nemáš žádný — ${escHTML(w.prevents)} tě zasáhne bez ochrany`
-            : `${w.spent} z ${w.owned} spotřebovaných${spentAll ? ' — proti ' + escHTML(w.prevents) + ' teď nejsi krytý' : `, krytí zbývá ${w.owned - w.spent}x`}`,
+            ? (missingButHeld
+                ? `máš ho v truhle, ale není postavený — ${escHTML(w.prevents)} tě zasáhne bez ochrany`
+                : `nemáš žádný — ${escHTML(w.prevents)} tě zasáhne bez ochrany${costStr ? `. Weather Shop: ${costStr}` : ''}`)
+            : `${w.spent} z ${w.owned} spotřebovaných${w.pending ? `, ${w.pending} se staví` : ''}${uncovered ? ' — proti ' + escHTML(w.prevents) + ' teď nejsi krytý' : `, krytí zbývá ${w.active}x`}${costStr ? `. Obnova: ${costStr}` : ''}`,
         });
       }
       /*

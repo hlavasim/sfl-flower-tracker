@@ -571,34 +571,77 @@ import { SEED_COSTS, TOOL_COSTS } from "../data/economy.mjs";
     /*
      * Weather protections, and whether they are still protecting anything.
      *
-     * These are NOT on a timer — that was the assumption worth checking. The game consumes one
-     * when its event fires and stamps the instance `used: true`
-     * (events/landExpansion/renewWeatherCollectible.ts renews it only `if (collectibleToRenew.used)`
-     * and clears the flag). So a spent pinwheel sits on the farm looking exactly like a working
-     * one, and the next tornado costs you the crops it would have saved.
+     * These are NOT on a timer. The game consumes one when its event fires and stamps the
+     * instance `used: true` (lib/weatherProtectionCollectibles.ts markWeatherCollectibleUsed;
+     * renewWeatherCollectible.ts renews only `if (collectibleToRenew.used)` and clears the flag).
+     * So a spent pinwheel sits on the farm looking exactly like a working one, and the next
+     * tornado costs you the crops it would have saved. That is the whole reason to report it.
      *
-     * Renewal costs the Weather Shop price + ingredients (getWeatherShop()). Not priced here:
-     * that table is not in this repo, and guessing the cost of the one row whose whole point is
-     * 'go spend coins' would be worse than saying it is unknown.
+     * WHERE they live moved, and this read the old place. The game keeps placed collectibles in
+     * four separate maps and getCollectiblesAcrossLocations covers all of them: the farm, the
+     * legacy `home`, and the house interior's two floors. On a current save `home.collectibles`
+     * is EMPTY — the house layout change moved everything to `interior.ground.collectibles` — so
+     * a farm with all four items placed reported all four MISSING. That is what the owner saw.
+     *
+     * WHEN one counts is also not merely "an entry exists". markWeatherCollectibleUsed protects
+     * only instances with `coordinates` (no coordinates = sitting in the chest, not placed) and
+     * with `readyAt <= now` (still being built protects nothing).
      */
     const WEATHER_PROTECTION = {
-      "Tornado Pinwheel":     "tornado",
-      "Mangrove":             "tsunami",
-      "Thermal Stone":        "great freeze",
-      "Protective Pesticide": "insect plague",
+      // ingredients/coins: types/calendar.ts WEATHER_SHOP_ITEM_COSTS. Renewal charges the base
+      // shop price scaled by island, with craft-time discounts deliberately not applied
+      // (renewWeatherCollectible.ts, same rule as renewPetShrine).
+      "Tornado Pinwheel":     { prevents: "tornado",       coins: 100, ingredients: { Wood: 30, Leather: 5 } },
+      "Mangrove":             { prevents: "tsunami",       coins: 100, ingredients: { Wood: 30, Leather: 5 } },
+      "Thermal Stone":        { prevents: "great freeze",  coins: 100, ingredients: { Stone: 5, Wool: 5 } },
+      "Protective Pesticide": { prevents: "insect plague", coins: 100, ingredients: { Wood: 30, Feather: 30 } },
     };
-    function weatherProtection(farm) {
+    // getWeatherShop's getMultiplier — everything before desert is at base price.
+    const WEATHER_SHOP_ISLAND_MULT = { volcano: 2.5, desert: 2 };
+    /** Every instance of a collectible, across all four maps the game places things in. */
+    function weatherPlacedInstances(farm, name) {
       if (!farm) return [];
-      const placed = farm.collectibles || {}, home = (farm.home && farm.home.collectibles) || {};
+      const interior = farm.interior || {};
+      const maps = [
+        farm.collectibles,
+        farm.home && farm.home.collectibles,
+        interior.ground && interior.ground.collectibles,
+        interior.level_one && interior.level_one.collectibles,
+      ];
+      const out = [];
+      for (const m of maps) for (const inst of ((m || {})[name] || [])) if (inst) out.push(inst);
+      return out;
+    }
+    function weatherProtection(farm, nowMs) {
+      if (!farm) return [];
+      const now = nowMs || Date.now();
+      const mult = WEATHER_SHOP_ISLAND_MULT[(farm.island && farm.island.type) || ""] || 1;
+      const inv = farm.inventory || {};
       const out = [];
       for (const name in WEATHER_PROTECTION) {
-        const all = [...(placed[name] || []), ...(home[name] || [])];
-        if (!all.length) { out.push({ name, prevents: WEATHER_PROTECTION[name], owned: 0, spent: 0, kind: "none" }); continue; }
-        const spent = all.filter((i) => i && i.used === true).length;
+        const def = WEATHER_PROTECTION[name];
+        const all = weatherPlacedInstances(farm, name);
+        // Placed means it has coordinates. An instance without them is in the chest.
+        const placedList = all.filter((i) => i.coordinates);
+        const spent = placedList.filter((i) => i.used === true).length;
+        const pending = placedList.filter((i) => i.used !== true && (i.readyAt || 0) > now).length;
+        const active = placedList.length - spent - pending;
+        const renew = { coins: def.coins * mult, ingredients: {}, islandMult: mult };
+        for (const k in def.ingredients) renew.ingredients[k] = def.ingredients[k] * mult;
         out.push({
-          name, prevents: WEATHER_PROTECTION[name], owned: all.length, spent,
-          // `partial` matters: one spent instance out of two still leaves you covered once.
-          kind: spent === 0 ? "ready" : (spent < all.length ? "partial" : "spent"),
+          name, prevents: def.prevents,
+          held: parseFloat(inv[name]) || 0,
+          // `owned` is the PLACED count, which is what the coverage note divides by.
+          owned: placedList.length, placed: placedList.length, spent, pending, active, renew,
+          /*
+           * none    — nothing placed, so nothing protects you (held says whether you own one)
+           * spent   — placed but every instance is used up: looks fine, protects nothing
+           * partial — some instances still good, so you are covered at least once
+           * ready   — fully covered
+           */
+          kind: placedList.length === 0 ? "none"
+              : active === 0 ? "spent"
+              : spent > 0 ? "partial" : "ready",
         });
       }
       return out;
@@ -706,7 +749,7 @@ export {
   FEED_RECIPES, FEED_QTY, FEED_XP_TABLE, SICKNESS_RATE_BY_LEVEL,
   BARN_DELIGHT_RECIPE, BARN_DELIGHT_RECIPE_ALT, SICKNESS_PREVENTION,
   SHRINE_DATA, LAVA_PIT_REQUIREMENTS, GREENHOUSE_OIL_COSTS,
-  getAnimalDropsPerCycle, getAnimalLevelDistribution, toMs, unitToSfl, shrineStatuses, weatherProtection, WEATHER_PROTECTION,
+  getAnimalDropsPerCycle, getAnimalLevelDistribution, toMs, unitToSfl, shrineStatuses, weatherProtection, weatherPlacedInstances, WEATHER_PROTECTION, WEATHER_SHOP_ISLAND_MULT,
   calcSeedCostPerDay, calcAnimalFeedCost, calcSicknessCost, calcLavaPitCostPerDay,
   getAnimalCatSfl, getPriceProduct, _shrineStatus, _shrineActiveNow, activeShrineEffects,
 };
