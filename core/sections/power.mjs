@@ -38,6 +38,8 @@ import { buildFormulaHTML } from "../engine/power-formula.mjs";
 // A composter is a PERIODIC action — cycle + inputs — so it is served as a per-day net here
 // rather than folded into the permanent-upgrade valuations.
 import { composterVerdicts, compostSkillValues } from "../engine/compost.mjs";
+// Digging, answered from the farm's own dug grid rather than a treasure-probability model.
+import { diggingVerdict } from "../engine/digging.mjs";
 
 export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   const inventory = farm.inventory || {};
@@ -534,5 +536,5 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     }
   }
 
-  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, skillRanks, composters: composterVerdicts(farm, p2pPrices, season, { savedProducts }), shrines: shrineStatuses(farm), weather: weatherProtection(farm), compostSkills, valueBasis: settings.measured ? "measured" : "theoretical", restockQueues, ...(boostValuesEff ? { boostValuesEff } : {}), ...(formulaHtml !== undefined ? { formulaHtml } : {}) };
+  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, skillRanks, composters: composterVerdicts(farm, p2pPrices, season, { savedProducts }), shrines: shrineStatuses(farm), weather: weatherProtection(farm), compostSkills, digging: diggingVerdict(farm, p2pPrices, exchangeRates, { coinsFree: false }), valueBasis: settings.measured ? "measured" : "theoretical", restockQueues, ...(boostValuesEff ? { boostValuesEff } : {}), ...(formulaHtml !== undefined ? { formulaHtml } : {}) };
 }
