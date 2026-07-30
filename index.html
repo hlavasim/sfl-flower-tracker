@@ -17465,6 +17465,55 @@
      * coins from section=ascension — because three separate valuation engines is how this
      * codebase got its worst bugs.
      */
+    /*
+     * "CO JEŠTĚ NEDĚLÁM" — how to get an activity you do not run into the black.
+     *
+     * The buy path cannot answer this by construction: a boost on a dead category is worth nothing
+     * until the category itself is above water, so every such item sinks to the bottom as
+     * CONDITIONAL and "how do I start?" never gets an answer. All figures are READ from
+     * section=roadmap; nothing is computed here.
+     *
+     * Everything in this panel is deliberately THEORETICAL and at MAX capacity — measured
+     * efficiency of an activity you never do is 0 by construction, and 0 chickens earn 0 whatever
+     * you buy, so both would answer the question with a tautology.
+     */
+    function roadmapStartupHtml() {
+      const rows = (_roadmapServer && _roadmapServer.startup) || [];
+      if (!rows.length) return "";
+      const fl = (v) => `${v >= 0 ? "+" : "\u2212"}${Math.abs(v).toFixed(3)}`;
+      const col = (v) => v > 0 ? "var(--green)" : v < 0 ? "var(--red)" : "var(--text-dim)";
+      const WHY = {
+        unpriced: "Nem\u00e1 cenu \u2014 tenhle zdroj se v p2p feedu neobchoduje, tak\u017ee ho neum\u00edme p\u0159ev\u00e9st na FLOWER. Vyr\u00e1b\u00ed, jen to nejde ocenit.",
+        "no-room": "Nen\u00ed m\u00edsto \u2014 st\u00e1j je pln\u00e1 druh\u00e9ho druhu. \u017d\u00e1dn\u00fd boost to nevy\u0159e\u0161\u00ed, mus\u00ed\u0161 ud\u011blat m\u00edsto nebo st\u00e1j vylep\u0161it.",
+        capacity: "Nem\u00e1\u0161 kde \u2014 chyb\u00ed budova nebo m\u00edsto. App ti budovu nekoup\u00ed.",
+        unflippable: "Ani v\u0161echny dostupn\u00e9 boosty to nedostanou do plusu.",
+      };
+      let h = `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:14px">`;
+      h += `<div class="pixel-font" style="font-size:0.62rem;color:var(--lily);margin-bottom:4px">\u{1F331} CO JE\u0160T\u011a NED\u011aL\u00c1M \u2014 co koupit, abych mohl za\u010d\u00edt</div>`;
+      h += `<div style="font-size:0.47rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Kategorie, kter\u00e9 te\u010f nevyd\u011bl\u00e1vaj\u00ed. Po\u010d\u00edt\u00e1no <b>teoreticky a na pln\u00fd stav</b> \u2014 nam\u011b\u0159en\u00e1 efektivita \u010dinnosti, kterou ned\u011bl\u00e1\u0161, je z definice 0 a nula slepic vyd\u011bl\u00e1 nulu, a\u0165 koup\u00ed\u0161 cokoliv. Bez toho by odpov\u011b\u010f byla tautologie.</div>`;
+      for (const r of rows) {
+        const cap = r.capacity;
+        h += `<div style="border-top:1px solid #20190f;padding:6px 0">`;
+        h += `<div style="font-size:0.56rem"><b>${escHTML(r.label)}</b>`
+          + `<span style="color:var(--text-dim);font-size:0.47rem"> \u00b7 te\u010f ${r.count}${r.atMax > r.count ? ` z max ${r.atMax}` : ""}`
+          + `${cap && cap.shared === "barn" ? ` \u00b7 st\u00e1j ${cap.held}/${cap.total}` : ""}</span>`
+          + ` <span style="color:${col(r.nowNet)};font-size:0.5rem">${fl(r.nowNet)} ${sflIcon("0.65em")}/den</span></div>`;
+        if (r.flips) {
+          h += `<div style="font-size:0.52rem;color:var(--green);margin-top:2px">Koupit za <b>${roadmapFmtFlower(r.cost)}</b> ${sflIcon("0.65em")} \u2192 <b>${fl(r.net)}</b> ${sflIcon("0.65em")}/den</div>`;
+          h += `<div style="font-size:0.5rem;color:var(--text-secondary);line-height:1.7">${r.picked.map((x) => `${escHTML(x.name)} <span style="color:var(--text-dim)">${roadmapFmtFlower(x.floor)}</span> <span style="color:var(--green)">+${x.gain.toFixed(3)}</span>`).join(" \u00b7 ")}</div>`;
+        } else {
+          h += `<div style="font-size:0.5rem;color:var(--yellow);margin-top:2px">${escHTML(WHY[r.blocked] || r.blocked || "")}</div>`;
+        }
+        // Per product, because one aggregate number hides that Olive is a near miss and Grape is not.
+        const ps = r.productsBefore || [];
+        if (ps.length > 1) {
+          h += `<div style="font-size:0.46rem;color:var(--text-dim);margin-top:3px">po plodin\u011b: ${ps.slice(0, 6).map((q, i) => `${i === 0 ? "<b style=\"color:var(--text-secondary)\">" : ""}${escHTML(q.product)} ${fl(q.net)}${i === 0 ? "</b>" : ""}`).join(" \u00b7 ")}</div>`;
+        }
+        h += `</div>`;
+      }
+      h += `</div>`;
+      return h;
+    }
     function roadmapPeriodicHtml() {
       const ps = powerState || {};
       const rows = [];
@@ -17915,6 +17964,7 @@
       h += roadmapProfitabilityHtml(settings);
       // ── Buy path: Visual graph or Table (toggle) ──
       h += `<div style="margin-bottom:16px">`;
+      h += roadmapStartupHtml();
       h += roadmapPeriodicHtml();
       h += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal)">YOUR BUY PATH — what to buy next, in order</div><div style="margin-left:auto;display:flex;gap:4px"><button id="bp-tab-graph" onclick="_roadmapBuyView('graph')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:#241a10;color:var(--text-secondary);cursor:pointer">▣ Visual</button><button id="bp-tab-table" onclick="_roadmapBuyView('table')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:var(--sunpetal);color:#1a120a;cursor:pointer;font-weight:bold">☰ Table</button><button id="bp-tab-skills" onclick="_roadmapBuyView('skills')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:#241a10;color:var(--text-secondary);cursor:pointer">⭐ Skills</button></div></div>`;
       {

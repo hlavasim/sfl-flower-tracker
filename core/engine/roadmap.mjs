@@ -1057,6 +1057,46 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       return l.length ? l[0].product : null;
     }
 
+    /*
+     * How many animals the buildings could hold, for the counterfactual "if I actually ran this".
+     *
+     * Formula from the game: buyAnimal.ts getBaseAnimalCapacity = 10 + (level-1)*5, plus 5*level
+     * again for a built Chicken Coop (hen house) or Barn Blueprint (barn).
+     *
+     * CAVEAT, measured and not resolved: on farm 155498 the barn reports level 3, which the formula
+     * turns into capacity 20 — while the barn actually holds 35 sheep. So `barn.level` is not the
+     * input the formula wants, or capacity is raised by something not modelled here. Rather than
+     * ship a ceiling contradicted by the farm in front of it, the formula is treated as a LOWER
+     * BOUND: the capacity used is never below what the building demonstrably holds already.
+     *
+     * The barn is SHARED between cows and sheep, which matters for exactly the question being
+     * asked: a barn full of sheep has no room for a cow, and "buy these boosts" would be the wrong
+     * answer when the real blocker is livestock.
+     */
+    function roadmapAnimalCapacity(cat) {
+      const farm = powerState.farm || {};
+      const built = (n) => (((farm.collectibles || {})[n] || []).length
+        + ((((farm.home || {}).collectibles) || {})[n] || []).length) > 0;
+      const base = (lvl) => 10 + (Math.max(1, Number(lvl) || 1) - 1) * 5;
+      if (cat === "chickens") {
+        const hh = farm.henHouse || {};
+        const lvl = Math.max(1, Number(hh.level) || 1);
+        const held = Object.keys(hh.animals || {}).length;
+        return { total: Math.max(base(lvl) + (built("Chicken Coop") ? 5 * lvl : 0), held), held, free: 0, shared: null };
+      }
+      if (cat === "cows" || cat === "sheep") {
+        const bn = farm.barn || {};
+        const lvl = Math.max(1, Number(bn.level) || 1);
+        const animals = Object.values(bn.animals || {});
+        const held = animals.length;
+        const mine = animals.filter((a) => (a.type || "").toLowerCase() === (cat === "cows" ? "cow" : "sheep")).length;
+        const total = Math.max(base(lvl) + (built("Barn Blueprint") ? 5 * lvl : 0), held);
+        // Free slots are what the OTHER species has left you.
+        return { total, held, free: Math.max(0, total - held), mine, shared: "barn" };
+      }
+      return null;
+    }
+
     function roadmapStartupPlans(userSettings, byName, catBoostsW) {
       /*
        * THEORETICAL, always — and this is the whole reason the first version answered nothing.
@@ -1101,6 +1141,20 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         // and no marketplace item substitutes for that.
         let count = 0;
         try { count = getCapacityCount(cat, capacity) || 0; } catch (e) { count = 0; }
+        /*
+         * "Počty dle maxu, ne dle reality" — the owner is right that the counterfactual needs it:
+         * with 0 chickens every figure is 0 whatever you buy, so the honest answer is what a FULL
+         * hen house would earn. The capacity is swapped for the building maximum while planning and
+         * restored afterwards, so nothing else on the page sees it.
+         */
+        const animalCap = roadmapAnimalCapacity(cat);
+        let atMax = count, capRestore = null, roomBlocked = false;
+        if (animalCap) {
+          atMax = animalCap.shared === "barn" ? (animalCap.mine || 0) + animalCap.free : animalCap.total;
+          // A barn already full of the other species is the real blocker, and boosts cannot fix it.
+          roomBlocked = atMax <= 0;
+          if (atMax > count) { capRestore = capacity[cat]; capacity[cat] = atMax; }
+        }
 
         // Candidates: unowned, priced, boost-bearing items that touch this category.
         const cands = [];
@@ -1112,7 +1166,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
 
         const picked = []; let net = nowNet; let cost = 0;
         const restore = [];
-        if (count > 0) {
+        if (atMax > 0) {
           for (let guard = 0; guard < 40 && net <= 0 && cands.length; guard++) {
             // Value each remaining candidate by what it adds to THIS category right now, then take
             // the best per FLOWER. Recomputed every round, so stacking effects are not double-counted.
@@ -1137,6 +1191,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
           }
         }
         for (const c of restore) c.has = false;         // never leak state into the buy path
+        if (capRestore != null) capacity[cat] = capRestore;   // and never leak the inflated capacity
 
         /*
          * "Cannot be flipped" and "cannot be PRICED" are different answers and looked identical.
@@ -1155,12 +1210,14 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
 
         out.push({
           cat, label: def.label || cat, count, nowNet, unpriced, unitsPerDay: produces,
+          // What the figures assume you would run, and where that ceiling comes from.
+          atMax, capacity: animalCap, roomBlocked,
           // Which product the figures assume, when the category has a choice.
           // Every product, best first, both as it stands now and after the plan's purchases.
           productsBefore: (() => { try { return roadmapCatProductNets(cat, owned, settings); } catch (e) { return []; } })(),
           picked, cost, net,
           // Why it is not actionable, when it is not.
-          blocked: unpriced ? "unpriced" : count === 0 ? "capacity" : (net <= 0 ? "unflippable" : null),
+          blocked: unpriced ? "unpriced" : roomBlocked ? "no-room" : (atMax <= 0 ? "capacity" : (net <= 0 ? "unflippable" : null)),
           flips: net > 0 && picked.length > 0,
         });
       }
@@ -1536,7 +1593,7 @@ export {
   roadmapItemValue, roadmapItemSituational, roadmapSimulate, _setRoadmapState,
   // Exported for testing: the node actions the buy path folds in. Its escalation has to match
   // nodeAcq's, and a test that re-derives the rule instead of calling this proves nothing.
-  roadmapNodeCandidates, roadmapSkillCandidates, roadmapAscensionCandidates, roadmapStartupPlans,
+  roadmapNodeCandidates, roadmapSkillCandidates, roadmapAscensionCandidates, roadmapStartupPlans, roadmapBuildClones,
   ROADMAP_EFF_HKEY, roadmapComputeEfficiency,
   getRoadmapSettings, roadmapOwnedEffects, roadmapCatBreakdown, roadmapCatNet,
   roadmapMiningChain, roadmapCatMix, ROADMAP_MINING_CATS, calcBoostValue, cmGetSeedRestockCount,

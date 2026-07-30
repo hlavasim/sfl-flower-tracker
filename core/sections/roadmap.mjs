@@ -11,6 +11,7 @@ import {
   roadmapMiningChain, roadmapCatBreakdown, roadmapProductBreakdown, roadmapSaltBreakdown,
   roadmapEffFactor, roadmapOwnedEffects, roadmapCoinsFree, roadmapInSeason, MINE_RES,
   cmGetSeedRestockCount, _getPowerContext,
+  roadmapStartupPlans, roadmapBuildClones,
 } from "../engine/roadmap.mjs";
 import { getCapacityCount, POWER_CATEGORIES } from "../engine/power-helpers.mjs";
 import { getAnimalCatSfl, calcAnimalFeedCost, calcSicknessCost } from "../engine/power-costs.mjs";
@@ -42,6 +43,16 @@ export function buildRoadmapSection(snapshots, settings = {}) {
   const currentProd = roadmapCurrentProduction(rs);
   const startIncome = (rs.startIncome != null) ? rs.startIncome : currentProd.total;
   const sim = roadmapSimulate(rs, startIncome);
+  /*
+   * "Co koupit, abych s tímhle vůbec mohl začít" — for the categories the buy path structurally
+   * cannot answer for: a boost on a dead category is worth nothing until the category is above
+   * water, so it sinks to the bottom as CONDITIONAL and the question never gets an answer.
+   */
+  let startup = [];
+  try {
+    const { byName, catBoostsW } = roadmapBuildClones();
+    startup = roadmapStartupPlans(rs, byName, catBoostsW);
+  } catch (e) { startup = []; }
 
   // JSON-safe: strip clone refs, null non-finite numbers.
   sim.untradeable = (sim.untradeable || []).map(_strip);
@@ -72,7 +83,7 @@ export function buildRoadmapSection(snapshots, settings = {}) {
   }
   const todo = buildTodo(rs);
 
-  return { eff, currentProd, startIncome, sim, profitability, todo };
+  return { eff, currentProd, startIncome, sim, profitability, todo, startup };
 }
 
 function _fmtFlower(v) {
