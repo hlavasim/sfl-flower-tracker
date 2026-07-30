@@ -589,6 +589,18 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
   const nodeAcq = { obsidianPerDay, obsidianPrice, costPerXp, prodCost,
     obsidianPerSunstone: OBSIDIAN_PER_SUNSTONE, perType: {} };
   /*
+   * The MEASUREMENT itself, passed through rather than left for the page to redo.
+   *
+   * roadmapComputeEfficiency already derives per-category ratios, session counts and the
+   * window they cover from the same snapshots, and every figure above is scaled by them. The
+   * NODES page nonetheless ran its own dig-session pass over its own history fetch and used
+   * THAT ratio for the EFF column and the ROI — on top of the ratio already baked into the
+   * per-node profit, so the "real" income was scaled by efficiency twice. Serving the detail
+   * (sessions, the window, whether it is measured at all) is what makes deleting that pass
+   * possible without losing the tooltip.
+   */
+  nodeAcq.eff = { byCat: effBy, meta: (eff && eff.meta) || null };
+  /*
    * MERGE: four T1 nodes become one T2 (and four T2 become one T3).
    *
    * Effective capacity is unchanged — a T2 counts as four nodes — and so is tool cost per unit

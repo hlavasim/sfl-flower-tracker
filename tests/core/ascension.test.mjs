@@ -655,3 +655,28 @@ test("every node carries tier counts, not just the mergeable four", () => {
   const anyMerged = Object.values(out.nodeAcq.perType).some((d) => d.tiers.t2 > 0 || d.tiers.t3 > 0);
   assert.ok(anyMerged, "the fixture farm has merged nodes, so the weighting is exercised");
 });
+
+test("the measurement is served, and it is the SAME ratio the per-node profit used", () => {
+  /*
+   * The NODES page ran its own dig-session pass and used that ratio for the EFF column and the
+   * ROI — while profitPerDay already carried the server's ratio. Two engines, and the "real"
+   * income scaled by efficiency twice. This pins that there is one ratio and that it reaches
+   * the page.
+   */
+  assert.ok(out.nodeAcq.eff, "nodeAcq serves the efficiency measurement");
+  assert.deepEqual(out.nodeAcq.eff.meta, eff.meta, "and the window it was measured over");
+  for (const [node, d] of Object.entries(out.nodeAcq.perType)) {
+    const cat = { "Crop Plot": "crops", "Fruit Patch": "fruits", Tree: "trees", "Stone Rock": "stone", "Iron Rock": "iron", "Gold Rock": "gold", "Crimstone Rock": "crimstone", "Oil Reserve": "oil", "Lava Pit": "obsidian", "Flower Bed": "flowers" }[node];
+    const served = out.nodeAcq.eff.byCat[cat];
+    assert.equal(d.effMeasured, !!(served && served.measured), `${node}: measured flag agrees with the served detail`);
+    // Obsidian is the one documented exception and must stay one: its value is already capped
+    // at one sale per week, so scaling it by throughput would count the same limit twice. The
+    // flag still reports that it WAS measured, which is why the page needs both fields.
+    if (cat === "obsidian") assert.equal(d.effRatio, 1, "obsidian is not throughput-scaled");
+    else if (d.effMeasured) assert.equal(d.effRatio, served.ratio, `${node}: uses the served ratio, not one of its own`);
+    // And profitPerDay must ALREADY be scaled by it — so a page that multiplies again is wrong.
+    if (d.netPerNode) assert.ok(Math.abs(d.profitPerDay - d.netPerNode * d.effRatio) < 1e-9, `${node}: profitPerDay = netPerNode x effRatio`);
+  }
+  // Not vacuous: the fixture measures crimstone/oil/obsidian, so at least one node is measured.
+  assert.ok(Object.values(out.nodeAcq.perType).some((d) => d.effMeasured), "some node is measured on this fixture");
+});
