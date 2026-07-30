@@ -17289,7 +17289,19 @@
 
 
     /*
-     * PERIODIC — the things you redo, as opposed to the buy path's permanent upgrades.
+     * WHAT HAS LAPSED — shrines and weather protection only.
+     *
+     * Was a general "periodic tasks" section (treasures, composters, restock queues,
+     * deliveries). The owner tried it and said those rows were of no use, so they are gone
+     * rather than left to rot: a section nobody reads is worse than no section, because it
+     * still has to be kept correct.
+     *
+     * What stays is the two things that EXPIRE on their own and are otherwise silent — a
+     * shrine runs out after 7 days and a weather item is consumed by its event, and in both
+     * cases the farm looks unchanged while the farm's output quietly drops.
+     *
+     * Original note, still true: the numbers are READ from what the server computed, never
+     * recomputed here.
      *
      * Ranked by FLOWER (or coins) per day, not by ROI: an action you repeat has no payback
      * period, so quoting one would be meaningless. Everything here is READ from what the server
@@ -17300,35 +17312,6 @@
     function roadmapPeriodicHtml() {
       const ps = powerState || {};
       const rows = [];
-
-      // 1. Treasures you are sitting on. Served by section=ascension, which the roadmap page
-      //    does not fetch, so it is read from the ascension payload when that has been loaded.
-      const tc = (_ascServer && _ascServer.current && _ascServer.current.treasureCoins) || null;
-      if (tc && tc.total > 0) {
-        const cps = (ps.exchangeRates && ps.exchangeRates.coinsPerSFL) || 0;
-        const top = (tc.items || []).slice(0, 3).map((i) => `${escHTML(i.name)} x${i.qty}`).join(', ');
-        rows.push({
-          what: 'Prodat treasures', now: true,
-          gain: cps > 0 ? tc.total / cps : null,
-          unit: `${Math.round(tc.total).toLocaleString('cs')} coins`,
-          note: `lezi ti v inventari, boost x${tc.boost.toFixed(2)}${top ? ' — ' + top : ''}`,
-        });
-      }
-
-      // 2. Composters. netPerDay < 0 means the crops it eats cost more than the fertiliser it
-      //    makes — worth saying out loud rather than leaving as an inviting empty slot.
-      for (const c of (ps.composters || [])) {
-        rows.push({
-          what: `Composter: ${escHTML(c.name)}`, now: c.netPerDay > 0,
-          gain: c.netPerDay,
-          unit: null,
-          warn: c.netPerDay <= 0,
-          approx: c.approximate, unpriced: c.unpriced,
-          note: c.netPerDay > 0
-            ? `${c.batchesPerDay.toFixed(1)} davek/den, hnojivo za ${roadmapFmtFlower(c.grossPerDay)} minus vstupy za ${roadmapFmtFlower(c.costPerDay)}`
-            : `nevyplati se: vstupy (${roadmapFmtFlower(c.costPerDay)}/den) jsou drazsi nez hnojivo (${roadmapFmtFlower(c.grossPerDay)}/den)`,
-        });
-      }
 
       /*
        * Weather protection. Not a timer — the game stamps the instance `used: true` when its
@@ -17401,51 +17384,13 @@
           note: `zbývá ${r.x.hoursLeft < 1 ? 'necelá hodina' : r.x.hoursLeft.toFixed(0) + ' h'} — ${escHTML(r.sh.effect)}`,
         });
       }
-      /*
-       * Deliveries — and to WHOM, which was the point.
-       *
-       * Uses the DASHBOARD's parser, dashParseDeliveryOrders, not the roadmap's own DELIVER
-       * branch. Both exist; the dashboard one is the better model and picking the weaker
-       * duplicate would have been the same mistake as the shrines. It computes the tickets for
-       * NPCs whose reward comes back empty from the API (dashCalculateDeliveryTickets), prices
-       * the inputs at p2p, derives an `efficiency`, and honours the animal / faction filters.
-       *
-       * An order is a one-off, which is the other reason this section ranks per day rather than
-       * by ROI — a payback period for a single delivery is meaningless.
-       */
-      try {
-        const dOrders = (typeof dashParseDeliveryOrders === 'function' && powerState && powerState.farm)
-          ? dashParseDeliveryOrders(powerState.farm) : [];
-        // Best first when the dashboard scored them; it sorts by its own efficiency measure.
-        for (const a of dOrders.slice(0, 4)) {
-          const who = escHTML(String(a.npc || a.from || a.title || 'NPC').replace(/^Deliver.*?\u2192\s*/, ''));
-          const detail = escHTML(String(a.detail || (a.detailParts || []).join(' \u00b7 ') || ''));
-          rows.push({
-            what: `Doru\u010dit \u2192 ${who}`, now: true, gain: null,
-            unit: a.efficiency != null && isFinite(a.efficiency) ? `${(a.efficiency).toFixed(2)}x` : null,
-            note: detail || 'objedn\u00e1vka \u010dek\u00e1',
-          });
-        }
-      } catch (e) {}
-      // 3. Restock. Already computed by section=power (buildQueueData); daysUntilEmpty null = never.
-      const q = ps.restockQueues || {};
-      const soon = Object.entries(q)
-        .filter(([, v]) => v && v.daysUntilEmpty != null && isFinite(v.daysUntilEmpty) && v.daysUntilEmpty < 3 && v.usePerDay > 0)
-        .sort((a, b) => a[1].daysUntilEmpty - b[1].daysUntilEmpty);
-      for (const [name, v] of soon) {
-        rows.push({
-          what: `Dokoupit ${escHTML(name)}`, now: true, gain: null, unit: null, warn: v.daysUntilEmpty < 1,
-          note: `zasoba na ${v.daysUntilEmpty < 1 ? 'mene nez den' : v.daysUntilEmpty.toFixed(1) + ' dne'} pri ${v.usePerDay.toFixed(1)}/den — az dojde, ta kategorie stoji`,
-        });
-      }
-
       if (!rows.length) return '';
       // Value first where we have one; the unquantified chores go under it rather than on top.
       rows.sort((a, b) => (b.gain || -Infinity) - (a.gain || -Infinity));
 
       let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
-      h += `<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">\u{1F504} PERIODICKE \u2014 co udelat teď, opakovaně</div>`;
-      h += `<div style="font-size:0.47rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Řazeno podle hodnoty za den, ne podle ROI \u2014 u opakované akce návratnost nedává smysl. Čísla chodí hotová z API, nepočítají se tu podruhé.</div>`;
+      h += `<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">\u23F3 CO VYPRŠELO \u2014 obnovit</div>`;
+      h += `<div style="font-size:0.47rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Jen věci, které sami doběhnou a přestanou platit \u2014 svatyně (7 dní) a ochrana proti živelným událostem. Ostatní periodické úkoly odsud vyřazeny: nepoužívaly se.</div>`;
       h += `<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;overflow:hidden">`;
       rows.forEach((r, i) => {
         const val = r.gain != null && isFinite(r.gain)
@@ -17458,7 +17403,6 @@
         h += `<div style="padding:0 8px 5px 26px;border-bottom:1px solid #20190f;font-size:0.45rem;color:var(--text-dim)">${r.note}</div>`;
       });
       h += `</div>`;
-      if (!tc) h += `<div style="font-size:0.45rem;color:var(--text-dim);margin-top:6px">Treasures se objeví, až jednou otevřeš ASCENSION \u2014 tam se ta částka počítá.</div>`;
       h += `</div>`;
       return h;
     }
