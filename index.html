@@ -18225,6 +18225,10 @@
       // Summary
       const { skillCostInfo } = powerState;
 
+      // Two repeatable activities the app could price but never showed an answer for. Above the
+      // boost catalogue on purpose: it is a verdict, not reference data.
+      content += _powerActivityVerdictHtml();
+
       content += `<div class="power-summary pixel-font">
         <div class="power-summary-stat"><div class="power-summary-label">OWNED</div><div class="power-summary-value" style="color:var(--green)">${ownedCount} / ${totalCount}</div></div>
         <div class="power-summary-stat"><div class="power-summary-label">GROSS REVENUE</div><div class="power-summary-value" style="color:var(--sunpetal)">${totalBoostedSfl.toFixed(2)} ${sflIcon()}/day</div></div>
@@ -19198,9 +19202,6 @@
           <td style="padding:3px 6px;border:1px solid var(--border-dark)">${effectsDesc || "<em>none</em>"}</td>
         </tr>`;
       }
-
-      // Two repeatable activities the app could price but never showed an answer for.
-      content += _powerActivityVerdictHtml();
 
       content += `</tbody></table></div></div>`;
 
