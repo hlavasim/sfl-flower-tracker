@@ -502,3 +502,43 @@ test("node acquisition: an unpriceable node is flagged, not reported as worthles
   // Price from the game's RESOURCE_NODE_PRICES: 30 base, +25 per purchase.
   assert.equal(fb.buy[0].sunstones, 30 + fb.bought * 25);
 });
+
+test("coin stock includes treasures you could sell, reported separately", async () => {
+  /*
+   * Every ascension step costs Coins, and a dig pile IS coins: treasures sell to an NPC at a
+   * fixed price, no market and no counterparty. Counting only farm.coins understated what the
+   * plan can pay for — on the fixture by 68% — and made steps look gated on coins already
+   * covered by the inventory.
+   */
+  const c = out.current;
+  assert.equal(c.coinsHeld, parseFloat(farm.coins) || 0, "the held figure is farm.coins, untouched");
+  assert.ok(c.treasureCoins.total > 0, "the fixture holds sellable treasures");
+  assert.ok(Math.abs(c.stock.Coins - (c.coinsHeld + c.treasureCoins.total)) < 1e-9,
+    "stock.Coins = held + treasures, so the plan can spend both");
+  // Both halves are exposed: the page must be able to say "X held + Y unsold", never one
+  // opaque number that looks like cash on hand.
+  assert.ok(c.stock.Coins > c.coinsHeld, "and the total is genuinely higher here");
+
+  // Boosts come from the same detection the treasury uses — Treasure Map +20%, Camel +30%,
+  // the Camel counting whether it is placed or merely owned.
+  const { findCollectible, getCount } = await import("../../core/engine/power-helpers.mjs");
+  let want = 1;
+  if (findCollectible(farm, "Treasure Map").length > 0) want += 0.2;
+  if (getCount(farm.inventory, "Camel") > 0 || findCollectible(farm, "Camel").length > 0) want += 0.3;
+  assert.ok(Math.abs(c.treasureCoins.boost - want) < 1e-9, `boost ${c.treasureCoins.boost} != ${want}`);
+
+  // Every line is priced off TREASURE_SELL_PRICES x qty x boost, and they sum to the total.
+  const { TREASURE_SELL_PRICES } = await import("../../core/data/crafting.mjs");
+  let sum = 0;
+  for (const it of c.treasureCoins.items) {
+    assert.ok(TREASURE_SELL_PRICES[it.name] > 0, `${it.name} has an NPC price`);
+    assert.equal(it.baseCoins, TREASURE_SELL_PRICES[it.name]);
+    assert.ok(Math.abs(it.coins - it.baseCoins * c.treasureCoins.boost * it.qty) < 1e-9, `${it.name}: coins = price x boost x qty`);
+    sum += it.coins;
+  }
+  assert.ok(Math.abs(sum - c.treasureCoins.total) < 1e-6, "the lines sum to the total");
+  // Sorted richest first, so the page can show the few that matter.
+  for (let i = 1; i < c.treasureCoins.items.length; i++) {
+    assert.ok(c.treasureCoins.items[i - 1].coins >= c.treasureCoins.items[i].coins, "sorted by value");
+  }
+});

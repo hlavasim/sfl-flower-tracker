@@ -11,7 +11,10 @@
 import { COOKING_RECIPES_DATA } from "../data/cooking.mjs";
 import { detectCookingBoosts, computeFoodXP } from "../engine/cooking.mjs";
 import { PRE_EXPANSION_REQUIREMENTS, ISLAND_PROGRESSION } from "../data/expansions.mjs";
-import { BUMPKIN_XP_TABLE } from "../engine/power-helpers.mjs";
+import { BUMPKIN_XP_TABLE, findCollectible } from "../engine/power-helpers.mjs";
+// Treasures sell to an NPC at a fixed coin price — the same table and boosts the treasury
+// section uses, so the two cannot disagree about what a dig pile is worth.
+import { TREASURE_SELL_PRICES } from "../data/crafting.mjs";
 import {
   SWAMP_BASE_EXPANSION, SWAMP_EXPANSIONS_PER_ASCENSION, HOURS_PER_EXPANSION,
   getAscensionUpgradeCost, getAscensionExpansionRequirements, getExpansionCrystalCount,
@@ -139,8 +142,35 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
   }
   const experienceEff = experience + bankedFoodXp;
 
+  /*
+   * Coins you could have, not just coins you hold.
+   *
+   * Every ascension step costs Coins, and treasures sitting in the inventory ARE coins — they
+   * sell to the NPC at a fixed price, no market, no counterparty. Counting only farm.coins
+   * understated what the plan can pay for and made steps look gated on coins that a dig pile
+   * already covers.
+   *
+   * Reused wholesale from the treasury section rather than re-derived: TREASURE_SELL_PRICES
+   * for the price and the same two boosts it detects (Treasure Map +20%, Camel +30%, and the
+   * Camel counts whether placed or merely owned). Reported separately as well as folded into
+   * the stock, so the plan never silently spends something the user has not sold yet.
+   */
+  let treasureBoost = 1;
+  if (findCollectible(farm, "Treasure Map").length > 0) treasureBoost += 0.2;
+  if (getCount(inv, "Camel") > 0 || findCollectible(farm, "Camel").length > 0) treasureBoost += 0.3;
+  const treasureCoins = { total: 0, boost: treasureBoost, items: [] };
+  for (const [name, baseCoins] of Object.entries(TREASURE_SELL_PRICES)) {
+    const qty = getCount(inv, name);
+    if (qty <= 0) continue;
+    const coins = baseCoins * treasureBoost * qty;
+    treasureCoins.total += coins;
+    treasureCoins.items.push({ name, qty, baseCoins, coins });
+  }
+  treasureCoins.items.sort((a, b) => b.coins - a.coins);
+
   // ── current state (§2.7 `current`) ──
-  const stock = { Coins: parseFloat(farm.coins) || 0 };
+  const coinsHeld = parseFloat(farm.coins) || 0;
+  const stock = { Coins: coinsHeld + treasureCoins.total };
   for (const r of SIM_RES) stock[r] = getCount(inv, r);
   if (grinx) { /* grinx halves COSTS, not stock */ }
   const bandStandings = {};
@@ -158,6 +188,9 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
     island: island.type || "basic", ascensionLevel, basicLand, stock, experience,
     bumpkinLevel: experience >= V150_XP ? 150 : null,
     bankedFoodXp,
+    // stock.Coins already includes treasureCoins.total; both parts are reported so the page
+    // can show "X coins + Y from treasures you have not sold" rather than one opaque number.
+    coinsHeld, treasureCoins,
     // ready to ascend into the NEXT band = current band complete = its baseline reached
     // (banked cooked food counts — it will be eaten with the pet boost before ascending)
     readyToAscend: ascensionLevel === 0 ? experienceEff >= V150_XP : experienceEff >= ascensionBaseline(ascensionLevel + 1),
