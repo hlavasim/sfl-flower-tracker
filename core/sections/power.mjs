@@ -35,6 +35,9 @@ import {
 import { _setPowerContext, calcBoostValue, roadmapEffFactor, getRoadmapSettings } from "../engine/roadmap.mjs";
 import { SKILL_UPGRADES, powerSkillRankVals, skillRankText } from "../engine/skill-ranks.mjs";
 import { buildFormulaHTML } from "../engine/power-formula.mjs";
+// A composter is a PERIODIC action — cycle + inputs — so it is served as a per-day net here
+// rather than folded into the permanent-upgrade valuations.
+import { composterVerdicts } from "../engine/compost.mjs";
 
 export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   const inventory = farm.inventory || {};
@@ -500,5 +503,5 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     }
   }
 
-  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, skillRanks, valueBasis: settings.measured ? "measured" : "theoretical", restockQueues, ...(boostValuesEff ? { boostValuesEff } : {}), ...(formulaHtml !== undefined ? { formulaHtml } : {}) };
+  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, skillRanks, composters: composterVerdicts(farm, p2pPrices, season, { savedProducts }), valueBasis: settings.measured ? "measured" : "theoretical", restockQueues, ...(boostValuesEff ? { boostValuesEff } : {}), ...(formulaHtml !== undefined ? { formulaHtml } : {}) };
 }

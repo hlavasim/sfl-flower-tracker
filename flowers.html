@@ -17288,6 +17288,83 @@
     }
 
 
+    /*
+     * PERIODIC — the things you redo, as opposed to the buy path's permanent upgrades.
+     *
+     * Ranked by FLOWER (or coins) per day, not by ROI: an action you repeat has no payback
+     * period, so quoting one would be meaningless. Everything here is READ from what the server
+     * already computed — composter verdicts and restock queues from section=power, treasure
+     * coins from section=ascension — because three separate valuation engines is how this
+     * codebase got its worst bugs.
+     */
+    function roadmapPeriodicHtml() {
+      const ps = powerState || {};
+      const rows = [];
+
+      // 1. Treasures you are sitting on. Served by section=ascension, which the roadmap page
+      //    does not fetch, so it is read from the ascension payload when that has been loaded.
+      const tc = (_ascServer && _ascServer.current && _ascServer.current.treasureCoins) || null;
+      if (tc && tc.total > 0) {
+        const cps = (ps.exchangeRates && ps.exchangeRates.coinsPerSFL) || 0;
+        const top = (tc.items || []).slice(0, 3).map((i) => `${escHTML(i.name)} x${i.qty}`).join(', ');
+        rows.push({
+          what: 'Prodat treasures', now: true,
+          gain: cps > 0 ? tc.total / cps : null,
+          unit: `${Math.round(tc.total).toLocaleString('cs')} coins`,
+          note: `lezi ti v inventari, boost x${tc.boost.toFixed(2)}${top ? ' — ' + top : ''}`,
+        });
+      }
+
+      // 2. Composters. netPerDay < 0 means the crops it eats cost more than the fertiliser it
+      //    makes — worth saying out loud rather than leaving as an inviting empty slot.
+      for (const c of (ps.composters || [])) {
+        rows.push({
+          what: `Composter: ${escHTML(c.name)}`, now: c.netPerDay > 0,
+          gain: c.netPerDay,
+          unit: null,
+          warn: c.netPerDay <= 0,
+          approx: c.approximate, unpriced: c.unpriced,
+          note: c.netPerDay > 0
+            ? `${c.batchesPerDay.toFixed(1)} davek/den, hnojivo za ${roadmapFmtFlower(c.grossPerDay)} minus vstupy za ${roadmapFmtFlower(c.costPerDay)}`
+            : `nevyplati se: vstupy (${roadmapFmtFlower(c.costPerDay)}/den) jsou drazsi nez hnojivo (${roadmapFmtFlower(c.grossPerDay)}/den)`,
+        });
+      }
+
+      // 3. Restock. Already computed by section=power (buildQueueData); daysUntilEmpty null = never.
+      const q = ps.restockQueues || {};
+      const soon = Object.entries(q)
+        .filter(([, v]) => v && v.daysUntilEmpty != null && isFinite(v.daysUntilEmpty) && v.daysUntilEmpty < 3 && v.usePerDay > 0)
+        .sort((a, b) => a[1].daysUntilEmpty - b[1].daysUntilEmpty);
+      for (const [name, v] of soon) {
+        rows.push({
+          what: `Dokoupit ${escHTML(name)}`, now: true, gain: null, unit: null, warn: v.daysUntilEmpty < 1,
+          note: `zasoba na ${v.daysUntilEmpty < 1 ? 'mene nez den' : v.daysUntilEmpty.toFixed(1) + ' dne'} pri ${v.usePerDay.toFixed(1)}/den — az dojde, ta kategorie stoji`,
+        });
+      }
+
+      if (!rows.length) return '';
+      // Value first where we have one; the unquantified chores go under it rather than on top.
+      rows.sort((a, b) => (b.gain || -Infinity) - (a.gain || -Infinity));
+
+      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
+      h += `<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">\u{1F504} PERIODICKE \u2014 co udelat teď, opakovaně</div>`;
+      h += `<div style="font-size:0.47rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Řazeno podle hodnoty za den, ne podle ROI \u2014 u opakované akce návratnost nedává smysl. Čísla chodí hotová z API, nepočítají se tu podruhé.</div>`;
+      h += `<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;overflow:hidden">`;
+      rows.forEach((r, i) => {
+        const val = r.gain != null && isFinite(r.gain)
+          ? `<b style="color:${r.gain > 0 ? 'var(--green)' : 'var(--red)'}">${r.gain > 0 ? '+' : ''}${roadmapFmtFlower(r.gain)}/d</b>`
+          : (r.unit ? `<b style="color:var(--sunpetal)">${r.unit}</b>` : `<span style="color:var(--text-dim)">\u2014</span>`);
+        h += `<div style="display:flex;gap:8px;align-items:baseline;padding:5px 8px;border-bottom:1px solid #20190f;font-size:0.55rem">`;
+        h += `<span style="min-width:18px;color:var(--text-dim)">${r.warn ? '\u26A0' : (r.now ? '\u25B8' : '\u00B7')}</span>`;
+        h += `<b style="flex:1;min-width:0">${r.what}${r.approx ? ' <span style="font-size:0.42rem;color:var(--text-dim)">přibližné</span>' : ''}${r.unpriced ? ' <span style="font-size:0.42rem;color:var(--yellow)">chybí cena</span>' : ''}</b>`;
+        h += `<span style="min-width:74px;text-align:right">${val}</span></div>`;
+        h += `<div style="padding:0 8px 5px 26px;border-bottom:1px solid #20190f;font-size:0.45rem;color:var(--text-dim)">${r.note}</div>`;
+      });
+      h += `</div>`;
+      if (!tc) h += `<div style="font-size:0.45rem;color:var(--text-dim);margin-top:6px">Treasures se objeví, až jednou otevřeš ASCENSION \u2014 tam se ta částka počítá.</div>`;
+      h += `</div>`;
+      return h;
+    }
     function roadmapSkillsViewHtml(settings) {
       const { byName, catBoostsW } = roadmapBuildClones();
       const skills = Object.values(byName).filter(c => c.type === "Skill");
@@ -17614,6 +17691,7 @@
       h += roadmapProfitabilityHtml(settings);
       // ── Buy path: Visual graph or Table (toggle) ──
       h += `<div style="margin-bottom:16px">`;
+      h += roadmapPeriodicHtml();
       h += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal)">YOUR BUY PATH — what to buy next, in order</div><div style="margin-left:auto;display:flex;gap:4px"><button id="bp-tab-graph" onclick="_roadmapBuyView('graph')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:#241a10;color:var(--text-secondary);cursor:pointer">▣ Visual</button><button id="bp-tab-table" onclick="_roadmapBuyView('table')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:var(--sunpetal);color:#1a120a;cursor:pointer;font-weight:bold">☰ Table</button><button id="bp-tab-skills" onclick="_roadmapBuyView('skills')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:#241a10;color:var(--text-secondary);cursor:pointer">⭐ Skills</button></div></div>`;
       {
         const _effReal = settings.effMode === "real";
