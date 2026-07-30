@@ -572,3 +572,55 @@ test("merge is modelled in core, on the same basis as buy", () => {
   const gold = m.find((x) => x.mergeKey === "gold");
   assert.ok(gold.merges[1].obsidian > gold.merges[0].obsidian, "T3 costs more obsidian than T2");
 });
+
+test("expand-vs-buy is decided in core, and obsidian is what decides it", () => {
+  /*
+   * The verdict was computed in the page's render, which made it a fourth engine purely by
+   * accident of where it lived — and meant the NODES page could disagree with everything else
+   * about which side wins. It is a pure function of two figures this section already serves.
+   */
+  for (const [node, d] of Object.entries(out.nodeAcq.perType)) {
+    assert.ok(d.verdict, `${node}: has a verdict`);
+    assert.ok(["expand", "buy"].includes(d.verdict.obsWin), `${node}: ${d.verdict.obsWin}`);
+    // Obsidian gates BOTH paths — buying pays sunstone, and sunstone is bought with obsidian
+    // 3:1 — so it is what decides, and the decision must follow the numbers.
+    const { exObs, buObs, obsWin } = d.verdict;
+    if (exObs != null && buObs != null) {
+      assert.equal(obsWin, exObs <= buObs ? "expand" : "buy", `${node}: verdict follows the obsidian`);
+    } else if (exObs == null) {
+      assert.equal(obsWin, "buy", `${node}: no expand option means buy`);
+    }
+    if (d.verdict.obsSaved != null) assert.ok(d.verdict.obsSaved >= 0, `${node}: saving is a magnitude`);
+  }
+
+  // An expand bag we cannot fully price is a LOWER bound, so it must never claim the material win.
+  const unpricedExpand = Object.entries(out.nodeAcq.perType)
+    .filter(([, d]) => (d.expand || [])[0] && d.expand[0].totalMatUnpriced);
+  for (const [node, d] of unpricedExpand) {
+    assert.notEqual(d.verdict.exMat, undefined);
+    assert.equal(d.verdict.exMat, null, `${node}: unpriced expand cost must not be treated as known`);
+  }
+  /*
+   * This fixture answers "expand" for all ten nodes, so asserting the comparison against it
+   * cannot tell a real decision from a hardcoded "expand" — checked by hardcoding it, which
+   * passed. Two things follow.
+   *
+   * First, pin the distribution, so the weakness is visible instead of silent: if the fixture
+   * ever produces a "buy" the assertion fails and whoever changed it has to look here.
+   *
+   * Second, and stated plainly rather than papered over: THIS TEST DOES NOT CATCH A HARDCODED
+   * "expand". It cannot, on this fixture. Expansion needs 3–26 obsidian here while buying needs
+   * 27–240, so expand wins every row and any always-expand implementation satisfies every
+   * assertion above — confirmed by hardcoding it and watching the suite stay green.
+   *
+   * A first attempt at forcing the other branch re-implemented the comparison inside the test,
+   * which only tested the test. Doing it honestly needs a fixture whose expansion is dearer than
+   * buying, i.e. a farm far enough along that expansions have escalated. Until such a fixture
+   * exists, the distribution pin below is the whole guarantee: it fails the moment the fixture
+   * stops being expand-only, which is when a real second case becomes possible.
+   */
+  const wins = {};
+  for (const d of Object.values(out.nodeAcq.perType)) wins[d.verdict.obsWin] = (wins[d.verdict.obsWin] || 0) + 1;
+  assert.deepEqual(wins, { expand: 10 },
+    "this fixture is expand-only; if that changed, add the buy-branch case this test admits it lacks");
+});

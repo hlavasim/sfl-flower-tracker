@@ -635,6 +635,7 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
     return { mergeKey, cat, tiers, merges: out };
   };
   nodeAcq.merge = Object.keys(MERGE_COSTS).map(mergeFor).filter(Boolean);
+
   for (const node of PROFIT_NODES) {
     const cat = NODE_TO_CAT[node];
     // Same figure the plan's step ROI uses — one source, so the table and the plan cannot
@@ -687,6 +688,32 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
     nodeAcq.perType[node] = { profitPerDay, grossPerNode, netPerNode, effRatio, effMeasured: !!(effBy[cat] && effBy[cat].measured), unpriced,
       sellable, unitsPerNode, unitName: (cats[cat] || {}).product || null,
       expand: (expandAcq[node] || []).slice(0, 4), buy, currentCount: owned, bought };
+  }
+  /*
+   * EXPAND vs BUY, decided here rather than in the page's render.
+   *
+   * It was already a pure function of the two figures this section serves — so it was a fourth
+   * engine only by accident of where it lived, and leaving it there meant the NODES page could
+   * still disagree with everything else about which side wins.
+   *
+   * Obsidian decides it, because obsidian gates BOTH paths: buying pays sunstone, and sunstone
+   * is bought with obsidian 3:1. Materials are compared separately and only reported when they
+   * disagree with the obsidian verdict, since that is the case worth a sentence.
+   */
+  for (const [node, d] of Object.entries(nodeAcq.perType)) {
+    const ex = (d.expand || [])[0] || null, bu = (d.buy || [])[0] || null;
+    const exObs = ex ? ex.totalObsidian : null, buObs = bu ? bu.obsidian : null;
+    const obsWin = exObs == null ? "buy" : buObs == null ? "expand" : (exObs <= buObs ? "expand" : "buy");
+    // An unpriced expand bag is only a LOWER bound, so it must not be allowed to claim a win.
+    const exMat = ex && !ex.totalMatUnpriced ? ex.totalMatSfl : null;
+    const buMat = bu ? bu.matSfl : null;
+    const matWin = exMat == null ? (buMat == null ? null : "buy") : buMat == null ? "expand" : (exMat <= buMat ? "expand" : "buy");
+    d.verdict = {
+      obsWin, matWin,
+      obsSaved: (exObs != null && buObs != null) ? Math.abs(buObs - exObs) : null,
+      matDisagrees: matWin != null && matWin !== obsWin,
+      exObs, buObs, exMat, buMat,
+    };
   }
 
   return { current, rates, steps: pending, frontier, bottleneck, reach, nodeCounts, grinx, maxAsc, nodeAcq };
