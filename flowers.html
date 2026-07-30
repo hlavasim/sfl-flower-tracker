@@ -20629,6 +20629,15 @@
       };
 
       // ── Find best product & marginal net SFL/day for a node type ──
+      /*
+       * One efficiency factor for BOTH options in this table. roadmapEffFactor is a measured
+       * ratio, not a discount — it can exceed 1 (gold sat at 1.50 on a real farm, the ratio>1.5
+       * clamp in roadmapComputeEfficiency; trees at 0.54) — so this is not a uniform haircut.
+       */
+      const mergeEff = (catId) => {
+        try { const f = roadmapEffFactor(catId, getRoadmapSettings()); return isFinite(f) && f > 0 ? f : 1; }
+        catch (e) { return 1; }
+      };
       function getMarginalNetSfl(nodeKey) {
         const np = NODE_PRICES[nodeKey];
         if (!np) return { marginal: 0, product: null };
@@ -20693,7 +20702,11 @@
         const purchased = Math.max(0, tiers.effective - baseCount);
         const nextSunstoneCost = np.base + purchased * np.increase;
         const costSfl = nextSunstoneCost * sunstoneCostSfl;
-        const { marginal, product: bestProduct } = getMarginalNetSfl(nodeKey);
+        // x eff on this side too. Adding it to merge alone would have matched the shape and
+        // broken the basis: the table presents these as directly comparable, so both are now
+        // what this farm actually harvests rather than a theoretical ceiling.
+        const { marginal: marginalTheo, product: bestProduct } = getMarginalNetSfl(nodeKey);
+        const marginal = marginalTheo * mergeEff(np.catId);
         const roiDays = (marginal > 0 && costSfl > 0) ? costSfl / marginal : Infinity;
         const sunstonesNeeded = nextSunstoneCost;
         const obsNeeded = sunstonesNeeded * 3; // 1 sunstone = 3 obsidian
@@ -20727,7 +20740,30 @@
         const rKey = catId === "stone" ? "Stone" : catId === "iron" ? "Iron" : catId === "gold" ? "Gold" : "Wood";
         const respawn = RESOURCE_RESPAWN_DATA[rKey];
         if (!respawn) continue;
-        const cyclesPerDay = 86400 / respawn.respawnSec;
+        /*
+         * Merge and buy sit in the same table as directly comparable options, so they have to
+         * be on the same basis. They were not: buy went through calcMarginalForProduct (boosts,
+         * tool cost, restock) while merge used the BASE respawn and no corrections at all. That
+         * is why the roadmap recommended merging gold to T2 where the NODES page rated a new
+         * node twice as good.
+         *
+         * Boosted cycle, not base: speed boosts and shrines (Badger for trees+stone, Mole for
+         * iron/gold/crimstone, both 0.75) mean more digs per day, so more bonuses.
+         *
+         * No tool term, and that is deliberate — verified in the game source rather than
+         * assumed. chop.ts: getRequiredAxeAmount() returns 1 * multiplier and the yield is
+         * amount.mul(multiplier), so a multiplier-4 node costs FOUR tools per dig and pays four
+         * times. Tool cost per unit of yield is identical to four separate T1 nodes, so it
+         * cancels out of the comparison. Merging buys the flat yieldBonus and nothing else.
+         *
+         * The bonus is a FLAT add, so percentage yield boosts must not multiply it — that is the
+         * one place merge legitimately differs from buy and must not be "unified" away.
+         */
+        let cyclesPerDay = 86400 / respawn.respawnSec;
+        try {
+          const ab = applyBoosts(catId, product, capacity, getOwnedEffects(catId));
+          if (ab && ab.effectiveCycle > 0) cyclesPerDay = 86400 / ab.effectiveCycle;
+        } catch (e) {}
         const price = p2pPrices[priceProduct] || 0;
 
         // Merge cost in SFL
@@ -20735,10 +20771,11 @@
         const coinCost = mc.t2.coins / exchangeRates.coinsPerSFL;
         const costSfl = obsCost + coinCost;
 
-        // Marginal benefit: 1 merged node gets +0.5 yield/dig/cycle
-        // Before: 4 t1 nodes, each giving bonus=0. After: 1 t2 giving bonus=+0.5
-        // Net physical nodes: -3. Effective capacity unchanged (4→4). Extra yield = +0.5×cyclesPerDay×price
-        const marginal = 0.5 * cyclesPerDay * price;
+        // Marginal benefit: 1 merged node gets +0.5 yield/dig/cycle.
+        // Before: 4 t1 nodes, each bonus=0. After: 1 t2 with bonus=+0.5. Effective capacity is
+        // unchanged (4→4) and so is tool cost per unit (see above), so the bonus IS the gain.
+        // x eff: you only collect the bonus on digs you actually make.
+        const marginal = 0.5 * cyclesPerDay * price * mergeEff(catId);
         const roiDays = (marginal > 0 && costSfl > 0) ? costSfl / marginal : Infinity;
 
         const hasObs = playerObsidian >= mc.t2.obsidian;
@@ -20777,7 +20814,30 @@
         const rKey = catId === "stone" ? "Stone" : catId === "iron" ? "Iron" : catId === "gold" ? "Gold" : "Wood";
         const respawn = RESOURCE_RESPAWN_DATA[rKey];
         if (!respawn) continue;
-        const cyclesPerDay = 86400 / respawn.respawnSec;
+        /*
+         * Merge and buy sit in the same table as directly comparable options, so they have to
+         * be on the same basis. They were not: buy went through calcMarginalForProduct (boosts,
+         * tool cost, restock) while merge used the BASE respawn and no corrections at all. That
+         * is why the roadmap recommended merging gold to T2 where the NODES page rated a new
+         * node twice as good.
+         *
+         * Boosted cycle, not base: speed boosts and shrines (Badger for trees+stone, Mole for
+         * iron/gold/crimstone, both 0.75) mean more digs per day, so more bonuses.
+         *
+         * No tool term, and that is deliberate — verified in the game source rather than
+         * assumed. chop.ts: getRequiredAxeAmount() returns 1 * multiplier and the yield is
+         * amount.mul(multiplier), so a multiplier-4 node costs FOUR tools per dig and pays four
+         * times. Tool cost per unit of yield is identical to four separate T1 nodes, so it
+         * cancels out of the comparison. Merging buys the flat yieldBonus and nothing else.
+         *
+         * The bonus is a FLAT add, so percentage yield boosts must not multiply it — that is the
+         * one place merge legitimately differs from buy and must not be "unified" away.
+         */
+        let cyclesPerDay = 86400 / respawn.respawnSec;
+        try {
+          const ab = applyBoosts(catId, product, capacity, getOwnedEffects(catId));
+          if (ab && ab.effectiveCycle > 0) cyclesPerDay = 86400 / ab.effectiveCycle;
+        } catch (e) {}
         const price = p2pPrices[priceProduct] || 0;
 
         const obsCost = mc.t3.obsidian * obsidianCostSfl;
@@ -20785,7 +20845,8 @@
         const costSfl = obsCost + coinCost;
 
         // 4×t2 (each +0.5) → 1×t3 (+2.5). Delta = 2.5 - 4×0.5 = +0.5 per cycle
-        const marginal = 0.5 * cyclesPerDay * price;
+        // x eff on this side too, same basis as T2 above and as the buy option.
+        const marginal = 0.5 * cyclesPerDay * price * mergeEff(catId);
         const roiDays = (marginal > 0 && costSfl > 0) ? costSfl / marginal : Infinity;
 
         const hasObs = playerObsidian >= mc.t3.obsidian;
