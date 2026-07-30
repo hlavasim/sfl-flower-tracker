@@ -17522,7 +17522,7 @@
         // the toggle key the server matches, the category only when there is no crop choice.
         const key = r.product || r.cat;
         const isOn = sel.includes(key);
-        const tip = `${r.label}: teď ${fl(r.nowNet)} FLOWER/den, po nákupech za ${roadmapFmtFlower(r.cost)} FLOWER ${fl(r.net)}/den. Přepnutím se tabulka přepne jen na věci, které tuhle činnost rozjedou.`;
+        const tip = `${r.label}: teď ${fl(r.nowNet)} FLOWER/den, do plusu od ${r.flipCost != null ? roadmapFmtFlower(r.flipCost) : "?"} FLOWER, se vším ${fl(r.net)}/den. Přepnutím tabulka ukáže všechno, co tuhle činnost boostuje.`;
         h += `<button class="dash-toggle-btn ${isOn ? "on" : ""}" onclick='_roadmapToggleScenario("${key}")' title="${escHTML(tip)}">${isOn ? "\u25c9" : "\u25cb"} \u{1F331} ${escHTML(r.label)} <span style="opacity:0.6">${fl(r.net)}/d</span></button>`;
       }
       const blocked = rows.filter((r) => !r.flips);
@@ -17534,47 +17534,55 @@
     }
 
     /*
-     * The SCENARIO table — the buy path of ONE activity you do not run yet. It REPLACES the
-     * reality table: only purchases that move THAT activity appear ("ty jiný než realita by měli
-     * zobrazovat pouze věci co ovlivňují jen je"), and the running column is the activity's own
-     * net/day, from the red start through the flip. Wood skills and expansions stay behind the
-     * Realita switch — they do not move this activity.
+     * The SCENARIO table — the buy path of ONE activity you do not run yet, in the SAME table
+     * format as the reality buy path (same columns, badges, icons — "Proč tam jiná tabulka?").
+     * It lists EVERYTHING that boosts the category ("Má tam bejt všechno co tu kategorii
+     * boostuje"), best value per FLOWER first; FL/day is the ACTIVITY's own running net, from
+     * the red start through the highlighted flip. ETA has no reinvestment model here — the
+     * activity earns nothing until you start it — so the column shows the payback of the
+     * cumulative spend instead of a date.
      */
     function roadmapScenarioTableHtml(plan) {
       const fl = (v) => `${v >= 0 ? "+" : "\u2212"}${Math.abs(v).toFixed(3)}`;
       const col = (v) => v > 0 ? "var(--green)" : v < 0 ? "var(--red)" : "var(--text-dim)";
+      const badge = (ty) => `<span style="font-size:0.5rem;padding:1px 4px;border-radius:3px;background:${ty === "Wearable" ? "#2a3a5a" : "#3a2a5a"};color:var(--text-dim)">${ty === "Wearable" ? "W" : "C"}</span>`;
       let h = `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:14px">`;
-      h += `<div class="pixel-font" style="font-size:0.62rem;color:var(--lily);margin-bottom:4px">\u{1F331} ${escHTML(plan.label)} \u2014 co koupit, abys mohl za\u010d\u00edt</div>`;
-      h += `<div style="font-size:0.55rem;margin-bottom:8px">te\u010f <b style="color:${col(plan.nowNet)}">${fl(plan.nowNet)}</b> ${sflIcon("0.65em")}/den \u2192 po ${plan.picked.length} n\u00e1kupech za <b>${roadmapFmtFlower(plan.cost)}</b> ${sflIcon("0.65em")} <b style="color:${col(plan.net)}">${fl(plan.net)}</b> ${sflIcon("0.65em")}/den`
+      h += `<div class="pixel-font" style="font-size:0.62rem;color:var(--lily);margin-bottom:4px">\u{1F331} ${escHTML(plan.label)} \u2014 kdy\u017e do toho p\u016fjde\u0161</div>`;
+      h += `<div style="font-size:0.55rem;margin-bottom:8px">te\u010f <b style="color:${col(plan.nowNet)}">${fl(plan.nowNet)}</b> ${sflIcon("0.65em")}/den`
+        + (plan.flipCost != null ? ` \u00b7 do plusu od <b>${roadmapFmtFlower(plan.flipCost)}</b> ${sflIcon("0.65em")}` : "")
+        + ` \u00b7 v\u0161ech ${plan.picked.length} vylep\u0161en\u00ed za <b>${roadmapFmtFlower(plan.cost)}</b> ${sflIcon("0.65em")} \u2192 <b style="color:${col(plan.net)}">${fl(plan.net)}</b> ${sflIcon("0.65em")}/den`
         + `<span style="color:var(--text-dim);font-size:0.47rem"> \u00b7 te\u010f ${plan.count}${plan.atMax > plan.count ? `, po\u010d\u00edt\u00e1no na max ${plan.atMax}` : ""}</span></div>`;
       h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.6rem">`;
       h += `<thead><tr style="color:var(--text-secondary);text-align:left">
         <th style="padding:4px 6px">#</th>
-        <th style="padding:4px 6px">Koupit</th>
+        <th style="padding:4px 6px">Item</th>
         <th style="padding:4px 6px">Boost</th>
-        <th style="padding:4px 6px;text-align:right">Cena ${sflIcon()}</th>
-        <th style="padding:4px 6px;text-align:right" title="Kumulativn\u00ed cena, kdy\u017e kupuje\u0161 shora dol\u016f.">&Sigma; Cena ${sflIcon()}</th>
-        <th style="padding:4px 6px;text-align:right" title="\u010cist\u00fd v\u00fdd\u011blek T\u00c9HLE \u010dinnosti za den po tomhle n\u00e1kupu \u2014 teoreticky a na pln\u00fd stav.">${sflIcon()}/den pot\u00e9</th>
+        <th style="padding:4px 6px;text-align:right" title="Kupn\u00ed cena v FLOWER \u2014 floor na marketplace.">Cost ${sflIcon()}</th>
+        <th style="padding:4px 6px;text-align:right" title="Kolik ta polo\u017eka p\u0159id\u00e1 T\u00c9HLE \u010dinnosti za den.">+${sflIcon()}/day</th>
+        <th style="padding:4px 6px;text-align:right" title="Cena \u00f7 p\u0159\u00ednos \u2014 za jak dlouho se polo\u017eka sama zaplat\u00ed.">Payback</th>
+        <th style="padding:4px 6px;text-align:right" title="Kumulativn\u00ed cena, kdy\u017e kupuje\u0161 shora dol\u016f.">&Sigma; Cost ${sflIcon()}</th>
+        <th style="padding:4px 6px;text-align:right" title="\u010cist\u00fd v\u00fdd\u011blek T\u00c9HLE \u010dinnosti za den po n\u00e1kupu \u2014 teoreticky, na pln\u00fd stav.">FL/day</th>
       </tr></thead><tbody>`;
-      h += `<tr style="border-top:1px solid #222"><td style="padding:3px 6px;color:var(--text-dim)">0</td><td style="padding:3px 6px;color:var(--text-dim)">te\u010f (bez n\u00e1kup\u016f)</td><td></td><td></td><td></td><td style="padding:3px 6px;text-align:right;color:${col(plan.nowNet)};font-weight:bold">${fl(plan.nowNet)}</td></tr>`;
+      h += `<tr style="border-top:1px solid #222"><td style="padding:3px 6px;color:var(--text-dim)">0</td><td style="padding:3px 6px;color:var(--text-dim)">te\u010f (bez n\u00e1kup\u016f)</td><td></td><td></td><td></td><td></td><td></td><td style="padding:3px 6px;text-align:right;color:${col(plan.nowNet)};font-weight:bold">${fl(plan.nowNet)}</td></tr>`;
       for (let i = 0; i < plan.picked.length; i++) {
         const x = plan.picked[i];
         const after = x.netAfter == null ? null : x.netAfter;
         h += `<tr style="border-top:1px solid #222${x.crosses ? ";background:rgba(46,160,67,0.10)" : ""}">
           <td style="padding:3px 6px;color:var(--text-dim)">${i + 1}</td>
-          <td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(x.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(x.name)}${x.crosses ? ` <span style="color:var(--green);font-size:0.45rem">\u2190 tady p\u0159ekl\u00e1p\u00ed do plusu</span>` : ""}</td>
+          <td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(x.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(x.name)} ${badge(x.type)}${x.crosses ? ` <span style="color:var(--green);font-size:0.45rem">\u2190 tady p\u0159ekl\u00e1p\u00ed do plusu</span>` : ""}</td>
           <td style="padding:3px 6px;color:var(--text-dim);max-width:240px">${escHTML((x.boost || "").split("\n").join(" \u00b7 "))}</td>
           <td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(x.floor)}</td>
+          <td style="padding:3px 6px;text-align:right;color:var(--green)">+${roadmapFmtFlower(x.gain)}</td>
+          <td style="padding:3px 6px;text-align:right">${x.gain > 0 ? roadmapFmtDays(x.floor / x.gain) : "\u2014"}</td>
           <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${x.cumCost == null ? "" : roadmapFmtFlower(x.cumCost)}</td>
           <td style="padding:3px 6px;text-align:right;color:${col(after == null ? 0 : after)};font-weight:bold">${after == null ? "\u2014" : fl(after)}</td>
         </tr>`;
       }
       h += `</tbody></table></div>`;
-      h += `<div style="margin-top:6px;font-size:0.5rem;color:var(--text-dim);line-height:1.6">Po\u010d\u00edt\u00e1no <b>teoreticky a na pln\u00fd stav</b> \u2014 nam\u011b\u0159en\u00e1 efektivita \u010dinnosti, kterou ned\u011bl\u00e1\u0161, je z definice 0. Ceny jsou marketplace floor; po\u0159ad\u00ed = nejv\u011bt\u0161\u00ed p\u0159\u00ednos za FLOWER, p\u0159epo\u010d\u00edt\u00e1van\u00fd po ka\u017ed\u00e9m kroku.</div>`;
+      h += `<div style="margin-top:6px;font-size:0.5rem;color:var(--text-dim);line-height:1.6">V\u0161echno, co ${escHTML(plan.label)} boostuje, se\u0159azen\u00e9 podle p\u0159\u00ednosu za FLOWER (p\u0159epo\u010d\u00edt\u00e1v\u00e1no po ka\u017ed\u00e9m kroku \u2014 synergie se nedubluj\u00ed). Po\u010d\u00edt\u00e1no <b>teoreticky a na pln\u00fd stav</b> \u2014 nam\u011b\u0159en\u00e1 efektivita \u010dinnosti, kterou ned\u011bl\u00e1\u0161, je z definice 0. Ceny jsou marketplace floor.</div>`;
       h += `</div>`;
       return h;
     }
-
     function roadmapPeriodicHtml() {
       const ps = powerState || {};
       const rows = [];

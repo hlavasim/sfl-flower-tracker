@@ -1195,10 +1195,17 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
             cands.push(c);
           }
 
+          /*
+           * The WHOLE catalogue, not the cheapest flip-set. The first version stopped the moment
+           * the net crossed zero, which showed one or two items and answered a question the owner
+           * did not ask ("Má tam bejt všechno co tu kategorii boostuje"). So the greedy runs until
+           * nothing helps any more; where the running net crosses zero stays marked (`crosses`,
+           * `flipCost`) so the "minimum to start" is still readable inside the full list.
+           */
           const picked = []; let net = nowNetP; let cost = 0;
           const restore = [];
           if (atMax > 0) {
-            for (let guard = 0; guard < 40 && net <= 0 && cands.length; guard++) {
+            for (let guard = 0; guard < 120 && cands.length; guard++) {
               // Value each remaining candidate by what it adds to THIS category right now, then take
               // the best per FLOWER. Recomputed every round, so stacking effects are not double-counted.
               let bi = -1, bestRatio = 0, bestGain = 0;
@@ -1260,6 +1267,8 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
             // Every product, best first, both as it stands now and after the plan's purchases.
             productsBefore: (() => { try { return roadmapCatProductNets(cat, owned, settings); } catch (e) { return []; } })(),
             picked, cost, net,
+            // What the cheapest start costs: cumulative cost at the row where the net crosses zero.
+            flipCost: (picked.find((x) => x.crosses) || {}).cumCost ?? null,
             // Why it is not actionable, when it is not.
             blocked: unpriced ? "unpriced" : roomBlocked ? "no-room" : (atMax <= 0 ? "capacity" : (net <= 0 ? "unflippable" : null)),
             flips: net > 0 && picked.length > 0,
