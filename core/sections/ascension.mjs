@@ -492,11 +492,12 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
     "Flower Bed": { base: 30, inc: 25, fk: "flowers.flowerBeds" },
   };
   /** Resolve a NODE_BUY.fk, which may be a dotted path into a container. */
-  const nodeOwnedCount = (fk) => {
+  const nodeObj = (fk) => {
     let o = farm;
-    for (const part of String(fk).split(".")) { if (!o || typeof o !== "object") return 0; o = o[part]; }
-    return o && typeof o === "object" ? Object.keys(o).length : 0;
+    for (const part of String(fk).split(".")) { if (!o || typeof o !== "object") return null; o = o[part]; }
+    return o && typeof o === "object" ? o : null;
   };
+  const nodeOwnedCount = (fk) => { const o = nodeObj(fk); return o ? Object.keys(o).length : 0; };
   const NODE_TO_CAT = { "Crop Plot": "crops", "Fruit Patch": "fruits", "Tree": "trees", "Stone Rock": "stone", "Iron Rock": "iron", "Gold Rock": "gold", "Crimstone Rock": "crimstone", "Oil Reserve": "oil", "Lava Pit": "obsidian", "Flower Bed": "flowers" };
   // Categories whose output cannot be sold — reported in units/day, never as FLOWER income.
   const NON_SELLABLE_CATS = new Set(["obsidian", "oil"]);
@@ -685,7 +686,14 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
      * show units/day and say the price is unknown.
      */
     const unpriced = sellable && unitsPerNode > 0 && !(grossPerNode > 0);
-    nodeAcq.perType[node] = { profitPerDay, grossPerNode, netPerNode, effRatio, effMeasured: !!(effBy[cat] && effBy[cat].measured), unpriced,
+    /*
+     * Tier counts for EVERY node, not just the four that can be merged. countNodeTiers was only
+     * reached from the merge model, so the page kept its own tier pass for crops, fruit, oil,
+     * lava pits and flower beds — the same split-brain that made a gold node read differently on
+     * two pages. multiplier >= 16 is T3, >= 4 is T2; effective counts a T2 as four nodes.
+     */
+    const tiers = countNodeTiers(nodeObj(np.fk) || {});
+    nodeAcq.perType[node] = { profitPerDay, grossPerNode, netPerNode, effRatio, effMeasured: !!(effBy[cat] && effBy[cat].measured), unpriced, tiers,
       sellable, unitsPerNode, unitName: (cats[cat] || {}).product || null,
       expand: (expandAcq[node] || []).slice(0, 4), buy, currentCount: owned, bought };
   }

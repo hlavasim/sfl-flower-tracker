@@ -624,3 +624,34 @@ test("expand-vs-buy is decided in core, and obsidian is what decides it", () => 
   assert.deepEqual(wins, { expand: 10 },
     "this fixture is expand-only; if that changed, add the buy-branch case this test admits it lacks");
 });
+
+test("every node carries tier counts, not just the mergeable four", () => {
+  /*
+   * countNodeTiers was only reached from the merge model, so tiers existed for trees / stones /
+   * iron / gold and nowhere else — and the NODES page kept its own tier pass for crops, fruit,
+   * oil, lava pits and flower beds. That is the same split brain that had one gold node reading
+   * differently on two pages.
+   */
+  const counts = { "Crop Plot": "crops", "Fruit Patch": "fruitPatches", Tree: "trees", "Stone Rock": "stones", "Iron Rock": "iron", "Gold Rock": "gold", "Crimstone Rock": "crimstones", "Oil Reserve": "oilReserves", "Lava Pit": "lavaPits", "Flower Bed": "flowers.flowerBeds" };
+  for (const [node, d] of Object.entries(out.nodeAcq.perType)) {
+    assert.ok(d.tiers, `${node}: has tier counts`);
+    const { t1, t2, t3, physical, effective } = d.tiers;
+    assert.equal(physical, t1 + t2 + t3, `${node}: physical is the sum of the tiers`);
+    // A T2 counts as four nodes and a T3 as sixteen — that is what "effective" means, and
+    // getting it wrong is what makes purchase escalation and per-node splits wrong.
+    assert.equal(effective, t1 + t2 * 4 + t3 * 16, `${node}: effective weights the tiers`);
+    assert.ok(effective >= physical, `${node}: effective can never be below physical`);
+
+    // And it must count the SAME objects the owned count does, including the dotted path for
+    // flower beds, whose farm.flowers is a container rather than a list.
+    const path = counts[node];
+    assert.ok(path, `${node}: test knows where to look`);
+    const obj = path.split(".").reduce((o, k) => (o && typeof o === "object" ? o[k] : undefined), farm);
+    assert.equal(physical, obj ? Object.keys(obj).length : 0, `${node}: tiers count the farm's own nodes`);
+    assert.equal(physical, d.currentCount, `${node}: and agree with currentCount`);
+  }
+  // Not vacuous: the fixture must actually have merged nodes somewhere, or effective === physical
+  // everywhere and the weighting is untested.
+  const anyMerged = Object.values(out.nodeAcq.perType).some((d) => d.tiers.t2 > 0 || d.tiers.t3 > 0);
+  assert.ok(anyMerged, "the fixture farm has merged nodes, so the weighting is exercised");
+});
