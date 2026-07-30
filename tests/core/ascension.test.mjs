@@ -746,3 +746,58 @@ test("merge carries the ratio it was scaled by, and every node names its categor
   }
   assert.equal(cats.size, 10, "ten distinct categories, so no node borrowed another's");
 });
+
+test("the buy path escalates node prices off farmActivity, like the NODES page does", async () => {
+  /*
+   * roadmapNodeCandidates used `tiers.effective - BASE_NODE_COUNTS[island]` — "how many more do I
+   * have than a fresh island starts with" — and called that the purchase count. That counts nodes
+   * an EXPANSION granted as purchases and leans on a hand-maintained base table. On farm 155498
+   * the two rules coincide, which is why it was invisible, so this drives the REAL function with a
+   * farm where they cannot: lots of nodes, nothing ever bought.
+   */
+  const { _setPowerContext, roadmapNodeCandidates, getRoadmapSettings } = await import("../../core/engine/roadmap.mjs");
+  const sunstonesOf = (rows, label) => {
+    const r = rows.find((x) => x.name === `Buy ${label} node`);
+    if (!r) return null;
+    const m = /(\d+) Sunstone/.exec(r.boost || "");
+    return m ? parseInt(m[1], 10) : null;
+  };
+
+  // Same real power context the section builds, but with the farm's purchase history swapped.
+  const withActivity = (activity, extra) => {
+    const f = JSON.parse(JSON.stringify(farm));
+    f.farmActivity = activity;
+    Object.assign(f, extra || {});
+    const pd = buildPowerSection(f, p2p, nfts, null, {});
+    _setPowerContext({ farm: f, inventory: f.inventory, capacity: pd.capacity, exchangeRates: pd.exchangeRates,
+      stockMods: pd.stockMods, p2pPrices: pd.p2pPrices, boostItems: pd.boostItems, savedProducts: {},
+      season: pd.season, nftData: pd.nftData, roadmapSettingsRaw: {} });
+    return roadmapNodeCandidates(getRoadmapSettings({}));
+  };
+
+  // 1. The real farm's counts must produce the same prices the NODES page shows.
+  const real = withActivity(farm.farmActivity || {});
+  assert.ok(real.length > 0, "node actions are produced at all");
+  for (const [label, base, inc, key] of [["Tree", 4, 3, "Tree Bought"], ["Stone", 4, 3, "Stone Rock Bought"],
+                                          ["Iron", 7, 5, "Iron Rock Bought"], ["Gold", 10, 6, "Gold Rock Bought"]]) {
+    const bought = Math.floor(Number((farm.farmActivity || {})[key]) || 0);
+    const got = sunstonesOf(real, label);
+    if (got == null) continue; // category may be unpriced on the fixture
+    assert.equal(got, base + bought * inc, `${label}: priced off ${key} (${bought})`);
+  }
+
+  // 2. Nothing bought ever → every node is at its FIRST-purchase price, however many you own.
+  //    The old rule read owned-minus-base here and escalated.
+  const none = withActivity({});
+  assert.equal(sunstonesOf(none, "Tree"), 4, "no purchases means the base price, whatever the farm holds");
+  assert.equal(sunstonesOf(none, "Gold"), 10);
+  const realGold = sunstonesOf(real, "Gold");
+  assert.ok(realGold > 10, `and the real farm, having bought some, pays more (${realGold})`);
+
+  // 3. The activity key is the GAME's node name, not NODE_PRICES' display label. Reading the label
+  //    finds nothing, which would silently price every node as never-purchased.
+  const mislabelled = withActivity({ "Gold Bought": 99, "Stone Bought": 99 });
+  assert.equal(sunstonesOf(mislabelled, "Gold"), 10, "'Gold Bought' is not a key the game writes");
+  const properlyKeyed = withActivity({ "Gold Rock Bought": 5 });
+  assert.equal(sunstonesOf(properlyKeyed, "Gold"), 10 + 5 * 6, "'Gold Rock Bought' is");
+});

@@ -748,6 +748,17 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
     }
 
     // ── flowers.html 17378-17431: roadmapNodeCandidates ──
+    /*
+     * NODE_PRICES is keyed by farm key and LABELLED for display ("Stone", "Gold"), but
+     * farmActivity uses the game's node names ("Stone Rock Bought", "Gold Rock Bought"). Reading
+     * the label straight would have found nothing and read every count as 0, i.e. quietly quoted
+     * every node at its first-purchase price. Verified against farm 155498's farmActivity keys.
+     */
+    const NODE_ACTIVITY_NAME = {
+      trees: "Tree", stones: "Stone Rock", iron: "Iron Rock", gold: "Gold Rock",
+      crimstones: "Crimstone Rock", oilReserves: "Oil Reserve", lavaPits: "Lava Pit",
+      crops: "Crop Plot", fruitPatches: "Fruit Patch", flowers: "Flower Bed",
+    };
     function roadmapNodeCandidates(settings) {
       const out = [];
       const { capacity, exchangeRates, farm } = powerState;
@@ -758,8 +769,8 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       const coinsFree = roadmapCoinsFree(settings);
       const er = coinsFree ? Object.assign({}, exchangeRates, { coinsPerSFL: Infinity }) : exchangeRates;
       const coinSfl = (coins) => coinsFree ? 0 : (er.coinsPerSFL > 0 ? coins / er.coinsPerSFL : 0);
-      const islandType = ((farm.island && farm.island.type) || "basic").toLowerCase();
-      const baseNodes = (typeof BASE_NODE_COUNTS !== "undefined" && (BASE_NODE_COUNTS[islandType] || BASE_NODE_COUNTS.basic)) || {};
+      // islandType and BASE_NODE_COUNTS were only here to guess the purchase count; farmActivity
+      // carries it, so neither is needed.
       const mkItem = (name, cost, cat, marg, desc) => ({ name, type: "Node", floor: cost, boost: desc, supply: 0,
         clone: { name, categories: [cat], effects: [], fixedMarginal: marg, has: false, isDisabled: false } });
       const MERGEKEY_CAT = { trees: "trees", stones: "stone", iron: "iron", gold: "gold" };
@@ -784,8 +795,21 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       // B. Buy new nodes with Sunstone (next 3 per resource; escalating cost).
       if (typeof NODE_PRICES !== "undefined") for (const [nk, np] of Object.entries(NODE_PRICES)) {
         const cat = np.catId; const fk = RES_FARMKEY[cat]; if (!fk) continue; // mineable/tree nodes only
-        const tiers = countNodeTiers(farm[fk] || {});
-        const purchased = Math.max(0, tiers.effective - (baseNodes[nk] || 0));
+        /*
+         * Escalation reads the game's own purchase counter, not a guess.
+         *
+         * This used `tiers.effective - BASE_NODE_COUNTS[island]`, which asks "how many more do I
+         * have than a fresh island of this type starts with" and calls the answer "bought". That
+         * counts nodes an EXPANSION granted as purchases, and it depends on a hand-maintained
+         * base table. getResourcePrice reads farmActivity["<Node> Bought"], so that is what the
+         * price escalates on — the same input nodeAcq uses, so the buy path and the NODES page
+         * cannot price the same node differently.
+         *
+         * On farm 155498 the two rules happen to agree for all ten node types (bought ==
+         * effective - base there), so this fixes no visible number today; it diverges as soon as
+         * expansions hand out nodes at a rate the base table does not predict.
+         */
+        const purchased = Math.floor(Number((farm.farmActivity || {})[`${NODE_ACTIVITY_NAME[nk] || np.label} Bought`]) || 0);
         const oeff = roadmapOwnedEffects(cat);
         const price = p2pPrices[getDefaultProduct(cat)] || 0;
         const perNodeBase = gameResBoostedBase(farm, cat, oeff);   // one fresh t1 node, yield/cycle
@@ -988,6 +1012,9 @@ export {
   roadmapCoinsFree, roadmapInSeason, MINE_RES,
   roadmapPerPlot,   BASE_NODE_COUNTS, MERGE_COSTS, countNodeTiers, roadmapCurrentProduction,
   roadmapItemValue, roadmapItemSituational, roadmapSimulate, _setRoadmapState,
+  // Exported for testing: the node actions the buy path folds in. Its escalation has to match
+  // nodeAcq's, and a test that re-derives the rule instead of calling this proves nothing.
+  roadmapNodeCandidates,
   ROADMAP_EFF_HKEY, roadmapComputeEfficiency,
   getRoadmapSettings, roadmapOwnedEffects, roadmapCatBreakdown, roadmapCatNet,
   roadmapMiningChain, roadmapCatMix, ROADMAP_MINING_CATS, calcBoostValue, cmGetSeedRestockCount,
