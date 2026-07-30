@@ -17942,11 +17942,34 @@
        * ascension expansion was labelled a Collectible.
        */
       const rowTypeMeta = {
-        Collectible: { label: "C",     full: "NFT collectibles",          bg: "#3a2a5a" },
-        Wearable:    { label: "W",     full: "Wearables",                 bg: "#2a3a5a" },
-        Skill:       { label: "SKILL", full: "Skilly a ascension ranky",  bg: "#3a2a5a" },
-        Node:        { label: "NODE",  full: "Nody (koupit / slou\u010dit)", bg: "#1f3a2a" },
-        Ascension:   { label: "EXP",   full: "Ascension expanze",         bg: "#4a2a2a" },
+        Collectible: { label: "C",     full: "NFT collectibles",          bg: "#3a2a5a", icon: "\ud83d\uddbc\ufe0f" },
+        Wearable:    { label: "W",     full: "Wearables",                 bg: "#2a3a5a", icon: "\ud83d\udc55" },
+        Skill:       { label: "SKILL", full: "Skilly a ascension ranky",  bg: "#3a2a5a", icon: "\u2b50" },
+        Node:        { label: "NODE",  full: "Nody (koupit / slou\u010dit)", bg: "#1f3a2a", icon: "\u26cf\ufe0f" },
+        Ascension:   { label: "EXP",   full: "Ascension expanze",         bg: "#4a2a2a", icon: "\ud83d\uddfa\ufe0f" },
+      };
+      /*
+       * Row icon. Every row used to call getItemIcon(r.name), which only resolves for real items \u2014
+       * "A1 \u00b7 Expansion 31" and "Tough Tree \u2192 Level 2" find nothing, the onerror hides the broken
+       * image, and those rows ended up with no icon at all. So the four generated types get their
+       * type's emoji, and only the two that ARE marketplace items keep the artwork.
+       *
+       * Skills are the one case worth a lookup: the rank rows are named "<Skill> \u2192 Level N", and the
+       * base skill DOES have art. Try it, and fall back to the star by hiding a failed image behind
+       * the emoji rather than leaving a gap.
+       */
+      const rowIcon = (r) => {
+        const meta = rowTypeMeta[r.type] || rowTypeMeta.Collectible;
+        if (r.type === "Collectible" || r.type === "Wearable") {
+          return `<img class="inline-icon" src="${getItemIcon(r.name)}" onerror="this.style.display='none'" alt="" title="${escHTML(meta.full)}">`;
+        }
+        const emoji = `<span style="font-size:0.85em" title="${escHTML(meta.full)}">${meta.icon}</span>`;
+        if (r.type !== "Skill") return emoji;
+        const base = (r.name || "").replace(/ \u2192 Level \d+$/, "");
+        // The emoji sits underneath; the image covers it when it loads and vanishes when it does not.
+        return `<span style="position:relative;display:inline-block;width:1.15em;text-align:center">${emoji}`
+          + `<img class="inline-icon" src="${getItemIcon(base)}" onerror="this.style.display='none'" alt=""`
+          + ` title="${escHTML(meta.full)}" style="position:absolute;left:0;top:0;width:100%;background:#160f08"></span>`;
       };
       /*
        * Type filters. The list mixes five kinds of action now (NFTs, wearables, skills, nodes,
@@ -17997,7 +18020,7 @@
         const marg = `+${roadmapFmtFlower(r.value)}` + (isPlan ? "" : ` <span style="color:var(--text-dim)">if used</span>`);
         h += `<tr style="border-top:1px solid #222">
           <td style="padding:3px 6px;color:var(--text-dim)">${rank}</td>
-          <td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(r.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.name)} ${typeBadge(r.type)} ${stBadge}${r.skillTakeNow ? ` <span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1f3a2a;color:#7fe0a0" title="Skill pointy na tohle už máš — můžeš vzít hned. Cena je i tak spočtená z XP, které ten point stál: držet point ho nedělá zdarma, stejně jako držet FLOWER nedělá NFT zdarma.">MůžEŠ HNED</span>` : ""}</td>
+          <td style="padding:3px 6px;white-space:nowrap">${rowIcon(r)} ${escHTML(r.name)} ${typeBadge(r.type)} ${stBadge}${r.skillTakeNow ? ` <span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1f3a2a;color:#7fe0a0" title="Skill pointy na tohle už máš — můžeš vzít hned. Cena je i tak spočtená z XP, které ten point stál: držet point ho nedělá zdarma, stejně jako držet FLOWER nedělá NFT zdarma.">MůžEŠ HNED</span>` : ""}</td>
           <td style="padding:3px 6px;color:var(--text-dim);max-width:240px">${boostTxt}</td>
           <td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(r.floor)}</td>
           <td style="padding:3px 6px;text-align:right;color:var(--green)">${marg}</td>
