@@ -17,7 +17,7 @@ import {
   RES_FARMKEY, gameResYield, gameResBoostedBase, applyBoosts, miningToolsPerDay, calcToolCostPerDay,
   getCycleSec, getCapacityCount, getDefaultProduct, isAnimalCat, POWER_CATEGORIES,
   getCount, findCollectible,
-  getEffectsForCategory, TOOL_TO_CAT,
+  getEffectsForCategory, TOOL_TO_CAT, SKILL_POINTS_PER_TIER,
 } from "./power-helpers.mjs";
 import {
   unitToSfl, calcSeedCostPerDay, calcAnimalFeedCost, calcSicknessCost,
@@ -747,6 +747,134 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       return out;
     }
 
+    /*
+     * SKILLS AND ASCENSION RANKS IN THE BUY PATH.
+     *
+     * They were excluded, and the reason given was that they cost skill POINTS rather than FLOWER
+     * so they do not belong in a FLOWER-ordered reinvestment queue. That is half right, and the
+     * half that is wrong is the important half: a skill point is BOUGHT, with the FLOWER of the
+     * food you cook to earn the XP. skillCostInfo already derives that rate (the cheapest XP
+     * recipe on this farm, with the farm's own XP boosts applied), and every skill boostItem
+     * already carries `floor = points x sflPerPoint` because the Power page shows it.
+     *
+     * So there are two kinds of skill action, and collapsing them is what made this look
+     * impossible:
+     *
+     *   1. Points you ALREADY HAVE. Those cost nothing — the XP is spent, the point is sitting
+     *      unused — so the skill is free income and belongs at the very FRONT of the order, ahead
+     *      of everything you have to save up for. Free points are a fixed budget, so they are
+     *      allocated here by value PER POINT before the queue is built; leaving the simulator to
+     *      break the tie would hand them out arbitrarily.
+     *   2. Points you do not have yet. Those cost points x sflPerPoint, which is a real FLOWER
+     *      cost and competes on equal terms with an NFT.
+     *
+     * Ascension ranks (Level 2 / Level 3) additionally cost Ascension Shards. Shards have no
+     * market — they come from ascension crystals — so they are priced by DERIVATION, and it is the
+     * owner's: one shard is worth a Gold Pickaxe's material cost. That is an assumption, not a
+     * quote, and it is labelled as one everywhere it is used. `shardSfl` is reported so the
+     * consumer can show it and so changing it is one edit.
+     *
+     * Values come from the SAME clone the rest of the path uses, so a skill's synergy with owned
+     * items is modelled exactly as an NFT's is. Rank deltas come from the served rank layer, which
+     * is the engine the Power page and the Skills tab already read.
+     */
+    function roadmapShardSfl() {
+      // Gold Pickaxe: 100 coins + 3 Wood + 3 Gold (economy.mjs TOOL_COSTS). Coins follow the
+      // roadmap's own coins-are-free rule so this cannot contradict the rest of the page.
+      const p2pPrices = roadmapPrices(getRoadmapSettings(powerState.roadmapSettingsRaw || {}));
+      const t = (typeof TOOL_COSTS !== "undefined" && TOOL_COSTS["Gold Pickaxe"]) || null;
+      if (!t) return 0;
+      let sfl = 0;
+      for (const [item, qty] of Object.entries(t.materials || {})) sfl += (p2pPrices[item] || 0) * qty;
+      return sfl;
+    }
+    function roadmapSkillCandidates(settings, byName, catBoostsW) {
+      const out = [];
+      const { boostItems, farm, skillCostInfo, skillRanks } = powerState;
+      if (!boostItems) return out;
+      const sflPerPoint = (skillCostInfo && skillCostInfo.sflPerPoint) || 0;
+      const skills = boostItems.filter((b) => b.type === "Skill");
+      if (!skills.length) return out;
+
+      /*
+       * Tier gates, from the game's getUnlockedTierForTree: a tier only opens once enough points
+       * sit in that TREE, and points spent on tier-3 skills never count toward a gate. A gated
+       * skill is not buyable yet at any price, so offering it would make the order a fiction.
+       */
+      const inTree = {};
+      for (const b of skills) {
+        if (!b.has || (Number(b.skillTier) || 1) === 3) continue;
+        inTree[b.skillTree] = (inTree[b.skillTree] || 0) + (b.skillPoints || 1);
+      }
+      const gated = (b) => {
+        const need = (SKILL_POINTS_PER_TIER[b.skillTree] || {})[Number(b.skillTier) || 1] || 0;
+        return (inTree[b.skillTree] || 0) < need;
+      };
+
+      // Free points: (level - 1) minus what is already spent, or the owner's override.
+      const level = (skillCostInfo && skillCostInfo.level) || 1;
+      let spent = 0;
+      for (const b of skills) if (b.has) spent += (b.skillPoints || 1);
+      let freePts = (settings.skillPts != null && isFinite(settings.skillPts))
+        ? Math.max(0, settings.skillPts) : Math.max(0, (level - 1) - spent);
+
+      const mk = (name, floor, cat, marg, desc, extra) => Object.assign({
+        name, type: "Skill", floor, boost: desc, supply: 0,
+        clone: { name, categories: [cat], effects: [], fixedMarginal: marg, has: false, isDisabled: false },
+      }, extra || {});
+
+      // ── L1: skills not taken yet ──
+      const l1 = [];
+      for (const b of skills) {
+        if (b.has || gated(b)) continue;
+        const clone = byName[b.name];
+        if (!clone) continue;
+        const marg = roadmapItemValue(clone, catBoostsW, settings);
+        if (!(marg > 0)) continue;                       // harmful/zero skills are not a BUY action
+        const pts = b.skillPoints || 1;
+        l1.push({ b, pts, marg, perPoint: marg / pts, cat: (b.categories || [])[0] || "crops" });
+      }
+      /*
+       * Free points are a fixed budget spent on the best return per POINT — and they cover a skill
+       * PARTIALLY, which is the part that matters. The first version asked "does this skill fit
+       * ENTIRELY in the free points?", so a single spare point could not touch Hectare Farm (3pt,
+       * the best per-point skill on the reference farm at +1.60/pt) and was spent instead on the
+       * best 1pt skill it happened to fit, Young Farmer at +0.03/pt — 50x worse advice. A point
+       * is not indivisible across a cost: holding one makes Hectare Farm cost TWO points, not three.
+       */
+      l1.sort((x, y) => y.perPoint - x.perPoint);
+      for (const r of l1) {
+        const covered = Math.min(r.pts, freePts);
+        freePts -= covered;
+        const payFor = r.pts - covered;
+        const note = covered === 0 ? ` · ${r.pts} × ${sflPerPoint.toFixed(0)} FLOWER XP`
+          : covered === r.pts ? ` · point${r.pts > 1 ? "y" : ""} už máš (zdarma)`
+          : ` · ${covered} pt už máš, doplať ${payFor} × ${sflPerPoint.toFixed(0)} FLOWER XP`;
+        out.push(mk(r.b.name, payFor * sflPerPoint, r.cat, r.marg,
+          `${r.pts}pt · ${r.b.skillTree || "?"}${note}`,
+          { skillFree: covered === r.pts, skillPointsFree: covered, skillPoints: r.pts, skillTree: r.b.skillTree || null }));
+      }
+
+      // ── L2 / L3: the next rank of a skill already owned ──
+      const shardSfl = roadmapShardSfl();
+      for (const [name, sr] of Object.entries(skillRanks || {})) {
+        if (!sr || !sr.nextLevel) continue;              // ranks are sequential: only level+1
+        const row = (sr.rows || []).find((r) => r.lvl === sr.nextLevel);
+        if (!row || !(row.delta > 0)) continue;
+        const cat = Object.keys(row.byCat || {})[0] || "crops";
+        const ptsSfl = (row.points || 0) * sflPerPoint;
+        const shards = row.shards || 0;
+        const floor = ptsSfl + shards * shardSfl;
+        if (!(floor > 0)) continue;
+        out.push(mk(`${name} \u2192 Level ${row.lvl}`, floor, cat, row.delta,
+          `${row.points}pt + ${shards} Ascension Shard \u00b7 ${row.text || ""}`,
+          { skillRank: row.lvl, skillPoints: row.points, shards, shardSfl,
+            // The assumption travels with the row so a consumer cannot show the number without it.
+            shardNote: `shard oce\u0148ov\u00e1n materi\u00e1lem Gold Pickaxe (\u2248${shardSfl.toFixed(2)} FLOWER) \u2014 odvozen\u00ed, ne tr\u017en\u00ed cena` }));
+      }
+      return out;
+    }
+
     // ── flowers.html 17378-17431: roadmapNodeCandidates ──
     /*
      * NODE_PRICES is keyed by farm key and LABELLED for display ("Stone", "Gold"), but
@@ -845,6 +973,13 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       // Fold in node expansion / Obsidian-merge actions (respect the price cap).
       const nodeCands = roadmapNodeCandidates(settings);
       for (const nc of nodeCands) { if (nc.floor > 0 && nc.floor <= maxP) econ.push(nc); }
+      /*
+       * Skills and ascension ranks, folded in on the same terms. A skill whose point you
+       * ALREADY HAVE has floor 0, so the `> 0` guard the nodes use would drop exactly the rows
+       * that matter most — free income belongs at the front of the order, not off it.
+       */
+      const skillCands = roadmapSkillCandidates(settings, byName, catBoostsW);
+      for (const sc of skillCands) { if (sc.floor <= maxP) econ.push(sc); }
       // Skills are NOT part of the buy path (Visual / Table) — they live in their own Skills tab. They cost
       // skill POINTS, not FLOWER, so they don't belong in a FLOWER reinvestment-ordered buy order.
       tail.sort((a, b) => a.floor - b.floor);
@@ -926,7 +1061,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       const timeline = [];
       { let ri = (startIncome > 0 ? startIncome : 0), rd = 0;
         for (const s of fin.steps) { const bm = Math.max(0, s.m.marginal || 0); const dd = ri > 0 ? s.m.floor / ri : Infinity; if (isFinite(dd)) rd += dd; ri += bm;
-          timeline.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, marginal: bm, roi: bm > 0 ? s.m.floor / bm : Infinity, atDay: rd, rateAfter: ri, kind: "econ", skillFree: s.m.skillFree, skillPoints: s.m.skillPoints, skillTree: s.m.skillTree, skillTier: s.m.skillTier }); } }
+          timeline.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, marginal: bm, roi: bm > 0 ? s.m.floor / bm : Infinity, atDay: rd, rateAfter: ri, kind: "econ", skillFree: s.m.skillFree, skillPoints: s.m.skillPoints, skillPointsFree: s.m.skillPointsFree, skillRank: s.m.skillRank, shards: s.m.shards, shardSfl: s.m.shardSfl, shardNote: s.m.shardNote, skillTree: s.m.skillTree, skillTier: s.m.skillTier }); } }
       let rate = (startIncome > 0 ? startIncome : 0) + fin.steps.reduce((a, s) => a + Math.max(0, s.m.marginal || 0), 0);
       let cumDays = timeline.length ? timeline[timeline.length - 1].atDay : 0;
       const econSteps = timeline.length;
@@ -950,7 +1085,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       const coreRate = (startIncome > 0 ? startIncome : 0) + coreMarg;
       // Unified ranked list: in-plan steps + conditional (situational), sorted by payback (ROI).
       const ranked = [];
-      for (const s of fin.steps) { const bm = Math.max(0, s.m.marginal || 0); ranked.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, value: bm, roi: bm > 0 ? s.m.floor / bm : Infinity, status: "plan", skillFree: s.m.skillFree, skillTree: s.m.skillTree, skillTier: s.m.skillTier }); }
+      for (const s of fin.steps) { const bm = Math.max(0, s.m.marginal || 0); ranked.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, value: bm, roi: bm > 0 ? s.m.floor / bm : Infinity, status: "plan", skillFree: s.m.skillFree, skillPoints: s.m.skillPoints, skillPointsFree: s.m.skillPointsFree, skillRank: s.m.skillRank, shards: s.m.shards, shardSfl: s.m.shardSfl, shardNote: s.m.shardNote, skillTree: s.m.skillTree, skillTier: s.m.skillTier }); }
       for (const m of situational) ranked.push({ name: m.name, type: m.type, boost: m.boost, floor: m.floor, value: m.sitValue, roi: m.sitValue > 0 ? m.floor / m.sitValue : Infinity, status: "conditional", reason: m.sitReason });
       ranked.sort((a, b) => a.roi - b.roi);
       { let rc = 0, ri = (startIncome > 0 ? startIncome : 0), rd = 0;
@@ -1014,7 +1149,7 @@ export {
   roadmapItemValue, roadmapItemSituational, roadmapSimulate, _setRoadmapState,
   // Exported for testing: the node actions the buy path folds in. Its escalation has to match
   // nodeAcq's, and a test that re-derives the rule instead of calling this proves nothing.
-  roadmapNodeCandidates,
+  roadmapNodeCandidates, roadmapSkillCandidates,
   ROADMAP_EFF_HKEY, roadmapComputeEfficiency,
   getRoadmapSettings, roadmapOwnedEffects, roadmapCatBreakdown, roadmapCatNet,
   roadmapMiningChain, roadmapCatMix, ROADMAP_MINING_CATS, calcBoostValue, cmGetSeedRestockCount,

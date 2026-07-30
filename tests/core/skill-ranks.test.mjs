@@ -121,3 +121,136 @@ test("the current rank is served, so a consumer can offer only the NEXT one", ()
     if (!s.has) assert.equal(s.nextLevel, null, `${name}: unowned skills offer no rank-up`);
   }
 });
+
+// ── skills and ascension ranks in the BUY PATH ──
+
+test("skills reach the buy path: free points cost nothing, unheld points cost their XP", async () => {
+  /*
+   * They were excluded on the grounds that they cost skill POINTS, not FLOWER. Half right, and the
+   * wrong half matters: a point is BOUGHT with the FLOWER of the food you cook for the XP, and
+   * skillCostInfo already derives that rate. So there are two kinds of action and collapsing them
+   * is what made this look impossible — a point you already hold makes the skill FREE and
+   * therefore first, while one you don't costs points × sflPerPoint and competes with an NFT.
+   */
+  const { buildPowerSection } = await import("../../core/sections/power.mjs");
+  const rm = await import("../../core/engine/roadmap.mjs");
+  const { POWER_CATEGORIES } = await import("../../core/engine/power-helpers.mjs");
+  const nfts = JSON.parse(readFileSync(new URL("../fixtures/nfts-sample.json", import.meta.url)));
+  const pd = buildPowerSection(farm, p2p, nfts, null, {});
+
+  const clones = pd.boostItems.map((b) => ({ ...b }));
+  const byName = {}; for (const c of clones) byName[c.name] = c;
+  const catBoostsW = {};
+  for (const cat of Object.keys(POWER_CATEGORIES)) catBoostsW[cat] = clones.filter((c) => c.categories.includes(cat));
+
+  const cands = rm.roadmapSkillCandidates(rm.getRoadmapSettings({}), byName, catBoostsW);
+  assert.ok(cands.length > 10, `skills are offered at all, got ${cands.length}`);
+
+  const sflPerPoint = pd.skillCostInfo.sflPerPoint;
+  assert.ok(sflPerPoint > 0, "the fixture derives an XP price");
+
+  const free = cands.filter((c) => c.skillFree);
+  const paid = cands.filter((c) => !c.skillFree && !c.skillRank);
+  const ranks = cands.filter((c) => c.skillRank);
+  assert.ok(paid.length > 0 && ranks.length > 0, "both kinds are produced");
+
+  // 1. A free one costs literally nothing, so the queue must put it first.
+  for (const c of free) assert.equal(c.floor, 0, `${c.name}: a point you hold is not a cost`);
+  // 2. Cost is only the points you must still BUY — free ones can cover a skill PARTIALLY.
+  for (const c of cands) {
+    if (c.skillRank) continue; // ranks add shards, checked in the next test
+    const pay = c.skillPoints - (c.skillPointsFree || 0);
+    assert.ok(Math.abs(c.floor - pay * sflPerPoint) < 1e-9, `${c.name}: ${c.floor} vs ${pay} x ${sflPerPoint}`);
+  }
+  /*
+   * 3. Free points go to the best return per POINT, and they cover a skill PARTIALLY. The first
+   *    version asked "does this skill fit ENTIRELY in the free points?", so a single spare point
+   *    could not touch the best per-point skill (Hectare Farm, 3pt, +1.60/pt) and was spent on the
+   *    best 1pt skill it happened to fit (Young Farmer, +0.03/pt) — 50x worse advice. A point is
+   *    not indivisible across a cost: holding one makes Hectare Farm cost TWO points, not three.
+   */
+  const covered = cands.filter((c) => (c.skillPointsFree || 0) > 0);
+  const uncovered = cands.filter((c) => !(c.skillPointsFree > 0) && !c.skillRank);
+  if (covered.length && uncovered.length) {
+    const worstCovered = Math.min(...covered.map((c) => c.clone.fixedMarginal / c.skillPoints));
+    const bestUncovered = Math.max(...uncovered.map((c) => c.clone.fixedMarginal / c.skillPoints));
+    assert.ok(worstCovered >= bestUncovered - 1e-9,
+      `free points went to the best per point (worst covered ${worstCovered}, best uncovered ${bestUncovered})`);
+  }
+  // A partially covered skill is cheaper than full price but not free — the distinction is the fix.
+  for (const c of covered) {
+    if (c.skillPointsFree < c.skillPoints) {
+      assert.ok(c.floor > 0 && c.floor < c.skillPoints * sflPerPoint, `${c.name}: discounted, not free`);
+    }
+  }
+  // 4. Only positive-value skills are a BUY action. A harmful skill is a reset, not a purchase.
+  for (const c of cands) assert.ok(c.clone.fixedMarginal > 0, `${c.name}: no zero/harmful rows in a buy order`);
+});
+
+test("ascension ranks are sequential and their shard price is a labelled derivation", async () => {
+  const { buildPowerSection } = await import("../../core/sections/power.mjs");
+  const rm = await import("../../core/engine/roadmap.mjs");
+  const { POWER_CATEGORIES } = await import("../../core/engine/power-helpers.mjs");
+  const nfts = JSON.parse(readFileSync(new URL("../fixtures/nfts-sample.json", import.meta.url)));
+  const pd = buildPowerSection(farm, p2p, nfts, null, {});
+  const clones = pd.boostItems.map((b) => ({ ...b }));
+  const byName = {}; for (const c of clones) byName[c.name] = c;
+  const catBoostsW = {};
+  for (const cat of Object.keys(POWER_CATEGORIES)) catBoostsW[cat] = clones.filter((c) => c.categories.includes(cat));
+  const ranks = rm.roadmapSkillCandidates(rm.getRoadmapSettings({}), byName, catBoostsW).filter((c) => c.skillRank);
+  assert.ok(ranks.length > 0);
+
+  const sflPerPoint = pd.skillCostInfo.sflPerPoint;
+  for (const c of ranks) {
+    // Only the NEXT rank may be offered. Listing Level 3 before Level 2 is an order you cannot follow.
+    const base = c.name.replace(/ \u2192 Level \d+$/, "");
+    const sr = pd.skillRanks[base];
+    assert.ok(sr, `${base}: served rank data`);
+    assert.equal(c.skillRank, sr.nextLevel, `${base}: only level ${sr.nextLevel} is buyable next`);
+
+    // Cost = the points' XP + the shards. Shards have no market, so the price is a DERIVATION and
+    // must travel with the row that uses it — a number without its assumption is a quote.
+    assert.ok(c.shards > 0, `${c.name}: a rank costs shards`);
+    assert.ok(Math.abs(c.floor - (c.skillPoints * sflPerPoint + c.shards * c.shardSfl)) < 1e-9,
+      `${c.name}: floor is points + shards`);
+    assert.ok(/odvozen/.test(c.shardNote || ""), `${c.name}: says it is a derivation, not a market price`);
+    assert.ok(c.shardSfl > 0, "and the shard has a price at all");
+  }
+  // The derivation itself: a Gold Pickaxe's MATERIALS (3 Wood + 3 Gold), not its coins — coins are
+  // free on this farm by the roadmap's own rule, so charging them would contradict the page.
+  const expect = 3 * p2p["Wood"] + 3 * p2p["Gold"];
+  assert.ok(Math.abs(ranks[0].shardSfl - expect) < 1e-9, `shard = Gold Pickaxe materials (${expect})`);
+});
+
+test("and they reach sim.ranked — the table, not just a candidate list", async () => {
+  /*
+   * The point of the exercise: "ascention a skill do tý tabulky". Producing candidates is not
+   * enough — roadmapSimulate has to fold them into the ranked order the Table view renders, and
+   * the free-point rows must NOT be dropped by the `floor > 0` guard the node actions use, since a
+   * zero cost is exactly what puts free income at the front.
+   */
+  const { buildPowerSection } = await import("../../core/sections/power.mjs");
+  const rm = await import("../../core/engine/roadmap.mjs");
+  const nfts = JSON.parse(readFileSync(new URL("../fixtures/nfts-sample.json", import.meta.url)));
+  buildPowerSection(farm, p2p, nfts, null, {});   // publishes the power context roadmapSimulate reads
+
+  const sim = rm.roadmapSimulate(rm.getRoadmapSettings({ incCollectibles: true, incWearables: true }), 0);
+  const rows = (sim.ranked || []).map((x) => x.m || x);
+  const skillRows = rows.filter((m) => m.type === "Skill");
+  assert.ok(skillRows.length > 20, `skills are in the ranked order, got ${skillRows.length}`);
+
+  // Both kinds made it: a plain skill and an ascension rank.
+  assert.ok(skillRows.some((m) => !/ Level \d+$/.test(m.name)), "plain skills");
+  assert.ok(skillRows.some((m) => / Level \d+$/.test(m.name)), "ascension ranks");
+
+  // The order is by payback like everything else, so the best skill must not sit below a worse one.
+  const paybacks = skillRows.map((m) => m.floor / (m.value || Infinity));
+  for (let i = 1; i < paybacks.length; i++) {
+    assert.ok(paybacks[i] >= paybacks[i - 1] - 1e-6,
+      `ranked by payback: ${skillRows[i - 1].name} (${paybacks[i - 1].toFixed(1)}d) before ${skillRows[i].name} (${paybacks[i].toFixed(1)}d)`);
+  }
+  // And a partially-free skill really is cheaper here than it would be at full price — the
+  // free point has to survive all the way into the table, not just the candidate builder.
+  const hectare = skillRows.find((m) => m.name === "Hectare Farm");
+  if (hectare) assert.ok(hectare.floor < 3 * 59, `Hectare Farm carries its free point (${hectare.floor})`);
+});

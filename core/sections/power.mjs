@@ -351,7 +351,10 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   // localStorage sfl_roadmap_settings (query `roadmap`) — marketFee/coinsFree/… feed
   // into the valuations even though calcBoostValue forces effMode theoretical.
   // roi: Infinity is JSON-unrepresentable → null on the wire (client maps back).
-  _setPowerContext({ farm, inventory, capacity, exchangeRates, stockMods, p2pPrices, boostItems, savedProducts, season, nftData: nftSlim, roadmapSettingsRaw: settings.roadmapSettings || {} });
+  // Held in a variable because it is re-published at the end of this function: skillRanks is not
+  // built until after boostValues, and the roadmap needs it to price Level 2 / Level 3 upgrades.
+  const powerCtx = { farm, inventory, capacity, exchangeRates, stockMods, p2pPrices, boostItems, savedProducts, season, nftData: nftSlim, skillCostInfo, roadmapSettingsRaw: settings.roadmapSettings || {} };
+  _setPowerContext(powerCtx);
   /*
    * `settings.measured` = value everything at this farm's OBSERVED throughput instead of the
    * theoretical ceiling. It only means anything when the caller POSTed farm-history snapshots
@@ -481,6 +484,11 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
       rows,
     };
   }
+
+  // Re-publish with the rank layer attached, so roadmapSkillCandidates can price L2/L3 without
+  // rebuilding it. Same object identity for everything else.
+  powerCtx.skillRanks = skillRanks;
+  _setPowerContext(powerCtx);
 
   /*
    * Second pass at MEASURED efficiency, for a named subset only.
