@@ -755,7 +755,7 @@ test("the buy path escalates node prices off farmActivity, like the NODES page d
    * the two rules coincide, which is why it was invisible, so this drives the REAL function with a
    * farm where they cannot: lots of nodes, nothing ever bought.
    */
-  const { _setPowerContext, roadmapNodeCandidates, getRoadmapSettings } = await import("../../core/engine/roadmap.mjs");
+  const { _setPowerContext, _setRoadmapState, roadmapNodeCandidates, getRoadmapSettings } = await import("../../core/engine/roadmap.mjs");
   const sunstonesOf = (rows, label) => {
     const r = rows.find((x) => x.name === `Buy ${label} node`);
     if (!r) return null;
@@ -772,6 +772,14 @@ test("the buy path escalates node prices off farmActivity, like the NODES page d
     _setPowerContext({ farm: f, inventory: f.inventory, capacity: pd.capacity, exchangeRates: pd.exchangeRates,
       stockMods: pd.stockMods, p2pPrices: pd.p2pPrices, boostItems: pd.boostItems, savedProducts: {},
       season: pd.season, nftData: pd.nftData, roadmapSettingsRaw: {} });
+    /*
+     * The ascension plan has to be on the state: node INCOME now comes from its nodeAcq rather than
+     * a locally derived margin, and without it roadmapNodeCandidates deliberately returns nothing.
+     * That guard exists because the local basis disagreed with nodeAcq by up to 3.3x, and a silent
+     * wrong number is worse than a visibly missing row.
+     */
+    _setRoadmapState({ effByCat: {}, effMeta: null, meanRatio: 0.5,
+      ascension: buildAscensionSection(f, pd, cooking.totalXpPerDay, eff, { max: 1 }) });
     return roadmapNodeCandidates(getRoadmapSettings({}));
   };
 

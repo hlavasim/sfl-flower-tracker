@@ -124,13 +124,14 @@ test("the current rank is served, so a consumer can offer only the NEXT one", ()
 
 // ── skills and ascension ranks in the BUY PATH ──
 
-test("skills reach the buy path: free points cost nothing, unheld points cost their XP", async () => {
+test("skills reach the buy path, priced by the XP their points cost — never free", async () => {
   /*
    * They were excluded on the grounds that they cost skill POINTS, not FLOWER. Half right, and the
    * wrong half matters: a point is BOUGHT with the FLOWER of the food you cook for the XP, and
-   * skillCostInfo already derives that rate. So there are two kinds of action and collapsing them
-   * is what made this look impossible — a point you already hold makes the skill FREE and
-   * therefore first, while one you don't costs points × sflPerPoint and competes with an NFT.
+   * skillCostInfo already derives that rate — so a skill has a real FLOWER price and competes with
+   * an NFT on equal terms.
+   *
+   * What it does NOT get is a discount for points you already hold. See below.
    */
   const { buildPowerSection } = await import("../../core/sections/power.mjs");
   const rm = await import("../../core/engine/roadmap.mjs");
@@ -149,39 +150,46 @@ test("skills reach the buy path: free points cost nothing, unheld points cost th
   const sflPerPoint = pd.skillCostInfo.sflPerPoint;
   assert.ok(sflPerPoint > 0, "the fixture derives an XP price");
 
-  const free = cands.filter((c) => c.skillFree);
-  const paid = cands.filter((c) => !c.skillFree && !c.skillRank);
+  const plain = cands.filter((c) => !c.skillRank);
   const ranks = cands.filter((c) => c.skillRank);
-  assert.ok(paid.length > 0 && ranks.length > 0, "both kinds are produced");
+  assert.ok(plain.length > 0 && ranks.length > 0, "both kinds are produced");
 
-  // 1. A free one costs literally nothing, so the queue must put it first.
-  for (const c of free) assert.equal(c.floor, 0, `${c.name}: a point you hold is not a cost`);
-  // 2. Cost is only the points you must still BUY — free ones can cover a skill PARTIALLY.
-  for (const c of cands) {
-    if (c.skillRank) continue; // ranks add shards, checked in the next test
-    const pay = c.skillPoints - (c.skillPointsFree || 0);
-    assert.ok(Math.abs(c.floor - pay * sflPerPoint) < 1e-9, `${c.name}: ${c.floor} vs ${pay} x ${sflPerPoint}`);
-  }
   /*
-   * 3. Free points go to the best return per POINT, and they cover a skill PARTIALLY. The first
-   *    version asked "does this skill fit ENTIRELY in the free points?", so a single spare point
-   *    could not touch the best per-point skill (Hectare Farm, 3pt, +1.60/pt) and was spent on the
-   *    best 1pt skill it happened to fit (Young Farmer, +0.03/pt) — 50x worse advice. A point is
-   *    not indivisible across a cost: holding one makes Hectare Farm cost TWO points, not three.
+   * A point you already HOLD does not make the skill free, and this is the assertion that matters.
+   *
+   * Two earlier versions discounted it — first "does it fit entirely in the free points?", then
+   * partial coverage — and both were the same error in different clothes: it is like calling an NFT
+   * free because you happen to hold enough FLOWER. The buy path prices an NFT at its floor whatever
+   * your balance is; a skill point cost XP to earn and that XP has a FLOWER price.
+   *
+   * Zeroing it also broke the ordering it was supposed to help. Cost 0 makes payback 0, so on the
+   * reference farm eight +0.03/day skills sorted above every real purchase.
    */
-  const covered = cands.filter((c) => (c.skillPointsFree || 0) > 0);
-  const uncovered = cands.filter((c) => !(c.skillPointsFree > 0) && !c.skillRank);
-  if (covered.length && uncovered.length) {
-    const worstCovered = Math.min(...covered.map((c) => c.clone.fixedMarginal / c.skillPoints));
-    const bestUncovered = Math.max(...uncovered.map((c) => c.clone.fixedMarginal / c.skillPoints));
-    assert.ok(worstCovered >= bestUncovered - 1e-9,
-      `free points went to the best per point (worst covered ${worstCovered}, best uncovered ${bestUncovered})`);
+  for (const c of plain) {
+    assert.ok(c.floor > 0, `${c.name}: a skill is never free`);
+    assert.ok(Math.abs(c.floor - c.skillPoints * sflPerPoint) < 1e-9,
+      `${c.name}: ${c.floor} must be ${c.skillPoints} x ${sflPerPoint}`);
+    assert.equal(c.skillFree, false, `${c.name}: nothing is flagged free any more`);
   }
-  // A partially covered skill is cheaper than full price but not free — the distinction is the fix.
-  for (const c of covered) {
-    if (c.skillPointsFree < c.skillPoints) {
-      assert.ok(c.floor > 0 && c.floor < c.skillPoints * sflPerPoint, `${c.name}: discounted, not free`);
-    }
+
+  /*
+   * Holding the points is still reported — it is what the reader wants to know — as a FLAG that
+   * cannot touch the cost or the ordering.
+   *
+   * The flag answers "can I take this RIGHT NOW?", which is a question of FIT, not of value per
+   * point: on the reference farm one spare point cannot take Hectare Farm (3pt) however good it is,
+   * so the flag lands on a 1pt skill instead. That is correct — it is a fact about what you can
+   * click today, and precisely because it no longer moves the price it cannot distort the order.
+   */
+  const takeNow = cands.filter((c) => c.skillTakeNow);
+  const later = plain.filter((c) => !c.skillTakeNow);
+  const freePts = Math.max(0, (pd.skillCostInfo.level - 1) - pd.boostItems.filter((b) => b.type === "Skill" && b.has).reduce((s, b) => s + (b.skillPoints || 1), 0));
+  for (const c of takeNow) {
+    assert.ok(c.skillPoints <= freePts, `${c.name}: ${c.skillPoints}pt must fit in the ${freePts} you hold`);
+  }
+  // Two skills with the same point cost must cost the same, flagged or not. That is the whole fix.
+  for (const a of takeNow) for (const b of later) {
+    if (a.skillPoints === b.skillPoints) assert.equal(a.floor, b.floor, "the flag does not change the price");
   }
   // 4. Only positive-value skills are a BUY action. A harmful skill is a reset, not a purchase.
   for (const c of cands) assert.ok(c.clone.fixedMarginal > 0, `${c.name}: no zero/harmful rows in a buy order`);
@@ -249,8 +257,12 @@ test("and they reach sim.ranked — the table, not just a candidate list", async
     assert.ok(paybacks[i] >= paybacks[i - 1] - 1e-6,
       `ranked by payback: ${skillRows[i - 1].name} (${paybacks[i - 1].toFixed(1)}d) before ${skillRows[i].name} (${paybacks[i].toFixed(1)}d)`);
   }
-  // And a partially-free skill really is cheaper here than it would be at full price — the
-  // free point has to survive all the way into the table, not just the candidate builder.
-  const hectare = skillRows.find((m) => m.name === "Hectare Farm");
-  if (hectare) assert.ok(hectare.floor < 3 * 59, `Hectare Farm carries its free point (${hectare.floor})`);
+  /*
+   * And NO row is free. A zero cost makes payback zero, so on the reference farm eight +0.03/day
+   * skills sorted above every real purchase — the same error as calling an NFT free because you
+   * happen to hold the FLOWER.
+   */
+  for (const m of skillRows) assert.ok(m.floor > 0, `${m.name}: priced, not free (${m.floor})`);
+  // Holding the points survives into the table as a flag, so the reader still learns it.
+  assert.ok(skillRows.some((m) => m.skillTakeNow), "some row says the points are already yours");
 });

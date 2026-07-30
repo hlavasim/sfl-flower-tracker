@@ -835,24 +835,30 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         l1.push({ b, pts, marg, perPoint: marg / pts, cat: (b.categories || [])[0] || "crops" });
       }
       /*
-       * Free points are a fixed budget spent on the best return per POINT — and they cover a skill
-       * PARTIALLY, which is the part that matters. The first version asked "does this skill fit
-       * ENTIRELY in the free points?", so a single spare point could not touch Hectare Farm (3pt,
-       * the best per-point skill on the reference farm at +1.60/pt) and was spent instead on the
-       * best 1pt skill it happened to fit, Young Farmer at +0.03/pt — 50x worse advice. A point
-       * is not indivisible across a cost: holding one makes Hectare Farm cost TWO points, not three.
+       * A point you already HOLD does not make the skill free.
+       *
+       * Two earlier versions got this wrong in opposite directions — first "does it fit entirely in
+       * the free points?" (so one spare point went to the best 1pt skill instead of discounting the
+       * best skill), then partial coverage. Both still zeroed or discounted the cost, and that is
+       * the actual error: it is the same mistake as calling an NFT free because you happen to hold
+       * enough FLOWER. The buy path prices an NFT at its floor whatever your balance is, and a skill
+       * point is no different — it cost XP to earn, and that XP has a FLOWER price.
+       *
+       * Zeroing it also broke the ordering it was meant to help: cost 0 makes payback 0, so eight
+       * +0.03/day skills sorted above every real purchase on the reference farm. So the cost is
+       * always points x sflPerPoint, and "you can take this right now" travels as a FLAG instead —
+       * which is information the reader wants without it distorting the ROI.
        */
       l1.sort((x, y) => y.perPoint - x.perPoint);
+      let ptsLeft = freePts;
       for (const r of l1) {
-        const covered = Math.min(r.pts, freePts);
-        freePts -= covered;
-        const payFor = r.pts - covered;
-        const note = covered === 0 ? ` · ${r.pts} × ${sflPerPoint.toFixed(0)} FLOWER XP`
-          : covered === r.pts ? ` · point${r.pts > 1 ? "y" : ""} už máš (zdarma)`
-          : ` · ${covered} pt už máš, doplať ${payFor} × ${sflPerPoint.toFixed(0)} FLOWER XP`;
-        out.push(mk(r.b.name, payFor * sflPerPoint, r.cat, r.marg,
-          `${r.pts}pt · ${r.b.skillTree || "?"}${note}`,
-          { skillFree: covered === r.pts, skillPointsFree: covered, skillPoints: r.pts, skillTree: r.b.skillTree || null }));
+        // Which skills the points you hold would actually cover, in best-per-point order. Reported,
+        // never subtracted.
+        const canTakeNow = ptsLeft >= r.pts;
+        if (canTakeNow) ptsLeft -= r.pts;
+        out.push(mk(r.b.name, r.pts * sflPerPoint, r.cat, r.marg,
+          `${r.pts}pt · ${r.b.skillTree || "?"} · ${r.pts} × ${sflPerPoint.toFixed(0)} FLOWER XP${canTakeNow ? " · body už máš, můžeš hned" : ""}`,
+          { skillFree: false, skillTakeNow: canTakeNow, skillPoints: r.pts, skillTree: r.b.skillTree || null }));
       }
 
       // ── L2 / L3: the next rank of a skill already owned ──
@@ -976,6 +982,14 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       const p2pPrices = roadmapPrices(settings);
       const obsidianP = p2pPrices["Obsidian"] || 0;
       if (!(obsidianP > 0)) return out;               // can't price Obsidian → skip node actions
+      /*
+       * Node income comes from nodeAcq, which the ascension section serves and the NODES page
+       * renders. Without it there are NO node rows — deliberately. Falling back to a locally
+       * derived margin is what made this page disagree with the other two by up to 3.3x, and a
+       * silent wrong number is worse than a visibly missing one.
+       */
+      const ascNodeAcq = (roadmapState && roadmapState.ascension && roadmapState.ascension.nodeAcq) || null;
+      if (!ascNodeAcq || !ascNodeAcq.perType) return out;
       const sunstoneP = obsidianP * 3;                 // 1 Sunstone = 3 Obsidian
       const coinsFree = roadmapCoinsFree(settings);
       const er = coinsFree ? Object.assign({}, exchangeRates, { coinsPerSFL: Infinity }) : exchangeRates;
@@ -987,20 +1001,32 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       const MERGEKEY_CAT = { trees: "trees", stones: "stone", iron: "iron", gold: "gold" };
       const cyclesFor = (cat) => { const oeff = roadmapOwnedEffects(cat); const ab = applyBoosts(cat, getDefaultProduct(cat), capacity, oeff); return ab.effectiveCycle > 0 ? 86400 / ab.effectiveCycle : 0; };
 
-      // A. Obsidian merges (4× t1 -> t2, 4× t2 -> t3) — each +0.5 yield/cycle.
+      /*
+       * A. Obsidian merges. The GAIN comes from nodeAcq.merge, not from a local
+       * cycles x price x eff product.
+       *
+       * Measured on farm 155498, the two bases disagreed by 0.19x to 3.33x per node type (Tree
+       * 0.43/day here against 2.29 there, Crimstone 1.13 against 0.34), so the buy path was ranking
+       * node actions on numbers the NODES page and the ascension plan both contradicted. nodeAcq is
+       * the source those two already share, and it derives the figure from the power engine's own
+       * category totals instead of re-deriving it.
+       */
+      const acqMerge = {};
+      for (const m of (ascNodeAcq.merge || [])) acqMerge[m.mergeKey] = m;
       for (const [mk, mc] of Object.entries(MERGE_COSTS)) {
         const cat = MERGEKEY_CAT[mk]; const fk = RES_FARMKEY[cat]; if (!cat || !fk) continue;
         const tiers = countNodeTiers(farm[fk] || {});
-        const price = p2pPrices[getDefaultProduct(cat)] || 0;
-        const marg = 0.5 * cyclesFor(cat) * price * roadmapEffFactor(cat, settings);
-        if (!(marg > 0)) continue;
+        const am = acqMerge[mk];
+        if (!am) continue;
         const label = (typeof NODE_PRICES !== "undefined" && NODE_PRICES[mk] && NODE_PRICES[mk].label) || cat;
         const nT2 = Math.floor((tiers.t1 || 0) / 4);
         const costT2 = mc.t2.obsidian * obsidianP + coinSfl(mc.t2.coins);
-        for (let i = 0; i < Math.min(nT2, 20); i++) out.push(mkItem("Merge " + label + " \u2192 tier 2", costT2, cat, marg, "4\u00d7 t1 \u2192 t2 \u00b7 +0.5/cycle \u00b7 " + mc.t2.obsidian + " Obsidian" + (coinsFree ? "" : " + " + (mc.t2.coins / 1000) + "k coins")));
+        const gainT2 = (am.merges.find((x) => x.tier === 2) || {}).gainPerDay || 0;
+        if (gainT2 > 0) for (let i = 0; i < Math.min(nT2, 20); i++) out.push(mkItem("Merge " + label + " \u2192 tier 2", costT2, cat, gainT2, "4\u00d7 t1 \u2192 t2 \u00b7 +0.5/cycle \u00b7 " + mc.t2.obsidian + " Obsidian" + (coinsFree ? "" : " + " + (mc.t2.coins / 1000) + "k coins")));
         const nT3 = Math.floor((tiers.t2 || 0) / 4);
         const costT3 = mc.t3.obsidian * obsidianP + coinSfl(mc.t3.coins);
-        for (let i = 0; i < Math.min(nT3, 10); i++) out.push(mkItem("Merge " + label + " \u2192 tier 3", costT3, cat, marg, "4\u00d7 t2 \u2192 t3 \u00b7 +0.5/cycle \u00b7 " + mc.t3.obsidian + " Obsidian" + (coinsFree ? "" : " + " + (mc.t3.coins / 1000) + "k coins")));
+        const gainT3 = (am.merges.find((x) => x.tier === 3) || {}).gainPerDay || 0;
+        if (gainT3 > 0) for (let i = 0; i < Math.min(nT3, 10); i++) out.push(mkItem("Merge " + label + " \u2192 tier 3", costT3, cat, gainT3, "4\u00d7 t2 \u2192 t3 \u00b7 +0.5/cycle \u00b7 " + mc.t3.obsidian + " Obsidian" + (coinsFree ? "" : " + " + (mc.t3.coins / 1000) + "k coins")));
       }
 
       // B. Buy new nodes with Sunstone (next 3 per resource; escalating cost).
@@ -1021,13 +1047,10 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
          * expansions hand out nodes at a rate the base table does not predict.
          */
         const purchased = Math.floor(Number((farm.farmActivity || {})[`${NODE_ACTIVITY_NAME[nk] || np.label} Bought`]) || 0);
-        const oeff = roadmapOwnedEffects(cat);
-        const price = p2pPrices[getDefaultProduct(cat)] || 0;
-        const perNodeBase = gameResBoostedBase(farm, cat, oeff);   // one fresh t1 node, yield/cycle
-        const grossDay = perNodeBase * cyclesFor(cat) * price;
-        let toolPerNode = 0;
-        try { const tc = (calcToolCostPerDay(cat, capacity, er, p2pPrices, powerState.stockMods, false).costPerDay) || 0; const nN = Object.keys(farm[fk] || {}).length; toolPerNode = nN > 0 ? tc / nN : 0; } catch {}
-        const marg = Math.max(0, grossDay - toolPerNode) * roadmapEffFactor(cat, settings);
+        // Same source as the merges above and as the NODES page: what ONE node of this category
+        // actually nets per day, already carrying the measured efficiency.
+        const acqNode = ascNodeAcq.perType[NODE_ACTIVITY_NAME[nk] || np.label];
+        const marg = acqNode ? (acqNode.profitPerDay || 0) : 0;
         if (!(marg > 0)) continue;
         for (let i = 0; i < 3; i++) {
           const nextSun = np.base + (purchased + i) * np.increase;
@@ -1146,7 +1169,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       const timeline = [];
       { let ri = (startIncome > 0 ? startIncome : 0), rd = 0;
         for (const s of fin.steps) { const bm = Math.max(0, s.m.marginal || 0); const dd = ri > 0 ? s.m.floor / ri : Infinity; if (isFinite(dd)) rd += dd; ri += bm;
-          timeline.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, marginal: bm, roi: bm > 0 ? s.m.floor / bm : Infinity, atDay: rd, rateAfter: ri, kind: "econ", skillFree: s.m.skillFree, skillPoints: s.m.skillPoints, skillPointsFree: s.m.skillPointsFree, skillRank: s.m.skillRank, shards: s.m.shards, shardSfl: s.m.shardSfl, shardNote: s.m.shardNote, skillTree: s.m.skillTree, skillTier: s.m.skillTier }); } }
+          timeline.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, marginal: bm, roi: bm > 0 ? s.m.floor / bm : Infinity, atDay: rd, rateAfter: ri, kind: "econ", skillFree: s.m.skillFree, skillPoints: s.m.skillPoints, skillTakeNow: s.m.skillTakeNow, skillRank: s.m.skillRank, shards: s.m.shards, shardSfl: s.m.shardSfl, shardNote: s.m.shardNote, skillTree: s.m.skillTree, skillTier: s.m.skillTier }); } }
       let rate = (startIncome > 0 ? startIncome : 0) + fin.steps.reduce((a, s) => a + Math.max(0, s.m.marginal || 0), 0);
       let cumDays = timeline.length ? timeline[timeline.length - 1].atDay : 0;
       const econSteps = timeline.length;
@@ -1170,7 +1193,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       const coreRate = (startIncome > 0 ? startIncome : 0) + coreMarg;
       // Unified ranked list: in-plan steps + conditional (situational), sorted by payback (ROI).
       const ranked = [];
-      for (const s of fin.steps) { const bm = Math.max(0, s.m.marginal || 0); ranked.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, value: bm, roi: bm > 0 ? s.m.floor / bm : Infinity, status: "plan", skillFree: s.m.skillFree, skillPoints: s.m.skillPoints, skillPointsFree: s.m.skillPointsFree, skillRank: s.m.skillRank, shards: s.m.shards, shardSfl: s.m.shardSfl, shardNote: s.m.shardNote, skillTree: s.m.skillTree, skillTier: s.m.skillTier }); }
+      for (const s of fin.steps) { const bm = Math.max(0, s.m.marginal || 0); ranked.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, value: bm, roi: bm > 0 ? s.m.floor / bm : Infinity, status: "plan", skillFree: s.m.skillFree, skillPoints: s.m.skillPoints, skillTakeNow: s.m.skillTakeNow, skillRank: s.m.skillRank, shards: s.m.shards, shardSfl: s.m.shardSfl, shardNote: s.m.shardNote, skillTree: s.m.skillTree, skillTier: s.m.skillTier }); }
       for (const m of situational) ranked.push({ name: m.name, type: m.type, boost: m.boost, floor: m.floor, value: m.sitValue, roi: m.sitValue > 0 ? m.floor / m.sitValue : Infinity, status: "conditional", reason: m.sitReason });
       ranked.sort((a, b) => a.roi - b.roi);
       { let rc = 0, ri = (startIncome > 0 ? startIncome : 0), rd = 0;
