@@ -1072,11 +1072,26 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         }
         for (const c of restore) c.has = false;         // never leak state into the buy path
 
+        /*
+         * "Cannot be flipped" and "cannot be PRICED" are different answers and looked identical.
+         * Flowers are the case: the category produces ~8 units a day and no flower has a price in
+         * the p2p feed at all, so its FLOWER figure is structurally 0 and no boost can ever move it.
+         * Reporting that as unflippable blames the farm for a gap in the price data.
+         */
+        const summary = ((powerState.categories || {}).catSummaries || {})[cat] || null;
+        let produces = 0, grosses = 0;
+        try {
+          const ab = applyBoosts(cat, getDefaultProduct(cat), capacity, owned);
+          produces = (ab && ab.unitsPerDay) || 0;
+          grosses = unitToSfl(produces, getPriceProduct(cat, getDefaultProduct(cat)), roadmapPrices(settings)) || 0;
+        } catch (e) {}
+        const unpriced = produces > 0 && !(grosses > 0);
+
         out.push({
-          cat, label: def.label || cat, count, nowNet,
+          cat, label: def.label || cat, count, nowNet, unpriced, unitsPerDay: produces,
           picked, cost, net,
           // Why it is not actionable, when it is not.
-          blocked: count === 0 ? "capacity" : (net <= 0 ? "unflippable" : null),
+          blocked: unpriced ? "unpriced" : count === 0 ? "capacity" : (net <= 0 ? "unflippable" : null),
           flips: net > 0 && picked.length > 0,
         });
       }
