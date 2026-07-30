@@ -197,7 +197,7 @@ test("node acquisition: expand (rolling dead-cost, equal split) vs buy (sunstone
    * Beehive / Flower Bed / Sunstone stay out.
    */
   assert.deepEqual(Object.keys(na.perType).sort(),
-    ["Crimstone Rock", "Crop Plot", "Fruit Patch", "Gold Rock", "Iron Rock", "Lava Pit", "Oil Reserve", "Stone Rock", "Tree"]);
+    ["Crimstone Rock", "Crop Plot", "Flower Bed", "Fruit Patch", "Gold Rock", "Iron Rock", "Lava Pit", "Oil Reserve", "Stone Rock", "Tree"]);
   assert.equal(na.perType["Oil Reserve"].sellable, false, "oil cannot be sold either");
   assert.ok(na.perType["Oil Reserve"].unitsPerNode > 0, "so a reserve's return is oil/day");
   assert.equal(na.perType["Oil Reserve"].profitPerDay, 0, "and its FLOWER income is zero");
@@ -281,8 +281,8 @@ test("node acquisition: per-node profit is NET of production cost and efficiency
   // profit as theoretical gross made the two columns non-comparable — and calling gross
   // revenue "profit" overstated it (tools/seeds sit in the category's costPerDay).
   const cats = powerData.categories.catSummaries;
-  const NODE_CAT = { "Crop Plot": "crops", "Fruit Patch": "fruits", Tree: "trees", "Stone Rock": "stone", "Iron Rock": "iron", "Gold Rock": "gold", "Crimstone Rock": "crimstone", "Oil Reserve": "oil", "Lava Pit": "obsidian" };
-  const counts = { crops: "crops", fruits: "fruitPatches", trees: "trees", stone: "stones", iron: "iron", gold: "gold", crimstone: "crimstones", oil: "oilReserves", obsidian: "lavaPits" };
+  const NODE_CAT = { "Crop Plot": "crops", "Fruit Patch": "fruits", Tree: "trees", "Stone Rock": "stone", "Iron Rock": "iron", "Gold Rock": "gold", "Crimstone Rock": "crimstone", "Oil Reserve": "oil", "Lava Pit": "obsidian", "Flower Bed": "flowers" };
+  const counts = { crops: "crops", fruits: "fruitPatches", trees: "trees", stone: "stones", iron: "iron", gold: "gold", crimstone: "crimstones", oil: "oilReserves", obsidian: "lavaPits", flowers: "flowers.flowerBeds" };
   // Guard the maps themselves: a node added to the section without being added here would
   // otherwise crash on cats[undefined] instead of failing with something readable.
   for (const node of Object.keys(out.nodeAcq.perType)) {
@@ -293,8 +293,9 @@ test("node acquisition: per-node profit is NET of production cost and efficiency
   let sawCost = false, sawEff = false;
   for (const [node, d] of Object.entries(out.nodeAcq.perType)) {
     const cat = NODE_CAT[node], cs = cats[cat];
-    const n = Object.keys(farm[counts[cat]] || {}).length;
-    const wantNet = Math.max(0, cs.boostedSfl - cs.costPerDay) / n;
+    const n = counts[cat].split(".").reduce((o,k)=>(o&&typeof o==="object")?o[k]:undefined, farm);
+    const nCount = n && typeof n==="object" ? Object.keys(n).length : 0;
+    const wantNet = Math.max(0, cs.boostedSfl - cs.costPerDay) / nCount;
     assert.ok(Math.abs(d.netPerNode - wantNet) < 1e-9, `${node}: net = (gross - cost) / nodes`);
     // Against cats, NOT against d.netPerNode — netPerNode is derived back out of
     // profitPerDay, so comparing the two would be circular and prove nothing.
@@ -471,4 +472,33 @@ test("wishlist — catalog ownership, auto-prune of active items, priority cumul
   assert.equal(w.byPriority[1].cumulative, 42);
   assert.equal(w.byPriority[2].cumulative, 42); // cumulative carries P1 down
   assert.equal(w.byPriority[1].affordable, parseFloat(farm.balance) >= 42);
+});
+
+test("node acquisition: an unpriceable node is flagged, not reported as worthless", () => {
+  /*
+   * Flower Bed is productive (~6 units/day on the fixture) but no flower has a price in the
+   * sfl.world p2p feed — only Sunflower and Cauliflower, which are crops. So its FLOWER
+   * figure is structurally 0 while the node is not worthless, and a bare 0 reads as if it
+   * were. The flag separates "earns nothing" from "cannot be priced".
+   */
+  const fb = out.nodeAcq.perType["Flower Bed"];
+  assert.ok(fb, "Flower Bed is in the table");
+  assert.equal(fb.sellable, true, "flowers are sellable in principle, unlike oil/obsidian");
+  assert.ok(fb.unitsPerNode > 0, "and a bed does produce");
+  assert.equal(fb.grossPerNode, 0, "but there is no price to turn that into FLOWER");
+  assert.equal(fb.unpriced, true, "so it must be flagged rather than shown as a zero");
+
+  // The distinction is real: a priced node is not flagged, and a non-sellable one is not
+  // either — its zero is genuine, it just pays in units.
+  assert.equal(out.nodeAcq.perType.Tree.unpriced, false, "wood has a price");
+  assert.ok(out.nodeAcq.perType.Tree.grossPerNode > 0);
+  assert.equal(out.nodeAcq.perType["Lava Pit"].unpriced, false, "obsidian is not sellable at all");
+  assert.equal(out.nodeAcq.perType["Oil Reserve"].unpriced, false, "nor is oil");
+
+  // The owned count must follow the nested container: farm.flowers is {flowerBeds, discovered},
+  // so counting farm.flowers itself would report 2 where the farm has 4 beds.
+  assert.equal(fb.currentCount, Object.keys(farm.flowers.flowerBeds).length);
+  assert.ok(fb.currentCount > 2, `nested count resolved (${fb.currentCount})`);
+  // Price from the game's RESOURCE_NODE_PRICES: 30 base, +25 per purchase.
+  assert.equal(fb.buy[0].sunstones, 30 + fb.bought * 25);
 });

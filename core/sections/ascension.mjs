@@ -436,7 +436,7 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
    * Price 40 / +20 per purchase, desert-gated — verified against RESOURCE_NODE_PRICES in the
    * game's events/landExpansion/buyResource.ts, not copied from our own inline table.
    */
-  const PROFIT_NODES = new Set(["Crop Plot", "Fruit Patch", "Tree", "Stone Rock", "Iron Rock", "Gold Rock", "Crimstone Rock", "Oil Reserve", "Lava Pit"]);
+  const PROFIT_NODES = new Set(["Crop Plot", "Fruit Patch", "Tree", "Stone Rock", "Iron Rock", "Gold Rock", "Crimstone Rock", "Oil Reserve", "Lava Pit", "Flower Bed"]);
   // exchangeObsidian.ts OBSIDIAN_PRICE — 3 obsidian buys 1 sunstone, on click.
   const OBSIDIAN_PER_SUNSTONE = 3;
   // Prices from the game's RESOURCE_NODE_PRICES (events/landExpansion/buyResource.ts).
@@ -447,8 +447,20 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
     "Crimstone Rock": { base: 20, inc: 20, fk: "crimstones" },
     "Oil Reserve": { base: 40, inc: 20, fk: "oilReserves" },
     "Lava Pit": { base: 40, inc: 40, fk: "lavaPits" },
+    // Flower beds are NOT a flat farm key: farm.flowers is a container, {flowerBeds,
+    // discovered}. Counting farm.flowers directly returns 2 — the container's own keys —
+    // where the farm has 4 beds, so the escalation and the per-node split would both be
+    // wrong. detectFarmCapacity already reads farm.flowers.flowerBeds; `fk` is a dotted
+    // path so this follows the same route.
+    "Flower Bed": { base: 30, inc: 25, fk: "flowers.flowerBeds" },
   };
-  const NODE_TO_CAT = { "Crop Plot": "crops", "Fruit Patch": "fruits", "Tree": "trees", "Stone Rock": "stone", "Iron Rock": "iron", "Gold Rock": "gold", "Crimstone Rock": "crimstone", "Oil Reserve": "oil", "Lava Pit": "obsidian" };
+  /** Resolve a NODE_BUY.fk, which may be a dotted path into a container. */
+  const nodeOwnedCount = (fk) => {
+    let o = farm;
+    for (const part of String(fk).split(".")) { if (!o || typeof o !== "object") return 0; o = o[part]; }
+    return o && typeof o === "object" ? Object.keys(o).length : 0;
+  };
+  const NODE_TO_CAT = { "Crop Plot": "crops", "Fruit Patch": "fruits", "Tree": "trees", "Stone Rock": "stone", "Iron Rock": "iron", "Gold Rock": "gold", "Crimstone Rock": "crimstone", "Oil Reserve": "oil", "Lava Pit": "obsidian", "Flower Bed": "flowers" };
   // Categories whose output cannot be sold — reported in units/day, never as FLOWER income.
   const NON_SELLABLE_CATS = new Set(["obsidian", "oil"]);
   const obsidianPrice = p2pP["Obsidian"] || 0;
@@ -553,7 +565,7 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
     const unitsPerNode = catCount > 0
       ? (((cats[cat] || {}).boostedUnitsPerDay || 0) / catCount) * effRatio : 0;
     const np = NODE_BUY[node];
-    const owned = Object.keys(farm[np.fk] || {}).length;
+    const owned = nodeOwnedCount(np.fk);
     // The real escalation input: how many of this node the farm has BOUGHT.
     const bought = Math.floor(Number((farm.farmActivity || {})[`${node} Bought`]) || 0);
     const buy = [];
@@ -578,7 +590,16 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
         matUnpriced: !(prodCost["Obsidian"] > 0),
       });
     }
-    nodeAcq.perType[node] = { profitPerDay, grossPerNode, netPerNode, effRatio, effMeasured: !!(effBy[cat] && effBy[cat].measured),
+    /*
+     * "earns 0" and "we cannot price it" are different answers and used to look identical.
+     * Flowers are the case: the category produces ~6 units/day, but no flower has a price in
+     * the sfl.world p2p feed at all (only Sunflower and Cauliflower, which are crops), so its
+     * FLOWER figure is structurally 0 while the node is genuinely productive. Reporting that
+     * as a plain zero reads as "worthless", which is wrong — hence the flag, so the table can
+     * show units/day and say the price is unknown.
+     */
+    const unpriced = sellable && unitsPerNode > 0 && !(grossPerNode > 0);
+    nodeAcq.perType[node] = { profitPerDay, grossPerNode, netPerNode, effRatio, effMeasured: !!(effBy[cat] && effBy[cat].measured), unpriced,
       sellable, unitsPerNode, unitName: (cats[cat] || {}).product || null,
       expand: (expandAcq[node] || []).slice(0, 4), buy, currentCount: owned, bought };
   }
