@@ -712,5 +712,37 @@ test("the buy list is deep enough to plan with, and escalates linearly", () => {
       assert.equal(d.buy[i].obsidian, d.buy[i].sunstones * out.nodeAcq.obsidianPerSunstone, `${node}: obsidian follows the sunstone count`);
     }
     assert.ok(step > 0, `${node}: each purchase costs more than the last`);
+    // The rule and the list must be the same thing, or a page walking the rule past entry 8
+    // (ROAD TO 2xT3 needs up to 32) silently prices differently from the table above it.
+    const r = d.buyRule;
+    assert.ok(r, `${node}: escalation rule served`);
+    assert.equal(step, r.inc, `${node}: the list escalates by the rule's increment`);
+    assert.equal(r.obsidianPerSunstone, out.nodeAcq.obsidianPerSunstone);
+    assert.equal(r.obsidianSfl, out.nodeAcq.prodCost.Obsidian || 0, `${node}: rule prices obsidian the same way`);
+    for (let i = 0; i < d.buy.length; i++) {
+      assert.equal(d.buy[i].sunstones, r.base + (r.bought + i) * r.inc, `${node}: entry ${i} matches the rule`);
+    }
   }
+});
+
+test("merge carries the ratio it was scaled by, and every node names its category", () => {
+  // Both exist so a page can render a theoretical column and an efficiency tooltip WITHOUT
+  // measuring anything itself — the last two reasons the NODES page kept its own history pass.
+  for (const t of out.nodeAcq.merge) {
+    for (const x of t.merges) {
+      assert.equal(typeof x.effRatio, "number", `${t.mergeKey} T${x.tier}: ratio served`);
+      // gainPerDay = bonus × digs/day × price × ratio, so dividing it back out is the theoretical
+      // figure. Pin the relationship rather than the value: a zero ratio must not be silently
+      // rewritten to 1.
+      if (x.gainPerDay > 0) assert.ok(x.effRatio > 0, `${t.mergeKey} T${x.tier}: a gain implies a ratio`);
+    }
+  }
+  const cats = new Set();
+  for (const [node, d] of Object.entries(out.nodeAcq.perType)) {
+    assert.ok(d.cat, `${node}: names its category`);
+    assert.ok(d.effRatio === 1 || out.nodeAcq.eff.byCat[d.cat] !== undefined || !d.effMeasured,
+      `${node}: the category reaches the served measurement`);
+    cats.add(d.cat);
+  }
+  assert.equal(cats.size, 10, "ten distinct categories, so no node borrowed another's");
 });

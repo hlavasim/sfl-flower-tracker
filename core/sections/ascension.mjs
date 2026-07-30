@@ -642,6 +642,10 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
         bonus, gainPerDay: bonus * cyclesPerDay * price * eff,
         // The game needs four of the lower tier in hand; below that it is not yet actionable.
         have, need: 4, ready: have >= 4,
+        // gainPerDay is already scaled by this, exactly like the buy side's profitPerDay.
+        // Served so a table showing a theoretical column can divide it back out rather than
+        // measuring efficiency again for itself.
+        effRatio: eff,
         /*
          * Obsidian AND coins, because the coins are the larger half by an order of magnitude:
          * a gold T3 merge is 20 obsidian (~34 FLOWER at production cost) plus 350k coins
@@ -721,7 +725,19 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
      * two pages. multiplier >= 16 is T3, >= 4 is T2; effective counts a T2 as four nodes.
      */
     const tiers = countNodeTiers(nodeObj(np.fk) || {});
-    nodeAcq.perType[node] = { profitPerDay, grossPerNode, netPerNode, effRatio, effMeasured: !!(effBy[cat] && effBy[cat].measured), unpriced, tiers,
+    /*
+     * The escalation RULE alongside the first eight prices, because one consumer needs an
+     * unbounded series: "what is still missing for 2xT3 of each" can mean 32 purchases of a
+     * single node type (2 T3 = 8 T2 = 32 T1), and serving a list that long for every node on
+     * every page load to cover it would be waste. This is the game's own price table
+     * (buyResource.ts RESOURCE_NODE_PRICES) plus this farm's purchase count, so a page walking
+     * it is reading data rather than running a second valuation — what a node EARNS and what
+     * obsidian COSTS still come from here only.
+     */
+    const buyRule = { base: np.base, inc: np.inc, bought, obsidianPerSunstone: OBSIDIAN_PER_SUNSTONE, obsidianSfl: prodCost["Obsidian"] || 0 };
+    // The category name, so a page can reach the served measurement detail (sessions, the
+    // window) for its tooltip instead of re-deriving it from history.
+    nodeAcq.perType[node] = { cat, profitPerDay, grossPerNode, netPerNode, effRatio, effMeasured: !!(effBy[cat] && effBy[cat].measured), unpriced, tiers, buyRule,
       sellable, unitsPerNode, unitName: (cats[cat] || {}).product || null,
       expand: (expandAcq[node] || []).slice(0, 4), buy, currentCount: owned, bought };
   }
