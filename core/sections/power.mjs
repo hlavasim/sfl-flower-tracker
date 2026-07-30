@@ -30,7 +30,7 @@ import {
 import {
   unitToSfl, calcSeedCostPerDay, calcAnimalFeedCost, calcSicknessCost,
   calcLavaPitCostPerDay, getAnimalCatSfl, getPriceProduct, activeShrineEffects,
-  buildQueueData,
+  buildQueueData, shrineStatuses,
 } from "../engine/power-costs.mjs";
 import { _setPowerContext, calcBoostValue, roadmapEffFactor, getRoadmapSettings } from "../engine/roadmap.mjs";
 import { SKILL_UPGRADES, powerSkillRankVals, skillRankText } from "../engine/skill-ranks.mjs";
@@ -503,5 +503,5 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     }
   }
 
-  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, skillRanks, composters: composterVerdicts(farm, p2pPrices, season, { savedProducts }), valueBasis: settings.measured ? "measured" : "theoretical", restockQueues, ...(boostValuesEff ? { boostValuesEff } : {}), ...(formulaHtml !== undefined ? { formulaHtml } : {}) };
+  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, skillRanks, composters: composterVerdicts(farm, p2pPrices, season, { savedProducts }), shrines: shrineStatuses(farm), valueBasis: settings.measured ? "measured" : "theoretical", restockQueues, ...(boostValuesEff ? { boostValuesEff } : {}), ...(formulaHtml !== undefined ? { formulaHtml } : {}) };
 }

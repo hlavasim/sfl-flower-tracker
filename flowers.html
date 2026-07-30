@@ -17330,6 +17330,33 @@
         });
       }
 
+      /*
+       * Shrines. A 7-day consumable, so lapsing is silent and expensive: one expired while this
+       * page was being written and the only symptom was every mining marginal dropping 25%.
+       * Badger (trees+stone) and Mole (iron/gold/crimstone) are both speed 0.75, which is a
+       * quarter off the recovery of the categories that pay best.
+       *
+       * Not valued in FLOWER: the gain is a speed multiplier on a category, and turning that
+       * into a per-day figure means re-running the whole chain with and without it. The row
+       * says WHAT it does and lets that stand rather than inventing a number.
+       */
+      const shrines = ps.shrines || [];
+      const lapsed = shrines.filter((x) => x.kind === 'expired');
+      const running = shrines.filter((x) => x.kind === 'active');
+      for (const x of lapsed) {
+        const ing = Object.entries(x.ingredients || {}).map(([k, v]) => `${v}x ${escHTML(k)}`).join(', ');
+        rows.push({
+          what: `Obnovit ${escHTML(x.name)}`, now: true, warn: true, gain: null, unit: null,
+          note: `vypršela — ${escHTML(x.effect)}. Platí ${x.durationDays} dní${ing ? `, stojí ${ing}` : ''}`,
+        });
+      }
+      // Running ones are listed too, so a short remainder is visible BEFORE it lapses.
+      for (const x of running.filter((x) => x.hoursLeft != null && x.hoursLeft < 48)) {
+        rows.push({
+          what: `${escHTML(x.name)} dobíhá`, now: false, gain: null, unit: null,
+          note: `zbývá ${x.hoursLeft < 1 ? 'necelá hodina' : x.hoursLeft.toFixed(0) + ' h'} — ${escHTML(x.effect)}`,
+        });
+      }
       // 3. Restock. Already computed by section=power (buildQueueData); daysUntilEmpty null = never.
       const q = ps.restockQueues || {};
       const soon = Object.entries(q)

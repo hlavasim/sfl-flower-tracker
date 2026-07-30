@@ -540,6 +540,33 @@ import { SEED_COSTS, TOOL_COSTS } from "../data/economy.mjs";
       return { kind: "expired" };
     }
 
+
+    /*
+     * Every shrine's standing, not just whether one is active.
+     *
+     * _shrineActiveNow answered a yes/no for the valuation path, so nothing could tell the
+     * player a shrine had LAPSED — one expired mid-session while this was being written and
+     * the only sign was that every mining marginal quietly dropped 25%. A shrine is a 7-day
+     * consumable, which makes it a periodic action, and periodic actions need surfacing.
+     *
+     * `kind`: never (not placed) | active (with hoursLeft) | expired (placed, ran out).
+     */
+    function shrineStatuses(farm) {
+      if (!farm) return [];
+      const placed = farm.collectibles || {}, placedHome = (farm.home && farm.home.collectibles) || {};
+      const out = [];
+      for (const name in SHRINE_DATA) {
+        const sh = SHRINE_DATA[name];
+        const st = _shrineStatus(name, placed, placedHome, sh.duration_d);
+        out.push({
+          name, kind: st.kind, hoursLeft: st.hoursLeft != null ? st.hoursLeft : null,
+          durationDays: sh.duration_d, catId: sh.catId, alsoCats: sh.alsoCats || [],
+          effect: sh.effect, effectKind: sh.effectKind,
+          ingredients: sh.ingredients || {},
+        });
+      }
+      return out;
+    }
     // ── flowers.html 15926-15954: _shrineActiveNow + activeShrineEffects ──
     function _shrineActiveNow(farm, name) {
       const sh = SHRINE_DATA[name];
@@ -643,7 +670,7 @@ export {
   FEED_RECIPES, FEED_QTY, FEED_XP_TABLE, SICKNESS_RATE_BY_LEVEL,
   BARN_DELIGHT_RECIPE, BARN_DELIGHT_RECIPE_ALT, SICKNESS_PREVENTION,
   SHRINE_DATA, LAVA_PIT_REQUIREMENTS, GREENHOUSE_OIL_COSTS,
-  getAnimalDropsPerCycle, getAnimalLevelDistribution, toMs, unitToSfl,
+  getAnimalDropsPerCycle, getAnimalLevelDistribution, toMs, unitToSfl, shrineStatuses,
   calcSeedCostPerDay, calcAnimalFeedCost, calcSicknessCost, calcLavaPitCostPerDay,
   getAnimalCatSfl, getPriceProduct, _shrineStatus, _shrineActiveNow, activeShrineEffects,
 };
