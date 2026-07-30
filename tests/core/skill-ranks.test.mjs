@@ -210,11 +210,17 @@ test("ascension ranks are sequential and their shard price is a labelled derivat
 
   const sflPerPoint = pd.skillCostInfo.sflPerPoint;
   for (const c of ranks) {
-    // Only the NEXT rank may be offered. Listing Level 3 before Level 2 is an order you cannot follow.
+    /*
+     * Every remaining rank is offered now, not just the next one \u2014 hiding the ladder was the wrong
+     * answer to sequencing, the same mistake the ascension list made. What must hold is that a rank
+     * is never one you already own, and that L2/L3 form a chain the planner and the display keep in
+     * order (checked at the end of this test).
+     */
     const base = c.name.replace(/ \u2192 Level \d+$/, "");
     const sr = pd.skillRanks[base];
     assert.ok(sr, `${base}: served rank data`);
-    assert.equal(c.skillRank, sr.nextLevel, `${base}: only level ${sr.nextLevel} is buyable next`);
+    assert.ok(c.skillRank >= sr.nextLevel, `${base}: L${c.skillRank} is not already owned (next is ${sr.nextLevel})`);
+    assert.equal(c.chainId, `rank:${base}`, `${base}: sits in its own chain`);
 
     // Cost = the points' XP + the shards. Shards have no market, so the price is a DERIVATION and
     // must travel with the row that uses it — a number without its assumption is a quote.
@@ -228,6 +234,22 @@ test("ascension ranks are sequential and their shard price is a labelled derivat
   // free on this farm by the roadmap's own rule, so charging them would contradict the page.
   const expect = 3 * p2p["Wood"] + 3 * p2p["Gold"];
   assert.ok(Math.abs(ranks[0].shardSfl - expect) < 1e-9, `shard = Gold Pickaxe materials (${expect})`);
+
+  // A skill offering both ranks numbers them 0,1 in ladder order, so nothing can place L3 first.
+  const byBase = {};
+  for (const c of ranks) {
+    const b = c.name.replace(/ → Level \d+$/, "");
+    (byBase[b] = byBase[b] || []).push(c);
+  }
+  const multi = Object.entries(byBase).filter(([, cs]) => cs.length > 1);
+  assert.ok(multi.length > 0, "some skill offers more than one remaining rank");
+  for (const [b, cs] of multi) {
+    const sorted = cs.slice().sort((x, y) => x.chainSeq - y.chainSeq);
+    for (let i = 0; i < sorted.length; i++) {
+      assert.equal(sorted[i].chainSeq, i, `${b}: chain positions are 0..n`);
+      if (i) assert.ok(sorted[i].skillRank > sorted[i - 1].skillRank, `${b}: chainSeq follows the rank`);
+    }
+  }
 });
 
 test("and they reach sim.ranked — the table, not just a candidate list", async () => {
@@ -252,10 +274,34 @@ test("and they reach sim.ranked — the table, not just a candidate list", async
   assert.ok(skillRows.some((m) => / Level \d+$/.test(m.name)), "ascension ranks");
 
   // The order is by payback like everything else, so the best skill must not sit below a worse one.
-  const paybacks = skillRows.map((m) => m.floor / (m.value || Infinity));
-  for (let i = 1; i < paybacks.length; i++) {
-    assert.ok(paybacks[i] >= paybacks[i - 1] - 1e-6,
-      `ranked by payback: ${skillRows[i - 1].name} (${paybacks[i - 1].toFixed(1)}d) before ${skillRows[i].name} (${paybacks[i].toFixed(1)}d)`);
+  /*
+   * Ordering, stated exactly, because the naive version of this assertion is wrong.
+   *
+   * The list is payback-sorted, and then each CHAIN is put back into ladder order within the slots
+   * the payback sort gave it. That second step necessarily moves a chain member into a slot its
+   * sibling earned, so a chain row can sit next to a row with a better payback — including a row
+   * from a DIFFERENT chain (measured: Fireside Alchemist L2 at 381 d landing above Speed Miner L2 at
+   * 217 d). That is the price of keeping "L3 after L2" true, and it is the right trade.
+   *
+   * So: rows that are in no chain are payback-ordered against each other, and a chain is internally
+   * in ladder order. Nothing stronger is claimed.
+   */
+  for (let i = 1; i < skillRows.length; i++) {
+    const a = skillRows[i - 1], b = skillRows[i];
+    if (a.chainId && a.chainId === b.chainId) {
+      assert.ok(b.chainSeq > a.chainSeq, `${a.name} then ${b.name}: a chain stays in ladder order`);
+      continue;
+    }
+    if (a.chainId || b.chainId) continue;   // a chain member occupies its sibling's slot; see above
+    const pa = a.floor / (a.value || Infinity), pb = b.floor / (b.value || Infinity);
+    assert.ok(pb >= pa - 1e-6, `ranked by payback: ${a.name} (${pa.toFixed(1)}d) before ${b.name} (${pb.toFixed(1)}d)`);
+  }
+  // And every chain in the table really is in ladder order, not merely adjacent-consistent.
+  const seen = {};
+  for (const m of skillRows) {
+    if (!m.chainId) continue;
+    if (seen[m.chainId] != null) assert.ok(m.chainSeq > seen[m.chainId], `${m.name}: after its earlier rank`);
+    seen[m.chainId] = m.chainSeq;
   }
   /*
    * And NO row is free. A zero cost makes payback zero, so on the reference farm eight +0.03/day

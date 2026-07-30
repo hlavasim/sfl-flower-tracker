@@ -863,20 +863,32 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
 
       // ── L2 / L3: the next rank of a skill already owned ──
       const shardSfl = roadmapShardSfl();
+      /*
+       * EVERY remaining rank, not just the next one.
+       *
+       * This offered only `nextLevel`, on the grounds that ranks are sequential — the same reasoning
+       * that once limited the ascension ladder to one row, and wrong for the same reason: sequence is
+       * a constraint on the PLAN, not a reason to hide the ladder. Level 2 and Level 3 are one chain
+       * per skill, so the planner can never place L3 before L2 and the display cannot show it that
+       * way either, while you still get to see what the whole upgrade is worth.
+       */
       for (const [name, sr] of Object.entries(skillRanks || {})) {
-        if (!sr || !sr.nextLevel) continue;              // ranks are sequential: only level+1
-        const row = (sr.rows || []).find((r) => r.lvl === sr.nextLevel);
-        if (!row || !(row.delta > 0)) continue;
-        const cat = Object.keys(row.byCat || {})[0] || "crops";
-        const ptsSfl = (row.points || 0) * sflPerPoint;
-        const shards = row.shards || 0;
-        const floor = ptsSfl + shards * shardSfl;
-        if (!(floor > 0)) continue;
-        out.push(mk(`${name} \u2192 Level ${row.lvl}`, floor, cat, row.delta,
-          `${row.points}pt + ${shards} Ascension Shard \u00b7 ${row.text || ""}`,
-          { skillRank: row.lvl, skillPoints: row.points, shards, shardSfl,
-            // The assumption travels with the row so a consumer cannot show the number without it.
-            shardNote: `shard oce\u0148ov\u00e1n materi\u00e1lem Gold Pickaxe (\u2248${shardSfl.toFixed(2)} FLOWER) \u2014 odvozen\u00ed, ne tr\u017en\u00ed cena` }));
+        if (!sr || !sr.nextLevel) continue;              // not owned, or already maxed
+        let cseq = 0;
+        for (const row of (sr.rows || [])) {
+          if (row.lvl < sr.nextLevel) continue;          // already at or past this rank
+          if (!(row.delta > 0)) continue;                // a rank that adds nothing is not a buy
+          const cat = Object.keys(row.byCat || {})[0] || "crops";
+          const shards = row.shards || 0;
+          const floor = (row.points || 0) * sflPerPoint + shards * shardSfl;
+          if (!(floor > 0)) continue;
+          out.push(mk(`${name} \u2192 Level ${row.lvl}`, floor, cat, row.delta,
+            `${row.points}pt + ${shards} Ascension Shard \u00b7 ${row.text || ""}`,
+            { skillRank: row.lvl, skillPoints: row.points, shards, shardSfl,
+              chainId: `rank:${name}`, chainSeq: cseq++,
+              // The assumption travels with the row so a consumer cannot show the number without it.
+              shardNote: `shard oce\u0148ov\u00e1n materi\u00e1lem Gold Pickaxe (\u2248${shardSfl.toFixed(2)} FLOWER) \u2014 odvozen\u00ed, ne tr\u017en\u00ed cena` }));
+        }
       }
       return out;
     }
@@ -925,22 +937,26 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         return { sfl, unpriced };
       };
       /*
-       * ONE row: the next step that actually earns something, carrying the cost of every step you
-       * must do to reach it.
+       * Every step up to ASC_MAX, not just the next one.
        *
-       * The first version offered every pending step and let the ROI sort order them, which
-       * produced an order you cannot follow — A2 e32 above A1 e31, A4 above A2 — because ascension
-       * steps are strictly sequential. Cumulative rows for every milestone would double-count
-       * (A1 e31 and A1 e33 overlap), so the honest offer is the NEXT one. Steps that grant no
-       * earning node (island upgrades, expansions of only decorative slots) are not skipped past
-       * silently: their cost is rolled into the row, because reaching the earning step means paying
-       * for them too. The full plan stays on the ascension page, which is where a plan belongs.
+       * It used to emit exactly one row, because ascension steps are strictly SEQUENTIAL and the
+       * first version let the payback sort order all 82 of them — producing an order you cannot
+       * follow (A2 Expansion 32 above A1 Expansion 31). The fix for that is a constraint in the
+       * PLANNER, not a shorter list: greedyOrder below may only take the earliest unplaced step, so
+       * the whole ladder can be shown while staying buildable.
+       *
+       * Each row is its own INCREMENT (not cumulative), so the table's running total stays honest.
+       * Steps that grant no earning node — island upgrades, decoration-only expansions — cannot be
+       * rows of their own, so their cost is rolled into the next earning step and they are named in
+       * its text: reaching that expansion means paying for them too.
        */
-      let cum = 0; const via = [];
+      const ASC_MAX = settings.ascMax != null ? settings.ascMax : 3;
+      let pending = 0; const via = []; let seq = 0;
       for (const st of asc.steps) {
+        if (st.asc > ASC_MAX) break;
         const priced = priceRes(Object.assign({}, st.cost, st.extraCost));
-        if (priced.unpriced) return out;   // cannot price the path this far — a floor must not compete
-        cum += priced.sfl;
+        if (priced.unpriced) break;   // cannot price the ladder past here — a floor must not compete
+        pending += priced.sfl;
         let marg = 0; const gained = [];
         for (const [node, n] of Object.entries(st.nodesAdded || {})) {
           const d = perType[node];
@@ -949,17 +965,23 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
           gained.push(`${n}x ${node}`);
         }
         const label = st.asc === 0
-          ? (st.kind === "upgrade" ? `Upgrade na ${st.next || "?"}` : `${st.island || "?"} e${st.expansion}`)
-          : (st.kind === "upgrade" ? `Ascension A${st.asc}` : `A${st.asc} · e${st.expansion}`);
-        if (!(marg > 0)) { via.push(label); continue; }   // no income yet: roll its cost forward
-        if (!(cum > 0)) return out;
+          ? (st.kind === "upgrade" ? `Upgrade na ${st.next || "?"}` : `${st.island || "?"} Expansion ${st.expansion}`)
+          : (st.kind === "upgrade" ? `Ascension A${st.asc}` : `A${st.asc} · Expansion ${st.expansion}`);
+        if (!(marg > 0)) { via.push(label); continue; }   // no income of its own: roll its cost on
+        if (!(pending > 0)) { via.length = 0; pending = 0; continue; }
         out.push({
-          name: label, type: "Ascension", floor: cum, supply: 0,
+          name: label, type: "Ascension", floor: pending, supply: 0,
           boost: `${gained.join(" + ")}${via.length ? ` · přes ${via.join(", ")}` : ""}${st.absLevel ? ` · level ${st.absLevel}` : ""}`,
           clone: { name: label, categories: ["crops"], effects: [], fixedMarginal: marg, has: false, isDisabled: false },
-          ascStep: { asc: st.asc, expansion: st.expansion, kind: st.kind, via, nodesAdded: st.nodesAdded || {} },
+          /*
+           * chainId/chainSeq are the generic sequencing hook: within a chain, step N cannot be
+           * taken before N-1. Ascension steps are one chain; each rankable skill is another
+           * (Level 2 before Level 3). The planner and the display both honour it.
+           */
+          chainId: "ascension", chainSeq: seq,
+          ascStep: { seq: seq++, asc: st.asc, expansion: st.expansion, kind: st.kind, via: via.slice(), nodesAdded: st.nodesAdded || {} },
         });
-        return out;   // only the next one is an action you can actually take
+        via.length = 0; pending = 0;
       }
       return out;
     }
@@ -1131,9 +1153,23 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         const rem = econPos.slice();
         for (const m of rem) { m._mg = roadmapItemValue(m.clone, catBoostsW, settings); m._roi = m._mg > 0 ? m.floor / m._mg : Infinity; }
         const ord = []; let g = 0;
+        /*
+         * CHAINS are strictly sequential: you cannot do A2 before A1, and you cannot take a skill's
+         * Level 3 before its Level 2. So within each chain only the earliest unplaced step is ever
+         * eligible. Without this the payback sort interleaves them freely and the plan reads as an
+         * order you cannot follow. Everything outside a chain is unconstrained.
+         */
+        const nextInChain = {};
+        const eligible = (m) => !m.chainId || (nextInChain[m.chainId] || 0) === m.chainSeq;
         while (rem.length && g++ < 5000) {
-          let bi = 0; for (let i = 1; i < rem.length; i++) if (rem[i]._roi < rem[bi]._roi) bi = i;
+          let bi = -1;
+          for (let i = 0; i < rem.length; i++) {
+            if (!eligible(rem[i])) continue;
+            if (bi < 0 || rem[i]._roi < rem[bi]._roi) bi = i;
+          }
+          if (bi < 0) break;   // only ineligible items left
           const nx = rem.splice(bi, 1)[0];
+          if (nx.chainId) nextInChain[nx.chainId] = (nextInChain[nx.chainId] || 0) + 1;
           if (!(nx._mg > 0)) continue;
           nx.clone.has = true; ord.push(nx);
           const cats = new Set(nx.clone.categories);
@@ -1153,6 +1189,9 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         while (improved && passes++ < 8) {
           improved = false;
           for (let i = 0; i < order.length - 1; i++) {
+            // A swap inside a chain (two ascension steps, or a skill's L2 and L3) produces a plan the
+            // game will not let you build, whatever it does to the integral.
+            if (order[i].chainId && order[i].chainId === order[i + 1].chainId) continue;
             const sw = order.slice(); const tmp = sw[i]; sw[i] = sw[i + 1]; sw[i + 1] = tmp;
             const v = simOrder(sw, H).integral;
             if (v > best + Math.abs(best) * 1e-9 + 1e-6) { order = sw; best = v; improved = true; }
@@ -1169,7 +1208,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       const timeline = [];
       { let ri = (startIncome > 0 ? startIncome : 0), rd = 0;
         for (const s of fin.steps) { const bm = Math.max(0, s.m.marginal || 0); const dd = ri > 0 ? s.m.floor / ri : Infinity; if (isFinite(dd)) rd += dd; ri += bm;
-          timeline.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, marginal: bm, roi: bm > 0 ? s.m.floor / bm : Infinity, atDay: rd, rateAfter: ri, kind: "econ", skillFree: s.m.skillFree, skillPoints: s.m.skillPoints, skillTakeNow: s.m.skillTakeNow, skillRank: s.m.skillRank, shards: s.m.shards, shardSfl: s.m.shardSfl, shardNote: s.m.shardNote, skillTree: s.m.skillTree, skillTier: s.m.skillTier }); } }
+          timeline.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, marginal: bm, roi: bm > 0 ? s.m.floor / bm : Infinity, atDay: rd, rateAfter: ri, kind: "econ", skillFree: s.m.skillFree, skillPoints: s.m.skillPoints, skillTakeNow: s.m.skillTakeNow, skillRank: s.m.skillRank, shards: s.m.shards, shardSfl: s.m.shardSfl, shardNote: s.m.shardNote, skillTree: s.m.skillTree, skillTier: s.m.skillTier, chainId: s.m.chainId, chainSeq: s.m.chainSeq }); } }
       let rate = (startIncome > 0 ? startIncome : 0) + fin.steps.reduce((a, s) => a + Math.max(0, s.m.marginal || 0), 0);
       let cumDays = timeline.length ? timeline[timeline.length - 1].atDay : 0;
       const econSteps = timeline.length;
@@ -1193,9 +1232,28 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       const coreRate = (startIncome > 0 ? startIncome : 0) + coreMarg;
       // Unified ranked list: in-plan steps + conditional (situational), sorted by payback (ROI).
       const ranked = [];
-      for (const s of fin.steps) { const bm = Math.max(0, s.m.marginal || 0); ranked.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, value: bm, roi: bm > 0 ? s.m.floor / bm : Infinity, status: "plan", skillFree: s.m.skillFree, skillPoints: s.m.skillPoints, skillTakeNow: s.m.skillTakeNow, skillRank: s.m.skillRank, shards: s.m.shards, shardSfl: s.m.shardSfl, shardNote: s.m.shardNote, skillTree: s.m.skillTree, skillTier: s.m.skillTier }); }
+      for (const s of fin.steps) { const bm = Math.max(0, s.m.marginal || 0); ranked.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, value: bm, roi: bm > 0 ? s.m.floor / bm : Infinity, status: "plan", skillFree: s.m.skillFree, skillPoints: s.m.skillPoints, skillTakeNow: s.m.skillTakeNow, skillRank: s.m.skillRank, shards: s.m.shards, shardSfl: s.m.shardSfl, shardNote: s.m.shardNote, skillTree: s.m.skillTree, skillTier: s.m.skillTier, chainId: s.m.chainId, chainSeq: s.m.chainSeq }); }
       for (const m of situational) ranked.push({ name: m.name, type: m.type, boost: m.boost, floor: m.floor, value: m.sitValue, roi: m.sitValue > 0 ? m.floor / m.sitValue : Infinity, status: "conditional", reason: m.sitReason });
       ranked.sort((a, b) => a.roi - b.roi);
+      /*
+       * The display sort is by payback, and on its own it scrambles every chain — that is exactly how
+       * a first version came to show "A2 Expansion 32" above "A1 Expansion 31" even though the PLANNER
+       * had ordered them correctly, and it would do the same to a skill's Level 3 and Level 2.
+       *
+       * Exempting chains from the sort would pin them to one end of the table, which is worse. So keep
+       * the SLOTS the payback sort gave each chain and put that chain back in order within exactly
+       * those slots: the set of positions is unchanged, only which step sits in each.
+       */
+      const chainSlots = {};
+      for (let i = 0; i < ranked.length; i++) {
+        const id = ranked[i].chainId;
+        if (id) (chainSlots[id] = chainSlots[id] || []).push(i);
+      }
+      for (const slots of Object.values(chainSlots)) {
+        if (slots.length < 2) continue;
+        const chain = slots.map((i) => ranked[i]).sort((a, b) => a.chainSeq - b.chainSeq);
+        slots.forEach((slot, k) => { ranked[slot] = chain[k]; });
+      }
       { let rc = 0, ri = (startIncome > 0 ? startIncome : 0), rd = 0;
         for (const r of ranked) { if (r.status !== "plan") continue; const dd = ri > 0 ? r.floor / ri : Infinity; if (isFinite(dd)) rd += dd; rc += r.floor; ri += r.value; r.cumCost = rc; r.rateAfter = ri; r.atDay = rd; } }
       return { timeline, ranked, coreCount, coreCost, coreRate, coreDays, econSteps, cosmeticCount: cosmetic.length, econCost, untradeable, tail, tailCost, noBoostCount, situational, startRate: startIncome, finalRate, totalDays: cumDays, totalCost, optGainPct, horizonYears: (settings.horizonYears || 100) };
