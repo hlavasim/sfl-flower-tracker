@@ -20157,11 +20157,13 @@
       try {
         const getJson = (url) => fetch(url).then((r) => r.json());
         const act = _worldActive ? `&active_days=${_worldActive}` : "";
-        const [stats, islandAgg, levelAgg, reachAgg, effLevelAgg, me, nodeDist, ...breakdowns] = await Promise.all([
+        const [stats, islandAgg, levelAgg, reachAgg, curSlotAgg, effLevelAgg, me, nodeDist, ...breakdowns] = await Promise.all([
           getJson(`${WORLD_API}&mode=stats`),
           getJson(`${WORLD_API}&mode=agg&group=island_type${act}`).catch(() => ({ rows: [] })),
           getJson(`${WORLD_API}&mode=agg&group=total_level&limit=1000${act}`).catch(() => ({ rows: [] })),
           getJson(`${WORLD_API}&mode=agg&group=reach_slot&limit=1000${act}`).catch(() => ({ rows: [] })),
+          // Where farms currently SIT on the same ladder — the reach chart's sibling.
+          getJson(`${WORLD_API}&mode=agg&group=current_slot&limit=1000${act}`).catch(() => ({ rows: [] })),
           getJson(`${WORLD_API}&mode=agg&group=effective_level&limit=1000${act}`).catch(() => ({ rows: [] })),
           // The viewer's own farm, so its bar can be marked. Never fatal: an unknown or
           // unconfigured farm just leaves the charts unhighlighted.
@@ -20215,6 +20217,22 @@
           }
         }
 
+        // Current position: identical slot encoding and gap-fill as the reach chart.
+        const curSeen = new Map(
+          (curSlotAgg.rows || []).filter((r) => r.key != null).map((r) => [Number(r.key), r.n])
+        );
+        const curKeys = [...curSeen.keys()].sort((a, b) => a - b);
+        const curRows = [];
+        for (let i = 0; i < curKeys.length; i++) {
+          const k = curKeys[i];
+          curRows.push({ key: k, n: curSeen.get(k) });
+          const next = curKeys[i + 1];
+          if (next == null) continue;
+          if (Math.floor(k / 1000) === Math.floor(next / 1000)) {
+            for (let f = k + 1; f < next; f++) curRows.push({ key: f, n: 0 });
+          }
+        }
+
         // Same one-row-per-level gap fill as the plain level chart.
         const effSeen = new Map(
           (effLevelAgg.rows || []).filter((r) => r.key != null).map((r) => [Number(r.key), r.n])
@@ -20229,7 +20247,7 @@
           _nodeDistCache.set(`${_worldNode}|${_worldActive || "all"}`, Promise.resolve(nodeDist));
         }
 
-        _worldData = { stats, islandRows, levelRows, reachRows, effLevelRows, me, breakdowns, nodeRows, nodeMeta };
+        _worldData = { stats, islandRows, levelRows, reachRows, curRows, effLevelRows, me, breakdowns, nodeRows, nodeMeta };
       } catch (e) {
         _worldErr = e.message || String(e);
       } finally {
@@ -20387,6 +20405,26 @@
         </div>
         ${_barChart(_worldData.effLevelRows, { colorFor: () => REACH_ASC_COLOR, label: (r) => `${r.key} sp`, rowHeight: 14, labelWidth: 46, maxHeight: 420, highlight: (r) => me && me.effective_level === r.key,
           rankTag: me ? _youTag(_rankIn(_worldData.effLevelRows, me.effective_level, (r) => r.key > me.effective_level)) : null })}
+      </div>`;
+
+      // Where each farm currently SITS on the expansion ladder — the reach chart's
+      // sibling, same slot encoding, same colours, so the two read as "you are here"
+      // versus "you could be here".
+      html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">AKTUÁLNÍ EXPANZE</div>
+        <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 8px;line-height:1.6">
+          Na jaké expanzi každá farma <b>právě je</b> — ostrov + počet expanzí, u ascendovaných
+          farem band A1, A2 … Žebřík běží Basic → Spring → Desert → Volcano → A1 → A2 …;
+          bary jsou řazené podle pozice. Srovnej s grafem EXPANSION REACH níže: ten ukazuje,
+          kam by farma <b>mohla</b> dosáhnout s tím, co má v bance.
+        </div>
+        ${_barChart(_worldData.curRows, {
+          colorFor: (r) => (decodeReachSlot(r.key).ascension >= 1 ? REACH_ASC_COLOR : REACH_PRE_COLOR),
+          label: (r) => decodeReachSlot(r.key).label,
+          rowHeight: 14, labelWidth: 72, maxHeight: 420,
+          highlight: (r) => me && me.current_slot === r.key,
+          rankTag: me ? _youTag(_rankIn(_worldData.curRows, me.current_slot, (r) => r.key > me.current_slot)) : null,
+        })}
       </div>`;
 
       // How far each farm COULD expand with what it already has banked — not where it

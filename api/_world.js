@@ -24,6 +24,16 @@ const DIMS = {
   // slot so it sorts numerically (phase*1000 + expansions). Computed at crawl time —
   // see azure-functions/shared/expansion-reach.js.
   reach_slot: "reach_slot",
+  // Where the farm currently SITS on the same ladder — same slot encoding as reach_slot,
+  // mirroring encodeSlot() in expansion-reach.js. Derived here in SQL because the crawler
+  // persists only the reach, and island_type + ascension_level + expansions already
+  // determine the current slot exactly (an ascended farm's island_type is irrelevant:
+  // the ascension branch wins).
+  current_slot: `((CASE WHEN ascension_level >= 1 THEN 3 + ascension_level
+                        WHEN island_type = 'spring' THEN 1
+                        WHEN island_type = 'desert' THEN 2
+                        WHEN island_type = 'volcano' THEN 3
+                        ELSE 0 END) * 1000 + COALESCE(expansions, 0))`,
   // Level after eating the food the farm already has cooked, valued with that farm's
   // own cooking boosts and a simulated x1.5 pet streak. total_level is the un-fed one.
   effective_level: "effective_level",
@@ -259,6 +269,7 @@ async function farmPosition(pool, q) {
   if (!/^\d{1,20}$/.test(id)) throw new Error("farm must be a numeric id");
   const r = await pool.query(
     `SELECT farm_id, username, island_type, total_level, effective_level, reach_slot,
+            ${DIMS.current_slot} AS current_slot,
             ascension_level, expansions, last_activity, is_blacklisted, ban_status
        FROM farm_world WHERE farm_id = $1`,
     [id]
@@ -273,6 +284,7 @@ async function farmPosition(pool, q) {
     total_level: row.total_level == null ? null : Number(row.total_level),
     effective_level: row.effective_level == null ? null : Number(row.effective_level),
     reach_slot: row.reach_slot == null ? null : Number(row.reach_slot),
+    current_slot: row.current_slot == null ? null : Number(row.current_slot),
     ascension_level: row.ascension_level == null ? null : Number(row.ascension_level),
     expansions: row.expansions == null ? null : Number(row.expansions),
     last_activity: row.last_activity,

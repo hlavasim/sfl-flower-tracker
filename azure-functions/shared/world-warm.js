@@ -13,7 +13,7 @@ const BASE = process.env.WORLD_WARM_BASE || "https://sunflower.sajmonium.quest";
 
 // Mirrors what the World page fetches (flowers.html): the four dedicated charts, the
 // worldBreakdowns list, and one distribution per sunstone-buyable node type.
-const DIMS = ["island_type", "total_level", "effective_level", "reach_slot",
+const DIMS = ["island_type", "total_level", "effective_level", "reach_slot", "current_slot",
   "ascension_level", "ban_status", "verified"];
 const NODES = ["crops", "trees", "stones", "fruitPatches", "iron", "gold",
   "crimstones", "flowers", "oilReserves", "lavaPits"];
