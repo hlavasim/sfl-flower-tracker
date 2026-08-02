@@ -20124,7 +20124,7 @@
               return `<div data-tip="${sTip}" style="height:100%;width:${sw}%;background:${s.color};cursor:pointer;${last ? "border-radius:0 4px 4px 0;" : "margin-right:2px;"}"></div>`;
             }).join("")
           : "";
-        return `<div style="display:grid;grid-template-columns:${labelW}px 1fr;align-items:center;height:${rowH}px${mine ? ";background:rgba(255,215,0,0.10)" : ""}">
+        return `<div${mine ? ` data-you="1"` : ""} style="display:grid;grid-template-columns:${labelW}px 1fr;align-items:center;height:${rowH}px${mine ? ";background:rgba(255,215,0,0.10)" : ""}">
           <div style="font-family:${mono};font-size:0.5625rem;color:${mine ? "var(--sunpetal)" : "var(--text-dim)"};text-align:right;padding-right:6px;overflow:hidden;white-space:nowrap">${mine ? "▶" : ""}${escHTML(label)}</div>
           <div style="position:relative;height:${barH}px;margin-right:${VALUE_GUTTER}px;border-left:1px solid var(--border-brown)">
             ${segs
@@ -20411,12 +20411,12 @@
       // sibling, same slot encoding, same colours, so the two read as "you are here"
       // versus "you could be here".
       html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
-        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">AKTUÁLNÍ EXPANZE</div>
+        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">CURRENT EXPANSION</div>
         <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 8px;line-height:1.6">
-          Na jaké expanzi každá farma <b>právě je</b> — ostrov + počet expanzí, u ascendovaných
-          farem band A1, A2 … Žebřík běží Basic → Spring → Desert → Volcano → A1 → A2 …;
-          bary jsou řazené podle pozice. Srovnej s grafem EXPANSION REACH níže: ten ukazuje,
-          kam by farma <b>mohla</b> dosáhnout s tím, co má v bance.
+          The expansion each farm is on <b>right now</b> — island + expansion count, ascended
+          farms as their band (A1, A2 …). Ladder runs Basic → Spring → Desert → Volcano → A1 → A2 …;
+          bars sorted by position. Compare with EXPANSION REACH below, which shows where each
+          farm <b>could</b> get with what it has banked.
         </div>
         ${_barChart(_worldData.curRows, {
           colorFor: (r) => (decodeReachSlot(r.key).ascension >= 1 ? REACH_ASC_COLOR : REACH_PRE_COLOR),
@@ -20581,6 +20581,18 @@
         <div class="timestamp pixel-font">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
       </div>`;
       _worldKeepScroll(() => { app.innerHTML = html; });
+      /*
+       * Scroll the viewer's own bar into view inside every scrollable ladder chart. The
+       * ladders run to ~100 rows behind a 420px window, so a farm past the early slots has
+       * its YOU row born off-screen — "chybí tam you" — and nothing hinted it existed.
+       * The page's scroll position is untouched; only each chart's inner scroller moves.
+       */
+      for (const row of app.querySelectorAll('[data-you="1"]')) {
+        const sc = row.parentElement;
+        if (sc && sc.scrollHeight > sc.clientHeight) {
+          sc.scrollTop = Math.max(0, row.offsetTop - sc.offsetTop - (sc.clientHeight - row.clientHeight) / 2);
+        }
+      }
     }
 
     /** Repaint only the node panel — no page rebuild, no scroll jump. */
