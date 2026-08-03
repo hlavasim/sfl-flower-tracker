@@ -5888,7 +5888,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.76</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.77</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5915,6 +5915,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.77", items: [
+          { t: "feat", text: "<b>Bumpkin page, ascended farms:</b> the XP goal is now <b>“XP to complete this ascension”</b> (reach band level 50 → ready to ascend into the next one), not the old “XP to level 200”. Below it, an <b>expansion unlocks</b> list marks every swamp expansion of the band with its <b>band-level gate</b> and status: ✅ built · 🔓 level reached but not built yet (needs resources — Ascension page) · 🔒 with the exact XP still needed to unlock it. Computed from your XP + Basic Land, verified against the engine's ascensionXpFor." },
+        ] },
         { ver: "v4.76", items: [
           { t: "fix", text: "<b>Ascension crystals &amp; shards</b> fixed to the game. Entering ascension from volcano now grants <b>4</b> Ascension Crystals — 1 for the upgrade plus the one-time <b>3-crystal top-up</b> for the pre-ascension island upgrades (A0_CRYSTALS_BY_ISLAND: spring 1 / desert 2 / volcano 3) — and each crystal mines for <b>3 Ascension Shards</b> (was wrongly 10). So the A1 upgrade shows 4 crystals / 12 shards. The top-up is once-only; later ascensions give 1 crystal per upgrade." },
           { t: "fix", text: "<b>Level &amp; skill points are now ascension-aware.</b> Once you ascend the game leaves the pre-150 XP table behind for the band model — the level is <b>150 + 50 per completed band + the level within the current band</b> (A1 L50 → <b>200</b>), not the table's 186. Fixes the roadmap <b>SKILLS / YOUR BUY PATH</b> panel (absolute level, free points = level − points spent per the game's own formula, and the SFL-of-XP per point) and the <b>Bumpkin</b> page, which now shows your absolute level plus band progress (“A1 · band level 50/50 — ready to ascend”). Verified against the game's getTotalBumpkinLevel and the world-crawl total_level." },
@@ -6758,6 +6761,19 @@
       const a = ascensionLevel || 0;
       if (a >= 1) return 150 + (a - 1) * 50 + _withinAscensionLevel(xp, a);
       return getBumpkinLevel(xp); // not ascended: the plain table level (186 for the fixture)
+    }
+    // Band level required to unlock each swamp expansion within an ascension
+    // (SWAMP_EXPANSION_LEVELS from the game / core ascension engine). Expansion e —
+    // Basic Land (30 + e) — unlocks at band level LEVELS[e]; band L50 completes the band.
+    const _SWAMP_EXPANSION_LEVELS = { 1: 1, 2: 4, 3: 8, 4: 12, 5: 16, 6: 20, 7: 24, 8: 28, 9: 32, 10: 36, 11: 40, 12: 45 };
+    const _SWAMP_BASE_EXPANSION = 30;
+    // Total XP to reach a within-band level (1..50) in ascension `a` (mirrors the
+    // engine's ascensionXpFor: baseline + the sum of the level-up costs below it).
+    function _ascXpForBandLevel(a, bandLevel) {
+      const band = _ascBandXp(a);
+      let xp = _ascBaseline(a);
+      for (let n = 1; n < bandLevel; n++) xp += (band * (1 + _ASC_WEIGHT_PER_LEVEL * n)) / _ASC_TOTAL_WEIGHT;
+      return xp;
     }
     // XP to go from an absolute level to the next one — for costing a skill point (1/level).
     // Pre-ascension uses the table delta; post-ascension uses the band level-up cost
@@ -10913,12 +10929,32 @@
             : (xpRemaining > 0 ? ` — ${Math.ceil(xpRemaining).toLocaleString()} XP to level ${targetLevel}` : " — MAX LEVEL!")}
         </div>`;
       if (ascended) {
+        // XP to FINISH the band (reach L50 = ready to ascend into the next ascension).
+        const xpToComplete = Math.max(0, _ascBaseline(ascLevel) + _ascBandXp(ascLevel) - currentXP);
+        // Swamp expansions already built this band (Basic Land resets to 30 on ascension).
+        const builtInBand = Math.max(0, Math.min(12, (parseInt(farm && farm.inventory && farm.inventory["Basic Land"]) || _SWAMP_BASE_EXPANSION) - _SWAMP_BASE_EXPANSION));
+        // Expansion level-gates within this band: what's built, what's level-unlocked but
+        // not yet built, and what still needs XP — the "limits for the next expansions".
+        let gates = "";
+        for (let e = 1; e <= 12; e++) {
+          const g = _SWAMP_EXPANSION_LEVELS[e];
+          const built = e <= builtInBand;
+          const reached = bandLevel >= g;
+          const xpToGate = Math.max(0, _ascXpForBandLevel(ascLevel, g) - currentXP);
+          const icon = built ? "✅" : reached ? "🔓" : "🔒";
+          const color = built ? "var(--green)" : reached ? "var(--sunpetal)" : "var(--text-dim)";
+          const note = built ? "built" : reached ? "unlocked — build (needs resources)" : `+${Math.ceil(xpToGate).toLocaleString()} XP`;
+          gates += `<div style="display:flex;justify-content:space-between;gap:10px;padding:1px 0;color:${color}"><span>${icon} Basic Land ${_SWAMP_BASE_EXPANSION + e} <span style="color:var(--text-dim)">· band L${g}</span></span><span style="white-space:nowrap">${note}</span></div>`;
+        }
         html += `
         <div class="progress-bar-outer" style="margin-top:8px"><div class="progress-bar-fill green" style="width:${bandPct.toFixed(2)}%"></div></div>
-        <div style="font-size: 0.5625rem;color:var(--text-dim);margin-top:2px">${bandMaxed
-          ? `Band A${ascLevel} complete — ready to ascend to A${ascLevel + 1}`
-          : `Band level ${bandLevel} → ${bandLevel + 1}: ${Math.ceil(bandNextNeed).toLocaleString()} XP to go`}</div>
-        <div style="font-size: 0.5rem;color:var(--text-dim);margin-top:4px;line-height:1.5">Absolute level = 150 + 50 per completed ascension band + the level within the current band. The pre-150 XP table no longer applies once you ascend.</div>`;
+        <div style="font-size: 0.6rem;color:var(--sunpetal);margin-top:6px">${bandMaxed
+          ? `✦ Ascension A${ascLevel} complete — ready to ascend to A${ascLevel + 1}`
+          : `${Math.ceil(xpToComplete).toLocaleString()} XP to complete Ascension A${ascLevel} → ready to ascend to A${ascLevel + 1}`}</div>
+        ${bandMaxed ? "" : `<div style="font-size: 0.5625rem;color:var(--text-dim);margin-top:2px">Next band level ${bandLevel} → ${bandLevel + 1}: ${Math.ceil(bandNextNeed).toLocaleString()} XP</div>`}
+        <div style="font-size: 0.5rem;color:var(--text-dim);margin:8px 0 3px;text-transform:uppercase;letter-spacing:0.5px">Expansion unlocks this band · level gate &amp; what's left</div>
+        <div style="font-size: 0.5rem;line-height:1.5">${gates}</div>
+        <div style="font-size: 0.5rem;color:var(--text-dim);margin-top:6px;line-height:1.5">✅ built · 🔓 level reached, not built yet (needs resources — see the Ascension page) · 🔒 needs more XP. Absolute level = 150 + 50 per completed band + level within the band.</div>`;
       } else {
         html += `
         <div style="display:flex;align-items:center;gap:8px;margin:8px 0 4px">
