@@ -380,6 +380,36 @@ test("complete volcano farm gets no pre-steps; plan starts at the A1 upgrade", (
   assert.ok(!out.steps.some((s) => s.asc === 0));
 });
 
+test("first ascension: A1 upgrade tops up the volcano crystals (1+3=4, 12 shards); shards are ×3", () => {
+  // Entering swamp from volcano grants the A1 upgrade crystal (1) PLUS the
+  // one-time A0_CRYSTALS_BY_ISLAND[volcano]=3 top-up = 4 crystals, mined for 12 shards.
+  const a1up = out.steps.find((s) => s.asc === 1 && s.kind === "upgrade");
+  assert.equal(a1up.crystals, 4);
+  assert.equal(a1up.shards, 12);
+  // every crystal mines for exactly 3 shards (ASCENSION_SHARDS_PER_MINE), never 10
+  const e31 = out.steps.find((s) => s.asc === 1 && s.expansion === 31);
+  assert.equal(e31.crystals, 1);
+  assert.equal(e31.shards, 3);
+  // A2 upgrade gets no retro top-up — just the 1 upgrade crystal (3 shards)
+  const a2up = out.steps.find((s) => s.asc === 2 && s.kind === "upgrade");
+  assert.equal(a2up.crystals, 1);
+  assert.equal(a2up.shards, 3);
+});
+
+test("pre-ascension island upgrade grants 1 crystal / 3 shards; already-earned crystals not re-topped-up", () => {
+  // A desert farm (A0[desert]=2): its shown desert→volcano upgrade grants 1 crystal,
+  // and the A1 upgrade tops up the remaining 2 → total 4 across the pre-swamp path.
+  const f = structuredClone(farm);
+  f.island = { type: "desert" };
+  f.inventory["Basic Land"] = "24";
+  const o = buildAscensionSection(f, powerData, cooking.totalXpPerDay, eff, { max: 1 });
+  const up = o.steps.find((s) => s.asc === 0 && s.kind === "upgrade");
+  assert.equal(up.crystals, 1);
+  assert.equal(up.shards, 3);
+  const a1up = o.steps.find((s) => s.asc === 1 && s.kind === "upgrade");
+  assert.equal(a1up.crystals, 1 + 2); // 1 upgrade + A0[desert]=2 retro
+});
+
 test("mid-volcano farm: remaining volcano expansions precede A1, game-table costs, slots first", () => {
   const f = structuredClone(farm);
   f.inventory["Basic Land"] = "28";

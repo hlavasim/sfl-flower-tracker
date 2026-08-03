@@ -131,6 +131,20 @@ export const getExpansionCrystalCount = (ascensionLevel, expansion) => {
   return e <= Math.min(ascensionLevel + 2, SWAMP_EXPANSIONS_PER_ASCENSION) ? 1 : 0;
 };
 
+// ── mineAscensionCrystal.ts: mining ONE single-use Ascension Crystal (costs 1
+// Gold Pickaxe) yields this many Ascension Shards. ──
+export const ASCENSION_SHARDS_PER_MINE = 3;
+
+// ── ascension.ts A0_CRYSTALS_BY_ISLAND: crystals owed for the pre-ascension
+// island-upgrade path (basic→spring +1, →desert +1, →volcano +1). For a farm
+// that upgraded before the crystal system existed, the full amount for its
+// CURRENT island is topped up once, on the first ascension into swamp
+// (getExpectedAscensionCrystals) — so a volcano farm gets 3 there, not 0.
+export const A0_CRYSTALS_BY_ISLAND = {
+  basic: 0, spring: 1, desert: 2, volcano: 3,
+  swamp: 3, spooky: 3, crystal: 3, galaxy: 3, marble: 3,
+};
+
 // ── node drip / schedule (golden-ratio deal, ported verbatim) ──
 export const getAscensionNodeDrip = (node, ascensionLevel) => {
   const base = SWAMP_NODE_DRIP[node];

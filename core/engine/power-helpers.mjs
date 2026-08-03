@@ -390,10 +390,15 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
     // ── flowers.html 5010-5060: calcSkillPointCost ──
     function calcSkillPointCost(bumpkin, p2pPrices, farm) {
       const xp = bumpkin?.experience || 0;
-      const level = getBumpkinLevel(xp);
+      // Ascension-aware: an ascended farm's level (and its skill-point count) follows
+      // the band model, not the pre-ascension table — see getTotalBumpkinLevel.
+      const ascLevel = (farm && farm.island && farm.island.ascensionLevel) || 0;
+      const level = getTotalBumpkinLevel(xp, ascLevel);
       if (level <= 1) return { sflPerPoint: 0, bestRecipe: null, level, totalXP: xp };
 
-      const totalXP = BUMPKIN_XP_TABLE[level - 1] || 0;
+      // XP accumulated to reach this level: the farm's actual xp once ascended (the
+      // table's level-200 threshold no longer corresponds to the band-model level).
+      const totalXP = ascLevel >= 1 ? xp : (BUMPKIN_XP_TABLE[level - 1] || 0);
 
       // Build effective prices including crafted ingredients
       const prices = { ...p2pPrices };
@@ -480,6 +485,38 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
         if (xp >= BUMPKIN_XP_TABLE[i]) return i + 1;
       }
       return 1;
+    }
+
+    // ── Ascension band-XP model (sunflower-land lib/level.ts), mirrored from
+    // azure-functions/shared/world-extract.js so the client agrees with the world
+    // crawl and the game. Once a farm ascends the Bumpkin level STOPS following the
+    // pre-ascension table (which gave 186 for 179M xp — correct while unascended) and
+    // switches to bands: 150 + 50 per completed band + the level within the current one.
+    const _ASC_BAND_XP_BASE = 50000000, _ASC_BAND_XP_GROWTH = 1.45, _ASC_BAND_XP_ROUND = 5000000;
+    const _ASC_WEIGHT_PER_LEVEL = 0.03, _ASC_LEVEL_UPS = 49;
+    const _ASC_TOTAL_WEIGHT = _ASC_LEVEL_UPS + _ASC_WEIGHT_PER_LEVEL * ((_ASC_LEVEL_UPS * 50) / 2); // 85.75
+    function _ascBandXp(a) { const raw = _ASC_BAND_XP_BASE * Math.pow(_ASC_BAND_XP_GROWTH, a - 1); return Math.round(raw / _ASC_BAND_XP_ROUND) * _ASC_BAND_XP_ROUND; }
+    function _ascBaseline(a) { let xp = BUMPKIN_XP_TABLE[149]; for (let b = 1; b < a; b++) xp += _ascBandXp(b); return xp; }
+    // Within-band level (0..50) for ascension `a` at total xp. n=1..49 level-ups; L50 = band complete.
+    function _withinAscensionLevel(xp, a) {
+      const baseline = _ascBaseline(a);
+      if (xp < baseline) return 0;
+      const band = _ascBandXp(a);
+      if (xp >= baseline + band) return 50;
+      let level = 1, levelStart = baseline;
+      for (let n = 1; n < _ASC_LEVEL_UPS; n++) {
+        const stepXp = (band * (1 + _ASC_WEIGHT_PER_LEVEL * n)) / _ASC_TOTAL_WEIGHT;
+        const nextStart = levelStart + stepXp;
+        if (xp >= nextStart) { level = n + 1; levelStart = nextStart; } else break;
+      }
+      return level;
+    }
+    // The game's getTotalBumpkinLevel — the ABSOLUTE level, which is also the number of
+    // skill points earned (1 per level, bands included). A1 L50 -> 200; A2 L25 -> 225.
+    function getTotalBumpkinLevel(xp, ascensionLevel) {
+      const a = ascensionLevel || 0;
+      if (a >= 1) return 150 + (a - 1) * 50 + _withinAscensionLevel(xp, a);
+      return getBumpkinLevel(xp); // not ascended: the plain table level (186 for the fixture)
     }
 
     function getAllEquippedWearables(farm) {

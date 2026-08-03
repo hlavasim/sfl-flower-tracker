@@ -23,7 +23,7 @@ import {
   SWAMP_BASE_EXPANSION, SWAMP_EXPANSIONS_PER_ASCENSION, HOURS_PER_EXPANSION,
   getAscensionUpgradeCost, getAscensionExpansionRequirements, getExpansionCrystalCount,
   getAscensionExpansionDelta, ascensionStanding, ascensionXpFor, ascensionBaseline,
-  bandXp, V150_XP, LEVELS_PER_ASCENSION,
+  bandXp, V150_XP, LEVELS_PER_ASCENSION, ASCENSION_SHARDS_PER_MINE, A0_CRYSTALS_BY_ISLAND,
 } from "../engine/ascension.mjs";
 
 const RES3 = ["Crimstone", "Oil", "Obsidian"];
@@ -85,9 +85,11 @@ export function buildPreAscensionSteps(islandType, basicLand, grinx) {
     for (const [r, q] of Object.entries(prog.upgradeItems)) {
       if (r in upCost) upCost[r] = q; else upExtra[r] = q;
     }
+    // Each pre-ascension island upgrade (→spring, →desert, →volcano) grants 1
+    // Ascension Crystal (A0_CRYSTALS_BY_ISLAND is the cumulative of these).
     steps.push({
       kind: "upgrade", asc: 0, island: prog.island, next: prog.next, expansion: null, band: 0, absLevel: 0,
-      cost: upCost, extraCost: upExtra, time: 0, nodesAdded: {}, crystals: 0, shards: 0,
+      cost: upCost, extraCost: upExtra, time: 0, nodesAdded: {}, crystals: 1, shards: ASCENSION_SHARDS_PER_MINE,
     });
     from = ISLAND_PROGRESSION[i + 1] ? prog.nextStart ?? 0 : 0;
   }
@@ -95,14 +97,18 @@ export function buildPreAscensionSteps(islandType, basicLand, grinx) {
 }
 
 // steps for a = 1..maxAsc: one upgrade step + 12 expansion steps each (§2.2).
-export function buildAscensionSteps(grinx, maxAsc) {
+// firstAscRetroCrystals: the one-time A0_CRYSTALS_BY_ISLAND top-up a farm gets
+// on its FIRST ascension into swamp (crystals owed for the pre-ascension island
+// upgrades it did before the crystal system existed). Granted at the a=1 upgrade.
+export function buildAscensionSteps(grinx, maxAsc, firstAscRetroCrystals = 0) {
   const steps = [];
   for (let a = 1; a <= maxAsc; a++) {
     const base = 150 + (a - 1) * LEVELS_PER_ASCENSION;
     const up = getAscensionUpgradeCost(a);
     const upCost = { ...up.items, Coins: up.coins };
     if (grinx) for (const r of RES3) upCost[r] = upCost[r] / 2;
-    steps.push({ kind: "upgrade", asc: a, expansion: null, band: 0, absLevel: base, cost: upCost, time: 0, nodesAdded: {}, crystals: 1, shards: 10 });
+    const upCrystals = 1 + (a === 1 ? firstAscRetroCrystals : 0);
+    steps.push({ kind: "upgrade", asc: a, expansion: null, band: 0, absLevel: base, cost: upCost, time: 0, nodesAdded: {}, crystals: upCrystals, shards: upCrystals * ASCENSION_SHARDS_PER_MINE });
     for (let e = 1; e <= SWAMP_EXPANSIONS_PER_ASCENSION; e++) {
       const expansion = SWAMP_BASE_EXPANSION + e;
       const req = getAscensionExpansionRequirements(a, expansion);
@@ -112,7 +118,7 @@ export function buildAscensionSteps(grinx, maxAsc) {
       steps.push({
         kind: "exp", asc: a, expansion, band: req.levelRequired, absLevel: base + req.levelRequired,
         cost, time: req.seconds, nodesAdded: getAscensionExpansionDelta(a, expansion),
-        crystals, shards: crystals * 10,
+        crystals, shards: crystals * ASCENSION_SHARDS_PER_MINE,
       });
     }
   }
@@ -220,7 +226,10 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
   // Pre-ascension remainder first (finish current island → ... → volcano 30),
   // then the ascension ladder. Ascension islands have no pre-steps.
   const preSteps = ascensionLevel === 0 ? buildPreAscensionSteps(island.type || "basic", basicLand, grinx) : [];
-  const steps = [...preSteps, ...buildAscensionSteps(grinx, maxAsc)];
+  // First ascension into swamp tops up the pre-ascension island-upgrade crystals
+  // for the CURRENT island (volcano → 3). Already-ascended farms got theirs.
+  const retroCrystals = ascensionLevel === 0 ? (A0_CRYSTALS_BY_ISLAND[island.type || "basic"] ?? 0) : 0;
+  const steps = [...preSteps, ...buildAscensionSteps(grinx, maxAsc, retroCrystals)];
   for (const s of steps) {
     if (s.asc === 0) {
       s.done = false; // built only for the not-yet-completed range

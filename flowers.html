@@ -5092,10 +5092,15 @@
     // Calculate the SFL cost per skill point for current bumpkin
     function calcSkillPointCost(bumpkin, p2pPrices, farm) {
       const xp = bumpkin?.experience || 0;
-      const level = getBumpkinLevel(xp);
+      // Ascension-aware: an ascended farm's level (and its skill-point count) follows
+      // the band model, not the pre-ascension table — see getTotalBumpkinLevel.
+      const ascLevel = (farm && farm.island && farm.island.ascensionLevel) || 0;
+      const level = getTotalBumpkinLevel(xp, ascLevel);
       if (level <= 1) return { sflPerPoint: 0, bestRecipe: null, level, totalXP: xp };
 
-      const totalXP = BUMPKIN_XP_TABLE[level - 1] || 0;
+      // XP accumulated to reach this level: the farm's actual xp once ascended (the
+      // table's level-200 threshold no longer corresponds to the band-model level).
+      const totalXP = ascLevel >= 1 ? xp : (BUMPKIN_XP_TABLE[level - 1] || 0);
 
       // Build effective prices including crafted ingredients
       const prices = { ...p2pPrices };
@@ -5883,7 +5888,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.75</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.76</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5910,6 +5915,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.76", items: [
+          { t: "fix", text: "<b>Ascension crystals &amp; shards</b> fixed to the game. Entering ascension from volcano now grants <b>4</b> Ascension Crystals — 1 for the upgrade plus the one-time <b>3-crystal top-up</b> for the pre-ascension island upgrades (A0_CRYSTALS_BY_ISLAND: spring 1 / desert 2 / volcano 3) — and each crystal mines for <b>3 Ascension Shards</b> (was wrongly 10). So the A1 upgrade shows 4 crystals / 12 shards. The top-up is once-only; later ascensions give 1 crystal per upgrade." },
+          { t: "fix", text: "<b>Level &amp; skill points are now ascension-aware.</b> Once you ascend the game leaves the pre-150 XP table behind for the band model — the level is <b>150 + 50 per completed band + the level within the current band</b> (A1 L50 → <b>200</b>), not the table's 186. Fixes the roadmap <b>SKILLS / YOUR BUY PATH</b> panel (absolute level, free points = level − points spent per the game's own formula, and the SFL-of-XP per point) and the <b>Bumpkin</b> page, which now shows your absolute level plus band progress (“A1 · band level 50/50 — ready to ascend”). Verified against the game's getTotalBumpkinLevel and the world-crawl total_level." },
+        ] },
         { ver: "v4.75", items: [
           { t: "feat", text: "<b>All calculations moved server-side</b> to a DOM-free core served via <code>/api/compute</code> (power, roadmap, cooking, prices, treasury, ROI, diff, buds, pets, wishlist, ascension…). Same numbers, computed once on the backend instead of in your browser." },
           { t: "feat", text: "New <b>ASCENSION</b> page (prestige-loop calculator): per-step costs, level gates, crystals &amp; node drip from the game formulas, node-aware production ETAs from <b>your</b> real farming rates, continuous-expand build schedule. Counts <b>banked cooked food</b> (eaten later with the ×1.5 pet boost) toward levels, includes the remaining pre-ascension island expansions, and shows <b>+FLOWER/day &amp; ROI</b> per step (resource + leveling cost)." },
@@ -6717,6 +6726,65 @@
         if (xp >= BUMPKIN_XP_TABLE[i]) return i + 1;
       }
       return 1;
+    }
+
+    // ── Ascension band-XP model (sunflower-land lib/level.ts), mirrored from
+    // azure-functions/shared/world-extract.js so the client agrees with the world
+    // crawl and the game. Once a farm ascends the Bumpkin level STOPS following the
+    // pre-ascension table (which gave 186 for 179M xp — correct while unascended) and
+    // switches to bands: 150 + 50 per completed band + the level within the current one.
+    const _ASC_BAND_XP_BASE = 50000000, _ASC_BAND_XP_GROWTH = 1.45, _ASC_BAND_XP_ROUND = 5000000;
+    const _ASC_WEIGHT_PER_LEVEL = 0.03, _ASC_LEVEL_UPS = 49;
+    const _ASC_TOTAL_WEIGHT = _ASC_LEVEL_UPS + _ASC_WEIGHT_PER_LEVEL * ((_ASC_LEVEL_UPS * 50) / 2); // 85.75
+    function _ascBandXp(a) { const raw = _ASC_BAND_XP_BASE * Math.pow(_ASC_BAND_XP_GROWTH, a - 1); return Math.round(raw / _ASC_BAND_XP_ROUND) * _ASC_BAND_XP_ROUND; }
+    function _ascBaseline(a) { let xp = BUMPKIN_XP_TABLE[149]; for (let b = 1; b < a; b++) xp += _ascBandXp(b); return xp; }
+    // Within-band level (0..50) for ascension `a` at total xp. n=1..49 level-ups; L50 = band complete.
+    function _withinAscensionLevel(xp, a) {
+      const baseline = _ascBaseline(a);
+      if (xp < baseline) return 0;
+      const band = _ascBandXp(a);
+      if (xp >= baseline + band) return 50;
+      let level = 1, levelStart = baseline;
+      for (let n = 1; n < _ASC_LEVEL_UPS; n++) {
+        const stepXp = (band * (1 + _ASC_WEIGHT_PER_LEVEL * n)) / _ASC_TOTAL_WEIGHT;
+        const nextStart = levelStart + stepXp;
+        if (xp >= nextStart) { level = n + 1; levelStart = nextStart; } else break;
+      }
+      return level;
+    }
+    // The game's getTotalBumpkinLevel — the ABSOLUTE level, which is also the number of
+    // skill points earned (1 per level, bands included). A1 L50 -> 200; A2 L25 -> 225.
+    function getTotalBumpkinLevel(xp, ascensionLevel) {
+      const a = ascensionLevel || 0;
+      if (a >= 1) return 150 + (a - 1) * 50 + _withinAscensionLevel(xp, a);
+      return getBumpkinLevel(xp); // not ascended: the plain table level (186 for the fixture)
+    }
+    // XP to go from an absolute level to the next one — for costing a skill point (1/level).
+    // Pre-ascension uses the table delta; post-ascension uses the band level-up cost
+    // levelXp(a,n), rolling into later bands past L50 so the series never goes negative.
+    function xpToNextLevel(absLevel, ascensionLevel) {
+      if (!ascensionLevel || ascensionLevel < 1) {
+        return (BUMPKIN_XP_TABLE[absLevel] || 0) - (BUMPKIN_XP_TABLE[absLevel - 1] || 0);
+      }
+      let a = ascensionLevel, L = absLevel - 150 - (a - 1) * 50;
+      while (L >= 50) { a++; L -= 50; }
+      const n = Math.max(1, L); // level-up n -> n+1 costs levelXp(a, n)
+      return (_ascBandXp(a) * (1 + _ASC_WEIGHT_PER_LEVEL * n)) / _ASC_TOTAL_WEIGHT;
+    }
+    // XP still needed to reach the NEXT absolute level from a given xp (ascension-aware).
+    // At a completed band (within-level 50) it returns 0: crossing into the next band needs
+    // an ascension (resources), not just cooking, so there is no "cook to next level" here.
+    function xpRemainingToNextLevel(xp, ascensionLevel) {
+      if (!ascensionLevel || ascensionLevel < 1) {
+        const lvl = getBumpkinLevel(xp);
+        return Math.max(0, (BUMPKIN_XP_TABLE[Math.min(lvl, 199)] || 0) - xp);
+      }
+      const bandLvl = _withinAscensionLevel(xp, ascensionLevel);
+      if (bandLvl >= 50) return 0;
+      const baseline = _ascBaseline(ascensionLevel), band = _ascBandXp(ascensionLevel);
+      let nextStart = baseline;
+      for (let n = 1; n <= bandLvl; n++) nextStart += (band * (1 + _ASC_WEIGHT_PER_LEVEL * n)) / _ASC_TOTAL_WEIGHT;
+      return Math.max(0, nextStart - xp);
     }
 
     function getAllEquippedWearables(farm) {
@@ -9719,8 +9787,9 @@
 
         if (data.bumpkin) {
           const bxp = parseFloat(data.bumpkin.experience || 0);
-          const blvl = getBumpkinLevel(bxp);
-          bumpkinProgress = `<div class="hub-card-progress pixel-font">Level ${blvl}/200</div>`;
+          const _al = (data.farm && data.farm.island && data.farm.island.ascensionLevel) || (data.island && data.island.ascensionLevel) || 0;
+          const blvl = getTotalBumpkinLevel(bxp, _al);
+          bumpkinProgress = `<div class="hub-card-progress pixel-font">Level ${blvl}${_al >= 1 ? "" : "/200"}</div>`;
         }
       }
 
@@ -10787,22 +10856,35 @@
       }
 
       const currentXP = parseFloat(bumpkin.experience || 0);
-      const currentLevel = getBumpkinLevel(currentXP);
+      const ascLevel = (farm && farm.island && farm.island.ascensionLevel) || 0;
+      const ascended = ascLevel >= 1;
+      // ABSOLUTE level — band model once ascended (see getTotalBumpkinLevel).
+      const currentLevel = getTotalBumpkinLevel(currentXP, ascLevel);
       const maxXP = BUMPKIN_XP_TABLE[199];
 
-      // Target level (user-adjustable)
+      // Pre-ascension food-to-target-level planner (table-based); only shown before ascending.
       const savedTarget = parseInt(localStorage.getItem("sfl_bumpkin_target") || "200");
-      const targetLevel = Math.max(currentLevel + 1, Math.min(200, savedTarget));
-      const targetXP = BUMPKIN_XP_TABLE[targetLevel - 1];
+      const targetLevel = Math.max(Math.min(currentLevel, 199) + 1, Math.min(200, savedTarget));
+      const targetXP = BUMPKIN_XP_TABLE[targetLevel - 1] || maxXP;
       const xpRemaining = Math.max(0, targetXP - currentXP);
-      const xpPctTotal = Math.min(100, (currentXP / maxXP) * 100);
-      const xpPctTarget = Math.min(100, (currentXP / targetXP) * 100);
-
-      // Level progress within current level
+      const xpPctTarget = targetXP > 0 ? Math.min(100, (currentXP / targetXP) * 100) : 100;
       const nextLevelXP = currentLevel < 200 ? BUMPKIN_XP_TABLE[currentLevel] : maxXP;
-      const prevLevelXP = BUMPKIN_XP_TABLE[currentLevel - 1];
+      const prevLevelXP = BUMPKIN_XP_TABLE[Math.min(currentLevel, 200) - 1] || 0;
       const levelProgress = currentLevel >= 200 ? 100 :
         Math.round(((currentXP - prevLevelXP) / (nextLevelXP - prevLevelXP)) * 100);
+
+      // Ascended: within-band level (0..50) and XP to the next band level.
+      const bandLevel = ascended ? _withinAscensionLevel(currentXP, ascLevel) : 0;
+      const bandMaxed = ascended && bandLevel >= 50;
+      let bandNextNeed = 0, bandPct = 100;
+      if (ascended && !bandMaxed) {
+        const baseline = _ascBaseline(ascLevel), band = _ascBandXp(ascLevel);
+        const stepXp = (n) => (band * (1 + _ASC_WEIGHT_PER_LEVEL * n)) / _ASC_TOTAL_WEIGHT;
+        let curStart = baseline; for (let n = 1; n < bandLevel; n++) curStart += stepXp(n);
+        const nextStart = curStart + stepXp(Math.max(1, bandLevel));
+        bandNextNeed = Math.max(0, nextStart - currentXP);
+        bandPct = nextStart > curStart ? Math.min(100, Math.max(0, ((currentXP - curStart) / (nextStart - curStart)) * 100)) : 0;
+      }
 
       // All cooking numbers come from the unified engine (/api/compute?section=cooking),
       // cached per query above — nothing on this page recomputes cook XP/time/cost.
@@ -10826,8 +10908,19 @@
       html += `<div class="bumpkin-xp-section pixel-panel pixel-font">
         <div class="bumpkin-level-big">LVL ${currentLevel}</div>
         <div class="bumpkin-xp-info">
-          ${Math.floor(currentXP).toLocaleString()} XP${xpRemaining > 0 ? ` — ${Math.ceil(xpRemaining).toLocaleString()} XP to level ${targetLevel}` : " — MAX LEVEL!"}
-        </div>
+          ${Math.floor(currentXP).toLocaleString()} XP${ascended
+            ? ` — Ascension A${ascLevel} · band level ${bandLevel}/50`
+            : (xpRemaining > 0 ? ` — ${Math.ceil(xpRemaining).toLocaleString()} XP to level ${targetLevel}` : " — MAX LEVEL!")}
+        </div>`;
+      if (ascended) {
+        html += `
+        <div class="progress-bar-outer" style="margin-top:8px"><div class="progress-bar-fill green" style="width:${bandPct.toFixed(2)}%"></div></div>
+        <div style="font-size: 0.5625rem;color:var(--text-dim);margin-top:2px">${bandMaxed
+          ? `Band A${ascLevel} complete — ready to ascend to A${ascLevel + 1}`
+          : `Band level ${bandLevel} → ${bandLevel + 1}: ${Math.ceil(bandNextNeed).toLocaleString()} XP to go`}</div>
+        <div style="font-size: 0.5rem;color:var(--text-dim);margin-top:4px;line-height:1.5">Absolute level = 150 + 50 per completed ascension band + the level within the current band. The pre-150 XP table no longer applies once you ascend.</div>`;
+      } else {
+        html += `
         <div style="display:flex;align-items:center;gap:8px;margin:8px 0 4px">
           <span style="font-size: 0.5625rem;color:var(--text-dim);white-space:nowrap">Target LVL</span>
           <input type="range" min="${currentLevel + 1}" max="200" value="${targetLevel}" oninput="document.getElementById('target-val').textContent=this.value" onchange="setBumpkinTargetLevel(this.value)" style="flex:1;accent-color:var(--sunpetal);cursor:pointer">
@@ -10835,8 +10928,9 @@
         </div>
         <div class="progress-bar-outer"><div class="progress-bar-fill green" style="width:${xpPctTarget.toFixed(2)}%"></div></div>
         <div style="font-size: 0.5625rem;color:var(--text-dim);margin-top:2px">${xpPctTarget.toFixed(1)}% to level ${targetLevel}</div>
-        ${currentLevel < 200 ? `<div style="margin-top:6px;font-size: 0.5625rem;color:var(--text-dim)">Level ${currentLevel} → ${currentLevel + 1}: ${levelProgress}%</div>` : ""}
-      </div>`;
+        ${currentLevel < 200 ? `<div style="margin-top:6px;font-size: 0.5625rem;color:var(--text-dim)">Level ${currentLevel} → ${currentLevel + 1}: ${levelProgress}%</div>` : ""}`;
+      }
+      html += `</div>`;
 
       // Everything below needs the cooking payload. The level section above does not, so it
       // stays on screen while the fetch is in flight or if the API is unreachable.
@@ -10866,10 +10960,10 @@
       if (bankedXP > 0) {
         const fmtXP = (v) => v % 1 === 0 ? v.toLocaleString() : v.toLocaleString(undefined, { maximumFractionDigits: 0 });
         const xpAfterEating = currentXP + bankedXP;
-        const levelAfterFood = getBumpkinLevel(xpAfterEating);
+        const levelAfterFood = getTotalBumpkinLevel(xpAfterEating, ascLevel);
         const levelsGained = levelAfterFood - currentLevel;
         const afterFoodNextXP = levelAfterFood < 200 ? BUMPKIN_XP_TABLE[levelAfterFood] : maxXP;
-        const afterFoodPrevXP = BUMPKIN_XP_TABLE[levelAfterFood - 1];
+        const afterFoodPrevXP = BUMPKIN_XP_TABLE[Math.min(levelAfterFood, 200) - 1] || 0;
         const afterFoodPct = levelAfterFood >= 200 ? 100 :
           Math.round(((xpAfterEating - afterFoodPrevXP) / (afterFoodNextXP - afterFoodPrevXP)) * 100);
         html += `<div class="bumpkin-boosts pixel-panel pixel-font" style="display:block">
@@ -11075,9 +11169,8 @@
 
         // Cost calculations — from level after eating all banked food
         const xpAfterEating = currentXP + bankedXP;
-        const levelAfterFood = getBumpkinLevel(xpAfterEating);
-        const nextLvlAfterFood = Math.min(levelAfterFood + 1, 200);
-        const xpToNextFromFood = Math.max(0, BUMPKIN_XP_TABLE[nextLvlAfterFood - 1] - xpAfterEating);
+        const levelAfterFood = getTotalBumpkinLevel(xpAfterEating, ascLevel);
+        const xpToNextFromFood = xpRemainingToNextLevel(xpAfterEating, ascLevel);
         const daysToNextLevel = totalXPPerDay > 0 && xpToNextFromFood > 0 ? xpToNextFromFood / totalXPPerDay : 0;
         const costToNextLevel = totalCostPerDay * daysToNextLevel;
         const costToTarget = totalCostPerDay * totalDays;
@@ -17824,11 +17917,13 @@
       const TREE_COLOR = { "Crops": "#7fe0a0", "Trees": "#b98a5a", "Mining": "#9aa6b2", "Cooking": "#e8a060", "Animals": "#e6c25a", "Fishing": "#6ab0e0", "Greenhouse": "#8fd98f", "Fruit Patch": "#e89a5a", "Bees & Flowers": "#e08fd0", "Machinery": "#c0a0e0", "Compost": "#9a8a6a", "Aging": "#d8c89a" };
       const farm = powerState.farm, bumpkin = farm.bumpkin || {};
       let info = {}; try { info = calcSkillPointCost(bumpkin, powerState.p2pPrices, farm) || {}; } catch (e) {}
-      const level = info.level || (typeof getBumpkinLevel === "function" ? getBumpkinLevel(bumpkin.experience || 0) : 1);
+      const ascLvl = (farm.island && farm.island.ascensionLevel) || 0;
+      const level = info.level || (typeof getTotalBumpkinLevel === "function" ? getTotalBumpkinLevel(bumpkin.experience || 0, ascLvl) : 1);
       const sflPerPt = info.sflPerPoint || 0;
       let spent = 0; const ownSk = bumpkin.skills || {};
       for (const sn in ownSk) { const sd = SKILL_TREE_DATA[sn]; spent += sd ? (sd.points || 0) : 0; }
-      const autoFree = Math.max(0, (level - 1) - spent);
+      // Game: available = getTotalBumpkinLevel − usedPoints (1 point per level, NOT level−1).
+      const autoFree = Math.max(0, level - spent);
       const freePts = (settings.skillPts != null && isFinite(settings.skillPts)) ? Math.max(0, settings.skillPts) : autoFree;
       const rows = skills.map(c => {
         const bd = roadmapSkillBreakdown(c, catBoostsW, settings);
@@ -18071,7 +18166,8 @@
       const recipeName = (ski.bestRecipe && ski.bestRecipe.name) || "Pizza Margherita";
       const recipeXP = (ski.bestRecipe && ski.bestRecipe.boostedXP) || 0;
       const recipeCost = (ski.bestRecipe && ski.bestRecipe.cost) || 0;
-      let curLevel = ski.level || getBumpkinLevel((farm.bumpkin && farm.bumpkin.experience) || 0);
+      const _ascLvl = (farm.island && farm.island.ascensionLevel) || 0;
+      let curLevel = ski.level || getTotalBumpkinLevel((farm.bumpkin && farm.bumpkin.experience) || 0, _ascLvl);
 
       const path = [];
       for (const s of econSteps) {
@@ -18079,7 +18175,7 @@
           const pts = s.skillPoints || 1;
           if (!s.skillFree) {
             for (let j = 0; j < pts; j++) {
-              const xpNeed = (BUMPKIN_XP_TABLE[curLevel] || 0) - (BUMPKIN_XP_TABLE[curLevel - 1] || 0);
+              const xpNeed = xpToNextLevel(curLevel, _ascLvl);
               const cakes = recipeXP > 0 ? Math.max(1, Math.ceil(xpNeed / recipeXP)) : 0;
               path.push({ k: "level", cakes, recipe: recipeName, cost: cakes * recipeCost, level: curLevel + 1 });
               curLevel++;
