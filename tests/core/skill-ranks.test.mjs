@@ -34,14 +34,16 @@ test("section=power serves a rank block for skills that have ranks", () => {
 test("a rank row is the marginal of that rank-up, priced in skill points", () => {
   const fm = out.skillRanks["Frugal Miner"];
   assert.ok(fm, "Frugal Miner is ranked");
-  assert.equal(fm.cost.points, 6, "tier 2 costs tier*3 = 6 points");
+  // Costs verified against the SHIPPED game (getSkillUpgradeCost + UPGRADE_POINTS_BY_TIER):
+  // a rank-up costs 1/3/6 points by tier — the pre-release tier*3 (3/6/9) overcharged everything.
+  assert.equal(fm.cost.points, 3, "tier 2 costs 3 points (UPGRADE_POINTS_BY_TIER)");
   assert.equal(fm.cost.shards, 2, "and tier ascension shards");
   assert.deepEqual(fm.rows.map((r) => r.lvl), [2, 3], "rows are the UPGRADES, so they start at 2");
 
   const l2 = fm.rows[0];
   assert.equal(l2.text, "Level 2: −30% cost (was −20% cost)", "the label the Power page shows");
   // ROI is the points' SFL cost over the daily gain — never Infinity on the wire.
-  assert.ok(Math.abs(l2.sflCost - out.skillCostInfo.sflPerPoint * 6) < 1e-9, "cost = points x sflPerPoint");
+  assert.ok(Math.abs(l2.sflCost - out.skillCostInfo.sflPerPoint * 3) < 1e-9, "cost = points x sflPerPoint");
   assert.ok(l2.roi === null || Math.abs(l2.roi - l2.sflCost / l2.delta) < 1e-6, "roi = cost / delta");
   assert.ok(l2.roi === null || isFinite(l2.roi), "JSON-safe");
 });
@@ -79,14 +81,30 @@ test("rank values come from calcBoostValue, not a second model", () => {
   });
 });
 
-test("the rank helpers were ported, not reinvented", () => {
-  // skillUpgradeCost and the rank-factor maths are copied from flowers.html verbatim; pin the
-  // two that decide money so a well-meaning rewrite has to justify itself.
-  assert.deepEqual(skillUpgradeCost(1), { shards: 1, points: 3 });
-  assert.deepEqual(skillUpgradeCost(3), { shards: 3, points: 9 });
+test("the rank helpers match the SHIPPED game, not the pre-release build", () => {
+  // Verified against bumpkinSkills.ts (main, 2026-08-03). Points per rank-up are 1/3/6 by
+  // tier (UPGRADE_POINTS_BY_TIER) — "Je to 1-3-6" — and shards equal the tier. The old
+  // tier*3 (3/6/9) came from a pre-release build and overcharged every rank on the page.
+  assert.deepEqual(skillUpgradeCost(1), { shards: 1, points: 1 });
+  assert.deepEqual(skillUpgradeCost(2), { shards: 2, points: 3 });
+  assert.deepEqual(skillUpgradeCost(3), { shards: 3, points: 6 });
   // costMultiplier stores the REMAINING fraction: 0.8 -> 0.7 is 20% -> 30% off, i.e. 1.5x.
   assert.ok(Math.abs(skillRankFactor(SKILL_UPGRADES["Frugal Miner"], 2) - 1.5) < 1e-9);
   assert.equal(skillRankText(SKILL_UPGRADES["Frugal Miner"], 3), "Level 3: −40% cost (was −30% cost)");
+});
+
+test("the rank table is the shipped game's, complete and with the release-day edits", () => {
+  // The pre-release table had 66 skills and four of them shipped with different magnitudes.
+  // Regenerated from BUMPKIN_REVAMP_SKILL_TREE: 143 upgradeable skills.
+  assert.equal(Object.keys(SKILL_UPGRADES).length, 143);
+  assert.deepEqual(SKILL_UPGRADES["Fruity Woody"].ranks, [1, 1.25, 1.5]);
+  assert.deepEqual(SKILL_UPGRADES["Greenhouse Gamble"].ranks, [30, 40, 50]);
+  assert.deepEqual(SKILL_UPGRADES["No Axe No Worries"].ranks, [1, 0.9, 0.8]);
+  assert.deepEqual(SKILL_UPGRADES["Tree Turnaround"].ranks, [15, 25, 35]);
+  // Bespoke effect shapes (aoe, buff/debuff pairs) are present for their cost ladders but are
+  // NOT priceable — no invented value may ship for them.
+  assert.equal(SKILL_UPGRADES["Chonky Scarecrow"].kind, "aoe");
+  assert.equal(SKILL_UPGRADES["Clucky Grazing"].kind, "costWithDebuff");
 });
 
 test("the page no longer carries its own copy of the rank table", () => {

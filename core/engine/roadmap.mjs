@@ -886,6 +886,15 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         let cseq = 0;
         for (const row of (sr.rows || [])) {
           if (row.lvl < sr.nextLevel) continue;          // already at or past this rank
+          /*
+           * Tree-tier gate, from the game's getSkillUpgradeTierRequirement: buying the rank-up
+           * FROM rank r needs the tree unlocked to tier min(3, skillTier + r). A gated rank is
+           * not buyable at any price — same rule the L1 candidates already apply — so offering
+           * it would make the order a fiction. Static against the current tree, like L1.
+           */
+          const reqTier = Math.min(3, (sr.tier || 1) + (row.lvl - 1));
+          const needPts = (SKILL_POINTS_PER_TIER[sr.skillTree] || {})[reqTier] || 0;
+          if ((inTree[sr.skillTree] || 0) < needPts) break;   // this and later ranks are gated
           if (!(row.delta > 0)) continue;                // a rank that adds nothing is not a buy
           const cat = Object.keys(row.byCat || {})[0] || "crops";
           const shards = row.shards || 0;
