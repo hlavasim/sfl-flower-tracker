@@ -300,6 +300,11 @@
       // Tree recovery: "-10% Tree Recovery Time"
       { rx: /([+-]?\d+\.?\d*)%\s+Tree\s+(?:Recovery|Respawn)\s+Time/i,
         fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "trees" }) },
+      // "15% chance trees grow instantly" (Tree Turnaround) — a p% chance of skipping the wait
+      // is an expected recovery time of (1-p)·T, i.e. the same thing as -p% recovery time.
+      // Parsed as qualitative before, which valued the skill and all its ranks at exactly 0.
+      { rx: /([\d.]+)%\s+chance\s+(trees?|crops?)\s+grows?\s+instantly/i,
+        fn: m => ({ type: "speed_pct", value: -parseFloat(m[1]), cat: /tree/i.test(m[2]) ? "trees" : "crops" }) },
       // Greenhouse growth time: "-5% Greenhouse Growth Time"
       { rx: /([+-]?\d+\.?\d*)%\s+Greenhouse\s+(?:Growth|Growing|Production)\s+Time/i,
         fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "greenhouse" }) },
@@ -579,12 +584,20 @@ export function parseBoostEffects(boostText, itemName) {
           if (m) {
             const eff = rule.fn(m);
             if (eff) {
-              eff.raw = line;
-              effects.push(eff);
-              // If alsoApply, duplicate for other categories
-              if (eff.alsoApply) {
-                for (const extraCat of eff.alsoApply) {
-                  effects.push({ ...eff, cat: extraCat, alsoApply: undefined });
+              /*
+               * A rule may return ONE effect or an ARRAY of them (the sickness rule spans all
+               * three animal cats). The array used to be pushed as a single nested element, so
+               * every consumer's `e.type` filter missed it and "-50% chance of sickness" carried
+               * exactly zero effects — Healthy Livestock valued 0 everywhere since day one.
+               */
+              for (const one of (Array.isArray(eff) ? eff : [eff])) {
+                one.raw = one.raw || line;
+                effects.push(one);
+                // If alsoApply, duplicate for other categories
+                if (one.alsoApply) {
+                  for (const extraCat of one.alsoApply) {
+                    effects.push({ ...one, cat: extraCat, alsoApply: undefined });
+                  }
                 }
               }
               matched = true;

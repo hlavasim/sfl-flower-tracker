@@ -223,7 +223,8 @@ test("ascension ranks are sequential and their shard price is a labelled derivat
   const byName = {}; for (const c of clones) byName[c.name] = c;
   const catBoostsW = {};
   for (const cat of Object.keys(POWER_CATEGORIES)) catBoostsW[cat] = clones.filter((c) => c.categories.includes(cat));
-  const ranks = rm.roadmapSkillCandidates(rm.getRoadmapSettings({}), byName, catBoostsW).filter((c) => c.skillRank);
+  const cands = rm.roadmapSkillCandidates(rm.getRoadmapSettings({}), byName, catBoostsW);
+  const ranks = cands.filter((c) => c.skillRank);
   assert.ok(ranks.length > 0);
 
   const sflPerPoint = pd.skillCostInfo.sflPerPoint;
@@ -253,21 +254,27 @@ test("ascension ranks are sequential and their shard price is a labelled derivat
   const expect = 3 * p2p["Wood"] + 3 * p2p["Gold"];
   assert.ok(Math.abs(ranks[0].shardSfl - expect) < 1e-9, `shard = Gold Pickaxe materials (${expect})`);
 
-  // A skill offering both ranks numbers them 0,1 in ladder order, so nothing can place L3 first.
-  const byBase = {};
-  for (const c of ranks) {
-    const b = c.name.replace(/ → Level \d+$/, "");
-    (byBase[b] = byBase[b] || []).push(c);
-  }
-  const multi = Object.entries(byBase).filter(([, cs]) => cs.length > 1);
-  assert.ok(multi.length > 0, "some skill offers more than one remaining rank");
+  /*
+   * Chains number their steps 0..n in ladder order, so nothing can place L3 first. An UNOWNED
+   * skill's chain is HEADED by the L1 purchase at seq 0 ("nemám ještě nic z toho, tak chci
+   * vidět L2 i L3") — the ladder is visible before you own anything; an owned skill's
+   * remaining ranks start the chain themselves. There is deliberately no tree-tier gate: the
+   * plan is a sequence of purchases that raises the tier as it goes.
+   */
+  const byChain = {};
+  for (const c of cands) if (c.chainId && c.chainId.startsWith("rank:")) (byChain[c.chainId] = byChain[c.chainId] || []).push(c);
+  const multi = Object.entries(byChain).filter(([, cs]) => cs.length > 1);
+  assert.ok(multi.length > 0, "some chain offers more than one step");
+  let headed = 0;
   for (const [b, cs] of multi) {
     const sorted = cs.slice().sort((x, y) => x.chainSeq - y.chainSeq);
-    for (let i = 0; i < sorted.length; i++) {
-      assert.equal(sorted[i].chainSeq, i, `${b}: chain positions are 0..n`);
-      if (i) assert.ok(sorted[i].skillRank > sorted[i - 1].skillRank, `${b}: chainSeq follows the rank`);
+    for (let i = 0; i < sorted.length; i++) assert.equal(sorted[i].chainSeq, i, `${b}: chain positions are 0..n`);
+    for (let i = 1; i < sorted.length; i++) {
+      assert.ok((sorted[i].skillRank || 99) > (sorted[i - 1].skillRank || 1), `${b}: chainSeq follows the ladder`);
     }
+    if (!sorted[0].skillRank) headed++;
   }
+  assert.ok(headed > 0, "an unowned skill chains L1 → L2/L3");
 });
 
 test("and they reach sim.ranked — the table, not just a candidate list", async () => {

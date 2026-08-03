@@ -66,3 +66,20 @@ test("the older refill/recovery/respawn wordings still parse the same way", () =
   assert.equal(m[0].type, "speed_mult");
   assert.equal(m[0].value, 0.5);
 });
+
+test("array-returning parse rules FLATTEN — Healthy Livestock carries three real effects", () => {
+  // The sickness rule returns an array (one effect per animal cat); it used to be pushed as a
+  // single nested element, so every `e.type` filter missed it and the skill valued 0 everywhere.
+  const eff = parseBoostEffects("-50% chance of sickness");
+  assert.equal(eff.length, 3);
+  for (const e of eff) { assert.equal(e.type, "sickness_reduction"); assert.equal(e.value, 0.5); }
+  assert.deepEqual(eff.map((e) => e.cat).sort(), ["chickens", "cows", "sheep"]);
+});
+
+test("a p% chance of instant growth is -p% expected recovery time, not qualitative", () => {
+  const tt = parseBoostEffects("15% chance trees grow instantly");
+  assert.equal(tt.length, 1);
+  assert.equal(tt[0].type, "speed_pct");
+  assert.equal(tt[0].value, -15);
+  assert.equal(tt[0].cat, "trees");
+});

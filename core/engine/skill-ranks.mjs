@@ -185,7 +185,18 @@ function powerSkillRankVals(b, catId, product, capacity, p2pPrices, allCatBoosts
   if (!priceable) { for (let lvl = 2; lvl <= up.maxLevel; lvl++) out.rows.push({ lvl, delta: 0, shards: cost.shards, points: cost.points }); return out; }
   const valAt = (lvl) => {
     const f = skillRankFactor(up, lvl);
-    const sb = Object.assign({}, b, { effects: (b.effects || []).map(e => (typeof e.value === "number") ? Object.assign({}, e, { value: e.value * f }) : e) });
+    /*
+     * Scale whichever field carries the rank's magnitude. `value` covers most effects, but
+     * chance effects carry it in `pct` (chance {pct, extra}, coin_chance {pct, coins}) — the
+     * rank raises the CHANCE, the payout stays — and scaling only `value` made every chance
+     * skill's ranks (Money Tree, Greenhouse Gamble, Fishy Chance…) compute a delta of exactly 0.
+     */
+    const scale = (e) => {
+      if (typeof e.value === "number") return Object.assign({}, e, { value: e.value * f });
+      if (typeof e.pct === "number") return Object.assign({}, e, { pct: e.pct * f });
+      return e;
+    };
+    const sb = Object.assign({}, b, { effects: (b.effects || []).map(scale) });
     try { const v = calcBoostValue(sb, catId, product, capacity, p2pPrices, allCatBoosts, isOwned, effMode); return (v && isFinite(v.synergy)) ? v.synergy : 0; } catch (e) { return 0; }
   };
   let prev = valAt(1);
@@ -207,6 +218,7 @@ function skillRankText(up, lvl) {
       case "flatDebuff": return "debuff " + x;
       case "flatReduction": return "−" + x;
       case "dailyLimit": return "+" + x + " daily limit";
+      case "cooldown": return +(x / 3600000).toFixed(1) + "h cooldown";
       case "flatBonus": return "+" + x;
       case "chance": return x + "% chance";
       case "additiveYield": return "+" + x + " yield";

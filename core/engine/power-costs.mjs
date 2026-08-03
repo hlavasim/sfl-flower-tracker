@@ -401,12 +401,19 @@ import { SEED_COSTS, TOOL_COSTS } from "../data/economy.mjs";
       }
       if (prevented) return { costPerDay: 0, avgRate: 0, barnDelightSfl, prevented: true, reductions, perLevel: [] };
 
-      // Rate multiplier from Healthy Livestock
+      /*
+       * Rate multiplier from Healthy Livestock — NAME mode only. In effect mode the skill's
+       * parsed sickness_reduction effect already scales the bill (rate and cure cost are
+       * interchangeable in expected value: rate × barnDelight × cureMult), so also matching
+       * the name here would halve the same bill twice.
+       */
       let rateMult = 1;
-      const hasHealthyLivestock = !!(skills && skills["Healthy Livestock"]);
-      if (hasHealthyLivestock) {
-        rateMult = 0.5;
-        reductions.push({ name: "Healthy Livestock", desc: "-50% sickness rate" });
+      if (!effectMode) {
+        const hasHealthyLivestock = !!(skills && skills["Healthy Livestock"]);
+        if (hasHealthyLivestock) {
+          rateMult = 0.5;
+          reductions.push({ name: "Healthy Livestock", desc: "-50% sickness rate" });
+        }
       }
 
       // Cure cost modifiers

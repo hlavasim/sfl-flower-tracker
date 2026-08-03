@@ -859,19 +859,44 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
        * which is information the reader wants without it distorting the ROI.
        */
       l1.sort((x, y) => y.perPoint - x.perPoint);
+      const shardSfl = roadmapShardSfl();
       let ptsLeft = freePts;
       for (const r of l1) {
         // Which skills the points you hold would actually cover, in best-per-point order. Reported,
         // never subtracted.
         const canTakeNow = ptsLeft >= r.pts;
         if (canTakeNow) ptsLeft -= r.pts;
+        /*
+         * The FULL ladder for a skill not owned yet ("nemám ještě nic z toho, tak chci vidět L2
+         * i L3"): L1 heads the chain and the worthwhile ranks follow it, exactly like an owned
+         * skill's ranks and like ascension steps. The chain stops at the first rank that adds
+         * nothing — offering L3 without its L2 predecessor would lie about the cost of getting
+         * there.
+         */
+        const sr0 = (skillRanks || {})[r.b.name];
+        const ladder = [];
+        for (const row of ((sr0 && sr0.rows) || [])) {
+          if (!(row.delta > 0)) break;
+          const shards = row.shards || 0;
+          const floor = (row.points || 0) * sflPerPoint + shards * shardSfl;
+          if (!(floor > 0)) break;
+          ladder.push({ row, shards, floor });
+        }
+        const chain = ladder.length ? { chainId: `rank:${r.b.name}`, chainSeq: 0 } : {};
         out.push(mk(r.b.name, r.pts * sflPerPoint, r.cat, r.marg,
           `${r.pts}pt · ${r.b.skillTree || "?"} · ${r.pts} × ${sflPerPoint.toFixed(0)} FLOWER XP${canTakeNow ? " · body už máš, můžeš hned" : ""}`,
-          { skillFree: false, skillTakeNow: canTakeNow, skillPoints: r.pts, skillTree: r.b.skillTree || null }));
+          { skillFree: false, skillTakeNow: canTakeNow, skillPoints: r.pts, skillTree: r.b.skillTree || null, ...chain }));
+        let cseq = 1;
+        for (const { row, shards, floor } of ladder) {
+          out.push(mk(`${r.b.name} → Level ${row.lvl}`, floor, r.cat, row.delta,
+            `${row.points}pt + ${shards} Ascension Shard · ${row.text || ""}`,
+            { skillRank: row.lvl, skillPoints: row.points, shards, shardSfl,
+              chainId: `rank:${r.b.name}`, chainSeq: cseq++,
+              shardNote: `shard oceňován materiálem Gold Pickaxe (≈${shardSfl.toFixed(2)} FLOWER) — odvození, ne tržní cena` }));
+        }
       }
 
       // ── L2 / L3: the next rank of a skill already owned ──
-      const shardSfl = roadmapShardSfl();
       /*
        * EVERY remaining rank, not just the next one.
        *
@@ -887,14 +912,12 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         for (const row of (sr.rows || [])) {
           if (row.lvl < sr.nextLevel) continue;          // already at or past this rank
           /*
-           * Tree-tier gate, from the game's getSkillUpgradeTierRequirement: buying the rank-up
-           * FROM rank r needs the tree unlocked to tier min(3, skillTier + r). A gated rank is
-           * not buyable at any price — same rule the L1 candidates already apply — so offering
-           * it would make the order a fiction. Static against the current tree, like L1.
+           * Deliberately NO tree-tier gate here (a short-lived one was added and removed the same
+           * day — "to jsme schválně dávali pryč"). The tier requirement rises as you buy skills,
+           * and the plan IS a sequence of purchases that raises it; hiding a rank because the
+           * tree is not there TODAY is the same mistake as hiding the ascension ladder was.
+           * Sequence lives in chainId/chainSeq; the ladder stays visible.
            */
-          const reqTier = Math.min(3, (sr.tier || 1) + (row.lvl - 1));
-          const needPts = (SKILL_POINTS_PER_TIER[sr.skillTree] || {})[reqTier] || 0;
-          if ((inTree[sr.skillTree] || 0) < needPts) break;   // this and later ranks are gated
           if (!(row.delta > 0)) continue;                // a rank that adds nothing is not a buy
           const cat = Object.keys(row.byCat || {})[0] || "crops";
           const shards = row.shards || 0;
