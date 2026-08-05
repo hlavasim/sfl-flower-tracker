@@ -1800,9 +1800,11 @@
       .trade-history-table td { font-size: 0.5rem; padding: 3px 6px; }
       .nav-more-btn { font-size: 0.5rem; padding: 12px 10px; }
       .pet-fetch-row { grid-template-columns: 1fr auto auto auto; gap: 4px; font-size: 0.6875rem; }
-      .pet-feed-row { grid-template-columns: 1fr auto auto auto; gap: 4px; font-size: 0.6875rem; }
-      .pet-feed-row > :nth-child(3) { display: none; }  /* XP column — cost & efficiency matter more on a phone */
-      .pet-feed-row.pet-feed-head { font-size: 0.4375rem; }
+      .pet-feed-table td { font-size: 0.6875rem; padding: 5px 4px; }
+      .pet-feed-table th { font-size: 0.375rem; padding: 5px 4px; }
+      /* XP column goes — cost and value are what you decide on. */
+      .pet-feed-table th:nth-child(3), .pet-feed-table td:nth-child(3) { display: none; }
+      .pet-feed-tier { width: 44px; margin-right: 5px; font-size: 0.375rem; }
     }
 
     /* ── Nav More Dropdown ── */
@@ -1911,37 +1913,34 @@
       padding: 4px 8px;
       line-height: 1.6;
     }
-    .pet-feed-row {
-      display: grid;
-      grid-template-columns: 1fr auto auto auto auto;
-      gap: 6px;
-      padding: 4px 8px;
-      font-size: 0.75rem;
-      align-items: center;
-    }
-    .pet-feed-row.pet-feed-head {
-      font-size: 0.5rem;
-      color: var(--text-dim);
-      font-family: 'Press Start 2P', cursive;
+    /* A real table, not per-row grids: one column track for the whole table is the only
+       way the numbers line up under each other from row to row. */
+    .pet-feed-table { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+    .pet-feed-table th {
+      font-family: 'Press Start 2P', cursive; font-size: 0.4375rem; color: var(--text-dim);
+      text-align: right; padding: 6px; white-space: nowrap; line-height: 1.5;
       border-bottom: 1px solid rgba(92,58,30,0.3);
     }
-    .pet-feed-row.pet-best {
-      background: rgba(48,209,88,0.1);
-      border-left: 3px solid var(--green);
-      padding-left: 5px;
+    .pet-feed-table td {
+      font-size: 0.75rem; padding: 5px 6px; text-align: right; white-space: nowrap;
+      border-bottom: 1px solid rgba(92,58,30,0.15);
     }
-    .pet-feed-row.pet-fed { opacity: 0.55; }
-    .pet-feed-food { display: flex; align-items: center; gap: 5px; min-width: 0; }
-    .pet-feed-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pet-feed-table th:first-child, .pet-feed-table td:first-child { text-align: left; width: 100%; }
+    .pet-feed-table tr.pet-best td { background: rgba(48,209,88,0.1); }
+    .pet-feed-table tr.pet-best td:first-child { box-shadow: inset 3px 0 0 var(--green); }
+    .pet-feed-table tr.pet-fed td { opacity: 0.5; }
     .pet-feed-tier {
-      font-size: 0.4375rem; padding: 1px 4px; border: 1px solid; line-height: 1.4;
-      font-family: 'Press Start 2P', cursive; flex-shrink: 0;
+      display: inline-block; width: 54px; text-align: center; margin-right: 7px;
+      font-size: 0.4375rem; padding: 2px 0; border: 1px solid; line-height: 1.4;
+      font-family: 'Press Start 2P', cursive;
     }
     .pet-feed-tier.easy { color: var(--green); border-color: var(--green); }
     .pet-feed-tier.medium { color: #ff8c42; border-color: #ff8c42; }
     .pet-feed-tier.hard { color: var(--red); border-color: var(--red); }
-    .pet-feed-eff { color: var(--sunpetal); font-weight: bold; white-space: nowrap; }
-    .pet-feed-note { font-size: 0.5rem; color: var(--text-dim); padding: 3px 8px 0; line-height: 1.5; }
+    .pet-feed-val { color: var(--sunpetal); font-weight: bold; }
+    /* Proportional to the best row, so the ranking reads without parsing the numbers. */
+    .pet-feed-bar { display: block; height: 3px; background: var(--sunpetal); opacity: 0.5; margin: 3px 0 0 auto; }
+    .pet-feed-note { font-size: 0.5rem; color: var(--text-dim); padding: 3px 6px 0; line-height: 1.5; }
     .pet-sfl-day { background:rgba(46,160,67,0.1); border:1px solid var(--green); padding:8px 10px; margin:6px 0; font-size:0.6875rem; border-radius:4px; }
     .pet-sfl-breakdown { font-size:0.5625rem; color:var(--text-dim); margin-top:4px; line-height:1.5; }
     .pet-xp-section { font-size:0.6875rem; padding:4px 0; color:var(--text-secondary); }
@@ -5958,6 +5957,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.81", items: [
+          { t: "fix", text: "<b>Pets FEEDING table is readable now.</b> Every row was its own CSS grid, so each row sized its columns independently and the numbers never lined up under each other — it's one real table with a single column track. Units moved out of the cells into the header (<b>ENERGY / XP / COST / &#x26A1; PER SFL</b>) so the cells are bare numbers, the difficulty chip has a fixed width so the food names start on one axis, and the value column carries a bar scaled to the best row of that pet — you can see the ranking without reading a single figure. Also dropped the stray <b>FLOWER</b> label: this app calls the currency SFL everywhere else, and the cost cell was already showing the SFL icon next to a header that said FLOWER." },
+        ] },
         { ver: "v4.80", items: [
           { t: "feat", text: "<b>Pets page: FEEDING table.</b> Each pet now lists today's food requests with what the feed is actually worth — the <b>energy and XP THIS pet gets</b> (base 20/100/300 by request difficulty, plus the +5 level bonuses, the NFT <b>aura multiplier</b> ×1.5/2/3, Pet Bowls, Beast Shoes, Hound Shrine and Walrus Onesie, in the game's own order), the <b>cost to cook the dish</b> from ingredients at market price, and the resulting <b>⚡ per FLOWER</b> — ranked best-value first, with ✅ on what you already fed today. Ported from the game's feedPet.ts, including the level filter on requests the page previously ignored (a low-level pet was shown a request the game hides). The spread is worth looking at: a \"cheap\" easy Cheese can be 6× worse value than a medium Sour Shake." },
           { t: "fix", text: "<b>Sales price charts: scrolling back now loads the whole visible window,</b> not just one batch. Each gesture kept fetching a single page because the re-entry event fired while the loader was still marked busy — at 4H/1D, where one page of change events collapses into a couple of bars, that left the chart mostly empty. It now pages in a loop until everything on screen is backed by data (or the history runs out), and switching to a coarser interval re-checks for the space it just opened." },
@@ -23709,29 +23711,31 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         // applies the game's own level filter to requests.food.
         if (pet.feeding && pet.feeding.length > 0) {
           content += `<div class="pet-section-title pixel-font">FEEDING</div>`;
-          content += `<div class="pet-feed-row pet-feed-head">
-            <span>FOOD</span><span>&#x26A1;</span><span>XP</span><span>COOK</span><span>&#x26A1;/FLOWER</span>
-          </div>`;
+          // Units live in the header so the cells stay bare numbers, and the value column
+          // is scaled against the best row of THIS pet.
+          const bestEff = Math.max(...pet.feeding.map(r => r.energyPerSfl || 0), 0);
+          content += `<table class="pet-feed-table"><thead><tr>
+            <th>FOOD</th><th>ENERGY</th><th>XP</th><th>COST ${sflIcon("0.85em")}</th><th>&#x26A1; PER ${sflIcon("0.85em")}</th>
+          </tr></thead><tbody>`;
           for (const r of pet.feeding) {
-            const cls = "pet-feed-row" + (r.best ? " pet-best" : "") + (r.fed ? " pet-fed" : "");
+            const cls = (r.best ? "pet-best" : "") + (r.fed ? " pet-fed" : "");
             const mark = r.fed ? "✅ " : (r.best ? "★ " : "");
-            const price = r.price != null ? `${r.price < 0.01 ? r.price.toFixed(4) : r.price.toFixed(3)} ${sflIcon("0.85em")}` : "&#x2014;";
+            const price = r.price != null ? (r.price < 0.01 ? r.price.toFixed(4) : r.price.toFixed(3)) : "&#x2014;";
             const eff = r.energyPerSfl != null ? Math.round(r.energyPerSfl).toLocaleString() : "&#x2014;";
-            content += `<div class="${cls}">
-              <span class="pet-feed-food">
-                <span class="pet-feed-tier ${r.difficulty}">${r.difficulty.toUpperCase()}</span>
-                <span class="pet-feed-name">${mark}${escHTML(r.food)}</span>
-              </span>
-              <span>${r.energy} &#x26A1;</span>
-              <span>${Math.round(r.xp)} xp</span>
-              <span>${price}</span>
-              <span class="pet-feed-eff">${eff}</span>
-            </div>`;
+            const barPct = bestEff > 0 && r.energyPerSfl ? Math.max(4, Math.round(r.energyPerSfl / bestEff * 100)) : 0;
+            content += `<tr class="${cls}">
+              <td><span class="pet-feed-tier ${r.difficulty}">${r.difficulty.toUpperCase()}</span>${mark}${escHTML(r.food)}</td>
+              <td>${r.energy}</td>
+              <td>${Math.round(r.xp)}</td>
+              <td>${price}</td>
+              <td class="pet-feed-val">${eff}${barPct > 0 ? `<span class="pet-feed-bar" style="width:${barPct}%"></span>` : ""}</td>
+            </tr>`;
           }
+          content += `</tbody></table>`;
           const fedCount = pet.feeding.filter(r => r.fed).length;
           content += `<div class="pet-feed-note">
-            ${fedCount}/${pet.feeding.length} fed today &#xB7; cook cost = ingredients at market price &#xB7;
-            &#x26A1;/FLOWER ranks the requests by value &#x2014; higher is better
+            ${fedCount}/${pet.feeding.length} fed today &#xB7; COST = cooking it from ingredients at market price &#xB7;
+            the last column is energy bought per ${sflIcon("0.85em")} &#x2014; higher is better value
           </div>`;
         } else if (pet.foods.length > 0) {
           content += `<div class="pet-section-title pixel-font">FOOD REQUESTS</div>`;

@@ -168,8 +168,15 @@ test("the page renders the feeding rows, not the old plain food list", () => {
   });
 
   assert.match(out, /FEEDING/);
-  assert.match(out, /pet-feed-row pet-best/, "best row not highlighted");
-  assert.match(out, /pet-feed-row pet-fed/, "fed row not dimmed");
+  // A single table, so every column shares one track and the numbers line up between
+  // rows — per-row grids sized their columns independently and looked scrambled.
+  assert.equal((out.match(/<table class="pet-feed-table">/g) || []).length, 1);
+  assert.equal((out.match(/<tr/g) || []).length, 4, "one header row + one row per request");
+  for (const row of out.split("<tr").slice(2)) {
+    assert.equal((row.match(/<td/g) || []).length, 5, "row does not have all five cells");
+  }
+  assert.match(out, /<tr class="pet-best">/, "best row not highlighted");
+  assert.match(out, /pet-fed/, "fed row not dimmed");
   assert.match(out, /pet-feed-tier easy/);
   assert.match(out, /pet-feed-tier hard/);
   assert.match(out, /17,207/, "efficiency not formatted");
@@ -177,10 +184,18 @@ test("the page renders the feeding rows, not the old plain food list", () => {
   assert.match(out, /1\.280/, "cost above a cent should read at 3 decimals");
   assert.match(out, /1\/3 fed today/);
   assert.doesNotMatch(out, /undefined|NaN/, "template produced undefined/NaN");
+  // Units belong in the header; repeating them in every cell is what made the numbers
+  // hard to read. And the column is per SFL — the app's currency label everywhere else.
+  assert.doesNotMatch(out, /\d+ &#x26A1;<\/td>|\d+ xp<\/td>/, "units repeated in the cells");
+  assert.doesNotMatch(out, /FLOWER/, "the rest of the app labels this currency SFL");
+  // The value bar is scaled against the best row of this pet.
+  assert.match(out, /pet-feed-bar" style="width:100%/, "best row's bar should be full width");
+  const bars = [...out.matchAll(/pet-feed-bar" style="width:(\d+)%/g)].map((m) => Number(m[1]));
+  assert.deepEqual(bars, [100, 4], "bars not proportional to the best value (unpriced row gets none)");
   // The unpriced row still renders, with an em dash instead of a fake price. Counted over
   // the rows only — the footer note carries an em dash of its own.
   const rowsOnly = out.split("pet-feed-note")[0];
-  assert.equal((rowsOnly.match(/&#x2014;/g) || []).length, 2, "unpriced row should dash BOTH cost and efficiency");
+  assert.equal((rowsOnly.match(/&#x2014;/g) || []).length, 2, "unpriced row should dash BOTH cost and value");
 });
 
 test("a pet with no feeding rows falls back to the old food list instead of blanking", () => {
