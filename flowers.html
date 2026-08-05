@@ -1800,6 +1800,9 @@
       .trade-history-table td { font-size: 0.5rem; padding: 3px 6px; }
       .nav-more-btn { font-size: 0.5rem; padding: 12px 10px; }
       .pet-fetch-row { grid-template-columns: 1fr auto auto auto; gap: 4px; font-size: 0.6875rem; }
+      .pet-feed-row { grid-template-columns: 1fr auto auto auto; gap: 4px; font-size: 0.6875rem; }
+      .pet-feed-row > :nth-child(3) { display: none; }  /* XP column — cost & efficiency matter more on a phone */
+      .pet-feed-row.pet-feed-head { font-size: 0.4375rem; }
     }
 
     /* ── Nav More Dropdown ── */
@@ -1908,6 +1911,37 @@
       padding: 4px 8px;
       line-height: 1.6;
     }
+    .pet-feed-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto auto auto;
+      gap: 6px;
+      padding: 4px 8px;
+      font-size: 0.75rem;
+      align-items: center;
+    }
+    .pet-feed-row.pet-feed-head {
+      font-size: 0.5rem;
+      color: var(--text-dim);
+      font-family: 'Press Start 2P', cursive;
+      border-bottom: 1px solid rgba(92,58,30,0.3);
+    }
+    .pet-feed-row.pet-best {
+      background: rgba(48,209,88,0.1);
+      border-left: 3px solid var(--green);
+      padding-left: 5px;
+    }
+    .pet-feed-row.pet-fed { opacity: 0.55; }
+    .pet-feed-food { display: flex; align-items: center; gap: 5px; min-width: 0; }
+    .pet-feed-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pet-feed-tier {
+      font-size: 0.4375rem; padding: 1px 4px; border: 1px solid; line-height: 1.4;
+      font-family: 'Press Start 2P', cursive; flex-shrink: 0;
+    }
+    .pet-feed-tier.easy { color: var(--green); border-color: var(--green); }
+    .pet-feed-tier.medium { color: #ff8c42; border-color: #ff8c42; }
+    .pet-feed-tier.hard { color: var(--red); border-color: var(--red); }
+    .pet-feed-eff { color: var(--sunpetal); font-weight: bold; white-space: nowrap; }
+    .pet-feed-note { font-size: 0.5rem; color: var(--text-dim); padding: 3px 8px 0; line-height: 1.5; }
     .pet-sfl-day { background:rgba(46,160,67,0.1); border:1px solid var(--green); padding:8px 10px; margin:6px 0; font-size:0.6875rem; border-radius:4px; }
     .pet-sfl-breakdown { font-size:0.5625rem; color:var(--text-dim); margin-top:4px; line-height:1.5; }
     .pet-xp-section { font-size:0.6875rem; padding:4px 0; color:var(--text-secondary); }
@@ -5924,6 +5958,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.80", items: [
+          { t: "feat", text: "<b>Pets page: FEEDING table.</b> Each pet now lists today's food requests with what the feed is actually worth — the <b>energy and XP THIS pet gets</b> (base 20/100/300 by request difficulty, plus the +5 level bonuses, the NFT <b>aura multiplier</b> ×1.5/2/3, Pet Bowls, Beast Shoes, Hound Shrine and Walrus Onesie, in the game's own order), the <b>cost to cook the dish</b> from ingredients at market price, and the resulting <b>⚡ per FLOWER</b> — ranked best-value first, with ✅ on what you already fed today. Ported from the game's feedPet.ts, including the level filter on requests the page previously ignored (a low-level pet was shown a request the game hides). The spread is worth looking at: a \"cheap\" easy Cheese can be 6× worse value than a medium Sour Shake." },
+          { t: "fix", text: "<b>Sales price charts: scrolling back now loads the whole visible window,</b> not just one batch. Each gesture kept fetching a single page because the re-entry event fired while the loader was still marked busy — at 4H/1D, where one page of change events collapses into a couple of bars, that left the chart mostly empty. It now pages in a loop until everything on screen is backed by data (or the history runs out), and switching to a coarser interval re-checks for the space it just opened." },
+        ] },
         { ver: "v4.79", items: [
           { t: "feat", text: "<b>Sales price charts: interval switch + history that loads itself.</b> Every price-history chart (P2P items and NFT floors) now has an interval bar — <b>RAW · 15M · 1H · 4H · 1D</b> — that buckets the recorded changes (last value in each bucket wins) while holding the visible time window, so you can zoom out to daily without losing your place. And scrolling or dragging past the left edge of what's loaded now fetches the next page of older changes by itself, splices it in and shifts the view by exactly the bars added so the chart doesn't jump — walk back through the whole tracked history instead of the ~500 most recent changes. When there is nothing older left it says <i>start of history</i> and stops asking." },
         ] },
@@ -13189,42 +13227,32 @@
       st.chart.applyOptions({ timeScale: { timeVisible: key !== "1d", secondsVisible: false } });
       try { if (vr) st.chart.timeScale().setVisibleRange(vr); }
       catch (e) { st.chart.timeScale().fitContent(); }
+      // A coarser interval turns the same time window into fewer bars, which can expose
+      // empty space on the left that the finer view had covered — fill it.
+      _phLoadOlder(chartId);
     }
 
-    // Scrolled/dragged past the left edge of what's loaded → pull the next page back.
+    // How much empty space on the left counts as "scrolled into unloaded past", and how
+    // many pages one gesture may pull before we stop and wait for the user to ask again.
+    const phGapBars = 5;
+    const phMaxPages = 40;
+
+    // Scrolled/dragged past the left edge of what's loaded → keep pulling pages until
+    // everything on screen is backed by data (or the history runs out). One page is not
+    // enough: at 4h/1d a whole page of change events collapses into a handful of bars,
+    // and the re-entry event can't drive this because it fires while st.loading is
+    // still set — the loop is the thing that makes deep scrolls converge.
     async function _phLoadOlder(chartId) {
       const st = _phCharts[chartId];
       if (!st || st.loading || st.exhausted || !st.loadOlder || !st.series) return;
       st.loading = true;
       _phStatus(chartId, "⟳ loading older…");
       try {
-        const oldest = st.raw.reduce((m, c) => {
-          const t = new Date(c.captured_at).getTime();
-          return isFinite(t) && (m === null || t < m) ? t : m;
-        }, null);
-        if (oldest === null) { st.exhausted = true; _phStatus(chartId, ""); return; }
-        const older = await st.loadOlder(new Date(oldest).toISOString());
-        // The API's `to` filter is inclusive, so drop anything not strictly older.
-        const fresh = (older || []).filter(c => new Date(c.captured_at).getTime() < oldest);
-        if (fresh.length === 0) {
-          st.exhausted = true;
-          _phStatus(chartId, "· start of history");
-          return;
+        for (let page = 0; page < phMaxPages && !st.exhausted; page++) {
+          const lr = st.chart.timeScale().getVisibleLogicalRange();
+          if (!lr || lr.from >= phGapBars) break;   // nothing visible is missing any more
+          await _phPageOlder(st, chartId);
         }
-        st.raw = fresh.concat(st.raw);
-        const prevLen = st.data.length;
-        const lr = st.chart.timeScale().getVisibleLogicalRange();
-        st.data = _phBuckets(st.raw, st.interval);
-        st.series.setData(st.data);
-        _phApplyTrend(st, st.data);
-        // Prepending shifts every bar right by `added`; shift the view to match so the
-        // chart doesn't jump — the new bars just extend the axis to the left.
-        const added = st.data.length - prevLen;
-        if (lr && added > 0) {
-          st.chart.timeScale().setVisibleLogicalRange({ from: lr.from + added, to: lr.to + added });
-        }
-        const cnt = document.getElementById(chartId + "-count");
-        if (cnt) cnt.textContent = st.raw.length;
       } catch (e) {
         st.exhausted = true;
         _phStatus(chartId, "· older history unavailable");
@@ -13232,6 +13260,37 @@
         st.loading = false;
         if (!st.exhausted) _phStatus(chartId, "");
       }
+    }
+
+    // One page back. Marks the chart exhausted when the API has nothing strictly older.
+    async function _phPageOlder(st, chartId) {
+      const oldest = st.raw.reduce((m, c) => {
+        const t = new Date(c.captured_at).getTime();
+        return isFinite(t) && (m === null || t < m) ? t : m;
+      }, null);
+      if (oldest === null) { st.exhausted = true; return; }
+      const older = await st.loadOlder(new Date(oldest).toISOString());
+      // The API's `to` filter is inclusive, so drop anything not strictly older.
+      const fresh = (older || []).filter(c => new Date(c.captured_at).getTime() < oldest);
+      if (fresh.length === 0) {
+        st.exhausted = true;
+        _phStatus(chartId, "· start of history");
+        return;
+      }
+      st.raw = fresh.concat(st.raw);
+      const prevLen = st.data.length;
+      const lr = st.chart.timeScale().getVisibleLogicalRange();
+      st.data = _phBuckets(st.raw, st.interval);
+      st.series.setData(st.data);
+      _phApplyTrend(st, st.data);
+      // Prepending shifts every bar right by `added`; shift the view to match so the
+      // chart doesn't jump — the new bars just extend the axis to the left.
+      const added = st.data.length - prevLen;
+      if (lr && added > 0) {
+        st.chart.timeScale().setVisibleLogicalRange({ from: lr.from + added, to: lr.to + added });
+      }
+      const cnt = document.getElementById(chartId + "-count");
+      if (cnt) cnt.textContent = st.raw.length;
     }
 
     function _createLWChart(containerId, label) {
@@ -13299,7 +13358,7 @@
       // A gap on the left (visible range running off the start of the data) means the
       // user scrolled/dragged into unloaded past — fetch it. Chains until it's filled.
       chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
-        if (range && range.from < 5) _phLoadOlder(containerId);
+        if (range && range.from < phGapBars) _phLoadOlder(containerId);
       });
 
       // Resize observer
@@ -23645,8 +23704,36 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           content += `<div style="padding:8px;color:var(--text-dim);font-size:0.6875rem">Unknown pet type &#x2014; no fetch data available</div>`;
         }
 
-        // Food requests
-        if (pet.foods.length > 0) {
+        // Feeding table — today's requests with what each one costs to cook and what it
+        // pays back, ranked by energy per FLOWER. Rows come from section=pets, which
+        // applies the game's own level filter to requests.food.
+        if (pet.feeding && pet.feeding.length > 0) {
+          content += `<div class="pet-section-title pixel-font">FEEDING</div>`;
+          content += `<div class="pet-feed-row pet-feed-head">
+            <span>FOOD</span><span>&#x26A1;</span><span>XP</span><span>COOK</span><span>&#x26A1;/FLOWER</span>
+          </div>`;
+          for (const r of pet.feeding) {
+            const cls = "pet-feed-row" + (r.best ? " pet-best" : "") + (r.fed ? " pet-fed" : "");
+            const mark = r.fed ? "✅ " : (r.best ? "★ " : "");
+            const price = r.price != null ? `${r.price < 0.01 ? r.price.toFixed(4) : r.price.toFixed(3)} ${sflIcon("0.85em")}` : "&#x2014;";
+            const eff = r.energyPerSfl != null ? Math.round(r.energyPerSfl).toLocaleString() : "&#x2014;";
+            content += `<div class="${cls}">
+              <span class="pet-feed-food">
+                <span class="pet-feed-tier ${r.difficulty}">${r.difficulty.toUpperCase()}</span>
+                <span class="pet-feed-name">${mark}${escHTML(r.food)}</span>
+              </span>
+              <span>${r.energy} &#x26A1;</span>
+              <span>${Math.round(r.xp)} xp</span>
+              <span>${price}</span>
+              <span class="pet-feed-eff">${eff}</span>
+            </div>`;
+          }
+          const fedCount = pet.feeding.filter(r => r.fed).length;
+          content += `<div class="pet-feed-note">
+            ${fedCount}/${pet.feeding.length} fed today &#xB7; cook cost = ingredients at market price &#xB7;
+            &#x26A1;/FLOWER ranks the requests by value &#x2014; higher is better
+          </div>`;
+        } else if (pet.foods.length > 0) {
           content += `<div class="pet-section-title pixel-font">FOOD REQUESTS</div>`;
           content += `<div class="pet-food-list">${pet.foods.map(f => escHTML(f)).join(" &#xB7; ")}</div>`;
         }

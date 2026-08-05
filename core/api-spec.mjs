@@ -66,7 +66,12 @@ export const API_SPEC = {
               "(rows: id/type/stem/aura/owned/sflPerDay/breakdown; `products` query param " +
               "overrides the per-category product like the page's selector). " +
               "`pets`: the pet advisor's per-pet daily economics (level, energy, best fetch, " +
-              "SFL/day) + feed boosts + the raw p2p price map its tables use. " +
+              "SFL/day) + feed boosts + the raw p2p price map its tables use. Each pet also " +
+              "carries `feeding`: today's food requests after the game's own level filter, " +
+              "each with the energy and XP that feed grants THIS pet (level bonuses, NFT aura, " +
+              "Pet Bowls, Beast Shoes, Hound Shrine, Walrus Onesie), the farm's cost to cook " +
+              "the dish (the `prices` productionCost map) and the resulting energy/XP per " +
+              "FLOWER, ranked best-value first. " +
               "`eff`: POST-only — measured harvest efficiency per category from farm-history " +
               "snapshot rows the client posts (body `{ snapshots: [{ captured_at, diff }] }`); " +
               "returns `{ effByCat, meta, meanRatio }` with theoretical cycles from the same " +

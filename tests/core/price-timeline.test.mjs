@@ -74,6 +74,20 @@ function loadChartModule() {
 }
 
 const iso = (s) => new Date(s).toISOString();
+const tick = () => new Promise((r) => setTimeout(r, 0));
+
+// Mount the way the page does: renderPriceTimeline returns HTML, the caller inserts it,
+// and the chart is created on a timer once the container exists.
+async function mount(m, changes, label, loadOlder) {
+  const html = m.renderPriceTimeline(changes, label, loadOlder);
+  const id = Object.keys(m._phCharts).at(-1);
+  m.document._add(id);
+  m.document._add(id + '-bar');
+  const status = m.document._add(id + '-status');
+  const count = m.document._add(id + '-count');
+  await tick();
+  return { id, html, status, count, chart: m.charts.at(-1) };
+}
 
 test("bucketing keeps the last value per interval and stays strictly ascending", () => {
   const { _phBuckets } = loadChartModule();
@@ -115,20 +129,14 @@ test("every interval up to 1D gets a button, RAW is the default", () => {
   assert.equal(Object.values(_phCharts)[0].interval, "raw");
 });
 
-test("switching interval re-buckets and holds the visible time window", () => {
+test("switching interval re-buckets and holds the visible time window", async () => {
   const m = loadChartModule();
   const changes = [
     { captured_at: iso("2026-08-01T10:00:00Z"), price: "1" },
     { captured_at: iso("2026-08-01T14:00:00Z"), price: "2" },
     { captured_at: iso("2026-08-02T10:00:00Z"), price: "3" },
   ];
-  m.renderPriceTimeline(changes, "Sunflower");
-  const id = Object.keys(m._phCharts)[0];
-  m.document._add(id);
-  m.document._add(id + "-bar");
-  m._createLWChart(id, "Sunflower");
-
-  const chart = m.charts[0];
+  const { id, chart } = await mount(m, changes, "Sunflower");
   assert.equal(chart.series.sets[0].length, 3);   // RAW
   chart.ts.visibleRange = { from: 100, to: 200 };
 
@@ -152,65 +160,106 @@ test("a gap on the left back-pages older history and keeps the view anchored", a
     // The API's `to` filter is inclusive, so the boundary row comes back too.
     { captured_at: iso("2026-08-01T10:00:00Z"), price: "5" },
   ];
-  m.renderPriceTimeline(changes, "Sunflower", (before) => { asked.push(before); return Promise.resolve(older); });
-  const id = Object.keys(m._phCharts)[0];
-  m.document._add(id);
-  m.document._add(id + "-bar");
-  m.document._add(id + "-status");
-  const count = m.document._add(id + "-count");
-  m._createLWChart(id, "Sunflower");
+  // Same page every time: the second call finds nothing strictly older and stops.
+  const { id, chart, count } = await mount(m, changes, "Sunflower",
+    (before) => { asked.push(before); return Promise.resolve(older); });
 
-  const chart = m.charts[0];
   chart.ts.logicalRange = { from: -3, to: 12 };
   chart.ts._cb({ from: -3, to: 12 });            // user dragged past the start of the data
-  await new Promise((r) => setTimeout(r, 0));
+  await tick();
 
-  assert.deepEqual(asked, [iso("2026-08-01T10:00:00Z")], "did not ask for history before the oldest point");
+  assert.equal(asked[0], iso("2026-08-01T10:00:00Z"), "did not ask for history before the oldest point");
   assert.deepEqual(chart.series.sets.at(-1).map((p) => p.value), [3, 4, 5, 6], "older points not prepended");
   // 2 bars added on the left → the same bars stay under the cursor.
   assert.deepEqual(chart.ts.setLogical.at(-1), { from: -1, to: 14 }, "view was not shifted by the bars added");
   assert.equal(count.textContent, 4);
+  // -1 is still a gap, so it asked once more — from the NEW oldest point — and that page
+  // held nothing older, which is what ends the run.
+  assert.deepEqual(asked, [iso("2026-08-01T10:00:00Z"), iso("2026-07-30T10:00:00Z")]);
+  assert.equal(m._phCharts[id].exhausted, true);
+});
+
+test("switching to a coarser interval fills the empty space it opens", async () => {
+  const m = loadChartModule();
+  // The same time window holds far fewer 1D bars than raw points, so a view that was
+  // fully backed by data at RAW can have nothing on its left at 1D.
+  const changes = [0, 1, 2, 3, 4, 5].map((h) => ({
+    captured_at: iso(`2026-08-02T0${h}:00:00Z`), price: String(h + 1),
+  }));
+  const asked = [];
+  const { id, chart } = await mount(m, changes, "Sunflower",
+    (before) => { asked.push(before); return Promise.resolve([]); });
+
+  chart.ts.logicalRange = { from: -6, to: 10 };
+  m._phSetInterval(id, "1d");
+  await tick();
+
+  assert.equal(asked.length, 1, "interval switch did not look for a gap to fill");
+});
+
+test("one gesture keeps paging until the whole visible window is backed by data", async () => {
+  const m = loadChartModule();
+  // Each page steps 3 more days back — like a coarse interval, where a page of change
+  // events collapses into a couple of bars and a single page never covers the scroll.
+  const DAY = 86400000;
+  let edge = new Date("2026-08-01T10:00:00Z").getTime();
+  const asked = [];
+  const { id, chart } = await mount(m,
+    [{ captured_at: iso("2026-08-01T10:00:00Z"), price: "9" }],
+    "Sunflower",
+    (before) => {
+      asked.push(before);
+      const page = [1, 2, 3].map((n) => ({ captured_at: new Date(edge - n * DAY).toISOString(), price: "1" }));
+      edge -= 3 * DAY;
+      return Promise.resolve(page);
+    },
+  );
+
+  chart.ts.logicalRange = { from: -14, to: 6 };     // dragged far into empty space
+  chart.ts._cb({ from: -14, to: 6 });
+  await tick();
+
+  assert.ok(asked.length >= 5, `expected repeated paging, got ${asked.length} request(s)`);
+  // It stops as soon as the left edge is covered — not one page later, not forever.
+  assert.ok(chart.ts.logicalRange.from >= 5, `left edge still uncovered: ${chart.ts.logicalRange.from}`);
+  assert.ok(asked.length < 40, "paging did not converge");
+  assert.equal(m._phCharts[id].loading, false, "left stuck in the loading state");
+  // Every page went back further than the last.
+  const times = asked.map((a) => new Date(a).getTime());
+  assert.deepEqual(times, [...times].sort((a, b) => b - a), "pages did not walk backwards");
 });
 
 test("no gap → no fetch; and a page with nothing new exhausts the chart", async () => {
   const m = loadChartModule();
   const changes = [{ captured_at: iso("2026-08-02T10:00:00Z"), price: "6" }];
   let calls = 0;
-  m.renderPriceTimeline(changes, "Sunflower", () => {
+  const { id, chart, status } = await mount(m, changes, "Sunflower", () => {
     calls++;
     return Promise.resolve([{ captured_at: iso("2026-08-02T10:00:00Z"), price: "6" }]);  // boundary row only
   });
-  const id = Object.keys(m._phCharts)[0];
-  m.document._add(id);
-  m.document._add(id + "-bar");
-  const status = m.document._add(id + "-status");
-  m._createLWChart(id, "Sunflower");
+  const scrollTo = (r) => { chart.ts.logicalRange = r; chart.ts._cb(r); };
 
-  const chart = m.charts[0];
-  chart.ts._cb({ from: 40, to: 90 });             // plenty of loaded data to the left
-  await new Promise((r) => setTimeout(r, 0));
+  scrollTo({ from: 40, to: 90 });                 // plenty of loaded data to the left
+  await tick();
   assert.equal(calls, 0, "fetched history without a gap");
 
-  chart.ts._cb({ from: -2, to: 30 });
-  await new Promise((r) => setTimeout(r, 0));
+  scrollTo({ from: -2, to: 30 });
+  await tick();
   assert.equal(calls, 1);
   assert.equal(m._phCharts[id].exhausted, true);
   assert.match(status.textContent, /start of history/);
 
-  chart.ts._cb({ from: -2, to: 30 });             // keeps scrolling — must not re-fetch
-  await new Promise((r) => setTimeout(r, 0));
+  scrollTo({ from: -2, to: 30 });                 // keeps scrolling — must not re-fetch
+  await tick();
   assert.equal(calls, 1, "kept fetching after history was exhausted");
 });
 
 test("charts without a loader never try to back-page", async () => {
   const m = loadChartModule();
-  m.renderPriceTimeline([{ captured_at: iso("2026-08-02T10:00:00Z"), price: "6" }], "Sunflower");
-  const id = Object.keys(m._phCharts)[0];
-  assert.equal(m._phCharts[id].exhausted, true);
-  m.document._add(id);
-  m.document._add(id + "-bar");
-  m._createLWChart(id, "Sunflower");
-  m.charts[0].ts._cb({ from: -5, to: 20 });
-  await new Promise((r) => setTimeout(r, 0));
-  assert.equal(m.charts[0].series.sets.length, 1, "data changed with no loader wired");
+  const { id, chart } = await mount(m, [{ captured_at: iso("2026-08-02T10:00:00Z"), price: "6" }], "Sunflower");
+  assert.equal(m._phCharts[id].exhausted, true, "no loader means nothing to page back to");
+  chart.ts.logicalRange = { from: -5, to: 20 };
+  chart.ts._cb({ from: -5, to: 20 });
+  await tick();
+  assert.equal(chart.series.sets.length, 1, "data changed with no loader wired");
 });
