@@ -1527,6 +1527,15 @@
       border: 2px solid var(--border-dark); cursor: pointer;
     }
     .ph-load-more:hover { background: var(--bg-light); color: var(--sunpetal); }
+    .ph-tf-bar { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; flex-wrap: wrap; }
+    .ph-tf {
+      padding: 3px 7px; font-family: 'Press Start 2P', cursive; font-size: 0.4375rem;
+      color: var(--text-dim); background: var(--bg-card-alt); line-height: 1.4;
+      border: 2px solid var(--border-dark); cursor: pointer;
+    }
+    .ph-tf:hover { background: var(--bg-light); color: var(--text-secondary); }
+    .ph-tf.active { color: var(--sunpetal); border-color: var(--sunpetal); background: var(--bg-card); }
+    .ph-tf-status { font-size: 0.5rem; color: var(--text-dim); margin-left: 4px; }
 
     /* ── Power Page ── */
     /* ── Nodes Investment Advisor ── */
@@ -5915,6 +5924,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.79", items: [
+          { t: "feat", text: "<b>Sales price charts: interval switch + history that loads itself.</b> Every price-history chart (P2P items and NFT floors) now has an interval bar — <b>RAW · 15M · 1H · 4H · 1D</b> — that buckets the recorded changes (last value in each bucket wins) while holding the visible time window, so you can zoom out to daily without losing your place. And scrolling or dragging past the left edge of what's loaded now fetches the next page of older changes by itself, splices it in and shifts the view by exactly the bars added so the chart doesn't jump — walk back through the whole tracked history instead of the ~500 most recent changes. When there is nothing older left it says <i>start of history</i> and stops asking." },
+        ] },
         { ver: "v4.78", items: [
           { t: "feat", text: "<b>Bumpkin page, ascended farms — pure leveling view.</b> It now tracks the ascension you're actually <b>working on</b>: once A1's XP band is full it shows <b>A2</b> (and A3, … if your XP already reaches further), never the finished band. Shows the <b>uncapped level</b> — the game freezes your level at the band cap until you ascend, so “LVL 200 (XP na 215)” reveals the progress hiding behind the cap — and eating banked food now reports the real uncapped levels gained instead of “same level”. Each expansion is a plain XP milestone (level gate + XP and <b>days at your cooking rate</b> to unlock it) plus the XP/days to <b>complete the ascension</b> (be ready to enter the next one). No resources — that's the Ascension page's job." },
         ] },
@@ -13060,9 +13072,13 @@
       return data.prices || [];
     }
 
-    async function fetchP2PHistory(itemName) {
-      const from = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
-      const resp = await fetch(`/api/price-history?item=${encodeURIComponent(itemName)}&from=${from}`);
+    // `before` (ISO timestamp) switches to back-paging: the newest page of changes
+    // strictly older than that instant, instead of the default last-30-days window.
+    async function fetchP2PHistory(itemName, before) {
+      let url = `/api/price-history?item=${encodeURIComponent(itemName)}`;
+      if (before) url += `&to=${encodeURIComponent(before)}`;
+      else url += `&from=${new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)}`;
+      const resp = await fetch(url);
       if (!resp.ok) throw new Error("P2P history fetch failed");
       const data = await resp.json();
       return data.changes || [];
@@ -13075,9 +13091,10 @@
       return data.values || [];
     }
 
-    async function fetchNftItemHistory(nftId, field, collection) {
+    async function fetchNftItemHistory(nftId, field, collection, before) {
       let url = `/api/nft-history?nft_id=${nftId}&field=${encodeURIComponent(field || "floor")}`;
       if (collection) url += `&collection=${encodeURIComponent(collection)}`;
+      if (before) url += `&to=${encodeURIComponent(before)}`;
       const resp = await fetch(url);
       if (!resp.ok) throw new Error("NFT history fetch failed");
       const data = await resp.json();
@@ -13086,35 +13103,144 @@
 
     // ── Shared price timeline bar chart ──
 
+    // Interval = bucket width; "raw" plots every recorded change verbatim.
+    const phIntervals = [
+      { key: "raw", label: "RAW", sec: 0 },
+      { key: "15m", label: "15M", sec: 900 },
+      { key: "1h", label: "1H", sec: 3600 },
+      { key: "4h", label: "4H", sec: 14400 },
+      { key: "1d", label: "1D", sec: 86400 },
+    ];
+    const _phCharts = {};   // chartId -> { raw, data, interval, chart, series, loadOlder, … }
+
     let _chartCounter = 0;
-    function renderPriceTimeline(changes, label) {
+    // loadOlder(beforeISO) -> changes[] older than beforeISO; omit it to disable back-paging.
+    function renderPriceTimeline(changes, label, loadOlder) {
       if (!changes || changes.length === 0) {
         return `<div class="ph-empty">Tracking started recently — no history yet</div>`;
       }
+      _phPruneCharts();
       const chartId = `lw-chart-${++_chartCounter}`;
+      _phCharts[chartId] = {
+        raw: changes.slice(), data: [], interval: "raw", loadOlder: loadOlder || null,
+        loading: false, exhausted: !loadOlder, chart: null, series: null, ro: null,
+      };
       // Schedule chart creation after DOM insert
-      setTimeout(() => _createLWChart(chartId, changes, label), 0);
-      return `<div class="ph-detail-title">${escHTML(label)} — last ${changes.length} changes</div>
+      setTimeout(() => _createLWChart(chartId, label), 0);
+      const tabs = phIntervals.map(i =>
+        `<button class="ph-tf${i.key === "raw" ? " active" : ""}" data-k="${i.key}"
+          onclick="_phSetInterval('${chartId}','${i.key}')">${i.label}</button>`).join("");
+      return `<div class="ph-detail-title">${escHTML(label)} — last <span id="${chartId}-count">${changes.length}</span> changes</div>
+        <div class="ph-tf-bar" id="${chartId}-bar">${tabs}<span class="ph-tf-status" id="${chartId}-status"></span></div>
         <div id="${chartId}" style="height:220px;width:100%;border-radius:4px;overflow:hidden"></div>`;
     }
 
-    function _createLWChart(containerId, changes, label) {
-      const container = document.getElementById(containerId);
-      if (!container || typeof LightweightCharts === "undefined") return;
-
-      const sorted = [...changes].sort((a, b) => new Date(a.captured_at) - new Date(b.captured_at));
-      // Deduplicate: LightweightCharts requires strictly ascending timestamps
-      // Keep last value per second (most recent data point wins)
-      const deduped = new Map();
-      for (const c of sorted) {
-        const d = new Date(c.captured_at);
-        const ts = Math.floor(d.getTime() / 1000);
-        const val = parseFloat(c.price ?? c.value ?? 0) || 0;
-        if (val > 0) deduped.set(ts, val);  // skip zero/invalid values
+    // Charts whose detail panel was closed leave a dead entry behind — drop them.
+    function _phPruneCharts() {
+      for (const [id, st] of Object.entries(_phCharts)) {
+        if (!st.chart || document.getElementById(id)) continue;
+        try { st.ro?.disconnect(); st.chart.remove(); } catch (e) { /* already gone */ }
+        delete _phCharts[id];
       }
-      const data = Array.from(deduped.entries())
-        .sort((a, b) => a[0] - b[0])
-        .map(([time, value]) => ({ time, value }));
+    }
+
+    // Change events -> one point per bucket (last value in the bucket wins).
+    // LightweightCharts requires strictly ascending timestamps, so this dedupes too.
+    function _phBuckets(raw, intervalKey) {
+      const sec = (phIntervals.find(i => i.key === intervalKey) || phIntervals[0]).sec;
+      const pts = [];
+      for (const c of raw) {
+        const ms = new Date(c.captured_at).getTime();
+        const val = parseFloat(c.price ?? c.value ?? 0) || 0;
+        if (!isFinite(ms) || val <= 0) continue;  // skip zero/invalid values
+        pts.push([Math.floor(ms / 1000), val]);
+      }
+      pts.sort((a, b) => a[0] - b[0]);
+      const bucketed = new Map();
+      for (const [ts, val] of pts) bucketed.set(sec ? Math.floor(ts / sec) * sec : ts, val);
+      return Array.from(bucketed.entries()).map(([time, value]) => ({ time, value }));
+    }
+
+    // Green when the loaded window ends above where it started, red otherwise.
+    function _phApplyTrend(st, data) {
+      const first = data.length > 0 ? data[0].value : 0;
+      const last = data.length > 0 ? data[data.length - 1].value : 0;
+      const c = last >= first ? "#22c55e" : "#ef4444";
+      st.series.applyOptions({ topColor: c + "40", bottomColor: c + "08", lineColor: c });
+    }
+
+    function _phStatus(chartId, text) {
+      const el = document.getElementById(chartId + "-status");
+      if (el) el.textContent = text;
+    }
+
+    function _phSetInterval(chartId, key) {
+      const st = _phCharts[chartId];
+      if (!st || st.interval === key) return;
+      st.interval = key;
+      document.getElementById(chartId + "-bar")?.querySelectorAll(".ph-tf")
+        .forEach(b => b.classList.toggle("active", b.dataset.k === key));
+      if (!st.chart || !st.series) return;
+      // Re-bucketing changes the bar count, so hold the visible *time* window instead.
+      const vr = st.chart.timeScale().getVisibleRange();
+      st.data = _phBuckets(st.raw, key);
+      st.series.setData(st.data);
+      _phApplyTrend(st, st.data);
+      st.chart.applyOptions({ timeScale: { timeVisible: key !== "1d", secondsVisible: false } });
+      try { if (vr) st.chart.timeScale().setVisibleRange(vr); }
+      catch (e) { st.chart.timeScale().fitContent(); }
+    }
+
+    // Scrolled/dragged past the left edge of what's loaded → pull the next page back.
+    async function _phLoadOlder(chartId) {
+      const st = _phCharts[chartId];
+      if (!st || st.loading || st.exhausted || !st.loadOlder || !st.series) return;
+      st.loading = true;
+      _phStatus(chartId, "⟳ loading older…");
+      try {
+        const oldest = st.raw.reduce((m, c) => {
+          const t = new Date(c.captured_at).getTime();
+          return isFinite(t) && (m === null || t < m) ? t : m;
+        }, null);
+        if (oldest === null) { st.exhausted = true; _phStatus(chartId, ""); return; }
+        const older = await st.loadOlder(new Date(oldest).toISOString());
+        // The API's `to` filter is inclusive, so drop anything not strictly older.
+        const fresh = (older || []).filter(c => new Date(c.captured_at).getTime() < oldest);
+        if (fresh.length === 0) {
+          st.exhausted = true;
+          _phStatus(chartId, "· start of history");
+          return;
+        }
+        st.raw = fresh.concat(st.raw);
+        const prevLen = st.data.length;
+        const lr = st.chart.timeScale().getVisibleLogicalRange();
+        st.data = _phBuckets(st.raw, st.interval);
+        st.series.setData(st.data);
+        _phApplyTrend(st, st.data);
+        // Prepending shifts every bar right by `added`; shift the view to match so the
+        // chart doesn't jump — the new bars just extend the axis to the left.
+        const added = st.data.length - prevLen;
+        if (lr && added > 0) {
+          st.chart.timeScale().setVisibleLogicalRange({ from: lr.from + added, to: lr.to + added });
+        }
+        const cnt = document.getElementById(chartId + "-count");
+        if (cnt) cnt.textContent = st.raw.length;
+      } catch (e) {
+        st.exhausted = true;
+        _phStatus(chartId, "· older history unavailable");
+      } finally {
+        st.loading = false;
+        if (!st.exhausted) _phStatus(chartId, "");
+      }
+    }
+
+    function _createLWChart(containerId, label) {
+      const container = document.getElementById(containerId);
+      const st = _phCharts[containerId];
+      if (!container || !st || typeof LightweightCharts === "undefined") return;
+
+      st.data = _phBuckets(st.raw, st.interval);
+      const data = st.data;
 
       if (data.length === 0) {
         container.innerHTML = '<div class="ph-empty">No valid price data</div>';
@@ -13165,14 +13291,23 @@
         priceFormat: { type: "price", precision: 4, minMove: 0.0001 },
       });
 
+      st.chart = chart;
+      st.series = areaSeries;
       areaSeries.setData(data);
       chart.timeScale().fitContent();
+
+      // A gap on the left (visible range running off the start of the data) means the
+      // user scrolled/dragged into unloaded past — fetch it. Chains until it's filled.
+      chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+        if (range && range.from < 5) _phLoadOlder(containerId);
+      });
 
       // Resize observer
       const ro = new ResizeObserver(() => {
         chart.applyOptions({ width: container.clientWidth });
       });
       ro.observe(container);
+      st.ro = ro;
     }
 
     // ── P2P History toggle detail ──
@@ -13190,7 +13325,8 @@
       row.after(detail);
       try {
         const changes = await fetchP2PHistory(itemName);
-        detail.innerHTML = renderPriceTimeline(changes, itemName);
+        detail.innerHTML = renderPriceTimeline(changes, itemName,
+          (before) => fetchP2PHistory(itemName, before));
       } catch (e) {
         detail.innerHTML = `<div class="ph-empty">Failed to load history</div>`;
       }
@@ -13221,7 +13357,8 @@
             .then(r => r.ok ? r.json() : { history: [] }).catch(() => ({ history: [] })),
         ]);
 
-        let html = renderPriceTimeline(changes, nftName + " (floor)");
+        let html = renderPriceTimeline(changes, nftName + " (floor)",
+          (before) => fetchNftItemHistory(nftId, "floor", collection, before));
 
         // Volume summary (7-day)
         const hist = volumeData.history || [];
