@@ -39,6 +39,18 @@ const NODE_TO_RES = {
 // Continuous-expand build schedule start (MIGRATION.md §2.5).
 const CONTINUOUS_EXPAND_START_MS = Date.UTC(2026, 7, 3); // 3.8.2026
 
+// Date gates on ascending INTO a band, keyed by the band being entered. The game
+// gates this in lib/flags.ts (TIME_BASED_FEATURE_FLAG_WINDOWS) and enforces it in
+// events/landExpansion/upgradeFarm.ts, which throws "Ascension to the next island is
+// not yet available" for exactly `ascensionLevel + 1 === 2`.
+//
+// Only A2 has a date. A0→A1 is explicitly NOT time-gated (flags.ts says so), and A3+
+// (crystal / galaxy / marble) have no flag in the game source at all — so nothing is
+// invented for them here. If the devs add one, it belongs in this map and nowhere else.
+export const ASCENSION_UNLOCK_MS = {
+  2: Date.UTC(2026, 8, 7), // SPOOKY_ASCENSION — 2026-09-07T00:00:00Z
+};
+
 const getCount = (inv, name) => {
   const v = (inv || {})[name];
   if (v === undefined || v === null) return 0;
@@ -345,6 +357,19 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
   let stuck = null;
   for (const s of pending) {
     if (s.asc >= 1 && slotMs < CONTINUOUS_EXPAND_START_MS) slotMs = CONTINUOUS_EXPAND_START_MS;
+    // A date-gated ascension breaks the chain: the upgrade cannot happen before its
+    // unlock no matter how fast the farm is, so its slot — and every slot behind it —
+    // moves out. `gateWaitDays` is the dead time this opens up, which is the honest
+    // answer to "can I go straight into it?": you finish the band, then you wait.
+    const gateMs = s.kind === "upgrade" ? ASCENSION_UNLOCK_MS[s.asc] : undefined;
+    if (gateMs && slotMs < gateMs) {
+      s.gatedUntilMs = gateMs;
+      s.gateWaitDays = (gateMs - slotMs) / 86400000;
+      slotMs = gateMs;
+    } else if (gateMs) {
+      s.gatedUntilMs = gateMs;   // gate exists but the build queue already runs past it
+      s.gateWaitDays = 0;
+    }
     s.buildSlotDays = (slotMs - nowMs) / 86400000;
     // stuck is per-mode: the UI shows one mode's ETAs, so the jam verdict must come
     // from the SAME mode (an eff-only flag next to theo ETAs reads "jams 14d vs 8h").
@@ -777,5 +802,11 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
     };
   }
 
-  return { current, rates, steps: pending, frontier, bottleneck, reach, nodeCounts, grinx, maxAsc, nodeAcq };
+  // Date-gated ascensions still ahead, so a page can explain a jump in the schedule
+  // instead of leaving an unexplained hole between two build slots.
+  const gates = pending
+    .filter((s) => s.gatedUntilMs)
+    .map((s) => ({ asc: s.asc, unlockMs: s.gatedUntilMs, waitDays: s.gateWaitDays, buildSlotDays: s.buildSlotDays }));
+
+  return { current, rates, steps: pending, frontier, bottleneck, reach, nodeCounts, grinx, maxAsc, nodeAcq, gates };
 }

@@ -6,7 +6,7 @@ import {
   getAscensionExpansionRequirements, getExpansionCrystalCount, getAscensionExpansionDelta,
   V150_XP,
 } from "../../core/engine/ascension.mjs";
-import { buildAscensionSection } from "../../core/sections/ascension.mjs";
+import { buildAscensionSection, ASCENSION_UNLOCK_MS } from "../../core/sections/ascension.mjs";
 import { buildPowerSection } from "../../core/sections/power.mjs";
 import { buildCookingSection } from "../../core/sections/cooking.mjs";
 
@@ -899,4 +899,89 @@ test("the whole ascension ladder is offered, in an order the game will let you b
   // 6. A step that grants nothing earning cannot be a row, so its cost is rolled into the next one
   //    and named there — reaching that expansion means paying for it too.
   if (firstEarning !== out.steps[0]) assert.ok(/přes /.test(first.boost), `says what it goes through: ${first.boost}`);
+});
+
+// ── date-gated ascensions ──
+//
+// The game blocks A1 → A2 until SPOOKY_ASCENSION opens (lib/flags.ts, enforced in
+// upgradeFarm.ts for exactly `ascensionLevel + 1 === 2`). Before this, the schedule
+// chained the ladder purely on build time and told you to walk straight into A2 on a
+// date the game refuses. The gate has to move that slot AND everything behind it.
+
+test("only A2 carries a date, taken verbatim from the game's flags.ts", () => {
+  assert.deepEqual(Object.keys(ASCENSION_UNLOCK_MS), ["2"], "no band may be gated that the game does not gate");
+  assert.equal(new Date(ASCENSION_UNLOCK_MS[2]).toISOString(), "2026-09-07T00:00:00.000Z");
+});
+
+test("the A2 upgrade slot cannot open before the unlock, and pushes the rest along", () => {
+  const nowMs = Date.now();
+  const a2 = out.steps.find((s) => s.kind === "upgrade" && s.asc === 2);
+  assert.ok(a2, "A2 upgrade step missing from the ladder");
+
+  const slotMs = nowMs + a2.buildSlotDays * 86400000;
+  assert.ok(slotMs >= ASCENSION_UNLOCK_MS[2] - 1000,
+    `A2 slot ${new Date(slotMs).toISOString()} opens before the game allows it`);
+  assert.equal(a2.gatedUntilMs, ASCENSION_UNLOCK_MS[2]);
+
+  // Nothing before A2 is gated: A1 is explicitly ungated in the game, and expansions
+  // are never gated — only the upgrade between bands is.
+  for (const s of out.steps) {
+    if (s === a2) continue;
+    assert.equal(s.gatedUntilMs, undefined, `${s.kind} A${s.asc} must not carry a gate`);
+  }
+
+  // Every later step is behind the gate too — the wait shifts the whole tail.
+  const after = out.steps.slice(out.steps.indexOf(a2) + 1);
+  for (const s of after) {
+    assert.ok(s.buildSlotDays >= a2.buildSlotDays - 1e-9,
+      `a step after A2 opens before it (${s.buildSlotDays} < ${a2.buildSlotDays})`);
+  }
+});
+
+test("the gate is reported with the dead time it costs", () => {
+  const g = (out.gates || []).find((x) => x.asc === 2);
+  assert.ok(g, "gates summary missing the A2 entry");
+  assert.equal(g.unlockMs, ASCENSION_UNLOCK_MS[2]);
+  assert.ok(g.waitDays >= 0);
+  // buildSlotDays − waitDays is when the queue actually arrives at the upgrade, so the
+  // page can say "ready in X, then idle Y".
+  assert.ok(g.buildSlotDays - g.waitDays >= -1e-9, "arrival cannot be before now");
+  assert.ok(Math.abs(g.buildSlotDays - out.steps.find((s) => s.kind === "upgrade" && s.asc === 2).buildSlotDays) < 1e-9);
+});
+
+test("a gated step is judged against its real slot, not the ungated one", () => {
+  // The whole point: waiting for the gate gives the farm more time, so a step that
+  // would miss a continuous slot can still be comfortably ready by the gated one.
+  const a2 = out.steps.find((s) => s.kind === "upgrade" && s.asc === 2);
+  for (const mode of ["eff", "theo"]) {
+    const sim = a2.sim && a2.sim[mode];
+    if (!sim || sim.farmEtaDays == null) continue;
+    assert.equal(sim.stuck, sim.farmEtaDays > a2.buildSlotDays + 1e-9,
+      `${mode}: stuck verdict not taken against the gated slot`);
+  }
+});
+
+// The gate is only useful if the page SAYS why the schedule jumps. Slice that banner
+// out of flowers.html and render it, so silently dropping the explanation fails here.
+test("the page explains the gate, with the arrival and the idle time", () => {
+  const html = readFileSync(new URL("../../flowers.html", import.meta.url), "utf8");
+  const start = html.indexOf("const waitGates = (d.gates || [])");
+  assert.ok(start > 0, "gate banner not found in flowers.html");
+  const end = html.indexOf("\n      }", start);
+  const body = html.slice(start, end) + "\n      }";
+
+  const render = (gates) => new Function("d", "fmtEta", "escHTML",
+    "let h = '';\n" + body + "\nreturn h;"
+  )({ gates }, (x) => x == null ? "—" : `${x.toFixed(1)}d`, String);
+
+  const out = render([{ asc: 2, unlockMs: Date.UTC(2026, 8, 7), waitDays: 11.6, buildSlotDays: 32.6 }]);
+  assert.match(out, /A2 unlocks 7\. ?9\. ?2026/, `unlock date not shown: ${out}`);
+  assert.match(out, /11\.6d/, "idle time not shown");
+  assert.match(out, /21\.0d/, "arrival (slot − wait) not shown");
+  assert.match(out, /SPOOKY_ASCENSION/, "should name the game flag it comes from");
+  assert.doesNotMatch(out, /undefined|NaN/);
+
+  // No wait → no banner. A gate the queue already runs past is not news.
+  assert.equal(render([{ asc: 2, unlockMs: Date.UTC(2026, 8, 7), waitDays: 0, buildSlotDays: 40 }]), "");
+  assert.equal(render([]), "");
 });
