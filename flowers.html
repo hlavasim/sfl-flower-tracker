@@ -5930,7 +5930,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.78</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.83</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5957,6 +5957,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.83", items: [
+          { t: "feat", text: "<b>◆ SHARD BUDGET</b> in the buy path (SKILLS ladder). Ascension Shards are the binding currency — only rank-ups spend them (T1 1◆ / T2 2◆ / T3 3◆), while every ascension hands you 50 skill points but only a handful of crystals — so you pile up points you can't use. The new panel projects what you'll bank by <b>A2/A3/A4/A5</b> and walks your own buy-path under each budget: how many rank-ups &amp; L1 skills you can afford, and the <b>idle points</b> you'll be sitting on. Plus two lists — <b>your shards → best rank-ups (FLOWER per shard)</b> and <b>surplus points → L1 skills (cost no shards)</b> — so you spend scarce shards where they pay most and dump leftover points into base skills. (Also un-sticks the version badge, which had been showing v4.78 since v4.79.)" },
+        ] },
         { ver: "v4.82", items: [
           { t: "fix", text: "<b>Ascension schedule respects the game's A2 date gate.</b> The build slots chained the ladder purely on build time, so the plan walked straight from the end of A1 into A2 — on a date the game refuses. Ascending into A2 is gated behind <code>SPOOKY_ASCENSION</code> (<b>7. 9. 2026</b>, from the game's flags.ts, enforced in upgradeFarm.ts for exactly <code>ascensionLevel + 1 === 2</code>). That upgrade's slot — and every slot behind it — now moves to the unlock, the row shows 🔒 with the date, and a banner says when the build queue actually arrives and <b>how long it then idles</b>. Since the wait gives the farm extra time, steps that looked like they'd miss their slot now pass. <b>A1 is not gated</b> (the game says so explicitly) and <b>A3+ have no date in the game at all</b> — no crystal/galaxy/marble flag exists — so nothing was invented for them; later bands are still scheduled purely by build time." },
         ] },
@@ -17777,6 +17780,45 @@
       renderRoadmapContent();
     };
 
+    // ◆ SHARD BUDGET: shards are the binding currency (only rank-ups spend them; each
+    // ascension gives 50 points but only a handful of crystals), so you pile up points you
+    // can't use. This projects what you'll bank by the next few ascensions and where to put
+    // it: rank-ups for the scarce shards (best FLOWER per shard), L1 skills for the surplus
+    // points (they cost NO shards). Walks `order` (the buy ladder) under each milestone's
+    // budget; rank-ups need shards+points, L1 need points only; leftover points = idle.
+    function roadmapShardBudgetHtml(order, shardsHave, freePts, ascLevel) {
+      const shForAsc = (a) => 3 * (1 + Math.min(a + 2, 12)); // crystals × 3 shards each
+      const a0 = ascLevel || 0;
+      const plan = (S, P) => {
+        let uS = 0, uP = 0, rankN = 0, rankGain = 0, l1N = 0, l1Gain = 0;
+        for (const o of order) {
+          const cs = o.shards || 0, cp = o.points || 0;
+          if (uS + cs <= S && uP + cp <= P) { uS += cs; uP += cp; if (cs > 0) { rankN++; rankGain += o.delta; } else { l1N++; l1Gain += o.delta; } }
+        }
+        return { rankN, rankGain, l1N, l1Gain, idle: P - uP };
+      };
+      const rows = [{ label: "teď", n: a0, sh: shardsHave }];
+      let sh = shardsHave;
+      for (let n = a0 + 1; n <= a0 + 4; n++) { sh += shForAsc(n); rows.push({ label: "A" + n, n, sh }); }
+      for (const r of rows) { r.pts = freePts + 50 * (r.n - a0); Object.assign(r, plan(r.sh, r.pts)); }
+      const ranks = order.filter(o => (o.shards || 0) > 0).map(o => ({ ...o, perSh: o.delta / o.shards })).sort((a, b) => b.perSh - a.perSh);
+      const l1s = order.filter(o => !(o.shards > 0) && (o.delta > 0)).sort((a, b) => (b.perPt || 0) - (a.perPt || 0));
+      return `<details style="margin:0 0 10px;border:1px solid var(--border-brown);border-radius:8px;background:#1a140c">
+        <summary style="cursor:pointer;padding:7px 10px;font-family:'Press Start 2P',monospace;font-size:0.5rem;color:var(--sunpetal)">◆ SHARD BUDGET — co našetříš do A${a0 + 1}–A${a0 + 4} &amp; kam s tím</summary>
+        <div style="padding:6px 10px 10px">
+          <div style="font-size:0.5rem;color:var(--text-dim);line-height:1.6;margin-bottom:6px">Shardy jsou úzké hrdlo — berou je <b>jen rank-upy</b> (T1 1◆, T2 2◆, T3 3◆), <b>L1 skilly stojí jen pointy</b>. Každá ascension dá <b>+50 pt</b>, ale jen <b>+${shForAsc(a0 + 1)}–${shForAsc(a0 + 4)}◆</b>, takže ti přebývají pointy. Řádky = co našetříš (kumulativně), sloupce = co se z toho dá koupit (chozeno tvým buy-pathem).</div>
+          <table style="width:100%;border-collapse:collapse;font-size:0.5rem">
+            <tr style="color:var(--text-dim)"><td style="padding:0 4px 3px 0">do</td><td style="text-align:right;padding:0 6px 3px">◆</td><td style="text-align:right;padding:0 6px 3px">pt</td><td style="text-align:right;padding:0 6px 3px">rank-upy → +FL/d</td><td style="text-align:right;padding:0 6px 3px">L1 → +FL/d</td><td style="text-align:right;padding:0 0 3px;color:#e8a060">idle pt</td></tr>
+            ${rows.map(r => `<tr style="border-top:1px solid #20190f"><td style="padding:2px 4px 2px 0;${r.label === "teď" ? "color:var(--text-dim)" : "color:var(--sunpetal)"}">${r.label}</td><td style="text-align:right;padding:2px 6px">${r.sh}</td><td style="text-align:right;padding:2px 6px">${r.pts}</td><td style="text-align:right;padding:2px 6px;color:var(--green)">${r.rankN} → +${roadmapFmtFlower(r.rankGain)}</td><td style="text-align:right;padding:2px 6px;color:var(--green)">${r.l1N} → +${roadmapFmtFlower(r.l1Gain)}</td><td style="text-align:right;padding:2px 0;color:${r.idle > 0 ? "#e8a060" : "var(--text-dim)"};font-weight:${r.idle > 0 ? "bold" : "normal"}">${r.idle}</td></tr>`).join("")}
+          </table>
+          <div style="font-size:0.5rem;color:var(--lily);margin:9px 0 3px;text-transform:uppercase;letter-spacing:0.5px">◆ Shardy → nejlepší rank-upy (FLOWER za shard)</div>
+          <div style="font-size:0.5rem;line-height:1.7">${ranks.slice(0, 8).map(o => `${escHTML(o.name)} <span style="color:var(--text-dim)">L${o.lvl}·${o.shards}◆</span> <span style="color:var(--sunpetal);font-weight:bold">${roadmapFmtFlower(o.perSh)}/◆</span> <span style="color:var(--green)">+${roadmapFmtFlower(o.delta)}/d</span>`).join(" &nbsp;·&nbsp; ") || "žádné rank-upy k mání"}</div>
+          <div style="font-size:0.5rem;color:var(--lily);margin:9px 0 3px;text-transform:uppercase;letter-spacing:0.5px">Přebytečné pointy → L1 skilly (nestojí ◆)</div>
+          <div style="font-size:0.5rem;line-height:1.7">${l1s.slice(0, 12).map(o => `${escHTML(o.name)} <span style="color:var(--text-dim)">${o.points}pt</span> <span style="color:var(--green)">+${roadmapFmtFlower(o.delta)}/d</span>`).join(" &nbsp;·&nbsp; ") || "žádné L1 skilly nezbývají — všechny hodnotné už máš"}</div>
+        </div>
+      </details>`;
+    }
+
     function roadmapAllUpgradesHtml(settings) {
       const ps = powerState || {};
       const sr = ps.skillRanks || {}, bv = ps.boostValues || {};
@@ -17873,6 +17915,8 @@
       let h = `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Every upgrade you can still take — buying a skill (L1) and each rank above it — best payback first, walked as a ladder so nothing sits above what it needs. <b>${order.length} steps · ${cPts} skill points · ${cSh} Ascension Shards · +${roadmapFmtFlower(cGain)}/day</b> if you took the lot. You have <b style="color:var(--green)">${freePts} point${freePts === 1 ? "" : "s"}</b> and <b style="color:${shardsHave ? "var(--green)" : "var(--red)"}">${shardsHave} shard${shardsHave === 1 ? "" : "s"}</b>. ROI prices points only — shards are not tradable, so they have no price. ${ps.valueBasis === "measured"
         ? `Values are priced at your <b>measured</b> throughput${ps.effMeta && ps.effMeta.days > 1 ? ` (${ps.effMeta.snaps} snapshots over ${ps.effMeta.days.toFixed(1)} days)` : ""}, not the theoretical ceiling.`
         : `Values are at <b>theoretical</b> throughput — no farm history reached the server, so measured could not be computed.`}</div>`;
+      // Forward shard/point projection — where the scarce shards and the surplus points go.
+      try { h += roadmapShardBudgetHtml(order, shardsHave, freePts, (ps.farm && ps.farm.island && ps.farm.island.ascensionLevel) || 0); } catch (e) {}
       h += `<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;overflow:hidden">`;
       h += `<div style="display:flex;gap:8px;padding:3px 8px;border-bottom:1px solid #20190f;font-size:0.44rem;color:var(--text-dim)"><span style="min-width:22px"></span><span style="flex:1;min-width:0">skill</span><span style="min-width:112px">tree · cost</span><span style="min-width:54px;text-align:right">FLOWER/d</span><span style="min-width:64px;text-align:right;color:var(--sunpetal);font-weight:bold" title="Podle tohoto sloupce je seznam řazený, od nejlepšího. FLOWER/den ÷ všechny body, které tě ta položka stojí (včetně odemčení tieru).">▼ per point</span><span style="min-width:42px;text-align:right" title="Návratnost ve dnech, včetně bodů na odemčení tieru. Je to jen převrácená hodnota sloupce vedle — cena bodu je pro všechny řádky stejná, takže řazení podle ROI a podle FLOWER/d na bod dává TOTÉŽ pořadí.">ROI</span><span style="min-width:74px;text-align:right">cumulative</span></div>`;
       order.forEach((r, i) => {
