@@ -5930,7 +5930,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.86</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.87</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5957,6 +5957,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.87", items: [
+          { t: "fix", text: "<b>Skills ladder toggles no longer kick you out of the ⭐ Skills tab.</b> Clicking <b>Jen L1</b> (or a budget milestone) re-rendered the whole roadmap, which rebuilds the buy-path and resets its tab to the default <b>☰ Table</b> — so you landed back on the old view and it looked like nothing had changed. The toggles now re-render just the Skills panel in place." },
+          { t: "fix", text: "<b>Skills ladder on mobile: the numbers you decide on are visible without scrolling.</b> v4.86 stopped the columns overlapping but pushed FLOWER/d and per-point off the right edge. Column order is now mobile-first — number, skill, <b>FLOWER/d</b>, <b>per point</b> — which fits a ~390px screen; tree·cost, ROI and cumulative sit to their right and are reachable by scrolling the ladder sideways." },
+        ] },
         { ver: "v4.86", items: [
           { t: "fix", text: "<b>Skills ladder no longer breaks on mobile.</b> It's a flex pseudo-table built for desktop width; on a phone the skill-name column collapsed to nothing and the text spilled over the \"tree · cost\" column (names wrapped mid-word, \"Mining\" printed on top of \"Frugal\"). The name column now has a fixed width and never wraps, and the whole ladder scrolls horizontally instead of overlapping — swipe right for FLOWER/d, per-point, ROI and cumulative. Columns stay aligned between the header and the rows." },
         ] },
@@ -17902,8 +17906,11 @@
         <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><span style="font-size:0.46rem;color:var(--text-dim)">budget k:</span>${[0, 1, 2, 3, 4].map(n => { const on = n === _msN; return `<button onclick="_roadmapSetSkillMilestone(${n})" title="${n === 0 ? "co máš teď" : "co našetříš do ascension " + _msName(n) + ": +" + (50 * n) + " pt a shardy z bandů"}" style="font-size:0.48rem;padding:2px 8px;border:1px solid var(--border-brown);border-radius:4px;cursor:pointer;background:${on ? "var(--sunpetal)" : "#241a10"};color:${on ? "#1a120a" : "var(--text-secondary)"};font-weight:${on ? "bold" : "normal"}">${_msName(n)}</button>`; }).join("")}</div>
         <div style="display:flex;gap:4px;align-items:center"><span style="font-size:0.46rem;color:var(--text-dim)">zobrazit:</span>${[["all", "Vše"], ["l1", "Jen L1"]].map(([m, lbl]) => { const on = (_skillLadderMode || "all") === m; return `<button onclick="_roadmapSetSkillLadderMode('${m}')" title="${m === "l1" ? "jen base skilly (L1) — stojí jen pointy, čára podle volných pointů" : "všechny upgrady (L1 i rank-upy) — čára podle pointů i shardů"}" style="font-size:0.48rem;padding:2px 8px;border:1px solid var(--border-brown);border-radius:4px;cursor:pointer;background:${on ? "var(--sunpetal)" : "#241a10"};color:${on ? "#1a120a" : "var(--text-secondary)"};font-weight:${on ? "bold" : "normal"}">${lbl}</button>`; }).join("")}</div>
       </div>`;
-      h += `<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;overflow-x:auto"><div style="min-width:600px">`;
-      h += `<div style="display:flex;gap:8px;padding:3px 8px;border-bottom:1px solid #20190f;font-size:0.44rem;color:var(--text-dim)"><span style="min-width:22px"></span><span style="flex:1 0 190px">skill</span><span style="min-width:112px;white-space:nowrap">tree · cost</span><span style="min-width:54px;text-align:right">FLOWER/d</span><span style="min-width:64px;text-align:right;color:var(--sunpetal);font-weight:bold" title="Podle tohoto sloupce je seznam řazený, od nejlepšího. FLOWER/den ÷ všechny body, které tě ta položka stojí (včetně odemčení tieru).">▼ per point</span><span style="min-width:42px;text-align:right" title="Návratnost ve dnech, včetně bodů na odemčení tieru. Je to jen převrácená hodnota sloupce vedle — cena bodu je pro všechny řádky stejná, takže řazení podle ROI a podle FLOWER/d na bod dává TOTÉŽ pořadí.">ROI</span><span style="min-width:74px;text-align:right">cumulative</span></div>`;
+      // Column order is mobile-first: number, name, then the two figures you actually decide
+      // on (FLOWER/d and per point) so they fit inside a ~390px screen without scrolling.
+      // tree·cost / ROI / cumulative sit to their right, reachable by horizontal scroll.
+      h += `<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;overflow-x:auto"><div style="min-width:566px">`;
+      h += `<div style="display:flex;gap:6px;padding:3px 8px;border-bottom:1px solid #20190f;font-size:0.44rem;color:var(--text-dim)"><span style="min-width:20px"></span><span style="flex:1 0 148px">skill</span><span style="min-width:52px;text-align:right;white-space:nowrap">FLOWER/d</span><span style="min-width:60px;text-align:right;white-space:nowrap;color:var(--sunpetal);font-weight:bold" title="Podle tohoto sloupce je seznam řazený, od nejlepšího. FLOWER/den ÷ všechny body, které tě ta položka stojí (včetně odemčení tieru).">▼ per point</span><span style="min-width:108px;white-space:nowrap">tree · cost</span><span style="min-width:40px;text-align:right" title="Návratnost ve dnech, včetně bodů na odemčení tieru. Je to jen převrácená hodnota sloupce vedle — cena bodu je pro všechny řádky stejná, takže řazení podle ROI a podle FLOWER/d na bod dává TOTÉŽ pořadí.">ROI</span><span style="min-width:72px;text-align:right;white-space:nowrap">cumulative</span></div>`;
       shown.forEach((r, i) => {
         if (i === affordable) {
           const why = (!_l1 && shown[i]._cS > _projSh && shown[i]._cP <= _projPt)
@@ -17924,7 +17931,7 @@
          * the wishlist's ✕ silently dead. No name, no escaping problem.
          */
         const TOGGLE = "var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none';";
-        h += `<div onclick="${TOGGLE}" title="klikni pro detail" style="display:flex;gap:8px;align-items:baseline;padding:4px 8px;border-bottom:1px solid #20190f;font-size:0.55rem;cursor:pointer;${dim}"><span style="color:var(--text-dim);min-width:22px">${i + 1}.</span><b style="flex:1 0 190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHTML(r.name)} <span style="color:var(--text-dim);font-weight:normal">L${r.lvl}</span>${gate}</b><span style="color:${col};font-size:0.45rem;min-width:112px;white-space:nowrap">${escHTML(r.tree || "")} · ${r.gap > 0 ? `<b style="color:#e8a060">${r.ptsAll}</b>` : r.points}pt${r.shards ? " + " + r.shards + "◆" : ""}</span><span style="color:var(--green);font-weight:bold;min-width:54px;text-align:right">+${roadmapFmtFlower(r.delta)}/d</span><span style="color:var(--sunpetal);font-weight:bold;font-size:0.5rem;min-width:64px;text-align:right" title="${roadmapFmtFlower(r.delta)}/d ÷ ${r.ptsAll} bodů — podle tohoto je seznam řazený">+${roadmapFmtFlower(r.perPt)}/pt</span><span style="color:${roiColorFor(roiD)};font-size:0.45rem;min-width:42px;text-align:right">${roiTxt}</span><span style="color:var(--text-dim);font-size:0.45rem;min-width:74px;text-align:right">${r._cP}pt${r._cS ? " · " + r._cS + "◆" : ""}</span></div>`;
+        h += `<div onclick="${TOGGLE}" title="klikni pro detail" style="display:flex;gap:6px;align-items:baseline;padding:4px 8px;border-bottom:1px solid #20190f;font-size:0.55rem;cursor:pointer;${dim}"><span style="color:var(--text-dim);min-width:20px">${i + 1}.</span><b style="flex:1 0 148px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHTML(r.name)} <span style="color:var(--text-dim);font-weight:normal">L${r.lvl}</span>${gate}</b><span style="color:var(--green);font-weight:bold;min-width:52px;text-align:right;white-space:nowrap">+${roadmapFmtFlower(r.delta)}/d</span><span style="color:var(--sunpetal);font-weight:bold;font-size:0.5rem;min-width:60px;text-align:right;white-space:nowrap" title="${roadmapFmtFlower(r.delta)}/d ÷ ${r.ptsAll} bodů — podle tohoto je seznam řazený">+${roadmapFmtFlower(r.perPt)}/pt</span><span style="color:${col};font-size:0.45rem;min-width:108px;white-space:nowrap">${escHTML(r.tree || "")} · ${r.gap > 0 ? `<b style="color:#e8a060">${r.ptsAll}</b>` : r.points}pt${r.shards ? " + " + r.shards + "◆" : ""}</span><span style="color:${roiColorFor(roiD)};font-size:0.45rem;min-width:40px;text-align:right">${roiTxt}</span><span style="color:var(--text-dim);font-size:0.45rem;min-width:72px;text-align:right;white-space:nowrap">${r._cP}pt${r._cS ? " · " + r._cS + "◆" : ""}</span></div>`;
 
         const catRows = Object.entries(r.byCat || {}).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
         const sd = SKILL_TREE_DATA[r.name] || {};
@@ -18794,8 +18801,11 @@
     // module vars rather than persisted (twinned) settings.
     let _skillMilestoneAhead = 0;
     let _skillLadderMode = "all";
-    window._roadmapSetSkillMilestone = function(n) { _skillMilestoneAhead = Math.max(0, Math.min(4, parseInt(n) || 0)); renderRoadmapContent(); };
-    window._roadmapSetSkillLadderMode = function(m) { _skillLadderMode = (m === "l1" ? "l1" : "all"); renderRoadmapContent(); };
+    // Re-render ONLY the ⭐ Skills panel in place — a full renderRoadmapContent() would rebuild
+    // the buy-path and reset its tab to the default (Table), bouncing you off the Skills view.
+    function _rerenderSkillsPanel() { const el = document.getElementById("buy-skills"); if (el) el.innerHTML = roadmapSkillsViewHtml(getRoadmapSettings()); }
+    window._roadmapSetSkillMilestone = function(n) { _skillMilestoneAhead = Math.max(0, Math.min(4, parseInt(n) || 0)); _rerenderSkillsPanel(); };
+    window._roadmapSetSkillLadderMode = function(m) { _skillLadderMode = (m === "l1" ? "l1" : "all"); _rerenderSkillsPanel(); };
     window._roadmapSetMaxPrice = function(v) { const n = parseFloat(v); saveRoadmapSettings({ maxPrice: isFinite(n) && n >= 0 ? n : 0 }); renderRoadmapContent(); };
     window._roadmapSetRestocks = function(v) { const n = parseFloat(v); saveRoadmapSettings({ restocksPerDay: isFinite(n) && n > 0 ? n : 2 }); renderRoadmapContent(); };
     window._roadmapSetTicketValue = function(v) { const n = parseFloat(v); saveRoadmapSettings({ ticketValueSfl: isFinite(n) && n >= 0 ? n : 1 }); renderRoadmapContent(); };
