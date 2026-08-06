@@ -5930,7 +5930,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.84</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.85</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5957,6 +5957,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.85", items: [
+          { t: "feat", text: "<b>Buy-path skills ladder: two toggles instead of a second table.</b> Folded the milestone projector into the ladder itself. <b>budget k: [teď · A2 · A3 · A4 · A5]</b> projects your budget forward — each ascension is +50 skill points and +3×(1+min(a+2,12)) shards — and moves the red \"from here on you cannot pay yet\" line down, so you see how far you'd reach by A3/A4/A5 (the header now reads \"Do A3 budeš mít X points and Y shards\"). <b>zobrazit: [Vše · Jen L1]</b> switches between all upgrades (the line cuts on points AND shards) and L1-only base skills (the line cuts on points alone — L1 costs no shards), with the cumulative column and totals re-numbered for the shown set. Replaces the v4.84 free-points panel, which lived above the ladder in its own box." },
+        ] },
         { ver: "v4.84", items: [
           { t: "feat", text: "<b>Skills: free-points milestone projector.</b> Replaces the shard-budget table (too much) with a <b>[teď · A2 · A3 · A4 · A5]</b> toggle right in the ⭐ Skills view. Each ascension band is 50 levels = 50 skill points, so the toggle projects how many <b>free skill points</b> you'll have by that ascension, and the <b>⭐ L1 SKILLY K VZETÍ</b> list (base skills only — they cost just points, no shards) marks which you can reach: <b style=\"color:#7fe0a0\">✓</b> takeable with those free points (best FLOWER/day first, cumulative) vs <b style=\"color:#e88\">✗</b> not yet. Flip the milestone to see how many more L1 skills each ascension unlocks — the answer to \"I'll have points piling up, where do they go\"." },
         ] },
@@ -17872,19 +17875,37 @@
       const TC = { "Crops": "#7fe0a0", "Trees": "#b98a5a", "Mining": "#9aa6b2", "Cooking": "#e8a060", "Animals": "#e6c25a", "Fishing": "#6ab0e0", "Greenhouse": "#8fd98f", "Fruit Patch": "#e89a5a", "Bees & Flowers": "#e08fd0", "Machinery": "#c0a0e0", "Compost": "#9a8a6a", "Aging": "#d8c89a" };
       if (!order.length) return `<div style="font-size:0.5rem;color:var(--text-dim)">Nothing pays back right now.</div>`;
 
-      // Where the money runs out. Points and shards are separate currencies, so the cut is
-      // whichever binds first — with 0 shards banked, every rank is beyond it by definition.
-      const affordable = order.filter(o => o.cPts <= freePts && o.cSh <= shardsHave).length;
+      // Two toggles drive this table. The ascension MILESTONE projects the budget forward
+      // (each ascension = +50 points and +3×(1+min(a+2,12)) shards); the MODE switches between
+      // all upgrades (shard+point cut) and L1-only (points cut — base skills cost no shards).
+      const _asc = (ps.farm && ps.farm.island && ps.farm.island.ascensionLevel) || 0;
+      const _msN = Math.max(0, Math.min(4, _skillMilestoneAhead || 0));
+      const _msName = (n) => n === 0 ? "teď" : "A" + (_asc + n);
+      let _projSh = shardsHave; for (let a = _asc + 1; a <= _asc + _msN; a++) _projSh += 3 * (1 + Math.min(a + 2, 12));
+      const _projPt = freePts + 50 * _msN;
+      const _l1 = _skillLadderMode === "l1";
+      // Shown rows + cost re-walked over the shown subset (L1-only re-numbers the cumulative).
+      const shown = _l1 ? order.filter(o => !(o.shards > 0)) : order;
+      let _cp = 0, _cs = 0;
+      for (const o of shown) { _cp += (o.points || 0); _cs += (o.shards || 0); o._cP = _cp; o._cS = _cs; }
+      const _shownGain = shown.reduce((s, o) => s + o.delta, 0);
+      // Where the money runs out at the projected budget — whichever currency binds first.
+      const affordable = shown.filter(o => o._cP <= _projPt && (_l1 || o._cS <= _projSh)).length;
 
-      let h = `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Every upgrade you can still take — buying a skill (L1) and each rank above it — best payback first, walked as a ladder so nothing sits above what it needs. <b>${order.length} steps · ${cPts} skill points · ${cSh} Ascension Shards · +${roadmapFmtFlower(cGain)}/day</b> if you took the lot. You have <b style="color:var(--green)">${freePts} point${freePts === 1 ? "" : "s"}</b> and <b style="color:${shardsHave ? "var(--green)" : "var(--red)"}">${shardsHave} shard${shardsHave === 1 ? "" : "s"}</b>. ROI prices points only — shards are not tradable, so they have no price. ${ps.valueBasis === "measured"
+      let h = `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Every upgrade you can still take — buying a skill (L1) and each rank above it — best payback first, walked as a ladder so nothing sits above what it needs. <b>${shown.length} step${shown.length === 1 ? "" : "s"}${_l1 ? " (jen L1)" : ""} · ${_cp} skill point${_cp === 1 ? "" : "s"}${_l1 ? "" : ` · ${_cs} Ascension Shard${_cs === 1 ? "" : "s"}`} · +${roadmapFmtFlower(_shownGain)}/day</b> if you took the lot. ${_msN > 0 ? `Do <b>${_msName(_msN)}</b> budeš mít` : "You have"} <b style="color:var(--green)">${_projPt} point${_projPt === 1 ? "" : "s"}</b>${_l1 ? " (jen L1 — bez shardů)" : ` and <b style="color:${_projSh ? "var(--green)" : "var(--red)"}">${_projSh} shard${_projSh === 1 ? "" : "s"}</b>`}. ROI prices points only — shards are not tradable, so they have no price. ${ps.valueBasis === "measured"
         ? `Values are priced at your <b>measured</b> throughput${ps.effMeta && ps.effMeta.days > 1 ? ` (${ps.effMeta.snaps} snapshots over ${ps.effMeta.days.toFixed(1)} days)` : ""}, not the theoretical ceiling.`
         : `Values are at <b>theoretical</b> throughput — no farm history reached the server, so measured could not be computed.`}</div>`;
+      h += `<div style="display:flex;gap:14px;align-items:center;margin:0 0 8px;flex-wrap:wrap">
+        <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><span style="font-size:0.46rem;color:var(--text-dim)">budget k:</span>${[0, 1, 2, 3, 4].map(n => { const on = n === _msN; return `<button onclick="_roadmapSetSkillMilestone(${n})" title="${n === 0 ? "co máš teď" : "co našetříš do ascension " + _msName(n) + ": +" + (50 * n) + " pt a shardy z bandů"}" style="font-size:0.48rem;padding:2px 8px;border:1px solid var(--border-brown);border-radius:4px;cursor:pointer;background:${on ? "var(--sunpetal)" : "#241a10"};color:${on ? "#1a120a" : "var(--text-secondary)"};font-weight:${on ? "bold" : "normal"}">${_msName(n)}</button>`; }).join("")}</div>
+        <div style="display:flex;gap:4px;align-items:center"><span style="font-size:0.46rem;color:var(--text-dim)">zobrazit:</span>${[["all", "Vše"], ["l1", "Jen L1"]].map(([m, lbl]) => { const on = (_skillLadderMode || "all") === m; return `<button onclick="_roadmapSetSkillLadderMode('${m}')" title="${m === "l1" ? "jen base skilly (L1) — stojí jen pointy, čára podle volných pointů" : "všechny upgrady (L1 i rank-upy) — čára podle pointů i shardů"}" style="font-size:0.48rem;padding:2px 8px;border:1px solid var(--border-brown);border-radius:4px;cursor:pointer;background:${on ? "var(--sunpetal)" : "#241a10"};color:${on ? "#1a120a" : "var(--text-secondary)"};font-weight:${on ? "bold" : "normal"}">${lbl}</button>`; }).join("")}</div>
+      </div>`;
       h += `<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;overflow:hidden">`;
       h += `<div style="display:flex;gap:8px;padding:3px 8px;border-bottom:1px solid #20190f;font-size:0.44rem;color:var(--text-dim)"><span style="min-width:22px"></span><span style="flex:1;min-width:0">skill</span><span style="min-width:112px">tree · cost</span><span style="min-width:54px;text-align:right">FLOWER/d</span><span style="min-width:64px;text-align:right;color:var(--sunpetal);font-weight:bold" title="Podle tohoto sloupce je seznam řazený, od nejlepšího. FLOWER/den ÷ všechny body, které tě ta položka stojí (včetně odemčení tieru).">▼ per point</span><span style="min-width:42px;text-align:right" title="Návratnost ve dnech, včetně bodů na odemčení tieru. Je to jen převrácená hodnota sloupce vedle — cena bodu je pro všechny řádky stejná, takže řazení podle ROI a podle FLOWER/d na bod dává TOTÉŽ pořadí.">ROI</span><span style="min-width:74px;text-align:right">cumulative</span></div>`;
-      order.forEach((r, i) => {
+      shown.forEach((r, i) => {
         if (i === affordable) {
-          const why = cSh > shardsHave && order[i].cSh > shardsHave && order[i].cPts <= freePts
-            ? `out of Ascension Shards (${shardsHave} banked)` : `out of skill points (${freePts} free)`;
+          const why = (!_l1 && shown[i]._cS > _projSh && shown[i]._cP <= _projPt)
+            ? `out of Ascension Shards (${_projSh}${_msN > 0 ? " by " + _msName(_msN) : " banked"})`
+            : `out of skill points (${_projPt}${_msN > 0 ? " by " + _msName(_msN) : " free"})`;
           h += `<div style="padding:4px 8px;background:#2a1410;border-top:2px solid var(--red);border-bottom:1px solid #20190f;font-size:0.47rem;color:var(--red)">— from here on you cannot pay yet: ${why} —</div>`;
         }
         const col = TC[r.tree] || "#8a7a5a";
@@ -17900,7 +17921,7 @@
          * the wishlist's ✕ silently dead. No name, no escaping problem.
          */
         const TOGGLE = "var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none';";
-        h += `<div onclick="${TOGGLE}" title="klikni pro detail" style="display:flex;gap:8px;align-items:baseline;padding:4px 8px;border-bottom:1px solid #20190f;font-size:0.55rem;cursor:pointer;${dim}"><span style="color:var(--text-dim);min-width:22px">${i + 1}.</span><b style="flex:1;min-width:0">${escHTML(r.name)} <span style="color:var(--text-dim);font-weight:normal">L${r.lvl}</span>${gate}</b><span style="color:${col};font-size:0.45rem;min-width:112px">${escHTML(r.tree || "")} · ${r.gap > 0 ? `<b style="color:#e8a060">${r.ptsAll}</b>` : r.points}pt${r.shards ? " + " + r.shards + "◆" : ""}</span><span style="color:var(--green);font-weight:bold;min-width:54px;text-align:right">+${roadmapFmtFlower(r.delta)}/d</span><span style="color:var(--sunpetal);font-weight:bold;font-size:0.5rem;min-width:64px;text-align:right" title="${roadmapFmtFlower(r.delta)}/d ÷ ${r.ptsAll} bodů — podle tohoto je seznam řazený">+${roadmapFmtFlower(r.perPt)}/pt</span><span style="color:${roiColorFor(roiD)};font-size:0.45rem;min-width:42px;text-align:right">${roiTxt}</span><span style="color:var(--text-dim);font-size:0.45rem;min-width:74px;text-align:right">${r.cPts}pt${r.cSh ? " · " + r.cSh + "◆" : ""}</span></div>`;
+        h += `<div onclick="${TOGGLE}" title="klikni pro detail" style="display:flex;gap:8px;align-items:baseline;padding:4px 8px;border-bottom:1px solid #20190f;font-size:0.55rem;cursor:pointer;${dim}"><span style="color:var(--text-dim);min-width:22px">${i + 1}.</span><b style="flex:1;min-width:0">${escHTML(r.name)} <span style="color:var(--text-dim);font-weight:normal">L${r.lvl}</span>${gate}</b><span style="color:${col};font-size:0.45rem;min-width:112px">${escHTML(r.tree || "")} · ${r.gap > 0 ? `<b style="color:#e8a060">${r.ptsAll}</b>` : r.points}pt${r.shards ? " + " + r.shards + "◆" : ""}</span><span style="color:var(--green);font-weight:bold;min-width:54px;text-align:right">+${roadmapFmtFlower(r.delta)}/d</span><span style="color:var(--sunpetal);font-weight:bold;font-size:0.5rem;min-width:64px;text-align:right" title="${roadmapFmtFlower(r.delta)}/d ÷ ${r.ptsAll} bodů — podle tohoto je seznam řazený">+${roadmapFmtFlower(r.perPt)}/pt</span><span style="color:${roiColorFor(roiD)};font-size:0.45rem;min-width:42px;text-align:right">${roiTxt}</span><span style="color:var(--text-dim);font-size:0.45rem;min-width:74px;text-align:right">${r._cP}pt${r._cS ? " · " + r._cS + "◆" : ""}</span></div>`;
 
         const catRows = Object.entries(r.byCat || {}).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
         const sd = SKILL_TREE_DATA[r.name] || {};
@@ -18193,6 +18214,7 @@
         return { c, net, allParts: bd.parts.concat(ex.flow), cond: bd.cond || [], tags: ex.tags || [] };
       });
       const resetList = rows.filter(r => r.c.has && r.net < -EPS).sort((a, b) => a.net - b.net);
+      const picks = rows.filter(r => !r.c.has && r.net > EPS).sort((a, b) => b.net - a.net).slice(0, 8);
       const valTag = (r) => {
         if (r.net > EPS) return `<span style="color:var(--green);font-weight:bold">+${roadmapFmtFlower(r.net)}/d</span>`;
         if (r.net < -EPS) return `<span style="color:var(--red);font-weight:bold">−${roadmapFmtFlower(-r.net)}/d</span>${r.c.has ? ` <span style="color:#e8a060;font-size:0.45rem">reset?</span>` : ""}`;
@@ -18224,32 +18246,18 @@
           <div style="text-align:right;min-width:58px;font-size:0.55rem">${valTag(r)}</div>
         </div>`;
       };
-      // Milestone projector: FREE points now / after the next ascensions (each band = 50
-      // levels = 50 skill points). Only the L1 base skills below are gated by these — rank-ups
-      // also need Ascension Shards, which run out long before points do.
-      const msAhead = Math.max(0, Math.min(4, _skillMilestoneAhead || 0));
-      const projFree = freePts + 50 * msAhead;
-      const msName = (n) => n === 0 ? "teď" : "A" + (ascLvl + n);
       let h = "";
       h += `<div class="pixel-panel" style="padding:11px;margin-bottom:14px">`;
-      h += `<div style="font-size:0.6rem;color:var(--sunpetal);display:flex;gap:8px;align-items:center;flex-wrap:wrap">Level ${level} · <b style="color:var(--green)">≈${projFree} free skill point${projFree === 1 ? "" : "s"}</b>${msAhead > 0 ? ` <span style="font-size:0.48rem;color:var(--text-dim)">do ${msName(msAhead)} (+${50 * msAhead} za ${msAhead}× ascension)</span>` : ""}${sflPerPt > 0 ? ` · 1 pt ≈ ${roadmapFmtFlower(sflPerPt)} SFL XP` : ""}<label style="font-size:0.48rem;color:var(--text-dim)">set teď: <input type="number" min="0" placeholder="auto" value="${settings.skillPts != null ? settings.skillPts : ''}" style="width:42px;font-size:0.55rem" onchange="_roadmapSetSkillPts(this.value)" title="Přepiš odhad volných pointů teď (může být vysoký, pokud máš Salt / Fish-Smoking skilly, které tool nezná)."></label></div>`;
-      h += `<div style="display:flex;gap:4px;align-items:center;margin-top:6px;flex-wrap:wrap"><span style="font-size:0.48rem;color:var(--text-dim)">volné pointy k:</span>${[0, 1, 2, 3, 4].map(n => { const on = n === msAhead; return `<button onclick="_roadmapSetSkillMilestone(${n})" style="font-size:0.5rem;padding:2px 9px;border:1px solid var(--border-brown);border-radius:4px;cursor:pointer;background:${on ? "var(--sunpetal)" : "#241a10"};color:${on ? "#1a120a" : "var(--text-secondary)"};font-weight:${on ? "bold" : "normal"}">${msName(n)}</button>`; }).join("")}</div>`;
+      h += `<div style="font-size:0.6rem;color:var(--sunpetal);display:flex;gap:8px;align-items:center;flex-wrap:wrap">Level ${level} · <b style="color:var(--green)">≈${freePts} free skill point${freePts === 1 ? "" : "s"}</b>${sflPerPt > 0 ? ` · 1 point ≈ ${roadmapFmtFlower(sflPerPt)} SFL of XP` : ""}<label style="font-size:0.48rem;color:var(--text-dim)">set: <input type="number" min="0" placeholder="auto" value="${settings.skillPts != null ? settings.skillPts : ''}" style="width:42px;font-size:0.55rem" onchange="_roadmapSetSkillPts(this.value)" title="Override the free-points estimate (it can read high if you own Salt / Fish-Smoking skills this tool doesn't track)."></label></div>`;
       if (resetList.length) {
         const loss = resetList.reduce((s, r) => s - r.net, 0), freed = resetList.reduce((s, r) => s + (r.c.skillPoints || 1), 0);
         h += `<div style="margin-top:9px;font-size:0.52rem;color:var(--red)"><b>◆ CONSIDER RESETTING (${resetList.length})</b> — owned skills hurting your FLOWER/day:</div>`;
         h += `<div style="font-size:0.52rem;color:var(--text-dim);line-height:1.7">${resetList.map(r => `${escHTML(r.c.name)} <span style="color:var(--red)">${roadmapFmtFlower(r.net)}/d</span> <span style="font-size:0.45rem">(${r.c.skillPoints || 1}pt, ${escHTML(r.c.skillTree || "")})</span>`).join(" · ")}</div>`;
         h += `<div style="font-size:0.47rem;color:var(--text-dim);margin-top:2px">Removing all of them stops a <b style="color:var(--green)">${roadmapFmtFlower(loss)}/d</b> loss and frees ${freed} points. (In-game resets cost SFL &amp; have a cooldown.)</div>`;
       }
-      // ⭐ L1 skills you don't own, best FLOWER/day first, with the selected milestone's point
-      // budget drawn across them (cumulative, best-first): ✓ green = reachable with ≈projFree
-      // free points, ✗ red = not yet. L1 only — they cost points, no shards.
-      const takeable = rows.filter(r => !r.c.has && r.net > EPS).sort((a, b) => b.net - a.net);
-      let cumP = 0; for (const r of takeable) { cumP += (r.c.skillPoints || 1); r._ok = cumP <= projFree; }
-      const affN = takeable.filter(r => r._ok).length;
-      if (takeable.length) {
-        h += `<div style="margin-top:10px;font-size:0.52rem;color:var(--lily)"><b>⭐ L1 SKILLY K VZETÍ</b> — nejlepší FLOWER/day, co ještě nemáš. S <b>≈${projFree}</b> volnými pointy ${msAhead > 0 ? "do " + msName(msAhead) : "teď"} dosáhneš <b style="color:var(--green)">${affN}</b> z ${takeable.length}:</div>`;
-        h += `<div style="font-size:0.5rem;line-height:1.9;margin-top:2px">${takeable.map(r => `<span style="color:${r._ok ? "var(--green)" : "var(--red)"};${r._ok ? "" : "opacity:0.75"};white-space:nowrap">${r._ok ? "✓" : "✗"} ${escHTML(r.c.name)} <span style="color:var(--text-dim);font-size:0.45rem">${r.c.skillPoints || 1}pt·${escHTML(r.c.skillTree || "")}</span> +${roadmapFmtFlower(r.net)}/d</span>`).join(" &nbsp; ")}</div>`;
-        h += `<div style="font-size:0.46rem;color:var(--text-dim);margin-top:3px">✓ = vezmeš s volnými pointy ${msAhead > 0 ? "do " + msName(msAhead) : "teď"} (nejlepší napřed, kumulativně) · ✗ = zatím ne. Přepni <b>volné pointy k:</b> nahoře a uvidíš, kolik jich odemkneš dál. Jen L1 (base skilly) — stojí <b>jen pointy</b>, žádné shardy.</div>`;
+      if (picks.length) {
+        h += `<div style="margin-top:9px;font-size:0.52rem;color:var(--lily)"><b>⭐ TOP TO TAKE</b> — best FLOWER/day you don't own:</div>`;
+        h += `<div style="font-size:0.52rem;color:var(--text-dim);line-height:1.7">${picks.map(r => `${escHTML(r.c.name)} <span style="color:var(--green)">+${roadmapFmtFlower(r.net)}/d</span> <span style="font-size:0.45rem">(${r.c.skillPoints || 1}pt, ${escHTML(r.c.skillTree || "")})</span>`).join(" · ")}</div>`;
       }
       h += `</div>`;
       h += `<div id="skill-all-upgrades" style="margin-bottom:10px">${roadmapAllUpgradesHtml(settings)}</div>`;
@@ -18778,10 +18786,13 @@
     window._roadmapSetMarketFee = function(v) { const n = parseFloat(v); saveRoadmapSettings({ marketFee: isFinite(n) && n >= 0 ? n : 10 }); renderRoadmapContent(); };
     window._roadmapToggleCat = function(cat, on) { const cur = ((getRoadmapSettings().excludeCats) || []).slice(); const i = cur.indexOf(cat); if (on) { if (i >= 0) cur.splice(i, 1); } else { if (i < 0) cur.push(cat); } saveRoadmapSettings({ excludeCats: cur }); renderRoadmapContent(); };
     window._roadmapSetSkillPts = function(v) { const n = parseFloat(v); saveRoadmapSettings({ skillPts: (v !== "" && isFinite(n) && n >= 0) ? Math.floor(n) : null }); renderRoadmapContent(); };
-    // Milestone for the ⭐ Skills free-points projector (0 = now, n = after n more ascensions).
-    // A view-only toggle, so it's a module var rather than a persisted (twinned) setting.
+    // Toggles for the buy-path skills ladder: the ascension milestone (0 = now, n = after n
+    // more ascensions) projects the budget forward; the mode filters to L1-only. View-only, so
+    // module vars rather than persisted (twinned) settings.
     let _skillMilestoneAhead = 0;
+    let _skillLadderMode = "all";
     window._roadmapSetSkillMilestone = function(n) { _skillMilestoneAhead = Math.max(0, Math.min(4, parseInt(n) || 0)); renderRoadmapContent(); };
+    window._roadmapSetSkillLadderMode = function(m) { _skillLadderMode = (m === "l1" ? "l1" : "all"); renderRoadmapContent(); };
     window._roadmapSetMaxPrice = function(v) { const n = parseFloat(v); saveRoadmapSettings({ maxPrice: isFinite(n) && n >= 0 ? n : 0 }); renderRoadmapContent(); };
     window._roadmapSetRestocks = function(v) { const n = parseFloat(v); saveRoadmapSettings({ restocksPerDay: isFinite(n) && n > 0 ? n : 2 }); renderRoadmapContent(); };
     window._roadmapSetTicketValue = function(v) { const n = parseFloat(v); saveRoadmapSettings({ ticketValueSfl: isFinite(n) && n >= 0 ? n : 1 }); renderRoadmapContent(); };
