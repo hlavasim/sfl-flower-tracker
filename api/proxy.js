@@ -14,6 +14,10 @@ export default async function handler(req, res) {
     "https://api.sunflower-land.com/",
     "https://sfl.world/",
     "https://api.coingecko.com/",
+    // Yakkamon's public pre-registration API (signup counter + top-100 leaderboard). It
+    // serves no CORS headers, so the browser cannot read it directly — same reason the
+    // others are here. Read-only and unauthenticated; nothing of ours is exposed.
+    "https://api.yakkamon.com/",
   ];
   if (!ALLOWED.some(prefix => url.startsWith(prefix))) {
     return res.status(403).json({ error: "Domain not allowed" });
@@ -34,6 +38,9 @@ export default async function handler(req, res) {
     { prefix: "https://sfl.world/", ttl: 300 },
     { prefix: "https://api.coingecko.com/", ttl: 300 },
     { prefix: "https://api.sunflower-land.com/community/farms/", ttl: 20 },
+    // Signup count moves slowly and the leaderboard regenerates on their side anyway
+    // (its own Cache-Control is 15 s); a minute is plenty fresh for a page you read.
+    { prefix: "https://api.yakkamon.com/", ttl: 60 },
   ];
   const rule = CACHE_RULES.find(r => url.startsWith(r.prefix));
   const apiUrl = process.env.KV_REST_API_URL;

@@ -5931,7 +5931,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.88</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.89</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5958,6 +5958,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.89", items: [
+          { t: "feat", text: "<b>Yakkamon page now runs on LIVE data.</b> Their pre-registration API turns out to be public (it just serves no CORS headers, so it goes through our proxy). The page now answers “what number would I be?” directly: it shows how many trainers have signed up so far, the <b>exact trainer number you'd get</b> if you registered now, which egg tier that lands in and how many spots are left in it — plus which tiers are already gone. After you sign up their own dashboard shows the same thing as <b>“TRAINER #N”</b>." },
+          { t: "feat", text: "<b>Live Yakkamon leaderboard — and it contradicts the marketing.</b> The site says rank is “revealed Q4 2026”, but the top 100 is readable today <i>with point totals</i>. The page now shows what #1 / #10 / #25 / #50 / #100 actually hold and converts each into the FLOWER it would take to match at the current multiplier. Treat it as a floor, not a target: deposits only open 10 Aug, so today's top is pure free-activity points and those thresholds will jump. Only the top 100 is public, so the top-1,000 / top-5,000 NFT cutoffs still aren't visible." },
+        ] },
         { ver: "v4.88", items: [
           { t: "feat", text: "<b>New 🐲 YAKKAMON page</b> (top nav) — everything known about Thought Farm's second game, the creature-collector + idle-farming title the Sunflower Land studio is building on Ronin. It uses <b>$FLOWER</b> (no new token), early access is Q4 2026 in waves, and from <b>10 Aug 2026</b> you can deposit $FLOWER for pre-registration points. The page carries the game description, key dates, every point source, the published deposit tiers, the rank→reward table, sign-up egg tiers, the 1 Oct free mint, official links and a scam warning (their previous X account was compromised — only @yakkamon_game is official). It also notes that <code>github.com/yakkamon/yakkamon</code> is still an empty placeholder, so unlike Sunflower Land none of this is verifiable in source yet." },
           { t: "feat", text: "<b>Yakkamon deposit calculator + “is it worth it” analysis.</b> Enter an amount and a week and it gives the points, the bulk bonus and the effective points-per-FLOWER — the multiplier is 3× in the opening week and drops 0.2× weekly. The formulas reproduce all four published tiers exactly (50→150+5, 500→1500+100, 5000→15000+2000, 50000→150000+40000); amounts in between use the doubling-per-10× bonus curve and are labelled as our interpolation, not published fact. The verdict section prices the real cost: a deposit is <b>not a purchase</b> (no withdrawal tax, no lock-up, no penalty) but <b>cannot be withdrawn during pre-registration</b>, so what it costs you is the forgone farm yield over that lock — computed from your own buy-path payback — plus contract risk. It also shows why the leaderboard is effectively a deposit ranking: all free activity earns roughly 1,000 points over ~4 months, while 500 FLOWER in week 1 earns 1,600." },
@@ -20862,6 +20866,33 @@
       const bonus = ykBonus(flower);
       return { base, bonus, total: base + bonus, perFlower: flower > 0 ? (base + bonus) / flower : 0 };
     }
+    /*
+     * Yakkamon publishes two endpoints with no CORS headers, so they go through /api/proxy
+     * (allow-listed there): /signups is the live registration counter — which is what tells
+     * you the trainer number you would get and therefore your egg tier — and /leaderboard is
+     * the live top 100 WITH point totals. The site says rank is "revealed Q4 2026", but the
+     * top of the board is in fact readable today, and it is the only real evidence of what a
+     * placing costs.
+     */
+    let _ykLive = null, _ykLiveErr = null, _ykLiveLoading = false;
+    async function _ykFetchLive() {
+      if (_ykLiveLoading) return;
+      _ykLiveLoading = true;
+      try {
+        const one = (u) => fetch(`/api/proxy?url=${encodeURIComponent(u)}`).then(r => r.ok ? r.json() : Promise.reject(r.status));
+        const [signups, board] = await Promise.all([
+          one("https://api.yakkamon.com/signups"),
+          one("https://api.yakkamon.com/leaderboard").catch(() => null),
+        ]);
+        _ykLive = { signups, board };
+        _ykLiveErr = null;
+      } catch (e) {
+        _ykLiveErr = String(e);
+      }
+      _ykLiveLoading = false;
+      if (getPage() === "yakkamon") renderYakkamon();
+    }
+
     let _ykAmount = 500, _ykWeek = 1, _ykRoiDays = 120, _ykLockDays = 120;
     window._ykSet = function (k, v) {
       const n = parseFloat(v);
@@ -20881,6 +20912,55 @@
 
       let h = `<div class="header pixel-panel pixel-font"><h1>🐲 YAKKAMON</h1>
         <div class="farm-id">Druhá hra od Thought Farm (tvůrci Sunflower Land) · pre-registrace běží</div></div>`;
+
+      // ── LIVE: registration counter + leaderboard ───────────────────
+      if (!_ykLive && !_ykLiveErr && !_ykLiveLoading) _ykFetchLive();
+      const su = _ykLive && _ykLive.signups;
+      const bd = _ykLive && _ykLive.board;
+      h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px;border-left:3px solid var(--green)">
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--green);margin-bottom:6px">🔴 ŽIVĚ — KOLIKÁTÝ BYS BYL</div>`;
+      if (su) {
+        const next = (su.claimed || 0) + 1;
+        const tier = su.tier || "?";
+        const gone = (su.tiers || []).filter(t => (su.claimed || 0) >= t.until).map(t => t.name);
+        h += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:8px">
+          <div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px">
+            <div style="font-size:0.45rem;color:var(--text-dim)">UŽ ZAREGISTROVÁNO</div>
+            <div style="font-size:0.8rem;color:var(--sunpetal);font-weight:bold">${fmt(su.claimed)}</div>
+            <div style="font-size:0.44rem;color:var(--text-dim)">z ${fmt(su.total)} celkem</div></div>
+          <div style="border:1px solid var(--border-brown);border-radius:6px;background:#1a1d10;padding:8px">
+            <div style="font-size:0.45rem;color:var(--text-dim)">TY BYS BYL</div>
+            <div style="font-size:0.8rem;color:var(--green);font-weight:bold">#${fmt(next)}</div>
+            <div style="font-size:0.44rem;color:var(--text-dim)">→ vajíčko <b style="color:var(--sunpetal)">${tier}</b></div></div>
+          <div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px">
+            <div style="font-size:0.45rem;color:var(--text-dim)">ZBÝVÁ V TIERU ${tier}</div>
+            <div style="font-size:0.8rem;color:var(--sunpetal);font-weight:bold">${fmt(su.remaining)}</div>
+            <div style="font-size:0.44rem;color:var(--text-dim)">tier končí na #${fmt(su.tierUntil)}</div></div>
+        </div>
+        <div style="font-size:0.5rem;line-height:1.7;color:var(--text-secondary)">
+          <b>Ano — své číslo poznáš.</b> Po registraci ti dashboard ukáže <b>„TRAINER #N"</b>, což je přesně tvoje pořadí. A dopředu to jde odhadnout odsud: teď je zapsáno <b>${fmt(su.claimed)}</b> trenérů, takže bys dostal zhruba <b>#${fmt(next)}</b>.
+          ${gone.length ? `<div style="margin-top:4px;color:#e8a060">⚠ Už je rozebráno: <b>${gone.join(", ")}</b> — na tyhle tiery je pozdě.</div>` : ""}
+          <div style="margin-top:4px;color:var(--text-dim);font-size:0.47rem">Tier vajíčka je <b>jediné</b>, co pořadí registrace ovlivňuje. Early access i NFT se dělí <b>podle bodů</b>, ne podle toho, kdy ses přihlásil.</div>
+        </div>`;
+        if (bd && bd.entries && bd.entries.length) {
+          const e = bd.entries, at = (r) => (e.find(x => x.rank === r) || {}).points;
+          const mult = ykMult(Math.max(1, nowWeek));
+          const flowerFor = (pts) => pts ? Math.ceil(pts / mult) : null;
+          h += `<div style="margin-top:10px;border-top:1px solid #20190f;padding-top:8px">
+            <div style="font-size:0.5rem;color:var(--lily);margin-bottom:4px"><b>ŽIVÝ ŽEBŘÍČEK</b> — ${fmt(bd.playerCount)} hráčů s body, veřejné je top ${bd.size}</div>
+            <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:300px">
+              <tr style="color:var(--text-dim);font-size:0.46rem"><td style="padding:0 6px 3px 0">pořadí</td><td style="text-align:right;padding:0 6px 3px">body teď</td><td style="text-align:right;padding:0 0 3px">≈ FLOWER na dorovnání</td></tr>
+              ${[1, 10, 25, 50, 100].map(r => { const p = at(r); return `<tr style="border-top:1px solid #20190f"><td style="padding:2px 6px 2px 0">#${r}</td><td style="text-align:right;padding:2px 6px;color:var(--sunpetal);font-weight:bold">${p ? fmt(p) : "—"}</td><td style="text-align:right;padding:2px 0;color:var(--green)">${p ? fmt(flowerFor(p)) + " ◈" : "—"}</td></tr>`; }).join("")}
+            </table></div>
+            <div style="font-size:0.46rem;color:var(--text-dim);margin-top:5px;line-height:1.6">Sloupec vpravo = kolik FLOWER by <b>dnes</b> stačilo na tolik bodů při aktuálním násobku ${mult.toFixed(1)}× (bez bulk bonusu, takže je to horní odhad). <b style="color:#e8a060">Ale pozor:</b> deposity se otevírají teprve ${open ? "právě teď" : "10. 8."} — jakmile začnou, tahle čísla vyletí nahoru, protože dnešní špička má body jen ze zdarma aktivit. Ber to jako <b>spodní hranici</b>, ne cíl. Zveřejněných je jen top 100, takže na hranici top 1 000 / 5 000 (kde jsou NFT) odsud nevidíš.</div>
+          </div>`;
+        }
+      } else if (_ykLiveErr) {
+        h += `<div style="font-size:0.5rem;color:var(--yellow)">Živá data se nepodařilo načíst (${escHTML(_ykLiveErr)}). Zkus REFRESH dole.</div>`;
+      } else {
+        h += `<div style="font-size:0.5rem;color:var(--text-dim)">Načítám živá data z api.yakkamon.com…</div>`;
+      }
+      h += `</div>`;
 
       // ── What it is ─────────────────────────────────────────────────
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
@@ -21027,7 +21107,7 @@
       </div>`;
 
       h += `<div style="font-size:0.45rem;color:var(--text-dim);text-align:center;margin-bottom:10px;line-height:1.6">Zdroj: yakkamon.com + docs.yakkamon.com, načteno 8. 8. 2026. Čísla se můžou změnit — u sporných míst je v textu uvedeno, co je publikované a co dopočítané.</div>`;
-      h += `<div class="footer"><button class="refresh-btn" onclick="renderYakkamon()">REFRESH</button></div>`;
+      h += `<div class="footer"><button class="refresh-btn" onclick="_ykLive=null;_ykLiveErr=null;renderYakkamon()">REFRESH</button></div>`;
       app.innerHTML = h;
     }
 
