@@ -2875,7 +2875,7 @@
     const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
     const IMG_BASE = "https://sfl.world/img/flowers/";
-    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "mytrades", "marks", "diff", "json", "constants", "ascension", "world"];
+    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "mytrades", "marks", "diff", "json", "constants", "ascension", "world", "yakkamon"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -5792,6 +5792,7 @@
         { id: "bumpkin", label: "BUMPKIN" },
         { id: "treasury", label: "TREASURY" },
         { id: "sales", label: "SALES" },
+        { id: "yakkamon", label: "🐲 YAKKAMON" },
       ];
       const overflow = [
         { id: "power", label: "POWER" },
@@ -5930,7 +5931,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.87</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.88</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5957,6 +5958,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.88", items: [
+          { t: "feat", text: "<b>New 🐲 YAKKAMON page</b> (top nav) — everything known about Thought Farm's second game, the creature-collector + idle-farming title the Sunflower Land studio is building on Ronin. It uses <b>$FLOWER</b> (no new token), early access is Q4 2026 in waves, and from <b>10 Aug 2026</b> you can deposit $FLOWER for pre-registration points. The page carries the game description, key dates, every point source, the published deposit tiers, the rank→reward table, sign-up egg tiers, the 1 Oct free mint, official links and a scam warning (their previous X account was compromised — only @yakkamon_game is official). It also notes that <code>github.com/yakkamon/yakkamon</code> is still an empty placeholder, so unlike Sunflower Land none of this is verifiable in source yet." },
+          { t: "feat", text: "<b>Yakkamon deposit calculator + “is it worth it” analysis.</b> Enter an amount and a week and it gives the points, the bulk bonus and the effective points-per-FLOWER — the multiplier is 3× in the opening week and drops 0.2× weekly. The formulas reproduce all four published tiers exactly (50→150+5, 500→1500+100, 5000→15000+2000, 50000→150000+40000); amounts in between use the doubling-per-10× bonus curve and are labelled as our interpolation, not published fact. The verdict section prices the real cost: a deposit is <b>not a purchase</b> (no withdrawal tax, no lock-up, no penalty) but <b>cannot be withdrawn during pre-registration</b>, so what it costs you is the forgone farm yield over that lock — computed from your own buy-path payback — plus contract risk. It also shows why the leaderboard is effectively a deposit ranking: all free activity earns roughly 1,000 points over ~4 months, while 500 FLOWER in week 1 earns 1,600." },
+        ] },
         { ver: "v4.87", items: [
           { t: "fix", text: "<b>Skills ladder toggles no longer kick you out of the ⭐ Skills tab.</b> Clicking <b>Jen L1</b> (or a budget milestone) re-rendered the whole roadmap, which rebuilds the buy-path and resets its tab to the default <b>☰ Table</b> — so you landed back on the old view and it looked like nothing had changed. The toggles now re-render just the Skills panel in place." },
           { t: "fix", text: "<b>Skills ladder on mobile: the numbers you decide on are visible without scrolling.</b> v4.86 stopped the columns overlapping but pushed FLOWER/d and per-point off the right edge. Column order is now mobile-first — number, skill, <b>FLOWER/d</b>, <b>per point</b> — which fits a ~390px screen; tree·cost, ROI and cumulative sit to their right and are reachable by scrolling the ladder sideways." },
@@ -20792,6 +20797,240 @@
       }
     }
 
+    /* ═══════════════════════════════════════════════════════════════════
+     *  YAKKAMON — Thought Farm's second game (the Sunflower Land studio).
+     *
+     *  Everything here is sourced from the official site/docs (yakkamon.com,
+     *  docs.yakkamon.com), read 2026-08-08, and is flagged where a figure is
+     *  OUR interpolation rather than something they published. The point of the
+     *  page is the deposit decision: from 10 Aug 2026 you can send $FLOWER for
+     *  pre-registration points, and the question is whether that is worth it.
+     * ═══════════════════════════════════════════════════════════════════ */
+    const YK = {
+      depositStart: Date.UTC(2026, 7, 10),          // 10 Aug 2026, week 1 opens
+      multStart: 3.0, multStepPerWeek: 0.2,          // 3X week 1, −0.2X each week after
+      minDeposit: 5,
+      // The four tiers the site actually publishes (points shown are AT the 3X opening week).
+      tiers: [
+        { flower: 50, pts: 150, bonus: 5 },
+        { flower: 500, pts: 1500, bonus: 100 },
+        { flower: 5000, pts: 15000, bonus: 2000 },
+        { flower: 50000, pts: 150000, bonus: 40000 },
+      ],
+      actions: [
+        { what: "Denní nurture vajíčka", pts: "+6", per: "den", note: "jediný opakovatelný zdroj zdarma" },
+        { what: "Připojení Discordu", pts: "+10", per: "jednorázově", note: "" },
+        { what: "Příspěvek na Discordu", pts: "+5", per: "post", note: "limit neuveden" },
+        { what: "Propojení X / Twitteru", pts: "+10", per: "jednorázově", note: "" },
+        { what: "Propojení peněženky", pts: "+10", per: "jednorázově", note: "" },
+        { what: "Referral (pozvaný kamarád)", pts: "+30", per: "kamarád", note: "škáluje, pokud máš dosah" },
+        { what: "Ronin free mint", pts: "+250", per: "mint", note: "1× na účet, 1. 10. 2026" },
+        { what: "$FLOWER deposit", pts: "×3.0 → ×0.2/týden dolů", per: "FLOWER", note: "zdaleka největší zdroj" },
+      ],
+      ranks: [
+        { r: "1 – 100", rew: "Legendary monster A", wave: "Wave 1", nft: true },
+        { r: "101 – 500", rew: "Legendary monster B", wave: "Wave 1", nft: true },
+        { r: "501 – 1 000", rew: "Legendary monster C", wave: "Wave 1", nft: true },
+        { r: "1 001 – 5 000", rew: "Rare monster A", wave: "Wave 2", nft: true },
+        { r: "5 001 – 20 000", rew: "Early access", wave: "Wave 3", nft: false },
+        { r: "20 001 – 50 000", rew: "Early access", wave: "Wave 4", nft: false },
+        { r: "50 001 – 100 000", rew: "Early access", wave: "Wave 5", nft: false },
+        { r: "100 001 +", rew: "nic — bez early access", wave: "—", nft: false },
+      ],
+      eggs: [
+        { r: "1 – 10 000", egg: "Platinum" }, { r: "10 001 – 25 000", egg: "Gold" },
+        { r: "25 001 – 50 000", egg: "Silver" }, { r: "50 001 – 100 000", egg: "Bronze" },
+        { r: "100 001 – 500 000", egg: "Basic" },
+      ],
+    };
+    /** Week index (1-based) of the deposit programme for a given time. */
+    function ykWeekAt(ms) { return Math.max(1, Math.floor((ms - YK.depositStart) / (7 * 86400000)) + 1); }
+    /** Multiplier for week n: 3.0, 2.8, 2.6 … The site does not say where it floors. */
+    function ykMult(week) { return Math.max(0, YK.multStart - YK.multStepPerWeek * (week - 1)); }
+    /*
+     * Bulk bonus. The site lists it at four amounts only; per FLOWER those are 0.1 / 0.2 /
+     * 0.4 / 0.8 — i.e. the rate DOUBLES per 10x deposited, which is the "exponentially more"
+     * they advertise. Everything between the tiers is this curve, and the UI says so rather
+     * than passing an interpolation off as published fact.
+     */
+    function ykBonus(flower) {
+      if (!(flower > 0)) return 0;
+      return flower * 0.1 * Math.pow(2, Math.log10(flower / 50));
+    }
+    function ykPoints(flower, week) {
+      const base = flower * ykMult(week);
+      const bonus = ykBonus(flower);
+      return { base, bonus, total: base + bonus, perFlower: flower > 0 ? (base + bonus) / flower : 0 };
+    }
+    let _ykAmount = 500, _ykWeek = 1, _ykRoiDays = 120, _ykLockDays = 120;
+    window._ykSet = function (k, v) {
+      const n = parseFloat(v);
+      if (k === "amount") _ykAmount = isFinite(n) && n >= 0 ? n : 0;
+      if (k === "week") _ykWeek = Math.max(1, Math.min(15, parseInt(v) || 1));
+      if (k === "roi") _ykRoiDays = isFinite(n) && n > 0 ? n : 120;
+      if (k === "lock") _ykLockDays = isFinite(n) && n > 0 ? n : 120;
+      renderYakkamon();
+    };
+
+    function renderYakkamon() {
+      const app = document.getElementById("app");
+      const fmt = (n, d) => (+n).toLocaleString("cs-CZ", { maximumFractionDigits: d === undefined ? 0 : d });
+      const nowWeek = ykWeekAt(Date.now());
+      const open = Date.now() >= YK.depositStart;
+      const daysToOpen = Math.ceil((YK.depositStart - Date.now()) / 86400000);
+
+      let h = `<div class="header pixel-panel pixel-font"><h1>🐲 YAKKAMON</h1>
+        <div class="farm-id">Druhá hra od Thought Farm (tvůrci Sunflower Land) · pre-registrace běží</div></div>`;
+
+      // ── What it is ─────────────────────────────────────────────────
+      h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:6px">CO TO JE</div>
+        <div style="font-size:0.55rem;line-height:1.8;color:var(--text-secondary)">
+          <b>Creature collector + idle farming automation.</b> Lovíš a chytáš divoká monstra po světě, pak je posadíš na farmaření / těžbu / výrobu — a ta běží dál, i když jsi offline. K tomu craft vybavení (potřebné na lov vzácnějších monster), gym a <b>PvP aréna</b> proti ostatním trenérům.
+          <div style="margin-top:6px">Regiony mají vlastní suroviny (pouště, sopky, ohnivé oblasti, vody), střídá se <b>den/noc</b> a každé <b>3 měsíce</b> přichází sezóna s novými monstry ve volné přírodě.</div>
+          <div style="margin-top:6px;color:var(--text-dim)">Staví to tým za Sunflower Land: 1M+ hráčů, 100+ open-source přispěvatelů, 5+ let vývoje. Tvrdí, že SFL kvůli tomu nezpomaluje — sdílí základy postavené za těch 5 let.</div>
+        </div>
+      </div>`;
+
+      // ── Key facts grid ─────────────────────────────────────────────
+      const facts = [
+        ["Síť", "Ronin", "deposity jdou z <b>Base</b> nebo <b>Ronin</b>"],
+        ["Token", "$FLOWER", "<b>žádný nový token</b> — stejný jako v SFL"],
+        ["Early access", "Q4 2026", "po vlnách, podle pořadí v žebříčku"],
+        ["Deposity", "od 10. 8. 2026", open ? `běží — <b>týden ${nowWeek}</b>, násobek <b>${ykMult(nowWeek).toFixed(1)}×</b>` : `otevírá se za <b>${daysToOpen} dní</b>`],
+        ["Free mint", "1. 10. 2026", "10 000 NFT na Roninu, zdarma (jen gas)"],
+        ["Registrace", "zdarma, jen e-mail", "bez peněženky, bez SFL účtu"],
+      ];
+      h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:8px">KLÍČOVÁ FAKTA</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
+          ${facts.map(([k, v, n]) => `<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:7px 9px">
+            <div style="font-size:0.45rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em">${k}</div>
+            <div style="font-size:0.62rem;color:var(--sunpetal);font-weight:bold;margin:2px 0">${v}</div>
+            <div style="font-size:0.45rem;color:var(--text-dim);line-height:1.5">${n}</div>
+          </div>`).join("")}
+        </div>
+      </div>`;
+
+      // ── DEPOSIT CALCULATOR ─────────────────────────────────────────
+      const p = ykPoints(_ykAmount, _ykWeek);
+      const exactTier = YK.tiers.find(t => t.flower === _ykAmount);
+      // Opportunity cost: the same FLOWER put into the farm pays back in _ykRoiDays, i.e. it
+      // yields 1/_ykRoiDays per day. Locked for _ykLockDays it forgoes that much FLOWER.
+      const forgone = _ykAmount * (_ykLockDays / _ykRoiDays);
+      const costPerKpt = p.total > 0 ? (forgone / p.total) * 1000 : 0;
+      h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">💰 KALKULAČKA DEPOSITU</div>
+        <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Kolik bodů dostaneš a co tě to reálně stojí. Minimum je <b>${YK.minDeposit} $FLOWER</b>.</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+          <label style="font-size:0.5rem;color:var(--text-dim)">deposit <input type="number" min="0" step="50" value="${_ykAmount}" style="width:80px;font-size:0.6rem" onchange="_ykSet('amount',this.value)"> $FLOWER</label>
+          <label style="font-size:0.5rem;color:var(--text-dim)">týden <input type="number" min="1" max="15" value="${_ykWeek}" style="width:46px;font-size:0.6rem" onchange="_ykSet('week',this.value)"> → <b style="color:var(--sunpetal)">${ykMult(_ykWeek).toFixed(1)}×</b></label>
+          <span style="font-size:0.45rem;color:var(--text-dim)">(týden 1 = 10.–16. 8. 2026)</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:8px">
+          <div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px">
+            <div style="font-size:0.45rem;color:var(--text-dim)">ZÁKLAD (${_ykAmount} × ${ykMult(_ykWeek).toFixed(1)})</div>
+            <div style="font-size:0.75rem;color:var(--green);font-weight:bold">${fmt(p.base)} pts</div></div>
+          <div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px">
+            <div style="font-size:0.45rem;color:var(--text-dim)">BULK BONUS</div>
+            <div style="font-size:0.75rem;color:var(--sunpetal);font-weight:bold">+${fmt(p.bonus)} pts</div></div>
+          <div style="border:1px solid var(--border-brown);border-radius:6px;background:#1a1d10;padding:8px">
+            <div style="font-size:0.45rem;color:var(--text-dim)">CELKEM</div>
+            <div style="font-size:0.75rem;color:var(--green);font-weight:bold">${fmt(p.total)} pts</div>
+            <div style="font-size:0.44rem;color:var(--text-dim)">${p.perFlower.toFixed(2)} pts za 1 FLOWER</div></div>
+        </div>
+        <div style="font-size:0.46rem;color:${exactTier ? "var(--green)" : "#e8a060"};margin-bottom:10px;line-height:1.6">${exactTier
+          ? `✓ Přesně publikovaná hodnota (${fmt(exactTier.flower)} → +${fmt(exactTier.pts)} pts, +${fmt(exactTier.bonus)} bonus při 3×).`
+          : `⚠ Bulk bonus je <b>náš odhad</b> — Yakkamon publikuje jen 4 částky (50 / 500 / 5 000 / 50 000). Sazba bonusu se u nich zdvojnásobuje na každý 10× větší deposit (0,1 → 0,2 → 0,4 → 0,8 pts/FLOWER) a tuhle křivku dopočítáváme. Základ (× násobek) je jistý.`}</div>
+        <div style="border-top:1px solid #20190f;padding-top:8px">
+          <div style="font-size:0.5rem;color:var(--lily);margin-bottom:5px"><b>CO TĚ TO STOJÍ</b> — FLOWER dostaneš zpět, ale mezitím nevydělává</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:7px">
+            <label style="font-size:0.5rem;color:var(--text-dim)">návratnost tvých nákupů <input type="number" min="1" value="${_ykRoiDays}" style="width:56px;font-size:0.6rem" onchange="_ykSet('roi',this.value)"> dní</label>
+            <label style="font-size:0.5rem;color:var(--text-dim)">zamčeno <input type="number" min="1" value="${_ykLockDays}" style="width:56px;font-size:0.6rem" onchange="_ykSet('lock',this.value)"> dní</label>
+          </div>
+          <div style="font-size:0.55rem;line-height:1.8">
+            Ušlý výnos: <b style="color:var(--red)">${fmt(forgone, 1)} FLOWER</b> <span style="color:var(--text-dim);font-size:0.47rem">(${fmt(_ykAmount)} × ${_ykLockDays}d ÷ ${_ykRoiDays}d)</span><br>
+            Cena za 1 000 bodů: <b style="color:var(--sunpetal)">${fmt(costPerKpt, 2)} FLOWER</b><br>
+            <span style="color:var(--text-dim);font-size:0.5rem">Aby se to vyplatilo, musí pro tebe mít NFT + early access hodnotu aspoň <b style="color:var(--sunpetal)">${fmt(forgone, 1)} FLOWER</b>.</span>
+          </div>
+          <div style="font-size:0.44rem;color:var(--text-dim);margin-top:6px;line-height:1.6">„Návratnost" vezmi z ROADMAP → buy path (sloupec ROI) — kolik dní se ti vrací nejlepší nákup, který si teď můžeš koupit. To je sazba, o kterou přicházíš. „Zamčeno" = od depositu do chvíle, kdy dostaneš přístup (Q4 2026) — výběry <b>během pre-registrace nejdou</b>.</div>
+        </div>
+      </div>`;
+
+      // ── Published deposit tiers ────────────────────────────────────
+      h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">PUBLIKOVANÉ ÚROVNĚ DEPOSITU</div>
+        <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Přesně jak je uvádí yakkamon.com (hodnoty platí pro <b>úvodní týden, 3×</b>). Všimni si posledního sloupce — čím víc pošleš, tím víc bodů <b>za jeden</b> FLOWER.</div>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.55rem;min-width:340px">
+          <tr style="color:var(--text-dim);font-size:0.47rem"><td style="padding:0 6px 4px 0">deposit</td><td style="text-align:right;padding:0 6px 4px">body</td><td style="text-align:right;padding:0 6px 4px">bonus</td><td style="text-align:right;padding:0 6px 4px">celkem</td><td style="text-align:right;padding:0 0 4px">pts / FLOWER</td></tr>
+          ${YK.tiers.map(t => `<tr style="border-top:1px solid #20190f"><td style="padding:3px 6px 3px 0"><b>${fmt(t.flower)}</b> ${sflIcon()}</td><td style="text-align:right;padding:3px 6px;color:var(--green)">+${fmt(t.pts)}</td><td style="text-align:right;padding:3px 6px;color:var(--sunpetal)">+${fmt(t.bonus)}</td><td style="text-align:right;padding:3px 6px;color:var(--green);font-weight:bold">${fmt(t.pts + t.bonus)}</td><td style="text-align:right;padding:3px 0;color:var(--sunpetal);font-weight:bold">${((t.pts + t.bonus) / t.flower).toFixed(2)}</td></tr>`).join("")}
+        </table></div>
+        <div style="font-size:0.47rem;color:var(--text-dim);margin-top:7px;line-height:1.7"><b>Násobek klesá v čase:</b> ${[1, 2, 3, 4, 5, 6].map(w => `t${w} <b style="color:${w === nowWeek && open ? "var(--sunpetal)" : "var(--text-secondary)"}">${ykMult(w).toFixed(1)}×</b>`).join(" · ")} … −0,2× každý týden. Čekání tě stojí body: stejný deposit má v týdnu 6 jen <b>${(ykMult(6) / ykMult(1) * 100).toFixed(0)} %</b> základních bodů oproti týdnu 1.</div>
+      </div>`;
+
+      // ── All point sources ──────────────────────────────────────────
+      h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:8px">VŠECHNY ZDROJE BODŮ</div>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.55rem;min-width:360px">
+          ${YK.actions.map(a => `<tr style="border-top:1px solid #20190f"><td style="padding:3px 6px 3px 0">${a.what}</td><td style="text-align:right;padding:3px 6px;color:var(--green);font-weight:bold;white-space:nowrap">${a.pts}</td><td style="padding:3px 6px;color:var(--text-dim);font-size:0.47rem;white-space:nowrap">/ ${a.per}</td><td style="padding:3px 0;color:var(--text-dim);font-size:0.45rem">${a.note}</td></tr>`).join("")}
+        </table></div>
+      </div>`;
+
+      // ── Rank rewards ───────────────────────────────────────────────
+      h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">ODMĚNY PODLE POŘADÍ (body)</div>
+        <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Rozhoduje <b>výhradně pořadí v bodech</b>, ne kdy ses zaregistroval. <b>Jen top 100 000</b> dostane early access. Pořadí se odhalí až u airdropu (Q4 2026) — během pre-registrace <b>nevidíš, jak si stojíš</b>.</div>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.55rem;min-width:340px">
+          <tr style="color:var(--text-dim);font-size:0.47rem"><td style="padding:0 6px 4px 0">pořadí</td><td style="padding:0 6px 4px">odměna</td><td style="padding:0 0 4px">vlna</td></tr>
+          ${YK.ranks.map(r => `<tr style="border-top:1px solid #20190f"><td style="padding:3px 6px 3px 0;white-space:nowrap">${r.r}</td><td style="padding:3px 6px;color:${r.nft ? "var(--green)" : "var(--text-secondary)"}">${r.nft ? "🏆 " : ""}${r.rew}</td><td style="padding:3px 0;color:var(--text-dim);font-size:0.47rem;white-space:nowrap">${r.wave}</td></tr>`).join("")}
+        </table></div>
+        <div style="font-size:0.47rem;color:var(--text-dim);margin-top:7px;line-height:1.7"><b>NFT airdrop:</b> top 5 000 dostane Monster NFT, <b>top 1 000 Legendary Monster NFT</b> — „nejvzácnější tier, jaký kdy vyrazíme". Vedle toho běží <b>free mint</b> 1. 10. 2026 na Roninu: 10 000 NFT zdarma (jen gas), uvnitř je zaseto <b>5 legendárních</b>, 1 mint na účet, blind — odhalí se až při launchi. Musíš být do 1. 10. ověřený na whitelistu.</div>
+      </div>`;
+
+      // ── Sign-up eggs ───────────────────────────────────────────────
+      h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">VAJÍČKO ZA REGISTRACI (podle pořadí přihlášení)</div>
+        <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Tohle je <b>jediné</b>, co ti dá včasná registrace — lepší typ vajíčka. <b>Není to NFT</b>, je to herní předmět. Early access z toho neplyne.</div>
+        <div style="font-size:0.55rem;line-height:1.9">${YK.eggs.map(e => `<span style="white-space:nowrap"><b style="color:var(--sunpetal)">${e.egg}</b> <span style="color:var(--text-dim);font-size:0.47rem">${e.r}</span></span>`).join(" &nbsp;·&nbsp; ")}</div>
+      </div>`;
+
+      // ── VERDICT ────────────────────────────────────────────────────
+      const freeDaily = 6, freeDays = 120;
+      const freeTotal = freeDaily * freeDays + 10 + 10 + 10 + 250;
+      const eq = YK.tiers[1]; // 500 FLOWER
+      h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px;border-left:3px solid var(--sunpetal)">
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:8px">🧠 MÁ TO SMYSL? — jak o tom přemýšlet</div>
+        <div style="font-size:0.55rem;line-height:1.85;color:var(--text-secondary)">
+          <b style="color:var(--green)">1. Není to nákup, je to zamčení.</b> FLOWER dostaneš zpět — dokumentace výslovně říká <b>žádná daň při výběru, žádný lock-up, žádné penále</b>. Nekupuješ body, jen svůj FLOWER na čas odkládáš.
+          <div style="margin-top:8px"><b style="color:var(--red)">2. Ale během pre-registrace nevybereš.</b> Výběry <b>nejsou dostupné</b>, dokud nedostaneš přístup (Q4 2026). Po launchi navíc platí <b>denní % limity</b> „z ekonomických a bezpečnostních důvodů". Takže od 10. 8. do Q4 2026 na ty peníze nesáhneš — to je reálně <b>2–5 měsíců</b>.</div>
+          <div style="margin-top:8px"><b style="color:#e8a060">3. Skutečná cena = ušlý výnos.</b> Ten samý FLOWER investovaný do tvé farmy něco vydělává. Kalkulačka výš to spočítá: při ${_ykRoiDays}denní návratnosti a ${_ykLockDays} dnech zamčení tě ${fmt(_ykAmount)} FLOWER stojí <b style="color:var(--red)">${fmt(forgone, 1)} FLOWER</b> ušlého příjmu. K tomu riziko smart kontraktu a protistrany.</div>
+          <div style="margin-top:8px"><b style="color:var(--lily)">4. Leaderboard je fakticky žebříček depositů.</b> Zdarma se nedá dohnat: aktivita zdarma dá za ~${freeDays} dní zhruba <b>${fmt(freeTotal)} bodů</b> (denní vajíčko ${freeDaily}×${freeDays} + Discord/X/peněženka + free mint), zatímco <b>${fmt(eq.flower)} FLOWER v prvním týdnu = ${fmt(eq.pts + eq.bonus)} bodů</b>. Jeden střední deposit tedy přebije <b>všechnu</b> tvou aktivitu zdarma za celé období. Kdo cílí na top 1 000 (Legendary NFT), bude nejspíš potřebovat deposit v řádu tisíců FLOWER.</div>
+          <div style="margin-top:8px"><b>5. Co nikdo neví.</b> Kolik bodů bude stačit na jaké pořadí (žebříček není veřejný, pořadí se ukáže až u airdropu), kolik bude Legendary Monster NFT stát na trhu, a jestli Yakkamon vůbec chytne. Vsázíš na <b>opci</b>, ne na známý výnos.</div>
+          <div style="margin-top:10px;padding:8px 10px;background:#161009;border:1px solid var(--border-brown);border-radius:6px">
+            <b style="color:var(--sunpetal)">Rozhodovací pravidlo:</b> deposit dává smysl, když (a) ten FLOWER stejně jen držíš a nemáš pro něj lepší využití na farmě, (b) unese to, že na něj 2–5 měsíců nesáhneš, a (c) NFT + early access má pro tebe hodnotu aspoň <b style="color:var(--red)">${fmt(forgone, 1)} FLOWER</b> (tvůj ušlý výnos). Pokud máš na farmě nákupy s krátkou návratností, které ještě nemáš koupené, <b>ty skoro jistě vyhrávají</b> — mají známý výnos, tohle je loterie.
+            <div style="margin-top:5px;font-size:0.5rem;color:var(--text-dim)">Časování: pokud se rozhodneš jít do toho, <b>první týden je nejlepší</b> (3×) — každý týden čekání ubere 0,2× z násobku. Ale nespěchej do toho jen kvůli násobku: rozdíl t1 vs t3 je ${((1 - ykMult(3) / ykMult(1)) * 100).toFixed(0)} %, což je málo proti riziku, že se rozhodneš špatně.</div>
+          </div>
+        </div>
+      </div>`;
+
+      // ── Repo + links ───────────────────────────────────────────────
+      h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:6px">REPO &amp; ODKAZY</div>
+        <div style="font-size:0.52rem;line-height:1.8;color:var(--text-secondary)">
+          <b>Kód zatím veřejně není.</b> <code>github.com/yakkamon/yakkamon</code> existuje, ale je to <b>prázdný placeholder</b> (2 commity, jen package.json a README „blank landing page project", MIT, 0 hvězd). Na rozdíl od Sunflower Land, které je celé open-source, tady zatím <b>není co číst</b> — takže mechaniku nejde ověřit ve zdrojáku, jen z marketingu. Komunitní web běží na <code>github.com/yakkamon-world/yakkamonworld</code>.
+          <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+            ${[["yakkamon.com", "https://yakkamon.com/"], ["docs.yakkamon.com", "https://docs.yakkamon.com/"], ["FAQ", "https://docs.yakkamon.com/faq"], ["Deposity", "https://docs.yakkamon.com/pre-registration/flower-deposits"], ["Early access", "https://docs.yakkamon.com/pre-registration/early-access-airdrop"], ["Free mint", "https://docs.yakkamon.com/pre-registration/free-mint"], ["X @yakkamon_game", "https://x.com/yakkamon_game"], ["Discord", "https://discord.gg/yakkamon"], ["GitHub", "https://github.com/yakkamon/yakkamon"]]
+              .map(([l, u]) => `<a href="${u}" target="_blank" rel="noopener" style="font-size:0.5rem;padding:3px 9px;border:1px solid var(--border-brown);border-radius:4px;background:#241a10;color:var(--sunpetal);text-decoration:none">${l} ↗</a>`).join("")}
+          </div>
+          <div style="margin-top:8px;font-size:0.47rem;color:#e8a060;line-height:1.6">⚠ <b>Pozor na podvody:</b> tým hlásí, že jejich <b>předchozí X účet byl kompromitován</b>. Oficiální je <b>pouze @yakkamon_game</b>. Nikdy nepodepisuj nic z odkazu, který nepřišel z těchhle domén.</div>
+        </div>
+      </div>`;
+
+      h += `<div style="font-size:0.45rem;color:var(--text-dim);text-align:center;margin-bottom:10px;line-height:1.6">Zdroj: yakkamon.com + docs.yakkamon.com, načteno 8. 8. 2026. Čísla se můžou změnit — u sporných míst je v textu uvedeno, co je publikované a co dopočítané.</div>`;
+      h += `<div class="footer"><button class="refresh-btn" onclick="renderYakkamon()">REFRESH</button></div>`;
+      app.innerHTML = h;
+    }
+
     function renderWorld() {
       const app = document.getElementById("app");
       let html = `<div class="header pixel-panel pixel-font">
@@ -24049,6 +24288,10 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       // WORLD describes every farm in the game, not the configured one, so it renders
       // without a farm id and without paying for the personal farm fetch.
       if (page === "world") { renderConfigBar(page); renderWorld(); return; }
+
+      // YAKKAMON is about a different game entirely (Thought Farm's second title) — it needs
+      // no farm data, so it renders without a farm id and without the personal farm fetch.
+      if (page === "yakkamon") { renderConfigBar(page); renderYakkamon(); return; }
 
       if (!FARM_ID) {
         renderConfigBar("hub");
