@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.98</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.99</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.99", items: [
+          { t: "fix", text: "<b>Decorations map drops the colour wash behind the flowers.</b> Each planned tile was painted with its colour swatch, which made the bands obvious but hid what the arrangement will actually look like. Flowers now sit on plain ground exactly as they will in game — the bands still read, because they come from the flowers' own colours. The swatches stay in the COLOUR BALANCE legend, where they belong." },
+        ] },
         { ver: "v4.98", items: [
           { t: "feat", text: "<b>The plan now covers all 12 ascension expansions, not just the ones you have built.</b> The band is <b>432 tiles</b> (12 × 36) and the layout fills it — expansions you have not built yet are drawn with a dashed edge and their flowers dimmed. A checkbox (on by default) plans the whole band as if its nodes had been moved onto expansions 1–30, which is the point of the exercise; it lists exactly what is in the way and how many tiles it holds. Turn it off to plan only what is free right now. On a 6/12 farm that moves the layout from <b>3 of each flower</b> to <b>8 of each</b> — 400 tiles, 80 per colour." },
           { t: "fix", text: "<b>Found the missing icons — 231 “?” blocks down to 1.</b> sfl.world answers 200 for every name but serves one shared 1,532-byte placeholder (verified by hash across all 32 unmapped objects). The game loads that art from <code>CONFIG.PROTECTED_IMAGE_URL</code> — the CDN behind <code>SUNNYSIDE.building.*</code> — which the repo does not contain at all: no per-building file exists across its 12,042 blobs. Buildings, fences, tombstones, composters and the rest are now matched by slug against the 2,406 asset paths in the game's own <code>sunnyside.ts</code>, with hand-mapping where the asset name differs (Market → bettys_market, Barn → barn_sm, Water Well → well1). Only Ascension Age Banner has no art anywhere and still falls back to its name." },
@@ -21702,10 +21705,11 @@
           const isAsc = own >= ASC_FROM && own < ASC_TO;
           const unbuilt = own >= expansions;
           const flower = plan.get(k);
-          let bg = isAsc ? (unbuilt ? "#12100b" : "#1a1710") : "#141009", inner = "";
+          // No colour wash behind the flowers — the whole point is to see the arrangement the
+          // way it will actually look in game, which is the icons on plain ground.
+          const bg = isAsc ? (unbuilt ? "#12100b" : "#1a1710") : "#141009";
+          let inner = "";
           if (flower) {
-            const c = decColors.find((c) => flower.startsWith(c + " "));
-            bg = decSwatch[c] || "#8a7a5a";
             inner = `<img src="${getItemIcon(flower)}" alt="" style="width:100%;height:100%;object-fit:contain;${unbuilt ? "opacity:0.55" : ""}" onerror="this.style.display='none'">`;
           }
           const edge = !isAsc ? "none" : unbuilt ? "1px dashed rgba(255,215,0,0.30)" : "1px solid rgba(255,215,0,0.10)";
@@ -21734,7 +21738,7 @@
         <div style="overflow:auto;max-height:70vh;border:1px solid var(--border-brown);border-radius:6px;background:#0d0b07">
           <div style="display:grid;grid-template-columns:repeat(${W}, 13px);grid-auto-rows:13px;gap:0;width:max-content">${cells.join("")}</div>
         </div>
-        <div style="font-size:0.45rem;color:var(--text-dim);margin-top:6px;line-height:1.6">Hover a tile for its coordinates. Colour blocks are the planned flowers, dark tiles with an icon are nodes/buildings/decorations you already have, plain dark tiles are free.</div>
+        <div style="font-size:0.45rem;color:var(--text-dim);margin-top:6px;line-height:1.6">Hover a tile for its coordinates. Flowers are drawn on plain ground with no colour wash behind them, so this is roughly what the arrangement will look like in game — the bands come from the flowers themselves. Tiles with any other icon are nodes, buildings and decorations you already have; plain dark tiles are free. A dashed edge means that expansion is not built yet.</div>
       </div>`;
 
       // ── colour legend + shopping list ────────────────────────────────
