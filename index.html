@@ -73,6 +73,10 @@
       flex-wrap: wrap;
       margin-bottom: 12px;
       background: var(--bg-dark);
+      /* Anchor for the MORE dropdown on narrow screens — see .nav-more-menu below. When the
+         bar wraps, the MORE button can end up anywhere on the last row, and a menu anchored
+         to the button itself hangs off the edge of the screen. */
+      position: relative;
     }
     .nav-link {
       font-family: 'Press Start 2P', cursive;
@@ -1858,6 +1862,14 @@
       color: var(--sunpetal);
       border-bottom-color: transparent;
       background: rgba(255,215,0,0.08);
+    }
+    /* Mobile: hang the menu across the whole nav bar instead of off the button. The bar wraps,
+       so the button can sit anywhere on the last row and a button-anchored menu runs off the
+       screen edge. Must come AFTER the base rules above — an override inside the earlier
+       max-width block loses the cascade to `.nav-more-wrap { position: relative }`. */
+    @media (max-width: 640px) {
+      .nav-more-wrap { position: static; }
+      .nav-more-menu { left: 0; right: 0; width: auto; max-height: 70vh; overflow-y: auto; }
     }
 
     /* ── Pet Cards ── */
@@ -5783,22 +5795,28 @@
     // ═══════════════════════════════════════
 
     function renderNavBar(page) {
+      // Only the pages actually used day to day sit in the bar; everything else lives under
+      // MORE. Nine primary entries wrapped the bar onto three rows on a phone and pushed the
+      // MORE button to the left edge, where its right-anchored dropdown was clipped.
+      const canDiff = ["155498", "1260204733777858"].includes(FARM_ID);
       const primary = [
         { id: "dashboard", label: "DASH" },
+        { id: "bumpkin", label: "BUMPKIN" },
+        { id: "ascension", label: "ASCENSION" },
+        { id: "roadmap", label: "ROADMAP" },
+        ...(canDiff ? [{ id: "diff", label: "DIFF" }] : []),
+        { id: "world", label: "🌍 WORLD" },
+      ];
+      const overflow = [
+        { id: "yakkamon", label: "🐲 YAKKAMON" },
         { id: "hub", label: "HUB" },
         { id: "flowers", label: "FLOWERS" },
         { id: "dolls", label: "DOLLS" },
         { id: "crustaceans", label: "CRABS" },
-        { id: "bumpkin", label: "BUMPKIN" },
         { id: "treasury", label: "TREASURY" },
         { id: "sales", label: "SALES" },
-        { id: "yakkamon", label: "🐲 YAKKAMON" },
-      ];
-      const overflow = [
         { id: "power", label: "POWER" },
-        { id: "roadmap", label: "ROADMAP" },
         { id: "nodes", label: "NODES" },
-        { id: "ascension", label: "ASCENSION" },
         { id: "roi", label: "ROI" },
         { id: "shrines", label: "SHRINES" },
         { id: "buds", label: "BUDS" },
@@ -5808,9 +5826,7 @@
         { id: "json", label: "JSON" },
         { id: "marks", label: "MARKS" },
         { id: "constants", label: "CONSTANTS" },
-        { id: "world", label: "🌍 WORLD" },
       ];
-      if (["155498", "1260204733777858"].includes(FARM_ID)) overflow.push({ id: "diff", label: "DIFF" });
       let html = '<div class="nav-bar pixel-panel">';
       for (const l of primary) {
         const cls = page === l.id ? " active" : "";
@@ -5931,7 +5947,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.91</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.92</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5958,6 +5974,11 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.92", items: [
+          { t: "fix", text: "<b>Nav trimmed to what's actually used daily, and the MORE menu no longer gets clipped.</b> The bar now carries only <b>DASH · BUMPKIN · ASCENSION · ROADMAP · DIFF · WORLD</b>; everything else (Yakkamon, Hub, Flowers, Dolls, Crabs, Treasury, Sales, Power, Nodes, ROI, Shrines, Buds, Pets, Flips, My Trades, JSON, Marks, Constants) moved under MORE. Nine primary entries wrapped the bar onto three rows on a phone and shoved the MORE button to the left edge, where its right-anchored dropdown ran off screen. On mobile the menu now spans the whole nav bar instead of hanging off the button — the earlier attempt at this sat above the base rule in the stylesheet and lost the cascade, so it never applied." },
+          { t: "fix", text: "<b>Yakkamon page shows the FLOWER icon, not a ◈ glyph.</b> The deposit-tier table used the real icon while every other figure on the page used a diamond character, so the same currency looked like two different things." },
+          { t: "feat", text: "<b>Budget planner now draws the deposit schedule.</b> A bar per tranche — week, date, multiplier, FLOWER, points and running total — so the shape of the plan is visible: one thick green slice up front for leaderboard standing, then a tail of weekly top-ups that <b>gets thicker</b> as the multiplier decays toward 1×. Makes it obvious why splitting the big deposit costs you: the bulk bonus is rated per deposit." },
+        ] },
         { ver: "v4.91", items: [
           { t: "feat", text: "<b>Yakkamon budget planner.</b> Give it a BTC budget, how far off launch is and how many weekly Platinum boxes you want, and it splits the money between the <b>one big week-1 deposit</b> (best multiplier + biggest bulk bonus, which is what buys leaderboard standing) and the <b>weekly top-ups</b> the reward track needs — the track resets every 7 days, so it cannot be bought in advance. It reports the week-1 deposit, the weekly spend, the cumulative points and <b>where that would rank against the LIVE board right now</b>, plus the forgone farm yield on the whole budget. Prices are live: FLOWER from the same sfl.world exchange the rest of the app prices with (CoinGecko's “sunflower-land” is a different, older token and would misprice the budget ~2×) and BTC from CoinGecko." },
           { t: "fix", text: "<b>Leaderboard context: deposits opened and the board exploded.</b> Before 10 Aug the whole top 100 was free-activity points — #1 held 5,360 and #100 just 370. Within hours of deposits opening #1 was at 592,342 (≈144,000 FLOWER staked) and #100 at 2,160. The page reads the live board, so its thresholds and the planner's rank estimate move with it; treat any figure as a snapshot, not a target." },
@@ -20979,7 +21000,7 @@
             <div style="font-size:0.5rem;color:var(--lily);margin-bottom:4px"><b>ŽIVÝ ŽEBŘÍČEK</b> — ${fmt(bd.playerCount)} hráčů s body, veřejné je top ${bd.size}</div>
             <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:300px">
               <tr style="color:var(--text-dim);font-size:0.46rem"><td style="padding:0 6px 3px 0">pořadí</td><td style="text-align:right;padding:0 6px 3px">body teď</td><td style="text-align:right;padding:0 0 3px">≈ FLOWER na dorovnání</td></tr>
-              ${[1, 10, 25, 50, 100].map(r => { const p = at(r); return `<tr style="border-top:1px solid #20190f"><td style="padding:2px 6px 2px 0">#${r}</td><td style="text-align:right;padding:2px 6px;color:var(--sunpetal);font-weight:bold">${p ? fmt(p) : "—"}</td><td style="text-align:right;padding:2px 0;color:var(--green)">${p ? fmt(flowerFor(p)) + " ◈" : "—"}</td></tr>`; }).join("")}
+              ${[1, 10, 25, 50, 100].map(r => { const p = at(r); return `<tr style="border-top:1px solid #20190f"><td style="padding:2px 6px 2px 0">#${r}</td><td style="text-align:right;padding:2px 6px;color:var(--sunpetal);font-weight:bold">${p ? fmt(p) : "—"}</td><td style="text-align:right;padding:2px 0;color:var(--green)">${p ? fmt(flowerFor(p)) + " " + sflIcon() : "—"}</td></tr>`; }).join("")}
             </table></div>
             <div style="font-size:0.46rem;color:var(--text-dim);margin-top:5px;line-height:1.6">Sloupec vpravo = kolik FLOWER by <b>dnes</b> stačilo na tolik bodů při aktuálním násobku ${mult.toFixed(1)}× (bez bulk bonusu, takže je to horní odhad). <b style="color:#e8a060">Ale pozor:</b> deposity se otevírají teprve ${open ? "právě teď" : "10. 8."} — jakmile začnou, tahle čísla vyletí nahoru, protože dnešní špička má body jen ze zdarma aktivit. Ber to jako <b>spodní hranici</b>, ne cíl. Zveřejněných je jen top 100, takže na hranici top 1 000 / 5 000 (kde jsou NFT) odsud nevidíš.</div>
           </div>`;
@@ -21036,8 +21057,14 @@
         const TRACK_TOP = 5000;                  // Platinum resource box tier
         const boxW = Math.min(_ykBoxWeeks, _ykLaunchWeeks - 1);
         let weekly = 0;
-        for (let w = 2; w <= boxW + 1; w++) weekly += ykNeedFor(TRACK_TOP - FREE_WK, w);
+        const tranches = [];   // the actual deposit schedule, week by week
+        for (let w = 2; w <= boxW + 1; w++) {
+          const amt = ykNeedFor(TRACK_TOP - FREE_WK, w);
+          weekly += amt;
+          tranches.push({ w, amt, pts: TRACK_TOP, why: "Platinum box" });
+        }
         const w1 = budget - weekly;
+        if (w1 > 0) tranches.unshift({ w: 1, amt: w1, pts: ykPoints(w1, 1).total, why: "leaderboard + OG status" });
         const cum = (w1 > 0 ? ykPoints(w1, 1).total : 0) + boxW * TRACK_TOP;
         const ent = (bd && bd.entries) || [];
         const beat = ent.filter(e => e.points > cum).length;   // how many of the live top-100 are above you
@@ -21050,24 +21077,59 @@
             <label style="font-size:0.5rem;color:var(--text-dim)">launch za <input type="number" min="2" max="30" value="${_ykLaunchWeeks}" style="width:44px;font-size:0.6rem" onchange="_ykSet('launch',this.value)"> týdnů</label>
             <label style="font-size:0.5rem;color:var(--text-dim)">boxů chci <input type="number" min="0" max="29" value="${_ykBoxWeeks}" style="width:44px;font-size:0.6rem" onchange="_ykSet('boxw',this.value)">×</label>
           </div>
-          <div style="font-size:0.5rem;color:var(--text-secondary);margin-bottom:8px">Rozpočet: <b style="color:var(--sunpetal)">${fmt(budget)} ◈</b> <span style="color:var(--text-dim)">(${fmt(budgetUsd)} USD · BTC ${fmt(btcUsd)} · FLOWER ${flUsd.toFixed(4)})</span></div>
+          <div style="font-size:0.5rem;color:var(--text-secondary);margin-bottom:8px">Rozpočet: <b style="color:var(--sunpetal)">${fmt(budget)} ${sflIcon()}</b> <span style="color:var(--text-dim)">(${fmt(budgetUsd)} USD · BTC ${fmt(btcUsd)} · FLOWER ${flUsd.toFixed(4)})</span></div>
           ${w1 < 0
-            ? `<div style="font-size:0.55rem;color:var(--red)">⚠ Nevejde se — samotné týdenní dokupování (${boxW}× box) stojí <b>${fmt(weekly)} ◈</b>, což je víc než celý rozpočet. Sniž počet boxů.</div>`
+            ? `<div style="font-size:0.55rem;color:var(--red)">⚠ Nevejde se — samotné týdenní dokupování (${boxW}× box) stojí <b>${fmt(weekly)} ${sflIcon()}</b>, což je víc než celý rozpočet. Sniž počet boxů.</div>`
             : `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px">
                 <div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px">
                   <div style="font-size:0.45rem;color:var(--text-dim)">VKLAD TÝDEN 1</div>
-                  <div style="font-size:0.72rem;color:var(--green);font-weight:bold">${fmt(w1)} ◈</div>
+                  <div style="font-size:0.72rem;color:var(--green);font-weight:bold">${fmt(w1)} ${sflIcon()}</div>
                   <div style="font-size:0.44rem;color:var(--text-dim)">${fmt(ykPoints(w1, 1).total)} bodů</div></div>
                 <div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px">
                   <div style="font-size:0.45rem;color:var(--text-dim)">TÝDENNÍ (${boxW}×)</div>
-                  <div style="font-size:0.72rem;color:var(--sunpetal);font-weight:bold">${fmt(weekly)} ◈</div>
+                  <div style="font-size:0.72rem;color:var(--sunpetal);font-weight:bold">${fmt(weekly)} ${sflIcon()}</div>
                   <div style="font-size:0.44rem;color:var(--text-dim)">${boxW}× Platinum box</div></div>
                 <div style="border:1px solid var(--border-brown);border-radius:6px;background:#1a1d10;padding:8px">
                   <div style="font-size:0.45rem;color:var(--text-dim)">KUMULATIVNĚ</div>
                   <div style="font-size:0.72rem;color:var(--green);font-weight:bold">${fmt(cum)} b</div>
                   <div style="font-size:0.44rem;color:var(--text-dim)">dnes ${rankTxt}</div></div>
               </div>
-              <div style="font-size:0.46rem;color:var(--text-dim);margin-top:7px;line-height:1.6">Každý týden boxů ubere z týdne 1 a tím i z kumulativních bodů — track a leaderboard soupeří o stejné peníze. Zařazení je proti <b>živému top ${ent.length || "?"}</b>, což je momentka: deposity se otevřely ${open ? "právě teď" : "10. 8."} a laťka poroste. Ušlý výnos z celého rozpočtu při ${_ykRoiDays}denní návratnosti a ${_ykLaunchWeeks * 7} dnech ≈ <b style="color:var(--red)">${fmt(budget * (_ykLaunchWeeks * 7) / _ykRoiDays)} ◈</b>.</div>`}
+              ${(() => {
+                // The schedule itself — one bar per deposit, scaled to the largest, so the
+                // shape of the plan (one big slice up front, a thin tail of weekly top-ups
+                // that gets thicker as the multiplier decays) is visible at a glance.
+                if (!tranches.length) return "";
+                const max = Math.max(...tranches.map(t => t.amt));
+                let run = 0;
+                const rows = tranches.map(t => {
+                  run += t.amt;
+                  const pct = max > 0 ? (t.amt / max) * 100 : 0;
+                  const first = t.w === 1;
+                  const col = first ? "var(--green)" : "var(--sunpetal)";
+                  const date = new Date(YK.depositStart + (t.w - 1) * 7 * 86400000);
+                  return `<div style="display:flex;gap:6px;align-items:center;font-size:0.46rem;padding:1px 0">
+                    <span style="min-width:26px;color:var(--text-dim);white-space:nowrap">t${t.w}</span>
+                    <span style="min-width:42px;color:var(--text-dim);white-space:nowrap">${date.getDate()}.${date.getMonth() + 1}.</span>
+                    <span style="min-width:34px;color:var(--text-dim);white-space:nowrap">${ykMult(t.w).toFixed(1)}×</span>
+                    <span style="flex:1;min-width:40px;background:#20190f;border-radius:2px;overflow:hidden;height:9px;display:block"><span style="display:block;height:100%;width:${pct.toFixed(1)}%;background:${col}"></span></span>
+                    <span style="min-width:56px;text-align:right;color:${col};font-weight:bold;white-space:nowrap">${fmt(t.amt)}</span>
+                    <span style="min-width:52px;text-align:right;color:var(--text-dim);white-space:nowrap">${fmt(t.pts)} b</span>
+                    <span style="min-width:56px;text-align:right;color:var(--text-dim);white-space:nowrap">Σ ${fmt(run)}</span>
+                  </div>`;
+                }).join("");
+                return `<div style="margin-top:10px;border-top:1px solid #20190f;padding-top:7px">
+                  <div style="font-size:0.5rem;color:var(--lily);margin-bottom:4px"><b>PLÁTKY — kdy a kolik poslat</b> <span style="color:var(--text-dim);font-weight:normal">(${tranches.length} vkladů · Σ ${fmt(budget)} ${sflIcon()})</span></div>
+                  <div style="overflow-x:auto"><div style="min-width:330px">
+                    <div style="display:flex;gap:6px;font-size:0.42rem;color:var(--text-dim);padding-bottom:2px">
+                      <span style="min-width:26px">týden</span><span style="min-width:42px">datum</span><span style="min-width:34px">násobek</span>
+                      <span style="flex:1;min-width:40px"></span><span style="min-width:56px;text-align:right">FLOWER</span>
+                      <span style="min-width:52px;text-align:right">body</span><span style="min-width:56px;text-align:right">Σ vloženo</span>
+                    </div>${rows}
+                  </div></div>
+                  <div style="font-size:0.44rem;color:var(--text-dim);margin-top:5px;line-height:1.6">Zelený plátek je jednorázový vklad na leaderboard (nejlepší násobek + největší bulk bonus). Žluté jsou týdenní dokupy na Platinum box — <b>zdražují</b>, jak násobek klesá ke 1×, proto je poslední plátek nejtlustší. Rozdělit velký vklad na víc menších by ti sebralo bonus, ten se počítá <b>z každého vkladu zvlášť</b>.</div>
+                </div>`;
+              })()}
+              <div style="font-size:0.46rem;color:var(--text-dim);margin-top:7px;line-height:1.6">Každý týden boxů ubere z týdne 1 a tím i z kumulativních bodů — track a leaderboard soupeří o stejné peníze. Zařazení je proti <b>živému top ${ent.length || "?"}</b>, což je momentka: deposity se otevřely ${open ? "právě teď" : "10. 8."} a laťka poroste. Ušlý výnos z celého rozpočtu při ${_ykRoiDays}denní návratnosti a ${_ykLaunchWeeks * 7} dnech ≈ <b style="color:var(--red)">${fmt(budget * (_ykLaunchWeeks * 7) / _ykRoiDays)} ${sflIcon()}</b>.</div>`}
         </div>`;
       }
 
@@ -21126,7 +21188,7 @@
           ${YK.tiers.map(t => `<tr style="border-top:1px solid #20190f"><td style="padding:3px 6px 3px 0"><b>${fmt(t.flower)}</b> ${sflIcon()}</td><td style="text-align:right;padding:3px 6px;color:var(--green)">+${fmt(t.pts)}</td><td style="text-align:right;padding:3px 6px;color:var(--sunpetal)">+${fmt(t.bonus)}</td><td style="text-align:right;padding:3px 6px;color:var(--green);font-weight:bold">${fmt(t.pts + t.bonus)}</td><td style="text-align:right;padding:3px 0;color:var(--sunpetal);font-weight:bold">${((t.pts + t.bonus) / t.flower).toFixed(2)}</td></tr>`).join("")}
         </table></div>
         <div style="font-size:0.47rem;color:var(--text-dim);margin-top:7px;line-height:1.7"><b>Násobek klesá v čase:</b> ${[1, 2, 3, 4, 5, 6, 8, 11].map(w => `t${w} <b style="color:${w === nowWeek && open ? "var(--sunpetal)" : "var(--text-secondary)"}">${ykMult(w).toFixed(1)}×</b>`).join(" · ")} — −0,2× týdně, <b>od 11. týdne už jen 1×</b> a dál to neklesá. Čekání tě stojí body: stejný deposit má v týdnu 6 jen <b>${(ykMult(6) / ykMult(1) * 100).toFixed(0)} %</b> a od týdne 11 jen <b>${(ykMult(11) / ykMult(1) * 100).toFixed(0)} %</b> základních bodů oproti týdnu 1.
-        <div style="margin-top:5px;color:var(--text-secondary)"><b>Důsledek pro rozkládání vkladů:</b> protože bonus se počítá per vklad a násobek padá, je <b>jeden velký vklad co nejdřív</b> výrazně lepší než stejná suma po týdnech. Rozložit ~96 000 ◈ do konce roku dá zhruba o <b>40 % bodů míň</b>, než kdyby ta samá suma dorazila najednou v prvním týdnu.</div></div>
+        <div style="margin-top:5px;color:var(--text-secondary)"><b>Důsledek pro rozkládání vkladů:</b> protože bonus se počítá per vklad a násobek padá, je <b>jeden velký vklad co nejdřív</b> výrazně lepší než stejná suma po týdnech. Rozložit ~96 000 ${sflIcon()} do konce roku dá zhruba o <b>40 % bodů míň</b>, než kdyby ta samá suma dorazila najednou v prvním týdnu.</div></div>
       </div>`;
 
       // ── All point sources ──────────────────────────────────────────
