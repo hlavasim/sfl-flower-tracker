@@ -2887,7 +2887,7 @@
     const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
     const IMG_BASE = "https://sfl.world/img/flowers/";
-    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "mytrades", "marks", "diff", "json", "constants", "ascension", "world", "yakkamon"];
+    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "mytrades", "marks", "diff", "json", "constants", "ascension", "world", "yakkamon", "decorations"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -5809,6 +5809,7 @@
       ];
       const overflow = [
         { id: "yakkamon", label: "🐲 YAKKAMON" },
+        { id: "decorations", label: "🌸 DECORATIONS" },
         { id: "hub", label: "HUB" },
         { id: "flowers", label: "FLOWERS" },
         { id: "dolls", label: "DOLLS" },
@@ -5947,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.95</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.96</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5974,6 +5975,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.96", items: [
+          { t: "feat", text: "<b>New 🌸 DECORATIONS page — island map + flower layout planner.</b> Draws your whole island tile by tile from the game's own geometry (LAND_SIZE 6, the rectangular-spiral EXPANSION_ORIGINS, RESOURCE_DIMENSIONS footprints — the rule that an expansion at origin (ox,oy) covers x ∈ [ox−3, ox+2] was checked against a real farm: all 380 placed objects land inside a built expansion, none outside). Every node, building and collectible you have placed is drawn with its icon. The <b>ascension expansions</b> are outlined in gold and filled with a generated flower layout: five contiguous colour bands with the same number of every flower inside each, so it comes out even by colour <i>and</i> by species. It reports free tiles, colour balance and a <b>what-to-grow</b> table checked against your inventory, and projects what the layout becomes once all 12 expansions of the band are built." },
+          { t: "feat", text: "<b>Bring your own layout.</b> The page accepts a JSON map of <code>{\"x,y\": \"Flower Name\"}</code> — paste one and the map redraws from it, with the colour balance, grow list and collision checks all recomputed against yours. It flags tiles that sit on something already placed or fall outside any expansion you own, and hands you the generated plan as JSON to copy and edit." },
+        ] },
         { ver: "v4.95", items: [
           { t: "feat", text: "<b>Weekly target is now free-form points, not a box count.</b> “Boxes wanted” assumed everyone chases the 5,000-point Platinum resource box; the planner now takes <b>points/week</b> and <b>for N weeks</b>, so aiming at 500 (Gold food box) or 75 (Silver resource box) works just as well. It names the weekly-track tier your target actually reaches and what the next one up would cost — the full ladder runs 10 Bronze loot box · 30 raffle ticket · 75 Silver · 150 raffle · 500 Gold food box · 5,000 Platinum · 50,000 OG status." },
           { t: "feat", text: "<b>The planner remembers what you typed.</b> Budget, launch horizon, weekly target, weeks, the SFL-funnel toggle and its farm rate, plus the deposit calculator's amount/week/payback/lock — all persisted, so the page comes back the way you left it instead of resetting to defaults on every visit." },
@@ -21373,6 +21378,276 @@
       app.innerHTML = h;
     }
 
+    /* ═══════════════════════════════════════════════════════════════════
+     *  DECORATIONS — island map + flower layout planner.
+     *
+     *  Geometry is the game's own: LAND_SIZE 6, EXPANSION_ORIGINS walked as the
+     *  rectangular spiral from expansion/lib/constants.ts, and an expansion at
+     *  origin (ox,oy) covers x ∈ [ox−3, ox+2], y ∈ [oy−3, oy+2]. That rule was
+     *  checked against a real farm: all 380 placed objects land inside a built
+     *  expansion, none outside. Footprints come from RESOURCE_DIMENSIONS.
+     * ═══════════════════════════════════════════════════════════════════ */
+    const DEC_LAND = 6;
+    const decDim = {
+      "Crop Plot": [1, 1], "Gold Rock": [1, 1], "Iron Rock": [1, 1], "Stone Rock": [1, 1],
+      "Crimstone Rock": [2, 2], "Tree": [2, 2], "Fruit Patch": [2, 2], "Beehive": [1, 1],
+      "Flower Bed": [3, 1], "Sunstone Rock": [2, 2], "Oil Reserve": [2, 2], "Lava Pit": [2, 2],
+      "Ascension Crystal": [2, 2],
+    };
+    // farm key -> node name, for the footprint lookup above
+    const decKeys = {
+      crops: "Crop Plot", trees: "Tree", stones: "Stone Rock", iron: "Iron Rock",
+      gold: "Gold Rock", crimstones: "Crimstone Rock", sunstones: "Sunstone Rock",
+      oilReserves: "Oil Reserve", lavaPits: "Lava Pit", beehives: "Beehive",
+    };
+    const decColors = ["Red", "Yellow", "Purple", "Blue", "White"];
+    const decSwatch = { Red: "#e05a5a", Yellow: "#e8c85a", Purple: "#a878d8", Blue: "#5aa8e0", White: "#e8e4dc" };
+    /** Rectangular-spiral expansion origins, index 0 = centre (game's spiralOrigins). */
+    function decOrigins(count) {
+      const out = [{ x: 0, y: 0 }];
+      for (let r = 1; out.length < count; r++) {
+        for (let y = -(r - 1); y <= r; y++) out.push({ x: r, y });
+        for (let x = r - 1; x >= -r; x--) out.push({ x, y: r });
+        for (let y = r - 1; y >= -r; y--) out.push({ x: -r, y });
+        for (let x = -r + 1; x <= r; x++) out.push({ x, y: -r });
+      }
+      return out.slice(0, count).map((o) => ({ x: o.x * DEC_LAND, y: o.y * DEC_LAND }));
+    }
+    const decBox = (o) => ({ x0: o.x - 3, x1: o.x + 2, y0: o.y - 3, y1: o.y + 2 });
+    /** The 10 species that exist in all 5 colours (Prism Petal & co have no colour). */
+    function decSpecies() {
+      const set = {};
+      for (const name of Object.keys(FLOWER_RECIPES)) {
+        const c = decColors.find((c) => name.startsWith(c + " "));
+        if (!c) continue;
+        (set[name.slice(c.length + 1)] = set[name.slice(c.length + 1)] || {})[c] = name;
+      }
+      return Object.entries(set).filter(([, cols]) => decColors.every((c) => cols[c])).map(([sp, cols]) => ({ sp, cols }));
+    }
+    /**
+     * Occupancy of every tile the farm currently uses, plus which expansion owns it.
+     * Returns { occ: Map("x,y" -> {name, icon}), owner: Map("x,y" -> expansion index) }.
+     */
+    function decOccupancy(farm, expansions) {
+      const occ = new Map(), owner = new Map();
+      const origins = decOrigins(expansions);
+      origins.forEach((o, i) => {
+        const b = decBox(o);
+        for (let x = b.x0; x <= b.x1; x++) for (let y = b.y0; y <= b.y1; y++) owner.set(x + "," + y, i);
+      });
+      const stamp = (x, y, w, h, name) => {
+        for (let dx = 0; dx < w; dx++) for (let dy = 0; dy < h; dy++) occ.set((x + dx) + "," + (y + dy), name);
+      };
+      for (const [key, node] of Object.entries(decKeys)) {
+        for (const v of Object.values(farm[key] || {})) {
+          if (!v || typeof v.x !== "number") continue;
+          const [w, h] = decDim[node] || [1, 1];
+          stamp(v.x, v.y, v.width || w, v.height || h, node);
+        }
+      }
+      for (const v of Object.values((farm.flowers && farm.flowers.flowerBeds) || {})) {
+        if (!v || typeof v.x !== "number") continue;
+        stamp(v.x, v.y, v.width || 3, v.height || 1, "Flower Bed");
+      }
+      for (const [name, arr] of Object.entries(farm.collectibles || {})) {
+        for (const it of (arr || [])) {
+          const c = it.coordinates || {};
+          if (typeof c.x !== "number") continue;
+          const d = decDim[name] || [1, 1];
+          stamp(c.x, c.y, d[0], d[1], name);
+        }
+      }
+      for (const [name, arr] of Object.entries(farm.buildings || {})) {
+        for (const it of (arr || [])) {
+          const c = it.coordinates || {};
+          if (typeof c.x !== "number") continue;
+          stamp(c.x, c.y, 2, 2, name);   // buildings are 2x2 unless told otherwise
+        }
+      }
+      return { occ, owner, origins };
+    }
+    /**
+     * The flower plan: walk the ascension expansions (spiral indices 30..41) in ring order,
+     * take every free tile, and lay 5 contiguous colour bands over them — inside a band the
+     * 10 species run in blocks, so both "same count of every flower" and "even colour" hold.
+     */
+    function decPlan(free, perFlower) {
+      const species = decSpecies();
+      const plan = new Map();
+      let i = 0;
+      for (const colour of decColors) {
+        for (const { cols } of species) {
+          for (let n = 0; n < perFlower && i < free.length; n++, i++) plan.set(free[i], cols[colour]);
+        }
+      }
+      return plan;
+    }
+
+    // _decPer null = auto: the largest count that still divides evenly across all 50 flowers
+    // (and therefore all 5 colours) in the space actually available. Setting it by hand is
+    // allowed, but asking for more than fits is what produced 80 Red / 0 Blue.
+    let _decData = null, _decErr = null, _decLoading = false, _decCustom = null, _decPer = null;
+    window._decSetPer = function (v) { const n = parseInt(v); _decPer = (v === "" || !isFinite(n)) ? null : Math.max(0, Math.min(40, n)); renderDecorations(); };
+    window._decApplyJson = function () {
+      const el = document.getElementById("dec-json");
+      if (!el) return;
+      const raw = (el.value || "").trim();
+      if (!raw) { _decCustom = null; renderDecorations(); return; }
+      try {
+        const parsed = JSON.parse(raw);
+        const m = new Map();
+        for (const [k, v] of Object.entries(parsed)) if (/^-?\d+,-?\d+$/.test(k) && typeof v === "string") m.set(k, v);
+        if (!m.size) throw new Error("no valid \"x,y\": \"Flower Name\" entries");
+        _decCustom = m; _decErr = null;
+      } catch (e) { _decErr = "JSON: " + e.message; }
+      renderDecorations();
+    };
+    window._decUseGenerated = function () { _decCustom = null; renderDecorations(); };
+
+    async function renderDecorations() {
+      const app = document.getElementById("app");
+      if (!FARM_ID) { app.innerHTML = `<div class="error-screen pixel-panel pixel-font"><div class="icon">⚠️</div><h2>Set your Farm ID first</h2></div>`; return; }
+      if (!_decData && !_decLoading) {
+        _decLoading = true;
+        app.innerHTML = `<div class="pixel-panel pixel-font" style="padding:14px">Loading farm layout…</div>`;
+        try {
+          const r = await fetch(`/api/proxy?url=${encodeURIComponent("https://api.sunflower-land.com/community/farms/" + FARM_ID)}`);
+          const j = await r.json();
+          _decData = j.farm || j;
+        } catch (e) { _decErr = "Could not load the farm (" + e.message + ")"; }
+        _decLoading = false;
+      }
+      const farm = _decData;
+      if (!farm) { app.innerHTML = `<div class="error-screen pixel-panel pixel-font"><div class="icon">⚠️</div><h2>${escHTML(_decErr || "No farm data")}</h2><button class="refresh-btn" onclick="_decData=null;renderDecorations()">RETRY</button></div>`; return; }
+
+      const expansions = Math.max(1, parseInt((farm.inventory || {})["Basic Land"]) || 1);
+      const ascLevel = (farm.island || {}).ascensionLevel || 0;
+      const { occ, owner, origins } = decOccupancy(farm, expansions);
+      // Ascension band = spiral indices 30..41 (Basic Land 31..42). Only those that exist.
+      const ascIdx = [];
+      for (let i = 30; i < Math.min(expansions, 42); i++) ascIdx.push(i);
+      const ascTiles = [];
+      for (const i of ascIdx) {
+        const b = decBox(origins[i]);
+        for (let y = b.y0; y <= b.y1; y++) for (let x = b.x0; x <= b.x1; x++) ascTiles.push(x + "," + y);
+      }
+      const freeAsc = ascTiles.filter((k) => !occ.has(k));
+      const nSpecies = decSpecies().length;                 // 10
+      const slots = nSpecies * decColors.length;           // 50 distinct flowers
+      const autoPer = Math.floor(freeAsc.length / slots);   // biggest count that stays even
+      const per = _decPer == null ? autoPer : _decPer;
+      const overflow = per * slots > freeAsc.length;
+      const plan = _decCustom || decPlan(freeAsc, per);
+      // What the same layout becomes once the whole 12-expansion band is built.
+      const fullBandFree = 12 * 36 - (ascTiles.length - freeAsc.length);
+      const fullPer = Math.floor(fullBandFree / slots);
+
+      // ── what the plan needs vs what you hold ──────────────────────────
+      const need = {};
+      for (const name of plan.values()) need[name] = (need[name] || 0) + 1;
+      const inv = farm.inventory || {};
+      const rows = Object.entries(need).map(([name, n]) => {
+        const have = Math.floor(parseFloat(inv[name]) || 0);
+        return { name, n, have, missing: Math.max(0, n - have) };
+      }).sort((a, b) => b.missing - a.missing || a.name.localeCompare(b.name));
+      const totalNeed = rows.reduce((s, r) => s + r.n, 0);
+      const totalMissing = rows.reduce((s, r) => s + r.missing, 0);
+      // plan tiles that are NOT free (custom JSON can collide with a node)
+      const collisions = [...plan.keys()].filter((k) => occ.has(k));
+      const outside = [...plan.keys()].filter((k) => !owner.has(k));
+
+      let h = `<div class="header pixel-panel pixel-font"><h1>🌸 DECORATIONS</h1>
+        <div class="farm-id">Farm #${escHTML(FARM_ID)} · ${expansions} expansions · ascension A${ascLevel}</div></div>`;
+
+      h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px">
+          ${[["ASCENSION EXPANSIONS", ascIdx.length + " / 12", "spiral 31–42"],
+             ["TILES THERE", _fmtNum(ascTiles.length), ascIdx.length + " × 36"],
+             ["FREE", _fmtNum(freeAsc.length), (ascTiles.length - freeAsc.length) + " taken by nodes"],
+             ["PLAN USES", _fmtNum(plan.size), totalNeed ? Object.keys(need).length + " kinds" : "—"],
+             ["STILL TO GROW", _fmtNum(totalMissing), totalMissing ? "not in inventory" : "all in hand ✓"]]
+            .map(([k, v, n]) => `<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:7px 9px">
+              <div style="font-size:0.44rem;color:var(--text-dim);letter-spacing:0.05em">${k}</div>
+              <div style="font-size:0.72rem;color:var(--sunpetal);font-weight:bold">${v}</div>
+              <div style="font-size:0.43rem;color:var(--text-dim)">${n}</div></div>`).join("")}
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:9px">
+          <label style="font-size:0.5rem;color:var(--text-dim)">${_decCustom ? "<b>custom JSON layout in use</b>" : `generated layout — <input type="number" min="0" max="40" placeholder="auto" value="${_decPer == null ? "" : _decPer}" style="width:52px;font-size:0.6rem" onchange="_decSetPer(this.value)"> of each flower <span style="color:var(--text-dim)">(auto = ${autoPer}, the most that stays even in ${_fmtNum(freeAsc.length)} tiles)</span>`}</label>
+          ${_decCustom ? `<button onclick="_decUseGenerated()" style="font-size:0.5rem;padding:3px 10px;border:1px solid var(--border-brown);border-radius:4px;background:#241a10;color:var(--sunpetal);cursor:pointer">back to generated</button>` : ""}
+        </div>
+        ${!_decCustom && overflow ? `<div style="font-size:0.5rem;color:var(--red);margin-top:6px">⚠ ${per} of each needs ${_fmtNum(per * slots)} tiles but only ${_fmtNum(freeAsc.length)} are free — the last colours get cut off. Use ${autoPer} (or leave it on auto).</div>` : ""}
+        ${!_decCustom && ascIdx.length < 12 ? `<div style="font-size:0.47rem;color:var(--text-dim);margin-top:6px;line-height:1.6">You have <b>${ascIdx.length} of 12</b> ascension expansions. Finish the band and there are <b>${_fmtNum(fullBandFree)}</b> free tiles, enough for <b>${fullPer} of each flower</b> (${_fmtNum(fullPer * slots)} tiles, ${fullPer * nSpecies} per colour).</div>` : ""}
+        ${collisions.length || outside.length ? `<div style="font-size:0.5rem;color:var(--red);margin-top:7px">⚠ ${collisions.length} tile(s) in your layout sit on something already placed${outside.length ? `, ${outside.length} are outside any expansion you own` : ""}.</div>` : ""}
+        ${_decErr ? `<div style="font-size:0.5rem;color:var(--red);margin-top:6px">${escHTML(_decErr)}</div>` : ""}
+      </div>`;
+
+      // ── the map ───────────────────────────────────────────────────────
+      let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+      origins.forEach((o) => { const b = decBox(o); minX = Math.min(minX, b.x0); maxX = Math.max(maxX, b.x1); minY = Math.min(minY, b.y0); maxY = Math.max(maxY, b.y1); });
+      const W = maxX - minX + 1, H = maxY - minY + 1;
+      const cells = [];
+      // y grows upward in the game, so rows run maxY -> minY
+      for (let y = maxY; y >= minY; y--) {
+        for (let x = minX; x <= maxX; x++) {
+          const k = x + "," + y;
+          const own = owner.get(k);
+          if (own === undefined) { cells.push(`<div style="background:#0d0b07"></div>`); continue; }
+          const isAsc = own >= 30;
+          const node = occ.get(k);
+          const flower = plan.get(k);
+          let bg = isAsc ? "#1a1710" : "#141009", inner = "";
+          if (node) { bg = "#241a10"; inner = `<img src="${getItemIcon(node)}" alt="" style="width:100%;height:100%;object-fit:contain;opacity:0.75" onerror="this.style.display='none'">`; }
+          else if (flower) {
+            const col = decColors.find((c) => flower.startsWith(c + " "));
+            bg = decSwatch[col] || "#8a7a5a";
+            inner = `<img src="${getItemIcon(flower)}" alt="" style="width:100%;height:100%;object-fit:contain" onerror="this.style.display='none'">`;
+          }
+          cells.push(`<div title="${x},${y}${node ? " · " + escHTML(node) : flower ? " · " + escHTML(flower) : ""}" style="background:${bg};outline:${isAsc ? "1px solid rgba(255,215,0,0.10)" : "none"};outline-offset:-1px">${inner}</div>`);
+        }
+      }
+      h += `<div class="pixel-panel" style="padding:10px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-bottom:6px">ISLAND MAP <span style="color:var(--text-dim);font-size:0.45rem">· ${W}×${H} tiles · gold outline = ascension expansions</span></div>
+        <div style="overflow:auto;max-height:70vh;border:1px solid var(--border-brown);border-radius:6px;background:#0d0b07">
+          <div style="display:grid;grid-template-columns:repeat(${W}, 13px);grid-auto-rows:13px;gap:0;width:max-content">${cells.join("")}</div>
+        </div>
+        <div style="font-size:0.45rem;color:var(--text-dim);margin-top:6px;line-height:1.6">Hover a tile for its coordinates. Colour blocks are the planned flowers, dark tiles with an icon are nodes/buildings/decorations you already have, plain dark tiles are free.</div>
+      </div>`;
+
+      // ── colour legend + shopping list ────────────────────────────────
+      const byColour = {};
+      for (const name of plan.values()) { const c = decColors.find((c) => name.startsWith(c + " ")) || "other"; byColour[c] = (byColour[c] || 0) + 1; }
+      h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-bottom:6px">COLOUR BALANCE</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:0.52rem">
+          ${decColors.map((c) => `<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:11px;height:11px;background:${decSwatch[c]};border-radius:2px;display:inline-block"></span>${c} <b style="color:var(--sunpetal)">${byColour[c] || 0}</b></span>`).join(" &nbsp; ")}
+        </div>
+        <div style="font-size:0.45rem;color:var(--text-dim);margin-top:5px">${new Set(decColors.map((c) => byColour[c] || 0)).size === 1 ? "✓ perfectly even across all five colours" : "⚠ colours are not even — adjust the per-flower count or your JSON"}</div>
+      </div>`;
+
+      h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-bottom:6px">WHAT TO GROW <span style="color:var(--text-dim);font-size:0.45rem">· plan needs ${_fmtNum(totalNeed)}, you hold ${_fmtNum(totalNeed - totalMissing)}</span></div>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:300px">
+          <tr style="color:var(--text-dim);font-size:0.45rem"><td style="padding:0 6px 3px 0">flower</td><td style="text-align:right;padding:0 6px 3px">need</td><td style="text-align:right;padding:0 6px 3px">have</td><td style="text-align:right;padding:0 0 3px">to grow</td></tr>
+          ${rows.map((r) => `<tr style="border-top:1px solid #20190f"><td style="padding:2px 6px 2px 0"><img class="inline-icon" src="${getItemIcon(r.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.name)}</td><td style="text-align:right;padding:2px 6px">${r.n}</td><td style="text-align:right;padding:2px 6px;color:var(--text-dim)">${r.have}</td><td style="text-align:right;padding:2px 0;color:${r.missing ? "var(--red)" : "var(--green)"};font-weight:bold">${r.missing || "✓"}</td></tr>`).join("")}
+        </table></div>
+      </div>`;
+
+      // ── JSON in/out ──────────────────────────────────────────────────
+      const asJson = JSON.stringify(Object.fromEntries([...plan.entries()]), null, 0);
+      h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-bottom:4px">YOUR OWN LAYOUT (JSON)</div>
+        <div style="font-size:0.47rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Format is <code>{"x,y": "Flower Name"}</code> — one entry per tile, coordinates in the game's own grid (hover the map to read them). Paste yours and press CHECK: the map redraws from it and everything above — colour balance, what to grow, collisions — is recomputed against it.</div>
+        <textarea id="dec-json" spellcheck="false" style="width:100%;height:90px;font-family:monospace;font-size:0.5rem;background:#0d0b07;color:var(--text-secondary);border:1px solid var(--border-brown);border-radius:5px;padding:6px">${escHTML(asJson)}</textarea>
+        <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+          <button onclick="_decApplyJson()" style="font-size:0.5rem;padding:4px 12px;border:1px solid var(--border-brown);border-radius:5px;background:var(--sunpetal);color:#1a120a;cursor:pointer;font-weight:bold">CHECK</button>
+          <button onclick="var t=document.getElementById('dec-json');t.select();document.execCommand('copy')" style="font-size:0.5rem;padding:4px 12px;border:1px solid var(--border-brown);border-radius:5px;background:#241a10;color:var(--text-secondary);cursor:pointer">COPY</button>
+        </div>
+      </div>`;
+
+      h += `<div class="footer"><button class="refresh-btn" onclick="_decData=null;_decErr=null;renderDecorations()">REFRESH</button></div>`;
+      app.innerHTML = h;
+    }
+
     function renderWorld() {
       const app = document.getElementById("app");
       let html = `<div class="header pixel-panel pixel-font">
@@ -24634,6 +24909,10 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       // YAKKAMON is about a different game entirely (Thought Farm's second title) — it needs
       // no farm data, so it renders without a farm id and without the personal farm fetch.
       if (page === "yakkamon") { renderConfigBar(page); renderYakkamon(); return; }
+
+      // DECORATIONS fetches the raw farm itself (it needs x/y of every placed object, which
+      // the compute sections do not carry) — so it also skips the shared farm pipeline.
+      if (page === "decorations") { renderConfigBar(page); renderDecorations(); return; }
 
       if (!FARM_ID) {
         renderConfigBar("hub");
