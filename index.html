@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.97</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.98</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.98", items: [
+          { t: "feat", text: "<b>The plan now covers all 12 ascension expansions, not just the ones you have built.</b> The band is <b>432 tiles</b> (12 × 36) and the layout fills it — expansions you have not built yet are drawn with a dashed edge and their flowers dimmed. A checkbox (on by default) plans the whole band as if its nodes had been moved onto expansions 1–30, which is the point of the exercise; it lists exactly what is in the way and how many tiles it holds. Turn it off to plan only what is free right now. On a 6/12 farm that moves the layout from <b>3 of each flower</b> to <b>8 of each</b> — 400 tiles, 80 per colour." },
+          { t: "fix", text: "<b>Found the missing icons — 231 “?” blocks down to 1.</b> sfl.world answers 200 for every name but serves one shared 1,532-byte placeholder (verified by hash across all 32 unmapped objects). The game loads that art from <code>CONFIG.PROTECTED_IMAGE_URL</code> — the CDN behind <code>SUNNYSIDE.building.*</code> — which the repo does not contain at all: no per-building file exists across its 12,042 blobs. Buildings, fences, tombstones, composters and the rest are now matched by slug against the 2,406 asset paths in the game's own <code>sunnyside.ts</code>, with hand-mapping where the asset name differs (Market → bettys_market, Barn → barn_sm, Water Well → well1). Only Ascension Age Banner has no art anywhere and still falls back to its name." },
+        ] },
         { ver: "v4.97", items: [
           { t: "feat", text: "<b>No two identical flowers touch any more.</b> The layout kept the colour bands but laid each species down in a solid block, so the same flower sat next to itself. Species are now placed on an <code>(x + 3y) mod 10</code> pattern — a horizontal neighbour shifts the index by 1 and a vertical one by 3, neither of which is 0 mod 10, so an identical pair can never be adjacent — followed by a balancing pass that only moves a tile when the target species is absent from its four neighbours. Verified on the generated plan: <b>0 adjacent duplicates</b> and <b>every one of the 50 flowers appears exactly the same number of times</b>." },
           { t: "fix", text: "<b>Multi-tile objects draw as one object, not a grid of copies.</b> A 2×2 Oil Reserve was four separate icons. The map now places each object once, spanning its real footprint, using the game's own BUILDINGS_DIMENSIONS and COLLECTIBLES_DIMENSIONS (233 non-1×1 decorations, 26 buildings) instead of assuming 1×1 nodes and 2×2 buildings. Buildings have no usable art anywhere — sfl.world returns the same “?” placeholder for all of them and a full scan of the game repo's 12,042 files finds no per-building asset — so apart from Manor, Mansion and Tent they render as a labelled block instead of a broken image." },
@@ -21418,13 +21422,25 @@
      * spritesheets. Only these three exist standalone; everything else falls back to a labelled
      * block, which reads better on the map than a broken image anyway.
      */
+    /*
+     * Art for everything sfl.world does not have. It answers 200 for every name but serves one
+     * shared 1,532-byte "?" placeholder — verified by hash across all 32 unmapped objects on a
+     * real farm. The game itself loads these from two places, so we do the same:
+     *   decCdn  — CONFIG.PROTECTED_IMAGE_URL (sunflower-land.com/game-assets), the source behind
+     *             SUNNYSIDE.building.* in src/assets/sunnyside.ts. Buildings live ONLY here;
+     *             the repo has no per-building file (checked across all 12,042 blobs).
+     *   decRepo — the few that are committed to the repo instead.
+     * Names that differ from the asset (Market -> bettys_market, Barn -> barn_sm) are mapped by
+     * hand; the rest were matched by slug against the 2,406 paths in sunnyside.ts.
+     */
+    const decCdnBase = "https://sunflower-land.com/game-assets";
+    const decCdn = {"Rug":"decorations/rug.png","Grubnash's Tombstone":"decorations/grubnash_tombstone.png","White Tulips":"decorations/white_tulips.png","Bonnie's Tombstone":"decorations/bonnies_tombstone.png","Stone Fence":"decorations/stone_fence.png","Fence":"decorations/fence.png","Dirt Path":"sfts/dirt_path.png","Workbench":"buildings/workbench.png","Market":"buildings/bettys_market.png","Fire Pit":"buildings/fire_pit.png","Mansion":"buildings/mansion.webp","Bakery":"buildings/bakery.png","Toolshed":"buildings/toolshed.png","Warehouse":"buildings/warehouse.png","Water Well":"buildings/well1.png","Deli":"buildings/deli.png","Kitchen":"buildings/kitchen.png","Smoothie Shack":"buildings/smoothie_shack_background.webp","Compost Bin":"composters/composter_basic.webp","Premium Composter":"composters/composter_advanced.webp","Turbo Composter":"composters/composter_intermediate.webp","Hen House":"buildings/hen_house.png","Barn":"buildings/barn_sm.webp","Greenhouse":"buildings/greenhouse.webp","Crop Machine":"buildings/crop_machine.wep.webp","Fish Market":"buildings/fish_market.webp","Pet House":"buildings/pet_house_red.webp","Aging Shed":"buildings/aging_shed_1.webp"};
+    const decRepo = {"Salt Lamp":"sfts/salt_lamp.webp","Salt Crystal Flower":"sfts/salt_crystal_flower.webp","Salt Awakening Banner":"decorations/banners/salt_awakening_banner.webp"};
     const decBuildIcon = {
       Manor: `${_jsdAssets}/buildings/manor.webp`,
       Mansion: `${_jsdAssets}/buildings/mansion.webp`,
       Tent: `${_jsdAssets}/buildings/tent.webp`,
     };
-    /** Short label for an object with no art — "Smoothie Shack" -> "SmSh". */
-    const decLabel = (n) => n.split(/\s+/).map((w) => w.slice(0, 2)).join("").slice(0, 5);
     const decColors = ["Red", "Yellow", "Purple", "Blue", "White"];
     const decSwatch = { Red: "#e05a5a", Yellow: "#e8c85a", Purple: "#a878d8", Blue: "#5aa8e0", White: "#e8e4dc" };
     /** Rectangular-spiral expansion origins, index 0 = centre (game's spiralOrigins). */
@@ -21471,11 +21487,13 @@
           if (!v || typeof v.x !== "number") continue;
           const [w, h] = decDim[node] || [1, 1];
           add(v.x, v.y, v.width || w, v.height || h, node);
+          items[items.length - 1].node = true;
         }
       }
       for (const v of Object.values((farm.flowers && farm.flowers.flowerBeds) || {})) {
         if (!v || typeof v.x !== "number") continue;
         add(v.x, v.y, v.width || 3, v.height || 1, "Flower Bed");
+        items[items.length - 1].node = true;
       }
       for (const [name, arr] of Object.entries(farm.collectibles || {})) {
         const d = decColl[name] || decDim[name] || [1, 1];
@@ -21545,7 +21563,10 @@
     // _decPer null = auto: the largest count that still divides evenly across all 50 flowers
     // (and therefore all 5 colours) in the space actually available. Setting it by hand is
     // allowed, but asking for more than fits is what produced 80 Red / 0 Blue.
-    let _decData = null, _decErr = null, _decLoading = false, _decCustom = null, _decPer = null;
+    // _decClear: plan the whole ascension band as if its nodes had been moved onto expansions
+    // 1–30, which is the point of the exercise. Off = plan only what is free right now.
+    let _decData = null, _decErr = null, _decLoading = false, _decCustom = null, _decPer = null, _decClear = true;
+    window._decToggleClear = function (on) { _decClear = !!on; renderDecorations(); };
     window._decSetPer = function (v) { const n = parseInt(v); _decPer = (v === "" || !isFinite(n)) ? null : Math.max(0, Math.min(40, n)); renderDecorations(); };
     window._decApplyJson = function () {
       const el = document.getElementById("dec-json");
@@ -21581,16 +21602,29 @@
 
       const expansions = Math.max(1, parseInt((farm.inventory || {})["Basic Land"]) || 1);
       const ascLevel = (farm.island || {}).ascensionLevel || 0;
-      const { occ, owner, origins, items } = decOccupancy(farm, expansions);
-      // Ascension band = spiral indices 30..41 (Basic Land 31..42). Only those that exist.
+      /*
+       * The whole ascension band is planned, not just the expansions already built — spiral
+       * indices 30..41 (Basic Land 31..42), 12 × 36 = 432 tiles. Occupancy still comes from the
+       * real farm, so tiles on a BUILT ascension expansion that hold a node are reported as
+       * "to move" rather than silently planted over; the ones not built yet are simply empty.
+       */
+      const ASC_FROM = 30, ASC_TO = 42;
+      const { occ, owner, origins, items } = decOccupancy(farm, Math.max(expansions, ASC_TO));
       const ascIdx = [];
-      for (let i = 30; i < Math.min(expansions, 42); i++) ascIdx.push(i);
+      for (let i = ASC_FROM; i < ASC_TO; i++) ascIdx.push(i);
       const ascTiles = [];
       for (const i of ascIdx) {
         const b = decBox(origins[i]);
         for (let y = b.y0; y <= b.y1; y++) for (let x = b.x0; x <= b.x1; x++) ascTiles.push(x + "," + y);
       }
-      const freeAsc = ascTiles.filter((k) => !occ.has(k));
+      // Everything in the band is plantable once you clear it; what sits there now is a chore,
+      // not a blocker — the user's plan is to move those nodes onto expansions 1–30.
+      const blocked = ascTiles.filter((k) => occ.has(k));
+      const freeAsc = _decClear ? ascTiles : ascTiles.filter((k) => !occ.has(k));
+      const toMove = _decClear ? [...new Set(items.filter((it) => {
+        const own = owner.get(it.x + "," + it.y);
+        return own >= ASC_FROM && own < ASC_TO;
+      }).map((it) => it.name))] : [];
       const nSpecies = decSpecies().length;                 // 10
       const slots = nSpecies * decColors.length;           // 50 distinct flowers
       const autoPer = Math.floor(freeAsc.length / slots);   // biggest count that stays even
@@ -21598,8 +21632,6 @@
       const overflow = per * slots > freeAsc.length;
       const plan = _decCustom || decPlan(freeAsc, per);
       // What the same layout becomes once the whole 12-expansion band is built.
-      const fullBandFree = 12 * 36 - (ascTiles.length - freeAsc.length);
-      const fullPer = Math.floor(fullBandFree / slots);
 
       // ── what the plan needs vs what you hold ──────────────────────────
       const need = {};
@@ -21620,9 +21652,9 @@
 
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px">
-          ${[["ASCENSION EXPANSIONS", ascIdx.length + " / 12", "spiral 31–42"],
-             ["TILES THERE", _fmtNum(ascTiles.length), ascIdx.length + " × 36"],
-             ["FREE", _fmtNum(freeAsc.length), (ascTiles.length - freeAsc.length) + " taken by nodes"],
+          ${[["ASCENSION BAND", "12 expansions", Math.max(0, Math.min(12, expansions - ASC_FROM)) + " built, " + Math.max(0, 12 - Math.max(0, expansions - ASC_FROM)) + " to come"],
+             ["TILES THERE", _fmtNum(ascTiles.length), "12 × 36"],
+             ["PLANTABLE", _fmtNum(freeAsc.length), _decClear ? (blocked.length ? blocked.length + " need clearing first" : "nothing in the way") : blocked.length + " taken by nodes"],
              ["PLAN USES", _fmtNum(plan.size), totalNeed ? Object.keys(need).length + " kinds" : "—"],
              ["STILL TO GROW", _fmtNum(totalMissing), totalMissing ? "not in inventory" : "all in hand ✓"]]
             .map(([k, v, n]) => `<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:7px 9px">
@@ -21635,7 +21667,15 @@
           ${_decCustom ? `<button onclick="_decUseGenerated()" style="font-size:0.5rem;padding:3px 10px;border:1px solid var(--border-brown);border-radius:4px;background:#241a10;color:var(--sunpetal);cursor:pointer">back to generated</button>` : ""}
         </div>
         ${!_decCustom && overflow ? `<div style="font-size:0.5rem;color:var(--red);margin-top:6px">⚠ ${per} of each needs ${_fmtNum(per * slots)} tiles but only ${_fmtNum(freeAsc.length)} are free — the last colours get cut off. Use ${autoPer} (or leave it on auto).</div>` : ""}
-        ${!_decCustom && ascIdx.length < 12 ? `<div style="font-size:0.47rem;color:var(--text-dim);margin-top:6px;line-height:1.6">You have <b>${ascIdx.length} of 12</b> ascension expansions. Finish the band and there are <b>${_fmtNum(fullBandFree)}</b> free tiles, enough for <b>${fullPer} of each flower</b> (${_fmtNum(fullPer * slots)} tiles, ${fullPer * nSpecies} per colour).</div>` : ""}
+        <div style="margin-top:8px;border:1px solid ${_decClear ? "var(--green)" : "var(--border-brown)"};border-radius:6px;background:${_decClear ? "#16190d" : "#161009"};padding:7px 9px">
+          <label style="font-size:0.52rem;color:var(--text-secondary);display:flex;gap:6px;align-items:center;cursor:pointer">
+            <input type="checkbox" ${_decClear ? "checked" : ""} onchange="_decToggleClear(this.checked)" style="cursor:pointer">
+            <b>Plan the whole band — I'll move its nodes onto expansions 1–30</b>
+          </label>
+          <div style="font-size:0.46rem;color:var(--text-dim);margin-top:4px;line-height:1.6">${_decClear
+            ? `All <b>432</b> tiles of the 12 ascension expansions count as plantable.${toMove.length ? ` First clear what sits there now: <b>${escHTML(toMove.join(", "))}</b> — ${blocked.length} tiles across ${Math.max(0, Math.min(12, expansions - ASC_FROM))} built expansions.` : ""} The unbuilt ones are drawn with a dashed edge.`
+            : `Only tiles that are free <b>right now</b> are planned — ${_fmtNum(freeAsc.length)} of ${_fmtNum(ascTiles.length)}.`}</div>
+        </div>
         ${collisions.length || outside.length ? `<div style="font-size:0.5rem;color:var(--red);margin-top:7px">⚠ ${collisions.length} tile(s) in your layout sit on something already placed${outside.length ? `, ${outside.length} are outside any expansion you own` : ""}.</div>` : ""}
         ${_decErr ? `<div style="font-size:0.5rem;color:var(--red);margin-top:6px">${escHTML(_decErr)}</div>` : ""}
       </div>`;
@@ -21659,23 +21699,34 @@
           const own = owner.get(k);
           if (own === undefined) continue;                    // sea — leave the backdrop
           if (occ.has(k)) continue;                           // drawn as part of an object below
-          const isAsc = own >= 30;
+          const isAsc = own >= ASC_FROM && own < ASC_TO;
+          const unbuilt = own >= expansions;
           const flower = plan.get(k);
-          let bg = isAsc ? "#1a1710" : "#141009", inner = "";
+          let bg = isAsc ? (unbuilt ? "#12100b" : "#1a1710") : "#141009", inner = "";
           if (flower) {
             const c = decColors.find((c) => flower.startsWith(c + " "));
             bg = decSwatch[c] || "#8a7a5a";
-            inner = `<img src="${getItemIcon(flower)}" alt="" style="width:100%;height:100%;object-fit:contain" onerror="this.style.display='none'">`;
+            inner = `<img src="${getItemIcon(flower)}" alt="" style="width:100%;height:100%;object-fit:contain;${unbuilt ? "opacity:0.55" : ""}" onerror="this.style.display='none'">`;
           }
-          cells.push(`<div title="${x},${y}${flower ? " · " + escHTML(flower) : ""}" style="grid-column:${col(x)};grid-row:${row(y)};background:${bg};outline:${isAsc ? "1px solid rgba(255,215,0,0.10)" : "none"};outline-offset:-1px">${inner}</div>`);
+          const edge = !isAsc ? "none" : unbuilt ? "1px dashed rgba(255,215,0,0.30)" : "1px solid rgba(255,215,0,0.10)";
+          cells.push(`<div title="${x},${y}${flower ? " · " + escHTML(flower) : ""}${unbuilt ? " · not built yet" : ""}" style="grid-column:${col(x)};grid-row:${row(y)};background:${bg};outline:${edge};outline-offset:-1px">${inner}</div>`);
         }
       }
       for (const it of items) {
         if (!owner.has(it.x + "," + it.y)) continue;
-        const src = decBuildIcon[it.name] || (!it.building ? getItemIcon(it.name) : (ITEM_IMAGE_MAP[it.name] || null));
+        /*
+         * Only sources known to hold real art. sfl.world answers 200 for everything but serves
+         * one shared "?" placeholder for anything it lacks — checked by hash across all 32
+         * unmapped objects on this farm, every one of them a placeholder. So: the game-repo
+         * building art, then ITEM_IMAGE_MAP, then sfl.world but ONLY for nodes and flowers,
+         * which genuinely have images there. Everything else gets its name instead of a "?".
+         */
+        const src = (decCdn[it.name] ? decCdnBase + "/" + decCdn[it.name] : null)
+          || (decRepo[it.name] ? _jsdAssets + "/" + decRepo[it.name] : null)
+          || decBuildIcon[it.name] || ITEM_IMAGE_MAP[it.name] || (it.node ? getItemIcon(it.name) : null);
         const inner = src
           ? `<img src="${src}" alt="" style="max-width:100%;max-height:100%;object-fit:contain" onerror="this.style.display='none'">`
-          : `<span style="font-size:${Math.min(8, 3 + it.w)}px;color:#c9a227;font-weight:bold;line-height:1;text-align:center;word-break:break-all">${escHTML(decLabel(it.name))}</span>`;
+          : `<span style="font-size:${Math.max(4, Math.min(7, 2 + it.w))}px;color:#c9a227;line-height:1.05;text-align:center;padding:1px;overflow:hidden;word-break:break-word">${escHTML(it.name)}</span>`;
         cells.push(`<div title="${escHTML(it.name)} · ${it.x},${it.y} · ${it.w}×${it.h}" style="grid-column:${col(it.x)} / span ${it.w};grid-row:${row(it.y + it.h - 1)} / span ${it.h};background:${src ? "#241a10" : "#2b2113"};outline:1px solid rgba(0,0,0,0.35);outline-offset:-1px;display:flex;align-items:center;justify-content:center;overflow:hidden">${inner}</div>`);
       }
       h += `<div class="pixel-panel" style="padding:10px;margin-bottom:12px">
