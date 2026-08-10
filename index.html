@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.05</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.06</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.06", items: [
+          { t: "feat", text: "<b>Eight patterned layouts</b> — rainbow diagonal, rainbow bands, wide bands, checker blocks, wave, chevron, drops and diamonds — on top of the three that were already there. All hold every flower at roughly <b>8–9 of the 432 tiles</b> with <b>no two identical flowers and no two of the same species touching</b>." },
+          { t: "feat", text: "<b>Patterns follow the band as a ribbon, not as a field.</b> The ascension expansions are six tiles wide the whole way — along the top and down the side — so anything with features bigger than six tiles reads as noise, which is what made the first attempts at drops and rings look like nothing at all. Every tile now carries ribbon coordinates (distance <i>along</i> the band, distance across it) derived from the expansion order, and the patterns are drawn in that space. Rainbow variants cycle the five colours several times over the band's length, so red turns up in several places rather than sitting in one block." },
+        ] },
         { ver: "v5.05", items: [
           { t: "fix", text: "<b>Even scatter kept putting the same kind of flower side by side.</b> The no-repeat check only compared full names, so Red Pansy next to White Pansy passed — and two pansies read as a repeat no matter what colour they are. Worse, the flower list ran species by species, so a neighbouring index was <i>always</i> the same species. Species and colour now advance together (species = k mod 10, colour = (k + ⌊k/10⌋) mod 5, still a bijection over all 50), and the balancing pass refuses any move that would seat a species beside itself. Measured over 786 neighbour pairs: <b>0 repeated flowers, 0 repeated species, 1 touching colour</b> — with every flower still appearing 8 or 9 times across the full 432 tiles." },
         ] },
@@ -21627,6 +21631,106 @@
      * filled, and species follow (x + 7y) mod 50 so no two identical flowers touch (a
      * horizontal step changes the index by 1, a vertical one by 7; neither is 0 mod 50).
      */
+    /*
+     * The band is not a field, it is a RIBBON: the ascension expansions run along the top and
+     * then down one side, six tiles wide the whole way. A pattern is only visible if it varies
+     * ALONG it — anything with features larger than six tiles reads as noise, which is what
+     * sank the first round of designs. So every tile gets ribbon coordinates: t = distance
+     * travelled along the band (0…71 on a full 12-expansion band), u = 0…5 across it.
+     *
+     * Derived from the expansion order rather than hardcoded: the band's expansions are already
+     * in spiral order, so each one contributes six steps of t, running along whichever axis
+     * that expansion is laid out on.
+     */
+    function decRibbon(ascIdx, origins) {
+      const rib = new Map();
+      const topY = Math.max(...ascIdx.map((i) => origins[i].y));
+      ascIdx.forEach((i, n) => {
+        const b = decBox(origins[i]);
+        const horizontal = origins[i].y === topY;      // top run, otherwise the descending side
+        for (let x = b.x0; x <= b.x1; x++) for (let y = b.y0; y <= b.y1; y++) {
+          const local = horizontal ? (b.x1 - x) : (b.y1 - y);
+          const across = horizontal ? (b.y1 - y) : (x - b.x0);
+          rib.set(x + "," + y, [n * 6 + local, across]);
+        }
+      });
+      return rib;
+    }
+    /*
+     * Ribbon patterns — each maps (t, u) to one of the five colours. They are written to be
+     * inherently balanced (every colour roughly a fifth of the ribbon) so the per-flower counts
+     * land near 8-9 without the evening-out pass having to distort the shape.
+     */
+    const decPatterns = {
+      "rainbow-diagonal": { label: "Rainbow ◣ diagonal", fn: (t, u) => Math.floor((t + u) / 3) % 5 },
+      "rainbow-bands": { label: "Rainbow ▮ bands", fn: (t) => Math.floor(t / 3) % 5 },
+      "rainbow-wide": { label: "Rainbow ▬ wide", fn: (t) => Math.floor(t / 5) % 5 },
+      "blocks": { label: "Checker ▩ blocks", fn: (t, u) => (Math.floor(t / 3) + Math.floor(u / 3) * 3) % 5 },
+      "wave": { label: "Rainbow ∿ wave", fn: (t) => Math.floor((t + 2.5 * Math.sin(t / 5)) / 3) % 5 },
+      "chevron": { label: "Chevron ⋀", fn: (t, u) => Math.floor((t + Math.abs(u - 2.5) * 2) / 3) % 5 },
+      "drops": {
+        label: "Drops ◍", fn: (t, u) => {
+          const P = 5, i = Math.round((t - 2) / P), ct = i * P + 2;
+          return Math.abs(t - ct) + Math.abs(u - 2) <= 1 ? ((i * 2) % 5) : ((i * 2 + 2) % 5);
+        },
+      },
+      "diamonds": {
+        label: "Diamonds ◆", fn: (t, u) => {
+          const P = 6, i = Math.round(t / P), ct = i * P;
+          return Math.abs(t - ct) + Math.abs(u - 2.5) <= 2.5 ? ((i * 3) % 5) : ((i * 3 + 2) % 5);
+        },
+      },
+    };
+    /** Build a plan from a ribbon colour field: even the colours, then spread species inside each. */
+    function decPlanPattern(free, rib, fn) {
+      const species = decSpecies();
+      const NS = species.length, NC = decColors.length;
+      const xy = (k) => k.split(",").map(Number), key = (x, y) => x + "," + y;
+      const col = new Map();
+      for (const k of free) {
+        const p = rib.get(k) || [0, 0];
+        col.set(k, ((Math.floor(fn(p[0], p[1])) % NC) + NC) % NC);
+      }
+      // Even the five colours out, only ever moving a tile that already borders the under-used
+      // colour — so the pattern's edges shift instead of holes appearing in its middle.
+      for (let pass = 0; pass < free.length * 2; pass++) {
+        const c = new Array(NC).fill(0);
+        for (const v of col.values()) c[v]++;
+        let hi = 0, lo = 0;
+        for (let i = 1; i < NC; i++) { if (c[i] > c[hi]) hi = i; if (c[i] < c[lo]) lo = i; }
+        if (c[hi] - c[lo] <= 1) break;
+        const moved = free.some((k) => {
+          if (col.get(k) !== hi) return false;
+          const [x, y] = xy(k);
+          if (![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => col.get(key(x + dx, y + dy)) === lo)) return false;
+          col.set(k, lo); return true;
+        });
+        if (!moved) break;
+      }
+      const sp = new Map();
+      for (const k of free) { const [x, y] = xy(k); sp.set(k, (((x + 3 * y) % NS) + NS) % NS); }
+      for (let c = 0; c < NC; c++) {
+        const mine = free.filter((k) => col.get(k) === c);
+        for (let pass = 0; pass < mine.length * 2; pass++) {
+          const cnt = new Array(NS).fill(0);
+          for (const k of mine) cnt[sp.get(k)]++;
+          let hi = 0, lo = 0;
+          for (let i = 1; i < NS; i++) { if (cnt[i] > cnt[hi]) hi = i; if (cnt[i] < cnt[lo]) lo = i; }
+          if (cnt[hi] - cnt[lo] <= 1) break;
+          const moved = mine.some((k) => {
+            if (sp.get(k) !== hi) return false;
+            const [x, y] = xy(k);
+            if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => sp.get(key(x + dx, y + dy)) === lo)) return false;
+            sp.set(k, lo); return true;
+          });
+          if (!moved) break;
+        }
+      }
+      const plan = new Map();
+      for (const k of free) plan.set(k, species[sp.get(k)].cols[decColors[col.get(k)]]);
+      return plan;
+    }
+
     function decPlanScatter(free) {
       const species = decSpecies();
       const NS = species.length, NC = decColors.length, S = NS * NC;   // 10 x 5 = 50
@@ -21792,8 +21896,10 @@
       const autoPer = Math.floor(freeAsc.length / slots);   // biggest count that stays even
       const per = _decPer == null ? autoPer : _decPer;
       const overflow = per * slots > freeAsc.length;
+      const ribbon = decRibbon(ascIdx, origins);
       const plan = _decCustom
-        || (_decLayout === "scatter" ? decPlanScatter(freeAsc)
+        || (decPatterns[_decLayout] ? decPlanPattern(freeAsc, ribbon, decPatterns[_decLayout].fn)
+          : _decLayout === "scatter" ? decPlanScatter(freeAsc)
           : _decLayout === "text" ? decPlanText(freeAsc, _decWord, "Red", "White")
           : decPlan(freeAsc, per));
       // What the same layout becomes once the whole 12-expansion band is built.
@@ -21938,7 +22044,8 @@
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
         <div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-bottom:6px">LAYOUT</div>
         <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
-          ${[["bands", "Colour bands"], ["scatter", "Even scatter"], ["text", "Written word"]].map(([v, l]) => {
+          ${[["bands", "Colour bands"], ["scatter", "Even scatter"], ["text", "Written word"],
+             ...Object.entries(decPatterns).map(([k, p]) => [k, p.label])].map(([v, l]) => {
             const on = !_decCustom && _decLayout === v;
             return `<button onclick="_decSetLayout('${v}')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;cursor:pointer;background:${on ? "var(--sunpetal)" : "#241a10"};color:${on ? "#1a120a" : "var(--text-secondary)"};font-weight:${on ? "bold" : "normal"}">${l}</button>`;
           }).join("")}
@@ -21946,7 +22053,9 @@
           ${!_decCustom && _decLayout === "text" ? `<label style="font-size:0.48rem;color:var(--text-dim)">word <input value="${escHTML(_decWord)}" maxlength="10" style="width:96px;font-size:0.55rem" onchange="_decSetWord(this.value)"></label>` : ""}
         </div>
         <div style="font-size:0.46rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">${
-          _decLayout === "scatter"
+          decPatterns[_decLayout]
+            ? "The band is a <b>ribbon</b> — six tiles wide all the way along the top and down the side — so this pattern varies <b>along</b> it rather than across the map. Colours are evened to a fifth each and species spread inside them, keeping every flower near 8–9 of the 432 tiles with nothing identical touching."
+          : _decLayout === "scatter"
             ? "Every one of the 50 flowers the same number of times, no colour grouping, spread so no two identical ones touch — and the remainder shared out one extra each so the <b>whole area is filled</b>."
             : _decLayout === "text"
               ? "The word is written across the band's top strip in a 3×5 font: <b>red</b> flowers for the letters on a <b>white</b> field, each using all ten species so nothing identical touches. Every remaining tile is filled with the white field. Only letters of SAJMONIUM are available in the font."
