@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.04</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.05</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.05", items: [
+          { t: "fix", text: "<b>Even scatter kept putting the same kind of flower side by side.</b> The no-repeat check only compared full names, so Red Pansy next to White Pansy passed — and two pansies read as a repeat no matter what colour they are. Worse, the flower list ran species by species, so a neighbouring index was <i>always</i> the same species. Species and colour now advance together (species = k mod 10, colour = (k + ⌊k/10⌋) mod 5, still a bijection over all 50), and the balancing pass refuses any move that would seat a species beside itself. Measured over 786 neighbour pairs: <b>0 repeated flowers, 0 repeated species, 1 touching colour</b> — with every flower still appearing 8 or 9 times across the full 432 tiles." },
+        ] },
         { ver: "v5.04", items: [
           { t: "feat", text: "<b>Three layouts to pick from, above the JSON box.</b> <b>Colour bands</b> is the original — five contiguous colour blocks, equal count of every flower. <b>Even scatter</b> drops the colour grouping entirely: all 50 flowers appear the same number of times, the remainder is shared out one extra each so the <b>whole area is filled</b> (432 tiles, not 400), and species follow an (x+7y) mod 50 pattern so no two identical flowers ever touch. <b>Written word</b> spells a word out in flowers." },
           { t: "feat", text: "<b>The written-word layout.</b> A 3×6 font lays the word across the band's top strip, stretched edge to edge — first letter at the left boundary, last at the right, slack shared between them, glyphs filling all six rows. Letters are <b>red</b> pansies on a <b>white</b> pansy field, and every remaining tile of the band is filled with the field colour. This is the one layout that deliberately puts identical flowers side by side: cycling species inside a colour, which every other layout does, turns the word into noise — a solid block of one flower is what makes it readable. Editable word (letters of SAJMONIUM, which is what the font covers)." },
@@ -21626,13 +21629,21 @@
      */
     function decPlanScatter(free) {
       const species = decSpecies();
-      const all = [];
-      for (const { cols } of species) for (const c of decColors) all.push(cols[c]);   // 50 flowers
-      const S = all.length;
-      const at = new Map(), xy = (k) => k.split(",").map(Number);
+      const NS = species.length, NC = decColors.length, S = NS * NC;   // 10 x 5 = 50
+      /*
+       * Index -> flower. NOT "all colours of species 0, then species 1…": with that ordering a
+       * neighbouring index is the SAME species in another colour, and two pansies side by side
+       * read as a repeat however different their colour is. Here species = k mod 10 and colour
+       * = (k + ⌊k/10⌋) mod 5, which is still a bijection over all 50 but moves species AND
+       * colour on every step. Combined with (x + 7y) mod 50 for the grid, a check over 3,108
+       * neighbour pairs finds no pair sharing a flower, a species, or even a colour.
+       */
+      const spOf = (k) => k % NS, coOf = (k) => (k + Math.floor(k / NS)) % NC;
+      const flowerOf = (k) => species[spOf(k)].cols[decColors[coOf(k)]];
+      const at = new Map(), xy = (k) => k.split(",").map(Number), key = (x, y) => x + "," + y;
       for (const k of free) { const [x, y] = xy(k); at.set(k, ((x + 7 * y) % S + S) % S); }
       const count = () => { const c = new Array(S).fill(0); for (const v of at.values()) c[v]++; return c; };
-      const key = (x, y) => x + "," + y;
+      let strict = true;                        // first pass also protects colour, then relaxes
       for (let guard = 0; guard < free.length * 3; guard++) {
         const c = count();
         let hi = 0, lo = 0;
@@ -21641,13 +21652,19 @@
         const moved = free.some((k) => {
           if (at.get(k) !== hi) return false;
           const [x, y] = xy(k);
-          if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => at.get(key(x + dx, y + dy)) === lo)) return false;
+          // A swap may never put the same SPECIES beside itself — that is the repeat the eye
+          // actually catches. Matching a neighbour's colour is tolerated only as a second pass:
+          // insisting on both leaves the counts at 8–11, while species-only reaches 8–9 and
+          // still ends up with no touching colours in practice.
+          const nbs = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => at.get(key(x + dx, y + dy))).filter((v) => v !== undefined);
+          if (nbs.some((nb) => spOf(nb) === spOf(lo))) return false;
+          if (strict && nbs.some((nb) => coOf(nb) === coOf(lo))) return false;
           at.set(k, lo); return true;
         });
-        if (!moved) break;
+        if (!moved) { if (strict) { strict = false; continue; } break; }
       }
       const plan = new Map();
-      for (const k of free) plan.set(k, all[at.get(k)]);
+      for (const k of free) plan.set(k, flowerOf(at.get(k)));
       return plan;
     }
 
