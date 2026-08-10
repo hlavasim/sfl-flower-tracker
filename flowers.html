@@ -5947,7 +5947,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.94</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.95</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5974,6 +5974,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.95", items: [
+          { t: "feat", text: "<b>Weekly target is now free-form points, not a box count.</b> “Boxes wanted” assumed everyone chases the 5,000-point Platinum resource box; the planner now takes <b>points/week</b> and <b>for N weeks</b>, so aiming at 500 (Gold food box) or 75 (Silver resource box) works just as well. It names the weekly-track tier your target actually reaches and what the next one up would cost — the full ladder runs 10 Bronze loot box · 30 raffle ticket · 75 Silver · 150 raffle · 500 Gold food box · 5,000 Platinum · 50,000 OG status." },
+          { t: "feat", text: "<b>The planner remembers what you typed.</b> Budget, launch horizon, weekly target, weeks, the SFL-funnel toggle and its farm rate, plus the deposit calculator's amount/week/payback/lock — all persisted, so the page comes back the way you left it instead of resetting to defaults on every visit." },
+        ] },
         { ver: "v4.94", items: [
           { t: "fix", text: "<b>The funnel mode was reading the wrong farm income — it overstated it by ~55%.</b> It took <code>totalBoostedSfl</code> from the POWER section, which is the <b>theoretical ceiling</b> (157/day on this farm), not what you actually earn. It now makes the identical call the ROADMAP page makes — same saved product picks, same saved roadmap settings, same posted history snapshots that measure how often you really harvest — and reads <code>startIncome</code>, so the figure matches the <b>“YOUR INCOME RIGHT NOW”</b> number you read on ROADMAP. (For reference on this farm: 157 theoretical · 71 with no settings or history · ~94–101 the real, measured figure.) Since the funnel multiplies that rate by every week to launch, the old number made the whole plan look far better than it is." },
         ] },
@@ -20877,6 +20881,18 @@
         { r: "50 001 – 100 000", rew: "Early access", wave: "Wave 5", nft: false },
         { r: "100 001 +", rew: "nothing — no early access", wave: "—", nft: false },
       ],
+      // The WEEKLY reward track — resets every 7 days, unclaimed tiers are lost ("each new
+      // reward list replaces the last"). Read off the live site 10 Aug 2026.
+      track: [
+        { pts: 10, rew: "Bronze loot box" },
+        { pts: 20, rew: "Reserved slot" },
+        { pts: 30, rew: "Raffle ticket" },
+        { pts: 75, rew: "Silver resource box" },
+        { pts: 150, rew: "Raffle ticket" },
+        { pts: 500, rew: "Gold food box" },
+        { pts: 5000, rew: "Platinum resource box" },
+        { pts: 50000, rew: "OG status" },
+      ],
       eggs: [
         { r: "1 – 10 000", egg: "Platinum" }, { r: "10 001 – 25 000", egg: "Gold" },
         { r: "25 001 – 50 000", egg: "Silver" }, { r: "50 001 – 100 000", egg: "Bronze" },
@@ -20938,15 +20954,39 @@
       if (getPage() === "yakkamon") renderYakkamon();
     }
 
-    let _ykAmount = 500, _ykWeek = 1, _ykRoiDays = 120, _ykLockDays = 120;
+    /*
+     * Everything the user types on this page is remembered — the planner is something you come
+     * back to as the leaderboard moves, and re-entering a budget and a target every visit is
+     * pure friction. One localStorage key, defaults applied per field so a partial or older
+     * saved blob still loads.
+     */
+    const YK_LS_KEY = "sfl_yakkamon_planner";
+    const _ykSaved = (() => { try { return JSON.parse(localStorage.getItem(YK_LS_KEY) || "{}") || {}; } catch (e) { return {}; } })();
+    const _ykNum = (v, dflt) => (typeof v === "number" && isFinite(v) && v >= 0) ? v : dflt;
+    function _ykPersist() {
+      try {
+        localStorage.setItem(YK_LS_KEY, JSON.stringify({
+          amount: _ykAmount, week: _ykWeek, roiDays: _ykRoiDays, lockDays: _ykLockDays,
+          btc: _ykBtc, launchWeeks: _ykLaunchWeeks, ptsPerWeek: _ykPtsPerWeek,
+          trackWeeks: _ykTrackWeeks, farmMode: _ykFarmMode, farmPerDay: _ykFarmPerDay,
+        }));
+      } catch (e) { /* private mode — settings just do not persist */ }
+    }
+    let _ykAmount = _ykNum(_ykSaved.amount, 500), _ykWeek = _ykNum(_ykSaved.week, 1),
+        _ykRoiDays = _ykNum(_ykSaved.roiDays, 120) || 120, _ykLockDays = _ykNum(_ykSaved.lockDays, 120) || 120;
     // Budget planner state: how much you have, how far off the launch is, and how many
     // weeks of the (resetting) reward track you want to buy.
-    let _ykBtc = 0.096, _ykLaunchWeeks = 17, _ykBoxWeeks = 8;
+    // ptsPerWeek is a free target, not a box count — the weekly track has tiers from 10 points
+    // (Bronze loot box) to 50,000 (OG status), so aiming at 500 is as valid as aiming at 5,000.
+    let _ykBtc = _ykNum(_ykSaved.btc, 0.096),
+        _ykLaunchWeeks = _ykNum(_ykSaved.launchWeeks, 17) || 17,
+        _ykPtsPerWeek = _ykNum(_ykSaved.ptsPerWeek, 5000),
+        _ykTrackWeeks = _ykNum(_ykSaved.trackWeeks, 8);
     // "Stop burning on SFL and funnel the farm's whole output into Yakkamon" mode. The rate
     // is the farm's realistic FLOWER/day — the same figure ROADMAP leads with — pulled from
     // section=power when a farm id is configured, and editable either way.
-    let _ykFarmMode = false, _ykFarmPerDay = 0, _ykFarmAuto = null;
-    window._ykToggleFarm = function (on) { _ykFarmMode = !!on; renderYakkamon(); };
+    let _ykFarmMode = !!_ykSaved.farmMode, _ykFarmPerDay = _ykNum(_ykSaved.farmPerDay, 0), _ykFarmAuto = null;
+    window._ykToggleFarm = function (on) { _ykFarmMode = !!on; _ykPersist(); renderYakkamon(); };
     async function _ykFetchFarmRate() {
       if (_ykFarmAuto !== null || !FARM_ID) return;
       _ykFarmAuto = 0;
@@ -20979,8 +21019,10 @@
       if (k === "lock") _ykLockDays = isFinite(n) && n > 0 ? n : 120;
       if (k === "btc") _ykBtc = isFinite(n) && n >= 0 ? n : 0;
       if (k === "launch") _ykLaunchWeeks = Math.max(2, Math.min(30, parseInt(v) || 17));
-      if (k === "boxw") _ykBoxWeeks = Math.max(0, Math.min(29, parseInt(v) || 0));
+      if (k === "ptsweek") _ykPtsPerWeek = Math.max(0, isFinite(n) ? n : 0);
+      if (k === "trackw") _ykTrackWeeks = Math.max(0, Math.min(29, parseInt(v) || 0));
       if (k === "farmday") _ykFarmPerDay = isFinite(n) && n >= 0 ? n : 0;
+      _ykPersist();
       renderYakkamon();
     };
     /** Smallest deposit in week `w` that reaches `target` points (binary search on ykPoints). */
@@ -21091,9 +21133,12 @@
       const btcUsd = (_ykLive && _ykLive.btcUsd) || 0;
       if (flUsd > 0 && btcUsd > 0) {
         const budgetUsd = _ykBtc * btcUsd, budget = budgetUsd / flUsd;
-        const FREE_WK = 42;                      // daily nurture 6×7 — negligible vs 5,000
-        const TRACK_TOP = 5000;                  // Platinum resource box tier
-        const boxW = Math.min(_ykBoxWeeks, _ykLaunchWeeks - 1);
+        const FREE_WK = 42;                      // daily nurture 6×7, earned without depositing
+        const TRACK_TOP = Math.max(0, _ykPtsPerWeek);   // whatever weekly tier you are aiming at
+        const boxW = Math.min(_ykTrackWeeks, _ykLaunchWeeks - 1);
+        // Highest weekly-track tier the target actually reaches, so the label says what you get.
+        const tierHit = YK.track.filter(t => t.pts <= TRACK_TOP).slice(-1)[0] || null;
+        const tierNext = YK.track.find(t => t.pts > TRACK_TOP) || null;
         /*
          * Farm-funnel mode: stop spending on SFL and send the farm's whole weekly output to
          * Yakkamon instead. That income arrives EVERY week and is deposited in one go with
@@ -21128,12 +21173,16 @@
         const rankTxt = !ent.length ? "—" : (beat === 0 ? "above #1 (today's top)" : beat >= ent.length ? "outside top " + ent.length : "≈ #" + (beat + 1));
         h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px;border-left:3px solid var(--lily)">
           <div class="pixel-font" style="font-size:0.62rem;color:var(--lily);margin-bottom:4px">🎯 BUDGET PLANNER</div>
-          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Splits a fixed budget between <b>one big week-1 deposit</b> (best multiplier + biggest bonus → cumulative leaderboard points) and the <b>weekly top-ups</b> for the Platinum box (the track resets, so it cannot be bought ahead).</div>
+          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Splits a fixed budget between <b>one big week-1 deposit</b> (best multiplier + biggest bonus → cumulative leaderboard points) and the <b>weekly top-ups</b> that hit your weekly-track target (the track resets, so it cannot be bought ahead).</div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:9px">
             <label style="font-size:0.5rem;color:var(--text-dim)">I have <input type="number" min="0" step="0.001" value="${_ykBtc}" style="width:66px;font-size:0.6rem" onchange="_ykSet('btc',this.value)"> BTC</label>
             <label style="font-size:0.5rem;color:var(--text-dim)">launch in <input type="number" min="2" max="30" value="${_ykLaunchWeeks}" style="width:44px;font-size:0.6rem" onchange="_ykSet('launch',this.value)"> weeks</label>
-            <label style="font-size:0.5rem;color:var(--text-dim)">boxes wanted <input type="number" min="0" max="29" value="${_ykBoxWeeks}" style="width:44px;font-size:0.6rem" onchange="_ykSet('boxw',this.value)">×</label>
+            <label style="font-size:0.5rem;color:var(--text-dim)">want <input type="number" min="0" step="10" value="${_ykPtsPerWeek}" style="width:66px;font-size:0.6rem" onchange="_ykSet('ptsweek',this.value)"> pts/week</label>
+            <label style="font-size:0.5rem;color:var(--text-dim)">for <input type="number" min="0" max="29" value="${_ykTrackWeeks}" style="width:44px;font-size:0.6rem" onchange="_ykSet('trackw',this.value)"> weeks</label>
           </div>
+          <div style="font-size:0.47rem;color:var(--text-dim);margin-bottom:9px;line-height:1.6">Weekly track tier: ${tierHit
+            ? `<b style="color:var(--green)">${escHTML(tierHit.rew)}</b> at ${fmt(tierHit.pts)} pts${tierNext ? ` · next up <b>${escHTML(tierNext.rew)}</b> needs ${fmt(tierNext.pts)}` : ""}`
+            : `<span style="color:#e8a060">below the lowest tier (${fmt(YK.track[0].pts)} pts = ${escHTML(YK.track[0].rew)})</span>`} — the track resets every 7 days and unclaimed tiers are lost, which is why it has to be bought again each week.</div>
           <div style="border:1px solid ${_ykFarmMode ? "var(--green)" : "var(--border-brown)"};border-radius:6px;background:${_ykFarmMode ? "#16190d" : "#161009"};padding:7px 9px;margin-bottom:9px">
             <label style="font-size:0.52rem;color:var(--text-secondary);display:flex;gap:6px;align-items:center;cursor:pointer">
               <input type="checkbox" ${_ykFarmMode ? "checked" : ""} onchange="_ykToggleFarm(this.checked)" style="cursor:pointer">
@@ -21145,7 +21194,7 @@
           </div>
           <div style="font-size:0.5rem;color:var(--text-secondary);margin-bottom:8px">Budget: <b style="color:var(--sunpetal)">${fmt(budget)} ${sflIcon()}</b> <span style="color:var(--text-dim)">(${fmt(budgetUsd)} USD · BTC ${fmt(btcUsd)} · FLOWER ${flUsd.toFixed(4)})</span></div>
           ${w1 < 0
-            ? `<div style="font-size:0.55rem;color:var(--red)">⚠ Does not fit — the weekly top-ups alone (${boxW}× box) cost <b>${fmt(weekly)} ${sflIcon()}</b>, more than the whole budget. Lower the box count.</div>`
+            ? `<div style="font-size:0.55rem;color:var(--red)">⚠ Does not fit — the weekly top-ups alone (${boxW} weeks × ${fmt(TRACK_TOP)} pts) cost <b>${fmt(weekly)} ${sflIcon()}</b>, more than the whole budget. Lower the target or the number of weeks.</div>`
             : `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px">
                 <div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px">
                   <div style="font-size:0.45rem;color:var(--text-dim)">WEEK 1 DEPOSIT</div>
@@ -21154,7 +21203,7 @@
                 <div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px">
                   <div style="font-size:0.45rem;color:var(--text-dim)">WEEKLY (${boxW}×)</div>
                   <div style="font-size:0.72rem;color:var(--sunpetal);font-weight:bold">${fmt(weekly)} ${sflIcon()}</div>
-                  <div style="font-size:0.44rem;color:var(--text-dim)">${boxW}× Platinum box${_ykFarmMode && farmWk > 0 ? ` · ${Object.values(topUp).filter(v => v === 0).length} covered by farm` : ""}</div></div>
+                  <div style="font-size:0.44rem;color:var(--text-dim)">${boxW}× ${fmt(TRACK_TOP)} pts${tierHit ? ` (${escHTML(tierHit.rew)})` : ""}${_ykFarmMode && farmWk > 0 ? ` · ${Object.values(topUp).filter(v => v === 0).length} covered by farm` : ""}</div></div>
                 ${_ykFarmMode && farmWk > 0 ? `<div style="border:1px solid #6ab0e0;border-radius:6px;background:#0f1519;padding:8px">
                   <div style="font-size:0.45rem;color:var(--text-dim)">FROM FARM (${_ykLaunchWeeks}w)</div>
                   <div style="font-size:0.72rem;color:#6ab0e0;font-weight:bold">${fmt(farmTotal)} ${sflIcon()}</div>
@@ -21196,7 +21245,7 @@
                       <span style="min-width:52px;text-align:right">points</span><span style="min-width:56px;text-align:right">Σ deposited</span>
                     </div>${rows}
                   </div></div>
-                  <div style="font-size:0.44rem;color:var(--text-dim);margin-top:5px;line-height:1.6">The green tranche is the one-off deposit that buys leaderboard standing (best multiplier + biggest bulk bonus). The amber ones are weekly top-ups for the Platinum box — they <b>get more expensive</b> as the multiplier decays toward 1×, which is why the last tranche is the fattest. Splitting the big deposit would cost you bonus, because it is rated <b>per deposit</b>.${_ykFarmMode && farmWk > 0 ? ` <b style="color:#6ab0e0">Blue</b> is farm income funnelled in — it arrives every week whether you top up or not, so late weeks where the farm alone clears 5,000 points cost the budget nothing.` : ""}</div>
+                  <div style="font-size:0.44rem;color:var(--text-dim);margin-top:5px;line-height:1.6">The green tranche is the one-off deposit that buys leaderboard standing (best multiplier + biggest bulk bonus). The amber ones are weekly top-ups to your ${fmt(TRACK_TOP)}-point target — they <b>get more expensive</b> as the multiplier decays toward 1×, which is why the last tranche is the fattest. Splitting the big deposit would cost you bonus, because it is rated <b>per deposit</b>.${_ykFarmMode && farmWk > 0 ? ` <b style="color:#6ab0e0">Blue</b> is farm income funnelled in — it arrives every week whether you top up or not, so weeks where the farm alone clears ${fmt(TRACK_TOP)} points cost the budget nothing.` : ""}</div>
                 </div>`;
               })()}
               <div style="font-size:0.46rem;color:var(--text-dim);margin-top:7px;line-height:1.6">Every week of boxes takes from week 1 and therefore from your cumulative points — the track and the leaderboard compete for the same money. The placing is against the <b>live top ${ent.length || "?"}</b>, which is a snapshot: deposits opened ${open ? "just now" : "10 Aug"} and the bar will rise. Forgone yield on the whole budget at a ${_ykRoiDays}-day payback over ${_ykLaunchWeeks * 7} days ≈ <b style="color:var(--red)">${fmt(budget * (_ykLaunchWeeks * 7) / _ykRoiDays)} ${sflIcon()}</b>.</div>`}
