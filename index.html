@@ -5947,7 +5947,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.93</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.94</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5974,6 +5974,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.94", items: [
+          { t: "fix", text: "<b>The funnel mode was reading the wrong farm income — it overstated it by ~55%.</b> It took <code>totalBoostedSfl</code> from the POWER section, which is the <b>theoretical ceiling</b> (157/day on this farm), not what you actually earn. It now makes the identical call the ROADMAP page makes — same saved product picks, same saved roadmap settings, same posted history snapshots that measure how often you really harvest — and reads <code>startIncome</code>, so the figure matches the <b>“YOUR INCOME RIGHT NOW”</b> number you read on ROADMAP. (For reference on this farm: 157 theoretical · 71 with no settings or history · ~94–101 the real, measured figure.) Since the funnel multiplies that rate by every week to launch, the old number made the whole plan look far better than it is." },
+        ] },
         { ver: "v4.93", items: [
           { t: "fix", text: "<b>Yakkamon page is fully in English</b> — it was the one page written in Czech. Numbers, dates and the tranche table now format in English too." },
           { t: "feat", text: "<b>“Stop spending on SFL” funnel mode.</b> A checkbox on the budget planner models burning nothing on the farm and depositing everything it earns into Yakkamon each week, on top of the plan. The farm's FLOWER/day is pulled automatically from your POWER data (editable if you'd rather take the ROADMAP figure). Its share shows as a <b style=\"color:#6ab0e0\">blue</b> segment in every tranche bar and as its own column in the table, and where the farm's weekly income alone already clears the 5,000-point track tier, no top-up is bought at all — the summary says how many weeks that covers. Farm income is deposited together with that week's top-up rather than separately, because the bulk bonus is rated per deposit." },
@@ -20948,10 +20951,23 @@
       if (_ykFarmAuto !== null || !FARM_ID) return;
       _ykFarmAuto = 0;
       try {
-        const r = await fetch(`/api/compute?farm=${FARM_ID}&section=power`);
+        /*
+         * The SAME call the ROADMAP page makes, so the funnel uses the number the user reads
+         * off "YOUR INCOME RIGHT NOW". Anything less gives a different answer: power's
+         * totalBoostedSfl is the THEORETICAL ceiling (157/day on this farm) and a settings-less
+         * GET is 71/day, while the roadmap — with the saved product picks, the saved roadmap
+         * settings and the posted history snapshots that measure real harvest frequency —
+         * reports 94/day. Overstating the farm rate makes the funnel look better than it is.
+         */
+        if (!_roadmapSnapshotsCache) { try { _roadmapSnapshotsCache = await _roadmapFetchHistorySlim(); } catch (e) { _roadmapSnapshotsCache = []; } }
+        const q = `products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}&roadmap=${encodeURIComponent(localStorage.getItem("sfl_roadmap_settings") || "{}")}`;
+        const r = await fetch(`/api/compute?farm=${FARM_ID}&section=roadmap&${q}`, {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [] }),
+        });
         if (!r.ok) return;
         const d = (await r.json()).data || {};
-        const v = (d.categories && d.categories.totalBoostedSfl) || 0;
+        const v = d.startIncome || (d.currentProd && d.currentProd.total) || 0;
         if (v > 0) { _ykFarmAuto = v; if (!_ykFarmPerDay) _ykFarmPerDay = v; renderYakkamon(); }
       } catch (e) { /* stays editable by hand */ }
     }
@@ -21124,7 +21140,7 @@
               <b>Stop spending on SFL — funnel the farm's whole output here</b>
             </label>
             <div style="font-size:0.47rem;color:var(--text-dim);margin-top:4px;line-height:1.6">Burn nothing on the farm, withdraw what it earns and deposit it every week on top of the plan. Farm income
-              <input type="number" min="0" step="1" value="${Math.round(_ykFarmPerDay)}" style="width:64px;font-size:0.55rem" onchange="_ykSet('farmday',this.value)"> ${sflIcon()}/day${_ykFarmAuto > 0 ? ` <span style="color:var(--text-dim)">(auto: ${fmt(_ykFarmAuto)} from POWER)</span>` : " — take it from ROADMAP"}.
+              <input type="number" min="0" step="1" value="${Math.round(_ykFarmPerDay)}" style="width:64px;font-size:0.55rem" onchange="_ykSet('farmday',this.value)"> ${sflIcon()}/day${_ykFarmAuto > 0 ? ` <span style="color:var(--text-dim)">(auto: ${fmt(_ykFarmAuto, 1)} — the same “YOUR INCOME RIGHT NOW” the ROADMAP page shows)</span>` : " — take it from ROADMAP"}.
               ${_ykFarmMode && farmWk > 0 ? `Adds <b style="color:var(--green)">${fmt(farmWk)} ${sflIcon()}/week</b>, <b>${fmt(farmTotal)}</b> over ${_ykLaunchWeeks} weeks — deposited together with that week's top-up, since the bulk bonus is rated per deposit.` : ""}</div>
           </div>
           <div style="font-size:0.5rem;color:var(--text-secondary);margin-bottom:8px">Budget: <b style="color:var(--sunpetal)">${fmt(budget)} ${sflIcon()}</b> <span style="color:var(--text-dim)">(${fmt(budgetUsd)} USD · BTC ${fmt(btcUsd)} · FLOWER ${flUsd.toFixed(4)})</span></div>
