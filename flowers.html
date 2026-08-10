@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.96</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.97</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.97", items: [
+          { t: "feat", text: "<b>No two identical flowers touch any more.</b> The layout kept the colour bands but laid each species down in a solid block, so the same flower sat next to itself. Species are now placed on an <code>(x + 3y) mod 10</code> pattern — a horizontal neighbour shifts the index by 1 and a vertical one by 3, neither of which is 0 mod 10, so an identical pair can never be adjacent — followed by a balancing pass that only moves a tile when the target species is absent from its four neighbours. Verified on the generated plan: <b>0 adjacent duplicates</b> and <b>every one of the 50 flowers appears exactly the same number of times</b>." },
+          { t: "fix", text: "<b>Multi-tile objects draw as one object, not a grid of copies.</b> A 2×2 Oil Reserve was four separate icons. The map now places each object once, spanning its real footprint, using the game's own BUILDINGS_DIMENSIONS and COLLECTIBLES_DIMENSIONS (233 non-1×1 decorations, 26 buildings) instead of assuming 1×1 nodes and 2×2 buildings. Buildings have no usable art anywhere — sfl.world returns the same “?” placeholder for all of them and a full scan of the game repo's 12,042 files finds no per-building asset — so apart from Manor, Mansion and Tent they render as a labelled block instead of a broken image." },
+        ] },
         { ver: "v4.96", items: [
           { t: "feat", text: "<b>New 🌸 DECORATIONS page — island map + flower layout planner.</b> Draws your whole island tile by tile from the game's own geometry (LAND_SIZE 6, the rectangular-spiral EXPANSION_ORIGINS, RESOURCE_DIMENSIONS footprints — the rule that an expansion at origin (ox,oy) covers x ∈ [ox−3, ox+2] was checked against a real farm: all 380 placed objects land inside a built expansion, none outside). Every node, building and collectible you have placed is drawn with its icon. The <b>ascension expansions</b> are outlined in gold and filled with a generated flower layout: five contiguous colour bands with the same number of every flower inside each, so it comes out even by colour <i>and</i> by species. It reports free tiles, colour balance and a <b>what-to-grow</b> table checked against your inventory, and projects what the layout becomes once all 12 expansions of the band are built." },
           { t: "feat", text: "<b>Bring your own layout.</b> The page accepts a JSON map of <code>{\"x,y\": \"Flower Name\"}</code> — paste one and the map redraws from it, with the colour balance, grow list and collision checks all recomputed against yours. It flags tiles that sit on something already placed or fall outside any expansion you own, and hands you the generated plan as JSON to copy and edit." },
@@ -21400,6 +21404,27 @@
       gold: "Gold Rock", crimstones: "Crimstone Rock", sunstones: "Sunstone Rock",
       oilReserves: "Oil Reserve", lavaPits: "Lava Pit", beehives: "Beehive",
     };
+    // Footprints for everything that is NOT 1x1, straight from the game's BUILDINGS_DIMENSIONS
+    // and COLLECTIBLES_DIMENSIONS. Anything absent is 1x1. Without these an Oil Reserve drew
+    // as four separate icons instead of one 2x2 object.
+    const decBuild = {"Town Center":[4,3],Market:[3,2],"Fire Pit":[3,2],House:[4,4],Manor:[5,4],Mansion:[6,5],Workbench:[3,2],Kitchen:[4,3],Bakery:[4,3],"Water Well":[2,2],Tent:[3,2],"Hen House":[4,3],Deli:[4,3],"Smoothie Shack":[3,2],Toolshed:[2,2],Warehouse:[3,2],"Compost Bin":[2,2],"Turbo Composter":[2,2],"Premium Composter":[2,2],Greenhouse:[4,4],"Crop Machine":[5,4],Barn:[4,4],"Fish Market":[3,3],"Crafting Box":[3,2],"Pet House":[3,3],"Aging Shed":[3,2]};
+    
+    const decColl = {Ramsey:[2,2],"Sunflower Statue":[3,4],"Potato Statue":[2,2],"Christmas Tree":[2,2],"Sunflower Tombstone":[2,2],"Sunflower Rock":[5,4],Fountain:[2,2],"Nyon Statue":[2,2],"Homeless Tent":[2,2],"Farmer Bath":[2,3],"Mysterious Head":[2,2],"Rock Golem":[2,2],"Immortal Pear":[2,1],Scarecrow:[2,1],Kuebiko:[2,1],"Golden Cauliflower":[2,2],"Chicken Coop":[2,2],Observatory:[2,2],"Victoria Sisters":[2,2],"Magic Bean":[2,2],"Christmas Snow Globe":[2,2],"Squirrel Monkey":[2,2],"Collectible Bear":[2,2],"Easter Bunny":[2,1],"Giant Carrot":[2,2],"Easter Bush":[2,1],"Witches' Eve Banner":[1,2],"Dawn Breaker Banner":[1,2],"Solar Flare Banner":[1,2],"Bull Run Banner":[1,2],"Human War Banner":[1,2],"Goblin War Banner":[1,2],"Catch the Kraken Banner":[1,2],"Spring Blossom Banner":[1,2],"Clash of Factions Banner":[1,2],"Pharaoh's Treasure Banner":[1,2],"Lifetime Farmer Banner":[1,2],"Creator Banner":[1,2],"Better Together Banner":[1,2],"Paw Prints Banner":[1,2],"Crabs and Traps Banner":[1,2],Maximus:[2,2],"Grain Grinder":[2,1],Bale:[2,2],"Sir Goldensnout":[2,2],"Queen Cornelia":[1,2],"Twilight Anglerfish":[2,1],"Starlight Tuna":[2,1],"Radiant Ray":[2,1],"Phantom Barracuda":[2,1],"Gilded Swordfish":[2,1],"Super Star":[2,1],"Giant Isopod":[2,1],Nautilus:[2,1],Dollocaris:[2,1],"Crimson Carp":[2,1],"Battle Fish":[2,1],"Lemon Shark":[2,1],"Longhorn Cowfish":[2,1],Poseidon:[2,1],Walrus:[2,2],Anchor:[2,2],"Speckled Kissing Fish":[2,1],"Dark Eyed Kissing Fish":[2,1],"Fisherman's Boat":[2,1],"Sea Arch":[3,2],"Crabs and Fish Rug":[3,2],"Fish Flags":[2,1],"Fish Drying Rack":[2,1],"Yellow Submarine Trophy":[2,2],"Pearl Bed":[2,1],"Crimstone Clam":[2,2],"Poseidon's Throne":[3,3],"Crystal Altar":[3,2],"Ascension Monument":[3,3],"Dino Egg Trophy":[2,1],"World Map Rug":[3,2],"Flower Cart":[2,2],"Blossom Royale":[2,2],"Sunrise Bloom Rug":[3,2],"Enchanted Rose":[1,2],Rainbow:[2,1],"Flower Rug":[3,3],"Tea Rug":[3,3],"Green Field Rug":[3,3],"Turbo Sprout":[2,2],Soybliss:[1,2],"Royal Throne":[2,2],"Lily Egg":[1,2],"Fancy Rug":[3,2],"Bullseye Board":[2,2],"Chess Rug":[4,4],"Twister Rug":[3,2],Cluckapult:[2,2],"Rice Panda":[1,2],"Sunflorian Throne":[1,2],"Nightshade Throne":[1,2],"Goblin Throne":[1,2],"Bumpkin Throne":[1,2],"Sunflorian Bunting":[2,1],"Nightshade Bunting":[2,1],"Goblin Bunting":[2,1],"Bumpkin Bunting":[2,1],"Sunflorian Faction Rug":[3,2],"Nightshade Faction Rug":[3,2],"Goblin Faction Rug":[3,2],"Bumpkin Faction Rug":[3,2],"Hapy Jar":[1,2],"Duamutef Jar":[1,2],"Qebehsenuef Jar":[1,2],"Imsety Jar":[1,2],"Adrift Ark":[2,2],Castellan:[2,2],"Sunlit Citadel":[2,2],Sarcophagus:[1,2],"Clay Tablet":[2,1],"Reveling Lemon":[2,2],"Anubis Jackal":[2,2],Sundial:[2,2],"Sand Golem":[2,1],"Cactus King":[1,2],"Scarab Beetle":[2,1],"Lemon Tea Bath":[3,2],Pyramid:[2,2],Oasis:[3,4],"Baobab Tree":[3,3],Camel:[2,1],"Tomato Bombard":[2,2],"Stone Beetle":[1,2],"Iron Beetle":[1,2],"Gold Beetle":[1,2],"Fairy Circle":[2,2],Squirrel:[2,1],"Salt Sculpture":[3,3],"Navigation Table":[2,1],"Royal Crab Pot":[2,2],"Crab House":[3,2],"Spa Cow":[2,1],"Spa Sheep":[2,1],"Deep Sea Pig":[2,2],"Deep Sea Slug":[2,2],"Crystal Shrimp":[2,2],"Salt Awakening Banner":[1,2],"Ascended Cow":[2,1],"Ascended Sheep":[2,1],Crocodile:[2,2],"Dumbo Octopus":[2,2],"Seahorse Dad":[2,2],"Ascension Age Banner":[1,2],"Legendary Shrine":[2,2],"Cow Scratcher":[1,2],"Spinning Wheel":[2,2],"Sleepy Rug":[3,2],Meteorite:[2,2],"Sheaf of Plenty":[1,2],"Mechanical Bull":[2,2],"Crop Circle":[2,2],"Moo-ver":[2,2],Cluckulator:[1,2],UFO:[2,2],Wagon:[2,2],"Black Sheep":[2,1],"Toxic Tuft":[2,1],Mootant:[2,1],"Cozy Fireplace":[2,1],"Christmas Rug":[3,2],"Penguin Pool":[2,2],"Festive Toy Train":[2,2],"Golden Cow":[2,2],Kite:[2,1],"Acorn House":[2,2],Igloo:[2,2],"Lake Rug":[3,3],Hammock:[3,1],Mammoth:[3,2],"Cup of Chocolate":[2,2],"Golden Sheep":[2,2],"Barn Blueprint":[2,1],"Winds of Change Banner":[1,2],"Great Bloom Banner":[1,2],"Frozen Cow":[2,1],"Frozen Sheep":[2,1],Jellyfish:[2,1],Quarry:[2,2],"Winter Guardian":[2,2],"Summer Guardian":[2,2],"Spring Guardian":[2,2],"Autumn Guardian":[2,2],"Sky Pillar":[2,2],"Flower-Scribed Statue":[2,1],"Balloon Rug":[2,2],"Giant Yam":[1,2],"Heart Air Balloon":[3,5],"Giant Zucchini":[1,2],"Mini Floating Island":[2,1],"Love Chicken":[1,2],"Dr Cow":[2,1],"Nurse Sheep":[2,1],"Pink Dolphin":[2,1],"Giant Kale":[2,2],"Big Apple":[2,2],"Big Orange":[2,2],"Big Banana":[2,2],"Farmer's Monument":[3,3],"Miner's Monument":[3,3],"Woodcutter's Monument":[3,3],"Teamwork Monument":[3,3],"Basic Cooking Pot":[2,2],"Expert Cooking Pot":[2,2],"Advanced Cooking Pot":[2,2],"Long Rug":[4,2],Wheelbarrow:[2,1],"Double Bed":[2,1],"Giant Artichoke":[2,2],"Jurassic Droplet":[2,1],"Giant Onion":[1,2],"Giant Turnip":[2,2],"Paw Prints Rug":[3,3],"Pet Bowls":[2,1],"Pet Bed":[2,1],"Giant Acorn":[2,1],"Moon Fox Statue":[2,3],"Sleepy Chicken":[1,2],"Mermaid Cow":[2,1],"Squid Chicken":[1,2],"Petnip Plant":[2,1],"Pet Kennel":[2,2],"Pet Playground":[2,2],"Fish Bowl":[2,1],"Giant Gold Bone":[2,1],"Lunar Temple":[3,3],"Magma Stone":[1,2],Cornucopia:[3,2]};
+    /*
+     * Building art is the one thing with no usable icon source. sfl.world answers 200 for every
+     * building but serves the SAME 1,532-byte "?" placeholder (verified by hash across
+     * Workbench/Kitchen/Water Well), and the game repo has no per-building file — a full tree
+     * scan of 12,042 blobs finds no kitchen/bakery/barn asset, so they are drawn from
+     * spritesheets. Only these three exist standalone; everything else falls back to a labelled
+     * block, which reads better on the map than a broken image anyway.
+     */
+    const decBuildIcon = {
+      Manor: `${_jsdAssets}/buildings/manor.webp`,
+      Mansion: `${_jsdAssets}/buildings/mansion.webp`,
+      Tent: `${_jsdAssets}/buildings/tent.webp`,
+    };
+    /** Short label for an object with no art — "Smoothie Shack" -> "SmSh". */
+    const decLabel = (n) => n.split(/\s+/).map((w) => w.slice(0, 2)).join("").slice(0, 5);
     const decColors = ["Red", "Yellow", "Purple", "Blue", "White"];
     const decSwatch = { Red: "#e05a5a", Yellow: "#e8c85a", Purple: "#a878d8", Blue: "#5aa8e0", White: "#e8e4dc" };
     /** Rectangular-spiral expansion origins, index 0 = centre (game's spiralOrigins). */
@@ -21429,42 +21454,44 @@
      * Returns { occ: Map("x,y" -> {name, icon}), owner: Map("x,y" -> expansion index) }.
      */
     function decOccupancy(farm, expansions) {
-      const occ = new Map(), owner = new Map();
+      const occ = new Map(), owner = new Map(), items = [];
       const origins = decOrigins(expansions);
       origins.forEach((o, i) => {
         const b = decBox(o);
         for (let x = b.x0; x <= b.x1; x++) for (let y = b.y0; y <= b.y1; y++) owner.set(x + "," + y, i);
       });
-      const stamp = (x, y, w, h, name) => {
+      // One entry per real object (origin + footprint) so the map can draw it as a single
+      // icon spanning its tiles; `occ` still marks every covered tile for collision checks.
+      const add = (x, y, w, h, name) => {
+        items.push({ x, y, w, h, name });
         for (let dx = 0; dx < w; dx++) for (let dy = 0; dy < h; dy++) occ.set((x + dx) + "," + (y + dy), name);
       };
       for (const [key, node] of Object.entries(decKeys)) {
         for (const v of Object.values(farm[key] || {})) {
           if (!v || typeof v.x !== "number") continue;
           const [w, h] = decDim[node] || [1, 1];
-          stamp(v.x, v.y, v.width || w, v.height || h, node);
+          add(v.x, v.y, v.width || w, v.height || h, node);
         }
       }
       for (const v of Object.values((farm.flowers && farm.flowers.flowerBeds) || {})) {
         if (!v || typeof v.x !== "number") continue;
-        stamp(v.x, v.y, v.width || 3, v.height || 1, "Flower Bed");
+        add(v.x, v.y, v.width || 3, v.height || 1, "Flower Bed");
       }
       for (const [name, arr] of Object.entries(farm.collectibles || {})) {
+        const d = decColl[name] || decDim[name] || [1, 1];
         for (const it of (arr || [])) {
           const c = it.coordinates || {};
-          if (typeof c.x !== "number") continue;
-          const d = decDim[name] || [1, 1];
-          stamp(c.x, c.y, d[0], d[1], name);
+          if (typeof c.x === "number") add(c.x, c.y, d[0], d[1], name);
         }
       }
       for (const [name, arr] of Object.entries(farm.buildings || {})) {
+        const d = decBuild[name] || [2, 2];
         for (const it of (arr || [])) {
           const c = it.coordinates || {};
-          if (typeof c.x !== "number") continue;
-          stamp(c.x, c.y, 2, 2, name);   // buildings are 2x2 unless told otherwise
+          if (typeof c.x === "number") { add(c.x, c.y, d[0], d[1], name); items[items.length - 1].building = true; }
         }
       }
-      return { occ, owner, origins };
+      return { occ, owner, origins, items };
     }
     /**
      * The flower plan: walk the ascension expansions (spiral indices 30..41) in ring order,
@@ -21473,12 +21500,44 @@
      */
     function decPlan(free, perFlower) {
       const species = decSpecies();
+      const S = species.length;                 // 10
       const plan = new Map();
+      const want = perFlower * S;               // tiles per colour band
+      const xy = (k) => k.split(",").map(Number);
+      const key = (x, y) => x + "," + y;
       let i = 0;
       for (const colour of decColors) {
-        for (const { cols } of species) {
-          for (let n = 0; n < perFlower && i < free.length; n++, i++) plan.set(free[i], cols[colour]);
+        const band = free.slice(i, i + want);
+        i += band.length;
+        if (!band.length) break;
+        /*
+         * Species pattern inside the band: (x + 3y) mod S. A horizontal neighbour shifts the
+         * index by 1 and a vertical one by 3 — neither is 0 mod 10 — so no two tiles holding
+         * the SAME flower can ever touch. Colour bands stay contiguous, which is the point.
+         */
+        const at = new Map();
+        for (const k of band) { const [x, y] = xy(k); at.set(k, ((x + 3 * y) % S + S) % S); }
+        /*
+         * The pattern alone is only near-even over an irregular region, so balance it: move
+         * tiles from the most over-used species to the least, but only where the tile's four
+         * neighbours do not already hold the target — so balancing never breaks the rule above.
+         */
+        const count = () => { const c = new Array(S).fill(0); for (const v of at.values()) c[v]++; return c; };
+        for (let guard = 0; guard < band.length * 4; guard++) {
+          const c = count();
+          let hi = 0, lo = 0;
+          for (let s = 1; s < S; s++) { if (c[s] > c[hi]) hi = s; if (c[s] < c[lo]) lo = s; }
+          if (c[hi] - c[lo] <= 1) break;        // as even as an odd tile count allows
+          const moved = band.some((k) => {
+            if (at.get(k) !== hi) return false;
+            const [x, y] = xy(k);
+            const clash = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => at.get(key(x + dx, y + dy)) === lo);
+            if (clash) return false;
+            at.set(k, lo); return true;
+          });
+          if (!moved) break;                    // nothing can move without touching itself
         }
+        for (const k of band) plan.set(k, species[at.get(k)].cols[colour]);
       }
       return plan;
     }
@@ -21522,7 +21581,7 @@
 
       const expansions = Math.max(1, parseInt((farm.inventory || {})["Basic Land"]) || 1);
       const ascLevel = (farm.island || {}).ascensionLevel || 0;
-      const { occ, owner, origins } = decOccupancy(farm, expansions);
+      const { occ, owner, origins, items } = decOccupancy(farm, expansions);
       // Ascension band = spiral indices 30..41 (Basic Land 31..42). Only those that exist.
       const ascIdx = [];
       for (let i = 30; i < Math.min(expansions, 42); i++) ascIdx.push(i);
@@ -21585,25 +21644,39 @@
       let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
       origins.forEach((o) => { const b = decBox(o); minX = Math.min(minX, b.x0); maxX = Math.max(maxX, b.x1); minY = Math.min(minY, b.y0); maxY = Math.max(maxY, b.y1); });
       const W = maxX - minX + 1, H = maxY - minY + 1;
+      /*
+       * Explicit grid placement rather than a row-major fill: a 2x2 Oil Reserve has to be ONE
+       * icon spanning four tiles, and a flowed layout cannot do that without shifting
+       * everything after it. Column/row are 1-based; the game's y grows upward while CSS rows
+       * grow downward, so an object of height h occupying y..y+h-1 starts at row maxY-(y+h-1).
+       */
       const cells = [];
-      // y grows upward in the game, so rows run maxY -> minY
+      const col = (x) => x - minX + 1;
+      const row = (y) => maxY - y + 1;
       for (let y = maxY; y >= minY; y--) {
         for (let x = minX; x <= maxX; x++) {
           const k = x + "," + y;
           const own = owner.get(k);
-          if (own === undefined) { cells.push(`<div style="background:#0d0b07"></div>`); continue; }
+          if (own === undefined) continue;                    // sea — leave the backdrop
+          if (occ.has(k)) continue;                           // drawn as part of an object below
           const isAsc = own >= 30;
-          const node = occ.get(k);
           const flower = plan.get(k);
           let bg = isAsc ? "#1a1710" : "#141009", inner = "";
-          if (node) { bg = "#241a10"; inner = `<img src="${getItemIcon(node)}" alt="" style="width:100%;height:100%;object-fit:contain;opacity:0.75" onerror="this.style.display='none'">`; }
-          else if (flower) {
-            const col = decColors.find((c) => flower.startsWith(c + " "));
-            bg = decSwatch[col] || "#8a7a5a";
+          if (flower) {
+            const c = decColors.find((c) => flower.startsWith(c + " "));
+            bg = decSwatch[c] || "#8a7a5a";
             inner = `<img src="${getItemIcon(flower)}" alt="" style="width:100%;height:100%;object-fit:contain" onerror="this.style.display='none'">`;
           }
-          cells.push(`<div title="${x},${y}${node ? " · " + escHTML(node) : flower ? " · " + escHTML(flower) : ""}" style="background:${bg};outline:${isAsc ? "1px solid rgba(255,215,0,0.10)" : "none"};outline-offset:-1px">${inner}</div>`);
+          cells.push(`<div title="${x},${y}${flower ? " · " + escHTML(flower) : ""}" style="grid-column:${col(x)};grid-row:${row(y)};background:${bg};outline:${isAsc ? "1px solid rgba(255,215,0,0.10)" : "none"};outline-offset:-1px">${inner}</div>`);
         }
+      }
+      for (const it of items) {
+        if (!owner.has(it.x + "," + it.y)) continue;
+        const src = decBuildIcon[it.name] || (!it.building ? getItemIcon(it.name) : (ITEM_IMAGE_MAP[it.name] || null));
+        const inner = src
+          ? `<img src="${src}" alt="" style="max-width:100%;max-height:100%;object-fit:contain" onerror="this.style.display='none'">`
+          : `<span style="font-size:${Math.min(8, 3 + it.w)}px;color:#c9a227;font-weight:bold;line-height:1;text-align:center;word-break:break-all">${escHTML(decLabel(it.name))}</span>`;
+        cells.push(`<div title="${escHTML(it.name)} · ${it.x},${it.y} · ${it.w}×${it.h}" style="grid-column:${col(it.x)} / span ${it.w};grid-row:${row(it.y + it.h - 1)} / span ${it.h};background:${src ? "#241a10" : "#2b2113"};outline:1px solid rgba(0,0,0,0.35);outline-offset:-1px;display:flex;align-items:center;justify-content:center;overflow:hidden">${inner}</div>`);
       }
       h += `<div class="pixel-panel" style="padding:10px;margin-bottom:12px">
         <div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-bottom:6px">ISLAND MAP <span style="color:var(--text-dim);font-size:0.45rem">· ${W}×${H} tiles · gold outline = ascension expansions</span></div>
