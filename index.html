@@ -5931,7 +5931,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.90</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.91</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5958,6 +5958,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.91", items: [
+          { t: "feat", text: "<b>Yakkamon budget planner.</b> Give it a BTC budget, how far off launch is and how many weekly Platinum boxes you want, and it splits the money between the <b>one big week-1 deposit</b> (best multiplier + biggest bulk bonus, which is what buys leaderboard standing) and the <b>weekly top-ups</b> the reward track needs — the track resets every 7 days, so it cannot be bought in advance. It reports the week-1 deposit, the weekly spend, the cumulative points and <b>where that would rank against the LIVE board right now</b>, plus the forgone farm yield on the whole budget. Prices are live: FLOWER from the same sfl.world exchange the rest of the app prices with (CoinGecko's “sunflower-land” is a different, older token and would misprice the budget ~2×) and BTC from CoinGecko." },
+          { t: "fix", text: "<b>Leaderboard context: deposits opened and the board exploded.</b> Before 10 Aug the whole top 100 was free-activity points — #1 held 5,360 and #100 just 370. Within hours of deposits opening #1 was at 592,342 (≈144,000 FLOWER staked) and #100 at 2,160. The page reads the live board, so its thresholds and the planner's rank estimate move with it; treat any figure as a snapshot, not a target." },
+        ] },
         { ver: "v4.90", items: [
           { t: "fix", text: "<b>Yakkamon multiplier floors at 1×, not 0.</b> Their fine print says the rate drops 0.2× weekly “until it rests at 1X”, so from week 11 it stays at 1× — the calculator was decaying it to zero and would have shown week 16+ deposits earning no base points at all." },
           { t: "feat", text: "<b>Bulk bonus is rated PER DEPOSIT — splitting is expensive.</b> Yakkamon's terms say the full amount must land in one go and split deposits “earn each their own smaller bonus”. Since the bonus rate doubles per 10× (up to +80% on 50,000) and the multiplier decays weekly, spreading the same FLOWER over several weeks is far worse than one deposit now: spreading ~96,000 FLOWER to year end earns roughly <b>40% fewer points</b> than the same sum deposited in week 1. The calculator now spells this out." },
@@ -20884,11 +20888,20 @@
       _ykLiveLoading = true;
       try {
         const one = (u) => fetch(`/api/proxy?url=${encodeURIComponent(u)}`).then(r => r.ok ? r.json() : Promise.reject(r.status));
-        const [signups, board] = await Promise.all([
+        // FLOWER comes from the SAME source the rest of the app prices with
+        // (sfl.world exchange). CoinGecko's "sunflower-land" is a different, older
+        // token — using it would misprice the budget by ~2x.
+        const [signups, board, ex, btc] = await Promise.all([
           one("https://api.yakkamon.com/signups"),
           one("https://api.yakkamon.com/leaderboard").catch(() => null),
+          one("https://sfl.world/api/v1.1/exchange").catch(() => null),
+          one("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd").catch(() => null),
         ]);
-        _ykLive = { signups, board };
+        _ykLive = {
+          signups, board,
+          flowerUsd: (ex && ex.sfl && ex.sfl.usd) || 0,
+          btcUsd: (btc && btc.bitcoin && btc.bitcoin.usd) || 0,
+        };
         _ykLiveErr = null;
       } catch (e) {
         _ykLiveErr = String(e);
@@ -20898,14 +20911,26 @@
     }
 
     let _ykAmount = 500, _ykWeek = 1, _ykRoiDays = 120, _ykLockDays = 120;
+    // Budget planner state: how much you have, how far off the launch is, and how many
+    // weeks of the (resetting) reward track you want to buy.
+    let _ykBtc = 0.096, _ykLaunchWeeks = 17, _ykBoxWeeks = 8;
     window._ykSet = function (k, v) {
       const n = parseFloat(v);
       if (k === "amount") _ykAmount = isFinite(n) && n >= 0 ? n : 0;
       if (k === "week") _ykWeek = Math.max(1, Math.min(15, parseInt(v) || 1));
       if (k === "roi") _ykRoiDays = isFinite(n) && n > 0 ? n : 120;
       if (k === "lock") _ykLockDays = isFinite(n) && n > 0 ? n : 120;
+      if (k === "btc") _ykBtc = isFinite(n) && n >= 0 ? n : 0;
+      if (k === "launch") _ykLaunchWeeks = Math.max(2, Math.min(30, parseInt(v) || 17));
+      if (k === "boxw") _ykBoxWeeks = Math.max(0, Math.min(29, parseInt(v) || 0));
       renderYakkamon();
     };
+    /** Smallest deposit in week `w` that reaches `target` points (binary search on ykPoints). */
+    function ykNeedFor(target, week) {
+      let lo = 0, hi = 1e9;
+      for (let i = 0; i < 200; i++) { const m = (lo + hi) / 2; ykPoints(m, week).total < target ? lo = m : hi = m; }
+      return hi;
+    }
 
     function renderYakkamon() {
       const app = document.getElementById("app");
@@ -20995,6 +21020,56 @@
           </div>`).join("")}
         </div>
       </div>`;
+
+      // ── BUDGET PLANNER ─────────────────────────────────────────────
+      /*
+       * Splits a fixed budget between the ONE deposit that buys leaderboard standing (week 1,
+       * best multiplier + biggest bulk bonus) and the weekly top-ups that keep claiming the
+       * reward track, which resets every 7 days and so cannot be bought in advance. Ranks the
+       * outcome against the LIVE board rather than a guess.
+       */
+      const flUsd = (_ykLive && _ykLive.flowerUsd) || 0;
+      const btcUsd = (_ykLive && _ykLive.btcUsd) || 0;
+      if (flUsd > 0 && btcUsd > 0) {
+        const budgetUsd = _ykBtc * btcUsd, budget = budgetUsd / flUsd;
+        const FREE_WK = 42;                      // daily nurture 6×7 — negligible vs 5,000
+        const TRACK_TOP = 5000;                  // Platinum resource box tier
+        const boxW = Math.min(_ykBoxWeeks, _ykLaunchWeeks - 1);
+        let weekly = 0;
+        for (let w = 2; w <= boxW + 1; w++) weekly += ykNeedFor(TRACK_TOP - FREE_WK, w);
+        const w1 = budget - weekly;
+        const cum = (w1 > 0 ? ykPoints(w1, 1).total : 0) + boxW * TRACK_TOP;
+        const ent = (bd && bd.entries) || [];
+        const beat = ent.filter(e => e.points > cum).length;   // how many of the live top-100 are above you
+        const rankTxt = !ent.length ? "—" : (beat === 0 ? "nad #1 (dnešní top)" : beat >= ent.length ? "mimo top " + ent.length : "≈ #" + (beat + 1));
+        h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px;border-left:3px solid var(--lily)">
+          <div class="pixel-font" style="font-size:0.62rem;color:var(--lily);margin-bottom:4px">🎯 ROZPOČTOVÝ PLÁNOVAČ</div>
+          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Rozdělí pevný rozpočet mezi <b>jeden velký vklad v týdnu 1</b> (nejlepší násobek + největší bonus → kumulativní body na leaderboard) a <b>týdenní dokupování</b> na Platinum box (track se resetuje, dopředu se koupit nedá).</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:9px">
+            <label style="font-size:0.5rem;color:var(--text-dim)">mám <input type="number" min="0" step="0.001" value="${_ykBtc}" style="width:66px;font-size:0.6rem" onchange="_ykSet('btc',this.value)"> BTC</label>
+            <label style="font-size:0.5rem;color:var(--text-dim)">launch za <input type="number" min="2" max="30" value="${_ykLaunchWeeks}" style="width:44px;font-size:0.6rem" onchange="_ykSet('launch',this.value)"> týdnů</label>
+            <label style="font-size:0.5rem;color:var(--text-dim)">boxů chci <input type="number" min="0" max="29" value="${_ykBoxWeeks}" style="width:44px;font-size:0.6rem" onchange="_ykSet('boxw',this.value)">×</label>
+          </div>
+          <div style="font-size:0.5rem;color:var(--text-secondary);margin-bottom:8px">Rozpočet: <b style="color:var(--sunpetal)">${fmt(budget)} ◈</b> <span style="color:var(--text-dim)">(${fmt(budgetUsd)} USD · BTC ${fmt(btcUsd)} · FLOWER ${flUsd.toFixed(4)})</span></div>
+          ${w1 < 0
+            ? `<div style="font-size:0.55rem;color:var(--red)">⚠ Nevejde se — samotné týdenní dokupování (${boxW}× box) stojí <b>${fmt(weekly)} ◈</b>, což je víc než celý rozpočet. Sniž počet boxů.</div>`
+            : `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px">
+                <div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px">
+                  <div style="font-size:0.45rem;color:var(--text-dim)">VKLAD TÝDEN 1</div>
+                  <div style="font-size:0.72rem;color:var(--green);font-weight:bold">${fmt(w1)} ◈</div>
+                  <div style="font-size:0.44rem;color:var(--text-dim)">${fmt(ykPoints(w1, 1).total)} bodů</div></div>
+                <div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px">
+                  <div style="font-size:0.45rem;color:var(--text-dim)">TÝDENNÍ (${boxW}×)</div>
+                  <div style="font-size:0.72rem;color:var(--sunpetal);font-weight:bold">${fmt(weekly)} ◈</div>
+                  <div style="font-size:0.44rem;color:var(--text-dim)">${boxW}× Platinum box</div></div>
+                <div style="border:1px solid var(--border-brown);border-radius:6px;background:#1a1d10;padding:8px">
+                  <div style="font-size:0.45rem;color:var(--text-dim)">KUMULATIVNĚ</div>
+                  <div style="font-size:0.72rem;color:var(--green);font-weight:bold">${fmt(cum)} b</div>
+                  <div style="font-size:0.44rem;color:var(--text-dim)">dnes ${rankTxt}</div></div>
+              </div>
+              <div style="font-size:0.46rem;color:var(--text-dim);margin-top:7px;line-height:1.6">Každý týden boxů ubere z týdne 1 a tím i z kumulativních bodů — track a leaderboard soupeří o stejné peníze. Zařazení je proti <b>živému top ${ent.length || "?"}</b>, což je momentka: deposity se otevřely ${open ? "právě teď" : "10. 8."} a laťka poroste. Ušlý výnos z celého rozpočtu při ${_ykRoiDays}denní návratnosti a ${_ykLaunchWeeks * 7} dnech ≈ <b style="color:var(--red)">${fmt(budget * (_ykLaunchWeeks * 7) / _ykRoiDays)} ◈</b>.</div>`}
+        </div>`;
+      }
 
       // ── DEPOSIT CALCULATOR ─────────────────────────────────────────
       const p = ykPoints(_ykAmount, _ykWeek);
