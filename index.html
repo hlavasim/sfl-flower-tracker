@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.00</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.01</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.01", items: [
+          { t: "fix", text: "<b>Multi-tile objects were anchored the wrong way, so trees sat on top of stone rocks.</b> A 2×2 object at (x,y) covers <b>y down to y−h+1</b>, not upward. Checked against the real farm: anchoring upward leaves 4 overlapping tiles — every one a Tree over a Stone Rock, exactly what the map drew — while anchoring downward leaves <b>zero</b>. Verified on the rendered map: 1,213 cells, 0 overlaps." },
+          { t: "fix", text: "<b>Reverted a bad “fix” that erased part of the farm.</b> v5.00 hid objects inside the ascension band whenever “plan the whole band” was on, and drew planned flowers over them — which deleted <b>138 pieces of Stone Fence</b> from the map. Everything you own is drawn again, always; the “needs clearing” line is what tells you a tile is in the way. (The band is also an L-shape — 7 expansions across the top and 5 down the left side — not just the top row.)" },
+        ] },
         { ver: "v5.00", items: [
           { t: "fix", text: "<b>Fruit patches were missing from the map entirely.</b> The occupancy scan read every node type except <code>fruitPatches</code> — 19 of them at 2×2, so <b>76 tiles</b> were drawn as bare ground and counted as free. Added, and the free-tile numbers move with it." },
           { t: "fix", text: "<b>Node icons were the inventory art, not the thing on the ground.</b> Crop Plot, Stone/Iron/Gold Rock, Fruit Patch and Tree were drawn with their ITEM_IMAGE_MAP icon — a lump of stone, an iron bar — so the map showed ore piles where rocks and plots stand. They now use the in-world sprites from the game CDN (soil2, stone_rock, iron_rock, gold_rock, fruit_patch, tree)." },
@@ -21502,9 +21506,15 @@
       });
       // One entry per real object (origin + footprint) so the map can draw it as a single
       // icon spanning its tiles; `occ` still marks every covered tile for collision checks.
+      /*
+       * A multi-tile object is anchored at its TOP row and extends DOWNWARD: (x,y) covers
+       * y, y-1 … y-h+1. Checked against the real farm — anchoring upward leaves 4 overlapping
+       * tiles (every one a Tree sitting on a Stone Rock, which is what the map drew), while
+       * anchoring downward leaves none.
+       */
       const add = (x, y, w, h, name) => {
         items.push({ x, y, w, h, name });
-        for (let dx = 0; dx < w; dx++) for (let dy = 0; dy < h; dy++) occ.set((x + dx) + "," + (y + dy), name);
+        for (let dx = 0; dx < w; dx++) for (let dy = 0; dy < h; dy++) occ.set((x + dx) + "," + (y - dy), name);
       };
       for (const [key, node] of Object.entries(decKeys)) {
         for (const v of Object.values(farm[key] || {})) {
@@ -21725,13 +21735,7 @@
           const isAsc = own >= ASC_FROM && own < ASC_TO;
           const unbuilt = own >= expansions;
           const flower = plan.get(k);
-          /*
-           * A planned flower wins over whatever stands there today when the band is being
-           * cleared — those objects are the ones you are moving out. Skipping them here is what
-           * made the bottom row of the top band render 6 tiles instead of 42: exactly the 36
-           * tiles reported as "need clearing first" were dropped from the drawing.
-           */
-          if (occ.has(k) && !(flower && _decClear && isAsc)) continue;
+          if (occ.has(k)) continue;                           // an object stands here — drawn below
           // No colour wash behind the flowers — the whole point is to see the arrangement the
           // way it will actually look in game, which is the icons on plain ground.
           const bg = isAsc ? (unbuilt ? "#12100b" : "#1a1710") : "#141009";
@@ -21743,11 +21747,14 @@
           cells.push(`<div title="${x},${y}${flower ? " · " + escHTML(flower) : ""}${unbuilt ? " · not built yet" : ""}" style="grid-column:${col(x)};grid-row:${row(y)};background:${bg};outline:${edge};outline-offset:-1px">${inner}</div>`);
         }
       }
+      /*
+       * Everything you own is drawn, always. An earlier build hid objects inside the band when
+       * "plan the whole band" was on, on the grounds that they were leaving — that erased 138
+       * pieces of a Stone Fence from the map and put flowers over it. The map has to show what
+       * is really there; the "needs clearing" line is what tells you it is in the way.
+       */
       for (const it of items) {
         if (!owner.has(it.x + "," + it.y)) continue;
-        // Objects inside the band are being relocated, so the plan replaces them on the map.
-        const ownIt = owner.get(it.x + "," + it.y);
-        if (_decClear && ownIt >= ASC_FROM && ownIt < ASC_TO) continue;
         /*
          * Only sources known to hold real art. sfl.world answers 200 for everything but serves
          * one shared "?" placeholder for anything it lacks — checked by hash across all 32
@@ -21762,7 +21769,7 @@
         const inner = src
           ? `<img src="${src}" alt="" style="max-width:100%;max-height:100%;object-fit:contain" onerror="this.style.display='none'">`
           : `<span style="font-size:${Math.max(4, Math.min(7, 2 + it.w))}px;color:#c9a227;line-height:1.05;text-align:center;padding:1px;overflow:hidden;word-break:break-word">${escHTML(it.name)}</span>`;
-        cells.push(`<div title="${escHTML(it.name)} · ${it.x},${it.y} · ${it.w}×${it.h}" style="grid-column:${col(it.x)} / span ${it.w};grid-row:${row(it.y + it.h - 1)} / span ${it.h};background:${src ? "#241a10" : "#2b2113"};outline:1px solid rgba(0,0,0,0.35);outline-offset:-1px;display:flex;align-items:center;justify-content:center;overflow:hidden">${inner}</div>`);
+        cells.push(`<div title="${escHTML(it.name)} · ${it.x},${it.y} · ${it.w}×${it.h}" style="grid-column:${col(it.x)} / span ${it.w};grid-row:${row(it.y)} / span ${it.h};background:${src ? "#241a10" : "#2b2113"};outline:1px solid rgba(0,0,0,0.35);outline-offset:-1px;display:flex;align-items:center;justify-content:center;overflow:hidden">${inner}</div>`);
       }
       h += `<div class="pixel-panel" style="padding:10px;margin-bottom:12px">
         <div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-bottom:6px">ISLAND MAP <span style="color:var(--text-dim);font-size:0.45rem">· ${W}×${H} tiles · gold outline = ascension expansions</span></div>
