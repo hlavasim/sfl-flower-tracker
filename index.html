@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.03</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.04</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.04", items: [
+          { t: "feat", text: "<b>Three layouts to pick from, above the JSON box.</b> <b>Colour bands</b> is the original — five contiguous colour blocks, equal count of every flower. <b>Even scatter</b> drops the colour grouping entirely: all 50 flowers appear the same number of times, the remainder is shared out one extra each so the <b>whole area is filled</b> (432 tiles, not 400), and species follow an (x+7y) mod 50 pattern so no two identical flowers ever touch. <b>Written word</b> spells a word out in flowers." },
+          { t: "feat", text: "<b>The written-word layout.</b> A 3×6 font lays the word across the band's top strip, stretched edge to edge — first letter at the left boundary, last at the right, slack shared between them, glyphs filling all six rows. Letters are <b>red</b> pansies on a <b>white</b> pansy field, and every remaining tile of the band is filled with the field colour. This is the one layout that deliberately puts identical flowers side by side: cycling species inside a colour, which every other layout does, turns the word into noise — a solid block of one flower is what makes it readable. Editable word (letters of SAJMONIUM, which is what the font covers)." },
+        ] },
         { ver: "v5.03", items: [
           { t: "fix", text: "<b>Expansions you have not built yet are no longer greyed out.</b> Their flowers were drawn at 55% opacity on a darker ground, which hid half the layout — the one thing the map exists to show. Same ground, full-strength icons everywhere; only a thin dashed edge still marks what is still to come." },
         ] },
@@ -21614,7 +21618,99 @@
     // allowed, but asking for more than fits is what produced 80 Red / 0 Blue.
     // _decClear: plan the whole ascension band as if its nodes had been moved onto expansions
     // 1–30, which is the point of the exercise. Off = plan only what is free right now.
+    /*
+     * Layout 2 — even scatter. No colour grouping at all: every one of the 50 flowers appears
+     * the same number of times, the remainder is spread one extra each so the whole area is
+     * filled, and species follow (x + 7y) mod 50 so no two identical flowers touch (a
+     * horizontal step changes the index by 1, a vertical one by 7; neither is 0 mod 50).
+     */
+    function decPlanScatter(free) {
+      const species = decSpecies();
+      const all = [];
+      for (const { cols } of species) for (const c of decColors) all.push(cols[c]);   // 50 flowers
+      const S = all.length;
+      const at = new Map(), xy = (k) => k.split(",").map(Number);
+      for (const k of free) { const [x, y] = xy(k); at.set(k, ((x + 7 * y) % S + S) % S); }
+      const count = () => { const c = new Array(S).fill(0); for (const v of at.values()) c[v]++; return c; };
+      const key = (x, y) => x + "," + y;
+      for (let guard = 0; guard < free.length * 3; guard++) {
+        const c = count();
+        let hi = 0, lo = 0;
+        for (let s = 1; s < S; s++) { if (c[s] > c[hi]) hi = s; if (c[s] < c[lo]) lo = s; }
+        if (c[hi] - c[lo] <= 1) break;          // as even as the tile count allows
+        const moved = free.some((k) => {
+          if (at.get(k) !== hi) return false;
+          const [x, y] = xy(k);
+          if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => at.get(key(x + dx, y + dy)) === lo)) return false;
+          at.set(k, lo); return true;
+        });
+        if (!moved) break;
+      }
+      const plan = new Map();
+      for (const k of free) plan.set(k, all[at.get(k)]);
+      return plan;
+    }
+
+    // 3x5 glyphs — the widest font that fits nine letters across the band's 42-tile top strip
+    // (9 x 3 + 8 gaps = 35 columns) with its 5 rows inside the strip's 6.
+    const decFont = {
+      S: ["111", "100", "111", "001", "001", "111"], A: ["111", "101", "101", "111", "101", "101"],
+      J: ["111", "001", "001", "001", "101", "111"], M: ["101", "111", "111", "101", "101", "101"],
+      O: ["111", "101", "101", "101", "101", "111"], N: ["101", "111", "111", "111", "111", "101"],
+      I: ["111", "010", "010", "010", "010", "111"], U: ["101", "101", "101", "101", "101", "111"],
+    };
+    const decFontH = 6;
+    /*
+     * Layout 3 — a word written in flowers. The band's top strip is 42x6, so the text is laid
+     * out there in a 3x5 font; ink and paper are two different COLOURS (all ten species of
+     * each, cycled so identical flowers never touch), which is what makes the letters legible
+     * from a distance. Every remaining tile of the band is filled with the paper colour.
+     */
+    function decPlanText(free, word, inkColour, paperColour) {
+      const species = decSpecies();
+      const S = species.length;
+      const xy = (k) => k.split(",").map(Number);
+      const ys = free.map((k) => xy(k)[1]);
+      const maxY = Math.max(...ys), minStrip = maxY - 5;
+      const strip = free.filter((k) => xy(k)[1] >= minStrip);
+      const sx = strip.map((k) => xy(k)[0]);
+      const x0 = Math.min(...sx), x1 = Math.max(...sx);
+      /*
+       * Spread the letters across the FULL width of the strip rather than sitting them in the
+       * middle at a fixed pitch: the first glyph starts at the left edge, the last ends at the
+       * right, and the slack is shared between them. With 6-row glyphs in a 6-row strip the
+       * word fills the whole band, which is the point of writing it in flowers.
+       */
+      const letters = word.toUpperCase().split("").filter((c) => decFont[c]);
+      const W = x1 - x0 + 1;
+      const n = letters.length;
+      const topY = maxY;
+      const ink = new Set();
+      letters.forEach((ch, i) => {
+        const gx = x0 + (n > 1 ? Math.round((i * (W - 3)) / (n - 1)) : Math.floor((W - 3) / 2));
+        decFont[ch].forEach((row, r) => {
+          for (let c = 0; c < 3; c++) if (row[c] === "1") ink.add((gx + c) + "," + (topY - r));
+        });
+      });
+      /*
+       * ONE species for the letters and one for the field, not ten of each. Cycling species
+       * inside a colour — which every other layout does to keep identical flowers apart — turns
+       * the word into noise at this scale, because the sprites differ far more than the colours
+       * do. Here legibility wins: a solid block of a single flower is exactly what makes the
+       * letters readable, so identical neighbours are deliberate. Pansies give the cleanest
+       * pair — same silhouette, so only the colour changes.
+       */
+      const pansy = species.find((s) => s.sp === "Pansy") || species[0];
+      const plan = new Map();
+      for (const k of free) plan.set(k, pansy.cols[ink.has(k) ? inkColour : paperColour]);
+      return plan;
+    }
+
     let _decData = null, _decErr = null, _decLoading = false, _decCustom = null, _decPer = null, _decClear = true;
+    let _decLayout = "bands";     // bands | scatter | text
+    let _decWord = "SAJMONIUM";
+    window._decSetLayout = function (v) { _decLayout = v; _decCustom = null; renderDecorations(); };
+    window._decSetWord = function (v) { _decWord = (v || "").toUpperCase().replace(/[^SAJMONIU]/g, "").slice(0, 10) || "SAJMONIUM"; _decCustom = null; renderDecorations(); };
     window._decToggleClear = function (on) { _decClear = !!on; renderDecorations(); };
     window._decSetPer = function (v) { const n = parseInt(v); _decPer = (v === "" || !isFinite(n)) ? null : Math.max(0, Math.min(40, n)); renderDecorations(); };
     window._decApplyJson = function () {
@@ -21679,7 +21775,10 @@
       const autoPer = Math.floor(freeAsc.length / slots);   // biggest count that stays even
       const per = _decPer == null ? autoPer : _decPer;
       const overflow = per * slots > freeAsc.length;
-      const plan = _decCustom || decPlan(freeAsc, per);
+      const plan = _decCustom
+        || (_decLayout === "scatter" ? decPlanScatter(freeAsc)
+          : _decLayout === "text" ? decPlanText(freeAsc, _decWord, "Red", "White")
+          : decPlan(freeAsc, per));
       // What the same layout becomes once the whole 12-expansion band is built.
 
       // ── what the plan needs vs what you hold ──────────────────────────
@@ -21820,6 +21919,21 @@
       // ── JSON in/out ──────────────────────────────────────────────────
       const asJson = JSON.stringify(Object.fromEntries([...plan.entries()]), null, 0);
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-bottom:6px">LAYOUT</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
+          ${[["bands", "Colour bands"], ["scatter", "Even scatter"], ["text", "Written word"]].map(([v, l]) => {
+            const on = !_decCustom && _decLayout === v;
+            return `<button onclick="_decSetLayout('${v}')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;cursor:pointer;background:${on ? "var(--sunpetal)" : "#241a10"};color:${on ? "#1a120a" : "var(--text-secondary)"};font-weight:${on ? "bold" : "normal"}">${l}</button>`;
+          }).join("")}
+          ${_decCustom ? `<span style="font-size:0.47rem;color:var(--lily)">custom JSON in use</span>` : ""}
+          ${!_decCustom && _decLayout === "text" ? `<label style="font-size:0.48rem;color:var(--text-dim)">word <input value="${escHTML(_decWord)}" maxlength="10" style="width:96px;font-size:0.55rem" onchange="_decSetWord(this.value)"></label>` : ""}
+        </div>
+        <div style="font-size:0.46rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">${
+          _decLayout === "scatter"
+            ? "Every one of the 50 flowers the same number of times, no colour grouping, spread so no two identical ones touch — and the remainder shared out one extra each so the <b>whole area is filled</b>."
+            : _decLayout === "text"
+              ? "The word is written across the band's top strip in a 3×5 font: <b>red</b> flowers for the letters on a <b>white</b> field, each using all ten species so nothing identical touches. Every remaining tile is filled with the white field. Only letters of SAJMONIUM are available in the font."
+              : "Five contiguous colour bands, the same count of every flower inside each. Fills as many whole sets as the space allows."}</div>
         <div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-bottom:4px">YOUR OWN LAYOUT (JSON)</div>
         <div style="font-size:0.47rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Format is <code>{"x,y": "Flower Name"}</code> — one entry per tile, coordinates in the game's own grid (hover the map to read them). Paste yours and press CHECK: the map redraws from it and everything above — colour balance, what to grow, collisions — is recomputed against it.</div>
         <textarea id="dec-json" spellcheck="false" style="width:100%;height:90px;font-family:monospace;font-size:0.5rem;background:#0d0b07;color:var(--text-secondary);border:1px solid var(--border-brown);border-radius:5px;padding:6px">${escHTML(asJson)}</textarea>
