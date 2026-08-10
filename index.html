@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.02</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.03</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.03", items: [
+          { t: "fix", text: "<b>Expansions you have not built yet are no longer greyed out.</b> Their flowers were drawn at 55% opacity on a darker ground, which hid half the layout — the one thing the map exists to show. Same ground, full-strength icons everywhere; only a thin dashed edge still marks what is still to come." },
+        ] },
         { ver: "v5.02", items: [
           { t: "fix", text: "<b>An expansion's footprint is not centred on its origin — the band was a row too low.</b> It spans <b>x [ox−3, ox+2]</b> but <b>y [oy−2, oy+3]</b>. The horizontal half is forced by a Stone Fence column at x=−15 (the symmetric alternative leaves 30 fence tiles on land nobody owns); the vertical half is forced by what the game shows — a fence along y=15 with <b>six</b> free rows above it, which only y[−2,+3] produces. Occupancy data alone could not separate the two candidates, since both fit every placed object; only the empty land above the fence distinguishes them. The ascension band now sits at y 16–21, the fence is correctly outside it, and the summary reads “nothing in the way” instead of demanding you clear 36 tiles that were never in the band." },
         ] },
@@ -21750,10 +21753,14 @@
           if (occ.has(k)) continue;                           // an object stands here — drawn below
           // No colour wash behind the flowers — the whole point is to see the arrangement the
           // way it will actually look in game, which is the icons on plain ground.
-          const bg = isAsc ? (unbuilt ? "#12100b" : "#1a1710") : "#141009";
+          // Same ground whether the expansion is built or not, so the finished layout reads as
+          // one picture; only a thin dashed edge marks what is still to come.
+          const bg = isAsc ? "#1a1710" : "#141009";
           let inner = "";
           if (flower) {
-            inner = `<img src="${getItemIcon(flower)}" alt="" style="width:100%;height:100%;object-fit:contain;${unbuilt ? "opacity:0.55" : ""}" onerror="this.style.display='none'">`;
+            // Full opacity even on expansions you have not built — the whole point is to see
+            // the finished arrangement, and dimming half of it hides exactly that.
+            inner = `<img src="${getItemIcon(flower)}" alt="" style="width:100%;height:100%;object-fit:contain" onerror="this.style.display='none'">`;
           }
           const edge = !isAsc ? "none" : unbuilt ? "1px dashed rgba(255,215,0,0.30)" : "1px solid rgba(255,215,0,0.10)";
           cells.push(`<div title="${x},${y}${flower ? " · " + escHTML(flower) : ""}${unbuilt ? " · not built yet" : ""}" style="grid-column:${col(x)};grid-row:${row(y)};background:${bg};outline:${edge};outline-offset:-1px">${inner}</div>`);
