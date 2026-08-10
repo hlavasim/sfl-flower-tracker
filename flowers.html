@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.99</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.00</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,11 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.00", items: [
+          { t: "fix", text: "<b>Fruit patches were missing from the map entirely.</b> The occupancy scan read every node type except <code>fruitPatches</code> — 19 of them at 2×2, so <b>76 tiles</b> were drawn as bare ground and counted as free. Added, and the free-tile numbers move with it." },
+          { t: "fix", text: "<b>Node icons were the inventory art, not the thing on the ground.</b> Crop Plot, Stone/Iron/Gold Rock, Fruit Patch and Tree were drawn with their ITEM_IMAGE_MAP icon — a lump of stone, an iron bar — so the map showed ore piles where rocks and plots stand. They now use the in-world sprites from the game CDN (soil2, stone_rock, iron_rock, gold_rock, fruit_patch, tree)." },
+          { t: "fix", text: "<b>Top band drew 5 rows instead of 6.</b> With “plan the whole band” on, the layout covers tiles that still hold something — but the map skipped exactly those as occupied, so the bottom row of the top band rendered 6 tiles instead of 42. The planned flower now wins on tiles being cleared, and the objects moving out are no longer drawn over it. That accounted for precisely the 36 tiles reported as “need clearing first”." },
+        ] },
         { ver: "v4.99", items: [
           { t: "fix", text: "<b>Decorations map drops the colour wash behind the flowers.</b> Each planned tile was painted with its colour swatch, which made the bands obvious but hid what the arrangement will actually look like. Flowers now sit on plain ground exactly as they will in game — the bands still read, because they come from the flowers' own colours. The swatches stay in the COLOUR BALANCE legend, where they belong." },
         ] },
@@ -21410,6 +21415,22 @@
       crops: "Crop Plot", trees: "Tree", stones: "Stone Rock", iron: "Iron Rock",
       gold: "Gold Rock", crimstones: "Crimstone Rock", sunstones: "Sunstone Rock",
       oilReserves: "Oil Reserve", lavaPits: "Lava Pit", beehives: "Beehive",
+      // fruitPatches was missing here, so 19 patches (2x2 each = 76 tiles) counted as free
+      // ground and the map drew nothing where they stand.
+      fruitPatches: "Fruit Patch",
+    };
+    /*
+     * Node art. ITEM_IMAGE_MAP holds the INVENTORY icon for these names — a lump of stone, an
+     * iron bar — not the thing standing on the land, so the map showed ore piles where rocks
+     * and plots should be. These are the in-world sprites from the same game CDN.
+     */
+    const decNodeArt = {
+      "Crop Plot": "crops/soil2.png",
+      "Stone Rock": "resources/stone_rock.png",
+      "Iron Rock": "resources/iron_rock.png",
+      "Gold Rock": "resources/gold_rock.png",
+      "Fruit Patch": "resources/fruit_patch.png",
+      "Tree": "resources/tree.png",
     };
     // Footprints for everything that is NOT 1x1, straight from the game's BUILDINGS_DIMENSIONS
     // and COLLECTIBLES_DIMENSIONS. Anything absent is 1x1. Without these an Oil Reserve drew
@@ -21701,10 +21722,16 @@
           const k = x + "," + y;
           const own = owner.get(k);
           if (own === undefined) continue;                    // sea — leave the backdrop
-          if (occ.has(k)) continue;                           // drawn as part of an object below
           const isAsc = own >= ASC_FROM && own < ASC_TO;
           const unbuilt = own >= expansions;
           const flower = plan.get(k);
+          /*
+           * A planned flower wins over whatever stands there today when the band is being
+           * cleared — those objects are the ones you are moving out. Skipping them here is what
+           * made the bottom row of the top band render 6 tiles instead of 42: exactly the 36
+           * tiles reported as "need clearing first" were dropped from the drawing.
+           */
+          if (occ.has(k) && !(flower && _decClear && isAsc)) continue;
           // No colour wash behind the flowers — the whole point is to see the arrangement the
           // way it will actually look in game, which is the icons on plain ground.
           const bg = isAsc ? (unbuilt ? "#12100b" : "#1a1710") : "#141009";
@@ -21718,6 +21745,9 @@
       }
       for (const it of items) {
         if (!owner.has(it.x + "," + it.y)) continue;
+        // Objects inside the band are being relocated, so the plan replaces them on the map.
+        const ownIt = owner.get(it.x + "," + it.y);
+        if (_decClear && ownIt >= ASC_FROM && ownIt < ASC_TO) continue;
         /*
          * Only sources known to hold real art. sfl.world answers 200 for everything but serves
          * one shared "?" placeholder for anything it lacks — checked by hash across all 32
@@ -21725,7 +21755,8 @@
          * building art, then ITEM_IMAGE_MAP, then sfl.world but ONLY for nodes and flowers,
          * which genuinely have images there. Everything else gets its name instead of a "?".
          */
-        const src = (decCdn[it.name] ? decCdnBase + "/" + decCdn[it.name] : null)
+        const src = (decNodeArt[it.name] ? decCdnBase + "/" + decNodeArt[it.name] : null)
+          || (decCdn[it.name] ? decCdnBase + "/" + decCdn[it.name] : null)
           || (decRepo[it.name] ? _jsdAssets + "/" + decRepo[it.name] : null)
           || decBuildIcon[it.name] || ITEM_IMAGE_MAP[it.name] || (it.node ? getItemIcon(it.name) : null);
         const inner = src
