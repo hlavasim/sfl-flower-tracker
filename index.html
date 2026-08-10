@@ -5931,7 +5931,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.89</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.90</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5958,6 +5958,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.90", items: [
+          { t: "fix", text: "<b>Yakkamon multiplier floors at 1×, not 0.</b> Their fine print says the rate drops 0.2× weekly “until it rests at 1X”, so from week 11 it stays at 1× — the calculator was decaying it to zero and would have shown week 16+ deposits earning no base points at all." },
+          { t: "feat", text: "<b>Bulk bonus is rated PER DEPOSIT — splitting is expensive.</b> Yakkamon's terms say the full amount must land in one go and split deposits “earn each their own smaller bonus”. Since the bonus rate doubles per 10× (up to +80% on 50,000) and the multiplier decays weekly, spreading the same FLOWER over several weeks is far worse than one deposit now: spreading ~96,000 FLOWER to year end earns roughly <b>40% fewer points</b> than the same sum deposited in week 1. The calculator now spells this out." },
+        ] },
         { ver: "v4.89", items: [
           { t: "feat", text: "<b>Yakkamon page now runs on LIVE data.</b> Their pre-registration API turns out to be public (it just serves no CORS headers, so it goes through our proxy). The page now answers “what number would I be?” directly: it shows how many trainers have signed up so far, the <b>exact trainer number you'd get</b> if you registered now, which egg tier that lands in and how many spots are left in it — plus which tiers are already gone. After you sign up their own dashboard shows the same thing as <b>“TRAINER #N”</b>." },
           { t: "feat", text: "<b>Live Yakkamon leaderboard — and it contradicts the marketing.</b> The site says rank is “revealed Q4 2026”, but the top 100 is readable today <i>with point totals</i>. The page now shows what #1 / #10 / #25 / #50 / #100 actually hold and converts each into the FLOWER it would take to match at the current multiplier. Treat it as a floor, not a target: deposits only open 10 Aug, so today's top is pure free-activity points and those thresholds will jump. Only the top 100 is public, so the top-1,000 / top-5,000 NFT cutoffs still aren't visible." },
@@ -20849,8 +20853,8 @@
     };
     /** Week index (1-based) of the deposit programme for a given time. */
     function ykWeekAt(ms) { return Math.max(1, Math.floor((ms - YK.depositStart) / (7 * 86400000)) + 1); }
-    /** Multiplier for week n: 3.0, 2.8, 2.6 … The site does not say where it floors. */
-    function ykMult(week) { return Math.max(0, YK.multStart - YK.multStepPerWeek * (week - 1)); }
+    /** Multiplier for week n: 3.0, 2.8, 2.6 … "until it rests at 1X" — so week 11 onward is 1×. */
+    function ykMult(week) { return Math.max(1, YK.multStart - YK.multStepPerWeek * (week - 1)); }
     /*
      * Bulk bonus. The site lists it at four amounts only; per FLOWER those are 0.1 / 0.2 /
      * 0.4 / 0.8 — i.e. the rate DOUBLES per 10x deposited, which is the "exponentially more"
@@ -21019,9 +21023,10 @@
             <div style="font-size:0.75rem;color:var(--green);font-weight:bold">${fmt(p.total)} pts</div>
             <div style="font-size:0.44rem;color:var(--text-dim)">${p.perFlower.toFixed(2)} pts za 1 FLOWER</div></div>
         </div>
-        <div style="font-size:0.46rem;color:${exactTier ? "var(--green)" : "#e8a060"};margin-bottom:10px;line-height:1.6">${exactTier
+        <div style="font-size:0.46rem;color:${exactTier ? "var(--green)" : "#e8a060"};margin-bottom:6px;line-height:1.6">${exactTier
           ? `✓ Přesně publikovaná hodnota (${fmt(exactTier.flower)} → +${fmt(exactTier.pts)} pts, +${fmt(exactTier.bonus)} bonus při 3×).`
-          : `⚠ Bulk bonus je <b>náš odhad</b> — Yakkamon publikuje jen 4 částky (50 / 500 / 5 000 / 50 000). Sazba bonusu se u nich zdvojnásobuje na každý 10× větší deposit (0,1 → 0,2 → 0,4 → 0,8 pts/FLOWER) a tuhle křivku dopočítáváme. Základ (× násobek) je jistý.`}</div>
+          : `⚠ Bulk bonus dopočítáváme mezi 4 publikovanými částkami (50 / 500 / 5 000 / 50 000). Yakkamon uvádí, že se <b>zdvojnásobuje na každý krok, až do +80 % u 50 000</b> — a přesně tuhle křivku používáme (0,1 → 0,2 → 0,4 → 0,8 bodu na FLOWER). Základ (× násobek) je jistý.`}</div>
+        <div style="font-size:0.46rem;color:#e8a060;margin-bottom:10px;line-height:1.6">⚠ <b>Bonus se počítá z KAŽDÉHO vkladu zvlášť</b> („rated per deposit" — celá částka musí dorazit najednou). Rozdělit stejnou sumu na víc menších vkladů proto dá <b>výrazně míň</b> bodů: každý kus spadne do své nižší bonusové sazby. Násobek navíc klesá 0,2× týdně, <b>až se zastaví na 1×</b> (od 11. týdne).</div>
         <div style="border-top:1px solid #20190f;padding-top:8px">
           <div style="font-size:0.5rem;color:var(--lily);margin-bottom:5px"><b>CO TĚ TO STOJÍ</b> — FLOWER dostaneš zpět, ale mezitím nevydělává</div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:7px">
@@ -21045,7 +21050,8 @@
           <tr style="color:var(--text-dim);font-size:0.47rem"><td style="padding:0 6px 4px 0">deposit</td><td style="text-align:right;padding:0 6px 4px">body</td><td style="text-align:right;padding:0 6px 4px">bonus</td><td style="text-align:right;padding:0 6px 4px">celkem</td><td style="text-align:right;padding:0 0 4px">pts / FLOWER</td></tr>
           ${YK.tiers.map(t => `<tr style="border-top:1px solid #20190f"><td style="padding:3px 6px 3px 0"><b>${fmt(t.flower)}</b> ${sflIcon()}</td><td style="text-align:right;padding:3px 6px;color:var(--green)">+${fmt(t.pts)}</td><td style="text-align:right;padding:3px 6px;color:var(--sunpetal)">+${fmt(t.bonus)}</td><td style="text-align:right;padding:3px 6px;color:var(--green);font-weight:bold">${fmt(t.pts + t.bonus)}</td><td style="text-align:right;padding:3px 0;color:var(--sunpetal);font-weight:bold">${((t.pts + t.bonus) / t.flower).toFixed(2)}</td></tr>`).join("")}
         </table></div>
-        <div style="font-size:0.47rem;color:var(--text-dim);margin-top:7px;line-height:1.7"><b>Násobek klesá v čase:</b> ${[1, 2, 3, 4, 5, 6].map(w => `t${w} <b style="color:${w === nowWeek && open ? "var(--sunpetal)" : "var(--text-secondary)"}">${ykMult(w).toFixed(1)}×</b>`).join(" · ")} … −0,2× každý týden. Čekání tě stojí body: stejný deposit má v týdnu 6 jen <b>${(ykMult(6) / ykMult(1) * 100).toFixed(0)} %</b> základních bodů oproti týdnu 1.</div>
+        <div style="font-size:0.47rem;color:var(--text-dim);margin-top:7px;line-height:1.7"><b>Násobek klesá v čase:</b> ${[1, 2, 3, 4, 5, 6, 8, 11].map(w => `t${w} <b style="color:${w === nowWeek && open ? "var(--sunpetal)" : "var(--text-secondary)"}">${ykMult(w).toFixed(1)}×</b>`).join(" · ")} — −0,2× týdně, <b>od 11. týdne už jen 1×</b> a dál to neklesá. Čekání tě stojí body: stejný deposit má v týdnu 6 jen <b>${(ykMult(6) / ykMult(1) * 100).toFixed(0)} %</b> a od týdne 11 jen <b>${(ykMult(11) / ykMult(1) * 100).toFixed(0)} %</b> základních bodů oproti týdnu 1.
+        <div style="margin-top:5px;color:var(--text-secondary)"><b>Důsledek pro rozkládání vkladů:</b> protože bonus se počítá per vklad a násobek padá, je <b>jeden velký vklad co nejdřív</b> výrazně lepší než stejná suma po týdnech. Rozložit ~96 000 ◈ do konce roku dá zhruba o <b>40 % bodů míň</b>, než kdyby ta samá suma dorazila najednou v prvním týdnu.</div></div>
       </div>`;
 
       // ── All point sources ──────────────────────────────────────────
