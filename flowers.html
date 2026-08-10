@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.01</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.02</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.02", items: [
+          { t: "fix", text: "<b>An expansion's footprint is not centred on its origin — the band was a row too low.</b> It spans <b>x [ox−3, ox+2]</b> but <b>y [oy−2, oy+3]</b>. The horizontal half is forced by a Stone Fence column at x=−15 (the symmetric alternative leaves 30 fence tiles on land nobody owns); the vertical half is forced by what the game shows — a fence along y=15 with <b>six</b> free rows above it, which only y[−2,+3] produces. Occupancy data alone could not separate the two candidates, since both fit every placed object; only the empty land above the fence distinguishes them. The ascension band now sits at y 16–21, the fence is correctly outside it, and the summary reads “nothing in the way” instead of demanding you clear 36 tiles that were never in the band." },
+        ] },
         { ver: "v5.01", items: [
           { t: "fix", text: "<b>Multi-tile objects were anchored the wrong way, so trees sat on top of stone rocks.</b> A 2×2 object at (x,y) covers <b>y down to y−h+1</b>, not upward. Checked against the real farm: anchoring upward leaves 4 overlapping tiles — every one a Tree over a Stone Rock, exactly what the map drew — while anchoring downward leaves <b>zero</b>. Verified on the rendered map: 1,213 cells, 0 overlaps." },
           { t: "fix", text: "<b>Reverted a bad “fix” that erased part of the farm.</b> v5.00 hid objects inside the ascension band whenever “plan the whole band” was on, and drew planned flowers over them — which deleted <b>138 pieces of Stone Fence</b> from the map. Everything you own is drawn again, always; the “needs clearing” line is what tells you a tile is in the way. (The band is also an L-shape — 7 expansions across the top and 5 down the left side — not just the top row.)" },
@@ -21482,7 +21485,16 @@
       }
       return out.slice(0, count).map((o) => ({ x: o.x * DEC_LAND, y: o.y * DEC_LAND }));
     }
-    const decBox = (o) => ({ x0: o.x - 3, x1: o.x + 2, y0: o.y - 3, y1: o.y + 2 });
+    /*
+     * An expansion's 6×6 footprint is NOT centred symmetrically on its origin: x runs
+     * [ox−3, ox+2] but y runs [oy−2, oy+3]. Both halves are pinned by the real farm —
+     * x[−3,+2] is forced by the Stone Fence column at x=−15 (x[−2,+3] leaves 30 fence tiles
+     * outside any owned land), and y[−2,+3] is forced by what the game actually shows: with
+     * a fence along y=15 there are six free rows above it, which only y[−2,+3] produces.
+     * The symmetric y[−3,+2] also fits the occupancy data, which is why it survived the first
+     * check — occupancy alone cannot separate the two, only the empty land above can.
+     */
+    const decBox = (o) => ({ x0: o.x - 3, x1: o.x + 2, y0: o.y - 2, y1: o.y + 3 });
     /** The 10 species that exist in all 5 colours (Prism Petal & co have no colour). */
     function decSpecies() {
       const set = {};
