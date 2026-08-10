@@ -5947,7 +5947,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.92</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v4.93</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5974,6 +5974,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v4.93", items: [
+          { t: "fix", text: "<b>Yakkamon page is fully in English</b> — it was the one page written in Czech. Numbers, dates and the tranche table now format in English too." },
+          { t: "feat", text: "<b>“Stop spending on SFL” funnel mode.</b> A checkbox on the budget planner models burning nothing on the farm and depositing everything it earns into Yakkamon each week, on top of the plan. The farm's FLOWER/day is pulled automatically from your POWER data (editable if you'd rather take the ROADMAP figure). Its share shows as a <b style=\"color:#6ab0e0\">blue</b> segment in every tranche bar and as its own column in the table, and where the farm's weekly income alone already clears the 5,000-point track tier, no top-up is bought at all — the summary says how many weeks that covers. Farm income is deposited together with that week's top-up rather than separately, because the bulk bonus is rated per deposit." },
+        ] },
         { ver: "v4.92", items: [
           { t: "fix", text: "<b>Nav trimmed to what's actually used daily, and the MORE menu no longer gets clipped.</b> The bar now carries only <b>DASH · BUMPKIN · ASCENSION · ROADMAP · DIFF · WORLD</b>; everything else (Yakkamon, Hub, Flowers, Dolls, Crabs, Treasury, Sales, Power, Nodes, ROI, Shrines, Buds, Pets, Flips, My Trades, JSON, Marks, Constants) moved under MORE. Nine primary entries wrapped the bar onto three rows on a phone and shoved the MORE button to the left edge, where its right-anchored dropdown ran off screen. On mobile the menu now spans the whole nav bar instead of hanging off the button — the earlier attempt at this sat above the base rule in the stylesheet and lost the cascade, so it never applied." },
           { t: "fix", text: "<b>Yakkamon page shows the FLOWER icon, not a ◈ glyph.</b> The deposit-tier table used the real icon while every other figure on the page used a diamond character, so the same currency looked like two different things." },
@@ -20851,14 +20855,14 @@
         { flower: 50000, pts: 150000, bonus: 40000 },
       ],
       actions: [
-        { what: "Denní nurture vajíčka", pts: "+6", per: "den", note: "jediný opakovatelný zdroj zdarma" },
-        { what: "Připojení Discordu", pts: "+10", per: "jednorázově", note: "" },
-        { what: "Příspěvek na Discordu", pts: "+5", per: "post", note: "limit neuveden" },
-        { what: "Propojení X / Twitteru", pts: "+10", per: "jednorázově", note: "" },
-        { what: "Propojení peněženky", pts: "+10", per: "jednorázově", note: "" },
-        { what: "Referral (pozvaný kamarád)", pts: "+30", per: "kamarád", note: "škáluje, pokud máš dosah" },
-        { what: "Ronin free mint", pts: "+250", per: "mint", note: "1× na účet, 1. 10. 2026" },
-        { what: "$FLOWER deposit", pts: "×3.0 → ×0.2/týden dolů", per: "FLOWER", note: "zdaleka největší zdroj" },
+        { what: "Daily egg nurture", pts: "+6", per: "day", note: "the only repeatable free source" },
+        { what: "Join Discord", pts: "+10", per: "one-off", note: "" },
+        { what: "Discord post", pts: "+5", per: "post", note: "no cap stated" },
+        { what: "Link X / Twitter", pts: "+10", per: "one-off", note: "" },
+        { what: "Link wallet", pts: "+10", per: "one-off", note: "" },
+        { what: "Referral (friend signs up)", pts: "+30", per: "friend", note: "scales if you have reach" },
+        { what: "Ronin free mint", pts: "+250", per: "mint", note: "1 per account, 1 Oct 2026" },
+        { what: "$FLOWER deposit", pts: "×3.0, −0.2/week", per: "FLOWER", note: "by far the biggest source" },
       ],
       ranks: [
         { r: "1 – 100", rew: "Legendary monster A", wave: "Wave 1", nft: true },
@@ -20868,7 +20872,7 @@
         { r: "5 001 – 20 000", rew: "Early access", wave: "Wave 3", nft: false },
         { r: "20 001 – 50 000", rew: "Early access", wave: "Wave 4", nft: false },
         { r: "50 001 – 100 000", rew: "Early access", wave: "Wave 5", nft: false },
-        { r: "100 001 +", rew: "nic — bez early access", wave: "—", nft: false },
+        { r: "100 001 +", rew: "nothing — no early access", wave: "—", nft: false },
       ],
       eggs: [
         { r: "1 – 10 000", egg: "Platinum" }, { r: "10 001 – 25 000", egg: "Gold" },
@@ -20935,6 +20939,22 @@
     // Budget planner state: how much you have, how far off the launch is, and how many
     // weeks of the (resetting) reward track you want to buy.
     let _ykBtc = 0.096, _ykLaunchWeeks = 17, _ykBoxWeeks = 8;
+    // "Stop burning on SFL and funnel the farm's whole output into Yakkamon" mode. The rate
+    // is the farm's realistic FLOWER/day — the same figure ROADMAP leads with — pulled from
+    // section=power when a farm id is configured, and editable either way.
+    let _ykFarmMode = false, _ykFarmPerDay = 0, _ykFarmAuto = null;
+    window._ykToggleFarm = function (on) { _ykFarmMode = !!on; renderYakkamon(); };
+    async function _ykFetchFarmRate() {
+      if (_ykFarmAuto !== null || !FARM_ID) return;
+      _ykFarmAuto = 0;
+      try {
+        const r = await fetch(`/api/compute?farm=${FARM_ID}&section=power`);
+        if (!r.ok) return;
+        const d = (await r.json()).data || {};
+        const v = (d.categories && d.categories.totalBoostedSfl) || 0;
+        if (v > 0) { _ykFarmAuto = v; if (!_ykFarmPerDay) _ykFarmPerDay = v; renderYakkamon(); }
+      } catch (e) { /* stays editable by hand */ }
+    }
     window._ykSet = function (k, v) {
       const n = parseFloat(v);
       if (k === "amount") _ykAmount = isFinite(n) && n >= 0 ? n : 0;
@@ -20944,6 +20964,7 @@
       if (k === "btc") _ykBtc = isFinite(n) && n >= 0 ? n : 0;
       if (k === "launch") _ykLaunchWeeks = Math.max(2, Math.min(30, parseInt(v) || 17));
       if (k === "boxw") _ykBoxWeeks = Math.max(0, Math.min(29, parseInt(v) || 0));
+      if (k === "farmday") _ykFarmPerDay = isFinite(n) && n >= 0 ? n : 0;
       renderYakkamon();
     };
     /** Smallest deposit in week `w` that reaches `target` points (binary search on ykPoints). */
@@ -20955,84 +20976,85 @@
 
     function renderYakkamon() {
       const app = document.getElementById("app");
-      const fmt = (n, d) => (+n).toLocaleString("cs-CZ", { maximumFractionDigits: d === undefined ? 0 : d });
+      const fmt = (n, d) => (+n).toLocaleString("en-US", { maximumFractionDigits: d === undefined ? 0 : d });
       const nowWeek = ykWeekAt(Date.now());
       const open = Date.now() >= YK.depositStart;
       const daysToOpen = Math.ceil((YK.depositStart - Date.now()) / 86400000);
 
       let h = `<div class="header pixel-panel pixel-font"><h1>🐲 YAKKAMON</h1>
-        <div class="farm-id">Druhá hra od Thought Farm (tvůrci Sunflower Land) · pre-registrace běží</div></div>`;
+        <div class="farm-id">Thought Farm's second game (the Sunflower Land studio) · pre-registration is live</div></div>`;
 
       // ── LIVE: registration counter + leaderboard ───────────────────
       if (!_ykLive && !_ykLiveErr && !_ykLiveLoading) _ykFetchLive();
+      _ykFetchFarmRate();   // best-effort: prefill the farm's FLOWER/day for the funnel toggle
       const su = _ykLive && _ykLive.signups;
       const bd = _ykLive && _ykLive.board;
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px;border-left:3px solid var(--green)">
-        <div class="pixel-font" style="font-size:0.62rem;color:var(--green);margin-bottom:6px">🔴 ŽIVĚ — KOLIKÁTÝ BYS BYL</div>`;
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--green);margin-bottom:6px">🔴 LIVE — WHAT NUMBER YOU&#39;D BE</div>`;
       if (su) {
         const next = (su.claimed || 0) + 1;
         const tier = su.tier || "?";
         const gone = (su.tiers || []).filter(t => (su.claimed || 0) >= t.until).map(t => t.name);
         h += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:8px">
           <div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px">
-            <div style="font-size:0.45rem;color:var(--text-dim)">UŽ ZAREGISTROVÁNO</div>
+            <div style="font-size:0.45rem;color:var(--text-dim)">ALREADY SIGNED UP</div>
             <div style="font-size:0.8rem;color:var(--sunpetal);font-weight:bold">${fmt(su.claimed)}</div>
-            <div style="font-size:0.44rem;color:var(--text-dim)">z ${fmt(su.total)} celkem</div></div>
+            <div style="font-size:0.44rem;color:var(--text-dim)">of ${fmt(su.total)} total</div></div>
           <div style="border:1px solid var(--border-brown);border-radius:6px;background:#1a1d10;padding:8px">
-            <div style="font-size:0.45rem;color:var(--text-dim)">TY BYS BYL</div>
+            <div style="font-size:0.45rem;color:var(--text-dim)">YOU'D BE</div>
             <div style="font-size:0.8rem;color:var(--green);font-weight:bold">#${fmt(next)}</div>
-            <div style="font-size:0.44rem;color:var(--text-dim)">→ vajíčko <b style="color:var(--sunpetal)">${tier}</b></div></div>
+            <div style="font-size:0.44rem;color:var(--text-dim)">→ <b style="color:var(--sunpetal)">${tier}</b></div></div>
           <div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px">
-            <div style="font-size:0.45rem;color:var(--text-dim)">ZBÝVÁ V TIERU ${tier}</div>
+            <div style="font-size:0.45rem;color:var(--text-dim)">${tier} EGGS LEFT</div>
             <div style="font-size:0.8rem;color:var(--sunpetal);font-weight:bold">${fmt(su.remaining)}</div>
-            <div style="font-size:0.44rem;color:var(--text-dim)">tier končí na #${fmt(su.tierUntil)}</div></div>
+            <div style="font-size:0.44rem;color:var(--text-dim)">tier ends at #${fmt(su.tierUntil)}</div></div>
         </div>
         <div style="font-size:0.5rem;line-height:1.7;color:var(--text-secondary)">
-          <b>Ano — své číslo poznáš.</b> Po registraci ti dashboard ukáže <b>„TRAINER #N"</b>, což je přesně tvoje pořadí. A dopředu to jde odhadnout odsud: teď je zapsáno <b>${fmt(su.claimed)}</b> trenérů, takže bys dostal zhruba <b>#${fmt(next)}</b>.
-          ${gone.length ? `<div style="margin-top:4px;color:#e8a060">⚠ Už je rozebráno: <b>${gone.join(", ")}</b> — na tyhle tiery je pozdě.</div>` : ""}
-          <div style="margin-top:4px;color:var(--text-dim);font-size:0.47rem">Tier vajíčka je <b>jediné</b>, co pořadí registrace ovlivňuje. Early access i NFT se dělí <b>podle bodů</b>, ne podle toho, kdy ses přihlásil.</div>
+          <b>Yes — you can tell your number.</b> After signing up their dashboard shows <b>&ldquo;TRAINER #N&rdquo;</b>, which is exactly your position. And you can work it out in advance from here: <b>${fmt(su.claimed)}</b> trainers are registered right now, so you would land around <b>#${fmt(next)}</b>.
+          ${gone.length ? `<div style="margin-top:4px;color:#e8a060">⚠ Already gone: <b>${gone.join(", ")}</b> — too late for those tiers.</div>` : ""}
+          <div style="margin-top:4px;color:var(--text-dim);font-size:0.47rem">The egg tier is the <b>only</b> thing sign-up order affects. Early access and the NFTs are decided <b>on points</b>, not on when you registered.</div>
         </div>`;
         if (bd && bd.entries && bd.entries.length) {
           const e = bd.entries, at = (r) => (e.find(x => x.rank === r) || {}).points;
           const mult = ykMult(Math.max(1, nowWeek));
           const flowerFor = (pts) => pts ? Math.ceil(pts / mult) : null;
           h += `<div style="margin-top:10px;border-top:1px solid #20190f;padding-top:8px">
-            <div style="font-size:0.5rem;color:var(--lily);margin-bottom:4px"><b>ŽIVÝ ŽEBŘÍČEK</b> — ${fmt(bd.playerCount)} hráčů s body, veřejné je top ${bd.size}</div>
+            <div style="font-size:0.5rem;color:var(--lily);margin-bottom:4px"><b>LIVE LEADERBOARD</b> — ${fmt(bd.playerCount)} players with points, top ${bd.size} is public</div>
             <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:300px">
-              <tr style="color:var(--text-dim);font-size:0.46rem"><td style="padding:0 6px 3px 0">pořadí</td><td style="text-align:right;padding:0 6px 3px">body teď</td><td style="text-align:right;padding:0 0 3px">≈ FLOWER na dorovnání</td></tr>
+              <tr style="color:var(--text-dim);font-size:0.46rem"><td style="padding:0 6px 3px 0">rank</td><td style="text-align:right;padding:0 6px 3px">points now</td><td style="text-align:right;padding:0 0 3px">≈ FLOWER to match</td></tr>
               ${[1, 10, 25, 50, 100].map(r => { const p = at(r); return `<tr style="border-top:1px solid #20190f"><td style="padding:2px 6px 2px 0">#${r}</td><td style="text-align:right;padding:2px 6px;color:var(--sunpetal);font-weight:bold">${p ? fmt(p) : "—"}</td><td style="text-align:right;padding:2px 0;color:var(--green)">${p ? fmt(flowerFor(p)) + " " + sflIcon() : "—"}</td></tr>`; }).join("")}
             </table></div>
-            <div style="font-size:0.46rem;color:var(--text-dim);margin-top:5px;line-height:1.6">Sloupec vpravo = kolik FLOWER by <b>dnes</b> stačilo na tolik bodů při aktuálním násobku ${mult.toFixed(1)}× (bez bulk bonusu, takže je to horní odhad). <b style="color:#e8a060">Ale pozor:</b> deposity se otevírají teprve ${open ? "právě teď" : "10. 8."} — jakmile začnou, tahle čísla vyletí nahoru, protože dnešní špička má body jen ze zdarma aktivit. Ber to jako <b>spodní hranici</b>, ne cíl. Zveřejněných je jen top 100, takže na hranici top 1 000 / 5 000 (kde jsou NFT) odsud nevidíš.</div>
+            <div style="font-size:0.46rem;color:var(--text-dim);margin-top:5px;line-height:1.6">Right column = how much FLOWER would buy that many points <b>today</b> at the current ${mult.toFixed(1)}× multiplier (bulk bonus excluded, so it is an upper estimate). <b style="color:#e8a060">Careful though:</b> deposits open ${open ? "as of now" : "10 Aug"} — once they do these numbers jump, because today's top is free-activity points only. Treat it as a <b>floor</b>, not a target. Only the top 100 is public, so the top 1,000 / 5,000 cut-offs (where the NFTs are) are not visible from here.</div>
           </div>`;
         }
       } else if (_ykLiveErr) {
-        h += `<div style="font-size:0.5rem;color:var(--yellow)">Živá data se nepodařilo načíst (${escHTML(_ykLiveErr)}). Zkus REFRESH dole.</div>`;
+        h += `<div style="font-size:0.5rem;color:var(--yellow)">Could not load live data (${escHTML(_ykLiveErr)}). Try REFRESH below.</div>`;
       } else {
-        h += `<div style="font-size:0.5rem;color:var(--text-dim)">Načítám živá data z api.yakkamon.com…</div>`;
+        h += `<div style="font-size:0.5rem;color:var(--text-dim)">Loading live data from api.yakkamon.com…</div>`;
       }
       h += `</div>`;
 
       // ── What it is ─────────────────────────────────────────────────
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
-        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:6px">CO TO JE</div>
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:6px">WHAT IT IS</div>
         <div style="font-size:0.55rem;line-height:1.8;color:var(--text-secondary)">
-          <b>Creature collector + idle farming automation.</b> Lovíš a chytáš divoká monstra po světě, pak je posadíš na farmaření / těžbu / výrobu — a ta běží dál, i když jsi offline. K tomu craft vybavení (potřebné na lov vzácnějších monster), gym a <b>PvP aréna</b> proti ostatním trenérům.
-          <div style="margin-top:6px">Regiony mají vlastní suroviny (pouště, sopky, ohnivé oblasti, vody), střídá se <b>den/noc</b> a každé <b>3 měsíce</b> přichází sezóna s novými monstry ve volné přírodě.</div>
-          <div style="margin-top:6px;color:var(--text-dim)">Staví to tým za Sunflower Land: 1M+ hráčů, 100+ open-source přispěvatelů, 5+ let vývoje. Tvrdí, že SFL kvůli tomu nezpomaluje — sdílí základy postavené za těch 5 let.</div>
+          <b>Creature collector meets idle farming automation.</b> You hunt and catch wild monsters out in the world, then put them to work farming, gathering and producing — and that keeps running while you are offline. On top of that: crafted gear (needed to track rarer monsters), a gym, and a <b>PvP arena</b> against other trainers.
+          <div style="margin-top:6px">Each region has its own resources (deserts, volcanoes, fire regions, waters), a <b>day/night</b> cycle runs, and every <b>3 months</b> a season brings new monsters into the wild.</div>
+          <div style="margin-top:6px;color:var(--text-dim)">Built by the Sunflower Land team: 1M+ players, 100+ open-source contributors, 5+ years of development. They say SFL is not slowing down because of it — the two share foundations built over those 5 years.</div>
         </div>
       </div>`;
 
       // ── Key facts grid ─────────────────────────────────────────────
       const facts = [
-        ["Síť", "Ronin", "deposity jdou z <b>Base</b> nebo <b>Ronin</b>"],
-        ["Token", "$FLOWER", "<b>žádný nový token</b> — stejný jako v SFL"],
-        ["Early access", "Q4 2026", "po vlnách, podle pořadí v žebříčku"],
-        ["Deposity", "od 10. 8. 2026", open ? `běží — <b>týden ${nowWeek}</b>, násobek <b>${ykMult(nowWeek).toFixed(1)}×</b>` : `otevírá se za <b>${daysToOpen} dní</b>`],
-        ["Free mint", "1. 10. 2026", "10 000 NFT na Roninu, zdarma (jen gas)"],
-        ["Registrace", "zdarma, jen e-mail", "bez peněženky, bez SFL účtu"],
+        ["Network", "Ronin", "deposits come from <b>Base</b> or <b>Ronin</b>"],
+        ["Token", "$FLOWER", "<b>no new token</b> — the same one as SFL"],
+        ["Early access", "Q4 2026", "in waves, by leaderboard rank"],
+        ["Deposits", "from 10 Aug 2026", open ? `live — <b>week ${nowWeek}</b>, multiplier <b>${ykMult(nowWeek).toFixed(1)}×</b>` : `opens in <b>${daysToOpen} days</b>`],
+        ["Free mint", "1 Oct 2026", "10,000 NFTs on Ronin, free (gas only)"],
+        ["Sign-up", "free, email only", "no wallet, no SFL account"],
       ];
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
-        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:8px">KLÍČOVÁ FAKTA</div>
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:8px">KEY FACTS</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
           ${facts.map(([k, v, n]) => `<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:7px 9px">
             <div style="font-size:0.45rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em">${k}</div>
@@ -21056,43 +21078,75 @@
         const FREE_WK = 42;                      // daily nurture 6×7 — negligible vs 5,000
         const TRACK_TOP = 5000;                  // Platinum resource box tier
         const boxW = Math.min(_ykBoxWeeks, _ykLaunchWeeks - 1);
-        let weekly = 0;
-        const tranches = [];   // the actual deposit schedule, week by week
+        /*
+         * Farm-funnel mode: stop spending on SFL and send the farm's whole weekly output to
+         * Yakkamon instead. That income arrives EVERY week and is deposited in one go with
+         * whatever else that week needs — combining matters, because the bulk bonus is rated
+         * per deposit. Where the farm's own income already clears the 5,000-point track tier,
+         * no top-up is bought at all, which is the point of the toggle.
+         */
+        const farmWk = _ykFarmMode ? Math.max(0, _ykFarmPerDay) * 7 : 0;
+        let weekly = 0;                        // budget spent on track top-ups
+        const topUp = {};                      // week -> top-up needed on top of farm income
         for (let w = 2; w <= boxW + 1; w++) {
-          const amt = ykNeedFor(TRACK_TOP - FREE_WK, w);
-          weekly += amt;
-          tranches.push({ w, amt, pts: TRACK_TOP, why: "Platinum box" });
+          const fromFarm = ykPoints(farmWk, w).total + FREE_WK;
+          if (fromFarm >= TRACK_TOP) { topUp[w] = 0; continue; }
+          // solve for the TOTAL deposit that reaches the tier, then subtract the farm part
+          const total = ykNeedFor(TRACK_TOP - FREE_WK, w);
+          const extra = Math.max(0, total - farmWk);
+          topUp[w] = extra;
+          weekly += extra;
         }
         const w1 = budget - weekly;
-        if (w1 > 0) tranches.unshift({ w: 1, amt: w1, pts: ykPoints(w1, 1).total, why: "leaderboard + OG status" });
-        const cum = (w1 > 0 ? ykPoints(w1, 1).total : 0) + boxW * TRACK_TOP;
+        const tranches = [];   // the actual deposit schedule, week by week
+        for (let w = 1; w <= _ykLaunchWeeks; w++) {
+          const budgetPart = w === 1 ? Math.max(0, w1) : (topUp[w] || 0);
+          const amt = budgetPart + farmWk;
+          if (amt <= 0) continue;
+          tranches.push({ w, amt, farm: farmWk, budgetPart, pts: ykPoints(amt, w).total });
+        }
+        const cum = tranches.reduce((a, t) => a + t.pts, 0) + FREE_WK * _ykLaunchWeeks;
+        const farmTotal = farmWk * _ykLaunchWeeks;
         const ent = (bd && bd.entries) || [];
         const beat = ent.filter(e => e.points > cum).length;   // how many of the live top-100 are above you
-        const rankTxt = !ent.length ? "—" : (beat === 0 ? "nad #1 (dnešní top)" : beat >= ent.length ? "mimo top " + ent.length : "≈ #" + (beat + 1));
+        const rankTxt = !ent.length ? "—" : (beat === 0 ? "above #1 (today's top)" : beat >= ent.length ? "outside top " + ent.length : "≈ #" + (beat + 1));
         h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px;border-left:3px solid var(--lily)">
-          <div class="pixel-font" style="font-size:0.62rem;color:var(--lily);margin-bottom:4px">🎯 ROZPOČTOVÝ PLÁNOVAČ</div>
-          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Rozdělí pevný rozpočet mezi <b>jeden velký vklad v týdnu 1</b> (nejlepší násobek + největší bonus → kumulativní body na leaderboard) a <b>týdenní dokupování</b> na Platinum box (track se resetuje, dopředu se koupit nedá).</div>
+          <div class="pixel-font" style="font-size:0.62rem;color:var(--lily);margin-bottom:4px">🎯 BUDGET PLANNER</div>
+          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Splits a fixed budget between <b>one big week-1 deposit</b> (best multiplier + biggest bonus → cumulative leaderboard points) and the <b>weekly top-ups</b> for the Platinum box (the track resets, so it cannot be bought ahead).</div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:9px">
-            <label style="font-size:0.5rem;color:var(--text-dim)">mám <input type="number" min="0" step="0.001" value="${_ykBtc}" style="width:66px;font-size:0.6rem" onchange="_ykSet('btc',this.value)"> BTC</label>
-            <label style="font-size:0.5rem;color:var(--text-dim)">launch za <input type="number" min="2" max="30" value="${_ykLaunchWeeks}" style="width:44px;font-size:0.6rem" onchange="_ykSet('launch',this.value)"> týdnů</label>
-            <label style="font-size:0.5rem;color:var(--text-dim)">boxů chci <input type="number" min="0" max="29" value="${_ykBoxWeeks}" style="width:44px;font-size:0.6rem" onchange="_ykSet('boxw',this.value)">×</label>
+            <label style="font-size:0.5rem;color:var(--text-dim)">I have <input type="number" min="0" step="0.001" value="${_ykBtc}" style="width:66px;font-size:0.6rem" onchange="_ykSet('btc',this.value)"> BTC</label>
+            <label style="font-size:0.5rem;color:var(--text-dim)">launch in <input type="number" min="2" max="30" value="${_ykLaunchWeeks}" style="width:44px;font-size:0.6rem" onchange="_ykSet('launch',this.value)"> weeks</label>
+            <label style="font-size:0.5rem;color:var(--text-dim)">boxes wanted <input type="number" min="0" max="29" value="${_ykBoxWeeks}" style="width:44px;font-size:0.6rem" onchange="_ykSet('boxw',this.value)">×</label>
           </div>
-          <div style="font-size:0.5rem;color:var(--text-secondary);margin-bottom:8px">Rozpočet: <b style="color:var(--sunpetal)">${fmt(budget)} ${sflIcon()}</b> <span style="color:var(--text-dim)">(${fmt(budgetUsd)} USD · BTC ${fmt(btcUsd)} · FLOWER ${flUsd.toFixed(4)})</span></div>
+          <div style="border:1px solid ${_ykFarmMode ? "var(--green)" : "var(--border-brown)"};border-radius:6px;background:${_ykFarmMode ? "#16190d" : "#161009"};padding:7px 9px;margin-bottom:9px">
+            <label style="font-size:0.52rem;color:var(--text-secondary);display:flex;gap:6px;align-items:center;cursor:pointer">
+              <input type="checkbox" ${_ykFarmMode ? "checked" : ""} onchange="_ykToggleFarm(this.checked)" style="cursor:pointer">
+              <b>Stop spending on SFL — funnel the farm's whole output here</b>
+            </label>
+            <div style="font-size:0.47rem;color:var(--text-dim);margin-top:4px;line-height:1.6">Burn nothing on the farm, withdraw what it earns and deposit it every week on top of the plan. Farm income
+              <input type="number" min="0" step="1" value="${Math.round(_ykFarmPerDay)}" style="width:64px;font-size:0.55rem" onchange="_ykSet('farmday',this.value)"> ${sflIcon()}/day${_ykFarmAuto > 0 ? ` <span style="color:var(--text-dim)">(auto: ${fmt(_ykFarmAuto)} from POWER)</span>` : " — take it from ROADMAP"}.
+              ${_ykFarmMode && farmWk > 0 ? `Adds <b style="color:var(--green)">${fmt(farmWk)} ${sflIcon()}/week</b>, <b>${fmt(farmTotal)}</b> over ${_ykLaunchWeeks} weeks — deposited together with that week's top-up, since the bulk bonus is rated per deposit.` : ""}</div>
+          </div>
+          <div style="font-size:0.5rem;color:var(--text-secondary);margin-bottom:8px">Budget: <b style="color:var(--sunpetal)">${fmt(budget)} ${sflIcon()}</b> <span style="color:var(--text-dim)">(${fmt(budgetUsd)} USD · BTC ${fmt(btcUsd)} · FLOWER ${flUsd.toFixed(4)})</span></div>
           ${w1 < 0
-            ? `<div style="font-size:0.55rem;color:var(--red)">⚠ Nevejde se — samotné týdenní dokupování (${boxW}× box) stojí <b>${fmt(weekly)} ${sflIcon()}</b>, což je víc než celý rozpočet. Sniž počet boxů.</div>`
+            ? `<div style="font-size:0.55rem;color:var(--red)">⚠ Does not fit — the weekly top-ups alone (${boxW}× box) cost <b>${fmt(weekly)} ${sflIcon()}</b>, more than the whole budget. Lower the box count.</div>`
             : `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px">
                 <div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px">
-                  <div style="font-size:0.45rem;color:var(--text-dim)">VKLAD TÝDEN 1</div>
+                  <div style="font-size:0.45rem;color:var(--text-dim)">WEEK 1 DEPOSIT</div>
                   <div style="font-size:0.72rem;color:var(--green);font-weight:bold">${fmt(w1)} ${sflIcon()}</div>
-                  <div style="font-size:0.44rem;color:var(--text-dim)">${fmt(ykPoints(w1, 1).total)} bodů</div></div>
+                  <div style="font-size:0.44rem;color:var(--text-dim)">${fmt(ykPoints(w1, 1).total)} points</div></div>
                 <div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px">
-                  <div style="font-size:0.45rem;color:var(--text-dim)">TÝDENNÍ (${boxW}×)</div>
+                  <div style="font-size:0.45rem;color:var(--text-dim)">WEEKLY (${boxW}×)</div>
                   <div style="font-size:0.72rem;color:var(--sunpetal);font-weight:bold">${fmt(weekly)} ${sflIcon()}</div>
-                  <div style="font-size:0.44rem;color:var(--text-dim)">${boxW}× Platinum box</div></div>
+                  <div style="font-size:0.44rem;color:var(--text-dim)">${boxW}× Platinum box${_ykFarmMode && farmWk > 0 ? ` · ${Object.values(topUp).filter(v => v === 0).length} covered by farm` : ""}</div></div>
+                ${_ykFarmMode && farmWk > 0 ? `<div style="border:1px solid #6ab0e0;border-radius:6px;background:#0f1519;padding:8px">
+                  <div style="font-size:0.45rem;color:var(--text-dim)">FROM FARM (${_ykLaunchWeeks}w)</div>
+                  <div style="font-size:0.72rem;color:#6ab0e0;font-weight:bold">${fmt(farmTotal)} ${sflIcon()}</div>
+                  <div style="font-size:0.44rem;color:var(--text-dim)">${fmt(farmWk)}/week, not from BTC</div></div>` : ""}
                 <div style="border:1px solid var(--border-brown);border-radius:6px;background:#1a1d10;padding:8px">
-                  <div style="font-size:0.45rem;color:var(--text-dim)">KUMULATIVNĚ</div>
-                  <div style="font-size:0.72rem;color:var(--green);font-weight:bold">${fmt(cum)} b</div>
-                  <div style="font-size:0.44rem;color:var(--text-dim)">dnes ${rankTxt}</div></div>
+                  <div style="font-size:0.45rem;color:var(--text-dim)">CUMULATIVE</div>
+                  <div style="font-size:0.72rem;color:var(--green);font-weight:bold">${fmt(cum)} pts</div>
+                  <div style="font-size:0.44rem;color:var(--text-dim)">today ${rankTxt}</div></div>
               </div>
               ${(() => {
                 // The schedule itself — one bar per deposit, scaled to the largest, so the
@@ -21108,28 +21162,28 @@
                   const col = first ? "var(--green)" : "var(--sunpetal)";
                   const date = new Date(YK.depositStart + (t.w - 1) * 7 * 86400000);
                   return `<div style="display:flex;gap:6px;align-items:center;font-size:0.46rem;padding:1px 0">
-                    <span style="min-width:26px;color:var(--text-dim);white-space:nowrap">t${t.w}</span>
-                    <span style="min-width:42px;color:var(--text-dim);white-space:nowrap">${date.getDate()}.${date.getMonth() + 1}.</span>
+                    <span style="min-width:26px;color:var(--text-dim);white-space:nowrap">w${t.w}</span>
+                    <span style="min-width:42px;color:var(--text-dim);white-space:nowrap">${date.toLocaleDateString("en-US", { day: "numeric", month: "short" })}</span>
                     <span style="min-width:34px;color:var(--text-dim);white-space:nowrap">${ykMult(t.w).toFixed(1)}×</span>
-                    <span style="flex:1;min-width:40px;background:#20190f;border-radius:2px;overflow:hidden;height:9px;display:block"><span style="display:block;height:100%;width:${pct.toFixed(1)}%;background:${col}"></span></span>
-                    <span style="min-width:56px;text-align:right;color:${col};font-weight:bold;white-space:nowrap">${fmt(t.amt)}</span>
-                    <span style="min-width:52px;text-align:right;color:var(--text-dim);white-space:nowrap">${fmt(t.pts)} b</span>
+                    <span style="flex:1;min-width:40px;background:#20190f;border-radius:2px;overflow:hidden;height:9px;display:flex"><span style="display:block;height:100%;width:${(max > 0 ? (t.budgetPart / max) * 100 : 0).toFixed(1)}%;background:${col}"></span><span style="display:block;height:100%;width:${(max > 0 ? (t.farm / max) * 100 : 0).toFixed(1)}%;background:#6ab0e0" title="from farm income"></span></span>
+                    <span style="min-width:56px;text-align:right;color:${col};font-weight:bold;white-space:nowrap">${fmt(t.amt)}${t.farm > 0 && t.budgetPart > 0 ? `<span style="display:block;font-weight:normal;color:#6ab0e0;font-size:0.85em">${fmt(t.farm)} farm</span>` : ""}</span>
+                    <span style="min-width:52px;text-align:right;color:var(--text-dim);white-space:nowrap">${fmt(t.pts)} pts</span>
                     <span style="min-width:56px;text-align:right;color:var(--text-dim);white-space:nowrap">Σ ${fmt(run)}</span>
                   </div>`;
                 }).join("");
                 return `<div style="margin-top:10px;border-top:1px solid #20190f;padding-top:7px">
-                  <div style="font-size:0.5rem;color:var(--lily);margin-bottom:4px"><b>PLÁTKY — kdy a kolik poslat</b> <span style="color:var(--text-dim);font-weight:normal">(${tranches.length} vkladů · Σ ${fmt(budget)} ${sflIcon()})</span></div>
+                  <div style="font-size:0.5rem;color:var(--lily);margin-bottom:4px"><b>TRANCHES — when and how much to send</b> <span style="color:var(--text-dim);font-weight:normal">(${tranches.length} deposits · Σ ${fmt(budget)} ${sflIcon()})</span></div>
                   <div style="overflow-x:auto"><div style="min-width:330px">
                     <div style="display:flex;gap:6px;font-size:0.42rem;color:var(--text-dim);padding-bottom:2px">
-                      <span style="min-width:26px">týden</span><span style="min-width:42px">datum</span><span style="min-width:34px">násobek</span>
+                      <span style="min-width:26px">week</span><span style="min-width:42px">date</span><span style="min-width:34px">mult</span>
                       <span style="flex:1;min-width:40px"></span><span style="min-width:56px;text-align:right">FLOWER</span>
-                      <span style="min-width:52px;text-align:right">body</span><span style="min-width:56px;text-align:right">Σ vloženo</span>
+                      <span style="min-width:52px;text-align:right">points</span><span style="min-width:56px;text-align:right">Σ deposited</span>
                     </div>${rows}
                   </div></div>
-                  <div style="font-size:0.44rem;color:var(--text-dim);margin-top:5px;line-height:1.6">Zelený plátek je jednorázový vklad na leaderboard (nejlepší násobek + největší bulk bonus). Žluté jsou týdenní dokupy na Platinum box — <b>zdražují</b>, jak násobek klesá ke 1×, proto je poslední plátek nejtlustší. Rozdělit velký vklad na víc menších by ti sebralo bonus, ten se počítá <b>z každého vkladu zvlášť</b>.</div>
+                  <div style="font-size:0.44rem;color:var(--text-dim);margin-top:5px;line-height:1.6">The green tranche is the one-off deposit that buys leaderboard standing (best multiplier + biggest bulk bonus). The amber ones are weekly top-ups for the Platinum box — they <b>get more expensive</b> as the multiplier decays toward 1×, which is why the last tranche is the fattest. Splitting the big deposit would cost you bonus, because it is rated <b>per deposit</b>.${_ykFarmMode && farmWk > 0 ? ` <b style="color:#6ab0e0">Blue</b> is farm income funnelled in — it arrives every week whether you top up or not, so late weeks where the farm alone clears 5,000 points cost the budget nothing.` : ""}</div>
                 </div>`;
               })()}
-              <div style="font-size:0.46rem;color:var(--text-dim);margin-top:7px;line-height:1.6">Každý týden boxů ubere z týdne 1 a tím i z kumulativních bodů — track a leaderboard soupeří o stejné peníze. Zařazení je proti <b>živému top ${ent.length || "?"}</b>, což je momentka: deposity se otevřely ${open ? "právě teď" : "10. 8."} a laťka poroste. Ušlý výnos z celého rozpočtu při ${_ykRoiDays}denní návratnosti a ${_ykLaunchWeeks * 7} dnech ≈ <b style="color:var(--red)">${fmt(budget * (_ykLaunchWeeks * 7) / _ykRoiDays)} ${sflIcon()}</b>.</div>`}
+              <div style="font-size:0.46rem;color:var(--text-dim);margin-top:7px;line-height:1.6">Every week of boxes takes from week 1 and therefore from your cumulative points — the track and the leaderboard compete for the same money. The placing is against the <b>live top ${ent.length || "?"}</b>, which is a snapshot: deposits opened ${open ? "just now" : "10 Aug"} and the bar will rise. Forgone yield on the whole budget at a ${_ykRoiDays}-day payback over ${_ykLaunchWeeks * 7} days ≈ <b style="color:var(--red)">${fmt(budget * (_ykLaunchWeeks * 7) / _ykRoiDays)} ${sflIcon()}</b>.</div>`}
         </div>`;
       }
 
@@ -21141,16 +21195,16 @@
       const forgone = _ykAmount * (_ykLockDays / _ykRoiDays);
       const costPerKpt = p.total > 0 ? (forgone / p.total) * 1000 : 0;
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
-        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">💰 KALKULAČKA DEPOSITU</div>
-        <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Kolik bodů dostaneš a co tě to reálně stojí. Minimum je <b>${YK.minDeposit} $FLOWER</b>.</div>
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">💰 DEPOSIT CALCULATOR</div>
+        <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">How many points you get and what it really costs you. The minimum is <b>${YK.minDeposit} $FLOWER</b>.</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
           <label style="font-size:0.5rem;color:var(--text-dim)">deposit <input type="number" min="0" step="50" value="${_ykAmount}" style="width:80px;font-size:0.6rem" onchange="_ykSet('amount',this.value)"> $FLOWER</label>
-          <label style="font-size:0.5rem;color:var(--text-dim)">týden <input type="number" min="1" max="15" value="${_ykWeek}" style="width:46px;font-size:0.6rem" onchange="_ykSet('week',this.value)"> → <b style="color:var(--sunpetal)">${ykMult(_ykWeek).toFixed(1)}×</b></label>
-          <span style="font-size:0.45rem;color:var(--text-dim)">(týden 1 = 10.–16. 8. 2026)</span>
+          <label style="font-size:0.5rem;color:var(--text-dim)">week <input type="number" min="1" max="15" value="${_ykWeek}" style="width:46px;font-size:0.6rem" onchange="_ykSet('week',this.value)"> → <b style="color:var(--sunpetal)">${ykMult(_ykWeek).toFixed(1)}×</b></label>
+          <span style="font-size:0.45rem;color:var(--text-dim)">(week 1 = 10–16 Aug 2026)</span>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:8px">
           <div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px">
-            <div style="font-size:0.45rem;color:var(--text-dim)">ZÁKLAD (${_ykAmount} × ${ykMult(_ykWeek).toFixed(1)})</div>
+            <div style="font-size:0.45rem;color:var(--text-dim)">BASE (${_ykAmount} × ${ykMult(_ykWeek).toFixed(1)})</div>
             <div style="font-size:0.75rem;color:var(--green);font-weight:bold">${fmt(p.base)} pts</div></div>
           <div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px">
             <div style="font-size:0.45rem;color:var(--text-dim)">BULK BONUS</div>
@@ -21161,39 +21215,39 @@
             <div style="font-size:0.44rem;color:var(--text-dim)">${p.perFlower.toFixed(2)} pts za 1 FLOWER</div></div>
         </div>
         <div style="font-size:0.46rem;color:${exactTier ? "var(--green)" : "#e8a060"};margin-bottom:6px;line-height:1.6">${exactTier
-          ? `✓ Přesně publikovaná hodnota (${fmt(exactTier.flower)} → +${fmt(exactTier.pts)} pts, +${fmt(exactTier.bonus)} bonus při 3×).`
-          : `⚠ Bulk bonus dopočítáváme mezi 4 publikovanými částkami (50 / 500 / 5 000 / 50 000). Yakkamon uvádí, že se <b>zdvojnásobuje na každý krok, až do +80 % u 50 000</b> — a přesně tuhle křivku používáme (0,1 → 0,2 → 0,4 → 0,8 bodu na FLOWER). Základ (× násobek) je jistý.`}</div>
-        <div style="font-size:0.46rem;color:#e8a060;margin-bottom:10px;line-height:1.6">⚠ <b>Bonus se počítá z KAŽDÉHO vkladu zvlášť</b> („rated per deposit" — celá částka musí dorazit najednou). Rozdělit stejnou sumu na víc menších vkladů proto dá <b>výrazně míň</b> bodů: každý kus spadne do své nižší bonusové sazby. Násobek navíc klesá 0,2× týdně, <b>až se zastaví na 1×</b> (od 11. týdne).</div>
+          ? `✓ Exactly as published (${fmt(exactTier.flower)} → +${fmt(exactTier.pts)} pts, +${fmt(exactTier.bonus)} bonus at 3×).`
+          : `⚠ The bulk bonus is interpolated between the 4 published amounts (50 / 500 / 5,000 / 50,000). Yakkamon states it <b>doubles at every step, up to +80% on 50,000</b> — which is exactly the curve used here (0.1 → 0.2 → 0.4 → 0.8 points per FLOWER). The base (× multiplier) is certain.`}</div>
+        <div style="font-size:0.46rem;color:#e8a060;margin-bottom:10px;line-height:1.6">⚠ <b>The bonus is rated on EACH deposit separately</b> (&ldquo;rated per deposit&rdquo; — the full amount must land in one go). Splitting the same sum into several smaller deposits therefore earns <b>far fewer</b> points: each piece falls into its own lower bonus rate. The multiplier also drops 0.2× per week <b>until it rests at 1×</b> (from week 11).</div>
         <div style="border-top:1px solid #20190f;padding-top:8px">
-          <div style="font-size:0.5rem;color:var(--lily);margin-bottom:5px"><b>CO TĚ TO STOJÍ</b> — FLOWER dostaneš zpět, ale mezitím nevydělává</div>
+          <div style="font-size:0.5rem;color:var(--lily);margin-bottom:5px"><b>WHAT IT COSTS YOU</b> — you get the FLOWER back, but it earns nothing meanwhile</div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:7px">
-            <label style="font-size:0.5rem;color:var(--text-dim)">návratnost tvých nákupů <input type="number" min="1" value="${_ykRoiDays}" style="width:56px;font-size:0.6rem" onchange="_ykSet('roi',this.value)"> dní</label>
-            <label style="font-size:0.5rem;color:var(--text-dim)">zamčeno <input type="number" min="1" value="${_ykLockDays}" style="width:56px;font-size:0.6rem" onchange="_ykSet('lock',this.value)"> dní</label>
+            <label style="font-size:0.5rem;color:var(--text-dim)">your buy payback <input type="number" min="1" value="${_ykRoiDays}" style="width:56px;font-size:0.6rem" onchange="_ykSet('roi',this.value)"> days</label>
+            <label style="font-size:0.5rem;color:var(--text-dim)">locked for <input type="number" min="1" value="${_ykLockDays}" style="width:56px;font-size:0.6rem" onchange="_ykSet('lock',this.value)"> days</label>
           </div>
           <div style="font-size:0.55rem;line-height:1.8">
-            Ušlý výnos: <b style="color:var(--red)">${fmt(forgone, 1)} FLOWER</b> <span style="color:var(--text-dim);font-size:0.47rem">(${fmt(_ykAmount)} × ${_ykLockDays}d ÷ ${_ykRoiDays}d)</span><br>
-            Cena za 1 000 bodů: <b style="color:var(--sunpetal)">${fmt(costPerKpt, 2)} FLOWER</b><br>
-            <span style="color:var(--text-dim);font-size:0.5rem">Aby se to vyplatilo, musí pro tebe mít NFT + early access hodnotu aspoň <b style="color:var(--sunpetal)">${fmt(forgone, 1)} FLOWER</b>.</span>
+            Forgone yield: <b style="color:var(--red)">${fmt(forgone, 1)} FLOWER</b> <span style="color:var(--text-dim);font-size:0.47rem">(${fmt(_ykAmount)} × ${_ykLockDays}d ÷ ${_ykRoiDays}d)</span><br>
+            Cost per 1,000 points: <b style="color:var(--sunpetal)">${fmt(costPerKpt, 2)} FLOWER</b><br>
+            <span style="color:var(--text-dim);font-size:0.5rem">For this to pay off, the NFT + early access must be worth at least <b style="color:var(--sunpetal)">${fmt(forgone, 1)} FLOWER</b> to you.</span>
           </div>
-          <div style="font-size:0.44rem;color:var(--text-dim);margin-top:6px;line-height:1.6">„Návratnost" vezmi z ROADMAP → buy path (sloupec ROI) — kolik dní se ti vrací nejlepší nákup, který si teď můžeš koupit. To je sazba, o kterou přicházíš. „Zamčeno" = od depositu do chvíle, kdy dostaneš přístup (Q4 2026) — výběry <b>během pre-registrace nejdou</b>.</div>
+          <div style="font-size:0.44rem;color:var(--text-dim);margin-top:6px;line-height:1.6">Take &ldquo;payback&rdquo; from ROADMAP → buy path (the ROI column) — how many days the best purchase available to you right now takes to repay. That is the rate you give up. &ldquo;Locked for&rdquo; = from the deposit until you get access (Q4 2026) — withdrawals are <b>not possible during pre-registration</b>.</div>
         </div>
       </div>`;
 
       // ── Published deposit tiers ────────────────────────────────────
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
-        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">PUBLIKOVANÉ ÚROVNĚ DEPOSITU</div>
-        <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Přesně jak je uvádí yakkamon.com (hodnoty platí pro <b>úvodní týden, 3×</b>). Všimni si posledního sloupce — čím víc pošleš, tím víc bodů <b>za jeden</b> FLOWER.</div>
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">PUBLISHED DEPOSIT TIERS</div>
+        <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Exactly as yakkamon.com states them (values are for the <b>opening week, 3×</b>). Note the last column — the more you send, the more points <b>per single</b> FLOWER.</div>
         <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.55rem;min-width:340px">
-          <tr style="color:var(--text-dim);font-size:0.47rem"><td style="padding:0 6px 4px 0">deposit</td><td style="text-align:right;padding:0 6px 4px">body</td><td style="text-align:right;padding:0 6px 4px">bonus</td><td style="text-align:right;padding:0 6px 4px">celkem</td><td style="text-align:right;padding:0 0 4px">pts / FLOWER</td></tr>
+          <tr style="color:var(--text-dim);font-size:0.47rem"><td style="padding:0 6px 4px 0">deposit</td><td style="text-align:right;padding:0 6px 4px">points</td><td style="text-align:right;padding:0 6px 4px">bonus</td><td style="text-align:right;padding:0 6px 4px">total</td><td style="text-align:right;padding:0 0 4px">pts / FLOWER</td></tr>
           ${YK.tiers.map(t => `<tr style="border-top:1px solid #20190f"><td style="padding:3px 6px 3px 0"><b>${fmt(t.flower)}</b> ${sflIcon()}</td><td style="text-align:right;padding:3px 6px;color:var(--green)">+${fmt(t.pts)}</td><td style="text-align:right;padding:3px 6px;color:var(--sunpetal)">+${fmt(t.bonus)}</td><td style="text-align:right;padding:3px 6px;color:var(--green);font-weight:bold">${fmt(t.pts + t.bonus)}</td><td style="text-align:right;padding:3px 0;color:var(--sunpetal);font-weight:bold">${((t.pts + t.bonus) / t.flower).toFixed(2)}</td></tr>`).join("")}
         </table></div>
-        <div style="font-size:0.47rem;color:var(--text-dim);margin-top:7px;line-height:1.7"><b>Násobek klesá v čase:</b> ${[1, 2, 3, 4, 5, 6, 8, 11].map(w => `t${w} <b style="color:${w === nowWeek && open ? "var(--sunpetal)" : "var(--text-secondary)"}">${ykMult(w).toFixed(1)}×</b>`).join(" · ")} — −0,2× týdně, <b>od 11. týdne už jen 1×</b> a dál to neklesá. Čekání tě stojí body: stejný deposit má v týdnu 6 jen <b>${(ykMult(6) / ykMult(1) * 100).toFixed(0)} %</b> a od týdne 11 jen <b>${(ykMult(11) / ykMult(1) * 100).toFixed(0)} %</b> základních bodů oproti týdnu 1.
-        <div style="margin-top:5px;color:var(--text-secondary)"><b>Důsledek pro rozkládání vkladů:</b> protože bonus se počítá per vklad a násobek padá, je <b>jeden velký vklad co nejdřív</b> výrazně lepší než stejná suma po týdnech. Rozložit ~96 000 ${sflIcon()} do konce roku dá zhruba o <b>40 % bodů míň</b>, než kdyby ta samá suma dorazila najednou v prvním týdnu.</div></div>
+        <div style="font-size:0.47rem;color:var(--text-dim);margin-top:7px;line-height:1.7"><b>The multiplier decays:</b> ${[1, 2, 3, 4, 5, 6, 8, 11].map(w => `w${w} <b style="color:${w === nowWeek && open ? "var(--sunpetal)" : "var(--text-secondary)"}">${ykMult(w).toFixed(1)}×</b>`).join(" · ")} — −0.2× per week, <b>from week 11 it is just 1×</b> and stops falling. Waiting costs you points: the same deposit in week 6 earns only <b>${(ykMult(6) / ykMult(1) * 100).toFixed(0)}%</b>, and from week 11 only <b>${(ykMult(11) / ykMult(1) * 100).toFixed(0)}%</b> of the base points it would in week 1.
+        <div style="margin-top:5px;color:var(--text-secondary)"><b>What that means for splitting deposits:</b> because the bonus is rated per deposit and the multiplier falls, <b>one big deposit as early as possible</b> beats the same sum spread over weeks by a wide margin. Spreading ~96,000 ${sflIcon()} out to year end earns roughly <b>40% fewer points</b> than the same sum landing in one go in week 1.</div></div>
       </div>`;
 
       // ── All point sources ──────────────────────────────────────────
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
-        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:8px">VŠECHNY ZDROJE BODŮ</div>
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:8px">ALL POINT SOURCES</div>
         <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.55rem;min-width:360px">
           ${YK.actions.map(a => `<tr style="border-top:1px solid #20190f"><td style="padding:3px 6px 3px 0">${a.what}</td><td style="text-align:right;padding:3px 6px;color:var(--green);font-weight:bold;white-space:nowrap">${a.pts}</td><td style="padding:3px 6px;color:var(--text-dim);font-size:0.47rem;white-space:nowrap">/ ${a.per}</td><td style="padding:3px 0;color:var(--text-dim);font-size:0.45rem">${a.note}</td></tr>`).join("")}
         </table></div>
@@ -21201,19 +21255,19 @@
 
       // ── Rank rewards ───────────────────────────────────────────────
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
-        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">ODMĚNY PODLE POŘADÍ (body)</div>
-        <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Rozhoduje <b>výhradně pořadí v bodech</b>, ne kdy ses zaregistroval. <b>Jen top 100 000</b> dostane early access. Pořadí se odhalí až u airdropu (Q4 2026) — během pre-registrace <b>nevidíš, jak si stojíš</b>.</div>
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">REWARDS BY RANK (points)</div>
+        <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Decided <b>purely on points rank</b>, not on when you registered. <b>Only the top 100,000</b> get early access. Officially the rank is revealed at the airdrop (Q4 2026) — though the live board above shows the top 100 today.</div>
         <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.55rem;min-width:340px">
-          <tr style="color:var(--text-dim);font-size:0.47rem"><td style="padding:0 6px 4px 0">pořadí</td><td style="padding:0 6px 4px">odměna</td><td style="padding:0 0 4px">vlna</td></tr>
+          <tr style="color:var(--text-dim);font-size:0.47rem"><td style="padding:0 6px 4px 0">rank</td><td style="padding:0 6px 4px">reward</td><td style="padding:0 0 4px">wave</td></tr>
           ${YK.ranks.map(r => `<tr style="border-top:1px solid #20190f"><td style="padding:3px 6px 3px 0;white-space:nowrap">${r.r}</td><td style="padding:3px 6px;color:${r.nft ? "var(--green)" : "var(--text-secondary)"}">${r.nft ? "🏆 " : ""}${r.rew}</td><td style="padding:3px 0;color:var(--text-dim);font-size:0.47rem;white-space:nowrap">${r.wave}</td></tr>`).join("")}
         </table></div>
-        <div style="font-size:0.47rem;color:var(--text-dim);margin-top:7px;line-height:1.7"><b>NFT airdrop:</b> top 5 000 dostane Monster NFT, <b>top 1 000 Legendary Monster NFT</b> — „nejvzácnější tier, jaký kdy vyrazíme". Vedle toho běží <b>free mint</b> 1. 10. 2026 na Roninu: 10 000 NFT zdarma (jen gas), uvnitř je zaseto <b>5 legendárních</b>, 1 mint na účet, blind — odhalí se až při launchi. Musíš být do 1. 10. ověřený na whitelistu.</div>
+        <div style="font-size:0.47rem;color:var(--text-dim);margin-top:7px;line-height:1.7"><b>NFT airdrop:</b> the top 5,000 get a Monster NFT, the <b>top 1,000 a Legendary Monster NFT</b> — &ldquo;the rarest tier we will ever mint&rdquo;. Separately there is a <b>free mint</b> on 1 Oct 2026 on Ronin: 10,000 NFTs free (gas only) with <b>5 legendaries</b> seeded inside, 1 mint per account, blind — revealed at launch. You must be verified on the whitelist before 1 Oct.</div>
       </div>`;
 
       // ── Sign-up eggs ───────────────────────────────────────────────
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
-        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">VAJÍČKO ZA REGISTRACI (podle pořadí přihlášení)</div>
-        <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Tohle je <b>jediné</b>, co ti dá včasná registrace — lepší typ vajíčka. <b>Není to NFT</b>, je to herní předmět. Early access z toho neplyne.</div>
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">SIGN-UP EGG (by registration order)</div>
+        <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">This is the <b>only</b> thing signing up early gets you — a better egg type. It is <b>not an NFT</b>, it is an in-game item, and it does not grant early access.</div>
         <div style="font-size:0.55rem;line-height:1.9">${YK.eggs.map(e => `<span style="white-space:nowrap"><b style="color:var(--sunpetal)">${e.egg}</b> <span style="color:var(--text-dim);font-size:0.47rem">${e.r}</span></span>`).join(" &nbsp;·&nbsp; ")}</div>
       </div>`;
 
@@ -21222,34 +21276,34 @@
       const freeTotal = freeDaily * freeDays + 10 + 10 + 10 + 250;
       const eq = YK.tiers[1]; // 500 FLOWER
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px;border-left:3px solid var(--sunpetal)">
-        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:8px">🧠 MÁ TO SMYSL? — jak o tom přemýšlet</div>
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:8px">🧠 IS IT WORTH IT? — how to think about it</div>
         <div style="font-size:0.55rem;line-height:1.85;color:var(--text-secondary)">
-          <b style="color:var(--green)">1. Není to nákup, je to zamčení.</b> FLOWER dostaneš zpět — dokumentace výslovně říká <b>žádná daň při výběru, žádný lock-up, žádné penále</b>. Nekupuješ body, jen svůj FLOWER na čas odkládáš.
-          <div style="margin-top:8px"><b style="color:var(--red)">2. Ale během pre-registrace nevybereš.</b> Výběry <b>nejsou dostupné</b>, dokud nedostaneš přístup (Q4 2026). Po launchi navíc platí <b>denní % limity</b> „z ekonomických a bezpečnostních důvodů". Takže od 10. 8. do Q4 2026 na ty peníze nesáhneš — to je reálně <b>2–5 měsíců</b>.</div>
-          <div style="margin-top:8px"><b style="color:#e8a060">3. Skutečná cena = ušlý výnos.</b> Ten samý FLOWER investovaný do tvé farmy něco vydělává. Kalkulačka výš to spočítá: při ${_ykRoiDays}denní návratnosti a ${_ykLockDays} dnech zamčení tě ${fmt(_ykAmount)} FLOWER stojí <b style="color:var(--red)">${fmt(forgone, 1)} FLOWER</b> ušlého příjmu. K tomu riziko smart kontraktu a protistrany.</div>
-          <div style="margin-top:8px"><b style="color:var(--lily)">4. Leaderboard je fakticky žebříček depositů.</b> Zdarma se nedá dohnat: aktivita zdarma dá za ~${freeDays} dní zhruba <b>${fmt(freeTotal)} bodů</b> (denní vajíčko ${freeDaily}×${freeDays} + Discord/X/peněženka + free mint), zatímco <b>${fmt(eq.flower)} FLOWER v prvním týdnu = ${fmt(eq.pts + eq.bonus)} bodů</b>. Jeden střední deposit tedy přebije <b>všechnu</b> tvou aktivitu zdarma za celé období. Kdo cílí na top 1 000 (Legendary NFT), bude nejspíš potřebovat deposit v řádu tisíců FLOWER.</div>
-          <div style="margin-top:8px"><b>5. Co nikdo neví.</b> Kolik bodů bude stačit na jaké pořadí (žebříček není veřejný, pořadí se ukáže až u airdropu), kolik bude Legendary Monster NFT stát na trhu, a jestli Yakkamon vůbec chytne. Vsázíš na <b>opci</b>, ne na známý výnos.</div>
+          <b style="color:var(--green)">1. This is not a purchase, it is a lock-up.</b> You get the FLOWER back — the docs say explicitly <b>no withdrawal tax, no lock-up, no penalty</b>. You are not buying points, you are parking your FLOWER for a while.
+          <div style="margin-top:8px"><b style="color:var(--red)">2. But you cannot withdraw during pre-registration.</b> Withdrawals are <b>not available</b> until you get access (Q4 2026), and after launch there are <b>daily % limits</b> &ldquo;for economic and security reasons&rdquo;. So from 10 Aug to Q4 2026 you cannot touch that money — realistically <b>2–5 months</b>.</div>
+          <div style="margin-top:8px"><b style="color:#e8a060">3. The real cost is forgone yield.</b> That same FLOWER put into your farm earns something. The calculator above prices it: at a ${_ykRoiDays}-day payback and ${_ykLockDays} days locked, ${fmt(_ykAmount)} FLOWER costs you <b style="color:var(--red)">${fmt(forgone, 1)} FLOWER</b> of income you did not make. On top of that sits smart-contract and counterparty risk.</div>
+          <div style="margin-top:8px"><b style="color:var(--lily)">4. The leaderboard is effectively a deposit ranking.</b> You cannot catch up for free: ~${freeDays} days of free activity yields roughly <b>${fmt(freeTotal)} points</b> (daily egg ${freeDaily}×${freeDays} + Discord/X/wallet + free mint), while <b>${fmt(eq.flower)} FLOWER in week 1 = ${fmt(eq.pts + eq.bonus)} points</b>. One mid-sized deposit therefore beats <b>all</b> of your free activity for the entire period. Anyone aiming for the top 1,000 (Legendary NFT) will likely need a deposit in the thousands of FLOWER.</div>
+          <div style="margin-top:8px"><b>5. What nobody knows.</b> How many points any given rank will take once the whales are done, what a Legendary Monster NFT will fetch on the market, and whether Yakkamon lands at all. You are buying an <b>option</b>, not a known return.</div>
           <div style="margin-top:10px;padding:8px 10px;background:#161009;border:1px solid var(--border-brown);border-radius:6px">
-            <b style="color:var(--sunpetal)">Rozhodovací pravidlo:</b> deposit dává smysl, když (a) ten FLOWER stejně jen držíš a nemáš pro něj lepší využití na farmě, (b) unese to, že na něj 2–5 měsíců nesáhneš, a (c) NFT + early access má pro tebe hodnotu aspoň <b style="color:var(--red)">${fmt(forgone, 1)} FLOWER</b> (tvůj ušlý výnos). Pokud máš na farmě nákupy s krátkou návratností, které ještě nemáš koupené, <b>ty skoro jistě vyhrávají</b> — mají známý výnos, tohle je loterie.
-            <div style="margin-top:5px;font-size:0.5rem;color:var(--text-dim)">Časování: pokud se rozhodneš jít do toho, <b>první týden je nejlepší</b> (3×) — každý týden čekání ubere 0,2× z násobku. Ale nespěchej do toho jen kvůli násobku: rozdíl t1 vs t3 je ${((1 - ykMult(3) / ykMult(1)) * 100).toFixed(0)} %, což je málo proti riziku, že se rozhodneš špatně.</div>
+            <b style="color:var(--sunpetal)">Decision rule:</b> a deposit makes sense when (a) you are just holding that FLOWER anyway and have no better use for it on the farm, (b) you can live without touching it for 2–5 months, and (c) the NFT + early access is worth at least <b style="color:var(--red)">${fmt(forgone, 1)} FLOWER</b> to you (your forgone yield). If there are short-payback purchases on your farm you have not made yet, <b>those almost certainly win</b> — they have a known return, this is a lottery ticket.
+            <div style="margin-top:5px;font-size:0.5rem;color:var(--text-dim)">Timing: if you do go in, <b>the first week is the best</b> (3×) — each week of waiting shaves 0.2× off the multiplier. But do not rush purely for the multiplier: w1 vs w3 is only ${((1 - ykMult(3) / ykMult(1)) * 100).toFixed(0)}%, which is small against the risk of deciding wrong.</div>
           </div>
         </div>
       </div>`;
 
       // ── Repo + links ───────────────────────────────────────────────
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
-        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:6px">REPO &amp; ODKAZY</div>
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:6px">REPO &amp; LINKS</div>
         <div style="font-size:0.52rem;line-height:1.8;color:var(--text-secondary)">
-          <b>Kód zatím veřejně není.</b> <code>github.com/yakkamon/yakkamon</code> existuje, ale je to <b>prázdný placeholder</b> (2 commity, jen package.json a README „blank landing page project", MIT, 0 hvězd). Na rozdíl od Sunflower Land, které je celé open-source, tady zatím <b>není co číst</b> — takže mechaniku nejde ověřit ve zdrojáku, jen z marketingu. Komunitní web běží na <code>github.com/yakkamon-world/yakkamonworld</code>.
+          <b>There is no public code yet.</b> <code>github.com/yakkamon/yakkamon</code> exists but is an <b>empty placeholder</b> (2 commits, just a package.json and a README reading &ldquo;blank landing page project&rdquo;, MIT, 0 stars). Unlike Sunflower Land, which is fully open-source, there is <b>nothing to read</b> here — so none of the mechanics can be verified in source, only taken from marketing. A community site lives at <code>github.com/yakkamon-world/yakkamonworld</code>.
           <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
-            ${[["yakkamon.com", "https://yakkamon.com/"], ["docs.yakkamon.com", "https://docs.yakkamon.com/"], ["FAQ", "https://docs.yakkamon.com/faq"], ["Deposity", "https://docs.yakkamon.com/pre-registration/flower-deposits"], ["Early access", "https://docs.yakkamon.com/pre-registration/early-access-airdrop"], ["Free mint", "https://docs.yakkamon.com/pre-registration/free-mint"], ["X @yakkamon_game", "https://x.com/yakkamon_game"], ["Discord", "https://discord.gg/yakkamon"], ["GitHub", "https://github.com/yakkamon/yakkamon"]]
+            ${[["yakkamon.com", "https://yakkamon.com/"], ["docs.yakkamon.com", "https://docs.yakkamon.com/"], ["FAQ", "https://docs.yakkamon.com/faq"], ["Deposits", "https://docs.yakkamon.com/pre-registration/flower-deposits"], ["Early access", "https://docs.yakkamon.com/pre-registration/early-access-airdrop"], ["Free mint", "https://docs.yakkamon.com/pre-registration/free-mint"], ["X @yakkamon_game", "https://x.com/yakkamon_game"], ["Discord", "https://discord.gg/yakkamon"], ["GitHub", "https://github.com/yakkamon/yakkamon"]]
               .map(([l, u]) => `<a href="${u}" target="_blank" rel="noopener" style="font-size:0.5rem;padding:3px 9px;border:1px solid var(--border-brown);border-radius:4px;background:#241a10;color:var(--sunpetal);text-decoration:none">${l} ↗</a>`).join("")}
           </div>
-          <div style="margin-top:8px;font-size:0.47rem;color:#e8a060;line-height:1.6">⚠ <b>Pozor na podvody:</b> tým hlásí, že jejich <b>předchozí X účet byl kompromitován</b>. Oficiální je <b>pouze @yakkamon_game</b>. Nikdy nepodepisuj nic z odkazu, který nepřišel z těchhle domén.</div>
+          <div style="margin-top:8px;font-size:0.47rem;color:#e8a060;line-height:1.6">⚠ <b>Scam warning:</b> the team says their <b>previous X account was compromised</b>. Only <b>@yakkamon_game</b> is official. Never sign anything from a link that did not come from these domains.</div>
         </div>
       </div>`;
 
-      h += `<div style="font-size:0.45rem;color:var(--text-dim);text-align:center;margin-bottom:10px;line-height:1.6">Zdroj: yakkamon.com + docs.yakkamon.com, načteno 8. 8. 2026. Čísla se můžou změnit — u sporných míst je v textu uvedeno, co je publikované a co dopočítané.</div>`;
+      h += `<div style="font-size:0.45rem;color:var(--text-dim);text-align:center;margin-bottom:10px;line-height:1.6">Source: yakkamon.com + docs.yakkamon.com, read 8 Aug 2026; signup counter, leaderboard and prices are live. Numbers can change — where it matters the text says what is published and what is interpolated.</div>`;
       h += `<div class="footer"><button class="refresh-btn" onclick="_ykLive=null;_ykLiveErr=null;renderYakkamon()">REFRESH</button></div>`;
       app.innerHTML = h;
     }
