@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.07</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.08</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.08", items: [
+          { t: "fix", text: "<b>The island map shows whole, and can fill the screen.</b> It sat in a 70vh box with its own scrollbar, so the map was never visible in one piece. That cap is gone — the map draws at full height and the page scrolls instead. A <b>tile size</b> control sits above it: <b>↔ fit width</b> (the default) sizes the tiles so the island exactly spans the panel and re-fits when you resize the window, or pick a fixed 8/13/20/28px. The choice is remembered. Fitting is measured against the panel after it is drawn, not the window — the content column is much narrower than the viewport, and sizing off the window made the map overflow its own box on a desktop." },
+        ] },
         { ver: "v5.07", items: [
           { t: "feat", text: "<b>New pattern: Rainbow ∿ from corner.</b> The band bends, and the corner sits in the <i>middle</i> of the ribbon rather than at an end — so a wave marching along it crosses the turn mid-stride and its slope appears to invert there. This variant measures outward from the corner in both directions and leans the diagonal the other way, so the two arms read as one symmetrical piece that meets cleanly in the bend. The original wave stays as it was." },
           { t: "feat", text: "<b>Click a flower in WHAT TO GROW for a placement guide.</b> It opens a map of just the band with every tile of that flower marked — the ones already standing in green, the ones still to place in amber — and a numbered walk: each step gives the move from the previous tile of the same flower as <b>← → ↑ ↓ with a tile count</b>, not raw coordinates. Pick the flower in your inventory and follow the arrows." },
@@ -21850,6 +21853,14 @@
     }
 
     let _decData = null, _decErr = null, _decLoading = false, _decCustom = null, _decPer = null, _decClear = true;
+    // Map zoom. "fit" sizes the tiles so the island spans the viewport width; a number is a
+    // fixed tile size in px. Persisted so the map opens the way you left it.
+    let _decTile = (() => { try { return JSON.parse(localStorage.getItem("sfl_dec_tile")) ?? "fit"; } catch (e) { return "fit"; } })();
+    window._decSetTile = function (v) {
+      _decTile = v === "fit" ? "fit" : Math.max(4, Math.min(40, parseInt(v) || 13));
+      try { localStorage.setItem("sfl_dec_tile", JSON.stringify(_decTile)); } catch (e) {}
+      renderDecorations();
+    };
     let _decLayout = "bands";     // bands | scatter | text
     let _decWord = "SAJMONIUM";
     window._decSetLayout = function (v) { _decLayout = v; _decCustom = null; renderDecorations(); };
@@ -22042,10 +22053,28 @@
           : `<span style="font-size:${Math.max(4, Math.min(7, 2 + it.w))}px;color:#c9a227;line-height:1.05;text-align:center;padding:1px;overflow:hidden;word-break:break-word">${escHTML(it.name)}</span>`;
         cells.push(`<div title="${escHTML(it.name)} · ${it.x},${it.y} · ${it.w}×${it.h}" style="grid-column:${col(it.x)} / span ${it.w};grid-row:${row(it.y)} / span ${it.h};background:${src ? "#241a10" : "#2b2113"};outline:1px solid rgba(0,0,0,0.35);outline-offset:-1px;display:flex;align-items:center;justify-content:center;overflow:hidden">${inner}</div>`);
       }
+      /*
+       * Tile size. "fit" divides the available width by the map's column count so the whole
+       * island spans the screen; the panel padding and a scrollbar's worth of slack are taken
+       * off first. No max-height any more — a nested scrollbar meant you could never see the
+       * map whole, so it now grows to its full height and the page scrolls instead.
+       */
+      // "fit" can only be resolved once the panel exists — the content column is far narrower
+      // than the window, so sizing off window.innerWidth overflowed. A first guess goes into the
+      // markup and _decFitMap corrects it against the real container right after insertion.
+      const px = _decTile === "fit" ? 13 : _decTile;
       h += `<div class="pixel-panel" style="padding:10px;margin-bottom:12px">
         <div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-bottom:6px">ISLAND MAP <span style="color:var(--text-dim);font-size:0.45rem">· ${W}×${H} tiles · gold outline = ascension expansions</span></div>
-        <div style="overflow:auto;max-height:70vh;border:1px solid var(--border-brown);border-radius:6px;background:#0d0b07">
-          <div style="display:grid;grid-template-columns:repeat(${W}, 13px);grid-auto-rows:13px;gap:0;width:max-content">${cells.join("")}</div>
+        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+          <span style="font-size:0.46rem;color:var(--text-dim)">tile size</span>
+          ${[["fit", "↔ fit width"], [8, "8"], [13, "13"], [20, "20"], [28, "28"]].map(([v, l]) => {
+            const on = String(_decTile) === String(v);
+            return `<button onclick="_decSetTile('${v}')" style="font-size:0.48rem;padding:2px 9px;border:1px solid var(--border-brown);border-radius:4px;cursor:pointer;background:${on ? "var(--sunpetal)" : "#241a10"};color:${on ? "#1a120a" : "var(--text-secondary)"};font-weight:${on ? "bold" : "normal"}">${l}</button>`;
+          }).join("")}
+          <span style="font-size:0.44rem;color:var(--text-dim)">${px}px · ${W * px}×${H * px}</span>
+        </div>
+        <div style="overflow-x:auto;border:1px solid var(--border-brown);border-radius:6px;background:#0d0b07">
+          <div id="dec-grid" data-cols="${W}" style="display:grid;grid-template-columns:repeat(${W}, ${px}px);grid-auto-rows:${px}px;gap:0;width:max-content">${cells.join("")}</div>
         </div>
         <div style="font-size:0.45rem;color:var(--text-dim);margin-top:6px;line-height:1.6">Hover a tile for its coordinates. Flowers are drawn on plain ground with no colour wash behind them, so this is roughly what the arrangement will look like in game — the bands come from the flowers themselves. Tiles with any other icon are nodes, buildings and decorations you already have; plain dark tiles are free. A dashed edge means that expansion is not built yet.</div>
       </div>`;
@@ -22140,7 +22169,22 @@
 
       h += `<div class="footer"><button class="refresh-btn" onclick="_decData=null;_decErr=null;renderDecorations()">REFRESH</button></div>`;
       app.innerHTML = h;
+      _decFitMap();
     }
+    /** Size the map's tiles to the container it actually sits in (only in "fit" mode). */
+    function _decFitMap() {
+      if (_decTile !== "fit") return;
+      const g = document.getElementById("dec-grid");
+      if (!g) return;
+      const cols = parseInt(g.dataset.cols) || 1;
+      const avail = (g.parentElement ? g.parentElement.clientWidth : 0) - 2;
+      if (avail <= 0) return;
+      const px = Math.max(5, Math.floor(avail / cols));
+      g.style.gridTemplateColumns = `repeat(${cols}, ${px}px)`;
+      g.style.gridAutoRows = px + "px";
+    }
+    // Keep it filling the width as the window changes, without redrawing the whole page.
+    window.addEventListener("resize", () => { if (getPage() === "decorations") _decFitMap(); });
 
     function renderWorld() {
       const app = document.getElementById("app");
