@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.13</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.14</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.14", items: [
+          { t: "feat", text: "<b>Finished flowers go green.</b> WHAT TO GROW has a <b>planted</b> column counting the tiles of that flower already standing where the plan wants them. Once every tile of a flower is done its whole row turns green, reads <b>done</b> and drops to the bottom of the list, so what is left to do stays at the top. The header keeps the running total — <i>plan needs 432, 17 already planted (1 of 50 flowers finished), 49 still to grow</i>." },
+          { t: "fix", text: "<b>The shopping list stops asking for flowers you have already planted.</b> A flower leaves your inventory the moment you place it, but <i>to grow</i> was still <i>need − inventory</i> — so planting made the list demand <i>more</i>, not less. It is now <i>need − planted − inventory</i>." },
+        ] },
         { ver: "v5.13", items: [
           { t: "fix", text: "<b>↺ RELOAD refreshes in the background.</b> It used to throw the page away and put “Loading farm layout…” up while it fetched, so the map, the guide you were following and your scroll position all vanished for a second. Now the farm is fetched behind the page — only the button says <b>RELOADING…</b> — and the redraw keeps every open guide, every setting and the exact scroll position. If the fetch fails you keep the page you had, with the error noted." },
         ] },
@@ -22065,13 +22069,22 @@
       // ── what the plan needs vs what you hold ──────────────────────────
       const need = {};
       for (const name of scoped.values()) need[name] = (need[name] || 0) + 1;
+      // What is already standing on its planned tile. A flower leaves your inventory when you
+      // place it, so the shopping list has to subtract these — otherwise it keeps asking you to
+      // grow flowers that are already in the ground.
+      const doneBy = {};
+      for (const [k, v] of scoped) if (occ.get(k) === v) doneBy[v] = (doneBy[v] || 0) + 1;
       const inv = farm.inventory || {};
       const rows = Object.entries(need).map(([name, n]) => {
         const have = Math.floor(parseFloat(inv[name]) || 0);
-        return { name, n, have, missing: Math.max(0, n - have) };
-      }).sort((a, b) => b.missing - a.missing || a.name.localeCompare(b.name));
+        const done = doneBy[name] || 0;
+        const left = n - done;
+        return { name, n, have, done, left, missing: Math.max(0, left - have) };
+      }).sort((a, b) => (a.left === 0) - (b.left === 0) || b.missing - a.missing || a.name.localeCompare(b.name));
       const totalNeed = rows.reduce((s, r) => s + r.n, 0);
+      const totalDone = rows.reduce((s, r) => s + r.done, 0);
       const totalMissing = rows.reduce((s, r) => s + r.missing, 0);
+      const flowersDone = rows.filter((r) => r.left === 0).length;
       // plan tiles that are NOT free (custom JSON can collide with a node)
       const collisions = [...plan.keys()].filter((k) => occ.has(k));
       const outside = [...plan.keys()].filter((k) => !owner.has(k));
@@ -22217,9 +22230,9 @@
       </div>`;
 
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
-        <div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-bottom:6px">WHAT TO GROW <span style="color:var(--text-dim);font-size:0.45rem">· plan needs ${_fmtNum(totalNeed)}, you hold ${_fmtNum(totalNeed - totalMissing)}</span></div>
-        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:300px">
-          <tr style="color:var(--text-dim);font-size:0.45rem"><td style="padding:0 6px 3px 0">flower</td><td style="text-align:right;padding:0 6px 3px">need</td><td style="text-align:right;padding:0 6px 3px">have</td><td style="text-align:right;padding:0 0 3px">to grow</td></tr>
+        <div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-bottom:6px">WHAT TO GROW <span style="color:var(--text-dim);font-size:0.45rem">· plan needs ${_fmtNum(totalNeed)}, <b style="color:var(--green)">${_fmtNum(totalDone)} already planted</b>${flowersDone ? ` (${flowersDone} of ${rows.length} flowers finished)` : ""}, ${_fmtNum(totalMissing)} still to grow</span></div>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:340px">
+          <tr style="color:var(--text-dim);font-size:0.45rem"><td style="padding:0 6px 3px 0">flower</td><td style="text-align:right;padding:0 6px 3px">need</td><td style="text-align:right;padding:0 6px 3px">planted</td><td style="text-align:right;padding:0 6px 3px">in bag</td><td style="text-align:right;padding:0 0 3px">to grow</td></tr>
           ${rows.map((r) => {
             /*
              * Placement guide. Coordinates are useless when you are stood in the game with a
@@ -22265,11 +22278,14 @@
               mini += `<div title="${k}${step ? " · step " + step : ""}" style="grid-column:${x - gX0 + 1};grid-row:${gY1 - y + 1};background:${bg};outline:1px solid rgba(255,255,255,0.07);outline-offset:-1px;display:flex;align-items:center;justify-content:center">${label}</div>`;
             }
             const isOpen = _decOpen.has(r.name);
-            const detail = `<tr style="display:${isOpen ? "table-row" : "none"}"><td colspan="4" style="padding:8px 8px 12px;background:#120d07">
+            const detail = `<tr style="display:${isOpen ? "table-row" : "none"}"><td colspan="5" style="padding:8px 8px 12px;background:#120d07">
               <div style="font-size:0.55rem;color:var(--text-secondary);margin-bottom:7px;line-height:1.7">Each step is the move from the <b>previous ${escHTML(r.name)}</b> — <b style="color:#8ce06a">green</b> is already standing there, <b style="color:#ffd86b">amber</b> still to place. The number in a square is its step below. Follow them in order with the flower selected in your inventory.</div>
               <div style="overflow-x:auto;margin-bottom:8px"><div style="display:grid;grid-template-columns:repeat(${gX1 - gX0 + 1},${GP}px);grid-auto-rows:${GP}px;width:max-content;background:#0d0b07;border:1px solid var(--border-brown)">${mini}</div></div>
               <div style="display:flex;flex-wrap:wrap;gap:3px">${steps}</div></td></tr>`;
-            return `<tr data-flower="${escHTML(r.name)}" onclick="_decToggleRow(this)" title="click for the placement guide" style="border-top:1px solid #20190f;cursor:pointer"><td style="padding:2px 6px 2px 0"><span class="dec-caret" style="color:var(--text-dim);font-size:0.45rem">${isOpen ? "▾" : "▸"}</span> <img class="inline-icon" src="${getItemIcon(r.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.name)}</td><td style="text-align:right;padding:2px 6px">${r.n}</td><td style="text-align:right;padding:2px 6px;color:var(--text-dim)">${r.have}</td><td style="text-align:right;padding:2px 0;color:${r.missing ? "var(--red)" : "var(--green)"};font-weight:bold">${r.missing || "✓"}</td></tr>${detail}`;
+            // A flower whose every tile is already standing is done — the whole row goes green
+            // so the ones left to do stand out at a glance.
+            const fin = r.left === 0;
+            return `<tr data-flower="${escHTML(r.name)}" onclick="_decToggleRow(this)" title="click for the placement guide" style="border-top:1px solid #20190f;cursor:pointer;background:${fin ? "#132009" : "transparent"}"><td style="padding:2px 6px 2px 0;color:${fin ? "var(--green)" : "inherit"}"><span class="dec-caret" style="color:var(--text-dim);font-size:0.45rem">${isOpen ? "▾" : "▸"}</span> <img class="inline-icon" src="${getItemIcon(r.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.name)}${fin ? " ✓" : ""}</td><td style="text-align:right;padding:2px 6px;color:${fin ? "var(--green)" : "inherit"}">${r.n}</td><td style="text-align:right;padding:2px 6px;color:${r.done ? "var(--green)" : "var(--text-dim)"};font-weight:${r.done ? "bold" : "normal"}">${r.done || "–"}</td><td style="text-align:right;padding:2px 6px;color:var(--text-dim)">${r.have}</td><td style="text-align:right;padding:2px 0;color:${fin ? "var(--green)" : r.missing ? "var(--red)" : "var(--yellow)"};font-weight:bold">${fin ? "done" : r.missing || "✓"}</td></tr>${detail}`;
           }).join("")}
         </table></div>
       </div>`;
