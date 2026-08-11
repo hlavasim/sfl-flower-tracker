@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.12</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.13</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.13", items: [
+          { t: "fix", text: "<b>↺ RELOAD refreshes in the background.</b> It used to throw the page away and put “Loading farm layout…” up while it fetched, so the map, the guide you were following and your scroll position all vanished for a second. Now the farm is fetched behind the page — only the button says <b>RELOADING…</b> — and the redraw keeps every open guide, every setting and the exact scroll position. If the fetch fails you keep the page you had, with the error noted." },
+        ] },
         { ver: "v5.12", items: [
           { t: "fix", text: "<b>Planting a flower no longer redraws the plan.</b> The layout was generated over <i>the tiles that are free right now</i>, and the colour balancing works on the tile set as a whole — so every flower you put in the ground removed a tile, shifted the balance, and the app then told you the flowers already planted belonged somewhere else. Measured on the real band: removing just <b>two</b> tiles moved between 2 and 32 flowers depending on the layout, and with the <i>plan the whole band</i> box unticked the ten flowers already standing went from matching to matching <b>none</b>. The layout is now a function of the band’s geometry and nothing else — what is standing on your farm only filters what gets <i>reported</i>, it never reaches the generator. Same tile, same flower, forever." },
           { t: "fix", text: "<b>Flowers you have already planted correctly stop counting as obstacles.</b> They were listed under “needs clearing first” alongside the stone and iron nodes." },
@@ -21915,9 +21918,30 @@
       if (on) _decOpen.add(name); else _decOpen.delete(name);
       _decSave();
     };
-    // Re-fetches the farm so tiles you have just planted turn green, keeping every setting
-    // and every open guide exactly where it was.
-    window._decReload = function () { _decData = null; _decErr = null; renderDecorations(); };
+    /*
+      * Re-reads the farm WITHOUT tearing the page down. Clearing _decData and re-rendering
+      * would put the "Loading farm layout…" placeholder up, wiping the map, the guide you
+      * were following and your scroll position for a second. Instead the fetch happens behind
+      * the page, only the button says anything, and the redraw lands where you were.
+      */
+    let _decReloading = false;
+    window._decReload = async function () {
+      if (_decReloading) return;
+      _decReloading = true;
+      const btn = document.getElementById("dec-reload");
+      if (btn) { btn.textContent = "↻ RELOADING…"; btn.style.opacity = "0.65"; btn.style.pointerEvents = "none"; }
+      try {
+        const r = await fetch(`/api/proxy?url=${encodeURIComponent("https://api.sunflower-land.com/community/farms/" + FARM_ID)}`);
+        const j = await r.json();
+        _decData = j.farm || j;
+        _decErr = null;
+      } catch (e) { _decErr = "Could not reload the farm (" + e.message + ")"; }
+      _decReloading = false;
+      if (getPage() !== "decorations") return;
+      const y = window.scrollY;
+      await renderDecorations();
+      window.scrollTo(0, y);
+    };
     window._decApplyJson = function () {
       const el = document.getElementById("dec-json");
       if (!el) return;
@@ -22285,7 +22309,7 @@
         * the guide happens to be. A reload button that only exists at the top or the bottom is
         * a scroll away every single time, so it is pinned to the viewport instead.
         */
-      h += `<button onclick="_decReload()" title="re-read the farm — planted tiles turn green"
+      h += `<button id="dec-reload" onclick="_decReload()" title="re-read the farm — planted tiles turn green"
         style="position:fixed;right:14px;bottom:14px;z-index:60;font-size:0.55rem;padding:9px 15px;border:1px solid var(--sunpetal);border-radius:8px;background:#241a10;color:var(--sunpetal);cursor:pointer;font-weight:bold;box-shadow:0 3px 12px rgba(0,0,0,0.6)" class="pixel-font">↺ RELOAD</button>`;
       app.innerHTML = h;
       _decFitMap();
