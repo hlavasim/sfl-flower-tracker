@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.09</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.10</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.10", items: [
+          { t: "fix", text: "<b>The layout no longer changes when you switch scope.</b> Picking <b>only what I own</b> was regenerating the pattern on the smaller area, so it came out as a different design — every flower you had already planted would have been in the wrong place once the next expansion unlocked. The layout is now always computed across the finished 12-expansion band, and the scope switch only decides how much of it is <b>shown and counted</b>. The same tile always gets the same flower; unlocking an expansion just adds tiles to plant, it never moves the ones already done." },
+        ] },
         { ver: "v5.09", items: [
           { t: "feat", text: "<b>Plan for what you actually own.</b> A <b>plan for</b> switch picks between the finished 12-expansion band and <b>only the expansions that exist today</b> — the shopping list, the layout and the placement guide all follow it. On a 6-of-12 farm that is the difference between needing 400 flowers and needing 200." },
           { t: "feat", text: "<b>The placement guide is readable now.</b> Squares went from 7px to 20px with a grid drawn over them so tiles can be counted off, each target square carries <b>its step number</b> so the picture and the numbered walk below refer to the same thing, and the step chips are roughly twice the size. The guide also shrinks to the built expansions when the scope switch is set that way." },
@@ -21921,9 +21924,15 @@
        * The full band answers "what does the finished thing need"; "built only" answers "what
        * can I plant this evening", which is a different and usually smaller shopping list.
        */
+      /*
+       * The layout is ALWAYS computed over the full 12-expansion band, never over the subset
+       * you happen to own. Generating it on the built tiles alone produced a different pattern,
+       * so every new expansion would have rearranged the flowers already in the ground. Scope
+       * only filters what the shopping list and the guide talk about — the flower on any given
+       * tile is fixed for good, and a new expansion just reveals more of the same design.
+       */
       const ascIdx = [];
-      const lastAsc = _decScope === "built" ? Math.min(expansions, ASC_TO) : ASC_TO;
-      for (let i = ASC_FROM; i < lastAsc; i++) ascIdx.push(i);
+      for (let i = ASC_FROM; i < ASC_TO; i++) ascIdx.push(i);
       const ascTiles = [];
       for (const i of ascIdx) {
         const b = decBox(origins[i]);
@@ -21958,9 +21967,28 @@
           : decPlan(freeAsc, per));
       // What the same layout becomes once the whole 12-expansion band is built.
 
+      /*
+       * `plan` is the whole design and drives the map. `scoped` is the part of it you can act
+       * on right now — identical flowers on identical tiles, just restricted to expansions that
+       * exist. The shopping list, the colour balance and the placement guide all read this one.
+       */
+      const scoped = _decScope === "built"
+        ? new Map([...plan].filter(([k]) => (owner.get(k) ?? 99) < expansions))
+        : plan;
+      const scopedTiles = [...scoped.keys()];
+      const scopedSet = new Set(scopedTiles);
+      // The guide draws only the area in scope, so it stays compact when you are planning
+      // just the expansions you own.
+      let gX0 = 1e9, gX1 = -1e9, gY0 = 1e9, gY1 = -1e9;
+      for (const k of (scopedTiles.length ? scopedTiles : ascTiles)) {
+        const [x, y] = k.split(",").map(Number);
+        gX0 = Math.min(gX0, x); gX1 = Math.max(gX1, x);
+        gY0 = Math.min(gY0, y); gY1 = Math.max(gY1, y);
+      }
+
       // ── what the plan needs vs what you hold ──────────────────────────
       const need = {};
-      for (const name of plan.values()) need[name] = (need[name] || 0) + 1;
+      for (const name of scoped.values()) need[name] = (need[name] || 0) + 1;
       const inv = farm.inventory || {};
       const rows = Object.entries(need).map(([name, n]) => {
         const have = Math.floor(parseFloat(inv[name]) || 0);
@@ -22102,7 +22130,7 @@
 
       // ── colour legend + shopping list ────────────────────────────────
       const byColour = {};
-      for (const name of plan.values()) { const c = decColors.find((c) => name.startsWith(c + " ")) || "other"; byColour[c] = (byColour[c] || 0) + 1; }
+      for (const name of scoped.values()) { const c = decColors.find((c) => name.startsWith(c + " ")) || "other"; byColour[c] = (byColour[c] || 0) + 1; }
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
         <div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-bottom:6px">COLOUR BALANCE</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:0.52rem">
@@ -22122,7 +22150,7 @@
              * So the tiles are walked in ribbon order and each step is expressed as a move from
              * the previous tile of the SAME flower, with a map of just the band beside it.
              */
-            const mine = [...plan.entries()].filter(([, v]) => v === r.name).map(([k]) => k.split(",").map(Number));
+            const mine = [...scoped.entries()].filter(([, v]) => v === r.name).map(([k]) => k.split(",").map(Number));
             mine.sort((a, b) => {
               const pa = ribbon.rib.get(a[0] + "," + a[1]) || [0, 0], pb = ribbon.rib.get(b[0] + "," + b[1]) || [0, 0];
               return pa[0] - pb[0] || pa[1] - pb[1];
@@ -22148,7 +22176,7 @@
             const order = new Map(mine.map(([x, y], i) => [x + "," + y, i + 1]));
             const GP = 20;
             let mini = "";
-            for (let y = ascY1; y >= ascY0; y--) for (let x = ascX0; x <= ascX1; x++) {
+            for (let y = gY1; y >= gY0; y--) for (let x = gX0; x <= gX1; x++) {
               const k = x + "," + y;
               if (!ascSet.has(k)) continue;
               const step = order.get(k);
@@ -22157,11 +22185,11 @@
               const label = step
                 ? `<span style="color:${done ? "#8ce06a" : "#ffd86b"};font-size:${GP > 15 ? 10 : 8}px;font-weight:bold;line-height:1">${step}</span>`
                 : "";
-              mini += `<div title="${k}${step ? " · step " + step : ""}" style="grid-column:${x - ascX0 + 1};grid-row:${ascY1 - y + 1};background:${bg};outline:1px solid rgba(255,255,255,0.07);outline-offset:-1px;display:flex;align-items:center;justify-content:center">${label}</div>`;
+              mini += `<div title="${k}${step ? " · step " + step : ""}" style="grid-column:${x - gX0 + 1};grid-row:${gY1 - y + 1};background:${bg};outline:1px solid rgba(255,255,255,0.07);outline-offset:-1px;display:flex;align-items:center;justify-content:center">${label}</div>`;
             }
             const detail = `<tr style="display:none"><td colspan="4" style="padding:8px 8px 12px;background:#120d07">
               <div style="font-size:0.55rem;color:var(--text-secondary);margin-bottom:7px;line-height:1.7">Each step is the move from the <b>previous ${escHTML(r.name)}</b> — <b style="color:#8ce06a">green</b> is already standing there, <b style="color:#ffd86b">amber</b> still to place. The number in a square is its step below. Follow them in order with the flower selected in your inventory.</div>
-              <div style="overflow-x:auto;margin-bottom:8px"><div style="display:grid;grid-template-columns:repeat(${ascX1 - ascX0 + 1},${GP}px);grid-auto-rows:${GP}px;width:max-content;background:#0d0b07;border:1px solid var(--border-brown)">${mini}</div></div>
+              <div style="overflow-x:auto;margin-bottom:8px"><div style="display:grid;grid-template-columns:repeat(${gX1 - gX0 + 1},${GP}px);grid-auto-rows:${GP}px;width:max-content;background:#0d0b07;border:1px solid var(--border-brown)">${mini}</div></div>
               <div style="display:flex;flex-wrap:wrap;gap:3px">${steps}</div></td></tr>`;
             return `<tr onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'table-row':'none';" title="click for the placement guide" style="border-top:1px solid #20190f;cursor:pointer"><td style="padding:2px 6px 2px 0"><span style="color:var(--text-dim);font-size:0.45rem">▸</span> <img class="inline-icon" src="${getItemIcon(r.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.name)}</td><td style="text-align:right;padding:2px 6px">${r.n}</td><td style="text-align:right;padding:2px 6px;color:var(--text-dim)">${r.have}</td><td style="text-align:right;padding:2px 0;color:${r.missing ? "var(--red)" : "var(--green)"};font-weight:bold">${r.missing || "✓"}</td></tr>${detail}`;
           }).join("")}
