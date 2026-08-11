@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.08</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.09</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.09", items: [
+          { t: "feat", text: "<b>Plan for what you actually own.</b> A <b>plan for</b> switch picks between the finished 12-expansion band and <b>only the expansions that exist today</b> — the shopping list, the layout and the placement guide all follow it. On a 6-of-12 farm that is the difference between needing 400 flowers and needing 200." },
+          { t: "feat", text: "<b>The placement guide is readable now.</b> Squares went from 7px to 20px with a grid drawn over them so tiles can be counted off, each target square carries <b>its step number</b> so the picture and the numbered walk below refer to the same thing, and the step chips are roughly twice the size. The guide also shrinks to the built expansions when the scope switch is set that way." },
+        ] },
         { ver: "v5.08", items: [
           { t: "fix", text: "<b>The island map shows whole, and can fill the screen.</b> It sat in a 70vh box with its own scrollbar, so the map was never visible in one piece. That cap is gone — the map draws at full height and the page scrolls instead. A <b>tile size</b> control sits above it: <b>↔ fit width</b> (the default) sizes the tiles so the island exactly spans the panel and re-fits when you resize the window, or pick a fixed 8/13/20/28px. The choice is remembered. Fitting is measured against the panel after it is drawn, not the window — the content column is much narrower than the viewport, and sizing off the window made the map overflow its own box on a desktop." },
         ] },
@@ -21861,6 +21865,9 @@
       try { localStorage.setItem("sfl_dec_tile", JSON.stringify(_decTile)); } catch (e) {}
       renderDecorations();
     };
+    // "all" = the finished 12-expansion band · "built" = only the expansions that exist today
+    let _decScope = "all";
+    window._decSetScope = function (v) { _decScope = v === "built" ? "built" : "all"; _decCustom = null; renderDecorations(); };
     let _decLayout = "bands";     // bands | scatter | text
     let _decWord = "SAJMONIUM";
     window._decSetLayout = function (v) { _decLayout = v; _decCustom = null; renderDecorations(); };
@@ -21909,8 +21916,14 @@
        */
       const ASC_FROM = 30, ASC_TO = 42;
       const { occ, owner, origins, items } = decOccupancy(farm, Math.max(expansions, ASC_TO));
+      /*
+       * Scope: plan the whole 12-expansion band, or only the expansions that actually exist.
+       * The full band answers "what does the finished thing need"; "built only" answers "what
+       * can I plant this evening", which is a different and usually smaller shopping list.
+       */
       const ascIdx = [];
-      for (let i = ASC_FROM; i < ASC_TO; i++) ascIdx.push(i);
+      const lastAsc = _decScope === "built" ? Math.min(expansions, ASC_TO) : ASC_TO;
+      for (let i = ASC_FROM; i < lastAsc; i++) ascIdx.push(i);
       const ascTiles = [];
       for (const i of ascIdx) {
         const b = decBox(origins[i]);
@@ -21979,6 +21992,14 @@
           ${_decCustom ? `<button onclick="_decUseGenerated()" style="font-size:0.5rem;padding:3px 10px;border:1px solid var(--border-brown);border-radius:4px;background:#241a10;color:var(--sunpetal);cursor:pointer">back to generated</button>` : ""}
         </div>
         ${!_decCustom && overflow ? `<div style="font-size:0.5rem;color:var(--red);margin-top:6px">⚠ ${per} of each needs ${_fmtNum(per * slots)} tiles but only ${_fmtNum(freeAsc.length)} are free — the last colours get cut off. Use ${autoPer} (or leave it on auto).</div>` : ""}
+        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:8px">
+          <span style="font-size:0.46rem;color:var(--text-dim)">plan for</span>
+          ${[["all", "whole band (12)"], ["built", "only what I have (" + Math.max(0, Math.min(12, expansions - ASC_FROM)) + ")"]].map(([v, l]) => {
+            const on = _decScope === v;
+            return `<button onclick="_decSetScope('${v}')" style="font-size:0.48rem;padding:2px 9px;border:1px solid var(--border-brown);border-radius:4px;cursor:pointer;background:${on ? "var(--sunpetal)" : "#241a10"};color:${on ? "#1a120a" : "var(--text-secondary)"};font-weight:${on ? "bold" : "normal"}">${l}</button>`;
+          }).join("")}
+          <span style="font-size:0.44rem;color:var(--text-dim)">${_decScope === "built" ? "shopping list and guide cover only the expansions that exist today" : "the finished layout, including expansions still to come"}</span>
+        </div>
         <div style="margin-top:8px;border:1px solid ${_decClear ? "var(--green)" : "var(--border-brown)"};border-radius:6px;background:${_decClear ? "#16190d" : "#161009"};padding:7px 9px">
           <label style="font-size:0.52rem;color:var(--text-secondary);display:flex;gap:6px;align-items:center;cursor:pointer">
             <input type="checkbox" ${_decClear ? "checked" : ""} onchange="_decToggleClear(this.checked)" style="cursor:pointer">
@@ -22117,21 +22138,31 @@
                 if (dy) parts.push(`${dy > 0 ? "↑" : "↓"}${Math.abs(dy)}`);
                 move = parts.join(" ") || "—";
               }
-              return `<span style="display:inline-block;min-width:82px;padding:1px 4px;margin:1px;border-radius:3px;background:${done ? "#16260f" : "#2b2113"};color:${done ? "var(--green)" : "#e8c85a"};font-size:0.47rem;white-space:nowrap">${i + 1}. ${move}${done ? " ✓" : ""}</span>`;
+              return `<span style="display:inline-block;min-width:104px;padding:3px 7px;border-radius:4px;background:${done ? "#1d3d12" : "#6b5410"};color:${done ? "#8ce06a" : "#ffd86b"};font-size:0.6rem;white-space:nowrap"><b>${i + 1}.</b> ${move}${done ? " ✓" : ""}</span>`;
             }).join("");
-            // map of the band only, this flower picked out
+            /*
+             * Guide map: the band at a size you can actually read, with a grid so tiles can be
+             * counted off, and each target square carrying its STEP NUMBER so the numbered walk
+             * below and the picture refer to the same thing.
+             */
+            const order = new Map(mine.map(([x, y], i) => [x + "," + y, i + 1]));
+            const GP = 20;
             let mini = "";
             for (let y = ascY1; y >= ascY0; y--) for (let x = ascX0; x <= ascX1; x++) {
               const k = x + "," + y;
               if (!ascSet.has(k)) continue;
-              const isMine = plan.get(k) === r.name;
-              const bg = isMine ? (placed(x, y) ? "var(--green)" : "#e8c85a") : (occ.has(k) ? "#3a2c18" : "#241a10");
-              mini += `<div title="${k}" style="grid-column:${x - ascX0 + 1};grid-row:${ascY1 - y + 1};background:${bg}"></div>`;
+              const step = order.get(k);
+              const done = step && placed(x, y);
+              const bg = step ? (done ? "#1d3d12" : "#6b5410") : (occ.has(k) ? "#3a2c18" : "#1a1710");
+              const label = step
+                ? `<span style="color:${done ? "#8ce06a" : "#ffd86b"};font-size:${GP > 15 ? 10 : 8}px;font-weight:bold;line-height:1">${step}</span>`
+                : "";
+              mini += `<div title="${k}${step ? " · step " + step : ""}" style="grid-column:${x - ascX0 + 1};grid-row:${ascY1 - y + 1};background:${bg};outline:1px solid rgba(255,255,255,0.07);outline-offset:-1px;display:flex;align-items:center;justify-content:center">${label}</div>`;
             }
-            const detail = `<tr style="display:none"><td colspan="4" style="padding:6px 8px 10px;background:#120d07">
-              <div style="font-size:0.47rem;color:var(--text-dim);margin-bottom:5px;line-height:1.6">Each step is the move from the <b>previous ${escHTML(r.name)}</b> — <b style="color:var(--green)">green</b> is already standing there, <b style="color:#e8c85a">amber</b> still to place. Follow them in order with the flower selected in your inventory.</div>
-              <div style="overflow-x:auto;margin-bottom:6px"><div style="display:grid;grid-template-columns:repeat(${ascX1 - ascX0 + 1},7px);grid-auto-rows:7px;width:max-content;background:#0d0b07">${mini}</div></div>
-              <div>${steps}</div></td></tr>`;
+            const detail = `<tr style="display:none"><td colspan="4" style="padding:8px 8px 12px;background:#120d07">
+              <div style="font-size:0.55rem;color:var(--text-secondary);margin-bottom:7px;line-height:1.7">Each step is the move from the <b>previous ${escHTML(r.name)}</b> — <b style="color:#8ce06a">green</b> is already standing there, <b style="color:#ffd86b">amber</b> still to place. The number in a square is its step below. Follow them in order with the flower selected in your inventory.</div>
+              <div style="overflow-x:auto;margin-bottom:8px"><div style="display:grid;grid-template-columns:repeat(${ascX1 - ascX0 + 1},${GP}px);grid-auto-rows:${GP}px;width:max-content;background:#0d0b07;border:1px solid var(--border-brown)">${mini}</div></div>
+              <div style="display:flex;flex-wrap:wrap;gap:3px">${steps}</div></td></tr>`;
             return `<tr onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'table-row':'none';" title="click for the placement guide" style="border-top:1px solid #20190f;cursor:pointer"><td style="padding:2px 6px 2px 0"><span style="color:var(--text-dim);font-size:0.45rem">▸</span> <img class="inline-icon" src="${getItemIcon(r.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.name)}</td><td style="text-align:right;padding:2px 6px">${r.n}</td><td style="text-align:right;padding:2px 6px;color:var(--text-dim)">${r.have}</td><td style="text-align:right;padding:2px 0;color:${r.missing ? "var(--red)" : "var(--green)"};font-weight:bold">${r.missing || "✓"}</td></tr>${detail}`;
           }).join("")}
         </table></div>
