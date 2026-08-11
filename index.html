@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.11</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.12</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,11 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.12", items: [
+          { t: "fix", text: "<b>Planting a flower no longer redraws the plan.</b> The layout was generated over <i>the tiles that are free right now</i>, and the colour balancing works on the tile set as a whole — so every flower you put in the ground removed a tile, shifted the balance, and the app then told you the flowers already planted belonged somewhere else. Measured on the real band: removing just <b>two</b> tiles moved between 2 and 32 flowers depending on the layout, and with the <i>plan the whole band</i> box unticked the ten flowers already standing went from matching to matching <b>none</b>. The layout is now a function of the band’s geometry and nothing else — what is standing on your farm only filters what gets <i>reported</i>, it never reaches the generator. Same tile, same flower, forever." },
+          { t: "fix", text: "<b>Flowers you have already planted correctly stop counting as obstacles.</b> They were listed under “needs clearing first” alongside the stone and iron nodes." },
+          { t: "feat", text: "<b>↺ RELOAD floats.</b> It follows the page instead of sitting at the top, so it is one click away whether you are looking at the map, a placement guide or the JSON." },
+        ] },
         { ver: "v5.11", items: [
           { t: "feat", text: "<b>The decorations page comes back exactly as you left it.</b> Reloading used to reset everything — the layout, the scope, the per-flower count, a pasted JSON, and above all the placement guide you had open. All of it is remembered now, including <b>which flowers are expanded</b> and roughly where you had scrolled to. Opening a guide no longer redraws the page either, so following a long walk stays put." },
           { t: "feat", text: "<b>RELOAD FARM button</b> at the top (and at the bottom). Plant a few flowers in the game, press it, and their squares turn green — the farm is re-fetched while your settings and open guides stay exactly as they were." },
@@ -21975,14 +21980,16 @@
         const b = decBox(origins[i]);
         for (let y = b.y0; y <= b.y1; y++) for (let x = b.x0; x <= b.x1; x++) ascTiles.push(x + "," + y);
       }
-      // Everything in the band is plantable once you clear it; what sits there now is a chore,
-      // not a blocker — the user's plan is to move those nodes onto expansions 1–30.
-      const blocked = ascTiles.filter((k) => occ.has(k));
-      const freeAsc = _decClear ? ascTiles : ascTiles.filter((k) => !occ.has(k));
-      const toMove = _decClear ? [...new Set(items.filter((it) => {
-        const own = owner.get(it.x + "," + it.y);
-        return own >= ASC_FROM && own < ASC_TO;
-      }).map((it) => it.name))] : [];
+      /*
+        * The layout is a function of the band's GEOMETRY and nothing else. It must never be
+        * generated over "the tiles that are free right now": the colour balancing works on the
+        * tile set as a whole, so planting a single flower would remove one tile, shift the
+        * balance, and tell you the flowers already in the ground belong somewhere else. What is
+        * standing on the farm only ever FILTERS what gets reported — it never reaches the
+        * generator. All 432 tiles, always.
+        */
+      const freeAsc = ascTiles;
+      const freeNow = ascTiles.filter((k) => !occ.has(k));
       const nSpecies = decSpecies().length;                 // 10
       const slots = nSpecies * decColors.length;           // 50 distinct flowers
       const autoPer = Math.floor(freeAsc.length / slots);   // biggest count that stays even
@@ -22009,9 +22016,17 @@
        * on right now — identical flowers on identical tiles, just restricted to expansions that
        * exist. The shopping list, the colour balance and the placement guide all read this one.
        */
-      const scoped = _decScope === "built"
-        ? new Map([...plan].filter(([k]) => (owner.get(k) ?? 99) < expansions))
-        : plan;
+      // Flowers you have already planted correctly are not in the way — they are done. Anything
+      // else sitting on a band tile is a node to move onto expansions 1–30.
+      const inTheWay = ascTiles.filter((k) => occ.has(k) && occ.get(k) !== plan.get(k));
+      const blocked = inTheWay;
+      const toMove = _decClear ? [...new Set(items.filter((it) => {
+        const own = owner.get(it.x + "," + it.y);
+        return own >= ASC_FROM && own < ASC_TO && occ.get(it.x + "," + it.y) !== plan.get(it.x + "," + it.y);
+      }).map((it) => it.name))] : [];
+      const scoped = new Map([...plan].filter(([k, v]) =>
+        (_decScope !== "built" || (owner.get(k) ?? 99) < expansions)
+        && (_decClear || !occ.has(k) || occ.get(k) === v)));
       const scopedTiles = [...scoped.keys()];
       const scopedSet = new Set(scopedTiles);
       // The guide draws only the area in scope, so it stays compact when you are planning
@@ -22039,14 +22054,13 @@
 
       let h = `<div class="header pixel-panel pixel-font"><h1>🌸 DECORATIONS</h1>
         <div class="farm-id">Farm #${escHTML(FARM_ID)} · ${expansions} expansions · ascension A${ascLevel}</div>
-        <div style="margin-top:7px"><button onclick="_decReload()" style="font-size:0.5rem;padding:4px 12px;border:1px solid var(--border-brown);border-radius:4px;background:#241a10;color:var(--sunpetal);cursor:pointer">↺ RELOAD FARM</button>
-        <span style="font-size:0.44rem;color:var(--text-dim);margin-left:7px">plant in the game, press this, and the tiles you did turn green</span></div></div>`;
+        <div style="font-size:0.44rem;color:var(--text-dim);margin-top:5px">plant in the game, press ↺ RELOAD, and the tiles you did turn green</div></div>`;
 
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px">
           ${[["ASCENSION BAND", "12 expansions", Math.max(0, Math.min(12, expansions - ASC_FROM)) + " built, " + Math.max(0, 12 - Math.max(0, expansions - ASC_FROM)) + " to come"],
              ["TILES THERE", _fmtNum(ascTiles.length), "12 × 36"],
-             ["PLANTABLE", _fmtNum(freeAsc.length), _decClear ? (blocked.length ? blocked.length + " need clearing first" : "nothing in the way") : blocked.length + " taken by nodes"],
+             ["PLANTABLE", _fmtNum(_decClear ? freeAsc.length : freeNow.length), _decClear ? (blocked.length ? blocked.length + " need clearing first" : "nothing in the way") : blocked.length + " taken by nodes"],
              ["PLAN USES", _fmtNum(plan.size), totalNeed ? Object.keys(need).length + " kinds" : "—"],
              ["STILL TO GROW", _fmtNum(totalMissing), totalMissing ? "not in inventory" : "all in hand ✓"]]
             .map(([k, v, n]) => `<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:7px 9px">
@@ -22074,7 +22088,7 @@
           </label>
           <div style="font-size:0.46rem;color:var(--text-dim);margin-top:4px;line-height:1.6">${_decClear
             ? `All <b>432</b> tiles of the 12 ascension expansions count as plantable.${toMove.length ? ` First clear what sits there now: <b>${escHTML(toMove.join(", "))}</b> — ${blocked.length} tiles across ${Math.max(0, Math.min(12, expansions - ASC_FROM))} built expansions.` : ""} The unbuilt ones are drawn with a dashed edge.`
-            : `Only tiles that are free <b>right now</b> are planned — ${_fmtNum(freeAsc.length)} of ${_fmtNum(ascTiles.length)}.`}</div>
+            : `The layout is unchanged, but only the tiles that are free <b>right now</b> are listed — ${_fmtNum(freeNow.length)} of ${_fmtNum(ascTiles.length)}.`}</div>
         </div>
         ${collisions.length || outside.length ? `<div style="font-size:0.5rem;color:var(--red);margin-top:7px">⚠ ${collisions.length} tile(s) in your layout sit on something already placed${outside.length ? `, ${outside.length} are outside any expansion you own` : ""}.</div>` : ""}
         ${_decErr ? `<div style="font-size:0.5rem;color:var(--red);margin-top:6px">${escHTML(_decErr)}</div>` : ""}
@@ -22266,7 +22280,13 @@
         </div>
       </div>`;
 
-      h += `<div class="footer"><button class="refresh-btn" onclick="_decReload()">RELOAD FARM</button></div>`;
+      /*
+        * You plant with the game in one window and this page in the other, scrolled to wherever
+        * the guide happens to be. A reload button that only exists at the top or the bottom is
+        * a scroll away every single time, so it is pinned to the viewport instead.
+        */
+      h += `<button onclick="_decReload()" title="re-read the farm — planted tiles turn green"
+        style="position:fixed;right:14px;bottom:14px;z-index:60;font-size:0.55rem;padding:9px 15px;border:1px solid var(--sunpetal);border-radius:8px;background:#241a10;color:var(--sunpetal);cursor:pointer;font-weight:bold;box-shadow:0 3px 12px rgba(0,0,0,0.6)" class="pixel-font">↺ RELOAD</button>`;
       app.innerHTML = h;
       _decFitMap();
       // Come back to where you were reading, but only on the first draw after a reload —
