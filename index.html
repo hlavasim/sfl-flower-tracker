@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.06</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.07</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.07", items: [
+          { t: "feat", text: "<b>New pattern: Rainbow ∿ from corner.</b> The band bends, and the corner sits in the <i>middle</i> of the ribbon rather than at an end — so a wave marching along it crosses the turn mid-stride and its slope appears to invert there. This variant measures outward from the corner in both directions and leans the diagonal the other way, so the two arms read as one symmetrical piece that meets cleanly in the bend. The original wave stays as it was." },
+          { t: "feat", text: "<b>Click a flower in WHAT TO GROW for a placement guide.</b> It opens a map of just the band with every tile of that flower marked — the ones already standing in green, the ones still to place in amber — and a numbered walk: each step gives the move from the previous tile of the same flower as <b>← → ↑ ↓ with a tile count</b>, not raw coordinates. Pick the flower in your inventory and follow the arrows." },
+        ] },
         { ver: "v5.06", items: [
           { t: "feat", text: "<b>Eight patterned layouts</b> — rainbow diagonal, rainbow bands, wide bands, checker blocks, wave, chevron, drops and diamonds — on top of the three that were already there. All hold every flower at roughly <b>8–9 of the 432 tiles</b> with <b>no two identical flowers and no two of the same species touching</b>." },
           { t: "feat", text: "<b>Patterns follow the band as a ribbon, not as a field.</b> The ascension expansions are six tiles wide the whole way — along the top and down the side — so anything with features bigger than six tiles reads as noise, which is what made the first attempts at drops and rings look like nothing at all. Every tile now carries ribbon coordinates (distance <i>along</i> the band, distance across it) derived from the expansion order, and the patterns are drawn in that space. Rainbow variants cycle the five colours several times over the band's length, so red turns up in several places rather than sitting in one block." },
@@ -21645,16 +21649,21 @@
     function decRibbon(ascIdx, origins) {
       const rib = new Map();
       const topY = Math.max(...ascIdx.map((i) => origins[i].y));
+      let horizontals = 0;
       ascIdx.forEach((i, n) => {
         const b = decBox(origins[i]);
         const horizontal = origins[i].y === topY;      // top run, otherwise the descending side
+        if (horizontal) horizontals = n + 1;
         for (let x = b.x0; x <= b.x1; x++) for (let y = b.y0; y <= b.y1; y++) {
           const local = horizontal ? (b.x1 - x) : (b.y1 - y);
           const across = horizontal ? (b.y1 - y) : (x - b.x0);
           rib.set(x + "," + y, [n * 6 + local, across]);
         }
       });
-      return rib;
+      // t of the turn. The corner sits in the MIDDLE of the ribbon, not at an end, so a pattern
+      // that just marches along t crosses it and its slope appears to flip there. Patterns that
+      // want to look right in the bend measure from here and run outwards both ways instead.
+      return { rib, corner: horizontals * 6 };
     }
     /*
      * Ribbon patterns — each maps (t, u) to one of the five colours. They are written to be
@@ -21667,6 +21676,19 @@
       "rainbow-wide": { label: "Rainbow ▬ wide", fn: (t) => Math.floor(t / 5) % 5 },
       "blocks": { label: "Checker ▩ blocks", fn: (t, u) => (Math.floor(t / 3) + Math.floor(u / 3) * 3) % 5 },
       "wave": { label: "Rainbow ∿ wave", fn: (t) => Math.floor((t + 2.5 * Math.sin(t / 5)) / 3) % 5 },
+      /*
+       * The wave again, but measured OUTWARD FROM THE CORNER instead of from one end, and with
+       * the diagonal leaning the other way. Marching along the ribbon means crossing the bend
+       * mid-pattern, where the slope appears to invert; mirroring about the corner makes the
+       * two arms read as one symmetrical piece that meets cleanly in the turn.
+       */
+      "wave-corner": {
+        label: "Rainbow ∿ from corner",
+        fn: (t, u, corner) => {
+          const d = Math.abs(t - corner);
+          return Math.floor((d + 2.5 * Math.sin(d / 5) + (5 - u)) / 3) % 5;
+        },
+      },
       "chevron": { label: "Chevron ⋀", fn: (t, u) => Math.floor((t + Math.abs(u - 2.5) * 2) / 3) % 5 },
       "drops": {
         label: "Drops ◍", fn: (t, u) => {
@@ -21682,14 +21704,14 @@
       },
     };
     /** Build a plan from a ribbon colour field: even the colours, then spread species inside each. */
-    function decPlanPattern(free, rib, fn) {
+    function decPlanPattern(free, ribbon, fn) {
       const species = decSpecies();
       const NS = species.length, NC = decColors.length;
       const xy = (k) => k.split(",").map(Number), key = (x, y) => x + "," + y;
       const col = new Map();
       for (const k of free) {
-        const p = rib.get(k) || [0, 0];
-        col.set(k, ((Math.floor(fn(p[0], p[1])) % NC) + NC) % NC);
+        const p = ribbon.rib.get(k) || [0, 0];
+        col.set(k, ((Math.floor(fn(p[0], p[1], ribbon.corner)) % NC) + NC) % NC);
       }
       // Even the five colours out, only ever moving a tile that already borders the under-used
       // colour — so the pattern's edges shift instead of holes appearing in its middle.
@@ -21897,6 +21919,14 @@
       const per = _decPer == null ? autoPer : _decPer;
       const overflow = per * slots > freeAsc.length;
       const ribbon = decRibbon(ascIdx, origins);
+      // Bounds of the band alone — the placement guide maps just this, not the whole island.
+      const ascSet = new Set(ascTiles);
+      let ascX0 = 1e9, ascX1 = -1e9, ascY0 = 1e9, ascY1 = -1e9;
+      for (const k of ascTiles) {
+        const [x, y] = k.split(",").map(Number);
+        ascX0 = Math.min(ascX0, x); ascX1 = Math.max(ascX1, x);
+        ascY0 = Math.min(ascY0, y); ascY1 = Math.max(ascY1, y);
+      }
       const plan = _decCustom
         || (decPatterns[_decLayout] ? decPlanPattern(freeAsc, ribbon, decPatterns[_decLayout].fn)
           : _decLayout === "scatter" ? decPlanScatter(freeAsc)
@@ -22035,7 +22065,46 @@
         <div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-bottom:6px">WHAT TO GROW <span style="color:var(--text-dim);font-size:0.45rem">· plan needs ${_fmtNum(totalNeed)}, you hold ${_fmtNum(totalNeed - totalMissing)}</span></div>
         <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:300px">
           <tr style="color:var(--text-dim);font-size:0.45rem"><td style="padding:0 6px 3px 0">flower</td><td style="text-align:right;padding:0 6px 3px">need</td><td style="text-align:right;padding:0 6px 3px">have</td><td style="text-align:right;padding:0 0 3px">to grow</td></tr>
-          ${rows.map((r) => `<tr style="border-top:1px solid #20190f"><td style="padding:2px 6px 2px 0"><img class="inline-icon" src="${getItemIcon(r.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.name)}</td><td style="text-align:right;padding:2px 6px">${r.n}</td><td style="text-align:right;padding:2px 6px;color:var(--text-dim)">${r.have}</td><td style="text-align:right;padding:2px 0;color:${r.missing ? "var(--red)" : "var(--green)"};font-weight:bold">${r.missing || "✓"}</td></tr>`).join("")}
+          ${rows.map((r) => {
+            /*
+             * Placement guide. Coordinates are useless when you are stood in the game with a
+             * flower in hand — what you need is "from the last one, three right and two up".
+             * So the tiles are walked in ribbon order and each step is expressed as a move from
+             * the previous tile of the SAME flower, with a map of just the band beside it.
+             */
+            const mine = [...plan.entries()].filter(([, v]) => v === r.name).map(([k]) => k.split(",").map(Number));
+            mine.sort((a, b) => {
+              const pa = ribbon.rib.get(a[0] + "," + a[1]) || [0, 0], pb = ribbon.rib.get(b[0] + "," + b[1]) || [0, 0];
+              return pa[0] - pb[0] || pa[1] - pb[1];
+            });
+            const placed = (x, y) => occ.get(x + "," + y) === r.name;
+            const steps = mine.map(([x, y], i) => {
+              const done = placed(x, y);
+              let move = "<span style=\"color:var(--text-dim)\">start</span>";
+              if (i > 0) {
+                const [px, py] = mine[i - 1], dx = x - px, dy = y - py;
+                const parts = [];
+                if (dx) parts.push(`${dx > 0 ? "→" : "←"}${Math.abs(dx)}`);
+                if (dy) parts.push(`${dy > 0 ? "↑" : "↓"}${Math.abs(dy)}`);
+                move = parts.join(" ") || "—";
+              }
+              return `<span style="display:inline-block;min-width:82px;padding:1px 4px;margin:1px;border-radius:3px;background:${done ? "#16260f" : "#2b2113"};color:${done ? "var(--green)" : "#e8c85a"};font-size:0.47rem;white-space:nowrap">${i + 1}. ${move}${done ? " ✓" : ""}</span>`;
+            }).join("");
+            // map of the band only, this flower picked out
+            let mini = "";
+            for (let y = ascY1; y >= ascY0; y--) for (let x = ascX0; x <= ascX1; x++) {
+              const k = x + "," + y;
+              if (!ascSet.has(k)) continue;
+              const isMine = plan.get(k) === r.name;
+              const bg = isMine ? (placed(x, y) ? "var(--green)" : "#e8c85a") : (occ.has(k) ? "#3a2c18" : "#241a10");
+              mini += `<div title="${k}" style="grid-column:${x - ascX0 + 1};grid-row:${ascY1 - y + 1};background:${bg}"></div>`;
+            }
+            const detail = `<tr style="display:none"><td colspan="4" style="padding:6px 8px 10px;background:#120d07">
+              <div style="font-size:0.47rem;color:var(--text-dim);margin-bottom:5px;line-height:1.6">Each step is the move from the <b>previous ${escHTML(r.name)}</b> — <b style="color:var(--green)">green</b> is already standing there, <b style="color:#e8c85a">amber</b> still to place. Follow them in order with the flower selected in your inventory.</div>
+              <div style="overflow-x:auto;margin-bottom:6px"><div style="display:grid;grid-template-columns:repeat(${ascX1 - ascX0 + 1},7px);grid-auto-rows:7px;width:max-content;background:#0d0b07">${mini}</div></div>
+              <div>${steps}</div></td></tr>`;
+            return `<tr onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'table-row':'none';" title="click for the placement guide" style="border-top:1px solid #20190f;cursor:pointer"><td style="padding:2px 6px 2px 0"><span style="color:var(--text-dim);font-size:0.45rem">▸</span> <img class="inline-icon" src="${getItemIcon(r.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.name)}</td><td style="text-align:right;padding:2px 6px">${r.n}</td><td style="text-align:right;padding:2px 6px;color:var(--text-dim)">${r.have}</td><td style="text-align:right;padding:2px 0;color:${r.missing ? "var(--red)" : "var(--green)"};font-weight:bold">${r.missing || "✓"}</td></tr>${detail}`;
+          }).join("")}
         </table></div>
       </div>`;
 
