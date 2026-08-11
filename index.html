@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.10</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.11</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.11", items: [
+          { t: "feat", text: "<b>The decorations page comes back exactly as you left it.</b> Reloading used to reset everything — the layout, the scope, the per-flower count, a pasted JSON, and above all the placement guide you had open. All of it is remembered now, including <b>which flowers are expanded</b> and roughly where you had scrolled to. Opening a guide no longer redraws the page either, so following a long walk stays put." },
+          { t: "feat", text: "<b>RELOAD FARM button</b> at the top (and at the bottom). Plant a few flowers in the game, press it, and their squares turn green — the farm is re-fetched while your settings and open guides stay exactly as they were." },
+        ] },
         { ver: "v5.10", items: [
           { t: "fix", text: "<b>The layout no longer changes when you switch scope.</b> Picking <b>only what I own</b> was regenerating the pattern on the smaller area, so it came out as a different design — every flower you had already planted would have been in the wrong place once the next expansion unlocked. The layout is now always computed across the finished 12-expansion band, and the scope switch only decides how much of it is <b>shown and counted</b>. The same tile always gets the same flower; unlocking an expansion just adds tiles to plant, it never moves the ones already done." },
         ] },
@@ -21859,7 +21863,26 @@
       return plan;
     }
 
-    let _decData = null, _decErr = null, _decLoading = false, _decCustom = null, _decPer = null, _decClear = true;
+    let _decData = null, _decErr = null, _decLoading = false;
+    /*
+     * Everything you set on this page survives a reload — the layout, the scope, the custom
+     * JSON and which flowers you have open. Planting is done with the page open beside the
+     * game, so a refresh must not throw away the guide you were following.
+     */
+    const _decSaved = (() => { try { return JSON.parse(localStorage.getItem("sfl_dec_ui")) || {}; } catch (e) { return {}; } })();
+    let _decCustom = _decSaved.custom ? new Map(Object.entries(_decSaved.custom)) : null;
+    let _decPer = _decSaved.per == null ? null : _decSaved.per;
+    let _decClear = _decSaved.clear !== false;
+    let _decOpen = new Set(Array.isArray(_decSaved.open) ? _decSaved.open : []);
+    function _decSave() {
+      try {
+        localStorage.setItem("sfl_dec_ui", JSON.stringify({
+          scope: _decScope, layout: _decLayout, word: _decWord, clear: _decClear, per: _decPer,
+          open: [..._decOpen], custom: _decCustom ? Object.fromEntries(_decCustom) : null,
+          scroll: _decSaved.scroll || 0,
+        }));
+      } catch (e) {}
+    }
     // Map zoom. "fit" sizes the tiles so the island spans the viewport width; a number is a
     // fixed tile size in px. Persisted so the map opens the way you left it.
     let _decTile = (() => { try { return JSON.parse(localStorage.getItem("sfl_dec_tile")) ?? "fit"; } catch (e) { return "fit"; } })();
@@ -21869,19 +21892,32 @@
       renderDecorations();
     };
     // "all" = the finished 12-expansion band · "built" = only the expansions that exist today
-    let _decScope = "all";
-    window._decSetScope = function (v) { _decScope = v === "built" ? "built" : "all"; _decCustom = null; renderDecorations(); };
-    let _decLayout = "bands";     // bands | scatter | text
-    let _decWord = "SAJMONIUM";
-    window._decSetLayout = function (v) { _decLayout = v; _decCustom = null; renderDecorations(); };
-    window._decSetWord = function (v) { _decWord = (v || "").toUpperCase().replace(/[^SAJMONIU]/g, "").slice(0, 10) || "SAJMONIUM"; _decCustom = null; renderDecorations(); };
-    window._decToggleClear = function (on) { _decClear = !!on; renderDecorations(); };
-    window._decSetPer = function (v) { const n = parseInt(v); _decPer = (v === "" || !isFinite(n)) ? null : Math.max(0, Math.min(40, n)); renderDecorations(); };
+    let _decScope = _decSaved.scope === "built" ? "built" : "all";
+    window._decSetScope = function (v) { _decScope = v === "built" ? "built" : "all"; _decCustom = null; _decSave(); renderDecorations(); };
+    let _decLayout = _decSaved.layout || "bands";     // bands | scatter | text
+    let _decWord = _decSaved.word || "SAJMONIUM";
+    window._decSetLayout = function (v) { _decLayout = v; _decCustom = null; _decSave(); renderDecorations(); };
+    window._decSetWord = function (v) { _decWord = (v || "").toUpperCase().replace(/[^SAJMONIU]/g, "").slice(0, 10) || "SAJMONIUM"; _decCustom = null; _decSave(); renderDecorations(); };
+    window._decToggleClear = function (on) { _decClear = !!on; _decSave(); renderDecorations(); };
+    window._decSetPer = function (v) { const n = parseInt(v); _decPer = (v === "" || !isFinite(n)) ? null : Math.max(0, Math.min(40, n)); _decSave(); renderDecorations(); };
+    // Opening a flower's guide only flips its row, so following a long walk never re-renders
+    // the page under you. The set is stored, so a reload comes back with it open.
+    window._decToggleRow = function (tr) {
+      const name = tr.dataset.flower;
+      const d = tr.nextElementSibling, on = d.style.display === "none";
+      d.style.display = on ? "table-row" : "none";
+      tr.querySelector(".dec-caret").textContent = on ? "▾" : "▸";
+      if (on) _decOpen.add(name); else _decOpen.delete(name);
+      _decSave();
+    };
+    // Re-fetches the farm so tiles you have just planted turn green, keeping every setting
+    // and every open guide exactly where it was.
+    window._decReload = function () { _decData = null; _decErr = null; renderDecorations(); };
     window._decApplyJson = function () {
       const el = document.getElementById("dec-json");
       if (!el) return;
       const raw = (el.value || "").trim();
-      if (!raw) { _decCustom = null; renderDecorations(); return; }
+      if (!raw) { _decCustom = null; _decSave(); renderDecorations(); return; }
       try {
         const parsed = JSON.parse(raw);
         const m = new Map();
@@ -21889,9 +21925,10 @@
         if (!m.size) throw new Error("no valid \"x,y\": \"Flower Name\" entries");
         _decCustom = m; _decErr = null;
       } catch (e) { _decErr = "JSON: " + e.message; }
+      _decSave();
       renderDecorations();
     };
-    window._decUseGenerated = function () { _decCustom = null; renderDecorations(); };
+    window._decUseGenerated = function () { _decCustom = null; _decSave(); renderDecorations(); };
 
     async function renderDecorations() {
       const app = document.getElementById("app");
@@ -22001,7 +22038,9 @@
       const outside = [...plan.keys()].filter((k) => !owner.has(k));
 
       let h = `<div class="header pixel-panel pixel-font"><h1>🌸 DECORATIONS</h1>
-        <div class="farm-id">Farm #${escHTML(FARM_ID)} · ${expansions} expansions · ascension A${ascLevel}</div></div>`;
+        <div class="farm-id">Farm #${escHTML(FARM_ID)} · ${expansions} expansions · ascension A${ascLevel}</div>
+        <div style="margin-top:7px"><button onclick="_decReload()" style="font-size:0.5rem;padding:4px 12px;border:1px solid var(--border-brown);border-radius:4px;background:#241a10;color:var(--sunpetal);cursor:pointer">↺ RELOAD FARM</button>
+        <span style="font-size:0.44rem;color:var(--text-dim);margin-left:7px">plant in the game, press this, and the tiles you did turn green</span></div></div>`;
 
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px">
@@ -22187,11 +22226,12 @@
                 : "";
               mini += `<div title="${k}${step ? " · step " + step : ""}" style="grid-column:${x - gX0 + 1};grid-row:${gY1 - y + 1};background:${bg};outline:1px solid rgba(255,255,255,0.07);outline-offset:-1px;display:flex;align-items:center;justify-content:center">${label}</div>`;
             }
-            const detail = `<tr style="display:none"><td colspan="4" style="padding:8px 8px 12px;background:#120d07">
+            const isOpen = _decOpen.has(r.name);
+            const detail = `<tr style="display:${isOpen ? "table-row" : "none"}"><td colspan="4" style="padding:8px 8px 12px;background:#120d07">
               <div style="font-size:0.55rem;color:var(--text-secondary);margin-bottom:7px;line-height:1.7">Each step is the move from the <b>previous ${escHTML(r.name)}</b> — <b style="color:#8ce06a">green</b> is already standing there, <b style="color:#ffd86b">amber</b> still to place. The number in a square is its step below. Follow them in order with the flower selected in your inventory.</div>
               <div style="overflow-x:auto;margin-bottom:8px"><div style="display:grid;grid-template-columns:repeat(${gX1 - gX0 + 1},${GP}px);grid-auto-rows:${GP}px;width:max-content;background:#0d0b07;border:1px solid var(--border-brown)">${mini}</div></div>
               <div style="display:flex;flex-wrap:wrap;gap:3px">${steps}</div></td></tr>`;
-            return `<tr onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'table-row':'none';" title="click for the placement guide" style="border-top:1px solid #20190f;cursor:pointer"><td style="padding:2px 6px 2px 0"><span style="color:var(--text-dim);font-size:0.45rem">▸</span> <img class="inline-icon" src="${getItemIcon(r.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.name)}</td><td style="text-align:right;padding:2px 6px">${r.n}</td><td style="text-align:right;padding:2px 6px;color:var(--text-dim)">${r.have}</td><td style="text-align:right;padding:2px 0;color:${r.missing ? "var(--red)" : "var(--green)"};font-weight:bold">${r.missing || "✓"}</td></tr>${detail}`;
+            return `<tr data-flower="${escHTML(r.name)}" onclick="_decToggleRow(this)" title="click for the placement guide" style="border-top:1px solid #20190f;cursor:pointer"><td style="padding:2px 6px 2px 0"><span class="dec-caret" style="color:var(--text-dim);font-size:0.45rem">${isOpen ? "▾" : "▸"}</span> <img class="inline-icon" src="${getItemIcon(r.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.name)}</td><td style="text-align:right;padding:2px 6px">${r.n}</td><td style="text-align:right;padding:2px 6px;color:var(--text-dim)">${r.have}</td><td style="text-align:right;padding:2px 0;color:${r.missing ? "var(--red)" : "var(--green)"};font-weight:bold">${r.missing || "✓"}</td></tr>${detail}`;
           }).join("")}
         </table></div>
       </div>`;
@@ -22226,10 +22266,38 @@
         </div>
       </div>`;
 
-      h += `<div class="footer"><button class="refresh-btn" onclick="_decData=null;_decErr=null;renderDecorations()">REFRESH</button></div>`;
+      h += `<div class="footer"><button class="refresh-btn" onclick="_decReload()">RELOAD FARM</button></div>`;
       app.innerHTML = h;
       _decFitMap();
+      // Come back to where you were reading, but only on the first draw after a reload —
+      // later re-renders are your own clicks and should not yank the page around.
+      if (!_decRestored) {
+        _decRestored = true;
+        const y = parseInt(_decSaved.scroll) || 0;
+        // The page keeps growing for a moment as the flower icons arrive, so one scrollTo
+        // lands short. Re-aim a few times, and stop the instant you scroll yourself.
+        if (y > 0) {
+          _decRestoring = true;
+          for (const t of [0, 250, 700, 1400]) setTimeout(() => { if (_decRestoring) window.scrollTo(0, y); }, t);
+          setTimeout(() => { _decRestoring = false; }, 1500);
+          for (const ev of ["wheel", "touchmove", "keydown"]) {
+            window.addEventListener(ev, () => { _decRestoring = false; }, { once: true, passive: true });
+          }
+        }
+      }
     }
+    let _decRestored = false, _decRestoring = false;
+    // The map is tall and the guide sits below it, so a reload that dumps you at the top
+    // costs a scroll every time. Remember roughly where you were.
+    let _decScrollT = null;
+    window.addEventListener("scroll", () => {
+      if (getPage() !== "decorations" || _decRestoring || _decScrollT) return;
+      _decScrollT = setTimeout(() => {
+        _decScrollT = null;
+        _decSaved.scroll = Math.round(window.scrollY);
+        _decSave();
+      }, 400);
+    });
     /** Size the map's tiles to the container it actually sits in (only in "fit" mode). */
     function _decFitMap() {
       if (_decTile !== "fit") return;
