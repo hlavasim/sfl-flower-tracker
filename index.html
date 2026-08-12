@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.14</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.15</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,11 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.15", items: [
+          { t: "fix", text: "<b>Yakkamon re-cut the airdrop ladder — and it is a downgrade, not an upgrade.</b> The table on the YAKKAMON page is the new one (12 Aug 2026) and says what actually moved. Only the <b>top 10</b> gained: #1–3 now get a Legendary A <i>and</i> a Legendary B, #4–10 a Legendary A <i>and</i> a Legendary C. Everything from <b>#51 down dropped a tier</b> — Legendary A used to run to #100 and now stops at #50, Legendary B ran to #500 and now stops at #250, and the old #501–1,000 Legendary C band is now plain Rare A. The line that decides whether you get an NFT <i>at all</i> did <b>not</b> move — it was rank 5,000 before and it is rank 5,000 now. Total supply is stated as <b>5,010 NFTs across 5,000 trainers</b>, never minted again." },
+          { t: "feat", text: "<b>The live board now shows the tier boundaries, not round numbers.</b> #1 / #3 / #4 / #10 / #11 / #50 / #51 / #100 — the only ranks where one more point changes what you win — each labelled with the egg it buys. It also calls out how thin the top cut is: <b>#50 and #51 are a few hundred points apart</b>, which at the current multiplier is a couple of hundred FLOWER between the best egg and the next one down." },
+          { t: "fix", text: "<b>The leaderboard API really is capped at 100.</b> Re-tested with <code>size</code>, <code>offset</code>, <code>page</code>, <code>from</code>, <code>skip</code> and <code>cursor</code> — every one returns ranks 1–100. So the cut-offs that decide the airdrop (#250, #500, #2,000 and above all <b>#5,000</b>, where the eggs stop) genuinely cannot be read from outside, and the page now says so instead of implying the old #1,000 / #5,000 lines." },
+        ] },
         { ver: "v5.14", items: [
           { t: "feat", text: "<b>Finished flowers go green.</b> WHAT TO GROW has a <b>planted</b> column counting the tiles of that flower already standing where the plan wants them. Once every tile of a flower is done its whole row turns green, reads <b>done</b> and drops to the bottom of the list, so what is left to do stays at the top. The header keeps the running total — <i>plan needs 432, 17 already planted (1 of 50 flowers finished), 49 still to grow</i>." },
           { t: "fix", text: "<b>The shopping list stops asking for flowers you have already planted.</b> A flower leaves your inventory the moment you place it, but <i>to grow</i> was still <i>need − inventory</i> — so planting made the list demand <i>more</i>, not less. It is now <i>need − planted − inventory</i>." },
@@ -20943,15 +20948,35 @@
         { what: "Ronin free mint", pts: "+250", per: "mint", note: "1 per account, 1 Oct 2026" },
         { what: "$FLOWER deposit", pts: "×3.0, −0.2/week", per: "FLOWER", note: "by far the biggest source" },
       ],
+      /*
+       * Re-cut by Yakkamon on 12 Aug 2026. Read the change carefully before treating it as
+       * good news: only the top 10 gained (they now get a SECOND egg) and everyone from #51
+       * down moved a tier LOWER than the old ladder gave them. Note what did NOT move — the
+       * line where the NFTs stop is rank 5,000, exactly as before; the old ladder gave
+       * 5,001–20,000 early access with no NFT too, the new table just says it bluntly.
+       * Total supply is stated as 5,010 NFTs across 5,000 trainers.
+       * The wave column is the OLD wave bands (1–1,000 / 1,001–5,000 / 5,001–100,000), which
+       * this table did not restate — where an egg band straddles two waves it says so.
+       */
       ranks: [
-        { r: "1 – 100", rew: "Legendary monster A", wave: "Wave 1", nft: true },
-        { r: "101 – 500", rew: "Legendary monster B", wave: "Wave 1", nft: true },
-        { r: "501 – 1 000", rew: "Legendary monster C", wave: "Wave 1", nft: true },
-        { r: "1 001 – 5 000", rew: "Rare monster A", wave: "Wave 2", nft: true },
-        { r: "5 001 – 20 000", rew: "Early access", wave: "Wave 3", nft: false },
-        { r: "20 001 – 50 000", rew: "Early access", wave: "Wave 4", nft: false },
-        { r: "50 001 – 100 000", rew: "Early access", wave: "Wave 5", nft: false },
-        { r: "100 001 +", rew: "nothing — no early access", wave: "—", nft: false },
+        { r: "1 – 3", rew: "Legendary A + Legendary B", wave: "Wave 1", nft: true },
+        { r: "4 – 10", rew: "Legendary A + Legendary C", wave: "Wave 1", nft: true },
+        { r: "11 – 50", rew: "Legendary A", wave: "Wave 1", nft: true },
+        { r: "51 – 250", rew: "Legendary B", wave: "Wave 1", nft: true },
+        { r: "251 – 500", rew: "Legendary C", wave: "Wave 1", nft: true },
+        { r: "501 – 2 000", rew: "Rare A", wave: "Wave 1–2", nft: true },
+        { r: "2 001 – 5 000", rew: "Rare B", wave: "Wave 2", nft: true },
+        { r: "5 001 +", rew: "no egg at all — early access only", wave: "Wave 3–5", nft: false },
+        { r: "100 001 +", rew: "nothing — not even early access", wave: "—", nft: false },
+      ],
+      // What the previous ladder (read 8 Aug) gave the same ranks, so the page can show what
+      // actually moved rather than just asserting "they changed it".
+      ranksWas: [
+        { r: "1 – 100", rew: "Legendary A" },
+        { r: "101 – 500", rew: "Legendary B" },
+        { r: "501 – 1 000", rew: "Legendary C" },
+        { r: "1 001 – 5 000", rew: "Rare A" },
+        { r: "5 001 – 100 000", rew: "early access only" },
       ],
       // The WEEKLY reward track — resets every 7 days, unclaimed tiers are lost ("each new
       // reward list replaces the last"). Read off the live site 10 Aug 2026.
@@ -21148,13 +21173,21 @@
           const e = bd.entries, at = (r) => (e.find(x => x.rank === r) || {}).points;
           const mult = ykMult(Math.max(1, nowWeek));
           const flowerFor = (pts) => pts ? Math.ceil(pts / mult) : null;
+          /*
+           * The rows shown are the egg-tier boundaries that fall inside the public top 100,
+           * not round numbers — those are the only ranks where a point actually changes what
+           * you win. #250 / #500 / #2,000 / #5,000 matter too but are not public.
+           */
+          const bounds = [[1, "Legendary A + B"], [3, "last A + B"], [4, "Legendary A + C"], [10, "last A + C"], [11, "Legendary A"], [50, "last Legendary A"], [51, "Legendary B"], [100, "Legendary B"]];
+          const gap50 = (at(50) || 0) - (at(51) || 0);
           h += `<div style="margin-top:10px;border-top:1px solid #20190f;padding-top:8px">
             <div style="font-size:0.5rem;color:var(--lily);margin-bottom:4px"><b>LIVE LEADERBOARD</b> — ${fmt(bd.playerCount)} players with points, top ${bd.size} is public</div>
-            <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:300px">
-              <tr style="color:var(--text-dim);font-size:0.46rem"><td style="padding:0 6px 3px 0">rank</td><td style="text-align:right;padding:0 6px 3px">points now</td><td style="text-align:right;padding:0 0 3px">≈ FLOWER to match</td></tr>
-              ${[1, 10, 25, 50, 100].map(r => { const p = at(r); return `<tr style="border-top:1px solid #20190f"><td style="padding:2px 6px 2px 0">#${r}</td><td style="text-align:right;padding:2px 6px;color:var(--sunpetal);font-weight:bold">${p ? fmt(p) : "—"}</td><td style="text-align:right;padding:2px 0;color:var(--green)">${p ? fmt(flowerFor(p)) + " " + sflIcon() : "—"}</td></tr>`; }).join("")}
+            <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:340px">
+              <tr style="color:var(--text-dim);font-size:0.46rem"><td style="padding:0 6px 3px 0">rank</td><td style="padding:0 6px 3px">wins</td><td style="text-align:right;padding:0 6px 3px">points now</td><td style="text-align:right;padding:0 0 3px">≈ FLOWER to match</td></tr>
+              ${bounds.map(([r, what]) => { const p = at(r); return `<tr style="border-top:1px solid #20190f"><td style="padding:2px 6px 2px 0">#${r}</td><td style="padding:2px 6px;color:var(--text-dim);font-size:0.46rem;white-space:nowrap">${what}</td><td style="text-align:right;padding:2px 6px;color:var(--sunpetal);font-weight:bold">${p ? fmt(p) : "—"}</td><td style="text-align:right;padding:2px 0;color:var(--green)">${p ? fmt(flowerFor(p)) + " " + sflIcon() : "—"}</td></tr>`; }).join("")}
             </table></div>
-            <div style="font-size:0.46rem;color:var(--text-dim);margin-top:5px;line-height:1.6">Right column = how much FLOWER would buy that many points <b>today</b> at the current ${mult.toFixed(1)}× multiplier (bulk bonus excluded, so it is an upper estimate). <b style="color:#e8a060">Careful though:</b> deposits open ${open ? "as of now" : "10 Aug"} — once they do these numbers jump, because today's top is free-activity points only. Treat it as a <b>floor</b>, not a target. Only the top 100 is public, so the top 1,000 / 5,000 cut-offs (where the NFTs are) are not visible from here.</div>
+            ${gap50 > 0 ? `<div style="font-size:0.46rem;color:#e8a060;margin-top:5px;line-height:1.6"><b>The Legendary A cut-off is razor thin.</b> #50 and #51 are <b>${fmt(gap50)} points</b> apart — about <b>${fmt(Math.ceil(gap50 / mult))} ${sflIcon()}</b> at today's multiplier. That is the whole difference between the top egg and the one below it.</div>` : ""}
+            <div style="font-size:0.46rem;color:var(--text-dim);margin-top:5px;line-height:1.6">FLOWER column = how much would buy that many points <b>today</b> at the current ${mult.toFixed(1)}× multiplier (bulk bonus excluded, so it is an upper estimate). <b style="color:#e8a060">Careful though:</b> deposits ${open ? "are open" : "open 10 Aug"} and these numbers only go up. Treat it as a <b>floor</b>, not a target. Only the top 100 is public — the <b>#250 / #500 / #2,000 / #5,000</b> cut-offs, including the one where the eggs stop entirely, are not visible from here. The API caps at 100 however you page it.</div>
           </div>`;
         }
       } else if (_ykLiveErr) {
@@ -21393,12 +21426,13 @@
       // ── Rank rewards ───────────────────────────────────────────────
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
         <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">REWARDS BY RANK (points)</div>
-        <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Decided <b>purely on points rank</b>, not on when you registered. <b>Only the top 100,000</b> get early access. Officially the rank is revealed at the airdrop (Q4 2026) — though the live board above shows the top 100 today.</div>
+        <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Decided <b>purely on points rank</b>, not on when you registered. <b>Only the top 5,000</b> get an egg — <b>5,010 NFTs across 5,000 trainers, and never minted again</b>. Officially the rank is revealed at the airdrop (Q4 2026) — though the live board above shows the top 100 today.</div>
         <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.55rem;min-width:340px">
           <tr style="color:var(--text-dim);font-size:0.47rem"><td style="padding:0 6px 4px 0">rank</td><td style="padding:0 6px 4px">reward</td><td style="padding:0 0 4px">wave</td></tr>
           ${YK.ranks.map(r => `<tr style="border-top:1px solid #20190f"><td style="padding:3px 6px 3px 0;white-space:nowrap">${r.r}</td><td style="padding:3px 6px;color:${r.nft ? "var(--green)" : "var(--text-secondary)"}">${r.nft ? "🏆 " : ""}${r.rew}</td><td style="padding:3px 0;color:var(--text-dim);font-size:0.47rem;white-space:nowrap">${r.wave}</td></tr>`).join("")}
         </table></div>
-        <div style="font-size:0.47rem;color:var(--text-dim);margin-top:7px;line-height:1.7"><b>NFT airdrop:</b> the top 5,000 get a Monster NFT, the <b>top 1,000 a Legendary Monster NFT</b> — &ldquo;the rarest tier we will ever mint&rdquo;. Separately there is a <b>free mint</b> on 1 Oct 2026 on Ronin: 10,000 NFTs free (gas only) with <b>5 legendaries</b> seeded inside, 1 mint per account, blind — revealed at launch. You must be verified on the whitelist before 1 Oct.</div>
+        <div style="font-size:0.47rem;color:#e8a060;margin-top:7px;line-height:1.7"><b>⚠ This ladder was re-cut on 12 Aug 2026, and it is not the upgrade it looks like.</b> Only the <b>top 10</b> gained — they now get a <b>second</b> egg. Everything from <b>#51 down moved a tier lower</b>. What did <b>not</b> move is the line that decides whether you get an NFT at all: it was rank <b>5,000</b> before and it is rank <b>5,000</b> now — the old ladder also gave 5,001–20,000 early access and no NFT, the new table just says so bluntly. What the same ranks got before: ${YK.ranksWas.map(o => `${o.r} → ${o.rew}`).join(" · ")}.</div>
+        <div style="font-size:0.47rem;color:var(--text-dim);margin-top:7px;line-height:1.7"><b>NFT airdrop:</b> only the top <b>5,000</b> get a Monster NFT at all, and only the top <b>500</b> get a Legendary — &ldquo;the rarest tier we will ever mint&rdquo;. Separately there is a <b>free mint</b> on 1 Oct 2026 on Ronin: 10,000 NFTs free (gas only) with <b>5 legendaries</b> seeded inside, 1 mint per account, blind — revealed at launch. You must be verified on the whitelist before 1 Oct.</div>
       </div>`;
 
       // ── Sign-up eggs ───────────────────────────────────────────────
@@ -21418,7 +21452,7 @@
           <b style="color:var(--green)">1. This is not a purchase, it is a lock-up.</b> You get the FLOWER back — the docs say explicitly <b>no withdrawal tax, no lock-up, no penalty</b>. You are not buying points, you are parking your FLOWER for a while.
           <div style="margin-top:8px"><b style="color:var(--red)">2. But you cannot withdraw during pre-registration.</b> Withdrawals are <b>not available</b> until you get access (Q4 2026), and after launch there are <b>daily % limits</b> &ldquo;for economic and security reasons&rdquo;. So from 10 Aug to Q4 2026 you cannot touch that money — realistically <b>2–5 months</b>.</div>
           <div style="margin-top:8px"><b style="color:#e8a060">3. The real cost is forgone yield.</b> That same FLOWER put into your farm earns something. The calculator above prices it: at a ${_ykRoiDays}-day payback and ${_ykLockDays} days locked, ${fmt(_ykAmount)} FLOWER costs you <b style="color:var(--red)">${fmt(forgone, 1)} FLOWER</b> of income you did not make. On top of that sits smart-contract and counterparty risk.</div>
-          <div style="margin-top:8px"><b style="color:var(--lily)">4. The leaderboard is effectively a deposit ranking.</b> You cannot catch up for free: ~${freeDays} days of free activity yields roughly <b>${fmt(freeTotal)} points</b> (daily egg ${freeDaily}×${freeDays} + Discord/X/wallet + free mint), while <b>${fmt(eq.flower)} FLOWER in week 1 = ${fmt(eq.pts + eq.bonus)} points</b>. One mid-sized deposit therefore beats <b>all</b> of your free activity for the entire period. Anyone aiming for the top 1,000 (Legendary NFT) will likely need a deposit in the thousands of FLOWER.</div>
+          <div style="margin-top:8px"><b style="color:var(--lily)">4. The leaderboard is effectively a deposit ranking.</b> You cannot catch up for free: ~${freeDays} days of free activity yields roughly <b>${fmt(freeTotal)} points</b> (daily egg ${freeDaily}×${freeDays} + Discord/X/wallet + free mint), while <b>${fmt(eq.flower)} FLOWER in week 1 = ${fmt(eq.pts + eq.bonus)} points</b>. One mid-sized deposit therefore beats <b>all</b> of your free activity for the entire period. And the live board prices the top end exactly: a <b>Legendary</b> now stops at rank <b>500</b>, and rank 100 alone already costs about <b>5,000 ${sflIcon()}</b> — so a Legendary is a four-figure FLOWER deposit, not a grind.</div>
           <div style="margin-top:8px"><b>5. What nobody knows.</b> How many points any given rank will take once the whales are done, what a Legendary Monster NFT will fetch on the market, and whether Yakkamon lands at all. You are buying an <b>option</b>, not a known return.</div>
           <div style="margin-top:10px;padding:8px 10px;background:#161009;border:1px solid var(--border-brown);border-radius:6px">
             <b style="color:var(--sunpetal)">Decision rule:</b> a deposit makes sense when (a) you are just holding that FLOWER anyway and have no better use for it on the farm, (b) you can live without touching it for 2–5 months, and (c) the NFT + early access is worth at least <b style="color:var(--red)">${fmt(forgone, 1)} FLOWER</b> to you (your forgone yield). If there are short-payback purchases on your farm you have not made yet, <b>those almost certainly win</b> — they have a known return, this is a lottery ticket.
