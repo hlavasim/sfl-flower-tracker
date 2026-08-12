@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.23</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.24</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.24", items: [
+          { t: "fix", text: "<b>The chart came back — v5.23 blanked it.</b> Moving the history to Postgres shipped ahead of its migration, so the endpoint 500s with <i>relation does not exist</i>; and the same change had deleted the inline builds on the argument that a copy in the page would drift from the table. With no table and no fallback there was nothing left to draw. The argument was right about a <b>growing</b> copy and wrong about this one: those four builds are finished history, they can never gain a row, and the migration inserts the identical values — so they are merged by build timestamp and dedupe against the table the moment it exists. Bedrock stays in the page, growth stays in the table, and a test now checks the two copies agree row for row so neither can rot." },
+        ] },
         { ver: "v5.23", items: [
           { t: "feat", text: "<b>The tier history is recorded in Postgres, by a cron, unattended.</b> It was a constant in the page plus whatever this browser had seen — so it only grew when someone had the page open, and was different on every device. Now it is the <code>yk_leaderboard</code> table, keyed on <b>the build’s own timestamp</b>, and a GitHub Actions cron records every build 10 minutes after it lands. Because the row is keyed on the build rather than on when it was fetched, the cron, a page visit and a manual retry can all fire at the same build and only the first writes — so opening this page still fills any window the cron missed, without ever double-counting. The endpoint does the fetching server-side, which is why the scheduled half is a <b>bare curl with no credentials</b>. Backfilled with the four builds gathered before it existed; the two whose timestamps were reconstructed stay flagged." },
         ] },
@@ -21142,15 +21145,32 @@
      * the nearest slot on the 4-hour grid. Flagged so a reconstruction is never mistaken for an
      * observation.
      */
+    /*
+     * FROZEN backfill — the builds recorded before any collector existed.
+     *
+     * This was deleted when the history moved to Postgres, on the argument that a copy of the
+     * data in the page would drift from the table. That argument holds for a GROWING copy and
+     * not for this one: these four builds are finished history, they will never gain a row, and
+     * the migration inserts the identical values — merging by build timestamp dedupes them. What
+     * deleting it actually bought was a blank chart the moment the endpoint was unavailable,
+     * which is exactly what shipped. Bedrock stays in the page; growth belongs in the table.
+     */
+    const ykBoardBackfill = [
+      { t: Date.UTC(2026, 7, 11, 9, 0, 57), players: 41305, p3: 380213, p10: 79075, p50: 18229, p100: 17176, derived: true },
+      { t: Date.UTC(2026, 7, 11, 17, 0, 57), players: 43330, p3: 380213, p10: 129117, p50: 19016, p100: 17213, derived: true },
+      { t: Date.UTC(2026, 7, 12, 5, 0, 57), players: 44811, p3: 380213, p10: 129126, p50: 19812, p100: 17226, derived: false },
+      { t: Date.UTC(2026, 7, 12, 9, 0, 57), players: 45291, p3: 380252, p10: 129126, p50: 20592, p100: 17251, derived: false },
+    ];
     const YK_HIST_KEY = "sfl_yk_board_hist";
-    let _ykHistFile = null;                            // data/yk-leaderboard.json, once fetched
+    let _ykHistFile = null;                            // yk_leaderboard rows, once fetched
     function _ykHistLoad() {
       let saved = [];
       try { saved = JSON.parse(localStorage.getItem(YK_HIST_KEY)) || []; } catch (e) { saved = []; }
       const byT = new Map();
-      // File first, local observations second: a build we watched arrive wins over the same
-      // build read from the file, because only the local one can be fresher than the last commit.
-      for (const r of (_ykHistFile || []).concat(Array.isArray(saved) ? saved : [])) {
+      // Backfill, then the table, then what this browser saw — later wins on a tie, so a live
+      // read always supersedes the same build from a slower source, and the chart still draws
+      // when the table is unreachable.
+      for (const r of ykBoardBackfill.concat(_ykHistFile || [], Array.isArray(saved) ? saved : [])) {
         if (r && isFinite(r.t) && isFinite(r.p50)) byT.set(r.t, r);
       }
       return [...byT.values()].sort((a, b) => a.t - b.t);
@@ -21166,9 +21186,9 @@
       const keep = cur.filter((r) => r.t !== row.t).concat([row]).sort((a, b) => a.t - b.t);
       // Seeded rows are re-added by _ykHistLoad on every read, so storing them again would grow
       // the blob for nothing. Only what we actually observed goes to localStorage.
-      // Rows already in the committed file are re-read on every load, so storing them again
-      // would grow the blob for nothing. Only what the file does not yet carry is kept here.
-      const fileT = new Set((_ykHistFile || []).map((r) => r.t));
+      // Rows the backfill or the table already carry are re-read on every load, so storing them
+      // again would grow the blob for nothing. Only what neither source has is kept here.
+      const fileT = new Set(ykBoardBackfill.concat(_ykHistFile || []).map((r) => r.t));
       try { localStorage.setItem(YK_HIST_KEY, JSON.stringify(keep.filter((r) => !fileT.has(r.t)))); } catch (e) {}
     }
 

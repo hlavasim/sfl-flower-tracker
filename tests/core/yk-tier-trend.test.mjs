@@ -120,12 +120,46 @@ test("the collector needs no credentials and cannot double-count", () => {
   assert.match(wf, /workflow_dispatch/, "a missed window can be filled by hand");
 });
 
-test("the page reads the recorded history rather than a constant that would rot", () => {
+test("the page survives the history endpoint being unavailable", () => {
+  /*
+   * The chart went blank in production the moment the DB-backed history shipped ahead of its
+   * migration: the endpoint 500s, localStorage is empty on a fresh browser, and with no
+   * fallback there was nothing to draw. The pre-collector builds are finished history — they
+   * can never gain a row and the migration inserts the identical values — so they stay in the
+   * page as bedrock. Growth still belongs in the table, never here.
+   */
   for (const name of ["flowers.html", "index.html"]) {
     const src = readFileSync(path.join(ROOT, name), "utf8");
     assert.match(src, /type=yk-board&collect=1/,
       `${name}: reads the recorded history, and records the build it is looking at`);
-    assert.ok(!/ykBoardSeed/.test(src),
-      `${name}: no inline copy of the data — it would drift from the table within a day`);
+    const m = src.match(/const ykBoardBackfill = \[([\s\S]*?)\];/);
+    assert.ok(m, `${name}: keeps the pre-collector builds so the chart draws without the API`);
+    const rows = m[1].match(/\{[^}]*\}/g) || [];
+    assert.equal(rows.length, 4,
+      `${name}: the backfill is FROZEN at the four pre-collector builds — anything newer belongs in the table, got ${rows.length}`);
+    assert.equal((m[1].match(/derived: true/g) || []).length, 2,
+      `${name}: the two reconstructed timestamps stay flagged`);
+    // Merge order matters: a live read must be able to supersede the same build from the backfill.
+    assert.match(src, /ykBoardBackfill\.concat\(_ykHistFile \|\| \[\], Array\.isArray\(saved\)/,
+      `${name}: backfill, then table, then this browser — later wins`);
   }
+});
+
+test("the backfill and the migration agree, row for row", () => {
+  /*
+   * Two copies of the same four builds, so they have to be checked against each other or one
+   * will quietly rot. They dedupe by build timestamp at runtime, which hides a value mismatch.
+   */
+  const src = readFileSync(path.join(ROOT, "flowers.html"), "utf8");
+  const m = src.match(/const ykBoardBackfill = \[([\s\S]*?)\];/);
+  const page = (m[1].match(/\{[^}]*\}/g) || []).map((r) => ({
+    players: +r.match(/players: (\d+)/)[1],
+    p3: +r.match(/p3: (\d+)/)[1], p10: +r.match(/p10: (\d+)/)[1],
+    p50: +r.match(/p50: (\d+)/)[1], p100: +r.match(/p100: (\d+)/)[1],
+  }));
+  const sql = readFileSync(path.join(ROOT, "azure-functions/migrations/2026-08-12-yakkamon-leaderboard.sql"), "utf8");
+  const db = [...sql.matchAll(/\('2026-[^']*',\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+),/g)]
+    .map((x) => ({ players: +x[1], p3: +x[2], p10: +x[3], p50: +x[4], p100: +x[5] }));
+  assert.equal(page.length, db.length, "same number of backfilled builds in both");
+  page.forEach((r, i) => assert.deepEqual(r, db[i], `backfill row ${i} differs between the page and the migration`));
 });
