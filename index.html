@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.22</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.23</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.23", items: [
+          { t: "feat", text: "<b>The tier history is recorded in Postgres, by a cron, unattended.</b> It was a constant in the page plus whatever this browser had seen — so it only grew when someone had the page open, and was different on every device. Now it is the <code>yk_leaderboard</code> table, keyed on <b>the build’s own timestamp</b>, and a GitHub Actions cron records every build 10 minutes after it lands. Because the row is keyed on the build rather than on when it was fetched, the cron, a page visit and a manual retry can all fire at the same build and only the first writes — so opening this page still fills any window the cron missed, without ever double-counting. The endpoint does the fetching server-side, which is why the scheduled half is a <b>bare curl with no credentials</b>. Backfilled with the four builds gathered before it existed; the two whose timestamps were reconstructed stay flagged." },
+        ] },
         { ver: "v5.22", items: [
           { t: "feat", text: "<b>The tier history is now a committed record, not a browser-local one.</b> It lives in <code>data/yk-leaderboard.json</code> and a <b>scheduled cloud agent appends to it 10 minutes after every rebuild</b>, so the record keeps growing whether or not anyone had the page open — and it is the same history on every device. What this browser sees is still captured on top, so a missed fire gets filled in rather than leaving a hole. The inline seed constant is gone: a copy of the data in the page would have drifted from the file within a day." },
         ] },
@@ -21128,10 +21131,11 @@
      * keyed on the build's own timestamp, so re-reading the same build changes nothing and a
      * gap only appears for a 4-hour window nobody was here for.
      *
-     * The long history lives in `data/yk-leaderboard.json`, appended by a scheduled agent that
-     * runs 10 minutes after every rebuild — so the record keeps growing whether or not anyone
-     * had the page open. localStorage is the gap-filler on top of it: if the agent misses a
-     * fire, whatever build YOU were looking at is still captured. The two are merged on read.
+     * The history lives in Postgres (`yk_leaderboard`, keyed on the build's own timestamp) and
+     * a GitHub Actions cron records every build 10 minutes after it lands — so the record grows
+     * whether or not anyone has the page open, and is the same on every device. Loading this
+     * page also records the build it sees, so a missed fire leaves no hole. localStorage stays
+     * as a third layer: if the API is down, the chart still has whatever this browser saw.
      *
      * Rows carrying `derived: true` have exact content — they are captured top-100 boards — but
      * a reconstructed TIMESTAMP, worked back from an "updated N min ago" label and pinned to
@@ -21182,8 +21186,9 @@
           one("https://api.yakkamon.com/leaderboard").catch(() => null),
           one("https://sfl.world/api/v1.1/exchange").catch(() => null),
           one("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd").catch(() => null),
-          // Same-origin static file, so it does not go through the proxy.
-          fetch("data/yk-leaderboard.json").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+          // Our own endpoint, so no proxy. collect=1 makes the visit itself record the build
+          // it is looking at, which fills any window the scheduled collector missed.
+          fetch("/api/farm-history?type=yk-board&collect=1").then((r) => (r.ok ? r.json() : null)).catch(() => null),
         ]);
         if (hist && Array.isArray(hist.snapshots)) _ykHistFile = hist.snapshots;
         _ykLive = {
@@ -21356,7 +21361,7 @@
         const mult = ykMult(Math.max(1, nowWeek));
         h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
           <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">📈 WHAT A PLACING COSTS — over time</div>
-          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Yakkamon publishes no history, so this is <b>our own</b>. A scheduled agent reads the board 10 minutes after every rebuild and appends it to the repo; this page adds whatever build it sees itself, so a missed fire still gets filled in. <b>${hist.length}</b> snapshot${hist.length === 1 ? "" : "s"} over <b>${spanH.toFixed(0)} h</b> — ${(_ykHistFile || []).length} from the committed record, ${Math.max(0, hist.length - ((_ykHistFile || []).length))} seen in this browser${hist.length - obs > 0 ? `, ${hist.length - obs} with a reconstructed timestamp` : ""}. Builds land every 4 h; times below are UTC.</div>
+          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Yakkamon publishes no history, so this is <b>our own</b>. A cron records every build 10 minutes after it lands; opening this page records the one it sees too, so a missed fire leaves no hole. <b>${hist.length}</b> snapshot${hist.length === 1 ? "" : "s"} over <b>${spanH.toFixed(0)} h</b> — ${(_ykHistFile || []).length} from the committed record, ${Math.max(0, hist.length - ((_ykHistFile || []).length))} seen in this browser${hist.length - obs > 0 ? `, ${hist.length - obs} with a reconstructed timestamp` : ""}. Builds land every 4 h; times below are UTC.</div>
           <div style="width:100%;margin-bottom:10px">${hist.length >= 2 ? _ykTierSvg(hist) : ""}</div>`;
         if (hist.length >= 2) {
           const rows = [[10, "#10", "Legendary A + Legendary C"], [50, "#50", "Legendary A"]];

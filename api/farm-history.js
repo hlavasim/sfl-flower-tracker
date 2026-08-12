@@ -24,6 +24,67 @@ export default async function handler(req, res) {
     }
   }
 
+  /* ─── Yakkamon tier thresholds over time ────────────────────────
+   *
+   * Folded in here for the same reason `world` is: Hobby caps the project at 12 functions and
+   * we are at 12.
+   *
+   * GET             → the recorded history, oldest first.
+   * GET &collect=1  → fetch the live board, record it, then return the history.
+   *
+   * The collect path does the fetching SERVER-side on purpose. That way the thing calling it on
+   * a schedule needs no credentials, no repo checkout and no knowledge of the upstream shape —
+   * a bare `curl` is a complete collector. Keyed on the build's own generated_at, so a schedule,
+   * a page visit and a manual retry can all call it and only the first one to see a given build
+   * writes anything.
+   */
+  if (req.query.type === "yk-board") {
+    try {
+      if (req.query.collect === "1") {
+        const r = await fetch("https://api.yakkamon.com/leaderboard", { headers: { accept: "application/json" } });
+        if (!r.ok) return res.status(502).json({ error: `leaderboard upstream ${r.status}` });
+        const b = await r.json();
+        const at = (rank) => {
+          const e = Array.isArray(b.entries) ? b.entries.find((x) => x.rank === rank) : null;
+          return e ? e.points : null;
+        };
+        const row = [b.generatedAt, b.playerCount, at(3), at(10), at(50), at(100)];
+        if (!row.every((v) => Number.isFinite(v))) {
+          return res.status(502).json({ error: "leaderboard payload missing a rank threshold" });
+        }
+        const ins = await pool.query(
+          `INSERT INTO yk_leaderboard (generated_at, player_count, p3, p10, p50, p100, entries)
+           VALUES (to_timestamp($1 / 1000.0), $2, $3, $4, $5, $6, $7::jsonb)
+           ON CONFLICT (generated_at) DO NOTHING
+           RETURNING generated_at`,
+          [...row, JSON.stringify(b.entries || [])],
+        );
+        res.setHeader("Cache-Control", "no-store");
+        return res.status(200).json({
+          collected: ins.rowCount > 0,          // false = this build was already recorded
+          generatedAt: b.generatedAt,
+          ageHours: +((Date.now() - b.generatedAt) / 3600000).toFixed(2),
+          playerCount: b.playerCount,
+          thresholds: { p3: row[2], p10: row[3], p50: row[4], p100: row[5] },
+        });
+      }
+      const q = await pool.query(
+        `SELECT (EXTRACT(EPOCH FROM generated_at) * 1000)::bigint AS t,
+                player_count AS players, p3, p10, p50, p100, derived
+           FROM yk_leaderboard ORDER BY generated_at ASC`,
+      );
+      res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=3600");
+      return res.status(200).json({
+        rebuiltEveryHours: 4,
+        snapshots: q.rows.map((x) => ({
+          t: Number(x.t), players: x.players, p3: x.p3, p10: x.p10, p50: x.p50, p100: x.p100, derived: x.derived,
+        })),
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   // ─── Investment Tracker: btc_transactions CRUD ─────────────────
   if (req.query.type === "btc-tx") {
     const method = (req.method || "GET").toUpperCase();

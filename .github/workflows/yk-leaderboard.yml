@@ -1,0 +1,45 @@
+# Record the Yakkamon leaderboard every time it rebuilds.
+#
+# The board is rebuilt every 4 hours on the UTC clock (01/05/09/13/17/21 at :00:57 — measured
+# from consecutive builds exactly 4.00 h apart) and Yakkamon keeps no history, so what a placing
+# costs over time is only knowable if somebody snapshots it. This is that somebody.
+#
+# It is a bare curl on purpose. /api/farm-history?type=yk-board&collect=1 does the fetching and
+# the writing server-side, so this workflow needs no secrets, no checkout and no knowledge of the
+# upstream payload — and the same URL is what a page visit or a manual retry calls. The row is
+# keyed on the build's own timestamp, so whoever gets there first writes and everyone else is a
+# no-op; a missed fire is picked up by the next one only if the build is still current, which is
+# why this runs on the same 4-hour grid rather than less often.
+#
+# :10 past, not :00 — the build lands at :00:57 and a cron that fires at :00 would race it.
+name: Yakkamon leaderboard snapshot
+
+on:
+  schedule:
+    - cron: "10 1,5,9,13,17,21 * * *"
+  workflow_dispatch: {}          # so a missed window can be filled by hand
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Record the current build
+        run: |
+          set -euo pipefail
+          # --fail-with-body so an upstream 502 shows its reason instead of an empty failure.
+          out=$(curl -sS --fail-with-body --max-time 60 --retry 3 --retry-delay 20 \
+            "https://sunflower.sajmonium.quest/api/farm-history?type=yk-board&collect=1")
+          echo "$out"
+          # `collected: false` means this build was already recorded - a normal outcome when a
+          # page visit beat the cron to it, not a failure.
+          node -e '
+            const r = JSON.parse(process.argv[1]);
+            if (!r.generatedAt) { console.error("no build in response"); process.exit(1); }
+            const age = r.ageHours;
+            console.log(`${r.collected ? "recorded" : "already had"} build ${new Date(r.generatedAt).toISOString()} (${age} h old), ${r.playerCount} players, #50 = ${r.thresholds.p50}`);
+            // A build much older than the 4h cadence means the upstream schedule moved and this
+            // cron is now sampling the wrong moment - worth failing loudly rather than silently
+            // recording staler and staler data.
+            if (age > 4.5) { console.error(`build is ${age} h old - the 4h cadence assumption may no longer hold`); process.exit(1); }
+          ' "$out"

@@ -86,30 +86,46 @@ test("the tier chart is small multiples, never a second y-axis", () => {
   }
 });
 
-test("the committed history file is present and well formed", () => {
-  const raw = JSON.parse(readFileSync(path.join(ROOT, "data/yk-leaderboard.json"), "utf8"));
-  assert.ok(Array.isArray(raw.snapshots), "snapshots array present");
-  assert.ok(raw.snapshots.length >= 4, `expected the backfilled snapshots, got ${raw.snapshots.length}`);
-  let prev = -Infinity;
-  for (const r of raw.snapshots) {
-    for (const k of ["t", "players", "p3", "p10", "p50", "p100"]) {
-      assert.equal(typeof r[k], "number", `every row carries a numeric ${k} — got ${JSON.stringify(r)}`);
-    }
-    assert.ok(r.t > prev, "rows are in ascending time order with no duplicate build");
-    prev = r.t;
-    assert.ok(r.p3 >= r.p10 && r.p10 >= r.p50 && r.p50 >= r.p100,
-      `thresholds must fall with rank — ${JSON.stringify(r)}`);
-  }
-  // A reconstruction must stay distinguishable from an observation.
-  assert.equal(raw.snapshots.filter((r) => r.derived === true).length, 2,
-    "exactly the two rows whose timestamps were worked back are flagged");
+test("the backfill migration is present and safe to re-run", () => {
+  const sql = readFileSync(path.join(ROOT, "azure-functions/migrations/2026-08-12-yakkamon-leaderboard.sql"), "utf8");
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS yk_leaderboard/, "table creation is idempotent");
+  assert.match(sql, /generated_at\s+TIMESTAMPTZ PRIMARY KEY/,
+    "keyed on the BUILD's timestamp — that is what makes a re-read a no-op instead of a duplicate");
+  assert.match(sql, /ON CONFLICT \(generated_at\) DO NOTHING/,
+    "the backfill never overwrites a row that is already there");
+  assert.match(sql, /GRANT SELECT, INSERT ON yk_leaderboard TO sfl_reader/,
+    "the API role appends and reads; it must not be able to edit or delete a recorded build");
+  const rows = sql.match(/\('2026-[^)]*\)/g) || [];
+  assert.ok(rows.length >= 4, `expected the four backfilled builds, got ${rows.length}`);
+  assert.equal((sql.match(/TRUE\)/g) || []).length, 2,
+    "exactly the two rows with a reconstructed timestamp are flagged derived");
 });
 
-test("the page reads that file rather than a constant that would rot", () => {
+test("the collector needs no credentials and cannot double-count", () => {
+  const api = readFileSync(path.join(ROOT, "api/farm-history.js"), "utf8");
+  const i = api.indexOf('req.query.type === "yk-board"');
+  assert.ok(i > 0, "the endpoint mode exists");
+  const body = api.slice(i, i + 3500);
+  assert.match(body, /api\.yakkamon\.com\/leaderboard/,
+    "the SERVER fetches the board — that is what lets the scheduled caller be a bare curl with no secrets");
+  assert.match(body, /ON CONFLICT \(generated_at\) DO NOTHING/,
+    "a build already recorded is a no-op, so cron + page visit + retry cannot double-count");
+  assert.match(body, /collected: ins\.rowCount > 0/, "the caller is told whether it actually wrote");
+  assert.ok(!/DELETE|UPDATE yk_leaderboard/.test(body), "recorded builds are append-only");
+
+  const wf = readFileSync(path.join(ROOT, ".github/workflows/yk-leaderboard.yml"), "utf8");
+  assert.match(wf, /cron: "10 1,5,9,13,17,21 \* \* \*"/,
+    "fires on the same 4h grid as the rebuild, at :10 so it cannot race the :00:57 build");
+  assert.ok(!/secrets\./.test(wf), "no secrets — the endpoint does the privileged part");
+  assert.match(wf, /workflow_dispatch/, "a missed window can be filled by hand");
+});
+
+test("the page reads the recorded history rather than a constant that would rot", () => {
   for (const name of ["flowers.html", "index.html"]) {
     const src = readFileSync(path.join(ROOT, name), "utf8");
-    assert.match(src, /fetch\("data\/yk-leaderboard\.json"\)/, `${name}: fetches the committed history`);
+    assert.match(src, /type=yk-board&collect=1/,
+      `${name}: reads the recorded history, and records the build it is looking at`);
     assert.ok(!/ykBoardSeed/.test(src),
-      `${name}: the inline seed is gone — a scheduled agent appends to the file, and a duplicate copy in the page would drift`);
+      `${name}: no inline copy of the data — it would drift from the table within a day`);
   }
 });
