@@ -86,18 +86,30 @@ test("the tier chart is small multiples, never a second y-axis", () => {
   }
 });
 
-test("the seeded history is present and well formed", () => {
-  const src = readFileSync(path.join(ROOT, "flowers.html"), "utf8");
-  const m = src.match(/const ykBoardSeed = \[([\s\S]*?)\];/);
-  assert.ok(m, "ykBoardSeed present");
-  const rows = m[1].match(/\{[^}]*\}/g) || [];
-  assert.ok(rows.length >= 4, `expected the four backfilled snapshots, got ${rows.length}`);
-  for (const r of rows) {
-    for (const k of ["t:", "players:", "p3:", "p10:", "p50:", "p100:", "derived:"]) {
-      assert.ok(r.includes(k), `every seeded row carries ${k} — got ${r}`);
+test("the committed history file is present and well formed", () => {
+  const raw = JSON.parse(readFileSync(path.join(ROOT, "data/yk-leaderboard.json"), "utf8"));
+  assert.ok(Array.isArray(raw.snapshots), "snapshots array present");
+  assert.ok(raw.snapshots.length >= 4, `expected the backfilled snapshots, got ${raw.snapshots.length}`);
+  let prev = -Infinity;
+  for (const r of raw.snapshots) {
+    for (const k of ["t", "players", "p3", "p10", "p50", "p100"]) {
+      assert.equal(typeof r[k], "number", `every row carries a numeric ${k} — got ${JSON.stringify(r)}`);
     }
+    assert.ok(r.t > prev, "rows are in ascending time order with no duplicate build");
+    prev = r.t;
+    assert.ok(r.p3 >= r.p10 && r.p10 >= r.p50 && r.p50 >= r.p100,
+      `thresholds must fall with rank — ${JSON.stringify(r)}`);
   }
-  // The two reconstructed timestamps must stay flagged: their content is observed, their
-  // timing is not, and a reader has to be able to tell.
-  assert.equal((m[1].match(/derived: true/g) || []).length, 2, "exactly the two reconstructed rows are flagged");
+  // A reconstruction must stay distinguishable from an observation.
+  assert.equal(raw.snapshots.filter((r) => r.derived === true).length, 2,
+    "exactly the two rows whose timestamps were worked back are flagged");
+});
+
+test("the page reads that file rather than a constant that would rot", () => {
+  for (const name of ["flowers.html", "index.html"]) {
+    const src = readFileSync(path.join(ROOT, name), "utf8");
+    assert.match(src, /fetch\("data\/yk-leaderboard\.json"\)/, `${name}: fetches the committed history`);
+    assert.ok(!/ykBoardSeed/.test(src),
+      `${name}: the inline seed is gone — a scheduled agent appends to the file, and a duplicate copy in the page would drift`);
+  }
 });

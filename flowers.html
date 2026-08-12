@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.21</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.22</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.22", items: [
+          { t: "feat", text: "<b>The tier history is now a committed record, not a browser-local one.</b> It lives in <code>data/yk-leaderboard.json</code> and a <b>scheduled cloud agent appends to it 10 minutes after every rebuild</b>, so the record keeps growing whether or not anyone had the page open — and it is the same history on every device. What this browser sees is still captured on top, so a missed fire gets filled in rather than leaving a hole. The inline seed constant is gone: a copy of the data in the page would have drifted from the file within a day." },
+        ] },
         { ver: "v5.21", items: [
           { t: "fix", text: "<b>The tier chart is four panels now — the first one was unreadable, and misleading with it.</b> It put #10/#50/#100 on one y-scale and pushed #3 onto a second. Two scales on one plot align arbitrarily, so <b>#3 — which had moved 39 points — was drawn climbing across the entire panel as if it had exploded</b>, while #50 and #100 were crushed into a single flat line at the bottom of the other scale. Four series spanning 17k to 380k cannot share an axis and a second axis only fakes it; a log scale was considered and rejected, because it makes every line look equally sedate, which is the opposite of the question. Each tier now gets <b>its own panel and its own linear range</b>, on one shared time axis, twice as tall as before — so #50 creeping 2,363 points in a day is finally visible as a slope instead of a flat line." },
           { t: "fix", text: "<b>Chart detail:</b> only the endpoint carries a number (plus what it moved over the window) instead of a label on every point; markers get a surface ring so they read as points on the line; every point has a hover tooltip with its exact build time and value, and says so when the timestamp was reconstructed rather than read. Colours were re-picked and <b>run through a contrast/colour-blindness validator</b> — the previous red-and-green pair was 3.7 ΔE apart under deuteranopia, i.e. the same colour." },
@@ -21125,25 +21128,26 @@
      * keyed on the build's own timestamp, so re-reading the same build changes nothing and a
      * gap only appears for a 4-hour window nobody was here for.
      *
-     * The four seeded rows are the snapshots this feature was built from. The first two carry
-     * `derived: true` — their content is exact (captured top-100 boards) but their timestamps
-     * were reconstructed from an "updated N min ago" label, so they are pinned to the nearest
-     * slot on the 4-hour grid rather than read off the API. Flagged so a reader never mistakes
-     * a reconstruction for an observation.
+     * The long history lives in `data/yk-leaderboard.json`, appended by a scheduled agent that
+     * runs 10 minutes after every rebuild — so the record keeps growing whether or not anyone
+     * had the page open. localStorage is the gap-filler on top of it: if the agent misses a
+     * fire, whatever build YOU were looking at is still captured. The two are merged on read.
+     *
+     * Rows carrying `derived: true` have exact content — they are captured top-100 boards — but
+     * a reconstructed TIMESTAMP, worked back from an "updated N min ago" label and pinned to
+     * the nearest slot on the 4-hour grid. Flagged so a reconstruction is never mistaken for an
+     * observation.
      */
-    const ykBoardSeed = [
-      { t: Date.UTC(2026, 7, 11, 9, 0, 57), players: 41305, p3: 380213, p10: 79075, p50: 18229, p100: 17176, derived: true },
-      { t: Date.UTC(2026, 7, 11, 17, 0, 57), players: 43330, p3: 380213, p10: 129117, p50: 19016, p100: 17213, derived: true },
-      { t: Date.UTC(2026, 7, 12, 5, 0, 57), players: 44811, p3: 380213, p10: 129126, p50: 19812, p100: 17226, derived: false },
-      { t: Date.UTC(2026, 7, 12, 9, 0, 57), players: 45291, p3: 380252, p10: 129126, p50: 20592, p100: 17251, derived: false },
-    ];
     const YK_HIST_KEY = "sfl_yk_board_hist";
+    let _ykHistFile = null;                            // data/yk-leaderboard.json, once fetched
     function _ykHistLoad() {
       let saved = [];
       try { saved = JSON.parse(localStorage.getItem(YK_HIST_KEY)) || []; } catch (e) { saved = []; }
       const byT = new Map();
-      for (const r of ykBoardSeed.concat(Array.isArray(saved) ? saved : [])) {
-        if (r && isFinite(r.t) && isFinite(r.p50)) byT.set(r.t, r);   // later wins: a real read replaces a seed
+      // File first, local observations second: a build we watched arrive wins over the same
+      // build read from the file, because only the local one can be fresher than the last commit.
+      for (const r of (_ykHistFile || []).concat(Array.isArray(saved) ? saved : [])) {
+        if (r && isFinite(r.t) && isFinite(r.p50)) byT.set(r.t, r);
       }
       return [...byT.values()].sort((a, b) => a.t - b.t);
     }
@@ -21158,8 +21162,10 @@
       const keep = cur.filter((r) => r.t !== row.t).concat([row]).sort((a, b) => a.t - b.t);
       // Seeded rows are re-added by _ykHistLoad on every read, so storing them again would grow
       // the blob for nothing. Only what we actually observed goes to localStorage.
-      const seedT = new Set(ykBoardSeed.map((r) => r.t));
-      try { localStorage.setItem(YK_HIST_KEY, JSON.stringify(keep.filter((r) => !seedT.has(r.t)))); } catch (e) {}
+      // Rows already in the committed file are re-read on every load, so storing them again
+      // would grow the blob for nothing. Only what the file does not yet carry is kept here.
+      const fileT = new Set((_ykHistFile || []).map((r) => r.t));
+      try { localStorage.setItem(YK_HIST_KEY, JSON.stringify(keep.filter((r) => !fileT.has(r.t)))); } catch (e) {}
     }
 
     let _ykLive = null, _ykLiveErr = null, _ykLiveLoading = false;
@@ -21171,12 +21177,15 @@
         // FLOWER comes from the SAME source the rest of the app prices with
         // (sfl.world exchange). CoinGecko's "sunflower-land" is a different, older
         // token — using it would misprice the budget by ~2x.
-        const [signups, board, ex, btc] = await Promise.all([
+        const [signups, board, ex, btc, hist] = await Promise.all([
           one("https://api.yakkamon.com/signups"),
           one("https://api.yakkamon.com/leaderboard").catch(() => null),
           one("https://sfl.world/api/v1.1/exchange").catch(() => null),
           one("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd").catch(() => null),
+          // Same-origin static file, so it does not go through the proxy.
+          fetch("data/yk-leaderboard.json").then((r) => (r.ok ? r.json() : null)).catch(() => null),
         ]);
+        if (hist && Array.isArray(hist.snapshots)) _ykHistFile = hist.snapshots;
         _ykLive = {
           signups, board,
           flowerUsd: (ex && ex.sfl && ex.sfl.usd) || 0,
@@ -21347,7 +21356,7 @@
         const mult = ykMult(Math.max(1, nowWeek));
         h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
           <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">📈 WHAT A PLACING COSTS — over time</div>
-          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Yakkamon publishes no history, so this is <b>our own</b>: every visit stores the board it saw, keyed on that build's timestamp. <b>${hist.length}</b> snapshot${hist.length === 1 ? "" : "s"} over <b>${spanH.toFixed(0)} h</b> (${obs} read live, ${hist.length - obs} seeded from when this was built). A build lands every 4 h (times below are UTC) — visit at least that often and there are no gaps.</div>
+          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Yakkamon publishes no history, so this is <b>our own</b>. A scheduled agent reads the board 10 minutes after every rebuild and appends it to the repo; this page adds whatever build it sees itself, so a missed fire still gets filled in. <b>${hist.length}</b> snapshot${hist.length === 1 ? "" : "s"} over <b>${spanH.toFixed(0)} h</b> — ${(_ykHistFile || []).length} from the committed record, ${Math.max(0, hist.length - ((_ykHistFile || []).length))} seen in this browser${hist.length - obs > 0 ? `, ${hist.length - obs} with a reconstructed timestamp` : ""}. Builds land every 4 h; times below are UTC.</div>
           <div style="width:100%;margin-bottom:10px">${hist.length >= 2 ? _ykTierSvg(hist) : ""}</div>`;
         if (hist.length >= 2) {
           const rows = [[10, "#10", "Legendary A + Legendary C"], [50, "#50", "Legendary A"]];
