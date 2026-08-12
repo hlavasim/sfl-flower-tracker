@@ -21732,11 +21732,17 @@
      * normal-vision and contrast all pass against this surface).
      */
     function _ykTierSvg(hist) {
+      /*
+       * Rank order, top to bottom — the same order the reward ladder further down the page uses.
+       * These were once sorted "the two you asked about first", which put #3 below #100 and read
+       * as a mistake. Colour stays welded to the tier, never to the row: reordering the panels
+       * must not repaint them, or a reader who learned "#50 is blue" is misled.
+       */
       const tiers = [
+        { key: "p3", label: "#3", what: "Legendary A + Legendary B", color: "#B07CD8" },
         { key: "p10", label: "#10", what: "Legendary A + Legendary C", color: "#FFD700" },
         { key: "p50", label: "#50", what: "Legendary A", color: "#4FA3E3" },
         { key: "p100", label: "#100", what: "last Legendary B", color: "#E8A060" },
-        { key: "p3", label: "#3", what: "Legendary A + Legendary B", color: "#B07CD8" },
       ];
       const W = 1000, PH = 118, GAP = 30, L = 104, R = 150, TOP = 34, AXIS = 30;
       const H = tiers.length * (PH + GAP) + AXIS;
