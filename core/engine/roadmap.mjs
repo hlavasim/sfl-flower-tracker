@@ -664,34 +664,45 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
 
 
     // ── flowers.html 16896-16968: roadmapItemValue + roadmapItemSituational ──
+    /*
+     * ONE valuation, everywhere. This used to hand-roll its own marginal — a whole-chain delta
+     * for the mining tiers plus a roadmapCatNet delta for the rest — while the Power page and
+     * the wishlist asked calcBoostValue. Two code paths answering "what is this boost worth"
+     * drift, and they had: measured across the live catalogue, 73 of the 79 items carried by
+     * both (92%) disagreed, the ratio running from 0.00 to 4.92 with a median of 0.80. Crimstone
+     * Spikes Hair read 3.93/day in the buy path against 12.89 on Power; a whole cluster —
+     * Dev Wrench, Infernal Drill, Oil Overalls, Pharaoh Gnome — sat at exactly 2x apart. So the
+     * buy path now asks the same function the pages ask, and the ordering, the ETAs and the
+     * cumulative costs all follow from the numbers you can see on Power.
+     *
+     * The cost of unifying: calcBoostValue overrides ONE category at a time, so an item touching
+     * several mining tiers no longer gets a single chain delta across all of them. That
+     * cross-tier term is what the old code bought with its duplicate path — and Power never had
+     * it either, so keeping it here is exactly what made the two disagree. Correctness of the
+     * PLAN depends on the ordering being consistent with what the user is shown; a per-category
+     * sum that matches Power beats a truer number nobody else computes.
+     */
     function roadmapItemValue(clone, catBoostsW, settings) {
       if (!clone) return 0;
       if (clone.fixedMarginal !== undefined) return clone.fixedMarginal; // node merge/expand actions
       let total = 0;
       const _exV = (settings.excludeCats || []);
-      const mineCats = clone.categories.filter(c => ROADMAP_MINING_CATS.indexOf(c) >= 0 && POWER_CATEGORIES[c] && POWER_CATEGORIES[c].quantifiable && clone.effects.some(e => e.cat === c) && _exV.indexOf(c) < 0);
-      // Mining boosts use the WHOLE-CHAIN delta: a tool/yield boost on one tier shifts other tiers' nets
-      // (e.g. a free tool frees the upstream resource it would have eaten) — a per-category delta misses that.
-      if (mineCats.length) {
-        const override = {};
-        for (const cat of mineCats) {
-          const ownedEff = catBoostsW[cat].filter(b => b.has && !b.isDisabled).flatMap(b => b.effects.filter(e => e.cat === cat));
-          override[cat] = ownedEff.concat(clone.effects.filter(e => e.cat === cat));
-        }
-        const d = roadmapMiningChain(settings, override).total - roadmapMiningChain(settings).total;
-        if (d > 0) total += d * roadmapEffFactor(mineCats[0], settings);
-      }
+      const { capacity, p2pPrices, savedProducts } = powerState;
       for (const cat of clone.categories) {
-        if (ROADMAP_MINING_CATS.indexOf(cat) >= 0) continue; // handled by the chain delta above
         if (_exV.indexOf(cat) >= 0) continue; // user filtered this activity out
         if (!POWER_CATEGORIES[cat] || !POWER_CATEGORIES[cat].quantifiable) continue;
-        const itemEff = clone.effects.filter(e => e.cat === cat);
-        if (itemEff.length === 0) continue;
-        const ownedEff = catBoostsW[cat].filter(b => b.has && !b.isDisabled).flatMap(b => b.effects.filter(e => e.cat === cat));
-        const without = Math.max(0, roadmapCatNet(cat, ownedEff, settings));
-        const withIt = Math.max(0, roadmapCatNet(cat, ownedEff.concat(itemEff), settings));
-        const delta = withIt - without;
-        if (delta > 0) total += delta * roadmapEffFactor(cat, settings);
+        if (!clone.effects.some(e => e.cat === cat)) continue;
+        const allCatBoosts = catBoostsW[cat];
+        if (!allCatBoosts) continue;
+        const product = (savedProducts || {})[cat] || getDefaultProduct(cat);
+        let v = 0;
+        try {
+          const r = calcBoostValue(clone, cat, product, capacity, p2pPrices, allCatBoosts, clone.has);
+          v = (r && isFinite(r.synergy)) ? r.synergy : 0;
+        } catch (e) { v = 0; }
+        // calcBoostValue answers at theoretical throughput (it forces that basis); the measured
+        // scaling is applied here, the same way core/sections/power.mjs scales what it displays.
+        if (v > 0) total += v * roadmapEffFactor(cat, settings);
       }
       return total;
     }

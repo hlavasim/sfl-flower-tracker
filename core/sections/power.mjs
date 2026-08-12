@@ -383,7 +383,19 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
    * back inside roadmapEffFactor, so animals and obsidian stay at 1 rather than being guessed.
    */
   const effRs = getRoadmapSettings(settings.roadmapSettings || {});
-  const effScale = (catId) => (settings.measured ? roadmapEffFactor(catId, effRs) : 1);
+  /*
+   * The basis is the user's Efficiency toggle, not "did history happen to be posted".
+   *
+   * `settings.measured` is set by api/compute purely because a { snapshots } body arrived, so
+   * this page went measured while the roadmap — which reads effMode — could be sitting on
+   * "100% (theoretical)". The same boost then read one number here and another there, differing
+   * by exactly that category's efficiency, with no control anywhere that moved both.
+   *
+   * roadmapEffFactor already resolves all three cases on its own: a manual slider override
+   * wins, effMode "theoretical" returns 1, and with no measured history loaded it also returns
+   * 1 — so a plain GET with no snapshots behaves exactly as it did before.
+   */
+  const effScale = (catId) => roadmapEffFactor(catId, effRs);
   const boostValues = {};
   for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
     if (!catDef.quantifiable) continue;
