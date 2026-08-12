@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.24</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.25</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.25", items: [
+          { t: "fix", text: "<b>The chart stopped showing anything the collector recorded.</b> The page makes one call to record-and-read, but <code>collect=1</code> was answering with only the write receipt — no history in the payload. The page’s guard on that array never fired, so it silently kept its frozen backfill and every build the cron had gathered was invisible on the site while sitting perfectly well in the database. The receipt now comes back with the full history attached, in the same round trip." },
+        ] },
         { ver: "v5.24", items: [
           { t: "fix", text: "<b>The chart came back — v5.23 blanked it.</b> Moving the history to Postgres shipped ahead of its migration, so the endpoint 500s with <i>relation does not exist</i>; and the same change had deleted the inline builds on the argument that a copy in the page would drift from the table. With no table and no fallback there was nothing left to draw. The argument was right about a <b>growing</b> copy and wrong about this one: those four builds are finished history, they can never gain a row, and the migration inserts the identical values — so they are merged by build timestamp and dedupe against the table the moment it exists. Bedrock stays in the page, growth stays in the table, and a test now checks the two copies agree row for row so neither can rot." },
         ] },

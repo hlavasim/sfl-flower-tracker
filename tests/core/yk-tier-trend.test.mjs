@@ -111,6 +111,14 @@ test("the collector needs no credentials and cannot double-count", () => {
   assert.match(body, /ON CONFLICT \(generated_at\) DO NOTHING/,
     "a build already recorded is a no-op, so cron + page visit + retry cannot double-count");
   assert.match(body, /collected: ins\.rowCount > 0/, "the caller is told whether it actually wrote");
+  /*
+   * The page makes ONE call to record-and-read. When collect=1 answered with only the write
+   * receipt, the page's `Array.isArray(hist.snapshots)` guard never fired, it silently kept
+   * its frozen backfill, and everything the cron had collected was invisible on the site.
+   */
+  const collectBranch = body.slice(0, body.indexOf("const q = await pool.query") >= 0 ? body.indexOf("const q = await pool.query") : body.length);
+  assert.match(collectBranch, /snapshots: after\.rows\.map/,
+    "collect=1 must return the history too — recording and reading are one round trip");
   assert.ok(!/DELETE|UPDATE yk_leaderboard/.test(body), "recorded builds are append-only");
 
   const wf = readFileSync(path.join(ROOT, ".github/workflows/yk-leaderboard.yml"), "utf8");

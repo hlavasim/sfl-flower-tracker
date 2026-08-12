@@ -59,6 +59,19 @@ export default async function handler(req, res) {
            RETURNING generated_at`,
           [...row, JSON.stringify(b.entries || [])],
         );
+        /*
+         * The history comes back WITH the write receipt.
+         *
+         * The page's one call has to do both — record the build it is looking at and read
+         * everything recorded so far — and when this returned only the receipt the page silently
+         * fell back to its frozen backfill and stopped showing anything the cron collected. One
+         * round trip, and no way to record without also being handed the result.
+         */
+        const after = await pool.query(
+          `SELECT (EXTRACT(EPOCH FROM generated_at) * 1000)::bigint AS t,
+                  player_count AS players, p3, p10, p50, p100, derived
+             FROM yk_leaderboard ORDER BY generated_at ASC`,
+        );
         res.setHeader("Cache-Control", "no-store");
         return res.status(200).json({
           collected: ins.rowCount > 0,          // false = this build was already recorded
@@ -66,6 +79,10 @@ export default async function handler(req, res) {
           ageHours: +((Date.now() - b.generatedAt) / 3600000).toFixed(2),
           playerCount: b.playerCount,
           thresholds: { p3: row[2], p10: row[3], p50: row[4], p100: row[5] },
+          rebuiltEveryHours: 4,
+          snapshots: after.rows.map((x) => ({
+            t: Number(x.t), players: x.players, p3: x.p3, p10: x.p10, p50: x.p50, p100: x.p100, derived: x.derived,
+          })),
         });
       }
       const q = await pool.query(
