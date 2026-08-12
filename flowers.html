@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.19</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.20</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.20", items: [
+          { t: "feat", text: "<b>New: what a placing COSTS, over time.</b> Yakkamon publishes no history — <code>/leaderboard</code> is one top-100 snapshot, rebuilt every 4 h — so the page now keeps its own. Every visit stores the build it saw, keyed on that build’s own timestamp, so re-reading the same build changes nothing and a gap only appears for a window nobody was here for. A chart plots the <b>#3 / #10 / #50 / #100</b> thresholds as they climb (#3 on its own axis — it is an order of magnitude up and would otherwise flatten the pair you actually read), and a table gives, for holding <b>#10</b> and <b>#50</b>: where the line is now, how fast it is moving, the spread of that movement, where it lands in 7 days and <b>how much FLOWER that would take then</b> — priced at the multiplier in force that week, not today’s, because the same deposit buys fewer points later. Seeded with the four snapshots this was built from; the two whose timestamps were reconstructed from an “updated N min ago” label are flagged as such." },
+          { t: "fix", text: "<b>The trend is a median, not a fitted line — the first version was badly wrong.</b> These thresholds <b>step</b>: one deposit lands and #10 jumps 50,000 points in a single build, then sits still for a day. Least squares reads that step as a trend and reported <b>“#10 rising +39,627/day”, projecting 410,895 a week out</b> — an artefact of one whale. It now takes the median across intervals, which a lone jump cannot move, and prints the <b>min…max range</b> beside it so a spiky series cannot pass for a smooth one. On the real data that is the difference between <i>+39,627/day</i> and <i>+9/day (range 0…150,126)</i>." },
+        ] },
         { ver: "v5.19", items: [
           { t: "fix", text: "<b>The leaderboard rebuilds every 4 hours, not twice a day.</b> v5.16 claimed a twice-daily cadence — that came from two samples that happened to land 12 hours apart, which is a multiple of the real interval, so both looked like scheduled builds and nothing contradicted it. Measured properly: consecutive builds at <b>05:00:57 and 09:00:57 UTC</b>, exactly 4.00 h apart, and a fetch at 08:08 still served the 05:00 board — which also rules out a 2- or 3-hour cycle. The schedule is <b>01:00 / 05:00 / 09:00 / 13:00 / 17:00 / 21:00 UTC</b>, six times a day, and the board now says so and turns amber past 3 hours instead of 6." },
         ] },
@@ -21108,6 +21112,52 @@
      * top of the board is in fact readable today, and it is the only real evidence of what a
      * placing costs.
      */
+    /* ── Tier-threshold history ────────────────────────────────────────
+     *
+     * Yakkamon publishes no history: /leaderboard is a single top-100 snapshot rebuilt every
+     * 4 hours (01:00 / 05:00 / 09:00 / 13:00 / 17:00 / 21:00 UTC, measured — consecutive builds
+     * 4.00 h apart, both on the same :00:57 second). So the only way to know what a placing
+     * COSTS over time is to keep the snapshots ourselves. Every visit records the build it saw,
+     * keyed on the build's own timestamp, so re-reading the same build changes nothing and a
+     * gap only appears for a 4-hour window nobody was here for.
+     *
+     * The four seeded rows are the snapshots this feature was built from. The first two carry
+     * `derived: true` — their content is exact (captured top-100 boards) but their timestamps
+     * were reconstructed from an "updated N min ago" label, so they are pinned to the nearest
+     * slot on the 4-hour grid rather than read off the API. Flagged so a reader never mistakes
+     * a reconstruction for an observation.
+     */
+    const ykBoardSeed = [
+      { t: Date.UTC(2026, 7, 11, 9, 0, 57), players: 41305, p3: 380213, p10: 79075, p50: 18229, p100: 17176, derived: true },
+      { t: Date.UTC(2026, 7, 11, 17, 0, 57), players: 43330, p3: 380213, p10: 129117, p50: 19016, p100: 17213, derived: true },
+      { t: Date.UTC(2026, 7, 12, 5, 0, 57), players: 44811, p3: 380213, p10: 129126, p50: 19812, p100: 17226, derived: false },
+      { t: Date.UTC(2026, 7, 12, 9, 0, 57), players: 45291, p3: 380252, p10: 129126, p50: 20592, p100: 17251, derived: false },
+    ];
+    const YK_HIST_KEY = "sfl_yk_board_hist";
+    function _ykHistLoad() {
+      let saved = [];
+      try { saved = JSON.parse(localStorage.getItem(YK_HIST_KEY)) || []; } catch (e) { saved = []; }
+      const byT = new Map();
+      for (const r of ykBoardSeed.concat(Array.isArray(saved) ? saved : [])) {
+        if (r && isFinite(r.t) && isFinite(r.p50)) byT.set(r.t, r);   // later wins: a real read replaces a seed
+      }
+      return [...byT.values()].sort((a, b) => a.t - b.t);
+    }
+    /** Record the build we are looking at. No-op if this build is already stored. */
+    function _ykHistRecord(board) {
+      if (!board || !board.generatedAt || !Array.isArray(board.entries) || board.entries.length < 100) return;
+      const at = (r) => { const e = board.entries.find((x) => x.rank === r); return e ? e.points : null; };
+      const row = { t: board.generatedAt, players: board.playerCount || 0, p3: at(3), p10: at(10), p50: at(50), p100: at(100), derived: false };
+      if (!isFinite(row.p50)) return;
+      const cur = _ykHistLoad();
+      if (cur.some((r) => r.t === row.t && !r.derived)) return;
+      const keep = cur.filter((r) => r.t !== row.t).concat([row]).sort((a, b) => a.t - b.t);
+      // Seeded rows are re-added by _ykHistLoad on every read, so storing them again would grow
+      // the blob for nothing. Only what we actually observed goes to localStorage.
+      const seedT = new Set(ykBoardSeed.map((r) => r.t));
+      try { localStorage.setItem(YK_HIST_KEY, JSON.stringify(keep.filter((r) => !seedT.has(r.t)))); } catch (e) {}
+    }
+
     let _ykLive = null, _ykLiveErr = null, _ykLiveLoading = false;
     async function _ykFetchLive() {
       if (_ykLiveLoading) return;
@@ -21128,6 +21178,7 @@
           flowerUsd: (ex && ex.sfl && ex.sfl.usd) || 0,
           btcUsd: (btc && btc.bitcoin && btc.bitcoin.usd) || 0,
         };
+        _ykHistRecord(board);
         _ykLiveErr = null;
       } catch (e) {
         _ykLiveErr = String(e);
@@ -21283,6 +21334,50 @@
         h += `<div style="font-size:0.5rem;color:var(--text-dim)">Loading live data from api.yakkamon.com…</div>`;
       }
       h += `</div>`;
+
+      // ── What a placing costs, over time ────────────────────────────
+      {
+        const hist = _ykHistLoad();
+        const spanH = hist.length > 1 ? (hist[hist.length - 1].t - hist[0].t) / 3600000 : 0;
+        const obs = hist.filter((r) => !r.derived).length;
+        const mult = ykMult(Math.max(1, nowWeek));
+        h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
+          <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">📈 WHAT A PLACING COSTS — over time</div>
+          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Yakkamon publishes no history, so this is <b>our own</b>: every visit stores the board it saw, keyed on that build's timestamp. <b>${hist.length}</b> snapshot${hist.length === 1 ? "" : "s"} over <b>${spanH.toFixed(0)} h</b> (${obs} read live, ${hist.length - obs} seeded from when this was built). A build lands every 4 h — visit at least that often and there are no gaps.</div>
+          <div id="yk-tier-chart" style="width:100%;min-height:240px;margin-bottom:8px"></div>`;
+        if (hist.length >= 2) {
+          const rows = [[10, "#10", "Legendary A + Legendary C"], [50, "#50", "Legendary A"]];
+          h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:420px">
+            <tr style="color:var(--text-dim);font-size:0.46rem"><td style="padding:0 6px 3px 0">hold</td><td style="text-align:right;padding:0 6px 3px">now</td><td style="text-align:right;padding:0 6px 3px">median/day</td><td style="text-align:right;padding:0 6px 3px">range</td><td style="text-align:right;padding:0 6px 3px">in 7 days</td><td style="text-align:right;padding:0 0 3px">≈ ${sflIcon()} then</td></tr>`;
+          for (const [rank, lbl, what] of rows) {
+            const fit = _ykTrend(hist, "p" + rank);
+            if (!fit) continue;
+            const wk7 = ykWeekAt(Date.now() + 7 * 86400000);
+            const m7 = ykMult(wk7);
+            const p7 = Math.max(0, fit.at(Date.now() + 7 * 86400000));
+            // Same stepped bonus the calculator uses: solve which step the deposit lands on.
+            const flowerFor = (pts, m) => { for (const [f, b] of [[50000, 0.8], [5000, 0.4], [500, 0.2], [50, 0.1]]) { const v = pts / (m + b); if (v >= f) return v; } return pts / m; };
+            h += `<tr style="border-top:1px solid #20190f">
+              <td style="padding:3px 6px 3px 0"><b style="color:var(--sunpetal)">${lbl}</b> <span style="color:var(--text-dim);font-size:0.44rem">${what}</span></td>
+              <td style="text-align:right;padding:3px 6px;color:var(--sunpetal);font-weight:bold">${fmt(Math.round(fit.cur))}</td>
+              <td style="text-align:right;padding:3px 6px;color:${fit.slope > 0 ? "#e8a060" : "var(--green)"}">${fit.slope >= 0 ? "+" : ""}${fmt(Math.round(fit.slope))}</td>
+              <td style="text-align:right;padding:3px 6px;color:var(--text-dim);font-size:0.45rem">${fmt(Math.round(fit.lo))} … ${fmt(Math.round(fit.hi))}</td>
+              <td style="text-align:right;padding:3px 6px;color:var(--text-secondary)">${fmt(Math.round(p7))}</td>
+              <td style="text-align:right;padding:3px 0;color:var(--green)">${fmt(Math.round(flowerFor(p7, m7)))} ${sflIcon()}</td>
+            </tr>`;
+          }
+          h += `</table></div>`;
+          const f50 = _ykTrend(hist, "p50");
+          const weak = hist.length < 6;
+          h += `<div style="font-size:0.46rem;color:${weak ? "#e8a060" : "var(--text-dim)"};margin-top:6px;line-height:1.6">${weak
+            ? `<b>⚠ Too few snapshots to forecast with.</b> <b>${hist.length}</b> builds over ${spanH.toFixed(0)} h gives ${(f50 && f50.k) || 0} intervals to take a median across — enough to describe the last day, not to predict the next week. These thresholds <b>step</b> rather than drift: one deposit lands and the line jumps, then sits still. Read the <b>range</b> column, not the median.`
+            : `Median across ${(f50 && f50.k) || 0} intervals from ${hist.length} snapshots. The median is used rather than a fitted line because a single large deposit steps the threshold, and a regression reads that step as a trend.`}
+            The ${sflIcon()} column prices the projected threshold at the multiplier in force <b>that week</b> (${ykMult(ykWeekAt(Date.now() + 7 * 86400000)).toFixed(1)}× in 7 days, against ${mult.toFixed(1)}× now) — holding a rank later costs more than the points alone say, because the same FLOWER buys fewer of them.</div>`;
+        } else {
+          h += `<div style="font-size:0.46rem;color:var(--text-dim)">Not enough snapshots yet — the trend appears once a second build has been seen.</div>`;
+        }
+        h += `</div>`;
+      }
 
       // ── What it is ─────────────────────────────────────────────────
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
@@ -21574,6 +21669,87 @@
       h += `<div style="font-size:0.45rem;color:var(--text-dim);text-align:center;margin-bottom:10px;line-height:1.6">Source: yakkamon.com + docs.yakkamon.com, read 8 Aug 2026; rank ladder re-cut 12 Aug 2026; signup counter, leaderboard and prices are live. The bulk-bonus shape is <b>measured off the live board</b>, not interpolated — the four amounts Yakkamon publishes are exact and the rate is flat between them.</div>`;
       h += `<div class="footer"><button class="refresh-btn" onclick="_ykLive=null;_ykLiveErr=null;renderYakkamon()">REFRESH</button></div>`;
       app.innerHTML = h;
+      _ykDrawTierChart();
+    }
+
+    /*
+     * What a placing COSTS, over time.
+     *
+     * Least squares on every stored snapshot, per tier. The slope is the honest headline —
+     * "#50 is rising N points a day" — and the projection is that slope carried forward, which
+     * is only as good as the window it was measured over, so the panel prints the sample count
+     * and the span next to it rather than presenting a number with no provenance.
+     *
+     * The FLOWER column is the part that actually decides a deposit, and it moves for TWO
+     * reasons: the threshold climbs AND the multiplier decays 0.2x a week. Holding a rank later
+     * therefore costs more than the points alone suggest, so the projection prices each date at
+     * the multiplier in force on that date, not today's.
+     */
+    /*
+     * MEDIAN of the per-interval rates, not a least-squares line.
+     *
+     * These thresholds do not drift, they STEP: one deposit lands and #10 jumps 50,000 points
+     * in a single build, then sits still for a day. A regression through that reads the step as
+     * a trend — on the first four snapshots it put #10 at "+39,627/day", projecting 410,895 a
+     * week out, which is an artefact of one whale and nothing else. The median across intervals
+     * ignores a lone jump the way it ignores a lone flat spell, and the min..max range is
+     * reported beside it so a spiky series cannot masquerade as a smooth one.
+     */
+    function _ykTrend(hist, key) {
+      const pts = hist.filter((r) => isFinite(r[key])).sort((a, b) => a.t - b.t);
+      if (pts.length < 2) return null;
+      const rates = [];
+      for (let i = 1; i < pts.length; i++) {
+        const days = (pts[i].t - pts[i - 1].t) / 86400000;
+        if (days > 0) rates.push((pts[i][key] - pts[i - 1][key]) / days);
+      }
+      if (!rates.length) return null;
+      const s = rates.slice().sort((a, b) => a - b);
+      const mid = s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
+      const last = pts[pts.length - 1];
+      return {
+        slope: mid, lo: s[0], hi: s[s.length - 1], n: pts.length, k: rates.length, cur: last[key],
+        at: (tms) => last[key] + mid * (tms - last.t) / 86400000,
+      };
+    }
+    function _ykDrawTierChart() {
+      const el = document.getElementById("yk-tier-chart");
+      if (!el || typeof LightweightCharts === "undefined") return;
+      const hist = _ykHistLoad();
+      if (hist.length < 2) return;
+      el.innerHTML = "";
+      const chart = LightweightCharts.createChart(el, {
+        height: 240,
+        layout: { background: { color: "transparent" }, textColor: "#9ca3af", fontFamily: "'Press Start 2P', monospace", fontSize: 9 },
+        grid: { vertLines: { color: "rgba(92,58,30,0.15)" }, horzLines: { color: "rgba(92,58,30,0.15)" } },
+        crosshair: { mode: 0, vertLine: { color: "rgba(255,215,0,0.3)", width: 1, style: 2 }, horzLine: { color: "rgba(255,215,0,0.3)", width: 1, style: 2 } },
+        rightPriceScale: { borderColor: "rgba(92,58,30,0.3)" },
+        timeScale: { borderColor: "rgba(92,58,30,0.3)", timeVisible: true, secondsVisible: false },
+        handleScroll: { mouseWheel: true, pressedMouseMove: true },
+        handleScale: { mouseWheel: true, pinch: true },
+      });
+      /*
+       * #3 is on its own scale — it is an order of magnitude above the rest, and on one axis it
+       * flattens #50 and #100 into a single line, which is exactly the pair you are reading.
+       */
+      const series = [
+        { key: "p10", label: "#10 · Leg A + C", color: "#B07CD8", scale: "right" },
+        { key: "p50", label: "#50 · Legendary A", color: "#FFD700", scale: "right" },
+        { key: "p100", label: "#100", color: "#30D158", scale: "right" },
+        { key: "p3", label: "#3 · Leg A + B", color: "#FF6B6B", scale: "left" },
+      ];
+      for (const s of series) {
+        const line = chart.addLineSeries({
+          color: s.color, lineWidth: 2, priceScaleId: s.scale === "left" ? "left" : "right",
+          priceLineVisible: false, lastValueVisible: true, title: s.label,
+        });
+        line.setData(hist.filter((r) => isFinite(r[s.key])).map((r) => ({ time: Math.floor(r.t / 1000), value: r[s.key] })));
+      }
+      chart.priceScale("left").applyOptions({ visible: true, borderColor: "rgba(92,58,30,0.3)" });
+      chart.timeScale().fitContent();
+      const ro = new ResizeObserver(() => chart.applyOptions({ width: el.clientWidth }));
+      ro.observe(el);
+      chart.applyOptions({ width: el.clientWidth });
     }
 
     /* ═══════════════════════════════════════════════════════════════════
