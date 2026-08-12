@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.15</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.16</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,11 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.16", items: [
+          { t: "fix", text: "<b>The bulk bonus is a step, not a slope — the calculator was over-paying you.</b> We read Yakkamon's “doubles at every step” as a smooth curve between the four published amounts. The live board says otherwise: measured against six real deposits, the stepped model reproduces every one exactly (18,000 → 61,200, i.e. ×3.4 to the point; 10,000 → 34,000; 6,000 → 20,400; 5,400 → 18,360) while the curve misses four of them by up to 5%. The rate is now <b>flat between</b> 50 / 500 / 5,000 / 50,000, and <b>zero below 50</b>." },
+          { t: "feat", text: "<b>The calculator names the next cliff.</b> Because the rate is flat between thresholds and jumps at them, stopping just short of one is the single worst way to deposit — <b>49,999 FLOWER earns 169,997 points, 50,000 earns 190,000</b>, so one more FLOWER is worth 20,003 points there. The calculator now shows which step you are on, how much more reaches the next, and what those points are worth per extra FLOWER against your current rate." },
+          { t: "feat", text: "<b>The live board says how stale it is.</b> It is rebuilt roughly <b>twice a day (about 05:00 and 17:00 UTC)</b>, not continuously, and it turns amber once it is over six hours old. That matters if you are timing a deposit against a multiplier deadline: everyone else waiting for the same deadline will be invisible on this board until after it has passed." },
+        ] },
         { ver: "v5.15", items: [
           { t: "fix", text: "<b>Yakkamon re-cut the airdrop ladder — and it is a downgrade, not an upgrade.</b> The table on the YAKKAMON page is the new one (12 Aug 2026) and says what actually moved. Only the <b>top 10</b> gained: #1–3 now get a Legendary A <i>and</i> a Legendary B, #4–10 a Legendary A <i>and</i> a Legendary C. Everything from <b>#51 down dropped a tier</b> — Legendary A used to run to #100 and now stops at #50, Legendary B ran to #500 and now stops at #250, and the old #501–1,000 Legendary C band is now plain Rare A. The line that decides whether you get an NFT <i>at all</i> did <b>not</b> move — it was rank 5,000 before and it is rank 5,000 now. Total supply is stated as <b>5,010 NFTs across 5,000 trainers</b>, never minted again." },
           { t: "feat", text: "<b>The live board now shows the tier boundaries, not round numbers.</b> #1 / #3 / #4 / #10 / #11 / #50 / #51 / #100 — the only ranks where one more point changes what you win — each labelled with the egg it buys. It also calls out how thin the top cut is: <b>#50 and #51 are a few hundred points apart</b>, which at the current multiplier is a couple of hundred FLOWER between the best egg and the next one down." },
@@ -20922,10 +20927,11 @@
      *  YAKKAMON — Thought Farm's second game (the Sunflower Land studio).
      *
      *  Everything here is sourced from the official site/docs (yakkamon.com,
-     *  docs.yakkamon.com), read 2026-08-08, and is flagged where a figure is
-     *  OUR interpolation rather than something they published. The point of the
-     *  page is the deposit decision: from 10 Aug 2026 you can send $FLOWER for
-     *  pre-registration points, and the question is whether that is worth it.
+     *  docs.yakkamon.com), read 2026-08-08, plus the rank ladder they re-cut on
+     *  2026-08-12 and the bonus shape MEASURED off the live board (see ykBonus).
+     *  The point of the page is the deposit decision: from 10 Aug 2026 you can
+     *  send $FLOWER for pre-registration points, and the question is whether
+     *  that is worth it.
      * ═══════════════════════════════════════════════════════════════════ */
     const YK = {
       depositStart: Date.UTC(2026, 7, 10),          // 10 Aug 2026, week 1 opens
@@ -21001,14 +21007,30 @@
     /** Multiplier for week n: 3.0, 2.8, 2.6 … "until it rests at 1X" — so week 11 onward is 1×. */
     function ykMult(week) { return Math.max(1, YK.multStart - YK.multStepPerWeek * (week - 1)); }
     /*
-     * Bulk bonus. The site lists it at four amounts only; per FLOWER those are 0.1 / 0.2 /
-     * 0.4 / 0.8 — i.e. the rate DOUBLES per 10x deposited, which is the "exponentially more"
-     * they advertise. Everything between the tiers is this curve, and the UI says so rather
-     * than passing an interpolation off as published fact.
+     * Bulk bonus. The site lists it at four amounts only — per FLOWER 0.1 / 0.2 / 0.4 / 0.8,
+     * doubling per 10x — and we used to read the gaps as a smooth doubling curve. The live
+     * board says otherwise: it is a STEP function, flat between the published amounts.
+     * Checked against six deposits readable on the leaderboard (12 Aug 2026), the stepped
+     * model reproduces every one to the point, the curve misses four of them:
+     *
+     *   deposit   observed   stepped   curve
+     *    50,000    190,000   190,000   190,000
+     *    18,000     61,200    61,200    64,588   ← 18,000 × 3.4 exactly
+     *    10,000     34,000    34,000    34,928
+     *     6,000     20,400    20,400    20,535
+     *     5,400     18,360    18,360    18,411
+     *     5,000     17,000    17,000    17,000
+     *
+     * Two consequences worth knowing before you deposit: the effective rate is FLAT between
+     * thresholds (5,000 and 49,999 both earn 3.4× in week 1, so the extra 45,000 buys rank
+     * and nothing else), and crossing one is a CLIFF — 49,999 earns 169,997 points while
+     * 50,000 earns 190,000, so a single FLOWER is worth 20,003 points at that edge.
+     * Below 50 the site publishes no bonus at all, so it is zero.
      */
     function ykBonus(flower) {
       if (!(flower > 0)) return 0;
-      return flower * 0.1 * Math.pow(2, Math.log10(flower / 50));
+      const rate = flower >= 50000 ? 0.8 : flower >= 5000 ? 0.4 : flower >= 500 ? 0.2 : flower >= 50 ? 0.1 : 0;
+      return flower * rate;
     }
     function ykPoints(flower, week) {
       const base = flower * ykMult(week);
@@ -21180,8 +21202,10 @@
            */
           const bounds = [[1, "Legendary A + B"], [3, "last A + B"], [4, "Legendary A + C"], [10, "last A + C"], [11, "Legendary A"], [50, "last Legendary A"], [51, "Legendary B"], [100, "Legendary B"]];
           const gap50 = (at(50) || 0) - (at(51) || 0);
+          const boardAgeH = bd.generatedAt ? (Date.now() - bd.generatedAt) / 3600000 : 0;
           h += `<div style="margin-top:10px;border-top:1px solid #20190f;padding-top:8px">
             <div style="font-size:0.5rem;color:var(--lily);margin-bottom:4px"><b>LIVE LEADERBOARD</b> — ${fmt(bd.playerCount)} players with points, top ${bd.size} is public</div>
+            ${bd.generatedAt ? `<div style="font-size:0.46rem;color:${boardAgeH > 6 ? "#e8a060" : "var(--text-dim)"};margin-bottom:5px;line-height:1.6"><b>⏱ This board is ${boardAgeH.toFixed(1)} h old</b> (built ${new Date(bd.generatedAt).toISOString().replace("T", " ").slice(0, 16)} UTC). It is rebuilt roughly <b>twice a day, around 05:00 and 17:00 UTC</b> — it is not live to the minute. So deposits made in the last few hours are <b>not in these numbers</b>, and if you are timing a deposit against a multiplier deadline, remember everyone else doing the same thing will be invisible here until after the deadline has passed.</div>` : ""}
             <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:340px">
               <tr style="color:var(--text-dim);font-size:0.46rem"><td style="padding:0 6px 3px 0">rank</td><td style="padding:0 6px 3px">wins</td><td style="text-align:right;padding:0 6px 3px">points now</td><td style="text-align:right;padding:0 0 3px">≈ FLOWER to match</td></tr>
               ${bounds.map(([r, what]) => { const p = at(r); return `<tr style="border-top:1px solid #20190f"><td style="padding:2px 6px 2px 0">#${r}</td><td style="padding:2px 6px;color:var(--text-dim);font-size:0.46rem;white-space:nowrap">${what}</td><td style="text-align:right;padding:2px 6px;color:var(--sunpetal);font-weight:bold">${p ? fmt(p) : "—"}</td><td style="text-align:right;padding:2px 0;color:var(--green)">${p ? fmt(flowerFor(p)) + " " + sflIcon() : "—"}</td></tr>`; }).join("")}
@@ -21360,6 +21384,15 @@
       // ── DEPOSIT CALCULATOR ─────────────────────────────────────────
       const p = ykPoints(_ykAmount, _ykWeek);
       const exactTier = YK.tiers.find(t => t.flower === _ykAmount);
+      /*
+       * The bonus is a step function, so the two things that actually decide a deposit are
+       * which step you are standing on and how far the next one is. Between steps the rate
+       * is flat — extra FLOWER buys rank and nothing else — but crossing one is worth far
+       * more than the FLOWER it costs, so the calculator says both out loud.
+       */
+      const ykRateNow = _ykAmount >= 50000 ? 0.8 : _ykAmount >= 5000 ? 0.4 : _ykAmount >= 500 ? 0.2 : _ykAmount >= 50 ? 0.1 : 0;
+      const ykNextStep = [50, 500, 5000, 50000].find((s) => s > _ykAmount) || null;
+      const ykCliffGain = ykNextStep ? ykPoints(ykNextStep, _ykWeek).total - p.total : 0;
       // Opportunity cost: the same FLOWER put into the farm pays back in _ykRoiDays, i.e. it
       // yields 1/_ykRoiDays per day. Locked for _ykLockDays it forgoes that much FLOWER.
       const forgone = _ykAmount * (_ykLockDays / _ykRoiDays);
@@ -21386,7 +21419,8 @@
         </div>
         <div style="font-size:0.46rem;color:${exactTier ? "var(--green)" : "#e8a060"};margin-bottom:6px;line-height:1.6">${exactTier
           ? `✓ Exactly as published (${fmt(exactTier.flower)} → +${fmt(exactTier.pts)} pts, +${fmt(exactTier.bonus)} bonus at 3×).`
-          : `⚠ The bulk bonus is interpolated between the 4 published amounts (50 / 500 / 5,000 / 50,000). Yakkamon states it <b>doubles at every step, up to +80% on 50,000</b> — which is exactly the curve used here (0.1 → 0.2 → 0.4 → 0.8 points per FLOWER). The base (× multiplier) is certain.`}</div>
+          : `The bulk bonus is a <b>step, not a slope</b> — it is <b>flat between</b> the four published amounts (50 / 500 / 5,000 / 50,000). Measured against six deposits readable on the live board: 18,000 → 61,200 (×3.4 exactly), 10,000 → 34,000, 6,000 → 20,400, 5,400 → 18,360 — the stepped model hits every one, a smooth curve misses four. ${ykRateNow ? `You are on the <b>+${(ykRateNow * 100).toFixed(0)}%</b> step` : `Below 50 ${sflIcon()} there is <b>no bonus at all</b>`}${ykNextStep ? `, and the rate does not move again until <b>${fmt(ykNextStep)}</b>.` : ` — the top step; it does not rise again.`}`}</div>
+        ${ykNextStep ? `<div style="font-size:0.46rem;color:var(--green);margin-bottom:6px;line-height:1.6"><b>⛰ Next cliff:</b> adding <b>${fmt(ykNextStep - _ykAmount)} ${sflIcon()}</b> to reach <b>${fmt(ykNextStep)}</b> is worth <b>+${fmt(ykCliffGain)} points</b> — ${(() => { const r = ykCliffGain / Math.max(1, ykNextStep - _ykAmount); return r >= 100 ? fmt(Math.round(r)) : r.toFixed(1); })()} pts per extra FLOWER, against ${p.perFlower.toFixed(1)} on what you have entered. Stopping just short of a step is the one genuinely bad way to deposit.</div>` : ""}
         <div style="font-size:0.46rem;color:#e8a060;margin-bottom:10px;line-height:1.6">⚠ <b>The bonus is rated on EACH deposit separately</b> (&ldquo;rated per deposit&rdquo; — the full amount must land in one go). Splitting the same sum into several smaller deposits therefore earns <b>far fewer</b> points: each piece falls into its own lower bonus rate. The multiplier also drops 0.2× per week <b>until it rests at 1×</b> (from week 11).</div>
         <div style="border-top:1px solid #20190f;padding-top:8px">
           <div style="font-size:0.5rem;color:var(--lily);margin-bottom:5px"><b>WHAT IT COSTS YOU</b> — you get the FLOWER back, but it earns nothing meanwhile</div>
@@ -21474,7 +21508,7 @@
         </div>
       </div>`;
 
-      h += `<div style="font-size:0.45rem;color:var(--text-dim);text-align:center;margin-bottom:10px;line-height:1.6">Source: yakkamon.com + docs.yakkamon.com, read 8 Aug 2026; signup counter, leaderboard and prices are live. Numbers can change — where it matters the text says what is published and what is interpolated.</div>`;
+      h += `<div style="font-size:0.45rem;color:var(--text-dim);text-align:center;margin-bottom:10px;line-height:1.6">Source: yakkamon.com + docs.yakkamon.com, read 8 Aug 2026; rank ladder re-cut 12 Aug 2026; signup counter, leaderboard and prices are live. The bulk-bonus shape is <b>measured off the live board</b>, not interpolated — the four amounts Yakkamon publishes are exact and the rate is flat between them.</div>`;
       h += `<div class="footer"><button class="refresh-btn" onclick="_ykLive=null;_ykLiveErr=null;renderYakkamon()">REFRESH</button></div>`;
       app.innerHTML = h;
     }
