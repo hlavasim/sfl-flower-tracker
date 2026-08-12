@@ -111,6 +111,11 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       };
     }
 
+    // Ceiling for the efficiency slider and for a manual effOverrides entry. Above 1 on purpose:
+    // the measured ratio is harvests against a one-cycle-per-login model, so a category worked
+    // several times a day legitimately measures well over 100%.
+    const ROADMAP_EFF_MAX = 2;
+
     // ── flowers.html 15893-15911: roadmapPrices + roadmapEffFactor ──
     function roadmapPrices(settings) {
       // Resources are ALWAYS valued at p2p (marketplace). No per-resource overrides.
@@ -118,8 +123,17 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
     }
 
     function roadmapEffFactor(cat, settings) {
+      /*
+       * The manual slider used to be capped at 1.00 while the MEASURED path below returns
+       * eb[cat].ratio uncapped — and that ratio routinely exceeds 1, because "efficiency" here
+       * is harvests against a one-cycle-per-login model, not a percentage of something. A farm
+       * mining crimstone at a measured 141% therefore read 141% while on auto and silently
+       * dropped to 100% the moment the slider was touched, understating that category's income
+       * AND every boost valued against it by the same 29%, with the row still printing
+       * "measured 141%" next to the truncated number. Same ceiling as the slider now.
+       */
       const ov = settings.effOverrides && settings.effOverrides[cat];
-      if (typeof ov === "number" && isFinite(ov)) return Math.max(0, Math.min(1, ov)); // manual slider
+      if (typeof ov === "number" && isFinite(ov)) return Math.max(0, Math.min(ROADMAP_EFF_MAX, ov)); // manual slider
       if (settings.effMode === "theoretical") return 1;
       if (cat === "obsidian") return 1; // obsidian net already capped at 1 sale/week
       if (isAnimalCat(cat)) return 1; // animals are 24h-cycle stockpilers — caught each daily login (~full); _h.* units don't match here

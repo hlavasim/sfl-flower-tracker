@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.16</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.17</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.17", items: [
+          { t: "fix", text: "<b>Pinning a mining efficiency above 100% no longer throws the excess away.</b> The efficiency slider stopped at 100% and a saved override was clamped to 1.00 — but the <i>measured</i> value it is meant to mirror is uncapped, because efficiency here counts harvests against a one-cycle-per-login model, so a resource you work several times a day legitimately measures well over 100%. A farm mining crimstone at a measured <b>141%</b> therefore read 141% while the row was on <b>auto</b> and silently dropped to 100% the moment the slider was touched — with the row still printing “measured 141%” right next to the truncated number. That understated the category's income and <b>every boost valued against it</b> by the same 29%: on a real farm Crimstone Spikes Hair reads <b>8.37 ⚀/day pinned at 100% versus 11.81 at 141%</b>. The slider now runs to 200% and the engine, the setter and the slider all share one ceiling." },
+        ] },
         { ver: "v5.16", items: [
           { t: "fix", text: "<b>The bulk bonus is a step, not a slope — the calculator was over-paying you.</b> We read Yakkamon's “doubles at every step” as a smooth curve between the four published amounts. The live board says otherwise: measured against six real deposits, the stepped model reproduces every one exactly (18,000 → 61,200, i.e. ×3.4 to the point; 10,000 → 34,000; 6,000 → 20,400; 5,400 → 18,360) while the curve misses four of them by up to 5%. The rate is now <b>flat between</b> 50 / 500 / 5,000 / 50,000, and <b>zero below 50</b>." },
           { t: "feat", text: "<b>The calculator names the next cliff.</b> Because the rate is flat between thresholds and jumps at them, stopping just short of one is the single worst way to deposit — <b>49,999 FLOWER earns 169,997 points, 50,000 earns 190,000</b>, so one more FLOWER is worth 20,003 points there. The calculator now shows which step you are on, how much more reaches the next, and what those points are worth per extra FLOWER against your current rate." },
@@ -16751,6 +16754,11 @@
       const next = Object.assign({}, getRoadmapSettings(), patch);
       try { localStorage.setItem("sfl_roadmap_settings", JSON.stringify(next)); } catch {}
     }
+    // Ceiling for the efficiency slider and for a manual effOverrides entry. Above 1 on purpose:
+    // the measured ratio is harvests against a one-cycle-per-login model, so a category worked
+    // several times a day legitimately measures well over 100%.
+    const ROADMAP_EFF_MAX = 2;
+
     // Merge the user's per-resource use-value overrides over live p2p. Roadmap-only (Power page untouched).
     function roadmapPrices(settings) {
       // Resources are ALWAYS valued at p2p (marketplace). No per-resource overrides.
@@ -16758,8 +16766,17 @@
     }
 
     function roadmapEffFactor(cat, settings) {
+      /*
+       * The manual slider used to be capped at 1.00 while the MEASURED path below returns
+       * eb[cat].ratio uncapped — and that ratio routinely exceeds 1, because "efficiency" here
+       * is harvests against a one-cycle-per-login model, not a percentage of something. A farm
+       * mining crimstone at a measured 141% therefore read 141% while on auto and silently
+       * dropped to 100% the moment the slider was touched, understating that category's income
+       * AND every boost valued against it by the same 29%, with the row still printing
+       * "measured 141%" next to the truncated number. Same ceiling as the slider now.
+       */
       const ov = settings.effOverrides && settings.effOverrides[cat];
-      if (typeof ov === "number" && isFinite(ov)) return Math.max(0, Math.min(1, ov)); // manual slider
+      if (typeof ov === "number" && isFinite(ov)) return Math.max(0, Math.min(ROADMAP_EFF_MAX, ov)); // manual slider
       if (settings.effMode === "theoretical") return 1;
       if (cat === "obsidian") return 1; // obsidian net already capped at 1 sale/week
       if (isAnimalCat(cat)) return 1; // animals are 24h-cycle stockpilers — caught each daily login (~full); _h.* units don't match here
@@ -17591,7 +17608,7 @@
         const overridden = !!(settings.effOverrides && typeof settings.effOverrides[r.cat] === "number");
         h += `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0;font-size:0.58rem">`;
         h += `<div style="min-width:84px"><img class="inline-icon" src="${getItemIcon(getDefaultProduct(r.cat))}" onerror="this.style.display='none'" alt=""> ${r.label}</div>`;
-        h += `<input type="range" min="0" max="100" step="1" value="${pct}" style="accent-color:var(--green);width:170px" oninput="_roadmapEffPreview('${r.cat}',this.value,${r.C.toFixed(3)})" onchange="_roadmapSetEffOverride('${r.cat}',this.value)">`;
+        h += `<input type="range" min="0" max="${ROADMAP_EFF_MAX * 100}" step="1" value="${pct}" style="accent-color:var(--green);width:170px" oninput="_roadmapEffPreview('${r.cat}',this.value,${r.C.toFixed(3)})" onchange="_roadmapSetEffOverride('${r.cat}',this.value)">`;
         h += `<div style="min-width:40px;text-align:right"><b id="eff-pct-${r.cat}" style="color:${overridden ? "var(--sunpetal)" : "var(--green)"}">${pct}%</b></div>`;
         h += `<div style="color:var(--text-dim);flex:1;min-width:230px">100% = every ${roadmapEffFmtH(r.C)} day &amp; night \u00b7 now \u2248 every <b id="eff-int-${r.cat}">${roadmapEffFmtH(interval)}</b>${measured != null ? ` \u00b7 measured ${measured}%` : ""}${overridden ? ` \u00b7 <span style="cursor:pointer;color:var(--lily)" onclick="_roadmapResetEffOverride('${r.cat}')">[auto]</span>` : ""}</div>`;
         h += `</div>`;
@@ -18904,7 +18921,7 @@
     window._roadmapSetIncome = function(v) { const n = parseFloat(v); saveRoadmapSettings({ startIncome: isFinite(n) && n >= 0 ? n : null }); renderRoadmapContent(); };
     window._roadmapResetIncome = function() { saveRoadmapSettings({ startIncome: null }); renderRoadmapContent(); };
     window._roadmapSetEffMode = function(v) { saveRoadmapSettings({ effMode: v === "theoretical" ? "theoretical" : "real" }); renderRoadmapContent(); };
-    window._roadmapSetEffOverride = function(cat, v) { const n = parseFloat(v) / 100; const cur = Object.assign({}, getRoadmapSettings().effOverrides || {}); cur[cat] = Math.max(0, Math.min(1, isFinite(n) ? n : 1)); saveRoadmapSettings({ effOverrides: cur }); renderRoadmapContent(); };
+    window._roadmapSetEffOverride = function(cat, v) { const n = parseFloat(v) / 100; const cur = Object.assign({}, getRoadmapSettings().effOverrides || {}); cur[cat] = Math.max(0, Math.min(ROADMAP_EFF_MAX, isFinite(n) ? n : 1)); saveRoadmapSettings({ effOverrides: cur }); renderRoadmapContent(); };
     window._roadmapResetEffOverride = function(cat) { const cur = Object.assign({}, getRoadmapSettings().effOverrides || {}); delete cur[cat]; saveRoadmapSettings({ effOverrides: cur }); renderRoadmapContent(); };
     window._roadmapResetAllEff = function() { saveRoadmapSettings({ effOverrides: {} }); renderRoadmapContent(); };
     window._roadmapSetResVal = function(res, v) { const cur = Object.assign({}, getRoadmapSettings().resourceUseValue || {}); const nx = parseFloat(v); if (v !== "" && isFinite(nx) && nx >= 0) cur[res] = nx; else delete cur[res]; saveRoadmapSettings({ resourceUseValue: cur }); renderRoadmapContent(); };
