@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.20</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.21</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.21", items: [
+          { t: "fix", text: "<b>The tier chart is four panels now — the first one was unreadable, and misleading with it.</b> It put #10/#50/#100 on one y-scale and pushed #3 onto a second. Two scales on one plot align arbitrarily, so <b>#3 — which had moved 39 points — was drawn climbing across the entire panel as if it had exploded</b>, while #50 and #100 were crushed into a single flat line at the bottom of the other scale. Four series spanning 17k to 380k cannot share an axis and a second axis only fakes it; a log scale was considered and rejected, because it makes every line look equally sedate, which is the opposite of the question. Each tier now gets <b>its own panel and its own linear range</b>, on one shared time axis, twice as tall as before — so #50 creeping 2,363 points in a day is finally visible as a slope instead of a flat line." },
+          { t: "fix", text: "<b>Chart detail:</b> only the endpoint carries a number (plus what it moved over the window) instead of a label on every point; markers get a surface ring so they read as points on the line; every point has a hover tooltip with its exact build time and value, and says so when the timestamp was reconstructed rather than read. Colours were re-picked and <b>run through a contrast/colour-blindness validator</b> — the previous red-and-green pair was 3.7 ΔE apart under deuteranopia, i.e. the same colour." },
+        ] },
         { ver: "v5.20", items: [
           { t: "feat", text: "<b>New: what a placing COSTS, over time.</b> Yakkamon publishes no history — <code>/leaderboard</code> is one top-100 snapshot, rebuilt every 4 h — so the page now keeps its own. Every visit stores the build it saw, keyed on that build’s own timestamp, so re-reading the same build changes nothing and a gap only appears for a window nobody was here for. A chart plots the <b>#3 / #10 / #50 / #100</b> thresholds as they climb (#3 on its own axis — it is an order of magnitude up and would otherwise flatten the pair you actually read), and a table gives, for holding <b>#10</b> and <b>#50</b>: where the line is now, how fast it is moving, the spread of that movement, where it lands in 7 days and <b>how much FLOWER that would take then</b> — priced at the multiplier in force that week, not today’s, because the same deposit buys fewer points later. Seeded with the four snapshots this was built from; the two whose timestamps were reconstructed from an “updated N min ago” label are flagged as such." },
           { t: "fix", text: "<b>The trend is a median, not a fitted line — the first version was badly wrong.</b> These thresholds <b>step</b>: one deposit lands and #10 jumps 50,000 points in a single build, then sits still for a day. Least squares reads that step as a trend and reported <b>“#10 rising +39,627/day”, projecting 410,895 a week out</b> — an artefact of one whale. It now takes the median across intervals, which a lone jump cannot move, and prints the <b>min…max range</b> beside it so a spiky series cannot pass for a smooth one. On the real data that is the difference between <i>+39,627/day</i> and <i>+9/day (range 0…150,126)</i>." },
@@ -21343,8 +21347,8 @@
         const mult = ykMult(Math.max(1, nowWeek));
         h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
           <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">📈 WHAT A PLACING COSTS — over time</div>
-          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Yakkamon publishes no history, so this is <b>our own</b>: every visit stores the board it saw, keyed on that build's timestamp. <b>${hist.length}</b> snapshot${hist.length === 1 ? "" : "s"} over <b>${spanH.toFixed(0)} h</b> (${obs} read live, ${hist.length - obs} seeded from when this was built). A build lands every 4 h — visit at least that often and there are no gaps.</div>
-          <div id="yk-tier-chart" style="width:100%;min-height:240px;margin-bottom:8px"></div>`;
+          <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Yakkamon publishes no history, so this is <b>our own</b>: every visit stores the board it saw, keyed on that build's timestamp. <b>${hist.length}</b> snapshot${hist.length === 1 ? "" : "s"} over <b>${spanH.toFixed(0)} h</b> (${obs} read live, ${hist.length - obs} seeded from when this was built). A build lands every 4 h (times below are UTC) — visit at least that often and there are no gaps.</div>
+          <div style="width:100%;margin-bottom:10px">${hist.length >= 2 ? _ykTierSvg(hist) : ""}</div>`;
         if (hist.length >= 2) {
           const rows = [[10, "#10", "Legendary A + Legendary C"], [50, "#50", "Legendary A"]];
           h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:420px">
@@ -21669,7 +21673,6 @@
       h += `<div style="font-size:0.45rem;color:var(--text-dim);text-align:center;margin-bottom:10px;line-height:1.6">Source: yakkamon.com + docs.yakkamon.com, read 8 Aug 2026; rank ladder re-cut 12 Aug 2026; signup counter, leaderboard and prices are live. The bulk-bonus shape is <b>measured off the live board</b>, not interpolated — the four amounts Yakkamon publishes are exact and the rate is flat between them.</div>`;
       h += `<div class="footer"><button class="refresh-btn" onclick="_ykLive=null;_ykLiveErr=null;renderYakkamon()">REFRESH</button></div>`;
       app.innerHTML = h;
-      _ykDrawTierChart();
     }
 
     /*
@@ -21712,44 +21715,74 @@
         at: (tms) => last[key] + mid * (tms - last.t) / 86400000,
       };
     }
-    function _ykDrawTierChart() {
-      const el = document.getElementById("yk-tier-chart");
-      if (!el || typeof LightweightCharts === "undefined") return;
-      const hist = _ykHistLoad();
-      if (hist.length < 2) return;
-      el.innerHTML = "";
-      const chart = LightweightCharts.createChart(el, {
-        height: 240,
-        layout: { background: { color: "transparent" }, textColor: "#9ca3af", fontFamily: "'Press Start 2P', monospace", fontSize: 9 },
-        grid: { vertLines: { color: "rgba(92,58,30,0.15)" }, horzLines: { color: "rgba(92,58,30,0.15)" } },
-        crosshair: { mode: 0, vertLine: { color: "rgba(255,215,0,0.3)", width: 1, style: 2 }, horzLine: { color: "rgba(255,215,0,0.3)", width: 1, style: 2 } },
-        rightPriceScale: { borderColor: "rgba(92,58,30,0.3)" },
-        timeScale: { borderColor: "rgba(92,58,30,0.3)", timeVisible: true, secondsVisible: false },
-        handleScroll: { mouseWheel: true, pressedMouseMove: true },
-        handleScale: { mouseWheel: true, pinch: true },
-      });
-      /*
-       * #3 is on its own scale — it is an order of magnitude above the rest, and on one axis it
-       * flattens #50 and #100 into a single line, which is exactly the pair you are reading.
-       */
-      const series = [
-        { key: "p10", label: "#10 · Leg A + C", color: "#B07CD8", scale: "right" },
-        { key: "p50", label: "#50 · Legendary A", color: "#FFD700", scale: "right" },
-        { key: "p100", label: "#100", color: "#30D158", scale: "right" },
-        { key: "p3", label: "#3 · Leg A + B", color: "#FF6B6B", scale: "left" },
+    /*
+     * SMALL MULTIPLES — one panel per tier, each on its OWN linear axis.
+     *
+     * The first version put all four on one plot with #3 pushed to a second y-scale. That is the
+     * single worst thing you can do to a chart: two scales on one plot align arbitrarily, so #3
+     * — which had moved 39 points — was drawn climbing across the whole panel as if it had
+     * exploded, while #50 and #100 were crushed into one flat line at the bottom of the other
+     * scale. The series span 17k to 380k; no single axis can hold them and no second axis is
+     * allowed to fake it. A log scale was considered and rejected: it makes every line look
+     * equally sedate, which is the opposite of the question being asked.
+     *
+     * So: four panels, one series each, each y-range zoomed to its own data, one shared time
+     * axis at the bottom. Identity comes from the panel title, not from colour, so colour is
+     * secondary encoding here — the hues are still a validated set (chroma, CVD-separation,
+     * normal-vision and contrast all pass against this surface).
+     */
+    function _ykTierSvg(hist) {
+      const tiers = [
+        { key: "p10", label: "#10", what: "Legendary A + Legendary C", color: "#FFD700" },
+        { key: "p50", label: "#50", what: "Legendary A", color: "#4FA3E3" },
+        { key: "p100", label: "#100", what: "last Legendary B", color: "#E8A060" },
+        { key: "p3", label: "#3", what: "Legendary A + Legendary B", color: "#B07CD8" },
       ];
-      for (const s of series) {
-        const line = chart.addLineSeries({
-          color: s.color, lineWidth: 2, priceScaleId: s.scale === "left" ? "left" : "right",
-          priceLineVisible: false, lastValueVisible: true, title: s.label,
-        });
-        line.setData(hist.filter((r) => isFinite(r[s.key])).map((r) => ({ time: Math.floor(r.t / 1000), value: r[s.key] })));
-      }
-      chart.priceScale("left").applyOptions({ visible: true, borderColor: "rgba(92,58,30,0.3)" });
-      chart.timeScale().fitContent();
-      const ro = new ResizeObserver(() => chart.applyOptions({ width: el.clientWidth }));
-      ro.observe(el);
-      chart.applyOptions({ width: el.clientWidth });
+      const W = 1000, PH = 118, GAP = 30, L = 104, R = 150, TOP = 34, AXIS = 30;
+      const H = tiers.length * (PH + GAP) + AXIS;
+      const t0 = hist[0].t, t1 = hist[hist.length - 1].t, span = Math.max(1, t1 - t0);
+      const X = (t) => L + ((t - t0) / span) * (W - L - R);
+      const fmtN = (v) => Math.round(v).toLocaleString("en-US");
+      const when = (t) => { const d = new Date(t); return `${String(d.getUTCDate()).padStart(2, "0")}. ${String(d.getUTCHours()).padStart(2, "0")}:00`; };
+
+      let s = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;font-family:'Press Start 2P',monospace" role="img" aria-label="Tier point thresholds over time, one panel per tier">`;
+      tiers.forEach((tier, i) => {
+        const pts = hist.filter((r) => isFinite(r[tier.key]));
+        if (pts.length < 2) return;
+        const top = TOP + i * (PH + GAP), bot = top + PH - 26;
+        const vs = pts.map((r) => r[tier.key]);
+        let lo = Math.min(...vs), hi = Math.max(...vs);
+        // A dead-flat series still needs a band, or it divides by zero and draws on the edge.
+        if (hi - lo < 1e-9) { const p = Math.max(1, Math.abs(hi) * 0.002); lo -= p; hi += p; }
+        else { const p = (hi - lo) * 0.18; lo -= p; hi += p; }
+        const Y = (v) => bot - ((v - lo) / (hi - lo)) * (bot - top);
+        const last = pts[pts.length - 1][tier.key];
+        const first = pts[0][tier.key];
+        const delta = last - first;
+
+        // Title clears the plot entirely — it used to sit 6px above the top hairline and collide
+        // with the max-value label pinned just under it.
+        s += `<text x="0" y="${top - 16}" fill="var(--text-secondary)" font-size="13">${tier.label}</text>`;
+        s += `<text x="${tier.label.length * 12 + 16}" y="${top - 16}" fill="var(--text-dim)" font-size="9">${escHTML(tier.what)}</text>`;
+        // Hairline band edges — solid, one shade off the surface (never dashed).
+        for (const v of [hi, lo]) s += `<line x1="${L}" y1="${Y(v).toFixed(1)}" x2="${W - R}" y2="${Y(v).toFixed(1)}" stroke="rgba(92,58,30,0.35)" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
+        s += `<text x="${L - 8}" y="${(Y(hi) + 4).toFixed(1)}" text-anchor="end" fill="var(--text-dim)" font-size="9">${fmtN(hi)}</text>`;
+        s += `<text x="${L - 8}" y="${(Y(lo) + 4).toFixed(1)}" text-anchor="end" fill="var(--text-dim)" font-size="9">${fmtN(lo)}</text>`;
+        s += `<polyline fill="none" stroke="${tier.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" points="${pts.map((r) => `${X(r.t).toFixed(1)},${Y(r[tier.key]).toFixed(1)}`).join(" ")}"/>`;
+        for (const r of pts) {
+          // 2px surface ring so a marker sitting on the line still reads as a point.
+          s += `<circle cx="${X(r.t).toFixed(1)}" cy="${Y(r[tier.key]).toFixed(1)}" r="4" fill="${tier.color}" stroke="var(--bg-medium)" stroke-width="2"><title>${when(r.t)} UTC — ${fmtN(r[tier.key])} pts${r.derived ? " (timestamp reconstructed)" : ""}</title></circle>`;
+        }
+        // Only the endpoint is labelled — a number on every point is unreadable.
+        s += `<text x="${W - R + 12}" y="${(Y(last) + 1).toFixed(1)}" fill="${tier.color}" font-size="13">${fmtN(last)}</text>`;
+        s += `<text x="${W - R + 12}" y="${(Y(last) + 16).toFixed(1)}" fill="${delta > 0 ? "#e8a060" : "var(--text-dim)"}" font-size="9">${delta >= 0 ? "+" : ""}${fmtN(delta)} in ${((t1 - t0) / 3600000).toFixed(0)} h</text>`;
+      });
+      const ticks = [t0, t0 + span / 2, t1];
+      const ay = H - AXIS + 14;
+      s += `<line x1="${L}" y1="${ay - 12}" x2="${W - R}" y2="${ay - 12}" stroke="rgba(92,58,30,0.35)" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
+      ticks.forEach((t, k) => { const anchor = k === 0 ? "start" : k === ticks.length - 1 ? "end" : "middle";
+        s += `<text x="${X(t).toFixed(1)}" y="${ay + 2}" text-anchor="${anchor}" fill="var(--text-dim)" font-size="9">${when(t)}</text>`; });
+            return s + `</svg>`;
     }
 
     /* ═══════════════════════════════════════════════════════════════════

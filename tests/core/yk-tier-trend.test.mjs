@@ -65,6 +65,27 @@ test("a genuinely steady climb is reported as one", () => {
   assert.equal(Math.round(r.at(3 * DAY + 7 * DAY)), 21500 + 3500, "projection carries the median forward");
 });
 
+test("the tier chart is small multiples, never a second y-axis", () => {
+  /*
+   * The first version put #10/#50/#100 on one scale and pushed #3 to a second. Two y-scales on
+   * one plot align arbitrarily: #3 had moved 39 points and was drawn climbing across the whole
+   * panel, while #50 and #100 were crushed into one flat line. Four series spanning 17k..380k
+   * get four panels — that is the only honest option, and a log scale is not a substitute.
+   */
+  for (const name of ["flowers.html", "index.html"]) {
+    const src = readFileSync(path.join(ROOT, name), "utf8");
+    const start = src.indexOf("function _ykTierSvg(");
+    assert.ok(start > 0, `${name}: the small-multiples renderer exists`);
+    const body = src.slice(start, start + 6000);
+    assert.ok(!/priceScaleId/.test(body), `${name}: no second price scale`);
+    assert.ok(!/scaleType|logarithmic/i.test(body), `${name}: linear only — a log scale flattens exactly the differences being read`);
+    // One <svg> holding a panel per tier, each with its own computed y-range.
+    assert.match(body, /const tiers = \[/, `${name}: draws a panel per tier`);
+    assert.match(body, /const Y = \(v\) =>/, `${name}: each panel derives its own y scale`);
+    assert.ok(!/_ykDrawTierChart/.test(src), `${name}: the old single-plot renderer is gone`);
+  }
+});
+
 test("the seeded history is present and well formed", () => {
   const src = readFileSync(path.join(ROOT, "flowers.html"), "utf8");
   const m = src.match(/const ykBoardSeed = \[([\s\S]*?)\];/);
