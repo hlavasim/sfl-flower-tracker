@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.27</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.28</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.28", items: [
+          { t: "fix", text: "<b>The SFL holding is read from your farm, not asked for.</b> v5.27 offered a <i>[set it]</i> prompt on every venue — including the one the app values on every single load. The farm’s treasury total is what metric ③ is already built from, so asking for it by hand meant asking for a number we hold, and one that goes stale the moment anything on the farm changes. The SFL tile now reads <b>live from your farm data</b> and has no prompt. Only a venue the app genuinely cannot see into — Yakkamon, which exposes no per-account balance — keeps the manual field." },
+        ] },
         { ver: "v5.27", items: [
           { t: "feat", text: "<b>A venue can now say what it still HOLDS, not just what was sent to it.</b> BTC sent to Yakkamon pre-registration read as spent for the whole lock-up, when it is parked and refundable — the tile said <i>0.0965 ₿ sent</i> and nothing else. Each venue tile now carries the holding (<b>[set it]</b> to enter, <b>[edit]</b> to change), values it in BTC at the live FLOWER price, and shows the gain or loss against what went in. It also says <b>where the number came from</b>: today Yakkamon exposes no per-account balance so it is typed in, and the tile says so — when the game does expose one, the same field is written with source <code>game</code>, the caveat disappears on its own and nothing else changes. A figure entered by hand must never be shown as a measured one." },
         ] },
@@ -27720,7 +27723,15 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         </div>
         ${(agg.venues || []).length > 1 ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">${agg.venues.map((v) => {
           const meta = invVenues[v.venue] || { label: v.venue.toUpperCase(), color: "var(--text-dim)" };
-          const bal = _invBalances[v.venue];
+          /*
+           * Prefer a holding the app already KNOWS over one somebody typed in. The farm's own
+           * value is computed every load — metric (3) is built from it — so asking for it by hand
+           * would be asking for a number we hold already, and one that goes stale the moment the
+           * farm changes. Only a venue the app cannot see into falls back to the manual figure.
+           */
+          const computed = (v.venue === "sfl" && treasuryTotalSfl > 0)
+            ? { amount: treasuryTotalSfl, unit: "FLOWER", source: "farm" } : null;
+          const bal = computed || _invBalances[v.venue];
           // Value the holding at the live FLOWER price so it can be read against what went in.
           const holdBtc = (bal && flowerPerBtc > 0) ? (bal.amount / flowerPerBtc) : null;
           const pnl = (holdBtc !== null && v.net > 0) ? ((holdBtc / v.net - 1) * 100) : null;
@@ -27731,7 +27742,11 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
             <div style="margin-top:6px;border-top:1px solid rgba(255,255,255,0.08);padding-top:5px">
               ${bal ? `<div style="font-family:'Courier New',monospace;font-size:0.72rem;color:var(--green)">${fmtFlower(bal.amount)} <span style="font-size:0.6rem;color:var(--text-dim)">held</span></div>
                  <div class="pixel-font" style="font-size:0.45rem;color:var(--text-dim);margin-top:2px">${holdBtc !== null ? fmtBtc(holdBtc) : "—"}${pnl !== null ? ` · <b style="color:${pnl >= 0 ? "var(--green)" : "var(--red)"}">${pnl >= 0 ? "+" : ""}${pnl.toFixed(1)}%</b>` : ""}</div>
-                 <div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);margin-top:2px">${bal.source === "game" ? "read from the game" : "typed in"} ${String(bal.noted_at).slice(0, 10)} · <span style="cursor:pointer;color:var(--lily)" onclick="_invSetBalance('${v.venue}')">[edit]</span></div>`
+                 <div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);margin-top:2px">${
+                   bal.source === "farm" ? "live from your farm data"
+                   : bal.source === "game" ? `read from the game ${String(bal.noted_at).slice(0, 10)} · <span style="cursor:pointer;color:var(--lily)" onclick="_invSetBalance('${v.venue}')">[edit]</span>`
+                   : `typed in ${String(bal.noted_at).slice(0, 10)} · <span style="cursor:pointer;color:var(--lily)" onclick="_invSetBalance('${v.venue}')">[edit]</span>`
+                 }</div>`
                 : `<div class="pixel-font" style="font-size:0.45rem;color:var(--text-dim)">holding unknown — <span style="cursor:pointer;color:var(--lily)" onclick="_invSetBalance('${v.venue}')">[set it]</span> so this does not read as spent</div>`}
             </div>
           </div>`;
