@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.25</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.26</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.26", items: [
+          { t: "fix", text: "<b>The Investment Tracker was counting a round trip as new money.</b> ① summed every deposit ever made, so pulling BTC out and putting the same BTC back read as a fresh investment. On the real ledger that meant <b>0.464 ₿ “deposited” and 46.1% “repaid” — while actually sitting at the highest exposure ever recorded, having recovered nothing</b>. The denominator is now the <b>high-water mark of the running net</b>, which is what was genuinely at risk, and the headline is <b>RECOVERED FROM PEAK</b>: how far you have climbed back down from it. Same ledger now reads 0% recovered, 0.250 ₿ in, peak 0.250 ₿ — with the gross flows still shown underneath so nothing is hidden. ③ LIQUIDATE NOW is measured against the peak too, for the same reason." },
+          { t: "feat", text: "<b>Transactions say where the money went — SFL or Yakkamon.</b> They were logged as one pot, which stopped being true the moment a deposit went to Yakkamon pre-registration instead of into the farm: different lock-up, different exit, and a combined figure answers neither question. Each row carries a venue chip (<b>click it to change</b>, since a row logged before this existed still needs tagging), the add form has a WHERE selector, and once there is more than one venue a per-venue split appears above the table with the net and peak for each. Existing rows default to SFL — every one of them predates the Yakkamon programme, which only opened 10 Aug." },
+        ] },
         { ver: "v5.25", items: [
           { t: "fix", text: "<b>The chart stopped showing anything the collector recorded.</b> The page makes one call to record-and-read, but <code>collect=1</code> was answering with only the write receipt — no history in the payload. The page’s guard on that array never fired, so it silently kept its frozen backfill and every build the cron had gathered was invisible on the site while sitting perfectly well in the database. The receipt now comes back with the full history attached, in the same round trip." },
         ] },
@@ -27510,23 +27514,45 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     }
 
     function invAggregate(transactions) {
+      /*
+       * PEAK exposure, not the sum of deposits.
+       *
+       * Summing deposits counts a round trip as new money: pull 0.21 out and put the same 0.21
+       * back and the total reads 0.46 "invested" with 46% "repaid" — while you are in fact
+       * sitting at your highest exposure ever, having recovered nothing. Measured on the real
+       * ledger, that is exactly what it said: 0.464 deposited, 46.1% repaid, against a true peak
+       * of 0.250 and 0% actually back out.
+       *
+       * What you risked is the high-water mark of the running net, so that is the denominator.
+       * Repaid is how far you have climbed back down from it — money that left and stayed gone.
+       */
       let depositBtc = 0, withdrawBtc = 0, depositUsd = 0, withdrawUsd = 0;
       let firstDepositDate = null;
-      for (const t of transactions) {
+      let net = 0, peakBtc = 0;
+      const byVenue = {};
+      const chron = transactions.slice().sort((a, b) =>
+        String(a.tx_date).localeCompare(String(b.tx_date)) || String(a.created_at).localeCompare(String(b.created_at)));
+      for (const t of chron) {
         const btc = parseFloat(t.btc_amount) || 0;
         const usd = parseFloat(t.usd_amount) || 0;
+        const v = (t.venue || "sfl").toLowerCase();
+        const bucket = byVenue[v] || (byVenue[v] = { venue: v, net: 0, peak: 0, depositBtc: 0, withdrawBtc: 0, count: 0 });
+        bucket.count++;
         if (t.direction === "deposit") {
-          depositBtc += btc;
-          depositUsd += usd;
+          depositBtc += btc; depositUsd += usd; net += btc;
+          bucket.depositBtc += btc; bucket.net += btc;
           if (!firstDepositDate || t.tx_date < firstDepositDate) firstDepositDate = t.tx_date;
         } else if (t.direction === "withdrawal") {
-          withdrawBtc += btc;
-          withdrawUsd += usd;
+          withdrawBtc += btc; withdrawUsd += usd; net -= btc;
+          bucket.withdrawBtc += btc; bucket.net -= btc;
         }
+        if (net > peakBtc) peakBtc = net;
+        if (bucket.net > bucket.peak) bucket.peak = bucket.net;
       }
-      const netDebtBtc = depositBtc - withdrawBtc;
-      const repaidPct = depositBtc > 0 ? (withdrawBtc / depositBtc) * 100 : null;
-      return { depositBtc, withdrawBtc, depositUsd, withdrawUsd, netDebtBtc, repaidPct, firstDepositDate };
+      const netDebtBtc = net;
+      const repaidPct = peakBtc > 0 ? ((peakBtc - net) / peakBtc) * 100 : null;
+      return { depositBtc, withdrawBtc, depositUsd, withdrawUsd, netDebtBtc, peakBtc, repaidPct, firstDepositDate,
+               venues: Object.values(byVenue).sort((a, b) => b.net - a.net) };
     }
 
     function fmtBtc(v) {
@@ -27595,11 +27621,11 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       const liquidValueSfl = treasuryTotalSfl * 0.9;
       const liquidValueBtc = (sflToUsd > 0 && btcUsd > 0 && treasuryTotalSfl > 0)
         ? (liquidValueSfl * sflToUsd / btcUsd) : 0;
-      const canCompute3 = (agg.depositBtc > 0 && sflToUsd > 0 && btcUsd > 0 && treasuryTotalSfl > 0);
+      const canCompute3 = (agg.peakBtc > 0 && sflToUsd > 0 && btcUsd > 0 && treasuryTotalSfl > 0);
       const ifLiqPct = canCompute3
-        ? ((agg.withdrawBtc + liquidValueBtc) / agg.depositBtc) * 100
+        ? ((agg.peakBtc - agg.netDebtBtc + liquidValueBtc) / agg.peakBtc) * 100
         : null;
-      const ifLiqText = (agg.depositBtc <= 0)
+      const ifLiqText = (agg.peakBtc <= 0)
         ? "n/a — no deposits"
         : !canCompute3
           ? "— (price API unavailable)"
@@ -27614,7 +27640,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       //   w/ liq : gap beyond the treasury liquidation proceeds (netDebt − liquidValue)
       //   w/o liq: the full remaining debt (netDebt), treasury untouched
       let liqFlowerHtml = "";
-      if (sflToUsd > 0 && btcUsd > 0 && agg.depositBtc > 0) {
+      if (sflToUsd > 0 && btcUsd > 0 && agg.peakBtc > 0) {
         const flowerPerBtc = btcUsd / sflToUsd;
         const fmtFlower = (v) => Math.round(v).toLocaleString("en-US") + " 🌸";
         const noLiqLine = agg.netDebtBtc <= 0
@@ -27633,7 +27659,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       // Days to payback — uses the 30d (preferred) or 7d earning rate from insights cache
       let daysText = "—", daysSubText = "expand Insights to compute", daysColor = "var(--text-dim)";
       const remainingBtc = agg.netDebtBtc;
-      if (remainingBtc <= 0 && agg.depositBtc > 0) {
+      if (remainingBtc <= 0 && agg.peakBtc > 0) {
         daysText = "✅ paid";
         daysColor = "var(--green)";
         daysSubText = "you've recouped";
@@ -27667,9 +27693,10 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         <h2 class="pixel-font" style="margin:0 0 10px 0;font-size:0.75rem;color:var(--sunpetal);letter-spacing:1px">💰 INVESTMENT TRACKER</h2>
         <div class="summary-bar" style="margin-bottom:12px">
           <div class="summary-stat">
-            <div class="label pixel-font">① REPAID SO FAR</div>
+            <div class="label pixel-font">① RECOVERED FROM PEAK</div>
             <div class="value pixel-font" style="color:${verdictColor(agg.repaidPct)}">${agg.repaidPct === null ? "n/a" : agg.repaidPct.toFixed(1) + " %"}</div>
-            <div class="label pixel-font" style="margin-top:4px;color:var(--text-dim)">${fmtBtc(agg.withdrawBtc)} / ${fmtBtc(agg.depositBtc)}</div>
+            <div class="label pixel-font" style="margin-top:4px;color:var(--text-dim)">in now ${fmtBtc(agg.netDebtBtc)} · peak ${fmtBtc(agg.peakBtc)}</div>
+            <div class="label pixel-font" style="margin-top:2px;color:var(--text-dim);font-size:0.5rem">gross flows ${fmtBtc(agg.depositBtc)} in / ${fmtBtc(agg.withdrawBtc)} out</div>
           </div>
           <div class="summary-stat">
             <div class="label pixel-font">② DAYS TO FULL</div>
@@ -27683,11 +27710,42 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
             ${liqFlowerHtml}
           </div>
         </div>
+        ${(agg.venues || []).length > 1 ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">${agg.venues.map((v) => {
+          const meta = invVenues[v.venue] || { label: v.venue.toUpperCase(), color: "var(--text-dim)" };
+          return `<div style="flex:1;min-width:150px;border:1px solid ${meta.color};border-radius:6px;padding:8px 10px;background:rgba(0,0,0,0.25)">
+            <div class="pixel-font" style="font-size:0.5rem;color:${meta.color};letter-spacing:0.5px">${meta.label}</div>
+            <div style="font-family:'Courier New',monospace;font-size:0.8rem;color:var(--text-secondary)">${fmtBtc(v.net)}</div>
+            <div class="pixel-font" style="font-size:0.45rem;color:var(--text-dim);margin-top:2px">peak ${fmtBtc(v.peak)} · ${v.count} tx</div>
+          </div>`;
+        }).join("")}</div>` : ""}
         <div id="inv-tx-table-wrap">${renderInvTxTable(transactions)}</div>
         <button class="roi-pill" onclick="_invShowAddForm()" style="margin-top:10px">+ Add transaction</button>
         <div id="inv-add-form" style="display:none"></div>
       `;
     }
+
+    /*
+     * The venues money can go to. Order matters: the chip cycles through these, so a row logged
+     * before the column existed is corrected in one click rather than deleted and re-entered.
+     */
+    const invVenues = {
+      sfl: { label: "SFL", color: "var(--sunpetal)" },
+      yakkamon: { label: "YAKKE", color: "var(--lily)" },
+    };
+    window._invCycleVenue = async function (id, current) {
+      const order = Object.keys(invVenues);
+      const next = order[(order.indexOf(current) + 1) % order.length];
+      try {
+        const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(FARM_ID)}&type=btc-tx&id=${encodeURIComponent(id)}`, {
+          method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ venue: next }),
+        });
+        if (!r.ok) throw new Error(((await r.json()) || {}).error || r.status);
+        // Same local-then-redraw path delete takes: pg returns BIGINT as a string, the inline id
+        // is a number, so both sides are coerced before matching.
+        for (const t of (_invState.transactions || [])) if (String(t.id) === String(id)) t.venue = next;
+        renderInvestmentTrackerContent();
+      } catch (e) { alert("Could not change the venue: " + e.message); }
+    };
 
     function renderInvTxTable(transactions) {
       if (transactions.length === 0) {
@@ -27698,6 +27756,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         <thead><tr class="pixel-font" style="background:rgba(0,0,0,0.35);color:var(--text-secondary);font-size:0.5625rem;letter-spacing:0.5px">
           <th style="text-align:left;padding:8px 10px">DATE</th>
           <th style="text-align:left;padding:8px 10px">TYPE</th>
+          <th style="text-align:left;padding:8px 10px">WHERE</th>
           <th style="text-align:right;padding:8px 10px">BTC</th>
           <th style="text-align:right;padding:8px 10px">USD</th>
           <th style="text-align:left;padding:8px 10px">NOTES</th>
@@ -27708,9 +27767,14 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         const signed = (isDep ? "−" : "+") + parseFloat(t.btc_amount).toFixed(8);
         const color = isDep ? "var(--red)" : "var(--green)";
         const usd = t.usd_amount ? "$" + parseFloat(t.usd_amount).toFixed(2) : "—";
+        // The venue is a click-to-cycle chip: it is the one field that gets corrected after the
+        // fact (you know where the money went; you may have logged it before the column existed).
+        const venue = (t.venue || "sfl").toLowerCase();
+        const vLabel = invVenues[venue] || { label: venue.toUpperCase(), color: "var(--text-dim)" };
         html += `<tr style="border-top:1px solid rgba(255,255,255,0.05)">
           <td style="padding:8px 10px">${escHTML(t.tx_date)}</td>
           <td style="padding:8px 10px;color:${color};font-weight:bold">${isDep ? "DEPOSIT" : "WITHDRAW"}</td>
+          <td style="padding:8px 10px"><button onclick="_invCycleVenue(${t.id},'${venue}')" title="click to change where this went" style="background:rgba(0,0,0,0.3);border:1px solid ${vLabel.color};color:${vLabel.color};border-radius:4px;padding:2px 7px;cursor:pointer;font-family:'Courier New',monospace;font-size:0.65rem">${vLabel.label}</button></td>
           <td style="text-align:right;padding:8px 10px;color:${color};font-weight:bold">${signed} ₿</td>
           <td style="text-align:right;padding:8px 10px;color:var(--text-dim)">${usd}</td>
           <td style="padding:8px 10px;color:var(--text-dim)">${escHTML(t.notes || "")}</td>
@@ -27739,6 +27803,9 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
             </select></div>
             <div><span class="pixel-font" style="${labelStyle}">BTC AMOUNT</span><input type="number" id="inv-f-btc" min="0" step="0.00000001" placeholder="0.020000" style="${inputStyle}"></div>
             <div><span class="pixel-font" style="${labelStyle}">USD VALUE (optional)</span><input type="number" id="inv-f-usd" min="0" step="0.01" placeholder="145.20" style="${inputStyle}"></div>
+            <div><span class="pixel-font" style="${labelStyle}">WHERE</span><select id="inv-f-venue" style="${inputStyle}">
+              ${Object.entries(invVenues).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("")}
+            </select></div>
           </div>
           <div style="margin-top:14px"><span class="pixel-font" style="${labelStyle}">NOTES</span><input type="text" id="inv-f-notes" maxlength="500" placeholder="cash out 1000 FLOWER…" style="${inputStyle}"></div>
           <div style="margin-top:14px;display:flex;gap:8px">
@@ -27766,11 +27833,12 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       const usdRaw = document.getElementById("inv-f-usd").value;
       const usd_amount = usdRaw === "" ? null : parseFloat(usdRaw);
       const notes = document.getElementById("inv-f-notes").value || null;
+      const venue = (document.getElementById("inv-f-venue") || {}).value || "sfl";
 
       if (!tx_date) return showError("Date required");
       if (!isFinite(btc_amount) || btc_amount <= 0) return showError("BTC amount must be > 0");
       try {
-        const tx = await invAddTransaction({ farm_id: parseInt(FARM_ID, 10), tx_date, direction, btc_amount, usd_amount, notes });
+        const tx = await invAddTransaction({ farm_id: parseInt(FARM_ID, 10), tx_date, direction, btc_amount, usd_amount, notes, venue });
         _invState.transactions.unshift(tx);
         _invHideAddForm();
         renderInvestmentTrackerContent();

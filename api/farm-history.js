@@ -5,7 +5,7 @@ const ALLOWED_FARMS = new Set([155498, 1260204733777858]);
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "*");
   if (req.method === "OPTIONS") return res.status(200).end();
 
@@ -111,7 +111,7 @@ export default async function handler(req, res) {
         if (!Number.isFinite(farm)) return res.status(400).json({ error: "farm required" });
         if (!ALLOWED_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
         const r = await pool.query(
-          `SELECT id, farm_id, tx_date, direction, btc_amount, usd_amount, notes, created_at
+          `SELECT id, farm_id, tx_date, direction, btc_amount, usd_amount, notes, venue, created_at
              FROM btc_transactions
             WHERE farm_id = $1
             ORDER BY tx_date DESC, created_at DESC`,
@@ -129,6 +129,11 @@ export default async function handler(req, res) {
           ? null : parseFloat(body.usd_amount);
         const notes = typeof body.notes === "string" ? body.notes.slice(0, 500) : null;
         const txDate = typeof body.tx_date === "string" ? body.tx_date : null;
+        // Free text, lower-cased and bounded. The UI offers the known venues; an unknown one is
+        // recorded rather than rejected, because a new place to put money appears before the
+        // code that knows about it.
+        const venue = (typeof body.venue === "string" && body.venue.trim())
+          ? body.venue.trim().toLowerCase().slice(0, 32) : "sfl";
 
         if (!Number.isFinite(farm) || farm <= 0) return res.status(400).json({ error: "farm_id required" });
         if (!ALLOWED_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
@@ -138,12 +143,35 @@ export default async function handler(req, res) {
         if (!txDate || !/^\d{4}-\d{2}-\d{2}$/.test(txDate)) return res.status(400).json({ error: "tx_date must be YYYY-MM-DD" });
 
         const r = await pool.query(
-          `INSERT INTO btc_transactions (farm_id, tx_date, direction, btc_amount, usd_amount, notes)
-           VALUES ($1, $2, $3, $4, $5, $6)
-           RETURNING id, farm_id, tx_date, direction, btc_amount, usd_amount, notes, created_at`,
-          [farm, txDate, direction, btc, usd, notes]
+          `INSERT INTO btc_transactions (farm_id, tx_date, direction, btc_amount, usd_amount, notes, venue)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING id, farm_id, tx_date, direction, btc_amount, usd_amount, notes, venue, created_at`,
+          [farm, txDate, direction, btc, usd, notes, venue]
         );
         return res.status(201).json({ transaction: r.rows[0] });
+      }
+
+      /*
+       * PATCH retags an existing row's venue and nothing else. Amounts and dates stay
+       * append-only — a mistyped entry is deleted and re-added rather than quietly edited, so
+       * the grant is UPDATE(venue) only and this is the one field it can touch.
+       */
+      if (method === "PATCH") {
+        const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+        const farm = parseInt(req.query.farm, 10);
+        const id = parseInt(req.query.id, 10);
+        const venue = (typeof body.venue === "string" && body.venue.trim())
+          ? body.venue.trim().toLowerCase().slice(0, 32) : null;
+        if (!Number.isFinite(farm) || !ALLOWED_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
+        if (!Number.isFinite(id)) return res.status(400).json({ error: "id required" });
+        if (!venue) return res.status(400).json({ error: "venue required" });
+        const r = await pool.query(
+          `UPDATE btc_transactions SET venue = $1 WHERE id = $2 AND farm_id = $3
+           RETURNING id, farm_id, tx_date, direction, btc_amount, usd_amount, notes, venue, created_at`,
+          [venue, id, farm]
+        );
+        if (!r.rowCount) return res.status(404).json({ error: "not found" });
+        return res.status(200).json({ transaction: r.rows[0] });
       }
 
       if (method === "DELETE") {
