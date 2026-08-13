@@ -102,6 +102,53 @@ export default async function handler(req, res) {
     }
   }
 
+  /* ─── What a venue is currently HOLDING ─────────────────────────
+   *
+   * The ledger says what was SENT somewhere; this says what is still there. Without it a
+   * Yakkamon deposit reads as spent for the whole lock-up, when it is parked and refundable.
+   *
+   * `source` distinguishes a figure typed in by hand from one read out of the game. Yakkamon
+   * exposes no per-account balance today, so it is manual; when it does, the same row is written
+   * with source='game' and the UI drops the caveat by itself.
+   */
+  if (req.query.type === "venue-balance") {
+    const method = (req.method || "GET").toUpperCase();
+    try {
+      const farm = parseInt(req.query.farm, 10);
+      if (!Number.isFinite(farm) || !ALLOWED_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
+      if (method === "GET") {
+        const r = await pool.query(
+          `SELECT venue, amount, unit, source, noted_at FROM venue_balance WHERE farm_id = $1 ORDER BY venue`,
+          [farm]
+        );
+        res.setHeader("Cache-Control", "no-store");
+        return res.status(200).json({ balances: r.rows });
+      }
+      if (method === "POST" || method === "PUT") {
+        const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+        const venue = (typeof body.venue === "string" && body.venue.trim())
+          ? body.venue.trim().toLowerCase().slice(0, 32) : null;
+        const amount = parseFloat(body.amount);
+        const unit = (typeof body.unit === "string" && body.unit.trim()) ? body.unit.trim().slice(0, 16) : "FLOWER";
+        const source = body.source === "game" ? "game" : "manual";
+        if (!venue) return res.status(400).json({ error: "venue required" });
+        if (!Number.isFinite(amount) || amount < 0) return res.status(400).json({ error: "amount must be >= 0" });
+        const r = await pool.query(
+          `INSERT INTO venue_balance (farm_id, venue, amount, unit, source, noted_at)
+           VALUES ($1, $2, $3, $4, $5, NOW())
+           ON CONFLICT (farm_id, venue) DO UPDATE
+             SET amount = EXCLUDED.amount, unit = EXCLUDED.unit, source = EXCLUDED.source, noted_at = NOW()
+           RETURNING venue, amount, unit, source, noted_at`,
+          [farm, venue, amount, unit, source]
+        );
+        return res.status(200).json({ balance: r.rows[0] });
+      }
+      return res.status(405).json({ error: "method not allowed" });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   // ─── Investment Tracker: btc_transactions CRUD ─────────────────
   if (req.query.type === "btc-tx") {
     const method = (req.method || "GET").toUpperCase();

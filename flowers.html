@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.26</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.27</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.27", items: [
+          { t: "feat", text: "<b>A venue can now say what it still HOLDS, not just what was sent to it.</b> BTC sent to Yakkamon pre-registration read as spent for the whole lock-up, when it is parked and refundable — the tile said <i>0.0965 ₿ sent</i> and nothing else. Each venue tile now carries the holding (<b>[set it]</b> to enter, <b>[edit]</b> to change), values it in BTC at the live FLOWER price, and shows the gain or loss against what went in. It also says <b>where the number came from</b>: today Yakkamon exposes no per-account balance so it is typed in, and the tile says so — when the game does expose one, the same field is written with source <code>game</code>, the caveat disappears on its own and nothing else changes. A figure entered by hand must never be shown as a measured one." },
+        ] },
         { ver: "v5.26", items: [
           { t: "fix", text: "<b>The Investment Tracker was counting a round trip as new money.</b> ① summed every deposit ever made, so pulling BTC out and putting the same BTC back read as a fresh investment. On the real ledger that meant <b>0.464 ₿ “deposited” and 46.1% “repaid” — while actually sitting at the highest exposure ever recorded, having recovered nothing</b>. The denominator is now the <b>high-water mark of the running net</b>, which is what was genuinely at risk, and the headline is <b>RECOVERED FROM PEAK</b>: how far you have climbed back down from it. Same ledger now reads 0% recovered, 0.250 ₿ in, peak 0.250 ₿ — with the gross flows still shown underneath so nothing is hidden. ③ LIQUIDATE NOW is measured against the peak too, for the same reason." },
           { t: "feat", text: "<b>Transactions say where the money went — SFL or Yakkamon.</b> They were logged as one pot, which stopped being true the moment a deposit went to Yakkamon pre-registration instead of into the farm: different lock-up, different exit, and a combined figure answers neither question. Each row carries a venue chip (<b>click it to change</b>, since a row logged before this existed still needs tagging), the add form has a WHERE selector, and once there is more than one venue a per-venue split appears above the table with the net and peak for each. Existing rows default to SFL — every one of them predates the Yakkamon programme, which only opened 10 Aug." },
@@ -27602,6 +27605,9 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         return [];
       });
       _invState = { transactions, rates: { sflToUsd: opts.sflToUsd, btcUsd, treasuryTotalSfl } };
+      // Holdings are a separate read: a venue can hold something without any BTC having moved
+      // this session, and a failure here must leave the ledger itself rendering.
+      await invLoadBalances(FARM_ID);
 
       renderInvestmentTrackerContent();
     }
@@ -27640,9 +27646,11 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       //   w/ liq : gap beyond the treasury liquidation proceeds (netDebt − liquidValue)
       //   w/o liq: the full remaining debt (netDebt), treasury untouched
       let liqFlowerHtml = "";
-      if (sflToUsd > 0 && btcUsd > 0 && agg.peakBtc > 0) {
-        const flowerPerBtc = btcUsd / sflToUsd;
-        const fmtFlower = (v) => Math.round(v).toLocaleString("en-US") + " 🌸";
+      // Hoisted out of the block below: the venue tiles value each holding in BTC with the same
+      // rate, and a const scoped to the if() was invisible to them.
+      const flowerPerBtc = (sflToUsd > 0 && btcUsd > 0) ? (btcUsd / sflToUsd) : 0;
+      const fmtFlower = (v) => Math.round(v).toLocaleString("en-US") + " 🌸";
+      if (flowerPerBtc > 0 && agg.peakBtc > 0) {
         const noLiqLine = agg.netDebtBtc <= 0
           ? `<span style="color:var(--green)">✅ already at 100%</span>`
           : `to 100% w/o liq: <b style="color:var(--text-secondary)">+${fmtFlower(agg.netDebtBtc * flowerPerBtc)}</b>`;
@@ -27712,10 +27720,20 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         </div>
         ${(agg.venues || []).length > 1 ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">${agg.venues.map((v) => {
           const meta = invVenues[v.venue] || { label: v.venue.toUpperCase(), color: "var(--text-dim)" };
-          return `<div style="flex:1;min-width:150px;border:1px solid ${meta.color};border-radius:6px;padding:8px 10px;background:rgba(0,0,0,0.25)">
+          const bal = _invBalances[v.venue];
+          // Value the holding at the live FLOWER price so it can be read against what went in.
+          const holdBtc = (bal && flowerPerBtc > 0) ? (bal.amount / flowerPerBtc) : null;
+          const pnl = (holdBtc !== null && v.net > 0) ? ((holdBtc / v.net - 1) * 100) : null;
+          return `<div style="flex:1;min-width:186px;border:1px solid ${meta.color};border-radius:6px;padding:8px 10px;background:rgba(0,0,0,0.25)">
             <div class="pixel-font" style="font-size:0.5rem;color:${meta.color};letter-spacing:0.5px">${meta.label}</div>
-            <div style="font-family:'Courier New',monospace;font-size:0.8rem;color:var(--text-secondary)">${fmtBtc(v.net)}</div>
+            <div style="font-family:'Courier New',monospace;font-size:0.8rem;color:var(--text-secondary)">${fmtBtc(v.net)} <span style="font-size:0.62rem;color:var(--text-dim)">sent</span></div>
             <div class="pixel-font" style="font-size:0.45rem;color:var(--text-dim);margin-top:2px">peak ${fmtBtc(v.peak)} · ${v.count} tx</div>
+            <div style="margin-top:6px;border-top:1px solid rgba(255,255,255,0.08);padding-top:5px">
+              ${bal ? `<div style="font-family:'Courier New',monospace;font-size:0.72rem;color:var(--green)">${fmtFlower(bal.amount)} <span style="font-size:0.6rem;color:var(--text-dim)">held</span></div>
+                 <div class="pixel-font" style="font-size:0.45rem;color:var(--text-dim);margin-top:2px">${holdBtc !== null ? fmtBtc(holdBtc) : "—"}${pnl !== null ? ` · <b style="color:${pnl >= 0 ? "var(--green)" : "var(--red)"}">${pnl >= 0 ? "+" : ""}${pnl.toFixed(1)}%</b>` : ""}</div>
+                 <div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);margin-top:2px">${bal.source === "game" ? "read from the game" : "typed in"} ${String(bal.noted_at).slice(0, 10)} · <span style="cursor:pointer;color:var(--lily)" onclick="_invSetBalance('${v.venue}')">[edit]</span></div>`
+                : `<div class="pixel-font" style="font-size:0.45rem;color:var(--text-dim)">holding unknown — <span style="cursor:pointer;color:var(--lily)" onclick="_invSetBalance('${v.venue}')">[set it]</span> so this does not read as spent</div>`}
+            </div>
           </div>`;
         }).join("")}</div>` : ""}
         <div id="inv-tx-table-wrap">${renderInvTxTable(transactions)}</div>
@@ -27732,6 +27750,40 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       sfl: { label: "SFL", color: "var(--sunpetal)" },
       yakkamon: { label: "YAKKE", color: "var(--lily)" },
     };
+    /*
+     * What each venue currently HOLDS, as opposed to what was sent to it. Without this a
+     * Yakkamon deposit reads as spent for the whole lock-up, when it is parked and refundable.
+     * `source` says whether the figure was typed in or read from the game — a hand-entered
+     * number must never be presented as a measured one.
+     */
+    let _invBalances = {};
+    async function invLoadBalances(farmId) {
+      try {
+        const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(farmId)}&type=venue-balance`);
+        if (!r.ok) return;
+        const j = await r.json();
+        _invBalances = {};
+        for (const b of (j.balances || [])) _invBalances[b.venue] = b;
+      } catch (e) { /* the tile just omits the holding */ }
+    }
+    window._invSetBalance = async function (venue) {
+      const cur = _invBalances[venue];
+      const raw = prompt(`How much do you currently hold in ${(invVenues[venue] || {}).label || venue}?  (FLOWER)`,
+        cur ? String(cur.amount) : "");
+      if (raw === null) return;
+      const amount = parseFloat(String(raw).replace(/[\s,]/g, ""));
+      if (!isFinite(amount) || amount < 0) { alert("Enter a number >= 0"); return; }
+      try {
+        const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(FARM_ID)}&type=venue-balance`, {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ venue, amount, unit: "FLOWER", source: "manual" }),
+        });
+        if (!r.ok) throw new Error(((await r.json()) || {}).error || r.status);
+        await invLoadBalances(FARM_ID);
+        renderInvestmentTrackerContent();
+      } catch (e) { alert("Could not save: " + e.message); }
+    };
+
     window._invCycleVenue = async function (id, current) {
       const order = Object.keys(invVenues);
       const next = order[(order.indexOf(current) + 1) % order.length];
