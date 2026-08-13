@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.28</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.29</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.29", items: [
+          { t: "feat", text: "<b>LIQUIDATE NOW counts the locked position too — as a second number, not a blended one.</b> Money sitting in Yakkamon was invisible to ③, which only ever valued the farm. It cannot go into the <i>now</i> figure either: withdrawals are closed until access opens in Q4, and folding locked funds into a percentage labelled NOW is the same misrepresentation ① was just fixed for. So the tile keeps <b>now</b> (farm treasury, less its 10% marketplace fee) and adds <b>at unlock</b> beneath it — the locked holding at <b>100%, no fee and no penalty</b>, because a deposit is returned rather than sold. On this ledger that is <b>58.8% now against 99.4% at unlock</b>: two true numbers about two different moments, instead of one that is true of neither." },
+        ] },
         { ver: "v5.28", items: [
           { t: "fix", text: "<b>The SFL holding is read from your farm, not asked for.</b> v5.27 offered a <i>[set it]</i> prompt on every venue — including the one the app values on every single load. The farm’s treasury total is what metric ③ is already built from, so asking for it by hand meant asking for a number we hold, and one that goes stale the moment anything on the farm changes. The SFL tile now reads <b>live from your farm data</b> and has no prompt. Only a venue the app genuinely cannot see into — Yakkamon, which exposes no per-account balance — keeps the manual field." },
         ] },
@@ -27627,12 +27630,34 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
                                   : p >= 50 ? "var(--sunpetal)"
                                   : "#ff8c42";
 
+      /*
+       * Two different questions, kept apart on purpose.
+       *
+       * "Liquidate now" means today, at today's terms: the farm's treasury sold on the
+       * marketplace, less its 10% fee. A Yakkamon deposit cannot be part of that — withdrawals
+       * are closed until access opens in Q4 — and folding locked money into a figure labelled
+       * NOW would be the same misrepresentation metric (1) was just fixed for.
+       *
+       * It is not lost either, so it gets its own line: it comes back at 100%, no fee and no
+       * penalty (their docs are explicit), just not yet. Hence "now" and "at unlock" side by
+       * side rather than one blended number that is true of neither moment.
+       */
       const liquidValueSfl = treasuryTotalSfl * 0.9;
       const liquidValueBtc = (sflToUsd > 0 && btcUsd > 0 && treasuryTotalSfl > 0)
         ? (liquidValueSfl * sflToUsd / btcUsd) : 0;
+      // Everything held somewhere that cannot be sold today. No fee is applied: a deposit is
+      // returned, not sold.
+      const lockedSfl = Object.values(_invBalances || {})
+        .filter((b) => b.venue !== "sfl")
+        .reduce((a, b) => a + (parseFloat(b.amount) || 0), 0);
+      const lockedBtc = (sflToUsd > 0 && btcUsd > 0) ? (lockedSfl * sflToUsd / btcUsd) : 0;
       const canCompute3 = (agg.peakBtc > 0 && sflToUsd > 0 && btcUsd > 0 && treasuryTotalSfl > 0);
+      const recoveredBtc = agg.peakBtc - agg.netDebtBtc;
       const ifLiqPct = canCompute3
-        ? ((agg.peakBtc - agg.netDebtBtc + liquidValueBtc) / agg.peakBtc) * 100
+        ? ((recoveredBtc + liquidValueBtc) / agg.peakBtc) * 100
+        : null;
+      const atUnlockPct = canCompute3
+        ? ((recoveredBtc + liquidValueBtc + lockedBtc) / agg.peakBtc) * 100
         : null;
       const ifLiqText = (agg.peakBtc <= 0)
         ? "n/a — no deposits"
@@ -27642,8 +27667,11 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       const liqColor = canCompute3 ? verdictColor(ifLiqPct) : "var(--text-dim)";
       const hasFarmValue = (sflToUsd > 0 && btcUsd > 0 && treasuryTotalSfl > 0);
       const liqSubText = hasFarmValue
-        ? `value: ${fmtSfl(liquidValueSfl)} ≈ ${fmtBtc(liquidValueBtc)}`
+        ? `farm ${fmtSfl(liquidValueSfl)} ≈ ${fmtBtc(liquidValueBtc)}`
         : "farm value or price feed unavailable";
+      const lockedHtml = (lockedSfl > 0 && canCompute3)
+        ? `<div class="label pixel-font" style="margin-top:4px;color:var(--lily);line-height:1.6">+ ${fmtSfl(lockedSfl)} locked (no fee, returns Q4)<br><b>${atUnlockPct.toFixed(1)} %</b> at unlock</div>`
+        : "";
 
       // FLOWER still needed to reach 100% repaid. 1 BTC = (btcUsd/sflToUsd) FLOWER.
       //   w/ liq : gap beyond the treasury liquidation proceeds (netDebt − liquidValue)
@@ -27718,6 +27746,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
             <div class="label pixel-font">③ LIQUIDATE NOW (10% fee)</div>
             <div class="value pixel-font" style="color:${liqColor}">${ifLiqText}</div>
             <div class="label pixel-font" style="margin-top:4px;color:var(--text-dim)">${liqSubText}</div>
+            ${lockedHtml}
             ${liqFlowerHtml}
           </div>
         </div>
