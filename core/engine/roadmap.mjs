@@ -429,6 +429,25 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
     }
     function roadmapCatNet(cat, effects, settings) { return roadmapCatBreakdown(cat, effects, settings).net; }
 
+    /*
+     * Net for ONE named product, not the optimal mix.
+     *
+     * roadmapCatNet fills the plots with whatever crop pays best, so a boost that only touches
+     * one crop still shows its whole value there — which is why Sickle read +3/day no matter
+     * which crop was selected, even though it only lifts Wheat. When the caller has a product in
+     * mind (the Power page's selector), value the boost against THAT product: applyBoosts inside
+     * roadmapPerPlot drops any product-specific effect that does not match, so a Wheat boost on a
+     * Kale selection nets exactly zero, which is the honest answer.
+     */
+    function roadmapProductNetEff(cat, product, effects, settings) {
+      const plots = getCapacityCount(cat, powerState.capacity);
+      if (!(plots > 0)) return 0;
+      const pp = roadmapPerPlot(cat, product, effects, settings);
+      if (!pp) return 0;
+      const take = Math.min(plots, pp.maxPlots > 0 ? pp.maxPlots : plots);
+      return (pp.gpp - pp.cpp) * take;
+    }
+
 
     // ── flowers.html (roadmapOwnedEffects; deviation 4: farm passed to shrines) ──
     function roadmapOwnedEffects(cat) {
@@ -514,7 +533,17 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
          * Acre Farm reads -0.74/day there because its -0.5 Advanced Crop debuff outweighs its
          * buff on that crop mix, where a clamped 0.00 read as merely uninteresting.
          */
-        const net = (ef) => roadmapCatNet(catId, ef, _s);
+        /*
+         * Crops / fruits / greenhouse carry a product, and the caller passes the one it means
+         * (the Power selector, or the roadmap's saved/default). Value the boost against THAT
+         * product rather than the best-paying mix, so a crop-specific boost reads its real value
+         * on the crops it touches and zero on the rest — the mix hid that. Categories with no
+         * product concept (animals, bees, etc.) keep the mix/category net unchanged.
+         */
+        const productScoped = product && ["crops", "fruits", "greenhouse"].indexOf(catId) >= 0;
+        const net = productScoped
+          ? (ef) => roadmapProductNetEff(catId, product, ef, _s)
+          : (ef) => roadmapCatNet(catId, ef, _s);
         synergy = net(ownedEff.concat(catEffects)) - net(ownedEff);
         solo = net(catEffects) - net([]);
       }

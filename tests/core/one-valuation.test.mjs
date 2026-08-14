@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { buildPowerSection } from "../../core/sections/power.mjs";
 import { calcBoostValue, roadmapItemValue, roadmapBuildClones, getRoadmapSettings } from "../../core/engine/roadmap.mjs";
+import { getDefaultProduct } from "../../core/engine/power-helpers.mjs";
 
 /*
  * The buy path and the Power page must answer "what is this boost worth" with ONE function.
@@ -40,7 +41,10 @@ test("roadmapItemValue equals the sum of calcBoostValue over the item's categori
         const list = catBoostsW[c];
         if (!list || !clone.effects.some((e) => e.cat === c)) continue;
         try {
-          const v = calcBoostValue(clone, c, out.savedProducts && out.savedProducts[c], out.capacity, out.p2pPrices, list, clone.has);
+          // The exact product roadmapItemValue passes, so the equality holds now that crop
+          // boosts are valued per-product: savedProducts[cat] || getDefaultProduct(cat).
+          const product = (out.savedProducts && out.savedProducts[c]) || getDefaultProduct(c);
+          const v = calcBoostValue(clone, c, product, out.capacity, out.p2pPrices, list, clone.has);
           if (v && isFinite(v.synergy) && v.synergy > 0) expected += v.synergy;
         } catch { /* same swallow the engine does */ }
       }

@@ -130,7 +130,7 @@ test("calcBoostValue takes the raw difference, identically in both copies", () =
   // calcBoostValue is allow-listed for its `effMode` param, so its body is not compared —
   // but the clamp is what makes a boost on a loss-making category worth anything, and it is
   // identical in both copies. Clamping each side instead of the difference zeroes them again.
-  const rx = /const net = \(ef\) => roadmapCatNet\(catId, ef, _s\);\s*synergy = net\(ownedEff\.concat\(catEffects\)\) - net\(ownedEff\);\s*solo = net\(catEffects\) - net\(\[\]\);/;
+  const rx = /const net = productScoped\s*\?\s*\(ef\) => roadmapProductNetEff\(catId, product, ef, _s\)\s*:\s*\(ef\) => roadmapCatNet\(catId, ef, _s\);\s*synergy = net\(ownedEff\.concat\(catEffects\)\) - net\(ownedEff\);\s*solo = net\(catEffects\) - net\(\[\]\);/;
   assert.match(page, rx, "flowers.html: the difference must be taken raw, unclamped");
   assert.match(read("core/engine/roadmap.mjs"), rx, "core: likewise");
 });

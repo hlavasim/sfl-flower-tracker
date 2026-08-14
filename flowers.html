@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.30</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.31</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.31", items: [
+          { t: "fix", text: "<b>A crop / fruit / greenhouse boost is now valued for the crop you have SELECTED, not the best-paying mix.</b> The per-item value ignored the product picker entirely — it filled the plots with whatever paid best, so <b>Sickle read the same +/day on every crop even though it only lifts Wheat</b>, and the same was true across greenhouse and fruits. Now a Wheat boost reads its Wheat value on Wheat and <b>exactly zero</b> on a crop it does not touch, and the number moves when you change the selector. Measured on the live farm: 14 of 20 crop boosts that were flat now vary by product — e.g. Horror Mike and Experienced Farmer read 0 on basic crops and only pay on the advanced ones they actually boost. Mining, animals and bees are unaffected (no product to pick). The buy path uses the same function, so ROADMAP and POWER stay in agreement." },
+        ] },
         { ver: "v5.30", items: [
           { t: "feat", text: "<b>New: boosts you OWN but are not getting.</b> A wearable boosts only when <b>equipped</b> and a collectible only when <b>placed</b> — so one sitting in the wardrobe or inventory is FLOWER/day left on the table. The POWER page now leads with a <b>💤 OWNED BUT NOT ACTIVE</b> panel: wearables first (a spare equipment slot is nearly free — this is where a <b>+0.1 crimstone armor that had never been worn</b> turned up), then unplaced collectibles ranked by what each would add, with the honest caveat that the farm has finite placement space so the /day is a ceiling. A slim amber banner (like the data-collection one) nudges from any page once POWER has run, and is dismissible." },
           { t: "fix", text: "<b>Along the way this exposed an overstatement:</b> the income engine reads whether a boost is <i>owned</i>, not whether it is <i>active</i> — so an owned-but-unequipped wearable or an owned-but-unplaced collectible was being counted in the POWER and ROADMAP totals as if it were working. The new panel says so where it lists them. The totals themselves are not re-based yet — a larger change, flagged rather than rushed." },
@@ -16467,7 +16470,17 @@
          * Acre Farm reads -0.74/day there because its -0.5 Advanced Crop debuff outweighs its
          * buff on that crop mix, where a clamped 0.00 read as merely uninteresting.
          */
-        const net = (ef) => roadmapCatNet(catId, ef, _s);
+        /*
+         * Crops / fruits / greenhouse carry a product, and the caller passes the one it means
+         * (the Power selector, or the roadmap's saved/default). Value the boost against THAT
+         * product rather than the best-paying mix, so a crop-specific boost reads its real value
+         * on the crops it touches and zero on the rest — the mix hid that. Categories with no
+         * product concept (animals, bees, etc.) keep the mix/category net unchanged.
+         */
+        const productScoped = product && ["crops", "fruits", "greenhouse"].indexOf(catId) >= 0;
+        const net = productScoped
+          ? (ef) => roadmapProductNetEff(catId, product, ef, _s)
+          : (ef) => roadmapCatNet(catId, ef, _s);
         synergy = net(ownedEff.concat(catEffects)) - net(ownedEff);
         solo = net(catEffects) - net([]);
       }
@@ -17241,6 +17254,25 @@
       return { gross, cost, net: gross - cost };
     }
     function roadmapCatNet(cat, effects, settings) { return roadmapCatBreakdown(cat, effects, settings).net; }
+
+    /*
+     * Net for ONE named product, not the optimal mix.
+     *
+     * roadmapCatNet fills the plots with whatever crop pays best, so a boost that only touches
+     * one crop still shows its whole value there — which is why Sickle read +3/day no matter
+     * which crop was selected, even though it only lifts Wheat. When the caller has a product in
+     * mind (the Power page's selector), value the boost against THAT product: applyBoosts inside
+     * roadmapPerPlot drops any product-specific effect that does not match, so a Wheat boost on a
+     * Kale selection nets exactly zero, which is the honest answer.
+     */
+    function roadmapProductNetEff(cat, product, effects, settings) {
+      const plots = getCapacityCount(cat, powerState.capacity);
+      if (!(plots > 0)) return 0;
+      const pp = roadmapPerPlot(cat, product, effects, settings);
+      if (!pp) return 0;
+      const take = Math.min(plots, pp.maxPlots > 0 ? pp.maxPlots : plots);
+      return (pp.gpp - pp.cpp) * take;
+    }
 
     // NET FLOWER/day for a single product (one crop / greenhouse item) at full plots.
     function roadmapProductBreakdown(cat, product, settings) {
