@@ -38,10 +38,15 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
 
     // ── flowers.html 2866-2871: findCollectible ──
     function findCollectible(farm, name) {
-      // Collectibles can be on main island or home island
+      // Placed collectibles live across four maps: the main land, the OLD home island (now empty),
+      // and BOTH floors of the house interior (farm.interior.ground / level_one), where the game
+      // moved indoor placement — the interior was missed, so items placed in the house read as
+      // unplaced. Layout presets (farm.layouts) are alternate arrangements, not live, so excluded.
       const main = farm.collectibles?.[name] || [];
       const home = farm.home?.collectibles?.[name] || [];
-      return [...main, ...home];
+      const interior = farm.interior?.ground?.collectibles?.[name] || [];
+      const level1 = farm.interior?.level_one?.collectibles?.[name] || [];
+      return [...main, ...home, ...interior, ...level1];
     }
 
     // ── flowers.html 3491-3532: BUMPKIN_XP_TABLE ──

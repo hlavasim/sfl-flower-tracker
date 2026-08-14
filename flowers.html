@@ -2918,10 +2918,15 @@
     ];
 
     function findCollectible(farm, name) {
-      // Collectibles can be on main island or home island
+      // Placed collectibles live across four maps: the main land, the OLD home island (now empty),
+      // and BOTH floors of the house interior (farm.interior.ground / level_one), where the game
+      // moved indoor placement — the interior was missed, so items placed in the house read as
+      // unplaced. Layout presets (farm.layouts) are alternate arrangements, not live, so excluded.
       const main = farm.collectibles?.[name] || [];
       const home = farm.home?.collectibles?.[name] || [];
-      return [...main, ...home];
+      const interior = farm.interior?.ground?.collectibles?.[name] || [];
+      const level1 = farm.interior?.level_one?.collectibles?.[name] || [];
+      return [...main, ...home, ...interior, ...level1];
     }
 
     function detectFlowerBoosts(farm) {
@@ -5948,7 +5953,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.31</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.32</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5980,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.32", items: [
+          { t: "feat", text: "<b>New CROP MACHINE panel on POWER.</b> Every crop the machine can grow, ranked by net 🌸/day, with its pack size, yield after boosts, cycle time and oil — the best crop expanded with the per-cycle and per-day numbers and a full yield breakdown (base → each boost → final). The economics are the game’s, not a crop plot’s: a cycle is <b>pack × base-grow ÷ plots</b> and <b>ordinary crop speed boosts do not apply</b> — only machine-specific ones (Groovy Gramophone, Rapid Rig, Crop Processor Unit) — while the ordinary crop <b>yield</b> boosts DO apply to the count. The old shared calc used yield = 1, so it overstated a basic crop under Acre Farm’s −0.5 by a third; this panel is correct. (The ROADMAP still uses the old calc — unifying it is next.)" },
+          { t: "fix", text: "<b>“Owned but not active” stops flagging things placed in the house.</b> The placed-collectible check missed the house interior entirely — it only looked at the main land and the (now-empty) old home map — so <b>35 collectibles placed on both floors of the house read as unplaced</b>, and the whole panel and its banner were noise. It now reads all four placement maps (main land + both interior floors), and on a farm with everything placed the panel correctly shows nothing. Same fix lands in all three copies of the collectible lookup." },
+        ] },
         { ver: "v5.31", items: [
           { t: "fix", text: "<b>A crop / fruit / greenhouse boost is now valued for the crop you have SELECTED, not the best-paying mix.</b> The per-item value ignored the product picker entirely — it filled the plots with whatever paid best, so <b>Sickle read the same +/day on every crop even though it only lifts Wheat</b>, and the same was true across greenhouse and fruits. Now a Wheat boost reads its Wheat value on Wheat and <b>exactly zero</b> on a crop it does not touch, and the number moves when you change the selector. Measured on the live farm: 14 of 20 crop boosts that were flat now vary by product — e.g. Horror Mike and Experienced Farmer read 0 on basic crops and only pay on the advanced ones they actually boost. Mining, animals and bees are unaffected (no product to pick). The buy path uses the same function, so ROADMAP and POWER stay in agreement." },
         ] },
@@ -16608,6 +16617,57 @@
       return h;
     }
 
+    /*
+     * CROP MACHINE panel. The server (core/sections/power.mjs) computes the real economics — a
+     * cycle is pack × base_grow / plots (crop speed boosts do NOT apply, only machine-specific
+     * ones), while the ordinary crop YIELD boosts do apply to the count. Crops are ranked by
+     * net FLOWER/day; the best is expanded with the per-cycle numbers and the yield breakdown so
+     * you can see exactly which boosts are lifting (or, with Acre Farm, cutting) the count.
+     */
+    function _powerCropMachineHtml() {
+      const cm = powerState && powerState.cropMachine;
+      if (!cm || !cm.rows || !cm.rows.length) return "";
+      const hms = (s) => { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return `${h}h${m ? " " + m + "m" : ""}`; };
+      const net = (v) => `<span style="color:${v >= 0 ? "var(--green)" : "var(--red)"};font-weight:bold">${v >= 0 ? "+" : ""}${v.toFixed(4)}</span>`;
+      const best = cm.rows[0];
+      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:6px">🌱 CROP MACHINE</div>
+        <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.7">
+          Plots <b style="color:var(--text-secondary)">${cm.plots}</b> · oil <b style="color:var(--text-secondary)">${cm.oilPerHour}/h</b> = <b style="color:var(--text-secondary)">${cm.oilFlowerPerDay.toFixed(3)} ${sflIcon()}/day</b>${cm.speedMult < 1 ? ` · machine speed <b style="color:var(--lily)">×${cm.speedMult.toFixed(2)}</b>` : ""}<br>
+          Time is <b>pack × base ÷ plots</b> — ordinary crop <b>speed</b> boosts do not apply here, only machine ones. Ordinary crop <b>yield</b> boosts do.
+        </div>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.55rem;min-width:420px">
+          <tr style="color:var(--text-dim);font-size:0.46rem"><td style="padding:0 6px 3px 0">crop</td><td style="text-align:right;padding:0 6px 3px">seeds</td><td style="text-align:right;padding:0 6px 3px">yield</td><td style="text-align:right;padding:0 6px 3px">time</td><td style="text-align:right;padding:0 6px 3px">oil</td><td style="text-align:right;padding:0 0 3px">net/day</td></tr>`;
+      for (const r of cm.rows) {
+        const isBest = r.crop === best.crop;
+        h += `<tr style="border-top:1px solid #20190f;background:${isBest ? "#132009" : "transparent"}">
+          <td style="padding:3px 6px 3px 0"><img class="inline-icon" src="${getItemIcon(r.crop)}" onerror="this.style.display='none'" alt="" style="width:18px;height:18px;vertical-align:middle"> ${escHTML(r.crop)}</td>
+          <td style="text-align:right;padding:3px 6px;color:var(--text-dim)">${r.pack}</td>
+          <td style="text-align:right;padding:3px 6px;color:var(--text-secondary)">${r.yieldPerSeed.toFixed(2)}</td>
+          <td style="text-align:right;padding:3px 6px;color:var(--text-dim);white-space:nowrap">${hms(r.cycleSec)}</td>
+          <td style="text-align:right;padding:3px 6px;color:var(--text-dim)">${r.oilPerCycle.toFixed(2)}</td>
+          <td style="text-align:right;padding:3px 0">${net(r.net)}</td>
+        </tr>`;
+      }
+      h += `</table></div>`;
+      // Best crop: cost/daily breakdown + yield modifiers, mirroring the reference layout.
+      h += `<div style="margin-top:10px;border-top:1px solid #20190f;padding-top:8px;font-size:0.5rem;color:var(--text-dim);line-height:1.7">
+        <b style="color:var(--sunpetal)">${escHTML(best.crop)}</b> — best: ${net(best.net)} ${sflIcon()}/day
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:6px">
+          <div><div style="color:var(--lily);font-size:0.46rem;margin-bottom:2px">PER CYCLE</div>
+            seeds ${best.pack} · yield ${best.yieldPerSeed.toFixed(2)} · ${hms(best.cycleSec)} · ${best.oilPerCycle.toFixed(2)} oil</div>
+          <div><div style="color:var(--lily);font-size:0.46rem;margin-bottom:2px">PER DAY</div>
+            ${best.cyclesPerDay.toFixed(1)} cycles · ${best.cropsPerDay.toFixed(1)} crops · rev ${best.revenue.toFixed(3)} · oil −${best.oilCost.toFixed(3)} · seed −${best.seedCost.toFixed(3)}</div>
+        </div>`;
+      if (best.steps && best.steps.length) {
+        h += `<div style="margin-top:6px"><span style="color:var(--lily);font-size:0.46rem">YIELD</span> base ${best.base.toFixed(2)} `;
+        h += best.steps.map((s) => `→ <span style="color:${s.label.startsWith("-") ? "var(--red)" : "var(--green)"}">${escHTML(s.label)}</span> ${escHTML(s.name)} (${s.to})`).join(" ");
+        h += ` → <b style="color:var(--text-secondary)">${best.yieldPerSeed.toFixed(2)}</b></div>`;
+      }
+      h += `</div></div>`;
+      return h;
+    }
+
     function _powerActivityVerdictHtml() {
       const ps = powerState || {};
       const dg = ps.digging || null, comps = ps.composters || [];
@@ -19219,6 +19279,9 @@
 
       // Boosts you own but are not getting — the highest-value thing on this page, so it leads.
       content += _powerDormantHtml();
+
+      // Crop Machine — its own economics (pack-based time, yield boosts, machine-only speed).
+      content += _powerCropMachineHtml();
 
       // Two repeatable activities the app could price but never showed an answer for. Above the
       // boost catalogue on purpose: it is a verdict, not reference data.

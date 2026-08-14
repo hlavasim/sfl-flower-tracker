@@ -18,11 +18,16 @@
 //     page's consumers (roadmapBuildMissing, nftFloor) actually read.
 import {
   parseBoostEffects, classifyToCategories, SKILL_FEED_EFFECTS,
+  CROP_GROW_DATA, PRODUCT_TO_CATEGORY,
 } from "../engine/power-boosts.mjs";
 import { computeBettyRate } from "../engine/prices.mjs";
+import { SEED_COSTS } from "../data/economy.mjs";
+import {
+  cropMachinePlots, cropMachineOilPerHour, cropMachineCrops, cropMachineSpeedMult, farmHasCropMachine,
+} from "../engine/crop-machine.mjs";
 import {
   findCollectible, getCount, getFactionMarkCost, marksToSfl, isWearableEquipped,
-  calcSkillPointCost, SKILL_TREE_DATA, POWER_CATEGORIES,
+  calcSkillPointCost, SKILL_TREE_DATA, POWER_CATEGORIES, CROP_TIERS, getBaseYield,
   detectFarmCapacity, detectStockModifiers, isAnimalCat,
   getEffectsForCategory, applyBoosts, calcToolCostPerDay, gameExtraEffects,
   getDefaultProduct,
@@ -534,6 +539,88 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   }
 
   /*
+   * ── CROP MACHINE ──────────────────────────────────────────────────────────────────────
+   *
+   * The machine grows a fixed PACK of one crop across its plots, and the model differs from a
+   * normal crop plot in two ways verified against the game:
+   *
+   *  1. TIME does not respond to ordinary crop speed boosts. A cycle is pack × base_grow / plots
+   *     using the crop's BASE time — only crop-machine-specific speed (Groovy Gramophone, and the
+   *     machinery skills Rapid Rig / Crop Processor Unit) shortens it, which is what
+   *     cropMachineSpeedMult already isolates.
+   *  2. QUANTITY does respond to the ordinary crop YIELD boosts (Acre Farm's ±, faction quivers,
+   *     yield NFTs) — the same ones a plot gets. applyBoosts separates yield from speed, so the
+   *     yield multiplier is taken and the speed multiplier from it is discarded.
+   *
+   * The old calcCropMachineDaily (still used by the roadmap) applied yield=1, so it overstated a
+   * basic crop under Acre Farm's -0.5 by a third. This panel computes it correctly; unifying the
+   * roadmap onto this is a separate step.
+   *
+   * PACK sizes are the game's fixed per-crop machine batch, read off the crops the machine can
+   * grow (Sunflower 960 … Broccoli 216) — confirmed by the cycle time matching pack×base/plots on
+   * every crop.
+   */
+  const CROP_MACHINE_PACK = {
+    Sunflower: 960, Potato: 480, Pumpkin: 360,
+    Rhubarb: 480, Zucchini: 480, Carrot: 240, Cabbage: 216, Yam: 216, Broccoli: 216,
+  };
+  let cropMachine = null;
+  if (farmHasCropMachine(farm)) {
+    const cmPlots = cropMachinePlots(farm);
+    const cmOilPerHour = cropMachineOilPerHour(farm);
+    const cmSpeed = cropMachineSpeedMult(farm, false);
+    const oilPrice = p2pPrices["Oil"] || 0;
+    const oilCostPerDay = cmOilPerHour * 24 * oilPrice;   // runs continuously, so the same for every crop
+    const coinsPerSFL = (exchangeRates && exchangeRates.coinsPerSFL) || 320;
+    const cropBase = getBaseYield("crops");
+    // Owned crop boosts, by item, so the yield breakdown can name each contributor.
+    const ownedCropItems = (catBoosts["crops"] || []).filter((b) => b.has && !b.isDisabled);
+    const ownedCropEff = ownedCropItems.flatMap((b) => getEffectsForCategory(b, "crops")).concat(activeShrineEffects(farm, "crops"));
+    const applies = (eff, crop) => {
+      if (eff.cat !== "crops") return false;
+      if (eff.product && PRODUCT_TO_CATEGORY[eff.product] === "crops" && eff.product !== crop) return false;
+      if (eff.cropTier && CROP_TIERS[eff.cropTier] && !CROP_TIERS[eff.cropTier].includes(crop)) return false;
+      return true;
+    };
+    const rows = cropMachineCrops(farm).map((crop) => {
+      const baseSec = CROP_GROW_DATA[crop], pack = CROP_MACHINE_PACK[crop];
+      if (!baseSec || !pack) return null;
+      let ab; try { ab = applyBoosts("crops", crop, capacity, ownedCropEff, farm); } catch { return null; }
+      const yieldPerSeed = cropBase * (ab.yieldMult || 1) + (ab.yieldFlat || 0);
+      const cycleSec = pack * baseSec * cmSpeed / cmPlots;
+      const cyclesPerDay = cycleSec > 0 ? 86400 / cycleSec : 0;
+      const cropsPerDay = cyclesPerDay * pack * yieldPerSeed;
+      const price = p2pPrices[crop] || 0;
+      const revenue = cropsPerDay * price;
+      const seedCostPerDay = (cyclesPerDay * pack) * (SEED_COSTS[crop] || 0) / coinsPerSFL;
+      // Yield breakdown, in applyBoosts's order: pct multiplies the running total, flat adds.
+      const steps = [];
+      let run = cropBase;
+      for (const b of ownedCropItems) {
+        for (const eff of getEffectsForCategory(b, "crops")) {
+          if (!applies(eff, crop)) continue;
+          // The game-injected boosts share one synthetic item name; their real source is in the
+          // effect's raw text ("Faction Quiver +0.25 crops"), so prefer that, trimmed of the value.
+          const src = (b.name === "Game boosts (API-missing)" && eff.raw)
+            ? eff.raw.replace(/\s*[+\-−][\d.].*$/, "").trim() : b.name;
+          if (eff.type === "yield_pct") { run *= (1 + eff.value / 100); steps.push({ name: src, label: `${eff.value >= 0 ? "+" : ""}${eff.value}%`, to: +run.toFixed(3) }); }
+          else if (eff.type === "yield_flat") { run += eff.value; steps.push({ name: src, label: `${eff.value >= 0 ? "+" : ""}${eff.value}`, to: +run.toFixed(3) }); }
+          else if (eff.type === "chance") { const ev = (eff.pct / 100) * eff.extra; run += ev; steps.push({ name: src, label: `+${(eff.pct)}%×${eff.extra}`, to: +run.toFixed(3) }); }
+        }
+      }
+      return {
+        crop, pack, yieldPerSeed: +yieldPerSeed.toFixed(3), cycleSec: Math.round(cycleSec),
+        oilPerCycle: +(cmOilPerHour * cycleSec / 3600).toFixed(3), cyclesPerDay: +cyclesPerDay.toFixed(2),
+        cropsPerDay: +cropsPerDay.toFixed(2), price, revenue: +revenue.toFixed(4),
+        oilCost: +oilCostPerDay.toFixed(4), seedCost: +seedCostPerDay.toFixed(4),
+        net: +(revenue - oilCostPerDay - seedCostPerDay).toFixed(4),
+        base: cropBase, steps,
+      };
+    }).filter(Boolean).sort((a, b) => b.net - a.net);
+    cropMachine = { plots: cmPlots, oilPerHour: cmOilPerHour, speedMult: cmSpeed, oilPrice, oilFlowerPerDay: +oilCostPerDay.toFixed(4), rows };
+  }
+
+  /*
    * Boosts you OWN but are not getting — a wearable sitting in the wardrobe unequipped, a
    * collectible sitting in inventory unplaced. Their boost only applies once active, so an
    * unactivated one is FLOWER/day left on the table, and the user found a +0.1 crimstone
@@ -585,5 +672,5 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     }
   }
 
-  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, skillRanks, composters: composterVerdicts(farm, p2pPrices, season, { savedProducts }), shrines: shrineStatuses(farm), weather: weatherProtection(farm), compostSkills, digging: diggingVerdict(farm, p2pPrices, exchangeRates, { coinsFree: false }), valueBasis: settings.measured ? "measured" : "theoretical", restockQueues, dormantBoosts, ...(boostValuesEff ? { boostValuesEff } : {}), ...(formulaHtml !== undefined ? { formulaHtml } : {}) };
+  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, skillRanks, composters: composterVerdicts(farm, p2pPrices, season, { savedProducts }), shrines: shrineStatuses(farm), weather: weatherProtection(farm), compostSkills, digging: diggingVerdict(farm, p2pPrices, exchangeRates, { coinsFree: false }), valueBasis: settings.measured ? "measured" : "theoretical", restockQueues, dormantBoosts, ...(cropMachine ? { cropMachine } : {}), ...(boostValuesEff ? { boostValuesEff } : {}), ...(formulaHtml !== undefined ? { formulaHtml } : {}) };
 }
