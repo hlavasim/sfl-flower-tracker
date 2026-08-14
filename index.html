@@ -5953,7 +5953,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.32</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.33</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5980,6 +5980,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.33", items: [
+          { t: "feat", text: "<b>The CROP MACHINE panel is now a per-crop breakdown.</b> Every crop the machine can grow — <b>including the ones locked behind Crop Extension Modules you have not taken</b>, shown with 🔒 and which module unlocks them — each a click-to-open row. Inside: the per-cycle and per-day numbers, and the two lists you asked for — <b>ACTIVE</b> (the skills and NFTs boosting that crop right now) and <b>AVAILABLE</b> (crop-yield skills you have not taken and NFTs you do not own that WOULD boost it), split by ◆ skill / ◈ NFT, debuffs in red. Boosts respect the crop’s tier, so a medium crop shows Scary Mike and the Cabbage-specific NFTs while a basic one does not. Speed boosts are correctly absent — they do not apply to the machine. (The NFT side is the curated crop-machine-relevant list; the marketplace API does not expose every NFT’s boost, and its parses of the speed ones were noisy, so they are excluded rather than shown wrong.)" },
+        ] },
         { ver: "v5.32", items: [
           { t: "feat", text: "<b>New CROP MACHINE panel on POWER.</b> Every crop the machine can grow, ranked by net 🌸/day, with its pack size, yield after boosts, cycle time and oil — the best crop expanded with the per-cycle and per-day numbers and a full yield breakdown (base → each boost → final). The economics are the game’s, not a crop plot’s: a cycle is <b>pack × base-grow ÷ plots</b> and <b>ordinary crop speed boosts do not apply</b> — only machine-specific ones (Groovy Gramophone, Rapid Rig, Crop Processor Unit) — while the ordinary crop <b>yield</b> boosts DO apply to the count. The old shared calc used yield = 1, so it overstated a basic crop under Acre Farm’s −0.5 by a third; this panel is correct. (The ROADMAP still uses the old calc — unifying it is next.)" },
           { t: "fix", text: "<b>“Owned but not active” stops flagging things placed in the house.</b> The placed-collectible check missed the house interior entirely — it only looked at the main land and the (now-empty) old home map — so <b>35 collectibles placed on both floors of the house read as unplaced</b>, and the whole panel and its banner were noise. It now reads all four placement maps (main land + both interior floors), and on a farm with everything placed the panel correctly shows nothing. Same fix lands in all three copies of the collectible lookup." },
@@ -16629,42 +16632,34 @@
       if (!cm || !cm.rows || !cm.rows.length) return "";
       const hms = (s) => { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return `${h}h${m ? " " + m + "m" : ""}`; };
       const net = (v) => `<span style="color:${v >= 0 ? "var(--green)" : "var(--red)"};font-weight:bold">${v >= 0 ? "+" : ""}${v.toFixed(4)}</span>`;
-      const best = cm.rows[0];
+      const chip = (e) => `<span style="display:inline-block;margin:1px 3px 1px 0;padding:1px 6px;border-radius:4px;font-size:0.5rem;border:1px solid ${e.debuff ? "var(--red)" : "#3a4a2a"};background:rgba(0,0,0,0.25);color:${e.debuff ? "#ffb0b0" : "var(--text-secondary)"}"><span style="color:var(--text-dim);font-size:0.42rem">${e.kind === "Skill" ? "◆" : "◈"}</span> ${escHTML(e.name)} <b>${escHTML(e.label)}</b></span>`;
       let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">
         <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:6px">🌱 CROP MACHINE</div>
         <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.7">
-          Plots <b style="color:var(--text-secondary)">${cm.plots}</b> · oil <b style="color:var(--text-secondary)">${cm.oilPerHour}/h</b> = <b style="color:var(--text-secondary)">${cm.oilFlowerPerDay.toFixed(3)} ${sflIcon()}/day</b>${cm.speedMult < 1 ? ` · machine speed <b style="color:var(--lily)">×${cm.speedMult.toFixed(2)}</b>` : ""}<br>
-          Time is <b>pack × base ÷ plots</b> — ordinary crop <b>speed</b> boosts do not apply here, only machine ones. Ordinary crop <b>yield</b> boosts do.
-        </div>
-        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.55rem;min-width:420px">
-          <tr style="color:var(--text-dim);font-size:0.46rem"><td style="padding:0 6px 3px 0">crop</td><td style="text-align:right;padding:0 6px 3px">seeds</td><td style="text-align:right;padding:0 6px 3px">yield</td><td style="text-align:right;padding:0 6px 3px">time</td><td style="text-align:right;padding:0 6px 3px">oil</td><td style="text-align:right;padding:0 0 3px">net/day</td></tr>`;
-      for (const r of cm.rows) {
-        const isBest = r.crop === best.crop;
-        h += `<tr style="border-top:1px solid #20190f;background:${isBest ? "#132009" : "transparent"}">
-          <td style="padding:3px 6px 3px 0"><img class="inline-icon" src="${getItemIcon(r.crop)}" onerror="this.style.display='none'" alt="" style="width:18px;height:18px;vertical-align:middle"> ${escHTML(r.crop)}</td>
-          <td style="text-align:right;padding:3px 6px;color:var(--text-dim)">${r.pack}</td>
-          <td style="text-align:right;padding:3px 6px;color:var(--text-secondary)">${r.yieldPerSeed.toFixed(2)}</td>
-          <td style="text-align:right;padding:3px 6px;color:var(--text-dim);white-space:nowrap">${hms(r.cycleSec)}</td>
-          <td style="text-align:right;padding:3px 6px;color:var(--text-dim)">${r.oilPerCycle.toFixed(2)}</td>
-          <td style="text-align:right;padding:3px 0">${net(r.net)}</td>
-        </tr>`;
-      }
-      h += `</table></div>`;
-      // Best crop: cost/daily breakdown + yield modifiers, mirroring the reference layout.
-      h += `<div style="margin-top:10px;border-top:1px solid #20190f;padding-top:8px;font-size:0.5rem;color:var(--text-dim);line-height:1.7">
-        <b style="color:var(--sunpetal)">${escHTML(best.crop)}</b> — best: ${net(best.net)} ${sflIcon()}/day
-        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:6px">
-          <div><div style="color:var(--lily);font-size:0.46rem;margin-bottom:2px">PER CYCLE</div>
-            seeds ${best.pack} · yield ${best.yieldPerSeed.toFixed(2)} · ${hms(best.cycleSec)} · ${best.oilPerCycle.toFixed(2)} oil</div>
-          <div><div style="color:var(--lily);font-size:0.46rem;margin-bottom:2px">PER DAY</div>
-            ${best.cyclesPerDay.toFixed(1)} cycles · ${best.cropsPerDay.toFixed(1)} crops · rev ${best.revenue.toFixed(3)} · oil −${best.oilCost.toFixed(3)} · seed −${best.seedCost.toFixed(3)}</div>
+          Plots <b style="color:var(--text-secondary)">${cm.plots}</b> · oil <b style="color:var(--text-secondary)">${(+cm.oilPerHour.toFixed(3))}/h</b> = <b style="color:var(--text-secondary)">${cm.oilFlowerPerDay.toFixed(3)} ${sflIcon()}/day</b>${cm.speedMult < 1 ? ` · machine speed <b style="color:var(--lily)">×${cm.speedMult.toFixed(2)}</b>` : ""}<br>
+          Time is <b>pack × base ÷ plots</b> — ordinary crop <b>speed</b> boosts do not apply, only machine ones. Ordinary crop <b>yield</b> boosts do. Click a crop for its boosts.
         </div>`;
-      if (best.steps && best.steps.length) {
-        h += `<div style="margin-top:6px"><span style="color:var(--lily);font-size:0.46rem">YIELD</span> base ${best.base.toFixed(2)} `;
-        h += best.steps.map((s) => `→ <span style="color:${s.label.startsWith("-") ? "var(--red)" : "var(--green)"}">${escHTML(s.label)}</span> ${escHTML(s.name)} (${s.to})`).join(" ");
-        h += ` → <b style="color:var(--text-secondary)">${best.yieldPerSeed.toFixed(2)}</b></div>`;
+      for (const r of cm.rows) {
+        const id = "cm-" + r.crop.replace(/[^a-z0-9]/gi, "");
+        h += `<div style="border-top:1px solid #20190f">
+          <div onclick="var d=document.getElementById('${id}');d.style.display=d.style.display==='none'?'block':'none'" style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;${r.locked ? "opacity:0.72" : ""}">
+            <img class="inline-icon" src="${getItemIcon(r.crop)}" onerror="this.style.display='none'" alt="" style="width:20px;height:20px">
+            <span style="flex:1;font-size:0.6rem;color:var(--text-secondary)">${r.locked ? "🔒 " : ""}${escHTML(r.crop)}<span style="color:var(--text-dim);font-size:0.46rem"> · ${escHTML(r.tier || "")}${r.locked ? " · needs " + escHTML(r.unlockSkill) : ""}</span></span>
+            <span style="font-size:0.5rem;color:var(--text-dim);white-space:nowrap">yield ${r.yieldPerSeed.toFixed(2)} · ${hms(r.cycleSec)}</span>
+            <span style="min-width:74px;text-align:right;font-family:'Courier New',monospace;font-size:0.6rem">${net(r.net)}</span>
+          </div>
+          <div id="${id}" style="display:none;padding:4px 0 8px 28px;font-size:0.5rem;color:var(--text-dim);line-height:1.7">
+            <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:6px">
+              <div><span style="color:var(--lily);font-size:0.46rem">PER CYCLE</span> ${r.pack} seeds · ${hms(r.cycleSec)} · ${r.oilPerCycle.toFixed(2)} oil</div>
+              <div><span style="color:var(--lily);font-size:0.46rem">PER DAY</span> ${r.cyclesPerDay.toFixed(1)} cycles · ${r.cropsPerDay.toFixed(1)} crops · rev ${r.revenue.toFixed(3)} · oil −${r.oilCost.toFixed(3)} · seed −${r.seedCost.toFixed(3)}</div>
+            </div>
+            <div style="margin-bottom:4px"><span style="color:var(--green);font-size:0.46rem">ACTIVE (${r.active.length})</span> ${r.active.length ? r.active.map(chip).join("") : "<span style='color:var(--text-dim)'>none — base yield only</span>"}</div>
+            <div><span style="color:var(--sunpetal);font-size:0.46rem">AVAILABLE (${r.available.length})</span> ${r.available.length ? r.available.map(chip).join("") : "<span style='color:var(--text-dim)'>nothing left to add</span>"}</div>
+            <div style="margin-top:5px;color:var(--text-dim);font-size:0.44rem">◆ skill · ◈ NFT · <span style="color:#ffb0b0">red = a debuff</span>. NFT list covers the crop-machine-relevant yield NFTs; the marketplace API does not expose every NFT boost.</div>
+          </div>
+        </div>`;
       }
-      h += `</div></div>`;
+      h += `</div>`;
       return h;
     }
 

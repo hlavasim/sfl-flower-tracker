@@ -564,6 +564,27 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     Sunflower: 960, Potato: 480, Pumpkin: 360,
     Rhubarb: 480, Zucchini: 480, Carrot: 240, Cabbage: 216, Yam: 216, Broccoli: 216,
   };
+  // Every crop the machine can EVER grow, with the module skill that unlocks it (basic three
+  // need nothing). Locked crops are shown too, so you can see what a module would add.
+  const CROP_MACHINE_UNLOCK = {
+    Sunflower: null, Potato: null, Pumpkin: null,
+    Rhubarb: "Crop Extension Module I", Zucchini: "Crop Extension Module I",
+    Carrot: "Crop Extension Module II", Cabbage: "Crop Extension Module II",
+    Yam: "Crop Extension Module III", Broccoli: "Crop Extension Module III",
+  };
+  // Crop-yield NFTs that reach the machine (yield only — speed NFTs do not apply here). Mirrors
+  // gameExtraEffects's list but as a catalogue so an UNOWNED one can still be listed as available.
+  // scope: "all" | { tier } | { product }. kind: how ownership is checked.
+  const CROP_MACHINE_NFTS = [
+    { name: "Sir Goldensnout", value: 0.5, scope: "all", kind: "collectible" },
+    { name: "Infernal Pitchfork", value: 3, scope: "all", kind: "wearable" },
+    { name: "Scary Mike", value: 0.2, scope: { tier: "medium" }, kind: "collectible", withSkill: { skill: "Horror Mike", value: 0.3 } },
+    { name: "Cabbage Boy", value: 0.25, scope: { product: "Cabbage" }, kind: "collectible" },
+    { name: "Cabbage Girl", value: 0.25, scope: { product: "Cabbage" }, kind: "collectible" },
+    { name: "Karkinos", value: 0.1, scope: { product: "Cabbage" }, kind: "collectible" },
+    { name: "Pablo The Bunny", value: 0.1, scope: { product: "Carrot" }, kind: "collectible" },
+    { name: "Giant Yam", value: 0.5, scope: { product: "Yam" }, kind: "collectible" },
+  ];
   let cropMachine = null;
   if (farmHasCropMachine(farm)) {
     const cmPlots = cropMachinePlots(farm);
@@ -573,18 +594,31 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     const oilCostPerDay = cmOilPerHour * 24 * oilPrice;   // runs continuously, so the same for every crop
     const coinsPerSFL = (exchangeRates && exchangeRates.coinsPerSFL) || 320;
     const cropBase = getBaseYield("crops");
-    // Owned crop boosts, by item, so the yield breakdown can name each contributor.
-    const ownedCropItems = (catBoosts["crops"] || []).filter((b) => b.has && !b.isDisabled);
-    const ownedCropEff = ownedCropItems.flatMap((b) => getEffectsForCategory(b, "crops")).concat(activeShrineEffects(farm, "crops"));
+    const skills = (farm.bumpkin && farm.bumpkin.skills) || {};
+    const tierOf = (crop) => Object.keys(CROP_TIERS).find((t) => CROP_TIERS[t].includes(crop)) || null;
+    const nftOwned = (n) => findCollectible(farm, n).length > 0;
+    const wearableActive = (n) => { try { return isWearableEquipped(farm, n); } catch { return false; } };
+    // All crop boost ITEMS (owned + not) from the catalogue, for the skill side of the lists.
+    const allCropItems = (catBoosts["crops"] || []);
+    const owned = allCropItems.filter((b) => b.has && !b.isDisabled);
+    const ownedCropEff = owned.flatMap((b) => getEffectsForCategory(b, "crops")).concat(activeShrineEffects(farm, "crops"));
     const applies = (eff, crop) => {
       if (eff.cat !== "crops") return false;
       if (eff.product && PRODUCT_TO_CATEGORY[eff.product] === "crops" && eff.product !== crop) return false;
       if (eff.cropTier && CROP_TIERS[eff.cropTier] && !CROP_TIERS[eff.cropTier].includes(crop)) return false;
       return true;
     };
-    const rows = cropMachineCrops(farm).map((crop) => {
+    const yieldLabel = (eff) => eff.type === "yield_pct" ? `${eff.value >= 0 ? "+" : ""}${eff.value}%`
+      : eff.type === "chance" ? `+${eff.pct}%×${eff.extra}` : `${eff.value >= 0 ? "+" : ""}${eff.value}`;
+    const nftScopeHits = (nft, crop) => nft.scope === "all"
+      || (nft.scope.tier && tierOf(crop) === nft.scope.tier)
+      || (nft.scope.product && nft.scope.product === crop);
+
+    const rows = Object.keys(CROP_MACHINE_PACK).map((crop) => {
       const baseSec = CROP_GROW_DATA[crop], pack = CROP_MACHINE_PACK[crop];
       if (!baseSec || !pack) return null;
+      const unlockSkill = CROP_MACHINE_UNLOCK[crop];
+      const locked = !!(unlockSkill && !skills[unlockSkill]);
       let ab; try { ab = applyBoosts("crops", crop, capacity, ownedCropEff, farm); } catch { return null; }
       const yieldPerSeed = cropBase * (ab.yieldMult || 1) + (ab.yieldFlat || 0);
       const cycleSec = pack * baseSec * cmSpeed / cmPlots;
@@ -593,30 +627,55 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
       const price = p2pPrices[crop] || 0;
       const revenue = cropsPerDay * price;
       const seedCostPerDay = (cyclesPerDay * pack) * (SEED_COSTS[crop] || 0) / coinsPerSFL;
-      // Yield breakdown, in applyBoosts's order: pct multiplies the running total, flat adds.
-      const steps = [];
-      let run = cropBase;
-      for (const b of ownedCropItems) {
+
+      // The two lists this crop cares about: what is ACTIVE on it now, and what could still be
+      // added (skills you have not taken, NFTs you do not own) — each with its effect.
+      const active = [], available = [];
+      for (const b of allCropItems) {
+        // SKILLS (clean, complete via the tree) and the game-injected crop boosts (faction
+        // quiver, AOE) only. The marketplace catalogue's crop collectibles/wearables are excluded
+        // here: most are SPEED boosts, which do not apply to the machine, and their boost text
+        // parses noisily (Cabbage Girl's -50% grow TIME read as a -50% yield). Curated crop
+        // yield NFTs come from CROP_MACHINE_NFTS below instead.
+        if (b.type !== "Skill" && b.name !== "Game boosts (API-missing)") continue;
         for (const eff of getEffectsForCategory(b, "crops")) {
+          if (eff.type !== "yield_pct" && eff.type !== "yield_flat" && eff.type !== "chance") continue;
           if (!applies(eff, crop)) continue;
-          // The game-injected boosts share one synthetic item name; their real source is in the
-          // effect's raw text ("Faction Quiver +0.25 crops"), so prefer that, trimmed of the value.
-          const src = (b.name === "Game boosts (API-missing)" && eff.raw)
+          // The game-injected boosts share one synthetic item name; recover the real source from
+          // the effect's raw text so it de-dups against the NFT catalogue below by that name.
+          const name = (b.name === "Game boosts (API-missing)" && eff.raw)
             ? eff.raw.replace(/\s*[+\-−][\d.].*$/, "").trim() : b.name;
-          if (eff.type === "yield_pct") { run *= (1 + eff.value / 100); steps.push({ name: src, label: `${eff.value >= 0 ? "+" : ""}${eff.value}%`, to: +run.toFixed(3) }); }
-          else if (eff.type === "yield_flat") { run += eff.value; steps.push({ name: src, label: `${eff.value >= 0 ? "+" : ""}${eff.value}`, to: +run.toFixed(3) }); }
-          else if (eff.type === "chance") { const ev = (eff.pct / 100) * eff.extra; run += ev; steps.push({ name: src, label: `+${(eff.pct)}%×${eff.extra}`, to: +run.toFixed(3) }); }
+          const entry = { name, kind: b.type === "Skill" ? "Skill" : "NFT", label: yieldLabel(eff), debuff: (eff.value || 0) < 0 };
+          (b.has ? active : available).push(entry);
         }
       }
+      for (const nft of CROP_MACHINE_NFTS) {
+        if (!nftScopeHits(nft, crop)) continue;
+        let val = nft.value;
+        if (nft.withSkill && skills[nft.withSkill.skill]) val = nft.withSkill.value;
+        const on = nft.kind === "wearable" ? wearableActive(nft.name) : nftOwned(nft.name);
+        const entry = { name: nft.name, kind: "NFT", label: `+${val}`, debuff: false };
+        (on ? active : available).push(entry);
+      }
+      // De-dup by name (a boost injected by the game AND listed in the catalogue would appear
+      // twice); a name that is active is never also offered as available.
+      const dedup = (list) => { const m = new Map(); for (const e of list) if (!m.has(e.name)) m.set(e.name, e); return [...m.values()]; };
+      const activeD = dedup(active);
+      const activeNames = new Set(activeD.map((e) => e.name));
+      const availableD = dedup(available).filter((e) => !activeNames.has(e.name));
+
       return {
-        crop, pack, yieldPerSeed: +yieldPerSeed.toFixed(3), cycleSec: Math.round(cycleSec),
-        oilPerCycle: +(cmOilPerHour * cycleSec / 3600).toFixed(3), cyclesPerDay: +cyclesPerDay.toFixed(2),
-        cropsPerDay: +cropsPerDay.toFixed(2), price, revenue: +revenue.toFixed(4),
-        oilCost: +oilCostPerDay.toFixed(4), seedCost: +seedCostPerDay.toFixed(4),
+        crop, tier: tierOf(crop), locked, unlockSkill, pack,
+        yieldPerSeed: +yieldPerSeed.toFixed(3), base: cropBase,
+        cycleSec: Math.round(cycleSec), oilPerCycle: +(cmOilPerHour * cycleSec / 3600).toFixed(3),
+        cyclesPerDay: +cyclesPerDay.toFixed(2), cropsPerDay: +cropsPerDay.toFixed(2),
+        price, revenue: +revenue.toFixed(4), oilCost: +oilCostPerDay.toFixed(4), seedCost: +seedCostPerDay.toFixed(4),
         net: +(revenue - oilCostPerDay - seedCostPerDay).toFixed(4),
-        base: cropBase, steps,
+        active: activeD, available: availableD,
       };
-    }).filter(Boolean).sort((a, b) => b.net - a.net);
+    }).filter(Boolean);
+    // Unlocked crops ranked by net; locked ones after, so the live choice leads.
+    rows.sort((a, b) => (a.locked - b.locked) || (b.net - a.net));
     cropMachine = { plots: cmPlots, oilPerHour: cmOilPerHour, speedMult: cmSpeed, oilPrice, oilFlowerPerDay: +oilCostPerDay.toFixed(4), rows };
   }
 
