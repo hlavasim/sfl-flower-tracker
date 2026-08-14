@@ -21,7 +21,7 @@ import {
 } from "../engine/power-boosts.mjs";
 import { computeBettyRate } from "../engine/prices.mjs";
 import {
-  findCollectible, getCount, getFactionMarkCost, marksToSfl,
+  findCollectible, getCount, getFactionMarkCost, marksToSfl, isWearableEquipped,
   calcSkillPointCost, SKILL_TREE_DATA, POWER_CATEGORIES,
   detectFarmCapacity, detectStockModifiers, isAnimalCat,
   getEffectsForCategory, applyBoosts, calcToolCostPerDay, gameExtraEffects,
@@ -533,6 +533,43 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     }
   }
 
+  /*
+   * Boosts you OWN but are not getting — a wearable sitting in the wardrobe unequipped, a
+   * collectible sitting in inventory unplaced. Their boost only applies once active, so an
+   * unactivated one is FLOWER/day left on the table, and the user found a +0.1 crimstone
+   * wearable that had never been equipped.
+   *
+   * Owned-and-active is judged from the farm, not from the `has` flag: `has` is true for a
+   * wearable the moment it is in the wardrobe and for a collectible the moment it is in
+   * inventory OR placed — so it cannot tell a worn item from a stored one, which is exactly the
+   * distinction this needs. A wearable is active when equipped; a collectible when at least one
+   * copy is placed.
+   *
+   * (That same conflation means the income figures COUNT these dormant boosts as if active —
+   * a separate overstatement, flagged to the user, not fixed here.)
+   *
+   * Value is the marginal each would add, read from boostValues (best across its categories).
+   * Disabled items are skipped: one superseded by a stronger active boost adds nothing.
+   */
+  const bestValue = (name) => {
+    let v = 0;
+    for (const cat of Object.keys(boostValues)) {
+      const e = boostValues[cat][name];
+      if (e && isFinite(e.synergy) && e.synergy > v) v = e.synergy;
+    }
+    return v;
+  };
+  const dormantBoosts = [];
+  for (const b of boostItems) {
+    if (b.type === "Skill" || b.isDisabled || !b.effects || !b.effects.length) continue;
+    let owned;
+    if (b.type === "Wearable") owned = (wardrobe[b.name] || 0) > 0 && !isWearableEquipped(farm, b.name);
+    else owned = getCount(inventory, b.name) > 0 && findCollectible(farm, b.name).length === 0;
+    if (!owned) continue;
+    dormantBoosts.push({ name: b.name, type: b.type, boost: (b.boost || "").split("\n")[0], value: +bestValue(b.name).toFixed(2) });
+  }
+  dormantBoosts.sort((a, b) => b.value - a.value);
+
   // On-demand formula panel (the page's buildFormulaHTML, now in core): computed only
   // for the one requested boost — precomputing all ~380 panels would be megabytes.
   let formulaHtml;
@@ -548,5 +585,5 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     }
   }
 
-  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, skillRanks, composters: composterVerdicts(farm, p2pPrices, season, { savedProducts }), shrines: shrineStatuses(farm), weather: weatherProtection(farm), compostSkills, digging: diggingVerdict(farm, p2pPrices, exchangeRates, { coinsFree: false }), valueBasis: settings.measured ? "measured" : "theoretical", restockQueues, ...(boostValuesEff ? { boostValuesEff } : {}), ...(formulaHtml !== undefined ? { formulaHtml } : {}) };
+  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, skillRanks, composters: composterVerdicts(farm, p2pPrices, season, { savedProducts }), shrines: shrineStatuses(farm), weather: weatherProtection(farm), compostSkills, digging: diggingVerdict(farm, p2pPrices, exchangeRates, { coinsFree: false }), valueBasis: settings.measured ? "measured" : "theoretical", restockQueues, dormantBoosts, ...(boostValuesEff ? { boostValuesEff } : {}), ...(formulaHtml !== undefined ? { formulaHtml } : {}) };
 }

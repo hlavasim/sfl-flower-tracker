@@ -5948,7 +5948,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.29</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.30</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5975,6 +5975,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.30", items: [
+          { t: "feat", text: "<b>New: boosts you OWN but are not getting.</b> A wearable boosts only when <b>equipped</b> and a collectible only when <b>placed</b> — so one sitting in the wardrobe or inventory is FLOWER/day left on the table. The POWER page now leads with a <b>💤 OWNED BUT NOT ACTIVE</b> panel: wearables first (a spare equipment slot is nearly free — this is where a <b>+0.1 crimstone armor that had never been worn</b> turned up), then unplaced collectibles ranked by what each would add, with the honest caveat that the farm has finite placement space so the /day is a ceiling. A slim amber banner (like the data-collection one) nudges from any page once POWER has run, and is dismissible." },
+          { t: "fix", text: "<b>Along the way this exposed an overstatement:</b> the income engine reads whether a boost is <i>owned</i>, not whether it is <i>active</i> — so an owned-but-unequipped wearable or an owned-but-unplaced collectible was being counted in the POWER and ROADMAP totals as if it were working. The new panel says so where it lists them. The totals themselves are not re-based yet — a larger change, flagged rather than rushed." },
+        ] },
         { ver: "v5.29", items: [
           { t: "feat", text: "<b>LIQUIDATE NOW counts the locked position too — as a second number, not a blended one.</b> Money sitting in Yakkamon was invisible to ③, which only ever valued the farm. It cannot go into the <i>now</i> figure either: withdrawals are closed until access opens in Q4, and folding locked funds into a percentage labelled NOW is the same misrepresentation ① was just fixed for. So the tile keeps <b>now</b> (farm treasury, less its 10% marketplace fee) and adds <b>at unlock</b> beneath it — the locked holding at <b>100%, no fee and no penalty</b>, because a deposit is returned rather than sold. On this ledger that is <b>58.8% now against 99.4% at unlock</b>: two true numbers about two different moments, instead of one that is true of neither." },
         ] },
@@ -16547,6 +16551,50 @@
      *
      * Everything here is READ from powerState. Nothing is recomputed.
      */
+    /*
+     * Boosts you own but are not getting: a wearable in the wardrobe unequipped, a collectible
+     * in inventory unplaced. The server (core/sections/power.mjs) detects them from the farm and
+     * values each. Wearables lead — a spare slot is nearly free, and that is where the user
+     * found a +0.1 crimstone that had never been worn — then collectibles by what they would
+     * add, honestly caveated: the farm has finite placement space, so "up to X/day" is the
+     * ceiling, not a promise. Below 0.01/day and worth-nothing decorations fold into a count.
+     */
+    function _powerDormantHtml() {
+      const all = (powerState && powerState.dormantBoosts) || [];
+      // Stash a one-line summary for the global banner: it fires on any page from this cache,
+      // so a fresh reader of another page still gets nudged after POWER has run once.
+      try {
+        const wearN = all.filter((d) => d.type === "Wearable").length;
+        const missed = all.reduce((s, d) => s + (d.value > 0 ? d.value : 0), 0);
+        sessionStorage.setItem("sfl_dormant_summary", JSON.stringify({ n: all.length, wear: wearN, missed: Math.round(missed) }));
+      } catch (e) {}
+      if (!all.length) return "";
+      const wear = all.filter((d) => d.type === "Wearable");
+      const coll = all.filter((d) => d.type === "Collectible" && d.value >= 0.01);
+      const rest = all.length - wear.length - coll.length;
+      if (!wear.length && !coll.length) return "";
+      const totalMissed = all.reduce((s, d) => s + (d.value > 0 ? d.value : 0), 0);
+      const row = (d) => `<div style="display:flex;align-items:center;gap:8px;padding:3px 0;border-top:1px solid #241a10">
+        <img class="inline-icon" src="${getItemIcon(d.name)}" onerror="this.style.display='none'" alt="" style="width:20px;height:20px">
+        <span style="flex:1;font-size:0.6rem;color:var(--text-secondary)">${escHTML(d.name)}<span style="color:var(--text-dim);font-size:0.5rem"> · ${escHTML(d.boost)}</span></span>
+        <span style="font-family:'Courier New',monospace;font-size:0.62rem;color:${d.value > 0 ? "var(--green)" : "var(--text-dim)"};white-space:nowrap">${d.value > 0 ? "+" + d.value.toFixed(2) + " " + sflIcon() + "/d" : "—"}</span>
+      </div>`;
+      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px;border-left:3px solid #e8a060">
+        <div class="pixel-font" style="font-size:0.62rem;color:#e8a060;margin-bottom:4px">💤 OWNED BUT NOT ACTIVE — up to ${Math.round(totalMissed).toLocaleString("en-US")} ${sflIcon()}/day sitting idle</div>
+        <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">A wearable boosts only when <b>equipped</b>, a collectible only when <b>placed</b>. These you own and are not getting. The /day is what each would add if active; collectibles compete for placement space, so treat it as a ceiling. <b style="color:#e8a060">These figures are also being counted as active in the totals above — a known overstatement.</b></div>`;
+      if (wear.length) {
+        h += `<div style="font-size:0.52rem;color:var(--lily);margin:6px 0 2px">👕 NOT EQUIPPED — a slot is nearly free, do these first</div>`;
+        h += wear.map(row).join("");
+      }
+      if (coll.length) {
+        h += `<div style="font-size:0.52rem;color:var(--lily);margin:8px 0 2px">🏠 NOT PLACED — ranked by what they would add</div>`;
+        h += coll.map(row).join("");
+      }
+      if (rest > 0) h += `<div style="font-size:0.47rem;color:var(--text-dim);margin-top:6px">+ ${rest} more owned but unplaced, each under 0.01 ${sflIcon()}/day (decorations, XP, one-offs) — not worth the space.</div>`;
+      h += `</div>`;
+      return h;
+    }
+
     function _powerActivityVerdictHtml() {
       const ps = powerState || {};
       const dg = ps.digging || null, comps = ps.composters || [];
@@ -19137,6 +19185,9 @@
       // Summary
       const { skillCostInfo } = powerState;
 
+      // Boosts you own but are not getting — the highest-value thing on this page, so it leads.
+      content += _powerDormantHtml();
+
       // Two repeatable activities the app could price but never showed an answer for. Above the
       // boost catalogue on purpose: it is a verdict, not reference data.
       content += _powerActivityVerdictHtml();
@@ -20137,6 +20188,9 @@
       const bestBuysOpen = bestBuysBody?.style.display === "block";
 
       document.getElementById("power-content").innerHTML = content;
+      // POWER just refreshed the dormant summary in sessionStorage; surface the banner now
+      // (it is a no-op if already shown or dismissed this session).
+      try { renderDormantBanner(); } catch (e) {}
 
       // Restore open/closed state after re-render
       openCats.forEach(catId => {
@@ -29446,10 +29500,37 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       document.body.insertBefore(bar, document.body.firstChild);
     }
 
+    /*
+     * Dormant-boost banner. Same slim, dismissible, sticky pattern as the collector-health bar,
+     * but amber — an opportunity, not an error. It reads the summary POWER stashed in
+     * sessionStorage, so it can nudge from any page once POWER has computed once this session,
+     * without recomputing the whole boost engine on every load. Wearables are the headline,
+     * since a spare equipment slot is nearly free.
+     */
+    function renderDormantBanner() {
+      if (sessionStorage.getItem("sfl_dormant_dismissed") === "1") return;
+      if (document.getElementById("dormant-banner")) return;
+      let s;
+      try { s = JSON.parse(sessionStorage.getItem("sfl_dormant_summary") || "null"); } catch { return; }
+      if (!s || !s.n) return;
+      if (!s.wear && s.missed < 1) return; // nothing worth interrupting for
+      const bits = [];
+      if (s.wear) bits.push(`<b>${s.wear} wearable${s.wear > 1 ? "s" : ""} not equipped</b>`);
+      bits.push(`${s.n} owned boost${s.n > 1 ? "s" : ""} inactive · up to ${Number(s.missed).toLocaleString("en-US")} ${sflIcon()}/day idle`);
+      const bar = document.createElement("div");
+      bar.id = "dormant-banner";
+      bar.style.cssText = "background:#2a2010;border-bottom:1px solid #e8a060;color:#f0c890;font-size:0.62rem;padding:6px 12px;display:flex;align-items:center;gap:10px;font-family:'Courier New',monospace;position:sticky;top:0;z-index:9998;cursor:pointer";
+      bar.onclick = (ev) => { if (ev.target.tagName !== "BUTTON") navigateTo("power"); };
+      bar.innerHTML = `<span style="flex:1">💤 ${bits.join(" · ")} — <span style="text-decoration:underline">open POWER</span></span>
+        <button onclick="event.stopPropagation();sessionStorage.setItem('sfl_dormant_dismissed','1');this.parentElement.remove()" style="background:none;border:1px solid #e8a060;color:#f0c890;border-radius:4px;cursor:pointer;font-size:0.6rem;padding:1px 7px">✕</button>`;
+      document.body.insertBefore(bar, document.body.firstChild);
+    }
+
     // Init
     migrateApiKey();
     main();
     renderHealthBanner();
+    renderDormantBanner();
   </script>
 </body>
 </html>
