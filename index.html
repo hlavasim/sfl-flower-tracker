@@ -5954,7 +5954,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.36</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.37</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5981,6 +5981,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.37", items: [
+          { t: "fix", text: "<b>The chum NFTs priced at zero, and it inverted the recommendation.</b> Rich, Speed and Fat Chicken are collectibles, not p2p goods — the value engine has no entry for them, so they resolved to 0 and a guaranteed White Shark came out at <b>0.07 ⛀ when it really costs 58.51</b>. The page had it as the best route on the board; it is in fact one of the worst. NFT floors are now merged into the price map, and the guaranteed table reads correctly: <b>Grub + 1× Wild Mushroom → Tuna at 0.06 ⛀ and 3,847 XP/⛀</b> against the shark routes at 13–22. The Marine Marvel table corrects with it — Gilded Swordfish goes back to Rock Blackfish, since a forced White Shark at 58.51 a cast is no bargain." },
+          { t: "feat", text: "<b>Fish Market chum added — a guaranteed TIER rather than a named fish.</b> Fish Flake, Fish Stick, Fish Oil and Crab Stick each guarantee a catch from a whole pool, so the XP column is the pool <b>average</b> with the spread beside it, not a single value you cannot choose. The members of each tier are printed in the row, so a mis-grouped fish is visible instead of buried in an average. <b>Fish Oil comes out second-best on the whole page</b> — 229 average XP for 0.08 ⛀, because it trades on the market for a fraction of what it costs to craft." },
+        ] },
         { ver: "v5.36", items: [
           { t: "fix", text: "<b>FISHING priced every cast at zero.</b> It read the raw p2p feed, which tracks 65 tradeable crops and resources — <b>no Rod, no bait, no fish</b>. It now reads the item-value engine (<code>section=prices</code>), which carries a market value for anything with a market and a derived production cost for everything else. A cast comes out at <b>0.065 ⛀</b> (rod 0.055 + bait 0.011), and the XP-per-FLOWER ranking finally has numbers: Tuna 513, Red Snapper 380, Oarfish 254. Fish have no p2p market, so that column is labelled as the engine’s figure rather than a sale price." },
           { t: "feat", text: "<b>Marine Marvels now consider the FORCED route to a source fish, and it changes the answer by 73×.</b> A source can be reached at your measured rate or guaranteed with a bait+chum pair, and the page takes the cheaper. White Shark has never turned up on its own here, so pricing by measured rate alone sent Gilded Swordfish through Rock Blackfish at 5% — <b>2,467 casts and 162 ⛀</b>. Three Rich Chickens guarantee a 30% source instead: <b>30 casts and 2.22 ⛀</b>. Crystal Shrimp likewise drops to a forced Tuna. The route is shown per row and turns green when forcing wins." },
@@ -21218,6 +21222,27 @@
       { marvel: "Crystal Shrimp", sources: [["Tuna", 0.008], ["Sea Bass", 0.03]], chapter: "Salt Awakening" },
     ];
 
+    /*
+     * Fish Market chum. Unlike a bait+chum pair, these do not name ONE fish — each guarantees a
+     * catch from a whole tier, so the honest figure is the tier's average XP, not a single value.
+     *
+     * The tier membership is read off the pasted "Fish Market guaranteed catch" table, whose four
+     * columns arrive flattened into one list; the split below follows the XP tiers, which is the
+     * only boundary the flattened order supports (Barred Knifejaw appears twice in that paste,
+     * once at each side of a column break). The members are printed in the UI precisely so a
+     * wrong split is obvious rather than buried.
+     */
+    const fishMarketChum = [
+      { chum: "Fish Flake", tier: "basic",
+        pool: ["Anchovy", "Butterflyfish", "Blowfish", "Clownfish", "Sea Bass", "Sea Horse", "Halibut", "Porgy", "Muskellunge"] },
+      { chum: "Fish Stick", tier: "advanced",
+        pool: ["Horse Mackerel", "Squid", "Moray Eel", "Olive Flounder", "Napoleanfish", "Surgeonfish", "Zebra Turkeyfish", "Walleye", "Angelfish", "Ray", "Rock Blackfish", "Tilapia"] },
+      { chum: "Fish Oil", tier: "expert",
+        pool: ["Tuna", "Mahi Mahi", "Blue Marlin", "Weakfish", "Oarfish", "Football fish", "Sunfish", "Cobia", "Hammerhead Shark"] },
+      { chum: "Crab Stick", tier: "rare",
+        pool: ["Barred Knifejaw", "Trout", "Coelacanth", "Saw Shark", "Whale Shark", "White Shark", "Parrotfish"] },
+    ];
+
     let _fishData = null, _fishPrices = null, _fishErr = null, _fishLoading = false;
     let _fishMoon = false, _fishHelm = false, _fishGuardian = false;
     try {
@@ -21234,7 +21259,7 @@
       if (_fishLoading) return;
       _fishLoading = true;
       try {
-        const [hist, prices] = await Promise.all([
+        const [hist, prices, floors] = await Promise.all([
           fetch("/api/farm-history?farm=" + encodeURIComponent(FARM_ID) + "&type=fishing").then((r) => (r.ok ? r.json() : Promise.reject(r.status))),
           /*
            * The item-value engine, not the raw p2p feed. price-history tracks 65 tradeable
@@ -21244,10 +21269,23 @@
            */
           fetch("/api/compute?farm=" + encodeURIComponent(FARM_ID) + "&section=prices")
             .then((r) => (r.ok ? r.json() : Promise.reject(r.status))).catch(() => null),
+          /*
+           * NFT floors, because several chums are NFTs and the value engine has no price for
+           * them at all. Rich/Speed/Fat Chicken are collectibles: the engine returned nothing,
+           * P() fell back to 0, and a guaranteed White Shark priced at 0.07 instead of ~75 —
+           * which inverted the recommendation and made the most expensive route look cheapest.
+           */
+          fetch("/api/nft-history?latest=1&collection=collectibles")
+            .then((r) => (r.ok ? r.json() : Promise.reject(r.status))).catch(() => null),
         ]);
         _fishData = hist;
         const pd = (prices && (prices.data || prices)) || {};
+        // Order matters: a real market value beats a derived cost, and an NFT floor beats both
+        // for the items that only exist as NFTs.
         _fishPrices = Object.assign({}, pd.productionCost || {}, pd.marketValue || {});
+        for (const v of ((floors && floors.values) || [])) {
+          if (v.field === "floor" && v.value > 0 && v.nft_name) _fishPrices[v.nft_name] = v.value;
+        }
         _fishErr = null;
       } catch (e) { _fishErr = String(e); }
       _fishLoading = false;
@@ -21361,6 +21399,29 @@
           (gr[0] && gr[0].xpPerSfl > bestRandom.xpPerSfl
             ? ', which <b style="color:var(--green)">' + escHTML(gr[0].bait) + " + " + escHTML(gr[0].chum) + '</b> beats at ' + gr[0].xpPerSfl.toFixed(1) + "."
             : ", which no guaranteed route beats.") : "") + "</div></div>";
+
+      // Tier chum: one cast, a guaranteed fish from a pool. Priced on the pool's AVERAGE XP,
+      // since which member you land is not yours to choose.
+      const mr = fishMarketChum.map((g) => {
+        const xps = g.pool.map((f) => ITEM_XP_VALUES[f] || 0).filter((x) => x > 0);
+        const avgXp = xps.length ? xps.reduce((a, b) => a + b, 0) / xps.length : 0;
+        const cost = rodP + baitAvg + P(g.chum);
+        return Object.assign({}, g, { avgXp, minXp: Math.min(...xps), maxXp: Math.max(...xps),
+                                      cost, xpPerSfl: cost > 0 ? avgXp / cost : 0 });
+      }).sort((a, b) => b.xpPerSfl - a.xpPerSfl);
+      h += '<div class="pixel-panel" style="padding:12px;margin-bottom:12px">' +
+        '<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">🐠 FISH MARKET CHUM — a guaranteed TIER</div>' +
+        '<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">These do not name one fish: each guarantees a catch from a whole tier, so the XP column is the tier <b>average</b> and the spread is shown beside it. Cost is rod + bait + the chum at its crafted value. Tier membership is taken from the published table — the members are listed so a wrong grouping is visible, not buried.</div>' +
+        '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:540px">' +
+        '<tr style="color:var(--text-dim);font-size:0.45rem"><td style="padding:0 6px 3px 0">chum</td><td style="text-align:right;padding:0 6px 3px">cost</td><td style="text-align:right;padding:0 6px 3px">avg XP</td><td style="text-align:right;padding:0 6px 3px">spread</td><td style="text-align:right;padding:0 0 3px">XP / ' + sflIcon() + '</td></tr>' +
+        mr.map((g) => '<tr style="border-top:1px solid #20190f">' +
+          '<td style="padding:3px 6px 3px 0"><b>' + escHTML(g.chum) + '</b> <span style="color:var(--text-dim);font-size:0.42rem">' + escHTML(g.tier) + '</span>' +
+            '<div style="color:var(--text-dim);font-size:0.42rem;line-height:1.5">' + g.pool.map(escHTML).join(" · ") + '</div></td>' +
+          '<td style="text-align:right;padding:3px 6px;color:#e8a060;vertical-align:top">' + (g.cost > 0 ? g.cost.toFixed(2) : "—") + '</td>' +
+          '<td style="text-align:right;padding:3px 6px;color:var(--text-secondary);vertical-align:top">' + Math.round(g.avgXp) + '</td>' +
+          '<td style="text-align:right;padding:3px 6px;color:var(--text-dim);vertical-align:top">' + g.minXp + "–" + g.maxXp + '</td>' +
+          '<td style="text-align:right;padding:3px 0;color:var(--sunpetal);font-weight:bold;vertical-align:top">' + (g.xpPerSfl > 0 ? g.xpPerSfl.toFixed(1) : "—") + "</td></tr>").join("") +
+        "</table></div></div>";
 
       const mult = (_fishMoon ? 2 : 1) * (_fishHelm ? 2 : 1) * (_fishGuardian ? 2 : 1);
       h += '<div class="pixel-panel" style="padding:12px;margin-bottom:12px">' +
