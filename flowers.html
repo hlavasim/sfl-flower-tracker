@@ -5954,7 +5954,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.34</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.35</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5981,6 +5981,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.35", items: [
+          { t: "fix", text: "<b>The FISHING page rendered blank.</b> Its dispatcher entry called <code>renderFishing(data)</code>, but <code>data</code> does not exist that early — the shared farm fetch happens further down, which is exactly why WORLD, YAKKAMON and DECORATIONS all call with no argument there. The result was a ReferenceError before a single line was drawn. It takes no argument now: the page answers from the snapshot diffs and live p2p prices and never needed the farm." },
+        ] },
         { ver: "v5.34", items: [
           { t: "feat", text: "<b>New 🎣 FISHING page — what a cast really costs, measured from your own history.</b> Rebuilt from the <b>raw per-snapshot diffs</b>, not a period total, because a diff is a whole play session: fish arrive mixed with digging, harvesting and deliveries. Two rules follow. <b>Fish are unambiguous</b> — a Surgeonfish can only come out of a rod — so every rod-spend diff counts toward them. <b>Treasure is not</b>: Clam Shell, Old Bottle and Pipi drop from a shovel too, and a shovel moved in 57 of the 82 rod diffs, so treasure is tallied only over the 25 diffs where none did. A third of the sample, and the page says so rather than quietly blending the two." },
           { t: "feat", text: "<b>Cost and XP per species, then the guaranteed-catch comparison.</b> Your measured catch rate (Crab every 2.3 casts, Tuna every 10.4, Trout every 105) priced at the live cost per cast, sorted by <b>XP per FLOWER</b> — the column that answers what to fish for XP. Beneath it every published bait+chum pair costed at live p2p, with a <b>vs random</b> column: negative means the guaranteed route is cheaper than fishing for that species at random, because a rare fish costs many wasted casts." },
@@ -21211,7 +21214,7 @@
       { marvel: "Crystal Shrimp", sources: [["Tuna", 0.008], ["Sea Bass", 0.03]], chapter: "Salt Awakening" },
     ];
 
-    let _fishData = null, _fishPrices = null, _fishErr = null, _fishLoading = false, _fishFarmData = null;
+    let _fishData = null, _fishPrices = null, _fishErr = null, _fishLoading = false;
     let _fishMoon = false, _fishHelm = false, _fishGuardian = false;
     try {
       const _fsv = JSON.parse(localStorage.getItem("sfl_fishing_ui") || "{}");
@@ -21220,7 +21223,7 @@
     window._fishToggle = function (k, v) {
       if (k === "moon") _fishMoon = v; else if (k === "helm") _fishHelm = v; else _fishGuardian = v;
       try { localStorage.setItem("sfl_fishing_ui", JSON.stringify({ moon: _fishMoon, helm: _fishHelm, guardian: _fishGuardian })); } catch (e) {}
-      renderFishing(_fishFarmData);
+      renderFishing();
     };
 
     async function _fishFetch() {
@@ -21237,11 +21240,10 @@
         _fishErr = null;
       } catch (e) { _fishErr = String(e); }
       _fishLoading = false;
-      if (getPage() === "fishing") renderFishing(_fishFarmData);
+      if (getPage() === "fishing") renderFishing();
     }
 
-    function renderFishing(data) {
-      _fishFarmData = data;
+    function renderFishing() {
       const app = document.getElementById("app");
       if (!_fishData && !_fishErr) _fishFetch();
 
@@ -21391,7 +21393,7 @@
           : '<div style="font-size:0.5rem;color:var(--text-dim)">No clean sample yet.</div>') + "</div>";
 
       h += '<div style="font-size:0.45rem;color:var(--text-dim);text-align:center;margin-bottom:10px;line-height:1.6">Catch rates and costs are YOUR history, not published drop tables. Guaranteed-catch pairs and map-piece chances are the game\'s published values; prices are live p2p.</div>';
-      h += '<div class="footer"><button class="refresh-btn" onclick="_fishData=null;_fishErr=null;renderFishing(_fishFarmData)">REFRESH</button></div>';
+      h += '<div class="footer"><button class="refresh-btn" onclick="_fishData=null;_fishErr=null;renderFishing()">REFRESH</button></div>';
       app.innerHTML = h;
     }
 
@@ -26406,9 +26408,11 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       // YAKKAMON is about a different game entirely (Thought Farm's second title) — it needs
       // no farm data, so it renders without a farm id and without the personal farm fetch.
       if (page === "yakkamon") { renderConfigBar(page); renderYakkamon(); return; }
-      // Fishing answers from the raw per-snapshot diffs, so it needs the farm for prices and
-      // skills but not the heavy power/roadmap state.
-      if (page === "fishing") { renderConfigBar(page); renderFishing(data); return; }
+      // Fishing answers entirely from the raw per-snapshot diffs and live p2p prices, so like
+      // WORLD and YAKKAMON above it skips the shared farm fetch. It takes no argument: `data`
+      // does not exist this early in the dispatcher, and passing it threw a ReferenceError that
+      // left the page blank.
+      if (page === "fishing") { renderConfigBar(page); renderFishing(); return; }
 
       // DECORATIONS fetches the raw farm itself (it needs x/y of every placed object, which
       // the compute sections do not carry) — so it also skips the shared farm pipeline.
