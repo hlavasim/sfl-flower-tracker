@@ -2887,7 +2887,7 @@
     const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
     const IMG_BASE = "https://sfl.world/img/flowers/";
-    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "mytrades", "marks", "diff", "json", "constants", "ascension", "world", "yakkamon", "decorations"];
+    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "mytrades", "marks", "diff", "json", "constants", "ascension", "world", "yakkamon", "fishing", "decorations"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -5814,6 +5814,7 @@
       ];
       const overflow = [
         { id: "yakkamon", label: "🐲 YAKKAMON" },
+        { id: "fishing", label: "🎣 FISHING" },
         { id: "decorations", label: "🌸 DECORATIONS" },
         { id: "hub", label: "HUB" },
         { id: "flowers", label: "FLOWERS" },
@@ -5953,7 +5954,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.33</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.34</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5980,6 +5981,12 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.34", items: [
+          { t: "feat", text: "<b>New 🎣 FISHING page — what a cast really costs, measured from your own history.</b> Rebuilt from the <b>raw per-snapshot diffs</b>, not a period total, because a diff is a whole play session: fish arrive mixed with digging, harvesting and deliveries. Two rules follow. <b>Fish are unambiguous</b> — a Surgeonfish can only come out of a rod — so every rod-spend diff counts toward them. <b>Treasure is not</b>: Clam Shell, Old Bottle and Pipi drop from a shovel too, and a shovel moved in 57 of the 82 rod diffs, so treasure is tallied only over the 25 diffs where none did. A third of the sample, and the page says so rather than quietly blending the two." },
+          { t: "feat", text: "<b>Cost and XP per species, then the guaranteed-catch comparison.</b> Your measured catch rate (Crab every 2.3 casts, Tuna every 10.4, Trout every 105) priced at the live cost per cast, sorted by <b>XP per FLOWER</b> — the column that answers what to fish for XP. Beneath it every published bait+chum pair costed at live p2p, with a <b>vs random</b> column: negative means the guaranteed route is cheaper than fishing for that species at random, because a rare fish costs many wasted casts." },
+          { t: "feat", text: "<b>Marine Marvel priced end to end.</b> Nine map pieces, dropping only from two named fish each, with <b>Full Moon / Deep Sea Helm / Guardian</b> toggles that each double the chance and stack. For each Marvel the page picks whichever source is cheapest <b>on your farm</b> — not the one with the highest drop rate — because it carries your own cost of landing that fish at all, then reports the casts and the FLOWER for all nine." },
+          { t: "fix", text: "<b>Casts are counted from bait, not rods, and the page explains why.</b> One cast burns one rod and one bait, but a diff is a NET delta: anything crafted inside the same window cancels against what was spent, which is how 1,475 rods show only 973 bait. Bait is the tighter of the two, so casts scale to it and the ratio is printed on the tile — the cost per cast is a floor, and it says so." },
+        ] },
         { ver: "v5.33", items: [
           { t: "feat", text: "<b>The CROP MACHINE panel is now a per-crop breakdown.</b> Every crop the machine can grow — <b>including the ones locked behind Crop Extension Modules you have not taken</b>, shown with 🔒 and which module unlocks them — each a click-to-open row. Inside: the per-cycle and per-day numbers, and the two lists you asked for — <b>ACTIVE</b> (the skills and NFTs boosting that crop right now) and <b>AVAILABLE</b> (crop-yield skills you have not taken and NFTs you do not own that WOULD boost it), split by ◆ skill / ◈ NFT, debuffs in red. Boosts respect the crop’s tier, so a medium crop shows Scary Mike and the Cabbage-specific NFTs while a basic one does not. Speed boosts are correctly absent — they do not apply to the machine. (The NFT side is the curated crop-machine-relevant list; the marketplace API does not expose every NFT’s boost, and its parses of the speed ones were noisy, so they are excluded rather than shown wrong.)" },
         ] },
@@ -21164,6 +21171,231 @@
     }
 
     /* ═══════════════════════════════════════════════════════════════════
+     *  FISHING — what a cast actually costs, and what it buys.
+     *
+     *  The history half is reconstructed from raw per-snapshot diffs
+     *  (/api/farm-history?type=fishing). A diff is a whole play session, not one
+     *  action, so fish and treasure are treated differently: a species can only
+     *  come from a rod, while Clam Shell / Old Bottle / Pipi also drop from a
+     *  shovel — those are counted only over diffs where no shovel moved.
+     * ═══════════════════════════════════════════════════════════════════ */
+
+    // Guaranteed catches: the exact bait+chum pairs the game publishes. Cost is resolved from
+    // live p2p at render time, so the cheapest route to a given fish is a fact, not a guess.
+    const fishGuaranteed = [
+      { bait: "Earthworm", chum: "Carrot", qty: 10, fish: "Anchovy" },
+      { bait: "Earthworm", chum: "Egg", qty: 5, fish: "Anchovy" },
+      { bait: "Grub", chum: "Orange", qty: 3, fish: "Tuna" },
+      { bait: "Grub", chum: "Wild Mushroom", qty: 1, fish: "Tuna" },
+      { bait: "Red Wiggler", chum: "Apple", qty: 3, fish: "Red Snapper" },
+      { bait: "Red Wiggler", chum: "Honey", qty: 1, fish: "Red Snapper" },
+      { bait: "Red Wiggler", chum: "Speed Chicken", qty: 3, fish: "Saw Shark" },
+      { bait: "Red Wiggler", chum: "Rich Chicken", qty: 3, fish: "White Shark" },
+      { bait: "Red Wiggler", chum: "Fat Chicken", qty: 3, fish: "Whale Shark" },
+    ];
+
+    /*
+     * Marine Marvels need 9 map pieces, and pieces only drop from two named fish each. Full Moon
+     * and the Deep Sea Helm each DOUBLE the chance and stack, which is the difference between a
+     * feasible grind and an absurd one — so the table is priced at every combination rather than
+     * at the base rate alone.
+     */
+    const fishMarvels = [
+      { marvel: "Starlight Tuna", sources: [["Halibut", 0.025], ["Horse Mackerel", 0.36]] },
+      { marvel: "Twilight Anglerfish", sources: [["Clownfish", 0.025], ["Parrotfish", 0.21]] },
+      { marvel: "Gilded Swordfish", sources: [["Rock Blackfish", 0.05], ["White Shark", 0.30]] },
+      { marvel: "Radiant Ray", sources: [["Trout", 0.02], ["Hammerhead Shark", 0.05]] },
+      { marvel: "Phantom Barracuda", sources: [["Mahi Mahi", 0.0018], ["Squid", 0.05]] },
+      { marvel: "Deep Sea Pig", sources: [["Sunfish", 0.005], ["Coelacanth", 0.005]], chapter: "Salt Awakening" },
+      { marvel: "Deep Sea Slug", sources: [["Surgeonfish", 0.001], ["Barred Knifejaw", 0.01]], chapter: "Salt Awakening" },
+      { marvel: "Crystal Shrimp", sources: [["Tuna", 0.008], ["Sea Bass", 0.03]], chapter: "Salt Awakening" },
+    ];
+
+    let _fishData = null, _fishPrices = null, _fishErr = null, _fishLoading = false, _fishFarmData = null;
+    let _fishMoon = false, _fishHelm = false, _fishGuardian = false;
+    try {
+      const _fsv = JSON.parse(localStorage.getItem("sfl_fishing_ui") || "{}");
+      _fishMoon = !!_fsv.moon; _fishHelm = !!_fsv.helm; _fishGuardian = !!_fsv.guardian;
+    } catch (e) {}
+    window._fishToggle = function (k, v) {
+      if (k === "moon") _fishMoon = v; else if (k === "helm") _fishHelm = v; else _fishGuardian = v;
+      try { localStorage.setItem("sfl_fishing_ui", JSON.stringify({ moon: _fishMoon, helm: _fishHelm, guardian: _fishGuardian })); } catch (e) {}
+      renderFishing(_fishFarmData);
+    };
+
+    async function _fishFetch() {
+      if (_fishLoading) return;
+      _fishLoading = true;
+      try {
+        const [hist, prices] = await Promise.all([
+          fetch("/api/farm-history?farm=" + encodeURIComponent(FARM_ID) + "&type=fishing").then((r) => (r.ok ? r.json() : Promise.reject(r.status))),
+          fetchP2PLatest().catch(() => []),
+        ]);
+        _fishData = hist;
+        _fishPrices = {};
+        for (const p of prices) _fishPrices[p.item_name] = parseFloat(p.price) || 0;
+        _fishErr = null;
+      } catch (e) { _fishErr = String(e); }
+      _fishLoading = false;
+      if (getPage() === "fishing") renderFishing(_fishFarmData);
+    }
+
+    function renderFishing(data) {
+      _fishFarmData = data;
+      const app = document.getElementById("app");
+      if (!_fishData && !_fishErr) _fishFetch();
+
+      let h = '<div class="header pixel-panel pixel-font"><h1>🎣 FISHING</h1><div class="farm-id">Farm #' + escHTML(FARM_ID) + "</div></div>";
+      if (_fishErr) {
+        app.innerHTML = h + '<div class="pixel-panel" style="padding:12px;font-size:0.55rem;color:var(--yellow)">Could not load fishing history (' + escHTML(_fishErr) + ").</div>";
+        return;
+      }
+      if (!_fishData) {
+        app.innerHTML = h + '<div class="pixel-panel" style="padding:12px;font-size:0.55rem;color:var(--text-dim)">Reading your fishing history from the raw snapshot diffs…</div>';
+        return;
+      }
+
+      const P = (n) => (_fishPrices && _fishPrices[n]) || 0;
+      const d = _fishData;
+      const rodP = P("Rod");
+      /*
+       * Casts are derived from BAIT, not from rods.
+       *
+       * One cast burns one rod and one bait, but a diff is a net delta: rods or bait crafted in
+       * the same window cancel against what was spent, so the two disagree. Bait is the tighter
+       * of the pair (it is consumed and rarely stockpiled mid-session), so casts scale to it and
+       * the ratio is printed, rather than silently picking whichever number flatters the result.
+       */
+      const casts = d.baitTotal > 0 ? d.baitTotal : d.rods;
+      const baitRatio = d.rods > 0 ? d.baitTotal / d.rods : 0;
+      const fishPerCast = casts > 0 ? d.fishTotal / casts : 0;
+      let baitSpend = 0;
+      for (const [b, q] of Object.entries(d.bait || {})) baitSpend += q * P(b);
+      const baitAvg = d.baitTotal > 0 ? baitSpend / d.baitTotal : 0;
+      const costPerCast = rodP + baitAvg;
+      const days = (d.firstAt && d.lastAt) ? Math.max(1, (new Date(d.lastAt) - new Date(d.firstAt)) / 86400000) : 0;
+
+      const tiles = [
+        ["RODS SPENT", fmt(d.rods), ""],
+        ["BAIT USED", fmt(d.baitTotal), (baitRatio * 100).toFixed(0) + "% of rods"],
+        ["FISH LANDED", fmt(d.fishTotal), ""],
+        ["FISH / CAST", fishPerCast.toFixed(2), ""],
+        ["COST / CAST", costPerCast > 0 ? costPerCast.toFixed(3) + " " + sflIcon() : "—",
+          rodP > 0 ? "rod " + rodP.toFixed(3) + " + bait " + baitAvg.toFixed(3) : "price feed down"],
+      ];
+      h += '<div class="pixel-panel" style="padding:12px;margin-bottom:12px">' +
+        '<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">📜 WHAT FISHING HAS ACTUALLY COST YOU</div>' +
+        '<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Rebuilt from <b>' + d.diffs + '</b> raw snapshot diffs that consumed a rod, over ' + days.toFixed(0) + ' days. A diff is a whole session, not one cast — so only fish are counted here, because a species can only come out of a rod.</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px;margin-bottom:8px">' +
+        tiles.map((t) => '<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px">' +
+          '<div style="font-size:0.44rem;color:var(--text-dim)">' + t[0] + '</div>' +
+          '<div style="font-size:0.72rem;color:var(--sunpetal);font-weight:bold">' + t[1] + '</div>' +
+          (t[2] ? '<div style="font-size:0.42rem;color:var(--text-dim)">' + t[2] + '</div>' : "") + "</div>").join("") +
+        '</div><div style="font-size:0.46rem;color:#e8a060;line-height:1.6">⚠ Deltas are <b>net</b>: bait or rods crafted inside the same window cancel against what was spent, which is why bait reads ' + (baitRatio * 100).toFixed(0) + '% of rods when a cast burns one of each. Casts scale to <b>bait</b>, the tighter of the two. Read cost/cast as a floor.</div></div>';
+
+      const rows = Object.entries(d.fish || {}).map(([name, qty]) => {
+        const perCast = casts > 0 ? qty / casts : 0;
+        const castsEach = perCast > 0 ? 1 / perCast : Infinity;
+        const cost = castsEach * costPerCast;
+        const xp = ITEM_XP_VALUES[name] || 0;
+        const value = P(name);
+        return { name, qty, castsEach, cost, xp, value, xpPerSfl: cost > 0 ? xp / cost : 0 };
+      }).filter((r) => r.qty >= 3).sort((a, b) => b.xpPerSfl - a.xpPerSfl);
+
+      h += '<div class="pixel-panel" style="padding:12px;margin-bottom:12px">' +
+        '<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">🐟 WHAT EACH FISH COST YOU — and what it paid back</div>' +
+        '<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Your own catch rate, priced at the live cost per cast. <b>XP per ' + sflIcon() + '</b> is the column that answers “what should I fish for XP” — the table is sorted by it. Species with fewer than 3 caught are hidden: the rate would be noise.</div>' +
+        '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:520px">' +
+        '<tr style="color:var(--text-dim);font-size:0.45rem"><td style="padding:0 6px 3px 0">fish</td><td style="text-align:right;padding:0 6px 3px">caught</td><td style="text-align:right;padding:0 6px 3px">casts each</td><td style="text-align:right;padding:0 6px 3px">cost each</td><td style="text-align:right;padding:0 6px 3px">XP</td><td style="text-align:right;padding:0 6px 3px">XP / ' + sflIcon() + '</td><td style="text-align:right;padding:0 0 3px">sells for</td></tr>' +
+        rows.map((r) => '<tr style="border-top:1px solid #20190f">' +
+          '<td style="padding:3px 6px 3px 0">' + escHTML(r.name) + '</td>' +
+          '<td style="text-align:right;padding:3px 6px;color:var(--text-dim)">' + fmt(r.qty) + '</td>' +
+          '<td style="text-align:right;padding:3px 6px;color:var(--text-secondary)">' + r.castsEach.toFixed(1) + '</td>' +
+          '<td style="text-align:right;padding:3px 6px;color:#e8a060">' + r.cost.toFixed(2) + '</td>' +
+          '<td style="text-align:right;padding:3px 6px;color:var(--text-dim)">' + (r.xp || "—") + '</td>' +
+          '<td style="text-align:right;padding:3px 6px;color:var(--sunpetal);font-weight:bold">' + (r.xpPerSfl > 0 ? r.xpPerSfl.toFixed(1) : "—") + '</td>' +
+          '<td style="text-align:right;padding:3px 0;color:var(--green)">' + (r.value > 0 ? r.value.toFixed(2) : "—") + '</td></tr>').join("") +
+        "</table></div></div>";
+
+      const gr = fishGuaranteed.map((g) => {
+        const cost = rodP + P(g.bait) + P(g.chum) * g.qty;
+        const xp = ITEM_XP_VALUES[g.fish] || 0;
+        return Object.assign({}, g, { cost, xp, xpPerSfl: cost > 0 ? xp / cost : 0 });
+      }).sort((a, b) => b.xpPerSfl - a.xpPerSfl);
+      const bestRandom = rows.length ? rows[0] : null;
+      h += '<div class="pixel-panel" style="padding:12px;margin-bottom:12px">' +
+        '<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">🎯 GUARANTEED CATCH — is the special bait worth it?</div>' +
+        '<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Bait + chum that guarantees a named fish: one cast, no luck. Cost is rod + bait + chum at live p2p, directly comparable with the random rates above.</div>' +
+        '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:520px">' +
+        '<tr style="color:var(--text-dim);font-size:0.45rem"><td style="padding:0 6px 3px 0">bait + chum</td><td style="padding:0 6px 3px">guarantees</td><td style="text-align:right;padding:0 6px 3px">cost</td><td style="text-align:right;padding:0 6px 3px">XP</td><td style="text-align:right;padding:0 6px 3px">XP / ' + sflIcon() + '</td><td style="text-align:right;padding:0 0 3px">vs random</td></tr>' +
+        gr.map((g) => {
+          const rnd = rows.find((r) => r.name === g.fish);
+          const cmp = rnd ? (g.cost / rnd.cost - 1) * 100 : null;
+          return '<tr style="border-top:1px solid #20190f">' +
+            '<td style="padding:3px 6px 3px 0">' + escHTML(g.bait) + " + " + g.qty + "× " + escHTML(g.chum) + '</td>' +
+            '<td style="padding:3px 6px;color:var(--text-secondary)">' + escHTML(g.fish) + '</td>' +
+            '<td style="text-align:right;padding:3px 6px;color:#e8a060">' + g.cost.toFixed(2) + '</td>' +
+            '<td style="text-align:right;padding:3px 6px;color:var(--text-dim)">' + (g.xp || "—") + '</td>' +
+            '<td style="text-align:right;padding:3px 6px;color:var(--sunpetal);font-weight:bold">' + (g.xpPerSfl > 0 ? g.xpPerSfl.toFixed(1) : "—") + '</td>' +
+            '<td style="text-align:right;padding:3px 0;color:' + (cmp === null ? "var(--text-dim)" : cmp <= 0 ? "var(--green)" : "var(--red)") + '">' +
+              (cmp === null ? "never caught" : (cmp >= 0 ? "+" : "") + cmp.toFixed(0) + "%") + "</td></tr>";
+        }).join("") +
+        '</table></div><div style="font-size:0.46rem;color:var(--text-dim);margin-top:6px;line-height:1.6">The last column is the whole question: <b>negative means the guaranteed route is CHEAPER</b> than fishing for it at random, because a rare fish costs many wasted casts.' +
+        (bestRandom ? ' Your best random XP rate is <b>' + escHTML(bestRandom.name) + '</b> at ' + bestRandom.xpPerSfl.toFixed(1) + " XP/" + sflIcon() +
+          (gr[0] && gr[0].xpPerSfl > bestRandom.xpPerSfl
+            ? ', which <b style="color:var(--green)">' + escHTML(gr[0].bait) + " + " + escHTML(gr[0].chum) + '</b> beats at ' + gr[0].xpPerSfl.toFixed(1) + "."
+            : ", which no guaranteed route beats.") : "") + "</div></div>";
+
+      const mult = (_fishMoon ? 2 : 1) * (_fishHelm ? 2 : 1) * (_fishGuardian ? 2 : 1);
+      h += '<div class="pixel-panel" style="padding:12px;margin-bottom:12px">' +
+        '<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">🗺️ MARINE MARVEL — 9 map pieces</div>' +
+        '<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">A Marvel needs <b>9 pieces</b>, and pieces drop only from two named fish each. Full Moon and the Deep Sea Helm each <b>double</b> the chance and stack, so what looks impossible at the base rate often is not. One Marvel per player, and you cannot find pieces for one you already have.</div>' +
+        '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;font-size:0.5rem">' +
+        '<label><input type="checkbox" ' + (_fishMoon ? "checked" : "") + ' onchange="_fishToggle(\'moon\',this.checked)"> Full Moon</label>' +
+        '<label><input type="checkbox" ' + (_fishHelm ? "checked" : "") + ' onchange="_fishToggle(\'helm\',this.checked)"> Deep Sea Helm</label>' +
+        '<label><input type="checkbox" ' + (_fishGuardian ? "checked" : "") + ' onchange="_fishToggle(\'guardian\',this.checked)"> Guardian</label>' +
+        '<span style="color:var(--sunpetal)">= ' + mult + '× drop chance</span></div>' +
+        '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:560px">' +
+        '<tr style="color:var(--text-dim);font-size:0.45rem"><td style="padding:0 6px 3px 0">marvel</td><td style="padding:0 6px 3px">cheapest source</td><td style="text-align:right;padding:0 6px 3px">piece chance</td><td style="text-align:right;padding:0 6px 3px">that fish takes</td><td style="text-align:right;padding:0 6px 3px">casts for 9</td><td style="text-align:right;padding:0 0 3px">total cost</td></tr>' +
+        fishMarvels.map((m) => {
+          // Pick the source that costs least per piece on THIS farm, not the one with the highest %.
+          const opts = m.sources.map((sr) => {
+            const p = Math.min(1, sr[1] * mult);
+            const rnd = rows.find((r) => r.name === sr[0]);
+            const castsPer = rnd ? rnd.castsEach : null;
+            const castsPiece = (castsPer && p > 0) ? castsPer / p : Infinity;
+            return { fish: sr[0], p, castsPer, castsPiece, cost: castsPiece * costPerCast };
+          }).sort((a, b) => a.castsPiece - b.castsPiece);
+          const best = opts[0];
+          const ok = isFinite(best.castsPiece);
+          return '<tr style="border-top:1px solid #20190f">' +
+            '<td style="padding:3px 6px 3px 0">' + escHTML(m.marvel) + (m.chapter ? ' <span style="color:var(--text-dim);font-size:0.42rem">' + escHTML(m.chapter) + "</span>" : "") + '</td>' +
+            '<td style="padding:3px 6px;color:var(--text-secondary)">' + escHTML(best.fish) + '</td>' +
+            '<td style="text-align:right;padding:3px 6px;color:var(--text-dim)">' + (best.p * 100).toFixed(best.p < 0.01 ? 2 : 1) + '%</td>' +
+            '<td style="text-align:right;padding:3px 6px;color:var(--text-dim)">' + (best.castsPer ? best.castsPer.toFixed(1) + " casts" : "never caught") + '</td>' +
+            '<td style="text-align:right;padding:3px 6px;color:var(--text-secondary)">' + (ok ? fmt(Math.round(best.castsPiece * 9)) : "—") + '</td>' +
+            '<td style="text-align:right;padding:3px 0;color:' + (ok ? "#e8a060" : "var(--text-dim)") + ';font-weight:bold">' + (ok ? fmt(Math.round(best.cost * 9)) + " " + sflIcon() : "—") + "</td></tr>";
+        }).join("") +
+        '</table></div><div style="font-size:0.46rem;color:var(--text-dim);margin-top:6px;line-height:1.6">“That fish takes” is <b>your own</b> measured rate for landing the source at all, so the total already carries every cast that produced something else. Where it says <i>never caught</i> the source is absent from your history and the row cannot be priced.</div></div>';
+
+      const tr = d.treasure || { items: {}, rods: 0, diffs: 0, total: 0 };
+      let trVal = 0;
+      for (const [k, q] of Object.entries(tr.items || {})) trVal += q * P(k);
+      h += '<div class="pixel-panel" style="padding:12px;margin-bottom:12px">' +
+        '<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">💎 TREASURE — what fishing gives back</div>' +
+        '<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Clam Shell, Old Bottle, Pipi and friends drop from <b>digging too</b>, and a shovel moved in most of your fishing diffs. So this is counted <b>only</b> over the ' + tr.diffs + ' diffs where no shovel moved at all — ' + fmt(tr.rods) + " of " + fmt(d.rods) + ' rods. Honest, but a third of the sample.</div>' +
+        (tr.total > 0
+          ? '<div style="font-size:0.55rem;color:var(--text-secondary);line-height:1.9">' +
+            Object.entries(tr.items).sort((a, b) => b[1] - a[1]).map((e) => escHTML(e[0]) + ' <b style="color:var(--sunpetal)">' + fmt(e[1]) + '</b> <span style="color:var(--text-dim);font-size:0.45rem">(' + (e[1] / tr.rods).toFixed(3) + "/rod)</span>").join(" &nbsp;·&nbsp; ") +
+            '<div style="margin-top:6px;color:var(--green)">worth ' + trVal.toFixed(2) + " " + sflIcon() + " over " + fmt(tr.rods) + ' rods = <b>' + (trVal / tr.rods).toFixed(4) + " " + sflIcon() + ' back per cast</b>, offsetting ' + (costPerCast > 0 ? ((trVal / tr.rods) / costPerCast * 100).toFixed(0) : "—") + "% of what a cast costs.</div></div>"
+          : '<div style="font-size:0.5rem;color:var(--text-dim)">No clean sample yet.</div>') + "</div>";
+
+      h += '<div style="font-size:0.45rem;color:var(--text-dim);text-align:center;margin-bottom:10px;line-height:1.6">Catch rates and costs are YOUR history, not published drop tables. Guaranteed-catch pairs and map-piece chances are the game\'s published values; prices are live p2p.</div>';
+      h += '<div class="footer"><button class="refresh-btn" onclick="_fishData=null;_fishErr=null;renderFishing(_fishFarmData)">REFRESH</button></div>';
+      app.innerHTML = h;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════
      *  YAKKAMON — Thought Farm's second game (the Sunflower Land studio).
      *
      *  Everything here is sourced from the official site/docs (yakkamon.com,
@@ -26174,6 +26406,9 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       // YAKKAMON is about a different game entirely (Thought Farm's second title) — it needs
       // no farm data, so it renders without a farm id and without the personal farm fetch.
       if (page === "yakkamon") { renderConfigBar(page); renderYakkamon(); return; }
+      // Fishing answers from the raw per-snapshot diffs, so it needs the farm for prices and
+      // skills but not the heavy power/roadmap state.
+      if (page === "fishing") { renderConfigBar(page); renderFishing(data); return; }
 
       // DECORATIONS fetches the raw farm itself (it needs x/y of every placed object, which
       // the compute sections do not carry) — so it also skips the shared farm pipeline.

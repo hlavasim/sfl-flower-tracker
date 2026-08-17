@@ -102,6 +102,78 @@ export default async function handler(req, res) {
     }
   }
 
+  /* ─── Fishing, reconstructed from the raw per-snapshot diffs ────
+   *
+   * A snapshot diff is not one action — it is everything that happened between two captures, so
+   * a fishing session arrives mixed with digging, harvesting and deliveries. Two consequences
+   * drive the whole shape of this:
+   *
+   *   1. FISH are unambiguous. A Surgeonfish can only come out of a rod, so every rod-spend diff
+   *      can be counted for fish.
+   *   2. TREASURE is not. Clam Shell, Old Bottle, Wooden Compass and Pipi drop from digging as
+   *      well, and `inventory.Sand Shovel` moves in 57 of the 82 rod diffs. So treasure is
+   *      tallied ONLY over diffs where no shovel moved — a third of the sample, but a third that
+   *      cannot be wrong.
+   *
+   * Deltas are NET: bait crafted inside the same window nets against bait spent, which is why
+   * 1,475 rods show only 973 bait. Both figures are returned so the caller can reconcile them
+   * rather than being handed one number that quietly understates the casts.
+   *
+   * 130 rows out of 2,010 snapshots carry a rod, so this is computed on the fly — a precomputed
+   * table would be machinery for a query that costs nothing.
+   */
+  if (req.query.type === "fishing") {
+    try {
+      const farm = parseInt(req.query.farm, 10);
+      if (!Number.isFinite(farm) || !ALLOWED_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
+      const q = await pool.query(
+        `SELECT captured_at, diff FROM farm_snapshots
+          WHERE farm_id = $1 AND diff ? 'inventory.Rod'
+          ORDER BY captured_at ASC`,
+        [farm]
+      );
+      const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
+      const BAIT = ["Earthworm", "Grub", "Red Wiggler", "Fishing Lure"];
+      // Only species — anything that also drops from a shovel is treasure and handled separately.
+      const SPECIES = new Set(["Anchovy","Butterflyfish","Blowfish","Clownfish","Sea Bass","Sea Horse","Horse Mackerel","Squid","Moray Eel","Olive Flounder","Napoleanfish","Surgeonfish","Zebra Turkeyfish","Angelfish","Halibut","Porgy","Muskellunge","Tilapia","Walleye","Ray","Rock Blackfish","Hammerhead shark","Hammerhead Shark","Tuna","Mahi Mahi","Blue Marlin","Weakfish","Oarfish","Football fish","Football Fish","Sunfish","Cobia","Barred Knifejaw","Trout","Coelacanth","Saw Shark","Whale Shark","White Shark","Parrotfish","Red Snapper","Crab","Starlight Tuna","Twilight Anglerfish","Gilded Swordfish","Radiant Ray","Phantom Barracuda","Crimson Carp","Battle Fish","Lemon Shark","Longhorn Cowfish"]);
+      const TREASURE = new Set(["Clam Shell","Old Bottle","Wooden Compass","Iron Compass","Emerald Compass","Hieroglyph","Pipi","Coral","Crab Claw","Pirate Bounty","Pearl","Sea Cucumber","Seaweed","Starfish"]);
+
+      let rods = 0, diffs = 0, firstAt = null, lastAt = null;
+      const bait = {}, fish = {};
+      let cleanDiffs = 0, cleanRods = 0;
+      const treasure = {};
+      for (const row of q.rows) {
+        const d = row.diff || {};
+        const rod = num(d["inventory.Rod"]);
+        if (rod >= 0) continue;                       // rods gained (crafted/bought), not a session
+        diffs++; rods += -rod;
+        if (!firstAt) firstAt = row.captured_at;
+        lastAt = row.captured_at;
+        const dug = Object.prototype.hasOwnProperty.call(d, "inventory.Sand Shovel");
+        if (!dug) { cleanDiffs++; cleanRods += -rod; }
+        for (const b of BAIT) { const v = num(d["inventory." + b]); if (v < 0) bait[b] = (bait[b] || 0) - v; }
+        for (const [k, raw] of Object.entries(d)) {
+          if (!k.startsWith("inventory.")) continue;
+          const v = num(raw); if (v <= 0) continue;
+          const name = k.slice(10);
+          if (SPECIES.has(name)) fish[name] = (fish[name] || 0) + v;
+          else if (!dug && TREASURE.has(name)) treasure[name] = (treasure[name] || 0) + v;
+        }
+      }
+      res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=3600");
+      return res.status(200).json({
+        firstAt, lastAt, diffs, rods, bait, fish,
+        baitTotal: Object.values(bait).reduce((a, b) => a + b, 0),
+        fishTotal: Object.values(fish).reduce((a, b) => a + b, 0),
+        // Treasure carries its own sample size — it is a third of the rods and must be read as such.
+        treasure: { items: treasure, diffs: cleanDiffs, rods: cleanRods,
+                    total: Object.values(treasure).reduce((a, b) => a + b, 0) },
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   /* ─── What a venue is currently HOLDING ─────────────────────────
    *
    * The ledger says what was SENT somewhere; this says what is still there. Without it a
