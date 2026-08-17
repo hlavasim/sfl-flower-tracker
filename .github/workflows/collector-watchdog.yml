@@ -1,0 +1,53 @@
+# Notice when the data collectors stop, in hours rather than days.
+#
+# On 2026-08-14 every collector stopped at 19:05 and nobody saw it for 2.5 days. The cause was a
+# blob lease on locks/sfl-data-collector/host held by a dead instance: the lease was fixed-duration
+# and still being renewed, so it never expired, an `az functionapp restart` did NOT drop it, and it
+# had to be broken by hand before a fresh host could take the lock.
+#
+# A watchdog INSIDE the function app cannot catch this — it would be waiting on the same lock as
+# everything else — and Consumption plans have no auto-heal. So the check has to run somewhere
+# else entirely, which is here.
+#
+# This detects and reports; it does not repair. Repairing means breaking a blob lease and
+# restarting the app, which needs Azure credentials in this repo — a deliberate decision, not
+# something to add by default. Detection alone turns a 3-day outage into a 1-hour one.
+name: Collector watchdog
+
+on:
+  schedule:
+    - cron: "20 * * * *"       # hourly, offset off the hour so it never races a collector run
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Are the collectors still writing?
+        run: |
+          set -euo pipefail
+          # The endpoint already knows each collector's own staleness threshold — Marks samples
+          # every 8h on weekdays and is allowed 30h, farm snapshots every 5min and allowed 2h.
+          # Re-deriving those here would just be a second copy to keep in sync.
+          out=$(curl -sS --fail-with-body --max-time 45 --retry 3 --retry-delay 15 \
+            "https://sunflower.sajmonium.quest/api/marketplace-orderbook?health=1")
+          node -e '
+            const r = JSON.parse(process.argv[1]);
+            const stale = (r.collectors || []).filter((c) => c.stale);
+            for (const c of r.collectors || []) {
+              console.log(`${c.stale ? "STALE" : "ok   "}  ${String(c.label).padEnd(20)} ${c.ageHours}h (limit ${c.staleThresholdH}h)`);
+            }
+            if (r.warnings && r.warnings.token) console.log(`token: ${r.warnings.token}`);
+            if (!stale.length && !(r.warnings && r.warnings.token)) { console.log("\nall collectors writing"); process.exit(0); }
+            // Everything stale at once is the host-lease failure, not six coincidences. Say so,
+            // because the fix for that one is specific and a restart alone does not do it.
+            if (stale.length === (r.collectors || []).length) {
+              console.error("\nEVERY collector is stale — this is the stuck host lease, not individual failures.");
+              console.error("Fix: az storage blob lease break -c azure-webjobs-hosts -b locks/sfl-data-collector/host");
+              console.error("A restart alone will NOT clear it: the lease survives the instance and is renewed.");
+            } else {
+              console.error(`\n${stale.length} collector(s) stale: ${stale.map((c) => c.label).join(", ")}`);
+            }
+            process.exit(1);
+          ' "$out"
