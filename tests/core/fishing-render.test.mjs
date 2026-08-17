@@ -27,6 +27,7 @@ const FARM = {
   bumpkin: { skills: { "Fish Smoking": 1 } },
   sculptures: { "Salt Sculpture": { level: 3 } },
   inventory: { "Gilded Swordfish": "1", Rod: "40" },
+  fishing: { dailyAttempts: { "2026-08-17": 55 } },
 };
 
 // Real shape of /api/farm-history?type=fishing: net per-diff deltas, not per-cast events.
@@ -53,7 +54,7 @@ const FLOORS = { values: [
   { field: "floor", nft_name: "Fat Chicken", value: 21.9 },
 ] };
 
-function renderPage() {
+function renderPage(farmOverride) {
   const app = { innerHTML: "" };
   const store = {};
   const elements = { app };
@@ -118,7 +119,7 @@ function renderPage() {
     win.navigator, win.matchMedia
   );
   assert.ok(api.render, "renderFishing is declared in flowers.html");
-  api.setState(HIST, PRICES, FARM);
+  api.setState(HIST, PRICES, farmOverride || FARM);
   api.render();                       // exactly how the dispatcher calls it: no argument
   return { html: app.innerHTML, api, app };
 }
@@ -167,7 +168,10 @@ test("bait is priced from its recipe, not from a market value it does not have",
   const block = html.slice(idx, idx + 900);
   assert.ok(/6×<\/b> Red Snapper|<b>6×<\/b> Red Snapper/.test(block.replace(/&times;/g, "×")),
     "the autumn recipe is expanded into the row");
-  assert.ok(/casts each/.test(block), "each ingredient is costed at a measured cast rate");
+  // Ingredients are costed from the community dump, naming the bait and the sample behind it.
+  assert.ok(/casts on (Earthworm|Grub|Red Wiggler|Fishing Lure)/.test(block),
+    "each ingredient is costed at a community rate, and says on which bait");
+  assert.ok(/n=[\d,]+/.test(block), "and carries the sample size that rate rests on");
 });
 
 test("the Radiant Ray decision comes out on the side the odds and the bait actually favour", () => {
@@ -187,8 +191,13 @@ test("the Radiant Ray decision comes out on the side the odds and the bait actua
   const tr = block.indexOf("Trout");
   assert.ok(hh > 0 && tr > 0, "both sources are shown, not just the winner");
   assert.ok(hh < tr, "Hammerhead shark ranks above Trout");
-  assert.ok(/Hammerhead shark[\s\S]{0,400}Fish Stick/.test(block),
-    "Hammerhead is forced with Fish Stick (Fish Oil is Trout's bait, not its own)");
+  // Each source's own bait must sit under that source: Fish Stick forces the Hammerhead,
+  // Fish Oil forces the Trout. Stating that pairing backwards is what sent an earlier cut of
+  // this page down the wrong route entirely.
+  const hhBlock = block.slice(hh, tr);
+  assert.ok(/Fish Stick/.test(hhBlock), "Hammerhead is forced with Fish Stick");
+  assert.ok(!/Fish Oil/.test(hhBlock), "and not with Fish Oil, which belongs to Trout");
+  assert.ok(/Fish Oil/.test(block.slice(tr)), "Trout is forced with Fish Oil");
 });
 
 test("a crafted-bait plan reports the casts hiding inside it, not only the price", () => {
@@ -197,8 +206,10 @@ test("a crafted-bait plan reports the casts hiding inside it, not only the price
    * 180 Fish Stick prices at ~1,000 FLOWER but contains ~16,000 casts. Reporting only the price
    * makes a year-long plan look like an afternoon, so the cast total is part of the deliverable.
    */
-  assert.ok(/casts in total/.test(html), "the winning route reports total casts");
-  assert.ok(/days at your \d+\/day/.test(html), "and translates them into days at the measured pace");
+  assert.ok(/⏱ [\d,]+ casts/.test(html), "each route reports its total casts");
+  // Both paces, because the long-run average alone (mostly idle days) reads as absurd.
+  assert.ok(/days fishing daily at \d+/.test(html), "days at the active pace");
+  assert.ok(/at your long-run \d+\/day/.test(html), "and at the long-run average, labelled as such");
 });
 
 test("pieces already held reduce the plan, and are clamped to a legal count", () => {
@@ -226,4 +237,124 @@ test("fish XP is the aged value, which is what the shed actually pays", () => {
   const row = html.slice(start, start + 500).replace(/,/g, "");
   assert.ok(/\b330\b/.test(row), "raw XP 330 is shown");
   assert.ok(/\b1[34]\d\d\b/.test(row), `aged XP is ~1320-1400 (4x plus prime weighting), got: ${row}`);
+});
+
+/*
+ * The winter regression, reported from the live page.
+ *
+ * Winter's Fish Stick is 6× Red Snapper + 2× Walleye + 2× Angelfish, and this farm has never
+ * landed an Angelfish. Its cost came out Infinity, the bait was marked incomplete, and every use
+ * of it silently disappeared — so the planner said Hammerhead shark had "no bait forces it", for
+ * a fish one Fish Stick catches on demand, and routed Radiant Ray through a 2% Trout at three
+ * times the price. The count of baits needed comes from the drop odds alone and never depended
+ * on the price, so an unpriceable ingredient must never delete a route.
+ */
+const WINTER_FARM = {
+  season: { season: "winter" },
+  bumpkin: { skills: {} },
+  sculptures: {},
+  inventory: { Rod: "40" },      // owns no Marvel: every one must be planned
+  fishing: { dailyAttempts: { "2026-08-17": 55 } },
+};
+
+test("a never-caught ingredient does not delete the route that depends on it", () => {
+  const { html } = renderPage(WINTER_FARM);
+  const start = html.indexOf("Radiant Ray");
+  const block = html.slice(start, html.indexOf("Phantom Barracuda"));
+  assert.ok(/Hammerhead shark/.test(block), "Hammerhead shark is still listed as a source");
+  assert.ok(!/no route at all/.test(block),
+    "neither source is written off — Fish Stick forces the Hammerhead even in winter");
+  assert.ok(/Fish Stick/.test(block), "the winter Fish Stick route is offered");
+  // Winter's Fish Stick needs Angelfish, which this farm has never caught. The community dump
+  // supplies its rate, so the route is priced from evidence rather than dropped or guessed.
+  assert.ok(/Angelfish/.test(block), "the ingredient this farm has never caught is still named");
+  // Match on text, not markup: an inline style like var(--text-dim) carries its own
+  // parentheses, which a naive character class walks straight into.
+  const plain = block.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  assert.ok(/Angelfish \([\d,]+ casts\)/.test(plain),
+    `and carries a real cast figure: ${(plain.match(/Angelfish[^+]{0,40}/) || ["?"])[0]}`);
+});
+
+test("an out-of-season source keeps its bait route and is labelled, not silently costed", () => {
+  const { html } = renderPage(WINTER_FARM);
+  /*
+   * Trout is winter-only and Hammerhead shark is summer/autumn, so in winter exactly one of
+   * Radiant Ray's two sources can be fished for. The other is reachable only through a crafted
+   * bait, which ignores the season gate -- confirmed in game. Costing an out-of-season fish as
+   * though you could go and catch it is the failure this pins.
+   */
+  const start = html.indexOf("Radiant Ray");
+  const block = html.slice(start, html.indexOf("Phantom Barracuda"));
+  assert.ok(/out of season \(summer\/autumn\)/.test(block),
+    "Hammerhead shark is marked out of season in winter");
+  assert.ok(/bait only/.test(block), "and its only remaining route is named as bait-only");
+  // Trout IS in season in winter, so it must offer a plain fishing route.
+  const troutBlock = block.slice(block.indexOf("Trout"));
+  assert.ok(/fishing normally/.test(block.slice(0, block.indexOf("Hammerhead")) + troutBlock),
+    "the in-season source can still simply be fished for");
+});
+
+test("Dumbo Octopus is reachable in winter only through a crafted bait", () => {
+  const { html } = renderPage(WINTER_FARM);
+  /*
+   * Both its sources -- Olive Flounder (spring/autumn) and Napoleanfish (summer/autumn) -- are
+   * shut in winter. Before the season gate the planner costed them as ordinary fishing; before
+   * crafted baits were allowed to ignore the gate it would have called the Marvel impossible.
+   * Neither is right: it is reachable, but only by crafting.
+   */
+  const start = html.indexOf("Dumbo Octopus");
+  assert.ok(start > 0, "Dumbo Octopus is listed");
+  const block = html.slice(start, html.indexOf("Seahorse Dad"));
+  assert.ok(!/fishing normally/.test(block), "neither source can be fished for in winter");
+  assert.ok(/out of season/.test(block), "both sources are marked out of season");
+  assert.ok(/Fish Flake/.test(block), "and a crafted-bait route is still offered");
+});
+
+test("every Fish Market bait that can force a fish is shown, not only the cheapest", () => {
+  const { html } = renderPage(WINTER_FARM);
+  /*
+   * Barred Knifejaw is listed by BOTH Fish Oil and Crab Stick, and which is cheaper flips with
+   * the season. Showing one hides a real option, so the planner prints all of them.
+   */
+  const start = html.indexOf("Radiant Ray");
+  const block = html.slice(start, html.indexOf("Phantom Barracuda"));
+  // Trout is forced only by Fish Oil, Hammerhead only by Fish Stick — both must appear, and so
+  // must the random route for Trout, which the farm HAS caught.
+  assert.ok(/Fish Oil/.test(block), "Trout's Fish Oil route is shown");
+  assert.ok(/Fish Stick/.test(block), "Hammerhead's Fish Stick route is shown");
+  assert.ok(/fishing normally/.test(block), "the random route is shown alongside the forced ones");
+});
+
+test("the shopping list is expanded for every bait route, not just the winner", () => {
+  const { html } = renderPage(WINTER_FARM);
+  const start = html.indexOf("Radiant Ray");
+  const block = html.slice(start, html.indexOf("Phantom Barracuda"));
+  const lists = block.match(/🧾/g) || [];
+  assert.ok(lists.length >= 2, `both bait routes carry a shopping list (found ${lists.length})`);
+  assert.ok(/Red Snapper/.test(block), "the Fish Stick list names its ingredients");
+});
+
+test("a pot ingredient whose chum is itself a crafted bait is priced, not zeroed", () => {
+  const { html } = renderPage(WINTER_FARM);
+  /*
+   * Winter's Crab Stick needs an Oyster; an Oyster is baited with 2x Fish Stick; Fish Stick has
+   * no market price. Reading the chum off the p2p map therefore resolved it to zero and put a
+   * whole Marine Marvel at 7 FLOWER. Sea Urchin (2x Fish Stick), Anemone (2x Fish Oil) and
+   * Horseshoe Crab (2x Crab Stick) share the shape, so the cost has to recurse into the recipe.
+   */
+  const plain = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  const i = plain.indexOf("Crab Stick");
+  assert.ok(i > 0, "Crab Stick appears");
+  // The shopping list must carry the sub-recipe: N Oysters is really 2N Fish Stick.
+  assert.ok(/Oyster \(pot \+ [\d,]+× Fish Stick\)/.test(plain),
+    `the Oyster's own chum is expanded: ${(plain.match(/Oyster[^)]{0,40}\)/) || ["?"])[0]}`);
+  /*
+   * And it must reach the price. In the FISH MARKET BAIT panel Crab Stick is one line: with the
+   * Fish Stick inside the Oyster counted it is several FLOWER, without it a few hundredths.
+   */
+  const panel = plain.slice(plain.indexOf("FISH MARKET BAIT"), plain.indexOf("MARINE MARVEL"));
+  const m = panel.match(/Crab Stick (\d+)h per batch ~?([\d.]+)/);
+  assert.ok(m, `Crab Stick is priced in the bait panel: ${panel.slice(0, 200)}`);
+  assert.ok(parseFloat(m[2]) > 1,
+    `Crab Stick costs more than 1 FLOWER once its Oyster's Fish Stick is counted, got ${m[2]}`);
 });

@@ -5954,7 +5954,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.38</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.40</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5981,6 +5981,18 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.40", items: [
+          { t: "feat", text: "<b>Catch rates now come from 107,310 community catches, not this farm’s log.</b> One farm’s history is sound on common fish and useless on rare ones — which is exactly backwards, since the rare ones carry the map pieces. Against 1,080 baited casts here: Red Snapper 5.2 vs 4.7 and Moray Eel 8.8 vs 7.7 agree, but <b>Halibut read 270 casts against 13.6 (20×)</b> and Porgy 270 against 31.6, while Parrotfish, White Shark, Hammerhead shark, Squid and Angelfish had never been caught at all and so had no rate to plan with. The published tables are per fish — “of the Anchovies caught, 63% were on Earthworm+Carrot” — which is P(bait|fish), the wrong way round, and why the same Grub+Banana shows 44% under one fish and 7% under another. The raw counts beside those percentages are joint cells, so summing a column inverts it exactly. <b>Validated before use: the inversion reproduces every known guaranteed pair at 100.0% unprompted</b> — Grub+Orange and Grub+Wild Mushroom → Tuna (n=9,638), Red Wiggler+Apple and +Honey → Red Snapper, Earthworm+Carrot and +Egg → Anchovy, and all three chicken pairs." },
+          { t: "fix", text: "<b>The planner ignored seasons, and half the map sources are seasonal.</b> Fish exist in one or two seasons out of four, so <b>8 of the 16 map sources cannot be fished for in winter at all</b> — including the Hammerhead shark this page was recommending, which is summer/autumn. A source that is shut now shows <b>✖ out of season</b> and offers only its crafted-bait route; a crafted bait ignores the season gate (confirmed in game), which is the entire reason to make one. <b>Dumbo Octopus has both sources shut in winter</b> and is reachable only by crafting. Trout is the mirror image: winter-only, so a Radiant Ray gathered by rod is a winter job. The community dump pools all four seasons and its own season tabs do not filter, so counts are undiluted per season before use." },
+          { t: "fix", text: "<b>A pot ingredient whose chum is itself a crafted bait priced at zero.</b> Winter’s Crab Stick needs an Oyster, an Oyster is baited with 2× Fish Stick, and Fish Stick has no market price — so it resolved to 0 and an entire Marine Marvel came out at <b>7 ⛀ when it really costs 239</b>. Bait cost now recurses through the recipe (Sea Urchin, Anemone and Horseshoe Crab have the same shape), and the shopping list shows the sub-recipe: <b>43× Oyster (pot + 86× Fish Stick)</b>." },
+          { t: "fix", text: "Fish XP, ingredient rates and the guaranteed-pair table were all cross-checked against the dump. The pair table survives unchanged — including the three chicken pairs, which are genuinely 100% and only looked doubtful because their <i>share of a fish’s catches</i> (3–8%) was briefly mistaken for their success rate. Same inverted-conditional trap this release exists to fix." },
+        ] },
+        { ver: "v5.39", items: [
+          { t: "fix", text: "<b>One un-priceable ingredient silently deleted an entire route.</b> Winter’s Fish Stick is 6× Red Snapper + 2× Walleye + 2× Angelfish, and this farm has never landed an Angelfish — so its cost came out Infinity, the bait was marked incomplete, and every use of it vanished. The planner then reported <b>“Hammerhead shark — never caught, and no bait forces it”</b> for a fish that one Fish Stick catches on demand, and routed Radiant Ray through a 2% Trout instead. <b>The number of baits needed comes from the drop odds and never depended on the price at all.</b> A missing rate now falls back to the median measured rate of the fish’s own tier, marked <b>~</b> and named as an estimate, and the route stays on the board. Fish Stick also stopped showing a blank cost." },
+          { t: "feat", text: "<b>Every route is listed, not just the winner.</b> Each source fish now shows fishing for it, the worm+chum pair, and <b>every</b> Fish Market bait whose list contains it — each with its own quantity, price, shopping list and cast total, cheapest marked ▸. Which one wins swings with the season: in autumn Radiant Ray runs through 180× Fish Stick for 1,122 ⛀, but in <b>winter the same bait needs Walleye at 83 casts each and costs ~2,773</b>, which flips the answer to fishing Trout at random. Seeing only the winner hid that the choice was seasonal." },
+          { t: "fix", text: "<b>“2,476 days” was the long-run average talking.</b> casts÷days spans the whole history, which is mostly days with no fishing at all, and read 6/day. Plans now quote <b>both</b> paces — days fishing daily at your best recorded <code>dailyAttempts</code>, and days at the long-run average, each labelled — because the honest answer is between them." },
+          { t: "fix", text: "Ingredient rates from small samples now carry their catch count, so a Blowfish priced off 11 catches says so rather than presenting 98.2 casts as a settled fact." },
+        ] },
         { ver: "v5.38", items: [
           { t: "fix", text: "<b>The Fish Market section was wrong in every particular, and v5.37 shipped it.</b> Fish Flake, Fish Stick, Fish Oil and Crab Stick are <b>bait, not chum</b> — they replace the worm, and <code>castRod.ts</code> throws “Chum cannot be used with guaranteed bait” on a cast that carries both. They do not roll a random member of a tier either: <b>you name the fish you want</b> out of the bait’s published list, so the “tier average XP” the page reported was an average over a pool nobody ever draws from, and the tier membership itself was invented from a flattened paste. Cost was equally wrong — the baits were priced at their p2p value while a Fish Stick actually costs <b>6× Red Snapper + 2× Moray Eel + 2× Napoleanfish</b>. Each bait is now priced by expanding its real seasonal recipe from <code>FISH_MARKET_RECIPES</code>, with every ingredient costed the way you obtain it: a rod fish at your measured rate, a crustacean at its pot chum. Crab Stick 2.37 ⛀, Fish Stick 5.84, Fish Oil 9.34, Fish Flake 51.95." },
           { t: "fix", text: "<b>Fish XP now goes through the Aging Shed, which is where fish actually go.</b> Judging a catch by <code>ITEM_XP_VALUES</code> understated it 3–5× and — worse — ranked the species wrongly, because the ageing multiplier steps at 200 and 330 base XP. The table now shows raw XP, aged XP, the salt the ageing consumes, and sorts on <b>aged XP per ⛀</b>, with your real prime-aged chance folded in from your skills and Salt Sculpture level." },
@@ -21212,6 +21224,81 @@
     ];
 
     /*
+     * Community catch counts, from the public fishing tracker (107,310 catches, read 2026-08-17).
+     *
+     * WHY THIS REPLACES THE PLAYER'S OWN HISTORY: a single farm's log is fine for a common fish
+     * and worthless for a rare one, which is exactly backwards for map pieces. Measured here
+     * against this farm's 1,080 baited casts: Red Snapper 5.2 vs 4.7 and Moray Eel 8.8 vs 7.7
+     * agree, but Halibut read 270 casts against 13.6 (20x), Porgy 270 against 31.6 (8.5x), and
+     * five map sources -- Parrotfish, White Shark, Hammerhead shark, Squid, Angelfish -- had
+     * never been caught at all, so they had no rate and silently dropped out of the planner.
+     *
+     * WHAT THE SOURCE TABLES SAY, AND WHY THEY ARE NOT USED RAW: they are published per FISH --
+     * "of the Anchovies caught, 63% were on Earthworm+Carrot" -- which is P(bait | fish). That is
+     * the wrong way round for choosing a bait, and is why the same Grub+Banana appears as 44% on
+     * one fish and 7% on another: two different denominators, neither answering "what will I catch
+     * on Grub+Banana". The raw counts beside those percentages are cells of the joint
+     * distribution, so summing a COLUMN inverts the conditional exactly, with no fitting:
+     *
+     *     P(fish | bait) = n(fish, bait) / SUM over fish of n(., bait)
+     *
+     * Checked against ground truth before being trusted: the inversion reproduces every known
+     * guaranteed pair at 100.0% unprompted -- Grub+Orange and Grub+Wild Mushroom to Tuna
+     * (n=9,638), Red Wiggler+Apple and +Honey to Red Snapper, Earthworm+Carrot and +Egg to
+     * Anchovy, and all three chicken pairs.
+     *
+     * SEASONS: `s` is the seasons the fish exists in (w/p/s/a), from the game's own FISH record.
+     * The dump pools all four seasons and the tracker's season tabs do not filter its counts, so
+     * a two-season fish is diluted about twofold and an out-of-season one looks merely rare rather
+     * than impossible. fishSeasonRate() undilutes it -- see there; this table stays raw so the
+     * correction is visible rather than baked in.
+     *
+     * `b` is per WORM bait only. The four crafted baits are deliberately absent: they do not draw
+     * from a pool at all, you name the fish, so their shares measure player preference and not
+     * probability.
+     */
+    const FISH_COMMUNITY_CATCH = {
+      "Anchovy": { s: "wpsa", b: { Earthworm: 23153 } },
+      "Angelfish": { s: "ws", b: { Grub: 423, "Fishing Lure": 237 } },
+      "Barred Knifejaw": { s: "ps", b: { Grub: 240, "Fishing Lure": 19 } },
+      "Blowfish": { s: "w", b: { Earthworm: 2002 } },
+      "Blue Marlin": { s: "ws", b: { "Red Wiggler": 2456, "Fishing Lure": 712, Grub: 316 } },
+      "Butterflyfish": { s: "sa", b: { Earthworm: 3235 } },
+      "Clownfish": { s: "ws", b: { Earthworm: 2322 } },
+      "Cobia": { s: "s", b: { "Red Wiggler": 1013 } },
+      "Coelacanth": { s: "wp", b: { "Red Wiggler": 349, "Fishing Lure": 38 } },
+      "Football fish": { s: "w", b: { "Red Wiggler": 736, "Fishing Lure": 149 } },
+      "Halibut": { s: "pa", b: { Earthworm: 3271 } },
+      "Hammerhead shark": { s: "sa", b: { "Fishing Lure": 123, Grub: 96 } },
+      "Horse Mackerel": { s: "ws", b: { Earthworm: 371 } },
+      "Mahi Mahi": { s: "sa", b: { "Red Wiggler": 2107, Grub: 738, "Fishing Lure": 301 } },
+      "Moray Eel": { s: "sa", b: { Grub: 2816, Earthworm: 1667, "Fishing Lure": 1444 } },
+      "Muskellunge": { s: "a", b: { Earthworm: 827 } },
+      "Napoleanfish": { s: "sa", b: { Grub: 1533, "Fishing Lure": 593 } },
+      "Oarfish": { s: "wp", b: { "Red Wiggler": 1596, "Fishing Lure": 498 } },
+      "Olive Flounder": { s: "pa", b: { Grub: 1787, Earthworm: 1213, "Fishing Lure": 640 } },
+      "Parrotfish": { s: "ps", b: { "Red Wiggler": 401, "Fishing Lure": 58 } },
+      "Porgy": { s: "p", b: { Earthworm: 1408 } },
+      "Ray": { s: "ps", b: { Grub: 264, "Fishing Lure": 117 } },
+      "Red Snapper": { s: "wpsa", b: { Grub: 6211, "Red Wiggler": 2976, "Fishing Lure": 2226 } },
+      "Rock Blackfish": { s: "a", b: { Grub: 709 } },
+      "Saw Shark": { s: "ps", b: { "Red Wiggler": 69, "Fishing Lure": 16 } },
+      "Sea Bass": { s: "pa", b: { Earthworm: 2299 } },
+      "Sea Horse": { s: "ps", b: { Earthworm: 1192 } },
+      "Squid": { s: "wp", b: { Earthworm: 1491 } },
+      "Sunfish": { s: "sa", b: { "Red Wiggler": 1593, "Fishing Lure": 573 } },
+      "Surgeonfish": { s: "sa", b: { Grub: 1426, "Fishing Lure": 594 } },
+      "Tilapia": { s: "s", b: { Grub: 846 } },
+      "Trout": { s: "w", b: { "Red Wiggler": 724 } },
+      "Tuna": { s: "wpsa", b: { Grub: 9638, "Red Wiggler": 5785, "Fishing Lure": 2162 } },
+      "Walleye": { s: "w", b: { Grub: 801 } },
+      "Weakfish": { s: "p", b: { "Red Wiggler": 975 } },
+      "Whale Shark": { s: "ws", b: { "Red Wiggler": 101, "Fishing Lure": 24 } },
+      "White Shark": { s: "ws", b: { "Red Wiggler": 54, "Fishing Lure": 9 } },
+      "Zebra Turkeyfish": { s: "ps", b: { Grub: 1622, "Fishing Lure": 556 } },
+    };
+
+    /*
      * The Fish Market's four crafted baits, from the game's GUARANTEED_CATCH_BY_BAIT.
      *
      * These REPLACE the worm — they are not chum. castRod.ts rejects a cast carrying both
@@ -21259,6 +21346,62 @@
      * a name against a table whatever case it arrives in. Without it a Hammerhead scores 0 XP
      * and drops off the ranking entirely.
      */
+    /*
+     * Undilute FISH_COMMUNITY_CATCH for one season, and answer "how many fish must I land before
+     * one of them is a <fish>".
+     *
+     * The dump pools four seasons. A fish available in k of them contributes to only k/4 of the
+     * volume, so its pooled count understates it by about k/4 when it IS in season — and says
+     * nothing at all about the fact that it is uncatchable when it is not. Assuming fishing volume
+     * is roughly even across the year (the only assumption available, and a mild one over 107k
+     * catches):
+     *
+     *     per-season count when available   m(f) = pooled(f) / |seasons(f)|
+     *     P(f | bait, season)               = m(f) / SUM over fish IN THAT SEASON of m(.)
+     *
+     * The denominator is rebuilt per season rather than reused — which fish compete for the same
+     * cast changes with the season, and that is the entire point of the correction.
+     *
+     * Returns null when the fish cannot be caught in that season at all. That is not "no data":
+     * it is the answer, and it is why a route can be real in autumn and impossible in winter.
+     */
+    const fishSeasonLetter = { winter: "w", spring: "p", summer: "s", autumn: "a" };
+    const _fishRateCache = {};
+    function fishSeasonRate(fish, season, bait) {
+      const key = season + "|" + (bait || "*");
+      let pool = _fishRateCache[key];
+      if (!pool) {
+        const letter = fishSeasonLetter[season];
+        pool = _fishRateCache[key] = { m: {}, lc: {}, total: 0 };
+        if (letter) {
+          for (const [f, rec] of Object.entries(FISH_COMMUNITY_CATCH)) {
+            if (!rec.s.includes(letter)) continue;             // out of season: not in the pool
+            const n = bait ? (rec.b[bait] || 0)
+                           : Object.values(rec.b).reduce((a, x) => a + x, 0);
+            if (!n) continue;
+            const m = n / rec.s.length;                        // per season, when available
+            pool.m[f] = m;
+            // The game spells two fish inconsistently across its own tables ("Hammerhead shark"
+            // in fishing.ts, "Hammerhead Shark" in consumables), and both spellings reach here.
+            pool.lc[f.toLowerCase()] = m;
+            pool.total += m;
+          }
+        }
+      }
+      const m = pool.m[fish] !== undefined ? pool.m[fish] : pool.lc[String(fish).toLowerCase()];
+      if (!m || !pool.total) return null;
+      return { p: m / pool.total, per: pool.total / m, sample: Math.round(m * 4) };
+    }
+    // The worm bait that lands this fish in the fewest fish overall, for a given season.
+    function fishBestBait(fish, season) {
+      let out = null;
+      for (const b of ["Earthworm", "Grub", "Red Wiggler", "Fishing Lure"]) {
+        const r = fishSeasonRate(fish, season, b);
+        if (r && (!out || r.per < out.per)) out = Object.assign({ bait: b }, r);
+      }
+      return out;
+    }
+
     const _fishCanonCache = {};
     function _fishCanon(name) {
       if (_fishCanonCache[name] !== undefined) return _fishCanonCache[name];
@@ -21482,24 +21625,108 @@
       const season = ((_fishFarm && _fishFarm.season && _fishFarm.season.season) || "autumn").toLowerCase();
       const rowOf = (n) => rows.find((r) => r.name === n) ||
                            rows.find((r) => r.name.toLowerCase() === String(n).toLowerCase()) || null;
-      function ingredientCost(name) {
-        const r = rowOf(name);
-        if (r) return { cost: r.cost, casts: r.castsEach, how: r.castsEach.toFixed(1) + " casts each" };
-        const cr = CRUSTACEAN_RECIPES[name];
-        if (cr) return { cost: cr.chum ? cr.qty * P(cr.chum) : 0, casts: 0,
-                         how: cr.pot + (cr.chum ? " · " + cr.qty + "× " + cr.chum : " · no chum") };
-        return { cost: Infinity, casts: 0, how: "never caught — no rate" };
+
+      /*
+       * A fish you have never caught still has to be PRICED, or one blank cell silently deletes a
+       * whole route.
+       *
+       * Winter's Fish Stick is 6× Red Snapper + 2× Walleye + 2× Angelfish. This farm has never
+       * landed an Angelfish, so its cost was Infinity, the bait was marked incomplete, and every
+       * use of it disappeared — including the only thing in the game that forces a Hammerhead
+       * shark. The planner then reported "never caught, and no bait forces it" for a fish that
+       * one Fish Stick catches on demand, and priced Radiant Ray through a 2% Trout instead.
+       *
+       * The number of baits needed comes from the drop odds and never depended on the price at
+       * all, so an unpriceable ingredient must never remove a route. A missing rate falls back to
+       * the MEDIAN measured rate of the same tier — fish within a tier share a rarity band — and
+       * everything derived from it is flagged as an estimate rather than dropped.
+       */
+      const _median = (a) => {
+        if (!a.length) return null;
+        const s = a.slice().sort((x, y) => x - y), m = s.length >> 1;
+        return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+      };
+      const _tierOf = (n) => FISH_TIER_MAP[n] || FISH_TIER_MAP[_fishCanon(n)] || null;
+      const tierMedian = {};
+      for (const r of rows) {
+        const t = _tierOf(r.name);
+        if (t && isFinite(r.castsEach)) (tierMedian[t] = tierMedian[t] || []).push(r.castsEach);
+      }
+      for (const t of Object.keys(tierMedian)) tierMedian[t] = _median(tierMedian[t]);
+      const allMedian = _median(rows.map((r) => r.castsEach).filter((x) => isFinite(x)));
+
+      /*
+       * Ingredients are priced from the COMMUNITY rate, not this farm's log.
+       *
+       * A recipe ingredient is often a fish this farm has barely seen — winter's Fish Stick needs
+       * Angelfish, never caught here — and a rate built on nothing is what deleted whole routes.
+       * 107k catches, season-corrected, gives every ingredient a real number. The farm's own
+       * figure is still carried alongside so the two can be compared rather than one silently
+       * replacing the other.
+       */
+      /*
+       * A crustacean's pot chum can itself be a crafted bait, and pricing it off the p2p map
+       * silently zeroes it: winter's Crab Stick needs an Oyster, an Oyster is baited with 2×
+       * Fish Stick, and Fish Stick has no market price — so Crab Stick came out at 7 FLOWER for
+       * an entire Marvel. Sea Urchin (2× Fish Stick), Anemone (2× Fish Oil) and Horseshoe Crab
+       * (2× Crab Stick) have the same shape. So a bait's cost is resolved recursively, with a
+       * visiting set: no recipe closes a loop today, but one added upstream would hang the page
+       * rather than fail visibly.
+       */
+      const _baitCost = {};
+      function craftedBaitCost(bait, seen) {
+        if (_baitCost[bait] !== undefined) return _baitCost[bait];
+        if (seen && seen.has(bait)) return Infinity;
+        const mark = new Set(seen || []); mark.add(bait);
+        const rec = (FISH_MARKET_RECIPES[bait] || {})[season] || {};
+        let c = 0;
+        for (const [ing, q] of Object.entries(rec)) c += ingredientCost(ing, mark).cost * q;
+        if (!seen) _baitCost[bait] = c;
+        return c;
+      }
+      function ingredientCost(name, seen) {
+        const cr = CRUSTACEAN_RECIPES[name] || CRUSTACEAN_RECIPES[_fishCanon(name)];
+        if (cr) {
+          const chumIsBait = cr.chum && FISH_MARKET_RECIPES[cr.chum];
+          const unit = !cr.chum ? 0 : chumIsBait ? craftedBaitCost(cr.chum, seen) : P(cr.chum);
+          return { cost: cr.qty * unit, casts: 0, est: false, pot: cr.pot,
+                   chum: cr.chum, chumQty: cr.qty, chumCrafted: !!chumIsBait,
+                   how: cr.pot + (cr.chum ? " · " + cr.qty + "× " + cr.chum +
+                        (chumIsBait ? " (crafted, " + unit.toFixed(2) + " each)" : "") : " · no chum") };
+        }
+        const com = fishBestBait(name, season);
+        const mine = rowOf(name);
+        if (com) {
+          // The dump counts FISH; a cast can land more than one with +1 yield boosts, so the
+          // conversion is this farm's own measured fish-per-cast.
+          const casts = com.per / (fishPerCast > 0 ? fishPerCast : 1);
+          const drift = mine && mine.castsEach > 0 ? mine.castsEach / casts : null;
+          return { cost: casts * costPerCast, casts, est: false,
+                   how: casts.toFixed(1) + " casts on " + com.bait + ", n=" + fmt(com.sample) +
+                        (drift && (drift > 1.6 || drift < 0.6) ? " · yours says " + mine.castsEach.toFixed(0) : "") };
+        }
+        // In-season but absent from the dump, or out of season entirely: fall back to this farm's
+        // own rate if it has one, and only then to the tier median.
+        if (mine) return { cost: mine.cost, casts: mine.castsEach, est: false,
+                           how: mine.castsEach.toFixed(1) + " casts, your log only (" + mine.qty + " caught)" };
+        const t = _tierOf(name), ce = (t && tierMedian[t]) || allMedian;
+        if (ce) return { cost: ce * costPerCast, casts: ce, est: true,
+                         how: "out of season — est. " + ce.toFixed(1) + " casts, " + (t ? t + "-tier median" : "overall median") };
+        return { cost: Infinity, casts: 0, est: false, how: "no rate at all" };
       }
       const baits = Object.keys(fishBaitCatch).map((bait) => {
         const rec = (FISH_MARKET_RECIPES[bait] || {})[season] || {};
         const parts = Object.entries(rec).map(([ing, q]) => {
           const ic = ingredientCost(ing);
-          return { ing, q, unit: ic.cost, casts: ic.casts, how: ic.how, total: ic.cost * q };
+          return { ing, q, unit: ic.cost, casts: ic.casts, how: ic.how, est: ic.est, total: ic.cost * q,
+                   chum: ic.chum, chumQty: ic.chumQty, chumCrafted: ic.chumCrafted };
         });
         const cost = parts.reduce((a, p) => a + p.total, 0);
         return { bait, parts, cost, hours: fishBaitHours[bait] || 0,
+                 est: parts.some((p) => p.est),
                  complete: parts.length > 0 && parts.every((p) => isFinite(p.unit)) };
       }).sort((a, b) => a.cost - b.cost);
+      const approx = (b, n) => (b.est ? "~" : "") + fmt(n, n < 100 ? 2 : 0);
 
       h += '<div class="pixel-panel" style="padding:12px;margin-bottom:12px">' +
         '<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">🎣 FISH MARKET BAIT — what one costs to make</div>' +
@@ -21508,15 +21735,17 @@
           '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">' +
             '<div style="font-size:0.58rem;color:var(--sunpetal);font-weight:bold">' + escHTML(b.bait) +
               ' <span style="color:var(--text-dim);font-size:0.44rem;font-weight:normal">' + b.hours + 'h per batch</span></div>' +
-            '<div style="font-size:0.58rem;color:#e8a060;font-weight:bold">' + (b.complete ? b.cost.toFixed(2) + " " + sflIcon() : "—") +
-              ' <span style="color:var(--text-dim);font-size:0.44rem;font-weight:normal">+ rod = ' + (b.complete ? (b.cost + rodP).toFixed(2) : "—") + ' per fish</span></div></div>' +
+            '<div style="font-size:0.58rem;color:#e8a060;font-weight:bold">' + (b.complete ? approx(b, b.cost) + " " + sflIcon() : "—") +
+              ' <span style="color:var(--text-dim);font-size:0.44rem;font-weight:normal">+ rod = ' + (b.complete ? approx(b, b.cost + rodP) : "—") + ' per fish</span></div></div>' +
           '<div style="font-size:0.46rem;color:var(--text-secondary);margin-top:4px;line-height:1.7">' +
             b.parts.map((p) => '<b>' + p.q + '×</b> ' + escHTML(p.ing) +
-              ' <span style="color:var(--text-dim)">(' + escHTML(p.how) + ' → ' + (isFinite(p.total) ? p.total.toFixed(2) : "?") + ')</span>').join(" &nbsp;+&nbsp; ") +
+              ' <span style="color:' + (p.est ? "#e8a060" : "var(--text-dim)") + '">(' + escHTML(p.how) + ' → ' + (isFinite(p.total) ? p.total.toFixed(2) : "?") + ')</span>').join(" &nbsp;+&nbsp; ") +
           '</div>' +
           '<div style="font-size:0.44rem;color:var(--text-dim);margin-top:4px;line-height:1.6">forces: ' +
             fishBaitCatch[b.bait].map(escHTML).join(" · ") + '</div></div>').join("") +
-        '<div style="font-size:0.46rem;color:#e8a060;line-height:1.6">⚠ A bait is only worth its <b>availability</b>, not its XP. Every one of these costs 5–50 ' + sflIcon() + ' for a single fish, while a worm cast costs ' + costPerCast.toFixed(3) + ' — you use them to reach a fish that will not turn up on its own, or to farm a map piece, never to grind XP.</div></div>';
+        '<div style="font-size:0.46rem;color:#e8a060;line-height:1.6">⚠ A bait is only worth its <b>availability</b>, not its XP — each buys one fish for many times what a worm cast costs (' + costPerCast.toFixed(3) + '), so you use them to reach a fish that will not turn up on its own, or to farm a map piece, never to grind XP.' +
+        (baits.some((b) => b.est) ? ' A <b style="color:#e8a060">~</b> means an ingredient you have never caught, priced at the median rate of its tier — an estimate, but never a reason to drop the route.' : "") +
+        (rows.some((r) => r.qty < 20) ? ' Rates from small samples carry their catch count, because a fish landed 10 times sets its own price to within a factor of two at best.' : "") + '</div></div>';
 
       /*
        * MARINE MARVEL PLANNER.
@@ -21531,7 +21760,18 @@
        * total is smaller, expanded into the shopping list that produces it.
        */
       const mult = (_fishMoon ? 2 : 1) * (_fishHelm ? 2 : 1) * (_fishGuardian ? 2 : 1);
+      /*
+       * Two paces, because one of them is a lie on its own.
+       *
+       * casts/days is the long-run average over the whole history, and that window is mostly days
+       * with no fishing at all — it read 6/day and turned a real plan into "2,476 days". The farm
+       * also records dailyAttempts, so the best day on record gives the pace when you ARE fishing.
+       * The truth is between them, and quoting both says so instead of picking the flattering one.
+       */
       const castsPerDay = days > 0 ? casts / days : 0;
+      const _attempts = Object.values((_fishFarm && _fishFarm.fishing && _fishFarm.fishing.dailyAttempts) || {})
+        .map(Number).filter((n) => n > 0);
+      const activePerDay = _attempts.length ? Math.max.apply(null, _attempts) : 0;
       const ownedNow = (_fishFarm && _fishFarm.inventory) || {};
       const isOwned = (n) => +(ownedNow[n] || 0) > 0;
       const active = fishMarvels.filter((m) => !m.chapter || m.chapter === fishMarvelChapter);
@@ -21539,12 +21779,26 @@
       function sourceRoutes(fish, pieces) {
         const p = Math.min(1, (fish.odds || 0) * mult);
         const out = [];
-        const rnd = rowOf(fish.name);
-        if (rnd && p > 0) {
-          const castsPiece = rnd.castsEach / p;
+        /*
+         * The random route exists only while the fish is IN SEASON. Half the map sources are
+         * two-season fish and one — Trout, the only winter route to a Radiant Ray — is
+         * single-season, so a planner that ignores this recommends casts that cannot land.
+         *
+         * A guaranteed bait is different and is added below without a season check: the game's
+         * validation does not filter the catch list by season, and this was confirmed in game.
+         * That asymmetry is the whole value of a crafted bait — it is the only way to reach a
+         * source that is shut right now.
+         */
+        const com = fishBestBait(fish.name, season);
+        if (com && p > 0) {
+          const castsEach = com.per / (fishPerCast > 0 ? fishPerCast : 1);
+          const castsPiece = castsEach / p;
+          const mine = rowOf(fish.name);
           out.push({ kind: "random", label: "fish normally", perPiece: castsPiece,
                      unit: "casts", total: castsPiece * pieces * costPerCast,
-                     detail: rnd.castsEach.toFixed(1) + " casts per " + escHTML(fish.name) + " × " + fmt(1 / p) + " fish per piece" });
+                     detail: castsEach.toFixed(1) + " casts per " + escHTML(fish.name) + " on <b>" + escHTML(com.bait) +
+                             "</b> × " + fmt(1 / p) + " per piece <span style=\"opacity:.7\">· community n=" + fmt(com.sample) +
+                             (mine ? ", your own log says " + mine.castsEach.toFixed(0) : "") + "</span>" });
         }
         // Forced: a worm+chum pair, or a Fish Market bait. Both land the fish every single cast.
         const pair = gr.filter((g) => g.fish.toLowerCase() === fish.name.toLowerCase() && g.cost > 0)
@@ -21554,13 +21808,15 @@
                      perPiece: 1 / p, unit: "casts", total: (1 / p) * pieces * pair.cost,
                      detail: pair.cost.toFixed(2) + " " + sflIcon() + " per guaranteed " + escHTML(fish.name) });
         }
-        const fb = baits.filter((b) => b.complete && fishBaitCatch[b.bait].some((f) => f.toLowerCase() === fish.name.toLowerCase()))
-                        .sort((a, b) => a.cost - b.cost)[0];
-        if (fb && p > 0) {
+        // EVERY Fish Market bait that lists this fish, not merely the cheapest — a few fish appear
+        // in two lists (Barred Knifejaw is in both Fish Oil and Crab Stick), and which of them is
+        // cheaper flips with the season, so both belong on screen.
+        for (const fb of baits.filter((b) => b.complete && fishBaitCatch[b.bait].some((f) => f.toLowerCase() === fish.name.toLowerCase()))) {
+          if (!(p > 0)) break;
           const per = fb.cost + rodP;
-          out.push({ kind: "bait", label: fb.bait, bait: fb, perPiece: 1 / p, unit: fb.bait,
+          out.push({ kind: "bait", label: fb.bait, bait: fb, perPiece: 1 / p, unit: fb.bait, est: fb.est,
                      total: (1 / p) * pieces * per,
-                     detail: per.toFixed(2) + " " + sflIcon() + " per guaranteed " + escHTML(fish.name) });
+                     detail: approx(fb, per) + " " + sflIcon() + " per guaranteed " + escHTML(fish.name) });
         }
         return out.sort((a, b) => a.total - b.total);
       }
@@ -21576,52 +21832,74 @@
         const pieces = 9 - held;
         const evaluated = m.sources.map((sr) => {
           const routes = sourceRoutes({ name: sr[0], odds: sr[1] }, pieces);
-          return { fish: sr[0], odds: sr[1], p: Math.min(1, sr[1] * mult), best: routes[0] || null };
+          return { fish: sr[0], odds: sr[1], p: Math.min(1, sr[1] * mult), routes, best: routes[0] || null };
         }).sort((a, b) => (a.best ? a.best.total : Infinity) - (b.best ? b.best.total : Infinity));
         const win = evaluated[0];
         if (win && win.best) planTotal += win.best.total; else planKnown = false;
 
-        const line = (e, isBest) => {
-          if (!e.best) {
-            return '<div style="font-size:0.5rem;color:var(--text-dim);padding:3px 0">○ ' + escHTML(e.fish) +
-              ' <span style="font-size:0.44rem">' + (e.p * 100).toFixed(e.p < 0.01 ? 2 : 1) + '%</span>' +
-              ' <span style="font-size:0.44rem">— never caught, and no bait forces it</span></div>';
-          }
-          const r = e.best;
+        /*
+         * EVERY route is printed, not just the winner. A source can be reached by fishing for it,
+         * by a worm+chum pair, and by any Fish Market bait whose list contains it — and which of
+         * those is cheapest swings with the season, since the recipes change under you. Showing
+         * only the winner hides the fact that a route exists at all, which is exactly how a bait
+         * that could not be priced came to read "no bait forces it".
+         */
+        const routeLine = (r, isBest) => {
           const n = Math.ceil(r.perPiece * pieces);
-          const units = r.kind === "random" ? fmt(n) + " casts" : fmt(n) + "× " + r.label;
+          const units = r.kind === "random" ? fmt(n) + " casts, fishing normally" : fmt(n) + "× " + r.label;
           /*
-           * Casts, not just FLOWER — because on a crafted bait the two diverge violently. 180
-           * Fish Stick reads as a mild ~1,000, but the fish inside them are 16,000 casts, which
-           * at a real day's fishing is the better part of a year. Quoting only the price would
-           * make an impossible plan look affordable.
+           * Casts, not just FLOWER — on a crafted bait the two diverge violently. 180 Fish Stick
+           * reads as a mild ~1,100, but the fish inside them are 16,000 casts, the better part of
+           * a year. Quoting only the price makes an impossible plan look affordable.
            */
-          let totalCasts = r.kind === "bait"
+          const totalCasts = r.kind === "bait"
             ? r.bait.parts.reduce((a, pt) => a + pt.casts * pt.q * n, 0)
             : n;
-          const dayStr = castsPerDay > 0 && totalCasts > 0
-            ? " ≈ " + fmt(Math.ceil(totalCasts / castsPerDay)) + " days at your " + Math.round(castsPerDay) + "/day"
+          const dayStr = totalCasts > 0 && (castsPerDay > 0 || activePerDay > 0)
+            ? " ≈ " + (activePerDay > 0 ? fmt(Math.ceil(totalCasts / activePerDay)) + " days fishing daily at " + Math.round(activePerDay) : "")
+                    + (activePerDay > 0 && castsPerDay > 0 ? ", " : "")
+                    + (castsPerDay > 0 ? fmt(Math.ceil(totalCasts / castsPerDay)) + " at your long-run " + Math.round(castsPerDay) + "/day" : "")
             : "";
           let bom = "";
-          if (isBest && r.kind === "bait") {
-            bom = '<div style="font-size:0.44rem;color:var(--text-secondary);margin-top:3px;line-height:1.7;padding-left:12px">' +
-              '🧾 ' + fmt(n) + '× ' + escHTML(r.bait.bait) + ' needs ' +
+          if (r.kind === "bait") {
+            bom = '<div style="font-size:0.42rem;color:var(--text-secondary);line-height:1.7;padding-left:16px">🧾 ' +
               r.bait.parts.map((pt) => '<b>' + fmt(pt.q * n) + '×</b> ' + escHTML(pt.ing) +
-                (pt.casts > 0 ? ' <span style="color:var(--text-dim)">(' + fmt(Math.ceil(pt.casts * pt.q * n)) + " casts)</span>" : "")).join(" &nbsp;+&nbsp; ") +
-              ' <span style="color:var(--text-dim)">· ' + r.bait.hours + 'h per batch</span></div>';
+                ' <span style="color:' + (pt.est ? "#e8a060" : "var(--text-dim)") + '">(' +
+                (pt.casts > 0
+                  ? fmt(Math.ceil(pt.casts * pt.q * n)) + " casts" + (pt.est ? ", est." : "")
+                  // A pot ingredient costs no casts but is not free: its own chum can be another
+                  // crafted bait, and 43 Oysters quietly means 86 Fish Stick.
+                  : pt.chum ? "pot + " + fmt(pt.chumQty * pt.q * n) + "× " + escHTML(pt.chum) : "pot, no chum") +
+                ")</span>").join(" + ") +
+              ' <span style="color:var(--text-dim)">· ' + r.bait.hours + 'h/batch</span></div>';
           }
-          if (isBest && totalCasts > 0) {
-            bom += '<div style="font-size:0.44rem;color:#e8a060;padding-left:12px;line-height:1.6">⏱ ' +
-              fmt(Math.ceil(totalCasts)) + ' casts in total' + dayStr + '</div>';
-          }
-          return '<div style="padding:3px 0;border-top:1px solid #1a150e">' +
-            '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:0.5rem">' +
-              '<div style="color:' + (isBest ? "var(--sunpetal)" : "var(--text-dim)") + '">' + (isBest ? "●" : "○") + " " + escHTML(e.fish) +
-                ' <span style="font-size:0.44rem;color:var(--text-dim)">' + (e.p * 100).toFixed(e.p < 0.01 ? 2 : 1) + '% per catch</span>' +
-                ' <span style="font-size:0.44rem;color:' + (r.kind === "random" ? "var(--text-dim)" : "var(--green)") + '">→ ' + escHTML(units) + '</span></div>' +
+          return '<div style="padding:2px 0 3px">' +
+            '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:0.48rem">' +
+              '<div style="color:' + (isBest ? "var(--green)" : "var(--text-dim)") + ';padding-left:12px">' +
+                (isBest ? "▸ " : "&nbsp;&nbsp; ") + escHTML(units) + '</div>' +
               '<div style="color:' + (isBest ? "#e8a060" : "var(--text-dim)") + ';font-weight:' + (isBest ? "bold" : "normal") + '">' +
-                fmt(r.total, 0) + " " + sflIcon() + '</div></div>' +
-            '<div style="font-size:0.42rem;color:var(--text-dim);padding-left:12px">' + r.detail + '</div>' + bom + '</div>';
+                (r.est ? "~" : "") + fmt(r.total, 0) + " " + sflIcon() + '</div></div>' +
+            bom +
+            '<div style="font-size:0.42rem;color:var(--text-dim);padding-left:16px;line-height:1.6">⏱ ' +
+              fmt(Math.ceil(totalCasts)) + ' casts' + dayStr + '</div></div>';
+        };
+
+        const line = (e, isBest) => {
+          const rec = FISH_COMMUNITY_CATCH[e.fish] || FISH_COMMUNITY_CATCH[_fishCanon(e.fish)];
+          const inSeason = rec ? rec.s.includes(fishSeasonLetter[season] || "") : true;
+          const head = '<div style="font-size:0.5rem;color:' + (isBest ? "var(--sunpetal)" : "var(--text-secondary)") + ';padding-top:3px">' +
+            (isBest ? "●" : "○") + " " + escHTML(e.fish) +
+            ' <span style="font-size:0.44rem;color:var(--text-dim)">' + (e.p * 100).toFixed(e.p < 0.01 ? 2 : 1) + '% per catch → ' +
+            fmt(1 / e.p) + ' needed per piece</span>' +
+            (rec && !inSeason
+              ? ' <span style="font-size:0.42rem;color:#e8a060">✖ out of season (' + escHTML(rec.s.split("").map((c) => ({ w: "winter", p: "spring", s: "summer", a: "autumn" })[c]).join("/")) + ') — bait only</span>'
+              : "") + '</div>';
+          if (!e.routes.length) {
+            return '<div style="padding:3px 0;border-top:1px solid #1a150e">' + head +
+              '<div style="font-size:0.44rem;color:var(--text-dim);padding-left:12px">no route at all — out of season, and no bait or pair lists it</div></div>';
+          }
+          return '<div style="padding:3px 0;border-top:1px solid #1a150e">' + head +
+            e.routes.map((r, i) => routeLine(r, i === 0)).join("") + '</div>';
         };
 
         return '<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px;margin-bottom:6px">' +
@@ -21636,7 +21914,7 @@
 
       h += '<div class="pixel-panel" style="padding:12px;margin-bottom:12px">' +
         '<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">🗺️ MARINE MARVEL PLANNER — what each map really costs</div>' +
-        '<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Nine pieces per Marvel, dropping only from the two named fish. Each source is costed the cheaper of <b>fishing for it</b> at your own rate or <b>forcing it</b> with a pair or a Fish Market bait — the winner is marked ● and expanded into a shopping list. Only the permanent Marvels and the <b>' + escHTML(fishMarvelChapter) + '</b> chapter are listed; a past chapter’s Marvels cannot be obtained at all.</div>' +
+        '<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Nine pieces per Marvel, dropping only from the two named fish. Catch rates are the community dump’s <b>107,310 catches</b>, inverted to P(fish|bait) and undiluted for <b>' + escHTML(season) + '</b> — not this farm’s log, which is sound on common fish and up to <b>20× out</b> on the rare ones that actually carry map pieces. A fish <b style="color:#e8a060">out of season cannot be fished for at all</b>, so its only route is a crafted bait, which ignores the season gate. The winner is marked ● and expanded into a shopping list. Only the permanent Marvels and the <b>' + escHTML(fishMarvelChapter) + '</b> chapter are listed; a past chapter’s Marvels cannot be obtained at all.</div>' +
         '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;font-size:0.5rem">' +
         '<label><input type="checkbox" ' + (_fishMoon ? "checked" : "") + ' onchange="_fishToggle(\'moon\',this.checked)"> Full Moon</label>' +
         '<label><input type="checkbox" ' + (_fishHelm ? "checked" : "") + ' onchange="_fishToggle(\'helm\',this.checked)"> Deep Sea Helm</label>' +

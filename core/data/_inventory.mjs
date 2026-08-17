@@ -258,6 +258,10 @@ export const TABLE_INVENTORY = [
     "lines": 12
   },
   {
+    "name": "FISH_COMMUNITY_CATCH",
+    "lines": 40
+  },
+  {
     "name": "FISH_DATA",
     "lines": 40
   },
