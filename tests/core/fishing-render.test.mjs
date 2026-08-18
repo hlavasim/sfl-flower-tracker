@@ -408,3 +408,44 @@ test("the order sums shared ingredients once and recurses through sub-recipes", 
   assert.ok(new RegExp(m[1].replace(/,/g, ",") + " casts").test(plain),
     `the planner route line quotes the same total (${m[1]})`);
 });
+
+test("every bait is priced in all four seasons, with the stock it already covers", () => {
+  const { html } = renderPage(WINTER_FARM);
+  const plain = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  const panel = plain.slice(plain.indexOf("FISH MARKET BAIT"), plain.indexOf("MARINE MARVEL"));
+  /*
+   * A recipe changes with the season and its cost with it, so "what does this bait cost" has four
+   * answers and only one of them is today's. Waiting for a cheaper season is a real decision and
+   * it cannot be made from a single number.
+   */
+  for (const sn of ["winter", "spring", "summer", "autumn"])
+    assert.ok(new RegExp(sn).test(panel), `${sn} is priced`);
+  assert.ok(/winter · now/.test(panel), "the live season is marked");
+  assert.ok(/can make \d+/.test(panel), "each season says how many the current stock covers");
+  // Autumn's Fish Stick is Moray Eel + Napoleanfish; winter's is Walleye + Angelfish.
+  assert.ok(/6× Red Snapper \+ 2× Moray Eel \+ 2× Napoleanfish/.test(panel),
+    "the other seasons' recipes are shown, not just today's");
+});
+
+test("a season priced off unknown ingredients is a floor, and cannot win", () => {
+  const { html } = renderPage(WINTER_FARM);
+  const plain = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  const panel = plain.slice(plain.indexOf("FISH MARKET BAIT"), plain.indexOf("MARINE MARVEL"));
+  /*
+   * Summer's Crab Stick is baited with Moonfur and Chewed Bone, neither of which the value engine
+   * prices. Treating a missing price as zero made summer read 0.11 against winter's 5.51 and would
+   * have sent the player off to wait three months on a number nobody measured.
+   */
+  const i = panel.indexOf("Crab Stick");
+  const block = panel.slice(i, i + 700);
+  assert.ok(/≥/.test(block), "an incompletely priced season is marked as a floor");
+  assert.ok(/no price for/.test(block), "and names the ingredient it could not price");
+  assert.ok(/no price for Moonfur, Chewed Bone|no price for Chewed Bone, Moonfur/.test(block),
+    `summer's unpriced chum is named: ${block.slice(0, 300)}`);
+  // The cheapest-season highlight is green; only a fully priced season may carry it. Autumn is
+  // the sole complete one for Crab Stick, so summer's ≥0.11 must not be the winner.
+  const html2 = html.slice(html.indexOf("Crab Stick"));
+  const summerTile = html2.slice(html2.indexOf(">summer<"), html2.indexOf(">summer<") + 400);
+  assert.ok(!/var\(--green\)[^<]*>≥/.test(summerTile),
+    "the unpriced summer figure is not crowned cheapest");
+});

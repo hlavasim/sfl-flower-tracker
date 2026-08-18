@@ -5954,7 +5954,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.41</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.42</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5981,6 +5981,11 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.42", items: [
+          { t: "feat", text: "<b>Every bait priced in all four seasons, with the stock you already hold.</b> A recipe changes with the season and its cost with it, so “what does a Fish Stick cost” has four answers and only one of them is today’s. Each bait now shows all four side by side — that season’s recipe, that season’s rates, and how many your current inventory already covers — with the live season outlined and the cheapest fully-priced one in green. <b>Waiting is a real strategy</b>: Fish Stick is 2.70 in winter against 2.02 in spring, and Crab Stick runs 5.51 now against 2.36 in autumn." },
+          { t: "fix", text: "<b>A missing price is not a price of zero, and it nearly sent you off to wait three months.</b> Summer’s Crab Stick is baited with Moonfur and Chewed Bone chum, neither of which the value engine prices — so both resolved to 0 and summer read <b>0.11 against winter’s 5.51</b>, a fiftyfold saving that was never measured. Seasons with an unpriced ingredient now show <b>≥</b>, name what could not be priced, and are barred from being crowned cheapest." },
+          { t: "fix", text: "<code>ownedNow</code> was declared below the bait table that reads it — a const in the temporal dead zone, which the new per-season stock column would have hit on every render." },
+        ] },
         { ver: "v5.41", items: [
           { t: "feat", text: "<b>Tick the routes you are actually doing, and get one order.</b> Every route on every Marvel now carries a checkbox, and a <b>YOUR ORDER</b> panel underneath adds the ticked ones into a single shopping list — quantity of each fish, crustacean, worm, chum and crafted bait, with where each one comes from, what you already hold, the total cost, the total casts, the days at your own pace and the serial craft hours. Shared ingredients are summed <b>once</b>: two Marvels routed through Fish Flake do not have you fish the same Anchovy twice. Both the ticks and the per-Marvel piece counts persist across reloads." },
           { t: "fix", text: "<b>Requirements now recurse, and the cast totals were badly wrong without it.</b> A Crab Stick needs an Oyster, an Oyster is baited with <b>2× Fish Stick</b>, and a Fish Stick is 6× Red Snapper + 2× Walleye + 2× Angelfish. Stopping at the Oyster made “43× Crab Stick” read as <b>73 casts — an afternoon — when it is really 3,535, or two months</b>, and left 86 Fish Stick sitting in the list with no ingredients behind them and their 172 craft-hours uncounted. One recursive definition of “what is buried inside one of these” now feeds both the route line and the order, so the two can no longer disagree about the same plan." },
@@ -21649,6 +21654,7 @@
        * are tradeable — so a bait's cost is the cost of the casts and chum behind it.
        */
       const season = ((_fishFarm && _fishFarm.season && _fishFarm.season.season) || "autumn").toLowerCase();
+      const ownedNow = (_fishFarm && _fishFarm.inventory) || {};
       const rowOf = (n) => rows.find((r) => r.name === n) ||
                            rows.find((r) => r.name.toLowerCase() === String(n).toLowerCase()) || null;
 
@@ -21700,27 +21706,30 @@
        * rather than fail visibly.
        */
       const _baitCost = {};
-      function craftedBaitCost(bait, seen) {
-        if (_baitCost[bait] !== undefined) return _baitCost[bait];
+      function craftedBaitCost(bait, seen, sn) {
+        sn = sn || season;
+        const ck = bait + "|" + sn;
+        if (_baitCost[ck] !== undefined) return _baitCost[ck];
         if (seen && seen.has(bait)) return Infinity;
         const mark = new Set(seen || []); mark.add(bait);
-        const rec = (FISH_MARKET_RECIPES[bait] || {})[season] || {};
+        const rec = (FISH_MARKET_RECIPES[bait] || {})[sn] || {};
         let c = 0;
-        for (const [ing, q] of Object.entries(rec)) c += ingredientCost(ing, mark).cost * q;
-        if (!seen) _baitCost[bait] = c;
+        for (const [ing, q] of Object.entries(rec)) c += ingredientCost(ing, mark, sn).cost * q;
+        if (!seen) _baitCost[ck] = c;
         return c;
       }
-      function ingredientCost(name, seen) {
+      function ingredientCost(name, seen, sn) {
+        sn = sn || season;
         const cr = CRUSTACEAN_RECIPES[name] || CRUSTACEAN_RECIPES[_fishCanon(name)];
         if (cr) {
           const chumIsBait = cr.chum && FISH_MARKET_RECIPES[cr.chum];
-          const unit = !cr.chum ? 0 : chumIsBait ? craftedBaitCost(cr.chum, seen) : P(cr.chum);
+          const unit = !cr.chum ? 0 : chumIsBait ? craftedBaitCost(cr.chum, seen, sn) : P(cr.chum);
           return { cost: cr.qty * unit, casts: 0, est: false, pot: cr.pot,
                    chum: cr.chum, chumQty: cr.qty, chumCrafted: !!chumIsBait,
                    how: cr.pot + (cr.chum ? " · " + cr.qty + "× " + cr.chum +
                         (chumIsBait ? " (crafted, " + unit.toFixed(2) + " each)" : "") : " · no chum") };
         }
-        const com = fishBestBait(name, season);
+        const com = fishBestBait(name, sn);
         const mine = rowOf(name);
         if (com) {
           // The dump counts FISH; a cast can land more than one with +1 yield boosts, so the
@@ -21748,7 +21757,41 @@
                    chum: ic.chum, chumQty: ic.chumQty, chumCrafted: ic.chumCrafted };
         });
         const cost = parts.reduce((a, p) => a + p.total, 0);
-        return { bait, parts, cost, hours: fishBaitHours[bait] || 0,
+        /*
+         * The same bait in all four seasons, because the recipe changes underneath you and the
+         * cheapest moment to make one is often not now. Autumn's Fish Stick is Moray Eel and
+         * Napoleanfish; winter's is Walleye and Angelfish at several times the casts. Knowing
+         * that turns "this is expensive" into "this is expensive until spring".
+         *
+         * `canMake` is how many the current inventory already covers, per season — the limiting
+         * ingredient, since a recipe is all-or-nothing.
+         */
+        const bySeason = {};
+        for (const sn of ["winter", "spring", "summer", "autumn"]) {
+          const r = (FISH_MARKET_RECIPES[bait] || {})[sn] || {};
+          const entries = Object.entries(r);
+          if (!entries.length) continue;
+          let c = 0, ok = true, canMake = Infinity;
+          /*
+           * A pot chum with no entry in the price map resolves to zero, and a zero here is not
+           * "free" — it is "unknown". Summer's Crab Stick is baited with Moonfur and Sea Snail
+           * chum, neither of which the value engine prices, so the season read 0.11 against
+           * winter's 5.51 and would have sent you off to wait three months for a number that was
+           * never measured. Unpriced ingredients are named and the total marked a floor.
+           */
+          const unpriced = [];
+          for (const [ing, q] of entries) {
+            const ic = ingredientCost(ing, null, sn);
+            if (!isFinite(ic.cost)) ok = false;
+            c += ic.cost * q;
+            canMake = Math.min(canMake, Math.floor((+(ownedNow[ing] || 0)) / q));
+            const cr = CRUSTACEAN_RECIPES[ing] || CRUSTACEAN_RECIPES[_fishCanon(ing)];
+            if (cr && cr.chum && !FISH_MARKET_RECIPES[cr.chum] && !(P(cr.chum) > 0)) unpriced.push(cr.chum);
+          }
+          bySeason[sn] = { cost: c, ok, canMake: isFinite(canMake) ? canMake : 0, unpriced,
+                           recipe: entries.map(([i, q]) => q + "× " + i).join(" + ") };
+        }
+        return { bait, parts, cost, hours: fishBaitHours[bait] || 0, bySeason,
                  est: parts.some((p) => p.est),
                  complete: parts.length > 0 && parts.every((p) => isFinite(p.unit)) };
       }).sort((a, b) => a.cost - b.cost);
@@ -21782,7 +21825,7 @@
 
       h += '<div class="pixel-panel" style="padding:12px;margin-bottom:12px">' +
         '<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">🎣 FISH MARKET BAIT — what one costs to make</div>' +
-        '<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">These four are <b>bait, not chum</b>: they replace the worm, and the game refuses a cast that carries chum as well. You then <b>pick the fish yourself</b> out of the list — the catch is not random, so there is no “average XP of a tier” to speak of. Recipes are the <b>' + escHTML(season) + '</b> ones, expanded into what each ingredient really costs you.</div>' +
+        '<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">These four are <b>bait, not chum</b>: they replace the worm, and the game refuses a cast that carries chum as well. You then <b>pick the fish yourself</b> out of the list — the catch is not random, so there is no “average XP of a tier” to speak of. The breakdown is the <b>' + escHTML(season) + '</b> recipe, expanded into what each ingredient really costs you; the four tiles under it price the <b>same bait in every season</b> at that season’s recipe and rates, with how many your current stock already covers. Cheapest season is green — waiting for it is a real strategy, since the same bait can differ several-fold.</div>' +
         baits.map((b) => '<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px;margin-bottom:6px">' +
           '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">' +
             '<div style="font-size:0.58rem;color:var(--sunpetal);font-weight:bold">' + escHTML(b.bait) +
@@ -21792,6 +21835,33 @@
           '<div style="font-size:0.46rem;color:var(--text-secondary);margin-top:4px;line-height:1.7">' +
             b.parts.map((p) => '<b>' + p.q + '×</b> ' + escHTML(p.ing) +
               ' <span style="color:' + (p.est ? "#e8a060" : "var(--text-dim)") + '">(' + escHTML(p.how) + ' → ' + (isFinite(p.total) ? p.total.toFixed(2) : "?") + ')</span>').join(" &nbsp;+&nbsp; ") +
+          '</div>' +
+          /*
+           * All four seasons side by side. The recipe changes with the season and the cost with
+           * it — autumn's Fish Stick is Moray Eel and Napoleanfish, winter's is Walleye and
+           * Angelfish — so the useful question is not only "what does this cost" but "when is it
+           * cheap", and whether the stock on hand already covers a few.
+           */
+          '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(122px,1fr));gap:4px;margin-top:6px">' +
+            ["winter", "spring", "summer", "autumn"].map((sn) => {
+              const bs = b.bySeason[sn];
+              if (!bs) return "";
+              const now = sn === season;
+              // A season priced off unknown ingredients cannot win the comparison — it is a floor,
+              // not a total, and crowning it would be the whole reason the check exists.
+              const solid = (x) => x.ok && !x.unpriced.length;
+              const cheapest = solid(bs) && Object.values(b.bySeason).filter(solid)
+                .every((x) => bs.cost <= x.cost + 1e-9);
+              return '<div style="border:1px solid ' + (now ? "var(--sunpetal)" : "#20190f") + ';border-radius:5px;padding:4px 5px;background:' + (now ? "#1d1608" : "#12100c") + '">' +
+                '<div style="font-size:0.42rem;color:' + (now ? "var(--sunpetal)" : "var(--text-dim)") + '">' + sn + (now ? " · now" : "") + '</div>' +
+                '<div style="font-size:0.58rem;color:' + (cheapest ? "var(--green)" : bs.unpriced.length ? "var(--text-dim)" : "#e8a060") + ';font-weight:bold">' +
+                  (bs.ok ? (bs.unpriced.length ? "≥" : "") + fmt(bs.cost, bs.cost < 100 ? 2 : 0) : "—") + '</div>' +
+                (bs.unpriced.length
+                  ? '<div style="font-size:0.38rem;color:#e8a060;line-height:1.4">no price for ' + escHTML([...new Set(bs.unpriced)].join(", ")) + '</div>'
+                  : "") +
+                '<div style="font-size:0.4rem;color:' + (bs.canMake > 0 ? "var(--green)" : "var(--text-dim)") + '">can make ' + fmt(bs.canMake) + '</div>' +
+                '<div style="font-size:0.38rem;color:var(--text-dim);line-height:1.5">' + escHTML(bs.recipe) + '</div></div>';
+            }).join("") +
           '</div>' +
           '<div style="font-size:0.44rem;color:var(--text-dim);margin-top:4px;line-height:1.6">forces: ' +
             fishBaitCatch[b.bait].map(escHTML).join(" · ") + '</div></div>').join("") +
@@ -21824,7 +21894,6 @@
       const _attempts = Object.values((_fishFarm && _fishFarm.fishing && _fishFarm.fishing.dailyAttempts) || {})
         .map(Number).filter((n) => n > 0);
       const activePerDay = _attempts.length ? Math.max.apply(null, _attempts) : 0;
-      const ownedNow = (_fishFarm && _fishFarm.inventory) || {};
       const isOwned = (n) => +(ownedNow[n] || 0) > 0;
       const active = fishMarvels.filter((m) => !m.chapter || m.chapter === fishMarvelChapter);
 
