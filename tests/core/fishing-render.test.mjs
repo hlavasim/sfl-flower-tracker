@@ -54,9 +54,10 @@ const FLOORS = { values: [
   { field: "floor", nft_name: "Fat Chicken", value: 21.9 },
 ] };
 
-function renderPage(farmOverride) {
+function renderPage(farmOverride, sharedStore) {
   const app = { innerHTML: "" };
-  const store = {};
+  // A caller-supplied store is the same browser localStorage surviving a reload.
+  const store = sharedStore || {};
   const elements = { app };
   const stubEl = () => ({
     innerHTML: "", textContent: "", style: {}, classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
@@ -109,6 +110,7 @@ function renderPage(farmOverride) {
          for (const v of (${JSON.stringify(FLOORS)}.values || [])) _fishPrices[v.nft_name] = v.value;
        },
        setPieces: (m, n) => window._fishSetPieces(m, n),
+       plan: (k, on) => window._fishPlanToggle(k, on),
        getPage: typeof getPage === "function" ? getPage : null,
      };`
   );
@@ -357,4 +359,52 @@ test("a pot ingredient whose chum is itself a crafted bait is priced, not zeroed
   assert.ok(m, `Crab Stick is priced in the bait panel: ${panel.slice(0, 200)}`);
   assert.ok(parseFloat(m[2]) > 1,
     `Crab Stick costs more than 1 FLOWER once its Oyster's Fish Stick is counted, got ${m[2]}`);
+});
+
+
+test("piece counts and ticked routes survive a reload", () => {
+  /*
+   * Both live in localStorage under sfl_fishing_ui, so a reload must bring them back. Asserting
+   * that the setter mutated a variable would prove nothing -- the page is rebuilt from storage on
+   * every load, so the test rebuilds it too, against the same store.
+   */
+  const store = {};
+  const first = renderPage(WINTER_FARM, store);
+  first.api.setPieces("Radiant Ray", 4);
+  first.api.plan("Radiant Ray|Trout|random:fish normally", true);
+  assert.ok(/5 to go/.test(first.app.innerHTML), "the entry takes effect immediately");
+
+  const reloaded = renderPage(WINTER_FARM, store);   // fresh page, same browser storage
+  assert.ok(/5 to go/.test(reloaded.html), "the piece count came back after the reload");
+  const order = reloaded.html.slice(reloaded.html.indexOf("YOUR ORDER"));
+  assert.ok(/Radiant Ray/.test(order) && /via Trout/.test(order),
+    "and so did the ticked route, still in the order");
+  assert.ok(/checked/.test(reloaded.html), "its checkbox is drawn ticked");
+
+  const clean = renderPage(WINTER_FARM);             // a different browser: nothing carried over
+  assert.ok(/9 to go/.test(clean.html), "an unrelated session is unaffected");
+  assert.ok(/Nothing ticked yet/.test(clean.html), "and starts with an empty order");
+});
+
+test("the order sums shared ingredients once and recurses through sub-recipes", () => {
+  /*
+   * 43x Crab Stick hides 86x Fish Stick inside its Oysters, and those hide 516 Red Snapper. A
+   * list that stopped at the Oyster read 73 casts for what is really 3,535 -- an afternoon
+   * against two months -- so the rollup has to go all the way down, and the planner's own route
+   * line has to agree with it.
+   */
+  const store = {};
+  const page = renderPage(WINTER_FARM, store);
+  page.api.plan("Twilight Anglerfish|Parrotfish|bait:Crab Stick", true);
+  const plain = page.app.innerHTML.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  const order = plain.slice(plain.indexOf("YOUR ORDER"));
+  for (const line of ["Fish Stick 86", "Red Snapper 516", "Oyster 43"])
+    assert.ok(new RegExp(line).test(order), `the rollup reaches ${line}: ${order.slice(0, 400)}`);
+  // Craft time counts the sub-recipe too: 86x2h + 43x4h.
+  assert.ok(/CRAFTING 344 h/.test(order), `craft hours include the nested bait: ${order.slice(0, 300)}`);
+  // And the planner's route line quotes the same cast total as the order.
+  const m = order.match(/TOTAL CASTS ([\d,]+)/);
+  assert.ok(m, "the order reports total casts");
+  assert.ok(new RegExp(m[1].replace(/,/g, ",") + " casts").test(plain),
+    `the planner route line quotes the same total (${m[1]})`);
 });

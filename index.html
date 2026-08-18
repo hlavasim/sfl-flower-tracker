@@ -5954,7 +5954,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.40</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.41</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5981,6 +5981,12 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.41", items: [
+          { t: "feat", text: "<b>Tick the routes you are actually doing, and get one order.</b> Every route on every Marvel now carries a checkbox, and a <b>YOUR ORDER</b> panel underneath adds the ticked ones into a single shopping list — quantity of each fish, crustacean, worm, chum and crafted bait, with where each one comes from, what you already hold, the total cost, the total casts, the days at your own pace and the serial craft hours. Shared ingredients are summed <b>once</b>: two Marvels routed through Fish Flake do not have you fish the same Anchovy twice. Both the ticks and the per-Marvel piece counts persist across reloads." },
+          { t: "fix", text: "<b>Requirements now recurse, and the cast totals were badly wrong without it.</b> A Crab Stick needs an Oyster, an Oyster is baited with <b>2× Fish Stick</b>, and a Fish Stick is 6× Red Snapper + 2× Walleye + 2× Angelfish. Stopping at the Oyster made “43× Crab Stick” read as <b>73 casts — an afternoon — when it is really 3,535, or two months</b>, and left 86 Fish Stick sitting in the list with no ingredients behind them and their 172 craft-hours uncounted. One recursive definition of “what is buried inside one of these” now feeds both the route line and the order, so the two can no longer disagree about the same plan." },
+          { t: "fix", text: "Ticking a route keyed on the Marvel and bait alone, so both of a Marvel’s sources were selected at once whenever they shared a bait — Starlight Tuna reaches Horse Mackerel and Halibut both through Fish Flake, and ticking one silently ordered 385 baits instead of 25. The key now names the source fish." },
+          { t: "fix", text: "The order’s “where it comes from” column read every line as a fish, so <b>Red Wiggler</b> came back as “out of season, est. 21.2 casts” — a composted worm described as an uncatchable species. Worms, crafted baits, pot crustaceans and bought chum each name their real source now. Craft time is also labelled <b>serial</b>, since one batch yields one bait." },
+        ] },
         { ver: "v5.40", items: [
           { t: "feat", text: "<b>Catch rates now come from 107,310 community catches, not this farm’s log.</b> One farm’s history is sound on common fish and useless on rare ones — which is exactly backwards, since the rare ones carry the map pieces. Against 1,080 baited casts here: Red Snapper 5.2 vs 4.7 and Moray Eel 8.8 vs 7.7 agree, but <b>Halibut read 270 casts against 13.6 (20×)</b> and Porgy 270 against 31.6, while Parrotfish, White Shark, Hammerhead shark, Squid and Angelfish had never been caught at all and so had no rate to plan with. The published tables are per fish — “of the Anchovies caught, 63% were on Earthworm+Carrot” — which is P(bait|fish), the wrong way round, and why the same Grub+Banana shows 44% under one fish and 7% under another. The raw counts beside those percentages are joint cells, so summing a column inverts it exactly. <b>Validated before use: the inversion reproduces every known guaranteed pair at 100.0% unprompted</b> — Grub+Orange and Grub+Wild Mushroom → Tuna (n=9,638), Red Wiggler+Apple and +Honey → Red Snapper, Earthworm+Carrot and +Egg → Anchovy, and all three chicken pairs." },
           { t: "fix", text: "<b>The planner ignored seasons, and half the map sources are seasonal.</b> Fish exist in one or two seasons out of four, so <b>8 of the 16 map sources cannot be fished for in winter at all</b> — including the Hammerhead shark this page was recommending, which is summer/autumn. A source that is shut now shows <b>✖ out of season</b> and offers only its crafted-bait route; a crafted bait ignores the season gate (confirmed in game), which is the entire reason to make one. <b>Dumbo Octopus has both sources shut in winter</b> and is reachable only by crafting. Trout is the mirror image: winter-only, so a Radiant Ray gathered by rod is a winter job. The community dump pools all four seasons and its own season tabs do not filter, so counts are undiluted per season before use." },
@@ -21419,19 +21425,39 @@
      * per-Marvel piece progress is not in there at all, so there is nothing to read.
      */
     let _fishPieces = {};
+    /*
+     * Which routes are actually being attempted, as "<Marvel>|<route label>".
+     *
+     * The planner prices every route of every Marvel, which is the right thing to show and the
+     * wrong thing to shop from — nobody chases eight Marvels at once. Ticking routes collects
+     * them into one order, so the question stops being "what does each cost" and becomes "what
+     * do I need to go and get".
+     */
+    let _fishPlan = {};
     try {
       const _fsv = JSON.parse(localStorage.getItem("sfl_fishing_ui") || "{}");
       _fishMoon = !!_fsv.moon; _fishHelm = !!_fsv.helm; _fishGuardian = !!_fsv.guardian;
       _fishPieces = _fsv.pieces && typeof _fsv.pieces === "object" ? _fsv.pieces : {};
+      _fishPlan = _fsv.plan && typeof _fsv.plan === "object" ? _fsv.plan : {};
     } catch (e) {}
     function _fishSaveUi() {
       try {
         localStorage.setItem("sfl_fishing_ui", JSON.stringify({
-          moon: _fishMoon, helm: _fishHelm, guardian: _fishGuardian, pieces: _fishPieces }));
+          moon: _fishMoon, helm: _fishHelm, guardian: _fishGuardian, pieces: _fishPieces, plan: _fishPlan }));
       } catch (e) {}
     }
     window._fishToggle = function (k, v) {
       if (k === "moon") _fishMoon = v; else if (k === "helm") _fishHelm = v; else _fishGuardian = v;
+      _fishSaveUi();
+      renderFishing();
+    };
+    window._fishPlanToggle = function (key, on) {
+      if (on) _fishPlan[key] = true; else delete _fishPlan[key];
+      _fishSaveUi();
+      renderFishing();
+    };
+    window._fishPlanClear = function () {
+      _fishPlan = {};
       _fishSaveUi();
       renderFishing();
     };
@@ -21728,6 +21754,32 @@
       }).sort((a, b) => a.cost - b.cost);
       const approx = (b, n) => (b.est ? "~" : "") + fmt(n, n < 100 ? 2 : 0);
 
+      /*
+       * Casts buried inside ONE of an item, all the way down.
+       *
+       * A Crab Stick contains an Oyster, which contains 2x Fish Stick, which contain 10 fish
+       * between them. Counting one level made "43x Crab Stick" read as 73 casts when it is 3,492
+       * — an afternoon against two months. Zero for anything not fished for: a composted worm, and
+       * the crafted or potted item itself, whose own ingredients are what carry the casts.
+       */
+      function itemCasts(name, depth) {
+        depth = depth || 0;
+        if (depth >= 5) return 0;
+        const rec = FISH_MARKET_RECIPES[name] && FISH_MARKET_RECIPES[name][season];
+        if (rec) {
+          let c = 0;
+          for (const [ing, q] of Object.entries(rec)) c += q * itemCasts(ing, depth + 1);
+          return c;
+        }
+        const cr = CRUSTACEAN_RECIPES[name] || CRUSTACEAN_RECIPES[_fishCanon(name)];
+        if (cr) return cr.chum ? cr.qty * itemCasts(cr.chum, depth + 1) : 0;
+        if (BAIT_WORM_YIELD[name]) return 0;
+        const com = fishBestBait(name, season);
+        if (com) return com.per / (fishPerCast > 0 ? fishPerCast : 1);
+        const mine = rowOf(name);
+        return mine ? mine.castsEach : 0;
+      }
+
       h += '<div class="pixel-panel" style="padding:12px;margin-bottom:12px">' +
         '<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">🎣 FISH MARKET BAIT — what one costs to make</div>' +
         '<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">These four are <b>bait, not chum</b>: they replace the worm, and the game refuses a cast that carries chum as well. You then <b>pick the fish yourself</b> out of the list — the catch is not random, so there is no “average XP of a tier” to speak of. Recipes are the <b>' + escHTML(season) + '</b> ones, expanded into what each ingredient really costs you.</div>' +
@@ -21795,7 +21847,7 @@
           const castsPiece = castsEach / p;
           const mine = rowOf(fish.name);
           out.push({ kind: "random", label: "fish normally", perPiece: castsPiece,
-                     unit: "casts", total: castsPiece * pieces * costPerCast,
+                     unit: "casts", total: castsPiece * pieces * costPerCast, worm: com.bait,
                      detail: castsEach.toFixed(1) + " casts per " + escHTML(fish.name) + " on <b>" + escHTML(com.bait) +
                              "</b> × " + fmt(1 / p) + " per piece <span style=\"opacity:.7\">· community n=" + fmt(com.sample) +
                              (mine ? ", your own log says " + mine.castsEach.toFixed(0) : "") + "</span>" });
@@ -21822,6 +21874,7 @@
       }
 
       let planTotal = 0, planKnown = true;
+      const chosen = [];          // routes the player ticked, collected while the cards render
       const cards = active.map((m) => {
         if (isOwned(m.marvel)) {
           return '<div style="border:1px solid #20190f;border-radius:6px;background:#12100c;padding:8px;margin-bottom:6px;opacity:0.6">' +
@@ -21844,7 +21897,9 @@
          * only the winner hides the fact that a route exists at all, which is exactly how a bait
          * that could not be priced came to read "no bait forces it".
          */
-        const routeLine = (r, isBest) => {
+        const routeLine = (r, isBest, e) => {
+          const key = m.marvel + "|" + e.fish + "|" + r.kind + ":" + r.label;
+          const ticked = !!_fishPlan[key];
           const n = Math.ceil(r.perPiece * pieces);
           const units = r.kind === "random" ? fmt(n) + " casts, fishing normally" : fmt(n) + "× " + r.label;
           /*
@@ -21852,9 +21907,7 @@
            * reads as a mild ~1,100, but the fish inside them are 16,000 casts, the better part of
            * a year. Quoting only the price makes an impossible plan look affordable.
            */
-          const totalCasts = r.kind === "bait"
-            ? r.bait.parts.reduce((a, pt) => a + pt.casts * pt.q * n, 0)
-            : n;
+          const totalCasts = r.kind === "bait" ? n + n * itemCasts(r.bait.bait) : n;
           const dayStr = totalCasts > 0 && (castsPerDay > 0 || activePerDay > 0)
             ? " ≈ " + (activePerDay > 0 ? fmt(Math.ceil(totalCasts / activePerDay)) + " days fishing daily at " + Math.round(activePerDay) : "")
                     + (activePerDay > 0 && castsPerDay > 0 ? ", " : "")
@@ -21873,10 +21926,13 @@
                 ")</span>").join(" + ") +
               ' <span style="color:var(--text-dim)">· ' + r.bait.hours + 'h/batch</span></div>';
           }
-          return '<div style="padding:2px 0 3px">' +
+          if (ticked) chosen.push({ marvel: m.marvel, fish: e.fish, r, n, totalCasts, key });
+          return '<div style="padding:2px 0 3px;' + (ticked ? "background:#1b2415;border-radius:4px" : "") + '">' +
             '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:0.48rem">' +
-              '<div style="color:' + (isBest ? "var(--green)" : "var(--text-dim)") + ';padding-left:12px">' +
-                (isBest ? "▸ " : "&nbsp;&nbsp; ") + escHTML(units) + '</div>' +
+              '<div style="color:' + (ticked ? "var(--sunpetal)" : isBest ? "var(--green)" : "var(--text-dim)") + ';padding-left:4px">' +
+                '<input type="checkbox" ' + (ticked ? "checked" : "") + ' style="vertical-align:middle;margin-right:4px" ' +
+                'onchange="_fishPlanToggle(' + JSON.stringify(key).replace(/"/g, "&quot;") + ',this.checked)">' +
+                (isBest ? "▸ " : "") + escHTML(units) + '</div>' +
               '<div style="color:' + (isBest ? "#e8a060" : "var(--text-dim)") + ';font-weight:' + (isBest ? "bold" : "normal") + '">' +
                 (r.est ? "~" : "") + fmt(r.total, 0) + " " + sflIcon() + '</div></div>' +
             bom +
@@ -21899,7 +21955,7 @@
               '<div style="font-size:0.44rem;color:var(--text-dim);padding-left:12px">no route at all — out of season, and no bait or pair lists it</div></div>';
           }
           return '<div style="padding:3px 0;border-top:1px solid #1a150e">' + head +
-            e.routes.map((r, i) => routeLine(r, i === 0)).join("") + '</div>';
+            e.routes.map((r, i) => routeLine(r, i === 0, e)).join("") + '</div>';
         };
 
         return '<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px;margin-bottom:6px">' +
@@ -21924,6 +21980,130 @@
         '<div style="font-size:0.5rem;color:var(--text-secondary);margin-top:6px;line-height:1.7">Every remaining Marvel by its cheapest route: <b style="color:#e8a060">' + fmt(planTotal, 0) + " " + sflIcon() + '</b>' +
           (planKnown ? "" : ' <span style="color:var(--text-dim);font-size:0.44rem">(excluding sources with no route at all)</span>') + '</div>' +
         '<div style="font-size:0.46rem;color:var(--text-dim);margin-top:4px;line-height:1.6">Piece counts are typed in because the farm API does not publish them — it exposes finished Marvels and a generic Treasure Map, but not per-Marvel progress. Pieces are consumed at 9, so 8 is the maximum you can hold.</div></div>';
+
+      /*
+       * THE ORDER — every ticked route folded into one shopping list.
+       *
+       * Each route is expanded to what you must physically obtain, not to a price:
+       *   random   N casts of a worm  → N worm + N rod
+       *   pair     N casts            → N worm + N×qty chum + N rod
+       *   bait     N crafted baits    → the season's recipe × N, + N rod to cast them
+       * and a pot ingredient contributes its own chum, since 43 Oysters is really 86 Fish Stick.
+       *
+       * Quantities are summed across routes on purpose: two Marvels that both run through Fish
+       * Flake share their Anchovy, and reading two separate lists would have you fish for it
+       * twice. Casts are summed the same way, which is what actually bounds the plan.
+       */
+      const order = { items: {}, casts: 0, flower: 0, rods: 0, baits: {} };
+      /*
+       * Requirements recurse, because the recipes do.
+       *
+       * A Crab Stick needs an Oyster, an Oyster is baited with 2x Fish Stick, and a Fish Stick is
+       * 6x Red Snapper + 2x Walleye + 2x Angelfish. Listing the Oyster and stopping leaves 86
+       * Fish Stick as a line with no ingredients behind it and no craft time counted -- the plan
+       * would read as 197 hours when it is really several times that. Depth is capped only as a
+       * backstop: no recipe closes a loop today, but one added upstream should not hang the page.
+       */
+      const need = (name, qty, depth) => {
+        if (!name || !(qty > 0)) return;
+        order.items[name] = (order.items[name] || 0) + qty;
+        if (depth >= 5) return;
+        const rec = FISH_MARKET_RECIPES[name] && FISH_MARKET_RECIPES[name][season];
+        if (rec) {
+          order.baits[name] = (order.baits[name] || 0) + qty;
+          for (const [ing, q] of Object.entries(rec)) need(ing, q * qty, depth + 1);
+          return;
+        }
+        const cr = CRUSTACEAN_RECIPES[name] || CRUSTACEAN_RECIPES[_fishCanon(name)];
+        if (cr && cr.chum) need(cr.chum, cr.qty * qty, depth + 1);
+      };
+      for (const c of chosen) {
+        const r = c.r;
+        order.flower += r.total;
+        order.casts += c.n;                      // the casts you make with whatever is on the hook
+        if (r.kind === "random") {
+          need(r.worm, c.n, 0);
+        } else if (r.kind === "pair") {
+          need(r.pair.bait, c.n, 0);
+          need(r.pair.chum, c.n * r.pair.qty, 0);
+        } else if (r.kind === "bait") {
+          need(r.bait.bait, c.n, 0);
+        }
+      }
+      /*
+       * How many casts an item costs. Zero for anything you do not fish for — a worm out of a
+       * composter, a crafted bait, a pot crustacean — since those are already expanded into their
+       * own ingredients and counting them again would double the total.
+       */
+      const castsForItem = (name) =>
+        (FISH_MARKET_RECIPES[name] || CRUSTACEAN_RECIPES[name] ||
+         CRUSTACEAN_RECIPES[_fishCanon(name)] || BAIT_WORM_YIELD[name]) ? 0 : itemCasts(name);
+      for (const [name, qty] of Object.entries(order.items)) order.casts += castsForItem(name) * qty;
+      order.rods = order.casts;                  // one rod per cast, wherever the cast happens
+
+      const orderRows = Object.entries(order.items).sort((a, b) => b[1] - a[1]);
+      /*
+       * The order lists worms, chum and rods as well as fish, and ingredientCost() knows only how
+       * to price a fish or a pot — it read "Red Wiggler" as a species and reported it out of
+       * season at a tier-median cast rate, which is nonsense for something that comes out of a
+       * composter. So the order names each line's real source.
+       */
+      const orderSource = (name) => {
+        if (BAIT_WORM_YIELD[name]) return "composter · ~" + BAIT_WORM_YIELD[name] + " per cycle";
+        if (FISH_MARKET_RECIPES[name]) return "Fish Market · " + (fishBaitHours[name] || 0) + "h per batch";
+        const cr = CRUSTACEAN_RECIPES[name] || CRUSTACEAN_RECIPES[_fishCanon(name)];
+        if (cr) return cr.pot + (cr.chum ? " · " + cr.qty + "× " + cr.chum : " · no chum");
+        const com = fishBestBait(name, season);
+        if (com) return (com.per / (fishPerCast > 0 ? fishPerCast : 1)).toFixed(1) + " casts on " + com.bait + ", n=" + fmt(com.sample);
+        const mine = rowOf(name);
+        if (mine) return mine.castsEach.toFixed(1) + " casts, your log only";
+        const price = P(name);
+        return price > 0 ? "buy · " + price.toFixed(3) + " each" : "—";
+      };
+      const craftHours = Object.entries(order.baits)
+        .reduce((a, [b, n]) => a + (fishBaitHours[b] || 0) * n, 0);
+
+      h += '<div class="pixel-panel" style="padding:12px;margin-bottom:12px;border-color:' + (chosen.length ? "var(--sunpetal)" : "var(--border-brown)") + '">' +
+        '<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">🧺 YOUR ORDER — tick the routes above</div>' +
+        (!chosen.length
+          ? '<div style="font-size:0.5rem;color:var(--text-dim);line-height:1.6">Nothing ticked yet. Tick a route on any Marvel above and everything it needs is added up here — one list, with the shared ingredients merged, so two plans running through Fish Flake do not have you fish for the same Anchovy twice.</div>'
+          : '<div style="font-size:0.5rem;color:var(--text-secondary);margin-bottom:8px;line-height:1.7">' +
+              chosen.map((c) => '<div>✔ <b>' + escHTML(c.marvel) + '</b> <span style="color:var(--text-dim)">via ' + escHTML(c.fish) + ' — ' +
+                (c.r.kind === "random" ? fmt(c.n) + " casts" : fmt(c.n) + "× " + escHTML(c.r.label)) + '</span></div>').join("") +
+            '</div>' +
+            '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:10px">' +
+              [["MARVELS", String(chosen.length), ""],
+               ["TOTAL COST", fmt(order.flower, 0) + " " + sflIcon(), ""],
+               ["TOTAL CASTS", fmt(Math.ceil(order.casts)), "one rod each"],
+               ["TIME FISHING", activePerDay > 0 ? fmt(Math.ceil(order.casts / activePerDay)) + " days" : "—",
+                 activePerDay > 0 ? "at your " + Math.round(activePerDay) + "/day" : ""],
+               ["CRAFTING", craftHours > 0 ? fmt(Math.ceil(craftHours)) + " h" : "—",
+                 craftHours > 0 ? "serial — divide by your slots" : ""]]
+                .map((t) => '<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px">' +
+                  '<div style="font-size:0.44rem;color:var(--text-dim)">' + t[0] + '</div>' +
+                  '<div style="font-size:0.7rem;color:var(--sunpetal);font-weight:bold">' + t[1] + '</div>' +
+                  (t[2] ? '<div style="font-size:0.42rem;color:var(--text-dim)">' + t[2] + '</div>' : "") + '</div>').join("") +
+            '</div>' +
+            (Object.keys(order.baits).length
+              ? '<div style="font-size:0.5rem;color:var(--text-secondary);margin-bottom:6px">🥣 <b>craft:</b> ' +
+                Object.entries(order.baits).sort((a, b) => b[1] - a[1])
+                  .map(([b, n]) => '<b style="color:var(--sunpetal)">' + fmt(n) + '×</b> ' + escHTML(b) +
+                    ' <span style="color:var(--text-dim);font-size:0.42rem">(' + (fishBaitHours[b] || 0) + 'h each)</span>').join(" &nbsp;·&nbsp; ") + '</div>'
+              : "") +
+            '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:360px">' +
+            '<tr style="color:var(--text-dim);font-size:0.45rem"><td style="padding:0 6px 3px 0">you need</td><td style="text-align:right;padding:0 6px 3px">qty</td><td style="padding:0 0 3px 8px">where it comes from</td></tr>' +
+            orderRows.map(([name, qty]) => {
+              const have = +((ownedNow[name] || 0));
+              return '<tr style="border-top:1px solid #20190f">' +
+                '<td style="padding:3px 6px 3px 0">' + escHTML(name) + '</td>' +
+                '<td style="text-align:right;padding:3px 6px;color:var(--sunpetal);font-weight:bold">' + fmt(Math.ceil(qty)) +
+                  (have > 0 ? '<div style="font-size:0.4rem;color:var(--green);font-weight:normal">have ' + fmt(have) + '</div>' : "") + '</td>' +
+                '<td style="padding:3px 0 3px 8px;color:var(--text-dim);font-size:0.44rem">' + escHTML(orderSource(name)) + '</td></tr>';
+            }).join("") +
+            '</table></div>' +
+            '<div style="margin-top:8px"><button class="refresh-btn" onclick="_fishPlanClear()">CLEAR</button></div>') +
+        '</div>';
+
 
       const tr = d.treasure || { items: {}, rods: 0, diffs: 0, total: 0 };
       let trVal = 0;
