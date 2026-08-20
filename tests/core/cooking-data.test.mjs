@@ -20,14 +20,22 @@ test("building list and defaults are consistent", () => {
   assert.equal(BUMPKIN_DEFAULT_RECIPES["Fire Pit"], "Pizza Margherita");
 });
 
-// ── Aged Fish generator (Task 5b) — flowers.html:4948-4955 generates 35 "Aged <fish>"
-// recipes at runtime; the page's live table is 119 recipes (84 static + 35 generated).
-test("recipe table has all 84 static recipes plus 35 generated Aged Fish recipes (119 total)", () => {
+// ── Aged Fish generator (Task 5b) — flowers.html generates one "Aged <fish>" recipe per
+// FISH_BASE_XP entry at runtime; the page's live table is 122 recipes (84 static + 38 generated).
+//
+// 38, not 35: consumables.ts builds AGED_FISH from the WHOLE FISH record, which has 38 fish.
+// Whale Shark / Saw Shark / White Shark were missing from FISH_BASE_XP, so the shed's three
+// biggest recipes did not exist here and their Aged stacks banked no XP at all.
+test("recipe table has all 84 static recipes plus 38 generated Aged Fish recipes (122 total)", () => {
   const keys = Object.keys(COOKING_RECIPES_DATA);
-  assert.equal(keys.length, 119, `expected 119 recipes, got ${keys.length}`);
+  assert.equal(keys.length, 122, `expected 122 recipes, got ${keys.length}`);
   const aged = keys.filter((k) => k.startsWith("Aged "));
-  assert.equal(aged.length, 35, `expected 35 Aged recipes, got ${aged.length}`);
-  assert.equal(Object.keys(FISH_BASE_XP).length, 35);
+  assert.equal(aged.length, 38, `expected 38 Aged recipes, got ${aged.length}`);
+  assert.equal(Object.keys(FISH_BASE_XP).length, 38);
+  // The sharks age at 5x (base > 330) and are the biggest XP items in the game.
+  assert.deepEqual(COOKING_RECIPES_DATA["Aged White Shark"],
+    { building: "Aging Shed", xp: 10000, cookSec: 28800, usesHoney: false });
+  assert.deepEqual(COOKING_INGREDIENTS["Aged White Shark"], { "White Shark": 1, Salt: 200 });
 });
 
 // Spot-check one generated recipe against values independently computed from the

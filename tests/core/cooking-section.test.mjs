@@ -34,7 +34,8 @@ test("Aging Shed is now served, with the level-clamped slot count (not placed-bu
   assert.ok(Math.abs(shed.xpPerCook - 1801.51) < 0.01, `xpPerCook was ${shed.xpPerCook}`);
   assert.equal(shed.cookMinutes, 76, `cookMinutes was ${shed.cookMinutes}`);
   assert.ok(Math.abs(shed.xpPerDay - 204803.25) < 1, `xpPerDay was ${shed.xpPerDay}`);
-  assert.equal(shed.recipes.length, 35, `recipes.length was ${shed.recipes.length}`);
+  // 38 = one per FISH_BASE_XP entry, the three sharks included (AGED_FISH covers all of FISH).
+  assert.equal(shed.recipes.length, 38, `recipes.length was ${shed.recipes.length}`);
 });
 
 test("totalXpPerDay now includes Aging Shed (was under-reporting by 16%)", () => {
@@ -201,11 +202,12 @@ test("back-compat: xpBoosts (string[]) and petStreak keep their exact previous s
 
 test("bankedFood sums XP across ALL recipes owned in inventory, attributed to recipe.building", () => {
   const p = buildCookingSection(farm, {}, { savedRecipes: {}, petSimulate: true });
-  // 81 static-recipe items + 10 Aged Fish stacks the fixture actually holds (Task 5b).
-  // The fixture also holds 1 "Aged Saw Shark" — Saw Shark is not in FISH_BASE_XP (not an
-  // Aging Shed fish), so it never gets a generated recipe and stays uncounted, same as
-  // the live page: 11 distinct "Aged *" stacks - 1 unrecognized = +10 items.
-  assert.equal(p.bankedFood.items.length, 91, `items.length was ${p.bankedFood.items.length}`);
+  // 81 static-recipe items + all 11 Aged Fish stacks the fixture holds (Task 5b).
+  // "Aged Saw Shark" used to be the odd one out: Saw Shark was missing from FISH_BASE_XP, so
+  // no recipe was generated for it and the stack banked nothing. consumables.ts derives
+  // AGED_FISH from the whole FISH record, and the stack sitting in this fixture is the proof
+  // that the shed takes it — so all 11 count now.
+  assert.equal(p.bankedFood.items.length, 92, `items.length was ${p.bankedFood.items.length}`);
   const mashedPotato = p.bankedFood.items.find((i) => i.name === "Mashed Potato");
   assert.ok(mashedPotato, "Mashed Potato should be in bankedFood.items");
   assert.equal(mashedPotato.qty, 90);
@@ -230,6 +232,7 @@ test("bankedFood sums XP across ALL recipes owned in inventory, attributed to re
     { baseXP: 200, qty: 13 }, // Blue Marlin
     { baseXP: 200, qty: 12 }, // Sunfish
     { baseXP: 240, qty: 12 }, // Sea Horse
+    { baseXP: 1920, qty: 1 },  // Saw Shark — 5x band, worth 28,824 on its own
   ];
   const maxXP = (b) => (b <= 200 ? b * 3 : b <= 330 ? b * 4 : b * 5);
   const generalMult = 1.05 * 1.05 * 1.1 * 1.1 * 1.5;
@@ -244,7 +247,7 @@ test("bankedFood sums XP across ALL recipes owned in inventory, attributed to re
   // Direction/size sanity check independent of the exact XP math above: items must
   // increase by exactly the 10 distinct recognized Aged Fish stacks.
   const agedItems = p.bankedFood.items.filter((i) => i.name.startsWith("Aged "));
-  assert.equal(agedItems.length, 10, `expected 10 Aged Fish line items, got ${agedItems.length}`);
+  assert.equal(agedItems.length, 11, `expected 11 Aged Fish line items, got ${agedItems.length}`);
 });
 
 // --- Aging Shed ownership -------------------------------------------------

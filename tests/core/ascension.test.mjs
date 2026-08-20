@@ -89,7 +89,10 @@ test("current state: pre-swamp farm is ready to ascend, standings served", () =>
 });
 
 test("banked food XP: cooked inventory counts toward levels, valued with pet boost", () => {
-  assert.equal(Math.round(out.current.bankedFoodXp), 8170932);
+  // 8,170,932 + 28,824: the fixture holds 1 "Aged Saw Shark", and Saw Shark was missing from
+  // FISH_BASE_XP, so that stack banked nothing. maxXP(1920) = 9,600 x the fixture's 3.0025
+  // aging multiplier = 28,824 — see cooking-section.test.mjs for the full derivation.
+  assert.equal(Math.round(out.current.bankedFoodXp), 8199756);
   // the pin would fail if the pet ×1.5 were dropped: without it the bank is ~⅔ of this
   assert.ok(out.current.bankedFoodXp > 0);
 });

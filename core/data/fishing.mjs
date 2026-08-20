@@ -17,7 +17,8 @@ export const FISH_TIER_MAP = {
   "Tuna":"expert","Mahi Mahi":"expert","Blue Marlin":"expert","Oarfish":"expert",
   "Football Fish":"expert","Sunfish":"expert","Coelacanth":"expert","Trout":"expert",
   "Walleye":"expert","Weakfish":"expert","Rock Blackfish":"expert","Cobia":"expert",
-  "Barred Knifejaw":"expert","Parrotfish":"expert"
+  "Barred Knifejaw":"expert","Parrotfish":"expert",
+  "Whale Shark":"expert","Saw Shark":"expert","White Shark":"expert"
 };
 
 // Worm-bait: avg yield per composter cycle (game roll: 2-4 / 2-3 / 1-3)

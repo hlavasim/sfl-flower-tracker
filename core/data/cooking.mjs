@@ -114,7 +114,16 @@ export const FISH_BASE_XP = {
   "Football Fish": 200, "Sunfish": 200, "Coelacanth": 410,
   "Angelfish": 250, "Halibut": 220, "Parrotfish": 440, "Porgy": 250,
   "Muskellunge": 250, "Trout": 330, "Walleye": 210, "Weakfish": 210,
-  "Rock Blackfish": 320, "Cobia": 310, "Tilapia": 190
+  "Rock Blackfish": 320, "Cobia": 310, "Tilapia": 190,
+  /*
+   * The three sharks were missing, and they are the biggest XP in the game.
+   *
+   * consumables.ts derives AGED_FISH from the WHOLE FISH record, so the shed takes every fish
+   * there is — an "Aged Saw Shark" is already sitting in the fixture's inventory, which is
+   * proof enough. Left out of this table they scored 0 aged XP and their Aged stacks went
+   * uncounted in banked food. No Fish Market recipe wants any of them.
+   */
+  "Whale Shark": 1370, "Saw Shark": 1920, "White Shark": 2000
 };
 
 // Ingredient lists for cost calculation (from sfl.world/info/cooking)

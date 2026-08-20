@@ -5043,7 +5043,17 @@
       "Football Fish": 200, "Sunfish": 200, "Coelacanth": 410,
       "Angelfish": 250, "Halibut": 220, "Parrotfish": 440, "Porgy": 250,
       "Muskellunge": 250, "Trout": 330, "Walleye": 210, "Weakfish": 210,
-      "Rock Blackfish": 320, "Cobia": 310, "Tilapia": 190
+      "Rock Blackfish": 320, "Cobia": 310, "Tilapia": 190,
+      /*
+       * The three sharks were missing, and they are the biggest XP in the game.
+       *
+       * consumables.ts derives AGED_FISH from the WHOLE FISH record, so the shed takes every
+       * fish there is — an "Aged Saw Shark" is already sitting in this farm's inventory, which
+       * is proof enough. Left out of this table they scored 0 aged XP, fell back to the rough
+       * ITEM_XP_VALUES figures (800/1000/750) everywhere else, and their Aged stacks went
+       * uncounted in banked food. No Fish Market recipe wants any of them.
+       */
+      "Whale Shark": 1370, "Saw Shark": 1920, "White Shark": 2000
     };
 
     // Fish tier (per game source FISH definition) — used for +1 fish boosts that target a tier
@@ -5060,7 +5070,8 @@
       "Tuna":"expert","Mahi Mahi":"expert","Blue Marlin":"expert","Oarfish":"expert",
       "Football Fish":"expert","Sunfish":"expert","Coelacanth":"expert","Trout":"expert",
       "Walleye":"expert","Weakfish":"expert","Rock Blackfish":"expert","Cobia":"expert",
-      "Barred Knifejaw":"expert","Parrotfish":"expert"
+      "Barred Knifejaw":"expert","Parrotfish":"expert",
+      "Whale Shark":"expert","Saw Shark":"expert","White Shark":"expert"
     };
 
     // Expected fish per cast for a given tier — accounts for +1 yield collectibles & skills
@@ -5954,7 +5965,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.42</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.43</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5981,6 +5992,11 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.43", items: [
+          { t: "feat", text: "<b>SAFE TO AGE — the fish no bait recipe wants, with what you hold of each.</b> The Fish Market's four baits eat <b>sixteen</b> season-specific ingredient lists between them, so “may I age this?” is answered per fish <i>and</i> per season, and nothing on the page answered it. Twelve fish are on <b>none</b> of the sixteen — Rock Blackfish, Hammerhead, Parrotfish, the three sharks, Horse Mackerel, Trout, Coelacanth, Ray, Squid, Barred Knifejaw — and on this farm that is <b>203 fish carrying 400,306 aged XP</b>, listed with icons, your stock, aged XP each, the salt it burns and the rack time. <b>Salt is the binding input, not the fish</b>: that stock wants 7,514 salt against 7,457 held. A second table covers the <b>17 fish no winter recipe touches</b> (another 874 fish, 643,232 XP) — free today, but each names the season and bait that wants it back, because ageing those is a bet, not a free lunch. Crab Stick never competes: it is all crustaceans, which the shed will not take." },
+          { t: "fix", text: "<b>The three sharks were missing from the fish XP table, and they are the biggest XP in the game.</b> <code>consumables.ts</code> derives <code>AGED_FISH</code> from the <b>whole</b> FISH record, so the shed takes every fish there is — an <b>Aged Saw Shark</b> was already sitting in inventory, which settles it. Whale Shark (1,370), Saw Shark (1,920) and White Shark (2,000) are all in the 5× band: an <b>Aged White Shark is 10,720 XP</b>, more than any other single item. Left out, they scored zero aged XP, fell back to the rough <code>ITEM_XP_VALUES</code> figures (750/800/1,000) everywhere else, and their Aged stacks were <b>skipped in banked food</b> — the Bumpkin page's bank was understated by 28,824 XP on the test farm for one stack of one shark. The Aging Shed now offers 38 recipes, not 35." },
+          { t: "fix", text: "A fish's stock is read from the inventory case-insensitively. The game spells two of them its own way — <b>“Hammerhead shark”</b> and <b>“Football fish”</b> — while the XP table uses the consumables spelling, so a straight lookup reported <b>0 held</b> for 17 Hammerheads, and “0 held” is indistinguishable from “nothing to process”, which is the whole answer this section exists to give." },
+        ] },
         { ver: "v5.42", items: [
           { t: "feat", text: "<b>Every bait priced in all four seasons, with the stock you already hold.</b> A recipe changes with the season and its cost with it, so “what does a Fish Stick cost” has four answers and only one of them is today’s. Each bait now shows all four side by side — that season’s recipe, that season’s rates, and how many your current inventory already covers — with the live season outlined and the cheapest fully-priced one in green. <b>Waiting is a real strategy</b>: Fish Stick is 2.70 in winter against 2.02 in spring, and Crab Stick runs 5.51 now against 2.36 in autumn." },
           { t: "fix", text: "<b>A missing price is not a price of zero, and it nearly sent you off to wait three months.</b> Summer’s Crab Stick is baited with Moonfur and Chewed Bone chum, neither of which the value engine prices — so both resolved to 0 and summer read <b>0.11 against winter’s 5.51</b>, a fiftyfold saving that was never measured. Seasons with an unpriced ingredient now show <b>≥</b>, name what could not be priced, and are barred from being crowned cheapest." },
@@ -21868,6 +21884,166 @@
         '<div style="font-size:0.46rem;color:#e8a060;line-height:1.6">⚠ A bait is only worth its <b>availability</b>, not its XP — each buys one fish for many times what a worm cast costs (' + costPerCast.toFixed(3) + '), so you use them to reach a fish that will not turn up on its own, or to farm a map piece, never to grind XP.' +
         (baits.some((b) => b.est) ? ' A <b style="color:#e8a060">~</b> means an ingredient you have never caught, priced at the median rate of its tier — an estimate, but never a reason to drop the route.' : "") +
         (rows.some((r) => r.qty < 20) ? ' Rates from small samples carry their catch count, because a fish landed 10 times sets its own price to within a factor of two at best.' : "") + '</div></div>';
+
+      /*
+       * WHAT MAY GO IN THE AGING SHED.
+       *
+       * The Fish Market's four baits eat SIXTEEN season-specific ingredient lists, so a fish on
+       * one of them is bait, not XP: age it and you have to catch it again before you can craft.
+       * A fish on none of the sixteen is never an ingredient in any season, so it can go in the
+       * shed with nothing given up. Crab Stick never competes at all — it is entirely
+       * crustaceans, which the shed does not take.
+       *
+       * The shed takes EVERY fish in the game (consumables.ts derives AGED_FISH from the whole
+       * FISH record), so the universe here is FISH_BASE_XP, sharks included. Stock is the LIVE
+       * inventory rather than the catch log: the question is what is sitting there right now
+       * waiting to be processed, not what has ever been landed.
+       */
+      const agingWants = {};                                  // fish (lower-case) → [{bait, sn, qty}]
+      for (const [_ab, _as] of Object.entries(FISH_MARKET_RECIPES))
+        for (const [_asn, _ai] of Object.entries(_as))
+          for (const [_af, _aq] of Object.entries(_ai)) {
+            const k = _af.toLowerCase();
+            (agingWants[k] = agingWants[k] || []).push({ bait: _ab, sn: _asn, qty: _aq });
+          }
+      /*
+       * A dish is not a bait ingredient, but it is still a claim on the fish. Horse Mackerel and
+       * Squid are wanted by nothing the Fish Market makes and by Fish Burger and Fried Calamari
+       * respectively — so they are free of the recipes without being free of everything, and
+       * calling them simply "free" would be wrong.
+       */
+      const agingDishes = {};
+      for (const [_ad, _ai] of Object.entries(COOKING_INGREDIENTS)) {
+        if (/^Aged /.test(_ad)) continue;
+        for (const _af of Object.keys(_ai)) {
+          if (FISH_BASE_XP[_af] === undefined) continue;
+          const k = _af.toLowerCase();
+          (agingDishes[k] = agingDishes[k] || []).push(_ad);
+        }
+      }
+      // Inventory keys arrive in the GAME's spelling ("Hammerhead shark", "Football fish"), which
+      // is not the spelling of the XP table, so stock is matched case-insensitively — and the two
+      // odd ones out need the game's spelling back to hit the icon map.
+      const ownedLc = {};
+      for (const [_ok, _ov] of Object.entries(ownedNow)) ownedLc[String(_ok).toLowerCase()] = +_ov || 0;
+      const agingIconName = { "Hammerhead Shark": "Hammerhead shark", "Football Fish": "Football fish" };
+      /*
+       * Ageing time carries the shed's own boosts (Speedy Aging x0.9, Salt Sculpture L5+ x0.95),
+       * taken from the same detectCookingBoosts the Bumpkin page uses so the two cannot drift. A
+       * backlog estimate that ignored them would be wrong by exactly those multipliers — this
+       * farm's Hammerhead jobs run 2h51m, not the unboosted 3h.
+       */
+      const agingTimeMult = !_fishFarm ? 1 : detectCookingBoosts(_fishFarm).timeBoosts
+        .filter((b) => (b.buildings || ["Aging Shed"]).includes("Aging Shed") &&
+                       !(b.excludeBuildings || []).includes("Aging Shed"))
+        .reduce((m, b) => m * b.multiplier, 1);
+
+      const agingRows = Object.keys(FISH_BASE_XP).map((name) => {
+        const base = FISH_BASE_XP[name];
+        const wants = agingWants[name.toLowerCase()] || [];
+        const qty = ownedLc[name.toLowerCase()] || 0;
+        const agedXp = getAgingMaxXP(base) * primeFactor;
+        const saltEach = getAgingSaltCost(base);
+        return { name, base, qty, wants, agedXp, saltEach,
+                 now: wants.filter((w) => w.sn === season),
+                 tier: _tierOf(name) || "?",
+                 dishes: agingDishes[name.toLowerCase()] || [],
+                 hours: (getAgingTimeSec(base) * agingTimeMult) / 3600,
+                 xpWait: qty * agedXp, saltWait: qty * saltEach };
+      });
+      // Stock first — the point is what to go and process — then value, so a species you hold
+      // none of still ranks by what it will be worth when you land one.
+      const agingSort = (a, b) => b.xpWait - a.xpWait || b.agedXp - a.agedXp;
+      const agingFree = agingRows.filter((r) => !r.wants.length).sort(agingSort);
+      const agingOffSeason = agingRows.filter((r) => r.wants.length && !r.now.length).sort(agingSort);
+      const agingReserved = agingRows.filter((r) => r.now.length)
+        .sort((a, b) => a.now[0].bait.localeCompare(b.now[0].bait) || b.now[0].qty - a.now[0].qty);
+
+      const agingTot = agingFree.reduce((a, r) => ({
+        fish: a.fish + r.qty, xp: a.xp + r.xpWait, salt: a.salt + r.saltWait, hours: a.hours + r.qty * r.hours,
+      }), { fish: 0, xp: 0, salt: 0, hours: 0 });
+      const agingShedState = (_fishFarm && _fishFarm.agingShed) || null;
+      const agingSlots = Math.min(Math.max((agingShedState && agingShedState.level) || 1, 1), 6);
+      const agingBusy = ((agingShedState && agingShedState.racks && agingShedState.racks.aging) || []).length;
+      const saltHeld = ownedLc["salt"] || 0;
+      const agingTiles = [
+        ["FREE TO AGE", fmt(agingTot.fish), agingFree.length + " species no recipe wants"],
+        ["AGED XP WAITING", fmt(agingTot.xp), "in that stock, at your prime rate"],
+        ["SALT IT COSTS", fmt(agingTot.salt), "you hold " + fmt(saltHeld) +
+          (saltP > 0 ? " · " + fmt(agingTot.salt * saltP, 1) + " " + sflIcon() : "")],
+        ["RACK", agingBusy + " / " + agingSlots, "slots busy right now"],
+        ["TO CLEAR IT", formatCookTime((agingTot.hours * 3600) / agingSlots),
+          agingSlots + " slot" + (agingSlots === 1 ? "" : "s") + " running non-stop"],
+      ];
+      const agingHead = '<tr style="color:var(--text-dim);font-size:0.45rem">' +
+        '<td style="padding:0 6px 3px 0">fish</td><td style="padding:0 6px 3px">tier</td>' +
+        '<td style="text-align:right;padding:0 6px 3px">you hold</td>' +
+        '<td style="text-align:right;padding:0 6px 3px">raw XP</td>' +
+        '<td style="text-align:right;padding:0 6px 3px">aged XP each</td>' +
+        '<td style="text-align:right;padding:0 6px 3px">salt each</td>' +
+        '<td style="text-align:right;padding:0 6px 3px">ages in</td>' +
+        '<td style="text-align:right;padding:0 6px 3px">XP waiting</td>' +
+        '<td style="text-align:right;padding:0 6px 3px">salt needed</td>' +
+        '<td style="padding:0 0 3px">also wanted by</td></tr>';
+      const agingRowHtml = (r, note) => '<tr style="border-top:1px solid #20190f">' +
+        '<td style="padding:3px 6px 3px 0;white-space:nowrap">' + _mIcon(agingIconName[r.name] || r.name, 14) +
+          ' <span style="color:' + (r.qty > 0 ? "var(--text-secondary)" : "var(--text-dim)") + '">' + escHTML(r.name) + '</span></td>' +
+        '<td style="padding:3px 6px;color:var(--text-dim);font-size:0.44rem">' + escHTML(r.tier) + '</td>' +
+        '<td style="text-align:right;padding:3px 6px;font-weight:bold;color:' + (r.qty > 0 ? "var(--sunpetal)" : "var(--text-dim)") + '">' + fmt(r.qty) + '</td>' +
+        '<td style="text-align:right;padding:3px 6px;color:var(--text-dim)">' + fmt(r.base) + '</td>' +
+        '<td style="text-align:right;padding:3px 6px;color:var(--text-secondary)">' + fmt(r.agedXp) + '</td>' +
+        '<td style="text-align:right;padding:3px 6px;color:var(--text-dim)">' + fmt(r.saltEach) + '</td>' +
+        '<td style="text-align:right;padding:3px 6px;color:var(--text-dim)">' + r.hours.toFixed(1) + 'h</td>' +
+        '<td style="text-align:right;padding:3px 6px;font-weight:bold;color:' + (r.xpWait > 0 ? "var(--green)" : "var(--text-dim)") + '">' + (r.xpWait > 0 ? fmt(r.xpWait) : "—") + '</td>' +
+        '<td style="text-align:right;padding:3px 6px;color:#e8a060">' + (r.saltWait > 0 ? fmt(r.saltWait) : "—") + '</td>' +
+        '<td style="padding:3px 0;font-size:0.44rem;color:' + (note ? "#e8a060" : "var(--text-dim)") + '">' + (note || "nothing") + '</td></tr>';
+
+      h += '<div class="pixel-panel" style="padding:12px;margin-bottom:12px">' +
+        '<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">🧂 SAFE TO AGE — the fish no bait recipe wants</div>' +
+        '<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">The four baits above eat <b>sixteen</b> season-specific ingredient lists between them, so “may I age this?” is answered per fish <i>and</i> per season. These <b>' + agingFree.length +
+        '</b> are on <b>none</b> of the sixteen — no season, no bait, ever — so the shed costs you nothing but salt. <b>Crab Stick never competes</b>: it is all crustaceans, which the shed will not take. The shed does take <b>every fish in the game</b>, the three sharks included, and an <b>Aged White Shark is ' +
+        fmt(getAgingMaxXP(FISH_BASE_XP["White Shark"]) * primeFactor) + ' XP</b> — the biggest single item there is. Stock is your live inventory; aged XP is on the same basis as the table further up (prime folded in at <b>' +
+        (getAgingPrimeChance(_fishFarm) * 100).toFixed(0) + '%</b> → ×' + primeFactor.toFixed(3) + '), and ageing times carry your Speedy Aging / Salt Sculpture boosts (×' + agingTimeMult.toFixed(2) + ').</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px;margin-bottom:8px">' +
+        agingTiles.map((t) => '<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px">' +
+          '<div style="font-size:0.44rem;color:var(--text-dim)">' + t[0] + '</div>' +
+          '<div style="font-size:0.72rem;color:var(--sunpetal);font-weight:bold">' + t[1] + '</div>' +
+          '<div style="font-size:0.42rem;color:' + (t[0] === "SALT IT COSTS" && saltHeld < agingTot.salt ? "#e8a060" : "var(--text-dim)") + '">' + t[2] + '</div></div>').join("") +
+        '</div>' +
+        '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:660px">' + agingHead +
+        agingFree.map((r) => agingRowHtml(r, r.dishes.length ? r.dishes.map(escHTML).join(", ") : "")).join("") +
+        '</table></div>' +
+        (saltHeld < agingTot.salt
+          ? '<div style="font-size:0.46rem;color:#e8a060;margin-top:6px;line-height:1.6">⚠ The whole free stock needs <b>' + fmt(agingTot.salt) + ' salt</b> and you hold <b>' + fmt(saltHeld) + '</b> — short by ' + fmt(agingTot.salt - saltHeld) + '. Salt is the binding input here, not the fish.</div>'
+          : "") +
+        (agingFree.some((r) => r.dishes.length)
+          ? '<div style="font-size:0.46rem;color:var(--text-dim);margin-top:6px;line-height:1.6">The last column is the honest caveat: <b>no bait recipe</b> wants these, but a <b>dish</b> still can — ' +
+            agingFree.filter((r) => r.dishes.length).map((r) => escHTML(r.name) + " → " + escHTML(r.dishes.join(", "))).join(" · ") +
+            '. Age them freely if you do not cook those.</div>'
+          : "") +
+        '</div>';
+
+      /*
+       * The second tier, and the whole reason the answer is not one list: a fish can be an
+       * ingredient in ONE season only. Halibut is autumn's Fish Flake and nothing else, so in
+       * winter it is as free as a shark — until autumn, when you would have to catch it again.
+       * Bigger stock than the free list, and a real decision rather than a free lunch.
+       */
+      h += '<div class="pixel-panel" style="padding:12px;margin-bottom:12px">' +
+        '<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">⏳ FREE THIS SEASON — wanted back in another one</div>' +
+        '<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">No <b>' + escHTML(season) +
+        '</b> recipe touches these <b>' + agingOffSeason.length + '</b>, so nothing you can craft today needs them — but the season named on each row does. Ageing them now is a bet that you will not want that bait when its season comes round, or that you will re-catch what it needs. Together they are <b>' +
+        fmt(agingOffSeason.reduce((s, r) => s + r.qty, 0)) + ' fish and ' + fmt(agingOffSeason.reduce((s, r) => s + r.xpWait, 0)) +
+        ' aged XP</b> — well past the free list, which is exactly why this is a decision and not a default.</div>' +
+        '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:660px">' +
+        agingHead.replace("also wanted by", "wanted back by") +
+        agingOffSeason.map((r) => agingRowHtml(r, [...new Set(r.wants.map((w) => w.qty + "× " + w.bait + " (" + w.sn + ")"))].map(escHTML).join(", ") +
+          (r.dishes.length ? " · " + escHTML(r.dishes.join(", ")) : ""))).join("") +
+        '</table></div>' +
+        '<div style="font-size:0.46rem;color:var(--text-dim);margin-top:6px;line-height:1.6">And the other side of the line, for completeness — <b>' + escHTML(season) +
+        '</b>’s baits eat these, so keep them: ' +
+        agingReserved.map((r) => '<b>' + escHTML(r.name) + '</b> (' + r.now.map((w) => w.qty + "× " + escHTML(w.bait)).join(", ") + ', hold ' + fmt(r.qty) + ')').join(" · ") +
+        '. Crab Stick’s crustaceans are absent from both tables: the shed cannot take them at all.</div></div>';
 
       /*
        * MARINE MARVEL PLANNER.
