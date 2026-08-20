@@ -152,7 +152,11 @@ function renderDiffPage(opts = {}) {
     if (u.includes("farm-diff-agg")) {
       return json({ periods: SNAPS.slice().reverse().map((s, i) => ({ period: s.captured_at, count: 3, diff: s.diff })) });
     }
-    if (u.includes("farm-history")) return json({ snapshots: SNAPS, total: opts.total || SNAPS.length });
+      if (u.includes("farm-history")) {
+      return json(opts.empty && u.includes("from=")
+        ? { snapshots: [], total: 0 }          // a window that matches no capture at all
+        : { snapshots: SNAPS, total: opts.total || SNAPS.length });
+    }
     if (u.includes("currency-api")) return json({ usd: { czk: 23 } });
     return json({});
   };
@@ -278,4 +282,23 @@ test("from/to is five-minute-grained and reaches the endpoint that buckets by it
   assert.equal(agg.length, 1, `one aggregate fetch: ${JSON.stringify(agg)}`);
   assert.ok(/group=day/.test(agg[0]) && /from=/.test(agg[0]),
     `grouped fetches carry the range: ${agg[0]}`);
+});
+
+test("a range that matches no snapshot still leaves a way back out", async () => {
+  /*
+   * Measured against production: group=day bounded to the last 7 minutes returns zero periods,
+   * because captures land every ~10-20 minutes. If the empty state dropped the slicer with it,
+   * the only control that could widen or clear that range would be gone and the page would need
+   * reloading to recover — so the empty state keeps the slicer and says what is going on.
+   */
+  const page = renderDiffPage({ empty: true });
+  await page.renderDiff({ farm: { bumpkin: {}, inventory: {} } });
+  await page.api._diffQuickRange(1);
+  const html = page.html();
+  assert.ok(/No data found/.test(html), "the empty state is still shown");
+  assert.ok(/_diffClearRange\(\)/.test(html), "CLEAR is still reachable — the range is escapable");
+  assert.ok(/diff-slicer/.test(html) && /diff-from/.test(html), "and so are the FROM/TO boxes");
+  assert.ok(/since the previous one/.test(html),
+    "with the reason a short window can be empty: a diff covers the time since the last capture");
+  assert.equal(page.bars(), 0, "and no chart is drawn");
 });

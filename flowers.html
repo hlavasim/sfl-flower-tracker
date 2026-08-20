@@ -6036,6 +6036,7 @@
         { ver: "v5.46", items: [
           { t: "feat", text: "<b>The diff timeline is a window with a slicer, not a wall of bars.</b> It drew every period it had loaded, so raw mode ran off the right-hand edge and <b>“now” — the one bar you open the page for — was the one you had to scroll to reach</b>. It now shows the <b>newest 20</b> by default (remembered per visit, with 50 / 100 / ALL beside it) and everything under the chart describes that window: net, gains, losses and the count card, which carries “of N” so the size of the load is never hidden. A scrubber pans the window without refetching — <b>◀ ▶</b> page by a full window, <b>NOW</b> jumps back to the newest, and dragging updates the label live but only repaints on release, because rebuilding a slider mid-drag drops the handle." },
           { t: "feat", text: "<b>FROM / TO, in five-minute steps, on both raw and grouped periods.</b> Raw was hard-wired to the newest 50 snapshots, which cannot express “raw for the last five days” (172 snapshots here) — it is a real range query now, capped at 500 and told you when the range holds more. The grouped side is the interesting half: the bounds go to the <b>server</b>, so <code>group=day</code> over <b>22:33–22:40</b> returns <b>one period holding exactly that session</b> rather than the whole day. Filtering day buckets after the fact could only ever hand back the whole day. LAST <b>6h / 24h / 5d / 30d</b> are one click." },
+          { t: "fix", text: "A from/to window that matches no snapshot no longer traps you: the empty state keeps the slicer, so CLEAR and the boxes are still there instead of a reload being the only way out. It also says why it can be empty — <b>captures land every ~10–20 minutes and a diff covers the time SINCE the previous one</b>, so a seven-minute window can hold none at all, and the changes made at the start of one arrive with the capture <b>after</b> it." },
         ] },
         { ver: "v5.45", items: [
           { t: "fix", text: "<b>SAFE TO AGE now sorts by what one fish pays, with empty stock at the bottom of each half.</b> A rack slot is the scarce thing, so the row order has to answer “is this one worth a slot”, and by that measure a single <b>White Shark (10,720)</b> beats a hundred <b>Rock Blackfish (1,372 each)</b> — sorting on the pile total buried both sharks four rows down behind a species worth an eighth as much per slot. Species you hold <b>none</b> of now drop to the end of their own half, both above and below the divider: they cannot be racked today, and in the middle of the list they only separated two fish you could act on. Barred Knifejaw is the case in point — 3,109 a piece and nothing to rack." },
@@ -30281,7 +30282,24 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         }
 
         if (processed.length === 0) {
-          out += `<div class="pixel-panel pixel-font" style="padding:20px;text-align:center;color:var(--text-secondary)">No data found for this period.</div>`;
+          /*
+           * The slicer is rendered even with nothing to show, or a range that matches no snapshot
+           * traps you: the only control that could widen or clear it would itself be gone, and
+           * the way out would be reloading the page.
+           */
+          out += renderSlicer(diffWindowRange(0, windowSize, null));
+          const ranged = !!(rangeFrom || rangeTo);
+          out += `<div class="pixel-panel pixel-font" style="padding:20px;text-align:center;color:var(--text-secondary);font-size:0.5625rem;line-height:1.8">
+            No data found for this period.` +
+            /*
+             * A window shorter than the capture interval is the likely cause and reads exactly
+             * like "nothing happened". Snapshots land every ~10-20 minutes and a diff covers the
+             * time SINCE the previous one, so the changes made at 22:33 arrive with the capture
+             * after them — the window has to reach past that capture, not stop at the last action.
+             */
+            (ranged
+              ? `<div style="margin-top:8px;font-size:0.5rem;color:var(--text-dim)">Snapshots land every ~10–20 minutes and a diff covers the time <b>since the previous one</b>, so a window shorter than that can hold none at all — and the changes you made at the start of it arrive with the capture <b>after</b> them. Widen the TO end past the next capture, or press CLEAR.</div>`
+              : "") + `</div>`;
           document.getElementById("diff-content").innerHTML = out;
           return;
         }
