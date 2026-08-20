@@ -62,14 +62,32 @@ test("a from/to window normalises, tolerates one open end, and fixes a reversed 
  * (the suite runs with no dependencies at all), so the handler cannot be imported and run here;
  * what is checked is the wiring that carries the bounds into the query.
  */
-const API = readFileSync(
-  path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.."), "api/farm-diff-agg.js"),
-  "utf8",
-);
+const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const API = readFileSync(path.join(ROOT_DIR, "api/farm-diff-agg.js"), "utf8");
 
-test("farm-diff-agg bounds its buckets with from/to, through the same parser the page uses", () => {
-  assert.ok(/import \{ parseDiffRange \} from "\.\.\/core\/sections\/diff\.mjs"/.test(API),
-    "the endpoint parses the range with core's parser, not its own");
+test("farm-diff-agg bounds its buckets with from/to, by the same parser the page uses", () => {
+  /*
+   * The parser is COPIED into the handler, not imported. A .js handler in a package without
+   * "type": "module" builds fine with an `import ... from "../core/sections/diff.mjs"` and then
+   * fails at runtime with FUNCTION_INVOCATION_FAILED on every request — which is how this
+   * endpoint went from working to 500 on all grouped periods with a green build. So the copy is
+   * deliberate, and this pins it to core's so the two cannot drift.
+   */
+  const norm = (x) => x.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "").replace(/\s+/g, " ").trim();
+  const grab = (src) => {
+    const i = src.indexOf("function parseDiffRange");
+    assert.ok(i > 0, "parseDiffRange is declared");
+    const open = src.indexOf("{", i);
+    let d = 0;
+    for (let k = open; k < src.length; k++) {
+      if (src[k] === "{") d++;
+      else if (src[k] === "}" && --d === 0) return src.slice(i, k + 1);
+    }
+  };
+  const CORE = readFileSync(path.join(ROOT_DIR, "core/sections/diff.mjs"), "utf8");
+  assert.equal(norm(grab(API)), norm(grab(CORE)), "the handler's copy matches core's, body for body");
+  assert.ok(!/from "\.\.\/core\//.test(API),
+    "and it does NOT import across the api/ boundary — that is what crashed the function");
   assert.ok(/const range = parseDiffRange\(req\.query\.from, req\.query\.to\)/.test(API));
   // Both CTEs — the one summing values and the one counting snapshots — must carry the bounds,
   // or the counts describe a different set of rows from the sums.

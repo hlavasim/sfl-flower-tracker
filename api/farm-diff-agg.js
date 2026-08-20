@@ -1,5 +1,28 @@
 import { getPool } from "./_db.js";
-import { parseDiffRange } from "../core/sections/diff.mjs";
+
+/*
+ * parseDiffRange is DUPLICATED from core/sections/diff.mjs rather than imported, and the
+ * duplication is deliberate.
+ *
+ * This handler is a .js file in a package with no "type": "module". Importing the .mjs from it
+ * deployed cleanly and then failed at runtime with FUNCTION_INVOCATION_FAILED on every call —
+ * the whole endpoint 500'd, grouped periods included, while the build stayed green. (compute.mjs
+ * imports core happily; it is itself .mjs.) Renaming this file would fix the import and change
+ * the deployed function, so the smaller, testable move is to carry the twelve lines here.
+ *
+ * tests/core/diff-window.test.mjs asserts this copy is identical to core's, so it cannot drift.
+ */
+function parseDiffRange(from, to) {
+  const one = (v) => {
+    if (v === undefined || v === null || v === "") return null;
+    const t = new Date(v);
+    return Number.isNaN(t.getTime()) ? null : t.toISOString();
+  };
+  let a = one(from);
+  let b = one(to);
+  if (a && b && a > b) { const t = a; a = b; b = t; }
+  return { from: a, to: b };
+}
 
 const ALLOWED_FARMS = new Set([155498, 1260204733777858]);
 
