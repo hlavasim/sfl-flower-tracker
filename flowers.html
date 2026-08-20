@@ -5965,7 +5965,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.44</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.45</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5992,6 +5992,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.45", items: [
+          { t: "fix", text: "<b>SAFE TO AGE now sorts by what one fish pays, with empty stock at the bottom of each half.</b> A rack slot is the scarce thing, so the row order has to answer “is this one worth a slot”, and by that measure a single <b>White Shark (10,720)</b> beats a hundred <b>Rock Blackfish (1,372 each)</b> — sorting on the pile total buried both sharks four rows down behind a species worth an eighth as much per slot. Species you hold <b>none</b> of now drop to the end of their own half, both above and below the divider: they cannot be racked today, and in the middle of the list they only separated two fish you could act on. Barred Knifejaw is the case in point — 3,109 a piece and nothing to rack." },
+        ] },
         { ver: "v5.44", items: [
           { t: "fix", text: "<b>SAFE TO AGE is one complete table, not one table per season.</b> The season-scoped “FREE THIS SEASON” panel is gone: it read as a second answer to the same question, and “free this winter” is not free — Halibut is autumn's Fish Flake whatever the calendar says. Now <b>every fish the shed takes is in one list</b>: the <b>12</b> that no recipe wants in any season above the line, then a divider, then the other <b>26</b> with the bait and the seasons that want each one — <b>4× Fish Flake (all seasons)</b> for Anchovy, <b>2× Fish Flake (autumn)</b> for Halibut — with the season you are in marked <b>· now</b>, so “wanted eventually” and “wanted today” stay apart without splitting the table. The tiles still count only the genuinely free stock (203 fish, 400,306 XP, 7,514 salt against 7,457 held), and the both-sides-of-the-line total is stated separately underneath rather than mixed into it." },
         ] },
@@ -21954,9 +21957,15 @@
                  hours: (getAgingTimeSec(base) * agingTimeMult) / 3600,
                  xpWait: qty * agedXp, saltWait: qty * saltEach };
       });
-      // Stock first — the point is what to go and process — then value, so a species you hold
-      // none of still ranks by what it will be worth when you land one.
-      const agingSort = (a, b) => b.xpWait - a.xpWait || b.agedXp - a.agedXp;
+      /*
+       * Ordered by what ONE fish pays, not by the size of the pile.
+       *
+       * The scarce thing is a rack slot, so the question a row answers is "is this one worth a
+       * slot" — and by that measure a single White Shark (10,720) beats a hundred Rock Blackfish
+       * (1,372 each). Anything you hold none of drops to the bottom of its own half: it cannot
+       * be processed today, and left in place it sits between two fish you could act on.
+       */
+      const agingSort = (a, b) => (b.qty > 0) - (a.qty > 0) || b.agedXp - a.agedXp || b.qty - a.qty;
       const agingFree = agingRows.filter((r) => !r.wants.length).sort(agingSort);
       const agingTaken = agingRows.filter((r) => r.wants.length).sort(agingSort);
       /*
@@ -22026,7 +22035,7 @@
         '<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">The four baits above eat <b>sixteen</b> season-specific ingredient lists between them, and the <b>' + agingFree.length +
         '</b> above the line are on <b>none</b> of the sixteen — no season, no bait, ever — so the shed costs you nothing but salt. Below the line is <b>every other fish the shed takes</b>, with the bait and the season that wants it, so the whole ' + agingRows.length +
         ' are in one place rather than split into a second answer. <b>Crab Stick never competes</b>: it is all crustaceans, which the shed will not take. It does take <b>every fish in the game</b>, the three sharks included — an <b>Aged White Shark is ' +
-        fmt(getAgingMaxXP(FISH_BASE_XP["White Shark"]) * primeFactor) + ' XP</b>, the biggest single item there is. Stock is your live inventory; aged XP is on the same basis as the table further up (prime folded in at <b>' +
+        fmt(getAgingMaxXP(FISH_BASE_XP["White Shark"]) * primeFactor) + ' XP</b>, the biggest single item there is. Rows run by <b>aged XP per fish</b> — a rack slot is the scarce thing, so one White Shark beats a hundred Rock Blackfish — with anything you hold <b>none</b> of pushed to the bottom of its half. Stock is your live inventory; aged XP is on the same basis as the table further up (prime folded in at <b>' +
         (getAgingPrimeChance(_fishFarm) * 100).toFixed(0) + '%</b> → ×' + primeFactor.toFixed(3) + '), and ageing times carry your Speedy Aging / Salt Sculpture boosts (×' + agingTimeMult.toFixed(2) + ').</div>' +
         '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px;margin-bottom:8px">' +
         agingTiles.map((t) => '<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px">' +

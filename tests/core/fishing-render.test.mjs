@@ -556,11 +556,24 @@ test("the totals are the free stock, its XP, and the salt it would burn", () => 
   const plain = panel.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
   assert.ok(/both sides of the line together: 22 fish , 41,486 aged XP and 780 salt/.test(plain),
     `the complete total is stated: ${plain.slice(plain.indexOf("both sides"), plain.indexOf("both sides") + 160)}`);
-  // Row order follows the stock: the biggest pile of XP first, not the rarest fish.
-  assert.ok(panel.indexOf(">Rock Blackfish<") < panel.indexOf(">White Shark<"),
-    "10 Rock Blackfish outrank 1 White Shark");
-  assert.ok(panel.indexOf(">White Shark<") < panel.indexOf(">Saw Shark<"),
-    "and a shark you hold outranks the same shark you do not");
+  /*
+   * Order is by what ONE fish pays, because a rack slot is the scarce thing — so 1 White Shark
+   * (10,720 each) outranks 10 Rock Blackfish (1,372 each) even though the pile is worth more in
+   * total. And a fish you hold none of goes last in its half however well it pays: Saw Shark is
+   * 10,291 a piece and still sits below Rock Blackfish, because you cannot rack one today.
+   */
+  assert.ok(panel.indexOf(">White Shark<") < panel.indexOf(">Hammerhead Shark<"),
+    "1 White Shark (10,720) outranks 2 Hammerheads (4,020)");
+  assert.ok(panel.indexOf(">Hammerhead Shark<") < panel.indexOf(">Rock Blackfish<"),
+    "which in turn outranks 10 Rock Blackfish (1,372) — per fish, not per pile");
+  assert.ok(panel.indexOf(">Rock Blackfish<") < panel.indexOf(">Saw Shark<"),
+    "and 0 held goes last even at 10,291 a piece");
+  // Same rule below the divider, applied to its own half.
+  const taken2 = panel.slice(panel.indexOf("A RECIPE WANTS THESE"));
+  assert.ok(taken2.indexOf(">Angelfish<") < taken2.indexOf(">Halibut<"),
+    "below the line too: Angelfish 1,072 above Halibut 943");
+  assert.ok(taken2.indexOf(">Halibut<") < taken2.indexOf(">Cobia<"),
+    "and 5 Halibut you hold beat a Cobia at 1,329 that you do not");
 });
 
 test("the sharks are in, at the 5x band the shed actually pays", () => {
