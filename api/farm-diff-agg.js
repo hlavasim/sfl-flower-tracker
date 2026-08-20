@@ -1,4 +1,5 @@
 import { getPool } from "./_db.js";
+import { parseDiffRange } from "../core/sections/diff.mjs";
 
 const ALLOWED_FARMS = new Set([155498, 1260204733777858]);
 
@@ -22,6 +23,19 @@ export default async function handler(req, res) {
   const defaultDays = { hour: 7, day: 90, week: 365, month: 730, year: 3650 };
   const days = Math.min(parseInt(req.query.days) || defaultDays[group], 3650);
 
+  /*
+   * An explicit &from=/&to= window, which is what makes a sub-period question answerable at all.
+   *
+   * Grouping alone cannot express "what happened between 22:33 and 22:40 tonight": group=day
+   * buckets the WHOLE day, so the answer arrives mixed with everything else done since midnight.
+   * Bounding the rows that go into the bucket does express it — the same group=day then returns
+   * one period containing exactly that session. Absent bounds keep the old behaviour (the last
+   * `days` days up to now), so this is additive.
+   */
+  const range = parseDiffRange(req.query.from, req.query.to);
+  const fromTs = range.from || new Date(Date.now() - days * 86400000).toISOString();
+  const toTs = range.to || "2100-01-01T00:00:00.000Z";
+
   const pool = getPool();
 
   try {
@@ -34,7 +48,7 @@ export default async function handler(req, res) {
         FROM farm_snapshots,
         LATERAL jsonb_each_text(diff) AS d(key, value)
         WHERE farm_id = $1
-          AND captured_at >= NOW() - ($3 * interval '1 day')
+          AND captured_at >= $3 AND captured_at <= $4
           AND diff IS NOT NULL
           AND diff != '{}'::jsonb
           AND d.value ~ '^-?[0-9]*\\.?[0-9]+'
@@ -45,7 +59,7 @@ export default async function handler(req, res) {
           COUNT(*) as snapshot_count
         FROM farm_snapshots
         WHERE farm_id = $1
-          AND captured_at >= NOW() - ($3 * interval '1 day')
+          AND captured_at >= $3 AND captured_at <= $4
           AND diff IS NOT NULL
           AND diff != '{}'::jsonb
         GROUP BY 1
@@ -67,9 +81,11 @@ export default async function handler(req, res) {
       FROM counts c
       ORDER BY c.period ASC
       LIMIT 500
-    `, [farmId, group, days]);
+    `, [farmId, group, fromTs, toTs]);
 
     return res.status(200).json({
+      from: fromTs,
+      to: range.to || null,
       periods: result.rows.map(r => ({
         period: r.period,
         count: parseInt(r.snapshot_count),

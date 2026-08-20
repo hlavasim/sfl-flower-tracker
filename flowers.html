@@ -2316,6 +2316,47 @@
       border-color: var(--text-dim);
     }
 
+    /* ── Diff slicer ── */
+    .diff-slicer { padding: 8px 10px; margin-bottom: 10px; }
+    .diff-slicer-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+    .diff-slicer-row:last-of-type { margin-bottom: 0; }
+    .diff-slicer-lbl {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 0.4375rem;
+      color: var(--text-dim);
+      margin-right: 2px;
+    }
+    .diff-slicer-btn { padding: 4px 8px; font-size: 0.5rem; }
+    .diff-slicer-input {
+      background: rgba(0,0,0,0.35);
+      border: 2px solid var(--panel-border);
+      border-radius: 4px;
+      color: var(--text-primary);
+      font-family: 'Press Start 2P', monospace;
+      font-size: 0.4375rem;
+      padding: 4px 6px;
+      color-scheme: dark;
+    }
+    .diff-slicer-range {
+      flex: 1;
+      min-width: 140px;
+      accent-color: var(--sunpetal);
+      cursor: pointer;
+    }
+    .diff-slicer-range:disabled { opacity: 0.35; cursor: default; }
+    .diff-slicer-note {
+      font-size: 0.4375rem;
+      color: var(--text-dim);
+      font-family: 'Press Start 2P', monospace;
+      line-height: 1.6;
+    }
+
 
     /* ── JSON Explorer ── */
     .json-search-bar { display:flex; gap:8px; align-items:center; margin-bottom:12px; }
@@ -5965,7 +6006,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.45</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.46</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5992,6 +6033,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.46", items: [
+          { t: "feat", text: "<b>The diff timeline is a window with a slicer, not a wall of bars.</b> It drew every period it had loaded, so raw mode ran off the right-hand edge and <b>“now” — the one bar you open the page for — was the one you had to scroll to reach</b>. It now shows the <b>newest 20</b> by default (remembered per visit, with 50 / 100 / ALL beside it) and everything under the chart describes that window: net, gains, losses and the count card, which carries “of N” so the size of the load is never hidden. A scrubber pans the window without refetching — <b>◀ ▶</b> page by a full window, <b>NOW</b> jumps back to the newest, and dragging updates the label live but only repaints on release, because rebuilding a slider mid-drag drops the handle." },
+          { t: "feat", text: "<b>FROM / TO, in five-minute steps, on both raw and grouped periods.</b> Raw was hard-wired to the newest 50 snapshots, which cannot express “raw for the last five days” (172 snapshots here) — it is a real range query now, capped at 500 and told you when the range holds more. The grouped side is the interesting half: the bounds go to the <b>server</b>, so <code>group=day</code> over <b>22:33–22:40</b> returns <b>one period holding exactly that session</b> rather than the whole day. Filtering day buckets after the fact could only ever hand back the whole day. LAST <b>6h / 24h / 5d / 30d</b> are one click." },
+        ] },
         { ver: "v5.45", items: [
           { t: "fix", text: "<b>SAFE TO AGE now sorts by what one fish pays, with empty stock at the bottom of each half.</b> A rack slot is the scarce thing, so the row order has to answer “is this one worth a slot”, and by that measure a single <b>White Shark (10,720)</b> beats a hundred <b>Rock Blackfish (1,372 each)</b> — sorting on the pile total buried both sharks four rows down behind a species worth an eighth as much per slot. Species you hold <b>none</b> of now drop to the end of their own half, both above and below the divider: they cannot be racked today, and in the middle of the list they only separated two fish you could act on. Barred Knifejaw is the case in point — 3,109 a piece and nothing to rack." },
         ] },
@@ -29743,6 +29788,56 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       return { sflPerDay, deltaSfl, deltaDays, sampleSize: n };
     }
 
+    /*
+     * The visible slice of the diff timeline — the "slicer".
+     *
+     * The chart drew every period it had loaded, so raw mode ran off the right edge of the screen
+     * and "now", the one bar anyone opens the page for, was the one you had to scroll to reach.
+     * The fix is a window: a fixed number of periods ending, by default, at the newest one.
+     *
+     *   total  how many periods are loaded
+     *   size   how many to show; 0 / null / negative / >= total all mean "everything"
+     *   start  index of the leftmost visible period; null means "pin to the newest", which is what
+     *          a fresh load, a period change and the NOW button all want
+     *
+     * `start` is clamped into [0, total - size] rather than rejected, so a window that no longer
+     * fits (period switched, data refetched, size grown) lands on the newest rows instead of on an
+     * empty chart. `end` is INCLUSIVE, and is -1 when there is nothing to show.
+     */
+    function diffWindowRange(total, size, start) {
+      const n = Math.max(0, Math.floor(Number(total)) || 0);
+      const want = Math.floor(Number(size));
+      const eff = Math.max(0, Math.min(want > 0 ? want : n, n));
+      const maxStart = Math.max(0, n - eff);
+      const s = (start === null || start === undefined || !Number.isFinite(Number(start)))
+        ? maxStart
+        : Math.max(0, Math.min(Math.floor(Number(start)), maxStart));
+      return { start: s, end: s + eff - 1, size: eff, total: n, maxStart, atNow: s >= maxStart };
+    }
+
+    /*
+     * A from/to window, normalised once for both the page and the API.
+     *
+     * Either end may be absent — "everything before 22:40" and "everything since Tuesday" are both
+     * legitimate — so a missing or unparseable bound comes back null rather than as some sentinel
+     * date the caller then has to recognise. Reversed bounds are swapped instead of returning
+     * nothing: typing the two boxes in the wrong order is a slip, not a request for an empty chart.
+     *
+     * Both ends come back as ISO UTC, which is what the SQL bounds and the history endpoint take,
+     * and which compares correctly as a string.
+     */
+    function parseDiffRange(from, to) {
+      const one = (v) => {
+        if (v === undefined || v === null || v === "") return null;
+        const t = new Date(v);
+        return Number.isNaN(t.getTime()) ? null : t.toISOString();
+      };
+      let a = one(from);
+      let b = one(to);
+      if (a && b && a > b) { const t = a; a = b; b = t; }
+      return { from: a, to: b };
+    }
+
     async function renderDiff(data) {
       const app = document.getElementById("app");
 
@@ -29920,6 +30015,20 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       let selectedIdx = -1;
       let processed = [];
       let loading = false;
+      /*
+       * The slicer's own state.
+       *
+       * `windowSize` is remembered, so the page opens on the last 20 of whatever period it was
+       * last left on. `windowStart` is NOT: a fresh load, a period change and the NOW button all
+       * pin the window to the newest end, which is the bar the page is opened to look at.
+       * `rangeFrom`/`rangeTo` are session-only for the same reason — a remembered absolute window
+       * would silently serve a stale, possibly empty, slice on the next visit.
+       */
+      let windowSize = parseInt(localStorage.getItem("sfl_diff_window"), 10);
+      if (!Number.isFinite(windowSize) || windowSize < 0) windowSize = 20;
+      let windowStart = null;
+      let rangeFrom = null, rangeTo = null;      // ISO strings, or null for "no bound"
+      let rangeTotal = 0;                        // rows the range really holds, when reported
 
       // ── Period label formatters ──
       function periodLabel(time, mode) {
@@ -29948,7 +30057,16 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         renderContent();
 
         if (mode === "all") {
-          const res = await fetchRetry(`/api/farm-history?farm=${FARM_ID}&latest=50`, "Farm history");
+          /*
+           * Without a range this is the old call — the newest 50 snapshots. With one it becomes a
+           * RANGE query, because "raw for the last five days" (172 snapshots on this farm) is not
+           * something `latest=50` can express. The fetch is capped, and the cap is reported rather
+           * than applied silently: a truncated window reads exactly like a quiet period.
+           */
+          const RAW_MAX = 500;
+          const res = (rangeFrom || rangeTo)
+            ? await fetchRetry(`/api/farm-history?farm=${FARM_ID}&from=${encodeURIComponent(rangeFrom || "1970-01-01")}&to=${encodeURIComponent(rangeTo || "2100-01-01")}&limit=${RAW_MAX}`, "Farm history")
+            : await fetchRetry(`/api/farm-history?farm=${FARM_ID}&latest=50`, "Farm history");
           if (!res.ok) {
             loading = false;
             document.getElementById("diff-content").innerHTML = renderGroupSelector() +
@@ -29956,6 +30074,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
             return;
           }
           const snapshots = (res.data.snapshots || []).reverse();
+          rangeTotal = Number.isFinite(res.data.total) ? res.data.total : snapshots.length;
           let valued;
           try { valued = await valueDiffs(snapshots); }
           catch (e) {
@@ -29970,7 +30089,15 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           });
         } else {
           const groupMap = { hours: "hour", days: "day", weeks: "week", months: "month", years: "year" };
-          const res = await fetchRetry(`/api/farm-diff-agg?farm=${FARM_ID}&group=${groupMap[mode]}`, "Aggregated data");
+          /*
+           * The range goes to the SERVER, not to a filter here, because it changes what lands in a
+           * bucket rather than which buckets are shown. group=days over 22:33-22:40 is one period
+           * holding exactly that session — filtering the day buckets afterwards could only ever
+           * hand back the whole day.
+           */
+          const rangeQs = (rangeFrom ? `&from=${encodeURIComponent(rangeFrom)}` : "") +
+                          (rangeTo ? `&to=${encodeURIComponent(rangeTo)}` : "");
+          const res = await fetchRetry(`/api/farm-diff-agg?farm=${FARM_ID}&group=${groupMap[mode]}${rangeQs}`, "Aggregated data");
           if (!res.ok) {
             loading = false;
             document.getElementById("diff-content").innerHTML = renderGroupSelector() +
@@ -29978,6 +30105,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
             return;
           }
           const periods = res.data.periods || [];
+          rangeTotal = periods.length;
           let valuedG;
           try { valuedG = await valueDiffs(periods); }
           catch (e) {
@@ -30005,6 +30133,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         }
 
         selectedIdx = processed.length > 0 ? processed.length - 1 : -1;
+        windowStart = null;                       // every reload lands on "now", never mid-history
         loading = false;
         renderContent();
       }
@@ -30066,6 +30195,73 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         return (v >= 0 ? "+" : "") + v.toFixed(d);
       }
 
+      /*
+       * A datetime-local value, snapped to five minutes.
+       *
+       * The inputs carry step="300", so a value off a five-minute boundary is one the browser
+       * itself considers invalid and refuses to step from. The prefill therefore rounds — down
+       * for the lower bound, up for the upper — which also widens the box by at most 5 minutes
+       * rather than quietly cropping a snapshot out of the window.
+       */
+      function _dtLocal(d, roundUp) {
+        const ms = 5 * 60000;
+        const t = new Date((roundUp ? Math.ceil(d.getTime() / ms) : Math.floor(d.getTime() / ms)) * ms);
+        const q = (n) => String(n).padStart(2, "0");
+        return t.getFullYear() + "-" + q(t.getMonth() + 1) + "-" + q(t.getDate()) + "T" + q(t.getHours()) + ":" + q(t.getMinutes());
+      }
+      function _winStamp(d) {
+        return d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+      }
+      function windowLabelText(win) {
+        if (!processed.length) return "nothing loaded";
+        const a = processed[Math.max(0, win.start)], b = processed[Math.max(0, win.end)];
+        const truncated = rangeTotal > processed.length
+          ? ` \u00b7 range holds ${rangeTotal}, newest ${processed.length} loaded` : "";
+        return `showing ${win.size} of ${win.total} \u00b7 ${_winStamp(a.time)} \u2192 ${_winStamp(b.time)}` +
+               (win.atNow ? " \u00b7 at now" : "") + truncated;
+      }
+      function renderSlicer(win) {
+        const sizes = [{ n: 20, label: "20" }, { n: 50, label: "50" }, { n: 100, label: "100" }, { n: 0, label: "ALL" }];
+        const quick = [{ h: 6, label: "6h" }, { h: 24, label: "24h" }, { h: 120, label: "5d" }, { h: 720, label: "30d" }, { h: 0, label: "ALL" }];
+        const first = processed.length ? processed[0].time : new Date();
+        const last = processed.length ? processed[processed.length - 1].time : new Date();
+        const fromVal = _dtLocal(rangeFrom ? new Date(rangeFrom) : first, false);
+        const toVal = _dtLocal(rangeTo ? new Date(rangeTo) : last, true);
+        const ranged = !!(rangeFrom || rangeTo);
+        let sl = `<div class="pixel-panel diff-slicer">`;
+        sl += `<div class="diff-slicer-row"><span class="diff-slicer-lbl">SHOW</span>`;
+        for (const z of sizes) {
+          sl += `<button class="diff-group-btn diff-slicer-btn pixel-font${windowSize === z.n ? " active" : ""}" onclick="window._diffSetSize(${z.n})">${z.label}</button>`;
+        }
+        sl += `<span class="diff-slicer-lbl">LAST</span>`;
+        for (const z of quick) {
+          sl += `<button class="diff-group-btn diff-slicer-btn pixel-font${(!ranged && z.h === 0) ? " active" : ""}" onclick="window._diffQuickRange(${z.h})">${z.label}</button>`;
+        }
+        sl += `</div>`;
+        sl += `<div class="diff-slicer-row"><span class="diff-slicer-lbl">FROM</span>` +
+              `<input type="datetime-local" step="300" id="diff-from" class="diff-slicer-input" value="${fromVal}">` +
+              `<span class="diff-slicer-lbl">TO</span>` +
+              `<input type="datetime-local" step="300" id="diff-to" class="diff-slicer-input" value="${toVal}">` +
+              `<button class="diff-group-btn diff-slicer-btn pixel-font${ranged ? " active" : ""}" onclick="window._diffApplyRange()">APPLY</button>` +
+              `<button class="diff-group-btn diff-slicer-btn pixel-font" onclick="window._diffClearRange()">CLEAR</button>` +
+              `<span class="diff-slicer-note">5-minute steps${ranged ? " \u00b7 window is live" : ""}</span></div>`;
+        /*
+         * The scrubber. oninput moves the LABEL only and onchange does the repaint, so a drag
+         * reads live without rebuilding the very element being dragged out from under the pointer
+         * on every pixel — replacing it mid-drag drops the pointer capture and the handle sticks.
+         */
+        sl += `<div class="diff-slicer-row">` +
+              `<button class="diff-group-btn diff-slicer-btn pixel-font" onclick="window._diffPan(-1)" title="older">\u25c0</button>` +
+              `<input type="range" id="diff-slicer-range" class="diff-slicer-range" min="0" max="${win.maxStart}" step="1" value="${win.start}"` +
+              ` ${win.maxStart === 0 ? "disabled" : ""} oninput="window._diffPreviewStart(this.value)" onchange="window._diffSetStart(this.value)">` +
+              `<button class="diff-group-btn diff-slicer-btn pixel-font" onclick="window._diffPan(1)" title="newer">\u25b6</button>` +
+              `<button class="diff-group-btn diff-slicer-btn pixel-font${win.atNow ? " active" : ""}" onclick="window._diffNow()">NOW</button>` +
+              `</div>`;
+        sl += `<div class="diff-slicer-note" id="diff-window-label">${escHTML(windowLabelText(win))}</div>`;
+        sl += `</div>`;
+        return sl;
+      }
+
       function renderContent() {
         let out = renderGroupSelector();
         out += renderCurrencySelector();
@@ -30090,21 +30286,33 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           return;
         }
 
+        /*
+         * Everything from here down describes the WINDOW, not the whole load — that is what a
+         * slicer means, and totals that ignored it would contradict the chart sitting under them.
+         * The count card keeps "of N" so the size of the load itself is never hidden.
+         */
+        const win = diffWindowRange(processed.length, windowSize, windowStart);
+        const view = processed.slice(win.start, win.end + 1);
+        // A selection outside the window would leave the detail panel describing a bar that is not
+        // on screen, so it follows the window to its newest visible period.
+        if (selectedIdx < win.start || selectedIdx > win.end) selectedIdx = win.end;
+
         // Stat cards
-        const totalNet = processed.reduce((s, p) => s + p.netSfl, 0);
-        const totalGain = processed.reduce((s, p) => s + (p.netSfl > 0 ? p.netSfl : 0), 0);
-        const totalLoss = processed.reduce((s, p) => s + (p.netSfl < 0 ? p.netSfl : 0), 0);
-        const totalSnapshots = processed.reduce((s, p) => s + p.count, 0);
-        const timeSpan = processed.length >= 2
-          ? Math.round((processed[processed.length - 1].time - processed[0].time) / 60000)
+        const totalNet = view.reduce((s, p) => s + p.netSfl, 0);
+        const totalGain = view.reduce((s, p) => s + (p.netSfl > 0 ? p.netSfl : 0), 0);
+        const totalLoss = view.reduce((s, p) => s + (p.netSfl < 0 ? p.netSfl : 0), 0);
+        const totalSnapshots = view.reduce((s, p) => s + p.count, 0);
+        const timeSpan = view.length >= 2
+          ? Math.round((view[view.length - 1].time - view[0].time) / 60000)
           : 0;
         const timeStr = timeSpan >= 1440 ? `${(timeSpan / 1440).toFixed(1)}d` : timeSpan >= 60 ? `${(timeSpan / 60).toFixed(1)}h` : `${timeSpan}m`;
 
         const isGrouped = groupMode !== "all";
         const countLabel = isGrouped ? "PERIODS" : "SNAPSHOTS";
+        const ofAll = win.size < win.total ? ` of ${win.total}` : "";
         const countExtra = isGrouped
-          ? ` <span style="font-size:0.4375rem;color:var(--text-dim)">(${totalSnapshots} snaps, ${timeStr})</span>`
-          : ` <span style="font-size:0.5rem;color:var(--text-dim)">(${timeStr})</span>`;
+          ? ` <span style="font-size:0.4375rem;color:var(--text-dim)">${ofAll} (${totalSnapshots} snaps, ${timeStr})</span>`
+          : ` <span style="font-size:0.5rem;color:var(--text-dim)">${ofAll} (${timeStr})</span>`;
 
         const _ci = getCurIcon("0.85em");
 
@@ -30123,7 +30331,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           </div>
           <div class="pixel-panel diff-stat-card">
             <div class="diff-stat-label">${countLabel}</div>
-            <div class="diff-stat-value" style="color:var(--text-primary)">${processed.length}${countExtra}</div>
+            <div class="diff-stat-value" style="color:var(--text-primary)">${win.size}${countExtra}</div>
           </div>
         </div>`;
 
@@ -30148,10 +30356,13 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           return s + v.toFixed(2);
         }
 
+        // The slicer sits directly above the chart it drives.
+        out += renderSlicer(win);
+
         // Bar chart
         const _cm = getCurMult();
-        const maxAbs = Math.max(...processed.map(p => Math.abs(p.netSfl * _cm)), 0.01);
-        const barW = processed.length > 120 ? 6 : processed.length > 60 ? 10 : processed.length > 30 ? 14 : 18;
+        const maxAbs = Math.max(...view.map(p => Math.abs(p.netSfl * _cm)), 0.01);
+        const barW = view.length > 120 ? 6 : view.length > 60 ? 10 : view.length > 30 ? 14 : 18;
         const singularMode = groupMode === "all" ? "SNAPSHOT" : groupMode.slice(0, -1).toUpperCase();
         const chartLabel = `${getCurLabel()} VALUE CHANGE PER ${singularMode}`;
 
@@ -30167,18 +30378,19 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
 
         out += `<div class="diff-zero-line" style="top:50%"></div>`;
 
-        const labelEvery = processed.length > 100 ? 6 : processed.length > 60 ? 4 : processed.length > 30 ? 2 : 1;
+        const labelEvery = view.length > 100 ? 6 : view.length > 60 ? 4 : view.length > 30 ? 2 : 1;
         const valEvery = barW >= 14 ? 1 : barW >= 10 ? 2 : barW >= 6 ? 3 : 5;
 
-        for (let i = 0; i < processed.length; i++) {
-          const p = processed[i];
+        for (let j = 0; j < view.length; j++) {
+          const i = win.start + j;              // the click handler works in absolute indices
+          const p = view[j];
           const pct = Math.min(Math.max(Math.abs(p.netSfl * _cm) / maxAbs * 90, 2), 90);
           const sel = i === selectedIdx ? " selected" : "";
           const tLabel = periodLabel(p.time, groupMode);
           const isPositive = p.netSfl >= 0;
           const snapInfo = p.count > 1 ? ` (${p.count} snapshots)` : "";
-          const valTxt = (i % valEvery === 0) ? fmtBarVal(p.netSfl) : "";
-          const showLbl = (i % labelEvery === 0);
+          const valTxt = (j % valEvery === 0) ? fmtBarVal(p.netSfl) : "";
+          const showLbl = (j % labelEvery === 0);
           const lblHtml = showLbl ? `<div class="diff-bar-label">${shortBarLabel(p.time, groupMode)}</div>` : "";
           const negInside = !isPositive && pct > 35;
           const valCls = negInside ? "diff-bar-val inside" : "diff-bar-val";
@@ -30371,6 +30583,53 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         currencyMode = mode;
         localStorage.setItem("sfl_diff_currency", mode);
         renderContent();
+      };
+      window._diffSetSize = function(n) {
+        const v = parseInt(n, 10);
+        windowSize = Number.isFinite(v) && v > 0 ? v : 0;
+        localStorage.setItem("sfl_diff_window", String(windowSize));
+        windowStart = null;                     // a resize re-anchors on now, never mid-history
+        renderContent();
+      };
+      // Drag feedback without a repaint: the label is the only thing that moves until the drag
+      // ends, because rebuilding the slider mid-drag drops the pointer and the handle sticks.
+      window._diffPreviewStart = function(v) {
+        const el = document.getElementById("diff-window-label");
+        if (el) el.textContent = windowLabelText(diffWindowRange(processed.length, windowSize, v));
+      };
+      window._diffSetStart = function(v) {
+        windowStart = Math.max(0, parseInt(v, 10) || 0);
+        const hadFocus = document.activeElement && document.activeElement.id === "diff-slicer-range";
+        renderContent();
+        // Keyboard paging is only usable if focus survives the repaint the arrow key triggered.
+        if (hadFocus) { const el = document.getElementById("diff-slicer-range"); if (el) el.focus(); }
+      };
+      window._diffPan = function(dir) {
+        const w = diffWindowRange(processed.length, windowSize, windowStart);
+        windowStart = Math.max(0, Math.min(w.maxStart, w.start + dir * Math.max(1, w.size)));
+        renderContent();
+      };
+      window._diffNow = function() {
+        windowStart = null;
+        renderContent();
+      };
+      window._diffApplyRange = async function() {
+        const f = document.getElementById("diff-from"), t = document.getElementById("diff-to");
+        const r = parseDiffRange(f && f.value, t && t.value);
+        rangeFrom = r.from; rangeTo = r.to;
+        await fetchData(groupMode);
+      };
+      window._diffClearRange = async function() {
+        if (!rangeFrom && !rangeTo) return;
+        rangeFrom = null; rangeTo = null;
+        await fetchData(groupMode);
+      };
+      window._diffQuickRange = async function(hours) {
+        const h = parseInt(hours, 10) || 0;
+        // "LAST 5d" is a lower bound only: the upper end is now, and stays now as time passes.
+        rangeFrom = h > 0 ? new Date(Date.now() - h * 3600000).toISOString() : null;
+        rangeTo = null;
+        await fetchData(groupMode);
       };
 
       // Initial fetch

@@ -62,3 +62,53 @@ export function valueDiff(diff, priceMap, rates = {}, trace) {
   }
   return { items, netSfl };
 }
+
+/*
+ * The visible slice of the diff timeline — the "slicer".
+ *
+ * The chart drew every period it had loaded, so raw mode ran off the right edge of the screen
+ * and "now", the one bar anyone opens the page for, was the one you had to scroll to reach.
+ * The fix is a window: a fixed number of periods ending, by default, at the newest one.
+ *
+ *   total  how many periods are loaded
+ *   size   how many to show; 0 / null / negative / >= total all mean "everything"
+ *   start  index of the leftmost visible period; null means "pin to the newest", which is what
+ *          a fresh load, a period change and the NOW button all want
+ *
+ * `start` is clamped into [0, total - size] rather than rejected, so a window that no longer
+ * fits (period switched, data refetched, size grown) lands on the newest rows instead of on an
+ * empty chart. `end` is INCLUSIVE, and is -1 when there is nothing to show.
+ */
+export function diffWindowRange(total, size, start) {
+  const n = Math.max(0, Math.floor(Number(total)) || 0);
+  const want = Math.floor(Number(size));
+  const eff = Math.max(0, Math.min(want > 0 ? want : n, n));
+  const maxStart = Math.max(0, n - eff);
+  const s = (start === null || start === undefined || !Number.isFinite(Number(start)))
+    ? maxStart
+    : Math.max(0, Math.min(Math.floor(Number(start)), maxStart));
+  return { start: s, end: s + eff - 1, size: eff, total: n, maxStart, atNow: s >= maxStart };
+}
+
+/*
+ * A from/to window, normalised once for both the page and the API.
+ *
+ * Either end may be absent — "everything before 22:40" and "everything since Tuesday" are both
+ * legitimate — so a missing or unparseable bound comes back null rather than as some sentinel
+ * date the caller then has to recognise. Reversed bounds are swapped instead of returning
+ * nothing: typing the two boxes in the wrong order is a slip, not a request for an empty chart.
+ *
+ * Both ends come back as ISO UTC, which is what the SQL bounds and the history endpoint take,
+ * and which compares correctly as a string.
+ */
+export function parseDiffRange(from, to) {
+  const one = (v) => {
+    if (v === undefined || v === null || v === "") return null;
+    const t = new Date(v);
+    return Number.isNaN(t.getTime()) ? null : t.toISOString();
+  };
+  let a = one(from);
+  let b = one(to);
+  if (a && b && a > b) { const t = a; a = b; b = t; }
+  return { from: a, to: b };
+}
