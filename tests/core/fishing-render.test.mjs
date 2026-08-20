@@ -453,14 +453,16 @@ test("a season priced off unknown ingredients is a floor, and cannot win", () =>
 /*
  * SAFE TO AGE — the fish no bait recipe wants.
  *
- * The question the page has to answer is not "what is agable" but "what can I age without
- * having to fish it again", and that is decided by SIXTEEN season-specific ingredient lists.
- * Three things can go wrong quietly, so each is pinned below:
- *   1. a fish this season's bait eats leaks into the free list (you age away your own bait);
+ * The question is not "what is agable" but "what can I age without having to fish it again",
+ * and that is decided by SIXTEEN season-specific ingredient lists. It is ONE table: the fish no
+ * recipe wants in any season, then a divider, then every other fish the shed takes with the bait
+ * and season that wants it. Four things can go wrong quietly, so each is pinned below:
+ *   1. a fish a recipe eats drifts above the divider (you age away your own bait);
  *   2. the stock reads 0 because the inventory spells it "Hammerhead shark" and the XP table
  *      spells it "Hammerhead Shark";
  *   3. the three sharks fall out of the universe entirely — they were missing from
- *      FISH_BASE_XP, and they are the biggest XP the shed pays.
+ *      FISH_BASE_XP, and they are the biggest XP the shed pays;
+ *   4. the ageing time ignores the shed's own boosts, which is a 17% error on the backlog.
  */
 const AGING_FARM = {
   season: { season: "winter" },
@@ -471,41 +473,51 @@ const AGING_FARM = {
     "Rock Blackfish": "10",       // free: on no recipe, in any season
     "Hammerhead shark": "2",      // free, and spelled the GAME's way
     "White Shark": "1",           // free, and the biggest XP in the game
-    Halibut: "5",                 // autumn's Fish Flake only — free in winter
-    Angelfish: "4",               // winter's Fish Stick — reserved right now
+    Halibut: "5",                 // autumn's Fish Flake only
+    Angelfish: "4",               // winter's Fish Stick — wanted right now
     Salt: "100",                  // deliberately far short of what the stock needs
     Rod: "40",
   },
   fishing: { dailyAttempts: { "2026-08-17": 55 } },
 };
 
-const agingPanels = (html) => {
-  const free = html.indexOf("SAFE TO AGE");
-  const off = html.indexOf("FREE THIS SEASON");
-  const end = html.indexOf("MARINE MARVEL PLANNER");
-  assert.ok(free > 0 && off > free && end > off, "both aging panels are present, before the planner");
-  return { free: html.slice(free, off), off: html.slice(off, end) };
+// The whole section is one panel, and the divider splits its single table in two.
+const agingPanel = (html) => {
+  const from = html.indexOf("SAFE TO AGE");
+  const to = html.indexOf("MARINE MARVEL PLANNER");
+  assert.ok(from > 0 && to > from, "the aging panel is present, before the planner");
+  const panel = html.slice(from, to);
+  const cut = panel.indexOf("A RECIPE WANTS THESE");
+  assert.ok(cut > 0, "the panel carries the divider row");
+  assert.ok(!panel.includes("FREE THIS SEASON"), "there is no second, season-scoped answer");
+  return { panel, free: panel.slice(0, cut), taken: panel.slice(cut) };
 };
 
-test("the free list is exactly the fish no Fish Market recipe wants, in any season", () => {
-  const { free } = agingPanels(renderPage(AGING_FARM).html);
+test("above the divider is exactly the fish no Fish Market recipe wants, in any season", () => {
+  const { free, taken } = agingPanel(renderPage(AGING_FARM).html);
   // 9 fish are on none of the sixteen lists, plus the 3 sharks that no bait recipe touches.
   for (const f of ["Rock Blackfish", "Hammerhead Shark", "Parrotfish", "White Shark",
                    "Horse Mackerel", "Saw Shark", "Whale Shark", "Trout", "Coelacanth",
                    "Ray", "Squid", "Barred Knifejaw"])
     assert.ok(free.includes(">" + f + "<"), `free to age: ${f}`);
   assert.equal((free.match(/border-top:1px solid #20190f/g) || []).length, 12,
-    "exactly 12 rows — no more, no fewer");
+    "exactly 12 rows above the line — no more, no fewer");
   /*
    * The failure that matters: ageing a fish a recipe eats. Anchovy, Red Snapper and Tuna are in
-   * every season's list; Angelfish, Walleye, Blue Marlin and Football Fish are in winter's.
+   * every season's list; Angelfish, Walleye, Blue Marlin and Football Fish are in winter's;
+   * Halibut is autumn-only, which is still a recipe and so still below the line.
    */
-  for (const f of ["Anchovy", "Red Snapper", "Tuna", "Angelfish", "Walleye", "Blue Marlin", "Halibut"])
-    assert.ok(!free.includes(">" + f + "<"), `${f} is bait, not XP — it must not be in the free list`);
+  for (const f of ["Anchovy", "Red Snapper", "Tuna", "Angelfish", "Walleye", "Blue Marlin", "Halibut"]) {
+    assert.ok(!free.includes(">" + f + "<"), `${f} is bait, not XP — it must not be above the line`);
+    assert.ok(taken.includes(">" + f + "<"), `${f} is still listed, below the line`);
+  }
+  // Complete: every fish the shed takes is in the one table.
+  const rows = (agingPanel(renderPage(AGING_FARM).html).panel.match(/border-top:1px solid #20190f/g) || []).length;
+  assert.equal(rows, 38, `all 38 agable fish are in the table, got ${rows}`);
 });
 
 test("stock is the live inventory, matched through the game's own spelling", () => {
-  const { free, off } = agingPanels(renderPage(AGING_FARM).html);
+  const { panel, free, taken } = agingPanel(renderPage(AGING_FARM).html);
   /*
    * The inventory says "Hammerhead shark" and "Football fish"; FISH_BASE_XP says "Hammerhead
    * Shark" and "Football Fish". A case-sensitive lookup reads every one of those as zero held —
@@ -514,37 +526,45 @@ test("stock is the live inventory, matched through the game's own spelling", () 
   const hh = free.slice(free.indexOf(">Hammerhead Shark<"));
   assert.ok(/>2</.test(hh.slice(0, 400)), "the 2 Hammerheads in the inventory are counted");
   // And its icon comes from the game's spelling, which is the one the icon map holds.
-  assert.ok(free.includes('alt="Hammerhead shark"'), "the icon resolves via the game's spelling");
+  assert.ok(panel.includes('alt="Hammerhead shark"'), "the icon resolves via the game's spelling");
   assert.ok(/<img [^>]*alt="Rock Blackfish"/.test(free), "every row carries its fish icon");
-  // The off-season table reads the same inventory.
-  assert.ok(off.slice(off.indexOf(">Halibut<"), off.indexOf(">Halibut<") + 400).includes(">5<"),
-    "the 5 Halibut are counted in the off-season table");
+  // Below the line reads the same inventory.
+  assert.ok(taken.slice(taken.indexOf(">Halibut<"), taken.indexOf(">Halibut<") + 400).includes(">5<"),
+    "the 5 Halibut are counted below the line too");
 });
 
-test("the totals are the stock, its XP, and the salt it would burn", () => {
-  const { free } = agingPanels(renderPage(AGING_FARM).html);
+test("the totals are the free stock, its XP, and the salt it would burn", () => {
+  const { panel } = agingPanel(renderPage(AGING_FARM).html);
   /*
    * Independently derived, not read back off the page. Prime chance is 24% (Fish Smoking x2,
    * Salt Sculpture L2+ +4) so the factor is 1.072:
-   *   Rock Blackfish 10 x maxXP(320)=1280  -> 13,721.6 XP, 26 salt each = 260
-   *   White Shark     1 x maxXP(2000)=10000 -> 10,720   XP, 200 salt      = 200
-   *   Hammerhead      2 x maxXP(750)=3750  ->  8,040    XP, 75 salt each  = 150
+   *   Rock Blackfish 10 x maxXP(320)=1280   -> 13,721.6 XP, 26 salt each = 260
+   *   White Shark     1 x maxXP(2000)=10000 -> 10,720   XP, 200 salt     = 200
+   *   Hammerhead      2 x maxXP(750)=3750   ->  8,040   XP, 75 salt each = 150
    *   13 fish, 32,482 XP, 610 salt against 100 held.
    */
-  assert.ok(free.includes(">13<"), "13 fish are free to age");
-  assert.ok(free.includes(">32,482<"), "and they carry 32,482 aged XP");
-  assert.ok(free.includes(">610<") && free.includes("you hold 100"), "610 salt against 100 held");
-  assert.ok(/short by 510/.test(free), "and salt, not fish, is named as the binding input");
-  assert.ok(free.includes(">2 / 4<"), "the rack reports busy slots against the shed's level");
+  assert.ok(panel.includes(">13<"), "13 fish are free to age");
+  assert.ok(panel.includes(">32,482<"), "and they carry 32,482 aged XP");
+  assert.ok(panel.includes(">610<") && panel.includes("you hold 100"), "610 salt against 100 held");
+  assert.ok(/short by 510/.test(panel), "and salt, not fish, is named as the binding input");
+  assert.ok(panel.includes(">2 / 4<"), "the rack reports busy slots against the shed's level");
+  /*
+   * The tiles are the FREE stock; the whole-table total is stated separately, never conflated.
+   * On top of the free 32,481.6 XP / 610 salt: Halibut 5 x 943.36 = 4,716.8 (18 salt each = 90)
+   * and Angelfish 4 x 1,072 = 4,288 (20 each = 80) -> 22 fish, 41,486 XP, 780 salt.
+   */
+  const plain = panel.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  assert.ok(/both sides of the line together: 22 fish , 41,486 aged XP and 780 salt/.test(plain),
+    `the complete total is stated: ${plain.slice(plain.indexOf("both sides"), plain.indexOf("both sides") + 160)}`);
   // Row order follows the stock: the biggest pile of XP first, not the rarest fish.
-  assert.ok(free.indexOf(">Rock Blackfish<") < free.indexOf(">White Shark<"),
+  assert.ok(panel.indexOf(">Rock Blackfish<") < panel.indexOf(">White Shark<"),
     "10 Rock Blackfish outrank 1 White Shark");
-  assert.ok(free.indexOf(">White Shark<") < free.indexOf(">Saw Shark<"),
+  assert.ok(panel.indexOf(">White Shark<") < panel.indexOf(">Saw Shark<"),
     "and a shark you hold outranks the same shark you do not");
 });
 
 test("the sharks are in, at the 5x band the shed actually pays", () => {
-  const { free } = agingPanels(renderPage(AGING_FARM).html);
+  const { free } = agingPanel(renderPage(AGING_FARM).html);
   /*
    * White Shark is 2,000 base, over the 330 boundary, so it ages at 5x to 10,000 and 10,720
    * with prime folded in — the biggest single XP item in the game, and it was missing from
@@ -557,35 +577,39 @@ test("the sharks are in, at the 5x band the shed actually pays", () => {
   assert.ok(/8\.0h/.test(ws), `and 8h of rack time: ${ws.replace(/<[^>]+>/g, " ")}`);
 });
 
-test("a fish wanted in another season is offered separately, and says which season wants it", () => {
-  const { off } = agingPanels(renderPage(AGING_FARM).html);
+test("below the line, every fish names the bait and the seasons that want it", () => {
+  const { taken } = agingPanel(renderPage(AGING_FARM).html);
+  const plain = (from) => taken.slice(taken.indexOf(">" + from + "<"), taken.indexOf(">" + from + "<") + 1600)
+    .replace(/<[^>]+>/g, " ").replace(/&times;/g, "×").replace(/\s+/g, " ");
   /*
-   * Halibut is on autumn's Fish Flake and nothing else. In winter it is as free as a shark, but
-   * ageing it is a bet — collapsing the two lists into one is what would hide that.
+   * Halibut is autumn's Fish Flake and nothing else — free today, and not free in the round, so
+   * the season is the row's business rather than a table of its own. Anchovy is on every season's
+   * Fish Flake, which must collapse to "all seasons" instead of listing four rows of the same.
    */
-  const hal = off.slice(off.indexOf(">Halibut<"), off.indexOf(">Halibut<") + 900);
-  assert.ok(/2× Fish Flake \(autumn\)/.test(hal.replace(/&times;/g, "×")),
-    `the season that wants it back is named: ${hal.replace(/<[^>]+>/g, " ").slice(0, 300)}`);
-  // Winter's own ingredients are in neither TABLE — they are named in the footnote instead.
-  const offTable = off.slice(0, off.indexOf("the other side of the line"));
-  assert.ok(!offTable.includes(">Angelfish<"), "a winter ingredient is not offered as free");
-  const plain = off.replace(/<[^>]+>/g, " ").replace(/&times;/g, "×").replace(/\s+/g, " ");
-  assert.ok(/Angelfish \(2× Fish Stick, hold 4\)/.test(plain),
-    `winter's ingredients are listed as reserved with the stock: ${plain.slice(-500)}`);
+  assert.ok(/2× Fish Flake \(autumn\)/.test(plain("Halibut")), `Halibut: ${plain("Halibut").slice(0, 200)}`);
+  assert.ok(/4× Fish Flake \(all seasons\)/.test(plain("Anchovy")), `Anchovy: ${plain("Anchovy").slice(0, 200)}`);
+  // The season running now is marked, so "wanted eventually" and "wanted today" stay apart.
+  assert.ok(/2× Fish Stick \(winter\) · now/.test(plain("Angelfish")), `Angelfish: ${plain("Angelfish").slice(0, 200)}`);
+  assert.ok(!/· now/.test(plain("Halibut")), "an out-of-season claim is not marked as current");
+  // A dish claim rides along with the recipe claim rather than replacing it.
+  assert.ok(/Fish n Chips/.test(plain("Halibut")), "the dish that also wants Halibut is named");
 });
 
 test("a dish is a claim on a fish too, and is not passed off as free", () => {
-  const { free } = agingPanels(renderPage(AGING_FARM).html);
+  const { panel, free } = agingPanel(renderPage(AGING_FARM).html);
   /*
    * Horse Mackerel and Squid are on none of the sixteen bait lists — and on Fish Burger and
    * Fried Calamari. Calling them simply free would be wrong, so the claim is named in the row
    * and repeated under the table.
    */
-  const plain = free.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  // Named in the row above the line, and gathered again in the footnote under the table.
+  const hm = free.slice(free.indexOf(">Horse Mackerel<"), free.indexOf(">Horse Mackerel<") + 1400);
+  assert.ok(/Fish Burger/.test(hm), "the row says which dish wants it");
+  const plain = panel.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
   assert.ok(/Horse Mackerel → Fish Burger/.test(plain), "the dish that wants Horse Mackerel is named");
   assert.ok(/Squid → Fried Calamari/.test(plain), "and the one that wants Squid");
   // Rock Blackfish is wanted by nothing at all, and says so rather than being left blank.
-  const rb = free.slice(free.indexOf(">Rock Blackfish<"), free.indexOf(">Rock Blackfish<") + 1100);
+  const rb = free.slice(free.indexOf(">Rock Blackfish<"), free.indexOf(">Rock Blackfish<") + 1400);
   assert.ok(/nothing/.test(rb), "a fish nothing wants says nothing, not an empty cell");
 });
 
@@ -598,12 +622,12 @@ test("ageing times carry the shed's own boosts", () => {
   const boosted = JSON.parse(JSON.stringify(AGING_FARM));
   boosted.bumpkin.skills["Speedy Aging"] = 1;
   boosted.sculptures["Salt Sculpture"].level = 6;
-  const { free } = agingPanels(renderPage(boosted).html);
+  const { free } = agingPanel(renderPage(boosted).html);
   assert.ok(/×0\.85\)/.test(free), "the compounded multiplier is stated");
   const hh = free.slice(free.indexOf(">Hammerhead Shark<"), free.indexOf(">Hammerhead Shark<") + 1400);
   assert.ok(/2\.6h/.test(hh), `3h x 0.855 = 2.6h, not 3.0h: ${hh.replace(/<[^>]+>/g, " ")}`);
   // The unboosted farm must still read the unboosted time, or the multiplier is being ignored.
-  const { free: plainFree } = agingPanels(renderPage(AGING_FARM).html);
+  const { free: plainFree } = agingPanel(renderPage(AGING_FARM).html);
   const hh2 = plainFree.slice(plainFree.indexOf(">Hammerhead Shark<"), plainFree.indexOf(">Hammerhead Shark<") + 1400);
   assert.ok(/3\.0h/.test(hh2), "and a farm with only an L3 sculpture keeps the full 3.0h");
 });
