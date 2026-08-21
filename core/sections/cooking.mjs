@@ -1,4 +1,5 @@
 import { COOKING_RECIPES_DATA, BUMPKIN_DEFAULT_RECIPES, COOKING_BUILDING_NAMES } from "../data/cooking.mjs";
+import { findCollectible } from "../derive/items.mjs";
 import { detectCookingBoosts, computeFoodXP, computeCookTime } from "../engine/cooking.mjs";
 import { computeRecipeCost, computeSaltYieldPerRake, computeSaltRakeCoinMult, computeFishYieldPerCast } from "../engine/cooking-cost.mjs";
 
@@ -32,6 +33,9 @@ export function buildCookingSection(farm, prices = {}, settings = {}) {
     // A Fish Market bait's recipe changes with the season, so the bait route has to be priced at
     // the season the farm is actually in — the cheapest season is a price you cannot pay today.
     season: (farm?.season?.season || "").toLowerCase(),
+    // A water trap is consumed per catch, so it is charged per crustacean — unless a Royal Crab
+    // Pot is PLACED, which is the one thing that stops placeWaterTrap decrementing the pot.
+    freeWaterTraps: findCollectible(farm, "Royal Crab Pot").length > 0,
   };
   const buildings = {};
   const cookingTrace = {};   // per-building xp/day derivation, only filled when settings.explain

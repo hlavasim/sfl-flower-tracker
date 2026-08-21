@@ -6006,7 +6006,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.47</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.48</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -6033,6 +6033,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.48", items: [
+          { t: "fix", text: "<b>A crab pot is consumed on every catch, and nothing was charging for it.</b> <code>placeWaterTrap</code> does <code>inventory[waterTrap].sub(1)</code> and stamps exactly <b>one</b> crustacean as caught — so a <b>Crab Pot (250 coins + 5 Feather + 3 Wool)</b> or a <b>Mariner Pot (500 + 10 Feather + 10 Merino Wool)</b> is a per-catch cost in the same way a rod is per cast. The cost side charged the chum alone, which left every crustacean exactly one pot too cheap and the two chum-less ones — <b>Isopod and Barnacle</b> — with no price at all. That is what made Crab Stick unpriceable, and Crab Stick is the only route to White Shark, Whale Shark, Parrotfish and Barred Knifejaw. <b>The market side had counted the pot all along</b>, so the two valuations disagreed by one pot on every crustacean; they now agree item for item. A placed <b>Royal Crab Pot</b> is the one exemption, because the same reducer then skips the decrement — with one, a chum-less catch really is free." },
+          { t: "fix", text: "Knock-on: an <b>Aged White Shark</b> went 3.19 → <b>4.43 SFL/cook</b> and the fish itself 2.55 → 3.79, because a Crab Stick carries <b>four</b> pot catches. On the FISHING page the bait breakdown now prices the pot too (“Crab Pot 0.41 + 2× Crimstone”), <b>the order lists the pots you will burn</b> — one per crustacean, which is exactly the thing you cannot fish without — and a pot in that list says where it comes from: workbench, 250 coins + 5× Feather + 3× Wool." },
+        ] },
         { ver: "v5.47", items: [
           { t: "feat", text: "<b>The Aging Shed now prices a fish the way you actually get one.</b> The old model was one rod and the fish you wanted appears — every species came out at a fraction of a cast (<b>0.065 SFL</b>) and the whole shed looked free. There are two real routes and the cheaper wins, per fish: <b>fish for it</b> at (rod + worm + chum) ÷ the odds, or <b>force it with the Fish Market bait that lists it</b> — one cast, no luck, but the bait has to be crafted first. Six of the 38 have no chum pair at all and go by bait: <b>White Shark, Whale Shark, Barred Knifejaw and Parrotfish through a Crab Stick</b>, Saw Shark through a Fish Oil, Ray through a Fish Flake. Aged Tuna went <b>0.10 → 0.55 SFL/cook</b>, Aged Parrotfish <b>0.21 → 2.69</b>, and Aged White Shark had no price at all before — now <b>3.19</b>. The ranking is finally about the fish rather than about the salt: Coelacanth tops the board at 21,283 XP/SFL, Sea Bass sits at 918." },
           { t: "feat", text: "<b>A cast is more than one fish, so the price is divided by what it yields.</b> Walrus, the seasonal collectible (Poseidon in autumn), Alba and the Fishy skills all add fish to a cast and the shed eats one at a time — this farm lands <b>1.1 basic/advanced and 1.2 expert per cast</b>, and every fish cost is divided by it. The card shows both halves now: <i>forced with Crab Stick (1 cast, no luck) — 3.05 a cast ÷ 1.2 fish per cast → 2.55 SFL/fish</i>." },
@@ -21811,11 +21815,19 @@
         sn = sn || season;
         const cr = CRUSTACEAN_RECIPES[name] || CRUSTACEAN_RECIPES[_fishCanon(name)];
         if (cr) {
+          /*
+           * The POT is charged, not just the chum. placeWaterTrap consumes one on every placement
+           * and stamps exactly one crustacean, so a Crab Pot (250 coins + 5 Feather + 3 Wool) is
+           * a per-catch cost like a rod is per cast — and a chum-less catch (Isopod, Barnacle)
+           * costs that pot rather than being free. Counting the chum alone made every crustacean
+           * exactly one pot too cheap, and Crab Stick needs four of them.
+           */
           const chumIsBait = cr.chum && FISH_MARKET_RECIPES[cr.chum];
           const unit = !cr.chum ? 0 : chumIsBait ? craftedBaitCost(cr.chum, seen, sn) : P(cr.chum);
-          return { cost: cr.qty * unit, casts: 0, est: false, pot: cr.pot,
+          const potP = P(cr.pot);
+          return { cost: potP + cr.qty * unit, casts: 0, est: false, pot: cr.pot,
                    chum: cr.chum, chumQty: cr.qty, chumCrafted: !!chumIsBait,
-                   how: cr.pot + (cr.chum ? " · " + cr.qty + "× " + cr.chum +
+                   how: cr.pot + " " + potP.toFixed(2) + (cr.chum ? " + " + cr.qty + "× " + cr.chum +
                         (chumIsBait ? " (crafted, " + unit.toFixed(2) + " each)" : "") : " · no chum") };
         }
         const com = fishBestBait(name, sn);
@@ -22343,7 +22355,12 @@
           return;
         }
         const cr = CRUSTACEAN_RECIPES[name] || CRUSTACEAN_RECIPES[_fishCanon(name)];
-        if (cr && cr.chum) need(cr.chum, cr.qty * qty, depth + 1);
+        if (cr) {
+          // One pot per catch, consumed — a list that orders the chum and not the pots is short
+          // of exactly the thing you cannot fish without.
+          need(cr.pot, qty, depth + 1);
+          if (cr.chum) need(cr.chum, cr.qty * qty, depth + 1);
+        }
       };
       for (const c of chosen) {
         const r = c.r;
@@ -22379,6 +22396,11 @@
       const orderSource = (name) => {
         if (BAIT_WORM_YIELD[name]) return "composter · ~" + BAIT_WORM_YIELD[name] + " per cycle";
         if (FISH_MARKET_RECIPES[name]) return "Fish Market · " + (fishBaitHours[name] || 0) + "h per batch";
+        if (TOOL_COSTS[name]) {
+          const t = TOOL_COSTS[name];
+          return "workbench · " + t.coins + " coins" +
+                 Object.entries(t.materials || {}).map(([m, q]) => " + " + q + "× " + m).join("");
+        }
         const cr = CRUSTACEAN_RECIPES[name] || CRUSTACEAN_RECIPES[_fishCanon(name)];
         if (cr) return cr.pot + (cr.chum ? " · " + cr.qty + "× " + cr.chum : " · no chum");
         const com = fishBestBait(name, season);

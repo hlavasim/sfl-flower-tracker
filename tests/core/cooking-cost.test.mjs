@@ -7,7 +7,7 @@ import {
   computeSaltRakeCoinMult,
   computeFishYieldPerCast,
 } from "../../core/engine/cooking-cost.mjs";
-import { computeRodCostSFL, itemProductionCost, computeFishEffectiveCost } from "../../core/engine/item-value.mjs";
+import { computeRodCostSFL, itemProductionCost, itemMarketValue, computeFishEffectiveCost, computeWaterTrapCostSFL } from "../../core/engine/item-value.mjs";
 
 const wrap = JSON.parse(readFileSync(new URL("../fixtures/farm-155498.json", import.meta.url)));
 const farm = wrap.farm || wrap;
@@ -224,23 +224,70 @@ test("a bait's own ingredients are fished for, which is also what stops the recu
   assert.ok(flake && flake.price > 0, "and the bait itself still prices");
 });
 
-test("a pot catch that needs no chum is nearly free, not unpriceable", () => {
+test("a pot catch costs the pot, which is consumed on every placement", () => {
   /*
-   * Barnacle and Isopod are caught with a pot and NO chum. Returning null for them made every
-   * recipe containing one unpriceable in turn — which is how Crab Stick lost its price, and with
-   * it the only route to White Shark, Whale Shark, Parrotfish and Barred Knifejaw.
+   * placeWaterTrap does `inventory[waterTrap].sub(1)` and stamps exactly ONE crustacean as
+   * caught, so the trap is a per-catch cost the way a rod is per cast — 250 coins + 5 Feather +
+   * 3 Wool for a Crab Pot, 500 + 10 + 10 Merino for a Mariner Pot.
+   *
+   * Charging the chum alone made every crustacean exactly one pot too cheap, and left the two
+   * chum-LESS ones (Isopod, Barnacle) unpriceable altogether — which in turn made Crab Stick
+   * unpriceable, and Crab Stick is the only route to White Shark, Whale Shark, Parrotfish and
+   * Barred Knifejaw. itemMarketValue had counted the pot all along, so the two resolvers
+   * disagreed by one pot on every crustacean.
    */
-  for (const n of ["Barnacle", "Isopod"]) {
-    const r = itemProductionCost(n, p2p, COINS_PER_SFL, skills, undefined, {});
-    assert.ok(r, `${n} must price`);
-    assert.equal(r.price, 0, `${n} costs a pot cycle, which this model does not charge for`);
-    assert.equal(r.source, "crustacean");
-  }
-  // A chum-fed one still costs its chum.
+  const crabPot = 250 / COINS_PER_SFL + 5 * p2p["Feather"] + 3 * p2p["Wool"];
+  const marinerPot = 500 / COINS_PER_SFL + 10 * p2p["Feather"] + 10 * p2p["Merino Wool"];
+  assert.ok(Math.abs(computeWaterTrapCostSFL("Crab Pot", p2p, COINS_PER_SFL) - crabPot) < 1e-12);
+  assert.ok(Math.abs(computeWaterTrapCostSFL("Mariner Pot", p2p, COINS_PER_SFL) - marinerPot) < 1e-12);
+
+  // A chum-less catch IS the pot — not free, and not unpriceable.
+  const isopod = itemProductionCost("Isopod", p2p, COINS_PER_SFL, skills, undefined, {});
+  assert.ok(isopod && Math.abs(isopod.price - crabPot) < 1e-12, `Isopod was ${isopod && isopod.price}`);
+  const barnacle = itemProductionCost("Barnacle", p2p, COINS_PER_SFL, skills, undefined, {});
+  assert.ok(barnacle && Math.abs(barnacle.price - marinerPot) < 1e-12, `Barnacle was ${barnacle && barnacle.price}`);
+
+  // A chum-fed one is the pot PLUS the cheaper of its chum and its alternate — the alt must not
+  // replace the total, which is the shape the old code had.
   const lobster = itemProductionCost("Lobster", p2p, COINS_PER_SFL, skills, undefined, {});
-  assert.ok(lobster && lobster.price > 0, "Lobster still costs its Wild Grass");
+  const wildGrass = itemProductionCost("Wild Grass", p2p, COINS_PER_SFL, skills, undefined, {});
+  const frost = itemProductionCost("Frost Pebble", p2p, COINS_PER_SFL, skills, undefined, {});
+  const chum = Math.min(...[wildGrass, frost].filter(Boolean).map((r) => r.price * 3));
+  assert.ok(Math.abs(lobster.price - (crabPot + chum)) < 1e-12,
+    `Lobster ${lobster.price} != pot ${crabPot} + chum ${chum}`);
+
+  // And the two resolvers now agree, which they did not before.
+  for (const n of ["Isopod", "Barnacle", "Lobster", "Shrimp", "Blue Crab", "Sea Slug"]) {
+    const pc = itemProductionCost(n, p2p, COINS_PER_SFL, skills, undefined, {});
+    const mv = itemMarketValue(n, p2p, undefined, { coinsPerSFL: COINS_PER_SFL });
+    assert.ok(Math.abs(pc.price - mv) < 1e-9, `${n}: production ${pc.price} vs market ${mv}`);
+  }
+
+  // Every season of Crab Stick prices, which is what the fish that only it can force depend on.
   for (const s of ["winter", "spring", "summer", "autumn"]) {
     const cs = itemProductionCost("Crab Stick", p2p, COINS_PER_SFL, skills, undefined, { season: s });
     assert.ok(cs && cs.price > 0, `Crab Stick prices in ${s}`);
   }
+});
+
+test("a placed Royal Crab Pot is the one thing that makes the trap free", () => {
+  /*
+   * The same reducer skips the decrement entirely when a Royal Crab Pot is built, so the pot
+   * genuinely costs nothing then — and a chum-less catch really is free. Zero has to survive as
+   * an answer here: treating it as "no price" is what made Crab Stick unpriceable before.
+   */
+  const free = { freeWaterTraps: true };
+  const isopod = itemProductionCost("Isopod", p2p, COINS_PER_SFL, skills, undefined, free);
+  assert.ok(isopod, "still priced, not null");
+  assert.equal(isopod.price, 0, "with the pot exempt and no chum, a catch is free");
+  // A chum-fed catch still costs its chum, just not the pot.
+  const paid = itemProductionCost("Lobster", p2p, COINS_PER_SFL, skills, undefined, {});
+  const exempt = itemProductionCost("Lobster", p2p, COINS_PER_SFL, skills, undefined, free);
+  const crabPot = 250 / COINS_PER_SFL + 5 * p2p["Feather"] + 3 * p2p["Wool"];
+  assert.ok(Math.abs((paid.price - exempt.price) - crabPot) < 1e-12,
+    `the difference between the two is exactly one Crab Pot`);
+  // An unpriceable chum is still unpriceable — the exemption must not turn it into a free catch.
+  const mussel = itemProductionCost("Mussel", p2p, COINS_PER_SFL, skills, undefined,
+    Object.assign({}, free));
+  if (mussel) assert.ok(mussel.price > 0, "Mussel prices only if its Moonfur does");
 });

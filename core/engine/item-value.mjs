@@ -557,18 +557,36 @@ function _pcInner(itemName, p2p, coinsPerSFL, skills, _seen, extras, trace) {
     return result;
   }
 
-  // 6. Crustacean (Blue Crab, Lobster, etc. via Crab Pot + chum)
+  // 6. Crustacean (Blue Crab, Lobster, etc. via Crab Pot / Mariner Pot + chum)
   if (typeof CRUSTACEAN_RECIPES !== "undefined" && CRUSTACEAN_RECIPES[itemName]) {
     const cr = CRUSTACEAN_RECIPES[itemName];
-    // Pot price (one-time setup, but treat as per-catch since we lack pot-cycle accounting)
-    let total = 0;
+    /*
+     * The POT is the floor of what a crustacean costs, not an afterthought.
+     *
+     * placeWaterTrap consumes one on every placement (`inventory[waterTrap].sub(1)`) and stamps
+     * exactly ONE crustacean as caught, so a Crab Pot at 250 coins + 5 Feather + 3 Wool is a
+     * per-catch cost in the same way a rod is per cast. This side used to charge the chum alone
+     * — so a chum-less catch (Isopod, Barnacle) came out unpriceable, and every other crustacean
+     * came out exactly one pot too cheap. itemMarketValue has always counted the pot, so the two
+     * resolvers disagreed by that pot on every single crustacean.
+     *
+     * A placed Royal Crab Pot is the one exemption: the same reducer skips the decrement, so the
+     * pot is genuinely free and extras.freeWaterTraps says so.
+     */
+    const potCost = (extras && extras.freeWaterTraps) ? 0 : computeWaterTrapCostSFL(cr.pot, p2p, coinsPerSFL);
+    let chumCost = 0;
+    // "Priced" is tracked rather than inferred from a zero, because zero is now a legal answer:
+    // a placed Royal Crab Pot makes the trap free and Isopod and Barnacle take no chum at all.
+    // Only a chum this resolver cannot price may come back null.
+    let chumPriced = !(cr.chum && cr.qty > 0);
     const kids = trace ? [] : undefined;
     let chumLabel = trace ? "" : undefined;
     if (cr.chum && cr.qty > 0) {
       const chumR = itemProductionCost(cr.chum, p2p, coinsPerSFL, skills, _seen, extras, kids);
       if (chumR) {
-        total += chumR.price * cr.qty;
-        if (trace) chumLabel = `${cr.qty} × ${cr.chum} @ ${chumR.price.toFixed(5)}`;
+        chumCost = chumR.price * cr.qty;
+        chumPriced = true;
+        if (trace) chumLabel = ` + ${cr.qty} × ${cr.chum} @ ${chumR.price.toFixed(5)}`;
       }
       // Try cheaper alternate chum
       if (cr.alt) {
@@ -577,28 +595,21 @@ function _pcInner(itemName, p2p, coinsPerSFL, skills, _seen, extras, trace) {
           const altR = itemProductionCost(altMatch[1], p2p, coinsPerSFL, skills, _seen, extras, kids);
           if (altR) {
             const altCost = altR.price * parseInt(altMatch[2]);
-            if (altCost > 0 && (total <= 0 || altCost < total)) {
-              total = altCost;
-              if (trace) chumLabel = `${altMatch[2]} × ${altMatch[1]} @ ${altR.price.toFixed(5)} (alt)`;
+            if (altCost > 0 && (chumCost <= 0 || altCost < chumCost)) {
+              chumCost = altCost;
+              chumPriced = true;
+              if (trace) chumLabel = ` + ${altMatch[2]} × ${altMatch[1]} @ ${altR.price.toFixed(5)} (alt)`;
             }
           }
         }
       }
     }
-    /*
-     * A chum-LESS pot catch (Barnacle, Isopod) is not unpriceable — it is very nearly free: the
-     * pot is a one-time build and a cycle costs only the wait. Returning null for them made
-     * every recipe CONTAINING one unpriceable too, which is how Crab Stick lost its price
-     * entirely, and with it the only route to White Shark, Whale Shark and Parrotfish.
-     */
-    if (!cr.chum || !(cr.qty > 0)) {
-      const result = { price: 0, source: "crustacean" };
-      if (trace) emit(trace, { item: itemName, method: "crustacean", formula: `${cr.pot}, no chum — a pot cycle only`, value: 0 });
-      return result;
-    }
-    if (!(total > 0)) return null;
+    if (!chumPriced) return null;
+    const total = potCost + chumCost;
     const result = { price: total, source: "crustacean" };
-    if (trace) emit(trace, { item: itemName, method: "crustacean", formula: chumLabel || "no priceable chum", value: total, steps: kids });
+    if (trace) emit(trace, { item: itemName, method: "crustacean",
+      formula: `${cr.pot} @ ${potCost.toFixed(5)}${cr.chum && cr.qty > 0 ? (chumLabel || " + unpriceable chum") : " (no chum)"}`,
+      value: total, steps: kids });
     return result;
   }
 
@@ -637,6 +648,24 @@ export function computeBaitCostSFL(baitName, p2pPrices) {
   const avgComposterCost = total / n;
   const wormYield = BAIT_WORM_YIELD[baitName] || 1;
   return avgComposterCost / wormYield;
+}
+
+/*
+ * SFL cost of ONE water trap — Crab Pot (250 coins + 5 Feather + 3 Wool) or Mariner Pot
+ * (500 coins + 10 Feather + 10 Merino Wool).
+ *
+ * The trap is CONSUMED: placeWaterTrap does `inventory[waterTrap].sub(1)` on every placement and
+ * stamps exactly one crustacean as caught, so this is a per-catch cost, not a one-time build —
+ * the same shape as a rod per cast. A placed Royal Crab Pot is the one exemption (the same
+ * reducer skips the decrement entirely).
+ */
+export function computeWaterTrapCostSFL(potName, p2pPrices, coinsPerSFL) {
+  const tool = (typeof TOOL_COSTS !== "undefined" && TOOL_COSTS[potName]) || null;
+  if (!tool) return 0;
+  const coinSFL = coinsPerSFL > 0 ? (tool.coins || 0) / coinsPerSFL : 0;
+  let matSFL = 0;
+  for (const [m, q] of Object.entries(tool.materials || {})) matSFL += (p2pPrices[m] || 0) * q;
+  return coinSFL + matSFL;
 }
 
 // SFL rod cost per cast — Reel Deal skill applies to COIN part only (skill text: "-50% rod coin cost")
