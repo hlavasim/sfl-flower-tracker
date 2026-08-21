@@ -29,6 +29,9 @@ export function buildCookingSection(farm, prices = {}, settings = {}) {
       advanced: computeFishYieldPerCast(farm, "advanced"),
       expert: computeFishYieldPerCast(farm, "expert"),
     },
+    // A Fish Market bait's recipe changes with the season, so the bait route has to be priced at
+    // the season the farm is actually in — the cheapest season is a price you cannot pay today.
+    season: (farm?.season?.season || "").toLowerCase(),
   };
   const buildings = {};
   const cookingTrace = {};   // per-building xp/day derivation, only filled when settings.explain

@@ -61,10 +61,15 @@ export function computeRecipeCost(recipeName, p2p, coinsPerSFL, skills, extras, 
   let hasUnpriced = false;
   coinsPerSFL = coinsPerSFL || 0;
   skills = skills || {};
-  // Auto-derive extras for Aging Shed recipes (fish counted as rod cost)
+  /*
+   * Aging Shed recipes price their fish as CAUGHT — the cheaper of fishing for it at the odds or
+   * forcing it with the Fish Market bait that lists it, divided by the fish a cast yields. See
+   * itemProductionCost step 2. Every other building's fish (Chowder's Anchovy, Fish Burger's
+   * Horse Mackerel) keeps the plain empirical cost it always had.
+   */
   const _recData = COOKING_RECIPES_DATA[recipeName];
   if (_recData && _recData.building === "Aging Shed") {
-    extras = Object.assign({ fishAsRod: true }, extras || {});
+    extras = Object.assign({ fishAsCaught: true }, extras || {});
   }
   const parts = trace ? [] : null;
   const kids = trace ? [] : null;
@@ -74,7 +79,8 @@ export function computeRecipeCost(recipeName, p2p, coinsPerSFL, skills, extras, 
     if (r) {
       const cost = r.price * qty;
       total += cost;
-      items.push({ name: itemName, qty, price: r.price, cost, source: r.source, fc: r.fc });
+      items.push({ name: itemName, qty, price: r.price, cost, source: r.source, fc: r.fc,
+                   via: r.via, castPrice: r.castPrice, yieldPerCast: r.yieldPerCast });
       if (trace) {
         parts.push(`${qty} × ${itemName} @ ${r.price.toFixed(5)}`);
         kids.push({ item: itemName, method: "ingredient", formula: `${qty} × @ ${r.price.toFixed(5)}`, value: cost, unit: "SFL", steps: ingTrace });

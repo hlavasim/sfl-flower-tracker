@@ -7,7 +7,7 @@ import {
   computeSaltRakeCoinMult,
   computeFishYieldPerCast,
 } from "../../core/engine/cooking-cost.mjs";
-import { computeRodCostSFL } from "../../core/engine/item-value.mjs";
+import { computeRodCostSFL, itemProductionCost, computeFishEffectiveCost } from "../../core/engine/item-value.mjs";
 
 const wrap = JSON.parse(readFileSync(new URL("../fixtures/farm-155498.json", import.meta.url)));
 const farm = wrap.farm || wrap;
@@ -88,9 +88,11 @@ test("Salt prices off the rake cost and honours yield/coin-mult extras", () => {
   // Task 5b: Aged Fish recipes are now generated into COOKING_INGREDIENTS, so this
   // resolves (fixes Task 7 concern 1, which pinned this as null).
   assert.ok(rc, "Aged Tuna cost should resolve now that Aged recipes exist");
-  assert.ok(!rc.hasUnpriced, "Aged Tuna should be fully priced (fish priced via rod cost, salt via rake cost)");
+  assert.ok(!rc.hasUnpriced, "Aged Tuna should be fully priced (fish priced as caught, salt via rake cost)");
   const byName = Object.fromEntries(rc.items.map((i) => [i.name, i]));
-  assert.equal(byName["Tuna"].source, "fish-rod", "Aging Shed fish is priced as rod cost / yield-per-cast");
+  // Tuna is forceable with a Wild Mushroom chum for pennies, so the caught price is the fishing
+  // route, not a Fish Stick — see the aging-shed block at the end of this file for the other half.
+  assert.equal(byName["Tuna"].source, "fish", "Aging Shed fish is priced as it is actually caught");
   assert.equal(byName["Salt"].source, "salt");
   // Aged Tuna needs 12 Salt: baseXP=200 -> maxXP=600 -> saltCost=round(600/50)=12.
   assert.equal(byName["Salt"].qty, 12, `Salt qty was ${byName["Salt"].qty}`);
@@ -114,4 +116,131 @@ test("salt/fish yield helpers respond to skills and collectibles", () => {
   assert.ok(
     Math.abs(computeFishYieldPerCast({ bumpkin: { skills: { "Fishy Chance": true } } }, "basic") - 1.1) < 1e-9
   );
+});
+
+
+/*
+ * ── The Aging Shed prices its fish as they are actually GOT ──────────────────────────────
+ *
+ * The old model was one rod, and the fish you wanted appears: every fish came out at a fraction
+ * of a cast and the whole shed looked free. There are really two ways to hold a named fish, and
+ * which is cheaper is not a matter of taste:
+ *
+ *   A  fish for it — (rod + worm + chum) / the odds. Cheap when a chum pair forces it, ruinous
+ *      when it does not: a Parrotfish at p=0.003 is 333 casts.
+ *   B  force it with the Fish Market bait that lists it — one cast, no luck, but the bait is
+ *      crafted out of other fish first.
+ *
+ * Both are priced, the cheaper wins, and the result is divided by what a cast YIELDS.
+ */
+const RODS = computeRodCostSFL(p2p, COINS_PER_SFL, skills);
+
+test("a fish only a bait can force is priced through that bait, at the season you are in", () => {
+  /*
+   * White Shark has no chum pair at all (it is not in FISH_DATA), so route A does not exist and
+   * only Crab Stick lists it. Before this it fell through every resolver and came back UNPRICED,
+   * which made Aged White Shark — the biggest XP item in the game — look like the cheapest recipe
+   * on the board at 9,872 XP/SFL, because only its salt was being counted.
+   */
+  const autumn = computeRecipeCost("Aged White Shark", p2p, COINS_PER_SFL, skills,
+    { season: "autumn", fishYieldByTier: { expert: 1.2 } });
+  const ws = autumn.items.find((i) => i.name === "White Shark");
+  assert.equal(ws.source, "fish-bait", `route was ${ws.source}`);
+  assert.equal(ws.via, "Crab Stick", "the bait that lists it");
+  assert.ok(!autumn.hasUnpriced, "and the recipe is fully priced now");
+
+  // Independently: rod + the autumn Crab Stick, divided by the fish a cast yields.
+  const crab = itemProductionCost("Crab Stick", p2p, COINS_PER_SFL, skills, undefined, { season: "autumn" });
+  assert.ok(Math.abs(ws.price - (RODS + crab.price) / 1.2) < 1e-9,
+    `${ws.price} vs (rod ${RODS} + Crab Stick ${crab.price}) / 1.2`);
+
+  /*
+   * And the season is the point: Crab Stick's recipe changes with it, so the same fish costs
+   * differently in winter. The cheapest season is a price you cannot pay today.
+   */
+  const winter = computeRecipeCost("Aged White Shark", p2p, COINS_PER_SFL, skills,
+    { season: "winter", fishYieldByTier: { expert: 1.2 } });
+  const wsW = winter.items.find((i) => i.name === "White Shark");
+  assert.equal(wsW.source, "fish-bait");
+  assert.ok(wsW.price > ws.price * 1.5,
+    `winter's Crab Stick is far dearer than autumn's: ${wsW.price} vs ${ws.price}`);
+  /*
+   * Winter is not re-derived from a standalone Crab Stick price the way autumn is, and the
+   * difference is the interesting part: winter's recipe contains an Oyster, whose own chum is
+   * Fish Stick — so the bait's ingredients are FISH, priced as caught and divided by the yield
+   * in their turn. A standalone bait price (no yield extras) therefore differs by ~0.1 SFL. What
+   * must hold is that the cast is what gets divided.
+   */
+  assert.ok(Math.abs(wsW.price - wsW.castPrice / 1.2) < 1e-12, "the cast price is what is divided");
+  assert.ok(wsW.castPrice > RODS, "and a cast costs the rod plus the bait, not the rod alone");
+});
+
+test("the cheaper of the two routes wins, fish by fish", () => {
+  const extras = { season: "autumn", fishYieldByTier: { basic: 1.1, advanced: 1.1, expert: 1.2 } };
+  const routeOf = (fish) => {
+    const rc = computeRecipeCost("Aged " + fish, p2p, COINS_PER_SFL, skills, extras);
+    return rc.items.find((i) => i.name === fish);
+  };
+  // Tuna: a Wild Mushroom chum forces it for pennies — no bait can beat that.
+  assert.equal(routeOf("Tuna").source, "fish");
+  // Parrotfish: no chum pair, 0.3% a cast at random, and Crab Stick lists it.
+  const parrot = routeOf("Parrotfish");
+  assert.equal(parrot.source, "fish-bait", `Parrotfish went ${parrot.source}`);
+  const random = computeFishEffectiveCost("Parrotfish", p2p, COINS_PER_SFL, skills);
+  assert.ok(random && parrot.price * 1.2 < random.sfl,
+    `the bait beats 333 casts: ${parrot.price * 1.2} vs ${random.sfl}`);
+  // Ray and Barred Knifejaw are the same shape.
+  assert.equal(routeOf("Ray").source, "fish-bait");
+  assert.equal(routeOf("Barred Knifejaw").source, "fish-bait");
+});
+
+test("a cast that yields more than one fish divides the price, exactly", () => {
+  /*
+   * Walrus, the seasonal collectible, Alba and the Fishy skills all add fish to a cast, and the
+   * shed only ever eats one — so the cost of the fish it eats is the cast divided by the yield.
+   */
+  const one = computeRecipeCost("Aged Tuna", p2p, COINS_PER_SFL, skills, { season: "autumn" });
+  const two = computeRecipeCost("Aged Tuna", p2p, COINS_PER_SFL, skills,
+    { season: "autumn", fishYieldByTier: { expert: 2 } });
+  const a = one.items.find((i) => i.name === "Tuna"), b = two.items.find((i) => i.name === "Tuna");
+  assert.ok(Math.abs(a.price / 2 - b.price) < 1e-12, `${a.price} / 2 != ${b.price}`);
+  assert.equal(b.yieldPerCast, 2, "and the divisor is reported, not hidden");
+  assert.ok(Math.abs(b.castPrice - a.price) < 1e-12, "alongside what one cast cost");
+  // Salt is untouched by any of this.
+  assert.equal(one.items.find((i) => i.name === "Salt").cost, two.items.find((i) => i.name === "Salt").cost);
+});
+
+test("a bait's own ingredients are fished for, which is also what stops the recursion", () => {
+  /*
+   * Fish Flake is 4 Anchovy + 2 others, and Fish Flake is also what would force an Anchovy. If
+   * the bait route applied inside a bait, pricing one would never terminate. Nested fish take
+   * route A only — correct in its own right, since a bait's ingredients are the common fish you
+   * simply catch.
+   */
+  const rc = computeRecipeCost("Aged Anchovy", p2p, COINS_PER_SFL, skills, { season: "autumn" });
+  const anchovy = rc.items.find((i) => i.name === "Anchovy");
+  assert.equal(anchovy.source, "fish", "an Anchovy is caught, not crafted out of Anchovies");
+  const flake = itemProductionCost("Fish Flake", p2p, COINS_PER_SFL, skills, undefined, { season: "autumn" });
+  assert.ok(flake && flake.price > 0, "and the bait itself still prices");
+});
+
+test("a pot catch that needs no chum is nearly free, not unpriceable", () => {
+  /*
+   * Barnacle and Isopod are caught with a pot and NO chum. Returning null for them made every
+   * recipe containing one unpriceable in turn — which is how Crab Stick lost its price, and with
+   * it the only route to White Shark, Whale Shark, Parrotfish and Barred Knifejaw.
+   */
+  for (const n of ["Barnacle", "Isopod"]) {
+    const r = itemProductionCost(n, p2p, COINS_PER_SFL, skills, undefined, {});
+    assert.ok(r, `${n} must price`);
+    assert.equal(r.price, 0, `${n} costs a pot cycle, which this model does not charge for`);
+    assert.equal(r.source, "crustacean");
+  }
+  // A chum-fed one still costs its chum.
+  const lobster = itemProductionCost("Lobster", p2p, COINS_PER_SFL, skills, undefined, {});
+  assert.ok(lobster && lobster.price > 0, "Lobster still costs its Wild Grass");
+  for (const s of ["winter", "spring", "summer", "autumn"]) {
+    const cs = itemProductionCost("Crab Stick", p2p, COINS_PER_SFL, skills, undefined, { season: s });
+    assert.ok(cs && cs.price > 0, `Crab Stick prices in ${s}`);
+  }
 });

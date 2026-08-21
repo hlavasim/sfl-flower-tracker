@@ -6006,7 +6006,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.46</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.47</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -6033,6 +6033,12 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.47", items: [
+          { t: "feat", text: "<b>The Aging Shed now prices a fish the way you actually get one.</b> The old model was one rod and the fish you wanted appears — every species came out at a fraction of a cast (<b>0.065 SFL</b>) and the whole shed looked free. There are two real routes and the cheaper wins, per fish: <b>fish for it</b> at (rod + worm + chum) ÷ the odds, or <b>force it with the Fish Market bait that lists it</b> — one cast, no luck, but the bait has to be crafted first. Six of the 38 have no chum pair at all and go by bait: <b>White Shark, Whale Shark, Barred Knifejaw and Parrotfish through a Crab Stick</b>, Saw Shark through a Fish Oil, Ray through a Fish Flake. Aged Tuna went <b>0.10 → 0.55 SFL/cook</b>, Aged Parrotfish <b>0.21 → 2.69</b>, and Aged White Shark had no price at all before — now <b>3.19</b>. The ranking is finally about the fish rather than about the salt: Coelacanth tops the board at 21,283 XP/SFL, Sea Bass sits at 918." },
+          { t: "feat", text: "<b>A cast is more than one fish, so the price is divided by what it yields.</b> Walrus, the seasonal collectible (Poseidon in autumn), Alba and the Fishy skills all add fish to a cast and the shed eats one at a time — this farm lands <b>1.1 basic/advanced and 1.2 expert per cast</b>, and every fish cost is divided by it. The card shows both halves now: <i>forced with Crab Stick (1 cast, no luck) — 3.05 a cast ÷ 1.2 fish per cast → 2.55 SFL/fish</i>." },
+          { t: "fix", text: "<b>The bait is priced at the season you are in, not at whichever season is cheapest.</b> A Fish Market recipe changes with the season and its cost with it — winter’s Crab Stick runs <b>5.98</b> against autumn’s <b>3.01</b> — so the cheapest season was a price you could not pay today. Without a season supplied (a generic valuation with no farm behind it) cheapest-of-all still stands." },
+          { t: "fix", text: "<b>A pot catch that needs no chum was treated as unpriceable, which silently deleted a whole bait.</b> Barnacle and Isopod come out of a pot with no chum at all; returning “no price” for them made every recipe containing one unpriceable in turn, so <b>Crab Stick had no price</b> — and Crab Stick is the only route to White Shark, Whale Shark, Parrotfish and Barred Knifejaw. They cost a pot cycle, which this model does not charge for, so they price at 0 and say so." },
+        ] },
         { ver: "v5.46", items: [
           { t: "feat", text: "<b>The diff timeline is a window with a slicer, not a wall of bars.</b> It drew every period it had loaded, so raw mode ran off the right-hand edge and <b>“now” — the one bar you open the page for — was the one you had to scroll to reach</b>. It now shows the <b>newest 20</b> by default (remembered per visit, with 50 / 100 / ALL beside it) and everything under the chart describes that window: net, gains, losses and the count card, which carries “of N” so the size of the load is never hidden. A scrubber pans the window without refetching — <b>◀ ▶</b> page by a full window, <b>NOW</b> jumps back to the newest, and dragging updates the label live but only repaints on release, because rebuilding a slider mid-drag drops the handle." },
           { t: "feat", text: "<b>FROM / TO, in five-minute steps, on both raw and grouped periods.</b> Raw was hard-wired to the newest 50 snapshots, which cannot express “raw for the last five days” (172 snapshots here) — it is a real range query now, capped at 500 and told you when the range holds more. The grouped side is the interesting half: the bounds go to the <b>server</b>, so <code>group=day</code> over <b>22:33–22:40</b> returns <b>one period holding exactly that session</b> rather than the whole day. Filtering day buckets after the fact could only ever hand back the whole day. LAST <b>6h / 24h / 5d / 30d</b> are one click." },
@@ -11540,17 +11546,32 @@
             if (sortMode === "sflPerCook") return `${escHTML(r.name)} (${cost} SFL/cook, ${xpStr} XP)`;
             return `${escHTML(r.name)} (${xph} XP/h, ${cost} SFL/cook)`;
           };
-          // Fish breakdown for selected recipe (shown below ingredient tooltips)
+          /*
+           * Fish breakdown for the selected recipe.
+           *
+           * For the Aging Shed the engine prices a fish as it is actually GOT — the cheaper of
+           * fishing for it at the odds and forcing it with the Fish Market bait that lists it —
+           * then divides by what a cast yields, since Walrus, the seasonal collectible, Alba and
+           * the Fishy skills routinely land more than one and the shed eats one at a time. Both
+           * halves are shown, or the number reads as a bare guess.
+           */
           let fishBreakdownHTML = "";
           if (selected && recipeCost) {
             for (const it of recipeCost.items) {
-              if (it.fc && it.source === "fish") {
+              if (it.source !== "fish" && it.source !== "fish-bait") continue;
+              let path = "";
+              if (it.source === "fish-bait" && it.via) {
+                path = `forced with <b>${escHTML(it.via)}</b> (1 cast, no luck)`;
+              } else if (it.fc) {
                 const fd = it.fc.fd;
-                const path = it.fc.useChum
+                path = it.fc.useChum
                   ? `${escHTML(fd.bait)} + ${fd.chumQty}\u00d7 ${escHTML(fd.chum)} chum`
-                  : `${escHTML(fd.bait)} only`;
-                fishBreakdownHTML += `<div class="bumpkin-fish-detail">\u{1F41F} <b>${escHTML(it.name)}</b>: ${path} \u2192 ${fmtSfl(it.fc.sfl)} SFL/fish</div>`;
-              }
+                  : `${escHTML(fd.bait)} only, ${(it.fc.prob * 100).toFixed(1)}% a cast`;
+              } else continue;
+              const per = (it.yieldPerCast && it.yieldPerCast !== 1 && it.castPrice)
+                ? ` \u2014 ${fmtSfl(it.castPrice)} a cast \u00f7 ${it.yieldPerCast} fish per cast`
+                : "";
+              fishBreakdownHTML += `<div class="bumpkin-fish-detail">\u{1F41F} <b>${escHTML(it.name)}</b>: ${path}${per} \u2192 ${fmtSfl(it.price)} SFL/fish</div>`;
             }
           }
           // Aging Shed: slots == its level (1-6), so the payload's buildingCount is both.
@@ -21388,7 +21409,7 @@
      *
      * The recipes are NOT repeated here — FISH_MARKET_RECIPES already carries them per season.
      */
-    const fishBaitCatch = {
+    const FISH_BAIT_CATCH = {
       "Fish Flake": ["Anchovy", "Butterflyfish", "Halibut", "Blowfish", "Porgy", "Clownfish", "Sea Bass", "Sea Horse", "Muskellunge", "Horse Mackerel", "Squid", "Moray Eel", "Olive Flounder", "Tilapia", "Napoleanfish", "Surgeonfish", "Zebra Turkeyfish", "Walleye", "Angelfish", "Ray"],
       "Fish Stick": ["Rock Blackfish", "Hammerhead shark", "Tuna", "Mahi Mahi", "Blue Marlin", "Weakfish", "Oarfish", "Football fish", "Sunfish", "Cobia"],
       "Fish Oil": ["Barred Knifejaw", "Trout", "Coelacanth", "Saw Shark"],
@@ -21817,7 +21838,7 @@
                          how: "out of season — est. " + ce.toFixed(1) + " casts, " + (t ? t + "-tier median" : "overall median") };
         return { cost: Infinity, casts: 0, est: false, how: "no rate at all" };
       }
-      const baits = Object.keys(fishBaitCatch).map((bait) => {
+      const baits = Object.keys(FISH_BAIT_CATCH).map((bait) => {
         const rec = (FISH_MARKET_RECIPES[bait] || {})[season] || {};
         const parts = Object.entries(rec).map(([ing, q]) => {
           const ic = ingredientCost(ing);
@@ -21932,7 +21953,7 @@
             }).join("") +
           '</div>' +
           '<div style="font-size:0.44rem;color:var(--text-dim);margin-top:4px;line-height:1.6">forces: ' +
-            fishBaitCatch[b.bait].map(escHTML).join(" · ") + '</div></div>').join("") +
+            FISH_BAIT_CATCH[b.bait].map(escHTML).join(" · ") + '</div></div>').join("") +
         '<div style="font-size:0.46rem;color:#e8a060;line-height:1.6">⚠ A bait is only worth its <b>availability</b>, not its XP — each buys one fish for many times what a worm cast costs (' + costPerCast.toFixed(3) + '), so you use them to reach a fish that will not turn up on its own, or to farm a map piece, never to grind XP.' +
         (baits.some((b) => b.est) ? ' A <b style="color:#e8a060">~</b> means an ingredient you have never caught, priced at the median rate of its tier — an estimate, but never a reason to drop the route.' : "") +
         (rows.some((r) => r.qty < 20) ? ' Rates from small samples carry their catch count, because a fish landed 10 times sets its own price to within a factor of two at best.' : "") + '</div></div>';
@@ -22170,7 +22191,7 @@
         // EVERY Fish Market bait that lists this fish, not merely the cheapest — a few fish appear
         // in two lists (Barred Knifejaw is in both Fish Oil and Crab Stick), and which of them is
         // cheaper flips with the season, so both belong on screen.
-        for (const fb of baits.filter((b) => b.complete && fishBaitCatch[b.bait].some((f) => f.toLowerCase() === fish.name.toLowerCase()))) {
+        for (const fb of baits.filter((b) => b.complete && FISH_BAIT_CATCH[b.bait].some((f) => f.toLowerCase() === fish.name.toLowerCase()))) {
           if (!(p > 0)) break;
           const per = fb.cost + rodP;
           out.push({ kind: "bait", label: fb.bait, bait: fb, perPiece: 1 / p, unit: fb.bait, est: fb.est,

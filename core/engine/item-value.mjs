@@ -2,7 +2,7 @@ import { FLOWER_RECIPES, DOLL_RECIPES, RECIPE_INGREDIENTS } from "../data/recipe
 import { SEED_COSTS, POTION_TICKET_COIN_FLOOR, EXOTIC_CROPS_TICKET_COST, GIANT_FRUIT_SELL_PRICES, TOOL_COSTS, FLOWER_SEED_COIN_COSTS, ITEM_XP_VALUES, GIANT_ITEM_COIN_PRICES } from "../data/economy.mjs";
 import { PET_FETCH_DATA } from "../data/pets.mjs";
 import { CRAFTED_INGREDIENT_RECIPES, TREASURE_SELL_PRICES, COMPOST_RECIPES, CRUSTACEAN_RECIPES } from "../data/crafting.mjs";
-import { FISH_MARKET_RECIPES, FISH_DATA, FISH_TIER_MAP, BAIT_WORM_YIELD, FISHING_ROD_COST } from "../data/fishing.mjs";
+import { FISH_MARKET_RECIPES, FISH_BAIT_CATCH, FISH_DATA, FISH_TIER_MAP, BAIT_WORM_YIELD, FISHING_ROD_COST } from "../data/fishing.mjs";
 import { COOKING_INGREDIENTS, SALT_RAKE_COST, SALT_BASE_YIELD } from "../data/cooking.mjs";
 
 // Trace sink for the item-value resolvers. When a caller passes a `trace` array as the
@@ -407,19 +407,68 @@ function _pcInner(itemName, p2p, coinsPerSFL, skills, _seen, extras, trace) {
     return result;
   }
 
-  // 2. Fish — for Aging Shed (extras.fishAsRod) treat as rod cost / yield-per-cast;
-  //    otherwise use empirical fishing cost (rod + bait + chum / probability)
-  if (FISH_DATA[itemName]) {
-    if (extras && extras.fishAsRod) {
+  /*
+   * 2. Fish, for the Aging Shed (extras.fishAsCaught) — how it is actually GOT, not a rod price.
+   *
+   * There are two ways to end up holding a named fish, and which is cheaper is not a matter of
+   * taste:
+   *
+   *   A  fish for it: (rod + worm + chum) / the odds. Cheap for a common fish and ruinous for a
+   *      rare one — a Barred Knifejaw at p=0.0001 is ten thousand casts.
+   *   B  force it with the Fish Market bait that lists it: one cast, no luck, but the bait has
+   *      to be crafted out of other fish first.
+   *
+   * Both are priced and the cheaper wins, because "I use baits" and "I just fish" are each right
+   * for a different half of the table. The old model — one rod, and the fish you wanted appears —
+   * priced every fish at a fraction of a cast and made the whole shed look free.
+   *
+   * The result is then divided by what a cast actually YIELDS: Walrus, the seasonal collectible,
+   * Alba and the Fishy skills mean one cast is routinely more than one fish, and the shed eats
+   * one at a time.
+   *
+   * The bait's own ingredients are priced by route A only (_noBaitRoute). That is both correct —
+   * they are common fish you simply catch — and what stops the recursion, since Fish Flake needs
+   * an Anchovy and Fish Flake is also what would force one.
+   */
+  if (extras && extras.fishAsCaught && (FISH_TIER_MAP[itemName] || FISH_DATA[itemName])) {
+    const tier = FISH_TIER_MAP[itemName];
+    const yieldPerCast = (tier && ((extras.fishYieldByTier || {})[tier])) || 1;
+    const routes = [];
+    const fc0 = computeFishEffectiveCost(itemName, p2p, coinsPerSFL, skills);
+    if (fc0 && fc0.sfl > 0) {
+      routes.push({ price: fc0.sfl, source: "fish", fc: fc0,
+                    how: `fished at random: ${fc0.rodSFL.toFixed(5)} rod + ${fc0.baitSFL.toFixed(5)} bait${fc0.chumCostPerCast ? ` + ${fc0.chumCostPerCast.toFixed(5)} chum` : ""} / ${fc0.prob} prob` });
+    }
+    if (!extras._noBaitRoute) {
       const rod = computeRodCostSFL(p2p, coinsPerSFL, skills);
-      const tier = FISH_TIER_MAP[itemName];
-      const yieldByTier = (extras && extras.fishYieldByTier) || {};
-      const yieldPerCast = (tier && yieldByTier[tier]) || 1;
-      if (!(rod > 0)) return null;
-      const result = { price: rod / yieldPerCast, source: "fish-rod" };
-      if (trace) emit(trace, { item: itemName, method: "fish rod", formula: `rod ${rod.toFixed(5)} SFL / ${yieldPerCast} yield`, value: result.price });
+      const sub = Object.assign({}, extras, { _noBaitRoute: true });
+      for (const [bait, caught] of Object.entries(FISH_BAIT_CATCH)) {
+        if (!caught.some((n) => n.toLowerCase() === itemName.toLowerCase())) continue;
+        const bTrace = trace ? [] : undefined;
+        // A fresh _seen per bait: one bait's ingredients must not make the next bait unpriceable.
+        const bp = itemProductionCost(bait, p2p, coinsPerSFL, skills, new Set(_seen), sub, bTrace);
+        if (bp && bp.price > 0 && rod > 0) {
+          routes.push({ price: rod + bp.price, source: "fish-bait", bait, steps: bTrace,
+                        how: `forced with ${bait}: ${rod.toFixed(5)} rod + ${bp.price.toFixed(5)} bait` });
+        }
+      }
+    }
+    if (routes.length) {
+      routes.sort((a, b) => a.price - b.price);
+      const best = routes[0];
+      const price = best.price / yieldPerCast;
+      // castPrice/yieldPerCast ride along so the Bumpkin card can show the division rather than
+      // a bare number — one cast is routinely more than one fish, and the shed eats one.
+      const result = { price, source: best.source, fc: best.fc, via: best.bait, castPrice: best.price, yieldPerCast };
+      if (trace) emit(trace, { item: itemName, method: best.source === "fish-bait" ? `forced with ${best.bait}` : "fished at random",
+        formula: `${best.how} = ${best.price.toFixed(5)} / ${yieldPerCast} fish per cast`, value: price, steps: best.steps });
       return result;
     }
+    // No route at all (a fish with neither odds nor a bait): fall through to the resolvers below.
+  }
+
+  // 2b. Fish outside that context — the empirical fishing cost (rod + bait + chum / probability)
+  if (FISH_DATA[itemName]) {
     const fc = computeFishEffectiveCost(itemName, p2p, coinsPerSFL, skills);
     if (!fc) return null;
     const result = { price: fc.sfl, source: "fish", fc };
@@ -439,11 +488,20 @@ function _pcInner(itemName, p2p, coinsPerSFL, skills, _seen, extras, trace) {
   // 3b. Fish Market processed (Fish Flake / Fish Stick / Fish Oil / Crab Stick)
   if (typeof FISH_MARKET_RECIPES !== "undefined" && FISH_MARKET_RECIPES[itemName]) {
     const seasonRecipes = FISH_MARKET_RECIPES[itemName];
-    // Use cheapest season (best player can do)
+    /*
+     * Priced at the season you are IN when one is supplied, not at whichever season is cheapest.
+     *
+     * The recipes change with the season and the cost with them — winter's Fish Stick wants
+     * Walleye and Angelfish, spring's wants Olive Flounder and Zebra Turkeyfish — so the cheapest
+     * season is a price you cannot pay today. Without a season (a generic valuation with no farm
+     * behind it) the old cheapest-of-all stands, which is the best the caller can be told.
+     */
+    const want = (extras && extras.season) ? String(extras.season).toLowerCase() : "";
+    const useSeasons = (want && seasonRecipes[want]) ? [want] : Object.keys(seasonRecipes);
     let bestCost = null;
     let bestFormula = trace ? null : undefined;
     let bestKids;
-    for (const s of Object.keys(seasonRecipes)) {
+    for (const s of useSeasons) {
       const recipe = seasonRecipes[s];
       let total = 0, missing = false;
       const seasonKids = trace ? [] : undefined;
@@ -526,6 +584,17 @@ function _pcInner(itemName, p2p, coinsPerSFL, skills, _seen, extras, trace) {
           }
         }
       }
+    }
+    /*
+     * A chum-LESS pot catch (Barnacle, Isopod) is not unpriceable — it is very nearly free: the
+     * pot is a one-time build and a cycle costs only the wait. Returning null for them made
+     * every recipe CONTAINING one unpriceable too, which is how Crab Stick lost its price
+     * entirely, and with it the only route to White Shark, Whale Shark and Parrotfish.
+     */
+    if (!cr.chum || !(cr.qty > 0)) {
+      const result = { price: 0, source: "crustacean" };
+      if (trace) emit(trace, { item: itemName, method: "crustacean", formula: `${cr.pot}, no chum — a pot cycle only`, value: 0 });
+      return result;
     }
     if (!(total > 0)) return null;
     const result = { price: total, source: "crustacean" };

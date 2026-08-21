@@ -68,6 +68,24 @@ export const FISH_DATA = {
 
 };
 
+/*
+ * What each Fish Market bait GUARANTEES, from the game's GUARANTEED_BAIT_CATCH (fishing.ts).
+ *
+ * These four are bait, not chum: they replace the worm, and you then pick the fish yourself out
+ * of the bait's list — no odds involved. That is the whole reason to craft one, and it is what
+ * makes a rare fish costable at all: a Barred Knifejaw at p=0.0001 is ten thousand casts at
+ * random and one cast with a Fish Oil.
+ *
+ * Spelling follows the GAME here ("Hammerhead shark", "Football fish"), which differs from the
+ * consumables record used by FISH_BASE_XP / FISH_TIER_MAP — look these up case-insensitively.
+ */
+export const FISH_BAIT_CATCH = {
+  "Fish Flake": ["Anchovy", "Butterflyfish", "Halibut", "Blowfish", "Porgy", "Clownfish", "Sea Bass", "Sea Horse", "Muskellunge", "Horse Mackerel", "Squid", "Moray Eel", "Olive Flounder", "Tilapia", "Napoleanfish", "Surgeonfish", "Zebra Turkeyfish", "Walleye", "Angelfish", "Ray"],
+  "Fish Stick": ["Rock Blackfish", "Hammerhead shark", "Tuna", "Mahi Mahi", "Blue Marlin", "Weakfish", "Oarfish", "Football fish", "Sunfish", "Cobia"],
+  "Fish Oil": ["Barred Knifejaw", "Trout", "Coelacanth", "Saw Shark"],
+  "Crab Stick": ["Barred Knifejaw", "Whale Shark", "White Shark", "Parrotfish"],
+};
+
 export const FISH_MARKET_RECIPES = {
   "Fish Flake": {
     autumn: { "Anchovy": 4, "Halibut": 2, "Muskellunge": 2 },

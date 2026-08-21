@@ -254,6 +254,10 @@ export const TABLE_INVENTORY = [
     "lines": 6
   },
   {
+    "name": "FISH_BAIT_CATCH",
+    "lines": 6
+  },
+  {
     "name": "FISH_BASE_XP",
     "lines": 12
   },
