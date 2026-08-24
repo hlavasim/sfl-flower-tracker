@@ -6006,7 +6006,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.48</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.49</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -6033,6 +6033,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.49", items: [
+          { t: "fix", text: "<b>The BUMPKIN page crashed for every farm below level 200 the moment its cooking data arrived.</b> The ascension-aware level rework deleted the <code>nextLvlAfterFood</code> definition but left three uses of it in the ingredient-cost summary, so the whole render died on a <code>ReferenceError</code> and the page sat on “Loading cooking data...” forever. A farm at level 200+ never evaluates the guarded branch — which is why the page kept working on the farm it was written against and broke on everyone else’s (found on a friend’s level-186 farm). One line restored, and the page now has a render test of its own: the real inline script, real engine cooking data, any throw fails the suite." },
+        ] },
         { ver: "v5.48", items: [
           { t: "fix", text: "<b>A crab pot is consumed on every catch, and nothing was charging for it.</b> <code>placeWaterTrap</code> does <code>inventory[waterTrap].sub(1)</code> and stamps exactly <b>one</b> crustacean as caught — so a <b>Crab Pot (250 coins + 5 Feather + 3 Wool)</b> or a <b>Mariner Pot (500 + 10 Feather + 10 Merino Wool)</b> is a per-catch cost in the same way a rod is per cast. The cost side charged the chum alone, which left every crustacean exactly one pot too cheap and the two chum-less ones — <b>Isopod and Barnacle</b> — with no price at all. That is what made Crab Stick unpriceable, and Crab Stick is the only route to White Shark, Whale Shark, Parrotfish and Barred Knifejaw. <b>The market side had counted the pot all along</b>, so the two valuations disagreed by one pot on every crustacean; they now agree item for item. A placed <b>Royal Crab Pot</b> is the one exemption, because the same reducer then skips the decrement — with one, a chum-less catch really is free." },
           { t: "fix", text: "Knock-on: an <b>Aged White Shark</b> went 3.19 → <b>4.43 SFL/cook</b> and the fish itself 2.55 → 3.79, because a Crab Stick carries <b>four</b> pot catches. On the FISHING page the bait breakdown now prices the pot too (“Crab Pot 0.41 + 2× Crimstone”), <b>the order lists the pots you will burn</b> — one per crustacean, which is exactly the thing you cannot fish without — and a pot in that list says where it comes from: workbench, 250 coins + 5× Feather + 3× Wool." },
@@ -11628,6 +11631,7 @@
         // Cost calculations — from level after eating all banked food
         const xpAfterEating = currentXP + bankedXP;
         const levelAfterFood = getTotalBumpkinLevel(xpAfterEating, ascLevel);
+        const nextLvlAfterFood = Math.min(levelAfterFood + 1, 200);
         const xpToNextFromFood = xpRemainingToNextLevel(xpAfterEating, ascLevel);
         const daysToNextLevel = totalXPPerDay > 0 && xpToNextFromFood > 0 ? xpToNextFromFood / totalXPPerDay : 0;
         const costToNextLevel = totalCostPerDay * daysToNextLevel;
