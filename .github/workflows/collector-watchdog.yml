@@ -38,8 +38,12 @@ jobs:
             for (const c of r.collectors || []) {
               console.log(`${c.stale ? "STALE" : "ok   "}  ${String(c.label).padEnd(20)} ${c.ageHours}h (limit ${c.staleThresholdH}h)`);
             }
+            // Token expiry is informational only: it cannot be renewed ahead of time anyway
+            // (the game logs the user out at expiry; logging back in mints the fresh JWT),
+            // and its status is already on the Sales page token card. If the token actually
+            // dies, the trades collector stops writing and the staleness check below fires.
             if (r.warnings && r.warnings.token) console.log(`token: ${r.warnings.token}`);
-            if (!stale.length && !(r.warnings && r.warnings.token)) { console.log("\nall collectors writing"); process.exit(0); }
+            if (!stale.length) { console.log("\nall collectors writing"); process.exit(0); }
             // Everything stale at once is the host-lease failure, not six coincidences. Say so,
             // because the fix for that one is specific and a restart alone does not do it.
             if (stale.length === (r.collectors || []).length) {
