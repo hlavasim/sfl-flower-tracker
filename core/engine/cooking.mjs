@@ -92,6 +92,10 @@ export function detectCookingBoosts(farm, settings = {}) {
   // Fish XP boosts — Aging Shed outputs (Aged Fish) count as fish consumables
   if (hasItem(farm, "Skill Shrimpy")) xpBoosts.push({ name: "Skill Shrimpy (+20% Fish XP)", multiplier: 1.20, buildings: ["Aging Shed"] });
   if (skills["Fishy Feast"]) xpBoosts.push({ name: "Fishy Feast (+20% Fish XP)", multiplier: 1.20, buildings: ["Aging Shed"] });
+  // Marine Marvel Master milestone wearable. The game applies it to FISH_CONSUMABLES
+  // (Aged + Prime Aged included) but only while WORN — hasItem's equipped check
+  // (bumpkin or farm hand) is exactly isWearableActive; wardrobe ownership is not.
+  if (hasItem(farm, "Luminous Anglerfish Topper")) xpBoosts.push({ name: "Luminous Anglerfish Topper (+50% Fish XP)", multiplier: 1.5, buildings: ["Aging Shed"] });
   // Salt yield & rake-cost (informational — affect salt cost rather than recipe XP/time)
   if (skills["Wide Rakes"]) xpBoosts.push({ name: "Wide Rakes (+2 salt/rake)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
   if (skills["Cheap Rakes"]) xpBoosts.push({ name: "Cheap Rakes (-20% rake coin cost)", multiplier: 1, buildings: ["Aging Shed"], salt: true });

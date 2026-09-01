@@ -36,7 +36,8 @@ jobs:
             const r = JSON.parse(process.argv[1]);
             const stale = (r.collectors || []).filter((c) => c.stale);
             for (const c of r.collectors || []) {
-              console.log(`${c.stale ? "STALE" : "ok   "}  ${String(c.label).padEnd(20)} ${c.ageHours}h (limit ${c.staleThresholdH}h)`);
+              const tag = c.paused ? "PAUSED" : c.stale ? "STALE " : "ok    ";
+              console.log(`${tag} ${String(c.label).padEnd(20)} ${c.ageHours}h (limit ${c.staleThresholdH}h)`);
             }
             // Token expiry is informational only: it cannot be renewed ahead of time anyway
             // (the game logs the user out at expiry; logging back in mints the fresh JWT),

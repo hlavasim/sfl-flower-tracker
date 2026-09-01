@@ -6006,7 +6006,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.49</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.51</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -6033,6 +6033,12 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.51", items: [
+          { t: "fix", text: "<b>The game walled its marketplace API behind an anti-bot layer on 1 Sept, and our collectors can't get through.</b> Every protected request now needs a signature (<code>X-Token</code>) produced by a WASM signer with a key baked into the game client — a session JWT alone gets <code>RT-001</code> rejected, which is why it still works in your browser but not from a server. So the <b>orderbook and trade collectors are paused</b> (their Azure timers stopped): Flips, live listings and floors go quiet, and My Trades stops growing — the history already gathered stays. <b>Prices and NFT values</b> come via sfl.world, which hit the same wall; those should thaw on their own once sfl.world recovers, so they're left running. Flips and My Trades now say plainly when their data is frozen (and un-say it automatically if collection ever resumes), and the collector watchdog no longer cries stale over a stop we chose." },
+        ] },
+        { ver: "v5.50", items: [
+          { t: "feat", text: "<b>The Luminous Anglerfish Topper now counts: +50% XP on everything out of the Aging Shed.</b> The Marine Marvel Master milestone wearable multiplies XP from every fish consumable — Aged and Prime Aged included — by 1.5, and the cooking engine knew nothing about it. Detected exactly the way the game does (<code>isWearableActive</code>): worn by the bumpkin or any farm hand counts, sitting in the wardrobe does not. On this farm it rides on farm hand #5, so Aging Shed XP/day, banked aged-fish XP and the recipe ranking all rise accordingly — stacking with Skill Shrimpy, Fishy Feast and the Prime Aged average." },
+        ] },
         { ver: "v5.49", items: [
           { t: "fix", text: "<b>The BUMPKIN page crashed for every farm below level 200 the moment its cooking data arrived.</b> The ascension-aware level rework deleted the <code>nextLvlAfterFood</code> definition but left three uses of it in the ingredient-cost summary, so the whole render died on a <code>ReferenceError</code> and the page sat on “Loading cooking data...” forever. A farm at level 200+ never evaluates the guarded branch — which is why the page kept working on the farm it was written against and broke on everyone else’s (found on a friend’s level-186 farm). One line restored, and the page now has a render test of its own: the real inline script, real engine cooking data, any throw fails the suite." },
         ] },
@@ -27643,6 +27649,17 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     window._flipSetSort = (s) => { localStorage.setItem("sfl_flip_sort", s); renderFlips(); };
     window._flipSearch = (v) => { window._flipQ = v; clearTimeout(window._flipT); window._flipT = setTimeout(() => renderFlips(), 300); };
 
+    // The marketplace collectors were paused 2026-09-01, when the game walled its /collection
+    // and /marketplace endpoints behind a request-token anti-bot layer (RT-001) no server-side
+    // caller can sign; the stored orderbook/trade tables stopped growing. This notice shows
+    // ONLY while the data is genuinely stale (older than the collector's own threshold), so it
+    // clears itself the moment collection ever resumes — no code change needed to un-say it.
+    function _mktPausedNotice(latestTs, thresholdH) {
+      if (latestTs && (Date.now() - new Date(latestTs).getTime()) / 3600000 <= thresholdH) return "";
+      const asOf = latestTs ? new Date(latestTs).toLocaleString("cs-CZ") : "—";
+      return `<div class="pixel-panel" style="padding:12px;margin-bottom:10px;border-left:3px solid var(--yellow);color:var(--yellow);font-size:0.58rem;line-height:1.5">⏸️ <b>Marketplace API omezeno hrou</b> (anti-bot ochrana, 1. 9. 2026). Serverový sběr byl pozastaven — data jsou zamrzlá k <b>${escHTML(asOf)}</b> a dál se neaktualizují.</div>`;
+    }
+
     async function renderFlips() {
       const app = document.getElementById("app");
       const sort = _flipSort();
@@ -27676,6 +27693,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       h += `<input type="text" placeholder="🔎 search NFT" value="${escHTML(q)}" oninput="_flipSearch(this.value)" style="background:#1c160f;border:1px solid var(--border-brown);color:var(--text-primary);border-radius:5px;padding:4px 8px;font-size:0.6rem;font-family:'Courier New',monospace;min-width:140px">`;
       for (const [k, lbl] of _flipSorts) h += `<button class="roi-pill${sort === k ? " active" : ""}" onclick="_flipSetSort('${k}')">${lbl}</button>`;
       h += `</div>`;
+      h += _mktPausedNotice(d.items[0]?.updatedAt, 3);
       h += `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px">${d.count} boostovaných NFT s bid i ask · <span class="flip-good">zelená</span> marže ≥15 % (zdravý flip) · <span class="flip-bad">červená</span> net ≤0 (spread nepokryje poplatek)</div>`;
       h += `<div style="overflow-x:auto"><table class="flip-t"><thead><tr>
         <th>NFT</th><th>bid→ask</th><th>avg10</th><th>spread</th><th>net</th><th>marže</th><th>obch.</th><th>tlak o/l</th>
@@ -27696,7 +27714,8 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       }
       h += `</tbody></table></div>`;
       const upd = d.items[0]?.updatedAt;
-      h += `<div class="flip-dim" style="font-size:0.5rem;margin-top:8px">Sběr každou hodinu${upd ? " · poslední: " + new Date(upd).toLocaleString("cs-CZ") : ""}</div>`;
+      const flipStale = upd && (Date.now() - new Date(upd).getTime()) / 3600000 > 3;
+      h += `<div class="flip-dim" style="font-size:0.5rem;margin-top:8px">${flipStale ? "Sběr pozastaven" : "Sběr každou hodinu"}${upd ? " · poslední: " + new Date(upd).toLocaleString("cs-CZ") : ""}</div>`;
       document.getElementById("flips-root").innerHTML = h;
     }
 
@@ -27733,6 +27752,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         .mt-t .icn{height:1.3em;vertical-align:-0.25em;margin-right:3px}
         .g{color:#7fe0a0}.r{color:#ff8888}.dim{color:var(--text-dim)}
       </style>`;
+      h += _mktPausedNotice(d.trades?.[0]?.date, 6);
       h += `<div class="mt-cards">
         <div class="mt-card"><div class="lbl">💸 Nakoupeno (${t.buyCount || 0}×)</div><div class="val r">${kf(t.boughtSfl)} ${sfl()}</div></div>
         <div class="mt-card"><div class="lbl">💰 Prodáno (${t.sellCount || 0}×)</div><div class="val g">${kf(t.soldSfl)} ${sfl()}</div></div>

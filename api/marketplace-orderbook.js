@@ -4,12 +4,22 @@ import { getPool } from "./_db.js";
 // serverless-function budget rather than shipping separate endpoint files). ──
 const FLIP_FEE = 0.10;
 const FLIP_SORTS = { score: "score", margin: "margin", spread: "spread_pct", liquidity: "liq", pressure: "offer_pressure", net: "net", floor: "floor" };
+// `paused` collectors are ones whose upstream the game walled off behind its
+// request-token anti-scraping layer on 2026-09-01 (RT-001 on /collection + /marketplace):
+// no server-side caller can sign those requests, so the Azure timers are disabled and these
+// tables have stopped growing on purpose. They stay in the report (with their age, so the
+// freeze date is visible) but never count as stale — the watchdog must not alarm on a stop
+// we chose. Drop the flag if the game reopens a server route and the collectors resume.
 const HEALTH_COLLECTORS = [
   { table: "farm_snapshots", col: "captured_at", label: "Farm snapshots", staleH: 2 },
-  { table: "price_changes", col: "captured_at", label: "Prices", staleH: 12 },
-  { table: "nft_changes", col: "captured_at", label: "NFT values", staleH: 12 },
-  { table: "marketplace_trades", col: "fulfilled_at", label: "Marketplace trades", staleH: 6 },
-  { table: "ob_snap", col: "ts", label: "Orderbook", staleH: 3 },
+  // Prices + NFT values are sourced from sfl.world, not the game directly. When the game walled
+  // its API on 2026-09-01, sfl.world's own scrape froze too — a third-party outage we can't fix,
+  // that recovers on its own. The 48h threshold (was 12h) rides out such a hiccup silently and
+  // only alarms if it stays dead for two full days, which is when it stops being "wait for them".
+  { table: "price_changes", col: "captured_at", label: "Prices", staleH: 48 },
+  { table: "nft_changes", col: "captured_at", label: "NFT values", staleH: 48 },
+  { table: "marketplace_trades", col: "fulfilled_at", label: "Marketplace trades", staleH: 6, paused: true },
+  { table: "ob_snap", col: "ts", label: "Orderbook", staleH: 3, paused: true },
   { table: "marks_snapshots", col: "captured_at", label: "Marks", staleH: 30 },
 ];
 
@@ -44,9 +54,11 @@ async function handleHealth(pool, res) {
       const q = await pool.query(`SELECT MAX(${c.col}) AS last FROM ${c.table}`);
       const last = q.rows[0].last;
       const ageH = last ? (Date.now() - new Date(last).getTime()) / 3600000 : null;
+      // A paused collector is never stale: it stopped by design (game API walled off), so it
+      // reports its age for context but stays out of the staleCollectors alarm below.
       return { table: c.table, label: c.label, lastWrite: last, ageHours: ageH == null ? null : Math.round(ageH * 10) / 10,
-        stale: ageH == null ? true : ageH > c.staleH, staleThresholdH: c.staleH };
-    } catch (e) { return { table: c.table, label: c.label, lastWrite: null, ageHours: null, stale: true, error: String(e.message || e).slice(0, 80) }; }
+        stale: c.paused ? false : (ageH == null ? true : ageH > c.staleH), staleThresholdH: c.staleH, paused: !!c.paused };
+    } catch (e) { return { table: c.table, label: c.label, lastWrite: null, ageHours: null, stale: !c.paused, paused: !!c.paused, error: String(e.message || e).slice(0, 80) }; }
   }));
   const token = await _tokenStatus();
   const staleCollectors = rows.filter((r) => r.stale).map((r) => r.label);
