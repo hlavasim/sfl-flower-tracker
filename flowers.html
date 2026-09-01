@@ -6006,7 +6006,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.52</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.53</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -6033,6 +6033,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.53", items: [
+          { t: "feat", text: "<b>WALLET is now a full FLOWER↔BTC position, worked out from the ledger — no hand-typed holding.</b> Every transaction can carry a FLOWER amount (a new column, shown in the table and <b>required for WALLET</b>), so the WALLET card derives what you still hold — bought 🌸 minus sold 🌸 — and your realized BTC — pulled out minus put in. Worked example: buy <b>8,000 🌸 for 0.1 ₿</b>, later sell <b>7,000 🌸 for 0.11 ₿</b> → the card reads <b>1,000 🌸 held</b> and <b>BILANCE +0.010000 ₿</b>. SFL and YAKKE are unchanged (their FLOWER field is optional)." },
+        ] },
         { ver: "v5.52", items: [
           { t: "feat", text: "<b>New WALLET venue in the Investment Tracker</b> — FLOWER bought with BTC and held to speculate on the BTC price, tracked like SFL and Yakkamon: tag deposits/withdrawals to it, set what it currently holds, and it's valued in BTC at the live FLOWER price against what went in." },
           { t: "feat", text: "<b>Each venue card now shows BILANCE</b> — the holding valued now minus the net that went in, in absolute BTC (the gain/loss in coin terms), beneath the existing % return. So a venue reads at a glance as <i>+0.017 ₿</i> rather than only as a percentage." },
@@ -29030,16 +29033,17 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       for (const t of chron) {
         const btc = parseFloat(t.btc_amount) || 0;
         const usd = parseFloat(t.usd_amount) || 0;
+        const flower = parseFloat(t.flower_amount) || 0;
         const v = (t.venue || "sfl").toLowerCase();
-        const bucket = byVenue[v] || (byVenue[v] = { venue: v, net: 0, peak: 0, depositBtc: 0, withdrawBtc: 0, count: 0 });
+        const bucket = byVenue[v] || (byVenue[v] = { venue: v, net: 0, peak: 0, depositBtc: 0, withdrawBtc: 0, depositFlower: 0, withdrawFlower: 0, count: 0 });
         bucket.count++;
         if (t.direction === "deposit") {
           depositBtc += btc; depositUsd += usd; net += btc;
-          bucket.depositBtc += btc; bucket.net += btc;
+          bucket.depositBtc += btc; bucket.net += btc; bucket.depositFlower += flower;
           if (!firstDepositDate || t.tx_date < firstDepositDate) firstDepositDate = t.tx_date;
         } else if (t.direction === "withdrawal") {
           withdrawBtc += btc; withdrawUsd += usd; net -= btc;
-          bucket.withdrawBtc += btc; bucket.net -= btc;
+          bucket.withdrawBtc += btc; bucket.net -= btc; bucket.withdrawFlower += flower;
         }
         if (net > peakBtc) peakBtc = net;
         if (bucket.net > bucket.peak) bucket.peak = bucket.net;
@@ -29239,6 +29243,28 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         ${(agg.venues || []).length > 1 ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">${agg.venues.map((v) => {
           const meta = invVenues[v.venue] || { label: v.venue.toUpperCase(), color: "var(--text-dim)" };
           /*
+           * WALLET is a FLOWER<->BTC speculation position, so unlike the others its holding is not
+           * typed in or read from the farm — it is DERIVED from the ledger: FLOWER held = what was
+           * bought (deposit FLOWER) minus what was sold (withdrawal FLOWER), and the BTC balance is
+           * the realized cash, withdrawn BTC minus deposited BTC (i.e. −net). "1000 🌸 and +0.01 ₿".
+           */
+          if (v.venue === "wallet") {
+            const heldFlower = v.depositFlower - v.withdrawFlower;
+            const holdBtc = flowerPerBtc > 0 ? heldFlower / flowerPerBtc : null;
+            const realizedBtc = v.withdrawBtc - v.depositBtc;
+            const realizedPct = v.depositBtc > 0 ? (realizedBtc / v.depositBtc) * 100 : null;
+            return `<div style="flex:1;min-width:186px;border:1px solid ${meta.color};border-radius:6px;padding:8px 10px;background:rgba(0,0,0,0.25)">
+              <div class="pixel-font" style="font-size:0.5rem;color:${meta.color};letter-spacing:0.5px">${meta.label}</div>
+              <div style="font-family:'Courier New',monospace;font-size:0.8rem;color:var(--green)">${fmtFlower(heldFlower)} <span style="font-size:0.62rem;color:var(--text-dim)">held</span></div>
+              <div class="pixel-font" style="font-size:0.45rem;color:var(--text-dim);margin-top:2px">${holdBtc !== null ? fmtBtc(holdBtc) + " value" : "—"}${realizedPct !== null ? ` · realized <b style="color:${realizedPct >= 0 ? "var(--green)" : "var(--red)"}">${realizedPct >= 0 ? "+" : ""}${realizedPct.toFixed(1)}%</b>` : ""}</div>
+              <div style="margin-top:6px;border-top:1px solid rgba(255,255,255,0.08);padding-top:5px;display:flex;justify-content:space-between;align-items:baseline">
+                <span class="pixel-font" style="font-size:0.45rem;color:var(--text-dim);letter-spacing:0.5px">BILANCE</span>
+                <span style="font-family:'Courier New',monospace;font-size:0.72rem;color:${realizedBtc >= 0 ? "var(--green)" : "var(--red)"}">${realizedBtc >= 0 ? "+" : ""}${fmtBtc(realizedBtc)}</span>
+              </div>
+              <div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);margin-top:3px">in ${fmtBtc(v.depositBtc)} · out ${fmtBtc(v.withdrawBtc)} · ${v.count} tx · z transakcí</div>
+            </div>`;
+          }
+          /*
            * Prefer a holding the app already KNOWS over one somebody typed in. The farm's own
            * value is computed every load — metric (3) is built from it — so asking for it by hand
            * would be asking for a number we hold already, and one that goes stale the moment the
@@ -29350,6 +29376,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           <th style="text-align:left;padding:8px 10px">TYPE</th>
           <th style="text-align:left;padding:8px 10px">WHERE</th>
           <th style="text-align:right;padding:8px 10px">BTC</th>
+          <th style="text-align:right;padding:8px 10px">FLOWER</th>
           <th style="text-align:right;padding:8px 10px">USD</th>
           <th style="text-align:left;padding:8px 10px">NOTES</th>
           <th style="text-align:center;padding:8px 10px"></th>
@@ -29368,6 +29395,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           <td style="padding:8px 10px;color:${color};font-weight:bold">${isDep ? "DEPOSIT" : "WITHDRAW"}</td>
           <td style="padding:8px 10px"><button onclick="_invCycleVenue(${t.id},'${venue}')" title="click to change where this went" style="background:rgba(0,0,0,0.3);border:1px solid ${vLabel.color};color:${vLabel.color};border-radius:4px;padding:2px 7px;cursor:pointer;font-family:'Courier New',monospace;font-size:0.65rem">${vLabel.label}</button></td>
           <td style="text-align:right;padding:8px 10px;color:${color};font-weight:bold">${signed} ₿</td>
+          <td style="text-align:right;padding:8px 10px;color:var(--text-dim)">${t.flower_amount != null ? Math.round(parseFloat(t.flower_amount)).toLocaleString("en-US") + " 🌸" : "—"}</td>
           <td style="text-align:right;padding:8px 10px;color:var(--text-dim)">${usd}</td>
           <td style="padding:8px 10px;color:var(--text-dim)">${escHTML(t.notes || "")}</td>
           <td style="text-align:center;padding:8px 10px"><button onclick="_invDeleteTx(${t.id})" style="background:transparent;border:none;color:var(--red);cursor:pointer;font-size:1rem;line-height:1" title="Delete">×</button></td>
@@ -29394,8 +29422,9 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
               <option value="deposit">DEPOSIT (money in)</option>
             </select></div>
             <div><span class="pixel-font" style="${labelStyle}">BTC AMOUNT</span><input type="number" id="inv-f-btc" min="0" step="0.00000001" placeholder="0.020000" style="${inputStyle}"></div>
+            <div><span class="pixel-font" id="inv-f-flower-label" style="${labelStyle}">FLOWER (optional)</span><input type="number" id="inv-f-flower" min="0" step="1" placeholder="8000" style="${inputStyle}"></div>
             <div><span class="pixel-font" style="${labelStyle}">USD VALUE (optional)</span><input type="number" id="inv-f-usd" min="0" step="0.01" placeholder="145.20" style="${inputStyle}"></div>
-            <div><span class="pixel-font" style="${labelStyle}">WHERE</span><select id="inv-f-venue" style="${inputStyle}">
+            <div><span class="pixel-font" style="${labelStyle}">WHERE</span><select id="inv-f-venue" onchange="_invVenueChanged()" style="${inputStyle}">
               ${Object.entries(invVenues).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("")}
             </select></div>
           </div>
@@ -29407,6 +29436,15 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           <div id="inv-add-error" style="display:none;margin-top:10px;font-size:0.6875rem;color:var(--red);font-family:'Courier New',monospace"></div>
         </div>
       `;
+      _invVenueChanged();   // set the FLOWER label to match the default venue
+    };
+
+    // WALLET derives its whole position from the per-transaction FLOWER amounts, so the field is
+    // required there; for SFL/YAKKE it is an optional annotation. The label says which.
+    window._invVenueChanged = function() {
+      const venue = (document.getElementById("inv-f-venue") || {}).value || "sfl";
+      const lbl = document.getElementById("inv-f-flower-label");
+      if (lbl) lbl.textContent = venue === "wallet" ? "FLOWER (required)" : "FLOWER (optional)";
     };
 
     window._invHideAddForm = function() {
@@ -29424,13 +29462,17 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       const btc_amount = parseFloat(document.getElementById("inv-f-btc").value);
       const usdRaw = document.getElementById("inv-f-usd").value;
       const usd_amount = usdRaw === "" ? null : parseFloat(usdRaw);
+      const flowerRaw = document.getElementById("inv-f-flower").value;
+      const flower_amount = flowerRaw === "" ? null : parseFloat(flowerRaw);
       const notes = document.getElementById("inv-f-notes").value || null;
       const venue = (document.getElementById("inv-f-venue") || {}).value || "sfl";
 
       if (!tx_date) return showError("Date required");
       if (!isFinite(btc_amount) || btc_amount <= 0) return showError("BTC amount must be > 0");
+      if (flower_amount !== null && (!isFinite(flower_amount) || flower_amount < 0)) return showError("FLOWER must be ≥ 0");
+      if (venue === "wallet" && (flower_amount === null || flower_amount <= 0)) return showError("FLOWER amount is required for WALLET");
       try {
-        const tx = await invAddTransaction({ farm_id: parseInt(FARM_ID, 10), tx_date, direction, btc_amount, usd_amount, notes, venue });
+        const tx = await invAddTransaction({ farm_id: parseInt(FARM_ID, 10), tx_date, direction, btc_amount, usd_amount, flower_amount, notes, venue });
         _invState.transactions.unshift(tx);
         _invHideAddForm();
         renderInvestmentTrackerContent();
