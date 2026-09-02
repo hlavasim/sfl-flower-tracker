@@ -6006,7 +6006,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.55</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.56</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -6033,6 +6033,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.56", items: [
+          { t: "feat", text: "<b>Average buy price per FLOWER is now shown per category</b> — on the SFL, YAKKE and WALLET cards alike, each from that venue's own buys (Σ its deposit ₿ ÷ Σ its deposit 🌸), with the live price beside it. It appears wherever the deposits carry a FLOWER amount (required for WALLET, optional for SFL/YAKKE), so you can compare your cost basis venue by venue." },
+        ] },
         { ver: "v5.55", items: [
           { t: "fix", text: "<b>WALLET was being counted as LOCKED in metric ③ — it isn't.</b> The \"at unlock\" figure summed every venue that wasn't SFL, which swept WALLET in with Yakkamon. But WALLET is liquid FLOWER you can sell today, so it now counts toward <b>liquidate NOW</b> (its held FLOWER valued at the live price, no farm-marketplace fee — it's the token), and only Yakkamon stays locked (returns Q4). The \"to 100% w/ liq\" line credits the WALLET holding too, so the gap agrees with the percentage. Locked is now decided by a per-venue flag, not \"anything ≠ SFL\"." },
         ] },
@@ -29303,10 +29306,15 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           // Bilance: what the holding is worth NOW minus what net went in, in absolute BTC — the
           // gain/loss in coin terms next to the % above it. Only meaningful once we know the holding.
           const bilanceBtc = (holdBtc !== null) ? (holdBtc - v.net) : null;
+          // Average buy price per FLOWER for THIS venue, from its own buys — shown per category
+          // wherever the deposits carry a FLOWER amount (optional for SFL/YAKKE). Live price beside it.
+          const avgBuyPerFlower = v.depositFlower > 0 ? (v.depositBtc / v.depositFlower) : null;
+          const nowPerFlower = flowerPerBtc > 0 ? (1 / flowerPerBtc) : null;
           return `<div style="flex:1;min-width:186px;border:1px solid ${meta.color};border-radius:6px;padding:8px 10px;background:rgba(0,0,0,0.25)">
             <div class="pixel-font" style="font-size:0.5rem;color:${meta.color};letter-spacing:0.5px">${meta.label}</div>
             <div style="font-family:'Courier New',monospace;font-size:0.8rem;color:var(--text-secondary)">${fmtBtc(v.net)} <span style="font-size:0.62rem;color:var(--text-dim)">sent</span></div>
             <div class="pixel-font" style="font-size:0.45rem;color:var(--text-dim);margin-top:2px">peak ${fmtBtc(v.peak)} · ${v.count} tx</div>
+            ${avgBuyPerFlower !== null ? `<div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);margin-top:2px">ø nákup <b style="color:var(--text-secondary)">${fmtBtc(avgBuyPerFlower)}</b> / 🌸${nowPerFlower !== null ? ` · teď ${fmtBtc(nowPerFlower)}` : ""}</div>` : ""}
             <div style="margin-top:6px;border-top:1px solid rgba(255,255,255,0.08);padding-top:5px">
               ${bal ? `<div style="font-family:'Courier New',monospace;font-size:0.72rem;color:var(--green)">${fmtFlower(bal.amount)} <span style="font-size:0.6rem;color:var(--text-dim)">held</span></div>
                  <div class="pixel-font" style="font-size:0.45rem;color:var(--text-dim);margin-top:2px">${holdBtc !== null ? fmtBtc(holdBtc) : "—"}${pnl !== null ? ` · <b style="color:${pnl >= 0 ? "var(--green)" : "var(--red)"}">${pnl >= 0 ? "+" : ""}${pnl.toFixed(1)}%</b>` : ""}</div>
