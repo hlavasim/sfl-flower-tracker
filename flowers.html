@@ -6006,7 +6006,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.59</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.60</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -6033,6 +6033,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.60", items: [
+          { t: "feat", text: "<b>The SATS / FLOWER chart is now live and zoomable, on a real price feed.</b> It reads CoinGecko's <code>flower-2</code> (the correct FLOWER token — its price tracks sfl.world) directly in BTC, so sats = BTC/FLOWER × 1e8, and it's drawn with lightweight-charts with a <b>5m · 1h · 4h · 1d</b> switch (5-minute detail for the last day, hourly out to weeks, daily out to a year). It sits between the three KPIs and the transactions table now, not at the bottom." },
+          { t: "fix", text: "<b>ø nákup is shown in sats per FLOWER on every card, and the live rate moved to the chart.</b> Each venue (SFL / YAKKE / WALLET) shows its average cost as <i>ø nákup NNN sats / 🌸</i> — the BTC in it ÷ the FLOWER it holds — instead of a tiny BTC decimal, so it's readable and comparable. The old \"· teď 0.00000…\" live price is gone from the cards (it was inconsistent with the chart and is what the chart is for)." },
+        ] },
         { ver: "v5.59", items: [
           { t: "feat", text: "<b>SATS / FLOWER chart under the Investment Tracker table</b> — the FLOWER price in satoshis over the last 30 days, so you can see the rate your WALLET speculates on. It is <b>daily</b>: FLOWER is only stored once a day (marketplace_totals), and BTC is taken per day from CoinGecko, so sats/flower = flower_usd / btc_usd × 1e8, one point per day. Inline SVG, green when the 30-day trend is up, red when down, with the current value and range beneath." },
         ] },
@@ -29290,15 +29294,16 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           // Bilance: what the holding is worth NOW minus what net went in, in absolute BTC — the
           // gain/loss in coin terms next to the % above it. Only meaningful once we know the holding.
           const bilanceBtc = (holdBtc !== null) ? (holdBtc - v.net) : null;
-          // Average buy price per FLOWER for THIS venue, from its own buys — shown per category
-          // wherever the deposits carry a FLOWER amount (optional for SFL/YAKKE). Live price beside it.
-          const avgBuyPerFlower = v.depositFlower > 0 ? (v.depositBtc / v.depositFlower) : null;
-          const nowPerFlower = flowerPerBtc > 0 ? (1 / flowerPerBtc) : null;
+          // Average cost per FLOWER for THIS venue, in sats: the BTC currently in the venue divided
+          // by the FLOWER it holds, ×1e8. Same idea across all cards — SFL/YAKKE/WALLET — so each
+          // shows what its held FLOWER cost on average. The live rate is no longer shown here; it's
+          // in the chart above. Needs a positive holding and net-in.
+          const avgSatsPerFlower = (bal && bal.amount > 0 && v.net > 0) ? ((v.net / bal.amount) * 1e8) : null;
           return `<div style="flex:1;min-width:186px;border:1px solid ${meta.color};border-radius:6px;padding:8px 10px;background:rgba(0,0,0,0.25)">
             <div class="pixel-font" style="font-size:0.5rem;color:${meta.color};letter-spacing:0.5px">${meta.label}</div>
             <div style="font-family:'Courier New',monospace;font-size:0.8rem;color:var(--text-secondary)">${fmtBtc(v.net)} <span style="font-size:0.62rem;color:var(--text-dim)">sent</span></div>
             <div class="pixel-font" style="font-size:0.45rem;color:var(--text-dim);margin-top:2px">peak ${fmtBtc(v.peak)} · ${v.count} tx</div>
-            ${avgBuyPerFlower !== null ? `<div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);margin-top:2px">ø nákup <b style="color:var(--text-secondary)">${fmtBtc(avgBuyPerFlower)}</b> / 🌸${nowPerFlower !== null ? ` · teď ${fmtBtc(nowPerFlower)}` : ""}</div>` : ""}
+            ${avgSatsPerFlower !== null ? `<div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);margin-top:2px">ø nákup <b style="color:var(--text-secondary)">${avgSatsPerFlower.toFixed(1)}</b> sats / 🌸</div>` : ""}
             <div style="margin-top:6px;border-top:1px solid rgba(255,255,255,0.08);padding-top:5px">
               ${bal ? `<div style="font-family:'Courier New',monospace;font-size:0.72rem;color:var(--green)">${fmtFlower(bal.amount)} <span style="font-size:0.6rem;color:var(--text-dim)">held</span></div>
                  <div class="pixel-font" style="font-size:0.45rem;color:var(--text-dim);margin-top:2px">${holdBtc !== null ? fmtBtc(holdBtc) : "—"}${pnl !== null ? ` · <b style="color:${pnl >= 0 ? "var(--green)" : "var(--red)"}">${pnl >= 0 ? "+" : ""}${pnl.toFixed(1)}%</b>` : ""}</div>
@@ -29316,81 +29321,93 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
             </div>
           </div>`;
         }).join("")}</div>` : ""}
+        <div id="inv-satsflower" style="margin:6px 0 16px"></div>
         <div id="inv-tx-table-wrap">${renderInvTxTable(transactions)}</div>
         <button class="roi-pill" onclick="_invShowAddForm()" style="margin-top:10px">+ Add transaction</button>
         <div id="inv-add-form" style="display:none"></div>
-        <div id="inv-satsflower" style="margin-top:16px"></div>
       `;
-      _invRenderSatsChart();   // fire-and-forget; fills #inv-satsflower once, then draws from cache
+      _invRenderSatsChart();   // fire-and-forget; builds the switcher + draws (cached per granularity)
     }
 
     /*
-     * SATS / FLOWER over the last 30 days, daily. FLOWER's price is only stored per day
-     * (marketplace_totals.flower_price, USD), so the chart is daily — one point per day —
-     * with BTC taken per day too. sats/flower = flower_usd / btc_usd × 1e8. Fetched once and
-     * cached: renderInvestmentTrackerContent runs on every add/delete, so it must not refetch.
+     * SATS / FLOWER chart — the FLOWER price in satoshis (1 sat = 1e-8 BTC), the rate the WALLET
+     * position speculates on. Priced directly in BTC from CoinGecko's flower-2 (the real FLOWER
+     * token — its USD tracks sfl.world; the older "sunflower-land" id is a different, mispriced
+     * token), so sats = btcPerFlower × 1e8. The granularity switch picks the CoinGecko range whose
+     * auto-resolution fits (1 day → 5-min, 2-90 days → hourly, >90 → daily); 4h is bucketed down
+     * from hourly. Each granularity is fetched once and cached, and drawn as a lightweight-charts
+     * line — renderInvestmentTrackerContent re-runs on every edit, so it must not refetch.
      */
-    let _satsChartCache = null;   // [{ date, sats }] ascending, or "error"
-    async function _invRenderSatsChart() {
+    const _SATS_GRAN = {
+      "5m": { days: 1,   bucketSec: 0,        timeVisible: true },
+      "1h": { days: 14,  bucketSec: 0,        timeVisible: true },
+      "4h": { days: 90,  bucketSec: 4 * 3600, timeVisible: true },
+      "1d": { days: 365, bucketSec: 0,        timeVisible: false },
+    };
+    let _satsGran = (localStorage.getItem("sfl_sats_gran") in _SATS_GRAN) ? localStorage.getItem("sfl_sats_gran") : "1h";
+    const _satsCache = {};     // gran -> [{ time, value }] ascending
+    let _satsChartObj = null;
+
+    window._invSetSatsGran = function (g) {
+      if (!_SATS_GRAN[g]) return;
+      _satsGran = g;
+      localStorage.setItem("sfl_sats_gran", g);
+      document.querySelectorAll("[data-satsgran]").forEach(b => b.classList.toggle("active", b.dataset.satsgran === g));
+      _invDrawSatsChart();
+    };
+
+    function _invRenderSatsChart() {
       const el = document.getElementById("inv-satsflower");
       if (!el) return;
-      const draw = () => { el.innerHTML = _satsChartSvg(_satsChartCache); };
-      if (_satsChartCache) return draw();
-      el.innerHTML = `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);padding:8px 0">SATS / FLOWER — načítám…</div>`;
-      try {
-        const [flowerResp, btcResp] = await Promise.all([
-          fetch("/api/marketplace-history?totals=1&days=31").then(r => r.ok ? r.json() : Promise.reject(r.status)),
-          fetch(`/api/proxy?url=${encodeURIComponent("https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=31")}`).then(r => r.ok ? r.json() : Promise.reject(r.status)),
-        ]);
-        // BTC: hourly points → last close per UTC day, keyed YYYY-MM-DD.
-        const btcByDay = {};
-        for (const [ms, price] of (btcResp.prices || [])) btcByDay[new Date(ms).toISOString().slice(0, 10)] = price;
-        const pts = [];
-        for (const t of (flowerResp.totals || [])) {
-          const day = String(t.date).slice(0, 10);
-          const flowerUsd = t.flower_price;
-          const btc = btcByDay[day];
-          if (flowerUsd > 0 && btc > 0) pts.push({ date: day, sats: (flowerUsd / btc) * 1e8 });
-        }
-        pts.sort((a, b) => a.date.localeCompare(b.date));
-        _satsChartCache = pts.length ? pts : "error";
-      } catch (e) {
-        console.warn("[sats/flower]", e);
-        _satsChartCache = "error";
-      }
-      draw();
+      el.innerHTML = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+          <span class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);letter-spacing:0.5px;flex:1">SATS / FLOWER</span>
+          ${Object.keys(_SATS_GRAN).map(g => `<button class="roi-pill${g === _satsGran ? " active" : ""}" data-satsgran="${g}" onclick="_invSetSatsGran('${g}')" style="padding:2px 8px;font-size:0.55rem">${g}</button>`).join("")}
+        </div>
+        <div id="inv-satsflower-canvas" style="height:200px"></div>
+        <div id="inv-satsflower-note" class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin-top:3px"></div>`;
+      _invDrawSatsChart();
     }
 
-    // A small self-contained SVG line chart — no library, theme-aware via CSS vars.
-    function _satsChartSvg(pts) {
-      const title = `<div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);letter-spacing:0.5px;margin-bottom:6px">SATS / FLOWER · 30 dní (denně)</div>`;
-      if (pts === "error" || !Array.isArray(pts) || pts.length < 2) {
-        return title + `<div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim)">Zatím málo dat pro graf.</div>`;
+    async function _invDrawSatsChart() {
+      const canvas = document.getElementById("inv-satsflower-canvas");
+      const note = document.getElementById("inv-satsflower-note");
+      if (!canvas) return;
+      if (typeof LightweightCharts === "undefined") { canvas.innerHTML = `<div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);padding:8px 0">Chart library not loaded.</div>`; return; }
+      const cfg = _SATS_GRAN[_satsGran];
+      let data = _satsCache[_satsGran];
+      if (!data) {
+        if (note) note.textContent = "načítám…";
+        try {
+          const url = `https://api.coingecko.com/api/v3/coins/flower-2/market_chart?vs_currency=btc&days=${cfg.days}`;
+          const j = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`).then(r => r.ok ? r.json() : Promise.reject(r.status));
+          let pts = (j.prices || []).map(([ms, btc]) => ({ time: Math.floor(ms / 1000), value: btc * 1e8 }));
+          if (cfg.bucketSec > 0) {          // downsample to the bucket: last value in each window
+            const by = {};
+            for (const p of pts) by[Math.floor(p.time / cfg.bucketSec) * cfg.bucketSec] = p.value;
+            pts = Object.keys(by).map(k => ({ time: +k, value: by[k] }));
+          }
+          pts.sort((a, b) => a.time - b.time);
+          pts = pts.filter((p, i, a) => i === 0 || p.time > a[i - 1].time);   // LW needs strictly ascending
+          data = _satsCache[_satsGran] = pts;
+        } catch (e) { console.warn("[sats/flower]", e); if (note) note.textContent = "graf nedostupný — zkus později"; return; }
       }
-      const W = 640, H = 170, padL = 46, padR = 10, padT = 8, padB = 22;
-      const xs = pts.map(p => p.sats);
-      let min = Math.min(...xs), max = Math.max(...xs);
-      if (min === max) { min -= 1; max += 1; }
-      const pad = (max - min) * 0.08; min -= pad; max += pad;
-      const px = (i) => padL + (i / (pts.length - 1)) * (W - padL - padR);
-      const py = (v) => padT + (1 - (v - min) / (max - min)) * (H - padT - padB);
-      const line = pts.map((p, i) => `${px(i).toFixed(1)},${py(p.sats).toFixed(1)}`).join(" ");
-      const area = `${padL},${(H - padB).toFixed(1)} ${line} ${px(pts.length - 1).toFixed(1)},${(H - padB).toFixed(1)}`;
-      const last = pts[pts.length - 1], first = pts[0];
-      const gy = (frac) => padT + frac * (H - padT - padB);
-      const gval = (frac) => max - frac * (max - min);
-      const grid = [0, 0.5, 1].map(f => `<line x1="${padL}" y1="${gy(f).toFixed(1)}" x2="${W - padR}" y2="${gy(f).toFixed(1)}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><text x="${padL - 5}" y="${(gy(f) + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--text-dim)" font-family="'Courier New',monospace">${gval(f).toFixed(0)}</text>`).join("");
-      const up = last.sats >= first.sats;
-      const col = up ? "#7fe0a0" : "#ff8888";
-      return title + `<div style="overflow-x:auto"><svg viewBox="0 0 ${W} ${H}" style="width:100%;min-width:320px;height:auto;display:block" preserveAspectRatio="none">
-        ${grid}
-        <polygon points="${area}" fill="${up ? "rgba(127,224,160,0.10)" : "rgba(255,136,136,0.10)"}"/>
-        <polyline points="${line}" fill="none" stroke="${col}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
-        <circle cx="${px(pts.length - 1).toFixed(1)}" cy="${py(last.sats).toFixed(1)}" r="2.6" fill="${col}"/>
-        <text x="${padL}" y="${H - 6}" font-size="9" fill="var(--text-dim)" font-family="'Courier New',monospace">${escHTML(first.date)}</text>
-        <text x="${W - padR}" y="${H - 6}" text-anchor="end" font-size="9" fill="var(--text-dim)" font-family="'Courier New',monospace">${escHTML(last.date)}</text>
-      </svg></div>
-      <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin-top:2px">teď <b style="color:${col}">${last.sats.toFixed(1)} sats/🌸</b> · rozsah ${Math.min(...xs).toFixed(0)}–${Math.max(...xs).toFixed(0)} · FLOWER cena je denní (${pts.length} dní)</div>`;
+      if (data.length < 2) { if (note) note.textContent = "málo dat pro tuto granularitu"; return; }
+      if (_satsChartObj) { try { _satsChartObj.remove(); } catch (e) {} _satsChartObj = null; }
+      canvas.innerHTML = "";
+      const chart = LightweightCharts.createChart(canvas, {
+        height: 200, autoSize: true,
+        layout: { background: { color: "transparent" }, textColor: "#c4a882" },
+        grid: { vertLines: { color: "rgba(255,255,255,0.05)" }, horzLines: { color: "rgba(255,255,255,0.05)" } },
+        timeScale: { timeVisible: cfg.timeVisible, secondsVisible: false, borderColor: "rgba(255,255,255,0.1)" },
+        rightPriceScale: { borderColor: "rgba(255,255,255,0.1)" },
+      });
+      _satsChartObj = chart;
+      const up = data[data.length - 1].value >= data[0].value;
+      const s = chart.addLineSeries({ color: up ? "#7fe0a0" : "#ff8888", lineWidth: 2, priceFormat: { type: "custom", minMove: 0.1, formatter: (v) => v.toFixed(1) } });
+      s.setData(data);
+      chart.timeScale().fitContent();
+      const xs = data.map(p => p.value);
+      if (note) note.textContent = `teď ${data[data.length - 1].value.toFixed(1)} sats/🌸 · rozsah ${Math.min(...xs).toFixed(1)}–${Math.max(...xs).toFixed(1)} · flower-2 (CoinGecko)`;
     }
 
     /*
