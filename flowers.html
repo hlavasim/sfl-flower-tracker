@@ -6006,7 +6006,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.60</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.61</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -6033,6 +6033,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.61", items: [
+          { t: "feat", text: "<b>Transactions are now editable.</b> Each row in the Investment Tracker table has a ✎ button that opens the form pre-filled, so you can fix any field — date, type, BTC, FLOWER, USD, venue, notes — instead of deleting and re-adding. Saved via a proper partial update (the wallet still requires a FLOWER amount)." },
+          { t: "fix", text: "<b>The transactions table stays one line per row.</b> DATE shows just the date (no time), and long NOTES are truncated with an ellipsis (hover to read the whole note) instead of wrapping the row onto two lines." },
+        ] },
         { ver: "v5.60", items: [
           { t: "feat", text: "<b>The SATS / FLOWER chart is now live and zoomable, on a real price feed.</b> It reads CoinGecko's <code>flower-2</code> (the correct FLOWER token — its price tracks sfl.world) directly in BTC, so sats = BTC/FLOWER × 1e8, and it's drawn with lightweight-charts with a <b>5m · 1h · 4h · 1d</b> switch (5-minute detail for the last day, hourly out to weeks, daily out to a year). It sits between the three KPIs and the transactions table now, not at the bottom." },
           { t: "fix", text: "<b>ø nákup is shown in sats per FLOWER on every card, and the live rate moved to the chart.</b> Each venue (SFL / YAKKE / WALLET) shows its average cost as <i>ø nákup NNN sats / 🌸</i> — the BTC in it ÷ the FLOWER it holds — instead of a tiny BTC decimal, so it's readable and comparable. The old \"· teď 0.00000…\" live price is gone from the cards (it was inconsistent with the chart and is what the chart is for)." },
@@ -29022,6 +29026,19 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       return (await r.json()).transaction;
     }
 
+    async function invUpdateTransaction(id, payload) {
+      const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(FARM_ID)}&type=btc-tx&id=${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ error: r.statusText }));
+        throw new Error(err.error || `update failed: ${r.status}`);
+      }
+      return (await r.json()).transaction;
+    }
+
     async function invDeleteTransaction(farmId, id) {
       const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(farmId)}&type=btc-tx&id=${encodeURIComponent(id)}`, {
         method: "DELETE",
@@ -29498,52 +29515,67 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         const venue = (t.venue || "sfl").toLowerCase();
         const vLabel = invVenues[venue] || { label: venue.toUpperCase(), color: "var(--text-dim)" };
         html += `<tr style="border-top:1px solid rgba(255,255,255,0.05)">
-          <td style="padding:8px 10px">${escHTML(t.tx_date)}</td>
-          <td style="padding:8px 10px;color:${color};font-weight:bold">${isDep ? "DEPOSIT" : "WITHDRAW"}</td>
-          <td style="padding:8px 10px"><button onclick="_invCycleVenue(${t.id},'${venue}')" title="click to change where this went" style="background:rgba(0,0,0,0.3);border:1px solid ${vLabel.color};color:${vLabel.color};border-radius:4px;padding:2px 7px;cursor:pointer;font-family:'Courier New',monospace;font-size:0.65rem">${vLabel.label}</button></td>
-          <td style="text-align:right;padding:8px 10px;color:${color};font-weight:bold">${signed} ₿</td>
-          <td style="text-align:right;padding:8px 10px;color:var(--text-dim)">${t.flower_amount != null ? Math.round(parseFloat(t.flower_amount)).toLocaleString("en-US") + " 🌸" : "—"}</td>
-          <td style="text-align:right;padding:8px 10px;color:var(--text-dim)">${usd}</td>
-          <td style="padding:8px 10px;color:var(--text-dim)">${escHTML(t.notes || "")}</td>
-          <td style="text-align:center;padding:8px 10px"><button onclick="_invDeleteTx(${t.id})" style="background:transparent;border:none;color:var(--red);cursor:pointer;font-size:1rem;line-height:1" title="Delete">×</button></td>
+          <td style="padding:8px 10px;white-space:nowrap">${escHTML(String(t.tx_date).slice(0, 10))}</td>
+          <td style="padding:8px 10px;color:${color};font-weight:bold;white-space:nowrap">${isDep ? "DEPOSIT" : "WITHDRAW"}</td>
+          <td style="padding:8px 10px;white-space:nowrap"><button onclick="_invCycleVenue(${t.id},'${venue}')" title="click to change where this went" style="background:rgba(0,0,0,0.3);border:1px solid ${vLabel.color};color:${vLabel.color};border-radius:4px;padding:2px 7px;cursor:pointer;font-family:'Courier New',monospace;font-size:0.65rem">${vLabel.label}</button></td>
+          <td style="text-align:right;padding:8px 10px;color:${color};font-weight:bold;white-space:nowrap">${signed} ₿</td>
+          <td style="text-align:right;padding:8px 10px;color:var(--text-dim);white-space:nowrap">${t.flower_amount != null ? Math.round(parseFloat(t.flower_amount)).toLocaleString("en-US") + " 🌸" : "—"}</td>
+          <td style="text-align:right;padding:8px 10px;color:var(--text-dim);white-space:nowrap">${usd}</td>
+          <td style="padding:8px 10px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px" title="${escHTML(t.notes || "")}">${escHTML(t.notes || "")}</td>
+          <td style="text-align:center;padding:8px 10px;white-space:nowrap">
+            <button onclick="_invShowAddForm(${t.id})" style="background:transparent;border:none;color:var(--lily);cursor:pointer;font-size:0.85rem;line-height:1;margin-right:4px" title="Edit">✎</button>
+            <button onclick="_invDeleteTx(${t.id})" style="background:transparent;border:none;color:var(--red);cursor:pointer;font-size:1rem;line-height:1" title="Delete">×</button>
+          </td>
         </tr>`;
       }
       html += `</tbody></table></div>`;
       return html;
     }
 
-    window._invShowAddForm = function() {
+    // Add a new transaction, or — when editId is given — edit an existing one in the same form,
+    // pre-filled from the row. Save routes to POST (add) or PATCH (edit) accordingly.
+    window._invShowAddForm = function(editId) {
       const wrap = document.getElementById("inv-add-form");
       if (!wrap) return;
+      const edit = (editId != null) ? (_invState.transactions || []).find(t => String(t.id) === String(editId)) : null;
       const today = new Date().toISOString().slice(0, 10);
+      const dVal = edit ? String(edit.tx_date).slice(0, 10) : today;
+      const dirVal = edit ? edit.direction : "withdrawal";
+      const btcVal = edit ? parseFloat(edit.btc_amount) : "";
+      const flowerVal = (edit && edit.flower_amount != null) ? parseFloat(edit.flower_amount) : "";
+      const usdVal = (edit && edit.usd_amount != null) ? parseFloat(edit.usd_amount) : "";
+      const venueVal = edit ? (edit.venue || "sfl").toLowerCase() : "sfl";
+      const notesVal = (edit && edit.notes) ? edit.notes : "";
       wrap.style.display = "block";
       const inputStyle = "width:100%;padding:6px 8px;background:#2a1050;color:#fff;border:2px solid #000;font-family:'Courier New',monospace;font-size:0.75rem";
       const labelStyle = "display:block;font-size:0.5625rem;color:var(--text-secondary);letter-spacing:0.5px;margin-bottom:4px";
+      const sel = (a, b) => a === b ? " selected" : "";
       wrap.innerHTML = `
         <div class="pixel-panel" style="margin-top:12px;padding:14px;background:rgba(0,0,0,0.3)">
-          <div class="pixel-font" style="font-size:0.6875rem;color:var(--sunpetal);margin-bottom:12px;letter-spacing:1px">ADD TRANSACTION</div>
+          <div class="pixel-font" style="font-size:0.6875rem;color:var(--sunpetal);margin-bottom:12px;letter-spacing:1px">${edit ? "EDIT TRANSACTION" : "ADD TRANSACTION"}</div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px">
-            <div><span class="pixel-font" style="${labelStyle}">DATE</span><input type="date" id="inv-f-date" value="${today}" style="${inputStyle}"></div>
+            <div><span class="pixel-font" style="${labelStyle}">DATE</span><input type="date" id="inv-f-date" value="${dVal}" style="${inputStyle}"></div>
             <div><span class="pixel-font" style="${labelStyle}">TYPE</span><select id="inv-f-dir" style="${inputStyle}">
-              <option value="withdrawal">WITHDRAWAL (cash out)</option>
-              <option value="deposit">DEPOSIT (money in)</option>
+              <option value="withdrawal"${sel("withdrawal", dirVal)}>WITHDRAWAL (cash out)</option>
+              <option value="deposit"${sel("deposit", dirVal)}>DEPOSIT (money in)</option>
             </select></div>
-            <div><span class="pixel-font" style="${labelStyle}">BTC AMOUNT</span><input type="number" id="inv-f-btc" min="0" step="0.00000001" placeholder="0.020000" style="${inputStyle}"></div>
-            <div><span class="pixel-font" id="inv-f-flower-label" style="${labelStyle}">FLOWER (optional)</span><input type="number" id="inv-f-flower" min="0" step="1" placeholder="8000" style="${inputStyle}"></div>
-            <div><span class="pixel-font" style="${labelStyle}">USD VALUE (optional)</span><input type="number" id="inv-f-usd" min="0" step="0.01" placeholder="145.20" style="${inputStyle}"></div>
+            <div><span class="pixel-font" style="${labelStyle}">BTC AMOUNT</span><input type="number" id="inv-f-btc" min="0" step="0.00000001" placeholder="0.020000" value="${btcVal}" style="${inputStyle}"></div>
+            <div><span class="pixel-font" id="inv-f-flower-label" style="${labelStyle}">FLOWER (optional)</span><input type="number" id="inv-f-flower" min="0" step="1" placeholder="8000" value="${flowerVal}" style="${inputStyle}"></div>
+            <div><span class="pixel-font" style="${labelStyle}">USD VALUE (optional)</span><input type="number" id="inv-f-usd" min="0" step="0.01" placeholder="145.20" value="${usdVal}" style="${inputStyle}"></div>
             <div><span class="pixel-font" style="${labelStyle}">WHERE</span><select id="inv-f-venue" onchange="_invVenueChanged()" style="${inputStyle}">
-              ${Object.entries(invVenues).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("")}
+              ${Object.entries(invVenues).map(([k, v]) => `<option value="${k}"${sel(k, venueVal)}>${v.label}</option>`).join("")}
             </select></div>
           </div>
-          <div style="margin-top:14px"><span class="pixel-font" style="${labelStyle}">NOTES</span><input type="text" id="inv-f-notes" maxlength="500" placeholder="cash out 1000 FLOWER…" style="${inputStyle}"></div>
+          <div style="margin-top:14px"><span class="pixel-font" style="${labelStyle}">NOTES</span><input type="text" id="inv-f-notes" maxlength="500" placeholder="cash out 1000 FLOWER…" value="${escHTML(notesVal)}" style="${inputStyle}"></div>
           <div style="margin-top:14px;display:flex;gap:8px">
-            <button class="roi-pill" onclick="_invSubmitAdd()">Save</button>
+            <button class="roi-pill" onclick="_invSubmitAdd(${edit ? edit.id : "null"})">Save</button>
             <button class="roi-pill" onclick="_invHideAddForm()">Cancel</button>
           </div>
           <div id="inv-add-error" style="display:none;margin-top:10px;font-size:0.6875rem;color:var(--red);font-family:'Courier New',monospace"></div>
         </div>
       `;
-      _invVenueChanged();   // set the FLOWER label to match the default venue
+      _invVenueChanged();   // set the FLOWER label to match the selected venue
+      wrap.scrollIntoView({ behavior: "smooth", block: "nearest" });
     };
 
     // WALLET derives its whole position from the per-transaction FLOWER amounts, so the field is
@@ -29559,7 +29591,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       if (wrap) { wrap.style.display = "none"; wrap.innerHTML = ""; }
     };
 
-    window._invSubmitAdd = async function() {
+    window._invSubmitAdd = async function(editId) {
       const errEl = document.getElementById("inv-add-error");
       const showError = (msg) => { errEl.style.display = "block"; errEl.textContent = msg; };
       errEl.style.display = "none";
@@ -29579,8 +29611,18 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       if (flower_amount !== null && (!isFinite(flower_amount) || flower_amount < 0)) return showError("FLOWER must be ≥ 0");
       if (venue === "wallet" && (flower_amount === null || flower_amount <= 0)) return showError("FLOWER amount is required for WALLET");
       try {
-        const tx = await invAddTransaction({ farm_id: parseInt(FARM_ID, 10), tx_date, direction, btc_amount, usd_amount, flower_amount, notes, venue });
-        _invState.transactions.unshift(tx);
+        if (editId != null) {
+          const tx = await invUpdateTransaction(editId, { tx_date, direction, btc_amount, usd_amount, flower_amount, notes, venue });
+          const arr = _invState.transactions || [];
+          const i = arr.findIndex(t => String(t.id) === String(editId));
+          if (i >= 0) arr[i] = tx;
+          // the date may have changed — keep the newest-first order the list is displayed in.
+          _invState.transactions = arr.slice().sort((a, b) =>
+            String(b.tx_date).localeCompare(String(a.tx_date)) || String(b.created_at || "").localeCompare(String(a.created_at || "")));
+        } else {
+          const tx = await invAddTransaction({ farm_id: parseInt(FARM_ID, 10), tx_date, direction, btc_amount, usd_amount, flower_amount, notes, venue });
+          _invState.transactions.unshift(tx);
+        }
         _invHideAddForm();
         renderInvestmentTrackerContent();
       } catch (e) {

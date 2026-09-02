@@ -277,23 +277,71 @@ export default async function handler(req, res) {
       }
 
       /*
-       * PATCH retags an existing row's venue and nothing else. Amounts and dates stay
-       * append-only — a mistyped entry is deleted and re-added rather than quietly edited, so
-       * the grant is UPDATE(venue) only and this is the one field it can touch.
+       * PATCH edits an existing row. Every field is optional — only the ones present in the body
+       * are written — so the venue-only chip still works and the edit form can change any of
+       * tx_date / direction / btc_amount / usd_amount / flower_amount / notes / venue. sfl_reader
+       * holds column-level UPDATE on exactly these (see the GRANT), never id/farm_id/created_at.
        */
       if (method === "PATCH") {
         const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
         const farm = parseInt(req.query.farm, 10);
         const id = parseInt(req.query.id, 10);
-        const venue = (typeof body.venue === "string" && body.venue.trim())
-          ? body.venue.trim().toLowerCase().slice(0, 32) : null;
         if (!Number.isFinite(farm) || !ALLOWED_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
         if (!Number.isFinite(id)) return res.status(400).json({ error: "id required" });
-        if (!venue) return res.status(400).json({ error: "venue required" });
+
+        const sets = [], vals = [];
+        const add = (col, val) => { vals.push(val); sets.push(`${col} = $${vals.length}`); };
+        let venueVal, flowerVal, venueSet = false, flowerSet = false;
+
+        if (body.venue !== undefined) {
+          venueVal = (typeof body.venue === "string" && body.venue.trim()) ? body.venue.trim().toLowerCase().slice(0, 32) : null;
+          if (!venueVal) return res.status(400).json({ error: "venue must be a non-empty string" });
+          venueSet = true; add("venue", venueVal);
+        }
+        if (body.tx_date !== undefined) {
+          if (typeof body.tx_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(body.tx_date)) return res.status(400).json({ error: "tx_date must be YYYY-MM-DD" });
+          add("tx_date", body.tx_date);
+        }
+        if (body.direction !== undefined) {
+          const d = String(body.direction).toLowerCase();
+          if (!["deposit", "withdrawal"].includes(d)) return res.status(400).json({ error: "direction must be deposit or withdrawal" });
+          add("direction", d);
+        }
+        if (body.btc_amount !== undefined) {
+          const btc = parseFloat(body.btc_amount);
+          if (!Number.isFinite(btc) || btc <= 0 || btc > 100) return res.status(400).json({ error: "btc_amount must be > 0 and <= 100" });
+          add("btc_amount", btc);
+        }
+        if (body.usd_amount !== undefined) {
+          const usd = (body.usd_amount === null || body.usd_amount === "") ? null : parseFloat(body.usd_amount);
+          if (usd !== null && (!Number.isFinite(usd) || usd < 0)) return res.status(400).json({ error: "usd_amount must be a non-negative number" });
+          add("usd_amount", usd);
+        }
+        if (body.flower_amount !== undefined) {
+          flowerVal = (body.flower_amount === null || body.flower_amount === "") ? null : parseFloat(body.flower_amount);
+          if (flowerVal !== null && (!Number.isFinite(flowerVal) || flowerVal < 0)) return res.status(400).json({ error: "flower_amount must be a non-negative number" });
+          flowerSet = true; add("flower_amount", flowerVal);
+        }
+        if (body.notes !== undefined) add("notes", typeof body.notes === "string" ? body.notes.slice(0, 500) : null);
+
+        if (!sets.length) return res.status(400).json({ error: "no fields to update" });
+
+        // wallet must keep a positive FLOWER amount (same rule as POST). Check the MERGED result —
+        // the effective venue/flower after this edit — reading whichever side the edit didn't set.
+        if (venueSet || flowerSet) {
+          const cur = await pool.query("SELECT venue, flower_amount FROM btc_transactions WHERE id = $1 AND farm_id = $2", [id, farm]);
+          if (!cur.rowCount) return res.status(404).json({ error: "not found" });
+          const effVenue = venueSet ? venueVal : String(cur.rows[0].venue || "").toLowerCase();
+          const effFlower = flowerSet ? flowerVal : (cur.rows[0].flower_amount === null ? null : parseFloat(cur.rows[0].flower_amount));
+          if (effVenue === "wallet" && !(effFlower > 0)) return res.status(400).json({ error: "flower_amount is required for the wallet venue" });
+        }
+
+        vals.push(id); const idIdx = vals.length;
+        vals.push(farm); const farmIdx = vals.length;
         const r = await pool.query(
-          `UPDATE btc_transactions SET venue = $1 WHERE id = $2 AND farm_id = $3
-           RETURNING id, farm_id, tx_date, direction, btc_amount, usd_amount, notes, venue, created_at`,
-          [venue, id, farm]
+          `UPDATE btc_transactions SET ${sets.join(", ")} WHERE id = $${idIdx} AND farm_id = $${farmIdx}
+           RETURNING id, farm_id, tx_date, direction, btc_amount, usd_amount, flower_amount, notes, venue, created_at`,
+          vals
         );
         if (!r.rowCount) return res.status(404).json({ error: "not found" });
         return res.status(200).json({ transaction: r.rows[0] });
