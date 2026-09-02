@@ -6006,7 +6006,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.54</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.55</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -6033,6 +6033,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.55", items: [
+          { t: "fix", text: "<b>WALLET was being counted as LOCKED in metric ③ — it isn't.</b> The \"at unlock\" figure summed every venue that wasn't SFL, which swept WALLET in with Yakkamon. But WALLET is liquid FLOWER you can sell today, so it now counts toward <b>liquidate NOW</b> (its held FLOWER valued at the live price, no farm-marketplace fee — it's the token), and only Yakkamon stays locked (returns Q4). The \"to 100% w/ liq\" line credits the WALLET holding too, so the gap agrees with the percentage. Locked is now decided by a per-venue flag, not \"anything ≠ SFL\"." },
+        ] },
         { ver: "v5.54", items: [
           { t: "feat", text: "<b>WALLET card now shows your average buy price per FLOWER</b> — the BTC paid per 🌸 across all your buys (Σ deposit ₿ ÷ Σ deposit 🌸), i.e. the cost basis of the position — with the live price beside it (<i>ø nákup 0.00001250 ₿ / 🌸 · teď 0.00000050</i>), so you can see at a glance whether what you still hold is above or below what you paid." },
         ] },
@@ -29140,17 +29143,27 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         ? (liquidValueSfl * sflToUsd / btcUsd) : 0;
       // Everything held somewhere that cannot be sold today. No fee is applied: a deposit is
       // returned, not sold.
+      // Locked = held somewhere that cannot be sold today and returns later (Yakkamon Q4). Driven
+      // by the per-venue `locked` flag, NOT "anything that isn't SFL" — that wrongly swept WALLET
+      // (liquid FLOWER) in here. WALLET holdings are counted as liquid-now below instead.
       const lockedSfl = Object.values(_invBalances || {})
-        .filter((b) => b.venue !== "sfl")
+        .filter((b) => (invVenues[b.venue] || {}).locked)
         .reduce((a, b) => a + (parseFloat(b.amount) || 0), 0);
       const lockedBtc = (sflToUsd > 0 && btcUsd > 0) ? (lockedSfl * sflToUsd / btcUsd) : 0;
+      // WALLET holds FLOWER bought with BTC — liquid, sellable today at the live price (the token
+      // itself, so no 10% farm-marketplace fee). Its BTC buys already sit in peak/net exposure, so
+      // the FLOWER they bought must count as a recoverable asset NOW, or that spend would read as
+      // unrecovered debt with nothing behind it. Held is derived from the ledger, not _invBalances.
+      const walletBucket = (agg.venues || []).find((x) => x.venue === "wallet");
+      const walletHeldFlower = walletBucket ? Math.max(0, walletBucket.depositFlower - walletBucket.withdrawFlower) : 0;
+      const walletLiquidBtc = (sflToUsd > 0 && btcUsd > 0) ? (walletHeldFlower * sflToUsd / btcUsd) : 0;
       const canCompute3 = (agg.peakBtc > 0 && sflToUsd > 0 && btcUsd > 0 && treasuryTotalSfl > 0);
       const recoveredBtc = agg.peakBtc - agg.netDebtBtc;
       const ifLiqPct = canCompute3
-        ? ((recoveredBtc + liquidValueBtc) / agg.peakBtc) * 100
+        ? ((recoveredBtc + liquidValueBtc + walletLiquidBtc) / agg.peakBtc) * 100
         : null;
       const atUnlockPct = canCompute3
-        ? ((recoveredBtc + liquidValueBtc + lockedBtc) / agg.peakBtc) * 100
+        ? ((recoveredBtc + liquidValueBtc + walletLiquidBtc + lockedBtc) / agg.peakBtc) * 100
         : null;
       const ifLiqText = (agg.peakBtc <= 0)
         ? "n/a — no deposits"
@@ -29160,7 +29173,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       const liqColor = canCompute3 ? verdictColor(ifLiqPct) : "var(--text-dim)";
       const hasFarmValue = (sflToUsd > 0 && btcUsd > 0 && treasuryTotalSfl > 0);
       const liqSubText = hasFarmValue
-        ? `farm ${fmtSfl(liquidValueSfl)} ≈ ${fmtBtc(liquidValueBtc)}`
+        ? `farm ${fmtSfl(liquidValueSfl)} ≈ ${fmtBtc(liquidValueBtc)}${walletHeldFlower > 0 ? ` · wallet ${fmtSfl(walletHeldFlower)} ≈ ${fmtBtc(walletLiquidBtc)}` : ""}`
         : "farm value or price feed unavailable";
       const lockedHtml = (lockedSfl > 0 && canCompute3)
         ? `<div class="label pixel-font" style="margin-top:4px;color:var(--lily);line-height:1.6">+ ${fmtSfl(lockedSfl)} locked (no fee, returns Q4)<br><b>${atUnlockPct.toFixed(1)} %</b> at unlock</div>`
@@ -29180,7 +29193,9 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           : `to 100% w/o liq: <b style="color:var(--text-secondary)">+${fmtFlower(agg.netDebtBtc * flowerPerBtc)}</b>`;
         let withLiqLine = "";
         if (treasuryTotalSfl > 0) {
-          const gapAfterLiqBtc = agg.netDebtBtc - liquidValueBtc;
+          // Liquid-now = farm treasury (less fee) + WALLET FLOWER, matching metric ③'s "now"
+          // side, so the gap here agrees with the percentage above it.
+          const gapAfterLiqBtc = agg.netDebtBtc - liquidValueBtc - walletLiquidBtc;
           withLiqLine = gapAfterLiqBtc <= 0
             ? `<span style="color:var(--green)">✅ liquidation alone hits 100%</span>`
             : `to 100% w/ liq: <b style="color:var(--sunpetal)">+${fmtFlower(gapAfterLiqBtc * flowerPerBtc)}</b>`;
@@ -29320,9 +29335,11 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
      */
     const invVenues = {
       sfl: { label: "SFL", color: "var(--sunpetal)" },
-      yakkamon: { label: "YAKKE", color: "var(--lily)" },
-      // FLOWER bought with BTC and held to speculate on the BTC price — a venue like the others:
-      // a manual FLOWER holding, valued in BTC at the live price, read against what went in.
+      // `locked`: the holding cannot be sold today and returns later (Yakkamon opens Q4). It feeds
+      // the "at unlock" figure of metric ③, never "liquidate now". WALLET is NOT locked.
+      yakkamon: { label: "YAKKE", color: "var(--lily)", locked: true },
+      // FLOWER bought with BTC and held to speculate on the BTC price. Liquid — sellable today —
+      // so it counts toward "liquidate now", and its held FLOWER is derived from the ledger.
       wallet: { label: "WALLET", color: "var(--blue)" },
     };
     /*
