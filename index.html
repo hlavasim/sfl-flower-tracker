@@ -6006,7 +6006,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.58</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.59</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -6033,6 +6033,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.59", items: [
+          { t: "feat", text: "<b>SATS / FLOWER chart under the Investment Tracker table</b> — the FLOWER price in satoshis over the last 30 days, so you can see the rate your WALLET speculates on. It is <b>daily</b>: FLOWER is only stored once a day (marketplace_totals), and BTC is taken per day from CoinGecko, so sats/flower = flower_usd / btc_usd × 1e8, one point per day. Inline SVG, green when the 30-day trend is up, red when down, with the current value and range beneath." },
+        ] },
         { ver: "v5.58", items: [
           { t: "fix", text: "<b>The WALLET card now looks like SFL and YAKKE.</b> It had a bespoke layout (held first, an in/out line); it now uses the same rows as the other venues — <i>sent · peak · tx</i>, then held with its BTC value and %, the source line, and BILANCE — with WALLET's source shown as <i>z transakcí</i> (derived from the ledger) and the ø nákup line where it has one. Numbers are unchanged: BILANCE is the held value now minus the net sent, which for WALLET is its total position P&L." },
         ] },
@@ -29316,7 +29319,78 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         <div id="inv-tx-table-wrap">${renderInvTxTable(transactions)}</div>
         <button class="roi-pill" onclick="_invShowAddForm()" style="margin-top:10px">+ Add transaction</button>
         <div id="inv-add-form" style="display:none"></div>
+        <div id="inv-satsflower" style="margin-top:16px"></div>
       `;
+      _invRenderSatsChart();   // fire-and-forget; fills #inv-satsflower once, then draws from cache
+    }
+
+    /*
+     * SATS / FLOWER over the last 30 days, daily. FLOWER's price is only stored per day
+     * (marketplace_totals.flower_price, USD), so the chart is daily — one point per day —
+     * with BTC taken per day too. sats/flower = flower_usd / btc_usd × 1e8. Fetched once and
+     * cached: renderInvestmentTrackerContent runs on every add/delete, so it must not refetch.
+     */
+    let _satsChartCache = null;   // [{ date, sats }] ascending, or "error"
+    async function _invRenderSatsChart() {
+      const el = document.getElementById("inv-satsflower");
+      if (!el) return;
+      const draw = () => { el.innerHTML = _satsChartSvg(_satsChartCache); };
+      if (_satsChartCache) return draw();
+      el.innerHTML = `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);padding:8px 0">SATS / FLOWER — načítám…</div>`;
+      try {
+        const [flowerResp, btcResp] = await Promise.all([
+          fetch("/api/marketplace-history?totals=1&days=31").then(r => r.ok ? r.json() : Promise.reject(r.status)),
+          fetch(`/api/proxy?url=${encodeURIComponent("https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=31")}`).then(r => r.ok ? r.json() : Promise.reject(r.status)),
+        ]);
+        // BTC: hourly points → last close per UTC day, keyed YYYY-MM-DD.
+        const btcByDay = {};
+        for (const [ms, price] of (btcResp.prices || [])) btcByDay[new Date(ms).toISOString().slice(0, 10)] = price;
+        const pts = [];
+        for (const t of (flowerResp.totals || [])) {
+          const day = String(t.date).slice(0, 10);
+          const flowerUsd = t.flower_price;
+          const btc = btcByDay[day];
+          if (flowerUsd > 0 && btc > 0) pts.push({ date: day, sats: (flowerUsd / btc) * 1e8 });
+        }
+        pts.sort((a, b) => a.date.localeCompare(b.date));
+        _satsChartCache = pts.length ? pts : "error";
+      } catch (e) {
+        console.warn("[sats/flower]", e);
+        _satsChartCache = "error";
+      }
+      draw();
+    }
+
+    // A small self-contained SVG line chart — no library, theme-aware via CSS vars.
+    function _satsChartSvg(pts) {
+      const title = `<div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);letter-spacing:0.5px;margin-bottom:6px">SATS / FLOWER · 30 dní (denně)</div>`;
+      if (pts === "error" || !Array.isArray(pts) || pts.length < 2) {
+        return title + `<div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim)">Zatím málo dat pro graf.</div>`;
+      }
+      const W = 640, H = 170, padL = 46, padR = 10, padT = 8, padB = 22;
+      const xs = pts.map(p => p.sats);
+      let min = Math.min(...xs), max = Math.max(...xs);
+      if (min === max) { min -= 1; max += 1; }
+      const pad = (max - min) * 0.08; min -= pad; max += pad;
+      const px = (i) => padL + (i / (pts.length - 1)) * (W - padL - padR);
+      const py = (v) => padT + (1 - (v - min) / (max - min)) * (H - padT - padB);
+      const line = pts.map((p, i) => `${px(i).toFixed(1)},${py(p.sats).toFixed(1)}`).join(" ");
+      const area = `${padL},${(H - padB).toFixed(1)} ${line} ${px(pts.length - 1).toFixed(1)},${(H - padB).toFixed(1)}`;
+      const last = pts[pts.length - 1], first = pts[0];
+      const gy = (frac) => padT + frac * (H - padT - padB);
+      const gval = (frac) => max - frac * (max - min);
+      const grid = [0, 0.5, 1].map(f => `<line x1="${padL}" y1="${gy(f).toFixed(1)}" x2="${W - padR}" y2="${gy(f).toFixed(1)}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><text x="${padL - 5}" y="${(gy(f) + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--text-dim)" font-family="'Courier New',monospace">${gval(f).toFixed(0)}</text>`).join("");
+      const up = last.sats >= first.sats;
+      const col = up ? "#7fe0a0" : "#ff8888";
+      return title + `<div style="overflow-x:auto"><svg viewBox="0 0 ${W} ${H}" style="width:100%;min-width:320px;height:auto;display:block" preserveAspectRatio="none">
+        ${grid}
+        <polygon points="${area}" fill="${up ? "rgba(127,224,160,0.10)" : "rgba(255,136,136,0.10)"}"/>
+        <polyline points="${line}" fill="none" stroke="${col}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+        <circle cx="${px(pts.length - 1).toFixed(1)}" cy="${py(last.sats).toFixed(1)}" r="2.6" fill="${col}"/>
+        <text x="${padL}" y="${H - 6}" font-size="9" fill="var(--text-dim)" font-family="'Courier New',monospace">${escHTML(first.date)}</text>
+        <text x="${W - padR}" y="${H - 6}" text-anchor="end" font-size="9" fill="var(--text-dim)" font-family="'Courier New',monospace">${escHTML(last.date)}</text>
+      </svg></div>
+      <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin-top:2px">teď <b style="color:${col}">${last.sats.toFixed(1)} sats/🌸</b> · rozsah ${Math.min(...xs).toFixed(0)}–${Math.max(...xs).toFixed(0)} · FLOWER cena je denní (${pts.length} dní)</div>`;
     }
 
     /*
