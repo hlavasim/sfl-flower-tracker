@@ -6006,7 +6006,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.53</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.54</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -6033,6 +6033,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.54", items: [
+          { t: "feat", text: "<b>WALLET card now shows your average buy price per FLOWER</b> — the BTC paid per 🌸 across all your buys (Σ deposit ₿ ÷ Σ deposit 🌸), i.e. the cost basis of the position — with the live price beside it (<i>ø nákup 0.00001250 ₿ / 🌸 · teď 0.00000050</i>), so you can see at a glance whether what you still hold is above or below what you paid." },
+        ] },
         { ver: "v5.53", items: [
           { t: "feat", text: "<b>WALLET is now a full FLOWER↔BTC position, worked out from the ledger — no hand-typed holding.</b> Every transaction can carry a FLOWER amount (a new column, shown in the table and <b>required for WALLET</b>), so the WALLET card derives what you still hold — bought 🌸 minus sold 🌸 — and your realized BTC — pulled out minus put in. Worked example: buy <b>8,000 🌸 for 0.1 ₿</b>, later sell <b>7,000 🌸 for 0.11 ₿</b> → the card reads <b>1,000 🌸 held</b> and <b>BILANCE +0.010000 ₿</b>. SFL and YAKKE are unchanged (their FLOWER field is optional)." },
         ] },
@@ -29253,10 +29256,16 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
             const holdBtc = flowerPerBtc > 0 ? heldFlower / flowerPerBtc : null;
             const realizedBtc = v.withdrawBtc - v.depositBtc;
             const realizedPct = v.depositBtc > 0 ? (realizedBtc / v.depositBtc) * 100 : null;
+            // Average buy price: BTC paid per FLOWER across all buys (deposits) — the cost basis of
+            // the position. Compared against the live price per FLOWER (1/flowerPerBtc) it says
+            // whether what you still hold is above or below what you paid.
+            const avgBuyPerFlower = v.depositFlower > 0 ? (v.depositBtc / v.depositFlower) : null;
+            const nowPerFlower = flowerPerBtc > 0 ? (1 / flowerPerBtc) : null;
             return `<div style="flex:1;min-width:186px;border:1px solid ${meta.color};border-radius:6px;padding:8px 10px;background:rgba(0,0,0,0.25)">
               <div class="pixel-font" style="font-size:0.5rem;color:${meta.color};letter-spacing:0.5px">${meta.label}</div>
               <div style="font-family:'Courier New',monospace;font-size:0.8rem;color:var(--green)">${fmtFlower(heldFlower)} <span style="font-size:0.62rem;color:var(--text-dim)">held</span></div>
               <div class="pixel-font" style="font-size:0.45rem;color:var(--text-dim);margin-top:2px">${holdBtc !== null ? fmtBtc(holdBtc) + " value" : "—"}${realizedPct !== null ? ` · realized <b style="color:${realizedPct >= 0 ? "var(--green)" : "var(--red)"}">${realizedPct >= 0 ? "+" : ""}${realizedPct.toFixed(1)}%</b>` : ""}</div>
+              ${avgBuyPerFlower !== null ? `<div class="pixel-font" style="font-size:0.45rem;color:var(--text-dim);margin-top:2px">ø nákup <b style="color:var(--text-secondary)">${fmtBtc(avgBuyPerFlower)}</b> / 🌸${nowPerFlower !== null ? ` · teď ${fmtBtc(nowPerFlower)}` : ""}</div>` : ""}
               <div style="margin-top:6px;border-top:1px solid rgba(255,255,255,0.08);padding-top:5px;display:flex;justify-content:space-between;align-items:baseline">
                 <span class="pixel-font" style="font-size:0.45rem;color:var(--text-dim);letter-spacing:0.5px">BILANCE</span>
                 <span style="font-family:'Courier New',monospace;font-size:0.72rem;color:${realizedBtc >= 0 ? "var(--green)" : "var(--red)"}">${realizedBtc >= 0 ? "+" : ""}${fmtBtc(realizedBtc)}</span>
