@@ -6006,7 +6006,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.57</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.58</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -6033,6 +6033,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.58", items: [
+          { t: "fix", text: "<b>The WALLET card now looks like SFL and YAKKE.</b> It had a bespoke layout (held first, an in/out line); it now uses the same rows as the other venues — <i>sent · peak · tx</i>, then held with its BTC value and %, the source line, and BILANCE — with WALLET's source shown as <i>z transakcí</i> (derived from the ledger) and the ø nákup line where it has one. Numbers are unchanged: BILANCE is the held value now minus the net sent, which for WALLET is its total position P&L." },
+        ] },
         { ver: "v5.57", items: [
           { t: "fix", text: "<b>WALLET BILANCE and % were realized-only, so a buy you haven't sold read as −100%.</b> Holding 22,901 🌸 bought for 0.05 ₿ showed <i>realized −100.0% · BILANCE −0.050002 ₿</i> — as if the purchase itself were a total loss, ignoring the FLOWER you now hold. Both are now the <b>total position P&L</b>: the FLOWER still held valued at the live price, plus any BTC you've taken out, minus what you put in. So that same position reads <b>−3.8% · BILANCE −0.001910 ₿</b> — the small dip from your 0.00000218 ₿ buy to the 0.00000210 ₿ price now — and an untouched buy at a flat price sits at ~0, not −100%." },
         ] },
@@ -29267,46 +29270,16 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         ${(agg.venues || []).length > 1 ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">${agg.venues.map((v) => {
           const meta = invVenues[v.venue] || { label: v.venue.toUpperCase(), color: "var(--text-dim)" };
           /*
-           * WALLET is a FLOWER<->BTC speculation position, so unlike the others its holding is not
-           * typed in or read from the farm — it is DERIVED from the ledger: FLOWER held = what was
-           * bought (deposit FLOWER) minus what was sold (withdrawal FLOWER). BILANCE is the TOTAL
-           * position P&L — the FLOWER still held valued now, plus BTC taken out, minus BTC put in —
-           * so an open position at a flat price reads ~0, not the −100% a realized-only view showed.
+           * One card layout for every venue. The holding's SOURCE differs — SFL is read live from
+           * the farm treasury, WALLET is DERIVED from the ledger (bought FLOWER − sold FLOWER), and
+           * anything else is the hand-typed venue balance — but the maths after that is identical:
+           * BILANCE = held valued now − net sent, which for WALLET equals its total position P&L
+           * (held + BTC out − BTC in), so an open buy reads its real gain/loss, never −100%.
            */
-          if (v.venue === "wallet") {
-            const heldFlower = v.depositFlower - v.withdrawFlower;
-            const holdBtc = flowerPerBtc > 0 ? heldFlower / flowerPerBtc : null;
-            // TOTAL position P&L, not realized-only: value of the FLOWER still held + BTC taken out
-            // − BTC put in. This is what "how am I doing" means whether the position is open or
-            // closed. A pure buy at a flat price reads ~0, not −100% — the earlier realized-only
-            // number treated the purchase itself as a loss and ignored the FLOWER it bought.
-            const totalPnlBtc = (holdBtc !== null) ? (holdBtc + v.withdrawBtc - v.depositBtc) : null;
-            const totalPnlPct = (totalPnlBtc !== null && v.depositBtc > 0) ? (totalPnlBtc / v.depositBtc) * 100 : null;
-            // Average buy price: BTC paid per FLOWER across all buys (deposits) — the cost basis of
-            // the position. Compared against the live price per FLOWER (1/flowerPerBtc) it says
-            // whether what you still hold is above or below what you paid.
-            const avgBuyPerFlower = v.depositFlower > 0 ? (v.depositBtc / v.depositFlower) : null;
-            const nowPerFlower = flowerPerBtc > 0 ? (1 / flowerPerBtc) : null;
-            return `<div style="flex:1;min-width:186px;border:1px solid ${meta.color};border-radius:6px;padding:8px 10px;background:rgba(0,0,0,0.25)">
-              <div class="pixel-font" style="font-size:0.5rem;color:${meta.color};letter-spacing:0.5px">${meta.label}</div>
-              <div style="font-family:'Courier New',monospace;font-size:0.8rem;color:var(--green)">${fmtFlower(heldFlower)} <span style="font-size:0.62rem;color:var(--text-dim)">held</span></div>
-              <div class="pixel-font" style="font-size:0.45rem;color:var(--text-dim);margin-top:2px">${holdBtc !== null ? fmtBtc(holdBtc) + " value" : "—"}${totalPnlPct !== null ? ` · <b style="color:${totalPnlPct >= 0 ? "var(--green)" : "var(--red)"}">${totalPnlPct >= 0 ? "+" : ""}${totalPnlPct.toFixed(1)}%</b>` : ""}</div>
-              ${avgBuyPerFlower !== null ? `<div class="pixel-font" style="font-size:0.45rem;color:var(--text-dim);margin-top:2px">ø nákup <b style="color:var(--text-secondary)">${fmtBtc(avgBuyPerFlower)}</b> / 🌸${nowPerFlower !== null ? ` · teď ${fmtBtc(nowPerFlower)}` : ""}</div>` : ""}
-              ${totalPnlBtc !== null ? `<div style="margin-top:6px;border-top:1px solid rgba(255,255,255,0.08);padding-top:5px;display:flex;justify-content:space-between;align-items:baseline">
-                <span class="pixel-font" style="font-size:0.45rem;color:var(--text-dim);letter-spacing:0.5px">BILANCE</span>
-                <span style="font-family:'Courier New',monospace;font-size:0.72rem;color:${totalPnlBtc >= 0 ? "var(--green)" : "var(--red)"}">${totalPnlBtc >= 0 ? "+" : ""}${fmtBtc(totalPnlBtc)}</span>
-              </div>` : ""}
-              <div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);margin-top:3px">in ${fmtBtc(v.depositBtc)} · out ${fmtBtc(v.withdrawBtc)} · ${v.count} tx · z transakcí</div>
-            </div>`;
-          }
-          /*
-           * Prefer a holding the app already KNOWS over one somebody typed in. The farm's own
-           * value is computed every load — metric (3) is built from it — so asking for it by hand
-           * would be asking for a number we hold already, and one that goes stale the moment the
-           * farm changes. Only a venue the app cannot see into falls back to the manual figure.
-           */
-          const computed = (v.venue === "sfl" && treasuryTotalSfl > 0)
-            ? { amount: treasuryTotalSfl, unit: "FLOWER", source: "farm" } : null;
+          const computed =
+              (v.venue === "sfl" && treasuryTotalSfl > 0) ? { amount: treasuryTotalSfl, unit: "FLOWER", source: "farm" }
+            : (v.venue === "wallet") ? { amount: Math.max(0, v.depositFlower - v.withdrawFlower), unit: "FLOWER", source: "ledger" }
+            : null;
           const bal = computed || _invBalances[v.venue];
           // Value the holding at the live FLOWER price so it can be read against what went in.
           const holdBtc = (bal && flowerPerBtc > 0) ? (bal.amount / flowerPerBtc) : null;
@@ -29328,6 +29301,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
                  <div class="pixel-font" style="font-size:0.45rem;color:var(--text-dim);margin-top:2px">${holdBtc !== null ? fmtBtc(holdBtc) : "—"}${pnl !== null ? ` · <b style="color:${pnl >= 0 ? "var(--green)" : "var(--red)"}">${pnl >= 0 ? "+" : ""}${pnl.toFixed(1)}%</b>` : ""}</div>
                  <div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);margin-top:2px">${
                    bal.source === "farm" ? "live from your farm data"
+                   : bal.source === "ledger" ? "z transakcí"
                    : bal.source === "game" ? `read from the game ${String(bal.noted_at).slice(0, 10)} · <span style="cursor:pointer;color:var(--lily)" onclick="_invSetBalance('${v.venue}')">[edit]</span>`
                    : `typed in ${String(bal.noted_at).slice(0, 10)} · <span style="cursor:pointer;color:var(--lily)" onclick="_invSetBalance('${v.venue}')">[edit]</span>`
                  }</div>
