@@ -17,7 +17,13 @@ const HEALTH_COLLECTORS = [
   // that recovers on its own. The 48h threshold (was 12h) rides out such a hiccup silently and
   // only alarms if it stays dead for two full days, which is when it stops being "wait for them".
   { table: "price_changes", col: "captured_at", label: "Prices", staleH: 48 },
-  { table: "nft_changes", col: "captured_at", label: "NFT values", staleH: 48 },
+  // sfl.world's PRICES feed came back (minutes fresh) but its NFT feed did not: /api/v1/nfts has
+  // reported the same `updatedAt` of 2026-08-31T22:59Z ever since. Our collector is healthy — it
+  // fetches, sees identical data, writes nothing (it is change-based), so the age just grows and
+  // the watchdog mailed hourly about a freeze on someone else's server. Paused for that reason,
+  // NOT because the collector stopped. Unpause once /api/v1/nfts moves again:
+  //   curl -s https://sfl.world/api/v1/nfts | python -c "import json,sys;print(json.load(sys.stdin)['updatedAt'])"
+  { table: "nft_changes", col: "captured_at", label: "NFT values", staleH: 48, paused: true },
   { table: "marketplace_trades", col: "fulfilled_at", label: "Marketplace trades", staleH: 6, paused: true },
   { table: "ob_snap", col: "ts", label: "Orderbook", staleH: 3, paused: true },
   { table: "marks_snapshots", col: "captured_at", label: "Marks", staleH: 30 },
