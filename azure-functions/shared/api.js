@@ -122,38 +122,82 @@ async function fetchNfts() {
 
 
 /**
- * Fetch marketplace activity data (daily aggregates, no auth needed).
+ * Fetch marketplace activity data (daily aggregates + live market snapshot).
  * Returns { flowerPrice, reports: { "YYYY-MM-DD": { totals, items } } }
+ *
+ * The /community path, not the bare /data one we used before. They are not the same feed:
+ * /data returns 2,467 items with trade stats only, /community/data returns 3,131 WITH a
+ * market snapshot per item — floor, bestOffer, listingCount, offerCount, live for 1,599 of
+ * them. That snapshot is the whole top of the book for the entire catalogue in ONE request,
+ * which is what lets the orderbook collector exist again at all: the per-item route the old
+ * one used is walled off, and this endpoint is throttled to roughly one request per 5s.
+ *
+ * floor/bestOffer are omitted per item when that side of the book is empty, and the snapshot
+ * is point-in-time (live on today's report, end-of-day on a past one) while the trade stats
+ * are cumulative over the marketplace's whole history.
  */
-async function fetchMarketplaceActivity() {
+async function fetchMarketplaceActivity(apiKey) {
+  const key = apiKey || DEFAULT_API_KEY;
   const resp = await fetch(
-    "https://api.sunflower-land.com/data?type=marketplaceActivity",
-    { headers: { "Content-Type": "application/json;charset=UTF-8" } }
+    "https://api.sunflower-land.com/community/data?type=marketplaceActivity",
+    { headers: { "Content-Type": "application/json;charset=UTF-8", "x-api-key": key } }
   );
+  if (resp.status === 429) throw Object.assign(new Error("Rate limited"), { status: 429 });
   if (!resp.ok) throw new Error(`MarketplaceActivity API ${resp.status}: ${await resp.text()}`);
   const json = await resp.json();
   return json.data || {};
 }
 
 /**
- * Fetch rich per-item collection data (requires Bearer JWT).
- * Returns { id, floor, supply, history, listings, offers, ... }
+ * Fetch rich per-item marketplace data: floor, supply, the 50 best offers and listings on
+ * each side, and the sale history. Returns { id, floor, supply, history, listings, offers, ... }
+ *
+ * This replaces /collection/{collection}/{id}, which the game walled behind its request-token
+ * anti-scraping layer on 2026-09-01 (RT-001) and which now answers 500 to every server-side
+ * caller. The community route carries the same object — offers/listings as {sfl, quantity} and
+ * history.sales with initiatedBy/fulfilledBy, field for field — so the callers did not change;
+ * only the URL, the auth (an API key instead of a player's Bearer JWT, so no token in Redis to
+ * keep alive) and the {data:…} envelope did.
+ *
+ * Two things the public view does NOT carry, by design: `balance` (it never reports what a
+ * particular farm owns) and any per-farm signature. Callers that recorded `balance` now record
+ * null for it.
+ *
+ * Throttled to roughly one request per 5 seconds per IP, doubling to 10 if you keep going —
+ * measured, not assumed: at 1.5s apart 4 of 6 calls 429, at 5.5s apart 2 of 6 still did. Pace
+ * per-item sweeps accordingly and retry the 429s.
  */
-async function fetchCollectionItem(collection, itemId, token) {
+async function fetchCollectionItem(collection, itemId, apiKey) {
+  const key = apiKey || DEFAULT_API_KEY;
   const resp = await fetch(
-    `https://api.sunflower-land.com/collection/${collection}/${itemId}?type=${collection}`,
-    {
-      headers: {
-        "Content-Type": "application/json;charset=UTF-8",
-        "Authorization": `Bearer ${token}`,
-      },
-    }
+    `https://api.sunflower-land.com/community/data?type=tradeable&collection=${encodeURIComponent(collection)}&id=${encodeURIComponent(itemId)}`,
+    { headers: { "Content-Type": "application/json;charset=UTF-8", "x-api-key": key } }
   );
   if (resp.status === 429) {
     throw Object.assign(new Error("Rate limited"), { status: 429 });
   }
-  if (!resp.ok) throw new Error(`Collection API ${resp.status}: ${await resp.text()}`);
-  return resp.json();
+  if (!resp.ok) throw new Error(`Tradeable API ${resp.status}: ${await resp.text()}`);
+  const json = await resp.json();
+  return json.data || {};
+}
+
+/**
+ * One farm's marketplace profile: its last 50 settled trades (both sides of the book), its
+ * open listings and offers, its five most frequent trading partners and weekly FLOWER flows.
+ *
+ * One request for what the old per-item sweep could only reach by visiting every item the farm
+ * had ever touched — this is how "my trades" is collected now.
+ */
+async function fetchMarketplaceProfile(farmId, apiKey) {
+  const key = apiKey || DEFAULT_API_KEY;
+  const resp = await fetch(
+    `https://api.sunflower-land.com/community/data?type=marketplaceProfile&farmId=${encodeURIComponent(farmId)}`,
+    { headers: { "Content-Type": "application/json;charset=UTF-8", "x-api-key": key } }
+  );
+  if (resp.status === 429) throw Object.assign(new Error("Rate limited"), { status: 429 });
+  if (!resp.ok) throw new Error(`MarketplaceProfile API ${resp.status}: ${await resp.text()}`);
+  const json = await resp.json();
+  return json.data || {};
 }
 
 /**
@@ -168,4 +212,4 @@ async function fetchLeaderboard(farmId) {
   return resp.json();
 }
 
-module.exports = { fetchFarmData, fetchFarmsBatch, fetchFarmsByIds, GET_FARMS_MAX_IDS, encodeCursor, decodeCursor, fetchPrices, fetchNfts, fetchMarketplaceActivity, fetchCollectionItem, fetchLeaderboard };
+module.exports = { fetchFarmData, fetchFarmsBatch, fetchFarmsByIds, GET_FARMS_MAX_IDS, encodeCursor, decodeCursor, fetchPrices, fetchNfts, fetchMarketplaceActivity, fetchCollectionItem, fetchMarketplaceProfile, fetchLeaderboard };

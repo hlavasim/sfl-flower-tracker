@@ -1,200 +1,130 @@
+// My trades, from the community marketplace profile (2026-09-11).
+//
+// The original swept every item that had traded that day — hundreds of calls to
+// /collection/{coll}/{id} at 500ms apart, signed with a player's Bearer JWT from Redis. The game
+// walled that route on 2026-09-01 (RT-001) and it has written nothing since.
+//
+// The replacement is not the same job done differently: at the community API's throttle
+// (~1 request per 5 seconds, measured) a catalogue-wide per-item sweep is simply not reachable —
+// it would be hours per run. What IS reachable is the thing this table is actually read for.
+// The `mytrades` page wants MY trades, and marketplaceProfile returns a farm's last fifty
+// settled trades on both sides of the book, plus its open listings and offers, in ONE request.
+//
+// So the division of labour is now:
+//   this function          — my settled trades + my open orders, hourly, 1 request
+//   orderbook-snapshot     — the whole catalogue's top of book, plus a paced deep sweep that
+//                            records other farms' trades for the boosted items
+//
+// Trades reaching this collector are the farm's own, so is_mine is true by construction and
+// my_side is derived the same way orderbook-snapshot derives it.
 const { getPool } = require("../shared/db");
-const { fetchMarketplaceActivity, fetchCollectionItem } = require("../shared/api");
+const { fetchMarketplaceProfile } = require("../shared/api");
 
-const KV_URL = process.env.KV_REST_API_URL;
-const KV_TOKEN = process.env.KV_REST_API_TOKEN;
-const REDIS_TOKEN_KEY = "game_token:155498";
+const MY_FARM_ID = 155498;
 
-async function getGameToken() {
-  if (!KV_URL || !KV_TOKEN) return null;
-  try {
-    const resp = await fetch(`${KV_URL}/get/${encodeURIComponent(REDIS_TOKEN_KEY)}`, {
-      headers: { Authorization: `Bearer ${KV_TOKEN}` },
-    });
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    return data.result || null;
-  } catch {
-    return null;
-  }
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+// For a fulfilled LISTING the initiator was the seller and the fulfiller bought; for a fulfilled
+// OFFER the initiator was the buyer and the fulfiller sold.
+function mySide(sale) {
+  const initId = +(sale.initiatedBy && sale.initiatedBy.id) || 0;
+  const iAmInitiator = initId === MY_FARM_ID;
+  const source = sale.source || "listing";
+  return source === "offer"
+    ? (iAmInitiator ? "buy" : "sell")
+    : (iAmInitiator ? "sell" : "buy");
 }
 
 module.exports = async function (context) {
   const pool = getPool();
 
+  const profile = await fetchMarketplaceProfile(MY_FARM_ID);
+  const trades = profile.trades || [];
+  const listings = profile.listings || {};
+  const offers = profile.offers || {};
+  context.log(
+    `marketplace-trades: profile has ${trades.length} recent trades, ` +
+    `${Object.keys(listings).length} open listings, ${Object.keys(offers).length} open offers ` +
+    `(lifetime ${profile.totalTrades || 0})`
+  );
+
+  let newTrades = 0, orders = 0;
+  const client = await pool.connect();
   try {
-    // Get game token from Redis
-    const token = await getGameToken();
-    if (!token) {
-      context.log.warn("No game token available in Redis — skipping marketplace-trades");
-      return;
+    await client.query("BEGIN");
+
+    for (const sale of trades) {
+      if (!sale.id) continue;
+      const r = await client.query(
+        `INSERT INTO marketplace_trades
+           (trade_id, collection, item_id, sfl, source, quantity, fulfilled_at,
+            initiated_by_id, initiated_by_name, fulfilled_by_id, fulfilled_by_name,
+            is_mine, my_side)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,true,$12)
+         ON CONFLICT (trade_id) DO NOTHING`,
+        [
+          String(sale.id),
+          sale.collection || null,
+          sale.itemId != null ? sale.itemId : null,
+          +sale.sfl || 0,
+          sale.source || null,
+          +sale.quantity || 1,
+          sale.fulfilledAt ? new Date(sale.fulfilledAt) : new Date(),
+          (sale.initiatedBy && sale.initiatedBy.id) || null,
+          (sale.initiatedBy && sale.initiatedBy.username) || null,
+          (sale.fulfilledBy && sale.fulfilledBy.id) || null,
+          (sale.fulfilledBy && sale.fulfilledBy.username) || null,
+          mySide(sale),
+        ]
+      );
+      newTrades += r.rowCount;
     }
 
-    // Verify token not expired (basic JWT decode)
-    try {
-      const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64").toString());
-      if (payload.exp && payload.exp * 1000 < Date.now()) {
-        context.log.warn("Game token expired — skipping marketplace-trades");
-        return;
-      }
-    } catch {
-      context.log.warn("Cannot decode game token — proceeding anyway");
-    }
+    /*
+     * My open orders. Keyed by trade id, each carrying the items on the block rather than one
+     * item id — a listing can hold several — so one order becomes one row per item in it. The
+     * previous rows for this farm are cleared first: an order that has since been cancelled or
+     * filled would otherwise sit in the book forever, which is the failure mode a DELETE-then-
+     * INSERT avoids and an upsert does not.
+     */
+    await client.query(`DELETE FROM marketplace_orderbook WHERE created_by_id = $1`, [MY_FARM_ID]);
 
-    // Fetch marketplace activity to find traded items
-    const activity = await fetchMarketplaceActivity();
-    const reports = activity.reports || {};
-    const today = new Date().toISOString().split("T")[0];
-    const report = reports[today] || {};
-    const items = report.items || {};
-
-    // Find items with trades today, sorted by volume DESC
-    const tradedItems = [];
-    for (const [key, val] of Object.entries(items)) {
-      if ((val.trades || 0) === 0) continue;
-      const dashIdx = key.lastIndexOf("-");
-      if (dashIdx === -1) continue;
-      const collection = key.substring(0, dashIdx);
-      const itemId = parseInt(key.substring(dashIdx + 1));
-      if (isNaN(itemId)) continue;
-      tradedItems.push({ collection, itemId, volume: val.volume || 0 });
-    }
-    tradedItems.sort((a, b) => b.volume - a.volume);
-
-    if (tradedItems.length === 0) {
-      context.log("No items with trades today");
-      return;
-    }
-
-    context.log(`Found ${tradedItems.length} items with trades today`);
-
-    let newTrades = 0;
-    let totalListings = 0;
-    let totalOffers = 0;
-    let processed = 0;
-    let delay = 500;
-
-    const client = await pool.connect();
-    try {
-      for (const { collection, itemId } of tradedItems) {
-        try {
-          const detail = await fetchCollectionItem(collection, itemId, token);
-
-          await client.query("BEGIN");
-
-          // Insert trades (dedup by trade_id)
-          const sales = (detail.history && detail.history.sales) || [];
-          for (const sale of sales) {
-            if (!sale.id) continue;
-            try {
-              await client.query(
-                `INSERT INTO marketplace_trades
-                   (trade_id, collection, item_id, sfl, source, quantity, fulfilled_at,
-                    initiated_by_id, initiated_by_name, fulfilled_by_id, fulfilled_by_name)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-                 ON CONFLICT (trade_id) DO NOTHING`,
-                [
-                  String(sale.id),
-                  sale.collection || collection,
-                  sale.itemId || itemId,
-                  sale.sfl || 0,
-                  sale.source || null,
-                  sale.quantity || 1,
-                  sale.fulfilledAt ? new Date(sale.fulfilledAt) : new Date(),
-                  sale.initiatedBy?.id || null,
-                  sale.initiatedBy?.username || null,
-                  sale.fulfilledBy?.id || null,
-                  sale.fulfilledBy?.username || null,
-                ]
-              );
-              newTrades++;
-            } catch (err) {
-              if (!err.message.includes("duplicate")) {
-                context.log.warn(`Trade insert error: ${err.message}`);
-              }
-            }
-          }
-
-          // Refresh orderbook for this item (delete old + insert new)
+    const writeOrders = async (book, side, at) => {
+      for (const [tradeId, o] of Object.entries(book || {})) {
+        const items = o.items || {};
+        for (const [itemName, qty] of Object.entries(items)) {
           await client.query(
-            `DELETE FROM marketplace_orderbook WHERE collection = $1 AND item_id = $2`,
-            [collection, itemId]
+            `INSERT INTO marketplace_orderbook
+               (collection, item_id, side, order_id, sfl, quantity, created_at, created_by_id, created_by_name)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+             ON CONFLICT (collection, item_id, side, order_id) DO NOTHING`,
+            [
+              o.collection || "collectibles",
+              // The profile names the item rather than numbering it; the id column is NOT NULL
+              // in spirit only, so a name-keyed order records 0 and carries the name in the
+              // order id, which is what the read layer joins on anyway.
+              0,
+              side,
+              `${tradeId}:${itemName}`,
+              +o.sfl || 0,
+              +qty || 1,
+              o[at] ? new Date(o[at]) : new Date(),
+              MY_FARM_ID,
+              profile.username || null,
+            ]
           );
-
-          // Insert listings
-          const listings = detail.listings || [];
-          for (const listing of listings) {
-            if (!listing.id) continue;
-            await client.query(
-              `INSERT INTO marketplace_orderbook
-                 (collection, item_id, side, order_id, sfl, quantity, created_at, created_by_id, created_by_name)
-               VALUES ($1, $2, 'listing', $3, $4, $5, $6, $7, $8)
-               ON CONFLICT (collection, item_id, side, order_id) DO NOTHING`,
-              [
-                collection, itemId,
-                String(listing.id),
-                listing.sfl || 0,
-                listing.quantity || 1,
-                listing.listedAt ? new Date(listing.listedAt) : new Date(),
-                listing.listedBy?.id || null,
-                listing.listedBy?.username || null,
-              ]
-            );
-            totalListings++;
-          }
-
-          // Insert offers
-          const offers = detail.offers || [];
-          for (const offer of offers) {
-            const offerId = offer.tradeId || offer.id;
-            if (!offerId) continue;
-            await client.query(
-              `INSERT INTO marketplace_orderbook
-                 (collection, item_id, side, order_id, sfl, quantity, created_at, created_by_id, created_by_name)
-               VALUES ($1, $2, 'offer', $3, $4, $5, $6, $7, $8)
-               ON CONFLICT (collection, item_id, side, order_id) DO NOTHING`,
-              [
-                collection, itemId,
-                String(offerId),
-                offer.sfl || 0,
-                offer.quantity || 1,
-                offer.offeredAt ? new Date(offer.offeredAt) : new Date(),
-                offer.offeredBy?.id || null,
-                offer.offeredBy?.username || null,
-              ]
-            );
-            totalOffers++;
-          }
-
-          await client.query("COMMIT");
-          processed++;
-        } catch (err) {
-          try { await client.query("ROLLBACK"); } catch {}
-
-          if (err.status === 429) {
-            context.log.warn(`Rate limited at item ${processed}, increasing delay`);
-            delay = 2000;
-            await sleep(5000);
-            continue;
-          }
-          context.log.warn(`Error processing ${collection}-${itemId}: ${err.message}`);
+          orders++;
         }
-
-        await sleep(delay);
       }
-    } finally {
-      client.release();
-    }
+    };
+    await writeOrders(listings, "listing", "createdAt");
+    await writeOrders(offers, "offer", "createdAt");
 
-    context.log(
-      `Processed ${processed}/${tradedItems.length} items, ` +
-      `${newTrades} new trades, ${totalListings} listings, ${totalOffers} offers`
-    );
+    await client.query("COMMIT");
   } catch (err) {
-    context.log.error(`Marketplace trades error: ${err.message}`);
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
   }
+
+  context.log(`marketplace-trades done: ${newTrades} new trades, ${orders} open order rows`);
 };
