@@ -201,10 +201,11 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
     Crimstone: Object.keys(farm.crimstones || {}).length,
     Oil: Object.keys(farm.oilReserves || {}).length,
     Obsidian: Object.keys(farm.lavaPits || {}).length,
-    Wood: Object.keys(farm.trees || {}).length,
-    Stone: Object.keys(farm.stones || {}).length,
-    Iron: Object.keys(farm.iron || {}).length,
-    Gold: Object.keys(farm.gold || {}).length,
+    // Effective, not objects: expansions add T1 nodes and the sim divides the rate by this.
+    Wood: countNodeTiers(farm.trees || {}).effective,
+    Stone: countNodeTiers(farm.stones || {}).effective,
+    Iron: countNodeTiers(farm.iron || {}).effective,
+    Gold: countNodeTiers(farm.gold || {}).effective,
   };
   const current = {
     island: island.type || "basic", ascensionLevel, basicLand, stock, experience,
@@ -398,13 +399,19 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
     "Iron Rock": "iron", "Gold Rock": "gold", "Crimstone Rock": "crimstone",
     "Oil Reserve": "oil", "Lava Pit": "obsidian", "Beehive": "bees", "Flower Bed": "flowers",
   };
+  /*
+   * EFFECTIVE nodes for the four mergeable kinds: a T2 is one object standing for 4 nodes and a
+   * T3 for 16, and the category income is earned by all of them. Counting objects made one Tree
+   * "earn" 10 FLOWER/day on a farm with 2x T1 + 2x T3 (4 objects, 34 trees) — 8.5x too much —
+   * and a bought or expansion-granted node is always a T1.
+   */
   const catNodeCount = {
     crops: Object.keys(farm.crops || {}).length,
     fruits: Object.keys(farm.fruitPatches || {}).length,
-    trees: Object.keys(farm.trees || {}).length,
-    stone: Object.keys(farm.stones || {}).length,
-    iron: Object.keys(farm.iron || {}).length,
-    gold: Object.keys(farm.gold || {}).length,
+    trees: countNodeTiers(farm.trees || {}).effective,
+    stone: countNodeTiers(farm.stones || {}).effective,
+    iron: countNodeTiers(farm.iron || {}).effective,
+    gold: countNodeTiers(farm.gold || {}).effective,
     crimstone: Object.keys(farm.crimstones || {}).length,
     oil: Object.keys(farm.oilReserves || {}).length,
     obsidian: Object.keys(farm.lavaPits || {}).length,

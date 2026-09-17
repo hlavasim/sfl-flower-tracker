@@ -297,7 +297,9 @@ test("node acquisition: per-node profit is NET of production cost and efficiency
   for (const [node, d] of Object.entries(out.nodeAcq.perType)) {
     const cat = NODE_CAT[node], cs = cats[cat];
     const n = counts[cat].split(".").reduce((o,k)=>(o&&typeof o==="object")?o[k]:undefined, farm);
-    const nCount = n && typeof n==="object" ? Object.keys(n).length : 0;
+    // Mergeable kinds count EFFECTIVE nodes (a T2 object is 4 nodes, a T3 is 16) — see the test below.
+    const merged = ["trees", "stone", "iron", "gold"].includes(cat);
+    const nCount = n && typeof n==="object" ? (merged ? Object.values(n).reduce((a, x) => a + (x.multiplier || 1), 0) : Object.keys(n).length) : 0;
     const wantNet = Math.max(0, cs.boostedSfl - cs.costPerDay) / nCount;
     assert.ok(Math.abs(d.netPerNode - wantNet) < 1e-9, `${node}: net = (gross - cost) / nodes`);
     // Against cats, NOT against d.netPerNode — netPerNode is derived back out of
@@ -987,4 +989,38 @@ test("the page explains the gate, with the arrival and the idle time", () => {
   // No wait → no banner. A gate the queue already runs past is not news.
   assert.equal(render([{ asc: 2, unlockMs: Date.UTC(2026, 8, 7), waitDays: 0, buildSlotDays: 40 }]), "");
   assert.equal(render([]), "");
+});
+
+/*
+ * A merged node is ONE object standing for 4 (T2) or 16 (T3) nodes, and the category income is
+ * earned by all of them. Dividing it by the object count made one Tree "earn" 10 FLOWER/day on a
+ * farm holding 2x T1 + 2x T3 (4 objects, 34 effective trees): the NODES purchase plan and the
+ * roadmap's expansion steps then ranked "Buy Tree" 8.5x too high. A bought or expansion-granted
+ * node is a T1, so its value is the category's income per EFFECTIVE node.
+ */
+test("what one node earns is the category income per EFFECTIVE node, not per merged object", () => {
+  const na = out.nodeAcq;
+  for (const [node, cat] of [["Tree", "trees"], ["Stone Rock", "stone"], ["Iron Rock", "iron"]]) {
+    const t = na.perType[node];
+    assert.ok(t.tiers.effective > t.tiers.physical, `${node}: the fixture farm has merged nodes`);
+    const cs = powerData.categories.catSummaries[cat];
+    const perEffective = cs.boostedSfl / t.tiers.effective;
+    assert.ok(Math.abs(t.grossPerNode - perEffective) < 1e-9,
+      `${node}: gross per node ${t.grossPerNode} must be ${cs.boostedSfl}/day over ${t.tiers.effective} effective nodes = ${perEffective}, not over ${t.tiers.physical} objects`);
+    assert.ok(t.profitPerDay <= perEffective + 1e-9, `${node}: and the net, efficiency-scaled figure cannot exceed it`);
+  }
+});
+
+/*
+ * Same defect, second place: the ascension simulator grows each resource's rate by
+ * rate / nodeCounts[r] for every node an expansion adds. Expansion nodes are T1, so the
+ * divisor has to be the effective count or each added Tree/Rock speeds the plan up 4–16x too much.
+ */
+test("the ascension simulator divides by EFFECTIVE nodes for the mergeable kinds", () => {
+  const eff = (o) => Object.values(o || {}).reduce((a, x) => a + (x.multiplier || 1), 0);
+  assert.equal(out.nodeCounts.Wood, eff(farm.trees), "Wood: effective trees, not tree objects");
+  assert.equal(out.nodeCounts.Stone, eff(farm.stones));
+  assert.equal(out.nodeCounts.Iron, eff(farm.iron));
+  assert.equal(out.nodeCounts.Gold, eff(farm.gold));
+  assert.equal(out.nodeCounts.Crimstone, Object.keys(farm.crimstones || {}).length, "crimstone cannot be merged — objects are nodes");
 });
