@@ -6006,7 +6006,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.61</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.62</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -6033,6 +6033,11 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.62", items: [
+          { t: "fix", text: "<b>A node is valued per real node, not per merged object.</b> A T2 tree/rock stands for 4 nodes and a T3 for 16, but income was divided by the number of objects — on a farm with 34 trees in 4 objects one Tree showed ~10 FLOWER/day instead of ~1.2. The NODES purchase plan, roadmap expansions, merge gains and the ascension ETA all used that figure; Buy Tree drops from the top of the plan." },
+          { t: "fix", text: "<b>Investment Insights no longer count WALLET / YAKKAMON money as farm cashflow.</b> Only SFL-venue transactions are netted out of the farm value series, so a wallet buy no longer reads as a burn (the 30-day slope went from −1,131 to about +10 FLOWER/day). Each row is now converted at its own date's sats/FLOWER rate (or its FLOWER amount) instead of today's." },
+          { t: "fix", text: "<b>Yakkamon calculator matches the official rules again.</b> The multiplier held 2.8× for two weeks after the deposit pause and windows turn Mondays 02:00 UTC, so this week is 2.2× (not 2.0×) and the 1× floor lands 26 Oct; points are floored like the server. Referral +75, the free mint (14–17 Sep, sold out, reveal 14 Oct), 68 legendaries, the four early-access waves, the Storm / Echo / Ghost / Bloom ladder and the deposit end date (fan-site figure, labelled) are updated." },
+        ] },
         { ver: "v5.61", items: [
           { t: "feat", text: "<b>Transactions are now editable.</b> Each row in the Investment Tracker table has a ✎ button that opens the form pre-filled, so you can fix any field — date, type, BTC, FLOWER, USD, venue, notes — instead of deleting and re-adding. Saved via a proper partial update (the wallet still requires a FLOWER amount)." },
           { t: "fix", text: "<b>The transactions table stays one line per row.</b> DATE shows just the date (no time), and long NOTES are truncated with an ellipsis (hover to read the whole note) instead of wrapping the row onto two lines." },
@@ -22519,15 +22524,19 @@
      *  YAKKAMON — Thought Farm's second game (the Sunflower Land studio).
      *
      *  Everything here is sourced from the official site/docs (yakkamon.com,
-     *  docs.yakkamon.com), read 2026-08-08, plus the rank ladder they re-cut on
-     *  2026-08-12 and the bonus shape MEASURED off the live board (see ykBonus).
+     *  docs.yakkamon.com), read 2026-08-08 and re-checked 2026-09-17, plus the rank
+     *  ladder they re-cut on 2026-08-12 and the bonus shape MEASURED off the live
+     *  board (see ykBonus). The one figure that is NOT official is the end of the
+     *  deposit window (depositEnd) — only the fan site yakkamonworld.com states it.
      *  The point of the page is the deposit decision: from 10 Aug 2026 you can
      *  send $FLOWER for pre-registration points, and the question is whether
      *  that is worth it.
      * ═══════════════════════════════════════════════════════════════════ */
     const YK = {
-      depositStart: Date.UTC(2026, 7, 10),          // 10 Aug 2026, week 1 opens
+      depositStart: Date.UTC(2026, 7, 10, 2),       // 10 Aug 2026, week 1 opens — windows turn Mondays 02:00 UTC
       multStart: 3.0, multStepPerWeek: 0.2,          // 3X week 1, −0.2X each week after
+      multHoldWeek: 3,                               // deposits were paused in week 2, so week 3 REPEATED 2.8X — every later step is a week late
+      depositEnd: Date.UTC(2026, 10, 16, 1, 59),     // deposits stop earning — yakkamonworld.com's figure, NOT in the official docs or site code
       minDeposit: 5,
       // The four tiers the site actually publishes (points shown are AT the 3X opening week).
       tiers: [
@@ -22542,29 +22551,29 @@
         { what: "Discord post", pts: "+5", per: "post", note: "no cap stated" },
         { what: "Link X / Twitter", pts: "+10", per: "one-off", note: "" },
         { what: "Link wallet", pts: "+10", per: "one-off", note: "" },
-        { what: "Referral (friend signs up)", pts: "+30", per: "friend", note: "scales if you have reach" },
-        { what: "Ronin free mint", pts: "+250", per: "mint", note: "1 per account, 1 Oct 2026" },
-        { what: "$FLOWER deposit", pts: "×3.0, −0.2/week", per: "FLOWER", note: "by far the biggest source" },
+        { what: "Referral (friend signs up)", pts: "+75", per: "friend", note: "first 5 instant, then the friend must deposit 100 FLOWER; your link works once you have 100 points" },
+        { what: "Ronin free mint", pts: "+250", per: "mint", note: "1 per wave — ran 14–17 Sep 2026, sold out; credited after the mint period" },
+        { what: "$FLOWER deposit", pts: "×3.0, −0.2/week", per: "FLOWER", note: "by far the biggest source (2.8× ran two weeks)" },
       ],
       /*
-       * Re-cut by Yakkamon on 12 Aug 2026. Read the change carefully before treating it as
-       * good news: only the top 10 gained (they now get a SECOND egg) and everyone from #51
-       * down moved a tier LOWER than the old ladder gave them. Note what did NOT move — the
-       * line where the NFTs stop is rank 5,000, exactly as before; the old ladder gave
-       * 5,001–20,000 early access with no NFT too, the new table just says it bluntly.
-       * Total supply is stated as 5,010 NFTs across 5,000 trainers.
-       * The wave column is the OLD wave bands (1–1,000 / 1,001–5,000 / 5,001–100,000), which
-       * this table did not restate — where an egg band straddles two waves it says so.
+       * Re-cut by Yakkamon on 12 Aug 2026; names and bands below are the docs' "NFT Airdrop"
+       * table as of 17 Sep 2026. The top 2,000 get one of four Genesis Legendaries (Storm is
+       * new and sits ABOVE the old ladder; Echo is the old Legendary A, Ghost fills the old B
+       * slot, Bloom the old C slot — widened from 501–1,000 to 501–2,000), 2,001–5,000 a Rare
+       * Egg. Note what did NOT move — the line where the NFTs stop is rank 5,000, exactly as
+       * before. The top 10 get a SECOND Legendary, hence 5,010 NFTs across 5,000 trainers.
+       * Waves: 1–1,000 / 1,001–5,000 / 5,001–20,000 / 20,001–100,000 — where an airdrop band
+       * straddles two waves it says so.
        */
       ranks: [
-        { r: "1 – 3", rew: "Legendary A + Legendary B", wave: "Wave 1", nft: true },
-        { r: "4 – 10", rew: "Legendary A + Legendary C", wave: "Wave 1", nft: true },
-        { r: "11 – 50", rew: "Legendary A", wave: "Wave 1", nft: true },
-        { r: "51 – 250", rew: "Legendary B", wave: "Wave 1", nft: true },
-        { r: "251 – 500", rew: "Legendary C", wave: "Wave 1", nft: true },
-        { r: "501 – 2 000", rew: "Rare A", wave: "Wave 1–2", nft: true },
-        { r: "2 001 – 5 000", rew: "Rare B", wave: "Wave 2", nft: true },
-        { r: "5 001 +", rew: "no egg at all — early access only", wave: "Wave 3–5", nft: false },
+        { r: "1 – 3", rew: "Storm + Echo", wave: "Wave 1", nft: true },
+        { r: "4 – 10", rew: "Storm + Ghost", wave: "Wave 1", nft: true },
+        { r: "11 – 50", rew: "Storm", wave: "Wave 1", nft: true },
+        { r: "51 – 250", rew: "Echo", wave: "Wave 1", nft: true },
+        { r: "251 – 500", rew: "Ghost", wave: "Wave 1", nft: true },
+        { r: "501 – 2 000", rew: "Bloom", wave: "Wave 1–2", nft: true },
+        { r: "2 001 – 5 000", rew: "Rare Egg", wave: "Wave 2", nft: true },
+        { r: "5 001 +", rew: "no egg at all — early access only", wave: "Wave 3–4", nft: false },
         { r: "100 001 +", rew: "nothing — not even early access", wave: "—", nft: false },
       ],
       // What the previous ladder (read 8 Aug) gave the same ranks, so the page can show what
@@ -22573,7 +22582,7 @@
         { r: "1 – 100", rew: "Legendary A" },
         { r: "101 – 500", rew: "Legendary B" },
         { r: "501 – 1 000", rew: "Legendary C" },
-        { r: "1 001 – 5 000", rew: "Rare A" },
+        { r: "1 001 – 5 000", rew: "Rare Egg" },
         { r: "5 001 – 100 000", rew: "early access only" },
       ],
       // The WEEKLY reward track — resets every 7 days, unclaimed tiers are lost ("each new
@@ -22596,8 +22605,8 @@
     };
     /** Week index (1-based) of the deposit programme for a given time. */
     function ykWeekAt(ms) { return Math.max(1, Math.floor((ms - YK.depositStart) / (7 * 86400000)) + 1); }
-    /** Multiplier for week n: 3.0, 2.8, 2.6 … "until it rests at 1X" — so week 11 onward is 1×. */
-    function ykMult(week) { return Math.max(1, YK.multStart - YK.multStepPerWeek * (week - 1)); }
+    /** Multiplier for week n: 3.0, 2.8, 2.8 (held), 2.6 … "until it rests at 1X" — so week 12 (26 Oct) onward is 1×. */
+    function ykMult(week) { return Math.max(1, YK.multStart - YK.multStepPerWeek * (week - 1 - (week >= YK.multHoldWeek ? 1 : 0))); }
     /*
      * Bulk bonus. The site lists it at four amounts only — per FLOWER 0.1 / 0.2 / 0.4 / 0.8,
      * doubling per 10x — and we used to read the gaps as a smooth doubling curve. The live
@@ -22615,17 +22624,19 @@
      *
      * Two consequences worth knowing before you deposit: the effective rate is FLAT between
      * thresholds (5,000 and 49,999 both earn 3.4× in week 1, so the extra 45,000 buys rank
-     * and nothing else), and crossing one is a CLIFF — 49,999 earns 169,997 points while
-     * 50,000 earns 190,000, so a single FLOWER is worth 20,003 points at that edge.
+     * and nothing else), and crossing one is a CLIFF — 49,999 earns 169,996 points while
+     * 50,000 earns 190,000, so a single FLOWER is worth 20,004 points at that edge.
      * Below 50 the site publishes no bonus at all, so it is zero.
      */
     function ykBonus(flower) {
       if (!(flower > 0)) return 0;
       const rate = flower >= 50000 ? 0.8 : flower >= 5000 ? 0.4 : flower >= 500 ? 0.2 : flower >= 50 ? 0.1 : 0;
-      return flower * rate;
+      return Math.floor(flower * rate + 1e-9);
     }
+    // points = floor(FLOWER × multiplier) + floor(FLOWER × bonus) — each floored on its own, like the
+    // site's depositPoints. The 1e-9 keeps 50 × 2.2 = 109.99999999999999 from losing a point.
     function ykPoints(flower, week) {
-      const base = flower * ykMult(week);
+      const base = Math.floor(flower * ykMult(week) + 1e-9);
       const bonus = ykBonus(flower);
       return { base, bonus, total: base + bonus, perFlower: flower > 0 ? (base + bonus) / flower : 0 };
     }
@@ -22864,7 +22875,7 @@
            * not round numbers — those are the only ranks where a point actually changes what
            * you win. #250 / #500 / #2,000 / #5,000 matter too but are not public.
            */
-          const bounds = [[1, "Legendary A + B"], [3, "last A + B"], [4, "Legendary A + C"], [10, "last A + C"], [11, "Legendary A"], [50, "last Legendary A"], [51, "Legendary B"], [100, "Legendary B"]];
+          const bounds = [[1, "Storm + Echo"], [3, "last Storm + Echo"], [4, "Storm + Ghost"], [10, "last Storm + Ghost"], [11, "Storm"], [50, "last Storm"], [51, "Echo"], [100, "Echo"]];
           const gap50 = (at(50) || 0) - (at(51) || 0);
           const boardAgeH = bd.generatedAt ? (Date.now() - bd.generatedAt) / 3600000 : 0;
           h += `<div style="margin-top:10px;border-top:1px solid #20190f;padding-top:8px">
@@ -22874,7 +22885,7 @@
               <tr style="color:var(--text-dim);font-size:0.46rem"><td style="padding:0 6px 3px 0">rank</td><td style="padding:0 6px 3px">wins</td><td style="text-align:right;padding:0 6px 3px">points now</td><td style="text-align:right;padding:0 0 3px">≈ FLOWER to match</td></tr>
               ${bounds.map(([r, what]) => { const p = at(r); return `<tr style="border-top:1px solid #20190f"><td style="padding:2px 6px 2px 0">#${r}</td><td style="padding:2px 6px;color:var(--text-dim);font-size:0.46rem;white-space:nowrap">${what}</td><td style="text-align:right;padding:2px 6px;color:var(--sunpetal);font-weight:bold">${p ? fmt(p) : "—"}</td><td style="text-align:right;padding:2px 0;color:var(--green)">${p ? fmt(flowerFor(p)) + " " + sflIcon() : "—"}</td></tr>`; }).join("")}
             </table></div>
-            ${gap50 > 0 ? `<div style="font-size:0.46rem;color:#e8a060;margin-top:5px;line-height:1.6"><b>The Legendary A cut-off is razor thin.</b> #50 and #51 are <b>${fmt(gap50)} points</b> apart — about <b>${fmt(Math.ceil(gap50 / mult))} ${sflIcon()}</b> at today's multiplier. That is the whole difference between the top egg and the one below it.</div>` : ""}
+            ${gap50 > 0 ? `<div style="font-size:0.46rem;color:#e8a060;margin-top:5px;line-height:1.6"><b>The Storm cut-off is razor thin.</b> #50 and #51 are <b>${fmt(gap50)} points</b> apart — about <b>${fmt(Math.ceil(gap50 / mult))} ${sflIcon()}</b> at today's multiplier. That is the whole difference between the top egg and the one below it.</div>` : ""}
             <div style="font-size:0.46rem;color:var(--text-dim);margin-top:5px;line-height:1.6">FLOWER column = how much would buy that many points <b>today</b> at the current ${mult.toFixed(1)}× multiplier (bulk bonus excluded, so it is an upper estimate). <b style="color:#e8a060">Careful though:</b> deposits ${open ? "are open" : "open 10 Aug"} and these numbers only go up. Treat it as a <b>floor</b>, not a target. Only the top 100 is public — the <b>#250 / #500 / #2,000 / #5,000</b> cut-offs, including the one where the eggs stop entirely, are not visible from here. The API caps at 100 however you page it.</div>
           </div>`;
         }
@@ -22896,7 +22907,7 @@
           <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Yakkamon publishes no history, so this is <b>our own</b>. A cron records every build 10 minutes after it lands; opening this page records the one it sees too, so a missed fire leaves no hole. <b>${hist.length}</b> snapshot${hist.length === 1 ? "" : "s"} over <b>${spanH.toFixed(0)} h</b> — ${(_ykHistFile || []).length} from the committed record, ${Math.max(0, hist.length - ((_ykHistFile || []).length))} seen in this browser${hist.length - obs > 0 ? `, ${hist.length - obs} with a reconstructed timestamp` : ""}. Builds land every 4 h; times below are UTC.</div>
           <div style="width:100%;margin-bottom:10px">${hist.length >= 2 ? _ykTierSvg(hist) : ""}</div>`;
         if (hist.length >= 2) {
-          const rows = [[10, "#10", "Legendary A + Legendary C"], [50, "#50", "Legendary A"]];
+          const rows = [[10, "#10", "Storm + Ghost"], [50, "#50", "Storm"]];
           h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:420px">
             <tr style="color:var(--text-dim);font-size:0.46rem"><td style="padding:0 6px 3px 0">hold</td><td style="text-align:right;padding:0 6px 3px">now</td><td style="text-align:right;padding:0 6px 3px">median/day</td><td style="text-align:right;padding:0 6px 3px">range</td><td style="text-align:right;padding:0 6px 3px">in 7 days</td><td style="text-align:right;padding:0 0 3px">≈ ${sflIcon()} then</td></tr>`;
           for (const [rank, lbl, what] of rows) {
@@ -22943,9 +22954,9 @@
       const facts = [
         ["Network", "Ronin", "deposits come from <b>Base</b> or <b>Ronin</b>"],
         ["Token", "$FLOWER", "<b>no new token</b> — the same one as SFL"],
-        ["Early access", "Q4 2026", "in waves, by leaderboard rank"],
-        ["Deposits", "from 10 Aug 2026", open ? `live — <b>week ${nowWeek}</b>, multiplier <b>${ykMult(nowWeek).toFixed(1)}×</b>` : `opens in <b>${daysToOpen} days</b>`],
-        ["Free mint", "1 Oct 2026", "10,000 NFTs on Ronin, free (gas only)"],
+        ["Early access", "Q4 2026", "4 waves by leaderboard rank: 1–1,000 · 1,001–5,000 · 5,001–20,000 · 20,001–100,000"],
+        ["Deposits", "10 Aug – 16 Nov 2026*", (Date.now() >= YK.depositEnd ? "closed — deposits no longer earn points" : open ? `live — <b>week ${nowWeek}</b>, multiplier <b>${ykMult(nowWeek).toFixed(1)}×</b>` : `opens in <b>${daysToOpen} days</b>`) + "<br>*end (16 Nov 01:59 UTC) is yakkamonworld.com's figure, not in the official docs"],
+        ["Free mint", "14–17 Sep 2026", "10,000 NFTs on Ronin — <b>sold out</b>; reveal 14 Oct"],
         ["Sign-up", "free, email only", "no wallet, no SFL account"],
       ];
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
@@ -23129,7 +23140,7 @@
           ? `✓ Exactly as published (${fmt(exactTier.flower)} → +${fmt(exactTier.pts)} pts, +${fmt(exactTier.bonus)} bonus at 3×).`
           : `The bulk bonus is a <b>step, not a slope</b> — it is <b>flat between</b> the four published amounts (50 / 500 / 5,000 / 50,000). Measured against six deposits readable on the live board: 18,000 → 61,200 (×3.4 exactly), 10,000 → 34,000, 6,000 → 20,400, 5,400 → 18,360 — the stepped model hits every one, a smooth curve misses four. ${ykRateNow ? `You are on the <b>+${(ykRateNow * 100).toFixed(0)}%</b> step` : `Below 50 ${sflIcon()} there is <b>no bonus at all</b>`}${ykNextStep ? `, and the rate does not move again until <b>${fmt(ykNextStep)}</b>.` : ` — the top step; it does not rise again.`}`}</div>
         ${ykNextStep ? `<div style="font-size:0.46rem;color:var(--green);margin-bottom:6px;line-height:1.6"><b>⛰ Next cliff:</b> adding <b>${fmt(ykNextStep - _ykAmount)} ${sflIcon()}</b> to reach <b>${fmt(ykNextStep)}</b> is worth <b>+${fmt(ykCliffGain)} points</b> — ${(() => { const r = ykCliffGain / Math.max(1, ykNextStep - _ykAmount); return r >= 100 ? fmt(Math.round(r)) : r.toFixed(1); })()} pts per extra FLOWER, against ${p.perFlower.toFixed(1)} on what you have entered. Stopping just short of a step is the one genuinely bad way to deposit.</div>` : ""}
-        <div style="font-size:0.46rem;color:#e8a060;margin-bottom:10px;line-height:1.6">⚠ <b>The bonus is rated on EACH deposit separately</b> (&ldquo;rated per deposit&rdquo; — the full amount must land in one go). Splitting the same sum into several smaller deposits therefore earns <b>far fewer</b> points: each piece falls into its own lower bonus rate. The multiplier also drops 0.2× per week <b>until it rests at 1×</b> (from week 11).</div>
+        <div style="font-size:0.46rem;color:#e8a060;margin-bottom:10px;line-height:1.6">⚠ <b>The bonus is rated on EACH deposit separately</b> (&ldquo;rated per deposit&rdquo; — the full amount must land in one go). Splitting the same sum into several smaller deposits therefore earns <b>far fewer</b> points: each piece falls into its own lower bonus rate. The multiplier also drops 0.2× per week <b>until it rests at 1×</b> (from week 12).</div>
         <div style="border-top:1px solid #20190f;padding-top:8px">
           <div style="font-size:0.5rem;color:var(--lily);margin-bottom:5px"><b>WHAT IT COSTS YOU</b> — you get the FLOWER back, but it earns nothing meanwhile</div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:7px">
@@ -23153,7 +23164,7 @@
           <tr style="color:var(--text-dim);font-size:0.47rem"><td style="padding:0 6px 4px 0">deposit</td><td style="text-align:right;padding:0 6px 4px">points</td><td style="text-align:right;padding:0 6px 4px">bonus</td><td style="text-align:right;padding:0 6px 4px">total</td><td style="text-align:right;padding:0 0 4px">pts / FLOWER</td></tr>
           ${YK.tiers.map(t => `<tr style="border-top:1px solid #20190f"><td style="padding:3px 6px 3px 0"><b>${fmt(t.flower)}</b> ${sflIcon()}</td><td style="text-align:right;padding:3px 6px;color:var(--green)">+${fmt(t.pts)}</td><td style="text-align:right;padding:3px 6px;color:var(--sunpetal)">+${fmt(t.bonus)}</td><td style="text-align:right;padding:3px 6px;color:var(--green);font-weight:bold">${fmt(t.pts + t.bonus)}</td><td style="text-align:right;padding:3px 0;color:var(--sunpetal);font-weight:bold">${((t.pts + t.bonus) / t.flower).toFixed(2)}</td></tr>`).join("")}
         </table></div>
-        <div style="font-size:0.47rem;color:var(--text-dim);margin-top:7px;line-height:1.7"><b>The multiplier decays:</b> ${[1, 2, 3, 4, 5, 6, 8, 11].map(w => `w${w} <b style="color:${w === nowWeek && open ? "var(--sunpetal)" : "var(--text-secondary)"}">${ykMult(w).toFixed(1)}×</b>`).join(" · ")} — −0.2× per week, <b>from week 11 it is just 1×</b> and stops falling. Waiting costs you points: the same deposit in week 6 earns only <b>${(ykMult(6) / ykMult(1) * 100).toFixed(0)}%</b>, and from week 11 only <b>${(ykMult(11) / ykMult(1) * 100).toFixed(0)}%</b> of the base points it would in week 1.
+        <div style="font-size:0.47rem;color:var(--text-dim);margin-top:7px;line-height:1.7"><b>The multiplier decays:</b> ${[1, 2, 3, 4, 5, 6, 8, 12].map(w => `w${w} <b style="color:${w === nowWeek && open ? "var(--sunpetal)" : "var(--text-secondary)"}">${ykMult(w).toFixed(1)}×</b>`).join(" · ")} — −0.2× per week (week 3 repeated 2.8× after a deposit pause), <b>from week 12 (26 Oct) it is just 1×</b> and stops falling. Waiting costs you points: the same deposit in week 6 earns only <b>${(ykMult(6) / ykMult(1) * 100).toFixed(0)}%</b>, and from week 12 only <b>${(ykMult(12) / ykMult(1) * 100).toFixed(0)}%</b> of the base points it would in week 1.
         <div style="margin-top:5px;color:var(--text-secondary)"><b>What that means for splitting deposits:</b> because the bonus is rated per deposit and the multiplier falls, <b>one big deposit as early as possible</b> beats the same sum spread over weeks by a wide margin. Spreading ~96,000 ${sflIcon()} out to year end earns roughly <b>40% fewer points</b> than the same sum landing in one go in week 1.</div></div>
       </div>`;
 
@@ -23173,8 +23184,8 @@
           <tr style="color:var(--text-dim);font-size:0.47rem"><td style="padding:0 6px 4px 0">rank</td><td style="padding:0 6px 4px">reward</td><td style="padding:0 0 4px">wave</td></tr>
           ${YK.ranks.map(r => `<tr style="border-top:1px solid #20190f"><td style="padding:3px 6px 3px 0;white-space:nowrap">${r.r}</td><td style="padding:3px 6px;color:${r.nft ? "var(--green)" : "var(--text-secondary)"}">${r.nft ? "🏆 " : ""}${r.rew}</td><td style="padding:3px 0;color:var(--text-dim);font-size:0.47rem;white-space:nowrap">${r.wave}</td></tr>`).join("")}
         </table></div>
-        <div style="font-size:0.47rem;color:#e8a060;margin-top:7px;line-height:1.7"><b>⚠ This ladder was re-cut on 12 Aug 2026, and it is not the upgrade it looks like.</b> Only the <b>top 10</b> gained — they now get a <b>second</b> egg. Everything from <b>#51 down moved a tier lower</b>. What did <b>not</b> move is the line that decides whether you get an NFT at all: it was rank <b>5,000</b> before and it is rank <b>5,000</b> now — the old ladder also gave 5,001–20,000 early access and no NFT, the new table just says so bluntly. What the same ranks got before: ${YK.ranksWas.map(o => `${o.r} → ${o.rew}`).join(" · ")}.</div>
-        <div style="font-size:0.47rem;color:var(--text-dim);margin-top:7px;line-height:1.7"><b>NFT airdrop:</b> only the top <b>5,000</b> get a Monster NFT at all, and only the top <b>500</b> get a Legendary — &ldquo;the rarest tier we will ever mint&rdquo;. Separately there is a <b>free mint</b> on 1 Oct 2026 on Ronin: 10,000 NFTs free (gas only) with <b>5 legendaries</b> seeded inside, 1 mint per account, blind — revealed at launch. You must be verified on the whitelist before 1 Oct.</div>
+        <div style="font-size:0.47rem;color:#e8a060;margin-top:7px;line-height:1.7"><b>⚠ This ladder was re-cut on 12 Aug 2026.</b> By Yakkamon's own account Storm is a new monster added <b>above</b> the old ladder, Echo is the old Legendary A, Ghost fills the old B slot and Bloom the old C slot — widened from 501–1,000 to <b>501–2,000</b>, so Legendaries now run to rank 2,000. The <b>top 10</b> get a <b>second</b> Legendary. What did <b>not</b> move is the line that decides whether you get an NFT at all: it was rank <b>5,000</b> before and it is rank <b>5,000</b> now — the old ladder also gave 5,001–20,000 early access and no NFT, the new table just says so bluntly. What the same ranks got before: ${YK.ranksWas.map(o => `${o.r} → ${o.rew}`).join(" · ")}.</div>
+        <div style="font-size:0.47rem;color:var(--text-dim);margin-top:7px;line-height:1.7"><b>NFT airdrop:</b> only the top <b>5,000</b> get a Monster NFT at all: the top <b>2,000</b> a Genesis Legendary (Storm, Echo and Ghost stop at rank <b>500</b>; 501–2,000 is Bloom), ranks 2,001–5,000 a Rare Egg. Separately there was a <b>free mint</b> on Ronin, 14–17 Sep 2026: 10,000 NFTs free (gas only), <b>sold out</b>, with <b>68 legendaries</b> (3 Storm, 5 Echo, 10 Ghost, 50 Bloom) and <b>50 rares</b> seeded inside, 1 mint per whitelisted wave, blind — revealed on <b>14 Oct</b>. Each mint is worth +250 points, credited after the mint period.</div>
       </div>`;
 
       // ── Sign-up eggs ───────────────────────────────────────────────
@@ -23194,7 +23205,7 @@
           <b style="color:var(--green)">1. This is not a purchase, it is a lock-up.</b> You get the FLOWER back — the docs say explicitly <b>no withdrawal tax, no lock-up, no penalty</b>. You are not buying points, you are parking your FLOWER for a while.
           <div style="margin-top:8px"><b style="color:var(--red)">2. But you cannot withdraw during pre-registration.</b> Withdrawals are <b>not available</b> until you get access (Q4 2026), and after launch there are <b>daily % limits</b> &ldquo;for economic and security reasons&rdquo;. So from 10 Aug to Q4 2026 you cannot touch that money — realistically <b>2–5 months</b>.</div>
           <div style="margin-top:8px"><b style="color:#e8a060">3. The real cost is forgone yield.</b> That same FLOWER put into your farm earns something. The calculator above prices it: at a ${_ykRoiDays}-day payback and ${_ykLockDays} days locked, ${fmt(_ykAmount)} FLOWER costs you <b style="color:var(--red)">${fmt(forgone, 1)} FLOWER</b> of income you did not make. On top of that sits smart-contract and counterparty risk.</div>
-          <div style="margin-top:8px"><b style="color:var(--lily)">4. The leaderboard is effectively a deposit ranking.</b> You cannot catch up for free: ~${freeDays} days of free activity yields roughly <b>${fmt(freeTotal)} points</b> (daily egg ${freeDaily}×${freeDays} + Discord/X/wallet + free mint), while <b>${fmt(eq.flower)} FLOWER in week 1 = ${fmt(eq.pts + eq.bonus)} points</b>. One mid-sized deposit therefore beats <b>all</b> of your free activity for the entire period. And the live board prices the top end exactly: a <b>Legendary</b> now stops at rank <b>500</b>, and rank 100 alone already costs about <b>5,000 ${sflIcon()}</b> — so a Legendary is a four-figure FLOWER deposit, not a grind.</div>
+          <div style="margin-top:8px"><b style="color:var(--lily)">4. The leaderboard is effectively a deposit ranking.</b> You cannot catch up for free: ~${freeDays} days of free activity yields roughly <b>${fmt(freeTotal)} points</b> (daily egg ${freeDaily}×${freeDays} + Discord/X/wallet + free mint), while <b>${fmt(eq.flower)} FLOWER in week 1 = ${fmt(eq.pts + eq.bonus)} points</b>. One mid-sized deposit therefore beats <b>all</b> of your free activity for the entire period. And the live board prices the top end exactly: <b>Storm, Echo and Ghost</b> stop at rank <b>500</b> (Bloom runs to 2,000), and rank 100 alone already costs about <b>5,000 ${sflIcon()}</b> — so one of those three is a four-figure FLOWER deposit, not a grind.</div>
           <div style="margin-top:8px"><b>5. What nobody knows.</b> How many points any given rank will take once the whales are done, what a Legendary Monster NFT will fetch on the market, and whether Yakkamon lands at all. You are buying an <b>option</b>, not a known return.</div>
           <div style="margin-top:10px;padding:8px 10px;background:#161009;border:1px solid var(--border-brown);border-radius:6px">
             <b style="color:var(--sunpetal)">Decision rule:</b> a deposit makes sense when (a) you are just holding that FLOWER anyway and have no better use for it on the farm, (b) you can live without touching it for 2–5 months, and (c) the NFT + early access is worth at least <b style="color:var(--red)">${fmt(forgone, 1)} FLOWER</b> to you (your forgone yield). If there are short-payback purchases on your farm you have not made yet, <b>those almost certainly win</b> — they have a known return, this is a lottery ticket.
@@ -29385,6 +29396,23 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       _invDrawSatsChart();
     }
 
+    // One granularity of the series, fetched once and cached. Rejects when CoinGecko is unavailable.
+    async function _invLoadSats(gran) {
+      if (_satsCache[gran]) return _satsCache[gran];
+      const cfg = _SATS_GRAN[gran];
+      const url = `https://api.coingecko.com/api/v3/coins/flower-2/market_chart?vs_currency=btc&days=${cfg.days}`;
+      const j = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`).then(r => r.ok ? r.json() : Promise.reject(r.status));
+      let pts = (j.prices || []).map(([ms, btc]) => ({ time: Math.floor(ms / 1000), value: btc * 1e8 }));
+      if (cfg.bucketSec > 0) {          // downsample to the bucket: last value in each window
+        const by = {};
+        for (const p of pts) by[Math.floor(p.time / cfg.bucketSec) * cfg.bucketSec] = p.value;
+        pts = Object.keys(by).map(k => ({ time: +k, value: by[k] }));
+      }
+      pts.sort((a, b) => a.time - b.time);
+      pts = pts.filter((p, i, a) => i === 0 || p.time > a[i - 1].time);   // LW needs strictly ascending
+      return _satsCache[gran] = pts;
+    }
+
     async function _invDrawSatsChart() {
       const canvas = document.getElementById("inv-satsflower-canvas");
       const note = document.getElementById("inv-satsflower-note");
@@ -29394,19 +29422,8 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       let data = _satsCache[_satsGran];
       if (!data) {
         if (note) note.textContent = "načítám…";
-        try {
-          const url = `https://api.coingecko.com/api/v3/coins/flower-2/market_chart?vs_currency=btc&days=${cfg.days}`;
-          const j = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`).then(r => r.ok ? r.json() : Promise.reject(r.status));
-          let pts = (j.prices || []).map(([ms, btc]) => ({ time: Math.floor(ms / 1000), value: btc * 1e8 }));
-          if (cfg.bucketSec > 0) {          // downsample to the bucket: last value in each window
-            const by = {};
-            for (const p of pts) by[Math.floor(p.time / cfg.bucketSec) * cfg.bucketSec] = p.value;
-            pts = Object.keys(by).map(k => ({ time: +k, value: by[k] }));
-          }
-          pts.sort((a, b) => a.time - b.time);
-          pts = pts.filter((p, i, a) => i === 0 || p.time > a[i - 1].time);   // LW needs strictly ascending
-          data = _satsCache[_satsGran] = pts;
-        } catch (e) { console.warn("[sats/flower]", e); if (note) note.textContent = "graf nedostupný — zkus později"; return; }
+        try { data = await _invLoadSats(_satsGran); }
+        catch (e) { console.warn("[sats/flower]", e); if (note) note.textContent = "graf nedostupný — zkus později"; return; }
       }
       if (data.length < 2) { if (note) note.textContent = "málo dat pro tuto granularitu"; return; }
       if (_satsChartObj) { try { _satsChartObj.remove(); } catch (e) {} _satsChartObj = null; }
@@ -29728,33 +29745,10 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       //     (total wealth created — farm value still on-farm plus BTC already extracted;
       //      used by the history chart)
       const transactions = _invState?.transactions || [];
-      const sflToUsd = _invState?.rates?.sflToUsd || 0;
-      const btcUsd = _invState?.rates?.btcUsd || 0;
-      const txToSflEq = (tx) => {
-        if (sflToUsd > 0 && tx.usd_amount && parseFloat(tx.usd_amount) > 0) {
-          return parseFloat(tx.usd_amount) / sflToUsd;
-        }
-        if (sflToUsd > 0 && btcUsd > 0) {
-          return parseFloat(tx.btc_amount) * btcUsd / sflToUsd;
-        }
-        return 0;
-      };
-      const txsByTime = [...transactions].sort((a, b) =>
-        new Date(a.tx_date).getTime() - new Date(b.tx_date).getTime()
-      );
-      for (const p of points) {
-        let withdrawnSfl = 0, depositedSfl = 0, withdrawnBtc = 0, depositedBtc = 0;
-        for (const t of txsByTime) {
-          if (new Date(t.tx_date).getTime() > p.time) break;
-          const sflEq = txToSflEq(t);
-          const btc = parseFloat(t.btc_amount) || 0;
-          if (t.direction === "withdrawal") { withdrawnSfl += sflEq; withdrawnBtc += btc; }
-          else if (t.direction === "deposit") { depositedSfl += sflEq; depositedBtc += btc; }
-        }
-        p.adjustedValueSfl = p.valueSfl + withdrawnSfl - depositedSfl;
-        const farmBtc = (sflToUsd > 0 && btcUsd > 0) ? p.valueSfl * sflToUsd / btcUsd : 0;
-        p.wealthBtc = farmBtc + withdrawnBtc;
-      }
+      // The SATS / FLOWER chart's daily series prices each row at its own date; without it
+      // (CoinGecko down) the rows fall back to today's rate.
+      const satsDaily = await _invLoadSats("1d").catch(() => null);
+      _insApplyCashflow(points, transactions, _invState?.rates, satsDaily);
 
       _insState = {
         points,
@@ -29769,6 +29763,50 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
 
       // Refresh main tracker now that we have an earning rate (so metric ② updates)
       renderInvestmentTrackerContent();
+    }
+
+    // Sets adjustedValueSfl + wealthBtc on each point (see the Cashflow adjustment note above).
+    // Only `sfl`-venue rows count: YAKKAMON / WALLET money never touches the farm, so netting it
+    // out faked a burn. `satsDaily` is the daily sats/FLOWER series ([{ time, value }] ascending).
+    function _insApplyCashflow(points, transactions, rates, satsDaily) {
+      const sflToUsd = rates?.sflToUsd || 0;
+      const btcUsd = rates?.btcUsd || 0;
+      // sats/FLOWER on the row's own day; null when the series does not reach back that far.
+      const satsAt = (ms) => {
+        let v = null;
+        for (const s of satsDaily || []) { if (s.time * 1000 > ms) break; v = s.value; }
+        return v;
+      };
+      const txToSflEq = (tx) => {
+        // What the row itself says was bought, then the rate of its own date. Today's rate is the
+        // last resort: July's 0.107 BTC was ~99.6k FLOWER, but reads as ~50k at September's price.
+        if (parseFloat(tx.flower_amount) > 0) return parseFloat(tx.flower_amount);
+        const sats = satsAt(new Date(tx.tx_date).getTime());
+        if (sats > 0) return parseFloat(tx.btc_amount) * 1e8 / sats;
+        if (sflToUsd > 0 && tx.usd_amount && parseFloat(tx.usd_amount) > 0) {
+          return parseFloat(tx.usd_amount) / sflToUsd;
+        }
+        if (sflToUsd > 0 && btcUsd > 0) {
+          return parseFloat(tx.btc_amount) * btcUsd / sflToUsd;
+        }
+        return 0;
+      };
+      const txsByTime = transactions
+        .filter((t) => (t.venue || "sfl").toLowerCase() === "sfl")   // rows from before the column are farm rows
+        .sort((a, b) => new Date(a.tx_date).getTime() - new Date(b.tx_date).getTime());
+      for (const p of points) {
+        let withdrawnSfl = 0, depositedSfl = 0, withdrawnBtc = 0, depositedBtc = 0;
+        for (const t of txsByTime) {
+          if (new Date(t.tx_date).getTime() > p.time) break;
+          const sflEq = txToSflEq(t);
+          const btc = parseFloat(t.btc_amount) || 0;
+          if (t.direction === "withdrawal") { withdrawnSfl += sflEq; withdrawnBtc += btc; }
+          else if (t.direction === "deposit") { depositedSfl += sflEq; depositedBtc += btc; }
+        }
+        p.adjustedValueSfl = p.valueSfl + withdrawnSfl - depositedSfl;
+        const farmBtc = (sflToUsd > 0 && btcUsd > 0) ? p.valueSfl * sflToUsd / btcUsd : 0;
+        p.wealthBtc = farmBtc + withdrawnBtc;
+      }
     }
 
     function renderInsightsContent() {
