@@ -1,7 +1,133 @@
 import { getPool } from "./_db.js";
 import { handleWorld } from "./_world.js";
+import ITEM_NAMES from "./_item-names.js";
+import { buildSeasonCalendar } from "../core/sections/seasons.mjs";
 
 const ALLOWED_FARMS = new Set([155498, 1260204733777858]);
+// The SPECULATION page is the owner's alone.
+const SPEC_FARMS = new Set([155498]);
+// Crops and fruits the seasonal calendar covers (the p2p feed prices all of them).
+const SPEC_CROPS = ["Sunflower", "Potato", "Rhubarb", "Pumpkin", "Zucchini", "Carrot", "Yam", "Cabbage", "Broccoli", "Soybean",
+  "Beetroot", "Pepper", "Cauliflower", "Parsnip", "Eggplant", "Corn", "Onion", "Radish", "Wheat", "Turnip", "Kale", "Artichoke",
+  "Barley", "Tomato", "Lemon", "Blueberry", "Orange", "Apple", "Banana", "Rice", "Olive", "Grape"];
+
+/*
+ * type=spec — the SPECULATION page, folded in here like the other modes (Vercel's 12-function cap).
+ *   what=calendar  GET              seasonal buy/sell calendar from price_changes + marketplace_daily
+ *   what=trades    GET/POST/PATCH/DELETE   the owner's position log (spec_trades)
+ *   what=eggs      GET/POST         Genesis egg market snapshots pushed by the local collector
+ */
+async function handleSpec(pool, req, res) {
+  const what = String(req.query.what || "");
+  const method = (req.method || "GET").toUpperCase();
+  const body = () => (typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {}));
+  const farm = parseInt(req.query.farm, 10);
+  if (!SPEC_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
+
+  if (what === "calendar" && method === "GET") {
+    const { rows } = await pool.query(
+      `SELECT item_name, (EXTRACT(EPOCH FROM captured_at) * 1000)::bigint AS t, price
+         FROM price_changes WHERE item_name = ANY($1) ORDER BY item_name, captured_at`, [SPEC_CROPS]);
+    const daily = {};
+    for (const r of rows) (daily[r.item_name] = daily[r.item_name] || []).push([Number(r.t), Number(r.price)]);
+    // Traded volume over the last 28 days. marketplace_daily is cumulative per item, so the
+    // window's quantity/volume is last minus first; resources trade under "collectibles".
+    const idOf = {};
+    for (const [id, name] of Object.entries(ITEM_NAMES.collectibles || {})) if (SPEC_CROPS.includes(name)) idOf[name] = parseInt(id, 10);
+    const ids = Object.values(idOf);
+    const liq = {};
+    if (ids.length) {
+      const q = await pool.query(
+        `SELECT item_id, MAX(quantity) - MIN(quantity) AS qty, MAX(volume) - MIN(volume) AS vol,
+                GREATEST(MAX(date) - MIN(date), 1) AS days
+           FROM marketplace_daily WHERE collection = 'collectibles' AND item_id = ANY($1) AND date >= CURRENT_DATE - 28
+          GROUP BY item_id`, [ids]);
+      const nameOf = Object.fromEntries(Object.entries(idOf).map(([n, i]) => [i, n]));
+      for (const r of q.rows) {
+        const d = Number(r.days) || 1;
+        liq[nameOf[r.item_id]] = { qtyPerDay: Number(r.qty) / d, flowerPerDay: Number(r.vol) / d };
+      }
+    }
+    res.setHeader("Cache-Control", "s-maxage=1800, stale-while-revalidate=3600");
+    return res.status(200).json(buildSeasonCalendar(daily, { now: Date.now(), liquidity: liq }));
+  }
+
+  if (what === "trades") {
+    const cols = "id, item, currency, qty, buy_price, buy_date, sell_price, sell_date, notes, created_at";
+    const num = (v) => (v === undefined || v === null || v === "" ? null : parseFloat(v));
+    const date = (v) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+    if (method === "GET") {
+      const r = await pool.query(`SELECT ${cols} FROM spec_trades WHERE farm_id = $1 ORDER BY buy_date DESC, id DESC`, [farm]);
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json({ trades: r.rows });
+    }
+    if (method === "POST") {
+      const b = body();
+      const item = typeof b.item === "string" ? b.item.trim().slice(0, 80) : "";
+      const currency = typeof b.currency === "string" && b.currency.trim() ? b.currency.trim().toUpperCase().slice(0, 12) : "FLOWER";
+      const qty = num(b.qty), buy = num(b.buy_price), sell = num(b.sell_price);
+      if (!item) return res.status(400).json({ error: "item required" });
+      if (!(qty > 0)) return res.status(400).json({ error: "qty must be > 0" });
+      if (!(buy >= 0)) return res.status(400).json({ error: "buy_price must be >= 0" });
+      if (!date(b.buy_date)) return res.status(400).json({ error: "buy_date must be YYYY-MM-DD" });
+      if (sell !== null && !(sell >= 0)) return res.status(400).json({ error: "sell_price must be >= 0" });
+      const r = await pool.query(
+        `INSERT INTO spec_trades (farm_id, item, currency, qty, buy_price, buy_date, sell_price, sell_date, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING ${cols}`,
+        [farm, item, currency, qty, buy, b.buy_date, sell, sell === null ? null : (date(b.sell_date) || new Date().toISOString().slice(0, 10)),
+          typeof b.notes === "string" ? b.notes.slice(0, 500) : null]);
+      return res.status(201).json({ trade: r.rows[0] });
+    }
+    const id = parseInt(req.query.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "id required" });
+    if (method === "PATCH") {
+      const b = body(), sets = [], vals = [];
+      const add = (col, v) => { vals.push(v); sets.push(`${col} = $${vals.length}`); };
+      if (b.item !== undefined) { const v = String(b.item).trim().slice(0, 80); if (!v) return res.status(400).json({ error: "item required" }); add("item", v); }
+      if (b.currency !== undefined) add("currency", String(b.currency).trim().toUpperCase().slice(0, 12) || "FLOWER");
+      if (b.qty !== undefined) { const v = num(b.qty); if (!(v > 0)) return res.status(400).json({ error: "qty must be > 0" }); add("qty", v); }
+      if (b.buy_price !== undefined) { const v = num(b.buy_price); if (!(v >= 0)) return res.status(400).json({ error: "buy_price must be >= 0" }); add("buy_price", v); }
+      if (b.buy_date !== undefined) { if (!date(b.buy_date)) return res.status(400).json({ error: "buy_date must be YYYY-MM-DD" }); add("buy_date", b.buy_date); }
+      if (b.sell_price !== undefined) { const v = num(b.sell_price); if (v !== null && !(v >= 0)) return res.status(400).json({ error: "sell_price must be >= 0" }); add("sell_price", v); }
+      if (b.sell_date !== undefined) { const v = b.sell_date === null || b.sell_date === "" ? null : date(b.sell_date); if (b.sell_date && !v) return res.status(400).json({ error: "sell_date must be YYYY-MM-DD" }); add("sell_date", v); }
+      if (b.notes !== undefined) add("notes", b.notes === null ? null : String(b.notes).slice(0, 500));
+      if (!sets.length) return res.status(400).json({ error: "nothing to update" });
+      vals.push(id, farm);
+      const r = await pool.query(`UPDATE spec_trades SET ${sets.join(", ")} WHERE id = $${vals.length - 1} AND farm_id = $${vals.length} RETURNING ${cols}`, vals);
+      if (!r.rows.length) return res.status(404).json({ error: "not found" });
+      return res.status(200).json({ trade: r.rows[0] });
+    }
+    if (method === "DELETE") {
+      const r = await pool.query(`DELETE FROM spec_trades WHERE id = $1 AND farm_id = $2 RETURNING id`, [id, farm]);
+      if (!r.rows.length) return res.status(404).json({ error: "not found" });
+      return res.status(200).json({ deleted: id });
+    }
+    return res.status(405).json({ error: "method not allowed" });
+  }
+
+  if (what === "eggs") {
+    if (method === "GET") {
+      const r = await pool.query(`SELECT ts, data FROM egg_market ORDER BY ts DESC LIMIT 1000`);
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json({ snapshots: r.rows.reverse() });
+    }
+    if (method === "POST") {
+      const b = body();
+      const list = Array.isArray(b.snapshots) ? b.snapshots : [b];
+      let n = 0;
+      for (const s of list.slice(0, 500)) {
+        if (!s || typeof s.ts_utc !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(s.ts_utc)) continue;
+        const json = JSON.stringify(s);
+        if (json.length > 20000) continue;
+        const r = await pool.query(`INSERT INTO egg_market (ts, data) VALUES ($1, $2) ON CONFLICT (ts) DO NOTHING`, [s.ts_utc, json]);
+        n += r.rowCount;
+      }
+      return res.status(200).json({ inserted: n });
+    }
+    return res.status(405).json({ error: "method not allowed" });
+  }
+  return res.status(400).json({ error: "what must be calendar, trades or eggs" });
+}
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -183,6 +309,11 @@ export default async function handler(req, res) {
    * exposes no per-account balance today, so it is manual; when it does, the same row is written
    * with source='game' and the UI drops the caveat by itself.
    */
+  if (req.query.type === "spec") {
+    try { return await handleSpec(pool, req, res); }
+    catch (e) { console.error("spec:", e.message); return res.status(500).json({ error: e.message }); }
+  }
+
   if (req.query.type === "venue-balance") {
     const method = (req.method || "GET").toUpperCase();
     try {

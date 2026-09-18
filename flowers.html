@@ -2928,7 +2928,7 @@
     const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
     const IMG_BASE = "https://sfl.world/img/flowers/";
-    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "mytrades", "marks", "diff", "json", "constants", "ascension", "world", "yakkamon", "fishing", "decorations"];
+    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "mytrades", "marks", "diff", "json", "constants", "ascension", "world", "yakkamon", "fishing", "decorations", "speculation"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -5865,6 +5865,7 @@
         { id: "world", label: "🌍 WORLD" },
       ];
       const overflow = [
+        ...(FARM_ID === "155498" ? [{ id: "speculation", label: "🎲 SPEKULACE" }] : []),
         { id: "yakkamon", label: "🐲 YAKKAMON" },
         { id: "fishing", label: "🎣 FISHING" },
         { id: "decorations", label: "🌸 DECORATIONS" },
@@ -6006,7 +6007,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.62</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.63</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -6033,6 +6034,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.63", items: [
+          { t: "feat", text: "<b>SPEKULACE page (farm 155498 only, MORE → 🎲 SPEKULACE).</b> A seasonal calendar of all 32 crops and fruits: how much dearer or cheaper each is in spring / summer / autumn / winter against its own trend, the buy → sell season, net gain per cycle after the 10% fee, whether the pattern held in both halves of the history, a KUPUJ / PRODÁVEJ signal for the running week, your stock and how much the market can take per day. Plus a position log (buy / sell / P&L, open positions marked to market), the skim-to-BTC panel (FLOWER in game, sats/FLOWER vs its 30-day mean, BTC 24h, what already left SFL) and the Genesis egg market from the hourly collector." },
+        ] },
         { ver: "v5.62", items: [
           { t: "fix", text: "<b>A node is valued per real node, not per merged object.</b> A T2 tree/rock stands for 4 nodes and a T3 for 16, but income was divided by the number of objects — on a farm with 34 trees in 4 objects one Tree showed ~10 FLOWER/day instead of ~1.2. The NODES purchase plan, roadmap expansions, merge gains and the ascension ETA all used that figure; Buy Tree drops from the top of the plan." },
           { t: "fix", text: "<b>Investment Insights no longer count WALLET / YAKKAMON money as farm cashflow.</b> Only SFL-venue transactions are netted out of the farm value series, so a wallet buy no longer reads as a burn (the 30-day slope went from −1,131 to about +10 FLOWER/day). Each row is now converted at its own date's sats/FLOWER rate (or its FLOWER amount) instead of today's." },
@@ -27597,6 +27601,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           case "json": renderJsonExplorer(data); break;
           case "marks": renderMarks(data); break;
           case "constants": renderConstants(data); break;
+          case "speculation": renderSpeculation(data); break;
           default: renderDashboard(data);
         }
 
@@ -27629,6 +27634,309 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     }
 
 
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  SPEKULACE (farm 155498 only) — seasonal crop calendar, the owner's position log,
+    //  the skim-to-BTC panel and the Genesis egg market, all on one page. Numbers come
+    //  ready-made from /api/farm-history?type=spec (core/sections/seasons.mjs); the page
+    //  only renders and posts.
+    // ═══════════════════════════════════════════════════════════════════
+    const specFee = 0.10;
+    const specSeasonCz = { spring: "jaro", summer: "léto", autumn: "podzim", winter: "zima" };
+    const specSeasonIcon = { spring: "🌱", summer: "☀️", autumn: "🍂", winter: "❄️" };
+    let _spec = { cal: null, trades: null, eggs: null, ledger: null, sats: null, btc: null, p2p: null, err: {} };
+    let _specEggChart = null;
+
+    const _specApi = (what, extra) => `/api/farm-history?type=spec&what=${what}&farm=${FARM_ID}${extra || ""}`;
+    const _specFmt = (n, d) => (n == null || !isFinite(n)) ? "—" : (+n).toLocaleString("cs-CZ", { maximumFractionDigits: d === undefined ? 0 : d });
+    const _specPct = (v, d) => (v == null || !isFinite(v)) ? "—" : (v >= 0 ? "+" : "−") + Math.abs(v * 100).toFixed(d === undefined ? 0 : d) + " %";
+    const _specDate = (ms) => { const x = new Date(ms); return x.getUTCDate() + ". " + (x.getUTCMonth() + 1) + "."; };
+    // A DATE column comes back as a timestamp at the server's midnight; the calendar day is what counts.
+    const _specDay = (v) => (v ? String(v).slice(0, 10) : "");
+    function _specPrice(item) {
+      const p = (_spec.p2p || []).find((x) => x.item_name === item);
+      return p ? Number(p.price) : null;
+    }
+    function _specEggFloor() {
+      const s = (_spec.eggs || []).slice(-1)[0];
+      return s && s.data ? Number(s.data.floor_hidden_ron) || null : null;
+    }
+
+    async function _specLoad(force) {
+      const get = async (key, url, pick) => {
+        if (_spec[key] && !force) return;
+        try { const r = await fetch(url); if (!r.ok) throw new Error(r.status + ""); _spec[key] = pick(await r.json()); delete _spec.err[key]; }
+        catch (e) { _spec.err[key] = e.message || String(e); }
+      };
+      await Promise.all([
+        // Shape-checked: a wrong answer must show as an error panel, not crash the render.
+        get("cal", _specApi("calendar"), (j) => { if (!j || !j.current || !Array.isArray(j.items)) throw new Error((j && j.error) || "neplatná odpověď"); return j; }),
+        get("trades", _specApi("trades"), (j) => { if (!j || !Array.isArray(j.trades)) throw new Error((j && j.error) || "neplatná odpověď"); return j.trades; }),
+        get("eggs", _specApi("eggs"), (j) => { if (!j || !Array.isArray(j.snapshots)) throw new Error((j && j.error) || "neplatná odpověď"); return j.snapshots; }),
+        get("ledger", `/api/farm-history?type=btc-tx&farm=${FARM_ID}`, (j) => j.transactions || []),
+        get("btc", `/api/proxy?url=${encodeURIComponent("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true")}`, (j) => j.bitcoin || null),
+        (async () => { if (_spec.p2p && !force) return; try { _spec.p2p = await fetchP2PLatest(); } catch (e) { _spec.err.p2p = e.message; } })(),
+        (async () => { if (_spec.sats && !force) return; try { _spec.sats = await _invLoadSats("1d"); } catch (e) { _spec.err.sats = String(e); } })(),
+      ]);
+    }
+
+    async function renderSpeculation(data) {
+      const app = document.getElementById("app");
+      if (FARM_ID !== "155498") {
+        app.innerHTML = `<div class="error-screen pixel-panel pixel-font"><h2>Tahle stránka je soukromá</h2><p>Spekulace jsou jen pro farmu vlastníka.</p></div>`;
+        return;
+      }
+      if (!_spec.cal) app.innerHTML = `<div class="loading-screen pixel-font"><div class="loading-flower">🎲</div><div class="loading-text">Načítám kalendář, deník a vajíčka…</div></div>`;
+      await _specLoad(false);
+      window._specData = data;
+      _specRender();
+    }
+
+    function _specRender() {
+      const app = document.getElementById("app");
+      const data = window._specData || {};
+      let h = `<div class="header pixel-panel pixel-font"><h1>🎲 SPEKULACE</h1>
+        <div class="farm-id">Jen pro farmu ${escHTML(FARM_ID)} · sezónní kalendář · deník obchodů · odvádění do BTC · Genesis vajíčka</div></div>`;
+      h += _specCalendarHtml(data);
+      h += _specTradesHtml();
+      h += _specSkimHtml(data);
+      h += _specEggsHtml();
+      h += `<div class="footer"><button class="refresh-btn" onclick="_specRefresh()">REFRESH</button></div>`;
+      app.innerHTML = h;
+      _specDrawEggChart();
+    }
+    window._specRefresh = async function () { await _specLoad(true); _specRender(); };
+
+    // ── 1. seasonal calendar ──────────────────────────────────────────────
+    function _specCalendarHtml(data) {
+      const c = _spec.cal;
+      if (!c) return `<div class="pixel-panel" style="padding:12px;margin-bottom:12px"><div class="pixel-font" style="color:var(--red)">Kalendář se nenačetl: ${escHTML(_spec.err.cal || "?")}</div></div>`;
+      const inv = (data.farm && data.farm.inventory) || {};
+      const cur = c.current.season;
+      const nextChange = c.current.startedAt + 7 * 86400000;
+      const days = Math.max(0, Math.ceil((nextChange - Date.now()) / 86400000));
+      const cell = (v) => {
+        if (v == null) return `<td style="text-align:center;color:var(--text-dim)">—</td>`;
+        const a = Math.min(1, Math.abs(v) / 0.2);
+        const bg = v < 0 ? `rgba(93,173,226,${0.12 + 0.55 * a})` : `rgba(255,107,107,${0.12 + 0.55 * a})`;
+        return `<td style="text-align:center;background:${bg};font-weight:bold">${_specPct(v)}</td>`;
+      };
+      const badge = (x) => x.signal === "buy" ? `<span style="color:#0d0906;background:var(--blue);padding:2px 6px;border-radius:3px;font-weight:bold">KUPUJ</span>`
+        : x.signal === "sell" ? `<span style="color:#0d0906;background:var(--red);padding:2px 6px;border-radius:3px;font-weight:bold">PRODÁVEJ</span>`
+        : x.signal === "hold" ? `<span style="color:var(--text-secondary)">drž / čekej</span>` : `<span style="color:var(--text-dim)">šum</span>`;
+      const act = c.items.filter((x) => x.signal === "buy" || x.signal === "sell");
+      let h = `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.75rem;color:var(--sunpetal);margin-bottom:6px">🌾 SEZÓNNÍ KALENDÁŘ PLODIN</div>
+        <div style="font-size:0.55rem;color:var(--text-dim);line-height:1.7;margin-bottom:10px">Hra střídá roční období po týdnu (pondělí 00:00 UTC) a plodiny jdou pěstovat jen v některých — nabídka i cena proto kmitají v 28denním cyklu. Barva = o kolik je plodina v daném období dražší (<span style="color:var(--red)">červená</span>) nebo levnější (<span style="color:var(--blue)">modrá</span>) než její vlastní trend. Signál se ukáže jen u plodin, kde vzor platil <b>v obou polovinách historie</b> (stabilní) a čistý výnos po ${Math.round(specFee * 100)}% poplatku je nad 5 %. „Kolik“ = desetina toho, co se denně zobchoduje — víc už tlačíš cenu sám.</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${c.weeks.map((w, i) => `<div style="border:1px solid ${i === 0 ? "var(--sunpetal)" : "var(--border-brown)"};border-radius:6px;padding:5px 9px;background:${i === 0 ? "rgba(255,215,0,0.08)" : "#161009"};min-width:74px">
+            <div style="font-size:0.5rem;color:var(--text-dim)">${i === 0 ? "TEĎ" : "od " + _specDate(w.start)}</div>
+            <div style="font-size:0.7rem;font-weight:bold">${specSeasonIcon[w.season]} ${specSeasonCz[w.season]}</div></div>`).join("")}</div>
+        <div style="font-size:0.62rem;margin-bottom:10px">Teď je <b>${specSeasonIcon[cur]} ${specSeasonCz[cur]}</b>, další období za <b>${days} d</b> (${_specDate(nextChange)}).</div>`;
+      if (act.length) {
+        h += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px;margin-bottom:12px">` + act.map((x) => {
+          const have = getCount(inv, x.item);
+          const buy = x.signal === "buy";
+          return `<div style="border:2px solid ${buy ? "var(--blue)" : "var(--red)"};border-radius:6px;padding:8px 10px;background:#161009">
+            <div style="font-size:0.72rem;font-weight:bold">${buy ? "🛒 KUPUJ" : "💰 PRODÁVEJ"} ${escHTML(x.item)}</div>
+            <div style="font-size:0.55rem;color:var(--text-secondary);line-height:1.7;margin-top:3px">
+              ${buy ? `levně teď (${specSeasonCz[x.buy]}), prodat v ${specSeasonCz[x.sell]} od ${_specDate(x.nextSell)}` : `draze teď (${specSeasonCz[x.sell]}), znovu levně v ${specSeasonCz[x.buy]} od ${_specDate(x.nextBuy)}`}<br>
+              čistý výnos cyklu <b style="color:var(--green)">${_specPct(x.expectedNet)}</b> · ověřeno mimo vzorek ${_specPct(x.oosNet)}<br>
+              cena ${_specFmt(x.price, 6)} ${sflIcon("0.8em")} (${_specPct(x.nowVsTrend)} vs trend)<br>
+              ${buy ? `trh unese ~<b>${_specFmt(x.maxQtyPerDay)}</b> ks/den ≈ <b>${_specFmt(x.maxFlowerPerDay, 1)}</b> ${sflIcon("0.8em")}/den` : `máš ve skladu <b>${_specFmt(have)}</b> ks ≈ ${_specFmt(have * x.price * (1 - specFee), 2)} ${sflIcon("0.8em")} po poplatku`}
+            </div></div>`;
+        }).join("") + `</div>`;
+      } else {
+        h += `<div style="font-size:0.6rem;color:var(--text-secondary);margin-bottom:10px">Tento týden není žádná stabilní plodina v nákupním ani prodejním období — čekej na další týden.</div>`;
+      }
+      h += `<div style="overflow-x:auto"><table class="node-res-table" style="min-width:980px">
+        <tr><th>PLODINA</th>${["spring", "summer", "autumn", "winter"].map((s) => `<th style="text-align:center;${s === cur ? "color:var(--sunpetal)" : ""}">${specSeasonIcon[s]} ${specSeasonCz[s].toUpperCase()}${s === cur ? " ◀" : ""}</th>`).join("")}
+        <th>KOUPIT → PRODAT</th><th style="text-align:right">ČISTĚ / CYKLUS</th><th style="text-align:right">MIMO VZOREK</th><th>SIGNÁL</th><th>DALŠÍ NÁKUP / PRODEJ</th><th style="text-align:right">CENA</th><th style="text-align:right">SKLAD</th><th style="text-align:right">MAX / DEN</th></tr>`;
+      for (const x of c.items) {
+        const dim = !x.stable ? "opacity:0.55" : "";
+        h += `<tr style="${dim}">
+          <td><b>${escHTML(x.item)}</b>${x.stable ? ` <span title="vzor platil v obou polovinách historie" style="color:var(--green)">✓</span>` : ""}</td>
+          ${["spring", "summer", "autumn", "winter"].map((s) => cell(x.bySeason[s])).join("")}
+          <td style="white-space:nowrap">${specSeasonIcon[x.buy]} ${specSeasonCz[x.buy]} → ${specSeasonIcon[x.sell]} ${specSeasonCz[x.sell]}</td>
+          <td style="text-align:right;color:${x.expectedNet > 0 ? "var(--green)" : "var(--red)"}">${_specPct(x.expectedNet)}</td>
+          <td style="text-align:right;color:var(--text-secondary)">${_specPct(x.oosNet)}</td>
+          <td style="white-space:nowrap">${badge(x)}</td>
+          <td style="white-space:nowrap;font-size:0.6rem">🛒 ${_specDate(x.nextBuy)} · 💰 ${_specDate(x.nextSell)}</td>
+          <td style="text-align:right">${_specFmt(x.price, 6)}</td>
+          <td style="text-align:right">${_specFmt(getCount(inv, x.item))}</td>
+          <td style="text-align:right;font-size:0.6rem;white-space:nowrap">${_specFmt(x.maxQtyPerDay)} ks<br><span style="color:var(--text-dim)">${_specFmt(x.maxFlowerPerDay, 1)} ${sflIcon("0.75em")}</span></td></tr>`;
+      }
+      h += `</table></div>
+        <div style="font-size:0.5rem;color:var(--text-dim);margin-top:6px;line-height:1.6">Ceny = p2p feed trackeru od 24. 2. 2026 (denně). „Čistě / cyklus“ = celá historie, „mimo vzorek“ = pravidlo určené z první poloviny a změřené na druhé. Objem = posledních 28 dní marketplace. Poplatek ${Math.round(specFee * 100)} % je jen na prodeji. Minulost není záruka — vzor mohou změnit nové recepty nebo kapitola.</div>
+      </div>`;
+      return h;
+    }
+
+    // ── 2. position log ───────────────────────────────────────────────────
+    function _specTradesHtml() {
+      const trades = _spec.trades;
+      const satsNow = _spec.sats && _spec.sats.length ? _spec.sats[_spec.sats.length - 1].value : null;
+      const crops = (_spec.cal && _spec.cal.items || []).map((x) => x.item);
+      const today = new Date().toISOString().slice(0, 10);
+      let realized = 0, openCost = 0, openValue = 0, openValued = true;
+      const rows = (trades || []).map((t) => {
+        const qty = Number(t.qty), buy = Number(t.buy_price), sell = t.sell_price == null ? null : Number(t.sell_price);
+        const isFlower = t.currency === "FLOWER";
+        let pnl = null, mark = null, markNote = "";
+        if (sell != null) { pnl = qty * (sell - buy); if (isFlower) realized += pnl; }
+        else {
+          const live = isFlower ? _specPrice(t.item) : (/egg/i.test(t.item) && t.currency === "RON" ? _specEggFloor() : null);
+          if (live != null) { mark = qty * (live * (isFlower ? 1 - specFee : 1) - buy); markNote = isFlower ? "při prodeji teď, po poplatku" : "vs. floor platného eggu"; }
+          if (isFlower) { openCost += qty * buy; if (live != null) openValue += qty * live * (1 - specFee); else openValued = false; }
+        }
+        const val = pnl != null ? pnl : mark;
+        return `<tr>
+          <td style="white-space:nowrap">${_specDay(t.buy_date)}</td>
+          <td><b>${escHTML(t.item)}</b>${t.notes ? `<div style="font-size:0.5rem;color:var(--text-dim)">${escHTML(t.notes)}</div>` : ""}</td>
+          <td style="text-align:right">${_specFmt(qty, 4)}</td>
+          <td style="text-align:right">${_specFmt(buy, 6)} ${escHTML(t.currency)}</td>
+          <td style="text-align:right">${_specFmt(qty * buy, 2)}</td>
+          <td style="text-align:right">${sell == null ? `<button class="roi-pill" onclick="_specSell(${t.id})">PRODAT</button>` : `${_specFmt(sell, 6)}<div style="font-size:0.5rem;color:var(--text-dim)">${_specDay(t.sell_date)}</div>`}</td>
+          <td style="text-align:right;font-weight:bold;color:${val == null ? "var(--text-dim)" : val >= 0 ? "var(--green)" : "var(--red)"}">${val == null ? "—" : (val >= 0 ? "+" : "") + _specFmt(val, 2) + " " + escHTML(t.currency)}${pnl == null && mark != null ? `<div style="font-size:0.45rem;color:var(--text-dim);font-weight:normal">${markNote}</div>` : ""}</td>
+          <td style="text-align:right;white-space:nowrap"><button class="roi-pill" onclick="_specEdit(${t.id})">✎</button> <button class="roi-pill" onclick="_specDel(${t.id})">✕</button></td></tr>`;
+      }).join("");
+      const satsOf = (fl) => satsNow ? fl * satsNow : null;
+      return `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.75rem;color:var(--sunpetal);margin-bottom:6px">📒 DENÍK OBCHODŮ</div>
+        <div style="font-size:0.55rem;color:var(--text-dim);line-height:1.7;margin-bottom:8px">Zapiš nákup (množství, cena za kus). Prodej doplníš tlačítkem PRODAT — zadej <b>čistou</b> cenu za kus, tedy co ti přišlo po poplatku. Otevřené pozice se oceňují živou cenou (plodiny p2p po 10% poplatku, vajíčka floorem platného eggu).</div>
+        <form onsubmit="return _specAdd(event)" style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;font-size:0.55rem">
+          <label>položka<br><input id="spec-item" list="spec-items" required style="width:140px;font-size:0.65rem" placeholder="Potato / Genesis egg #803"></label>
+          <datalist id="spec-items">${crops.map((c) => `<option value="${escHTML(c)}">`).join("")}<option value="Genesis egg"></datalist>
+          <label>měna<br><select id="spec-cur" style="font-size:0.65rem"><option>FLOWER</option><option>RON</option><option>USDC</option></select></label>
+          <label>množství<br><input id="spec-qty" type="number" step="any" min="0" required style="width:90px;font-size:0.65rem"></label>
+          <label>cena / ks<br><input id="spec-price" type="number" step="any" min="0" required style="width:100px;font-size:0.65rem"></label>
+          <label>datum<br><input id="spec-date" type="date" value="${today}" required style="font-size:0.65rem"></label>
+          <label>poznámka<br><input id="spec-notes" style="width:140px;font-size:0.65rem"></label>
+          <button class="refresh-btn" type="submit">+ PŘIDAT</button>
+        </form>
+        ${trades == null ? `<div style="color:var(--red);font-size:0.6rem">Deník se nenačetl: ${escHTML(_spec.err.trades || "?")}</div>`
+          : !trades.length ? `<div style="font-size:0.6rem;color:var(--text-secondary)">Zatím žádný obchod.</div>`
+          : `<div style="overflow-x:auto"><table class="node-res-table" style="min-width:760px">
+              <tr><th>NÁKUP</th><th>POLOŽKA</th><th style="text-align:right">KS</th><th style="text-align:right">CENA / KS</th><th style="text-align:right">CELKEM</th><th style="text-align:right">PRODEJ / KS</th><th style="text-align:right">ZISK</th><th></th></tr>${rows}</table></div>
+            <div style="font-size:0.62rem;margin-top:8px;line-height:1.8">Realizováno (FLOWER): <b style="color:${realized >= 0 ? "var(--green)" : "var(--red)"}">${realized >= 0 ? "+" : ""}${_specFmt(realized, 2)} ${sflIcon("0.8em")}</b>${satsOf(realized) != null ? ` ≈ ${_specFmt(satsOf(realized))} sats` : ""}
+            · otevřeno: nakoupeno za ${_specFmt(openCost, 2)} ${sflIcon("0.8em")}, teď ${openValued ? "" : "≥ "}${_specFmt(openValue, 2)} ${sflIcon("0.8em")} po poplatku</div>`}
+      </div>`;
+    }
+    const _specReq = async (method, extra, body) => {
+      const r = await fetch(_specApi("trades", extra), { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || r.status);
+      return j;
+    };
+    window._specAdd = function (ev) {
+      ev.preventDefault();
+      const v = (id) => document.getElementById(id).value;
+      _specReq("POST", "", { item: v("spec-item"), currency: v("spec-cur"), qty: v("spec-qty"), buy_price: v("spec-price"), buy_date: v("spec-date"), notes: v("spec-notes") || null })
+        .then(async () => { _spec.trades = null; await _specLoad(false); _specRender(); })
+        .catch((e) => alert("Nepodařilo se uložit: " + e.message));
+      return false;
+    };
+    window._specSell = function (id) {
+      const price = prompt("Čistá prodejní cena za kus (po poplatku):");
+      if (price == null || price === "") return;
+      const date = prompt("Datum prodeje (YYYY-MM-DD):", new Date().toISOString().slice(0, 10));
+      if (!date) return;
+      _specReq("PATCH", `&id=${id}`, { sell_price: price, sell_date: date })
+        .then(async () => { _spec.trades = null; await _specLoad(false); _specRender(); })
+        .catch((e) => alert("Nepodařilo se uložit: " + e.message));
+    };
+    window._specEdit = function (id) {
+      const t = (_spec.trades || []).find((x) => x.id == id); if (!t) return;
+      const ask = (label, cur) => { const v = prompt(label, cur == null ? "" : cur); return v === null ? undefined : v; };
+      const patch = {};
+      const q = ask("Množství:", t.qty); if (q === undefined) return; patch.qty = q;
+      const b = ask("Nákupní cena / ks:", t.buy_price); if (b === undefined) return; patch.buy_price = b;
+      const bd = ask("Datum nákupu (YYYY-MM-DD):", _specDay(t.buy_date)); if (bd === undefined) return; patch.buy_date = bd;
+      const s = ask("Prodejní cena / ks (prázdné = otevřená pozice):", t.sell_price); if (s === undefined) return;
+      patch.sell_price = s === "" ? null : s;
+      if (s !== "") { const sd = ask("Datum prodeje (YYYY-MM-DD):", _specDay(t.sell_date) || new Date().toISOString().slice(0, 10)); if (sd === undefined) return; patch.sell_date = sd; }
+      else patch.sell_date = null;
+      const n = ask("Poznámka:", t.notes); if (n !== undefined) patch.notes = n || null;
+      _specReq("PATCH", `&id=${id}`, patch).then(async () => { _spec.trades = null; await _specLoad(false); _specRender(); }).catch((e) => alert("Nepodařilo se uložit: " + e.message));
+    };
+    window._specDel = function (id) {
+      if (!confirm("Smazat tenhle obchod z deníku?")) return;
+      _specReq("DELETE", `&id=${id}`).then(async () => { _spec.trades = null; await _specLoad(false); _specRender(); }).catch((e) => alert("Nepodařilo se smazat: " + e.message));
+    };
+
+    // ── 3. skim to BTC ────────────────────────────────────────────────────
+    function _specSkimHtml(data) {
+      const s = _spec.sats || [];
+      const now = s.length ? s[s.length - 1].value : null;
+      const last30 = s.slice(-30).map((p) => p.value);
+      const avg30 = last30.length ? last30.reduce((a, b) => a + b, 0) / last30.length : null;
+      const btcChg = _spec.btc && typeof _spec.btc.usd_24h_change === "number" ? _spec.btc.usd_24h_change / 100 : null;
+      const bal = Number((data.farm && data.farm.balance) || 0);
+      const skims = (_spec.ledger || []).filter((t) => t.direction === "withdrawal" && (t.venue || "sfl").toLowerCase() === "sfl");
+      const skimBtc = skims.reduce((a, t) => a + (Number(t.btc_amount) || 0), 0);
+      const lastSkim = skims.map((t) => _specDay(t.tx_date)).sort().slice(-1)[0] || null;
+      const dump = btcChg != null && btcChg <= -0.04;
+      const rich = now != null && avg30 != null && now >= avg30 * 1.10;
+      const verdict = dump ? `<b style="color:var(--green)">DOBRÝ DEN NA ODVEDENÍ</b> — BTC dnes ${_specPct(btcChg, 1)}, FLOWER v sats je mechanicky dražší (historicky ~+6 %).`
+        : rich ? `<b style="color:var(--green)">DOBRÝ DEN NA ODVEDENÍ</b> — FLOWER je ${_specPct(now / avg30 - 1)} nad 30denním průměrem v sats.`
+        : `<span style="color:var(--text-secondary)">Běžný den.</span> Odvádět se vyplatí hlavně v den, kdy BTC spadne o 4 % a víc, nebo když je FLOWER ≥ 10 % nad 30denním průměrem v sats.`;
+      return `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.75rem;color:var(--sunpetal);margin-bottom:6px">₿ ODVÁDĚNÍ DO BTC</div>
+        <div style="font-size:0.55rem;color:var(--text-dim);line-height:1.7;margin-bottom:8px">Farma vyrobí ~45–68 ${sflIcon("0.75em")} denně, které by šly odvést, ale dnes všechno, co vydělá, ve hře zase utratíš. Tady je, kolik leží ve hře teď, kolik už odešlo a jestli je dnes dobrý kurz. Odvedení zapisuj jako výběr (venue SFL) v Investment Trackeru na stránce DIFF.</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-bottom:10px">
+          <div style="border:1px solid var(--border-brown);border-radius:6px;padding:7px 9px;background:#161009"><div style="font-size:0.45rem;color:var(--text-dim)">FLOWER VE HŘE TEĎ</div><div style="font-size:0.8rem;font-weight:bold;color:var(--sunpetal)">${_specFmt(bal, 1)} ${sflIcon("0.8em")}</div><div style="font-size:0.5rem;color:var(--text-dim)">${now ? "≈ " + _specFmt(bal * now) + " sats · " + _specFmt(bal * now / 1e8, 5) + " ₿" : ""}</div></div>
+          <div style="border:1px solid var(--border-brown);border-radius:6px;padding:7px 9px;background:#161009"><div style="font-size:0.45rem;color:var(--text-dim)">SATS / FLOWER</div><div style="font-size:0.8rem;font-weight:bold">${_specFmt(now, 1)}</div><div style="font-size:0.5rem;color:var(--text-dim)">30d průměr ${_specFmt(avg30, 1)} (${avg30 ? _specPct(now / avg30 - 1) : "—"})</div></div>
+          <div style="border:1px solid var(--border-brown);border-radius:6px;padding:7px 9px;background:#161009"><div style="font-size:0.45rem;color:var(--text-dim)">BTC 24 H</div><div style="font-size:0.8rem;font-weight:bold;color:${btcChg != null && btcChg < 0 ? "var(--red)" : "var(--green)"}">${_specPct(btcChg, 1)}</div><div style="font-size:0.5rem;color:var(--text-dim)">${_spec.btc ? "$" + _specFmt(_spec.btc.usd) : ""}</div></div>
+          <div style="border:1px solid var(--border-brown);border-radius:6px;padding:7px 9px;background:#161009"><div style="font-size:0.45rem;color:var(--text-dim)">UŽ ODVEDENO ZE SFL</div><div style="font-size:0.8rem;font-weight:bold;color:var(--green)">${_specFmt(skimBtc, 5)} ₿</div><div style="font-size:0.5rem;color:var(--text-dim)">${skims.length} výběrů${lastSkim ? " · poslední " + lastSkim : ""}</div></div>
+        </div>
+        <div style="font-size:0.62rem;line-height:1.7">${verdict}</div>
+      </div>`;
+    }
+
+    // ── 4. Genesis eggs ───────────────────────────────────────────────────
+    function _specEggsHtml() {
+      const snaps = _spec.eggs || [];
+      const last = snaps.length ? snaps[snaps.length - 1].data : null;
+      const dayAgo = snaps.filter((s) => Date.parse(s.ts) <= Date.now() - 24 * 3600000).slice(-1)[0];
+      const prev = dayAgo ? dayAgo.data : null;
+      const mine = last && last.mine ? Object.entries(last.mine) : [];
+      const tile = (k, v, s) => `<div style="border:1px solid var(--border-brown);border-radius:6px;padding:7px 9px;background:#161009"><div style="font-size:0.45rem;color:var(--text-dim)">${k}</div><div style="font-size:0.8rem;font-weight:bold">${v}</div><div style="font-size:0.5rem;color:var(--text-dim)">${s || ""}</div></div>`;
+      const d = (a, b) => (a != null && b != null && b !== 0) ? _specPct(a / b - 1) + " za 24 h" : "";
+      return `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.75rem;color:var(--sunpetal);margin-bottom:6px">🥚 GENESIS VAJÍČKA (YAKKAMON)</div>
+        <div style="font-size:0.55rem;color:var(--text-dim);line-height:1.7;margin-bottom:8px">Hodinové snímky z lokálního sběrače (tvoje PC): floor <b>platných</b> eggů ověřený v oficiálních metadatech, zeď nabídek u flooru, oficiální počet Bad Eggů a prodeje. Oficiální obchod na Ronin Marketu od 21. 9., reveal 14. 10. Nákupy eggů zapisuj do deníku výše jako „Genesis egg #id“ v RON.</div>
+        ${!last ? `<div style="font-size:0.6rem;color:var(--text-secondary)">Zatím žádný snímek — sběrač je posílá každou hodinu v :05.</div>` : `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:10px">
+          ${tile("FLOOR PLATNÉHO EGGU", _specFmt(last.floor_hidden_ron) + " RON", d(last.floor_hidden_ron, prev && prev.floor_hidden_ron) || (last.usd_per_ron ? "≈ $" + _specFmt(last.floor_hidden_ron * last.usd_per_ron, 2) : ""))}
+          ${tile("10. / 50. NEJLEVNĚJŠÍ", _specFmt(last.ask_10th_ron) + " / " + _specFmt(last.ask_50th_ron), "do 2 % nad floorem: " + _specFmt(last.asks_within_2pct) + " · do 5 %: " + _specFmt(last.asks_within_5pct))}
+          ${tile("BAD EGGY OFICIÁLNĚ", _specFmt(last.official_bad_eggs), (last.newly_flagged ? "+" + last.newly_flagged + " poslední běh · " : "") + d(last.official_bad_eggs, prev && prev.official_bad_eggs))}
+          ${tile("NABÍDEK CELKEM", _specFmt(last.listed_total), "nejlepší nabídka ke koupi " + _specFmt(last.top_offer_wron, 1) + " WRON")}
+          ${tile("PRODEJE ZA HODINU", _specFmt(last.sales_1h_hidden) + " platných", "medián " + _specFmt(last.median_sale_1h_hidden_ron) + " RON · přijaté nabídky " + _specFmt(last.offers_accepted_1h))}
+        </div>
+        <div id="spec-egg-chart" style="height:220px;margin-bottom:6px"></div>
+        <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px">Poslední snímek ${escHTML(String(snaps[snaps.length - 1].ts).replace("T", " ").slice(0, 16))} UTC · ${snaps.length} snímků. Zelená = floor platného eggu, žlutá = 10. nejlevnější, červená = Bad Eggy (pravá osa).</div>
+        ${mine.length ? `<div style="font-size:0.62rem">Tvoje eggy: ${mine.map(([id, st]) => `<b>#${escHTML(id)}</b> <span style="color:${st === "Hidden" ? "var(--green)" : "var(--red)"}">${escHTML(st)}</span>`).join(" · ")}</div>` : ""}
+        ${last.cheapest && last.cheapest.length ? `<div style="font-size:0.55rem;color:var(--text-secondary);margin-top:6px;line-height:1.7">Nejlevnější platné teď: ${last.cheapest.slice(0, 8).map((c) => `<a href="https://opensea.io/item/ronin/0x6d1bc5247ca99d917d91ec52dbbb5ef6c2435107/${encodeURIComponent(c[0])}" target="_blank" rel="noopener" style="color:var(--lily)">#${escHTML(String(c[0]))}</a> ${_specFmt(c[1])}${c[2] ? " ⚠" : ""}`).join(" · ")}<br><span style="color:var(--text-dim)">⚠ = ID ze skupiny 4080–4615 (pravděpodobně farma multi-účtů, vyšší riziko pozdějšího označení)</span></div>` : ""}`}
+      </div>`;
+    }
+    function _specDrawEggChart() {
+      const el = document.getElementById("spec-egg-chart");
+      if (!el || typeof LightweightCharts === "undefined") return;
+      if (_specEggChart) { try { _specEggChart.remove(); } catch (e) {} _specEggChart = null; }
+      const pts = (_spec.eggs || []).map((s) => ({ t: Math.floor(Date.parse(s.ts) / 1000), d: s.data })).filter((p) => p.t);
+      const line = (key) => pts.filter((p) => p.d[key] != null).map((p) => ({ time: p.t, value: Number(p.d[key]) }));
+      const chart = LightweightCharts.createChart(el, {
+        height: 220, autoSize: true,
+        layout: { background: { color: "transparent" }, textColor: "#c4a882" },
+        grid: { vertLines: { color: "rgba(255,255,255,0.05)" }, horzLines: { color: "rgba(255,255,255,0.05)" } },
+        timeScale: { timeVisible: true, secondsVisible: false, borderColor: "rgba(255,255,255,0.1)" },
+        rightPriceScale: { borderColor: "rgba(255,255,255,0.1)" }, leftPriceScale: { visible: true, borderColor: "rgba(255,255,255,0.1)" },
+      });
+      _specEggChart = chart;
+      chart.addLineSeries({ color: "#30D158", lineWidth: 2, priceScaleId: "left" }).setData(line("floor_hidden_ron"));
+      chart.addLineSeries({ color: "#FFD60A", lineWidth: 1, priceScaleId: "left" }).setData(line("ask_10th_ron"));
+      chart.addLineSeries({ color: "#FF6B6B", lineWidth: 2, priceScaleId: "right" }).setData(line("official_bad_eggs"));
+      chart.timeScale().fitContent();
+    }
 
     // ═══════════════════════════════════════
     //  DIFF PAGE (farm 155498 only)
