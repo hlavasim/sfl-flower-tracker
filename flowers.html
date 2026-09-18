@@ -27912,8 +27912,12 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           ${tile("NABÍDEK CELKEM", _specFmt(last.listed_total), "nejlepší nabídka ke koupi " + _specFmt(last.top_offer_wron, 1) + " WRON")}
           ${tile("PRODEJE ZA HODINU", _specFmt(last.sales_1h_hidden) + " platných", "medián " + _specFmt(last.median_sale_1h_hidden_ron) + " RON · přijaté nabídky " + _specFmt(last.offers_accepted_1h))}
         </div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px 16px;font-size:0.55rem;color:var(--text-secondary);margin-bottom:4px">
+          ${[["#30D158", 3, "floor platného eggu (RON, levá osa)"], ["#FFD60A", 2, "10. nejlevnější nabídka (RON, levá osa)"], ["#FF6B6B", 3, "Bad Eggy oficiálně (počet, pravá osa)"]]
+            .map(([c, w, t]) => `<span style="display:inline-flex;align-items:center;gap:6px"><i style="display:inline-block;width:16px;height:${w}px;background:${c};border-radius:2px"></i>${t}</span>`).join("")}
+        </div>
         <div id="spec-egg-chart" style="height:220px;margin-bottom:6px"></div>
-        <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px">Poslední snímek ${escHTML(String(snaps[snaps.length - 1].ts).replace("T", " ").slice(0, 16))} UTC · ${snaps.length} snímků. Zelená = floor platného eggu, žlutá = 10. nejlevnější, červená = Bad Eggy (pravá osa).</div>
+        <div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px">Poslední snímek ${escHTML(String(snaps[snaps.length - 1].ts).replace("T", " ").slice(0, 16))} UTC · ${snaps.length} snímků.</div>
         ${mine.length ? `<div style="font-size:0.62rem">Tvoje eggy: ${mine.map(([id, st]) => `<b>#${escHTML(id)}</b> <span style="color:${st === "Hidden" ? "var(--green)" : "var(--red)"}">${escHTML(st)}</span>`).join(" · ")}</div>` : ""}
         ${last.cheapest && last.cheapest.length ? `<div style="font-size:0.55rem;color:var(--text-secondary);margin-top:6px;line-height:1.7">Nejlevnější platné teď: ${last.cheapest.slice(0, 8).map((c) => `<a href="https://opensea.io/item/ronin/0x6d1bc5247ca99d917d91ec52dbbb5ef6c2435107/${encodeURIComponent(c[0])}" target="_blank" rel="noopener" style="color:var(--lily)">#${escHTML(String(c[0]))}</a> ${_specFmt(c[1])}${c[2] ? " ⚠" : ""}`).join(" · ")}<br><span style="color:var(--text-dim)">⚠ = ID ze skupiny 4080–4615 (pravděpodobně farma multi-účtů, vyšší riziko pozdějšího označení)</span></div>` : ""}`}
       </div>`;
