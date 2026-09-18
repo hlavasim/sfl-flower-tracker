@@ -27719,7 +27719,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         if (v == null) return `<td style="text-align:center;color:var(--text-dim)">—</td>`;
         const a = Math.min(1, Math.abs(v) / 0.2);
         const bg = v < 0 ? `rgba(93,173,226,${0.12 + 0.55 * a})` : `rgba(255,107,107,${0.12 + 0.55 * a})`;
-        return `<td style="text-align:center;background:${bg};font-weight:bold">${_specPct(v)}</td>`;
+        return `<td style="text-align:center;background:${bg};font-weight:bold;white-space:nowrap">${_specPct(v)}</td>`;
       };
       const badge = (x) => x.signal === "buy" ? `<span style="color:#0d0906;background:var(--blue);padding:2px 6px;border-radius:3px;font-weight:bold">KUPUJ</span>`
         : x.signal === "sell" ? `<span style="color:#0d0906;background:var(--red);padding:2px 6px;border-radius:3px;font-weight:bold">PRODÁVEJ</span>`
@@ -27754,7 +27754,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       for (const x of c.items) {
         const dim = !x.stable ? "opacity:0.55" : "";
         h += `<tr style="${dim}">
-          <td><b>${escHTML(x.item)}</b>${x.stable ? ` <span title="vzor platil v obou polovinách historie" style="color:var(--green)">✓</span>` : ""}</td>
+          <td style="white-space:nowrap"><b>${escHTML(x.item)}</b>${x.stable ? ` <span title="vzor platil v obou polovinách historie" style="color:var(--green)">✓</span>` : ""}</td>
           ${["spring", "summer", "autumn", "winter"].map((s) => cell(x.bySeason[s])).join("")}
           <td style="white-space:nowrap">${specSeasonIcon[x.buy]} ${specSeasonCz[x.buy]} → ${specSeasonIcon[x.sell]} ${specSeasonCz[x.sell]}</td>
           <td style="text-align:right;color:${x.expectedNet > 0 ? "var(--green)" : "var(--red)"}">${_specPct(x.expectedNet)}</td>
