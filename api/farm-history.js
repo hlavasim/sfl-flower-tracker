@@ -1,7 +1,6 @@
 import { getPool } from "./_db.js";
 import { handleWorld } from "./_world.js";
 import ITEM_NAMES from "./_item-names.js";
-import { buildSeasonCalendar } from "../core/sections/seasons.mjs";
 
 const ALLOWED_FARMS = new Set([155498, 1260204733777858]);
 // The SPECULATION page is the owner's alone.
@@ -25,6 +24,9 @@ async function handleSpec(pool, req, res) {
   if (!SPEC_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
 
   if (what === "calendar" && method === "GET") {
+    // Dynamic: this file is bundled as CommonJS, and a static import of an .mjs module made the
+    // whole function fail to load (FUNCTION_INVOCATION_FAILED) — every farm-history mode went down.
+    const { buildSeasonCalendar } = await import("../core/sections/seasons.mjs");
     const { rows } = await pool.query(
       `SELECT item_name, (EXTRACT(EPOCH FROM captured_at) * 1000)::bigint AS t, price
          FROM price_changes WHERE item_name = ANY($1) ORDER BY item_name, captured_at`, [SPEC_CROPS]);
