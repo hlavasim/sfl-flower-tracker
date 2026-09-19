@@ -210,7 +210,7 @@ import { SEED_COSTS, TOOL_COSTS } from "../data/economy.mjs";
         oilPerSeed = GREENHOUSE_OIL_COSTS[product];
         if (stockMods.slickSaver) oilPerSeed = Math.max(0, oilPerSeed - 1);
         // "+N% Oil consumption" debuffs (e.g. Greasy Plants) multiply greenhouse oil use — a real cost.
-        const _oilConsPct = (boostEffects || []).filter(e => e && e.type === "oil_consumption_pct").reduce((s, e) => s + (e.value || 0), 0);
+        const _oilConsPct = (boostEffects || []).filter(e => e && e.type === "oil_consumption_pct" && (!e.product || e.product === product)).reduce((s, e) => s + (e.value || 0), 0);
         if (_oilConsPct) oilPerSeed *= (1 + _oilConsPct / 100);
         oilSflPerSeed = oilPerSeed * ((p2pPrices && p2pPrices["Oil"]) || 0);
         oilCostPerDay = oilSflPerSeed * seedsPerDay;

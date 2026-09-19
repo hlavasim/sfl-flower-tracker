@@ -6007,7 +6007,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.63</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.64</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -6034,6 +6034,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.64", items: [
+          { t: "fix", text: "<b>Chapter, reward and drop items now count in POWER and ROADMAP.</b> Boost items came only from the marketplace feed, and an item of the running chapter is not tradeable until the chapter ends — so an owned <b>Rice Shirt</b> (+1 Rice, half the Oil to plant Rice) boosted nothing, and neither did Trident, Sunflower Rod or Angler Waders. They are now read from a table taken from the game source: the Ascension Age auction items (Rice Shirt, Surfer Hair, Alchemist Apron, Vibraphone, Winged Vase, Ascended Idol, Salt Worker Gnome), the megastore ones (Moon Hair, Astrolabe, Ascension Monument, Otty the Otter), the mutant drops and the fishing rewards. A shop item is priced as its tickets × your ticket value; an auction item has no fixed price and is never ranked by payback." },
+          { t: "fix", text: "<b>A greenhouse oil effect can be scoped to one product.</b> Rice Shirt's “-50% Oil to plant Rice” was read as a −50% Oil <i>yield</i>; it now halves the oil per Rice seed and leaves Olive and Grape alone." },
+        ] },
         { ver: "v5.63", items: [
           { t: "feat", text: "<b>SPEKULACE page (farm 155498 only, MORE → 🎲 SPEKULACE).</b> A seasonal calendar of all 32 crops and fruits: how much dearer or cheaper each is in spring / summer / autumn / winter against its own trend, the buy → sell season, net gain per cycle after the 10% fee, whether the pattern held in both halves of the history, a KUPUJ / PRODÁVEJ signal for the running week, your stock and how much the market can take per day. Plus a position log (buy / sell / P&L, open positions marked to market), the skim-to-BTC panel (FLOWER in game, sats/FLOWER vs its 30-day mean, BTC 24h, what already left SFL) and the Genesis egg market from the hourly collector." },
         ] },
@@ -15943,7 +15947,7 @@
         oilPerSeed = GREENHOUSE_OIL_COSTS[product];
         if (stockMods.slickSaver) oilPerSeed = Math.max(0, oilPerSeed - 1);
         // "+N% Oil consumption" debuffs (e.g. Greasy Plants) multiply greenhouse oil use — a real cost.
-        const _oilConsPct = (boostEffects || []).filter(e => e && e.type === "oil_consumption_pct").reduce((s, e) => s + (e.value || 0), 0);
+        const _oilConsPct = (boostEffects || []).filter(e => e && e.type === "oil_consumption_pct" && (!e.product || e.product === product)).reduce((s, e) => s + (e.value || 0), 0);
         if (_oilConsPct) oilPerSeed *= (1 + _oilConsPct / 100);
         oilSflPerSeed = oilPerSeed * ((p2pPrices && p2pPrices["Oil"]) || 0);
         oilCostPerDay = oilSflPerSeed * seedsPerDay;

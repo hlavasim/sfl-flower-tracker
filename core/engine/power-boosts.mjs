@@ -61,6 +61,22 @@
     // Boost text parser rules (ordered by priority)
     // Item-name-based effect overrides (when buff text can't be regex-parsed reliably)
     const BOOST_EFFECT_OVERRIDES = {
+      // "-50% Oil to plant Rice" read as a -50% Oil YIELD. It is a planting cost on Rice only
+      // (plantGreenhouse.ts: usage *= 0.5 for Rice Seed), so it has to be scoped to the product.
+      "Rice Shirt": [
+        { type: "yield_flat", value: 1, cat: "greenhouse", product: "Rice", raw: "+1 Rice" },
+        { type: "oil_consumption_pct", value: -50, cat: "greenhouse", product: "Rice", raw: "-50% Oil to plant Rice" },
+      ],
+      "Moon Hair": [
+        { type: "yield_flat", value: 0.5, cat: "fruits", product: "Celestine", raw: "+0.5 Full Moon Fruit" },
+        { type: "yield_flat", value: 0.5, cat: "fruits", product: "Lunara", raw: "+0.5 Full Moon Fruit" },
+        { type: "yield_flat", value: 0.5, cat: "fruits", product: "Duskberry", raw: "+0.5 Full Moon Fruit" },
+        { type: "qualitative", cat: "other", raw: "+2 Full Moon Seed stock" },
+      ],
+      "Otty the Otter": [
+        { type: "daily_flat", value: 5, cat: "fishing", raw: "+5 daily fishing reels" },
+        { type: "yield_flat", value: 1 / 15, cat: "fishing", conditional: "every 15th reel", raw: "+1 random fish every 15th reel" },
+      ],
       "Green Amulet": [
         { type: "chance", pct: 10, extra: 10, cat: "crops", raw: "10% chance +10 Crop yield" },
         { type: "chance", pct: 10, extra: 10, cat: "greenhouse", product: "Rice", raw: "10% chance +10 Rice (greenhouse)" },

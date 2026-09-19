@@ -21,6 +21,7 @@ import {
   CROP_GROW_DATA, PRODUCT_TO_CATEGORY,
 } from "../engine/power-boosts.mjs";
 import { computeBettyRate } from "../engine/prices.mjs";
+import { CHAPTER_BOOST_ITEMS, CHAPTER_TICKET } from "../data/chapter-items.mjs";
 import { SEED_COSTS } from "../data/economy.mjs";
 import {
   cropMachinePlots, cropMachineOilPerHour, cropMachineCrops, cropMachineSpeedMult, farmHasCropMachine,
@@ -146,6 +147,27 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     });
   }
 
+  // Chapter / reward / drop items the marketplace feed does not list (core/data/chapter-items.mjs).
+  // An owned one must count; an unowned one is shown with its value, priced only when the game
+  // fixes a price (shop tickets × the roadmap's ticket value) — an auction item is never "free".
+  const ticketValue = Number((settings.roadmapSettings || {}).ticketValueSfl) || 0;
+  const chapterPriced = [];
+  for (const c of CHAPTER_BOOST_ITEMS) {
+    if (boostItems.some(b => b.name === c.name)) continue;
+    const has = c.type === "Wearable"
+      ? (wardrobe[c.name] || 0) > 0
+      : (getCount(inventory, c.name) > 0 || findCollectible(farm, c.name).length > 0);
+    const effects = parseBoostEffects(c.boost, c.name);
+    const categories = classifyToCategories(effects);
+    const priced = c.source === "shop" && c.ticket && c.ticket.item === CHAPTER_TICKET && ticketValue > 0;
+    const floor = priced ? c.ticket.qty * ticketValue : 0;
+    boostItems.push({
+      name: c.name, type: c.type, boost: c.boost, floor, supply: 0, has, effects, categories, markCost: 0,
+      source: c.source, chapter: c.chapter, ticket: c.ticket || null, priceUnknown: !priced,
+    });
+    if (priced && !has) chapterPriced.push({ name: c.name, type: c.type, floor, boost_text: c.boost });
+  }
+
   // Add skill boosts from full skill tree
   const skillCostInfo = calcSkillPointCost(farm.bumpkin, p2pPrices, farm);
   for (const [skillName, skill] of Object.entries(SKILL_TREE_DATA)) {
@@ -244,6 +266,11 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     nftSlim[tk] = (nftData[tk] || []).filter((it) => it && it.name).map((it) => ({
       name: it.name, floor: it.floor, boost_text: it.boost_text, supply: it.supply,
     }));
+  }
+  // Priced chapter shop items become roadmap candidates like any NFT; unpriced ones stay out.
+  for (const c of chapterPriced) {
+    const tk = c.type === "Wearable" ? "wearables" : "collectibles";
+    if (!nftSlim[tk].some((x) => x.name === c.name)) nftSlim[tk].push({ name: c.name, floor: c.floor, boost_text: c.boost_text, supply: 0 });
   }
 
   // ── categories: renderPowerContent's per-category summary pipeline (page ~18100-18190),
