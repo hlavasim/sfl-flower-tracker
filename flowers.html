@@ -6036,6 +6036,7 @@
       const log = [
         { ver: "v5.67", items: [
           { t: "fix", text: "<b>Wallet read on-chain no longer comes up short.</b> Base's public RPC rate-limited every other call (429), so the wallet read as a few hundred sats; each chain now has fallback RPCs and a failed read is flagged in orange under the BILANCE instead of silently under-counting." },
+          { t: "fix", text: "Only Base and Ronin are read now — the two chains in use; Polygon and Ethereum were extra calls and extra ways to fail." },
           { t: "fix", text: "<b>REPAY PLAN is two figures</b> — WITHDRAW DAILY (🌸, with ₿ and the plan underneath) and YOU ARE BEHIND / AHEAD BY (🌸, ₿, days, withdrawn-of-target since the start) — plus the chart. The position row, target/actual/trend tiles are gone; the BILANCE table carries the position. The BTC column of that table is always 6 decimals so it lines up." },
         ] },
         { ver: "v5.66", items: [
@@ -29742,8 +29743,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
      */
     /*
      * What the owner's wallet addresses hold, read on-chain (farm-history?type=venue-holdings).
-     * One address is the same on every chain, so each is read on Base / Ronin / Polygon / Ethereum
-     * and summed; fungible tokens value the WALLET venue, Genesis eggs the YAKKAMON venue at the
+     * One address is the same on every chain, so each is read on Base and Ronin and summed; fungible tokens value the WALLET venue, Genesis eggs the YAKKAMON venue at the
      * best fillable Hidden offer on Ronin Market. Null until an address is registered.
      */
     let _invHoldings = null;   // { wallets, venues: { wallet, yakkamon }, egg, prices, errors }
@@ -29756,7 +29756,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       } catch (e) { /* the tiles fall back to the ledger / typed balances */ }
     }
     window._invAddWallet = async function () {
-      const raw = prompt("Adresa peněženky (0x…) — přečte se na Base, Roninu, Polygonu i Ethereu naráz:");
+      const raw = prompt("Adresa peněženky (0x…) — přečte se na Base i Roninu naráz:");
       if (raw === null) return;
       const address = String(raw).trim();
       if (!/^0x[0-9a-fA-F]{40}$/.test(address)) { alert("To není EVM adresa (0x + 40 hex znaků)."); return; }

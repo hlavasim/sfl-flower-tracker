@@ -1,8 +1,8 @@
 /*
  * On-chain holdings of the owner's wallet addresses, valued in USD and BTC.
  *
- * An EVM address is the same on every chain, so one registered address is read on Base, Ronin,
- * Polygon and Ethereum at once and whatever lies where is summed. Fungible tokens belong to the
+ * An EVM address is the same on every chain, so one registered address is read on Base and Ronin
+ * (the two chains the owner uses) and whatever lies where is summed. Fungible tokens belong to the
  * WALLET venue of the Investment Tracker (BTC was sent there to buy them); Yakkamon Genesis eggs
  * belong to the YAKKAMON venue and are priced at the best fillable "Hidden" trait offer on Ronin
  * Market — the price a seller gets right now, not an ask.
@@ -24,15 +24,8 @@ export const CHAINS = {
     USDC:   { address: "0x0b7007c13325c48911f73a2dad5fa5dcbf808adc", decimals: 6, price: "usd" },
     FLOWER: { address: "0x3e12b9d6a4d12cd9b4a6d613872d0eb32f68b380", decimals: 18, price: "flower-2" },
   } },
-  polygon: { rpc: "https://polygon-bor-rpc.publicnode.com", native: { symbol: "POL", price: "polygon-ecosystem-token" }, tokens: {
-    USDC:   { address: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359", decimals: 6, price: "usd" },
-    "USDC.e": { address: "0x2791bca1f2de4661ed88a30c99a7a9449aa84174", decimals: 6, price: "usd" },
-  } },
-  ethereum: { rpc: "https://ethereum-rpc.publicnode.com", native: { symbol: "ETH", price: "ethereum" }, tokens: {
-    USDC:   { address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", decimals: 6, price: "usd" },
-  } },
 };
-const PRICE_IDS = ["bitcoin", "ethereum", "ronin", "polygon-ecosystem-token", "flower-2"];
+const PRICE_IDS = ["bitcoin", "ethereum", "ronin", "flower-2"];
 const DUST_USD = 0.01;
 
 // Public RPCs rate-limit (mainnet.base.org answered 429 on every other call from Vercel), so each
@@ -40,8 +33,6 @@ const DUST_USD = 0.01;
 const RPC_FALLBACKS = {
   "https://mainnet.base.org": ["https://base-rpc.publicnode.com", "https://base.llamarpc.com", "https://1rpc.io/base"],
   "https://api.roninchain.com/rpc": ["https://ronin.lgns.net/rpc", "https://ronin.drpc.org"],
-  "https://polygon-bor-rpc.publicnode.com": ["https://polygon-rpc.com", "https://1rpc.io/matic"],
-  "https://ethereum-rpc.publicnode.com": ["https://eth.llamarpc.com", "https://cloudflare-eth.com"],
 };
 async function rpc(url, method, params) {
   let last;
