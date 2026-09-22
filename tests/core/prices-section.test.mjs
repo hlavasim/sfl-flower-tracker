@@ -71,7 +71,8 @@ test("the maps agree with the engine item by item", async () => {
   const p = buildPricesSection(farm, p2p, S);
   // C7: the section injects the farm-derived potion-ticket cost into the rates it hands
   // the resolver — the direct engine call must mirror that to compare like for like.
-  const rates = { ...S, potionTicketCoinCost: computePotionTicketCoinCost(farm) };
+  // E7: likewise the farm's current season, which the section now defaults to.
+  const rates = { ...S, season: String(farm.season.season).toLowerCase(), potionTicketCoinCost: computePotionTicketCoinCost(farm) };
   for (const [name, v] of Object.entries(p.marketValue)) {
     assert.equal(v, itemMarketValue(name, p2p, null, rates), `marketValue[${name}]`);
   }
@@ -180,7 +181,10 @@ test("no explain flag → no traces, map byte-identical to today", () => {
   // 353 = the pre-C1 352 + Grubby Doll, whose recipe repeats an ingredient across
   // sibling branches: the old shared visited-set zeroed the second occurrence and the
   // doll never priced at all. With backtracking (C1) it prices legitimately.
-  assert.equal(Object.keys(p.marketValue).length, 353);
+  // 349 = 353 − 4 partial sums E6 turned into "unpriced": Oyster and Sea Urchin (chum
+  // unpriceable, pot alone), Fish Oil (one fish unpriceable) and Sand Drill (a material
+  // unpriceable). Absent is the honest answer; consumers fall back to productionCost.
+  assert.equal(Object.keys(p.marketValue).length, 349);
 });
 
 // Bounding the explain payload: only DERIVED items (method !== "market price") get a trace
