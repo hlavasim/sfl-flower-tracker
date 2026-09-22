@@ -29516,6 +29516,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           <div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);text-align:right">₿</div>
           <div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);text-align:right">🌸</div>
         </div>
+        ${!errors.ledger && _invRecoveredLine(agg) ? `<div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);margin:-1px 0 4px">${_invRecoveredLine(agg)}</div>` : ""}
         ${row("COST", fmtBtc(cost), fl(cost), { bold: true, info: errors.ledger ? "transakce se nepodařilo načíst" : `čisté BTC uvnitř · celkem ${fmtBtc(agg.depositBtc)} in, ${fmtBtc(agg.withdrawBtc)} out · peak ${fmtBtc(agg.peakBtc)}` })}
         ${rows.map((r) => row(r.label, fmtBtc(r.btc), fl(r.btc), { info: r.info, ctl: r.ctl, color: !isFinite(r.btc) ? "var(--text-dim)" : r.liquid ? "var(--green)" : "var(--lily)" })).join("")}
         ${row("HODNOTA hned", fmtBtc(sellable), fl(sellable), { top: true, bold: true, info: "součet zelených řádků — prodejné dnes" })}
@@ -29525,6 +29526,12 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         ${problems.length ? `<div class="pixel-font" style="font-size:0.45rem;color:#ff8c42;margin-top:6px">⚠ nekompletní — ${problems.map(escHTML).join(" · ")} · součty ukazují „—“, reload</div>` : ""}
         ${errs.length ? `<div class="pixel-font" style="font-size:0.45rem;color:#ff8c42;margin-top:6px">⚠ on-chain read incomplete — ${errs.map(escHTML).join(" · ")} · Wallet is undervalued, reload</div>` : ""}
       </div>`;
+    }
+    // "RECOVERED x % of peak y ₿" — how far the net BTC inside has come back down from its peak
+    // (invAggregate's repaidPct), shown dim under the BILANCE title. Empty with no deposits.
+    function _invRecoveredLine(agg) {
+      if (!agg || !(agg.peakBtc > 0) || agg.repaidPct === null || !isFinite(agg.repaidPct)) return "";
+      return `RECOVERED ${agg.repaidPct.toFixed(1)} % of peak ${agg.peakBtc.toFixed(6)} ₿`;
     }
     let _repayChartObj = null;
     function _invDrawRepayChart(stats) {

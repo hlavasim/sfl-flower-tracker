@@ -251,3 +251,18 @@ test("api-spec documents unmeasured efficiency, include=game_value, truncated, b
   for (const p of ["book", "flips"]) assert.ok(obParams.includes(p), `orderbook param ${p}`);
   assert.ok(ob.get.responses["200"].description.includes("`maxAgeHours`"), "flips maxAgeHours");
 });
+
+// ── 8. RECOVERED % is visible again, under the BILANCE title ──
+test("the BILANCE shows 'RECOVERED x % of peak y ₿' from the ledger's peak", () => {
+  const { _invRecoveredLine, invAggregate } = loadPageFns(["_invRecoveredLine", "invAggregate"]);
+  // 0.25 ₿ in, 0.05 ₿ back out: 20 % of the peak recovered.
+  const agg = invAggregate([
+    { id: 1, tx_date: "2026-01-01", direction: "deposit", btc_amount: 0.25, venue: "sfl" },
+    { id: 2, tx_date: "2026-02-01", direction: "withdrawal", btc_amount: 0.05, venue: "sfl" },
+  ]);
+  assert.ok(Math.abs(agg.repaidPct - 20) < 1e-9 && agg.peakBtc === 0.25, `ledger read: ${agg.repaidPct} of ${agg.peakBtc}`);
+  assert.equal(_invRecoveredLine(agg), `RECOVERED ${agg.repaidPct.toFixed(1)} % of peak ${agg.peakBtc.toFixed(6)} ₿`);
+  assert.equal(_invRecoveredLine(invAggregate([])), "", "no deposits → no line");
+  const i = PAGE_SRC.indexOf("function _invBalanceSheetHtml(");
+  assert.match(PAGE_SRC.slice(i, i + 12000), /_invRecoveredLine\(agg\)/, "the BILANCE renders it");
+});
