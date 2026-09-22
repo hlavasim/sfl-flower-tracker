@@ -39,13 +39,15 @@ const DUST_USD = 0.01;
 // chain has fallbacks and a call walks them until one answers.
 const RPC_FALLBACKS = {
   "https://mainnet.base.org": ["https://base-rpc.publicnode.com", "https://base.llamarpc.com", "https://1rpc.io/base"],
-  "https://api.roninchain.com/rpc": ["https://ronin.lgns.net/rpc"],
+  "https://api.roninchain.com/rpc": ["https://ronin.lgns.net/rpc", "https://ronin.drpc.org"],
   "https://polygon-bor-rpc.publicnode.com": ["https://polygon-rpc.com", "https://1rpc.io/matic"],
   "https://ethereum-rpc.publicnode.com": ["https://eth.llamarpc.com", "https://cloudflare-eth.com"],
 };
 async function rpc(url, method, params) {
   let last;
-  for (const u of [url, ...(RPC_FALLBACKS[url] || [])]) {
+  const urls = [url, ...(RPC_FALLBACKS[url] || [])];
+  for (const u of urls.concat(urls)) {   // a second pass: a transient "fetch failed" on every endpoint at once happens
+    if (last) await new Promise((r) => setTimeout(r, 150));
     try {
       const r = await fetch(u, { method: "POST", headers: { "content-type": "application/json", "user-agent": UA },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
