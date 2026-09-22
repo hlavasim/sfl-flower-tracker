@@ -1201,8 +1201,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
      */
     function roadmapAnimalCapacity(cat) {
       const farm = powerState.farm || {};
-      const built = (n) => (((farm.collectibles || {})[n] || []).length
-        + ((((farm.home || {}).collectibles) || {})[n] || []).length) > 0;
+      const built = (n) => findCollectible(farm, n).length > 0;   // all four placement maps
       const base = (lvl) => 10 + (Math.max(1, Number(lvl) || 1) - 1) * 5;
       if (cat === "chickens") {
         const hh = farm.henHouse || {};
@@ -1867,5 +1866,5 @@ export {
   roadmapNodeCandidates, roadmapSkillCandidates, roadmapAscensionCandidates, roadmapStartupPlans, roadmapBuildClones,
   ROADMAP_EFF_HKEY, roadmapComputeEfficiency,
   getRoadmapSettings, roadmapOwnedEffects, roadmapCatBreakdown, roadmapCatNet,
-  roadmapMiningChain, roadmapCatMix, ROADMAP_MINING_CATS, calcBoostValue, cmGetSeedRestockCount,
+  roadmapMiningChain, roadmapCatMix, ROADMAP_MINING_CATS, roadmapAnimalCapacity, calcBoostValue, cmGetSeedRestockCount,
 };

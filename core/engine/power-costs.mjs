@@ -7,7 +7,7 @@ import {
   ANIMAL_CAT_MAP,
   getAnimalLevel, RESOURCE_RESPAWN_DATA, TOOL_TO_CAT, BASE_STOCK,
   getCycleSec, getCapacityCount, getDefaultProduct, getBaseYield, applyBoosts,
-  getEffectiveStock, calcToolCostPerDay, getEffectsForCategory, SEED_DATA,
+  getEffectiveStock, calcToolCostPerDay, getEffectsForCategory, SEED_DATA, findCollectible,
 } from "./power-helpers.mjs";
 import { PRODUCT_TO_CATEGORY, FRUIT_HARVEST_COUNT } from "./power-boosts.mjs";
 import { SEED_COSTS, TOOL_COSTS } from "../data/economy.mjs";
@@ -598,11 +598,11 @@ import { SEED_COSTS, TOOL_COSTS } from "../data/economy.mjs";
      */
     function shrineStatuses(farm) {
       if (!farm) return [];
-      const placed = farm.collectibles || {}, placedHome = (farm.home && farm.home.collectibles) || {};
       const out = [];
       for (const name in SHRINE_DATA) {
         const sh = SHRINE_DATA[name];
-        const st = _shrineStatus(name, placed, placedHome, sh.duration_d);
+        // All four placement maps (findCollectible) — a shrine in the house interior counted as never placed.
+        const st = _shrineStatus(name, { [name]: findCollectible(farm, name) }, {}, sh.duration_d);
         out.push({
           name, kind: st.kind, hoursLeft: st.hoursLeft != null ? st.hoursLeft : null,
           durationDays: sh.duration_d, catId: sh.catId, alsoCats: sh.alsoCats || [],
@@ -695,8 +695,7 @@ import { SEED_COSTS, TOOL_COSTS } from "../data/economy.mjs";
     function _shrineActiveNow(farm, name) {
       const sh = SHRINE_DATA[name];
       if (!sh || !farm) return false;
-      const placed = farm.collectibles || {}, placedHome = (farm.home && farm.home.collectibles) || {};
-      return _shrineStatus(name, placed, placedHome, sh.duration_d).kind === "active";
+      return _shrineStatus(name, { [name]: findCollectible(farm, name) }, {}, sh.duration_d).kind === "active";
     }
     // Deviation (see header): `farm` param replaces the page's powerState.farm global.
     function activeShrineEffects(farm, catId) {

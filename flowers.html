@@ -17417,8 +17417,7 @@
     function _shrineActiveNow(farm, name) {
       const sh = SHRINE_DATA[name];
       if (!sh || !farm) return false;
-      const placed = farm.collectibles || {}, placedHome = (farm.home && farm.home.collectibles) || {};
-      return _shrineStatus(name, placed, placedHome, sh.duration_d).kind === "active";
+      return _shrineStatus(name, { [name]: findCollectible(farm, name) }, {}, sh.duration_d).kind === "active";
     }
     function activeShrineEffects(catId) {
       const farm = (typeof powerState !== "undefined" && powerState) ? powerState.farm : null;
