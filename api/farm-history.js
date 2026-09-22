@@ -1,6 +1,11 @@
 import { getPool } from "./_db.js";
 import { handleWorld } from "./_world.js";
 import ITEM_NAMES from "./_item-names.js";
+import { readAddress, fetchPrices, bestEggOfferWron, valueHoldings } from "./_holdings.js";
+
+// Prices and the egg offer are shared by every request and change slowly; the RPC reads are per
+// address and always live. Warm instances keep this for 10 minutes.
+const _holdCache = { at: 0, prices: null, egg: null };
 
 const ALLOWED_FARMS = new Set([155498, 1260204733777858]);
 // The SPECULATION page is the owner's alone.
@@ -351,6 +356,65 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: "method not allowed" });
     } catch (e) {
       return res.status(500).json({ error: e.message });
+    }
+  }
+
+  // ─── Investment Tracker: the owner's wallet addresses ───
+  if (req.query.type === "farm-wallet") {
+    const method = (req.method || "GET").toUpperCase();
+    try {
+      const farm = parseInt(req.query.farm, 10);
+      if (!Number.isFinite(farm) || !ALLOWED_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
+      if (method === "GET") {
+        const r = await pool.query(`SELECT address, label, added_at FROM farm_wallet WHERE farm_id = $1 ORDER BY added_at`, [farm]);
+        res.setHeader("Cache-Control", "no-store");
+        return res.status(200).json({ wallets: r.rows });
+      }
+      if (method === "POST") {
+        const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+        const address = String(body.address || "").trim().toLowerCase();
+        const label = typeof body.label === "string" ? body.label.trim().slice(0, 40) || null : null;
+        if (!/^0x[0-9a-f]{40}$/.test(address)) return res.status(400).json({ error: "address must be a 0x… EVM address" });
+        const r = await pool.query(
+          `INSERT INTO farm_wallet (farm_id, address, label) VALUES ($1, $2, $3)
+           ON CONFLICT (farm_id, address) DO NOTHING RETURNING address, label, added_at`, [farm, address, label]);
+        return res.status(200).json({ wallet: r.rows[0] || { address, label } });
+      }
+      if (method === "DELETE") {
+        const address = String(req.query.address || "").trim().toLowerCase();
+        await pool.query(`DELETE FROM farm_wallet WHERE farm_id = $1 AND address = $2`, [farm, address]);
+        return res.status(200).json({ ok: true });
+      }
+      return res.status(405).json({ error: "method not allowed" });
+    } catch (err) {
+      console.error("[farm-wallet]", err);
+      return res.status(500).json({ error: "farm wallet failed", detail: String(err.message || err) });
+    }
+  }
+
+  // ─── Investment Tracker: what those addresses hold, on-chain, valued in USD / BTC ───
+  if (req.query.type === "venue-holdings") {
+    try {
+      const farm = parseInt(req.query.farm, 10);
+      if (!Number.isFinite(farm) || !ALLOWED_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
+      const wallets = (await pool.query(`SELECT address, label FROM farm_wallet WHERE farm_id = $1 ORDER BY added_at`, [farm])).rows;
+      const notes = [];
+      if (Date.now() - _holdCache.at > 10 * 60 * 1000 || !_holdCache.prices) {
+        try { _holdCache.prices = await fetchPrices(); } catch (e) { notes.push("prices: " + e.message); }
+        try { _holdCache.egg = await bestEggOfferWron(); } catch (e) { notes.push("egg offer: " + e.message); }
+        _holdCache.at = Date.now();
+      }
+      const prices = _holdCache.prices || { usd: 1 };
+      const egg = _holdCache.egg || { wron: 0, fillable: 0 };
+      const perWallet = await Promise.all(wallets.map(async (w) => ({ ...w, balances: await readAddress(w.address) })));
+      const { venues, errors } = valueHoldings(perWallet.flatMap((w) => w.balances), prices, egg.wron);
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json({ wallets: wallets.map((w) => ({ address: w.address, label: w.label })), venues,
+        egg: { offerWron: egg.wron, offerUsd: egg.wron * (prices.ronin || 0), fillableOffers: egg.fillable },
+        prices, errors: errors.concat(notes), fetched_at: new Date().toISOString() });
+    } catch (err) {
+      console.error("[venue-holdings]", err);
+      return res.status(500).json({ error: "venue holdings failed", detail: String(err.message || err) });
     }
   }
 
