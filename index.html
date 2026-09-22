@@ -6007,7 +6007,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.64</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.65</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -6034,6 +6034,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.65", items: [
+          { t: "feat", text: "<b>Investment Tracker: REPAY PLAN.</b> Set how much of your peak exposure you want back out into BTC — a rate per day, month or year — and a start date; a start in the past credits every withdrawal logged since (all venues, from the ledger). The card shows the daily target in ₿ and in 🌸 at today's rate, what should have come out so far against what actually did, the lead or lag in ₿ / 🌸 / days, and the realized pace of the last 50 days against the target. Under it a chart of the last 50 and the next 50 days: the target line running on, the withdrawals as a step line with daily bars, and the trend where the current pace lands. One plan per farm, saved to the DB (<code>farm-history?type=repay-plan</code>)." },
+          { t: "fix", text: "<b>The three KPI tiles are folded into that card as one compact row</b> — RECOVERED (back of what was risked, still in), IF SOLD TODAY (farm + wallet, the after-unlock figure), STILL MISSING (after selling / keeping the farm) and PAYBACK ETA, which runs at the plan's pace when one is set and falls back to the farm-yield estimate (a negative yield reads “no ETA — nothing to pay back with” instead of 🚨 BURN)." },
+        ] },
         { ver: "v5.64", items: [
           { t: "fix", text: "<b>Chapter, reward and drop items now count in POWER and ROADMAP.</b> Boost items came only from the marketplace feed, and an item of the running chapter is not tradeable until the chapter ends — so an owned <b>Rice Shirt</b> (+1 Rice, half the Oil to plant Rice) boosted nothing, and neither did Trident, Sunflower Rod or Angler Waders. They are now read from a table taken from the game source: the Ascension Age auction items (Rice Shirt, Surfer Hair, Alchemist Apron, Vibraphone, Winged Vase, Ascended Idol, Salt Worker Gnome), the megastore ones (Moon Hair, Astrolabe, Ascension Monument, Otty the Otter), the mutant drops and the fishing rewards. A shop item is priced as its tickets × your ticket value; an auction item has no fixed price and is never ranked by payback." },
           { t: "fix", text: "<b>A greenhouse oil effect can be scoped to one product.</b> Rice Shirt's “-50% Oil to plant Rice” was read as a −50% Oil <i>yield</i>; it now halves the oil per Rice seed and leaves Olive and Grape alone." },
@@ -29470,6 +29474,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       // Holdings are a separate read: a venue can hold something without any BTC having moved
       // this session, and a failure here must leave the ledger itself rendering.
       await invLoadBalances(FARM_ID);
+      await invLoadRepayPlan(FARM_ID);
 
       renderInvestmentTrackerContent();
     }
@@ -29485,6 +29490,8 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
                                   : p >= 100 ? "var(--green)"
                                   : p >= 50 ? "var(--sunpetal)"
                                   : "#ff8c42";
+      // ④ REPAY PLAN: the pace the user chose, measured against the withdrawals since its start.
+      const planStats = _invPlan ? repayPlanStats(_invPlan, transactions, { peakBtc: agg.peakBtc, netDebtBtc: agg.netDebtBtc }) : null;
 
       /*
        * Two different questions, kept apart on purpose.
@@ -29532,44 +29539,35 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           : (ifLiqPct.toFixed(1) + " %");
       const liqColor = canCompute3 ? verdictColor(ifLiqPct) : "var(--text-dim)";
       const hasFarmValue = (sflToUsd > 0 && btcUsd > 0 && treasuryTotalSfl > 0);
-      const liqSubText = hasFarmValue
-        ? `farm ${fmtSfl(liquidValueSfl)} ≈ ${fmtBtc(liquidValueBtc)}${walletHeldFlower > 0 ? ` · wallet ${fmtSfl(walletHeldFlower)} ≈ ${fmtBtc(walletLiquidBtc)}` : ""}`
-        : "farm value or price feed unavailable";
-      const lockedHtml = (lockedSfl > 0 && canCompute3)
-        ? `<div class="label pixel-font" style="margin-top:4px;color:var(--lily);line-height:1.6">+ ${fmtSfl(lockedSfl)} locked (no fee, returns Q4)<br><b>${atUnlockPct.toFixed(1)} %</b> at unlock</div>`
-        : "";
 
       // FLOWER still needed to reach 100% repaid. 1 BTC = (btcUsd/sflToUsd) FLOWER.
       //   w/ liq : gap beyond the treasury liquidation proceeds (netDebt − liquidValue)
       //   w/o liq: the full remaining debt (netDebt), treasury untouched
-      let liqFlowerHtml = "";
       // Hoisted out of the block below: the venue tiles value each holding in BTC with the same
       // rate, and a const scoped to the if() was invisible to them.
       const flowerPerBtc = (sflToUsd > 0 && btcUsd > 0) ? (btcUsd / sflToUsd) : 0;
       const fmtFlower = (v) => Math.round(v).toLocaleString("en-US") + " 🌸";
-      if (flowerPerBtc > 0 && agg.peakBtc > 0) {
-        const noLiqLine = agg.netDebtBtc <= 0
-          ? `<span style="color:var(--green)">✅ already at 100%</span>`
-          : `to 100% w/o liq: <b style="color:var(--text-secondary)">+${fmtFlower(agg.netDebtBtc * flowerPerBtc)}</b>`;
-        let withLiqLine = "";
-        if (treasuryTotalSfl > 0) {
-          // Liquid-now = farm treasury (less fee) + WALLET FLOWER, matching metric ③'s "now"
-          // side, so the gap here agrees with the percentage above it.
-          const gapAfterLiqBtc = agg.netDebtBtc - liquidValueBtc - walletLiquidBtc;
-          withLiqLine = gapAfterLiqBtc <= 0
-            ? `<span style="color:var(--green)">✅ liquidation alone hits 100%</span>`
-            : `to 100% w/ liq: <b style="color:var(--sunpetal)">+${fmtFlower(gapAfterLiqBtc * flowerPerBtc)}</b>`;
-        }
-        liqFlowerHtml = `<div class="label pixel-font" style="margin-top:6px;color:var(--text-dim);line-height:1.7;font-family:'Courier New',monospace">${withLiqLine ? withLiqLine + "<br>" : ""}${noLiqLine}</div>`;
-      }
+      // FLOWER still missing to 100 %: after selling = the gap beyond farm (less fee) + wallet,
+      // matching the "if sold today" side; keeping the farm = the whole remaining debt.
+      const missingKeepFlower = (flowerPerBtc > 0 && agg.peakBtc > 0) ? Math.max(0, agg.netDebtBtc) * flowerPerBtc : null;
+      const missingAfterFlower = (flowerPerBtc > 0 && agg.peakBtc > 0 && treasuryTotalSfl > 0)
+        ? Math.max(0, agg.netDebtBtc - liquidValueBtc - walletLiquidBtc) * flowerPerBtc : null;
 
-      // Days to payback — uses the 30d (preferred) or 7d earning rate from insights cache
-      let daysText = "—", daysSubText = "expand Insights to compute", daysColor = "var(--text-dim)";
+      // Days to payback — at the repay plan's pace when one is set, else from the farm's 30d
+      // (preferred) or 7d earning rate in the insights cache.
+      let daysText = "—", daysSubText = "set a repay plan below, or expand Insights", daysColor = "var(--text-dim)";
       const remainingBtc = agg.netDebtBtc;
+      const daysLabel = (days) => days < 365 ? Math.round(days) + " days" : `${Math.round(days)} days (${(days / 365).toFixed(1)} yr)`;
+      const daysTone = (days) => days < 90 ? "var(--green)" : days < 365 ? "var(--sunpetal)" : "#ff8c42";
       if (remainingBtc <= 0 && agg.peakBtc > 0) {
         daysText = "✅ paid";
         daysColor = "var(--green)";
         daysSubText = "you've recouped";
+      } else if (planStats && planStats.etaDays > 0) {
+        const eta = new Date(Date.now() + planStats.etaDays * 86400000);
+        daysText = daysLabel(planStats.etaDays);
+        daysSubText = `ETA ${eta.getFullYear() < 9999 ? eta.toISOString().slice(0, 10) : "—"} at the plan's pace, ${fmtBtc(planStats.dailyTargetBtc)}/day`;
+        daysColor = daysTone(planStats.etaDays);
       } else if (_insState) {
         const r30 = _insSlopeForWindow(30) || _insSlopeForWindow(7);
         const sflToUsd2 = _insState.rates?.sflToUsd || sflToUsd;
@@ -29581,16 +29579,13 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
             const eta = new Date(Date.now() + days * 86400000);
             // Always show the real day count; for long horizons append a yr suffix for legibility.
             // ETA date stays ISO YYYY-MM-DD as long as it's within JS Date range (~year 275000), else "—".
-            const yrs = days / 365;
-            daysText = days < 365
-              ? Math.round(days) + " days"
-              : `${Math.round(days)} days (${yrs.toFixed(1)} yr)`;
+            daysText = daysLabel(days);
             const etaStr = (isFinite(eta.getTime()) && eta.getFullYear() < 9999) ? eta.toISOString().slice(0,10) : "—";
-            daysSubText = `ETA: ${etaStr} @ ${btcPerDay.toFixed(8)} ₿/day`;
-            daysColor = days < 90 ? "var(--green)" : days < 365 ? "var(--sunpetal)" : "#ff8c42";
+            daysSubText = `ETA ${etaStr} from farm yield, ${btcPerDay.toFixed(8)} ₿/day`;
+            daysColor = daysTone(days);
           } else if (btcPerDay <= 0) {
-            daysText = "🚨 BURN";
-            daysSubText = `farm losing value (${r30.sflPerDay.toFixed(1)} ⛀/day)`;
+            daysText = "no ETA";
+            daysSubText = `farm yield ${r30.sflPerDay.toFixed(1)} ⛀/day — nothing to pay back with; set a repay plan below`;
             daysColor = "var(--red)";
           }
         }
@@ -29598,26 +29593,12 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
 
       mount.innerHTML = `
         <h2 class="pixel-font" style="margin:0 0 10px 0;font-size:0.75rem;color:var(--sunpetal);letter-spacing:1px">💰 INVESTMENT TRACKER</h2>
-        <div class="summary-bar" style="margin-bottom:12px">
-          <div class="summary-stat">
-            <div class="label pixel-font">① RECOVERED FROM PEAK</div>
-            <div class="value pixel-font" style="color:${verdictColor(agg.repaidPct)}">${agg.repaidPct === null ? "n/a" : agg.repaidPct.toFixed(1) + " %"}</div>
-            <div class="label pixel-font" style="margin-top:4px;color:var(--text-dim)">in now ${fmtBtc(agg.netDebtBtc)} · peak ${fmtBtc(agg.peakBtc)}</div>
-            <div class="label pixel-font" style="margin-top:2px;color:var(--text-dim);font-size:0.5rem">gross flows ${fmtBtc(agg.depositBtc)} in / ${fmtBtc(agg.withdrawBtc)} out</div>
-          </div>
-          <div class="summary-stat">
-            <div class="label pixel-font">② DAYS TO FULL</div>
-            <div class="value pixel-font" style="color:${daysColor}">${daysText}</div>
-            <div class="label pixel-font" style="margin-top:4px;color:var(--text-dim)">${daysSubText}</div>
-          </div>
-          <div class="summary-stat">
-            <div class="label pixel-font">③ LIQUIDATE NOW (10% fee)</div>
-            <div class="value pixel-font" style="color:${liqColor}">${ifLiqText}</div>
-            <div class="label pixel-font" style="margin-top:4px;color:var(--text-dim)">${liqSubText}</div>
-            ${lockedHtml}
-            ${liqFlowerHtml}
-          </div>
-        </div>
+        ${_invRepayHtml(agg, planStats, flowerPerBtc, {
+          repaidText: agg.repaidPct === null ? "n/a" : agg.repaidPct.toFixed(1) + " %", repaidColor: verdictColor(agg.repaidPct),
+          ifLiqText, liqColor, liquidValueSfl, walletHeldFlower, hasFarmValue,
+          lockedSfl: (lockedSfl > 0 && canCompute3) ? lockedSfl : 0, atUnlockPct,
+          missingAfterFlower, missingKeepFlower, daysText, daysSubText, daysColor,
+        })}
         ${(agg.venues || []).length > 1 ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">${agg.venues.map((v) => {
           const meta = invVenues[v.venue] || { label: v.venue.toUpperCase(), color: "var(--text-dim)" };
           /*
@@ -29671,6 +29652,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         <div id="inv-add-form" style="display:none"></div>
       `;
       _invRenderSatsChart();   // fire-and-forget; builds the switcher + draws (cached per granularity)
+      _invDrawRepayChart(planStats);
     }
 
     /*
@@ -29789,6 +29771,177 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         for (const b of (j.balances || [])) _invBalances[b.venue] = b;
       } catch (e) { /* the tile just omits the holding */ }
     }
+    /*
+     * REPAY PLAN — "take X % of what I risked back out into BTC every day / month / year". A
+     * pace laid over the ledger from start_date: the target accrues daily, every withdrawal since
+     * counts against it. Start in the past and the withdrawals already made are credited. Stored
+     * per farm (farm-history?type=repay-plan); the maths is the core twin below.
+     */
+    let _invPlan = null;   // { start_date, rate, period } or null
+    async function invLoadRepayPlan(farmId) {
+      try {
+        const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(farmId)}&type=repay-plan`);
+        if (r.ok) _invPlan = (await r.json()).plan || null;
+      } catch (e) { /* the card offers to create one */ }
+    }
+    function repayPlanStats(plan, transactions, ctx) {
+      const perDay = { day: 1, month: 365 / 12, year: 365 };
+      const rate = parseFloat(plan && plan.rate);
+      const divisor = perDay[(plan && plan.period) || "year"];
+      const peakBtc = (ctx && ctx.peakBtc) || 0;
+      const netDebtBtc = (ctx && ctx.netDebtBtc) || 0;
+      const startMs = Date.parse(String((plan && plan.start_date) || "").slice(0, 10) + "T00:00:00Z");
+      const todayMs = Date.parse(String((ctx && ctx.today) || new Date().toISOString()).slice(0, 10) + "T00:00:00Z");
+      if (!isFinite(rate) || rate <= 0 || !divisor || !isFinite(startMs) || !isFinite(todayMs) || peakBtc <= 0) return null;
+
+      const dailyTargetBtc = peakBtc * (rate / 100) / divisor;
+      const daysElapsed = Math.max(0, Math.round((todayMs - startMs) / 86400000));
+      const targetBtc = dailyTargetBtc * daysElapsed;
+
+      const byDay = {};
+      let actualBtc = 0;
+      for (const t of transactions || []) {
+        if (t.direction !== "withdrawal") continue;
+        const d = String(t.tx_date || "").slice(0, 10);
+        const ms = Date.parse(d + "T00:00:00Z");
+        if (!isFinite(ms) || ms < startMs || ms > todayMs) continue;
+        const btc = parseFloat(t.btc_amount) || 0;
+        byDay[d] = (byDay[d] || 0) + btc;
+        actualBtc += btc;
+      }
+
+      const series = [];
+      let cum = 0;
+      for (let i = 0; i <= daysElapsed; i++) {
+        const d = new Date(startMs + i * 86400000).toISOString().slice(0, 10);
+        cum += byDay[d] || 0;
+        series.push({ time: d, target: dailyTargetBtc * i, actual: cum });
+      }
+
+      const balanceBtc = actualBtc - targetBtc;
+
+      const horizon = (ctx && ctx.horizonDays) || 50;
+      const lookback = Math.min(horizon, daysElapsed);
+      const paceBtcPerDay = lookback > 0 ? (series[series.length - 1].actual - series[series.length - 1 - lookback].actual) / lookback : 0;
+      const future = [];
+      for (let i = 1; i <= horizon; i++) {
+        const d = new Date(todayMs + i * 86400000).toISOString().slice(0, 10);
+        future.push({ time: d, target: dailyTargetBtc * (daysElapsed + i), trend: actualBtc + paceBtcPerDay * i });
+      }
+
+      return {
+        dailyTargetBtc, daysElapsed, targetBtc, actualBtc, balanceBtc, paceBtcPerDay,
+        etaDays: netDebtBtc > 0 ? netDebtBtc / dailyTargetBtc : 0,
+        series, future,
+      };
+    }
+    const _planPeriodCz = { day: "denně", month: "měsíčně", year: "ročně" };
+    /*
+     * One card for the whole position: where it stands (recovered / if sold today / still
+     * missing / ETA) on the first row, the plan's pace against the ledger on the second, and a
+     * chart of the last 50 days and the next 50 under it. `pos` carries the figures the render
+     * function already computed for the position row.
+     */
+    function _invRepayHtml(agg, stats, flowerPerBtc, pos) {
+      const fmtFl = (btc) => flowerPerBtc > 0 ? Math.round(btc * flowerPerBtc).toLocaleString("en-US") + " 🌸" : "—";
+      const fmtN = (v) => Math.round(v).toLocaleString("en-US") + " 🌸";
+      const p = _invPlan;
+      const stat = (label, val, sub, color) => `<div class="summary-stat" style="min-width:150px">
+          <div class="label pixel-font" style="font-size:0.45rem">${label}</div>
+          <div style="font-family:'Courier New',monospace;font-size:0.82rem;color:${color || "var(--text-secondary)"};margin-top:2px">${val}</div>
+          ${sub ? `<div class="label pixel-font" style="margin-top:2px;color:var(--text-dim);font-size:0.42rem;line-height:1.6">${sub}</div>` : ""}
+        </div>`;
+      const position = `<div class="summary-bar" style="margin:6px 0 0">
+          ${stat("RECOVERED", pos.repaidText, agg.peakBtc > 0 ? `${fmtBtc(agg.peakBtc - agg.netDebtBtc)} of ${fmtBtc(agg.peakBtc)} · in: ${fmtBtc(agg.netDebtBtc)}` : "no deposits yet", pos.repaidColor)}
+          ${stat("IF SOLD TODAY (−10 %)", pos.ifLiqText, (pos.hasFarmValue ? `farm ${fmtN(pos.liquidValueSfl)}${pos.walletHeldFlower > 0 ? ` + wallet ${fmtN(pos.walletHeldFlower)}` : ""}` : "no farm value") + (pos.lockedSfl > 0 ? ` · <span style="color:var(--lily)">${pos.atUnlockPct.toFixed(1)} % after Q4 unlock</span>` : ""), pos.liqColor)}
+          ${stat("STILL MISSING", pos.missingAfterFlower === null ? (pos.missingKeepFlower === null ? "—" : fmtN(pos.missingKeepFlower)) : (pos.missingAfterFlower <= 0 ? "✅ 0" : fmtN(pos.missingAfterFlower)),
+                 pos.missingAfterFlower === null ? "keeping the farm" : `after selling · ${pos.missingKeepFlower <= 0 ? "✅ 0" : fmtN(pos.missingKeepFlower)} keeping the farm`, "var(--sunpetal)")}
+          ${stat("PAYBACK ETA", pos.daysText, pos.daysSubText, pos.daysColor)}
+        </div>`;
+      const form = `<div id="inv-plan-form" style="margin-top:8px;display:${p ? "none" : "flex"};gap:8px;flex-wrap:wrap;align-items:center;font-family:'Courier New',monospace;font-size:0.72rem">
+          <label class="pixel-font" style="font-size:0.45rem;color:var(--text-dim)">od <input type="date" id="inv-plan-start" value="${p ? p.start_date : new Date().toISOString().slice(0, 10)}" style="background:rgba(0,0,0,0.4);border:1px solid var(--text-dim);color:var(--text-primary);padding:3px 5px;border-radius:3px;font-family:inherit;font-size:0.7rem"></label>
+          <label class="pixel-font" style="font-size:0.45rem;color:var(--text-dim)">splácet <input type="number" id="inv-plan-rate" step="any" min="0.01" value="${p ? p.rate : 10}" style="width:64px;background:rgba(0,0,0,0.4);border:1px solid var(--text-dim);color:var(--text-primary);padding:3px 5px;border-radius:3px;font-family:inherit;font-size:0.7rem"> % z peaku</label>
+          <select id="inv-plan-period" style="background:rgba(0,0,0,0.4);border:1px solid var(--text-dim);color:var(--text-primary);padding:3px 5px;border-radius:3px;font-family:inherit;font-size:0.7rem">
+            ${Object.entries(_planPeriodCz).map(([k, v]) => `<option value="${k}"${(p ? p.period : "year") === k ? " selected" : ""}>${v}</option>`).join("")}
+          </select>
+          <button class="roi-pill" onclick="_invSavePlan()" style="padding:3px 10px;font-size:0.55rem">💾 uložit</button>
+          ${p ? `<button class="roi-pill" onclick="_invDeletePlan()" style="padding:3px 10px;font-size:0.55rem;color:var(--red)">smazat</button>` : ""}
+          <span id="inv-plan-msg" class="pixel-font" style="font-size:0.45rem;color:var(--text-dim)"></span>
+        </div>`;
+      const head = `<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+          <span class="label pixel-font" style="flex:1">REPAY PLAN <span style="color:var(--text-dim)">— splátky do BTC${p && stats ? ` · ${p.rate} % ${_planPeriodCz[p.period]} z peaku, od ${p.start_date} (${stats.daysElapsed} d)` : ""}</span></span>
+          ${p ? `<span class="pixel-font" style="font-size:0.45rem;color:var(--lily);cursor:pointer" onclick="const f=document.getElementById('inv-plan-form');f.style.display=f.style.display==='none'?'flex':'none'">[upravit]</span>` : ""}
+        </div>`;
+      const box = (inner) => `<div style="border:1px solid var(--lily);border-radius:6px;padding:8px 10px;margin-bottom:12px;background:rgba(0,0,0,0.25)">${head}${position}${inner}${form}</div>`;
+      if (!p || !stats) {
+        return box(`<div class="label pixel-font" style="margin-top:8px;color:var(--text-dim);line-height:1.7">${p ? "plán nejde spočítat (chybí peak nebo kurz)" : `Zatím žádný plán. Nastav, kolik z peaku ${fmtBtc(agg.peakBtc)} chceš vracet do BTC — denně, měsíčně nebo ročně. Start v minulosti započítá i výběry od té doby.`}</div>`);
+      }
+      const behind = stats.balanceBtc < 0;
+      const trendVsTarget = stats.paceBtcPerDay - stats.dailyTargetBtc;
+      return box(`<div class="summary-bar" style="margin:8px 0 6px">
+          ${stat("CÍL / DEN", fmtBtc(stats.dailyTargetBtc), `≈ ${fmtFl(stats.dailyTargetBtc)} / den dnes`)}
+          ${stat("MĚL JSI VYBRAT", fmtBtc(stats.targetBtc), `≈ ${fmtFl(stats.targetBtc)} za ${stats.daysElapsed} d`)}
+          ${stat("REÁLNĚ VYBRÁNO", fmtBtc(stats.actualBtc), `≈ ${fmtFl(stats.actualBtc)} · z transakcí od startu`, "var(--green)")}
+          ${stat("BILANCE", `${behind ? "" : "+"}${fmtBtc(stats.balanceBtc)}`, `${behind ? "pozadu" : "napřed"} o ≈ ${fmtFl(Math.abs(stats.balanceBtc))}${stats.dailyTargetBtc > 0 ? ` (${Math.round(Math.abs(stats.balanceBtc) / stats.dailyTargetBtc)} d)` : ""}`, behind ? "var(--red)" : "var(--green)")}
+          ${stat("TREND (50 d)", `${stats.paceBtcPerDay > 0 ? fmtBtc(stats.paceBtcPerDay) : "0"}/den`, trendVsTarget >= 0 ? `nad cílem — za 50 d +${fmtFl(trendVsTarget * 50)} navíc` : `pod cílem — za 50 d skluz −${fmtFl(-trendVsTarget * 50)}`, trendVsTarget >= 0 ? "var(--green)" : "#ff8c42")}
+        </div>
+        <div id="inv-repay-chart" style="height:200px"></div>
+        <div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);margin-top:3px">−50 d … dnes … +50 d · <span style="color:#e8c86a">- - cíl</span> · <span style="color:#7fe0a0">── vybráno</span> · <span style="color:#7fb8e0">···· trend (tempo posledních 50 d)</span> · <span style="color:#7fe0a0">▮ výběry / den</span></div>`);
+    }
+    let _repayChartObj = null;
+    function _invDrawRepayChart(stats) {
+      const el = document.getElementById("inv-repay-chart");
+      if (!el || !stats) return;
+      if (typeof LightweightCharts === "undefined") { el.innerHTML = `<div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);padding:8px 0">Chart library not loaded.</div>`; return; }
+      if (_repayChartObj) { try { _repayChartObj.remove(); } catch (e) {} _repayChartObj = null; }
+      el.innerHTML = "";
+      const chart = LightweightCharts.createChart(el, {
+        height: 200, autoSize: true,
+        layout: { background: { color: "transparent" }, textColor: "#c4a882" },
+        grid: { vertLines: { color: "rgba(255,255,255,0.05)" }, horzLines: { color: "rgba(255,255,255,0.05)" } },
+        timeScale: { borderColor: "rgba(255,255,255,0.1)" },
+        rightPriceScale: { borderColor: "rgba(255,255,255,0.1)" },
+      });
+      _repayChartObj = chart;
+      const fmt = { type: "custom", minMove: 0.00000001, formatter: (v) => v.toFixed(5) };
+      const past = stats.series, future = stats.future, today = past[past.length - 1];
+      // The target runs straight through today; withdrawals stop there and the trend takes over.
+      chart.addLineSeries({ color: "#e8c86a", lineWidth: 2, lineStyle: 2, priceFormat: fmt, title: "cíl", lastValueVisible: false })
+        .setData(past.map((s) => ({ time: s.time, value: s.target })).concat(future.map((s) => ({ time: s.time, value: s.target }))));
+      const actual = chart.addLineSeries({ color: "#7fe0a0", lineWidth: 2, lineType: 1, priceFormat: fmt, title: "vybráno" });
+      actual.setData(past.map((s) => ({ time: s.time, value: s.actual })));
+      actual.setMarkers([{ time: today.time, position: "aboveBar", color: "#c4a882", shape: "arrowDown", text: "dnes" }]);
+      chart.addLineSeries({ color: "#7fb8e0", lineWidth: 1, lineStyle: 1, priceFormat: fmt, title: "trend", lastValueVisible: false })
+        .setData([{ time: today.time, value: today.actual }].concat(future.map((s) => ({ time: s.time, value: s.trend }))));
+      // Daily withdrawals as bars on their own scale at the bottom, so a single day's pull is visible.
+      const daily = past.map((s, i) => ({ time: s.time, value: s.actual - (i ? past[i - 1].actual : 0), color: "rgba(127,224,160,0.45)" })).filter((b) => b.value > 0);
+      if (daily.length) {
+        chart.addHistogramSeries({ priceScaleId: "bars", priceFormat: fmt, lastValueVisible: false, priceLineVisible: false }).setData(daily);
+        chart.priceScale("bars").applyOptions({ scaleMargins: { top: 0.7, bottom: 0 }, visible: false });
+      }
+      const from = past[Math.max(0, past.length - 51)].time, to = future.length ? future[future.length - 1].time : today.time;
+      chart.timeScale().setVisibleRange({ from, to });
+    }
+    window._invSavePlan = async function () {
+      const msg = document.getElementById("inv-plan-msg");
+      const body = { start_date: document.getElementById("inv-plan-start").value, rate: parseFloat(document.getElementById("inv-plan-rate").value), period: document.getElementById("inv-plan-period").value };
+      if (!body.start_date || !(body.rate > 0)) { if (msg) msg.textContent = "vyplň datum a sazbu > 0"; return; }
+      try {
+        const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(FARM_ID)}&type=repay-plan`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
+        _invPlan = (await r.json()).plan;
+        renderInvestmentTrackerContent();
+      } catch (e) { if (msg) msg.textContent = "uložení selhalo: " + e.message; }
+    };
+    window._invDeletePlan = async function () {
+      if (!confirm("Smazat repay plán?")) return;
+      try {
+        const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(FARM_ID)}&type=repay-plan`, { method: "DELETE" });
+        if (!r.ok) throw new Error(r.statusText);
+        _invPlan = null;
+        renderInvestmentTrackerContent();
+      } catch (e) { alert("smazání selhalo: " + e.message); }
+    };
     window._invSetBalance = async function (venue) {
       const cur = _invBalances[venue];
       const raw = prompt(`How much do you currently hold in ${(invVenues[venue] || {}).label || venue}?  (FLOWER)`,

@@ -354,6 +354,47 @@ export default async function handler(req, res) {
     }
   }
 
+  // ─── Investment Tracker: repay plan (one row per farm, a setting not a ledger) ───
+  if (req.query.type === "repay-plan") {
+    const method = (req.method || "GET").toUpperCase();
+    try {
+      const farm = parseInt(req.query.farm, 10);
+      if (!Number.isFinite(farm) || !ALLOWED_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
+      if (method === "GET") {
+        const r = await pool.query(
+          `SELECT start_date::text AS start_date, rate, period, updated_at FROM repay_plan WHERE farm_id = $1`, [farm]);
+        res.setHeader("Cache-Control", "no-store");
+        return res.status(200).json({ plan: r.rows[0] || null });
+      }
+      if (method === "POST" || method === "PUT") {
+        const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+        const startDate = typeof body.start_date === "string" ? body.start_date.slice(0, 10) : "";
+        const rate = parseFloat(body.rate);
+        const period = String(body.period || "year").toLowerCase();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) return res.status(400).json({ error: "start_date must be YYYY-MM-DD" });
+        if (!Number.isFinite(rate) || rate <= 0 || rate > 1000) return res.status(400).json({ error: "rate must be > 0 and <= 1000 (percent)" });
+        if (!["day", "month", "year"].includes(period)) return res.status(400).json({ error: "period must be day, month or year" });
+        const r = await pool.query(
+          `INSERT INTO repay_plan (farm_id, start_date, rate, period)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (farm_id) DO UPDATE
+             SET start_date = EXCLUDED.start_date, rate = EXCLUDED.rate, period = EXCLUDED.period, updated_at = NOW()
+           RETURNING start_date::text AS start_date, rate, period, updated_at`,
+          [farm, startDate, rate, period]
+        );
+        return res.status(200).json({ plan: r.rows[0] });
+      }
+      if (method === "DELETE") {
+        await pool.query(`DELETE FROM repay_plan WHERE farm_id = $1`, [farm]);
+        return res.status(200).json({ ok: true });
+      }
+      return res.status(405).json({ error: "method not allowed" });
+    } catch (err) {
+      console.error("[repay-plan]", err);
+      return res.status(500).json({ error: "repay plan failed", detail: String(err.message || err) });
+    }
+  }
+
   // ─── Investment Tracker: btc_transactions CRUD ─────────────────
   if (req.query.type === "btc-tx") {
     const method = (req.method || "GET").toUpperCase();
