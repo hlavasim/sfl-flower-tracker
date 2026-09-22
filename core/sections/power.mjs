@@ -20,7 +20,7 @@ import {
   parseBoostEffects, classifyToCategories, SKILL_FEED_EFFECTS,
   CROP_GROW_DATA, PRODUCT_TO_CATEGORY,
 } from "../engine/power-boosts.mjs";
-import { computeBettyRate } from "../engine/prices.mjs";
+import { computeBettyRate, pickCoinsPerSFL } from "../engine/prices.mjs";
 import { CHAPTER_BOOST_ITEMS, CHAPTER_TICKET } from "../data/chapter-items.mjs";
 import { SEED_COSTS } from "../data/economy.mjs";
 import {
@@ -54,24 +54,22 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
 
   // ── page 15883-15925 (fetch block): rate assembly on the passed responses ──
   const p2pPrices = {};
-  const exchangeRates = { coinsPerSFL: 320, gemsPerSFL: 0, sflUsd: 0 };
+  const exchangeRates = { coinsPerSFL: 0, gemsPerSFL: 0, sflUsd: 0 };
   for (const [k, v] of Object.entries(p2p || {})) {
     p2pPrices[k] = parseFloat(v) || 0;
   }
-  // Use Betty rate for coins→SFL (more accurate than API exchange rate)
+  // Coins→SFL: the Betty rate (more accurate than the API exchange), else the exchange's best
+  // tier, else 0 = unpriced — pickCoinsPerSFL, the one rule the valuation pages use.
   const betty = computeBettyRate(p2pPrices);
-  if (betty.rate > 0) {
-    exchangeRates.coinsPerSFL = betty.rate;
-    exchangeRates.bettyItem = betty.item;
-  }
+  if (betty.rate > 0) exchangeRates.bettyItem = betty.item;
+  let apiCoinRate = 0;
   const rateResp = exchange || null;
   if (rateResp) {
     const coinTiers = Object.values(rateResp?.coins || rateResp?.data?.coins || {});
     const gemTiers = Object.values(rateResp?.gems || rateResp?.data?.gems || {});
-    // Fallback to API rate if Betty rate failed
-    if (!betty.rate && coinTiers.length > 0) {
+    if (coinTiers.length > 0) {
       const best = coinTiers.reduce((a, b) => (b.coin / b.sfl) > (a.coin / a.sfl) ? b : a);
-      exchangeRates.coinsPerSFL = best.coin / best.sfl;
+      apiCoinRate = best.coin / best.sfl;
     }
     if (gemTiers.length > 0) {
       const best = gemTiers.reduce((a, b) => (b.gem / (b.sfl * 0.7)) > (a.gem / (a.sfl * 0.7)) ? b : a);
@@ -80,6 +78,7 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     const _sflUsd = rateResp?.sfl?.usd || rateResp?.data?.sfl?.usd || 0;
     if (_sflUsd > 0) exchangeRates.sflUsd = _sflUsd;
   }
+  exchangeRates.coinsPerSFL = pickCoinsPerSFL("betty", betty.rate, apiCoinRate);
 
   // Detect farm capacity
   const capacity = detectFarmCapacity(farm);
@@ -699,7 +698,7 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     const cmSpeed = cropMachineSpeedMult(farm, false);
     const oilPrice = p2pPrices["Oil"] || 0;
     const oilCostPerDay = cmOilPerHour * 24 * oilPrice;   // runs continuously, so the same for every crop
-    const coinsPerSFL = (exchangeRates && exchangeRates.coinsPerSFL) || 320;
+    const coinsPerSFL = (exchangeRates && exchangeRates.coinsPerSFL) || 0;   // 0 = no rate: seeds unpriced
     const cropBase = getBaseYield("crops");
     const skills = (farm.bumpkin && farm.bumpkin.skills) || {};
     const tierOf = (crop) => Object.keys(CROP_TIERS).find((t) => CROP_TIERS[t].includes(crop)) || null;
@@ -737,7 +736,7 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
       const cropsPerDay = cyclesPerDay * pack * yieldPerSeed;
       const price = p2pPrices[crop] || 0;
       const revenue = cropsPerDay * price;
-      const seedCostPerDay = (cyclesPerDay * pack) * (SEED_COSTS[crop] || 0) / coinsPerSFL;
+      const seedCostPerDay = coinsPerSFL > 0 ? (cyclesPerDay * pack) * (SEED_COSTS[crop] || 0) / coinsPerSFL : 0;
 
       // The two lists this crop cares about: what is ACTIVE on it now, and what could still be
       // added (skills you have not taken, NFTs you do not own) — each with its effect.

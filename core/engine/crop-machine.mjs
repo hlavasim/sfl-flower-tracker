@@ -65,8 +65,8 @@ import { findCollectible } from "./power-helpers.mjs";
       const oilCost = oilPerDay * oilPrice;
       // Seed cost (coins → SFL via coinsPerSFL)
       const seedCoinsPerCrop = SEED_COSTS[cropName] || 0;
-      const coinsPerSFL = exchangeRates?.coinsPerSFL || 320;
-      const seedCostPerDay = (seedsPerDay * seedCoinsPerCrop) / coinsPerSFL;
+      const coinsPerSFL = exchangeRates?.coinsPerSFL || 0;   // 0 = no live rate: seeds unpriced
+      const seedCostPerDay = coinsPerSFL > 0 ? (seedsPerDay * seedCoinsPerCrop) / coinsPerSFL : 0;
       const net = revenue - oilCost - seedCostPerDay;
       return {
         crop: cropName, plots, speedMult, effSecPerCrop, seedsPerDay, yieldPerSeed: perSeed, cropsPerDay,

@@ -392,7 +392,7 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
   // (selected recipes). Resources without a P2P price flag costUnpriced (cost is
   // then a lower bound). ROI = payback days = cost / daily gain.
   const p2pP = powerData && powerData.p2pPrices ? powerData.p2pPrices : {};
-  const xr = (powerData && powerData.exchangeRates) || { coinsPerSFL: 320, gemsPerSFL: 0 };
+  const xr = (powerData && powerData.exchangeRates) || { coinsPerSFL: 0, gemsPerSFL: 0 };   // 0 = coins unpriced
   const NODE_CAT = {
     "Crop Plot": "crops", "Fruit Patch": "fruits", "Tree": "trees", "Stone Rock": "stone",
     "Iron Rock": "iron", "Gold Rock": "gold", "Crimstone Rock": "crimstone",

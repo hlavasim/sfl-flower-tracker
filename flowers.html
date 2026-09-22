@@ -4304,7 +4304,7 @@
       const speedMult = cropMachineSpeedMult(farm, !!withTortoiseShrine);
       const oilPerHour = cropMachineOilPerHour(farm);
       const oilPrice = p2pPrices["Oil"] || 0;
-      const coinsPerSFL = exchangeRates?.coinsPerSFL || 320;
+      const coinsPerSFL = exchangeRates?.coinsPerSFL || 0;   // 0 = no live rate: seeds unpriced
       const win = (windowSec && windowSec > 0) ? windowSec : cmComputeRestockWindow(farm);
 
       // Per-crop economics — net SFL per second is the greedy sort key.
@@ -4315,7 +4315,7 @@
         const perSeed = (yieldBySeed && yieldBySeed[c] > 0) ? yieldBySeed[c] : 1;
         const cropPrice = (p2pPrices[c] || 0) * perSeed; // revenue per seed = crops per seed × price
         const seedCoinsPerCrop = SEED_COSTS[c] || 0;
-        const seedSflPerCrop = seedCoinsPerCrop / coinsPerSFL;
+        const seedSflPerCrop = coinsPerSFL > 0 ? seedCoinsPerCrop / coinsPerSFL : 0;
         const oilSflPerCrop = (oilPerHour * oilPrice / 3600) * secPerCrop;
         const netPerCrop = cropPrice - seedSflPerCrop - oilSflPerCrop;
         const netPerSec = secPerCrop > 0 ? netPerCrop / secPerCrop : -Infinity;
@@ -17785,77 +17785,6 @@
       return { gross, cost, net: gross - cost };
     }
 
-
-
-    // ⛏️ MINING STRATEGY — net value per resource AFTER the tool's resource ingredients.
-    // Each pickaxe is crafted from lower resources, so pushing up the chain (Wood→Stone→…→Crimstone)
-    // only pays if the ore is worth more than the inputs its tool eats. Efficiency-adjusted, shared-Wood aware.
-    function roadmapMiningStrategyHtml(settings) {
-      const { capacity, exchangeRates } = powerState;
-      const p2pPrices = roadmapPrices(settings);
-      const cf = roadmapCoinsFree(settings);
-      const coinsPerSFL = exchangeRates.coinsPerSFL || 320;
-      const CHAIN = [
-        { cat: "trees", product: "Wood", tool: "Axe" },
-        { cat: "stone", product: "Stone", tool: "Pickaxe" },
-        { cat: "iron", product: "Iron", tool: "Stone Pickaxe" },
-        { cat: "gold", product: "Gold", tool: "Iron Pickaxe" },
-        { cat: "crimstone", product: "Crimstone", tool: "Gold Pickaxe" },
-      ];
-      const rows = [];
-      for (const link of CHAIN) {
-        if (getCapacityCount(link.cat, capacity) <= 0) continue;
-        const ab = applyBoosts(link.cat, link.product, capacity, roadmapOwnedEffects(link.cat));
-        const yieldPerAction = gameResYieldPerTool(powerState.farm, link.cat, roadmapOwnedEffects(link.cat));
-        if (!(yieldPerAction > 0)) continue;
-        const tool = TOOL_COSTS[link.tool] || { coins: 0 };
-        let toolMat = 0;
-        for (const [m, q] of Object.entries(tool.materials || {})) toolMat += (p2pPrices[m] || 0) * q;
-        const toolCoin = cf ? 0 : (coinsPerSFL > 0 ? (tool.coins || 0) / coinsPerSFL : 0);
-        const toolCostPerUnit = (toolMat + toolCoin) / yieldPerAction;
-        const price = p2pPrices[link.product] || 0;
-        const netPerUnit = price - toolCostPerUnit;
-        const realUnits = gameResUnitsPerDay(link.cat, powerState.farm, capacity, roadmapOwnedEffects(link.cat)) * roadmapEffFactor(link.cat, settings);
-        rows.push({
-          cat: link.cat, product: link.product, yieldPerAction, toolCostPerUnit, price, netPerUnit,
-          realUnits, sellRaw: realUnits * price, dailyNet: roadmapCatNet(link.cat, roadmapOwnedEffects(link.cat), settings),
-          woodPerUnit: (((tool.materials && tool.materials.Wood) || 0) / yieldPerAction),
-        });
-      }
-      if (!rows.length) return "";
-
-      let recTotal = 0; const recParts = []; const skip = [];
-      for (const r of rows) {
-        if (r.cat === "trees") { recTotal += r.sellRaw; recParts.push(`sell Wood +${roadmapFmtFlower(r.sellRaw)}`); }
-        else if (r.netPerUnit > 0) { recTotal += r.dailyNet; recParts.push(`mine ${r.product} +${roadmapFmtFlower(r.dailyNet)}`); }
-        else skip.push(r.product);
-      }
-
-      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
-      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">⛏️ MINING STRATEGY — sell raw, or push up the chain?</div>`;
-      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Pickaxes are crafted from lower resources (Pickaxe = 3 Wood; Stone Pickaxe = 3 Wood + 5 Stone; Iron Pickaxe = 3 Wood + 5 Iron; Gold Pickaxe = 3 Wood + 3 Gold). <b>net/unit</b> = sell price minus the tool's resource cost (valued at sell prices). <span style="color:var(--red)">Red = the ore is worth LESS than the inputs its tool eats</span> → sell the inputs instead of mining it.</div>`;
-      h += `<table style="width:100%;border-collapse:collapse;font-size:0.58rem"><tr style="color:var(--text-dim);font-size:0.5rem"><td></td><td style="text-align:right;padding:0 6px">harvest/d</td><td style="text-align:right;padding:0 6px">tool/unit</td><td style="text-align:right;padding:0 6px">net/unit</td><td style="text-align:right;padding:0 6px">net/day</td><td style="padding-left:6px">verdict</td></tr>`;
-      for (const r of rows) {
-        const pos = r.netPerUnit > 0.0003, neg = r.netPerUnit < -0.0003;
-        const col = pos ? "var(--green)" : (neg ? "var(--red)" : "var(--text-dim)");
-        const verdict = r.cat === "trees" ? "✅ sell raw" : (pos ? "✅ mine & sell" : (neg ? "❌ tools cost more than ore" : "⚠️ break-even"));
-        h += `<tr style="border-bottom:1px solid #1b1b1b">
-          <td style="padding:2px 6px 2px 0;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(r.product)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.product)}</td>
-          <td style="padding:2px 6px;text-align:right">${roadmapFmtFlower(r.realUnits)}</td>
-          <td style="padding:2px 6px;text-align:right;color:var(--text-dim)">${r.cat === "trees" ? "—" : roadmapFmtFlower(r.toolCostPerUnit)}</td>
-          <td style="padding:2px 6px;text-align:right;color:${col}">${r.netPerUnit >= 0 ? "+" : "−"}${roadmapFmtFlower(Math.abs(r.netPerUnit))}</td>
-          <td style="padding:2px 6px;text-align:right;color:${col};font-weight:bold">${r.dailyNet >= 0 ? "+" : "−"}${roadmapFmtFlower(Math.abs(r.dailyNet))}</td>
-          <td style="padding:2px 0 2px 6px;color:${col};font-size:0.52rem">${verdict}</td>
-        </tr>`;
-      }
-      h += `</table>`;
-      h += `<div style="margin-top:8px;font-size:0.56rem;color:var(--text-secondary)"><b>→ Recommended:</b> ${recParts.join(" · ")}${skip.length ? ` · <span style="color:var(--red)">skip ${skip.join("/")} (lose money)</span>` : ""}. Total ≈ <b style="color:var(--green)">${roadmapFmtFlower(recTotal)} ${sflIcon()}/day</b>.</div>`;
-      const woodRow = rows.find(r => r.cat === "trees");
-      if (woodRow) h += `<div style="margin-top:4px;font-size:0.5rem;color:var(--text-dim)">Wood flow: you harvest ~${roadmapFmtFlower(woodRow.realUnits)} Wood/day → enough for ~${Math.floor(woodRow.realUnits / 3)} pickaxes (3 Wood each). Every higher tier also eats Wood, so even a worthwhile tier is Wood-limited — you can't max all of them at once.</div>`;
-      h += `</div>`;
-      return h;
-    }
-
     // "What should I farm/mine now" — net FLOWER/day per activity at full activity, green/red.
     // Rough key values (chest EV is backend data) — labeled estimates the user can mentally adjust.
     // Average chest payout per key (game source chests.ts). Coins dominate but are free when you hold a
@@ -18431,7 +18360,7 @@
     function roadmapSkillExtraFlow(clone, settings) {
       const flow = [], tags = [];
       if (!clone || !clone.effects) return { flow, tags };
-      const er = powerState.exchangeRates || {}, cps = er.coinsPerSFL || 1500;
+      const er = powerState.exchangeRates || {}, cps = er.coinsPerSFL > 0 ? er.coinsPerSFL : 0;   // 0 = coins unpriced
       const cap = powerState.capacity, p2p = roadmapPrices(settings), sm = powerState.stockMods || {};
       const ef = (cat) => roadmapEffFactor(cat, settings);
       const lblOf = (cat) => (POWER_CATEGORIES[cat] && POWER_CATEGORIES[cat].label) || cat;
@@ -18474,13 +18403,13 @@
         if (/Coins?/i.test(raw) && (m = raw.match(/(?:(\d+(?:\.\d+)?)\s*%\s*chance\s*)?\+?\s*(\d+)\s*Coins?/i)) && parseFloat(m[2]) > 0 && /chop|tree|mine|rock|stone|iron|gold/i.test(raw)) {
           const chance = m[1] ? parseFloat(m[1]) / 100 : 1, amt = parseFloat(m[2]);
           const cat = /tree|chop/i.test(raw) ? "trees" : (/iron/i.test(raw) ? "iron" : (/gold/i.test(raw) ? "gold" : "stone"));
-          const sv = (chance * amt * chopsPerDay(cat)) / cps;
+          const sv = cps > 0 ? (chance * amt * chopsPerDay(cat)) / cps : 0;
           if (sv > 1e-6) flow.push({ label: "Coins (" + lblOf(cat) + ")", delta: sv, kind: "coin" }); else tagMisc(raw);
           continue;
         }
         if (e.type === "qualitative") {
           if (/deliver|deliveries|Bounties|selling[^.]*Market|coins/i.test(raw)) {
-            let ref = 0; const pm = raw.match(/(\d+(?:\.\d+)?)\s*%/); if (pm) ref = (parseFloat(pm[1]) / 100) * 1000 / cps;
+            let ref = 0; const pm = raw.match(/(\d+(?:\.\d+)?)\s*%/); if (pm && cps > 0) ref = (parseFloat(pm[1]) / 100) * 1000 / cps;
             tags.push({ group: "coins", text: raw, ref });
           } else if (/XP/i.test(raw)) tags.push({ group: "xp", text: raw });
           else if (/time/i.test(raw)) tags.push({ group: "speed", text: raw });
@@ -18979,7 +18908,7 @@
       const { byName, catBoostsW } = roadmapBuildClones();
       const skills = Object.values(byName).filter(c => c.type === "Skill");
       const EPS = 0.01;
-      const cps = (powerState.exchangeRates && powerState.exchangeRates.coinsPerSFL) || 1500;
+      const cps = (powerState.exchangeRates && powerState.exchangeRates.coinsPerSFL) || 0;
       const effLbl = settings.effMode === "real" ? "your Last-7-days activity" : "100% theoretical";
       const TREE_COLOR = { "Crops": "#7fe0a0", "Trees": "#b98a5a", "Mining": "#9aa6b2", "Cooking": "#e8a060", "Animals": "#e6c25a", "Fishing": "#6ab0e0", "Greenhouse": "#8fd98f", "Fruit Patch": "#e89a5a", "Bees & Flowers": "#e08fd0", "Machinery": "#c0a0e0", "Compost": "#9a8a6a", "Aging": "#d8c89a" };
       const farm = powerState.farm, bumpkin = farm.bumpkin || {};
@@ -19045,7 +18974,7 @@
       }
       h += `</div>`;
       h += `<div id="skill-all-upgrades" style="margin-bottom:10px">${roadmapAllUpgradesHtml(settings)}</div>`;
-      h += `<div style="font-size:0.52rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">All skills by tree &amp; tier (like the in-game tree). FLOWER/day each adds on <b>your</b> farm at <b>${effLbl}</b> efficiency; yield, cheaper costs &amp; coins are priced (coins at ${Math.round(cps)}/FLOWER), XP / speed / limits show their kind. Pts column = skill points (and the SFL of XP to earn them). <a href="https://sfl.world/tools/skills/" target="_blank" style="color:var(--sunpetal);text-decoration:none">skill tree ↗</a></div>`;
+      h += `<div style="font-size:0.52rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">All skills by tree &amp; tier (like the in-game tree). FLOWER/day each adds on <b>your</b> farm at <b>${effLbl}</b> efficiency; yield, cheaper costs &amp; coins are priced (${cps > 0 ? `coins at ${Math.round(cps)}/FLOWER` : "coins unpriced: no live rate"}), XP / speed / limits show their kind. Pts column = skill points (and the SFL of XP to earn them). <a href="https://sfl.world/tools/skills/" target="_blank" style="color:var(--sunpetal);text-decoration:none">skill tree ↗</a></div>`;
       const byTree = {};
       for (const r of rows) { const tr = r.c.skillTree || "Other"; (byTree[tr] = byTree[tr] || []).push(r); }
       const treeNames = Object.keys(byTree).sort((a, b) => {
@@ -26866,7 +26795,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         // Daily gain = (totalNet_with − totalNet_without) × 86400 / windowSec.
         const farmRef = _shrineFarmRef;
         if (sh.catId === "greenhouse" && farmRef && farmHasCropMachine(farmRef)) {
-          const xr = _shrineExchangeRates || { coinsPerSFL: 320 };
+          const xr = _shrineExchangeRates || { coinsPerSFL: 0 };   // no Power rate → coins unpriced
           const windowSec = cmComputeRestockWindow(farmRef);
           // Same crops per seed as the Power page's CROP MACHINE panel (section=power yieldPerSeed).
           const simWithout = cmSimulateQueue(farmRef, p2pPrices, xr, false, windowSec, _shrineCmYields);

@@ -122,10 +122,6 @@ export const TABLE_INVENTORY = [
     "lines": 5
   },
   {
-    "name": "CHAIN",
-    "lines": 7
-  },
-  {
     "name": "CHANCE_CAT_MAP",
     "lines": 7
   },

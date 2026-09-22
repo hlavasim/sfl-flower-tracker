@@ -189,3 +189,32 @@ test("Insights asks farm-history for include=game_value, not the whole farm", ()
   assert.match(body, /\/api\/farm-history\?[^`]*include=game_value/, "Insights snapshot fetch");
   assert.doesNotMatch(body, /include=game_data/, "the 180 KB-per-row game_data is not needed for a valuation");
 });
+
+// ── 5. One coin-rate rule: the chosen live source, else the other one, else 0 (unpriced) ──
+import { buildRoiSection } from "../../core/sections/roi.mjs";
+
+test("with no Betty rate, the exchange's coin rate is used; with neither, coins are unpriced (0), not 320", () => {
+  const noBetty = { Wood: "0.01" };   // nothing Betty buys has a p2p price
+  const exchange = { coins: { a: { coin: 800, sfl: 1 } }, gems: {}, sfl: { usd: 0.05 } };
+  assert.equal(buildPowerSection(farm, noBetty, nftsFix, exchange, {}).exchangeRates.coinsPerSFL, 800, "power: the other live source");
+  assert.equal(buildPowerSection(farm, noBetty, nftsFix, null, {}).exchangeRates.coinsPerSFL, 0, "power: no source → 0");
+  assert.equal(buildRoiSection(farm, noBetty, nftsFix, exchange, 0, {}).exchangeRates.coinsPerSFL, 800, "roi: the other live source");
+  assert.equal(buildRoiSection(farm, noBetty, nftsFix, null, 0, {}).exchangeRates.coinsPerSFL, 0, "roi: no source → 0");
+});
+
+test("an unpriced coin rate prices crop-machine seeds at 0, never at a made-up 320", () => {
+  const r = calcCropMachineDaily(farm, "Sunflower", { Sunflower: 0.01 }, { coinsPerSFL: 0 }, false);
+  assert.equal(r.seedCostPerDay, 0);
+  const pw = buildPowerSection(farm, { Oil: "0" }, nftsFix, null, {});   // nothing Betty buys is priced
+  for (const row of (pw.cropMachine ? pw.cropMachine.rows : [])) assert.equal(row.seedCost, 0, `${row.crop}: seed cost at no rate`);
+});
+
+test("no hard-coded 320 / 1500 coins-per-FLOWER fallback is left in the page or core", () => {
+  const rx = /coinsPerSFL\s*(?:\|\||:)\s*(?:320|1500)\b|\|\|\s*\{\s*coinsPerSFL:\s*(?:320|1500)\b/;
+  const files = ["flowers.html", "core/sections/power.mjs", "core/sections/roi.mjs", "core/sections/ascension.mjs",
+    "core/engine/crop-machine.mjs"];
+  for (const f of files) {
+    const hits = readFileSync(path.join(ROOT, f), "utf8").split("\n").filter((l) => rx.test(l) && !/\{ t: "/.test(l));
+    assert.deepEqual(hits, [], `${f} still invents a coin rate`);
+  }
+});
