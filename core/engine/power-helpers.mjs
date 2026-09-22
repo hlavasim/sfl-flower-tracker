@@ -633,11 +633,6 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
         }
       }
 
-      console.log("[Power] Animal detection:", { chickens, cows, sheep, goldenAnimals,
-        henHouse: !!farm.henHouse, barn: !!farm.barn,
-        chickenLevels: chickenList.map(a => a.level),
-        cowLevels: cowList.map(a => a.level),
-        sheepLevels: sheepList.map(a => a.level) });
 
       return {
         crops: Object.keys(farm.crops || {}).length,

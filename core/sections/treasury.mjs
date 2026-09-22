@@ -68,9 +68,6 @@ export function buildTreasuryData(p2p, nftData, exchange, btcUsd, opts = {}) {
       const wardrobe = farm.wardrobe || {};
       const MIN_VALUE = 0.01;
 
-      // Debug: log farm keys to help find gems path
-      console.log("[Treasury] farm keys:", Object.keys(farm));
-      console.log("[Treasury] farm.gems:", farm.gems, "| farm.bank:", farm.bank, "| inventory Gem:", inventory["Gem"]);
 
       // --- Resources: inventory items with P2P prices ---
       const resources = [];

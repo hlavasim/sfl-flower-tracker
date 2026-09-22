@@ -319,7 +319,6 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .flower-chain .input-flower { color: var(--yellow); }
     .flower-chain .consumed-by { color: #c87d38; }
     .inline-icon { width: 14px; height: 14px; object-fit: contain; image-rendering: pixelated; vertical-align: middle; margin-right: 3px; }
 
@@ -337,9 +336,6 @@
     }
     .flower-bar-fill.bar-green {
       background: linear-gradient(180deg, #4ade80, #16a34a);
-    }
-    .flower-bar-fill.bar-yellow {
-      background: linear-gradient(180deg, #fbbf24, #d97706);
     }
     .flower-bar-fill.bar-red {
       background: linear-gradient(180deg, #f87171, #dc2626);
@@ -1503,26 +1499,12 @@
     .ph-row-img { width: 28px; height: 28px; object-fit: contain; image-rendering: pixelated; filter: drop-shadow(1px 1px 0 #000); }
     .ph-row-name { font-weight: bold; color: var(--text-primary); }
     .ph-row-sub { font-size: 0.5625rem; color: var(--text-dim); margin-top: 1px; }
-    .ph-change-up { color: var(--green); font-weight: bold; }
-    .ph-change-down { color: var(--red); font-weight: bold; }
-    .ph-change-flat { color: var(--text-dim); }
     .ph-supply { font-size: 0.5rem; color: var(--text-dim); padding: 1px 5px; border: 1px solid var(--border-dark); }
     .ph-detail {
       padding: 10px 14px; background: var(--bg-darkest);
       border-bottom: 2px solid var(--border-dark);
     }
     .ph-detail-title { font-size: 0.625rem; color: var(--text-secondary); margin-bottom: 8px; }
-    .ph-bar-row {
-      display: flex; align-items: center; gap: 6px;
-      font-size: 0.5625rem; margin-bottom: 3px;
-    }
-    .ph-bar-date { width: 72px; color: var(--text-dim); flex-shrink: 0; text-align: right; }
-    .ph-bar-track { flex: 1; height: 14px; background: var(--bg-card-alt); position: relative; }
-    .ph-bar-fill { height: 100%; transition: width 0.2s; }
-    .ph-bar-fill.up { background: var(--green); }
-    .ph-bar-fill.down { background: var(--red); }
-    .ph-bar-fill.flat { background: var(--text-dim); }
-    .ph-bar-val { width: 65px; color: var(--text-secondary); flex-shrink: 0; }
     .ph-empty { padding: 16px; text-align: center; font-size: 0.625rem; color: var(--text-dim); }
     .ph-load-more {
       display: block; width: 100%; padding: 8px; text-align: center;
@@ -1543,18 +1525,9 @@
 
     /* ── Power Page ── */
     /* ── Nodes Investment Advisor ── */
-    .node-card { margin-bottom:12px; padding:12px 14px; }
-    .node-card-header { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
-    .node-card-name { font-size:0.8125rem; font-weight:bold; color:var(--text-primary); }
-    .node-card-sub { font-size:0.6875rem; color:var(--text-secondary); }
-    .node-card-row { display:grid; grid-template-columns:1fr auto auto; gap:6px; padding:5px 8px; font-size:0.75rem; align-items:center; }
-    .node-card-row + .node-card-row { border-top:1px solid rgba(92,58,30,0.15); }
-    .node-card-row.node-best { background:rgba(48,209,88,0.1); border-left:3px solid var(--green); padding-left:5px; }
-    .node-card-row.node-neg { opacity:0.5; }
     .node-res-table { width:100%; border-collapse:collapse; margin-bottom:4px; }
     .node-res-table th { font-size:0.5625rem; color:var(--text-dim); text-align:left; padding:6px 10px; border-bottom:2px solid var(--border-brown); }
     .node-res-table td { font-size:0.75rem; padding:5px 10px; border-bottom:1px solid rgba(92,58,30,0.2); }
-    .node-section-title { font-size:0.5625rem; color:var(--text-dim); margin:10px 0 4px; letter-spacing:0.5px; border-bottom:1px solid rgba(92,58,30,0.3); padding-bottom:4px; }
 
         .power-summary {
       display: grid;
@@ -1756,7 +1729,6 @@
         padding: 6px 8px;
       }
       .flower-time { display: none; }
-      .flower-row.mobile-show-time .flower-time { display: block; }
       .seed-header { flex-wrap: wrap; gap: 6px; }
       .summary-bar { gap: 8px; }
       .summary-stat { min-width: 80px; }
@@ -1785,8 +1757,6 @@
       .sales-summary-grid { grid-template-columns: repeat(2, 1fr); }
       .ph-row { grid-template-columns: 22px 1fr auto; gap: 5px; padding: 5px 8px; }
       .ph-row-img { width: 22px; height: 22px; }
-      .ph-bar-date { width: 58px; font-size: 0.5rem; }
-      .ph-bar-val { width: 50px; font-size: 0.5rem; }
       .power-summary { grid-template-columns: repeat(2, 1fr); }
       .power-boost-row { grid-template-columns: 22px 1fr auto; gap: 5px; padding: 5px 8px; }
       .power-boost-img { width: 20px; height: 20px; }
@@ -2183,17 +2153,6 @@
       bottom: auto;
       color: rgba(255, 255, 255, 0.95);
     }
-    .diff-summary-strip {
-      display: flex;
-      gap: 16px;
-      flex-wrap: wrap;
-      padding: 10px 14px;
-      font-size: 0.75rem;
-      align-items: center;
-    }
-    .diff-summary-strip .val { font-weight: bold; }
-    .diff-summary-strip .pos { color: var(--green); }
-    .diff-summary-strip .neg { color: var(--red); }
     .diff-detail {
       padding: 12px 14px;
       margin-bottom: 12px;
@@ -2927,7 +2886,6 @@
 
     const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
-    const IMG_BASE = "https://sfl.world/img/flowers/";
     const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "mytrades", "marks", "diff", "json", "constants", "ascension", "world", "yakkamon", "fishing", "decorations", "speculation"];
 
     // ═══════════════════════════════════════
@@ -3484,16 +3442,6 @@
     }
 
 
-    const CROPS_AND_FRUITS = new Set([
-      "Sunflower","Potato","Pumpkin","Carrot","Cabbage","Soybean",
-      "Beetroot","Cauliflower","Parsnip","Eggplant","Corn","Radish",
-      "Wheat","Kale","Turnip","Onion","Pepper","Rhubarb","Artichoke",
-      "Barley","Zucchini","Yam","Broccoli",
-      "Tomato","Lemon","Blueberry","Orange","Apple","Banana",
-      "Grape","Rice","Olive",
-      "Celestine","Lunara","Duskberry",
-    ]);
-
     // ═══════════════════════════════════════
     //  DOLL RECIPES
     // ═══════════════════════════════════════
@@ -3891,14 +3839,6 @@
     ];
     // Golden animals: collectible → free feeding for that animal type
     const GOLDEN_ANIMALS = { "Gold Egg": "Chicken", "Golden Cow": "Cow", "Golden Sheep": "Sheep" };
-    // Skill feed effects: skill name → per-cat feed multiplier (negative = reduction, positive = increase)
-    const SKILL_FEED_EFFECTS = {
-      "Efficient Feeding":    { chickens: -0.05, cows: -0.05, sheep: -0.05 },
-      "Clucky Grazing":       { chickens: -0.25, cows: 0.50, sheep: 0.50 },
-      "Sheepwise Diet":       { chickens: 0.50, cows: 0.50, sheep: -0.25 },
-      "Cow-Smart Nutrition":  { chickens: 0.50, cows: -0.25, sheep: 0.50 },
-      "Chonky Feed":          { chickens: -0.25, cows: -0.25, sheep: -0.25 }, // net of +50% food x 2x XP (half feedings) = x0.75
-    };
 
     // ── Animal Sickness System ──
     // Sickness check: once per 24h, server-side. Higher level = higher chance.
@@ -3929,13 +3869,6 @@
     const SICKNESS_PREVENTION = {
       "Frozen Cow": "cows", "Frozen Sheep": "sheep",
       "Summer Chicken": "chickens", "Nurse Sheep": "sheep", "Sleepy Chicken": "chickens",
-    };
-    // Sickness-reducing skills/items and their effects
-    const SICKNESS_EFFECTS = {
-      "Healthy Livestock":  { type: "rate_reduction", value: 0.50 },  // -50% sickness chance
-      "Oracle Syringe":     { type: "cure_free", value: 1.0 },       // free cure (no Barn Delight)
-      "Medic Apron":        { type: "cure_discount", value: 0.50 },  // half Barn Delight cost
-      "Alternate Medicine": { type: "recipe_reduction" },             // cheaper recipe
     };
 
     // Get animal level from XP
@@ -4029,64 +3962,6 @@
         return 0.1;
       }
     }
-
-    // ── Node purchase prices (Sunstone cost: base + purchased × increase) ──
-    // UNUSED since the NODES page started reading nodeAcq from compute?section=ascension.
-    // The live copy is core/sections/ascension.mjs NODE_BUY. Left in place rather than deleted; if
-    // anything is ever wired back to it, it will silently disagree with every other page.
-    const NODE_PRICES = {
-      trees:       { base: 4,  increase: 3,  farmKey: "trees",       catId: "trees",    label: "Tree" },
-      stones:      { base: 4,  increase: 3,  farmKey: "stones",      catId: "stone",    label: "Stone" },
-      iron:        { base: 7,  increase: 5,  farmKey: "iron",        catId: "iron",     label: "Iron" },
-      gold:        { base: 10, increase: 6,  farmKey: "gold",        catId: "gold",     label: "Gold" },
-      crimstones:  { base: 20, increase: 20, farmKey: "crimstones",  catId: "crimstone", label: "Crimstone" },
-      oilReserves: { base: 40, increase: 20, farmKey: "oilReserves", catId: "oil",      label: "Oil Reserve" },
-      // Lava Pit was missing from this table, so the advisor silently never offered it —
-      // even though everything behind it was already in place: calcMarginalForProduct has
-      // an explicit `catId === "obsidian"` branch that nets out the pit's ingredients via
-      // calcLavaPitCostPerDay, power-helpers maps the category to capacity.lavaPits, and
-      // BASE_NODE_COUNTS already carries the per-island starting count. Price 40 / +40 per
-      // purchase, volcano-gated (game: RESOURCE_NODE_PRICES in buyResource.ts).
-      // Not in MERGE_COSTS on purpose — lava pits cannot be merged.
-      lavaPits:    { base: 40, increase: 40, farmKey: "lavaPits",    catId: "obsidian", label: "Lava Pit" },
-      crops:       { base: 3,  increase: 2,  farmKey: "crops",       catId: "crops",    label: "Crop Plot" },
-      fruitPatches:{ base: 5,  increase: 5,  farmKey: "fruitPatches", catId: "fruits",  label: "Fruit Patch" },
-      flowers:     { base: 30, increase: 25, farmKey: "flowers",     catId: "flowers",  label: "Flower Bed" },
-    };
-
-    // Resource categories trackable via farm-history diffs (catId → inventory key)
-    // Resource categories trackable via farm-history diffs
-    // catId -> { inv: inventory key (legacy fallback), hKey: _h.* diff key (precise), nodeKey: nodes.* key }
-    const EFFICIENCY_RESOURCE_MAP = {
-      trees:     { inv: "Wood",      hKey: "_h.trees",       nodeKey: "trees" },
-      stone:     { inv: "Stone",     hKey: "_h.stones",      nodeKey: "stones" },
-      iron:      { inv: "Iron",      hKey: "_h.iron",        nodeKey: "iron" },
-      gold:      { inv: "Gold",      hKey: "_h.gold",        nodeKey: "gold" },
-      crimstone: { inv: "Crimstone", hKey: "_h.crimstones",  nodeKey: "crimstones" },
-      oil:       { inv: "Oil",       hKey: "_h.oilReserves", nodeKey: "oilReserves" },
-    };
-
-    // ── Base node counts per island type (default before purchases) ──
-    // UNUSED since the NODES page started reading nodeAcq from compute?section=ascension.
-    // The live copy is core/engine/roadmap.mjs (node counts come from the farm itself now). Left in place rather than deleted; if
-    // anything is ever wired back to it, it will silently disagree with every other page.
-    const BASE_NODE_COUNTS = {
-      basic:          { crops:31, trees:9,  stones:7,  iron:4,  gold:2, crimstones:0, oilReserves:0, lavaPits:0, fruitPatches:0, flowers:0 },
-      spring:         { crops:45, trees:18, stones:15, iron:9,  gold:6, crimstones:2, oilReserves:0, lavaPits:0, fruitPatches:11, flowers:3 },
-      desert:         { crops:65, trees:23, stones:20, iron:12, gold:7, crimstones:4, oilReserves:3, lavaPits:0, fruitPatches:15, flowers:3 },
-      volcano:        { crops:65, trees:23, stones:20, iron:13, gold:8, crimstones:5, oilReserves:4, lavaPits:3, fruitPatches:15, flowers:3 },
-    };
-
-    // ── Merge costs (4×t1→t2, 4×t2→t3) ──
-    // UNUSED since the NODES page started reading nodeAcq from compute?section=ascension.
-    // The live copy is core/engine/roadmap.mjs MERGE_COSTS, served via nodeAcq.merge. Left in place rather than deleted; if
-    // anything is ever wired back to it, it will silently disagree with every other page.
-    const MERGE_COSTS = {
-      trees:  { t2: { obsidian:3,  coins:25000  }, t3: { obsidian:5,  coins:50000  }, yieldBonus: { t2:0.5, t3:2.5 } },
-      stones: { t2: { obsidian:5,  coins:50000  }, t3: { obsidian:10, coins:100000 }, yieldBonus: { t2:0.5, t3:2.5 } },
-      iron:   { t2: { obsidian:10, coins:100000 }, t3: { obsidian:15, coins:200000 }, yieldBonus: { t2:0.5, t3:2.5 } },
-      gold:   { t2: { obsidian:15, coins:200000 }, t3: { obsidian:20, coins:350000 }, yieldBonus: { t2:0.5, t3:2.5 } },
-    };
 
     // ── Lava Pit seasonal requirements (cost per ignition) ──
     const LAVA_PIT_REQUIREMENTS = {
@@ -4870,30 +4745,9 @@
     // ── Hardcoded bud data (2,621 NFTs, never changes) ──
     const BUD_COUNT = 2621;
     const BUD_TYPE_NAMES = ["Beach","Castle","Cave","Plaza","Port","Retreat","Saphiro","Sea","Snow","Woodlands"];
-    const BUD_STEM_NAMES = ["3 Leaf Clover","Acorn Hat","Apple Head","Axe Head","Banana","Basic Leaf","Carrot Head","Diamond Gem","Egg Head","Fish Hat","Gold Gem","Hibiscus","Magic Mushroom","Miner Hat","Mushroom","Rainbow Horn","Red Bow","Ruby Gem","Seashell","Silver Horn","Sunflower Hat","Sunflower Headband","Sunshield Foliage","Tender Coral","Tree Hat"];
     const BUD_AURA_NAMES = ["No Aura","Basic","Green","Rare","Mythical"];
-    const BUD_TYPES_ENC = "66437663288399648642954165595695238181989364964338308918839080720217921906361312374745302734796685535964198940123885797739080989377504891438453746781274152788794581745850855822811844494297502621612841188079966519558341393927440901161925384124071975504230076556543868255410706573658265137126366483954451844240985066268217235027237343368282690597790796108852142387212419443398222568049324317739491399959331962911342411552504704468092880210708925172194970567608704346316238674298295421449667765652581736985864385749043736605646721188178796663799939759403109069299911076400912397942849785036701857800924136961697052701016851622871919588797420435485837724874237415468269312618077015374761447810338752613913748309778113670930819947375930362976254828338025771556314263136269004620764149895524892198427896942621067197685088650600821374900707927681241634793295162828178657288485297746093043267416956069248907206414972540126169322722226701224104880237578082114353649556247022845215644842439874481810269742121650383270172040119654897966002600465556443683369129799557207230595491835564189596193815907772052448219902571121606088479955721607454817456093321824765063446256143324660755532283616374382405804081810496665413685277868099943942063707472733712152536798892347045320162139695201780516785109689920388670863905086312946979124970400526044240191385945760143629929788522854181571055639557861110051346240259858680073065357867089742486621407483561599017952874516637337759972518179600603688882494325026044243556643714372504647001729637464484802197716393440338971759228690510642252602837154719163029109762308393479234287117565251932582554595519553209473829899747271112289549526026583660918482436961356620842045168112082021975320333227481058121366598754467693464520083847705788179017235050242189817415686034190486036745248354729565961758653194782092459616024845657566485873198056933445394513395621305679100111552536845752304222934807074641661950357820866435308406936450429766916566335412305299111313933548896505319717881322005765619966906347819231716971107629764904441059932246148063315740783580680425086116313421368541523190560675387981279423123510901377477275651577193624205374204101530958075005503869907045930901013060620969267716363943089895326138834789861190165999686278284245534803020037005499494867893226252657511361096850754329803169705386773414966779898111937265845748640880479611523366579555004739624128998664490164445121551940890759624541748553980578880580386414258583037659989959290944530052153034360056068935651703480758471308445330447593342330911756633023509235798954391302853545766067608245615927640565105260311509220940673";
-    const BUD_STEMS_ENC = "mf2odlinjl53jfiaffojglnll7e5ggdlgon2blgj3dm3j2njil0nl2oh44hdk7job8bb4iblolfjo3ffbajbjbl3fonlil3gi4l3i8gl35njgegcnfnn8lnn4dam1be6l9j4bfmkbf1f3ib22g5bb3cml33cjffhnhjbg0db3oibjijjkddi8cglbggn0335bl3mnf3lm8jf1fdmbj2jj4nnlbjonllkkjid6g1o2kgmjjoibfblic8lll469iha6hf2c1i8j88b8f83ff8ig3con6m3mi5n2g3m4lhnjlgfjlfll3lglgg4k24gmo3fj1b17dfofg63fo28ndlchmb9labniei6efi8gnbg473h1f2j1jnib2b9odjn4l3fioei32m8mlgaom434d5g1m1h285nm4fj4gja1jfnnb5i2879fliigc4k32njniib17f0a3nm8fo8gn7no34nicbjoogflmij5jdi4oei2ni4ogofb3eecn3l3bbbiboj7kjbjj7lnn559oi62kdf8fafgjamfn2j2lii33fmlmh28bkmofkf2boc62lj33j8n4ii06f33fainbif1fge8fje1g3jinfiffhkb9fljieninmh4m2ggm1f4a0bmo1lin99n533dlilnibbb3nf9ib68mdc1mjiglni2ajabbjabd3a4n4n33blnk3inagblll7gbonnmngbnm7f4lff37bai8bkjg868eg2noil8gl3hlnl89333bblfg94g0jjkmjfbj4jc1jiccfjbl4hn2egd6bnjiff8ecbbci1glgbnjab2bj440g9mocag1fjjmi08mnijcmbolmmgc4li8jajildjajlmb3l17bgml4fa858b6cn42ik7ajn1l7nhmjf8if4fbgi3o6ibg1j6kbblgink0ggfelfb88lobbml3iib6ge66jejkgngilljmfaiffai3m8mb0l3fogmnc1nj8nhbjk21d8ii5nmbgljfmmh5mjf8e7mo351effgjlmjf2dohgn6b6m4m83c84n8jgjjeb1j8lffjn3mna4fb68mnn5njjgnj2lfo6eb3mllndglghibgm3ll63igneoo22f48e3enib1onf5bbnofbk22g1f33fi1jf3fgnin2mi2omon634b32dllne2b3n1lng78bn0ll3mfgimjbgdnlkcnjifbfdof0mofojll45cfinfi8gnem4jnlmb0jhmo4n2gj87emffhgablifmon3lnh4n55fd3fh4c3igb42mje3fnl8bmodbheobfnjijgclf4fa1k4nodilind4nmi44oc2i3eknj39g376ddimj02ibgfl3aii38nij6i1mi0ginlof2lk9jfmi11nhg83442b3c3n0g68bgb7ghbl8nfmlb3hlkfono73le4d4g4ijj2fo68hinlo7g3f9ggmngo3ii12ioikj2g4ldg3m4b2gll2c6f7oknk84fibmj3d4mi3bh2inojj78a3584n3cf38mj4ffef2jfb3g5no6ij13nnclfb33imenjdn3fnbfmlngeg1n5ibkbkf8al3cfhbki8gb5mfj8jl1ngkfj13onlc24n5glbbflnbf42fjllbi832kbdmobin3f4lbho5gl4blm2mi834mnff4iggoni4lnh3f680ib34jie12bgl23nf184bolnjfm37ink33jgin56ig3gg8j9mg8dmkl2m7fg8198blgffeifgfnjingjjfglff4jgjl35no2fbg3bfmgm7l3hijmgilginmgl2m6jlmjikbem36i3jo1i7g2g7jm30418nnff255bnjf08g0nhlm3lamjf32jbm1b98330i2j97dobdm1g2omii2kd83em22jn8lb9if2jf8fgb5bi3j7li3i2e0ihiijn6mjl12fe641coil8ai1doohnjnfnglo1m4fjmg6mf3fl8oninm7gbmdb6nl3b5gbkikcibnnb2ci41b3ocmejbhja6j8gkmbmf7kln2oiif6hfhg6lijfog8ilmmflb8hfg3834i2ifg379lobml9loba3ibdii5mo37fgbjme3l5h4hodlemfjj97kndmndjf8clbb6n1bjolm5mib9an3lgkb7lg6mo7b88j1m2735nh6lfna4m76ea3ol2njhn25l3f24dll24g5jo6814abif4jjj9jblbdfnci8jd248n79gnj7n7dge2i3ggmjdi6gigj31m1f742g6nf66gf4anaomgfoho8nbaf25bbjjo3lnilhbjffik3jgb4l9lij2gcln4cbgfgie4efmj4i6bnmnniih51lfnn8ko7n2162hjd89ggb3fjl6lnk338hggooljb6dmangjn4j8l26jmhmd322nbb592o2b321g13jlo6m85khgj3mbi18oighi9janijf7mii0lbmjfng8mlgojbcli0g57n3b3f36nflomkigkekh5giilgm43jghki4abc3gml4bl8bblj893lkfaf0b8jlfm3gi8jm71n2gi1g2fmo4llf77ono24eoiingifn7ffj1llfj34n6gfiin3dkm3iam1ff";
-    const BUD_AURAS_ENC = "10001110010001101104110200102000100124021100111011003000000000111141010000110201100110303011111110310201300010101001010110110200100110003010010100101011420033003200200132110110101000000412000202104110211111102202101110101210100010100001121103031100230210000001113012100101103010010031231001110100000212101011011100022100101000111110220000100101201110001010113100103300012100120021022100100000103000010001100101000100011011310112004101100100200000110000000000000210100121200011000012021111111112010112010011102120100010030000001000112000200221111000021021111201000002000021331110130101120020110110011101211110100000111001211104011103000101111010001110210112000110101001000212201200203020000010101120413000111001011101333100001200210110200320100200000000000200201100111200010120001110011100100000011110310102100201210001001012010101011120000201301113001000100113001002000001242110111101100000100000010100201101303031004111112220010113010030000021101110120100010003101121112000000220020000201131020000200202310100010101001100110101131001021100000341110000000300001111013121111111011100002100001221110111110000003020010012010003100221000112000200000140124110030000110301001002120010103200120021001110001021104011020132101010100111102100030112101103000023200010000111000111102101000111010133011020210110110120020000111000011111000101110000002010113010000001110021110020001020122011102010300210201111010001002011101000102000110200100010100000010022021200010100230021120101013000001000010100001001010110000200102111010100211122202121011201111021010100100111001112101211323000123111000010010000110101101100003321400100120001111020201010001010101110001110001000020100331011011010111012000100310100011031221001211110412200102100111111020001204001011000122012000110102303112421220020011010011010011100100001011010101104101000010111201000120311001000001111000001010410011001000102111010111201000001001001002111000100033010001201000100021010001003010210000100210001020101100010110100001120303130200110002110103111000103021111100004101020241001110000101201011000111013142210002122210300100103000110011020101000012100221012100200310110010220000003000221100001130000000000130011120100004112022120011000000100100111102010121300200000002200440312113002021011010003011100010200102001011021110000011122011011014000110120000301101101001210321101041111100003030401112000000211000020112010000000101011112101001000021000001000110100131010000003110001001010200131001000100100001113000121101040002012110120031030101120001100010010000100113000021000101000102201021100000001200010010110000011110241100421021200000121102001000101100000011211021200101";
-    function decodeBud(id) {
-      if (id < 1 || id > BUD_COUNT) return null;
-      const i = id - 1;
-      const typeIdx = parseInt(BUD_TYPES_ENC[i], 10);
-      const sc = BUD_STEMS_ENC[i];
-      const stemIdx = sc >= "0" && sc <= "9" ? parseInt(sc) : sc.charCodeAt(0) - 97 + 10;
-      const auraIdx = parseInt(BUD_AURAS_ENC[i], 10);
-      return { id, type: BUD_TYPE_NAMES[typeIdx], stem: BUD_STEM_NAMES[stemIdx], aura: BUD_AURA_NAMES[auraIdx] };
-    }
 
     function marksToSfl(marks) { return marks / 100; }
-
-    // Crafted ingredient recipes — derive price from sub-ingredients
-    // ── Flower seed coin costs ──
-    const FLOWER_SEED_COIN_COSTS = {
-      "Sunpetal Seed": 240, "Bloom Seed": 480, "Lily Seed": 1200,
-      "Celestine Seed": 720, "Clover Seed": 720, "Edelweiss Seed": 720,
-      "Lavender Seed": 720, "Gladiolus Seed": 720,
-    };
 
     // ── Fish/food XP values (for XP-based pricing) ──
     const ITEM_XP_VALUES = {
@@ -4912,11 +4766,6 @@
       "Trout": 100, "Weakfish": 100,
       // Cakes/foods not in COOKING_RECIPES_DATA
       "Pirate Cake": 3000,
-    };
-
-    // ── Giant item coin sell prices ──
-    const GIANT_ITEM_COIN_PRICES = {
-      "Giant Apple": 1500, "Giant Orange": 500, "Giant Banana": 4000,
     };
 
     // Fish Market recipes by season (from sfl.world/info/fishing/info)
@@ -4947,37 +4796,6 @@
       },
     };
 
-    // Compost recipes: season-dependent inputs, base output amounts (from composterDetails)
-    const COMPOST_RECIPES = {
-      "Compost Bin": {
-        outputs: { "Sprout Mix": 10, "Earthworm": 6 },
-        inputs: {
-          spring: { "Rhubarb": 10, "Carrot": 5 },
-          summer: { "Zucchini": 10, "Pepper": 2 },
-          autumn: { "Yam": 15 },
-          winter: { "Potato": 10, "Cabbage": 3 },
-        },
-      },
-      "Turbo Composter": {
-        outputs: { "Fruitful Blend": 3, "Grub": 4 },
-        inputs: {
-          spring: { "Soybean": 5, "Corn": 3 },
-          summer: { "Cauliflower": 4, "Eggplant": 3 },
-          autumn: { "Broccoli": 10, "Artichoke": 2 },
-          winter: { "Onion": 5, "Turnip": 2 },
-        },
-      },
-      "Premium Composter": {
-        outputs: { "Rapid Root": 10, "Red Wiggler": 3 },
-        inputs: {
-          spring: { "Blueberry": 8, "Egg": 5 },
-          summer: { "Banana": 3, "Egg": 5 },
-          autumn: { "Apple": 4, "Tomato": 5 },
-          winter: { "Lemon": 3, "Apple": 3 },
-        },
-      },
-    };
-
     const CRAFTED_INGREDIENT_RECIPES = {
       "Cheese": { "Milk": 3 },
       "Kernel Blend": { "Corn": 1 },
@@ -5005,13 +4823,9 @@
       "Royal Bed": { "Royal Bedding": 3, "Royal Ornament": 3, "Sturdy Bed": 3 },
     };
 
-    // ── Fishing data (rod cost + per-fish probability model) ──
-    // Source: sunflower-land game repo (fishing.ts, tools.ts)
-    // Rod is consumed per cast: 20 coins + 3 Wood + 1 Stone (Reel Deal skill -50%)
-    const FISHING_ROD_COST = { coins: 20, materials: { Wood: 3, Stone: 1 } };
+    // ── Fishing data (per-fish probability model) ──
 
     // ── Salt mining (Salt Rake consumed per harvest) ──
-    const SALT_RAKE_COST = { coins: 20, materials: { Wood: 3 } };
     const SALT_BASE_YIELD = 10;
     function computeSaltYieldPerRake(farm) {
       let y = SALT_BASE_YIELD;
@@ -5020,19 +4834,9 @@
       try { if (farm && isWearableEquipped(farm, "Deep Sea Salt Cave Background")) y += 5; } catch {}
       return y;
     }
-    // Salt Rake coin-cost multiplier — Cheap Rakes (-20%) + Salt Sculpture L4+ (-10%), multiplicative
-    function computeSaltRakeCoinMult(farm) {
-      const skills = farm?.bumpkin?.skills || {};
-      const lvl = farm?.sculptures?.["Salt Sculpture"]?.level || 0;
-      let m = 1;
-      if (skills["Cheap Rakes"]) m *= 0.80;
-      if (lvl >= 4) m *= 0.90;
-      return m;
-    }
 
     // ── Aging Shed formulas (from sunflower-land/agingFormulas.ts) ──
     const AGING_PRIME_BASE = 0.10, AGING_PRIME_MULT = 1.3;
-    const AGING_DEFAULT_FACTOR = 1 + AGING_PRIME_BASE * (AGING_PRIME_MULT - 1); // 1.03 baseline
 
     // Per-farm prime-aged chance (0..1). Mirrors getPrimeAgedChance in the SFL repo.
     function getAgingPrimeChance(farm) {
@@ -5099,31 +4903,6 @@
       "Barred Knifejaw":"expert","Parrotfish":"expert",
       "Whale Shark":"expert","Saw Shark":"expert","White Shark":"expert"
     };
-
-    // Expected fish per cast for a given tier — accounts for +1 yield collectibles & skills
-    function computeFishYieldPerCast(farm, tier) {
-      let y = 1; // base
-      const skills = farm?.bumpkin?.skills || {};
-      const season = (farm?.season?.season || "").toLowerCase();
-      const has = (n) => findCollectible(farm, n).length > 0;
-      // Always-on
-      if (has("Walrus")) y += 1;
-      // Seasonal +1 fish collectibles
-      if (season === "spring" && has("Pink Dolphin")) y += 1;
-      if (season === "summer" && has("Jellyfish")) y += 1;
-      if (season === "autumn" && has("Poseidon")) y += 1;
-      if (season === "winter" && has("Super Star")) y += 1;
-      // Tier-specific chance boosts (expected value)
-      if (tier === "basic") {
-        if (has("Alba")) y += 0.5;                 // 50% chance +1 basic
-        if (skills["Fishy Chance"]) y += 0.10;     // 10% chance +1 basic
-      } else if (tier === "advanced") {
-        if (skills["Fishy Roll"]) y += 0.10;       // 10% chance +1 advanced
-      } else if (tier === "expert") {
-        if (skills["Fishy Gamble"]) y += 0.20;     // 20% chance +1 expert
-      }
-      return y;
-    }
 
     // Twins of core/data/cooking.mjs GAME_FISH_SPELLING / FISH_COOKABLE_NAMES / COOKABLE_CAKES.
     // Aged products carry the GAME's fish spelling (consumables.ts:1261, :1291 — "Aged Hammerhead
@@ -11908,30 +11687,6 @@
       "Coprolite": 200, "Pirate Bounty": 7500,
     };
 
-    // Betty sell prices in COINS (from game source crops.ts / fruits.ts)
-    const BETTY_SELL_PRICES = {
-      "Sunflower": 0.02, "Potato": 0.14, "Rhubarb": 0.24, "Pumpkin": 0.4,
-      "Zucchini": 0.4, "Carrot": 0.8, "Yam": 0.8, "Cabbage": 1.5,
-      "Broccoli": 1.5, "Soybean": 2.3, "Beetroot": 2.8, "Pepper": 3,
-      "Cauliflower": 4.25, "Parsnip": 6.5, "Eggplant": 8, "Corn": 9,
-      "Onion": 10, "Radish": 9.5, "Wheat": 7, "Turnip": 8,
-      "Kale": 10, "Artichoke": 12, "Barley": 12,
-      "Tomato": 2, "Lemon": 6, "Blueberry": 12, "Orange": 18,
-      "Apple": 25, "Banana": 25, "Celestine": 200, "Lunara": 500,
-      "Duskberry": 1000, "Grape": 240, "Rice": 320, "Olive": 400,
-    };
-
-    function computeBettyRate(p2pPrices) {
-      let bestRate = 0, bestItem = "";
-      for (const [name, sellCoins] of Object.entries(BETTY_SELL_PRICES)) {
-        const p2p = p2pPrices[name];
-        if (!p2p || p2p <= 0) continue;
-        const rate = sellCoins / p2p;
-        if (rate > bestRate) { bestRate = rate; bestItem = name; }
-      }
-      return { rate: bestRate, item: bestItem };
-    }
-
     // The one coin-rate fallback (twin of core/engine/prices.mjs): the mode's source, else the
     // other live source, else 0 = coins unpriced — never a hardcoded 320 / 1500.
     function pickCoinsPerSFL(mode, bettyRate, apiRate) {
@@ -13286,9 +13041,6 @@
       const wardrobe = farm.wardrobe || {};
       const MIN_VALUE = 0.01;
 
-      // Debug: log farm keys to help find gems path
-      console.log("[Treasury] farm keys:", Object.keys(farm));
-      console.log("[Treasury] farm.gems:", farm.gems, "| farm.bank:", farm.bank, "| inventory Gem:", inventory["Gem"]);
 
       // --- Resources: inventory items with P2P prices ---
       const resources = [];
@@ -13577,11 +13329,6 @@
       const btcTotal = rates.btcUsd > 0 ? usdTotal / rates.btcUsd : 0;
       const rateLbl = (r) => r > 0 ? Math.round(r) : "n/a";
 
-      const coinModeLabel = treasuryCoinMode === "betty"
-        ? `Betty (${escHTML(rates.bettyItem)}: ${rateLbl(rates.coinsPerSFL_betty)}/${sflIcon()})`
-        : treasuryCoinMode === "api"
-          ? `Exchange API (${rateLbl(rates.coinsPerSFL_api)}/${sflIcon()})`
-          : "0 (no value)";
       const statusWarn = treasuryStatusWarnings(td);
 
       let html = `<div class="bumpkin-dev-banner pixel-panel pixel-font">⚠ UNDER DEVELOPMENT — might show incorrect data</div>
@@ -15677,11 +15424,6 @@
         }
       }
 
-      console.log("[Power] Animal detection:", { chickens, cows, sheep, goldenAnimals,
-        henHouse: !!farm.henHouse, barn: !!farm.barn,
-        chickenLevels: chickenList.map(a => a.level),
-        cowLevels: cowList.map(a => a.level),
-        sheepLevels: sheepList.map(a => a.level) });
 
       return {
         crops: Object.keys(farm.crops || {}).length,
@@ -15700,73 +15442,6 @@
         oilReserves: Object.keys(farm.oilReserves || {}).length,
         trees: sumMergedNodes(farm.trees),
       };
-    }
-
-    // Get base production per day (units, not SFL) for a category + selected product
-    function getBaseProductionPerDay(catId, product, capacity) {
-      switch (catId) {
-        case "crops": {
-          const growSec = CROP_GROW_DATA[product];
-          if (!growSec) return 0;
-          const n = capacity.crops || 0;
-          return n * (86400 / growSec) * 1; // yield=1 per harvest
-        }
-        case "fruits": {
-          const growSec = FRUIT_GROW_DATA[product];
-          if (!growSec) return 0;
-          const n = capacity.fruitPatches || 0;
-          return n * (86400 / growSec) * 1;
-        }
-        case "greenhouse": {
-          const growSec = GREENHOUSE_GROW_DATA[product];
-          if (!growSec) return 0;
-          const n = capacity.greenhouse || 0;
-          return n * (86400 / growSec) * 1;
-        }
-        case "chickens": {
-          const d = ANIMAL_CYCLE_DATA["Chicken"];
-          return (capacity.chickens || 0) * (86400 / d.cycleSec) * 1;
-        }
-        case "cows": {
-          const d = ANIMAL_CYCLE_DATA["Cow"];
-          return (capacity.cows || 0) * (86400 / d.cycleSec) * 1;
-        }
-        case "sheep": {
-          const d = ANIMAL_CYCLE_DATA["Sheep"];
-          return (capacity.sheep || 0) * (86400 / d.cycleSec) * 1;
-        }
-        case "bees": {
-          return (capacity.bees || 0) * 1; // ~1 honey/day per hive
-        }
-        case "obsidian": {
-          const d = RESOURCE_RESPAWN_DATA["Obsidian"];
-          const n = capacity.lavaPits || 0;
-          return n * (86400 / d.respawnSec) * d.yield;
-        }
-        case "oil": {
-          const d = RESOURCE_RESPAWN_DATA["Oil"];
-          const n = capacity.oilReserves || 0;
-          return n * (86400 / d.respawnSec) * d.yield;
-        }
-        case "stone": case "iron": case "gold": case "crimstone": {
-          const rKey = catId === "stone" ? "Stone" : catId === "iron" ? "Iron" : catId === "gold" ? "Gold" : "Crimstone";
-          const d = RESOURCE_RESPAWN_DATA[rKey];
-          const capKey = catId === "stone" ? "stones" : catId === "crimstone" ? "crimstones" : catId;
-          const n = capacity[capKey] || 0;
-          return n * (86400 / d.respawnSec) * d.yield;
-        }
-        case "trees": {
-          const d = RESOURCE_RESPAWN_DATA["Wood"];
-          return (capacity.trees || 0) * (86400 / d.respawnSec) * d.yield;
-        }
-        case "flowers": {
-          const growSec = SEED_DATA[product]?.baseSeconds || 86400;
-          const n = capacity.flowers || 0;
-          return n * (86400 / growSec) * 1;
-        }
-        case "fishing": return 20; // ~20 catches/day estimate
-        default: return 0;
-      }
     }
 
     // Get the grow/cycle seconds for a category's selected product
@@ -15951,105 +15626,6 @@
       if (NON_SELLABLE_PRODUCTS.has(product)) return 0;
       const price = p2pPrices[product] || 0;
       return unitsPerDay * price;
-    }
-
-    // ── Bud boost calculation ──
-    function budEffectApplies(eff, catId, product) {
-      if (!eff.cats.includes(catId)) return false;
-      if (eff.cropTier && catId === "crops") {
-        const tierCrops = CROP_TIERS[eff.cropTier];
-        if (tierCrops && !tierCrops.includes(product)) return false;
-      }
-      if (eff.product && eff.product !== product) return false;
-      return true;
-    }
-
-    function calcBudSflPerDay(bud, capacity, p2pPrices, savedProducts) {
-      const typeEffects = BUD_TYPE_BOOSTS[bud.type] || [];
-      const stemEffects = BUD_STEM_BOOSTS[bud.stem] || [];
-      const aura = BUD_AURA_MULTIPLIERS[bud.aura] || 1;
-      const allEffects = [...typeEffects, ...stemEffects];
-      let totalSfl = 0;
-      const breakdown = [];
-
-      for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
-        if (!catDef.quantifiable) continue;
-
-        // Animals: iterate over all products (Egg+Feather, Milk+Leather, etc.)
-        if (isAnimalCat(catId)) {
-          const animal = getAnimalData(catId);
-          if (!animal) continue;
-          let catSfl = 0;
-          for (const prod of animal.products) {
-            const yieldVals = [];
-            for (const eff of allEffects) {
-              if (!budEffectApplies(eff, catId, prod)) continue;
-              if (eff.type === "yield_flat") yieldVals.push(eff.value);
-            }
-            const bestYield = yieldVals.reduce((s, v) => s + v, 0) * aura; // game ADDS type + stem, then x aura: getBudBoost, lib/getBudYieldBoosts.ts:161-167 (max() dropped the smaller trait)
-            if (bestYield > 0) {
-              const n = getCapacityCount(catId, capacity);
-              const cycleSec = getCycleSec(catId, prod);
-              const price = p2pPrices[prod] || 0;
-              catSfl += bestYield * (86400 / cycleSec) * n * price;
-            }
-          }
-          if (catSfl > 0) {
-            totalSfl += catSfl;
-            breakdown.push({ catId, sflPerDay: catSfl });
-          }
-          continue;
-        }
-
-        const product = savedProducts[catId] || getDefaultProduct(catId);
-        const n = getCapacityCount(catId, capacity);
-        if (n === 0 && catId !== "fishing") continue;
-
-        const yieldVals = [], speedVals = [], chanceVals = [];
-        for (const eff of allEffects) {
-          if (!budEffectApplies(eff, catId, product)) continue;
-          if (eff.type === "yield_flat") yieldVals.push(eff.value);
-          else if (eff.type === "speed_pct") speedVals.push(eff.value);
-          else if (eff.type === "chance") chanceVals.push(eff);
-        }
-
-        const bestYield = yieldVals.reduce((s, v) => s + v, 0) * aura; // game ADDS type + stem, then x aura: getBudBoost, lib/getBudYieldBoosts.ts:161-167 (max() dropped the smaller trait)
-        const bestSpeed = speedVals.length > 0 ? Math.min(...speedVals) * aura : 0;
-        const bestChance = chanceVals.length > 0
-          ? chanceVals.reduce((a, b) => (a.pct * a.extra > b.pct * b.extra) ? a : b) : null;
-
-        const cycleSec = getCycleSec(catId, product);
-        const priceProduct = getPriceProduct(catId, product);
-        const price = p2pPrices[priceProduct] || 0;
-        let extraSfl = 0;
-
-        if (bestYield > 0) {
-          if (catId === "fishing") extraSfl += bestYield * price;
-          else if (catId === "bees") extraSfl += bestYield * n * price;
-          else extraSfl += bestYield * (86400 / cycleSec) * n * price;
-        }
-
-        if (bestSpeed !== 0) {
-          const newCycle = cycleSec * (1 + bestSpeed / 100);
-          if (newCycle > 0) {
-            const baseY = getBaseYield(catId);
-            extraSfl += ((86400 / newCycle) - (86400 / cycleSec)) * n * baseY * price;
-          }
-        }
-
-        if (bestChance) {
-          const effPct = bestChance.pct * aura;
-          const catches = catId === "fishing" ? 20 : (86400 / cycleSec) * n;
-          extraSfl += (effPct / 100) * bestChance.extra * catches * price;
-        }
-
-        if (extraSfl > 0) {
-          totalSfl += extraSfl;
-          breakdown.push({ catId, sflPerDay: extraSfl, product: priceProduct });
-        }
-      }
-
-      return { totalSfl, breakdown };
     }
 
     const CAT_ICON_ITEM = {
@@ -16280,38 +15856,6 @@
 
     // ── Animal Feed Cost Functions ──
 
-    // Get preferred feed (highest XP) for a given level. Returns null at max level (use cheapest).
-    function getPreferredFeed(level) {
-      if (level >= 15) return null;
-      for (const row of FEED_XP_TABLE) {
-        if (level >= row.min && level <= row.max) {
-          let best = null, bestXP = 0;
-          for (const [food, xp] of Object.entries(row.xp)) {
-            if (xp > bestXP) { bestXP = xp; best = food; }
-          }
-          return best;
-        }
-      }
-      return "Mixed Grain";
-    }
-
-    // Get cheapest feed by P2P ingredient cost
-    function getCheapestFeed(p2pPrices, stockMods) {
-      let cheapest = null, cheapestCost = Infinity;
-      for (const [food, ingredients] of Object.entries(FEED_RECIPES)) {
-        let cost = 0;
-        if (food === "Mixed Grain" && stockMods?.hasKaleMix) {
-          cost = (p2pPrices["Kale"] || 0) * 3;
-        } else {
-          for (const [item, qty] of Object.entries(ingredients)) {
-            cost += (p2pPrices[item] || 0) * qty;
-          }
-        }
-        if (cost < cheapestCost) { cheapestCost = cost; cheapest = food; }
-      }
-      return { food: cheapest, costPerUnit: cheapestCost };
-    }
-
     // Get cost per 1 unit of a specific feed
     function getFeedCostPerUnit(foodName, p2pPrices, stockMods) {
       if (foodName === "Mixed Grain" && stockMods?.hasKaleMix) {
@@ -16335,18 +15879,6 @@
         }
       }
       return Math.max(0, mult);
-    }
-
-    // Highest-XP ("favourite") food for a level + its XP — the food used to complete a cycle.
-    function getFavFoodForLevel(level) {
-      for (const row of FEED_XP_TABLE) {
-        if (level >= row.min && level <= row.max) {
-          let best = null, bestXp = 0;
-          for (const [f, xp] of Object.entries(row.xp)) { if (xp > bestXp) { bestXp = xp; best = f; } }
-          return { food: best || "Mixed Grain", xp: bestXp || 1 };
-        }
-      }
-      return { food: "Mixed Grain", xp: 80 };
     }
 
     // Cheapest-TOTAL feed for an animal's cycle: try every food (favourite minimises feedings but may cost
@@ -16553,22 +16085,6 @@
       const avgRate = animals.length > 0 ? totalExpectedSick / animals.length : 0;
 
       return { costPerDay, avgRate, totalExpectedSick, barnDelightSfl, cureCostMult, rateMult, preventedShare, reductions, animalCount: animals.length, perLevel };
-    }
-
-    // Calculate sickness cost savings from a specific boost item
-    function calcSicknessBoostSavings(boostItem, catId, capacity, p2pPrices, allBoostItems, skills) {
-      const animals = capacity.animalDetails?.[catId] || [];
-      if (animals.length === 0) return 0;
-
-      // Base cost without this item
-      const itemsWithout = (allBoostItems || []).filter(b => b.name !== boostItem.name);
-      const baseCost = calcSicknessCost(catId, capacity, p2pPrices, itemsWithout, skills);
-
-      // Cost with this item (simulate ownership)
-      const itemsWith = (allBoostItems || []).map(b => b.name === boostItem.name ? { ...b, has: true } : b);
-      const withCost = calcSicknessCost(catId, capacity, p2pPrices, itemsWith, skills);
-
-      return baseCost.costPerDay - withCost.costPerDay;
     }
 
     // ── Shared Restock System ──
@@ -17248,15 +16764,6 @@
       const ec = ab.effectiveCycle || getCycleSec(cat, getDefaultProduct(cat));
       return ec > 0 ? gameResYield(farm, cat, eff) * (86400 / ec) : 0;
     }
-    // Average resource per single node-harvest (per tool used) — for the mining-strategy tool cost.
-    function gameResYieldPerTool(farm, cat, effects) {
-      const eff = effects || roadmapOwnedEffects(cat);
-      const obj = farm[RES_FARMKEY[cat]] || {};
-      const n = Object.keys(obj).length;
-      return n > 0 ? gameResYield(farm, cat, eff) / n : gameResBoostedBase(farm, cat, eff);
-    }
-
-    const FACTION_WINGS_END = true;
 
 
     // Build powerState — shared by POWER and ROADMAP pages. Throws on fetch failure (no DOM writes).
@@ -17641,36 +17148,6 @@
       }
       return { byCat, total, peak: _mode === "production" ? peak : null, mode: _mode, fee: _fee };
     }
-    function roadmapMiningChainHtml(settings) {
-      const ch = roadmapMiningChain(settings);
-      const order = ["trees", "stone", "iron", "gold", "crimstone", "oil"];
-      const ICON = { sell: ["SELL", "#7fe0a0", "#1f3a2a"], use: ["USE", "#5DADE2", "#16314a"], skip: ["SKIP", "#e8a060", "#3a2c18"] };
-      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
-      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">⛏️ MINING CHAIN — sell, or mine up the chain?</div>`;
-      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Pickaxes eat real resources, so a tier is worth mining only if its ore beats the inputs it burns — and a tier can be worth mining purely to FEED a more profitable tier above it. <b style="color:#7fe0a0">SELL</b> = sell it raw · <b style="color:#5DADE2">USE</b> = burn it into the next tier · <b style="color:#e8a060">SKIP</b> = mining loses vs selling the inputs (sell those instead). <b>Δ</b> = the per-day gain from mining this vs just selling its inputs.</div>`;
-      h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.58rem"><thead><tr style="color:var(--text-dim);font-size:0.5rem;text-align:left"><th style="padding:2px 6px">resource</th><th style="padding:2px 6px">do</th><th style="padding:2px 6px;text-align:right">produce/d</th><th style="padding:2px 6px;text-align:right">sell / use</th><th style="padding:2px 6px;text-align:right">Δ vs sell-inputs</th><th style="padding:2px 6px;text-align:right">net/d</th></tr></thead><tbody>`;
-      let tot = 0;
-      for (const c of order) {
-        const r = ch.byCat[c]; if (!r || (!r.mined && !(r.produced > 0))) continue;
-        const f = roadmapEffFactor(c, settings); tot += r.mined ? r.net * f : 0;
-        const ic = ICON[r.verdict] || ICON.sell;
-        const feed = (r.verdict === "use" && r.feeds) ? (" → " + escHTML(MINE_RES[r.feeds] || r.feeds)) : "";
-        const badge = `<span style="font-size:0.5rem;padding:1px 5px;border-radius:3px;background:${ic[2]};color:${ic[1]};font-weight:bold">${ic[0]}${feed}</span>`;
-        const dcol = r.dailyProfit > 0.003 ? "var(--green)" : (r.dailyProfit < -0.003 ? "var(--red)" : "var(--text-dim)");
-        const il = r.inputLimited ? ` <span style="color:var(--yellow);font-size:0.45rem" title="you can't produce enough of a lower resource to feed this fully">input-limited</span>` : "";
-        h += `<tr style="border-top:1px solid #1b1b1b">
-          <td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(MINE_RES[c])}" onerror="this.style.display='none'" alt=""> ${escHTML(MINE_RES[c])}</td>
-          <td style="padding:3px 6px;white-space:nowrap">${badge}${il}</td>
-          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${roadmapFmtFlower(r.produced * f)}</td>
-          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${r.mined ? (roadmapFmtFlower(r.sellable * f) + " / " + roadmapFmtFlower(r.consumed * f)) : "—"}</td>
-          <td style="padding:3px 6px;text-align:right;color:${dcol}">${r.dailyProfit >= 0 ? "+" : "−"}${roadmapFmtFlower(Math.abs(r.dailyProfit * f))}</td>
-          <td style="padding:3px 6px;text-align:right;color:var(--sunpetal);font-weight:bold">${r.mined ? roadmapFmtFlower(r.net * f) : "0"}</td>
-        </tr>`;
-      }
-      h += `</tbody></table></div>`;
-      h += `<div style="margin-top:8px;font-size:0.56rem;color:var(--text-secondary)">Total mining income ≈ <b style="color:var(--green)">${roadmapFmtFlower(tot)} ${sflIcon()}/day</b> — the optimal sell/use mix above, scaled by your real harvest efficiency (matches the income).</div>`;
-      return h;
-    }
     function roadmapCatBreakdown(cat, effects, settings) {
       const { capacity, savedProducts, exchangeRates, stockMods, season } = powerState;
       const p2pPrices = roadmapPrices(settings);
@@ -17761,30 +17238,6 @@
       return (pp.gpp - pp.cpp) * take * seasonShare;
     }
 
-    // NET FLOWER/day for a single product (one crop / greenhouse item) at full plots.
-    function roadmapProductBreakdown(cat, product, settings) {
-      const { capacity, exchangeRates, stockMods } = powerState;
-      const p2pPrices = roadmapPrices(settings);
-      const er = roadmapCoinsFree(settings) ? Object.assign({}, exchangeRates, { coinsPerSFL: Infinity }) : exchangeRates;
-      const ownedEff = roadmapOwnedEffects(cat);
-      if (ROADMAP_MINING_CATS.indexOf(cat) >= 0) return roadmapCatBreakdown(cat, ownedEff, settings);
-      let gross = 0, cost = 0;
-      try {
-        const ab = applyBoosts(cat, product, capacity, ownedEff);
-        gross = unitToSfl(ab.unitsPerDay, getPriceProduct(cat, product), p2pPrices) || 0;
-        if (cat === "crops" || cat === "fruits" || cat === "greenhouse" || cat === "flowers") {
-          cost += (calcSeedCostPerDay(cat, product, capacity, er, stockMods, ownedEff, p2pPrices).costPerDay) || 0;
-        }
-        // Seed-restock cap: you can only plant restocksPerDay × Betty-restock seeds/day of a crop.
-        if (cat === "crops") {
-          const theoSeedsPerDay = getCapacityCount("crops", capacity) * (ab.effectiveCycle > 0 ? 86400 / ab.effectiveCycle : 0);
-          const capSeeds = (settings.restocksPerDay || 2) * (cmGetSeedRestockCount(powerState.farm, product) || 0);
-          if (theoSeedsPerDay > 0 && capSeeds < theoSeedsPerDay) { const sf = capSeeds / theoSeedsPerDay; gross *= sf; cost *= sf; }
-        }
-      } catch {}
-      return { gross, cost, net: gross - cost };
-    }
-
     // "What should I farm/mine now" — net FLOWER/day per activity at full activity, green/red.
     // Rough key values (chest EV is backend data) — labeled estimates the user can mentally adjust.
     // Average chest payout per key (game source chests.ts). Coins dominate but are free when you hold a
@@ -17834,8 +17287,6 @@
       for (const [w, q] of Object.entries(reward.wearables || {})) parts.push(q + "\u00d7 " + w);
       return parts.join(", ") || "\u2014";
     }
-    // Rough seasonal-ticket value (ticket-shop EV is backend) — labeled estimate, adjust mentally.
-    const ROADMAP_TICKET_VALUE_SFL = 3;
     // Deliveries + bounties: reward value (SFL/coins/tickets/marks/keys) minus the items you give.
     function roadmapDeliveriesHtml(settings) {
       const { farm, p2pPrices, exchangeRates } = powerState;
@@ -17942,51 +17393,6 @@
       });
       h += `</tbody></table></div>`;
       h += `<div style="margin-top:8px;font-size:0.5rem;color:var(--text-dim)">days/key uses 1 bed per NPC at its grow rate. The NPC\u2019s liked flower gives more points but usually grows slower, so the best points-per-grow-day flower (often a 1-day Pansy/Cosmos) reaches the key faster. Keys are random chest opens \u2014 value shown is the average.</div>`;
-      h += `</div>`;
-      return h;
-    }
-
-    // SKILLS advisory: level + cost-per-point, and RESET advice (owned skills that add <= 0 FLOWER/day
-    // for your farm because their debuff cancels the buff). The skills themselves are ranked in the
-    // main buy order; this box surfaces the reset opportunity the buy order can't (it only adds skills).
-    function roadmapSkillsHtml(settings) {
-      const farm = powerState.farm; const bumpkin = farm.bumpkin || {};
-      let info = {}; try { info = calcSkillPointCost(bumpkin, powerState.p2pPrices, farm) || {}; } catch {}
-      const { byName, catBoostsW } = roadmapBuildClones();
-      const drop = [], topTake = []; let freeCount = 0, freePts = 0;
-      for (const name in byName) {
-        const c = byName[name];
-        if (c.type !== "Skill") continue;
-        if (c.has) {
-          c.has = false; const v = roadmapItemValue(c, catBoostsW, settings); c.has = true;
-          if (v < -0.0001) drop.push({ name, pts: c.skillPoints || 0, tree: c.skillTree || "", v }); // actively hurting
-          else if (v <= 0.0001) { freeCount++; freePts += (c.skillPoints || 0); } // inactive → points could be redeployed
-        } else {
-          const v = roadmapItemValue(c, catBoostsW, settings);
-          if (v > 0) topTake.push({ name, v, floor: c.floor, pts: c.skillPoints || 0, tree: c.skillTree || "", roi: c.floor > 0 ? c.floor / v : 0 });
-        }
-      }
-      topTake.sort((a, b) => a.roi - b.roi);
-      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
-      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">SKILLS \u2014 what to take &amp; what to reset</div>`;
-      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Level ${info.level || "?"} \u00b7 1 skill point \u2248 ${roadmapFmtFlower(info.sflPerPoint || 0)} ${sflIcon()} of cooking XP. Unlearned skills with a positive FLOWER/day gain are already ranked in the buy order above (their cost = points \u00d7 that XP cost \u2014 i.e. whether it pays to burn resources for XP to level up). If you have unspent points, treat the top ones as free.</div>`;
-      if (topTake.length) {
-        h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin:6px 0 3px">TOP SKILLS TO TAKE (by payback)</div>`;
-        h += `<table style="width:100%;border-collapse:collapse;font-size:0.58rem"><tr style="color:var(--text-dim);font-size:0.5rem"><td>skill</td><td style="text-align:right;padding:0 6px">pts</td><td style="text-align:right;padding:0 6px">+FL/day</td><td style="text-align:right">payback</td></tr>`;
-        for (const s of topTake.slice(0, 10)) h += `<tr style="border-bottom:1px solid #1b1b1b"><td style="padding:2px 6px 2px 0">${escHTML(s.name)} <span style="color:var(--text-dim);font-size:0.5rem">${escHTML(s.tree)}</span></td><td style="padding:2px 6px;text-align:right;color:var(--text-dim)">${s.pts}</td><td style="padding:2px 6px;text-align:right;color:var(--green)">+${roadmapFmtFlower(s.v)}</td><td style="padding:2px 0 2px 6px;text-align:right">${roadmapFmtDays(s.roi)}</td></tr>`;
-        h += `</table>`;
-      }
-      if (drop.length) {
-        h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--red);margin:10px 0 3px">RESET THESE \u2014 owned skills HURTING your FLOWER/day (debuff &gt; buff)</div>`;
-        h += `<div style="font-size:0.55rem;color:var(--text-dim);line-height:1.7">${drop.map(d => `${escHTML(d.name)} <span style="color:var(--red);font-size:0.5rem">${roadmapFmtFlower(d.v)}/d</span> <span style="color:var(--text-dim);font-size:0.5rem">(${d.pts}pt ${escHTML(d.tree)})</span>`).join(" \u00b7 ")}</div>`;
-      }
-      const potential = topTake.reduce((s, x) => s + x.v, 0);
-      if (freePts > 0 && topTake.length) {
-        h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin:10px 0 3px">FREEABLE POINTS</div>`;
-        h += `<div style="font-size:0.55rem;color:var(--text-dim);line-height:1.6">You hold <b>${freePts} points</b> in ${freeCount} skills that add 0 FLOWER/day (they\u2019re for activities you don\u2019t run for profit). A reset could redeploy them to the top skills above for up to <span style="color:var(--green)">+${roadmapFmtFlower(potential)}/day</span> \u2014 but weigh that against any non-FLOWER value (XP rate, Petal Blessed cooldown, fishing, cooking). Watch tree-tier prerequisites.</div>`;
-      } else if (!drop.length && !topTake.length) {
-        h += `<div style="font-size:0.55rem;color:var(--green)">Your skill allocation is already optimal for FLOWER \u2014 nothing worth changing.</div>`;
-      }
       h += `</div>`;
       return h;
     }
@@ -18113,27 +17519,6 @@
       if (x >= 48) return (x / 24).toFixed(1) + " days";
       if (x >= 10) return Math.round(x) + "h";
       return x.toFixed(1) + "h";
-    }
-    // Per-category harvest-efficiency sliders + what each % means as a harvest interval.
-    function roadmapResourceValuePanel(settings) {
-      const RES = ["Crimstone", "Sunstone", "Obsidian", "Oil", "Gold", "Iron", "Stone", "Wood"];
-      const p2p = powerState.p2pPrices || {};
-      const ov = settings.resourceUseValue || {};
-      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px;font-size:0.6rem;color:var(--text-secondary)">`;
-      h += `<div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-bottom:6px">RESOURCE USE-VALUE</div>`;
-      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">What each resource is worth to YOU in ${sflIcon()}, used everywhere the roadmap prices it \u2014 as income when you sell/keep it AND as a cost when a tool eats it. Blank = live p2p. Raise a resource you mine to <b>use</b> (Crimstone/Sunstone/Obsidian for crafting) above p2p, or drop one you <b>over-produce</b> (surplus Gold/Wood you can\u2019t actually sell) below p2p \u2014 cheaper Gold makes Crimstone\u2019s Gold-Pickaxe cost fall, so its boosts move from CONDITIONAL into the plan.</div>`;
-      h += `<div style="display:flex;flex-wrap:wrap;gap:12px">`;
-      for (const r of RES) {
-        const live = p2p[r];
-        const cur = (ov[r] !== undefined) ? ov[r] : "";
-        const liveTxt = live > 0 ? roadmapFmtFlower(live) : "n/a";
-        const tag = (ov[r] !== undefined) ? `<span style="color:var(--green)" title="overridden (live ${liveTxt})">\u25cf</span>` : `<span style="color:var(--text-dim)" title="using live p2p ${liveTxt}">p2p</span>`;
-        h += `<label style="display:inline-flex;align-items:center;gap:4px"><img class="inline-icon" src="${getItemIcon(r)}" onerror="this.style.display='none'" alt=""> ${escHTML(r)} <input type="number" step="0.01" min="0" placeholder="${liveTxt}" value="${cur}" style="width:62px" onchange="_roadmapSetResVal('${r}',this.value)"> ${tag}</label>`;
-      }
-      h += `</div>`;
-      if (Object.keys(ov).length) h += `<button onclick="_roadmapResetResVal()" style="margin-top:8px;font-size:0.55rem">reset all to p2p</button>`;
-      h += `</div>`;
-      return h;
     }
     function roadmapEfficiencyPanel(settings) {
       const cats = [["trees", "Trees"], ["stone", "Stone"], ["iron", "Iron"], ["gold", "Gold"], ["crimstone", "Crimstone"], ["oil", "Oil"], ["crops", "Crops"], ["fruits", "Fruits"], ["greenhouse", "Greenhouse"]];
@@ -19093,34 +18478,6 @@
     function roadmapFlowIcon(name) { try { return getItemIcon(name); } catch { return ""; } }
 
 
-    // What-to-do-today TILES (a grid of the best concrete actions, not a path).
-    function roadmapTodoTilesHtml(settings) {
-      // MIGRATED: branches come from section=roadmap's `todo` (computed in core);
-      // iconName → icon html restored client-side (roadmapFlowIcon is DOM-only).
-      const branches = ((_roadmapServer && _roadmapServer.todo) || []).map(b => Object.assign({}, b, {
-        icon: roadmapFlowIcon(b.iconName),
-        actions: (b.actions || []).map(a => Object.assign({}, a, { icon: a.iconName ? roadmapFlowIcon(a.iconName) : "" })),
-      }));
-      if (!branches.length) return "";
-      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
-      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">WHAT TO DO TODAY</div>`;
-      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:10px;line-height:1.6">The best concrete moves right now, by category. <span style="color:var(--green)">Green</span> = do it, <span style="color:var(--red)">red</span> = skip (loses FLOWER).</div>`;
-      h += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:10px">`;
-      for (const br of branches) {
-        h += `<div style="background:linear-gradient(160deg,#251c12,#1c160f);border:1px solid var(--border-brown);border-radius:8px;padding:9px 11px">`;
-        h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin-bottom:6px;display:flex;align-items:center;gap:6px"><img class="inline-icon" src="${br.icon}" onerror="this.style.display='none'" alt=""> ${escHTML(br.label)}</div>`;
-        for (const a of br.actions.slice(0, 4)) {
-          h += `<div style="display:flex;align-items:center;gap:6px;padding:3px 0 3px 7px;border-left:3px solid ${a.good ? "var(--green)" : "var(--red)"};margin-bottom:3px">`;
-          h += `${a.icon ? `<img class="inline-icon" src="${a.icon}" onerror="this.style.display='none'" alt="">` : ""}`;
-          h += `<div style="flex:1"><div style="font-size:0.6rem;color:var(--text-primary);font-family:'Courier New',monospace">${escHTML(a.label)}</div><div style="font-size:0.55rem;color:${a.good ? "var(--green)" : "var(--red)"};font-family:'Courier New',monospace">${escHTML(a.sub)}</div></div>`;
-          h += `</div>`;
-        }
-        h += `</div>`;
-      }
-      h += `</div></div>`;
-      return h;
-    }
-
     // Buy-path graph data: the econ buy order with SKILLS + the LEVELING for them expanded into their
     // own nodes (a free skill uses an unused point; a paid skill is preceded by "cook N cakes -> +1 point").
     function roadmapBuildMineFlowData(settings) {
@@ -19660,8 +19017,6 @@
       const _cats = powerState.categories || { catSummaries: {}, totalBaseSfl: 0, totalBoostedSfl: 0, totalCostSfl: 0 };
       if (_cats.oilPrice !== undefined) {
         p2pPrices["Oil"] = _cats.oilPrice;
-        // Cache Oil price for diff page (includes all real boosts)
-        localStorage.setItem("sfl_oil_price", String(_cats.oilPrice));
       }
       let totalBaseSfl = _cats.totalBaseSfl, totalBoostedSfl = _cats.totalBoostedSfl, totalCostSfl = _cats.totalCostSfl;
       const catSummaries = _cats.catSummaries;
@@ -21056,18 +20411,6 @@
     //  NODES INVESTMENT ADVISOR
     // ═══════════════════════════════════════
 
-    // UNUSED since the NODES page started reading nodeAcq from compute?section=ascension.
-    // The live copy is core/engine/roadmap.mjs, served as nodeAcq.perType[node].tiers. Left in place rather than deleted; if
-    // anything is ever wired back to it, it will silently disagree with every other page.
-    function countNodeTiers(resourceObj) {
-      let t1 = 0, t2 = 0, t3 = 0;
-      for (const node of Object.values(resourceObj || {})) {
-        const m = node.multiplier || 1;
-        if (m >= 16) t3++; else if (m >= 4) t2++; else t1++;
-      }
-      return { physical: t1 + t2 + t3, t1, t2, t3, effective: t1 + t2 * 4 + t3 * 16 };
-    }
-
     window.nodesSetRoiCap = function(val) {
       try { localStorage.setItem("sfl_nodes_roi_cap", val); } catch {}
       if (cachedFarmData) renderNodes(cachedFarmData);
@@ -21337,13 +20680,6 @@
       if (!found || !total) return null;
       const rank = above + 1;
       return { rank, of: total, pct: (rank / total) * 100 };
-    }
-
-    /** "#158 of 4,790 · top 3.3%" — extra precision when the percentile is tiny. */
-    function _fmtRank(rk) {
-      if (!rk) return "";
-      const pct = rk.pct < 0.1 ? rk.pct.toFixed(2) : rk.pct.toFixed(1);
-      return `#${_fmtNum(rk.rank)} of ${_fmtNum(rk.of)} · top ${pct}%`;
     }
 
     /** Compact tag rendered on the viewer's own bar: "YOU (top 0.02% · #149)". */
@@ -23960,7 +23296,6 @@
       O: ["111", "101", "101", "101", "101", "111"], N: ["101", "111", "111", "111", "111", "101"],
       I: ["111", "010", "010", "010", "010", "111"], U: ["101", "101", "101", "101", "101", "111"],
     };
-    const decFontH = 6;
     /*
      * Layout 3 — a word written in flowers. The band's top strip is 42x6, so the text is laid
      * out there in a 3x5 font; ink and paper are two different COLOURS (all ten species of
@@ -25750,10 +25085,6 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     //  ROI: SELL-OR-FARM ADVISOR
     // ═══════════════════════════════════════
 
-    const ROI_QUANT_CATS = ["trees", "stone", "iron", "gold", "crimstone", "obsidian", "oil",
-                            "crops", "fruits", "greenhouse", "flowers",
-                            "chickens", "cows", "sheep", "fishing", "bees", "pets"];
-
     // Parse pets from farm data (mirrors renderPets parsing logic)
     function parseRoiPets(farm) {
       const pets = [];
@@ -27100,10 +26431,6 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       return r;
     }
 
-    function petEnergyFromRequests(level, isNft) {
-      return petRequestsAtLevel(level, isNft).reduce((s, r) => s + PET_REQUEST_VALUES[r].energy, 0);
-    }
-
     function petFetchEnergyBonus(level) {
       let b = 0;
       if (level >= 5)  b += 5;
@@ -27220,7 +26547,6 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
 
     // XP to reach level L = 50 * L * (L - 1)  (each level costs 100 * currentLevel XP)
     function petCumulativeXp(level) { return 50 * level * (level - 1); }
-    function petXpForLevel(level) { return 100 * level; } // XP needed to go FROM this level to next
 
     function petLevel(xp) {
       // Solve 50*L*(L-1) <= xp  =>  L = floor((1 + sqrt(1 + xp/12.5)) / 2)
@@ -28393,7 +27719,6 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     // ══════════════════════════════════════════════════════════════
 
     let _marksRefreshTimer = null;
-    let _marksChartCounter = 0;
 
     async function renderMarks(data) {
       const app = document.getElementById("app");
@@ -28919,33 +28244,6 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         const daysRemaining = Math.max(0, 7 - _dayNum + 1); // today counts
 
         if (gap > 0 && _kitReqs.length > 0) {
-          // For each kitchen resource, calculate: how many deliveries needed for X marks
-          // Diminishing: first 10/day give 20+18+...+2 = 110 raw, then 1 each
-          // Over D days: D * 110 raw per resource before diminishing kicks hard
-          // Total raw marks per resource for N deliveries spread optimally over D days:
-          function optimalRawMarks(deliveries, days) {
-            if (deliveries <= 0 || days <= 0) return 0;
-            const perDay = Math.min(10, Math.ceil(deliveries / days));
-            let total = 0;
-            let left = deliveries;
-            for (let d = 0; d < days && left > 0; d++) {
-              const today = Math.min(perDay, left);
-              for (let i = 0; i < today; i++) {
-                total += Math.max(20 - i * 2, 1);
-              }
-              left -= today;
-            }
-            // Any leftover (if perDay * days < deliveries) gets dumped on last day
-            // (this happens when deliveries > 10 * days)
-            if (left > 0) {
-              // Continue from last day's fulfilled count
-              const lastDayDone = Math.min(perDay, deliveries - left + perDay) % (perDay + 1);
-              for (let i = 0; i < left; i++) {
-                total += Math.max(20 - (10 + i) * 2, 1); // after 10, all give 1
-              }
-            }
-            return total;
-          }
 
           // Simpler: for each resource, cost per delivery and marks per delivery
           // Use greedy: always pick the cheapest SFL/mark next delivery
@@ -29576,7 +28874,6 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     function _localIsoDate(d) {
       return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
     }
-    const LS_INV_INSIGHTS_OPEN = "sfl_diff_insights_open";
 
     /*
      * Owner-only API calls — every write, plus the BTC ledger and wallet reads — carry the write
@@ -29706,10 +29003,6 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       if (!isFinite(v)) return "—";
       return (Math.abs(v) >= 0.001 ? v.toFixed(6) : v.toFixed(8)) + " ₿";
     }
-    function fmtUsd(v) {
-      if (!isFinite(v) || v === 0) return "—";
-      return "$" + (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2));
-    }
     function fmtSfl(v) {
       if (!isFinite(v)) return "—";
       return (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2)) + " ⛀";
@@ -29793,10 +29086,6 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       const agg = invAggregate(transactions);
       const { sflToUsd, btcUsd, treasuryTotalSfl } = rates;
 
-      const verdictColor = (p) => p === null ? "var(--text-dim)"
-                                  : p >= 100 ? "var(--green)"
-                                  : p >= 50 ? "var(--sunpetal)"
-                                  : "#ff8c42";
       // ④ REPAY PLAN: the pace the user chose, measured against the withdrawals since its start.
       const planStats = (_invPlan && !errors.ledger) ? repayPlanStats(_invPlan, transactions, { peakBtc: agg.peakBtc, netDebtBtc: agg.netDebtBtc }) : null;
 
@@ -29842,72 +29131,9 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       const chainEggs = _invRepriceVenue(_invHoldings && _invHoldings.venues && _invHoldings.venues.yakkamon, sflToUsd, btcUsd);
       const walletLiquidBtc = chainWallet ? chainWallet.btc : ((sflToUsd > 0 && btcUsd > 0) ? (walletHeldFlower * sflToUsd / btcUsd) : 0);
       const eggsLiquidBtc = chainEggs ? chainEggs.btc : 0;
-      const canCompute3 = (agg.peakBtc > 0 && sflToUsd > 0 && btcUsd > 0 && treasuryTotalSfl > 0);
-      const recoveredBtc = agg.peakBtc - agg.netDebtBtc;
-      const ifLiqPct = canCompute3
-        ? ((recoveredBtc + liquidValueBtc + walletLiquidBtc + eggsLiquidBtc) / agg.peakBtc) * 100
-        : null;
-      const atUnlockPct = canCompute3
-        ? ((recoveredBtc + liquidValueBtc + walletLiquidBtc + eggsLiquidBtc + lockedBtc) / agg.peakBtc) * 100
-        : null;
-      const ifLiqText = (agg.peakBtc <= 0)
-        ? "n/a — no deposits"
-        : !canCompute3
-          ? "— (price API unavailable)"
-          : (ifLiqPct.toFixed(1) + " %");
-      const liqColor = canCompute3 ? verdictColor(ifLiqPct) : "var(--text-dim)";
-      const hasFarmValue = (sflToUsd > 0 && btcUsd > 0 && treasuryTotalSfl > 0);
-
-      // FLOWER still needed to reach 100% repaid. 1 BTC = (btcUsd/sflToUsd) FLOWER.
-      //   w/ liq : gap beyond the treasury liquidation proceeds (netDebt − liquidValue)
-      //   w/o liq: the full remaining debt (netDebt), treasury untouched
-      // Hoisted out of the block below: the venue tiles value each holding in BTC with the same
-      // rate, and a const scoped to the if() was invisible to them.
+      // 1 BTC = (btcUsd/sflToUsd) FLOWER.
       const flowerPerBtc = (sflToUsd > 0 && btcUsd > 0) ? (btcUsd / sflToUsd) : 0;
       const fmtFlower = (v) => Math.round(v).toLocaleString("en-US") + " 🌸";
-      // FLOWER still missing to 100 %: after selling = the gap beyond farm (less fee) + wallet,
-      // matching the "if sold today" side; keeping the farm = the whole remaining debt.
-      const missingKeepFlower = (flowerPerBtc > 0 && agg.peakBtc > 0) ? Math.max(0, agg.netDebtBtc) * flowerPerBtc : null;
-      const missingAfterFlower = (flowerPerBtc > 0 && agg.peakBtc > 0 && treasuryTotalSfl > 0)
-        ? Math.max(0, agg.netDebtBtc - liquidValueBtc - walletLiquidBtc - eggsLiquidBtc) * flowerPerBtc : null;
-
-      // Days to payback — at the repay plan's pace when one is set, else from the farm's 30d
-      // (preferred) or 7d earning rate in the insights cache.
-      let daysText = "—", daysSubText = "set a repay plan below, or expand Insights", daysColor = "var(--text-dim)";
-      const remainingBtc = agg.netDebtBtc;
-      const daysLabel = (days) => days < 365 ? Math.round(days) + " days" : `${Math.round(days)} days (${(days / 365).toFixed(1)} yr)`;
-      const daysTone = (days) => days < 90 ? "var(--green)" : days < 365 ? "var(--sunpetal)" : "#ff8c42";
-      if (remainingBtc <= 0 && agg.peakBtc > 0) {
-        daysText = "✅ paid";
-        daysColor = "var(--green)";
-        daysSubText = "you've recouped";
-      } else if (planStats && planStats.etaDays > 0) {
-        const eta = new Date(Date.now() + planStats.etaDays * 86400000);
-        daysText = daysLabel(planStats.etaDays);
-        daysSubText = `ETA ${eta.getFullYear() < 9999 ? eta.toISOString().slice(0, 10) : "—"} at the plan's pace, ${fmtBtc(planStats.dailyTargetBtc)}/day`;
-        daysColor = daysTone(planStats.etaDays);
-      } else if (_insState) {
-        const r30 = _insSlopeForWindow(30) || _insSlopeForWindow(7);
-        const sflToUsd2 = _insState.rates?.sflToUsd || sflToUsd;
-        const btcUsd2 = _insState.rates?.btcUsd || btcUsd;
-        if (r30 && sflToUsd2 > 0 && btcUsd2 > 0) {
-          const btcPerDay = r30.sflPerDay * sflToUsd2 / btcUsd2;
-          if (btcPerDay > 0 && remainingBtc > 0) {
-            const days = remainingBtc / btcPerDay;
-            const eta = new Date(Date.now() + days * 86400000);
-            // Always show the real day count; for long horizons append a yr suffix for legibility.
-            // ETA date stays ISO YYYY-MM-DD as long as it's within JS Date range (~year 275000), else "—".
-            daysText = daysLabel(days);
-            const etaStr = (isFinite(eta.getTime()) && eta.getFullYear() < 9999) ? eta.toISOString().slice(0,10) : "—";
-            daysSubText = `ETA ${etaStr} from farm yield, ${btcPerDay.toFixed(8)} ₿/day`;
-            daysColor = daysTone(days);
-          } else if (btcPerDay <= 0) {
-            daysText = "no ETA";
-            daysSubText = `farm yield ${r30.sflPerDay.toFixed(1)} ⛀/day — nothing to pay back with; set a repay plan below`;
-            daysColor = "var(--red)";
-          }
-        }
-      }
 
       mount.innerHTML = `
         <h2 class="pixel-font" style="margin:0 0 10px 0;font-size:0.75rem;color:var(--sunpetal);letter-spacing:1px">💰 INVESTMENT TRACKER</h2>
@@ -30170,10 +29396,8 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     }
     const _planPeriodCz = { day: "denně", month: "měsíčně", year: "ročně" };
     /*
-     * One card for the whole position: where it stands (recovered / if sold today / still
-     * missing / ETA) on the first row, the plan's pace against the ledger on the second, and a
-     * chart of the last 50 days and the next 50 under it. `pos` carries the figures the render
-     * function already computed for the position row.
+     * The REPAY PLAN card: the plan's daily withdrawal and how far ahead of / behind it the ledger
+     * is, and a chart of the last 50 days and the next 50 under it.
      */
     function _invRepayHtml(agg, stats, flowerPerBtc, errors) {
       const fmtFl = (btc) => flowerPerBtc > 0 ? Math.round(btc * flowerPerBtc).toLocaleString("en-US") + " 🌸" : "—";
@@ -30220,8 +29444,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     /*
      * BILANCE — one balance sheet instead of a card per venue: what went in (net BTC, with its
      * FLOWER equivalent at today's rate), every holding valued now, the total that is sellable
-     * today and the total once the Yakkamon deposit unlocks, and the difference. The position row
-     * of the REPAY PLAN card is derived from the same figures.
+     * today and the total once the Yakkamon deposit unlocks, and the difference.
      *
      * A row whose source failed to load shows "—" and the totals it feeds show "—" too, with the
      * reason underneath: a failed read is never a zero (COST 0 read as a green balance, a missing
@@ -30647,9 +29870,6 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       _insLoadedFor = FARM;
 
       renderInsightsContent();
-
-      // Refresh main tracker now that we have an earning rate (so metric ② updates)
-      renderInvestmentTrackerContent();
     }
 
     // Sets adjustedValueSfl + wealthBtc on each point (see the Cashflow adjustment note above).
