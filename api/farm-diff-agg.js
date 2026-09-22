@@ -25,6 +25,7 @@ function parseDiffRange(from, to) {
 }
 
 const ALLOWED_FARMS = new Set([155498, 1260204733777858]);
+const MAX_PERIODS = 500;
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -76,6 +77,9 @@ export default async function handler(req, res) {
           AND diff != '{}'::jsonb
           AND d.value ~ '^-?[0-9]*\\.?[0-9]+'
       ),
+      -- The NEWEST periods when the range holds more than the cap: ordering ASC before the LIMIT
+      -- used to keep the oldest 500 and silently drop the most recent data. One extra row tells
+      -- the handler the range was truncated.
       counts AS (
         SELECT
           date_trunc($2, captured_at AT TIME ZONE 'UTC') as period,
@@ -86,6 +90,8 @@ export default async function handler(req, res) {
           AND diff IS NOT NULL
           AND diff != '{}'::jsonb
         GROUP BY 1
+        ORDER BY 1 DESC
+        LIMIT ${MAX_PERIODS + 1}
       ),
       summed AS (
         SELECT period, key, SUM(val) as total
@@ -103,13 +109,17 @@ export default async function handler(req, res) {
         ) as agg_diff
       FROM counts c
       ORDER BY c.period ASC
-      LIMIT 500
     `, [farmId, group, fromTs, toTs]);
+
+    // Rows arrive oldest first; past the cap the extra (oldest) one is dropped and flagged.
+    const truncated = result.rows.length > MAX_PERIODS;
+    const rows = truncated ? result.rows.slice(result.rows.length - MAX_PERIODS) : result.rows;
 
     return res.status(200).json({
       from: fromTs,
       to: range.to || null,
-      periods: result.rows.map(r => ({
+      truncated,
+      periods: rows.map(r => ({
         period: r.period,
         count: parseInt(r.snapshot_count),
         diff: r.agg_diff || {}

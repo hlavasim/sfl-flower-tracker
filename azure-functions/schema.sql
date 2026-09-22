@@ -44,12 +44,16 @@ CREATE TABLE last_known_prices (
   updated_at TIMESTAMPTZ NOT NULL
 );
 
+-- Keyed by collection too: ids repeat across collectibles / wearables / buds / pets, and
+-- nft-snapshot upserts ON CONFLICT (nft_id, collection, field) — with the old (nft_id, field)
+-- key that statement has no matching constraint and every run fails.
 CREATE TABLE last_known_nft_values (
   nft_id INTEGER NOT NULL,
+  collection TEXT NOT NULL,
   field TEXT NOT NULL,
   value DOUBLE PRECISION NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL,
-  PRIMARY KEY (nft_id, field)
+  PRIMARY KEY (nft_id, collection, field)
 );
 
 

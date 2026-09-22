@@ -19,6 +19,35 @@ const SPEC_CROPS = ["Sunflower", "Potato", "Rhubarb", "Pumpkin", "Zucchini", "Ca
   "Barley", "Tomato", "Lemon", "Blueberry", "Orange", "Apple", "Banana", "Rice", "Olive", "Grape"];
 
 /*
+ * include=game_value — the part of game_data a farm VALUATION reads, instead of the whole
+ * ~180 KB farm per row (Insights asked for 60 rows of it: 12.7 MB per page load).
+ *
+ * Mirrors what computeFarmValue() in flowers.html reads: inventory, wardrobe, balance, coins,
+ * gems, bank, pets.nfts, trades.listings, and whether a collectible is placed on any of the four
+ * maps (findCollectible). Placement is only tested for presence there, so each placed name keeps
+ * its first placement rather than every coordinate. Opt-in: include=game_data still returns the
+ * full farm. If computeFarmValue starts reading another field, add it here.
+ */
+const _placed = (path) =>
+  `(SELECT jsonb_object_agg(e.k, jsonb_build_array(e.v -> 0))
+      FROM jsonb_each(CASE WHEN jsonb_typeof(game_data #> '${path}') = 'object'
+                           THEN game_data #> '${path}' ELSE '{}'::jsonb END) AS e(k, v))`;
+const GAME_VALUE_SQL = `jsonb_strip_nulls(jsonb_build_object(
+    'inventory', game_data -> 'inventory',
+    'wardrobe', game_data -> 'wardrobe',
+    'balance', game_data -> 'balance',
+    'coins', game_data -> 'coins',
+    'gems', game_data -> 'gems',
+    'bank', game_data -> 'bank',
+    'pets', jsonb_build_object('nfts', game_data #> '{pets,nfts}'),
+    'trades', jsonb_build_object('listings', game_data #> '{trades,listings}'),
+    'collectibles', ${_placed("{collectibles}")},
+    'home', jsonb_build_object('collectibles', ${_placed("{home,collectibles}")}),
+    'interior', jsonb_build_object(
+      'ground', jsonb_build_object('collectibles', ${_placed("{interior,ground,collectibles}")}),
+      'level_one', jsonb_build_object('collectibles', ${_placed("{interior,level_one,collectibles}")}))))`;
+
+/*
  * type=spec — the SPECULATION page, folded in here like the other modes (Vercel's 12-function cap).
  *   what=calendar  GET              seasonal buy/sell calendar from price_changes + marketplace_daily
  *   what=trades    GET/POST/PATCH/DELETE   the owner's position log (spec_trades)
@@ -35,9 +64,15 @@ async function handleSpec(pool, req, res) {
     // Dynamic: this file is bundled as CommonJS, and a static import of an .mjs module made the
     // whole function fail to load (FUNCTION_INVOCATION_FAILED) — every farm-history mode went down.
     const { buildSeasonCalendar } = await import("../core/sections/seasons.mjs");
+    // One row per item per UTC day — the day's last positive price — instead of every change
+    // ever recorded. buildSeasonCalendar reduces the points to exactly that (toDaily: filter
+    // price > 0, keep the last point of each UTC day, forward-fill), so the result is identical
+    // while the read stays bounded by items × days rather than growing with every p2p tick.
     const { rows } = await pool.query(
-      `SELECT item_name, (EXTRACT(EPOCH FROM captured_at) * 1000)::bigint AS t, price
-         FROM price_changes WHERE item_name = ANY($1) ORDER BY item_name, captured_at`, [SPEC_CROPS]);
+      `SELECT DISTINCT ON (item_name, date_trunc('day', captured_at AT TIME ZONE 'UTC'))
+              item_name, (EXTRACT(EPOCH FROM captured_at) * 1000)::bigint AS t, price
+         FROM price_changes WHERE item_name = ANY($1) AND price > 0
+        ORDER BY item_name, date_trunc('day', captured_at AT TIME ZONE 'UTC'), captured_at DESC`, [SPEC_CROPS]);
     const daily = {};
     for (const r of rows) (daily[r.item_name] = daily[r.item_name] || []).push([Number(r.t), Number(r.price)]);
     // Traded volume over the last 28 days. marketplace_daily is cumulative per item, so the
@@ -654,9 +689,14 @@ export default async function handler(req, res) {
     // Range query
     const from = req.query.from || "1970-01-01";
     const to = req.query.to || "2100-01-01";
-    const limit = Math.min(parseInt(req.query.limit) || 100, 1000);
-    const offset = parseInt(req.query.offset) || 0;
     const includeData = req.query.include === "game_data";
+    const includeValue = req.query.include === "game_value";
+    // A full game_data row is ~180 KB, so rows that carry one are capped at 100 per request
+    // (the Insights page asks for exactly 100); diff-only rows keep the 1000 cap.
+    const limit = Math.min(parseInt(req.query.limit) || 100, includeData || includeValue ? 100 : 1000);
+    const offset = parseInt(req.query.offset) || 0;
+    // $5 (includeData) is referenced in both shapes: Postgres rejects a bound parameter it cannot type.
+    const gameCol = includeValue ? `CASE WHEN NOT $5 THEN ${GAME_VALUE_SQL} END` : "CASE WHEN $5 THEN game_data ELSE NULL END";
     // Optional time-bucketing: ?bucket_hours=N keeps the latest snapshot in each N-hour bucket
     // (Postgres date_bin, 14+). Gives a consistent points/day regardless of collection density,
     // and works correctly across the cleanup boundary (~30d) where retention switches to 1/day.
@@ -669,7 +709,7 @@ export default async function handler(req, res) {
       ? await pool.query(
           `SELECT DISTINCT ON (date_bin($7::interval, captured_at, '2020-01-01'::timestamptz))
                   id, farm_id, captured_at, diff,
-                  CASE WHEN $5 THEN game_data ELSE NULL END AS game_data
+                  ${gameCol} AS game_data
            FROM farm_snapshots
            WHERE farm_id = $1 AND captured_at >= $2 AND captured_at <= $3
            ORDER BY date_bin($7::interval, captured_at, '2020-01-01'::timestamptz) DESC,
@@ -679,7 +719,7 @@ export default async function handler(req, res) {
         )
       : await pool.query(
           `SELECT id, farm_id, captured_at, diff,
-                  CASE WHEN $5 THEN game_data ELSE NULL END AS game_data
+                  ${gameCol} AS game_data
            FROM farm_snapshots
            WHERE farm_id = $1 AND captured_at >= $2 AND captured_at <= $3
            ORDER BY captured_at DESC
