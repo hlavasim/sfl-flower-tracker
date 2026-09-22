@@ -54,7 +54,13 @@ export const API_SPEC = {
               "renderPowerContent pipeline: base/boosted SFL/day, seed/tool/feed/sickness " +
               "costs, honoring the `products` selections), `boostValues` (per-boost-per-category " +
               "solo/synergy/ROI from the roadmap engine; roi Infinity → null on the wire), and " +
-              "a slim `nftData` ({collectibles, wearables} with name/floor/boost_text/supply). Fetches the sfl.world NFT " +
+              "a slim `nftData` ({collectibles, wearables} with name/floor/boost_text/supply). " +
+              "`effUnmeasured: true` when no measured efficiency applies (no history posted, or " +
+              "nothing could be measured) — every figure is then at theoretical 100 % throughput. " +
+              "`cropMachine` (farms with a Crop Machine): plots, oil/h, speed multiplier and per-crop " +
+              "`rows` whose `yieldPerSeed` is crops per seed after the game's yield boosts " +
+              "(harvestCropMachine.ts); the roadmap and the Shrines page price the machine with it. " +
+              "Fetches the sfl.world NFT " +
               "list server-side; a failed NFT fetch is a 502 like a failed farm fetch. " +
               "`roi`: the ROI-vs-login-frequency page's state — its own boost-item list " +
               "(with quantCats/isSellable flags), `pets`, `capacity`, `p2pPrices`, `sflUsd`, " +
@@ -75,14 +81,17 @@ export const API_SPEC = {
               "`eff`: POST-only — measured harvest efficiency per category from farm-history " +
               "snapshot rows the client posts (body `{ snapshots: [{ captured_at, diff }] }`); " +
               "returns `{ effByCat, meta, meanRatio }` with theoretical cycles from the same " +
-              "boosted engine as `power`. " +
+              "boosted engine as `power`. `meta.measured` is false and `meanRatio` is `null` " +
+              "when nothing could be measured (no or too little history): read that as " +
+              "unmeasured (theoretical 100 %), never as 0 % or a 50 % default. " +
               "`treasury`: full-farm liquidation valuation — `td` (nft floors + p2p + coin/gem/" +
               "USD/BTC rates) and `value` (computeFarmValue: resources/treasures/collectibles/" +
               "wearables/pets/listings/liquid + totals) for the requested `coinMode`. " +
               "`roadmap`: POST-only — the roadmap page's computed layer: measured efficiency " +
               "(body `{ snapshots }` like `eff`), `currentProd` (net income by category at " +
               "real efficiency), and `sim` (the reinvestment-ordered buy path: timeline, " +
-              "ranked list, core/cosmetic/tail splits; non-finite roi/atDay → null). Honors " +
+              "ranked list, core/cosmetic/tail splits; non-finite roi/atDay → null), plus " +
+              "`effUnmeasured` (as in `power`: true = every figure is theoretical). Honors " +
               "the `roadmap` and `products` query params. " +
               "`ascension`: POST-only prestige-loop calculator — pending upgrade/expansion steps " +
               "with game-formula costs/levels/crystals, node-aware production simulation " +
@@ -93,7 +102,8 @@ export const API_SPEC = {
               "the farm) and the wishlist's per-priority cumulative costs vs the FLOWER " +
               "balance; `list` query param carries the client's priorities; placed/worn " +
               "items auto-prune. Rows carry FLOWER/day + ROI, theoretical and at measured " +
-              "efficiency. Optional body `{ snapshots, budFloors }`: snapshots like `eff` " +
+              "efficiency (`effUnmeasured: true` when none was measured). Optional body " +
+              "`{ snapshots, budFloors }`: snapshots like `eff` " +
               "(absent → measured collapses onto theoretical), `budFloors` = the whole " +
               "{ \"<bud id>\": floor } marketplace map, since per-id asks live in the DB and " +
               "this endpoint stays DB-free. `list` accepts `buds:<id>` for one bud and " +
@@ -296,7 +306,16 @@ export const API_SPEC = {
               "- `section=openapi` → **this document itself, unwrapped**: top-level `openapi`, " +
               "`info`, `servers`, `paths`. There is NO `data`/`section`/`computedAt` key — reading " +
               "`.data` gives `undefined`. It is served raw because a Swagger UI `url:` must resolve " +
-              "to the OpenAPI document itself.",
+              "to the OpenAPI document itself.\n" +
+              "Every farm-computed response (the first shape) also carries a freshness envelope " +
+              "beside `data`, never inside it: `farmFetchedAt` (ISO time the farm used was fetched " +
+              "from the game API) and `stale` (boolean). The farm and the NFT list fall back to " +
+              "their last good copy when the live fetch fails; then `stale` is true and " +
+              "`staleSources` (e.g. `[\"farm\"]`, `[\"nfts\"]`), `staleAgeMin` (age of the oldest " +
+              "fallback in minutes) and `staleFetchedAt` (its fetch time) say what was served, and a " +
+              "stale farm adds `farmAgeSec`. `pricesOk` (on `prices`, `diff` and `treasury`) is false " +
+              "when the upstream P2P price fetch failed; `section=treasury` also returns " +
+              "`data.status` `{ pricesOk, nftsStale, exchangeOk, btcOk }`.",
             content: {
               "application/json": {
                 // Deliberately unconstrained: the three shapes above differ at the top level, and
@@ -382,6 +401,82 @@ export const API_SPEC = {
                 },
               },
             },
+          },
+        },
+      },
+    },
+    // The endpoints below are documented for their query modes only; they are not pinned to
+    // their handlers the way /api/compute is (tests/core/revize-leftovers.test.mjs checks the
+    // modes named here exist in this document).
+    "/api/farm-history": {
+      get: {
+        summary: "Stored farm snapshots (diffs, optionally the farm itself) for an allowed farm.",
+        parameters: [
+          { name: "farm", in: "query", required: true, schema: { type: "string" }, description: "Farm ID (only the tracked farms are allowed)." },
+          { name: "from", in: "query", required: false, schema: { type: "string" }, description: "Range start (ISO date/time)." },
+          { name: "to", in: "query", required: false, schema: { type: "string" }, description: "Range end (ISO date/time)." },
+          { name: "bucket_hours", in: "query", required: false, schema: { type: "integer" }, description: "Keep only the latest snapshot per N-hour bucket (1-720)." },
+          { name: "limit", in: "query", required: false, schema: { type: "integer" }, description: "Row cap: 1000 for diff-only rows, 100 when `include` is set." },
+          { name: "latest", in: "query", required: false, schema: { type: "integer" }, description: "Latest N snapshots instead of a range (max 100)." },
+          {
+            name: "include", in: "query", required: false, schema: { type: "string", enum: ["game_data", "game_value"] },
+            description:
+              "`game_data`: the whole farm per row (~180 KB each). `game_value`: only what a farm " +
+              "valuation reads (inventory, wardrobe, balance, coins, gems, bank, pets.nfts, " +
+              "trades.listings, and the first placement of each collectible in all four placement " +
+              "maps), returned under the same `game_data` key. Range queries only; `latest` " +
+              "honours `game_data` alone. Absent: diffs only.",
+          },
+        ],
+        responses: { 200: { description: "`{ snapshots: [{ id, farm_id, captured_at, diff, game_data }] }`, newest first." } },
+      },
+    },
+    "/api/farm-diff-agg": {
+      get: {
+        summary: "Snapshot diffs summed per period.",
+        parameters: [
+          { name: "farm", in: "query", required: true, schema: { type: "string" }, description: "Farm ID (only the tracked farms are allowed)." },
+          { name: "group", in: "query", required: true, schema: { type: "string", enum: ["hour", "day", "week", "month", "year"] }, description: "Period size." },
+          { name: "days", in: "query", required: false, schema: { type: "integer" }, description: "Look-back when no `from` is given (default per group, max 3650)." },
+          { name: "from", in: "query", required: false, schema: { type: "string" }, description: "Explicit window start." },
+          { name: "to", in: "query", required: false, schema: { type: "string" }, description: "Explicit window end." },
+        ],
+        responses: {
+          200: {
+            description:
+              "`{ from, to, truncated, periods: [{ period, count, diff }] }`, oldest period first. " +
+              "At most 500 periods: past that the OLDEST are dropped and `truncated` is true, so the " +
+              "newest data is always present.",
+          },
+        },
+      },
+    },
+    "/api/marketplace-orderbook": {
+      get: {
+        summary: "Marketplace order books, plus the catalogue-wide top of book and the flips list.",
+        parameters: [
+          {
+            name: "book", in: "query", required: false, schema: { type: "string", enum: ["1"] },
+            description:
+              "`1`: the top of the book for the whole catalogue from the game's marketplaceActivity " +
+              "feed, `{ at, day, flowerPrice, items: { <name>: { c, id, f, b, lc, oc, ls } } }` " +
+              "(collection, id, floor, best offer, listing/offer counts, latest sale). Cached 5 " +
+              "minutes; a failed refresh serves the last copy with `stale: true`.",
+          },
+          {
+            name: "flips", in: "query", required: false, schema: { type: "string", enum: ["1"] },
+            description: "`1`: offer/listing spreads worth flipping after the 10 % fee (see the 200 response).",
+          },
+          { name: "sort", in: "query", required: false, schema: { type: "string", enum: ["score", "margin", "spread", "liquidity", "pressure", "net", "floor"] }, description: "flips=1 only: sort key." },
+          { name: "minprice", in: "query", required: false, schema: { type: "number" }, description: "flips=1 only: minimum item price." },
+          { name: "q", in: "query", required: false, schema: { type: "string" }, description: "flips=1 only: name filter." },
+        ],
+        responses: {
+          200: {
+            description:
+              "Depends on the mode. flips=1: `{ sort, maxAgeHours, count, items }` — only books the " +
+              "collector confirmed within `maxAgeHours` hours are listed, so an emptied book no " +
+              "longer shows a spread nobody can trade.",
           },
         },
       },

@@ -218,3 +218,36 @@ test("no hard-coded 320 / 1500 coins-per-FLOWER fallback is left in the page or 
     assert.deepEqual(hits, [], `${f} still invents a coin rate`);
   }
 });
+
+// ── 6. The OpenAPI document covers what the handlers ship now ──
+import { API_SPEC } from "../../core/api-spec.mjs";
+
+test("api-spec documents the compute freshness envelope, key by key, as the handler emits it", () => {
+  const handler = readFileSync(path.join(ROOT, "api/compute.mjs"), "utf8");
+  const fr = handler.slice(handler.indexOf("function _freshness("), handler.indexOf("function _freshness(") + 900);
+  const keys = new Set([
+    ...[...fr.matchAll(/out\.(\w+)\s*=/g)].map((m) => m[1]),
+    ...[...fr.matchAll(/const out = \{\s*(\w+):[^,]*,\s*(\w+):/g)].flatMap((m) => [m[1], m[2]]),
+    ...[...handler.matchAll(/payload\.(\w+)\s*=/g)].map((m) => m[1]),
+  ]);
+  for (const k of ["farmFetchedAt", "stale", "staleSources", "staleAgeMin", "staleFetchedAt", "farmAgeSec", "pricesOk"]) {
+    assert.ok(keys.has(k), `the handler still emits ${k} (else update this test)`);
+  }
+  const doc = API_SPEC.paths["/api/compute"].get.responses["200"].description;
+  for (const k of keys) assert.ok(doc.includes("`" + k + "`"), `200 response does not document \`${k}\``);
+});
+
+test("api-spec documents unmeasured efficiency, include=game_value, truncated, book=1 and maxAgeHours", () => {
+  const sec = API_SPEC.paths["/api/compute"].get.parameters.find((p) => p.name === "section").description;
+  for (const s of ["effUnmeasured", "meta.measured", "meanRatio` is `null"]) assert.ok(sec.includes(s), `section doc: ${s}`);
+  const fh = API_SPEC.paths["/api/farm-history"];
+  assert.ok(fh, "/api/farm-history documented");
+  assert.deepEqual(fh.get.parameters.find((p) => p.name === "include").schema.enum, ["game_data", "game_value"]);
+  const agg = API_SPEC.paths["/api/farm-diff-agg"];
+  assert.ok(agg && agg.get.responses["200"].description.includes("`truncated`"), "farm-diff-agg truncated");
+  const ob = API_SPEC.paths["/api/marketplace-orderbook"];
+  assert.ok(ob, "/api/marketplace-orderbook documented");
+  const obParams = ob.get.parameters.map((p) => p.name);
+  for (const p of ["book", "flips"]) assert.ok(obParams.includes(p), `orderbook param ${p}`);
+  assert.ok(ob.get.responses["200"].description.includes("`maxAgeHours`"), "flips maxAgeHours");
+});
