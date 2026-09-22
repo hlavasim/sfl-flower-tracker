@@ -18,7 +18,9 @@ const farm = wrap.farm || wrap;
 const p2p = JSON.parse(readFileSync(path.join(ROOT, "tests/fixtures/p2p-prices.json"), "utf8"));
 
 // Own NFT payload: the shared fixture is tiny and none of its items are skills anyway.
-const out = buildPowerSection(farm, p2p, { collectibles: [], wearables: [] }, null, {});
+// coinsFree: false — Frugal Miner (the multi-category example below) only saves COINS, and the
+// fixture's 284k coins switch the auto "coins are free" rule on, which rightly values it at 0.
+const out = buildPowerSection(farm, p2p, { collectibles: [], wearables: [] }, null, { roadmapSettings: { coinsFree: false } });
 
 test("section=power serves a rank block for skills that have ranks", () => {
   const sr = out.skillRanks;
@@ -201,7 +203,10 @@ test("skills reach the buy path, priced by the XP their points cost — never fr
    */
   const takeNow = cands.filter((c) => c.skillTakeNow);
   const later = plain.filter((c) => !c.skillTakeNow);
-  const freePts = Math.max(0, (pd.skillCostInfo.level - 1) - pd.boostItems.filter((b) => b.type === "Skill" && b.has).reduce((s, b) => s + (b.skillPoints || 1), 0));
+  // The game's formula (choseSkill.ts getAvailableBumpkinSkillPoints): level − points spent.
+  const spent = pd.boostItems.filter((b) => b.type === "Skill" && b.has).reduce((s, b) => s + (b.skillPoints || 1), 0);
+  const freePts = Math.max(0, pd.skillCostInfo.level - spent);
+  assert.equal(pd.skillCostInfo.freePoints, freePts, "section=power serves the game's free points");
   for (const c of takeNow) {
     assert.ok(c.skillPoints <= freePts, `${c.name}: ${c.skillPoints}pt must fit in the ${freePts} you hold`);
   }

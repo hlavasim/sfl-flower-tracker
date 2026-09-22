@@ -33,7 +33,14 @@ function escHTML(s) {
 }
 
     // ── flowers.html 15360-15600: buildFormulaHTML ──
-    function buildFormulaHTML(boostItem, catId, product, capacity, p2pPrices, allCatBoosts) {
+    /*
+     * `explain` (section=power passes it): the value-list entry for this boost plus the two
+     * engine nets it is the difference of. The branches below derive the GROSS effect (yield,
+     * tool cost avoided…); the footer then shows the number the list actually displays — net of
+     * tool/seed/feed costs and the market fee, seasons averaged, × measured efficiency — so the
+     * panel explains that number instead of printing a different one with its own ROI.
+     */
+    function buildFormulaHTML(boostItem, catId, product, capacity, p2pPrices, allCatBoosts, explain) {
       const catEffects = getEffectsForCategory(boostItem, catId);
       const priceProduct = getPriceProduct(catId, product);
       const price = p2pPrices[priceProduct] || 0;
@@ -43,6 +50,26 @@ function escHTML(s) {
 
       const powerState = _getPowerContext(); // deviation
       const { skillCostInfo } = powerState;
+      const f4 = (v) => (v >= 0 ? "+" : "") + v.toFixed(4);
+      const valueFooter = () => {
+        const s = explain && explain.shown;
+        if (!s || !isFinite(s.synergy)) return "";
+        let o = `<hr style="border-color:var(--border-dark);margin:4px 0">`;
+        o += `<div style="margin-bottom:2px;color:var(--lily)"><strong>Value shown in the list:</strong></div>`;
+        if (isFinite(explain.netWith) && isFinite(explain.netWithout)) {
+          o += `<div>Category net WITH it ${explain.netWith.toFixed(4)} − WITHOUT it ${explain.netWithout.toFixed(4)} = ${f4(explain.netWith - explain.netWithout)} ${sflIcon()}/day</div>`;
+          o += `<div style="color:var(--text-dim)">(net = output − tool/seed/feed costs${explain.marketFee ? `, sold after the ${explain.marketFee}% market fee` : ""}; seasonal crops averaged over the year)</div>`;
+        }
+        if (s.coinsFree) o += `<div style="color:var(--text-dim)">Coins are treated as free on this farm, so a coin discount saves nothing.</div>`;
+        if (isFinite(explain.effFactor) && Math.abs(explain.effFactor - 1) > 1e-9) o += `<div>× your measured efficiency ${Math.round(explain.effFactor * 100)}%</div>`;
+        o += `<div><strong>= ${f4(s.synergy)} ${sflIcon()}/day</strong></div>`;
+        if (boostItem.floor > 0) {
+          o += s.synergy > 0
+            ? `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${s.synergy.toFixed(4)} = <span style="color:var(--sunpetal)">${(boostItem.floor / s.synergy).toFixed(0)} days</span></div>`
+            : `<div style="color:var(--red)"><strong>ROI: none</strong> — adds nothing at current prices</div>`;
+        }
+        return o;
+      };
 
       let h = `<div class="power-formula pixel-font">`;
       // Header with type and cost
@@ -58,6 +85,7 @@ function escHTML(s) {
       // Disabled state — superseded by stronger item
       if (boostItem.isDisabled) {
         h += `<div style="color:var(--red);margin:8px 0">⛔ This boost is <strong>DISABLED</strong> — superseded by <strong>${escHTML(boostItem.disabledByName)}</strong> which is active on your farm.</div>`;
+        h += valueFooter();
         h += `</div>`;
         return h;
       }
@@ -70,7 +98,7 @@ function escHTML(s) {
         h += `<div>Bumpkin Level: ${skillCostInfo.level} → Total XP: ${(skillCostInfo.totalXP / 1e6).toFixed(1)}M</div>`;
         h += `<div>Best recipe: ${escHTML(br.name)} (base ${br.xp} XP${br.boostedXP !== br.xp ? ` → ${br.boostedXP} XP boosted` : ""} / ${br.cost.toFixed(4)} ${sflIcon()} = ${br.ratio.toFixed(0)} XP/${sflIcon()})</div>`;
         if (skillCostInfo.xpBoostNames?.length) h += `<div>XP boosts applied: ${escHTML(skillCostInfo.xpBoostNames.join(", "))}</div>`;
-        h += `<div>Avg cost per level: ${skillCostInfo.sflPerLevel.toFixed(1)} ${sflIcon()} → <strong>1 skill point ≈ ${skillCostInfo.sflPerPoint.toFixed(1)} ${sflIcon()}</strong></div>`;
+        h += `<div>Next level: ${((skillCostInfo.nextLevelXp || 0) / 1e6).toFixed(2)}M XP → <strong>1 skill point ≈ ${skillCostInfo.sflPerPoint.toFixed(1)} ${sflIcon()}</strong> <span style="color:var(--text-dim)">(average so far ${skillCostInfo.sflPerLevel.toFixed(1)}/level — the next point costs the next level)</span></div>`;
         h += `<div style="color:var(--sunpetal)">This skill (${boostItem.skillPoints}pt): <strong>${boostItem.skillPoints} × ${skillCostInfo.sflPerPoint.toFixed(1)} = ~${boostItem.floor.toFixed(0)} ${sflIcon()}</strong></div>`;
       }
       h += `<hr style="border-color:var(--border-dark);margin:4px 0">`;
@@ -85,9 +113,10 @@ function escHTML(s) {
         h += `<div>Base tool cost would be: ${baseCost.toolSfl.toFixed(4)} ${sflIcon()} per use</div>`;
         h += `<div>Would use ${(baseCost.toolsPerDay || 0).toFixed(2)} tools/day</div>`;
         h += `<div style="color:var(--green)"><strong>Cost savings: ${baseCost.costPerDay.toFixed(4)} ${sflIcon()}/day</strong></div>`;
-        if (boostItem.floor > 0 && baseCost.costPerDay > 0) {
+        if (!explain && boostItem.floor > 0 && baseCost.costPerDay > 0) {
           h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${baseCost.costPerDay.toFixed(4)} = <span style="color:var(--sunpetal)">${(boostItem.floor / baseCost.costPerDay).toFixed(0)} days</span></div>`;
         }
+        h += valueFooter();
         h += `</div>`;
         return h;
       }
@@ -117,10 +146,11 @@ function escHTML(s) {
           h += `<div>Discount: -${(eff.value * 100).toFixed(0)}% coin cost → saves ${coinSavings.toFixed(1)} coins = ${sflSavings.toFixed(6)} ${sflIcon()} per use</div>`;
           h += `<div>Tools/day: ${(baseCost.toolsPerDay || 0).toFixed(2)}</div>`;
           h += `<div style="color:var(--green)"><strong>Cost savings: ${sflSavings.toFixed(6)} × ${(baseCost.toolsPerDay || 0).toFixed(2)} = ⬇${dailySavings.toFixed(4)} ${sflIcon()}/day</strong></div>`;
-          if (boostItem.floor > 0 && dailySavings > 0) {
+          if (!explain && boostItem.floor > 0 && dailySavings > 0) {
             h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${dailySavings.toFixed(4)} = <span style="color:var(--sunpetal)">${(boostItem.floor / dailySavings).toFixed(0)} days</span></div>`;
           }
         }
+        h += valueFooter();
         h += `</div>`;
         return h;
       }
@@ -140,9 +170,10 @@ function escHTML(s) {
         h += `<div>Reduced cost/ignition: ${reducedCost.costPerIgnition.toFixed(2)} ${sflIcon()}</div>`;
         h += `<div>Ignitions/day: ${(baseCost.ignitionsPerDay || 0).toFixed(2)}</div>`;
         h += `<div style="color:var(--green)"><strong>Cost savings: (${baseCost.costPerIgnition.toFixed(2)} - ${reducedCost.costPerIgnition.toFixed(2)}) × ${(baseCost.ignitionsPerDay || 0).toFixed(2)} = 🌋⬇${savings.toFixed(4)} ${sflIcon()}/day</strong></div>`;
-        if (boostItem.floor > 0 && savings > 0) {
+        if (!explain && boostItem.floor > 0 && savings > 0) {
           h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${savings.toFixed(4)} = <span style="color:var(--sunpetal)">${(boostItem.floor / savings).toFixed(0)} days</span></div>`;
         }
+        h += valueFooter();
         h += `</div>`;
         return h;
       }
@@ -180,11 +211,12 @@ function escHTML(s) {
           }
         }
         h += `<div style="margin-top:4px;color:var(${totalValue >= 0 ? '--green' : '--red'})"><strong>Net: ${totalValue >= 0 ? '+' : ''}${totalValue.toFixed(4)} ${sflIcon()}/day</strong></div>`;
-        if (boostItem.floor > 0 && totalValue > 0) {
+        if (!explain && boostItem.floor > 0 && totalValue > 0) {
           h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${totalValue.toFixed(4)} = <span style="color:var(--sunpetal)">${(boostItem.floor / totalValue).toFixed(0)} days</span></div>`;
-        } else if (totalValue < 0 && boostItem.floor > 0) {
+        } else if (!explain && totalValue < 0 && boostItem.floor > 0) {
           h += `<div style="color:var(--red)"><strong>ROI: LOSS</strong> — net value is negative</div>`;
         }
+        h += valueFooter();
         h += `</div>`;
         return h;
       }
@@ -208,8 +240,8 @@ function escHTML(s) {
             const withoutEffects = allCatBoosts.filter(b => b.has && !b.isDisabled && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId)).concat(activeShrineEffects(powerState.farm, catId));
             const withoutInfo = getAnimalCatSfl(catId, capacity, withoutEffects, p2pPrices);
             const marginal = allInfo.totalSfl - withoutInfo.totalSfl;
-            h += `<div style="margin-bottom:4px"><strong>Marginal (${ownedEffects.length} effects):</strong> <span style="color:var(--green)">+${marginal.toFixed(4)} ${sflIcon()}/day</span></div>`;
-            if (boostItem.floor > 0 && marginal > 0) {
+            h += `<div style="margin-bottom:4px"><strong>Gross output delta (${ownedEffects.length} effects, before costs):</strong> <span style="color:var(--green)">+${marginal.toFixed(4)} ${sflIcon()}/day</span></div>`;
+            if (!explain && boostItem.floor > 0 && marginal > 0) {
               h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${marginal.toFixed(4)} = <span style="color:var(--sunpetal)">${(boostItem.floor / marginal).toFixed(0)} days</span></div>`;
             }
           } else {
@@ -217,8 +249,8 @@ function escHTML(s) {
             const withInfo = getAnimalCatSfl(catId, capacity, withThis, p2pPrices);
             const ownedInfo = getAnimalCatSfl(catId, capacity, ownedEffects, p2pPrices);
             const synergy = withInfo.totalSfl - ownedInfo.totalSfl;
-            h += `<div style="margin-bottom:4px"><strong>Synergy (with your boosts):</strong> <span style="color:var(--green)">+${synergy.toFixed(4)} ${sflIcon()}/day</span></div>`;
-            if (boostItem.floor > 0 && synergy > 0) {
+            h += `<div style="margin-bottom:4px"><strong>Gross output delta with your boosts (before costs):</strong> <span style="color:var(--green)">+${synergy.toFixed(4)} ${sflIcon()}/day</span></div>`;
+            if (!explain && boostItem.floor > 0 && synergy > 0) {
               h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${synergy.toFixed(4)} = <span style="color:var(--sunpetal)">${(boostItem.floor / synergy).toFixed(0)} days</span></div>`;
             }
           }
@@ -226,11 +258,11 @@ function escHTML(s) {
           // Non-animal formula (original)
           h += `<div style="margin-bottom:4px"><strong>Farm:</strong> ${n} × ${escHTML(product)} (${formatSec(baseCycleSec)} grow | ${price.toFixed(6)} ${sflIcon()})</div>`;
 
-          const baseResult = applyBoosts(catId, product, capacity, []);
+          const baseResult = applyBoosts(catId, product, capacity, [], powerState.farm);
           const baseSfl = unitToSfl(baseResult.unitsPerDay, priceProduct, p2pPrices);
           h += `<div style="margin-bottom:4px"><strong>Base:</strong> ${baseResult.unitsPerDay.toFixed(2)} units/day = ${baseSfl.toFixed(4)} ${sflIcon()}/day</div>`;
 
-          const soloResult = applyBoosts(catId, product, capacity, catEffects);
+          const soloResult = applyBoosts(catId, product, capacity, catEffects, powerState.farm);
           const soloSfl = unitToSfl(soloResult.unitsPerDay, priceProduct, p2pPrices);
           const soloDelta = soloSfl - baseSfl;
           h += `<div style="margin-bottom:4px"><strong>Solo:</strong>`;
@@ -241,26 +273,26 @@ function escHTML(s) {
 
           const ownedEffects = allCatBoosts.filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, catId)).concat(activeShrineEffects(powerState.farm, catId));
           if (boostItem.has) {
-            const allResult = applyBoosts(catId, product, capacity, ownedEffects);
+            const allResult = applyBoosts(catId, product, capacity, ownedEffects, powerState.farm);
             const withoutEffects = allCatBoosts.filter(b => b.has && !b.isDisabled && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId)).concat(activeShrineEffects(powerState.farm, catId));
-            const withoutResult = applyBoosts(catId, product, capacity, withoutEffects);
+            const withoutResult = applyBoosts(catId, product, capacity, withoutEffects, powerState.farm);
             const allSfl = unitToSfl(allResult.unitsPerDay, priceProduct, p2pPrices);
             const withoutSfl = unitToSfl(withoutResult.unitsPerDay, priceProduct, p2pPrices);
             const marginal = allSfl - withoutSfl;
-            h += `<div style="margin-bottom:4px"><strong>Marginal (${ownedEffects.length} active effects):</strong> <span style="color:var(--green)">+${marginal.toFixed(4)} ${sflIcon()}/day</span></div>`;
-            if (boostItem.floor > 0 && marginal > 0) {
+            h += `<div style="margin-bottom:4px"><strong>Gross output delta (${ownedEffects.length} active effects, before costs):</strong> <span style="color:var(--green)">+${marginal.toFixed(4)} ${sflIcon()}/day</span></div>`;
+            if (!explain && boostItem.floor > 0 && marginal > 0) {
               const roi = boostItem.floor / marginal;
               h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${marginal.toFixed(4)} = <span style="color:var(--sunpetal)">${roi.toFixed(0)} days</span></div>`;
             }
           } else {
             const withThis = [...ownedEffects, ...catEffects];
-            const withResult = applyBoosts(catId, product, capacity, withThis);
-            const ownedResult = applyBoosts(catId, product, capacity, ownedEffects);
+            const withResult = applyBoosts(catId, product, capacity, withThis, powerState.farm);
+            const ownedResult = applyBoosts(catId, product, capacity, ownedEffects, powerState.farm);
             const withSfl = unitToSfl(withResult.unitsPerDay, priceProduct, p2pPrices);
             const ownedSfl = unitToSfl(ownedResult.unitsPerDay, priceProduct, p2pPrices);
             const synergy = withSfl - ownedSfl;
-            h += `<div style="margin-bottom:4px"><strong>Synergy (with your boosts):</strong> <span style="color:var(--green)">+${synergy.toFixed(4)} ${sflIcon()}/day</span></div>`;
-            if (boostItem.floor > 0 && synergy > 0) {
+            h += `<div style="margin-bottom:4px"><strong>Gross output delta with your boosts (before costs):</strong> <span style="color:var(--green)">+${synergy.toFixed(4)} ${sflIcon()}/day</span></div>`;
+            if (!explain && boostItem.floor > 0 && synergy > 0) {
               const roi = boostItem.floor / synergy;
               h += `<div><strong>ROI:</strong> ${boostItem.floor.toFixed(1)} / ${synergy.toFixed(4)} = <span style="color:var(--sunpetal)">${roi.toFixed(0)} days</span></div>`;
             }
@@ -272,6 +304,7 @@ function escHTML(s) {
         h += `<div style="color:var(--text-dim)">Qualitative boost — cannot calculate ${sflIcon()}/day value.</div>`;
       }
 
+      h += valueFooter();
       h += `</div>`;
       return h;
     }
