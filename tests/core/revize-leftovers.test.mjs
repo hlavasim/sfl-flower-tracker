@@ -58,3 +58,51 @@ test("a Chicken Coop placed indoors still raises the hen house capacity on the r
     assert.equal(withCoop - without, 10, "Chicken Coop adds 5 per hen house level (level 2 → +10)");
   } finally { _setPowerContext(prev); }
 });
+
+// ── 2. D12: the crop machine applies crop YIELD boosts per seed (harvestCropMachine.ts) ──
+import { buildPowerSection } from "../../core/sections/power.mjs";
+import { buildRoadmapSection } from "../../core/sections/roadmap.mjs";
+import { calcCropMachineDaily } from "../../core/engine/crop-machine.mjs";
+import { cmGetSeedRestockCount } from "../../core/engine/roadmap.mjs";
+import { CROP_GROW_DATA } from "../../core/engine/power-boosts.mjs";
+
+const p2pFix = JSON.parse(readFileSync(path.join(ROOT, "tests/fixtures/p2p-prices.json"), "utf8"));
+const nftsFix = JSON.parse(readFileSync(path.join(ROOT, "tests/fixtures/nfts-sample.json"), "utf8"));
+
+test("calcCropMachineDaily counts crops per seed; seeds (not crops) are what cost coins", () => {
+  const er = { coinsPerSFL: 100 };
+  const one = calcCropMachineDaily(farm, "Sunflower", { Sunflower: 0.01 }, er, false);
+  const boosted = calcCropMachineDaily(farm, "Sunflower", { Sunflower: 0.01 }, er, false, 1.5);
+  assert.ok(Math.abs(boosted.revenue - one.revenue * 1.5) < 1e-9, "revenue scales with crops per seed");
+  assert.ok(Math.abs(boosted.cropsPerDay - one.cropsPerDay * 1.5) < 1e-9, "crops per day scales too");
+  assert.equal(boosted.seedsPerDay, one.seedsPerDay, "the machine still plants the same seeds");
+  assert.ok(Math.abs(boosted.seedCostPerDay - one.seedCostPerDay) < 1e-12, "seed cost follows seeds, not crops");
+});
+
+test("the roadmap's CROP MACHINE rows use the Power panel's crops per seed", () => {
+  const pw = buildPowerSection(farm, p2pFix, nftsFix, null, {});
+  const cm = pw.cropMachine;
+  assert.ok(cm && cm.rows.some((r) => r.yieldPerSeed !== 1), "the fixture has a crop yield boost on the machine");
+  const out = buildRoadmapSection([], { roadmapSettings: {}, farm, p2p: p2pFix });
+  const rows = out.profitability.groups.find((g) => g.id === "cropMachine").rows;
+  assert.ok(rows.length > 0, "the roadmap lists crop machine crops");
+  const rpd = 2;   // roadmap default restocks per day
+  for (const row of rows) {
+    const pr = cm.rows.find((r) => r.crop === row.label);
+    const seedsPerDay = 86400 * cm.plots / (CROP_GROW_DATA[row.label] * cm.speedMult);
+    const seeds = Math.min(seedsPerDay, rpd * cmGetSeedRestockCount(farm, row.label));
+    const want = seeds * pr.yieldPerSeed * pr.price;
+    assert.ok(Math.abs(row.gross - want) <= Math.max(1e-6, want * 2e-3),
+      `${row.label}: roadmap gross ${row.gross.toFixed(4)} ≠ seeds × ${pr.yieldPerSeed} × price = ${want.toFixed(4)}`);
+  }
+});
+
+test("every Crop Machine queue on the page is priced with the server's crops per seed", () => {
+  const src = readFileSync(path.join(ROOT, "flowers.html"), "utf8");
+  const calls = [...src.matchAll(/cmSimulateQueue\(([^;\n]*)\);/g)].map((m) => m[1]);
+  assert.ok(calls.length >= 3, `found the queue call sites (${calls.length})`);
+  for (const args of calls) {
+    const n = args.split(",").length;
+    assert.equal(n, 6, `cmSimulateQueue(${args}) must pass the yield map as its 6th argument`);
+  }
+});

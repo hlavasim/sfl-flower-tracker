@@ -4180,31 +4180,6 @@
       if (withTortoiseShrine) m *= 0.9;
       return m;
     }
-    // Compute daily SFL net (revenue − oil − seed cost) for a given crop in the Crop Machine.
-    function calcCropMachineDaily(farm, cropName, p2pPrices, exchangeRates, withTortoiseShrine) {
-      const baseSec = CROP_GROW_DATA[cropName];
-      if (!baseSec) return null;
-      const plots = cropMachinePlots(farm);
-      const speedMult = cropMachineSpeedMult(farm, !!withTortoiseShrine);
-      const effSecPerCrop = baseSec * speedMult / plots;
-      const cropsPerDay = effSecPerCrop > 0 ? 86400 / effSecPerCrop : 0;
-      const cropPrice = p2pPrices[cropName] || 0;
-      const revenue = cropsPerDay * cropPrice;
-      // Oil cost
-      const oilPerHour = cropMachineOilPerHour(farm);
-      const oilPerDay = oilPerHour * 24;
-      const oilPrice = p2pPrices["Oil"] || 0;
-      const oilCost = oilPerDay * oilPrice;
-      // Seed cost (coins → SFL via coinsPerSFL)
-      const seedCoinsPerCrop = SEED_COSTS[cropName] || 0;
-      const coinsPerSFL = exchangeRates?.coinsPerSFL || 320;
-      const seedCostPerDay = (cropsPerDay * seedCoinsPerCrop) / coinsPerSFL;
-      const net = revenue - oilCost - seedCostPerDay;
-      return {
-        crop: cropName, plots, speedMult, effSecPerCrop, cropsPerDay,
-        revenue, oilPerDay, oilCost, seedCostPerDay, net,
-      };
-    }
     function farmHasCropMachine(farm) {
       return ((farm.buildings || {})["Crop Machine"] || []).length > 0;
     }
@@ -4314,8 +4289,10 @@
     // (section=power cropMachine.rows[].yieldPerSeed: the game's yield boosts that reach a machine
     // pack, AOE plot boosts excluded). Without it every seed counted as exactly 1 crop, so this
     // queue and the server panel on the same page disagreed by the farm's whole yield boost.
-    function cmYieldMapFromServer() {
-      const rows = (typeof powerState !== "undefined" && powerState && powerState.cropMachine && powerState.cropMachine.rows) || null;
+    // `cm` (optional): a section=power cropMachine payload; defaults to the Power page's own.
+    function cmYieldMapFromServer(cm) {
+      if (!cm) cm = (typeof powerState !== "undefined" && powerState) ? powerState.cropMachine : null;
+      const rows = (cm && cm.rows) || null;
       if (!rows) return null;
       const m = {};
       for (const r of rows) if (r && r.crop && r.yieldPerSeed > 0) m[r.crop] = r.yieldPerSeed;
@@ -26383,6 +26360,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         p2pPrices = d.p2pPrices || {};
         boostItems = d.boostItems || [];
         powerRates = d.exchangeRates || null;
+        _shrineCmYields = cmYieldMapFromServer(d.cropMachine || { rows: [] });
       } catch (err) {
         document.getElementById("shrines-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load prices: ${escHTML(err.message)}</p></div>`;
         return;
@@ -26648,6 +26626,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     // when computing Crop Machine contributions for Tortoise Shrine.
     let _shrineFarmRef = null;
     let _shrineExchangeRates = null;
+    let _shrineCmYields = null;   // crop machine crops per seed, from section=power
 
     // Render per-resource detail rows for the expandable section under each shrine card.
     // Each entry shows: Power baseline + delta, shrine effect added, eff applied, net contribution.
@@ -26887,8 +26866,9 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         if (sh.catId === "greenhouse" && farmRef && farmHasCropMachine(farmRef)) {
           const xr = _shrineExchangeRates || { coinsPerSFL: 320 };
           const windowSec = cmComputeRestockWindow(farmRef);
-          const simWithout = cmSimulateQueue(farmRef, p2pPrices, xr, false, windowSec);
-          const simWith    = cmSimulateQueue(farmRef, p2pPrices, xr, true,  windowSec);
+          // Same crops per seed as the Power page's CROP MACHINE panel (section=power yieldPerSeed).
+          const simWithout = cmSimulateQueue(farmRef, p2pPrices, xr, false, windowSec, _shrineCmYields);
+          const simWith    = cmSimulateQueue(farmRef, p2pPrices, xr, true,  windowSec, _shrineCmYields);
           if (simWithout && simWith) {
             const dailyFactor = 86400 / windowSec;
             const rawDelta = (simWith.totalNet - simWithout.totalNet) * dailyFactor;

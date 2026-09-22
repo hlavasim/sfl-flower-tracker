@@ -99,7 +99,7 @@ export function buildRoadmapSection(snapshots, settings = {}) {
       const er = ps.exchangeRates;
       const rows = [];
       for (const crop of cropMachineCrops(ps.farm)) {
-        const r = calcCropMachineDaily(ps.farm, crop, ps.p2pPrices, er, false);
+        const r = calcCropMachineDaily(ps.farm, crop, ps.p2pPrices, er, false, (ps.cropMachineYields || {})[crop]);
         if (!r || !isFinite(r.net)) continue;
         rows.push({ product: crop, net: r.net, gross: r.revenue,
           cost: (r.oilCost || 0) + (r.seedCostPerDay || 0), plots: r.plots });
@@ -288,11 +288,13 @@ function buildProfitability(settings) {
   if (farmHasCropMachine(powerState.farm)) {
     for (const crop of cropMachineCrops(powerState.farm)) {
       if (_excl(crop)) continue;
-      const r = calcCropMachineDaily(powerState.farm, crop, powerState.p2pPrices, er, false);
+      // Crops per seed from section=power's CROP MACHINE panel (the game's yield boosts per seed).
+      const r = calcCropMachineDaily(powerState.farm, crop, powerState.p2pPrices, er, false, (powerState.cropMachineYields || {})[crop]);
       if (!r) continue;
       let gross = r.revenue, cost = (r.oilCost || 0) + (r.seedCostPerDay || 0), net = r.net;
+      // The restock cap is in SEEDS, so it scales against seeds planted, not crops harvested.
       const capSeeds = rpd * (cmGetSeedRestockCount(powerState.farm, crop) || 0);
-      if (r.cropsPerDay > 0 && capSeeds < r.cropsPerDay) { const sf = capSeeds / r.cropsPerDay; gross *= sf; cost *= sf; net *= sf; }
+      if (r.seedsPerDay > 0 && capSeeds < r.seedsPerDay) { const sf = capSeeds / r.seedsPerDay; gross *= sf; cost *= sf; net *= sf; }
       if (isFinite(net)) gCm.rows.push({ label: crop, icon: crop, gross, cost, net });
     }
   }

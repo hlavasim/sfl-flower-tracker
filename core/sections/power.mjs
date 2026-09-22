@@ -659,9 +659,8 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
    *     yield NFTs) — the same ones a plot gets. applyBoosts separates yield from speed, so the
    *     yield multiplier is taken and the speed multiplier from it is discarded.
    *
-   * The old calcCropMachineDaily (still used by the roadmap) applied yield=1, so it overstated a
-   * basic crop under Acre Farm's -0.5 by a third. This panel computes it correctly; unifying the
-   * roadmap onto this is a separate step.
+   * The old calcCropMachineDaily applied yield=1, so it overstated a basic crop under Acre Farm's
+   * -0.5 by a third. The roadmap now reads this panel's crops per seed (powerCtx.cropMachineYields).
    *
    * PACK sizes are the game's fixed per-crop machine batch, read off the crops the machine can
    * grow (Sunflower 960 … Broccoli 216) — confirmed by the cycle time matching pack×base/plots on
@@ -787,6 +786,10 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     }).filter(Boolean);
     // Unlocked crops ranked by net; locked ones after, so the live choice leads.
     rows.sort((a, b) => (a.locked - b.locked) || (b.net - a.net));
+    // Crops per seed on the power context, so the roadmap's machine rows (calcCropMachineDaily)
+    // price the same yield this panel does instead of 1 crop per seed.
+    powerCtx.cropMachineYields = {};
+    for (const r of rows) powerCtx.cropMachineYields[r.crop] = r.yieldPerSeed;
     cropMachine = { plots: cmPlots, oilPerHour: cmOilPerHour, speedMult: cmSpeed, oilPrice, oilFlowerPerDay: +oilCostPerDay.toFixed(4), rows };
   }
 

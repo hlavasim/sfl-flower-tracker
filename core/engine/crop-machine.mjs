@@ -44,13 +44,18 @@ import { findCollectible } from "./power-helpers.mjs";
       return m;
     }
     // Compute daily SFL net (revenue − oil − seed cost) for a given crop in the Crop Machine.
-    function calcCropMachineDaily(farm, cropName, p2pPrices, exchangeRates, withTortoiseShrine) {
+    // `yieldPerSeed` (optional): crops harvested per seed. harvestCropMachine.ts applies the
+    // ordinary crop yield boosts to every seed of a pack, so this is section=power's
+    // cropMachine.rows[].yieldPerSeed; without it a seed counts as exactly 1 crop.
+    function calcCropMachineDaily(farm, cropName, p2pPrices, exchangeRates, withTortoiseShrine, yieldPerSeed) {
       const baseSec = CROP_GROW_DATA[cropName];
       if (!baseSec) return null;
       const plots = cropMachinePlots(farm);
       const speedMult = cropMachineSpeedMult(farm, !!withTortoiseShrine);
-      const effSecPerCrop = baseSec * speedMult / plots;
-      const cropsPerDay = effSecPerCrop > 0 ? 86400 / effSecPerCrop : 0;
+      const effSecPerCrop = baseSec * speedMult / plots;   // machine seconds per SEED
+      const seedsPerDay = effSecPerCrop > 0 ? 86400 / effSecPerCrop : 0;
+      const perSeed = yieldPerSeed > 0 ? yieldPerSeed : 1;
+      const cropsPerDay = seedsPerDay * perSeed;
       const cropPrice = p2pPrices[cropName] || 0;
       const revenue = cropsPerDay * cropPrice;
       // Oil cost
@@ -61,10 +66,10 @@ import { findCollectible } from "./power-helpers.mjs";
       // Seed cost (coins → SFL via coinsPerSFL)
       const seedCoinsPerCrop = SEED_COSTS[cropName] || 0;
       const coinsPerSFL = exchangeRates?.coinsPerSFL || 320;
-      const seedCostPerDay = (cropsPerDay * seedCoinsPerCrop) / coinsPerSFL;
+      const seedCostPerDay = (seedsPerDay * seedCoinsPerCrop) / coinsPerSFL;
       const net = revenue - oilCost - seedCostPerDay;
       return {
-        crop: cropName, plots, speedMult, effSecPerCrop, cropsPerDay,
+        crop: cropName, plots, speedMult, effSecPerCrop, seedsPerDay, yieldPerSeed: perSeed, cropsPerDay,
         revenue, oilPerDay, oilCost, seedCostPerDay, net,
       };
     }
