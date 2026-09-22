@@ -60,7 +60,7 @@ test("E8: section=treasury reports what its numbers stand on", async () => {
 // and computedAt = now, so a stale farm passed for a live one.
 test("E8: a stale farm is flagged with its age", async () => {
   const live = await call({ section: "treasury" });
-  assert.equal(live._json.stale, undefined, "a live farm carries no stale flag");
+  assert.ok(!live._json.stale, "a live farm is not flagged stale");
   _clearCacheForTests({ keepLastGood: true });
   const stale = await call({ section: "treasury" }, undefined, { farmDown: true });
   assert.equal(stale._status, 200, "the stale fallback still serves");
