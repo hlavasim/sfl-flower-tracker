@@ -30647,10 +30647,11 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       // bucket_hours=12 means server keeps the latest snapshot in each 12h slot, so the
       // 7d/14d/30d earning-rate windows aren't all squeezed into the last few hours of data
       // (which was the v3.25 bug — `latest=60` only covered ~2 days of dense collection).
-      // include=game_data is required for computeFarmValue per-snapshot.
+      // include=game_value: only the fields computeFarmValue reads (api/farm-history.js
+      // GAME_VALUE_SQL), not the ~180 KB full farm per row.
       const fromIso = new Date(Date.now() - 30 * 86400000).toISOString();
       const toIso = new Date(Date.now() + 86400000).toISOString();
-      const histResp = await fetch(`/api/farm-history?farm=${FARM}&from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}&bucket_hours=12&limit=100&include=game_data`);
+      const histResp = await fetch(`/api/farm-history?farm=${FARM}&from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}&bucket_hours=12&limit=100&include=game_value`);
       if (!histResp.ok) throw new Error(`snapshots fetch failed: ${histResp.status}`);
       const hist = await histResp.json();
       let snaps = hist.snapshots || [];

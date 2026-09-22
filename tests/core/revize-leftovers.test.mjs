@@ -130,3 +130,62 @@ test("the page's boost parser strips 'Plot' the same way", () => {
   assert.ok(readFileSync(path.join(ROOT, "flowers.html"), "utf8").includes(fix), "flowers.html");
   assert.ok(readFileSync(path.join(ROOT, "core/engine/power-boosts.mjs"), "utf8").includes(fix), "core");
 });
+
+// ── 4. Insights values snapshots from include=game_value, which must carry every field
+//       computeFarmValue reads ──
+import { buildTreasuryData } from "../../core/sections/treasury.mjs";
+
+const PAGE_SRC = readFileSync(path.join(ROOT, "flowers.html"), "utf8");
+function loadPageFns(names) {
+  const script = PAGE_SRC.slice(PAGE_SRC.indexOf("<script>") + 8, PAGE_SRC.lastIndexOf("</script>"));
+  const stubEl = () => ({ innerHTML: "", textContent: "", style: {}, classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
+    appendChild() {}, addEventListener() {}, setAttribute() {}, removeAttribute() {}, querySelector: () => null,
+    querySelectorAll: () => [], getContext: () => null, children: [], dataset: {} });
+  const doc = { getElementById: () => stubEl(), querySelector: () => null, querySelectorAll: () => [], createElement: stubEl,
+    addEventListener() {}, removeEventListener() {}, body: stubEl(), documentElement: stubEl(), head: stubEl(), readyState: "complete", cookie: "" };
+  const store = {};
+  const win = {
+    localStorage: { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } },
+    sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    location: { href: "https://example.test/", search: "", hash: "", pathname: "/", origin: "https://example.test" },
+    addEventListener() {}, removeEventListener() {}, matchMedia: () => ({ matches: false, addEventListener() {} }),
+    requestAnimationFrame: () => 0, setTimeout: () => 0, setInterval: () => 0, clearTimeout() {}, clearInterval() {},
+    history: { replaceState() {}, pushState() {} }, navigator: { userAgent: "node", clipboard: { writeText: async () => {} } },
+    fetch: async () => ({ ok: false, status: 503, json: async () => ({}) }),
+    console: { log() {}, warn() {}, error() {}, info() {}, debug() {} },
+  };
+  win.window = win; win.document = doc;
+  const run = new Function("window", "document", "localStorage", "sessionStorage", "fetch", "requestAnimationFrame", "setTimeout",
+    "setInterval", "clearTimeout", "clearInterval", "location", "history", "navigator", "matchMedia", "console",
+    `${script}\n return { ${names.join(", ")} };`);
+  return run(win, doc, win.localStorage, win.sessionStorage, win.fetch, win.requestAnimationFrame, win.setTimeout,
+    win.setInterval, win.clearTimeout, win.clearInterval, win.location, win.history, win.navigator, win.matchMedia, win.console);
+}
+
+/** JS mirror of api/farm-history.js GAME_VALUE_SQL (each placed name keeps its first placement). */
+function gameValueProjection(g) {
+  const placed = (m) => { const o = {}; for (const [k, v] of Object.entries(m || {})) o[k] = [Array.isArray(v) ? v[0] : undefined]; return o; };
+  return JSON.parse(JSON.stringify({
+    inventory: g.inventory, wardrobe: g.wardrobe, balance: g.balance, coins: g.coins, gems: g.gems, bank: g.bank,
+    pets: { nfts: g.pets && g.pets.nfts }, trades: { listings: g.trades && g.trades.listings },
+    collectibles: placed(g.collectibles), home: { collectibles: placed(g.home && g.home.collectibles) },
+    interior: { ground: { collectibles: placed(g.interior && g.interior.ground && g.interior.ground.collectibles) },
+      level_one: { collectibles: placed(g.interior && g.interior.level_one && g.interior.level_one.collectibles) } },
+  }));
+}
+
+test("the page's computeFarmValue gives the same totals on the game_value projection as on the full farm", () => {
+  const { computeFarmValue } = loadPageFns(["computeFarmValue"]);
+  const td = buildTreasuryData(p2pFix, nftsFix, null, 0);
+  const full = computeFarmValue(farm, td, "betty");
+  const slim = computeFarmValue(gameValueProjection(farm), td, "betty");
+  assert.ok(full.totals.grand > 0, "the fixture farm has a value");
+  assert.deepEqual(slim.totals, full.totals, "a field computeFarmValue reads is missing from GAME_VALUE_SQL");
+});
+
+test("Insights asks farm-history for include=game_value, not the whole farm", () => {
+  const i = PAGE_SRC.indexOf("async function renderInvestmentInsights(");
+  const body = PAGE_SRC.slice(i, i + 3000);
+  assert.match(body, /\/api\/farm-history\?[^`]*include=game_value/, "Insights snapshot fetch");
+  assert.doesNotMatch(body, /include=game_data/, "the 180 KB-per-row game_data is not needed for a valuation");
+});

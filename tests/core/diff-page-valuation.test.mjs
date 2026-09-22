@@ -66,7 +66,7 @@ function page(opts = {}) {
     if (u.includes("type=venue-balance")) return json({ balances: [] });
     if (u.includes("type=repay-plan")) return json({ plan: null });
     if (u.includes("type=venue-holdings")) return json({ wallets: [], venues: null, errors: [] });
-    if (u.includes("include=game_data")) return json({ snapshots: opts.insightSnaps || [] });
+    if (u.includes("include=game_value")) return json({ snapshots: opts.insightSnaps || [] });
     if (u.includes("farm-history")) return json({ snapshots: [{ id: 1, captured_at: iso(NOW - 3600000), diff: { coins: 1 } }], total: 1 });
     if (u.includes("coingecko")) return json({ prices: [] });
     if (u.includes("currency-api")) return json({ usd: { czk: 23 } });
