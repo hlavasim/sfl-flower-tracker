@@ -4314,7 +4314,18 @@
     }
     // Greedy queue simulator: best-net first, fill until window full, partial-fill last crop.
     // Returns per-crop entries + totals. Window can be overridden (for shrine diff calcs).
-    function cmSimulateQueue(farm, p2pPrices, exchangeRates, withTortoiseShrine, windowSec) {
+    // `yieldBySeed` (optional): crops per seed, per crop — the server's CROP MACHINE panel
+    // (section=power cropMachine.rows[].yieldPerSeed: the game's yield boosts that reach a machine
+    // pack, AOE plot boosts excluded). Without it every seed counted as exactly 1 crop, so this
+    // queue and the server panel on the same page disagreed by the farm's whole yield boost.
+    function cmYieldMapFromServer() {
+      const rows = (typeof powerState !== "undefined" && powerState && powerState.cropMachine && powerState.cropMachine.rows) || null;
+      if (!rows) return null;
+      const m = {};
+      for (const r of rows) if (r && r.crop && r.yieldPerSeed > 0) m[r.crop] = r.yieldPerSeed;
+      return m;
+    }
+    function cmSimulateQueue(farm, p2pPrices, exchangeRates, withTortoiseShrine, windowSec, yieldBySeed) {
       const crops = cropMachineCrops(farm);
       const plots = cropMachinePlots(farm);
       const speedMult = cropMachineSpeedMult(farm, !!withTortoiseShrine);
@@ -4327,15 +4338,16 @@
       const candidates = crops.map(c => {
         const baseSec = CROP_GROW_DATA[c];
         if (!baseSec) return null;
-        const secPerCrop = baseSec * speedMult / plots; // CM seconds per single crop
-        const cropPrice = p2pPrices[c] || 0;
+        const secPerCrop = baseSec * speedMult / plots; // CM seconds per single SEED
+        const perSeed = (yieldBySeed && yieldBySeed[c] > 0) ? yieldBySeed[c] : 1;
+        const cropPrice = (p2pPrices[c] || 0) * perSeed; // revenue per seed = crops per seed × price
         const seedCoinsPerCrop = SEED_COSTS[c] || 0;
         const seedSflPerCrop = seedCoinsPerCrop / coinsPerSFL;
         const oilSflPerCrop = (oilPerHour * oilPrice / 3600) * secPerCrop;
         const netPerCrop = cropPrice - seedSflPerCrop - oilSflPerCrop;
         const netPerSec = secPerCrop > 0 ? netPerCrop / secPerCrop : -Infinity;
         const restock = cmGetSeedRestockCount(farm, c);
-        return { crop: c, secPerCrop, cropPrice, seedSflPerCrop, oilSflPerCrop, netPerCrop, netPerSec, restock };
+        return { crop: c, secPerCrop, perSeed, cropPrice, seedSflPerCrop, oilSflPerCrop, netPerCrop, netPerSec, restock };
       }).filter(x => x && isFinite(x.netPerSec));
 
       // Sort by profit per second descending. Negative-net crops are kept in the
@@ -4363,14 +4375,14 @@
         queue.push({
           crop: cand.crop, seedsUsed, timeSec: timeUsedHere,
           revenue, seedCost, oilCost, net,
-          netPerSec: cand.netPerSec, restockCap: maxSeeds, partial: seedsUsed < maxSeeds,
+          netPerSec: cand.netPerSec, restockCap: maxSeeds, partial: seedsUsed < maxSeeds, yieldPerSeed: cand.perSeed,
         });
         timeUsed += timeUsedHere;
         totalNet += net;
         totalRevenue += revenue;
         totalOilCost += oilCost;
         totalSeedCost += seedCost;
-        totalCrops += seedsUsed;
+        totalCrops += seedsUsed * cand.perSeed;
       }
 
       return {
@@ -4458,7 +4470,7 @@
       "Young Farmer":       { tree: "Crops", points: 1, tier: 1, buff: "+0.1 Basic Crop yield", debuff: null },
       "Experienced Farmer": { tree: "Crops", points: 1, tier: 1, buff: "+0.1 Medium Crop yield", debuff: null },
       "Old Farmer":         { tree: "Crops", points: 1, tier: 1, buff: "+0.1 Advanced Crop yield", debuff: null },
-      "Chonky Scarecrow":   { tree: "Crops", points: 1, tier: 1, buff: "+0.1 Basic Crop yield", debuff: null },
+      "Chonky Scarecrow":   { tree: "Crops", points: 1, tier: 1, buff: "-12.5% Basic Crop growth time", debuff: null },
       "Betty's Friend":     { tree: "Crops", points: 1, tier: 1, buff: "+30% Betty Coin delivery revenue", debuff: null },
       "Strong Roots":       { tree: "Crops", points: 2, tier: 2, buff: "-10% Advanced Crop Growth Time", debuff: null },
       "Coin Swindler":      { tree: "Crops", points: 2, tier: 2, buff: "+10% coins selling crops at Market", debuff: null },
@@ -5250,12 +5262,29 @@
       // Total SFL to reach current level via most efficient cooking
       const totalSFL = totalXP / bestRatio;
       const sflPerLevel = totalSFL / level;
-      // 1 level = 1 skill point
+      /*
+       * 1 level = 1 skill point, and the NEXT point is bought by earning the NEXT level — so a
+       * point costs that level's XP, not the average of every level so far. The average is
+       * dominated by the cheap early levels: at level 186 it read 59.9 FLOWER/point against the
+       * 240.5 the next level actually costs, pricing every skill ~4x too cheap.
+       */
+      let nextLevelXp = 0;
+      if (ascLevel >= 1) {
+        const within = _withinAscensionLevel(xp, ascLevel);
+        const band = within >= 50 ? ascLevel + 1 : ascLevel;
+        const step = within >= 50 ? 1 : Math.max(1, within);
+        nextLevelXp = _ascBandXp(band) * (1 + _ASC_WEIGHT_PER_LEVEL * step) / _ASC_TOTAL_WEIGHT;
+      } else {
+        const cur = BUMPKIN_XP_TABLE[level - 1] || 0;
+        const nxt = BUMPKIN_XP_TABLE[level];
+        nextLevelXp = nxt != null ? nxt - cur : cur - (BUMPKIN_XP_TABLE[level - 2] || 0);
+      }
+      const sflPerPoint = nextLevelXp > 0 ? nextLevelXp / bestRatio : sflPerLevel;
       const xpBoostNames = cookingBoosts.xpBoosts.filter(b =>
         !b.buildings || b.buildings.includes(bestRecipe.building)
       ).map(b => `${b.name} (×${b.multiplier})`);
 
-      return { sflPerPoint: sflPerLevel, bestRecipe, level, totalXP, totalSFL, sflPerLevel, xpBoostNames };
+      return { sflPerPoint, bestRecipe, level, totalXP, totalSFL, sflPerLevel, nextLevelXp, xpBoostNames };
     }
 
     // Power category definitions
@@ -5330,19 +5359,19 @@
         { type: "sickness_reduction", value: 0.5, cat: "sheep", raw: "-50% Barn Delight cost" },
       ],
       "Frozen Cow": [
-        { type: "sickness_prevention", value: 1.0, cat: "cows", raw: "Prevents cow sickness" },
+        { type: "sickness_prevention", value: 1.0, cat: "cows", raw: "Prevents cow sickness in winter", season: "winter" },
       ],
       "Frozen Sheep": [
-        { type: "sickness_prevention", value: 1.0, cat: "sheep", raw: "Prevents sheep sickness" },
+        { type: "sickness_prevention", value: 1.0, cat: "sheep", raw: "Prevents sheep sickness in winter", season: "winter" },
       ],
       "Summer Chicken": [
-        { type: "sickness_prevention", value: 1.0, cat: "chickens", raw: "Prevents chicken sickness" },
+        { type: "sickness_prevention", value: 1.0, cat: "chickens", raw: "Prevents chicken sickness in summer", season: "summer" },
       ],
       "Nurse Sheep": [
-        { type: "sickness_prevention", value: 1.0, cat: "sheep", raw: "Prevents sheep sickness" },
+        { type: "sickness_prevention", value: 1.0, cat: "sheep", raw: "Prevents sheep sickness in summer", season: "summer" },
       ],
       "Sleepy Chicken": [
-        { type: "sickness_prevention", value: 1.0, cat: "chickens", raw: "Prevents chicken sickness" },
+        { type: "sickness_prevention", value: 1.0, cat: "chickens", raw: "Prevents chicken sickness in autumn", season: "autumn" },
       ],
       "Gold Beetle": [
         { type: "yield_flat", value: 0.1, cat: "gold", raw: "+0.1 Gold" },
@@ -15899,17 +15928,14 @@
       const morePicks = skills["More Picks"] !== undefined;
       const fellersDiscount = skills["Feller's Discount"] !== undefined; // -20% axe coin cost
       const frugalMiner = skills["Frugal Miner"] !== undefined;         // -20% pickaxe coin cost
-      // Free tool collectibles (zero tool cost for category)
-      const hasQuarry = findCollectible(farm, "Quarry").length > 0 || getCount(inventory, "Quarry") > 0;
-      const hasForeman = findCollectible(farm, "Foreman Beaver").length > 0 || getCount(inventory, "Foreman Beaver") > 0;
+      // Free tool collectibles (zero tool cost for category). The game checks these with
+      // isCollectibleBuilt / isWearableActive, so only a PLACED collectible or an EQUIPPED
+      // wearable (bumpkin or farm hand) counts — one sitting in inventory/wardrobe does nothing.
+      const hasQuarry = findCollectible(farm, "Quarry").length > 0;
+      const hasForeman = findCollectible(farm, "Foreman Beaver").length > 0;
       const oilRigActive = skills["Oil Rig"] !== undefined;
       const hasInfernalDrill = isWearableEquipped(farm, "Infernal Drill");
-      // Crimstone Spikes Hair: wearable that lets you mine crimstone without Gold Pickaxes.
-      // Counted whether equipped OR just owned in wardrobe — the in-game effect applies once
-      // it's part of the bumpkin's outfit, but UI-wise we show the savings regardless so the
-      // user can immediately see the value before equipping.
-      const hasCrimstoneSpikesHair = isWearableEquipped(farm, "Crimstone Spikes Hair")
-        || ((farm.wardrobe || {})["Crimstone Spikes Hair"] || 0) > 0;
+      const hasCrimstoneSpikesHair = isWearableEquipped(farm, "Crimstone Spikes Hair");
       const slickSaver = skills["Slick Saver"] !== undefined; // -1 Oil for greenhouse seeds
       const hasKaleMix = skills["Kale Mix"] !== undefined; // Mixed Grain uses 3 Kale instead
       return { hasWarehouse, hasToolshed, moreAxes, morePicks, fellersDiscount, frugalMiner, hasQuarry, hasForeman, oilRigActive, hasInfernalDrill, hasCrimstoneSpikesHair, slickSaver, hasKaleMix };
@@ -15981,7 +16007,10 @@
     // skipDiscount: if true, ignore coin discounts (for base cost calculation)
     // Tools consumed per day = one tool per PHYSICAL rock per BOOSTED recovery cycle. A merged rock is
     // still ONE rock (one tool, multiplied yield); faster recovery = more tools. Falls back before powerState.
-    function miningToolsPerDay(catId, capacity) {
+    // `effects` (optional): the effect set whose speed decides the tool count — a what-if caller
+    // (roadmapMiningChain's override) passes the same set its output uses. Default = owned.
+    // Same parameter order as core; `_farm` is unused here (the page reads powerState.farm).
+    function miningToolsPerDay(catId, capacity, _farm, effects) {
       const fkMap = { trees: "trees", stone: "stones", iron: "iron", gold: "gold", crimstone: "crimstones", oil: "oilReserves" };
       const fk = fkMap[catId];
       const pf = (typeof powerState !== "undefined" && powerState && powerState.farm) ? powerState.farm : null;
@@ -15994,7 +16023,7 @@
         toolNodes = oneToolPerNode ? ns.length : ns.reduce((s, n) => s + ((n && n.multiplier) || 1), 0);
       } else { toolNodes = capacity[fk] || 0; }
       let ec = 0;
-      try { ec = applyBoosts(catId, getDefaultProduct(catId), capacity, roadmapOwnedEffects(catId)).effectiveCycle || 0; } catch {}
+      try { ec = applyBoosts(catId, getDefaultProduct(catId), capacity, effects || roadmapOwnedEffects(catId)).effectiveCycle || 0; } catch {}
       if (!(ec > 0)) { const rk = { trees:"Wood", stone:"Stone", iron:"Iron", gold:"Gold", crimstone:"Crimstone", oil:"Oil" }[catId]; const d = RESOURCE_RESPAWN_DATA[rk]; ec = d ? d.respawnSec : 0; }
       return ec > 0 ? toolNodes * (86400 / ec) : 0;
     }
@@ -16253,7 +16282,7 @@
      * Medic Apron reaches a valuation only as its parsed effect — matching on owned item NAMES
      * below means every "what if I buy it" question scored those items exactly 0.
      */
-    function calcSicknessCost(catId, capacity, p2pPrices, boostItems, skills, effects) {
+    function calcSicknessCost(catId, capacity, p2pPrices, boostItems, skills, effects, season) {
       const animals = capacity.animalDetails?.[catId] || [];
       if (animals.length === 0) return { costPerDay: 0, avgRate: 0, barnDelightSfl: 0, reductions: [], perLevel: [] };
       const probeEff = (effects || []).filter(e => e.cat === catId);
@@ -16274,24 +16303,31 @@
        * would count the same item twice. Callers that pass no effects keep the name checks.
        */
       const effectMode = effects != null;
-      let prevented = false;
+      const prevs = []; // one per protecting item: { name, season } — season null = all year
       if (effectMode) {
-        if (probeEff.some(e => e.type === "sickness_prevention")) {
-          prevented = true;
-          reductions.push({ name: "sickness prevention", desc: "Full prevention" });
-        }
+        for (const e of probeEff) if (e.type === "sickness_prevention") prevs.push({ name: "sickness prevention", season: e.season || null });
       } else if (boostItems) {
         for (const item of boostItems) {
           if (!item.has) continue;
           const prevCat = SICKNESS_PREVENTION[item.name];
           if (prevCat === catId) {
-            prevented = true;
-            reductions.push({ name: item.name, desc: "Full prevention" });
-            break;
+            const pe = (item.effects || []).find(e => e.type === "sickness_prevention");
+            prevs.push({ name: item.name, season: (pe && pe.season) || null });
           }
         }
       }
-      if (prevented) return { costPerDay: 0, avgRate: 0, barnDelightSfl, prevented: true, reductions, perLevel: [] };
+      const seasons = prevs.map(p => p.season);
+      let preventedShare = 0;
+      if (prevs.length) {
+        if (season === undefined || seasons.indexOf(null) >= 0) preventedShare = 1;
+        else if (season === "annual") preventedShare = Math.min(1, new Set(seasons).size / 4);
+        else preventedShare = seasons.indexOf(season) >= 0 ? 1 : 0;
+      }
+      if (preventedShare >= 1) {
+        reductions.push({ name: prevs[0].name, desc: "Full prevention" });
+        return { costPerDay: 0, avgRate: 0, barnDelightSfl, prevented: true, reductions, perLevel: [] };
+      }
+      if (preventedShare > 0) reductions.push({ name: prevs.map(p => p.name).join(", "), desc: `No sickness ${Math.round(preventedShare * 100)}% of the year` });
 
       /*
        * Rate multiplier from Healthy Livestock — NAME mode only. In effect mode the skill's
@@ -16343,10 +16379,10 @@
         perLevel[lvl].count++;
       }
 
-      const costPerDay = totalExpectedSick * barnDelightSfl * cureCostMult;
+      const costPerDay = totalExpectedSick * barnDelightSfl * cureCostMult * (1 - preventedShare);
       const avgRate = animals.length > 0 ? totalExpectedSick / animals.length : 0;
 
-      return { costPerDay, avgRate, totalExpectedSick, barnDelightSfl, cureCostMult, rateMult, reductions, animalCount: animals.length, perLevel };
+      return { costPerDay, avgRate, totalExpectedSick, barnDelightSfl, cureCostMult, rateMult, preventedShare, reductions, animalCount: animals.length, perLevel };
     }
 
     // Calculate sickness cost savings from a specific boost item
@@ -16654,12 +16690,14 @@
           const toolName = Object.keys(TOOL_TO_CAT).find(t => TOOL_TO_CAT[t] === catId);
           const tool = toolName ? TOOL_COSTS[toolName] : null;
           let solo = 0;
-          if (tool && baseCost.toolsPerDay > 0 && exchangeRates.coinsPerSFL > 0) {
+          // A coin discount saves nothing when the roadmap treats coins as free (core copy says why).
+          const coinsFree = roadmapCoinsFree(getRoadmapSettings());
+          if (!coinsFree && tool && baseCost.toolsPerDay > 0 && exchangeRates.coinsPerSFL > 0) {
             const coinSavingsPerUse = tool.coins * discountValue / exchangeRates.coinsPerSFL;
             solo = coinSavingsPerUse * baseCost.toolsPerDay;
           }
           const roi = (boostItem.floor > 0 && solo > 0) ? boostItem.floor / solo : Infinity;
-          return { solo, synergy: solo, roi, isCostReduction: true };
+          return { solo, synergy: solo, roi, isCostReduction: true, ...(coinsFree ? { coinsFree: true } : {}) };
         }
         return { solo: 0, synergy: 0, roi: Infinity };
       }
@@ -17213,7 +17251,7 @@
       return out;
     }
     function roadmapOwnedEffects(cat) {
-      return powerState.boostItems.filter(b => b.has).flatMap(b => b.effects.filter(e => e.cat === cat)).concat(activeShrineEffects(cat));
+      return powerState.boostItems.filter(b => b.has && !b.isDisabled).flatMap(b => b.effects.filter(e => e.cat === cat)).concat(activeShrineEffects(cat));
     }
 
     // Coins are "free" when you hold a big pile of them — they're not directly convertible
@@ -17344,8 +17382,8 @@
       for (const c of MINE_CHAIN) {
         const e = eff(c);
         P[c] = RES_FARMKEY[c] ? gameResUnitsPerDay(c, farm, cap, e) : (applyBoosts(c, MINE_RES[c], cap, e).unitsPerDay || 0);
-        tools[c] = miningToolsPerDay(c, cap);
-        price[c] = p2p[MINE_RES[c]] || 0;
+        tools[c] = miningToolsPerDay(c, cap, farm, e);   // tools follow the override speed, like the output
+        price[c] = unitToSfl(1, MINE_RES[c], p2p); // Oil is not tradeable → not income
         try { free[c] = !!calcToolCostPerDay(c, cap, er, p2p, sm, false).freeTool || (eff(c) || []).some(e => e.type === "free_tool"); } catch { free[c] = (eff(c) || []).some(e => e.type === "free_tool"); }
       }
       // own (non-chain) tool cost per day: leather/wool + coins
@@ -17470,10 +17508,12 @@
       const skills = (powerState.farm && powerState.farm.bumpkin && powerState.farm.bumpkin.skills) || {};
       const product = savedProducts[cat] || getDefaultProduct(cat);
       const er = roadmapCoinsFree(settings) ? Object.assign({}, exchangeRates, { coinsPerSFL: Infinity }) : exchangeRates;
-      // Obsidian can only be liquidated ~1×/week → income = (1 obsidian − 1 ignition's fuel) / 7 days.
+      // Obsidian: (1 obsidian − 1 ignition's fuel) / 7 days. The obsidian itself is priced by
+      // unitToSfl, i.e. 0 — the game does not let it be traded (tradeLimits.ts), so it is not
+      // income; what it is worth shows up in the nodes it buys. The fuel is a real cost.
       if (cat === "obsidian") {
         if (getCapacityCount("obsidian", capacity) <= 0) return { gross: 0, cost: 0, net: 0 };
-        const price = p2pPrices["Obsidian"] || 0;
+        const price = unitToSfl(1, "Obsidian", p2pPrices);
         let lavaMult = 1;
         for (const e of (effects || [])) if (e.type === "lava_cost_reduction" && e.cat === "obsidian") lavaMult *= (1 - (e.value || 0));
         let ign = 0;
@@ -17487,7 +17527,7 @@
           cost += (calcAnimalFeedCost(cat, capacity, p2pPrices, effects, stockMods).costPerDay) || 0;
           // `effects` reaches the sickness calc too — an unowned Sleepy Chicken / Medic Apron only
           // exists in a what-if probe as its effect, and matching owned item names scored them 0.
-          cost += (calcSicknessCost(cat, capacity, p2pPrices, powerState.boostItems, skills, effects || []).costPerDay) || 0;
+          cost += (calcSicknessCost(cat, capacity, p2pPrices, powerState.boostItems, skills, effects || [], settings.seasonBasis === "annual" ? "annual" : season).costPerDay) || 0;
         } else if (cat === "crops" || cat === "fruits" || cat === "greenhouse") {
           const mix = roadmapCatMix(cat, effects, settings);
           gross = mix.gross; cost += mix.cost;
@@ -17537,7 +17577,19 @@
       const pp = roadmapPerPlot(cat, product, effects, settings);
       if (!pp) return 0;
       const take = Math.min(plots, pp.maxPlots > 0 ? pp.maxPlots : plots);
-      return (pp.gpp - pp.cpp) * take;
+      /*
+       * On the annual basis (calcBoostValue: bought once, kept all year) a seasonal product only
+       * earns in the seasons it can be planted — the same per-season averaging roadmapCatMix
+       * does for the mix. Without it Giant Kale read 2.80/day for a crop that grows two seasons
+       * in four. A product in no season table (greenhouse) is year-round.
+       */
+      let seasonShare = 1;
+      if (settings.seasonBasis === "annual" && (cat === "crops" || cat === "fruits")) {
+        const names = Object.keys(SEASON_CROPS);
+        const n = names.filter((s) => (SEASON_CROPS[s] || []).indexOf(product) >= 0).length;
+        if (n > 0) seasonShare = n / names.length;
+      }
+      return (pp.gpp - pp.cpp) * take * seasonShare;
     }
 
     // NET FLOWER/day for a single product (one crop / greenhouse item) at full plots.
@@ -18360,10 +18412,8 @@
       if (!items.length) return `<div style="font-size:0.5rem;color:var(--text-dim)">No skill data — reload so section=power runs.</div>`;
 
       const sflPerPt = (ps.skillCostInfo && ps.skillCostInfo.sflPerPoint) || 0;
-      const level = (ps.skillCostInfo && ps.skillCostInfo.level) || 1;
-      let spent = 0;
-      for (const b of items) if (b.has) spent += (b.skillPoints || 1);
-      const autoFree = Math.max(0, (level - 1) - spent);
+      // Free points come from section=power (the game's level − spent, one formula for every view).
+      const autoFree = Math.max(0, (ps.skillCostInfo && ps.skillCostInfo.freePoints) || 0);
       const freePts = (settings.skillPts != null && isFinite(settings.skillPts)) ? Math.max(0, settings.skillPts) : autoFree;
       const shardsHave = Math.floor((ps.inventory && parseFloat(ps.inventory["Ascension Shard"])) || 0);
 
@@ -18772,10 +18822,9 @@
       const ascLvl = (farm.island && farm.island.ascensionLevel) || 0;
       const level = info.level || (typeof getTotalBumpkinLevel === "function" ? getTotalBumpkinLevel(bumpkin.experience || 0, ascLvl) : 1);
       const sflPerPt = info.sflPerPoint || 0;
-      let spent = 0; const ownSk = bumpkin.skills || {};
-      for (const sn in ownSk) { const sd = SKILL_TREE_DATA[sn]; spent += sd ? (sd.points || 0) : 0; }
-      // Game: available = getTotalBumpkinLevel − usedPoints (1 point per level, NOT level−1).
-      const autoFree = Math.max(0, level - spent);
+      // Game: available = getTotalBumpkinLevel − usedPoints (1 point per level, NOT level−1), rank-ups
+      // included — served once by section=power so this view and the buy path cannot disagree.
+      const autoFree = Math.max(0, (powerState.skillCostInfo && powerState.skillCostInfo.freePoints) || 0);
       const freePts = (settings.skillPts != null && isFinite(settings.skillPts)) ? Math.max(0, settings.skillPts) : autoFree;
       const rows = skills.map(c => {
         const bd = roadmapSkillBreakdown(c, catBoostsW, settings);
@@ -19129,8 +19178,10 @@
         const ratios = Object.values(eff.effByCat || {}).map(e => e.ratio).filter(r => r > 0);
         let gDefault = ratios.length ? ratios.reduce((a, b) => a + b, 0) / ratios.length : 0.3;
         gDefault = Math.min(1.5, Math.max(0.05, gDefault));
+        // No measured history → meanRatio null → roadmapEffFactor falls back to theoretical 1.0.
+        // (It fell back to gDefault = 0.3 here and 0.5 on the server, silently cutting income.)
         roadmapState = { effByCat: eff.effByCat || {}, effMeta: eff.meta, globalActivityDefault: gDefault,
-          meanRatio: (typeof eff.meanRatio === "number" ? eff.meanRatio : gDefault),
+          meanRatio: (typeof eff.meanRatio === "number" ? eff.meanRatio : null),
           currentProdDefault: d.currentProd.total, prodBreakdown: d.currentProd.breakdown };
       } catch (err) {
         if (!_roadmapServer) { el.innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load: ${escHTML(err.message)}</p></div>`; return; }
@@ -19366,9 +19417,9 @@
       if (roadmapState.effMeta && roadmapState.effMeta.available) {
         const parts = [];
         for (const [cat, e] of Object.entries(roadmapState.effByCat)) { if (!e.measured) continue; parts.push(`${POWER_CATEGORIES[cat] ? POWER_CATEGORIES[cat].label : cat} ${Math.round(e.ratio * 100)}%`); }
-        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--text-dim)">Harvest efficiency (throughput vs theoretical), ${roadmapState.effMeta.from} → ${roadmapState.effMeta.to}, last 7 days, ${roadmapState.effMeta.snaps} snaps: ${parts.join(" · ")}${parts.length ? "" : "no harvests recorded"} · bees/fishing use avg ${Math.round((roadmapState.meanRatio || 0) * 100)}%</div>`;
+        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--text-dim)">Harvest efficiency (throughput vs theoretical), ${roadmapState.effMeta.from} → ${roadmapState.effMeta.to}, last 7 days, ${roadmapState.effMeta.snaps} snaps: ${parts.join(" · ")}${parts.length ? "" : "no harvests recorded"} · bees/fishing use avg ${roadmapState.meanRatio != null ? Math.round(roadmapState.meanRatio * 100) + "%" : "100% (unmeasured)"}</div>`;
       } else {
-        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--yellow)">No recent history available — using ${settings.effMode === "theoretical" ? "theoretical" : "average activity"} rates only.</div>`;
+        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--yellow)">No recent history available — efficiency is UNMEASURED, so every figure is at theoretical (100%) rates.</div>`;
       }
       h += `</div>`;
 
@@ -19505,7 +19556,7 @@
       _powerChainCache = null;
       const { boostItems, catBoosts, capacity, p2pPrices, savedProducts, exchangeRates, stockMods, season } = powerState;
 
-      const ownedCount = boostItems.filter(b => b.has).length;
+      const ownedCount = boostItems.filter(b => b.has || b.owned).length; // owned = active OR owned-but-idle (b.owned)
       const totalCount = boostItems.length;
 
       // Per-category production/cost summary — MIGRATED to core (section=power's
@@ -19568,7 +19619,7 @@
             Ingredients: ${Object.entries(br.ingredients).map(([k, v]) => `${v}× ${escHTML(k)}`).join(", ")} = ${br.cost.toFixed(4)} ${sflIcon()}<br>
             Efficiency: <strong>${br.ratio.toFixed(0)} XP/${sflIcon()}</strong> | Total to lvl ${skillCostInfo.level}: ~${(skillCostInfo.totalSFL).toFixed(0)} ${sflIcon()}<br>
             <span style="color:var(--sunpetal);font-weight:bold">1 skill point ≈ ${skillCostInfo.sflPerPoint.toFixed(1)} ${sflIcon()}</span>
-            <span style="color:var(--text-dim)"> (${skillCostInfo.sflPerLevel.toFixed(1)} ${sflIcon()}/level avg)</span>
+            <span style="color:var(--text-dim)"> (= the next level, ${((skillCostInfo.nextLevelXp || 0) / 1e6).toFixed(2)}M XP · average so far ${skillCostInfo.sflPerLevel.toFixed(1)} ${sflIcon()}/level)</span>
           </div>
         </div>`;
       }
@@ -19592,7 +19643,7 @@
       if (farmRef && farmHasCropMachine(farmRef)) {
         const windowSec = cmComputeRestockWindow(farmRef);
         const windowHours = windowSec / 3600;
-        const sim = cmSimulateQueue(farmRef, p2pPrices, exchangeRates, false, windowSec);
+        const sim = cmSimulateQueue(farmRef, p2pPrices, exchangeRates, false, windowSec, cmYieldMapFromServer()); // same yield basis as the server CROP MACHINE panel
         // Skill / collectible labels for the speed-multiplier breakdown
         const skNames = [];
         const sk = farmRef.bumpkin?.skills || {};
@@ -19649,7 +19700,7 @@
             </tr></thead><tbody>${rowsHtml || `<tr><td colspan="7" style="padding:8px;text-align:center;color:var(--text-dim)">No profitable crops in queue.</td></tr>`}</tbody>
           </table>
           <div style="background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:4px;line-height:1.7;font-size:0.6875rem">
-            <b style="color:var(--sunpetal)">Window total:</b> ${sim.totalCrops} crops · ${(sim.timeUsed/3600).toFixed(2)}h used${unfilledH > 0.05 ? ` <span style="color:var(--text-dim)">(${unfilledH.toFixed(2)}h idle)</span>` : ''}<br>
+            <b style="color:var(--sunpetal)">Window total:</b> ${Math.round(sim.totalCrops)} crops · ${(sim.timeUsed/3600).toFixed(2)}h used${unfilledH > 0.05 ? ` <span style="color:var(--text-dim)">(${unfilledH.toFixed(2)}h idle)</span>` : ''}<br>
             <span style="color:var(--green)">+${sim.totalRevenue.toFixed(2)}</span> revenue
             − <span style="color:var(--red)">${sim.totalOilCost.toFixed(2)}</span> oil
             − <span style="color:var(--red)">${sim.totalSeedCost.toFixed(2)}</span> seeds
@@ -19869,7 +19920,7 @@
       for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
         if (!catDef.quantifiable) continue;
         const product = savedProducts[catId] || getDefaultProduct(catId);
-        const missingInCat = catBoosts[catId].filter(b => !b.has && !b.isDisabled && b.floor > 0);
+        const missingInCat = catBoosts[catId].filter(b => !b.has && !b.owned && !b.isDisabled && b.floor > 0); // never "buy" what you own
         for (const b of missingInCat) {
           const val = _powerBoostVal(catId, b);
           if (val.synergy > 0.0001) {
@@ -19914,8 +19965,8 @@
         const product = savedProducts[catId] || getDefaultProduct(catId);
         const summary = catSummaries[catId] || { baseSfl: 0, boostedSfl: 0, delta: 0 };
         const n = getCapacityCount(catId, capacity);
-        const owned = items.filter(b => b.has);
-        const missing = items.filter(b => !b.has);
+        const owned = items.filter(b => b.has || b.owned); // an owned-but-unplaced item is owned, not "missing" (its value = if activated)
+        const missing = items.filter(b => !b.has && !b.owned);
 
         content += `<div class="power-category pixel-panel" id="power-cat-${catId}">`;
         // 24h production with product icon
@@ -19969,7 +20020,9 @@
         } else if (!isAnimalCat(catId) && catId !== "fishing" && prodPerDay > 0 && iconItem) {
           unitsLine = `<div style="color:var(--sunpetal);font-size:0.5rem">${prodPerDay % 1 < 0.01 ? prodPerDay.toFixed(0) : prodPerDay.toFixed(1)} ${mkIcon(iconItem)}</div>`;
         }
-        const sflLine = `<div style="color:${catNet >= 0 ? 'var(--green)' : 'var(--red)'};font-size:0.5rem">${catNet >= 0 ? "+" : ""}${catNet.toFixed(2)}${sflIcon()}/day</div>`;
+        const sflLine = summary.unvalued
+          ? `<div style="color:var(--text-dim);font-size:0.5rem" title="${escHTML(summary.unvaluedReason || "no price basis")}">not priced</div>`
+          : `<div style="color:${catNet >= 0 ? 'var(--green)' : 'var(--red)'};font-size:0.5rem">${catNet >= 0 ? "+" : ""}${catNet.toFixed(2)}${sflIcon()}/day</div>`;
         content += `<span class="power-cat-sfl">${unitsLine}${sflLine}</span>
           <span class="power-toggle-arrow">▶</span>
         </div>`;
@@ -20125,8 +20178,8 @@
         const items = catBoosts[catId];
         if (items.length === 0) continue;
 
-        const owned = items.filter(b => b.has);
-        const missing = items.filter(b => !b.has);
+        const owned = items.filter(b => b.has || b.owned); // an owned-but-unplaced item is owned, not "missing" (its value = if activated)
+        const missing = items.filter(b => !b.has && !b.owned);
 
         content += `<div class="power-category pixel-panel" id="power-cat-${catId}">`;
         content += `<div class="power-cat-header pixel-font" onclick="togglePowerCategory('${catId}')">

@@ -16,7 +16,13 @@ const wrap = JSON.parse(readFileSync(new URL("../fixtures/farm-155498.json", imp
 const baseFarm = wrap.farm || wrap;
 const p2p = JSON.parse(readFileSync(new URL("../fixtures/p2p-prices.json", import.meta.url)));
 const nfts = JSON.parse(readFileSync(new URL("../fixtures/nfts-sample.json", import.meta.url)));
-const withShirt = { ...baseFarm, wardrobe: { ...(baseFarm.wardrobe || {}), "Rice Shirt": 1 } };
+// Owned AND worn: a wearable's boost only applies while it is equipped (isWearableActive), so a
+// shirt merely sitting in the wardrobe is owned but not active — see the next test.
+const withShirt = {
+  ...baseFarm,
+  wardrobe: { ...(baseFarm.wardrobe || {}), "Rice Shirt": 1 },
+  bumpkin: { ...baseFarm.bumpkin, equipped: { ...(baseFarm.bumpkin.equipped || {}), shirt: "Rice Shirt" } },
+};
 const item = (out, name) => out.boostItems.find((b) => b.name === name);
 
 test("chapter items that the marketplace feed lacks are boost items", () => {
@@ -40,6 +46,13 @@ test("an owned Rice Shirt counts: +1 Rice in the greenhouse and half the Oil to 
     "the Oil line is a planting cost on Rice, not a -50% Oil YIELD");
   assert.ok(!b.effects.some((e) => e.cat === "oil"), "it must not read as a penalty on the oil reserves");
   assert.ok(b.categories.includes("greenhouse"));
+});
+
+test("a Rice Shirt only in the wardrobe is owned but not active", () => {
+  const inWardrobe = { ...baseFarm, wardrobe: { ...(baseFarm.wardrobe || {}), "Rice Shirt": 1 } };
+  const b = item(buildPowerSection(inWardrobe, p2p, nfts, null, {}), "Rice Shirt");
+  assert.equal(b.owned, true, "ownership is still reported");
+  assert.equal(b.has, false, "but the game does not apply an unequipped wearable");
 });
 
 test("a product-scoped oil effect halves Rice's oil and leaves Olive alone", () => {

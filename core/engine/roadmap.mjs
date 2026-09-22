@@ -9,8 +9,10 @@
 //      sfl_roadmap_settings, passed by the client via the `roadmap` query param).
 //   2. getRoadmapSettings normalizes powerState.roadmapSettingsRaw instead of reading
 //      localStorage — the normalization body is byte-identical.
-//   3. roadmapState (measured-efficiency history) is null server-side; roadmapEffFactor
-//      already guards on it and calcBoostValue forces effMode "theoretical" anyway.
+//   3. roadmapState (measured-efficiency history) arrives from the caller via _setRoadmapState.
+//      It is module-level, so api/compute scopes it to ONE request (reset after every request,
+//      set before the first pass that reads it) — otherwise a warm instance hands the previous
+//      request's efficiency, possibly another farm's, to the next one.
 //   4. activeShrineEffects/miningToolsPerDay get powerState.farm passed explicitly
 //      (they read the global on the page).
 import {
@@ -32,7 +34,7 @@ import { computeSaltYieldPerRake, computeSaltRakeCoinMult } from "./cooking-cost
 
 // Deviation 1: the page global, module-scoped. Set before any calc.
 let powerState = null;
-let roadmapState = null; // deviation 3: no measured history server-side
+let roadmapState = null; // deviation 3: per-request, set/reset by the caller
 export function _setPowerContext(ps) { powerState = ps; }
 export function _getPowerContext() { return powerState; }
 function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives from the caller
@@ -280,9 +282,14 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       for (const c of MINE_CHAIN) {
         const e = eff(c);
         P[c] = RES_FARMKEY[c] ? gameResUnitsPerDay(c, farm, cap, e) : (applyBoosts(c, MINE_RES[c], cap, e).unitsPerDay || 0);
-        tools[c] = miningToolsPerDay(c, cap, farm, roadmapOwnedEffects(c)); // deviation 4
-        price[c] = p2p[MINE_RES[c]] || 0;
-        try { free[c] = !!calcToolCostPerDay(c, cap, er, p2p, sm, false, farm, roadmapOwnedEffects(c)).freeTool || (eff(c) || []).some(e => e.type === "free_tool"); } catch { free[c] = (eff(c) || []).some(e => e.type === "free_tool"); }
+        // Tools follow the SAME effect set as the output: a speed boost that makes a node give
+        // more per day also makes it eat more tools per day. Counting tools at the owned speed
+        // while the override sped the output up made the extra output free (Dev Wrench 11.26/day).
+        tools[c] = miningToolsPerDay(c, cap, farm, e); // deviation 4
+        // Sell value follows unitToSfl: Oil (like Obsidian) cannot be traded, so mining it is not
+        // income — its value is already inside the greenhouse / machine output it feeds.
+        price[c] = unitToSfl(1, MINE_RES[c], p2p);
+        try { free[c] = !!calcToolCostPerDay(c, cap, er, p2p, sm, false, farm, e).freeTool || (e || []).some(x => x.type === "free_tool"); } catch { free[c] = (e || []).some(x => x.type === "free_tool"); }
       }
       // own (non-chain) tool cost per day: leather/wool + coins
       const ownCost = (c) => {
@@ -307,7 +314,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       }
       // per-unit net vs selling the embedded wood; per-day profit; mine if positive
       const mined = {}, dailyProfit = {}, netPerUnit = {}, soloNet = {};
-      let treeToolCost = 0; try { const _tt = calcToolCostPerDay("trees", cap, er, p2p, sm, false, farm, roadmapOwnedEffects("trees")); treeToolCost = _tt.freeTool ? 0 : (_tt.costPerDay || 0); } catch {}
+      let treeToolCost = 0; try { const _tt = calcToolCostPerDay("trees", cap, er, p2p, sm, false, farm, eff("trees")); treeToolCost = _tt.freeTool ? 0 : (_tt.costPerDay || 0); } catch {}
       for (const c of MINE_CHAIN) {
         // SOLO net: mine c & sell it, buying its DIRECT recipe inputs at p2p (vs the chain's self-mined all-in wood).
         let _inSolo = 0; const _Ts = MINE_TOOL[c]; if (_Ts && !free[c]) for (const i in _Ts.chain) _inSolo += _Ts.chain[i] * price[i] * (tools[c] || 0);
@@ -378,10 +385,12 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       const skills = (powerState.farm && powerState.farm.bumpkin && powerState.farm.bumpkin.skills) || {};
       const product = savedProducts[cat] || getDefaultProduct(cat);
       const er = roadmapCoinsFree(settings) ? Object.assign({}, exchangeRates, { coinsPerSFL: Infinity }) : exchangeRates;
-      // Obsidian can only be liquidated ~1×/week → income = (1 obsidian − 1 ignition's fuel) / 7 days.
+      // Obsidian: (1 obsidian − 1 ignition's fuel) / 7 days. The obsidian itself is priced by
+      // unitToSfl, i.e. 0 — the game does not let it be traded (tradeLimits.ts), so it is not
+      // income; what it is worth shows up in the nodes it buys. The fuel is a real cost.
       if (cat === "obsidian") {
         if (getCapacityCount("obsidian", capacity) <= 0) return { gross: 0, cost: 0, net: 0 };
-        const price = p2pPrices["Obsidian"] || 0;
+        const price = unitToSfl(1, "Obsidian", p2pPrices);
         let lavaMult = 1;
         for (const e of (effects || [])) if (e.type === "lava_cost_reduction" && e.cat === "obsidian") lavaMult *= (1 - (e.value || 0));
         let ign = 0;
@@ -395,7 +404,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
           cost += (calcAnimalFeedCost(cat, capacity, p2pPrices, effects, stockMods).costPerDay) || 0;
           // `effects` reaches the sickness calc too — an unowned Sleepy Chicken / Medic Apron only
           // exists in a what-if probe as its effect, and matching owned item names scored them 0.
-          cost += (calcSicknessCost(cat, capacity, p2pPrices, powerState.boostItems, skills, effects || []).costPerDay) || 0;
+          cost += (calcSicknessCost(cat, capacity, p2pPrices, powerState.boostItems, skills, effects || [], settings.seasonBasis === "annual" ? "annual" : season).costPerDay) || 0;
         } else if (cat === "crops" || cat === "fruits" || cat === "greenhouse") {
           const mix = roadmapCatMix(cat, effects, settings);
           gross = mix.gross; cost += mix.cost;
@@ -445,13 +454,27 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       const pp = roadmapPerPlot(cat, product, effects, settings);
       if (!pp) return 0;
       const take = Math.min(plots, pp.maxPlots > 0 ? pp.maxPlots : plots);
-      return (pp.gpp - pp.cpp) * take;
+      /*
+       * On the annual basis (calcBoostValue: bought once, kept all year) a seasonal product only
+       * earns in the seasons it can be planted — the same per-season averaging roadmapCatMix
+       * does for the mix. Without it Giant Kale read 2.80/day for a crop that grows two seasons
+       * in four. A product in no season table (greenhouse) is year-round.
+       */
+      let seasonShare = 1;
+      if (settings.seasonBasis === "annual" && (cat === "crops" || cat === "fruits")) {
+        const names = Object.keys(SEASON_CROPS);
+        const n = names.filter((s) => (SEASON_CROPS[s] || []).indexOf(product) >= 0).length;
+        if (n > 0) seasonShare = n / names.length;
+      }
+      return (pp.gpp - pp.cpp) * take * seasonShare;
     }
 
 
     // ── flowers.html (roadmapOwnedEffects; deviation 4: farm passed to shrines) ──
     function roadmapOwnedEffects(cat) {
-      return powerState.boostItems.filter(b => b.has).flatMap(b => b.effects.filter(e => e.cat === cat)).concat(activeShrineEffects(powerState.farm, cat));
+      // Same filter as the Power summary: an item the game switches off (Woody/Apprentice Beaver
+      // under an active Foreman) contributes nothing — has-only here doubled tree income.
+      return powerState.boostItems.filter(b => b.has && !b.isDisabled).flatMap(b => b.effects.filter(e => e.cat === cat)).concat(activeShrineEffects(powerState.farm, cat));
     }
 
 
@@ -485,12 +508,16 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
           const toolName = Object.keys(TOOL_TO_CAT).find(t => TOOL_TO_CAT[t] === catId);
           const tool = toolName ? TOOL_COSTS[toolName] : null;
           let solo = 0;
-          if (tool && baseCost.toolsPerDay > 0 && exchangeRates.coinsPerSFL > 0) {
+          // The discount only saves COINS. When the roadmap treats coins as free (a big pile,
+          // or the toggle), every coin cost in the chain and the income is 0 — so is a coin
+          // discount. Pricing it anyway was Frugal Miner's fictitious +0.75/day.
+          const coinsFree = roadmapCoinsFree(getRoadmapSettings(powerState.roadmapSettingsRaw));
+          if (!coinsFree && tool && baseCost.toolsPerDay > 0 && exchangeRates.coinsPerSFL > 0) {
             const coinSavingsPerUse = tool.coins * discountValue / exchangeRates.coinsPerSFL;
             solo = coinSavingsPerUse * baseCost.toolsPerDay;
           }
           const roi = (boostItem.floor > 0 && solo > 0) ? boostItem.floor / solo : Infinity;
-          return { solo, synergy: solo, roi, isCostReduction: true };
+          return { solo, synergy: solo, roi, isCostReduction: true, ...(coinsFree ? { coinsFree: true } : {}) };
         }
         return { solo: 0, synergy: 0, roi: Infinity };
       }
@@ -509,10 +536,11 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         ? Object.assign({}, getRoadmapSettings(powerState.roadmapSettingsRaw), { seasonBasis: "annual" })
         : Object.assign({}, getRoadmapSettings(powerState.roadmapSettingsRaw), { effMode: "theoretical", effOverrides: {}, seasonBasis: "annual" });
       const ownedEff = allCatBoosts.filter(b => b.has && !b.isDisabled && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId)).concat(activeShrineEffects(powerState.farm, catId)); // deviation 4
-      let synergy, solo;
+      let synergy, solo, netWith, netWithout;
       if (ROADMAP_MINING_CATS.indexOf(catId) >= 0) {
         const mk = (ef) => { const o = {}; o[catId] = ef; return roadmapMiningChain(_s, o).total; };
-        synergy = mk(ownedEff.concat(catEffects)) - mk(ownedEff);
+        netWith = mk(ownedEff.concat(catEffects)); netWithout = mk(ownedEff);
+        synergy = netWith - netWithout;
         solo = mk(catEffects) - mk([]);
       } else {
         /*
@@ -546,6 +574,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
           : (ef) => roadmapCatNet(catId, ef, _s);
         synergy = net(ownedEff.concat(catEffects)) - net(ownedEff);
         solo = net(catEffects) - net([]);
+        netWithout = net(ownedEff); netWith = netWithout + synergy;   // for the formula panel
       }
       /*
        * Coin drops per harvest (coin_chance): Money Tree's "1% chance +200 Coins chopping
@@ -570,11 +599,14 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
             for (const e of coinEffects) add += ((e.pct || 0) / 100) * (e.coins || 0) * harvests / cps;
             synergy += add;
             solo += add;
+            if (netWith != null) netWith += add;
           }
         }
       }
       const roi = (boostItem.floor > 0 && synergy > 0) ? boostItem.floor / synergy : Infinity;
-      const out = { solo, synergy, roi };
+      // netWith / netWithout: the two category nets `synergy` is the difference of — the formula
+      // panel shows them so it explains the number the value list shows (callers strip them).
+      const out = { solo, synergy, roi, netWith, netWithout };
       if (catEffects.some(e => e.type === "free_tool")) out.isFreeTool = true;
       else if (catEffects.some(e => e.type === "lava_cost_reduction")) out.isLavaCostReduction = true;
       else if (catEffects.some(e => e.type === "fruit_stump_wood" || e.type === "fruit_free_chop")) out.isFruitStump = true;
@@ -593,14 +625,21 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
     // The page fetched /api/farm-history itself; here the caller POSTs those snapshot
     // rows (diff-page pattern — compute stays DB-free). Body verbatim from the `if
     // (!rows...)` guard down; applyBoosts gets powerState.farm (deviation 4).
+    /*
+     * meanRatio is null — and meta.measured false — whenever nothing was measured (no history,
+     * too short a window, or no harvest signal in it). It used to default to 0.5, and because
+     * roadmapEffFactor falls back to meanRatio for any category without its own signal, a failed
+     * 7-day history fetch silently HALVED every non-animal category. With null the fallback is
+     * the theoretical 1.0, and `meta.measured` lets the caller say so.
+     */
     function roadmapComputeEfficiency(rows) {
-      const out = { effByCat: {}, meta: { snaps: 0, days: 0, available: false, from: "", to: "" } };
+      const out = { effByCat: {}, meanRatio: null, meta: { snaps: 0, days: 0, available: false, measured: false, from: "", to: "" } };
       if (!rows || rows.length < 2) return out;
       const sorted = rows.filter(s => s.captured_at && s.diff && Object.keys(s.diff).some(k => k.startsWith("_h.")))
         .sort((a, b) => new Date(a.captured_at) - new Date(b.captured_at));
       if (sorted.length < 2) return out;
       const pDays = (new Date(sorted[sorted.length - 1].captured_at) - new Date(sorted[0].captured_at)) / 86400000;
-      out.meta = { snaps: sorted.length, days: pDays, available: pDays > 1, from: sorted[0].captured_at.slice(0, 10), to: sorted[sorted.length - 1].captured_at.slice(0, 10) };
+      out.meta = { snaps: sorted.length, days: pDays, available: pDays > 1, measured: false, from: sorted[0].captured_at.slice(0, 10), to: sorted[sorted.length - 1].captured_at.slice(0, 10) };
       if (pDays <= 1) return out;
       const measuredRatios = [];
       for (const [catId, hKey] of Object.entries(ROADMAP_EFF_HKEY)) {
@@ -623,7 +662,8 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         out.effByCat[catId] = { ratio, total, actualPerDay, theoPerDay, sessions: sessions.length, nodeCount, measured };
         if (measured && catId !== "obsidian") measuredRatios.push(ratio);
       }
-      out.meanRatio = measuredRatios.length ? measuredRatios.reduce((a, b) => a + b, 0) / measuredRatios.length : 0.5;
+      out.meanRatio = measuredRatios.length ? measuredRatios.reduce((a, b) => a + b, 0) / measuredRatios.length : null;
+      out.meta.measured = measuredRatios.length > 0;
       return out;
     }
 
@@ -874,12 +914,10 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         return (inTree[b.skillTree] || 0) < need;
       };
 
-      // Free points: (level - 1) minus what is already spent, or the owner's override.
-      const level = (skillCostInfo && skillCostInfo.level) || 1;
-      let spent = 0;
-      for (const b of skills) if (b.has) spent += (b.skillPoints || 1);
+      // Free points: the game's level − spent, served once by section=power (skillCostInfo),
+      // or the owner's override.
       let freePts = (settings.skillPts != null && isFinite(settings.skillPts))
-        ? Math.max(0, settings.skillPts) : Math.max(0, (level - 1) - spent);
+        ? Math.max(0, settings.skillPts) : Math.max(0, (skillCostInfo && skillCostInfo.freePoints) || 0);
 
       const mk = (name, floor, cat, marg, desc, extra) => Object.assign({
         name, type: "Skill", floor, boost: desc, supply: 0,
@@ -1298,7 +1336,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
           // Candidates: unowned, priced, boost-bearing items that touch this category.
           const cands = [];
           for (const c of (catBoostsW[cat] || [])) {
-            if (c.has || c.isDisabled) continue;
+            if (c.has || c.owned || c.isDisabled) continue;   // owned-but-idle: place/equip it, do not buy it
             if (!(c.floor > 0) || c.floor > TROLL || c.floor > maxP) continue;
             cands.push(c);
           }
@@ -1567,7 +1605,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
           if (!scen.includes(plan.cat) && !scen.includes(plan.product)) continue;
           for (const x of (plan.picked || [])) {
             const src = byName[x.name];
-            if (!src || src.has || x.floor > maxP) continue;
+            if (!src || src.has || src.owned || x.floor > maxP) continue;
             if (scenSeen.has(x.name)) continue;
             scenSeen.add(x.name);
             /*

@@ -194,7 +194,7 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
       "Young Farmer":       { tree: "Crops", points: 1, tier: 1, buff: "+0.1 Basic Crop yield", debuff: null },
       "Experienced Farmer": { tree: "Crops", points: 1, tier: 1, buff: "+0.1 Medium Crop yield", debuff: null },
       "Old Farmer":         { tree: "Crops", points: 1, tier: 1, buff: "+0.1 Advanced Crop yield", debuff: null },
-      "Chonky Scarecrow":   { tree: "Crops", points: 1, tier: 1, buff: "+0.1 Basic Crop yield", debuff: null },
+      "Chonky Scarecrow":   { tree: "Crops", points: 1, tier: 1, buff: "-12.5% Basic Crop growth time", debuff: null },
       "Betty's Friend":     { tree: "Crops", points: 1, tier: 1, buff: "+30% Betty Coin delivery revenue", debuff: null },
       "Strong Roots":       { tree: "Crops", points: 2, tier: 2, buff: "-10% Advanced Crop Growth Time", debuff: null },
       "Coin Swindler":      { tree: "Crops", points: 2, tier: 2, buff: "+10% coins selling crops at Market", debuff: null },
@@ -442,12 +442,29 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
       // Total SFL to reach current level via most efficient cooking
       const totalSFL = totalXP / bestRatio;
       const sflPerLevel = totalSFL / level;
-      // 1 level = 1 skill point
+      /*
+       * 1 level = 1 skill point, and the NEXT point is bought by earning the NEXT level — so a
+       * point costs that level's XP, not the average of every level so far. The average is
+       * dominated by the cheap early levels: at level 186 it read 59.9 FLOWER/point against the
+       * 240.5 the next level actually costs, pricing every skill ~4x too cheap.
+       */
+      let nextLevelXp = 0;
+      if (ascLevel >= 1) {
+        const within = _withinAscensionLevel(xp, ascLevel);
+        const band = within >= 50 ? ascLevel + 1 : ascLevel;
+        const step = within >= 50 ? 1 : Math.max(1, within);
+        nextLevelXp = _ascBandXp(band) * (1 + _ASC_WEIGHT_PER_LEVEL * step) / _ASC_TOTAL_WEIGHT;
+      } else {
+        const cur = BUMPKIN_XP_TABLE[level - 1] || 0;
+        const nxt = BUMPKIN_XP_TABLE[level];
+        nextLevelXp = nxt != null ? nxt - cur : cur - (BUMPKIN_XP_TABLE[level - 2] || 0);
+      }
+      const sflPerPoint = nextLevelXp > 0 ? nextLevelXp / bestRatio : sflPerLevel;
       const xpBoostNames = cookingBoosts.xpBoosts.filter(b =>
         !b.buildings || b.buildings.includes(bestRecipe.building)
       ).map(b => `${b.name} (×${b.multiplier})`);
 
-      return { sflPerPoint: sflPerLevel, bestRecipe, level, totalXP, totalSFL, sflPerLevel, xpBoostNames };
+      return { sflPerPoint, bestRecipe, level, totalXP, totalSFL, sflPerLevel, nextLevelXp, xpBoostNames };
     }
 
     // ── flowers.html 5063-5087: POWER_CATEGORIES ──
@@ -809,17 +826,14 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
       const morePicks = skills["More Picks"] !== undefined;
       const fellersDiscount = skills["Feller's Discount"] !== undefined; // -20% axe coin cost
       const frugalMiner = skills["Frugal Miner"] !== undefined;         // -20% pickaxe coin cost
-      // Free tool collectibles (zero tool cost for category)
-      const hasQuarry = findCollectible(farm, "Quarry").length > 0 || getCount(inventory, "Quarry") > 0;
-      const hasForeman = findCollectible(farm, "Foreman Beaver").length > 0 || getCount(inventory, "Foreman Beaver") > 0;
+      // Free tool collectibles (zero tool cost for category). The game checks these with
+      // isCollectibleBuilt / isWearableActive, so only a PLACED collectible or an EQUIPPED
+      // wearable (bumpkin or farm hand) counts — one sitting in inventory/wardrobe does nothing.
+      const hasQuarry = findCollectible(farm, "Quarry").length > 0;
+      const hasForeman = findCollectible(farm, "Foreman Beaver").length > 0;
       const oilRigActive = skills["Oil Rig"] !== undefined;
       const hasInfernalDrill = isWearableEquipped(farm, "Infernal Drill");
-      // Crimstone Spikes Hair: wearable that lets you mine crimstone without Gold Pickaxes.
-      // Counted whether equipped OR just owned in wardrobe — the in-game effect applies once
-      // it's part of the bumpkin's outfit, but UI-wise we show the savings regardless so the
-      // user can immediately see the value before equipping.
-      const hasCrimstoneSpikesHair = isWearableEquipped(farm, "Crimstone Spikes Hair")
-        || ((farm.wardrobe || {})["Crimstone Spikes Hair"] || 0) > 0;
+      const hasCrimstoneSpikesHair = isWearableEquipped(farm, "Crimstone Spikes Hair");
       const slickSaver = skills["Slick Saver"] !== undefined; // -1 Oil for greenhouse seeds
       const hasKaleMix = skills["Kale Mix"] !== undefined; // Mixed Grain uses 3 Kale instead
       return { hasWarehouse, hasToolshed, moreAxes, morePicks, fellersDiscount, frugalMiner, hasQuarry, hasForeman, oilRigActive, hasInfernalDrill, hasCrimstoneSpikesHair, slickSaver, hasKaleMix };
@@ -1007,41 +1021,47 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
       // Faction Quiver — +0.25 to ALL crops if the faction's wings wearable is equipped anywhere.
       const faction = (farm.faction && farm.faction.name) || "";
       const wings = FACTION_WINGS[faction];
-      if (wings && farmWearableEquipped(farm, wings)) out.push({ type: "yield_flat", value: 0.25, cat: "crops", raw: "Faction Quiver +0.25 crops" });
+      if (wings && farmWearableEquipped(farm, wings)) out.push({ type: "yield_flat", value: 0.25, cat: "crops", raw: "Faction Quiver +0.25 crops", source: wings });
       // AOE crop yield collectibles (game uses plot positions; we assume covered, like sfl.world's display).
-      if (ownsC("Scary Mike")) out.push({ type: "yield_flat", value: skills["Horror Mike"] ? 0.3 : 0.2, cat: "crops", cropTier: "medium", raw: (skills["Horror Mike"] ? "Horror Mike +0.3" : "Scary Mike +0.2") + " medium crops" });
-      if (ownsC("Laurie the Chuckle Crow")) out.push({ type: "yield_flat", value: skills["Laurie's Gains"] ? 0.3 : 0.2, cat: "crops", cropTier: "advanced", raw: (skills["Laurie's Gains"] ? "Laurie's Gains +0.3" : "Laurie +0.2") + " advanced crops" });
-      if (ownsC("Sir Goldensnout")) out.push({ type: "yield_flat", value: 0.5, cat: "crops", raw: "Sir Goldensnout +0.5 crops (AOE)" });
+      // `aoe`: plot-only — the game applies them only to a crop harvested from a PLOT inside the area,
+      // never to a Crop Machine pack (harvest.ts: `plot && plot.x !== undefined`).
+      // Scary Mike / Laurie carry their BASE +0.2 only. The game's Horror Mike / Laurie's Gains
+      // replace it with +0.3, i.e. +0.1 more — which is exactly the skill's own parsed effect
+      // (power.mjs keeps it only while the crow is placed). Adding 0.3 here as well counted the
+      // skill twice: +0.4 on every medium/advanced crop.
+      if (ownsC("Scary Mike")) out.push({ type: "yield_flat", value: 0.2, cat: "crops", cropTier: "medium", raw: "Scary Mike +0.2 medium crops", source: "Scary Mike", aoe: true });
+      if (ownsC("Laurie the Chuckle Crow")) out.push({ type: "yield_flat", value: 0.2, cat: "crops", cropTier: "advanced", raw: "Laurie +0.2 advanced crops", source: "Laurie the Chuckle Crow", aoe: true });
+      if (ownsC("Sir Goldensnout")) out.push({ type: "yield_flat", value: 0.5, cat: "crops", raw: "Sir Goldensnout +0.5 crops (AOE)", source: "Sir Goldensnout", aoe: true });
       // Global crop additions
-      if (farmWearableEquipped(farm, "Infernal Pitchfork")) out.push({ type: "yield_flat", value: 3, cat: "crops", raw: "Infernal Pitchfork +3 crops" });
-      if (ownsC("Cabbage Boy")) { out.push({ type: "yield_flat", value: 0.25, cat: "crops", product: "Cabbage", raw: "Cabbage Boy +0.25" }); if (ownsC("Cabbage Girl")) out.push({ type: "yield_flat", value: 0.25, cat: "crops", product: "Cabbage", raw: "Cabbage Girl +0.25" }); }
-      else if (ownsC("Karkinos")) out.push({ type: "yield_flat", value: 0.1, cat: "crops", product: "Cabbage", raw: "Karkinos +0.1 Cabbage" });
-      if (ownsC("Pablo The Bunny")) out.push({ type: "yield_flat", value: 0.1, cat: "crops", product: "Carrot", raw: "Pablo +0.1 Carrot" });
-      if (ownsC("Maximus")) out.push({ type: "yield_flat", value: 1, cat: "crops", product: "Eggplant", raw: "Maximus +1 Eggplant" });
-      if (ownsC("Giant Yam")) out.push({ type: "yield_flat", value: 0.5, cat: "crops", product: "Yam", raw: "Giant Yam +0.5" });
-      if (ownsC("Giant Kale")) out.push({ type: "yield_flat", value: 2, cat: "crops", product: "Kale", raw: "Giant Kale +2" });
-      if (ownsC("Sheaf of Plenty")) out.push({ type: "yield_flat", value: 2, cat: "crops", product: "Barley", raw: "Sheaf of Plenty +2 Barley" });
+      if (farmWearableEquipped(farm, "Infernal Pitchfork")) out.push({ type: "yield_flat", value: 3, cat: "crops", raw: "Infernal Pitchfork +3 crops", source: "Infernal Pitchfork" });
+      if (ownsC("Cabbage Boy")) { out.push({ type: "yield_flat", value: 0.25, cat: "crops", product: "Cabbage", raw: "Cabbage Boy +0.25", source: "Cabbage Boy" }); if (ownsC("Cabbage Girl")) out.push({ type: "yield_flat", value: 0.25, cat: "crops", product: "Cabbage", raw: "Cabbage Girl +0.25", source: "Cabbage Girl" }); }
+      else if (ownsC("Karkinos")) out.push({ type: "yield_flat", value: 0.1, cat: "crops", product: "Cabbage", raw: "Karkinos +0.1 Cabbage", source: "Karkinos" });
+      if (ownsC("Pablo The Bunny")) out.push({ type: "yield_flat", value: 0.1, cat: "crops", product: "Carrot", raw: "Pablo +0.1 Carrot", source: "Pablo The Bunny" });
+      if (ownsC("Maximus")) out.push({ type: "yield_flat", value: 1, cat: "crops", product: "Eggplant", raw: "Maximus +1 Eggplant", source: "Maximus" });
+      if (ownsC("Giant Yam")) out.push({ type: "yield_flat", value: 0.5, cat: "crops", product: "Yam", raw: "Giant Yam +0.5", source: "Giant Yam" });
+      if (ownsC("Giant Kale")) out.push({ type: "yield_flat", value: 2, cat: "crops", product: "Kale", raw: "Giant Kale +2", source: "Giant Kale" });
+      if (ownsC("Sheaf of Plenty")) out.push({ type: "yield_flat", value: 2, cat: "crops", product: "Barley", raw: "Sheaf of Plenty +2 Barley", source: "Sheaf of Plenty" });
 
       // ── FRUITS (game fruitHarvested.ts) ──
       const _wingsEq = wings && farmWearableEquipped(farm, wings);
-      if (_wingsEq) out.push({ type: "yield_flat", value: 0.25, cat: "fruits", raw: "Faction Quiver +0.25 fruit" });
-      if (ownsC("Macaw")) out.push({ type: "yield_flat", value: skills["Loyal Macaw"] ? 0.2 : 0.1, cat: "fruits", raw: (skills["Loyal Macaw"] ? "Loyal Macaw +0.2" : "Macaw +0.1") + " fruit" });
-      if (farmWearableEquipped(farm, "Fruit Picker Apron")) out.push({ type: "yield_flat", value: 0.1, cat: "fruits", raw: "Fruit Picker Apron +0.1 fruit" });
-      if (farmWearableEquipped(farm, "Camel Onesie")) out.push({ type: "yield_flat", value: 0.1, cat: "fruits", raw: "Camel Onesie +0.1 fruit" });
-      if (ownsC("Black Bearry")) out.push({ type: "yield_flat", value: 1, cat: "fruits", product: "Blueberry", raw: "Black Bearry +1 Blueberry" });
-      if (ownsC("Lady Bug")) out.push({ type: "yield_flat", value: 0.25, cat: "fruits", product: "Apple", raw: "Lady Bug +0.25 Apple" });
-      if (ownsC("Banana Chicken")) out.push({ type: "yield_flat", value: 0.1, cat: "fruits", product: "Banana", raw: "Banana Chicken +0.1 Banana" });
-      if (farmWearableEquipped(farm, "Banana Amulet")) out.push({ type: "yield_flat", value: 0.5, cat: "fruits", product: "Banana", raw: "Banana Amulet +0.5 Banana" });
-      if (ownsC("Lemon Shark")) out.push({ type: "yield_flat", value: 0.2, cat: "fruits", product: "Lemon", raw: "Lemon Shark +0.2 Lemon" });
-      if (ownsC("Reveling Lemon")) out.push({ type: "yield_flat", value: 0.25, cat: "fruits", product: "Lemon", raw: "Reveling Lemon +0.25 Lemon" });
-      if (ownsC("Tomato Bombard")) out.push({ type: "yield_flat", value: 1, cat: "fruits", product: "Tomato", raw: "Tomato Bombard +1 Tomato" });
+      if (_wingsEq) out.push({ type: "yield_flat", value: 0.25, cat: "fruits", raw: "Faction Quiver +0.25 fruit", source: wings });
+      if (ownsC("Macaw")) out.push({ type: "yield_flat", value: skills["Loyal Macaw"] ? 0.2 : 0.1, cat: "fruits", raw: (skills["Loyal Macaw"] ? "Loyal Macaw +0.2" : "Macaw +0.1") + " fruit", source: "Macaw" });
+      if (farmWearableEquipped(farm, "Fruit Picker Apron")) out.push({ type: "yield_flat", value: 0.1, cat: "fruits", raw: "Fruit Picker Apron +0.1 fruit", source: "Fruit Picker Apron" });
+      if (farmWearableEquipped(farm, "Camel Onesie")) out.push({ type: "yield_flat", value: 0.1, cat: "fruits", raw: "Camel Onesie +0.1 fruit", source: "Camel Onesie" });
+      if (ownsC("Black Bearry")) out.push({ type: "yield_flat", value: 1, cat: "fruits", product: "Blueberry", raw: "Black Bearry +1 Blueberry", source: "Black Bearry" });
+      if (ownsC("Lady Bug")) out.push({ type: "yield_flat", value: 0.25, cat: "fruits", product: "Apple", raw: "Lady Bug +0.25 Apple", source: "Lady Bug" });
+      if (ownsC("Banana Chicken")) out.push({ type: "yield_flat", value: 0.1, cat: "fruits", product: "Banana", raw: "Banana Chicken +0.1 Banana", source: "Banana Chicken" });
+      if (farmWearableEquipped(farm, "Banana Amulet")) out.push({ type: "yield_flat", value: 0.5, cat: "fruits", product: "Banana", raw: "Banana Amulet +0.5 Banana", source: "Banana Amulet" });
+      if (ownsC("Lemon Shark")) out.push({ type: "yield_flat", value: 0.2, cat: "fruits", product: "Lemon", raw: "Lemon Shark +0.2 Lemon", source: "Lemon Shark" });
+      if (ownsC("Reveling Lemon")) out.push({ type: "yield_flat", value: 0.25, cat: "fruits", product: "Lemon", raw: "Reveling Lemon +0.25 Lemon", source: "Reveling Lemon" });
+      if (ownsC("Tomato Bombard")) out.push({ type: "yield_flat", value: 1, cat: "fruits", product: "Tomato", raw: "Tomato Bombard +1 Tomato", source: "Tomato Bombard" });
 
       // ── GREENHOUSE (game harvestGreenHouse.ts) — collectible/wearable boosts the API omits (skills parsed separately) ──
-      if (ownsC("Pharaoh Gnome")) out.push({ type: "yield_flat", value: 2, cat: "greenhouse", raw: "Pharaoh Gnome +2 greenhouse" });
-      if (ownsC("Rice Panda")) out.push({ type: "yield_flat", value: 0.25, cat: "greenhouse", product: "Rice", raw: "Rice Panda +0.25 Rice" });
-      if (farmWearableEquipped(farm, "Non La Hat")) out.push({ type: "yield_flat", value: 1, cat: "greenhouse", product: "Rice", raw: "Non La Hat +1 Rice" });
-      if (farmWearableEquipped(farm, "Olive Shield")) out.push({ type: "yield_flat", value: 1, cat: "greenhouse", product: "Olive", raw: "Olive Shield +1 Olive" });
-      if (farmWearableEquipped(farm, "Olive Royalty Shirt")) out.push({ type: "yield_flat", value: 0.25, cat: "greenhouse", product: "Olive", raw: "Olive Royalty Shirt +0.25 Olive" });
+      if (ownsC("Pharaoh Gnome")) out.push({ type: "yield_flat", value: 2, cat: "greenhouse", raw: "Pharaoh Gnome +2 greenhouse", source: "Pharaoh Gnome" });
+      if (ownsC("Rice Panda")) out.push({ type: "yield_flat", value: 0.25, cat: "greenhouse", product: "Rice", raw: "Rice Panda +0.25 Rice", source: "Rice Panda" });
+      if (farmWearableEquipped(farm, "Non La Hat")) out.push({ type: "yield_flat", value: 1, cat: "greenhouse", product: "Rice", raw: "Non La Hat +1 Rice", source: "Non La Hat" });
+      if (farmWearableEquipped(farm, "Olive Shield")) out.push({ type: "yield_flat", value: 1, cat: "greenhouse", product: "Olive", raw: "Olive Shield +1 Olive", source: "Olive Shield" });
+      if (farmWearableEquipped(farm, "Olive Royalty Shirt")) out.push({ type: "yield_flat", value: 0.25, cat: "greenhouse", product: "Olive", raw: "Olive Royalty Shirt +0.25 Olive", source: "Olive Royalty Shirt" });
       return out;
     }
 

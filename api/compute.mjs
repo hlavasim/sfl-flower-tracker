@@ -301,7 +301,7 @@ export default async function handler(req, res) {
         const pwEff = roadmapComputeEfficiency(pwSnaps);
         _setRoadmapState({
           effByCat: pwEff.effByCat || {}, effMeta: pwEff.meta,
-          meanRatio: typeof pwEff.meanRatio === "number" ? pwEff.meanRatio : 0.5,
+          meanRatio: typeof pwEff.meanRatio === "number" ? pwEff.meanRatio : null,
         });
         pwSettings.measured = true;
         pwSettings.effMeta = pwEff.meta;
@@ -331,10 +331,25 @@ export default async function handler(req, res) {
       if (!nftResult.ok) return res.status(502).json({ error: `nfts fetch failed: ${nftResult.status}` });
       let roadmapSettings = {};
       try { roadmapSettings = req.query.roadmap ? JSON.parse(req.query.roadmap) : {}; } catch { roadmapSettings = {}; }
-      const rmPower = buildPowerSection(farm, p2p, nftResult.data, exchange, { ...settings, roadmapSettings, savedProducts: req.query.products ? JSON.parse(req.query.products) : {} });
+      const rmPwSettings = { ...settings, roadmapSettings, savedProducts: req.query.products ? JSON.parse(req.query.products) : {} };
       let input = {};
       input = _parseBody(req.body);
       const rmSnaps = Array.isArray(input.snapshots) ? input.snapshots : [];
+      /*
+       * Same three-step order as section=power: a context pass (roadmapComputeEfficiency reads
+       * powerState), then THIS request's efficiency into the roadmap state, then the real pass.
+       * The real pass builds skillRanks — scaled by roadmapEffFactor — which the buy path uses
+       * as-is for Level 2/3 rows, while L1 skills and NFTs are scaled inside
+       * buildRoadmapSection. Without this the ranks were priced at the PREVIOUS request's
+       * efficiency (or none) and the items at this one's.
+       */
+      buildPowerSection(farm, p2p, nftResult.data, exchange, rmPwSettings); // context only
+      const rmEff = roadmapComputeEfficiency(rmSnaps);
+      _setRoadmapState({
+        effByCat: rmEff.effByCat || {}, effMeta: rmEff.meta,
+        meanRatio: typeof rmEff.meanRatio === "number" ? rmEff.meanRatio : null,
+      });
+      const rmPower = buildPowerSection(farm, p2p, nftResult.data, exchange, rmPwSettings);
       /*
        * The ascension plan, built here so its expansions and upgrades can compete in the buy
        * path. Same inputs the section=ascension branch uses, including the forced petSimulate
@@ -345,7 +360,7 @@ export default async function handler(req, res) {
       let rmAsc = null;
       try {
         const rmCooking = _cookingForAscension(farm, p2p, { ...settings, petSimulate: true });
-        rmAsc = buildAscensionSection(farm, rmPower, rmCooking, roadmapComputeEfficiency(rmSnaps), { grinx: req.query.grinx === "1", max: req.query.max });
+        rmAsc = buildAscensionSection(farm, rmPower, rmCooking, rmEff, { grinx: req.query.grinx === "1", max: req.query.max });
       } catch (e) { rmAsc = null; }   // the buy path still works without it
       // scenarios=greenhouse,chickens — activities the farm does not run yet that the user asked
       // to plan for. They change what the simulator considers, so they belong in the request.
@@ -426,7 +441,7 @@ export default async function handler(req, res) {
       const wlEff = roadmapComputeEfficiency(Array.isArray(wlBody.snapshots) ? wlBody.snapshots : []);
       _setRoadmapState({
         effByCat: wlEff.effByCat || {}, effMeta: wlEff.meta,
-        meanRatio: typeof wlEff.meanRatio === "number" ? wlEff.meanRatio : 0.5,
+        meanRatio: typeof wlEff.meanRatio === "number" ? wlEff.meanRatio : null,
       });
       const powerData = buildPowerSection(farm, p2p, nftResult.data, exchange,
         { ...settings, roadmapSettings: wlRoadmap, effectiveFor: wishNames });
@@ -436,11 +451,18 @@ export default async function handler(req, res) {
        * farm give the bud engine the same inputs section=buds uses; `budFloors` is POSTed by
        * the client because per-id marketplace asks live in the DB and compute stays DB-free.
        */
+      /*
+       * `theo` = boostValuesTheo (unscaled) and `eff` = boostValuesEff (× measured ratio), both
+       * from the same effectiveFor pass. powerData.boostValues follows the user's Efficiency
+       * toggle — on the default it is ALREADY the measured figure — so passing it as `theo`
+       * printed the two columns swapped.
+       */
       data = buildWishlistSection(farm, nftResult.data, {
-        list, boostValues: powerData.boostValues, boostValuesEff: powerData.boostValuesEff,
+        list, boostValues: powerData.boostValuesTheo || powerData.boostValues, boostValuesEff: powerData.boostValuesEff,
         p2p, roadmapSettings: wlRoadmap,
         budFloors: (wlBody.budFloors && typeof wlBody.budFloors === "object") ? wlBody.budFloors : {},
       });
+      data.effUnmeasured = !(wlEff.meta && wlEff.meta.measured);
     }
     // `roi`: the ROI page's state — the page's own copy of the power fetch+rate block
     // (plus a 4th upstream, BTC/USD) and its own boost-item/pet builders. Same 502
@@ -482,5 +504,15 @@ export default async function handler(req, res) {
     return res.status(200).json(payload);
   } catch (e) {
     return res.status(500).json({ error: String((e && e.message) || e) });
+  } finally {
+    /*
+     * The roadmap state (measured efficiency) is MODULE-level and roadmapEffFactor reads it for
+     * every section that values boosts. Nothing used to clear it, so on a warm instance a plain
+     * section=power / roi / treasury priced everything at the efficiency the previous
+     * roadmap/wishlist request left behind — possibly for another farm (Green Thumb 0.18 →
+     * 0.045/day). Every branch sets it synchronously after its last `await` and this finally
+     * runs in that same synchronous stretch, so no concurrent request can observe another's.
+     */
+    _setRoadmapState(null);
   }
 }
