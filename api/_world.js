@@ -436,11 +436,6 @@ async function handleWorld(pool, q) {
     case "agg": {
       const extra = [].concat(q.filter || []).length > 0;
       if (extra || !q.group) return { rows: await aggregate(pool, q) };
-      // Validate before touching the cache so a bad func/measure is a 400, not a cache row.
-      if (!DIMS[q.group]) throw new Error(`bad group: ${q.group}`);
-      const func = q.func || "count";
-      if (!(func in FUNCS)) throw new Error(`bad func: ${func}`);
-      if (func !== "count" && !MEASURES[q.measure]) throw new Error(`bad measure: ${q.measure}`);
       const got = await cachedChart(pool, scopeKey(q), aggDimKey(q), async () => ({ rows: await aggregate(pool, q) }));
       return got;
     }
