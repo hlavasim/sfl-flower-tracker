@@ -42,7 +42,7 @@ test("compute?section=cooking returns the cooking payload from the fixture", asy
     assert.equal(res._status, 200);
     assert.equal(res._json.section, "cooking");
     const fp = res._json.data.buildings["Fire Pit"];
-    assert.ok(Math.abs(fp.xpPerDay - 232509.80) < 1, `FirePit ${fp.xpPerDay}`);
+    assert.ok(Math.abs(fp.xpPerDay - 445643.79) < 1, `FirePit ${fp.xpPerDay}`);
   } finally {
     globalThis.fetch = orig;
   }
@@ -121,7 +121,7 @@ test("prices fetch failure still returns cooking data (null costs), not a 500", 
     await handler(req, res);
     assert.equal(res._status, 200);
     const fp = res._json.data.buildings["Fire Pit"];
-    assert.ok(Math.abs(fp.xpPerDay - 232509.80) < 1, `FirePit ${fp.xpPerDay}`);
+    assert.ok(Math.abs(fp.xpPerDay - 445643.79) < 1, `FirePit ${fp.xpPerDay}`);
     const selected = fp.recipes.find((r) => r.name === fp.recipe);
     assert.equal(selected.cost, null);
   } finally {

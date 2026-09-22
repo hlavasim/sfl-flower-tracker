@@ -54,11 +54,15 @@ test("Aged Tuna matches the page's generator formula (independently computed)", 
 
 // Second spot-check with a fish that crosses the >330 tier boundary:
 // Hammerhead Shark: baseXP=750 (>330) -> maxXP=750*5=3750; saltCost=round(3750/50)=75;
-// timeSec=((3750-750)/1000)*3600=10800.
-test("Aged Hammerhead Shark matches the page's generator formula (independently computed)", () => {
-  const r = COOKING_RECIPES_DATA["Aged Hammerhead Shark"];
-  assert.ok(r, "Aged Hammerhead Shark should exist in COOKING_RECIPES_DATA");
+// timeSec=((3750-750)/1000)*3600=10800. The PRODUCT is named in the game's spelling —
+// consumables.ts:1261 "Hammerhead shark", AGED_FISH = `Aged ${name}` — so it matches the inventory
+// key; the ingredient keeps the fishing tables' spelling, which prices it.
+test("Aged Hammerhead shark matches the page's generator formula (independently computed)", () => {
+  const r = COOKING_RECIPES_DATA["Aged Hammerhead shark"];
+  assert.ok(r, "Aged Hammerhead shark should exist in COOKING_RECIPES_DATA");
+  assert.equal(COOKING_RECIPES_DATA["Aged Hammerhead Shark"], undefined, "not under the tracker's spelling");
   assert.equal(r.xp, 3750);
   assert.equal(r.cookSec, 10800);
-  assert.deepEqual(COOKING_INGREDIENTS["Aged Hammerhead Shark"], { "Hammerhead Shark": 1, Salt: 75 });
+  assert.deepEqual(COOKING_INGREDIENTS["Aged Hammerhead shark"], { "Hammerhead Shark": 1, Salt: 75 });
+  assert.ok(COOKING_RECIPES_DATA["Aged Football fish"], "Football fish follows the game spelling too");
 });

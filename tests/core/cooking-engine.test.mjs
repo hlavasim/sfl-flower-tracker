@@ -12,13 +12,15 @@ test("detectCookingBoosts returns the three sections", () => {
   assert.ok(Array.isArray(b.xpBoosts) && Array.isArray(b.timeBoosts) && b.petStreakInfo);
 });
 
-test("Pizza Margherita matches the v4.74-verified Bumpkin numbers (Simulate x1.5)", () => {
+test("Pizza Margherita: XP per dish as v4.74, cook time on the game's oil rule (Simulate x1.5)", () => {
   const boosts = detectCookingBoosts(farm, { petSimulate: true });
   const r = COOKING_RECIPES_DATA["Pizza Margherita"];
   const xp = computeFoodXP("Pizza Margherita", r, "Fire Pit", boosts);
-  const timeMin = computeCookTime(r.cookSec, "Fire Pit", boosts) / 60;
+  const timeMin = computeCookTime(r.cookSec, "Fire Pit", boosts, undefined, "Pizza Margherita") / 60;
   assert.ok(Math.abs(xp - 50025.94) < 0.1, `xp was ${xp}, expected ~50025.94`);
-  assert.ok(Math.abs(timeMin - 309.8) < 0.3, `cook minutes was ${timeMin}, expected ~309.8`);
+  // 1200 min x 0.9 x 0.9 x 0.75 x 0.85 x 0.6 (oiled Fire Pit, Swift Sizzle) = 371.79. v4.74's 309.8
+  // halved the time for Double Nom, which is +1 dish, not speed (collectRecipe.ts:43-46).
+  assert.ok(Math.abs(timeMin - 371.79) < 0.3, `cook minutes was ${timeMin}, expected ~371.79`);
 });
 
 test("petSimulate false does NOT inject the x1.5 pet boost", () => {

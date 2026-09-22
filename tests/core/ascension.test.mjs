@@ -89,10 +89,10 @@ test("current state: pre-swamp farm is ready to ascend, standings served", () =>
 });
 
 test("banked food XP: cooked inventory counts toward levels, valued with pet boost", () => {
-  // 8,170,932 + 28,824: the fixture holds 1 "Aged Saw Shark", and Saw Shark was missing from
-  // FISH_BASE_XP, so that stack banked nothing. maxXP(1920) = 9,600 x the fixture's 3.0025
-  // aging multiplier = 28,824 — see cooking-section.test.mjs for the full derivation.
-  assert.equal(Math.round(out.current.bankedFoodXp), 8199756);
+  // The same bank the Bumpkin page reports (one computeBankedFoodXp): 36 Prime Aged fish now
+  // counted, banked Aged fish without the expected-prime uplift, Grain Grinder only on cakes and
+  // the fish XP boosts on fish dishes — cooking-section.test.mjs derives the total rule by rule.
+  assert.equal(Math.round(out.current.bankedFoodXp), 8442413);
   // the pin would fail if the pet ×1.5 were dropped: without it the bank is ~⅔ of this
   assert.ok(out.current.bankedFoodXp > 0);
 });

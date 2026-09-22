@@ -2,6 +2,7 @@
 // roadmap profitability block. Inline copies stay for the power-page restock panel.
 import { CROP_GROW_DATA } from "./power-boosts.mjs";
 import { SEED_COSTS } from "../data/economy.mjs";
+import { findCollectible } from "./power-helpers.mjs";
 
     // ── flowers.html 4028-4101: crop machine cluster ──
     function cropMachinePlots(farm) {
@@ -32,12 +33,12 @@ import { SEED_COSTS } from "../data/economy.mjs";
     }
     function cropMachineSpeedMult(farm, withTortoiseShrine) {
       const sk = farm.bumpkin?.skills || {};
-      const placed = (farm.collectibles || {});
-      const placedHome = (farm.home?.collectibles || {});
       let m = 1;
       if (sk["Crop Processor Unit"]) m *= 0.95;
       if (sk["Rapid Rig"]) m *= 0.8;
-      const hasGramo = (placed["Groovy Gramophone"]?.length || 0) > 0 || (placedHome["Groovy Gramophone"]?.length || 0) > 0;
+      // Placed anywhere the game looks — all four collectible maps (findCollectible), not just
+      // the farm and the legacy home: a Gramophone in the house interior counted as absent.
+      const hasGramo = findCollectible(farm, "Groovy Gramophone").length > 0;
       if (hasGramo) m *= 0.5;
       if (withTortoiseShrine) m *= 0.9;
       return m;

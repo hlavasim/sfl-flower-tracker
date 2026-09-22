@@ -219,14 +219,45 @@ export const COOKING_INGREDIENTS = {
   "Slow Juice":           { "Grape": 10, "Kale": 100 },
 };
 
+/*
+ * The game's OWN spelling of two fish (types/consumables.ts:1261 "Hammerhead shark", :1291
+ * "Football fish"). AGED_FISH / PRIME_AGED_FISH are `Aged ${name}` over that record
+ * (consumables.ts:1403-1433), so the inventory holds "Aged Hammerhead shark" — a recipe keyed
+ * "Aged Hammerhead Shark" never matched it and those stacks scored 0 banked XP. FISH_BASE_XP keeps
+ * the tracker's spelling because the fishing tables (FISH_DATA, FISH_TIER_MAP) are keyed by it;
+ * only the NAMES of the aged products follow the game.
+ */
+export const GAME_FISH_SPELLING = { "Hammerhead Shark": "Hammerhead shark", "Football Fish": "Football fish" };
+
+// Prime Aged fish XP: floor(maxXP × PRIME_AGED_XP_MULTIPLIER 1.3) — consumables.ts:1420-1433.
+// Not a recipe (the shed rolls prime on collect), so it lives beside the recipes: banked-food
+// XP needs it, the recipe picker must not offer it.
+export const PRIME_AGED_FISH_XP = {};
+
+// Fish consumables the game boosts as FISH (FISH_CONSUMABLES, consumables.ts:1457-1470) besides
+// raw/aged/prime-aged fish: FISH_COOKABLES (:1137-1148) + INSTANT_FISH_RECIPES (:1150-1158).
+export const FISH_COOKABLE_NAMES = [
+  "Chowder", "Gumbo", "Fermented Fish", "Fried Calamari", "Fish Burger", "Fish Omelette",
+  "Ocean's Olive", "Seafood Basket", "Fish n Chips", "Sushi Roll",
+  "Furikake Sprinkle", "Surimi Rice Bowl", "Creamy Crab Bite", "Crimstone Infused Fish Oil",
+];
+// COOKABLE_CAKES (consumables.ts:1160-1175) + Pirate Cake — Grain Grinder's XP and Frosted Cakes'
+// time boost target these, not the whole Bakery (boosts.ts:273-279, :347-353).
+export const COOKABLE_CAKES = [
+  "Sunflower Cake", "Potato Cake", "Pumpkin Cake", "Carrot Cake", "Cabbage Cake", "Beetroot Cake",
+  "Cauliflower Cake", "Parsnip Cake", "Radish Cake", "Wheat Cake", "Eggplant Cake", "Orange Cake",
+  "Honey Cake", "Lemon Cheesecake",
+];
+
 // Generate Aged Fish recipes from FISH_BASE_XP (1 fish + N salt → 1 Aged Fish).
 // Mirrors flowers.html:4944-4955 — runs at module load, mutating the two exported
 // tables above additively (35 recipes: 84 static + 35 = 119). XP stored here is the
 // regular-aged value (= maxXP); the prime-aged weighted average is applied per-farm
 // via the "Prime Aged chance" xpBoost in detectCookingBoosts (core/engine/cooking.mjs).
 for (const [_fish, _baseXP] of Object.entries(FISH_BASE_XP)) {
-  const _aged = "Aged " + _fish;
+  const _aged = "Aged " + (GAME_FISH_SPELLING[_fish] || _fish);
   const _maxXP = getAgingMaxXP(_baseXP);
+  PRIME_AGED_FISH_XP["Prime Aged " + (GAME_FISH_SPELLING[_fish] || _fish)] = Math.floor(_maxXP * 1.3);
   const _saltN = getAgingSaltCost(_baseXP);
   const _timeS = getAgingTimeSec(_baseXP);
   COOKING_RECIPES_DATA[_aged] = { building: "Aging Shed", xp: _maxXP, cookSec: _timeS, usesHoney: false };
