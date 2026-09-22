@@ -1,4 +1,5 @@
 import { getPool } from "./_db.js";
+import { requireWriteToken } from "./_auth.js";
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -11,7 +12,9 @@ export default async function handler(req, res) {
 
   try {
     // ── Force refresh: trigger Azure Function manually ──
+    // Owner-only: it resets the crawl state and calls the Azure admin endpoint with the master key.
     if (mode === "force-refresh") {
+      if (!requireWriteToken(req, res)) return;
       const masterKey = process.env.AZURE_FUNC_MASTER_KEY;
       if (!masterKey) return res.status(500).json({ error: "Azure key not configured" });
       try {

@@ -1,5 +1,6 @@
 import { getPool } from "./_db.js";
 import ITEM_NAMES from "./_item-names.js";
+import { requireWriteToken } from "./_auth.js";
 
 /*
  * ?book=1 — the top of the book for the WHOLE catalogue, keyed by item name: floor (cheapest
@@ -134,7 +135,7 @@ function _parseBody(body) {
 // POST ?wishlist=1  { farm, ...op }    → op is one of:
 //   { key, priority }  upsert one item   |   { remove }  delete one item
 //   { list: {...} }    replace the whole list (import)
-// Writes are gated to the owner farm; reads are open (empty for others).
+// Writes are gated to the owner farm AND the write token; reads are open (empty for others).
 async function handleWishlist(pool, req, res) {
   if (req.method === "GET") {
     const farm = parseInt(req.query.farm);
@@ -149,6 +150,7 @@ async function handleWishlist(pool, req, res) {
     const body = _parseBody(req.body);
     const farm = parseInt(body.farm);
     if (farm !== WISHLIST_OWNER) return res.status(403).json({ error: "wishlist is read-only for this farm" });
+    if (!requireWriteToken(req, res)) return;
     if (body.list && typeof body.list === "object") {
       const client = await pool.connect();
       try {
