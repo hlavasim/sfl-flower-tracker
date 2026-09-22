@@ -1,11 +1,11 @@
 import { buildCookingSection } from "../core/sections/cooking.mjs";
 import { buildConstantsSection } from "../core/sections/constants.mjs";
 import { buildPricesSection } from "../core/sections/prices.mjs";
-import { valueDiff } from "../core/sections/diff.mjs";
+import { valueDiff, diffPriceMap } from "../core/sections/diff.mjs";
 import { buildPowerSection } from "../core/sections/power.mjs";
 import { buildRoiSection } from "../core/sections/roi.mjs";
 import { roadmapComputeEfficiency, _setRoadmapState } from "../core/engine/roadmap.mjs";
-import { buildTreasurySection } from "../core/sections/treasury.mjs";
+import { buildTreasurySection, buildTreasuryData } from "../core/sections/treasury.mjs";
 import { buildRoadmapSection } from "../core/sections/roadmap.mjs";
 import { buildAscensionSection } from "../core/sections/ascension.mjs";
 import { buildWishlistSection } from "../core/sections/wishlist.mjs";
@@ -122,11 +122,14 @@ async function fetchFarm(farmId) {
   });
   if (result.ok) {
     if (lastGoodFarm.size > CACHE_MAX_ENTRIES) lastGoodFarm.delete(lastGoodFarm.keys().next().value);
-    lastGoodFarm.set(farmId, result.data);
+    // Remember WHEN it was good: a stale farm is served with its age (payload.stale +
+    // farmAgeSec), so the page can say "farm data from 40 min ago" instead of passing it off
+    // as current — computedAt alone is always "now".
+    lastGoodFarm.set(farmId, { data: result.data, at: Date.now() });
     return result;
   }
   const stale = lastGoodFarm.get(farmId);
-  if (stale) return { ok: true, data: stale, stale: true };
+  if (stale) return { ok: true, data: stale.data, stale: true, fetchedAt: stale.at };
   return result;
 }
 
@@ -189,6 +192,15 @@ async function fetchExchange() {
     }
   }, EXCHANGE_TTL_MS);
   return result.data;
+}
+
+// Marketplace id -> name (api/_item-names.js), for the sfl.world NFT rows that ship without a
+// name. Imported lazily and fault-tolerant: it is a .js ESM file next to an .mjs, and a module
+// that fails to load must cost the names, never the whole endpoint.
+let _itemNamesPromise = null;
+function loadItemNames() {
+  if (!_itemNamesPromise) _itemNamesPromise = import("./_item-names.js").then((m) => m.default || null).catch(() => null);
+  return _itemNamesPromise;
 }
 
 // Test-only hook: node:test imports this module once and runs every test in a file against
@@ -256,17 +268,29 @@ export default async function handler(req, res) {
     // DB-free — data lives in the DB endpoints, valuation lives here. explain=1 attaches a
     // per-snapshot net-SFL trace. Body: { snapshots: [{ capturedAt, diff }, ...] }.
     else if (section === "diff") {
-      const priceMap = (buildPricesSection(farm, p2p, settings).marketValue) || {};
+      /*
+       * The map is diffPriceMap's (core/sections/diff.mjs): market value, else production cost
+       * (cooked dishes), else the NFT collectible floor, plus wearables at their floor and Oil at
+       * the Power page's drill-cost figure. NFTs / exchange are best-effort here — without them
+       * the diff still values everything the price map covers, as before.
+       */
+      const [nftResult, exchange] = await Promise.all([fetchNfts(), fetchExchange()]);
+      const nftData = nftResult.ok ? nftResult.data : {};
+      const td = buildTreasuryData(p2p, nftData, exchange, 0, { itemNames: await loadItemNames() });
+      let oilPrice = 0;
+      try { oilPrice = (buildPowerSection(farm, p2p, nftData, exchange, settings).categories || {}).oilPrice || 0; } catch { oilPrice = 0; }
+      const pm = diffPriceMap(buildPricesSection(farm, p2p, settings), td, oilPrice);
+      const diffRates = { ...settings, wearablePrices: pm.wearables };
       let input = {};
       input = _parseBody(req.body);
       const list = Array.isArray(input.snapshots) ? input.snapshots : [];
       const snapshots = list.map((s) => {
         const dm = (s && s.diff) || {};
         const trace = settings.explain ? [] : undefined;
-        const { items, netSfl } = valueDiff(dm, priceMap, settings, trace);
+        const { items, netSfl } = valueDiff(dm, pm.items, diffRates, trace);
         return { capturedAt: s.capturedAt ?? s.time ?? null, netSfl, items, ...(settings.explain ? { trace: trace[0] } : {}) };
       });
-      data = { snapshots };
+      data = { snapshots, oilPrice, nftsOk: !!nftResult.ok };
     }
     // `power`: the POWER/ROADMAP pages' shared boost state (task: power migration). Needs
     // two extra upstreams the other sections don't: the sfl.world NFT list (the section is
@@ -468,7 +492,19 @@ export default async function handler(req, res) {
       if (!nftResult.ok) return res.status(502).json({ error: `nfts fetch failed: ${nftResult.status}` });
       let petPrices = {};
       try { petPrices = req.query.petprices ? JSON.parse(req.query.petprices) : {}; } catch { petPrices = {}; }
-      data = buildTreasurySection(farm, p2p, nftResult.data, exchange, btcUsd, { coinMode: req.query.coinMode || "betty", petPrices });
+      data = buildTreasurySection(farm, p2p, nftResult.data, exchange, btcUsd, { coinMode: req.query.coinMode || "betty", petPrices, itemNames: await loadItemNames() });
+      /*
+       * Every upstream here is best-effort except the NFT list, so a 200 alone cannot say what
+       * the numbers stand on. Without p2p prices ~half the farm reads 0; without the exchange
+       * gems read 0; without BTC/USD the BTC column does. The page shows each false as a warning
+       * instead of rendering the shrunken total as if it were real.
+       */
+      data.status = {
+        pricesOk: Object.keys(p2p).length > 0,
+        nftsStale: !!nftResult.stale,
+        exchangeOk: !!(exchange && (exchange.coins || exchange.gems)),
+        btcOk: btcUsd > 0,
+      };
     }
     else return res.status(400).json({ error: `unknown section: ${section}` });
     const payload = { farm: farmId, computedAt: new Date().toISOString(), section, data };
@@ -478,7 +514,13 @@ export default async function handler(req, res) {
     // client's PRICES() cache has no TTL, so caching the latter as if it were the former reads
     // 0 for every migrated price for the rest of the session. pricesOk lets the client tell
     // the two apart and treat a false as retryable instead of durable success.
-    if (section === "prices") payload.pricesOk = Object.keys(p2p).length > 0;
+    if (section === "prices" || section === "diff" || section === "treasury") payload.pricesOk = Object.keys(p2p).length > 0;
+    // Stale farm (the live fetch failed, the last good one was served): say so, with its age.
+    if (farmResult.stale) {
+      payload.stale = true;
+      payload.farmFetchedAt = new Date(farmResult.fetchedAt).toISOString();
+      payload.farmAgeSec = Math.round((Date.now() - farmResult.fetchedAt) / 1000);
+    }
     return res.status(200).json(payload);
   } catch (e) {
     return res.status(500).json({ error: String((e && e.message) || e) });

@@ -7665,7 +7665,9 @@
         }
       }
       _priceTracesLoading.delete(key);
-      if (cachedFarmData) main();
+      // Only the Diff page reads traces, and only its content panel shows them: repaint that
+      // panel. main() re-ran the whole renderDiff — every fetch of the page, a second time.
+      if (_diffRerenderContent && getPage() === "diff") _diffRerenderContent();
     }
 
     // Synchronous accessor: PRICE_TRACES(rates).marketTrace[name] once loaded. Returns null
@@ -11780,6 +11782,7 @@
       resources: "#2ECC71",
       treasures: "#F1C40F",
       collectibles: "#E67E22",
+      produced: "#D35400",
       wearables: "#9B59B6",
       pets: "#E91E63",
       listings: "#1ABC9C",
@@ -11818,6 +11821,25 @@
         if (rate > bestRate) { bestRate = rate; bestItem = name; }
       }
       return { rate: bestRate, item: bestItem };
+    }
+
+    // The one coin-rate fallback (twin of core/engine/prices.mjs): the mode's source, else the
+    // other live source, else 0 = coins unpriced — never a hardcoded 320 / 1500.
+    function pickCoinsPerSFL(mode, bettyRate, apiRate) {
+      const betty = bettyRate > 0 ? bettyRate : 0;
+      const api = apiRate > 0 ? apiRate : 0;
+      if (mode === "betty") return betty || api;
+      if (mode === "api") return api || betty;
+      return 0;
+    }
+
+    // The one NFT unit-price rule (twin of core/engine/prices.mjs): floor first, last sale only
+    // when there is no floor — the rule ROI / Power already used.
+    function nftUnitPrice(nft) {
+      if (!nft) return 0;
+      const floor = parseFloat(nft.floor) || 0;
+      if (floor > 0) return floor;
+      return parseFloat(nft.lastSalePrice) || 0;
     }
 
     const SFL_ICON_URL = "https://raw.githubusercontent.com/sunflower-land/sunflower-land/main/src/assets/icons/flower_token.webp";
@@ -13119,18 +13141,38 @@
           const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=treasury&coinMode=${encodeURIComponent(treasuryCoinMode)}&petprices=${petprices}`);
           if (!rp.ok) throw new Error(`compute treasury ${rp.status}`);
           payload = await rp.json();
+          // pricesOk:false = the server's p2p fetch fell back to {} — about half the farm would
+          // read 0. Retry like an HTTP failure; if it stays false, the page gets it flagged below.
+          if (payload.pricesOk === false && a < 2) throw new Error("prices not loaded (pricesOk:false)");
           break;
         } catch (e) { lastErr = e; if (a < 2) await new Promise(r => setTimeout(r, 1000 * (a + 1))); }
       }
       if (!payload) throw lastErr;
       const d = payload.data || {};
       _treasuryServerValue = { coinMode: d.coinMode, value: d.value };
-      return d.td;
+      const td = d.td || {};
+      // What the numbers stand on, for every page that shows them (Treasury, Diff, tracker).
+      td.status = { ...(d.status || {}), pricesOk: payload.pricesOk !== false && (!d.status || d.status.pricesOk !== false),
+                    stale: !!payload.stale, farmAgeSec: payload.farmAgeSec || 0 };
+      return td;
+    }
+    // The failures behind a td, as short warnings — shown instead of letting a shrunken total
+    // pass for the real one. Empty when everything loaded.
+    function treasuryStatusWarnings(td) {
+      const s = (td && td.status) || {};
+      const w = [];
+      if (s.pricesOk === false) w.push("market prices unavailable — resources, produced goods and listings read 0");
+      if (s.exchangeOk === false) w.push("exchange rates unavailable — gems read 0" + (td && td.coinsPerSFL_betty > 0 ? "" : ", coins unpriced"));
+      if (s.btcOk === false) w.push("BTC/USD unavailable — no BTC figures");
+      if (s.nftsStale) w.push("NFT floors are from an earlier fetch");
+      if (s.stale) w.push(`farm data is ${s.farmAgeSec >= 3600 ? Math.round(s.farmAgeSec / 3600) + " h" : Math.max(1, Math.round(s.farmAgeSec / 60)) + " min"} old (live fetch failed)`);
+      return w;
     }
 
     function computeFarmValue(farm, td, coinMode) {
       const { nftCollectibles, nftWearables, p2pPrices, sflUsd, coinsPerSFL_api, coinsPerSFL_betty, bettyItem, gemsPerSFL, btcUsd } = td;
-      const coinsPerSFL = coinMode === "api" ? coinsPerSFL_api : coinMode === "betty" ? coinsPerSFL_betty : 0;
+      const productionCost = td.productionCost || {};
+      const coinsPerSFL = pickCoinsPerSFL(coinMode, coinsPerSFL_betty, coinsPerSFL_api);
       const inventory = farm.inventory || {};
       const wardrobe = farm.wardrobe || {};
       const MIN_VALUE = 0.01;
@@ -13155,8 +13197,8 @@
       // Detect treasure sell boosts
       let treasureBoost = 1;
       if (findCollectible(farm, "Treasure Map").length > 0) treasureBoost += 0.2;
-      // Camel: check inventory (might not be placed)
-      if (getCount(inventory, "Camel") > 0 || findCollectible(farm, "Camel").length > 0) treasureBoost += 0.3;
+      // Camel: the game applies its +30 % only while it is PLACED — one in the inventory is not.
+      if (findCollectible(farm, "Camel").length > 0) treasureBoost += 0.3;
 
       for (const [name, baseCoins] of Object.entries(TREASURE_SELL_PRICES)) {
         const qty = getCount(inventory, name);
@@ -13187,13 +13229,29 @@
       }
       collectibles.sort((a, b) => b.total - a.total);
 
+      // --- Produced: inventory the p2p feed does not trade (cooked dishes, crafted goods, fish,
+      // bait), valued at the section=prices production cost. Without it 92 dishes on the
+      // fixture farm read as 0. Treasures, NFTs and gems have their own categories.
+      const produced = [];
+      for (const name of Object.keys(inventory)) {
+        if (p2pPrices[name] !== undefined || TREASURE_SELL_PRICES[name] !== undefined || nftCollectibles[name] || name === "Gem") continue;
+        const unit = parseFloat(productionCost[name]) || 0;
+        if (unit <= 0) continue;
+        const qty = getCount(inventory, name);
+        if (qty <= 0) continue;
+        const total = qty * unit;
+        if (total < MIN_VALUE) continue;
+        produced.push({ name, qty, unitPrice: unit, total });
+      }
+      produced.sort((a, b) => b.total - a.total);
+
       // --- Wearables: wardrobe matched against NFT wearables ---
       const wearables = [];
       for (const [name, qty] of Object.entries(wardrobe)) {
         if (!qty || qty <= 0) continue;
         const nft = nftWearables[name];
         if (!nft) continue;
-        const price = parseFloat(nft.lastSalePrice) || parseFloat(nft.floor) || 0;
+        const price = nftUnitPrice(nft);
         if (price <= 0) continue;
         const total = qty * price;
         if (total < MIN_VALUE) continue;
@@ -13232,7 +13290,7 @@
           if (q <= 0) continue;
           let price = p2pPrices[name] || 0;
           if (price <= 0 && nftCollectibles[name]) price = parseFloat(nftCollectibles[name].floor) || 0;
-          if (price <= 0 && nftWearables[name]) price = parseFloat(nftWearables[name].lastSalePrice) || parseFloat(nftWearables[name].floor) || 0;
+          if (price <= 0 && nftWearables[name]) price = nftUnitPrice(nftWearables[name]);
           if (!_listAgg[name]) _listAgg[name] = { qty: 0, price };
           _listAgg[name].qty += q;
         }
@@ -13256,19 +13314,40 @@
       const resourcesTotal = resources.reduce((s, r) => s + r.total, 0);
       const treasuresTotal = treasures.reduce((s, t) => s + t.total, 0);
       const collectiblesTotal = collectibles.reduce((s, c) => s + c.total, 0);
+      const producedTotal = produced.reduce((s, p) => s + p.total, 0);
       const wearablesTotal = wearables.reduce((s, w) => s + w.total, 0);
       const petsTotal = pets.reduce((s, p) => s + p.total, 0);
       const listingsTotal = listings.reduce((s, l) => s + l.total, 0);
-      const grandTotal = resourcesTotal + treasuresTotal + collectiblesTotal + wearablesTotal + petsTotal + listingsTotal + liquidTotal;
+      const grandTotal = resourcesTotal + treasuresTotal + collectiblesTotal + producedTotal + wearablesTotal + petsTotal + listingsTotal + liquidTotal;
+
+      /*
+       * What the farm turns into if sold on the marketplace TODAY: only what the marketplace
+       * trades (p2p resources, NFT collectibles / wearables / pets, escrowed listings) less its
+       * 10 % fee, plus the FLOWER balance, which is already FLOWER and pays no fee. Coins, gems,
+       * NPC-only treasures and off-feed produced goods cannot be sold there, so they are listed
+       * as excluded rather than counted (the grand total above still shows them).
+       */
+      const marketplaceTotal = resourcesTotal + collectiblesTotal + wearablesTotal + petsTotal + listingsTotal;
+      const marketFee = 0.1;
+      const sellable = {
+        marketplace: marketplaceTotal,
+        fee: marketplaceTotal * marketFee,
+        afterFee: marketplaceTotal * (1 - marketFee),
+        flowerBalance: sflBalance,
+        total: marketplaceTotal * (1 - marketFee) + sflBalance,
+        excluded: { coins: coinsAsSFL, gems: gemsAsSFL, treasures: treasuresTotal, produced: producedTotal },
+      };
 
       return {
-        resources, treasures, collectibles, wearables, pets, listings,
+        resources, treasures, collectibles, produced, wearables, pets, listings,
         liquid: { sflBalance, coinBalance, gemBalance, coinsAsSFL, gemsAsSFL, total: liquidTotal },
         treasureBoost,
+        sellable,
         totals: {
           resources: resourcesTotal,
           treasures: treasuresTotal,
           collectibles: collectiblesTotal,
+          produced: producedTotal,
           wearables: wearablesTotal,
           pets: petsTotal,
           listings: listingsTotal,
@@ -13305,6 +13384,7 @@
         { key: "resources", label: "Resources", color: TREASURY_CAT_COLORS.resources },
         { key: "treasures", label: "Treasures", color: TREASURY_CAT_COLORS.treasures },
         { key: "collectibles", label: "Collectibles", color: TREASURY_CAT_COLORS.collectibles },
+        { key: "produced", label: "Produced", color: TREASURY_CAT_COLORS.produced },
         { key: "wearables", label: "Wearables", color: TREASURY_CAT_COLORS.wearables },
         { key: "pets", label: "Pets", color: TREASURY_CAT_COLORS.pets },
         { key: "listings", label: "Listings", color: TREASURY_CAT_COLORS.listings },
@@ -13382,17 +13462,21 @@
         ? _treasuryServerValue.value
         : computeFarmValue(farm, td, treasuryCoinMode);
       const { totals, rates, resources, treasures, collectibles, wearables, pets, listings, liquid, treasureBoost } = val;
+      const produced = val.produced || [];
 
       const usdTotal = totals.grand * rates.sflUsd;
       const btcTotal = rates.btcUsd > 0 ? usdTotal / rates.btcUsd : 0;
+      const rateLbl = (r) => r > 0 ? Math.round(r) : "n/a";
 
       const coinModeLabel = treasuryCoinMode === "betty"
-        ? `Betty (${escHTML(rates.bettyItem)}: ${Math.round(rates.coinsPerSFL_betty)}/${sflIcon()})`
+        ? `Betty (${escHTML(rates.bettyItem)}: ${rateLbl(rates.coinsPerSFL_betty)}/${sflIcon()})`
         : treasuryCoinMode === "api"
-          ? `Exchange API (${Math.round(rates.coinsPerSFL_api)}/${sflIcon()})`
+          ? `Exchange API (${rateLbl(rates.coinsPerSFL_api)}/${sflIcon()})`
           : "0 (no value)";
+      const statusWarn = treasuryStatusWarnings(td);
 
       let html = `<div class="bumpkin-dev-banner pixel-panel pixel-font">⚠ UNDER DEVELOPMENT — might show incorrect data</div>
+      ${statusWarn.length ? `<div class="pixel-panel pixel-font" style="padding:8px 12px;margin-bottom:10px;font-size:0.5625rem;color:#ff8c42;line-height:1.7">⚠ Incomplete valuation: ${statusWarn.map(escHTML).join(" · ")}</div>` : ""}
       <div class="treasury-header pixel-panel pixel-font">
         <h1>TREASURY</h1>
         <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
@@ -13405,8 +13489,8 @@
         <div style="margin-top:8px;font-size: 0.5625rem">
           <span style="color:var(--text-dim)">Coin rate:</span>
           <select onchange="setCoinMode(this.value)" style="font-family:'Courier New',monospace;font-size: 0.5625rem;background:#111;color:var(--text-primary);border:2px solid var(--border-brown);padding:2px 4px">
-            <option value="betty" ${treasuryCoinMode === "betty" ? "selected" : ""}>Betty (${escHTML(rates.bettyItem)} ${Math.round(rates.coinsPerSFL_betty)}/SFL)</option>
-            <option value="api" ${treasuryCoinMode === "api" ? "selected" : ""}>Exchange API (${Math.round(rates.coinsPerSFL_api)}/SFL)</option>
+            <option value="betty" ${treasuryCoinMode === "betty" ? "selected" : ""}>Betty (${escHTML(rates.bettyItem)} ${rateLbl(rates.coinsPerSFL_betty)}/SFL)</option>
+            <option value="api" ${treasuryCoinMode === "api" ? "selected" : ""}>Exchange API (${rateLbl(rates.coinsPerSFL_api)}/SFL)</option>
             <option value="zero" ${treasuryCoinMode === "zero" ? "selected" : ""}>0 (no real value)</option>
           </select>
         </div>
@@ -13420,6 +13504,7 @@
       html += renderCategoryCard("resources", "⛏️", "RESOURCES", totals.resources, totals.grand, resources);
       html += renderCategoryCard("treasures", "🏴‍☠️", "TREASURES", totals.treasures, totals.grand, treasures);
       html += renderCategoryCard("collectibles", "🏆", "COLLECTIBLES", totals.collectibles, totals.grand, collectibles);
+      if (produced.length > 0) html += renderCategoryCard("produced", "🍲", "PRODUCED", totals.produced || 0, totals.grand, produced);
       html += renderCategoryCard("wearables", "👕", "WEARABLES", totals.wearables, totals.grand, wearables);
       if (pets.length > 0) html += renderCategoryCard("pets", "🐾", "PETS", totals.pets, totals.grand, pets);
       if (listings.length > 0) html += renderCategoryCard("listings", "🏷️", "LISTINGS", totals.listings, totals.grand, listings);
@@ -13448,6 +13533,9 @@
         { key: "resources", icon: "⛏️", label: "Resources", items: resources },
         { key: "treasures", icon: "🏴‍☠️", label: `Treasures${boostLabel}`, items: treasures },
         { key: "collectibles", icon: "🏆", label: "Collectibles", items: collectibles },
+        // Off the p2p feed (cooked dishes, crafted goods, fish): valued at production cost, and
+        // NOT sellable on the marketplace — the Investment Tracker's BILANCE leaves them out.
+        { key: "produced", icon: "🍲", label: "Produced (at production cost, not marketplace-sellable)", items: produced },
         { key: "wearables", icon: "👕", label: "Wearables", items: wearables },
       ];
       for (const sec of sections) {
@@ -13509,10 +13597,12 @@
       const td = await fetchTreasuryData();
       const nfts = {};
       for (const [name, c] of Object.entries(td.nftCollectibles || {})) {
-        nfts[name] = { floor: parseFloat(c.floor) || 0, lastSale: parseFloat(c.lastSalePrice) || 0, type: "collectible", id: c.id, collection: "collectibles", boost: c.boost_text || "" };
+        nfts[name] = { floor: parseFloat(c.floor) || 0, lastSale: parseFloat(c.lastSalePrice) || 0, price: parseFloat(c.floor) || 0, type: "collectible", id: c.id, collection: "collectibles", boost: c.boost_text || "" };
       }
+      // `price` for a wearable is the one wearable rule (nftUnitPrice: floor, else last sale) —
+      // the number Treasury / ROI / Power value the same wearable at.
       for (const [name, w] of Object.entries(td.nftWearables || {})) {
-        nfts[name] = { floor: parseFloat(w.floor) || 0, lastSale: parseFloat(w.lastSalePrice) || 0, type: "wearable", id: w.id, collection: "wearables", boost: w.boost_text || "" };
+        nfts[name] = { floor: parseFloat(w.floor) || 0, lastSale: parseFloat(w.lastSalePrice) || 0, price: nftUnitPrice(w), type: "wearable", id: w.id, collection: "wearables", boost: w.boost_text || "" };
       }
       return { nfts, p2p: td.p2pPrices || {} };
     }
@@ -14840,8 +14930,8 @@
           marketPrice = market.p2p[itemName];
           priceSource = "P2P";
         } else if (market.nfts[itemName]) {
-          marketPrice = market.nfts[itemName].floor;
-          priceSource = "Floor";
+          marketPrice = market.nfts[itemName].price;
+          priceSource = market.nfts[itemName].floor > 0 ? "Floor" : "Last sale";
         }
 
         const delta = marketPrice > 0 ? ((unitPrice - marketPrice) / marketPrice) * 100 : 0;
@@ -14887,8 +14977,8 @@
           marketPrice = market.p2p[itemName];
           priceSource = "P2P";
         } else if (market.nfts[itemName]) {
-          marketPrice = market.nfts[itemName].floor;
-          priceSource = "Floor";
+          marketPrice = market.nfts[itemName].price;
+          priceSource = market.nfts[itemName].floor > 0 ? "Floor" : "Last sale";
         }
 
         const delta = marketPrice > 0 ? ((unitPrice - marketPrice) / marketPrice) * 100 : 0;
@@ -27592,6 +27682,19 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       // task-TRACE4: same reasoning — the trace cache is keyed by farm+rates too.
       _priceTracesCache.clear();
       _priceTracesErrKeys.clear();
+      // The rest of the rate/price caches REFRESH used to leave alone, so the button refreshed
+      // the farm and kept first-load prices: the dashboard's treasury rates, the SATS/FLOWER
+      // series, the Yakkamon FLOWER/BTC prices, the Diff page's treasury data and the Insights.
+      _dashTdPromise = null;
+      dashP2P = {};
+      dashRates = { coinsPerSFL: null, gemsPerSFL: null };
+      for (const g of Object.keys(_satsCache)) delete _satsCache[g];
+      _ykLive = null;
+      _ykLiveErr = null;
+      _diffTd = null;
+      _diffTdError = null;
+      _insState = null;
+      _insLoadedFor = null;
       main();
     }
 
@@ -29399,6 +29502,11 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     // ═══════════════════════════════════════
 
     const INV_API_BASE = "/api/farm-history";
+    // YYYY-MM-DD of the LOCAL calendar day. toISOString() is the UTC day, which between 00:00 and
+    // 02:00 in Prague is still yesterday — a form defaulting to it logged today's row a day early.
+    function _localIsoDate(d) {
+      return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    }
     const LS_INV_INSIGHTS_OPEN = "sfl_diff_insights_open";
 
     async function invListTransactions(farmId) {
@@ -29462,8 +29570,17 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       let firstDepositDate = null;
       let net = 0, peakBtc = 0;
       const byVenue = {};
+      /*
+       * Same-day order is fixed, not left to entry order: withdrawals before deposits. The ledger
+       * has dates, not times, so which came first that day is unknown — and taking deposits first
+       * lets a withdraw-and-redeposit day spike the running net above anything really at risk,
+       * inflating the peak. Withdrawals first is the reading that never inflates it, and it no
+       * longer depends on the order the rows happened to be typed in.
+       */
+      const dirRank = (t) => (t.direction === "withdrawal" ? 0 : 1);
       const chron = transactions.slice().sort((a, b) =>
-        String(a.tx_date).localeCompare(String(b.tx_date)) || String(a.created_at).localeCompare(String(b.created_at)));
+        String(a.tx_date).slice(0, 10).localeCompare(String(b.tx_date).slice(0, 10)) || dirRank(a) - dirRank(b) ||
+        String(a.created_at).localeCompare(String(b.created_at)));
       for (const t of chron) {
         const btc = parseFloat(t.btc_amount) || 0;
         const usd = parseFloat(t.usd_amount) || 0;
@@ -29501,40 +29618,46 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       return (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2)) + " ⛀";
     }
 
-    let _invState = null;  // { transactions, rates: { sflToUsd, btcUsd, treasuryTotalSfl } }
+    let _invState = null;  // { transactions, rates: { sflToUsd, btcUsd, treasuryTotalSfl }, farmValue, errors }
+    // The Diff page's one section=treasury result (renderDiff sets it) — tracker and Insights
+    // price with it instead of refetching, so the page has ONE FLOWER/USD and ONE BTC/USD.
+    let _diffTd = null, _diffTdError = null;
+    // renderDiff's content repaint, for the price-trace cache to call on arrival.
+    let _diffRerenderContent = null;
 
     async function renderInvestmentTracker(data, opts) {
       const mount = document.getElementById("investment-tracker");
       if (!mount) return;
 
-      // Need BTC price too — fetch from coingecko (same source as treasury)
-      let btcUsd = 0;
-      try {
-        const r = await fetch(`/api/proxy?url=${encodeURIComponent("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd")}`);
-        if (r.ok) {
-          const j = await r.json();
-          btcUsd = j?.bitcoin?.usd || 0;
-        }
-      } catch {}
-
-      // Compute treasury value (reuse treasury logic if available — for metric ③)
-      let treasuryTotalSfl = 0;
-      try {
-        if (typeof fetchTreasuryData === "function" && typeof computeFarmValue === "function") {
-          const td = await fetchTreasuryData();
-          const v = computeFarmValue(data.farm, td, "betty");
-          // computeFarmValue returns { totals: { grand, ... }, ... }
-          treasuryTotalSfl = v?.totals?.grand || 0;
-        }
-      } catch (e) {
-        console.warn("[invest] treasury compute failed", e);
+      /*
+       * Rates and farm value come from the page's ONE section=treasury result (opts.td, fetched
+       * once by renderDiff): FLOWER/USD and BTC/USD are the treasury's, so the tracker, the
+       * Treasury page and Insights cannot price the same holding differently. The farm is valued
+       * in the coin mode the Treasury page is set to, not a hardcoded "betty".
+       *
+       * Every failure is recorded in `errors` and rendered as "—" with a warning. A failed read
+       * must never come out as a number: an empty ledger is COST 0 and a green balance, a missing
+       * farm value is a farm worth 0.
+       */
+      const errors = {};
+      const td = (opts && opts.td) || null;
+      if (!td) errors.treasury = (opts && opts.tdError) || "treasury data unavailable";
+      const sflToUsd = (td && td.sflUsd) || 0;
+      const btcUsd = (td && td.btcUsd) || 0;
+      if (td && !(sflToUsd > 0)) errors.rates = "FLOWER/USD unavailable";
+      if (td && !(btcUsd > 0)) errors.rates = (errors.rates ? errors.rates + ", " : "") + "BTC/USD unavailable";
+      let farmValue = null;
+      if (td) {
+        try { farmValue = computeFarmValue(data.farm, td, treasuryCoinMode); }
+        catch (e) { errors.treasury = e.message; }
+        if (td.status && td.status.pricesOk === false) errors.treasury = "market prices unavailable — farm value incomplete";
       }
 
-      const transactions = await invListTransactions(FARM_ID).catch(err => {
-        console.error("[invest] list failed", err);
-        return [];
-      });
-      _invState = { transactions, rates: { sflToUsd: opts.sflToUsd, btcUsd, treasuryTotalSfl } };
+      let transactions = [];
+      try { transactions = await invListTransactions(FARM_ID); }
+      catch (err) { console.error("[invest] list failed", err); errors.ledger = err.message; }
+      _invState = { transactions, farmValue, errors,
+        rates: { sflToUsd, btcUsd, treasuryTotalSfl: farmValue ? farmValue.totals.grand : 0 } };
       // Holdings are a separate read: a venue can hold something without any BTC having moved
       // this session, and a failure here must leave the ledger itself rendering.
       await invLoadBalances(FARM_ID);
@@ -29548,6 +29671,8 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       const mount = document.getElementById("investment-tracker");
       if (!mount || !_invState) return;
       const { transactions, rates } = _invState;
+      const errors = _invState.errors || {};
+      const farmValue = _invState.farmValue || null;
       const agg = invAggregate(transactions);
       const { sflToUsd, btcUsd, treasuryTotalSfl } = rates;
 
@@ -29556,7 +29681,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
                                   : p >= 50 ? "var(--sunpetal)"
                                   : "#ff8c42";
       // ④ REPAY PLAN: the pace the user chose, measured against the withdrawals since its start.
-      const planStats = _invPlan ? repayPlanStats(_invPlan, transactions, { peakBtc: agg.peakBtc, netDebtBtc: agg.netDebtBtc }) : null;
+      const planStats = (_invPlan && !errors.ledger) ? repayPlanStats(_invPlan, transactions, { peakBtc: agg.peakBtc, netDebtBtc: agg.netDebtBtc }) : null;
 
       /*
        * Two different questions, kept apart on purpose.
@@ -29570,8 +29695,11 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
        * penalty (their docs are explicit), just not yet. Hence "now" and "at unlock" side by
        * side rather than one blended number that is true of neither moment.
        */
-      const liquidValueSfl = treasuryTotalSfl * 0.9;
-      const liquidValueBtc = (sflToUsd > 0 && btcUsd > 0 && treasuryTotalSfl > 0)
+      // What the farm sells for TODAY (computeFarmValue's `sellable`): marketplace-tradeable items
+      // less the 10 % fee, plus the FLOWER balance without one. Coins, gems, NPC treasures and
+      // off-feed produced goods are not counted — the marketplace does not trade them.
+      const liquidValueSfl = (farmValue && farmValue.sellable) ? farmValue.sellable.total : 0;
+      const liquidValueBtc = (sflToUsd > 0 && btcUsd > 0 && liquidValueSfl > 0)
         ? (liquidValueSfl * sflToUsd / btcUsd) : 0;
       // Everything held somewhere that cannot be sold today. No fee is applied: a deposit is
       // returned, not sold.
@@ -29591,8 +29719,10 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       // On-chain wins when an address is registered: everything the wallet holds (FLOWER, stables,
       // gas coins…) is sellable today. Genesis eggs (YAKKAMON venue) are liquid too — they sell into
       // a live offer on Ronin Market — unlike the locked FLOWER deposit.
-      const chainWallet = _invHoldings && _invHoldings.venues && _invHoldings.venues.wallet;
-      const chainEggs = _invHoldings && _invHoldings.venues && _invHoldings.venues.yakkamon;
+      // Re-priced with the page's own FLOWER/USD and BTC/USD (the treasury's), not the holdings
+      // endpoint's CoinGecko pair — one table, one rate for each.
+      const chainWallet = _invRepriceVenue(_invHoldings && _invHoldings.venues && _invHoldings.venues.wallet, sflToUsd, btcUsd);
+      const chainEggs = _invRepriceVenue(_invHoldings && _invHoldings.venues && _invHoldings.venues.yakkamon, sflToUsd, btcUsd);
       const walletLiquidBtc = chainWallet ? chainWallet.btc : ((sflToUsd > 0 && btcUsd > 0) ? (walletHeldFlower * sflToUsd / btcUsd) : 0);
       const eggsLiquidBtc = chainEggs ? chainEggs.btc : 0;
       const canCompute3 = (agg.peakBtc > 0 && sflToUsd > 0 && btcUsd > 0 && treasuryTotalSfl > 0);
@@ -29664,8 +29794,8 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
 
       mount.innerHTML = `
         <h2 class="pixel-font" style="margin:0 0 10px 0;font-size:0.75rem;color:var(--sunpetal);letter-spacing:1px">💰 INVESTMENT TRACKER</h2>
-        ${_invRepayHtml(agg, planStats, flowerPerBtc)}
-        ${_invBalanceSheetHtml({ agg, flowerPerBtc, fmtFlower, treasuryTotalSfl, liquidValueSfl, liquidValueBtc, lockedBtc, chainWallet, chainEggs, walletLiquidBtc, walletHeldFlower, eggsLiquidBtc })}
+        ${_invRepayHtml(agg, planStats, flowerPerBtc, errors)}
+        ${_invBalanceSheetHtml({ agg, flowerPerBtc, fmtFlower, treasuryTotalSfl, liquidValueSfl, liquidValueBtc, lockedBtc, chainWallet, chainEggs, walletLiquidBtc, walletHeldFlower, eggsLiquidBtc, farmValue, errors })}
         <div id="inv-satsflower" style="margin:6px 0 16px"></div>
         <div id="inv-tx-table-wrap">${renderInvTxTable(transactions)}</div>
         <button class="roi-pill" onclick="_invShowAddForm()" style="margin-top:10px">+ Add transaction</button>
@@ -29782,14 +29912,16 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
      * number must never be presented as a measured one.
      */
     let _invBalances = {};
+    let _invBalancesErr = null;   // a failed read shows the Yakke row as "—", not as "not set"
     async function invLoadBalances(farmId) {
       try {
         const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(farmId)}&type=venue-balance`);
-        if (!r.ok) return;
+        if (!r.ok) throw new Error(`venue-balance ${r.status}`);
         const j = await r.json();
         _invBalances = {};
         for (const b of (j.balances || [])) _invBalances[b.venue] = b;
-      } catch (e) { /* the tile just omits the holding */ }
+        _invBalancesErr = null;
+      } catch (e) { _invBalancesErr = e.message || String(e); }
     }
     /*
      * REPAY PLAN — "take X % of what I risked back out into BTC every day / month / year". A
@@ -29803,13 +29935,32 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
      * best fillable Hidden offer on Ronin Market. Null until an address is registered.
      */
     let _invHoldings = null;   // { wallets, venues: { wallet, yakkamon }, egg, prices, errors }
+    let _invHoldingsErr = null;   // why the last read failed — the Wallet row then shows "—", never the ledger guess
     async function invLoadHoldings(farmId) {
       try {
         const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(farmId)}&type=venue-holdings`);
-        if (!r.ok) return;
+        if (!r.ok) throw new Error(`venue-holdings ${r.status}`);
         const j = await r.json();
         _invHoldings = (j.wallets && j.wallets.length) ? j : { wallets: [], venues: null, errors: j.errors || [] };
-      } catch (e) { /* the tiles fall back to the ledger / typed balances */ }
+        _invHoldingsErr = null;
+      } catch (e) { _invHoldings = null; _invHoldingsErr = e.message || String(e); }
+    }
+    /*
+     * A holdings venue re-priced with the PAGE's rates: FLOWER at the treasury's FLOWER/USD and
+     * every USD figure into BTC at the treasury's BTC/USD. The endpoint prices with CoinGecko's
+     * pair, so without this one BILANCE table mixed two FLOWER and two BTC prices. Items the
+     * endpoint dropped as dust stay in the venue total unchanged.
+     */
+    function _invRepriceVenue(venue, sflToUsd, btcUsd) {
+      if (!venue) return venue;
+      let usd = venue.usd || 0;
+      const items = (venue.items || []).map((i) => {
+        if (i.symbol !== "FLOWER" || !(sflToUsd > 0)) return i;
+        const u = i.amount * sflToUsd;
+        usd += u - (i.usd || 0);
+        return Object.assign({}, i, { usd: u, unitUsd: sflToUsd });
+      });
+      return Object.assign({}, venue, { items, usd, btc: btcUsd > 0 ? usd / btcUsd : NaN });
     }
     window._invAddWallet = async function () {
       const raw = prompt("Adresa peněženky (0x…) — přečte se na Base i Roninu naráz:");
@@ -29841,51 +29992,61 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     }
     function repayPlanStats(plan, transactions, ctx) {
       const perDay = { day: 1, month: 365 / 12, year: 365 };
+      const dayMs = 86400000;
       const rate = parseFloat(plan && plan.rate);
       const divisor = perDay[(plan && plan.period) || "year"];
       const peakBtc = (ctx && ctx.peakBtc) || 0;
       const netDebtBtc = (ctx && ctx.netDebtBtc) || 0;
+      const now = new Date();
+      const localToday = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
       const startMs = Date.parse(String((plan && plan.start_date) || "").slice(0, 10) + "T00:00:00Z");
-      const todayMs = Date.parse(String((ctx && ctx.today) || new Date().toISOString()).slice(0, 10) + "T00:00:00Z");
+      const todayMs = Date.parse(String((ctx && ctx.today) || localToday).slice(0, 10) + "T00:00:00Z");
       if (!isFinite(rate) || rate <= 0 || !divisor || !isFinite(startMs) || !isFinite(todayMs) || peakBtc <= 0) return null;
 
       const dailyTargetBtc = peakBtc * (rate / 100) / divisor;
-      const daysElapsed = Math.max(0, Math.round((todayMs - startMs) / 86400000));
+      // Days the plan has been running: 0 on the start day, negative (clamped) while it is in the future.
+      const daysElapsed = Math.max(0, Math.round((todayMs - startMs) / dayMs));
       const targetBtc = dailyTargetBtc * daysElapsed;
+      const targetAt = (ms) => dailyTargetBtc * Math.max(0, Math.round((ms - startMs) / dayMs));
 
+      // Net withdrawals since the start, any venue — a wallet sale of FLOWER for BTC repays just like a
+      // farm withdrawal does, and a deposit anywhere takes it back — bucketed by day.
       const byDay = {};
-      let actualBtc = 0;
       for (const t of transactions || []) {
-        if (t.direction !== "withdrawal") continue;
+        const sign = t.direction === "withdrawal" ? 1 : t.direction === "deposit" ? -1 : 0;
+        if (!sign) continue;
         const d = String(t.tx_date || "").slice(0, 10);
         const ms = Date.parse(d + "T00:00:00Z");
         if (!isFinite(ms) || ms < startMs || ms > todayMs) continue;
-        const btc = parseFloat(t.btc_amount) || 0;
-        byDay[d] = (byDay[d] || 0) + btc;
-        actualBtc += btc;
+        byDay[d] = (byDay[d] || 0) + sign * (parseFloat(t.btc_amount) || 0);
       }
 
       const series = [];
       let cum = 0;
-      for (let i = 0; i <= daysElapsed; i++) {
-        const d = new Date(startMs + i * 86400000).toISOString().slice(0, 10);
-        cum += byDay[d] || 0;
-        series.push({ time: d, target: dailyTargetBtc * i, actual: cum });
+      for (let ms = Math.min(startMs, todayMs); ms <= todayMs; ms += dayMs) {
+        const d = new Date(ms).toISOString().slice(0, 10);
+        cum = Math.max(0, cum + (byDay[d] || 0));
+        series.push({ time: d, target: targetAt(ms), actual: cum });
       }
+      const actualBtc = cum;
 
       const balanceBtc = actualBtc - targetBtc;
 
+      // Ahead: the target keeps climbing, and the realized pace of the last `horizonDays` (or since
+      // the start, if younger) is extended as the trend — where the withdrawals land if they go on
+      // as they have.
       const horizon = (ctx && ctx.horizonDays) || 50;
-      const lookback = Math.min(horizon, daysElapsed);
+      const lookback = Math.min(horizon, series.length - 1);
       const paceBtcPerDay = lookback > 0 ? (series[series.length - 1].actual - series[series.length - 1 - lookback].actual) / lookback : 0;
       const future = [];
       for (let i = 1; i <= horizon; i++) {
-        const d = new Date(todayMs + i * 86400000).toISOString().slice(0, 10);
-        future.push({ time: d, target: dailyTargetBtc * (daysElapsed + i), trend: actualBtc + paceBtcPerDay * i });
+        const ms = todayMs + i * dayMs;
+        future.push({ time: new Date(ms).toISOString().slice(0, 10), target: targetAt(ms), trend: actualBtc + paceBtcPerDay * i });
       }
 
       return {
         dailyTargetBtc, daysElapsed, targetBtc, actualBtc, balanceBtc, paceBtcPerDay,
+        // Days from now to a fully repaid position at the plan's pace, ignoring the current lead/lag.
         etaDays: netDebtBtc > 0 ? netDebtBtc / dailyTargetBtc : 0,
         series, future,
       };
@@ -29897,17 +30058,18 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
      * chart of the last 50 days and the next 50 under it. `pos` carries the figures the render
      * function already computed for the position row.
      */
-    function _invRepayHtml(agg, stats, flowerPerBtc) {
+    function _invRepayHtml(agg, stats, flowerPerBtc, errors) {
       const fmtFl = (btc) => flowerPerBtc > 0 ? Math.round(btc * flowerPerBtc).toLocaleString("en-US") + " 🌸" : "—";
       const fmtN = (v) => Math.round(v).toLocaleString("en-US") + " 🌸";
       const p = _invPlan;
-      const stat = (label, val, sub, color) => `<div class="summary-stat" style="min-width:150px">
-          <div class="label pixel-font" style="font-size:0.45rem">${label}</div>
+      const ledgerErr = errors && errors.ledger;
+      const stat = (label, val, sub, color, tip) => `<div class="summary-stat" style="min-width:150px"${tip ? ` title="${String(tip).replace(/"/g, "&quot;")}"` : ""}>
+          <div class="label pixel-font" style="font-size:0.45rem">${label}${tip ? ` <span style="cursor:help;color:var(--text-dim)">ⓘ</span>` : ""}</div>
           <div style="font-family:'Courier New',monospace;font-size:0.82rem;color:${color || "var(--text-secondary)"};margin-top:2px">${val}</div>
           ${sub ? `<div class="label pixel-font" style="margin-top:2px;color:var(--text-dim);font-size:0.42rem;line-height:1.6">${sub}</div>` : ""}
         </div>`;
       const form = `<div id="inv-plan-form" style="margin-top:8px;display:${p ? "none" : "flex"};gap:8px;flex-wrap:wrap;align-items:center;font-family:'Courier New',monospace;font-size:0.72rem">
-          <label class="pixel-font" style="font-size:0.45rem;color:var(--text-dim)">od <input type="date" id="inv-plan-start" value="${p ? p.start_date : new Date().toISOString().slice(0, 10)}" style="background:rgba(0,0,0,0.4);border:1px solid var(--text-dim);color:var(--text-primary);padding:3px 5px;border-radius:3px;font-family:inherit;font-size:0.7rem"></label>
+          <label class="pixel-font" style="font-size:0.45rem;color:var(--text-dim)">od <input type="date" id="inv-plan-start" value="${p ? p.start_date : _localIsoDate(new Date())}" style="background:rgba(0,0,0,0.4);border:1px solid var(--text-dim);color:var(--text-primary);padding:3px 5px;border-radius:3px;font-family:inherit;font-size:0.7rem"></label>
           <label class="pixel-font" style="font-size:0.45rem;color:var(--text-dim)">splácet <input type="number" id="inv-plan-rate" step="any" min="0.01" value="${p ? p.rate : 10}" style="width:64px;background:rgba(0,0,0,0.4);border:1px solid var(--text-dim);color:var(--text-primary);padding:3px 5px;border-radius:3px;font-family:inherit;font-size:0.7rem"> % z peaku</label>
           <select id="inv-plan-period" style="background:rgba(0,0,0,0.4);border:1px solid var(--text-dim);color:var(--text-primary);padding:3px 5px;border-radius:3px;font-family:inherit;font-size:0.7rem">
             ${Object.entries(_planPeriodCz).map(([k, v]) => `<option value="${k}"${(p ? p.period : "year") === k ? " selected" : ""}>${v}</option>`).join("")}
@@ -29921,26 +30083,36 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           ${p ? `<span class="pixel-font" style="font-size:0.45rem;color:var(--lily);cursor:pointer" onclick="const f=document.getElementById('inv-plan-form');f.style.display=f.style.display==='none'?'flex':'none'">[upravit]</span>` : ""}
         </div>`;
       const box = (inner) => `<div style="border:1px solid var(--lily);border-radius:6px;padding:8px 10px;margin-bottom:12px;background:rgba(0,0,0,0.25)">${head}${inner}${form}</div>`;
+      if (ledgerErr) {
+        return box(`<div class="label pixel-font" style="margin-top:8px;color:#ff8c42;line-height:1.7">⚠ transakce se nepodařilo načíst (${escHTML(ledgerErr)}) — plán nejde spočítat, reload</div>`);
+      }
       if (!p || !stats) {
         return box(`<div class="label pixel-font" style="margin-top:8px;color:var(--text-dim);line-height:1.7">${p ? "plán nejde spočítat (chybí peak nebo kurz)" : `Zatím žádný plán. Nastav, kolik z peaku ${fmtBtc(agg.peakBtc)} chceš vracet do BTC — denně, měsíčně nebo ročně. Start v minulosti započítá i výběry od té doby.`}</div>`);
       }
       const behind = stats.balanceBtc < 0;
       const lagDays = stats.dailyTargetBtc > 0 ? Math.round(Math.abs(stats.balanceBtc) / stats.dailyTargetBtc) : 0;
+      // E13: what counts is NET withdrawn since the start — a withdrawal put back later repays nothing.
+      const netTip = `Počítají se ČISTÉ výběry od ${p.start_date}: výběry − vklady (všechna místa), průběžný součet nikdy pod nulou. Výběr, který se pak vrátí zpět vkladem (round trip), se jako splátka nepočítá. Dny jsou lokální kalendářní dny.`;
       return box(`<div class="summary-bar" style="margin:8px 0 6px">
           ${stat("WITHDRAW DAILY", `<b>${fmtFl(stats.dailyTargetBtc)}</b>`, `${fmtBtc(stats.dailyTargetBtc)} / day · ${p.rate} % ${_planPeriodCz[p.period]} of peak ${fmtBtc(agg.peakBtc)}`)}
-          ${stat(behind ? "YOU ARE BEHIND BY" : "YOU ARE AHEAD BY", `<b>${fmtFl(Math.abs(stats.balanceBtc))}</b>`, `${fmtBtc(Math.abs(stats.balanceBtc))} · ${lagDays} days · withdrawn ${fmtFl(stats.actualBtc)} of ${fmtFl(stats.targetBtc)} since ${p.start_date}`, behind ? "var(--red)" : "var(--green)")}
+          ${stat(behind ? "YOU ARE BEHIND BY" : "YOU ARE AHEAD BY", `<b>${fmtFl(Math.abs(stats.balanceBtc))}</b>`, `${fmtBtc(Math.abs(stats.balanceBtc))} · ${lagDays} days · net withdrawn ${fmtFl(stats.actualBtc)} of ${fmtFl(stats.targetBtc)} since ${p.start_date}`, behind ? "var(--red)" : "var(--green)", netTip)}
         </div>
         <div id="inv-repay-chart" style="height:200px"></div>
-        <div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);margin-top:3px">−50 d … dnes … +50 d · <span style="color:#e8c86a">- - cíl</span> · <span style="color:#7fe0a0">── vybráno</span> · <span style="color:#7fb8e0">···· trend (tempo posledních 50 d)</span> · <span style="color:#7fe0a0">▮ výběry / den</span></div>`);
+        <div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);margin-top:3px">−50 d … dnes … +50 d · <span style="color:#e8c86a">- - cíl</span> · <span style="color:#7fe0a0">── vybráno (čistě)</span> · <span style="color:#7fb8e0">···· trend (tempo posledních 50 d)</span> · <span style="color:#7fe0a0">▮ výběry / den</span></div>`);
     }
     /*
      * BILANCE — one balance sheet instead of a card per venue: what went in (net BTC, with its
      * FLOWER equivalent at today's rate), every holding valued now, the total that is sellable
      * today and the total once the Yakkamon deposit unlocks, and the difference. The position row
      * of the REPAY PLAN card is derived from the same figures.
+     *
+     * A row whose source failed to load shows "—" and the totals it feeds show "—" too, with the
+     * reason underneath: a failed read is never a zero (COST 0 read as a green balance, a missing
+     * farm as a farm worth nothing, a failed on-chain read as the ledger's guess).
      */
     function _invBalanceSheetHtml(x) {
       const { agg, flowerPerBtc, fmtFlower } = x;
+      const errors = x.errors || {};
       const usd = (v) => "$" + Math.round(v).toLocaleString("en-US");
       const fmtBtc = (v) => isFinite(v) ? v.toFixed(6) + " ₿" : "—";   // one width for the column, unlike the page-wide 6/8 switch
       const amt = (i) => (i.amount >= 1000 ? Math.round(i.amount).toLocaleString("en-US") : i.amount >= 1 ? i.amount.toFixed(2).replace(/\.?0+$/, "") : i.amount.toPrecision(2))
@@ -29950,25 +30122,47 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       const wallets = (_invHoldings && _invHoldings.wallets) || [];
       const walletCtl = ` ${wallets.map((w) => `<span style="cursor:pointer;color:var(--red)" title="odebrat ${w.address}" onclick="_invRemoveWallet('${w.address}')">×</span>`).join(" ")} <span style="cursor:pointer;color:var(--lily)" title="přidat adresu" onclick="_invAddWallet()">[+]</span>`;
       const typed = _invBalances.yakkamon;
-      const fl = (btc) => flowerPerBtc > 0 ? fmtFlower(btc * flowerPerBtc) : "—";
+      const fl = (btc) => (flowerPerBtc > 0 && isFinite(btc)) ? fmtFlower(btc * flowerPerBtc) : "—";
+      const ratesOk = flowerPerBtc > 0;
+      const problems = [];
+      if (errors.rates) problems.push(errors.rates);
       const rows = [];
-      if (x.treasuryTotalSfl > 0) rows.push({ label: "SFL farma", btc: x.liquidValueBtc, liquid: true, info: `${fmtFlower(x.liquidValueSfl)} = treasury ${fmtFlower(x.treasuryTotalSfl)} po −10 % marketplace fee · live z farmy · prodejné hned` });
-      if (x.chainWallet) rows.push({ label: "Wallet", btc: x.walletLiquidBtc, liquid: true, ctl: walletCtl, info: `on-chain (${wallets.map((w) => w.address.slice(0, 6) + "…" + w.address.slice(-4)).join(", ")}), všechny sítě: ${x.chainWallet.items.map((i) => `${amt(i)} ${usd(i.usd)} (${i.chain})`).join(", ") || "nic"} = ${usd(x.chainWallet.usd)} · prodejné hned` });
-      else rows.push({ label: "Wallet", btc: x.walletLiquidBtc, liquid: true, ctl: walletCtl, info: `${x.walletHeldFlower > 0 ? fmtFlower(x.walletHeldFlower) + " " : ""}z transakcí (koupené − prodané 🌸) · přidej adresu [+] a přečte se on-chain` });
-      rows.push(typed
-        ? { label: "Yakke locked", btc: x.lockedBtc, liquid: false, ctl: ` <span style="cursor:pointer;color:var(--lily)" onclick="_invSetBalance('yakkamon')">[edit]</span>`, info: `${fmtFlower(typed.amount)} deposit v Yakkamonu, vrací se v Q4 bez fee · ${typed.source === "game" ? "read from the game" : "zadáno ručně"} ${String(typed.noted_at).slice(0, 10)} · počítá se až po unlocku` }
+      const fv = x.farmValue;
+      if (errors.treasury || !fv) {
+        problems.push("farm value: " + (errors.treasury || "unavailable"));
+        rows.push({ label: "SFL farma", btc: NaN, liquid: true, info: "hodnotu farmy se nepodařilo spočítat" });
+      } else {
+        const s = fv.sellable, ex = s.excluded;
+        rows.push({ label: "SFL farma", btc: ratesOk ? x.liquidValueBtc : NaN, liquid: true,
+          info: `${fmtFlower(s.total)} = marketplace ${fmtFlower(s.marketplace)} (resources, NFT collectibles / wearables / pets, listings) −10 % fee ${fmtFlower(s.fee)} + FLOWER balance ${fmtFlower(s.flowerBalance)} (bez fee) · NEPOČÍTÁ SE (marketplace je neobchoduje): coins ≈ ${fmtFlower(ex.coins)}, gems ≈ ${fmtFlower(ex.gems)}, treasures ≈ ${fmtFlower(ex.treasures)}, vařené/vyrobené ≈ ${fmtFlower(ex.produced)} · treasury celkem ${fmtFlower(x.treasuryTotalSfl)} · coin rate: ${treasuryCoinMode}` });
+      }
+      if (_invHoldingsErr) {
+        problems.push("on-chain read: " + _invHoldingsErr);
+        rows.push({ label: "Wallet", btc: NaN, liquid: true, ctl: walletCtl, info: "on-chain čtení selhalo — reload" });
+      } else if (x.chainWallet) rows.push({ label: "Wallet", btc: ratesOk ? x.walletLiquidBtc : NaN, liquid: true, ctl: walletCtl, info: `on-chain (${wallets.map((w) => w.address.slice(0, 6) + "…" + w.address.slice(-4)).join(", ")}), všechny sítě: ${x.chainWallet.items.map((i) => `${amt(i)} ${usd(i.usd)} (${i.chain})`).join(", ") || "nic"} = ${usd(x.chainWallet.usd)} · FLOWER a BTC za kurz treasury · prodejné hned` });
+      else rows.push({ label: "Wallet", btc: ratesOk ? x.walletLiquidBtc : NaN, liquid: true, ctl: walletCtl, info: `${x.walletHeldFlower > 0 ? fmtFlower(x.walletHeldFlower) + " " : ""}z transakcí (koupené − prodané 🌸) · přidej adresu [+] a přečte se on-chain` });
+      if (_invBalancesErr) {
+        problems.push("Yakke balance: " + _invBalancesErr);
+        rows.push({ label: "Yakke locked", btc: NaN, liquid: false, info: "zůstatek se nepodařilo načíst" });
+      } else rows.push(typed
+        ? { label: "Yakke locked", btc: ratesOk ? x.lockedBtc : NaN, liquid: false, ctl: ` <span style="cursor:pointer;color:var(--lily)" onclick="_invSetBalance('yakkamon')">[edit]</span>`, info: `${fmtFlower(typed.amount)} deposit v Yakkamonu, vrací se v Q4 bez fee · ${typed.source === "game" ? "read from the game" : "zadáno ručně"} ${String(typed.noted_at).slice(0, 10)} · počítá se až po unlocku` }
         : { label: "Yakke locked", btc: 0, liquid: false, ctl: ` <span style="cursor:pointer;color:var(--lily)" onclick="_invSetBalance('yakkamon')">[set]</span>`, info: "holding neznámý — zadej, kolik 🌸 je v Yakkamonu" });
       if (x.chainEggs && x.chainEggs.items.length) {
         const e = x.chainEggs.items[0], off = _invHoldings.egg || {};
-        rows.push({ label: "Genesis eggs", btc: x.eggsLiquidBtc, liquid: true, info: `${amt(e)} × ${Math.round(off.offerWron || 0)} WRON (${usd(e.unitUsd)}) = ${usd(e.usd)} · nejlepší vyplnitelná Hidden trait offer na Ronin Marketu${off.fillableOffers ? ` (${off.fillableOffers} nabídek s krytým WRON)` : ""} · prodejné hned` });
+        const book = e.unitWron !== undefined
+          ? `${amt(e)} prodáno do knihy nabídek: ${Math.round(e.bookWron || 0)} WRON celkem, Ø ${Math.round(e.unitWron)} WRON/ks (nejlepší nabídka ${Math.round(off.offerWron || 0)} WRON bere jen svůj počet kusů, další jdou za nižší)${e.unfilled ? ` · ${e.unfilled} ks kniha nepobere → 0` : ""}`
+          : `${amt(e)} × ${Math.round(off.offerWron || 0)} WRON`;
+        rows.push({ label: "Genesis eggs", btc: ratesOk ? x.eggsLiquidBtc : NaN, liquid: true, info: `${book} = ${usd(e.usd)} · Hidden trait offers na Ronin Marketu${off.fillableOffers ? ` (${off.fillableOffers} nabídek s krytým WRON)` : ""} · prodejné hned` });
       }
-      const sellable = rows.filter((r) => r.liquid).reduce((a, r) => a + r.btc, 0);
-      const locked = rows.filter((r) => !r.liquid).reduce((a, r) => a + r.btc, 0);
-      const cost = agg.netDebtBtc;
+      const sum = (list) => list.reduce((a, r) => a + r.btc, 0);   // NaN if any row is unknown
+      const sellable = sum(rows.filter((r) => r.liquid));
+      const locked = sum(rows.filter((r) => !r.liquid));
+      if (errors.ledger) problems.push("transactions: " + errors.ledger);
+      const cost = errors.ledger ? NaN : agg.netDebtBtc;
       const bilNow = sellable - cost, bilUnlock = sellable + locked - cost;
-      const pct = (v) => cost > 0 ? ` <span style="color:var(--text-dim)">${v >= 0 ? "+" : ""}${(v / cost * 100).toFixed(1)} %</span>` : "";
-      const tone = (v) => v >= 0 ? "var(--green)" : "var(--red)";
-      const sgn = (v, f) => (v >= 0 ? "+" : "") + f(v);
+      const pct = (v) => (cost > 0 && isFinite(v)) ? ` <span style="color:var(--text-dim)">${v >= 0 ? "+" : ""}${(v / cost * 100).toFixed(1)} %</span>` : "";
+      const tone = (v) => !isFinite(v) ? "var(--text-dim)" : v >= 0 ? "var(--green)" : "var(--red)";
+      const sgn = (v, f) => !isFinite(v) ? "—" : (v >= 0 ? "+" : "") + f(v);
       const mono = "font-family:'Courier New',monospace";
       const row = (label, btc, flower, o = {}) => `<div style="display:grid;grid-template-columns:1fr 120px 120px;gap:8px;align-items:baseline;padding:3px 0;border-top:1px solid rgba(255,255,255,0.06)${o.top ? ";border-top:1px solid rgba(255,255,255,0.18)" : ""}">
           <div class="pixel-font" style="font-size:0.45rem;color:${o.labelColor || "var(--text-dim)"};letter-spacing:0.5px">${label}${o.info ? info(o.info) : ""}${o.ctl || ""}</div>
@@ -29978,17 +30172,18 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       const errs = (_invHoldings && _invHoldings.errors || []).filter(Boolean);
       return `<div style="border:1px solid var(--sunpetal);border-radius:6px;padding:8px 10px;margin-bottom:12px;background:rgba(0,0,0,0.25)">
         <div style="display:grid;grid-template-columns:1fr 120px 120px;gap:8px;padding-bottom:3px">
-          <div class="label pixel-font">BILANCE${info("Co šlo dovnitř (čisté BTC) proti tomu, co držení dnes stojí. Zelené řádky jdou prodat hned, fialový až po unlocku. 🌸 = přepočet při dnešní ceně.")}</div>
+          <div class="label pixel-font">BILANCE${info("Co šlo dovnitř (čisté BTC) proti tomu, co držení dnes stojí. Zelené řádky jdou prodat hned, fialový až po unlocku. 🌸 = přepočet při dnešní ceně. Všechny řádky za jeden kurz FLOWER/USD a BTC/USD (z treasury).")}</div>
           <div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);text-align:right">₿</div>
           <div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);text-align:right">🌸</div>
         </div>
-        ${row("COST", fmtBtc(cost), fl(cost), { bold: true, info: `čisté BTC uvnitř · celkem ${fmtBtc(agg.depositBtc)} in, ${fmtBtc(agg.withdrawBtc)} out · peak ${fmtBtc(agg.peakBtc)}` })}
-        ${rows.map((r) => row(r.label, fmtBtc(r.btc), fl(r.btc), { info: r.info, ctl: r.ctl, color: r.liquid ? "var(--green)" : "var(--lily)" })).join("")}
+        ${row("COST", fmtBtc(cost), fl(cost), { bold: true, info: errors.ledger ? "transakce se nepodařilo načíst" : `čisté BTC uvnitř · celkem ${fmtBtc(agg.depositBtc)} in, ${fmtBtc(agg.withdrawBtc)} out · peak ${fmtBtc(agg.peakBtc)}` })}
+        ${rows.map((r) => row(r.label, fmtBtc(r.btc), fl(r.btc), { info: r.info, ctl: r.ctl, color: !isFinite(r.btc) ? "var(--text-dim)" : r.liquid ? "var(--green)" : "var(--lily)" })).join("")}
         ${row("HODNOTA hned", fmtBtc(sellable), fl(sellable), { top: true, bold: true, info: "součet zelených řádků — prodejné dnes" })}
-        ${locked > 0 ? row("HODNOTA po unlocku", fmtBtc(sellable + locked), fl(sellable + locked), { info: "+ Yakke deposit, až se v Q4 vrátí" }) : ""}
+        ${(locked > 0 || !isFinite(locked)) ? row("HODNOTA po unlocku", fmtBtc(sellable + locked), fl(sellable + locked), { info: "+ Yakke deposit, až se v Q4 vrátí" }) : ""}
         ${row("BILANCE hned", sgn(bilNow, fmtBtc) + pct(bilNow), sgn(bilNow, fl), { top: true, bold: true, color: tone(bilNow), labelColor: "var(--text-secondary)", info: "hodnota hned − cost" })}
-        ${locked > 0 ? row("BILANCE po unlocku", sgn(bilUnlock, fmtBtc) + pct(bilUnlock), sgn(bilUnlock, fl), { bold: true, color: tone(bilUnlock), labelColor: "var(--text-secondary)", info: "hodnota po unlocku − cost" }) : ""}
-        ${errs.length ? `<div class="pixel-font" style="font-size:0.45rem;color:#ff8c42;margin-top:6px">⚠ on-chain read incomplete — ${errs.join(" · ")} · Wallet is undervalued, reload</div>` : ""}
+        ${(locked > 0 || !isFinite(locked)) ? row("BILANCE po unlocku", sgn(bilUnlock, fmtBtc) + pct(bilUnlock), sgn(bilUnlock, fl), { bold: true, color: tone(bilUnlock), labelColor: "var(--text-secondary)", info: "hodnota po unlocku − cost" }) : ""}
+        ${problems.length ? `<div class="pixel-font" style="font-size:0.45rem;color:#ff8c42;margin-top:6px">⚠ nekompletní — ${problems.map(escHTML).join(" · ")} · součty ukazují „—“, reload</div>` : ""}
+        ${errs.length ? `<div class="pixel-font" style="font-size:0.45rem;color:#ff8c42;margin-top:6px">⚠ on-chain read incomplete — ${errs.map(escHTML).join(" · ")} · Wallet is undervalued, reload</div>` : ""}
       </div>`;
     }
     let _repayChartObj = null;
@@ -30127,7 +30322,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       const wrap = document.getElementById("inv-add-form");
       if (!wrap) return;
       const edit = (editId != null) ? (_invState.transactions || []).find(t => String(t.id) === String(editId)) : null;
-      const today = new Date().toISOString().slice(0, 10);
+      const today = _localIsoDate(new Date());
       const dVal = edit ? String(edit.tx_date).slice(0, 10) : today;
       const dirVal = edit ? edit.direction : "withdrawal";
       const btcVal = edit ? parseFloat(edit.btc_amount) : "";
@@ -30279,8 +30474,9 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       // Ensure ascending order by captured_at for downstream logic
       snaps.sort((a, b) => new Date(a.captured_at).getTime() - new Date(b.captured_at).getTime());
 
-      // 2) Fetch treasury reference data (prices for valuation)
-      const td = await fetchTreasuryData();
+      // 2) Treasury reference data (prices for valuation): the Diff page's one fetch, reused —
+      // only fetched here if that one failed.
+      const td = _diffTd || await fetchTreasuryData();
 
       // 3) Compute farm value per snapshot (cache by snapshot id).
       // Server-side bucketing (bucket_hours=12) already returns ~60 well-spaced rows for a 30d
@@ -30292,12 +30488,13 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         if (!valueCache.has(snap.id)) {
           try {
             const farmObj = snap.game_data || snap.farm || snap;
-            const v = computeFarmValue(farmObj, td, "betty");
+            const v = computeFarmValue(farmObj, td, treasuryCoinMode);   // the Treasury page's coin mode
             valueCache.set(snap.id, v?.totals?.grand || 0);
           } catch (e) {
-            valueCache.set(snap.id, 0);
+            valueCache.set(snap.id, null);   // unvaluable snapshot: left out, not charted as a 0
           }
         }
+        if (valueCache.get(snap.id) === null) continue;
         points.push({
           id: snap.id,
           time: new Date(snap.captured_at).getTime(),
@@ -30376,6 +30573,10 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           else if (t.direction === "deposit") { depositedSfl += sflEq; depositedBtc += btc; }
         }
         p.adjustedValueSfl = p.valueSfl + withdrawnSfl - depositedSfl;
+        // The cumulative farm cashflow at this point, kept so the Income Breakdown nets a window
+        // with exactly these conversions (farm venue only, each row at its own date's rate).
+        p.cashOutSfl = withdrawnSfl;
+        p.cashInSfl = depositedSfl;
         const farmBtc = (sflToUsd > 0 && btcUsd > 0) ? p.valueSfl * sflToUsd / btcUsd : 0;
         p.wealthBtc = farmBtc + withdrawnBtc;
       }
@@ -30504,19 +30705,23 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       const lastFarm = lastSnap.game_data || lastSnap.farm || lastSnap;
       let v0, v1;
       try {
-        v0 = computeFarmValue(firstFarm, td, "betty");
-        v1 = computeFarmValue(lastFarm, td, "betty");
+        v0 = computeFarmValue(firstFarm, td, treasuryCoinMode);   // the Treasury page's coin mode
+        v1 = computeFarmValue(lastFarm, td, treasuryCoinMode);
       } catch (e) {
         return emptyMsg("Couldn't compute category breakdown.");
       }
 
-      // computeFarmValue returns totals = { resources, treasures, collectibles, wearables, liquid, grand }
-      const CAT_KEYS = ["resources", "treasures", "collectibles", "wearables", "liquid"];
+      // Every category computeFarmValue totals — pets and listings included, so the rows add up
+      // to the same raw Δ the grand total moved by.
+      const CAT_KEYS = ["resources", "treasures", "collectibles", "produced", "wearables", "pets", "listings", "liquid"];
       const CAT_LABELS = {
         resources: "Resources",
         treasures: "Treasures",
         collectibles: "Collectibles",
+        produced: "Produced (cooked / crafted)",
         wearables: "Wearables",
+        pets: "Pets",
+        listings: "Listings",
         liquid: "Liquid (SFL/coins/gems)",
       };
       const t0 = v0?.totals || {};
@@ -30530,27 +30735,20 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       }
       rows.sort((a, b) => b.delta - a.delta);
 
-      // User-cashflow row: explains how much of the Liquid delta was the user's own
-      // withdrawals/deposits rather than farm productivity. Computed in SFL equivalents
-      // using current rates (best approximation without per-tx historic rate).
-      const winStart = new Date(firstSnap.captured_at).getTime();
-      const winEnd = new Date(lastSnap.captured_at).getTime();
-      const sflToUsdNow = _insState.rates?.sflToUsd || 0;
-      const btcUsdNow = _insState.rates?.btcUsd || 0;
+      // User-cashflow row: how much of the move was the user's own withdrawals/deposits rather
+      // than farm productivity. Taken from _insApplyCashflow's running totals on the two window
+      // points, so it is the SAME conversion the earning rate uses: farm venue only (WALLET /
+      // YAKKAMON money never touches the farm) and each row at its own date's rate.
+      const p0 = points.find((p) => p.id === firstSnap.id);
+      const p1 = points.find((p) => p.id === lastSnap.id);
+      if (!p0 || !p1 || p0.cashOutSfl === undefined || p1.cashOutSfl === undefined) return emptyMsg("Insufficient snapshot coverage for breakdown.");
+      const withdrawnSfl = p1.cashOutSfl - p0.cashOutSfl;
+      const depositedSfl = p1.cashInSfl - p0.cashInSfl;
+      const winStart = p0.time, winEnd = p1.time;
       const txInWindow = _insState.transactions.filter(t => {
         const tt = new Date(t.tx_date).getTime();
-        return tt >= winStart && tt <= winEnd;
+        return tt > winStart && tt <= winEnd && (t.venue || "sfl").toLowerCase() === "sfl";
       });
-      let withdrawnSfl = 0, depositedSfl = 0;
-      for (const t of txInWindow) {
-        const sflEq = (sflToUsdNow > 0 && t.usd_amount && parseFloat(t.usd_amount) > 0)
-          ? parseFloat(t.usd_amount) / sflToUsdNow
-          : (sflToUsdNow > 0 && btcUsdNow > 0
-              ? parseFloat(t.btc_amount) * btcUsdNow / sflToUsdNow
-              : 0);
-        if (t.direction === "withdrawal") withdrawnSfl += sflEq;
-        else if (t.direction === "deposit") depositedSfl += sflEq;
-      }
       const netCashflowSfl = depositedSfl - withdrawnSfl; // negative = net extracted
       const productiveTotal = total - netCashflowSfl;     // strip out user-driven liquid moves
 
@@ -30772,12 +30970,18 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         fetchRetry("https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json", "USD/CZK"),
       ]);
 
+      // This one td is THE treasury fetch of the page load: the Investment Tracker and Insights
+      // read it from _diffTd instead of fetching section=treasury again (it used to be 3×), so
+      // every panel shares one FLOWER/USD and one BTC/USD.
+      _diffTd = tdRes.ok ? tdRes.td : null;
+      _diffTdError = tdRes.ok ? null : tdRes.error;
       if (tdRes.ok) {
         const td = tdRes.td;
         for (const [k, v] of Object.entries(td.p2pPrices || {})) p2pPrices[k] = parseFloat(v) || 0;
         sflToUsd = td.sflUsd || 0;
-        coinsPerSFL = td.coinsPerSFL_betty || 320;
+        coinsPerSFL = pickCoinsPerSFL("betty", td.coinsPerSFL_betty, td.coinsPerSFL_api);
         gemsPerSFL = td.gemsPerSFL || 0;
+        for (const w of treasuryStatusWarnings(td)) warnings.push(w);
       } else { warnings.push(`Prices/rates: ${tdRes.error}`); }
 
       if (czkRes.ok) {
@@ -30791,35 +30995,16 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           ? _sc.bestRecipe.cost / _sc.bestRecipe.boostedXP : 0;
       } catch(e) { sflPerXP = 0; }
 
-      // Compute Oil price from farm data (same method as Power page)
-      if (!p2pPrices["Oil"]) {
-        // Try localStorage cache from Power page (includes all NFT boosts)
-        const cachedOil = parseFloat(localStorage.getItem("sfl_oil_price"));
-        if (!isNaN(cachedOil) && cachedOil >= 0) {
-          p2pPrices["Oil"] = cachedOil;
-        } else {
-          // Fallback: compute from farm capacity + skills (no NFT boosts)
-          try {
-            const _cap = detectFarmCapacity(data.farm);
-            const _sm = detectStockModifiers(data.farm);
-            const _oilYield = applyBoosts("oil", "Oil", _cap, []);
-            const _oilCost = calcToolCostPerDay("oil", _cap, { coinsPerSFL }, p2pPrices, _sm);
-            if (_oilYield.unitsPerDay > 0 && _oilCost.costPerDay > 0) {
-              p2pPrices["Oil"] = _oilCost.costPerDay / _oilYield.unitsPerDay;
-            } else if (_oilYield.unitsPerDay > 0) {
-              p2pPrices["Oil"] = 0;
-            }
-          } catch(e) {}
-        }
-      }
+      // (Oil is priced server-side now — section=diff takes the Power page's drill-cost figure —
+      // so the page's own Oil derivation, which nothing read any more, is gone.)
 
       // Detect current season for Fish Market recipes
       const currentSeason = (data.farm?.season?.season || "").toLowerCase();
 
-      // Detect treasure sell boosts (same as treasury page)
+      // Detect treasure sell boosts (same as treasury page: the Camel counts only when placed)
       let treasureBoost = 1;
       if (findCollectible(data.farm, "Treasure Map").length > 0) treasureBoost += 0.2;
-      if (getCount(data.farm?.inventory || {}, "Camel") > 0 || findCollectible(data.farm, "Camel").length > 0) treasureBoost += 0.3;
+      if (findCollectible(data.farm, "Camel").length > 0) treasureBoost += 0.3;
 
       // The all-five-rates profile the diff page prices with. Passed to
       // /api/compute?section=diff (server-side valuation — see valueDiffs/fetchData below) and
@@ -30855,9 +31040,10 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
 
       // Expose data ref for toggle handler
       window._invDataRef = data;
+      _diffRerenderContent = renderContent;
 
       // Kick off the load in the background — don't block diff render.
-      renderInvestmentTracker(data, { p2pPrices, sflToUsd }).catch(err => {
+      renderInvestmentTracker(data, { td: _diffTd, tdError: _diffTdError }).catch(err => {
         invMount.innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Investment tracker failed: ${escHTML(err.message)}</p></div>`;
       });
 
@@ -31421,8 +31607,8 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         // no client-side price derivation (explainItemSfl deleted). Fetched via roiRates, the
         // same all-5-rates profile roiPriceMap already uses above, so it shares that cache
         // key. PRICE_TRACES(roiRates) is null until the fetch resolves; show a loading line
-        // until then (arrival triggers main() \u2192 renderDiff() \u2192 renderContent() again, same
-        // as PRICES()). Shows BOTH the market and production trace per item, side by side, so
+        // until then (arrival repaints this panel via _diffRerenderContent \u2014 renderContent only,
+        // never the whole renderDiff with its fetches). Shows BOTH the market and production trace per item, side by side, so
         // a viewer can see when they disagree (the C6/C8/C9 discrepancy detector).
         const priceTraces = PRICE_TRACES(roiRates);
         if (priceTraces === null) {

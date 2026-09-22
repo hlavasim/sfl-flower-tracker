@@ -90,7 +90,15 @@ export function buildPricesSection(farm, prices = {}, settings = {}) {
   const explain = !!settings.explain;
   // Mirrors core/sections/cooking.mjs — these depend only on `farm`, not on the
   // item being priced, so computed once and reused across the whole universe.
+  /*
+   * Season: the one the farm is IN, for both maps — the rule core/sections/cooking.mjs already
+   * uses. Without it productionCost priced a Fish Market item at the cheapest season of the
+   * year and marketValue at whichever season happens to be listed first, so the same Fish
+   * Flake cost 1.07 here and 2.96 on the Bumpkin page. An explicit settings.season still wins.
+   */
+  const season = String(settings.season || farm?.season?.season || "").toLowerCase();
   const extras = {
+    season,
     saltYieldPerRake: computeSaltYieldPerRake(farm),
     saltRakeCoinMult: computeSaltRakeCoinMult(farm),
     fishYieldByTier: {
@@ -101,7 +109,7 @@ export function buildPricesSection(farm, prices = {}, settings = {}) {
   };
   // C7 (audit): exotic crops price via the farm's own Potion House history, not the
   // old hardcoded 15 c/ticket. An explicit rates.potionTicketCoinCost still wins.
-  const resolverRates = { ...settings, potionTicketCoinCost: settings.potionTicketCoinCost > 0 ? settings.potionTicketCoinCost : computePotionTicketCoinCost(farm) };
+  const resolverRates = { ...settings, season, potionTicketCoinCost: settings.potionTicketCoinCost > 0 ? settings.potionTicketCoinCost : computePotionTicketCoinCost(farm) };
   const universe = buildItemUniverse(p2p);
   const marketValue = {};
   const productionCost = {};

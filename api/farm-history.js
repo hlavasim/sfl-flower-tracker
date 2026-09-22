@@ -405,9 +405,9 @@ export default async function handler(req, res) {
         _holdCache.at = Date.now();
       }
       const prices = _holdCache.prices || { usd: 1 };
-      const egg = _holdCache.egg || { wron: 0, fillable: 0 };
+      const egg = _holdCache.egg || { wron: 0, fillable: 0, offers: [] };
       const perWallet = await Promise.all(wallets.map(async (w) => ({ ...w, balances: await readAddress(w.address) })));
-      const { venues, errors } = valueHoldings(perWallet.flatMap((w) => w.balances), prices, egg.wron);
+      const { venues, errors } = valueHoldings(perWallet.flatMap((w) => w.balances), prices, egg.offers || []);
       res.setHeader("Cache-Control", "no-store");
       return res.status(200).json({ wallets: wallets.map((w) => ({ address: w.address, label: w.label })), venues,
         egg: { offerWron: egg.wron, offerUsd: egg.wron * (prices.ronin || 0), fillableOffers: egg.fillable },

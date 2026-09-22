@@ -12,7 +12,8 @@ const out = buildTreasurySection(farm, p2p, nfts, null, 97000, {});
 
 test("treasury — td rates assembled; betty rate from p2p, defaults without exchange", () => {
   assert.ok(out.td.coinsPerSFL_betty > 0, "betty rate");
-  assert.equal(out.td.coinsPerSFL_api, 320); // no exchange resp → default
+  assert.equal(out.td.coinsPerSFL_api, 0); // no exchange resp → no rate, not a made-up 320
+  assert.equal(out.value.rates.coinsPerSFL, out.td.coinsPerSFL_betty, "coins still priced, at the live Betty rate");
   assert.equal(out.td.gemsPerSFL, 0);
   assert.equal(out.td.btcUsd, 97000);
   assert.ok(out.td.nftCollectibles["Foreman Beaver"]);
