@@ -98,24 +98,49 @@ function buildWhere(filters, params) {
  * result back IS the refresh. A scheduler only has to call the same public endpoints the
  * page calls, so the SQL behind each chart exists in exactly one place.
  */
-let _genCache = { at: 0, gen: null };
+let _genCache = { at: 0, gen: undefined };
 
+/*
+ * The generation is the dump that has been COMPLETELY ingested — null while one is in progress.
+ *
+ * world-cdn writes the new dump_path (and complete = FALSE) when an ingest STARTS and only sets
+ * complete = TRUE when the last record is in, possibly several 15-minute invocations later.
+ * Keying on dump_path alone therefore opened a new generation mid-ingest: the first chart
+ * request computed over a half-loaded farm_world, stored it, and that half-built chart was then
+ * served as "today's" until the next dump — and the DELETE below dropped the complete one.
+ */
 async function currentGen(pool) {
-  // The generation only changes when a new dump starts, so a short memo is enough to keep
-  // this off the hot path without ever serving a stale generation for long.
-  if (Date.now() - _genCache.at < 60_000 && _genCache.gen !== null) return _genCache.gen;
-  const r = await pool.query("SELECT dump_path FROM cdn_ingest_state WHERE id = 1");
-  const gen = (r.rows[0] && r.rows[0].dump_path) || "none";
+  // A short memo keeps this off the hot path; completion is picked up within a minute.
+  if (Date.now() - _genCache.at < 60_000 && _genCache.gen !== undefined) return _genCache.gen;
+  const r = await pool.query("SELECT dump_path, complete FROM cdn_ingest_state WHERE id = 1");
+  const row = r.rows[0];
+  const gen = !row || !row.dump_path ? "none" : row.complete ? row.dump_path : null;
   _genCache = { at: Date.now(), gen };
   return gen;
 }
 
+/** Test hook: forget the memoised generation. */
+export function _resetWorldGenCache() { _genCache = { at: 0, gen: undefined }; }
+
 /**
  * Serve `dim` for `scope` from world_agg, computing and storing it on a miss.
  * A failed write is swallowed: the caller still gets correct data, just uncached.
+ *
+ * While an ingest is running (gen null) nothing is written: the last complete generation's
+ * payload is served if there is one, else the chart is computed live, uncached.
  */
 async function cachedChart(pool, scope, dim, compute) {
   const gen = await currentGen(pool);
+  if (gen === null) {
+    try {
+      // Only complete generations are ever written, so the newest row is the last complete one.
+      const prev = await pool.query(
+        `SELECT gen, payload FROM world_agg WHERE scope = $1 AND dim = $2
+          ORDER BY computed_at DESC LIMIT 1`, [scope, dim]);
+      if (prev.rows.length) return { ...prev.rows[0].payload, cached: true, gen: prev.rows[0].gen, ingesting: true };
+    } catch { /* fall through to live */ }
+    return { ...(await compute()), cached: false, gen: null, ingesting: true };
+  }
   try {
     const hit = await pool.query(
       "SELECT payload FROM world_agg WHERE gen = $1 AND scope = $2 AND dim = $3", [gen, scope, dim]);
@@ -139,6 +164,20 @@ const scopeKey = (q) => {
   return Number.isFinite(d) && d > 0 ? String(Math.min(Math.round(d), 3650)) : "all";
 };
 
+const aggLimit = (q) => Math.min(Math.max(parseInt(q.limit, 10) || 100, 1), 1000);
+
+/*
+ * The world_agg `dim` of an unfiltered agg chart: EVERY parameter that changes its rows. It was
+ * the group alone, so `func=sum&measure=xp` or `limit=5` for a group was served whatever the
+ * first request for that group had stored — for the whole day. `measure` only matters when
+ * func is not count (count ignores it). azure-functions/shared/world-warm.js builds the same
+ * key to skip what is already cached; tests/api/world-cache.test.mjs pins that they agree.
+ */
+export function aggDimKey(q) {
+  const func = q.func || "count";
+  return `${q.group}|${func}${func === "count" ? "" : `:${q.measure}`}|${aggLimit(q)}`;
+}
+
 async function aggregate(pool, q) {
   const params = [];
   const filters = [].concat(q.filter || []);
@@ -158,7 +197,7 @@ async function aggregate(pool, q) {
     valueExpr = func === "median" ? `${FUNCS[func]} ${m})` : `${FUNCS[func]}(${m})`;
   }
 
-  const limit = Math.min(Math.max(parseInt(q.limit, 10) || 100, 1), 1000);
+  const limit = aggLimit(q);
   const sql = groupKey
     ? `SELECT ${groupKey} AS key, COUNT(*)::bigint AS n, ${valueExpr} AS value
          FROM farm_world ${where} GROUP BY 1 ORDER BY n DESC NULLS LAST LIMIT ${limit}`
@@ -390,14 +429,19 @@ async function handleWorld(pool, q) {
   switch (q.mode || "stats") {
     case "stats": return crawlStats(pool);
     /*
-     * Only the unfiltered shape is cached — group + activity scope, which is exactly what
-     * the page asks for. An ad-hoc `filter=` from the API is computed live every time
-     * rather than filling the table with one-off combinations.
+     * Only the unfiltered shape is cached — keyed by activity scope and aggDimKey (group, func,
+     * measure, limit). An ad-hoc `filter=` from the API is computed live every time rather
+     * than filling the table with one-off combinations.
      */
     case "agg": {
       const extra = [].concat(q.filter || []).length > 0;
       if (extra || !q.group) return { rows: await aggregate(pool, q) };
-      const got = await cachedChart(pool, scopeKey(q), q.group, async () => ({ rows: await aggregate(pool, q) }));
+      // Validate before touching the cache so a bad func/measure is a 400, not a cache row.
+      if (!DIMS[q.group]) throw new Error(`bad group: ${q.group}`);
+      const func = q.func || "count";
+      if (!(func in FUNCS)) throw new Error(`bad func: ${func}`);
+      if (func !== "count" && !MEASURES[q.measure]) throw new Error(`bad measure: ${q.measure}`);
+      const got = await cachedChart(pool, scopeKey(q), aggDimKey(q), async () => ({ rows: await aggregate(pool, q) }));
       return got;
     }
     case "item": return await itemHolders(pool, q);

@@ -10,6 +10,23 @@ import ITEM_NAMES from "./_item-names.js";
  * (from farm.trades.offers) is on top.
  */
 const _book = { at: 0, data: null };
+
+/*
+ * Item key of the marketplaceActivity feed → { collection, id }. The same function as
+ * azure-functions/shared/market-key.js (the collectors' copy — a CommonJS module this file cannot
+ * import without the bundling trouble farm-diff-agg.js describes); tests/api/market-key.test.mjs
+ * pins that they agree. Splits on the LAST dash so "economies-{slug}-{id}" keeps its slug in the
+ * collection, and the id must be all digits.
+ */
+export function parseItemKey(key) {
+  const s = String(key == null ? "" : key);
+  const dash = s.lastIndexOf("-");
+  if (dash <= 0) return null;
+  const idPart = s.slice(dash + 1);
+  if (!/^\d+$/.test(idPart)) return null;
+  return { collection: s.slice(0, dash), id: parseInt(idPart, 10) };
+}
+
 async function handleBook(res) {
   const kvUrl = process.env.KV_REST_API_URL, kvTok = process.env.KV_REST_API_TOKEN;
   const KEY = "cache:market-book:v1", TTL = 300;
@@ -34,11 +51,12 @@ async function handleBook(res) {
   const day = Object.keys(reports).sort().pop();
   const items = {};
   for (const [k, m] of Object.entries((reports[day] || {}).items || {})) {
-    const dash = k.indexOf("-");
-    const coll = k.slice(0, dash), id = k.slice(dash + 1);
-    const name = (ITEM_NAMES[coll] || {})[id];
+    const key = parseItemKey(k);
+    if (!key) continue;
+    // Community economies ("economies-{slug}-{id}") have no entry in ITEM_NAMES and drop out here.
+    const name = (ITEM_NAMES[key.collection] || {})[key.id];
     if (!name || (m.floor == null && m.bestOffer == null)) continue;
-    items[name] = { c: coll, id: +id, f: m.floor ?? null, b: m.bestOffer ?? null, lc: m.listingCount || 0, oc: m.offerCount || 0, ls: m.latestSale ?? null };
+    items[name] = { c: key.collection, id: key.id, f: m.floor ?? null, b: m.bestOffer ?? null, lc: m.listingCount || 0, oc: m.offerCount || 0, ls: m.latestSale ?? null };
   }
   const data = { at: new Date().toISOString(), day, flowerPrice: act.flowerPrice ?? null, items };
   _book.data = data; _book.at = Date.now();
@@ -51,6 +69,9 @@ async function handleBook(res) {
 // ── flips + health modes fold in here (kept as query modes to stay under Vercel's
 // serverless-function budget rather than shipping separate endpoint files). ──
 const FLIP_FEE = 0.10;
+// ob_last keeps a row per item forever; a book the collector has not confirmed within this many
+// hours (it refreshes every live item hourly) is not a spread anyone can trade today.
+const FLIP_MAX_AGE_H = 3;
 const FLIP_SORTS = { score: "score", margin: "margin", spread: "spread_pct", liquidity: "liq", pressure: "offer_pressure", net: "net", floor: "floor" };
 // `paused` collectors are ones whose upstream the game walled off behind its
 // request-token anti-scraping layer on 2026-09-01 (RT-001 on /collection + /marketplace):
@@ -65,16 +86,17 @@ const HEALTH_COLLECTORS = [
   // that recovers on its own. The 48h threshold (was 12h) rides out such a hiccup silently and
   // only alarms if it stays dead for two full days, which is when it stops being "wait for them".
   { table: "price_changes", col: "captured_at", label: "Prices", staleH: 48 },
-  // sfl.world's PRICES feed came back (minutes fresh) but its NFT feed did not: /api/v1/nfts has
-  // reported the same `updatedAt` of 2026-08-31T22:59Z ever since. Our collector is healthy — it
-  // fetches, sees identical data, writes nothing (it is change-based), so the age just grows and
-  // the watchdog mailed hourly about a freeze on someone else's server. Paused for that reason,
-  // NOT because the collector stopped. Unpause once /api/v1/nfts moves again:
-  //   curl -s https://sfl.world/api/v1/nfts | python -c "import json,sys;print(json.load(sys.stdin)['updatedAt'])"
-  { table: "nft_changes", col: "captured_at", label: "NFT values", staleH: 48, paused: true },
+  // sfl.world's NFT feed froze on 2026-08-31 and was paused here while it stayed frozen; it is
+  // live again, so it is watched again. The collector is change-based (writes only when a floor,
+  // last sale or supply moves), so the same 48h threshold as prices applies.
+  { table: "nft_changes", col: "captured_at", label: "NFT values", staleH: 48 },
   { table: "marketplace_trades", col: "fulfilled_at", label: "Marketplace trades", staleH: 6, paused: true },
   { table: "ob_snap", col: "ts", label: "Orderbook", staleH: 3, paused: true },
   { table: "marks_snapshots", col: "captured_at", label: "Marks", staleH: 30 },
+  // Written hourly by marketplace-activity (community API key, not the walled routes). Watched
+  // because a missing migration used to roll this collector back every hour without a sound.
+  { table: "marketplace_daily", col: "captured_at", label: "Marketplace daily", staleH: 3 },
+  { table: "marketplace_totals", col: "captured_at", label: "Marketplace totals", staleH: 3 },
 ];
 
 async function _redisGameToken() {
@@ -188,7 +210,8 @@ async function handleFlips(pool, req, res) {
      FROM ob_last ol
      LEFT JOIN (SELECT collection, item_id, COUNT(*) AS trades_today FROM marketplace_trades WHERE fulfilled_at >= CURRENT_DATE GROUP BY collection, item_id) t
        ON t.collection = ol.collection AND t.item_id = ol.item_id
-     WHERE ol.best_offer IS NOT NULL AND ol.best_listing IS NOT NULL`);
+     WHERE ol.best_offer IS NOT NULL AND ol.best_listing IS NOT NULL
+       AND ol.ts > NOW() - make_interval(hours => $1)`, [FLIP_MAX_AGE_H]);
   let items = rows.map((r) => {
     const tradesToday = Number(r.trades_today) || 0;
     const net = r.best_listing * (1 - FLIP_FEE) - r.best_offer;
@@ -211,7 +234,7 @@ async function handleFlips(pool, req, res) {
     : sortKey === "liq" ? x.liq : sortKey === "offer_pressure" ? x.offerPressure : sortKey === "net" ? x.net : (x.floor || 0);
   items.sort((a, b) => (val(a) - val(b)) * dir);
   res.setHeader("Cache-Control", "s-maxage=120, stale-while-revalidate=300");
-  return res.status(200).json({ sort: req.query.sort || "score", count: items.length, items });
+  return res.status(200).json({ sort: req.query.sort || "score", maxAgeHours: FLIP_MAX_AGE_H, count: items.length, items });
 }
 
 export default async function handler(req, res) {

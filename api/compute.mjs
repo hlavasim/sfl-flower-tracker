@@ -14,6 +14,7 @@ import { buildBudsSection } from "../core/sections/buds.mjs";
 import { buildPetsSection } from "../core/sections/pets.mjs";
 import { computeBettyRate } from "../core/engine/prices.mjs";
 import { API_SPEC } from "../core/api-spec.mjs";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 // Vercel auto-parses a JSON POST body into an object; the local dev-server passes
 // the raw Buffer. Handle both (and a stringified body) so POST sections don't lose
@@ -109,8 +110,22 @@ function cachedFetch(cache, key, run, ttlMs = CACHE_TTL_MS) {
 // than a dead page for a read-only dashboard — so when the live fetch fails but we have
 // EVER succeeded for this farm on this instance, serve that instead. Same for nfts
 // (single key). Prices/exchange/btc are already best-effort by design.
-const lastGoodFarm = G.lastGoodFarm ??= new Map(); // farmId -> wrap
-const lastGoodNfts = G.lastGoodNfts ??= { data: null };
+//
+// Bounded in age as well as count: past STALE_MAX_AGE_MS the stored copy is no longer a
+// "throttle window" stand-in but a different farm, and the request fails as it would have
+// without a fallback. Every result carries `fetchedAt` (when upstream actually answered), so
+// the response can say how old its data is instead of stamping it with the compute time.
+const STALE_MAX_AGE_MS = 6 * 3600_000;
+const _reqCtx = new AsyncLocalStorage();
+const lastGoodFarm = G.lastGoodFarm ??= new Map(); // farmId -> { data, fetchedAt }
+const lastGoodNfts = G.lastGoodNfts ??= { data: null, fetchedAt: 0 };
+
+function _staleOr(result, good) {
+  if (good && good.data && Date.now() - good.fetchedAt <= STALE_MAX_AGE_MS) {
+    return { ok: true, data: good.data, stale: true, fetchedAt: good.fetchedAt };
+  }
+  return result;
+}
 
 async function fetchFarm(farmId) {
   const result = await cachedFetch(farmCache, farmId, async () => {
@@ -118,16 +133,14 @@ async function fetchFarm(farmId) {
     const r = await fetch(`${PROXY}/api/proxy?url=${encodeURIComponent(sflUrl)}`);
     if (!r.ok) return { ok: false, status: r.status };
     const wrap = await r.json();
-    return { ok: true, data: wrap };
+    return { ok: true, data: wrap, fetchedAt: Date.now() };
   });
   if (result.ok) {
     if (lastGoodFarm.size > CACHE_MAX_ENTRIES) lastGoodFarm.delete(lastGoodFarm.keys().next().value);
-    lastGoodFarm.set(farmId, result.data);
+    lastGoodFarm.set(farmId, { data: result.data, fetchedAt: result.fetchedAt });
     return result;
   }
-  const stale = lastGoodFarm.get(farmId);
-  if (stale) return { ok: true, data: stale, stale: true };
-  return result;
+  return _staleOr(result, lastGoodFarm.get(farmId));
 }
 
 // Prices are best-effort: a failed/erroring fetch must not fail the whole endpoint
@@ -155,11 +168,32 @@ async function fetchNfts() {
   const result = await cachedFetch(nftsCache, "nfts", async () => {
     const r = await fetch(`${PROXY}/api/proxy?url=${encodeURIComponent(NFTS_URL)}`);
     if (!r.ok) return { ok: false, status: r.status };
-    return { ok: true, data: await r.json() };
+    return { ok: true, data: await r.json(), fetchedAt: Date.now() };
   }, NFTS_TTL_MS);
-  if (result.ok) { lastGoodNfts.data = result.data; return result; }
-  if (lastGoodNfts.data) return { ok: true, data: lastGoodNfts.data, stale: true };
-  return result;
+  const out = result.ok ? result : _staleOr(result, lastGoodNfts);
+  if (result.ok) { lastGoodNfts.data = result.data; lastGoodNfts.fetchedAt = result.fetchedAt; }
+  // Per-request note for the response envelope (see _freshness). AsyncLocalStorage rather than a
+  // module variable: a warm instance serves concurrent requests, and one request must not
+  // report another's staleness.
+  const store = _reqCtx.getStore();
+  if (store) store.nfts = out;
+  return out;
+}
+
+// Staleness of the two fallback-capable inputs, merged into the response envelope — never into
+// `data`, so no section's payload changes shape. `farmFetchedAt` is always the real upstream
+// time of the farm used; `stale`/`staleAgeMin`/`staleSources` say when a fallback was served.
+function _freshness(farmResult, nftResult) {
+  const out = { farmFetchedAt: farmResult.fetchedAt ? new Date(farmResult.fetchedAt).toISOString() : null, stale: false };
+  const staleOnes = [["farm", farmResult], ["nfts", nftResult]].filter(([, r]) => r && r.stale);
+  if (staleOnes.length) {
+    const oldest = Math.min(...staleOnes.map(([, r]) => r.fetchedAt));
+    out.stale = true;
+    out.staleSources = staleOnes.map(([k]) => k);
+    out.staleAgeMin = Math.round((Date.now() - oldest) / 60000);
+    out.staleFetchedAt = new Date(oldest).toISOString();
+  }
+  return out;
 }
 
 // BTC/USD for the ROI page's currency toggle — best-effort exactly like the page
@@ -208,7 +242,11 @@ export function _clearCacheForTests(opts = {}) {
   btcCache.clear();
 }
 
-export default async function handler(req, res) {
+export default function handler(req, res) {
+  return _reqCtx.run({}, () => _handler(req, res));
+}
+
+async function _handler(req, res) {
   const farmId = (req.query && req.query.farm) || "";
   const section = (req.query && req.query.section) || "cooking";
   // Sections that describe the API itself need no farm — must branch before the farm guard.
@@ -471,7 +509,7 @@ export default async function handler(req, res) {
       data = buildTreasurySection(farm, p2p, nftResult.data, exchange, btcUsd, { coinMode: req.query.coinMode || "betty", petPrices });
     }
     else return res.status(400).json({ error: `unknown section: ${section}` });
-    const payload = { farm: farmId, computedAt: new Date().toISOString(), section, data };
+    const payload = { farm: farmId, computedAt: new Date().toISOString(), ..._freshness(farmResult, _reqCtx.getStore()?.nfts), section, data };
     // section=prices only (task F2-2e-fix): fetchPrices() above is best-effort and silently
     // falls back to {} on any upstream failure, so a 200 alone cannot tell the client "prices
     // genuinely loaded" from "upstream was rate-limited, data.marketValue is near-empty". The

@@ -21,6 +21,8 @@
 // the column is written null by pass 1 and left untouched by pass 2.
 const { getPool } = require("../shared/db");
 const { fetchNfts, fetchMarketplaceActivity, fetchCollectionItem } = require("../shared/api");
+const { parseItemKey } = require("../shared/market-key");
+const { presentColumns } = require("../shared/schema-check");
 
 const MY_FARM_ID = 155498;
 const PRESSURE_BAND = 2.0;        // FLOWER band around the best price (§4.1)
@@ -104,18 +106,25 @@ function mySide(sale) {
   return { isMine: true, side };
 }
 
-// "collectibles-601" → { collection: "collectibles", id: 601 }. Community economies arrive as
-// economies-{slug}-{itemId}, which splits the same way on the LAST dash.
-function parseItemKey(key) {
-  const dash = key.lastIndexOf("-");
-  if (dash === -1) return null;
-  const id = parseInt(key.slice(dash + 1), 10);
-  if (isNaN(id)) return null;
-  return { collection: key.slice(0, dash), id };
-}
+// Pass 1 only clears books that vanished when the report looks like a whole catalogue. A feed
+// hiccup that returns a handful of items must not wipe ~1,600 live books in one run.
+const MIN_LIVE_FOR_CLEAR = 200;
 
 module.exports = async function (context) {
   const pool = getPool();
+
+  // deep_ts arrives with migrations/2026-09-11-marketplace-community-api.sql. Without it every
+  // pass-2 write would fail and roll back item by item, so check once and say so loudly.
+  let hasDeepTs = true;
+  try {
+    hasDeepTs = (await presentColumns(pool, "ob_last", ["deep_ts"])).has("deep_ts");
+  } catch (err) {
+    context.log.warn(`ob_last column check failed (${err.message}) — assuming deep_ts exists`);
+  }
+  if (!hasDeepTs) {
+    context.log.error("MIGRATION MISSING: ob_last.deep_ts — apply azure-functions/migrations/" +
+      "2026-09-11-marketplace-community-api.sql. Pass 2 runs without the rotation column until then.");
+  }
 
   // ── PASS 1: the whole catalogue, one request ──────────────────────────────
   const activity = await fetchMarketplaceActivity();
@@ -167,20 +176,24 @@ module.exports = async function (context) {
            (+p.offer_count || 0) !== m.offerCount || (+p.listing_count || 0) !== m.listingCount;
   };
 
-  let shallow = 0, historized = 0;
+  let shallow = 0, historized = 0, cleared = 0;
+  // Every item the report shows with a live book, as "collection-id" (normalised by the parser).
+  const live = new Set();
   const client = await pool.connect();
   try {
     for (const [key, it] of Object.entries(items)) {
       const parsed = parseItemKey(key);
       if (!parsed) continue;
       // An item with trade history but nothing on the market reports zeroed counts and no
-      // floor. Recording it would overwrite a real book with blanks, so skip it.
+      // floor. Its book is EMPTY — not written here, but cleared in the step after this loop
+      // if ob_last still holds an old top of book for it.
       if (it.floor == null && it.bestOffer == null && !it.listingCount && !it.offerCount) continue;
+      live.add(`${parsed.collection}-${parsed.id}`);
       const m = snapshotMetrics(it);
-      const nm = meta.get(key);
+      const nm = meta.get(`${parsed.collection}-${parsed.id}`);
       try {
         await client.query("BEGIN");
-        if (moved(key, m)) {
+        if (moved(`${parsed.collection}-${parsed.id}`, m)) {
           await client.query(
             `INSERT INTO ob_snap
                (collection, item_id, best_offer, best_listing, spread, spread_pct,
@@ -220,16 +233,53 @@ module.exports = async function (context) {
         context.log.warn(`shallow ${key}: ${err.message}`);
       }
     }
+
+    /*
+     * Books that emptied. An item whose last listing sold or whose last offer was withdrawn
+     * drops out of the live set above, and skipping it used to leave its old best_offer /
+     * best_listing in ob_last for good — Flips then showed spreads nobody could trade. Anything
+     * ob_last still prices that this report does not show live is cleared (and the emptying
+     * historized in ob_snap), but only when the report looks like the whole catalogue.
+     */
+    if (live.size >= MIN_LIVE_FOR_CLEAR) {
+      try {
+        await client.query("BEGIN");
+        const r = await client.query(
+          `UPDATE ob_last SET ts = NOW(), floor = NULL, best_offer = NULL, best_listing = NULL,
+                  spread = NULL, spread_pct = NULL, offer_count = 0, listing_count = 0,
+                  offer_pressure = 0, listing_pressure = 0, offer_ladder = NULL, listing_ladder = NULL
+            WHERE (best_offer IS NOT NULL OR best_listing IS NOT NULL OR floor IS NOT NULL)
+              AND NOT ((collection || '-' || item_id) = ANY($1::text[]))
+            RETURNING collection, item_id`,
+          [[...live]]
+        );
+        for (const row of r.rows) {
+          await client.query(
+            `INSERT INTO ob_snap (collection, item_id, best_offer, best_listing, offer_count, listing_count)
+             VALUES ($1, $2, NULL, NULL, 0, 0)`,
+            [row.collection, row.item_id]
+          );
+        }
+        await client.query("COMMIT");
+        cleared = r.rows.length;
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        context.log.warn(`clearing emptied books failed: ${err.message}`);
+      }
+    } else if (live.size) {
+      context.log.warn(`only ${live.size} live books in the ${day} report (< ${MIN_LIVE_FOR_CLEAR}) — not clearing emptied books this run`);
+    }
   } finally {
     client.release();
   }
-  context.log(`orderbook-snapshot pass 1: ${shallow} items from the ${day} report, ${historized} moved (${boosted.length} boosted known)`);
+  context.log(`orderbook-snapshot pass 1: ${shallow} items from the ${day} report, ${historized} moved, ` +
+    `${cleared} emptied books cleared (${boosted.length} boosted known)`);
 
   // ── PASS 2: paced deep sweep for ladders, pressure, supply and real trades ──
   // Oldest first, so successive runs rotate through the boosted set instead of re-reading the
   // same head every hour.
   let order = new Map();
-  try {
+  if (hasDeepTs) try {
     const r = await pool.query(
       `SELECT collection, item_id, EXTRACT(EPOCH FROM COALESCE(deep_ts, 'epoch'::timestamptz)) AS age
          FROM ob_last`
@@ -278,13 +328,13 @@ module.exports = async function (context) {
         );
         await c2.query(
           `INSERT INTO ob_last
-             (collection, item_id, ts, deep_ts, name, boost_text, floor, last_sale, supply,
+             (collection, item_id, ts${hasDeepTs ? ", deep_ts" : ""}, name, boost_text, floor, last_sale, supply,
               best_offer, best_listing, spread, spread_pct, offer_count, listing_count,
               offer_pressure, listing_pressure, avg_trade10, n_trades10,
               offer_ladder, listing_ladder)
-           VALUES ($1,$2,NOW(),NOW(),$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+           VALUES ($1,$2,NOW()${hasDeepTs ? ",NOW()" : ""},$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
            ON CONFLICT (collection, item_id) DO UPDATE SET
-             ts = EXCLUDED.ts, deep_ts = EXCLUDED.deep_ts,
+             ts = EXCLUDED.ts${hasDeepTs ? ", deep_ts = EXCLUDED.deep_ts" : ""},
              name = COALESCE(EXCLUDED.name, ob_last.name),
              boost_text = COALESCE(EXCLUDED.boost_text, ob_last.boost_text),
              floor = EXCLUDED.floor, last_sale = EXCLUDED.last_sale,

@@ -1,5 +1,13 @@
 const { getPool } = require("../shared/db");
 const { fetchMarketplaceActivity } = require("../shared/api");
+const { parseItemKey } = require("../shared/market-key");
+const { presentColumns } = require("../shared/schema-check");
+
+// Columns added by migrations/2026-09-11-marketplace-community-api.sql. Written only when the
+// database has them: without the migration the old statement failed on every run, rolled back
+// the whole transaction (marketplace_totals included) and both tables silently stopped growing.
+const SNAPSHOT_COLS = ["floor", "best_offer", "listing_count", "offer_count"];
+const BASE_COLS = ["date", "collection", "item_id", "low", "high", "volume", "trades", "quantity", "latest_sale"];
 
 module.exports = async function (context) {
   const pool = getPool();
@@ -14,6 +22,24 @@ module.exports = async function (context) {
       context.log("No marketplace activity data returned");
       return;
     }
+
+    let have;
+    try {
+      have = await presentColumns(pool, "marketplace_daily", SNAPSHOT_COLS);
+    } catch (err) {
+      have = new Set();
+      context.log.error(`marketplace_daily column check failed (${err.message}) — writing trade stats only`);
+    }
+    const snapCols = SNAPSHOT_COLS.filter((c) => have.has(c));
+    if (snapCols.length < SNAPSHOT_COLS.length) {
+      context.log.error(
+        `MIGRATION MISSING: marketplace_daily lacks ${SNAPSHOT_COLS.filter((c) => !have.has(c)).join(", ")} — ` +
+        `apply azure-functions/migrations/2026-09-11-marketplace-community-api.sql. ` +
+        `Writing trade stats only until then; the book snapshot is dropped.`
+      );
+    }
+    const cols = BASE_COLS.concat(snapCols);
+    const updates = cols.slice(3).map((c) => `${c} = EXCLUDED.${c}`).concat("captured_at = NOW()").join(",\n                 ");
 
     const client = await pool.connect();
     try {
@@ -47,15 +73,11 @@ module.exports = async function (context) {
           const chunk = entries.slice(i, i + 100);
           const values = [];
           const params = [];
-          let paramIdx = 1;
 
           for (const [key, val] of chunk) {
-            // Key format: "collectibles-463" or "buds-933"
-            const dashIdx = key.lastIndexOf("-");
-            if (dashIdx === -1) continue;
-            const collection = key.substring(0, dashIdx);
-            const itemId = parseInt(key.substring(dashIdx + 1));
-            if (isNaN(itemId)) continue;
+            // "collectibles-463", "buds-933", "economies-{slug}-{id}" — see shared/market-key.js
+            const parsed = parseItemKey(key);
+            if (!parsed) continue;
 
             /*
              * The four snapshot fields are the market, not the day's trading: floor is the
@@ -65,37 +87,26 @@ module.exports = async function (context) {
              * side of the book is empty, so they are written as null rather than zero — a floor
              * of 0 would read as "free", not "nothing listed".
              */
-            values.push(
-              `($${paramIdx}, $${paramIdx + 1}, $${paramIdx + 2}, $${paramIdx + 3}, $${paramIdx + 4}, $${paramIdx + 5}, $${paramIdx + 6}, $${paramIdx + 7}, $${paramIdx + 8}, $${paramIdx + 9}, $${paramIdx + 10}, $${paramIdx + 11}, $${paramIdx + 12})`
-            );
-            params.push(
-              date, collection, itemId,
-              val.low || null, val.high || null, val.volume || 0,
-              val.trades || 0, val.quantity || 0, val.latestSale || null,
-              val.floor != null ? val.floor : null,
-              val.bestOffer != null ? val.bestOffer : null,
-              val.listingCount != null ? val.listingCount : null,
-              val.offerCount != null ? val.offerCount : null
-            );
-            paramIdx += 13;
+            const row = {
+              date, collection: parsed.collection, item_id: parsed.id,
+              low: val.low || null, high: val.high || null, volume: val.volume || 0,
+              trades: val.trades || 0, quantity: val.quantity || 0, latest_sale: val.latestSale || null,
+              floor: val.floor != null ? val.floor : null,
+              best_offer: val.bestOffer != null ? val.bestOffer : null,
+              listing_count: val.listingCount != null ? val.listingCount : null,
+              offer_count: val.offerCount != null ? val.offerCount : null,
+            };
+            const base = params.length;
+            values.push(`(${cols.map((_, j) => `$${base + j + 1}`).join(", ")})`);
+            for (const c of cols) params.push(row[c]);
           }
 
           if (values.length > 0) {
             await client.query(
-              `INSERT INTO marketplace_daily (date, collection, item_id, low, high, volume, trades, quantity, latest_sale, floor, best_offer, listing_count, offer_count)
+              `INSERT INTO marketplace_daily (${cols.join(", ")})
                VALUES ${values.join(", ")}
                ON CONFLICT (date, collection, item_id) DO UPDATE SET
-                 low = EXCLUDED.low,
-                 high = EXCLUDED.high,
-                 volume = EXCLUDED.volume,
-                 trades = EXCLUDED.trades,
-                 quantity = EXCLUDED.quantity,
-                 latest_sale = EXCLUDED.latest_sale,
-                 floor = EXCLUDED.floor,
-                 best_offer = EXCLUDED.best_offer,
-                 listing_count = EXCLUDED.listing_count,
-                 offer_count = EXCLUDED.offer_count,
-                 captured_at = NOW()`,
+                 ${updates}`,
               params
             );
           }
