@@ -57,7 +57,8 @@ test("Rapid Root is a growth boost and is flagged approximate", () => {
 test("a composter verdict is a per-day net, priced on THIS season's inputs", () => {
   const v = composterVerdict("Compost Bin", farm, p2p, season, {});
   assert.ok(v, "Compost Bin has a verdict");
-  assert.equal(v.batchesPerDay, 24 / 6, "composterDetails: 6h a batch");
+  // composterDetails: 6h a batch, x0.9 for the fixture's Swift Decomposer (startComposter.ts getReadyAt).
+  assert.equal(v.batchesPerDay, 24 / (6 * 0.9), "6h a batch, Swift Decomposer x0.9");
   assert.equal(v.season, season);
   assert.ok(Math.abs(v.netPerDay - (v.grossPerDay - v.costPerDay)) < 1e-12);
 
@@ -239,15 +240,21 @@ test("the Compost tree is no longer worth exactly zero, and the reasons are kept
   // 1. Output skills now carry a real per-day figure, priced off the composter that makes the item.
   assert.equal(by["Efficient Bin"].composter, "Compost Bin", "+5 Sprout Mix lands in the Compost Bin's batch");
   assert.ok(by["Efficient Bin"].value > 0, `Efficient Bin: ${by["Efficient Bin"].value}`);
-  // 5 extra mix per batch x 4 batches a day x what one mix is worth — no magic in the arithmetic.
+  // 5 extra mix per batch x the Bin's batches a day (4, or 4/0.9 with Swift Decomposer) x one mix.
   const oneMix = fertiliserValue("Sprout Mix", farm, pd.p2pPrices, {}).value;
-  assert.ok(Math.abs(by["Efficient Bin"].value - 5 * oneMix * 4) < 1e-9, "5 x 4 batches x one mix");
+  assert.ok(Math.abs(by["Efficient Bin"].value - 5 * oneMix * (24 / (6 * 0.9))) < 1e-9, "5 x batches/day x one mix");
   assert.ok(by["Efficient Bin"].conditional, "and it says it only counts if the composter runs");
 
-  // 2. A speed skill on a LOSS-MAKING composter is harmful, and says so rather than clamping to 0.
-  //    All three composters net negative on this farm, so faster batches lose money faster.
-  assert.ok(by["Swift Decomposer"].value < 0, `Swift Decomposer: ${by["Swift Decomposer"].value}`);
-  assert.equal(by["Swift Decomposer"].harmful, true);
+  // 2. A speed skill scales each composter's net, whatever its sign — never clamped to 0. The farm
+  //    HOLDS Swift Decomposer, and the verdicts already include it, so its worth is what dropping it
+  //    would cost: net x (1 - 0.9) per composter. With the farm's composter skills counted, the Bin
+  //    and the Premium pay and the Turbo loses, so here it nets positive.
+  const verdicts = composterVerdicts(farm, pd.p2pPrices, pd.season, {});
+  const swift = verdicts.reduce((s, v) => s + v.netPerDay * (1 - 0.9), 0);
+  assert.ok(Math.abs(by["Swift Decomposer"].value - swift) < 1e-12, `Swift Decomposer: ${by["Swift Decomposer"].value}`);
+  assert.equal(by["Swift Decomposer"].harmful, swift < 0);
+  const turbo = by["Swift Decomposer"].parts.find((x) => x.composter === "Turbo Composter");
+  assert.ok(turbo.delta < 0, "and on the loss-making Turbo Composter it is a loss, shown, not clamped");
 
   // 3. Bait is not a fertiliser. Unpriced, NOT zero — zero reads as "worthless".
   assert.equal(by["Wormy Treat"].value, null);
@@ -265,7 +272,7 @@ test("the Compost tree is no longer worth exactly zero, and the reasons are kept
   // 5. And the per-day ones reach the UI, which reads boostValues — that is where the 0 was shown.
   assert.ok(pd.boostValues.crops["Efficient Bin"], "Efficient Bin is in boostValues");
   assert.equal(pd.boostValues.crops["Efficient Bin"].synergy, by["Efficient Bin"].value);
-  assert.ok(pd.boostValues.crops["Swift Decomposer"].synergy < 0, "including the harmful one");
+  assert.equal(pd.boostValues.crops["Swift Decomposer"].synergy, by["Swift Decomposer"].value, "including the speed one");
   // The per-activation ones must NOT be in that column: a guessed daily rate beside measured ones
   // would corrupt it.
   assert.equal(pd.boostValues.crops["Sprout Surge"], undefined, "power skills stay out of boostValues");

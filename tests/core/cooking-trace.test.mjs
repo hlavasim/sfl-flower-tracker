@@ -71,7 +71,7 @@ test("explain attaches a cookingTrace whose top value equals each building's xpP
     assert.ok(node, `trace for ${bd}`);
     // value can't lie: the trace's top value rounds to the same displayed xpPerDay
     assert.ok(Math.abs(Math.round(node.value * 1000) / 1000 - b.xpPerDay) < 1e-6, `${bd}: trace ${node.value} vs ${b.xpPerDay}`);
-    assert.equal(node.steps.length, 3, `${bd}: xp/cook, cook time, cooks/day`);
+    assert.equal(node.steps.length, 4, `${bd}: xp/dish, cook time, dishes/cook, cooks/day`);
     checked++;
   }
   assert.ok(checked >= 5, `expected the main buildings traced, only ${checked}`);
@@ -80,16 +80,17 @@ test("explain attaches a cookingTrace whose top value equals each building's xpP
 test("cooking payload is unchanged when explain is absent (no cookingTrace key)", () => {
   const plain = buildCookingSection(farm, {}, { savedRecipes: {}, petSimulate: true });
   assert.equal(plain.cookingTrace, undefined, "no cookingTrace without explain");
-  assert.ok(Math.abs(plain.buildings["Fire Pit"].xpPerDay - 232509.80) < 1);  // ground truth intact
+  assert.ok(Math.abs(plain.buildings["Fire Pit"].xpPerDay - 445643.79) < 1);  // ground truth intact
 });
 
-test("Fire Pit trace: xp/cook × cooks/day multiplies out to its xpPerDay", () => {
+test("Fire Pit trace: xp/dish × dishes/cook × cooks/day multiplies out to its xpPerDay", () => {
   const p = buildCookingSection(farm, {}, { savedRecipes: {}, petSimulate: true, explain: true });
   const node = p.cookingTrace["Fire Pit"];
-  const xpNode = node.steps[0], timeNode = node.steps[1], cooksNode = node.steps[2];
+  const xpNode = node.steps[0], timeNode = node.steps[1], dishNode = node.steps[2], cooksNode = node.steps[3];
   assert.equal(xpNode.method, "food xp");
+  assert.equal(dishNode.item, "dishes/cook");
   assert.equal(cooksNode.item, "cooks/day");
-  assert.ok(Math.abs(xpNode.value * cooksNode.value - node.value) < 1e-6, "xp/cook × cooks/day = xp/day");
+  assert.ok(Math.abs(xpNode.value * dishNode.value * cooksNode.value - node.value) < 1e-6, "xp/dish × dishes × cooks/day = xp/day");
   // units label each node so a shared renderer shows the right suffix (not "SFL")
   assert.equal(node.unit, "XP/day");
   assert.equal(xpNode.unit, "XP");

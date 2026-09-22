@@ -5,7 +5,7 @@
 // A composter is a PERIODIC action, not a permanent upgrade — it has a cycle and consumes
 // inputs — so what it returns is a per-day net, not an ROI.
 import { COMPOST_RECIPES, COMPOSTER_CYCLE, FERTILISER_EFFECTS } from "../data/crafting.mjs";
-import { findCollectible, getCount, getCycleSec, getCapacityCount, getDefaultProduct } from "./power-helpers.mjs";
+import { findCollectible, getCount, getCycleSec, getCapacityCount, getDefaultProduct, isWearableEquipped } from "./power-helpers.mjs";
 
 /**
  * FLOWER value of ONE fertiliser, i.e. of applying it to one plot for one harvest.
@@ -59,6 +59,32 @@ export function fertiliserValue(name, farm, p2pPrices, opts = {}) {
 }
 
 /**
+ * What THIS farm's composter makes per batch and how long a batch takes — the game's own two
+ * functions, events/landExpansion/startComposter.ts:
+ *   getCompostAmount (:59-107): +5 Efficient Bin (Compost Bin only), +5 Turbo Charged (Turbo only),
+ *     +10 Premium Worms (Premium only), -5 Composting Overhaul and +5 Composting Revamp on ANY
+ *     composter, +1 with Turd Topper worn; never below 0.
+ *   getReadyAt (:31-57): x0.9 with Soil Krabby placed, x0.9 with Swift Decomposer.
+ * The verdict ran on the base amount and time, so a farm holding these skills saw the bare
+ * composter — its net read as a loss where the game pays a profit.
+ */
+export function composterFarmBoosts(name, farm) {
+  let add = 0, timeMult = 1;
+  const used = [];
+  const plus = (n, label) => { add += n; used.push(label); };
+  if (name === "Compost Bin" && hasSkill(farm, "Efficient Bin")) plus(5, "Efficient Bin +5");
+  if (name === "Turbo Composter" && hasSkill(farm, "Turbo Charged")) plus(5, "Turbo Charged +5");
+  if (name === "Premium Composter" && hasSkill(farm, "Premium Worms")) plus(10, "Premium Worms +10");
+  if (hasSkill(farm, "Composting Overhaul")) plus(-5, "Composting Overhaul -5");
+  if (hasSkill(farm, "Composting Revamp")) plus(5, "Composting Revamp +5");
+  let turd = false; try { turd = isWearableEquipped(farm, "Turd Topper"); } catch {}
+  if (turd) plus(1, "Turd Topper +1");
+  if (findCollectible(farm || {}, "Soil Krabby").length > 0) { timeMult *= 0.9; used.push("Soil Krabby x0.9"); }
+  if (hasSkill(farm, "Swift Decomposer")) { timeMult *= 0.9; used.push("Swift Decomposer x0.9"); }
+  return { add, timeMult, used };
+}
+
+/**
  * Per-day net of running one composter flat out: the fertilisers it makes, minus the crops it
  * eats. Season-dependent, because the inputs are.
  */
@@ -66,12 +92,17 @@ export function composterVerdict(name, farm, p2pPrices, season, opts = {}) {
   const recipe = COMPOST_RECIPES[name];
   const cycle = COMPOSTER_CYCLE[name];
   if (!recipe || !cycle || !(cycle.hours > 0)) return null;
-  const batchesPerDay = 24 / cycle.hours;
+  const fb = composterFarmBoosts(name, farm);
+  const batchesPerDay = 24 / (cycle.hours * fb.timeMult);
 
   // Outputs. Baits (Earthworm, Grub, Red Wiggler) are fishing items, not fertilisers — counted
   // as unpriced rather than silently dropped, so the verdict cannot look better than it is.
+  // The FIRST output is the composter's `produce` (composterDetails) — the one getCompostAmount
+  // adjusts; the worms are rolled separately on collect.
   let outPerBatch = 0; const outputs = []; const ignored = [];
-  for (const [item, qty] of Object.entries(recipe.outputs || {})) {
+  let first = true;
+  for (let [item, qty] of Object.entries(recipe.outputs || {})) {
+    if (first) { qty = Math.max(0, qty + fb.add); first = false; }
     const fv = fertiliserValue(item, farm, p2pPrices, opts);
     if (!fv) { ignored.push({ item, qty, reason: "not a fertiliser" }); continue; }
     outPerBatch += fv.value * qty;
@@ -91,7 +122,7 @@ export function composterVerdict(name, farm, p2pPrices, season, opts = {}) {
   const grossPerDay = outPerBatch * batchesPerDay;
   const costPerDay = inPerBatch * batchesPerDay;
   return {
-    name, batchesPerDay, season: season || null,
+    name, batchesPerDay, season: season || null, farmBoosts: fb.used,
     grossPerDay, costPerDay, netPerDay: grossPerDay - costPerDay,
     outputs, inputs: inputRows, ignored,
     // Flagged, not hidden: a missing price makes the net a floor, not an answer.
@@ -139,10 +170,10 @@ function hasSkill(farm, name) {
  *   - the three "+N" skills are each gated to ONE building (`&& building === "Compost Bin"` and so
  *     on), which is what makes inferring the building from the output item safe here;
  *   - Composting Revamp has NO building check, so its +N lands on whichever composter you run;
- *   - Composting Overhaul does not appear in getCompostAmount AT ALL. Its buff table here reads
- *     "-5 fertilisers" and the source applies no such penalty to the produce count — it only adds
- *     worms (composterBait.ts). So no penalty is modelled: inventing one the game does not apply
- *     would be worse than the gap. It stays worms-only, i.e. unpriced.
+ *   - Composting Overhaul DOES cut the produce count: getCompostAmount applies `produceAmount -= 5`
+ *     on every composter (startComposter.ts:85-88), on top of the worms it adds. An earlier note
+ *     here said it did not appear there at all — wrong. composterFarmBoosts applies the -5, so the
+ *     verdicts are net of it; it has no row below because its worm side is unpriced.
  */
 const COMPOST_SKILL_OUTPUT = {
   // "+N <item>" — more of one output per batch. The composter is inferred from its recipe, which is
@@ -227,10 +258,13 @@ export function compostSkillValues(farm, p2pPrices, season, opts = {}) {
        * a loss-making composter increases the loss, and showing that is the point — the previous
        * behaviour (0 for everything) hid it.
        */
+      // The verdicts already carry the skill when it is held (composterFarmBoosts), so an owned
+      // one is worth what removing it would cost, an unowned one what adding it would bring.
+      const owned = hasSkill(farm, skill);
       const parts = [];
-      for (const v of Object.values(verdicts)) parts.push({ composter: v.name, delta: v.netPerDay * (1 / def.timeMult - 1) });
+      for (const v of Object.values(verdicts)) parts.push({ composter: v.name, delta: owned ? v.netPerDay * (1 - def.timeMult) : v.netPerDay * (1 / def.timeMult - 1) });
       const total = parts.reduce((s, x) => s + x.delta, 0);
-      rows.push({ skill, has: hasSkill(farm, skill), value: total, parts,
+      rows.push({ skill, has: owned, value: total, parts,
         conditional: "pouze u composterů, které skutečně necháváš běžet",
         harmful: total < 0 });
     }

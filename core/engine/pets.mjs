@@ -75,7 +75,10 @@ import { PET_FETCH_DATA, PET_REQUESTS, PET_REQUEST_XP } from "../data/pets.mjs";
       return requests;
     }
 
-    const PET_AURA_ENERGY_MULT = { "No Aura": 1, "Common Aura": 1.5, "Rare Aura": 2, "Mythic Aura": 3 };
+    // game: AURA_ENERGY_MULTIPLIER (events/pets/feedPet.ts:39-44). lowerCamelCase because
+    // flowers.html carries the same table for its petFeedEnergy twin (page constants rule).
+    const petAuraEnergyMult = { "No Aura": 1, "Common Aura": 1.5, "Rare Aura": 2, "Mythic Aura": 3 };
+    const PET_AURA_ENERGY_MULT = petAuraEnergyMult;
     const PET_BIB_XP = { "Baby Bib": 0, "Collar": 5, "Gold Necklace": 10 };
     const _petRound2 = (n) => Math.round(n * 100) / 100;
 
@@ -87,7 +90,7 @@ import { PET_FETCH_DATA, PET_REQUESTS, PET_REQUEST_XP } from "../data/pets.mjs";
       if (level >= 35) boost += 5;
       if (level >= 75) boost += 5;
       let energy = baseEnergy + boost;
-      if (isNft && aura) energy *= (PET_AURA_ENERGY_MULT[aura] ?? 1);
+      if (isNft && aura) energy *= (petAuraEnergyMult[aura] ?? 1);
       // The game also grants VIPs +5 during the "Paw Prints" chapter. That chapter ran
       // 2025-11-03 → 2026-02-02 (CHAPTERS), so it can no longer apply and is left out.
       if (walrusOnesie) energy += 5;
@@ -181,11 +184,38 @@ import { PET_FETCH_DATA, PET_REQUESTS, PET_REQUEST_XP } from "../data/pets.mjs";
     }
 
     // ── flowers.html 22125-22176: petDailyCalc ──
-    function petDailyCalc(pet, p2pPrices, feedMult, hasPetBowls) {
+    // Units ONE fetch of `res` returns — getFetchYield (events/pets/fetchPet.ts:45-100):
+    // 1, +1 Acorn with Squirrel Onesie worn, +0.25 Acorn with Oaken placed, + the level's
+    // native share (petExtraResourceChance — a flat fraction added to the amount, not a roll)
+    // on everything EXCEPT Fossil Shell, +25% Moonfur for an NFT pet at 150+, +1 Acorn per
+    // Acorn fetch from level 18, and +1 of the fetched resource for an NFT pet at 60+ unless it
+    // is Acorn or Moonfur.
+    function petFetchYield(res, level, isNft, boosts) {
+      const b = boosts || {};
+      let y = 1;
+      if (res === "Acorn" && b.squirrelOnesie) y += 1;
+      if (res === "Acorn" && b.oaken) y += 0.25;
+      if (res !== "Fossil Shell") {
+        y += petExtraResourceChance(level);
+        if (isNft && level >= 150 && res === "Moonfur") y += 0.25;
+      }
+      if (level >= 18 && res === "Acorn") y += 1;
+      if (isNft && level >= 60 && res !== "Acorn" && res !== "Moonfur") y += 1;
+      return y;
+    }
+
+    function petDailyCalc(pet, p2pPrices, feedMult, hasPetBowls, boosts) {
+      const b = boosts || {};
       const reqTypes = petRequestsAtLevel(pet.level, pet.isNft);
       const reqEnergy = reqTypes.reduce((s, r) => s + PET_REQUEST_VALUES[r].energy, 0);
       const fetchBonus = petFetchEnergyBonus(pet.level);
-      const energyPerFeed = reqEnergy + fetchBonus;
+      // Energy per feed is the sum of what each request pays, priced exactly as the feeding
+      // table prices it (getPetEnergy, events/pets/feedPet.ts:46-94): the level bonus lands on
+      // EVERY request, the NFT aura multiplies it, Walrus Onesie adds +5 per request. The old
+      // `reqEnergy + fetchBonus` added the bonus once per feed and ignored aura + Walrus, so the
+      // card and the table beside it showed two different numbers.
+      const energyPerFeed = reqTypes.reduce((s, r) => s + petFeedEnergy(PET_REQUEST_VALUES[r].energy,
+        { level: pet.level, isNft: pet.isNft, aura: pet.aura, walrusOnesie: b.walrusOnesie }), 0);
       const dailyEnergy = energyPerFeed * feedMult;
 
       // XP per feed
@@ -193,50 +223,39 @@ import { PET_FETCH_DATA, PET_REQUESTS, PET_REQUEST_XP } from "../data/pets.mjs";
       const xpMult = 1 + petXpBonusMultiplier(pet.level, pet.isNft);
       const dailyXp = reqXp * xpMult * feedMult;
 
-      // Best resource
+      // Best resource — ranked by what a fetch actually RETURNS per energy, not by one unit.
       const fetchData = PET_FETCH_DATA[pet.petType] || [];
       const unlocked = fetchData.filter(f => pet.level >= f.level);
       const extraChance = petExtraResourceChance(pet.level);
 
-      let bestRes = null, bestSflPerEnergy = 0;
+      let bestRes = null, bestSflPerEnergy = 0, bestYield = 0;
       for (const f of unlocked) {
-        const price = p2pPrices[f.res] || 0;
-        const sflPerE = price / f.energy;
+        const y = petFetchYield(f.res, pet.level, pet.isNft, b);
+        const sflPerE = (p2pPrices[f.res] || 0) * y / f.energy;
         if (sflPerE > bestSflPerEnergy) {
           bestSflPerEnergy = sflPerE;
           bestRes = f;
+          bestYield = y;
         }
       }
 
-      let dailySfl = 0, fetchesPerDay = 0;
+      let dailySfl = 0, fetchesPerDay = 0, acornBonus = 0, guaranteedBonus = 0;
       if (bestRes) {
+        const price = p2pPrices[bestRes.res] || 0;
         fetchesPerDay = dailyEnergy / bestRes.energy;
-        dailySfl = fetchesPerDay * (p2pPrices[bestRes.res] || 0) * (1 + extraChance);
-      }
-
-      // Acorn bonus at Lv18+
-      let acornBonus = 0;
-      if (pet.level >= 18) {
-        acornBonus = (p2pPrices["Acorn"] || 0) * feedMult;
-        dailySfl += acornBonus;
-      }
-
-      // Guaranteed non-Acorn/Moonfur resource at Lv60+ (NFT only)
-      let guaranteedBonus = 0;
-      if (pet.isNft && pet.level >= 60) {
-        const nonAcornRes = unlocked.filter(f => f.res !== "Acorn" && f.res !== "Moonfur");
-        const bestNonAcornPrice = nonAcornRes.reduce((best, f) => Math.max(best, p2pPrices[f.res] || 0), 0);
-        guaranteedBonus = bestNonAcornPrice * fetchesPerDay;
-        dailySfl += guaranteedBonus;
+        dailySfl = fetchesPerDay * price * bestYield;
+        // The two flat per-fetch extras, split out for the card's breakdown line (already in dailySfl).
+        if (pet.level >= 18 && bestRes.res === "Acorn") acornBonus = fetchesPerDay * price;
+        if (pet.isNft && pet.level >= 60 && bestRes.res !== "Acorn" && bestRes.res !== "Moonfur") guaranteedBonus = fetchesPerDay * price;
       }
 
       return { reqTypes, reqEnergy, fetchBonus, energyPerFeed, dailyEnergy, reqXp, xpMult,
-               dailyXp, bestRes, bestSflPerEnergy, extraChance, dailySfl, fetchesPerDay, acornBonus, guaranteedBonus, feedMult };
+               dailyXp, bestRes, bestSflPerEnergy, bestYield, extraChance, dailySfl, fetchesPerDay, acornBonus, guaranteedBonus, feedMult };
     }
 
 export {
   PET_REQUEST_VALUES, petRequestsAtLevel, petEnergyFromRequests,
-  petFetchEnergyBonus, petExtraResourceChance, petXpBonusMultiplier, petDailyCalc,
+  petFetchEnergyBonus, petExtraResourceChance, petXpBonusMultiplier, petDailyCalc, petFetchYield,
   PET_AURA_ENERGY_MULT, PET_BIB_XP,
   petFoodDifficulty, petFoodRequests, petFeedEnergy, petFeedXp, buildPetFeedingTable,
 };

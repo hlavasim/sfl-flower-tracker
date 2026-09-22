@@ -174,10 +174,6 @@ export const TABLE_INVENTORY = [
     "lines": 8
   },
   {
-    "name": "CROP_HARVEST_SECONDS",
-    "lines": 6
-  },
-  {
     "name": "CROP_MACHINE_BASIC",
     "lines": 2
   },
@@ -303,10 +299,6 @@ export const TABLE_INVENTORY = [
   },
   {
     "name": "FRUIT_HARVEST_COUNT",
-    "lines": 4
-  },
-  {
-    "name": "FRUIT_HARVEST_SECONDS",
     "lines": 4
   },
   {

@@ -4170,12 +4170,12 @@
     }
     function cropMachineSpeedMult(farm, withTortoiseShrine) {
       const sk = farm.bumpkin?.skills || {};
-      const placed = (farm.collectibles || {});
-      const placedHome = (farm.home?.collectibles || {});
       let m = 1;
       if (sk["Crop Processor Unit"]) m *= 0.95;
       if (sk["Rapid Rig"]) m *= 0.8;
-      const hasGramo = (placed["Groovy Gramophone"]?.length || 0) > 0 || (placedHome["Groovy Gramophone"]?.length || 0) > 0;
+      // Placed anywhere the game looks — all four collectible maps (findCollectible), not just
+      // the farm and the legacy home: a Gramophone in the house interior counted as absent.
+      const hasGramo = findCollectible(farm, "Groovy Gramophone").length > 0;
       if (hasGramo) m *= 0.5;
       if (withTortoiseShrine) m *= 0.9;
       return m;
@@ -4251,10 +4251,8 @@
       const cooldown = CM_TEMP_COOLDOWNS_MS[name];
       if (!cooldown) return false;
       const now = Date.now();
-      const lists = [
-        (farm.collectibles || {})[name],
-        (farm.home?.collectibles || {})[name],
-      ];
+      // All four collectible maps (findCollectible), not only the farm and the legacy home.
+      const lists = [findCollectible(farm, name)];
       for (const list of lists) {
         if (!list) continue;
         for (const placed of list) {
@@ -4270,9 +4268,7 @@
     function cmOutdoorCropTimeMult(farm, cropName) {
       const sk = farm.bumpkin?.skills || {};
       const inv = farm.inventory || {};
-      const placed = farm.collectibles || {};
-      const placedHome = farm.home?.collectibles || {};
-      const hasC = (name) => ((placed[name]?.length || 0) > 0) || ((placedHome[name]?.length || 0) > 0);
+      const hasC = (name) => findCollectible(farm, name).length > 0; // all four collectible maps
       const boosts = [];
       let m = 1;
       // Seed Specialist (rare collectible — present in inventory): ×0.9
@@ -5140,12 +5136,27 @@
       return y;
     }
 
+    // Twins of core/data/cooking.mjs GAME_FISH_SPELLING / FISH_COOKABLE_NAMES / COOKABLE_CAKES.
+    // Aged products carry the GAME's fish spelling (consumables.ts:1261, :1291 — "Aged Hammerhead
+    // shark"), so the recipe key matches the inventory key.
+    const gameFishSpelling = { "Hammerhead Shark": "Hammerhead shark", "Football Fish": "Football fish" };
+    const fishCookableNames = [
+      "Chowder", "Gumbo", "Fermented Fish", "Fried Calamari", "Fish Burger", "Fish Omelette",
+      "Ocean's Olive", "Seafood Basket", "Fish n Chips", "Sushi Roll",
+      "Furikake Sprinkle", "Surimi Rice Bowl", "Creamy Crab Bite", "Crimstone Infused Fish Oil",
+    ];
+    const cookableCakes = [
+      "Sunflower Cake", "Potato Cake", "Pumpkin Cake", "Carrot Cake", "Cabbage Cake", "Beetroot Cake",
+      "Cauliflower Cake", "Parsnip Cake", "Radish Cake", "Wheat Cake", "Eggplant Cake", "Orange Cake",
+      "Honey Cake", "Lemon Cheesecake",
+    ];
+
     // Generate Aged Fish recipes from FISH_BASE_XP (1 fish + N salt → 1 Aged Fish).
     // XP stored here is the regular-aged value (= maxXP). The prime-aged weighted
     // average is applied per-farm via the "Prime Aged chance" xpBoost in
     // detectCookingBoosts, using the player's actual skills/sculpture level.
     for (const [_fish, _baseXP] of Object.entries(FISH_BASE_XP)) {
-      const _aged = "Aged " + _fish;
+      const _aged = "Aged " + (gameFishSpelling[_fish] || _fish);
       const _maxXP = getAgingMaxXP(_baseXP);
       const _saltN = getAgingSaltCost(_baseXP);
       const _timeS = getAgingTimeSec(_baseXP);
@@ -7293,10 +7304,31 @@
       return false;
     }
 
+    // Faction week key — getWeekKey (lib/factions.ts:22-47), weeks counted from START_DATE (:15).
+    const FACTION_START_MS = Date.UTC(2024, 5, 24);
+    function factionWeekKey(ms) {
+      const d = new Date(ms);
+      d.setUTCHours(0, 0, 0, 0);
+      const week = Math.floor(Math.floor((d.getTime() - FACTION_START_MS) / 86400000) / 7);
+      return new Date(FACTION_START_MS + week * 7 * 86400000).toISOString().slice(0, 10);
+    }
+
+    // BUILDING_OIL_BOOSTS (events/landExpansion/cook.ts:48-55): the share of a recipe's time an
+    // oiled building takes off, with the three skills that raise it.
+    function buildingOilBoost(skills, building) {
+      const t = {
+        "Fire Pit": skills["Swift Sizzle"] ? 0.4 : 0.2,
+        "Kitchen": skills["Turbo Fry"] ? 0.5 : 0.25,
+        "Smoothie Shack": 0.3,
+        "Bakery": 0.35,
+        "Deli": skills["Fry Frenzy"] ? 0.6 : 0.4,
+      };
+      return t[building] || 0;
+    }
+
     function detectCookingBoosts(farm) {
       const skills = farm.bumpkin?.skills || {};
-      const xpBoosts = [];
-      const timeBoosts = [];
+      const now = Date.now();
 
       // Check collectible OR wearable (handles both cases)
       function hasItem(name) {
@@ -7306,18 +7338,17 @@
       function hasAny(...names) {
         return names.some(n => hasItem(n));
       }
+      // isFoodMadeWithCheese (expansion/lib/boosts.ts:55-58): Cheese is a DIRECT ingredient.
+      const cheeseRecipes = Object.keys(COOKING_INGREDIENTS).filter((n) => (COOKING_INGREDIENTS[n] || {}).Cheese > 0);
+      const xpBoosts = [];
+      const timeBoosts = [];
+      // Extra FOOD per cook (getCookingAmount, events/landExpansion/collectRecipe.ts:27-78) —
+      // `extra` is the expected number of additional dishes, a certainty or a chance.
+      const amountBoosts = [];
 
-      // Debug: log all available items so user can spot missing boosts
-      console.log("[Cooking Boosts] Collectibles:", Object.keys(farm.collectibles || {}));
-      console.log("[Cooking Boosts] Home collectibles:", Object.keys(farm.home?.collectibles || {}));
-      const allEquipped = getAllEquippedWearables(farm);
-      console.log("[Cooking Boosts] Main bumpkin equipped:", allEquipped[0]);
-      console.log("[Cooking Boosts] Farm hands equipped:", allEquipped.slice(1));
-      console.log("[Cooking Boosts] farmHands raw:", farm.farmHands);
-      console.log("[Cooking Boosts] Skills:", Object.keys(skills));
-
-      // === XP BOOSTS ===
-      // Skills
+      // === XP BOOSTS === (getFoodExpBoost, expansion/lib/boosts.ts:295-430)
+      // Multipliers first; the flat Swiss Whiskers +500 is added after them, and the bud and the
+      // faction-pet multipliers apply to the whole sum — so those two go last, in that order.
       if (skills["Munching Mastery"]) xpBoosts.push({ name: "Munching Mastery", multiplier: 1.05 });
       if (skills["Juicy Boost"]) xpBoosts.push({ name: "Juicy Boost", multiplier: 1.1, buildings: ["Smoothie Shack"] });
       if (skills["Drive-Through Deli"]) xpBoosts.push({ name: "Drive-Through Deli", multiplier: 1.15, buildings: ["Deli"] });
@@ -7327,44 +7358,69 @@
       if (hasItem("Pan")) xpBoosts.push({ name: "Pan (+25% Bumpkin XP)", multiplier: 1.25 });
       if (hasItem("Observatory")) xpBoosts.push({ name: "Observatory", multiplier: 1.05 });
       if (hasItem("Blossombeard")) xpBoosts.push({ name: "Blossombeard", multiplier: 1.1 });
-      if (hasItem("Grain Grinder")) xpBoosts.push({ name: "Grain Grinder", multiplier: 1.2, buildings: ["Bakery"] });
-      if (hasItem("Lifetime Farmer Banner")) xpBoosts.push({ name: "Lifetime Farmer Banner", multiplier: 1.1 });
+      // Cakes (+ Pirate Cake) only, not everything the Bakery makes — boosts.ts:347-353.
+      if (hasItem("Grain Grinder")) xpBoosts.push({ name: "Grain Grinder", multiplier: 1.2, foods: cookableCakes.concat(["Pirate Cake"]) });
+      // VIP x1.1 — hasVipAccess (lib/vipAccess.ts:11-32): trial, paid expiry OR the Lifetime Farmer
+      // Banner. Detecting only the banner missed every paid/trial VIP.
+      if (dashHasVipAccess(farm, now)) xpBoosts.push({ name: "VIP Access", multiplier: 1.1 });
+      // Hungry Hare x2 on Fermented Carrots only — boosts.ts:377-383.
+      if (findCollectible(farm, "Hungry Hare").length > 0) xpBoosts.push({ name: "Hungry Hare", multiplier: 2, foods: ["Fermented Carrots"] });
 
-      // === PET STREAK (auto-detect from faction) ===
+      // === PET STREAK — getFactionPetBoostMultiplier (lib/factions.ts:582-611) ===
+      // The multiplier comes from LAST week's collective-pet streak, and pays only if the farm
+      // qualified (fed every request of last week — faction.pet.qualifiesForBoost, set at rollover)
+      // and is not in a faction-switch cooldown. Reading the newest history week and the previous
+      // week's petXP was a week late and keyed on the wrong flag.
       const faction = farm.faction || {};
       const factionHistory = faction.history || {};
-      const sortedWeeks = Object.keys(factionHistory).sort();
-      const currentWeekKey = sortedWeeks[sortedWeeks.length - 1] || "";
-      const prevWeekKey = sortedWeeks[sortedWeeks.length - 2] || "";
-      const currentWeekData = factionHistory[currentWeekKey] || {};
-      const prevWeekData = factionHistory[prevWeekKey] || {};
-      const petStreak = currentWeekData.collectivePet?.streak || 0;
-      const streakMultiplier = petStreak >= 8 ? 1.5 : petStreak >= 6 ? 1.3 : petStreak >= 4 ? 1.2 : petStreak >= 2 ? 1.1 : 1.0;
-      const weeksToMax = petStreak >= 8 ? 0 : 8 - petStreak;
-      // This week: boost active if player fed pet LAST week (petXP > 0)
-      const thisWeekActive = (prevWeekData.petXP || 0) > 0 && streakMultiplier > 1;
-      // Next week: qualifiesForBoost = player fed pet THIS week
-      const nextWeekQualified = faction.pet?.qualifiesForBoost === true;
+      const weekKey = factionWeekKey(now);
+      const lastWeekKey = factionWeekKey(Date.parse(weekKey + "T00:00:00Z") - 7 * 86400000);
+      const lastWeekStreak = factionHistory[lastWeekKey]?.collectivePet?.streak || 0;
+      const currentStreak = factionHistory[weekKey]?.collectivePet?.streak || 0;
+      const streakMultiplier = lastWeekStreak >= 8 ? 1.5 : lastWeekStreak >= 6 ? 1.3 : lastWeekStreak >= 4 ? 1.2 : lastWeekStreak >= 2 ? 1.1 : 1.0;
+      const onCooldown = !!(faction.boostCooldownUntil && now < faction.boostCooldownUntil);
+      const qualifies = faction.pet?.qualifiesForBoost === true;
+      const thisWeekActive = !onCooldown && qualifies && streakMultiplier > 1;
+      // Next week pays only if every one of THIS week's pet requests gets fed at least once
+      // (qualifiesForFactionPetBoostFromPriorWeekRequests, lib/factionPetQualifiesForBoost.ts).
+      const reqs = Array.isArray(faction.pet?.requests) ? faction.pet.requests : [];
+      const nextWeekQualified = reqs.length > 0 && reqs.every((r) => Object.keys(r.dailyFulfilled || {}).length > 0);
+      const weeksToMax = currentStreak >= 8 ? 0 : 8 - currentStreak;
       const manualPetStreak = localStorage.getItem("sfl_pet_streak") === "1";
 
-      if (thisWeekActive) {
-        xpBoosts.push({ name: "Pet's Streak", multiplier: streakMultiplier, petStreak: true });
-      } else if (manualPetStreak) {
-        xpBoosts.push({ name: "Pet's Streak (simulate)", multiplier: 1.5, petStreak: true, manual: true });
-      }
+      const petStreakInfo = { streak: lastWeekStreak, currentStreak, multiplier: streakMultiplier, thisWeekActive, qualifies, onCooldown, nextWeekQualified, weeksToMax, manualOverride: manualPetStreak };
 
-      const petStreakInfo = { streak: petStreak, multiplier: streakMultiplier, thisWeekActive, nextWeekQualified, weeksToMax, manualOverride: manualPetStreak };
-
-      // === TIME BOOSTS ===
-      // Skills
-      if (skills["Double Nom"]) timeBoosts.push({ name: "Double Nom", multiplier: 0.5, excludeBuildings: ["Aging Shed"] });
+      // === TIME BOOSTS === (getCookingTime, expansion/lib/boosts.ts:159-285)
       if (skills["Fast Feasts"]) timeBoosts.push({ name: "Fast Feasts", multiplier: 0.9, buildings: ["Fire Pit", "Kitchen"] });
-      if (skills["Frosted Cakes"]) timeBoosts.push({ name: "Frosted Cakes", multiplier: 0.9, buildings: ["Bakery"] });
+      // Cakes only (item in cookableCakes) — boosts.ts:279-283, not every Bakery recipe.
+      if (skills["Frosted Cakes"]) timeBoosts.push({ name: "Frosted Cakes", multiplier: 0.9, foods: cookableCakes });
       // Items
       if (hasItem("Luna's Hat")) timeBoosts.push({ name: "Luna's Hat", multiplier: 0.5, excludeBuildings: ["Aging Shed"] });
       if (hasItem("Desert Gnome")) timeBoosts.push({ name: "Desert Gnome", multiplier: 0.9, excludeBuildings: ["Aging Shed"] });
       if (hasAny("Nightshade Medallion")) timeBoosts.push({ name: "Nightshade Medallion", multiplier: 0.75, excludeBuildings: ["Aging Shed"] });
       if (hasAny("Master Chefs Cleaver", "Master Chef's Cleaver")) timeBoosts.push({ name: "Master Chefs Cleaver", multiplier: 0.85, excludeBuildings: ["Aging Shed"] });
+      /*
+       * Building oil — getCookingOilBoost (events/landExpansion/cook.ts:64-103): an oiled building
+       * cooks in (1 - boost) of the time. Whether the owner keeps a building oiled is read from the
+       * farm itself: `buildings[b][0].oil > 0` means oil is sitting in it now, i.e. they run it
+       * oiled, and it is modelled at the full boost (the partial-oil branch of the game only bites
+       * on the one cook that drains it). A dry building gets nothing.
+       */
+      for (const bd of ["Fire Pit", "Kitchen", "Bakery", "Deli", "Smoothie Shack"]) {
+        const oiled = ((farm.buildings || {})[bd] || []).some((b) => (Number(b && b.oil) || 0) > 0);
+        const boost = buildingOilBoost(skills, bd);
+        if (oiled && boost > 0) timeBoosts.push({ name: "Building Oil", multiplier: +(1 - boost).toFixed(2), buildings: [bd] });
+      }
+
+      // === BONUS FOOD === (getCookingAmount, collectRecipe.ts:27-78)
+      // Double Nom: +1 dish on every cook in a cooking building (cook.ts isCookingBuilding — not the
+      // Aging Shed). It was modelled as half the cook TIME, which gives the same XP/day on its own but
+      // multiplies wrongly with the chance-based extras below.
+      if (skills["Double Nom"]) amountBoosts.push({ name: "Double Nom", extra: 1, excludeBuildings: ["Aging Shed"] });
+      // Fiery Jackpot: 20% chance of +1 on the Fire Pit.
+      if (skills["Fiery Jackpot"]) amountBoosts.push({ name: "Fiery Jackpot (20% +1)", extra: 0.2, buildings: ["Fire Pit"] });
+      // Master Chef's Cleaver worn: 10% chance of +1 on any recipe.
+      if (hasAny("Master Chefs Cleaver", "Master Chef's Cleaver")) amountBoosts.push({ name: "Master Chef's Cleaver (10% +1)", extra: 0.1, excludeBuildings: ["Aging Shed"] });
 
       // === AGING SHED BOOSTS ===
       const sculptures = farm.sculptures || {};
@@ -7375,19 +7431,26 @@
       // Prime Aged weighted average. Base 10% chance of prime (×1.3 XP) → factor 1.03.
       // Fish Smoking doubles the chance (→ 20%); Salt Sculpture L2+ adds +4% (→ 14/24%).
       // Recipe XP is stored as the regular-aged value; this single boost folds in the
-      // expected uplift from primes for the player's actual farm state.
+      // expected uplift from primes for the player's actual farm state. `primeAvg` marks it
+      // as an EXPECTATION: banked fish are known to be regular or prime, so it skips them.
       {
         const _primePct = +(getAgingPrimeChance(farm) * 100).toFixed(0);
         const _primeFactor = getAgingPrimeFactor(farm);
         xpBoosts.push({
-          name: "Prime Aged avg (" + _primePct + "% \u00d7 1.3 XP)",
+          name: "Prime Aged avg (" + _primePct + "% × 1.3 XP)",
           multiplier: _primeFactor,
-          buildings: ["Aging Shed"]
+          buildings: ["Aging Shed"],
+          primeAvg: true,
         });
       }
-      // Fish XP boosts — Aging Shed outputs (Aged Fish) count as fish consumables
-      if (hasItem("Skill Shrimpy")) xpBoosts.push({ name: "Skill Shrimpy (+20% Fish XP)", multiplier: 1.20, buildings: ["Aging Shed"] });
-      if (skills["Fishy Feast"]) xpBoosts.push({ name: "Fishy Feast (+20% Fish XP)", multiplier: 1.20, buildings: ["Aging Shed"] });
+      // Fish XP boosts — every FISH consumable (fish dishes and instant fish recipes as well as
+      // Aged / Prime Aged fish): boosts.ts:320-328 (topper), :355-367 (Shrimpy, Fishy Feast).
+      if (hasItem("Skill Shrimpy")) xpBoosts.push({ name: "Skill Shrimpy (+20% Fish XP)", multiplier: 1.20, fishOnly: true });
+      if (skills["Fishy Feast"]) xpBoosts.push({ name: "Fishy Feast (+20% Fish XP)", multiplier: 1.20, fishOnly: true });
+      // Marine Marvel Master milestone wearable. The game applies it to FISH_CONSUMABLES
+      // (Aged + Prime Aged included) but only while WORN — hasItem's equipped check
+      // (bumpkin or farm hand) is exactly isWearableActive; wardrobe ownership is not.
+      if (hasItem("Luminous Anglerfish Topper")) xpBoosts.push({ name: "Luminous Anglerfish Topper (+50% Fish XP)", multiplier: 1.5, fishOnly: true });
       // Salt yield & rake-cost (informational — affect salt cost rather than recipe XP/time)
       if (skills["Wide Rakes"]) xpBoosts.push({ name: "Wide Rakes (+2 salt/rake)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
       if (skills["Cheap Rakes"]) xpBoosts.push({ name: "Cheap Rakes (-20% rake coin cost)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
@@ -7404,20 +7467,45 @@
       if (skills["Fishy Roll"]) xpBoosts.push({ name: "Fishy Roll (+0.1 expected Advanced)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
       if (skills["Fishy Gamble"]) xpBoosts.push({ name: "Fishy Gamble (+0.2 expected Expert)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
 
+      // Swiss Whiskers placed: +500 XP on every recipe made with Cheese — boosts.ts:396-403. Flat,
+      // so it lands after the multipliers above and before the two below.
+      if (findCollectible(farm, "Swiss Whiskers").length > 0) xpBoosts.push({ name: "Swiss Whiskers (+500 XP, cheese recipes)", multiplier: 1, add: 500, foods: cheeseRecipes });
+      // Port bud, placed: x(1 + aura x 0.1) on fish consumables, best bud only —
+      // getBudExperienceBoosts (lib/getBudExperienceBoosts.ts:237-270).
+      {
+        let best = 1;
+        for (const bud of Object.values(farm.buds || {})) {
+          if (!bud || !bud.coordinates || bud.type !== "Port") continue;
+          best = Math.max(best, 1 + (BUD_AURA_MULTIPLIERS[bud.aura] || 1) * 0.1);
+        }
+        if (best > 1) xpBoosts.push({ name: "Port Bud (Fish XP)", multiplier: +best.toFixed(4), fishOnly: true });
+      }
+      if (thisWeekActive) {
+        xpBoosts.push({ name: "Pet's Streak", multiplier: streakMultiplier, petStreak: true });
+      } else if (manualPetStreak) {
+        xpBoosts.push({ name: "Pet's Streak (simulate)", multiplier: 1.5, petStreak: true, manual: true });
+      }
+
       console.log("[Cooking Boosts] Detected XP:", xpBoosts.map(b => b.name));
       console.log("[Cooking Boosts] Detected Time:", timeBoosts.map(b => b.name));
       console.log("[Cooking Boosts] Pet Streak:", petStreakInfo);
 
-      return { xpBoosts, timeBoosts, petStreakInfo };
+      return { xpBoosts, timeBoosts, amountBoosts, petStreakInfo };
     }
 
+    // Page copy of core computeFoodXP (known deviation: no trace sink). Same gates as core's
+    // cookBoostApplies — recipe lists for Grain Grinder / Hungry Hare / Swiss Whiskers, the FISH
+    // consumables for the fish boosts — and Swiss Whiskers' flat +500.
     function computeFoodXP(foodName, food, buildingName, boosts) {
       let xp = food.xp;
       for (const b of boosts.xpBoosts) {
         if (b.buildings && !b.buildings.includes(buildingName)) continue;
         if (b.excludeBuildings && b.excludeBuildings.includes(buildingName)) continue;
         if (b.honeyOnly && !food.usesHoney) continue;
-        xp *= b.multiplier;
+        if (b.foods && !b.foods.includes(foodName)) continue;
+        if (b.fishOnly && !(fishCookableNames.includes(foodName) || /^(Prime )?Aged /.test(foodName))) continue;
+        if (b.add) xp += b.add;
+        else xp *= b.multiplier;
       }
       return xp;
     }
@@ -7614,6 +7702,21 @@
       return null;
     }
     let _pricesMissed = false;
+    /*
+     * What an item handed over for a delivery, a faction donation or a gift costs, priced ONE way
+     * for the Dashboard, the Roadmap and the Marks page: the Roadmap's rule — production cost
+     * first (a dish priced from its recipe), else market value, else the raw p2p quote. The three
+     * pages used to price the same delivery three different ways (Dashboard: market value only;
+     * Marks: market value, then its own recipe fallback). `rates` is the caller's PRICES profile.
+     */
+    function deliveryItemCostSfl(name, rates, p2p) {
+      const maps = PRICES(rates) || {};
+      const prod = (maps.productionCost || {})[name];
+      if (prod > 0) return prod;
+      const mkt = (maps.marketValue || {})[name];
+      if (mkt > 0) return mkt;
+      return (p2p && p2p[name]) || 0;
+    }
     /*
      * Await the price map instead of rendering without it. A page that renders once with real
      * prices is strictly better than one that renders wrong and repaints — the repaint re-runs
@@ -8564,16 +8667,10 @@
     //  DASHBOARD — Reference Data
     // ═══════════════════════════════════════
 
-    const CROP_HARVEST_SECONDS = {
-      "Sunflower":60,"Potato":300,"Pumpkin":1800,"Carrot":3600,"Cabbage":7200,
-      "Soybean":10800,"Beetroot":14400,"Cauliflower":28800,"Parsnip":43200,
-      "Eggplant":57600,"Corn":72000,"Radish":86400,"Wheat":86400,"Kale":129600,
-      "Barley":172800,"Rice":259200,"Olive":302400,"Grape":259200,"Tomato":7200
-    };
-    const FRUIT_HARVEST_SECONDS = {
-      "Apple":43200,"Blueberry":43200,"Orange":43200,"Banana":43200,
-      "Tomato":7200,"Lemon":86400
-    };
+    // Crop and fruit grow times come from the page's canonical CROP_GROW_DATA / FRUIT_GROW_DATA
+    // (the Power tables). The dashboard kept its own copies, which lacked Rhubarb, Zucchini, Yam,
+    // Broccoli, Pepper, Onion, Turnip and Artichoke (-> a 24 h fallback) and had Blueberry 12 h
+    // (6 h), Orange 12 h (8 h) and Lemon 24 h (4 h) — so a Lemon read "ready" 20 h late.
     const GREENHOUSE_HARVEST_SECONDS = {
       "Rice":115200,"Olive":158400,"Grape":43200
     };
@@ -8633,14 +8730,14 @@
       // PRICES(dashRates) is null until that profile's fetch resolves; guard to {} so lookups
       // fall through to the same "|| 0" absence handling the old call's "|| 0" had, and
       // the arrival rerender (via main()) repaints with real data once the map lands.
-      const priceMap = (PRICES(dashRates) || {}).marketValue || {};
       for (const {name, qty} of arr) {
         let unit;
         if (name === "coins") {
           // Some deliveries (e.g. tywin) consume coins as part of payment.
           unit = dashRates?.coinsPerSFL > 0 ? 1 / dashRates.coinsPerSFL : 0;
         } else {
-          unit = priceMap[name] || 0;
+          // The shared delivery rule (production cost first) — same as Roadmap and Marks.
+          unit = deliveryItemCostSfl(name, dashRates, dashP2P);
         }
         total += unit * qty;
       }
@@ -8662,7 +8759,7 @@
         }
         const c = plot.crop;
         const name = c.name || "Crop";
-        const harvestSec = CROP_HARVEST_SECONDS[name] || 86400;
+        const harvestSec = CROP_GROW_DATA[name] || 86400;
         const plantedAt = toMs(c.plantedAt || 0);
         const readyAt = plantedAt + harvestSec * 1000;
         if (readyAt <= now) {
@@ -8683,7 +8780,7 @@
         if (!patch.fruit) continue;
         const f = patch.fruit;
         const name = f.name || "Fruit";
-        const harvestSec = FRUIT_HARVEST_SECONDS[name] || CROP_HARVEST_SECONDS[name] || 43200;
+        const harvestSec = FRUIT_GROW_DATA[name] || CROP_GROW_DATA[name] || 43200;
         const harvestedAt = toMs(f.harvestedAt || f.plantedAt || 0);
         const readyAt = harvestedAt + harvestSec * 1000;
         if (readyAt <= now) {
@@ -8914,7 +9011,7 @@
         const p = pot.plant;
         const name = p.name || "Greenhouse crop";
         const plantedAt = toMs(p.plantedAt || 0);
-        const harvestSec = GREENHOUSE_HARVEST_SECONDS[name] || CROP_HARVEST_SECONDS[name] || 86400;
+        const harvestSec = GREENHOUSE_HARVEST_SECONDS[name] || CROP_GROW_DATA[name] || 86400;
         const readyAt = plantedAt + harvestSec * 1000;
         if (readyAt <= now) {
           actions.push({ category:"Greenhouse", icon:"🏠", label:name, detail:dashAgoText(now - readyAt), status:"ready", readyAt, priority:10 });
@@ -9224,10 +9321,9 @@
         }
       } catch(e) {}
 
-      // Maneki Neko — check both farm.collectibles AND farm.home.collectibles
+      // Maneki Neko — wherever it is placed (findCollectible: farm, home and both interior floors)
       try {
-        let mn = (farm.collectibles?.["Maneki Neko"] || [])[0];
-        if (!mn) mn = (farm.home?.collectibles?.["Maneki Neko"] || [])[0];
+        const mn = findCollectible(farm, "Maneki Neko")[0];
         if (mn && mn.shakenAt) {
           const shaken = toMs(mn.shakenAt);
           if (shaken < ts) {
@@ -9506,10 +9602,12 @@
       { name: "Salt Awakening",    start: Date.UTC(2026,  4,  4), ticket: "Salt Rock",           boosts: ["Spa Hat", "Spa Robe", "Spa Slippers"] },
     ];
 
-    // Per-NPC base ticket reward (mirrors TICKET_REWARDS in deliver.ts).
+    // Per-NPC base ticket reward (mirrors TICKET_REWARDS in events/landExpansion/deliver.ts:39-51).
+    // finn is 3 and tywin 5 in the game source — unchanged there since 2024-05-05 (c4fb85b5e) up
+    // to the 2026-04-24 checkout; this table had 4 and 10.
     const TICKET_REWARDS = {
       "pumpkin' pete": 1, "bert": 2, "miranda": 2, "finley": 2, "raven": 3,
-      "finn": 4, "timmy": 4, "cornwell": 4, "tywin": 10, "jester": 4, "pharaoh": 5,
+      "finn": 3, "timmy": 4, "cornwell": 4, "tywin": 5, "jester": 4, "pharaoh": 5,
     };
 
     // Collectibles that count as "built" via findCollectible() length > 0.
@@ -11504,6 +11602,8 @@
           let tag = "";
           if (b.buildings) tag = ` (${b.buildings.join(", ")})`;
           if (b.honeyOnly) tag = " (honey)";
+          if (b.fishOnly) tag = " (fish)";
+          if (b.foods) tag = b.foods.length === 1 ? " (" + b.foods[0] + ")" : " (" + b.foods.length + " recipes)";
           return tag;
         };
         // Pet streak section
@@ -11534,12 +11634,13 @@
         html += `<div class="bumpkin-boosts pixel-panel pixel-font">
           <div class="bumpkin-boosts-col">
             <h4 style="color:var(--green)">XP BOOSTS</h4>
-            ${boosts.xpBoosts.filter(b => !b.petStreak).map(b => `<div class="boost-row"><span>${escHTML(b.name)}${xpLabel(b)}</span><span class="boost-val">×${b.multiplier}</span></div>`).join("") || '<div style="color:var(--text-dim)">None detected</div>'}
+            ${boosts.xpBoosts.filter(b => !b.petStreak).map(b => `<div class="boost-row"><span>${escHTML(b.name)}${xpLabel(b)}</span><span class="boost-val">${b.add ? "+" + b.add : "×" + b.multiplier}</span></div>`).join("") || '<div style="color:var(--text-dim)">None detected</div>'}
             ${petStreakHTML}
           </div>
           <div class="bumpkin-boosts-col">
             <h4 style="color:var(--blue)">TIME BOOSTS</h4>
-            ${boosts.timeBoosts.length > 0 ? boosts.timeBoosts.map(b => `<div class="boost-row"><span>${escHTML(b.name)}${b.buildings ? " (" + b.buildings.join(", ") + ")" : ""}</span><span class="boost-val">×${b.multiplier}</span></div>`).join("") : '<div style="color:var(--text-dim)">None detected</div>'}
+            ${boosts.timeBoosts.length > 0 ? boosts.timeBoosts.map(b => `<div class="boost-row"><span>${escHTML(b.name)}${b.buildings ? " (" + b.buildings.join(", ") + ")" : (b.foods ? " (cakes)" : "")}</span><span class="boost-val">×${b.multiplier}</span></div>`).join("") : '<div style="color:var(--text-dim)">None detected</div>'}
+            ${(boosts.amountBoosts || []).map(b => `<div class="boost-row"><span>${escHTML(b.name)}${b.buildings ? " (" + b.buildings.join(", ") + ")" : ""}</span><span class="boost-val">+${b.extra} food</span></div>`).join("")}
           </div>
         </div>`;
       }
@@ -15787,7 +15888,7 @@
               if (!budEffectApplies(eff, catId, prod)) continue;
               if (eff.type === "yield_flat") yieldVals.push(eff.value);
             }
-            const bestYield = yieldVals.length > 0 ? Math.max(...yieldVals) * aura : 0;
+            const bestYield = yieldVals.reduce((s, v) => s + v, 0) * aura; // game ADDS type + stem, then x aura: getBudBoost, lib/getBudYieldBoosts.ts:161-167 (max() dropped the smaller trait)
             if (bestYield > 0) {
               const n = getCapacityCount(catId, capacity);
               const cycleSec = getCycleSec(catId, prod);
@@ -15814,7 +15915,7 @@
           else if (eff.type === "chance") chanceVals.push(eff);
         }
 
-        const bestYield = yieldVals.length > 0 ? Math.max(...yieldVals) * aura : 0;
+        const bestYield = yieldVals.reduce((s, v) => s + v, 0) * aura; // game ADDS type + stem, then x aura: getBudBoost, lib/getBudYieldBoosts.ts:161-167 (max() dropped the smaller trait)
         const bestSpeed = speedVals.length > 0 ? Math.min(...speedVals) * aura : 0;
         const bestChance = chanceVals.length > 0
           ? chanceVals.reduce((a, b) => (a.pct * a.extra > b.pct * b.extra) ? a : b) : null;
@@ -17666,11 +17767,7 @@
       // >0), else raw p2p. PRICES(...) is null until this profile's fetch resolves; guard to {} so
       // lookups fall through to the existing "|| 0" absence handling below, and the arrival
       // rerender (via main()) repaints with real data once the map lands.
-      const maps = PRICES(powerState.exchangeRates) || {};
-      const prodMap = maps.productionCost || {}, mktMap = maps.marketValue || {};
-      if (prodMap[name] > 0) return prodMap[name];
-      if (mktMap[name] > 0) return mktMap[name];
-      return p2p[name] || 0;
+      return deliveryItemCostSfl(name, powerState.exchangeRates, p2p);
     }
     function roadmapGiftRewardValue(reward, nftFloor) {
       const { p2pPrices, exchangeRates } = powerState;
@@ -19598,9 +19695,7 @@
         const sk = farmRef.bumpkin?.skills || {};
         if (sk["Crop Processor Unit"]) skNames.push("Crop Processor Unit ×0.95");
         if (sk["Rapid Rig"]) skNames.push("Rapid Rig ×0.8");
-        const placed = (farmRef.collectibles || {});
-        const placedHome = (farmRef.home?.collectibles || {});
-        const hasGramo = (placed["Groovy Gramophone"]?.length || 0) > 0 || (placedHome["Groovy Gramophone"]?.length || 0) > 0;
+        const hasGramo = findCollectible(farmRef, "Groovy Gramophone").length > 0; // all four maps
         if (hasGramo) skNames.push("Groovy Gramophone ×0.5");
         // Wheat-window basis breakdown
         const wheatRestock = cmGetSeedRestockCount(farmRef, "Wheat");
@@ -21801,13 +21896,21 @@
        */
       const saltP = P("Salt");
       const primeFactor = getAgingPrimeFactor(_fishFarm);
+      /*
+       * Aged fish XP as the cooking engine pays it: the prime weighting AND the farm's XP boosts on
+       * fish consumables (Skill Shrimpy, Fishy Feast, Luminous Anglerfish Topper, a placed Port bud,
+       * plus the general ones) — computeFoodXP on a unit Aged recipe is exactly that multiplier.
+       * The prime factor alone put every aged figure here below the Bumpkin page's own.
+       */
+      const agedXpMult = _fishFarm ? computeFoodXP("Aged Fish", { xp: 1, usesHoney: false }, "Aging Shed", detectCookingBoosts(_fishFarm)) : primeFactor;
+      const agedBoostNote = agedXpMult > primeFactor + 1e-9 ? ", × " + (agedXpMult / primeFactor).toFixed(3) + " from your fish XP boosts" : "";
       const _baseXpOf = (n) => FISH_BASE_XP[n] || FISH_BASE_XP[_fishCanon(n)] || ITEM_XP_VALUES[n] || 0;
       const rows = Object.entries(d.fish || {}).map(([name, qty]) => {
         const perCast = casts > 0 ? qty / casts : 0;
         const castsEach = perCast > 0 ? 1 / perCast : Infinity;
         const cost = castsEach * costPerCast;
         const xp = _baseXpOf(name);
-        const agedXp = xp > 0 ? getAgingMaxXP(xp) * primeFactor : 0;
+        const agedXp = xp > 0 ? getAgingMaxXP(xp) * agedXpMult : 0;
         const salt = xp > 0 ? getAgingSaltCost(xp) : 0;
         const agedCost = cost + salt * saltP;
         const value = P(name);
@@ -21817,7 +21920,7 @@
 
       h += '<div class="pixel-panel" style="padding:12px;margin-bottom:12px">' +
         '<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">🐟 WHAT EACH FISH COST YOU — and what it paid back</div>' +
-        '<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Your own catch rate, priced at the live cost per cast — then <b>through the Aging Shed</b>, which is where these actually go. Ageing returns 3×/4×/5× base XP (stepping at 200 and 330 base) for one fish plus <b>maxXP/50 salt</b>, so the cost column adds the salt and the ranking uses the aged figure. Prime-aged is folded in at your real chance (<b>' + (getAgingPrimeChance(_fishFarm) * 100).toFixed(0) + '%</b> → ×' + primeFactor.toFixed(3) + '). Species with fewer than 3 caught are hidden: the rate would be noise.</div>' +
+        '<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Your own catch rate, priced at the live cost per cast — then <b>through the Aging Shed</b>, which is where these actually go. Ageing returns 3×/4×/5× base XP (stepping at 200 and 330 base) for one fish plus <b>maxXP/50 salt</b>, so the cost column adds the salt and the ranking uses the aged figure. Prime-aged is folded in at your real chance (<b>' + (getAgingPrimeChance(_fishFarm) * 100).toFixed(0) + '%</b> → ×' + primeFactor.toFixed(3) + agedBoostNote + '). Species with fewer than 3 caught are hidden: the rate would be noise.</div>' +
         '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:600px">' +
         '<tr style="color:var(--text-dim);font-size:0.45rem"><td style="padding:0 6px 3px 0">fish</td><td style="text-align:right;padding:0 6px 3px">caught</td><td style="text-align:right;padding:0 6px 3px">casts each</td><td style="text-align:right;padding:0 6px 3px">cost each</td><td style="text-align:right;padding:0 6px 3px">raw XP</td><td style="text-align:right;padding:0 6px 3px">aged XP</td><td style="text-align:right;padding:0 6px 3px">+ salt</td><td style="text-align:right;padding:0 6px 3px">aged XP / ' + sflIcon() + '</td><td style="text-align:right;padding:0 0 3px">engine value</td></tr>' +
         rows.map((r) => '<tr style="border-top:1px solid #20190f">' +
@@ -21836,7 +21939,7 @@
         const cost = rodP + P(g.bait) + P(g.chum) * g.qty;
         const base = _baseXpOf(g.fish);
         // Same basis as the table above — aged, plus the salt the ageing costs.
-        const xp = base > 0 ? getAgingMaxXP(base) * primeFactor : 0;
+        const xp = base > 0 ? getAgingMaxXP(base) * agedXpMult : 0;
         const full = cost + (base > 0 ? getAgingSaltCost(base) * saltP : 0);
         return Object.assign({}, g, { cost, xp, xpPerSfl: full > 0 ? xp / full : 0 });
       }).sort((a, b) => b.xpPerSfl - a.xpPerSfl);
@@ -22143,7 +22246,7 @@
        * farm's Hammerhead jobs run 2h51m, not the unboosted 3h.
        */
       const agingTimeMult = !_fishFarm ? 1 : detectCookingBoosts(_fishFarm).timeBoosts
-        .filter((b) => (b.buildings || ["Aging Shed"]).includes("Aging Shed") &&
+        .filter((b) => !b.foods && (b.buildings || ["Aging Shed"]).includes("Aging Shed") &&
                        !(b.excludeBuildings || []).includes("Aging Shed"))
         .reduce((m, b) => m * b.multiplier, 1);
 
@@ -22151,7 +22254,7 @@
         const base = FISH_BASE_XP[name];
         const wants = agingWants[name.toLowerCase()] || [];
         const qty = ownedLc[name.toLowerCase()] || 0;
-        const agedXp = getAgingMaxXP(base) * primeFactor;
+        const agedXp = getAgingMaxXP(base) * agedXpMult;
         const saltEach = getAgingSaltCost(base);
         return { name, base, qty, wants, agedXp, saltEach,
                  now: wants.filter((w) => w.sn === season),
@@ -22238,8 +22341,8 @@
         '<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">The four baits above eat <b>sixteen</b> season-specific ingredient lists between them, and the <b>' + agingFree.length +
         '</b> above the line are on <b>none</b> of the sixteen — no season, no bait, ever — so the shed costs you nothing but salt. Below the line is <b>every other fish the shed takes</b>, with the bait and the season that wants it, so the whole ' + agingRows.length +
         ' are in one place rather than split into a second answer. <b>Crab Stick never competes</b>: it is all crustaceans, which the shed will not take. It does take <b>every fish in the game</b>, the three sharks included — an <b>Aged White Shark is ' +
-        fmt(getAgingMaxXP(FISH_BASE_XP["White Shark"]) * primeFactor) + ' XP</b>, the biggest single item there is. Rows run by <b>aged XP per fish</b> — a rack slot is the scarce thing, so one White Shark beats a hundred Rock Blackfish — with anything you hold <b>none</b> of pushed to the bottom of its half. Stock is your live inventory; aged XP is on the same basis as the table further up (prime folded in at <b>' +
-        (getAgingPrimeChance(_fishFarm) * 100).toFixed(0) + '%</b> → ×' + primeFactor.toFixed(3) + '), and ageing times carry your Speedy Aging / Salt Sculpture boosts (×' + agingTimeMult.toFixed(2) + ').</div>' +
+        fmt(getAgingMaxXP(FISH_BASE_XP["White Shark"]) * agedXpMult) + ' XP</b>, the biggest single item there is. Rows run by <b>aged XP per fish</b> — a rack slot is the scarce thing, so one White Shark beats a hundred Rock Blackfish — with anything you hold <b>none</b> of pushed to the bottom of its half. Stock is your live inventory; aged XP is on the same basis as the table further up (prime folded in at <b>' +
+        (getAgingPrimeChance(_fishFarm) * 100).toFixed(0) + '%</b> → ×' + primeFactor.toFixed(3) + agedBoostNote + '), and ageing times carry your Speedy Aging / Salt Sculpture boosts (×' + agingTimeMult.toFixed(2) + ').</div>' +
         '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px;margin-bottom:8px">' +
         agingTiles.map((t) => '<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px">' +
           '<div style="font-size:0.44rem;color:var(--text-dim)">' + t[0] + '</div>' +
@@ -26101,8 +26204,6 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     async function renderShrines(data) {
       const app = document.getElementById("app");
       const { farm, inventory } = data;
-      const placed = farm.collectibles || {};
-      const placedHome = (farm.home || {}).collectibles || {};
 
       let html = `<div class="header pixel-panel pixel-font">
         <h1>PET SHRINES</h1>
@@ -26117,16 +26218,20 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       html += `<div id="shrines-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Computing shrine ROI…</div></div></div>`;
       app.innerHTML = html;
 
-      // Prices/rates/NFT boost items — MIGRATED: one compute?section=roi call replaces
-      // the page's THIRD copy of the prices/exchange/btc/nfts fetch + buildRoiBoostItems
-      // (the server runs the same builder in core/sections/roi.mjs).
-      let p2pPrices = {}, sflUsd = 0, btcUsd = 0, boostItems = [];
+      /*
+       * Prices, rates and boost items from compute?section=power — the POWER page's own payload, so
+       * a shrine is valued on exactly Power's numbers: its coins/FLOWER rate (was a hard-coded 320),
+       * its derived Oil price (drill cost ÷ boosted yield; section=roi carries no Oil, so Oil sat at
+       * 0 here) and the same owned boost effects. Shrines are not in the boost catalogue, so the
+       * base stays shrine-free for the "should I craft this" marginal.
+       */
+      let p2pPrices = {}, boostItems = [], powerRates = null;
       try {
         let payload, lastErr;
         for (let a = 0; a < 3; a++) {
           try {
-            const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=roi&multicat=${encodeURIComponent(localStorage.getItem("sfl_roi_multicat_assignment") || "{}")}`);
-            if (!rp.ok) throw new Error(`compute roi ${rp.status}`);
+            const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=power`);
+            if (!rp.ok) throw new Error(`compute power ${rp.status}`);
             payload = await rp.json();
             break;
           } catch (e) { lastErr = e; if (a < 2) await new Promise(r => setTimeout(r, 1000 * (a + 1))); }
@@ -26134,9 +26239,8 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         if (!payload) throw lastErr;
         const d = payload.data || {};
         p2pPrices = d.p2pPrices || {};
-        sflUsd = d.sflUsd || 0;
-        btcUsd = d.btcUsd || 0;
         boostItems = d.boostItems || [];
+        powerRates = d.exchangeRates || null;
       } catch (err) {
         document.getElementById("shrines-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load prices: ${escHTML(err.message)}</p></div>`;
         return;
@@ -26148,19 +26252,22 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       // Expose farm + exchange rates to shrine helpers via module-scoped refs
       // (lets Tortoise Shrine include crop-machine contribution without function-signature churn)
       _shrineFarmRef = farm;
-      _shrineExchangeRates = { coinsPerSFL: 320 };
+      _shrineExchangeRates = powerRates;   // Power's rate, not a constant
 
-      // Fetch farm history & compute per-category eff (same algorithm as Nodes page).
-      let efficiencyMap = {};
+      /*
+       * Efficiency: the Power/Roadmap engines' own measurement — section=eff runs
+       * roadmapComputeEfficiency over the same 7-day farm-history slice the Roadmap and Ascension
+       * pages post — read through the same rule as roadmapEffFactor (see _shrineEff). The page
+       * used to measure its own 14-day version, capped at 1.0, with a 70% fallback.
+       */
+      let efficiencyMap = null;
       try {
-        const fromIso = new Date(Date.now() - 14 * 86400000).toISOString();
-        const toIso = new Date(Date.now() + 86400000).toISOString();
-        // Use raw (no bucket) date-range with limit=1000 to get snapshot diffs covering ~14d
-        const r = await fetch(`/api/farm-history?farm=${FARM_ID}&from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}&limit=1000`);
-        if (r.ok) {
-          const histData = await r.json();
-          efficiencyMap = _shrineBuildEffMap(histData.snapshots || [], capacity, ownedEffects);
-        }
+        if (!_roadmapSnapshotsCache) _roadmapSnapshotsCache = await _roadmapFetchHistorySlim();
+        const r = await fetch(`/api/compute?farm=${FARM_ID}&section=eff`, {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [] }),
+        });
+        if (r.ok) efficiencyMap = (await r.json()).data || null;
       } catch (e) { console.warn("[Shrines] eff fetch failed", e); }
 
       // Acorn opportunity cost derived dynamically from pets fetch yields
@@ -26172,7 +26279,8 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       for (const [name, sh] of Object.entries(SHRINE_DATA)) {
         const costSfl = _shrineIngredientCostSfl(sh.ingredients, p2pPrices, fallbackPrices);
         const hasIngredients = _shrineHasIngredients(sh.ingredients, inventory);
-        const status = _shrineStatus(name, placed, placedHome, sh.duration_d);
+        // Placed anywhere the game looks (findCollectible: all four collectible maps).
+        const status = _shrineStatus(name, { [name]: findCollectible(farm, name) }, {}, sh.duration_d);
         const margin = _shrineMarginalSflPerDay(sh, capacity, p2pPrices, ownedEffects, efficiencyMap);
 
         // Earnings across the full active duration of one placement (sh.duration_d days)
@@ -26310,7 +26418,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       // Footer notes
       content += `<div class="pixel-font" style="margin-top:16px;padding:12px;background:rgba(0,0,0,0.2);border:2px solid rgba(255,255,255,0.05);font-size:0.55rem;color:var(--text-dim);line-height:1.7">
         <b style="color:var(--text-secondary)">How BOOST / EARN are computed (real efficiency)</b><br>
-        • <b>BOOST</b> = current daily ${ICON} per affected resource × shrine effect × <b>per-category eff</b> (from your snapshot harvest cadence; same data as the Nodes-page EFFICIENCY column). Categories without snapshot data (animals, flowers) use ${(SHRINE_FALLBACK_EFF*100).toFixed(0)}% fallback.<br>
+        • <b>BOOST</b> = current daily ${ICON} per affected resource × shrine effect × <b>per-category eff</b> — the same measured efficiency and rule as Power/Roadmap (7-day harvest cadence; animals and obsidian count as 100%, categories without their own signal use your average activity, your Roadmap sliders win). Prices, Oil and the coin rate are the Power page's.<br>
         • <b>EARN</b> = BOOST × shrine duration_days (7 / 1 / 30).<br>
         • <b>Indirect</b> (Boar cooking, Fox crafting, Hound pet XP, Trading): no clean ${ICON}/day mapping — judge manually.<br>
         • <b>Acorn opportunity cost</b>: not on p2p, priced dynamically at <b>${acornPrice.toFixed(3)} ${ICON}/Acorn</b> = 100 energy × best ${ICON}/energy your pets can fetch.<br>
@@ -26357,76 +26465,27 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       return { kind: "expired" };
     }
 
-    // Compute efficiency per category from snapshot diffs.
-    // Mirrors the Nodes page algorithm: extract `_h.<resource>` event counts,
-    // merge digs within 30 min into sessions, compute actual sessions/day vs
-    // theoretical (using applyBoosts effectiveCycle), ratio = actual / theoretical.
-    // Returns { catId: { ratio, sessions, ... } }. Only known node categories
-    // (trees, stone, iron, gold, crimstone, oil) get computed; others remain undefined.
-    function _shrineBuildEffMap(snapshots, capacity, ownedEffects) {
-      const efficiencyMap = {};
-      if (typeof EFFICIENCY_RESOURCE_MAP === "undefined") return efficiencyMap;
-      const sorted = (snapshots || [])
-        .filter(s => s.captured_at && s.diff !== null && s.diff !== undefined)
-        .sort((a, b) => new Date(a.captured_at) - new Date(b.captured_at));
-      // Filter to v2 snapshots (those with _h.*)
-      const v2Start = sorted.findIndex(s => Object.keys(s.diff || {}).some(k => k.startsWith("_h.")));
-      const v2 = v2Start >= 0 ? sorted.slice(v2Start) : [];
-      if (v2.length < 2) return efficiencyMap;
-      const pDays = (new Date(v2[v2.length - 1].captured_at) - new Date(v2[0].captured_at)) / 86400000;
-      if (pDays < 0.5) return efficiencyMap;
-
-      for (const [catId, resInfo] of Object.entries(EFFICIENCY_RESOURCE_MAP)) {
-        const digTimes = [];
-        let totalHarvested = 0;
-        for (const snap of v2) {
-          const hCount = (snap.diff || {})[resInfo.hKey];
-          if (hCount > 0) {
-            digTimes.push(new Date(snap.captured_at).getTime());
-            totalHarvested += hCount;
-          }
-        }
-        const sessions = [];
-        if (digTimes.length > 0) {
-          let sStart = digTimes[0], sEnd = digTimes[0];
-          for (let i = 1; i < digTimes.length; i++) {
-            if (digTimes[i] - sEnd <= 1800000) sEnd = digTimes[i];
-            else { sessions.push(sStart); sStart = digTimes[i]; sEnd = digTimes[i]; }
-          }
-          sessions.push(sStart);
-        }
-        const product = getDefaultProduct(catId);
-        const catEffects = ownedEffects.filter(e => e.cat === catId);
-        const boosted = applyBoosts(catId, product, capacity, catEffects);
-        const effectiveCycle = boosted.effectiveCycle || 0;
-        const theoreticalPerDay = effectiveCycle > 0 ? 86400 / effectiveCycle : 0;
-        const actualPerDay = sessions.length / pDays;
-        let ratio = theoreticalPerDay > 0 ? actualPerDay / theoreticalPerDay : 0;
-        if (ratio > 1.5) ratio = 1.5;
-        efficiencyMap[catId] = { ratio, sessions: sessions.length, actualPerDay, theoreticalPerDay, totalHarvested };
-      }
-      return efficiencyMap;
-    }
-
     // Marginal SFL/day from owning a shrine. Approach:
     //   1. Compute baseline daily SFL per relevant category using applyBoosts with the user's
     //      OWNED effects (same engine as the Power page). This is what the user actually earns.
-    //   2. Multiply by the per-category eff ratio derived from snapshot diff history (Nodes page
-    //      algorithm: actual sessions/day vs theoretical sessions/day). Falls back to 0.85 when
-    //      no eff data is available (animals, flowers — categories not in EFFICIENCY_RESOURCE_MAP).
+    //   2. Multiply by the per-category efficiency Power/Roadmap use (section=eff, read by the
+    //      roadmapEffFactor rule in _shrineEff).
     //   3. Apply the shrine's effect ON TOP of that real-eff-adjusted baseline:
     //      - speed × s → gain = real_baseline × ((1/s) - 1)
     //      - yield_flat per cycle → gain = real_harvests/day × added × price
     //      - chance % +1 → gain = real_harvests/day × p × price
-    const SHRINE_FALLBACK_EFF = 0.7;
-
+    // roadmapEffFactor's rule (auto mode + the user's Roadmap sliders) over a served section=eff
+    // payload { effByCat, meanRatio } instead of the roadmap page's roadmapState global.
     function _shrineEff(catId, efficiencyMap) {
-      const e = (efficiencyMap || {})[catId];
-      // Cap at 1.0 — over-mining (user visits more often than the cycle completes) doesn't
-      // mean the shrine's speedup compounds. The session-vs-theoretical ratio can read > 1
-      // because the nodes-page metric counts sessions, but actual harvest output is still
-      // bounded by what the nodes produce. Capping at 1.0 prevents inflated shrine BOOST.
-      return (e && e.ratio > 0) ? Math.min(e.ratio, 1.0) : SHRINE_FALLBACK_EFF;
+      const rs = getRoadmapSettings();
+      const ov = rs.effOverrides && rs.effOverrides[catId];
+      if (typeof ov === "number" && isFinite(ov)) return Math.max(0, Math.min(ROADMAP_EFF_MAX, ov));
+      if (rs.effMode === "theoretical") return 1;
+      if (catId === "obsidian" || isAnimalCat(catId)) return 1;
+      const eb = efficiencyMap && efficiencyMap.effByCat;
+      if (!eb) return 1;
+      if (eb[catId] && eb[catId].measured) return eb[catId].ratio;
+      return efficiencyMap.meanRatio || 1;
     }
 
     // Helper: baseline SFL/day for a category using current owned effects
@@ -26746,7 +26805,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         ⚠️ UNDER DEVELOPMENT ⚠️
         <div style="margin-top:6px;font-size:0.5rem;color:var(--text-secondary);line-height:1.5">
           All ${BUD_COUNT} bud NFTs with boost calculations (hardcoded data).<br>
-          ${sflIcon()}/day based on YOUR farm capacity. Same-resource boosts: best wins (no stacking). Owned buds shown first.
+          ${sflIcon()}/day based on YOUR farm capacity. A bud's type and stem boosts on the same resource add up, then the aura multiplies them (as in the game); across several buds only the best one counts. Owned buds shown first.
         </div>
       </div>`;
 
@@ -27016,11 +27075,58 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       return m;
     }
 
-    function petDailyCalc(pet, p2pPrices, feedMult, hasPetBowls) {
+    // Per-request feed energy — twin of core/engine/pets.mjs (getPetEnergy port). The table is
+    // lowerCamelCase on purpose: flowers.html's constants inventory reads UPPER_SNAKE literals as game tables.
+    const petAuraEnergyMult = { "No Aura": 1, "Common Aura": 1.5, "Rare Aura": 2, "Mythic Aura": 3 };
+    const _petRound2 = (n) => Math.round(n * 100) / 100;
+
+    // getPetEnergy: flat level bonuses first, THEN the NFT aura multiplies them too,
+    // and the wearable's +5 lands after the multiplier.
+    function petFeedEnergy(baseEnergy, { level = 1, isNft = false, aura = null, walrusOnesie = false } = {}) {
+      let boost = 0;
+      if (level >= 5) boost += 5;
+      if (level >= 35) boost += 5;
+      if (level >= 75) boost += 5;
+      let energy = baseEnergy + boost;
+      if (isNft && aura) energy *= (petAuraEnergyMult[aura] ?? 1);
+      // The game also grants VIPs +5 during the "Paw Prints" chapter. That chapter ran
+      // 2025-11-03 → 2026-02-02 (CHAPTERS), so it can no longer apply and is left out.
+      if (walrusOnesie) energy += 5;
+      return _petRound2(energy);
+    }
+
+    // Units ONE fetch of `res` returns — getFetchYield (events/pets/fetchPet.ts:45-100):
+    // 1, +1 Acorn with Squirrel Onesie worn, +0.25 Acorn with Oaken placed, + the level's
+    // native share (petExtraResourceChance — a flat fraction added to the amount, not a roll)
+    // on everything EXCEPT Fossil Shell, +25% Moonfur for an NFT pet at 150+, +1 Acorn per
+    // Acorn fetch from level 18, and +1 of the fetched resource for an NFT pet at 60+ unless it
+    // is Acorn or Moonfur.
+    function petFetchYield(res, level, isNft, boosts) {
+      const b = boosts || {};
+      let y = 1;
+      if (res === "Acorn" && b.squirrelOnesie) y += 1;
+      if (res === "Acorn" && b.oaken) y += 0.25;
+      if (res !== "Fossil Shell") {
+        y += petExtraResourceChance(level);
+        if (isNft && level >= 150 && res === "Moonfur") y += 0.25;
+      }
+      if (level >= 18 && res === "Acorn") y += 1;
+      if (isNft && level >= 60 && res !== "Acorn" && res !== "Moonfur") y += 1;
+      return y;
+    }
+
+    function petDailyCalc(pet, p2pPrices, feedMult, hasPetBowls, boosts) {
+      const b = boosts || {};
       const reqTypes = petRequestsAtLevel(pet.level, pet.isNft);
       const reqEnergy = reqTypes.reduce((s, r) => s + PET_REQUEST_VALUES[r].energy, 0);
       const fetchBonus = petFetchEnergyBonus(pet.level);
-      const energyPerFeed = reqEnergy + fetchBonus;
+      // Energy per feed is the sum of what each request pays, priced exactly as the feeding
+      // table prices it (getPetEnergy, events/pets/feedPet.ts:46-94): the level bonus lands on
+      // EVERY request, the NFT aura multiplies it, Walrus Onesie adds +5 per request. The old
+      // `reqEnergy + fetchBonus` added the bonus once per feed and ignored aura + Walrus, so the
+      // card and the table beside it showed two different numbers.
+      const energyPerFeed = reqTypes.reduce((s, r) => s + petFeedEnergy(PET_REQUEST_VALUES[r].energy,
+        { level: pet.level, isNft: pet.isNft, aura: pet.aura, walrusOnesie: b.walrusOnesie }), 0);
       const dailyEnergy = energyPerFeed * feedMult;
 
       // XP per feed
@@ -27028,45 +27134,34 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       const xpMult = 1 + petXpBonusMultiplier(pet.level, pet.isNft);
       const dailyXp = reqXp * xpMult * feedMult;
 
-      // Best resource
+      // Best resource — ranked by what a fetch actually RETURNS per energy, not by one unit.
       const fetchData = PET_FETCH_DATA[pet.petType] || [];
       const unlocked = fetchData.filter(f => pet.level >= f.level);
       const extraChance = petExtraResourceChance(pet.level);
 
-      let bestRes = null, bestSflPerEnergy = 0;
+      let bestRes = null, bestSflPerEnergy = 0, bestYield = 0;
       for (const f of unlocked) {
-        const price = p2pPrices[f.res] || 0;
-        const sflPerE = price / f.energy;
+        const y = petFetchYield(f.res, pet.level, pet.isNft, b);
+        const sflPerE = (p2pPrices[f.res] || 0) * y / f.energy;
         if (sflPerE > bestSflPerEnergy) {
           bestSflPerEnergy = sflPerE;
           bestRes = f;
+          bestYield = y;
         }
       }
 
-      let dailySfl = 0, fetchesPerDay = 0;
+      let dailySfl = 0, fetchesPerDay = 0, acornBonus = 0, guaranteedBonus = 0;
       if (bestRes) {
+        const price = p2pPrices[bestRes.res] || 0;
         fetchesPerDay = dailyEnergy / bestRes.energy;
-        dailySfl = fetchesPerDay * (p2pPrices[bestRes.res] || 0) * (1 + extraChance);
-      }
-
-      // Acorn bonus at Lv18+
-      let acornBonus = 0;
-      if (pet.level >= 18) {
-        acornBonus = (p2pPrices["Acorn"] || 0) * feedMult;
-        dailySfl += acornBonus;
-      }
-
-      // Guaranteed non-Acorn/Moonfur resource at Lv60+ (NFT only)
-      let guaranteedBonus = 0;
-      if (pet.isNft && pet.level >= 60) {
-        const nonAcornRes = unlocked.filter(f => f.res !== "Acorn" && f.res !== "Moonfur");
-        const bestNonAcornPrice = nonAcornRes.reduce((best, f) => Math.max(best, p2pPrices[f.res] || 0), 0);
-        guaranteedBonus = bestNonAcornPrice * fetchesPerDay;
-        dailySfl += guaranteedBonus;
+        dailySfl = fetchesPerDay * price * bestYield;
+        // The two flat per-fetch extras, split out for the card's breakdown line (already in dailySfl).
+        if (pet.level >= 18 && bestRes.res === "Acorn") acornBonus = fetchesPerDay * price;
+        if (pet.isNft && pet.level >= 60 && bestRes.res !== "Acorn" && bestRes.res !== "Moonfur") guaranteedBonus = fetchesPerDay * price;
       }
 
       return { reqTypes, reqEnergy, fetchBonus, energyPerFeed, dailyEnergy, reqXp, xpMult,
-               dailyXp, bestRes, bestSflPerEnergy, extraChance, dailySfl, fetchesPerDay, acornBonus, guaranteedBonus, feedMult };
+               dailyXp, bestRes, bestSflPerEnergy, bestYield, extraChance, dailySfl, fetchesPerDay, acornBonus, guaranteedBonus, feedMult };
     }
 
 
@@ -27108,7 +27203,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       // Pet state — MIGRATED to core/sections/pets.mjs (compute?section=pets): boost
       // detection, pet parsing + per-pet daily calc run server-side; raw p2pPrices come
       // back for the page's resource tables.
-      let p2pPrices = {}, pets = [], feedMultiplier = 1.0, hasPetBowls = false, hasVictoriasApron = false;
+      let p2pPrices = {}, pets = [], feedMultiplier = 1.0, hasPetBowls = false, hasVictoriasApron = false, fetchBoosts = {};
       try {
         let payload, lastErr;
         for (let a = 0; a < 3; a++) {
@@ -27126,6 +27221,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         feedMultiplier = d.feedMultiplier || 1.0;
         hasPetBowls = !!d.hasPetBowls;
         hasVictoriasApron = !!d.hasVictoriasApron;
+        fetchBoosts = d.fetchBoosts || {};
       } catch (err) {
         document.getElementById("pets-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load: ${escHTML(err.message)}</p></div>`;
         return;
@@ -27282,8 +27378,10 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           const withCalc = unlocked.map(f => {
             const price = p2pPrices[f.res] || 0;
             const fetches = Math.floor(pet.energy / f.energy);
-            const totalSfl = fetches * price;
-            const ratio = price > 0 ? price / f.energy : 0;
+            // Units per fetch as the game pays them (getFetchYield, events/pets/fetchPet.ts:45-100).
+            const perFetch = petFetchYield(f.res, pet.level, pet.isNft, fetchBoosts);
+            const totalSfl = fetches * price * perFetch;
+            const ratio = price > 0 ? price * perFetch / f.energy : 0;
             return { ...f, price, ratio, fetches, totalSfl };
           }).sort((a, b) => b.totalSfl - a.totalSfl);
 
@@ -28368,7 +28466,11 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       // estimateItemSfl directly. PRICES(null) is null until the first fetch resolves;
       // guard to {} so lookups fall through to the existing "|| 0" absence handling
       // rather than throwing, and the arrival rerender (via main()) repaints with real data.
-      const _marksPriceMap = (PRICES(null) || {}).marketValue || {};
+      const _marksMaps = PRICES(null) || {};
+      const _marksPriceMap = {};
+      for (const k of new Set([...Object.keys(_marksMaps.productionCost || {}), ...Object.keys(_marksMaps.marketValue || {}), ...Object.keys(_marksP2pPrices)])) {
+        _marksPriceMap[k] = deliveryItemCostSfl(k, null, _marksP2pPrices);   // Roadmap's rule, shared with Dashboard
+      }
 
       // Use LIVE farm data for strategy (not stale snapshot)
       const liveFarm = liveData?.farm || null;

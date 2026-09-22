@@ -1,22 +1,16 @@
 import { COOKING_RECIPES_DATA, BUMPKIN_DEFAULT_RECIPES, COOKING_BUILDING_NAMES } from "../data/cooking.mjs";
 import { findCollectible } from "../derive/items.mjs";
-import { detectCookingBoosts, computeFoodXP, computeCookTime } from "../engine/cooking.mjs";
+import { detectCookingBoosts, computeFoodXP, computeCookTime, computeCookAmount, computeBankedFoodXp } from "../engine/cooking.mjs";
 import { computeRecipeCost, computeSaltYieldPerRake, computeSaltRakeCoinMult, computeFishYieldPerCast } from "../engine/cooking-cost.mjs";
 
 const rnd = (x) => (x == null || !isFinite(x)) ? null : Math.round(x * 1000) / 1000;
-// Mirrors flowers.html:6595 (getCount) — inventory quantities can arrive as strings.
-const getCount = (inv, name) => {
-  const v = inv[name];
-  if (v === undefined || v === null) return 0;
-  return Math.floor(parseFloat(v));
-};
 
-// settings = { savedRecipes?: object, petSimulate?: boolean, coinsPerSFL?: number }
+// settings = { savedRecipes?: object, petSimulate?: boolean, coinsPerSFL?: number, now?: ms }
 // prices = p2p price map (sfl.world/api/v1/prices .data.p2p), or {} if unavailable —
 // recipe costs come back null (unpriced) rather than throwing.
 export function buildCookingSection(farm, prices = {}, settings = {}) {
   const savedRecipes = settings.savedRecipes || {};
-  const boosts = detectCookingBoosts(farm, { petSimulate: !!settings.petSimulate });
+  const boosts = detectCookingBoosts(farm, { petSimulate: !!settings.petSimulate, now: settings.now });
   const p2p = prices;
   const coinsPerSFL = settings.coinsPerSFL || 0;
   const skills = farm?.bumpkin?.skills || {};
@@ -59,25 +53,32 @@ export function buildCookingSection(farm, prices = {}, settings = {}) {
       .filter(([, r]) => r.building === bd)
       .map(([name, r]) => {
         const xp = computeFoodXP(name, r, bd, boosts);
-        const time = computeCookTime(r.cookSec, bd, boosts);
-        const xpPerHour = time > 0 ? (xp / time) * 3600 : 0;
+        const time = computeCookTime(r.cookSec, bd, boosts, undefined, name);
+        // Dishes per cook: Double Nom's +1 and the Fiery Jackpot / Cleaver chances.
+        const amount = computeCookAmount(name, bd, boosts);
+        const xpPerHour = time > 0 ? (xp * amount / time) * 3600 : 0;
         const isInstant = r.cookSec === 0;
         const rc = p2p ? computeRecipeCost(name, p2p, coinsPerSFL, skills, extras) : null;
         const cost = (rc && rc.total > 0) ? rc.total : null;
-        const xpPerSfl = (cost && cost > 0) ? xp / cost : 0;
+        // Double Nom doubles the ingredients too (getCookingRequirements, cook.ts:174-176), so only
+        // the chance-based extras make a dish cheaper; cost stays the one-set recipe cost.
+        const ingSets = (skills["Double Nom"] && bd !== "Aging Shed") ? 2 : 1;
+        const xpPerSfl = (cost && cost > 0) ? (xp * amount) / (cost * ingSets) : 0;
         // Cost breakdown for the page's Cost/cook tooltip (items) and +self badge
         // (hasUnpriced) — flowers.html:10802 (costTip) and :10854 (+self badge).
         const items = rc ? rc.items : null;
         const hasUnpriced = rc ? rc.hasUnpriced : false;
-        return { name, xp, time, xpPerHour, cost, xpPerSfl, isInstant, items, hasUnpriced };
+        return { name, xp, time, amount, xpPerHour, cost, xpPerSfl, isInstant, items, hasUnpriced };
       });
     const rd = selName ? COOKING_RECIPES_DATA[selName] : null;
     if (!rd) { buildings[bd] = { recipe: null, cookMinutes: null, xpPerCook: 0, buildingCount: count, xpPerDay: 0, recipes }; continue; }
     const xp = computeFoodXP(selName, rd, bd, boosts);
-    const time = computeCookTime(rd.cookSec, bd, boosts);
+    const time = computeCookTime(rd.cookSec, bd, boosts, undefined, selName);
+    const amount = computeCookAmount(selName, bd, boosts);
     const cooksPerDay = time > 0 ? (86400 / time) * count : 0;
-    const xpPerDay = xp * cooksPerDay;
-    buildings[bd] = { recipe: selName, cookMinutes: time > 0 ? Math.round(time / 6) / 10 : null, xpPerCook: rnd(xp), buildingCount: count, xpPerDay: rnd(xpPerDay), recipes };
+    // XP one cook pays = XP per dish × dishes per cook.
+    const xpPerDay = xp * amount * cooksPerDay;
+    buildings[bd] = { recipe: selName, cookMinutes: time > 0 ? Math.round(time / 6) / 10 : null, xpPerCook: rnd(xp * amount), dishesPerCook: rnd(amount), buildingCount: count, xpPerDay: rnd(xpPerDay), recipes };
     total += xpPerDay;
     if (settings.explain) {
       // Recompute the SAME xp/time with a trace sink so the derivation mirrors the value
@@ -85,16 +86,17 @@ export function buildCookingSection(farm, prices = {}, settings = {}) {
       // boost breakdown; the top formula multiplies xp/cook by cooks/day.
       const xpTrace = [], timeTrace = [];
       computeFoodXP(selName, rd, bd, boosts, xpTrace);
-      computeCookTime(rd.cookSec, bd, boosts, timeTrace);
+      computeCookTime(rd.cookSec, bd, boosts, timeTrace, selName);
       cookingTrace[bd] = {
         item: bd,
         method: "xp/day",
-        formula: `${rnd(xp)} XP/cook × ${rnd(cooksPerDay)} cooks/day` + (count > 1 ? ` (${count} buildings)` : ""),
+        formula: `${rnd(xp)} XP/dish × ${rnd(amount)} dishes/cook × ${rnd(cooksPerDay)} cooks/day` + (count > 1 ? ` (${count} buildings)` : ""),
         value: xpPerDay,
         unit: "XP/day",
         steps: [
           xpTrace[0],
           timeTrace[0],
+          { item: "dishes/cook", method: "bonus food", formula: ["1"].concat((boosts.amountBoosts || []).filter((b) => (!b.buildings || b.buildings.includes(bd)) && !(b.excludeBuildings || []).includes(bd)).map((b) => `+ ${b.extra} (${b.name})`)).join(" "), value: amount, unit: "dishes/cook" },
           { item: "cooks/day", method: "throughput", formula: `86400s / ${Math.round(time)}s` + (count > 1 ? ` × ${count} buildings` : ""), value: cooksPerDay, unit: "cooks/day" },
         ],
       };
@@ -106,21 +108,9 @@ export function buildCookingSection(farm, prices = {}, settings = {}) {
     }
   }
   const pi = boosts.petStreakInfo || {};
-  // Mirrors flowers.html:10606-10617 — XP banked in the food inventory, summed across
-  // ALL recipes (not just the 5 main buildings), attributed to each recipe's own
-  // `.building` (not the loop variable above).
-  const inventory = farm.inventory || {};
-  const foodInInventory = [];
-  let bankedXP = 0;
-  for (const [foodName, recipe] of Object.entries(COOKING_RECIPES_DATA)) {
-    const qty = getCount(inventory, foodName);
-    if (qty > 0) {
-      const xpEach = computeFoodXP(foodName, recipe, recipe.building, boosts);
-      const totalFoodXP = xpEach * qty;
-      bankedXP += totalFoodXP;
-      foodInInventory.push({ name: foodName, qty, xpEach, totalFoodXP });
-    }
-  }
+  // XP banked in the food inventory: every recipe plus Prime Aged fish, each attributed to its
+  // own `.building` — computeBankedFoodXp, shared with the ascension section.
+  const banked = computeBankedFoodXp(farm, boosts);
   return {
     buildings,
     totalXpPerDay: rnd(total),
@@ -128,8 +118,8 @@ export function buildCookingSection(farm, prices = {}, settings = {}) {
     xpBoosts: (boosts.xpBoosts || []).filter((b) => !b.petStreak).map((b) => b.name),
     // Full boost objects (unfiltered — includes pet-streak entries), for the Bumpkin
     // page's boost lists (flowers.html:10707-10717) and xpLabel() building/honey tags.
-    boosts: { xpBoosts: boosts.xpBoosts || [], timeBoosts: boosts.timeBoosts || [], petStreakInfo: pi },
-    bankedFood: { totalXp: bankedXP, items: foodInInventory },
+    boosts: { xpBoosts: boosts.xpBoosts || [], timeBoosts: boosts.timeBoosts || [], amountBoosts: boosts.amountBoosts || [], petStreakInfo: pi },
+    bankedFood: { totalXp: banked.totalXp, items: banked.items },
     ...(settings.explain ? { cookingTrace, costTrace } : {}),
   };
 }
