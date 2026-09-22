@@ -6007,7 +6007,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.67</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.68</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -6034,6 +6034,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.68", items: [
+          { t: "feat", text: "<b>ROADMAP: an Offer column.</b> Every collectible and wearable on the roadmap shows the best offer on the marketplace and, in one status icon, where you stand: 🟢 your offer is the highest (or tied), 🟠 you have an offer but someone bids more, ⚪ no offer of yours — the price is the best bid your offer would have to beat. −X % marks items whose best bid sits well below the floor (a wide spread worth bidding into); the tooltip has the floor, offer and listing counts, the latest sale and your own price. The book for the whole catalogue comes from the game's community marketplace feed in one request (<code>marketplace-orderbook?book=1</code>, shared for 5 minutes); your offers are read from your farm." },
+        ] },
         { ver: "v5.67", items: [
           { t: "fix", text: "<b>Wallet read on-chain no longer comes up short.</b> Base's public RPC rate-limited every other call (429), so the wallet read as a few hundred sats; each chain now has fallback RPCs and a failed read is flagged in orange under the BILANCE instead of silently under-counting." },
           { t: "fix", text: "Only Base and Ronin are read now — the two chains in use; Polygon and Ethereum were extra calls and extra ways to fail." },
@@ -19053,6 +19056,53 @@
     // settings change re-runs it → fresh server compute) and hands the payload to the
     // renderer below; roadmapState is refreshed from the served eff so the inline
     // profitability/label helpers keep working. null roi/atDay = serialized Infinity.
+    /*
+     * OFFER column: the best offer on the marketplace for each roadmap item, and whether the owner
+     * has an offer of their own on it and is on top — all in one status icon.
+     *   🟢 your offer is the best one (or tied with it)   🟠 you have an offer but someone bids more
+     *   ⚪ no offer of yours — the price shown is the best bid, where an offer of yours would start
+     * The book (floor / best offer for the whole catalogue) comes from marketplace-orderbook?book=1,
+     * refreshed every 5 minutes; the owner's own offers from farm.trades.offers (per-unit = sfl/qty).
+     */
+    let _rmBook = null;
+    async function _rmLoadBook() {
+      try {
+        const r = await fetch("/api/marketplace-orderbook?book=1");
+        if (r.ok) _rmBook = await r.json();
+      } catch (e) { /* the column shows — */ }
+    }
+    function _rmMyOffers() {
+      const out = {};
+      const offers = (powerState && powerState.farm && powerState.farm.trades && powerState.farm.trades.offers) || {};
+      for (const o of Object.values(offers)) {
+        if (!o || o.fulfilledAt || o.clearedAt) continue;
+        for (const [name, qty] of Object.entries(o.items || {})) {
+          const unit = (+o.sfl || 0) / (+qty || 1);
+          if (!out[name] || unit > out[name].unit) out[name] = { unit, qty: +qty || 1 };
+        }
+      }
+      return out;
+    }
+    function _rmOfferCell(name, myOffers) {
+      const m = _rmBook && _rmBook.items && _rmBook.items[name];
+      const mine = myOffers[name];
+      if (!m) return mine ? `<span title="Tvoje nabídka ${roadmapFmtFlower(mine.unit)} — trh pro tuhle položku nemá data">🟠 ${roadmapFmtFlower(mine.unit)}</span>` : `<span style="color:var(--text-dim)">—</span>`;
+      const bid = m.b, ask = m.f;
+      const gap = (bid != null && ask) ? Math.round((ask - bid) / ask * 100) : null;
+      const book = `best offer ${bid != null ? roadmapFmtFlower(bid) : "none"} (${m.oc} nabídek) · floor ${ask != null ? roadmapFmtFlower(ask) : "—"} (${m.lc} listingů)${gap != null ? ` · mezera ${gap} %` : ""}${m.ls != null ? ` · poslední prodej ${roadmapFmtFlower(m.ls)}` : ""}`;
+      let icon, price, tip;
+      if (mine && (bid == null || mine.unit >= bid - 1e-9)) {
+        icon = "🟢"; price = mine.unit;
+        tip = `Tvoje nabídka ${roadmapFmtFlower(mine.unit)}${mine.qty > 1 ? ` ×${mine.qty}` : ""} je nejvyšší${bid != null && Math.abs(mine.unit - bid) < 1e-9 ? " (nebo sdílí první místo)" : ""}. ${book}`;
+      } else if (mine) {
+        icon = "🟠"; price = mine.unit;
+        tip = `Přebitá: tvoje ${roadmapFmtFlower(mine.unit)}, nejvyšší ${roadmapFmtFlower(bid)} (o ${roadmapFmtFlower(bid - mine.unit)} víc). ${book}`;
+      } else {
+        icon = "⚪"; price = bid;
+        tip = `Nemáš nabídku. ${book}`;
+      }
+      return `<span title="${escHTML(tip)}" style="cursor:help;white-space:nowrap">${icon} ${price != null ? roadmapFmtFlower(price) : "—"}${gap != null && gap >= 15 ? ` <span style="font-size:0.45rem;color:var(--sunpetal)">−${gap}%</span>` : ""}</span>`;
+    }
     async function renderRoadmapContent() {
       const el = document.getElementById("roadmap-content");
       if (!el) return;
@@ -19060,12 +19110,14 @@
         // The scenario view renders client-side from `startup` — the simulation stays pure
         // reality, so no scenario parameter travels with the request.
         const q = `products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}&roadmap=${encodeURIComponent(localStorage.getItem("sfl_roadmap_settings") || "{}")}`;
+        const bookP = _rmLoadBook();
         const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=roadmap&${q}`, {
           method: "POST", headers: { "content-type": "application/json" },
           body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [] }),
         });
         if (!rp.ok) throw new Error(`compute roadmap ${rp.status}`);
         const d = (await rp.json()).data || {};
+        await bookP;
         const inf = (v) => (v == null ? Infinity : v);
         for (const t of (d.sim.timeline || [])) { t.roi = inf(t.roi); t.atDay = inf(t.atDay); }
         for (const r of (d.sim.ranked || [])) { r.roi = inf(r.roi); r.atDay = inf(r.atDay); }
@@ -19199,6 +19251,7 @@
         <th style="padding:4px 6px">Item</th>
         <th style="padding:4px 6px">Boost</th>
         <th style="padding:4px 6px;text-align:right" title="Kupní cena v FLOWER — floor na marketplace, u craftu odvozená z materiálu.">Cost ${sflIcon()}</th>
+        <th style="padding:4px 6px;text-align:right" title="Nejlepší nabídka (bid) na marketplace a stav tvé nabídky: 🟢 tvoje je nejvyšší · 🟠 máš nabídku, ale někdo nabízí víc · ⚪ nemáš nabídku (cena = nejvyšší bid). −X % = o kolik je bid pod floor. Najeď myší pro detail.">Offer</th>
         <th style="padding:4px 6px;text-align:right" title="Kolik ti ta položka přidá za den, v FLOWER.">+${sflIcon()}/day</th>
         <th style="padding:4px 6px;text-align:right" title="Řazeno podle návratnosti. U kroků, které tvoří řadu (ascension expanze, Level 2 → 3), se řadí podle návratnosti CELÉ řady až sem — ten krok nejde koupit dřív než ty před ním. Tahle hodnota je pak pod vlastní návratností jako ‚v řadě‘.">Payback</th>
         <th style="padding:4px 6px;text-align:right" title="Kumulativní cena v FLOWER, když kupuješ shora dolů.">&Sigma; Cost ${sflIcon()}</th>
@@ -19206,6 +19259,7 @@
         <th style="padding:4px 6px;text-align:right">ETA</th>
       </tr></thead><tbody>`;
       const typeBadge = ty => { const d = rowTypeMeta[ty] || rowTypeMeta.Collectible; return `<span style="font-size:0.5rem;padding:1px 4px;border-radius:3px;background:${d.bg};color:var(--text-dim)" title="${escHTML(d.full)}">${d.label}</span>`; };
+      const _myOffers = _rmMyOffers();
       let rank = 0;
       for (const r of (sim.ranked || [])) {
         rank++;   // counts the FULL order, so a visible row keeps its real position
@@ -19221,6 +19275,7 @@
           <td style="padding:3px 6px;white-space:nowrap">${rowIcon(r)} ${escHTML(r.name)} ${typeBadge(r.type)} ${stBadge}${r.skillTakeNow ? ` <span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1f3a2a;color:#7fe0a0" title="Skill pointy na tohle už máš — můžeš vzít hned. Cena je i tak spočtená z XP, které ten point stál: držet point ho nedělá zdarma, stejně jako držet FLOWER nedělá NFT zdarma.">MůžEŠ HNED</span>` : ""}</td>
           <td style="padding:3px 6px;color:var(--text-dim);max-width:240px">${boostTxt}</td>
           <td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(r.floor)}</td>
+          <td style="padding:3px 6px;text-align:right">${(!r.type || r.type === "Collectible" || r.type === "Wearable") ? _rmOfferCell(r.name, _myOffers) : `<span style="color:var(--text-dim)">—</span>`}</td>
           <td style="padding:3px 6px;text-align:right;color:var(--green)">${marg}</td>
           <td style="padding:3px 6px;text-align:right">${roadmapFmtDays(r.roi)}${
             /*

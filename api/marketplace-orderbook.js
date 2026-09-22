@@ -1,4 +1,52 @@
 import { getPool } from "./_db.js";
+import ITEM_NAMES from "./_item-names.js";
+
+/*
+ * ?book=1 — the top of the book for the WHOLE catalogue, keyed by item name: floor (cheapest
+ * listing), bestOffer, listing/offer counts, latest sale. One call to the documented community
+ * marketplaceActivity feed carries all ~3,000 items; it is throttled to about one request per 5 s
+ * per IP, so the compact result is shared through KV for 5 minutes (and kept per warm instance).
+ * The roadmap reads it to show the best offer next to each item and whether the owner's own offer
+ * (from farm.trades.offers) is on top.
+ */
+const _book = { at: 0, data: null };
+async function handleBook(res) {
+  const kvUrl = process.env.KV_REST_API_URL, kvTok = process.env.KV_REST_API_TOKEN;
+  const KEY = "cache:market-book:v1", TTL = 300;
+  res.setHeader("Cache-Control", "public, max-age=60");
+  if (_book.data && Date.now() - _book.at < TTL * 1000) return res.status(200).json(_book.data);
+  if (kvUrl && kvTok) {
+    try {
+      const g = await (await fetch(`${kvUrl}/get/${encodeURIComponent(KEY)}`, { headers: { Authorization: `Bearer ${kvTok}` } })).json();
+      if (g.result) { _book.data = JSON.parse(g.result); _book.at = Date.now(); return res.status(200).json(_book.data); }
+    } catch {}
+  }
+  const key = process.env.SFL_API_KEY;
+  if (!key) return res.status(500).json({ error: "SFL_API_KEY not configured" });
+  const r = await fetch("https://api.sunflower-land.com/community/data?type=marketplaceActivity",
+    { headers: { "Content-Type": "application/json;charset=UTF-8", "x-api-key": key } });
+  if (!r.ok) {
+    if (_book.data) return res.status(200).json({ ..._book.data, stale: true });
+    return res.status(r.status === 429 ? 503 : 502).json({ error: `marketplaceActivity ${r.status}` });
+  }
+  const act = (await r.json()).data || {};
+  const reports = act.reports || {};
+  const day = Object.keys(reports).sort().pop();
+  const items = {};
+  for (const [k, m] of Object.entries((reports[day] || {}).items || {})) {
+    const dash = k.indexOf("-");
+    const coll = k.slice(0, dash), id = k.slice(dash + 1);
+    const name = (ITEM_NAMES[coll] || {})[id];
+    if (!name || (m.floor == null && m.bestOffer == null)) continue;
+    items[name] = { c: coll, id: +id, f: m.floor ?? null, b: m.bestOffer ?? null, lc: m.listingCount || 0, oc: m.offerCount || 0, ls: m.latestSale ?? null };
+  }
+  const data = { at: new Date().toISOString(), day, flowerPrice: act.flowerPrice ?? null, items };
+  _book.data = data; _book.at = Date.now();
+  if (kvUrl && kvTok) {
+    try { await fetch(`${kvUrl}/set/${encodeURIComponent(KEY)}?EX=${TTL}`, { method: "POST", headers: { Authorization: `Bearer ${kvTok}`, "Content-Type": "text/plain" }, body: JSON.stringify(data) }); } catch {}
+  }
+  return res.status(200).json(data);
+}
 
 // ── flips + health modes fold in here (kept as query modes to stay under Vercel's
 // serverless-function budget rather than shipping separate endpoint files). ──
@@ -174,6 +222,7 @@ export default async function handler(req, res) {
 
   // Folded-in modes (see top-of-file note).
   if (req.query.wishlist === "1") { try { return await handleWishlist(getPool(), req, res); } catch (e) { console.error("wishlist:", e.message); return res.status(500).json({ error: String(e.message || e) }); } }
+  if (req.query.book === "1") { try { return await handleBook(res); } catch (e) { console.error("book:", e.message); return res.status(500).json({ error: String(e.message || e) }); } }
   if (req.query.health === "1") { try { return await handleHealth(getPool(), res); } catch (e) { return res.status(500).json({ error: String(e.message || e) }); } }
   if (req.query.flips === "1") { try { return await handleFlips(getPool(), req, res); } catch (e) { console.error("flips:", e.message); return res.status(500).json({ error: String(e.message || e) }); } }
 
