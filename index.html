@@ -6035,7 +6035,7 @@
     function renderChangelog() {
       const log = [
         { ver: "v5.68", items: [
-          { t: "feat", text: "<b>ROADMAP: an Offer column.</b> Every collectible and wearable on the roadmap shows the best offer on the marketplace and, in one status icon, where you stand: 🟢 your offer is the highest (or tied), 🟠 you have an offer but someone bids more, ⚪ no offer of yours — the price is the best bid your offer would have to beat. −X % is how far the best bid sits below the floor, on every row (highlighted from 15 %, a spread worth bidding into); the tooltip has the floor, offer and listing counts, the latest sale and your own price. The book for the whole catalogue comes from the game's community marketplace feed in one request (<code>marketplace-orderbook?book=1</code>, shared for 5 minutes); your offers are read from your farm." },
+          { t: "feat", text: "<b>ROADMAP: an Offer column.</b> Every collectible and wearable on the roadmap shows the best offer on the marketplace and, in one status icon, where you stand: 🟢 your offer is the highest (or tied), 🟠 you have an offer but someone bids more, ⚪ no offer of yours — the price is the best bid your offer would have to beat. −X % is how far the best bid sits below the floor, on every row (highlighted from 15 %, a spread worth bidding into); the tooltip has the floor, offer and listing counts, the latest sale and your own price, and a click opens the item in the in-game marketplace. The book for the whole catalogue comes from the game's community marketplace feed in one request (<code>marketplace-orderbook?book=1</code>, shared for 5 minutes); your offers are read from your farm." },
         ] },
         { ver: "v5.67", items: [
           { t: "fix", text: "<b>Wallet read on-chain no longer comes up short.</b> Base's public RPC rate-limited every other call (429), so the wallet read as a few hundred sats; each chain now has fallback RPCs and a failed read is flagged in orange under the BILANCE instead of silently under-counting." },
@@ -19101,7 +19101,8 @@
         icon = "⚪"; price = bid;
         tip = `Nemáš nabídku. ${book}`;
       }
-      return `<span title="${escHTML(tip)}" style="cursor:help;white-space:nowrap">${icon} ${price != null ? roadmapFmtFlower(price) : "—"}${gap != null ? ` <span style="font-size:0.45rem;color:${gap >= 15 ? "var(--sunpetal)" : "var(--text-dim)"}">−${gap}%</span>` : ""}</span>`;
+      const href = `https://sunflower-land.com/play/#/marketplace/${m.c}/${m.id}`;
+      return `<a href="${href}" target="_blank" rel="noopener" title="${escHTML(tip + " · klik = otevřít v marketplace")}" style="white-space:nowrap;color:inherit;text-decoration:none;border-bottom:1px dotted var(--text-dim)">${icon} ${price != null ? roadmapFmtFlower(price) : "—"}${gap != null ? ` <span style="font-size:0.45rem;color:${gap >= 15 ? "var(--sunpetal)" : "var(--text-dim)"}">−${gap}%</span>` : ""}</a>`;
     }
     async function renderRoadmapContent() {
       const el = document.getElementById("roadmap-content");
