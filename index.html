@@ -6007,7 +6007,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.66</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.67</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -6034,6 +6034,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.67", items: [
+          { t: "fix", text: "<b>Wallet read on-chain no longer comes up short.</b> Base's public RPC rate-limited every other call (429), so the wallet read as a few hundred sats; each chain now has fallback RPCs and a failed read is flagged in orange under the BILANCE instead of silently under-counting." },
+          { t: "fix", text: "<b>REPAY PLAN is two figures</b> — WITHDRAW DAILY (🌸, with ₿ and the plan underneath) and YOU ARE BEHIND / AHEAD BY (🌸, ₿, days, withdrawn-of-target since the start) — plus the chart. The position row, target/actual/trend tiles are gone; the BILANCE table carries the position. The BTC column of that table is always 6 decimals so it lines up." },
+        ] },
         { ver: "v5.66", items: [
           { t: "feat", text: "<b>Investment Tracker: one BILANCE instead of a card per venue.</b> COST (net BTC inside, with its 🌸 equivalent at today's rate), then every holding valued now — the farm treasury after the 10 % fee, the wallet <b>read on-chain</b>, the locked Yakkamon deposit, the Genesis eggs — then the value sellable today and after the Q4 unlock, and the difference. Register a wallet address on the Wallet line (<code>[+ peněženka]</code>; one address is the same on every chain, so it is read on Base, Ronin, Polygon and Ethereum at once and everything it holds — FLOWER, USDC, cbBTC, WETH/ETH, RON/WRON, POL — is valued in USD and BTC). Its Genesis eggs are priced at the <b>best fillable Hidden trait offer on Ronin Market</b>, the price a seller gets now. IF SOLD TODAY and STILL MISSING count the whole wallet and the eggs as sellable now. Endpoints <code>farm-history?type=farm-wallet</code> / <code>venue-holdings</code>." },
         ] },
@@ -29603,12 +29607,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
 
       mount.innerHTML = `
         <h2 class="pixel-font" style="margin:0 0 10px 0;font-size:0.75rem;color:var(--sunpetal);letter-spacing:1px">💰 INVESTMENT TRACKER</h2>
-        ${_invRepayHtml(agg, planStats, flowerPerBtc, {
-          repaidText: agg.repaidPct === null ? "n/a" : agg.repaidPct.toFixed(1) + " %", repaidColor: verdictColor(agg.repaidPct),
-          ifLiqText, liqColor, liquidValueSfl, walletHeldFlower, hasFarmValue, walletLiquidBtc, eggsLiquidBtc, chainWallet: !!chainWallet,
-          lockedSfl: (lockedSfl > 0 && canCompute3) ? lockedSfl : 0, atUnlockPct,
-          missingAfterFlower, missingKeepFlower, daysText, daysSubText, daysColor,
-        })}
+        ${_invRepayHtml(agg, planStats, flowerPerBtc)}
         ${_invBalanceSheetHtml({ agg, flowerPerBtc, fmtFlower, treasuryTotalSfl, liquidValueSfl, liquidValueBtc, lockedBtc, chainWallet, chainEggs, walletLiquidBtc, walletHeldFlower, eggsLiquidBtc })}
         <div id="inv-satsflower" style="margin:6px 0 16px"></div>
         <div id="inv-tx-table-wrap">${renderInvTxTable(transactions)}</div>
@@ -29842,7 +29841,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
      * chart of the last 50 days and the next 50 under it. `pos` carries the figures the render
      * function already computed for the position row.
      */
-    function _invRepayHtml(agg, stats, flowerPerBtc, pos) {
+    function _invRepayHtml(agg, stats, flowerPerBtc) {
       const fmtFl = (btc) => flowerPerBtc > 0 ? Math.round(btc * flowerPerBtc).toLocaleString("en-US") + " 🌸" : "—";
       const fmtN = (v) => Math.round(v).toLocaleString("en-US") + " 🌸";
       const p = _invPlan;
@@ -29850,16 +29849,6 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           <div class="label pixel-font" style="font-size:0.45rem">${label}</div>
           <div style="font-family:'Courier New',monospace;font-size:0.82rem;color:${color || "var(--text-secondary)"};margin-top:2px">${val}</div>
           ${sub ? `<div class="label pixel-font" style="margin-top:2px;color:var(--text-dim);font-size:0.42rem;line-height:1.6">${sub}</div>` : ""}
-        </div>`;
-      const position = `<div class="summary-bar" style="margin:6px 0 0">
-          ${stat("RECOVERED", pos.repaidText, agg.peakBtc > 0 ? `${fmtBtc(agg.peakBtc - agg.netDebtBtc)} of ${fmtBtc(agg.peakBtc)} · in: ${fmtBtc(agg.netDebtBtc)}` : "no deposits yet", pos.repaidColor)}
-          ${stat("IF SOLD TODAY (−10 %)", pos.ifLiqText, (pos.hasFarmValue ? `farm ${fmtN(pos.liquidValueSfl)}` : "no farm value")
-            + (pos.chainWallet ? ` + wallet ${fmtBtc(pos.walletLiquidBtc)}` : (pos.walletHeldFlower > 0 ? ` + wallet ${fmtN(pos.walletHeldFlower)}` : ""))
-            + (pos.eggsLiquidBtc > 0 ? ` + eggs ${fmtBtc(pos.eggsLiquidBtc)}` : "")
-            + (pos.lockedSfl > 0 ? ` · <span style="color:var(--lily)">${pos.atUnlockPct.toFixed(1)} % after Q4 unlock</span>` : ""), pos.liqColor)}
-          ${stat("STILL MISSING", pos.missingAfterFlower === null ? (pos.missingKeepFlower === null ? "—" : fmtN(pos.missingKeepFlower)) : (pos.missingAfterFlower <= 0 ? "✅ 0" : fmtN(pos.missingAfterFlower)),
-                 pos.missingAfterFlower === null ? "keeping the farm" : `after selling · ${pos.missingKeepFlower <= 0 ? "✅ 0" : fmtN(pos.missingKeepFlower)} keeping the farm`, "var(--sunpetal)")}
-          ${stat("PAYBACK ETA", pos.daysText, pos.daysSubText, pos.daysColor)}
         </div>`;
       const form = `<div id="inv-plan-form" style="margin-top:8px;display:${p ? "none" : "flex"};gap:8px;flex-wrap:wrap;align-items:center;font-family:'Courier New',monospace;font-size:0.72rem">
           <label class="pixel-font" style="font-size:0.45rem;color:var(--text-dim)">od <input type="date" id="inv-plan-start" value="${p ? p.start_date : new Date().toISOString().slice(0, 10)}" style="background:rgba(0,0,0,0.4);border:1px solid var(--text-dim);color:var(--text-primary);padding:3px 5px;border-radius:3px;font-family:inherit;font-size:0.7rem"></label>
@@ -29875,18 +29864,15 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           <span class="label pixel-font" style="flex:1">REPAY PLAN <span style="color:var(--text-dim)">— splátky do BTC${p && stats ? ` · ${p.rate} % ${_planPeriodCz[p.period]} z peaku, od ${p.start_date} (${stats.daysElapsed} d)` : ""}</span></span>
           ${p ? `<span class="pixel-font" style="font-size:0.45rem;color:var(--lily);cursor:pointer" onclick="const f=document.getElementById('inv-plan-form');f.style.display=f.style.display==='none'?'flex':'none'">[upravit]</span>` : ""}
         </div>`;
-      const box = (inner) => `<div style="border:1px solid var(--lily);border-radius:6px;padding:8px 10px;margin-bottom:12px;background:rgba(0,0,0,0.25)">${head}${position}${inner}${form}</div>`;
+      const box = (inner) => `<div style="border:1px solid var(--lily);border-radius:6px;padding:8px 10px;margin-bottom:12px;background:rgba(0,0,0,0.25)">${head}${inner}${form}</div>`;
       if (!p || !stats) {
         return box(`<div class="label pixel-font" style="margin-top:8px;color:var(--text-dim);line-height:1.7">${p ? "plán nejde spočítat (chybí peak nebo kurz)" : `Zatím žádný plán. Nastav, kolik z peaku ${fmtBtc(agg.peakBtc)} chceš vracet do BTC — denně, měsíčně nebo ročně. Start v minulosti započítá i výběry od té doby.`}</div>`);
       }
       const behind = stats.balanceBtc < 0;
-      const trendVsTarget = stats.paceBtcPerDay - stats.dailyTargetBtc;
+      const lagDays = stats.dailyTargetBtc > 0 ? Math.round(Math.abs(stats.balanceBtc) / stats.dailyTargetBtc) : 0;
       return box(`<div class="summary-bar" style="margin:8px 0 6px">
-          ${stat("CÍL / DEN", fmtBtc(stats.dailyTargetBtc), `≈ ${fmtFl(stats.dailyTargetBtc)} / den dnes`)}
-          ${stat("MĚL JSI VYBRAT", fmtBtc(stats.targetBtc), `≈ ${fmtFl(stats.targetBtc)} za ${stats.daysElapsed} d`)}
-          ${stat("REÁLNĚ VYBRÁNO", fmtBtc(stats.actualBtc), `≈ ${fmtFl(stats.actualBtc)} · z transakcí od startu`, "var(--green)")}
-          ${stat("BILANCE", `${behind ? "" : "+"}${fmtBtc(stats.balanceBtc)}`, `${behind ? "pozadu" : "napřed"} o ≈ ${fmtFl(Math.abs(stats.balanceBtc))}${stats.dailyTargetBtc > 0 ? ` (${Math.round(Math.abs(stats.balanceBtc) / stats.dailyTargetBtc)} d)` : ""}`, behind ? "var(--red)" : "var(--green)")}
-          ${stat("TREND (50 d)", `${stats.paceBtcPerDay > 0 ? fmtBtc(stats.paceBtcPerDay) : "0"}/den`, trendVsTarget >= 0 ? `nad cílem — za 50 d +${fmtFl(trendVsTarget * 50)} navíc` : `pod cílem — za 50 d skluz −${fmtFl(-trendVsTarget * 50)}`, trendVsTarget >= 0 ? "var(--green)" : "#ff8c42")}
+          ${stat("WITHDRAW DAILY", `<b>${fmtFl(stats.dailyTargetBtc)}</b>`, `${fmtBtc(stats.dailyTargetBtc)} / day · ${p.rate} % ${_planPeriodCz[p.period]} of peak ${fmtBtc(agg.peakBtc)}`)}
+          ${stat(behind ? "YOU ARE BEHIND BY" : "YOU ARE AHEAD BY", `<b>${fmtFl(Math.abs(stats.balanceBtc))}</b>`, `${fmtBtc(Math.abs(stats.balanceBtc))} · ${lagDays} days · withdrawn ${fmtFl(stats.actualBtc)} of ${fmtFl(stats.targetBtc)} since ${p.start_date}`, behind ? "var(--red)" : "var(--green)")}
         </div>
         <div id="inv-repay-chart" style="height:200px"></div>
         <div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);margin-top:3px">−50 d … dnes … +50 d · <span style="color:#e8c86a">- - cíl</span> · <span style="color:#7fe0a0">── vybráno</span> · <span style="color:#7fb8e0">···· trend (tempo posledních 50 d)</span> · <span style="color:#7fe0a0">▮ výběry / den</span></div>`);
@@ -29900,6 +29886,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     function _invBalanceSheetHtml(x) {
       const { agg, flowerPerBtc, fmtFlower } = x;
       const usd = (v) => "$" + Math.round(v).toLocaleString("en-US");
+      const fmtBtc = (v) => isFinite(v) ? v.toFixed(6) + " ₿" : "—";   // one width for the column, unlike the page-wide 6/8 switch
       const amt = (i) => (i.amount >= 1000 ? Math.round(i.amount).toLocaleString("en-US") : i.amount >= 1 ? i.amount.toFixed(2).replace(/\.?0+$/, "") : i.amount.toPrecision(2))
         + " " + (i.symbol === "FLOWER" ? "🌸" : i.symbol === "Genesis Egg" ? "🥚" : i.symbol);
       const esc = (t) => String(t).replace(/"/g, "&quot;");
@@ -29945,7 +29932,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         ${locked > 0 ? row("HODNOTA po unlocku", fmtBtc(sellable + locked), fl(sellable + locked), { info: "+ Yakke deposit, až se v Q4 vrátí" }) : ""}
         ${row("BILANCE hned", sgn(bilNow, fmtBtc) + pct(bilNow), sgn(bilNow, fl), { top: true, bold: true, color: tone(bilNow), labelColor: "var(--text-secondary)", info: "hodnota hned − cost" })}
         ${locked > 0 ? row("BILANCE po unlocku", sgn(bilUnlock, fmtBtc) + pct(bilUnlock), sgn(bilUnlock, fl), { bold: true, color: tone(bilUnlock), labelColor: "var(--text-secondary)", info: "hodnota po unlocku − cost" }) : ""}
-        ${errs.length ? `<div class="pixel-font" style="font-size:0.4rem;color:#ff8c42;margin-top:4px">on-chain: ${errs.join(" · ")}</div>` : ""}
+        ${errs.length ? `<div class="pixel-font" style="font-size:0.45rem;color:#ff8c42;margin-top:6px">⚠ on-chain read incomplete — ${errs.join(" · ")} · Wallet is undervalued, reload</div>` : ""}
       </div>`;
     }
     let _repayChartObj = null;
