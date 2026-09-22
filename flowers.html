@@ -6035,7 +6035,7 @@
     function renderChangelog() {
       const log = [
         { ver: "v5.68", items: [
-          { t: "feat", text: "<b>ROADMAP: an Offer column.</b> Every collectible and wearable on the roadmap shows the best offer on the marketplace and, in one status icon, where you stand: 🟢 your offer is the highest (or tied), 🟠 you have an offer but someone bids more, ⚪ no offer of yours — the price is the best bid your offer would have to beat. −X % marks items whose best bid sits well below the floor (a wide spread worth bidding into); the tooltip has the floor, offer and listing counts, the latest sale and your own price. The book for the whole catalogue comes from the game's community marketplace feed in one request (<code>marketplace-orderbook?book=1</code>, shared for 5 minutes); your offers are read from your farm." },
+          { t: "feat", text: "<b>ROADMAP: an Offer column.</b> Every collectible and wearable on the roadmap shows the best offer on the marketplace and, in one status icon, where you stand: 🟢 your offer is the highest (or tied), 🟠 you have an offer but someone bids more, ⚪ no offer of yours — the price is the best bid your offer would have to beat. −X % is how far the best bid sits below the floor, on every row (highlighted from 15 %, a spread worth bidding into); the tooltip has the floor, offer and listing counts, the latest sale and your own price. The book for the whole catalogue comes from the game's community marketplace feed in one request (<code>marketplace-orderbook?book=1</code>, shared for 5 minutes); your offers are read from your farm." },
         ] },
         { ver: "v5.67", items: [
           { t: "fix", text: "<b>Wallet read on-chain no longer comes up short.</b> Base's public RPC rate-limited every other call (429), so the wallet read as a few hundred sats; each chain now has fallback RPCs and a failed read is flagged in orange under the BILANCE instead of silently under-counting." },
@@ -19101,7 +19101,7 @@
         icon = "⚪"; price = bid;
         tip = `Nemáš nabídku. ${book}`;
       }
-      return `<span title="${escHTML(tip)}" style="cursor:help;white-space:nowrap">${icon} ${price != null ? roadmapFmtFlower(price) : "—"}${gap != null && gap >= 15 ? ` <span style="font-size:0.45rem;color:var(--sunpetal)">−${gap}%</span>` : ""}</span>`;
+      return `<span title="${escHTML(tip)}" style="cursor:help;white-space:nowrap">${icon} ${price != null ? roadmapFmtFlower(price) : "—"}${gap != null ? ` <span style="font-size:0.45rem;color:${gap >= 15 ? "var(--sunpetal)" : "var(--text-dim)"}">−${gap}%</span>` : ""}</span>`;
     }
     async function renderRoadmapContent() {
       const el = document.getElementById("roadmap-content");
@@ -19251,7 +19251,7 @@
         <th style="padding:4px 6px">Item</th>
         <th style="padding:4px 6px">Boost</th>
         <th style="padding:4px 6px;text-align:right" title="Kupní cena v FLOWER — floor na marketplace, u craftu odvozená z materiálu.">Cost ${sflIcon()}</th>
-        <th style="padding:4px 6px;text-align:right" title="Nejlepší nabídka (bid) na marketplace a stav tvé nabídky: 🟢 tvoje je nejvyšší · 🟠 máš nabídku, ale někdo nabízí víc · ⚪ nemáš nabídku (cena = nejvyšší bid). −X % = o kolik je bid pod floor. Najeď myší pro detail.">Offer</th>
+        <th style="padding:4px 6px;text-align:right" title="Nejlepší nabídka (bid) na marketplace a stav tvé nabídky: 🟢 tvoje je nejvyšší · 🟠 máš nabídku, ale někdo nabízí víc · ⚪ nemáš nabídku (cena = nejvyšší bid). −X % = o kolik je bid pod floor (žlutě od 15 %, kde se vyplatí nabízet). Najeď myší pro detail.">Offer</th>
         <th style="padding:4px 6px;text-align:right" title="Kolik ti ta položka přidá za den, v FLOWER.">+${sflIcon()}/day</th>
         <th style="padding:4px 6px;text-align:right" title="Řazeno podle návratnosti. U kroků, které tvoří řadu (ascension expanze, Level 2 → 3), se řadí podle návratnosti CELÉ řady až sem — ten krok nejde koupit dřív než ty před ním. Tahle hodnota je pak pod vlastní návratností jako ‚v řadě‘.">Payback</th>
         <th style="padding:4px 6px;text-align:right" title="Kumulativní cena v FLOWER, když kupuješ shora dolů.">&Sigma; Cost ${sflIcon()}</th>
