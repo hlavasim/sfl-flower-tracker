@@ -2,12 +2,15 @@ import { getPool } from "./_db.js";
 import { handleWorld } from "./_world.js";
 import ITEM_NAMES from "./_item-names.js";
 import { readAddress, fetchPrices, bestEggOfferWron, valueHoldings } from "./_holdings.js";
+import { requireWriteToken } from "./_auth.js";
 
 // Prices and the egg offer are shared by every request and change slowly; the RPC reads are per
 // address and always live. Warm instances keep this for 10 minutes.
 const _holdCache = { at: 0, prices: null, egg: null };
 
 const ALLOWED_FARMS = new Set([155498, 1260204733777858]);
+// A venue is a key the page matches and renders (the WHERE chip) — a short slug, nothing else.
+const VENUE_RE = /^[a-z0-9_-]{1,32}$/;
 // The SPECULATION page is the owner's alone.
 const SPEC_FARMS = new Set([155498]);
 // Crops and fruits the seasonal calendar covers (the p2p feed prices all of them).
@@ -68,6 +71,7 @@ async function handleSpec(pool, req, res) {
       res.setHeader("Cache-Control", "no-store");
       return res.status(200).json({ trades: r.rows });
     }
+    if (!requireWriteToken(req, res)) return;
     if (method === "POST") {
       const b = body();
       const item = typeof b.item === "string" ? b.item.trim().slice(0, 80) : "";
@@ -119,6 +123,7 @@ async function handleSpec(pool, req, res) {
       return res.status(200).json({ snapshots: r.rows.reverse() });
     }
     if (method === "POST") {
+      if (!requireWriteToken(req, res)) return;
       const b = body();
       const list = Array.isArray(b.snapshots) ? b.snapshots : [b];
       let n = 0;
@@ -335,13 +340,15 @@ export default async function handler(req, res) {
         return res.status(200).json({ balances: r.rows });
       }
       if (method === "POST" || method === "PUT") {
+        if (!requireWriteToken(req, res)) return;
         const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
         const venue = (typeof body.venue === "string" && body.venue.trim())
-          ? body.venue.trim().toLowerCase().slice(0, 32) : null;
+          ? body.venue.trim().toLowerCase() : null;
         const amount = parseFloat(body.amount);
         const unit = (typeof body.unit === "string" && body.unit.trim()) ? body.unit.trim().slice(0, 16) : "FLOWER";
         const source = body.source === "game" ? "game" : "manual";
         if (!venue) return res.status(400).json({ error: "venue required" });
+        if (!VENUE_RE.test(venue)) return res.status(400).json({ error: "venue must be 1-32 of a-z 0-9 _ -" });
         if (!Number.isFinite(amount) || amount < 0) return res.status(400).json({ error: "amount must be >= 0" });
         const r = await pool.query(
           `INSERT INTO venue_balance (farm_id, venue, amount, unit, source, noted_at)
@@ -365,6 +372,8 @@ export default async function handler(req, res) {
     try {
       const farm = parseInt(req.query.farm, 10);
       if (!Number.isFinite(farm) || !ALLOWED_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
+      // Every method, the read included: the list IS the owner's wallet addresses.
+      if (!requireWriteToken(req, res)) return;
       if (method === "GET") {
         const r = await pool.query(`SELECT address, label, added_at FROM farm_wallet WHERE farm_id = $1 ORDER BY added_at`, [farm]);
         res.setHeader("Cache-Control", "no-store");
@@ -397,6 +406,8 @@ export default async function handler(req, res) {
     try {
       const farm = parseInt(req.query.farm, 10);
       if (!Number.isFinite(farm) || !ALLOWED_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
+      // Owner-only read: the answer carries the wallet addresses and what they hold.
+      if (!requireWriteToken(req, res)) return;
       const wallets = (await pool.query(`SELECT address, label FROM farm_wallet WHERE farm_id = $1 ORDER BY added_at`, [farm])).rows;
       const notes = [];
       if (Date.now() - _holdCache.at > 10 * 60 * 1000 || !_holdCache.prices) {
@@ -430,6 +441,7 @@ export default async function handler(req, res) {
         res.setHeader("Cache-Control", "no-store");
         return res.status(200).json({ plan: r.rows[0] || null });
       }
+      if (!requireWriteToken(req, res)) return;
       if (method === "POST" || method === "PUT") {
         const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
         const startDate = typeof body.start_date === "string" ? body.start_date.slice(0, 10) : "";
@@ -467,6 +479,8 @@ export default async function handler(req, res) {
         const farm = parseInt(req.query.farm, 10);
         if (!Number.isFinite(farm)) return res.status(400).json({ error: "farm required" });
         if (!ALLOWED_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
+        // The read is owner-only too: it is the BTC ledger.
+        if (!requireWriteToken(req, res)) return;
         const r = await pool.query(
           `SELECT id, farm_id, tx_date, direction, btc_amount, usd_amount, flower_amount, notes, venue, created_at
              FROM btc_transactions
@@ -488,14 +502,16 @@ export default async function handler(req, res) {
           ? null : parseFloat(body.flower_amount);
         const notes = typeof body.notes === "string" ? body.notes.slice(0, 500) : null;
         const txDate = typeof body.tx_date === "string" ? body.tx_date : null;
-        // Free text, lower-cased and bounded. The UI offers the known venues; an unknown one is
-        // recorded rather than rejected, because a new place to put money appears before the
-        // code that knows about it.
+        // Lower-cased slug. The UI offers the known venues; an unknown one is recorded rather than
+        // rejected, because a new place to put money appears before the code that knows about
+        // it — but only as a slug (VENUE_RE): the page renders it and hands it back on a click.
         const venue = (typeof body.venue === "string" && body.venue.trim())
-          ? body.venue.trim().toLowerCase().slice(0, 32) : "sfl";
+          ? body.venue.trim().toLowerCase() : "sfl";
 
         if (!Number.isFinite(farm) || farm <= 0) return res.status(400).json({ error: "farm_id required" });
         if (!ALLOWED_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
+        if (!requireWriteToken(req, res)) return;
+        if (!VENUE_RE.test(venue)) return res.status(400).json({ error: "venue must be 1-32 of a-z 0-9 _ -" });
         if (!["deposit", "withdrawal"].includes(direction)) return res.status(400).json({ error: "direction must be deposit or withdrawal" });
         if (!Number.isFinite(btc) || btc <= 0 || btc > 100) return res.status(400).json({ error: "btc_amount must be > 0 and <= 100" });
         if (usd !== null && (!Number.isFinite(usd) || usd < 0)) return res.status(400).json({ error: "usd_amount must be a non-negative number" });
@@ -525,6 +541,7 @@ export default async function handler(req, res) {
         const farm = parseInt(req.query.farm, 10);
         const id = parseInt(req.query.id, 10);
         if (!Number.isFinite(farm) || !ALLOWED_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
+        if (!requireWriteToken(req, res)) return;
         if (!Number.isFinite(id)) return res.status(400).json({ error: "id required" });
 
         const sets = [], vals = [];
@@ -532,8 +549,9 @@ export default async function handler(req, res) {
         let venueVal, flowerVal, venueSet = false, flowerSet = false;
 
         if (body.venue !== undefined) {
-          venueVal = (typeof body.venue === "string" && body.venue.trim()) ? body.venue.trim().toLowerCase().slice(0, 32) : null;
+          venueVal = (typeof body.venue === "string" && body.venue.trim()) ? body.venue.trim().toLowerCase() : null;
           if (!venueVal) return res.status(400).json({ error: "venue must be a non-empty string" });
+          if (!VENUE_RE.test(venueVal)) return res.status(400).json({ error: "venue must be 1-32 of a-z 0-9 _ -" });
           venueSet = true; add("venue", venueVal);
         }
         if (body.tx_date !== undefined) {
@@ -590,6 +608,7 @@ export default async function handler(req, res) {
         const id = parseInt(req.query.id, 10);
         if (!Number.isFinite(farm) || !Number.isFinite(id)) return res.status(400).json({ error: "farm and id required" });
         if (!ALLOWED_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
+        if (!requireWriteToken(req, res)) return;
         const r = await pool.query(
           `DELETE FROM btc_transactions WHERE id = $1 AND farm_id = $2 RETURNING id`,
           [id, farm]

@@ -14291,7 +14291,7 @@
       if (!token) { fb.innerHTML = '<span style="color:var(--red)">Paste a token first</span>'; return; }
       fb.innerHTML = '<span style="color:var(--text-dim)">Updating...</span>';
       try {
-        const resp = await fetch("/api/game-token", {
+        const resp = await writeFetch("/api/game-token", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ farm: parseInt(FARM_ID), token }),
@@ -14600,7 +14600,7 @@
     }
     // fire-and-forget write to the DB (owner farm only; others stay localStorage-only)
     function _wlPost(payload) {
-      fetch(`/api/marketplace-orderbook?wishlist=1`, { method: "POST", headers: { "content-type": "application/json" },
+      writeFetch(`/api/marketplace-orderbook?wishlist=1`, { method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ farm: FARM_ID, ...payload }) }).catch(() => {});
     }
     window._wlSetPrio = function(key, p) {
@@ -27735,9 +27735,9 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     }
 
     async function _specLoad(force) {
-      const get = async (key, url, pick) => {
+      const get = async (key, url, pick, f) => {
         if (_spec[key] && !force) return;
-        try { const r = await fetch(url); if (!r.ok) throw new Error(r.status + ""); _spec[key] = pick(await r.json()); delete _spec.err[key]; }
+        try { const r = await (f || fetch)(url); if (!r.ok) throw new Error(r.status + ""); _spec[key] = pick(await r.json()); delete _spec.err[key]; }
         catch (e) { _spec.err[key] = e.message || String(e); }
       };
       await Promise.all([
@@ -27745,7 +27745,8 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         get("cal", _specApi("calendar"), (j) => { if (!j || !j.current || !Array.isArray(j.items)) throw new Error((j && j.error) || "neplatná odpověď"); return j; }),
         get("trades", _specApi("trades"), (j) => { if (!j || !Array.isArray(j.trades)) throw new Error((j && j.error) || "neplatná odpověď"); return j.trades; }),
         get("eggs", _specApi("eggs"), (j) => { if (!j || !Array.isArray(j.snapshots)) throw new Error((j && j.error) || "neplatná odpověď"); return j.snapshots; }),
-        get("ledger", `/api/farm-history?type=btc-tx&farm=${FARM_ID}`, (j) => j.transactions || []),
+        // The ledger is an owner-only read; refused, the skim tile shows a 🔒 link instead of 0.
+        get("ledger", `/api/farm-history?type=btc-tx&farm=${FARM_ID}`, (j) => j.transactions || [], (u) => writeFetch(u, undefined, true)),
         get("btc", `/api/proxy?url=${encodeURIComponent("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true")}`, (j) => j.bitcoin || null),
         (async () => { if (_spec.p2p && !force) return; try { _spec.p2p = await fetchP2PLatest(); } catch (e) { _spec.err.p2p = e.message; } })(),
         (async () => { if (_spec.sats && !force) return; try { _spec.sats = await _invLoadSats("1d"); } catch (e) { _spec.err.sats = String(e); } })(),
@@ -27778,6 +27779,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       _specDrawEggChart();
     }
     window._specRefresh = async function () { await _specLoad(true); _specRender(); };
+    window._specUnlock = function () { if (askWriteToken()) _specRefresh(); };
 
     // ── 1. seasonal calendar ──────────────────────────────────────────────
     function _specCalendarHtml(data) {
@@ -27862,12 +27864,12 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         }
         const val = pnl != null ? pnl : mark;
         return `<tr>
-          <td style="white-space:nowrap">${_specDay(t.buy_date)}</td>
+          <td style="white-space:nowrap">${escHTML(_specDay(t.buy_date))}</td>
           <td><b>${escHTML(t.item)}</b>${t.notes ? `<div style="font-size:0.5rem;color:var(--text-dim)">${escHTML(t.notes)}</div>` : ""}</td>
           <td style="text-align:right">${_specFmt(qty, 4)}</td>
           <td style="text-align:right">${_specFmt(buy, 6)} ${escHTML(t.currency)}</td>
           <td style="text-align:right">${_specFmt(qty * buy, 2)}</td>
-          <td style="text-align:right">${sell == null ? `<button class="roi-pill" onclick="_specSell(${t.id})">PRODAT</button>` : `${_specFmt(sell, 6)}<div style="font-size:0.5rem;color:var(--text-dim)">${_specDay(t.sell_date)}</div>`}</td>
+          <td style="text-align:right">${sell == null ? `<button class="roi-pill" onclick="_specSell(${t.id})">PRODAT</button>` : `${_specFmt(sell, 6)}<div style="font-size:0.5rem;color:var(--text-dim)">${escHTML(_specDay(t.sell_date))}</div>`}</td>
           <td style="text-align:right;font-weight:bold;color:${val == null ? "var(--text-dim)" : val >= 0 ? "var(--green)" : "var(--red)"}">${val == null ? "—" : (val >= 0 ? "+" : "") + _specFmt(val, 2) + " " + escHTML(t.currency)}${pnl == null && mark != null ? `<div style="font-size:0.45rem;color:var(--text-dim);font-weight:normal">${markNote}</div>` : ""}</td>
           <td style="text-align:right;white-space:nowrap"><button class="roi-pill" onclick="_specEdit(${t.id})">✎</button> <button class="roi-pill" onclick="_specDel(${t.id})">✕</button></td></tr>`;
       }).join("");
@@ -27894,7 +27896,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       </div>`;
     }
     const _specReq = async (method, extra, body) => {
-      const r = await fetch(_specApi("trades", extra), { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+      const r = await writeFetch(_specApi("trades", extra), { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || r.status);
       return j;
@@ -27958,7 +27960,9 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           <div style="border:1px solid var(--border-brown);border-radius:6px;padding:7px 9px;background:#161009"><div style="font-size:0.45rem;color:var(--text-dim)">FLOWER VE HŘE TEĎ</div><div style="font-size:0.8rem;font-weight:bold;color:var(--sunpetal)">${_specFmt(bal, 1)} ${sflIcon("0.8em")}</div><div style="font-size:0.5rem;color:var(--text-dim)">${now ? "≈ " + _specFmt(bal * now) + " sats · " + _specFmt(bal * now / 1e8, 5) + " ₿" : ""}</div></div>
           <div style="border:1px solid var(--border-brown);border-radius:6px;padding:7px 9px;background:#161009"><div style="font-size:0.45rem;color:var(--text-dim)">SATS / FLOWER</div><div style="font-size:0.8rem;font-weight:bold">${_specFmt(now, 1)}</div><div style="font-size:0.5rem;color:var(--text-dim)">30d průměr ${_specFmt(avg30, 1)} (${avg30 ? _specPct(now / avg30 - 1) : "—"})</div></div>
           <div style="border:1px solid var(--border-brown);border-radius:6px;padding:7px 9px;background:#161009"><div style="font-size:0.45rem;color:var(--text-dim)">BTC 24 H</div><div style="font-size:0.8rem;font-weight:bold;color:${btcChg != null && btcChg < 0 ? "var(--red)" : "var(--green)"}">${_specPct(btcChg, 1)}</div><div style="font-size:0.5rem;color:var(--text-dim)">${_spec.btc ? "$" + _specFmt(_spec.btc.usd) : ""}</div></div>
-          <div style="border:1px solid var(--border-brown);border-radius:6px;padding:7px 9px;background:#161009"><div style="font-size:0.45rem;color:var(--text-dim)">UŽ ODVEDENO ZE SFL</div><div style="font-size:0.8rem;font-weight:bold;color:var(--green)">${_specFmt(skimBtc, 5)} ₿</div><div style="font-size:0.5rem;color:var(--text-dim)">${skims.length} výběrů${lastSkim ? " · poslední " + lastSkim : ""}</div></div>
+          <div style="border:1px solid var(--border-brown);border-radius:6px;padding:7px 9px;background:#161009"><div style="font-size:0.45rem;color:var(--text-dim)">UŽ ODVEDENO ZE SFL</div>${_spec.err.ledger
+            ? `<div style="font-size:0.8rem;font-weight:bold">—</div><div style="font-size:0.5rem;color:var(--text-dim)"><span style="cursor:pointer;color:var(--lily)" onclick="_specUnlock()">🔒 zadej klíč</span></div>`
+            : `<div style="font-size:0.8rem;font-weight:bold;color:var(--green)">${_specFmt(skimBtc, 5)} ₿</div><div style="font-size:0.5rem;color:var(--text-dim)">${skims.length} výběrů${lastSkim ? " · poslední " + escHTML(lastSkim) : ""}</div>`}</div>
         </div>
         <div style="font-size:0.62rem;line-height:1.7">${verdict}</div>
       </div>`;
@@ -27980,7 +27984,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:10px">
           ${tile("FLOOR PLATNÉHO EGGU", _specFmt(last.floor_hidden_ron) + " RON", d(last.floor_hidden_ron, prev && prev.floor_hidden_ron) || (last.usd_per_ron ? "≈ $" + _specFmt(last.floor_hidden_ron * last.usd_per_ron, 2) : ""))}
           ${tile("10. / 50. NEJLEVNĚJŠÍ", _specFmt(last.ask_10th_ron) + " / " + _specFmt(last.ask_50th_ron), "do 2 % nad floorem: " + _specFmt(last.asks_within_2pct) + " · do 5 %: " + _specFmt(last.asks_within_5pct))}
-          ${tile("BAD EGGY OFICIÁLNĚ", _specFmt(last.official_bad_eggs), (last.newly_flagged ? "+" + last.newly_flagged + " poslední běh · " : "") + d(last.official_bad_eggs, prev && prev.official_bad_eggs))}
+          ${tile("BAD EGGY OFICIÁLNĚ", _specFmt(last.official_bad_eggs), (last.newly_flagged ? "+" + _specFmt(last.newly_flagged) + " poslední běh · " : "") + d(last.official_bad_eggs, prev && prev.official_bad_eggs))}
           ${tile("NABÍDEK CELKEM", _specFmt(last.listed_total), "nejlepší nabídka ke koupi " + _specFmt(last.top_offer_wron, 1) + " WRON")}
           ${tile("PRODEJE ZA HODINU", _specFmt(last.sales_1h_hidden) + " platných", "medián " + _specFmt(last.median_sale_1h_hidden_ron) + " RON · přijaté nabídky " + _specFmt(last.offers_accepted_1h))}
         </div>
@@ -29192,7 +29196,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       btn.disabled = true;
       btn.textContent = "\u23F3 Crawling...";
       try {
-        const resp = await fetch("/api/marks-history?mode=force-refresh");
+        const resp = await writeFetch("/api/marks-history?mode=force-refresh");
         if (resp.ok) {
           btn.textContent = "\u2705 Triggered!";
           // Auto-refresh after 30s to show new data
@@ -29401,15 +29405,43 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     const INV_API_BASE = "/api/farm-history";
     const LS_INV_INSIGHTS_OPEN = "sfl_diff_insights_open";
 
+    /*
+     * Owner-only API calls — every write, plus the BTC ledger and wallet reads — carry the write
+     * token as `x-write-token` (api/_auth.js). It lives in this browser's localStorage only.
+     * writeFetch() is fetch() plus that header; on a 401 it asks for the token once, stores it and
+     * retries once. `quiet` skips the dialog: the tracker's background reads show a 🔒 link instead
+     * of popping a prompt on page load. A 503 (no WRITE_TOKEN on the server) is returned as-is —
+     * no key typed here can fix it.
+     */
+    function writeHeaders(h) {
+      let t = null;
+      try { t = localStorage.getItem("sfl_write_token"); } catch (e) {}
+      return t ? { ...(h || {}), "x-write-token": t } : { ...(h || {}) };
+    }
+    function askWriteToken() {
+      const v = prompt("Zadej zápisový klíč (write token) — uloží se jen v tomto prohlížeči:");
+      if (v === null || !v.trim()) return false;
+      try { localStorage.setItem("sfl_write_token", v.trim()); } catch (e) {}
+      return true;
+    }
+    async function writeFetch(url, init, quiet) {
+      const go = () => fetch(url, { ...(init || {}), headers: writeHeaders(init && init.headers) });
+      const r = await go();
+      if (r.status !== 401 || quiet || !askWriteToken()) return r;
+      return go();
+    }
+
     async function invListTransactions(farmId) {
-      const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(farmId)}&type=btc-tx`);
+      const r = await writeFetch(`${INV_API_BASE}?farm=${encodeURIComponent(farmId)}&type=btc-tx`, undefined, true);
+      // Refused (no / wrong token, or writes off): the caller renders a lock, never an empty ledger.
+      if (r.status === 401 || r.status === 503) throw Object.assign(new Error(`list refused: ${r.status}`), { locked: r.status });
       if (!r.ok) throw new Error(`list failed: ${r.status}`);
       const d = await r.json();
       return d.transactions || [];
     }
 
     async function invAddTransaction(payload) {
-      const r = await fetch(`${INV_API_BASE}?type=btc-tx`, {
+      const r = await writeFetch(`${INV_API_BASE}?type=btc-tx`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -29422,7 +29454,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     }
 
     async function invUpdateTransaction(id, payload) {
-      const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(FARM_ID)}&type=btc-tx&id=${encodeURIComponent(id)}`, {
+      const r = await writeFetch(`${INV_API_BASE}?farm=${encodeURIComponent(FARM_ID)}&type=btc-tx&id=${encodeURIComponent(id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -29435,7 +29467,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     }
 
     async function invDeleteTransaction(farmId, id) {
-      const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(farmId)}&type=btc-tx&id=${encodeURIComponent(id)}`, {
+      const r = await writeFetch(`${INV_API_BASE}?farm=${encodeURIComponent(farmId)}&type=btc-tx&id=${encodeURIComponent(id)}`, {
         method: "DELETE",
       });
       if (!r.ok) {
@@ -29530,11 +29562,13 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         console.warn("[invest] treasury compute failed", e);
       }
 
+      let locked = 0;
       const transactions = await invListTransactions(FARM_ID).catch(err => {
+        if (err.locked) { locked = err.locked; return []; }
         console.error("[invest] list failed", err);
         return [];
       });
-      _invState = { transactions, rates: { sflToUsd: opts.sflToUsd, btcUsd, treasuryTotalSfl } };
+      _invState = { transactions, locked, opts, rates: { sflToUsd: opts.sflToUsd, btcUsd, treasuryTotalSfl } };
       // Holdings are a separate read: a venue can hold something without any BTC having moved
       // this session, and a failure here must leave the ledger itself rendering.
       await invLoadBalances(FARM_ID);
@@ -29544,9 +29578,26 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       renderInvestmentTrackerContent();
     }
 
+    window._invUnlock = function () {
+      if (!askWriteToken()) return;
+      const mount = document.getElementById("investment-tracker");
+      renderInvestmentTracker(window._invDataRef, (_invState && _invState.opts) || {}).catch(err => {
+        if (mount) mount.innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Investment tracker failed: ${escHTML(err.message)}</p></div>`;
+      });
+    };
+
     function renderInvestmentTrackerContent() {
       const mount = document.getElementById("investment-tracker");
       if (!mount || !_invState) return;
+      // Ledger refused: every figure below is derived from it, so render a lock rather than a
+      // BILANCE with COST 0 that reads as "nothing invested".
+      if (_invState.locked) {
+        mount.innerHTML = `<h2 class="pixel-font" style="margin:0 0 10px 0;font-size:0.75rem;color:var(--sunpetal);letter-spacing:1px">💰 INVESTMENT TRACKER</h2>
+          <div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);line-height:1.8">${_invState.locked === 503
+            ? "🔒 zápisy jsou na serveru vypnuté (WRITE_TOKEN není nastavený)"
+            : `🔒 ledger je jen pro vlastníka — <span style="cursor:pointer;color:var(--lily)" onclick="_invUnlock()">zadej klíč</span>`}</div>`;
+        return;
+      }
       const { transactions, rates } = _invState;
       const agg = invAggregate(transactions);
       const { sflToUsd, btcUsd, treasuryTotalSfl } = rates;
@@ -29805,7 +29856,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     let _invHoldings = null;   // { wallets, venues: { wallet, yakkamon }, egg, prices, errors }
     async function invLoadHoldings(farmId) {
       try {
-        const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(farmId)}&type=venue-holdings`);
+        const r = await writeFetch(`${INV_API_BASE}?farm=${encodeURIComponent(farmId)}&type=venue-holdings`, undefined, true);
         if (!r.ok) return;
         const j = await r.json();
         _invHoldings = (j.wallets && j.wallets.length) ? j : { wallets: [], venues: null, errors: j.errors || [] };
@@ -29817,7 +29868,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       const address = String(raw).trim();
       if (!/^0x[0-9a-fA-F]{40}$/.test(address)) { alert("To není EVM adresa (0x + 40 hex znaků)."); return; }
       try {
-        const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(FARM_ID)}&type=farm-wallet`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address }) });
+        const r = await writeFetch(`${INV_API_BASE}?farm=${encodeURIComponent(FARM_ID)}&type=farm-wallet`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address }) });
         if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
         await invLoadHoldings(FARM_ID);
         renderInvestmentTrackerContent();
@@ -29826,7 +29877,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     window._invRemoveWallet = async function (address) {
       if (!confirm(`Odebrat ${address.slice(0, 6)}…${address.slice(-4)} ze sledovaných peněženek?`)) return;
       try {
-        const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(FARM_ID)}&type=farm-wallet&address=${encodeURIComponent(address)}`, { method: "DELETE" });
+        const r = await writeFetch(`${INV_API_BASE}?farm=${encodeURIComponent(FARM_ID)}&type=farm-wallet&address=${encodeURIComponent(address)}`, { method: "DELETE" });
         if (!r.ok) throw new Error(r.statusText);
         await invLoadHoldings(FARM_ID);
         renderInvestmentTrackerContent();
@@ -29948,7 +29999,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       const esc = (t) => String(t).replace(/"/g, "&quot;");
       const info = (t) => `<span title="${esc(t)}" style="cursor:help;color:var(--text-dim);margin-left:4px">ⓘ</span>`;
       const wallets = (_invHoldings && _invHoldings.wallets) || [];
-      const walletCtl = ` ${wallets.map((w) => `<span style="cursor:pointer;color:var(--red)" title="odebrat ${w.address}" onclick="_invRemoveWallet('${w.address}')">×</span>`).join(" ")} <span style="cursor:pointer;color:var(--lily)" title="přidat adresu" onclick="_invAddWallet()">[+]</span>`;
+      const walletCtl = ` ${wallets.map((w) => `<span style="cursor:pointer;color:var(--red)" title="odebrat ${escHTML(w.address)}" onclick="_invRemoveWallet('${escJsAttr(w.address)}')">×</span>`).join(" ")} <span style="cursor:pointer;color:var(--lily)" title="přidat adresu" onclick="_invAddWallet()">[+]</span>`;
       const typed = _invBalances.yakkamon;
       const fl = (btc) => flowerPerBtc > 0 ? fmtFlower(btc * flowerPerBtc) : "—";
       const rows = [];
@@ -29988,7 +30039,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         ${locked > 0 ? row("HODNOTA po unlocku", fmtBtc(sellable + locked), fl(sellable + locked), { info: "+ Yakke deposit, až se v Q4 vrátí" }) : ""}
         ${row("BILANCE hned", sgn(bilNow, fmtBtc) + pct(bilNow), sgn(bilNow, fl), { top: true, bold: true, color: tone(bilNow), labelColor: "var(--text-secondary)", info: "hodnota hned − cost" })}
         ${locked > 0 ? row("BILANCE po unlocku", sgn(bilUnlock, fmtBtc) + pct(bilUnlock), sgn(bilUnlock, fl), { bold: true, color: tone(bilUnlock), labelColor: "var(--text-secondary)", info: "hodnota po unlocku − cost" }) : ""}
-        ${errs.length ? `<div class="pixel-font" style="font-size:0.45rem;color:#ff8c42;margin-top:6px">⚠ on-chain read incomplete — ${errs.join(" · ")} · Wallet is undervalued, reload</div>` : ""}
+        ${errs.length ? `<div class="pixel-font" style="font-size:0.45rem;color:#ff8c42;margin-top:6px">⚠ on-chain read incomplete — ${escHTML(errs.join(" · "))} · Wallet is undervalued, reload</div>` : ""}
       </div>`;
     }
     let _repayChartObj = null;
@@ -30030,7 +30081,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       const body = { start_date: document.getElementById("inv-plan-start").value, rate: parseFloat(document.getElementById("inv-plan-rate").value), period: document.getElementById("inv-plan-period").value };
       if (!body.start_date || !(body.rate > 0)) { if (msg) msg.textContent = "vyplň datum a sazbu > 0"; return; }
       try {
-        const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(FARM_ID)}&type=repay-plan`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        const r = await writeFetch(`${INV_API_BASE}?farm=${encodeURIComponent(FARM_ID)}&type=repay-plan`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
         if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
         _invPlan = (await r.json()).plan;
         renderInvestmentTrackerContent();
@@ -30039,7 +30090,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     window._invDeletePlan = async function () {
       if (!confirm("Smazat repay plán?")) return;
       try {
-        const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(FARM_ID)}&type=repay-plan`, { method: "DELETE" });
+        const r = await writeFetch(`${INV_API_BASE}?farm=${encodeURIComponent(FARM_ID)}&type=repay-plan`, { method: "DELETE" });
         if (!r.ok) throw new Error(r.statusText);
         _invPlan = null;
         renderInvestmentTrackerContent();
@@ -30053,7 +30104,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       const amount = parseFloat(String(raw).replace(/[\s,]/g, ""));
       if (!isFinite(amount) || amount < 0) { alert("Enter a number >= 0"); return; }
       try {
-        const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(FARM_ID)}&type=venue-balance`, {
+        const r = await writeFetch(`${INV_API_BASE}?farm=${encodeURIComponent(FARM_ID)}&type=venue-balance`, {
           method: "POST", headers: { "content-type": "application/json" },
           body: JSON.stringify({ venue, amount, unit: "FLOWER", source: "manual" }),
         });
@@ -30067,7 +30118,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       const order = Object.keys(invVenues);
       const next = order[(order.indexOf(current) + 1) % order.length];
       try {
-        const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(FARM_ID)}&type=btc-tx&id=${encodeURIComponent(id)}`, {
+        const r = await writeFetch(`${INV_API_BASE}?farm=${encodeURIComponent(FARM_ID)}&type=btc-tx&id=${encodeURIComponent(id)}`, {
           method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ venue: next }),
         });
         if (!r.ok) throw new Error(((await r.json()) || {}).error || r.status);
@@ -30106,7 +30157,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         html += `<tr style="border-top:1px solid rgba(255,255,255,0.05)">
           <td style="padding:8px 10px;white-space:nowrap">${escHTML(String(t.tx_date).slice(0, 10))}</td>
           <td style="padding:8px 10px;color:${color};font-weight:bold;white-space:nowrap">${isDep ? "DEPOSIT" : "WITHDRAW"}</td>
-          <td style="padding:8px 10px;white-space:nowrap"><button onclick="_invCycleVenue(${t.id},'${venue}')" title="click to change where this went" style="background:rgba(0,0,0,0.3);border:1px solid ${vLabel.color};color:${vLabel.color};border-radius:4px;padding:2px 7px;cursor:pointer;font-family:'Courier New',monospace;font-size:0.65rem">${vLabel.label}</button></td>
+          <td style="padding:8px 10px;white-space:nowrap"><button data-id="${escHTML(t.id)}" data-venue="${escHTML(venue)}" onclick="_invCycleVenue(this.dataset.id, this.dataset.venue)" title="click to change where this went" style="background:rgba(0,0,0,0.3);border:1px solid ${vLabel.color};color:${vLabel.color};border-radius:4px;padding:2px 7px;cursor:pointer;font-family:'Courier New',monospace;font-size:0.65rem">${escHTML(vLabel.label)}</button></td>
           <td style="text-align:right;padding:8px 10px;color:${color};font-weight:bold;white-space:nowrap">${signed} ₿</td>
           <td style="text-align:right;padding:8px 10px;color:var(--text-dim);white-space:nowrap">${t.flower_amount != null ? Math.round(parseFloat(t.flower_amount)).toLocaleString("en-US") + " 🌸" : "—"}</td>
           <td style="text-align:right;padding:8px 10px;color:var(--text-dim);white-space:nowrap">${usd}</td>
@@ -30143,7 +30194,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         <div class="pixel-panel" style="margin-top:12px;padding:14px;background:rgba(0,0,0,0.3)">
           <div class="pixel-font" style="font-size:0.6875rem;color:var(--sunpetal);margin-bottom:12px;letter-spacing:1px">${edit ? "EDIT TRANSACTION" : "ADD TRANSACTION"}</div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px">
-            <div><span class="pixel-font" style="${labelStyle}">DATE</span><input type="date" id="inv-f-date" value="${dVal}" style="${inputStyle}"></div>
+            <div><span class="pixel-font" style="${labelStyle}">DATE</span><input type="date" id="inv-f-date" value="${escHTML(dVal)}" style="${inputStyle}"></div>
             <div><span class="pixel-font" style="${labelStyle}">TYPE</span><select id="inv-f-dir" style="${inputStyle}">
               <option value="withdrawal"${sel("withdrawal", dirVal)}>WITHDRAWAL (cash out)</option>
               <option value="deposit"${sel("deposit", dirVal)}>DEPOSIT (money in)</option>
