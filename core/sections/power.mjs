@@ -746,7 +746,7 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
         // SKILLS (clean, complete via the tree) and the game-injected crop boosts (faction
         // quiver, AOE) only. The marketplace catalogue's crop collectibles/wearables are excluded
         // here: most are SPEED boosts, which do not apply to the machine, and their boost text
-        // parses noisily (Cabbage Girl's -50% grow TIME read as a -50% yield). Curated crop
+        // parses noisily (Cabbage Girl's grow-TIME text once read as a -50% yield). Curated crop
         // yield NFTs come from CROP_MACHINE_NFTS below instead.
         if (b.type !== "Skill" && b.name !== "Game boosts (API-missing)") continue;
         for (const eff of machineEff(b)) {

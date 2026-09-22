@@ -106,3 +106,27 @@ test("every Crop Machine queue on the page is priced with the server's crops per
     assert.equal(n, 6, `cmSimulateQueue(${args}) must pass the yield map as its 6th argument`);
   }
 });
+
+// ── 3. "<Crop> Plot Growth Time" is a grow-TIME boost (plant.ts), not a yield cut ──
+import { parseBoostEffects } from "../../core/engine/power-boosts.mjs";
+
+test("Cabbage Girl and the other '<Crop> Plot Growth Time' items parse as grow-time boosts", () => {
+  // Texts as sfl.world ships them; plant.ts multiplies the crop's grow seconds for each.
+  const cases = [
+    ["Cabbage Girl", "-50% Cabbage Plot Growth Time", "Cabbage", -50],
+    ["Giant Zucchini", "-50% Zucchini Plot Growth Time", "Zucchini", -50],
+    ["Broccoli Hat", "-50% Broccoli Plot Growth Time", "Broccoli", -50],
+    ["Carrot Amulet", "-20% Carrot Plot Growth time", "Carrot", -20],
+  ];
+  for (const [name, text, product, value] of cases) {
+    const eff = parseBoostEffects(text, name);
+    assert.deepEqual(eff.map((e) => [e.type, e.cat, e.product, e.value]), [["speed_pct", "crops", product, value]],
+      `${name}: ${JSON.stringify(eff)}`);
+  }
+});
+
+test("the page's boost parser strips 'Plot' the same way", () => {
+  const fix = String.raw`const prod = m[2].trim().replace(/\s+Plot$/i, "");`;
+  assert.ok(readFileSync(path.join(ROOT, "flowers.html"), "utf8").includes(fix), "flowers.html");
+  assert.ok(readFileSync(path.join(ROOT, "core/engine/power-boosts.mjs"), "utf8").includes(fix), "core");
+});
