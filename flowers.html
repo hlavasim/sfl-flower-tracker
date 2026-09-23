@@ -66,6 +66,19 @@
       padding-bottom: max(12px, env(safe-area-inset-bottom));
     }
 
+    /* Wide mode (ultrawide monitors): the 960px column is a phone-first default. A small ↔ toggle,
+       only shown on wide screens, lets the page use the window; the choice is kept per browser. */
+    body.wide .container { max-width: min(96vw, 2400px); }
+    #wide-toggle { position: fixed; top: 6px; right: 8px; z-index: 50; background: rgba(0,0,0,0.35); color: var(--text-dim);
+      border: 1px solid rgba(255,255,255,0.12); border-radius: 4px; font: 11px monospace; padding: 2px 6px; cursor: pointer; opacity: 0.45; }
+    #wide-toggle:hover { opacity: 1; }
+    @media (max-width: 1100px) { #wide-toggle { display: none; } body.wide .container { max-width: 960px; } }
+    /* Roadmap pick: a faint checkbox that only shows up on hover or once ticked. */
+    .rm-pick { opacity: 0.18; cursor: pointer; margin: 0 3px 0 0; vertical-align: middle; width: 11px; height: 11px; }
+    tr:hover .rm-pick, .rm-pick:checked { opacity: 0.9; }
+    #rm-pick-total { position: sticky; bottom: 0; z-index: 5; background: rgba(20,14,8,0.94); border-top: 1px solid rgba(255,255,255,0.08);
+      padding: 5px 8px; font-size: 0.55rem; color: var(--text-dim); font-family: 'Courier New', monospace; }
+
     /* ── Nav Bar ── */
     .nav-bar {
       display: flex;
@@ -2866,6 +2879,7 @@
   <script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
+  <button id="wide-toggle" title="Roztáhnout stránku na šířku okna (ultrawide) / zpět na úzký sloupec" onclick="(function(){var on=document.body.classList.toggle('wide');try{localStorage.setItem('sfl_wide',on?'1':'0')}catch(e){}})()">↔</button>
   <div class="container">
     <div id="nav-bar"></div>
     <div id="config-bar"></div>
@@ -2880,6 +2894,9 @@
   <div id="help-modal" class="modal-overlay" style="display:none"></div>
 
   <script>
+    // Wide mode (↔ toggle): restore the per-browser choice before anything renders.
+    try { if (localStorage.getItem("sfl_wide") === "1") document.body.classList.add("wide"); } catch (e) {}
+
     // ═══════════════════════════════════════
     //  CONSTANTS
     // ═══════════════════════════════════════
@@ -5805,7 +5822,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.71</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.72</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5832,6 +5849,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.72", items: [
+          { t: "feat", text: "<b>Wide mode for big screens.</b> A small ↔ button (top right, only on screens wider than 1,100 px) lets the page use the whole window instead of the 960 px column; the choice is remembered per browser." },
+          { t: "feat", text: "<b>ROADMAP: pick items and see their total.</b> A faint checkbox left of each rank (it shows on hover) adds the row to a small bar at the bottom: how many you picked, what they cost bought now at the floor vs via offers (with the saving), the payback of each, and the FLOWER/day they add. Picks are remembered per browser." },
+        ] },
         { ver: "v5.71", items: [
           { t: "fix", text: "<b>ROADMAP: a product unchecked in the filter no longer props up its boosts.</b> A boost was valued on the category's chosen product (your POWER choice, else the default — Grape for the greenhouse) even when that very product was unchecked, so Vinny (+0.25 Grape) stayed IN PLAN with Grape off. Such a boost now counts nothing toward the plan." },
           { t: "feat", text: "<b>ROADMAP: the offer price for a 2-year payback.</b> The payback bracket now also shows the most you can offer for the item to pay back in exactly 2 years (FLOWER/day × 730.5), e.g. “(5.1mo offer · 2y ≤ 217)”." },
@@ -18607,6 +18628,34 @@
       }
       return out;
     }
+    /*
+     * Roadmap picks: tick rows (faint checkbox left of the rank) to see, at the bottom, what they
+     * cost bought now at the floor vs via offers, and the FLOWER/day they add. Kept per browser.
+     */
+    let _rmPicks = new Set((() => { try { return JSON.parse(localStorage.getItem("sfl_rm_picks") || "[]"); } catch (e) { return []; } })());
+    let _rmRowData = {};
+    function _rmRenderPickTotal() {
+      const el = document.getElementById("rm-pick-total");
+      if (!el) return;
+      const rows = [..._rmPicks].map((n) => _rmRowData[n]).filter(Boolean);
+      if (!rows.length) { el.style.display = "none"; el.innerHTML = ""; return; }
+      const now = rows.reduce((a, r) => a + r.now, 0), off = rows.reduce((a, r) => a + r.offer, 0), val = rows.reduce((a, r) => a + r.value, 0);
+      const f = (v) => Math.round(v).toLocaleString("en-US");
+      const pb = (c) => val > 0 ? ` (${roadmapFmtDays(c / val)})` : "";
+      el.style.display = "block";
+      el.innerHTML = `✓ ${rows.length} vybráno · buy now <b style="color:var(--text-secondary)">${f(now)} 🌸</b>${pb(now)} · via offers <b style="color:var(--green)">${f(off)} 🌸</b>${pb(off)}${now > 0 ? ` <span style="color:var(--sunpetal)">−${Math.round((1 - off / now) * 100)} %</span>` : ""} · +${val.toFixed(2)} 🌸/day · <span style="cursor:pointer;color:var(--lily)" onclick="_rmClearPicks()">zrušit</span>`;
+    }
+    window._rmTogglePick = function (name, on) {
+      if (on) _rmPicks.add(name); else _rmPicks.delete(name);
+      try { localStorage.setItem("sfl_rm_picks", JSON.stringify([..._rmPicks])); } catch (e) {}
+      _rmRenderPickTotal();
+    };
+    window._rmClearPicks = function () {
+      _rmPicks.clear();
+      try { localStorage.removeItem("sfl_rm_picks"); } catch (e) {}
+      document.querySelectorAll(".rm-pick").forEach((c) => { c.checked = false; });
+      _rmRenderPickTotal();
+    };
     // The price the Offer cell shows: your own offer if you have one, else the best bid to beat.
     // Payback "at offer" uses it — what the item pays back if an offer at that price is accepted.
     function _rmOfferPrice(name, myOffers) {
@@ -18795,6 +18844,7 @@
       </tr></thead><tbody>`;
       const typeBadge = ty => { const d = rowTypeMeta[ty] || rowTypeMeta.Collectible; return `<span style="font-size:0.5rem;padding:1px 4px;border-radius:3px;background:${d.bg};color:var(--text-dim)" title="${escHTML(d.full)}">${d.label}</span>`; };
       const _myOffers = _rmMyOffers();
+      _rmRowData = {};
       let rank = 0;
       for (const r of (sim.ranked || [])) {
         rank++;   // counts the FULL order, so a visible row keeps its real position
@@ -18805,8 +18855,13 @@
           : `<span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#3a3220;color:#e8c060;font-weight:bold" title="${escHTML(r.reason || "")}">CONDITIONAL</span>`;
         const boostTxt = escHTML((r.boost || "").split("\n").join(" \u00b7 ")) + (isPlan ? "" : ` <span style="color:var(--lily)">\u00b7 ${escHTML(r.reason || "only if you run that activity")}</span>`);
         const marg = `+${roadmapFmtFlower(r.value)}` + (isPlan ? "" : ` <span style="color:var(--text-dim)">if used</span>`);
+        {
+          const _trade = !r.type || r.type === "Collectible" || r.type === "Wearable";
+          const _op = _trade ? _rmOfferPrice(r.name, _myOffers) : null;
+          _rmRowData[r.name] = { now: r.floor || 0, offer: (_op > 0 ? _op : (r.floor || 0)), value: r.value || 0 };
+        }
         h += `<tr style="border-top:1px solid #222">
-          <td style="padding:3px 6px;color:var(--text-dim)">${rank}</td>
+          <td style="padding:3px 6px;color:var(--text-dim);white-space:nowrap"><input type="checkbox" class="rm-pick" title="Vybrat do součtu dole" ${_rmPicks.has(r.name) ? "checked" : ""} onchange="_rmTogglePick(${escHTML(JSON.stringify(r.name))},this.checked)">${rank}</td>
           <td style="padding:3px 6px;white-space:nowrap">${rowIcon(r)} ${escHTML(r.name)} ${typeBadge(r.type)} ${stBadge}${r.skillTakeNow ? ` <span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1f3a2a;color:#7fe0a0" title="Skill pointy na tohle už máš — můžeš vzít hned. Cena je i tak spočtená z XP, které ten point stál: držet point ho nedělá zdarma, stejně jako držet FLOWER nedělá NFT zdarma.">MůžEŠ HNED</span>` : ""}</td>
           <td style="padding:3px 6px;color:var(--text-dim);max-width:240px">${boostTxt}</td>
           <td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(r.floor)}</td>
@@ -18835,6 +18890,7 @@
         </tr>`;
       }
       h += `</tbody></table></div>`;
+      h += `<div id="rm-pick-total" style="display:none"></div>`;
       h += `<div style="margin-top:6px;font-size:0.55rem;color:var(--text-dim);line-height:1.6">One list ranked by payback. <b style="color:#7fe0a0">IN PLAN</b> = your profit-optimal buy order (\u03a3 Cost + ETA assume you reinvest income in this order). <b style="color:#e8c060">CONDITIONAL</b> = boosts a category not in your profitable mix yet (e.g. crimstone below break-even) \u2014 ranked by what it WOULD add at full scale, so nothing is hidden. <b>+FL/day is each item\u2019s value added to your CURRENT farm</b>, so it doesn\u2019t depend on what you buy first (\u03a3 Cost &amp; ETA then assume you buy down the list, reinvesting income).</div>`;
 
       // Cosmetic tail (boost present but no FLOWER value) \u2014 collapsed
@@ -18918,6 +18974,7 @@
       try { window.__roadmapFlowData = roadmapBuildFlowData(sim, settings); } catch (e) { window.__roadmapFlowData = { roadmap: { nodes: [], edges: [] }, todo: { nodes: [], edges: [] } }; }
       try { window.__roadmapFlowData.mineChain = roadmapBuildMineFlowData(settings); } catch (e) { if (window.__roadmapFlowData) window.__roadmapFlowData.mineChain = { nodes: [], edges: [] }; }
       el.innerHTML = h;
+      _rmRenderPickTotal();
       el.insertAdjacentHTML("afterbegin", '<div id="nodeacq-roadmap"></div>');
       _mountNodeAcq("nodeacq-roadmap");
       _roadmapMountFlow(0);
