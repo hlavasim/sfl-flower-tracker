@@ -5805,7 +5805,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.69</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.70</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5832,6 +5832,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.70", items: [
+          { t: "feat", text: "<b>ROADMAP: payback at the offer price.</b> Next to each collectible's and wearable's payback, in brackets, is the payback if an offer at the Offer column's price is accepted — your own offer if you have one, else the current best bid — so the saving from buying via an offer instead of at the floor shows as time, e.g. “2.5y (1.5y offer)”." },
+        ] },
         { ver: "v5.69", items: [
           { t: "fix", text: "<b>Security: every write needs the owner's write token.</b> The BTC ledger (reads too), wallets, venue balances, repay plan, SPEKULACE trades and eggs, wishlist, game token and the marks force-refresh answer 401 without it; the page asks for the token once. The SFL API key is sent only to the SFL farm API (it went to CoinGecko, sfl.world and Yakkamon too), and ledger text is escaped (a venue name could inject script)." },
           { t: "fix", text: "<b>Security: one request can no longer leak into the next.</b> The measured efficiency was module state on the server, so a plain POWER / ROI / TREASURY request could price boosts at the previous request's efficiency, even another farm's. It is set and cleared per request." },
@@ -18597,6 +18600,14 @@
       }
       return out;
     }
+    // The price the Offer cell shows: your own offer if you have one, else the best bid to beat.
+    // Payback "at offer" uses it — what the item pays back if an offer at that price is accepted.
+    function _rmOfferPrice(name, myOffers) {
+      const mine = myOffers[name];
+      if (mine) return mine.unit;
+      const m = _rmBook && _rmBook.items && _rmBook.items[name];
+      return (m && m.b != null) ? m.b : null;
+    }
     function _rmOfferCell(name, myOffers) {
       const m = _rmBook && _rmBook.items && _rmBook.items[name];
       const mine = myOffers[name];
@@ -18794,7 +18805,12 @@
           <td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(r.floor)}</td>
           <td style="padding:3px 6px;text-align:right">${(!r.type || r.type === "Collectible" || r.type === "Wearable") ? _rmOfferCell(r.name, _myOffers) : `<span style="color:var(--text-dim)">—</span>`}</td>
           <td style="padding:3px 6px;text-align:right;color:var(--green)">${marg}</td>
-          <td style="padding:3px 6px;text-align:right">${roadmapFmtDays(r.roi)}${
+          <td style="padding:3px 6px;text-align:right">${roadmapFmtDays(r.roi)}${(() => {
+            if (!(!r.type || r.type === "Collectible" || r.type === "Wearable") || !(r.value > 0)) return "";
+            const op = _rmOfferPrice(r.name, _myOffers);
+            if (!(op > 0)) return "";
+            return ` <span style="font-size:0.5rem;color:var(--text-dim)" title="Návratnost, pokud koupíš za cenu nabídky (${roadmapFmtFlower(op)} FLOWER) místo floor ${roadmapFmtFlower(r.floor)}: ${roadmapFmtFlower(op)} ÷ ${roadmapFmtFlower(r.value)}/den.">(${roadmapFmtDays(op / r.value)} offer)</span>`;
+          })()}${
             /*
              * A chain row is POSITIONED by its prefix payback — what it costs to get here including
              * every step you must do first — not by its own. Without showing that, the column looks
