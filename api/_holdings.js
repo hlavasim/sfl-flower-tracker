@@ -4,8 +4,8 @@
  * An EVM address is the same on every chain, so one registered address is read on Base and Ronin
  * (the two chains the owner uses) and whatever lies where is summed. Fungible tokens belong to the
  * WALLET venue of the Investment Tracker (BTC was sent there to buy them); Yakkamon Genesis eggs
- * belong to the YAKKAMON venue and are priced at the best fillable "Hidden" trait offer on Ronin
- * Market — the price a seller gets right now, not an ask.
+ * belong to the YAKKAMON venue and are priced by selling them into the fillable "Hidden" trait
+ * offer book on Ronin Market (eggBookValue) — what a seller gets right now, not an ask.
  */
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 const EGG = "0x6d1bc5247ca99d917d91ec52dbbb5ef6c2435107";
@@ -92,6 +92,7 @@ export async function fetchPrices() {
  */
 export async function bestEggOfferWron(pages = 8) {
   let best = 0, n = 0;
+  const offers = [];   // every fillable offer: { wron, qty } — the book eggBookValue walks
   const now = Date.now() / 1000;
   for (let f = 0; f < pages * 50; f += 50) {
     const q = `{ collectionOffers(from: ${f}, size: 50) { data { tokenAddress availableQuantity itemPrice endTime } } }`;
@@ -102,30 +103,60 @@ export async function bestEggOfferWron(pages = 8) {
     for (const o of rows) {
       if (o.tokenAddress.toLowerCase() !== EGG || !(o.availableQuantity > 0) || o.endTime <= now) continue;
       n++;
-      best = Math.max(best, Number(BigInt(o.itemPrice)) / 1e18);
+      const wron = Number(BigInt(o.itemPrice)) / 1e18;
+      best = Math.max(best, wron);
+      offers.push({ wron, qty: Number(o.availableQuantity) || 0 });
     }
   }
-  return { wron: best, fillable: n };
+  offers.sort((a, b) => b.wron - a.wron);
+  return { wron: best, fillable: n, offers };
+}
+
+/*
+ * What N eggs fetch if sold into the book RIGHT NOW: the best offer takes as many as its
+ * availableQuantity allows, the next-best takes the next ones, and so on. "N × best offer"
+ * assumed the top bid would buy all 20 when it buys one — ~38 % too high on the owner's
+ * holding. Eggs the whole book cannot absorb are worth nothing today and are reported as
+ * `unfilled`, never priced at the last bid.
+ */
+export function eggBookValue(offers, count) {
+  let left = Math.max(0, Math.floor(count || 0)), wron = 0;
+  const book = (offers || []).filter((o) => o && o.wron > 0 && o.qty > 0).slice().sort((a, b) => b.wron - a.wron);
+  for (const o of book) {
+    if (left <= 0) break;
+    const take = Math.min(left, o.qty);
+    wron += take * o.wron;
+    left -= take;
+  }
+  return { wron, filled: Math.max(0, Math.floor(count || 0)) - left, unfilled: left };
 }
 
 /**
  * Pure: value raw balances with prices and split them into venues.
  *   wallet   = every fungible token (BTC was sent to the wallet venue to buy them)
- *   yakkamon = Genesis eggs at the best fillable Hidden offer
+ *   yakkamon = Genesis eggs sold into the fillable Hidden offer book (eggBookValue)
  * Dust under DUST_USD is dropped from the item lists but nothing is hidden from the totals.
+ * `eggOffers` is the book from bestEggOfferWron().offers ([{ wron, qty }]).
  */
-export function valueHoldings(balances, prices, eggOfferWron) {
+export function valueHoldings(balances, prices, eggOffers) {
   const btcUsd = prices.bitcoin || 0;
   const venues = { wallet: { usd: 0, btc: 0, items: [] }, yakkamon: { usd: 0, btc: 0, items: [] } };
   const errors = [];
+  const eggs = balances.filter((b) => !b.error && b.kind === "egg" && b.amount > 0).reduce((a, b) => a + b.amount, 0);
+  const book = eggBookValue(eggOffers, eggs);   // all eggs sold as one lot, whatever address holds them
+  const eggUnitWron = eggs > 0 ? book.wron / eggs : 0;
   for (const b of balances) {
     if (b.error) { errors.push(`${b.chain}: ${b.error}`); continue; }
     if (!(b.amount > 0)) continue;
-    const unit = b.kind === "egg" ? (eggOfferWron || 0) * (prices.ronin || 0) : (prices[b.price] || 0);
+    const unit = b.kind === "egg" ? eggUnitWron * (prices.ronin || 0) : (prices[b.price] || 0);
     const usd = b.amount * unit;
     const v = venues[b.kind === "egg" ? "yakkamon" : "wallet"];
     v.usd += usd;
-    if (usd >= DUST_USD || b.kind === "egg") v.items.push({ chain: b.chain, symbol: b.symbol, amount: b.amount, usd, unitUsd: unit });
+    if (usd >= DUST_USD || b.kind === "egg") {
+      const item = { chain: b.chain, symbol: b.symbol, amount: b.amount, usd, unitUsd: unit };
+      if (b.kind === "egg") Object.assign(item, { unitWron: eggUnitWron, bookWron: book.wron, filled: book.filled, unfilled: book.unfilled });
+      v.items.push(item);
+    }
   }
   for (const v of Object.values(venues)) {
     v.btc = btcUsd > 0 ? v.usd / btcUsd : 0;

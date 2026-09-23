@@ -19,6 +19,19 @@
  */
 import { TREASURE_SELL_PRICES } from "../data/crafting.mjs";
 import { TOOL_COSTS } from "../data/economy.mjs";
+import { findCollectible } from "../derive/items.mjs";
+
+/**
+ * What the treasure NPC pays on top of the base sell price — getSellPrice in
+ * events/landExpansion/treasureSold.ts:28-47: +20% with Treasure Map, +30% with Camel, each only
+ * when PLACED (isCollectibleBuilt). Owning one in the inventory does nothing.
+ */
+export function treasureSellMultiplier(farm) {
+  let m = 1;
+  if (findCollectible(farm || {}, "Treasure Map").length > 0) m += 0.2;
+  if (findCollectible(farm || {}, "Camel").length > 0) m += 0.3;
+  return m;
+}
 
 /** Material + coin cost of one dig with a given tool. */
 export function digToolCost(tool, p2pPrices, exchangeRates, opts = {}) {
@@ -66,8 +79,11 @@ export function diggingVerdict(farm, p2pPrices, exchangeRates, opts = {}) {
   const items = [];
   let coins = 0, flowerSfl = 0;
   const unpriced = [];
+  // The NPC price as this farm gets it — the placed Treasure Map / Camel bonus included, the same
+  // multiplier the ascension section applies to treasures already in the inventory.
+  const sellMult = treasureSellMultiplier(farm);
   for (const [item, qty] of Object.entries(found)) {
-    const sell = TREASURE_SELL_PRICES[item];
+    const sell = TREASURE_SELL_PRICES[item] != null ? TREASURE_SELL_PRICES[item] * sellMult : undefined;
     const p2p = (p2pPrices && p2pPrices[item]) || 0;
     const row = { item, qty, sellCoins: sell != null ? sell * qty : null, p2pSfl: p2p > 0 ? p2p * qty : null };
     if (sell != null) coins += sell * qty;
@@ -97,7 +113,7 @@ export function diggingVerdict(farm, p2pPrices, exchangeRates, opts = {}) {
     completedPatterns: Array.isArray(dig.completedPatterns) ? dig.completedPatterns.slice() : [],
     patternsAvailable: Array.isArray(dig.patterns) ? dig.patterns.length : 0,
     byTool, tools, items, unpriced,
-    coins, coinsAsSfl, flowerSfl, costSfl,
+    coins, coinsAsSfl, flowerSfl, costSfl, sellMult,
     perDig: digs > 0 ? {
       coins: coins / digs,
       coinsAsSfl: coinsAsSfl == null ? null : coinsAsSfl / digs,

@@ -20,7 +20,7 @@ import {
   parseBoostEffects, classifyToCategories, SKILL_FEED_EFFECTS,
   CROP_GROW_DATA, PRODUCT_TO_CATEGORY,
 } from "../engine/power-boosts.mjs";
-import { computeBettyRate } from "../engine/prices.mjs";
+import { computeBettyRate, pickCoinsPerSFL } from "../engine/prices.mjs";
 import { CHAPTER_BOOST_ITEMS, CHAPTER_TICKET } from "../data/chapter-items.mjs";
 import { SEED_COSTS } from "../data/economy.mjs";
 import {
@@ -39,7 +39,7 @@ import {
   buildQueueData, shrineStatuses, weatherProtection,
 } from "../engine/power-costs.mjs";
 import { _setPowerContext, calcBoostValue, roadmapEffFactor, getRoadmapSettings } from "../engine/roadmap.mjs";
-import { SKILL_UPGRADES, powerSkillRankVals, skillRankText } from "../engine/skill-ranks.mjs";
+import { SKILL_UPGRADES, powerSkillRankVals, skillRankText, skillUpgradeCost } from "../engine/skill-ranks.mjs";
 import { buildFormulaHTML } from "../engine/power-formula.mjs";
 // A composter is a PERIODIC action — cycle + inputs — so it is served as a per-day net here
 // rather than folded into the permanent-upgrade valuations.
@@ -54,24 +54,22 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
 
   // ── page 15883-15925 (fetch block): rate assembly on the passed responses ──
   const p2pPrices = {};
-  const exchangeRates = { coinsPerSFL: 320, gemsPerSFL: 0, sflUsd: 0 };
+  const exchangeRates = { coinsPerSFL: 0, gemsPerSFL: 0, sflUsd: 0 };
   for (const [k, v] of Object.entries(p2p || {})) {
     p2pPrices[k] = parseFloat(v) || 0;
   }
-  // Use Betty rate for coins→SFL (more accurate than API exchange rate)
+  // Coins→SFL: the Betty rate (more accurate than the API exchange), else the exchange's best
+  // tier, else 0 = unpriced — pickCoinsPerSFL, the one rule the valuation pages use.
   const betty = computeBettyRate(p2pPrices);
-  if (betty.rate > 0) {
-    exchangeRates.coinsPerSFL = betty.rate;
-    exchangeRates.bettyItem = betty.item;
-  }
+  if (betty.rate > 0) exchangeRates.bettyItem = betty.item;
+  let apiCoinRate = 0;
   const rateResp = exchange || null;
   if (rateResp) {
     const coinTiers = Object.values(rateResp?.coins || rateResp?.data?.coins || {});
     const gemTiers = Object.values(rateResp?.gems || rateResp?.data?.gems || {});
-    // Fallback to API rate if Betty rate failed
-    if (!betty.rate && coinTiers.length > 0) {
+    if (coinTiers.length > 0) {
       const best = coinTiers.reduce((a, b) => (b.coin / b.sfl) > (a.coin / a.sfl) ? b : a);
-      exchangeRates.coinsPerSFL = best.coin / best.sfl;
+      apiCoinRate = best.coin / best.sfl;
     }
     if (gemTiers.length > 0) {
       const best = gemTiers.reduce((a, b) => (b.gem / (b.sfl * 0.7)) > (a.gem / (a.sfl * 0.7)) ? b : a);
@@ -80,16 +78,30 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     const _sflUsd = rateResp?.sfl?.usd || rateResp?.data?.sfl?.usd || 0;
     if (_sflUsd > 0) exchangeRates.sflUsd = _sflUsd;
   }
+  exchangeRates.coinsPerSFL = pickCoinsPerSFL("betty", betty.rate, apiCoinRate);
 
   // Detect farm capacity
   const capacity = detectFarmCapacity(farm);
 
   // Build boost items with parsed effects
   const boostItems = [];
+  /*
+   * `has` = the boost is ACTIVE on this farm, which is what every valuation reads. The game
+   * applies a collectible only while it is PLACED (isCollectibleBuilt — any of the four maps
+   * findCollectible reads) and a wearable only while it is EQUIPPED on the bumpkin or a farm
+   * hand (isWearableActive). Counting "in inventory / in the wardrobe" as active credited boosts
+   * the farm is not getting: Crimstone Armor sitting in the wardrobe added +0.8/day.
+   * `owned` keeps plain ownership for the UI — an owned-but-idle item is not something to BUY.
+   */
+  const collectibleOwned = (n) => getCount(inventory, n) > 0 || findCollectible(farm, n).length > 0;
+  const collectibleActive = (n) => findCollectible(farm, n).length > 0;
+  const wearableOwned = (n) => (wardrobe[n] || 0) > 0 || isWearableEquipped(farm, n);
+  const wearableActive = (n) => isWearableEquipped(farm, n);
 
   for (const item of (nftData.collectibles || [])) {
     if (!item.have_boost || !item.name || !item.boost_text) continue;
-    const has = getCount(inventory, item.name) > 0 || findCollectible(farm, item.name).length > 0;
+    const has = collectibleActive(item.name);
+    const owned = collectibleOwned(item.name);
     const effects = parseBoostEffects(item.boost_text, item.name);
     const categories = classifyToCategories(effects);
     let floor = parseFloat(item.floor) || 0;
@@ -98,13 +110,14 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     boostItems.push({
       name: item.name, type: "Collectible", boost: item.boost_text,
       floor, supply: item.supply || 0,
-      has, effects, categories, markCost,
+      has, owned, effects, categories, markCost,
     });
   }
 
   for (const item of (nftData.wearables || [])) {
     if (!item.have_boost || !item.name || !item.boost_text) continue;
-    const has = (wardrobe[item.name] || 0) > 0;
+    const has = wearableActive(item.name);
+    const owned = wearableOwned(item.name);
     const effects = parseBoostEffects(item.boost_text, item.name);
     const categories = classifyToCategories(effects);
     let floor = parseFloat(item.floor) || 0;
@@ -113,7 +126,7 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     boostItems.push({
       name: item.name, type: "Wearable", boost: item.boost_text,
       floor, supply: item.supply || 0,
-      has, effects, categories, markCost,
+      has, owned, effects, categories, markCost,
     });
   }
 
@@ -128,7 +141,8 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   ];
   for (const extra of EXTRA_BOOST_ITEMS) {
     if (boostItems.some(b => b.name === extra.name)) continue;
-    const has = getCount(inventory, extra.name) > 0 || findCollectible(farm, extra.name).length > 0;
+    const has = collectibleActive(extra.name);
+    const owned = collectibleOwned(extra.name);
     const effects = parseBoostEffects(extra.boost, extra.name);
     const categories = classifyToCategories(effects);
     // Calculate craft cost in SFL
@@ -143,7 +157,7 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     }
     boostItems.push({
       name: extra.name, type: extra.type, boost: extra.boost,
-      floor, supply: 0, has, effects, categories, markCost: 0,
+      floor, supply: 0, has, owned, effects, categories, markCost: 0,
     });
   }
 
@@ -154,26 +168,54 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   const chapterPriced = [];
   for (const c of CHAPTER_BOOST_ITEMS) {
     if (boostItems.some(b => b.name === c.name)) continue;
-    const has = c.type === "Wearable"
-      ? (wardrobe[c.name] || 0) > 0
-      : (getCount(inventory, c.name) > 0 || findCollectible(farm, c.name).length > 0);
+    const has = c.type === "Wearable" ? wearableActive(c.name) : collectibleActive(c.name);
+    const owned = c.type === "Wearable" ? wearableOwned(c.name) : collectibleOwned(c.name);
     const effects = parseBoostEffects(c.boost, c.name);
     const categories = classifyToCategories(effects);
     const priced = c.source === "shop" && c.ticket && c.ticket.item === CHAPTER_TICKET && ticketValue > 0;
     const floor = priced ? c.ticket.qty * ticketValue : 0;
     boostItems.push({
-      name: c.name, type: c.type, boost: c.boost, floor, supply: 0, has, effects, categories, markCost: 0,
+      name: c.name, type: c.type, boost: c.boost, floor, supply: 0, has, owned, effects, categories, markCost: 0,
       source: c.source, chapter: c.chapter, ticket: c.ticket || null, priceUnknown: !priced,
     });
-    if (priced && !has) chapterPriced.push({ name: c.name, type: c.type, floor, boost_text: c.boost });
+    if (priced && !owned) chapterPriced.push({ name: c.name, type: c.type, floor, boost_text: c.boost });
   }
 
   // Add skill boosts from full skill tree
   const skillCostInfo = calcSkillPointCost(farm.bumpkin, p2pPrices, farm);
+  /*
+   * Free skill points — ONE formula, the game's (choseSkill.ts getAvailableBumpkinSkillPoints):
+   * level − points spent. Not level − 1: a level-1 bumpkin already holds one point. Rank-ups
+   * (Level 2/3) are bought with points too, so they count as spent. Served here so the roadmap
+   * and both page views read the same number instead of three different ones.
+   */
+  {
+    let spent = 0;
+    for (const [sn, lvl] of Object.entries(skills)) {
+      const sd = SKILL_TREE_DATA[sn];
+      if (!sd) continue;
+      spent += sd.points || 0;
+      const up = SKILL_UPGRADES[sn];
+      const rank = Number(lvl) || 1;
+      if (up && rank > 1) spent += (rank - 1) * skillUpgradeCost(up.tier).points;
+    }
+    skillCostInfo.spentPoints = spent;
+    skillCostInfo.freePoints = Math.max(0, (skillCostInfo.level || 0) - spent);
+  }
+  /*
+   * Skills that only upgrade a PLACED collectible's area boost (harvest.ts / plant.ts): the game
+   * applies them inside the collectible's AOE branch, so with the collectible not placed they do
+   * nothing. Horror Mike / Laurie's Gains are +0.1 on top of the crow's +0.2 (gameExtraEffects
+   * carries the +0.2); Chonky Scarecrow turns the Basic Scarecrow's ×0.8 basic-crop time into
+   * ×0.7, i.e. ×0.875 more (its SKILL_TREE_DATA text).
+   */
+  const skillNeedsPlaced = { "Horror Mike": "Scary Mike", "Laurie's Gains": "Laurie the Chuckle Crow", "Chonky Scarecrow": "Basic Scarecrow" };
   for (const [skillName, skill] of Object.entries(SKILL_TREE_DATA)) {
     const has = skills[skillName] !== undefined;
     const boostText = skill.buff + (skill.debuff ? "\n" + skill.debuff : "");
-    const effects = parseBoostEffects(boostText);
+    const needs = skillNeedsPlaced[skillName];
+    const inactive = !!(needs && !collectibleActive(needs));
+    const effects = inactive ? [] : parseBoostEffects(boostText);
     // Inject feed reduction effects for named animal skills
     if (SKILL_FEED_EFFECTS[skillName]) {
       for (const [cat, value] of Object.entries(SKILL_FEED_EFFECTS[skillName])) {
@@ -208,6 +250,7 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
       floor: skillFloor, supply: 0, has, effects, categories,
       skillPoints: skill.points, skillTree: skill.tree, skillTier: skill.tier,
       isPower: skill.power || false,
+      ...(needs ? { requires: needs, requiresActive: !inactive } : {}),
     });
   }
 
@@ -217,10 +260,10 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     if (disabledByEffects.length > 0) {
       b.disabledBy = disabledByEffects.flatMap(e => e.names);
       b.effects = b.effects.filter(e => e.type !== "disabled_by"); // remove meta-effects
-      // Check if any superseding item is active on this farm
+      // Check if any superseding item is ACTIVE on this farm (placed / equipped / skill taken)
+      // — an unplaced Foreman Beaver does not switch Woody off in the game either.
       const activeSuperseder = b.disabledBy.find(name =>
-        getCount(inventory, name) > 0 || findCollectible(farm, name).length > 0
-        || (wardrobe[name] || 0) > 0 || skills[name] !== undefined
+        collectibleActive(name) || wearableActive(name) || skills[name] !== undefined
       );
       if (activeSuperseder) {
         b.isDisabled = true;
@@ -230,7 +273,19 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   }
 
   // Inject boosts the marketplace NFT API doesn't expose but the game applies (faithful port).
-  const _extraEff = gameExtraEffects(farm);
+  /*
+   * ONLY what the feed does not already carry. gameExtraEffects was written when the feed
+   * exposed ~6 boosts; it now lists Giant Kale, Sheaf of Plenty, Maximus, Sir Goldensnout,
+   * Pharaoh Gnome, Non La Hat, Infernal Pitchfork… with their yield text, so the same boost
+   * arrived twice (Giant Kale +4 Kale where the game gives +2). An extra is dropped when an
+   * item of the same name already contributes the same kind of effect with the same scope —
+   * type/product/tier must match, so Cabbage Girl's feed text (a grow-TIME boost) does not
+   * swallow its +0.25 Cabbage yield from the game.
+   */
+  const _sameScope = (a, b) => a.cat === b.cat && a.type === b.type
+    && (a.product || null) === (b.product || null) && (a.cropTier || null) === (b.cropTier || null);
+  const _extraEff = gameExtraEffects(farm).filter((e) => !boostItems.some((b) =>
+    b.name === e.source && (b.effects || []).some((x) => _sameScope(x, e))));
   if (_extraEff.length) boostItems.push({ name: "Game boosts (API-missing)", type: "Game", boost: _extraEff.map(e => e.raw).join(" · "), floor: 0, supply: 0, has: true, effects: _extraEff, categories: classifyToCategories(_extraEff), markCost: 0 });
 
   // Build category → boosts mapping
@@ -244,18 +299,6 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
 
   // Detect current season
   const season = (farm.season?.season || "").toLowerCase();
-
-  // Oil isn't p2p-traded — derive its unit value from drill cost / boosted yield (like the Power page),
-  // so Crop Machine + greenhouse oil costs show up. Priced at real coin cost (oil is a mined resource).
-  // NOTE: farm/effects are deliberately NOT passed to applyBoosts/calcToolCostPerDay here —
-  // on the page this ran while the powerState global was still null, so the per-node engine
-  // and owned-effects paths never fired during build (see power-helpers.mjs header).
-  try {
-    const _oilEff = (catBoosts["oil"] || []).filter(b => b.has && !b.isDisabled).flatMap(b => getEffectsForCategory(b, "oil"));
-    const _oilYield = applyBoosts("oil", "Oil", capacity, _oilEff).unitsPerDay;
-    const _oilTool = calcToolCostPerDay("oil", capacity, exchangeRates, p2pPrices, stockMods);
-    if (_oilYield > 0 && _oilTool.costPerDay > 0) p2pPrices["Oil"] = _oilTool.costPerDay / _oilYield;
-  } catch {}
 
   // Slim nftData for the client — the page kept the WHOLE upstream response on
   // powerState.nftData, but its two remaining consumers (roadmapBuildMissing iterating
@@ -277,11 +320,10 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   // ported VERBATIM with powerState reads parameterized. Runs on the same catBoosts built
   // above; `settings.savedProducts` mirrors the page's product selectors (query `products`).
   const savedProducts = settings.savedProducts || {};
-  // Page's roadmapOwnedEffects verbatim: has-only (NOT filtered on isDisabled), plus
-  // active shrine effects. miningToolsPerDay/calcToolCostPerDay consumed THIS set at
-  // render time via the powerState global — the summary loop's own ownedEffects
-  // (has && !isDisabled) is a different, narrower set used only for applyBoosts.
-  const roadmapOwnedEff = (cat) => boostItems.filter(b => b.has).flatMap(b => b.effects.filter(e => e.cat === cat)).concat(activeShrineEffects(farm, cat));
+  // Same set as roadmapOwnedEffects and the summary loop's ownedEffects: active AND not
+  // disabled. It used to be has-only here, so a Woody the Beaver switched off by Foreman
+  // still sped up the tree cycle the tool cost is counted on.
+  const roadmapOwnedEff = (cat) => boostItems.filter(b => b.has && !b.isDisabled).flatMap(b => b.effects.filter(e => e.cat === cat)).concat(activeShrineEffects(farm, cat));
 
   // Derive Oil unit cost from actual drill cost / actual boosted yield
   // Uses farm's real boosts (Infernal Drill = free, yield boosts, speed boosts)
@@ -296,7 +338,7 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     p2pPrices["Oil"] = 0; // free drilling (Infernal Drill) → oil is free
   }
 
-  let totalBaseSfl = 0, totalBoostedSfl = 0, totalCostSfl = 0;
+  let totalBaseSfl = 0, totalBoostedSfl = 0, totalCostSfl = 0, oilConsumedCost = 0;
   const catSummaries = {};
   for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
     if (!catDef.quantifiable) continue;
@@ -351,9 +393,10 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     } else if (isAnimalCat(catId)) {
       const c = calcAnimalFeedCost(catId, capacity, p2pPrices, ownedEffects, stockMods);
       const cBase = calcAnimalFeedCost(catId, capacity, p2pPrices, [], stockMods);
-      // Add sickness cost
-      const sc = calcSicknessCost(catId, capacity, p2pPrices, boostItems, skills);
-      const scBase = calcSicknessCost(catId, capacity, p2pPrices, [], {});
+      // Add sickness cost — in the CURRENT season: seasonal protection (Frozen Cow…) only
+      // counts while its season is on.
+      const sc = calcSicknessCost(catId, capacity, p2pPrices, boostItems, skills, undefined, season);
+      const scBase = calcSicknessCost(catId, capacity, p2pPrices, [], {}, undefined, season);
       costPerDay = c.costPerDay + sc.costPerDay;
       baseCostPerDay = cBase.costPerDay + scBase.costPerDay;
       costDetails = c;
@@ -362,15 +405,37 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     }
     const totalCatCost = costPerDay + restockPerDay;
     const totalCatBaseCost = baseCostPerDay + restockPerDay;
+    /*
+     * Oil is counted ONCE in the totals. The oil category already carries the drilling
+     * (its tool cost is the whole expense, it grosses nothing because oil is not sellable),
+     * and Oil's unit price IS that drilling cost ÷ output — so the greenhouse's oil line is
+     * the same FLOWER again. The greenhouse row keeps it (it decides whether growing pays);
+     * only the page total drops it.
+     */
+    oilConsumedCost += (costDetails && costDetails.oilCostPerDay) || 0;
     totalCostSfl += totalCatCost;
 
     totalBaseSfl += baseSfl;
     totalBoostedSfl += boostedSfl;
     catSummaries[catId] = { baseSfl, boostedSfl, delta: boostedSfl - baseSfl, product, boostedUnitsPerDay, animalBreakdown, costPerDay: totalCatCost, baseCostPerDay: totalCatBaseCost, costSavings: totalCatBaseCost - totalCatCost, costDetails };
+    /*
+     * Fishing has no price basis: "Fish" is a placeholder product — fish are not on the p2p
+     * feed and the catch is a random species mix per bait, so there is no single FLOWER value
+     * to multiply by. It is flagged UNVALUED instead of reading as a real 0/day, and every
+     * fishing boost inherits the flag below.
+     */
+    if (catId === "fishing" && !(p2pPrices[getPriceProduct(catId, product)] > 0)) {
+      catSummaries[catId].unvalued = true;
+      catSummaries[catId].unvaluedReason = "fish have no marketplace price (catch is a random species mix)";
+    }
   }
+  // The oil the greenhouse burns was already paid for as the oil category's drilling (see
+  // above) — only when this farm drills it itself, otherwise the greenhouse line is the cost.
+  const oilDedup = (catSummaries.oil && catSummaries.oil.costPerDay > 0) ? Math.min(oilConsumedCost, catSummaries.oil.costPerDay) : 0;
+  totalCostSfl -= oilDedup;
   // Restock (localStorage settings) stays client-side; totals here cover the per-category
   // pipeline only — exactly the part the page's loop computed before its restock block.
-  const categories = { catSummaries, totalBaseSfl, totalBoostedSfl, totalCostSfl, oilPrice: p2pPrices["Oil"] };
+  const categories = { catSummaries, totalBaseSfl, totalBoostedSfl, totalCostSfl, oilPrice: p2pPrices["Oil"], oilCountedInDrilling: oilDedup };
 
   // ── restockQueues: buildQueueData verbatim (page ~18114). The page's restock
   // SETTINGS (mode/trigger/activeQueues) are localStorage-only interactive state and
@@ -406,9 +471,8 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
    *
    * calcBoostValue takes an effMode, but neither roadmapCatBreakdown nor roadmapMiningChain —
    * the two functions that actually produce its numbers — ever calls roadmapEffFactor. So the
-   * flag changes nothing downstream and every value it returns is theoretical. (That is also
-   * why the wishlist's "dle efektivity" column is identical to the theoretical one for
-   * collectibles and wearables: a separate, older bug, untouched here.)
+   * flag changes nothing downstream and every value it returns is theoretical — which is why
+   * the wishlist's measured column is built by scaling below (boostValuesEff), not by the flag.
    *
    * So the per-category value is multiplied by that category's measured ratio, which is what
    * the roadmap's own skills view does to its parts. Categories with no harvest signal fall
@@ -423,11 +487,15 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
    * "100% (theoretical)". The same boost then read one number here and another there, differing
    * by exactly that category's efficiency, with no control anywhere that moved both.
    *
-   * roadmapEffFactor already resolves all three cases on its own: a manual slider override
-   * wins, effMode "theoretical" returns 1, and with no measured history loaded it also returns
-   * 1 — so a plain GET with no snapshots behaves exactly as it did before.
+   * roadmapEffFactor resolves the cases on its own: a manual slider override wins, effMode
+   * "theoretical" returns 1, and with no measured history in the roadmap state it returns 1.
+   * That last case is only true because api/compute SCOPES the roadmap state to the request
+   * (reset after every request, set before the pass that reads it). The state is module-level;
+   * before that scoping a plain GET on a warm instance was scaled by whatever efficiency the
+   * previous roadmap/wishlist request — possibly for another farm — had left behind.
    */
   const effScale = (catId) => roadmapEffFactor(catId, effRs);
+  const fishingUnvalued = !!(catSummaries.fishing && catSummaries.fishing.unvalued);
   const boostValues = {};
   for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
     if (!catDef.quantifiable) continue;
@@ -436,6 +504,7 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     for (const b of catBoosts[catId]) {
       try {
         const v = calcBoostValue(b, catId, product, capacity, p2pPrices, catBoosts[catId], b.has, effMode);
+        delete v.netWith; delete v.netWithout;   // formula-panel detail, not payload
         if (!isFinite(v.roi)) v.roi = null;
         if (!isFinite(v.solo)) v.solo = 0;
         if (!isFinite(v.synergy)) v.synergy = 0;
@@ -446,6 +515,7 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
           v.solo *= f; v.synergy *= f;
           v.roi = (b.floor > 0 && v.synergy > 0) ? b.floor / v.synergy : null;
         }
+        if (catId === "fishing" && fishingUnvalued) v.unvalued = true;   // 0 means "no price", not "worthless"
         boostValues[catId][b.name] = v;
       } catch {}
     }
@@ -537,29 +607,38 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   _setPowerContext(powerCtx);
 
   /*
-   * Second pass at MEASURED efficiency, for a named subset only.
+   * The wishlist's two columns, for a named subset only: THEORETICAL (every node harvested the
+   * moment it respawns) and at this farm's MEASURED efficiency.
    *
-   * boostValues above is theoretical by construction (calcBoostValue's default), which is
-   * what the Power page wants. The wishlist also wants to know what a boost is worth at this
-   * farm's observed throughput, so it asks for those items by name. Restricted to the subset
-   * because the theoretical pass already covers ~380 items across every category and doing
-   * that twice for a handful of wishlist rows would be pure waste.
+   * boostValues above follows the user's Efficiency toggle, so on the default "real" setting it
+   * is already the measured figure — and the old second pass asked calcBoostValue for
+   * "measured", which (see effScale above) returns the THEORETICAL number. The wishlist then
+   * printed them swapped (Scarecrow "theo" 0.41 / "eff" 1.04). Here both are built from one
+   * calcBoostValue: theo unscaled, eff × this farm's measured ratio (effMode forced "real" —
+   * the column is "measured" whatever the toggle says; manual overrides still apply). Only the
+   * named items, because the full catalogue is ~380 boosts across every category.
    */
-  let boostValuesEff;
+  let boostValuesEff, boostValuesTheo;
   const effFor = Array.isArray(settings.effectiveFor) ? new Set(settings.effectiveFor) : null;
   if (effFor && effFor.size) {
-    boostValuesEff = {};
+    boostValuesEff = {}; boostValuesTheo = {};
+    const measRs = Object.assign({}, effRs, { effMode: "real" });
     for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
       if (!catDef.quantifiable) continue;
       const product = savedProducts[catId] || getDefaultProduct(catId);
+      const f = roadmapEffFactor(catId, measRs);
       for (const b of catBoosts[catId]) {
         if (!effFor.has(b.name)) continue;
         try {
-          const v = calcBoostValue(b, catId, product, capacity, p2pPrices, catBoosts[catId], b.has, "measured");
-          if (!isFinite(v.roi)) v.roi = null;
+          const v = calcBoostValue(b, catId, product, capacity, p2pPrices, catBoosts[catId], b.has);
+          delete v.netWith; delete v.netWithout;
           if (!isFinite(v.solo)) v.solo = 0;
           if (!isFinite(v.synergy)) v.synergy = 0;
-          (boostValuesEff[catId] = boostValuesEff[catId] || {})[b.name] = v;
+          const theo = { ...v, roi: (b.floor > 0 && v.synergy > 0) ? b.floor / v.synergy : null };
+          const eff = { ...v, solo: v.solo * f, synergy: v.synergy * f };
+          eff.roi = (b.floor > 0 && eff.synergy > 0) ? b.floor / eff.synergy : null;
+          (boostValuesTheo[catId] = boostValuesTheo[catId] || {})[b.name] = theo;
+          (boostValuesEff[catId] = boostValuesEff[catId] || {})[b.name] = eff;
         } catch {}
       }
     }
@@ -579,9 +658,8 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
    *     yield NFTs) — the same ones a plot gets. applyBoosts separates yield from speed, so the
    *     yield multiplier is taken and the speed multiplier from it is discarded.
    *
-   * The old calcCropMachineDaily (still used by the roadmap) applied yield=1, so it overstated a
-   * basic crop under Acre Farm's -0.5 by a third. This panel computes it correctly; unifying the
-   * roadmap onto this is a separate step.
+   * The old calcCropMachineDaily applied yield=1, so it overstated a basic crop under Acre Farm's
+   * -0.5 by a third. The roadmap now reads this panel's crops per seed (powerCtx.cropMachineYields).
    *
    * PACK sizes are the game's fixed per-crop machine batch, read off the crops the machine can
    * grow (Sunflower 960 … Broccoli 216) — confirmed by the cycle time matching pack×base/plots on
@@ -602,10 +680,11 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   // Crop-yield NFTs that reach the machine (yield only — speed NFTs do not apply here). Mirrors
   // gameExtraEffects's list but as a catalogue so an UNOWNED one can still be listed as available.
   // scope: "all" | { tier } | { product }. kind: how ownership is checked.
+  // AOE collectibles (Sir Goldensnout, Scary Mike, Laurie, Queen Cornelia, the Gnome trio) are
+  // NOT here: harvest.ts applies them only to a crop on a PLOT inside their area, and a machine
+  // pack has no plot (harvestCropMachine → getCropYieldAmount without `plot`).
   const CROP_MACHINE_NFTS = [
-    { name: "Sir Goldensnout", value: 0.5, scope: "all", kind: "collectible" },
     { name: "Infernal Pitchfork", value: 3, scope: "all", kind: "wearable" },
-    { name: "Scary Mike", value: 0.2, scope: { tier: "medium" }, kind: "collectible", withSkill: { skill: "Horror Mike", value: 0.3 } },
     { name: "Cabbage Boy", value: 0.25, scope: { product: "Cabbage" }, kind: "collectible" },
     { name: "Cabbage Girl", value: 0.25, scope: { product: "Cabbage" }, kind: "collectible" },
     { name: "Karkinos", value: 0.1, scope: { product: "Cabbage" }, kind: "collectible" },
@@ -619,16 +698,20 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     const cmSpeed = cropMachineSpeedMult(farm, false);
     const oilPrice = p2pPrices["Oil"] || 0;
     const oilCostPerDay = cmOilPerHour * 24 * oilPrice;   // runs continuously, so the same for every crop
-    const coinsPerSFL = (exchangeRates && exchangeRates.coinsPerSFL) || 320;
+    const coinsPerSFL = (exchangeRates && exchangeRates.coinsPerSFL) || 0;   // 0 = no rate: seeds unpriced
     const cropBase = getBaseYield("crops");
     const skills = (farm.bumpkin && farm.bumpkin.skills) || {};
     const tierOf = (crop) => Object.keys(CROP_TIERS).find((t) => CROP_TIERS[t].includes(crop)) || null;
     const nftOwned = (n) => findCollectible(farm, n).length > 0;
     const wearableActive = (n) => { try { return isWearableEquipped(farm, n); } catch { return false; } };
     // All crop boost ITEMS (owned + not) from the catalogue, for the skill side of the lists.
+    // Plot-only AOE boosts are dropped (see CROP_MACHINE_NFTS): by item name for feed items and
+    // skills, by the `aoe` tag for the game-injected ones.
+    const plotOnly = new Set(["Sir Goldensnout", "Scary Mike", "Horror Mike", "Laurie the Chuckle Crow", "Laurie's Gains", "Queen Cornelia", "Gnome"]);
+    const machineEff = (b) => plotOnly.has(b.name) ? [] : getEffectsForCategory(b, "crops").filter((e) => !e.aoe);
     const allCropItems = (catBoosts["crops"] || []);
     const owned = allCropItems.filter((b) => b.has && !b.isDisabled);
-    const ownedCropEff = owned.flatMap((b) => getEffectsForCategory(b, "crops")).concat(activeShrineEffects(farm, "crops"));
+    const ownedCropEff = owned.flatMap(machineEff).concat(activeShrineEffects(farm, "crops"));
     const applies = (eff, crop) => {
       if (eff.cat !== "crops") return false;
       if (eff.product && PRODUCT_TO_CATEGORY[eff.product] === "crops" && eff.product !== crop) return false;
@@ -653,7 +736,7 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
       const cropsPerDay = cyclesPerDay * pack * yieldPerSeed;
       const price = p2pPrices[crop] || 0;
       const revenue = cropsPerDay * price;
-      const seedCostPerDay = (cyclesPerDay * pack) * (SEED_COSTS[crop] || 0) / coinsPerSFL;
+      const seedCostPerDay = coinsPerSFL > 0 ? (cyclesPerDay * pack) * (SEED_COSTS[crop] || 0) / coinsPerSFL : 0;
 
       // The two lists this crop cares about: what is ACTIVE on it now, and what could still be
       // added (skills you have not taken, NFTs you do not own) — each with its effect.
@@ -662,24 +745,23 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
         // SKILLS (clean, complete via the tree) and the game-injected crop boosts (faction
         // quiver, AOE) only. The marketplace catalogue's crop collectibles/wearables are excluded
         // here: most are SPEED boosts, which do not apply to the machine, and their boost text
-        // parses noisily (Cabbage Girl's -50% grow TIME read as a -50% yield). Curated crop
+        // parses noisily (Cabbage Girl's grow-TIME text once read as a -50% yield). Curated crop
         // yield NFTs come from CROP_MACHINE_NFTS below instead.
         if (b.type !== "Skill" && b.name !== "Game boosts (API-missing)") continue;
-        for (const eff of getEffectsForCategory(b, "crops")) {
+        for (const eff of machineEff(b)) {
           if (eff.type !== "yield_pct" && eff.type !== "yield_flat" && eff.type !== "chance") continue;
           if (!applies(eff, crop)) continue;
-          // The game-injected boosts share one synthetic item name; recover the real source from
-          // the effect's raw text so it de-dups against the NFT catalogue below by that name.
-          const name = (b.name === "Game boosts (API-missing)" && eff.raw)
-            ? eff.raw.replace(/\s*[+\-−][\d.].*$/, "").trim() : b.name;
+          // The game-injected boosts share one synthetic item name; the real source travels
+          // on the effect so it de-dups against the NFT catalogue below by that name.
+          const name = (b.name === "Game boosts (API-missing)")
+            ? (eff.source || (eff.raw || "").replace(/\s*[+\-−][\d.].*$/, "").trim()) : b.name;
           const entry = { name, kind: b.type === "Skill" ? "Skill" : "NFT", label: yieldLabel(eff), debuff: (eff.value || 0) < 0 };
           (b.has ? active : available).push(entry);
         }
       }
       for (const nft of CROP_MACHINE_NFTS) {
         if (!nftScopeHits(nft, crop)) continue;
-        let val = nft.value;
-        if (nft.withSkill && skills[nft.withSkill.skill]) val = nft.withSkill.value;
+        const val = nft.value;
         const on = nft.kind === "wearable" ? wearableActive(nft.name) : nftOwned(nft.name);
         const entry = { name: nft.name, kind: "NFT", label: `+${val}`, debuff: false };
         (on ? active : available).push(entry);
@@ -703,6 +785,10 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     }).filter(Boolean);
     // Unlocked crops ranked by net; locked ones after, so the live choice leads.
     rows.sort((a, b) => (a.locked - b.locked) || (b.net - a.net));
+    // Crops per seed on the power context, so the roadmap's machine rows (calcCropMachineDaily)
+    // price the same yield this panel does instead of 1 crop per seed.
+    powerCtx.cropMachineYields = {};
+    for (const r of rows) powerCtx.cropMachineYields[r.crop] = r.yieldPerSeed;
     cropMachine = { plots: cmPlots, oilPerHour: cmOilPerHour, speedMult: cmSpeed, oilPrice, oilFlowerPerDay: +oilCostPerDay.toFixed(4), rows };
   }
 
@@ -712,14 +798,8 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
    * unactivated one is FLOWER/day left on the table, and the user found a +0.1 crimstone
    * wearable that had never been equipped.
    *
-   * Owned-and-active is judged from the farm, not from the `has` flag: `has` is true for a
-   * wearable the moment it is in the wardrobe and for a collectible the moment it is in
-   * inventory OR placed — so it cannot tell a worn item from a stored one, which is exactly the
-   * distinction this needs. A wearable is active when equipped; a collectible when at least one
-   * copy is placed.
-   *
-   * (That same conflation means the income figures COUNT these dormant boosts as if active —
-   * a separate overstatement, flagged to the user, not fixed here.)
+   * `has` is ACTIVE (placed / equipped) and `owned` is plain ownership, so dormant = owned and
+   * not active. The income figures no longer count these (they used to, when `has` meant owned).
    *
    * Value is the marginal each would add, read from boostValues (best across its categories).
    * Disabled items are skipped: one superseded by a stronger active boost adds nothing.
@@ -735,10 +815,7 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   const dormantBoosts = [];
   for (const b of boostItems) {
     if (b.type === "Skill" || b.isDisabled || !b.effects || !b.effects.length) continue;
-    let owned;
-    if (b.type === "Wearable") owned = (wardrobe[b.name] || 0) > 0 && !isWearableEquipped(farm, b.name);
-    else owned = getCount(inventory, b.name) > 0 && findCollectible(farm, b.name).length === 0;
-    if (!owned) continue;
+    if (!(b.owned && !b.has)) continue;
     dormantBoosts.push({ name: b.name, type: b.type, boost: (b.boost || "").split("\n")[0], value: +bestValue(b.name).toFixed(2) });
   }
   dormantBoosts.sort((a, b) => b.value - a.value);
@@ -754,9 +831,24 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     if (bi) {
       const fc = isQual ? ((bi.categories || ["other"])[0]) : settings.formulaCat;
       const product = savedProducts[fc] || getDefaultProduct(fc);
-      try { formulaHtml = buildFormulaHTML(bi, fc, product, capacity, p2pPrices, catBoosts[fc] || []); } catch {}
+      /*
+       * The panel explains the number the value list SHOWS: boostValues[fc][name] (net, same
+       * engine, same efficiency scale) plus the with/without nets it is the difference of. It
+       * used to re-derive its own gross yield delta, so Tiki Totem's panel said 1.289/day · 75 d
+       * next to a list reading 1.160/day · 84 d.
+       */
+      let explain = null;
+      try {
+        const raw = calcBoostValue(bi, fc, product, capacity, p2pPrices, catBoosts[fc] || [], bi.has, effMode);
+        explain = { shown: (boostValues[fc] || {})[bi.name] || null, netWith: raw.netWith, netWithout: raw.netWithout,
+          rawSynergy: raw.synergy, effFactor: effScale(fc), marketFee: effRs.marketFee };
+      } catch {}
+      try { formulaHtml = buildFormulaHTML(bi, fc, product, capacity, p2pPrices, catBoosts[fc] || [], explain); } catch {}
     }
   }
 
-  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, skillRanks, composters: composterVerdicts(farm, p2pPrices, season, { savedProducts }), shrines: shrineStatuses(farm), weather: weatherProtection(farm), compostSkills, digging: diggingVerdict(farm, p2pPrices, exchangeRates, { coinsFree: false }), valueBasis: settings.measured ? "measured" : "theoretical", restockQueues, dormantBoosts, ...(cropMachine ? { cropMachine } : {}), ...(boostValuesEff ? { boostValuesEff } : {}), ...(formulaHtml !== undefined ? { formulaHtml } : {}) };
+  // effUnmeasured: no measured efficiency applies to this response (no history posted, or the
+  // history had no harvest signal) — every figure is at theoretical (100 %) throughput.
+  const effUnmeasured = !(settings.effMeta && settings.effMeta.measured);
+  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, skillRanks, composters: composterVerdicts(farm, p2pPrices, season, { savedProducts }), shrines: shrineStatuses(farm), weather: weatherProtection(farm), compostSkills, digging: diggingVerdict(farm, p2pPrices, exchangeRates, { coinsFree: false }), valueBasis: settings.measured ? "measured" : "theoretical", effUnmeasured, restockQueues, dormantBoosts, ...(cropMachine ? { cropMachine } : {}), ...(boostValuesEff ? { boostValuesEff, boostValuesTheo } : {}), ...(formulaHtml !== undefined ? { formulaHtml } : {}) };
 }

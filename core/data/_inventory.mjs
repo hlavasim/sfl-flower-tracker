@@ -38,20 +38,12 @@ export const TABLE_INVENTORY = [
     "lines": 2
   },
   {
-    "name": "BASE_NODE_COUNTS",
-    "lines": 6
-  },
-  {
     "name": "BASE_STOCK",
     "lines": 18
   },
   {
     "name": "BETTY_RESTOCK_AMOUNT",
     "lines": 8
-  },
-  {
-    "name": "BETTY_SELL_PRICES",
-    "lines": 11
   },
   {
     "name": "BOOST_EFFECT_OVERRIDES",
@@ -76,10 +68,6 @@ export const TABLE_INVENTORY = [
   {
     "name": "BUD_STEM_BOOSTS",
     "lines": 19
-  },
-  {
-    "name": "BUD_STEM_NAMES",
-    "lines": 2
   },
   {
     "name": "BUD_TYPE_BOOSTS",
@@ -122,10 +110,6 @@ export const TABLE_INVENTORY = [
     "lines": 5
   },
   {
-    "name": "CHAIN",
-    "lines": 7
-  },
-  {
     "name": "CHANCE_CAT_MAP",
     "lines": 7
   },
@@ -140,10 +124,6 @@ export const TABLE_INVENTORY = [
   {
     "name": "COLORS",
     "lines": 2
-  },
-  {
-    "name": "COMPOST_RECIPES",
-    "lines": 29
   },
   {
     "name": "COMPOSTER_NAMES",
@@ -172,10 +152,6 @@ export const TABLE_INVENTORY = [
   {
     "name": "CROP_GROW_DATA",
     "lines": 8
-  },
-  {
-    "name": "CROP_HARVEST_SECONDS",
-    "lines": 6
   },
   {
     "name": "CROP_MACHINE_BASIC",
@@ -234,10 +210,6 @@ export const TABLE_INVENTORY = [
     "lines": 16
   },
   {
-    "name": "EFFICIENCY_RESOURCE_MAP",
-    "lines": 8
-  },
-  {
     "name": "FACTION_SHIELDS",
     "lines": 2
   },
@@ -278,20 +250,12 @@ export const TABLE_INVENTORY = [
     "lines": 15
   },
   {
-    "name": "FISHING_ROD_COST",
-    "lines": 2
-  },
-  {
     "name": "FLOWER_BOOSTS",
     "lines": 9
   },
   {
     "name": "FLOWER_RECIPES",
     "lines": 61
-  },
-  {
-    "name": "FLOWER_SEED_COIN_COSTS",
-    "lines": 5
   },
   {
     "name": "FLOWER_YIELD_BOOSTS",
@@ -306,20 +270,12 @@ export const TABLE_INVENTORY = [
     "lines": 4
   },
   {
-    "name": "FRUIT_HARVEST_SECONDS",
-    "lines": 4
-  },
-  {
     "name": "GEAR_BOOST",
     "lines": 2
   },
   {
     "name": "GEAR_BST",
     "lines": 2
-  },
-  {
-    "name": "GIANT_ITEM_COIN_PRICES",
-    "lines": 3
   },
   {
     "name": "GIFT_NPC_ORDER",
@@ -362,10 +318,6 @@ export const TABLE_INVENTORY = [
     "lines": 28
   },
   {
-    "name": "MERGE_COSTS",
-    "lines": 6
-  },
-  {
     "name": "MINE_CHAIN",
     "lines": 2
   },
@@ -384,10 +336,6 @@ export const TABLE_INVENTORY = [
   {
     "name": "NFT_LISTING_COLLECTIONS",
     "lines": 2
-  },
-  {
-    "name": "NODE_PRICES",
-    "lines": 11
   },
   {
     "name": "NONWOOD",
@@ -494,16 +442,8 @@ export const TABLE_INVENTORY = [
     "lines": 7
   },
   {
-    "name": "ROI_QUANT_CATS",
-    "lines": 3
-  },
-  {
     "name": "SALT_BASE_YIELD",
     "lines": 1
-  },
-  {
-    "name": "SALT_RAKE_COST",
-    "lines": 2
   },
   {
     "name": "SEASON_CROPS",
@@ -534,20 +474,12 @@ export const TABLE_INVENTORY = [
     "lines": 17
   },
   {
-    "name": "SICKNESS_EFFECTS",
-    "lines": 6
-  },
-  {
     "name": "SICKNESS_PREVENTION",
     "lines": 4
   },
   {
     "name": "SICKNESS_RATE_BY_LEVEL",
     "lines": 18
-  },
-  {
-    "name": "SKILL_FEED_EFFECTS",
-    "lines": 7
   },
   {
     "name": "SKILL_RANK_PRICEABLE",

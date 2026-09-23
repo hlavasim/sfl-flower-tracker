@@ -93,19 +93,19 @@
         { type: "sickness_reduction", value: 0.5, cat: "sheep", raw: "-50% Barn Delight cost" },
       ],
       "Frozen Cow": [
-        { type: "sickness_prevention", value: 1.0, cat: "cows", raw: "Prevents cow sickness" },
+        { type: "sickness_prevention", value: 1.0, cat: "cows", raw: "Prevents cow sickness in winter", season: "winter" },
       ],
       "Frozen Sheep": [
-        { type: "sickness_prevention", value: 1.0, cat: "sheep", raw: "Prevents sheep sickness" },
+        { type: "sickness_prevention", value: 1.0, cat: "sheep", raw: "Prevents sheep sickness in winter", season: "winter" },
       ],
       "Summer Chicken": [
-        { type: "sickness_prevention", value: 1.0, cat: "chickens", raw: "Prevents chicken sickness" },
+        { type: "sickness_prevention", value: 1.0, cat: "chickens", raw: "Prevents chicken sickness in summer", season: "summer" },
       ],
       "Nurse Sheep": [
-        { type: "sickness_prevention", value: 1.0, cat: "sheep", raw: "Prevents sheep sickness" },
+        { type: "sickness_prevention", value: 1.0, cat: "sheep", raw: "Prevents sheep sickness in summer", season: "summer" },
       ],
       "Sleepy Chicken": [
-        { type: "sickness_prevention", value: 1.0, cat: "chickens", raw: "Prevents chicken sickness" },
+        { type: "sickness_prevention", value: 1.0, cat: "chickens", raw: "Prevents chicken sickness in autumn", season: "autumn" },
       ],
       "Gold Beetle": [
         { type: "yield_flat", value: 0.1, cat: "gold", raw: "+0.1 Gold" },
@@ -361,9 +361,11 @@
         fn: m => ({ type: "qualitative", cat: "fishing", raw: m[0] }) },
       // Specific product growth/cooldown time: "-20% Pumpkin Growth Time", "-20% Crimstone Cooldown Time"
       // ONLY matches if product is in PRODUCT_TO_CATEGORY — unknown products fall through
+      // "<Crop> Plot Growth Time" (Cabbage Girl, Giant Zucchini, Broccoli Hat, Carrot Amulet) is the
+      // same grow-time boost (plant.ts) — without stripping "Plot" it fell through to a yield cut.
       { rx: /([+-]?\d+\.?\d*)%\s+([\w\s]+?)\s+(?:Growth|Growing|Cooldown|Recovery|Respawn|Production|Sleep)\s+Time/i,
         fn: m => {
-          const prod = m[2].trim();
+          const prod = m[2].trim().replace(/\s+Plot$/i, "");
           const cat = PRODUCT_TO_CATEGORY[prod];
           if (cat) return { type: "speed_pct", value: parseFloat(m[1]), cat, product: prod };
           // Try animal name

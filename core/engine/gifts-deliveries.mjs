@@ -217,10 +217,12 @@ export function _setItemCostMaps(maps) { _itemCostMaps = maps || { productionCos
       { name: "Salt Awakening",    start: Date.UTC(2026,  4,  4), ticket: "Salt Rock",           boosts: ["Spa Hat", "Spa Robe", "Spa Slippers"] },
     ];
 
-    // Per-NPC base ticket reward (mirrors TICKET_REWARDS in deliver.ts).
+    // Per-NPC base ticket reward (mirrors TICKET_REWARDS in events/landExpansion/deliver.ts:39-51).
+    // finn is 3 and tywin 5 in the game source — unchanged there since 2024-05-05 (c4fb85b5e) up
+    // to the 2026-04-24 checkout; this table had 4 and 10.
     const TICKET_REWARDS = {
       "pumpkin' pete": 1, "bert": 2, "miranda": 2, "finley": 2, "raven": 3,
-      "finn": 4, "timmy": 4, "cornwell": 4, "tywin": 10, "jester": 4, "pharaoh": 5,
+      "finn": 3, "timmy": 4, "cornwell": 4, "tywin": 5, "jester": 4, "pharaoh": 5,
     };
 
     // Collectibles that count as "built" via findCollectible() length > 0.

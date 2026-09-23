@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { valueHoldings, CHAINS } from "../../api/_holdings.js";
+import { valueHoldings, eggBookValue, CHAINS } from "../../api/_holdings.js";
 
 /*
  * The Investment Tracker values a registered address by everything it holds. These pin the split
@@ -19,8 +19,11 @@ const balances = [
   { chain: "ronin", error: "ronin-rpc 525" },
 ];
 
+// A deep enough book to fill all 20 eggs at one price, so the split/pricing test stays about that.
+const deepBook = [{ wron: 390, qty: 50 }];
+
 test("tokens go to WALLET, eggs to YAKKAMON, each valued in USD and BTC", () => {
-  const { venues, errors } = valueHoldings(balances, prices, 390);
+  const { venues, errors } = valueHoldings(balances, prices, deepBook);
   const w = venues.wallet, y = venues.yakkamon;
   const wantUsd = 0.0005 * 4000 + 2187.61 + 22901 * 0.16 + 20 * 0.06 + 0.000001 * 4000;
   assert.ok(Math.abs(w.usd - wantUsd) < 1e-9);
@@ -33,9 +36,26 @@ test("tokens go to WALLET, eggs to YAKKAMON, each valued in USD and BTC", () => 
 });
 
 test("no egg offer means eggs are listed but worth nothing, not skipped", () => {
-  const { venues } = valueHoldings(balances, prices, 0);
+  const { venues } = valueHoldings(balances, prices, []);
   assert.equal(venues.yakkamon.usd, 0);
   assert.equal(venues.yakkamon.items.length, 1);
+  assert.equal(venues.yakkamon.items[0].unfilled, 20, "and the item says none of them can be sold");
+});
+
+/*
+ * E12: the best bid is for ONE egg (availableQuantity 1), not for the 20 held. Selling 20 now
+ * walks the book: 1 at 390, 5 at 300, the remaining 14 at 250 = 5,390 WRON, not 20 × 390 =
+ * 7,800 (+45 %). Eggs the book cannot absorb are worth nothing today.
+ */
+test("eggs are valued by walking the fillable offer book, not N × the best offer", () => {
+  const book = [{ wron: 250, qty: 50 }, { wron: 390, qty: 1 }, { wron: 300, qty: 5 }];   // unsorted on purpose
+  assert.deepEqual(eggBookValue(book, 20), { wron: 390 + 5 * 300 + 14 * 250, filled: 20, unfilled: 0 });
+  const { venues } = valueHoldings(balances, prices, book);
+  const y = venues.yakkamon.items[0];
+  assert.ok(Math.abs(venues.yakkamon.usd - 5390 * 0.06) < 1e-9, `${venues.yakkamon.usd} ≠ 5390 WRON × 0.06`);
+  assert.ok(Math.abs(y.unitWron - 5390 / 20) < 1e-9, "the average fill, not the top bid");
+  assert.deepEqual(eggBookValue([{ wron: 400, qty: 3 }, { wron: 0, qty: 9 }, { wron: 100, qty: 0 }], 5),
+    { wron: 1200, filled: 3, unfilled: 2 }, "a thin book sells what it can; dead offers are skipped");
 });
 
 test("every token's price id is one the price feed fetches", () => {

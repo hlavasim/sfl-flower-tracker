@@ -144,6 +144,11 @@ function _mvInner(itemName, p2pPrices, _visited, rates, trace) {
     if (tool.materials) {
       for (const [mat, qty] of Object.entries(tool.materials)) {
         const matPrice = itemMarketValue(mat, p2pPrices, visited, rates, kids);
+        // E6: an unpriceable material makes the tool unpriced, not "coins + the rest".
+        if (matPrice <= 0) {
+          if (trace) return emit(trace, { item: itemName, method: "tool cost", formula: `unpriceable material: ${mat}`, value: 0, steps: kids });
+          return 0;
+        }
         total += matPrice * qty;
         if (trace) parts.push(`${qty} × ${mat} @ ${matPrice.toFixed(5)}`);
       }
@@ -270,7 +275,10 @@ function _mvInner(itemName, p2pPrices, _visited, rates, trace) {
         }
       }
     }
-    if (potPrice > 0) {
+    // E6: a chum that neither route can price leaves the catch unpriced — pot alone is a
+    // partial sum that reads as a real (too cheap) price.
+    const chumMissing = cr.chum && cr.qty > 0 && !(chumCost > 0);
+    if (potPrice > 0 && !chumMissing) {
       const value = potPrice + chumCost;
       if (trace) return emit(trace, { item: itemName, method: "crustacean", formula: `${cr.pot} @ ${potPrice.toFixed(5)}${chumLabel}`, value, steps: kids });
       return value;
@@ -316,12 +324,15 @@ function _mvInner(itemName, p2pPrices, _visited, rates, trace) {
       let total = 0;
       const kids = trace ? [] : undefined;
       const parts = trace ? [] : undefined;
+      let missing = false;
       for (const [ing, qty] of Object.entries(recipe)) {
         const p = itemMarketValue(ing, p2pPrices, visited, rates, kids);
+        // E6: one unpriceable fish makes the batch unpriced (Fish Oil read 0.02 instead of ~5).
+        if (p <= 0) { missing = true; break; }
         total += p * qty;
         if (trace) parts.push(`${qty} × ${ing} @ ${p.toFixed(5)}`);
       }
-      if (total > 0) {
+      if (!missing && total > 0) {
         if (trace) return emit(trace, { item: itemName, method: "fish market", formula: parts.join(" + "), value: total, steps: kids });
         return total;
       }
@@ -337,13 +348,15 @@ function _mvInner(itemName, p2pPrices, _visited, rates, trace) {
         let batchCost = 0;
         const kids = trace ? [] : undefined;
         const parts = trace ? [] : undefined;
+        let missing = false;
         for (const [ing, qty] of Object.entries(inputs)) {
           const p = itemMarketValue(ing, p2pPrices, visited, rates, kids);
+          if (p <= 0) { missing = true; break; }   // E6: unpriced input -> unpriced batch
           batchCost += p * qty;
           if (trace) parts.push(`${qty} × ${ing} @ ${p.toFixed(5)}`);
         }
         const totalUnits = Object.values(data.outputs).reduce((sum, q) => sum + q, 0);
-        if (batchCost > 0 && totalUnits > 0) {
+        if (!missing && batchCost > 0 && totalUnits > 0) {
           const value = batchCost / totalUnits;
           if (trace) return emit(trace, { item: itemName, method: "compost", formula: `(${parts.join(" + ")}) / ${totalUnits} units`, value, steps: kids });
           return value;

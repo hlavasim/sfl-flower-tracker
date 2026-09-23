@@ -19,6 +19,10 @@ export function buildPetsSection(farm, p2p, settings = {}) {
   const hasWalrusOnesie = isWearableEquipped(farm, "Walrus Onesie");
   const hasBeastShoes = isWearableEquipped(farm, "Beast Shoes");
   const hasHoundShrine = _shrineActiveNow(farm, "Hound Shrine");
+  // Fetch-yield boosts (getFetchYield, events/pets/fetchPet.ts:59-73): Squirrel Onesie worn
+  // and Oaken placed each add Acorns per Acorn fetch.
+  const hasSquirrelOnesie = isWearableEquipped(farm, "Squirrel Onesie");
+  const hasOaken = findCollectible(farm, "Oaken").length > 0;
 
   // What a dish costs THIS farm to cook — the same productionCost map the prices and
   // diff sections value inventory with, so a food is never priced two ways in the app.
@@ -57,11 +61,13 @@ export function buildPetsSection(farm, p2p, settings = {}) {
 
   // Per-pet daily economics, same call the page made per row
   const feedBoosts = { petBowls: hasPetBowls, walrusOnesie: hasWalrusOnesie, beastShoes: hasBeastShoes, houndShrine: hasHoundShrine };
+  // What the daily calc needs: Walrus Onesie for energy, the two Acorn boosts for fetch yield.
+  const fetchBoosts = { walrusOnesie: hasWalrusOnesie, squirrelOnesie: hasSquirrelOnesie, oaken: hasOaken };
   for (const pet of pets) {
-    pet.calc = petDailyCalc(pet, p2pPrices, feedMultiplier, hasPetBowls);
+    pet.calc = petDailyCalc(pet, p2pPrices, feedMultiplier, hasPetBowls, fetchBoosts);
     pet.feeding = buildPetFeedingTable(pet, (food) => foodCost[food], feedBoosts);
   }
 
   return { pets, feedMultiplier, hasPetBowls, hasVictoriasApron,
-           hasWalrusOnesie, hasBeastShoes, hasHoundShrine, p2pPrices };
+           hasWalrusOnesie, hasBeastShoes, hasHoundShrine, fetchBoosts, p2pPrices };
 }

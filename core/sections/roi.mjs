@@ -11,7 +11,7 @@
 import {
   parseBoostEffects, classifyToCategories, SKILL_FEED_EFFECTS,
 } from "../engine/power-boosts.mjs";
-import { computeBettyRate } from "../engine/prices.mjs";
+import { computeBettyRate, pickCoinsPerSFL } from "../engine/prices.mjs";
 import {
   findCollectible, getCount, getFactionMarkCost, marksToSfl,
   SKILL_TREE_DATA, detectFarmCapacity, detectStockModifiers,
@@ -112,26 +112,28 @@ export function buildRoiSection(farm, p2p, nftData, exchange, btcUsd, settings =
 
   // ── page 20953-20986: rate assembly, ROI's own variant (kept verbatim) ──
   const p2pPrices = {};
-  const exchangeRates = { coinsPerSFL: 320, gemsPerSFL: 0 };
+  const exchangeRates = { coinsPerSFL: 0, gemsPerSFL: 0 };
   let sflUsd = 0;
   for (const [k, v] of Object.entries(p2p || {})) p2pPrices[k] = parseFloat(v) || 0;
   const rateResp = exchange || null;
   sflUsd = rateResp?.sfl?.usd || 0;
 
   const betty = computeBettyRate(p2pPrices);
-  if (betty.rate > 0) { exchangeRates.coinsPerSFL = betty.rate; }
+  let apiCoinRate = 0;
   if (rateResp) {
     const coinTiers = Object.values(rateResp?.coins || {});
     const gemTiers = Object.values(rateResp?.gems || {});
-    if (!betty.rate && coinTiers.length > 0) {
+    if (coinTiers.length > 0) {
       const best = coinTiers.reduce((a, b) => (b.coin / b.sfl) > (a.coin / a.sfl) ? b : a);
-      exchangeRates.coinsPerSFL = best.coin / best.sfl;
+      apiCoinRate = best.coin / best.sfl;
     }
     if (gemTiers.length > 0) {
       const best = gemTiers.reduce((a, b) => (b.gem / (b.sfl * 0.7)) > (a.gem / (a.sfl * 0.7)) ? b : a);
       exchangeRates.gemsPerSFL = best.gem / (best.sfl * 0.7);
     }
   }
+  // Betty, else the exchange, else 0 = unpriced (pickCoinsPerSFL — no made-up 320).
+  exchangeRates.coinsPerSFL = pickCoinsPerSFL("betty", betty.rate, apiCoinRate);
 
   const capacity = detectFarmCapacity(farm);
   const stockMods = detectStockModifiers(farm);

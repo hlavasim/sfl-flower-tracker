@@ -139,7 +139,7 @@ import {
               if (!budEffectApplies(eff, catId, prod)) continue;
               if (eff.type === "yield_flat") yieldVals.push(eff.value);
             }
-            const bestYield = yieldVals.length > 0 ? Math.max(...yieldVals) * aura : 0;
+            const bestYield = yieldVals.reduce((s, v) => s + v, 0) * aura; // game ADDS type + stem, then x aura: getBudBoost, lib/getBudYieldBoosts.ts:161-167 (max() dropped the smaller trait)
             if (bestYield > 0) {
               const n = getCapacityCount(catId, capacity);
               const cycleSec = getCycleSec(catId, prod);
@@ -166,7 +166,7 @@ import {
           else if (eff.type === "chance") chanceVals.push(eff);
         }
 
-        const bestYield = yieldVals.length > 0 ? Math.max(...yieldVals) * aura : 0;
+        const bestYield = yieldVals.reduce((s, v) => s + v, 0) * aura; // game ADDS type + stem, then x aura: getBudBoost, lib/getBudYieldBoosts.ts:161-167 (max() dropped the smaller trait)
         const bestSpeed = speedVals.length > 0 ? Math.min(...speedVals) * aura : 0;
         const bestChance = chanceVals.length > 0
           ? chanceVals.reduce((a, b) => (a.pct * a.extra > b.pct * b.extra) ? a : b) : null;

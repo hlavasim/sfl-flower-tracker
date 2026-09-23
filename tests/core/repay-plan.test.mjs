@@ -10,7 +10,6 @@ const ctx = { peakBtc: 0.3, netDebtBtc: 0.3, today: "2026-09-22" };
 const tx = [
   { tx_date: "2026-09-01", direction: "withdrawal", btc_amount: "0.001" },   // before start — ignored
   { tx_date: "2026-09-12", direction: "withdrawal", btc_amount: "0.002" },
-  { tx_date: "2026-09-12", direction: "deposit",    btc_amount: "0.050" },   // deposits never count
   { tx_date: "2026-09-20", direction: "withdrawal", btc_amount: "0.0005" },
   { tx_date: "2026-09-30", direction: "withdrawal", btc_amount: "1" },       // future — ignored
 ];
@@ -67,4 +66,67 @@ test("a future start, a bad rate or no peak yields no plan rather than nonsense"
   assert.equal(repayPlanStats({ start_date: "2026-09-12", rate: 0, period: "year" }, tx, ctx), null);
   assert.equal(repayPlanStats({ start_date: "2026-09-12", rate: 10, period: "week" }, tx, ctx), null);
   assert.equal(repayPlanStats({ start_date: "2026-09-12", rate: 10, period: "year" }, tx, { ...ctx, peakBtc: 0 }), null);
+});
+
+/*
+ * E13: a round trip is not a repayment. Pull 0.05 out and put the same 0.05 back and nothing has
+ * been repaid — gross withdrawals booked 0.052 here. Net withdrawals since the start, floored at 0
+ * in the running series, book the 0.002 that actually stayed out.
+ */
+test("a withdraw-then-redeposit round trip repays nothing — net withdrawals count", () => {
+  const plan = { start_date: "2026-09-12", rate: 10, period: "year" };
+  const rt = [
+    { tx_date: "2026-09-13", direction: "withdrawal", btc_amount: "0.05" },
+    { tx_date: "2026-09-15", direction: "deposit",    btc_amount: "0.05" },   // put straight back
+    { tx_date: "2026-09-18", direction: "withdrawal", btc_amount: "0.002" },
+  ];
+  const s = repayPlanStats(plan, rt, ctx);
+  assert.ok(Math.abs(s.actualBtc - 0.002) < 1e-12, `actual ${s.actualBtc}, gross would be 0.052`);
+  assert.equal(s.series[1].actual, 0.05, "the withdrawal shows on its day");
+  assert.equal(s.series[3].actual, 0, "and the re-deposit takes it back");
+  assert.ok(Math.abs(s.series[6].actual - 0.002) < 1e-12);
+  // The floor: a deposit ahead of any withdrawal cannot bank negative repayment.
+  const early = repayPlanStats(plan, [
+    { tx_date: "2026-09-13", direction: "deposit",    btc_amount: "0.1" },
+    { tx_date: "2026-09-14", direction: "withdrawal", btc_amount: "0.01" },
+  ], ctx);
+  assert.ok(early.series.every((p) => p.actual >= 0), "never below zero");
+  assert.ok(Math.abs(early.actualBtc - 0.01) < 1e-12);
+});
+
+/*
+ * E15: dates are the owner's LOCAL days. At 01:30 in Prague on 23 Sep the UTC date is still
+ * 22 Sep, so the plan used to end "today" a day early and treat a withdrawal logged today as
+ * being in the future.
+ */
+test("today is the local date, not the UTC one", () => {
+  const RealDate = Date, tz = process.env.TZ;
+  const at = RealDate.parse("2026-09-22T23:30:00Z");   // 01:30 on the 23rd in Prague
+  class FakeDate extends RealDate {
+    constructor(...a) { super(...(a.length ? a : [at])); }
+    static now() { return at; }
+  }
+  process.env.TZ = "Europe/Prague";
+  globalThis.Date = FakeDate;
+  try {
+    const s = repayPlanStats({ start_date: "2026-09-20", rate: 10, period: "year" },
+      [{ tx_date: "2026-09-23", direction: "withdrawal", btc_amount: "0.004" }], { peakBtc: 0.3, netDebtBtc: 0.3 });
+    assert.equal(s.series[s.series.length - 1].time, "2026-09-23", "the plan runs to the local today");
+    assert.equal(s.daysElapsed, 3);
+    assert.ok(Math.abs(s.actualBtc - 0.004) < 1e-12, "a withdrawal made today counts today");
+  } finally {
+    globalThis.Date = RealDate;
+    if (tz === undefined) delete process.env.TZ; else process.env.TZ = tz;
+  }
+});
+
+test("a start still in the future anchors the chart at today — no date appears twice", () => {
+  const f = repayPlanStats({ start_date: "2026-10-01", rate: 10, period: "year" }, [], ctx);
+  const times = f.series.concat(f.future).map((p) => p.time);
+  assert.equal(new Set(times).size, times.length, "every date once");
+  assert.ok(times.every((t, i) => i === 0 || t > times[i - 1]), "strictly ascending, as the chart needs");
+  assert.equal(f.series[0].time, "2026-09-22");
+  const at = (d) => f.future.find((p) => p.time === d).target;
+  assert.equal(at("2026-10-01"), 0, "nothing accrues before the start");
+  assert.ok(Math.abs(at("2026-10-02") - f.dailyTargetBtc) < 1e-12, "and it accrues from the start on");
 });

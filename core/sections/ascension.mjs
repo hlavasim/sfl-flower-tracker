@@ -8,17 +8,17 @@
 //     same roadmapComputeEfficiency as sections eff/roadmap) for the effective mode;
 //   - xpPerDay: buildCookingSection's totalXpPerDay (the verified cooking engine).
 // POST-only (snapshots for efficiency); query grinx=0|1, max=1..10.
-import { COOKING_RECIPES_DATA } from "../data/cooking.mjs";
 // Merge lives here now, not in flowers.html. nodeAcq was the only place computing buy and
 // expand, so the NODES page kept a THIRD engine for merges — which is how the same gold node
 // came out negative on one page and positive on two others. One source or none.
 import { MERGE_COSTS, countNodeTiers, roadmapEffFactor, getRoadmapSettings } from "../engine/roadmap.mjs";
-import { detectCookingBoosts, computeFoodXP } from "../engine/cooking.mjs";
+import { detectCookingBoosts, computeBankedFoodXp } from "../engine/cooking.mjs";
 import { PRE_EXPANSION_REQUIREMENTS, ISLAND_PROGRESSION } from "../data/expansions.mjs";
-import { BUMPKIN_XP_TABLE, findCollectible, miningToolsPerDay } from "../engine/power-helpers.mjs";
+import { BUMPKIN_XP_TABLE, miningToolsPerDay } from "../engine/power-helpers.mjs";
 // Treasures sell to an NPC at a fixed coin price — the same table and boosts the treasury
 // section uses, so the two cannot disagree about what a dig pile is worth.
 import { TREASURE_SELL_PRICES } from "../data/crafting.mjs";
+import { treasureSellMultiplier } from "../engine/digging.mjs";
 import {
   SWAMP_BASE_EXPANSION, SWAMP_EXPANSIONS_PER_ASCENSION, HOURS_PER_EXPANSION,
   getAscensionUpgradeCost, getAscensionExpansionRequirements, getExpansionCrystalCount,
@@ -57,8 +57,11 @@ const getCount = (inv, name) => {
   return parseFloat(v) || 0;
 };
 
-// XP threshold for an ABSOLUTE bumpkin level (pre-ascension gates, 1..150).
-const xpForLevel = (lvl) => lvl <= 1 ? 0 : BUMPKIN_XP_TABLE[lvl - 2] ?? BUMPKIN_XP_TABLE[BUMPKIN_XP_TABLE.length - 1];
+// XP threshold for an ABSOLUTE bumpkin level (pre-ascension gates, 1..150). BUMPKIN_XP_TABLE[i]
+// is the XP to REACH level i+1 (getBumpkinLevel returns i+1 once xp >= table[i]; game
+// LEVEL_EXPERIENCE in lib/level.ts:203 — 1: 0, 2: 2, 3: 22, …), so level L needs table[L-1].
+// table[L-2] was one level short: every pre-ascension gate read as met a level early.
+const xpForLevel = (lvl) => lvl <= 1 ? 0 : BUMPKIN_XP_TABLE[lvl - 1] ?? BUMPKIN_XP_TABLE[BUMPKIN_XP_TABLE.length - 1];
 
 // Steps still missing BEFORE ascension: finish the current island, upgrade,
 // finish the next... through volcano 30 (upgradeFarm.ts chain). asc: 0 marks
@@ -154,14 +157,9 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
   // waiting to be eaten — and the user eats with the ×1.5 pet-streak boost active, so
   // it is valued with petSimulate boosts (the same computeFoodXP the Bumpkin page
   // uses). Level gates and ETAs below run on experience + this bank.
-  let bankedFoodXp = 0;
-  {
-    const boosts = detectCookingBoosts(farm, { petSimulate: true });
-    for (const [food, data] of Object.entries(COOKING_RECIPES_DATA)) {
-      const qty = getCount(inv, food);
-      if (qty > 0) bankedFoodXp += qty * computeFoodXP(food, data, data.building, boosts);
-    }
-  }
+  // Prime Aged fish included, and banked fish without the expected-prime uplift — one
+  // implementation with the Bumpkin page (computeBankedFoodXp).
+  const bankedFoodXp = computeBankedFoodXp(farm, detectCookingBoosts(farm, { petSimulate: true })).totalXp;
   const experienceEff = experience + bankedFoodXp;
 
   /*
@@ -173,13 +171,14 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
    * already covers.
    *
    * Reused wholesale from the treasury section rather than re-derived: TREASURE_SELL_PRICES
-   * for the price and the same two boosts it detects (Treasure Map +20%, Camel +30%, and the
-   * Camel counts whether placed or merely owned). Reported separately as well as folded into
-   * the stock, so the plan never silently spends something the user has not sold yet.
+   * for the price and the same two boosts the game applies (Treasure Map +20%, Camel +30%).
+   * Both must be PLACED: treasureSold.ts getSellPrice checks isCollectibleBuilt for each
+   * (events/landExpansion/treasureSold.ts:36-44) — a Camel sitting in the inventory pays
+   * nothing. Same helper the digging verdict uses, so the two cannot disagree. Reported
+   * separately as well as folded into the stock, so the plan never silently spends
+   * something the user has not sold yet.
    */
-  let treasureBoost = 1;
-  if (findCollectible(farm, "Treasure Map").length > 0) treasureBoost += 0.2;
-  if (getCount(inv, "Camel") > 0 || findCollectible(farm, "Camel").length > 0) treasureBoost += 0.3;
+  const treasureBoost = treasureSellMultiplier(farm);
   const treasureCoins = { total: 0, boost: treasureBoost, items: [] };
   for (const [name, baseCoins] of Object.entries(TREASURE_SELL_PRICES)) {
     const qty = getCount(inv, name);
@@ -393,7 +392,7 @@ export function buildAscensionSection(farm, powerData, cookingTotalXp, eff, sett
   // (selected recipes). Resources without a P2P price flag costUnpriced (cost is
   // then a lower bound). ROI = payback days = cost / daily gain.
   const p2pP = powerData && powerData.p2pPrices ? powerData.p2pPrices : {};
-  const xr = (powerData && powerData.exchangeRates) || { coinsPerSFL: 320, gemsPerSFL: 0 };
+  const xr = (powerData && powerData.exchangeRates) || { coinsPerSFL: 0, gemsPerSFL: 0 };   // 0 = coins unpriced
   const NODE_CAT = {
     "Crop Plot": "crops", "Fruit Patch": "fruits", "Tree": "trees", "Stone Rock": "stone",
     "Iron Rock": "iron", "Gold Rock": "gold", "Crimstone Rock": "crimstone",

@@ -7,7 +7,7 @@ import {
   ANIMAL_CAT_MAP,
   getAnimalLevel, RESOURCE_RESPAWN_DATA, TOOL_TO_CAT, BASE_STOCK,
   getCycleSec, getCapacityCount, getDefaultProduct, getBaseYield, applyBoosts,
-  getEffectiveStock, calcToolCostPerDay, getEffectsForCategory, SEED_DATA,
+  getEffectiveStock, calcToolCostPerDay, getEffectsForCategory, SEED_DATA, findCollectible,
 } from "./power-helpers.mjs";
 import { PRODUCT_TO_CATEGORY, FRUIT_HARVEST_COUNT } from "./power-boosts.mjs";
 import { SEED_COSTS, TOOL_COSTS } from "../data/economy.mjs";
@@ -361,7 +361,14 @@ import { SEED_COSTS, TOOL_COSTS } from "../data/economy.mjs";
      * Medic Apron reaches a valuation only as its parsed effect — matching on owned item NAMES
      * below means every "what if I buy it" question scored those items exactly 0.
      */
-    function calcSicknessCost(catId, capacity, p2pPrices, boostItems, skills, effects) {
+    /*
+     * `season` (optional): the game's sickness protection items are SEASONAL — Frozen Cow /
+     * Frozen Sheep only in winter, Summer Chicken and Nurse Sheep in summer, Sleepy Chicken in
+     * autumn (the effect carries `season`). A season name applies them only in that season;
+     * "annual" averages the year (a one-season item covers a quarter of it — what a permanent
+     * valuation needs). Omitted = the old full-year prevention, for callers not migrated.
+     */
+    function calcSicknessCost(catId, capacity, p2pPrices, boostItems, skills, effects, season) {
       const animals = capacity.animalDetails?.[catId] || [];
       if (animals.length === 0) return { costPerDay: 0, avgRate: 0, barnDelightSfl: 0, reductions: [], perLevel: [] };
       const probeEff = (effects || []).filter(e => e.cat === catId);
@@ -382,24 +389,31 @@ import { SEED_COSTS, TOOL_COSTS } from "../data/economy.mjs";
        * would count the same item twice. Callers that pass no effects keep the name checks.
        */
       const effectMode = effects != null;
-      let prevented = false;
+      const prevs = []; // one per protecting item: { name, season } — season null = all year
       if (effectMode) {
-        if (probeEff.some(e => e.type === "sickness_prevention")) {
-          prevented = true;
-          reductions.push({ name: "sickness prevention", desc: "Full prevention" });
-        }
+        for (const e of probeEff) if (e.type === "sickness_prevention") prevs.push({ name: "sickness prevention", season: e.season || null });
       } else if (boostItems) {
         for (const item of boostItems) {
           if (!item.has) continue;
           const prevCat = SICKNESS_PREVENTION[item.name];
           if (prevCat === catId) {
-            prevented = true;
-            reductions.push({ name: item.name, desc: "Full prevention" });
-            break;
+            const pe = (item.effects || []).find(e => e.type === "sickness_prevention");
+            prevs.push({ name: item.name, season: (pe && pe.season) || null });
           }
         }
       }
-      if (prevented) return { costPerDay: 0, avgRate: 0, barnDelightSfl, prevented: true, reductions, perLevel: [] };
+      const seasons = prevs.map(p => p.season);
+      let preventedShare = 0;
+      if (prevs.length) {
+        if (season === undefined || seasons.indexOf(null) >= 0) preventedShare = 1;
+        else if (season === "annual") preventedShare = Math.min(1, new Set(seasons).size / 4);
+        else preventedShare = seasons.indexOf(season) >= 0 ? 1 : 0;
+      }
+      if (preventedShare >= 1) {
+        reductions.push({ name: prevs[0].name, desc: "Full prevention" });
+        return { costPerDay: 0, avgRate: 0, barnDelightSfl, prevented: true, reductions, perLevel: [] };
+      }
+      if (preventedShare > 0) reductions.push({ name: prevs.map(p => p.name).join(", "), desc: `No sickness ${Math.round(preventedShare * 100)}% of the year` });
 
       /*
        * Rate multiplier from Healthy Livestock — NAME mode only. In effect mode the skill's
@@ -451,10 +465,10 @@ import { SEED_COSTS, TOOL_COSTS } from "../data/economy.mjs";
         perLevel[lvl].count++;
       }
 
-      const costPerDay = totalExpectedSick * barnDelightSfl * cureCostMult;
+      const costPerDay = totalExpectedSick * barnDelightSfl * cureCostMult * (1 - preventedShare);
       const avgRate = animals.length > 0 ? totalExpectedSick / animals.length : 0;
 
-      return { costPerDay, avgRate, totalExpectedSick, barnDelightSfl, cureCostMult, rateMult, reductions, animalCount: animals.length, perLevel };
+      return { costPerDay, avgRate, totalExpectedSick, barnDelightSfl, cureCostMult, rateMult, preventedShare, reductions, animalCount: animals.length, perLevel };
     }
 
     // ── flowers.html 15160-15184: calcLavaPitCostPerDay ──
@@ -584,11 +598,11 @@ import { SEED_COSTS, TOOL_COSTS } from "../data/economy.mjs";
      */
     function shrineStatuses(farm) {
       if (!farm) return [];
-      const placed = farm.collectibles || {}, placedHome = (farm.home && farm.home.collectibles) || {};
       const out = [];
       for (const name in SHRINE_DATA) {
         const sh = SHRINE_DATA[name];
-        const st = _shrineStatus(name, placed, placedHome, sh.duration_d);
+        // All four placement maps (findCollectible) — a shrine in the house interior counted as never placed.
+        const st = _shrineStatus(name, { [name]: findCollectible(farm, name) }, {}, sh.duration_d);
         out.push({
           name, kind: st.kind, hoursLeft: st.hoursLeft != null ? st.hoursLeft : null,
           durationDays: sh.duration_d, catId: sh.catId, alsoCats: sh.alsoCats || [],
@@ -681,8 +695,7 @@ import { SEED_COSTS, TOOL_COSTS } from "../data/economy.mjs";
     function _shrineActiveNow(farm, name) {
       const sh = SHRINE_DATA[name];
       if (!sh || !farm) return false;
-      const placed = farm.collectibles || {}, placedHome = (farm.home && farm.home.collectibles) || {};
-      return _shrineStatus(name, placed, placedHome, sh.duration_d).kind === "active";
+      return _shrineStatus(name, { [name]: findCollectible(farm, name) }, {}, sh.duration_d).kind === "active";
     }
     // Deviation (see header): `farm` param replaces the page's powerState.farm global.
     function activeShrineEffects(farm, catId) {

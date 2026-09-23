@@ -1,3 +1,5 @@
+import { requireWriteToken } from "./_auth.js";
+
 const ALLOWED_FARM = 155498;
 const REDIS_KEY = `game_token:${ALLOWED_FARM}`;
 
@@ -74,6 +76,8 @@ export default async function handler(req, res) {
     if (parseInt(farm) !== ALLOWED_FARM) {
       return res.status(403).json({ error: "Unauthorized farm" });
     }
+    // The stored token is what the server trades with — only the owner may replace it.
+    if (!requireWriteToken(req, res)) return;
     if (!token || typeof token !== "string") {
       return res.status(400).json({ error: "Missing token" });
     }

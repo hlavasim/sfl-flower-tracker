@@ -74,10 +74,10 @@ export function buildWishlistSection(farm, nftData, settings = {}) {
   const budPrices = {};
   for (const [k, v] of Object.entries(settings.p2p || {})) budPrices[k] = parseFloat(v) || 0;
   // The measured column applies this farm's per-category throughput to each breakdown entry —
-  // the same roadmapEffFactor the roadmap and calcBoostValue's measured pass use, so a bud
-  // and a collectible are discounted by the same activity model (including its meanRatio
-  // fallback when no farm history was posted).
-  const budEffSettings = getRoadmapSettings(settings.roadmapSettings || {});
+  // the same roadmapEffFactor (effMode forced "real", overrides kept) section=power uses for
+  // the collectibles' boostValuesEff, so a bud and a collectible are discounted by the same
+  // activity model. With no farm history measured both fall back to theoretical (1.0).
+  const budEffSettings = Object.assign({}, getRoadmapSettings(settings.roadmapSettings || {}), { effMode: "real" });
   const budVals = {}; // wishlist key → [theoretical, at measured efficiency]
 
   /** Value one decoded bud. Traits come from the id alone; only the money needs prices. */

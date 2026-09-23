@@ -1,11 +1,11 @@
 import { buildCookingSection } from "../core/sections/cooking.mjs";
 import { buildConstantsSection } from "../core/sections/constants.mjs";
 import { buildPricesSection } from "../core/sections/prices.mjs";
-import { valueDiff } from "../core/sections/diff.mjs";
+import { valueDiff, diffPriceMap } from "../core/sections/diff.mjs";
 import { buildPowerSection } from "../core/sections/power.mjs";
 import { buildRoiSection } from "../core/sections/roi.mjs";
 import { roadmapComputeEfficiency, _setRoadmapState } from "../core/engine/roadmap.mjs";
-import { buildTreasurySection } from "../core/sections/treasury.mjs";
+import { buildTreasurySection, buildTreasuryData } from "../core/sections/treasury.mjs";
 import { buildRoadmapSection } from "../core/sections/roadmap.mjs";
 import { buildAscensionSection } from "../core/sections/ascension.mjs";
 import { buildWishlistSection } from "../core/sections/wishlist.mjs";
@@ -14,6 +14,7 @@ import { buildBudsSection } from "../core/sections/buds.mjs";
 import { buildPetsSection } from "../core/sections/pets.mjs";
 import { computeBettyRate } from "../core/engine/prices.mjs";
 import { API_SPEC } from "../core/api-spec.mjs";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 // Vercel auto-parses a JSON POST body into an object; the local dev-server passes
 // the raw Buffer. Handle both (and a stringified body) so POST sections don't lose
@@ -109,8 +110,22 @@ function cachedFetch(cache, key, run, ttlMs = CACHE_TTL_MS) {
 // than a dead page for a read-only dashboard — so when the live fetch fails but we have
 // EVER succeeded for this farm on this instance, serve that instead. Same for nfts
 // (single key). Prices/exchange/btc are already best-effort by design.
-const lastGoodFarm = G.lastGoodFarm ??= new Map(); // farmId -> wrap
-const lastGoodNfts = G.lastGoodNfts ??= { data: null };
+//
+// Bounded in age as well as count: past STALE_MAX_AGE_MS the stored copy is no longer a
+// "throttle window" stand-in but a different farm, and the request fails as it would have
+// without a fallback. Every result carries `fetchedAt` (when upstream actually answered), so
+// the response can say how old its data is instead of stamping it with the compute time.
+const STALE_MAX_AGE_MS = 6 * 3600_000;
+const _reqCtx = new AsyncLocalStorage();
+const lastGoodFarm = G.lastGoodFarm ??= new Map(); // farmId -> { data, fetchedAt }
+const lastGoodNfts = G.lastGoodNfts ??= { data: null, fetchedAt: 0 };
+
+function _staleOr(result, good) {
+  if (good && good.data && Date.now() - good.fetchedAt <= STALE_MAX_AGE_MS) {
+    return { ok: true, data: good.data, stale: true, fetchedAt: good.fetchedAt };
+  }
+  return result;
+}
 
 async function fetchFarm(farmId) {
   const result = await cachedFetch(farmCache, farmId, async () => {
@@ -118,16 +133,14 @@ async function fetchFarm(farmId) {
     const r = await fetch(`${PROXY}/api/proxy?url=${encodeURIComponent(sflUrl)}`);
     if (!r.ok) return { ok: false, status: r.status };
     const wrap = await r.json();
-    return { ok: true, data: wrap };
+    return { ok: true, data: wrap, fetchedAt: Date.now() };
   });
   if (result.ok) {
     if (lastGoodFarm.size > CACHE_MAX_ENTRIES) lastGoodFarm.delete(lastGoodFarm.keys().next().value);
-    lastGoodFarm.set(farmId, result.data);
+    lastGoodFarm.set(farmId, { data: result.data, fetchedAt: result.fetchedAt });
     return result;
   }
-  const stale = lastGoodFarm.get(farmId);
-  if (stale) return { ok: true, data: stale, stale: true };
-  return result;
+  return _staleOr(result, lastGoodFarm.get(farmId));
 }
 
 // Prices are best-effort: a failed/erroring fetch must not fail the whole endpoint
@@ -155,11 +168,32 @@ async function fetchNfts() {
   const result = await cachedFetch(nftsCache, "nfts", async () => {
     const r = await fetch(`${PROXY}/api/proxy?url=${encodeURIComponent(NFTS_URL)}`);
     if (!r.ok) return { ok: false, status: r.status };
-    return { ok: true, data: await r.json() };
+    return { ok: true, data: await r.json(), fetchedAt: Date.now() };
   }, NFTS_TTL_MS);
-  if (result.ok) { lastGoodNfts.data = result.data; return result; }
-  if (lastGoodNfts.data) return { ok: true, data: lastGoodNfts.data, stale: true };
-  return result;
+  const out = result.ok ? result : _staleOr(result, lastGoodNfts);
+  if (result.ok) { lastGoodNfts.data = result.data; lastGoodNfts.fetchedAt = result.fetchedAt; }
+  // Per-request note for the response envelope (see _freshness). AsyncLocalStorage rather than a
+  // module variable: a warm instance serves concurrent requests, and one request must not
+  // report another's staleness.
+  const store = _reqCtx.getStore();
+  if (store) store.nfts = out;
+  return out;
+}
+
+// Staleness of the two fallback-capable inputs, merged into the response envelope — never into
+// `data`, so no section's payload changes shape. `farmFetchedAt` is always the real upstream
+// time of the farm used; `stale`/`staleAgeMin`/`staleSources` say when a fallback was served.
+function _freshness(farmResult, nftResult) {
+  const out = { farmFetchedAt: farmResult.fetchedAt ? new Date(farmResult.fetchedAt).toISOString() : null, stale: false };
+  const staleOnes = [["farm", farmResult], ["nfts", nftResult]].filter(([, r]) => r && r.stale);
+  if (staleOnes.length) {
+    const oldest = Math.min(...staleOnes.map(([, r]) => r.fetchedAt));
+    out.stale = true;
+    out.staleSources = staleOnes.map(([k]) => k);
+    out.staleAgeMin = Math.round((Date.now() - oldest) / 60000);
+    out.staleFetchedAt = new Date(oldest).toISOString();
+  }
+  return out;
 }
 
 // BTC/USD for the ROI page's currency toggle — best-effort exactly like the page
@@ -191,6 +225,15 @@ async function fetchExchange() {
   return result.data;
 }
 
+// Marketplace id -> name (api/_item-names.js), for the sfl.world NFT rows that ship without a
+// name. Imported lazily and fault-tolerant: it is a .js ESM file next to an .mjs, and a module
+// that fails to load must cost the names, never the whole endpoint.
+let _itemNamesPromise = null;
+function loadItemNames() {
+  if (!_itemNamesPromise) _itemNamesPromise = import("./_item-names.js").then((m) => m.default || null).catch(() => null);
+  return _itemNamesPromise;
+}
+
 // Test-only hook: node:test imports this module once and runs every test in a file against
 // that same instance, so the module-level caches above persist across tests unless cleared.
 // Production callers never call this.
@@ -208,7 +251,11 @@ export function _clearCacheForTests(opts = {}) {
   btcCache.clear();
 }
 
-export default async function handler(req, res) {
+export default function handler(req, res) {
+  return _reqCtx.run({}, () => _handler(req, res));
+}
+
+async function _handler(req, res) {
   const farmId = (req.query && req.query.farm) || "";
   const section = (req.query && req.query.section) || "cooking";
   // Sections that describe the API itself need no farm — must branch before the farm guard.
@@ -256,17 +303,29 @@ export default async function handler(req, res) {
     // DB-free — data lives in the DB endpoints, valuation lives here. explain=1 attaches a
     // per-snapshot net-SFL trace. Body: { snapshots: [{ capturedAt, diff }, ...] }.
     else if (section === "diff") {
-      const priceMap = (buildPricesSection(farm, p2p, settings).marketValue) || {};
+      /*
+       * The map is diffPriceMap's (core/sections/diff.mjs): market value, else production cost
+       * (cooked dishes), else the NFT collectible floor, plus wearables at their floor and Oil at
+       * the Power page's drill-cost figure. NFTs / exchange are best-effort here — without them
+       * the diff still values everything the price map covers, as before.
+       */
+      const [nftResult, exchange] = await Promise.all([fetchNfts(), fetchExchange()]);
+      const nftData = nftResult.ok ? nftResult.data : {};
+      const td = buildTreasuryData(p2p, nftData, exchange, 0, { itemNames: await loadItemNames() });
+      let oilPrice = 0;
+      try { oilPrice = (buildPowerSection(farm, p2p, nftData, exchange, settings).categories || {}).oilPrice || 0; } catch { oilPrice = 0; }
+      const pm = diffPriceMap(buildPricesSection(farm, p2p, settings), td, oilPrice);
+      const diffRates = { ...settings, wearablePrices: pm.wearables };
       let input = {};
       input = _parseBody(req.body);
       const list = Array.isArray(input.snapshots) ? input.snapshots : [];
       const snapshots = list.map((s) => {
         const dm = (s && s.diff) || {};
         const trace = settings.explain ? [] : undefined;
-        const { items, netSfl } = valueDiff(dm, priceMap, settings, trace);
+        const { items, netSfl } = valueDiff(dm, pm.items, diffRates, trace);
         return { capturedAt: s.capturedAt ?? s.time ?? null, netSfl, items, ...(settings.explain ? { trace: trace[0] } : {}) };
       });
-      data = { snapshots };
+      data = { snapshots, oilPrice, nftsOk: !!nftResult.ok };
     }
     // `power`: the POWER/ROADMAP pages' shared boost state (task: power migration). Needs
     // two extra upstreams the other sections don't: the sfl.world NFT list (the section is
@@ -301,7 +360,7 @@ export default async function handler(req, res) {
         const pwEff = roadmapComputeEfficiency(pwSnaps);
         _setRoadmapState({
           effByCat: pwEff.effByCat || {}, effMeta: pwEff.meta,
-          meanRatio: typeof pwEff.meanRatio === "number" ? pwEff.meanRatio : 0.5,
+          meanRatio: typeof pwEff.meanRatio === "number" ? pwEff.meanRatio : null,
         });
         pwSettings.measured = true;
         pwSettings.effMeta = pwEff.meta;
@@ -331,10 +390,25 @@ export default async function handler(req, res) {
       if (!nftResult.ok) return res.status(502).json({ error: `nfts fetch failed: ${nftResult.status}` });
       let roadmapSettings = {};
       try { roadmapSettings = req.query.roadmap ? JSON.parse(req.query.roadmap) : {}; } catch { roadmapSettings = {}; }
-      const rmPower = buildPowerSection(farm, p2p, nftResult.data, exchange, { ...settings, roadmapSettings, savedProducts: req.query.products ? JSON.parse(req.query.products) : {} });
+      const rmPwSettings = { ...settings, roadmapSettings, savedProducts: req.query.products ? JSON.parse(req.query.products) : {} };
       let input = {};
       input = _parseBody(req.body);
       const rmSnaps = Array.isArray(input.snapshots) ? input.snapshots : [];
+      /*
+       * Same three-step order as section=power: a context pass (roadmapComputeEfficiency reads
+       * powerState), then THIS request's efficiency into the roadmap state, then the real pass.
+       * The real pass builds skillRanks — scaled by roadmapEffFactor — which the buy path uses
+       * as-is for Level 2/3 rows, while L1 skills and NFTs are scaled inside
+       * buildRoadmapSection. Without this the ranks were priced at the PREVIOUS request's
+       * efficiency (or none) and the items at this one's.
+       */
+      buildPowerSection(farm, p2p, nftResult.data, exchange, rmPwSettings); // context only
+      const rmEff = roadmapComputeEfficiency(rmSnaps);
+      _setRoadmapState({
+        effByCat: rmEff.effByCat || {}, effMeta: rmEff.meta,
+        meanRatio: typeof rmEff.meanRatio === "number" ? rmEff.meanRatio : null,
+      });
+      const rmPower = buildPowerSection(farm, p2p, nftResult.data, exchange, rmPwSettings);
       /*
        * The ascension plan, built here so its expansions and upgrades can compete in the buy
        * path. Same inputs the section=ascension branch uses, including the forced petSimulate
@@ -345,7 +419,7 @@ export default async function handler(req, res) {
       let rmAsc = null;
       try {
         const rmCooking = _cookingForAscension(farm, p2p, { ...settings, petSimulate: true });
-        rmAsc = buildAscensionSection(farm, rmPower, rmCooking, roadmapComputeEfficiency(rmSnaps), { grinx: req.query.grinx === "1", max: req.query.max });
+        rmAsc = buildAscensionSection(farm, rmPower, rmCooking, rmEff, { grinx: req.query.grinx === "1", max: req.query.max });
       } catch (e) { rmAsc = null; }   // the buy path still works without it
       // scenarios=greenhouse,chickens — activities the farm does not run yet that the user asked
       // to plan for. They change what the simulator considers, so they belong in the request.
@@ -426,7 +500,7 @@ export default async function handler(req, res) {
       const wlEff = roadmapComputeEfficiency(Array.isArray(wlBody.snapshots) ? wlBody.snapshots : []);
       _setRoadmapState({
         effByCat: wlEff.effByCat || {}, effMeta: wlEff.meta,
-        meanRatio: typeof wlEff.meanRatio === "number" ? wlEff.meanRatio : 0.5,
+        meanRatio: typeof wlEff.meanRatio === "number" ? wlEff.meanRatio : null,
       });
       const powerData = buildPowerSection(farm, p2p, nftResult.data, exchange,
         { ...settings, roadmapSettings: wlRoadmap, effectiveFor: wishNames });
@@ -436,11 +510,18 @@ export default async function handler(req, res) {
        * farm give the bud engine the same inputs section=buds uses; `budFloors` is POSTed by
        * the client because per-id marketplace asks live in the DB and compute stays DB-free.
        */
+      /*
+       * `theo` = boostValuesTheo (unscaled) and `eff` = boostValuesEff (× measured ratio), both
+       * from the same effectiveFor pass. powerData.boostValues follows the user's Efficiency
+       * toggle — on the default it is ALREADY the measured figure — so passing it as `theo`
+       * printed the two columns swapped.
+       */
       data = buildWishlistSection(farm, nftResult.data, {
-        list, boostValues: powerData.boostValues, boostValuesEff: powerData.boostValuesEff,
+        list, boostValues: powerData.boostValuesTheo || powerData.boostValues, boostValuesEff: powerData.boostValuesEff,
         p2p, roadmapSettings: wlRoadmap,
         budFloors: (wlBody.budFloors && typeof wlBody.budFloors === "object") ? wlBody.budFloors : {},
       });
+      data.effUnmeasured = !(wlEff.meta && wlEff.meta.measured);
     }
     // `roi`: the ROI page's state — the page's own copy of the power fetch+rate block
     // (plus a 4th upstream, BTC/USD) and its own boost-item/pet builders. Same 502
@@ -468,19 +549,47 @@ export default async function handler(req, res) {
       if (!nftResult.ok) return res.status(502).json({ error: `nfts fetch failed: ${nftResult.status}` });
       let petPrices = {};
       try { petPrices = req.query.petprices ? JSON.parse(req.query.petprices) : {}; } catch { petPrices = {}; }
-      data = buildTreasurySection(farm, p2p, nftResult.data, exchange, btcUsd, { coinMode: req.query.coinMode || "betty", petPrices });
+      data = buildTreasurySection(farm, p2p, nftResult.data, exchange, btcUsd, { coinMode: req.query.coinMode || "betty", petPrices, itemNames: await loadItemNames() });
+      /*
+       * Every upstream here is best-effort except the NFT list, so a 200 alone cannot say what
+       * the numbers stand on. Without p2p prices ~half the farm reads 0; without the exchange
+       * gems read 0; without BTC/USD the BTC column does. The page shows each false as a warning
+       * instead of rendering the shrunken total as if it were real.
+       */
+      data.status = {
+        pricesOk: Object.keys(p2p).length > 0,
+        nftsStale: !!nftResult.stale,
+        exchangeOk: !!(exchange && (exchange.coins || exchange.gems)),
+        btcOk: btcUsd > 0,
+      };
     }
     else return res.status(400).json({ error: `unknown section: ${section}` });
-    const payload = { farm: farmId, computedAt: new Date().toISOString(), section, data };
+    const payload = { farm: farmId, computedAt: new Date().toISOString(), ..._freshness(farmResult, _reqCtx.getStore()?.nfts), section, data };
     // section=prices only (task F2-2e-fix): fetchPrices() above is best-effort and silently
     // falls back to {} on any upstream failure, so a 200 alone cannot tell the client "prices
     // genuinely loaded" from "upstream was rate-limited, data.marketValue is near-empty". The
     // client's PRICES() cache has no TTL, so caching the latter as if it were the former reads
     // 0 for every migrated price for the rest of the session. pricesOk lets the client tell
     // the two apart and treat a false as retryable instead of durable success.
-    if (section === "prices") payload.pricesOk = Object.keys(p2p).length > 0;
+    if (section === "prices" || section === "diff" || section === "treasury") payload.pricesOk = Object.keys(p2p).length > 0;
+    // Stale farm (the live fetch failed, the last good one was served): say so, with its age.
+    if (farmResult.stale) {
+      payload.stale = true;
+      payload.farmFetchedAt = new Date(farmResult.fetchedAt).toISOString();
+      payload.farmAgeSec = Math.round((Date.now() - farmResult.fetchedAt) / 1000);
+    }
     return res.status(200).json(payload);
   } catch (e) {
     return res.status(500).json({ error: String((e && e.message) || e) });
+  } finally {
+    /*
+     * The roadmap state (measured efficiency) is MODULE-level and roadmapEffFactor reads it for
+     * every section that values boosts. Nothing used to clear it, so on a warm instance a plain
+     * section=power / roi / treasury priced everything at the efficiency the previous
+     * roadmap/wishlist request left behind — possibly for another farm (Green Thumb 0.18 →
+     * 0.045/day). Every branch sets it synchronously after its last `await` and this finally
+     * runs in that same synchronous stretch, so no concurrent request can observe another's.
+     */
+    _setRoadmapState(null);
   }
 }

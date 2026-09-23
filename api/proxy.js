@@ -7,7 +7,7 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  const { url, key } = req.query;
+  const { url } = req.query;
   if (!url) return res.status(400).json({ error: "Missing ?url= parameter" });
 
   const ALLOWED = [
@@ -21,6 +21,18 @@ export default async function handler(req, res) {
   ];
   if (!ALLOWED.some(prefix => url.startsWith(prefix))) {
     return res.status(403).json({ error: "Domain not allowed" });
+  }
+  /*
+   * The SFL API is the one target that gets our SFL_API_KEY, so it is not an open prefix: only
+   * the paths the app reads are relayed, or this would be a public relay for the key to any
+   * endpoint it unlocks. Today that is the public farm read (page + compute.mjs); the server-side
+   * marketplace calls in marketplace-orderbook.js go direct, not through here.
+   */
+  const SFL = "https://api.sunflower-land.com/";
+  const SFL_PATHS = [/^community\/farms\/\d+$/];
+  const isSfl = url.startsWith(SFL);
+  if (isSfl && !SFL_PATHS.some(re => re.test(url.slice(SFL.length)))) {
+    return res.status(403).json({ error: "Path not allowed" });
   }
 
   /*
@@ -67,9 +79,9 @@ export default async function handler(req, res) {
   }
 
   const headers = {};
-  // Use client-provided key, or fall back to server-side env var
-  const apiKey = key || process.env.SFL_API_KEY;
-  if (apiKey) headers["x-api-key"] = apiKey;
+  // The server's key goes to the SFL API only — never to CoinGecko, sfl.world or Yakkamon.
+  // (A client-supplied ?key= used to override it; nothing in the app sent one.)
+  if (isSfl && process.env.SFL_API_KEY) headers["x-api-key"] = process.env.SFL_API_KEY;
 
   try {
     const resp = await fetch(url, { headers });

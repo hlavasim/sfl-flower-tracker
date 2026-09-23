@@ -1,5 +1,6 @@
 const { getPool } = require("../shared/db");
 const { fetchNfts } = require("../shared/api");
+const { presentColumns } = require("../shared/schema-check");
 
 const TRACKED_FIELDS = ["floor", "lastSalePrice", "supply"];
 
@@ -19,54 +20,50 @@ module.exports = async function (context) {
       }
     }
 
-    // Derive buds/pets prices from marketplace DB tables
+    /*
+     * Buds and pets are not in the sfl.world feed, so their floor / last sale come from the
+     * catalogue-wide marketplaceActivity snapshot that marketplace-activity writes hourly into
+     * marketplace_daily (one row per item per day; today's row carries the live book).
+     *
+     * They used to be derived from marketplace_orderbook + marketplace_trades. Since 2026-09-11
+     * marketplace_orderbook holds only the OWNER's open orders, all with item_id 0 (the profile
+     * feed names items instead of numbering them), and marketplace_trades only the owner's
+     * trades — so that derivation recorded the owner's own asking price as the floor of "bud #0"
+     * and "pet #0". Supply is no longer tracked for them: the old figure was a count of listing
+     * orders, not a supply, and nothing public reports one per bud/pet.
+     */
+    let hasFloor = false;
+    try {
+      hasFloor = (await presentColumns(pool, "marketplace_daily", ["floor"])).has("floor");
+    } catch (err) {
+      context.log.warn(`marketplace_daily column check failed: ${err.message}`);
+    }
+    if (!hasFloor) {
+      context.log.error("MIGRATION MISSING: marketplace_daily.floor — apply azure-functions/migrations/" +
+        "2026-09-11-marketplace-community-api.sql. Bud/pet floors are skipped until then (last sale still recorded).");
+    }
     for (const collection of ["buds", "pets"]) {
       try {
-        const [floorRes, saleRes, supplyRes] = await Promise.all([
-          // Floor = lowest listing price per item
-          pool.query(
-            `SELECT item_id, MIN(sfl / GREATEST(quantity, 1)) as floor
-             FROM marketplace_orderbook
-             WHERE collection = $1 AND side = 'listing'
-             GROUP BY item_id`,
-            [collection]
-          ),
-          // Last sale = most recent trade per item
-          pool.query(
-            `SELECT DISTINCT ON (item_id) item_id, sfl / GREATEST(quantity, 1) as last_sale
-             FROM marketplace_trades
-             WHERE collection = $1
-             ORDER BY item_id, fulfilled_at DESC`,
-            [collection]
-          ),
-          // Supply = count of distinct listing orders
-          pool.query(
-            `SELECT item_id, COUNT(*) as supply
-             FROM marketplace_orderbook
-             WHERE collection = $1 AND side = 'listing'
-             GROUP BY item_id`,
-            [collection]
-          ),
-        ]);
-
-        const items = new Map();
-        for (const r of floorRes.rows) {
-          items.set(r.item_id, { id: r.item_id, collection, floor: parseFloat(r.floor) });
-        }
-        for (const r of saleRes.rows) {
-          const item = items.get(r.item_id) || { id: r.item_id, collection };
-          item.lastSalePrice = parseFloat(r.last_sale);
-          items.set(r.item_id, item);
-        }
-        for (const r of supplyRes.rows) {
-          const item = items.get(r.item_id);
-          if (item) item.supply = parseInt(r.supply);
-        }
-
-        for (const item of items.values()) {
+        // Only a report from today or yesterday: an older one means marketplace-activity has
+        // stopped, and re-recording its frozen values would only hide that.
+        const r = await pool.query(
+          `SELECT item_id, ${hasFloor ? "floor" : "NULL::double precision AS floor"}, latest_sale
+             FROM marketplace_daily
+            WHERE collection = $1
+              AND date = (SELECT MAX(date) FROM marketplace_daily WHERE collection = $1)
+              AND date >= CURRENT_DATE - 1`,
+          [collection]
+        );
+        let n = 0;
+        for (const row of r.rows) {
+          const item = { id: row.item_id, collection };
+          if (row.floor != null && +row.floor > 0) item.floor = parseFloat(row.floor);
+          if (row.latest_sale != null && +row.latest_sale > 0) item.lastSalePrice = parseFloat(row.latest_sale);
+          if (item.floor === undefined && item.lastSalePrice === undefined) continue;
           allNfts.push(item);
+          n++;
         }
-        context.log(`Derived ${items.size} ${collection} prices from marketplace data`);
+        context.log(`Derived ${n} ${collection} prices from marketplace_daily`);
       } catch (err) {
         context.log.warn(`Failed to derive ${collection} prices: ${err.message}`);
       }

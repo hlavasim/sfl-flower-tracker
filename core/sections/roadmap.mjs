@@ -30,8 +30,9 @@ const _strip = (m) => ({ name: m.name, type: m.type, floor: m.floor, boost: m.bo
 
 export function buildRoadmapSection(snapshots, settings = {}) {
   const eff = roadmapComputeEfficiency(snapshots || []);
-  // Same shape renderRoadmap builds client-side from section=eff.
-  const meanRatio = typeof eff.meanRatio === "number" ? eff.meanRatio : 0.5;
+  // Same shape renderRoadmap builds client-side from section=eff. No measurement → null, which
+  // roadmapEffFactor reads as theoretical (1.0) — NOT a silent 0.5 on every category.
+  const meanRatio = typeof eff.meanRatio === "number" ? eff.meanRatio : null;
   /*
    * The ascension plan travels with the state so its EXPANSIONS and UPGRADES can compete in the
    * buy path. They belong there: an expansion costs materials and hands you profit nodes, which
@@ -98,7 +99,7 @@ export function buildRoadmapSection(snapshots, settings = {}) {
       const er = ps.exchangeRates;
       const rows = [];
       for (const crop of cropMachineCrops(ps.farm)) {
-        const r = calcCropMachineDaily(ps.farm, crop, ps.p2pPrices, er, false);
+        const r = calcCropMachineDaily(ps.farm, crop, ps.p2pPrices, er, false, (ps.cropMachineYields || {})[crop]);
         if (!r || !isFinite(r.net)) continue;
         rows.push({ product: crop, net: r.net, gross: r.revenue,
           cost: (r.oilCost || 0) + (r.seedCostPerDay || 0), plots: r.plots });
@@ -149,7 +150,9 @@ export function buildRoadmapSection(snapshots, settings = {}) {
   }
   const todo = buildTodo(rs);
 
-  return { eff, currentProd, startIncome, sim, profitability, todo, startup, startupError };
+  // effUnmeasured: no harvest efficiency could be measured, so every figure is at theoretical
+  // (100 %) throughput — the page says so instead of presenting it as "your last 7 days".
+  return { eff, effUnmeasured: !(eff.meta && eff.meta.measured), currentProd, startIncome, sim, profitability, todo, startup, startupError };
 }
 
 function _fmtFlower(v) {
@@ -268,7 +271,7 @@ function buildProfitability(settings) {
       const ani = getAnimalCatSfl(cat, cap, oeff, powerState.p2pPrices);
       const feed = calcAnimalFeedCost(cat, cap, powerState.p2pPrices, oeff, powerState.stockMods);
       const skl = (powerState.farm.bumpkin && powerState.farm.bumpkin.skills) || {};
-      const sick = calcSicknessCost(cat, cap, powerState.p2pPrices, powerState.boostItems, skl);
+      const sick = calcSicknessCost(cat, cap, powerState.p2pPrices, powerState.boostItems, skl, undefined, powerState.season);
       const parts = (ani.breakdown || []).filter(b => b.sfl > 0.0001).map(b => `${b.product} +${_fmtFl(b.sfl * f)}`);
       if ((feed.costPerDay || 0) > 0.0001) parts.push(`feed −${_fmtFl(feed.costPerDay * f)}`);
       if ((sick.costPerDay || 0) > 0.0001) parts.push(`sick −${_fmtFl(sick.costPerDay * f)}`);
@@ -285,11 +288,13 @@ function buildProfitability(settings) {
   if (farmHasCropMachine(powerState.farm)) {
     for (const crop of cropMachineCrops(powerState.farm)) {
       if (_excl(crop)) continue;
-      const r = calcCropMachineDaily(powerState.farm, crop, powerState.p2pPrices, er, false);
+      // Crops per seed from section=power's CROP MACHINE panel (the game's yield boosts per seed).
+      const r = calcCropMachineDaily(powerState.farm, crop, powerState.p2pPrices, er, false, (powerState.cropMachineYields || {})[crop]);
       if (!r) continue;
       let gross = r.revenue, cost = (r.oilCost || 0) + (r.seedCostPerDay || 0), net = r.net;
+      // The restock cap is in SEEDS, so it scales against seeds planted, not crops harvested.
       const capSeeds = rpd * (cmGetSeedRestockCount(powerState.farm, crop) || 0);
-      if (r.cropsPerDay > 0 && capSeeds < r.cropsPerDay) { const sf = capSeeds / r.cropsPerDay; gross *= sf; cost *= sf; net *= sf; }
+      if (r.seedsPerDay > 0 && capSeeds < r.seedsPerDay) { const sf = capSeeds / r.seedsPerDay; gross *= sf; cost *= sf; net *= sf; }
       if (isFinite(net)) gCm.rows.push({ label: crop, icon: crop, gross, cost, net });
     }
   }
@@ -300,6 +305,11 @@ function buildProfitability(settings) {
   for (const [cat, icon] of [["flowers", "Red Pansy"], ["bees", "Honey"], ["fishing", "Fish"]]) {
     if ((cat !== "fishing" && getCapacityCount(cat, cap) <= 0) || _excl(cat)) continue;
     addBd(gOther, POWER_CATEGORIES[cat].label, icon, sBd(roadmapCatBreakdown(cat, roadmapOwnedEffects(cat), settings), roadmapEffFactor(cat, settings)));
+    // Fishing has no price basis (see section=power catSummaries.fishing.unvalued): its 0 is
+    // "not priced", not "earns nothing".
+    if (cat === "fishing" && gOther.rows.length && !((powerState.p2pPrices || {})["Fish"] > 0)) {
+      Object.assign(gOther.rows[gOther.rows.length - 1], { unvalued: true, sub: "not priced — fish have no marketplace price" });
+    }
   }
   if (!_excl("salt")) addBd(gOther, "Salt Farm", "Salt", sBd(roadmapSaltBreakdown(settings), roadmapEffFactor("salt", settings)), "rake");
 

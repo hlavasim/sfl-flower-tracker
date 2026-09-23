@@ -1,3 +1,5 @@
+import { nftUnitPrice } from "../engine/prices.mjs";
+
 // Value a precomputed farm-diff delta map into per-item SFL contributions + a net total.
 // The diff itself is produced upstream (the snapshot collector) and stored; this only VALUES
 // an already-computed numeric delta map. Extracted verbatim from flowers.html's processDiff
@@ -15,6 +17,9 @@ export function valueDiff(diff, priceMap, rates = {}, trace) {
   const coinsPerSFL = rates.coinsPerSFL || 0;
   const gemsPerSFL = rates.gemsPerSFL || 0;
   const map = priceMap || {};
+  // rates.wearablePrices: wearable name -> SFL (diffPriceMap's `wearables`). Wardrobe changes
+  // used to be listed but never valued, so buying a wearable read as a pure FLOWER loss.
+  const wearablePrices = rates.wearablePrices || {};
   let netSfl = 0;
   const items = [];
   const kids = trace ? [] : null;
@@ -46,6 +51,9 @@ export function valueDiff(diff, priceMap, rates = {}, trace) {
       formula = `${d} × ${price.toFixed(5)} SFL`;
     } else if (key.startsWith("wardrobe.")) {
       itemName = key.substring(9); category = "wardrobe";
+      const price = wearablePrices[itemName] || 0;
+      sflValue = d * price;
+      formula = `${d} × ${price.toFixed(5)} SFL (floor)`;
     } else if (key.startsWith("stock.")) {
       continue;
     }
@@ -61,6 +69,38 @@ export function valueDiff(diff, priceMap, rates = {}, trace) {
     trace.push({ item: "net SFL", method: "diff valuation", formula: `Σ of ${kids.length} priced changes`, value: netSfl, unit: "SFL", steps: kids });
   }
   return { items, netSfl };
+}
+
+/*
+ * The price map the diff page values changes with — one place, so the fallbacks are pinned.
+ *
+ *   prices     buildPricesSection output { marketValue, productionCost }
+ *   td         buildTreasuryData output (NFT floors, id-resolved names) — optional
+ *   oilPrice   SFL per Oil, the Power page's drill-cost / boosted-yield figure — optional
+ *
+ * Returns { items, wearables }: `items` for inventory.<name> keys, `wearables` for wardrobe.
+ * Precedence per item: market value, else production cost (cooked dishes: the section=prices
+ * productionCost is the owner's rule — 63 of 122 dishes had no market value and read as 0, so
+ * cooking a Gumbo looked like a loss), else the NFT collectible floor (collectibles live in
+ * the inventory), else Oil at its drilling cost. Wearables use nftUnitPrice (floor first).
+ */
+export function diffPriceMap(prices, td, oilPrice) {
+  const items = {};
+  const mv = (prices && prices.marketValue) || {};
+  const pc = (prices && prices.productionCost) || {};
+  for (const [name, v] of Object.entries(pc)) if (v > 0) items[name] = v;
+  for (const [name, v] of Object.entries(mv)) if (v > 0) items[name] = v;
+  for (const [name, nft] of Object.entries((td && td.nftCollectibles) || {})) {
+    const floor = parseFloat(nft.floor) || 0;
+    if (floor > 0 && !(items[name] > 0)) items[name] = floor;
+  }
+  if (oilPrice > 0 && !(items.Oil > 0)) items.Oil = oilPrice;
+  const wearables = {};
+  for (const [name, nft] of Object.entries((td && td.nftWearables) || {})) {
+    const p = nftUnitPrice(nft);
+    if (p > 0) wearables[name] = p;
+  }
+  return { items, wearables };
 }
 
 /*
