@@ -5822,7 +5822,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.72</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.73</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5849,6 +5849,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.73", items: [
+          { t: "fix", text: "<b>POWER / ROADMAP count four untradeable boosters.</b> They never appear in the marketplace feed the boost list is built from, so a farm that had them placed got none of their effect. Now, by the game's own rules: <b>Immortal Pear</b> +1 harvest per fruit seed (+2 with Pear Turbocharge), <b>Basic Scarecrow</b> ×0.8 growth time on basic crops in its area, <b>Bale</b> +0.1 Egg (and Milk / Wool with Bale Economy, ×2 with Double Bale), <b>Radiant Ray</b> +0.1 Iron." },
+          { t: "fix", text: "The marketplace id → name map is regenerated from the current game source: 15 new items (Pigpen, the Rarecrows, the Beetles and their feeds, Mud, Rawhide, Truffle) now show by name instead of a bare id." },
+        ] },
         { ver: "v5.72", items: [
           { t: "feat", text: "<b>Wide mode for big screens.</b> A small ↔ button (top right, only on screens wider than 1,100 px) lets the page use the whole window instead of the 960 px column; the choice is remembered per browser." },
           { t: "feat", text: "<b>ROADMAP: pick items and see their total.</b> A faint checkbox left of each rank (it shows on hover) adds the row to a small bar at the bottom: how many you picked, what they cost bought now at the floor vs via offers (with the saving), the payback of each, and the FLOWER/day they add. Picks are remembered per browser." },

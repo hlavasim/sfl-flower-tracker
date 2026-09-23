@@ -1048,6 +1048,28 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
       if (ownsC("Banana Chicken")) out.push({ type: "yield_flat", value: 0.1, cat: "fruits", product: "Banana", raw: "Banana Chicken +0.1 Banana", source: "Banana Chicken" });
       if (farmWearableEquipped(farm, "Banana Amulet")) out.push({ type: "yield_flat", value: 0.5, cat: "fruits", product: "Banana", raw: "Banana Amulet +0.5 Banana", source: "Banana Amulet" });
       if (ownsC("Lemon Shark")) out.push({ type: "yield_flat", value: 0.2, cat: "fruits", product: "Lemon", raw: "Lemon Shark +0.2 Lemon", source: "Lemon Shark" });
+      /*
+       * Untradeable boosters the marketplace feed never lists, so nothing else adds them (game
+       * source 2026-09-23). A ranked skill's level multiplies the base like SKILL_UPGRADES in
+       * skill-ranks.mjs (Double Bale ×2/2.5/3, Pear Turbocharge ×2/3/4).
+       */
+      const rankMult = (name, table) => { const l = Math.floor(+skills[name] || 0); return l > 0 ? table[Math.min(l, table.length) - 1] : 1; };
+      // Immortal Pear: +1 harvest per fruit seed (landExpansion/utils.ts getFruitHarvests).
+      if (ownsC("Immortal Pear")) out.push({ type: "extra_harvest", value: rankMult("Pear Turbocharge", [2, 3, 4]), cat: "fruits", raw: "Immortal Pear +harvest per seed", source: "Immortal Pear" });
+      // Basic Scarecrow: ×0.8 basic-crop growth time inside its area (plant.ts); Chonky Scarecrow's
+      // extra is its own parsed skill effect, kept by power.mjs only while this is placed.
+      if (ownsC("Basic Scarecrow")) out.push({ type: "speed_mult", value: 0.8, cat: "crops", cropTier: "basic", raw: "Basic Scarecrow ×0.8 basic crop time", source: "Basic Scarecrow", aoe: true });
+      // Bale: +0.1 Egg always, +0.1 Milk / Wool with Bale Economy, ×Double Bale (lib/animals.ts).
+      if (ownsC("Bale")) {
+        const bale = 0.1 * rankMult("Double Bale", [2, 2.5, 3]);
+        out.push({ type: "yield_flat", value: bale, cat: "chickens", product: "Egg", raw: `Bale +${bale} Egg`, source: "Bale" });
+        if (skills["Bale Economy"]) {
+          out.push({ type: "yield_flat", value: bale, cat: "sheep", product: "Wool", raw: `Bale +${bale} Wool`, source: "Bale" });
+          out.push({ type: "yield_flat", value: bale, cat: "cows", product: "Milk", raw: `Bale +${bale} Milk`, source: "Bale" });
+        }
+      }
+      // Radiant Ray: +0.1 Iron per mine (ironMine.ts).
+      if (ownsC("Radiant Ray")) out.push({ type: "yield_flat", value: 0.1, cat: "iron", raw: "Radiant Ray +0.1 Iron", source: "Radiant Ray" });
       if (ownsC("Reveling Lemon")) out.push({ type: "yield_flat", value: 0.25, cat: "fruits", product: "Lemon", raw: "Reveling Lemon +0.25 Lemon", source: "Reveling Lemon" });
       if (ownsC("Tomato Bombard")) out.push({ type: "yield_flat", value: 1, cat: "fruits", product: "Tomato", raw: "Tomato Bombard +1 Tomato", source: "Tomato Bombard" });
 
