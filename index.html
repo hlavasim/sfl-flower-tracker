@@ -5805,7 +5805,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.70</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.71</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5832,6 +5832,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.71", items: [
+          { t: "fix", text: "<b>ROADMAP: a product unchecked in the filter no longer props up its boosts.</b> A boost was valued on the category's chosen product (your POWER choice, else the default — Grape for the greenhouse) even when that very product was unchecked, so Vinny (+0.25 Grape) stayed IN PLAN with Grape off. Such a boost now counts nothing toward the plan." },
+          { t: "feat", text: "<b>ROADMAP: the offer price for a 2-year payback.</b> The payback bracket now also shows the most you can offer for the item to pay back in exactly 2 years (FLOWER/day × 730.5), e.g. “(5.1mo offer · 2y ≤ 217)”." },
+        ] },
         { ver: "v5.70", items: [
           { t: "feat", text: "<b>ROADMAP: payback at the offer price.</b> Next to each collectible's and wearable's payback, in brackets, is the payback if an offer at the Offer column's price is accepted — your own offer if you have one, else the current best bid — so the saving from buying via an offer instead of at the floor shows as time, e.g. “2.5y (1.5y offer)”." },
         ] },
@@ -17738,6 +17742,9 @@
         const allCatBoosts = catBoostsW[cat];
         if (!allCatBoosts) continue;
         const product = (savedProducts || {})[cat] || getDefaultProduct(cat);
+        // A product the user unchecked in the filter is not grown: a boost valued on it (Vinny's
+        // +0.25 Grape with Grape unchecked) must not count toward the plan.
+        if (_exV.indexOf(product) >= 0) continue;
         let v = 0;
         try {
           const r = calcBoostValue(clone, cat, product, capacity, p2pPrices, allCatBoosts, clone.has);
@@ -18809,7 +18816,8 @@
             if (!(!r.type || r.type === "Collectible" || r.type === "Wearable") || !(r.value > 0)) return "";
             const op = _rmOfferPrice(r.name, _myOffers);
             if (!(op > 0)) return "";
-            return ` <span style="font-size:0.5rem;color:var(--text-dim)" title="Návratnost, pokud koupíš za cenu nabídky (${roadmapFmtFlower(op)} FLOWER) místo floor ${roadmapFmtFlower(r.floor)}: ${roadmapFmtFlower(op)} ÷ ${roadmapFmtFlower(r.value)}/den.">(${roadmapFmtDays(op / r.value)} offer)</span>`;
+            const p2y = r.value * 730.5;   // the offer price whose payback is exactly 2 years
+            return ` <span style="font-size:0.5rem;color:var(--text-dim)" title="Návratnost, pokud koupíš za cenu nabídky (${roadmapFmtFlower(op)} FLOWER) místo floor ${roadmapFmtFlower(r.floor)}: ${roadmapFmtFlower(op)} ÷ ${roadmapFmtFlower(r.value)}/den. Pro návratnost přesně 2 roky nabídni nejvýš ${roadmapFmtFlower(p2y)} FLOWER (${roadmapFmtFlower(r.value)}/den × 730,5 dne).">(${roadmapFmtDays(op / r.value)} offer · 2y ≤ ${roadmapFmtFlower(p2y)})</span>`;
           })()}${
             /*
              * A chain row is POSITIONED by its prefix payback — what it costs to get here including

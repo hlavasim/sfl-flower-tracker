@@ -764,6 +764,9 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         const allCatBoosts = catBoostsW[cat];
         if (!allCatBoosts) continue;
         const product = (savedProducts || {})[cat] || getDefaultProduct(cat);
+        // A product the user unchecked in the filter is not grown: a boost valued on it (Vinny's
+        // +0.25 Grape with Grape unchecked) must not count toward the plan.
+        if (_exV.indexOf(product) >= 0) continue;
         let v = 0;
         try {
           const r = calcBoostValue(clone, cat, product, capacity, p2pPrices, allCatBoosts, clone.has);
