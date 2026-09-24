@@ -5174,6 +5174,17 @@
         { type: "yield_flat", value: 0.1, cat: "iron", raw: "+0.1 Iron (Volcano Island)" },
         { type: "yield_flat", value: 0.1, cat: "gold", raw: "+0.1 Gold (Volcano Island)" },
       ],
+      // The marketplace text for these two parsed as a qualitative note (Infernal Bullwhip's even
+      // arrives cut: "50% Feed to"), so both were worth 0. Rules from the game source (2026-09-24):
+      // plantGreenhouse.ts `seconds *= 0.5` with Turbo Sprout built; lib/animals.ts halves the base
+      // feed of Sheep and Cows while Infernal Bullwhip is worn.
+      "Turbo Sprout": [
+        { type: "speed_mult", value: 0.5, cat: "greenhouse", raw: "-50% Greenhouse growth time" },
+      ],
+      "Infernal Bullwhip": [
+        { type: "feed_reduction", value: -0.5, cat: "cows", raw: "-50% feed for Cows" },
+        { type: "feed_reduction", value: -0.5, cat: "sheep", raw: "-50% feed for Sheep" },
+      ],
       // Golden animals — free feeding for their species (capacity.goldenAnimals already detects ownership,
       // but parser routing keeps them in their proper category & exposes the savings as a free_feed effect
       // so the ROI page can scenario-toggle the goldenAnimals flag.
@@ -5822,7 +5833,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.73</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.74</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5849,6 +5860,13 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.74", items: [
+          { t: "feat", text: "<b>Ticks and picks are shared between devices.</b> Roadmap picks and filters, POWER products, the Ascension, restock, gift, sleep and Bumpkin settings, the marks budget and the like are stored per farm on the server: set them on the PC and the phone has them too. Saving needs the owner write token on that device; zoom, width and open sections stay per browser." },
+          { t: "fix", text: "<b>ROADMAP: Chicken Coop is worth the chickens it makes room for.</b> +5 hen house stalls per level (20 → 35 at level 3) were read as a note and ignored, so it showed +0.54/day (only its +1 Egg). Capacity boosters (Chicken Coop, Barn Blueprint) are now valued at full stalls with and without the item — never below their plain effect, since nobody has to fill stalls that lose money." },
+          { t: "fix", text: "<b>ROADMAP offers skills behind a closed tier.</b> They were dropped entirely, so with 22 free points and none in Fruit Patch, Short Pickings (+0.77/day) never showed. The points that open the tier are now added to the skill's cost." },
+          { t: "fix", text: "<b>Turbo Sprout</b> (−50 % greenhouse growth) and <b>Infernal Bullwhip</b> (−50 % cow and sheep feed) counted as 0: their marketplace text did not parse. Rules from the game source." },
+          { t: "feat", text: "<b>BILANCE: egg profit.</b> Under Genesis eggs, what the eggs you bought would fetch in the offer book now minus what you paid (from your Ronin transactions, pushed hourly by the egg collector), in ₿, 🌸 and %, with WRON and $ in the ⓘ." },
+        ] },
         { ver: "v5.73", items: [
           { t: "fix", text: "<b>POWER / ROADMAP count four untradeable boosters.</b> They never appear in the marketplace feed the boost list is built from, so a farm that had them placed got none of their effect. Now, by the game's own rules: <b>Immortal Pear</b> +1 harvest per fruit seed (+2 with Pear Turbocharge), <b>Basic Scarecrow</b> ×0.8 growth time on basic crops in its area, <b>Bale</b> +0.1 Egg (and Milk / Wool with Bale Economy, ×2 with Double Bale), <b>Radiant Ray</b> +0.1 Iron." },
           { t: "fix", text: "The marketplace id → name map is regenerated from the current game source: 15 new items (Pigpen, the Rarecrows, the Beetles and their feeds, Mud, Rawhide, Truffle) now show by name instead of a bare id." },
@@ -29237,7 +29255,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       mount.innerHTML = `
         <h2 class="pixel-font" style="margin:0 0 10px 0;font-size:0.75rem;color:var(--sunpetal);letter-spacing:1px">💰 INVESTMENT TRACKER</h2>
         ${_invRepayHtml(agg, planStats, flowerPerBtc, errors)}
-        ${_invBalanceSheetHtml({ agg, flowerPerBtc, fmtFlower, treasuryTotalSfl, liquidValueSfl, liquidValueBtc, lockedBtc, chainWallet, chainEggs, walletLiquidBtc, walletHeldFlower, eggsLiquidBtc, farmValue, errors })}
+        ${_invBalanceSheetHtml({ agg, flowerPerBtc, fmtFlower, treasuryTotalSfl, liquidValueSfl, liquidValueBtc, lockedBtc, chainWallet, chainEggs, walletLiquidBtc, walletHeldFlower, eggsLiquidBtc, farmValue, errors, btcUsd })}
         <div id="inv-satsflower" style="margin:6px 0 16px"></div>
         <div id="inv-tx-table-wrap">${renderInvTxTable(transactions)}</div>
         <button class="roi-pill" onclick="_invShowAddForm()" style="margin-top:10px">+ Add transaction</button>
@@ -29592,6 +29610,15 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           ? `${amt(e)} prodáno do knihy nabídek: ${Math.round(e.bookWron || 0)} WRON celkem, Ø ${Math.round(e.unitWron)} WRON/ks (nejlepší nabídka ${Math.round(off.offerWron || 0)} WRON bere jen svůj počet kusů, další jdou za nižší)${e.unfilled ? ` · ${e.unfilled} ks kniha nepobere → 0` : ""}`
           : `${amt(e)} × ${Math.round(off.offerWron || 0)} WRON`;
         rows.push({ label: "Genesis eggs", btc: ratesOk ? x.eggsLiquidBtc : NaN, liquid: true, info: `${book} = ${usd(e.usd)} · Hidden trait offers na Ronin Marketu${off.fillableOffers ? ` (${off.fillableOffers} nabídek s krytým WRON)` : ""} · prodejné hned` });
+        // Profit on the eggs BOUGHT (cost from the egg collector): what they fetch in the offer book
+        // now minus what was paid. A detail of the row above — not added to the totals again.
+        const c = off.cost;
+        if (c && c.bought > 0 && e.unitWron > 0) {
+          const usdPerWron = e.unitUsd / e.unitWron, nowWron = c.bought * e.unitWron, gainWron = nowWron - c.wron;
+          const gainBtc = x.btcUsd > 0 ? gainWron * usdPerWron / x.btcUsd : NaN;
+          x.eggGain = { btc: ratesOk ? gainBtc : NaN, pct: gainWron / c.wron * 100,
+            info: `${c.bought} koupených za ${Math.round(c.wron).toLocaleString("en-US")} WRON (Ø ${(c.wron / c.bought).toFixed(1)}) · dnes do knihy nabídek Ø ${Math.round(e.unitWron)} = ${Math.round(nowWron).toLocaleString("en-US")} WRON · zisk ${gainWron >= 0 ? "+" : ""}${Math.round(gainWron).toLocaleString("en-US")} WRON = ${gainWron >= 0 ? "+" : "−"}${usd(Math.abs(gainWron * usdPerWron))}${c.unbought ? ` · ${c.unbought} ks nekoupené (bez ceny), nepočítají se` : ""} · bez prodejního fee · jen detail, v součtech už je řádek Genesis eggs · nákupy k ${String(c.at).slice(0, 16).replace("T", " ")}` };
+        }
       }
       const sum = (list) => list.reduce((a, r) => a + r.btc, 0);   // NaN if any row is unknown
       const sellable = sum(rows.filter((r) => r.liquid));
@@ -29617,7 +29644,8 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         </div>
         ${!errors.ledger && _invRecoveredLine(agg) ? `<div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);margin:-1px 0 4px">${_invRecoveredLine(agg)}</div>` : ""}
         ${row("COST", fmtBtc(cost), fl(cost), { bold: true, info: errors.ledger ? "transakce se nepodařilo načíst" : `čisté BTC uvnitř · celkem ${fmtBtc(agg.depositBtc)} in, ${fmtBtc(agg.withdrawBtc)} out · peak ${fmtBtc(agg.peakBtc)}` })}
-        ${rows.map((r) => row(r.label, fmtBtc(r.btc), fl(r.btc), { info: r.info, ctl: r.ctl, color: !isFinite(r.btc) ? "var(--text-dim)" : r.liquid ? "var(--green)" : "var(--lily)" })).join("")}
+        ${rows.map((r) => row(r.label, fmtBtc(r.btc), fl(r.btc), { info: r.info, ctl: r.ctl, color: !isFinite(r.btc) ? "var(--text-dim)" : r.liquid ? "var(--green)" : "var(--lily)" })
+          + (r.label === "Genesis eggs" && x.eggGain ? row("↳ zisk vajec", sgn(x.eggGain.btc, fmtBtc) + ` <span style="color:var(--text-dim)">${x.eggGain.pct >= 0 ? "+" : ""}${x.eggGain.pct.toFixed(1)} %</span>`, sgn(x.eggGain.btc, fl), { info: x.eggGain.info, color: tone(x.eggGain.btc) }) : "")).join("")}
         ${row("HODNOTA hned", fmtBtc(sellable), fl(sellable), { top: true, bold: true, info: "součet zelených řádků — prodejné dnes" })}
         ${(locked > 0 || !isFinite(locked)) ? row("HODNOTA po unlocku", fmtBtc(sellable + locked), fl(sellable + locked), { info: "+ Yakke deposit, až se v Q4 vrátí" }) : ""}
         ${row("BILANCE hned", sgn(bilNow, fmtBtc) + pct(bilNow), sgn(bilNow, fl), { top: true, bold: true, color: tone(bilNow), labelColor: "var(--text-secondary)", info: "hodnota hned − cost" })}
@@ -31630,9 +31658,71 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       document.body.insertBefore(bar, document.body.firstChild);
     }
 
+    // ═══════════════════════════════════════
+    //  PREFS SYNC (farm_prefs)
+    // ═══════════════════════════════════════
+    /*
+     * What you tick and pick (roadmap picks and filters, POWER products, plans, budgets…) lived only
+     * in this browser, so the phone and the PC had to be set up twice. These keys are mirrored to the
+     * farm_prefs table: pulled right after the first render (the shared copy wins, the page re-renders
+     * if it changed anything), pushed on every change
+     * (needs the owner write token; without it the device only reads). Device-only state — zoom,
+     * width, open sections, tokens, caches — stays local on purpose.
+     */
+    const prefSyncKeys = ["sfl_rm_picks", "sfl_roadmap_settings", "sfl_power_products", "sfl_ascension_settings",
+      "sfl_tracked_dolls", "sfl_restock_settings", "sfl_gift_plan", "sfl_roi_multicat_assignment", "sfl_sleep_schedule",
+      "sfl_marks_budget", "sfl_bumpkin_target", "sfl_bumpkin_recipes", "sfl_nodes_roi_cap", "sfl_coin_mode",
+      "sfl_sales_sell_type", "sfl_sales_sell_min", "sfl_pet_streak", "sfl_wl_eff", "sfl_flower_mode", "sfl_flower_n", "sfl_sats_gran"];
+    let _prefApplying = false, _prefPending = {}, _prefTimer = null;
+    function _prefFarm() { try { return getConfig().farm || null; } catch (e) { return null; } }
+    function _prefPush() {
+      const farm = _prefFarm(), prefs = _prefPending;
+      _prefPending = {}; _prefTimer = null;
+      if (!farm || !Object.keys(prefs).length) return;
+      writeFetch(`/api/farm-history?type=prefs&farm=${encodeURIComponent(farm)}`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prefs }) }, true).catch(() => {});
+    }
+    function _prefQueue(k, v) { _prefPending[k] = v; clearTimeout(_prefTimer); _prefTimer = setTimeout(_prefPush, 800); }
+    try {
+      const S = Storage.prototype, set = S.setItem, rem = S.removeItem;
+      const synced = (st, k) => !_prefApplying && prefSyncKeys.includes(k) && typeof window !== "undefined" && st === window.localStorage;
+      S.setItem = function (k, v) { set.call(this, k, v); if (synced(this, k)) _prefQueue(k, String(v)); };
+      S.removeItem = function (k) { rem.call(this, k); if (synced(this, k)) _prefQueue(k, null); };
+    } catch (e) {}
+    // Pull the shared copy into localStorage. Returns true when something changed.
+    async function _prefPull() {
+      const farm = _prefFarm();
+      if (!farm) return false;
+      const r = await fetch(`/api/farm-history?type=prefs&farm=${encodeURIComponent(farm)}`);
+      if (!r.ok) return false;
+      const server = (await r.json()).prefs || {};
+      let changed = false;
+      _prefApplying = true;
+      try {
+        for (const k of prefSyncKeys) {
+          const local = localStorage.getItem(k);
+          if (Object.prototype.hasOwnProperty.call(server, k)) {
+            if (server[k] !== local) { localStorage.setItem(k, server[k]); changed = true; }
+          } else if (local !== null) _prefQueue(k, local);          // first device: seed the shared copy
+        }
+      } finally { _prefApplying = false; }
+      if (changed) {
+        // The four settings the page caches in memory at load.
+        try { _rmPicks = new Set(JSON.parse(localStorage.getItem("sfl_rm_picks") || "[]")); } catch (e) {}
+        treasuryCoinMode = localStorage.getItem("sfl_coin_mode") || "betty";
+        _wlEff = localStorage.getItem("sfl_wl_eff") === "1";
+        const g = localStorage.getItem("sfl_sats_gran");
+        if (g in _SATS_GRAN) _satsGran = g;
+      }
+      return changed;
+    }
+
     // Init
     migrateApiKey();
     main();
+    // The shared settings arrive after the first render; only when they change something (another
+    // device ticked it) does the page render again.
+    _prefPull().then((changed) => { if (changed) main(); }).catch(() => {});
     renderHealthBanner();
     renderDormantBanner();
   </script>

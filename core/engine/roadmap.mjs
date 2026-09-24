@@ -751,9 +751,62 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
      * PLAN depends on the ordering being consistent with what the user is shown; a per-category
      * sum that matches Power beats a truer number nobody else computes.
      */
+    /*
+     * A CAPACITY BOOSTER (Chicken Coop, Barn Blueprint) is worth the animals it makes room for, not
+     * only its yield line. The buy path read the Coop's "+5 Base Chickens / +5 per upgrade" as a
+     * qualitative note and valued it at +0.54/day — the +1 Egg on the 20 birds already there —
+     * while at hen house level 3 it is 20 -> 35 birds. So the category net is computed with the
+     * stalls filled and the item's effects on, minus the net today. The new animals are modelled at
+     * the levels the current herd has (they get there with time; the item is held for years), and
+     * both sides are taken at full stalls, so empty stalls you have today are not credited to it.
+     * Buying the animals themselves (coins) is not charged. In a shared barn the new stalls go to
+     * whichever species gains more from them, never to both.
+     * Returns null when the item is no capacity booster, is owned, or the building has no herd yet
+     * (that case is the startup planner's).
+     */
+    function roadmapCapacityBoosterValue(clone, catBoostsW, settings) {
+      if (!clone || clone.has) return null;
+      const { capacity } = powerState;
+      if (!capacity || !capacity.animalDetails) return null;
+      let best = null;
+      for (const cat of ["chickens", "cows", "sheep"]) {
+        if ((settings.excludeCats || []).indexOf(cat) >= 0) continue;
+        const cap = roadmapAnimalCapacity(cat);
+        if (!cap || cap.booster !== clone.name) continue;
+        const herd = capacity.animalDetails[cat] || [];
+        const extra = Math.max(0, cap.boostedTotal - cap.total);
+        if (!herd.length) continue;
+        const owned = (catBoostsW[cat] || []).filter((b) => b.has && !b.isDisabled)
+          .flatMap((b) => b.effects.filter((e) => e.cat === cat)).concat(activeShrineEffects(powerState.farm, cat));
+        const mine = clone.effects.filter((e) => e.cat === cat);
+        const cnt0 = capacity[cat];
+        // Both sides at FULL stalls: stalls you already have would be filled without the item, so
+        // only the ones it adds are its credit. (In a shared barn "full" is this species' share.)
+        const room = cap.shared ? (cap.mine || 0) + cap.free : cap.total;
+        const fill = (n) => {
+          capacity[cat] = n;
+          capacity.animalDetails[cat] = n <= herd.length ? herd : herd.concat(Array.from({ length: n - herd.length }, (_, i) => ({ ...herd[i % herd.length] })));
+        };
+        let gain = 0;
+        try {
+          fill(Math.max(herd.length, room));
+          const before = roadmapCatNet(cat, owned, settings);
+          fill(Math.max(herd.length, room) + extra);
+          gain = roadmapCatNet(cat, owned.concat(mine), settings) - before;
+        } catch (e) { gain = 0; }
+        finally { capacity[cat] = cnt0; capacity.animalDetails[cat] = herd; }
+        gain = Math.max(0, gain) * roadmapEffFactor(cat, settings);
+        if (best === null || gain > best) best = gain;
+      }
+      return best;
+    }
+
     function roadmapItemValue(clone, catBoostsW, settings) {
       if (!clone) return 0;
       if (clone.fixedMarginal !== undefined) return clone.fixedMarginal; // node merge/expand actions
+      // A capacity booster is worth the better of: filling the stalls it adds, or its effects on the
+      // herd as it is (nobody has to fill stalls that lose money).
+      const capValue = roadmapCapacityBoosterValue(clone, catBoostsW, settings);
       let total = 0;
       const _exV = (settings.excludeCats || []);
       const { capacity, p2pPrices, savedProducts } = powerState;
@@ -776,7 +829,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         // scaling is applied here, the same way core/sections/power.mjs scales what it displays.
         if (v > 0) total += v * roadmapEffFactor(cat, settings);
       }
-      return total;
+      return capValue !== null ? Math.max(capValue, total) : total;
     }
 
     // "Situational" value: what a boost is worth if you DID run the activity it touches, even when that
@@ -912,9 +965,22 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         if (!b.has || (Number(b.skillTier) || 1) === 3) continue;
         inTree[b.skillTree] = (inTree[b.skillTree] || 0) + (b.skillPoints || 1);
       }
-      const gated = (b) => {
-        const need = (SKILL_POINTS_PER_TIER[b.skillTree] || {})[Number(b.skillTier) || 1] || 0;
-        return (inTree[b.skillTree] || 0) < need;
+      /*
+       * A gated skill is not unreachable, it is more expensive: the tier opens once enough points sit
+       * in the tree's lower tiers. Dropping every gated skill hid Short Pickings (+0.77/day) from an
+       * owner with 22 free points and none in Fruit Patch. So the gap is added to its point cost —
+       * those filler points go to lower-tier skills of the same tree, priced like any point and
+       * credited with nothing (conservative: some fillers pay on their own, and are offered too).
+       * Only when the tree has too few untaken lower-tier points is the skill really out of reach.
+       */
+      const gateGap = (b) => {
+        const tier = Number(b.skillTier) || 1;
+        const need = (SKILL_POINTS_PER_TIER[b.skillTree] || {})[tier] || 0;
+        const gap = Math.max(0, need - (inTree[b.skillTree] || 0));
+        if (!gap) return 0;
+        const spare = skills.filter((x) => !x.has && x !== b && x.skillTree === b.skillTree && (Number(x.skillTier) || 1) < tier)
+          .reduce((a, x) => a + (x.skillPoints || 1), 0);
+        return spare >= gap ? gap : null;
       };
 
       // Free points: the game's level − spent, served once by section=power (skillCostInfo),
@@ -930,13 +996,15 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       // ── L1: skills not taken yet ──
       const l1 = [];
       for (const b of skills) {
-        if (b.has || gated(b)) continue;
+        if (b.has) continue;
+        const gap = gateGap(b);
+        if (gap === null) continue;                      // the tree cannot open this tier at all
         const clone = byName[b.name];
         if (!clone) continue;
         const marg = roadmapItemValue(clone, catBoostsW, settings);
         if (!(marg > 0)) continue;                       // harmful/zero skills are not a BUY action
-        const pts = b.skillPoints || 1;
-        l1.push({ b, pts, marg, perPoint: marg / pts, cat: (b.categories || [])[0] || "crops" });
+        const pts = (b.skillPoints || 1) + gap;          // the skill's own points + the tier unlock
+        l1.push({ b, pts, gap, marg, perPoint: marg / pts, cat: (b.categories || [])[0] || "crops" });
       }
       /*
        * A point you already HOLD does not make the skill free.
@@ -979,7 +1047,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         }
         const chain = ladder.length ? { chainId: `rank:${r.b.name}`, chainSeq: 0 } : {};
         out.push(mk(r.b.name, r.pts * sflPerPoint, r.cat, r.marg,
-          `${r.pts}pt · ${r.b.skillTree || "?"} · ${r.pts} × ${sflPerPoint.toFixed(0)} FLOWER XP${canTakeNow ? " · body už máš, můžeš hned" : ""}`,
+          `${r.pts}pt · ${r.b.skillTree || "?"}${r.gap ? ` (${r.pts - r.gap}pt skill + ${r.gap}pt do nižšího tieru na odemčení tier ${r.b.skillTier})` : ""} · ${r.pts} × ${sflPerPoint.toFixed(0)} FLOWER XP${canTakeNow ? " · body už máš, můžeš hned" : ""}`,
           { skillFree: false, skillTakeNow: canTakeNow, skillPoints: r.pts, skillTree: r.b.skillTree || null, ...chain }));
         let cseq = 1;
         for (const { row, shards, floor } of ladder) {

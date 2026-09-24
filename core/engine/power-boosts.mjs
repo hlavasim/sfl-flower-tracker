@@ -124,6 +124,17 @@
         { type: "yield_flat", value: 0.1, cat: "iron", raw: "+0.1 Iron (Volcano Island)" },
         { type: "yield_flat", value: 0.1, cat: "gold", raw: "+0.1 Gold (Volcano Island)" },
       ],
+      // The marketplace text for these two parsed as a qualitative note (Infernal Bullwhip's even
+      // arrives cut: "50% Feed to"), so both were worth 0. Rules from the game source (2026-09-24):
+      // plantGreenhouse.ts `seconds *= 0.5` with Turbo Sprout built; lib/animals.ts halves the base
+      // feed of Sheep and Cows while Infernal Bullwhip is worn.
+      "Turbo Sprout": [
+        { type: "speed_mult", value: 0.5, cat: "greenhouse", raw: "-50% Greenhouse growth time" },
+      ],
+      "Infernal Bullwhip": [
+        { type: "feed_reduction", value: -0.5, cat: "cows", raw: "-50% feed for Cows" },
+        { type: "feed_reduction", value: -0.5, cat: "sheep", raw: "-50% feed for Sheep" },
+      ],
       // Golden animals — free feeding for their species (capacity.goldenAnimals already detects ownership,
       // but parser routing keeps them in their proper category & exposes the savings as a free_feed effect
       // so the ROI page can scenario-toggle the goldenAnimals flag.

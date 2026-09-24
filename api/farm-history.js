@@ -1,7 +1,7 @@
 import { getPool } from "./_db.js";
 import { handleWorld } from "./_world.js";
 import ITEM_NAMES from "./_item-names.js";
-import { readAddress, fetchPrices, bestEggOfferWron, valueHoldings } from "./_holdings.js";
+import { readAddress, fetchPrices, bestEggOfferWron, valueHoldings, eggCostBasis } from "./_holdings.js";
 import { requireWriteToken } from "./_auth.js";
 
 // Prices and the egg offer are shared by every request and change slowly; the RPC reads are per
@@ -454,13 +454,55 @@ export default async function handler(req, res) {
       const egg = _holdCache.egg || { wron: 0, fillable: 0, offers: [] };
       const perWallet = await Promise.all(wallets.map(async (w) => ({ ...w, balances: await readAddress(w.address) })));
       const { venues, errors } = valueHoldings(perWallet.flatMap((w) => w.balances), prices, egg.offers || []);
+      // What the held eggs cost: the local egg collector pushes it with its hourly market snapshot.
+      let eggCost = null;
+      try {
+        const c = (await pool.query(`SELECT ts, data->'mine' AS mine, data->'my_cost' AS cost FROM egg_market WHERE data ? 'my_cost' ORDER BY ts DESC LIMIT 1`)).rows[0];
+        if (c) eggCost = { ...eggCostBasis(c.mine, c.cost), at: c.ts };
+      } catch (e) { notes.push("egg cost: " + e.message); }
       res.setHeader("Cache-Control", "no-store");
       return res.status(200).json({ wallets: wallets.map((w) => ({ address: w.address, label: w.label })), venues,
-        egg: { offerWron: egg.wron, offerUsd: egg.wron * (prices.ronin || 0), fillableOffers: egg.fillable },
+        egg: { offerWron: egg.wron, offerUsd: egg.wron * (prices.ronin || 0), fillableOffers: egg.fillable, cost: eggCost },
         prices, errors: errors.concat(notes), fetched_at: new Date().toISOString() });
     } catch (err) {
       console.error("[venue-holdings]", err);
       return res.status(500).json({ error: "venue holdings failed", detail: String(err.message || err) });
+    }
+  }
+
+  // ─── Page choices shared across devices (farm_prefs) ───
+  // GET: every stored key for the farm (plain page settings, nothing sensitive). POST
+  // { prefs: { key: value | null } }: owner-only upsert, null deletes. The page decides which
+  // localStorage keys sync; the server only checks their shape and size.
+  if (req.query.type === "prefs") {
+    const method = (req.method || "GET").toUpperCase();
+    try {
+      const farm = parseInt(req.query.farm, 10);
+      if (!Number.isFinite(farm) || !ALLOWED_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
+      if (method === "GET") {
+        const r = await pool.query(`SELECT key, value FROM farm_prefs WHERE farm_id = $1`, [farm]);
+        res.setHeader("Cache-Control", "no-store");
+        return res.status(200).json({ prefs: Object.fromEntries(r.rows.map((x) => [x.key, x.value])) });
+      }
+      if (method !== "POST") return res.status(405).json({ error: "method not allowed" });
+      if (!requireWriteToken(req, res)) return;
+      const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+      const entries = Object.entries((body && body.prefs) || {});
+      if (!entries.length || entries.length > 60) return res.status(400).json({ error: "prefs must hold 1-60 keys" });
+      for (const [k, v] of entries) {
+        if (!/^sfl_[a-z0-9_]{1,40}$/.test(k)) return res.status(400).json({ error: `bad key ${String(k).slice(0, 50)}` });
+        if (v !== null && (typeof v !== "string" || v.length > 20000)) return res.status(400).json({ error: `bad value for ${k}` });
+      }
+      for (const [k, v] of entries) {
+        if (v === null) await pool.query(`DELETE FROM farm_prefs WHERE farm_id = $1 AND key = $2`, [farm, k]);
+        else await pool.query(
+          `INSERT INTO farm_prefs (farm_id, key, value) VALUES ($1, $2, $3)
+           ON CONFLICT (farm_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`, [farm, k, v]);
+      }
+      return res.status(200).json({ ok: true, saved: entries.length });
+    } catch (err) {
+      console.error("[prefs]", err);
+      return res.status(500).json({ error: "prefs failed", detail: String(err.message || err) });
     }
   }
 

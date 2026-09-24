@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { valueHoldings, eggBookValue, CHAINS } from "../../api/_holdings.js";
+import { valueHoldings, eggBookValue, eggCostBasis, CHAINS } from "../../api/_holdings.js";
 
 /*
  * The Investment Tracker values a registered address by everything it holds. These pin the split
@@ -64,4 +64,11 @@ test("every token's price id is one the price feed fetches", () => {
     assert.ok(ids.has(c.native.price));
     for (const t of Object.values(c.tokens)) assert.ok(ids.has(t.price), t.address);
   }
+});
+
+test("egg cost basis counts only the held eggs that were bought; received ones stay unpriced", () => {
+  const mine = { "1": "Hidden", "2": "Hidden", "3": "Hidden" };
+  const cost = { "1": 430.46, "2": 325.01, "99": 500 };   // 99 was sold, 3 was never bought
+  assert.deepEqual(eggCostBasis(mine, cost), { wron: 430.46 + 325.01, bought: 2, unbought: 1 });
+  assert.deepEqual(eggCostBasis(null, null), { wron: 0, bought: 0, unbought: 0 });
 });

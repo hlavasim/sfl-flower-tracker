@@ -164,3 +164,18 @@ export function valueHoldings(balances, prices, eggOffers) {
   }
   return { venues, errors };
 }
+
+/**
+ * Cost basis of the eggs held, from the egg collector's snapshot: `mine` = {token: status} held now,
+ * `cost` = {token: WRON paid} for the ones the owner BOUGHT. Eggs held without a buy (received, not
+ * purchased) are counted as `unbought`, never priced at 0 into the average.
+ */
+export function eggCostBasis(mine, cost) {
+  const held = Object.keys(mine || {});
+  let wron = 0, bought = 0;
+  for (const t of held) {
+    const v = Number((cost || {})[t]);
+    if (v > 0) { wron += v; bought++; }
+  }
+  return { wron, bought, unbought: held.length - bought };
+}

@@ -39,6 +39,7 @@ const KNOWN_DEVIATIONS = new Map([
   ["gameResUnitsPerDay", "threads powerState.farm through applyBoosts' new param"],
   ["roadmapMiningChain", "same powerState/global-free rework"],
   ["calcBoostValue", "gains the `effMode` param the wishlist's measured pass opts into"],
+  ["roadmapItemValue", "values capacity boosters (Chicken Coop, Barn Blueprint) by the stalls they add via roadmapAnimalCapacity, which exists only in core; the page copy has no caller, the roadmap is served by section=roadmap"],
   // Sections whose core copy drops page-only concerns (fetching, DOM, rendering).
   ["computeFarmValue", "core copy takes prefetched data; the page copy fetches"],
   ["detectCookingBoosts", "global-free rework"],
