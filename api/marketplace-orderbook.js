@@ -100,29 +100,54 @@ const HEALTH_COLLECTORS = [
   { table: "marketplace_totals", col: "captured_at", label: "Marketplace totals", staleH: 3 },
 ];
 
-async function _redisGameToken() {
-  const url = process.env.KV_REST_API_URL, tok = process.env.KV_REST_API_TOKEN;
-  if (!url || !tok) return null;
-  try {
-    const r = await fetch(`${url}/get/game_token:155498`, { headers: { Authorization: `Bearer ${tok}` } });
-    return (await r.json()).result || null;
-  } catch { return null; }
+/*
+ * The game's player-JWT routes (/collection, /marketplace) were walled on 2026-09-01 (RT-001) and
+ * answer 403/500 to every server-side caller, so nothing here signs with a game token any more.
+ * Everything goes through the documented community API with the project's SFL_API_KEY, which does
+ * not expire. (The Redis game token and its "expires in" banner went with it.)
+ */
+async function communityGet(query) {
+  const key = process.env.SFL_API_KEY;
+  if (!key) throw Object.assign(new Error("SFL_API_KEY not configured"), { status: 500 });
+  const r = await fetch(`https://api.sunflower-land.com/community/data?${query}`,
+    { headers: { "Content-Type": "application/json;charset=UTF-8", "x-api-key": key } });
+  if (!r.ok) throw Object.assign(new Error(`community ${r.status}`), { status: r.status });
+  return (await r.json()).data || {};
 }
 
-async function _tokenStatus() {
-  const url = process.env.KV_REST_API_URL, tok = process.env.KV_REST_API_TOKEN;
-  if (!url || !tok) return { configured: false };
-  try {
-    const r = await fetch(`${url}/get/game_token:155498`, { headers: { Authorization: `Bearer ${tok}` } });
-    const token = (await r.json()).result;
-    if (!token) return { configured: true, present: false };
-    const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64").toString());
-    const expMs = payload.exp ? payload.exp * 1000 : null;
-    const daysLeft = expMs ? (expMs - Date.now()) / 86400000 : null;
-    return { configured: true, present: true, expired: expMs ? expMs < Date.now() : false,
-      daysLeft: daysLeft == null ? null : Math.round(daysLeft * 10) / 10,
-      expiresAt: expMs ? new Date(expMs).toISOString() : null };
-  } catch { return { configured: true, present: false, error: true }; }
+/*
+ * Floors of the 1-of-1 collections (buds, pets) from ONE marketplaceActivity call — it carries
+ * every bud and pet id with its floor (cheapest listing, absent when none is listed), best offer
+ * and latest sale. Shared through KV for 5 minutes: the feed is throttled to ~1 request / 5 s.
+ */
+const _uniq = { at: 0, data: null };
+export function uniqueFloorsFromActivity(act) {
+  const reports = (act && act.reports) || {};
+  const day = Object.keys(reports).sort().pop();
+  const out = { buds: [], pets: [] };
+  for (const [k, m] of Object.entries((reports[day] || {}).items || {})) {
+    const key = parseItemKey(k);
+    if (!key || !out[key.collection] || !(m && m.floor > 0)) continue;
+    out[key.collection].push({ id: key.id, floor: m.floor, lastSale: m.latestSale ?? null });
+  }
+  return out;
+}
+async function loadUniqueFloors() {
+  const kvUrl = process.env.KV_REST_API_URL, kvTok = process.env.KV_REST_API_TOKEN;
+  const KEY = "cache:market-unique-floors:v1", TTL = 300;
+  if (_uniq.data && Date.now() - _uniq.at < TTL * 1000) return _uniq.data;
+  if (kvUrl && kvTok) {
+    try {
+      const g = await (await fetch(`${kvUrl}/get/${encodeURIComponent(KEY)}`, { headers: { Authorization: `Bearer ${kvTok}` } })).json();
+      if (g.result) { _uniq.data = JSON.parse(g.result); _uniq.at = Date.now(); return _uniq.data; }
+    } catch {}
+  }
+  const data = uniqueFloorsFromActivity(await communityGet("type=marketplaceActivity"));
+  _uniq.data = data; _uniq.at = Date.now();
+  if (kvUrl && kvTok) {
+    try { await fetch(`${kvUrl}/set/${encodeURIComponent(KEY)}?EX=${TTL}`, { method: "POST", headers: { Authorization: `Bearer ${kvTok}`, "Content-Type": "text/plain" }, body: JSON.stringify(data) }); } catch {}
+  }
+  return data;
 }
 
 async function handleHealth(pool, res) {
@@ -137,12 +162,9 @@ async function handleHealth(pool, res) {
         stale: c.paused ? false : (ageH == null ? true : ageH > c.staleH), staleThresholdH: c.staleH, paused: !!c.paused };
     } catch (e) { return { table: c.table, label: c.label, lastWrite: null, ageHours: null, stale: !c.paused, paused: !!c.paused, error: String(e.message || e).slice(0, 80) }; }
   }));
-  const token = await _tokenStatus();
   const staleCollectors = rows.filter((r) => r.stale).map((r) => r.label);
-  const tokenWarn = token.present === false || token.expired === true || (token.daysLeft != null && token.daysLeft < 3);
   res.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate=120");
-  return res.status(200).json({ ok: staleCollectors.length === 0 && !tokenWarn, token, collectors: rows,
-    warnings: { token: tokenWarn ? (token.present === false ? "missing" : token.expired ? "expired" : `expires in ${token.daysLeft}d`) : null, staleCollectors } });
+  return res.status(200).json({ ok: staleCollectors.length === 0, collectors: rows, warnings: { staleCollectors } });
 }
 
 const WISHLIST_OWNER = 155498; // only the owner's wishlist is writable (personal tool)
@@ -251,9 +273,10 @@ export default async function handler(req, res) {
   if (req.query.health === "1") { try { return await handleHealth(getPool(), res); } catch (e) { return res.status(500).json({ error: String(e.message || e) }); } }
   if (req.query.flips === "1") { try { return await handleFlips(getPool(), req, res); } catch (e) { console.error("flips:", e.message); return res.status(500).json({ error: String(e.message || e) }); } }
 
-  // ── Live mode: real-time orderbook from the SFL marketplace API (Bearer JWT).
-  // On-demand ONLY (called when a user opens the Sales page) — never on a schedule.
-  // Token lives in SFL_GAME_TOKEN env var, used solely here. Does not touch the DB.
+  // ── Live order book of ONE item (Sales page), on demand only, never on a schedule.
+  // The community "tradeable" route carries the same listings/offers as the walled /collection
+  // route did. It is throttled to ~1 request / 5 s, so the answer is cached for a minute and the
+  // page paces its calls; a 429 goes back to the page, which retries.
   if (req.query.live === "1") {
     const collection = req.query.collection;
     const itemId = parseInt(req.query.item_id);
@@ -261,67 +284,31 @@ export default async function handler(req, res) {
     if (!allowed.includes(collection) || isNaN(itemId)) {
       return res.status(400).json({ error: "live mode needs ?collection=<type>&item_id=N" });
     }
-    const token = process.env.SFL_GAME_TOKEN;
-    if (!token) return res.status(503).json({ error: "no game token configured" });
     try {
-      const r = await fetch(
-        `https://api.sunflower-land.com/collection/${collection}/${itemId}?type=${collection}`,
-        { headers: { "Content-Type": "application/json;charset=UTF-8", "Authorization": `Bearer ${token}` } }
-      );
-      if (r.status === 429) return res.status(429).json({ error: "rate limited by SFL API" });
-      if (!r.ok) return res.status(502).json({ error: `SFL API ${r.status}` });
-      const d = await r.json();
+      const d = await communityGet(`type=tradeable&collection=${encodeURIComponent(collection)}&id=${itemId}`);
       const listings = (d.listings || []).map((l) => ({ sfl: l.sfl, qty: l.quantity, by: l.listedById, name: l.listedBy?.username || null }));
       const offers = (d.offers || []).map((o) => ({ sfl: o.sfl, qty: o.quantity, by: o.offeredById, name: o.offeredBy?.username || null }));
       res.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate=120");
-      return res.status(200).json({ live: true, floor: d.floor, listingCount: d.listingCount, offerCount: d.offerCount, listings, offers });
+      return res.status(200).json({ live: true, floor: d.floor, listingCount: d.listingCount ?? listings.length, offerCount: d.offerCount ?? offers.length, listings, offers });
     } catch (e) {
-      return res.status(500).json({ error: String(e.message || e) });
+      if (e.status === 429) return res.status(429).json({ error: "rate limited by SFL API" });
+      return res.status(502).json({ error: String(e.message || e) });
     }
   }
 
-  // ── Pet floors mode: all pet listings (id + floor) so the caller can compute
-  // per-type (breed) floors for 1-of-1 pets. One call covers every pet type.
-  if (req.query.petfloors === "1") {
-    const token = process.env.SFL_GAME_TOKEN;
-    if (!token) return res.status(503).json({ error: "no game token configured" });
+  // ── Floors of every listed pet / bud (1-of-1 collections), from the community catalogue.
+  // Pets: the caller groups them by type (PET_TYPES) for per-breed floors. Buds: the caller joins
+  // them against section=buds (id -> traits/boost) to price a bud.
+  if (req.query.petfloors === "1" || req.query.budfloors === "1") {
     try {
-      const r = await fetch(
-        "https://api.sunflower-land.com/marketplace?filters=pets",
-        { headers: { "Content-Type": "application/json;charset=UTF-8", "Authorization": `Bearer ${token}` } }
-      );
-      if (r.status === 429) return res.status(429).json({ error: "rate limited by SFL API" });
-      if (!r.ok) return res.status(502).json({ error: `SFL API ${r.status}` });
-      const d = await r.json();
-      const items = (d.items || [])
-        .filter((i) => (i.floor || 0) > 0)
-        .map((i) => ({ id: i.id, floor: i.floor }));
+      const f = await loadUniqueFloors();
       res.setHeader("Cache-Control", "s-maxage=120, stale-while-revalidate=240");
-      return res.status(200).json({ pets: true, items });
+      return req.query.petfloors === "1"
+        ? res.status(200).json({ pets: true, items: f.pets.map((i) => ({ id: i.id, floor: i.floor })) })
+        : res.status(200).json({ buds: true, items: f.buds });
     } catch (e) {
-      return res.status(500).json({ error: String(e.message || e) });
-    }
-  }
-
-  // Bud floors: all currently-listed buds (id → floor). Buds are 1-of-1, so the
-  // caller joins these against section=buds (id → traits/boost) to price a bud.
-  // Token comes from Redis (kept fresh) — the SFL_GAME_TOKEN env var goes stale.
-  if (req.query.budfloors === "1") {
-    const token = await _redisGameToken() || process.env.SFL_GAME_TOKEN;
-    if (!token) return res.status(503).json({ error: "no game token configured" });
-    try {
-      const r = await fetch(
-        "https://api.sunflower-land.com/marketplace?filters=buds",
-        { headers: { "Content-Type": "application/json;charset=UTF-8", "Authorization": `Bearer ${token}` } }
-      );
-      if (r.status === 429) return res.status(429).json({ error: "rate limited by SFL API" });
-      if (!r.ok) return res.status(502).json({ error: `SFL API ${r.status}` });
-      const d = await r.json();
-      const items = (d.items || []).filter((i) => (i.floor || 0) > 0).map((i) => ({ id: i.id, floor: i.floor, lastSale: i.lastSalePrice || null }));
-      res.setHeader("Cache-Control", "s-maxage=120, stale-while-revalidate=240");
-      return res.status(200).json({ buds: true, items });
-    } catch (e) {
-      return res.status(500).json({ error: String(e.message || e) });
+      if (e.status === 429) return res.status(429).json({ error: "rate limited by SFL API" });
+      return res.status(502).json({ error: String(e.message || e) });
     }
   }
 

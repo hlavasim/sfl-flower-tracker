@@ -1423,66 +1423,6 @@
     }
 
     /* ── Token Management ── */
-    .token-card {
-      border: 3px solid var(--border-dark);
-      background: var(--bg-card);
-      margin-bottom: 16px;
-    }
-    .token-card-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 14px;
-      background: var(--bg-medium);
-      border-bottom: 3px solid var(--border-dark);
-      cursor: pointer;
-      font-size: 0.6875rem;
-    }
-    .token-card-header:hover { background: var(--bg-light); }
-    .token-status-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      display: inline-block;
-    }
-    .token-status-dot.valid { background: var(--green); }
-    .token-status-dot.expired { background: var(--red); }
-    .token-status-dot.none { background: var(--text-dim); }
-    .token-card-body {
-      padding: 12px 14px;
-      display: none;
-    }
-    .token-input-row {
-      display: flex;
-      gap: 8px;
-      margin-top: 8px;
-    }
-    .token-input {
-      flex: 1;
-      padding: 6px 8px;
-      background: var(--bg-darkest);
-      color: var(--text-primary);
-      border: 2px solid var(--border-dark);
-      font-size: 0.5625rem;
-      font-family: 'Courier New', monospace;
-    }
-    .token-input:focus { border-color: var(--border-brown); outline: none; }
-    .token-submit {
-      padding: 6px 14px;
-      background: var(--bg-medium);
-      color: var(--sunpetal);
-      border: 2px solid var(--border-brown);
-      font-family: 'Press Start 2P', cursive;
-      font-size: 0.5rem;
-      cursor: pointer;
-    }
-    .token-submit:hover { background: var(--bg-light); }
-    .token-feedback {
-      font-size: 0.5625rem;
-      margin-top: 6px;
-      min-height: 1em;
-    }
-
-    /* ── Price History (Sales page) ── */
     .ph-search {
       width: 100%; padding: 6px 10px; margin-bottom: 0;
       background: var(--bg-darkest); color: var(--text-primary);
@@ -5833,7 +5773,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.74</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.75</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5860,6 +5800,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.75", items: [
+          { t: "fix", text: "<b>No game token anywhere any more.</b> The pet floors, the bud floors (wishlist) and the live order book on the Sales page still signed with a game JWT, and all three had been failing since the game walled those routes on 2026-09-01. They now use the community API with the project key, which does not expire: pets and buds from one catalogue call, the live book per item (paced ~5 s apart, the API's limit). The “game token expires” banner and the GAME TOKEN card are gone." },
+        ] },
         { ver: "v5.74", items: [
           { t: "feat", text: "<b>Ticks and picks are shared between devices.</b> Roadmap picks and filters, POWER products, the Ascension, restock, gift, sleep and Bumpkin settings, the marks budget and the like are stored per farm on the server: set them on the PC and the phone has them too. Saving needs the owner write token on that device; zoom, width and open sections stay per browser." },
           { t: "fix", text: "<b>ROADMAP: Chicken Coop is worth the chickens it makes room for.</b> +5 hen house stalls per level (20 → 35 at level 3) were read as a note and ignored, so it showed +0.54/day (only its +1 Egg). Capacity boosters (Chicken Coop, Barn Blueprint) are now valued at full stalls with and without the item — never below their plain effect, since nobody has to fill stalls that lose money." },
@@ -14250,80 +14193,6 @@
       }
     }
 
-    // ── Render Token Management card ──
-    async function _renderTokenCard(container) {
-      if (FARM_ID !== "155498") { container.innerHTML = ""; return; }
-      try {
-        const resp = await fetch(`/api/game-token?farm=${FARM_ID}`);
-        const data = await resp.json();
-
-        let dotClass = "none", statusText = "Not set";
-        if (data.hasToken) {
-          if (data.status === "valid") {
-            dotClass = "valid";
-            statusText = `Valid (${data.expiresIn || "?"})`;
-          } else if (data.status === "expired") {
-            dotClass = "expired";
-            statusText = "Expired";
-          } else {
-            dotClass = "none";
-            statusText = data.status || "Unknown";
-          }
-        }
-
-        container.innerHTML = `<div class="token-card pixel-font">
-          <div class="token-card-header" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
-            <span class="token-status-dot ${dotClass}"></span>
-            <span style="flex:1">\ud83d\udd11 GAME TOKEN</span>
-            <span style="font-size:0.5625rem;color:var(--text-dim)">${escHTML(statusText)}</span>
-          </div>
-          <div class="token-card-body" style="display:none">
-            <div style="font-size:0.5625rem;color:var(--text-dim);margin-bottom:8px">
-              Paste a game JWT to update the stored token for marketplace trade tracking.
-            </div>
-            <div class="token-input-row">
-              <input type="text" class="token-input" id="token-input-field" placeholder="eyJhbG...">
-              <button class="token-submit" onclick="_submitGameToken()">UPDATE</button>
-            </div>
-            <div class="token-feedback" id="token-feedback"></div>
-          </div>
-        </div>`;
-      } catch (e) {
-        console.warn("[Token card]", e);
-        container.innerHTML = "";
-      }
-    }
-
-    async function _submitGameToken() {
-      const input = document.getElementById("token-input-field");
-      const fb = document.getElementById("token-feedback");
-      const token = (input?.value || "").trim();
-      if (!token) { fb.innerHTML = '<span style="color:var(--red)">Paste a token first</span>'; return; }
-      fb.innerHTML = '<span style="color:var(--text-dim)">Updating...</span>';
-      try {
-        const resp = await writeFetch("/api/game-token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ farm: parseInt(FARM_ID), token }),
-        });
-        const data = await resp.json();
-        if (data.success) {
-          fb.innerHTML = `<span style="color:var(--green)">\u2705 Updated! Expires in ${data.expiresIn || "?"}</span>`;
-          input.value = "";
-          // Refresh the token card status dot
-          const header = fb.closest(".token-card")?.querySelector(".token-card-header");
-          if (header) {
-            header.querySelector(".token-status-dot").className = "token-status-dot valid";
-            header.querySelector("span:last-child").textContent = `Valid (${data.expiresIn || "?"})`;
-          }
-        } else {
-          fb.innerHTML = `<span style="color:var(--red)">\u274c ${escHTML(data.error || "Failed")}</span>`;
-        }
-      } catch (e) {
-        fb.innerHTML = `<span style="color:var(--red)">\u274c ${escHTML(e.message)}</span>`;
-      }
-    }
-
     // Wearable name -> marketplace item id (sfl.world /nfts misses some, e.g. Luna's Crescent).
     // Source: sunflower-land src/features/game/types/bumpkin.ts ITEM_IDS.
     const WEARABLE_IDS = {
@@ -15082,7 +14951,7 @@
             l._live = m;
             if (el) el.innerHTML = _liveLine(l, m);
             loaded++; setProg();
-            await _sleep(400);
+            await _sleep(5200);   // community API: ~1 request / 5 s
             continue;
           }
           const liveColl = l.mkt || l.collection; // resources live under the collectibles collection
@@ -15102,7 +14971,7 @@
           }
           if (!done && el) el.innerHTML = `<span style="color:var(--yellow)">⏳ market busy — reopen later</span>`;
           loaded++; setProg();
-          await _sleep(400);
+          await _sleep(5200);   // community API: ~1 request / 5 s
         }
         _regroupActive(); // bucket + sort once all live data is in
       };
@@ -15274,9 +15143,6 @@
       content += renderP2PHistorySection(p2pPrices);
       content += renderNftHistorySection();
 
-      // Token management container (async-filled, only for farm 155498)
-      content += `<div id="token-card-container"></div>`;
-
       content += `<div class="footer">
         <button class="refresh-btn" onclick="refresh()">REFRESH</button>
         <div class="timestamp pixel-font">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
@@ -15284,10 +15150,9 @@
 
       document.getElementById("sales-content").innerHTML = content;
 
-      // Async: fill market overview, volume leaders, token card
+      // Async: fill market overview, volume leaders
       _renderMarketOverview(document.getElementById("market-overview-container"));
       _renderVolumeLeaders(document.getElementById("volume-leaders-container"));
-      _renderTokenCard(document.getElementById("token-card-container"));
       _renderSellList(); // what-can-I-sell list (threshold from localStorage)
       _fillLiveOffers(activeListings); // live nearest-offer + seller rank (on-demand)
     }
@@ -31608,9 +31473,10 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
 
     // ── Collector-health banner ──────────────────────────────────────────────
     // The background collectors (farm/price/nft/orderbook snapshots, marketplace
-    // trades) and the game token once broke silently for months. This surfaces a
-    // slim warning bar at the top ONLY when something is stale or the token is
-    // about to expire — otherwise it's invisible. Dismissible per session.
+    // trades) once broke silently for months. This surfaces a slim warning bar at the
+    // top ONLY when something is stale — otherwise it's invisible. Dismissible per session.
+    // (No game-token line any more: nothing uses a game JWT since the move to the
+    // community API with the project's API key, which does not expire.)
     async function renderHealthBanner() {
       if (sessionStorage.getItem("sfl_health_dismissed") === "1") return;
       let d;
@@ -31621,7 +31487,6 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       } catch { return; }
       if (!d || d.ok) return; // all healthy → say nothing
       const parts = [];
-      if (d.warnings?.token) parts.push(`🔑 game token ${escHTML(d.warnings.token)}`);
       if (d.warnings?.staleCollectors?.length) parts.push(`⚠️ stale: ${d.warnings.staleCollectors.map(escHTML).join(", ")}`);
       if (!parts.length) return;
       const bar = document.createElement("div");

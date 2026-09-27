@@ -102,7 +102,6 @@ test("every owner-only call on the page goes through writeFetch", () => {
     /writeFetch\(`\$\{INV_API_BASE\}\?farm=\$\{encodeURIComponent\(FARM_ID\)\}&type=venue-balance`/,
     /writeFetch\(_specApi\("trades", extra\)/,
     /writeFetch\(`\/api\/marketplace-orderbook\?wishlist=1`/,
-    /writeFetch\("\/api\/game-token"/,
     /writeFetch\("\/api\/marks-history\?mode=force-refresh"\)/,
   ];
   for (const re of mustUse) assert.match(page, re);
