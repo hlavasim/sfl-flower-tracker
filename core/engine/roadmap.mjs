@@ -35,7 +35,20 @@ import { computeSaltYieldPerRake, computeSaltRakeCoinMult } from "./cooking-cost
 // Deviation 1: the page global, module-scoped. Set before any calc.
 let powerState = null;
 let roadmapState = null; // deviation 3: per-request, set/reset by the caller
-export function _setPowerContext(ps) { powerState = ps; }
+/*
+ * Per-context memo. What a farm OWNS (boost items with has && !isDisabled) and which shrines are
+ * running do not change while one request is computed: the planners toggle `has` on CLONES
+ * (roadmapBuildClones), never on powerState.boostItems, and shrine expiry is read at request time.
+ * Rebuilding both for every probe was ~40 % of the roadmap's CPU (the order search asks for them
+ * tens of thousands of times). Reset whenever a new context is published.
+ */
+let _ctxMemo = { owned: new Map(), shrine: new Map() };
+export function _setPowerContext(ps) { powerState = ps; _ctxMemo = { owned: new Map(), shrine: new Map() }; }
+function _shrineEffectsFor(cat) {
+  let v = _ctxMemo.shrine.get(cat);
+  if (!v) { v = activeShrineEffects(powerState.farm, cat); _ctxMemo.shrine.set(cat, v); }
+  return v;
+}
 export function _getPowerContext() { return powerState; }
 function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives from the caller
 
@@ -474,7 +487,12 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
     function roadmapOwnedEffects(cat) {
       // Same filter as the Power summary: an item the game switches off (Woody/Apprentice Beaver
       // under an active Foreman) contributes nothing — has-only here doubled tree income.
-      return powerState.boostItems.filter(b => b.has && !b.isDisabled).flatMap(b => b.effects.filter(e => e.cat === cat)).concat(activeShrineEffects(powerState.farm, cat));
+      let v = _ctxMemo.owned.get(cat);
+      if (!v) {
+        v = powerState.boostItems.filter(b => b.has && !b.isDisabled).flatMap(b => b.effects.filter(e => e.cat === cat)).concat(_shrineEffectsFor(cat));
+        _ctxMemo.owned.set(cat, v);
+      }
+      return v.slice();   // callers may extend their copy; the memo stays intact
     }
 
 
@@ -535,7 +553,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       const _s = effMode === "measured"
         ? Object.assign({}, getRoadmapSettings(powerState.roadmapSettingsRaw), { seasonBasis: "annual" })
         : Object.assign({}, getRoadmapSettings(powerState.roadmapSettingsRaw), { effMode: "theoretical", effOverrides: {}, seasonBasis: "annual" });
-      const ownedEff = allCatBoosts.filter(b => b.has && !b.isDisabled && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId)).concat(activeShrineEffects(powerState.farm, catId)); // deviation 4
+      const ownedEff = allCatBoosts.filter(b => b.has && !b.isDisabled && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId)).concat(_shrineEffectsFor(catId)); // deviation 4
       let synergy, solo, netWith, netWithout;
       if (ROADMAP_MINING_CATS.indexOf(catId) >= 0) {
         const mk = (ef) => { const o = {}; o[catId] = ef; return roadmapMiningChain(_s, o).total; };
@@ -777,7 +795,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         const extra = Math.max(0, cap.boostedTotal - cap.total);
         if (!herd.length) continue;
         const owned = (catBoostsW[cat] || []).filter((b) => b.has && !b.isDisabled)
-          .flatMap((b) => b.effects.filter((e) => e.cat === cat)).concat(activeShrineEffects(powerState.farm, cat));
+          .flatMap((b) => b.effects.filter((e) => e.cat === cat)).concat(_shrineEffectsFor(cat));
         const mine = clone.effects.filter((e) => e.cat === cat);
         const cnt0 = capacity[cat];
         // Both sides at FULL stalls: stalls you already have would be filled without the item, so
@@ -1334,7 +1352,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       const effectsFor = (cat) => (catBoostsW[cat] || [])
         .filter((b) => b.has && !b.isDisabled)
         .flatMap((b) => b.effects.filter((e) => e.cat === cat))
-        .concat(activeShrineEffects(powerState.farm, cat));
+        .concat(_shrineEffectsFor(cat));
       const out = [];
       const { capacity } = powerState;
       const maxP = (settings.maxPrice && settings.maxPrice > 0) ? settings.maxPrice : Infinity;
@@ -1717,12 +1735,28 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
 
       // Simulate a buy ORDER with reinvestment + dynamic synergy. Returns the step timeline,
       // final rate, total days, and the total FLOWER income integrated over horizon H (objective).
+      /*
+       * An item's marginal depends only on WHICH items are already owned (the clones' `has`), never
+       * on the order they were bought in, so it is memoised on (item, set of items bought before it).
+       * The order search swaps two neighbours at a time: every other step sees the same set as in
+       * the previous pass, and re-deriving it from scratch was ~90 % of the roadmap's CPU.
+       */
+      const margMemo = new Map();
+      // Keyed on a per-candidate id, not the name: "Buy Gold node" and the merges appear several
+      // times with different prices and gains.
+      econPos.forEach((m, i) => { m._uid = i; });
       const simOrder = (order, H) => {
         resetClones();
         let r = startIncome > 0 ? startIncome : 0, day = 0, integral = 0, cumc = 0;
         const steps = [];
+        const bought = [];   // ids bought so far, kept sorted so the key is order-independent
         for (const m of order) {
-          const marg = Math.max(0, roadmapItemValue(m.clone, catBoostsW, settings));
+          const key = m._uid + ":" + bought.join(",");
+          let marg = margMemo.get(key);
+          if (marg === undefined) { marg = Math.max(0, roadmapItemValue(m.clone, catBoostsW, settings)); margMemo.set(key, marg); }
+          let lo = 0, hi = bought.length;
+          while (lo < hi) { const mid = (lo + hi) >> 1; if (bought[mid] < m._uid) lo = mid + 1; else hi = mid; }
+          bought.splice(lo, 0, m._uid);
           const dd = r > 0 ? m.floor / r : Infinity;
           if (isFinite(dd)) integral += r * dd;
           day += dd; m.clone.has = true; r += marg;

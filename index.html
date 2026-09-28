@@ -5773,7 +5773,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.76</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.77</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5800,6 +5800,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.77", items: [
+          { t: "perf", text: "<b>ROADMAP computes about 7× faster</b> (1.3 s → 0.17 s on the reference farm), with identical numbers. Owned boosts and shrines are read once per computation instead of for every probe, and the order search reuses an item's value for the same set of earlier purchases." },
+        ] },
         { ver: "v5.76", items: [
           { t: "feat", text: "<b>DECORATIONS: the written word in more styles.</b> Quick buttons for <b>SAJMONIUM</b> or just <b>SAJMON</b> on the top expansions; SAJMON gets a bigger, bolder 5-wide font. Five colour styles instead of red on white only: Classic, Rainbow (each letter its own colour), Night gold (yellow on purple), Sky (white and yellow on blue) and Ember (white on red). All in pansies, so only the colour changes and the letters stay sharp." },
         ] },
