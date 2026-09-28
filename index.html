@@ -2672,150 +2672,6 @@
 
 </style>
   <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
-  <link rel="stylesheet" href="https://unpkg.com/reactflow@11.11.4/dist/style.css">
-  <script type="importmap">
-  { "imports": {
-    "react": "https://esm.sh/react@18.3.1",
-    "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
-    "react-dom": "https://esm.sh/react-dom@18.3.1",
-    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client"
-  }}
-  </script>
-  <script type="module">
-    (async () => {
-      const errBox = (msg) => { const el = document.getElementById("rf-graph"); if (el) el.innerHTML = '<div style="padding:16px;color:#FF6B6B;font-family:Courier New,monospace;font-size:12px;line-height:1.6">Graph engine error:<br>' + msg + '</div>'; };
-      try {
-        const React = (await import("react")).default;
-        const { createRoot } = await import("react-dom/client");
-        const RF = await import("https://esm.sh/reactflow@11.11.4?external=react,react-dom");
-        const ReactFlow = RF.default || RF.ReactFlow;
-        const { Background, Controls, MiniMap, Handle, Position } = RF;
-        if (!ReactFlow) throw new Error("ReactFlow component missing from module");
-        const h = React.createElement;
-        const C = { gold:"#FFD700", green:"#30D158", red:"#FF6B6B", lily:"#B07CD8", blue:"#5DADE2", yellow:"#FFD60A", dim:"#9a8060", text:"#f0e6d2", sec:"#c4a882", panel:"#1c160f", brown:"#5c3a1e", goldb:"#8b6914" };
-        const PF = "'Press Start 2P',monospace", CF = "'Courier New',monospace";
-        const fmt = (n) => { n = +n || 0; const a = Math.abs(n); if (a >= 1000) return (n/1000).toFixed(1)+"k"; if (a >= 100) return n.toFixed(0); if (a >= 1) return n.toFixed(2); return n.toFixed(3); };
-        const days = (d) => !isFinite(d) ? "—" : (d >= 365 ? (d/365).toFixed(1)+"y" : Math.round(d)+"d");
-        const hideImg = (e) => { e.target.style.display = "none"; };
-        const handles = () => [ h(Handle, { key:"t", type:"target", position:Position.Top, style:{ opacity:0, border:0 } }), h(Handle, { key:"s", type:"source", position:Position.Bottom, style:{ opacity:0, border:0 } }) ];
-        // A WoW-style tooltip card — all info always visible (the tile IS the tooltip).
-        function Card({ accent, icon, emoji, title, subline, idx, effect, rows, foot }) {
-          const [hv, setHv] = React.useState(false);
-          return h("div", { onMouseEnter:()=>setHv(true), onMouseLeave:()=>setHv(false), style:{ width:316, background:"linear-gradient(165deg,#201810,#13100a)", border:"2px solid "+accent, borderRadius:10, padding:"8px 11px", boxShadow:(hv?"0 0 26px ":"0 0 13px ")+accent+"55, 0 3px 12px rgba(0,0,0,.55)", transition:"box-shadow .15s" } },
-            handles(),
-            h("div", { style:{ display:"flex", alignItems:"center", gap:9, borderBottom:"1px solid "+C.brown, paddingBottom:7 } },
-              icon ? h("img", { src:icon, onError:hideImg, style:{ width:38, height:38, imageRendering:"pixelated" } }) : (emoji ? h("div", { style:{ fontSize:26, width:38, textAlign:"center" } }, emoji) : null),
-              h("div", { style:{ flex:1 } },
-                h("div", { style:{ fontFamily:CF, fontSize:14, fontWeight:"bold", color:accent, lineHeight:1.15 } }, title),
-                subline ? h("div", { style:{ fontFamily:CF, fontSize:11, color:C.sec, marginTop:3 } }, subline) : null),
-              h("div", { style:{ fontFamily:PF, fontSize:9, color:C.dim } }, "#"+idx)),
-            effect ? h("div", { style:{ fontFamily:CF, fontSize:11, color:C.yellow, margin:"5px 0 3px", lineHeight:1.3 } }, effect) : null,
-            h("div", { style:{ marginTop:effect?0:7 } }, rows.map((r,i) => h("div", { key:i, style:{ display:"flex", justifyContent:"space-between", fontFamily:CF, fontSize:11.5, lineHeight:1.55 } }, h("span", { style:{ color:C.dim } }, r.k), h("span", { style:{ color:r.c||C.text, fontWeight:"bold" } }, r.v)))),
-            foot ? h("div", { style:{ marginTop:7, paddingTop:6, borderTop:"1px solid "+C.brown, fontFamily:CF, fontSize:10, color:C.dim, display:"flex", justifyContent:"space-between" } }, h("span", null, foot.l||""), h("span", null, foot.r||"")) : null);
-        }
-        function WowItem({ data }) {
-          const good = (+data.marginal) > 0;
-          const ac = data.itype === "Skill" ? C.lily : (data.itype === "Node" ? C.blue : C.gold);
-          return h(Card, { accent:ac, icon:data.icon, title:data.label, subline:data.itype, idx:data.idx, effect:data.boost||null,
-            rows: [
-              { k:"FLOWER / day", v:(good?"+":"")+fmt(data.marginal), c:good?C.green:C.red },
-              { k:"Cost", v:fmt(data.cost)+" ◈", c:C.sec },
-              { k:"Payback", v:days(data.roi), c:C.gold },
-              { k:"Ready in", v:"~"+Math.round(data.atDay||0)+" days", c:C.blue } ],
-            foot:{ l:"Σ spent "+fmt(data.cumCost)+" ◈", r:"income → "+fmt(data.rateAfter)+"/d" } });
-        }
-        function SkillNode({ data }) {
-          const good = (+data.marginal) > 0;
-          const sub = (data.tree || "Skill") + (data.tier ? (" · Tier " + data.tier) : "");
-          return h(Card, { accent:C.lily, emoji:"🧠", title:"Skill: "+data.label, subline:sub, idx:data.idx, effect:data.boost||null,
-            rows: [
-              { k:"FLOWER / day", v:(good?"+":"")+fmt(data.marginal), c:good?C.green:C.red },
-              { k:"Cost", v:data.free?("FREE — uses 1 unused point"):(data.pts+" skill point"+(data.pts>1?"s":"")), c:data.free?C.green:C.sec },
-              { k:"Skill points", v:String(data.pts), c:C.lily },
-              { k:"Ready in", v:"~"+Math.round(data.atDay||0)+" days", c:C.blue } ],
-            foot:{ l:"find it in: "+sub, r:"" } });
-        }
-        function LevelNode({ data }) {
-          return h(Card, { accent:C.blue, emoji:"⬆️", title:"Level up → +1 point", subline:"reach level "+data.level, idx:data.idx,
-            effect:"Cook "+data.cakes+"× "+data.recipe+" and eat them",
-            rows: [ { k:"Cost (ingredients)", v:"~"+fmt(data.cost)+" ◈", c:C.sec }, { k:"Gives", v:"+1 skill point", c:C.green } ],
-            foot:{ l:"Σ spent "+fmt(data.cumCost)+" ◈", r:"" } });
-        }
-        const mineHandles = () => [
-          h(Handle, { key:"t", id:"t", type:"target", position:Position.Top, style:{ opacity:0, border:0 } }),
-          h(Handle, { key:"l", id:"l", type:"target", position:Position.Left, style:{ opacity:0, border:0 } }),
-          h(Handle, { key:"r", id:"r", type:"source", position:Position.Right, style:{ opacity:0, border:0 } }),
-          h(Handle, { key:"b0", id:"b0", type:"source", position:Position.Bottom, style:{ opacity:0, border:0, left:"12%" } }),
-          h(Handle, { key:"b1", id:"b1", type:"source", position:Position.Bottom, style:{ opacity:0, border:0, left:"38%" } }),
-          h(Handle, { key:"b2", id:"b2", type:"source", position:Position.Bottom, style:{ opacity:0, border:0, left:"62%" } }),
-          h(Handle, { key:"b3", id:"b3", type:"source", position:Position.Bottom, style:{ opacity:0, border:0, left:"88%" } }) ];
-        function MineNode({ data }) {
-          const vc = data.verdict === "sell" ? C.green : (data.verdict === "step" ? C.blue : C.red);
-          const vlabel = data.verdict === "sell" ? (data.isPeak ? "✓ BEST STOP — SELL" : "✓ MINE & SELL") : (data.verdict === "step" ? ("↑ STEP TO " + (data.feeds || "").toUpperCase()) : "✗ DON'T MINE");
-          const p = +data.dailyProfit || 0;
-          const base = !(data.inputs && data.inputs.length);
-          const barC = base ? C.green : (data.verdict === "step" ? C.blue : (data.verdict === "sell" ? (p >= 0 ? C.green : C.red) : C.red));
-          return h("div", { style:{ width:228, background:"#13100a", border:"2.5px solid "+vc, borderRadius:11, overflow:"hidden", boxShadow:"0 0 15px "+vc+"55" } },
-            mineHandles(),
-            h("div", { style:{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", background:vc+"22", borderBottom:"1px solid "+vc+"55" } },
-              data.icon ? h("img", { src:data.icon, onError:hideImg, style:{ width:30, height:30, imageRendering:"pixelated" } }) : null,
-              h("div", { style:{ flex:1 } },
-                h("div", { style:{ fontFamily:CF, fontSize:14, fontWeight:"bold", color:C.text } }, data.res),
-                h("div", { style:{ fontFamily:PF, fontSize:7, color:vc, marginTop:3 } }, vlabel))),
-            h("div", { style:{ padding:"8px 10px 9px" } },
-              h("div", { style:{ fontFamily:CF, fontSize:9.5, color:C.dim, textTransform:"uppercase", letterSpacing:0.5 } }, "⛏ one mine gives"),
-              h("div", { style:{ display:"flex", alignItems:"center", gap:6, margin:"3px 0 2px" } },
-                data.icon ? h("img", { src:data.icon, onError:hideImg, style:{ width:20, height:20, imageRendering:"pixelated" } }) : null,
-                h("span", { style:{ fontFamily:CF, fontSize:16, fontWeight:"bold", color:C.gold } }, fmt(data.yieldPerMine)),
-                h("span", { style:{ fontFamily:CF, fontSize:11, color:C.dim } }, data.res),
-                h("span", { style:{ fontFamily:CF, fontSize:14, fontWeight:"bold", color:C.green, marginLeft:"auto" } }, "= " + fmt(data.valuePerMine) + " ◈")),
-              base
-                ? h("div", { style:{ fontFamily:CF, fontSize:10.5, color:C.green, marginTop:6, paddingTop:6, borderTop:"1px dashed "+C.brown } }, "✅ no tool cost — just a free Axe")
-                : h("div", { style:{ marginTop:6, paddingTop:6, borderTop:"1px dashed "+C.brown } },
-                    h("div", { style:{ display:"flex", alignItems:"baseline" } },
-                      h("span", { style:{ fontFamily:CF, fontSize:9, color:C.dim, textTransform:"uppercase" } }, "all-in cost (wood baked in)"),
-                      h("span", { style:{ marginLeft:"auto", fontFamily:CF, fontSize:13, fontWeight:"bold", color:C.red } }, "= " + fmt(data.eatCost) + " ◈" + (data.woodAllIn ? "  ·  " + fmt(data.woodAllIn) + "w" : ""))),
-                    h("div", { style:{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", marginTop:3 } },
-                      data.inputs.map((inp, i) => h("span", { key:i, style:{ display:"inline-flex", alignItems:"center", gap:2, background:"#241a10", borderRadius:4, padding:"1px 4px" } },
-                        h("span", { style:{ fontFamily:CF, fontSize:12, fontWeight:"bold", color:C.red } }, inp.qty + "×"),
-                        inp.icon ? h("img", { src:inp.icon, onError:hideImg, style:{ width:16, height:16, imageRendering:"pixelated" } }) : null,
-                        h("span", { style:{ fontFamily:CF, fontSize:10, color:C.sec } }, inp.res))))),
-              h("div", { style:{ marginTop:8, padding:"6px 8px", borderRadius:7, background:barC+"22", border:"1px solid "+barC+"66", textAlign:"center" } },
-                base
-                  ? h("span", { style:{ fontFamily:CF, fontSize:11, fontWeight:"bold", color:C.green } }, "▲ free to mine — pure profit, just sell it")
-                  : data.verdict === "step"
-                    ? h("span", { style:{ fontFamily:CF, fontSize:9.5, fontWeight:"bold", color:C.blue, lineHeight:1.35 } }, "↑ a step to " + (data.feeds || "") + " — loses " + fmt(Math.abs(p)) + "/day alone, paid back when you sell " + (data.feeds || ""))
-                    : data.verdict === "sell"
-                      ? h("span", { style:{ fontFamily:CF, fontSize:10.5, fontWeight:"bold", color:(p>=0?C.green:C.red) } }, (p>=0?"▲ +":"▼ −") + fmt(Math.abs(p)) + " \u25c8/day \u2014 chain PAYS" + (data.rowReturn ? " (×" + (+data.rowReturn).toFixed(2) + " Wood)" : "") + ((data.soloNet !== undefined && Math.abs(data.soloNet - p) > 0.005) ? " · solo " + (data.soloNet>=0?"+":"\u2212") + fmt(Math.abs(data.soloNet)) : ""))
-                      : h("span", { style:{ fontFamily:CF, fontSize:10, fontWeight:"bold", color:C.red } }, "▼ not worth it \u2014 costs more Wood than the ore sells for"))));
-        }
-                const nodeTypes = { wowItem:WowItem, skillNode:SkillNode, levelNode:LevelNode, mineNode:MineNode };
-        const roots = {};
-        window.__mountFlow = function(elId, kind) {
-          const el = document.getElementById(elId); if (!el) return;
-          try {
-            const fd = (window.__roadmapFlowData && window.__roadmapFlowData[kind]) || { nodes:[], edges:[] };
-            const edges = (fd.edges||[]).map((e)=>Object.assign({}, e, { style:{ stroke:(e.stroke||C.gold), strokeWidth:3, strokeDasharray:(e.dashed?"7 4":null) }, markerEnd:{ type:"arrowclosed", color:(e.stroke||C.gold) }, animated:e.animated!==false, labelStyle:{ fill:"#f5ead2", fontFamily:CF, fontSize:11, fontWeight:"bold" }, labelBgStyle:{ fill:"#1c160f", fillOpacity:0.92, stroke:(e.stroke||C.gold) }, labelBgPadding:[5,3], labelBgBorderRadius:5 }));
-            if (roots[elId]) { try { roots[elId].unmount(); } catch (e) {} }
-            const root = createRoot(el); roots[elId] = root;
-            const isMine = kind === "mineChain";
-            const common = { nodes:fd.nodes, edges:edges, nodeTypes:nodeTypes, proOptions:{ hideAttribution:true }, defaultEdgeOptions:{ type:"smoothstep" }, nodesDraggable:true, nodesConnectable:false, elementsSelectable:true, panOnDrag:true };
-            const rfProps = isMine
-              ? Object.assign({}, common, { fitView:true, fitViewOptions:{ padding:0.16 }, minZoom:0.2, maxZoom:2.5, panOnScroll:false, zoomOnScroll:true, zoomOnPinch:true, zoomOnDoubleClick:true })
-              : Object.assign({}, common, { fitView:false, defaultViewport:{ x:40, y:30, zoom:1 }, minZoom:1, maxZoom:1, panOnScroll:true, panOnScrollSpeed:0.9, zoomOnScroll:false, zoomOnPinch:false, zoomOnDoubleClick:false, onInit:(inst)=>{ try { inst.setViewport({ x:40, y:30, zoom:1 }, { duration:0 }); } catch (e) {} } });
-            root.render(h(ReactFlow, rfProps,
-              h(Background, { color:"#3a2a1a", gap:24, size:1 }),
-              isMine ? h(Controls, { showInteractive:false }) : null));
-          } catch (e) { errBox("render: " + ((e && e.message) || e)); }
-        };
-        window.__flowReady = true;
-        if (typeof window._roadmapMountFlow === "function") window._roadmapMountFlow(0);
-      } catch (e) {
-        window.__flowError = String((e && e.message) || e);
-        errBox("load: " + window.__flowError + "<br><span style=\"color:#9a8060\">(the tables below have the same data)</span>");
-      }
-    })();
-  </script>
   <script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
@@ -5773,7 +5629,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.77</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.78</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5800,6 +5656,12 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.78", items: [
+          { t: "feat", text: "<b>ROADMAP plans for the most FLOWER in hand after 5 years.</b> The old order maximised gross income and bought everything whatever the horizon (133 items, 74 of them never repaying within five years). Now each step buys what adds the most FLOWER-at-the-horizon per FLOWER spent, as soon as it is saved up, and stops when nothing still pays in time. On the reference farm: 66 buys for 49.6k instead of 217k, and about 246k FLOWER in hand after five years instead of 116k. Income the repay plan takes to BTC is not reinvested (auto from the repay card, or set it). NFT resale at the end is measured by price bucket (nothing above 10k, where nothing sells)." },
+          { t: "feat", text: "<b>Bundles.</b> Things that only pay together are bought together: a run of ascension expansions where the first steps add nothing but the one behind them pays (A3 Expansion 35 + 36 + 38), a tool with its node. Shown as SKUPINA \u00d7N with the bundle\u2019s gain on its first row." },
+          { t: "feat", text: "The table reads in plan order, then a block of items that do not pay back within the horizon, then the conditional ones. New column: FLOWER gained after N years. Settings: horizon (default 5 y; the old 100 y default reads as 5), BTC withdrawal per day, NFT value change per year." },
+          { t: "perf", text: "<b>Filters are instant.</b> Every click rebuilt the hidden node graph (about 20 s); the graphical Visual view is removed, and toggling a row type only re-draws the table." },
+        ] },
         { ver: "v5.77", items: [
           { t: "perf", text: "<b>ROADMAP computes about 7× faster</b> (1.3 s → 0.17 s on the reference farm), with identical numbers. Owned boosts and shrines are read once per computation instead of for every probe, and the order search reuses an item's value for the same set of earlier purchases." },
         ] },
@@ -16776,7 +16638,12 @@
         maxPrice: (typeof s.maxPrice === "number" && s.maxPrice >= 0) ? s.maxPrice : 0,
         coinsFree: (s.coinsFree === true || s.coinsFree === false) ? s.coinsFree : undefined,
         restocksPerDay: (typeof s.restocksPerDay === "number" && s.restocksPerDay > 0) ? s.restocksPerDay : 2,
-        horizonYears: (typeof s.horizonYears === "number" && s.horizonYears > 0) ? s.horizonYears : 100,
+        // The goal is the most FLOWER within five years. 100 was the old default, not a choice.
+        horizonYears: (typeof s.horizonYears === "number" && s.horizonYears > 0 && s.horizonYears !== 100) ? s.horizonYears : 5,
+        // FLOWER/day the repay plan takes to BTC; null = auto (the page fills it from the plan).
+        withdrawPerDay: (typeof s.withdrawPerDay === "number" && s.withdrawPerDay >= 0) ? s.withdrawPerDay : null,
+        // NFT value change per year for resale at the horizon; null = measured per price bucket.
+        nftDriftPerYear: (typeof s.nftDriftPerYear === "number" && s.nftDriftPerYear >= 0) ? s.nftDriftPerYear : null,
         optimizeOrder: s.optimizeOrder !== false,
         effOverrides: (s.effOverrides && typeof s.effOverrides === "object") ? s.effOverrides : {},
         ticketValueSfl: (typeof s.ticketValueSfl === "number" && s.ticketValueSfl >= 0) ? s.ticketValueSfl : 0,
@@ -17497,7 +17364,7 @@
       for (const b of bd) { const pct = total > 0 ? Math.max(1, b.sfl / total * 100) : 0; const c = catColor[b.cat] || "#8b6914"; bar += `<div style="width:${pct}%;background:${c}" title="${lbl(b.cat)} ${roadmapFmtFlower(b.sfl)}/d"></div>`; legend += `<span style="white-space:nowrap;margin-right:12px"><span style="display:inline-block;width:8px;height:8px;background:${c};border-radius:2px;vertical-align:middle"></span> ${escHTML(lbl(b.cat))} ${roadmapFmtFlower(b.sfl)}</span>`; }
       let h = `<div class="pixel-panel" style="padding:14px;margin-bottom:16px">`;
       h += `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-secondary);margin-bottom:8px">YOUR INCOME RIGHT NOW</div>`;
-      h += `<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:10px"><div style="font-size:1.7rem;font-weight:bold;color:var(--sunpetal);line-height:1">${roadmapFmtFlower(total)} ${sflIcon()}<span style="font-size:0.65rem;color:var(--text-dim)"> /day</span></div><div style="font-size:0.6rem;color:var(--text-dim)">\u2192 grows to <b style="color:var(--green)">${roadmapFmtFlower(sim.coreRate)}/day</b> after the ${sim.coreCount} worth-it buys (\u2248${roadmapFmtFlower(sim.coreCost)} ${sflIcon()}, ~${roadmapFmtDays(sim.coreDays)}) <span style="color:var(--text-dim);font-size:0.5rem">+ ${sim.econSteps - sim.coreCount} niche buys reach ${roadmapFmtFlower(sim.finalRate)}/day, up to ${roadmapFmtFlower(sim.totalCost)}</span></div></div>`;
+      h += `<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:10px"><div style="font-size:1.7rem;font-weight:bold;color:var(--sunpetal);line-height:1">${roadmapFmtFlower(total)} ${sflIcon()}<span style="font-size:0.65rem;color:var(--text-dim)"> /day</span></div><div style="font-size:0.6rem;color:var(--text-dim)">\u2192 <b style="color:var(--green)">${roadmapFmtFlower(sim.finalRate)}/day</b> after the plan: ${sim.econSteps} buys for ${roadmapFmtFlower(sim.econCost)} ${sflIcon()}, done in ~${roadmapFmtDays((sim.timeline || []).filter(t => t.kind === "econ").reduce((a, t) => Math.max(a, t.atDay || 0), 0))}${sim.wealth != null ? ` \u00b7 <span title="FLOWER v ruce za ${sim.horizonYears} let: hotovost ${roadmapFmtFlower(sim.cashAtHorizon)} + za kolik se pak prodají koupená NFT ${roadmapFmtFlower(sim.resaleAtHorizon)}. Počítá s tím, že celý příjem kromě výběru do BTC investuješ podle plánu.">in hand after ${sim.horizonYears} y: <b style="color:var(--sunpetal)">${roadmapFmtFlower(sim.wealth)} ${sflIcon()}</b></span>` : ""}${sim.withdrawPerDay > 0 ? ` <span style="font-size:0.5rem">(\u2212${roadmapFmtFlower(sim.withdrawPerDay)}/day to BTC)</span>` : ""}${sim.beyondCount ? ` <span style="font-size:0.5rem">\u00b7 ${sim.beyondCount} items don\u2019t pay back within ${sim.horizonYears} y</span>` : ""}</div></div>`;
       if (bd.length) { h += `<div style="display:flex;height:16px;border-radius:4px;overflow:hidden;border:1px solid var(--border-brown);margin-bottom:6px">${bar}</div><div style="font-size:0.5rem;color:var(--text-dim);line-height:1.9">${legend}</div>`; }
       h += `</div>`;
       return h;
@@ -17818,8 +17685,9 @@
       const h = _roadmapHiddenTypes();
       if (h.has(ty)) h.delete(ty); else h.add(ty);
       try { localStorage.setItem(LS_ROADMAP_HIDDEN_TYPES, JSON.stringify([...h])); } catch {}
-      // Re-render the view only. The plan is unchanged, so nothing needs recomputing.
-      renderRoadmapContent();
+      // Re-render the view only. The plan is unchanged, so nothing needs recomputing — this used
+      // to refetch and recompute the whole roadmap on every click.
+      if (_roadmapServer) _renderRoadmapContentWith(_roadmapServer); else renderRoadmapContent();
     };
 
     function roadmapAllUpgradesHtml(settings) {
@@ -18413,81 +18281,10 @@
       } catch { return []; }
     }
 
-    function roadmapFlowIcon(name) { try { return getItemIcon(name); } catch { return ""; } }
 
 
     // Buy-path graph data: the econ buy order with SKILLS + the LEVELING for them expanded into their
     // own nodes (a free skill uses an unused point; a paid skill is preceded by "cook N cakes -> +1 point").
-    function roadmapBuildMineFlowData(settings) {
-      const ch = roadmapMiningChain(settings);
-      const cap = powerState.capacity, p2p = roadmapPrices(settings);
-      const _cf = roadmapCoinsFree(settings), _er = powerState.exchangeRates;
-      // Wood on top (feeds every tool); the rest in a row below = the tier chain; Oil branches under Iron.
-      const POS = { trees:{x:516,y:0}, stone:{x:0,y:300}, iron:{x:344,y:300}, gold:{x:688,y:300}, crimstone:{x:1032,y:300} };
-      const NONWOOD = { iron:"stone", gold:"iron", crimstone:"gold" };
-      const WOOD_SH = { stone:"b0", iron:"b1", gold:"b2", crimstone:"b3" };
-      const nodes = [], edges = [];
-      const E = (src, tgt, sh, th, lbl, tgtMined, type) => edges.push({ id: tgt + "<" + src + "@" + sh, source: src, target: tgt, sourceHandle: sh, targetHandle: th, label: lbl, stroke: tgtMined ? "#30D158" : "#FF6B6B", dashed: !tgtMined, animated: !!tgtMined, type: type });
-      for (const cat of ["trees", "stone", "iron", "gold", "crimstone"]) {
-        const r = ch.byCat[cat]; if (!r || !(r.produced > 0)) continue;
-        let tpd = 0; try { tpd = miningToolsPerDay(cat, cap); } catch {}
-        const yieldPerMine = tpd > 0 ? r.produced / tpd : r.produced;
-        const T = MINE_TOOL[cat];
-        const inputs = T ? Object.entries(T.chain || {}).map(([i, q]) => ({ res: MINE_RES[i], qty: q, icon: getItemIcon(MINE_RES[i]) }))
-                            .concat(Object.entries(T.mat || {}).map(([m, q]) => ({ res: m, qty: q, icon: getItemIcon(m) }))) : [];
-        nodes.push({ id: cat, type: "mineNode", position: POS[cat] || { x: 0, y: 0 }, data: {
-          res: MINE_RES[cat], icon: getItemIcon(MINE_RES[cat]), yieldPerMine, valuePerMine: yieldPerMine * (p2p[MINE_RES[cat]] || 0),
-          inputs, eatCost: (r.woodCostPerUnit || 0) * yieldPerMine + (_cf || !(_er.coinsPerSFL > 0) ? 0 : ((TOOL_COSTS[Object.keys(TOOL_TO_CAT).find(k => TOOL_TO_CAT[k] === cat)] || {}).coins || 0) / _er.coinsPerSFL), woodAllIn: (r.embWood || 0) * yieldPerMine, verdict: r.verdict, mined: r.mined, feeds: r.feeds ? MINE_RES[r.feeds] : null, dailyProfit: r.dailyProfit, soloNet: r.soloNet, rowReturn: r.rowReturn, isPeak: r.isPeak } });
-        if (cat === "trees" || !T || !T.chain) continue;
-        const oilCat = cat === "oil";
-        // Wood feeds every tool — a line down from Wood into this resource
-        if (T.chain.trees && ch.byCat.trees) E("trees", cat, WOOD_SH[cat] || "b0", "t", T.chain.trees + "× Wood", r.mined, "default");
-        // tier progression (the non-Wood ingredient): chain link in the row, or vertical down to Oil
-        const pr = NONWOOD[cat];
-        if (pr && ch.byCat[pr] && T.chain[pr]) E(pr, cat, oilCat ? "b" : "r", oilCat ? "t" : "l", T.chain[pr] + "× " + MINE_RES[pr], r.mined);
-      }
-      return { nodes, edges };
-    }
-    function roadmapBuildFlowData(sim, settings) {
-      const farm = powerState.farm, p2p = powerState.p2pPrices;
-      const rmNodes = [], rmEdges = [];
-      const econSteps = (sim.timeline || []).filter(s => s.kind === "econ").slice(0, 48);
-      let ski = {}; try { ski = calcSkillPointCost(farm.bumpkin, p2p, farm) || {}; } catch {}
-      const recipeName = (ski.bestRecipe && ski.bestRecipe.name) || "Pizza Margherita";
-      const recipeXP = (ski.bestRecipe && ski.bestRecipe.boostedXP) || 0;
-      const recipeCost = (ski.bestRecipe && ski.bestRecipe.cost) || 0;
-      const _ascLvl = (farm.island && farm.island.ascensionLevel) || 0;
-      let curLevel = ski.level || getTotalBumpkinLevel((farm.bumpkin && farm.bumpkin.experience) || 0, _ascLvl);
-
-      const path = [];
-      for (const s of econSteps) {
-        if (s.type === "Skill") {
-          const pts = s.skillPoints || 1;
-          if (!s.skillFree) {
-            for (let j = 0; j < pts; j++) {
-              const xpNeed = xpToNextLevel(curLevel, _ascLvl);
-              const cakes = recipeXP > 0 ? Math.max(1, Math.ceil(xpNeed / recipeXP)) : 0;
-              path.push({ k: "level", cakes, recipe: recipeName, cost: cakes * recipeCost, level: curLevel + 1 });
-              curLevel++;
-            }
-          }
-          path.push({ k: "skill", s, free: !!s.skillFree, pts });
-        } else {
-          path.push({ k: "item", s });
-        }
-      }
-
-      let cum = 0;
-      path.forEach((p, i) => {
-        const pos = { x: 0, y: i * 300 }, id = "b" + i;
-        if (p.k === "item") { const s = p.s; cum += (s.floor || 0); rmNodes.push({ id, type: "wowItem", position: pos, data: { label: s.name, icon: roadmapFlowIcon(s.name), cost: s.floor, marginal: s.marginal, roi: s.roi, boost: (s.boost || "").split("\n").join(" \u00b7 "), itype: s.type, idx: i + 1, rateAfter: s.rateAfter, atDay: s.atDay, cumCost: cum } }); }
-        else if (p.k === "skill") { rmNodes.push({ id, type: "skillNode", position: pos, data: { label: p.s.name, free: p.free, pts: p.pts, marginal: p.s.marginal, boost: (p.s.boost || "").split("\n").join(" \u00b7 "), tree: p.s.skillTree, tier: p.s.skillTier, idx: i + 1, rateAfter: p.s.rateAfter, atDay: p.s.atDay, cumCost: cum } }); }
-        else { cum += (p.cost || 0); rmNodes.push({ id, type: "levelNode", position: pos, data: { cakes: p.cakes, recipe: p.recipe, cost: p.cost, level: p.level, idx: i + 1, cumCost: cum } }); }
-        if (i > 0) rmEdges.push({ id: "be" + i, source: "b" + (i - 1), target: id, animated: true, type: "smoothstep" });
-      });
-
-      return { roadmap: { nodes: rmNodes, edges: rmEdges } };
-    }
 
     // MIGRATED: eff + production + the buy-path simulation come from POST
     // compute?section=roadmap (core/sections/roadmap.mjs). This wrapper fetches (every
@@ -18578,13 +18375,27 @@
       const href = `https://sunflower-land.com/play/#/marketplace/${m.c}/${m.id}`;
       return `<a href="${href}" target="_blank" rel="noopener" title="${escHTML(tip + " · klik = otevřít v marketplace")}" style="white-space:nowrap;color:inherit;text-decoration:none;border-bottom:1px dotted var(--text-dim)">${icon} ${price != null ? roadmapFmtFlower(price) : "—"}${gap != null ? ` <span style="font-size:0.45rem;color:${gap >= 15 ? "var(--sunpetal)" : "var(--text-dim)"}">−${gap}%</span>` : ""}</a>`;
     }
+    /*
+     * Roadmap settings as sent to section=roadmap. The planner does not reinvest what the repay plan
+     * takes to BTC: unless the owner typed a figure, the daily withdrawal last shown on the
+     * Investment Tracker's repay card is used (sfl_repay_daily_flower, shared across devices).
+     */
+    function _rmServerSettingsJson() {
+      let s = {};
+      try { s = JSON.parse(localStorage.getItem("sfl_roadmap_settings") || "{}") || {}; } catch (e) { s = {}; }
+      if (!(typeof s.withdrawPerDay === "number" && s.withdrawPerDay >= 0)) {
+        const auto = parseFloat(localStorage.getItem("sfl_repay_daily_flower"));
+        if (isFinite(auto) && auto > 0) s.withdrawPerDay = auto;
+      }
+      return JSON.stringify(s);
+    }
     async function renderRoadmapContent() {
       const el = document.getElementById("roadmap-content");
       if (!el) return;
       try {
         // The scenario view renders client-side from `startup` — the simulation stays pure
         // reality, so no scenario parameter travels with the request.
-        const q = `products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}&roadmap=${encodeURIComponent(localStorage.getItem("sfl_roadmap_settings") || "{}")}`;
+        const q = `products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}&roadmap=${encodeURIComponent(_rmServerSettingsJson())}`;
         const bookP = _rmLoadBook();
         const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=roadmap&${q}`, {
           method: "POST", headers: { "content-type": "application/json" },
@@ -18630,25 +18441,15 @@
       // ── What to farm / mine now (per-category profitability) ──
       const _rmCollapse = (title, inner) => inner ? `<details style="margin-bottom:12px"><summary style="cursor:pointer;padding:9px 12px;background:#1c160f;border:1px solid var(--border-brown);border-radius:8px;font-family:'Press Start 2P',monospace;font-size:0.55rem;color:var(--sunpetal)">\u25b8 ${title}</summary><div style="margin-top:8px">${inner}</div></details>` : "";
       h += roadmapProfitabilityHtml(settings);
-      // ── Buy path: Visual graph or Table (toggle) ──
+      // ── Buy path: Table or Skills (toggle) ──
       h += `<div style="margin-bottom:16px">`;
       h += roadmapPeriodicHtml();
-      h += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal)">YOUR BUY PATH — what to buy next, in order</div><div style="margin-left:auto;display:flex;gap:4px"><button id="bp-tab-graph" onclick="_roadmapBuyView('graph')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:#241a10;color:var(--text-secondary);cursor:pointer">▣ Visual</button><button id="bp-tab-table" onclick="_roadmapBuyView('table')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:var(--sunpetal);color:#1a120a;cursor:pointer;font-weight:bold">☰ Table</button><button id="bp-tab-skills" onclick="_roadmapBuyView('skills')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:#241a10;color:var(--text-secondary);cursor:pointer">⭐ Skills</button></div></div>`;
+      h += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal)">YOUR BUY PATH — what to buy next, in order</div><div style="margin-left:auto;display:flex;gap:4px"><button id="bp-tab-table" onclick="_roadmapBuyView('table')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:var(--sunpetal);color:#1a120a;cursor:pointer;font-weight:bold">☰ Table</button><button id="bp-tab-skills" onclick="_roadmapBuyView('skills')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:#241a10;color:var(--text-secondary);cursor:pointer">⭐ Skills</button></div></div>`;
       {
         const _effReal = settings.effMode === "real";
         const _pct = (c) => Math.round(roadmapEffFactor(c, settings) * 100);
         h += `<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap;font-size:0.55rem;color:var(--text-dim)"><span>+FL/day &amp; income shown at</span><select onchange="_roadmapSetEffMode(this.value)" style="font-size:0.55rem;padding:2px 6px;background:#241a10;color:var(--text-secondary);border:1px solid var(--border-brown);border-radius:4px;cursor:pointer"><option value="real"${_effReal ? " selected" : ""}>your Last-7-days activity</option><option value="theoretical"${!_effReal ? " selected" : ""}>100% theoretical (full-time)</option></select>${_effReal ? `<span>— how often you actually harvest (Wood ${_pct("trees")}%, Crops ${_pct("crops")}%, Stone ${_pct("stone")}% of max). Applies to every number on this page.</span>` : `<span style="color:var(--yellow)">— full-time potential (you'd have to harvest every node the instant it's ready). Switch to Last-7-days for realistic numbers.</span>`}</div>`;
       }
-      /*
-       * Table is the default view, not Visual. The table is the one that carries the actual
-       * numbers — cost, FLOWER/day, ROI, cumulative — and the graph is a picture of the same
-       * order. Opening on the picture meant every visit started with a click.
-       */
-      h += `<div id="buy-graph" style="display:none">`;
-      h += `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px">scroll = move down the path · drag to pan · +/− to zoom</div>`;
-      h += `<div id="rf-graph" style="height:760px;width:100%;border:1px solid var(--border-brown);border-radius:8px;background:radial-gradient(circle at 50% 22%, #1a130b, #0e0a06);overflow:hidden"></div>`;
-      h += `<div id="rf-fallback" style="display:none;padding:14px;font-size:0.6rem;color:var(--text-dim)">Loading the graph engine… if this stays, your browser/network blocked the CDN — use the Table view.</div>`;
-      h += `</div>`;
       h += `<div id="buy-table">`;
       if (!(startIncome > 0)) {
         h += `<div class="pixel-panel" style="padding:10px;margin-bottom:14px;color:var(--yellow);font-size:0.6rem">Set a positive "Start FLOWER/day" to get time estimates. The ORDER below is still correct (sorted by ROI payback).</div>`;
@@ -18731,6 +18532,7 @@
         <th style="padding:4px 6px;text-align:right" title="Nejlepší nabídka (bid) na marketplace a stav tvé nabídky: 🟢 tvoje je nejvyšší · 🟠 máš nabídku, ale někdo nabízí víc · ⚪ nemáš nabídku (cena = nejvyšší bid). −X % = o kolik je bid pod floor (žlutě od 15 %, kde se vyplatí nabízet). Najeď myší pro detail.">Offer</th>
         <th style="padding:4px 6px;text-align:right" title="Kolik ti ta položka přidá za den, v FLOWER.">+${sflIcon()}/day</th>
         <th style="padding:4px 6px;text-align:right" title="Řazeno podle návratnosti. U kroků, které tvoří řadu (ascension expanze, Level 2 → 3), se řadí podle návratnosti CELÉ řady až sem — ten krok nejde koupit dřív než ty před ním. Tahle hodnota je pak pod vlastní návratností jako ‚v řadě‘.">Payback</th>
+        <th style="padding:4px 6px;text-align:right" title="O kolik FLOWER budeš mít po ${settings.horizonYears} letech víc, když tohle koupíš ve chvíli, kdy na to podle plánu našetříš: výnos do konce horizontu − cena + za kolik se NFT pak prodá (podle cenového pásma, nad 10k nic). Záporné = nevyplatí se.">Za ${settings.horizonYears} let ${sflIcon()}</th>
         <th style="padding:4px 6px;text-align:right" title="Kumulativní cena v FLOWER, když kupuješ shora dolů.">&Sigma; Cost ${sflIcon()}</th>
         <th style="padding:4px 6px;text-align:right">FL/day</th>
         <th style="padding:4px 6px;text-align:right">ETA</th>
@@ -18738,16 +18540,26 @@
       const typeBadge = ty => { const d = rowTypeMeta[ty] || rowTypeMeta.Collectible; return `<span style="font-size:0.5rem;padding:1px 4px;border-radius:3px;background:${d.bg};color:var(--text-dim)" title="${escHTML(d.full)}">${d.label}</span>`; };
       const _myOffers = _rmMyOffers();
       _rmRowData = {};
-      let rank = 0;
+      let rank = 0, _rmBeyondShown = false, _rmCondShown = false;
       for (const r of (sim.ranked || [])) {
         rank++;   // counts the FULL order, so a visible row keeps its real position
         if (_rmHidden.has(r.type || "Collectible")) continue;
-        const isPlan = r.status === "plan";
+        const isPlan = r.status === "plan", isBeyond = r.status === "beyond";
+        if (r.status === "conditional" && !_rmCondShown) {
+          _rmCondShown = true;
+          h += `<tr><td colspan="11" style="padding:8px 6px 3px;font-size:0.55rem;color:#e8c060;border-top:2px solid #4a4020">▼ Podmíněné — zvedají činnost, kterou teď ziskově neprovozuješ. Hodnota platí, jen pokud ji rozjedeš.</td></tr>`;
+        }
+        if (isBeyond && !_rmBeyondShown) {
+          _rmBeyondShown = true;
+          h += `<tr><td colspan="11" style="padding:8px 6px 3px;font-size:0.55rem;color:#e8a060;border-top:2px solid #5a3a20">\u25bc Nevyplatí se do ${settings.horizonYears} let \u2014 do ${settings.horizonYears}. roku by vydělaly méně, než stojí (po odečtení prodeje NFT). Řazeno podle návratnosti.</td></tr>`;
+        }
         const stBadge = isPlan
           ? `<span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1f3a2a;color:#7fe0a0;font-weight:bold">IN PLAN</span>`
-          : `<span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#3a3220;color:#e8c060;font-weight:bold" title="${escHTML(r.reason || "")}">CONDITIONAL</span>`;
-        const boostTxt = escHTML((r.boost || "").split("\n").join(" \u00b7 ")) + (isPlan ? "" : ` <span style="color:var(--lily)">\u00b7 ${escHTML(r.reason || "only if you run that activity")}</span>`);
-        const marg = `+${roadmapFmtFlower(r.value)}` + (isPlan ? "" : ` <span style="color:var(--text-dim)">if used</span>`);
+          : isBeyond
+            ? `<span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#3a2418;color:#e8a060;font-weight:bold" title="Do ${settings.horizonYears} let se nevrátí.">&gt; ${settings.horizonYears} LET</span>`
+            : `<span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#3a3220;color:#e8c060;font-weight:bold" title="${escHTML(r.reason || "")}">CONDITIONAL</span>`;
+        const boostTxt = escHTML((r.boost || "").split("\n").join(" \u00b7 ")) + ((isPlan || isBeyond) ? "" : ` <span style="color:var(--lily)">\u00b7 ${escHTML(r.reason || "only if you run that activity")}</span>`);
+        const marg = `+${roadmapFmtFlower(r.value)}` + ((isPlan || isBeyond) ? "" : ` <span style="color:var(--text-dim)">if used</span>`);
         {
           const _trade = !r.type || r.type === "Collectible" || r.type === "Wearable";
           const _op = _trade ? _rmOfferPrice(r.name, _myOffers) : null;
@@ -18755,7 +18567,7 @@
         }
         h += `<tr style="border-top:1px solid #222">
           <td style="padding:3px 6px;color:var(--text-dim);white-space:nowrap"><input type="checkbox" class="rm-pick" title="Vybrat do součtu dole" ${_rmPicks.has(r.name) ? "checked" : ""} onchange="_rmTogglePick(${escHTML(JSON.stringify(r.name))},this.checked)">${rank}</td>
-          <td style="padding:3px 6px;white-space:nowrap">${rowIcon(r)} ${escHTML(r.name)} ${typeBadge(r.type)} ${stBadge}${r.skillTakeNow ? ` <span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1f3a2a;color:#7fe0a0" title="Skill pointy na tohle už máš — můžeš vzít hned. Cena je i tak spočtená z XP, které ten point stál: držet point ho nedělá zdarma, stejně jako držet FLOWER nedělá NFT zdarma.">MůžEŠ HNED</span>` : ""}</td>
+          <td style="padding:3px 6px;white-space:nowrap">${isPlan && r.bundle && r.horizonGain === 0 ? `<span style="color:#b08cd8" title="Patří ke skupině nad sebou — kupuje se s ní.">\u21b3</span> ` : ""}${rowIcon(r)} ${escHTML(r.name)} ${typeBadge(r.type)} ${stBadge}${isPlan && r.bundle && r.horizonGain !== 0 ? ` <span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#2a1f3a;color:#b08cd8;font-weight:bold" title="Tyhle ${r.bundle} položky se vyplatí jen spolu (třeba krok ascension, který sám nic nedá, před krokem, který vydělá). Kupují se naráz, zisk je za celou skupinu.">SKUPINA \u00d7${r.bundle}</span>` : ""}${r.skillTakeNow ? ` <span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1f3a2a;color:#7fe0a0" title="Skill pointy na tohle už máš — můžeš vzít hned. Cena je i tak spočtená z XP, které ten point stál: držet point ho nedělá zdarma, stejně jako držet FLOWER nedělá NFT zdarma.">MůžEŠ HNED</span>` : ""}</td>
           <td style="padding:3px 6px;color:var(--text-dim);max-width:240px">${boostTxt}</td>
           <td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(r.floor)}</td>
           <td style="padding:3px 6px;text-align:right">${(!r.type || r.type === "Collectible" || r.type === "Wearable") ? _rmOfferCell(r.name, _myOffers) : `<span style="color:var(--text-dim)">—</span>`}</td>
@@ -18777,6 +18589,7 @@
               ? `<div style="font-size:0.45rem;color:var(--text-dim)" title="Řadí se podle návratnosti CELÉ řady až sem: ${roadmapFmtFlower(r.prefixCost)} FLOWER za všechny kroky včetně tohohle. Vlastní návratnost tohohle kroku je ${roadmapFmtDays(r.roi)}, ale nejde ho koupit dřív než ty před ním.">v řadě ${roadmapFmtDays(r.sortRoi)}</div>`
               : ""
           }</td>
+          <td style="padding:3px 6px;text-align:right;color:${r.horizonGain > 0 ? "var(--green)" : "#e07070"}" title="${r.resale > 0 ? `včetně prodeje NFT na konci za ${roadmapFmtFlower(r.resale)}` : ""}">${isPlan && r.bundle && r.horizonGain === 0 ? `<span style="color:#b08cd8">ve skupině</span>` : r.horizonGain != null && isFinite(r.horizonGain) ? (r.horizonGain > 0 ? "+" : "\u2212") + roadmapFmtFlower(Math.abs(r.horizonGain)) : "\u2014"}</td>
           <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${isPlan ? roadmapFmtFlower(r.cumCost) : "\u2014"}</td>
           <td style="padding:3px 6px;text-align:right;color:var(--sunpetal)">${isPlan ? roadmapFmtFlower(r.rateAfter) : "\u2014"}</td>
           <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${isPlan ? roadmapFmtDate(r.atDay) : "\u2014"}</td>
@@ -18784,7 +18597,7 @@
       }
       h += `</tbody></table></div>`;
       h += `<div id="rm-pick-total" style="display:none"></div>`;
-      h += `<div style="margin-top:6px;font-size:0.55rem;color:var(--text-dim);line-height:1.6">One list ranked by payback. <b style="color:#7fe0a0">IN PLAN</b> = your profit-optimal buy order (\u03a3 Cost + ETA assume you reinvest income in this order). <b style="color:#e8c060">CONDITIONAL</b> = boosts a category not in your profitable mix yet (e.g. crimstone below break-even) \u2014 ranked by what it WOULD add at full scale, so nothing is hidden. <b>+FL/day is each item\u2019s value added to your CURRENT farm</b>, so it doesn\u2019t depend on what you buy first (\u03a3 Cost &amp; ETA then assume you buy down the list, reinvesting income).</div>`;
+      h += `<div style="margin-top:6px;font-size:0.55rem;color:var(--text-dim);line-height:1.6"><b style="color:#7fe0a0">IN PLAN</b> = the buy order that leaves the most FLOWER in hand after ${settings.horizonYears} years, top to bottom (\u03a3 Cost + ETA assume you reinvest income minus the BTC withdrawal, buying each item once it is saved up). <b style="color:#e8a060">&gt; ${settings.horizonYears} LET</b> = earns something, but not its price back within the horizon. <b style="color:#e8c060">CONDITIONAL</b> = boosts a category not in your profitable mix yet (e.g. crimstone below break-even) \u2014 ranked by what it WOULD add at full scale, so nothing is hidden. <b>+FL/day is each item\u2019s value added to your CURRENT farm</b>, so it doesn\u2019t depend on what you buy first (\u03a3 Cost &amp; ETA then assume you buy down the list, reinvesting income).</div>`;
 
       // Cosmetic tail (boost present but no FLOWER value) \u2014 collapsed
       const cosmeticRows = (sim.timeline || []).filter(x => x.kind === "cosmetic");
@@ -18816,7 +18629,7 @@
       // ── Model notes ──
       h += `<div class="pixel-panel" style="margin-top:18px;padding:12px;font-size:0.55rem;color:var(--text-dim);line-height:1.7">
         <div class="pixel-font" style="font-size:0.5rem;color:var(--text-secondary);margin-bottom:6px">HOW THIS IS CALCULATED</div>
-        • <b>Order</b> = optimised to maximise TOTAL FLOWER earned over your horizon (default 100y). Starts from greedy ROI payback (cheapest-fastest first so income compounds), then a local search swaps adjacent buys whenever that yields more total FLOWER over the horizon — catching reinvestment cases where buying a cheap booster slightly earlier compounds into more (your "B then A" example).<br>
+        • <b>Order</b> = the most FLOWER in hand after your horizon (default 5 years). Each step buys the item that adds the most FLOWER-at-the-horizon per FLOWER spent, given what you already own, as soon as it is saved up; the plan stops when nothing still pays for itself in time. Income the repay plan takes to BTC is not reinvested. NFT resale at the end is measured on the market by price bucket (listing price after the 10 % fee, value change per year from the last six months; nothing above 10k, where nothing sells).<br>
         • <b>Coins are free</b> (when you hold &gt;10k) — coin-priced costs like axes &amp; seeds aren't charged, since coins don't convert to FLOWER. So coin-only activities like trees get cheaper.<br>
         • <b>Obsidian</b> sells only ~1/week, so its income is capped at one obsidian (minus a lava ignition) per week — its ROI lands near the bottom.<br>
         • <b>Net, not gross</b> — every category subtracts its running costs (animal feed &amp; sickness, crop/fruit/flower seeds, mining tools, lava-pit fuel) before counting. A loss-making activity (e.g. low-level sheep where feed ≥ wool) nets 0, and an animal boost only scores once it actually flips that category positive.<br>
@@ -18847,7 +18660,12 @@
       h += `<label title="Treat coin-denominated costs (axes, seeds…) as free — coins aren't directly convertible to FLOWER. Auto-on when you hold >10k coins."><input type="checkbox" ${roadmapCoinsFree(settings) ? "checked" : ""} onchange="_roadmapToggle('coinsFree',this.checked)"> Coins free</label>`;
       h += `<label title="Betty seed restocks you do per day. Caps how much you can plant; fast crops (Sunflower) are seed-limited not plot-limited.">Restocks/day: <input type="number" value="${settings.restocksPerDay}" min="1" step="1" style="width:46px" onchange="_roadmapSetRestocks(this.value)"></label>`;
       h += `<label title="What one seasonal delivery ticket is worth to YOU in FLOWER. Tickets only buy season-shop items and expire — set 0 to ignore ticket rewards in deliveries.">Ticket value: <input type="number" value="${settings.ticketValueSfl}" min="0" step="0.5" style="width:52px" onchange="_roadmapSetTicketValue(this.value)"> ${sflIcon()}</label>`;
-      h += `<label title="Optimise the buy order to maximise total FLOWER earned over this many years (reinvestment + synergy aware).">Optimise over: <input type="number" value="${settings.horizonYears}" min="1" step="10" style="width:54px" onchange="_roadmapSetHorizon(this.value)"> yr${sim.optGainPct > 0.05 ? ` <span style="color:var(--green)">+${sim.optGainPct.toFixed(1)}% vs ROI-order</span>` : ""}</label>`;
+      h += `<label title="Plán maximalizuje FLOWER v ruce po tolika letech: co se do té doby nevrátí, do plánu nepatří.">Horizont: <input type="number" value="${settings.horizonYears}" min="1" step="1" style="width:46px" onchange="_roadmapSetHorizon(this.value)"> let</label>`;
+      {
+        const autoW = parseFloat(localStorage.getItem("sfl_repay_daily_flower"));
+        h += `<label title="Kolik FLOWER denně odchází do BTC (repay plán) — to se do nákupů neinvestuje. Prázdné = automaticky z repay plánu v Investment Trackeru.">Výběr do BTC: <input type="number" value="${settings.withdrawPerDay != null ? settings.withdrawPerDay : ""}" placeholder="${isFinite(autoW) && autoW > 0 ? "auto " + roadmapFmtFlower(autoW) : "0"}" min="0" step="1" style="width:72px" onchange="_roadmapSetWithdraw(this.value)"> /den</label>`;
+      }
+      h += `<label title="Jak se mění hodnota NFT za rok, když ji na konci horizontu prodáváš. Prázdné = změřeno z trhu podle cenového pásma (−19 až −47 % ročně; nad 10k se NFT neprodá). 1 = hodnota se drží.">Hodnota NFT/rok: <input type="number" value="${settings.nftDriftPerYear != null ? settings.nftDriftPerYear : ""}" placeholder="z dat" min="0" max="2" step="0.05" style="width:58px" onchange="_roadmapSetDrift(this.value)"></label>`;
       h += `<label><input type="checkbox" ${settings.showCosmetic ? "checked" : ""} onchange="_roadmapToggle('showCosmetic',this.checked)"> Show no-value boosts</label>`;
       h += `<label title="Skip NFTs above this floor price (0 = no cap). Items priced over 500k FLOWER are always dropped as troll/no-liquidity listings.">Max price: <input type="number" value="${settings.maxPrice || 0}" step="100" min="0" style="width:88px" onchange="_roadmapSetMaxPrice(this.value)"> ${settings.maxPrice ? "" : "(no cap)"}</label>`;
       h += `<button onclick="refresh()" title="Re-fetch your live farm (new purchases) + current marketplace floor prices, then rebuild the whole roadmap" style="margin-left:auto;font-size:0.6rem;padding:4px 10px;cursor:pointer">↻ Refresh live data</button>`;
@@ -18864,13 +18682,10 @@
       h += roadmapEfficiencyPanel(settings);
       h += `</div></details>`;
 
-      try { window.__roadmapFlowData = roadmapBuildFlowData(sim, settings); } catch (e) { window.__roadmapFlowData = { roadmap: { nodes: [], edges: [] }, todo: { nodes: [], edges: [] } }; }
-      try { window.__roadmapFlowData.mineChain = roadmapBuildMineFlowData(settings); } catch (e) { if (window.__roadmapFlowData) window.__roadmapFlowData.mineChain = { nodes: [], edges: [] }; }
       el.innerHTML = h;
       _rmRenderPickTotal();
       el.insertAdjacentHTML("afterbegin", '<div id="nodeacq-roadmap"></div>');
       _mountNodeAcq("nodeacq-roadmap");
-      _roadmapMountFlow(0);
     }
 
     window._roadmapSetIncome = function(v) { const n = parseFloat(v); saveRoadmapSettings({ startIncome: isFinite(n) && n >= 0 ? n : null }); renderRoadmapContent(); };
@@ -18925,36 +18740,21 @@
     window._roadmapSetMaxPrice = function(v) { const n = parseFloat(v); saveRoadmapSettings({ maxPrice: isFinite(n) && n >= 0 ? n : 0 }); renderRoadmapContent(); };
     window._roadmapSetRestocks = function(v) { const n = parseFloat(v); saveRoadmapSettings({ restocksPerDay: isFinite(n) && n > 0 ? n : 2 }); renderRoadmapContent(); };
     window._roadmapSetTicketValue = function(v) { const n = parseFloat(v); saveRoadmapSettings({ ticketValueSfl: isFinite(n) && n >= 0 ? n : 1 }); renderRoadmapContent(); };
-    window._roadmapSetHorizon = function(v) { const n = parseFloat(v); saveRoadmapSettings({ horizonYears: isFinite(n) && n > 0 ? n : 100 }); renderRoadmapContent(); };
+    window._roadmapSetHorizon = function(v) { const n = parseFloat(v); saveRoadmapSettings({ horizonYears: isFinite(n) && n > 0 ? n : 5 }); renderRoadmapContent(); };
+    window._roadmapSetWithdraw = function(v) { const n = parseFloat(v); saveRoadmapSettings({ withdrawPerDay: v === "" || !isFinite(n) ? null : Math.max(0, n) }); renderRoadmapContent(); };
+    window._roadmapSetDrift = function(v) { const n = parseFloat(v); saveRoadmapSettings({ nftDriftPerYear: v === "" || !isFinite(n) ? null : Math.max(0, n) }); renderRoadmapContent(); };
     window._roadmapToggleUntradeable = function() { const e = document.getElementById("rm-untradeable"); if (e) e.style.display = e.style.display === "none" ? "block" : "none"; };
-    window._roadmapMountFlow = function(attempt) {
-      const g = document.getElementById("rf-graph"); if (!g) return;
-      if (window.__flowError) { g.innerHTML = '<div style="padding:14px;color:var(--red);font-size:0.6rem">Graph engine failed: ' + window.__flowError + '</div>'; return; }
-      if (window.__mountFlow) { try { window.__mountFlow("rf-graph", window.__flowKind || "roadmap"); } catch (e) { g.innerHTML = '<div style="padding:14px;color:var(--red);font-size:0.6rem">Render error: ' + ((e && e.message) || e) + '</div>'; } const mg = document.getElementById("rf-mine"); if (mg) { try { window.__mountFlow("rf-mine", "mineChain"); } catch (e) {} } return; }
-      if (attempt < 80) { setTimeout(() => window._roadmapMountFlow(attempt + 1), 150); }
-      else { const f = document.getElementById("rf-fallback"); if (f) f.style.display = "block"; }
-    };
     window._roadmapBuyView = function(v) {
-      const divs = { graph: document.getElementById("buy-graph"), table: document.getElementById("buy-table"), skills: document.getElementById("buy-skills") };
-      const tabs = { graph: document.getElementById("bp-tab-graph"), table: document.getElementById("bp-tab-table"), skills: document.getElementById("bp-tab-skills") };
-      if (!divs.graph || !divs.table) return;
+      const divs = { table: document.getElementById("buy-table"), skills: document.getElementById("buy-skills") };
+      const tabs = { table: document.getElementById("bp-tab-table"), skills: document.getElementById("bp-tab-skills") };
+      if (!divs.table) return;
       // Falls back to "table" to match the markup's default — they must not disagree, or the
       // first click on an already-active tab would blank the section.
-      const view = (v === "graph" || v === "skills") ? v : "table";
-      for (const k of ["graph", "table", "skills"]) {
+      const view = v === "skills" ? "skills" : "table";
+      for (const k of ["table", "skills"]) {
         if (divs[k]) divs[k].style.display = (k === view) ? "block" : "none";
         const tb = tabs[k]; if (tb) { const on = (k === view); tb.style.background = on ? "var(--sunpetal)" : "#241a10"; tb.style.color = on ? "#1a120a" : "var(--text-secondary)"; tb.style.fontWeight = on ? "bold" : "normal"; }
       }
-      if (view === "graph" && window.__mountFlow) { try { window.__mountFlow("rf-graph", window.__flowKind || "roadmap"); } catch (e) {} }
-    };
-    window._roadmapFlowTab = function(kind) {
-      window.__flowKind = kind;
-      const a = document.getElementById("rf-tab-roadmap"), b = document.getElementById("rf-tab-todo");
-      if (a && b) {
-        a.style.background = kind === "roadmap" ? "var(--sunpetal)" : "#241a10"; a.style.color = kind === "roadmap" ? "#1a120a" : "var(--text-secondary)";
-        b.style.background = kind === "todo" ? "var(--sunpetal)" : "#241a10"; b.style.color = kind === "todo" ? "#1a120a" : "var(--text-secondary)";
-      }
-      if (window.__mountFlow) { try { window.__mountFlow("rf-graph", kind); } catch (e) {} }
     };
 
 
@@ -22347,7 +22147,7 @@
          * reports 94/day. Overstating the farm rate makes the funnel look better than it is.
          */
         if (!_roadmapSnapshotsCache) { try { _roadmapSnapshotsCache = await _roadmapFetchHistorySlim(); } catch (e) { _roadmapSnapshotsCache = []; } }
-        const q = `products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}&roadmap=${encodeURIComponent(localStorage.getItem("sfl_roadmap_settings") || "{}")}`;
+        const q = `products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}&roadmap=${encodeURIComponent(_rmServerSettingsJson())}`;
         const r = await fetch(`/api/compute?farm=${FARM_ID}&section=roadmap&${q}`, {
           method: "POST", headers: { "content-type": "application/json" },
           body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [] }),
@@ -29453,6 +29253,8 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         return box(`<div class="label pixel-font" style="margin-top:8px;color:var(--text-dim);line-height:1.7">${p ? "plán nejde spočítat (chybí peak nebo kurz)" : `Zatím žádný plán. Nastav, kolik z peaku ${fmtBtc(agg.peakBtc)} chceš vracet do BTC — denně, měsíčně nebo ročně. Start v minulosti započítá i výběry od té doby.`}</div>`);
       }
       const behind = stats.balanceBtc < 0;
+      // The ROADMAP plans with what is left after this withdrawal (see _rmServerSettingsJson).
+      if (flowerPerBtc > 0 && stats.dailyTargetBtc > 0) { try { localStorage.setItem("sfl_repay_daily_flower", String(Math.round(stats.dailyTargetBtc * flowerPerBtc * 100) / 100)); } catch (e) {} }
       const lagDays = stats.dailyTargetBtc > 0 ? Math.round(Math.abs(stats.balanceBtc) / stats.dailyTargetBtc) : 0;
       // E13: what counts is NET withdrawn since the start — a withdrawal put back later repays nothing.
       const netTip = `Počítají se ČISTÉ výběry od ${p.start_date}: výběry − vklady (všechna místa), průběžný součet nikdy pod nulou. Výběr, který se pak vrátí zpět vkladem (round trip), se jako splátka nepočítá. Dny jsou lokální kalendářní dny.`;
@@ -31577,7 +31379,8 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     const prefSyncKeys = ["sfl_rm_picks", "sfl_roadmap_settings", "sfl_power_products", "sfl_ascension_settings",
       "sfl_tracked_dolls", "sfl_restock_settings", "sfl_gift_plan", "sfl_roi_multicat_assignment", "sfl_sleep_schedule",
       "sfl_marks_budget", "sfl_bumpkin_target", "sfl_bumpkin_recipes", "sfl_nodes_roi_cap", "sfl_coin_mode",
-      "sfl_sales_sell_type", "sfl_sales_sell_min", "sfl_pet_streak", "sfl_wl_eff", "sfl_flower_mode", "sfl_flower_n", "sfl_sats_gran"];
+      "sfl_sales_sell_type", "sfl_sales_sell_min", "sfl_pet_streak", "sfl_wl_eff", "sfl_flower_mode", "sfl_flower_n", "sfl_sats_gran",
+      "sfl_repay_daily_flower"];
     let _prefApplying = false, _prefPending = {}, _prefTimer = null;
     function _prefFarm() { try { return getConfig().farm || null; } catch (e) { return null; } }
     function _prefPush() {

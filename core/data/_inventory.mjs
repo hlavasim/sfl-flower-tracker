@@ -338,10 +338,6 @@ export const TABLE_INVENTORY = [
     "lines": 2
   },
   {
-    "name": "NONWOOD",
-    "lines": 2
-  },
-  {
     "name": "PAGES",
     "lines": 2
   },
@@ -540,10 +536,6 @@ export const TABLE_INVENTORY = [
   {
     "name": "WEARABLE_IDS",
     "lines": 78
-  },
-  {
-    "name": "WOOD_SH",
-    "lines": 2
   },
   {
     "name": "ZOOM_STEPS",

@@ -29,6 +29,7 @@ import {
   CROP_GROW_DATA, FRUIT_GROW_DATA, GREENHOUSE_GROW_DATA, FRUIT_HARVEST_COUNT,
 } from "./power-boosts.mjs";
 import { TOOL_COSTS } from "../data/economy.mjs";
+import { planByWealth } from "./wealth-plan.mjs";
 import { SALT_RAKE_COST } from "../data/cooking.mjs";
 import { computeSaltYieldPerRake, computeSaltRakeCoinMult } from "./cooking-cost.mjs";
 
@@ -118,7 +119,12 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         maxPrice: (typeof s.maxPrice === "number" && s.maxPrice >= 0) ? s.maxPrice : 0,
         coinsFree: (s.coinsFree === true || s.coinsFree === false) ? s.coinsFree : undefined,
         restocksPerDay: (typeof s.restocksPerDay === "number" && s.restocksPerDay > 0) ? s.restocksPerDay : 2,
-        horizonYears: (typeof s.horizonYears === "number" && s.horizonYears > 0) ? s.horizonYears : 100,
+        // The goal is the most FLOWER within five years. 100 was the old default, not a choice.
+        horizonYears: (typeof s.horizonYears === "number" && s.horizonYears > 0 && s.horizonYears !== 100) ? s.horizonYears : 5,
+        // FLOWER/day the repay plan takes to BTC; null = auto (the page fills it from the plan).
+        withdrawPerDay: (typeof s.withdrawPerDay === "number" && s.withdrawPerDay >= 0) ? s.withdrawPerDay : null,
+        // NFT value change per year for resale at the horizon; null = measured per price bucket.
+        nftDriftPerYear: (typeof s.nftDriftPerYear === "number" && s.nftDriftPerYear >= 0) ? s.nftDriftPerYear : null,
         optimizeOrder: s.optimizeOrder !== false,
         effOverrides: (s.effOverrides && typeof s.effOverrides === "object") ? s.effOverrides : {},
         ticketValueSfl: (typeof s.ticketValueSfl === "number" && s.ticketValueSfl >= 0) ? s.ticketValueSfl : 0,
@@ -1733,106 +1739,42 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       }
       situational.sort((a, b) => (a.floor / (a.sitValue || 1e-9)) - (b.floor / (b.sitValue || 1e-9)));
 
-      // Simulate a buy ORDER with reinvestment + dynamic synergy. Returns the step timeline,
-      // final rate, total days, and the total FLOWER income integrated over horizon H (objective).
       /*
-       * An item's marginal depends only on WHICH items are already owned (the clones' `has`), never
-       * on the order they were bought in, so it is memoised on (item, set of items bought before it).
-       * The order search swaps two neighbours at a time: every other step sees the same set as in
-       * the previous pass, and re-deriving it from scratch was ~90 % of the roadmap's CPU.
+       * The buy path, by FLOWER IN HAND at the horizon (wealth-plan.mjs). Replaces a payback-greedy
+       * order refined by adjacent swaps on GROSS income: it never subtracted what was spent, so the
+       * horizon changed nothing and every candidate was bought (133 on the reference farm, 74 of
+       * them losing money within five years). Now a purchase has to pay for itself — net of the
+       * resale value the NFT still has at the horizon — or it is listed as "not within N years".
+       * Income that the repay plan withdraws to BTC is not reinvested.
        */
-      const margMemo = new Map();
-      // Keyed on a per-candidate id, not the name: "Buy Gold node" and the merges appear several
-      // times with different prices and gains.
-      econPos.forEach((m, i) => { m._uid = i; });
-      const simOrder = (order, H) => {
-        resetClones();
-        let r = startIncome > 0 ? startIncome : 0, day = 0, integral = 0, cumc = 0;
-        const steps = [];
-        const bought = [];   // ids bought so far, kept sorted so the key is order-independent
-        for (const m of order) {
-          const key = m._uid + ":" + bought.join(",");
-          let marg = margMemo.get(key);
-          if (marg === undefined) { marg = Math.max(0, roadmapItemValue(m.clone, catBoostsW, settings)); margMemo.set(key, marg); }
-          let lo = 0, hi = bought.length;
-          while (lo < hi) { const mid = (lo + hi) >> 1; if (bought[mid] < m._uid) lo = mid + 1; else hi = mid; }
-          bought.splice(lo, 0, m._uid);
-          const dd = r > 0 ? m.floor / r : Infinity;
-          if (isFinite(dd)) integral += r * dd;
-          day += dd; m.clone.has = true; r += marg;
-          cumc += m.floor; steps.push({ m, marg, atDay: day, rateAfter: r, cumCost: cumc });
-        }
-        if (H > 0 && isFinite(day)) integral += r * Math.max(0, H - day);
-        return { steps, finalRate: r, totalDays: day, integral };
-      };
+      const H = (settings.horizonYears || 5) * 365;
+      const withdrawPerDay = Math.max(0, settings.withdrawPerDay || 0);
+      for (const m of econPos) m.price = m.floor;
+      resetClones();
+      const plan = planByWealth(econPos, {
+        startIncome, withdrawPerDay, horizonDays: H, driftOverride: settings.nftDriftPerYear,
+        valueOf: (m) => roadmapItemValue(m.clone, catBoostsW, settings),
+        buy: (m) => { m.clone.has = true; },
+        unbuy: (m) => { m.clone.has = false; },
+        // What an item interacts with: its categories. Re-valuation and bundles stay inside them.
+        groups: (m) => m.clone.categories,
+      });
+      resetClones();
 
-      // Greedy start: lowest payback first, recomputing synergy after each buy.
-      const greedyOrder = () => {
-        resetClones();
-        const rem = econPos.slice();
-        for (const m of rem) { m._mg = roadmapItemValue(m.clone, catBoostsW, settings); m._roi = m._mg > 0 ? m.floor / m._mg : Infinity; }
-        const ord = []; let g = 0;
-        /*
-         * CHAINS are strictly sequential: you cannot do A2 before A1, and you cannot take a skill's
-         * Level 3 before its Level 2. So within each chain only the earliest unplaced step is ever
-         * eligible. Without this the payback sort interleaves them freely and the plan reads as an
-         * order you cannot follow. Everything outside a chain is unconstrained.
-         */
-        const nextInChain = {};
-        const eligible = (m) => !m.chainId || (nextInChain[m.chainId] || 0) === m.chainSeq;
-        while (rem.length && g++ < 5000) {
-          let bi = -1;
-          for (let i = 0; i < rem.length; i++) {
-            if (!eligible(rem[i])) continue;
-            if (bi < 0 || rem[i]._roi < rem[bi]._roi) bi = i;
-          }
-          if (bi < 0) break;   // only ineligible items left
-          const nx = rem.splice(bi, 1)[0];
-          if (nx.chainId) nextInChain[nx.chainId] = (nextInChain[nx.chainId] || 0) + 1;
-          if (!(nx._mg > 0)) continue;
-          nx.clone.has = true; ord.push(nx);
-          const cats = new Set(nx.clone.categories);
-          for (const m of rem) if (m.clone.categories.some(c => cats.has(c))) { m._mg = roadmapItemValue(m.clone, catBoostsW, settings); m._roi = m._mg > 0 ? m.floor / m._mg : Infinity; }
-        }
-        return ord;
-      };
-
-      let order = greedyOrder();
-      const H = (settings.horizonYears || 100) * 365;
-      const greedyVal = order.length ? simOrder(order, H).integral : 0;
-      // Local-search refinement: adjacent swaps that raise total FLOWER over the horizon. Greedy
-      // ROI is optimal for independent items; this catches reinvestment cases where buying a cheap
-      // booster slightly earlier compounds into more total FLOWER (the user's "B then A" case).
-      if (settings.optimizeOrder !== false && order.length > 1 && order.length <= 140) {
-        let best = greedyVal, improved = true, passes = 0;
-        while (improved && passes++ < 8) {
-          improved = false;
-          for (let i = 0; i < order.length - 1; i++) {
-            // A swap inside a chain (two ascension steps, or a skill's L2 and L3) produces a plan the
-            // game will not let you build, whatever it does to the integral.
-            if (order[i].chainId && order[i].chainId === order[i + 1].chainId) continue;
-            const sw = order.slice(); const tmp = sw[i]; sw[i] = sw[i + 1]; sw[i + 1] = tmp;
-            const v = simOrder(sw, H).integral;
-            if (v > best + Math.abs(best) * 1e-9 + 1e-6) { order = sw; best = v; improved = true; }
-          }
-        }
-      }
-      const fin = simOrder(order, H);
-      const optGainPct = greedyVal > 0 ? (fin.integral / greedyVal - 1) * 100 : 0;
-
-      // DISPLAY uses each item's marginal vs your CURRENT farm (s.m.marginal) — NOT its buy-ORDER
-      // position. Otherwise a boost bought after big synergistic ones (e.g. Tiki Totem after the Beavers
-      // double Wood respawn) shows an inflated, order-dependent number. Cumulative cost / income / ETA
-      // are a running total in the shown order, so the columns add up to the per-row +FL/day.
+      // DISPLAY: +FL/day is each item's value vs your CURRENT farm (m.marginal), so it does not
+      // depend on what is bought first. ETA, FL/day and Σ cost follow the plan.
+      const itemFields = (m) => ({ skillFree: m.skillFree, skillPoints: m.skillPoints, skillTakeNow: m.skillTakeNow, skillRank: m.skillRank, shards: m.shards, shardSfl: m.shardSfl, shardNote: m.shardNote, skillTree: m.skillTree, skillTier: m.skillTier, chainId: m.chainId, chainSeq: m.chainSeq, scenarioCat: m.scenarioCat });
       const timeline = [];
-      { let ri = (startIncome > 0 ? startIncome : 0), rd = 0;
-        for (const s of fin.steps) { const bm = Math.max(0, s.m.marginal || 0); const dd = ri > 0 ? s.m.floor / ri : Infinity; if (isFinite(dd)) rd += dd; ri += bm;
-          timeline.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, marginal: bm, roi: bm > 0 ? s.m.floor / bm : Infinity, atDay: rd, rateAfter: ri, kind: "econ", skillFree: s.m.skillFree, skillPoints: s.m.skillPoints, skillTakeNow: s.m.skillTakeNow, skillRank: s.m.skillRank, shards: s.m.shards, shardSfl: s.m.shardSfl, shardNote: s.m.shardNote, skillTree: s.m.skillTree, skillTier: s.m.skillTier, chainId: s.m.chainId, chainSeq: s.m.chainSeq, scenarioCat: s.m.scenarioCat }); } }
-      let rate = (startIncome > 0 ? startIncome : 0) + fin.steps.reduce((a, s) => a + Math.max(0, s.m.marginal || 0), 0);
-      let cumDays = timeline.length ? timeline[timeline.length - 1].atDay : 0;
+      for (const s of plan.steps) {
+        const m = s.c, bm = Math.max(0, m.marginal || 0);
+        timeline.push({ name: m.name, type: m.type, boost: m.boost, floor: m.floor, marginal: bm, roi: bm > 0 ? m.floor / bm : Infinity, atDay: s.atDay, rateAfter: s.rate, kind: "econ", horizonGain: s.horizonGain, resale: s.resale, bundle: s.bundle, ...itemFields(m) });
+      }
+      let rate = plan.steps.length ? plan.steps[plan.steps.length - 1].rate : (startIncome > 0 ? startIncome : 0);
+      let cumDays = plan.days;
       const econSteps = timeline.length;
       const econCost = timeline.reduce((s, t) => s + t.floor, 0);
       const finalRate = rate;
+      const optGainPct = 0;
 
       cosmetic.sort((a, b) => a.floor - b.floor);
       for (const m of cosmetic) {
@@ -1849,67 +1791,47 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         if (t.roi <= CORE_ROI_DAYS) { coreCost += t.floor; coreMarg += t.marginal; coreCount++; coreDays = Math.max(coreDays, t.atDay); }
       }
       const coreRate = (startIncome > 0 ? startIncome : 0) + coreMarg;
-      // Unified ranked list: in-plan steps + conditional (situational), sorted by payback (ROI).
-      const ranked = [];
-      for (const s of fin.steps) { const bm = Math.max(0, s.m.marginal || 0); ranked.push({ name: s.m.name, type: s.m.type, boost: s.m.boost, floor: s.m.floor, value: bm, roi: bm > 0 ? s.m.floor / bm : Infinity, status: "plan", skillFree: s.m.skillFree, skillPoints: s.m.skillPoints, skillTakeNow: s.m.skillTakeNow, skillRank: s.m.skillRank, shards: s.m.shards, shardSfl: s.m.shardSfl, shardNote: s.m.shardNote, skillTree: s.m.skillTree, skillTier: s.m.skillTier, chainId: s.m.chainId, chainSeq: s.m.chainSeq, scenarioCat: s.m.scenarioCat }); }
-      for (const m of situational) ranked.push({ name: m.name, type: m.type, boost: m.boost, floor: m.floor, value: m.sitValue, roi: m.sitValue > 0 ? m.floor / m.sitValue : Infinity, status: "conditional", reason: m.sitReason });
-      ranked.sort((a, b) => a.roi - b.roi);
+      // One list in three blocks: the plan in PLAN order, then what does not pay back within the
+      // horizon, then the conditional rows (boosts on an activity you do not run profitably yet).
+      const planRows = plan.steps.map((s) => {
+        const m = s.c, bm = Math.max(0, m.marginal || 0);
+        return { name: m.name, type: m.type, boost: m.boost, floor: m.floor, value: bm, roi: bm > 0 ? m.floor / bm : Infinity, status: "plan", horizonGain: s.horizonGain, resale: s.resale, cumCost: s.cumCost, rateAfter: s.rate, atDay: s.atDay, bundle: s.bundle, ...itemFields(m) };
+      });
+      const rest = [];
+      for (const x of plan.left) {
+        const m = x.c, bm = Math.max(0, m.marginal || 0);
+        rest.push({ name: m.name, type: m.type, boost: m.boost, floor: m.floor, value: bm, roi: bm > 0 ? m.floor / bm : Infinity, status: "beyond", horizonGain: x.horizonGain, ...itemFields(m) });
+      }
+      rest.sort((a, b) => a.roi - b.roi);
+      const conditional = situational.map((m) => ({ name: m.name, type: m.type, boost: m.boost, floor: m.floor, value: m.sitValue, roi: m.sitValue > 0 ? m.floor / m.sitValue : Infinity, status: "conditional", reason: m.sitReason }));
+      conditional.sort((a, b) => a.roi - b.roi);
       /*
-       * The table is ranked by PAYBACK, and a chain has to stay in ladder order inside it — you
-       * cannot take a skill's Level 3 before its Level 2, or A2 before A1.
-       *
-       * The first attempt kept the SLOTS the payback sort gave each chain and refilled them in ladder
-       * order. That was wrong in a way only the rendered table showed: the chain's first step lands in
-       * the BEST slot any of its members earned, the second step in the second best, and so on — so
-       * the early ladder is hoisted to the top regardless of its own payback. On a real farm that put
-       * "A1 Expansion 36" (2.0 YEARS) at row 5 of 163 and "A1 Expansion 38" (7.6 years) at row 7,
-       * above everything worth buying. The sort said one thing and the table showed another.
-       *
-       * A chain is one decision, so it gets ONE position: the whole chain is placed as a contiguous
-       * block at the payback its FIRST step earns, because that first step is the only one you can
-       * actually act on next. The rows inside the block keep ladder order and their own paybacks,
-       * which vary — that is honest, and it is what a sequence looks like.
+       * Outside the plan a chain still has to read in ladder order (you cannot take a skill's
+       * Level 3 before its Level 2, or A2 before A1): each row is placed by its PREFIX payback —
+       * cost of every step up to it over the gain of all of them — made strictly increasing along
+       * the chain. Each row still displays its own cost, gain and payback.
        */
       const chains = {};
-      for (const r of ranked) if (r.chainId) (chains[r.chainId] = chains[r.chainId] || []).push(r);
+      for (const r of rest) if (r.chainId) (chains[r.chainId] = chains[r.chainId] || []).push(r);
       if (Object.keys(chains).length) {
-        /*
-         * A chain row is placed by its PREFIX payback: what it costs to get there including every
-         * step you must do first, over what you earn once you have them all.
-         *
-         * Anchoring the whole chain on its first step was the previous attempt and it was still
-         * wrong — the ascension ladder's first step pays back in 61 days, so all 31 rows sat above
-         * every NFT, including the ones that pay back in 30 years. A sequence is not one decision.
-         *
-         * The prefix figure is the honest one: "A1 Expansion 38" is not a 7.6-year purchase, it is
-         * the far end of a run you must buy through, and that run's cumulative payback is what
-         * decides whether it belongs above or below the next NFT. Taking a running MAX also makes
-         * the value non-decreasing along the chain, which is what keeps the ladder in order once
-         * everything is sorted together — order is a property of the sort key, not a patch after it.
-         *
-         * Each row still DISPLAYS its own cost, gain and payback. Only the position uses the prefix.
-         */
         for (const rows of Object.values(chains)) {
           rows.sort((a, b) => a.chainSeq - b.chainSeq);
           let cost = 0, gain = 0, worst = 0;
           for (const r of rows) {
             cost += r.floor; gain += r.value;
             const prefix = gain > 0 ? cost / gain : Infinity;
-            // Strictly increasing along the chain: a running max alone produces TIES, and ties fall
-            // back on the payback order the array already had, which reordered 17 rows.
             worst = Math.max(worst, prefix);
             r.sortRoi = worst + r.chainSeq * 1e-9;
-            r.prefixRoi = prefix;          // served so the page can explain the placement
+            r.prefixRoi = prefix;
             r.prefixCost = cost;
           }
         }
-        for (const r of ranked) if (r.sortRoi == null) r.sortRoi = r.roi;
-        // Stable by construction: equal keys keep the order the payback sort already gave them.
-        ranked.sort((a, b) => a.sortRoi - b.sortRoi);
+        for (const r of rest) if (r.sortRoi == null) r.sortRoi = r.roi;
+        rest.sort((a, b) => a.sortRoi - b.sortRoi);
       }
-      { let rc = 0, ri = (startIncome > 0 ? startIncome : 0), rd = 0;
-        for (const r of ranked) { if (r.status !== "plan") continue; const dd = ri > 0 ? r.floor / ri : Infinity; if (isFinite(dd)) rd += dd; rc += r.floor; ri += r.value; r.cumCost = rc; r.rateAfter = ri; r.atDay = rd; } }
-      return { timeline, ranked, coreCount, coreCost, coreRate, coreDays, econSteps, cosmeticCount: cosmetic.length, econCost, untradeable, tail, tailCost, noBoostCount, situational, startRate: startIncome, finalRate, totalDays: cumDays, totalCost, optGainPct, horizonYears: (settings.horizonYears || 100) };
+      const ranked = planRows.concat(rest, conditional);
+      return { timeline, ranked, coreCount, coreCost, coreRate, coreDays, econSteps, cosmeticCount: cosmetic.length, econCost, untradeable, tail, tailCost, noBoostCount, situational, startRate: startIncome, finalRate, totalDays: cumDays, totalCost, optGainPct, horizonYears: (settings.horizonYears || 5),
+        wealth: plan.wealth, cashAtHorizon: plan.cash, resaleAtHorizon: plan.resale, withdrawPerDay, beyondCount: plan.left.length };
     }
 
 
