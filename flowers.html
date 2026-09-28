@@ -5629,7 +5629,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.78</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.79</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5656,6 +5656,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.79", items: [
+          { t: "fix", text: "<b>ROADMAP node prices match the NODES page.</b> Obsidian was priced at its p2p listing (~16 FLOWER) instead of the production cost the NODES page and the ascension plan use (~1.8): a Gold node read 1,344 FLOWER and 4.7 years here against ~150 and 193 days there. Obsidian sells about once a week, so the listing is not a price you can realise. The roadmap now offers the next 8 purchases per node type, like the NODES page." },
+          { t: "feat", text: "<b>Obsidian is rationed to what you make</b> (~4.45/day on the reference farm). A node buy or merge waits until the obsidian is made, or tops the shortfall up on the market when that leaves more FLOWER; other purchases carry on meanwhile. Without it the plan wanted 6,822 obsidian by day 405. Reference farm: 110 buys (44 nodes), ~266k FLOWER in hand after five years." },
+        ] },
         { ver: "v5.78", items: [
           { t: "feat", text: "<b>ROADMAP plans for the most FLOWER in hand after 5 years.</b> The old order maximised gross income and bought everything whatever the horizon (133 items, 74 of them never repaying within five years). Now each step buys what adds the most FLOWER-at-the-horizon per FLOWER spent, as soon as it is saved up, and stops when nothing still pays in time. On the reference farm: 66 buys for 49.6k instead of 217k, and about 246k FLOWER in hand after five years instead of 116k. Income the repay plan takes to BTC is not reinvested (auto from the repay card, or set it). NFT resale at the end is measured by price bucket (nothing above 10k, where nothing sells)." },
           { t: "feat", text: "<b>Bundles.</b> Things that only pay together are bought together: a run of ascension expansions where the first steps add nothing but the one behind them pays (A3 Expansion 35 + 36 + 38), a tool with its node. Shown as SKUPINA \u00d7N with the bundle\u2019s gain on its first row." },

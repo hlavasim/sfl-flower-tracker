@@ -69,6 +69,10 @@ export function resaleFactor(type, price, years, driftOverride) {
  *   groups(c)       keys of what c interacts with (e.g. its categories); default: one shared group
  *   maxBundle       largest bundle tried (default 4; 1 = no bundles)
  *   maxChainRun     longest run of one chain in a bundle (default 8)
+ *   resources       limited inputs a candidate may also need, e.g.
+ *                     { obsidian: { stock, perDay, market, unitCost } } with c.res = { obsidian: n }.
+ *                   c.price already counts n x unitCost. A purchase waits until enough is made,
+ *                   or buys the shortfall at `market` — whichever leaves more FLOWER at H.
  * @returns {{ steps, left, wealth, cash, resale, days }}
  *   steps: [{ c, gain (FLOWER/day), atDay, rate, cumCost, horizonGain, resale, bundle? }]
  *   left:  [{ c, gain, horizonGain }] — worth something per day, but not within the horizon
@@ -87,6 +91,21 @@ export function planByWealth(cands, o) {
   const val = new Map();
   const value = (c) => Math.max(0, o.valueOf(c));
   for (const c of rem) val.set(c, value(c));
+  /*
+   * Limited inputs. Obsidian priced at production cost made the plan buy 49 nodes by day 405,
+   * needing 6,822 obsidian from a farm that makes 4.45 a day (1,533 days' worth). A resource is
+   * made at `perDay`; what a purchase needs beyond the stock either waits for production or is
+   * bought on the market, and the planner takes whichever leaves more FLOWER at the horizon.
+   */
+  const resources = o.resources || {};
+  const used = {};
+  for (const k of Object.keys(resources)) used[k] = 0;
+  const stockAt = (k, time) => (resources[k].stock || 0) + (resources[k].perDay || 0) * time - used[k];
+  const needsOf = (list) => {
+    const n = {};
+    for (const c of list) for (const [k, q] of Object.entries(c.res || {})) if (resources[k] && q > 0) n[k] = (n[k] || 0) + q;
+    return n;
+  };
   const nextInChain = {};
   // Eligible given the chain steps already bought plus those earlier in `bundle`.
   const eligible = (c, bundle) => {
@@ -97,14 +116,37 @@ export function planByWealth(cands, o) {
   // FLOWER in hand at H that buying `list` (jointly adding `g`/day) as soon as affordable adds.
   const evaluate = (list, g) => {
     if (!(g > 0)) return null;
-    const p = list.reduce((s, c) => s + c.price, 0);
+    const p0 = list.reduce((s, c) => s + c.price, 0);
     const r = net();
-    const wait = cash >= p ? 0 : (r > 0 ? (p - cash) / r : Infinity);
-    const at = t + wait;
-    if (!(at < H)) return null;
-    const resale = list.reduce((s, c) => s + c.price * resaleFactor(c.type, c.price, (H - at) / 365, o.driftOverride), 0);
-    const horizonGain = g * (H - at) - p + resale;
-    return { at, wait, horizonGain, resale, price: p, score: horizonGain / Math.max(p, 1e-9) };
+    const cashAt = (p) => t + (cash >= p ? 0 : (r > 0 ? (p - cash) / r : Infinity));
+    const needs = needsOf(list);
+    const option = (p, at, bought) => {
+      if (!(at < H)) return null;
+      const resale = list.reduce((s, c) => s + c.price * resaleFactor(c.type, c.price, (H - at) / 365, o.driftOverride), 0);
+      const horizonGain = g * (H - at) - p + resale;
+      // waiting on an INPUT rather than on cash: taking it now would idle the cash until then
+      const inputBound = at > cashAt(p) + 1e-9;
+      return { at, wait: at - t, horizonGain, resale, price: p, bought, inputBound, score: horizonGain / Math.max(p, 1e-9) };
+    };
+    // a) wait until the inputs are made
+    let atWait = cashAt(p0);
+    for (const [k, q] of Object.entries(needs)) {
+      const short = q - stockAt(k, t);
+      if (short > 0) atWait = Math.max(atWait, resources[k].perDay > 0 ? t + short / resources[k].perDay : Infinity);
+    }
+    let best = option(p0, atWait, null);
+    // b) buy the shortfall on the market
+    let extra = 0; const bought = {};
+    for (const [k, q] of Object.entries(needs)) {
+      const short = q - Math.max(0, stockAt(k, t));
+      if (short > 0 && resources[k].market > 0) { extra += short * (resources[k].market - (resources[k].unitCost || 0)); bought[k] = short; }
+      else if (short > 0) { extra = Infinity; }
+    }
+    if (Object.keys(bought).length && isFinite(extra)) {
+      const alt = option(p0 + extra, cashAt(p0 + extra), bought);
+      if (alt && (!best || alt.horizonGain > best.horizonGain)) best = alt;
+    }
+    return best;
   };
   // Members of each group, among what is left — the pool a bundle may grow from.
   const groupIndex = () => {
@@ -173,6 +215,13 @@ export function planByWealth(cands, o) {
   };
 
   const steps = [];
+  /*
+   * A candidate that waits on an input (obsidian) rather than on cash is not taken while
+   * something else can use the cash now: taking it would jump the clock to the day the input is
+   * ready and idle the cash in between. It is taken once nothing else is buyable, which is when
+   * the clock may advance to it.
+   */
+  const better = (ev, cur) => !cur || (!!cur.inputBound !== !!ev.inputBound ? !ev.inputBound : ev.score > cur.score);
   for (let guard = 0; guard < 5000 && rem.size; guard++) {
     let bestList = null, bestEv = null;
     const lonely = [];
@@ -180,7 +229,7 @@ export function planByWealth(cands, o) {
       if (!eligible(c, null)) continue;
       const ev = evaluate([c], val.get(c));
       if (ev && ev.horizonGain > 0) {
-        if (!bestEv || ev.score > bestEv.score) { bestList = [c]; bestEv = ev; }
+        if (better(ev, bestEv)) { bestList = [c]; bestEv = ev; }
       } else lonely.push(c);
     }
     if (maxBundle > 1 && lonely.length) {
@@ -190,7 +239,7 @@ export function planByWealth(cands, o) {
         if (!e) { idx = idx || groupIndex(); e = growBundle(c, idx); bundleCache.set(c, e); }
         if (!e.res) continue;
         const ev = evaluate(e.res.list, e.res.g);
-        if (ev && ev.horizonGain > 0 && (!bestEv || ev.score > bestEv.score)) { bestList = e.res.list; bestEv = ev; }
+        if (ev && ev.horizonGain > 0 && better(ev, bestEv)) { bestList = e.res.list; bestEv = ev; }
       }
     }
     if (!bestList) break;
@@ -198,6 +247,7 @@ export function planByWealth(cands, o) {
     t = bestEv.at;
     cash -= bestEv.price;
     const bundle = bestList.length > 1;
+    for (const [k, q] of Object.entries(needsOf(bestList))) used[k] += q - ((bestEv.bought && bestEv.bought[k]) || 0);
     for (const c of bestList) {
       const g = value(c);                       // in bundle order: each sees the ones before it
       rate += g; cum += c.price;

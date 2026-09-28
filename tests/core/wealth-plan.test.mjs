@@ -106,6 +106,28 @@ test("something that pays on its own is not folded into a bundle", () => {
   assert.equal(r.steps.find((s) => s.c.name === "E35").bundle, 2);
 });
 
+/*
+ * Limited inputs: obsidian priced at production cost bought 49 nodes by day 405 on a farm that
+ * makes 4.45 a day. Purchases now wait for the input (or top it up from the market), and a
+ * purchase waiting on an input does not freeze the cash that other purchases could use.
+ */
+test("an obsidian purchase waits for production and does not block cash purchases meanwhile", () => {
+  const r = runB([
+    { name: "node", price: 90, gain: 1, type: "Node", res: { obsidian: 90 } },     // 90 obsidian at 1/day
+    { name: "nft", price: 500, gain: 1, type: "Skill" },                             // cash only, day 5
+  ], { resources: { obsidian: { stock: 0, perDay: 1, market: 100, unitCost: 1 } } });
+  const at = Object.fromEntries(r.steps.map((s) => [s.c.name, s.atDay]));
+  assert.ok(at.nft < at.node, "the cash purchase is not held up by the obsidian one");
+  assert.ok(Math.abs(at.node - 90) < 1e-6, "the node comes when 90 obsidian are made");
+});
+
+test("the shortfall is bought on the market when that leaves more FLOWER", () => {
+  // Cheap obsidian on the market (2 vs 1 made) and slow production: buying it beats waiting a year.
+  const r = runB([{ name: "node", price: 100, gain: 3, type: "Node", res: { obsidian: 100 } }],
+    { resources: { obsidian: { stock: 0, perDay: 0.25, market: 2, unitCost: 1 } } });
+  assert.ok(r.steps[0].atDay < 10, `bought early, day ${r.steps[0].atDay}`);
+});
+
 test("resale model: nothing above 10k, less the longer it is held, nothing for non-NFTs", () => {
   assert.equal(resaleFactor("Collectible", 12000, 1), 0);
   assert.equal(resaleFactor("Skill", 500, 1), 0);

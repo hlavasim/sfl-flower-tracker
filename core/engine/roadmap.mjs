@@ -1567,8 +1567,6 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       const out = [];
       const { capacity, exchangeRates, farm } = powerState;
       const p2pPrices = roadmapPrices(settings);
-      const obsidianP = p2pPrices["Obsidian"] || 0;
-      if (!(obsidianP > 0)) return out;               // can't price Obsidian → skip node actions
       /*
        * Node income comes from nodeAcq, which the ascension section serves and the NODES page
        * renders. Without it there are NO node rows — deliberately. Falling back to a locally
@@ -1577,13 +1575,25 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
        */
       const ascNodeAcq = (roadmapState && roadmapState.ascension && roadmapState.ascension.nodeAcq) || null;
       if (!ascNodeAcq || !ascNodeAcq.perType) return out;
+      /*
+       * Obsidian at the price the NODES page and the ascension plan use: nodeAcq's production
+       * cost. This priced it at the p2p listing (~16 FLOWER) while those two used ~1.8, so a Gold
+       * node read 1,344 FLOWER and 4.7 years here against ~150 and 193 days there. The listing is
+       * not a price you can realise: obsidian sells about once a week, which is why its own income
+       * is capped at one sale a week. Surplus obsidian is worth what it costs to make.
+       */
+      const obsRule = Object.values(ascNodeAcq.perType).find((p) => p && p.buyRule && p.buyRule.obsidianSfl > 0);
+      const obsidianP = obsRule ? obsRule.buyRule.obsidianSfl : 0;
+      if (!(obsidianP > 0)) return out;               // can't price Obsidian → skip node actions
       const sunstoneP = obsidianP * 3;                 // 1 Sunstone = 3 Obsidian
       const coinsFree = roadmapCoinsFree(settings);
       const er = coinsFree ? Object.assign({}, exchangeRates, { coinsPerSFL: Infinity }) : exchangeRates;
       const coinSfl = (coins) => coinsFree ? 0 : (er.coinsPerSFL > 0 ? coins / er.coinsPerSFL : 0);
       // islandType and BASE_NODE_COUNTS were only here to guess the purchase count; farmActivity
       // carries it, so neither is needed.
-      const mkItem = (name, cost, cat, marg, desc) => ({ name, type: "Node", floor: cost, boost: desc, supply: 0,
+      // `obsidian`: how much of it the action consumes — the planner rations it (wealth-plan.mjs).
+      const mkItem = (name, cost, cat, marg, desc, obsidian) => ({ name, type: "Node", floor: cost, boost: desc, supply: 0,
+        res: obsidian > 0 ? { obsidian } : undefined,
         clone: { name, categories: [cat], effects: [], fixedMarginal: marg, has: false, isDisabled: false } });
       const MERGEKEY_CAT = { trees: "trees", stones: "stone", iron: "iron", gold: "gold" };
       const cyclesFor = (cat) => { const oeff = roadmapOwnedEffects(cat); const ab = applyBoosts(cat, getDefaultProduct(cat), capacity, oeff); return ab.effectiveCycle > 0 ? 86400 / ab.effectiveCycle : 0; };
@@ -1609,14 +1619,14 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         const nT2 = Math.floor((tiers.t1 || 0) / 4);
         const costT2 = mc.t2.obsidian * obsidianP + coinSfl(mc.t2.coins);
         const gainT2 = (am.merges.find((x) => x.tier === 2) || {}).gainPerDay || 0;
-        if (gainT2 > 0) for (let i = 0; i < Math.min(nT2, 20); i++) out.push(mkItem("Merge " + label + " \u2192 tier 2", costT2, cat, gainT2, "4\u00d7 t1 \u2192 t2 \u00b7 +0.5/cycle \u00b7 " + mc.t2.obsidian + " Obsidian" + (coinsFree ? "" : " + " + (mc.t2.coins / 1000) + "k coins")));
+        if (gainT2 > 0) for (let i = 0; i < Math.min(nT2, 20); i++) out.push(mkItem("Merge " + label + " \u2192 tier 2", costT2, cat, gainT2, "4\u00d7 t1 \u2192 t2 \u00b7 +0.5/cycle \u00b7 " + mc.t2.obsidian + " Obsidian" + (coinsFree ? "" : " + " + (mc.t2.coins / 1000) + "k coins"), mc.t2.obsidian));
         const nT3 = Math.floor((tiers.t2 || 0) / 4);
         const costT3 = mc.t3.obsidian * obsidianP + coinSfl(mc.t3.coins);
         const gainT3 = (am.merges.find((x) => x.tier === 3) || {}).gainPerDay || 0;
-        if (gainT3 > 0) for (let i = 0; i < Math.min(nT3, 10); i++) out.push(mkItem("Merge " + label + " \u2192 tier 3", costT3, cat, gainT3, "4\u00d7 t2 \u2192 t3 \u00b7 +0.5/cycle \u00b7 " + mc.t3.obsidian + " Obsidian" + (coinsFree ? "" : " + " + (mc.t3.coins / 1000) + "k coins")));
+        if (gainT3 > 0) for (let i = 0; i < Math.min(nT3, 10); i++) out.push(mkItem("Merge " + label + " \u2192 tier 3", costT3, cat, gainT3, "4\u00d7 t2 \u2192 t3 \u00b7 +0.5/cycle \u00b7 " + mc.t3.obsidian + " Obsidian" + (coinsFree ? "" : " + " + (mc.t3.coins / 1000) + "k coins"), mc.t3.obsidian));
       }
 
-      // B. Buy new nodes with Sunstone (next 3 per resource; escalating cost).
+      // B. Buy new nodes with Sunstone (next 8 per resource; escalating cost).
       if (typeof NODE_PRICES !== "undefined") for (const [nk, np] of Object.entries(NODE_PRICES)) {
         const cat = np.catId; const fk = RES_FARMKEY[cat]; if (!fk) continue; // mineable/tree nodes only
         /*
@@ -1639,9 +1649,12 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         const acqNode = ascNodeAcq.perType[NODE_ACTIVITY_NAME[nk] || np.label];
         const marg = acqNode ? (acqNode.profitPerDay || 0) : 0;
         if (!(marg > 0)) continue;
-        for (let i = 0; i < 3; i++) {
+        // As deep as the NODES page looks (nodeAcq BUY_DEPTH): with obsidian at production cost
+        // several purchases per type pay back well inside the horizon, and a cut at three stopped
+        // the plan early for no reason. Each costs more than the last, so the plan stops by itself.
+        for (let i = 0; i < 8; i++) {
           const nextSun = np.base + (purchased + i) * np.increase;
-          out.push(mkItem("Buy " + np.label + " node", nextSun * sunstoneP, cat, marg, "+1 node \u00b7 " + nextSun + " Sunstone (" + (nextSun * 3) + " Obsidian)"));
+          out.push(mkItem("Buy " + np.label + " node", nextSun * sunstoneP, cat, marg, "+1 node \u00b7 " + nextSun + " Sunstone (" + (nextSun * 3) + " Obsidian)", nextSun * 3));
         }
       }
       return out;
@@ -1751,8 +1764,18 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       const withdrawPerDay = Math.max(0, settings.withdrawPerDay || 0);
       for (const m of econPos) m.price = m.floor;
       resetClones();
+      // Obsidian is made at a limited rate (nodeAcq measures it): node buys and merges are rationed
+      // to it, or top up from the market at the p2p price when that leaves more FLOWER.
+      const nodeAcqR = (roadmapState && roadmapState.ascension && roadmapState.ascension.nodeAcq) || null;
+      const obsRule = nodeAcqR && Object.values(nodeAcqR.perType || {}).find((x) => x && x.buyRule && x.buyRule.obsidianSfl > 0);
+      const resources = nodeAcqR ? { obsidian: {
+        stock: parseFloat(((powerState.farm || {}).inventory || {}).Obsidian) || 0,
+        perDay: nodeAcqR.obsidianPerDay || 0,
+        market: (powerState.p2pPrices || {}).Obsidian || 0,
+        unitCost: obsRule ? obsRule.buyRule.obsidianSfl : 0,
+      } } : {};
       const plan = planByWealth(econPos, {
-        startIncome, withdrawPerDay, horizonDays: H, driftOverride: settings.nftDriftPerYear,
+        startIncome, withdrawPerDay, horizonDays: H, driftOverride: settings.nftDriftPerYear, resources,
         valueOf: (m) => roadmapItemValue(m.clone, catBoostsW, settings),
         buy: (m) => { m.clone.has = true; },
         unbuy: (m) => { m.clone.has = false; },
