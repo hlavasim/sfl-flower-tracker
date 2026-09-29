@@ -32,7 +32,8 @@ const PROXY = process.env.PROXY_ORIGIN || "https://sunflower.sajmonium.quest";
 const PRICES_URL = "https://sfl.world/api/v1/prices";
 const NFTS_URL = "https://sfl.world/api/v1/nfts";
 const EXCHANGE_URL = "https://sfl.world/api/v1.1/exchange";
-const BTC_URL = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd";
+// CoinGecko's keyless API answers 403 since 2026-09; Coinbase spot is public and keyless.
+const BTC_URL = "https://api.coinbase.com/v2/prices/BTC-USD/spot";
 
 // --- Short-TTL in-process cache for the two upstream fetches -------------------------------
 // /api/compute is a pure read. Each migrated consumer on a page (marks today, more sections
@@ -202,10 +203,10 @@ function _freshness(farmResult, nftResult) {
 async function fetchBtc() {
   const result = await cachedFetch(btcCache, "btc", async () => {
     try {
-      const r = await fetch(`${PROXY}/api/proxy?url=${encodeURIComponent(BTC_URL)}`);
+      const r = await fetch(BTC_URL, { headers: { accept: "application/json" } });
       if (!r.ok) return { ok: false, data: 0 };
       const json = await r.json();
-      return { ok: true, data: json?.bitcoin?.usd || 0 };
+      return { ok: true, data: parseFloat(json?.data?.amount) || 0 };
     } catch {
       return { ok: false, data: 0 };
     }

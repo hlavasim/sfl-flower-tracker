@@ -14,6 +14,12 @@ export default async function handler(req, res) {
     "https://api.sunflower-land.com/",
     "https://sfl.world/",
     "https://api.coingecko.com/",
+    // CoinGecko's keyless API answers 403 to everyone since 2026-09 (CloudFront). BTC/ETH/RON spot
+    // and BTC candles now come from Coinbase, FLOWER's price and history from GeckoTerminal (its
+    // Base DEX pool). All public, keyless, read-only.
+    "https://api.coinbase.com/",
+    "https://api.exchange.coinbase.com/",
+    "https://api.geckoterminal.com/",
     // Yakkamon's public pre-registration API (signup counter + top-100 leaderboard). It
     // serves no CORS headers, so the browser cannot read it directly — same reason the
     // others are here. Read-only and unauthenticated; nothing of ours is exposed.
@@ -49,6 +55,10 @@ export default async function handler(req, res) {
   const CACHE_RULES = [
     { prefix: "https://sfl.world/", ttl: 300 },
     { prefix: "https://api.coingecko.com/", ttl: 300 },
+    { prefix: "https://api.coinbase.com/", ttl: 120 },
+    { prefix: "https://api.exchange.coinbase.com/", ttl: 300 },
+    // GeckoTerminal allows ~30 calls a minute; the shared cache keeps page loads well under it.
+    { prefix: "https://api.geckoterminal.com/", ttl: 300 },
     { prefix: "https://api.sunflower-land.com/community/farms/", ttl: 20 },
     // Signup count moves slowly and the leaderboard regenerates on their side anyway
     // (its own Cache-Control is 15 s); a minute is plenty fresh for a page you read.

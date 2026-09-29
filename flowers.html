@@ -5420,7 +5420,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.85</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.86</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5447,6 +5447,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.86", items: [
+          { t: "fix", text: "<b>BTC and wallet prices are back.</b> CoinGecko's free API now refuses every request (403), so the Investment Tracker / BILANCE, Treasury's BTC figures, Yakkamon and SPEKULACE had no BTC price and the wallet was undervalued. BTC, ETH and RON now come from Coinbase, FLOWER from GeckoTerminal (its Base DEX pool); the SATS / FLOWER chart is FLOWER's pool price divided by BTC at the same time." },
+        ] },
         { ver: "v5.85", items: [
           { t: "feat", text: "<b>TICKETY redone as a checklist.</b> Four numbers on top; today's checklist in groups that open into the concrete steps (which delivery with which items, which chore and how much of it today so the board is done by the Monday reset, which bounty); everything not worth doing in one folded line; one ranking of this chapter's auction and shop items by FLOWER a day on your farm. The rest folds away." },
           { t: "feat", text: "<b>Chapter goal.</b> Pick the auction item you want, your estimate of its price and how many tickets its lot will take: the page says whether collecting gets you there in the weeks left and pays off, or what the gem round or waiting would cost instead — and moves the checklist's worth-it line to what a ticket is worth for that item. Planned for the next chapter once this chapter's auction is over. Synced across devices." },
@@ -19776,7 +19779,8 @@
           one("https://api.yakkamon.com/signups"),
           one("https://api.yakkamon.com/leaderboard").catch(() => null),
           one("https://sfl.world/api/v1.1/exchange").catch(() => null),
-          one("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd").catch(() => null),
+          // CoinGecko's keyless API answers 403 since 2026-09: Coinbase spot instead.
+          one("https://api.coinbase.com/v2/prices/BTC-USD/spot").catch(() => null),
           // Our own endpoint, so no proxy. collect=1 makes the visit itself record the build
           // it is looking at, which fills any window the scheduled collector missed.
           fetch("/api/farm-history?type=yk-board&collect=1").then((r) => (r.ok ? r.json() : null)).catch(() => null),
@@ -19785,7 +19789,7 @@
         _ykLive = {
           signups, board,
           flowerUsd: (ex && ex.sfl && ex.sfl.usd) || 0,
-          btcUsd: (btc && btc.bitcoin && btc.bitcoin.usd) || 0,
+          btcUsd: (btc && btc.data && parseFloat(btc.data.amount)) || 0,
         };
         _ykHistRecord(board);
         _ykLiveErr = null;
@@ -24588,7 +24592,10 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         get("eggs", _specApi("eggs"), (j) => { if (!j || !Array.isArray(j.snapshots)) throw new Error((j && j.error) || "neplatná odpověď"); return j.snapshots; }),
         // The ledger is an owner-only read; refused, the skim tile shows a 🔒 link instead of 0.
         get("ledger", `/api/farm-history?type=btc-tx&farm=${FARM_ID}`, (j) => j.transactions || [], (u) => writeFetch(u, undefined, true)),
-        get("btc", `/api/proxy?url=${encodeURIComponent("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true")}`, (j) => j.bitcoin || null),
+        get("btc", `/api/proxy?url=${encodeURIComponent("https://api.exchange.coinbase.com/products/BTC-USD/stats")}`, (j) => {
+          const last = parseFloat(j && j.last), open = parseFloat(j && j.open);
+          return last > 0 ? { usd: last, usd_24h_change: open > 0 ? (last / open - 1) * 100 : null } : null;
+        }),
         (async () => { if (_spec.p2p && !force) return; try { _spec.p2p = await fetchP2PLatest(); } catch (e) { _spec.err.p2p = e.message; } })(),
         (async () => { if (_spec.sats && !force) return; try { _spec.sats = await _invLoadSats("1d"); } catch (e) { _spec.err.sats = String(e); } })(),
       ]);
@@ -26946,13 +26953,46 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       _invDrawSatsChart();
     }
 
-    // One granularity of the series, fetched once and cached. Rejects when CoinGecko is unavailable.
+    // One granularity of the series, fetched once and cached. CoinGecko's keyless API answers 403
+    // since 2026-09, so the series is built: FLOWER in USD from its main Base pool (FLOWER/USDC,
+    // GeckoTerminal OHLCV) divided by BTC in USD (Coinbase candles) at each point. Rejects when
+    // either source fails.
+    const _SATS_POOL = "0xafe30319a948f322585fafc1cab1671a47eb3786";
+    const _SATS_SRC = {   // GeckoTerminal timeframe/aggregate/limit, Coinbase granularity (s)
+      "5m": { tf: "minute", agg: 5, limit: 288, cb: 300 },
+      "1h": { tf: "hour", agg: 1, limit: 336, cb: 3600 },
+      "4h": { tf: "hour", agg: 4, limit: 540, cb: 21600 },
+      "1d": { tf: "day", agg: 1, limit: 365, cb: 86400 },
+    };
+    const _proxyJson = (u) => fetch(`/api/proxy?url=${encodeURIComponent(u)}`).then(r => r.ok ? r.json() : Promise.reject(r.status));
+    // Coinbase returns at most 300 candles a call: page back from now over the span.
+    async function _btcCandles(gran, fromSec) {
+      const out = [];
+      let end = Math.floor(Date.now() / 1000);
+      while (end > fromSec) {
+        const start = Math.max(fromSec, end - gran * 299);
+        const rows = await _proxyJson(`https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=${gran}&start=${new Date(start * 1000).toISOString()}&end=${new Date(end * 1000).toISOString()}`);
+        if (!Array.isArray(rows) || !rows.length) break;
+        for (const r of rows) out.push([r[0], r[4]]);          // [time, low, high, open, close, volume]
+        end = start - 1;
+      }
+      return out.sort((a, b) => a[0] - b[0]);
+    }
     async function _invLoadSats(gran) {
       if (_satsCache[gran]) return _satsCache[gran];
-      const cfg = _SATS_GRAN[gran];
-      const url = `https://api.coingecko.com/api/v3/coins/flower-2/market_chart?vs_currency=btc&days=${cfg.days}`;
-      const j = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`).then(r => r.ok ? r.json() : Promise.reject(r.status));
-      let pts = (j.prices || []).map(([ms, btc]) => ({ time: Math.floor(ms / 1000), value: btc * 1e8 }));
+      const cfg = _SATS_GRAN[gran], src = _SATS_SRC[gran];
+      const gt = await _proxyJson(`https://api.geckoterminal.com/api/v2/networks/base/pools/${_SATS_POOL}/ohlcv/${src.tf}?aggregate=${src.agg}&limit=${src.limit}&currency=usd`);
+      const fl = ((gt && gt.data && gt.data.attributes && gt.data.attributes.ohlcv_list) || []).map(r => [r[0], r[4]]).sort((a, b) => a[0] - b[0]);
+      if (!fl.length) throw new Error("GeckoTerminal: no data");
+      const btc = await _btcCandles(src.cb, fl[0][0] - src.cb);
+      if (!btc.length) throw new Error("Coinbase: no data");
+      // The BTC close at or just before each FLOWER point.
+      let j = 0;
+      let pts = [];
+      for (const [t, usd] of fl) {
+        while (j + 1 < btc.length && btc[j + 1][0] <= t) j++;
+        if (btc[j][0] <= t && btc[j][1] > 0 && usd > 0) pts.push({ time: t, value: (usd / btc[j][1]) * 1e8 });
+      }
       if (cfg.bucketSec > 0) {          // downsample to the bucket: last value in each window
         const by = {};
         for (const p of pts) by[Math.floor(p.time / cfg.bucketSec) * cfg.bucketSec] = p.value;

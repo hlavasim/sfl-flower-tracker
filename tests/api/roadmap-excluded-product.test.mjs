@@ -20,7 +20,7 @@ async function roadmap(roadmapSettings) {
     if (u.includes("v1/prices")) return { ok: true, status: 200, json: async () => ({ data: { p2p: JSON.parse(p2pText) } }) };
     if (u.includes("v1/nfts")) return { ok: true, status: 200, json: async () => nfts };
     if (u.includes("exchange")) return { ok: true, status: 200, json: async () => ({ data: {} }) };
-    if (u.includes("coingecko")) return { ok: true, status: 200, json: async () => ({}) };
+    if (u.includes("coinbase")) return { ok: true, status: 200, json: async () => ({}) };
     return { ok: true, status: 200, json: async () => JSON.parse(fixture) };
   };
   _clearCacheForTests({});

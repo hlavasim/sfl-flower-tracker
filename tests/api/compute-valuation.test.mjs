@@ -27,7 +27,7 @@ function upstream(o = {}) {
     if (u.includes("v1/prices")) return o.pricesDown ? fail(503) : ok({ data: { p2p: JSON.parse(p2pText) } });
     if (u.includes("v1/nfts")) return ok(o.nfts || nftsSample);
     if (u.includes("exchange")) return ok({ sfl: { usd: 0.15 }, coins: { a: { coin: 64000, sfl: 200 } }, gems: { a: { gem: 100, sfl: 1 } } });
-    if (u.includes("coingecko")) return ok({ bitcoin: { usd: 86000 } });
+    if (u.includes("coinbase")) return ok({ data: { amount: "86000" } }); // BTC/USD spot (CoinGecko 403s since 2026-09)
     if (o.farmDown) return fail(429);
     return ok(JSON.parse(fixtureText));
   };

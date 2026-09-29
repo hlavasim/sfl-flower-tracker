@@ -273,7 +273,7 @@ function mockFetchForAscension() {
     // the wishlist catalog empty.
     if (u.includes("v1/nfts")) return { ok: true, status: 200, json: async () => JSON.parse(nfts) };
     if (u.includes("exchange")) return { ok: true, status: 200, json: async () => ({ data: {} }) };
-    if (u.includes("coingecko")) return { ok: true, status: 200, json: async () => ({}) };
+    if (u.includes("coinbase")) return { ok: true, status: 200, json: async () => ({}) };
     return { ok: true, status: 200, json: async () => JSON.parse(fixtureText) };
   };
 }

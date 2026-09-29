@@ -75,13 +75,27 @@ export async function readAddress(addr) {
   return out;
 }
 
+/*
+ * USD prices of what the wallets hold. CoinGecko's keyless API answers 403 to everyone since
+ * 2026-09, so: BTC / ETH / RON spot from Coinbase, FLOWER from GeckoTerminal (the token on Base,
+ * priced by its DEX pools). A price that fails stays undefined — that holding is shown unpriced,
+ * the others still count; only when every source fails is it an error.
+ */
+const COINBASE_PAIRS = { bitcoin: "BTC-USD", ethereum: "ETH-USD", ronin: "RON-USD" };
+const FLOWER_BASE = "0x3e12b9d6a4d12cd9b4a6d613872d0eb32f68b380";
 export async function fetchPrices() {
-  const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${PRICE_IDS.join(",")}&vs_currencies=usd`,
-    { headers: { "user-agent": UA, accept: "application/json" } });
-  if (!r.ok) throw new Error(`coingecko ${r.status}`);
-  const j = await r.json();
+  const get = (u) => fetch(u, { headers: { "user-agent": UA, accept: "application/json" } })
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`${new URL(u).host} ${r.status}`))));
   const p = { usd: 1 };
-  for (const id of PRICE_IDS) p[id] = j[id] && j[id].usd;
+  const errs = [];
+  await Promise.all([
+    ...Object.entries(COINBASE_PAIRS).map(([id, pair]) => get(`https://api.coinbase.com/v2/prices/${pair}/spot`)
+      .then((j) => { const v = parseFloat(j && j.data && j.data.amount); if (v > 0) p[id] = v; }).catch((e) => errs.push(e.message))),
+    get(`https://api.geckoterminal.com/api/v2/simple/networks/base/token_price/${FLOWER_BASE}`)
+      .then((j) => { const v = parseFloat(j && j.data && j.data.attributes && j.data.attributes.token_prices && j.data.attributes.token_prices[FLOWER_BASE]); if (v > 0) p["flower-2"] = v; })
+      .catch((e) => errs.push(e.message)),
+  ]);
+  if (PRICE_IDS.every((id) => !(p[id] > 0))) throw new Error(`prices: ${errs.join(", ") || "none"}`);
   return p;
 }
 
