@@ -257,7 +257,10 @@ test("F: the crop machine panel applies machine-reaching yield boosts only (no p
   const out = power(farm);
   const sun = out.cropMachine.rows.find((r) => r.crop === "Sunflower");
   const plot = applyBoosts("crops", "Sunflower", out.capacity, ownedEff(out, "crops"), farm);
-  assert.ok(Math.abs((1 * plot.yieldMult + plot.yieldFlat) - sun.yieldPerSeed - 0.5) < 1e-3,
-    "a plot gets Sir Goldensnout's +0.5, a machine pack does not (harvest.ts needs a plot)");
+  // Its +0.5 reaches the 12 plots around it (area of effect), so per plot on average it is
+  // 0.5 x min(1, 12 / plots).
+  const covered = 0.5 * Math.min(1, 12 / out.capacity.crops);
+  assert.ok(Math.abs((1 * plot.yieldMult + plot.yieldFlat) - sun.yieldPerSeed - covered) < 1e-3,
+    "a plot gets Sir Goldensnout's +0.5 (within its area), a machine pack does not (harvest.ts needs a plot)");
   assert.ok(!sun.active.concat(sun.available).some((e) => e.name === "Sir Goldensnout"), "and it is not listed as a machine boost");
 });

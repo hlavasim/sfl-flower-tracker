@@ -77,10 +77,15 @@
         { type: "daily_flat", value: 5, cat: "fishing", raw: "+5 daily fishing reels" },
         { type: "yield_flat", value: 1 / 15, cat: "fishing", conditional: "every 15th reel", raw: "+1 random fish every 15th reel" },
       ],
+      // The game MULTIPLIES the multiplicative part of the yield by 10 on a 10 % crit
+      // (harvest.ts getMultiplicativeCropYield: amount *= 10, before the additive boosts), so the
+      // expected effect is x1.9 on that part — not "+10", which overstated it by ~10 % on a base of
+      // 1 and ignored Scarecrow / Kuebiko / Golden Cauliflower, which it also multiplies. Rice and
+      // Olive take the same path (harvestGreenHouse.ts calls getCropYieldAmount).
       "Green Amulet": [
-        { type: "chance", pct: 10, extra: 10, cat: "crops", raw: "10% chance +10 Crop yield" },
-        { type: "chance", pct: 10, extra: 10, cat: "greenhouse", product: "Rice", raw: "10% chance +10 Rice (greenhouse)" },
-        { type: "chance", pct: 10, extra: 10, cat: "greenhouse", product: "Olive", raw: "10% chance +10 Olive (greenhouse)" },
+        { type: "yield_pct", value: 90, cat: "crops", raw: "10% chance x10 Crop yield (EV x1.9)" },
+        { type: "yield_pct", value: 90, cat: "greenhouse", product: "Rice", raw: "10% chance x10 Rice (EV x1.9)" },
+        { type: "yield_pct", value: 90, cat: "greenhouse", product: "Olive", raw: "10% chance x10 Olive (EV x1.9)" },
       ],
       "Oracle Syringe": [
         { type: "sickness_reduction", value: 1.0, cat: "chickens", raw: "Free cure for sick animals" },
@@ -128,6 +133,40 @@
       // arrives cut: "50% Feed to"), so both were worth 0. Rules from the game source (2026-09-24):
       // plantGreenhouse.ts `seconds *= 0.5` with Turbo Sprout built; lib/animals.ts halves the base
       // feed of Sheep and Cows while Infernal Bullwhip is worn.
+      // mineCrimstone.ts: a 10 % instant recovery AND x0.9 on the rest, so the expected recovery
+      // is 0.9 x 0.9 = x0.81 of the time.
+      "Crimstone Clam": [
+        { type: "speed_mult", value: 0.81, cat: "crimstone", raw: "10% instant recovery + x0.9 Crimstone recovery (EV x0.81)" },
+      ],
+      /*
+       * AREA-OF-EFFECT items reach only the tiles around them (collisionDetection.ts isWithinAOE):
+       * `aoeTiles` is how many plots / nodes the area holds at best, `aoeShare` the categories that
+       * compete for those tiles. applyBoosts / gameResBoostedBase scale the effect by the share of
+       * the farm's plots or nodes it can cover. Valued on every node, Emerald Turtle read 9 FLOWER/day
+       * on a farm where eight tiles hold at most ~3.4.
+       */
+      "Emerald Turtle": [
+        { type: "yield_flat", value: 0.5, cat: "stone", product: "Stone", aoeTiles: 8, aoeShare: ["stone", "iron", "gold"], raw: "+0.5 Stone (8 tiles around it)" },
+        { type: "yield_flat", value: 0.5, cat: "iron", product: "Iron", aoeTiles: 8, aoeShare: ["stone", "iron", "gold"], raw: "+0.5 Iron (8 tiles around it)" },
+        { type: "yield_flat", value: 0.5, cat: "gold", product: "Gold", aoeTiles: 8, aoeShare: ["stone", "iron", "gold"], raw: "+0.5 Gold (8 tiles around it)" },
+      ],
+      "Tin Turtle": [
+        { type: "yield_flat", value: 0.1, cat: "stone", product: "Stone", aoeTiles: 8, aoeShare: ["stone"], raw: "+0.1 Stone (8 tiles around it)" },
+      ],
+      // A 4x4 square around the 2x2 statue: 12 plots (collisionDetection.ts "Sir Goldensnout").
+      "Sir Goldensnout": [
+        { type: "yield_flat", value: 0.5, cat: "crops", aoeTiles: 12, aoeShare: ["crops"], raw: "+0.5 crop yield (12 plots around it)" },
+      ],
+      // +0.1 only on plots that a bee swarm pollinated (harvest.ts plot.beeSwarm); how often hives
+      // swarm is decided on the server, so it cannot be priced. It was +0.1 on every crop harvest.
+      "Pollen Power Up": [
+        { type: "qualitative", cat: "crops", raw: "+0.1 crop yield on plots after a bee swarm (swarm rate unknown — not valued)" },
+      ],
+      // +0.5 greenhouse yield, but every planting takes one more seed (plantGreenhouse.ts).
+      "Seeded Bounty": [
+        { type: "yield_flat", value: 0.5, cat: "greenhouse", raw: "+0.5 Greenhouse yield" },
+        { type: "seed_extra", value: 1, cat: "greenhouse", raw: "+1 seed per planting" },
+      ],
       "Turbo Sprout": [
         { type: "speed_mult", value: 0.5, cat: "greenhouse", raw: "-50% Greenhouse growth time" },
       ],
@@ -248,15 +287,18 @@
           const cat = PRODUCT_TO_CATEGORY[prod] || "other";
           return { type: "yield_flat", value: parseFloat(m[1]) / 5, cat, product: prod, conditional: "5th mine" };
         }},
-      // "N% chance x3 Product yield" → effective = (pct/100) * (3-1) = pct/100 * 2 extra
+      // "N% chance x3 Product yield" (Tough Tree): the game MULTIPLIES the yield on the crit, after
+      // the other multipliers and before the flat bonuses (chop.ts), so the expected effect is
+      // x(1 + pct/100 x (mult-1)) on the multiplicative part — a yield_pct. It was a flat
+      // pct/100 x (mult-1), right only with no other multiplier: with Beaver / Lumberjack it
+      // undervalued Tough Tree by 20-78 %.
       { rx: /(\d+\.?\d*)%\s+chance\s+x(\d+)\s+(\w+)/i,
         fn: m => {
           const prod = m[3].trim();
           const cat = PRODUCT_TO_CATEGORY[prod] || "other";
           const pct = parseFloat(m[1]);
           const mult = parseFloat(m[2]);
-          // Effective extra yield = pct% × (mult - 1) × baseYield (use 1 as proxy)
-          return { type: "yield_flat", value: pct / 100 * (mult - 1), cat, product: prod, conditional: `${pct}% x${mult}` };
+          return { type: "yield_pct", value: pct * (mult - 1), cat, product: prod, conditional: `${pct}% x${mult}` };
         }},
       // "1/N chance +X Product" → effective = X / N (e.g., Golden Sunflower: "1/700 chance +0.35 Gold")
       { rx: /1\/(\d+)\s+chance\s+\+?(\d+\.?\d*)\s+([\w\s]+?)$/i,
@@ -332,6 +374,12 @@
       // Parsed as qualitative before, which valued the skill and all its ranks at exactly 0.
       { rx: /([\d.]+)%\s+chance\s+(trees?|crops?)\s+grows?\s+instantly/i,
         fn: m => ({ type: "speed_pct", value: -parseFloat(m[1]), cat: /tree/i.test(m[2]) ? "trees" : "crops" }) },
+      // Same for mining: "10% chance for Crimstone to recover instantly" (Crimstone Clam),
+      // "…for gold…" (Pickaxe Shark). mineCrimstone.ts / mineGold.ts return recoveryTimeMs 0 on
+      // the crit, so the expected recovery is (1-p)·T. It read as qualitative, and the missing
+      // speed showed up as measured activity ABOVE 100 % on gold and crimstone.
+      { rx: /([\d.]+)%\s+chance\s+for\s+(stone|iron|gold|crimstone)\s+to\s+recover\s+instantly/i,
+        fn: m => ({ type: "speed_pct", value: -parseFloat(m[1]), cat: m[2].toLowerCase() }) },
       // Greenhouse growth time: "-5% Greenhouse Growth Time"
       { rx: /([+-]?\d+\.?\d*)%\s+Greenhouse\s+(?:Growth|Growing|Production)\s+Time/i,
         fn: m => ({ type: "speed_pct", value: parseFloat(m[1]), cat: "greenhouse" }) },

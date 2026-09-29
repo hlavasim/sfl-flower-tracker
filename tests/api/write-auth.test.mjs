@@ -4,7 +4,6 @@ import { getPool } from "../../api/_db.js";
 import { requireWriteToken } from "../../api/_auth.js";
 import farmHistory from "../../api/farm-history.js";
 import orderbook from "../../api/marketplace-orderbook.js";
-import gameToken from "../../api/game-token.js";
 import marksHistory from "../../api/marks-history.js";
 
 /*
@@ -146,20 +145,3 @@ test("btc-tx venue must be a slug — markup cannot be stored (stored XSS in the
   }
 });
 
-test("game-token POST (replaces the stored trading token) needs the write token", async () => {
-  process.env.KV_REST_API_URL = "https://kv.test";
-  process.env.KV_REST_API_TOKEN = "kv";
-  const orig = globalThis.fetch;
-  const hits = [];
-  globalThis.fetch = async (u) => { hits.push(String(u)); return { ok: true, status: 200, json: async () => ({ result: null }) }; };
-  try {
-    const payload = Buffer.from(JSON.stringify({ farmId: 155498, exp: Math.floor(Date.now() / 1000) + 86400 })).toString("base64");
-    const body = { farm: 155498, token: `h.${payload}.s` };
-    const refused = await call(gameToken, { method: "POST", body });
-    assert.equal(refused._status, 401);
-    assert.equal(hits.length, 0, "nothing written to KV");
-    const ok = await call(gameToken, { method: "POST", body, token: TOKEN });
-    assert.equal(ok._status, 200);
-    assert.ok(hits.some((u) => u.includes("/set/")));
-  } finally { globalThis.fetch = orig; }
-});

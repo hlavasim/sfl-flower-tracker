@@ -58,3 +58,14 @@ test("stalls that would lose money are not filled: the item keeps at least its e
   catBoostsW.chickens.push(coop, eggCopy);
   assert.ok(rm.roadmapItemValue(coop, catBoostsW, settings) >= rm.roadmapItemValue(eggCopy, catBoostsW, settings) - 1e-9);
 });
+
+test("the POWER page's value (calcBoostValue) carries the stalls too, not just the egg", () => {
+  const { pd, catBoostsW } = setup();
+  pd.capacity.goldenAnimals = { ...(pd.capacity.goldenAnimals || {}), Chicken: true };
+  const eggCopy = { ...coop, name: "Egg-only copy" };
+  const withStalls = rm.calcBoostValue(coop, "chickens", "Egg", pd.capacity, pd.p2pPrices, catBoostsW.chickens.concat(coop), false);
+  const eggOnly = rm.calcBoostValue(eggCopy, "chickens", "Egg", pd.capacity, pd.p2pPrices, catBoostsW.chickens.concat(eggCopy), false);
+  assert.ok(withStalls.synergy > eggOnly.synergy * 1.5, `${withStalls.synergy} vs ${eggOnly.synergy}`);
+  const owned = rm.calcBoostValue(coop, "chickens", "Egg", pd.capacity, pd.p2pPrices, catBoostsW.chickens.concat(coop), true);
+  assert.ok(owned.synergy <= eggOnly.synergy + 1e-9, "an owned Coop's stalls are already on the farm: no stall credit");
+});

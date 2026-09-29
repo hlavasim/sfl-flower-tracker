@@ -74,7 +74,7 @@ import { roiComputeCategory } from "../engine/roi-calc.mjs";
       for (const [skillName, skill] of Object.entries(SKILL_TREE_DATA)) {
         const has = skills[skillName] !== undefined;
         const boostText = skill.buff + (skill.debuff ? "\n" + skill.debuff : "");
-        const effects = parseBoostEffects(boostText);
+        const effects = parseBoostEffects(boostText, skillName);
         if (SKILL_FEED_EFFECTS[skillName]) {
           for (const [cat, value] of Object.entries(SKILL_FEED_EFFECTS[skillName])) {
             effects.push({ type: "feed_reduction", value, cat });

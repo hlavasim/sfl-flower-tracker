@@ -505,7 +505,15 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
     // ── flowers.html 15360-15419: calcBoostValue ──
     function calcBoostValue(boostItem, catId, product, capacity, p2pPrices, allCatBoosts, isOwned, effMode) {
       const catEffects = getEffectsForCategory(boostItem, catId);
-      if (catEffects.length === 0) return { solo: 0, synergy: 0, roi: Infinity };
+      // Capacity boosters: the stalls they add (capacityStallGain). The better of that and the
+      // item's effects on the herd as it is — nobody has to fill stalls that lose money.
+      const _sCap = Object.assign({}, getRoadmapSettings(powerState.roadmapSettingsRaw), effMode === "measured" ? { seasonBasis: "annual" } : { effMode: "theoretical", effOverrides: {}, seasonBasis: "annual" });
+      const stallGain = (isOwned || boostItem.isDisabled) ? null : capacityStallGain(boostItem, catId, catEffects,
+        (c) => (c === catId ? allCatBoosts : (powerState.boostItems || [])).filter(b => b.has && !b.isDisabled && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, c)).concat(_shrineEffectsFor(c)), _sCap);
+      if (catEffects.length === 0) {
+        if (stallGain > 0) return { solo: stallGain, synergy: stallGain, roi: boostItem.floor > 0 ? boostItem.floor / stallGain : Infinity, capacityStalls: true };
+        return { solo: 0, synergy: 0, roi: Infinity };
+      }
 
       // If this boost is disabled by a stronger owned item, it contributes nothing
       if (boostItem.isDisabled) {
@@ -599,6 +607,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         synergy = net(ownedEff.concat(catEffects)) - net(ownedEff);
         solo = net(catEffects) - net([]);
         netWithout = net(ownedEff); netWith = netWithout + synergy;   // for the formula panel
+        if (stallGain !== null && stallGain > synergy) { synergy = stallGain; solo = Math.max(solo, stallGain); }
       }
       /*
        * Coin drops per harvest (coin_chance): Money Tree's "1% chance +200 Coins chopping
@@ -777,60 +786,54 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
      */
     /*
      * A CAPACITY BOOSTER (Chicken Coop, Barn Blueprint) is worth the animals it makes room for, not
-     * only its yield line. The buy path read the Coop's "+5 Base Chickens / +5 per upgrade" as a
-     * qualitative note and valued it at +0.54/day — the +1 Egg on the 20 birds already there —
-     * while at hen house level 3 it is 20 -> 35 birds. So the category net is computed with the
-     * stalls filled and the item's effects on, minus the net today. The new animals are modelled at
-     * the levels the current herd has (they get there with time; the item is held for years), and
-     * both sides are taken at full stalls, so empty stalls you have today are not credited to it.
-     * Buying the animals themselves (coins) is not charged. In a shared barn the new stalls go to
-     * whichever species gains more from them, never to both.
-     * Returns null when the item is no capacity booster, is owned, or the building has no herd yet
-     * (that case is the startup planner's).
+     * only its yield line: at hen house level 3 the Coop is 20 -> 35 birds, and valuing only its
+     * +1 Egg read +0.54/day. Both sides are taken at FULL stalls (stalls you already have would be
+     * filled without it), the new animals at the levels the current herd has, and the item's own
+     * effects on. Buying the animals (coins) is not charged. In a shared barn the stalls count for
+     * the species that gains more from them, never for both. null = not a booster for `cat`, owned,
+     * or no herd yet (the startup planner's case). Theoretical basis: callers scale it like any
+     * other value. Lives here, in calcBoostValue, so the POWER page, the wishlist and the roadmap
+     * all read one number.
      */
-    function roadmapCapacityBoosterValue(clone, catBoostsW, settings) {
-      if (!clone || clone.has) return null;
+    function capacityStallGain(item, cat, itemEff, ownedFor, s) {
+      if (!item || item.has || ["chickens", "cows", "sheep"].indexOf(cat) < 0) return null;
       const { capacity } = powerState;
       if (!capacity || !capacity.animalDetails) return null;
-      let best = null;
-      for (const cat of ["chickens", "cows", "sheep"]) {
-        if ((settings.excludeCats || []).indexOf(cat) >= 0) continue;
-        const cap = roadmapAnimalCapacity(cat);
-        if (!cap || cap.booster !== clone.name) continue;
-        const herd = capacity.animalDetails[cat] || [];
+      const gainFor = (c, mine) => {
+        const cap = roadmapAnimalCapacity(c);
+        if (!cap || cap.booster !== item.name) return null;
+        const herd = capacity.animalDetails[c] || [];
+        if (!herd.length) return null;
         const extra = Math.max(0, cap.boostedTotal - cap.total);
-        if (!herd.length) continue;
-        const owned = (catBoostsW[cat] || []).filter((b) => b.has && !b.isDisabled)
-          .flatMap((b) => b.effects.filter((e) => e.cat === cat)).concat(_shrineEffectsFor(cat));
-        const mine = clone.effects.filter((e) => e.cat === cat);
-        const cnt0 = capacity[cat];
-        // Both sides at FULL stalls: stalls you already have would be filled without the item, so
-        // only the ones it adds are its credit. (In a shared barn "full" is this species' share.)
         const room = cap.shared ? (cap.mine || 0) + cap.free : cap.total;
+        const cnt0 = capacity[c];
         const fill = (n) => {
-          capacity[cat] = n;
-          capacity.animalDetails[cat] = n <= herd.length ? herd : herd.concat(Array.from({ length: n - herd.length }, (_, i) => ({ ...herd[i % herd.length] })));
+          capacity[c] = n;
+          capacity.animalDetails[c] = n <= herd.length ? herd : herd.concat(Array.from({ length: n - herd.length }, (_, i) => ({ ...herd[i % herd.length] })));
         };
-        let gain = 0;
+        const owned = ownedFor(c);
         try {
           fill(Math.max(herd.length, room));
-          const before = roadmapCatNet(cat, owned, settings);
+          const before = roadmapCatNet(c, owned, s);
           fill(Math.max(herd.length, room) + extra);
-          gain = roadmapCatNet(cat, owned.concat(mine), settings) - before;
-        } catch (e) { gain = 0; }
-        finally { capacity[cat] = cnt0; capacity.animalDetails[cat] = herd; }
-        gain = Math.max(0, gain) * roadmapEffFactor(cat, settings);
-        if (best === null || gain > best) best = gain;
+          return roadmapCatNet(c, owned.concat(mine), s) - before;
+        } catch (e) { return 0; }
+        finally { capacity[c] = cnt0; capacity.animalDetails[c] = herd; }
+      };
+      const here = gainFor(cat, itemEff);
+      if (here === null) return null;
+      const cap = roadmapAnimalCapacity(cat);
+      if (cap && cap.shared) {
+        const other = cat === "cows" ? "sheep" : "cows";
+        const there = gainFor(other, (item.effects || []).filter((e) => e.cat === other));
+        if (there !== null && there > here) return 0;
       }
-      return best;
+      return Math.max(0, here);
     }
 
     function roadmapItemValue(clone, catBoostsW, settings) {
       if (!clone) return 0;
       if (clone.fixedMarginal !== undefined) return clone.fixedMarginal; // node merge/expand actions
-      // A capacity booster is worth the better of: filling the stalls it adds, or its effects on the
-      // herd as it is (nobody has to fill stalls that lose money).
-      const capValue = roadmapCapacityBoosterValue(clone, catBoostsW, settings);
       let total = 0;
       const _exV = (settings.excludeCats || []);
       const { capacity, p2pPrices, savedProducts } = powerState;
@@ -853,7 +856,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         // scaling is applied here, the same way core/sections/power.mjs scales what it displays.
         if (v > 0) total += v * roadmapEffFactor(cat, settings);
       }
-      return capValue !== null ? Math.max(capValue, total) : total;
+      return total;
     }
 
     // "Situational" value: what a boost is worth if you DID run the activity it touches, even when that

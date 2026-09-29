@@ -215,7 +215,7 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     const boostText = skill.buff + (skill.debuff ? "\n" + skill.debuff : "");
     const needs = skillNeedsPlaced[skillName];
     const inactive = !!(needs && !collectibleActive(needs));
-    const effects = inactive ? [] : parseBoostEffects(boostText);
+    const effects = inactive ? [] : parseBoostEffects(boostText, skillName);
     // Inject feed reduction effects for named animal skills
     if (SKILL_FEED_EFFECTS[skillName]) {
       for (const [cat, value] of Object.entries(SKILL_FEED_EFFECTS[skillName])) {

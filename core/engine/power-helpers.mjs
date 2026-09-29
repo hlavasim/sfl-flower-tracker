@@ -734,6 +734,16 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
     // Apply a set of boost effects to calculate boosted production
     // Returns { unitsPerDay, speedMult, yieldMult, yieldFlat, details }
     // Deviation 1 (see header): `farm` param replaces the page's `powerState.farm` global.
+    /*
+     * Share of a category's plots / nodes an AREA-OF-EFFECT effect can reach: aoeTiles over the
+     * plots or nodes of every category competing for them (aoeShare), at most 1. Non-area effects: 1.
+     */
+    function aoeCoverage(eff, n, capacity) {
+      if (!eff || !(eff.aoeTiles > 0)) return 1;
+      const cats = eff.aoeShare && eff.aoeShare.length ? eff.aoeShare : [eff.cat];
+      const total = cats.reduce((s, c) => s + (c === eff.cat && n > 0 ? n : (getCapacityCount(c, capacity || {}) || 0)), 0);
+      return total > 0 ? Math.min(1, eff.aoeTiles / total) : 1;
+    }
     function applyBoosts(catId, product, capacity, boostEffects, farm) {
       const baseCycleSec = getCycleSec(catId, product);
       const baseYield = getBaseYield(catId);
@@ -762,14 +772,18 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
           case "speed_pct":
             speedMult *= (1 + eff.value / 100);
             break;
-          case "speed_mult":
-            speedMult *= eff.value;
+          case "speed_mult": {
+            // An area item speeds only the plots it covers: the farm-wide rate is the covered share
+            // at the faster rate plus the rest at the normal one.
+            const f = aoeCoverage(eff, n, capacity);
+            speedMult *= f >= 1 ? eff.value : 1 / ((1 - f) + f / eff.value);
             break;
+          }
           case "yield_pct":
             yieldMult *= (1 + eff.value / 100);
             break;
           case "yield_flat":
-            yieldFlat += eff.value;
+            yieldFlat += eff.value * aoeCoverage(eff, n, capacity);
             break;
           case "chance":
             // Expected value: pct% chance of +extra per cycle
@@ -989,7 +1003,9 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
       // Fold the parsed boost effects (API/EXTRA collectibles + skills) for this resource.
       for (const e of (effects || [])) {
         if (e.cat !== cat) continue;
-        if (e.type === "yield_flat") add += (e.value || 0);
+        if (e.type === "yield_flat") add += (e.value || 0) * aoeCoverage(e, Object.keys(farm[RES_FARMKEY[e.cat]] || {}).length,
+          { stones: Object.keys(farm.stones || {}).length, iron: Object.keys(farm.iron || {}).length, gold: Object.keys(farm.gold || {}).length,
+            crimstones: Object.keys(farm.crimstones || {}).length, trees: Object.keys(farm.trees || {}).length });
         else if (e.type === "yield_pct") mult *= (1 + (e.value || 0) / 100);
         else if (e.type === "yield_mult") mult *= (e.value || 1);
       }
@@ -1024,9 +1040,13 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
       // replace it with +0.3, i.e. +0.1 more — which is exactly the skill's own parsed effect
       // (power.mjs keeps it only while the crow is placed). Adding 0.3 here as well counted the
       // skill twice: +0.4 on every medium/advanced crop.
-      if (ownsC("Scary Mike")) out.push({ type: "yield_flat", value: 0.2, cat: "crops", cropTier: "medium", raw: "Scary Mike +0.2 medium crops", source: "Scary Mike", aoe: true });
-      if (ownsC("Laurie the Chuckle Crow")) out.push({ type: "yield_flat", value: 0.2, cat: "crops", cropTier: "advanced", raw: "Laurie +0.2 advanced crops", source: "Laurie the Chuckle Crow", aoe: true });
-      if (ownsC("Sir Goldensnout")) out.push({ type: "yield_flat", value: 0.5, cat: "crops", raw: "Sir Goldensnout +0.5 crops (AOE)", source: "Sir Goldensnout", aoe: true });
+      // Area sizes (collisionDetection.ts getAOEExtent): a scarecrow-type item covers 3x3 = 9 plots,
+      // widened to 7x7 / 8x8 / 9x9 by its rank skill; Sir Goldensnout 12. Scaled by the share of the
+      // plots they can reach (aoeCoverage) — they were counted on every plot.
+      const aoeRank = (skill) => { const r = Math.floor(+skills[skill] || 0); return r > 0 ? [49, 64, 81][Math.min(r, 3) - 1] : 9; };
+      if (ownsC("Scary Mike")) out.push({ type: "yield_flat", value: 0.2, cat: "crops", cropTier: "medium", raw: "Scary Mike +0.2 medium crops", source: "Scary Mike", aoe: true, aoeTiles: aoeRank("Horror Mike") });
+      if (ownsC("Laurie the Chuckle Crow")) out.push({ type: "yield_flat", value: 0.2, cat: "crops", cropTier: "advanced", raw: "Laurie +0.2 advanced crops", source: "Laurie the Chuckle Crow", aoe: true, aoeTiles: aoeRank("Laurie's Gains") });
+      if (ownsC("Sir Goldensnout")) out.push({ type: "yield_flat", value: 0.5, cat: "crops", raw: "Sir Goldensnout +0.5 crops (AOE)", source: "Sir Goldensnout", aoe: true, aoeTiles: 12 });
       // Global crop additions
       if (farmWearableEquipped(farm, "Infernal Pitchfork")) out.push({ type: "yield_flat", value: 3, cat: "crops", raw: "Infernal Pitchfork +3 crops", source: "Infernal Pitchfork" });
       if (ownsC("Cabbage Boy")) { out.push({ type: "yield_flat", value: 0.25, cat: "crops", product: "Cabbage", raw: "Cabbage Boy +0.25", source: "Cabbage Boy" }); if (ownsC("Cabbage Girl")) out.push({ type: "yield_flat", value: 0.25, cat: "crops", product: "Cabbage", raw: "Cabbage Girl +0.25", source: "Cabbage Girl" }); }
@@ -1058,7 +1078,7 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
       if (ownsC("Immortal Pear")) out.push({ type: "extra_harvest", value: rankMult("Pear Turbocharge", [2, 3, 4]), cat: "fruits", raw: "Immortal Pear +harvest per seed", source: "Immortal Pear" });
       // Basic Scarecrow: ×0.8 basic-crop growth time inside its area (plant.ts); Chonky Scarecrow's
       // extra is its own parsed skill effect, kept by power.mjs only while this is placed.
-      if (ownsC("Basic Scarecrow")) out.push({ type: "speed_mult", value: 0.8, cat: "crops", cropTier: "basic", raw: "Basic Scarecrow ×0.8 basic crop time", source: "Basic Scarecrow", aoe: true });
+      if (ownsC("Basic Scarecrow")) out.push({ type: "speed_mult", value: 0.8, cat: "crops", cropTier: "basic", raw: "Basic Scarecrow ×0.8 basic crop time", source: "Basic Scarecrow", aoe: true, aoeTiles: aoeRank("Chonky Scarecrow") });
       // Bale: +0.1 Egg always, +0.1 Milk / Wool with Bale Economy, ×Double Bale (lib/animals.ts).
       if (ownsC("Bale")) {
         const bale = 0.1 * rankMult("Double Bale", [2, 2.5, 3]);

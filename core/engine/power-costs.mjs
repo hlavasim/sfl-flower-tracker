@@ -201,8 +201,10 @@ import { SEED_COSTS, TOOL_COSTS } from "../data/economy.mjs";
       }
 
       // Seed consumption: for fruits, 1 seed per (harvestCount × growCycle)
+      // "+1 seed to plant" (Seeded Bounty): every planting takes more seeds; oil stays per planting.
+      const seedsPerPlanting = 1 + (boostEffects || []).filter(e => e && e.type === "seed_extra" && e.cat === catId).reduce((s, e) => s + (e.value || 0), 0);
       const seedsPerDay = cyclesPerDay * n / effectiveHarvests;
-      let costPerDay = seedSfl * seedsPerDay;
+      let costPerDay = seedSfl * seedsPerDay * seedsPerPlanting;
 
       // Greenhouse oil cost per seed
       let oilPerSeed = 0, oilSflPerSeed = 0, oilCostPerDay = 0;
