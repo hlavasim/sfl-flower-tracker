@@ -18,6 +18,7 @@ import {
 import { findCollectible, ANIMAL_LEVELS, GOLDEN_ANIMALS, isWearableEquipped, calcSkillPointCost } from "../engine/power-helpers.mjs";
 import { FEED_RECIPES, FEED_QTY, FEED_XP_TABLE } from "../engine/power-costs.mjs";
 import { computeSaltYieldPerRake, computeSaltRakeCoinMult } from "../engine/cooking-cost.mjs";
+import { CHORE_TASKS } from "../engine/chore-tasks.mjs";
 import { SALT_RAKE_COST, FISH_BASE_XP, GAME_FISH_SPELLING, getAgingSaltCost, getAgingMaxXP } from "../data/cooking.mjs";
 
 const DAY = 86400000;
@@ -205,13 +206,24 @@ export function buildTicketsSection(farm, prices, opts = {}) {
       delivered: stats.deliveryCount || 0, skipped: stats.skippedCount || 0 });
   }
 
-  // Chores — this week's board.
+  // Chores — this week's board, with how far along each is and what a day it takes to finish
+  // before the Monday 00:00 UTC reset (the game counts farmActivity[counter] - initialProgress).
+  const weekEnd = (() => { const d0 = new Date(now); const dow = (d0.getUTCDay() + 6) % 7; return Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth(), d0.getUTCDate() - dow + 7); })();
+  const daysLeft = Math.max(1, Math.ceil((weekEnd - now) / DAY));
   for (const [npc, c] of Object.entries(farm.choreBoard?.chores || {})) {
     const t = +(c.reward?.items?.[ticket] || 0);
     if (!t) continue;
     const cc = choreCost(c.name || "", prices, coinsPerSFL);
+    const task = CHORE_TASKS[c.name];
+    let progress = null, required = null, remaining = null, perDay = null;
+    if (task) {
+      required = task[1];
+      progress = Math.max(0, (+act[task[0]] || 0) - (+c.initialProgress || 0));
+      remaining = c.completedAt ? 0 : Math.max(0, required - progress);
+      perDay = Math.ceil(remaining / daysLeft);
+    }
     add({ group: "chore", label: c.name, npc, tickets: t + bonus.chore, per: "week", cost: cc.cost, kind: cc.kind,
-      item: cc.item || null, done: !!c.completedAt });
+      item: cc.item || null, done: !!c.completedAt, required, progress, remaining, perDay, daysLeft });
   }
 
   // Bounties — this week's board; animal ones cost raising a replacement.
@@ -331,7 +343,8 @@ export function buildTicketsSection(farm, prices, opts = {}) {
   };
   const weekNo = Math.floor(Math.max(0, now - chapter.start) / (7 * DAY)) + 1;
   const timeline = { start: chapter.start, tasksBegin, ticketAuction: auctionAt, end: chapter.end || null,
-    week: weekNo, weeks: chapter.end ? Math.round((chapter.end - chapter.start) / (7 * DAY)) : null };
+    week: weekNo, weeks: chapter.end ? Math.round((chapter.end - chapter.start) / (7 * DAY)) : null,
+    weekEnd, daysLeftInWeek: daysLeft };
 
   return {
     chapter: { name: chapter.name, ticket, start: chapter.start, tasksBegin, end: chapter.end || null,
@@ -612,6 +625,43 @@ function shopItemValues(farm, prices, opts) {
     price: it.price || (it.tickets ? `${it.tickets.toLocaleString("en-US")} ${ticket}` : "—"),
     perDay: it.perDay === undefined ? null : it.perDay, perUse: it.perUse === undefined ? null : it.perUse,
     perYear: it.perDay == null ? null : it.perDay * 365 }));
+}
+
+/**
+ * The chapter goal: an item you want from the ticket auction, what you think it is worth, and
+ * how many tickets its lot will take. Answers what a ticket is worth to you for it, whether the
+ * weeks left can get you there, what that costs, and what the gem round or waiting would cost.
+ * @param goal  { value (FLOWER), tickets }
+ * @param ctx   { collected, weeksLeft, curve: [[ticketsPerWeek, costPerWeek]] ascending,
+ *                track (tickets from the chapter track still to come), rounds (roundRatios) }
+ */
+export function ticketGoal(goal, ctx) {
+  const value = Math.max(0, +goal.value || 0), tickets = Math.max(0, +goal.tickets || 0);
+  const weeks = Math.max(0, +ctx.weeksLeft || 0);
+  const have = Math.max(0, +ctx.collected || 0) + Math.max(0, +ctx.track || 0);
+  const curve = (ctx.curve || []).filter((p) => p && p[0] > 0).sort((a, b) => a[0] - b[0]);
+  const maxPerWeek = curve.length ? curve[curve.length - 1][0] : 0;
+  const needPerWeek = weeks > 0 ? Math.max(0, (tickets - have) / weeks) : (tickets > have ? Infinity : 0);
+  let costPerWeek = null;
+  if (needPerWeek === 0) costPerWeek = 0;
+  else for (let i = 0; i < curve.length; i++) {
+    if (needPerWeek <= curve[i][0]) {
+      const [t0, c0] = i ? curve[i - 1] : [0, 0], [t1, c1] = curve[i];
+      costPerWeek = c0 + (c1 - c0) * (t1 > t0 ? (needPerWeek - t0) / (t1 - t0) : 0);
+      break;
+    }
+  }
+  const reachable = costPerWeek != null;
+  const cost = reachable ? costPerWeek * weeks : null;
+  const worth = value * (1 - MARKET_FEE);
+  const r = ctx.rounds || {};
+  return {
+    value, tickets, ticketValue: tickets > 0 ? worth / tickets : 0,
+    needPerWeek, maxPerWeek, maxTickets: Math.round(have + maxPerWeek * weeks),
+    reachable, cost, net: reachable ? worth - cost : null,
+    verdict: !reachable ? "unreachable" : worth > cost ? "collect" : "not-worth",
+    gemCost: r.gem ? value * r.gem.median : null, flowerCost: r.flower ? value * r.flower.median : null, waitCost: value,
+  };
 }
 
 export { AUCTION_REFERENCE, choreCost, raiseCost, ticketBonuses, roundRatios, auctionItemValues, shopItemValues };

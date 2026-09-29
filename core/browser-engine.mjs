@@ -24,3 +24,5 @@ export { computeFarmValue } from "./sections/treasury.mjs";
 export { _setPowerContext, _getPowerContext, _setRoadmapState } from "./engine/roadmap.mjs";
 // Tables the page fills at runtime (applyFlowerBoosts writes the boosted flower times).
 export { SEED_DATA as _SEED_DATA } from "./engine/power-helpers.mjs";
+// The TICKETY page's chapter goal (reachability, ticket value, the alternatives).
+export { ticketGoal } from "./sections/tickets.mjs";

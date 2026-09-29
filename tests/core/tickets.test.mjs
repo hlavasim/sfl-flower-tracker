@@ -191,3 +191,40 @@ test("shop: an hourglass is worth its category's net over the window × the time
   assert.equal(by("Cornucopia").perDay, null);
   assert.equal(by("Otty the Otter").price, "250 Otter Pebble");
 });
+
+test("chores: progress from the game's own counter, what is left, and a daily share to the Monday reset", async () => {
+  const f = farm({
+    farmActivity: { "Shiny Feather Collected": "4000", "Stone Mined": 1060 },
+    choreBoard: { chores: { bert: { name: "Mine Stones 100 times", reward: { items: { "Shiny Feather": 2 } }, initialProgress: 1000 } } },
+  });
+  const d = buildTicketsSection(f, prices, { now: NOW });
+  const c = d.sources.find((s) => s.group === "chore");
+  assert.equal(c.required, 100);
+  assert.equal(c.progress, 60);
+  assert.equal(c.remaining, 40);
+  // NOW is Tuesday 12:00 UTC: the week resets Monday 00:00, 5.5 days → 6 days.
+  assert.equal(c.daysLeft, 6);
+  assert.equal(c.perDay, 7);
+  assert.equal(d.timeline.weekEnd, Date.UTC(2026, 9, 5));
+});
+
+test("chapter goal: ticket value for the item, reachable from the curve, cheaper ways compared", async () => {
+  const { ticketGoal } = await import("../../core/sections/tickets.mjs");
+  const curve = [[500, 20], [1000, 170], [1300, 380]];
+  const rounds = { gem: { median: 0.6 }, flower: { median: 1.4 } };
+  // 5,600 tickets in 8 weeks from 0 with 290 from the track: 663.75 a week — on the curve.
+  const mid = ticketGoal({ value: 900, tickets: 5600 }, { collected: 0, weeksLeft: 8, curve, track: 290, rounds });
+  assert.ok(Math.abs(mid.needPerWeek - 663.75) < 1e-9);
+  assert.equal(mid.reachable, true);
+  assert.ok(Math.abs(mid.cost - 8 * (20 + 150 * (163.75 / 500))) < 1e-9);
+  assert.equal(mid.verdict, "collect");
+  assert.ok(Math.abs(mid.ticketValue - 900 * 0.9 / 5600) < 1e-12);
+  // 13,000 needs 1,589 a week; the curve tops out at 1,300 → unreachable, with the most you could get.
+  const top = ticketGoal({ value: 6900, tickets: 13000 }, { collected: 0, weeksLeft: 8, curve, track: 290, rounds });
+  assert.equal(top.reachable, false);
+  assert.equal(top.verdict, "unreachable");
+  assert.equal(top.maxTickets, 290 + 1300 * 8);
+  assert.ok(Math.abs(top.gemCost - 6900 * 0.6) < 1e-9);
+  // Already holding enough: costs nothing more.
+  assert.equal(ticketGoal({ value: 100, tickets: 400 }, { collected: 500, weeksLeft: 1, curve }).cost, 0);
+});

@@ -5420,7 +5420,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.84</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.85</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5447,6 +5447,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.85", items: [
+          { t: "feat", text: "<b>TICKETY redone as a checklist.</b> Four numbers on top; today's checklist in groups that open into the concrete steps (which delivery with which items, which chore and how much of it today so the board is done by the Monday reset, which bounty); everything not worth doing in one folded line; one ranking of this chapter's auction and shop items by FLOWER a day on your farm. The rest folds away." },
+          { t: "feat", text: "<b>Chapter goal.</b> Pick the auction item you want, your estimate of its price and how many tickets its lot will take: the page says whether collecting gets you there in the weeks left and pays off, or what the gem round or waiting would cost instead — and moves the checklist's worth-it line to what a ticket is worth for that item. Planned for the next chapter once this chapter's auction is over. Synced across devices." },
+        ] },
         { ver: "v5.84", items: [
           { t: "feat", text: "<b>TICKETY is a guide for the running chapter.</b> On top: what to do now (collect the cheap sources, which auction item to put the tickets into, what to buy in the shop with the rest). Then cards — side by side on a PC, stacked on a phone: where the chapter is, your tickets, what to do and what to skip this week (grouped like the game), what each auction item and each shop item would earn on your farm a day. The calculator and all the detail tables are folded under PODROBNOSTI." },
           { t: "feat", text: "<b>Chapter items priced on your farm</b> from what you actually do (the last four weeks of salt harvests, aged fish, spice/fermentation, potion games, full-moon fruit): Ascended Idol (the rakes it saves), Salt Worker Gnome, Surfer Hair, Winged Vase, Alchemist Apron, Vibraphone; in the shop the hourglasses per use, Moon Hair and Astrolabe per day. Monuments, Otty and the cooking/fishing hourglasses say why they are not priced." },
@@ -24727,6 +24731,47 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         <div class="pixel-font" style="font-size:0.75rem;color:var(--sunpetal);margin-bottom:8px">📚 HISTORIE TABULÍ — CO STÁLO „VŠECHNO“</div>${body}</div>`;
     }
 
+    function _tkGoal() {
+      let g = {};
+      try { g = JSON.parse(localStorage.getItem("sfl_tk_goal") || "{}") || {}; } catch (e) { g = {}; }
+      return { item: g.item || "", est: +g.est || 0, unit: g.unit === "flower" ? "flower" : "usd", tickets: +g.tickets || 13000 };
+    }
+    window._tkGoalChange = function () {
+      const v = (id) => document.getElementById(id);
+      const g = { item: v("tk-goal-item").value, est: parseFloat(v("tk-goal-est").value) || 0, unit: v("tk-goal-unit").value, tickets: parseFloat(v("tk-goal-tickets").value) || 0 };
+      try { localStorage.setItem("sfl_tk_goal", JSON.stringify(g)); } catch (e) {}
+      if (window._tkData) { document.getElementById("app").innerHTML = _ticketsHtml(window._tkData); _tkDecide(); }
+    };
+    window._tkGoalTickets = function (n) { document.getElementById("tk-goal-tickets").value = n; window._tkGoalChange(); };
+    function _tkGoalCardHtml(d, g, goal, x) {
+      const fl = sflIcon("0.85em"), muted = "color:var(--text-dim)";
+      const opts = [`<option value="">— vyber —</option>`].concat(x.auctionItems.map((i) =>
+        `<option value="${escHTML(i.name)}"${g.item === i.name ? " selected" : ""}>${escHTML(i.name)}${i.perDay > 0 ? ` (+${_tkFmt(i.perDay, 2)}/den)` : ""}</option>`),
+        [`<option value="jiný"${g.item === "jiný" ? " selected" : ""}>jiný předmět</option>`]).join("");
+      const money = (f) => `${_tkFmt(f)} ${fl}${x.usd > 0 ? ` <span style="${muted}">($${_tkFmt(f * x.usd)})</span>` : ""}`;
+      let verdict = `<div style="font-size:0.62rem;${muted}">Vyber předmět, zadej odhad jeho ceny po chapteru a kolik ticketů bude lot chtít — stránka řekne, jestli se vyplatí sbírat.</div>`;
+      if (goal) {
+        const alt = `kolo za gemy ~${money(goal.gemCost || 0)} · počkat a koupit ~${money(goal.waitCost)}`;
+        const box = (color, head, body) => `<div style="border:2px solid ${color};border-radius:6px;padding:8px 10px;background:#161009">
+          <div style="font-size:0.72rem;font-weight:bold;color:${color};margin-bottom:4px">${head}</div><div style="font-size:0.62rem;line-height:1.7">${body}</div></div>`;
+        verdict = goal.verdict === "collect"
+          ? box("var(--green)", "✅ Sbírej — vyplatí se", `Potřebuješ ~${_tkFmt(goal.needPerWeek)} ${x.tk} týdně (${_tkFmt(x.weeksLeft, 1)} týdnů), stojí ~${money(goal.cost)} → čistě <b style="color:var(--green)">+${_tkFmt(goal.net)}</b> ${fl}. Ticket ti teď má cenu ~${_tkFmt(goal.ticketValue, 2)} ${fl}, checklist níž se tomu přizpůsobil.<br><span style="${muted}">Pro srovnání: ${alt}.</span>`)
+          : goal.verdict === "not-worth"
+          ? box("var(--red)", "❌ Nesbírej — ticketů by bylo dost, ale stojí víc, než předmět vynese", `Sbírání ~${money(goal.cost)} za předmět za ~${money(goal.value * 0.9)}. Levněji: ${alt}.`)
+          : box("var(--sunpetal)", "⚠️ Nestihneš to", `Potřeba ~${_tkFmt(goal.needPerWeek)} ${x.tk} týdně, z tabulí se dá nejvýš ~${_tkFmt(goal.maxPerWeek)} → do aukce max ~${_tkFmt(goal.maxTickets)} z ${_tkFmt(goal.tickets)}. Místo toho: ${alt}.`);
+      }
+      return `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.74rem;color:var(--sunpetal);margin-bottom:8px">🎯 CÍL ${x.forNext ? "PŘÍŠTÍHO CHAPTERU" : "TOHOTO CHAPTERU"} <span style="${muted};font-size:0.58rem">${x.forNext ? `(${_tkFmt(x.weeksLeft)} týdnů úkolů do aukce)` : `(aukce za ${_tkFmt(x.weeksLeft * 7)} dní)`}</span></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:0.62rem;margin-bottom:8px">
+          <select id="tk-goal-item" onchange="_tkGoalChange()">${opts}</select>
+          <label>cena <input id="tk-goal-est" type="number" min="0" step="50" value="${g.est || ""}" placeholder="odhad" style="width:80px" onchange="_tkGoalChange()"></label>
+          <select id="tk-goal-unit" onchange="_tkGoalChange()"><option value="usd"${g.unit === "usd" ? " selected" : ""}>$</option><option value="flower"${g.unit === "flower" ? " selected" : ""}>FLOWER</option></select>
+          <label>lot za <input id="tk-goal-tickets" type="number" min="0" step="100" value="${g.tickets}" style="width:80px" onchange="_tkGoalChange()"> ${x.icon}</label>
+          <button class="roi-pill" onclick="_tkGoalTickets(13000)" title="vzácný lot (málo kusů) — minule ~13 000">vzácný</button>
+          <button class="roi-pill" onclick="_tkGoalTickets(5600)" title="střední lot — minule ~5 600">střední</button>
+        </div>${verdict}</div>`;
+    }
+
     function _tkFmt(n, dec = 0) {
       if (n == null || !isFinite(n)) return "—";
       return Number(n).toLocaleString("cs-CZ", { minimumFractionDigits: dec, maximumFractionDigits: dec });
@@ -24736,87 +24781,133 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     const _tkKind = { free: "děláš to stejně", plant: "musíš pěstovat tohle", consume: "spotřebuje suroviny", fish: "nahození + denní limit", unknown: "neznám cenu" };
 
     /*
-     * The page: a guide for the running chapter in cards (side by side on a PC, stacked on a
-     * phone) — where the chapter is, your tickets, what to do and what to skip this week, what
-     * each auction and shop item would earn on this farm — then the calculator, and every detail
-     * behind it folded away.
+     * The page, as agreed with the owner: four numbers; today's checklist (groups that open into
+     * the concrete steps, chores spread over the days left to the Monday reset); one folded line
+     * for everything not worth doing; one ranking of the auction and shop items by FLOWER a day
+     * on this farm. The calculator and the detail tables fold away at the bottom.
      */
     function _ticketsHtml(d) {
-      const c = d.chapter, tk = escHTML(c.ticket), b = d.bonus, t = d.timeline, g = d.guide;
+      const c = d.chapter, tk = escHTML(c.ticket), ta = d.thisAuction, tl = d.timeline;
+      const fl = sflIcon("0.85em");
       const icon = `<img class="inline-icon" src="${getItemIcon(c.ticket)}" onerror="this.style.display='none'" alt="">`;
-      const fl = sflIcon("0.8em");
-      const card = (title, body, wide) => `<div class="pixel-panel" style="padding:12px 14px;${wide ? "grid-column:1/-1;" : ""}min-width:0">
-        <div class="pixel-font" style="font-size:0.72rem;color:var(--sunpetal);margin-bottom:8px">${title}</div>${body}</div>`;
-      const small = (x) => `<div style="font-size:0.55rem;color:var(--text-dim);line-height:1.6;margin-top:6px">${x}</div>`;
-      const row = (k, v) => `<div style="display:flex;justify-content:space-between;gap:10px;font-size:0.62rem;line-height:1.9"><span style="color:var(--text-secondary)">${k}</span><b style="text-align:right">${v}</b></div>`;
-      let h = `<div class="header pixel-panel pixel-font"><h1>🎟️ TICKETY</h1>
-        <div class="farm-id">Farm #${escHTML(FARM_ID)} · ${escHTML(c.name)} · ticket ${icon} ${tk}</div></div>`;
-
-      // What to do now, in three lines.
-      const ta = d.thisAuction;
-      const auctionItems = d.items.filter((i) => i.source === "auction");
-      const shopItems = d.items.filter((i) => i.source === "shop");
-      const bestAuction = auctionItems.filter((i) => !i.owned && i.perDay > 0).sort((a, b) => b.perDay - a.perDay)[0] || null;
-      const shopWorth = (i) => (i.perDay > 0 ? i.perDay * 365 : (i.perUse > 0 ? i.perUse : 0));
-      const bestShop = shopItems.filter((i) => !i.owned && i.tickets > 0 && shopWorth(i) > 0).sort((a, b) => shopWorth(b) / b.tickets - shopWorth(a) / a.tickets)[0] || null;
-      const doT = g.doIt.reduce((s, x) => s + x.ticketsPerWeek, 0), doC = g.doIt.reduce((s, x) => s + x.costPerWeek, 0);
+      const cap = (x) => String(x).replace(/(^|[\s'])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
+      const right = "text-align:right;white-space:nowrap";
+      const muted = "color:var(--text-dim)";
+      let limit = d.guide.ticketValue;
+      const worth = (s) => s.perTicket != null && s.perTicket <= limit;
       const auctionOpen = ta && ta.weeksUntil > 0;
-      const lines = [];
-      lines.push(`Sbírej jen levné zdroje (✅) — ještě <b>+${_tkFmt(doT)} ${tk}</b> tento týden za ~${_tkFmt(doC, 1)} ${fl}. Drahé (❌) vynech.`);
-      if (auctionOpen) lines.push(`Aukce za tickety začíná v týdnu od <b>${_tkDate(ta.at)}</b>; budeš mít odhadem <b>${_tkFmt(ta.ticketsExpected)}</b> ${icon}.` +
-        (bestAuction ? ` Tvůj nejlepší cíl: <b>${escHTML(bestAuction.name)}</b> (≈ ${_tkFmt(bestAuction.perDay, 2)} ${fl}/den). Dej do něj všechny tickety — při prohře se vrátí.` : ""));
-      else lines.push(`Aukce za tickety je za námi — zbylé tickety jsou už jen pro shop.`);
-      if (bestShop) lines.push(`Co zbude, utrať v shopu: na ticket nejvíc vydělá <b>${escHTML(bestShop.name)}</b> (${_tkFmt(bestShop.tickets)} ${tk}, ${bestShop.perDay > 0 ? `≈ ${_tkFmt(bestShop.perDay, 2)} ${fl}/den` : `≈ ${_tkFmt(bestShop.perUse, 2)} ${fl} za kus`}). Po chapteru jsou tickety k ničemu.`);
-      h += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px;border:2px solid var(--green)">
-        <div class="pixel-font" style="font-size:0.78rem;color:var(--green);margin-bottom:8px">🎯 CO DĚLAT TEĎ</div>
-        <ol style="margin:0 0 0 18px;font-size:0.66rem;line-height:1.9">${lines.map((x) => `<li>${x}</li>`).join("")}</ol></div>`;
+      const days = auctionOpen ? Math.max(0, Math.round(ta.weeksUntil * 7)) : 0;
+      const items = d.items.slice();
+      const bestAuction = items.filter((i) => i.source === "auction" && !i.owned && i.perDay > 0).sort((a, b) => b.perDay - a.perDay)[0] || null;
 
-      h += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:12px;margin-bottom:12px">`;
+      // The chapter goal: an item you want, your estimate of its price, the tickets its lot takes.
+      // While this chapter's ticket auction is ahead it plans for it; after it, for the next one.
+      const goalSaved = _tkGoal();
+      const usd = d.rates.sflUsd || 0;
+      const goalValue = goalSaved.unit === "flower" ? goalSaved.est : (usd > 0 ? goalSaved.est / usd : 0);
+      const forNext = !auctionOpen;
+      const weeksLeft = forNext ? d.assumptions.weeksToAuction : ta.weeksUntil;
+      const curve = d.history && d.history.curve && d.history.curve.length
+        ? d.history.curve.filter((x) => x.share >= 0.5).map((x) => [x.ticketsPerWeek, x.cost])
+        : d.plans.map((x) => [x.ticketsPerWeek, x.costPerWeek]);
+      const goal = goalSaved.est > 0 && goalSaved.tickets > 0 ? ticketGoal({ value: goalValue, tickets: goalSaved.tickets }, {
+        collected: forNext ? 0 : c.collected, weeksLeft,
+        track: d.track * Math.min(1, weeksLeft / d.assumptions.weeksToAuction), curve, rounds: d.rounds }) : null;
+      const goalDrives = goal && goal.verdict === "collect" && goal.ticketValue > limit;
+      if (goalDrives) limit = goal.ticketValue;
 
-      // Where the chapter is.
-      h += card("📅 KDE JSME", row("Týden", `${t.week}${t.weeks ? ` z ${t.weeks}` : ""}`) +
-        row("Úkoly běží od", _tkDate(t.tasksBegin)) +
-        (t.ticketAuction ? row("Aukce za tickety", `od ${_tkDate(t.ticketAuction)}`) : "") +
-        (t.end ? row("Konec chapteru", _tkDate(t.end)) : "") +
-        small(`Aukce má tři druhy kol: za gemy a za FLOWER běží dřív (minule 2.–3. a 4.–6. týden chapteru), za tickety až ke konci. První týden chapteru a týden aukce nejsou úkoly ani bounty.`));
+      let h = `<div class="header pixel-panel pixel-font"><h1>🎟️ TICKETY</h1>
+        <div class="farm-id">${escHTML(c.name)} · ${icon} ${tk} · týden ${tl.week}${tl.weeks ? ` z ${tl.weeks}` : ""}</div></div>`;
 
-      // Your tickets.
-      h += card(`${icon} TVOJE TICKETY`, row("Sesbíráno tento chapter", _tkFmt(c.collected)) +
-        row("Tvoje tempo", `${_tkFmt(c.perWeek)} / týden`) +
-        (auctionOpen ? row("Do aukce odhadem", _tkFmt(ta.ticketsExpected)) : "") +
-        row("Top hráči", `${_tkFmt(d.observedTop.perWeek)} / týden`) +
-        row("Bonus doručení / úkol / bounty", `+${b.delivery} / +${b.chore} / +${b.bounty}`) +
-        small(`VIP ${b.vip ? "✅" : "❌"} · ${b.items.map((i) => `${escHTML(i.name)} ${i.active ? "✅" : "❌"}`).join(" · ")}. „Sesbíráno“ je čítač hry — kolik jich ještě máš, ukáže jen hra.`));
+      // 1. Four numbers.
+      const tile = (label, value, sub, color) => `<div class="pixel-panel" style="padding:10px 12px;text-align:center;min-width:0">
+        <div style="font-size:0.58rem;color:var(--text-secondary)">${label}</div>
+        <div style="font-size:1.05rem;font-weight:bold;margin:4px 0;color:${color || "inherit"}">${value}</div>
+        <div style="font-size:0.56rem;${muted}">${sub || "&nbsp;"}</div></div>`;
+      h += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,160px),1fr));gap:10px;margin-bottom:12px">` +
+        tile("Do aukce budeš mít", auctionOpen ? `${_tkFmt(ta.ticketsExpected)} ${icon}` : "—", `teď ${_tkFmt(c.collected)}`) +
+        tile("Aukce za tickety", auctionOpen ? (days <= 0 ? "právě běží" : `za ${days} dní`) : "proběhla", tl.ticketAuction ? `od ${_tkDate(tl.ticketAuction)}` : "") +
+        tile("Tvoje tempo", `${_tkFmt(c.perWeek)} / týden`, `top hráči ${_tkFmt(d.observedTop.perWeek)}`) +
+        tile("Cíl v aukci", bestAuction ? escHTML(bestAuction.name) : "—", bestAuction ? `+${_tkFmt(bestAuction.perDay, 2)} FLOWER / den` : "", "var(--green)") +
+        `</div>`;
 
-      // Do / skip this week, grouped the way the game shows them.
-      const grp = (list, max) => list.length ? list.map((x) => `<div style="margin-bottom:8px">
-          <div style="font-size:0.62rem;font-weight:bold">${_tkGroup[x.group]} <span style="color:var(--text-dim);font-weight:normal">+${_tkFmt(x.ticketsPerWeek)} / týden · ${_tkFmt(x.costPerWeek, 1)} ${fl}</span></div>
-          <div style="font-size:0.56rem;color:var(--text-secondary);line-height:1.7">${x.items.slice(0, max).map((i) =>
-            `${escHTML(i.label)} <span style="color:var(--text-dim)">+${i.tickets}${i.per === "day" ? "/den" : ""} · ${i.perTicket == null ? "?" : _tkFmt(i.perTicket, 3)}</span>`).join(" · ")}${x.items.length > max ? ` · a ${x.items.length - max} dalších` : ""}</div></div>`).join("")
-        : `<div style="font-size:0.6rem;color:var(--text-dim)">nic</div>`;
-      h += card("✅ DĚLEJ TENTO TÝDEN", grp(g.doIt, 10) +
-        small(`Zdroje za méně než ${_tkFmt(g.ticketValue, 2)} ${fl} za ticket (tolik ticket vynesl u středních lotů minulé aukce). Číslo za zdrojem = ${fl} za ticket.`));
-      h += card("❌ NEDĚLEJ", grp(g.skip, 6) +
-        small(`Dražší než ticket vynese: vaření na úkoly, drahá doručení, bounty za ovce a krávy (zvíře se smaže), exotické plodiny.`));
+      h += _tkGoalCardHtml(d, goalSaved, goal, { forNext, weeksLeft, goalValue, usd, auctionItems: items.filter((i) => i.source === "auction"), icon, tk });
 
-      // What each item would earn here.
-      const itemTable = (list, shop) => `<div style="overflow-x:auto"><table class="node-res-table" style="min-width:${shop ? 460 : 420}px">
-        <tr><th>PŘEDMĚT</th>${shop ? `<th style="text-align:right">CENA</th>` : ""}<th style="text-align:right">${fl}/DEN</th><th style="text-align:right">ZA ROK</th></tr>` +
-        list.slice().sort((a, b) => (b.perDay ?? (b.perUse != null ? b.perUse / 365 : -1)) - (a.perDay ?? (a.perUse != null ? a.perUse / 365 : -1))).map((i) => `<tr${i.owned ? ' style="opacity:0.55"' : ""}>
-          <td><b>${escHTML(i.name)}</b>${i.owned ? " ✅ máš" : ""}${i.have > 0 ? ` <span style="color:var(--text-dim)">(máš ${_tkFmt(i.have)})</span>` : ""}<div style="font-size:0.52rem;color:var(--text-dim)">${escHTML(i.what)}${i.basis ? ` · ${escHTML(i.basis)}` : ""}</div></td>
-          ${shop ? `<td style="text-align:right;white-space:nowrap">${escHTML(i.price || "—")}</td>` : ""}
-          <td style="text-align:right;font-weight:bold;white-space:nowrap">${i.perDay != null ? _tkFmt(i.perDay, 2) : i.perUse != null ? `${_tkFmt(i.perUse, 2)} <span style="font-weight:normal;color:var(--text-dim)">za kus</span>` : "?"}</td>
-          <td style="text-align:right">${i.perYear == null ? "—" : _tkFmt(i.perYear)}</td></tr>`).join("") + `</table></div>`;
-      const act = d.activity;
-      h += card("🔨 AUKCE — CO BY TI VYDĚLALO", itemTable(auctionItems, false) +
-        small(`Ceny lotů v ticketech určí hra až při aukci. ${act ? `Počítáno z toho, co na farmě skutečně děláš (${escHTML(act.from)} → ${escHTML(act.to)}).` : "Bez historie farmy jen sůl z počtu nodů."}`));
-      if (shopItems.length) h += card("🛒 SHOP (MEGASTORE) — CO BY TI VYDĚLALO", itemTable(shopItems, true) +
-        small(`Shop má pevnou cenu, nic nedražíš. Přesýpací hodiny jsou na jedno použití (hodnota „za kus“ = když celé okno sázíš/těžíš). Monumenty fungují až s dost fandy ve vesnici a nedávají denní výnos. Předměty z aukce i shopu jdou prodat až po konci chapteru.`));
+      h += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,430px),1fr));gap:12px;margin-bottom:12px;align-items:start">`;
+
+      // 2. Today's checklist: groups that open into steps.
+      const step = (done, text, sub, plus) => `<div style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-top:1px solid rgba(255,255,255,0.06);${done ? "opacity:0.45" : ""}">
+          <span style="flex:0 0 auto">${done ? "✅" : "⬜"}</span>
+          <div style="flex:1;min-width:0;font-size:0.64rem;line-height:1.5">${text}${sub ? `<div style="font-size:0.56rem;${muted}">${sub}</div>` : ""}</div>
+          <b style="flex:0 0 auto;font-size:0.64rem;color:var(--green)">+${plus}</b></div>`;
+      const groups = [];
+      const deliveries = d.sources.filter((s) => s.group === "delivery" && worth(s));
+      if (deliveries.length) groups.push({ icon: "📦", name: "Doručení", note: "každý den", rows: deliveries.map((s) => ({ done: s.done, tickets: s.tickets,
+        html: step(s.done, `<b>${escHTML(cap(s.label))}</b>: ${s.items ? Object.entries(s.items).map(([k, v]) => `${v}× ${escHTML(k)}`).join(", ") : "čeká na novou objednávku"}`, "", s.tickets) })) });
+      const chores = d.sources.filter((s) => s.group === "chore" && worth(s));
+      if (chores.length) groups.push({ icon: "📋", name: "Úkoly", note: `do pondělí (${tl.daysLeftInWeek} dní)`, rows: chores
+        .sort((a, b) => (a.done - b.done) || ((b.perDay || 0) - (a.perDay || 0)))
+        .map((s) => {
+          const ready = !s.done && s.remaining === 0;
+          const sub = s.done ? "hotovo" : ready ? "splněno — vyzvedni u NPC" : s.required ? `${_tkFmt(s.progress)} / ${_tkFmt(s.required)} · zbývá ${_tkFmt(s.remaining)} · <b style="color:var(--sunpetal)">dnes ~${_tkFmt(s.perDay)}</b>` : "";
+          const tag = s.kind === "plant" && !s.done && !ready ? ` <span title="musíš mít zasazené / pěstovat" style="font-size:0.56rem">🌱</span>` : "";
+          return { done: s.done, tickets: s.tickets, html: step(s.done, `<b>${escHTML(cap(s.npc))}</b>: ${escHTML(s.label)}${tag}`, sub, s.tickets) };
+        }) });
+      const bounties = d.sources.filter((s) => s.group === "bounty" && worth(s));
+      if (bounties.length) groups.push({ icon: "🎯", name: "Bounty", note: "tento týden", rows: bounties.map((s) => ({ done: s.done, tickets: s.tickets,
+        html: step(s.done, `Odevzdej <b>${escHTML(s.label)}</b>`, "", s.tickets) })) });
+      const animals = d.sources.filter((s) => s.group === "animal" && worth(s));
+      if (animals.length) groups.push({ icon: "🐔", name: "Bounty za mladá zvířata", note: "tento týden", rows: animals.map((s) => ({ done: s.done, tickets: s.tickets,
+        html: step(s.done, `Odevzdej <b>${escHTML(s.animal)}</b> na levelu ${s.level}+`, s.feed > 0 ? `krmení ~${_tkFmt(s.feed, 2)} FLOWER` : "krmení zdarma (zlaté zvíře)", s.tickets) })) });
+      const daily = d.sources.find((s) => s.group === "daily");
+      if (daily) groups.unshift({ icon: "🎁", name: "Denní odměna", note: "každý den", rows: [{ done: daily.done, tickets: 1, html: step(daily.done, "Vyzvedni denní odměnu", "", 1) }] });
+      const groupHtml = groups.map((g) => {
+        const open = g.rows.filter((r) => !r.done), plus = open.reduce((s, r) => s + r.tickets, 0);
+        return `<details${open.length ? " open" : ""} style="margin-bottom:6px">
+          <summary style="cursor:pointer;display:flex;justify-content:space-between;gap:8px;padding:6px 0;font-size:0.7rem">
+            <span>${g.icon} <b>${g.name}</b> <span style="${muted};font-size:0.58rem">${g.note}</span></span>
+            <span style="white-space:nowrap">${open.length ? `${open.length} zbývá · <b style="color:var(--green)">+${plus}</b>` : "✅ hotovo"}</span></summary>
+          ${g.rows.map((r) => r.html).join("")}</details>`;
+      }).join("");
+      // Not worth it: one folded line.
+      const skip = d.sources.filter((s) => !s.done && s.tickets > 0 && !worth(s));
+      const w = (s) => (s.per === "day" ? 7 : 1);
+      const skipT = skip.reduce((a, s) => a + s.tickets * w(s), 0), skipC = skip.reduce((a, s) => a + (s.cost || 0) * w(s), 0);
+      const skipHtml = skip.length ? `<details style="margin-top:8px"><summary style="cursor:pointer;font-size:0.62rem;color:var(--text-secondary);padding:6px 0">
+          ❌ Nevyplatí se: ${skip.length} věcí (+${_tkFmt(skipT)} ${tk} týdně by stálo ~${_tkFmt(skipC)} FLOWER)</summary>
+          <table class="node-res-table" style="width:100%"><tr><th>CO</th><th style="${right}">${tk}</th><th style="${right}">FLOWER / TICKET</th></tr>` +
+          skip.slice().sort((a, b) => (a.perTicket ?? 9) - (b.perTicket ?? 9)).map((s) => `<tr><td style="font-size:0.6rem">${_tkGroup[s.group]}: ${escHTML(s.group === "delivery" ? cap(s.label) : s.label)}</td>
+            <td style="${right}">+${s.tickets}${s.per === "day" ? "/den" : ""}</td><td style="${right}">${s.perTicket == null ? "?" : _tkFmt(s.perTicket, 2)}</td></tr>`).join("") + `</table></details>` : "";
+      h += `<div class="pixel-panel" style="padding:12px 14px;min-width:0">
+        <div class="pixel-font" style="font-size:0.74rem;color:var(--green);margin-bottom:6px">✅ CHECKLIST NA DNEŠEK</div>
+        <div style="font-size:0.56rem;${muted};margin-bottom:6px">Jen věci, kde ticket stojí míň než ~${_tkFmt(limit, 2)} FLOWER${goalDrives ? " (podle tvého cíle)" : ""}. Úkoly jsou rozpočítané, abys je stihl do pondělního resetu.</div>
+        ${groupHtml}${skipHtml}</div>`;
+
+      // 3. One ranking of auction and shop items.
+      const priced = items.filter((i) => i.perDay != null || i.perUse != null);
+      const unpriced = items.filter((i) => i.perDay == null && i.perUse == null);
+      const val = (i) => (i.perDay != null ? i.perDay : i.perUse / 7);
+      const max = Math.max(0.01, ...priced.map(val));
+      const rows = priced.sort((a, b) => val(b) - val(a)).map((i) => {
+        const bar = Math.max(2, Math.round((val(i) / max) * 100));
+        const v = i.perDay != null ? `${_tkFmt(i.perDay, 2)}<span style="${muted};font-weight:normal"> /den</span>` : `${_tkFmt(i.perUse, 2)}<span style="${muted};font-weight:normal"> /kus</span>`;
+        const price = i.source === "auction" ? `<span style="${muted}">aukce</span>` : (i.tickets ? `${_tkFmt(i.tickets)} ${icon}` : escHTML(i.price));
+        return `<tr title="${escHTML(`${i.what}${i.basis ? " — " + i.basis : ""}`)}"${i.owned ? ' style="opacity:0.5"' : ""}>
+          <td>${escHTML(i.name)}${i.owned ? " ✅" : ""}${i.have > 0 ? ` <span style="${muted}">×${_tkFmt(i.have)}</span>` : ""}
+            <div style="height:4px;background:var(--green);opacity:0.7;width:${bar}%;margin-top:3px;border-radius:2px"></div></td>
+          <td style="font-size:0.6rem">${i.source === "auction" ? "🔨 aukce" : "🛒 shop"}</td>
+          <td style="${right};font-size:0.6rem">${price}</td>
+          <td style="${right};font-weight:bold">${v}</td></tr>`;
+      });
+      h += `<div class="pixel-panel" style="padding:12px 14px;min-width:0">
+        <div class="pixel-font" style="font-size:0.74rem;color:var(--sunpetal);margin-bottom:6px">🏆 CO TI VYDĚLÁ NEJVÍC</div>
+        <div style="font-size:0.56rem;${muted};margin-bottom:6px">Aukce i shop tohoto chapteru, FLOWER denně na tvojí farmě (podle toho, co skutečně děláš). Přesýpací hodiny jsou na jedno použití. Najeď na řádek pro vysvětlení.</div>
+        <table class="node-res-table" style="width:100%"><tr><th>PŘEDMĚT</th><th>ODKUD</th><th style="${right}">CENA</th><th style="${right}">FLOWER</th></tr>${rows.join("")}</table>
+        ${unpriced.length ? `<div style="font-size:0.55rem;${muted};margin-top:6px">Neumím ocenit: ${unpriced.map((i) => escHTML(i.name)).join(", ")}</div>` : ""}</div>`;
       h += `</div>`;
 
-      h += _tkDecisionHtml(d);
-      h += `<details style="margin-bottom:12px"><summary class="pixel-font" style="font-size:0.7rem;cursor:pointer;padding:8px 0">📂 PODROBNOSTI — aukce tohoto chapteru, příští chapter, historie tabulí, všechny zdroje, minulá aukce</summary>
-        <div style="margin-top:10px">${_tkDetailsHtml(d)}</div></details>`;
+      h += `<details style="margin-bottom:12px"><summary class="pixel-font" style="font-size:0.66rem;cursor:pointer;padding:8px 0">📂 Kalkulačka, historie a všechny podrobnosti</summary>
+        <div style="margin-top:10px">${_tkDecisionHtml(d)}${_tkDetailsHtml(d)}</div></details>`;
       h += `<div class="footer"><button class="refresh-btn" onclick="renderTickets()">REFRESH</button></div>`;
       return h;
     }
@@ -29115,7 +29206,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       "sfl_tracked_dolls", "sfl_restock_settings", "sfl_gift_plan", "sfl_roi_multicat_assignment", "sfl_sleep_schedule",
       "sfl_marks_budget", "sfl_bumpkin_target", "sfl_bumpkin_recipes", "sfl_nodes_roi_cap", "sfl_coin_mode",
       "sfl_sales_sell_type", "sfl_sales_sell_min", "sfl_pet_streak", "sfl_wl_eff", "sfl_flower_mode", "sfl_flower_n", "sfl_sats_gran",
-      "sfl_repay_daily_flower"];
+      "sfl_repay_daily_flower", "sfl_tk_goal"];
     let _prefApplying = false, _prefPending = {}, _prefTimer = null;
     function _prefFarm() { try { return getConfig().farm || null; } catch (e) { return null; } }
     function _prefPush() {
