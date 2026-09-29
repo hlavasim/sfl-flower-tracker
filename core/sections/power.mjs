@@ -39,7 +39,7 @@ import {
   buildQueueData, shrineStatuses, weatherProtection,
 } from "../engine/power-costs.mjs";
 import { _setPowerContext, calcBoostValue, roadmapEffFactor, getRoadmapSettings } from "../engine/roadmap.mjs";
-import { SKILL_UPGRADES, powerSkillRankVals, skillRankText, skillUpgradeCost } from "../engine/skill-ranks.mjs";
+import { SKILL_UPGRADES, powerSkillRankVals, skillRankText, skillUpgradeCost, powerCooldownEffects } from "../engine/skill-ranks.mjs";
 import { buildFormulaHTML } from "../engine/power-formula.mjs";
 // A composter is a PERIODIC action — cycle + inputs — so it is served as a per-day net here
 // rather than folded into the permanent-upgrade valuations.
@@ -170,10 +170,20 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     if (boostItems.some(b => b.name === c.name)) continue;
     const has = c.type === "Wearable" ? wearableActive(c.name) : collectibleActive(c.name);
     const owned = c.type === "Wearable" ? wearableOwned(c.name) : collectibleOwned(c.name);
-    const effects = parseBoostEffects(c.boost, c.name);
+    // A cooldown item's worth depends on which power skills this farm has.
+    const effects = c.powerCooldownMult ? powerCooldownEffects(skills, c.powerCooldownMult) : parseBoostEffects(c.boost, c.name);
     const categories = classifyToCategories(effects);
-    const priced = c.source === "shop" && c.ticket && c.ticket.item === CHAPTER_TICKET && ticketValue > 0;
-    const floor = priced ? c.ticket.qty * ticketValue : 0;
+    let floor = 0, priced = false;
+    if (c.source === "shop" && c.ticket && c.ticket.item === CHAPTER_TICKET && ticketValue > 0) {
+      priced = true; floor = c.ticket.qty * ticketValue;
+    } else if (c.source === "market" && c.id) {
+      // The feed's row for this id: its floor, or the last sale when the floor is missing or a
+      // joke listing (99,999,999,999,999).
+      const row = (nftData[c.type === "Wearable" ? "wearables" : "collectibles"] || []).find((r) => r && Number(r.id) === c.id);
+      const f = row ? parseFloat(row.floor) || 0 : 0;
+      floor = f > 0 && f < 1e6 ? f : (row ? parseFloat(row.lastSalePrice) || 0 : 0);
+      priced = floor > 0;
+    }
     boostItems.push({
       name: c.name, type: c.type, boost: c.boost, floor, supply: 0, has, owned, effects, categories, markCost: 0,
       source: c.source, chapter: c.chapter, ticket: c.ticket || null, priceUnknown: !priced,

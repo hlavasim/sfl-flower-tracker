@@ -510,14 +510,15 @@ import { SEED_COSTS, TOOL_COSTS } from "../data/economy.mjs";
       // If we have per-animal level data, use level-based drops
       if (animals && animals.length > 0) {
         // Extract speed multiplier from boosts (same for all products)
-        let speedMult = 1;
+        let speedMult = 1, extraCycles = 0;
         for (const eff of boostEffects) {
           if (eff.cat !== catId) continue;
           if (eff.type === "speed_pct") speedMult *= (1 + eff.value / 100);
           else if (eff.type === "speed_mult") speedMult *= eff.value;
+          else if (eff.type === "extra_cycles") extraCycles += eff.value; // more Barnyard Rouse wake-ups
         }
         const effectiveCycle = animal.cycleSec * speedMult;
-        const cyclesPerDay = effectiveCycle > 0 ? 86400 / effectiveCycle : 0;
+        const cyclesPerDay = effectiveCycle > 0 ? 86400 / effectiveCycle + extraCycles : 0;
 
         let totalSfl = 0;
         const breakdown = [];

@@ -252,11 +252,13 @@ test("D10 a pre-ascension level gate needs the XP OF that level (lib/level.ts LE
 });
 
 // ── D11 ───────────────────────────────────────────────────────────────────────────────────────
-test("D11 delivery tickets: tywin 5, finn 3 (events/landExpansion/deliver.ts:39-51)", async () => {
+// The game raised these after the April checkout this test was first written against:
+// deliver.ts TICKET_REWARDS at cb713bc (2026-09-29) has tywin 10, finn 5.
+test("D11 delivery tickets: tywin 10, finn 5 (events/landExpansion/deliver.ts:45-57)", async () => {
   const { dashCalculateDeliveryTickets } = await import("../../core/engine/gifts-deliveries.mjs");
   const bare = { inventory: {}, bumpkin: { equipped: {} } };
-  assert.equal(dashCalculateDeliveryTickets("tywin", bare, JULY_16), 5);
-  assert.equal(dashCalculateDeliveryTickets("finn", bare, JULY_16), 3);
+  assert.equal(dashCalculateDeliveryTickets("tywin", bare, JULY_16), 10);
+  assert.equal(dashCalculateDeliveryTickets("finn", bare, JULY_16), 5);
 });
 
 // ── F: one placed-check ───────────────────────────────────────────────────────────────────────

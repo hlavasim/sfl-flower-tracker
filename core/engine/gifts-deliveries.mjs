@@ -269,14 +269,16 @@ export function _setItemCostMaps(maps) { _itemCostMaps = maps || { productionCos
       { name: "Paw Prints",        start: Date.UTC(2025, 10,  3), ticket: "Pet Cookie",          boosts: ["Pet Specialist Hat", "Pet Specialist Pants", "Pet Specialist Shirt"] },
       { name: "Crabs and Traps",   start: Date.UTC(2026,  1,  2), ticket: "Floater",             boosts: ["Fish Hook Hat", "Fish Hook Vest", "Fish Hook Waders"] },
       { name: "Salt Awakening",    start: Date.UTC(2026,  4,  4), ticket: "Salt Rock",           boosts: ["Spa Hat", "Spa Robe", "Spa Slippers"] },
+      // tasksBegin: ticket tasks are frozen until the 2nd Monday (getSeasonWeek.ts); end = next chapter start.
+      { name: "Ascension Age",     start: Date.UTC(2026,  7,  3), ticket: "Shiny Feather",       boosts: ["Swamp Lily Hat", "Swamp Armor", "Swamp Pants"], tasksBegin: Date.UTC(2026, 7, 10), end: Date.UTC(2026, 10, 2) },
     ];
 
-    // Per-NPC base ticket reward (mirrors TICKET_REWARDS in events/landExpansion/deliver.ts:39-51).
-    // finn is 3 and tywin 5 in the game source — unchanged there since 2024-05-05 (c4fb85b5e) up
-    // to the 2026-04-24 checkout; this table had 4 and 10.
+    // Per-NPC base ticket reward: TICKET_REWARDS in events/landExpansion/deliver.ts, checked
+    // against the game source of 2026-09-29 (cb713bc). The game raised raven/finn/timmy/tywin/
+    // pharaoh and lowered cornwell since the 2026-04-24 checkout this table was last matched to.
     const TICKET_REWARDS = {
-      "pumpkin' pete": 1, "bert": 2, "miranda": 2, "finley": 2, "raven": 3,
-      "finn": 3, "timmy": 4, "cornwell": 4, "tywin": 5, "jester": 4, "pharaoh": 5,
+      "pumpkin' pete": 1, "bert": 2, "miranda": 2, "finley": 2, "raven": 4,
+      "finn": 5, "timmy": 5, "cornwell": 3, "tywin": 10, "jester": 4, "pharaoh": 6,
     };
 
     // Collectibles that count as "built" via findCollectible() length > 0.

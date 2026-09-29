@@ -237,7 +237,37 @@ function skillRankText(up, lvl) {
   return "Level " + lvl + ": " + f(up.ranks[lvl - 1]) + " (was " + f(up.ranks[lvl - 2]) + ")";
 }
 
+/*
+ * Power skills that finish a whole cycle of a category at once (skillUsed.ts): used as soon as
+ * the cooldown allows, each use is one extra cycle of that category. Instant Gratification
+ * (cooking), Salt Surge (salt) and the compost ones have no production category here.
+ */
+const POWER_SKILL_CATS = {
+  "Instant Growth": ["crops"], "Tree Blitz": ["trees"], "Barnyard Rouse": ["chickens", "cows", "sheep"],
+  "Petal Blessed": ["flowers"], "Greenhouse Guru": ["greenhouse"], "Grease Lightning": ["oil"],
+};
+/**
+ * Effects of an item that multiplies every power-skill cooldown by `mult` (Luna's Crescent: 0.5,
+ * getSkillCooldown in skillUsed.ts): for each power skill the farm has, the extra uses a day at
+ * its rank's cooldown, as extra cycles of its categories.
+ */
+function powerCooldownEffects(skills, mult) {
+  const out = [];
+  if (!(mult > 0 && mult < 1)) return out;
+  for (const [name, cats] of Object.entries(POWER_SKILL_CATS)) {
+    const rank = Number(skills && skills[name]);
+    if (!(rank >= 1)) continue;
+    const up = SKILL_UPGRADES[name];
+    const cdMs = up && up.kind === "cooldown" ? up.ranks[Math.min(rank, up.ranks.length) - 1] : null;
+    if (!(cdMs > 0)) continue;
+    const perDay = (1 / mult - 1) * (86400000 / cdMs);
+    for (const cat of cats) out.push({ type: "extra_cycles", value: perDay, cat, raw: `${name}: +${+perDay.toFixed(2)} uses/day` });
+  }
+  return out;
+}
+
 export {
+  POWER_SKILL_CATS, powerCooldownEffects,
   SKILL_UPGRADES, SKILL_RANK_PRICEABLE,
   skillUpgradeCost, skillRankMag, skillRankFactor, skillRankText, powerSkillRankVals,
 };

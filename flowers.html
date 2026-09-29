@@ -2710,7 +2710,7 @@
 
     const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
-    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "mytrades", "marks", "diff", "json", "constants", "ascension", "world", "yakkamon", "fishing", "decorations", "speculation"];
+    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "mytrades", "marks", "diff", "json", "constants", "ascension", "world", "yakkamon", "fishing", "decorations", "speculation", "tickets"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -2782,7 +2782,7 @@
     }
 
     function getPetalBlessedCooldownH(farm) {
-      const hasLunas = farm.wardrobe?.["Luna's Crescent"] > 0;
+      const hasLunas = isWearableEquipped(farm, "Luna's Crescent"); // the game needs it worn (bumpkin or farm hand), not just owned
       return hasLunas ? 48 : 96;
     }
 
@@ -5278,6 +5278,7 @@
       ];
       const overflow = [
         ...(FARM_ID === "155498" ? [{ id: "speculation", label: "🎲 SPEKULACE" }] : []),
+        { id: "tickets", label: "🎟️ TICKETY" },
         { id: "yakkamon", label: "🐲 YAKKAMON" },
         { id: "fishing", label: "🎣 FISHING" },
         { id: "decorations", label: "🌸 DECORATIONS" },
@@ -5419,7 +5420,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.81</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.82</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5446,6 +5447,11 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.82", items: [
+          { t: "feat", text: "<b>TICKETY</b> (MORE → 🎟️): what each ticket source costs this farm in FLOWER — deliveries, chores, bounties, animal bounties (a turned-in animal is deleted, so its cost is raising a replacement) — against the auction lot it can win, priced at today's floor of last chapter's lots. The ticket auction comes ~8 weeks into a chapter, so plans count those weeks. Shows how many tickets you will have at this chapter's auction (from 5 Oct) and the cheapest way to the next lot." },
+          { t: "fix", text: "<b>Ascension Age</b> was missing from the chapter table, so the dashboard called deliveries “Salt Rock”. Delivery tickets match the current game (Tywin 10, Finn 5, Timmy 5, Raven 4, Pharaoh 6, Cornwell 3)." },
+          { t: "feat", text: "<b>Luna's Crescent</b> in POWER and ROADMAP: sfl.world lists it without a name, so it was never there. Priced from the market by its id; worth the extra uses of the power skills you have (half the cooldown = one more use per cooldown, one more harvest cycle each). The dashboard and flower page now count it only when worn, like the game." },
+        ] },
         { ver: "v5.81", items: [
           { t: "fix", text: "<b>One calculation engine.</b> The page no longer carries its own copy of ~120 calculation functions; it loads the same modules the server runs. Two copies had drifted: the <b>gifts planner</b> showed 0h for every flower, and the Diff page priced fish XP with every cooking boost applied to every recipe." },
           { t: "fix", text: "<b>Treasury on the live site</b> missed 98 NFTs that sfl.world lists without a name (Master Chef’s Cleaver among the owned ones): the id → name map loaded one level too shallow there. <b>Shrine renewal</b> on the roadmap now shows its value (it was always blank). The server roadmap’s gift pick uses real flower grow times with your boosts, not 24 h for every flower." },
@@ -7274,7 +7280,7 @@
       if (!powers || powers["Petal Blessed"] === undefined) {
         return { status: "unavailable" };
       }
-      const hasLunas = farm.wardrobe?.["Luna's Crescent"] > 0;
+      const hasLunas = isWearableEquipped(farm, "Luna's Crescent"); // the game needs it worn (bumpkin or farm hand), not just owned
       const cooldownMs = PETAL_BLESSED_COOLDOWN * (hasLunas ? 0.5 : 1) * 1000;
       const lastUsed = toMs(powers["Petal Blessed"]);
       const nextAt = lastUsed + cooldownMs;
@@ -8455,7 +8461,7 @@
       const now = Date.now();
       const powers = farm.bumpkin?.previousPowerUseAt;
       if (!powers) return actions;
-      const hasLuna = (farm.wardrobe?.["Luna's Crescent"] || 0) > 0;
+      const hasLuna = isWearableEquipped(farm, "Luna's Crescent"); // worn, like the game's getSkillCooldown
       for (const [name, lastUsed] of Object.entries(powers)) {
         const baseCooldown = DASH_POWER_COOLDOWNS[name];
         if (!baseCooldown) continue;
@@ -8781,14 +8787,16 @@
       { name: "Paw Prints",        start: Date.UTC(2025, 10,  3), ticket: "Pet Cookie",          boosts: ["Pet Specialist Hat", "Pet Specialist Pants", "Pet Specialist Shirt"] },
       { name: "Crabs and Traps",   start: Date.UTC(2026,  1,  2), ticket: "Floater",             boosts: ["Fish Hook Hat", "Fish Hook Vest", "Fish Hook Waders"] },
       { name: "Salt Awakening",    start: Date.UTC(2026,  4,  4), ticket: "Salt Rock",           boosts: ["Spa Hat", "Spa Robe", "Spa Slippers"] },
+      // tasksBegin: ticket tasks are frozen until the 2nd Monday (getSeasonWeek.ts); end = next chapter start.
+      { name: "Ascension Age",     start: Date.UTC(2026,  7,  3), ticket: "Shiny Feather",       boosts: ["Swamp Lily Hat", "Swamp Armor", "Swamp Pants"], tasksBegin: Date.UTC(2026, 7, 10), end: Date.UTC(2026, 10, 2) },
     ];
 
-    // Per-NPC base ticket reward (mirrors TICKET_REWARDS in events/landExpansion/deliver.ts:39-51).
-    // finn is 3 and tywin 5 in the game source — unchanged there since 2024-05-05 (c4fb85b5e) up
-    // to the 2026-04-24 checkout; this table had 4 and 10.
+    // Per-NPC base ticket reward: TICKET_REWARDS in events/landExpansion/deliver.ts, checked
+    // against the game source of 2026-09-29 (cb713bc). The game raised raven/finn/timmy/tywin/
+    // pharaoh and lowered cornwell since the 2026-04-24 checkout this table was last matched to.
     const TICKET_REWARDS = {
-      "pumpkin' pete": 1, "bert": 2, "miranda": 2, "finley": 2, "raven": 3,
-      "finn": 3, "timmy": 4, "cornwell": 4, "tywin": 5, "jester": 4, "pharaoh": 5,
+      "pumpkin' pete": 1, "bert": 2, "miranda": 2, "finley": 2, "raven": 4,
+      "finn": 5, "timmy": 5, "cornwell": 3, "tywin": 10, "jester": 4, "pharaoh": 6,
     };
 
     // Collectibles that count as "built" via findCollectible() length > 0.
@@ -24494,6 +24502,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           case "marks": renderMarks(data); break;
           case "constants": renderConstants(data); break;
           case "speculation": renderSpeculation(data); break;
+          case "tickets": renderTickets(); break;
           default: renderDashboard(data);
         }
 
@@ -24571,6 +24580,137 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         (async () => { if (_spec.p2p && !force) return; try { _spec.p2p = await fetchP2PLatest(); } catch (e) { _spec.err.p2p = e.message; } })(),
         (async () => { if (_spec.sats && !force) return; try { _spec.sats = await _invLoadSats("1d"); } catch (e) { _spec.err.sats = String(e); } })(),
       ]);
+    }
+
+    /*
+     * TICKETY — what the chapter's tickets cost this farm, source by source, against the
+     * auction lot they can win. Everything is computed by core/sections/tickets.mjs
+     * (/api/compute?section=tickets); this only lays it out.
+     */
+    async function renderTickets() {
+      const app = document.getElementById("app");
+      app.innerHTML = `<div class="header pixel-panel pixel-font"><h1>🎟️ TICKETY</h1>
+        <div class="farm-id">Farm #${escHTML(FARM_ID)} · co stojí tickety a kolik vyhrají v aukci</div></div>
+        <div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Počítám zdroje ticketů…</div></div>`;
+      let d;
+      try {
+        const r = await fetch(`/api/compute?farm=${FARM_ID}&section=tickets`);
+        if (!r.ok) throw new Error(`compute tickets ${r.status}`);
+        d = (await r.json()).data;
+      } catch (e) {
+        app.innerHTML += `<div class="error-screen pixel-panel pixel-font"><p>Nenačetlo se: ${escHTML(e.message)}</p></div>`;
+        return;
+      }
+      app.innerHTML = _ticketsHtml(d);
+    }
+
+    function _tkFmt(n, dec = 0) {
+      if (n == null || !isFinite(n)) return "—";
+      return Number(n).toLocaleString("cs-CZ", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+    }
+    function _tkDate(ms) { return ms ? new Date(ms).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" }) : "—"; }
+    const _tkGroup = { daily: "🎁 Denní odměna", delivery: "📦 Doručení", chore: "📋 Úkol", bounty: "🎯 Bounty", animal: "🐾 Bounty za zvíře" };
+    const _tkKind = { free: "děláš to stejně", plant: "musíš pěstovat tohle", consume: "spotřebuje suroviny", fish: "nahození + denní limit", unknown: "neznám cenu" };
+
+    function _ticketsHtml(d) {
+      const c = d.chapter, tk = escHTML(c.ticket);
+      const icon = `<img class="inline-icon" src="${getItemIcon(c.ticket)}" onerror="this.style.display='none'" alt="">`;
+      const panel = (title, body) => `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.75rem;color:var(--sunpetal);margin-bottom:8px">${title}</div>${body}</div>`;
+      const note = (t) => `<div style="font-size:0.55rem;color:var(--text-dim);line-height:1.7;margin-bottom:8px">${t}</div>`;
+      let h = `<div class="header pixel-panel pixel-font"><h1>🎟️ TICKETY</h1>
+        <div class="farm-id">Farm #${escHTML(FARM_ID)} · ${escHTML(c.name)} · ticket ${icon} ${tk}</div></div>`;
+
+      // Bonuses the farm already has.
+      const b = d.bonus;
+      h += `<div class="summary-bar pixel-panel">
+        <div class="summary-stat"><div class="label pixel-font">SESBÍRÁNO</div><div class="value">${_tkFmt(c.collected)}</div></div>
+        <div class="summary-stat"><div class="label pixel-font">ZA TÝDEN</div><div class="value">${_tkFmt(c.perWeek)}</div></div>
+        <div class="summary-stat"><div class="label pixel-font">TOP HRÁČI / TÝDEN</div><div class="value">${_tkFmt(d.observedTop.perWeek)}</div></div>
+        <div class="summary-stat"><div class="label pixel-font">BONUS DORUČENÍ / ÚKOL / BOUNTY</div><div class="value">+${b.delivery} / +${b.chore} / +${b.bounty}</div></div>
+      </div>`;
+      h += note(`Bonusy: VIP ${b.vip ? "✅ (+2 u doručení a úkolů)" : "❌"} · ${b.items.map((i) => `${escHTML(i.name)} ${i.active ? "✅" : "❌"}`).join(" · ")} (+1 každý, i na farmhandovi). ` +
+        `„Sesbíráno“ = čítač hry, ne to, co ještě máš — utracené tickety se neodečítají.`);
+
+      // 1. This chapter's auction.
+      const ta = d.thisAuction;
+      if (ta && ta.weeksUntil > 0) {
+        const lots = d.auction.lots.filter((l) => l.value > 0).sort((a, b) => a.tickets - b.tickets);
+        // The lots just out of reach (within ~2,000 tickets), and of those the most valuable one
+        // — the next lot by ticket count can be worth less than one a little further up.
+        const near = lots.filter((l) => l.tickets > ta.ticketsExpected && l.tickets - ta.ticketsExpected <= 2000);
+        const nextLot = near.slice().sort((a, b) => b.value - a.value)[0] || null;
+        const gap = nextLot ? nextLot.tickets - ta.ticketsExpected : 0;
+        const days = Math.max(0, Math.floor(ta.weeksUntil * 7));
+        // Cheapest open sources that fit before the auction (daily ones × days left).
+        const open = d.sources.filter((s) => !s.done && s.perTicket != null && s.tickets > 0)
+          .map((s) => ({ ...s, reps: s.per === "day" ? days : 1 })).filter((s) => s.reps > 0)
+          .sort((a, b) => a.perTicket - b.perTicket);
+        let got = 0, spent = 0; const pick = [];
+        for (const s of open) { if (got >= gap) break; got += s.tickets * s.reps; spent += (s.cost || 0) * s.reps; pick.push(s); }
+        let body = note(`Aukce tohoto chapteru začíná v týdnu od <b>${_tkDate(ta.at)}</b> (za ${_tkFmt(ta.weeksUntil * 7)} dní). Tickety získané po ní už na aukci nejdou. Ceny letošních lotů určí server až při aukci — srovnání je s loty minulého chapteru.`);
+        body += `<div style="font-size:0.65rem;line-height:1.8">Do aukce budeš mít odhadem <b>${_tkFmt(ta.ticketsExpected)}</b> ${icon}. ` +
+          (ta.lastChapterEquivalent ? `Minule by to stačilo na <b>${escHTML(ta.lastChapterEquivalent)}</b>. ` : "") +
+          (nextLot ? `Na <b>${escHTML(nextLot.name)}</b> (hodnota ${_tkFmt(nextLot.value)} ${sflIcon("0.8em")}) chybí <b>${_tkFmt(gap)}</b>.` : "") + `</div>`;
+        if (near.length > 1) body += `<div style="font-size:0.58rem;color:var(--text-secondary);margin-top:4px">Blízko nad tebou: ${near.map((l) => `${escHTML(l.name)} +${_tkFmt(l.tickets - ta.ticketsExpected)} (${_tkFmt(l.value)} ${sflIcon("0.8em")})`).join(" · ")}</div>`;
+        if (nextLot && pick.length) {
+          body += `<div style="font-size:0.6rem;margin-top:6px">Nejlevněji to doženeš (${got >= gap ? "stačí" : "nestačí"} — +${_tkFmt(got)} za ${_tkFmt(spent, 1)} ${sflIcon("0.8em")}):</div>
+            <ul style="font-size:0.58rem;line-height:1.7;margin:4px 0 0 18px">${pick.map((s) => `<li>${_tkGroup[s.group]}: ${escHTML(s.label)} — +${s.tickets}${s.reps > 1 ? ` × ${s.reps} dní` : ""}, ${_tkFmt(s.perTicket, 3)} ${sflIcon("0.8em")}/ticket</li>`).join("")}</ul>`;
+        }
+        h += panel(`🔨 AUKCE TOHOTO CHAPTERU — ${_tkDate(ta.at)}`, body);
+      }
+
+      // 2. Next chapter: what each lot costs to reach.
+      const best = d.best;
+      let body = note(`Předpoklad: ${d.assumptions.weeksToAuction} týdnů úkolů do aukce (tak to bylo v obou posledních chapterech), stejná tabule jako tento týden, doručení každý den, k tomu ${d.track} ${tk} z chapter tracku. ` +
+        `Hodnota lotu = dnešní cena stejného předmětu minulého chapteru po ${Math.round(d.assumptions.marketFee * 100)}% poplatku. „Nejlevněji“ = děláš všechny zdroje do dané ceny za ticket, od nejlevnějšího.`);
+      if (best && best.net > 0) {
+        body += `<div style="border:2px solid var(--green);border-radius:6px;padding:8px 10px;background:#161009;margin-bottom:10px;font-size:0.62rem;line-height:1.8">
+          ✅ Nejvíc vydělá: dělat vše do <b>${_tkFmt(best.maxPerTicket, 3)} ${sflIcon("0.8em")}/ticket</b> → ${_tkFmt(best.ticketsPerWeek)} ${tk}/týden, do aukce ${_tkFmt(best.atAuction)}, stojí ${_tkFmt(best.cost)} ${sflIcon("0.8em")} → <b>${escHTML(best.lot)}</b> (${_tkFmt(best.lotValue)}) = čistě <b style="color:var(--green)">+${_tkFmt(best.net)}</b> ${sflIcon("0.8em")}</div>`;
+      }
+      body += `<div style="overflow-x:auto"><table class="node-res-table" style="min-width:760px">
+        <tr><th>LOT (minulý chapter)</th><th style="text-align:right">TICKETŮ NA VÝHRU</th><th style="text-align:right">POTŘEBA / TÝDEN</th><th style="text-align:right">HODNOTA</th><th style="text-align:right">NEJLEVNĚJI STOJÍ</th><th style="text-align:right">ČISTĚ</th><th>VERDIKT</th></tr>` +
+        d.perLot.map((l) => {
+          const verdict = !l.reachable ? `<span style="color:var(--red)">z tabule nedosáhneš — chybí ${_tkFmt(l.shortPerWeek)}/týden</span>`
+            : l.net > 0 ? `<span style="color:var(--green)">vyplatí se</span>` : `<span style="color:var(--text-dim)">nevyplatí se</span>`;
+          return `<tr><td>${escHTML(l.name)}</td><td style="text-align:right">${_tkFmt(l.tickets)}</td><td style="text-align:right">${_tkFmt(l.needPerWeek)}</td>
+            <td style="text-align:right">${_tkFmt(l.lotValue)}</td><td style="text-align:right">${l.cost == null ? "—" : _tkFmt(l.cost)}</td>
+            <td style="text-align:right;color:${l.net == null ? "inherit" : l.net > 0 ? "var(--green)" : "var(--red)"}">${l.net == null ? "—" : (l.net > 0 ? "+" : "") + _tkFmt(l.net)}</td><td>${verdict}</td></tr>`;
+        }).join("") + `</table></div>`;
+      body += note(`Top loty vyhrávají hráči, kteří udělají úplně vše — medián nejlepších farem byl ${_tkFmt(d.observedTop.perWeek)} ${tk}/týden (strop ${_tkFmt(d.observedTop.capTotal)} za ${d.observedTop.weeks} týdne), víc, než ukazuje jedna tabule (eventy ×2 u doručení, víc zvířecích bounty). Při shodě rozhoduje ascension, pak level.`);
+      h += panel("📈 DALŠÍ CHAPTER — KOLIK STOJÍ KTERÝ LOT", body);
+
+      // 3. Sources, cheapest first.
+      const rows = d.sources.slice().sort((a, b) => (a.perTicket ?? 1e9) - (b.perTicket ?? 1e9));
+      const bb = d.bountyBonus;
+      body = note(`Každý zdroj: kolik ${tk} dá (s tvými bonusy) a co tě stojí ve ${sflIcon("0.8em")} — suroviny v odevzdávce za tržní/výrobní cenu, u zvířecích bounty krmení (zdarma se zlatým zvířetem) + ${Math.round(d.assumptions.raiseSlotLoss * 100)} % produkce místa ve stáji/kurníku po dobu růstu (1 level/den; zvíře se odevzdáním smaže). ` +
+        `Týdenní bonus za všechny bounty bez zvířat: +${bb.tickets} ${bb.claimed ? "✅ vybráno" : `— chybí: ${bb.open.map(escHTML).join(", ") || "nic"}`}.`);
+      body += `<div style="overflow-x:auto"><table class="node-res-table" style="min-width:820px">
+        <tr><th>ZDROJ</th><th>CO</th><th style="text-align:right">${tk}</th><th style="text-align:right">STOJÍ</th><th style="text-align:right">${sflIcon("0.8em")} / TICKET</th><th>STAV</th><th>POZNÁMKA</th></tr>` +
+        rows.map((s) => {
+          const per = s.per === "day" ? "/den" : "/týden";
+          let extra = "";
+          if (s.group === "delivery") extra = s.items ? Object.entries(s.items).map(([k, v]) => `${v}× ${escHTML(k)}`).join(", ") + ` · doručeno ${_tkFmt(s.delivered)}, přeskočeno ${_tkFmt(s.skipped)}` : "žádná objednávka";
+          else if (s.group === "chore") extra = _tkKind[s.kind] + (s.item ? ` (${escHTML(s.item)})` : "");
+          else if (s.group === "animal") extra = `krmení ${_tkFmt(s.feed, 2)}${s.golden ? " (zlaté zvíře)" : ""} + místo ${_tkFmt(s.slot, 2)} · ~${s.days} dní`;
+          return `<tr${s.done ? ' style="opacity:0.55"' : ""}><td style="white-space:nowrap">${_tkGroup[s.group]}</td><td>${escHTML(s.label)}</td>
+            <td style="text-align:right;white-space:nowrap">+${s.tickets} ${per}</td><td style="text-align:right">${s.cost == null ? "?" : _tkFmt(s.cost, 2)}</td>
+            <td style="text-align:right;font-weight:bold">${s.perTicket == null ? "?" : _tkFmt(s.perTicket, 3)}</td>
+            <td>${s.done ? "✅ hotovo" : "⬜ otevřené"}</td><td style="font-size:0.55rem;color:var(--text-secondary)">${extra}</td></tr>`;
+        }).join("") + `</table></div>`;
+      h += panel(`🧾 ZDROJE ${tk.toUpperCase()} — OD NEJLEVNĚJŠÍHO`, body);
+
+      // 4. The reference: last chapter's ticket lots at today's prices.
+      const ref = d.auction.reference;
+      body = note(`Loty placené tickety v aukci ${escHTML(ref.chapter)} (${escHTML(ref.ticket)}): průměr minimálních vítězných nabídek z pěti kol, podle <a href="${escHTML(ref.source)}" target="_blank" style="color:var(--sunpetal)">sfl.world</a> (${escHTML(ref.readAt)}). Hodnota = dnešní floor, ${sflIcon("0.8em")}/ticket po poplatku. Letošní aukce: ${d.auction.currentItems.map(escHTML).join(", ")}.`);
+      body += `<div style="overflow-x:auto"><table class="node-res-table" style="min-width:700px">
+        <tr><th>LOT</th><th style="text-align:right">KUSŮ</th><th style="text-align:right">TICKETŮ</th><th style="text-align:right">${sflIcon("0.8em")} KOLO</th><th style="text-align:right">FLOOR DNES</th><th style="text-align:right">POSLEDNÍ PRODEJ</th><th style="text-align:right">${sflIcon("0.8em")} / TICKET</th></tr>` +
+        d.auction.lots.map((l) => `<tr><td>${escHTML(l.name)}</td><td style="text-align:right">${l.supply}</td><td style="text-align:right">${_tkFmt(l.tickets)}</td>
+          <td style="text-align:right">${l.flower == null ? "—" : _tkFmt(l.flower)}</td><td style="text-align:right">${_tkFmt(l.floor)}</td><td style="text-align:right">${_tkFmt(l.last)}</td>
+          <td style="text-align:right;font-weight:bold">${l.perTicket == null ? "—" : _tkFmt(l.perTicket, 3)}</td></tr>`).join("") + `</table></div>`;
+      h += panel("🏷️ MINULÁ AUKCE ZA TICKETY — DNEŠNÍ CENY", body);
+      h += `<div class="footer"><button class="refresh-btn" onclick="renderTickets()">REFRESH</button></div>`;
+      return h;
     }
 
     async function renderSpeculation(data) {

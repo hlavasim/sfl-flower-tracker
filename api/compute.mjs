@@ -12,6 +12,7 @@ import { buildWishlistSection } from "../core/sections/wishlist.mjs";
 import { buildCookingSection as _cookingForAscension } from "../core/sections/cooking.mjs";
 import { buildBudsSection } from "../core/sections/buds.mjs";
 import { buildPetsSection } from "../core/sections/pets.mjs";
+import { buildTicketsSection } from "../core/sections/tickets.mjs";
 import { computeBettyRate } from "../core/engine/prices.mjs";
 import { API_SPEC } from "../core/api-spec.mjs";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -570,6 +571,26 @@ async function _handler(req, res) {
         exchangeOk: !!(exchange && (exchange.coins || exchange.gems)),
         btcOk: btcUsd > 0,
       };
+    }
+    // `tickets`: what each ticket source costs this farm against the auction lot it can win.
+    // Prices = this farm's section=prices maps; animal slot output = section=power's per-animal
+    // net; lot values = today's NFT floors (buildTreasuryData, names resolved by id).
+    else if (section === "tickets") {
+      const [nftResult, exchange] = await Promise.all([fetchNfts(), fetchExchange()]);
+      const nftData = nftResult.ok ? nftResult.data : {};
+      const td = buildTreasuryData(p2p, nftData, exchange, 0, { itemNames: await loadItemNames() });
+      const animalNet = {};
+      try {
+        const cs = buildPowerSection(farm, p2p, nftData, exchange, settings).categories.catSummaries || {};
+        for (const [cat, type] of [["chickens", "Chicken"], ["sheep", "Sheep"], ["cows", "Cow"]]) {
+          const c = cs[cat], n = c && c.costDetails && c.costDetails.animalCount;
+          if (n > 0) animalNet[type] = (c.boostedSfl - (c.costPerDay || 0)) / n;
+        }
+      } catch { /* no animal output → animal bounties priced by feed alone */ }
+      data = buildTicketsSection(farm, buildPricesSection(farm, p2p, settings), {
+        coinsPerSFL, animalNet, floors: { ...td.nftCollectibles, ...td.nftWearables },
+      });
+      data.status = { pricesOk: Object.keys(p2p).length > 0, nftsOk: !!nftResult.ok };
     }
     else return res.status(400).json({ error: `unknown section: ${section}` });
     const payload = { farm: farmId, computedAt: new Date().toISOString(), ..._freshness(farmResult, _reqCtx.getStore()?.nfts), section, data };

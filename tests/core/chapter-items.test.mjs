@@ -90,8 +90,10 @@ test("the roadmap's candidate list gets the priced chapter items and never an un
 
 test("every chapter item names its source, and shop items their ticket cost", () => {
   for (const c of CHAPTER_BOOST_ITEMS) {
-    assert.ok(["auction", "shop", "drop", "reward"].includes(c.source), `${c.name}: source`);
+    assert.ok(["auction", "shop", "drop", "reward", "market"].includes(c.source), `${c.name}: source`);
     assert.ok(c.type === "Wearable" || c.type === "Collectible", `${c.name}: type`);
     if (c.source === "shop") assert.ok(c.ticket && c.ticket.qty > 0, `${c.name}: ticket cost`);
+    // A market item is priced from the feed row with its marketplace id — no id, no price.
+    if (c.source === "market") assert.ok(Number.isInteger(c.id) && c.id > 0, `${c.name}: marketplace id`);
   }
 });

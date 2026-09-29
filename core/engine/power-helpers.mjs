@@ -755,6 +755,7 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
       let yieldMult = 1; // multiplied to output
       let yieldFlat = 0; // added per cycle per slot
       let extraHarvest = 0; // extra fruit harvests per seed (Immortal Pear, etc.)
+      let extraCycles = 0; // whole extra cycles a day (more power-skill uses: Luna's Crescent)
 
       for (const eff of boostEffects) {
         // Only apply effects that match this category
@@ -793,6 +794,9 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
           case "extra_harvest":
             extraHarvest += eff.value;
             break;
+          case "extra_cycles":
+            extraCycles += eff.value;
+            break;
           case "daily_flat":
             yieldFlat += eff.value; // fishing: unitsPerDay = 20 + yieldFlat (per-day), so this lands per-day
             break;
@@ -807,7 +811,7 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
       }
 
       const effectiveCycle = baseCycleSec * speedMult;
-      const cyclesPerDay = catId === "fishing" ? 1 : (effectiveCycle > 0 ? 86400 / effectiveCycle : 0);
+      const cyclesPerDay = catId === "fishing" ? 1 : (effectiveCycle > 0 ? 86400 / effectiveCycle + extraCycles : 0);
       const outputPerCycle = baseYield * yieldMult + yieldFlat;
 
       let unitsPerDay;

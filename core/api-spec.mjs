@@ -29,7 +29,7 @@ export const API_SPEC = {
             name: "section",
             in: "query",
             required: false,
-            schema: { type: "string", enum: ["ascension", "buds", "constants", "cooking", "diff", "eff", "openapi", "pets", "power", "prices", "roadmap", "roi", "treasury", "wishlist"], default: "cooking" },
+            schema: { type: "string", enum: ["ascension", "buds", "constants", "cooking", "diff", "eff", "openapi", "pets", "power", "prices", "roadmap", "roi", "tickets", "treasury", "wishlist"], default: "cooking" },
             description:
               "Which computation to run. `constants`: the canonical core/data game tables " +
               "plus flowers.html migration-coverage status, no farm needed. `cooking`: " +
@@ -87,6 +87,10 @@ export const API_SPEC = {
               "`treasury`: full-farm liquidation valuation — `td` (nft floors + p2p + coin/gem/" +
               "USD/BTC rates) and `value` (computeFarmValue: resources/treasures/collectibles/" +
               "wearables/pets/listings/liquid + totals) for the requested `coinMode`. " +
+              "`tickets`: the chapter's ticket sources on this farm (deliveries, chores, " +
+              "bounties, animal bounties) with each one's FLOWER cost, the plans \"do everything " +
+              "up to X FLOWER a ticket\" and which auction lot each reaches (lots priced at today's " +
+              "NFT floor, last chapter's winning ticket bids). " +
               "`roadmap`: POST-only — the roadmap page's computed layer: measured efficiency " +
               "(body `{ snapshots }` like `eff`), `currentProd` (net income by category at " +
               "real efficiency), and `sim` (the reinvestment-ordered buy path: timeline, " +

@@ -13,6 +13,8 @@
  *   shop    — chapter megastore (megastore.ts), priced as ticket qty × the roadmap's ticket value
  *   reward  — milestone / chapter track reward
  *   drop    — chapter mutant drop
+ *   market  — trades, but the feed lists it without a name (only its marketplace `id`), so it is
+ *             priced from that id's row
  * Merged-node collectibles (Ancient Tree, Prime Gold Rock, …) are left out on purpose: they are
  * the T2/T3 node tiers, already counted by the node-tier logic.
  */
@@ -35,6 +37,9 @@ export const CHAPTER_BOOST_ITEMS = [
   { name: "Ascended Sheep", type: "Collectible", source: "drop", chapter: "Ascension Age", boost: "+0.05 Wool" },
   { name: "Ascended Cow", type: "Collectible", source: "drop", chapter: "Ascension Age", boost: "-2.5% Cow Sleep Time" },
   { name: "Ruins Flower", type: "Collectible", source: "drop", chapter: "Ascension Age", boost: "+0.05 Honey from full beehives" },
+  // Tradeable, but the feed row has no name. Halves every power-skill cooldown (skillUsed.ts
+  // getSkillCooldown), valued as the extra uses of the power skills the farm has.
+  { name: "Luna's Crescent", type: "Wearable", source: "market", id: 499, chapter: null, powerCooldownMult: 0.5, boost: "-50% power skill cooldowns" },
   // Rewards that never trade
   { name: "Salt Bottle Onesie", type: "Wearable", source: "reward", chapter: "Ascension Age", boost: "+1 Spice Rack output" },
   { name: "Trident", type: "Wearable", source: "reward", chapter: null, boost: "20% Chance +1 Fish" },
