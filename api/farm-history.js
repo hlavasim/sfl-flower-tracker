@@ -506,6 +506,44 @@ export default async function handler(req, res) {
     }
   }
 
+  // ─── TICKETY page: one snapshot a week (the week's last), cut to what the ticket model reads ───
+  // Boards (bounties, chores), the ticket NPCs' orders, the ticket bonuses (VIP, worn items,
+  // farm hands), the "X Collected" counters, and the golden animals / chapter boost collectibles
+  // wherever they are placed. ~15 KB a week instead of the ~240 KB farm.
+  if (req.query.type === "ticket-weeks") {
+    try {
+      const farm = parseInt(req.query.farm, 10);
+      if (!Number.isFinite(farm) || !ALLOWED_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
+      const names = ["Gold Egg", "Golden Sheep", "Golden Cow", "Igloo", "Hammock", "Heart Air Balloon"];
+      const pick = (path) => `jsonb_strip_nulls(jsonb_build_object(${names.map((n) => `'${n}', game_data${path}->'${n}'`).join(", ")}))`;
+      const r = await pool.query(
+        `SELECT DISTINCT ON (date_trunc('week', captured_at)) to_char(date_trunc('week', captured_at), 'YYYY-MM-DD') AS wk,
+                (extract(epoch from captured_at) * 1000)::bigint AS ts,
+                jsonb_build_object(
+                  'bounties', game_data->'bounties',
+                  'choreBoard', game_data->'choreBoard',
+                  'delivery', jsonb_build_object('orders', game_data->'delivery'->'orders'),
+                  'npcs', game_data->'npcs',
+                  'vip', game_data->'vip',
+                  'inventory', jsonb_strip_nulls(jsonb_build_object('Lifetime Farmer Banner', game_data->'inventory'->'Lifetime Farmer Banner', 'Gem', game_data->'inventory'->'Gem')),
+                  'bumpkin', jsonb_build_object('equipped', game_data->'bumpkin'->'equipped'),
+                  'farmHands', game_data->'farmHands',
+                  'dailyRewards', game_data->'dailyRewards',
+                  'farmActivity', (SELECT jsonb_object_agg(k, v) FROM jsonb_each(game_data->'farmActivity') t(k, v) WHERE k LIKE '% Collected'),
+                  'collectibles', ${pick("->'collectibles'")},
+                  'interior', jsonb_build_object('ground', jsonb_build_object('collectibles', ${pick("->'interior'->'ground'->'collectibles'")}),
+                                                 'level_one', jsonb_build_object('collectibles', ${pick("->'interior'->'level_one'->'collectibles'")}))
+                ) AS farm
+           FROM farm_snapshots WHERE farm_id = $1
+          ORDER BY date_trunc('week', captured_at), captured_at DESC`, [farm]);
+      res.setHeader("Cache-Control", "public, max-age=900");
+      return res.status(200).json({ weeks: r.rows.map((x) => ({ wk: x.wk, ts: Number(x.ts), farm: x.farm })) });
+    } catch (err) {
+      console.error("[ticket-weeks]", err);
+      return res.status(500).json({ error: "ticket-weeks failed", detail: String(err.message || err) });
+    }
+  }
+
   // ─── Investment Tracker: repay plan (one row per farm, a setting not a ledger) ───
   if (req.query.type === "repay-plan") {
     const method = (req.method || "GET").toUpperCase();

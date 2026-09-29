@@ -90,7 +90,10 @@ export const API_SPEC = {
               "`tickets`: the chapter's ticket sources on this farm (deliveries, chores, " +
               "bounties, animal bounties) with each one's FLOWER cost, the plans \"do everything " +
               "up to X FLOWER a ticket\" and which auction lot each reaches (lots priced at today's " +
-              "NFT floor, last chapter's winning ticket bids). " +
+              "NFT floor, last chapter's winning ticket bids), `rounds` (FLOWER / Gem round and " +
+              "last sale against today's floor) and `rates`. Optional POST body `{ weeks }` from " +
+              "`/api/farm-history?type=ticket-weeks` adds `history`: every recorded week through " +
+              "the same model at today's prices, per-chapter medians and the tickets-per-week cost curve. " +
               "`roadmap`: POST-only — the roadmap page's computed layer: measured efficiency " +
               "(body `{ snapshots }` like `eff`), `currentProd` (net income by category at " +
               "real efficiency), and `sim` (the reinvestment-ordered buy path: timeline, " +

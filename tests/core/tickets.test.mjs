@@ -112,3 +112,33 @@ test("plans count the weeks to the auction, not the whole chapter, and say which
   assert.equal(d.thisAuction.at, Date.UTC(2026, 9, 5));
   assert.ok(d.thisAuction.ticketsExpected > 4000 && d.thisAuction.ticketsExpected < 4600);
 });
+
+test("history: every week through the same model, frozen weeks kept but out of the averages, a rising cost curve", async () => {
+  const { buildTicketHistory } = await import("../../core/sections/tickets.mjs");
+  const frozen = farm({ bounties: { requests: [], completed: [] }, choreBoard: { chores: {} } });
+  const h = buildTicketHistory([
+    { wk: "2026-08-03", ts: Date.UTC(2026, 7, 4), farm: frozen },
+    { wk: "2026-09-28", ts: NOW, farm: farm() },
+  ], prices, { coinsPerSFL: 1500 });
+  assert.equal(h.weeks.length, 2);
+  assert.deepEqual(h.weeks.map((w) => w.active), [false, true]);
+  assert.equal(h.chapters.length, 1);
+  assert.equal(h.chapters[0].name, "Ascension Age");
+  assert.equal(h.chapters[0].weeks, 1, "the frozen week is not averaged");
+  assert.equal(h.all.weeks, 1);
+  for (let i = 1; i < h.curve.length; i++) assert.ok(h.curve[i].cost >= h.curve[i - 1].cost, "more tickets never cost less");
+});
+
+test("round ratios: FLOWER and Gem rounds and last sales against today's floor", async () => {
+  const { roundRatios } = await import("../../core/sections/tickets.mjs");
+  const r = roundRatios([
+    { name: "A", floor: 1000, flower: 1400, gem: 30000, last: 700 },
+    { name: "B", floor: 500, flower: 600, gem: null, last: 0 },
+    { name: "C", floor: 0, flower: 90, gem: 900, last: 5 },
+    { name: "Pufferfish", floor: 7, flower: 19, gem: null, last: 5 },
+  ], 50);
+  assert.equal(r.rows.length, 2, "no floor or a trivial one (under 100), no ratio");
+  assert.ok(Math.abs(r.flower.median - (1.4 + 1.2) / 2) < 1e-9);
+  assert.ok(Math.abs(r.gem.median - 0.6) < 1e-9, "30,000 gems / 50 per FLOWER = 600 against 1,000");
+  assert.equal(r.lastSale.n, 1);
+});

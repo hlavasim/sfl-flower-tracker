@@ -312,9 +312,107 @@ export function buildTicketsSection(farm, prices, opts = {}) {
     plans, best, perLot, thisAuction, observedTop: OBSERVED_TOP,
     auction: { reference: { chapter: AUCTION_REFERENCE.chapter, ticket: AUCTION_REFERENCE.ticket, source: AUCTION_REFERENCE.source, readAt: AUCTION_REFERENCE.readAt },
       lots, currentItems: CURRENT_AUCTION_ITEMS },
+    // For the "tickets, gems, FLOWER or wait" decision on the page.
+    rounds: roundRatios(lots, opts.gemsPerSFL || 0),
+    rates: { gemsPerSFL: opts.gemsPerSFL || 0, sflUsd: opts.sflUsd || 0, gems: +(farm.inventory?.Gem || 0) },
     assumptions: { weeksToAuction: WEEKS_TO_AUCTION, raiseSlotLoss: RAISE_SLOT_LOSS, marketFee: MARKET_FEE,
       weeklyBountyBonus: WEEKLY_BOUNTY_BONUS },
   };
 }
 
-export { AUCTION_REFERENCE, choreCost, raiseCost, ticketBonuses };
+const median = (xs) => {
+  const a = xs.filter((x) => x != null && isFinite(x)).sort((p, q) => p - q);
+  if (!a.length) return null;
+  const m = Math.floor(a.length / 2);
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+};
+
+/*
+ * The same auction item could be had four ways; last chapter says what each cost against the
+ * item's price on the market today (its floor): the FLOWER round, the Gem round (gems at the
+ * exchange rate), and waiting to buy (the floor itself — and the last sales, often below it).
+ * Tickets are priced by the history of what collecting them cost (buildTicketHistory).
+ */
+// Lots under this floor are left out: a 19-FLOWER bid on a 7-FLOWER Pufferfish reads as "300 %"
+// and says nothing about how an item worth having is priced.
+const RATIO_MIN_FLOOR = 100;
+function roundRatios(lots, gemsPerSFL) {
+  const rows = lots.filter((l) => l.floor >= RATIO_MIN_FLOOR).map((l) => ({
+    name: l.name, floor: l.floor,
+    flower: l.flower != null ? l.flower / l.floor : null,
+    gem: l.gem != null && gemsPerSFL > 0 ? (l.gem / gemsPerSFL) / l.floor : null,
+    lastSale: l.last > 0 ? l.last / l.floor : null,
+  }));
+  const col = (k) => rows.map((r) => r[k]).filter((x) => x != null);
+  const sum = (k) => { const v = col(k); return v.length ? { median: median(v), min: Math.min(...v), max: Math.max(...v), n: v.length } : null; };
+  return { rows, flower: sum("flower"), gem: sum("gem"), lastSale: sum("lastSale") };
+}
+
+/**
+ * Every recorded week run through the same model: what "everything" cost that week at today's
+ * prices, and the curve "X tickets a week cost Y". Weeks with no bounty board (a chapter's frozen
+ * first week, the auction week) are kept in the list but left out of the averages.
+ * @param weeks [{ wk, ts, farm }] — /api/farm-history?type=ticket-weeks
+ */
+export function buildTicketHistory(weeks, prices, opts = {}) {
+  const list = [];
+  for (const w of weeks || []) {
+    if (!w || !w.farm) continue;
+    const d = buildTicketsSection(w.farm, prices, { ...opts, now: +w.ts || Date.parse(w.wk) });
+    const part = (g) => d.sources.filter((s) => s.group === g).reduce((a, s) => {
+      const k = s.per === "day" ? 7 : 1;
+      a.tickets += s.tickets * k; if (s.cost != null) a.cost += s.cost * k;
+      if (s.done) a.doneTickets += s.tickets; a.n += 1; if (s.done) a.done += 1;
+      return a;
+    }, { tickets: 0, cost: 0, doneTickets: 0, n: 0, done: 0 });
+    const parts = { delivery: part("delivery"), chore: part("chore"), bounty: part("bounty"), animal: part("animal") };
+    const active = parts.bounty.n > 0;
+    const max = d.plans[d.plans.length - 1] || null;
+    // The priciest items of the week's bounty board — what makes a "max board" expensive.
+    const hard = d.sources.filter((s) => s.group === "bounty" && s.perTicket != null && s.perTicket > 0.3)
+      .map((s) => ({ name: s.label, cost: s.cost, done: s.done }));
+    list.push({ wk: w.wk, chapter: d.chapter.name, ticket: d.chapter.ticket, active,
+      maxTickets: max ? max.ticketsPerWeek : 0, maxCost: max ? max.costPerWeek : 0,
+      curve: d.plans.map((p) => [p.ticketsPerWeek, p.costPerWeek]), parts, hard,
+      bonusOpen: d.bountyBonus.open.length, collected: d.chapter.collected });
+  }
+  const act = list.filter((x) => x.active);
+  // What a week at X tickets costs, median over the recorded weeks (linear between a week's plans).
+  const costAt = (curve, x) => {
+    if (!curve.length || x > curve[curve.length - 1][0]) return null;
+    if (x <= curve[0][0]) return curve[0][1] * (curve[0][0] > 0 ? x / curve[0][0] : 0);
+    for (let i = 1; i < curve.length; i++) {
+      const [t0, c0] = curve[i - 1], [t1, c1] = curve[i];
+      if (x <= t1) return c0 + (c1 - c0) * (t1 > t0 ? (x - t0) / (t1 - t0) : 0);
+    }
+    return null;
+  };
+  const top = Math.max(0, ...act.map((x) => x.maxTickets));
+  const curve = [];
+  for (let x = 50; x <= top + 50; x += 50) {
+    const costs = act.map((w) => costAt(w.curve, x));
+    const ok = costs.filter((c) => c != null);
+    if (!ok.length) break;
+    // Near the top only a few weeks reach x, and their median can dip below the level before;
+    // more tickets never cost less, so the curve only rises.
+    const prev = curve.length ? curve[curve.length - 1].cost : 0;
+    curve.push({ ticketsPerWeek: x, cost: Math.max(prev, median(ok)), share: ok.length / act.length });
+  }
+  const byChapter = {};
+  for (const x of act) (byChapter[x.chapter] = byChapter[x.chapter] || []).push(x);
+  const chapters = Object.entries(byChapter).map(([name, a]) => ({
+    name, ticket: a[0].ticket, weeks: a.length,
+    maxTickets: median(a.map((x) => x.maxTickets)), maxCost: median(a.map((x) => x.maxCost)),
+    parts: Object.fromEntries(["delivery", "chore", "bounty", "animal"].map((k) => [k, {
+      tickets: median(a.map((x) => x.parts[k].tickets)), cost: median(a.map((x) => x.parts[k].cost)) }])),
+    doneBountyTickets: median(a.map((x) => x.parts.bounty.doneTickets)),
+  }));
+  return {
+    weeks: list.map(({ curve: _c, ...rest }) => rest),
+    chapters,
+    all: act.length ? { weeks: act.length, maxTickets: median(act.map((x) => x.maxTickets)), maxCost: median(act.map((x) => x.maxCost)) } : null,
+    curve,
+  };
+}
+
+export { AUCTION_REFERENCE, choreCost, raiseCost, ticketBonuses, roundRatios };

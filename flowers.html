@@ -5420,7 +5420,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.82</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.83</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5447,6 +5447,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.83", items: [
+          { t: "feat", text: "<b>TICKETY: collect tickets, or wait and buy?</b> Enter what an auction item will be worth after the chapter ($ or FLOWER) and how big a lot it is; the page prices four ways to get it — collecting the tickets (from what collecting cost over every recorded week), the Gem round, the FLOWER round (both from how last chapter's rounds compared with the items' prices today) and buying on the market after the chapter." },
+          { t: "feat", text: "<b>TICKETY: board history.</b> Every recorded week of every chapter through the same model at today's prices: what doing everything would have given and cost, per chapter and in total (~1,320 tickets a week for ~536 FLOWER), the cost of X tickets a week, and week by week what you did and what was expensive on the board." },
+        ] },
         { ver: "v5.82", items: [
           { t: "feat", text: "<b>TICKETY</b> (MORE → 🎟️): what each ticket source costs this farm in FLOWER — deliveries, chores, bounties, animal bounties (a turned-in animal is deleted, so its cost is raising a replacement) — against the auction lot it can win, priced at today's floor of last chapter's lots. The ticket auction comes ~8 weeks into a chapter, so plans count those weeks. Shows how many tickets you will have at this chapter's auction (from 5 Oct) and the cheapest way to the next lot." },
           { t: "fix", text: "<b>Ascension Age</b> was missing from the chapter table, so the dashboard called deliveries “Salt Rock”. Delivery tickets match the current game (Tywin 10, Finn 5, Timmy 5, Raven 4, Pharaoh 6, Cornwell 3)." },
@@ -24591,17 +24595,132 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       const app = document.getElementById("app");
       app.innerHTML = `<div class="header pixel-panel pixel-font"><h1>🎟️ TICKETY</h1>
         <div class="farm-id">Farm #${escHTML(FARM_ID)} · co stojí tickety a kolik vyhrají v aukci</div></div>
-        <div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Počítám zdroje ticketů…</div></div>`;
+        <div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Počítám zdroje ticketů a historii tabulí…</div></div>`;
+      // The recorded weeks (only the two tracked farms have them) go to compute, which runs the
+      // same model on each; without them the page still works from this week's boards.
+      let weeks = null;
+      try {
+        const rw = await fetch(`/api/farm-history?type=ticket-weeks&farm=${FARM_ID}`);
+        if (rw.ok) weeks = (await rw.json()).weeks || null;
+      } catch (e) { weeks = null; }
       let d;
       try {
-        const r = await fetch(`/api/compute?farm=${FARM_ID}&section=tickets`);
+        const r = weeks && weeks.length
+          ? await fetch(`/api/compute?farm=${FARM_ID}&section=tickets`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ weeks }) })
+          : await fetch(`/api/compute?farm=${FARM_ID}&section=tickets`);
         if (!r.ok) throw new Error(`compute tickets ${r.status}`);
         d = (await r.json()).data;
       } catch (e) {
         app.innerHTML += `<div class="error-screen pixel-panel pixel-font"><p>Nenačetlo se: ${escHTML(e.message)}</p></div>`;
         return;
       }
+      window._tkData = d;
       app.innerHTML = _ticketsHtml(d);
+      _tkDecide();
+    }
+
+    /*
+     * The decision: a cool item shows up for this chapter's auction and you think it will be
+     * worth X after the chapter. Collect the tickets for it, bid gems, bid FLOWER, or wait and buy?
+     * Every path is priced from what last chapter did (d.rounds) and what collecting tickets
+     * cost over every recorded week (d.history.curve).
+     */
+    function _tkSaved() { try { return JSON.parse(localStorage.getItem("sfl_tk_decide") || "{}") || {}; } catch (e) { return {}; } }
+    function _tkDecisionHtml(d) {
+      const s = _tkSaved();
+      const est = s.est != null ? s.est : 1500, unit = s.unit || "usd", tier = s.tier || "top", custom = s.custom || 13000;
+      const sel = (v, cur) => (v === cur ? " selected" : "");
+      return `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.75rem;color:var(--sunpetal);margin-bottom:8px">🧮 SBÍRAT TICKETY, NEBO POČKAT A KOUPIT?</div>
+        <div style="font-size:0.55rem;color:var(--text-dim);line-height:1.7;margin-bottom:8px">Zadej, kolik bude podle tebe předmět z aukce stát na trhu po chapteru, a jak drahý lot to je v ticketech. Každá cesta je spočítaná z toho, jak to dopadlo minule (stejné předměty v kole za FLOWER, za gemy a jejich dnešní cena) a co stálo sbírání ticketů v každém zaznamenaném týdnu.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:0.62rem;margin-bottom:10px">
+          <label>Odhad ceny po chapteru <input id="tk-est" type="number" min="0" step="50" value="${escHTML(String(est))}" style="width:90px" oninput="_tkDecide()"></label>
+          <select id="tk-unit" onchange="_tkDecide()"><option value="usd"${sel("usd", unit)}>$</option><option value="flower"${sel("flower", unit)}>FLOWER</option></select>
+          <label>Lot <select id="tk-tier" onchange="_tkDecide()">
+            <option value="top"${sel("top", tier)}>top (málo kusů, ~13 000 ticketů)</option>
+            <option value="mid"${sel("mid", tier)}>střední (~5 600 ticketů)</option>
+            <option value="custom"${sel("custom", tier)}>vlastní počet ticketů</option></select></label>
+          <input id="tk-custom" type="number" min="0" step="100" value="${escHTML(String(custom))}" style="width:90px" oninput="_tkDecide()">
+        </div>
+        <div id="tk-decision-out"></div></div>`;
+    }
+    function _tkDecide() {
+      const d = window._tkData; const out = document.getElementById("tk-decision-out");
+      if (!d || !out) return;
+      const est = parseFloat(document.getElementById("tk-est").value) || 0;
+      const unit = document.getElementById("tk-unit").value, tier = document.getElementById("tk-tier").value;
+      const custom = parseFloat(document.getElementById("tk-custom").value) || 0;
+      try { localStorage.setItem("sfl_tk_decide", JSON.stringify({ est, unit, tier, custom })); } catch (e) {}
+      document.getElementById("tk-custom").style.display = tier === "custom" ? "" : "none";
+      const usd = d.rates.sflUsd || 0;
+      const V = unit === "usd" ? (usd > 0 ? est / usd : 0) : est;
+      const lots = d.auction.lots;
+      const need = tier === "custom" ? custom
+        : tier === "top" ? Math.round(Math.max(...lots.map((l) => l.tickets)))
+        : Math.round(lots.filter((l) => l.tickets > 2000 && l.tickets < 7000).reduce((s, l, _, a) => s + l.tickets / a.length, 0));
+      const weeks = d.assumptions.weeksToAuction;
+      const perWeek = Math.max(0, (need - d.track) / weeks);
+      // Ticket cost: the history's curve when there is one, else this week's plans.
+      const pts = d.history && d.history.curve && d.history.curve.length
+        ? d.history.curve.filter((c) => c.share >= 0.5).map((c) => [c.ticketsPerWeek, c.cost])
+        : d.plans.map((p) => [p.ticketsPerWeek, p.costPerWeek]);
+      let tkCost = null;
+      for (let i = 0; i < pts.length; i++) {
+        if (perWeek <= pts[i][0]) {
+          const [t0, c0] = i ? pts[i - 1] : [0, 0], [t1, c1] = pts[i];
+          tkCost = (c0 + (c1 - c0) * (t1 > t0 ? (perWeek - t0) / (t1 - t0) : 0)) * weeks; break;
+        }
+      }
+      const maxPerWeek = pts.length ? pts[pts.length - 1][0] : 0;
+      const maxTickets = Math.round(maxPerWeek * weeks + d.track);
+      const r = d.rounds, gems = d.rates.gemsPerSFL;
+      const fmtF = (x) => `${_tkFmt(x)} ${sflIcon("0.8em")}${usd > 0 ? ` <span style="color:var(--text-dim)">($${_tkFmt(x * usd)})</span>` : ""}`;
+      const range = (s) => s ? `${_tkFmt(V * s.min)}–${_tkFmt(V * s.max)}` : "—";
+      const paths = [];
+      paths.push({ key: "tickets", label: "🎟️ Sbírat tickety", cost: tkCost,
+        how: tkCost == null
+          ? `<span style="color:var(--red)">nedosáhneš</span> — potřeba ${_tkFmt(need)} ticketů za ${weeks} týdnů (${_tkFmt(perWeek)}/týden), historicky zvládnutelné nejvýš ~${_tkFmt(maxTickets)} (${_tkFmt(maxPerWeek)}/týden aspoň v polovině týdnů). Top hráči to mají díky eventům.`
+          : `${_tkFmt(need)} ticketů = ${_tkFmt(perWeek)}/týden po ${weeks} týdnů (+${d.track} z tracku). Výhra není jistá: při shodě rozhoduje ascension a level.` });
+      if (r.gem) paths.push({ key: "gem", label: "💎 Kolo za gemy", cost: V * r.gem.median,
+        how: `minule ${Math.round(r.gem.median * 100)} % pozdější ceny (${Math.round(r.gem.min * 100)}–${Math.round(r.gem.max * 100)} %, rozpětí ${range(r.gem)}) · ≈ ${_tkFmt(V * r.gem.median * gems)} gemů, máš ${_tkFmt(d.rates.gems)}` });
+      if (r.flower) paths.push({ key: "flower", label: "🌸 Kolo za FLOWER", cost: V * r.flower.median,
+        how: `minule ${Math.round(r.flower.median * 100)} % pozdější ceny (${Math.round(r.flower.min * 100)}–${Math.round(r.flower.max * 100)} %) — v aukci se přeplácí` });
+      paths.push({ key: "wait", label: "⏳ Počkat a koupit na trhu", cost: V,
+        how: `po skončení chapteru${d.chapter.end ? ` (${_tkDate(d.chapter.end)})` : ""} · poslední prodeje bývají ještě níž, ~${r.lastSale ? Math.round(r.lastSale.median * 100) : "?"} % flooru` });
+      const feasible = paths.filter((p) => p.cost != null);
+      const best = feasible.reduce((b, p) => (!b || p.cost < b.cost ? p : b), null);
+      out.innerHTML = (V > 0 ? `<div style="font-size:0.6rem;margin-bottom:6px">Odhad ${fmtF(V)}${unit === "usd" ? ` (kurz ${_tkFmt(usd, 3)} $/FLOWER)` : ""} · lot za ${_tkFmt(need)} ticketů</div>` : "") +
+        `<div style="overflow-x:auto"><table class="node-res-table" style="min-width:680px"><tr><th>CESTA</th><th style="text-align:right">STOJÍ ODHADEM</th><th>JAK</th></tr>` +
+        paths.map((p) => `<tr${p === best ? ' style="background:rgba(80,200,120,0.12)"' : ""}><td style="white-space:nowrap">${p.label}${p === best ? " ✅" : ""}</td>
+          <td style="text-align:right;white-space:nowrap">${p.cost == null ? "—" : fmtF(p.cost)}</td><td style="font-size:0.56rem;color:var(--text-secondary)">${p.how}</td></tr>`).join("") +
+        `</table></div>` +
+        `<div style="font-size:0.55rem;color:var(--text-dim);margin-top:6px">Tickety jsou po aukci k ničemu (jen shop), gemy a FLOWER ti v aukci při prohře vrátí. Poměry kol z ${r.gem ? r.gem.n : 0} předmětů minulé aukce, cena sbírání z ${d.history && d.history.all ? d.history.all.weeks + " týdnů historie" : "této tabule"} (dnešní ceny).</div>`;
+    }
+
+    function _tkHistoryHtml(d) {
+      const h = d.history;
+      if (!h || !h.weeks || !h.weeks.length) return "";
+      const note = (t) => `<div style="font-size:0.55rem;color:var(--text-dim);line-height:1.7;margin-bottom:8px">${t}</div>`;
+      let body = note(`Každý zaznamenaný týden (poslední snímek týdne) přepočtený dnešními cenami: kolik ticketů by dala úplně všechna doručení, úkoly a bounty, a za kolik. Týdny bez tabule (první týden chapteru, týden aukce) se do průměrů nepočítají.`);
+      body += `<div style="overflow-x:auto"><table class="node-res-table" style="min-width:760px">
+        <tr><th>CHAPTER</th><th style="text-align:right">TÝDNŮ</th><th style="text-align:right">MAX / TÝDEN</th><th style="text-align:right">STOJÍ / TÝDEN</th><th style="text-align:right">${sflIcon("0.8em")} / TICKET</th><th style="text-align:right">DORUČENÍ</th><th style="text-align:right">ÚKOLY</th><th style="text-align:right">BOUNTY</th><th style="text-align:right">ZVÍŘATA</th></tr>` +
+        h.chapters.map((c) => `<tr><td>${escHTML(c.name)} <span style="color:var(--text-dim)">(${escHTML(c.ticket)})</span></td><td style="text-align:right">${c.weeks}</td>
+          <td style="text-align:right">${_tkFmt(c.maxTickets)}</td><td style="text-align:right">${_tkFmt(c.maxCost)}</td><td style="text-align:right;font-weight:bold">${_tkFmt(c.maxCost / c.maxTickets, 3)}</td>` +
+          ["delivery", "chore", "bounty", "animal"].map((k) => `<td style="text-align:right;white-space:nowrap">${_tkFmt(c.parts[k].tickets)} / ${_tkFmt(c.parts[k].cost)}</td>`).join("") + `</tr>`).join("") +
+        (h.all ? `<tr style="font-weight:bold"><td>Všechno</td><td style="text-align:right">${h.all.weeks}</td><td style="text-align:right">${_tkFmt(h.all.maxTickets)}</td><td style="text-align:right">${_tkFmt(h.all.maxCost)}</td><td style="text-align:right">${_tkFmt(h.all.maxCost / h.all.maxTickets, 3)}</td><td colspan="4"></td></tr>` : "") +
+        `</table></div>`;
+      body += `<div style="font-size:0.58rem;margin:10px 0 4px">Kolik stojí X ticketů týdně (medián přes týdny, v závorce kolik týdnů to vůbec šlo):</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;font-size:0.55rem">${h.curve.filter((c, i) => i % 2 === 1).map((c) => `<span style="border:1px solid var(--border-brown);border-radius:4px;padding:2px 6px">${_tkFmt(c.ticketsPerWeek)}/t → ${_tkFmt(c.cost)} (${Math.round(c.share * 100)} %)</span>`).join("")}</div>`;
+      body += `<details style="margin-top:10px"><summary style="font-size:0.6rem;cursor:pointer">Týden po týdnu (${h.weeks.length})</summary>
+        <div style="overflow-x:auto;margin-top:6px"><table class="node-res-table" style="min-width:820px">
+        <tr><th>TÝDEN</th><th>CHAPTER</th><th style="text-align:right">MAX TICKETŮ</th><th style="text-align:right">STOJÍ</th><th style="text-align:right">BOUNTY HOTOVO</th><th>DRAHÉ NA TABULI</th></tr>` +
+        h.weeks.slice().reverse().map((w) => `<tr${w.active ? "" : ' style="opacity:0.5"'}><td style="white-space:nowrap">${escHTML(String(w.wk).slice(0, 10))}</td><td>${escHTML(w.chapter)}</td>
+          <td style="text-align:right">${w.active ? _tkFmt(w.maxTickets) : "bez tabule"}</td><td style="text-align:right">${w.active ? _tkFmt(w.maxCost) : "—"}</td>
+          <td style="text-align:right">${w.active ? `${w.parts.bounty.done}/${w.parts.bounty.n}` : "—"}</td>
+          <td style="font-size:0.55rem;color:var(--text-secondary)">${w.hard.map((x) => `${x.done ? "✅" : "⬜"} ${escHTML(x.name)} ${_tkFmt(x.cost, 1)}`).join(" · ")}</td></tr>`).join("") +
+        `</table></div></details>`;
+      return `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.75rem;color:var(--sunpetal);margin-bottom:8px">📚 HISTORIE TABULÍ — CO STÁLO „VŠECHNO“</div>${body}</div>`;
     }
 
     function _tkFmt(n, dec = 0) {
@@ -24631,6 +24750,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       </div>`;
       h += note(`Bonusy: VIP ${b.vip ? "✅ (+2 u doručení a úkolů)" : "❌"} · ${b.items.map((i) => `${escHTML(i.name)} ${i.active ? "✅" : "❌"}`).join(" · ")} (+1 každý, i na farmhandovi). ` +
         `„Sesbíráno“ = čítač hry, ne to, co ještě máš — utracené tickety se neodečítají.`);
+      h += _tkDecisionHtml(d);
 
       // 1. This chapter's auction.
       const ta = d.thisAuction;
@@ -24679,6 +24799,8 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         }).join("") + `</table></div>`;
       body += note(`Top loty vyhrávají hráči, kteří udělají úplně vše — medián nejlepších farem byl ${_tkFmt(d.observedTop.perWeek)} ${tk}/týden (strop ${_tkFmt(d.observedTop.capTotal)} za ${d.observedTop.weeks} týdne), víc, než ukazuje jedna tabule (eventy ×2 u doručení, víc zvířecích bounty). Při shodě rozhoduje ascension, pak level.`);
       h += panel("📈 DALŠÍ CHAPTER — KOLIK STOJÍ KTERÝ LOT", body);
+
+      h += _tkHistoryHtml(d);
 
       // 3. Sources, cheapest first.
       const rows = d.sources.slice().sort((a, b) => (a.perTicket ?? 1e9) - (b.perTicket ?? 1e9));

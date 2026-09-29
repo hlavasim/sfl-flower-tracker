@@ -12,7 +12,7 @@ import { buildWishlistSection } from "../core/sections/wishlist.mjs";
 import { buildCookingSection as _cookingForAscension } from "../core/sections/cooking.mjs";
 import { buildBudsSection } from "../core/sections/buds.mjs";
 import { buildPetsSection } from "../core/sections/pets.mjs";
-import { buildTicketsSection } from "../core/sections/tickets.mjs";
+import { buildTicketsSection, buildTicketHistory } from "../core/sections/tickets.mjs";
 import { computeBettyRate } from "../core/engine/prices.mjs";
 import { API_SPEC } from "../core/api-spec.mjs";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -587,9 +587,13 @@ async function _handler(req, res) {
           if (n > 0) animalNet[type] = (c.boostedSfl - (c.costPerDay || 0)) / n;
         }
       } catch { /* no animal output → animal bounties priced by feed alone */ }
-      data = buildTicketsSection(farm, buildPricesSection(farm, p2p, settings), {
-        coinsPerSFL, animalNet, floors: { ...td.nftCollectibles, ...td.nftWearables },
-      });
+      const tkPrices = buildPricesSection(farm, p2p, settings);
+      const tkOpts = { coinsPerSFL, animalNet, floors: { ...td.nftCollectibles, ...td.nftWearables }, gemsPerSFL: td.gemsPerSFL, sflUsd: td.sflUsd };
+      data = buildTicketsSection(farm, tkPrices, tkOpts);
+      // Optional POST body { weeks } (/api/farm-history?type=ticket-weeks): the same model run on
+      // every recorded week, at today's prices.
+      const tkBody = _parseBody(req.body);
+      if (Array.isArray(tkBody.weeks) && tkBody.weeks.length) data.history = buildTicketHistory(tkBody.weeks.slice(0, 200), tkPrices, tkOpts);
       data.status = { pricesOk: Object.keys(p2p).length > 0, nftsOk: !!nftResult.ok };
     }
     else return res.status(400).json({ error: `unknown section: ${section}` });
