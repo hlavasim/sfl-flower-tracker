@@ -166,10 +166,6 @@ export const TABLE_INVENTORY = [
     "lines": 2
   },
   {
-    "name": "CROP_MACHINE_MODULE_III",
-    "lines": 9
-  },
-  {
     "name": "CROP_TIERS",
     "lines": 5
   },
@@ -250,10 +246,6 @@ export const TABLE_INVENTORY = [
     "lines": 15
   },
   {
-    "name": "FLOWER_BOOSTS",
-    "lines": 9
-  },
-  {
     "name": "FLOWER_RECIPES",
     "lines": 61
   },
@@ -331,10 +323,6 @@ export const TABLE_INVENTORY = [
   },
   {
     "name": "NFT_BREED_TYPES",
-    "lines": 2
-  },
-  {
-    "name": "NFT_LISTING_COLLECTIONS",
     "lines": 2
   },
   {

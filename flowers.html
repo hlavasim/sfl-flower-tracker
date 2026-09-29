@@ -2672,6 +2672,17 @@
 
 </style>
   <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
+  <script type="module">
+    // Load the calculation engine (core/*.mjs — the modules the server runs) and hand it to the page.
+    import("/core/browser-engine.mjs").then((engine) => {
+      window.__engine = engine;
+      for (const [k, v] of Object.entries(engine)) if (!(k in window)) window[k] = v;
+      window.dispatchEvent(new Event("sfl-engine"));
+    }).catch((e) => {
+      const app = document.getElementById("app");
+      if (app) app.innerHTML = '<div class="error-screen pixel-panel pixel-font"><h2>The calculation engine did not load</h2><p>' + String(e && e.message || e) + '</p><button class="refresh-btn" onclick="location.reload()">RELOAD</button></div>';
+    });
+  </script>
   <script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
@@ -2719,66 +2730,7 @@
     //  FLOWER BOOSTS (auto-detected from API)
     // ═══════════════════════════════════════
 
-    const FLOWER_BOOSTS = [
-      { name: "Flower Crown",      type: "wearable",        multiplier: 0.5  },
-      { name: "Moth Shrine",       type: "collectible_temp", multiplier: 0.75, durationMs: 7 * 24 * 3600 * 1000 },
-      { name: "Flower Fox",        type: "collectible",     multiplier: 0.9  },
-      { name: "Blossom Hourglass", type: "collectible_temp", multiplier: 0.75, durationMs: 4 * 3600 * 1000 },
-      { name: "Blooming Boost",    type: "skill",           multiplier: 0.9  },
-      { name: "Flower Power",      type: "skill",           multiplier: 0.8  },
-      { name: "Flowery Abode",     type: "skill",           multiplier: 1.5  },
-    ];
-
-    function findCollectible(farm, name) {
-      // Placed collectibles live across four maps: the main land, the OLD home island (now empty),
-      // and BOTH floors of the house interior (farm.interior.ground / level_one), where the game
-      // moved indoor placement — the interior was missed, so items placed in the house read as
-      // unplaced. Layout presets (farm.layouts) are alternate arrangements, not live, so excluded.
-      const main = farm.collectibles?.[name] || [];
-      const home = farm.home?.collectibles?.[name] || [];
-      const interior = farm.interior?.ground?.collectibles?.[name] || [];
-      const level1 = farm.interior?.level_one?.collectibles?.[name] || [];
-      return [...main, ...home, ...interior, ...level1];
-    }
-
-    function detectFlowerBoosts(farm) {
-      const active = [];
-      for (const boost of FLOWER_BOOSTS) {
-        let isActive = false;
-        switch (boost.type) {
-          case "wearable": {
-            const equipped = farm.bumpkin?.equipped || {};
-            isActive = Object.values(equipped).flat().includes(boost.name);
-            break;
-          }
-          case "collectible": {
-            isActive = findCollectible(farm, boost.name).length > 0;
-            break;
-          }
-          case "collectible_temp": {
-            const placements = findCollectible(farm, boost.name);
-            if (placements.length > 0) {
-              const latest = placements[placements.length - 1];
-              const placedAt = toMs(latest.createdAt || latest.readyAt || 0);
-              isActive = (Date.now() - placedAt) < boost.durationMs;
-            }
-            break;
-          }
-          case "skill": {
-            const skills = farm.bumpkin?.skills || {};
-            isActive = skills[boost.name] !== undefined;
-            break;
-          }
-        }
-        if (isActive) active.push(boost);
-      }
-      console.log("[Boosts]", active.map(b => `${b.name} ×${b.multiplier}`), "multiplier:", computeFlowerMultiplier(active));
-      return active;
-    }
-
-    function computeFlowerMultiplier(activeBoosts) {
-      return activeBoosts.reduce((m, b) => m * b.multiplier, 1);
-    }
+    // Flower growth-time boosts: FLOWER_BOOSTS, detectFlowerBoosts, computeFlowerMultiplier are the engine's.
 
     // ═══════════════════════════════════════
     //  FLOWER YIELD BOOSTS (+1 chance / guaranteed)
@@ -2835,7 +2787,10 @@
     }
 
         function applyFlowerBoosts(multiplier) {
-      for (const sd of Object.values(SEED_DATA)) {
+      // The engine has its own SEED_DATA (getFlowerChainHours reads it): it gets the boosted times too.
+      const tables = [SEED_DATA];
+      if (typeof __engine !== "undefined") tables.push(__engine._SEED_DATA);
+      for (const t of tables) for (const sd of Object.values(t)) {
         sd.seconds = sd.baseSeconds * multiplier;
         sd.hours = sd.seconds / 3600;
       }
@@ -3082,31 +3037,6 @@
 
     // Display order — alphabetical by display name
     const GIFT_NPC_ORDER = ["betty", "bert", "blacksmith", "corale", "cornwell", "finley", "finn", "jester", "miranda", "old salty", "pumpkin' pete", "raven", "tywin", "victoria"];
-
-    function getFlowerGiftPoints(npc, flower, hasBlossomBonding) {
-      // Bonuses are ADDITIVE: total = base + npc-specific bonus + skill bonus (+2 if Blossom Bonding)
-      const base = DEFAULT_FLOWER_POINTS[flower] || 0;
-      const bonus = (BUMPKIN_FLOWER_BONUSES[npc] || {})[flower] || 0;
-      const skill = hasBlossomBonding ? 2 : 0;
-      return base + bonus + skill;
-    }
-
-    // Recursive chain-time calculation: sum grow times through entire flower chain
-    // Crop inputs are treated as 0 hours (assumed available/quick).
-    // Cycles are broken with a visiting Set.
-    function getFlowerChainHours(flower, visiting) {
-      visiting = visiting || new Set();
-      if (visiting.has(flower)) return 0;
-      visiting.add(flower);
-      const recipe = FLOWER_RECIPES[flower];
-      if (!recipe) return 0;
-      const seedSec = SEED_DATA[recipe.seed]?.seconds || 0;
-      const seedHours = seedSec / 3600;
-      if (FLOWER_RECIPES[recipe.input]) {
-        return seedHours + getFlowerChainHours(recipe.input, visiting);
-      }
-      return seedHours;
-    }
 
     // Returns array of {flower, seed, hours} for each step in the chain.
     function getFlowerChainSteps(flower, visiting) {
@@ -3618,8 +3548,6 @@
       "Sheep":   { cycleSec: 24 * 3600, products: ["Wool", "Merino Wool"], farmKey: "sheep" },
     };
     const ANIMAL_CAT_MAP = { chickens: "Chicken", cows: "Cow", sheep: "Sheep" };
-    function isAnimalCat(catId) { return catId in ANIMAL_CAT_MAP; }
-    function getAnimalData(catId) { return ANIMAL_CYCLE_DATA[ANIMAL_CAT_MAP[catId]]; }
 
     // ── Animal Level System ──
     // Cumulative XP thresholds per level (index = level, value = min XP needed)
@@ -3684,36 +3612,6 @@
       "Summer Chicken": "chickens", "Nurse Sheep": "sheep", "Sleepy Chicken": "chickens",
     };
 
-    // Get animal level from XP
-    function getAnimalLevel(animalType, experience) {
-      const thresholds = ANIMAL_LEVELS[animalType];
-      if (!thresholds) return 0;
-      for (let i = thresholds.length - 1; i >= 0; i--) {
-        if (experience >= thresholds[i]) return i;
-      }
-      return 0;
-    }
-    // Get drops per cycle for a single animal at a given level
-    function getAnimalDropsPerCycle(animalType, level) {
-      const drops = ANIMAL_RESOURCE_DROP[animalType];
-      const data = ANIMAL_CYCLE_DATA[animalType];
-      if (!drops || !data) return {};
-      const row = drops[Math.min(level, 15)] || [0, 0];
-      const result = {};
-      data.products.forEach((prod, i) => { result[prod] = row[i] || 0; });
-      return result;
-    }
-    // Get level distribution summary from an animal detail list
-    function getAnimalLevelDistribution(animals) {
-      if (!animals || animals.length === 0) return { levels: {}, avgLevel: 0 };
-      const levels = {};
-      let sum = 0;
-      for (const a of animals) {
-        levels[a.level] = (levels[a.level] || 0) + 1;
-        sum += a.level;
-      }
-      return { levels, avgLevel: sum / animals.length };
-    }
 
     const RESOURCE_RESPAWN_DATA = {
       "Stone":     { respawnSec: 14400, yield: 2.2, farmKey: "stones" },  // base 2 + Native (20%×1=+0.2)
@@ -3824,53 +3722,10 @@
     // ── Greenhouse oil costs per seed ──
     const GREENHOUSE_OIL_COSTS = { "Grape": 3, "Rice": 4, "Olive": 5 };
 
-    // ── Crop Machine constants (mirror sunflower-land/src/features/game/events/landExpansion/supplyCropMachine.ts) ──
-    // Plots: 10 base, 15 with Field Extension Module skill.
-    // Time per pack: crop_grow_seconds × seeds / plots, times all speed boost multipliers.
-    // Oil: 1/h base × (1 + 0.1·Crop Processor Unit + 0.4·Rapid Rig) × (1 − 0.1·Oil Gadget − 0.3·Efficiency Extension Module).
-    // Speed boosts (multiplicative): Crop Processor Unit ×0.95, Rapid Rig ×0.8, Groovy Gramophone ×0.5, Tortoise Shrine ×0.9.
-    // Available crops depend on Crop Extension Module I/II/III skills + base set.
-    function cropMachinePlots(farm) {
-      return (farm.bumpkin?.skills?.["Field Extension Module"]) ? 15 : 10;
-    }
-    function cropMachineOilPerHour(farm) {
-      const sk = farm.bumpkin?.skills || {};
-      let addtl = 1;
-      if (sk["Crop Processor Unit"]) addtl += 0.1;
-      if (sk["Rapid Rig"]) addtl += 0.4;
-      let reduction = 1;
-      if (sk["Oil Gadget"]) reduction -= 0.1;
-      if (sk["Efficiency Extension Module"]) reduction -= 0.3;
-      return addtl * reduction;
-    }
     // Crops unlocked for Crop Machine. Default basic set + skill-gated additions.
     const CROP_MACHINE_BASIC = ["Sunflower", "Potato", "Pumpkin"];
     const CROP_MACHINE_MODULE_I = ["Rhubarb", "Zucchini"];          // Crop Extension Module I
     const CROP_MACHINE_MODULE_II = ["Carrot", "Cabbage"];           // Crop Extension Module II
-    const CROP_MACHINE_MODULE_III = ["Yam", "Broccoli"];            // Crop Extension Module III
-    function cropMachineCrops(farm) {
-      const sk = farm.bumpkin?.skills || {};
-      const out = [...CROP_MACHINE_BASIC];
-      if (sk["Crop Extension Module I"])   out.push(...CROP_MACHINE_MODULE_I);
-      if (sk["Crop Extension Module II"])  out.push(...CROP_MACHINE_MODULE_II);
-      if (sk["Crop Extension Module III"]) out.push(...CROP_MACHINE_MODULE_III);
-      return out;
-    }
-    function cropMachineSpeedMult(farm, withTortoiseShrine) {
-      const sk = farm.bumpkin?.skills || {};
-      let m = 1;
-      if (sk["Crop Processor Unit"]) m *= 0.95;
-      if (sk["Rapid Rig"]) m *= 0.8;
-      // Placed anywhere the game looks — all four collectible maps (findCollectible), not just
-      // the farm and the legacy home: a Gramophone in the house interior counted as absent.
-      const hasGramo = findCollectible(farm, "Groovy Gramophone").length > 0;
-      if (hasGramo) m *= 0.5;
-      if (withTortoiseShrine) m *= 0.9;
-      return m;
-    }
-    function farmHasCropMachine(farm) {
-      return ((farm.buildings || {})["Crop Machine"] || []).length > 0;
-    }
 
     // ── Crop Machine queue simulator ──
     // Mirrors how the user actually plays: between restocks, fill the queue from
@@ -3888,15 +3743,6 @@
       "Turnip": 80, "Radish": 80, "Wheat": 80,
       "Kale": 60, "Artichoke": 60, "Barley": 60,
     };
-    function farmHasWarehouse(farm) {
-      return (((farm.buildings || {})["Warehouse"]) || []).length > 0;
-    }
-    // Effective restock amount per Betty visit: base × 1.2 if Warehouse present.
-    function cmGetSeedRestockCount(farm, cropName) {
-      const base = BETTY_RESTOCK_AMOUNT[cropName];
-      if (!base) return 0;
-      return farmHasWarehouse(farm) ? Math.ceil(base * 1.2) : base;
-    }
     // Active outdoor crop plots count — used as parallel capacity for Wheat window calc.
     function cmGetPlotCount(farm) {
       return Object.keys(farm.crops || {}).length;
@@ -4560,8 +4406,6 @@
     const BUD_TYPE_NAMES = ["Beach","Castle","Cave","Plaza","Port","Retreat","Saphiro","Sea","Snow","Woodlands"];
     const BUD_AURA_NAMES = ["No Aura","Basic","Green","Rare","Mythical"];
 
-    function marksToSfl(marks) { return marks / 100; }
-
     // ── Fish/food XP values (for XP-based pricing) ──
     const ITEM_XP_VALUES = {
       // Fish (base XP from sfl.world/info/fish-xp)
@@ -4640,40 +4484,10 @@
 
     // ── Salt mining (Salt Rake consumed per harvest) ──
     const SALT_BASE_YIELD = 10;
-    function computeSaltYieldPerRake(farm) {
-      let y = SALT_BASE_YIELD;
-      const skills = farm?.bumpkin?.skills || {};
-      if (skills["Wide Rakes"]) y += 2;
-      try { if (farm && isWearableEquipped(farm, "Deep Sea Salt Cave Background")) y += 5; } catch {}
-      return y;
-    }
 
     // ── Aging Shed formulas (from sunflower-land/agingFormulas.ts) ──
     const AGING_PRIME_BASE = 0.10, AGING_PRIME_MULT = 1.3;
 
-    // Per-farm prime-aged chance (0..1). Mirrors getPrimeAgedChance in the SFL repo.
-    function getAgingPrimeChance(farm) {
-      const skills = farm?.bumpkin?.skills || {};
-      const saltSculptLvl = farm?.sculptures?.["Salt Sculpture"]?.level || 0;
-      let chance = AGING_PRIME_BASE * 100;  // percent
-      if (skills["Fish Smoking"]) chance *= 2;       // ×2  → 20
-      if (saltSculptLvl >= 2) chance += 4;            // +4% → 14 / 24
-      return chance / 100;
-    }
-    function getAgingPrimeFactor(farm) {
-      return 1 + getAgingPrimeChance(farm) * (AGING_PRIME_MULT - 1);
-    }
-    function getAgingMaxXP(baseXP) {
-      if (baseXP <= 200) return baseXP * 3;
-      if (baseXP <= 330) return baseXP * 4;
-      return baseXP * 5;
-    }
-    function getAgingSaltCost(baseXP) { return Math.round(getAgingMaxXP(baseXP) / 50); }
-    function getAgingTimeSec(baseXP) {
-      const maxXP = getAgingMaxXP(baseXP);
-      const j = baseXP <= 200 ? 300 : baseXP <= 330 ? 500 : 1000;
-      return ((maxXP - baseXP) / j) * 3600;
-    }
 
     // Base XP per fish (from game consumables FISH record)
     const FISH_BASE_XP = {
@@ -4736,13 +4550,16 @@
     // XP stored here is the regular-aged value (= maxXP). The prime-aged weighted
     // average is applied per-farm via the "Prime Aged chance" xpBoost in
     // detectCookingBoosts, using the player's actual skills/sculpture level.
-    for (const [_fish, _baseXP] of Object.entries(FISH_BASE_XP)) {
-      const _aged = "Aged " + (gameFishSpelling[_fish] || _fish);
-      const _maxXP = getAgingMaxXP(_baseXP);
-      const _saltN = getAgingSaltCost(_baseXP);
-      const _timeS = getAgingTimeSec(_baseXP);
-      COOKING_RECIPES_DATA[_aged] = { building: "Aging Shed", xp: _maxXP, cookSec: _timeS, usesHoney: false };
-      COOKING_INGREDIENTS[_aged] = { [_fish]: 1, "Salt": _saltN };
+    // Runs once the engine is loaded (see _whenEngine): the aging formulas live in core.
+    function _initAgingRecipes() {
+      for (const [_fish, _baseXP] of Object.entries(FISH_BASE_XP)) {
+        const _aged = "Aged " + (gameFishSpelling[_fish] || _fish);
+        const _maxXP = getAgingMaxXP(_baseXP);
+        const _saltN = getAgingSaltCost(_baseXP);
+        const _timeS = getAgingTimeSec(_baseXP);
+        COOKING_RECIPES_DATA[_aged] = { building: "Aging Shed", xp: _maxXP, cookSec: _timeS, usesHoney: false };
+        COOKING_INGREDIENTS[_aged] = { [_fish]: 1, "Salt": _saltN };
+      }
     }
 
     // Worm-bait: avg yield per composter cycle (game roll: 2-4 / 2-3 / 1-3)
@@ -4791,81 +4608,6 @@
       "Weakfish":        { paths: [{ bait: "Red Wiggler",prob: 0.043 }, { bait: "Red Wiggler",chum: "Artichoke", chumQty: 3  }] },
     
     };
-
-    // Calculate the SFL cost per skill point for current bumpkin
-    function calcSkillPointCost(bumpkin, p2pPrices, farm) {
-      const xp = bumpkin?.experience || 0;
-      // Ascension-aware: an ascended farm's level (and its skill-point count) follows
-      // the band model, not the pre-ascension table — see getTotalBumpkinLevel.
-      const ascLevel = (farm && farm.island && farm.island.ascensionLevel) || 0;
-      const level = getTotalBumpkinLevel(xp, ascLevel);
-      if (level <= 1) return { sflPerPoint: 0, bestRecipe: null, level, totalXP: xp };
-
-      // XP accumulated to reach this level: the farm's actual xp once ascended (the
-      // table's level-200 threshold no longer corresponds to the band-model level).
-      const totalXP = ascLevel >= 1 ? xp : (BUMPKIN_XP_TABLE[level - 1] || 0);
-
-      // Build effective prices including crafted ingredients
-      const prices = { ...p2pPrices };
-      for (const [crafted, recipe] of Object.entries(CRAFTED_INGREDIENT_RECIPES)) {
-        if (!prices[crafted]) {
-          let derivedCost = 0;
-          for (const [item, qty] of Object.entries(recipe)) {
-            derivedCost += (prices[item] || 0) * qty;
-          }
-          if (derivedCost > 0) prices[crafted] = derivedCost;
-        }
-      }
-
-      // Detect cooking boosts to apply XP multipliers
-      const cookingBoosts = farm ? detectCookingBoosts(farm) : { xpBoosts: [], timeBoosts: [] };
-
-      // Hardcoded: Pizza Margherita for verification (TODO: restore best-recipe search after verified)
-      const recipeName = "Pizza Margherita";
-      const ingredients = RECIPE_INGREDIENTS[recipeName];
-      const recipeData = COOKING_RECIPES_DATA[recipeName];
-      let cost = 0;
-      let missingIngredient = false;
-      for (const [item, qty] of Object.entries(ingredients)) {
-        const price = prices[item] || 0;
-        if (price === 0) { missingIngredient = true; break; }
-        cost += price * qty;
-      }
-      if (missingIngredient || cost <= 0) return { sflPerPoint: 0, bestRecipe: null, level, totalXP };
-
-      const boostedXP = computeFoodXP(recipeName, recipeData, recipeData.building, cookingBoosts);
-      const bestRatio = boostedXP / cost;
-      const bestRecipe = { name: recipeName, xp: recipeData.xp, boostedXP: Math.round(boostedXP), cost, ratio: bestRatio, building: recipeData.building, ingredients };
-
-      if (bestRatio === 0) return { sflPerPoint: 0, bestRecipe: null, level, totalXP };
-
-      // Total SFL to reach current level via most efficient cooking
-      const totalSFL = totalXP / bestRatio;
-      const sflPerLevel = totalSFL / level;
-      /*
-       * 1 level = 1 skill point, and the NEXT point is bought by earning the NEXT level — so a
-       * point costs that level's XP, not the average of every level so far. The average is
-       * dominated by the cheap early levels: at level 186 it read 59.9 FLOWER/point against the
-       * 240.5 the next level actually costs, pricing every skill ~4x too cheap.
-       */
-      let nextLevelXp = 0;
-      if (ascLevel >= 1) {
-        const within = _withinAscensionLevel(xp, ascLevel);
-        const band = within >= 50 ? ascLevel + 1 : ascLevel;
-        const step = within >= 50 ? 1 : Math.max(1, within);
-        nextLevelXp = _ascBandXp(band) * (1 + _ASC_WEIGHT_PER_LEVEL * step) / _ASC_TOTAL_WEIGHT;
-      } else {
-        const cur = BUMPKIN_XP_TABLE[level - 1] || 0;
-        const nxt = BUMPKIN_XP_TABLE[level];
-        nextLevelXp = nxt != null ? nxt - cur : cur - (BUMPKIN_XP_TABLE[level - 2] || 0);
-      }
-      const sflPerPoint = nextLevelXp > 0 ? nextLevelXp / bestRatio : sflPerLevel;
-      const xpBoostNames = cookingBoosts.xpBoosts.filter(b =>
-        !b.buildings || b.buildings.includes(bestRecipe.building)
-      ).map(b => `${b.name} (×${b.multiplier})`);
-
-      return { sflPerPoint, bestRecipe, level, totalXP, totalSFL, sflPerLevel, nextLevelXp, xpBoostNames };
-    }
 
     // Power category definitions
     const POWER_CATEGORIES = {
@@ -5677,7 +5419,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.80</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.81</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5704,6 +5446,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.81", items: [
+          { t: "fix", text: "<b>One calculation engine.</b> The page no longer carries its own copy of ~120 calculation functions; it loads the same modules the server runs. Two copies had drifted: the <b>gifts planner</b> showed 0h for every flower, and the Diff page priced fish XP with every cooking boost applied to every recipe." },
+          { t: "fix", text: "<b>Treasury on the live site</b> missed 98 NFTs that sfl.world lists without a name (Master Chef’s Cleaver among the owned ones): the id → name map loaded one level too shallow there. <b>Shrine renewal</b> on the roadmap now shows its value (it was always blank). The server roadmap’s gift pick uses real flower grow times with your boosts, not 24 h for every flower." },
+        ] },
         { ver: "v5.80", items: [
           { t: "fix", text: "<b>Value revision against the game source</b> (30 top plan items checked). Area-of-effect items now count only the tiles they reach: <b>Emerald Turtle</b> 8 nodes (9.0 \u2192 1.7 FLOWER/day), <b>Sir Goldensnout</b> 12 plots (1.5 \u2192 0.2), Tin Turtle, and the scarecrows by their rank-widened area. <b>Tough Tree</b>\u2019s chance of x3 multiplies (it undervalued up to 78 %). <b>Green Amulet</b> is x10 on the multiplicative yield (expected x1.9), not +10. <b>Pollen Power Up</b> only applies after a bee swarm, so it is no longer valued. <b>Seeded Bounty</b> pays for its extra seed. <b>Crimstone Clam</b> / <b>Pickaxe Shark</b> instant recovery counts as speed \u2014 measured activity on gold and crimstone is no longer above 100 %." },
           { t: "fix", text: "<b>Chicken Coop</b> is valued with the stalls it adds in one place, so the POWER page and the roadmap agree. The unused game-token endpoint is removed." },
@@ -6856,12 +6602,6 @@
     //  HELPERS
     // ═══════════════════════════════════════
 
-    function getCount(inv, name) {
-      const v = inv[name];
-      if (v === undefined || v === null) return 0;
-      return Math.floor(parseFloat(v));
-    }
-
     function formatHours(h) {
       if (h <= 0) return "Done";
       const totalMin = Math.round(h * 60);
@@ -6891,9 +6631,6 @@
       return pct >= 100 ? "bar-green" : "bar-red";
     }
 
-    function escHTML(s) {
-      return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-    }
     /*
      * For a value that lands inside a SINGLE-QUOTED JS STRING within an HTML attribute,
      * e.g. onclick="doThing('<here>')".
@@ -6915,13 +6652,6 @@
     //  BUMPKIN HELPERS
     // ═══════════════════════════════════════
 
-    function getBumpkinLevel(xp) {
-      for (let i = BUMPKIN_XP_TABLE.length - 1; i >= 0; i--) {
-        if (xp >= BUMPKIN_XP_TABLE[i]) return i + 1;
-      }
-      return 1;
-    }
-
     // ── Ascension band-XP model (sunflower-land lib/level.ts), mirrored from
     // azure-functions/shared/world-extract.js so the client agrees with the world
     // crawl and the game. Once a farm ascends the Bumpkin level STOPS following the
@@ -6930,29 +6660,6 @@
     const _ASC_BAND_XP_BASE = 50000000, _ASC_BAND_XP_GROWTH = 1.45, _ASC_BAND_XP_ROUND = 5000000;
     const _ASC_WEIGHT_PER_LEVEL = 0.03, _ASC_LEVEL_UPS = 49;
     const _ASC_TOTAL_WEIGHT = _ASC_LEVEL_UPS + _ASC_WEIGHT_PER_LEVEL * ((_ASC_LEVEL_UPS * 50) / 2); // 85.75
-    function _ascBandXp(a) { const raw = _ASC_BAND_XP_BASE * Math.pow(_ASC_BAND_XP_GROWTH, a - 1); return Math.round(raw / _ASC_BAND_XP_ROUND) * _ASC_BAND_XP_ROUND; }
-    function _ascBaseline(a) { let xp = BUMPKIN_XP_TABLE[149]; for (let b = 1; b < a; b++) xp += _ascBandXp(b); return xp; }
-    // Within-band level (0..50) for ascension `a` at total xp. n=1..49 level-ups; L50 = band complete.
-    function _withinAscensionLevel(xp, a) {
-      const baseline = _ascBaseline(a);
-      if (xp < baseline) return 0;
-      const band = _ascBandXp(a);
-      if (xp >= baseline + band) return 50;
-      let level = 1, levelStart = baseline;
-      for (let n = 1; n < _ASC_LEVEL_UPS; n++) {
-        const stepXp = (band * (1 + _ASC_WEIGHT_PER_LEVEL * n)) / _ASC_TOTAL_WEIGHT;
-        const nextStart = levelStart + stepXp;
-        if (xp >= nextStart) { level = n + 1; levelStart = nextStart; } else break;
-      }
-      return level;
-    }
-    // The game's getTotalBumpkinLevel — the ABSOLUTE level, which is also the number of
-    // skill points earned (1 per level, bands included). A1 L50 -> 200; A2 L25 -> 225.
-    function getTotalBumpkinLevel(xp, ascensionLevel) {
-      const a = ascensionLevel || 0;
-      if (a >= 1) return 150 + (a - 1) * 50 + _withinAscensionLevel(xp, a);
-      return getBumpkinLevel(xp); // not ascended: the plain table level (186 for the fixture)
-    }
     // UNCAPPED total level — the level the XP is WORTH if the player kept ascending. The game
     // freezes the level at the current band until you actually ascend, but experience keeps
     // accumulating, so this surfaces the progress hiding behind the cap. Rolls past any band
@@ -7003,230 +6710,10 @@
       return Math.max(0, nextStart - xp);
     }
 
-    function getAllEquippedWearables(farm) {
-      // Main bumpkin + all farm hands (additional bumpkins)
-      const all = [];
-      if (farm.bumpkin?.equipped) all.push(farm.bumpkin.equipped);
-      // Farm hands — try common API field names
-      const hands = farm.farmHands?.bumpkins || farm.farmHands || {};
-      for (const hand of Object.values(hands)) {
-        if (hand?.equipped) all.push(hand.equipped);
-      }
-      return all;
-    }
-
-    function isWearableEquipped(farm, name) {
-      for (const equipped of getAllEquippedWearables(farm)) {
-        if (Object.values(equipped).flat().includes(name)) return true;
-      }
-      return false;
-    }
-
     // Faction week key — getWeekKey (lib/factions.ts:22-47), weeks counted from START_DATE (:15).
     const FACTION_START_MS = Date.UTC(2024, 5, 24);
-    function factionWeekKey(ms) {
-      const d = new Date(ms);
-      d.setUTCHours(0, 0, 0, 0);
-      const week = Math.floor(Math.floor((d.getTime() - FACTION_START_MS) / 86400000) / 7);
-      return new Date(FACTION_START_MS + week * 7 * 86400000).toISOString().slice(0, 10);
-    }
 
-    // BUILDING_OIL_BOOSTS (events/landExpansion/cook.ts:48-55): the share of a recipe's time an
-    // oiled building takes off, with the three skills that raise it.
-    function buildingOilBoost(skills, building) {
-      const t = {
-        "Fire Pit": skills["Swift Sizzle"] ? 0.4 : 0.2,
-        "Kitchen": skills["Turbo Fry"] ? 0.5 : 0.25,
-        "Smoothie Shack": 0.3,
-        "Bakery": 0.35,
-        "Deli": skills["Fry Frenzy"] ? 0.6 : 0.4,
-      };
-      return t[building] || 0;
-    }
 
-    function detectCookingBoosts(farm) {
-      const skills = farm.bumpkin?.skills || {};
-      const now = Date.now();
-
-      // Check collectible OR wearable (handles both cases)
-      function hasItem(name) {
-        return findCollectible(farm, name).length > 0 || isWearableEquipped(farm, name);
-      }
-      // Try multiple name variants
-      function hasAny(...names) {
-        return names.some(n => hasItem(n));
-      }
-      // isFoodMadeWithCheese (expansion/lib/boosts.ts:55-58): Cheese is a DIRECT ingredient.
-      const cheeseRecipes = Object.keys(COOKING_INGREDIENTS).filter((n) => (COOKING_INGREDIENTS[n] || {}).Cheese > 0);
-      const xpBoosts = [];
-      const timeBoosts = [];
-      // Extra FOOD per cook (getCookingAmount, events/landExpansion/collectRecipe.ts:27-78) —
-      // `extra` is the expected number of additional dishes, a certainty or a chance.
-      const amountBoosts = [];
-
-      // === XP BOOSTS === (getFoodExpBoost, expansion/lib/boosts.ts:295-430)
-      // Multipliers first; the flat Swiss Whiskers +500 is added after them, and the bud and the
-      // faction-pet multipliers apply to the whole sum — so those two go last, in that order.
-      if (skills["Munching Mastery"]) xpBoosts.push({ name: "Munching Mastery", multiplier: 1.05 });
-      if (skills["Juicy Boost"]) xpBoosts.push({ name: "Juicy Boost", multiplier: 1.1, buildings: ["Smoothie Shack"] });
-      if (skills["Drive-Through Deli"]) xpBoosts.push({ name: "Drive-Through Deli", multiplier: 1.15, buildings: ["Deli"] });
-      if (skills["Buzzworthy Treats"]) xpBoosts.push({ name: "Buzzworthy Treats", multiplier: 1.1, honeyOnly: true });
-      // Items (check both collectibles + wearables)
-      if (hasItem("Golden Spatula")) xpBoosts.push({ name: "Golden Spatula", multiplier: 1.1 });
-      if (hasItem("Pan")) xpBoosts.push({ name: "Pan (+25% Bumpkin XP)", multiplier: 1.25 });
-      if (hasItem("Observatory")) xpBoosts.push({ name: "Observatory", multiplier: 1.05 });
-      if (hasItem("Blossombeard")) xpBoosts.push({ name: "Blossombeard", multiplier: 1.1 });
-      // Cakes (+ Pirate Cake) only, not everything the Bakery makes — boosts.ts:347-353.
-      if (hasItem("Grain Grinder")) xpBoosts.push({ name: "Grain Grinder", multiplier: 1.2, foods: cookableCakes.concat(["Pirate Cake"]) });
-      // VIP x1.1 — hasVipAccess (lib/vipAccess.ts:11-32): trial, paid expiry OR the Lifetime Farmer
-      // Banner. Detecting only the banner missed every paid/trial VIP.
-      if (dashHasVipAccess(farm, now)) xpBoosts.push({ name: "VIP Access", multiplier: 1.1 });
-      // Hungry Hare x2 on Fermented Carrots only — boosts.ts:377-383.
-      if (findCollectible(farm, "Hungry Hare").length > 0) xpBoosts.push({ name: "Hungry Hare", multiplier: 2, foods: ["Fermented Carrots"] });
-
-      // === PET STREAK — getFactionPetBoostMultiplier (lib/factions.ts:582-611) ===
-      // The multiplier comes from LAST week's collective-pet streak, and pays only if the farm
-      // qualified (fed every request of last week — faction.pet.qualifiesForBoost, set at rollover)
-      // and is not in a faction-switch cooldown. Reading the newest history week and the previous
-      // week's petXP was a week late and keyed on the wrong flag.
-      const faction = farm.faction || {};
-      const factionHistory = faction.history || {};
-      const weekKey = factionWeekKey(now);
-      const lastWeekKey = factionWeekKey(Date.parse(weekKey + "T00:00:00Z") - 7 * 86400000);
-      const lastWeekStreak = factionHistory[lastWeekKey]?.collectivePet?.streak || 0;
-      const currentStreak = factionHistory[weekKey]?.collectivePet?.streak || 0;
-      const streakMultiplier = lastWeekStreak >= 8 ? 1.5 : lastWeekStreak >= 6 ? 1.3 : lastWeekStreak >= 4 ? 1.2 : lastWeekStreak >= 2 ? 1.1 : 1.0;
-      const onCooldown = !!(faction.boostCooldownUntil && now < faction.boostCooldownUntil);
-      const qualifies = faction.pet?.qualifiesForBoost === true;
-      const thisWeekActive = !onCooldown && qualifies && streakMultiplier > 1;
-      // Next week pays only if every one of THIS week's pet requests gets fed at least once
-      // (qualifiesForFactionPetBoostFromPriorWeekRequests, lib/factionPetQualifiesForBoost.ts).
-      const reqs = Array.isArray(faction.pet?.requests) ? faction.pet.requests : [];
-      const nextWeekQualified = reqs.length > 0 && reqs.every((r) => Object.keys(r.dailyFulfilled || {}).length > 0);
-      const weeksToMax = currentStreak >= 8 ? 0 : 8 - currentStreak;
-      const manualPetStreak = localStorage.getItem("sfl_pet_streak") === "1";
-
-      const petStreakInfo = { streak: lastWeekStreak, currentStreak, multiplier: streakMultiplier, thisWeekActive, qualifies, onCooldown, nextWeekQualified, weeksToMax, manualOverride: manualPetStreak };
-
-      // === TIME BOOSTS === (getCookingTime, expansion/lib/boosts.ts:159-285)
-      if (skills["Fast Feasts"]) timeBoosts.push({ name: "Fast Feasts", multiplier: 0.9, buildings: ["Fire Pit", "Kitchen"] });
-      // Cakes only (item in cookableCakes) — boosts.ts:279-283, not every Bakery recipe.
-      if (skills["Frosted Cakes"]) timeBoosts.push({ name: "Frosted Cakes", multiplier: 0.9, foods: cookableCakes });
-      // Items
-      if (hasItem("Luna's Hat")) timeBoosts.push({ name: "Luna's Hat", multiplier: 0.5, excludeBuildings: ["Aging Shed"] });
-      if (hasItem("Desert Gnome")) timeBoosts.push({ name: "Desert Gnome", multiplier: 0.9, excludeBuildings: ["Aging Shed"] });
-      if (hasAny("Nightshade Medallion")) timeBoosts.push({ name: "Nightshade Medallion", multiplier: 0.75, excludeBuildings: ["Aging Shed"] });
-      if (hasAny("Master Chefs Cleaver", "Master Chef's Cleaver")) timeBoosts.push({ name: "Master Chefs Cleaver", multiplier: 0.85, excludeBuildings: ["Aging Shed"] });
-      /*
-       * Building oil — getCookingOilBoost (events/landExpansion/cook.ts:64-103): an oiled building
-       * cooks in (1 - boost) of the time. Whether the owner keeps a building oiled is read from the
-       * farm itself: `buildings[b][0].oil > 0` means oil is sitting in it now, i.e. they run it
-       * oiled, and it is modelled at the full boost (the partial-oil branch of the game only bites
-       * on the one cook that drains it). A dry building gets nothing.
-       */
-      for (const bd of ["Fire Pit", "Kitchen", "Bakery", "Deli", "Smoothie Shack"]) {
-        const oiled = ((farm.buildings || {})[bd] || []).some((b) => (Number(b && b.oil) || 0) > 0);
-        const boost = buildingOilBoost(skills, bd);
-        if (oiled && boost > 0) timeBoosts.push({ name: "Building Oil", multiplier: +(1 - boost).toFixed(2), buildings: [bd] });
-      }
-
-      // === BONUS FOOD === (getCookingAmount, collectRecipe.ts:27-78)
-      // Double Nom: +1 dish on every cook in a cooking building (cook.ts isCookingBuilding — not the
-      // Aging Shed). It was modelled as half the cook TIME, which gives the same XP/day on its own but
-      // multiplies wrongly with the chance-based extras below.
-      if (skills["Double Nom"]) amountBoosts.push({ name: "Double Nom", extra: 1, excludeBuildings: ["Aging Shed"] });
-      // Fiery Jackpot: 20% chance of +1 on the Fire Pit.
-      if (skills["Fiery Jackpot"]) amountBoosts.push({ name: "Fiery Jackpot (20% +1)", extra: 0.2, buildings: ["Fire Pit"] });
-      // Master Chef's Cleaver worn: 10% chance of +1 on any recipe.
-      if (hasAny("Master Chefs Cleaver", "Master Chef's Cleaver")) amountBoosts.push({ name: "Master Chef's Cleaver (10% +1)", extra: 0.1, excludeBuildings: ["Aging Shed"] });
-
-      // === AGING SHED BOOSTS ===
-      const sculptures = farm.sculptures || {};
-      const saltSculptLvl = sculptures["Salt Sculpture"]?.level || 0;
-      // Time
-      if (skills["Speedy Aging"]) timeBoosts.push({ name: "Speedy Aging", multiplier: 0.9, buildings: ["Aging Shed"] });
-      if (saltSculptLvl >= 5) timeBoosts.push({ name: "Salt Sculpture L5+", multiplier: 0.95, buildings: ["Aging Shed"] });
-      // Prime Aged weighted average. Base 10% chance of prime (×1.3 XP) → factor 1.03.
-      // Fish Smoking doubles the chance (→ 20%); Salt Sculpture L2+ adds +4% (→ 14/24%).
-      // Recipe XP is stored as the regular-aged value; this single boost folds in the
-      // expected uplift from primes for the player's actual farm state. `primeAvg` marks it
-      // as an EXPECTATION: banked fish are known to be regular or prime, so it skips them.
-      {
-        const _primePct = +(getAgingPrimeChance(farm) * 100).toFixed(0);
-        const _primeFactor = getAgingPrimeFactor(farm);
-        xpBoosts.push({
-          name: "Prime Aged avg (" + _primePct + "% × 1.3 XP)",
-          multiplier: _primeFactor,
-          buildings: ["Aging Shed"],
-          primeAvg: true,
-        });
-      }
-      // Fish XP boosts — every FISH consumable (fish dishes and instant fish recipes as well as
-      // Aged / Prime Aged fish): boosts.ts:320-328 (topper), :355-367 (Shrimpy, Fishy Feast).
-      if (hasItem("Skill Shrimpy")) xpBoosts.push({ name: "Skill Shrimpy (+20% Fish XP)", multiplier: 1.20, fishOnly: true });
-      if (skills["Fishy Feast"]) xpBoosts.push({ name: "Fishy Feast (+20% Fish XP)", multiplier: 1.20, fishOnly: true });
-      // Marine Marvel Master milestone wearable. The game applies it to FISH_CONSUMABLES
-      // (Aged + Prime Aged included) but only while WORN — hasItem's equipped check
-      // (bumpkin or farm hand) is exactly isWearableActive; wardrobe ownership is not.
-      if (hasItem("Luminous Anglerfish Topper")) xpBoosts.push({ name: "Luminous Anglerfish Topper (+50% Fish XP)", multiplier: 1.5, fishOnly: true });
-      // Salt yield & rake-cost (informational — affect salt cost rather than recipe XP/time)
-      if (skills["Wide Rakes"]) xpBoosts.push({ name: "Wide Rakes (+2 salt/rake)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
-      if (skills["Cheap Rakes"]) xpBoosts.push({ name: "Cheap Rakes (-20% rake coin cost)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
-      if (saltSculptLvl >= 4) xpBoosts.push({ name: "Salt Sculpture L4+ (-10% rake coin cost)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
-      // Fish-yield boosts (informational — affect fish/rod cost in Aged Fish recipes)
-      const _season = (farm?.season?.season || "").toLowerCase();
-      if (hasItem("Walrus")) xpBoosts.push({ name: "Walrus (+1 Fish)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
-      if (_season === "spring" && hasItem("Pink Dolphin")) xpBoosts.push({ name: "Pink Dolphin (+1 Fish, Spring)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
-      if (_season === "summer" && hasItem("Jellyfish")) xpBoosts.push({ name: "Jellyfish (+1 Fish, Summer)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
-      if (_season === "autumn" && hasItem("Poseidon")) xpBoosts.push({ name: "Poseidon (+1 Fish, Autumn)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
-      if (_season === "winter" && hasItem("Super Star")) xpBoosts.push({ name: "Super Star (+1 Fish, Winter)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
-      if (hasItem("Alba")) xpBoosts.push({ name: "Alba (+0.5 expected Basic Fish)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
-      if (skills["Fishy Chance"]) xpBoosts.push({ name: "Fishy Chance (+0.1 expected Basic)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
-      if (skills["Fishy Roll"]) xpBoosts.push({ name: "Fishy Roll (+0.1 expected Advanced)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
-      if (skills["Fishy Gamble"]) xpBoosts.push({ name: "Fishy Gamble (+0.2 expected Expert)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
-
-      // Swiss Whiskers placed: +500 XP on every recipe made with Cheese — boosts.ts:396-403. Flat,
-      // so it lands after the multipliers above and before the two below.
-      if (findCollectible(farm, "Swiss Whiskers").length > 0) xpBoosts.push({ name: "Swiss Whiskers (+500 XP, cheese recipes)", multiplier: 1, add: 500, foods: cheeseRecipes });
-      // Port bud, placed: x(1 + aura x 0.1) on fish consumables, best bud only —
-      // getBudExperienceBoosts (lib/getBudExperienceBoosts.ts:237-270).
-      {
-        let best = 1;
-        for (const bud of Object.values(farm.buds || {})) {
-          if (!bud || !bud.coordinates || bud.type !== "Port") continue;
-          best = Math.max(best, 1 + (BUD_AURA_MULTIPLIERS[bud.aura] || 1) * 0.1);
-        }
-        if (best > 1) xpBoosts.push({ name: "Port Bud (Fish XP)", multiplier: +best.toFixed(4), fishOnly: true });
-      }
-      if (thisWeekActive) {
-        xpBoosts.push({ name: "Pet's Streak", multiplier: streakMultiplier, petStreak: true });
-      } else if (manualPetStreak) {
-        xpBoosts.push({ name: "Pet's Streak (simulate)", multiplier: 1.5, petStreak: true, manual: true });
-      }
-
-      console.log("[Cooking Boosts] Detected XP:", xpBoosts.map(b => b.name));
-      console.log("[Cooking Boosts] Detected Time:", timeBoosts.map(b => b.name));
-      console.log("[Cooking Boosts] Pet Streak:", petStreakInfo);
-
-      return { xpBoosts, timeBoosts, amountBoosts, petStreakInfo };
-    }
-
-    // Page copy of core computeFoodXP (known deviation: no trace sink). Same gates as core's
-    // cookBoostApplies — recipe lists for Grain Grinder / Hungry Hare / Swiss Whiskers, the FISH
-    // consumables for the fish boosts — and Swiss Whiskers' flat +500.
-    function computeFoodXP(foodName, food, buildingName, boosts) {
-      let xp = food.xp;
-      for (const b of boosts.xpBoosts) {
-        if (b.buildings && !b.buildings.includes(buildingName)) continue;
-        if (b.excludeBuildings && b.excludeBuildings.includes(buildingName)) continue;
-        if (b.honeyOnly && !food.usesHoney) continue;
-        if (b.foods && !b.foods.includes(foodName)) continue;
-        if (b.fishOnly && !(fishCookableNames.includes(foodName) || /^(Prime )?Aged /.test(foodName))) continue;
-        if (b.add) xp += b.add;
-        else xp *= b.multiplier;
-      }
-      return xp;
-    }
 
     function formatCookTime(seconds) {
       if (seconds <= 0) return "Instant";
@@ -7687,11 +7174,6 @@
       }
 
       return pending;
-    }
-
-    function toMs(ts) {
-      // SFL API timestamps may be in seconds or milliseconds
-      return ts < 1e12 ? ts * 1000 : ts;
     }
 
     function extractBedDetails(flowerBeds) {
@@ -9260,27 +8742,6 @@
       "Protective Pesticide":"insect plague",
     };
     /*
-     * Twin of weatherPlacedInstances in core/engine/power-costs.mjs — the game keeps placed
-     * collectibles in FOUR maps (getCollectiblesAcrossLocations): the farm, the legacy home, and
-     * the house interior's two floors. This read only the first two, and on a current save
-     * home.collectibles is empty because the house layout change moved everything to
-     * interior.ground.collectibles — so this card called all four items MISSING on a farm that
-     * has all four placed.
-     */
-    function weatherPlacedInstances(farm, name) {
-      if (!farm) return [];
-      const interior = farm.interior || {};
-      const maps = [
-        farm.collectibles,
-        farm.home && farm.home.collectibles,
-        interior.ground && interior.ground.collectibles,
-        interior.level_one && interior.level_one.collectibles,
-      ];
-      const out = [];
-      for (const m of maps) for (const inst of ((m || {})[name] || [])) if (inst) out.push(inst);
-      return out;
-    }
-    /*
      * Three states, not two. A weather item is consumed by its event and STAYS placed looking
      * identical to a working one (markWeatherCollectibleUsed sets `used: true` rather than
      * deleting it), so "placed" was never the right question — a green tick on a spent pinwheel
@@ -9333,61 +8794,6 @@
     // Collectibles that count as "built" via findCollectible() length > 0.
     // Anything not in this set is treated as a wearable (equipped check).
     const KNOWN_BOOST_COLLECTIBLES = new Set(["Igloo", "Hammock", "Heart Air Balloon"]);
-
-    function dashGetCurrentChapter(now) {
-      now = now || Date.now();
-      let active = CHAPTERS[0];
-      for (const c of CHAPTERS) {
-        if (c.start <= now) active = c;
-      }
-      return active;
-    }
-
-    function dashGetSeasonalTicket(farm) {
-      return dashGetCurrentChapter(Date.now()).ticket;
-    }
-
-    function dashHasVipAccess(farm, now) {
-      now = now || Date.now();
-      if (Number(getCount(farm.inventory || {}, "Lifetime Farmer Banner")) > 0) return true;
-      const vip = farm.vip || {};
-      const TRIAL_MS = 7 * 24 * 3600 * 1000;
-      const trialAt = toMs(vip.trialStartedAt || 0);
-      if (trialAt && trialAt > now - TRIAL_MS) return true;
-      const expiresAt = toMs(vip.expiresAt || 0);
-      if (expiresAt && expiresAt > now) return true;
-      return false;
-    }
-
-    function _dashHasWearable(farm, name) {
-      const equipped = Object.values(farm.bumpkin?.equipped || {});
-      if (equipped.includes(name)) return true;
-      const hands = farm.farmHands?.bumpkins || {};
-      for (const h of Object.values(hands)) {
-        if (Object.values(h.equipped || {}).includes(name)) return true;
-      }
-      return false;
-    }
-
-    // Returns the total ticket reward for a delivery from `npc` on this farm,
-    // including VIP +2 and chapter boost items (+1 each, up to +3).
-    // Returns 0 for NPCs that don't pay tickets.
-    function dashCalculateDeliveryTickets(npc, farm, now) {
-      const base = TICKET_REWARDS[npc];
-      if (!base) return 0;
-      now = now || Date.now();
-      let amount = base;
-      if (dashHasVipAccess(farm, now)) amount += 2;
-      const chapter = dashGetCurrentChapter(now);
-      for (const item of chapter.boosts) {
-        if (KNOWN_BOOST_COLLECTIBLES.has(item)) {
-          if (findCollectible(farm, item).length > 0) amount += 1;
-        } else {
-          if (_dashHasWearable(farm, item)) amount += 1;
-        }
-      }
-      return amount;
-    }
 
     // <img> tag for an item icon; falls back to invisible on error.
     function _dashIcon(name) {
@@ -11618,29 +11024,7 @@
       "Coprolite": 200, "Pirate Bounty": 7500,
     };
 
-    // The one coin-rate fallback (twin of core/engine/prices.mjs): the mode's source, else the
-    // other live source, else 0 = coins unpriced — never a hardcoded 320 / 1500.
-    function pickCoinsPerSFL(mode, bettyRate, apiRate) {
-      const betty = bettyRate > 0 ? bettyRate : 0;
-      const api = apiRate > 0 ? apiRate : 0;
-      if (mode === "betty") return betty || api;
-      if (mode === "api") return api || betty;
-      return 0;
-    }
-
-    // The one NFT unit-price rule (twin of core/engine/prices.mjs): floor first, last sale only
-    // when there is no floor — the rule ROI / Power already used.
-    function nftUnitPrice(nft) {
-      if (!nft) return 0;
-      const floor = parseFloat(nft.floor) || 0;
-      if (floor > 0) return floor;
-      return parseFloat(nft.lastSalePrice) || 0;
-    }
-
     const SFL_ICON_URL = "https://raw.githubusercontent.com/sunflower-land/sunflower-land/main/src/assets/icons/flower_token.webp";
-    function sflIcon(size) {
-      return `<img src="${SFL_ICON_URL}" class="sfl-icon" alt="SFL"${size ? ` style="height:${size}"` : ""}>`;
-    }
     const ITEM_ICON_BASE = "https://sfl.world/img/source/";
     const GITHUB_ASSETS = "https://raw.githubusercontent.com/sunflower-land/sunflower-land/main/src/assets";
     // Small pixel icons from sfl.world. These are the same images shown on the
@@ -12964,190 +12348,22 @@
       return w;
     }
 
+    // Engine wrappers: the page's "pet streak" toggle (localStorage) is the engine's petSimulate setting.
+    function _cookSettings() {
+      let petSimulate = false;
+      try { petSimulate = localStorage.getItem("sfl_pet_streak") === "1"; } catch (e) {}
+      return { petSimulate };
+    }
+    function detectCookingBoosts(farm) {
+      return __engine.detectCookingBoosts(farm, _cookSettings());
+    }
+    function calcSkillPointCost(bumpkin, p2pPrices, farm) {
+      return __engine.calcSkillPointCost(bumpkin, p2pPrices, farm, _cookSettings());
+    }
     function computeFarmValue(farm, td, coinMode) {
-      const { nftCollectibles, nftWearables, p2pPrices, sflUsd, coinsPerSFL_api, coinsPerSFL_betty, bettyItem, gemsPerSFL, btcUsd } = td;
-      const productionCost = td.productionCost || {};
-      const coinsPerSFL = pickCoinsPerSFL(coinMode, coinsPerSFL_betty, coinsPerSFL_api);
-      const inventory = farm.inventory || {};
-      const wardrobe = farm.wardrobe || {};
-      const MIN_VALUE = 0.01;
-
-
-      // --- Resources: inventory items with P2P prices ---
-      const resources = [];
-      for (const [name, price] of Object.entries(p2pPrices)) {
-        const qty = getCount(inventory, name);
-        if (qty <= 0) continue;
-        const total = qty * price;
-        if (total < MIN_VALUE) continue;
-        resources.push({ name, qty, unitPrice: price, total });
-      }
-      resources.sort((a, b) => b.total - a.total);
-
-      // --- Treasures: inventory items with coin sell prices ---
-      const treasures = [];
-      // Detect treasure sell boosts
-      let treasureBoost = 1;
-      if (findCollectible(farm, "Treasure Map").length > 0) treasureBoost += 0.2;
-      // Camel: the game applies its +30 % only while it is PLACED — one in the inventory is not.
-      if (findCollectible(farm, "Camel").length > 0) treasureBoost += 0.3;
-
-      for (const [name, baseCoins] of Object.entries(TREASURE_SELL_PRICES)) {
-        const qty = getCount(inventory, name);
-        if (qty <= 0) continue;
-        const boostedCoins = baseCoins * treasureBoost;
-        const sflValue = coinsPerSFL > 0 ? boostedCoins / coinsPerSFL : 0;
-        const total = qty * sflValue;
-        if (total < MIN_VALUE) continue;
-        treasures.push({ name, qty, unitPrice: sflValue, unitCoins: boostedCoins, total });
-      }
-      treasures.sort((a, b) => b.total - a.total);
-
-      // --- Collectibles: inventory NFT collectibles (inventory includes placed) ---
-      const collectibles = [];
-      const countedCollectibles = new Set();
-
-      for (const name of Object.keys(nftCollectibles)) {
-        const nft = nftCollectibles[name];
-        const floor = parseFloat(nft.floor) || 0;
-        if (floor <= 0) continue;
-
-        const qty = getCount(inventory, name);
-        if (qty <= 0) continue;
-        const total = qty * floor;
-        if (total < MIN_VALUE) continue;
-        collectibles.push({ name, qty, unitPrice: floor, total });
-        countedCollectibles.add(name);
-      }
-      collectibles.sort((a, b) => b.total - a.total);
-
-      // --- Produced: inventory the p2p feed does not trade (cooked dishes, crafted goods, fish,
-      // bait), valued at the section=prices production cost. Without it 92 dishes on the
-      // fixture farm read as 0. Treasures, NFTs and gems have their own categories.
-      const produced = [];
-      for (const name of Object.keys(inventory)) {
-        if (p2pPrices[name] !== undefined || TREASURE_SELL_PRICES[name] !== undefined || nftCollectibles[name] || name === "Gem") continue;
-        const unit = parseFloat(productionCost[name]) || 0;
-        if (unit <= 0) continue;
-        const qty = getCount(inventory, name);
-        if (qty <= 0) continue;
-        const total = qty * unit;
-        if (total < MIN_VALUE) continue;
-        produced.push({ name, qty, unitPrice: unit, total });
-      }
-      produced.sort((a, b) => b.total - a.total);
-
-      // --- Wearables: wardrobe matched against NFT wearables ---
-      const wearables = [];
-      for (const [name, qty] of Object.entries(wardrobe)) {
-        if (!qty || qty <= 0) continue;
-        const nft = nftWearables[name];
-        if (!nft) continue;
-        const price = nftUnitPrice(nft);
-        if (price <= 0) continue;
-        const total = qty * price;
-        if (total < MIN_VALUE) continue;
-        wearables.push({ name, qty, unitPrice: price, total });
-      }
-      wearables.sort((a, b) => b.total - a.total);
-
-      // --- Pets: NFT pets valued at user-entered purchase prices (sfl_pet_prices_v1) ---
-      // Keyed `nft-${id}` to match the Power-page Pets panel. Common pets aren't
-      // tradeable, so only NFT pets count toward liquidatable farm value.
-      const pets = [];
-      const PET_DEFAULT_PRICE = 2000; // flat fallback per NFT pet (no reliable per-type floor data)
-      let _petPrices = {};
-      try { _petPrices = JSON.parse(localStorage.getItem("sfl_pet_prices_v1") || "{}") || {}; } catch {}
-      for (const [id, pet] of Object.entries(farm.pets?.nfts || {})) {
-        const price = parseFloat(_petPrices["nft-" + id]) || PET_DEFAULT_PRICE; // entered price wins, else 2000
-        if (price < MIN_VALUE) continue;
-        const petType = pet.traits?.type || "Pet";
-        pets.push({ name: `${petType} #${id}`, qty: 1, unitPrice: price, total: price });
-      }
-      pets.sort((a, b) => b.total - a.total);
-
-      // --- Listings: FUNGIBLE items escrowed in active marketplace listings (trades.listings) ---
-      // IMPORTANT: only resources are added here. NFTs (collectibles / wearables / pets / buds)
-      // STAY in inventory / wardrobe / pets.nfts while listed, so they're already counted in
-      // those categories — adding them here too double-counts (treasury + listing). Only fungible
-      // resources are deducted from inventory when listed, so only those would otherwise vanish.
-      // Valued at market (p2p) — same methodology as the Resources category.
-      const NFT_LISTING_COLLECTIONS = ["collectibles", "wearables", "pets", "buds"];
-      const listings = [];
-      const _listAgg = {};
-      for (const l of Object.values(farm.trades?.listings || {})) {
-        if (NFT_LISTING_COLLECTIONS.includes(l.collection)) continue; // already counted in their own category
-        for (const [name, qty] of Object.entries(l.items || {})) {
-          const q = parseFloat(qty) || 0;
-          if (q <= 0) continue;
-          let price = p2pPrices[name] || 0;
-          if (price <= 0 && nftCollectibles[name]) price = parseFloat(nftCollectibles[name].floor) || 0;
-          if (price <= 0 && nftWearables[name]) price = nftUnitPrice(nftWearables[name]);
-          if (!_listAgg[name]) _listAgg[name] = { qty: 0, price };
-          _listAgg[name].qty += q;
-        }
-      }
-      for (const [name, agg] of Object.entries(_listAgg)) {
-        const total = agg.qty * agg.price;
-        if (total < MIN_VALUE) continue;
-        listings.push({ name, qty: agg.qty, unitPrice: agg.price, total });
-      }
-      listings.sort((a, b) => b.total - a.total);
-
-      // --- Liquid: SFL balance + coins + gems ---
-      const sflBalance = parseFloat(farm.balance) || 0;
-      const coinBalance = parseFloat(farm.coins) || 0;
-      // Try multiple paths for gems
-      const gemBalance = parseFloat(farm.gems) || parseFloat(farm.bank?.gems) || getCount(inventory, "Gem") || 0;
-      const coinsAsSFL = coinsPerSFL > 0 ? coinBalance / coinsPerSFL : 0;
-      const gemsAsSFL = gemsPerSFL > 0 ? gemBalance / gemsPerSFL : 0;
-      const liquidTotal = sflBalance + coinsAsSFL + gemsAsSFL;
-
-      const resourcesTotal = resources.reduce((s, r) => s + r.total, 0);
-      const treasuresTotal = treasures.reduce((s, t) => s + t.total, 0);
-      const collectiblesTotal = collectibles.reduce((s, c) => s + c.total, 0);
-      const producedTotal = produced.reduce((s, p) => s + p.total, 0);
-      const wearablesTotal = wearables.reduce((s, w) => s + w.total, 0);
-      const petsTotal = pets.reduce((s, p) => s + p.total, 0);
-      const listingsTotal = listings.reduce((s, l) => s + l.total, 0);
-      const grandTotal = resourcesTotal + treasuresTotal + collectiblesTotal + producedTotal + wearablesTotal + petsTotal + listingsTotal + liquidTotal;
-
-      /*
-       * What the farm turns into if sold on the marketplace TODAY: only what the marketplace
-       * trades (p2p resources, NFT collectibles / wearables / pets, escrowed listings) less its
-       * 10 % fee, plus the FLOWER balance, which is already FLOWER and pays no fee. Coins, gems,
-       * NPC-only treasures and off-feed produced goods cannot be sold there, so they are listed
-       * as excluded rather than counted (the grand total above still shows them).
-       */
-      const marketplaceTotal = resourcesTotal + collectiblesTotal + wearablesTotal + petsTotal + listingsTotal;
-      const marketFee = 0.1;
-      const sellable = {
-        marketplace: marketplaceTotal,
-        fee: marketplaceTotal * marketFee,
-        afterFee: marketplaceTotal * (1 - marketFee),
-        flowerBalance: sflBalance,
-        total: marketplaceTotal * (1 - marketFee) + sflBalance,
-        excluded: { coins: coinsAsSFL, gems: gemsAsSFL, treasures: treasuresTotal, produced: producedTotal },
-      };
-
-      return {
-        resources, treasures, collectibles, produced, wearables, pets, listings,
-        liquid: { sflBalance, coinBalance, gemBalance, coinsAsSFL, gemsAsSFL, total: liquidTotal },
-        treasureBoost,
-        sellable,
-        totals: {
-          resources: resourcesTotal,
-          treasures: treasuresTotal,
-          collectibles: collectiblesTotal,
-          produced: producedTotal,
-          wearables: wearablesTotal,
-          pets: petsTotal,
-          listings: listingsTotal,
-          liquid: liquidTotal,
-          grand: grandTotal,
-        },
-        rates: { sflUsd, btcUsd, coinsPerSFL, coinsPerSFL_api, coinsPerSFL_betty, bettyItem },
-      };
+      let petPrices = {};
+      try { petPrices = JSON.parse(localStorage.getItem("sfl_pet_prices_v1") || "{}") || {}; } catch (e) {}
+      return __engine.computeFarmValue(farm, td, coinMode, petPrices);
     }
 
     let treasuryDetailOpen = {};
@@ -15098,373 +14314,11 @@
       "Oranges":"Orange", "Tomatoes":"Tomato", "Olives":"Olive",
       "Sunflowers":"Sunflower", "Eggs":"Egg",
     };
-    function normalizeBoostLine(line) {
-      for (const [p, s] of Object.entries(PLURAL_FIXES))
-        line = line.replace(new RegExp(`\\b${p}\\b`, 'g'), s);
-      return line;
-    }
 
-    // Expand comma/and/&-separated product lines into individual lines
-    // e.g. "+0.2 Egg, Wool and Milk yield" → ["+0.2 Egg yield", "+0.2 Wool yield", "+0.2 Milk yield"]
-    // e.g. "+0.5 Wheat, Radish, Kale, Rice, Barley" → ["+0.5 Wheat", "+0.5 Radish", ...]
-    function expandMultiProductLines(lines) {
-      const out = [];
-      for (const line of lines) {
-        // Handle "+X Basic and Medium Crop yield" — MUST be before generic yield split
-        const m2 = line.match(/^([+-]?\d+\.?\d*)\s+(.+?)\s+(?:and|&)\s+(.+?)\s+(Crop\s+yield)$/i);
-        if (m2) { out.push(`${m2[1]} ${m2[2]} ${m2[4]}`); out.push(`${m2[1]} ${m2[3]} ${m2[4]}`); continue; }
-        // Match: "+0.2 Egg, Wool and Milk yield" or "-0.35 Leather & Merino Wool yield"
-        const m = line.match(/^([+-]?\d+\.?\d*)\s+(.+?)\s+(yield)$/i);
-        if (m) {
-          const prods = m[2].split(/\s*(?:,\s*(?:and\s+)?|\s+and\s+|\s*&\s*)\s*/);
-          if (prods.length > 1) {
-            for (const p of prods) out.push(`${m[1]} ${p.trim()} ${m[3]}`);
-            continue;
-          }
-        }
-        // Handle "+0.5 Wheat, Radish, Kale, Rice, Barley" (no trailing "yield")
-        // and "+0.5 Stone, Iron, Gold (AOE 3x3)" — strip parenthetical first
-        const cleaned = line.replace(/\s*\([^)]*\)\s*/g, '');
-        const m3 = cleaned.match(/^([+-]?\d+\.?\d*)\s+(.+)$/);
-        if (m3) {
-          const prods = m3[2].split(/\s*(?:,\s*(?:and\s+)?|\s+and\s+|\s*&\s*)\s*/);
-          if (prods.length > 1) {
-            // Verify at least 2 parts look like product names (in PRODUCT_TO_CATEGORY)
-            const known = prods.filter(p => PRODUCT_TO_CATEGORY[p.trim()]);
-            if (known.length >= 2) {
-              for (const p of prods) out.push(`${m3[1]} ${p.trim()}`);
-              continue;
-            }
-          }
-        }
-        // Handle "-50% Apple and Banana Growth Time" → split into two lines
-        const m4 = line.match(/^([+-]?\d+\.?\d*%?)\s+(.+?)\s+(?:and|&)\s+(.+?)\s+((?:Growth|Growing|Cooldown|Recovery|Respawn|Production)\s+Time.*)$/i);
-        if (m4) {
-          const p1 = m4[2].trim(), p2 = m4[3].trim();
-          if (PRODUCT_TO_CATEGORY[p1] && PRODUCT_TO_CATEGORY[p2]) {
-            out.push(`${m4[1]} ${p1} ${m4[4]}`);
-            out.push(`${m4[1]} ${p2} ${m4[4]}`);
-            continue;
-          }
-        }
-        out.push(line);
-      }
-      return out;
-    }
-
-    function parseBoostEffects(boostText, itemName) {
-      if (!boostText) return [];
-      if (itemName && BOOST_EFFECT_OVERRIDES[itemName]) return BOOST_EFFECT_OVERRIDES[itemName].map(e => ({ ...e }));
-      const effects = [];
-      let lines = boostText.split("\n").map(l => l.trim()).filter(Boolean);
-      lines = lines.map(normalizeBoostLine);
-      lines = expandMultiProductLines(lines);
-      for (const line of lines) {
-        let matched = false;
-        for (const rule of BOOST_PARSE_RULES) {
-          const m = line.match(rule.rx);
-          if (m) {
-            const eff = rule.fn(m);
-            if (eff) {
-              /*
-               * A rule may return ONE effect or an ARRAY of them (the sickness rule spans all
-               * three animal cats). The array used to be pushed as a single nested element, so
-               * every consumer's `e.type` filter missed it and "-50% chance of sickness" carried
-               * exactly zero effects — Healthy Livestock valued 0 everywhere since day one.
-               */
-              for (const one of (Array.isArray(eff) ? eff : [eff])) {
-                one.raw = one.raw || line;
-                effects.push(one);
-                // If alsoApply, duplicate for other categories
-                if (one.alsoApply) {
-                  for (const extraCat of one.alsoApply) {
-                    effects.push({ ...one, cat: extraCat, alsoApply: undefined });
-                  }
-                }
-              }
-              matched = true;
-              break;
-            }
-            // If fn returned null, continue to next rule (product not recognized)
-          }
-        }
-        if (!matched) {
-          effects.push({ type: "qualitative", cat: "other", raw: line });
-        }
-      }
-      return effects;
-    }
-
-    function classifyToCategories(effects) {
-      const cats = new Set();
-      for (const e of effects) {
-        if (e.cat) cats.add(e.cat);
-      }
-      if (cats.size === 0) cats.add("other");
-      return [...cats];
-    }
-
-    // Sum effective base nodes accounting for merged nodes (tier/multiplier)
-    function sumMergedNodes(resourceObj) {
-      if (!resourceObj || typeof resourceObj !== "object") return 0;
-      let total = 0;
-      for (const node of Object.values(resourceObj)) {
-        total += node.multiplier || 1; // unmerged nodes have no multiplier field → count as 1
-      }
-      return total;
-    }
-
-    function detectFarmCapacity(farm) {
-      // Collect per-animal details (id, type, experience, level)
-      const chickenList = [], cowList = [], sheepList = [];
-
-      // Helper to process animal entries
-      function processAnimal(id, a) {
-        const t = (a.type || "").toLowerCase();
-        const xp = parseFloat(a.experience) || 0;
-        if (t === "chicken" || t === "") {
-          // henHouse animals don't always have type, default to chicken
-        }
-        if (t === "cow") {
-          cowList.push({ id, level: getAnimalLevel("Cow", xp), experience: xp });
-        } else if (t === "sheep") {
-          sheepList.push({ id, level: getAnimalLevel("Sheep", xp), experience: xp });
-        }
-      }
-
-      // Hen House: farm.henHouse.animals OR farm.buildings["Hen House"][].animals
-      const henAnimals = farm.henHouse?.animals;
-      if (henAnimals && typeof henAnimals === "object") {
-        for (const [id, a] of Object.entries(henAnimals)) {
-          const xp = parseFloat(a.experience) || 0;
-          chickenList.push({ id, level: getAnimalLevel("Chicken", xp), experience: xp });
-        }
-      }
-      if (chickenList.length === 0) {
-        const henBuildings = farm.buildings?.["Hen House"] || [];
-        for (const b of henBuildings) {
-          for (const [id, a] of Object.entries(b.animals || {})) {
-            const xp = parseFloat(a.experience) || 0;
-            chickenList.push({ id, level: getAnimalLevel("Chicken", xp), experience: xp });
-          }
-        }
-      }
-
-      // Barn: farm.barn.animals OR farm.buildings["Barn"][].animals
-      const barnAnimals = farm.barn?.animals;
-      if (barnAnimals && typeof barnAnimals === "object") {
-        for (const [id, a] of Object.entries(barnAnimals)) {
-          processAnimal(id, a);
-        }
-      }
-      if (cowList.length === 0 && sheepList.length === 0) {
-        const barnBuildings = farm.buildings?.["Barn"] || [];
-        for (const b of barnBuildings) {
-          for (const [id, a] of Object.entries(b.animals || {})) {
-            processAnimal(id, a);
-          }
-        }
-      }
-
-      const chickens = chickenList.length, cows = cowList.length, sheep = sheepList.length;
-
-      // Detect golden animals (free feeding)
-      const inventory = farm.inventory || {};
-      const goldenAnimals = {};
-      for (const [itemName, animalType] of Object.entries(GOLDEN_ANIMALS)) {
-        if (findCollectible(farm, itemName).length > 0 || (parseFloat(inventory[itemName]) || 0) > 0) {
-          goldenAnimals[animalType] = true;
-        }
-      }
-
-
-      return {
-        crops: Object.keys(farm.crops || {}).length,
-        fruitPatches: Object.keys(farm.fruitPatches || {}).length,
-        greenhouse: Object.keys(farm.greenhouse?.pots || {}).length,
-        chickens, cows, sheep,
-        animalDetails: { chickens: chickenList, cows: cowList, sheep: sheepList },
-        goldenAnimals,
-        bees: Object.keys(farm.beehives || {}).length,
-        flowers: Object.keys(farm.flowers?.flowerBeds || {}).length,
-        stones: sumMergedNodes(farm.stones),
-        iron: sumMergedNodes(farm.iron),
-        gold: sumMergedNodes(farm.gold),
-        crimstones: sumMergedNodes(farm.crimstones),
-        lavaPits: Object.keys(farm.lavaPits || {}).length,
-        oilReserves: Object.keys(farm.oilReserves || {}).length,
-        trees: sumMergedNodes(farm.trees),
-      };
-    }
-
-    // Get the grow/cycle seconds for a category's selected product
-    function getCycleSec(catId, product) {
-      switch (catId) {
-        case "crops": return CROP_GROW_DATA[product] || 43200;
-        case "fruits": return FRUIT_GROW_DATA[product] || 43200;
-        case "greenhouse": return GREENHOUSE_GROW_DATA[product] || 86400;
-        case "chickens": return ANIMAL_CYCLE_DATA["Chicken"].cycleSec;
-        case "cows": return ANIMAL_CYCLE_DATA["Cow"].cycleSec;
-        case "sheep": return ANIMAL_CYCLE_DATA["Sheep"].cycleSec;
-        case "bees": return 86400;
-        case "stone": return RESOURCE_RESPAWN_DATA["Stone"].respawnSec;
-        case "iron": return RESOURCE_RESPAWN_DATA["Iron"].respawnSec;
-        case "gold": return RESOURCE_RESPAWN_DATA["Gold"].respawnSec;
-        case "crimstone": return RESOURCE_RESPAWN_DATA["Crimstone"].respawnSec;
-        case "obsidian": return RESOURCE_RESPAWN_DATA["Obsidian"].respawnSec;
-        case "oil": return RESOURCE_RESPAWN_DATA["Oil"].respawnSec;
-        case "trees": return RESOURCE_RESPAWN_DATA["Wood"].respawnSec;
-        case "flowers": return SEED_DATA[product]?.baseSeconds || 86400;
-        default: return 86400;
-      }
-    }
-
-    function getCapacityCount(catId, capacity) {
-      switch (catId) {
-        case "crops": return capacity.crops;
-        case "fruits": return capacity.fruitPatches;
-        case "greenhouse": return capacity.greenhouse;
-        case "chickens": return capacity.chickens;
-        case "cows": return capacity.cows;
-        case "sheep": return capacity.sheep;
-        case "bees": return capacity.bees;
-        case "flowers": return capacity.flowers;
-        case "stone": return capacity.stones;
-        case "iron": return capacity.iron;
-        case "gold": return capacity.gold;
-        case "crimstone": return capacity.crimstones;
-        case "obsidian": return capacity.lavaPits;
-        case "oil": return capacity.oilReserves;
-        case "trees": return capacity.trees;
-        default: return 0;
-      }
-    }
-
-    function getDefaultProduct(catId) {
-      switch (catId) {
-        case "crops": return "Kale";
-        case "fruits": return "Blueberry";
-        case "greenhouse": return "Grape";
-        case "chickens": return "Egg";
-        case "cows": return "Milk";
-        case "sheep": return "Wool";
-        case "bees": return "Honey";
-        case "stone": return "Stone";
-        case "iron": return "Iron";
-        case "gold": return "Gold";
-        case "crimstone": return "Crimstone";
-        case "obsidian": return "Obsidian";
-        case "oil": return "Oil";
-        case "trees": return "Wood";
-        case "flowers": return "Sunpetal Seed";
-        case "fishing": return "Fish";
-        default: return null;
-      }
-    }
-
-    function getBaseYield(catId) {
-      switch (catId) {
-        case "stone": return RESOURCE_RESPAWN_DATA["Stone"].yield;
-        case "iron": return RESOURCE_RESPAWN_DATA["Iron"].yield;
-        case "gold": return RESOURCE_RESPAWN_DATA["Gold"].yield;
-        case "crimstone": return RESOURCE_RESPAWN_DATA["Crimstone"].yield;
-        case "obsidian": return RESOURCE_RESPAWN_DATA["Obsidian"].yield;
-        case "oil": return RESOURCE_RESPAWN_DATA["Oil"].yield;
-        case "trees": return RESOURCE_RESPAWN_DATA["Wood"].yield;
-        default: return 1;
-      }
-    }
-
-    // Apply a set of boost effects to calculate boosted production
-    // Returns { unitsPerDay, speedMult, yieldMult, yieldFlat, details }
-    /*
-     * Share of a category's plots / nodes an AREA-OF-EFFECT effect can reach: aoeTiles over the
-     * plots or nodes of every category competing for them (aoeShare), at most 1. Non-area effects: 1.
-     */
-    function aoeCoverage(eff, n, capacity) {
-      if (!eff || !(eff.aoeTiles > 0)) return 1;
-      const cats = eff.aoeShare && eff.aoeShare.length ? eff.aoeShare : [eff.cat];
-      const total = cats.reduce((s, c) => s + (c === eff.cat && n > 0 ? n : (getCapacityCount(c, capacity || {}) || 0)), 0);
-      return total > 0 ? Math.min(1, eff.aoeTiles / total) : 1;
-    }
+    // Engine wrappers: the page calls these without the farm / context arguments the engine takes;
+    // they add them from the page's state. The calculation itself is the engine's (core/*.mjs).
     function applyBoosts(catId, product, capacity, boostEffects) {
-      const baseCycleSec = getCycleSec(catId, product);
-      const baseYield = getBaseYield(catId);
-      const n = getCapacityCount(catId, capacity);
-      if (n === 0 && catId !== "fishing") return { unitsPerDay: 0, speedMult: 1, yieldMult: 1, yieldFlat: 0 };
-
-      let speedMult = 1; // multiplied to cycle time (< 1 = faster)
-      let yieldMult = 1; // multiplied to output
-      let yieldFlat = 0; // added per cycle per slot
-      let extraHarvest = 0; // extra fruit harvests per seed (Immortal Pear, etc.)
-
-      for (const eff of boostEffects) {
-        // Only apply effects that match this category
-        if (eff.cat !== catId) continue;
-        // For product-specific boosts, check if product matches
-        if (eff.product && PRODUCT_TO_CATEGORY[eff.product] === catId) {
-          if (eff.product !== product) continue; // all product-specific boosts must match
-        }
-        // cropTier filtering: "Basic/Medium/Advanced Crop" boosts only apply to crops in that tier
-        if (eff.cropTier && catId === "crops") {
-          const tierCrops = CROP_TIERS[eff.cropTier];
-          if (tierCrops && !tierCrops.includes(product)) continue;
-        }
-
-        switch (eff.type) {
-          case "speed_pct":
-            speedMult *= (1 + eff.value / 100);
-            break;
-          case "speed_mult": {
-            // An area item speeds only the plots it covers: the farm-wide rate is the covered share
-            // at the faster rate plus the rest at the normal one.
-            const f = aoeCoverage(eff, n, capacity);
-            speedMult *= f >= 1 ? eff.value : 1 / ((1 - f) + f / eff.value);
-            break;
-          }
-          case "yield_pct":
-            yieldMult *= (1 + eff.value / 100);
-            break;
-          case "yield_flat":
-            yieldFlat += eff.value * aoeCoverage(eff, n, capacity);
-            break;
-          case "chance":
-            // Expected value: pct% chance of +extra per cycle
-            yieldFlat += (eff.pct / 100) * eff.extra;
-            break;
-          case "extra_harvest":
-            extraHarvest += eff.value;
-            break;
-          case "daily_flat":
-            yieldFlat += eff.value; // fishing: unitsPerDay = 20 + yieldFlat (per-day), so this lands per-day
-            break;
-          case "free_tool":
-          case "cost_reduction":
-          case "fruit_free_chop":
-          case "fruit_stump_wood":
-          case "feed_reduction":
-            // Handled in cost/value calculations, not production yield
-            break;
-        }
-      }
-
-      const effectiveCycle = baseCycleSec * speedMult;
-      const cyclesPerDay = catId === "fishing" ? 1 : (effectiveCycle > 0 ? 86400 / effectiveCycle : 0);
-      const outputPerCycle = baseYield * yieldMult + yieldFlat;
-
-      let unitsPerDay;
-      if (catId === "fishing") {
-        unitsPerDay = 20 + yieldFlat; // flat estimate for fishing
-      } else if (catId === "bees") {
-        unitsPerDay = n * (baseYield * yieldMult + yieldFlat); // simplified for bees
-      } else if (RES_FARMKEY[catId] && typeof powerState !== "undefined" && powerState && powerState.farm) {
-        // Unify with the faithful per-node engine (correct base + tier flats); cycle stays boosted.
-        unitsPerDay = gameResYield(powerState.farm, catId, boostEffects) * cyclesPerDay;
-      } else {
-        unitsPerDay = n * cyclesPerDay * outputPerCycle;
-      }
-
-      return { unitsPerDay, speedMult, yieldMult, yieldFlat, effectiveCycle, extraHarvest };
+      return __engine.applyBoosts(catId, product, capacity, boostEffects, powerState ? powerState.farm : undefined);
     }
 
     /*
@@ -15487,13 +14341,6 @@
       "Obsidian", "Oil", "Sunstone", "Diamond", "Ascension Shard", "Refined Salt",
       "Wild Mushroom", "Magic Mushroom",
     ]);
-
-    // Calculate SFL/day from units/day
-    function unitToSfl(unitsPerDay, product, p2pPrices) {
-      if (NON_SELLABLE_PRODUCTS.has(product)) return 0;
-      const price = p2pPrices[product] || 0;
-      return unitsPerDay * price;
-    }
 
     const CAT_ICON_ITEM = {
       crops: "Wheat", fruits: "Apple", greenhouse: "Grape", chickens: "Egg", cows: "Milk",
@@ -15530,431 +14377,15 @@
 
     // ── Cost calculation helpers ──
 
-    // Detect stock modifiers from farm buildings/skills
-    function detectStockModifiers(farm) {
-      const buildings = farm.buildings || {};
-      const skills = farm.bumpkin?.skills || {};
-      const inventory = farm.inventory || {};
-      const hasWarehouse = (buildings["Warehouse"] || []).length > 0;
-      const hasToolshed = (buildings["Toolshed"] || []).length > 0;
-      const moreAxes = skills["More Axes"] !== undefined;
-      const morePicks = skills["More Picks"] !== undefined;
-      const fellersDiscount = skills["Feller's Discount"] !== undefined; // -20% axe coin cost
-      const frugalMiner = skills["Frugal Miner"] !== undefined;         // -20% pickaxe coin cost
-      // Free tool collectibles (zero tool cost for category). The game checks these with
-      // isCollectibleBuilt / isWearableActive, so only a PLACED collectible or an EQUIPPED
-      // wearable (bumpkin or farm hand) counts — one sitting in inventory/wardrobe does nothing.
-      const hasQuarry = findCollectible(farm, "Quarry").length > 0;
-      const hasForeman = findCollectible(farm, "Foreman Beaver").length > 0;
-      const oilRigActive = skills["Oil Rig"] !== undefined;
-      const hasInfernalDrill = isWearableEquipped(farm, "Infernal Drill");
-      const hasCrimstoneSpikesHair = isWearableEquipped(farm, "Crimstone Spikes Hair");
-      const slickSaver = skills["Slick Saver"] !== undefined; // -1 Oil for greenhouse seeds
-      const hasKaleMix = skills["Kale Mix"] !== undefined; // Mixed Grain uses 3 Kale instead
-      return { hasWarehouse, hasToolshed, moreAxes, morePicks, fellersDiscount, frugalMiner, hasQuarry, hasForeman, oilRigActive, hasInfernalDrill, hasCrimstoneSpikesHair, slickSaver, hasKaleMix };
-    }
-
-    // Get effective stock for a seed/tool
-    function getEffectiveStock(seedOrTool, stockMods) {
-      let base = BASE_STOCK[seedOrTool] || 0;
-      if (base === 0) return 0;
-      // Warehouse: +20% seeds
-      if (seedOrTool.includes("Seed") && stockMods.hasWarehouse) base = Math.floor(base * 1.2);
-      // Toolshed: +50% tools
-      if (TOOL_COSTS[seedOrTool] && stockMods.hasToolshed) base = Math.floor(base * 1.5);
-      // Skill bonuses
-      if (seedOrTool === "Axe" && stockMods.moreAxes) base += 50;
-      if (seedOrTool === "Pickaxe" && stockMods.morePicks) base += 70;
-      if (seedOrTool === "Stone Pickaxe" && stockMods.morePicks) base += 20;
-      if (seedOrTool === "Iron Pickaxe" && stockMods.morePicks) base += 7;
-      if (seedOrTool === "Gold Pickaxe" && stockMods.morePicks) base += 2;
-      return base;
-    }
-
-    // Calculate seed cost per day for a crop/fruit/greenhouse category
-    function calcSeedCostPerDay(catId, product, capacity, exchangeRates, stockMods, boostEffects, p2pPrices) {
-      const coinCost = SEED_COSTS[product];
-      if (!coinCost || exchangeRates.coinsPerSFL <= 0) return { costPerDay: 0, seedSfl: 0, restockPerDay: 0 };
-      const seedSfl = coinCost / exchangeRates.coinsPerSFL;
-      const n = getCapacityCount(catId, capacity);
-      if (n === 0) return { costPerDay: 0, seedSfl, restockPerDay: 0 };
-
-      // Apply speed boosts to get effective cycles/day
-      const result = applyBoosts(catId, product, capacity, boostEffects);
-      const effectiveCycle = result.effectiveCycle || getCycleSec(catId, product);
-      const cyclesPerDay = effectiveCycle > 0 ? 86400 / effectiveCycle : 0;
-
-      // Fruit harvest count: one seed produces multiple harvests
-      let effectiveHarvests = 1;
-      if (catId === "fruits") {
-        const baseHarvests = FRUIT_HARVEST_COUNT[product] || 4;
-        effectiveHarvests = baseHarvests + (result.extraHarvest || 0);
-      }
-
-      // Seed consumption: for fruits, 1 seed per (harvestCount × growCycle)
-      // "+1 seed to plant" (Seeded Bounty): every planting takes more seeds; oil stays per planting.
-      const seedsPerPlanting = 1 + (boostEffects || []).filter(e => e && e.type === "seed_extra" && e.cat === catId).reduce((s, e) => s + (e.value || 0), 0);
-      const seedsPerDay = cyclesPerDay * n / effectiveHarvests;
-      let costPerDay = seedSfl * seedsPerDay * seedsPerPlanting;
-
-      // Greenhouse oil cost per seed
-      let oilPerSeed = 0, oilSflPerSeed = 0, oilCostPerDay = 0;
-      if (catId === "greenhouse" && GREENHOUSE_OIL_COSTS[product]) {
-        oilPerSeed = GREENHOUSE_OIL_COSTS[product];
-        if (stockMods.slickSaver) oilPerSeed = Math.max(0, oilPerSeed - 1);
-        // "+N% Oil consumption" debuffs (e.g. Greasy Plants) multiply greenhouse oil use — a real cost.
-        const _oilConsPct = (boostEffects || []).filter(e => e && e.type === "oil_consumption_pct" && (!e.product || e.product === product)).reduce((s, e) => s + (e.value || 0), 0);
-        if (_oilConsPct) oilPerSeed *= (1 + _oilConsPct / 100);
-        oilSflPerSeed = oilPerSeed * ((p2pPrices && p2pPrices["Oil"]) || 0);
-        oilCostPerDay = oilSflPerSeed * seedsPerDay;
-        costPerDay += oilCostPerDay;
-      }
-
-      // Stock info (restock cost calculated separately in shared restock system)
-      const seedName = product + " Seed";
-      const stock = getEffectiveStock(seedName, stockMods);
-      const daysUntilEmpty = seedsPerDay > 0 ? stock / seedsPerDay : Infinity;
-
-      return { costPerDay, seedSfl, restockPerDay: 0, cyclesPerDay, seedsPerDay, stock, daysUntilEmpty, oilPerSeed, oilSflPerSeed, oilCostPerDay, effectiveHarvests };
-    }
-
-    // Calculate tool cost per day for a resource category
-    // skipDiscount: if true, ignore coin discounts (for base cost calculation)
-    // Tools consumed per day = one tool per PHYSICAL rock per BOOSTED recovery cycle. A merged rock is
-    // still ONE rock (one tool, multiplied yield); faster recovery = more tools. Falls back before powerState.
-    // `effects` (optional): the effect set whose speed decides the tool count — a what-if caller
-    // (roadmapMiningChain's override) passes the same set its output uses. Default = owned.
-    // Same parameter order as core; `_farm` is unused here (the page reads powerState.farm).
     function miningToolsPerDay(catId, capacity, _farm, effects) {
-      const fkMap = { trees: "trees", stone: "stones", iron: "iron", gold: "gold", crimstone: "crimstones", oil: "oilReserves" };
-      const fk = fkMap[catId];
-      const pf = (typeof powerState !== "undefined" && powerState && powerState.farm) ? powerState.farm : null;
-      // Tools eaten per mine = node.multiplier for trees/stone/iron/gold (merged tier-N node eats N tools);
-      // crimstone & oil always eat exactly 1 tool per mine regardless of multiplier (game: mineCrimstone/oil).
-      const oneToolPerNode = (catId === "crimstone" || catId === "oil");
-      let toolNodes;
-      if (pf && fk) {
-        const ns = Object.values(pf[fk] || {});
-        toolNodes = oneToolPerNode ? ns.length : ns.reduce((s, n) => s + ((n && n.multiplier) || 1), 0);
-      } else { toolNodes = capacity[fk] || 0; }
-      let ec = 0;
-      try { ec = applyBoosts(catId, getDefaultProduct(catId), capacity, effects || roadmapOwnedEffects(catId)).effectiveCycle || 0; } catch {}
-      if (!(ec > 0)) { const rk = { trees:"Wood", stone:"Stone", iron:"Iron", gold:"Gold", crimstone:"Crimstone", oil:"Oil" }[catId]; const d = RESOURCE_RESPAWN_DATA[rk]; ec = d ? d.respawnSec : 0; }
-      return ec > 0 ? toolNodes * (86400 / ec) : 0;
+      return __engine.miningToolsPerDay(catId, capacity, powerState ? powerState.farm : null, effects || __engine.roadmapOwnedEffects(catId));
     }
     function calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods, skipDiscount) {
-      const toolName = Object.keys(TOOL_TO_CAT).find(t => TOOL_TO_CAT[t] === catId);
-      if (!toolName) return { costPerDay: 0, toolSfl: 0, restockPerDay: 0 };
-      const tool = TOOL_COSTS[toolName];
-      if (!tool || exchangeRates.coinsPerSFL <= 0) return { costPerDay: 0, toolSfl: 0, restockPerDay: 0 };
-
-      // Free tool check (Quarry = free stone mining, Foreman Beaver = free tree chopping)
-      if (!skipDiscount) {
-        if (catId === "stone" && stockMods.hasQuarry) {
-          // Still compute toolsPerDay for display but cost = 0
-          const rKey = "Stone";
-          const d = RESOURCE_RESPAWN_DATA[rKey];
-          const n = capacity.stones || 0;
-          const toolsPerDay = miningToolsPerDay(catId, capacity);
-          return { costPerDay: 0, toolSfl: 0, restockPerDay: 0, toolsPerDay, stock: 0, freeTool: true, freeToolSource: "Quarry" };
-        }
-        if (catId === "trees" && stockMods.hasForeman) {
-          const d = RESOURCE_RESPAWN_DATA["Wood"];
-          const n = capacity.trees || 0;
-          const toolsPerDay = miningToolsPerDay(catId, capacity);
-          return { costPerDay: 0, toolSfl: 0, restockPerDay: 0, toolsPerDay, stock: 0, freeTool: true, freeToolSource: "Foreman Beaver" };
-        }
-        if (catId === "oil" && stockMods.hasInfernalDrill) {
-          const d = RESOURCE_RESPAWN_DATA["Oil"];
-          const n = capacity.oilReserves || 0;
-          const toolsPerDay = miningToolsPerDay(catId, capacity);
-          return { costPerDay: 0, toolSfl: 0, restockPerDay: 0, toolsPerDay, stock: 0, freeTool: true, freeToolSource: "Infernal Drill" };
-        }
-        if (catId === "crimstone" && stockMods.hasCrimstoneSpikesHair) {
-          const d = RESOURCE_RESPAWN_DATA["Crimstone"];
-          const n = capacity.crimstones || 0;
-          const toolsPerDay = miningToolsPerDay(catId, capacity);
-          return { costPerDay: 0, toolSfl: 0, restockPerDay: 0, toolsPerDay, stock: 0, freeTool: true, freeToolSource: "Crimstone Spikes Hair" };
-        }
-      }
-
-      // Apply coin discounts from skills (unless skipDiscount)
-      let coinDiscount = 0;
-      let discountSource = "";
-      if (!skipDiscount) {
-        if (toolName === "Axe" && stockMods.fellersDiscount) {
-          coinDiscount = 0.2; discountSource = "Feller's Discount";
-        } else if (toolName !== "Axe" && toolName !== "Oil Drill" && stockMods.frugalMiner) {
-          coinDiscount = 0.2; discountSource = "Frugal Miner";
-        }
-      }
-      const effectiveCoins = tool.coins * (1 - coinDiscount);
-
-      // Oil Rig skill: Oil Drill uses Wool×20 instead of Leather×10
-      let effectiveMaterials = tool.materials;
-      if (catId === "oil" && stockMods.oilRigActive && tool.materials) {
-        effectiveMaterials = { ...tool.materials };
-        delete effectiveMaterials["Leather"];
-        effectiveMaterials["Wool"] = 20;
-      }
-
-      // Tool cost in SFL = coins (after discount) + material costs
-      let toolSfl = effectiveCoins / exchangeRates.coinsPerSFL;
-      if (effectiveMaterials) {
-        for (const [mat, qty] of Object.entries(effectiveMaterials)) {
-          toolSfl += (p2pPrices[mat] || 0) * qty;
-        }
-      }
-
-      const rKey = catId === "stone" ? "Stone" : catId === "iron" ? "Iron" : catId === "gold" ? "Gold" : catId === "crimstone" ? "Crimstone" : catId === "oil" ? "Oil" : "Wood";
-      const d = RESOURCE_RESPAWN_DATA[rKey];
-      if (!d) return { costPerDay: 0, toolSfl, restockPerDay: 0 };
-      const capKey = catId === "stone" ? "stones" : catId === "crimstone" ? "crimstones" : catId === "oil" ? "oilReserves" : catId;
-      const n = capacity[capKey] || 0;
-      if (n === 0) return { costPerDay: 0, toolSfl, restockPerDay: 0 };
-      const cyclesPerDay = 86400 / d.respawnSec;
-      const toolsPerDay = miningToolsPerDay(catId, capacity); // physical rocks x boosted cycle
-      const costPerDay = toolSfl * toolsPerDay;
-
-      // Stock info (restock cost calculated separately in shared restock system)
-      const stock = getEffectiveStock(toolName, stockMods);
-      const daysUntilEmpty = toolsPerDay > 0 ? stock / toolsPerDay : Infinity;
-
-      return { costPerDay, toolSfl, restockPerDay: 0, toolsPerDay, stock, daysUntilEmpty, coinDiscount, discountSource, effectiveCoins, baseCoins: tool.coins };
+      return __engine.calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods, skipDiscount,
+        powerState ? powerState.farm : undefined, __engine.roadmapOwnedEffects(catId));
     }
 
     // ── Animal Feed Cost Functions ──
-
-    // Get cost per 1 unit of a specific feed
-    function getFeedCostPerUnit(foodName, p2pPrices, stockMods) {
-      if (foodName === "Mixed Grain" && stockMods?.hasKaleMix) {
-        return (p2pPrices["Kale"] || 0) * 3;
-      }
-      const recipe = FEED_RECIPES[foodName];
-      if (!recipe) return 0;
-      let cost = 0;
-      for (const [item, qty] of Object.entries(recipe)) {
-        cost += (p2pPrices[item] || 0) * qty;
-      }
-      return cost;
-    }
-
-    // Compute feed reduction multiplier from boost effects for a specific animal category
-    function getFeedReductionMult(catId, boostEffects) {
-      let mult = 1;
-      for (const eff of boostEffects) {
-        if (eff.type === "feed_reduction" && eff.cat === catId) {
-          mult *= (1 + eff.value); // value is negative for reductions (e.g. -0.25)
-        }
-      }
-      return Math.max(0, mult);
-    }
-
-    // Cheapest-TOTAL feed for an animal's cycle: try every food (favourite minimises feedings but may cost
-    // more per unit; a cheap low-XP food needs more feedings) and pick min noOfFeed x qty x cost. Matches the
-    // feed advisor, so the income net and the advisor agree.
-    function getOptimalFeedForLevel(level, xpPerCycle, feedQty, p2pPrices, stockMods) {
-      let row = null;
-      for (const r of FEED_XP_TABLE) { if (level >= r.min && level <= r.max) { row = r; break; } }
-      const foods = row ? Object.keys(row.xp) : ["Mixed Grain"];
-      let bestFood = null, bestCost = Infinity, bestN = 1;
-      for (const food of foods) {
-        const xp = (row && row.xp[food]) || 1; if (!(xp > 0)) continue;
-        const noOfFeed = Math.max(1, Math.ceil(xpPerCycle / xp));
-        const cost = noOfFeed * feedQty * getFeedCostPerUnit(food, p2pPrices, stockMods);
-        if (cost < bestCost) { bestCost = cost; bestFood = food; bestN = noOfFeed; }
-      }
-      return { food: bestFood || "Mixed Grain", costPerCycle: bestCost === Infinity ? 0 : bestCost, noOfFeed: bestN };
-    }
-
-    // Main animal feed cost function (analogous to calcSeedCostPerDay / calcToolCostPerDay)
-    function calcAnimalFeedCost(catId, capacity, p2pPrices, boostEffects, stockMods) {
-      const animalType = ANIMAL_CAT_MAP[catId];
-      if (!animalType) return { costPerDay: 0 };
-
-      const animals = capacity.animalDetails?.[catId] || [];
-      if (animals.length === 0) return { costPerDay: 0, animalCount: 0 };
-
-      // Check golden animal → free feeding. A `free_feed` effect counts as well as the
-      // ownership flag: a Gold Egg / Golden Cow / Golden Sheep the farm does NOT own yet
-      // reaches this function only as that effect, so without it the entire boost of a
-      // 12k-FLOWER item was worth exactly 0 to every valuation that asks "what if I buy it"
-      // (the Power page, the roadmap and the wishlist all difference this cost).
-      if (capacity.goldenAnimals?.[animalType]
-          || (boostEffects || []).some(e => e.type === "free_feed" && e.cat === catId)) {
-        const goldenItem = Object.keys(GOLDEN_ANIMALS).find(k => GOLDEN_ANIMALS[k] === animalType);
-        return { costPerDay: 0, isGolden: true, goldenItem, animalCount: animals.length };
-      }
-
-      // Speed multiplier affects feeding frequency
-      let speedMult = 1;
-      for (const eff of boostEffects) {
-        if (eff.cat !== catId) continue;
-        if (eff.type === "speed_pct") speedMult *= (1 + eff.value / 100);
-        else if (eff.type === "speed_mult") speedMult *= eff.value;
-      }
-      const cycleSec = ANIMAL_CYCLE_DATA[animalType].cycleSec * speedMult;
-      const cyclesPerDay = cycleSec > 0 ? 86400 / cycleSec : 0;
-
-      // Feed reduction from boosts
-      const feedReductionMult = getFeedReductionMult(catId, boostEffects);
-      const baseFeedQty = FEED_QTY[animalType] || 1;
-      const effectiveFeedQty = baseFeedQty * feedReductionMult;
-
-      const levelDist = getAnimalLevelDistribution(animals);
-
-      // Compute per-animal feed cost
-      let totalCostPerCycle = 0;
-      const feedBreakdown = {}; // { foodName: { count, costPerUnit, totalUnits } }
-
-      // Food per PRODUCTION cycle scales with level: completing a cycle needs `xpPerCycle` XP,
-      // each feeding grants the food's XP, so noOfFeed = ceil(xpPerCycle / foodXp) and total food =
-      // noOfFeed x REQUIRED_FOOD_QTY. (game: feedAnimal.ts). At L15 a cow eats 12x5=60 Mixed Grain/cycle.
-      const lvls = ANIMAL_LEVELS[animalType];
-      for (const animal of animals) {
-        const lvl = animal.level;
-        let xpPerCycle;
-        if (lvl >= 15) xpPerCycle = (lvls[15] - lvls[14]);
-        else xpPerCycle = ((lvls[lvl + 1] || lvls[15]) - lvls[lvl]);
-        const opt = getOptimalFeedForLevel(lvl, xpPerCycle, effectiveFeedQty, p2pPrices, stockMods);
-        const foodName = opt.food;
-        const costPerUnit = getFeedCostPerUnit(foodName, p2pPrices, stockMods);
-        const unitsThisAnimal = opt.noOfFeed * effectiveFeedQty;
-        totalCostPerCycle += opt.costPerCycle;
-
-        if (!feedBreakdown[foodName]) feedBreakdown[foodName] = { count: 0, costPerUnit, totalUnits: 0 };
-        feedBreakdown[foodName].count++;
-        feedBreakdown[foodName].totalUnits += unitsThisAnimal;
-      }
-
-      const costPerDay = totalCostPerCycle * cyclesPerDay;
-
-      return {
-        costPerDay,
-        feedBreakdown,
-        feedReductionMult,
-        animalCount: animals.length,
-        cyclesPerDay,
-        baseFeedQty,
-        effectiveFeedQty,
-        levelDist,
-        speedMult,
-      };
-    }
-
-    // ── Animal Sickness Cost ──
-    // Expected daily sickness cost = numAnimals * sicknessRate * barnDelightCostSfl
-    // Reduced by: Healthy Livestock (-50% rate), Oracle Syringe (free cure),
-    //   Medic Apron (-50% cost), Alternate Medicine (cheaper recipe),
-    //   Prevention items (0% for specific type)
-    /*
-     * `effects` (optional): sickness_prevention / sickness_reduction effects from a WHAT-IF probe.
-     * Same reason free_feed reaches calcAnimalFeedCost as an effect: an unowned Sleepy Chicken or
-     * Medic Apron reaches a valuation only as its parsed effect — matching on owned item NAMES
-     * below means every "what if I buy it" question scored those items exactly 0.
-     */
-    function calcSicknessCost(catId, capacity, p2pPrices, boostItems, skills, effects, season) {
-      const animals = capacity.animalDetails?.[catId] || [];
-      if (animals.length === 0) return { costPerDay: 0, avgRate: 0, barnDelightSfl: 0, reductions: [], perLevel: [] };
-      const probeEff = (effects || []).filter(e => e.cat === catId);
-
-      const reductions = [];
-
-      // Base Barn Delight cost in SFL
-      const hasAltMedicine = !!(skills && skills["Alternate Medicine"]);
-      const recipe = hasAltMedicine ? BARN_DELIGHT_RECIPE_ALT : BARN_DELIGHT_RECIPE;
-      if (hasAltMedicine) reductions.push({ name: "Alternate Medicine", desc: "Recipe: -1 Lemon & Honey" });
-      const lemonPrice = p2pPrices["Lemon"] || 0;
-      const honeyPrice = p2pPrices["Honey"] || 0;
-      const barnDelightSfl = (recipe.Lemon * lemonPrice) + (recipe.Honey * honeyPrice);
-
-      /*
-       * When an effects list arrives it is the ONLY source for item-borne relief — the caller
-       * built it from what is owned PLUS what is being probed, so also matching owned item names
-       * would count the same item twice. Callers that pass no effects keep the name checks.
-       */
-      const effectMode = effects != null;
-      const prevs = []; // one per protecting item: { name, season } — season null = all year
-      if (effectMode) {
-        for (const e of probeEff) if (e.type === "sickness_prevention") prevs.push({ name: "sickness prevention", season: e.season || null });
-      } else if (boostItems) {
-        for (const item of boostItems) {
-          if (!item.has) continue;
-          const prevCat = SICKNESS_PREVENTION[item.name];
-          if (prevCat === catId) {
-            const pe = (item.effects || []).find(e => e.type === "sickness_prevention");
-            prevs.push({ name: item.name, season: (pe && pe.season) || null });
-          }
-        }
-      }
-      const seasons = prevs.map(p => p.season);
-      let preventedShare = 0;
-      if (prevs.length) {
-        if (season === undefined || seasons.indexOf(null) >= 0) preventedShare = 1;
-        else if (season === "annual") preventedShare = Math.min(1, new Set(seasons).size / 4);
-        else preventedShare = seasons.indexOf(season) >= 0 ? 1 : 0;
-      }
-      if (preventedShare >= 1) {
-        reductions.push({ name: prevs[0].name, desc: "Full prevention" });
-        return { costPerDay: 0, avgRate: 0, barnDelightSfl, prevented: true, reductions, perLevel: [] };
-      }
-      if (preventedShare > 0) reductions.push({ name: prevs.map(p => p.name).join(", "), desc: `No sickness ${Math.round(preventedShare * 100)}% of the year` });
-
-      /*
-       * Rate multiplier from Healthy Livestock — NAME mode only. In effect mode the skill's
-       * parsed sickness_reduction effect already scales the bill (rate and cure cost are
-       * interchangeable in expected value: rate × barnDelight × cureMult), so also matching
-       * the name here would halve the same bill twice.
-       */
-      let rateMult = 1;
-      if (!effectMode) {
-        const hasHealthyLivestock = !!(skills && skills["Healthy Livestock"]);
-        if (hasHealthyLivestock) {
-          rateMult = 0.5;
-          reductions.push({ name: "Healthy Livestock", desc: "-50% sickness rate" });
-        }
-      }
-
-      // Cure cost modifiers
-      let cureCostMult = 1;
-      if (effectMode) {
-        // Oracle Syringe parses as sickness_reduction 1.0, so "free cure" needs no special case.
-        for (const e of probeEff) {
-          if (e.type === "sickness_reduction") { cureCostMult *= (1 - (e.value || 0)); reductions.push({ name: e.raw || "sickness reduction", desc: `-${Math.round((e.value || 0) * 100)}% cure cost` }); }
-        }
-      } else {
-        const hasOracleSyringe = boostItems && boostItems.some(b => b.name === "Oracle Syringe" && b.has);
-        if (hasOracleSyringe) {
-          cureCostMult = 0;
-          reductions.push({ name: "Oracle Syringe", desc: "Free cure" });
-        }
-        if (cureCostMult > 0) {
-          const hasMedicApron = boostItems && boostItems.some(b => b.name === "Medic Apron" && b.has);
-          if (hasMedicApron) {
-            cureCostMult *= 0.5;
-            reductions.push({ name: "Medic Apron", desc: "-50% Barn Delight cost" });
-          }
-        }
-      }
-
-      // Per-animal level-based sickness rate
-      let totalExpectedSick = 0;
-      const perLevel = {};  // { level: { count, rate, cost } }
-      for (const animal of animals) {
-        const lvl = Math.min(animal.level || 1, SICKNESS_RATE_BY_LEVEL.length - 1);
-        const baseRate = SICKNESS_RATE_BY_LEVEL[lvl] || 0;
-        const effectiveRate = baseRate * rateMult;
-        totalExpectedSick += effectiveRate;
-
-        if (!perLevel[lvl]) perLevel[lvl] = { count: 0, rate: effectiveRate, baseRate };
-        perLevel[lvl].count++;
-      }
-
-      const costPerDay = totalExpectedSick * barnDelightSfl * cureCostMult * (1 - preventedShare);
-      const avgRate = animals.length > 0 ? totalExpectedSick / animals.length : 0;
-
-      return { costPerDay, avgRate, totalExpectedSick, barnDelightSfl, cureCostMult, rateMult, preventedShare, reductions, animalCount: animals.length, perLevel };
-    }
 
     // ── Shared Restock System ──
     // Restock buys ALL seeds (15 gems) or ALL tools (10 gems) or both (20 gems) at once.
@@ -16013,90 +14444,6 @@
       const restockSfl = exchangeRates.gemsPerSFL > 0 ? gemCost / exchangeRates.gemsPerSFL : 0;
       const restockPerDay = restockFrequencyDays > 0 ? restockSfl / restockFrequencyDays : 0;
       return { restockPerDay, restockFrequencyDays, triggerQueue: trigger, gemCost, restockSfl };
-    }
-
-    // Lava Pit cost: seasonal material requirements → P2P cost per ignition
-    function calcLavaPitCostPerDay(capacity, p2pPrices, season, costMult) {
-      const n = capacity.lavaPits || 0;
-      if (n === 0 || !season) return { costPerDay: 0, costPerIgnition: 0, requirements: [], season };
-      const reqs = LAVA_PIT_REQUIREMENTS[season];
-      if (!reqs) return { costPerDay: 0, costPerIgnition: 0, requirements: [], season };
-
-      const mult = costMult !== undefined ? costMult : 1;
-      let costPerIgnition = 0;
-      const breakdown = [];
-      for (const r of reqs) {
-        const price = p2pPrices[r.item] || 0;
-        const effectiveQty = r.qty * mult;
-        const cost = price * effectiveQty;
-        costPerIgnition += cost;
-        breakdown.push({ item: r.item, qty: effectiveQty, baseQty: r.qty, price, cost });
-      }
-
-      const d = RESOURCE_RESPAWN_DATA["Obsidian"];
-      const cyclesPerDay = 86400 / d.respawnSec;
-      const ignitionsPerDay = n * cyclesPerDay;
-      const costPerDay = costPerIgnition * ignitionsPerDay;
-
-      return { costPerDay, costPerIgnition, ignitionsPerDay, requirements: breakdown, season, costMult: mult };
-    }
-
-    // Compute total SFL/day across all products for an animal category
-    function getAnimalCatSfl(catId, capacity, boostEffects, p2pPrices) {
-      const animalType = ANIMAL_CAT_MAP[catId];
-      const animal = getAnimalData(catId);
-      if (!animal) return { totalSfl: 0, breakdown: [] };
-
-      const animals = capacity.animalDetails?.[catId];
-      // If we have per-animal level data, use level-based drops
-      if (animals && animals.length > 0) {
-        // Extract speed multiplier from boosts (same for all products)
-        let speedMult = 1;
-        for (const eff of boostEffects) {
-          if (eff.cat !== catId) continue;
-          if (eff.type === "speed_pct") speedMult *= (1 + eff.value / 100);
-          else if (eff.type === "speed_mult") speedMult *= eff.value;
-        }
-        const effectiveCycle = animal.cycleSec * speedMult;
-        const cyclesPerDay = effectiveCycle > 0 ? 86400 / effectiveCycle : 0;
-
-        let totalSfl = 0;
-        const breakdown = [];
-        for (const prod of animal.products) {
-          // Collect yield modifiers for this specific product
-          let yieldMult = 1, yieldFlat = 0;
-          for (const eff of boostEffects) {
-            if (eff.cat !== catId) continue;
-            if (eff.product && PRODUCT_TO_CATEGORY[eff.product] === catId && eff.product !== prod) continue;
-            if (eff.type === "yield_pct") yieldMult *= (1 + eff.value / 100);
-            else if (eff.type === "yield_flat") { if (eff.product || prod === animal.products[0]) yieldFlat += eff.value; } // product-less flat = primary product only
-            else if (eff.type === "chance") yieldFlat += (eff.pct / 100) * eff.extra;
-          }
-          // Sum production across all animals at their individual levels
-          let totalUnits = 0;
-          for (const a of animals) {
-            const drops = getAnimalDropsPerCycle(animalType, a.level);
-            const baseDrop = drops[prod] || 0;
-            totalUnits += (baseDrop * yieldMult + yieldFlat) * cyclesPerDay;
-          }
-          const price = p2pPrices[prod] || 0;
-          const sfl = totalUnits * price;
-          totalSfl += sfl;
-          breakdown.push({ product: prod, unitsPerDay: totalUnits, sfl, speedMult, yieldMult, yieldFlat, effectiveCycle });
-        }
-        return { totalSfl, breakdown };
-      }
-
-      // Fallback: no per-animal data — use old flat yield=1 path
-      let totalSfl = 0;
-      const breakdown = [];
-      for (const prod of animal.products) {
-        const result = applyBoosts(catId, prod, capacity, boostEffects);
-        const sfl = unitToSfl(result.unitsPerDay, prod, p2pPrices);
-        totalSfl += sfl;
-        breakdown.push({ product: prod, unitsPerDay: result.unitsPerDay, sfl, ...result });
-      }
-      return { totalSfl, breakdown };
     }
 
     // Format seconds to human-readable time
@@ -16210,139 +14557,6 @@
       return h;
     }
 
-    // Get all effects for a specific boost item relevant to a category
-    function getEffectsForCategory(boostItem, catId) {
-      return boostItem.effects.filter(e => e.cat === catId);
-    }
-
-    // Calculate solo + synergy SFL/day for a boost within a category
-    function calcBoostValue(boostItem, catId, product, capacity, p2pPrices, allCatBoosts, isOwned) {
-      const catEffects = getEffectsForCategory(boostItem, catId);
-      if (catEffects.length === 0) return { solo: 0, synergy: 0, roi: Infinity };
-
-      // If this boost is disabled by a stronger owned item, it contributes nothing
-      if (boostItem.isDisabled) {
-        return { solo: 0, synergy: 0, roi: Infinity, disabled: true, disabledByName: boostItem.disabledByName };
-      }
-
-      // Handle cost_reduction effects (e.g., Feller's Discount, Frugal Miner)
-      const costEffects = catEffects.filter(e => e.type === "cost_reduction");
-      if (costEffects.length > 0) {
-        // Cost reduction value = base cost - discounted cost for this category
-        const { exchangeRates, stockMods } = powerState;
-        if (["trees", "stone", "iron", "gold", "crimstone", "oil"].includes(catId)) {
-          // If category already has free tools, cost reduction has no effect
-          const hasFreeTools = allCatBoosts.some(b => b.has && !b.isDisabled &&
-            getEffectsForCategory(b, catId).some(e => e.type === "free_tool"));
-          if (hasFreeTools) {
-            return { solo: 0, synergy: 0, roi: Infinity, redundantFreeTool: true };
-          }
-          const baseCost = calcToolCostPerDay(catId, capacity, exchangeRates, p2pPrices, stockMods, true);
-          // Apply only THIS boost's discount
-          const discountValue = costEffects[0].value || 0.2;
-          const savings = baseCost.costPerDay * discountValue; // 20% of base coin cost portion
-          // More precisely: savings = (baseCoins * discountValue / coinsPerSFL) * toolsPerDay
-          const toolName = Object.keys(TOOL_TO_CAT).find(t => TOOL_TO_CAT[t] === catId);
-          const tool = toolName ? TOOL_COSTS[toolName] : null;
-          let solo = 0;
-          // A coin discount saves nothing when the roadmap treats coins as free (core copy says why).
-          const coinsFree = roadmapCoinsFree(getRoadmapSettings());
-          if (!coinsFree && tool && baseCost.toolsPerDay > 0 && exchangeRates.coinsPerSFL > 0) {
-            const coinSavingsPerUse = tool.coins * discountValue / exchangeRates.coinsPerSFL;
-            solo = coinSavingsPerUse * baseCost.toolsPerDay;
-          }
-          const roi = (boostItem.floor > 0 && solo > 0) ? boostItem.floor / solo : Infinity;
-          return { solo, synergy: solo, roi, isCostReduction: true, ...(coinsFree ? { coinsFree: true } : {}) };
-        }
-        return { solo: 0, synergy: 0, roi: Infinity };
-      }
-
-      // Non-animal categories: value via the SHARED roadmap engine (NET — with tool/seed cost + the mining
-      // chain — at theoretical efficiency), so the Power page and the roadmap agree on every yield/tool boost.
-      // seasonBasis "annual": bought once and kept, so valued over the whole year.
-      const _s = Object.assign({}, getRoadmapSettings(), { effMode: "theoretical", effOverrides: {}, seasonBasis: "annual" });
-      const ownedEff = allCatBoosts.filter(b => b.has && !b.isDisabled && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId)).concat(activeShrineEffects(catId));
-      let synergy, solo;
-      if (ROADMAP_MINING_CATS.indexOf(catId) >= 0) {
-        const mk = (ef) => { const o = {}; o[catId] = ef; return roadmapMiningChain(_s, o).total; };
-        synergy = mk(ownedEff.concat(catEffects)) - mk(ownedEff);
-        solo = mk(catEffects) - mk([]);
-      } else {
-        /*
-         * Clamp the DIFFERENCE, not each side of it.
-         *
-         * Clamping both nets first made every boost on a loss-making category read exactly
-         * 0. On a real farm chickens net -0.87 FLOWER/day (gross 1.05 vs 1.92 of feed and
-         * sickness), so max(0, ·) flattened both sides to 0 and took the marginal with it:
-         * Rich Chicken's +0.016/day of extra eggs and Fat Chicken's +0.168/day of saved feed
-         * both reported as worthless. It also overstated the reverse case — a boost that
-         * turns a loss-maker profitable scored its whole net instead of the part it added.
-         *
-         * The mining branch above already differences raw nets; this matches it.
-         *
-         * And the difference is NOT clamped either, as of the unclamp pass: a boost that makes
-         * a category worse reports the negative. Measured on a real farm before shipping it —
-         * 6 of 277 valued items move, none of them owned, and what they gain is a warning:
-         * Acre Farm reads -0.74/day there because its -0.5 Advanced Crop debuff outweighs its
-         * buff on that crop mix, where a clamped 0.00 read as merely uninteresting.
-         */
-        /*
-         * Crops / fruits / greenhouse carry a product, and the caller passes the one it means
-         * (the Power selector, or the roadmap's saved/default). Value the boost against THAT
-         * product rather than the best-paying mix, so a crop-specific boost reads its real value
-         * on the crops it touches and zero on the rest — the mix hid that. Categories with no
-         * product concept (animals, bees, etc.) keep the mix/category net unchanged.
-         */
-        const productScoped = product && ["crops", "fruits", "greenhouse"].indexOf(catId) >= 0;
-        const net = productScoped
-          ? (ef) => roadmapProductNetEff(catId, product, ef, _s)
-          : (ef) => roadmapCatNet(catId, ef, _s);
-        synergy = net(ownedEff.concat(catEffects)) - net(ownedEff);
-        solo = net(catEffects) - net([]);
-      }
-      /*
-       * Coin drops per harvest (coin_chance): Money Tree's "1% chance +200 Coins chopping
-       * trees". Neither the chain nor roadmapCatNet models coins, so this is additive on top
-       * of whatever the category's production came to — it is extra revenue per harvest event,
-       * not a change to the yield.
-       *
-       * Added here because it was the one component the roadmap's skills view priced and this
-       * engine did not: Money Tree read 0.756/day there and exactly 0 on the Power page.
-       * Converted through coinsPerSFL, and scaled by the harvest rate the same cost model uses
-       * for tools, so a category you barely touch earns proportionally less from it.
-       */
-      const coinEffects = catEffects.filter(e => e.type === "coin_chance");
-      if (coinEffects.length) {
-        const { capacity, exchangeRates } = powerState;
-        const cps = exchangeRates && exchangeRates.coinsPerSFL;
-        if (cps > 0) {
-          let harvests = 0;
-          try { harvests = miningToolsPerDay(catId, capacity, powerState.farm, ownedEff) || 0; } catch (e) { harvests = 0; }
-          if (harvests > 0) {
-            let add = 0;
-            for (const e of coinEffects) add += ((e.pct || 0) / 100) * (e.coins || 0) * harvests / cps;
-            synergy += add;
-            solo += add;
-          }
-        }
-      }
-      const roi = (boostItem.floor > 0 && synergy > 0) ? boostItem.floor / synergy : Infinity;
-      const out = { solo, synergy, roi };
-      if (catEffects.some(e => e.type === "free_tool")) out.isFreeTool = true;
-      else if (catEffects.some(e => e.type === "lava_cost_reduction")) out.isLavaCostReduction = true;
-      else if (catEffects.some(e => e.type === "fruit_stump_wood" || e.type === "fruit_free_chop")) out.isFruitStump = true;
-      return out;
-    }
-
-    // Get the product name used for P2P price lookup
-    function getPriceProduct(catId, product) {
-      // For flowers, use the seed label
-      if (catId === "flowers") {
-        const sd = SEED_DATA[product];
-        return sd ? sd.label : "Sunpetal";
-      }
-      return product;
-    }
 
     // localStorage persistence for product selections
     function getSavedPowerProducts() {
@@ -16354,13 +14568,6 @@
       localStorage.setItem("sfl_power_products", JSON.stringify(saved));
     }
 
-
-    function formatSec(sec) {
-      if (sec < 60) return sec + "s";
-      if (sec < 3600) return (sec / 60).toFixed(0) + "m";
-      if (sec < 86400) return (sec / 3600).toFixed(1) + "h";
-      return (sec / 86400).toFixed(1) + "d";
-    }
 
     // ═══════════════════════════════════════
     //  RENDER: POWER
@@ -16573,68 +14780,9 @@
       renderPowerContent();
     }
 
-    // Wearable equipped on the main bumpkin OR any farm hand (game's isWearableActive).
-    function farmWearableEquipped(farm, name) {
-      const eq = (farm.bumpkin && farm.bumpkin.equipped) || {};
-      if (Object.values(eq).indexOf(name) >= 0) return true;
-      const hands = (farm.farmHands && farm.farmHands.bumpkins) || {};
-      for (const h of Object.values(hands)) {
-        if (h && h.equipped && Object.values(h.equipped).indexOf(name) >= 0) return true;
-      }
-      return false;
-    }
     const FACTION_SHIELDS = { bumpkins: "Bumpkin Shield", goblins: "Goblin Shield", nightshades: "Nightshade Shield", sunflorians: "Sunflorian Shield" };
     const RES_FARMKEY = { trees: "trees", stone: "stones", iron: "iron", gold: "gold", crimstone: "crimstones" };
 
-    // Per-node boosted base = (1 x multiplicatives + additives), faithful to chop.ts / *Mine.ts.
-    // The yield BOOSTS (beavers, beetles, Wood Nymph, Tin Turtle, Iron Idol, Nugget, Volcano Gnome,
-    // + every Mining/Trees skill) are FOLDED FROM THE PASSED EFFECT SET so a with-vs-without delta
-    // produces a real marginal for the roadmap. The structural part keeps ONLY what the NFT API does
-    // NOT expose (and therefore can never appear in `effects`, so no double count): Native +0.2,
-    // Squirrel +0.1, the Lumberjack collectible x1.1, and the faction shield +0.25.
-    function gameResBoostedBase(farm, cat, effects) {
-      const has = (n) => findCollectible(farm, n).length > 0;
-      const faction = (farm.faction && farm.faction.name) || "";
-      const shieldEq = FACTION_SHIELDS[faction] && farmWearableEquipped(farm, FACTION_SHIELDS[faction]);
-      let mult = 1, add = 0;
-      const skills = (farm.bumpkin && farm.bumpkin.skills) || {};
-      if (cat === "crimstone") add += 0.4; // crimstone: +2 every 5th dig ~= +0.4 avg streak (its base bonus)
-      else if (cat === "trees" || cat === "stone" || cat === "iron" || cat === "gold") add += 0.2; // base "Native" +1 crit (20%) — DEFAULT for everyone, NOT a skill
-      if (shieldEq && cat !== "oil") add += 0.25; // faction shield (Nightshade/Goblin/Sunflorian/Bumpkin) — +0.25 to EVERY mined ore, game-only (absent from the NFT API)
-      if (cat === "trees") {
-        if (has("Lumberjack")) mult *= 1.1;   // collectible — absent from the NFT API
-        if (has("Squirrel")) add += 0.1;       // absent from the NFT API
-      }
-      // Fold the parsed boost effects (API/EXTRA collectibles + skills) for this resource.
-      for (const e of (effects || [])) {
-        if (e.cat !== cat) continue;
-        if (e.type === "yield_flat") add += (e.value || 0) * aoeCoverage(e, Object.keys(farm[RES_FARMKEY[e.cat]] || {}).length,
-          { stones: Object.keys(farm.stones || {}).length, iron: Object.keys(farm.iron || {}).length, gold: Object.keys(farm.gold || {}).length,
-            crimstones: Object.keys(farm.crimstones || {}).length, trees: Object.keys(farm.trees || {}).length });
-        else if (e.type === "yield_pct") mult *= (1 + (e.value || 0) / 100);
-        else if (e.type === "yield_mult") mult *= (e.value || 1);
-      }
-      return 1 * mult + add;
-    }
-    // Total resource units per full harvest-round (all nodes): Sum_node bb x multiplier + tierBonus.
-    function gameResYield(farm, cat, effects) {
-      const bb = gameResBoostedBase(farm, cat, effects);
-      const obj = farm[RES_FARMKEY[cat]] || {};
-      let total = 0;
-      for (const node of Object.values(obj)) {
-        const m = (node && node.multiplier) || 1;
-        const tier = (node && node.tier) || (m >= 16 ? 3 : (m >= 4 ? 2 : 1));
-        total += bb * m + (tier === 3 ? 2.5 : (tier === 2 ? 0.5 : 0));
-      }
-      return total;
-    }
-    function gameResUnitsPerDay(cat, farm, capacity, effects) {
-      if (!RES_FARMKEY[cat]) return 0;
-      const eff = effects || roadmapOwnedEffects(cat);
-      const ab = applyBoosts(cat, getDefaultProduct(cat), capacity, eff);
-      const ec = ab.effectiveCycle || getCycleSec(cat, getDefaultProduct(cat));
-      return ec > 0 ? gameResYield(farm, cat, eff) * (86400 / ec) : 0;
-    }
 
 
     // Build powerState — shared by POWER and ROADMAP pages. Throws on fetch failure (no DOM writes).
@@ -16667,6 +14815,7 @@
       }
       const savedProducts = getSavedPowerProducts();
       powerState = { ...d, catBoosts, savedProducts, farm, inventory };
+      _engineSyncPower();
       return powerState;
     }
 
@@ -16687,42 +14836,10 @@
       autumn: ["Potato","Pumpkin","Carrot","Yam","Broccoli","Soybean","Wheat","Barley","Artichoke","Tomato","Apple","Banana","Rice","Olive","Grape"],
       winter: ["Potato","Cabbage","Beetroot","Cauliflower","Parsnip","Onion","Turnip","Wheat","Kale","Lemon","Blueberry","Apple","Rice","Olive","Grape"],
     };
-    function roadmapInSeason(product) {
-      const s = ((powerState.farm && powerState.farm.season && powerState.farm.season.season) || "").toLowerCase();
-      const list = SEASON_CROPS[s];
-      if (!list) return true;
-      return list.includes(product);
-    }
 
-    function getRoadmapSettings() {
-      let s = {};
-      try { s = JSON.parse(localStorage.getItem("sfl_roadmap_settings") || "{}"); } catch {}
-      return {
-        effMode: s.effMode === "theoretical" ? "theoretical" : "real",
-        globalActivity: (typeof s.globalActivity === "number") ? s.globalActivity : null,
-        startIncome: (typeof s.startIncome === "number" && s.startIncome >= 0) ? s.startIncome : null,
-        incCollectibles: s.incCollectibles !== false,
-        incWearables: s.incWearables !== false,
-        incSkills: s.incSkills !== false,
-        excludeCats: Array.isArray(s.excludeCats) ? s.excludeCats.filter(x => typeof x === "string") : [],
-        miningCostMode: s.miningCostMode === "production" ? "production" : "market",
-        marketFee: (typeof s.marketFee === "number" && s.marketFee >= 0) ? s.marketFee : 10,
-        skillPts: (typeof s.skillPts === "number" && s.skillPts >= 0) ? s.skillPts : null,
-        showCosmetic: !!s.showCosmetic,
-        maxPrice: (typeof s.maxPrice === "number" && s.maxPrice >= 0) ? s.maxPrice : 0,
-        coinsFree: (s.coinsFree === true || s.coinsFree === false) ? s.coinsFree : undefined,
-        restocksPerDay: (typeof s.restocksPerDay === "number" && s.restocksPerDay > 0) ? s.restocksPerDay : 2,
-        // The goal is the most FLOWER within five years. 100 was the old default, not a choice.
-        horizonYears: (typeof s.horizonYears === "number" && s.horizonYears > 0 && s.horizonYears !== 100) ? s.horizonYears : 5,
-        // FLOWER/day the repay plan takes to BTC; null = auto (the page fills it from the plan).
-        withdrawPerDay: (typeof s.withdrawPerDay === "number" && s.withdrawPerDay >= 0) ? s.withdrawPerDay : null,
-        // NFT value change per year for resale at the horizon; null = measured per price bucket.
-        nftDriftPerYear: (typeof s.nftDriftPerYear === "number" && s.nftDriftPerYear >= 0) ? s.nftDriftPerYear : null,
-        optimizeOrder: s.optimizeOrder !== false,
-        effOverrides: (s.effOverrides && typeof s.effOverrides === "object") ? s.effOverrides : {},
-        ticketValueSfl: (typeof s.ticketValueSfl === "number" && s.ticketValueSfl >= 0) ? s.ticketValueSfl : 0,
-        resourceUseValue: {}, // removed — resources are always p2p
-      };
+    function getRoadmapSettings(raw) {
+      if (raw === undefined) { try { raw = JSON.parse(localStorage.getItem("sfl_roadmap_settings") || "{}"); } catch (e) { raw = {}; } }
+      return __engine.getRoadmapSettings(raw);
     }
     function saveRoadmapSettings(patch) {
       const next = Object.assign({}, getRoadmapSettings(), patch);
@@ -16733,35 +14850,6 @@
     // several times a day legitimately measures well over 100%.
     const ROADMAP_EFF_MAX = 2;
 
-    // Merge the user's per-resource use-value overrides over live p2p. Roadmap-only (Power page untouched).
-    function roadmapPrices(settings) {
-      // Resources are ALWAYS valued at p2p (marketplace). No per-resource overrides.
-      return powerState.p2pPrices || {};
-    }
-
-    function roadmapEffFactor(cat, settings) {
-      /*
-       * The manual slider used to be capped at 1.00 while the MEASURED path below returns
-       * eb[cat].ratio uncapped — and that ratio routinely exceeds 1, because "efficiency" here
-       * is harvests against a one-cycle-per-login model, not a percentage of something. A farm
-       * mining crimstone at a measured 141% therefore read 141% while on auto and silently
-       * dropped to 100% the moment the slider was touched, understating that category's income
-       * AND every boost valued against it by the same 29%, with the row still printing
-       * "measured 141%" next to the truncated number. Same ceiling as the slider now.
-       */
-      const ov = settings.effOverrides && settings.effOverrides[cat];
-      if (typeof ov === "number" && isFinite(ov)) return Math.max(0, Math.min(ROADMAP_EFF_MAX, ov)); // manual slider
-      if (settings.effMode === "theoretical") return 1;
-      if (cat === "obsidian") return 1; // obsidian net already capped at 1 sale/week
-      if (isAnimalCat(cat)) return 1; // animals are 24h-cycle stockpilers — caught each daily login (~full); _h.* units don't match here
-      if (!roadmapState || !roadmapState.effByCat) return 1; // no measured history loaded (e.g. Power page) → theoretical
-      const eb = roadmapState.effByCat;
-      // Categories with their own harvest signal use the measured throughput ratio.
-      if (eb[cat] && eb[cat].measured) return eb[cat].ratio;
-      // bees / fishing have no per-category signal → use overall average activity
-      return roadmapState.meanRatio || 1;
-    }
-
     // Effective harvest-cycle length (hours) for one node/plot of a category, with the user's speed
     // boosts — used to translate an efficiency % into a real-world harvest interval.
     function roadmapCatCycleHours(cat) {
@@ -16771,134 +14859,8 @@
       return 0;
     }
 
-    // ── Active-shrine boosts baked into Power & Roadmap (reflects the shrines actually placed on the farm) ──
-    // A placed, un-expired shrine's speed/yield boost is folded into the per-category effect list so Power and
-    // Roadmap income match reality; it drops out automatically once the shrine expires. The SHRINES page builds
-    // its own shrine-FREE base (buildRoiBoostItems) for its "should I craft this" marginal math, so it is
-    // deliberately unaffected by these injections.
-    function _shrineActiveNow(farm, name) {
-      const sh = SHRINE_DATA[name];
-      if (!sh || !farm) return false;
-      return _shrineStatus(name, { [name]: findCollectible(farm, name) }, {}, sh.duration_d).kind === "active";
-    }
     function activeShrineEffects(catId) {
-      const farm = (typeof powerState !== "undefined" && powerState) ? powerState.farm : null;
-      if (!farm || !catId) return [];
-      const out = [];
-      for (const name in SHRINE_DATA) {
-        const sh = SHRINE_DATA[name];
-        if (!_shrineActiveNow(farm, name)) continue;
-        const cats = [sh.catId].concat(sh.alsoCats || []);
-        if ((sh.effectKind === "speed" || sh.effectKind === "speed_and_yield") && cats.indexOf(catId) >= 0)
-          out.push({ cat: catId, type: "speed_mult", value: sh.speed, shrine: name });
-        if (sh.effectKind === "speed_and_yield" && catId === "flowers" && sh.chance)
-          out.push({ cat: catId, type: "yield_flat", value: sh.chance, shrine: name });                 // Moth: 25% chance +1 flower = +0.25 EV
-        if (sh.effectKind === "speed_and_yield" && catId === "oil" && sh.oil3rdDrillBonus)
-          out.push({ cat: catId, type: "yield_flat", value: sh.oil3rdDrillBonus / 3, shrine: name });    // Stag: +15 oil every 3rd drill = +5/drill
-        if (sh.effectKind === "yield_flat" && cats.indexOf(catId) >= 0)
-          out.push({ cat: catId, type: "yield_flat", value: sh.flat, shrine: name });                    // Bear: +0.5 honey/hive
-        if (sh.effectKind === "yield_flat_multi" && (sh.targets || []).indexOf(catId) >= 0)
-          out.push({ cat: catId, type: "yield_flat", value: sh.flat, shrine: name });                    // Legendary: +1 to targets
-      }
-      return out;
-    }
-    function roadmapOwnedEffects(cat) {
-      return powerState.boostItems.filter(b => b.has && !b.isDisabled).flatMap(b => b.effects.filter(e => e.cat === cat)).concat(activeShrineEffects(cat));
-    }
-
-    // Coins are "free" when you hold a big pile of them — they're not directly convertible
-    // to FLOWER, so coin-denominated costs (tools, seeds) shouldn't be priced at the Betty rate.
-    // Auto-on above 10k coins; explicit toggle overrides.
-    function roadmapCoinsFree(settings) {
-      if (settings && settings.coinsFree === true) return true;
-      if (settings && settings.coinsFree === false) return false;
-      return (parseFloat(powerState.farm && powerState.farm.coins) || 0) > 10000;
-    }
-
-    // NET FLOWER/day for a category given an effect set: gross production − running costs
-    // (feed, sickness, seed, tools, lava). Mirrors the ROI/Power full-cost model — so a
-    // loss-making activity (e.g. low-level animals where feed ≥ produce) nets ≤ 0.
-    // Per-plot economics of growing product p (one crop/fruit/greenhouse item) under an effect set.
-    // Returns per-plot gross & cost (all-plots figure ÷ plots) plus its seed-restock plot cap.
-    function roadmapPerPlot(cat, p, effects, settings) {
-      const { capacity, exchangeRates, stockMods } = powerState;
-      const p2pPrices = roadmapPrices(settings);
-      const plots = getCapacityCount(cat, capacity);
-      if (!(plots > 0)) return null;
-      const er = roadmapCoinsFree(settings) ? Object.assign({}, exchangeRates, { coinsPerSFL: Infinity }) : exchangeRates;
-      let ab; try { ab = applyBoosts(cat, p, capacity, effects); } catch { return null; }
-      if (!ab || !(ab.unitsPerDay > 0)) return null;
-      const grossAll = unitToSfl(ab.unitsPerDay, getPriceProduct(cat, p), p2pPrices) || 0;
-      let costAll = 0;
-      try { costAll = (calcSeedCostPerDay(cat, p, capacity, er, stockMods, effects, p2pPrices).costPerDay) || 0; } catch {}
-      const cyclesPerDay = ab.effectiveCycle > 0 ? 86400 / ab.effectiveCycle : 0;
-      // Seed-restock cap → plots that product p can keep continuously planted from daily Betty restocks.
-      let maxPlots = plots;
-      const capSeeds = (settings.restocksPerDay || 2) * (cmGetSeedRestockCount(powerState.farm, p) || 0);
-      if (capSeeds > 0 && cyclesPerDay > 0) maxPlots = Math.min(plots, capSeeds / cyclesPerDay);
-      return { gpp: grossAll / plots, cpp: costAll / plots, plots, maxPlots, cyclesPerDay };
-    }
-
-    // Category net for crops/fruits/greenhouse = the OPTIMAL mix over ALL in-season products, filling
-    // the farm's plots by descending net-per-plot under each product's 2-restock/day seed cap (so you
-    // typically grow a few crops before a restock, exactly as the game forces). A boost that lifts a
-    // crop into the profitable mix is captured as a real improvement here. Returns { gross, cost }.
-    /*
-     * Which products fill the plots, and what that grosses and costs.
-     *
-     * Two bases. The default is unchanged: only what is in season RIGHT NOW competes, which is
-     * the honest answer to "what am I earning this week".
-     *
-     * `seasonBasis: "annual"` — set by calcBoostValue, the PERMANENT-value path — answers a
-     * different question, because a boost is bought once and kept. The in-season gate was wrong
-     * there in both directions: a boost tied to Banana (summer + autumn) scored 100% for half a
-     * year and 0% for the other half, and the 13 single-season products scored 100% for a
-     * quarter of it. Up to a 4x overstatement on the exact number a buy decision is made from.
-     *
-     * It is annualised by running the selection ONCE PER SEASON and averaging the four results.
-     * Not by weighting each product by its share of the year and selecting once — that was the
-     * first attempt and it was worse than the bug: a weighted Corn never beats year-round Wheat
-     * for a plot, so every Corn-specific boost collapsed to exactly 0 instead of a quarter of
-     * its value. In Corn's own season Corn does win, and that value is real.
-     *
-     * Cost of doing it properly is near zero: roadmapPerPlot does not depend on the season, so
-     * it still runs once per product. Only the fill — a sort and a loop — repeats four times.
-     */
-    function roadmapCatMix(cat, effects, settings) {
-      const plots = getCapacityCount(cat, powerState.capacity);
-      if (!(plots > 0)) return { gross: 0, cost: 0 };
-      const table = cat === "crops" ? CROP_GROW_DATA : (cat === "fruits" ? FRUIT_GROW_DATA : GREENHOUSE_GROW_DATA);
-      const rows = [];
-      const _exM = (settings.excludeCats || []);
-      for (const p of Object.keys(table)) {
-        if (_exM.indexOf(p) >= 0) continue;
-        const pp = roadmapPerPlot(cat, p, effects, settings); if (!pp) continue;
-        rows.push({ p, netPerPlot: pp.gpp - pp.cpp, grossPerPlot: pp.gpp, costPerPlot: pp.cpp, maxPlots: pp.maxPlots });
-      }
-      // Fill the plots with the best available, richest first. `allow` decides what is available.
-      const fill = (allow) => {
-        const rs = (allow ? rows.filter((r) => allow(r.p)) : rows).slice().sort((a, b) => b.netPerPlot - a.netPerPlot);
-        let rem = plots, gross = 0, cost = 0;
-        for (const r of rs) {
-          if (rem <= 1e-9 || !(r.netPerPlot > 0)) break;
-          const take = Math.min(rem, r.maxPlots); if (take <= 0) continue;
-          gross += r.grossPerPlot * take; cost += r.costPerPlot * take; rem -= take;
-        }
-        return { gross, cost };
-      };
-      const seasonal = (cat === "crops" || cat === "fruits");
-      if (!seasonal) return fill(null);
-      if (settings.seasonBasis !== "annual") return fill((p) => roadmapInSeason(p));
-      const names = Object.keys(SEASON_CROPS);
-      let g = 0, c = 0;
-      for (const sName of names) {
-        const list = SEASON_CROPS[sName] || [];
-        // A product in no season table at all is year-round (greenhouse items reaching here).
-        const inAny = (p) => names.some((x) => (SEASON_CROPS[x] || []).indexOf(p) >= 0);
-        const r = fill((p) => (list.indexOf(p) >= 0) || !inAny(p));
-        g += r.gross; c += r.cost;
-      }
-      return { gross: g / names.length, cost: c / names.length };
+      return __engine.activeShrineEffects(powerState ? powerState.farm : null, catId);
     }
 
     // Tools are NEVER free: a pickaxe eats real Wood/Iron you could have sold, so mining a resource costs
@@ -16924,195 +14886,6 @@
       crimstone: { chain: { trees: 3, gold: 3 },   mat: {},            coins: 100 },
       oil:       { chain: { trees: 20, iron: 9 },  mat: { Leather: 10 }, coins: 100 },
     };
-    function roadmapMiningChain(settings, effOverride) {
-      const farm = powerState.farm, cap = powerState.capacity;
-      const p2p = roadmapPrices(settings), sm = powerState.stockMods;
-      const cf = roadmapCoinsFree(settings);
-      const er = cf ? Object.assign({}, powerState.exchangeRates, { coinsPerSFL: Infinity }) : powerState.exchangeRates;
-      const eff = (c) => (effOverride && effOverride[c]) || roadmapOwnedEffects(c);
-      const P = {}, tools = {}, price = {}, free = {};
-      for (const c of MINE_CHAIN) {
-        const e = eff(c);
-        P[c] = RES_FARMKEY[c] ? gameResUnitsPerDay(c, farm, cap, e) : (applyBoosts(c, MINE_RES[c], cap, e).unitsPerDay || 0);
-        tools[c] = miningToolsPerDay(c, cap, farm, e);   // tools follow the override speed, like the output
-        price[c] = unitToSfl(1, MINE_RES[c], p2p); // Oil is not tradeable → not income
-        try { free[c] = !!calcToolCostPerDay(c, cap, er, p2p, sm, false).freeTool || (eff(c) || []).some(e => e.type === "free_tool"); } catch { free[c] = (eff(c) || []).some(e => e.type === "free_tool"); }
-      }
-      // own (non-chain) tool cost per day: leather/wool + coins
-      const ownCost = (c) => {
-        if (!MINE_TOOL[c] || free[c]) return 0;
-        let mats = MINE_TOOL[c].mat || {};
-        if (c === "oil" && sm.oilRigActive) { mats = { Wool: 20 }; }
-        let m = 0; for (const k in mats) m += (p2p[k] || 0) * mats[k];
-        const coin = cf ? 0 : (er.coinsPerSFL > 0 ? (MINE_TOOL[c].coins || 0) / er.coinsPerSFL : 0);
-        return (m + coin) * (tools[c] || 0);
-      };
-      // EMBEDDED-WOOD valuation. Wood is the base you produce; every ore is made FROM wood through its whole
-      // pickaxe chain. To mine an ore you must mine its intermediates yourself, so its true cost is the TOTAL
-      // wood baked in. embWood[c] = wood consumed per unit of c (recursive). Mine & sell c only if price > that.
-      const woodPrice = price.trees || 0;
-      const yieldOf = {}; for (const c of MINE_CHAIN) yieldOf[c] = (tools[c] > 0) ? P[c] / tools[c] : 0;
-      const embWood = { trees: 1 };
-      for (const c of ["stone", "iron", "gold", "crimstone", "oil"]) {
-        const T = MINE_TOOL[c];
-        if (!T || free[c] || !(yieldOf[c] > 0)) { embWood[c] = 0; continue; }
-        let w = 0; for (const i in T.chain) w += T.chain[i] * (embWood[i] != null ? embWood[i] : (woodPrice > 0 ? (price[i] / woodPrice) : 0));
-        embWood[c] = w / yieldOf[c];
-      }
-      // per-unit net vs selling the embedded wood; per-day profit; mine if positive
-      const mined = {}, dailyProfit = {}, netPerUnit = {}, soloNet = {};
-      let treeToolCost = 0; try { const _tt = calcToolCostPerDay("trees", cap, er, p2p, sm, false); treeToolCost = _tt.freeTool ? 0 : (_tt.costPerDay || 0); } catch {}
-      for (const c of MINE_CHAIN) {
-        // SOLO net: mine c & sell it, buying its DIRECT recipe inputs at p2p (vs the chain's self-mined all-in wood).
-        let _inSolo = 0; const _Ts = MINE_TOOL[c]; if (_Ts && !free[c]) for (const i in _Ts.chain) _inSolo += _Ts.chain[i] * price[i] * (tools[c] || 0);
-        soloNet[c] = P[c] * price[c] - _inSolo - (c === "trees" ? treeToolCost : ownCost(c));
-        if (c === "trees") { netPerUnit[c] = woodPrice; dailyProfit[c] = P[c] * woodPrice - treeToolCost; mined[c] = dailyProfit[c] > 1e-9; continue; }
-        const costPerUnit = embWood[c] * woodPrice;          // wood baked in, per unit
-        netPerUnit[c] = price[c] - costPerUnit;
-        dailyProfit[c] = P[c] * netPerUnit[c] - ownCost(c);   // own = leather/wool + coins per day (≈0 for coins-free)
-        mined[c] = dailyProfit[c] > 1e-9;
-      }
-      // return-on-wood per ore (how much converting Wood this far multiplies it) + the chain PEAK (best stop).
-      const rowReturn = { trees: 1 };
-      const chainOrder = ["stone", "iron", "gold", "crimstone"];
-      for (const c of chainOrder) rowReturn[c] = (embWood[c] > 0 && woodPrice > 0 && P[c] > 0) ? price[c] / (embWood[c] * woodPrice) : 0;
-      let peak = null, peakR = 1 + 1e-9;   // 1.0 = just selling Wood
-      for (const c of chainOrder) if (P[c] > 0 && rowReturn[c] > peakR) { peakR = rowReturn[c]; peak = c; }
-      const peakIdx = peak ? chainOrder.indexOf(peak) : -1;
-      const verdict = { trees: "sell" };
-      for (let i = 0; i < chainOrder.length; i++) {
-        const c = chainOrder[i];
-        if (!(P[c] > 0) || peak == null) verdict[c] = "skip";
-        else if (i < peakIdx) verdict[c] = "step";   // necessary intermediate (loses on its own)
-        else if (i === peakIdx) verdict[c] = "sell";  // best stopping point — sell here
-        else verdict[c] = "skip";                      // one step too far
-      }
-      // ── MARKET (opportunity-cost) net: output & the tool's DIRECT inputs valued at marketplace sell, after
-      //    fee. Free tool => no inputs charged (pure profit). Independent of how the inputs were produced.
-      const _mode = settings.miningCostMode === "production" ? "production" : "market";
-      const _fee = _mode === "market" ? Math.max(0, Math.min(0.6, (settings.marketFee != null ? +settings.marketFee : 10) / 100)) : 0;
-      const marketNet = {};
-      for (const c of MINE_CHAIN) {
-        const _T = MINE_TOOL[c];
-        let resCost = 0;
-        if (_T && !free[c]) {
-          for (const i in _T.chain) resCost += _T.chain[i] * price[i];
-          const mats = (c === "oil" && sm.oilRigActive) ? { Wool: 20 } : (_T.mat || {});
-          for (const m in mats) resCost += (p2p[m] || 0) * mats[m];
-          resCost *= (tools[c] || 0);
-        }
-        let coin = 0;
-        if (c === "trees") coin = treeToolCost;
-        else if (_T && !free[c] && !cf && er.coinsPerSFL > 0) coin = ((_T.coins || 0) / er.coinsPerSFL) * (tools[c] || 0);
-        marketNet[c] = (P[c] * price[c] - resCost) * (1 - _fee) - coin;
-      }
-      const byCat = {}; let total = 0;
-      for (const c of MINE_CHAIN) {
-        let v, net, dp, isP, feedsC;
-        if (_mode === "market") {
-          dp = marketNet[c]; v = dp > 1e-9 ? "sell" : "skip"; net = dp > 1e-9 ? dp : 0; isP = false; feedsC = null;
-        } else {
-          v = verdict[c] || "skip"; dp = dailyProfit[c] || 0; net = (v === "sell") ? dailyProfit[c] : 0; isP = (c === peak); feedsC = (v === "step" && peak) ? peak : null;
-        }
-        byCat[c] = { gross: P[c] * price[c], net, V: price[c], price: price[c], verdict: v,
-          feeds: feedsC, mined: v !== "skip", produced: P[c],
-          dailyProfit: dp, marketNet: marketNet[c] || 0, prodNet: dailyProfit[c] || 0, soloNet: soloNet[c] || 0,
-          embWood: embWood[c] || 0, netPerUnit: netPerUnit[c] || 0,
-          woodCostPerUnit: (embWood[c] || 0) * woodPrice, rowReturn: rowReturn[c] || 0, isPeak: isP,
-          sellable: (v === "sell") ? P[c] : 0, consumed: 0, inputLimited: false };
-        if (v === "sell") total += net;
-      }
-      return { byCat, total, peak: _mode === "production" ? peak : null, mode: _mode, fee: _fee };
-    }
-    function roadmapCatBreakdown(cat, effects, settings) {
-      const { capacity, savedProducts, exchangeRates, stockMods, season } = powerState;
-      const p2pPrices = roadmapPrices(settings);
-      const skills = (powerState.farm && powerState.farm.bumpkin && powerState.farm.bumpkin.skills) || {};
-      const product = savedProducts[cat] || getDefaultProduct(cat);
-      const er = roadmapCoinsFree(settings) ? Object.assign({}, exchangeRates, { coinsPerSFL: Infinity }) : exchangeRates;
-      // Obsidian: (1 obsidian − 1 ignition's fuel) / 7 days. The obsidian itself is priced by
-      // unitToSfl, i.e. 0 — the game does not let it be traded (tradeLimits.ts), so it is not
-      // income; what it is worth shows up in the nodes it buys. The fuel is a real cost.
-      if (cat === "obsidian") {
-        if (getCapacityCount("obsidian", capacity) <= 0) return { gross: 0, cost: 0, net: 0 };
-        const price = unitToSfl(1, "Obsidian", p2pPrices);
-        let lavaMult = 1;
-        for (const e of (effects || [])) if (e.type === "lava_cost_reduction" && e.cat === "obsidian") lavaMult *= (1 - (e.value || 0));
-        let ign = 0;
-        try { ign = (calcLavaPitCostPerDay(capacity, p2pPrices, season, lavaMult).costPerIgnition) || 0; } catch {}
-        return { gross: price / 7, cost: ign / 7, net: (price - ign) / 7 };
-      }
-      let gross = 0, cost = 0;
-      try {
-        if (isAnimalCat(cat)) {
-          gross = (getAnimalCatSfl(cat, capacity, effects, p2pPrices).totalSfl) || 0;
-          cost += (calcAnimalFeedCost(cat, capacity, p2pPrices, effects, stockMods).costPerDay) || 0;
-          // `effects` reaches the sickness calc too — an unowned Sleepy Chicken / Medic Apron only
-          // exists in a what-if probe as its effect, and matching owned item names scored them 0.
-          cost += (calcSicknessCost(cat, capacity, p2pPrices, powerState.boostItems, skills, effects || [], settings.seasonBasis === "annual" ? "annual" : season).costPerDay) || 0;
-        } else if (cat === "crops" || cat === "fruits" || cat === "greenhouse") {
-          const mix = roadmapCatMix(cat, effects, settings);
-          gross = mix.gross; cost += mix.cost;
-          if (cat === "fruits") {
-            // Fruit-stump boosts (No Axe No Worries / Fruity Woody): wood gained + axe saved per lifecycle.
-            const sw = (effects || []).filter(e => e.type === "fruit_stump_wood");
-            const fc = (effects || []).filter(e => e.type === "fruit_free_chop");
-            if (sw.length || fc.length) {
-              const prod = savedProducts.fruits || getDefaultProduct("fruits");
-              const hc = (typeof FRUIT_HARVEST_COUNT !== "undefined" && FRUIT_HARVEST_COUNT[prod]) || 3;
-              const gs = (typeof FRUIT_GROW_DATA !== "undefined" && FRUIT_GROW_DATA[prod]) || 43200;
-              const lc = getCapacityCount("fruits", capacity) * (86400 / (hc * gs));
-              let sv = 0;
-              for (const e of sw) sv += lc * (e.value || 0) * (p2pPrices["Wood"] || 0);
-              if (fc.length && er.coinsPerSFL > 0) { const axe = TOOL_COSTS["Axe"]; if (axe) sv += lc * (axe.coins / er.coinsPerSFL); }
-              gross += sv;
-            }
-          }
-        } else if (ROADMAP_MINING_CATS.indexOf(cat) >= 0) {
-          // Mining chain (sell-vs-use). effOverride routes a boost toggle through for marginals.
-          const r = roadmapMiningChain(settings, { [cat]: effects }).byCat[cat] || { gross: 0, net: 0 };
-          gross = r.gross; cost = r.gross - r.net;
-        } else {
-          gross = unitToSfl(applyBoosts(cat, product, capacity, effects).unitsPerDay, getPriceProduct(cat, product), p2pPrices) || 0;
-          if (cat === "flowers") {
-            cost += (calcSeedCostPerDay(cat, product, capacity, er, stockMods, effects, p2pPrices).costPerDay) || 0;
-          }
-        }
-      } catch {}
-      return { gross, cost, net: gross - cost };
-    }
-    function roadmapCatNet(cat, effects, settings) { return roadmapCatBreakdown(cat, effects, settings).net; }
-
-    /*
-     * Net for ONE named product, not the optimal mix.
-     *
-     * roadmapCatNet fills the plots with whatever crop pays best, so a boost that only touches
-     * one crop still shows its whole value there — which is why Sickle read +3/day no matter
-     * which crop was selected, even though it only lifts Wheat. When the caller has a product in
-     * mind (the Power page's selector), value the boost against THAT product: applyBoosts inside
-     * roadmapPerPlot drops any product-specific effect that does not match, so a Wheat boost on a
-     * Kale selection nets exactly zero, which is the honest answer.
-     */
-    function roadmapProductNetEff(cat, product, effects, settings) {
-      const plots = getCapacityCount(cat, powerState.capacity);
-      if (!(plots > 0)) return 0;
-      const pp = roadmapPerPlot(cat, product, effects, settings);
-      if (!pp) return 0;
-      const take = Math.min(plots, pp.maxPlots > 0 ? pp.maxPlots : plots);
-      /*
-       * On the annual basis (calcBoostValue: bought once, kept all year) a seasonal product only
-       * earns in the seasons it can be planted — the same per-season averaging roadmapCatMix
-       * does for the mix. Without it Giant Kale read 2.80/day for a crop that grows two seasons
-       * in four. A product in no season table (greenhouse) is year-round.
-       */
-      let seasonShare = 1;
-      if (settings.seasonBasis === "annual" && (cat === "crops" || cat === "fruits")) {
-        const names = Object.keys(SEASON_CROPS);
-        const n = names.filter((s) => (SEASON_CROPS[s] || []).indexOf(product) >= 0).length;
-        if (n > 0) seasonShare = n / names.length;
-      }
-      return (pp.gpp - pp.cpp) * take * seasonShare;
-    }
 
     // "What should I farm/mine now" — net FLOWER/day per activity at full activity, green/red.
     // Rough key values (chest EV is backend data) — labeled estimates the user can mentally adjust.
@@ -17123,46 +14896,6 @@
       "Rare Key": { gems: 6, coins: 6000, sunstone: 0.05, misc: 0.6 },
       "Luxury Key": { gems: 16, coins: 9000, sunstone: 0.1, misc: 1.2 },
     };
-    function roadmapKeyValue(name) {
-      const c = KEY_CHEST[name]; if (!c) return 0;
-      const er = powerState.exchangeRates || {}, p2p = powerState.p2pPrices || {};
-      const coinsFree = (parseFloat(powerState.farm && powerState.farm.coins) || 0) > 10000;
-      const gemSfl = er.gemsPerSFL > 0 ? c.gems / er.gemsPerSFL : 0;
-      const coinSfl = coinsFree ? 0 : (er.coinsPerSFL > 0 ? c.coins / er.coinsPerSFL : 0);
-      const sunSfl = (c.sunstone || 0) * 3 * (p2p["Obsidian"] || 0);
-      return gemSfl + coinSfl + sunSfl + (c.misc || 0);
-    }
-    // Real SFL cost of ANY item, recipe-aware (cooked foods like Goblin Brunch = 5 Boiled Eggs +
-    // 1 Goblin\u2019s Treat, Bumpkin Roast, Cabbers n Mash, ...) via the served productionCost map
-    // (computed server-side by the recursive _resolveItemSfl resolver) so they price their actual
-    // recipe instead of 0.
-    function roadmapItemCost(name) {
-      if (name === "coins") return 0;
-      const p2p = powerState.p2pPrices || {};
-      // F2-2f: roadmap reads the shared price map (/api/compute?section=prices), priced with the
-      // exchangeRates profile, instead of calling _resolveItemSfl/estimateItemSfl directly.
-      // Precedence preserved verbatim (C6): production cost first (if >0), else market value (if
-      // >0), else raw p2p. PRICES(...) is null until this profile's fetch resolves; guard to {} so
-      // lookups fall through to the existing "|| 0" absence handling below, and the arrival
-      // rerender (via main()) repaints with real data once the map lands.
-      return deliveryItemCostSfl(name, powerState.exchangeRates, p2p);
-    }
-    function roadmapGiftRewardValue(reward, nftFloor) {
-      const { p2pPrices, exchangeRates } = powerState;
-      const coinsFree = (parseFloat(powerState.farm && powerState.farm.coins) || 0) > 10000;
-      let v = 0;
-      if (reward.coins && !coinsFree && exchangeRates.coinsPerSFL > 0) v += reward.coins / exchangeRates.coinsPerSFL;
-      for (const [item, qty] of Object.entries(reward.items || {})) v += (KEY_CHEST[item] ? roadmapKeyValue(item) : (p2pPrices[item] || roadmapItemCost(item) || nftFloor(item) || 0)) * qty;
-      for (const [w, qty] of Object.entries(reward.wearables || {})) v += (nftFloor(w) || 0) * qty;
-      return v;
-    }
-    function roadmapGiftRewardLabel(reward) {
-      const parts = [];
-      for (const [i, q] of Object.entries(reward.items || {})) parts.push(q + "\u00d7 " + i);
-      if (reward.coins) parts.push(reward.coins.toLocaleString() + " coins");
-      for (const [w, q] of Object.entries(reward.wearables || {})) parts.push(q + "\u00d7 " + w);
-      return parts.join(", ") || "\u2014";
-    }
     // Deliveries + bounties: reward value (SFL/coins/tickets/marks/keys) minus the items you give.
     function roadmapDeliveriesHtml(settings) {
       const { farm, p2pPrices, exchangeRates } = powerState;
@@ -17563,53 +15296,6 @@
       h += `<div style="margin-top:8px;font-size:0.5rem;color:var(--text-dim)">gives = gross sale value of a day's production; cost = feed+sickness (animals) / oil+seeds (crop machine) / wood (salt) / tools+seeds (mining,crops \u2014 free when coins are free). At full activity (not scaled by your harvest frequency).</div>`;
       h += `</div></div>`;
       return h;
-    }
-
-    // Marginal realistic NET FLOWER/day a boost adds, given current owned+bought set.
-    /*
-     * ONE valuation, everywhere. This used to hand-roll its own marginal — a whole-chain delta
-     * for the mining tiers plus a roadmapCatNet delta for the rest — while the Power page and
-     * the wishlist asked calcBoostValue. Two code paths answering "what is this boost worth"
-     * drift, and they had: measured across the live catalogue, 73 of the 79 items carried by
-     * both (92%) disagreed, the ratio running from 0.00 to 4.92 with a median of 0.80. Crimstone
-     * Spikes Hair read 3.93/day in the buy path against 12.89 on Power; a whole cluster —
-     * Dev Wrench, Infernal Drill, Oil Overalls, Pharaoh Gnome — sat at exactly 2x apart. So the
-     * buy path now asks the same function the pages ask, and the ordering, the ETAs and the
-     * cumulative costs all follow from the numbers you can see on Power.
-     *
-     * The cost of unifying: calcBoostValue overrides ONE category at a time, so an item touching
-     * several mining tiers no longer gets a single chain delta across all of them. That
-     * cross-tier term is what the old code bought with its duplicate path — and Power never had
-     * it either, so keeping it here is exactly what made the two disagree. Correctness of the
-     * PLAN depends on the ordering being consistent with what the user is shown; a per-category
-     * sum that matches Power beats a truer number nobody else computes.
-     */
-    function roadmapItemValue(clone, catBoostsW, settings) {
-      if (!clone) return 0;
-      if (clone.fixedMarginal !== undefined) return clone.fixedMarginal; // node merge/expand actions
-      let total = 0;
-      const _exV = (settings.excludeCats || []);
-      const { capacity, p2pPrices, savedProducts } = powerState;
-      for (const cat of clone.categories) {
-        if (_exV.indexOf(cat) >= 0) continue; // user filtered this activity out
-        if (!POWER_CATEGORIES[cat] || !POWER_CATEGORIES[cat].quantifiable) continue;
-        if (!clone.effects.some(e => e.cat === cat)) continue;
-        const allCatBoosts = catBoostsW[cat];
-        if (!allCatBoosts) continue;
-        const product = (savedProducts || {})[cat] || getDefaultProduct(cat);
-        // A product the user unchecked in the filter is not grown: a boost valued on it (Vinny's
-        // +0.25 Grape with Grape unchecked) must not count toward the plan.
-        if (_exV.indexOf(product) >= 0) continue;
-        let v = 0;
-        try {
-          const r = calcBoostValue(clone, cat, product, capacity, p2pPrices, allCatBoosts, clone.has);
-          v = (r && isFinite(r.synergy)) ? r.synergy : 0;
-        } catch (e) { v = 0; }
-        // calcBoostValue answers at theoretical throughput (it forces that basis); the measured
-        // scaling is applied here, the same way core/sections/power.mjs scales what it displays.
-        if (v > 0) total += v * roadmapEffFactor(cat, settings);
-      }
-      return total;
     }
 
 
@@ -18122,7 +15808,7 @@
         let cost = null, perDay = null, netTotal = null;
         try {
           cost = _shrineIngredientCostSfl(sh.ingredients, ps.p2pPrices || {}, ps.p2pPrices || {});
-          const m = _shrineMarginalSflPerDay(sh, ps.capacity, ps.p2pPrices || {}, getOwnedEffects(sh.catId), null);
+          const m = _shrineMarginalSflPerDay(sh, ps.capacity, ps.p2pPrices || {}, roadmapOwnedEffects(sh.catId), null);
           perDay = m && isFinite(m.sflPerDay) ? m.sflPerDay : null;
           if (perDay != null && cost != null) netTotal = perDay * sh.duration_d - cost;
         } catch (e) {}
@@ -18262,15 +15948,6 @@
     }
 
 
-
-    function roadmapBuildClones() {
-      const clones = powerState.boostItems.map(b => Object.assign({}, b));
-      const byName = {};
-      clones.forEach(c => { byName[c.name] = c; });
-      const catBoostsW = {};
-      for (const cat of Object.keys(POWER_CATEGORIES)) catBoostsW[cat] = clones.filter(c => c.categories.includes(cat));
-      return { byName, catBoostsW };
-    }
 
 
 
@@ -18493,6 +16170,7 @@
         roadmapState = { effByCat: eff.effByCat || {}, effMeta: eff.meta, globalActivityDefault: gDefault,
           meanRatio: (typeof eff.meanRatio === "number" ? eff.meanRatio : null),
           currentProdDefault: d.currentProd.total, prodBreakdown: d.currentProd.breakdown };
+        __engine._setRoadmapState(roadmapState);
       } catch (err) {
         if (!_roadmapServer) { el.innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load: ${escHTML(err.message)}</p></div>`; return; }
       }
@@ -19967,86 +17645,9 @@
       }
       return out.length ? out : null;
     }
-    // ── Ascension skill ranks ────────────────────────────────────────────────────────────────────
-    // Cost of ONE rank-up, from the game's getSkillUpgradeCost(tier): flat per tier.
-    // Verified against getSkillUpgradeCost + UPGRADE_POINTS_BY_TIER (bumpkinSkills.ts, 2026-08-03):
-    // points are 1 / 3 / 6 by tier — NOT tier x 3, which overcharged every rank-up ("Je to 1-3-6").
-    // Shards equal the tier.
-    function skillUpgradeCost(tier) { return { shards: tier, points: { 1: 1, 2: 3, 3: 6 }[tier] || 0 }; }
-    // growthMultiplier / costMultiplier store the REMAINING fraction (0.95 = -5%), so the magnitude that
-    // matters is the reduction (1 - v). Every other kind stores the magnitude directly.
-    function skillRankMag(kind, v) { return (kind === "growthMultiplier" || kind === "costMultiplier") ? (1 - v) : v; }
-    function skillRankFactor(up, rank) {
-      const r = up && up.ranks; if (!r || rank < 1 || rank > r.length) return 1;
-      const base = skillRankMag(up.kind, r[0]);
-      if (!(Math.abs(base) > 1e-9)) return 1;
-      return skillRankMag(up.kind, r[rank - 1]) / base;
-    }
     // Kinds whose magnitude maps onto an effect our value engine already prices.
     const SKILL_RANK_PRICEABLE = ["additiveYield", "growthMultiplier", "costMultiplier", "coinBonus", "flatDebuff", "oilReduction", "multiplier", "flatReduction", "chance", "yieldWithDebuff"];
-    // Per-rank value of a skill for ONE category: re-run calcBoostValue with the skill's effects scaled to
-    // the rank's magnitude, so growth/yield stay exact. rows[] = the MARGINAL of each rank-up.
-    function powerSkillRankVals(b, catId, product, capacity, p2pPrices, allCatBoosts, isOwned, effMode) {
-      if (!b || b.type !== "Skill" || typeof SKILL_UPGRADES === "undefined") return null;
-      const up = SKILL_UPGRADES[b.name];
-      if (!up || !up.ranks || !(up.maxLevel > 1)) return null;
-      const cost = skillUpgradeCost(up.tier);
-      const priceable = SKILL_RANK_PRICEABLE.indexOf(up.kind) >= 0;
-      const out = { up, cost, priceable, rows: [] };
-      if (!priceable) { for (let lvl = 2; lvl <= up.maxLevel; lvl++) out.rows.push({ lvl, delta: 0, shards: cost.shards, points: cost.points }); return out; }
-      const valAt = (lvl) => {
-        const f = skillRankFactor(up, lvl);
-        // yieldWithDebuff skills (Rocky/Ferrous Favor, Acre/Hectare Farm…) rank the
-        // BUFF and the DEBUFF on DIFFERENT curves (e.g. Rocky buff 1→1.4→1.8 but
-        // debuff 0.5→0.6→0.7). The debuff effect carries a negative yield value, so
-        // scale it by its own factor; scale the buff (and everything else) by f.
-        const df = (up.debuff && up.debuff[0]) ? (up.debuff[lvl - 1] / up.debuff[0]) : f;
-        /*
-         * Scale whichever field carries the rank's magnitude. `value` covers most effects, but
-         * chance effects carry it in `pct` (chance {pct, extra}, coin_chance {pct, coins}) — the
-         * rank raises the CHANCE, the payout stays — and scaling only `value` made every chance
-         * skill's ranks (Money Tree, Greenhouse Gamble, Fishy Chance…) compute a delta of exactly 0.
-         */
-        const scale = (e) => {
-          const fac = (up.kind === "yieldWithDebuff" && typeof e.value === "number" && e.value < 0) ? df : f;
-          if (typeof e.value === "number") return Object.assign({}, e, { value: e.value * fac });
-          if (typeof e.pct === "number") return Object.assign({}, e, { pct: e.pct * fac });
-          return e;
-        };
-        const sb = Object.assign({}, b, { effects: (b.effects || []).map(scale) });
-        try { const v = calcBoostValue(sb, catId, product, capacity, p2pPrices, allCatBoosts, isOwned, effMode); return (v && isFinite(v.synergy)) ? v.synergy : 0; } catch (e) { return 0; }
-      };
-      let prev = valAt(1);
-      for (let lvl = 2; lvl <= up.maxLevel; lvl++) { const v = valAt(lvl); out.rows.push({ lvl, delta: v - prev, shards: cost.shards, points: cost.points }); prev = v; }
-      return out;
-    }
 
-    // Human text for what a rank changes (kind-aware), e.g. "Level 2: -6% growth time (was -5%)".
-    function skillRankText(up, lvl) {
-      const f = (x) => {
-        switch (up.kind) {
-          case "growthMultiplier": return "−" + (+((1 - x) * 100).toFixed(2)) + "% growth time";
-          case "costMultiplier": return "−" + (+((1 - x) * 100).toFixed(2)) + "% cost";
-          case "coinBonus": return "+" + (+(x * 100).toFixed(0)) + "% coins";
-          case "xpBonus": return "+" + (+(x * 100).toFixed(0)) + "% XP";
-          case "timeReduction": return "−" + (+(x * 100).toFixed(0)) + "% time";
-          case "oilReduction": return "−" + (+(x * 100).toFixed(0)) + "% oil";
-          case "multiplier": return x + "× effect";
-          case "flatDebuff": return "debuff " + x;
-          case "flatReduction": return "−" + x;
-          case "dailyLimit": return "+" + x + " daily limit";
-          case "cooldown": return +(x / 3600000).toFixed(1) + "h cooldown";
-          case "flatBonus": return "+" + x;
-          case "chance": return x + "% chance";
-          case "additiveYield": return "+" + x + " yield";
-          default: return "+" + x;
-        }
-      };
-      // Bespoke effect shapes (per-item stock tables, buff/debuff pairs) may carry no scalar
-  // magnitude for a rank; the ladder still shows, just without a number.
-  if (up.ranks[lvl - 1] == null || up.ranks[lvl - 2] == null) return "Level " + lvl;
-  return "Level " + lvl + ": " + f(up.ranks[lvl - 1]) + " (was " + f(up.ranks[lvl - 2]) + ")";
-    }
     // Each Ascension rank as its OWN row, so it reads like a separate skill with its own value + ROI.
     // Cost = tier*3 skill points (priced via sflPerPoint) + tier Ascension Shards (no market price -> label only).
     // ROI colour ramp: green (fast) -> white at 2 years -> fully red at 4 years+. Anchors match the
@@ -24981,26 +22582,6 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     //  ROI: SELL-OR-FARM ADVISOR
     // ═══════════════════════════════════════
 
-    // Parse pets from farm data (mirrors renderPets parsing logic)
-    function parseRoiPets(farm) {
-      const pets = [];
-      const commonPets = farm.pets?.common || {};
-      for (const [name, pet] of Object.entries(commonPets)) {
-        const xp = pet.experience || 0;
-        const level = petLevel(xp);
-        pets.push({ name, petType: PET_NAME_SPECIES[name] || null, species: PET_NAME_SPECIES[name] || null,
-                    level, xp, energy: pet.energy || 0, foods: pet.requests?.food || [], isNft: false, nftId: null });
-      }
-      const nftPets = farm.pets?.nfts || {};
-      for (const [id, pet] of Object.entries(nftPets)) {
-        const xp = pet.experience || 0;
-        const level = petLevel(xp);
-        const petType = pet.traits?.type || "Unknown";
-        pets.push({ name: petType, petType, species: petType, level, xp, energy: pet.energy || 0,
-                    foods: pet.requests?.food || [], isNft: true, nftId: id });
-      }
-      return pets;
-    }
     const LS_ROI_LOGINS = "sfl_roi_logins_per_day";
     const LS_ROI_CURRENCY = "sfl_roi_currency";
     const LS_ROI_MULTICAT = "sfl_roi_multicat_assignment";
@@ -25726,23 +23307,6 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       return true;
     }
 
-    function _shrineStatus(name, placed, placedHome, duration_d) {
-      const all = [...(placed[name] || []), ...(placedHome[name] || [])];
-      if (all.length === 0) return { kind: "never" };
-      const now = Date.now();
-      const durMs = duration_d * 86400000;
-      let latestExpiry = 0;
-      for (const inst of all) {
-        const created = toMs(inst.createdAt || inst.readyAt || 0);
-        const expires = created + durMs;
-        if (expires > latestExpiry) latestExpiry = expires;
-      }
-      if (latestExpiry > now) {
-        return { kind: "active", hoursLeft: (latestExpiry - now) / 3600000 };
-      }
-      return { kind: "expired" };
-    }
-
     // Marginal SFL/day from owning a shrine. Approach:
     //   1. Compute baseline daily SFL per relevant category using applyBoosts with the user's
     //      OWNED effects (same engine as the Power page). This is what the user actually earns.
@@ -26318,141 +23882,11 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       return n > 0 ? sum / n : (PET_FOOD_CATEGORY_FALLBACK[category] || 0);
     }
 
-    // ── Pet calculator helpers ──
-    function petRequestsAtLevel(level, isNft) {
-      const r = ["easy","medium"];
-      if (isNft || level >= 10) r.push("hard");
-      if (isNft && level >= 30) r.push("medium");  // 2nd medium
-      if (isNft && level >= 200) r.push("hard");    // 2nd hard
-      return r;
-    }
-
-    function petFetchEnergyBonus(level) {
-      let b = 0;
-      if (level >= 5)  b += 5;
-      if (level >= 35) b += 5;
-      if (level >= 75) b += 5;
-      return b;
-    }
-
-    function petExtraResourceChance(level) {
-      let c = 0;
-      if (level >= 15)  c += 0.10;
-      if (level >= 50)  c += 0.05;
-      if (level >= 100) c += 0.10;
-      return c;
-    }
-
-    function petXpBonusMultiplier(level, isNft) {
-      let m = 0;
-      if (level >= 27) m += 0.10;
-      if (isNft && level >= 40) m += 0.15;
-      if (isNft && level >= 85) m += 0.25;
-      return m;
-    }
-
     // Per-request feed energy — twin of core/engine/pets.mjs (getPetEnergy port). The table is
     // lowerCamelCase on purpose: flowers.html's constants inventory reads UPPER_SNAKE literals as game tables.
     const petAuraEnergyMult = { "No Aura": 1, "Common Aura": 1.5, "Rare Aura": 2, "Mythic Aura": 3 };
     const _petRound2 = (n) => Math.round(n * 100) / 100;
 
-    // getPetEnergy: flat level bonuses first, THEN the NFT aura multiplies them too,
-    // and the wearable's +5 lands after the multiplier.
-    function petFeedEnergy(baseEnergy, { level = 1, isNft = false, aura = null, walrusOnesie = false } = {}) {
-      let boost = 0;
-      if (level >= 5) boost += 5;
-      if (level >= 35) boost += 5;
-      if (level >= 75) boost += 5;
-      let energy = baseEnergy + boost;
-      if (isNft && aura) energy *= (petAuraEnergyMult[aura] ?? 1);
-      // The game also grants VIPs +5 during the "Paw Prints" chapter. That chapter ran
-      // 2025-11-03 → 2026-02-02 (CHAPTERS), so it can no longer apply and is left out.
-      if (walrusOnesie) energy += 5;
-      return _petRound2(energy);
-    }
-
-    // Units ONE fetch of `res` returns — getFetchYield (events/pets/fetchPet.ts:45-100):
-    // 1, +1 Acorn with Squirrel Onesie worn, +0.25 Acorn with Oaken placed, + the level's
-    // native share (petExtraResourceChance — a flat fraction added to the amount, not a roll)
-    // on everything EXCEPT Fossil Shell, +25% Moonfur for an NFT pet at 150+, +1 Acorn per
-    // Acorn fetch from level 18, and +1 of the fetched resource for an NFT pet at 60+ unless it
-    // is Acorn or Moonfur.
-    function petFetchYield(res, level, isNft, boosts) {
-      const b = boosts || {};
-      let y = 1;
-      if (res === "Acorn" && b.squirrelOnesie) y += 1;
-      if (res === "Acorn" && b.oaken) y += 0.25;
-      if (res !== "Fossil Shell") {
-        y += petExtraResourceChance(level);
-        if (isNft && level >= 150 && res === "Moonfur") y += 0.25;
-      }
-      if (level >= 18 && res === "Acorn") y += 1;
-      if (isNft && level >= 60 && res !== "Acorn" && res !== "Moonfur") y += 1;
-      return y;
-    }
-
-    function petDailyCalc(pet, p2pPrices, feedMult, hasPetBowls, boosts) {
-      const b = boosts || {};
-      const reqTypes = petRequestsAtLevel(pet.level, pet.isNft);
-      const reqEnergy = reqTypes.reduce((s, r) => s + PET_REQUEST_VALUES[r].energy, 0);
-      const fetchBonus = petFetchEnergyBonus(pet.level);
-      // Energy per feed is the sum of what each request pays, priced exactly as the feeding
-      // table prices it (getPetEnergy, events/pets/feedPet.ts:46-94): the level bonus lands on
-      // EVERY request, the NFT aura multiplies it, Walrus Onesie adds +5 per request. The old
-      // `reqEnergy + fetchBonus` added the bonus once per feed and ignored aura + Walrus, so the
-      // card and the table beside it showed two different numbers.
-      const energyPerFeed = reqTypes.reduce((s, r) => s + petFeedEnergy(PET_REQUEST_VALUES[r].energy,
-        { level: pet.level, isNft: pet.isNft, aura: pet.aura, walrusOnesie: b.walrusOnesie }), 0);
-      const dailyEnergy = energyPerFeed * feedMult;
-
-      // XP per feed
-      const reqXp = reqTypes.reduce((s, r) => s + PET_REQUEST_VALUES[r].xp + (hasPetBowls ? 10 : 0), 0);
-      const xpMult = 1 + petXpBonusMultiplier(pet.level, pet.isNft);
-      const dailyXp = reqXp * xpMult * feedMult;
-
-      // Best resource — ranked by what a fetch actually RETURNS per energy, not by one unit.
-      const fetchData = PET_FETCH_DATA[pet.petType] || [];
-      const unlocked = fetchData.filter(f => pet.level >= f.level);
-      const extraChance = petExtraResourceChance(pet.level);
-
-      let bestRes = null, bestSflPerEnergy = 0, bestYield = 0;
-      for (const f of unlocked) {
-        const y = petFetchYield(f.res, pet.level, pet.isNft, b);
-        const sflPerE = (p2pPrices[f.res] || 0) * y / f.energy;
-        if (sflPerE > bestSflPerEnergy) {
-          bestSflPerEnergy = sflPerE;
-          bestRes = f;
-          bestYield = y;
-        }
-      }
-
-      let dailySfl = 0, fetchesPerDay = 0, acornBonus = 0, guaranteedBonus = 0;
-      if (bestRes) {
-        const price = p2pPrices[bestRes.res] || 0;
-        fetchesPerDay = dailyEnergy / bestRes.energy;
-        dailySfl = fetchesPerDay * price * bestYield;
-        // The two flat per-fetch extras, split out for the card's breakdown line (already in dailySfl).
-        if (pet.level >= 18 && bestRes.res === "Acorn") acornBonus = fetchesPerDay * price;
-        if (pet.isNft && pet.level >= 60 && bestRes.res !== "Acorn" && bestRes.res !== "Moonfur") guaranteedBonus = fetchesPerDay * price;
-      }
-
-      return { reqTypes, reqEnergy, fetchBonus, energyPerFeed, dailyEnergy, reqXp, xpMult,
-               dailyXp, bestRes, bestSflPerEnergy, bestYield, extraChance, dailySfl, fetchesPerDay, acornBonus, guaranteedBonus, feedMult };
-    }
-
-
-    // XP to reach level L = 50 * L * (L - 1)  (each level costs 100 * currentLevel XP)
-    function petCumulativeXp(level) { return 50 * level * (level - 1); }
-
-    function petLevel(xp) {
-      // Solve 50*L*(L-1) <= xp  =>  L = floor((1 + sqrt(1 + xp/12.5)) / 2)
-      if (xp <= 0) return 1;
-      const L = Math.floor((1 + Math.sqrt(1 + xp / 12.5)) / 2);
-      // Clamp: verify and adjust
-      if (petCumulativeXp(L + 1) <= xp) return L + 1;
-      if (petCumulativeXp(L) > xp) return Math.max(1, L - 1);
-      return Math.max(1, L);
-    }
 
     async function renderPets(data) {
       const app = document.getElementById("app");
@@ -29229,67 +26663,6 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         if (r.ok) _invPlan = (await r.json()).plan || null;
       } catch (e) { /* the card offers to create one */ }
     }
-    function repayPlanStats(plan, transactions, ctx) {
-      const perDay = { day: 1, month: 365 / 12, year: 365 };
-      const dayMs = 86400000;
-      const rate = parseFloat(plan && plan.rate);
-      const divisor = perDay[(plan && plan.period) || "year"];
-      const peakBtc = (ctx && ctx.peakBtc) || 0;
-      const netDebtBtc = (ctx && ctx.netDebtBtc) || 0;
-      const now = new Date();
-      const localToday = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
-      const startMs = Date.parse(String((plan && plan.start_date) || "").slice(0, 10) + "T00:00:00Z");
-      const todayMs = Date.parse(String((ctx && ctx.today) || localToday).slice(0, 10) + "T00:00:00Z");
-      if (!isFinite(rate) || rate <= 0 || !divisor || !isFinite(startMs) || !isFinite(todayMs) || peakBtc <= 0) return null;
-
-      const dailyTargetBtc = peakBtc * (rate / 100) / divisor;
-      // Days the plan has been running: 0 on the start day, negative (clamped) while it is in the future.
-      const daysElapsed = Math.max(0, Math.round((todayMs - startMs) / dayMs));
-      const targetBtc = dailyTargetBtc * daysElapsed;
-      const targetAt = (ms) => dailyTargetBtc * Math.max(0, Math.round((ms - startMs) / dayMs));
-
-      // Net withdrawals since the start, any venue — a wallet sale of FLOWER for BTC repays just like a
-      // farm withdrawal does, and a deposit anywhere takes it back — bucketed by day.
-      const byDay = {};
-      for (const t of transactions || []) {
-        const sign = t.direction === "withdrawal" ? 1 : t.direction === "deposit" ? -1 : 0;
-        if (!sign) continue;
-        const d = String(t.tx_date || "").slice(0, 10);
-        const ms = Date.parse(d + "T00:00:00Z");
-        if (!isFinite(ms) || ms < startMs || ms > todayMs) continue;
-        byDay[d] = (byDay[d] || 0) + sign * (parseFloat(t.btc_amount) || 0);
-      }
-
-      const series = [];
-      let cum = 0;
-      for (let ms = Math.min(startMs, todayMs); ms <= todayMs; ms += dayMs) {
-        const d = new Date(ms).toISOString().slice(0, 10);
-        cum = Math.max(0, cum + (byDay[d] || 0));
-        series.push({ time: d, target: targetAt(ms), actual: cum });
-      }
-      const actualBtc = cum;
-
-      const balanceBtc = actualBtc - targetBtc;
-
-      // Ahead: the target keeps climbing, and the realized pace of the last `horizonDays` (or since
-      // the start, if younger) is extended as the trend — where the withdrawals land if they go on
-      // as they have.
-      const horizon = (ctx && ctx.horizonDays) || 50;
-      const lookback = Math.min(horizon, series.length - 1);
-      const paceBtcPerDay = lookback > 0 ? (series[series.length - 1].actual - series[series.length - 1 - lookback].actual) / lookback : 0;
-      const future = [];
-      for (let i = 1; i <= horizon; i++) {
-        const ms = todayMs + i * dayMs;
-        future.push({ time: new Date(ms).toISOString().slice(0, 10), target: targetAt(ms), trend: actualBtc + paceBtcPerDay * i });
-      }
-
-      return {
-        dailyTargetBtc, daysElapsed, targetBtc, actualBtc, balanceBtc, paceBtcPerDay,
-        // Days from now to a fully repaid position at the plan's pace, ignoring the current lead/lag.
-        etaDays: netDebtBtc > 0 ? netDebtBtc / dailyTargetBtc : 0,
-        series, future,
-      };
-    }
     const _planPeriodCz = { day: "denně", month: "měsíčně", year: "ročně" };
     /*
      * The REPAY PLAN card: the plan's daily withdrawal and how far ahead of / behind it the ledger
@@ -30120,56 +27493,6 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       const deltaDays = (last.time - first.time) / 86400000;
       const deltaSfl = valOf(last) - valOf(first);
       return { sflPerDay, deltaSfl, deltaDays, sampleSize: n };
-    }
-
-    /*
-     * The visible slice of the diff timeline — the "slicer".
-     *
-     * The chart drew every period it had loaded, so raw mode ran off the right edge of the screen
-     * and "now", the one bar anyone opens the page for, was the one you had to scroll to reach.
-     * The fix is a window: a fixed number of periods ending, by default, at the newest one.
-     *
-     *   total  how many periods are loaded
-     *   size   how many to show; 0 / null / negative / >= total all mean "everything"
-     *   start  index of the leftmost visible period; null means "pin to the newest", which is what
-     *          a fresh load, a period change and the NOW button all want
-     *
-     * `start` is clamped into [0, total - size] rather than rejected, so a window that no longer
-     * fits (period switched, data refetched, size grown) lands on the newest rows instead of on an
-     * empty chart. `end` is INCLUSIVE, and is -1 when there is nothing to show.
-     */
-    function diffWindowRange(total, size, start) {
-      const n = Math.max(0, Math.floor(Number(total)) || 0);
-      const want = Math.floor(Number(size));
-      const eff = Math.max(0, Math.min(want > 0 ? want : n, n));
-      const maxStart = Math.max(0, n - eff);
-      const s = (start === null || start === undefined || !Number.isFinite(Number(start)))
-        ? maxStart
-        : Math.max(0, Math.min(Math.floor(Number(start)), maxStart));
-      return { start: s, end: s + eff - 1, size: eff, total: n, maxStart, atNow: s >= maxStart };
-    }
-
-    /*
-     * A from/to window, normalised once for both the page and the API.
-     *
-     * Either end may be absent — "everything before 22:40" and "everything since Tuesday" are both
-     * legitimate — so a missing or unparseable bound comes back null rather than as some sentinel
-     * date the caller then has to recognise. Reversed bounds are swapped instead of returning
-     * nothing: typing the two boxes in the wrong order is a slip, not a request for an empty chart.
-     *
-     * Both ends come back as ISO UTC, which is what the SQL bounds and the history endpoint take,
-     * and which compares correctly as a string.
-     */
-    function parseDiffRange(from, to) {
-      const one = (v) => {
-        if (v === undefined || v === null || v === "") return null;
-        const t = new Date(v);
-        return Number.isNaN(t.getTime()) ? null : t.toISOString();
-      };
-      let a = one(from);
-      let b = one(to);
-      if (a && b && a > b) { const t = a; a = b; b = t; }
-      return { from: a, to: b };
     }
 
     async function renderDiff(data) {
@@ -31499,7 +28822,30 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       return changed;
     }
 
+    /*
+     * THE ENGINE. The calculations live in core/*.mjs, the same modules the server runs; the page
+     * loads them (core/browser-engine.mjs, the loader in <head>) instead of carrying its own copy
+     * of ~100 functions — two copies drifted (Chicken Coop read one value here, another on the
+     * roadmap). Everything that needs them waits for the engine; tests put it on globalThis.
+     */
+    function _whenEngine(fn) {
+      if (typeof __engine !== "undefined") { fn(); return; }
+      window.addEventListener("sfl-engine", () => fn(), { once: true });
+    }
+    // The engine keeps its own module state; the page's powerState is handed over whenever it is
+    // set, with the roadmap settings read live (they change on the page after the fact).
+    function _engineSyncPower() {
+      if (!powerState) return;
+      if (!Object.getOwnPropertyDescriptor(powerState, "roadmapSettingsRaw")) {
+        Object.defineProperty(powerState, "roadmapSettingsRaw", { configurable: true, enumerable: false,
+          get() { try { return JSON.parse(localStorage.getItem("sfl_roadmap_settings") || "{}") || {}; } catch (e) { return {}; } } });
+      }
+      __engine._setPowerContext(powerState);
+    }
+
     // Init
+    _whenEngine(() => {
+    _initAgingRecipes();
     migrateApiKey();
     main();
     // The shared settings arrive after the first render; only when they change something (another
@@ -31507,6 +28853,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     _prefPull().then((changed) => { if (changed) main(); }).catch(() => {});
     renderHealthBanner();
     renderDormantBanner();
+    });
   </script>
 </body>
 </html>

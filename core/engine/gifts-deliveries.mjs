@@ -185,18 +185,72 @@ export function _setItemCostMaps(maps) { _itemCostMaps = maps || { productionCos
     // Recursive chain-time calculation: sum grow times through entire flower chain
     // Crop inputs are treated as 0 hours (assumed available/quick).
     // Cycles are broken with a visiting Set.
-    function getFlowerChainHours(flower, visiting) {
+    // mult: the farm's flower-time multiplier (computeFlowerMultiplier). Without it the boosted
+    // time the page wrote into SEED_DATA (applyFlowerBoosts) is used, else the base time — the
+    // server passes mult instead of touching the shared table per request.
+    function getFlowerChainHours(flower, visiting, mult) {
       visiting = visiting || new Set();
       if (visiting.has(flower)) return 0;
       visiting.add(flower);
       const recipe = FLOWER_RECIPES[flower];
       if (!recipe) return 0;
-      const seedSec = SEED_DATA[recipe.seed]?.seconds || 0;
+      const sd = SEED_DATA[recipe.seed];
+      const seedSec = !sd ? 0 : mult != null ? sd.baseSeconds * mult : (sd.seconds ?? sd.baseSeconds);
       const seedHours = seedSec / 3600;
       if (FLOWER_RECIPES[recipe.input]) {
-        return seedHours + getFlowerChainHours(recipe.input, visiting);
+        return seedHours + getFlowerChainHours(recipe.input, visiting, mult);
       }
       return seedHours;
+    }
+
+    // ── flowers.html: FLOWER_BOOSTS + detectFlowerBoosts + computeFlowerMultiplier ──
+    // Flower growth-time boosts (auto-detected from the farm).
+    const FLOWER_BOOSTS = [
+      { name: "Flower Crown",      type: "wearable",        multiplier: 0.5  },
+      { name: "Moth Shrine",       type: "collectible_temp", multiplier: 0.75, durationMs: 7 * 24 * 3600 * 1000 },
+      { name: "Flower Fox",        type: "collectible",     multiplier: 0.9  },
+      { name: "Blossom Hourglass", type: "collectible_temp", multiplier: 0.75, durationMs: 4 * 3600 * 1000 },
+      { name: "Blooming Boost",    type: "skill",           multiplier: 0.9  },
+      { name: "Flower Power",      type: "skill",           multiplier: 0.8  },
+      { name: "Flowery Abode",     type: "skill",           multiplier: 1.5  },
+    ];
+
+    function detectFlowerBoosts(farm) {
+      const active = [];
+      for (const boost of FLOWER_BOOSTS) {
+        let isActive = false;
+        switch (boost.type) {
+          case "wearable": {
+            const equipped = farm.bumpkin?.equipped || {};
+            isActive = Object.values(equipped).flat().includes(boost.name);
+            break;
+          }
+          case "collectible": {
+            isActive = findCollectible(farm, boost.name).length > 0;
+            break;
+          }
+          case "collectible_temp": {
+            const placements = findCollectible(farm, boost.name);
+            if (placements.length > 0) {
+              const latest = placements[placements.length - 1];
+              const placedAt = toMs(latest.createdAt || latest.readyAt || 0);
+              isActive = (Date.now() - placedAt) < boost.durationMs;
+            }
+            break;
+          }
+          case "skill": {
+            const skills = farm.bumpkin?.skills || {};
+            isActive = skills[boost.name] !== undefined;
+            break;
+          }
+        }
+        if (isActive) active.push(boost);
+      }
+      return active;
+    }
+
+    function computeFlowerMultiplier(activeBoosts) {
+      return activeBoosts.reduce((m, b) => m * b.multiplier, 1);
     }
 
     // ── flowers.html 8722-8747: CHAPTERS + TICKET_REWARDS + KNOWN_BOOST_COLLECTIBLES ──
@@ -339,7 +393,8 @@ export function _setItemCostMaps(maps) { _itemCostMaps = maps || { productionCos
       return parts.join(", ") || "\u2014";
     }
 
-export {
+export {  FLOWER_BOOSTS, detectFlowerBoosts, computeFlowerMultiplier, dashGetSeasonalTicket, _dashHasWearable, roadmapGiftRewardLabel,
+
   BUMPKIN_FLOWER_BONUSES, DEFAULT_FLOWER_POINTS, BUMPKIN_GIFTS_DATA,
   getFlowerGiftPoints, getFlowerChainHours,
   CHAPTERS, TICKET_REWARDS, dashGetCurrentChapter, dashHasVipAccess,

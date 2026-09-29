@@ -291,3 +291,5 @@ export function computeBankedFoodXp(farm, boosts) {
   return { totalXp, items };
 }
 
+// Used by the page through core/browser-engine.mjs.
+export { buildingOilBoost };

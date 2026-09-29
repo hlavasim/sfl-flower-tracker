@@ -1,3 +1,4 @@
+import "../helpers/page-engine.mjs";
 import { test, afterEach } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
@@ -237,9 +238,9 @@ test("F: the page's RESTOCK QUEUE uses the server panel's crops-per-seed, not 1"
     for (let k = open; k < SRC.length; k++) { if (SRC[k] === o) d++; else if (SRC[k] === c && --d === 0) return SRC.slice(i, k + 1) + ";"; }
     return null;
   };
-  const code = ["function findCollectible(", "const CROP_MACHINE_BASIC", "const CROP_MACHINE_MODULE_I ", "const CROP_MACHINE_MODULE_II ", "const CROP_MACHINE_MODULE_III",
-    "const BETTY_RESTOCK_AMOUNT", "function farmHasWarehouse(", "function cmGetSeedRestockCount(", "function cropMachineCrops(",
-    "function cropMachinePlots(", "function cropMachineSpeedMult(", "function cropMachineOilPerHour(", "function cmSimulateQueue("].map(slice).join("\n");
+  // The page's own queue simulator; the crop-machine helpers it calls come from the engine
+  // (tests/helpers/page-engine.mjs puts it on the global object, as the page's loader does).
+  const code = ["const BETTY_RESTOCK_AMOUNT", "function cmSimulateQueue("].filter((h) => SRC.includes(h)).map(slice).join("\n");
   const cmSimulateQueue = new Function("CROP_GROW_DATA", "SEED_COSTS", code + "\nreturn cmSimulateQueue;")(CROP_GROW_DATA, SEED_COSTS);
   const out = power(FARM);
   const yields = {}; for (const r of out.cropMachine.rows) yields[r.crop] = r.yieldPerSeed;

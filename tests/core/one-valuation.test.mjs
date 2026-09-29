@@ -64,12 +64,12 @@ test("the buy path no longer runs its own mining-chain delta", () => {
    * roadmapItemValue starts disagreeing with Power again on exactly the free-tool and
    * multi-tier items, which is the hardest class to notice by eye.
    */
-  for (const name of ["core/engine/roadmap.mjs", "flowers.html"]) {
-    const src = readFileSync(path.join(ROOT, name), "utf8");
-    const i = src.indexOf("function roadmapItemValue");
-    assert.ok(i > 0, `${name}: roadmapItemValue present`);
-    const body = src.slice(i, i + 2000);
-    assert.ok(!/roadmapMiningChain/.test(body), `${name}: must not re-derive a mining chain of its own`);
-    assert.match(body, /calcBoostValue\(/, `${name}: must delegate to calcBoostValue`);
-  }
+  const src = readFileSync(path.join(ROOT, "core/engine/roadmap.mjs"), "utf8");
+  const i = src.indexOf("function roadmapItemValue");
+  assert.ok(i > 0, "core: roadmapItemValue present");
+  const body = src.slice(i, i + 2000);
+  assert.ok(!/roadmapMiningChain/.test(body), "core: must not re-derive a mining chain of its own");
+  assert.match(body, /calcBoostValue\(/, "core: must delegate to calcBoostValue");
+  // The page loads the engine instead of carrying a copy that could drift.
+  assert.ok(!readFileSync(path.join(ROOT, "flowers.html"), "utf8").includes("function roadmapItemValue("), "flowers.html has no copy of its own");
 });

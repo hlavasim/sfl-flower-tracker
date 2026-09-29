@@ -19,7 +19,7 @@ import { CROP_GROW_DATA, FRUIT_GROW_DATA, GREENHOUSE_GROW_DATA } from "../engine
 import { farmHasCropMachine, cropMachineCrops, calcCropMachineDaily } from "../engine/crop-machine.mjs";
 import { roadmapPerPlot } from "../engine/roadmap.mjs";
 import {
-  DEFAULT_FLOWER_POINTS, BUMPKIN_GIFTS_DATA, getFlowerGiftPoints, getFlowerChainHours,
+  DEFAULT_FLOWER_POINTS, BUMPKIN_GIFTS_DATA, getFlowerGiftPoints, getFlowerChainHours, detectFlowerBoosts, computeFlowerMultiplier,
   dashCalculateDeliveryTickets, roadmapItemCost, roadmapGiftRewardValue, _setItemCostMaps,
 } from "../engine/gifts-deliveries.mjs";
 import { buildPricesSection } from "./prices.mjs";
@@ -200,10 +200,11 @@ function buildTodo(settings) {
   // GIFTS — top NPCs to gift flowers
   const hasBB = !!(farm.bumpkin && farm.bumpkin.skills && farm.bumpkin.skills["Blossom Bonding"]);
   const gl = Object.keys(DEFAULT_FLOWER_POINTS), gr = [];
+  let flowerMult = 1; try { flowerMult = computeFlowerMultiplier(detectFlowerBoosts(farm)); } catch {}
   for (const [npc, data] of Object.entries(BUMPKIN_GIFTS_DATA)) {
     if (!data.repeats) continue;
     let best = null;
-    for (const f of gl) { const p = getFlowerGiftPoints(npc, f, hasBB); let hrs = 0; try { hrs = getFlowerChainHours(f); } catch {} const days = Math.max(1, (hrs || 24) / 24); const eff = p / days; if (!best || eff > best.eff) best = { f, p, days, eff }; }
+    for (const f of gl) { const p = getFlowerGiftPoints(npc, f, hasBB); let hrs = 0; try { hrs = getFlowerChainHours(f, undefined, flowerMult); } catch {} const days = Math.max(1, (hrs || 24) / 24); const eff = p / days; if (!best || eff > best.eff) best = { f, p, days, eff }; }
     const rv = roadmapGiftRewardValue(data.repeats, () => 0), pd = (rv > 0 && best.eff > 0) ? rv * best.eff / data.repeats.fp : 0;
     if (pd > 0.05) gr.push({ npc, bf: best.f, days: best.days, pd });
   }

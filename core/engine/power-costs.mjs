@@ -791,6 +791,7 @@ import { SEED_COSTS, TOOL_COSTS } from "../data/economy.mjs";
 
 
 export {
+  getFeedCostPerUnit, getFeedReductionMult, getOptimalFeedForLevel,
   RESTOCK_GEM_COSTS, RESTOCK_QUEUE_DEFS, buildQueueData,
   FEED_RECIPES, FEED_QTY, FEED_XP_TABLE, SICKNESS_RATE_BY_LEVEL,
   BARN_DELIGHT_RECIPE, BARN_DELIGHT_RECIPE_ALT, SICKNESS_PREVENTION,

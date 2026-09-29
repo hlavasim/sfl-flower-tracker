@@ -1,3 +1,4 @@
+import "../helpers/page-engine.mjs";
 import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";

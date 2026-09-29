@@ -230,8 +230,16 @@ async function fetchExchange() {
 // that fails to load must cost the names, never the whole endpoint.
 let _itemNamesPromise = null;
 function loadItemNames() {
-  if (!_itemNamesPromise) _itemNamesPromise = import("./_item-names.js").then((m) => m.default || null).catch(() => null);
+  if (!_itemNamesPromise) _itemNamesPromise = import("./_item-names.js").then(_unwrapItemNames).catch(() => null);
   return _itemNamesPromise;
+}
+// Vercel bundles the .js file as CommonJS (api/ has no "type": "module"), so the import yields
+// { default: { default: map } } — the map one level deeper. Locally it is ESM: { default: map }.
+// Unwrapping only one level cost prod every name-less NFT row (98 of them, owned ones included).
+export function _unwrapItemNames(m) {
+  let d = m && m.default;
+  if (d && !d.wearables && !d.collectibles && d.default) d = d.default;
+  return d || null;
 }
 
 // Test-only hook: node:test imports this module once and runs every test in a file against

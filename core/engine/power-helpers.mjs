@@ -393,7 +393,8 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
     function marksToSfl(marks) { return marks / 100; }
 
     // ── flowers.html 5010-5060: calcSkillPointCost ──
-    function calcSkillPointCost(bumpkin, p2pPrices, farm) {
+    // cookSettings: detectCookingBoosts settings (the page passes its pet-streak toggle).
+    function calcSkillPointCost(bumpkin, p2pPrices, farm, cookSettings) {
       const xp = bumpkin?.experience || 0;
       // Ascension-aware: an ascended farm's level (and its skill-point count) follows
       // the band model, not the pre-ascension table — see getTotalBumpkinLevel.
@@ -418,7 +419,7 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
       }
 
       // Detect cooking boosts to apply XP multipliers
-      const cookingBoosts = farm ? detectCookingBoosts(farm) : { xpBoosts: [], timeBoosts: [] };
+      const cookingBoosts = farm ? detectCookingBoosts(farm, cookSettings) : { xpBoosts: [], timeBoosts: [] };
 
       // Hardcoded: Pizza Margherita for verification (TODO: restore best-recipe search after verified)
       const recipeName = "Pizza Margherita";
@@ -1103,6 +1104,7 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
     }
 
 export {
+  _ascBandXp, _ascBaseline, _withinAscensionLevel, getTotalBumpkinLevel, aoeCoverage,
   SEED_DATA, findCollectible, BUMPKIN_XP_TABLE,
   ANIMAL_CYCLE_DATA, ANIMAL_LEVELS, GOLDEN_ANIMALS, getAnimalLevel, isAnimalCat, getAnimalData,
   ANIMAL_CAT_MAP,

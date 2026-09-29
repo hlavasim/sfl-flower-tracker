@@ -309,4 +309,5 @@ function escHTML(s) {
       return h;
     }
 
-export { buildFormulaHTML };
+export {  sflIcon, formatSec, escHTML,
+ buildFormulaHTML };

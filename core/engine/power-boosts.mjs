@@ -698,3 +698,6 @@ export function classifyToCategories(effects) {
       if (cats.size === 0) cats.add("other");
       return [...cats];
     }
+
+// Used by the page through core/browser-engine.mjs.
+export { normalizeBoostLine, expandMultiProductLines };

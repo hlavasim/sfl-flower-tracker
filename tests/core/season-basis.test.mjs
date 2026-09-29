@@ -79,9 +79,9 @@ test("the in-season basis is untouched, and still gated on the season", () => {
 test("calcBoostValue asks for the annual basis", async () => {
   // The whole point: the permanent-value engine must be on the annual basis, or a season-locked
   // boost is still quoted at four times its worth for three months of the year.
-  const page = readFileSync(new URL("../../flowers.html", import.meta.url), "utf8");
+  // The page loads this one (core/browser-engine.mjs), it no longer has a copy.
   const core = readFileSync(new URL("../../core/engine/roadmap.mjs", import.meta.url), "utf8");
-  for (const [name, src] of [["core", core], ["flowers.html", page]]) {
+  for (const [name, src] of [["core", core]]) {
     const i = src.indexOf("function calcBoostValue");
     assert.ok(i > 0, `${name}: calcBoostValue present`);
     const body = src.slice(i, i + 4000);

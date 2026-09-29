@@ -164,3 +164,6 @@ export function buildRoiSection(farm, p2p, nftData, exchange, btcUsd, settings =
 
   return { boostItems, capacity, p2pPrices, sflUsd, btcUsd: btcUsd || 0, exchangeRates, stockMods, season, pets, rowsByLogins };
 }
+
+// Used by the page through core/browser-engine.mjs.
+export { parseRoiPets };

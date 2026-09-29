@@ -21,13 +21,17 @@ import vm from "node:vm";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const page = readFileSync(path.join(ROOT, "flowers.html"), "utf8");
 
+// The page loads shared helpers such as escHTML from core (core/browser-engine.mjs); lift those
+// from core/engine/power-formula.mjs, everything else from the page.
+const coreFormula = readFileSync(path.join(ROOT, "core/engine/power-formula.mjs"), "utf8");
 function lift(name) {
-  const i = page.indexOf(`function ${name}(`);
-  assert.ok(i > 0, `${name} not found in flowers.html`);
+  const src = page.includes(`function ${name}(`) ? page : coreFormula;
+  const i = src.indexOf(`function ${name}(`);
+  assert.ok(i > 0, `${name} not found in flowers.html or core`);
   let depth = 0;
-  for (let k = page.indexOf("{", i); k < page.length; k++) {
-    if (page[k] === "{") depth++;
-    else if (page[k] === "}") { depth--; if (depth === 0) return page.slice(i, k + 1); }
+  for (let k = src.indexOf("{", i); k < src.length; k++) {
+    if (src[k] === "{") depth++;
+    else if (src[k] === "}") { depth--; if (depth === 0) return src.slice(i, k + 1); }
   }
   throw new Error(`could not slice ${name}`);
 }
