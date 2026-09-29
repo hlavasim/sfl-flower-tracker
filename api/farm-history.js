@@ -509,7 +509,9 @@ export default async function handler(req, res) {
   // ─── TICKETY page: one snapshot a week (the week's last), cut to what the ticket model reads ───
   // Boards (bounties, chores), the ticket NPCs' orders, the ticket bonuses (VIP, worn items,
   // farm hands), the "X Collected" counters, and the golden animals / chapter boost collectibles
-  // wherever they are placed. ~15 KB a week instead of the ~240 KB farm.
+  // wherever they are placed. ~15 KB a week instead of the ~240 KB farm. The salt / aging /
+  // spice / potion counters and the potion history give the farm's measured weekly use, which
+  // prices the chapter items that boost those activities.
   if (req.query.type === "ticket-weeks") {
     try {
       const farm = parseInt(req.query.farm, 10);
@@ -529,7 +531,11 @@ export default async function handler(req, res) {
                   'bumpkin', jsonb_build_object('equipped', game_data->'bumpkin'->'equipped'),
                   'farmHands', game_data->'farmHands',
                   'dailyRewards', game_data->'dailyRewards',
-                  'farmActivity', (SELECT jsonb_object_agg(k, v) FROM jsonb_each(game_data->'farmActivity') t(k, v) WHERE k LIKE '% Collected'),
+                  'farmActivity', (SELECT jsonb_object_agg(k, v) FROM jsonb_each(game_data->'farmActivity') t(k, v)
+                                    WHERE k LIKE '% Collected' OR k LIKE '% Spiced' OR k LIKE '% Fermented'
+                                       OR k IN ('Salt Harvested', 'Salt Rake Crafted', 'Potion Mixed',
+                                                'Celestine Harvested', 'Lunara Harvested', 'Duskberry Harvested')),
+                  'potionHouse', jsonb_build_object('history', game_data->'potionHouse'->'history'),
                   'collectibles', ${pick("->'collectibles'")},
                   'interior', jsonb_build_object('ground', jsonb_build_object('collectibles', ${pick("->'interior'->'ground'->'collectibles'")}),
                                                  'level_one', jsonb_build_object('collectibles', ${pick("->'interior'->'level_one'->'collectibles'")}))

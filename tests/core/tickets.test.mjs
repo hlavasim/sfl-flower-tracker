@@ -142,3 +142,52 @@ test("round ratios: FLOWER and Gem rounds and last sales against today's floor",
   assert.ok(Math.abs(r.gem.median - 0.6) < 1e-9, "30,000 gems / 50 per FLOWER = 600 against 1,000");
   assert.equal(r.lastSale.n, 1);
 });
+
+test("measured activity: per-day rates from the weekly counters, species kept apart, prime separate", async () => {
+  const { measuredActivity } = await import("../../core/sections/tickets.mjs");
+  const DAY = 86400000;
+  const wk = (ts, a, hist) => ({ wk: new Date(ts).toISOString().slice(0, 10), ts, farm: { farmActivity: a, potionHouse: { history: hist } } });
+  const act = measuredActivity([
+    wk(NOW - 14 * DAY, { "Salt Harvested": 100, "Aged Tuna Collected": 10, "Prime Aged Tuna Collected": 1, "Refined Salt Spiced": 5 }, { 80: 2 }),
+    wk(NOW - 7 * DAY, { "Salt Harvested": 170, "Aged Tuna Collected": 24, "Prime Aged Tuna Collected": 4, "Refined Salt Spiced": 12 }, { 80: 3 }),
+    wk(NOW, { "Salt Harvested": 240, "Aged Tuna Collected": 38, "Prime Aged Tuna Collected": 8, "Refined Salt Spiced": 19 }, { 80: 5 }),
+  ]);
+  assert.equal(act.days, 14);
+  assert.ok(Math.abs(act.saltHarvests - 10) < 1e-9);
+  assert.ok(Math.abs(act.aged.Tuna - 2) < 1e-9);
+  assert.ok(Math.abs(act.prime.Tuna - 0.5) < 1e-9);
+  assert.ok(Math.abs(act.racks["Refined Salt"] - 1) < 1e-9);
+  assert.ok(Math.abs(act.potionGames - 3 / 14) < 1e-9);
+  assert.equal(measuredActivity([wk(NOW, {}, {})]), null, "one snapshot measures nothing");
+});
+
+test("auction items: Ascended Idol saves the rakes, Salt Worker Gnome adds salt, owned items are marked", async () => {
+  const { auctionItemValues } = await import("../../core/sections/tickets.mjs");
+  const p = { marketValue: { Salt: 0.004, Wood: 0.012 }, productionCost: {} };
+  const f = farm({ saltFarm: { nodes: { 0: {}, 1: {} } }, wardrobe: { "Rice Shirt": 1 } });
+  const act = { saltHarvests: 10, potionGames: 1, aged: {}, prime: {}, racks: {}, from: "a", to: "b" };
+  const items = auctionItemValues(f, p, { coinsPerSFL: 1500, activity: act });
+  const by = (n) => items.find((i) => i.name === n);
+  const rake = 20 / 1500 + 3 * 0.012;
+  assert.ok(Math.abs(by("Ascended Idol").perDay - 10 * rake) < 1e-9);
+  const more = 10 * (1 / 0.7 - 1);
+  assert.ok(Math.abs(by("Salt Worker Gnome").perDay - ((more * 12 + 20) * 0.004 - more * rake)) < 1e-9);
+  assert.ok(Math.abs(by("Alchemist Apron").perDay - 160 / 1500) < 1e-9);
+  assert.equal(by("Rice Shirt").owned, true);
+  // Without history the aging items cannot be priced — null, not 0.
+  const bare = auctionItemValues(f, p, { coinsPerSFL: 1500 });
+  assert.equal(bare.find((i) => i.name === "Surfer Hair").perDay, null);
+  assert.ok(bare.find((i) => i.name === "Ascended Idol").perDay > 0, "salt still priced from the nodes");
+});
+
+test("shop: an hourglass is worth its category's net over the window × the time saved, per use", async () => {
+  const { shopItemValues } = await import("../../core/sections/tickets.mjs");
+  const items = shopItemValues(farm(), prices, { now: NOW, catNet: { stone: 10, iron: 8, gold: 6, crops: 24, greenhouse: 0 } });
+  const by = (n) => items.find((i) => i.name === n);
+  assert.ok(Math.abs(by("Ore Hourglass").perUse - 24 * (3 / 24) * 1) < 1e-9, "3 h at ×0.5 = 3 h of stone+iron+gold output saved");
+  assert.ok(Math.abs(by("Harvest Hourglass").perUse - 24 * (6 / 24) * (1 / 0.75 - 1)) < 1e-9);
+  assert.equal(by("Ore Hourglass").tickets, 400);
+  assert.equal(by("Ascension Monument").perDay, 0, "no daily income");
+  assert.equal(by("Cornucopia").perDay, null);
+  assert.equal(by("Otty the Otter").price, "250 Otter Pebble");
+});
