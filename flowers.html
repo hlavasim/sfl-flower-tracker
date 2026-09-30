@@ -5420,7 +5420,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.90</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.91</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5447,6 +5447,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.91", items: [
+          { t: "fix", text: "Your offers on <b>buds</b> now show in the ROADMAP's OFFER column (🟢 top / 🟠 outbid) with the best bid, like any other item — the marketplace book dropped every bud because buds have no catalogue name." },
+          { t: "fix", text: "⏳ CO VYPRŠELO no longer lists a shrine that is still running (“… dobíhá” with 44 h left); a shrine shows up only once it has actually lapsed, as “Obnovit” when renewing pays." },
+        ] },
         { ver: "v5.90", items: [
           { t: "fix", text: "ROADMAP buy path: a bud's boost column now says what it does — e.g. <b>+0.21 Stone, Iron, Gold</b> (type and stem added, times the aura) — instead of its traits (Cave · Seashell · Basic), which are still in the link tooltip." },
         ] },
