@@ -15868,13 +15868,8 @@
           note: `${escHTML(r.sh.effect)} — za ${r.sh.duration_d} dní vydělá ${roadmapFmtFlower(r.perDay * r.sh.duration_d)}, stojí ${roadmapFmtFlower(r.cost)}${ing ? ` (${ing})` : ''}, čistě +${roadmapFmtFlower(r.netTotal)}`,
         });
       }
-      // A running one with little left, so a short remainder shows BEFORE it lapses.
-      for (const r of shRows.filter((r) => r.x.kind === 'active' && r.x.hoursLeft != null && r.x.hoursLeft < 48)) {
-        rows.push({
-          what: `${escHTML(r.x.name)} dobíhá`, now: false, gain: r.perDay, unit: null,
-          note: `zbývá ${r.x.hoursLeft < 1 ? 'necelá hodina' : r.x.hoursLeft.toFixed(0) + ' h'} — ${escHTML(r.sh.effect)}`,
-        });
-      }
+      // A shrine still running is not listed, however little is left: the owner wants it here only
+      // once it has actually lapsed (the "Obnovit" rows above), not as a countdown.
       if (!rows.length) return '';
       // Value first where we have one; the unquantified chores go under it rather than on top.
       rows.sort((a, b) => (b.gain || -Infinity) - (a.gain || -Infinity));
@@ -16371,7 +16366,7 @@
         const boostTxt = escHTML((r.boost || "").split("\n").join(" \u00b7 ")) + ((isPlan || isBeyond) ? "" : ` <span style="color:var(--lily)">\u00b7 ${escHTML(r.reason || "only if you run that activity")}</span>`);
         const marg = `+${roadmapFmtFlower(r.value)}` + ((isPlan || isBeyond) ? "" : ` <span style="color:var(--text-dim)">if used</span>`);
         {
-          const _trade = !r.type || r.type === "Collectible" || r.type === "Wearable";
+          const _trade = !r.type || r.type === "Collectible" || r.type === "Wearable" || r.type === "Bud";
           const _op = _trade ? _rmOfferPrice(r.name, _myOffers) : null;
           _rmRowData[r.name] = { now: r.floor || 0, offer: (_op > 0 ? _op : (r.floor || 0)), value: r.value || 0 };
         }
@@ -16380,10 +16375,10 @@
           <td style="padding:3px 6px;white-space:nowrap">${isPlan && r.bundle && r.horizonGain === 0 ? `<span style="color:#b08cd8" title="Patří ke skupině nad sebou — kupuje se s ní.">\u21b3</span> ` : ""}${rowIcon(r)} ${r.type === "Bud" && r.budId ? `<a href="https://sunflower-land.com/play/#/marketplace/buds/${r.budId}" target="_blank" rel="noopener" style="color:inherit" title="${escHTML(r.budTraits || "")} · otevřít v marketplace">${escHTML(r.name)}</a>` : escHTML(r.name)} ${typeBadge(r.type)} ${stBadge}${isPlan && r.bundle && r.horizonGain !== 0 ? ` <span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#2a1f3a;color:#b08cd8;font-weight:bold" title="Tyhle ${r.bundle} položky se vyplatí jen spolu (třeba krok ascension, který sám nic nedá, před krokem, který vydělá). Kupují se naráz, zisk je za celou skupinu.">SKUPINA \u00d7${r.bundle}</span>` : ""}${r.skillTakeNow ? ` <span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1f3a2a;color:#7fe0a0" title="Skill pointy na tohle už máš — můžeš vzít hned. Cena je i tak spočtená z XP, které ten point stál: držet point ho nedělá zdarma, stejně jako držet FLOWER nedělá NFT zdarma.">MůžEŠ HNED</span>` : ""}</td>
           <td style="padding:3px 6px;color:var(--text-dim);max-width:240px">${boostTxt}</td>
           <td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(r.floor)}</td>
-          <td style="padding:3px 6px;text-align:right">${(!r.type || r.type === "Collectible" || r.type === "Wearable") ? _rmOfferCell(r.name, _myOffers) : `<span style="color:var(--text-dim)">—</span>`}</td>
+          <td style="padding:3px 6px;text-align:right">${(!r.type || r.type === "Collectible" || r.type === "Wearable" || r.type === "Bud") ? _rmOfferCell(r.name, _myOffers) : `<span style="color:var(--text-dim)">—</span>`}</td>
           <td style="padding:3px 6px;text-align:right;color:var(--green)">${marg}</td>
           <td style="padding:3px 6px;text-align:right">${roadmapFmtDays(r.roi)}${(() => {
-            if (!(!r.type || r.type === "Collectible" || r.type === "Wearable") || !(r.value > 0)) return "";
+            if (!(!r.type || r.type === "Collectible" || r.type === "Wearable" || r.type === "Bud") || !(r.value > 0)) return "";
             const op = _rmOfferPrice(r.name, _myOffers);
             if (!(op > 0)) return "";
             const p2y = r.value * 730.5;   // the offer price whose payback is exactly 2 years

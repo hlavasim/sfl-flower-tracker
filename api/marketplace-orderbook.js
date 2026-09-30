@@ -19,6 +19,17 @@ const _book = { at: 0, data: null };
  * pins that they agree. Splits on the LAST dash so "economies-{slug}-{id}" keeps its slug in the
  * collection, and the id must be all digits.
  */
+/*
+ * The book's name for a feed key: ITEM_NAMES for the catalogue, and "Bud #<id>" for buds — they
+ * are 1-of-1 NFTs with no catalogue name, and without this every bud dropped out of the book (the
+ * roadmap's buy path and the offer watcher then could not see an offer on one).
+ */
+export function bookItemName(key) {
+  if (!key) return null;
+  if (key.collection === "buds") return "Bud #" + key.id;
+  return (ITEM_NAMES[key.collection] || {})[key.id] || null;
+}
+
 export function parseItemKey(key) {
   const s = String(key == null ? "" : key);
   const dash = s.lastIndexOf("-");
@@ -30,7 +41,7 @@ export function parseItemKey(key) {
 
 async function handleBook(res) {
   const kvUrl = process.env.KV_REST_API_URL, kvTok = process.env.KV_REST_API_TOKEN;
-  const KEY = "cache:market-book:v1", TTL = 300;
+  const KEY = "cache:market-book:v2", TTL = 300;   // v2: buds included
   res.setHeader("Cache-Control", "public, max-age=60");
   if (_book.data && Date.now() - _book.at < TTL * 1000) return res.status(200).json(_book.data);
   if (kvUrl && kvTok) {
@@ -55,7 +66,7 @@ async function handleBook(res) {
     const key = parseItemKey(k);
     if (!key) continue;
     // Community economies ("economies-{slug}-{id}") have no entry in ITEM_NAMES and drop out here.
-    const name = (ITEM_NAMES[key.collection] || {})[key.id];
+    const name = bookItemName(key);
     if (!name || (m.floor == null && m.bestOffer == null)) continue;
     items[name] = { c: key.collection, id: key.id, f: m.floor ?? null, b: m.bestOffer ?? null, lc: m.listingCount || 0, oc: m.offerCount || 0, ls: m.latestSale ?? null };
   }
