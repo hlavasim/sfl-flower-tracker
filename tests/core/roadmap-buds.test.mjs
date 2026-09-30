@@ -87,3 +87,16 @@ test("placed buds you own count in YOUR INCOME RIGHT NOW (best per resource)", (
   assert.ok(Math.abs(row.sfl - want) < 1e-9, `buds income ${row.sfl} != best-per-resource ${want}`);
   buildPowerSection(farm, p2p, nfts, null, {});   // restore the shared context
 });
+
+test("the buy path's boost column says what the bud does, not its traits", async () => {
+  const { budBoostText } = await import("../../core/engine/buds.mjs");
+  // Cave (+0.2 minerals) with a Basic aura (x1.05); Seashell has no boost.
+  assert.equal(budBoostText({ type: "Cave", stem: "Seashell", aura: "Basic" }), "+0.21 Stone, Iron, Gold");
+  // Type + stem on the same target add up before the aura: Cave + Diamond Gem, Rare (x2) = +0.8.
+  assert.equal(budBoostText({ type: "Cave", stem: "Diamond Gem", aura: "Rare" }), "+0.8 Stone, Iron, Gold");
+  assert.equal(budBoostText({ type: "Port", stem: "Seashell", aura: "No Aura" }), "");
+  const out = buildRoadmapSection([], { roadmapSettings: {}, farm, p2p, budFloors: { [caveRare.id]: 10 } });
+  const row = (out.sim.timeline || []).find((t) => t.type === "Bud");
+  assert.ok(row && /Stone, Iron, Gold/.test(row.boost), `boost column: ${row && row.boost}`);
+  assert.ok(row.budTraits && row.budTraits.includes("Cave"), "traits still travel for the tooltip");
+});

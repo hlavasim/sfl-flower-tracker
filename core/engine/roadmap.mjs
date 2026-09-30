@@ -36,7 +36,7 @@ import {
   farmHasCropMachine, cropMachineCrops, cropMachineMix, cropMachineItemGain,
   CROP_MACHINE_NFTS, CROP_MACHINE_SPEED_ITEMS,
 } from "./crop-machine.mjs";
-import { decodeBud, budSetSfl } from "./buds.mjs";
+import { decodeBud, budSetSfl, budBoostText } from "./buds.mjs";
 
 // Deviation 1: the page global, module-scoped. Set before any calc.
 let powerState = null;
@@ -1794,7 +1794,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         for (const x of scored.slice(0, BUD_CANDIDATES)) {
           _budCands.push(x.clone);
           econ.push({ name: x.clone.name, type: "Bud", floor: x.floor, supply: 1, budId: x.bud.id,
-            boost: `${x.bud.type} · ${x.bud.stem} · ${x.bud.aura}`, clone: x.clone });
+            boost: budBoostText(x.bud), budTraits: `${x.bud.type} · ${x.bud.stem} · ${x.bud.aura} aura`, clone: x.clone });
         }
       }
       /*
@@ -1896,7 +1896,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
 
       // DISPLAY: +FL/day is each item's value vs your CURRENT farm (m.marginal), so it does not
       // depend on what is bought first. ETA, FL/day and Σ cost follow the plan.
-      const itemFields = (m) => ({ skillFree: m.skillFree, skillPoints: m.skillPoints, skillTakeNow: m.skillTakeNow, skillRank: m.skillRank, shards: m.shards, shardSfl: m.shardSfl, shardNote: m.shardNote, skillTree: m.skillTree, skillTier: m.skillTier, chainId: m.chainId, chainSeq: m.chainSeq, scenarioCat: m.scenarioCat, budId: m.budId });
+      const itemFields = (m) => ({ skillFree: m.skillFree, skillPoints: m.skillPoints, skillTakeNow: m.skillTakeNow, skillRank: m.skillRank, shards: m.shards, shardSfl: m.shardSfl, shardNote: m.shardNote, skillTree: m.skillTree, skillTier: m.skillTier, chainId: m.chainId, chainSeq: m.chainSeq, scenarioCat: m.scenarioCat, budId: m.budId, budTraits: m.budTraits });
       const timeline = [];
       for (const s of plan.steps) {
         const m = s.c, bm = Math.max(0, m.marginal || 0);

@@ -217,6 +217,35 @@ import {
     }
 
     /*
+     * What a bud actually does, in plain text: "+0.21 Stone, Iron, Gold · +0.53 Wood". Type and
+     * stem on the same target add up and the aura multiplies them, as in the game (getBudBoost),
+     * so the number is the real bonus per harvest. "" = no boost at all.
+     */
+    const BUD_TARGET_NAMES = { crops: "crops", trees: "Wood", stone: "Stone", iron: "Iron", gold: "Gold",
+      chickens: "Egg", cows: "Milk", sheep: "Wool", fruits: "fruits", mushrooms: "mushrooms", fishing: "fish" };
+    function budBoostText(bud) {
+      const aura = BUD_AURA_MULTIPLIERS[bud.aura] || 1;
+      const acc = new Map();   // target -> { kind, value }
+      for (const eff of [...(BUD_TYPE_BOOSTS[bud.type] || []), ...(BUD_STEM_BOOSTS[bud.stem] || [])]) {
+        let target = eff.product || eff.cats.map((c) => BUD_TARGET_NAMES[c] || c).join(", ");
+        if (!eff.product && eff.cropTier) target = eff.cropTier + " crops";
+        if (eff.cats.length === 3 && ["chickens", "cows", "sheep"].every((c) => eff.cats.includes(c))) target = "animal produce";
+        const key = eff.type + "|" + target;
+        const v = eff.type === "chance" ? eff.pct : eff.value;
+        const e = acc.get(key) || { type: eff.type, target, value: 0, extra: eff.extra };
+        e.value += v; acc.set(key, e);
+      }
+      const out = [];
+      for (const e of acc.values()) {
+        const v = e.value * aura;
+        if (e.type === "yield_flat") out.push(`+${+v.toFixed(3)} ${e.target}`);
+        else if (e.type === "speed_pct") out.push(`${+v.toFixed(1)}% ${e.target} grow time`);
+        else if (e.type === "chance") out.push(`${+v.toFixed(1)}% chance of +${e.extra} ${e.target}`);
+      }
+      return out.join(" · ");
+    }
+
+    /*
      * FLOWER/day a SET of buds is worth: for every resource-and-kind key, the best bud's part
      * only — the game's max-per-resource rule, so overlapping buds never add up. `scale(part)`
      * lets the caller weight each part (measured activity per category; 0 for a category or
@@ -249,6 +278,6 @@ import {
 export {
   BUD_TYPE_BOOSTS, BUD_STEM_BOOSTS, BUD_AURA_MULTIPLIERS, BUD_COUNT,
   BUD_TYPE_NAMES, BUD_STEM_NAMES, BUD_AURA_NAMES,
-  decodeBud, budEffectApplies, calcBudSflPerDay, getPriceProduct, budSflParts, budSetSfl,
+  decodeBud, budEffectApplies, calcBudSflPerDay, getPriceProduct, budSflParts, budSetSfl, budBoostText,
   BUD_BOOST_FILTERS, budHasBoostFilter,
 };

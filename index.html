@@ -5420,7 +5420,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.89</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.90</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5447,6 +5447,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.90", items: [
+          { t: "fix", text: "ROADMAP buy path: a bud's boost column now says what it does — e.g. <b>+0.21 Stone, Iron, Gold</b> (type and stem added, times the aura) — instead of its traits (Cave · Seashell · Basic), which are still in the link tooltip." },
+        ] },
         { ver: "v5.89", items: [
           { t: "feat", text: "<b>Buds in the ROADMAP buy path.</b> The best of the buds listed on the marketplace (by FLOWER/day per FLOWER of price) compete with every other purchase, marked <b>BUD</b> with a link to the bud. A bud is worth only what it ADDS: the game counts, per resource, just the single best placed bud (type + stem added, times the aura), so once the plan buys one mineral bud another mineral bud adds nothing on Stone/Iron/Gold." },
           { t: "feat", text: "YOUR INCOME RIGHT NOW counts the placed buds you own (best bud per resource)." },
@@ -16374,7 +16377,7 @@
         }
         h += `<tr style="border-top:1px solid #222">
           <td style="padding:3px 6px;color:var(--text-dim);white-space:nowrap"><input type="checkbox" class="rm-pick" title="Vybrat do součtu dole" ${_rmPicks.has(r.name) ? "checked" : ""} onchange="_rmTogglePick(${escHTML(JSON.stringify(r.name))},this.checked)">${rank}</td>
-          <td style="padding:3px 6px;white-space:nowrap">${isPlan && r.bundle && r.horizonGain === 0 ? `<span style="color:#b08cd8" title="Patří ke skupině nad sebou — kupuje se s ní.">\u21b3</span> ` : ""}${rowIcon(r)} ${r.type === "Bud" && r.budId ? `<a href="https://sunflower-land.com/play/#/marketplace/buds/${r.budId}" target="_blank" rel="noopener" style="color:inherit" title="${escHTML(r.boost || "")} · otevřít v marketplace">${escHTML(r.name)}</a>` : escHTML(r.name)} ${typeBadge(r.type)} ${stBadge}${isPlan && r.bundle && r.horizonGain !== 0 ? ` <span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#2a1f3a;color:#b08cd8;font-weight:bold" title="Tyhle ${r.bundle} položky se vyplatí jen spolu (třeba krok ascension, který sám nic nedá, před krokem, který vydělá). Kupují se naráz, zisk je za celou skupinu.">SKUPINA \u00d7${r.bundle}</span>` : ""}${r.skillTakeNow ? ` <span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1f3a2a;color:#7fe0a0" title="Skill pointy na tohle už máš — můžeš vzít hned. Cena je i tak spočtená z XP, které ten point stál: držet point ho nedělá zdarma, stejně jako držet FLOWER nedělá NFT zdarma.">MůžEŠ HNED</span>` : ""}</td>
+          <td style="padding:3px 6px;white-space:nowrap">${isPlan && r.bundle && r.horizonGain === 0 ? `<span style="color:#b08cd8" title="Patří ke skupině nad sebou — kupuje se s ní.">\u21b3</span> ` : ""}${rowIcon(r)} ${r.type === "Bud" && r.budId ? `<a href="https://sunflower-land.com/play/#/marketplace/buds/${r.budId}" target="_blank" rel="noopener" style="color:inherit" title="${escHTML(r.budTraits || "")} · otevřít v marketplace">${escHTML(r.name)}</a>` : escHTML(r.name)} ${typeBadge(r.type)} ${stBadge}${isPlan && r.bundle && r.horizonGain !== 0 ? ` <span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#2a1f3a;color:#b08cd8;font-weight:bold" title="Tyhle ${r.bundle} položky se vyplatí jen spolu (třeba krok ascension, který sám nic nedá, před krokem, který vydělá). Kupují se naráz, zisk je za celou skupinu.">SKUPINA \u00d7${r.bundle}</span>` : ""}${r.skillTakeNow ? ` <span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1f3a2a;color:#7fe0a0" title="Skill pointy na tohle už máš — můžeš vzít hned. Cena je i tak spočtená z XP, které ten point stál: držet point ho nedělá zdarma, stejně jako držet FLOWER nedělá NFT zdarma.">MůžEŠ HNED</span>` : ""}</td>
           <td style="padding:3px 6px;color:var(--text-dim);max-width:240px">${boostTxt}</td>
           <td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(r.floor)}</td>
           <td style="padding:3px 6px;text-align:right">${(!r.type || r.type === "Collectible" || r.type === "Wearable") ? _rmOfferCell(r.name, _myOffers) : `<span style="color:var(--text-dim)">—</span>`}</td>
