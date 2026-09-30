@@ -25,6 +25,7 @@ import { CHAPTER_BOOST_ITEMS, CHAPTER_TICKET } from "../data/chapter-items.mjs";
 import { SEED_COSTS } from "../data/economy.mjs";
 import {
   cropMachinePlots, cropMachineOilPerHour, cropMachineCrops, cropMachineSpeedMult, farmHasCropMachine,
+  CROP_MACHINE_NFTS,
 } from "../engine/crop-machine.mjs";
 import {
   findCollectible, getCount, getFactionMarkCost, marksToSfl, isWearableEquipped,
@@ -687,20 +688,8 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     Carrot: "Crop Extension Module II", Cabbage: "Crop Extension Module II",
     Yam: "Crop Extension Module III", Broccoli: "Crop Extension Module III",
   };
-  // Crop-yield NFTs that reach the machine (yield only — speed NFTs do not apply here). Mirrors
-  // gameExtraEffects's list but as a catalogue so an UNOWNED one can still be listed as available.
-  // scope: "all" | { tier } | { product }. kind: how ownership is checked.
-  // AOE collectibles (Sir Goldensnout, Scary Mike, Laurie, Queen Cornelia, the Gnome trio) are
-  // NOT here: harvest.ts applies them only to a crop on a PLOT inside their area, and a machine
-  // pack has no plot (harvestCropMachine → getCropYieldAmount without `plot`).
-  const CROP_MACHINE_NFTS = [
-    { name: "Infernal Pitchfork", value: 3, scope: "all", kind: "wearable" },
-    { name: "Cabbage Boy", value: 0.25, scope: { product: "Cabbage" }, kind: "collectible" },
-    { name: "Cabbage Girl", value: 0.25, scope: { product: "Cabbage" }, kind: "collectible" },
-    { name: "Karkinos", value: 0.1, scope: { product: "Cabbage" }, kind: "collectible" },
-    { name: "Pablo The Bunny", value: 0.1, scope: { product: "Carrot" }, kind: "collectible" },
-    { name: "Giant Yam", value: 0.5, scope: { product: "Yam" }, kind: "collectible" },
-  ];
+  // CROP_MACHINE_NFTS (crop-machine.mjs): the crop-yield NFTs that reach the machine — shared
+  // with the roadmap, which values the unowned ones in the buy path.
   let cropMachine = null;
   if (farmHasCropMachine(farm)) {
     const cmPlots = cropMachinePlots(farm);

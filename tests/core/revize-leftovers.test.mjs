@@ -85,7 +85,8 @@ test("the roadmap's CROP MACHINE rows use the Power panel's crops per seed", () 
   const cm = pw.cropMachine;
   assert.ok(cm && cm.rows.some((r) => r.yieldPerSeed !== 1), "the fixture has a crop yield boost on the machine");
   const out = buildRoadmapSection([], { roadmapSettings: {}, farm, p2p: p2pFix });
-  const rows = out.profitability.groups.find((g) => g.id === "cropMachine").rows;
+  // The crop rows; the last "Your mix" row is the queue total, checked in roadmap-crop-machine.test.
+  const rows = out.profitability.groups.find((g) => g.id === "cropMachine").rows.filter((r) => !/^Your mix/.test(r.label));
   assert.ok(rows.length > 0, "the roadmap lists crop machine crops");
   const rpd = 2;   // roadmap default restocks per day
   for (const row of rows) {

@@ -32,6 +32,10 @@ import { TOOL_COSTS } from "../data/economy.mjs";
 import { planByWealth } from "./wealth-plan.mjs";
 import { SALT_RAKE_COST } from "../data/cooking.mjs";
 import { computeSaltYieldPerRake, computeSaltRakeCoinMult } from "./cooking-cost.mjs";
+import {
+  farmHasCropMachine, cropMachineCrops, cropMachineMix, cropMachineItemGain,
+  CROP_MACHINE_NFTS, CROP_MACHINE_SPEED_ITEMS,
+} from "./crop-machine.mjs";
 
 // Deviation 1: the page global, module-scoped. Set before any calc.
 let powerState = null;
@@ -745,6 +749,35 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
 
 
     // ── flowers.html 16216-16227: roadmapCurrentProduction ──
+    /*
+     * CROP MACHINE — the crops the owner grows in it. Its own checkboxes, stored as "cm:<Crop>" in
+     * excludeCats: the machine and the plots are separate production, and sharing the plot
+     * checkboxes made a machine crop vanish whenever it was unchecked on the plots (Sunflower,
+     * Yam and Rhubarb grown only in the machine never showed up at all).
+     */
+    function roadmapMachineCrops(settings) {
+      const ex = settings.excludeCats || [];
+      return cropMachineCrops(powerState.farm).filter((c) => ex.indexOf("cm:" + c) < 0);
+    }
+    /*
+     * The machine's day with the checked crops sharing its queue (cropMachineMix). Taken at full
+     * running time, NOT scaled by measured activity: it runs on its own, and the only thing the
+     * owner's attention limits is the restocks, which cap the seeds. null = no machine.
+     */
+    function roadmapCropMachineMix(settings, extra) {
+      const farm = powerState.farm;
+      if (!farm || !farmHasCropMachine(farm)) return null;
+      const rpd = settings.restocksPerDay || 2;
+      const er = roadmapCoinsFree(settings)
+        ? Object.assign({}, powerState.exchangeRates, { coinsPerSFL: Infinity }) : powerState.exchangeRates;
+      const opts = Object.assign({
+        yields: powerState.cropMachineYields || {},
+        capSeeds: (c) => rpd * (cmGetSeedRestockCount(farm, c) || 0),
+      }, extra || {});
+      return { crops: roadmapMachineCrops(settings), er, opts, p2p: powerState.p2pPrices,
+        mix: cropMachineMix(farm, roadmapMachineCrops(settings), powerState.p2pPrices, er, opts) };
+    }
+
     function roadmapCurrentProduction(settings) {
       let total = 0; const breakdown = [];
       for (const [cat, meta] of Object.entries(POWER_CATEGORIES)) {
@@ -760,6 +793,9 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         const v = Math.max(0, net) * roadmapEffFactor(cat, settings);
         if (v > 0) { total += v; breakdown.push({ cat, sfl: v }); }
       }
+      // The Crop Machine is not a POWER_CATEGORIES entry, so the loop above never saw it.
+      const cm = roadmapCropMachineMix(settings);
+      if (cm && cm.mix.net > 0) { total += cm.mix.net; breakdown.push({ cat: "cropMachine", sfl: cm.mix.net }); }
       breakdown.sort((a, b) => b.sfl - a.sfl);
       return { total, breakdown };
     }
@@ -856,6 +892,13 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         // scaling is applied here, the same way core/sections/power.mjs scales what it displays.
         if (v > 0) total += v * roadmapEffFactor(cat, settings);
       }
+      // What it adds to the Crop Machine's mix — separate production from the plots above, so a
+      // crop NFT that helps both (Infernal Pitchfork) is worth both. Unscaled, like the machine's
+      // income.
+      if (!clone.has && (CROP_MACHINE_SPEED_ITEMS[clone.name] || CROP_MACHINE_NFTS.some((n) => n.name === clone.name))) {
+        const cm = roadmapCropMachineMix(settings);
+        if (cm) total += cropMachineItemGain(clone.name, powerState.farm, cm.crops, cm.p2p, cm.er, cm.opts);
+      }
       return total;
     }
 
@@ -924,8 +967,16 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
           ? (wardrobe[name] || 0) > 0
           : (getCount(inventory, name) > 0 || findCollectible(farm, name).length > 0);
         if (has) return;
-        const clone = byName[name] || null;
-        const floor = clone ? clone.floor : (parseFloat(item.floor) || 0);
+        let clone = byName[name] || null;
+        /*
+         * A Crop Machine item the boost catalogue does not parse (Groovy Gramophone's "-50% Growth
+         * Time in Crop Machine" is qualitative there) would have no clone and drop out as pure
+         * decoration. It gets a bare one so roadmapItemValue can price it on the machine.
+         */
+        if (!clone && (CROP_MACHINE_SPEED_ITEMS[name] || CROP_MACHINE_NFTS.some((n) => n.name === name))) {
+          clone = { name, categories: ["crops"], effects: [], has: false, isDisabled: false };
+        }
+        const floor = (clone && clone.floor != null) ? clone.floor : (parseFloat(item.floor) || 0);
         out.push({ name, type, floor, clone, boost: (item.boost_text || (clone && clone.boost) || ""), supply: item.supply || 0 });
       };
       if (settings.incCollectibles && nftData) for (const it of (nftData.collectibles || [])) add(it, "Collectible");
@@ -1921,4 +1972,5 @@ export {
   ROADMAP_EFF_HKEY, roadmapComputeEfficiency,
   getRoadmapSettings, roadmapOwnedEffects, roadmapCatBreakdown, roadmapCatNet,
   roadmapMiningChain, roadmapCatMix, ROADMAP_MINING_CATS, roadmapAnimalCapacity, calcBoostValue, cmGetSeedRestockCount,
+  roadmapMachineCrops, roadmapCropMachineMix,
 };

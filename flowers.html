@@ -5420,7 +5420,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.86</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.87</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5447,6 +5447,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.87", items: [
+          { t: "feat", text: "<b>Crop Machine in the ROADMAP.</b> WHAT I FARM has its own <b>Crop Machine</b> row of checkboxes (separate from the plot crops, so a crop you grow only in the machine no longer disappears when it is unchecked on the plots). WHAT TO FARM / MINE NOW shows every checked crop's own net in the machine — on the share of the day your restocks' seeds fill, oil charged only while it runs — plus <b>Your mix</b>: the checked crops sharing the machine's one queue, richest first, losing crops left out." },
+          { t: "feat", text: "YOUR INCOME RIGHT NOW now counts the Crop Machine (its mix, at full running time), so every ETA in the buy path includes it. Items that help the machine are priced on that mix in the buy path: Groovy Gramophone (half grow time), Giant Yam, Pablo, the Cabbage trio, and Infernal Pitchfork (plots + machine)." },
+        ] },
         { ver: "v5.86", items: [
           { t: "fix", text: "<b>BTC and wallet prices are back.</b> CoinGecko's free API now refuses every request (403), so the Investment Tracker / BILANCE, Treasury's BTC figures, Yakkamon and SPEKULACE had no BTC price and the wallet was undervalued. BTC, ETH and RON now come from Coinbase, FLOWER from GeckoTerminal (its Base DEX pool); the SATS / FLOWER chart is FLOWER's pool price divided by BTC at the same time." },
         ] },
@@ -15188,8 +15192,8 @@
       const prod = (_roadmapServer && _roadmapServer.currentProd) || { total: 0, breakdown: [] };
       const total = startIncome > 0 ? startIncome : (prod.total || 0);
       const bd = (prod.breakdown || []).filter(b => b.sfl > 0.01).sort((a, b) => b.sfl - a.sfl);
-      const catColor = { trees:"#63c74d", stone:"#9a8060", iron:"#c4a882", gold:"#FFD700", crimstone:"#FF6B6B", crops:"#30D158", fruits:"#FF69B4", greenhouse:"#5DADE2", chickens:"#FFD60A", cows:"#C8A2C8", sheep:"#B07CD8", bees:"#FFD700", fishing:"#5DADE2", obsidian:"#8b6914", flowers:"#FF69B4", oil:"#8b6914", pets:"#F5A9BC" };
-      const lbl = (c) => (POWER_CATEGORIES[c] && POWER_CATEGORIES[c].label) || c;
+      const catColor = { trees:"#63c74d", stone:"#9a8060", iron:"#c4a882", gold:"#FFD700", crimstone:"#FF6B6B", crops:"#30D158", fruits:"#FF69B4", greenhouse:"#5DADE2", chickens:"#FFD60A", cows:"#C8A2C8", sheep:"#B07CD8", bees:"#FFD700", fishing:"#5DADE2", obsidian:"#8b6914", flowers:"#FF69B4", oil:"#8b6914", pets:"#F5A9BC", cropMachine:"#E67E22" };
+      const lbl = (c) => c === "cropMachine" ? "Crop Machine" : ((POWER_CATEGORIES[c] && POWER_CATEGORIES[c].label) || c);
       let bar = "", legend = "";
       for (const b of bd) { const pct = total > 0 ? Math.max(1, b.sfl / total * 100) : 0; const c = catColor[b.cat] || "#8b6914"; bar += `<div style="width:${pct}%;background:${c}" title="${lbl(b.cat)} ${roadmapFmtFlower(b.sfl)}/d"></div>`; legend += `<span style="white-space:nowrap;margin-right:12px"><span style="display:inline-block;width:8px;height:8px;background:${c};border-radius:2px;vertical-align:middle"></span> ${escHTML(lbl(b.cat))} ${roadmapFmtFlower(b.sfl)}</span>`; }
       let h = `<div class="pixel-panel" style="padding:14px;margin-bottom:16px">`;
@@ -15239,7 +15243,8 @@
       const gCrop = mk("crops", "🌾 CROPS — net if all plots grow this one");
       const gGh = mk("greenhouse", "🏠 GREENHOUSE");
       const gFruit = mk("fruits", "🍎 FRUITS");
-      const gCm = mk("cropMachine", "⚙️ CROP MACHINE — auto, per crop");
+      const gCm = mk("cropMachine", "⚙️ CROP MACHINE — your crops sharing its queue");
+      if (_pfMap.cropMachine && _pfMap.cropMachine.note) gCm.note = escHTML(_pfMap.cropMachine.note);
       const gOther = mk("other", "✨ OTHER");
       for (const row of gMine.rows) {
         const VB = { sell: ["SELL", "#7fe0a0"], step: ["STEP", "#5DADE2"], skip: ["SKIP", "#e8a060"] }[row.verdict] || ["", "#999"];
@@ -15255,6 +15260,8 @@
           ["Animals", [["chickens","Chickens"],["cows","Cows"],["sheep","Sheep"]]],
           ["Other", [["flowers","Flowers"],["bees","Bees"],["fishing","Fishing"],["salt","Salt"],["obsidian","Obsidian"]]]];
         const _multi = [["Crops", Object.keys(CROP_GROW_DATA)], ["Fruits", Object.keys(FRUIT_GROW_DATA)], ["Greenhouse", Object.keys(GREENHOUSE_GROW_DATA)]];
+        // Crop Machine: the crops its modules unlock, keyed "cm:<Crop>" (all/none group "cropmachine").
+        const _cmCrops = (powerState.farm && farmHasCropMachine(powerState.farm)) ? cropMachineCrops(powerState.farm) : [];
         const _nEx = (settings.excludeCats || []).length;
         const _alln = (g) => `<span style="font-size:0.46rem;color:var(--text-dim)"> <a onclick="_roadmapFilterGroup('${g}',true)" style="cursor:pointer;color:var(--sunpetal)">all</a>/<a onclick="_roadmapFilterGroup('${g}',false)" style="cursor:pointer;color:var(--red)">none</a></span>`;
         let _ff = `<details${_nEx ? " open" : ""} style="margin:2px 0 10px;border:1px solid var(--border-brown);border-radius:8px;background:#1a140c"><summary style="cursor:pointer;padding:6px 10px;font-family:'Press Start 2P',monospace;font-size:0.5rem;color:var(--sunpetal)">\u2699 WHAT I FARM / MINE${_nEx ? ` — ${_nEx} hidden` : ""}</summary><div style="padding:4px 10px 8px;font-size:0.55rem;line-height:1.9">`;
@@ -15266,6 +15273,11 @@
         for (const [gn, items] of _multi) {
           _ff += `<div style="margin-top:2px"><span style="color:var(--text-dim);font-size:0.5rem;display:inline-block;width:96px;vertical-align:top">${gn}:${_alln(gn.toLowerCase())}</span>`;
           for (const it of items) { const on = !_excl(it); _ff += `<label style="margin-right:10px;white-space:nowrap;${on ? "" : "opacity:0.45"}"><input type="checkbox" ${on ? "checked" : ""} onchange="_roadmapToggleCat('${it}',this.checked)"> ${escHTML(it)}</label>`; }
+          _ff += `</div>`;
+        }
+        if (_cmCrops.length) {
+          _ff += `<div style="margin-top:2px"><span style="color:var(--text-dim);font-size:0.5rem;display:inline-block;width:96px;vertical-align:top">Crop Machine:${_alln("cropmachine")}</span>`;
+          for (const it of _cmCrops) { const on = !_excl("cm:" + it); _ff += `<label style="margin-right:10px;white-space:nowrap;${on ? "" : "opacity:0.45"}"><input type="checkbox" ${on ? "checked" : ""} onchange="_roadmapToggleCat('cm:${it}',this.checked)"> ${escHTML(it)}</label>`; }
           _ff += `</div>`;
         }
         _ff += `<div style="font-size:0.5rem;color:var(--text-dim);margin-top:5px">Unchecked = removed from the table AND the buy path. A general boost (e.g. +0.1 all crops) stays as long as at least one crop is checked.</div></div></details>`;
@@ -16493,7 +16505,8 @@
     window._roadmapSetGlobal = function(v) { const n = parseFloat(v) / 100; saveRoadmapSettings({ globalActivity: isFinite(n) ? n : null }); renderRoadmapContent(); };
     window._roadmapToggle = function(key, val) { const p = {}; p[key] = !!val; saveRoadmapSettings(p); renderRoadmapContent(); };
     window._roadmapFilterGroup = function(group, on) {
-      const map = { crops: Object.keys(CROP_GROW_DATA), fruits: Object.keys(FRUIT_GROW_DATA), greenhouse: Object.keys(GREENHOUSE_GROW_DATA) };
+      const map = { crops: Object.keys(CROP_GROW_DATA), fruits: Object.keys(FRUIT_GROW_DATA), greenhouse: Object.keys(GREENHOUSE_GROW_DATA),
+        cropmachine: (powerState.farm && farmHasCropMachine(powerState.farm)) ? cropMachineCrops(powerState.farm).map(c => "cm:" + c) : [] };
       const items = map[group] || []; const cur = ((getRoadmapSettings().excludeCats) || []).slice();
       for (const it of items) { const i = cur.indexOf(it); if (on) { if (i >= 0) cur.splice(i, 1); } else { if (i < 0) cur.push(it); } }
       saveRoadmapSettings({ excludeCats: cur }); renderRoadmapContent();

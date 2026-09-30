@@ -10,13 +10,13 @@ import {
   roadmapCurrentProduction, roadmapSimulate,
   roadmapMiningChain, roadmapCatBreakdown, roadmapProductBreakdown, roadmapSaltBreakdown,
   roadmapEffFactor, roadmapOwnedEffects, roadmapCoinsFree, roadmapInSeason, MINE_RES,
-  cmGetSeedRestockCount, _getPowerContext,
-  roadmapStartupPlans, roadmapBuildClones,
+  _getPowerContext,
+  roadmapStartupPlans, roadmapBuildClones, roadmapMachineCrops, roadmapCropMachineMix,
 } from "../engine/roadmap.mjs";
 import { getCapacityCount, POWER_CATEGORIES } from "../engine/power-helpers.mjs";
 import { getAnimalCatSfl, calcAnimalFeedCost, calcSicknessCost } from "../engine/power-costs.mjs";
 import { CROP_GROW_DATA, FRUIT_GROW_DATA, GREENHOUSE_GROW_DATA } from "../engine/power-boosts.mjs";
-import { farmHasCropMachine, cropMachineCrops, calcCropMachineDaily } from "../engine/crop-machine.mjs";
+import { farmHasCropMachine, calcCropMachineDaily } from "../engine/crop-machine.mjs";
 import { roadmapPerPlot } from "../engine/roadmap.mjs";
 import {
   DEFAULT_FLOWER_POINTS, BUMPKIN_GIFTS_DATA, getFlowerGiftPoints, getFlowerChainHours, detectFlowerBoosts, computeFlowerMultiplier,
@@ -98,7 +98,7 @@ export function buildRoadmapSection(snapshots, settings = {}) {
     if (farmHasCropMachine(ps.farm)) {
       const er = ps.exchangeRates;
       const rows = [];
-      for (const crop of cropMachineCrops(ps.farm)) {
+      for (const crop of roadmapMachineCrops(rs)) {
         const r = calcCropMachineDaily(ps.farm, crop, ps.p2pPrices, er, false, (ps.cropMachineYields || {})[crop]);
         if (!r || !isFinite(r.net)) continue;
         rows.push({ product: crop, net: r.net, gross: r.revenue,
@@ -286,17 +286,35 @@ function buildProfitability(settings) {
     if (bd && isFinite(bd.net)) gCrop.rows.push({ label: crop, icon: crop, gross: bd.gross || 0, cost: bd.cost || 0, net: bd.net, fade: !roadmapInSeason(crop) });
   }
   if (getCapacityCount("greenhouse", cap) > 0) for (const gp of Object.keys(GREENHOUSE_GROW_DATA)) { if (_excl(gp)) continue; addBd(gGh, gp, gp, sBd(roadmapProductBreakdown("greenhouse", gp, settings), roadmapEffFactor("greenhouse", settings))); }
-  if (farmHasCropMachine(powerState.farm)) {
-    for (const crop of cropMachineCrops(powerState.farm)) {
-      if (_excl(crop)) continue;
-      // Crops per seed from section=power's CROP MACHINE panel (the game's yield boosts per seed).
-      const r = calcCropMachineDaily(powerState.farm, crop, powerState.p2pPrices, er, false, (powerState.cropMachineYields || {})[crop]);
-      if (!r) continue;
-      let gross = r.revenue, cost = (r.oilCost || 0) + (r.seedCostPerDay || 0), net = r.net;
-      // The restock cap is in SEEDS, so it scales against seeds planted, not crops harvested.
-      const capSeeds = rpd * (cmGetSeedRestockCount(powerState.farm, crop) || 0);
-      if (r.seedsPerDay > 0 && capSeeds < r.seedsPerDay) { const sf = capSeeds / r.seedsPerDay; gross *= sf; cost *= sf; net *= sf; }
-      if (isFinite(net)) gCm.rows.push({ label: crop, icon: crop, gross, cost, net });
+  /*
+   * CROP MACHINE — one row per checked crop: is it profitable in the machine ON ITS OWN? Each is
+   * that crop grown for the share of the day its restocked seeds fill (restocks × seeds per
+   * restock), oil charged for that share only — so a loss shows red, like any other row.
+   * The last row is YOUR MIX: the checked crops sharing the one queue (roadmapCropMachineMix,
+   * richest first, losers left out) — the number YOUR INCOME RIGHT NOW counts. The crop rows are
+   * alternatives per crop; only the mix row is the total.
+   */
+  const cm = roadmapCropMachineMix(settings);
+  if (cm) {
+    const inMix = new Set(cm.mix.rows.map((r) => r.crop));
+    const cropRows = [];
+    for (const crop of cm.crops) {
+      const r = calcCropMachineDaily(powerState.farm, crop, cm.p2p, cm.er, false, (powerState.cropMachineYields || {})[crop]);
+      if (!r || !isFinite(r.net) || !(r.seedsPerDay > 0)) continue;
+      const share = Math.min(1, cm.opts.capSeeds(crop) / r.seedsPerDay);
+      cropRows.push({ label: crop, icon: crop, gross: r.revenue * share, cost: (r.oilCost + r.seedCostPerDay) * share,
+        net: r.net * share, fade: !inMix.has(crop),
+        sub: Math.round(share * 100) + "% of machine time · " + Math.round(r.seedsPerDay * share) + " seeds/d" + (inMix.has(crop) ? "" : r.net <= 0 ? " · loses, not in your mix" : " · no time left in your mix") });
+    }
+    cropRows.sort((a, b) => b.net - a.net);
+    gCm.rows.push(...cropRows);
+    if (cm.crops.length) {
+      gCm.rows.push({ label: "Your mix — in your income", icon: "Crop Machine", gross: cm.mix.gross, cost: cm.mix.cost, net: cm.mix.net,
+        sub: cm.mix.rows.map((r) => r.crop + " " + Math.round(r.share * 100) + "%").join(" + ") + (cm.mix.idle > 0.005 ? " · idle " + Math.round(cm.mix.idle * 100) + "%" : "") });
+    }
+    gCm.keepOrder = true;   // crops, then the mix row last
+    if (cm.mix.idle > 0.005 && cm.mix.rows.length) {
+      gCm.note = "Machine idle " + Math.round(cm.mix.idle * 100) + "% of the day — your " + rpd + "× daily restocks do not supply more seeds of the crops that pay.";
     }
   }
   if (getCapacityCount("fruits", cap) > 0) for (const fr of Object.keys(FRUIT_GROW_DATA)) { if (_excl(fr)) continue;
