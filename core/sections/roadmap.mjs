@@ -44,6 +44,8 @@ export function buildRoadmapSection(snapshots, settings = {}) {
   const rs = getRoadmapSettings(settings.roadmapSettings || {});
   // Which not-yet-run activities the user switched on. Straight through to the simulator.
   rs.scenarios = Array.isArray(settings.scenarios) ? settings.scenarios : [];
+  // Listed buds' marketplace floors, straight through to the simulator's bud candidates.
+  rs.budFloors = (settings.budFloors && typeof settings.budFloors === "object") ? settings.budFloors : {};
   const currentProd = roadmapCurrentProduction(rs);
   /*
    * PETS — income the roadmap could not see. The category is in POWER_CATEGORIES but is not

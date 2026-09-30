@@ -5420,7 +5420,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.88</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.89</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5447,6 +5447,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.89", items: [
+          { t: "feat", text: "<b>Buds in the ROADMAP buy path.</b> The best of the buds listed on the marketplace (by FLOWER/day per FLOWER of price) compete with every other purchase, marked <b>BUD</b> with a link to the bud. A bud is worth only what it ADDS: the game counts, per resource, just the single best placed bud (type + stem added, times the aura), so once the plan buys one mineral bud another mineral bud adds nothing on Stone/Iron/Gold." },
+          { t: "feat", text: "YOUR INCOME RIGHT NOW counts the placed buds you own (best bud per resource)." },
+        ] },
         { ver: "v5.88", items: [
           { t: "fix", text: "ROADMAP: the empty space left by the removed mining graph is gone, together with its \u201c\u26cf\ufe0f MINING \u2014 is each ore worth more than its inputs at market?\u201d heading and the tile legend. The cost-basis switch and the mining verdict stay \u2014 they drive the mining table. \ud83c\udf31 NOV\u00dd NODE: EXPANDOVAT vs KOUPIT is collapsed by default (click to open)." },
         ] },
@@ -15195,8 +15199,8 @@
       const prod = (_roadmapServer && _roadmapServer.currentProd) || { total: 0, breakdown: [] };
       const total = startIncome > 0 ? startIncome : (prod.total || 0);
       const bd = (prod.breakdown || []).filter(b => b.sfl > 0.01).sort((a, b) => b.sfl - a.sfl);
-      const catColor = { trees:"#63c74d", stone:"#9a8060", iron:"#c4a882", gold:"#FFD700", crimstone:"#FF6B6B", crops:"#30D158", fruits:"#FF69B4", greenhouse:"#5DADE2", chickens:"#FFD60A", cows:"#C8A2C8", sheep:"#B07CD8", bees:"#FFD700", fishing:"#5DADE2", obsidian:"#8b6914", flowers:"#FF69B4", oil:"#8b6914", pets:"#F5A9BC", cropMachine:"#E67E22" };
-      const lbl = (c) => c === "cropMachine" ? "Crop Machine" : ((POWER_CATEGORIES[c] && POWER_CATEGORIES[c].label) || c);
+      const catColor = { trees:"#63c74d", stone:"#9a8060", iron:"#c4a882", gold:"#FFD700", crimstone:"#FF6B6B", crops:"#30D158", fruits:"#FF69B4", greenhouse:"#5DADE2", chickens:"#FFD60A", cows:"#C8A2C8", sheep:"#B07CD8", bees:"#FFD700", fishing:"#5DADE2", obsidian:"#8b6914", flowers:"#FF69B4", oil:"#8b6914", pets:"#F5A9BC", cropMachine:"#E67E22", buds:"#9ACD32" };
+      const lbl = (c) => c === "cropMachine" ? "Crop Machine" : c === "buds" ? "Buds" : ((POWER_CATEGORIES[c] && POWER_CATEGORIES[c].label) || c);
       let bar = "", legend = "";
       for (const b of bd) { const pct = total > 0 ? Math.max(1, b.sfl / total * 100) : 0; const c = catColor[b.cat] || "#8b6914"; bar += `<div style="width:${pct}%;background:${c}" title="${lbl(b.cat)} ${roadmapFmtFlower(b.sfl)}/d"></div>`; legend += `<span style="white-space:nowrap;margin-right:12px"><span style="display:inline-block;width:8px;height:8px;background:${c};border-radius:2px;vertical-align:middle"></span> ${escHTML(lbl(b.cat))} ${roadmapFmtFlower(b.sfl)}</span>`; }
       let h = `<div class="pixel-panel" style="padding:14px;margin-bottom:16px">`;
@@ -16085,6 +16089,19 @@
      * The book (floor / best offer for the whole catalogue) comes from marketplace-orderbook?book=1,
      * refreshed every 5 minutes; the owner's own offers from farm.trades.offers (per-unit = sfl/qty).
      */
+    // Listed buds' marketplace floors { "<id>": floor }, POSTed to section=roadmap so the buy path
+    // can offer buds (compute cannot read the marketplace DB). Once per page; {} on failure.
+    let _rmBudFloors = null;
+    async function _rmLoadBudFloors() {
+      if (_rmBudFloors) return _rmBudFloors;
+      try {
+        const r = await fetch("/api/marketplace-orderbook?budfloors=1");
+        const floors = {};
+        if (r.ok) for (const i of (await r.json()).items || []) floors[i.id] = i.floor;
+        _rmBudFloors = floors;
+      } catch (e) { return {}; }
+      return _rmBudFloors;
+    }
     let _rmBook = null;
     async function _rmLoadBook() {
       try {
@@ -16183,9 +16200,10 @@
         // reality, so no scenario parameter travels with the request.
         const q = `products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}&roadmap=${encodeURIComponent(_rmServerSettingsJson())}`;
         const bookP = _rmLoadBook();
+        const budFloors = await _rmLoadBudFloors();
         const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=roadmap&${q}`, {
           method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [] }),
+          body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [], budFloors }),
         });
         if (!rp.ok) throw new Error(`compute roadmap ${rp.status}`);
         const d = (await rp.json()).data || {};
@@ -16254,6 +16272,8 @@
         Ascension:   { label: "EXP",   full: "Ascension expanze",         bg: "#4a2a2a", icon: "\ud83d\uddfa\ufe0f" },
         // Rows that exist only because a scenario is switched on \u2014 an activity you do not run yet.
         Scenario:    { label: "START", full: "Rozjezd nov\u00e9 \u010dinnosti",   bg: "#1f3a2a", icon: "\ud83c\udf31" },
+        // A listed bud: worth only what it adds over your best bud per resource (the game counts one).
+        Bud:         { label: "BUD",   full: "Budy (1 nejlep\u0161\u00ed na surovinu)", bg: "#2a3a1f", icon: "\ud83c\udf31" },
       };
       /*
        * Row icon. Every row used to call getItemIcon(r.name), which only resolves for real items \u2014
@@ -16354,7 +16374,7 @@
         }
         h += `<tr style="border-top:1px solid #222">
           <td style="padding:3px 6px;color:var(--text-dim);white-space:nowrap"><input type="checkbox" class="rm-pick" title="Vybrat do součtu dole" ${_rmPicks.has(r.name) ? "checked" : ""} onchange="_rmTogglePick(${escHTML(JSON.stringify(r.name))},this.checked)">${rank}</td>
-          <td style="padding:3px 6px;white-space:nowrap">${isPlan && r.bundle && r.horizonGain === 0 ? `<span style="color:#b08cd8" title="Patří ke skupině nad sebou — kupuje se s ní.">\u21b3</span> ` : ""}${rowIcon(r)} ${escHTML(r.name)} ${typeBadge(r.type)} ${stBadge}${isPlan && r.bundle && r.horizonGain !== 0 ? ` <span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#2a1f3a;color:#b08cd8;font-weight:bold" title="Tyhle ${r.bundle} položky se vyplatí jen spolu (třeba krok ascension, který sám nic nedá, před krokem, který vydělá). Kupují se naráz, zisk je za celou skupinu.">SKUPINA \u00d7${r.bundle}</span>` : ""}${r.skillTakeNow ? ` <span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1f3a2a;color:#7fe0a0" title="Skill pointy na tohle už máš — můžeš vzít hned. Cena je i tak spočtená z XP, které ten point stál: držet point ho nedělá zdarma, stejně jako držet FLOWER nedělá NFT zdarma.">MůžEŠ HNED</span>` : ""}</td>
+          <td style="padding:3px 6px;white-space:nowrap">${isPlan && r.bundle && r.horizonGain === 0 ? `<span style="color:#b08cd8" title="Patří ke skupině nad sebou — kupuje se s ní.">\u21b3</span> ` : ""}${rowIcon(r)} ${r.type === "Bud" && r.budId ? `<a href="https://sunflower-land.com/play/#/marketplace/buds/${r.budId}" target="_blank" rel="noopener" style="color:inherit" title="${escHTML(r.boost || "")} · otevřít v marketplace">${escHTML(r.name)}</a>` : escHTML(r.name)} ${typeBadge(r.type)} ${stBadge}${isPlan && r.bundle && r.horizonGain !== 0 ? ` <span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#2a1f3a;color:#b08cd8;font-weight:bold" title="Tyhle ${r.bundle} položky se vyplatí jen spolu (třeba krok ascension, který sám nic nedá, před krokem, který vydělá). Kupují se naráz, zisk je za celou skupinu.">SKUPINA \u00d7${r.bundle}</span>` : ""}${r.skillTakeNow ? ` <span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1f3a2a;color:#7fe0a0" title="Skill pointy na tohle už máš — můžeš vzít hned. Cena je i tak spočtená z XP, které ten point stál: držet point ho nedělá zdarma, stejně jako držet FLOWER nedělá NFT zdarma.">MůžEŠ HNED</span>` : ""}</td>
           <td style="padding:3px 6px;color:var(--text-dim);max-width:240px">${boostTxt}</td>
           <td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(r.floor)}</td>
           <td style="padding:3px 6px;text-align:right">${(!r.type || r.type === "Collectible" || r.type === "Wearable") ? _rmOfferCell(r.name, _myOffers) : `<span style="color:var(--text-dim)">—</span>`}</td>

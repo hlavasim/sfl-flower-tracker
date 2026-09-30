@@ -117,13 +117,19 @@ import {
       return true;
     }
 
-    function calcBudSflPerDay(bud, capacity, p2pPrices, savedProducts) {
+    /*
+     * A bud's FLOWER/day split into PARTS, one per (category, product, kind) it boosts. The
+     * split exists because of how the game combines buds: for each resource only the single best
+     * placed bud counts (getBudYieldBoosts / getBudSpeedBoosts: Math.max / Math.min over the
+     * placed buds), so a second Cave bud adds nothing on Stone. A part's key names the resource
+     * and kind; the best bud per key is what a SET of buds is worth (budSetSfl).
+     */
+    function budSflParts(bud, capacity, p2pPrices, savedProducts) {
       const typeEffects = BUD_TYPE_BOOSTS[bud.type] || [];
       const stemEffects = BUD_STEM_BOOSTS[bud.stem] || [];
       const aura = BUD_AURA_MULTIPLIERS[bud.aura] || 1;
       const allEffects = [...typeEffects, ...stemEffects];
-      let totalSfl = 0;
-      const breakdown = [];
+      const parts = [];
 
       for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
         if (!catDef.quantifiable) continue;
@@ -132,7 +138,6 @@ import {
         if (isAnimalCat(catId)) {
           const animal = getAnimalData(catId);
           if (!animal) continue;
-          let catSfl = 0;
           for (const prod of animal.products) {
             const yieldVals = [];
             for (const eff of allEffects) {
@@ -144,12 +149,9 @@ import {
               const n = getCapacityCount(catId, capacity);
               const cycleSec = getCycleSec(catId, prod);
               const price = p2pPrices[prod] || 0;
-              catSfl += bestYield * (86400 / cycleSec) * n * price;
+              const sfl = bestYield * (86400 / cycleSec) * n * price;
+              if (sfl > 0) parts.push({ key: catId + "|" + prod + "|yield", catId, product: prod, sfl });
             }
-          }
-          if (catSfl > 0) {
-            totalSfl += catSfl;
-            breakdown.push({ catId, sflPerDay: catSfl });
           }
           continue;
         }
@@ -174,35 +176,63 @@ import {
         const cycleSec = getCycleSec(catId, product);
         const priceProduct = getPriceProduct(catId, product);
         const price = p2pPrices[priceProduct] || 0;
-        let extraSfl = 0;
+        const add = (kind, sfl) => { if (sfl > 0) parts.push({ key: catId + "|" + product + "|" + kind, catId, product: priceProduct, sfl }); };
 
         if (bestYield > 0) {
-          if (catId === "fishing") extraSfl += bestYield * price;
-          else if (catId === "bees") extraSfl += bestYield * n * price;
-          else extraSfl += bestYield * (86400 / cycleSec) * n * price;
+          if (catId === "fishing") add("yield", bestYield * price);
+          else if (catId === "bees") add("yield", bestYield * n * price);
+          else add("yield", bestYield * (86400 / cycleSec) * n * price);
         }
 
         if (bestSpeed !== 0) {
           const newCycle = cycleSec * (1 + bestSpeed / 100);
           if (newCycle > 0) {
             const baseY = getBaseYield(catId);
-            extraSfl += ((86400 / newCycle) - (86400 / cycleSec)) * n * baseY * price;
+            add("speed", ((86400 / newCycle) - (86400 / cycleSec)) * n * baseY * price);
           }
         }
 
         if (bestChance) {
           const effPct = bestChance.pct * aura;
           const catches = catId === "fishing" ? 20 : (86400 / cycleSec) * n;
-          extraSfl += (effPct / 100) * bestChance.extra * catches * price;
-        }
-
-        if (extraSfl > 0) {
-          totalSfl += extraSfl;
-          breakdown.push({ catId, sflPerDay: extraSfl, product: priceProduct });
+          add("chance", (effPct / 100) * bestChance.extra * catches * price);
         }
       }
+      return parts;
+    }
 
+    function calcBudSflPerDay(bud, capacity, p2pPrices, savedProducts) {
+      let totalSfl = 0;
+      const breakdown = [], byCat = new Map();
+      for (const pt of budSflParts(bud, capacity, p2pPrices, savedProducts)) {
+        totalSfl += pt.sfl;
+        let row = byCat.get(pt.catId);
+        if (!row) {
+          row = isAnimalCat(pt.catId) ? { catId: pt.catId, sflPerDay: 0 } : { catId: pt.catId, sflPerDay: 0, product: pt.product };
+          byCat.set(pt.catId, row); breakdown.push(row);
+        }
+        row.sflPerDay += pt.sfl;
+      }
       return { totalSfl, breakdown };
+    }
+
+    /*
+     * FLOWER/day a SET of buds is worth: for every resource-and-kind key, the best bud's part
+     * only — the game's max-per-resource rule, so overlapping buds never add up. `scale(part)`
+     * lets the caller weight each part (measured activity per category; 0 for a category or
+     * product the owner does not run).
+     */
+    function budSetSfl(buds, capacity, p2pPrices, savedProducts, scale) {
+      const best = new Map();
+      for (const bud of buds) {
+        for (const pt of budSflParts(bud, capacity, p2pPrices, savedProducts)) {
+          const v = pt.sfl * (scale ? scale(pt) : 1);
+          if (v > (best.get(pt.key) || 0)) best.set(pt.key, v);
+        }
+      }
+      let total = 0;
+      for (const v of best.values()) total += v;
+      return total;
     }
 
     // ── flowers.html 15421-15429: getPriceProduct ──
@@ -219,6 +249,6 @@ import {
 export {
   BUD_TYPE_BOOSTS, BUD_STEM_BOOSTS, BUD_AURA_MULTIPLIERS, BUD_COUNT,
   BUD_TYPE_NAMES, BUD_STEM_NAMES, BUD_AURA_NAMES,
-  decodeBud, budEffectApplies, calcBudSflPerDay, getPriceProduct,
+  decodeBud, budEffectApplies, calcBudSflPerDay, getPriceProduct, budSflParts, budSetSfl,
   BUD_BOOST_FILTERS, budHasBoostFilter,
 };

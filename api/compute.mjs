@@ -434,7 +434,10 @@ async function _handler(req, res) {
       // scenarios=greenhouse,chickens — activities the farm does not run yet that the user asked
       // to plan for. They change what the simulator considers, so they belong in the request.
       const rmScen = String(req.query.scenarios || "").split(",").map((x) => x.trim()).filter(Boolean);
-      data = buildRoadmapSection(rmSnaps, { roadmapSettings, farm, p2p, ascension: rmAsc, scenarios: rmScen });
+      // Listed buds' floors ({ "<id>": floor }), POSTed by the page like the wishlist's: the
+      // marketplace DB is not readable from here. The buy path offers the best of them.
+      const rmBudFloors = (input.budFloors && typeof input.budFloors === "object") ? input.budFloors : {};
+      data = buildRoadmapSection(rmSnaps, { roadmapSettings, farm, p2p, ascension: rmAsc, scenarios: rmScen, budFloors: rmBudFloors });
     }
     // `ascension`: the prestige-loop calculator (replaces the external cockpit that
     // read /api/power-summary): costs/levels/crystals from the game-formula port,

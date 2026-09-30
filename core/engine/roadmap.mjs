@@ -36,6 +36,7 @@ import {
   farmHasCropMachine, cropMachineCrops, cropMachineMix, cropMachineItemGain,
   CROP_MACHINE_NFTS, CROP_MACHINE_SPEED_ITEMS,
 } from "./crop-machine.mjs";
+import { decodeBud, budSetSfl } from "./buds.mjs";
 
 // Deviation 1: the page global, module-scoped. Set before any calc.
 let powerState = null;
@@ -778,6 +779,28 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         mix: cropMachineMix(farm, roadmapMachineCrops(settings), powerState.p2pPrices, er, opts) };
     }
 
+    /*
+     * BUDS. The game counts, per resource, only the single best PLACED bud (getBudYieldBoosts:
+     * Math.max over the placed buds), so buds never add up on the same resource. A set of buds
+     * is valued that way (budSetSfl) and a candidate is worth only what it adds over the owned
+     * placed buds plus the ones the plan already bought. Scaled by measured activity like any
+     * other boost; 0 on a category or product the owner filtered out.
+     */
+    let _budCands = [];                     // the buy path's bud clones (set by roadmapSimulate)
+    function roadmapOwnedBuds() {
+      const buds = (powerState.farm && powerState.farm.buds) || {};
+      return Object.values(buds).filter((b) => b && b.coordinates && b.type).map((b) => ({ type: b.type, stem: b.stem, aura: b.aura }));
+    }
+    function roadmapBudSetValue(buds, settings) {
+      const ex = settings.excludeCats || [];
+      const scale = (pt) => (ex.indexOf(pt.catId) >= 0 || ex.indexOf(pt.product) >= 0) ? 0 : roadmapEffFactor(pt.catId, settings);
+      return budSetSfl(buds, powerState.capacity, powerState.p2pPrices, powerState.savedProducts || {}, scale);
+    }
+    function roadmapBudMarginal(clone, settings) {
+      const have = roadmapOwnedBuds().concat(_budCands.filter((c) => c.has && c !== clone).map((c) => c.bud));
+      return Math.max(0, roadmapBudSetValue(have.concat([clone.bud]), settings) - roadmapBudSetValue(have, settings));
+    }
+
     function roadmapCurrentProduction(settings) {
       let total = 0; const breakdown = [];
       for (const [cat, meta] of Object.entries(POWER_CATEGORIES)) {
@@ -796,6 +819,9 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       // The Crop Machine is not a POWER_CATEGORIES entry, so the loop above never saw it.
       const cm = roadmapCropMachineMix(settings);
       if (cm && cm.mix.net > 0) { total += cm.mix.net; breakdown.push({ cat: "cropMachine", sfl: cm.mix.net }); }
+      // Placed buds: their boosts are not in the boost catalogue the categories above read.
+      const budsSfl = roadmapBudSetValue(roadmapOwnedBuds(), settings);
+      if (budsSfl > 0) { total += budsSfl; breakdown.push({ cat: "buds", sfl: budsSfl }); }
       breakdown.sort((a, b) => b.sfl - a.sfl);
       return { total, breakdown };
     }
@@ -870,6 +896,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
     function roadmapItemValue(clone, catBoostsW, settings) {
       if (!clone) return 0;
       if (clone.fixedMarginal !== undefined) return clone.fixedMarginal; // node merge/expand actions
+      if (clone.bud) return roadmapBudMarginal(clone, settings);
       let total = 0;
       const _exV = (settings.excludeCats || []);
       const { capacity, p2pPrices, savedProducts } = powerState;
@@ -1743,6 +1770,34 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       // Ascension expansions and upgrades, on the same terms.
       for (const ac of roadmapAscensionCandidates(settings)) { if (ac.floor <= maxP) econ.push(ac); }
       /*
+       * BUDS currently listed on the marketplace (settings.budFloors, { "<id>": floor } — the page
+       * fetches it, compute cannot read the marketplace DB). Each is 1-of-1. Only the BUD_CANDIDATES
+       * best by FLOWER/day per FLOWER of price are offered: hundreds are listed, most are a worse
+       * copy of a better one, and every candidate costs the planner a value call per step.
+       */
+      _budCands = [];
+      {
+        const BUD_CANDIDATES = 30;
+        const ownedIds = new Set(Object.keys((powerState.farm && powerState.farm.buds) || {}));
+        const scored = [];
+        for (const [idStr, fl] of Object.entries(settings.budFloors || {})) {
+          const floor = parseFloat(fl) || 0;
+          if (!(floor > 0) || floor > TROLL || floor > maxP || ownedIds.has(idStr)) continue;
+          const bud = decodeBud(parseInt(idStr, 10));
+          if (!bud) continue;
+          // categories = the planner's re-valuation group: a bud's worth moves only with other buds.
+          const clone = { name: "Bud #" + bud.id, categories: ["buds"], effects: [], has: false, isDisabled: false, bud };
+          const v = roadmapBudMarginal(clone, settings);
+          if (v > 0) scored.push({ v, floor, bud, clone });
+        }
+        scored.sort((a, b) => (b.v / b.floor) - (a.v / a.floor));
+        for (const x of scored.slice(0, BUD_CANDIDATES)) {
+          _budCands.push(x.clone);
+          econ.push({ name: x.clone.name, type: "Bud", floor: x.floor, supply: 1, budId: x.bud.id,
+            boost: `${x.bud.type} · ${x.bud.stem} · ${x.bud.aura}`, clone: x.clone });
+        }
+      }
+      /*
        * SCENARIOS — activities the farm does not run yet, switched on by the user.
        *
        * These rows do not exist in the buy path by construction: a boost on a dead category is
@@ -1794,6 +1849,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       const origHas = [];
       for (const cat of Object.keys(catBoostsW)) for (const c of catBoostsW[cat]) origHas.push([c, c.has]);
       for (const nc of nodeCands) origHas.push([nc.clone, nc.clone.has]);
+      for (const c of _budCands) origHas.push([c, c.has]);
       const resetClones = () => { for (const [c, h] of origHas) c.has = h; };
 
       const econPos = [], situational = [];
@@ -1840,7 +1896,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
 
       // DISPLAY: +FL/day is each item's value vs your CURRENT farm (m.marginal), so it does not
       // depend on what is bought first. ETA, FL/day and Σ cost follow the plan.
-      const itemFields = (m) => ({ skillFree: m.skillFree, skillPoints: m.skillPoints, skillTakeNow: m.skillTakeNow, skillRank: m.skillRank, shards: m.shards, shardSfl: m.shardSfl, shardNote: m.shardNote, skillTree: m.skillTree, skillTier: m.skillTier, chainId: m.chainId, chainSeq: m.chainSeq, scenarioCat: m.scenarioCat });
+      const itemFields = (m) => ({ skillFree: m.skillFree, skillPoints: m.skillPoints, skillTakeNow: m.skillTakeNow, skillRank: m.skillRank, shards: m.shards, shardSfl: m.shardSfl, shardNote: m.shardNote, skillTree: m.skillTree, skillTier: m.skillTier, chainId: m.chainId, chainSeq: m.chainSeq, scenarioCat: m.scenarioCat, budId: m.budId });
       const timeline = [];
       for (const s of plan.steps) {
         const m = s.c, bm = Math.max(0, m.marginal || 0);
@@ -1972,5 +2028,5 @@ export {
   ROADMAP_EFF_HKEY, roadmapComputeEfficiency,
   getRoadmapSettings, roadmapOwnedEffects, roadmapCatBreakdown, roadmapCatNet,
   roadmapMiningChain, roadmapCatMix, ROADMAP_MINING_CATS, roadmapAnimalCapacity, calcBoostValue, cmGetSeedRestockCount,
-  roadmapMachineCrops, roadmapCropMachineMix,
+  roadmapMachineCrops, roadmapCropMachineMix, roadmapOwnedBuds, roadmapBudSetValue, roadmapBudMarginal,
 };
