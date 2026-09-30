@@ -5420,7 +5420,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.87</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.88</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5447,6 +5447,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.88", items: [
+          { t: "fix", text: "ROADMAP: the empty space left by the removed mining graph is gone, together with its \u201c\u26cf\ufe0f MINING \u2014 is each ore worth more than its inputs at market?\u201d heading and the tile legend. The cost-basis switch and the mining verdict stay \u2014 they drive the mining table. \ud83c\udf31 NOV\u00dd NODE: EXPANDOVAT vs KOUPIT is collapsed by default (click to open)." },
+        ] },
         { ver: "v5.87", items: [
           { t: "feat", text: "<b>Crop Machine in the ROADMAP.</b> WHAT I FARM has its own <b>Crop Machine</b> row of checkboxes (separate from the plot crops, so a crop you grow only in the machine no longer disappears when it is unchecked on the plots). WHAT TO FARM / MINE NOW shows every checked crop's own net in the machine — on the share of the day your restocks' seeds fill, oil charged only while it runs — plus <b>Your mix</b>: the checked crops sharing the machine's one queue, richest first, losing crops left out." },
           { t: "feat", text: "YOUR INCOME RIGHT NOW now counts the Crop Machine (its mix, at full running time), so every ETA in the buy path includes it. Items that help the machine are priced on that mix in the buy path: Groovy Gramophone (half grow time), Giant Yam, Pablo, the Cabbage trio, and Infernal Pitchfork (plots + machine)." },
@@ -15301,11 +15304,8 @@
       } else if (_peak) _verdict = "<b style=\"color:var(--green)\">Climb Wood" + _steps.map(c => " → " + _nm(c)).join("") + " → " + _nm(_peak) + ", then SELL the " + _nm(_peak) + ".</b> " + (_steps.length ? ("Mining " + _steps.map(_nm).join(" &amp; ") + " loses on its own, but selling " + _nm(_peak) + " covers those losses") : ("Selling " + _nm(_peak))) + " — the whole chain nets <b style=\"color:var(--green)\">+" + (+_peakNet).toFixed(2) + " FLOWER/day</b> (×" + (+_peakR).toFixed(2) + " your Wood). " + (_skipC.length ? ("<b style=\"color:var(--red)\">Stop there — don't go on to " + _skipC.map(_nm).join(" &amp; ") + "</b> (one step too far, no better than stopping at " + _nm(_peak) + "). ") : "") + "Plus your raw Wood is ~" + _woodPct + "% of mining income.";
       else _verdict = "<b style=\"color:var(--red)\">No ore beats just selling your Wood</b> — every chain eats more Wood than the ore sells for. Just sell the Wood.";
       h += `<div style="margin:2px 0 14px">
-        <div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin-bottom:5px">⛏️ MINING — ${_mc.mode === "market" ? "is each ore worth more than its inputs at market?" : "how far up the chain if you self-mine?"}</div>
         <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap"><span style="font-size:0.5rem;color:var(--text-dim)">cost basis:</span><button onclick="_roadmapSetMineMode('market')" style="font-size:0.5rem;padding:2px 8px;border:1px solid var(--border-brown);border-radius:4px;cursor:pointer;background:${_mc.mode === "market" ? "var(--sunpetal)" : "#241a10"};color:${_mc.mode === "market" ? "#1a120a" : "var(--text-secondary)"};font-weight:${_mc.mode === "market" ? "bold" : "normal"}" title="Opportunity cost: a tool's inputs cost their marketplace sell value, no matter how cheap they were to mine (Quarry-correct).">Market price</button><button onclick="_roadmapSetMineMode('production')" style="font-size:0.5rem;padding:2px 8px;border:1px solid var(--border-brown);border-radius:4px;cursor:pointer;background:${_mc.mode === "production" ? "var(--sunpetal)" : "#241a10"};color:${_mc.mode === "production" ? "#1a120a" : "var(--text-secondary)"};font-weight:${_mc.mode === "production" ? "bold" : "normal"}" title="Self-mine: an ore costs the Wood baked into its whole chain (climb to the best stop).">Self-mine chain</button>${_mc.mode === "market" ? ` <label style="font-size:0.5rem;color:var(--text-dim)" title="Marketplace fee on sales. Scales income; doesn\u2019t change which ores are worth mining.">fee <input type="number" value="${settings.marketFee != null ? settings.marketFee : 10}" min="0" max="50" step="0.5" style="width:42px" onchange="_roadmapSetMarketFee(this.value)">%</label>` : ``}</div>
         ${_verdict ? `<div style="font-size:0.62rem;color:var(--text-primary);background:#1a140c;border:1px solid var(--border-brown);border-left:3px solid var(--green);border-radius:6px;padding:7px 10px;margin-bottom:7px;line-height:1.5">${_verdict}</div>` : ``}
-        <div id="rf-mine" style="height:430px;border:1px solid var(--border-brown);border-radius:8px;background:#13100a;overflow:hidden"></div>
-        <div style="font-size:0.52rem;color:var(--text-dim);margin-top:4px;line-height:1.6">Each tile = <b>one mine</b> of that resource — what it yields (+ its FLOWER value) and what its tool eats. <b style="color:var(--green)">Green ▲</b> = the ore beats the Wood baked into it · <b style="color:var(--red)">red ▼</b> = a loss, sell the inputs instead. <b>Wood sits on top</b> — its lines fan down into every tool; the row below is the tier chain Stone → Iron → Gold → Crimstone. Each tile shows the green <b>output value</b> vs the red <b>all-in Wood cost</b> (total Wood baked into its whole pickaxe chain) \u2014 if the red is bigger, don\u2019t mine it. Arrows are labelled with what each step consumes. <b style="color:#5DADE2">Blue STEP</b> tiles lose on their own \u2014 you mine them only to reach the best ore (the green <b>BEST STOP</b>); <b style="color:var(--red)">red SKIP</b> is one step too far. <b>Scroll / pinch / the +/− buttons to zoom</b>, drag the background to pan or drag a tile to move it.</div>
       </div>`;
       for (const g of groups) {
         if (!g.rows.length) continue;
@@ -22068,8 +22068,9 @@
       const T_TOTAL = tip("Celá expanze — co zaplatíš, když chceš právě tenhle node a na ostatní z bundle kašleš (včetně přičtených expanzí bez profit-nodu). Podle tohoto sloupce se rozhoduje ✓.");
       const T_SHARE = tip("Tatáž cena dělená mezi všechny nody, které expanze dá. Platí jen když využiješ všechny.");
 
-      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">
-        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:8px">🌱 NOVÝ NODE: EXPANDOVAT vs KOUPIT</div>
+      let h = `<details class="pixel-panel" style="padding:12px;margin-bottom:16px">
+        <summary class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);cursor:pointer">🌱 NOVÝ NODE: EXPANDOVAT vs KOUPIT</summary>
+        <div style="margin-top:8px"></div>
         <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.56rem">
           <thead>
             <tr style="color:var(--text-dim);font-size:0.5rem">
@@ -22157,7 +22158,7 @@
         </tr>`;
 
       }
-      h += `</tbody></table></div></div>`;
+      h += `</tbody></table></div></details>`;
       return h;
     }
     async function _mountNodeAcq(containerId) {
