@@ -5420,7 +5420,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.92</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.93</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5447,6 +5447,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.93", items: [
+          { t: "feat", text: "<b>Oil and lava pits are costs, not income.</b> Neither can be sold — you make them for expansions and nodes — so YOUR INCOME RIGHT NOW is now net of running them: “výdělek 127 − Oil 16.8 − Lava pit 15.4 = 95 /day”, and every ETA in the plan uses that. In WHAT TO FARM they show in red (Oil marked PRO EXPANZE, a new Lava pit row; the Obsidian checkbox is now “Lava pit”). Unchecked, they cost nothing." },
+          { t: "feat", text: "Items that help them are valued by what they SAVE for the same output (a yield boost = fewer drills/ignitions per unit), so they finally show up in the buy path — e.g. Oil Gallon +3.39/day for 1,179 (pays back in under a year). The lava fuel's oil is not counted twice when you drill your own oil." },
+        ] },
         { ver: "v5.92", items: [
           { t: "feat", text: "ROADMAP buy path: the “Za 5 let” column also shows that result as a % of the purchase price, e.g. +547 (+21 %)." },
         ] },
@@ -15212,11 +15216,18 @@
       const catColor = { trees:"#63c74d", stone:"#9a8060", iron:"#c4a882", gold:"#FFD700", crimstone:"#FF6B6B", crops:"#30D158", fruits:"#FF69B4", greenhouse:"#5DADE2", chickens:"#FFD60A", cows:"#C8A2C8", sheep:"#B07CD8", bees:"#FFD700", fishing:"#5DADE2", obsidian:"#8b6914", flowers:"#FF69B4", oil:"#8b6914", pets:"#F5A9BC", cropMachine:"#E67E22", buds:"#9ACD32" };
       const lbl = (c) => c === "cropMachine" ? "Crop Machine" : c === "buds" ? "Buds" : ((POWER_CATEGORIES[c] && POWER_CATEGORIES[c].label) || c);
       let bar = "", legend = "";
-      for (const b of bd) { const pct = total > 0 ? Math.max(1, b.sfl / total * 100) : 0; const c = catColor[b.cat] || "#8b6914"; bar += `<div style="width:${pct}%;background:${c}" title="${lbl(b.cat)} ${roadmapFmtFlower(b.sfl)}/d"></div>`; legend += `<span style="white-space:nowrap;margin-right:12px"><span style="display:inline-block;width:8px;height:8px;background:${c};border-radius:2px;vertical-align:middle"></span> ${escHTML(lbl(b.cat))} ${roadmapFmtFlower(b.sfl)}</span>`; }
+      const barBase = bd.reduce((s, b) => s + b.sfl, 0);
+      for (const b of bd) { const pct = barBase > 0 ? Math.max(1, b.sfl / barBase * 100) : 0; const c = catColor[b.cat] || "#8b6914"; bar += `<div style="width:${pct}%;background:${c}" title="${lbl(b.cat)} ${roadmapFmtFlower(b.sfl)}/d"></div>`; legend += `<span style="white-space:nowrap;margin-right:12px"><span style="display:inline-block;width:8px;height:8px;background:${c};border-radius:2px;vertical-align:middle"></span> ${escHTML(lbl(b.cat))} ${roadmapFmtFlower(b.sfl)}</span>`; }
       let h = `<div class="pixel-panel" style="padding:14px;margin-bottom:16px">`;
       h += `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-secondary);margin-bottom:8px">YOUR INCOME RIGHT NOW</div>`;
       h += `<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:10px"><div style="font-size:1.7rem;font-weight:bold;color:var(--sunpetal);line-height:1">${roadmapFmtFlower(total)} ${sflIcon()}<span style="font-size:0.65rem;color:var(--text-dim)"> /day</span></div><div style="font-size:0.6rem;color:var(--text-dim)">\u2192 <b style="color:var(--green)">${roadmapFmtFlower(sim.finalRate)}/day</b> after the plan: ${sim.econSteps} buys for ${roadmapFmtFlower(sim.econCost)} ${sflIcon()}, done in ~${roadmapFmtDays((sim.timeline || []).filter(t => t.kind === "econ").reduce((a, t) => Math.max(a, t.atDay || 0), 0))}${sim.wealth != null ? ` \u00b7 <span title="FLOWER v ruce za ${sim.horizonYears} let: hotovost ${roadmapFmtFlower(sim.cashAtHorizon)} + za kolik se pak prodají koupená NFT ${roadmapFmtFlower(sim.resaleAtHorizon)}. Počítá s tím, že celý příjem kromě výběru do BTC investuješ podle plánu.">in hand after ${sim.horizonYears} y: <b style="color:var(--sunpetal)">${roadmapFmtFlower(sim.wealth)} ${sflIcon()}</b></span>` : ""}${sim.withdrawPerDay > 0 ? ` <span style="font-size:0.5rem">(\u2212${roadmapFmtFlower(sim.withdrawPerDay)}/day to BTC)</span>` : ""}${sim.beyondCount ? ` <span style="font-size:0.5rem">\u00b7 ${sim.beyondCount} items don\u2019t pay back within ${sim.horizonYears} y</span>` : ""}</div></div>`;
       if (bd.length) { h += `<div style="display:flex;height:16px;border-radius:4px;overflow:hidden;border:1px solid var(--border-brown);margin-bottom:6px">${bar}</div><div style="font-size:0.5rem;color:var(--text-dim);line-height:1.9">${legend}</div>`; }
+      // Oil and lava pits burn resources for expansions/nodes: shown as what comes off the gross.
+      const inputs = (prod.inputs || []).filter(x => x.sfl < -0.01);
+      if (inputs.length) {
+        const inLbl = { oil: "Oil", obsidian: "Lava pit" };
+        h += `<div style="font-size:0.55rem;color:var(--text-secondary);margin-top:6px">výdělek <b>${roadmapFmtFlower(prod.gross || 0)}</b>${inputs.map(x => ` <span style="color:var(--red)">− ${escHTML(inLbl[x.cat] || x.cat)} ${roadmapFmtFlower(-x.sfl)}</span>`).join("")} = <b style="color:var(--sunpetal)">${roadmapFmtFlower(total)} /day</b> <span style="font-size:0.48rem;color:var(--text-dim)">(oil a obsidian děláš na expanze a nody, neprodáváš je — jejich provoz je náklad)</span></div>`;
+      }
       h += `</div>`;
       return h;
     }
@@ -15264,7 +15275,7 @@
       if (_pfMap.cropMachine && _pfMap.cropMachine.note) gCm.note = escHTML(_pfMap.cropMachine.note);
       const gOther = mk("other", "✨ OTHER");
       for (const row of gMine.rows) {
-        const VB = { sell: ["SELL", "#7fe0a0"], step: ["STEP", "#5DADE2"], skip: ["SKIP", "#e8a060"] }[row.verdict] || ["", "#999"];
+        const VB = { sell: ["SELL", "#7fe0a0"], step: ["STEP", "#5DADE2"], skip: ["SKIP", "#e8a060"], input: ["PRO EXPANZE", "#c8a2c8"] }[row.verdict] || ["", "#999"];
         row.badge = `<span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1c160f;color:${VB[1]};font-weight:bold">${VB[0]}${row.verdict === "step" && row.feeds ? ("→" + escHTML(MINE_RES[row.feeds] || row.feeds)) : ""}</span>${row.isPeak ? ' <span style="font-size:0.45rem;color:var(--sunpetal);font-weight:bold">★ best stop</span>' : ""}`;
         try { row.expandHtml = roadmapMiningDetail(row.cat, row.chain, row.eff); } catch {}
       }
@@ -15275,7 +15286,7 @@
       {
         const _single = [["Mining & Trees", [["trees","Wood"],["stone","Stone"],["iron","Iron"],["gold","Gold"],["crimstone","Crimstone"],["oil","Oil"]]],
           ["Animals", [["chickens","Chickens"],["cows","Cows"],["sheep","Sheep"]]],
-          ["Other", [["flowers","Flowers"],["bees","Bees"],["fishing","Fishing"],["salt","Salt"],["obsidian","Obsidian"]]]];
+          ["Other", [["flowers","Flowers"],["bees","Bees"],["fishing","Fishing"],["salt","Salt"],["obsidian","Lava pit"]]]];
         const _multi = [["Crops", Object.keys(CROP_GROW_DATA)], ["Fruits", Object.keys(FRUIT_GROW_DATA)], ["Greenhouse", Object.keys(GREENHOUSE_GROW_DATA)]];
         // Crop Machine: the crops its modules unlock, keyed "cm:<Crop>" (all/none group "cropmachine").
         const _cmCrops = (powerState.farm && farmHasCropMachine(powerState.farm)) ? cropMachineCrops(powerState.farm) : [];

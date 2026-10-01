@@ -19,7 +19,7 @@ import {
   RES_FARMKEY, gameResYield, gameResBoostedBase, applyBoosts, miningToolsPerDay, calcToolCostPerDay,
   getCycleSec, getCapacityCount, getDefaultProduct, isAnimalCat, POWER_CATEGORIES,
   getCount, findCollectible,
-  getEffectsForCategory, TOOL_TO_CAT, SKILL_POINTS_PER_TIER,
+  getEffectsForCategory, TOOL_TO_CAT, SKILL_POINTS_PER_TIER, getBaseYield,
 } from "./power-helpers.mjs";
 import {
   unitToSfl, calcSeedCostPerDay, calcAnimalFeedCost, calcSicknessCost,
@@ -574,7 +574,17 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         : Object.assign({}, getRoadmapSettings(powerState.roadmapSettingsRaw), { effMode: "theoretical", effOverrides: {}, seasonBasis: "annual" });
       const ownedEff = allCatBoosts.filter(b => b.has && !b.isDisabled && b.name !== boostItem.name).flatMap(b => getEffectsForCategory(b, catId)).concat(_shrineEffectsFor(catId)); // deviation 4
       let synergy, solo, netWith, netWithout;
-      if (ROADMAP_MINING_CATS.indexOf(catId) >= 0) {
+      if (ROADMAP_INPUT_CATS.indexOf(catId) >= 0 && roadmapInputActive(catId, _s)) {
+        // Oil / lava pits as self-use inputs (see roadmapInputRun): worth the running cost saved
+        // for the same output, not the sale value of something that is never sold. At the
+        // theoretical basis like every other branch here — callers apply the measured activity
+        // (roadmapItemValue, the rank layer's effScale); scaling it here too counted it twice.
+        const _sT = Object.assign({}, _s, { effMode: "theoretical", effOverrides: {} });
+        synergy = roadmapInputSaving(catId, ownedEff, catEffects, _sT);
+        solo = roadmapInputSaving(catId, [], catEffects, _sT);
+        const c0 = roadmapInputRun(catId, ownedEff, _sT).cost;
+        netWithout = -c0; netWith = -c0 + synergy;   // for the formula panel: the cost, as a negative net
+      } else if (ROADMAP_MINING_CATS.indexOf(catId) >= 0) {
         const mk = (ef) => { const o = {}; o[catId] = ef; return roadmapMiningChain(_s, o).total; };
         netWith = mk(ownedEff.concat(catEffects)); netWithout = mk(ownedEff);
         synergy = netWith - netWithout;
@@ -801,10 +811,85 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       return Math.max(0, roadmapBudSetValue(have.concat([clone.bud]), settings) - roadmapBudSetValue(have, settings));
     }
 
+    /*
+     * SELF-USE INPUTS: Oil and the lava pits' Obsidian. Neither can be sold (unitToSfl prices both
+     * at 0) — the owner makes them for expansions and new nodes. So they are not income, they are
+     * a running COST: the oil drills, the lava pits' fuel. While checked in WHAT I FARM:
+     *   - YOUR INCOME RIGHT NOW is net of that cost (it used to drop out as max(0, loss));
+     *   - an item that touches them is worth the cost it SAVES for the same output — a cost cut
+     *     directly, a yield boost through fewer drills / ignitions per unit:
+     *       saving = cost(owned) - cost(owned + item) x units(owned) / units(owned + item).
+     * Unchecked, they count for nothing.
+     */
+    const ROADMAP_INPUT_CATS = ["oil", "obsidian"];
+    function roadmapInputEff(cat, settings) {
+      if (cat !== "obsidian") return roadmapEffFactor(cat, settings);
+      // roadmapEffFactor pins obsidian to 1 for the old one-sale-a-week model; as a cost what
+      // matters is how often the pits are actually lit — the measured ratio, never above full.
+      const ov = settings.effOverrides && settings.effOverrides.obsidian;
+      if (typeof ov === "number" && isFinite(ov)) return Math.max(0, Math.min(1, ov));
+      if (settings.effMode === "theoretical") return 1;
+      const eb = roadmapState && roadmapState.effByCat;
+      return (eb && eb.obsidian && eb.obsidian.measured) ? Math.max(0, Math.min(1, eb.obsidian.ratio)) : 1;
+    }
+    // { cost FLOWER/day, units/day } at full activity for an effect set.
+    function roadmapInputRun(cat, effects, settings) {
+      const cap = powerState.capacity;
+      if (cat === "oil") {
+        const o = roadmapMiningChain(settings, { oil: effects }).byCat.oil;
+        if (!o) return { cost: 0, units: 0 };
+        return { cost: Math.max(0, (o.gross || 0) - (o.dailyProfit || 0)), units: o.produced || 0 };
+      }
+      const n = getCapacityCount("obsidian", cap);
+      if (!(n > 0)) return { cost: 0, units: 0 };
+      let lavaMult = 1;
+      for (const e of (effects || [])) if (e.type === "lava_cost_reduction" && e.cat === "obsidian") lavaMult *= (1 - (e.value || 0));
+      const ab = applyBoosts("obsidian", "Obsidian", cap, effects || [], powerState.farm);
+      const cycle = ab.effectiveCycle || getCycleSec("obsidian", "Obsidian");
+      const lights = cycle > 0 ? n * 86400 / cycle : 0;
+      /*
+       * The fuel's Oil is the owner's own when Oil is checked: its drills are already the Oil
+       * input's cost, so pricing that oil again here counted it twice (on the owner's farm ~12 of
+       * the 27/day). Only oil the pits need BEYOND what the drills make is bought at market.
+       */
+      const prices = roadmapPrices(settings);
+      const ownOil = roadmapInputActive("oil", settings);
+      let perLight = 0, oilPerLight = 0;
+      try {
+        const lp = calcLavaPitCostPerDay(cap, ownOil ? Object.assign({}, prices, { Oil: 0 }) : prices, powerState.season, lavaMult);
+        perLight = lp.costPerIgnition || 0;
+        const o = (lp.requirements || []).find((r) => r.item === "Oil");
+        oilPerLight = o ? o.qty : 0;
+      } catch {}
+      let cost = perLight * lights;
+      if (ownOil && oilPerLight > 0) {
+        const made = roadmapInputRun("oil", roadmapOwnedEffects("oil"), settings).units;
+        cost += Math.max(0, lights * oilPerLight - made) * (prices.Oil || 0);
+      }
+      return { cost, units: lights * (getBaseYield("obsidian") * (ab.yieldMult || 1) + (ab.yieldFlat || 0)) };
+    }
+    function roadmapInputActive(cat, settings) {
+      return ROADMAP_INPUT_CATS.indexOf(cat) >= 0 && (settings.excludeCats || []).indexOf(cat) < 0
+        && getCapacityCount(cat, powerState.capacity) > 0;
+    }
+    // What running it costs per day now (owned boosts, measured activity). 0 when unchecked.
+    function roadmapInputCost(cat, settings) {
+      if (!roadmapInputActive(cat, settings)) return 0;
+      return roadmapInputRun(cat, roadmapOwnedEffects(cat), settings).cost * roadmapInputEff(cat, settings);
+    }
+    // FLOWER/day `itemEff` saves on top of `ownedEff`, for the same output.
+    function roadmapInputSaving(cat, ownedEff, itemEff, settings) {
+      if (!roadmapInputActive(cat, settings) || !itemEff.length) return 0;
+      const a = roadmapInputRun(cat, ownedEff, settings), b = roadmapInputRun(cat, ownedEff.concat(itemEff), settings);
+      if (!(a.units > 0) || !(b.units > 0)) return 0;
+      return (a.cost - b.cost * a.units / b.units) * roadmapInputEff(cat, settings);
+    }
+
     function roadmapCurrentProduction(settings) {
       let total = 0; const breakdown = [];
       for (const [cat, meta] of Object.entries(POWER_CATEGORIES)) {
         if (!meta.quantifiable) continue;
+        if (ROADMAP_INPUT_CATS.indexOf(cat) >= 0) continue;   // a cost, below — never sold
         /*
          * Deliberately roadmapCatNet, not the plot-aware roadmapAnyCatNet. A blanket rename caught
          * this call site by accident and it must not change: this is the farm's CURRENT income,
@@ -823,7 +908,13 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       const budsSfl = roadmapBudSetValue(roadmapOwnedBuds(), settings);
       if (budsSfl > 0) { total += budsSfl; breakdown.push({ cat: "buds", sfl: budsSfl }); }
       breakdown.sort((a, b) => b.sfl - a.sfl);
-      return { total, breakdown };
+      // Oil and lava pits burn resources for expansions/nodes: income is net of that.
+      const gross = total, inputs = [];
+      for (const cat of ROADMAP_INPUT_CATS) {
+        const c = roadmapInputCost(cat, settings);
+        if (c > 0) { total -= c; inputs.push({ cat, sfl: -c }); }
+      }
+      return { total, breakdown, gross, inputs };
     }
 
 
@@ -917,7 +1008,9 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         } catch (e) { v = 0; }
         // calcBoostValue answers at theoretical throughput (it forces that basis); the measured
         // scaling is applied here, the same way core/sections/power.mjs scales what it displays.
-        if (v > 0) total += v * roadmapEffFactor(cat, settings);
+        // Inputs (oil / lava pits) scale by how often they actually run — the same factor their
+        // cost in YOUR INCOME RIGHT NOW uses; roadmapEffFactor pins obsidian to 1 for a sale model.
+        if (v > 0) total += v * (ROADMAP_INPUT_CATS.indexOf(cat) >= 0 ? roadmapInputEff(cat, settings) : roadmapEffFactor(cat, settings));
       }
       // What it adds to the Crop Machine's mix — separate production from the plots above, so a
       // crop NFT that helps both (Infernal Pitchfork) is worth both. Unscaled, like the machine's
@@ -2029,4 +2122,5 @@ export {
   getRoadmapSettings, roadmapOwnedEffects, roadmapCatBreakdown, roadmapCatNet,
   roadmapMiningChain, roadmapCatMix, ROADMAP_MINING_CATS, roadmapAnimalCapacity, calcBoostValue, cmGetSeedRestockCount,
   roadmapMachineCrops, roadmapCropMachineMix, roadmapOwnedBuds, roadmapBudSetValue, roadmapBudMarginal,
+  ROADMAP_INPUT_CATS, roadmapInputRun, roadmapInputCost, roadmapInputSaving, roadmapInputEff,
 };

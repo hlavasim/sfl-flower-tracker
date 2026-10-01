@@ -12,6 +12,7 @@ import {
   roadmapEffFactor, roadmapOwnedEffects, roadmapCoinsFree, roadmapInSeason, MINE_RES,
   _getPowerContext,
   roadmapStartupPlans, roadmapBuildClones, roadmapMachineCrops, roadmapCropMachineMix,
+  roadmapInputCost,
 } from "../engine/roadmap.mjs";
 import { getCapacityCount, POWER_CATEGORIES } from "../engine/power-helpers.mjs";
 import { getAnimalCatSfl, calcAnimalFeedCost, calcSicknessCost } from "../engine/power-costs.mjs";
@@ -64,6 +65,7 @@ export function buildRoadmapSection(snapshots, settings = {}) {
       .reduce((s, p) => s + ((p.calc && p.calc.dailySfl) || 0), 0) * roadmapEffFactor("pets", rs);
     if (petsSfl > 0) {
       currentProd.total += petsSfl;
+      currentProd.gross += petsSfl;
       currentProd.breakdown.push({ cat: "pets", sfl: petsSfl });
       currentProd.breakdown.sort((a, b) => b.sfl - a.sfl);
     }
@@ -259,9 +261,15 @@ function buildProfitability(settings) {
     const f = roadmapEffFactor(cat, settings);
     gMine.rows.push({ label: MINE_RES[cat], icon: MINE_RES[cat], cat, gross: r.gross * f, cost: (r.gross - r.dailyProfit) * f, net: r.dailyProfit * f, soloNet: r.soloNet * f, verdict: r.verdict, isPeak: r.isPeak, feeds: r.feeds, eff: f, chain: r });
   }
-  for (const [cat, icon] of [["obsidian", "Obsidian"]]) {
-    if (getCapacityCount(cat, cap) <= 0 || _excl(cat)) continue;
-    addBd(gOther, (POWER_CATEGORIES[cat] ? POWER_CATEGORIES[cat].label : cat), icon, sBd(roadmapCatBreakdown(cat, roadmapOwnedEffects(cat), settings), roadmapEffFactor(cat, settings)), "1/wk");
+  // Oil and the lava pits are made for expansions and nodes, never sold: a running cost (the same
+  // figure YOUR INCOME RIGHT NOW subtracts), shown in red.
+  {
+    const oilRow = gMine.rows.find((r) => r.cat === "oil");
+    const oilCost = roadmapInputCost("oil", settings);
+    if (oilRow && oilCost > 0) Object.assign(oilRow, { gross: 0, cost: oilCost, net: -oilCost, soloNet: undefined, verdict: "input" });
+    const lavaCost = roadmapInputCost("obsidian", settings);
+    if (lavaCost > 0) gOther.rows.push({ label: "Lava pit", icon: "Obsidian", gross: 0, cost: lavaCost, net: -lavaCost,
+      sub: "obsidian pro expanze a nody · neprodává se" });
   }
   for (const [cat, icon] of [["chickens", "Egg"], ["cows", "Milk"], ["sheep", "Wool"]]) {
     if (getCapacityCount(cat, cap) <= 0 || _excl(cat)) continue;
