@@ -5420,7 +5420,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.93</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.94</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5447,6 +5447,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.94", items: [
+          { t: "feat", text: "ROADMAP buy path: an item that adds less than <b>10 % of its price</b> in 5 years no longer counts as paying back — it drops out of the plan and is listed as not worth it (&gt; 5 LET), like the ones that lose." },
+        ] },
         { ver: "v5.93", items: [
           { t: "feat", text: "<b>Oil and lava pits are costs, not income.</b> Neither can be sold — you make them for expansions and nodes — so YOUR INCOME RIGHT NOW is now net of running them: “výdělek 127 − Oil 16.8 − Lava pit 15.4 = 95 /day”, and every ETA in the plan uses that. In WHAT TO FARM they show in red (Oil marked PRO EXPANZE, a new Lava pit row; the Obsidian checkbox is now “Lava pit”). Unchecked, they cost nothing." },
           { t: "feat", text: "Items that help them are valued by what they SAVE for the same output (a yield boost = fewer drills/ignitions per unit), so they finally show up in the buy path — e.g. Oil Gallon +3.39/day for 1,179 (pays back in under a year). The lava fuel's oil is not counted twice when you drill your own oil." },
@@ -16379,7 +16382,7 @@
         const stBadge = isPlan
           ? `<span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1f3a2a;color:#7fe0a0;font-weight:bold">IN PLAN</span>`
           : isBeyond
-            ? `<span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#3a2418;color:#e8a060;font-weight:bold" title="Do ${settings.horizonYears} let se nevrátí.">&gt; ${settings.horizonYears} LET</span>`
+            ? `<span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#3a2418;color:#e8a060;font-weight:bold" title="Do ${settings.horizonYears} let nevydělá aspoň 10 % své ceny — nevyplatí se.">&gt; ${settings.horizonYears} LET</span>`
             : `<span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#3a3220;color:#e8c060;font-weight:bold" title="${escHTML(r.reason || "")}">CONDITIONAL</span>`;
         const boostTxt = escHTML((r.boost || "").split("\n").join(" \u00b7 ")) + ((isPlan || isBeyond) ? "" : ` <span style="color:var(--lily)">\u00b7 ${escHTML(r.reason || "only if you run that activity")}</span>`);
         const marg = `+${roadmapFmtFlower(r.value)}` + ((isPlan || isBeyond) ? "" : ` <span style="color:var(--text-dim)">if used</span>`);

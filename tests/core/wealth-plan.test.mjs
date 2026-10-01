@@ -143,3 +143,17 @@ test("the horizon defaults to five years, and the old 100-year default is read a
   assert.equal(getRoadmapSettings({ horizonYears: 8 }).horizonYears, 8);
   assert.equal(getRoadmapSettings({}).withdrawPerDay, null);
 });
+
+test("minReturn: a gain under that share of the price by the horizon does not count as paying back", () => {
+  // Skills (no resale), price 1,000, bought on day 10 (100/day income, no cash): horizonGain is
+  // gain x 1,815 days - 1,000. 0.5785/day -> +50 (5 %); 0.6612/day -> +200 (20 %).
+  const cands = () => [
+    { name: "five", price: 1000, gain: 1050 / 1815, type: "Skill" },
+    { name: "twenty", price: 1000, gain: 1200 / 1815, type: "Skill" },
+  ];
+  const plain = run(cands());
+  assert.deepEqual(plain.steps.map((s) => s.c.name).sort(), ["five", "twenty"], "without a floor both pay back");
+  const floor = run(cands(), { minReturn: 0.1 });
+  assert.deepEqual(floor.steps.map((s) => s.c.name), ["twenty"]);
+  assert.deepEqual(floor.left.map((x) => x.c.name), ["five"], "the +5 % one is listed as not paying");
+});

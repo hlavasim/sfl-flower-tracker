@@ -69,6 +69,8 @@ export function resaleFactor(type, price, years, driftOverride) {
  *   groups(c)       keys of what c interacts with (e.g. its categories); default: one shared group
  *   maxBundle       largest bundle tried (default 4; 1 = no bundles)
  *   maxChainRun     longest run of one chain in a bundle (default 8)
+ *   minReturn       smallest gain by the horizon, as a share of the price, that counts as paying
+ *                   back (default 0). 0.1 = an item must add at least 10 % of what it costs.
  *   resources       limited inputs a candidate may also need, e.g.
  *                     { obsidian: { stock, perDay, market, unitCost } } with c.res = { obsidian: n }.
  *                   c.price already counts n x unitCost. A purchase waits until enough is made,
@@ -79,6 +81,13 @@ export function resaleFactor(type, price, years, driftOverride) {
  */
 export function planByWealth(cands, o) {
   const H = o.horizonDays;
+  /*
+   * "Pays back" = gains more than minReturn x price by the horizon. A sliver above zero (+2 % in
+   * five years on 3,000 FLOWER) is a coin flip on the price model, not a purchase worth making,
+   * so the owner set a floor; such items go to `left` like any other that does not pay.
+   */
+  const minRet = Math.max(0, o.minReturn || 0);
+  const pays = (ev) => !!ev && ev.horizonGain > minRet * Math.max(0, ev.price || 0);
   const withdraw = Math.max(0, o.withdrawPerDay || 0);
   const maxBundle = o.unbuy ? Math.max(1, o.maxBundle || 4) : 1;
   // A chain run (ascension expansions, skill ranks) may be longer: 35 -> 38 is four steps and
@@ -180,7 +189,7 @@ export function planByWealth(cands, o) {
            * unrelated ascension run just because it lifted the average, and showed as "+0"; it is
            * bought on its own instead, and any synergy is picked up by the re-valuation after.
            */
-          if (!chainNext) { const alone = evaluate([c], val.get(c)); if (alone && alone.horizonGain > 0) continue; }
+          if (!chainNext) { const alone = evaluate([c], val.get(c)); if (pays(alone)) continue; }
           const gc = trialValue(c, list);
           const ev = evaluate(list.concat(c), g + gc);
           if (ev && (!pickEv || ev.score > pickEv.score)) { pick = c; pickEv = ev; pickG = gc; }
@@ -194,7 +203,7 @@ export function planByWealth(cands, o) {
     } finally {
       for (let i = list.length - 1; i >= 0; i--) o.unbuy(list[i]);
     }
-    const res = (!best || !(best.horizonGain > 0) || !bestList || bestList.length < 2) ? null : { list: bestList, g: bestG };
+    const res = (!pays(best) || !bestList || bestList.length < 2) ? null : { list: bestList, g: bestG };
     return { res, keys, chains };
   };
   /*
@@ -228,7 +237,7 @@ export function planByWealth(cands, o) {
     for (const c of rem) {
       if (!eligible(c, null)) continue;
       const ev = evaluate([c], val.get(c));
-      if (ev && ev.horizonGain > 0) {
+      if (pays(ev)) {
         if (better(ev, bestEv)) { bestList = [c]; bestEv = ev; }
       } else lonely.push(c);
     }
@@ -239,7 +248,7 @@ export function planByWealth(cands, o) {
         if (!e) { idx = idx || groupIndex(); e = growBundle(c, idx); bundleCache.set(c, e); }
         if (!e.res) continue;
         const ev = evaluate(e.res.list, e.res.g);
-        if (ev && ev.horizonGain > 0 && better(ev, bestEv)) { bestList = e.res.list; bestEv = ev; }
+        if (pays(ev) && better(ev, bestEv)) { bestList = e.res.list; bestEv = ev; }
       }
     }
     if (!bestList) break;

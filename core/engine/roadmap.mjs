@@ -1979,6 +1979,8 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       } } : {};
       const plan = planByWealth(econPos, {
         startIncome, withdrawPerDay, horizonDays: H, driftOverride: settings.nftDriftPerYear, resources,
+        // Under +10 % of its price by the horizon does not count as paying back (owner's rule).
+        minReturn: 0.1,
         valueOf: (m) => roadmapItemValue(m.clone, catBoostsW, settings),
         buy: (m) => { m.clone.has = true; },
         unbuy: (m) => { m.clone.has = false; },
