@@ -5420,7 +5420,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.91</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.92</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5447,6 +5447,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.92", items: [
+          { t: "feat", text: "ROADMAP buy path: the “Za 5 let” column also shows that result as a % of the purchase price, e.g. +547 (+21 %)." },
+        ] },
         { ver: "v5.91", items: [
           { t: "fix", text: "Your offers on <b>buds</b> now show in the ROADMAP's OFFER column (🟢 top / 🟠 outbid) with the best bid, like any other item — the marketplace book dropped every bud because buds have no catalogue name." },
           { t: "fix", text: "⏳ CO VYPRŠELO no longer lists a shrine that is still running (“… dobíhá” with 44 h left); a shrine shows up only once it has actually lapsed, as “Obnovit” when renewing pays." },
@@ -16398,7 +16401,7 @@
               ? `<div style="font-size:0.45rem;color:var(--text-dim)" title="Řadí se podle návratnosti CELÉ řady až sem: ${roadmapFmtFlower(r.prefixCost)} FLOWER za všechny kroky včetně tohohle. Vlastní návratnost tohohle kroku je ${roadmapFmtDays(r.roi)}, ale nejde ho koupit dřív než ty před ním.">v řadě ${roadmapFmtDays(r.sortRoi)}</div>`
               : ""
           }</td>
-          <td style="padding:3px 6px;text-align:right;color:${r.horizonGain > 0 ? "var(--green)" : "#e07070"}" title="${r.resale > 0 ? `včetně prodeje NFT na konci za ${roadmapFmtFlower(r.resale)}` : ""}">${isPlan && r.bundle && r.horizonGain === 0 ? `<span style="color:#b08cd8">ve skupině</span>` : r.horizonGain != null && isFinite(r.horizonGain) ? (r.horizonGain > 0 ? "+" : "\u2212") + roadmapFmtFlower(Math.abs(r.horizonGain)) : "\u2014"}</td>
+          <td style="padding:3px 6px;text-align:right;color:${r.horizonGain > 0 ? "var(--green)" : "#e07070"}" title="${r.resale > 0 ? `včetně prodeje NFT na konci za ${roadmapFmtFlower(r.resale)}` : ""}">${isPlan && r.bundle && r.horizonGain === 0 ? `<span style="color:#b08cd8">ve skupině</span>` : r.horizonGain != null && isFinite(r.horizonGain) ? (r.horizonGain > 0 ? "+" : "\u2212") + roadmapFmtFlower(Math.abs(r.horizonGain)) + (!r.bundle && r.floor > 0 ? ` <span style="font-size:0.45rem;opacity:0.75" title="výsledek za ${settings.horizonYears} let jako % z nákupní ceny ${roadmapFmtFlower(r.floor)}">(${r.horizonGain >= 0 ? "+" : "\u2212"}${Math.round(Math.abs(r.horizonGain) / r.floor * 100)} %)</span>` : "") : "\u2014"}</td>
           <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${isPlan ? roadmapFmtFlower(r.cumCost) : "\u2014"}</td>
           <td style="padding:3px 6px;text-align:right;color:var(--sunpetal)">${isPlan ? roadmapFmtFlower(r.rateAfter) : "\u2014"}</td>
           <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${isPlan ? roadmapFmtDate(r.atDay) : "\u2014"}</td>
