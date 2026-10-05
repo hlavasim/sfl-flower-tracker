@@ -5420,7 +5420,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.97</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.98</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5447,6 +5447,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.98", items: [
+          { t: "feat", text: "Investment Tracker: <b>BTC on your wallets counts as withdrawn.</b> cbBTC, WBTC, tBTC… found on the tracked wallets (1:1 BTC) leave the Wallet row and lower COST, so RECOVERED and the band's gold “vybráno” include them; BILANCE itself does not change. The COST tooltip lists them." },
+        ] },
         { ver: "v5.97", items: [
           { t: "feat", text: "BILANCE band: <b>checkpoints past break-even</b> — +10 / +20 / +50 / +100 / +200 / +500 / +1000 % of the peak; the ones reached are gold with ✓ and the next one is always shown as the goal (+10 % while still below break-even), with “do +X % chybí …”." },
           { t: "fix", text: "BILANCE band: labels no longer overlap — close ones move to the next line and the ones near an edge anchor inwards (the right end used to print “hned” and “po unlocku” on top of each other)." },
@@ -26958,7 +26961,20 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       // endpoint's CoinGecko pair — one table, one rate for each.
       const chainWallet = _invRepriceVenue(_invHoldings && _invHoldings.venues && _invHoldings.venues.wallet, sflToUsd, btcUsd);
       const chainEggs = _invRepriceVenue(_invHoldings && _invHoldings.venues && _invHoldings.venues.yakkamon, sflToUsd, btcUsd);
-      const walletLiquidBtc = chainWallet ? chainWallet.btc : ((sflToUsd > 0 && btcUsd > 0) ? (walletHeldFlower * sflToUsd / btcUsd) : 0);
+      /*
+       * BTC derivatives on the wallets (cbBTC, WBTC, tBTC…) are BTC already back out of FLOWER: the
+       * owner counts them as a WITHDRAWAL, not as wallet value. They leave the Wallet row and lower
+       * the net BTC inside (cost), so RECOVERED and the band's gold "vybráno" include them. BILANCE
+       * is unchanged — the same BTC just moves from "held" to "taken out". 1:1 with BTC.
+       */
+      const btcDerivs = new Set(["cbBTC", "WBTC", "tBTC", "BTCB", "WBTC.e"]);
+      const btcBackItems = chainWallet ? chainWallet.items.filter((i) => btcDerivs.has(i.symbol) && i.amount > 0) : [];
+      const btcBackOnChain = btcBackItems.reduce((a, i) => a + i.amount, 0);
+      const walletLiquidBtc = chainWallet ? Math.max(0, chainWallet.btc - btcBackOnChain) : ((sflToUsd > 0 && btcUsd > 0) ? (walletHeldFlower * sflToUsd / btcUsd) : 0);
+      const aggSheet = btcBackOnChain > 0 && agg && agg.peakBtc > 0
+        ? Object.assign({}, agg, { netDebtBtc: agg.netDebtBtc - btcBackOnChain,
+            repaidPct: (agg.peakBtc - (agg.netDebtBtc - btcBackOnChain)) / agg.peakBtc * 100 })
+        : agg;
       const eggsLiquidBtc = chainEggs ? chainEggs.btc : 0;
       // 1 BTC = (btcUsd/sflToUsd) FLOWER.
       const flowerPerBtc = (sflToUsd > 0 && btcUsd > 0) ? (btcUsd / sflToUsd) : 0;
@@ -26967,7 +26983,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       mount.innerHTML = `
         <h2 class="pixel-font" style="margin:0 0 10px 0;font-size:0.75rem;color:var(--sunpetal);letter-spacing:1px">💰 INVESTMENT TRACKER</h2>
         ${_invRepayHtml(agg, planStats, flowerPerBtc, errors)}
-        ${_invBalanceSheetHtml({ agg, flowerPerBtc, fmtFlower, treasuryTotalSfl, liquidValueSfl, liquidValueBtc, lockedBtc, chainWallet, chainEggs, walletLiquidBtc, walletHeldFlower, eggsLiquidBtc, farmValue, errors, btcUsd })}
+        ${_invBalanceSheetHtml({ agg: aggSheet, btcBackOnChain, btcBackItems, flowerPerBtc, fmtFlower, treasuryTotalSfl, liquidValueSfl, liquidValueBtc, lockedBtc, chainWallet, chainEggs, walletLiquidBtc, walletHeldFlower, eggsLiquidBtc, farmValue, errors, btcUsd })}
         <div id="inv-satsflower" style="margin:6px 0 16px"></div>
         <div id="inv-tx-table-wrap">${renderInvTxTable(transactions)}</div>
         <button class="roi-pill" onclick="_invShowAddForm()" style="margin-top:10px">+ Add transaction</button>
@@ -27330,7 +27346,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         </div>
         ${!errors.ledger && _invRecoveredLine(agg) ? `<div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);margin:-1px 0 4px">${_invRecoveredLine(agg)}</div>` : ""}
         ${!errors.ledger && !problems.length ? _invRecoveryBand(agg, cost, rows) : ""}
-        ${row("COST", fmtBtc(cost), fl(cost), { bold: true, info: errors.ledger ? "transakce se nepodařilo načíst" : `čisté BTC uvnitř · celkem ${fmtBtc(agg.depositBtc)} in, ${fmtBtc(agg.withdrawBtc)} out · peak ${fmtBtc(agg.peakBtc)}` })}
+        ${row("COST", fmtBtc(cost), fl(cost), { bold: true, info: errors.ledger ? "transakce se nepodařilo načíst" : `čisté BTC uvnitř · celkem ${fmtBtc(agg.depositBtc)} in, ${fmtBtc(agg.withdrawBtc)} out${x.btcBackOnChain > 0 ? ` + ${fmtBtc(x.btcBackOnChain)} BTC na walletce (${x.btcBackItems.map((i) => `${i.amount.toFixed(6)} ${i.symbol}`).join(", ")}) jako vybráno` : ""} · peak ${fmtBtc(agg.peakBtc)}` })}
         ${rows.map((r) => row(r.label, fmtBtc(r.btc), fl(r.btc), { info: r.info, ctl: r.ctl, color: !isFinite(r.btc) ? "var(--text-dim)" : r.liquid ? "var(--green)" : "var(--lily)" })
           + (r.label === "Genesis eggs" && x.eggGain ? row("↳ zisk vajec", sgn(x.eggGain.btc, fmtBtc) + ` <span style="color:var(--text-dim)">${x.eggGain.pct >= 0 ? "+" : ""}${x.eggGain.pct.toFixed(1)} %</span>`, sgn(x.eggGain.btc, fl), { info: x.eggGain.info, color: tone(x.eggGain.btc) }) : "")).join("")}
         ${row("HODNOTA hned", fmtBtc(sellable), fl(sellable), { top: true, bold: true, info: "součet zelených řádků — prodejné dnes" })}
