@@ -5420,7 +5420,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.95</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.96</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5447,6 +5447,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.96", items: [
+          { t: "fix", text: "BILANCE band: the break-even line is now the centrepiece — a glowing finish line at the peak with 🏁 BREAK-EVEN, a profit zone past it (anything above the peak is drawn there), and “do break-even chybí X ₿ hned · Y ₿ po unlocku”. The misleading “0 ₿ — vše vybráno” label is gone." },
+        ] },
         { ver: "v5.95", items: [
           { t: "feat", text: "Investment Tracker, BILANCE: <b>the way back as one band</b> from 0 to the peak you had at risk — <b>vybráno</b> (BTC already taken out, in shining gold), then what the farm, wallet and eggs cover now, the Yakkamon deposit faded (after the unlock) and the grey part still missing, with markers for “hned” and “po unlocku”. Value beyond the peak shows as profit instead of overflowing." },
         ] },
@@ -27361,24 +27364,37 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       const nowEnd = segs.reduce((a, s) => a + s.btc, 0);
       for (const r of rows.filter((r) => !r.liquid && r.btc > 0)) segs.push({ name: short[r.label] || r.label, btc: r.btc, bg: "var(--lily)", faded: true });
       const unlockEnd = segs.reduce((a, s) => a + s.btc, 0);
-      // Fit to the peak: anything above it is profit, shown after the band.
-      let left = peak;
-      const shown = [];
-      for (const s of segs) { const w = Math.min(s.btc, left); if (w > 0) shown.push({ ...s, w }); left -= w; }
-      if (left > 1e-9) shown.push({ name: "chybí", w: left, bg: "rgba(255,255,255,0.08)", gap: true });
-      const pc = (v) => Math.max(0, Math.min(100, v / peak * 100));
+      /*
+       * BREAK-EVEN is the peak: withdrawn + value = what was at risk. The band runs a little PAST it
+       * (a profit zone), so the finish line sits inside the picture and value above the peak is
+       * drawn there instead of overflowing.
+       */
+      const scale = Math.max(peak * 1.15, unlockEnd * 1.03);
+      const shown = segs.map((s) => ({ ...s, w: s.btc }));
+      if (unlockEnd < peak - 1e-9) shown.push({ name: "chybí", w: peak - unlockEnd, bg: "repeating-linear-gradient(45deg,rgba(255,255,255,0.05) 0 6px,rgba(255,255,255,0.11) 6px 12px)", gap: true });
+      const pc = (v) => Math.max(0, Math.min(100, v / scale * 100));
       const fmt3 = (v) => v.toFixed(3).replace(".", ",");
-      const seg = (s) => `<div title="${escHTML(s.name)} ${fmt3(s.w)} ₿ · ${(s.w / peak * 100).toFixed(1)} %" style="width:${pc(s.w)}%;background:${s.bg};${s.faded ? "opacity:0.55;" : ""}display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap;font-size:0.58rem;color:${s.gap ? "var(--text-dim)" : "#1a120a"};${s.gap ? "" : "font-weight:bold;"}border-right:1px solid rgba(0,0,0,0.35)">${pc(s.w) >= 11 ? `${escHTML(s.name)} ${fmt3(s.w)}` : ""}</div>`;
+      const seg = (s) => `<div title="${escHTML(s.name)} ${fmt3(s.w)} ₿ · ${(s.w / peak * 100).toFixed(1)} % vrcholu" style="width:${pc(s.w)}%;background:${s.bg};${s.faded ? "opacity:0.55;" : ""}display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap;font-size:0.58rem;color:${s.gap ? "var(--text-dim)" : "#1a120a"};${s.gap ? "" : "font-weight:bold;"}border-right:1px solid rgba(0,0,0,0.35)">${pc(s.w) >= 11 ? `${escHTML(s.name)} ${fmt3(s.w)}` : ""}</div>`;
       const mark = (at, label, dashed) => `<div style="position:absolute;left:${pc(at)}%;top:-4px;bottom:-4px;border-left:1px ${dashed ? "dashed" : "solid"} var(--text-primary);"></div><div class="pixel-font" style="position:absolute;left:${pc(at)}%;top:-17px;transform:translateX(-50%);white-space:nowrap;font-size:0.4rem;color:var(--text-secondary)">${label} ${Math.round(at / peak * 100)} %</div>`;
-      const profit = unlockEnd - peak;
-      return `<style>@keyframes invGoldShine{0%{background-position:100% 0}100%{background-position:-150% 0}}</style>
-        <div style="margin:18px 0 8px">
-          <div style="position:relative;display:flex;height:22px;border-radius:4px;overflow:visible;border:1px solid var(--border-brown)">
-            <div style="display:flex;width:100%;height:100%;border-radius:4px;overflow:hidden">${shown.map(seg).join("")}</div>
+      const profit = unlockEnd - peak, missingNow = peak - nowEnd;
+      const be = pc(peak);
+      return `<style>@keyframes invGoldShine{0%{background-position:100% 0}100%{background-position:-150% 0}}@keyframes invBePulse{0%,100%{opacity:1}50%{opacity:0.55}}</style>
+        <div style="margin:20px 0 8px">
+          <div style="position:relative;height:22px">
+            <div style="position:absolute;left:${be}%;right:0;top:0;bottom:0;border-radius:0 4px 4px 0;background:repeating-linear-gradient(90deg,rgba(127,224,160,0.10) 0 4px,rgba(127,224,160,0.04) 4px 8px);border:1px dashed rgba(127,224,160,0.45);border-left:none"></div>
+            <div style="position:absolute;left:${be}%;right:0;top:0;bottom:0;display:flex;align-items:center;justify-content:center;font-size:0.5rem;color:rgba(127,224,160,0.8);pointer-events:none">${profit > 1e-9 ? "" : "zisk"}</div>
+            <div style="position:absolute;left:0;top:0;bottom:0;width:${be}%;border:1px solid var(--border-brown);border-radius:4px 0 0 4px"></div>
+            <div style="position:absolute;left:0;top:0;bottom:0;right:0;display:flex;border-radius:4px;overflow:hidden">${shown.map(seg).join("")}</div>
             ${mark(nowEnd, "hned", false)}${unlockEnd > nowEnd + 1e-9 ? mark(unlockEnd, "po unlocku", true) : ""}
+            <div style="position:absolute;left:${be}%;top:-7px;bottom:-7px;width:3px;transform:translateX(-1.5px);background:linear-gradient(180deg,#ffd700,#7fe0a0);box-shadow:0 0 6px rgba(255,215,0,0.7);animation:invBePulse 2.4s ease-in-out infinite"></div>
+            <div style="position:absolute;left:${be}%;top:24px;transform:translateX(-50%);white-space:nowrap;text-align:center">
+              <div style="font-size:0.42rem;color:#ffd700;letter-spacing:0.5px"><span style="font-size:0.7rem">🏁</span> <span class="pixel-font">BREAK-EVEN</span></div>
+              <div style="font-size:0.52rem;color:var(--text-secondary)">${fmt3(peak)} ₿</div>
+            </div>
           </div>
-          <div style="display:flex;justify-content:space-between;font-size:0.5rem;color:var(--text-dim);margin-top:3px">
-            <span>0 ₿ — vše vybráno · <b style="background:${gold};background-size:250% 100%;animation:invGoldShine 3s linear infinite;-webkit-background-clip:text;background-clip:text;color:transparent">vybráno ${back > 0 ? fmt3(back) : "zatím 0"} ₿ (${(back / peak * 100).toFixed(1)} %)</b></span><span>${profit > 1e-9 ? `<b style="color:var(--green)">+${fmt3(profit)} ₿ nad vrcholem</b> · ` : ""}vrchol ${fmt3(peak)} ₿</span>
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;font-size:0.5rem;color:var(--text-dim);margin-top:30px;gap:8px;flex-wrap:wrap">
+            <b style="background:${gold};background-size:250% 100%;animation:invGoldShine 3s linear infinite;-webkit-background-clip:text;background-clip:text;color:transparent">vybráno ${back > 0 ? fmt3(back) : "zatím 0"} ₿ (${(back / peak * 100).toFixed(1)} %)</b>
+            <span>${profit > 1e-9 ? `<b style="color:var(--green)">+${fmt3(profit)} ₿ za break-even</b>` : missingNow > 1e-9 ? `do break-even chybí <b style="color:var(--text-secondary)">${fmt3(missingNow)} ₿</b> hned · <b style="color:var(--text-secondary)">${fmt3(Math.max(0, -profit))} ₿</b> po unlocku` : ""}</span>
           </div>
         </div>`;
     }
