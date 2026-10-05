@@ -5420,7 +5420,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.94</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.95</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5447,6 +5447,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.95", items: [
+          { t: "feat", text: "Investment Tracker, BILANCE: <b>the way back as one band</b> from 0 to the peak you had at risk — <b>vybráno</b> (BTC already taken out, in shining gold), then what the farm, wallet and eggs cover now, the Yakkamon deposit faded (after the unlock) and the grey part still missing, with markers for “hned” and “po unlocku”. Value beyond the peak shows as profit instead of overflowing." },
+        ] },
         { ver: "v5.94", items: [
           { t: "feat", text: "ROADMAP buy path: an item that adds less than <b>10 % of its price</b> in 5 years no longer counts as paying back — it drops out of the plan and is listed as not worth it (&gt; 5 LET), like the ones that lose." },
         ] },
@@ -27319,6 +27322,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           <div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);text-align:right">🌸</div>
         </div>
         ${!errors.ledger && _invRecoveredLine(agg) ? `<div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);margin:-1px 0 4px">${_invRecoveredLine(agg)}</div>` : ""}
+        ${!errors.ledger && !problems.length ? _invRecoveryBand(agg, cost, rows) : ""}
         ${row("COST", fmtBtc(cost), fl(cost), { bold: true, info: errors.ledger ? "transakce se nepodařilo načíst" : `čisté BTC uvnitř · celkem ${fmtBtc(agg.depositBtc)} in, ${fmtBtc(agg.withdrawBtc)} out · peak ${fmtBtc(agg.peakBtc)}` })}
         ${rows.map((r) => row(r.label, fmtBtc(r.btc), fl(r.btc), { info: r.info, ctl: r.ctl, color: !isFinite(r.btc) ? "var(--text-dim)" : r.liquid ? "var(--green)" : "var(--lily)" })
           + (r.label === "Genesis eggs" && x.eggGain ? row("↳ zisk vajec", sgn(x.eggGain.btc, fmtBtc) + ` <span style="color:var(--text-dim)">${x.eggGain.pct >= 0 ? "+" : ""}${x.eggGain.pct.toFixed(1)} %</span>`, sgn(x.eggGain.btc, fl), { info: x.eggGain.info, color: tone(x.eggGain.btc) }) : "")).join("")}
@@ -27335,6 +27339,48 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     function _invRecoveredLine(agg) {
       if (!agg || !(agg.peakBtc > 0) || agg.repaidPct === null || !isFinite(agg.repaidPct)) return "";
       return `RECOVERED ${agg.repaidPct.toFixed(1)} % of peak ${agg.peakBtc.toFixed(6)} ₿`;
+    }
+    /*
+     * The way back, as one band from 0 to the PEAK at risk (the owner's pick of five mockups):
+     * what already came back out (vráceno), then what each holding would cover — sellable now in
+     * full colour, the Yakkamon deposit faded (only after the unlock) — and the grey gap still
+     * missing. Two markers: covered now, covered after the unlock. Value beyond the peak shows as
+     * profit at the end instead of overflowing the band. Same numbers as the rows below.
+     */
+    function _invRecoveryBand(agg, cost, rows) {
+      const peak = agg && agg.peakBtc;
+      if (!(peak > 0) || !isFinite(cost) || rows.some((r) => !isFinite(r.btc))) return "";
+      const short = { "SFL farma": "farma", "Wallet": "wallet", "Genesis eggs": "vejce", "Yakke locked": "Yakke" };
+      const color = { "SFL farma": "var(--green)", "Wallet": "#5DADE2", "Genesis eggs": "#e8c86a" };
+      const back = Math.max(0, peak - cost);
+      const segs = [];
+      // VYBRÁNO — BTC that has already come back out: gold with a moving shine, the part that counts.
+      const gold = "linear-gradient(110deg,#b8860b 0%,#ffd700 35%,#fff6c8 50%,#ffd700 65%,#b8860b 100%)";
+      if (back > 0) segs.push({ name: "vybráno", btc: back, bg: `${gold};background-size:250% 100%;animation:invGoldShine 3s linear infinite` });
+      for (const r of rows.filter((r) => r.liquid && r.btc > 0)) segs.push({ name: short[r.label] || r.label, btc: r.btc, bg: color[r.label] || "#7fe0a0" });
+      const nowEnd = segs.reduce((a, s) => a + s.btc, 0);
+      for (const r of rows.filter((r) => !r.liquid && r.btc > 0)) segs.push({ name: short[r.label] || r.label, btc: r.btc, bg: "var(--lily)", faded: true });
+      const unlockEnd = segs.reduce((a, s) => a + s.btc, 0);
+      // Fit to the peak: anything above it is profit, shown after the band.
+      let left = peak;
+      const shown = [];
+      for (const s of segs) { const w = Math.min(s.btc, left); if (w > 0) shown.push({ ...s, w }); left -= w; }
+      if (left > 1e-9) shown.push({ name: "chybí", w: left, bg: "rgba(255,255,255,0.08)", gap: true });
+      const pc = (v) => Math.max(0, Math.min(100, v / peak * 100));
+      const fmt3 = (v) => v.toFixed(3).replace(".", ",");
+      const seg = (s) => `<div title="${escHTML(s.name)} ${fmt3(s.w)} ₿ · ${(s.w / peak * 100).toFixed(1)} %" style="width:${pc(s.w)}%;background:${s.bg};${s.faded ? "opacity:0.55;" : ""}display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap;font-size:0.58rem;color:${s.gap ? "var(--text-dim)" : "#1a120a"};${s.gap ? "" : "font-weight:bold;"}border-right:1px solid rgba(0,0,0,0.35)">${pc(s.w) >= 11 ? `${escHTML(s.name)} ${fmt3(s.w)}` : ""}</div>`;
+      const mark = (at, label, dashed) => `<div style="position:absolute;left:${pc(at)}%;top:-4px;bottom:-4px;border-left:1px ${dashed ? "dashed" : "solid"} var(--text-primary);"></div><div class="pixel-font" style="position:absolute;left:${pc(at)}%;top:-17px;transform:translateX(-50%);white-space:nowrap;font-size:0.4rem;color:var(--text-secondary)">${label} ${Math.round(at / peak * 100)} %</div>`;
+      const profit = unlockEnd - peak;
+      return `<style>@keyframes invGoldShine{0%{background-position:100% 0}100%{background-position:-150% 0}}</style>
+        <div style="margin:18px 0 8px">
+          <div style="position:relative;display:flex;height:22px;border-radius:4px;overflow:visible;border:1px solid var(--border-brown)">
+            <div style="display:flex;width:100%;height:100%;border-radius:4px;overflow:hidden">${shown.map(seg).join("")}</div>
+            ${mark(nowEnd, "hned", false)}${unlockEnd > nowEnd + 1e-9 ? mark(unlockEnd, "po unlocku", true) : ""}
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:0.5rem;color:var(--text-dim);margin-top:3px">
+            <span>0 ₿ — vše vybráno · <b style="background:${gold};background-size:250% 100%;animation:invGoldShine 3s linear infinite;-webkit-background-clip:text;background-clip:text;color:transparent">vybráno ${back > 0 ? fmt3(back) : "zatím 0"} ₿ (${(back / peak * 100).toFixed(1)} %)</b></span><span>${profit > 1e-9 ? `<b style="color:var(--green)">+${fmt3(profit)} ₿ nad vrcholem</b> · ` : ""}vrchol ${fmt3(peak)} ₿</span>
+          </div>
+        </div>`;
     }
     let _repayChartObj = null;
     function _invDrawRepayChart(stats) {
