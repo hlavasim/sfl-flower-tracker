@@ -583,9 +583,15 @@ async function _handler(req, res) {
       const [nftResult, exchange] = await Promise.all([fetchNfts(), fetchExchange()]);
       const nftData = nftResult.ok ? nftResult.data : {};
       const td = buildTreasuryData(p2p, nftData, exchange, 0, { itemNames: await loadItemNames() });
-      const animalNet = {}, catNet = {};
+      const animalNet = {}, catNet = {}, boostPerDay = {};
       try {
-        const cs = buildPowerSection(farm, p2p, nftData, exchange, settings).categories.catSummaries || {};
+        const ps = buildPowerSection(farm, p2p, nftData, exchange, settings);
+        const cs = ps.categories.catSummaries || {};
+        // What each boost would add a day (summed over its categories) - prices the old items
+        // that come back in this chapter's auction (Quarry, Tomato Clown...).
+        for (const vals of Object.values(ps.boostValues || {}))
+          for (const [name, v] of Object.entries(vals))
+            if (v && isFinite(v.synergy)) boostPerDay[name] = (boostPerDay[name] || 0) + Math.max(0, v.synergy);
         for (const [cat, type] of [["chickens", "Chicken"], ["sheep", "Sheep"], ["cows", "Cow"]]) {
           const c = cs[cat], n = c && c.costDetails && c.costDetails.animalCount;
           if (n > 0) animalNet[type] = (c.boostedSfl - (c.costPerDay || 0)) / n;
@@ -596,7 +602,7 @@ async function _handler(req, res) {
         }
       } catch { /* no power pass → animal bounties priced by feed alone, hourglasses unpriced */ }
       const tkPrices = buildPricesSection(farm, p2p, settings);
-      const tkOpts = { coinsPerSFL, animalNet, catNet, floors: { ...td.nftCollectibles, ...td.nftWearables }, gemsPerSFL: td.gemsPerSFL, sflUsd: td.sflUsd };
+      const tkOpts = { coinsPerSFL, animalNet, catNet, boostPerDay, floors: { ...td.nftCollectibles, ...td.nftWearables }, gemsPerSFL: td.gemsPerSFL, sflUsd: td.sflUsd };
       // Optional POST body { weeks } (/api/farm-history?type=ticket-weeks): the same model run on
       // every recorded week at today's prices, and the farm's measured use (salt, aging, potions)
       // that prices this chapter's items.

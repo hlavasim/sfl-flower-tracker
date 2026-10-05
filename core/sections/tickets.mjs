@@ -66,9 +66,58 @@ const AUCTION_REFERENCE = {
     { name: "Fat Crab",         supply: 180, tickets: 341,   flower: 18,   gem: null },
   ],
 };
-// This chapter's auction items (collections.ts); their ticket prices are set by the server.
-const CURRENT_AUCTION_ITEMS = ["Salt Rug", "Coat Rack", "Vibraphone", "Winged Vase", "Ascended Idol",
-  "Salt Worker Gnome", "Surfer Hair", "Rice Shirt", "Alchemist Apron"];
+/*
+ * This chapter's auction schedule as the game's auctioneer lists it (copied by the owner from the
+ * in-game list, 2026-10-05; the list itself needs a login). Every item runs 5 rounds 5 h apart
+ * from `first` (UTC). Old items return (Quarry, Autumn's Embrace, Tomato Clown); "Pet" is a pet
+ * NFT. supply = the number on the item's card. Prices are set per round by the server — not here.
+ */
+const AUCTION_SCHEDULE = {
+  chapter: "Ascension Age", readAt: "2026-10-05", rounds: 5, everyH: 5,
+  items: [
+    { name: "Salt Rug",          kind: "collectible", supply: 18, first: Date.UTC(2026, 9, 5, 21) },
+    { name: "Coat Rack",         kind: "collectible", supply: 18, first: Date.UTC(2026, 9, 5, 22) },
+    { name: "Vibraphone",        kind: "collectible", supply: 20, first: Date.UTC(2026, 9, 5, 23) },
+    { name: "Quarry",            kind: "collectible", supply: 6,  first: Date.UTC(2026, 9, 6, 22) },
+    { name: "Autumn's Embrace",  kind: "wearable",    supply: 10, first: Date.UTC(2026, 9, 6, 23) },
+    { name: "Rice Shirt",        kind: "wearable",    supply: 8,  first: Date.UTC(2026, 9, 7, 21) },
+    { name: "Ascended Idol",     kind: "collectible", supply: 6,  first: Date.UTC(2026, 9, 7, 22) },
+    { name: "Pet",               kind: "nft",         supply: 50, first: Date.UTC(2026, 9, 7, 23) },
+    { name: "Salt Worker Gnome", kind: "collectible", supply: 5,  first: Date.UTC(2026, 9, 8, 22) },
+    { name: "Tomato Clown",      kind: "collectible", supply: 8,  first: Date.UTC(2026, 9, 8, 23) },
+    { name: "Alchemist Apron",   kind: "wearable",    supply: 8,  first: Date.UTC(2026, 9, 9, 21) },
+    { name: "Surfer Hair",       kind: "wearable",    supply: 8,  first: Date.UTC(2026, 9, 9, 22) },
+    { name: "Winged Vase",       kind: "collectible", supply: 8,  first: Date.UTC(2026, 9, 9, 23) },
+  ],
+};
+const CURRENT_AUCTION_ITEMS = AUCTION_SCHEDULE.items.map((i) => i.name);
+
+/*
+ * The schedule with what each item would add on this farm: the chapter model (auctionItemValues)
+ * where it prices the item, else the POWER valuation of its boost (opts.boostPerDay, the same
+ * marginal POWER shows). Rounds already started stay listed as done.
+ */
+function auctionSchedule(farm, chapterItems, opts, now) {
+  const S = AUCTION_SCHEDULE, H = 3600000;
+  const byName = Object.fromEntries(chapterItems.map((i) => [i.name, i]));
+  const bpd = opts.boostPerDay || {};
+  return { chapter: S.chapter, readAt: S.readAt, items: S.items.map((it) => {
+    const rounds = Array.from({ length: S.rounds }, (_, k) => it.first + k * S.everyH * H);
+    const ci = byName[it.name];
+    let perDay = ci && ci.perDay != null ? ci.perDay : (bpd[it.name] != null ? bpd[it.name] : null);
+    let basis = ci && ci.perDay != null ? ci.basis : (bpd[it.name] != null ? "hodnota boostu jako v POWER" : (ci ? ci.basis : ""));
+    if (it.kind === "nft") { perDay = null; basis = "náhodný pet — nelze ocenit"; }
+    // Won to resell: today's floor after the market fee — the most a round is worth bidding even
+    // when the farm already has one (or gains nothing from it).
+    const f = (opts.floors || {})[it.name] || {};
+    const floor = +f.floor > 0 && +f.floor < 1e6 ? +f.floor : (+f.lastSalePrice || 0);
+    return { name: it.name, kind: it.kind, supply: it.supply, rounds,
+      next: rounds.find((t) => t > now) || null, left: rounds.filter((t) => t > now).length,
+      perDay, basis: basis || "", what: ci ? ci.what : "",
+      floor: floor > 0 ? floor : null, resale: floor > 0 ? +(floor * (1 - MARKET_FEE)).toFixed(2) : null,
+      owned: it.kind === "nft" ? false : hasItem(farm, it.name, it.kind) };
+  }) };
+}
 const MARKET_FEE = 0.1;
 
 function currentChapter(now) {
@@ -346,6 +395,7 @@ export function buildTicketsSection(farm, prices, opts = {}) {
     week: weekNo, weeks: chapter.end ? Math.round((chapter.end - chapter.start) / (7 * DAY)) : null,
     weekEnd, daysLeftInWeek: daysLeft };
 
+  const chapterItems = [...auctionItemValues(farm, prices, opts), ...shopItemValues(farm, prices, opts)];
   return {
     chapter: { name: chapter.name, ticket, start: chapter.start, tasksBegin, end: chapter.end || null,
       weeksDone: +weeksDone.toFixed(2), weeksLeft: weeksLeft == null ? null : +weeksLeft.toFixed(2),
@@ -355,7 +405,8 @@ export function buildTicketsSection(farm, prices, opts = {}) {
     sources,
     plans, best, perLot, thisAuction, observedTop: OBSERVED_TOP,
     guide, timeline,
-    items: [...auctionItemValues(farm, prices, opts), ...shopItemValues(farm, prices, opts)],
+    items: chapterItems,
+    schedule: auctionSchedule(farm, chapterItems, opts, now),
     activity: opts.activity || null,
     auction: { reference: { chapter: AUCTION_REFERENCE.chapter, ticket: AUCTION_REFERENCE.ticket, source: AUCTION_REFERENCE.source, readAt: AUCTION_REFERENCE.readAt },
       lots, currentItems: CURRENT_AUCTION_ITEMS },

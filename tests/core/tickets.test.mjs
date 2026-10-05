@@ -228,3 +228,23 @@ test("chapter goal: ticket value for the item, reachable from the curve, cheaper
   // Already holding enough: costs nothing more.
   assert.equal(ticketGoal({ value: 100, tickets: 400 }, { collected: 500, weeksLeft: 1, curve }).cost, 0);
 });
+
+test("auction schedule: 13 items, 5 rounds 5 h apart, next round and value from POWER", () => {
+  const d = buildTicketsSection(farm(), prices, { now: Date.UTC(2026, 9, 6, 0), boostPerDay: { "Quarry": 1.5 },
+    floors: { "Quarry": { floor: 6000, lastSalePrice: 5000 }, "Tomato Clown": { floor: 0, lastSalePrice: 600 } } });
+  const s = d.schedule.items;
+  assert.strictEqual(s.length, 13);
+  const rug = s.find((i) => i.name === "Salt Rug");
+  assert.deepStrictEqual(rug.rounds.map((t) => new Date(t).toISOString().slice(5, 16)),
+    ["10-05T21:00", "10-06T02:00", "10-06T07:00", "10-06T12:00", "10-06T17:00"]);
+  assert.strictEqual(rug.left, 4);
+  assert.strictEqual(rug.next, Date.UTC(2026, 9, 6, 2));
+  const q = s.find((i) => i.name === "Quarry");
+  assert.strictEqual(q.perDay, 1.5);                     // not in the chapter model → POWER value
+  assert.strictEqual(q.left, 5);
+  assert.strictEqual(s.find((i) => i.name === "Pet").perDay, null);
+  assert.strictEqual(q.resale, 5400);                    // floor after the 10 % fee
+  assert.strictEqual(s.find((i) => i.name === "Tomato Clown").resale, 540);   // no floor → last sale
+  assert.strictEqual(rug.resale, null);
+  assert.strictEqual(s.find((i) => i.name === "Coat Rack").perDay, 0);   // decoration
+});

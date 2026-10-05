@@ -5420,7 +5420,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.98</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.99</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5447,6 +5447,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v5.99", items: [
+          { t: "feat", text: "TICKETY: <b>auction schedule.</b> All 13 items of this chapter's auction (Salt Rug … Winged Vase, plus the returning Quarry, Autumn's Embrace, Tomato Clown and a Pet), 5 rounds 5 h apart: the next round in your time, rounds left, what the item would add on your farm a day, and <b>PRODEJ</b> — today's floor after the 10 % fee, the most worth bidding even for a copy you would only resell (Quarry ~6,200)." },
+        ] },
         { ver: "v5.98", items: [
           { t: "feat", text: "Investment Tracker: <b>BTC on your wallets counts as withdrawn.</b> cbBTC, WBTC, tBTC… found on the tracked wallets (1:1 BTC) leave the Wallet row and lower COST, so RECOVERED and the band's gold “vybráno” include them; BILANCE itself does not change. The COST tooltip lists them." },
         ] },
@@ -24977,12 +24980,43 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         <div style="font-size:0.56rem;${muted};margin-bottom:6px">Aukce i shop tohoto chapteru, FLOWER denně na tvojí farmě (podle toho, co skutečně děláš). Přesýpací hodiny jsou na jedno použití. Najeď na řádek pro vysvětlení.</div>
         <table class="node-res-table" style="width:100%"><tr><th>PŘEDMĚT</th><th>ODKUD</th><th style="${right}">CENA</th><th style="${right}">FLOWER</th></tr>${rows.join("")}</table>
         ${unpriced.length ? `<div style="font-size:0.55rem;${muted};margin-top:6px">Neumím ocenit: ${unpriced.map((i) => escHTML(i.name)).join(", ")}</div>` : ""}</div>`;
+      h += _tkScheduleHtml(d.schedule);
       h += `</div>`;
 
       h += `<details style="margin-bottom:12px"><summary class="pixel-font" style="font-size:0.66rem;cursor:pointer;padding:8px 0">📂 Kalkulačka, historie a všechny podrobnosti</summary>
         <div style="margin-top:10px">${_tkDecisionHtml(d)}${_tkDetailsHtml(d)}</div></details>`;
       h += `<div class="footer"><button class="refresh-btn" onclick="renderTickets()">REFRESH</button></div>`;
       return h;
+    }
+
+    /*
+     * This chapter's auction rounds (the in-game list the owner copied): every item, its supply,
+     * the next round in local time and how many are left, and what it would add on this farm a day.
+     */
+    function _tkScheduleHtml(sch) {
+      if (!sch || !sch.items || !sch.items.length) return "";
+      const now = Date.now(), right = "text-align:right;white-space:nowrap", muted = "color:var(--text-dim)";
+      const when = (ms) => new Date(ms).toLocaleString("cs-CZ", { weekday: "short", day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
+      const soon = sch.items.filter((i) => i.next).map((i) => i.next).sort((a, b) => a - b)[0] || null;
+      const rows = sch.items.map((i) => {
+        const done = !i.next;
+        const isSoon = i.next && i.next === soon;
+        const v = i.kind === "nft" ? `<span style="${muted}">—</span>`
+          : i.perDay == null ? `<span style="${muted}">?</span>`
+          : i.perDay > 0 ? `<b style="color:var(--green)">+${_tkFmt(i.perDay, 2)}</b>` : `<span style="${muted}">0</span>`;
+        const tip = [i.what, i.basis].filter(Boolean).join(" — ") + `
+Kola: ${i.rounds.map(when).join(", ")}`;
+        return `<tr title="${escHTML(tip)}" style="${done ? "opacity:0.4" : ""}">
+          <td>${escHTML(i.name)}${i.owned ? " ✅" : ""}<div style="font-size:0.55rem;${muted}">${i.kind === "wearable" ? "wearable" : i.kind === "nft" ? "NFT" : "collectible"} · ${i.supply} ks</div></td>
+          <td style="${right};font-size:0.6rem${isSoon ? ";color:var(--sunpetal);font-weight:bold" : ""}">${done ? "skončila" : `${when(i.next)}<div style="font-size:0.55rem;${muted};font-weight:normal">ještě ${i.left} z 5 kol</div>`}</td>
+          <td style="${right}">${v}</td>
+          <td style="${right}">${i.resale != null ? `${_tkFmt(i.resale, i.resale < 100 ? 1 : 0)}` : `<span style="${muted}">—</span>`}</td></tr>`;
+      }).join("");
+      return `<div class="pixel-panel" style="padding:12px 14px;min-width:0">
+        <div class="pixel-font" style="font-size:0.74rem;color:var(--sunpetal);margin-bottom:6px">🔨 ROZPIS AUKCE</div>
+        <div style="font-size:0.56rem;${muted};margin-bottom:6px">Každá věc má 5 kol po 5 hodinách, čas začátku je tvůj místní. Ceny kol hra ukáže až v aukci. <b>FLOWER/DEN</b> = co by přidal na tvojí farmě (✅ = už máš, druhý kus nepřidá nic). <b>PRODEJ</b> = dnešní floor po 10 % poplatku: tolik se vyplatí dát i za kus, který jen prodáš (letošní novinky floor ještě nemají — prodat půjdou až po konci chapteru). Najeď na řádek pro všechna kola.</div>
+        <table class="node-res-table" style="width:100%"><tr><th>PŘEDMĚT</th><th style="${right}">DALŠÍ KOLO</th><th style="${right}">FLOWER/DEN</th><th style="${right}">PRODEJ</th></tr>${rows}</table>
+        <div style="font-size:0.55rem;${muted};margin-top:6px">Opsáno ze hry ${escHTML(sch.readAt)}.</div></div>`;
     }
 
     function _tkDetailsHtml(d) {
