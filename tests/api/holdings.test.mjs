@@ -43,19 +43,20 @@ test("no egg offer means eggs are listed but worth nothing, not skipped", () => 
 });
 
 /*
- * E12: the best bid is for ONE egg (availableQuantity 1), not for the 20 held. Selling 20 now
- * walks the book: 1 at 390, 5 at 300, the remaining 14 at 250 = 5,390 WRON, not 20 × 390 =
- * 7,800 (+45 %). Eggs the book cannot absorb are worth nothing today.
+ * The owner's rule (2026-10-06): every egg at the best fillable offer, whatever quantity it covers —
+ * the eggs are sold over days through listings, not dumped into the book. An offer made by one of
+ * the owner's own wallets never prices his eggs (the egg bot's 460 bids once inflated them).
  */
-test("eggs are valued by walking the fillable offer book, not N × the best offer", () => {
-  const book = [{ wron: 250, qty: 50 }, { wron: 390, qty: 1 }, { wron: 300, qty: 5 }];   // unsorted on purpose
-  assert.deepEqual(eggBookValue(book, 20), { wron: 390 + 5 * 300 + 14 * 250, filled: 20, unfilled: 0 });
-  const { venues } = valueHoldings(balances, prices, book);
+test("eggs: each at the best fillable offer, the owner's own offers excluded", () => {
+  const book = [{ wron: 250, qty: 50 }, { wron: 460, qty: 18, buyer: "0xbot" }, { wron: 390, qty: 1 }, { wron: 300, qty: 5 }];
+  const { venues } = valueHoldings(balances, prices, book, ["0xBOT"]);
   const y = venues.yakkamon.items[0];
-  assert.ok(Math.abs(venues.yakkamon.usd - 5390 * 0.06) < 1e-9, `${venues.yakkamon.usd} ≠ 5390 WRON × 0.06`);
-  assert.ok(Math.abs(y.unitWron - 5390 / 20) < 1e-9, "the average fill, not the top bid");
+  assert.ok(Math.abs(venues.yakkamon.usd - 20 * 390 * 0.06) < 1e-9, `${venues.yakkamon.usd} ≠ 20 × 390 WRON × 0.06`);
+  assert.equal(y.unitWron, 390, "the best offer by someone else, not the own 460");
+  assert.equal(y.unfilled, 0);
+  // The book walk stays available (eggBookValue) for anyone who wants the dump price.
   assert.deepEqual(eggBookValue([{ wron: 400, qty: 3 }, { wron: 0, qty: 9 }, { wron: 100, qty: 0 }], 5),
-    { wron: 1200, filled: 3, unfilled: 2 }, "a thin book sells what it can; dead offers are skipped");
+    { wron: 1200, filled: 3, unfilled: 2 });
 });
 
 test("every token's price id is one the price feed fetches", () => {

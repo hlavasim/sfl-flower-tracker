@@ -453,7 +453,7 @@ export default async function handler(req, res) {
       const prices = _holdCache.prices || { usd: 1 };
       const egg = _holdCache.egg || { wron: 0, fillable: 0, offers: [] };
       const perWallet = await Promise.all(wallets.map(async (w) => ({ ...w, balances: await readAddress(w.address) })));
-      const { venues, errors } = valueHoldings(perWallet.flatMap((w) => w.balances), prices, egg.offers || []);
+      const { venues, errors } = valueHoldings(perWallet.flatMap((w) => w.balances), prices, egg.offers || [], wallets.map((w) => w.address));
       // What the held eggs cost: the local egg collector pushes it with its hourly market snapshot.
       let eggCost = null;
       try {

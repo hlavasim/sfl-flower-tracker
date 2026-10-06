@@ -119,7 +119,7 @@ export async function bestEggOfferWron(pages = 8) {
   const offers = [];   // every fillable offer: { wron, qty } — the book eggBookValue walks
   const now = Date.now() / 1000;
   for (let f = 0; f < pages * 50; f += 50) {
-    const q = `{ collectionOffers(from: ${f}, size: 50) { data { tokenAddress availableQuantity itemPrice endTime } } }`;
+    const q = `{ collectionOffers(from: ${f}, size: 50) { data { tokenAddress buyer availableQuantity itemPrice endTime } } }`;
     const r = await fetch(GQL, { method: "POST", headers: { "content-type": "application/json", "user-agent": UA }, body: JSON.stringify({ query: q }) });
     if (!r.ok) throw new Error(`ronin gql ${r.status}`);
     const rows = (((await r.json()).data || {}).collectionOffers || {}).data || [];
@@ -129,7 +129,7 @@ export async function bestEggOfferWron(pages = 8) {
       n++;
       const wron = Number(BigInt(o.itemPrice)) / 1e18;
       best = Math.max(best, wron);
-      offers.push({ wron, qty: Number(o.availableQuantity) || 0 });
+      offers.push({ wron, qty: Number(o.availableQuantity) || 0, buyer: String(o.buyer || "").toLowerCase() });
     }
   }
   offers.sort((a, b) => b.wron - a.wron);
@@ -158,17 +158,23 @@ export function eggBookValue(offers, count) {
 /**
  * Pure: value raw balances with prices and split them into venues.
  *   wallet   = every fungible token (BTC was sent to the wallet venue to buy them)
- *   yakkamon = Genesis eggs sold into the fillable Hidden offer book (eggBookValue)
+ *   yakkamon = Genesis eggs, EACH at the best fillable Hidden offer — the owner's rule (2026-10-06),
+ *              whatever quantity that offer covers. The eggs are sold over days through listings,
+ *              not dumped into the book at once, so walking the book (eggBookValue) understated
+ *              them. Offers made by the owner's own wallets (`ownAddrs`) never price his eggs:
+ *              the egg bot's 460 bids once did.
  * Dust under DUST_USD is dropped from the item lists but nothing is hidden from the totals.
- * `eggOffers` is the book from bestEggOfferWron().offers ([{ wron, qty }]).
+ * `eggOffers` is the book from bestEggOfferWron().offers ([{ wron, qty, buyer }]).
  */
-export function valueHoldings(balances, prices, eggOffers) {
+export function valueHoldings(balances, prices, eggOffers, ownAddrs) {
   const btcUsd = prices.bitcoin || 0;
   const venues = { wallet: { usd: 0, btc: 0, items: [] }, yakkamon: { usd: 0, btc: 0, items: [] } };
   const errors = [];
   const eggs = balances.filter((b) => !b.error && b.kind === "egg" && b.amount > 0).reduce((a, b) => a + b.amount, 0);
-  const book = eggBookValue(eggOffers, eggs);   // all eggs sold as one lot, whatever address holds them
-  const eggUnitWron = eggs > 0 ? book.wron / eggs : 0;
+  const own = new Set((ownAddrs || []).map((a) => String(a).toLowerCase()));
+  const eggUnitWron = (eggOffers || []).filter((o) => o && o.qty > 0 && !own.has(o.buyer))
+    .reduce((m, o) => Math.max(m, o.wron || 0), 0);
+  const book = { wron: eggs * eggUnitWron, filled: eggUnitWron > 0 ? eggs : 0, unfilled: eggUnitWron > 0 ? 0 : eggs };
   for (const b of balances) {
     if (b.error) { errors.push(`${b.chain}: ${b.error}`); continue; }
     if (!(b.amount > 0)) continue;

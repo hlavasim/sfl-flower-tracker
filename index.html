@@ -5428,7 +5428,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.01</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.02</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5455,6 +5455,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.02", items: [
+          { t: "fix", text: "Investment Tracker: <b>every Genesis egg at the best fillable offer</b>, whatever quantity that offer covers — the eggs are sold over days through listings, not dumped into the book at once, so walking the book understated them. Offers made by your own tracked wallets never price your eggs (the egg bot's 460 WRON bids once inflated them)." },
+        ] },
         { ver: "v6.01", items: [
           { t: "fix", text: "Investment Tracker: <b>RON was priced ~3× too high.</b> Coinbase no longer trades RON-USD but its spot price still answered a stale 0.21 $ while RON traded at ~0.068 $ — so every RON, WRON and Genesis egg on a tracked wallet was overvalued. RON now comes from GeckoTerminal (WRON on Ronin), the same source as FLOWER." },
         ] },
