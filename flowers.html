@@ -5428,7 +5428,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.00</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.01</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5455,6 +5455,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.01", items: [
+          { t: "fix", text: "Investment Tracker: <b>RON was priced ~3× too high.</b> Coinbase no longer trades RON-USD but its spot price still answered a stale 0.21 $ while RON traded at ~0.068 $ — so every RON, WRON and Genesis egg on a tracked wallet was overvalued. RON now comes from GeckoTerminal (WRON on Ronin), the same source as FLOWER." },
+        ] },
         { ver: "v6.00", items: [
           { t: "feat", text: "<b>POWER and ROADMAP value what they used to skip.</b> ~145 items and skills parsed into “other” and were worth 0, so they never reached the buy path. New categories, each the game's own rule run with and without the boost on your farm (measured from your weekly records where it needs your activity): <b>🧂 SALT</b> (Wide Rakes, Cheap Rakes, Salty Seas, Sea Blessed, Salt Surge with their L2/L3, Ascended Idol, Salt Worker Gnome, Deep Sea Salt Cave Background), <b>🐮 ANIMAL EXTRAS</b> (Vibraphone, Double Bale, Bale Economy), <b>🐟 AGING & RACKS</b> (Winged Vase, Surfer Hair, Astrolabe, Salt Bottle Onesie, Fish Smoking, Speedy Aging, Ager, Refiner, Bacalhau, Alchemist Apron), <b>⚙️ CROP MACHINE</b> skills, <b>⚡ POWER SKILLS</b> (Instant Growth, Barnyard Rouse, Greenhouse Guru… — if used whenever the cooldown is up) and <b>⭐ BUMPKIN XP</b> (Observatory, Golden Spatula, Pan, Munching Mastery, from the XP you actually gain). Seasonal wearables (Autumn's Embrace, Solflare Aegis, Frozen Heart, Blossom Ward) count at their annual average, Angel / Devil Wings as −30 % crop time, seed discounts (Fruity Heaven, Flower Sale, Seedy Business, Ladybug Suit, Sunflower Shield, Hungry Caterpillar) lower the seed cost." },
           { t: "feat", text: "Every boost that still has no FLOWER value says <b>why</b> (POWER's qualitative rows, ROADMAP's no-value list) — e.g. per-food XP boosts need the food mix, which the game no longer stores." },

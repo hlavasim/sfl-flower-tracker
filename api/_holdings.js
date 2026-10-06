@@ -81,8 +81,15 @@ export async function readAddress(addr) {
  * priced by its DEX pools). A price that fails stays undefined — that holding is shown unpriced,
  * the others still count; only when every source fails is it an error.
  */
-const COINBASE_PAIRS = { bitcoin: "BTC-USD", ethereum: "ETH-USD", ronin: "RON-USD" };
+/*
+ * RON is NOT from Coinbase: Coinbase no longer trades RON-USD (its exchange returns NotFound) but
+ * its /prices spot still answers with a stale 0.21 while RON traded at ~0.067 (2026-10-06) — every
+ * RON, WRON and Genesis egg on a wallet read ~3× too high. RON comes from GeckoTerminal's WRON price
+ * on Ronin, the same source as FLOWER.
+ */
+const COINBASE_PAIRS = { bitcoin: "BTC-USD", ethereum: "ETH-USD" };
 const FLOWER_BASE = "0x3e12b9d6a4d12cd9b4a6d613872d0eb32f68b380";
+const WRON_RONIN = "0xe514d9deb7966c8be0ca922de8a064264ea6bcd4";
 export async function fetchPrices() {
   const get = (u) => fetch(u, { headers: { "user-agent": UA, accept: "application/json" } })
     .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`${new URL(u).host} ${r.status}`))));
@@ -93,6 +100,9 @@ export async function fetchPrices() {
       .then((j) => { const v = parseFloat(j && j.data && j.data.amount); if (v > 0) p[id] = v; }).catch((e) => errs.push(e.message))),
     get(`https://api.geckoterminal.com/api/v2/simple/networks/base/token_price/${FLOWER_BASE}`)
       .then((j) => { const v = parseFloat(j && j.data && j.data.attributes && j.data.attributes.token_prices && j.data.attributes.token_prices[FLOWER_BASE]); if (v > 0) p["flower-2"] = v; })
+      .catch((e) => errs.push(e.message)),
+    get(`https://api.geckoterminal.com/api/v2/simple/networks/ronin/token_price/${WRON_RONIN}`)
+      .then((j) => { const v = parseFloat(j && j.data && j.data.attributes && j.data.attributes.token_prices && j.data.attributes.token_prices[WRON_RONIN]); if (v > 0) p.ronin = v; })
       .catch((e) => errs.push(e.message)),
   ]);
   if (PRICE_IDS.every((id) => !(p[id] > 0))) throw new Error(`prices: ${errs.join(", ") || "none"}`);
