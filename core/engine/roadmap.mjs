@@ -18,7 +18,7 @@
 import {
   RES_FARMKEY, gameResYield, gameResBoostedBase, applyBoosts, miningToolsPerDay, calcToolCostPerDay,
   getCycleSec, getCapacityCount, getDefaultProduct, isAnimalCat, POWER_CATEGORIES,
-  getCount, findCollectible,
+  getCount, findCollectible, isWearableEquipped,
   getEffectsForCategory, TOOL_TO_CAT, SKILL_POINTS_PER_TIER, getBaseYield,
 } from "./power-helpers.mjs";
 import {
@@ -37,6 +37,7 @@ import {
   CROP_MACHINE_NFTS, CROP_MACHINE_SPEED_ITEMS,
 } from "./crop-machine.mjs";
 import { decodeBud, budSetSfl, budBoostText } from "./buds.mjs";
+import { SIDE_MODELS, sideValue, sideRankDelta } from "./side-values.mjs";
 
 // Deviation 1: the page global, module-scoped. Set before any calc.
 let powerState = null;
@@ -525,6 +526,23 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         return { solo: 0, synergy: 0, roi: Infinity, disabled: true, disabledByName: boostItem.disabledByName };
       }
 
+      /*
+       * SIDE categories (salt, …): the side model's marginal on this farm (core/engine/side-values.mjs),
+       * at these prices and the roadmap's coin rule. A skill counts at the rank the farm has, or rank 1
+       * when it is not taken; its L2/L3 come from the rank layer. Already at the measured pace, so the
+       * callers do not scale it again.
+       */
+      if (POWER_CATEGORIES[catId] && POWER_CATEGORIES[catId].side) {
+        const sm = SIDE_MODELS[boostItem.name];
+        if (!sm || sm.cat !== catId) return { solo: 0, synergy: 0, roi: Infinity };
+        const cur = Number((((powerState.farm || {}).bumpkin || {}).skills || {})[boostItem.name]) || 0;
+        let r = null;
+        try { r = sideValue(boostItem.name, roadmapSideCtx(getRoadmapSettings(powerState.roadmapSettingsRaw), p2pPrices), sm.skill ? (isOwned ? Math.max(1, cur) : 1) : null); } catch (e) { r = null; }
+        const v = r && isFinite(r.perDay) ? r.perDay : 0;
+        return { solo: v, synergy: v, roi: (boostItem.floor > 0 && v > 0) ? boostItem.floor / v : Infinity, side: true,
+          ...(sm.power ? { conditional: "power skill — počítá s použitím pokaždé, když vyprší cooldown" } : {}) };
+      }
+
       // Handle cost_reduction effects (e.g., Feller's Discount, Frugal Miner)
       const costEffects = catEffects.filter(e => e.type === "cost_reduction");
       if (costEffects.length > 0) {
@@ -984,6 +1002,55 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       return Math.max(0, here);
     }
 
+    function roadmapSideCtx(settings, prices) {
+      const { farm, exchangeRates } = powerState;
+      const sci = powerState.skillCostInfo || {};
+      const sflPerXP = sci.bestRecipe && sci.bestRecipe.boostedXP > 0 ? sci.bestRecipe.cost / sci.bestRecipe.boostedXP : 0;
+      // Animal harvests a day — each animal once per boosted cycle, at the measured pace.
+      const animalHarvests = {};
+      for (const cat of ["chickens", "cows", "sheep"]) {
+        try {
+          const n = getCapacityCount(cat, powerState.capacity) || 0;
+          const cyc = applyBoosts(cat, getDefaultProduct(cat), powerState.capacity, roadmapOwnedEffects(cat), farm).effectiveCycle || 86400;
+          animalHarvests[cat] = n * (86400 / cyc) * roadmapEffFactor(cat, settings);
+        } catch (e) { animalHarvests[cat] = 0; }
+      }
+      // The machine's day with a given machine-skill set (side-values machineNet): every crop those
+      // skills unlock that the owner has not unticked ("cm:<Crop>"), restock-capped like the income.
+      let machineNet = null;
+      if (farm && farmHasCropMachine(farm)) {
+        const cm = roadmapCropMachineMix(settings);
+        const MSK = ["Oil Gadget", "Efficiency Extension Module", "Field Extension Module", "Crop Extension Module I",
+          "Crop Extension Module II", "Crop Extension Module III", "Leak-Proof Tank", "Field Expansion Module"];
+        if (cm) machineNet = (skills) => {
+          const base = Object.assign({}, (farm.bumpkin && farm.bumpkin.skills) || {});
+          for (const n of MSK) delete base[n];
+          const f2 = Object.assign({}, farm, { bumpkin: Object.assign({}, farm.bumpkin, { skills: Object.assign(base, skills) }) });
+          const crops = cropMachineCrops(f2).filter((c) => (settings.excludeCats || []).indexOf("cm:" + c) < 0);
+          return cropMachineMix(f2, crops, cm.p2p, cm.er, cm.opts).net;
+        };
+      }
+      return { farm, prices: prices || roadmapPrices(settings), coinsPerSFL: (exchangeRates && exchangeRates.coinsPerSFL) || 0,
+        coinsFree: roadmapCoinsFree(settings), activity: powerState.sideActivity || null, sflPerXP, animalHarvests, machineNet,
+        // A category's net with extra effects minus without (power skills' extra cycles), on the
+        // owned setup — the roadmap's own category engine, so costs come with it.
+        catGain: (cat, effects) => {
+          try {
+            const own = roadmapOwnedEffects(cat);
+            const net = (ef) => (ROADMAP_MINING_CATS.indexOf(cat) >= 0
+              ? (roadmapMiningChain(settings, { [cat]: ef }).byCat[cat] || { net: 0 }).net
+              : roadmapCatNet(cat, ef, settings));
+            return net(own.concat(effects)) - net(own);
+          } catch (e) { return 0; }
+        },
+        isActive: (n) => findCollectible(farm, n).length > 0 || (() => { try { return isWearableEquipped(farm, n); } catch (e) { return false; } })() };
+    }
+
+    // A side skill's rank-up (L → L+1 marginal) — the same context calcBoostValue's side branch uses.
+    function roadmapSideRankDelta(name, level) {
+      return sideRankDelta(name, roadmapSideCtx(getRoadmapSettings(powerState.roadmapSettingsRaw), powerState.p2pPrices), level);
+    }
+
     function roadmapItemValue(clone, catBoostsW, settings) {
       if (!clone) return 0;
       if (clone.fixedMarginal !== undefined) return clone.fixedMarginal; // node merge/expand actions
@@ -993,7 +1060,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       const { capacity, p2pPrices, savedProducts } = powerState;
       for (const cat of clone.categories) {
         if (_exV.indexOf(cat) >= 0) continue; // user filtered this activity out
-        if (!POWER_CATEGORIES[cat] || !POWER_CATEGORIES[cat].quantifiable) continue;
+        if (!POWER_CATEGORIES[cat] || !(POWER_CATEGORIES[cat].quantifiable || POWER_CATEGORIES[cat].side)) continue;
         if (!clone.effects.some(e => e.cat === cat)) continue;
         const allCatBoosts = catBoostsW[cat];
         if (!allCatBoosts) continue;
@@ -1010,7 +1077,8 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         // scaling is applied here, the same way core/sections/power.mjs scales what it displays.
         // Inputs (oil / lava pits) scale by how often they actually run — the same factor their
         // cost in YOUR INCOME RIGHT NOW uses; roadmapEffFactor pins obsidian to 1 for a sale model.
-        if (v > 0) total += v * (ROADMAP_INPUT_CATS.indexOf(cat) >= 0 ? roadmapInputEff(cat, settings) : roadmapEffFactor(cat, settings));
+        // Side models already run at the farm's measured pace — no second scaling.
+        if (v > 0) total += v * (POWER_CATEGORIES[cat].side ? 1 : ROADMAP_INPUT_CATS.indexOf(cat) >= 0 ? roadmapInputEff(cat, settings) : roadmapEffFactor(cat, settings));
       }
       // What it adds to the Crop Machine's mix — separate production from the plots above, so a
       // crop NFT that helps both (Infernal Pitchfork) is worth both. Unscaled, like the machine's
@@ -1847,7 +1915,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         if (!(m.floor > 0) || m.floor > TROLL) { untradeable.push(m); continue; }
         if (!m.clone) { noBoostCount++; continue; } // no boost at all (pure decoration) → not part of the profit roadmap
         if (m.floor > maxP) { tail.push(m); continue; }
-        const economic = !m.clone.isDisabled && m.clone.categories.some(c => POWER_CATEGORIES[c] && POWER_CATEGORIES[c].quantifiable);
+        const economic = !m.clone.isDisabled && m.clone.categories.some(c => POWER_CATEGORIES[c] && (POWER_CATEGORIES[c].quantifiable || POWER_CATEGORIES[c].side));
         if (economic) econ.push(m); else cosmetic.push(m);
       }
       // Fold in node expansion / Obsidian-merge actions (respect the price cap).
@@ -2008,7 +2076,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       for (const m of cosmetic) {
         const days = rate > 0 ? m.floor / rate : Infinity;
         cumDays += days;
-        timeline.push({ name: m.name, type: m.type, boost: m.boost, floor: m.floor, marginal: 0, roi: Infinity, atDay: cumDays, rateAfter: rate, kind: "cosmetic" });
+        timeline.push({ name: m.name, type: m.type, boost: m.boost, floor: m.floor, marginal: 0, roi: Infinity, atDay: cumDays, rateAfter: rate, kind: "cosmetic", reason: (m.clone && m.clone.noValueReason) || null });
       }
       const totalCost = timeline.reduce((s, t) => s + t.floor, 0);
       // Worthwhile core: the good-payback buys (the ones actually worth doing) vs the expensive long tail.
@@ -2113,7 +2181,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
 
 export {
   farmHasWarehouse, gameResUnitsPerDay, roadmapPrices, roadmapProductNetEff,
-  roadmapProductBreakdown, roadmapSaltBreakdown, roadmapEffFactor,
+  roadmapProductBreakdown, roadmapSaltBreakdown, roadmapEffFactor, roadmapSideRankDelta,
   roadmapCoinsFree, roadmapInSeason, MINE_RES,
   roadmapPerPlot,   BASE_NODE_COUNTS, MERGE_COSTS, countNodeTiers, roadmapCurrentProduction,
   roadmapItemValue, roadmapItemSituational, roadmapSimulate, _setRoadmapState,

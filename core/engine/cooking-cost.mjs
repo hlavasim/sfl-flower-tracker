@@ -2,20 +2,27 @@ import { findCollectible, isWearableEquipped } from "../derive/items.mjs";
 import { COOKING_INGREDIENTS, COOKING_RECIPES_DATA, SALT_BASE_YIELD } from "../data/cooking.mjs";
 import { itemProductionCost } from "./item-value.mjs";
 
+// types/salt.ts getSaltYieldPerRake: Wide Rakes +2/+3/+4 by rank (it was a flat +2), Deep Sea Salt
+// Cave Background +5, Salt Worker Gnome +2 (missing before). The VIP +2 is Salt Awakening only.
+const _rankOf = (v) => { const n = Number(v); return n > 0 ? n : (v ? 1 : 0); };
 export function computeSaltYieldPerRake(farm) {
   let y = SALT_BASE_YIELD;
   const skills = farm?.bumpkin?.skills || {};
-  if (skills["Wide Rakes"]) y += 2;
+  const wide = _rankOf(skills["Wide Rakes"]);
+  if (wide) y += [2, 3, 4][Math.min(wide, 3) - 1];
   try { if (farm && isWearableEquipped(farm, "Deep Sea Salt Cave Background")) y += 5; } catch {}
+  try { if (farm && findCollectible(farm, "Salt Worker Gnome").length > 0) y += 2; } catch {}
   return y;
 }
 
-// Salt Rake coin-cost multiplier — Cheap Rakes (-20%) + Salt Sculpture L4+ (-10%), multiplicative
+// Salt Rake coin-cost multiplier (craftTool.ts) — Cheap Rakes ×0.8/0.7/0.6 by rank + Salt
+// Sculpture L4+ ×0.9, multiplicative
 export function computeSaltRakeCoinMult(farm) {
   const skills = farm?.bumpkin?.skills || {};
   const lvl = farm?.sculptures?.["Salt Sculpture"]?.level || 0;
   let m = 1;
-  if (skills["Cheap Rakes"]) m *= 0.80;
+  const cheap = _rankOf(skills["Cheap Rakes"]);
+  if (cheap) m *= [0.8, 0.7, 0.6][Math.min(cheap, 3) - 1];
   if (lvl >= 4) m *= 0.90;
   return m;
 }

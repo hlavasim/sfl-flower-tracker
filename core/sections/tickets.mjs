@@ -20,6 +20,7 @@ import { FEED_RECIPES, FEED_QTY, FEED_XP_TABLE } from "../engine/power-costs.mjs
 import { computeSaltYieldPerRake, computeSaltRakeCoinMult } from "../engine/cooking-cost.mjs";
 import { CHORE_TASKS } from "../engine/chore-tasks.mjs";
 import { SALT_RAKE_COST, FISH_BASE_XP, GAME_FISH_SPELLING, getAgingSaltCost, getAgingMaxXP } from "../data/cooking.mjs";
+import { SIDE_MODELS, sideValue } from "../engine/side-values.mjs";
 
 const DAY = 86400000;
 const WEEKLY_BOUNTY_BONUS = 100;
@@ -535,8 +536,11 @@ export function measuredActivity(weeks, spanWeeks = 4) {
     else if ((m = k.match(/^Aged (.+) Collected$/))) aged[m[1]] = d(k);
     else if ((m = k.match(/^(.+) (Spiced|Fermented)$/))) racks[m[1]] = d(k);
   }
+  // Bumpkin XP gained a day (every source, every boost the farm has) — what the XP boosts scale.
+  const xp0 = +((first.farm.bumpkin || {}).experience || 0), xp1 = +((last.farm.bumpkin || {}).experience || 0);
   return {
     days: +days.toFixed(2), from: first.wk, to: last.wk,
+    xpPerDay: xp0 > 0 && xp1 > 0 ? Math.max(0, xp1 - xp0) / days : null,
     saltHarvests: d("Salt Harvested"), potionGames: Math.max(0, games(last.farm) - games(first.farm)) / days,
     aged, prime, racks,
     fullMoon: { Celestine: d("Celestine Harvested"), Lunara: d("Lunara Harvested"), Duskberry: d("Duskberry Harvested") },
@@ -613,6 +617,24 @@ function auctionItemValues(farm, prices, opts) {
     { name: "Salt Rug", kind: "collectible", what: "dekorace", perDay: 0, basis: "" },
     { name: "Coat Rack", kind: "collectible", what: "dekorace", perDay: 0, basis: "" },
   ];
+  /*
+   * ONE valuation: an item a side model prices (salt, aging, animals — core/engine/side-values.mjs)
+   * takes that number, the one POWER and ROADMAP show, instead of the formula above. Same prices
+   * (market value, else production cost) and the same measured activity.
+   */
+  const sideCtx = {
+    farm, prices: new Proxy({}, { get: (_, n) => (typeof n === "string" ? mv(n) : undefined) }),
+    coinsPerSFL, coinsFree: false, activity: act, sflPerXP,
+    isActive: (n) => findCollectible(farm, n).length > 0 || (() => { try { return isWearableEquipped(farm, n); } catch { return false; } })(),
+  };
+  for (const it of items) {
+    if (!SIDE_MODELS[it.name]) continue;
+    const needsAct = SIDE_MODELS[it.name].cat !== "salt";
+    if (needsAct && !act) continue;                         // keeps its "potřebuje historii" note
+    let r = null;
+    try { r = sideValue(it.name, sideCtx, null); } catch { r = null; }
+    if (r && isFinite(r.perDay)) { it.perDay = r.perDay; it.basis = (it.basis ? it.basis + " · " : "") + "stejný výpočet jako POWER / ROADMAP"; }
+  }
   return items.map((it) => ({ ...it, source: "auction", owned: hasItem(farm, it.name, it.kind),
     perYear: it.perDay == null ? null : it.perDay * 365 }));
 }

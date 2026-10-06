@@ -4628,6 +4628,14 @@
       trees:     { label: "TREES",    emoji: "🌳", selector: null,   quantifiable: true },
       fishing:  { label: "FISHING",  emoji: "🎣", selector: null,   quantifiable: true },
       bees:     { label: "BEES",     emoji: "🐝", selector: null,   quantifiable: true },
+      // Side — valued by core/engine/side-values.mjs (the game's rule for the activity), not by a
+      // production pass; quantifiable stays false so the production loops skip them.
+      salt:       { label: "SALT",          emoji: "🧂", selector: null, quantifiable: false, side: true },
+      animalx:    { label: "ANIMAL EXTRAS", emoji: "🐮", selector: null, quantifiable: false, side: true },
+      aging:      { label: "AGING & RACKS", emoji: "🐟", selector: null, quantifiable: false, side: true },
+      machine:    { label: "CROP MACHINE",  emoji: "⚙️", selector: null, quantifiable: false, side: true },
+      power:      { label: "POWER SKILLS",  emoji: "⚡", selector: null, quantifiable: false, side: true },
+      xp:         { label: "BUMPKIN XP",    emoji: "⭐", selector: null, quantifiable: false, side: true },
       // Qualitative
       pets:       { label: "PETS",          emoji: "🐾", selector: null, quantifiable: false },
       cooking:    { label: "COOKING / XP",  emoji: "🍳", selector: null, quantifiable: false },
@@ -5420,7 +5428,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v5.99</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.00</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5447,6 +5455,11 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.00", items: [
+          { t: "feat", text: "<b>POWER and ROADMAP value what they used to skip.</b> ~145 items and skills parsed into “other” and were worth 0, so they never reached the buy path. New categories, each the game's own rule run with and without the boost on your farm (measured from your weekly records where it needs your activity): <b>🧂 SALT</b> (Wide Rakes, Cheap Rakes, Salty Seas, Sea Blessed, Salt Surge with their L2/L3, Ascended Idol, Salt Worker Gnome, Deep Sea Salt Cave Background), <b>🐮 ANIMAL EXTRAS</b> (Vibraphone, Double Bale, Bale Economy), <b>🐟 AGING & RACKS</b> (Winged Vase, Surfer Hair, Astrolabe, Salt Bottle Onesie, Fish Smoking, Speedy Aging, Ager, Refiner, Bacalhau, Alchemist Apron), <b>⚙️ CROP MACHINE</b> skills, <b>⚡ POWER SKILLS</b> (Instant Growth, Barnyard Rouse, Greenhouse Guru… — if used whenever the cooldown is up) and <b>⭐ BUMPKIN XP</b> (Observatory, Golden Spatula, Pan, Munching Mastery, from the XP you actually gain). Seasonal wearables (Autumn's Embrace, Solflare Aegis, Frozen Heart, Blossom Ward) count at their annual average, Angel / Devil Wings as −30 % crop time, seed discounts (Fruity Heaven, Flower Sale, Seedy Business, Ladybug Suit, Sunflower Shield, Hungry Caterpillar) lower the seed cost." },
+          { t: "feat", text: "Every boost that still has no FLOWER value says <b>why</b> (POWER's qualitative rows, ROADMAP's no-value list) — e.g. per-food XP boosts need the food mix, which the game no longer stores." },
+          { t: "fix", text: "Salt income: Wide Rakes and Cheap Rakes count their rank (+2/+3/+4 salt, −20/30/40 % rake coins), Salt Worker Gnome adds its +2. Crop Machine: Field Extension (+5/7/10 plots), Oil Gadget, Efficiency Extension, Crop Processor Unit and Rapid Rig count their rank. TICKETY's auction items now take the same numbers (Vibraphone was ~5× too low: a spice job is 5 Salt Licks)." },
+        ] },
         { ver: "v5.99", items: [
           { t: "feat", text: "TICKETY: <b>auction schedule.</b> All 13 items of this chapter's auction (Salt Rug … Winged Vase, plus the returning Quarry, Autumn's Embrace, Tomato Clown and a Pet), 5 rounds 5 h apart: the next round in your time, rounds left, what the item would add on your farm a day, and <b>PRODEJ</b> — today's floor after the 10 % fee, the most worth bidding even for a copy you would only resell (Quarry ~6,200)." },
         ] },
@@ -14870,9 +14883,10 @@
        * back to theoretical — `valueBasis` in the response says which one you got.
        */
       if (!_roadmapSnapshotsCache) { try { _roadmapSnapshotsCache = await _roadmapFetchHistorySlim(); } catch (e) { _roadmapSnapshotsCache = []; } }
-      const payload = await _fetchCompute(url, (_roadmapSnapshotsCache && _roadmapSnapshotsCache.length)
+      const sideWeeks = await _sideWeeks();
+      const payload = await _fetchCompute(url, ((_roadmapSnapshotsCache && _roadmapSnapshotsCache.length) || sideWeeks.length)
         ? { init: { method: "POST", headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ snapshots: _roadmapSnapshotsCache }) } }
+                    body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [], weeks: sideWeeks }) } }
         : undefined);
       const d = payload.data || {};
       // Rebuild category → boosts mapping (shared refs into boostItems)
@@ -16091,6 +16105,21 @@
       await renderRoadmapContent();
     }
 
+    /*
+     * The farm's weekly records (farm-history?type=ticket-weeks, the tracked farms only): POSTed to
+     * section=power / roadmap as `weeks`, so the side models (salt, aging, … — core/engine/side-values.mjs)
+     * run at the measured activity. Fetched once per page; [] when there are none.
+     */
+    let _sideWeeksCache = null;
+    async function _sideWeeks() {
+      if (_sideWeeksCache) return _sideWeeksCache;
+      try {
+        const r = await fetch(`/api/farm-history?type=ticket-weeks&farm=${FARM_ID}`);
+        _sideWeeksCache = r.ok ? ((await r.json()).weeks || []) : [];
+      } catch (e) { _sideWeeksCache = []; }
+      return _sideWeeksCache;
+    }
+
     // farm-history rows slimmed to the _h.* diff slices section=roadmap/eff consume.
     let _roadmapSnapshotsCache = null;
     let _roadmapServer = null; // last section=roadmap payload { eff, currentProd, startIncome, sim }
@@ -16236,9 +16265,10 @@
         const q = `products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}&roadmap=${encodeURIComponent(_rmServerSettingsJson())}`;
         const bookP = _rmLoadBook();
         const budFloors = await _rmLoadBudFloors();
+        const weeks = await _sideWeeks();
         const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=roadmap&${q}`, {
           method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [], budFloors }),
+          body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [], budFloors, weeks }),
         });
         if (!rp.ok) throw new Error(`compute roadmap ${rp.status}`);
         const d = (await rp.json()).data || {};
@@ -16447,7 +16477,7 @@
         if (settings.showCosmetic) {
           h += `<details style="margin-top:12px"><summary style="cursor:pointer;font-size:0.55rem;color:var(--text-secondary)">${cosmeticRows.length} no-FLOWER-value boost NFTs (qualitative / net \u2264 0) \u2014 cheapest first</summary><div style="overflow-x:auto;margin-top:6px"><table style="width:100%;border-collapse:collapse;font-size:0.58rem"><tbody>`;
           for (const m of cosmeticRows.slice(0, 100)) {
-            h += `<tr style="border-top:1px solid #222"><td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(m.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(m.name)} ${typeBadge(m.type)}</td><td style="padding:3px 6px;color:var(--text-dim);max-width:260px">${escHTML((m.boost || "").split("\n").join(" \u00b7 "))}</td><td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(m.floor)}</td></tr>`;
+            h += `<tr style="border-top:1px solid #222"><td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(m.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(m.name)} ${typeBadge(m.type)}</td><td style="padding:3px 6px;color:var(--text-dim);max-width:260px">${escHTML((m.boost || "").split("\n").join(" \u00b7 "))}${m.reason ? `<div style="font-style:italic;margin-top:2px">${escHTML(m.reason)}</div>` : ""}</td><td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(m.floor)}</td></tr>`;
           }
           h += `</tbody></table></div></details>`;
         } else {
@@ -16996,7 +17026,7 @@
       // Best Buys: top 10 missing boosts by ROI
       const bestBuys = [];
       for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
-        if (!catDef.quantifiable) continue;
+        if (!catDef.quantifiable && !catDef.side) continue;
         const product = savedProducts[catId] || getDefaultProduct(catId);
         const missingInCat = catBoosts[catId].filter(b => !b.has && !b.owned && !b.isDisabled && b.floor > 0); // never "buy" what you own
         for (const b of missingInCat) {
@@ -17248,11 +17278,49 @@
         content += `</div></div>`; // cat-body, power-category
       }
 
+      /*
+       * SIDE categories (salt, …): valued by the side models (core/engine/side-values.mjs) at the
+       * farm's measured activity — no production summary, just the boosts with their FLOWER a day
+       * and, for skills, the served L2/L3 ladder.
+       */
+      const sideCats = Object.entries(POWER_CATEGORIES).filter(([c, d]) => d.side && (catBoosts[c] || []).length);
+      if (sideCats.length) {
+        content += `<div class="pixel-font" style="font-size: 0.6875rem;color:var(--text-secondary);margin:16px 0 8px;border-bottom:2px solid var(--border-dark);padding-bottom:4px">═══ DALŠÍ ČINNOSTI (podle pravidel hry a tvé aktivity) ═══</div>`;
+        for (const [catId, catDef] of sideCats) {
+          const items = catBoosts[catId];
+          const owned = items.filter(b => b.has || b.owned);
+          const missing = items.filter(b => !b.has && !b.owned);
+          content += `<div class="power-category pixel-panel" id="power-cat-${catId}">`;
+          content += `<div class="power-cat-header pixel-font" onclick="togglePowerCategory('${catId}')">
+            <span>${catDef.emoji} ${catDef.label}</span>
+            <span class="power-cat-count">${owned.length}/${items.length} owned</span>
+            <span class="power-toggle-arrow">▶</span>
+          </div>`;
+          content += `<div class="power-cat-body">`;
+          if (owned.length > 0) {
+            content += `<div class="power-subsection-label">✅ OWNED (${owned.length})</div>`;
+            for (const b of owned) {
+              content += renderPowerBoostRow(b, catId, null, _powerBoostVal(catId, b), true);
+              content += renderPowerSkillRankRows(b, catId, null, capacity, p2pPrices, items, true);
+            }
+          }
+          if (missing.length > 0) {
+            content += `<div class="power-subsection-label">❌ MISSING (${missing.length})</div>`;
+            const mv = missing.map(b => ({ b, val: _powerBoostVal(catId, b) })).sort((x, y) => x.val.roi - y.val.roi);
+            for (const { b, val } of mv) {
+              content += renderPowerBoostRow(b, catId, null, val, false);
+              content += renderPowerSkillRankRows(b, catId, null, capacity, p2pPrices, items, false);
+            }
+          }
+          content += `</div></div>`;
+        }
+      }
+
       // Qualitative categories
       content += `<div class="pixel-font" style="font-size: 0.6875rem;color:var(--text-secondary);margin:16px 0 8px;border-bottom:2px solid var(--border-dark);padding-bottom:4px">═══ QUALITATIVE BOOSTS ═══</div>`;
 
       for (const [catId, catDef] of Object.entries(POWER_CATEGORIES)) {
-        if (catDef.quantifiable) continue;
+        if (catDef.quantifiable || catDef.side) continue;
         const items = catBoosts[catId];
         if (items.length === 0) continue;
 
@@ -17755,7 +17823,11 @@
     }
 
     function renderPowerSkillRankRows(b, catId, product, capacity, p2pPrices, allCatBoosts, isOwned) {
-      const r = powerSkillRankVals(b, catId, product, capacity, p2pPrices, allCatBoosts, isOwned);
+      // A side category's ladder is served by section=power (skillRanks, from the side model) — the
+      // client-side rank pass scales effects a side model does not have.
+      const sideSr = POWER_CATEGORIES[catId] && POWER_CATEGORIES[catId].side ? (powerState.skillRanks || {})[b.name] : null;
+      const r = sideSr ? (sideSr.rows && sideSr.rows.length ? { up: (typeof SKILL_UPGRADES !== "undefined" && SKILL_UPGRADES[b.name]) || {}, cost: sideSr.cost, rows: sideSr.rows } : null)
+        : (POWER_CATEGORIES[catId] && POWER_CATEGORIES[catId].side ? null : powerSkillRankVals(b, catId, product, capacity, p2pPrices, allCatBoosts, isOwned));
       if (!r || !r.up || !r.rows.length) return "";
       let sflPerPt = 0;
       try { sflPerPt = (calcSkillPointCost(powerState.farm.bumpkin, powerState.p2pPrices, powerState.farm) || {}).sflPerPoint || 0; } catch (e) {}
@@ -17764,7 +17836,7 @@
         const sflCost = sflPerPt * row.points;
         const rb = Object.assign({}, b, {
           name: b.name + " — Level " + row.lvl,
-          boost: skillRankText(r.up, row.lvl),
+          boost: row.text || skillRankText(r.up, row.lvl),
           floor: sflCost,
           skillPoints: row.points,
           rankShards: row.shards,
@@ -17863,6 +17935,7 @@
         <div class="power-boost-info">
           <div class="power-boost-name">${escHTML(b.name)} <span class="power-boost-type">${escHTML(typeLabel)}</span></div>
           <div class="power-boost-text">${escHTML(b.boost)}</div>
+          ${b.noValueReason ? `<div class="power-boost-text" style="color:var(--text-dim);font-style:italic">bez FLOWER hodnoty: ${escHTML(b.noValueReason)}</div>` : ""}
         </div>
         <div class="power-boost-value">
           ${!isOwned && costLabel ? `<div class="power-boost-floor">${costLabel}</div>` : ""}
@@ -19915,9 +19988,10 @@
          */
         if (!_roadmapSnapshotsCache) { try { _roadmapSnapshotsCache = await _roadmapFetchHistorySlim(); } catch (e) { _roadmapSnapshotsCache = []; } }
         const q = `products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}&roadmap=${encodeURIComponent(_rmServerSettingsJson())}`;
+        const weeks = await _sideWeeks();
         const r = await fetch(`/api/compute?farm=${FARM_ID}&section=roadmap&${q}`, {
           method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [] }),
+          body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [], weeks }),
         });
         if (!r.ok) return;
         const d = (await r.json()).data || {};

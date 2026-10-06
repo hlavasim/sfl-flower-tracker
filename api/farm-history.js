@@ -528,7 +528,7 @@ export default async function handler(req, res) {
                   'npcs', game_data->'npcs',
                   'vip', game_data->'vip',
                   'inventory', jsonb_strip_nulls(jsonb_build_object('Lifetime Farmer Banner', game_data->'inventory'->'Lifetime Farmer Banner', 'Gem', game_data->'inventory'->'Gem')),
-                  'bumpkin', jsonb_build_object('equipped', game_data->'bumpkin'->'equipped'),
+                  'bumpkin', jsonb_build_object('equipped', game_data->'bumpkin'->'equipped', 'experience', game_data->'bumpkin'->'experience'),
                   'farmHands', game_data->'farmHands',
                   'dailyRewards', game_data->'dailyRewards',
                   'farmActivity', (SELECT jsonb_object_agg(k, v) FROM jsonb_each(game_data->'farmActivity') t(k, v)

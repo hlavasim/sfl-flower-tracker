@@ -5,17 +5,24 @@ import { SEED_COSTS } from "../data/economy.mjs";
 import { findCollectible } from "./power-helpers.mjs";
 
     // ── flowers.html 4028-4101: crop machine cluster ──
+    // Skill ranks (supplyCropMachine.ts, SKILL_RANKS): a taken skill stores its rank (1-3), an old
+    // save `true` — rank 1. They were flat rank-1 values here, so L2/L3 were worth nothing.
+    const _cmRank = (sk, name) => { const v = sk[name]; const n = Number(v); return n > 0 ? Math.min(3, n) : (v ? 1 : 0); };
+    const _cmAt = (ranks, r) => ranks[r - 1];
     function cropMachinePlots(farm) {
-      return (farm.bumpkin?.skills?.["Field Extension Module"]) ? 15 : 10;
+      const r = _cmRank(farm.bumpkin?.skills || {}, "Field Extension Module");
+      return 10 + (r ? _cmAt([5, 7, 10], r) : 0);
     }
     function cropMachineOilPerHour(farm) {
       const sk = farm.bumpkin?.skills || {};
       let addtl = 1;
-      if (sk["Crop Processor Unit"]) addtl += 0.1;
-      if (sk["Rapid Rig"]) addtl += 0.4;
+      const cpu = _cmRank(sk, "Crop Processor Unit"), rig = _cmRank(sk, "Rapid Rig");
+      if (cpu) addtl += _cmAt([0.1, 0.15, 0.2], cpu);
+      if (rig) addtl += _cmAt([0.4, 0.5, 0.6], rig);
       let reduction = 1;
-      if (sk["Oil Gadget"]) reduction -= 0.1;
-      if (sk["Efficiency Extension Module"]) reduction -= 0.3;
+      const og = _cmRank(sk, "Oil Gadget"), eem = _cmRank(sk, "Efficiency Extension Module");
+      if (og) reduction -= _cmAt([0.1, 0.15, 0.2], og);
+      if (eem) reduction -= _cmAt([0.3, 0.4, 0.5], eem);
       return addtl * reduction;
     }
     // Crops unlocked for Crop Machine. Default basic set + skill-gated additions.
@@ -34,8 +41,9 @@ import { findCollectible } from "./power-helpers.mjs";
     function cropMachineSpeedMult(farm, withTortoiseShrine) {
       const sk = farm.bumpkin?.skills || {};
       let m = 1;
-      if (sk["Crop Processor Unit"]) m *= 0.95;
-      if (sk["Rapid Rig"]) m *= 0.8;
+      const cpu = _cmRank(sk, "Crop Processor Unit"), rig = _cmRank(sk, "Rapid Rig");
+      if (cpu) m *= _cmAt([0.95, 0.9, 0.85], cpu);
+      if (rig) m *= _cmAt([0.8, 0.7, 0.6], rig);
       // Placed anywhere the game looks — all four collectible maps (findCollectible), not just
       // the farm and the legacy home: a Gramophone in the house interior counted as absent.
       const hasGramo = findCollectible(farm, "Groovy Gramophone").length > 0;

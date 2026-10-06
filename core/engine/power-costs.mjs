@@ -184,7 +184,10 @@ import { SEED_COSTS, TOOL_COSTS } from "../data/economy.mjs";
     function calcSeedCostPerDay(catId, product, capacity, exchangeRates, stockMods, boostEffects, p2pPrices) {
       const coinCost = SEED_COSTS[product];
       if (!coinCost || exchangeRates.coinsPerSFL <= 0) return { costPerDay: 0, seedSfl: 0, restockPerDay: 0 };
-      const seedSfl = coinCost / exchangeRates.coinsPerSFL;
+      // Seed coin discounts (Fruity Heaven −10 % fruit, Flower Sale −20 % flower, Seedy Business
+      // −15 % greenhouse, Ladybug Suit −25 % Onion): seed_cost_pct effects, product-scoped when set.
+      const _seedPct = (boostEffects || []).filter(e => e && e.type === "seed_cost_pct" && e.cat === catId && (!e.product || e.product === product)).reduce((s, e) => s + (e.value || 0), 0);
+      const seedSfl = coinCost * Math.max(0, 1 + _seedPct / 100) / exchangeRates.coinsPerSFL;
       const n = getCapacityCount(catId, capacity);
       if (n === 0) return { costPerDay: 0, seedSfl, restockPerDay: 0 };
 

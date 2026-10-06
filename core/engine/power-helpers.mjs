@@ -487,6 +487,14 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
       trees:     { label: "TREES",    emoji: "🌳", selector: null,   quantifiable: true },
       fishing:  { label: "FISHING",  emoji: "🎣", selector: null,   quantifiable: true },
       bees:     { label: "BEES",     emoji: "🐝", selector: null,   quantifiable: true },
+      // Side — valued by core/engine/side-values.mjs (the game's rule for the activity), not by a
+      // production pass; quantifiable stays false so the production loops skip them.
+      salt:       { label: "SALT",          emoji: "🧂", selector: null, quantifiable: false, side: true },
+      animalx:    { label: "ANIMAL EXTRAS", emoji: "🐮", selector: null, quantifiable: false, side: true },
+      aging:      { label: "AGING & RACKS", emoji: "🐟", selector: null, quantifiable: false, side: true },
+      machine:    { label: "CROP MACHINE",  emoji: "⚙️", selector: null, quantifiable: false, side: true },
+      power:      { label: "POWER SKILLS",  emoji: "⚡", selector: null, quantifiable: false, side: true },
+      xp:         { label: "BUMPKIN XP",    emoji: "⭐", selector: null, quantifiable: false, side: true },
       // Qualitative
       pets:       { label: "PETS",          emoji: "🐾", selector: null, quantifiable: false },
       cooking:    { label: "COOKING / XP",  emoji: "🍳", selector: null, quantifiable: false },

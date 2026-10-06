@@ -1,6 +1,7 @@
 // Boost-text parsing subsystem — extracted VERBATIM from flowers.html for the power
 // section. Data tables (grow-data, boost rules) are duplicated in core here; the inline
 // copies stay until their other consumers migrate. DOM-free.
+import { SIDE_MODELS } from "./side-values.mjs";
 
     export const CROP_GROW_DATA = {
       "Sunflower": 60, "Potato": 300, "Rhubarb": 600, "Pumpkin": 1800, "Zucchini": 1800,
@@ -63,6 +64,30 @@
     const BOOST_EFFECT_OVERRIDES = {
       // "-50% Oil to plant Rice" read as a -50% Oil YIELD. It is a planting cost on Rice only
       // (plantGreenhouse.ts: usage *= 0.5 for Rice Seed), so it has to be scoped to the product.
+      /*
+       * SEASONAL wearables work one season in four. Valued as the annual average the buy path uses
+       * (bought once, kept): −50 % plot crop time in one season = ×1.25 a year = −20 % all year;
+       * +1 yield in one season = +0.25.
+       */
+      "Autumn's Embrace": [
+        { type: "speed_pct", value: -20, cat: "crops", raw: "−50% plot crop time in Autumn (annual average −20%)" },
+      ],
+      "Solflare Aegis": [
+        { type: "speed_pct", value: -20, cat: "crops", raw: "−50% plot crop time in Summer (annual average −20%)" },
+      ],
+      "Frozen Heart": [
+        { type: "yield_flat", value: 0.25, cat: "crops", raw: "+1 plot crop yield in Winter (annual average +0.25)" },
+      ],
+      "Blossom Ward": [
+        { type: "yield_flat", value: 0.25, cat: "crops", raw: "+1 plot crop yield in Spring (annual average +0.25)" },
+      ],
+      // Free seeds (the game sets the seed price to 0) — a 100 % seed discount.
+      "Sunflower Shield": [
+        { type: "seed_cost_pct", value: -100, cat: "crops", product: "Sunflower", raw: "Free Sunflower Seeds" },
+      ],
+      "Hungry Caterpillar": [
+        { type: "seed_cost_pct", value: -100, cat: "flowers", raw: "Free Flower Seeds" },
+      ],
       "Rice Shirt": [
         { type: "yield_flat", value: 1, cat: "greenhouse", product: "Rice", raw: "+1 Rice" },
         { type: "oil_consumption_pct", value: -50, cat: "greenhouse", product: "Rice", raw: "-50% Oil to plant Rice" },
@@ -236,6 +261,19 @@
           }
           return result;
         }},
+      // Seed coin discounts → seed_cost_pct (calcSeedCostPerDay). Before the qualitative cost rules below.
+      { rx: /([+-]?\d+\.?\d*)%\s+Fruit\s+seeds?\s+cost/i,
+        fn: m => ({ type: "seed_cost_pct", value: -Math.abs(parseFloat(m[1])), cat: "fruits" }) },
+      { rx: /([+-]?\d+\.?\d*)%\s+Flower\s+seeds?\s+cost/i,
+        fn: m => ({ type: "seed_cost_pct", value: -Math.abs(parseFloat(m[1])), cat: "flowers" }) },
+      { rx: /([+-]?\d+\.?\d*)%\s+Greenhouse\s+seeds?\s+cost/i,
+        fn: m => ({ type: "seed_cost_pct", value: -Math.abs(parseFloat(m[1])), cat: "greenhouse" }) },
+      { rx: /([+-]?\d+\.?\d*)%\s+(\w+)\s+Seed\s+Coin\s+cost/i,
+        fn: m => { const cat = PRODUCT_TO_CATEGORY[m[2]]; return cat ? { type: "seed_cost_pct", value: -Math.abs(parseFloat(m[1])), cat, product: m[2] } : null; } },
+      // "30% Chance of Instant Crops" (Angel / Devil Wings): a p% chance to skip the wait is an
+      // expected (1−p)·T — the same as −p% growth time (the Tree Turnaround rule below).
+      { rx: /([\d.]+)%\s+chance\s+of\s+instant\s+crops?/i,
+        fn: m => ({ type: "speed_pct", value: -parseFloat(m[1]), cat: "crops" }) },
       // "N% Onion Seed Coin cost" → cost reduction, not yield
       { rx: /\d+%\s+[\w\s]+(?:Seed\s+)?Coin\s+cost/i,
         fn: m => ({ type: "qualitative", cat: "other", raw: m[0] }) },
@@ -647,7 +685,20 @@
       return out;
     }
 
+/*
+ * An item a side model prices (core/engine/side-values.mjs — salt, …) carries ONE "side" effect in
+ * that model's category instead of the "other" notes its text parses to, so it lands in a category
+ * POWER and ROADMAP value. The production categories never read a "side" effect.
+ */
 export function parseBoostEffects(boostText, itemName) {
+      const side = itemName && SIDE_MODELS[itemName];
+      if (side) {
+        const rest = _parseBoostEffects(boostText, itemName).filter((e) => e.cat !== "other");
+        return rest.concat({ type: "side", cat: side.cat, raw: (boostText || "").split("\n")[0] });
+      }
+      return _parseBoostEffects(boostText, itemName);
+}
+function _parseBoostEffects(boostText, itemName) {
       if (!boostText) return [];
       if (itemName && BOOST_EFFECT_OVERRIDES[itemName]) return BOOST_EFFECT_OVERRIDES[itemName].map(e => ({ ...e }));
       const effects = [];

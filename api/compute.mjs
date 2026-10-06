@@ -365,6 +365,10 @@ async function _handler(req, res) {
        */
       const pwBody = _parseBody(req.body);
       const pwSnaps = Array.isArray(pwBody.snapshots) ? pwBody.snapshots : [];
+      // Optional `weeks` (farm-history?type=ticket-weeks): the farm's measured activity — salt
+      // harvests, aging, potions… — that the side models (core/engine/side-values.mjs) run at.
+      const pwWeeks = Array.isArray(pwBody.weeks) ? pwBody.weeks.slice(0, 200) : [];
+      if (pwWeeks.length) pwSettings.activity = measuredActivity(pwWeeks);
       if (pwSnaps.length) {
         buildPowerSection(farm, p2p, nftResult.data, exchange, pwSettings); // context only
         const pwEff = roadmapComputeEfficiency(pwSnaps);
@@ -404,6 +408,8 @@ async function _handler(req, res) {
       let input = {};
       input = _parseBody(req.body);
       const rmSnaps = Array.isArray(input.snapshots) ? input.snapshots : [];
+      const rmWeeks = Array.isArray(input.weeks) ? input.weeks.slice(0, 200) : [];   // measured activity, as section=power
+      if (rmWeeks.length) rmPwSettings.activity = measuredActivity(rmWeeks);
       /*
        * Same three-step order as section=power: a context pass (roadmapComputeEfficiency reads
        * powerState), then THIS request's efficiency into the roadmap state, then the real pass.

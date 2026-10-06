@@ -21,6 +21,7 @@ import {
   CROP_GROW_DATA, PRODUCT_TO_CATEGORY,
 } from "../engine/power-boosts.mjs";
 import { computeBettyRate, pickCoinsPerSFL } from "../engine/prices.mjs";
+import { SIDE_MODELS, noValueReason } from "../engine/side-values.mjs";
 import { CHAPTER_BOOST_ITEMS, CHAPTER_TICKET } from "../data/chapter-items.mjs";
 import { SEED_COSTS } from "../data/economy.mjs";
 import {
@@ -39,7 +40,7 @@ import {
   calcLavaPitCostPerDay, getAnimalCatSfl, getPriceProduct, activeShrineEffects,
   buildQueueData, shrineStatuses, weatherProtection,
 } from "../engine/power-costs.mjs";
-import { _setPowerContext, calcBoostValue, roadmapEffFactor, getRoadmapSettings } from "../engine/roadmap.mjs";
+import { _setPowerContext, calcBoostValue, roadmapEffFactor, getRoadmapSettings, roadmapSideRankDelta } from "../engine/roadmap.mjs";
 import { SKILL_UPGRADES, powerSkillRankVals, skillRankText, skillUpgradeCost, powerCooldownEffects } from "../engine/skill-ranks.mjs";
 import { buildFormulaHTML } from "../engine/power-formula.mjs";
 // A composter is a PERIODIC action — cycle + inputs — so it is served as a per-day net here
@@ -265,6 +266,13 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
     });
   }
 
+  // A boost no category values carries WHY (side-values noValueReason) — POWER's qualitative rows
+  // and ROADMAP's no-value list show it, so nothing drops out without a word.
+  for (const b of boostItems) {
+    const valued = (b.categories || []).some((c) => POWER_CATEGORIES[c] && (POWER_CATEGORIES[c].quantifiable || POWER_CATEGORIES[c].side));
+    if (!valued) b.noValueReason = noValueReason(b.name, b.categories);
+  }
+
   // Process "Disabled if X Active" — mark items superseded by stronger owned items
   for (const b of boostItems) {
     const disabledByEffects = b.effects.filter(e => e.type === "disabled_by");
@@ -463,7 +471,7 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   // roi: Infinity is JSON-unrepresentable → null on the wire (client maps back).
   // Held in a variable because it is re-published at the end of this function: skillRanks is not
   // built until after boostValues, and the roadmap needs it to price Level 2 / Level 3 upgrades.
-  const powerCtx = { farm, inventory, capacity, exchangeRates, stockMods, p2pPrices, boostItems, savedProducts, season, nftData: nftSlim, skillCostInfo, roadmapSettingsRaw: settings.roadmapSettings || {} };
+  const powerCtx = { farm, inventory, capacity, exchangeRates, stockMods, p2pPrices, boostItems, savedProducts, season, nftData: nftSlim, skillCostInfo, roadmapSettingsRaw: settings.roadmapSettings || {}, sideActivity: settings.activity || null };
   _setPowerContext(powerCtx);
   /*
    * `settings.measured` = value everything at this farm's OBSERVED throughput instead of the
@@ -556,6 +564,22 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   }
 
   /*
+   * SIDE categories (salt, …): the game's rule for the activity, run with and without the item
+   * on this farm (core/engine/side-values.mjs). A skill not taken yet is valued at rank 1, a taken
+   * one at the rank it has. Throughput is the measured activity when the caller posted the weekly
+   * records (settings.activity), else what the nodes allow.
+   */
+  // The value itself is calcBoostValue's side branch — the one valuation the buy path reads too.
+  for (const b of boostItems) {
+    const m = SIDE_MODELS[b.name];
+    if (!m || b.isDisabled) continue;
+    let r = null;
+    try { r = calcBoostValue(b, m.cat, null, capacity, p2pPrices, catBoosts[m.cat] || [], b.has, effMode); } catch { r = null; }
+    if (!r || !isFinite(r.synergy)) continue;
+    (boostValues[m.cat] = boostValues[m.cat] || {})[b.name] = { ...r, roi: isFinite(r.roi) ? r.roi : null };
+  }
+
+  /*
    * Ascension RANKS (Level 2 / Level 3), computed here rather than on the page.
    *
    * The rank layer used to live inline in flowers.html only, so anything else that wanted
@@ -610,6 +634,27 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
       nextLevel: b.has && level < info.up.maxLevel ? level + 1 : null,
       rows,
     };
+  }
+
+  // Side skills (salt, …): the same ladder, each rank's marginal from the side model.
+  for (const b of boostItems) {
+    const m = SIDE_MODELS[b.name];
+    const up = SKILL_UPGRADES[b.name];
+    if (b.type !== "Skill" || !m || !m.skill || !up || !(up.maxLevel > 1) || skillRanks[b.name]) continue;
+    const cost = skillUpgradeCost(up.tier);
+    const sflPerPoint = skillCostInfo.sflPerPoint || 0;
+    const rows = [];
+    for (let l = 2; l <= up.maxLevel; l++) {
+      let d = 0;
+      try { d = roadmapSideRankDelta(b.name, l) || 0; } catch { d = 0; }
+      const sflCost = sflPerPoint * cost.points;
+      rows.push({ lvl: l, delta: d, byCat: { [m.cat]: d }, points: cost.points, shards: cost.shards,
+        text: skillRankText(up, l), sflCost, roi: d > 0.0001 && sflCost > 0 ? sflCost / d : null });
+    }
+    const level = Number(skills[b.name]) || 0;
+    skillRanks[b.name] = { tier: up.tier, maxLevel: up.maxLevel, kind: up.kind, priceable: true, cost,
+      skillTree: b.skillTree || null, has: !!b.has, level,
+      nextLevel: b.has && level < up.maxLevel ? level + 1 : null, rows };
   }
 
   // Re-publish with the rank layer attached, so roadmapSkillCandidates can price L2/L3 without
