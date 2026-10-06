@@ -5428,7 +5428,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.02</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.03</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5455,6 +5455,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.03", items: [
+          { t: "fix", text: "ROADMAP ⭐ Skills: <b>switching Last 7 days / 100 % theoretical now changes the numbers.</b> The tab reads the POWER values, which were computed once at page load with the basis of that moment — the switch re-drew the buy path only. It (and the per-category efficiency overrides) now re-computes them first. The side categories (salt, aging, XP…) stay on your measured activity either way." },
+        ] },
         { ver: "v6.02", items: [
           { t: "fix", text: "Investment Tracker: <b>every Genesis egg at the best fillable offer</b>, whatever quantity that offer covers — the eggs are sold over days through listings, not dumped into the book at once, so walking the book understated them. Offers made by your own tracked wallets never price your eggs (the egg bot's 460 WRON bids once inflated them)." },
         ] },
@@ -16568,7 +16571,16 @@
 
     window._roadmapSetIncome = function(v) { const n = parseFloat(v); saveRoadmapSettings({ startIncome: isFinite(n) && n >= 0 ? n : null }); renderRoadmapContent(); };
     window._roadmapResetIncome = function() { saveRoadmapSettings({ startIncome: null }); renderRoadmapContent(); };
-    window._roadmapSetEffMode = function(v) { saveRoadmapSettings({ effMode: v === "theoretical" ? "theoretical" : "real" }); renderRoadmapContent(); };
+    /*
+     * The Skills tab (roadmapAllUpgradesHtml) reads powerState.boostValues / skillRanks, which
+     * section=power scales by the efficiency basis server-side. Re-rendering the roadmap alone left
+     * them at the basis the page loaded with — switching 7d / 100 % changed nothing there. So a
+     * basis change re-fetches the power state first, the way _powerSetEffMode does.
+     */
+    async function _roadmapRefreshPowerBasis() {
+      try { if (powerState) await buildPowerState({ farm: powerState.farm, inventory: powerState.inventory }); } catch (e) {}
+    }
+    window._roadmapSetEffMode = async function(v) { saveRoadmapSettings({ effMode: v === "theoretical" ? "theoretical" : "real" }); await _roadmapRefreshPowerBasis(); renderRoadmapContent(); };
     /*
      * Same setting, same storage — only the redraw differs. The power section reads
      * roadmapSettings server-side, so the basis has to be re-fetched, not just re-rendered.
@@ -16582,9 +16594,9 @@
       renderPowerContent();
       window.scrollTo(0, scrollY);
     };
-    window._roadmapSetEffOverride = function(cat, v) { const n = parseFloat(v) / 100; const cur = Object.assign({}, getRoadmapSettings().effOverrides || {}); cur[cat] = Math.max(0, Math.min(ROADMAP_EFF_MAX, isFinite(n) ? n : 1)); saveRoadmapSettings({ effOverrides: cur }); renderRoadmapContent(); };
-    window._roadmapResetEffOverride = function(cat) { const cur = Object.assign({}, getRoadmapSettings().effOverrides || {}); delete cur[cat]; saveRoadmapSettings({ effOverrides: cur }); renderRoadmapContent(); };
-    window._roadmapResetAllEff = function() { saveRoadmapSettings({ effOverrides: {} }); renderRoadmapContent(); };
+    window._roadmapSetEffOverride = async function(cat, v) { const n = parseFloat(v) / 100; const cur = Object.assign({}, getRoadmapSettings().effOverrides || {}); cur[cat] = Math.max(0, Math.min(ROADMAP_EFF_MAX, isFinite(n) ? n : 1)); saveRoadmapSettings({ effOverrides: cur }); await _roadmapRefreshPowerBasis(); renderRoadmapContent(); };
+    window._roadmapResetEffOverride = async function(cat) { const cur = Object.assign({}, getRoadmapSettings().effOverrides || {}); delete cur[cat]; saveRoadmapSettings({ effOverrides: cur }); await _roadmapRefreshPowerBasis(); renderRoadmapContent(); };
+    window._roadmapResetAllEff = async function() { saveRoadmapSettings({ effOverrides: {} }); await _roadmapRefreshPowerBasis(); renderRoadmapContent(); };
     window._roadmapSetResVal = function(res, v) { const cur = Object.assign({}, getRoadmapSettings().resourceUseValue || {}); const nx = parseFloat(v); if (v !== "" && isFinite(nx) && nx >= 0) cur[res] = nx; else delete cur[res]; saveRoadmapSettings({ resourceUseValue: cur }); renderRoadmapContent(); };
     window._roadmapResetResVal = function() { saveRoadmapSettings({ resourceUseValue: {} }); renderRoadmapContent(); };
     window._roadmapEffPreview = function(cat, v, C) {
