@@ -5428,7 +5428,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.03</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.04</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5455,6 +5455,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.04", items: [
+          { t: "feat", text: "WORLD: <b>🎯 AUCTION PRIORITY.</b> A tied auction bid goes to the higher Ascension, then level, then XP — this card ranks your farm by exactly that among every farm in the daily dump (your position, how many are in front, how many have a higher Ascension) and lists the 50 right ahead with the XP you need to pass each. <b>🔄 Načíst živě</b> re-reads those 50 from the game with a progress bar (owner-only, on your own API key) and re-ranks them on the spot." },
+        ] },
         { ver: "v6.03", items: [
           { t: "fix", text: "ROADMAP ⭐ Skills: <b>switching Last 7 days / 100 % theoretical now changes the numbers.</b> The tab reads the POWER values, which were computed once at page load with the basis of that moment — the switch re-drew the buy path only. It (and the per-category efficiency overrides) now re-computes them first. The side categories (salt, aging, XP…) stay on your measured activity either way." },
         ] },
@@ -21590,6 +21593,8 @@
         <div class="summary-stat"><div class="label">BANNED</div><div class="value pending">${_fmtNum(s.stored.banned)}</div></div>
       </div>`;
 
+      html += _worldPrioHtml();
+
       // Dataset provenance. This replaced a crawl-progress panel: there is no sweep or
       // ETA any more, the data arrives as one daily file.
       html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
@@ -21742,6 +21747,115 @@
      * for the whole page — the charts all blinked and every scrollable chart body jumped
      * back to the top, for a change that affects one panel.
      */
+    /*
+     * AUCTION PRIORITY. A tied auction bid goes to "whichever Bumpkin has the higher Ascension, then
+     * level, then experience" (the game's tieBreaker.ascensionRule). ?type=world&mode=priority ranks
+     * this farm by that tuple against every farm in the daily dump and returns the 50 just ahead;
+     * REFRESH re-reads those 50 from the game (farm-history?type=world-refresh — owner-only, on the
+     * viewer's own API key, 5 farms a call so the bar moves) and re-ranks them live, with the XP
+     * that passes each one.
+     */
+    let _worldPrio = null, _worldPrioErr = null, _worldPrioLoading = false;
+    let _worldPrioLive = {};                     // farm_id → { ascension, xp, level, at } read live
+    let _worldPrioRun = null;                    // { done, total, err } while a refresh runs
+    async function _fetchWorldPrio() {
+      if (!FARM_ID || _worldPrioLoading) return;
+      _worldPrioLoading = true; _worldPrioErr = null;
+      try {
+        const r = await fetch(`${WORLD_API}&mode=priority&farm=${encodeURIComponent(FARM_ID)}`);
+        const d = await r.json();
+        if (!r.ok || d.error) throw new Error(d.error || `HTTP ${r.status}`);
+        _worldPrio = d;
+      } catch (e) { _worldPrioErr = e.message; }
+      _worldPrioLoading = false;
+      _worldRepaintPrio();
+    }
+    function _worldRepaintPrio() {
+      const el = document.getElementById("world-prio");
+      if (el) el.outerHTML = _worldPrioHtml(); else if (typeof renderWorld === "function" && _worldData) renderWorld();
+    }
+    window._worldPrioRefresh = async function () {
+      if (!_worldPrio || !_worldPrio.found || (_worldPrioRun && !_worldPrioRun.err && _worldPrioRun.done < _worldPrioRun.total)) return;
+      const ids = [String(FARM_ID), ..._worldPrio.next.map((x) => String(x.farm_id))];
+      _worldPrioRun = { done: 0, total: ids.length, err: null };
+      _worldRepaintPrio();
+      for (let i = 0; i < ids.length; i += 5) {
+        const batch = ids.slice(i, i + 5);
+        try {
+          const r = await writeFetch(`/api/farm-history?type=world-refresh&farm=${encodeURIComponent(FARM_ID)}&ids=${batch.join(",")}`);
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+          for (const f of d.farms || []) {
+            if (f.error) continue;
+            _worldPrioLive[f.farm_id] = { ascension: f.ascension, xp: f.xp, level: getTotalBumpkinLevel(f.xp, f.ascension), at: d.at };
+          }
+        } catch (e) { _worldPrioRun.err = e.message; _worldRepaintPrio(); return; }
+        _worldPrioRun.done = Math.min(ids.length, i + batch.length);
+        _worldRepaintPrio();
+      }
+    };
+    function _worldPrioHtml() {
+      const box = (inner) => `<div id="world-prio" class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
+        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">🎯 AUCTION PRIORITY</div>
+        <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 8px;line-height:1.6">
+          Při stejné nabídce v aukci vyhrává vyšší <b>Ascension</b>, pak vyšší <b>level</b>, pak víc <b>XP</b> (pravidlo hry).
+          Tady je tvoje pořadí podle toho mezi všemi farmami a co tě dělí od těch před tebou.</div>${inner}</div>`;
+      if (!FARM_ID) return box(`<div style="font-size:0.55rem;color:var(--text-dim)">Bez farmy (?farm=…) není koho řadit.</div>`);
+      if (!_worldPrio) {
+        if (!_worldPrioLoading && !_worldPrioErr) setTimeout(_fetchWorldPrio, 0);
+        return box(`<div style="font-size:0.55rem;color:${_worldPrioErr ? "var(--yellow)" : "var(--text-dim)"}">${_worldPrioErr ? "Nenačetlo se: " + escHTML(_worldPrioErr) : "Počítám pořadí…"}</div>`);
+      }
+      const P = _worldPrio;
+      if (!P.found) return box(`<div style="font-size:0.55rem;color:var(--text-dim)">Farma ${escHTML(String(FARM_ID))} v denním dumpu zatím není.</div>`);
+      const key = (x) => [x.ascension, x.level, x.xp];
+      const gt = (a, b) => { const A = key(a), B = key(b); for (let i = 0; i < 3; i++) { if (A[i] !== B[i]) return A[i] > B[i]; } return false; };
+      const liveOf = (x) => Object.assign({}, x, _worldPrioLive[x.farm_id] ? { ..._worldPrioLive[x.farm_id], live: true } : {});
+      const me = liveOf(P.me);
+      const rows = P.next.map(liveOf);
+      const passed = rows.filter((r) => !gt(r, me)).length;      // live data: ones you are already past
+      const ahead = rows.filter((r) => gt(r, me)).sort((a, b) => (gt(a, b) ? 1 : gt(b, a) ? -1 : 0));
+      const rank = Math.max(1, P.rank - passed);
+      const run = _worldPrioRun;
+      const running = run && !run.err && run.done < run.total;
+      const fmtXp = (n) => (n >= 1e6 ? (n / 1e6).toFixed(n >= 1e8 ? 1 : 2) + " M" : n >= 1e3 ? (n / 1e3).toFixed(1) + " k" : String(Math.round(n)));
+      let h = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:8px;margin-bottom:10px">
+        ${[["TVOJE POŘADÍ", `#${_fmtNum(rank)}`, P.total ? `z ${_fmtNum(P.total)} farem` : ""],
+           ["PŘED TEBOU", _fmtNum(P.ahead - passed), `${_fmtNum(P.aheadSameAscension)} se stejnou Ascension`],
+           ["TY", `A${me.ascension} · L${me.level}`, `${fmtXp(me.xp)} XP${me.live ? " · živě" : ""}`],
+           ["VYŠŠÍ ASCENSION", _fmtNum(P.higherAscension), P.higherAscension ? "ty předběhne jen ascense" : "nikdo — jde jen o XP"]]
+          .map(([l, v, sub]) => `<div class="pixel-panel" style="padding:8px;text-align:center"><div style="font-size:0.5rem;color:var(--text-secondary)">${l}</div>
+            <div class="pixel-font" style="font-size:0.85rem;margin:3px 0">${v}</div><div style="font-size:0.48rem;color:var(--text-dim)">${sub}</div></div>`).join("")}
+      </div>`;
+      // refresh with progress
+      const pct = run ? Math.round((run.done / Math.max(1, run.total)) * 100) : 0;
+      h += `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+        <button class="refresh-btn" style="margin:0" onclick="_worldPrioRefresh()" ${running ? "disabled" : ""}>${running ? "NAČÍTÁM…" : `🔄 NAČÍST ŽIVĚ ${P.next.length} PŘED TEBOU`}</button>
+        ${run ? `<div style="flex:1;min-width:160px;height:10px;background:var(--bg-card);border:2px solid var(--border-dark);position:relative;overflow:hidden">
+            <div style="height:100%;width:${pct}%;background:${run.err ? "var(--red)" : "var(--green)"};transition:width 0.4s;${running ? "background-image:repeating-linear-gradient(45deg,rgba(255,255,255,0.18) 0 6px,transparent 6px 12px);background-size:24px 24px;animation:prioStripes 0.8s linear infinite" : ""}"></div></div>
+          <span style="font-size:0.55rem;color:${run.err ? "var(--yellow)" : "var(--text-dim)"}">${run.err ? "chyba: " + escHTML(run.err) : `${run.done} / ${run.total}`}</span>` : `<span style="font-size:0.5rem;color:var(--text-dim)">data z denního dumpu — pro aktuální stav načti živě (tvým API klíčem, jen vlastník)</span>`}
+      </div>
+      <style>@keyframes prioStripes{from{background-position:0 0}to{background-position:24px 0}}</style>`;
+      // the ladder: who is in front, and the XP to pass them
+      if (!ahead.length) {
+        h += `<div style="font-size:0.6rem;color:var(--green)">${passed ? `Předběhl jsi všech ${passed} načtených — jsi na #${_fmtNum(rank)}.` : "Před tebou nikdo není."}</div>`;
+        return box(h);
+      }
+      h += `<div style="overflow-x:auto"><table class="node-res-table" style="width:100%"><tr><th>#</th><th>FARMA</th><th>ASC</th><th>LEVEL</th><th style="text-align:right">XP</th><th style="text-align:right">CHYBÍ TI XP</th><th style="text-align:right">PŘEDBĚHNEŠ</th></tr>`;
+      ahead.forEach((r, i) => {
+        const need = r.ascension > me.ascension ? null : Math.max(0, r.xp - me.xp) + 1;
+        h += `<tr${r.live ? "" : ' style="opacity:0.75"'}>
+          <td>${_fmtNum(rank - 1 - i)}</td>
+          <td>${escHTML(r.username || "—")} <span style="color:var(--text-dim);font-size:0.5rem">#${r.farm_id}${r.live ? " · živě" : ""}</span></td>
+          <td>A${r.ascension}</td><td>${r.level}</td>
+          <td style="text-align:right">${fmtXp(r.xp)}</td>
+          <td style="text-align:right;${need == null ? "color:var(--text-dim)" : ""}">${need == null ? "vyšší Ascension" : "+" + fmtXp(need)}</td>
+          <td style="text-align:right">${need == null ? "—" : `${i + 1} ${i === 0 ? "farmu" : i < 4 ? "farmy" : "farem"}`}</td></tr>`;
+      });
+      h += `</table></div>
+      <div style="font-size:0.5rem;color:var(--text-dim);margin-top:6px">Level se počítá z XP a Ascension, takže při stejné Ascension rozhoduje jen XP. „Chybí ti XP“ = kolik musíš získat, abys tu farmu předběhl (a s ní všechny nad ní v tabulce níž).</div>`;
+      return box(h);
+    }
+
     function _worldNodePanelHtml() {
       if (!_worldData) return "";
       const me = _worldData.me && _worldData.me.found ? _worldData.me : null;

@@ -333,6 +333,51 @@ async function farmPosition(pool, q) {
 }
 
 /*
+ * GET ?type=world&mode=priority&farm=<id> — AUCTION PRIORITY. A tied auction bid goes to "whichever
+ * Bumpkin has the higher Ascension, then level, then experience" (the game's
+ * tieBreaker.ascensionRule), so this ranks the farm by that tuple against every crawled farm
+ * (banned and blacklisted ones left out) and returns the 50 right in front of it — the ones the
+ * page refreshes live and shows the XP to pass. Crawl rows can be weeks old (a full sweep takes
+ * ~2 months), which is why the page re-reads those 50 from the game.
+ */
+async function auctionPriority(pool, q) {
+  const id = String(q.farm || "").trim();
+  if (!/^\d{1,20}$/.test(id)) throw new Error("farm must be a numeric id");
+  const me = (await pool.query(
+    `SELECT farm_id, username, COALESCE(ascension_level, 0) AS asc, COALESCE(total_level, 0) AS lvl, COALESCE(xp, 0) AS xp, last_seen_at
+       FROM farm_world WHERE farm_id = $1`, [id])).rows[0];
+  if (!me) return { found: false, farm_id: Number(id) };
+  const live = `COALESCE(ban_status, 'ok') = 'ok' AND NOT COALESCE(is_blacklisted, false)`;
+  const key = `(COALESCE(ascension_level, 0), COALESCE(total_level, 0), COALESCE(xp, 0))`;
+  const mine = [Number(me.asc), Number(me.lvl), Number(me.xp)];
+  // Only farms at the same or a higher ascension can be ahead — the ascension_level index cuts the
+  // ~620k rows to the few that matter (the full scan took 36 s). A farm at ascension 0 still
+  // scans most of the table; nothing narrower is honest there.
+  const near = `ascension_level >= $1 AND ${live}`;
+  const c = (await pool.query(
+    `SELECT COUNT(*) FILTER (WHERE ${key} > ($1::int, $2::int, $3::float8))::bigint AS ahead,
+            COUNT(*) FILTER (WHERE ${key} > ($1::int, $2::int, $3::float8) AND ascension_level = $1)::bigint AS ahead_same_asc,
+            COUNT(*) FILTER (WHERE ascension_level > $1)::bigint AS higher_asc
+       FROM farm_world WHERE ${near}`, mine)).rows[0];
+  // The field size is shared by every viewer and changes slowly — cached per crawl generation.
+  let total = null;
+  try {
+    total = (await cachedChart(pool, "all", "priority:total", async () =>
+      ({ n: Number((await pool.query(`SELECT COUNT(*)::bigint AS n FROM farm_world WHERE ${live}`)).rows[0].n) }))).n;
+  } catch { total = null; }   // the rank stands without the field size
+  const next = (await pool.query(
+    `SELECT farm_id, username, COALESCE(ascension_level, 0) AS asc, COALESCE(total_level, 0) AS lvl, COALESCE(xp, 0) AS xp, last_seen_at
+       FROM farm_world WHERE ${near} AND ${key} > ($1::int, $2::int, $3::float8)
+      ORDER BY ${key} ASC LIMIT 50`, mine)).rows;
+  const row = (r) => ({ farm_id: Number(r.farm_id), username: r.username, ascension: Number(r.asc), level: Number(r.lvl), xp: Number(r.xp), seen: r.last_seen_at });
+  return {
+    found: true, me: row(me),
+    ahead: Number(c.ahead), aheadSameAscension: Number(c.ahead_same_asc), higherAscension: Number(c.higher_asc), total: Number(total) || null,
+    rank: Number(c.ahead) + 1, next: next.map(row),
+  };
+}
+
+/*
  * GET ?type=world&mode=nodes&node=trees — distribution of how many of one buyable node
  * type farms have, split by how far they have MERGED it.
  *
@@ -441,6 +486,7 @@ async function handleWorld(pool, q) {
     }
     case "item": return await itemHolders(pool, q);
     case "farm": return await farmPosition(pool, q);
+    case "priority": return await auctionPriority(pool, q);
     case "nodes": return await nodeDistribution(pool, q);
     case "dims": return { dims: Object.keys(DIMS), measures: Object.keys(MEASURES), funcs: Object.keys(FUNCS), ops: Object.keys(OPS) };
     default: throw new Error(`bad mode: ${q.mode}`);

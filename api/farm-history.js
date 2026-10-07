@@ -187,6 +187,40 @@ export default async function handler(req, res) {
   // ─── World crawl: progress + generic aggregation over farm_world ───
   // Folded in here rather than given its own file because Vercel's Hobby plan
   // caps the project at 12 serverless functions and we are already at 12.
+  /*
+   * AUCTION PRIORITY refresh (WORLD page): re-reads a few farms (the ones in front of the viewer)
+   * from the game, live — the crawl rows can be a day old. Owner-only (write token) and only for
+   * the two tracked farms, because every read spends an API key's rate limit: the viewer's OWN key
+   * — FARM_<id>_KEY, the same per-farm convention the Azure collector uses, and for the owner's
+   * farm the project SFL_API_KEY. A farm without its own key is refused, never served on
+   * someone else's key. At most 5 ids a call, read one after another, so the page shows progress.
+   */
+  if (req.query.type === "world-refresh") {
+    try {
+      const farm = parseInt(req.query.farm, 10);
+      if (!Number.isFinite(farm) || !ALLOWED_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
+      if (!requireWriteToken(req, res)) return;
+      const key = process.env[`FARM_${farm}_KEY`] || (farm === 155498 ? process.env.SFL_API_KEY : null);
+      if (!key) return res.status(503).json({ error: `no API key for farm ${farm} (set FARM_${farm}_KEY)` });
+      const ids = String(req.query.ids || "").split(",").map((x) => x.trim()).filter((x) => /^\d{1,20}$/.test(x)).slice(0, 5);
+      const out = [];
+      for (const id of ids) {
+        try {
+          const r = await fetch(`https://api.sunflower-land.com/community/farms/${id}`, { headers: { "x-api-key": key } });
+          if (!r.ok) { out.push({ farm_id: Number(id), error: `HTTP ${r.status}` }); continue; }
+          const f = ((await r.json()) || {}).farm || {};
+          out.push({ farm_id: Number(id), username: f.username || null, ascension: Number((f.island || {}).ascensionLevel || 0),
+            xp: Number((f.bumpkin || {}).experience || 0) });
+        } catch (e) { out.push({ farm_id: Number(id), error: String(e.message || e).slice(0, 80) }); }
+      }
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json({ farms: out, at: new Date().toISOString() });
+    } catch (err) {
+      console.error("[world-refresh]", err);
+      return res.status(500).json({ error: "world-refresh failed", detail: String(err.message || err) });
+    }
+  }
+
   if (req.query.type === "world") {
     try {
       const out = await handleWorld(pool, req.query);
