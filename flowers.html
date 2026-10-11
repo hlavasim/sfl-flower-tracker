@@ -5428,7 +5428,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.04</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.05</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5455,6 +5455,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.05", items: [
+          { t: "fix", text: "INVESTMENT TRACKER: <b>REPAY PLAN counts BTC held on the wallet.</b> cbBTC (and WBTC, tBTC…) on your registered wallets already counted as withdrawn in BILANCE, but the repay plan only read the ledger, so it showed you behind. It now enters as one withdrawal dated today, and the payoff estimate uses the same net debt as BILANCE." },
+        ] },
         { ver: "v6.04", items: [
           { t: "feat", text: "WORLD: <b>🎯 AUCTION PRIORITY.</b> A tied auction bid goes to the higher Ascension, then level, then XP — this card ranks your farm by exactly that among every farm in the daily dump (your position, how many are in front, how many have a higher Ascension) and lists the 50 right ahead with the XP you need to pass each. <b>🔄 Načíst živě</b> re-reads those 50 from the game with a progress bar (owner-only, on your own API key) and re-ranks them on the spot." },
         ] },
@@ -27158,9 +27161,6 @@ Kola: ${i.rounds.map(when).join(", ")}`;
       const agg = invAggregate(transactions);
       const { sflToUsd, btcUsd, treasuryTotalSfl } = rates;
 
-      // ④ REPAY PLAN: the pace the user chose, measured against the withdrawals since its start.
-      const planStats = (_invPlan && !errors.ledger) ? repayPlanStats(_invPlan, transactions, { peakBtc: agg.peakBtc, netDebtBtc: agg.netDebtBtc }) : null;
-
       /*
        * Two different questions, kept apart on purpose.
        *
@@ -27216,6 +27216,13 @@ Kola: ${i.rounds.map(when).join(", ")}`;
             repaidPct: (agg.peakBtc - (agg.netDebtBtc - btcBackOnChain)) / agg.peakBtc * 100 })
         : agg;
       const eggsLiquidBtc = chainEggs ? chainEggs.btc : 0;
+      // ④ REPAY PLAN: the pace the user chose, measured against the withdrawals since its start.
+      // BTC derivatives held on chain are withdrawals too (see above), but the ledger has no row
+      // for them, so they enter as one withdrawal dated today — the day the plan first sees them.
+      const planTx = btcBackOnChain > 0
+        ? transactions.concat([{ direction: "withdrawal", tx_date: _localIsoDate(new Date()), btc_amount: btcBackOnChain }])
+        : transactions;
+      const planStats = (_invPlan && !errors.ledger) ? repayPlanStats(_invPlan, planTx, { peakBtc: agg.peakBtc, netDebtBtc: aggSheet.netDebtBtc }) : null;
       // 1 BTC = (btcUsd/sflToUsd) FLOWER.
       const flowerPerBtc = (sflToUsd > 0 && btcUsd > 0) ? (btcUsd / sflToUsd) : 0;
       const fmtFlower = (v) => Math.round(v).toLocaleString("en-US") + " 🌸";
@@ -27492,7 +27499,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
       if (flowerPerBtc > 0 && stats.dailyTargetBtc > 0) { try { localStorage.setItem("sfl_repay_daily_flower", String(Math.round(stats.dailyTargetBtc * flowerPerBtc * 100) / 100)); } catch (e) {} }
       const lagDays = stats.dailyTargetBtc > 0 ? Math.round(Math.abs(stats.balanceBtc) / stats.dailyTargetBtc) : 0;
       // E13: what counts is NET withdrawn since the start — a withdrawal put back later repays nothing.
-      const netTip = `Počítají se ČISTÉ výběry od ${p.start_date}: výběry − vklady (všechna místa), průběžný součet nikdy pod nulou. Výběr, který se pak vrátí zpět vkladem (round trip), se jako splátka nepočítá. Dny jsou lokální kalendářní dny.`;
+      const netTip = `Počítají se ČISTÉ výběry od ${p.start_date}: výběry − vklady (všechna místa), průběžný součet nikdy pod nulou. Výběr, který se pak vrátí zpět vkladem (round trip), se jako splátka nepočítá. BTC na peněžence (cbBTC, WBTC…) se počítá jako výběr ke dnešku. Dny jsou lokální kalendářní dny.`;
       return box(`<div class="summary-bar" style="margin:8px 0 6px">
           ${stat("WITHDRAW DAILY", `<b>${fmtFl(stats.dailyTargetBtc)}</b>`, `${fmtBtc(stats.dailyTargetBtc)} / day · ${p.rate} % ${_planPeriodCz[p.period]} of peak ${fmtBtc(agg.peakBtc)}`)}
           ${stat(behind ? "YOU ARE BEHIND BY" : "YOU ARE AHEAD BY", `<b>${fmtFl(Math.abs(stats.balanceBtc))}</b>`, `${fmtBtc(Math.abs(stats.balanceBtc))} · ${lagDays} days · net withdrawn ${fmtFl(stats.actualBtc)} of ${fmtFl(stats.targetBtc)} since ${p.start_date}`, behind ? "var(--red)" : "var(--green)", netTip)}
