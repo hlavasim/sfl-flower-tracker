@@ -5428,7 +5428,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.06</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.07</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5455,6 +5455,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.07", items: [
+          { t: "fix", text: "INVESTMENT TRACKER: the REPAY PLAN cards fill the page — two columns on desktop (lead and payoff full width, today and streak side by side), one on phones; the streak's 30 day tiles stay small instead of growing with the card." },
+        ] },
         { ver: "v6.06", items: [
           { t: "feat", text: "INVESTMENT TRACKER: <b>REPAY PLAN read as days.</b> Four cards above the plan: 🚀/⏳ how many days you are ahead of or behind it, on a track with the plan in the middle; 🎯 what to withdraw today to be back on plan, or until when you are covered; 🔥 your run of days on plan, the record and the last 30 days as tiles; 🏁 how much of the peak is back with 25/50/75/100 % milestones and the payoff day at the plan's pace and at your last-50-day pace." },
         ] },
@@ -27559,7 +27562,8 @@ Kola: ${i.rounds.map(when).join(", ")}`;
         </div>`;
 
       return `<style>
-          .rp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:8px;margin:10px 0 8px}
+          .rp-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0 8px}
+          @media (max-width:640px){.rp-grid{grid-template-columns:minmax(0,1fr)}}
           .rp-card{background:linear-gradient(160deg,rgba(255,255,255,0.05),rgba(0,0,0,0.25));border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px 12px;animation:rpIn .5s ease both}
           .rp-lbl{font-family:'Press Start 2P',monospace;font-size:0.45rem;color:var(--text-dim);letter-spacing:0.5px}
           .rp-big{font-family:'Press Start 2P',monospace;font-size:1.15rem;line-height:1.3}
@@ -27570,8 +27574,8 @@ Kola: ${i.rounds.map(when).join(", ")}`;
           .rp-fill{position:absolute;top:4px;height:6px;border-radius:3px;animation:rpGrow .9s cubic-bezier(.2,.8,.2,1) both;transform-origin:${ahead ? "left" : "right"}}
           .rp-mid{position:absolute;left:50%;top:-4px;bottom:-4px;width:2px;background:#e8c86a;transform:translateX(-1px)}
           .rp-dot{position:absolute;top:50%;width:16px;height:16px;border-radius:50%;background:#1c160f;border:3px solid;transform:translate(-50%,-50%);animation:rpPulse 2s ease-in-out infinite}
-          .rp-tiles{display:grid;grid-template-columns:repeat(15,1fr);gap:3px;margin:8px 0 3px}
-          .rp-tile{aspect-ratio:1;border-radius:2px}
+          .rp-tiles{display:flex;flex-wrap:wrap;gap:3px;margin:8px 0 3px}
+          .rp-tile{width:14px;height:14px;border-radius:2px;flex:none}
           .rp-bar{position:relative;height:12px;border-radius:6px;background:rgba(0,0,0,0.4);margin:6px 0 22px}
           .rp-bar-in{height:100%;border-radius:6px;background:linear-gradient(90deg,#b8860b,#ffd700);box-shadow:0 0 10px rgba(255,215,0,0.35);animation:rpGrow 1.1s cubic-bezier(.2,.8,.2,1) both;transform-origin:left}
           .rp-ms{position:absolute;top:-3px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;font-size:0.7rem;line-height:1}
