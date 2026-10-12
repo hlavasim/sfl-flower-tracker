@@ -5428,7 +5428,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.05</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.06</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5455,6 +5455,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.06", items: [
+          { t: "feat", text: "INVESTMENT TRACKER: <b>REPAY PLAN read as days.</b> Four cards above the plan: 🚀/⏳ how many days you are ahead of or behind it, on a track with the plan in the middle; 🎯 what to withdraw today to be back on plan, or until when you are covered; 🔥 your run of days on plan, the record and the last 30 days as tiles; 🏁 how much of the peak is back with 25/50/75/100 % milestones and the payoff day at the plan's pace and at your last-50-day pace." },
+        ] },
         { ver: "v6.05", items: [
           { t: "fix", text: "INVESTMENT TRACKER: <b>REPAY PLAN counts BTC held on the wallet.</b> cbBTC (and WBTC, tBTC…) on your registered wallets already counted as withdrawn in BILANCE, but the repay plan only read the ledger, so it showed you behind. It now enters as one withdrawal dated today, and the payoff estimate uses the same net debt as BILANCE." },
         ] },
@@ -27229,7 +27232,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
 
       mount.innerHTML = `
         <h2 class="pixel-font" style="margin:0 0 10px 0;font-size:0.75rem;color:var(--sunpetal);letter-spacing:1px">💰 INVESTMENT TRACKER</h2>
-        ${_invRepayHtml(agg, planStats, flowerPerBtc, errors)}
+        ${_invRepayHtml(aggSheet, planStats, flowerPerBtc, errors)}
         ${_invBalanceSheetHtml({ agg: aggSheet, btcBackOnChain, btcBackItems, flowerPerBtc, fmtFlower, treasuryTotalSfl, liquidValueSfl, liquidValueBtc, lockedBtc, chainWallet, chainEggs, walletLiquidBtc, walletHeldFlower, eggsLiquidBtc, farmValue, errors, btcUsd })}
         <div id="inv-satsflower" style="margin:6px 0 16px"></div>
         <div id="inv-tx-table-wrap">${renderInvTxTable(transactions)}</div>
@@ -27463,6 +27466,126 @@ Kola: ${i.rounds.map(when).join(", ")}`;
      * The REPAY PLAN card: the plan's daily withdrawal and how far ahead of / behind it the ledger
      * is, and a chart of the last 50 days and the next 50 under it.
      */
+    /*
+     * REPAY PLAN hero — the plan read as days, so it is felt rather than computed:
+     *   LEAD     how many days of the plan's daily withdrawal you are ahead of / behind it, on a
+     *            centred track (plan = middle), with what that is in 🌸 / ₿
+     *   TODAY    what to withdraw today to be back on plan, or until when you are covered
+     *   STREAK   consecutive days on or above plan up to today, the best run, and the last 30
+     *            days as tiles (green ahead, red behind, brighter = further)
+     *   PAYOFF   how much of the peak is back, the 25/50/75/100 % milestones, and the day it is
+     *            all back — at the plan's pace and at the pace of the last 50 days
+     * All of it from repayPlanStats + the balance sheet's net debt (cbBTC counted as withdrawn).
+     */
+    function _invRepayHeroHtml(agg, stats, flowerPerBtc) {
+      const daily = stats.dailyTargetBtc;
+      if (!(daily > 0)) return "";
+      const fl = (btc) => flowerPerBtc > 0 ? Math.round(btc * flowerPerBtc).toLocaleString("cs-CZ") + " 🌸" : fmtBtc(btc);
+      const dateIn = (days) => { const d = new Date(); d.setDate(d.getDate() + Math.ceil(days)); return d.toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" }); };
+      const dny = (n) => { const a = Math.abs(n); return a === 1 ? "den" : a >= 2 && a <= 4 ? "dny" : "dní"; };
+      const leadDays = stats.balanceBtc / daily;
+      const lead = Math.round(leadDays);
+      const ahead = stats.balanceBtc >= 0;
+      const tone = ahead ? "var(--green)" : "var(--red)";
+      const glow = ahead ? "rgba(127,224,160,0.35)" : "rgba(255,107,107,0.35)";
+
+      // LEAD track: plan in the middle, ±range days to the edges.
+      const range = Math.max(14, Math.min(120, Math.ceil(Math.abs(leadDays) * 1.3 / 7) * 7));
+      const pos = 50 + Math.max(-50, Math.min(50, leadDays / range * 50));
+      const fillL = Math.min(50, pos), fillW = Math.abs(pos - 50);
+      const leadCard = `<div class="rp-card" style="grid-column:1/-1">
+          <div class="rp-lbl">${ahead ? "🚀 NÁSKOK PŘED PLÁNEM" : "⏳ SKLUZ ZA PLÁNEM"}</div>
+          <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:4px 0 10px">
+            <span class="rp-big" style="color:${tone};text-shadow:0 0 14px ${glow}">${lead > 0 ? "+" : ""}${lead} ${dny(lead)}</span>
+            <span class="rp-sub">${ahead ? "máš vybráno navíc" : "chybí vybrat"} <b style="color:var(--text-secondary)">${fl(Math.abs(stats.balanceBtc))}</b> · ${fmtBtc(Math.abs(stats.balanceBtc))}</span>
+          </div>
+          <div class="rp-track">
+            <div class="rp-zone" style="left:0;width:50%;background:linear-gradient(90deg,rgba(255,107,107,0.22),rgba(255,107,107,0.04))"></div>
+            <div class="rp-zone" style="left:50%;width:50%;background:linear-gradient(90deg,rgba(127,224,160,0.04),rgba(127,224,160,0.22))"></div>
+            <div class="rp-fill" style="left:${fillL}%;width:${fillW}%;background:${tone};box-shadow:0 0 10px ${glow}"></div>
+            <div class="rp-mid"></div>
+            <div class="rp-dot" style="left:${pos}%;border-color:${tone};box-shadow:0 0 0 4px ${glow}"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between" class="rp-sub"><span>−${range} d</span><span>plán</span><span>+${range} d</span></div>
+        </div>`;
+
+      // TODAY
+      const catchUp = Math.max(0, -stats.balanceBtc) + daily;
+      const coveredDays = Math.floor(Math.max(0, leadDays));
+      const todayCard = `<div class="rp-card">
+          <div class="rp-lbl">🎯 DNES</div>
+          ${ahead
+            ? `<div class="rp-mid-val" style="color:var(--green)">${coveredDays > 0 ? `kryto do ${dateIn(coveredDays)}` : "jsi přesně v plánu"}</div>
+               <div class="rp-sub">${coveredDays > 0 ? `${coveredDays} ${dny(coveredDays)} nemusíš vybrat nic. Každý výběr navíc náskok prodlouží — ${fl(daily)} = +1 den.` : `Dnešní splátka: <b>${fl(daily)}</b>.`}</div>`
+            : `<div class="rp-mid-val" style="color:var(--sunpetal)">vyber ${fl(catchUp)}</div>
+               <div class="rp-sub">= ${fmtBtc(catchUp)} a jsi zpátky v plánu i s dnešní splátkou (${fl(daily)} / den).</div>`}
+        </div>`;
+
+      // STREAK + last 30 days
+      const leadOf = (x) => (x.actual - x.target) / daily;
+      const ser = stats.series || [];
+      let cur = 0, best = 0, run = 0, onPlan = 0;
+      for (const x of ser) { if (x.actual + 1e-12 >= x.target) { run++; onPlan++; best = Math.max(best, run); } else run = 0; }
+      cur = run;
+      const tiles = ser.slice(-30).map((x) => {
+        const l = leadOf(x), a = Math.min(1, 0.25 + Math.abs(l) / 14);
+        const c = l >= -1e-9 ? `rgba(127,224,160,${a})` : `rgba(255,107,107,${a})`;
+        return `<span class="rp-tile" style="background:${c}" title="${x.time}: ${l >= 0 ? "+" : ""}${l.toFixed(1)} d"></span>`;
+      }).join("");
+      const streakCard = `<div class="rp-card">
+          <div class="rp-lbl">🔥 SÉRIE V PLÁNU</div>
+          <div class="rp-mid-val" style="color:${cur ? "var(--sunpetal)" : "var(--text-dim)"}">${cur} ${dny(cur)}${cur && cur === best ? " · rekord!" : ""}</div>
+          <div class="rp-sub">nejdelší ${best} ${dny(best)} · v plánu ${ser.length ? Math.round(onPlan / ser.length * 100) : 0} % dní</div>
+          <div class="rp-tiles">${tiles}</div>
+          <div class="rp-sub" style="display:flex;justify-content:space-between"><span>−${Math.min(30, ser.length)} d</span><span>dnes</span></div>
+        </div>`;
+
+      // PAYOFF
+      const peak = agg.peakBtc || 0, debt = Math.max(0, agg.netDebtBtc || 0);
+      const back = Math.max(0, peak - debt), pct = peak > 0 ? Math.min(100, back / peak * 100) : 0;
+      const planEta = debt / daily;
+      const pace = stats.paceBtcPerDay > 0 ? stats.paceBtcPerDay : 0;
+      const paceEta = pace > 0 ? debt / pace : null;
+      const marks = [25, 50, 75, 100].map((m) => `<div class="rp-ms" style="left:${m}%"><span style="color:${pct >= m ? "var(--sunpetal)" : "var(--text-dim)"}">${pct >= m ? "★" : "☆"}</span><small>${m} %</small></div>`).join("");
+      const etaRow = (label, days, best) => `<div style="display:flex;justify-content:space-between;gap:8px;margin-top:4px"><span class="rp-sub">${label}</span><span style="font-family:'Courier New',monospace;font-size:0.72rem;color:${best ? "var(--green)" : "var(--text-secondary)"}">${days == null ? "—" : `${Math.ceil(days).toLocaleString("cs-CZ")} ${dny(Math.ceil(days))} · ${dateIn(days)}`}</span></div>`;
+      const payCard = `<div class="rp-card" style="grid-column:1/-1">
+          <div class="rp-lbl">🏁 DO ÚPLNÉHO SPLACENÍ</div>
+          <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:4px 0 8px">
+            <span class="rp-big" style="background:linear-gradient(110deg,#b8860b 0%,#ffd700 35%,#fff6c8 50%,#ffd700 65%,#b8860b 100%);background-size:250% 100%;animation:invGoldShine 3s linear infinite;-webkit-background-clip:text;background-clip:text;color:transparent">${debt > 0 ? `${Math.ceil(planEta).toLocaleString("cs-CZ")} ${dny(Math.ceil(planEta))}` : "SPLACENO 🎉"}</span>
+            <span class="rp-sub">vráceno <b style="color:var(--text-secondary)">${pct.toFixed(1)} %</b> z peaku ${fmtBtc(peak)} · zbývá ${fl(debt)} (${fmtBtc(debt)})</span>
+          </div>
+          <div class="rp-bar"><div class="rp-bar-in" style="width:${pct}%"></div>${marks}</div>
+          ${debt > 0 ? etaRow("tempem plánu", planEta, paceEta == null || planEta <= paceEta) + etaRow("tempem posledních 50 dní", paceEta, paceEta != null && paceEta < planEta) : ""}
+        </div>`;
+
+      return `<style>
+          .rp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:8px;margin:10px 0 8px}
+          .rp-card{background:linear-gradient(160deg,rgba(255,255,255,0.05),rgba(0,0,0,0.25));border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px 12px;animation:rpIn .5s ease both}
+          .rp-lbl{font-family:'Press Start 2P',monospace;font-size:0.45rem;color:var(--text-dim);letter-spacing:0.5px}
+          .rp-big{font-family:'Press Start 2P',monospace;font-size:1.15rem;line-height:1.3}
+          .rp-mid-val{font-family:'Press Start 2P',monospace;font-size:0.7rem;margin:6px 0 4px;line-height:1.5}
+          .rp-sub{font-size:0.62rem;color:var(--text-dim);line-height:1.5}
+          .rp-track{position:relative;height:14px;border-radius:7px;background:rgba(0,0,0,0.4);overflow:visible;margin:6px 0 4px}
+          .rp-zone{position:absolute;top:0;bottom:0;border-radius:7px}
+          .rp-fill{position:absolute;top:4px;height:6px;border-radius:3px;animation:rpGrow .9s cubic-bezier(.2,.8,.2,1) both;transform-origin:${ahead ? "left" : "right"}}
+          .rp-mid{position:absolute;left:50%;top:-4px;bottom:-4px;width:2px;background:#e8c86a;transform:translateX(-1px)}
+          .rp-dot{position:absolute;top:50%;width:16px;height:16px;border-radius:50%;background:#1c160f;border:3px solid;transform:translate(-50%,-50%);animation:rpPulse 2s ease-in-out infinite}
+          .rp-tiles{display:grid;grid-template-columns:repeat(15,1fr);gap:3px;margin:8px 0 3px}
+          .rp-tile{aspect-ratio:1;border-radius:2px}
+          .rp-bar{position:relative;height:12px;border-radius:6px;background:rgba(0,0,0,0.4);margin:6px 0 22px}
+          .rp-bar-in{height:100%;border-radius:6px;background:linear-gradient(90deg,#b8860b,#ffd700);box-shadow:0 0 10px rgba(255,215,0,0.35);animation:rpGrow 1.1s cubic-bezier(.2,.8,.2,1) both;transform-origin:left}
+          .rp-ms{position:absolute;top:-3px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;font-size:0.7rem;line-height:1}
+          .rp-ms:last-child{transform:translateX(-90%)}
+          .rp-ms small{font-size:0.5rem;color:var(--text-dim);margin-top:5px;white-space:nowrap}
+          @keyframes rpIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+          @keyframes rpGrow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+          @keyframes rpPulse{0%,100%{box-shadow:0 0 0 3px ${glow}}50%{box-shadow:0 0 0 8px transparent}}
+          @keyframes invGoldShine{0%{background-position:100% 0}100%{background-position:-150% 0}}
+          @media (prefers-reduced-motion:reduce){.rp-card,.rp-fill,.rp-bar-in,.rp-dot{animation:none}}
+        </style>
+        <div class="rp-grid">${leadCard}${todayCard}${streakCard}${payCard}</div>`;
+    }
+
     function _invRepayHtml(agg, stats, flowerPerBtc, errors) {
       const fmtFl = (btc) => flowerPerBtc > 0 ? Math.round(btc * flowerPerBtc).toLocaleString("en-US") + " 🌸" : "—";
       const fmtN = (v) => Math.round(v).toLocaleString("en-US") + " 🌸";
@@ -27500,7 +27623,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
       const lagDays = stats.dailyTargetBtc > 0 ? Math.round(Math.abs(stats.balanceBtc) / stats.dailyTargetBtc) : 0;
       // E13: what counts is NET withdrawn since the start — a withdrawal put back later repays nothing.
       const netTip = `Počítají se ČISTÉ výběry od ${p.start_date}: výběry − vklady (všechna místa), průběžný součet nikdy pod nulou. Výběr, který se pak vrátí zpět vkladem (round trip), se jako splátka nepočítá. BTC na peněžence (cbBTC, WBTC…) se počítá jako výběr ke dnešku. Dny jsou lokální kalendářní dny.`;
-      return box(`<div class="summary-bar" style="margin:8px 0 6px">
+      return box(`${_invRepayHeroHtml(agg, stats, flowerPerBtc)}<div class="summary-bar" style="margin:8px 0 6px">
           ${stat("WITHDRAW DAILY", `<b>${fmtFl(stats.dailyTargetBtc)}</b>`, `${fmtBtc(stats.dailyTargetBtc)} / day · ${p.rate} % ${_planPeriodCz[p.period]} of peak ${fmtBtc(agg.peakBtc)}`)}
           ${stat(behind ? "YOU ARE BEHIND BY" : "YOU ARE AHEAD BY", `<b>${fmtFl(Math.abs(stats.balanceBtc))}</b>`, `${fmtBtc(Math.abs(stats.balanceBtc))} · ${lagDays} days · net withdrawn ${fmtFl(stats.actualBtc)} of ${fmtFl(stats.targetBtc)} since ${p.start_date}`, behind ? "var(--red)" : "var(--green)", netTip)}
         </div>
