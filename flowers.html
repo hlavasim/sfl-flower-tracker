@@ -5428,7 +5428,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.08</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.09</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5455,6 +5455,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.09", items: [
+          { t: "feat", text: "INVESTMENT TRACKER: REPAY PLAN <b>⚡ TEMPO</b> replaces the day streak (useless when you withdraw once a week): your pace over the last 50 days as days of plan per day — 0,80 d/den = sending 80 % of the daily target — on a 0–2× gauge, with the days to payoff at that pace and what is missing per day to reach 1×." },
+        ] },
         { ver: "v6.08", items: [
           { t: "feat", text: "INVESTMENT TRACKER: REPAY PLAN in two columns — the four cards stacked on the left, the daily target / lead and the chart on the right, the chart as tall as the cards instead of a 200 px strip. One column under 900 px." },
         ] },
@@ -27477,8 +27480,9 @@ Kola: ${i.rounds.map(when).join(", ")}`;
      *   LEAD     how many days of the plan's daily withdrawal you are ahead of / behind it, on a
      *            centred track (plan = middle), with what that is in 🌸 / ₿
      *   TODAY    what to withdraw today to be back on plan, or until when you are covered
-     *   STREAK   consecutive days on or above plan up to today, the best run, and the last 30
-     *            days as tiles (green ahead, red behind, brighter = further)
+     *   TEMPO    the realized pace as days of plan per day (0.8 = sending 80 % of the daily
+     *            target) over the last 50 days — a weekly withdrawer is judged on the average,
+     *            not on a day-by-day streak — and the payoff it leads to
      *   PAYOFF   how much of the peak is back, the 25/50/75/100 % milestones, and the day it is
      *            all back — at the plan's pace and at the pace of the last 50 days
      * All of it from repayPlanStats + the balance sheet's net debt (cbBTC counted as withdrawn).
@@ -27527,23 +27531,26 @@ Kola: ${i.rounds.map(when).join(", ")}`;
                <div class="rp-sub">= ${fmtBtc(catchUp)} a jsi zpátky v plánu i s dnešní splátkou (${fl(daily)} / den).</div>`}
         </div>`;
 
-      // STREAK + last 30 days
-      const leadOf = (x) => (x.actual - x.target) / daily;
+      // TEMPO: realized pace in days of plan per day, over repayPlanStats' lookback (≤ 50 d)
       const ser = stats.series || [];
-      let cur = 0, best = 0, run = 0, onPlan = 0;
-      for (const x of ser) { if (x.actual + 1e-12 >= x.target) { run++; onPlan++; best = Math.max(best, run); } else run = 0; }
-      cur = run;
-      const tiles = ser.slice(-30).map((x) => {
-        const l = leadOf(x), a = Math.min(1, 0.25 + Math.abs(l) / 14);
-        const c = l >= -1e-9 ? `rgba(127,224,160,${a})` : `rgba(255,107,107,${a})`;
-        return `<span class="rp-tile" style="background:${c}" title="${x.time}: ${l >= 0 ? "+" : ""}${l.toFixed(1)} d"></span>`;
-      }).join("");
-      const streakCard = `<div class="rp-card">
-          <div class="rp-lbl">🔥 SÉRIE V PLÁNU</div>
-          <div class="rp-mid-val" style="color:${cur ? "var(--sunpetal)" : "var(--text-dim)"}">${cur} ${dny(cur)}${cur && cur === best ? " · rekord!" : ""}</div>
-          <div class="rp-sub">nejdelší ${best} ${dny(best)} · v plánu ${ser.length ? Math.round(onPlan / ser.length * 100) : 0} % dní</div>
-          <div class="rp-tiles">${tiles}</div>
-          <div class="rp-sub" style="display:flex;justify-content:space-between"><span>−${Math.min(30, ser.length)} d</span><span>dnes</span></div>
+      const lookDays = Math.min(50, Math.max(0, ser.length - 1));
+      const ratio = Math.max(0, stats.paceBtcPerDay || 0) / daily;
+      const rTone = ratio >= 1 ? "var(--green)" : ratio >= 0.75 ? "var(--sunpetal)" : "var(--red)";
+      const rPos = Math.min(100, ratio / 2 * 100);
+      const debtLeft = Math.max(0, agg.netDebtBtc || 0);
+      const tempoCard = `<div class="rp-card">
+          <div class="rp-lbl">⚡ TEMPO</div>
+          <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:4px 0 8px">
+            <span class="rp-big" style="color:${rTone}">${ratio.toFixed(2).replace(".", ",")} d/den</span>
+            <span class="rp-sub">posíláš <b style="color:var(--text-secondary)">${Math.round(ratio * 100)} %</b> plánu · za posledních ${lookDays} ${dny(lookDays)} ${fl((stats.paceBtcPerDay || 0) * lookDays)} z ${fl(daily * lookDays)}</span>
+          </div>
+          <div class="rp-track">
+            <div class="rp-fill" style="left:0;width:${rPos}%;background:${rTone};transform-origin:left"></div>
+            <div class="rp-mid"></div>
+            <div class="rp-dot" style="left:${rPos}%;border-color:${rTone};box-shadow:none;animation:none"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between" class="rp-sub"><span>0×</span><span>plán 1×</span><span>2×</span></div>
+          <div class="rp-sub" style="margin-top:4px">${ratio > 0 ? `tímhle tempem splaceno za <b style="color:${rTone}">${Math.ceil(debtLeft / (stats.paceBtcPerDay)).toLocaleString("cs-CZ")} ${dny(Math.ceil(debtLeft / stats.paceBtcPerDay))}</b>${ratio < 1 ? ` · na 1× chybí ${fl(daily - stats.paceBtcPerDay)} / den` : ""}` : "za posledních 50 dní žádný čistý výběr"}</div>
         </div>`;
 
       // PAYOFF
@@ -27581,8 +27588,6 @@ Kola: ${i.rounds.map(when).join(", ")}`;
           .rp-fill{position:absolute;top:4px;height:6px;border-radius:3px;animation:rpGrow .9s cubic-bezier(.2,.8,.2,1) both;transform-origin:${ahead ? "left" : "right"}}
           .rp-mid{position:absolute;left:50%;top:-4px;bottom:-4px;width:2px;background:#e8c86a;transform:translateX(-1px)}
           .rp-dot{position:absolute;top:50%;width:16px;height:16px;border-radius:50%;background:#1c160f;border:3px solid;transform:translate(-50%,-50%);animation:rpPulse 2s ease-in-out infinite}
-          .rp-tiles{display:flex;flex-wrap:wrap;gap:3px;margin:8px 0 3px}
-          .rp-tile{width:14px;height:14px;border-radius:2px;flex:none}
           .rp-bar{position:relative;height:12px;border-radius:6px;background:rgba(0,0,0,0.4);margin:6px 0 22px}
           .rp-bar-in{height:100%;border-radius:6px;background:linear-gradient(90deg,#b8860b,#ffd700);box-shadow:0 0 10px rgba(255,215,0,0.35);animation:rpGrow 1.1s cubic-bezier(.2,.8,.2,1) both;transform-origin:left}
           .rp-ms{position:absolute;top:-3px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;font-size:0.7rem;line-height:1}
@@ -27594,7 +27599,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
           @keyframes invGoldShine{0%{background-position:100% 0}100%{background-position:-150% 0}}
           @media (prefers-reduced-motion:reduce){.rp-card,.rp-fill,.rp-bar-in,.rp-dot{animation:none}}
         </style>
-        <div class="rp-grid">${leadCard}${todayCard}${streakCard}${payCard}</div>`;
+        <div class="rp-grid">${leadCard}${tempoCard}${todayCard}${payCard}</div>`;
     }
 
     function _invRepayHtml(agg, stats, flowerPerBtc, errors) {
