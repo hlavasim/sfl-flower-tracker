@@ -53,6 +53,26 @@ async function rpc(url, method, params) {
 const pad = (addr) => addr.toLowerCase().replace(/^0x/, "").padStart(64, "0");
 const balanceOf = (url, token, addr) => rpc(url, "eth_call", [{ to: token, data: "0x70a08231" + pad(addr) }, "latest"]);
 
+/*
+ * The eggs an address holds with their traits (Monster, Rarity, Status… from the official
+ * metadata), so each can be matched to the trait offers that would buy it. At most 50; an egg
+ * whose metadata does not load keeps `traits: null` and is priced only by an offer without criteria.
+ */
+async function readEggs(url, addr, n) {
+  const ids = await Promise.all(Array.from({ length: Math.min(n, 50) }, (_, i) =>
+    rpc(url, "eth_call", [{ to: EGG, data: "0x2f745c59" + pad(addr) + i.toString(16).padStart(64, "0") }, "latest"])
+      .then((h) => String(BigInt(h))).catch(() => null)));
+  return Promise.all(ids.map(async (id) => {
+    if (!id) return { id: null, traits: null };
+    try {
+      const r = await fetch(`https://api.yakkamon.com/metadata/${id}`, { headers: { "user-agent": UA, accept: "application/json" } });
+      if (!r.ok) throw new Error(String(r.status));
+      const m = await r.json();
+      return { id, traits: Object.fromEntries((m.attributes || []).map((a) => [a.trait_type, a.value])) };
+    } catch { return { id, traits: null }; }
+  }));
+}
+
 /** Raw balances of one address on every chain: [{ chain, symbol, amount, price }]. A chain that fails is skipped. */
 export async function readAddress(addr) {
   const out = [];
@@ -65,7 +85,10 @@ export async function readAddress(addr) {
       ]);
       out.push({ chain, symbol: c.native.symbol, amount: Number(BigInt(nat)) / 1e18, price: c.native.price });
       for (const [sym, t, h] of toks) {
-        if (sym === "EGG") out.push({ chain, symbol: "Genesis Egg", amount: Number(BigInt(h)), price: "egg", kind: "egg" });
+        if (sym === "EGG") {
+          const amount = Number(BigInt(h));
+          out.push({ chain, symbol: "Genesis Egg", amount, price: "egg", kind: "egg", eggs: await readEggs(c.rpc, addr, amount) });
+        }
         else out.push({ chain, symbol: sym, amount: Number(BigInt(h)) / 10 ** t.decimals, price: t.price });
       }
     } catch (e) {
@@ -119,7 +142,7 @@ export async function bestEggOfferWron(pages = 8) {
   const offers = [];   // every fillable offer: { wron, qty } — the book eggBookValue walks
   const now = Date.now() / 1000;
   for (let f = 0; f < pages * 50; f += 50) {
-    const q = `{ collectionOffers(from: ${f}, size: 50) { data { tokenAddress buyer availableQuantity itemPrice endTime } } }`;
+    const q = `{ collectionOffers(from: ${f}, size: 50) { data { tokenAddress buyer availableQuantity itemPrice endTime metadata { stringCriteria { traitName traitValue } numberCriteria { traitName } } } } }`;
     const r = await fetch(GQL, { method: "POST", headers: { "content-type": "application/json", "user-agent": UA }, body: JSON.stringify({ query: q }) });
     if (!r.ok) throw new Error(`ronin gql ${r.status}`);
     const rows = (((await r.json()).data || {}).collectionOffers || {}).data || [];
@@ -129,7 +152,9 @@ export async function bestEggOfferWron(pages = 8) {
       n++;
       const wron = Number(BigInt(o.itemPrice)) / 1e18;
       best = Math.max(best, wron);
-      offers.push({ wron, qty: Number(o.availableQuantity) || 0, buyer: String(o.buyer || "").toLowerCase() });
+      const md = o.metadata || {};
+      offers.push({ wron, qty: Number(o.availableQuantity) || 0, buyer: String(o.buyer || "").toLowerCase(),
+        criteria: md.stringCriteria || [], numeric: (md.numberCriteria || []).length > 0 });
     }
   }
   offers.sort((a, b) => b.wron - a.wron);
@@ -158,8 +183,8 @@ export function eggBookValue(offers, count) {
 /**
  * Pure: value raw balances with prices and split them into venues.
  *   wallet   = every fungible token (BTC was sent to the wallet venue to buy them)
- *   yakkamon = Genesis eggs, EACH at the best fillable Hidden offer — the owner's rule (2026-10-06),
- *              whatever quantity that offer covers. The eggs are sold over days through listings,
+ *   yakkamon = Genesis eggs, EACH at the best fillable offer whose trait criteria it meets — the
+ *              owner's rule (2026-10-06), whatever quantity that offer covers. The eggs are sold over days through listings,
  *              not dumped into the book at once, so walking the book (eggBookValue) understated
  *              them. Offers made by the owner's own wallets (`ownAddrs`) never price his eggs:
  *              the egg bot's 460 bids once did.
@@ -170,14 +195,28 @@ export function valueHoldings(balances, prices, eggOffers, ownAddrs) {
   const btcUsd = prices.bitcoin || 0;
   const venues = { wallet: { usd: 0, btc: 0, items: [] }, yakkamon: { usd: 0, btc: 0, items: [] } };
   const errors = [];
-  const eggs = balances.filter((b) => !b.error && b.kind === "egg" && b.amount > 0).reduce((a, b) => a + b.amount, 0);
   const own = new Set((ownAddrs || []).map((a) => String(a).toLowerCase()));
-  const eggUnitWron = (eggOffers || []).filter((o) => o && o.qty > 0 && !own.has(o.buyer))
+  /*
+   * Since the reveal offers target traits (a Raigo bid, a Legendary bid…), so each egg takes the
+   * best offer whose criteria ALL match its own traits (`b.eggs[i].traits` from readAddress). An
+   * egg whose traits could not be read, or an egg beyond the listed ones, only matches an offer
+   * without criteria; an offer on a numeric trait cannot be checked and matches nothing.
+   */
+  const usable = (eggOffers || []).filter((o) => o && o.qty > 0 && !own.has(o.buyer) && !o.numeric);
+  const bestFor = (traits) => usable
+    .filter((o) => (o.criteria || []).every((c) => traits && String(traits[c.traitName]) === String(c.traitValue)))
     .reduce((m, o) => Math.max(m, o.wron || 0), 0);
-  const book = { wron: eggs * eggUnitWron, filled: eggUnitWron > 0 ? eggs : 0, unfilled: eggUnitWron > 0 ? 0 : eggs };
+  const eggBook = (b) => {
+    const known = (b.eggs || []).slice(0, b.amount);
+    const each = known.map((e) => bestFor(e && e.traits)).concat(Array(Math.max(0, b.amount - known.length)).fill(bestFor(null)));
+    const wron = each.reduce((a, w) => a + w, 0), filled = each.filter((w) => w > 0).length;
+    return { wron, filled, unfilled: each.length - filled };
+  };
   for (const b of balances) {
     if (b.error) { errors.push(`${b.chain}: ${b.error}`); continue; }
     if (!(b.amount > 0)) continue;
+    const book = b.kind === "egg" ? eggBook(b) : null;
+    const eggUnitWron = book ? book.wron / b.amount : 0;
     const unit = b.kind === "egg" ? eggUnitWron * (prices.ronin || 0) : (prices[b.price] || 0);
     const usd = b.amount * unit;
     const v = venues[b.kind === "egg" ? "yakkamon" : "wallet"];

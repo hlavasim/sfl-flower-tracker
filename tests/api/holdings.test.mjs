@@ -59,6 +59,31 @@ test("eggs: each at the best fillable offer, the owner's own offers excluded", (
     { wron: 1200, filled: 3, unfilled: 2 });
 });
 
+/*
+ * After the reveal (2026-10-14) offers target traits: a 5,500 WRON bid for a Raigo priced every
+ * Brazito the owner held at 5,500. Each egg takes only the best offer whose criteria all match its
+ * own traits; an offer on a numeric trait cannot be checked and never matches.
+ */
+test("eggs: each at the best offer whose trait criteria it meets", () => {
+  const eggBal = [{ chain: "ronin", symbol: "Genesis Egg", amount: 3, price: "egg", kind: "egg", eggs: [
+    { id: "803", traits: { Monster: "Brazito", Rarity: "Uncommon", Status: "Revealed" } },
+    { id: "7105", traits: { Monster: "Salu", Rarity: "Legendary", Status: "Revealed" } },
+    { id: "9", traits: null },   // metadata unreadable: only an offer without criteria can price it
+  ] }];
+  const book = [
+    { wron: 5500, qty: 1, criteria: [{ traitName: "Monster", traitValue: "Raigo" }] },
+    { wron: 900, qty: 1, criteria: [{ traitName: "Rarity", traitValue: "Uncommon" }], numeric: true },
+    { wron: 800, qty: 1, criteria: [{ traitName: "Rarity", traitValue: "Legendary" }] },
+    { wron: 300, qty: 1, criteria: [{ traitName: "Rarity", traitValue: "Uncommon" }], buyer: "0xbot" },
+    { wron: 290, qty: 1, criteria: [{ traitName: "Rarity", traitValue: "Uncommon" }] },
+    { wron: 31, qty: 4, criteria: [] },
+  ];
+  const y = valueHoldings(eggBal, prices, book, ["0xbot"]).venues.yakkamon.items[0];
+  assert.equal(y.bookWron, 290 + 800 + 31, "Brazito 290, Salu 800, the unreadable one 31 — never the Raigo 5,500");
+  assert.equal(y.filled, 3);
+  assert.ok(Math.abs(y.usd - (290 + 800 + 31) * 0.06) < 1e-9);
+});
+
 test("every token's price id is one the price feed fetches", () => {
   const ids = new Set(["usd", "bitcoin", "ethereum", "ronin", "flower-2"]);
   for (const c of Object.values(CHAINS)) {

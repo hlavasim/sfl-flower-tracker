@@ -5428,7 +5428,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.09</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.10</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5455,6 +5455,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.10", items: [
+          { t: "fix", text: "INVESTMENT TRACKER: <b>Genesis eggs valued by their own traits.</b> Since the reveal, offers target a monster or a rarity — a 5,500 WRON bid for a Raigo priced every Brazito you hold at 5,500. Each egg now reads its traits from the official metadata and takes only the best offer whose criteria it meets (your own offers still excluded)." },
+        ] },
         { ver: "v6.09", items: [
           { t: "feat", text: "INVESTMENT TRACKER: REPAY PLAN <b>⚡ TEMPO</b> replaces the day streak (useless when you withdraw once a week): your pace over the last 50 days as days of plan per day — 0,80 d/den = sending 80 % of the daily target — on a 0–2× gauge, with the days to payoff at that pace and what is missing per day to reach 1×." },
         ] },
@@ -27695,9 +27698,9 @@ Kola: ${i.rounds.map(when).join(", ")}`;
       if (x.chainEggs && x.chainEggs.items.length) {
         const e = x.chainEggs.items[0], off = _invHoldings.egg || {};
         const book = e.unitWron !== undefined
-          ? `${amt(e)} prodáno do knihy nabídek: ${Math.round(e.bookWron || 0)} WRON celkem, Ø ${Math.round(e.unitWron)} WRON/ks (nejlepší nabídka ${Math.round(off.offerWron || 0)} WRON bere jen svůj počet kusů, další jdou za nižší)${e.unfilled ? ` · ${e.unfilled} ks kniha nepobere → 0` : ""}`
+          ? `${amt(e)} prodáno do knihy nabídek: ${Math.round(e.bookWron || 0)} WRON celkem, Ø ${Math.round(e.unitWron)} WRON/ks (každé vejce za nejlepší nabídku, jejíž traity splňuje — nabídka na Raigo či Legendary Brazito neocení)${e.unfilled ? ` · ${e.unfilled} ks bez odpovídající nabídky → 0` : ""}`
           : `${amt(e)} × ${Math.round(off.offerWron || 0)} WRON`;
-        rows.push({ label: "Genesis eggs", btc: ratesOk ? x.eggsLiquidBtc : NaN, liquid: true, info: `${book} = ${usd(e.usd)} · Hidden trait offers na Ronin Marketu${off.fillableOffers ? ` (${off.fillableOffers} nabídek s krytým WRON)` : ""} · prodejné hned` });
+        rows.push({ label: "Genesis eggs", btc: ratesOk ? x.eggsLiquidBtc : NaN, liquid: true, info: `${book} = ${usd(e.usd)} · trait nabídky na Ronin Marketu${off.fillableOffers ? ` (${off.fillableOffers} nabídek s krytým WRON)` : ""} · prodejné hned` });
         // Profit on the eggs BOUGHT (cost from the egg collector): what they fetch in the offer book
         // now minus what was paid. A detail of the row above — not added to the totals again.
         const c = off.cost;
