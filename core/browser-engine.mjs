@@ -16,6 +16,7 @@ export { escHTML, formatSec, sflIcon } from "./engine/power-formula.mjs";
 export { _ascBandXp, _ascBaseline, _withinAscensionLevel, aoeCoverage, applyBoosts, calcSkillPointCost, calcToolCostPerDay, detectFarmCapacity, detectStockModifiers, farmWearableEquipped, gameResBoostedBase, gameResYield, getAnimalData, getAnimalLevel, getBaseYield, getBumpkinLevel, getCapacityCount, getCount, getCycleSec, getDefaultProduct, getEffectiveStock, getEffectsForCategory, getTotalBumpkinLevel, isAnimalCat, marksToSfl, miningToolsPerDay, sumMergedNodes } from "./engine/power-helpers.mjs";
 export { nftUnitPrice, pickCoinsPerSFL } from "./engine/prices.mjs";
 export { repayPlanStats } from "./engine/repay-plan.mjs";
+export { voiceCategories, voiceDue, voiceSettings, voiceWindowOpen } from "./engine/dash-voice.mjs";
 export { calcBoostValue, cmGetSeedRestockCount, farmHasWarehouse, gameResUnitsPerDay, getRoadmapSettings, roadmapBuildClones, roadmapCatBreakdown, roadmapCatMix, roadmapCatNet, roadmapCoinsFree, roadmapEffFactor, roadmapInSeason, roadmapItemValue, roadmapMiningChain, roadmapOwnedEffects, roadmapPerPlot, roadmapPrices, roadmapProductNetEff } from "./engine/roadmap.mjs";
 export { powerSkillRankVals, skillRankFactor, skillRankMag, skillRankText, skillUpgradeCost } from "./engine/skill-ranks.mjs";
 export { diffWindowRange, parseDiffRange } from "./sections/diff.mjs";

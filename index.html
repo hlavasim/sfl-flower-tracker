@@ -5428,7 +5428,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.10</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.11</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5455,6 +5455,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.11", items: [
+          { t: "feat", text: "DASH: <b>live + voice.</b> While the dashboard is open it re-reads your farm every 3 minutes, so chopped trees and replanted plots leave READY NOW without a reload. <b>🔊 Hlas</b> reads READY NOW out loud in English (&ldquo;Chop trees, Mine iron.&rdquo;) when something turns ready and again every N minutes while it stays ready — only on the days and hours you pick, with a per-category mute list (deliveries, bounties and chores start muted). Schedule synced across devices; on/off per browser." },
+        ] },
         { ver: "v6.10", items: [
           { t: "fix", text: "INVESTMENT TRACKER: <b>Genesis eggs valued by their own traits.</b> Since the reveal, offers target a monster or a rarity — a 5,500 WRON bid for a Raigo priced every Brazito you hold at 5,500. Each egg now reads its traits from the official metadata and takes only the best offer whose criteria it meets (your own offers still excluded)." },
         ] },
@@ -7412,6 +7415,7 @@
       }
 
       if (!data) throw lastErr || new Error("Failed to load farm data");
+      _farmFetchedAt = Date.now();
 
       const farm = data.farm || {};
       const inventory = farm.inventory || {};
@@ -9369,6 +9373,114 @@
       return actions;
     }
 
+    /*
+     * DASH VOICE + LIVE. The dashboard re-reads the farm every 3 minutes while it is open (or the
+     * voice is on), so a chopped tree or a replanted plot leaves READY NOW without a reload. The
+     * voice reads READY NOW as short English commands through the browser's speech engine — when
+     * a category turns ready and again every N minutes while it stays ready, only on the chosen
+     * days and hours (core/engine/dash-voice.mjs decides; this only wires it up). The schedule is
+     * shared across devices (sfl_dash_voice); ON/OFF stays per browser (sfl_dash_voice_on), as a
+     * browser may only speak after a click on it.
+     */
+    const DASH_LIVE_MS = 3 * 60 * 1000;
+    var _farmFetchedAt = 0;   // var: fetchFarmData (earlier in the file) writes it
+    let _dashLiveBusy = false, _dashVoiceSpoken = {}, _dashReadyKey = "";
+    function dashVoiceSettings() {
+      let st = {};
+      try { st = JSON.parse(localStorage.getItem("sfl_dash_voice") || "{}") || {}; } catch (e) { st = {}; }
+      let on = false;
+      try { on = localStorage.getItem("sfl_dash_voice_on") === "1"; } catch (e) {}
+      return { ...voiceSettings(st), on };
+    }
+    function _dashVoiceSave(patch) {
+      const { on, ...rest } = { ...dashVoiceSettings(), ...patch };
+      try { localStorage.setItem("sfl_dash_voice", JSON.stringify(rest)); localStorage.setItem("sfl_dash_voice_on", on ? "1" : "0"); } catch (e) {}
+    }
+    function _dashSay(text) {
+      if (!text || typeof speechSynthesis === "undefined") return;
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = "en-US";
+      const v = speechSynthesis.getVoices().find((x) => /^en(-|_)US/i.test(x.lang)) || speechSynthesis.getVoices().find((x) => /^en/i.test(x.lang));
+      if (v) u.voice = v;
+      speechSynthesis.speak(u);
+    }
+    window.dashVoiceToggle = function () {
+      const on = !dashVoiceSettings().on;
+      _dashVoiceSave({ on });
+      _dashVoiceSpoken = {};
+      if (on) { _dashSay("Voice on."); setTimeout(_dashVoiceTick, 1500); }
+      else if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
+      if (cachedFarmData && getPage() === "dashboard") renderDashboard(cachedFarmData);
+    };
+    window.dashVoiceDay = function (d, checked) {
+      const days = new Set(dashVoiceSettings().days);
+      if (checked) days.add(d); else days.delete(d);
+      _dashVoiceSave({ days: [...days].sort() });
+    };
+    window.dashVoiceMute = function (cat, muted) {
+      const m = new Set(dashVoiceSettings().muted || []);
+      if (muted) m.add(cat); else m.delete(cat);
+      _dashVoiceSave({ muted: [...m] });
+    };
+    window.dashVoiceSet = function (k, v) {
+      if (k === "repeatMin") { const n = Math.round(parseFloat(v)); if (!(n >= 1)) return; v = n; }
+      _dashVoiceSave({ [k]: v });
+    };
+    window.dashVoiceTest = function () {
+      const farm = cachedFarmData && cachedFarmData.farm;
+      const ready = farm ? parseDashboardActions(farm).filter((a) => a.status === "ready") : [];
+      const r = voiceDue(ready, Date.now(), { ...dashVoiceSettings(), on: true, days: [0, 1, 2, 3, 4, 5, 6], from: "00:00", to: "24:00" }, {});
+      _dashSay(r.text || "Nothing is ready.");
+    };
+    function _dashVoicePanelHtml() {
+      if (typeof voiceSettings === "undefined") return "";
+      const st = dashVoiceSettings();
+      const names = [[1, "Po"], [2, "Út"], [3, "St"], [4, "Čt"], [5, "Pá"], [6, "So"], [0, "Ne"]];
+      const ago = _farmFetchedAt ? Math.max(0, Math.round((Date.now() - _farmFetchedAt) / 60000)) : null;
+      const inp = "background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-dark);border-radius:4px;font-family:'Courier New',monospace;font-size:0.65rem;padding:2px 4px";
+      return `<div class="dash-toolbar" style="align-items:center;font-family:'Courier New',monospace;font-size:0.62rem;color:var(--text-secondary)">
+          <button class="dash-toggle-btn ${st.on ? "on" : ""}" onclick="dashVoiceToggle()">${st.on ? "🔊 Hlas: ZAP" : "🔇 Hlas: VYP"}</button>
+          <span>${names.map(([d, n]) => `<label style="margin-right:4px;cursor:pointer"><input type="checkbox" ${st.days.includes(d) ? "checked" : ""} onchange="dashVoiceDay(${d},this.checked)"> ${n}</label>`).join("")}</span>
+          <label>od <input type="time" value="${escHTML(st.from)}" onchange="dashVoiceSet('from',this.value)" style="${inp}"></label>
+          <label>do <input type="time" value="${escHTML(st.to)}" onchange="dashVoiceSet('to',this.value)" style="${inp}"></label>
+          <label>znovu po <input type="number" min="1" step="1" value="${st.repeatMin}" onchange="dashVoiceSet('repeatMin',this.value)" style="${inp};width:44px"> min</label>
+          <button class="dash-toggle-btn" onclick="dashVoiceTest()" title="Řekne teď, co je hotové (bez ohledu na dny a hodiny)">▶ test</button>
+          <details style="flex-basis:100%"><summary style="cursor:pointer">⚙ co hlásit — odškrtni, co neděláš (např. Oil) · ztlumeno ${(st.muted || []).length}</summary>
+            <div style="display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:4px">${voiceCategories().map((c) => `<label style="cursor:pointer"><input type="checkbox" ${(st.muted || []).includes(c) ? "" : "checked"} onchange="dashVoiceMute(${escHTML(JSON.stringify(c))},!this.checked)"> ${escHTML(c)}</label>`).join("")}</div>
+          </details>
+          <span style="color:var(--text-dim)">🔄 živě: farma ${ago == null ? "—" : ago === 0 ? "právě načtená" : `načtená před ${ago} min`} · obnova každé 3 min</span>
+        </div>`;
+    }
+    async function _dashVoiceTick() {
+      const st = dashVoiceSettings();
+      const onDash = getPage() === "dashboard";
+      if (!FARM_ID || (!onDash && !st.on) || typeof parseDashboardActions !== "function") return;
+      // Re-read the farm when it is older than 3 minutes (the proxy caches it for 20 s, so this
+      // costs the SFL API one call per 3 minutes per open tab).
+      let fresh = false;
+      if (Date.now() - _farmFetchedAt >= DASH_LIVE_MS && !_dashLiveBusy) {
+        _dashLiveBusy = true;
+        try { cachedFarmData = await fetchFarmData(); fresh = true; } catch (e) { console.warn("[dash live]", e); }
+        _dashLiveBusy = false;
+      }
+      const farm = cachedFarmData && cachedFarmData.farm;
+      if (!farm) return;
+      const ready = parseDashboardActions(farm).filter((a) => a.status === "ready");
+      const key = ready.map((a) => a.category + ":" + a.label).sort().join("|");
+      // Repaint when the farm was re-read or something turned ready, keeping the scroll position;
+      // never while the user is typing in one of the dashboard's own inputs.
+      if (onDash && (fresh || key !== _dashReadyKey) && !(document.activeElement && /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName))) {
+        const y = window.scrollY;
+        await renderDashboard(cachedFarmData);
+        window.scrollTo(0, y);
+      }
+      _dashReadyKey = key;
+      const r = voiceDue(ready, Date.now(), st, _dashVoiceSpoken);
+      _dashVoiceSpoken = r.spoken;
+      if (r.text) _dashSay(r.text);
+    }
+    setInterval(_dashVoiceTick, 30 * 1000);
+
     async function renderDashboard(data) {
       if (Object.keys(dashP2P).length === 0) await dashFetchP2P();
       if (dashRates.coinsPerSFL == null) await dashFetchRates();
@@ -9416,6 +9528,7 @@
             ${_showFaction ? "☑" : "☐"} Show faction items (Goblin NPCs, Mark rewards)
           </button>
         </div>
+        ${_dashVoicePanelHtml()}
       </div>`;
 
       // Weather Shop placement status — needs all 4 placed (Tornado Pinwheel /
@@ -29805,7 +29918,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
       "sfl_tracked_dolls", "sfl_restock_settings", "sfl_gift_plan", "sfl_roi_multicat_assignment", "sfl_sleep_schedule",
       "sfl_marks_budget", "sfl_bumpkin_target", "sfl_bumpkin_recipes", "sfl_nodes_roi_cap", "sfl_coin_mode",
       "sfl_sales_sell_type", "sfl_sales_sell_min", "sfl_pet_streak", "sfl_wl_eff", "sfl_flower_mode", "sfl_flower_n", "sfl_sats_gran",
-      "sfl_repay_daily_flower", "sfl_tk_goal"];
+      "sfl_repay_daily_flower", "sfl_tk_goal", "sfl_dash_voice"];
     let _prefApplying = false, _prefPending = {}, _prefTimer = null;
     function _prefFarm() { try { return getConfig().farm || null; } catch (e) { return null; } }
     function _prefPush() {
