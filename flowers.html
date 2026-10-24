@@ -5322,6 +5322,8 @@
         html += `<button class="nav-link${cls}" onclick="navigateTo('${l.id}')">${l.label}</button>`;
       }
       html += `</div></div>`;
+      // Craft World lives on its own page (craftworld.html); it keeps the farm id for the way back.
+      html += `<a class="nav-link" href="/craftworld.html?farm=${encodeURIComponent(FARM_ID || "")}" title="Craft World planner — base, levelování, upgrady, trh" style="text-decoration:none">🦖 CRAFT</a>`;
       html += '<div class="nav-zoom">';
       html += '<button class="zoom-btn" onclick="changeZoom(-1)" title="Zmenšit text">A-</button>';
       html += '<button class="zoom-btn" onclick="changeZoom(1)" title="Zvětšit text">A+</button>';
@@ -5428,7 +5430,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.11</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.12</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5455,6 +5457,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.12", items: [
+          { t: "feat", text: "<b>🦖 CRAFT — Craft World planner</b> (top right of the bar, its own page /craftworld.html): your base from screenshots, levelling (XP per power and per COIN lost for your factories, what to unlock next, a Masterpiece calculator with the power tiers), the next upgrade of every factory priced in COIN, and the market — make or buy for all 49 factories at live Katana prices with the 2.5 % Exchange fee, plus pool fee yields. Factory data from RAWRTools." },
+          { t: "feat", text: "INVESTMENT TRACKER: new venue <b>CRAFT</b> (Craft World). Entry logged: 99 Kč of new money and 30 FLOWER moved from the farm (SFL → CRAFT, net zero exposure)." },
+        ] },
         { ver: "v6.11", items: [
           { t: "feat", text: "DASH: <b>live + voice.</b> While the dashboard is open it re-reads your farm every 3 minutes, so chopped trees and replanted plots leave READY NOW without a reload. <b>🔊 Hlas</b> reads READY NOW out loud in English (&ldquo;Chop trees, Mine iron.&rdquo;) when something turns ready and again every N minutes while it stays ready — only on the days and hours you pick, with a per-category mute list (deliveries, bounties and chores start muted). Schedule synced across devices; on/off per browser." },
         ] },
@@ -27500,6 +27506,9 @@ Kola: ${i.rounds.map(when).join(", ")}`;
       // FLOWER bought with BTC and held to speculate on the BTC price. Liquid — sellable today —
       // so it counts toward "liquidate now", and its held FLOWER is derived from the ledger.
       wallet: { label: "WALLET", color: "var(--blue)" },
+      // Craft World (Ronin): money put into the game's COIN and resources. Liquid only with the
+      // game's paid pass, and worth little on its thin pools, so it is tracked as money in.
+      craftworld: { label: "CRAFT", color: "var(--green)" },
     };
     /*
      * What each venue currently HOLDS, as opposed to what was sent to it. Without this a

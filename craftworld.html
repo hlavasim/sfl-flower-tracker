@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Craft World Planner</title>
+<meta name="description" content="Craft World: base, levelování, plán upgradů a trh — podle screenshotů a živých cen z Katana.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦖</text></svg>">
+<style>
+  :root {
+    --bg: #f6f5f1; --surface: #ffffff; --surface-2: #f0eee8; --border: #e2ded4; --text: #1d1b16; --muted: #6b665a;
+    --accent: #d9622b; --accent-soft: #fbe6da; --good: #2f8a4f; --good-soft: #e1f2e6; --warn: #b7791f; --warn-soft: #f8eccf;
+    --bad: #c2412d; --bad-soft: #f8e0dc; --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15140f; --surface: #1e1d17; --surface-2: #26241d; --border: #35322a; --text: #ece8dc; --muted: #a39d8c;
+      --accent: #f08048; --accent-soft: #3a2518; --good: #5cc07c; --good-soft: #1b2e21; --warn: #e0a84a; --warn-soft: #33281a;
+      --bad: #ee7a66; --bad-soft: #3a1f1a; --shadow: none;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15140f; --surface: #1e1d17; --surface-2: #26241d; --border: #35322a; --text: #ece8dc; --muted: #a39d8c;
+    --accent: #f08048; --accent-soft: #3a2518; --good: #5cc07c; --good-soft: #1b2e21; --warn: #e0a84a; --warn-soft: #33281a;
+    --bad: #ee7a66; --bad-soft: #3a1f1a; --shadow: none;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  a { color: var(--accent); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 20px 16px 48px; }
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  header h1 { margin: 0; font-size: 1.6rem; letter-spacing: -.02em; }
+  header .sub { color: var(--muted); font-size: .9rem; }
+  header .spacer { flex: 1; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); text-decoration: none; color: var(--text); font-size: .88rem; box-shadow: var(--shadow); cursor: pointer; }
+  .pill:hover { border-color: var(--accent); }
+  nav.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; position: sticky; top: 0; background: var(--bg); padding: 8px 0; z-index: 5; }
+  nav.tabs a { padding: 7px 14px; border-radius: 10px; text-decoration: none; color: var(--muted); font-weight: 600; font-size: .9rem; }
+  nav.tabs a:hover { background: var(--surface-2); color: var(--text); }
+  section { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px 18px 14px; margin-bottom: 16px; box-shadow: var(--shadow); }
+  section h2 { margin: 0 0 4px; font-size: 1.15rem; }
+  section .lead { color: var(--muted); margin: 0 0 14px; font-size: .9rem; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 10px; margin-bottom: 14px; }
+  .kpi { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; }
+  .kpi .l { color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
+  .kpi .v { font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .kpi .s { color: var(--muted); font-size: .8rem; }
+  .table-wrap { overflow-x: auto; margin: 0 -4px; }
+  table { width: 100%; border-collapse: collapse; font-size: .88rem; font-variant-numeric: tabular-nums; }
+  th { text-align: left; color: var(--muted); font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 7px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  td.n, th.n { text-align: right; white-space: nowrap; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .75rem; font-weight: 600; white-space: nowrap; }
+  .tag.good { background: var(--good-soft); color: var(--good); }
+  .tag.warn { background: var(--warn-soft); color: var(--warn); }
+  .tag.bad { background: var(--bad-soft); color: var(--bad); }
+  .tag.mute { background: var(--surface-2); color: var(--muted); }
+  .muted { color: var(--muted); }
+  .note { background: var(--accent-soft); border-radius: 12px; padding: 10px 12px; font-size: .88rem; margin: 10px 0; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+  .calc { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 10px; margin-bottom: 12px; }
+  label.f { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; color: var(--muted); }
+  input, select { font: inherit; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); }
+  .bar { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--accent); }
+  .err { color: var(--bad); }
+  footer { color: var(--muted); font-size: .8rem; text-align: center; margin-top: 20px; }
+  @media (max-width: 640px) { header h1 { font-size: 1.3rem; } section { padding: 14px 12px 10px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>🦖 Craft World Planner</h1>
+      <div class="sub" id="status">Načítám…</div>
+    </div>
+    <div class="spacer"></div>
+    <a class="pill" id="back" href="/">🌻 SFL tracker</a>
+    <button class="pill" id="theme" title="Světlý / tmavý režim">◐</button>
+  </header>
+  <nav class="tabs">
+    <a href="#base">🏗️ Base</a><a href="#level">📈 Levelování</a><a href="#upgrade">🔧 Upgrady</a><a href="#market">💱 Trh</a>
+  </nav>
+
+  <section id="base">
+    <h2>🏗️ Moje base</h2>
+    <p class="lead" id="base-lead">Stav z posledního screenshotu.</p>
+    <div class="kpis" id="base-kpis"></div>
+    <div class="table-wrap"><table id="base-table"></table></div>
+  </section>
+
+  <section id="level">
+    <h2>📈 Levelování</h2>
+    <p class="lead">Kde dostaneš nejvíc XP. „XP / COIN“ = kolik XP dostaneš za každý COIN, o který tě výroba připraví (vstupy dražší než výstup); <b>zdarma</b> = výroba ještě vydělává.</p>
+    <div class="grid2">
+      <div>
+        <h3 style="margin:4px 0 8px;font-size:1rem">Moje továrny</h3>
+        <div class="table-wrap"><table id="xp-owned"></table></div>
+      </div>
+      <div>
+        <h3 style="margin:4px 0 8px;font-size:1rem">Co odemknout dál (na levelu 1)</h3>
+        <div class="table-wrap"><table id="xp-next"></table></div>
+      </div>
+    </div>
+    <h3 style="margin:18px 0 8px;font-size:1rem">🏛️ Kalkulačka Masterpiece</h3>
+    <p class="lead">Cena přispění v energii roste po tarifech (5 / 7 / 13 / 25 / 50 za kus; hranice 50 / 250 / 625 / 1 300 v jednom okně do resetu). Doporučí, kolik dát, než XP za energii klesne pod tvou nejlepší továrnu.</p>
+    <div class="calc">
+      <label class="f">Kusů chci dát<input id="mp-qty" type="number" min="0" value="551"></label>
+      <label class="f">XP za kus<input id="mp-xp" type="number" min="0" step="any" value="50"></label>
+      <label class="f">Už dáno v tomto okně<input id="mp-done" type="number" min="0" value="0"></label>
+      <label class="f">Laťka (XP / energie)<input id="mp-bar" type="number" min="0" step="any" value="8"></label>
+    </div>
+    <div id="mp-out"></div>
+  </section>
+
+  <section id="upgrade">
+    <h2>🔧 Plán upgradů</h2>
+    <p class="lead">Další level každé tvé továrny: cena upgradu v COIN (podle trhu), kolik XP a produkce denně přidá a XP/den za každý utracený COIN. Nahoře je to, co tě posune nejlevněji.</p>
+    <div class="table-wrap"><table id="up-table"></table></div>
+  </section>
+
+  <section id="market">
+    <h2>💱 Trh — vyrobit, nebo koupit?</h2>
+    <p class="lead">Poměr = hodnota výstupu ÷ hodnota vstupů (ceny z Katana, v COIN). Na Exchange platíš 2,5 % za směnu, takže prodat vstup a koupit výstup stojí ~5 %:
+      <span class="tag good">vyrob</span> poměr ≥ 1 · <span class="tag warn">nastejno</span> 0,95–1 · <span class="tag bad">kup</span> pod 0,95 (výroba ztrácí víc než poplatky).</p>
+    <div class="calc"><label class="f">Hledat<input id="mk-q" placeholder="např. copper, steel…"></label></div>
+    <div class="table-wrap"><table id="mk-table"></table></div>
+    <h3 style="margin:18px 0 8px;font-size:1rem">💧 Pooly (výnos z poplatků)</h3>
+    <p class="lead">Roční výnos z poplatků podle obratu za 24 h. Pozor: v poolu držíš i surovinu, a vyrobené zboží dlouhodobě zlevňuje — poplatky to obvykle nevyrovnají.</p>
+    <div class="table-wrap"><table id="pool-table"></table></div>
+  </section>
+
+  <footer>Data továren: <a href="https://www.rawrtools.com/factories" target="_blank" rel="noopener">RAWRTools</a> (herní data) · ceny: Katana přes GeckoTerminal · stav base: tvoje screenshoty</footer>
+</div>
+
+<script type="module">
+import { levelEconomics, marketTable, upgradePlan, masterpieceCost, masterpieceStop, pricesFromPools, xpSources } from "/core/craftworld/calc.mjs";
+
+const COIN = "0x7dc167e270d5ef683ceaf4afcdf2efbdd667a9a7";
+const FARM = new URLSearchParams(location.search).get("farm") || (() => { try { return JSON.parse(localStorage.getItem("sfl_config") || "{}").farm; } catch { return null; } })() || "155498";
+document.getElementById("back").href = "/?farm=" + encodeURIComponent(FARM);
+
+// theme toggle, remembered per browser
+(() => {
+  const k = "cw_theme"; let t = null;
+  try { t = localStorage.getItem(k); } catch {}
+  if (t) document.documentElement.dataset.theme = t;
+  document.getElementById("theme").onclick = () => {
+    const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    const nx = cur === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = nx;
+    try { localStorage.setItem(k, nx); } catch {}
+  };
+})();
+
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const nf = (v, d = 0) => v == null || !isFinite(v) ? "—" : Number(v).toLocaleString("cs-CZ", { maximumFractionDigits: d, minimumFractionDigits: d });
+const big = (v) => v == null || !isFinite(v) ? "—" : Math.abs(v) >= 1e6 ? nf(v / 1e6, 1) + " M" : Math.abs(v) >= 1e4 ? nf(v / 1e3, 0) + " k" : nf(v, Math.abs(v) < 10 ? 2 : 0);
+const proxy = (u) => "/api/proxy?url=" + encodeURIComponent(u);
+const getJSON = async (u) => { const r = await fetch(u); if (!r.ok) throw new Error(u.split("?")[0] + " " + r.status); return r.json(); };
+const fmtDur = (s) => s >= 86400 ? nf(s / 86400, s % 86400 ? 1 : 0) + " d" : s >= 3600 ? nf(s / 3600, s % 3600 ? 1 : 0) + " h" : s >= 60 ? nf(s / 60, 0) + " min" : s + " s";
+const verdictTag = (v) => v === "craft" ? '<span class="tag good">vyrob</span>' : v === "either" ? '<span class="tag warn">nastejno</span>' : v === "buy" ? '<span class="tag bad">kup</span>' : '<span class="tag mute">—</span>';
+const xpCoin = (v) => v == null ? "—" : v === Infinity ? '<span class="tag good">zdarma</span>' : nf(v, 0);
+const recipe = (L, name) => L.inputs.map((x) => `${nf(x.amount)} ${esc(x.symbol.toLowerCase())}`).join(" + ") + ` → ${nf(L.output)} ${esc(name.toLowerCase())}`;
+
+let F = {}, P = {}, coinUsd = 0, usdCzk = 0, base = null, snapTime = null, pools = [];
+
+async function load() {
+  const st = document.getElementById("status");
+  const errors = [];
+  const [fData, cw] = await Promise.all([
+    getJSON("/core/craftworld/factories.json").catch((e) => { errors.push("továrny: " + e.message); return { factories: {} }; }),
+    getJSON(`/api/farm-history?type=cw&farm=${encodeURIComponent(FARM)}`).catch((e) => { errors.push("base: " + e.message); return null; }),
+  ]);
+  F = fData.factories || {};
+  if (cw && cw.latest) { base = cw.latest.data; snapTime = cw.latest.taken_at; }
+  // Katana RESOURCE/COIN pools, a page at a time (the proxy caches each for 5 minutes)
+  for (let page = 1; page <= 8; page++) {
+    try {
+      const d = await getJSON(proxy(`https://api.geckoterminal.com/api/v2/networks/ronin/tokens/${COIN}/pools?page=${page}`));
+      if (!d.data || !d.data.length) break;
+      pools.push(...d.data);
+    } catch (e) { if (page === 1) errors.push("ceny: " + e.message); break; }
+  }
+  const pm = pricesFromPools(pools);
+  P = Object.fromEntries(Object.entries(pm).map(([k, v]) => [k, v.price]));
+  // COIN's dollar price from the deepest COIN/USDC pool already fetched (no extra call: GeckoTerminal
+  // allows ~30 calls a minute and the pool pages use most of them)
+  coinUsd = pm.USDC && pm.USDC.price > 0 ? 1 / pm.USDC.price : 0;
+  if (!coinUsd) errors.push("COIN/USD: chybí pool COIN/USDC");
+  try { usdCzk = parseFloat((await getJSON(proxy("https://api.coinbase.com/v2/exchange-rates?currency=USD"))).data.rates.CZK); } catch { usdCzk = 0; }
+  st.innerHTML = `1 COIN = $${coinUsd ? coinUsd.toFixed(6) : "—"}${usdCzk ? ` = ${(coinUsd * usdCzk).toFixed(4)} Kč` : ""} · ${Object.keys(P).length} surovin s cenou · stav base ${snapTime ? new Date(snapTime).toLocaleString("cs-CZ") : "zatím žádný"}` + (errors.length ? ` · <span class="err">${esc(errors.join("; "))}</span>` : "");
+  render();
+}
+
+function coinStr(c) { return c == null ? "—" : `${big(c)} COIN` + (coinUsd ? ` <span class="muted">(${usdCzk ? nf(c * coinUsd * usdCzk, 2) + " Kč" : "$" + nf(c * coinUsd, 3)})</span>` : ""); }
+
+function renderBase() {
+  const k = document.getElementById("base-kpis"), t = document.getElementById("base-table"), lead = document.getElementById("base-lead");
+  if (!base) { lead.textContent = "Zatím žádný stav — pošli Claudovi screenshoty base (Town Hall, budovy s levely, sklad, energie, profil)."; k.innerHTML = ""; t.innerHTML = ""; return; }
+  lead.innerHTML = `Stav k ${new Date(snapTime).toLocaleString("cs-CZ")}${base.notes ? ` · <span class="muted">${esc(base.notes)}</span>` : ""}`;
+  const kp = [
+    ["Level", base.playerLevel ?? "?", base.xp != null ? `${big(base.xp)}${base.xpNext ? " / " + big(base.xpNext) : ""} XP` : "z profilu"],
+    ["Town Hall", base.townHall ?? "?", ""],
+    ["Energie", base.power ? `${big(base.power.cur)}${base.power.max ? " / " + big(base.power.max) : ""}` : "?", base.power && base.power.regen ? `+${big(base.power.regen)} / h` : ""],
+    ["COIN", big(base.coin), base.coin && coinUsd ? (usdCzk ? nf(base.coin * coinUsd * usdCzk, 0) + " Kč" : "$" + nf(base.coin * coinUsd, 2)) : ""],
+  ];
+  k.innerHTML = kp.map(([l, v, s]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${esc(v)}</div><div class="s">${esc(s)}</div></div>`).join("");
+  const rows = (base.buildings || []).map((b) => {
+    const f = F[b.slug];
+    const L = f && b.level ? f.levels.find((x) => x.level === b.level) : null;
+    return `<tr><td>${esc(f ? f.name : b.slug)}${b.note ? ` <span class="muted">· ${esc(b.note)}</span>` : ""}</td>
+      <td class="n">${b.level ?? '<span class="tag mute">?</span>'}${f ? `<span class="muted"> / ${f.levels.length}</span>` : ""}</td>
+      <td>${L ? recipe(L, f.name) : '<span class="muted">—</span>'}</td>
+      <td class="n">${L ? fmtDur(L.durationSeconds) : "—"}</td>
+      <td class="n">${L ? big(L.productionPerDay) : "—"}</td>
+      <td class="n">${L ? big(L.xpPerDay) : "—"}</td>
+      <td class="n">${L ? big(L.powerCost) : "—"}</td></tr>`;
+  }).join("");
+  t.innerHTML = `<tr><th>Budova</th><th class="n">Level</th><th>Recept</th><th class="n">Cyklus</th><th class="n">Ks / den</th><th class="n">XP / den</th><th class="n">Energie / běh</th></tr>${rows}`;
+  if (base.inventory && Object.keys(base.inventory).length) {
+    const inv = Object.entries(base.inventory).map(([s, q]) => ({ s, q, v: P[s.toUpperCase()] != null ? q * P[s.toUpperCase()] : null })).sort((a, b) => (b.v ?? 0) - (a.v ?? 0));
+    t.insertAdjacentHTML("afterend", `<h3 style="margin:16px 0 8px;font-size:1rem">Sklad</h3><div class="table-wrap"><table><tr><th>Surovina</th><th class="n">Kusů</th><th class="n">Hodnota</th></tr>${inv.map((x) => `<tr><td>${esc(x.s)}</td><td class="n">${big(x.q)}</td><td class="n">${coinStr(x.v)}</td></tr>`).join("")}</table></div>`);
+  }
+}
+
+function renderLevel() {
+  const owned = xpSources(F, P, base);
+  document.getElementById("xp-owned").innerHTML = owned.length
+    ? `<tr><th>Továrna</th><th class="n">Lv</th><th class="n">XP / den</th><th class="n">XP / energie</th><th class="n">XP / COIN</th></tr>` + owned.map((r) => `<tr><td>${esc(r.name)}</td><td class="n">${r.level}</td><td class="n">${big(r.xpPerDay)}</td><td class="n">${nf(r.xpPerPower, 1)}</td><td class="n">${xpCoin(r.xpPerCoin)}</td></tr>`).join("")
+    : `<tr><td class="muted">Zatím nevím, jaké továrny máš — pošli screenshot.</td></tr>`;
+  const have = new Set((base && base.buildings || []).map((b) => b.slug));
+  const next = Object.entries(F).filter(([s, f]) => !have.has(s) && f.levels[0].inputs.length)
+    .map(([slug, f]) => ({ slug, name: f.name, ...levelEconomics(f, 1, P) })).filter((r) => r.xpPerCoin != null)
+    .sort((a, b) => b.xpPerCoin - a.xpPerCoin).slice(0, 10);
+  document.getElementById("xp-next").innerHTML = `<tr><th>Továrna</th><th class="n">XP / den</th><th class="n">XP / energie</th><th class="n">XP / COIN</th></tr>` +
+    next.map((r) => `<tr><td>${esc(r.name)}</td><td class="n">${big(r.xpPerDay)}</td><td class="n">${nf(r.xpPerPower, 1)}</td><td class="n">${xpCoin(r.xpPerCoin)}</td></tr>`).join("");
+  // the bar for the Masterpiece calculator: the best XP per power among owned factories
+  const best = owned.reduce((m, r) => Math.max(m, r.xpPerPower || 0), 0);
+  if (best) document.getElementById("mp-bar").value = best.toFixed(1);
+  renderMp();
+}
+
+function renderMp() {
+  const q = +document.getElementById("mp-qty").value || 0, xp = +document.getElementById("mp-xp").value || 0;
+  const done = +document.getElementById("mp-done").value || 0, bar = +document.getElementById("mp-bar").value || 0;
+  const m = masterpieceCost(q, xp, done), stop = masterpieceStop(xp, bar, done);
+  const rec = masterpieceCost(Math.min(q, stop), xp, done);
+  document.getElementById("mp-out").innerHTML = `
+    <div class="table-wrap"><table><tr><th>Tarif (do kusů)</th><th class="n">Kusů</th><th class="n">Energie</th><th class="n">XP / energie</th><th></th></tr>
+    ${m.parts.map((p) => `<tr><td>do ${p.upTo === Infinity ? "∞" : nf(p.upTo)}</td><td class="n">${nf(p.units)}</td><td class="n">${nf(p.power)}</td><td class="n">${nf(p.xpPerPower, 1)}</td><td>${p.xpPerPower >= bar ? '<span class="tag good">vyplatí se</span>' : '<span class="tag bad">radši továrna</span>'}</td></tr>`).join("")}
+    <tr><td><b>Celkem</b></td><td class="n"><b>${nf(q)}</b></td><td class="n"><b>${nf(m.power)}</b></td><td class="n"><b>${nf(m.xpPerPower, 1)}</b></td><td>${nf(m.xp)} XP</td></tr></table></div>
+    <div class="note">💡 Doporučení: dej teď <b>${stop === Infinity ? nf(q) : nf(Math.min(q, stop))}</b> kusů (${nf(rec.power)} energie → ${nf(rec.xp)} XP, ${nf(rec.xpPerPower, 1)} XP/energii). Zbytek až po resetu tarifů.</div>`;
+}
+["mp-qty", "mp-xp", "mp-done", "mp-bar"].forEach((id) => document.getElementById(id).addEventListener("input", renderMp));
+
+function renderUpgrades() {
+  const plan = upgradePlan(F, P, base);
+  document.getElementById("up-table").innerHTML = plan.length
+    ? `<tr><th>Továrna</th><th class="n">Level</th><th>Cena upgradu</th><th class="n">+XP / den</th><th class="n">+Ks / den</th><th class="n">XP/den za COIN</th></tr>` +
+      plan.map((r) => `<tr><td>${esc(r.name)}</td><td class="n">${r.from} → ${r.to}</td><td>${r.upgradeCost.map((c) => `${nf(c.amount)} ${esc(c.symbol.toLowerCase())}`).join(" + ")} <span class="muted">= ${coinStr(r.cost)}</span></td><td class="n">+${big(r.dXpPerDay)}</td><td class="n">${r.dProdPerDay >= 0 ? "+" : ""}${big(r.dProdPerDay)}</td><td class="n">${r.xpPerCoin == null ? "—" : big(r.xpPerCoin)}</td></tr>`).join("")
+    : `<tr><td class="muted">Plán spočítám, až budu znát levely tvých továren (screenshot).</td></tr>`;
+}
+
+function renderMarket() {
+  const q = document.getElementById("mk-q").value.trim().toLowerCase();
+  const rows = marketTable(F, P, base).filter((r) => !q || r.name.toLowerCase().includes(q));
+  document.getElementById("mk-table").innerHTML = `<tr><th>Továrna</th><th>Recept (L1)</th><th class="n">Vstupy</th><th class="n">Výstup</th><th class="n">Poměr</th><th>Co dělat</th><th class="n">XP / COIN</th></tr>` +
+    rows.map((r) => { const L = F[r.slug].levels.find((x) => x.level === r.level) || F[r.slug].levels[0];
+      return `<tr><td>${esc(r.name)}${r.owned ? ' <span class="tag mute">mám</span>' : ""}</td><td class="muted">${recipe(L, r.name)} · ${fmtDur(L.durationSeconds)}</td><td class="n">${big(r.inV)}</td><td class="n">${big(r.outV)}</td><td class="n"><b>${nf(r.ratio, 2)}</b></td><td>${verdictTag(r.verdict)}</td><td class="n">${xpCoin(r.xpPerCoin)}</td></tr>`; }).join("");
+  const pr = pools.map((p) => { const a = p.attributes, tvl = +a.reserve_in_usd || 0, v = +((a.volume_usd || {}).h24) || 0, fee = (+((a.name.match(/([\d.]+)%$/) || [])[1]) || 1) / 100;
+      return { name: a.name, tvl, v, apr: tvl ? v * fee / tvl * 365 * 100 : 0 }; })
+    .filter((x) => x.tvl >= 500).sort((a, b) => b.apr - a.apr).slice(0, 12);
+  document.getElementById("pool-table").innerHTML = `<tr><th>Pool</th><th class="n">Velikost</th><th class="n">Obrat 24 h</th><th class="n">Výnos ročně</th></tr>` +
+    pr.map((x) => `<tr><td>${esc(x.name)}</td><td class="n">$${nf(x.tvl)}</td><td class="n">$${nf(x.v)}</td><td class="n">${nf(x.apr, 1)} %</td></tr>`).join("");
+}
+document.getElementById("mk-q").addEventListener("input", renderMarket);
+
+function render() { renderBase(); renderLevel(); renderUpgrades(); renderMarket(); }
+load().catch((e) => { document.getElementById("status").innerHTML = `<span class="err">Chyba: ${esc(e.message)}</span>`; });
+</script>
+</body>
+</html>

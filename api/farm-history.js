@@ -395,6 +395,21 @@ export default async function handler(req, res) {
     catch (e) { console.error("spec:", e.message); return res.status(500).json({ error: e.message }); }
   }
 
+  // ─── CRAFT WORLD base snapshots (read from screenshots; written with the admin role) ───
+  if (req.query.type === "cw") {
+    try {
+      const farm = parseInt(req.query.farm, 10);
+      if (!Number.isFinite(farm) || !ALLOWED_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
+      const r = await pool.query(
+        `SELECT id, taken_at, data, source FROM cw_snapshot WHERE farm_id = $1 ORDER BY taken_at DESC LIMIT 200`, [farm]);
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json({ latest: r.rows[0] || null, snapshots: r.rows });
+    } catch (err) {
+      console.error("[cw]", err);
+      return res.status(500).json({ error: "craft world snapshots failed", detail: String(err.message || err) });
+    }
+  }
+
   if (req.query.type === "venue-balance") {
     const method = (req.method || "GET").toUpperCase();
     try {
