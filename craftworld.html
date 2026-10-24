@@ -39,6 +39,8 @@
   nav.tabs a:hover { background: var(--surface-2); color: var(--text); }
   section { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px 18px 14px; margin-bottom: 16px; box-shadow: var(--shadow); }
   section h2 { margin: 0 0 4px; font-size: 1.15rem; }
+  /* hidden for now at the owner's request (2026-10-24): the Town Hall plan is the page */
+  section.later, nav.tabs { display: none; }
   section .lead { color: var(--muted); margin: 0 0 14px; font-size: .9rem; }
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 10px; margin-bottom: 14px; }
   .kpi { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; }
@@ -81,17 +83,23 @@
     <button class="pill" id="theme" title="Světlý / tmavý režim">◐</button>
   </header>
   <nav class="tabs">
-    <a href="#base">🏗️ Base</a><a href="#level">📈 Levelování</a><a href="#upgrade">🔧 Upgrady</a><a href="#market">💱 Trh</a>
+    <a href="#base">🏗️ Base</a><a href="#plan">🎯 Plán TH</a><a href="#level">📈 Levelování</a><a href="#upgrade">🔧 Upgrady</a><a href="#market">💱 Trh</a>
   </nav>
 
-  <section id="base">
+  <section id="base" class="later">
     <h2>🏗️ Moje base</h2>
     <p class="lead" id="base-lead">Stav z posledního screenshotu.</p>
     <div class="kpis" id="base-kpis"></div>
     <div class="table-wrap"><table id="base-table"></table></div>
   </section>
 
-  <section id="level">
+  <section id="plan">
+    <h2>🎯 Plán base po Town Hallech</h2>
+    <p class="lead">Co tě čeká na každém dalším Town Hallu: co chce samotný upgrade (level hráče, suroviny, čas), jaké nové budovy a levely se odemknou, kolik stojí a co dají. Ceny v COIN podle trhu — <b>koupit jde jen to, co máš vyzkoumané</b>.</p>
+    <div id="th-plan"></div>
+  </section>
+
+  <section id="level" class="later">
     <h2>📈 Levelování</h2>
     <p class="lead">Kde dostaneš nejvíc XP. „XP / COIN“ = kolik XP dostaneš za každý COIN, o který tě výroba připraví (vstupy dražší než výstup); <b>zdarma</b> = výroba ještě vydělává.</p>
     <div class="grid2">
@@ -115,13 +123,13 @@
     <div id="mp-out"></div>
   </section>
 
-  <section id="upgrade">
+  <section id="upgrade" class="later">
     <h2>🔧 Plán upgradů</h2>
     <p class="lead">Další level každé tvé továrny: cena upgradu v COIN (podle trhu), kolik XP a produkce denně přidá a XP/den za každý utracený COIN. Nahoře je to, co tě posune nejlevněji.</p>
     <div class="table-wrap"><table id="up-table"></table></div>
   </section>
 
-  <section id="market">
+  <section id="market" class="later">
     <h2>💱 Trh — vyrobit, nebo koupit?</h2>
     <p class="lead">Poměr = hodnota výstupu ÷ hodnota vstupů (ceny z Katana, v COIN). Na Exchange platíš 2,5 % za směnu, takže prodat vstup a koupit výstup stojí ~5 %:
       <span class="tag good">vyrob</span> poměr ≥ 1 · <span class="tag warn">nastejno</span> 0,95–1 · <span class="tag bad">kup</span> pod 0,95 (výroba ztrácí víc než poplatky).</p>
@@ -136,7 +144,7 @@
 </div>
 
 <script type="module">
-import { levelEconomics, marketTable, upgradePlan, masterpieceCost, masterpieceStop, pricesFromPools, xpSources } from "/core/craftworld/calc.mjs";
+import { levelEconomics, marketTable, upgradePlan, masterpieceCost, masterpieceStop, pricesFromPools, xpSources, thPlan } from "/core/craftworld/calc.mjs";
 
 const COIN = "0x7dc167e270d5ef683ceaf4afcdf2efbdd667a9a7";
 const FARM = new URLSearchParams(location.search).get("farm") || (() => { try { return JSON.parse(localStorage.getItem("sfl_config") || "{}").farm; } catch { return null; } })() || "155498";
@@ -165,6 +173,7 @@ const verdictTag = (v) => v === "craft" ? '<span class="tag good">vyrob</span>' 
 const xpCoin = (v) => v == null ? "—" : v === Infinity ? '<span class="tag good">zdarma</span>' : nf(v, 0);
 const recipe = (L, name) => L.inputs.map((x) => `${nf(x.amount)} ${esc(x.symbol.toLowerCase())}`).join(" + ") + ` → ${nf(L.output)} ${esc(name.toLowerCase())}`;
 
+let B = {};
 let F = {}, P = {}, coinUsd = 0, usdCzk = 0, base = null, snapTime = null, pools = [];
 
 async function load() {
@@ -175,6 +184,7 @@ async function load() {
     getJSON(`/api/farm-history?type=cw&farm=${encodeURIComponent(FARM)}`).catch((e) => { errors.push("base: " + e.message); return null; }),
   ]);
   F = fData.factories || {};
+  B = (await getJSON("/core/craftworld/buildings.json").catch((e) => { errors.push("budovy: " + e.message); return { buildings: {} }; })).buildings || {};
   if (cw && cw.latest) { base = cw.latest.data; snapTime = cw.latest.taken_at; }
   // Katana RESOURCE/COIN pools, a page at a time (the proxy caches each for 5 minutes)
   for (let page = 1; page <= 8; page++) {
@@ -224,6 +234,60 @@ function renderBase() {
     const inv = Object.entries(base.inventory).map(([s, q]) => ({ s, q, v: P[s.toUpperCase()] != null ? q * P[s.toUpperCase()] : null })).sort((a, b) => (b.v ?? 0) - (a.v ?? 0));
     t.insertAdjacentHTML("afterend", `<h3 style="margin:16px 0 8px;font-size:1rem">Sklad</h3><div class="table-wrap"><table><tr><th>Surovina</th><th class="n">Kusů</th><th class="n">Hodnota</th></tr>${inv.map((x) => `<tr><td>${esc(x.s)}</td><td class="n">${big(x.q)}</td><td class="n">${coinStr(x.v)}</td></tr>`).join("")}</table></div>`);
   }
+}
+
+// research: base.research = { SYMBOL: { done: bool, level: number|null } } from the owner's screenshots
+const researchOf = (sym) => (base && base.research || {})[sym];
+const resMark = (sym) => { const r = researchOf(sym); return r && !r.done ? ` <span class="tag warn" title="Nemáš vyzkoumané — nejde vyrobit ani koupit">🔒 research${r.level ? " lvl " + r.level : ""}</span>` : ""; };
+const bagStr = (items) => (items || []).length ? items.map((x) => `${nf(x.amount, x.amount < 1 ? 2 : 0)} ${esc(x.symbol.toLowerCase())}${resMark(x.symbol)}`).join(" + ") : "zdarma";
+const effStr = (e) => Object.entries(e || {}).filter(([k, v]) => v && v !== "—" && k !== "Max count").map(([k, v]) => `<span class="muted">${esc(k)}</span> ${esc(v)}`).join(" · ");
+
+// What each building is for (the RAWRTools tables carry only numbers). "?" = not confirmed in-game.
+const BUILDING_INFO = {
+  airstream: "větrná elektrárna — vyrábí energii, nic nespotřebuje",
+  sunforge: "solární elektrárna — energie v cyklech po 4 h",
+  steamforge: "parní elektrárna — energie z Lavy",
+  reactor: "reaktor — hodně energie z Hydrogenu",
+  "power-cell": "akumulátor — zvětší kapacitu energie",
+  battery: "baterie — velká kapacita energie",
+  "secret-lab": "tajná laboratoř (řetězec Academy) — účel ověř ve hře",
+  vault: "Vault — účel ověř ve hře (?)",
+  workshop: "dílna — Workshop body",
+  hatchery: "líheň — sloty na vajíčka, kratší inkubace",
+  school: "škola — trénink pracovníků",
+  university: "univerzita — přeškolení pracovníků (reroll)",
+  house: "dům — bydlení pro pracovníky",
+};
+const info = (slug) => BUILDING_INFO[slug] ? `<div class="muted" style="font-size:.8rem">${esc(BUILDING_INFO[slug])}</div>` : "";
+const priceTag = (items) => { const c = (items || []).reduce((a, x) => a == null || P[x.symbol] == null ? null : a + x.amount * P[x.symbol], 0); return c == null ? '<span class="muted">?</span>' : big(c); };
+
+function renderPlan() {
+  const el = document.getElementById("th-plan");
+  if (!B["town-hall"]) { el.innerHTML = '<p class="muted">Data budov se nenačetla.</p>'; return; }
+  const curTH = base && base.townHall != null ? base.townHall : 5;
+  const lvl = base && base.playerLevel != null ? base.playerLevel : null;
+  const plan = thPlan(B, P, curTH, lvl);
+  el.innerHTML = `<p class="muted" style="margin-top:0">Level <b>${lvl ?? "?"}</b>${base && base.xp != null ? ` (${big(base.xp)}${base.xpNext ? " / " + big(base.xpNext) : ""} XP)` : ""} · Town Hall <b>TH${curTH}</b>. Stávající budovy beru jako vylepšené na strop TH${curTH} — kde nejsou, bude upgrade delší.</p>` + plan.map((t, i) => {
+    const u = t.upgrade || {};
+    const lvTag = t.levelsShort == null ? "" : t.levelsShort === 0 ? '<span class="tag good">level máš</span>' : `<span class="tag warn">chybí ${t.levelsShort} lvl</span>`;
+    const nb = t.newBuildings.map((x) => `<tr><td><b>${esc(x.name)}</b> ${x.isNew ? '<span class="tag good">nová</span>' : `<span class="tag good">+${x.copies} ks</span> <span class="muted">(celkem ${x.count})</span>`}${info(x.slug)}</td>
+        <td>${bagStr(x.buildCost)}</td><td class="n">${priceTag(x.buildCost)}</td><td class="n">${esc(x.buildTime || "")}</td><td style="font-size:.82rem">${effStr(x.effect)}</td></tr>`).join("");
+    const ups = t.upgrades.map((x) => `<tr><td><b>${esc(x.name)}</b>${x.player ? ` <span class="muted">· lvl ${x.player}</span>` : ""}${info(x.slug)}</td>
+        <td>${x.parts.map((p) => `<div>${esc(p.who)}: <b>L${p.from} → L${p.to}</b></div>`).join("")}</td>
+        <td>${x.parts.map((p) => `<div>${bagStr(p.cost)}</div>`).join("")}</td><td class="n">${big(x.totalCoin)}</td>
+        <td style="font-size:.82rem">${effStr(x.top)}</td></tr>`).join("");
+    return `<details ${i === 0 ? "open" : ""} style="border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:10px">
+      <summary style="cursor:pointer;font-weight:700;font-size:1.05rem">TH${t.th} — ${bagStr(u.cost)} <span class="muted" style="font-weight:400">(${coinStr(u.coin)}) · ${esc(u.time || "")} · level ${u.player ?? "?"}</span> ${lvTag}</summary>
+      <div style="margin:8px 0 12px" class="muted">Town Hall po upgradu: ${effStr(u.effect)}</div>
+      ${(() => { const need = [...new Set(t.totalCost.map((x) => x.symbol))].filter((sym) => { const r = researchOf(sym); return r && !r.done; });
+        return need.length ? `<div class="note">🔬 <b>Potřebný research:</b> ${need.map((sym) => { const r = researchOf(sym); return `<b>${esc(sym.toLowerCase())}</b> ${r.level ? `(level ${r.level}${lvl != null && lvl < r.level ? `, chybí ${r.level - lvl}` : ", level máš"})` : "(level zatím nevím)"}`; }).join(" · ")}</div>` : ""; })()}
+      <h4 style="margin:6px 0">🆕 Nové budovy</h4>
+      ${nb ? `<div class="table-wrap"><table><tr><th>Budova</th><th>Postavení (L1)</th><th class="n">COIN</th><th class="n">Čas</th><th>Co dá na L1</th></tr>${nb}</table></div>` : '<p class="muted">Žádné.</p>'}
+      <h4 style="margin:14px 0 6px">⬆️ Nové upgrady (do stropu TH${t.th})</h4>
+      ${ups ? `<div class="table-wrap"><table><tr><th>Budova</th><th>Levely</th><th>Cena</th><th class="n">COIN</th><th>Na stropu dá</th></tr>${ups}</table></div>` : '<p class="muted">Žádné.</p>'}
+      <div class="note">Celkem na TH${t.th} (upgrade TH + nové budovy + všechny upgrady): <b>${bagStr(t.totalCost)}</b>${t.totalCoin != null ? ` ≈ <b>${coinStr(t.totalCoin)}</b>` : ""}</div>
+    </details>`;
+  }).join("");
 }
 
 function renderLevel() {
@@ -278,7 +342,7 @@ function renderMarket() {
 }
 document.getElementById("mk-q").addEventListener("input", renderMarket);
 
-function render() { renderBase(); renderLevel(); renderUpgrades(); renderMarket(); }
+function render() { renderBase(); renderPlan(); renderLevel(); renderUpgrades(); renderMarket(); }
 load().catch((e) => { document.getElementById("status").innerHTML = `<span class="err">Chyba: ${esc(e.message)}</span>`; });
 </script>
 </body>

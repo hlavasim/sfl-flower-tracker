@@ -73,3 +73,27 @@ test("xp sources rank owned factories by XP per COIN lost", () => {
   const s = xpSources(factories, prices, { buildings: [{ slug: "copper", level: 1 }, { slug: "beam", level: 1 }] });
   assert.equal(s[0].slug, "beam");
 });
+
+test("town hall plan: TH6 = 3 Ceramics; new: Battery, Secret Lab, a 4th Airstream and Power Cell; upgrades incl. the new copies", async () => {
+  const { thPlan } = await import("../../core/craftworld/calc.mjs");
+  const buildings = JSON.parse(fs.readFileSync(new URL("../../core/craftworld/buildings.json", import.meta.url))).buildings;
+  const plan = thPlan(buildings, { CERAMICS: 66, SCREWS: 100 }, 5, 33);
+  const th6 = plan[0];
+  assert.equal(th6.th, 6);
+  assert.deepEqual(th6.upgrade.cost, [{ symbol: "CERAMICS", amount: 3 }]);
+  assert.equal(th6.upgrade.coin, 198);
+  assert.equal(th6.levelsShort, 0);
+  const nb = Object.fromEntries(th6.newBuildings.map((x) => [x.slug, x]));
+  assert.equal(nb.battery.isNew, true);
+  assert.equal(nb["secret-lab"].isNew, true);
+  assert.equal(nb.airstream.copies, 1);
+  assert.equal(nb.airstream.count, 4);
+  assert.deepEqual(nb.airstream.buildCost, [{ symbol: "MUD", amount: 3 }]);
+  assert.equal(nb["power-cell"].count, 4);
+  const ups = Object.fromEntries(th6.upgrades.map((x) => [x.slug, x]));
+  const air = ups.airstream;
+  assert.deepEqual(air.parts.map((p) => [p.from, p.to, p.copies]), [[8, 9, 3], [1, 9, 1]], "3 standing copies 8->9, the new one 1->9");
+  assert.ok(ups.battery && ups.battery.parts[0].from === 1 && ups.battery.cap === 3);
+  assert.ok(plan.length === 5 && plan[4].th === 10, "TH6..TH10");
+  assert.equal(plan[1].levelsShort, 17, "TH7 needs level 50");
+});

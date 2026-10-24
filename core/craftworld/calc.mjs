@@ -139,3 +139,95 @@ export function pricesFromPools(pools) {
   }
   return best;
 }
+
+/*
+ * TOWN HALL PLAN — for every Town Hall level above the current one: the Town Hall upgrade itself
+ * (player level, cost, time, power after) and everything that level opens in the other buildings
+ * (buildings/*.json tables carry a "TH req." per building level): a building appearing for the
+ * first time, or further levels of one already open, with their costs and what the top level gives.
+ *   buildings  core/craftworld/buildings.json (.buildings)
+ */
+const CTRL = new Set(["Lv", "TH req.", "Player lv req.", "Upgrade time", "Upgrade cost"]);
+const cellNum = (c) => typeof c === "string" ? parseFloat(c.replace(/,/g, "")) * (/k$/i.test(c) ? 1e3 : /m$/i.test(c) ? 1e6 : 1) : NaN;
+
+function buildingRows(b) {
+  const t = b.tables && b.tables[0];
+  if (!t) return [];
+  const H = t.headers.map((h) => typeof h === "string" ? h : "");
+  const ix = (name) => H.indexOf(name);
+  return t.rows.map((r) => ({
+    lv: cellNum(r[ix("Lv")]),
+    th: ix("TH req.") >= 0 ? cellNum(r[ix("TH req.")]) : null,
+    player: ix("Player lv req.") >= 0 ? cellNum(r[ix("Player lv req.")]) : null,
+    time: ix("Upgrade time") >= 0 ? r[ix("Upgrade time")] : null,
+    cost: ix("Upgrade cost") >= 0 && r[ix("Upgrade cost")] && r[ix("Upgrade cost")].items ? r[ix("Upgrade cost")].items : [],
+    effect: Object.fromEntries(H.map((h, i) => [h, r[i]]).filter(([h, v]) => h && !CTRL.has(h) && typeof v === "string")),
+  })).filter((r) => isFinite(r.lv));
+}
+
+const addBag = (into, items) => { for (const x of items) into[x.symbol] = (into[x.symbol] || 0) + x.amount; return into; };
+
+/*
+ * For every Town Hall level n above the current one, three blocks — the way the game's own
+ * upgrade screen and the base read:
+ *   upgrade        the Town Hall upgrade itself
+ *   newBuildings   every building that is new at n, and every EXTRA copy of one the base already
+ *                  has ("Max count" rises) — each placed at level 1, at level 1's cost
+ *   upgrades       every building with levels to gain at n: copies already standing go from the
+ *                  previous Town Hall's cap to the new cap; new copies go from 1 to the new cap
+ * Copies already standing are assumed at the previous cap (the owner's actual levels are not
+ * known to this function).
+ */
+export function thPlan(buildings, prices, curTH, playerLevel) {
+  const th = buildingRows(buildings["town-hall"] || { tables: [] });
+  const maxTH = th.reduce((m, r) => Math.max(m, r.lv), 0);
+  const bagOf = (o) => Object.entries(o).map(([symbol, amount]) => ({ symbol, amount }));
+  const plan = [];
+  for (let n = (curTH || 0) + 1; n <= maxTH; n++) {
+    const up = th.find((r) => r.lv === n);
+    const newBuildings = [], upgrades = [];
+    for (const [slug, b] of Object.entries(buildings)) {
+      if (slug === "town-hall") continue;
+      const rows = buildingRows(b).filter((r) => r.th != null).sort((a, z) => a.lv - z.lv);
+      if (!rows.length) continue;
+      const hasCount = rows.some((r) => "Max count" in r.effect);
+      const capAt = (k) => rows.filter((r) => r.th <= k).reduce((m, r) => Math.max(m, r.lv), 0);
+      const countAt = (k) => hasCount ? rows.filter((r) => r.th <= k).reduce((m, r) => Math.max(m, cellNum(r.effect["Max count"]) || 0), 0) : (capAt(k) > 0 ? 1 : 0);
+      const prevCap = capAt(n - 1), cap = capAt(n), prevCount = countAt(n - 1), count = countAt(n);
+      const newCopies = Math.max(0, count - prevCount);
+      const first = rows[0];
+      if (newCopies) {
+        newBuildings.push({ slug, name: b.name, isNew: prevCount === 0, copies: newCopies, count,
+          buildCost: first.cost, buildCoin: bagValue(first.cost, prices), buildTime: first.time, effect: first.effect });
+      }
+      const sumRows = (lo, hi) => rows.filter((r) => r.lv >= lo && r.lv <= hi).reduce((acc, r) => addBag(acc, r.cost), {});
+      const parts = [];
+      if (prevCount > 0 && cap > prevCap) {
+        const one = sumRows(prevCap + 1, cap);
+        const all = {}; for (let i = 0; i < prevCount; i++) addBag(all, bagOf(one));
+        parts.push({ who: prevCount > 1 ? `stávající ${prevCount} ks` : "stávající", from: prevCap, to: cap, copies: prevCount, cost: bagOf(all) });
+      }
+      if (newCopies && cap > first.lv) {
+        const one = sumRows(first.lv + 1, cap);
+        const all = {}; for (let i = 0; i < newCopies; i++) addBag(all, bagOf(one));
+        parts.push({ who: newCopies > 1 ? `nové ${newCopies} ks` : "nová", from: first.lv, to: cap, copies: newCopies, cost: bagOf(all) });
+      }
+      if (parts.length) {
+        const total = {}; for (const p of parts) addBag(total, p.cost);
+        const levels = rows.filter((r) => r.lv > Math.min(...parts.map((p) => p.from)) && r.lv <= cap);
+        upgrades.push({ slug, name: b.name, parts, cap, prevCap, totalCost: bagOf(total), totalCoin: bagValue(bagOf(total), prices),
+          player: levels.reduce((m, r) => Math.max(m, r.player || 0), 0) || null, top: (rows.find((r) => r.lv === cap) || {}).effect, levels });
+      }
+    }
+    newBuildings.sort((a, z) => (z.isNew - a.isNew) || a.name.localeCompare(z.name));
+    upgrades.sort((a, z) => a.name.localeCompare(z.name));
+    const total = {};
+    if (up) addBag(total, up.cost);
+    for (const nb of newBuildings) for (let i = 0; i < nb.copies; i++) addBag(total, nb.buildCost);
+    for (const u of upgrades) addBag(total, u.totalCost);
+    plan.push({ th: n, upgrade: up && { player: up.player, cost: up.cost, coin: bagValue(up.cost, prices), time: up.time, effect: up.effect },
+      levelsShort: up && up.player && playerLevel != null ? Math.max(0, up.player - playerLevel) : null,
+      newBuildings, upgrades, totalCost: bagOf(total), totalCoin: bagValue(bagOf(total), prices) });
+  }
+  return plan;
+}
