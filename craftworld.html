@@ -99,6 +99,17 @@
     <div id="th-plan"></div>
   </section>
 
+  <section id="matrix">
+    <h2>📊 Efektivita továren po levelech</h2>
+    <p class="lead">Každá továrna × každý level, jedna továrna běžící nonstop (data hry z RAWRTools; ×2 boost čísla zdvojí, poměr XP/energie se nemění). Čím zelenější, tím lepší. Orámované = tvůj level.</p>
+    <div class="calc">
+      <label class="f">Ukazatel<select id="mx-metric"><option value="xpPerPower">XP za energii</option><option value="xpPerHour">XP za hodinu</option><option value="powerPerHour">Energie za hodinu</option></select></label>
+      <label class="f">Řadit<select id="mx-sort"><option value="name">abecedně</option><option value="l1">podle levelu 1</option><option value="max">podle nejlepšího levelu</option></select></label>
+      <label class="f">Hledat<input id="mx-q" placeholder="např. copper, sand…"></label>
+    </div>
+    <div class="table-wrap" style="max-height:70vh;overflow:auto"><table id="mx-table" style="font-size:.78rem"></table></div>
+  </section>
+
   <section id="level" class="later">
     <h2>📈 Levelování</h2>
     <p class="lead">Kde dostaneš nejvíc XP. „XP / COIN“ = kolik XP dostaneš za každý COIN, o který tě výroba připraví (vstupy dražší než výstup); <b>zdarma</b> = výroba ještě vydělává.</p>
@@ -144,7 +155,7 @@
 </div>
 
 <script type="module">
-import { levelEconomics, marketTable, upgradePlan, masterpieceCost, masterpieceStop, pricesFromPools, xpSources, thPlan } from "/core/craftworld/calc.mjs";
+import { levelEconomics, marketTable, upgradePlan, masterpieceCost, masterpieceStop, pricesFromPools, xpSources, thPlan, efficiencyMatrix } from "/core/craftworld/calc.mjs";
 
 const COIN = "0x7dc167e270d5ef683ceaf4afcdf2efbdd667a9a7";
 const FARM = new URLSearchParams(location.search).get("farm") || (() => { try { return JSON.parse(localStorage.getItem("sfl_config") || "{}").farm; } catch { return null; } })() || "155498";
@@ -342,7 +353,33 @@ function renderMarket() {
 }
 document.getElementById("mk-q").addEventListener("input", renderMarket);
 
-function render() { renderBase(); renderPlan(); renderLevel(); renderUpgrades(); renderMarket(); }
+function renderMatrix() {
+  const metric = document.getElementById("mx-metric").value, sort = document.getElementById("mx-sort").value;
+  const q = document.getElementById("mx-q").value.trim().toLowerCase();
+  const owned = {};
+  for (const b of (base && base.buildings) || []) if (b.level) (owned[b.slug] = owned[b.slug] || new Set()).add(b.level);
+  let rows = efficiencyMatrix(F).filter((r) => !q || r.name.toLowerCase().includes(q));
+  const v = (l) => l[metric];
+  const best = (r) => Math.max(...r.levels.map((l) => v(l) || 0));
+  if (sort === "l1") rows.sort((a, b) => (v(b.levels[0]) || 0) - (v(a.levels[0]) || 0));
+  else if (sort === "max") rows.sort((a, b) => best(b) - best(a));
+  else rows.sort((a, b) => a.name.localeCompare(b.name));
+  const all = rows.flatMap((r) => r.levels.map(v)).filter((x) => x > 0);
+  const lo = Math.log(Math.min(...all)), hi = Math.log(Math.max(...all));
+  const lower = metric === "powerPerHour";   // less power is better
+  const color = (x) => { if (!(x > 0)) return ""; let t = (Math.log(x) - lo) / ((hi - lo) || 1); if (lower) t = 1 - t; return `background:hsl(${Math.round(t * 120)},55%,${document.documentElement.dataset.theme === "dark" || (!document.documentElement.dataset.theme && matchMedia("(prefers-color-scheme: dark)").matches) ? 26 : 82}%)`; };
+  const maxLv = Math.max(...rows.map((r) => r.levels.length));
+  const fmt = (x) => x == null ? "" : metric === "xpPerPower" ? nf(x, x < 10 ? 1 : 0) : big(x);
+  document.getElementById("mx-table").innerHTML = `<tr><th style="position:sticky;left:0;background:var(--surface);z-index:2">Továrna</th>${Array.from({ length: maxLv }, (_, i) => `<th class="n" style="position:sticky;top:0;background:var(--surface)">L${i + 1}</th>`).join("")}</tr>` +
+    rows.map((r) => `<tr><td style="position:sticky;left:0;background:var(--surface);white-space:nowrap;font-weight:600">${esc(r.name)}</td>${Array.from({ length: maxLv }, (_, i) => {
+      const l = r.levels[i]; if (!l) return "<td></td>";
+      const mine = owned[r.slug] && owned[r.slug].has(l.level);
+      return `<td class="n" style="${color(v(l))};${mine ? "outline:2px solid var(--accent);outline-offset:-2px;font-weight:700" : ""}" title="${esc(r.name)} L${l.level}: ${nf(l.xpPerPower, 2)} XP/energie · ${big(l.xpPerHour)} XP/h · ${big(l.powerPerHour)} energie/h">${fmt(v(l))}</td>`; }).join("")}</tr>`).join("");
+}
+["mx-metric", "mx-sort"].forEach((id) => document.getElementById(id).addEventListener("change", renderMatrix));
+document.getElementById("mx-q").addEventListener("input", renderMatrix);
+
+function render() { renderBase(); renderPlan(); renderMatrix(); renderLevel(); renderUpgrades(); renderMarket(); }
 load().catch((e) => { document.getElementById("status").innerHTML = `<span class="err">Chyba: ${esc(e.message)}</span>`; });
 </script>
 </body>

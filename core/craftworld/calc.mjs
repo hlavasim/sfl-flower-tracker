@@ -231,3 +231,20 @@ export function thPlan(buildings, prices, curTH, playerLevel) {
   }
   return plan;
 }
+
+/*
+ * Efficiency matrix: every factory × every level — XP per unit of power, XP per hour and power
+ * per hour of one factory running non-stop. Mines (they give no XP) are left out.
+ */
+export function efficiencyMatrix(factories) {
+  return Object.entries(factories)
+    .filter(([, f]) => f.levels.some((l) => l.xpPerOutput > 0))
+    .map(([slug, f]) => ({
+      slug, name: f.name,
+      levels: f.levels.map((l) => {
+        const runsPerHour = 3600 / l.durationSeconds;
+        return { level: l.level, xpPerPower: l.powerCost ? (l.xpPerOutput * l.output) / l.powerCost : null,
+          xpPerHour: l.xpPerOutput * l.output * runsPerHour, powerPerHour: l.powerCost * runsPerHour };
+      }),
+    }));
+}

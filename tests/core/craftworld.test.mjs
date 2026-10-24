@@ -97,3 +97,11 @@ test("town hall plan: TH6 = 3 Ceramics; new: Battery, Secret Lab, a 4th Airstrea
   assert.ok(plan.length === 5 && plan[4].th === 10, "TH6..TH10");
   assert.equal(plan[1].levelsShort, 17, "TH7 needs level 50");
 });
+
+test("efficiency matrix: Copper L1 8 XP/power, 2,000 XP/h, 250 power/h; Sand L9 18.75 XP/power", async () => {
+  const { efficiencyMatrix } = await import("../../core/craftworld/calc.mjs");
+  const m = Object.fromEntries(efficiencyMatrix(factories).map((r) => [r.slug, r]));
+  assert.deepEqual(m.copper.levels[0], { level: 1, xpPerPower: 8, xpPerHour: 2000, powerPerHour: 250 });
+  assert.equal(m.sand.levels[8].xpPerPower, 18.75);
+  assert.ok(!m.earth, "mines use no power");
+});
