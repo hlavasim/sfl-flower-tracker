@@ -67,6 +67,22 @@
   .bar { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
   .bar > i { display: block; height: 100%; background: var(--accent); }
   .err { color: var(--bad); }
+  .ico { width: 26px; height: 26px; image-rendering: pixelated; vertical-align: middle; flex: none; }
+  .ico.sm { width: 18px; height: 18px; }
+  .tree, .tree ul { list-style: none; margin: 0; padding: 0; }
+  .tree ul { margin-left: 22px; padding-left: 14px; border-left: 2px dashed var(--border); }
+  .tree li { position: relative; margin: 8px 0; }
+  .tree ul > li::before { content: ""; position: absolute; left: -14px; top: 22px; width: 12px; border-top: 2px dashed var(--border); }
+  .node { display: flex; gap: 10px; align-items: flex-start; background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px; }
+  .node .nm { font-weight: 700; }
+  .node .qty { color: var(--muted); font-size: .85rem; margin-left: 4px; }
+  .node .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 130px), 1fr)); gap: 4px 12px; font-size: .8rem; margin-top: 4px; }
+  .node .grid .k { color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .03em; }
+  .node .rec { font-size: .78rem; color: var(--muted); margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+  .node.base { background: transparent; }
+  details.tn > summary { list-style: none; cursor: pointer; }
+  details.tn > summary::-webkit-details-marker { display: none; }
+  details.tn:not([open]) > summary .node { box-shadow: inset 3px 0 0 var(--accent); }
   footer { color: var(--muted); font-size: .8rem; text-align: center; margin-top: 20px; }
   @media (max-width: 640px) { header h1 { font-size: 1.3rem; } section { padding: 14px 12px 10px; } }
 </style>
@@ -97,6 +113,17 @@
     <h2>🎯 Plán base po Town Hallech</h2>
     <p class="lead">Co tě čeká na každém dalším Town Hallu: co chce samotný upgrade (level hráče, suroviny, čas), jaké nové budovy a levely se odemknou, kolik stojí a co dají. Ceny v COIN podle trhu — <b>koupit jde jen to, co máš vyzkoumané</b>.</p>
     <div id="th-plan"></div>
+  </section>
+
+  <section id="tree">
+    <h2>🌳 Strom výroby</h2>
+    <p class="lead">Z čeho se co vyrábí, až k základním surovinám. Všude <b>s 2,5% poplatkem Exchange</b>: koupit = trh +2,5 %, prodat = trh −2,5 %. Vyrobit = vstupy, každý za levnější z obou cest. <span class="tag good">vyrob</span> = výroba levnější než nákup. <b>Zisk / h</b> = (prodejní cena − cena výroby) za hodinu jedné továrny. Množství jsou na 1 kus nahoře.</p>
+    <div class="calc">
+      <label class="f">Surovina<select id="tr-item"></select></label>
+      <label class="f">&nbsp;<button class="pill" id="tr-cfg-btn" type="button">⚙ Moje poměry</button></label>
+    </div>
+    <div id="tr-cfg" style="display:none;margin-bottom:12px"></div>
+    <div id="tr-out"></div>
   </section>
 
   <section id="matrix">
@@ -155,7 +182,7 @@
 </div>
 
 <script type="module">
-import { levelEconomics, marketTable, upgradePlan, masterpieceCost, masterpieceStop, pricesFromPools, xpSources, thPlan, efficiencyMatrix } from "/core/craftworld/calc.mjs";
+import { levelEconomics, marketTable, upgradePlan, masterpieceCost, masterpieceStop, pricesFromPools, xpSources, thPlan, efficiencyMatrix, recipeTree, recipeOf, outputSymbol, secPerOne } from "/core/craftworld/calc.mjs";
 
 const COIN = "0x7dc167e270d5ef683ceaf4afcdf2efbdd667a9a7";
 const FARM = new URLSearchParams(location.search).get("farm") || (() => { try { return JSON.parse(localStorage.getItem("sfl_config") || "{}").farm; } catch { return null; } })() || "155498";
@@ -185,6 +212,7 @@ const xpCoin = (v) => v == null ? "—" : v === Infinity ? '<span class="tag goo
 const recipe = (L, name) => L.inputs.map((x) => `${nf(x.amount)} ${esc(x.symbol.toLowerCase())}`).join(" + ") + ` → ${nf(L.output)} ${esc(name.toLowerCase())}`;
 
 let B = {};
+let flowerUsd = 0;
 let F = {}, P = {}, coinUsd = 0, usdCzk = 0, base = null, snapTime = null, pools = [];
 
 async function load() {
@@ -212,6 +240,7 @@ async function load() {
   coinUsd = pm.USDC && pm.USDC.price > 0 ? 1 / pm.USDC.price : 0;
   if (!coinUsd) errors.push("COIN/USD: chybí pool COIN/USDC");
   try { usdCzk = parseFloat((await getJSON(proxy("https://api.coinbase.com/v2/exchange-rates?currency=USD"))).data.rates.CZK); } catch { usdCzk = 0; }
+  try { const fl = "0x3e12b9d6a4d12cd9b4a6d613872d0eb32f68b380"; flowerUsd = parseFloat((await getJSON(proxy(`https://api.geckoterminal.com/api/v2/simple/networks/base/token_price/${fl}`))).data.attributes.token_prices[fl]); } catch { flowerUsd = 0; }
   st.innerHTML = `1 COIN = $${coinUsd ? coinUsd.toFixed(6) : "—"}${usdCzk ? ` = ${(coinUsd * usdCzk).toFixed(4)} Kč` : ""} · ${Object.keys(P).length} surovin s cenou · stav base ${snapTime ? new Date(snapTime).toLocaleString("cs-CZ") : "zatím žádný"}` + (errors.length ? ` · <span class="err">${esc(errors.join("; "))}</span>` : "");
   render();
 }
@@ -250,7 +279,7 @@ function renderBase() {
 // research: base.research = { SYMBOL: { done: bool, level: number|null } } from the owner's screenshots
 const researchOf = (sym) => (base && base.research || {})[sym];
 const resMark = (sym) => { const r = researchOf(sym); return r && !r.done ? ` <span class="tag warn" title="Nemáš vyzkoumané — nejde vyrobit ani koupit">🔒 research${r.level ? " lvl " + r.level : ""}</span>` : ""; };
-const bagStr = (items) => (items || []).length ? items.map((x) => `${nf(x.amount, x.amount < 1 ? 2 : 0)} ${esc(x.symbol.toLowerCase())}${resMark(x.symbol)}`).join(" + ") : "zdarma";
+const bagStr = (items) => (items || []).length ? items.map((x) => `<span style="white-space:nowrap">${icon(x.symbol, "sm")} ${nf(x.amount, x.amount < 1 ? 2 : 0)} ${esc(x.symbol.toLowerCase())}</span>${resMark(x.symbol)}`).join(" + ") : "zdarma";
 const effStr = (e) => Object.entries(e || {}).filter(([k, v]) => v && v !== "—" && k !== "Max count").map(([k, v]) => `<span class="muted">${esc(k)}</span> ${esc(v)}`).join(" · ");
 
 // What each building is for (the RAWRTools tables carry only numbers). "?" = not confirmed in-game.
@@ -353,6 +382,67 @@ function renderMarket() {
 }
 document.getElementById("mk-q").addEventListener("input", renderMarket);
 
+// ── production tree ──
+const RATIO_KEY = "cw_ratios";
+let ratios = {};
+try { ratios = JSON.parse(localStorage.getItem(RATIO_KEY) || "{}") || {}; } catch { ratios = {}; }
+const saveRatios = () => { try { localStorage.setItem(RATIO_KEY, JSON.stringify(ratios)); } catch {} };
+const coin3 = (c) => c == null ? '<span class="muted">—</span>' : `${big(c)} <span class="muted">COIN · $${coinUsd ? (c * coinUsd).toPrecision(2) : "—"}${flowerUsd && coinUsd ? ` · ${(c * coinUsd / flowerUsd).toPrecision(2)} FLW` : ""}</span>`;
+
+const icon = (sym, cls = "") => `<img class="ico ${cls}" src="/icons/cw/${String(sym).toLowerCase()}.png" alt="" loading="lazy" onerror="this.style.visibility='hidden'">`;
+const dur = (sec) => sec == null ? "—" : sec >= 3600 ? nf(sec / 3600, sec % 3600 ? 1 : 0) + " h" : sec >= 60 ? nf(sec / 60, sec % 60 ? 1 : 0) + " min" : nf(sec, 1) + " s";
+function treeNode(n, qty, depth) {
+  const tag = n.diff == null ? "" : n.diff < -0.005 ? `<span class="tag good">vyrob · ${nf(-n.diff * 100, 0)} % levněji než koupit</span>` : n.diff > 0.005 ? `<span class="tag bad">kup · výroba +${nf(n.diff * 100, 0)} %</span>` : '<span class="tag warn">nastejno</span>';
+  const own = ratios[n.slug] ? ' <span class="tag mute">vlastní nastavení</span>' : "";
+  const label = n.name || n.symbol.charAt(0) + n.symbol.slice(1).toLowerCase();
+  const card = `<div class="node${n.inputs.length ? "" : " base"}">${icon(n.symbol)}<div style="flex:1;min-width:0">
+      <div><span class="nm">${esc(label)}</span><span class="qty">× ${nf(qty, qty < 10 ? 2 : 0)}</span> ${tag}${own}</div>
+      <div class="grid">
+        <div><div class="k">koupit (+2,5 %)</div>${coin3(n.buy)}</div>
+        <div><div class="k">prodat (−2,5 %)</div>${coin3(n.sell)}</div>
+        ${n.make != null ? `<div><div class="k">vyrobit</div>${coin3(n.make)}</div>` : ""}
+        ${n.secPerOne ? `<div><div class="k">čas na 1 ks</div>${dur(n.secPerOne)}</div>` : ""}
+        ${n.grossPerHour != null ? `<div><div class="k">tržba / h</div>${coin3(n.grossPerHour)}</div>` : ""}
+        ${n.profitPerHour != null ? `<div><div class="k">zisk / h</div><span style="color:${n.profitPerHour >= 0 ? "var(--good)" : "var(--bad)"};font-weight:700">${n.profitPerHour >= 0 ? "+" : ""}${big(n.profitPerHour)}</span> <span class="muted">COIN</span></div>` : ""}
+      </div>
+      ${n.inputs.length ? `<div class="rec">recept: ${n.inputs.map((x) => `<span style="white-space:nowrap">${icon(x.symbol, "sm")} ${nf(x.perOne, x.perOne < 10 ? 2 : 0)} ${esc(x.symbol.toLowerCase())}</span>`).join(" + ")} → ${icon(n.symbol, "sm")} 1</div>` : '<div class="rec">základní surovina — z dolu, nebo jen koupit</div>'}
+    </div></div>`;
+  if (!n.inputs.length) return `<li>${card}</li>`;
+  return `<li><details class="tn" ${depth < 2 ? "open" : ""}><summary>${card}</summary><ul>${n.inputs.map((x) => treeNode(x.node, qty * x.perOne, depth + 1)).join("")}</ul></details></li>`;
+}
+function renderTree() {
+  const sel = document.getElementById("tr-item");
+  if (!sel.options.length) {
+    const items = Object.values(F).filter((f) => f.levels[0].inputs.length).map((f) => ({ sym: outputSymbol(f), name: f.name })).sort((a, b) => a.name.localeCompare(b.name));
+    sel.innerHTML = items.map((i) => `<option value="${i.sym}">${esc(i.name)}</option>`).join("");
+    let last = null; try { last = localStorage.getItem("cw_tree_item"); } catch {}
+    sel.value = last && items.some((i) => i.sym === last) ? last : "COPPER";
+  }
+  const t = recipeTree(sel.value, F, P, ratios);
+  document.getElementById("tr-out").innerHTML = `<ul class="tree">${treeNode(t, 1, 0)}</ul>`;
+}
+function renderRatioCfg() {
+  const box = document.getElementById("tr-cfg");
+  const rows = Object.entries(F).filter(([, f]) => f.levels[0].inputs.length).sort((a, b) => a[1].name.localeCompare(b[1].name));
+  box.innerHTML = `<div class="note">Tvoje čísla po upgradech: kolik kusů vstupu spotřebuje továrna na <b>1 kus výstupu</b> a za kolik <b>sekund</b> 1 kus udělá. Prázdné = výchozí hodnota hry (level 1). Ukládá se v tomhle prohlížeči.</div>
+    <div class="table-wrap" style="max-height:50vh;overflow:auto"><table><tr><th>Továrna</th><th>Vstupy na 1 kus</th><th>Sekund na 1 kus</th><th></th></tr>
+    ${rows.map(([slug, f]) => { const def = recipeOf({ ...f, slug }, {}); const sec = secPerOne({ ...f, slug }, {});
+      return `<tr><td style="white-space:nowrap">${icon(outputSymbol(f), "sm")} ${esc(f.name)}</td>
+      <td>${def.map((x) => `<label style="margin-right:10px;white-space:nowrap">${icon(x.symbol, "sm")} <input type="number" step="any" min="0" style="width:84px" data-slug="${slug}" data-sym="${x.symbol}" placeholder="${nf(x.perOne, 2)}" value="${ratios[slug] && ratios[slug][x.symbol] != null ? ratios[slug][x.symbol] : ""}"></label>`).join("")}</td>
+      <td><input type="number" step="any" min="0" style="width:96px" data-slug="${slug}" data-sym="__sec" placeholder="${nf(sec, 1)}" value="${ratios[slug] && ratios[slug].__sec != null ? ratios[slug].__sec : ""}"></td>
+      <td>${ratios[slug] ? `<button class="pill" data-reset="${slug}" type="button">výchozí</button>` : ""}</td></tr>`; }).join("")}</table></div>`;
+  box.querySelectorAll("input[data-slug]").forEach((inp) => inp.addEventListener("change", () => {
+    const { slug, sym } = inp.dataset, v = parseFloat(inp.value);
+    ratios[slug] = ratios[slug] || {};
+    if (isFinite(v) && v > 0) ratios[slug][sym] = v; else delete ratios[slug][sym];
+    if (!Object.keys(ratios[slug]).length) delete ratios[slug];
+    saveRatios(); renderTree();
+  }));
+  box.querySelectorAll("button[data-reset]").forEach((b) => b.addEventListener("click", () => { delete ratios[b.dataset.reset]; saveRatios(); renderRatioCfg(); renderTree(); }));
+}
+document.getElementById("tr-item").addEventListener("change", (e) => { try { localStorage.setItem("cw_tree_item", e.target.value); } catch {} renderTree(); });
+document.getElementById("tr-cfg-btn").addEventListener("click", () => { const b = document.getElementById("tr-cfg"); const open = b.style.display === "none"; b.style.display = open ? "block" : "none"; if (open) renderRatioCfg(); });
+
 function renderMatrix() {
   const metric = document.getElementById("mx-metric").value, sort = document.getElementById("mx-sort").value;
   const q = document.getElementById("mx-q").value.trim().toLowerCase();
@@ -379,7 +469,7 @@ function renderMatrix() {
 ["mx-metric", "mx-sort"].forEach((id) => document.getElementById(id).addEventListener("change", renderMatrix));
 document.getElementById("mx-q").addEventListener("input", renderMatrix);
 
-function render() { renderBase(); renderPlan(); renderMatrix(); renderLevel(); renderUpgrades(); renderMarket(); }
+function render() { renderBase(); renderPlan(); renderTree(); renderMatrix(); renderLevel(); renderUpgrades(); renderMarket(); }
 load().catch((e) => { document.getElementById("status").innerHTML = `<span class="err">Chyba: ${esc(e.message)}</span>`; });
 </script>
 </body>

@@ -248,3 +248,46 @@ export function efficiencyMatrix(factories) {
       }),
     }));
 }
+
+/*
+ * PRODUCTION TREE — how an item is made, down to the mined base, priced with the Exchange fee:
+ *   buy      what buying one costs:      market × (1 + fee)
+ *   sell     what selling one brings:    market × (1 − fee)
+ *   make     what making one costs: each input at its own best (bought, or made if cheaper)
+ *   best     the cheaper of buy / make — what a parent pays for it as an input
+ *   diff     (make − buy) / buy: negative = making beats buying
+ *   secPerOne, grossPerHour (sell / time), profitPerHour ((sell − make) / time) for one factory
+ * `ratios` overrides per factory slug: { slug: { SYMBOL: inputs per ONE output, __sec: seconds per
+ * ONE output } } — the owner's numbers after upgrades. Default: the game's level 1.
+ */
+export function recipeOf(factory, ratios) {
+  const L = factory.levels[0];
+  const own = ratios && ratios[factory.slug || ""];
+  return L.inputs.map((x) => ({ symbol: x.symbol, perOne: own && own[x.symbol] != null ? Number(own[x.symbol]) : x.amount / L.output }));
+}
+export function secPerOne(factory, ratios) {
+  const L = factory.levels[0];
+  const own = ratios && ratios[factory.slug || ""];
+  return own && own.__sec != null ? Number(own.__sec) : L.durationSeconds / L.output;
+}
+
+export function recipeTree(symbol, factories, prices, ratios = {}, fee = EXCHANGE_FEE, seen = new Set()) {
+  const sym = String(symbol).toUpperCase();
+  const entry = Object.entries(factories).find(([, f]) => outputSymbol(f) === sym && f.levels[0].inputs.length);
+  const market = prices[sym] ?? null;
+  const buy = market == null ? null : market * (1 + fee), sell = market == null ? null : market * (1 - fee);
+  if (!entry || seen.has(sym)) return { symbol: sym, market, buy, sell, make: null, best: buy, inputs: [], slug: entry ? entry[0] : null };
+  const [slug, f] = entry;
+  const next = new Set(seen).add(sym);
+  const inputs = recipeOf({ ...f, slug }, ratios).map((x) => {
+    const node = recipeTree(x.symbol, factories, prices, ratios, fee, next);
+    return { ...x, node, cost: node.best == null ? null : x.perOne * node.best };
+  });
+  const make = inputs.some((x) => x.cost == null) ? null : inputs.reduce((a, x) => a + x.cost, 0);
+  const best = buy == null ? make : make == null ? buy : Math.min(buy, make);
+  const sec = secPerOne({ ...f, slug }, ratios);
+  return { symbol: sym, slug, name: f.name, market, buy, sell, make, best, inputs, secPerOne: sec,
+    diff: buy && make != null ? (make - buy) / buy : null,
+    grossPerHour: sell != null && sec ? sell * 3600 / sec : null,
+    profitPerHour: sell != null && make != null && sec ? (sell - make) * 3600 / sec : null };
+}

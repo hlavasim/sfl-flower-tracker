@@ -105,3 +105,26 @@ test("efficiency matrix: Copper L1 8 XP/power, 2,000 XP/h, 250 power/h; Sand L9 
   assert.equal(m.sand.levels[8].xpPerPower, 18.75);
   assert.ok(!m.earth, "mines use no power");
 });
+
+test("recipe tree: Copper from Sand with the 2.5 % fee on every buy and sell; own ratios and time override", async () => {
+  const { recipeTree } = await import("../../core/craftworld/calc.mjs");
+  const p = { COPPER: 9.72, SAND: 0.36, CLAY: 0.13, MUD: 0.01, EARTH: 0.003 };
+  const t = recipeTree("COPPER", factories, p);
+  assert.equal(t.inputs[0].symbol, "SAND");
+  assert.equal(t.inputs[0].perOne, 30);
+  // each step takes the cheaper of buying (market × 1.025) and making:
+  // Mud: buy 0.01025 vs make 3 × 0.003075 = 0.009225 -> 0.009225; Clay: buy 0.13325 vs 0.09225;
+  // Sand: buy 0.369 vs 3 × 0.09225 = 0.27675; Copper make = 30 × 0.27675 = 8.3025
+  assert.ok(Math.abs(t.make - 8.3025) < 1e-9);
+  assert.ok(Math.abs(t.buy - 9.72 * 1.025) < 1e-9 && Math.abs(t.sell - 9.72 * 0.975) < 1e-9);
+  assert.ok(t.diff < 0);
+  assert.equal(t.secPerOne, 3600);
+  assert.ok(Math.abs(t.grossPerHour - 9.72 * 0.975) < 1e-9, "one Copper an hour, sold after the fee");
+  assert.ok(Math.abs(t.profitPerHour - (9.72 * 0.975 - 8.3025)) < 1e-9);
+  // a 3 % edge does not survive the fees: buy inputs at +2.5 %, sell at −2.5 %
+  const thin = recipeTree("COPPER", factories, { COPPER: 10, SAND: 10 / 30 / 1.03 });
+  assert.ok(thin.profitPerHour < 0, "a 3 % edge is a loss after 2.5 % in and 2.5 % out");
+  const own = recipeTree("COPPER", factories, p, { copper: { SAND: 28, __sec: 1800 } });
+  assert.ok(Math.abs(own.make - 28 * 0.27675) < 1e-9);
+  assert.ok(Math.abs(own.grossPerHour - 2 * 9.72 * 0.975) < 1e-9, "one every 30 min = two an hour");
+});
