@@ -128,3 +128,16 @@ test("recipe tree: Copper from Sand with the 2.5 % fee on every buy and sell; ow
   assert.ok(Math.abs(own.make - 28 * 0.27675) < 1e-9);
   assert.ok(Math.abs(own.grossPerHour - 2 * 9.72 * 0.975) < 1e-9, "one every 30 min = two an hour");
 });
+
+test("uses of Beam: Brick (5 Beam + 6 Clay) and Nail (690 Beam + 2 Steel), each Beam valued through the product", async () => {
+  const { usesOf } = await import("../../core/craftworld/calc.mjs");
+  const p = { BEAM: 0.14, BRICK: 1.5, CLAY: 0.13, NAIL: 200, STEEL: 44 };
+  const u = usesOf("BEAM", factories, p);
+  const brick = u.uses.find((x) => x.product === "BRICK"), nail = u.uses.find((x) => x.product === "NAIL");
+  assert.equal(brick.perOne, 5);
+  assert.equal(nail.perOne, 690);
+  // Brick sold 1.5 × 0.975 minus 6 Clay at best (buy 0.13325 or made) -> per Beam / 5
+  assert.ok(brick.valuePerUnit > 0 && brick.valuePerUnit < 1.5 * 0.975 / 5);
+  assert.ok(Math.abs(u.sell - 0.14 * 0.975) < 1e-12);
+  assert.ok(u.uses[0].vsSell >= u.uses[u.uses.length - 1].vsSell, "best use first");
+});

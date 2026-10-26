@@ -121,9 +121,13 @@
     <div class="calc">
       <label class="f">Surovina<select id="tr-item"></select></label>
       <label class="f">&nbsp;<button class="pill" id="tr-cfg-btn" type="button">⚙ Moje poměry</button></label>
+      <label class="f" title="Pro „Výdělečné“: vstupy, které máš vlastní (z dolů nebo vlastní výroby), se ocení tím, za kolik bys je prodal (−2,5 %), ne nákupní cenou (+2,5 %)">Vstupy<select id="tr-own"><option value="buy">kupuji (+2,5 %)</option><option value="own">mám vlastní (−2,5 %)</option></select></label>
     </div>
     <div id="tr-cfg" style="display:none;margin-bottom:12px"></div>
     <div id="tr-out"></div>
+    <h3 style="margin:18px 0 6px;font-size:1rem">⬆️ Kam to jde dál — prodat, nebo zpracovat?</h3>
+    <p class="lead" style="margin-bottom:8px">Kdo tuhle surovinu spotřebovává. <b>Hodnota 1 ks při zpracování</b> = (výrobek prodaný −2,5 % − ostatní vstupy za nejlepší cenu) ÷ kolik kusů téhle suroviny spotřebuje. Porovnává se s prodejem suroviny rovnou (−2,5 %).</p>
+    <div id="tr-up"></div>
   </section>
 
   <section id="matrix">
@@ -182,7 +186,7 @@
 </div>
 
 <script type="module">
-import { levelEconomics, marketTable, upgradePlan, masterpieceCost, masterpieceStop, pricesFromPools, xpSources, thPlan, efficiencyMatrix, recipeTree, recipeOf, outputSymbol, secPerOne } from "/core/craftworld/calc.mjs";
+import { levelEconomics, marketTable, upgradePlan, masterpieceCost, masterpieceStop, pricesFromPools, xpSources, thPlan, efficiencyMatrix, recipeTree, recipeOf, outputSymbol, secPerOne, usesOf } from "/core/craftworld/calc.mjs";
 
 const COIN = "0x7dc167e270d5ef683ceaf4afcdf2efbdd667a9a7";
 const FARM = new URLSearchParams(location.search).get("farm") || (() => { try { return JSON.parse(localStorage.getItem("sfl_config") || "{}").farm; } catch { return null; } })() || "155498";
@@ -413,13 +417,60 @@ function treeNode(n, qty, depth) {
 function renderTree() {
   const sel = document.getElementById("tr-item");
   if (!sel.options.length) {
-    const items = Object.values(F).filter((f) => f.levels[0].inputs.length).map((f) => ({ sym: outputSymbol(f), name: f.name })).sort((a, b) => a.name.localeCompare(b.name));
-    sel.innerHTML = items.map((i) => `<option value="${i.sym}">${esc(i.name)}</option>`).join("");
+    // everything made in a factory, plus the raw inputs (Earth, Water, Fire, Lumber, Dust…) so their uses show too
+    const made = new Map(Object.values(F).filter((f) => f.levels[0].inputs.length).map((f) => [outputSymbol(f), f.name]));
+    for (const f of Object.values(F)) for (const x of f.levels[0].inputs) if (!made.has(x.symbol)) made.set(x.symbol, x.symbol.charAt(0) + x.symbol.slice(1).toLowerCase());
+    const items = [...made].map(([sym, name]) => ({ sym, name })).sort((a, b) => a.name.localeCompare(b.name));
+    sel.innerHTML = `<option value="__PROFIT">💰 Výdělečné — vše v plusu</option>` + items.map((i) => `<option value="${i.sym}">${esc(i.name)}</option>`).join("");
     let last = null; try { last = localStorage.getItem("cw_tree_item"); } catch {}
-    sel.value = last && items.some((i) => i.sym === last) ? last : "COPPER";
+    sel.value = last && (last === "__PROFIT" || items.some((i) => i.sym === last)) ? last : "__PROFIT";
+  }
+  const upEl0 = document.getElementById("tr-up");
+  if (sel.value === "__PROFIT") {
+    // every factory whose product, sold after the fee, is worth more than its inputs at their best
+    const ownIn = document.getElementById("tr-own").value === "own";
+    const all = Object.values(F).filter((f) => f.levels[0].inputs.length).map((f) => {
+      const t = recipeTree(outputSymbol(f), F, P, ratios);
+      if (!ownIn) return t;
+      // own inputs: each direct input valued at what selling it would bring (market − fee)
+      const cost = t.inputs.some((x) => P[x.symbol] == null) ? null : t.inputs.reduce((a, x) => a + x.perOne * P[x.symbol] * 0.975, 0);
+      return { ...t, make: cost, profitPerHour: t.sell != null && cost != null && t.secPerOne ? (t.sell - cost) * 3600 / t.secPerOne : null };
+    }).filter((t) => t.profitPerHour != null && t.profitPerHour > 0).sort((a, b) => b.profitPerHour - a.profitPerHour);
+    document.getElementById("tr-out").innerHTML = all.length
+      ? `<p class="muted" style="margin:0 0 8px">${all.length} výrobků je v plusu ${ownIn ? "při zpracování vlastních vstupů (oceněných prodejní cenou −2,5 %), výrobek prodaný −2,5 %" : "i po 2,5% poplatku na nákup vstupů i prodej výrobku (vstupy za levnější z koupit / vyrobit)"}. Řazeno podle zisku za hodinu jedné továrny. Klikni pro strom.</p>` +
+        all.map((t) => { const margin = t.make ? (t.sell - t.make) / t.make : null;
+          return `<div class="node" style="margin-bottom:8px;cursor:pointer" data-goto="${t.symbol}">${icon(t.symbol)}<div style="flex:1;min-width:0">
+            <div><span class="nm">${esc(t.name)}</span> <span class="tag good">+${nf(margin * 100, 1)} % marže</span></div>
+            <div class="rec">recept: ${t.inputs.map((x) => `<span style="white-space:nowrap">${icon(x.symbol, "sm")} ${nf(x.perOne, x.perOne < 10 ? 2 : 0)} ${esc(x.symbol.toLowerCase())}</span>`).join(" + ")} → ${icon(t.symbol, "sm")} 1 · ${dur(t.secPerOne)}</div>
+            <div class="grid">
+              <div><div class="k">výroba</div>${coin3(t.make)}</div>
+              <div><div class="k">prodej (−2,5 %)</div>${coin3(t.sell)}</div>
+              <div><div class="k">zisk / h</div><span style="color:var(--good);font-weight:700">+${big(t.profitPerHour)}</span> <span class="muted">COIN</span></div>
+              <div><div class="k">zisk / den</div>${coin3(t.profitPerHour * 24)}</div>
+            </div></div></div>`; }).join("")
+      : `<p class="muted">Teď není nic v plusu${ownIn ? "" : " — po 2,5 % na nákup vstupů a 2,5 % na prodej se výroba z nakoupených vstupů nikde nevyplatí. Zkus „Vstupy: mám vlastní“"}. Vyrábí se kvůli XP.</p>`;
+    document.getElementById("tr-out").querySelectorAll("[data-goto]").forEach((el) => el.addEventListener("click", () => { sel.value = el.dataset.goto; try { localStorage.setItem("cw_tree_item", sel.value); } catch {} renderTree(); }));
+    upEl0.innerHTML = '<p class="muted">Vyber konkrétní surovinu, kam jde dál.</p>';
+    return;
   }
   const t = recipeTree(sel.value, F, P, ratios);
   document.getElementById("tr-out").innerHTML = `<ul class="tree">${treeNode(t, 1, 0)}</ul>`;
+  const u = usesOf(sel.value, F, P, ratios);
+  const upEl = document.getElementById("tr-up");
+  if (!u.uses.length) { upEl.innerHTML = '<p class="muted">Tuhle surovinu žádná továrna nespotřebovává — dá se jen prodat (nebo na upgrady a stavby).</p>'; }
+  else upEl.innerHTML = `<div class="node" style="margin-bottom:8px">${icon(u.symbol)}<div><span class="nm">Prodat rovnou</span><div class="grid"><div><div class="k">1 ks po poplatku</div>${coin3(u.sell)}</div></div></div></div>` +
+    u.uses.map((x) => {
+      const tag = x.vsSell == null ? '<span class="tag mute">bez ceny</span>' : x.vsSell > 0.005 ? `<span class="tag good">zpracuj · +${nf(x.vsSell * 100, 0)} % proti prodeji</span>` : x.vsSell < -0.005 ? `<span class="tag bad">radši prodej · ${nf(x.vsSell * 100, 0)} %</span>` : '<span class="tag warn">nastejno</span>';
+      return `<div class="node" style="margin-bottom:8px;cursor:pointer" data-goto="${x.product}">${icon(x.product)}<div style="flex:1;min-width:0">
+        <div><span class="nm">${esc(x.name)}</span> ${tag}</div>
+        <div class="rec">recept: ${icon(u.symbol, "sm")} ${nf(x.perOne, x.perOne < 10 ? 2 : 0)} ${esc(u.symbol.toLowerCase())}${x.others.map((o) => ` + ${icon(o.symbol, "sm")} ${nf(o.perOne, o.perOne < 10 ? 2 : 0)} ${esc(o.symbol.toLowerCase())}`).join("")} → ${icon(x.product, "sm")} 1 · ${dur(x.secPerOne)}</div>
+        <div class="grid">
+          <div><div class="k">hodnota 1 ks ${esc(u.symbol.toLowerCase())} při zpracování</div>${coin3(x.valuePerUnit)}</div>
+          <div><div class="k">výrobek prodaný (−2,5 %)</div>${coin3(x.productSell)}</div>
+          <div><div class="k">ostatní vstupy</div>${coin3(x.otherCost)}</div>
+        </div></div></div>`;
+    }).join("");
+  upEl.querySelectorAll("[data-goto]").forEach((el) => el.addEventListener("click", () => { sel.value = el.dataset.goto; try { localStorage.setItem("cw_tree_item", sel.value); } catch {} renderTree(); document.getElementById("tree").scrollIntoView({ behavior: "smooth" }); }));
 }
 function renderRatioCfg() {
   const box = document.getElementById("tr-cfg");
@@ -441,6 +492,7 @@ function renderRatioCfg() {
   box.querySelectorAll("button[data-reset]").forEach((b) => b.addEventListener("click", () => { delete ratios[b.dataset.reset]; saveRatios(); renderRatioCfg(); renderTree(); }));
 }
 document.getElementById("tr-item").addEventListener("change", (e) => { try { localStorage.setItem("cw_tree_item", e.target.value); } catch {} renderTree(); });
+document.getElementById("tr-own").addEventListener("change", () => renderTree());
 document.getElementById("tr-cfg-btn").addEventListener("click", () => { const b = document.getElementById("tr-cfg"); const open = b.style.display === "none"; b.style.display = open ? "block" : "none"; if (open) renderRatioCfg(); });
 
 function renderMatrix() {

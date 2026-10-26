@@ -291,3 +291,28 @@ export function recipeTree(symbol, factories, prices, ratios = {}, fee = EXCHANG
     grossPerHour: sell != null && sec ? sell * 3600 / sec : null,
     profitPerHour: sell != null && make != null && sec ? (sell - make) * 3600 / sec : null };
 }
+
+/*
+ * WHERE AN ITEM GOES NEXT — every factory that consumes `symbol`, and what one unit of it is worth
+ * when it is processed there instead of sold:
+ *   valuePerUnit = (product sold, −fee  −  the product's other inputs at their best) / units used
+ *   vsSell       = valuePerUnit / selling the unit itself (−fee) − 1   (> 0: process it, < 0: sell it)
+ */
+export function usesOf(symbol, factories, prices, ratios = {}, fee = EXCHANGE_FEE) {
+  const sym = String(symbol).toUpperCase();
+  const own = prices[sym] == null ? null : prices[sym] * (1 - fee);
+  const out = [];
+  for (const [slug, f] of Object.entries(factories)) {
+    const rec = recipeOf({ ...f, slug }, ratios);
+    const mine = rec.find((x) => x.symbol === sym);
+    if (!mine) continue;
+    const prod = outputSymbol(f);
+    const t = recipeTree(prod, factories, prices, ratios, fee);
+    const others = t.inputs.filter((x) => x.symbol !== sym);
+    const otherCost = others.some((x) => x.cost == null) ? null : others.reduce((a, x) => a + x.cost, 0);
+    const valuePerUnit = t.sell == null || otherCost == null ? null : (t.sell - otherCost) / mine.perOne;
+    out.push({ slug, product: prod, name: f.name, perOne: mine.perOne, others: others.map((x) => ({ symbol: x.symbol, perOne: x.perOne })),
+      productSell: t.sell, otherCost, valuePerUnit, vsSell: own && valuePerUnit != null ? valuePerUnit / own - 1 : null, secPerOne: t.secPerOne });
+  }
+  return { symbol: sym, sell: own, uses: out.sort((a, b) => (b.vsSell ?? -9) - (a.vsSell ?? -9)) };
+}
