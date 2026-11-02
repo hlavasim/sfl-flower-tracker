@@ -3968,6 +3968,7 @@
       "Greenhouse":     { 2: 2, 3: 5 },
       "Machinery":      { 2: 2, 3: 5 },
       "Aging":          { 2: 3, 3: 7 },
+      "Cave":           { 2: 3, 3: 6 },
     };
 
     // Full skill tree data from sfl.world/tools/skills
@@ -4138,6 +4139,22 @@
       "Sea Blessed":        { tree: "Aging", points: 2, tier: 2, buff: "Bonus Salt", debuff: null },
       "Ager":               { tree: "Aging", points: 3, tier: 3, buff: "Aging Shed bonus", debuff: null },
       "Salt Surge":         { tree: "Aging", points: 3, tier: 3, buff: "Instant Salt surge", debuff: null, power: true },
+      // ── Cave (Cave Dwellers, bumpkinSkills.ts) ──
+      "Lean Compost":       { tree: "Cave", points: 1, tier: 1, buff: "-5% Myco Bin batch ingredients", debuff: null },
+      "Rapid Mycelium":     { tree: "Cave", points: 1, tier: 1, buff: "-5% Myco Bin batch time", debuff: null },
+      "Mushroom Bloom":     { tree: "Cave", points: 1, tier: 1, buff: "+1 Mushroom tile per Cave patch", debuff: null },
+      "Muddy Bounty":       { tree: "Cave", points: 1, tier: 1, buff: "+10% Mud per Cave Mud tile", debuff: null },
+      "Sturdy Shovel":      { tree: "Cave", points: 1, tier: 1, buff: "10% chance a Cave dig keeps its Sand Shovel", debuff: null },
+      "Fungal Harvest":     { tree: "Cave", points: 2, tier: 2, buff: "+0.2 Mushrooms per Cave Mushroom tile", debuff: null },
+      "Beetle Nest":        { tree: "Cave", points: 2, tier: 2, buff: "+1 Beetle tile per Beetle-recipe patch", debuff: null },
+      "Sturdy Drill":       { tree: "Cave", points: 2, tier: 2, buff: "20% chance a Cave drill keeps its Sand Drill", debuff: null },
+      "Tool Hoarder":       { tree: "Cave", points: 2, tier: 2, buff: "+25 Sand Shovel and +5 Sand Drill stock", debuff: null },
+      "Rare Breeds":        { tree: "Cave", points: 3, tier: 3, buff: "Rarer Cave Beetles", debuff: null },
+      "Twin Beetles":       { tree: "Cave", points: 3, tier: 3, buff: "5% chance of +1 Beetle", debuff: null },
+      // ── Pigs (Animals tree, Cave Dwellers) ──
+      "Truffle Yield":      { tree: "Animals", points: 2, tier: 2, buff: "+10% Truffles", debuff: null },
+      "Swill Savvy":        { tree: "Animals", points: 3, tier: 3, buff: "-25% Pig feed", debuff: "+50% feed for every other animal" },
+      "Bristle Payout":     { tree: "Animals", points: 3, tier: 3, buff: "+10% Pig Bristles", debuff: null },
     };
 
     // Ascension skill RANKS — ported verbatim from sunflower-land bumpkinSkills.ts (BUMPKIN_REVAMP_SKILL_TREE
@@ -4148,6 +4165,20 @@
       "Acre Farm":                   { tier: 3, maxLevel: 3, kind: "yieldWithDebuff", ranks: [1, 1.4, 1.8], debuff: [0.5, 0.6, 0.7] },
       "Ager":                        { tier: 3, maxLevel: 3, kind: "multiplier", ranks: [2, 3, 4] },
       "Bacalhau":                    { tier: 1, maxLevel: 3, kind: "additiveYield", ranks: [1, 2, 3] },
+      "Lean Compost":                { tier: 1, maxLevel: 3, kind: "costMultiplier", ranks: [0.95, 0.9, 0.85] },
+      "Rapid Mycelium":              { tier: 1, maxLevel: 3, kind: "growthMultiplier", ranks: [0.95, 0.9, 0.85] },
+      "Mushroom Bloom":              { tier: 1, maxLevel: 3, kind: "additiveYield", ranks: [1, 2, 3] },
+      "Muddy Bounty":                { tier: 1, maxLevel: 3, kind: "multiplier", ranks: [1.1, 1.2, 1.3] },
+      "Sturdy Shovel":               { tier: 1, maxLevel: 3, kind: "chance", ranks: [10, 20, 30] },
+      "Fungal Harvest":              { tier: 2, maxLevel: 3, kind: "additiveYield", ranks: [0.2, 0.3, 0.4] },
+      "Beetle Nest":                 { tier: 2, maxLevel: 3, kind: "additiveYield", ranks: [1, 2, 3] },
+      "Sturdy Drill":                { tier: 2, maxLevel: 3, kind: "chance", ranks: [20, 30, 40] },
+      "Tool Hoarder":                { tier: 2, maxLevel: 3, kind: "stockBonus", ranks: [25, 50, 100] },
+      "Rare Breeds":                 { tier: 3, maxLevel: 3, kind: "flatBonus", ranks: [1, 2, 3] },
+      "Twin Beetles":                { tier: 3, maxLevel: 3, kind: "chance", ranks: [5, 10, 15] },
+      "Truffle Yield":               { tier: 2, maxLevel: 3, kind: "multiplier", ranks: [1.1, 1.2, 1.3] },
+      "Swill Savvy":                 { tier: 3, maxLevel: 3, kind: "costWithDebuff", ranks: [0.75, 0.65, 0.5] },
+      "Bristle Payout":              { tier: 3, maxLevel: 3, kind: "multiplier", ranks: [1.1, 1.2, 1.3] },
       "Barnyard Rouse":              { tier: 3, maxLevel: 3, kind: "cooldown", ranks: [432000000, 345600000, 302400000] },
       "Bee Collective":              { tier: 3, maxLevel: 3, kind: "chance", ranks: [20, 27.5, 35] },
       "Betty's Friend":              { tier: 1, maxLevel: 3, kind: "coinBonus", ranks: [0.3, 0.45, 0.6] },
@@ -4636,6 +4667,8 @@
       machine:    { label: "CROP MACHINE",  emoji: "⚙️", selector: null, quantifiable: false, side: true },
       power:      { label: "POWER SKILLS",  emoji: "⚡", selector: null, quantifiable: false, side: true },
       xp:         { label: "BUMPKIN XP",    emoji: "⭐", selector: null, quantifiable: false, side: true },
+      pigs:       { label: "PIGS",          emoji: "🐖", selector: null, quantifiable: false, side: true },
+      cave:       { label: "CAVE",          emoji: "🍄", selector: null, quantifiable: false, side: true },
       // Qualitative
       pets:       { label: "PETS",          emoji: "🐾", selector: null, quantifiable: false },
       cooking:    { label: "COOKING / XP",  emoji: "🍳", selector: null, quantifiable: false },
@@ -5430,7 +5463,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.16</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.17</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5457,6 +5490,11 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.17", items: [
+          { t: "feat", text: "<b>Chapter 16 — Cave Dwellers.</b> The tracker now knows the chapter (2. 11. 2026 → 1. 2. 2027, ticket <b>Duende Cap</b>, +1 per Duende Shoes / Pants / Shirt, ticket auction week 4. 1.). TICKETY lists its megastore (Duende Hat, Straw House, Duende Monument, Pot of Luck, hourglasses) and auction items with their value on your farm; the auction reference is now Ascension Age's results from sfl.world." },
+          { t: "feat", text: "<b>Pigs and the Cave in POWER and ROADMAP.</b> New categories 🐖 PIGS and 🍄 CAVE: Truffles per pig level less the cheapest Slop, and the Myco Bins' day (mushrooms, beetles, Mud less inputs and Sand Shovels), with the 11 Cave skills and Truffle Yield / Swill Savvy / Pig Onesie / Cattlegrim. ROADMAP offers <b>Pigpen L2 / L3</b> and <b>Cave tiers</b> as steps with their cost and gain. Truffles have no market price yet, so one is worth its best recipe's XP; Beetles are animal feed, Mud is the feed a Mud coat saves — only as much as your pigs use." },
+          { t: "fix", text: "<b>Ascension Age items had no price</b> although they trade since today: the marketplace feed lists them by id only. Rice Shirt, Vibraphone, Salt Worker Gnome, Surfer Hair, Moon Hair, Otty, Astrolabe and the rest now take their real floor, so they are back in ROADMAP's buy order. New Cave Dwellers boosts are modelled too (Duende Hat, Firefly Aura, Antique Dress, Harpoon, Giant Truffle, Fish Trap, the chapter mutants), and FISHING lists this chapter's Marvels (Macropinna, Betta, Manatee)." },
+        ] },
         { ver: "v6.16", items: [
           { t: "feat", text: "🦖 CRAFT production tree: new <b>⬆️ Where it goes next</b> panel — who consumes the chosen material and what 1 piece is worth when processed (product sold −2.5 % minus the other inputs) vs selling it right away. The selector now starts with <b>💰 Profitable</b>: every product in the plus after the 2.5 % fees, sorted by profit per hour of one factory; <b>Inputs: bought / own</b> switch values your own inputs at what selling them would bring." },
         ] },
@@ -8913,6 +8951,8 @@
       { name: "Salt Awakening",    start: Date.UTC(2026,  4,  4), ticket: "Salt Rock",           boosts: ["Spa Hat", "Spa Robe", "Spa Slippers"] },
       // tasksBegin: ticket tasks are frozen until the 2nd Monday (getSeasonWeek.ts); end = next chapter start.
       { name: "Ascension Age",     start: Date.UTC(2026,  7,  3), ticket: "Shiny Feather",       boosts: ["Swamp Lily Hat", "Swamp Armor", "Swamp Pants"], tasksBegin: Date.UTC(2026, 7, 10), end: Date.UTC(2026, 10, 2) },
+      // Cave Dwellers (types/chapters.ts): ticket Duende Cap; Duende Shoes / Pants / Shirt +1 each (completeNPCChore.ts).
+      { name: "Cave Dwellers",     start: Date.UTC(2026, 10,  2), ticket: "Duende Cap",          boosts: ["Duende Shoes", "Duende Pants", "Duende Shirt"], tasksBegin: Date.UTC(2026, 10, 9), end: Date.UTC(2027, 1, 1) },
     ];
 
     // Per-NPC base ticket reward: TICKET_REWARDS in events/landExpansion/deliver.ts, checked
@@ -18833,7 +18873,7 @@
      * The first five are permanent; the rest belong to a chapter and leave with it. This page
      * used to list the Salt Awakening trio, which can no longer be obtained at all.
      */
-    const fishMarvelChapter = "Ascension Age";
+    const fishMarvelChapter = "Cave Dwellers";
     const fishMarvels = [
       { marvel: "Starlight Tuna", sources: [["Halibut", 0.025], ["Horse Mackerel", 0.36]] },
       { marvel: "Twilight Anglerfish", sources: [["Clownfish", 0.025], ["Parrotfish", 0.21]] },
@@ -18843,6 +18883,10 @@
       { marvel: "Crocodile", sources: [["Red Snapper", 0.005], ["Moray Eel", 0.015]], chapter: "Ascension Age" },
       { marvel: "Dumbo Octopus", sources: [["Olive Flounder", 0.005], ["Napoleanfish", 0.005]], chapter: "Ascension Age" },
       { marvel: "Seahorse Dad", sources: [["Angelfish", 0.001], ["Porgy", 0.01]], chapter: "Ascension Age" },
+      // Cave Dwellers (fishing.ts, 2026-11-02; Whale Shark raised to 1 % on launch day). Betta has three sources.
+      { marvel: "Macropinna", sources: [["Moray Eel", 0.015], ["Coelacanth", 0.01]], chapter: "Cave Dwellers" },
+      { marvel: "Betta", sources: [["Zebra Turkeyfish", 0.01], ["Muskellunge", 0.02], ["Blowfish", 0.01]], chapter: "Cave Dwellers" },
+      { marvel: "Manatee", sources: [["Whale Shark", 0.01], ["Sea Bass", 0.002]], chapter: "Cave Dwellers" },
     ];
 
     /*

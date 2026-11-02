@@ -17,9 +17,7 @@ import {
 } from "../engine/gifts-deliveries.mjs";
 import { findCollectible, ANIMAL_LEVELS, GOLDEN_ANIMALS, isWearableEquipped, calcSkillPointCost } from "../engine/power-helpers.mjs";
 import { FEED_RECIPES, FEED_QTY, FEED_XP_TABLE } from "../engine/power-costs.mjs";
-import { computeSaltYieldPerRake, computeSaltRakeCoinMult } from "../engine/cooking-cost.mjs";
 import { CHORE_TASKS } from "../engine/chore-tasks.mjs";
-import { SALT_RAKE_COST, FISH_BASE_XP, GAME_FISH_SPELLING, getAgingSaltCost, getAgingMaxXP } from "../data/cooking.mjs";
 import { SIDE_MODELS, sideValue } from "../engine/side-values.mjs";
 
 const DAY = 86400000;
@@ -33,7 +31,7 @@ const TRACK_TICKETS = { free: 130, vip: 160 };
  * the horizon for a bid is those 8 weeks.
  */
 const WEEKS_TO_AUCTION = 8;
-const AUCTION_WEEK = { "Ascension Age": Date.UTC(2026, 9, 5) };
+const AUCTION_WEEK = { "Ascension Age": Date.UTC(2026, 9, 5), "Cave Dwellers": Date.UTC(2027, 0, 4) };
 // What the best farms actually made (community dumps 2026-09-21 → 09-28): the median of the 82
 // farms at the chapter cap made 1,568 a week; the cap itself was 11,844 after 7.2 weeks. Deliveries
 // ×2 calendar events and more animal bounties get them above what one board shows.
@@ -46,52 +44,59 @@ const GUIDE_TICKET_VALUE = 0.1;
 const RAISE_SLOT_LOSS = 0.7;
 
 /*
- * Ticket-priced lots of the last finished chapter's auction (Salt Awakening), from
- * https://sfl.world/info/auctions, read 2026-09-29. Each lot ran in five rounds per currency;
+ * Ticket-priced lots of the last finished chapter's auction (Ascension Age), from
+ * https://sfl.world/info/auctions, read 2026-11-02. Each lot ran in five rounds per currency;
  * the numbers are the mean minimum WINNING bid across the rounds. flower/gem = the same item's
- * FLOWER and Gem rounds (null when it had none). The lot's value is its NFT price today
- * (opts.floors), so a ticket is worth what the item it wins sells for.
+ * FLOWER and Gem rounds (null when it had none). supply = the whole lot over every currency.
+ * The lot's value is its NFT price today (opts.floors), so a ticket is worth what the item it
+ * wins sells for.
  */
 const AUCTION_REFERENCE = {
-  chapter: "Salt Awakening", ticket: "Salt Rock", source: "https://sfl.world/info/auctions", readAt: "2026-09-29",
+  chapter: "Ascension Age", ticket: "Shiny Feather", source: "https://sfl.world/info/auctions", readAt: "2026-11-02",
   lots: [
-    { name: "Crab House",       supply: 75,  tickets: 13091, flower: 5015, gem: 81439 },
-    { name: "Obsidian Turtle",  supply: 90,  tickets: 13085, flower: null, gem: null },
-    { name: "Royal Crab Pot",   supply: 60,  tickets: 12988, flower: 4832, gem: 94175 },
-    { name: "Summer Guardian",  supply: 150, tickets: 7437,  flower: null, gem: null },
-    { name: "Giant Onion",      supply: 80,  tickets: 6712,  flower: null, gem: null },
-    { name: "Pistol Shrimp",    supply: 150, tickets: 5815,  flower: 386,  gem: 9164 },
-    { name: "Navigation Table", supply: 150, tickets: 5639,  flower: 869,  gem: 14396 },
-    { name: "Speed Trap",       supply: 120, tickets: 5541,  flower: 336,  gem: 8264 },
-    { name: "Pufferfish",       supply: 180, tickets: 342,   flower: 19,   gem: null },
-    { name: "Fat Crab",         supply: 180, tickets: 341,   flower: 18,   gem: null },
+    { name: "Salt Worker Gnome", supply: 75,  tickets: 13412, flower: 1125, gem: 35893 },
+    { name: "Ascended Idol",     supply: 90,  tickets: 13366, flower: 2555, gem: 65736 },
+    { name: "Quarry",            supply: 30,  tickets: 13246, flower: null, gem: null },
+    { name: "Autumn's Embrace",  supply: 50,  tickets: 13246, flower: null, gem: null },
+    { name: "Surfer Hair",       supply: 120, tickets: 13152, flower: 2449, gem: 37352 },
+    { name: "Rice Shirt",        supply: 120, tickets: 11623, flower: 1034, gem: 24894 },
+    { name: "Alchemist Apron",   supply: 120, tickets: 10368, flower: 894,  gem: 17723 },
+    { name: "Winged Vase",       supply: 120, tickets: 9534,  flower: 795,  gem: 12810 },
+    { name: "Tomato Clown",      supply: 40,  tickets: 8362,  flower: null, gem: null },
+    { name: "Pet",               supply: 250, tickets: 6881,  flower: null, gem: null },
+    { name: "Vibraphone",        supply: 300, tickets: 4458,  flower: 338,  gem: 4286 },
+    { name: "Coat Rack",         supply: 180, tickets: 97,    flower: 9,   gem: null },
+    { name: "Salt Rug",          supply: 180, tickets: 83,    flower: 10,  gem: null },
   ],
 };
 /*
- * This chapter's auction schedule as the game's auctioneer lists it (copied by the owner from the
- * in-game list, 2026-10-05; the list itself needs a login). Every item runs 5 rounds 5 h apart
- * from `first` (UTC). Old items return (Quarry, Autumn's Embrace, Tomato Clown); "Pet" is a pet
- * NFT. supply = the number on the item's card. Prices are set per round by the server — not here.
+ * Each chapter's auction schedule as the game's auctioneer lists it (the list needs a login, so the
+ * owner copies it from the game). Every item runs 5 rounds 5 h apart from `first` (UTC). Old items
+ * can return (Quarry, Autumn's Embrace, Tomato Clown); "Pet" is a pet NFT. supply = the number on
+ * the item's card. Prices are set per round by the server — not here. Cave Dwellers' list is not
+ * out yet (auction week 2027-01-04): empty until then, so the page shows no schedule rather than
+ * the last chapter's.
  */
-const AUCTION_SCHEDULE = {
-  chapter: "Ascension Age", readAt: "2026-10-05", rounds: 5, everyH: 5,
-  items: [
-    { name: "Salt Rug",          kind: "collectible", supply: 18, first: Date.UTC(2026, 9, 5, 21) },
-    { name: "Coat Rack",         kind: "collectible", supply: 18, first: Date.UTC(2026, 9, 5, 22) },
-    { name: "Vibraphone",        kind: "collectible", supply: 20, first: Date.UTC(2026, 9, 5, 23) },
-    { name: "Quarry",            kind: "collectible", supply: 6,  first: Date.UTC(2026, 9, 6, 22) },
-    { name: "Autumn's Embrace",  kind: "wearable",    supply: 10, first: Date.UTC(2026, 9, 6, 23) },
-    { name: "Rice Shirt",        kind: "wearable",    supply: 8,  first: Date.UTC(2026, 9, 7, 21) },
-    { name: "Ascended Idol",     kind: "collectible", supply: 6,  first: Date.UTC(2026, 9, 7, 22) },
-    { name: "Pet",               kind: "nft",         supply: 50, first: Date.UTC(2026, 9, 7, 23) },
-    { name: "Salt Worker Gnome", kind: "collectible", supply: 5,  first: Date.UTC(2026, 9, 8, 22) },
-    { name: "Tomato Clown",      kind: "collectible", supply: 8,  first: Date.UTC(2026, 9, 8, 23) },
-    { name: "Alchemist Apron",   kind: "wearable",    supply: 8,  first: Date.UTC(2026, 9, 9, 21) },
-    { name: "Surfer Hair",       kind: "wearable",    supply: 8,  first: Date.UTC(2026, 9, 9, 22) },
-    { name: "Winged Vase",       kind: "collectible", supply: 8,  first: Date.UTC(2026, 9, 9, 23) },
-  ],
+const AUCTION_SCHEDULES = {
+  "Ascension Age": { chapter: "Ascension Age", readAt: "2026-10-05", rounds: 5, everyH: 5,
+    items: [
+      { name: "Salt Rug",          kind: "collectible", supply: 18, first: Date.UTC(2026, 9, 5, 21) },
+      { name: "Coat Rack",         kind: "collectible", supply: 18, first: Date.UTC(2026, 9, 5, 22) },
+      { name: "Vibraphone",        kind: "collectible", supply: 20, first: Date.UTC(2026, 9, 5, 23) },
+      { name: "Quarry",            kind: "collectible", supply: 6,  first: Date.UTC(2026, 9, 6, 22) },
+      { name: "Autumn's Embrace",  kind: "wearable",    supply: 10, first: Date.UTC(2026, 9, 6, 23) },
+      { name: "Rice Shirt",        kind: "wearable",    supply: 8,  first: Date.UTC(2026, 9, 7, 21) },
+      { name: "Ascended Idol",     kind: "collectible", supply: 6,  first: Date.UTC(2026, 9, 7, 22) },
+      { name: "Pet",               kind: "nft",         supply: 50, first: Date.UTC(2026, 9, 7, 23) },
+      { name: "Salt Worker Gnome", kind: "collectible", supply: 5,  first: Date.UTC(2026, 9, 8, 22) },
+      { name: "Tomato Clown",      kind: "collectible", supply: 8,  first: Date.UTC(2026, 9, 8, 23) },
+      { name: "Alchemist Apron",   kind: "wearable",    supply: 8,  first: Date.UTC(2026, 9, 9, 21) },
+      { name: "Surfer Hair",       kind: "wearable",    supply: 8,  first: Date.UTC(2026, 9, 9, 22) },
+      { name: "Winged Vase",       kind: "collectible", supply: 8,  first: Date.UTC(2026, 9, 9, 23) },
+    ],
+  },
+  "Cave Dwellers": { chapter: "Cave Dwellers", readAt: null, rounds: 5, everyH: 5, items: [] },
 };
-const CURRENT_AUCTION_ITEMS = AUCTION_SCHEDULE.items.map((i) => i.name);
 
 /*
  * The schedule with what each item would add on this farm: the chapter model (auctionItemValues)
@@ -99,10 +104,10 @@ const CURRENT_AUCTION_ITEMS = AUCTION_SCHEDULE.items.map((i) => i.name);
  * marginal POWER shows). Rounds already started stay listed as done.
  */
 function auctionSchedule(farm, chapterItems, opts, now) {
-  const S = AUCTION_SCHEDULE, H = 3600000;
+  const S = AUCTION_SCHEDULES[currentChapter(now).name] || { items: [] }, H = 3600000;
   const byName = Object.fromEntries(chapterItems.map((i) => [i.name, i]));
   const bpd = opts.boostPerDay || {};
-  return { chapter: S.chapter, readAt: S.readAt, items: S.items.map((it) => {
+  return { chapter: S.chapter || null, readAt: S.readAt || null, items: S.items.map((it) => {
     const rounds = Array.from({ length: S.rounds }, (_, k) => it.first + k * S.everyH * H);
     const ci = byName[it.name];
     let perDay = ci && ci.perDay != null ? ci.perDay : (bpd[it.name] != null ? bpd[it.name] : null);
@@ -397,6 +402,9 @@ export function buildTicketsSection(farm, prices, opts = {}) {
     weekEnd, daysLeftInWeek: daysLeft };
 
   const chapterItems = [...auctionItemValues(farm, prices, opts), ...shopItemValues(farm, prices, opts)];
+  const schedule = auctionSchedule(farm, chapterItems, opts, now);
+  // This chapter's lots: the copied schedule, else the auctioneer's items from the game source.
+  const currentItems = schedule.items.length ? schedule.items.map((i) => i.name) : chapterItems.filter((i) => i.source === "auction").map((i) => i.name);
   return {
     chapter: { name: chapter.name, ticket, start: chapter.start, tasksBegin, end: chapter.end || null,
       weeksDone: +weeksDone.toFixed(2), weeksLeft: weeksLeft == null ? null : +weeksLeft.toFixed(2),
@@ -407,10 +415,10 @@ export function buildTicketsSection(farm, prices, opts = {}) {
     plans, best, perLot, thisAuction, observedTop: OBSERVED_TOP,
     guide, timeline,
     items: chapterItems,
-    schedule: auctionSchedule(farm, chapterItems, opts, now),
+    schedule,
     activity: opts.activity || null,
     auction: { reference: { chapter: AUCTION_REFERENCE.chapter, ticket: AUCTION_REFERENCE.ticket, source: AUCTION_REFERENCE.source, readAt: AUCTION_REFERENCE.readAt },
-      lots, currentItems: CURRENT_AUCTION_ITEMS },
+      lots, currentItems },
     // For the "tickets, gems, FLOWER or wait" decision on the page.
     rounds: roundRatios(lots, opts.gemsPerSFL || 0),
     rates: { gemsPerSFL: opts.gemsPerSFL || 0, sflUsd: opts.sflUsd || 0, gems: +(farm.inventory?.Gem || 0) },
@@ -547,10 +555,6 @@ export function measuredActivity(weeks, spanWeeks = 4) {
   };
 }
 
-const SALT_CHARGE_MS = 7 * 3600000;          // salt.ts SALT_CHARGE_GENERATION_TIME
-const POTION_GAME_FEE = 320;                  // startPotion.ts GAME_FEE (coins)
-const PRIME_AGED_BASE = 0.1;                  // agingBase.ts PRIME_AGED_BASE_CHANCE
-
 function hasItem(farm, name, kind) {
   if (kind === "wearable") return isWearableEquipped(farm, name) || (farm.wardrobe?.[name] || 0) > 0;
   return findCollectible(farm, name).length > 0 || (+(farm.inventory?.[name] || 0) > 0);
@@ -566,56 +570,25 @@ function auctionItemValues(farm, prices, opts) {
   const act = opts.activity || null;
   const coinsPerSFL = opts.coinsPerSFL || 0;
   const mv = (n) => (prices.marketValue || {})[n] || (prices.productionCost || {})[n] || 0;
-  const coinSfl = (c) => (coinsPerSFL > 0 ? c / coinsPerSFL : 0);
-  // Salt: harvests a day measured, else every node emptied as it charges.
-  const nodes = Object.keys(farm.saltFarm?.nodes || {}).length;
-  const saltHarvests = act && act.saltHarvests > 0 ? act.saltHarvests : nodes * (DAY / SALT_CHARGE_MS);
-  const saltYield = computeSaltYieldPerRake(farm);
-  const rakeCost = coinSfl(SALT_RAKE_COST.coins * computeSaltRakeCoinMult(farm))
-    + Object.entries(SALT_RAKE_COST.materials).reduce((s, [m, q]) => s + mv(m) * q, 0);
-  const saltPrice = mv("Salt");
-  const hasIdol = hasItem(farm, "Ascended Idol", "collectible");
-  // Aging: fish aged a day by species, with their base XP.
-  const spell = Object.fromEntries(Object.entries(GAME_FISH_SPELLING).map(([k, v]) => [v, k]));
-  const agedRows = act ? Object.keys({ ...act.aged, ...act.prime }).map((sp) => {
-    const fish = spell[sp] || sp; const base = FISH_BASE_XP[fish];
-    return base ? { fish, perDay: (act.aged[sp] || 0) + (act.prime[sp] || 0), prime: act.prime[sp] || 0, base } : null;
-  }).filter(Boolean) : [];
-  const agedPerDay = agedRows.reduce((s, r) => s + r.perDay, 0);
   let sflPerXP = 0;
   try {
     const sc = calcSkillPointCost(farm.bumpkin, prices.marketValue || {}, farm);
     if (sc && sc.bestRecipe && sc.bestRecipe.boostedXP > 0) sflPerXP = sc.bestRecipe.cost / sc.bestRecipe.boostedXP;
   } catch { sflPerXP = 0; }
   const needAct = "potřebuje historii farmy (jen sledované farmy)";
+  // Cave Dwellers' auctioneer (collections.ts). Production boosts are valued in POWER (their
+  // marginal arrives as opts.boostPerDay in the schedule); Giant Truffle by the XP side model below.
+  const inPower = "v ROADMAP/POWER";
   const items = [
-    { name: "Ascended Idol", kind: "collectible", what: "sůl bez hrábí",
-      perDay: saltHarvests * rakeCost,
-      basis: `${saltHarvests.toFixed(1)} sklizní soli/den × hrábě ${rakeCost.toFixed(3)}` },
-    { name: "Salt Worker Gnome", kind: "collectible", what: "nabíjení soli ×0,7 a +2 sůl za sklizeň",
-      perDay: (() => {
-        const more = saltHarvests * (1 / 0.7 - 1);
-        return (more * (saltYield + 2) + saltHarvests * 2) * saltPrice - (hasIdol ? 0 : more * rakeCost);
-      })(),
-      basis: `${saltHarvests.toFixed(1)} → ${(saltHarvests / 0.7).toFixed(1)} sklizní/den, ${saltYield}+2 soli, sůl ${saltPrice.toFixed(4)}` },
-    { name: "Surfer Hair", kind: "wearable", what: "poloviční sůl na stárnutí ryb",
-      perDay: act ? agedRows.reduce((s, r) => s + r.perDay * getAgingSaltCost(r.base), 0) * 0.5 * saltPrice : null,
-      basis: act ? `${agedPerDay.toFixed(1)} ryb/den` : needAct },
-    { name: "Winged Vase", kind: "collectible", what: "+14 % šance na Prime Aged (+30 % XP)",
-      perDay: act ? agedRows.reduce((s, r) => s + r.perDay * 0.14 * (Math.floor(getAgingMaxXP(r.base) * 1.3) - getAgingMaxXP(r.base)), 0) * sflPerXP : null,
-      basis: act ? `${agedPerDay.toFixed(1)} ryb/den, XP po ${sflPerXP.toFixed(6)}` : needAct },
-    { name: "Alchemist Apron", kind: "wearable", what: "poloviční poplatek v Potion House",
-      perDay: act ? act.potionGames * coinSfl(POTION_GAME_FEE * 0.5) : null,
-      basis: act ? `${act.potionGames.toFixed(2)} her/den` : needAct },
-    // applyAnimalFeedBuff.ts: a Salt Lick (produce ×1.05) or Honey Treat (feed ×0.75) buff lasts
-    // 6 harvests instead of 3 — the same buffs for half the items.
-    { name: "Vibraphone", kind: "collectible", what: "buff ze Salt Lick / Honey Treat vydrží 6 sklizní místo 3",
-      perDay: act && (mv("Salt Lick") > 0 || mv("Honey Treat") > 0)
-        ? ((act.racks["Salt Lick"] || 0) * mv("Salt Lick") + (act.racks["Honey Treat"] || 0) * mv("Honey Treat")) * 0.5 : null,
-      basis: act ? `ušetří půlku Salt Lick / Honey Treat (${((act.racks["Salt Lick"] || 0) + (act.racks["Honey Treat"] || 0)).toFixed(1)}/den)${mv("Salt Lick") > 0 ? "" : " — nemají cenu"}` : "potřebuje historii farmy" },
-    { name: "Rice Shirt", kind: "wearable", what: "+1 rýže, poloviční olej na rýži", perDay: null, basis: "v ROADMAP/POWER" },
-    { name: "Salt Rug", kind: "collectible", what: "dekorace", perDay: 0, basis: "" },
-    { name: "Coat Rack", kind: "collectible", what: "dekorace", perDay: 0, basis: "" },
+    { name: "Giant Truffle", kind: "collectible", what: "+30 % XP z jídla (mimo ryby), +60 % ze Smoothie Shack a Deli", perDay: null, basis: needAct },
+    { name: "Firefly Aura", kind: "wearable", what: "Lava Pit o 20 % rychleji, 5 % hned hotová", perDay: null, basis: inPower },
+    { name: "Antique Dress", kind: "wearable", what: "hrozny o 30 % rychleji, 10 % šance +10 hroznů", perDay: null, basis: inPower },
+    { name: "Harpoon", kind: "wearable", what: "20 % šance, že nahození nespotřebuje denní pokus", perDay: null, basis: inPower },
+    { name: "Stick House", kind: "collectible", what: "expanze −25 % Oil a o 10 % rychleji (ne s Grinx's Hammer)", perDay: 0, basis: "jednorázově u expanzí" },
+    { name: "Brick House", kind: "collectible", what: "expanze −25 % Crimstone a −5 % coinů (ne s Grinx's Hammer)", perDay: 0, basis: "jednorázově u expanzí" },
+    { name: "Hercules Beetle Hat", kind: "wearable", what: "expanze −25 % Obsidian (ne s Grinx's Hammer)", perDay: 0, basis: "jednorázově u expanzí" },
+    { name: "Piggy Bank", kind: "collectible", what: "dekorace", perDay: 0, basis: "" },
+    { name: "Big Bad Wolf", kind: "collectible", what: "dekorace", perDay: 0, basis: "" },
   ];
   /*
    * ONE valuation: an item a side model prices (salt, aging, animals — core/engine/side-values.mjs)
@@ -635,6 +608,11 @@ function auctionItemValues(farm, prices, opts) {
     try { r = sideValue(it.name, sideCtx, null); } catch { r = null; }
     if (r && isFinite(r.perDay)) { it.perDay = r.perDay; it.basis = (it.basis ? it.basis + " · " : "") + "stejný výpočet jako POWER / ROADMAP"; }
   }
+  // A production boost takes POWER's marginal for it (opts.boostPerDay), the number POWER shows.
+  const bpd = opts.boostPerDay || {};
+  for (const it of items) {
+    if (it.perDay == null && it.basis === inPower && bpd[it.name] != null) { it.perDay = bpd[it.name]; it.basis = "hodnota boostu jako v POWER"; }
+  }
   return items.map((it) => ({ ...it, source: "auction", owned: hasItem(farm, it.name, it.kind),
     perYear: it.perDay == null ? null : it.perDay * 365 }));
 }
@@ -644,34 +622,22 @@ function auctionItemValues(farm, prices, opts) {
  *   hourglasses  one placed window of `hours` in which planting/chopping/mining starts at `mult`
  *                of the time (collectibleBuilt.ts, plant.ts, chop.ts, stoneMine.ts…): worth the
  *                category's net for the window × the time saved — "per use", they burn out
- *   Moon Hair    +0.5 per Celestine / Lunara / Duskberry harvest (fruitHarvested.ts), measured
- *   Astrolabe    +5 % XP eating aged fish (boosts.ts) and 15 % double spice / fermentation
- *                output (agingFormulas.ts) — the output only where it has a price
- * Monuments work only with the village's cheers (monuments.ts isMonumentActive) and give no
- * daily resource; Otty, Gourmet and Fisher's act on fishing and cooking, which the tracker does
- * not price. Those stay null with the reason.
+ *   Duende Hat   ×0.9 plot crop and fruit patch time (plant.ts, fruitPlanted.ts): the crops +
+ *                fruits net × (1/0.9 − 1)
+ * Duende Monument works only with the village's cheers (monuments.ts) and gives no daily resource;
+ * Straw House (compost), Pot of Luck (desert digging) and the Gourmet / Fisher's hourglasses act on
+ * what the tracker does not price. Those stay null with the reason. The Duende Shoes / Pants / Shirt
+ * are the chapter's +1 ticket items (ticketBonuses).
  */
 function shopItemValues(farm, prices, opts) {
-  const act = opts.activity || null;
   const catNet = opts.catNet || {};
-  const mv = (n) => (prices.marketValue || {})[n] || (prices.productionCost || {})[n] || 0;
   const ticket = currentChapter(opts.now || Date.now()).ticket;
-  let sflPerXP = 0;
-  try {
-    const sc = calcSkillPointCost(farm.bumpkin, prices.marketValue || {}, farm);
-    if (sc && sc.bestRecipe && sc.bestRecipe.boostedXP > 0) sflPerXP = sc.bestRecipe.cost / sc.bestRecipe.boostedXP;
-  } catch { sflPerXP = 0; }
   const hourglass = (name, hours, mult, cats, what) => {
     const net = cats.reduce((s, c) => s + Math.max(0, catNet[c] || 0), 0);
     return { name, kind: "consumable", what: `${what}, ${hours} h`, tickets: name === "Ore Hourglass" ? 400 : 200,
       perUse: cats.length && Object.keys(catNet).length ? net * (hours / 24) * (1 / mult - 1) : null,
       basis: Object.keys(catNet).length ? `čisté ${cats.join("+")} ${net.toFixed(1)}/den, když celé okno sázíš/těžíš` : "bez výpočtu POWER" };
   };
-  const spell = Object.fromEntries(Object.entries(GAME_FISH_SPELLING).map(([k, v]) => [v, k]));
-  const agedXpPerDay = act ? Object.entries(act.aged).reduce((s, [sp, n]) => { const b = FISH_BASE_XP[spell[sp] || sp]; return b ? s + n * getAgingMaxXP(b) : s; }, 0)
-    + Object.entries(act.prime).reduce((s, [sp, n]) => { const b = FISH_BASE_XP[spell[sp] || sp]; return b ? s + n * Math.floor(getAgingMaxXP(b) * 1.3) : s; }, 0) : 0;
-  const rackOut = act ? Object.entries(act.racks).reduce((s, [item, n]) => s + n * mv(item), 0) : 0;
-  const fm = act ? act.fullMoon || {} : {};
   const items = [
     hourglass("Harvest Hourglass", 6, 0.75, ["crops", "greenhouse"], "plodiny a skleník rostou o 25 % rychleji"),
     hourglass("Timber Hourglass", 4, 0.75, ["trees"], "stromy o 25 % rychleji"),
@@ -680,16 +646,16 @@ function shopItemValues(farm, prices, opts) {
     hourglass("Blossom Hourglass", 4, 0.75, ["flowers"], "květiny o 25 % rychleji"),
     { name: "Gourmet Hourglass", kind: "consumable", what: "vaření 2× rychleji, 4 h", tickets: 100, perUse: null, basis: "vaření tracker neoceňuje" },
     { name: "Fisher's Hourglass", kind: "consumable", what: "50 % šance +1 ryba, 4 h", tickets: 200, perUse: null, basis: "rybaření tracker neoceňuje" },
-    { name: "Moon Hair", kind: "wearable", what: "+0,5 úrody Celestine / Lunara / Duskberry", tickets: 9000,
-      perDay: act ? Object.entries(fm).reduce((s, [f, n]) => s + n * 0.5 * mv(f), 0) : null,
-      basis: act ? `${Object.values(fm).reduce((s, n) => s + n, 0).toFixed(2)} sklizní/den` : "potřebuje historii farmy" },
-    { name: "Astrolabe", kind: "collectible", what: "+5 % XP ze stárnutých ryb, 15 % dvojnásobek koření a fermentace", tickets: 9000,
-      perDay: act ? agedXpPerDay * 0.05 * sflPerXP + rackOut * 0.15 : null,
-      basis: act ? `${Math.round(agedXpPerDay)} XP/den z ryb; výstupy regálů jen s cenou (${rackOut.toFixed(2)}/den)` : "potřebuje historii farmy" },
-    { name: "Ascension Monument", kind: "collectible", what: "expanze se staví o 20 % rychleji (s 1000 fandy vesnice)", tickets: 4000, perDay: 0, basis: "žádný denní výnos" },
-    { name: "Cornucopia", kind: "collectible", what: "+1 obří ovoce z vesnických projektů (s 1000 fandy)", tickets: 9000, perDay: null, basis: "závisí na projektech vesnice" },
-    { name: "Teamwork Monument", kind: "collectible", what: "+1 pomoc denně (se 100 fandy)", tickets: 6000, perDay: null, basis: "pomoc tracker neoceňuje" },
-    { name: "Otty the Otter", kind: "collectible", what: "+5 nahození denně, každé 15. ryba navíc", tickets: null, price: "250 Otter Pebble", perDay: null, basis: "rybaření tracker neoceňuje" },
+    // Cave Dwellers megastore (megastore.ts)
+    { name: "Duende Hat", kind: "wearable", what: "plodiny na polích a ovoce rostou o 10 % rychleji", tickets: 9000,
+      perDay: Object.keys(catNet).length ? (Math.max(0, catNet.crops || 0) + Math.max(0, catNet.fruits || 0)) * (1 / 0.9 - 1) : null,
+      basis: Object.keys(catNet).length ? `čisté crops+fruits ${(Math.max(0, catNet.crops || 0) + Math.max(0, catNet.fruits || 0)).toFixed(1)}/den × 11 %` : "bez výpočtu POWER" },
+    { name: "Straw House", kind: "collectible", what: "kompostér o 10 % rychleji, 3× základní kompost a červi", tickets: 9000, perDay: null, basis: "compost tracker oceňuje jen u skillů" },
+    { name: "Duende Monument", kind: "collectible", what: "expanze −10 % surovin (ne s Grinx's Hammer) a o 10 % rychleji (s 1000 fandy vesnice)", tickets: 4000, perDay: 0, basis: "žádný denní výnos" },
+    { name: "Pot of Luck", kind: "collectible", what: "1/3 šance na poklad navíc v poušti", tickets: null, price: "250 Clover Coin", perDay: null, basis: "kopání tracker neoceňuje" },
+    { name: "Duende Shoes", kind: "wearable", what: "+1 Duende Cap za chore, dodávku i bounty", tickets: null, price: "5,000 coins", perDay: null, basis: "viz bonusy ticketů" },
+    { name: "Duende Pants", kind: "wearable", what: "+1 Duende Cap za chore, dodávku i bounty", tickets: null, price: "10 FLOWER", perDay: null, basis: "viz bonusy ticketů" },
+    { name: "Duende Shirt", kind: "wearable", what: "+1 Duende Cap za chore, dodávku i bounty", tickets: null, price: "50 FLOWER", perDay: null, basis: "viz bonusy ticketů" },
   ];
   // An hourglass burns out, so having some is no reason not to buy more: count them instead.
   return items.map((it) => ({ ...it, source: "shop",

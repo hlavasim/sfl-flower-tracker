@@ -248,6 +248,7 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
         "Trees": ["trees"],
         "Bees & Flowers": ["bees", "flowers"],
         "Cooking": ["cooking"],
+        "Cave": ["cave"],
       };
       const treeCats = TREE_TO_CATS[skill.tree];
       if (treeCats) {

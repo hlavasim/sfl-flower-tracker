@@ -185,6 +185,7 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
       "Greenhouse":     { 2: 2, 3: 5 },
       "Machinery":      { 2: 2, 3: 5 },
       "Aging":          { 2: 3, 3: 7 },
+      "Cave":           { 2: 3, 3: 6 },
     };
 
     // ── flowers.html 4322-4489: SKILL_TREE_DATA ──
@@ -355,6 +356,22 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
       "Sea Blessed":        { tree: "Aging", points: 2, tier: 2, buff: "Bonus Salt", debuff: null },
       "Ager":               { tree: "Aging", points: 3, tier: 3, buff: "Aging Shed bonus", debuff: null },
       "Salt Surge":         { tree: "Aging", points: 3, tier: 3, buff: "Instant Salt surge", debuff: null, power: true },
+      // ── Cave (Cave Dwellers, bumpkinSkills.ts) ──
+      "Lean Compost":       { tree: "Cave", points: 1, tier: 1, buff: "-5% Myco Bin batch ingredients", debuff: null },
+      "Rapid Mycelium":     { tree: "Cave", points: 1, tier: 1, buff: "-5% Myco Bin batch time", debuff: null },
+      "Mushroom Bloom":     { tree: "Cave", points: 1, tier: 1, buff: "+1 Mushroom tile per Cave patch", debuff: null },
+      "Muddy Bounty":       { tree: "Cave", points: 1, tier: 1, buff: "+10% Mud per Cave Mud tile", debuff: null },
+      "Sturdy Shovel":      { tree: "Cave", points: 1, tier: 1, buff: "10% chance a Cave dig keeps its Sand Shovel", debuff: null },
+      "Fungal Harvest":     { tree: "Cave", points: 2, tier: 2, buff: "+0.2 Mushrooms per Cave Mushroom tile", debuff: null },
+      "Beetle Nest":        { tree: "Cave", points: 2, tier: 2, buff: "+1 Beetle tile per Beetle-recipe patch", debuff: null },
+      "Sturdy Drill":       { tree: "Cave", points: 2, tier: 2, buff: "20% chance a Cave drill keeps its Sand Drill", debuff: null },
+      "Tool Hoarder":       { tree: "Cave", points: 2, tier: 2, buff: "+25 Sand Shovel and +5 Sand Drill stock", debuff: null },
+      "Rare Breeds":        { tree: "Cave", points: 3, tier: 3, buff: "Rarer Cave Beetles", debuff: null },
+      "Twin Beetles":       { tree: "Cave", points: 3, tier: 3, buff: "5% chance of +1 Beetle", debuff: null },
+      // ── Pigs (Animals tree, Cave Dwellers) ──
+      "Truffle Yield":      { tree: "Animals", points: 2, tier: 2, buff: "+10% Truffles", debuff: null },
+      "Swill Savvy":        { tree: "Animals", points: 3, tier: 3, buff: "-25% Pig feed", debuff: "+50% feed for every other animal" },
+      "Bristle Payout":     { tree: "Animals", points: 3, tier: 3, buff: "+10% Pig Bristles", debuff: null },
     };
 
     // ── flowers.html 4633-4637: CROP_TIERS ──
@@ -495,6 +512,8 @@ import { detectCookingBoosts, computeFoodXP } from "./cooking.mjs";
       machine:    { label: "CROP MACHINE",  emoji: "⚙️", selector: null, quantifiable: false, side: true },
       power:      { label: "POWER SKILLS",  emoji: "⚡", selector: null, quantifiable: false, side: true },
       xp:         { label: "BUMPKIN XP",    emoji: "⭐", selector: null, quantifiable: false, side: true },
+      pigs:       { label: "PIGS",          emoji: "🐖", selector: null, quantifiable: false, side: true },
+      cave:       { label: "CAVE",          emoji: "🍄", selector: null, quantifiable: false, side: true },
       // Qualitative
       pets:       { label: "PETS",          emoji: "🐾", selector: null, quantifiable: false },
       cooking:    { label: "COOKING / XP",  emoji: "🍳", selector: null, quantifiable: false },

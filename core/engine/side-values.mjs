@@ -164,6 +164,7 @@ function primeChance(ctx, st) {
 function agingSpeed(ctx, st) {
   let t = lvl(st, "Speedy Aging") ? rank(SPEEDY_AGING, lvl(st, "Speedy Aging")) : 1;
   if (sculptLevel(ctx) >= 5) t *= 0.95;
+  if (on(st, "Fish Trap")) t *= 0.8;          // agingFormulas.ts
   return 1 / t;
 }
 /** Aged fish a day by species, as measured (plain + Prime), at the farm's current setup. */
@@ -309,7 +310,8 @@ function powerSkillNet(name) {
  * ALL food are here: the per-food ones (cakes, fish, deli…) need the food mix, which the snapshots
  * no longer carry (bumpkin.activity is empty).
  */
-const XP_ITEMS = { "Observatory": 1.05, "Golden Spatula": 1.1, "Pan": 1.25 };
+// Giant Truffle is ×1.3 on non-fish food (×1.6 on Smoothie Shack / Deli food, not counted).
+const XP_ITEMS = { "Observatory": 1.05, "Golden Spatula": 1.1, "Pan": 1.25, "Giant Truffle": 1.3 };
 const MUNCHING = [0.05, 0.075, 0.1];
 function xpMult(st) {
   let m = 1;
@@ -322,6 +324,241 @@ function xpNet(ctx, st) {
   if (!(x > 0) || !(ctx.sflPerXP > 0)) return 0;
   const unboosted = x / xpMult(sideState(ctx));
   return unboosted * xpMult(st) * ctx.sflPerXP;
+}
+
+/* ── PIGS and the CAVE (Cave Dwellers; game source 2026-11-02) ─────────────────────────── */
+
+/*
+ * A Pig sleeps 24 h (feedAnimal.ts) and, fed back to "ready", gives Truffles by level
+ * (types/animals.ts). Like the other animals here, a cycle needs the XP to the next level
+ * (Cow thresholds) and every feed is one Slop of the level's favourite tier (or a cheaper one
+ * per XP); a Slop costs ONE of its crops in the listed amount (types/pigFeeds.ts). Pig Bristles
+ * only come from trading a pig in, so they are not daily income.
+ *
+ * The Cave's Myco Bins dig a 25-tile patch every 12 h (types/caveRecipes.ts, cavePatch.ts).
+ * Nothing it gives trades yet (Mud never will — tradeLimits.ts), so its outputs are valued by
+ * what they replace on THIS farm: a Beetle is that much animal-feed XP, a Wild / Magic Mushroom
+ * is one Rich / Gourmet Slop, and Mud is the feed a Mud coat saves (×1.25 feed XP for one claim,
+ * 25 Mud; two claims with Vibraphone) — only as much Mud as the farm's pigs can use.
+ * A Truffle is its p2p price once it trades, else what its best recipe pays in XP over the
+ * other ingredients (consumables.ts), at the farm's FLOWER per XP.
+ */
+const PIG_LEVELS = [0, 180, 360, 720, 1080, 1440, 1980, 2520, 3060, 3600, 4320, 5040, 5760, 6480, 7200, 8160];
+const PIG_TRUFFLES = [0, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 4];
+const SLOP_XP = [   // [from level, XP of Basic / Hearty / Rich / Gourmet]
+  [0, { "Basic Slop": 60, "Hearty Slop": 10, "Rich Slop": 20, "Gourmet Slop": 30 }],
+  [3, { "Basic Slop": 10, "Hearty Slop": 60, "Rich Slop": 20, "Gourmet Slop": 30 }],
+  [6, { "Basic Slop": 10, "Hearty Slop": 20, "Rich Slop": 60, "Gourmet Slop": 30 }],
+  [10, { "Basic Slop": 10, "Hearty Slop": 20, "Rich Slop": 30, "Gourmet Slop": 80 }],
+];
+const SLOP_CROPS = {
+  "Basic Slop": { Sunflower: 800, Potato: 150, Rhubarb: 100, Pumpkin: 60, Zucchini: 60, Carrot: 25, Yam: 25, Cabbage: 15, Broccoli: 15, Soybean: 9 },
+  "Hearty Slop": { Beetroot: 15, Pepper: 15, Cauliflower: 8, Parsnip: 5, Tomato: 20, Lemon: 4, Blueberry: 4 },
+  "Rich Slop": { Eggplant: 6, Wheat: 6, Turnip: 6, Corn: 5, Onion: 5, Radish: 5, Kale: 4, Artichoke: 4, Barley: 3, Orange: 3, Apple: 2, Banana: 2 },
+  "Gourmet Slop": { Rice: 1, Olive: 1, Grape: 1, Celestine: 1, Lunara: 1, Duskberry: 1 },
+};
+const MUD_COAT = 25;                 // lib/animals.ts MUD_COAT_COST, one claim (Vibraphone: two)
+const MUD_XP = 1.25;
+const TRUFFLE_RECIPES = [            // consumables.ts
+  { truffles: 1, xp: 1000, other: { Potato: 30 } },                               // Ember-Roasted Truffle Potatoes
+  { truffles: 15, xp: 30000, other: { Wheat: 30, Egg: 30, Honey: 5 } },           // Truffle Cake
+  { truffles: 8, xp: 32000, other: { Rice: 3, "Wild Mushroom": 5 } },             // Creamy Truffle Risotto
+];
+const CATTLEGRIM = 0.25, BARN_MANAGER = 0.1;
+const TRUFFLE_YIELD = [1.1, 1.2, 1.3];
+const SWILL_SAVVY = [0.75, 0.65, 0.5], SWILL_DEBUFF = [1.5, 1.55, 1.65];
+
+const CAVE_BATCH_H = 12;
+const CAVE_TILES = 25;
+const CAVE_RECIPES = {               // caveRecipes.ts
+  Mushroom: { mush: 6, beetle: 2, mud: 17, mudX: 1, input: { Wood: 10 } },
+  Beetle: { mush: 3, beetle: 5, mud: 17, mudX: 1, input: { Egg: 30 } },
+  Mud: { mush: 3, beetle: 2, mud: 20, mudX: 2, input: null },
+};
+const CAVE_MUD_CROPS = { Sunflower: 500, Potato: 80, Rhubarb: 40, Pumpkin: 20, Zucchini: 20, Carrot: 10, Yam: 10, Cabbage: 5,
+  Broccoli: 5, Soybean: 3, Beetroot: 3, Pepper: 3, Cauliflower: 2, Parsnip: 2, Eggplant: 2, Corn: 2, Onion: 2, Wheat: 2, Turnip: 2,
+  Radish: 2, Kale: 2, Artichoke: 2, Barley: 2, Rice: 1, Olive: 1 };
+const BEETLE_XP = { "Green Beetle": 100, "Blue Beetle": 200, "Pink Beetle": 400, "Amber Beetle": 800 };
+const BEETLE_ODDS = [{ "Green Beetle": 40, "Blue Beetle": 30, "Pink Beetle": 20, "Amber Beetle": 10 },
+  { "Green Beetle": 35, "Blue Beetle": 35, "Pink Beetle": 15, "Amber Beetle": 15 },     // Rare Breeds 1-3
+  { "Green Beetle": 30, "Blue Beetle": 30, "Pink Beetle": 20, "Amber Beetle": 20 },
+  { "Green Beetle": 25, "Blue Beetle": 25, "Pink Beetle": 25, "Amber Beetle": 25 }];
+const SAND_SHOVEL = { coins: 20, Wood: 2, Stone: 1 };                                    // tools.ts, 1 tile
+const SAND_DRILL = { coins: 40, Oil: 1, Crimstone: 1, Wood: 3, Leather: 1 };            // 2×2 = 4 tiles
+const CAVE_SKILLS = {
+  "Lean Compost": [0.95, 0.9, 0.85], "Rapid Mycelium": [0.95, 0.9, 0.85], "Mushroom Bloom": [1, 2, 3],
+  "Muddy Bounty": [1.1, 1.2, 1.3], "Sturdy Shovel": [0.1, 0.2, 0.3], "Fungal Harvest": [0.2, 0.3, 0.4],
+  "Beetle Nest": [1, 2, 3], "Sturdy Drill": [0.2, 0.3, 0.4], "Tool Hoarder": [0, 0, 0], "Rare Breeds": [1, 2, 3],
+  "Twin Beetles": [0.05, 0.1, 0.15],
+};
+const cs = (st, name, dflt) => (lvl(st, name) ? rank(CAVE_SKILLS[name], lvl(st, name)) : dflt);
+
+/** FLOWER for a bundle of coins and items; Infinity when an item has no price (it cannot be the cheap route). */
+function bundleCost(ctx, b) {
+  const pr = ctx.prices || {};
+  let v = 0;
+  for (const [k, q] of Object.entries(b)) {
+    if (k === "coins") { if (!ctx.coinsFree && ctx.coinsPerSFL > 0) v += q / ctx.coinsPerSFL; continue; }
+    if (!(pr[k] > 0)) return Infinity;
+    v += q * pr[k];
+  }
+  return v;
+}
+/** The cheapest crop route to one Slop (crops without a price are skipped). */
+function slopCost(ctx, slop) {
+  const pr = ctx.prices || {};
+  let best = Infinity;
+  for (const [crop, q] of Object.entries(SLOP_CROPS[slop])) if (pr[crop] > 0) best = Math.min(best, q * pr[crop]);
+  return isFinite(best) ? best : 0;
+}
+function pigLevel(xp) { let l = 0; for (let i = 0; i < PIG_LEVELS.length; i++) if (xp >= PIG_LEVELS[i]) l = i; return l; }
+/** Levels of the farm's pigs (farm.pigpen.animals). */
+export function farmPigs(farm) {
+  return Object.values((farm && farm.pigpen && farm.pigpen.animals) || {}).filter((a) => a && a.type === "Pig")
+    .map((a) => pigLevel(Number(a.experience) || 0));
+}
+/** One claim's feed for a pig at `level`: the cheapest Slop per XP, at the state's XP and feed multipliers. */
+function pigFeed(ctx, st, level, xpMult) {
+  const need = level >= 15 ? PIG_LEVELS[15] - PIG_LEVELS[14] : PIG_LEVELS[level + 1] - PIG_LEVELS[level];
+  const row = SLOP_XP.filter(([from]) => level >= from).pop()[1];
+  const qty = lvl(st, "Swill Savvy") ? rank(SWILL_SAVVY, lvl(st, "Swill Savvy")) : 1;
+  let best = Infinity;
+  for (const [slop, xp] of Object.entries(row)) {
+    const c = slopCost(ctx, slop);
+    if (!(c > 0)) continue;
+    best = Math.min(best, Math.ceil(need / (xp * xpMult)) * qty * c);
+  }
+  return isFinite(best) ? best : 0;
+}
+function pigXpMult(st) { return on(st, "Pig Onesie") ? 1.05 : 1; }
+/**
+ * FLOWER for one Truffle: its p2p price, else its best recipe's XP over the other ingredients.
+ * ctx.sflPerXP is per BOOSTED XP (the skill-point price), so the recipe's XP takes the farm's
+ * own food-XP boost (ctx.xpBoost, boostedXP / xp of that recipe).
+ */
+export function truffleValue(ctx) {
+  const pr = ctx.prices || {};
+  if (pr["Truffle"] > 0) return pr["Truffle"];
+  if (!(ctx.sflPerXP > 0)) return 0;
+  const wild = slopCost(ctx, "Rich Slop");
+  let best = 0;
+  for (const r of TRUFFLE_RECIPES) {
+    const other = Object.entries(r.other).reduce((t, [k, q]) => t + q * (k === "Wild Mushroom" ? wild : (pr[k] || 0)), 0);
+    best = Math.max(best, (r.xp * (ctx.xpBoost || 1) * ctx.sflPerXP - other) / r.truffles);
+  }
+  return best;
+}
+function trufflesPerClaim(st, level) {
+  let t = PIG_TRUFFLES[level] || 0;
+  if (!t) return 0;
+  if (on(st, "Cattlegrim")) t += CATTLEGRIM;
+  if (lvl(st, "Barn Manager")) t += BARN_MANAGER;
+  if (lvl(st, "Truffle Yield")) t *= rank(TRUFFLE_YIELD, lvl(st, "Truffle Yield"));
+  return t;
+}
+/** One pig's day at `level` (1 claim): Truffles less its uncoated feed. */
+export function pigDay(ctx, st, level) {
+  const truffles = trufflesPerClaim(st, level);
+  const feed = pigFeed(ctx, st, level, pigXpMult(st));
+  return { truffles, feed, net: truffles * truffleValue(ctx) - feed };
+}
+function pigsNet(ctx, st) {
+  const pigs = farmPigs(ctx.farm);
+  let v = pigs.reduce((t, l) => t + pigDay(ctx, st, l).net, 0);
+  // Swill Savvy's debuff: every other animal eats ×1.5 / 1.55 / 1.65.
+  if (lvl(st, "Swill Savvy") && ctx.catGain) {
+    const d = rank(SWILL_DEBUFF, lvl(st, "Swill Savvy")) - 1;
+    for (const cat of ["chickens", "cows", "sheep"]) v += ctx.catGain(cat, [{ type: "feed_reduction", value: d, cat, raw: `Swill Savvy: +${Math.round(d * 100)}% feed` }]) || 0;
+  }
+  return v;
+}
+
+/** What a Mud coat saves per Mud on each pig (×1.25 feed XP for one claim), and the Mud a day they can use. */
+function mudUse(ctx, st) {
+  const perClaim = MUD_COAT / (on(st, "Vibraphone") ? 2 : 1);
+  const m = pigXpMult(st);
+  let need = 0, saving = 0;
+  for (const l of farmPigs(ctx.farm)) {
+    const s = pigFeed(ctx, st, l, m) - pigFeed(ctx, st, l, m * MUD_XP);
+    if (s > 0) { need += perClaim; saving += s; }
+  }
+  return { need, perMud: need > 0 ? saving / need : 0 };
+}
+/** The farm's FLOWER per animal-feed XP — a Beetle's worth per XP (its pigs' favourite Slop, else Basic Slop). */
+function feedPerXP(ctx) {
+  const pigs = farmPigs(ctx.farm);
+  const lvls = pigs.length ? pigs : [0];
+  let t = 0;
+  for (const l of lvls) {
+    const row = SLOP_XP.filter(([from]) => l >= from).pop()[1];
+    let best = Infinity;
+    for (const [slop, xp] of Object.entries(row)) { const c = slopCost(ctx, slop); if (c > 0) best = Math.min(best, c / xp); }
+    t += isFinite(best) ? best : 0;
+  }
+  return t / lvls.length;
+}
+/** One Myco Bin batch of `recipe`: what it gives and costs, with the state's cave skills. */
+export function caveBatch(ctx, st, recipe, mudValue) {
+  const r = CAVE_RECIPES[recipe];
+  const pr = ctx.prices || {};
+  const bloom = cs(st, "Mushroom Bloom", 0), nest = recipe === "Beetle" ? cs(st, "Beetle Nest", 0) : 0;
+  const mushT = r.mush + bloom, beetleT = r.beetle + nest, mudT = Math.max(0, CAVE_TILES - mushT - beetleT);
+  const mushrooms = mushT * (1 + cs(st, "Fungal Harvest", 0));
+  const beetles = beetleT * (1 + cs(st, "Twin Beetles", 0));
+  const odds = BEETLE_ODDS[lvl(st, "Rare Breeds") ? Math.min(3, lvl(st, "Rare Breeds")) : 0];
+  const beetleXp = Object.entries(odds).reduce((t, [b, p]) => t + (p / 100) * BEETLE_XP[b], 0);
+  const mud = mudT * r.mudX * cs(st, "Muddy Bounty", 1);
+  let input = 0;
+  if (r.input) { input = bundleCost(ctx, r.input); if (!isFinite(input)) input = 0; }
+  else {
+    let best = Infinity;
+    for (const [crop, q] of Object.entries(CAVE_MUD_CROPS)) if (pr[crop] > 0) best = Math.min(best, q * pr[crop]);
+    input = isFinite(best) ? best : 0;
+  }
+  input *= cs(st, "Lean Compost", 1);
+  const shovel = bundleCost(ctx, SAND_SHOVEL) * (1 - cs(st, "Sturdy Shovel", 0));
+  const drill = (bundleCost(ctx, SAND_DRILL) / 4) * (1 - cs(st, "Sturdy Drill", 0));
+  const perTile = Math.min(shovel, drill);
+  const dig = CAVE_TILES * (isFinite(perTile) ? perTile : 0);
+  const gross = mushrooms * (0.9 * slopCost(ctx, "Rich Slop") + 0.1 * slopCost(ctx, "Gourmet Slop"))
+    + beetles * beetleXp * feedPerXP(ctx) + mud * (mudValue || 0);
+  return { recipe, mushrooms, beetles, beetleXp, mud, input, dig, gross, net: gross - input - dig };
+}
+/** Myco Bins on the farm: one per cave tier (types/caveTiers.ts). */
+export function farmBins(farm) {
+  const c = farm && farm.cave;
+  if (!c) return 0;
+  return Math.max(Object.keys(c.machines || {}).length, Number(c.tier) || 0);
+}
+/** The cave's day: each bin runs its best recipe; Mud is worth its coat saving only up to what the pigs use. */
+export function caveDay(ctx, st, bins) {
+  const n = bins != null ? bins : farmBins(ctx.farm);
+  const per = DAY_MS / (CAVE_BATCH_H * 3600000 * cs(st, "Rapid Mycelium", 1));
+  let { need, perMud } = mudUse(ctx, st);
+  const out = [];
+  let net = 0;
+  for (let i = 0; i < n; i++) {
+    let best = null;
+    for (const rec of Object.keys(CAVE_RECIPES)) {
+      const b = caveBatch(ctx, st, rec, 0);
+      const mudPerDay = b.mud * per;
+      const useful = Math.min(mudPerDay, Math.max(0, need));
+      const dayNet = b.net * per + useful * perMud;
+      if (!best || dayNet > best.dayNet) best = { ...b, dayNet, mudUsed: useful };
+    }
+    need -= best.mudUsed;
+    net += best.dayNet;
+    out.push(best);
+  }
+  return { net, bins: out, batchesPerDay: per };
+}
+function caveNet(ctx, st) { return caveDay(ctx, st).net; }
+
+/** Pigs and cave as the farm stands — YOUR INCOME rows. */
+export function sideCavePigsNow(ctx) {
+  const st = sideState(ctx);
+  const pigs = farmPigs(ctx.farm);
+  return { pigs: pigs.map((l) => ({ level: l, ...pigDay(ctx, st, l) })), pigsNet: pigsNet(ctx, st), truffleValue: truffleValue(ctx), cave: caveDay(ctx, st) };
 }
 
 /* ── registry ──────────────────────────────────────────────────────────────────────────── */
@@ -355,6 +592,7 @@ export const SIDE_MODELS = {
   "Refiner": { cat: "aging", net: agingAll, skill: true, maxLevel: 3 },
   "Bacalhau": { cat: "aging", net: agingAll, skill: true, maxLevel: 3 },
   "Alchemist Apron": { cat: "aging", net: potionNet },
+  "Fish Trap": { cat: "aging", net: agingAll },
   // crop machine
   ...Object.fromEntries(MACHINE_SKILLS.map((n) => [n, { cat: "machine", net: machineNet, skill: true, maxLevel: /^Crop Extension/.test(n) ? 1 : 3 }])),
   // bumpkin XP
@@ -362,6 +600,15 @@ export const SIDE_MODELS = {
   "Golden Spatula": { cat: "xp", net: xpNet },
   "Pan": { cat: "xp", net: xpNet },
   "Munching Mastery": { cat: "xp", net: xpNet, skill: true, maxLevel: 3 },
+  "Giant Truffle": { cat: "xp", net: xpNet },
+  // pigs — Truffles less feed, on the farm's own pigs
+  "Truffle Yield": { cat: "pigs", net: pigsNet, skill: true, maxLevel: 3 },
+  "Swill Savvy": { cat: "pigs", net: pigsNet, skill: true, maxLevel: 3 },
+  "Pig Onesie": { cat: "pigs", net: pigsNet },
+  "Cattlegrim": { cat: "pigs", net: pigsNet },
+  "Barn Manager": { cat: "pigs", net: pigsNet, skill: true, maxLevel: 1 },
+  // cave — the Myco Bins' day
+  ...Object.fromEntries(Object.keys(CAVE_SKILLS).filter((n) => n !== "Tool Hoarder").map((n) => [n, { cat: "cave", net: caveNet, skill: true, maxLevel: 3 }])),
   // power skills — "if you use it every time the cooldown is up"
   ...Object.fromEntries(Object.keys(POWER_SKILLS).map((n) => [n, { cat: "power", net: powerSkillNet(n), skill: true, maxLevel: 3, power: true }])),
 };
@@ -385,10 +632,16 @@ const NO_VALUE = [
   [["Turd Topper", "Soil Krabby", "Knowledge Crab", "Feathery Business", "Composting Bonanza", "Composting Revamp", "Composting Overhaul"],
     "compost — denní hodnotu má jen část compost skillů (u ostatních záleží, jak často boostuješ)"],
   [["Kale Mix", "Alternate Medicine", "Barn Blueprint", "Oil Rig"], "mění recept nebo kapacitu zvířat — zatím neoceněno"],
+  [["Straw House"], "compost — denní hodnotu má jen část compost skillů (u ostatních záleží, jak často boostuješ)"],
+  [["Bristle Payout"], "Pig Bristles jsou jen z výměny prasete (trade-in) — žádný denní výnos"],
+  [["Tool Hoarder"], "jen větší zásoba lopat a vrtáků — výnos nemění, ušetří restock"],
+  [["Cyclops Bloom", "Pot of Luck"], "rychlejší Fish Market / poklady v poušti — tracker tyhle činnosti zatím neoceňuje"],
   [["Rooster", "Carrot Sword"], "šance na mutanta — náhodný drop bez tržní ceny"],
   [["Bee Collective", "Hornet Mask"], "šance na roj včel — jak často roj přijde, rozhoduje server"],
   [["Loyal Macaw", "Pear Turbocharge", "Gnome"], "zdvojí efekt jiného předmětu — zatím neoceněno"],
   [["Golden Sunflower"], "šance na zlato při sklizni slunečnic — zatím neoceněno"],
+  [["Stick House", "Brick House", "Hercules Beetle Hat", "Duende Monument", "Spooky Bed"],
+    "levnější / rychlejší expanze nebo farmhand navíc — jednorázový efekt, žádný denní výnos"],
   [["Grinx's Hammer", "Ascension Monument", "Architect Ruler", "Sol & Luna", "Dino Egg Trophy", "Genie Lamp", "Christmas Tree", "Lunar Temple", "Blossom Bonding"],
     "jednorázový nebo nepeněžní efekt — žádný denní výnos"],
 ];
@@ -411,6 +664,8 @@ export const SIDE_CATS = {
   machine: { label: "CROP MACHINE", emoji: "⚙️" },
   power: { label: "POWER SKILLS", emoji: "⚡" },
   xp: { label: "BUMPKIN XP", emoji: "⭐" },
+  pigs: { label: "PIGS", emoji: "🐖" },
+  cave: { label: "CAVE", emoji: "🍄" },
 };
 
 /** What the item adds at `level` (skills) / when active (items) vs without it, everything else as the farm has it. */

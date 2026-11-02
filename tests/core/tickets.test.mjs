@@ -93,21 +93,21 @@ test("animal bounties cost the feed to raise a replacement plus the slot's outpu
 
 test("a lot is priced at today's floor after the fee, a joke floor falls back to the last sale", () => {
   const d = buildTicketsSection(farm(), prices, { now: NOW, floors: {
-    "Obsidian Turtle": { floor: 5300, lastSalePrice: 4800 }, "Crab House": { floor: 99999999999999, lastSalePrice: 1752 } } });
-  const turtle = d.auction.lots.find((l) => l.name === "Obsidian Turtle");
-  assert.ok(Math.abs(turtle.perTicket - 5300 * 0.9 / 13085) < 1e-9);
-  const house = d.auction.lots.find((l) => l.name === "Crab House");
-  assert.equal(house.floor, 0); assert.equal(house.value, 1752);
+    "Salt Worker Gnome": { floor: 2488, lastSalePrice: 2200 }, "Rice Shirt": { floor: 99999999999999, lastSalePrice: 1200 } } });
+  const gnome = d.auction.lots.find((l) => l.name === "Salt Worker Gnome");
+  assert.ok(Math.abs(gnome.perTicket - 2488 * 0.9 / 13412) < 1e-9);
+  const shirt = d.auction.lots.find((l) => l.name === "Rice Shirt");
+  assert.equal(shirt.floor, 0); assert.equal(shirt.value, 1200);
 });
 
 test("plans count the weeks to the auction, not the whole chapter, and say which lots the board cannot reach", () => {
-  const d = buildTicketsSection(farm(), prices, { now: NOW, floors: { "Obsidian Turtle": { floor: 5300 }, "Fat Crab": { floor: 6 } } });
+  const d = buildTicketsSection(farm(), prices, { now: NOW, floors: { "Salt Worker Gnome": { floor: 2488 }, "Salt Rug": { floor: 6 } } });
   const max = d.plans[d.plans.length - 1];
   assert.equal(max.atAuction, Math.round(max.ticketsPerWeek * 8 + d.track));
-  const turtle = d.perLot.find((l) => l.name === "Obsidian Turtle");
-  assert.equal(turtle.reachable, false);
-  assert.ok(turtle.shortPerWeek > 0);
-  assert.equal(d.perLot.find((l) => l.name === "Fat Crab").reachable, true);
+  const gnome = d.perLot.find((l) => l.name === "Salt Worker Gnome");
+  assert.equal(gnome.reachable, false);
+  assert.ok(gnome.shortPerWeek > 0);
+  assert.equal(d.perLot.find((l) => l.name === "Salt Rug").reachable, true);
   // This chapter: 4,000 collected over ~7.3 weeks, auction in ~0.8 weeks.
   assert.equal(d.thisAuction.at, Date.UTC(2026, 9, 5));
   assert.ok(d.thisAuction.ticketsExpected > 4000 && d.thisAuction.ticketsExpected < 4600);
@@ -161,35 +161,36 @@ test("measured activity: per-day rates from the weekly counters, species kept ap
   assert.equal(measuredActivity([wk(NOW, {}, {})]), null, "one snapshot measures nothing");
 });
 
-test("auction items: Ascended Idol saves the rakes, Salt Worker Gnome adds salt, owned items are marked", async () => {
+test("auction items (Cave Dwellers): production boosts are POWER's, expansion items earn nothing a day, owned items are marked", async () => {
   const { auctionItemValues } = await import("../../core/sections/tickets.mjs");
-  const p = { marketValue: { Salt: 0.004, Wood: 0.012 }, productionCost: {} };
-  const f = farm({ saltFarm: { nodes: { 0: {}, 1: {} } }, wardrobe: { "Rice Shirt": 1 } });
-  const act = { saltHarvests: 10, potionGames: 1, aged: {}, prime: {}, racks: {}, from: "a", to: "b" };
-  const items = auctionItemValues(f, p, { coinsPerSFL: 1500, activity: act });
+  const p = { marketValue: { Wood: 0.012 }, productionCost: {} };
+  const f = farm({ wardrobe: { "Harpoon": 1 } });
+  const items = auctionItemValues(f, p, { coinsPerSFL: 1500 });
   const by = (n) => items.find((i) => i.name === n);
-  const rake = 20 / 1500 + 3 * 0.012;
-  assert.ok(Math.abs(by("Ascended Idol").perDay - 10 * rake) < 1e-9);
-  const more = 10 * (1 / 0.7 - 1);
-  assert.ok(Math.abs(by("Salt Worker Gnome").perDay - ((more * 12 + 20) * 0.004 - more * rake)) < 1e-9);
-  assert.ok(Math.abs(by("Alchemist Apron").perDay - 160 / 1500) < 1e-9);
-  assert.equal(by("Rice Shirt").owned, true);
-  // Without history the aging items cannot be priced — null, not 0.
-  const bare = auctionItemValues(f, p, { coinsPerSFL: 1500 });
-  assert.equal(bare.find((i) => i.name === "Surfer Hair").perDay, null);
-  assert.ok(bare.find((i) => i.name === "Ascended Idol").perDay > 0, "salt still priced from the nodes");
+  assert.deepEqual(items.map((i) => i.name).sort(), ["Antique Dress", "Big Bad Wolf", "Brick House", "Firefly Aura", "Giant Truffle",
+    "Harpoon", "Hercules Beetle Hat", "Piggy Bank", "Stick House"]);
+  assert.equal(by("Firefly Aura").perDay, null, "a lava-pit boost: valued in POWER, not here");
+  const withPower = auctionItemValues(f, p, { coinsPerSFL: 1500, boostPerDay: { "Firefly Aura": 0.4 } });
+  assert.equal(withPower.find((i) => i.name === "Firefly Aura").perDay, 0.4, "…and takes POWER's marginal when it is passed");
+  assert.equal(by("Stick House").perDay, 0, "cheaper expansions: no daily income");
+  assert.equal(by("Harpoon").owned, true);
+  // Without history the XP item cannot be priced — null, not 0.
+  assert.equal(by("Giant Truffle").perDay, null);
+  assert.ok(items.every((i) => i.source === "auction"));
 });
 
 test("shop: an hourglass is worth its category's net over the window × the time saved, per use", async () => {
   const { shopItemValues } = await import("../../core/sections/tickets.mjs");
-  const items = shopItemValues(farm(), prices, { now: NOW, catNet: { stone: 10, iron: 8, gold: 6, crops: 24, greenhouse: 0 } });
+  const items = shopItemValues(farm(), prices, { now: Date.UTC(2026, 10, 3), catNet: { stone: 10, iron: 8, gold: 6, crops: 24, fruits: 6, greenhouse: 0 } });
   const by = (n) => items.find((i) => i.name === n);
   assert.ok(Math.abs(by("Ore Hourglass").perUse - 24 * (3 / 24) * 1) < 1e-9, "3 h at ×0.5 = 3 h of stone+iron+gold output saved");
   assert.ok(Math.abs(by("Harvest Hourglass").perUse - 24 * (6 / 24) * (1 / 0.75 - 1)) < 1e-9);
   assert.equal(by("Ore Hourglass").tickets, 400);
-  assert.equal(by("Ascension Monument").perDay, 0, "no daily income");
-  assert.equal(by("Cornucopia").perDay, null);
-  assert.equal(by("Otty the Otter").price, "250 Otter Pebble");
+  assert.ok(Math.abs(by("Duende Hat").perDay - 30 * (1 / 0.9 - 1)) < 1e-9, "×0.9 on plots and fruit patches");
+  assert.equal(by("Duende Hat").price, "9,000 Duende Cap");
+  assert.equal(by("Duende Monument").perDay, 0, "no daily income");
+  assert.equal(by("Straw House").perDay, null);
+  assert.equal(by("Pot of Luck").price, "250 Clover Coin");
 });
 
 test("chores: progress from the game's own counter, what is left, and a daily share to the Monday reset", async () => {
@@ -246,5 +247,14 @@ test("auction schedule: 13 items, 5 rounds 5 h apart, next round and value from 
   assert.strictEqual(q.resale, 5400);                    // floor after the 10 % fee
   assert.strictEqual(s.find((i) => i.name === "Tomato Clown").resale, 540);   // no floor → last sale
   assert.strictEqual(rug.resale, null);
-  assert.strictEqual(s.find((i) => i.name === "Coat Rack").perDay, 0);   // decoration
+  assert.strictEqual(s.find((i) => i.name === "Coat Rack").perDay, null); // last chapter's lot: no model, no POWER value
+});
+
+test("auction schedule follows the chapter: Cave Dwellers has none copied yet, so none is shown", () => {
+  const d = buildTicketsSection(farm(), prices, { now: Date.UTC(2026, 10, 3) });
+  assert.equal(d.chapter.name, "Cave Dwellers");
+  assert.equal(d.chapter.ticket, "Duende Cap");
+  assert.deepStrictEqual(d.schedule.items, []);
+  assert.ok(d.auction.currentItems.includes("Giant Truffle"), "the lots come from the game source until the list is copied");
+  assert.equal(d.auction.reference.chapter, "Ascension Age");
 });

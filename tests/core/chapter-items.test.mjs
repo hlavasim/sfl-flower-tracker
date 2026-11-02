@@ -72,20 +72,30 @@ test("a product-scoped oil effect halves Rice's oil and leaves Olive alone", () 
 
 test("shop items are priced in tickets × the ticket value; auction and drop items carry no price", () => {
   const out = buildPowerSection(baseFarm, p2p, nfts, null, { roadmapSettings: { ticketValueSfl: 0.05 } });
-  assert.equal(item(out, "Moon Hair").floor, 9000 * 0.05, "Moon Hair: 9,000 Shiny Feather");
-  const rice = item(out, "Rice Shirt");
-  assert.equal(rice.floor, 0);
-  assert.equal(rice.priceUnknown, true, "auction: no fixed price");
-  assert.equal(rice.source, "auction");
+  assert.equal(item(out, "Duende Hat").floor, 9000 * 0.05, "Duende Hat: 9,000 Duende Cap");
+  const truffle = item(out, "Giant Truffle");
+  assert.equal(truffle.floor, 0);
+  assert.equal(truffle.priceUnknown, true, "auction: no fixed price");
+  assert.equal(truffle.source, "auction");
+  // A shop item quoted in another currency (Pot of Luck: Clover Coin) stays unpriced.
+  assert.equal(item(out, "Pot of Luck").priceUnknown, true);
   // Without a ticket value a shop item is unpriced too, never free.
-  assert.equal(item(buildPowerSection(baseFarm, p2p, nfts, null, {}), "Moon Hair").priceUnknown, true);
+  assert.equal(item(buildPowerSection(baseFarm, p2p, nfts, null, {}), "Duende Hat").priceUnknown, true);
+});
+
+test("last chapter's items trade now: priced from the feed row with their marketplace id", () => {
+  const withRows = { ...nfts, wearables: [...(nfts.wearables || []).filter((r) => Number(r.id) !== 413), { id: 413, floor: "1313", lastSalePrice: "1200" }] };
+  const rice = item(buildPowerSection(baseFarm, p2p, withRows, null, {}), "Rice Shirt");
+  assert.equal(rice.source, "market");
+  assert.equal(rice.floor, 1313, "the nameless id-413 wearable row is the Rice Shirt");
+  assert.equal(rice.priceUnknown, false);
 });
 
 test("the roadmap's candidate list gets the priced chapter items and never an unpriced one", () => {
   const out = buildPowerSection(baseFarm, p2p, nfts, null, { roadmapSettings: { ticketValueSfl: 0.05 } });
   const names = [...out.nftData.collectibles, ...out.nftData.wearables].map((x) => x.name);
-  assert.ok(names.includes("Moon Hair"), "priced shop item is a roadmap candidate");
-  assert.ok(!names.includes("Rice Shirt"), "an auction item has no price, so it cannot be ranked by payback");
+  assert.ok(names.includes("Duende Hat"), "priced shop item is a roadmap candidate");
+  assert.ok(!names.includes("Giant Truffle"), "an auction item has no price, so it cannot be ranked by payback");
 });
 
 test("every chapter item names its source, and shop items their ticket cost", () => {

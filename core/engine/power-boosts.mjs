@@ -98,6 +98,42 @@ import { SIDE_MODELS } from "./side-values.mjs";
         { type: "yield_flat", value: 0.5, cat: "fruits", product: "Duskberry", raw: "+0.5 Full Moon Fruit" },
         { type: "qualitative", cat: "other", raw: "+2 Full Moon Seed stock" },
       ],
+      // ── Cave Dwellers (game source 2026-11-02) ──
+      // plant.ts / fruitPlanted.ts: seconds *= 0.9 on plots and fruit patches.
+      "Duende Hat": [
+        { type: "speed_mult", value: 0.9, cat: "crops", raw: "-10% Crop plot growth time" },
+        { type: "speed_mult", value: 0.9, cat: "fruits", raw: "-10% Fruit patch growth time" },
+      ],
+      // startLavaPit.ts: ×0.8 time, and 5 % of pits finish at once — expected ×0.8 × 0.95.
+      "Firefly Aura": [
+        { type: "speed_mult", value: 0.76, cat: "obsidian", raw: "-20% Lava Pit time + 5% instant (EV x0.76)" },
+      ],
+      // plantGreenhouse.ts ×0.7 on Grape; harvestGreenHouse.ts 10 % chance of +10 Grapes = +1 expected.
+      "Antique Dress": [
+        { type: "speed_mult", value: 0.7, cat: "greenhouse", product: "Grape", raw: "-30% Grape growth time" },
+        { type: "yield_flat", value: 1, cat: "greenhouse", product: "Grape", raw: "10% chance +10 Grapes (EV +1)" },
+      ],
+      // castRod.ts: a 20 % chance the reel keeps its daily attempt — 1 / 0.8 = 1.25 reels per attempt.
+      // The "+2 Fish per catch" label is server-side and not counted.
+      "Harpoon": [
+        { type: "daily_flat", value: 5, cat: "fishing", raw: "20% chance a reel keeps its daily attempt (EV +25% of 20 reels)" },
+      ],
+      // Feed XP ×1.05 (feedAnimal.ts) = 1/1.05 of the feed for the same XP. Pigs: side model.
+      "Pig Onesie": [
+        { type: "feed_reduction", value: 1 / 1.05 - 1, cat: "chickens", raw: "+5% Chicken feed XP" },
+        { type: "feed_reduction", value: 1 / 1.05 - 1, cat: "cows", raw: "+5% Cow feed XP" },
+        { type: "feed_reduction", value: 1 / 1.05 - 1, cat: "sheep", raw: "+5% Sheep feed XP" },
+      ],
+      // mineCrimstone.ts: +0.5 on the 5th mine of a streak = +0.1 a mine.
+      "Mushroom Chicken": [
+        { type: "yield_flat", value: 0.1, cat: "crimstone", raw: "+0.5 Crimstone on the 5th mine streak (EV +0.1)" },
+      ],
+      "Ladybug Cow": [
+        { type: "yield_flat", value: 1, cat: "oil", raw: "+1 Oil per drill" },
+      ],
+      "Beetle Sheep": [
+        { type: "speed_mult", value: 0.925, cat: "sheep", raw: "-7.5% Sheep sleep time" },
+      ],
       "Otty the Otter": [
         { type: "daily_flat", value: 5, cat: "fishing", raw: "+5 daily fishing reels" },
         { type: "yield_flat", value: 1 / 15, cat: "fishing", conditional: "every 15th reel", raw: "+1 random fish every 15th reel" },

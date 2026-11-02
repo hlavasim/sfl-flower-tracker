@@ -97,8 +97,9 @@ test("the rank helpers match the SHIPPED game, not the pre-release build", () =>
 
 test("the rank table is the shipped game's, complete and with the release-day edits", () => {
   // The pre-release table had 66 skills and four of them shipped with different magnitudes.
-  // Regenerated from BUMPKIN_REVAMP_SKILL_TREE: 143 upgradeable skills.
-  assert.equal(Object.keys(SKILL_UPGRADES).length, 143);
+  // Regenerated from BUMPKIN_REVAMP_SKILL_TREE: 143 upgradeable skills, + the 11 Cave and 3 Pig
+  // skills of Cave Dwellers (2026-11-02) = 157, the game's count of `upgrade:` blocks.
+  assert.equal(Object.keys(SKILL_UPGRADES).length, 157);
   assert.deepEqual(SKILL_UPGRADES["Fruity Woody"].ranks, [1, 1.25, 1.5]);
   assert.deepEqual(SKILL_UPGRADES["Greenhouse Gamble"].ranks, [30, 40, 50]);
   assert.deepEqual(SKILL_UPGRADES["No Axe No Worries"].ranks, [1, 0.9, 0.8]);

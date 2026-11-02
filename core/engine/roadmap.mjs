@@ -37,7 +37,7 @@ import {
   CROP_MACHINE_NFTS, CROP_MACHINE_SPEED_ITEMS,
 } from "./crop-machine.mjs";
 import { decodeBud, budSetSfl, budBoostText } from "./buds.mjs";
-import { SIDE_MODELS, sideValue, sideRankDelta } from "./side-values.mjs";
+import { SIDE_MODELS, sideValue, sideRankDelta, sideState, pigDay, farmPigs, caveDay, caveBatch, farmBins } from "./side-values.mjs";
 
 // Deviation 1: the page global, module-scoped. Set before any calc.
 let powerState = null;
@@ -1006,6 +1006,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       const { farm, exchangeRates } = powerState;
       const sci = powerState.skillCostInfo || {};
       const sflPerXP = sci.bestRecipe && sci.bestRecipe.boostedXP > 0 ? sci.bestRecipe.cost / sci.bestRecipe.boostedXP : 0;
+      const xpBoost = sci.bestRecipe && sci.bestRecipe.xp > 0 ? sci.bestRecipe.boostedXP / sci.bestRecipe.xp : 1;
       // Animal harvests a day — each animal once per boosted cycle, at the measured pace.
       const animalHarvests = {};
       for (const cat of ["chickens", "cows", "sheep"]) {
@@ -1031,7 +1032,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         };
       }
       return { farm, prices: prices || roadmapPrices(settings), coinsPerSFL: (exchangeRates && exchangeRates.coinsPerSFL) || 0,
-        coinsFree: roadmapCoinsFree(settings), activity: powerState.sideActivity || null, sflPerXP, animalHarvests, machineNet,
+        coinsFree: roadmapCoinsFree(settings), activity: powerState.sideActivity || null, sflPerXP, xpBoost, animalHarvests, machineNet,
         // A category's net with extra effects minus without (power skills' extra cycles), on the
         // owned setup — the roadmap's own category engine, so costs come with it.
         catGain: (cat, effects) => {
@@ -1452,6 +1453,90 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
           ascStep: { seq: seq++, asc: st.asc, expansion: st.expansion, kind: st.kind, via: via.slice(), nodesAdded: st.nodesAdded || {} },
         });
         via.length = 0; pending = 0;
+      }
+      return out;
+    }
+
+    /*
+     * PIGPEN and CAVE TIERS (Cave Dwellers; buildings.ts, upgradeBuilding.ts, caveTiers.ts).
+     *
+     * Each is a sequential chain like the ascension ladder: the Pigpen, then its L2 and L3 (+3 pigs
+     * each — the build seeds 3 starter pigs, a new pig costs 100 coins); the Cave, then tiers II…VIII
+     * (+1 Myco Bin each). A step's income is the side model's own day (core/engine/side-values.mjs):
+     * three more pigs at the farm's mean pig level, or the cave's day with one more bin minus without
+     * — so a bin that only loses money is never offered. Mud does not trade, so it is priced at what
+     * a Mud batch costs per Mud beyond what its mushrooms and beetles are worth; Pig Bristles have
+     * no price yet, so the tiers that need them end the chain (a floor must not compete).
+     */
+    const PIGPEN_STEPS = [
+      { level: 1, cost: { Coins: 200, Wood: 150, Iron: 10, Gold: 10, Mud: 10 }, pigs: 3 },
+      { level: 2, cost: { Coins: 5000 + 300, Wood: 450, Iron: 45, Gold: 35, Crimstone: 12, Mud: 25 }, pigs: 3 },
+      { level: 3, cost: { Coins: 37500 + 300, Wood: 2250, Iron: 135, Gold: 90, Crimstone: 50, Oil: 100, Mud: 100 }, pigs: 3 },
+    ];
+    const CAVE_STEPS = [
+      { tier: 1, cost: { Coins: 200, Wood: 20, Stone: 5 } },
+      { tier: 2, cost: { Coins: 500, Mud: 80, Wood: 25, Stone: 10 } },
+      { tier: 3, cost: { Coins: 1000, Mud: 160, Wood: 50, Stone: 25, Leather: 10 } },
+      { tier: 4, cost: { Coins: 2500, Mud: 320, Wood: 75, Stone: 50, Leather: 15 } },
+      { tier: 5, cost: { Coins: 5000, Mud: 640, Wood: 100, Stone: 75, "Pig Bristles": 20 } },
+      { tier: 6, cost: { Coins: 10000, Mud: 960, Wood: 150, Stone: 100, "Pig Bristles": 30 } },
+      { tier: 7, cost: { Coins: 20000, Mud: 1440, Wood: 200, Stone: 150, "Pig Bristles": 40 } },
+      { tier: 8, cost: { Coins: 40000, Mud: 2200, Wood: 250, Stone: 200, "Pig Bristles": 50 } },
+    ];
+    function roadmapCaveCandidates(settings) {
+      const out = [];
+      const farm = powerState && powerState.farm;
+      if (!farm) return out;
+      const ctx = roadmapSideCtx(settings, roadmapPrices(settings));
+      const st = sideState(ctx);
+      const prodCost = (roadmapState && roadmapState.ascension && roadmapState.ascension.nodeAcq && roadmapState.ascension.nodeAcq.prodCost) || {};
+      const mudBatch = caveBatch(ctx, st, "Mud", 0);
+      const mudUnit = mudBatch.mud > 0 ? Math.max(0, mudBatch.input + mudBatch.dig - mudBatch.gross) / mudBatch.mud : 0;
+      const priceRes = (res) => {
+        let sfl = 0, unpriced = false;
+        for (const [item, qty] of Object.entries(res)) {
+          if (item === "Coins") { if (!ctx.coinsFree && ctx.coinsPerSFL > 0) sfl += qty / ctx.coinsPerSFL; continue; }
+          const unit = item === "Mud" ? mudUnit : (prodCost[item] > 0 ? prodCost[item] : (ctx.prices[item] || 0));
+          if (!(unit > 0)) { unpriced = true; continue; }
+          sfl += unit * qty;
+        }
+        return { sfl, unpriced };
+      };
+      const costText = (res) => Object.entries(res).map(([k, q]) => `${q} ${k}`).join(", ");
+      // Pigpen chain
+      const pigs = farmPigs(farm);
+      const pen = (farm.pigpen && Number(farm.pigpen.level)) || (pigs.length ? 1 : 0);
+      const meanLvl = pigs.length ? Math.max(1, Math.round(pigs.reduce((t, l) => t + l, 0) / pigs.length)) : 1;
+      const perPig = pigDay(ctx, st, meanLvl).net;
+      let seq = 0;
+      for (const step of PIGPEN_STEPS) {
+        if (step.level <= pen) continue;
+        const pr = priceRes(step.cost);
+        if (pr.unpriced) break;
+        const marg = step.pigs * perPig;
+        if (!(marg > 0)) break;
+        const name = step.level === 1 ? "Pigpen" : `Pigpen L${step.level}`;
+        out.push({ name, type: "Building", floor: pr.sfl, supply: 0,
+          boost: `+${step.pigs} prasata (lanýže na levelu ${meanLvl}) · ${costText(step.cost)}`,
+          clone: { name, categories: ["pigs"], effects: [], fixedMarginal: marg, has: false, isDisabled: false },
+          chainId: "pigpen", chainSeq: seq++ });
+      }
+      // Cave chain
+      const bins = farmBins(farm);
+      const tier = (farm.cave && Number(farm.cave.tier)) || 0;
+      seq = 0;
+      for (const step of CAVE_STEPS) {
+        if (step.tier <= tier) continue;
+        const pr = priceRes(step.cost);
+        if (pr.unpriced) break;
+        const extra = step.tier - tier;
+        const marg = caveDay(ctx, st, bins + extra).net - caveDay(ctx, st, bins + extra - 1).net;
+        if (!(marg > 0)) break;
+        const name = step.tier === 1 ? "Cave" : `Cave tier ${step.tier}`;
+        out.push({ name, type: "Building", floor: pr.sfl, supply: 0,
+          boost: `+1 Myco Bin · ${costText(step.cost)}`,
+          clone: { name, categories: ["cave"], effects: [], fixedMarginal: marg, has: false, isDisabled: false },
+          chainId: "cave", chainSeq: seq++ });
       }
       return out;
     }
@@ -1930,6 +2015,8 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       for (const sc of skillCands) { if (sc.floor <= maxP) econ.push(sc); }
       // Ascension expansions and upgrades, on the same terms.
       for (const ac of roadmapAscensionCandidates(settings)) { if (ac.floor <= maxP) econ.push(ac); }
+      // Pigpen levels and cave tiers, on the same terms.
+      for (const cc of roadmapCaveCandidates(settings)) { if (cc.floor <= maxP) econ.push(cc); }
       /*
        * BUDS currently listed on the marketplace (settings.budFloors, { "<id>": floor } — the page
        * fetches it, compute cannot read the marketplace DB). Each is 1-of-1. Only the BUD_CANDIDATES

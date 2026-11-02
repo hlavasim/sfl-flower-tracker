@@ -152,8 +152,8 @@ test("every section is present, including the ones that replaced the wrong model
 
 test("the current chapter's marvels are listed and owned ones are retired", () => {
   const { html } = renderPage();
-  for (const m of ["Crocodile", "Dumbo Octopus", "Seahorse Dad", "Radiant Ray", "Starlight Tuna"])
-    assert.ok(html.includes(m), `Ascension Age / permanent marvel listed: ${m}`);
+  for (const m of ["Macropinna", "Betta", "Manatee", "Radiant Ray", "Starlight Tuna"])
+    assert.ok(html.includes(m), `Cave Dwellers / permanent marvel listed: ${m}`);
   // The farm owns a Gilded Swordfish: pieces stop dropping, so it must not be costed.
   const gild = html.slice(html.indexOf("Gilded Swordfish"), html.indexOf("Gilded Swordfish") + 220);
   assert.ok(/already caught/.test(gild), "an owned Marvel is struck out rather than priced");
@@ -297,20 +297,21 @@ test("an out-of-season source keeps its bait route and is labelled, not silently
     "the in-season source can still simply be fished for");
 });
 
-test("Dumbo Octopus is reachable in winter only through a crafted bait", () => {
+test("an out-of-season source is offered only as a crafted bait; the in-season one is fished normally", () => {
   const { html } = renderPage(WINTER_FARM);
   /*
-   * Both its sources -- Olive Flounder (spring/autumn) and Napoleanfish (summer/autumn) -- are
-   * shut in winter. Before the season gate the planner costed them as ordinary fishing; before
-   * crafted baits were allowed to ignore the gate it would have called the Marvel impossible.
-   * Neither is right: it is reachable, but only by crafting.
+   * Macropinna (Cave Dwellers) drops from Moray Eel (summer/autumn) and Coelacanth (spring/winter).
+   * In winter Moray Eel cannot be fished for, so it may only be reached by crafting its bait;
+   * Coelacanth is simply fished. (Ascension Age's Dumbo Octopus, shut on both sources in winter,
+   * pinned this until its chapter ended.)
    */
-  const start = html.indexOf("Dumbo Octopus");
-  assert.ok(start > 0, "Dumbo Octopus is listed");
-  const block = html.slice(start, html.indexOf("Seahorse Dad"));
-  assert.ok(!/fishing normally/.test(block), "neither source can be fished for in winter");
-  assert.ok(/out of season/.test(block), "both sources are marked out of season");
-  assert.ok(/Fish Flake/.test(block), "and a crafted-bait route is still offered");
+  const start = html.indexOf("Macropinna");
+  assert.ok(start > 0, "Macropinna is listed");
+  const block = html.slice(start, html.indexOf("Betta", start));
+  const moray = block.slice(0, block.indexOf("Coelacanth"));
+  assert.ok(/out of season/.test(moray) && !/fishing normally/.test(moray), "Moray Eel is out of season in winter");
+  assert.ok(/Fish Flake/.test(moray), "and its crafted-bait route is still offered");
+  assert.ok(/fishing normally/.test(block.slice(block.indexOf("Coelacanth"))), "Coelacanth can be fished for");
 });
 
 test("every Fish Market bait that can force a fish is shown, not only the cheapest", () => {

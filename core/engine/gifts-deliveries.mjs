@@ -271,6 +271,8 @@ export function _setItemCostMaps(maps) { _itemCostMaps = maps || { productionCos
       { name: "Salt Awakening",    start: Date.UTC(2026,  4,  4), ticket: "Salt Rock",           boosts: ["Spa Hat", "Spa Robe", "Spa Slippers"] },
       // tasksBegin: ticket tasks are frozen until the 2nd Monday (getSeasonWeek.ts); end = next chapter start.
       { name: "Ascension Age",     start: Date.UTC(2026,  7,  3), ticket: "Shiny Feather",       boosts: ["Swamp Lily Hat", "Swamp Armor", "Swamp Pants"], tasksBegin: Date.UTC(2026, 7, 10), end: Date.UTC(2026, 10, 2) },
+      // Cave Dwellers (types/chapters.ts): ticket Duende Cap; Duende Shoes / Pants / Shirt +1 each (completeNPCChore.ts).
+      { name: "Cave Dwellers",     start: Date.UTC(2026, 10,  2), ticket: "Duende Cap",          boosts: ["Duende Shoes", "Duende Pants", "Duende Shirt"], tasksBegin: Date.UTC(2026, 10, 9), end: Date.UTC(2027, 1, 1) },
     ];
 
     // Per-NPC base ticket reward: TICKET_REWARDS in events/landExpansion/deliver.ts, checked
