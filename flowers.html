@@ -5463,7 +5463,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.25</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.26</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5490,6 +5490,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.26", items: [
+          { t: "fix", text: "Widget API: each node carries the timestamp its harvest counts from, so the phone drops a row harvested since the tracker computed it (it showed trees and oranges as ready after you had picked them). A node a power skill finished (Grease Lightning, Greenhouse Guru, Instant Growth, Tree Blitz, Petal Blessed, Barnyard Rouse) is ready since the moment you used the skill, not since every refresh." },
+        ] },
         { ver: "v6.25", items: [
           { t: "feat", text: "Widget API: <b>animals</b> too — every chicken, sheep, cow and pig's next produce from the game's own code (Egg + Feather, Wool + Merino Wool, Milk + Leather, Truffle), a harvest worth all the items it adds. A node a power skill finished (Greenhouse Guru, Instant Growth) reads as ready now instead of 1970, and the widget takes every ready time from here (the game's clock, boosts included)." },
         ] },

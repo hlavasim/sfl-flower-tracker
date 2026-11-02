@@ -36,14 +36,17 @@ export async function simulateHarvests(farmJson, farmId, now = Date.now()) {
   if (Dec) for (const t of TOOLS) state.inventory[t] = new Dec(1e9);
 
   const tasks = [];
-  const add = (kind, id, name, product, readyAt, run) => {
-    if (Number.isFinite(readyAt)) tasks.push({ kind, id, name, product, readyAt, run });
+  // startedAt = the node's own timestamp this harvest counts from (chopped / mined / drilled /
+  // planted / last fruit harvest / asleep): a client holding older data can tell the node was
+  // harvested since and drop the stale row.
+  const add = (kind, id, name, product, readyAt, run, startedAt) => {
+    if (Number.isFinite(readyAt)) tasks.push({ kind, id, name, product, readyAt, run, startedAt: startedAt ?? null });
   };
 
   for (const [id, t] of Object.entries(state.trees || {})) {
     if (!placed(t) || !t.wood) continue;
     add("tree", id, t.name || "Tree", "Wood", G.getTreeReadyAt(t, state),
-      (s, at) => G.chop({ state: s, action: { type: "timber.chopped", index: id, item: "Axe" }, createdAt: at, farmId }));
+      (s, at) => G.chop({ state: s, action: { type: "timber.chopped", index: id, item: "Axe" }, createdAt: at, farmId }), t.wood.choppedAt);
   }
   const rocks = [
     ["stone", "stones", "Stone Rock", "Stone", (s, id, at) => G.mineStone({ state: s, action: { type: "stoneRock.mined", index: id }, createdAt: at, farmId })],
@@ -54,30 +57,30 @@ export async function simulateHarvests(farmJson, farmId, now = Date.now()) {
   for (const [kind, key, dflt, product, run] of rocks) {
     for (const [id, r] of Object.entries(state[key] || {})) {
       if (!placed(r) || !r.stone) continue;
-      add(kind, id, r.name || dflt, product, G.getMineReadyAt(r, r.name || dflt, state), (s, at) => run(s, id, at));
+      add(kind, id, r.name || dflt, product, G.getMineReadyAt(r, r.name || dflt, state), (s, at) => run(s, id, at), r.stone.minedAt);
     }
   }
   for (const [id, o] of Object.entries(state.oilReserves || {})) {
     if (!placed(o) || !o.oil) continue;
     add("oil", id, "Oil Reserve", "Oil", G.getOilReserveReadyAt(o, state),
-      (s, at) => G.drillOilReserve({ state: s, action: { type: "oilReserve.drilled", id }, createdAt: at, farmId }));
+      (s, at) => G.drillOilReserve({ state: s, action: { type: "oilReserve.drilled", id }, createdAt: at, farmId }), o.oil.drilledAt);
   }
   for (const [id, plot] of Object.entries(state.crops || {})) {
     const c = plot && plot.crop;
     if (!placed(plot) || !c || !G.CROPS[c.name]) continue;
     add("crop", id, c.name, c.name, G.getCropReadyAt(c, G.CROPS[c.name], state, plot.fertiliser),
-      (s, at) => G.harvest({ state: s, action: { type: "crop.harvested", index: id }, createdAt: at, farmId }));
+      (s, at) => G.harvest({ state: s, action: { type: "crop.harvested", index: id }, createdAt: at, farmId }), c.plantedAt);
   }
   for (const [id, patch] of Object.entries(state.fruitPatches || {})) {
     const f = patch && patch.fruit;
     if (!placed(patch) || !f) continue;
     add("fruit", id, f.name, f.name, G.getFruitReadyAt(f, state, patch.fertiliser),
-      (s, at) => G.harvestFruit({ state: s, action: { type: "fruit.harvested", index: id }, createdAt: at, farmId }));
+      (s, at) => G.harvestFruit({ state: s, action: { type: "fruit.harvested", index: id }, createdAt: at, farmId }), f.harvestedAt || f.plantedAt);
   }
   for (const [id, pot] of Object.entries((state.greenhouse && state.greenhouse.pots) || {})) {
     if (!pot || !pot.plant) continue;
     add("greenhouse", id, pot.plant.name, pot.plant.name, G.getGreenhousePotReadyAt(pot, state),
-      (s, at) => G.harvestGreenHouse({ state: s, action: { type: "greenhouse.harvested", id: Number(id) }, createdAt: at, farmId }));
+      (s, at) => G.harvestGreenHouse({ state: s, action: { type: "greenhouse.harvested", id: Number(id) }, createdAt: at, farmId }), pot.plant.plantedAt);
   }
   /*
    * Animals: their produce (Egg + Feather, Milk + Leather, Wool + Merino Wool, Truffle) is claimed
@@ -91,19 +94,29 @@ export async function simulateHarvests(farmJson, farmId, now = Date.now()) {
         const animal = s[key].animals[id];
         const ready = animal.state === "ready" ? s : { ...s, [key]: { ...s[key], animals: { ...s[key].animals, [id]: { ...animal, state: "ready" } } } };
         return G.claimProduce({ state: ready, action: { type: "produce.claimed", animal: a.type, id }, createdAt: at });
-      });
+      }, a.asleepAt);
     }
   }
   for (const [id, bed] of Object.entries((state.flowers && state.flowers.flowerBeds) || {})) {
     const f = bed && bed.flower;
     if (!placed(bed) || !f) continue;
     add("flower", id, f.name, f.name, G.getFlowerReadyAt(f, state),
-      (s, at) => G.harvestFlower({ state: s, action: { type: "flower.harvested", id }, createdAt: at, farmId }));
+      (s, at) => G.harvestFlower({ state: s, action: { type: "flower.harvested", id }, createdAt: at, farmId }), f.plantedAt);
   }
 
-  // A power skill that finishes a category (Greenhouse Guru, Instant Growth…) sets the start to 0, so
-  // the game's ready time lands in 1970: it is ready now, not "56 years overdue".
-  for (const t of tasks) if (t.readyAt < Date.UTC(2021, 0, 1)) t.readyAt = now;
+  /*
+   * A power skill that finishes a category sets the start to 1 (skillUsed.ts), so the game's ready
+   * time lands in 1970. It has been ready since the skill was used — bumpkin.previousPowerUseAt —
+   * not "56 years", and not "now" either (that restarted the count on every refresh).
+   */
+  const POWER_SKILL = { crop: "Instant Growth", tree: "Tree Blitz", greenhouse: "Greenhouse Guru", oil: "Grease Lightning",
+    flower: "Petal Blessed", animal: "Barnyard Rouse" };
+  const usedAt = (state.bumpkin && state.bumpkin.previousPowerUseAt) || {};
+  for (const t of tasks) {
+    if (t.readyAt >= Date.UTC(2021, 0, 1)) continue;
+    const used = Number(usedAt[POWER_SKILL[t.kind]]) || 0;
+    t.readyAt = used > 0 && used <= now ? used : now;
+  }
   tasks.sort((a, b) => a.readyAt - b.readyAt);
   const out = [];
   // The game's analytics complain on every harvest ("[MoonForge] call … init()") — not ours to fix.
@@ -124,10 +137,10 @@ export async function simulateHarvests(farmJson, farmId, now = Date.now()) {
         if (d > 1e-9) gains[k] = +d.toFixed(4);
       }
       const product = t.product || Object.keys(gains)[0] || null;
-      out.push({ kind: t.kind, id: t.id, name: t.name, product, readyAt: t.readyAt,
+      out.push({ kind: t.kind, id: t.id, name: t.name, product, readyAt: t.readyAt, startedAt: t.startedAt,
         amount: product && gains[product] != null ? gains[product] : 0, gains });
     } catch (e) {
-      out.push({ kind: t.kind, id: t.id, name: t.name, product: t.product, readyAt: t.readyAt, amount: null, error: String(e && e.message || e) });
+      out.push({ kind: t.kind, id: t.id, name: t.name, product: t.product, readyAt: t.readyAt, startedAt: t.startedAt, amount: null, error: String(e && e.message || e) });
     }
   }
   } finally { console.log = log; console.warn = warn; }
