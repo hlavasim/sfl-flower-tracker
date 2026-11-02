@@ -39,14 +39,17 @@ export async function simulateHarvests(farmJson, farmId, now = Date.now()) {
   // startedAt = the node's own timestamp this harvest counts from (chopped / mined / drilled /
   // planted / last fruit harvest / asleep): a client holding older data can tell the node was
   // harvested since and drop the stale row.
-  const add = (kind, id, name, product, readyAt, run, startedAt) => {
-    if (Number.isFinite(readyAt)) tasks.push({ kind, id, name, product, readyAt, run, startedAt: startedAt ?? null });
+  // again(state) = the node's ready time after a harvest — a seeded instant regrowth (Tree
+  // Turnaround, instant mine / drill recoveries) makes it ready at once, and the visit harvests again.
+  const add = (kind, id, name, product, readyAt, run, startedAt, again) => {
+    if (Number.isFinite(readyAt)) tasks.push({ kind, id, name, product, readyAt, run, startedAt: startedAt ?? null, again: again || null });
   };
 
   for (const [id, t] of Object.entries(state.trees || {})) {
     if (!placed(t) || !t.wood) continue;
     add("tree", id, t.name || "Tree", "Wood", G.getTreeReadyAt(t, state),
-      (s, at) => G.chop({ state: s, action: { type: "timber.chopped", index: id, item: "Axe" }, createdAt: at, farmId }), t.wood.choppedAt);
+      (s, at) => G.chop({ state: s, action: { type: "timber.chopped", index: id, item: "Axe" }, createdAt: at, farmId }), t.wood.choppedAt,
+      (s) => G.getTreeReadyAt(s.trees[id], s));
   }
   const rocks = [
     ["stone", "stones", "Stone Rock", "Stone", (s, id, at) => G.mineStone({ state: s, action: { type: "stoneRock.mined", index: id }, createdAt: at, farmId })],
@@ -57,13 +60,15 @@ export async function simulateHarvests(farmJson, farmId, now = Date.now()) {
   for (const [kind, key, dflt, product, run] of rocks) {
     for (const [id, r] of Object.entries(state[key] || {})) {
       if (!placed(r) || !r.stone) continue;
-      add(kind, id, r.name || dflt, product, G.getMineReadyAt(r, r.name || dflt, state), (s, at) => run(s, id, at), r.stone.minedAt);
+      add(kind, id, r.name || dflt, product, G.getMineReadyAt(r, r.name || dflt, state), (s, at) => run(s, id, at), r.stone.minedAt,
+        (s) => G.getMineReadyAt(s[key][id], r.name || dflt, s));
     }
   }
   for (const [id, o] of Object.entries(state.oilReserves || {})) {
     if (!placed(o) || !o.oil) continue;
     add("oil", id, "Oil Reserve", "Oil", G.getOilReserveReadyAt(o, state),
-      (s, at) => G.drillOilReserve({ state: s, action: { type: "oilReserve.drilled", id }, createdAt: at, farmId }), o.oil.drilledAt);
+      (s, at) => G.drillOilReserve({ state: s, action: { type: "oilReserve.drilled", id }, createdAt: at, farmId }), o.oil.drilledAt,
+      (s) => G.getOilReserveReadyAt(s.oilReserves[id], s));
   }
   for (const [id, plot] of Object.entries(state.crops || {})) {
     const c = plot && plot.crop;
@@ -130,7 +135,15 @@ export async function simulateHarvests(farmJson, farmId, now = Date.now()) {
     const before = state.inventory;
     try {
       state = t.run(state, at);
-      // Everything the harvest added (an animal gives two products; a crit can add a bonus item).
+      // Regrew at once: the same visit harvests it again (each roll moves the counter), up to 5×.
+      let instant = 0;
+      while (t.again && instant < 5) {
+        const next = t.again(state);
+        if (!(Number.isFinite(next) && next <= at)) break;
+        state = t.run(state, at + 1000 * (instant + 1));
+        instant++;
+      }
+      // Everything the visit added (an animal gives two products; a crit can add a bonus item).
       const gains = {};
       for (const [k, v] of Object.entries(state.inventory)) {
         const d = Number(v || 0) - Number(before[k] || 0);
@@ -138,7 +151,7 @@ export async function simulateHarvests(farmJson, farmId, now = Date.now()) {
       }
       const product = t.product || Object.keys(gains)[0] || null;
       out.push({ kind: t.kind, id: t.id, name: t.name, product, readyAt: t.readyAt, startedAt: t.startedAt,
-        amount: product && gains[product] != null ? gains[product] : 0, gains });
+        amount: product && gains[product] != null ? gains[product] : 0, gains, ...(instant ? { instant } : {}) });
     } catch (e) {
       out.push({ kind: t.kind, id: t.id, name: t.name, product: t.product, readyAt: t.readyAt, startedAt: t.startedAt, amount: null, error: String(e && e.message || e) });
     }
