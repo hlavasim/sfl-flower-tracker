@@ -12,7 +12,7 @@ import { buildWishlistSection } from "../core/sections/wishlist.mjs";
 import { buildCookingSection as _cookingForAscension } from "../core/sections/cooking.mjs";
 import { buildBudsSection } from "../core/sections/buds.mjs";
 import { buildPetsSection } from "../core/sections/pets.mjs";
-import { buildTicketsSection, buildTicketHistory, measuredActivity } from "../core/sections/tickets.mjs";
+import { buildTicketsSection, buildTicketHistory, measuredActivity, pastChapterPace } from "../core/sections/tickets.mjs";
 import { computeBettyRate } from "../core/engine/prices.mjs";
 import { CHAPTER_RESOURCE_PRICES } from "../core/data/chapter-items.mjs";
 import { API_SPEC } from "../core/api-spec.mjs";
@@ -617,8 +617,11 @@ async function _handler(req, res) {
       const tkBody = _parseBody(req.body);
       const tkWeeks = Array.isArray(tkBody.weeks) ? tkBody.weeks.slice(0, 200) : [];
       const tkActivity = tkWeeks.length ? measuredActivity(tkWeeks) : null;
-      data = buildTicketsSection(farm, tkPrices, { ...tkOpts, activity: tkActivity });
-      if (tkWeeks.length) data.history = buildTicketHistory(tkWeeks, tkPrices, tkOpts);
+      const tkHistory = tkWeeks.length ? buildTicketHistory(tkWeeks, tkPrices, tkOpts) : null;
+      // The farm's own pace from its past chapters — the projection's pace until this chapter has a full ticket week.
+      const pastPace = pastChapterPace(tkHistory, farm);
+      data = buildTicketsSection(farm, tkPrices, { ...tkOpts, activity: tkActivity, pastPace });
+      if (tkHistory) data.history = tkHistory;
       data.status = { pricesOk: Object.keys(p2p).length > 0, nftsOk: !!nftResult.ok };
     }
     else return res.status(400).json({ error: `unknown section: ${section}` });

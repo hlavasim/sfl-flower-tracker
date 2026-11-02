@@ -365,12 +365,22 @@ export function buildTicketsSection(farm, prices, opts = {}) {
       shortPerWeek: plan ? 0 : Math.round(needPerWeek - (maxPlan ? maxPlan.ticketsPerWeek : 0)) };
   }).sort((a, b) => a.tickets - b.tickets);
 
-  // This chapter: its auction may still be ahead, with what has been collected by then.
+  /*
+   * This chapter: its auction may still be ahead, with what has been collected by then.
+   *
+   * Only TICKET weeks count. The chapter's first week (before tasksBegin) and the auction week pay
+   * tickets for the daily reward and deliveries only — no chores, bounties or animals — so a
+   * projection over calendar weeks overstated them, and a pace measured in the first week (1 ticket
+   * on day one) said "you'll have 1 at the auction". Until a full ticket week has passed, the pace
+   * is the farm's own from its past chapters (opts.pastPace, buildTicketHistory), when it has one.
+   */
   const auctionAt = AUCTION_WEEK[chapter.name] || null;
-  const perWeekNow = weeksDone > 0 ? collected / weeksDone : 0;
+  const ticketWeeksUntil = (t) => Math.max(0, (t - Math.max(now, tasksBegin)) / (7 * DAY));
+  const pace = weeksDone >= 1 ? collected / weeksDone : (opts.pastPace > 0 ? opts.pastPace : (weeksDone > 0 ? collected / weeksDone : 0));
+  const paceFrom = weeksDone >= 1 ? "chapter" : (opts.pastPace > 0 ? "history" : "chapter");
   const thisAuction = auctionAt ? {
-    at: auctionAt, weeksUntil: +Math.max(0, (auctionAt - now) / (7 * DAY)).toFixed(2),
-    ticketsExpected: Math.round(collected + perWeekNow * Math.max(0, (auctionAt - now) / (7 * DAY))),
+    at: auctionAt, weeksUntil: +ticketWeeksUntil(auctionAt).toFixed(2), paceFrom,
+    ticketsExpected: Math.round(collected + pace * ticketWeeksUntil(auctionAt)),
   } : null;
   if (thisAuction) { const l = lotFor(thisAuction.ticketsExpected); thisAuction.lastChapterEquivalent = l ? l.name : null; }
 
@@ -399,7 +409,10 @@ export function buildTicketsSection(farm, prices, opts = {}) {
   const weekNo = Math.floor(Math.max(0, now - chapter.start) / (7 * DAY)) + 1;
   const timeline = { start: chapter.start, tasksBegin, ticketAuction: auctionAt, end: chapter.end || null,
     week: weekNo, weeks: chapter.end ? Math.round((chapter.end - chapter.start) / (7 * DAY)) : null,
-    weekEnd, daysLeftInWeek: daysLeft };
+    weekEnd, daysLeftInWeek: daysLeft,
+    // Ticket weeks left for the megastore (open to the chapter's end), the auction week taken out.
+    ticketWeeksToEnd: chapter.end ? +Math.max(0, ticketWeeksUntil(chapter.end) - (auctionAt && auctionAt > now ? 1 : 0)).toFixed(2) : null,
+    boardFrozen: now < tasksBegin || !!(auctionAt && now >= auctionAt && now < auctionAt + 7 * DAY) };
 
   const chapterItems = [...auctionItemValues(farm, prices, opts), ...shopItemValues(farm, prices, opts)];
   const schedule = auctionSchedule(farm, chapterItems, opts, now);
@@ -408,7 +421,7 @@ export function buildTicketsSection(farm, prices, opts = {}) {
   return {
     chapter: { name: chapter.name, ticket, start: chapter.start, tasksBegin, end: chapter.end || null,
       weeksDone: +weeksDone.toFixed(2), weeksLeft: weeksLeft == null ? null : +weeksLeft.toFixed(2),
-      collected, perWeek: weeksDone > 0 ? collected / weeksDone : null,
+      collected, perWeek: pace > 0 ? pace : null, perWeekFrom: paceFrom,
       projectedEnd: weeksLeft != null && weeksDone > 0 ? Math.round(collected + (collected / weeksDone) * weeksLeft) : null },
     bonus, track, bountyBonus,
     sources,
@@ -509,6 +522,8 @@ export function buildTicketHistory(weeks, prices, opts = {}) {
   for (const x of act) (byChapter[x.chapter] = byChapter[x.chapter] || []).push(x);
   const chapters = Object.entries(byChapter).map(([name, a]) => ({
     name, ticket: a[0].ticket, weeks: a.length,
+    // What the farm actually collected a ticket week (its last record over its ticket weeks).
+    collectedPerWeek: Math.max(...a.map((x) => x.collected || 0)) / a.length,
     maxTickets: median(a.map((x) => x.maxTickets)), maxCost: median(a.map((x) => x.maxCost)),
     parts: Object.fromEntries(["delivery", "chore", "bounty", "animal"].map((k) => [k, {
       tickets: median(a.map((x) => x.parts[k].tickets)), cost: median(a.map((x) => x.parts[k].cost)) }])),
@@ -527,6 +542,14 @@ export function buildTicketHistory(weeks, prices, opts = {}) {
  * (the last four weeks): salt harvests, aged fish by species (plain and Prime), spice and
  * fermentation output, potion games. Null when there is no history to measure from.
  */
+/** Median tickets a ticket week over the farm's past chapters (not the running one), or 0. */
+export function pastChapterPace(history, farm, now = Date.now()) {
+  if (!history || !history.chapters) return 0;
+  const cur = currentChapter(now).name;
+  const xs = history.chapters.filter((c) => c.name !== cur && c.weeks >= 3 && c.collectedPerWeek > 0).map((c) => c.collectedPerWeek);
+  return xs.length ? median(xs) : 0;
+}
+
 export function measuredActivity(weeks, spanWeeks = 4) {
   const list = (weeks || []).filter((w) => w && w.farm && w.farm.farmActivity).sort((a, b) => a.ts - b.ts);
   if (list.length < 2) return null;

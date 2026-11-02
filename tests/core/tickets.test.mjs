@@ -258,3 +258,23 @@ test("auction schedule follows the chapter: Cave Dwellers has none copied yet, s
   assert.ok(d.auction.currentItems.includes("Giant Truffle"), "the lots come from the game source until the list is copied");
   assert.equal(d.auction.reference.chapter, "Ascension Age");
 });
+
+test("the first week of a chapter pays no chores or bounties: projections count ticket weeks and borrow the past pace", async () => {
+  const { pastChapterPace } = await import("../../core/sections/tickets.mjs");
+  // Cave Dwellers' day one: tasks from 2026-11-09, ticket auction 2027-01-04 = 8 ticket weeks.
+  const now = Date.UTC(2026, 10, 2, 12);
+  const day1 = farm({ farmActivity: { "Duende Cap Collected": "1" } });
+  const bare = buildTicketsSection(day1, prices, { now });
+  assert.equal(bare.thisAuction.weeksUntil, 8, "the frozen first week is not a ticket week");
+  assert.equal(bare.timeline.boardFrozen, true);
+  const d = buildTicketsSection(day1, prices, { now, pastPace: 600 });
+  assert.equal(d.thisAuction.ticketsExpected, 1 + 600 * 8, "not 1: the farm's own pace from past chapters");
+  assert.equal(d.thisAuction.paceFrom, "history");
+  assert.equal(d.chapter.perWeek, 600);
+  // Megastore weeks to the chapter's end (2027-02-01): 12 ticket weeks less the auction week.
+  assert.equal(d.timeline.ticketWeeksToEnd, 11);
+  // The past pace is the median of the finished chapters, never the running one.
+  const hist = { chapters: [{ name: "Salt Awakening", weeks: 10, collectedPerWeek: 500 }, { name: "Ascension Age", weeks: 11, collectedPerWeek: 700 },
+    { name: "Cave Dwellers", weeks: 1, collectedPerWeek: 5 }] };
+  assert.equal(pastChapterPace(hist, day1, now), 600);
+});

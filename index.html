@@ -5463,7 +5463,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.21</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.22</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5490,6 +5490,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.22", items: [
+          { t: "fix", text: "<b>TICKETY in a chapter's first week.</b> It said \"by the auction you'll have 1\": the pace was measured on day one, and the chapter's first week and the auction week were counted as ticket weeks although they pay only the daily reward and deliveries (no chores, bounties or animals). Projections now count only ticket weeks (8 to Cave Dwellers' auction), and until a full one has passed the pace is your own from past chapters (\"z minulých kapitol\")." },
+        ] },
         { ver: "v6.21", items: [
           { t: "feat", text: "POWER → 🐖 PIGS: <b>a pig level by level</b> — Truffles per claim, what to feed it (the cheapest Slop and the crop to make it from) and the profit a day, best level in green, a losing one in red. 🍄 CAVE: <b>all three Myco Bin recipes side by side</b> per batch (yield, input, digging, profit)." },
         ] },
@@ -25315,7 +25318,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       h += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,160px),1fr));gap:10px;margin-bottom:12px">` +
         tile("Do aukce budeš mít", auctionOpen ? `${_tkFmt(ta.ticketsExpected)} ${icon}` : "—", `teď ${_tkFmt(c.collected)}`) +
         tile("Aukce za tickety", auctionOpen ? (days <= 0 ? "právě běží" : `za ${days} dní`) : "proběhla", tl.ticketAuction ? `od ${_tkDate(tl.ticketAuction)}` : "") +
-        tile("Tvoje tempo", `${_tkFmt(c.perWeek)} / týden`, `top hráči ${_tkFmt(d.observedTop.perWeek)}`) +
+        tile("Tvoje tempo", `${_tkFmt(c.perWeek)} / týden`, `${c.perWeekFrom === "history" ? "z minulých kapitol · " : ""}top hráči ${_tkFmt(d.observedTop.perWeek)}`) +
         tile("Cíl v aukci", bestAuction ? escHTML(bestAuction.name) : "—", bestAuction ? `+${_tkFmt(bestAuction.perDay, 2)} FLOWER / den` : "", "var(--green)") +
         `</div>`;
 
