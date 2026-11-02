@@ -336,9 +336,8 @@ function xpNet(ctx, st) {
  * only come from trading a pig in, so they are not daily income.
  *
  * The Cave's Myco Bins dig a 25-tile patch every 12 h (types/caveRecipes.ts, cavePatch.ts).
- * Nothing it gives trades yet (Mud never will — tradeLimits.ts), so its outputs are valued by
- * what they replace on THIS farm: a Beetle is that much animal-feed XP, a Wild / Magic Mushroom
- * is one Rich / Gourmet Slop, and Mud is the feed a Mud coat saves (×1.25 feed XP for one claim,
+ * Its outputs are valued by what they bring on THIS farm: a Beetle is the better of its p2p price
+ * and that much animal-feed XP, a Wild / Magic Mushroom is one Rich / Gourmet Slop, and Mud is the feed a Mud coat saves (×1.25 feed XP for one claim,
  * 25 Mud; two claims with Vibraphone) — only as much Mud as the farm's pigs can use.
  * A Truffle is its p2p price once it trades, else what its best recipe pays in XP over the
  * other ingredients (consumables.ts), at the farm's FLOWER per XP.
@@ -507,6 +506,9 @@ export function caveBatch(ctx, st, recipe, mudValue) {
   const beetles = beetleT * (1 + cs(st, "Twin Beetles", 0));
   const odds = BEETLE_ODDS[lvl(st, "Rare Breeds") ? Math.min(3, lvl(st, "Rare Breeds")) : 0];
   const beetleXp = Object.entries(odds).reduce((t, [b, p]) => t + (p / 100) * BEETLE_XP[b], 0);
+  // A Beetle is worth the better of selling it and feeding it (its XP as animal feed).
+  const fpx = feedPerXP(ctx);
+  const beetleValue = Object.entries(odds).reduce((t, [b, p]) => t + (p / 100) * Math.max(pr[b] || 0, BEETLE_XP[b] * fpx), 0);
   const mud = mudT * r.mudX * cs(st, "Muddy Bounty", 1);
   let input = 0;
   if (r.input) { input = bundleCost(ctx, r.input); if (!isFinite(input)) input = 0; }
@@ -521,7 +523,7 @@ export function caveBatch(ctx, st, recipe, mudValue) {
   const perTile = Math.min(shovel, drill);
   const dig = CAVE_TILES * (isFinite(perTile) ? perTile : 0);
   const gross = mushrooms * (0.9 * slopCost(ctx, "Rich Slop") + 0.1 * slopCost(ctx, "Gourmet Slop"))
-    + beetles * beetleXp * feedPerXP(ctx) + mud * (mudValue || 0);
+    + beetles * beetleValue + mud * (mudValue || 0);
   return { recipe, mushrooms, beetles, beetleXp, mud, input, dig, gross, net: gross - input - dig };
 }
 /** Myco Bins on the farm: one per cave tier (types/caveTiers.ts). */

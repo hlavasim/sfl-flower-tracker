@@ -73,6 +73,16 @@ test("a Myco Bin batch: the recipe's tiles, Mud ×2 on the Mud recipe, skills mo
   assert.ok(Math.abs(mud.dig - 25 * (20 / 320 + 2 * 0.0107 + 0.0202)) < 1e-12);
 });
 
+test("a Beetle is worth the better of its market price and its feed XP", () => {
+  // No slop crops priced: feed XP is worth 0 and mushrooms too, so the batch is its Beetles at market.
+  const beetles = { "Green Beetle": 1.379, "Blue Beetle": 1.4, "Pink Beetle": 4.4, "Amber Beetle": 7.8 };
+  const c = ctx(farm(), { prices: { Egg: 0.0245, ...beetles } }), st = sideState(c);
+  // Base odds 40/30/20/10: 0.4·1.379 + 0.3·1.4 + 0.2·4.4 + 0.1·7.8 = 2.6316 a Beetle, 5 on the Beetle recipe.
+  assert.ok(Math.abs(caveBatch(c, st, "Beetle", 0).gross - 5 * 2.6316) < 1e-9);
+  // Without a market price a Beetle falls back to its feed XP (here 0).
+  assert.equal(caveBatch(ctx(farm(), { prices: { Egg: 0.0245 } }), st, "Beetle", 0).gross, 0);
+});
+
 test("Mud is worth a coat's feed saving, but only as much Mud as the pigs can use", () => {
   const c = ctx(farm()), st = sideState(c);
   const one = caveDay(c, st, 1), many = caveDay(c, st, 6);

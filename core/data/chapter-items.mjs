@@ -69,5 +69,17 @@ export const CHAPTER_BOOST_ITEMS = [
   { name: "Angler Waders", type: "Wearable", source: "reward", chapter: null, boost: "+10 daily fishing reels" },
 ];
 
+/*
+ * Chapter 16 resources that trade in the game's marketplace but are not in the sfl.world p2p feed
+ * yet (still the 65 old resources on 2026-11-02). The marketplace itself sits behind the anti-bot
+ * request token, so these are the owner's reading of it (lowest listing per unit, launch day —
+ * thin markets, expect them to fall). Used ONLY while the feed lacks the item: once sfl.world
+ * lists it, the feed wins.
+ */
+export const CHAPTER_RESOURCE_PRICES = {
+  readAt: "2026-11-02", source: "in-game marketplace, read by the owner",
+  prices: { "Green Beetle": 1.379, "Blue Beetle": 1.4, "Pink Beetle": 4.4, "Amber Beetle": 7.8, "Pig Bristles": 6.4, "Truffle": 0.6996 },
+};
+
 /** The ticket every current-chapter shop price is quoted in; other currencies stay unpriced. */
 export const CHAPTER_TICKET = "Duende Cap";

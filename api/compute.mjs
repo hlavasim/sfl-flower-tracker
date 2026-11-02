@@ -14,6 +14,7 @@ import { buildBudsSection } from "../core/sections/buds.mjs";
 import { buildPetsSection } from "../core/sections/pets.mjs";
 import { buildTicketsSection, buildTicketHistory, measuredActivity } from "../core/sections/tickets.mjs";
 import { computeBettyRate } from "../core/engine/prices.mjs";
+import { CHAPTER_RESOURCE_PRICES } from "../core/data/chapter-items.mjs";
 import { API_SPEC } from "../core/api-spec.mjs";
 import { AsyncLocalStorage } from "node:async_hooks";
 
@@ -155,7 +156,8 @@ async function fetchPrices() {
       const r = await fetch(`${PROXY}/api/proxy?url=${encodeURIComponent(PRICES_URL)}`);
       if (!r.ok) return { ok: false, data: {} };
       const json = await r.json();
-      return { ok: true, data: json?.data?.p2p || {} };
+      // New chapter resources the feed does not carry yet: the dated fallback, the feed wins.
+      return { ok: true, data: { ...CHAPTER_RESOURCE_PRICES.prices, ...(json?.data?.p2p || {}) } };
     } catch {
       return { ok: false, data: {} };
     }
