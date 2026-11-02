@@ -43,6 +43,8 @@ export { harvestGreenHouse } from "features/game/events/landExpansion/harvestGre
 export { getGreenhousePotReadyAt } from "features/game/events/landExpansion/greenhouseReadiness";
 export { harvestFlower } from "features/game/events/landExpansion/harvestFlower";
 export { getFlowerReadyAt } from "features/game/lib/flowerBedReadiness";
+export { claimProduce } from "features/game/events/landExpansion/claimProduce";
+export { getAnimalReadyAt } from "features/game/lib/animals";
 `;
 
 const banner = [

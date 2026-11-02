@@ -24,9 +24,10 @@ async function game() {
 const placed = (n) => n && n.x !== undefined && n.y !== undefined;
 
 /**
- * Every node's next harvest: { kind, id, name, product, readyAt, amount } (amount null + error when
- * the game refused it). kind: tree | stone | iron | gold | crimstone | oil | crop | fruit |
- * greenhouse | flower. Only nodes with something growing / a timer are listed.
+ * Every node's next harvest: { kind, id, name, product, readyAt, amount, gains } (amount null +
+ * error when the game refused it; gains = every item it added). kind: tree | stone | iron | gold |
+ * crimstone | oil | crop | fruit | greenhouse | flower | animal. Only nodes with something
+ * growing / a timer are listed.
  */
 export async function simulateHarvests(farmJson, farmId, now = Date.now()) {
   const G = await game();
@@ -78,6 +79,21 @@ export async function simulateHarvests(farmJson, farmId, now = Date.now()) {
     add("greenhouse", id, pot.plant.name, pot.plant.name, G.getGreenhousePotReadyAt(pot, state),
       (s, at) => G.harvestGreenHouse({ state: s, action: { type: "greenhouse.harvested", id: Number(id) }, createdAt: at, farmId }));
   }
+  /*
+   * Animals: their produce (Egg + Feather, Milk + Leather, Wool + Merino Wool, Truffle) is claimed
+   * when they wake; claimProduce wants the "ready" state the feeding put them in, so the copy is
+   * marked ready — the yield only depends on the level and the boosts.
+   */
+  for (const [key, building] of [["henHouse", state.henHouse], ["barn", state.barn], ["pigpen", state.pigpen]]) {
+    for (const [id, a] of Object.entries((building && building.animals) || {})) {
+      if (!a || !a.type) continue;
+      add("animal", id, a.type, null, G.getAnimalReadyAt(a, state), (s, at) => {
+        const animal = s[key].animals[id];
+        const ready = animal.state === "ready" ? s : { ...s, [key]: { ...s[key], animals: { ...s[key].animals, [id]: { ...animal, state: "ready" } } } };
+        return G.claimProduce({ state: ready, action: { type: "produce.claimed", animal: a.type, id }, createdAt: at });
+      });
+    }
+  }
   for (const [id, bed] of Object.entries((state.flowers && state.flowers.flowerBeds) || {})) {
     const f = bed && bed.flower;
     if (!placed(bed) || !f) continue;
@@ -85,6 +101,9 @@ export async function simulateHarvests(farmJson, farmId, now = Date.now()) {
       (s, at) => G.harvestFlower({ state: s, action: { type: "flower.harvested", id }, createdAt: at, farmId }));
   }
 
+  // A power skill that finishes a category (Greenhouse Guru, Instant Growth…) sets the start to 0, so
+  // the game's ready time lands in 1970: it is ready now, not "56 years overdue".
+  for (const t of tasks) if (t.readyAt < Date.UTC(2021, 0, 1)) t.readyAt = now;
   tasks.sort((a, b) => a.readyAt - b.readyAt);
   const out = [];
   // The game's analytics complain on every harvest ("[MoonForge] call … init()") — not ours to fix.
@@ -95,11 +114,18 @@ export async function simulateHarvests(farmJson, farmId, now = Date.now()) {
   for (const t of tasks) {
     // A harvest happens when its node is ready (never in the past); a minute's margin past the edge.
     const at = Math.max(now, t.readyAt) + 60000;
-    const before = Number(state.inventory[t.product] || 0);
+    const before = state.inventory;
     try {
       state = t.run(state, at);
-      out.push({ kind: t.kind, id: t.id, name: t.name, product: t.product, readyAt: t.readyAt,
-        amount: +(Number(state.inventory[t.product] || 0) - before).toFixed(4) });
+      // Everything the harvest added (an animal gives two products; a crit can add a bonus item).
+      const gains = {};
+      for (const [k, v] of Object.entries(state.inventory)) {
+        const d = Number(v || 0) - Number(before[k] || 0);
+        if (d > 1e-9) gains[k] = +d.toFixed(4);
+      }
+      const product = t.product || Object.keys(gains)[0] || null;
+      out.push({ kind: t.kind, id: t.id, name: t.name, product, readyAt: t.readyAt,
+        amount: product && gains[product] != null ? gains[product] : 0, gains });
     } catch (e) {
       out.push({ kind: t.kind, id: t.id, name: t.name, product: t.product, readyAt: t.readyAt, amount: null, error: String(e && e.message || e) });
     }

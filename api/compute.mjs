@@ -607,19 +607,23 @@ async function _handler(req, res) {
      * Bins' value from the POWER models.
      */
     else if (section === "widget") {
-      const [nftResult, exchange, usdCzk] = await Promise.all([fetchNfts(), fetchExchange(), fetchUsdCzk()]);
-      const sflUsd = (exchange && (exchange.sfl?.usd || exchange.data?.sfl?.usd)) || 0;
-      const kc = (flower) => (flower != null && sflUsd > 0 && usdCzk > 0 ? +(flower * sflUsd * usdCzk).toFixed(2) : null);
+      // The upstream fetches run while the harvests replay (I/O under the CPU-bound replay).
+      const upstream = Promise.all([fetchNfts(), fetchExchange(), fetchUsdCzk()]);
       const { simulateHarvests } = await import("../core/engine/harvest-sim.mjs");
       const now = Date.now();
       const harvests = await simulateHarvests(farm, Number(farmId), now);
+      const [nftResult, exchange, usdCzk] = await upstream;
+      const sflUsd = (exchange && (exchange.sfl?.usd || exchange.data?.sfl?.usd)) || 0;
+      const kc = (flower) => (flower != null && sflUsd > 0 && usdCzk > 0 ? +(flower * sflUsd * usdCzk).toFixed(2) : null);
       // POWER's price map: the feed plus what it derives (Oil from its production cost).
       let ps = null;
       try { if (nftResult.ok) ps = buildPowerSection(farm, p2p, nftResult.data, exchange, settings); } catch { ps = null; }
       const prices = (ps && ps.p2pPrices) || p2p;
       const price = (item) => parseFloat(prices[item]) || 0;
+      // A harvest is worth every item it adds at its price (null when none of them has one).
       const items = harvests.map((h) => {
-        const flower = h.amount != null && price(h.product) > 0 ? +(h.amount * price(h.product)).toFixed(4) : null;
+        const priced = Object.entries(h.gains || {}).filter(([k]) => price(k) > 0);
+        const flower = h.amount != null && priced.length ? +priced.reduce((t, [k, q]) => t + q * price(k), 0).toFixed(4) : null;
         return { ...h, flower, czk: kc(flower) };
       });
       const cavePigs = (ps && ps.cavePigs) || null;
