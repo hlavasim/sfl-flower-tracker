@@ -37,6 +37,7 @@ import {
   CROP_MACHINE_NFTS, CROP_MACHINE_SPEED_ITEMS,
 } from "./crop-machine.mjs";
 import { decodeBud, budSetSfl, budBoostText } from "./buds.mjs";
+import { CHAPTER_RESOURCE_PRICES } from "../data/chapter-items.mjs";
 import { SIDE_MODELS, sideValue, sideRankDelta, sideState, pigSlot, farmPigs, caveDay, caveBatch, farmBins, sideCavePigsNow } from "./side-values.mjs";
 
 // Deviation 1: the page global, module-scoped. Set before any calc.
@@ -1546,7 +1547,11 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
     function roadmapCavePigs() {
       const ctx = roadmapSideCtx(getRoadmapSettings(powerState.roadmapSettingsRaw), powerState.p2pPrices);
       const r = sideCavePigsNow(ctx);
+      // Which of the prices these panels stand on are the owner's hand-entered fallback (the feed lacks them).
+      const pr = powerState.p2pPrices || {};
+      const manual = Object.entries(CHAPTER_RESOURCE_PRICES.prices).filter(([k, v]) => pr[k] === v).map(([item, price]) => ({ item, price }));
       return {
+        manualPrices: manual.length ? { readAt: CHAPTER_RESOURCE_PRICES.readAt, items: manual } : null,
         pigs: r.pigs, pigsNow: r.pigs.reduce((t, p) => t + p.net, 0), truffleValue: r.truffleValue,
         levels: r.levels.map((l) => ({ level: l.level, truffles: l.truffles, feed: l.feed, net: l.net,
           slop: l.feedPick.slop, crop: l.feedPick.crop, cropQty: l.feedPick.cropQty, feeds: l.feedPick.feeds })),

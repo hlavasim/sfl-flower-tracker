@@ -5463,7 +5463,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.22</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.23</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5490,6 +5490,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.23", items: [
+          { t: "fix", text: "POWER → 🐖 PIGS and 🍄 CAVE: <b>one table each instead of two.</b> Pigs: one row per level — on the left a day at that level (what to feed, feed cost, Truffles, profit), on the right trading in at that level (Bristles, what the whole raise earned, per day); 🐖 marks your pigs. Cave: one row per recipe with its per-batch and per-day profit; ⛏️ marks what your Myco Bins run. Both panels say ❗ when they stand on the hand-entered Truffle / Beetle / Bristle prices, and which." },
+        ] },
         { ver: "v6.22", items: [
           { t: "fix", text: "<b>TICKETY in a chapter's first week.</b> It said \"by the auction you'll have 1\": the pace was measured on day one, and the chapter's first week and the auction week were counted as ticket weeks although they pay only the daily reward and deliveries (no chores, bounties or animals). Projections now count only ticket weeks (8 to Cave Dwellers' auction), and until a full one has passed the pace is your own from past chapters (\"z minulých kapitol\")." },
         ] },
@@ -25417,33 +25420,50 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       if (!cp || (catId !== "pigs" && catId !== "cave")) return "";
       const f = (v, d = 2) => (v == null || !isFinite(v) ? "—" : (v >= 0 ? "+" : "") + v.toFixed(d));
       const r = "text-align:right";
-      const box = (body) => `<div style="font-size:0.6rem;line-height:1.7;padding:8px 10px;margin:4px 0 10px;border:1px dashed var(--border-dark);border-radius:6px">${body}</div>`;
+      const mp = cp.manualPrices;
+      const warn = mp ? `<div style="color:var(--sunpetal);font-weight:bold;margin-bottom:4px">❗ Ceny jsou zadané ručně (${escHTML(mp.readAt)}), sfl.world je zatím nemá: ${mp.items.map((x) => `${escHTML(x.item)} ${x.price}`).join(" · ")} ${sflIcon()} — nižší z nabídky a posledního prodeje, první den kapitoly. Až je sfl.world přidá, přepnou se samy.</div>` : "";
+      const box = (body) => `<div style="font-size:0.6rem;line-height:1.7;padding:8px 10px;margin:4px 0 10px;border:1px dashed var(--border-dark);border-radius:6px">${warn}${body}</div>`;
       if (catId === "pigs") {
         const s = cp.slot || {};
         const best = s.best;
-        const rows = (s.cycles || []).map((c) => `<tr${best && c.level === best.level ? ` style="color:var(--green);font-weight:bold"` : ""}><td>L${c.level}</td><td style="${r}">${c.level} d</td><td style="${r}">${c.truffles.toFixed(1)}</td><td style="${r}">${c.bristles.toFixed(1)}</td><td style="${r}">${f(c.total, 1)}</td><td style="${r}">${f(c.perDay)}</td></tr>`).join("");
-        return box(`<b>Tvoje prasata dnes:</b> ${cp.pigs.length} × (levely ${cp.pigs.map((p) => p.level).join(", ") || "—"}) = <b>${f(cp.pigsNow)}</b> ${sflIcon()}/den · lanýž ${cp.truffleValue.toFixed(3)} ${sflIcon()}
-          <br><b>Místo v Pigpenu dlouhodobě:</b> držet prase na L15 = ${f(s.keep)}/den${best ? ` · vychovat na <b>L${best.level}</b> a vyměnit za Bristles = <b>${f(best.perDay)}</b>/den` : " · Bristles nemají cenu"}
+        const cyc = Object.fromEntries((s.cycles || []).map((c) => [c.level, c]));
+        const have = {};
+        for (const p of cp.pigs || []) have[p.level] = (have[p.level] || 0) + 1;
+        const rows = (cp.levels || []).map((l) => {
+          const c = cyc[l.level];
+          const isBest = best && c && c.level === best.level;
+          const lose = l.net < 0;
+          return `<tr${isBest ? ` style="color:var(--green);font-weight:bold"` : ""}>
+            <td>L${l.level}${have[l.level] ? ` <span title="tvoje prasata na tomhle levelu">🐖×${have[l.level]}</span>` : ""}</td>
+            <td>${l.slop ? `${l.feeds}× ${escHTML(l.slop.replace(" Slop", ""))} <span style="color:var(--text-dim)">(${l.cropQty}× ${escHTML(l.crop)})</span>` : "—"}</td>
+            <td style="${r}">${f(-l.feed, 3)}</td>
+            <td style="${r}">${l.truffles.toFixed(2)}</td>
+            <td style="${r}${lose ? ";color:var(--red)" : ""}">${f(l.net)}</td>
+            <td style="${r};border-left:2px solid var(--border-dark)">${c ? c.bristles.toFixed(1) : "—"}</td>
+            <td style="${r}">${c ? f(c.total, 1) : "—"}</td>
+            <td style="${r}">${c ? f(c.perDay) : "—"}</td></tr>`;
+        }).join("");
+        return box(`<b>Tvoje prasata dnes:</b> ${cp.pigs.length} = <b>${f(cp.pigsNow)}</b> ${sflIcon()}/den · lanýž ${cp.truffleValue.toFixed(3)} ${sflIcon()} po poplatku
+          <br><b>Co s místem v Pigpenu:</b> držet prase na L15 = ${f(s.keep)}/den${best ? ` · vychovat na <b>L${best.level}</b> a vyměnit = <b>${f(best.perDay)}</b>/den` : " · Bristles nemají cenu"}
           → <b style="color:var(--green)">${s.tradeIn ? `vyměňovat na L${best.level}` : "držet"}</b>
-          <div style="color:var(--text-dim)">Nové prase za 100 coinů, každý den o level výš (krmení do dalšího levelu), lanýže při každém sběru, Bristles při výměně (prase musí být vzhůru). Bez 10% poplatku za prodej.</div>
-          ${rows ? `<table class="node-res-table" style="width:100%;margin-top:4px"><tr><th>VÝMĚNA NA</th><th style="${r}">DNÍ</th><th style="${r}">LANÝŽE</th><th style="${r}">BRISTLES</th><th style="${r}">CELKEM</th><th style="${r}">/DEN</th></tr>${rows}</table>` : ""}
-          ${(cp.levels || []).length ? `<div style="margin-top:8px"><b>Prase po levelech</b> — lanýže z jednoho sběru, krmení do dalšího levelu nejlevnějším Slopem a čím ho udělat:</div>
-          <table class="node-res-table" style="width:100%;margin-top:4px"><tr><th>LEVEL</th><th style="${r}">LANÝŽE</th><th>KRMIT</th><th style="${r}">KRMENÍ</th><th style="${r}">ZISK /DEN</th></tr>${cp.levels.map((l) => {
-            const bestNet = Math.max(...cp.levels.map((x) => x.net));
-            const col = l.net < 0 ? "color:var(--red)" : l.net === bestNet ? "color:var(--green);font-weight:bold" : "";
-            return `<tr style="${col}"><td>L${l.level}</td><td style="${r}">${l.truffles.toFixed(2)}</td><td>${l.slop ? `${l.feeds}× ${escHTML(l.slop)} <span style="color:var(--text-dim)">(${l.cropQty}× ${escHTML(l.crop)})</span>` : "—"}</td><td style="${r}">${f(-l.feed, 3)}</td><td style="${r}">${f(l.net)}</td></tr>`;
-          }).join("")}</table>` : ""}`);
+          <div style="color:var(--text-dim)">Jeden řádek = jeden level. Vlevo jeden den prasete na tom levelu: čím ho krmit (nejlevnější Slop a z čeho), kolik krmení stojí, kolik dá lanýžů a zisk za den. Vpravo výměna na tom levelu: Bristles, kolik celý chov od nového prasete (100 coinů, každý den o level výš) vydělal, a to na den. Lanýže a Bristles po 10% poplatku.</div>
+          ${rows ? `<table class="node-res-table" style="width:100%;margin-top:4px">
+            <tr><th rowspan="2">LEVEL</th><th colspan="4">JEDEN DEN NA TOMHLE LEVELU</th><th colspan="3" style="border-left:2px solid var(--border-dark)">VYMĚNIT NA TOMHLE LEVELU</th></tr>
+            <tr><th>KRMIT</th><th style="${r}">KRMENÍ</th><th style="${r}">LANÝŽE</th><th style="${r}">ZISK</th><th style="${r};border-left:2px solid var(--border-dark)">BRISTLES</th><th style="${r}">CELÝ CHOV</th><th style="${r}">/DEN</th></tr>${rows}</table>` : ""}`);
       }
       const c = cp.cave || { bins: [] };
-      const rows = c.bins.map((b, i) => `<tr><td>Myco Bin ${i + 1}</td><td>${escHTML(b.recipe)}</td><td style="${r}">${b.mushrooms.toFixed(1)} / ${b.beetles.toFixed(1)} / ${b.mud.toFixed(0)}</td><td style="${r}">${f(-(b.input + b.dig))}</td><td style="${r}">${f(b.dayNet)}</td></tr>`).join("");
-      return box(`<b>Jeskyně dnes:</b> ${c.bins.length} Myco Bin × ${(c.batchesPerDay || 0).toFixed(2)} dávky/den = <b>${f(c.net)}</b> ${sflIcon()}/den
-        <div style="color:var(--text-dim)">Každý Myco Bin s nejlepším receptem. Brouci za lepší z ceny na trhu a hodnoty krmiva, houby jako Slop, Mud jen kolik ho prasata spotřebují na kabát. Kopání 25 políček Sand Shovelem.</div>
-        ${rows ? `<table class="node-res-table" style="width:100%;margin-top:4px"><tr><th>BIN</th><th>RECEPT</th><th style="${r}">HOUBY / BROUCI / MUD</th><th style="${r}">VSTUP+KOPÁNÍ /DÁVKU</th><th style="${r}">/DEN</th></tr>${rows}</table>` : ""}
-        ${(cp.recipes || []).length ? `<div style="margin-top:8px"><b>Recepty vedle sebe</b> (jedna dávka; Mud tu má hodnotu 0 — počítá se jen tolik, kolik ho prasata spotřebují na kabát, a na stavby Pigpenu a jeskyně ho potřebuješ zvlášť):</div>
-        <table class="node-res-table" style="width:100%;margin-top:4px"><tr><th>RECEPT</th><th style="${r}">HOUBY / BROUCI / MUD</th><th style="${r}">VÝNOS</th><th style="${r}">VSTUP</th><th style="${r}">KOPÁNÍ</th><th style="${r}">ZISK /DÁVKU</th></tr>${cp.recipes.map((x) => {
-          const best = Math.max(...cp.recipes.map((y) => y.net));
-          return `<tr${x.net === best ? ` style="color:var(--green);font-weight:bold"` : ""}><td>${escHTML(x.recipe)}</td><td style="${r}">${x.mushrooms.toFixed(1)} / ${x.beetles.toFixed(1)} / ${x.mud.toFixed(0)}</td><td style="${r}">${f(x.gross)}</td><td style="${r}">${f(-x.input)}</td><td style="${r}">${f(-x.dig)}</td><td style="${r}">${f(x.net)}</td></tr>`;
-        }).join("")}</table>` : ""}`);
+      const per = c.batchesPerDay || 0;
+      const running = {};
+      for (const b of c.bins || []) running[b.recipe] = (running[b.recipe] || 0) + 1;
+      const bestNet = Math.max(...(cp.recipes || []).map((y) => y.net));
+      const rows = (cp.recipes || []).map((x) => `<tr${x.net === bestNet ? ` style="color:var(--green);font-weight:bold"` : ""}>
+        <td>${escHTML(x.recipe)}${running[x.recipe] ? ` <span title="tolik tvých Myco Binů na něm tracker počítá">⛏️×${running[x.recipe]}</span>` : ""}</td>
+        <td style="${r}">${x.mushrooms.toFixed(1)} / ${x.beetles.toFixed(1)} / ${x.mud.toFixed(0)}</td>
+        <td style="${r}">${f(x.gross)}</td><td style="${r}">${f(-x.input)}</td><td style="${r}">${f(-x.dig)}</td>
+        <td style="${r}">${f(x.net)}</td><td style="${r}">${f(x.net * per)}</td></tr>`).join("");
+      return box(`<b>Jeskyně dnes:</b> ${c.bins.length} Myco Bin × ${per.toFixed(2)} dávky/den = <b>${f(c.net)}</b> ${sflIcon()}/den
+        <div style="color:var(--text-dim)">Jeden řádek = jeden recept, jedna dávka: co dá (houby / brouci / Mud), kolik to je ve FLOWER, vstup receptu, kopání 25 políček Sand Shovelem a zisk; poslední sloupec je to na den. ⛏️ = na čem tracker počítá tvoje Myco Biny. Brouci za lepší z prodeje (po 10% poplatku) a krmiva, houby jako Slop. Mud tu má 0 — počítá se jen tolik, kolik ho prasata spotřebují na kabát; na stavby Pigpenu a jeskyně ho potřebuješ zvlášť.</div>
+        ${rows ? `<table class="node-res-table" style="width:100%;margin-top:4px"><tr><th>RECEPT</th><th style="${r}">HOUBY / BROUCI / MUD</th><th style="${r}">VÝNOS</th><th style="${r}">VSTUP</th><th style="${r}">KOPÁNÍ</th><th style="${r}">ZISK /DÁVKU</th><th style="${r}">/DEN</th></tr>${rows}</table>` : ""}`);
     }
 
     function _tkScheduleHtml(sch) {
