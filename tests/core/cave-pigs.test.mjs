@@ -117,6 +117,13 @@ test("Mud is worth a coat's feed saving, but only as much Mud as the pigs can us
 test("the farm's pigs and cave as they stand", () => {
   const now = sideCavePigsNow(ctx(farm()));
   assert.equal(now.pigs.length, 3);
+  // Every level with what to feed it (L0–2 favourite Basic Slop: 150 Potato is the cheapest crop here).
+  assert.equal(now.levels.length, 16);
+  const fp = now.levels[1].feedPick;
+  assert.deepEqual([fp.slop, fp.crop, fp.cropQty, fp.feeds], ["Basic Slop", "Potato", 150, 3]);
+  assert.ok(Math.abs(now.levels[1].feed - 3 * 150 * 0.0002) < 1e-12);
+  // All three Myco Bin recipes side by side.
+  assert.deepEqual(now.recipes.map((r) => r.recipe), ["Mushroom", "Beetle", "Mud"]);
   assert.equal(now.cave.bins.length, 1);
   assert.ok(isFinite(now.pigsNet) && isFinite(now.cave.net));
 });

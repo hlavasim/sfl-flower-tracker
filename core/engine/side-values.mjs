@@ -413,11 +413,15 @@ function bundleCost(ctx, b) {
   return v;
 }
 /** The cheapest crop route to one Slop (crops without a price are skipped). */
-function slopCost(ctx, slop) {
+function slopCost(ctx, slop) { return slopPick(ctx, slop).cost; }
+/** Which crop makes one Slop cheapest: { cost, crop, qty } (cost 0 when none has a price). */
+function slopPick(ctx, slop) {
   const pr = ctx.prices || {};
-  let best = Infinity;
-  for (const [crop, q] of Object.entries(SLOP_CROPS[slop])) if (pr[crop] > 0) best = Math.min(best, q * pr[crop]);
-  return isFinite(best) ? best : 0;
+  let best = { cost: 0, crop: null, qty: 0 };
+  for (const [crop, q] of Object.entries(SLOP_CROPS[slop])) {
+    if (pr[crop] > 0 && (!best.crop || q * pr[crop] < best.cost)) best = { cost: q * pr[crop], crop, qty: q };
+  }
+  return best;
 }
 function pigLevel(xp) { let l = 0; for (let i = 0; i < PIG_LEVELS.length; i++) if (xp >= PIG_LEVELS[i]) l = i; return l; }
 /** Levels of the farm's pigs (farm.pigpen.animals). */
@@ -426,17 +430,20 @@ export function farmPigs(farm) {
     .map((a) => pigLevel(Number(a.experience) || 0));
 }
 /** One claim's feed for a pig at `level`: the cheapest Slop per XP, at the state's XP and feed multipliers. */
-function pigFeed(ctx, st, level, xpMult) {
+function pigFeed(ctx, st, level, xpMult) { return pigFeedPick(ctx, st, level, xpMult).cost; }
+/** …and which Slop / crop that is: { cost, slop, crop, cropQty, feeds }. */
+function pigFeedPick(ctx, st, level, xpMult) {
   const need = level >= 15 ? PIG_LEVELS[15] - PIG_LEVELS[14] : PIG_LEVELS[level + 1] - PIG_LEVELS[level];
   const row = SLOP_XP.filter(([from]) => level >= from).pop()[1];
   const qty = lvl(st, "Swill Savvy") ? rank(SWILL_SAVVY, lvl(st, "Swill Savvy")) : 1;
-  let best = Infinity;
+  let best = null;
   for (const [slop, xp] of Object.entries(row)) {
-    const c = slopCost(ctx, slop);
-    if (!(c > 0)) continue;
-    best = Math.min(best, Math.ceil(need / (xp * xpMult)) * qty * c);
+    const p = slopPick(ctx, slop);
+    if (!(p.cost > 0)) continue;
+    const feeds = Math.ceil(need / (xp * xpMult)) * qty;
+    if (!best || feeds * p.cost < best.cost) best = { cost: feeds * p.cost, slop, crop: p.crop, cropQty: p.qty, feeds };
   }
-  return isFinite(best) ? best : 0;
+  return best || { cost: 0, slop: null, crop: null, cropQty: 0, feeds: 0 };
 }
 function pigXpMult(st) { return on(st, "Pig Onesie") ? 1.05 : 1; }
 /**
@@ -601,8 +608,12 @@ function caveNet(ctx, st) { return caveDay(ctx, st).net; }
 export function sideCavePigsNow(ctx) {
   const st = sideState(ctx);
   const pigs = farmPigs(ctx.farm);
+  // Every level's day and what to feed it; every Myco Bin recipe side by side (Mud at 0 — its coat
+  // value depends on what the pigs need, which caveDay works out for the bins as they run).
+  const levels = Array.from({ length: 16 }, (_, l) => ({ level: l, ...pigDay(ctx, st, l), feedPick: pigFeedPick(ctx, st, l, pigXpMult(st)) }));
+  const recipes = Object.keys(CAVE_RECIPES).map((r) => caveBatch(ctx, st, r, 0));
   return { pigs: pigs.map((l) => ({ level: l, ...pigDay(ctx, st, l) })), pigsNet: pigsNet(ctx, st), slot: pigSlot(ctx, st),
-    truffleValue: truffleValue(ctx), cave: caveDay(ctx, st) };
+    truffleValue: truffleValue(ctx), cave: caveDay(ctx, st), levels, recipes };
 }
 
 /* ── registry ──────────────────────────────────────────────────────────────────────────── */

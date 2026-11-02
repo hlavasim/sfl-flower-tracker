@@ -5463,7 +5463,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.20</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.21</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5490,6 +5490,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.21", items: [
+          { t: "feat", text: "POWER → 🐖 PIGS: <b>a pig level by level</b> — Truffles per claim, what to feed it (the cheapest Slop and the crop to make it from) and the profit a day, best level in green, a losing one in red. 🍄 CAVE: <b>all three Myco Bin recipes side by side</b> per batch (yield, input, digging, profit)." },
+        ] },
         { ver: "v6.20", items: [
           { t: "fix", text: "<b>Cave and pig values were too optimistic.</b> The Chapter 16 prices took the cheapest listing, but listings ran up to 11× the last sale (Blue Beetle 1.4 vs 0.2, Pink 4.4 vs 0.4). Each now takes the lower of the two, and Truffles, Beetles and Bristles are valued at what a sale keeps after the 10 % market fee (a Truffle is the better of selling and cooking). The Cave's day drops from ~22 to ~6 FLOWER; trading pigs in at L15 still beats keeping them." },
         ] },
@@ -25420,13 +25423,24 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           <br><b>Místo v Pigpenu dlouhodobě:</b> držet prase na L15 = ${f(s.keep)}/den${best ? ` · vychovat na <b>L${best.level}</b> a vyměnit za Bristles = <b>${f(best.perDay)}</b>/den` : " · Bristles nemají cenu"}
           → <b style="color:var(--green)">${s.tradeIn ? `vyměňovat na L${best.level}` : "držet"}</b>
           <div style="color:var(--text-dim)">Nové prase za 100 coinů, každý den o level výš (krmení do dalšího levelu), lanýže při každém sběru, Bristles při výměně (prase musí být vzhůru). Bez 10% poplatku za prodej.</div>
-          ${rows ? `<table class="node-res-table" style="width:100%;margin-top:4px"><tr><th>VÝMĚNA NA</th><th style="${r}">DNÍ</th><th style="${r}">LANÝŽE</th><th style="${r}">BRISTLES</th><th style="${r}">CELKEM</th><th style="${r}">/DEN</th></tr>${rows}</table>` : ""}`);
+          ${rows ? `<table class="node-res-table" style="width:100%;margin-top:4px"><tr><th>VÝMĚNA NA</th><th style="${r}">DNÍ</th><th style="${r}">LANÝŽE</th><th style="${r}">BRISTLES</th><th style="${r}">CELKEM</th><th style="${r}">/DEN</th></tr>${rows}</table>` : ""}
+          ${(cp.levels || []).length ? `<div style="margin-top:8px"><b>Prase po levelech</b> — lanýže z jednoho sběru, krmení do dalšího levelu nejlevnějším Slopem a čím ho udělat:</div>
+          <table class="node-res-table" style="width:100%;margin-top:4px"><tr><th>LEVEL</th><th style="${r}">LANÝŽE</th><th>KRMIT</th><th style="${r}">KRMENÍ</th><th style="${r}">ZISK /DEN</th></tr>${cp.levels.map((l) => {
+            const bestNet = Math.max(...cp.levels.map((x) => x.net));
+            const col = l.net < 0 ? "color:var(--red)" : l.net === bestNet ? "color:var(--green);font-weight:bold" : "";
+            return `<tr style="${col}"><td>L${l.level}</td><td style="${r}">${l.truffles.toFixed(2)}</td><td>${l.slop ? `${l.feeds}× ${escHTML(l.slop)} <span style="color:var(--text-dim)">(${l.cropQty}× ${escHTML(l.crop)})</span>` : "—"}</td><td style="${r}">${f(-l.feed, 3)}</td><td style="${r}">${f(l.net)}</td></tr>`;
+          }).join("")}</table>` : ""}`);
       }
       const c = cp.cave || { bins: [] };
       const rows = c.bins.map((b, i) => `<tr><td>Myco Bin ${i + 1}</td><td>${escHTML(b.recipe)}</td><td style="${r}">${b.mushrooms.toFixed(1)} / ${b.beetles.toFixed(1)} / ${b.mud.toFixed(0)}</td><td style="${r}">${f(-(b.input + b.dig))}</td><td style="${r}">${f(b.dayNet)}</td></tr>`).join("");
       return box(`<b>Jeskyně dnes:</b> ${c.bins.length} Myco Bin × ${(c.batchesPerDay || 0).toFixed(2)} dávky/den = <b>${f(c.net)}</b> ${sflIcon()}/den
         <div style="color:var(--text-dim)">Každý Myco Bin s nejlepším receptem. Brouci za lepší z ceny na trhu a hodnoty krmiva, houby jako Slop, Mud jen kolik ho prasata spotřebují na kabát. Kopání 25 políček Sand Shovelem.</div>
-        ${rows ? `<table class="node-res-table" style="width:100%;margin-top:4px"><tr><th>BIN</th><th>RECEPT</th><th style="${r}">HOUBY / BROUCI / MUD</th><th style="${r}">VSTUP+KOPÁNÍ /DÁVKU</th><th style="${r}">/DEN</th></tr>${rows}</table>` : ""}`);
+        ${rows ? `<table class="node-res-table" style="width:100%;margin-top:4px"><tr><th>BIN</th><th>RECEPT</th><th style="${r}">HOUBY / BROUCI / MUD</th><th style="${r}">VSTUP+KOPÁNÍ /DÁVKU</th><th style="${r}">/DEN</th></tr>${rows}</table>` : ""}
+        ${(cp.recipes || []).length ? `<div style="margin-top:8px"><b>Recepty vedle sebe</b> (jedna dávka; Mud tu má hodnotu 0 — počítá se jen tolik, kolik ho prasata spotřebují na kabát, a na stavby Pigpenu a jeskyně ho potřebuješ zvlášť):</div>
+        <table class="node-res-table" style="width:100%;margin-top:4px"><tr><th>RECEPT</th><th style="${r}">HOUBY / BROUCI / MUD</th><th style="${r}">VÝNOS</th><th style="${r}">VSTUP</th><th style="${r}">KOPÁNÍ</th><th style="${r}">ZISK /DÁVKU</th></tr>${cp.recipes.map((x) => {
+          const best = Math.max(...cp.recipes.map((y) => y.net));
+          return `<tr${x.net === best ? ` style="color:var(--green);font-weight:bold"` : ""}><td>${escHTML(x.recipe)}</td><td style="${r}">${x.mushrooms.toFixed(1)} / ${x.beetles.toFixed(1)} / ${x.mud.toFixed(0)}</td><td style="${r}">${f(x.gross)}</td><td style="${r}">${f(-x.input)}</td><td style="${r}">${f(-x.dig)}</td><td style="${r}">${f(x.net)}</td></tr>`;
+        }).join("")}</table>` : ""}`);
     }
 
     function _tkScheduleHtml(sch) {

@@ -1548,6 +1548,9 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       const r = sideCavePigsNow(ctx);
       return {
         pigs: r.pigs, pigsNow: r.pigs.reduce((t, p) => t + p.net, 0), truffleValue: r.truffleValue,
+        levels: r.levels.map((l) => ({ level: l.level, truffles: l.truffles, feed: l.feed, net: l.net,
+          slop: l.feedPick.slop, crop: l.feedPick.crop, cropQty: l.feedPick.cropQty, feeds: l.feedPick.feeds })),
+        recipes: r.recipes.map((b) => ({ recipe: b.recipe, mushrooms: b.mushrooms, beetles: b.beetles, mud: b.mud, gross: b.gross, input: b.input, dig: b.dig, net: b.net })),
         slot: { keep: r.slot.keep, tradeIn: r.slot.tradeIn, perDay: r.slot.perDay, best: r.slot.best,
           cycles: r.slot.cycles.map((c) => ({ level: c.level, bristles: c.bristles, truffles: c.truffles, perDay: c.perDay, total: c.total })) },
         cave: { net: r.cave.net, batchesPerDay: r.cave.batchesPerDay,
