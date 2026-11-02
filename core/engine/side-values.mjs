@@ -333,7 +333,10 @@ function xpNet(ctx, st) {
  * (types/animals.ts). Like the other animals here, a cycle needs the XP to the next level
  * (Cow thresholds) and every feed is one Slop of the level's favourite tier (or a cheaper one
  * per XP); a Slop costs ONE of its crops in the listed amount (types/pigFeeds.ts). Pig Bristles
- * only come from trading a pig in, so they are not daily income.
+ * only come from trading a pig in (tradeInPig.ts: awake, level 3+, the pig is gone), so a pen slot
+ * has two long-run plays: keep the pig at L15 for its Truffles, or raise a new one (100 coins) to
+ * level L — one level a day, Truffles on every claim — and trade it in for its Bristles. pigSlot
+ * finds the better per day; valuations use it, as a pen slot is held for good.
  *
  * The Cave's Myco Bins dig a 25-tile patch every 12 h (types/caveRecipes.ts, cavePatch.ts).
  * Its outputs are valued by what they bring on THIS farm: a Beetle is the better of its p2p price
@@ -363,6 +366,9 @@ const TRUFFLE_RECIPES = [            // consumables.ts
   { truffles: 15, xp: 30000, other: { Wheat: 30, Egg: 30, Honey: 5 } },           // Truffle Cake
   { truffles: 8, xp: 32000, other: { Rice: 3, "Wild Mushroom": 5 } },             // Creamy Truffle Risotto
 ];
+const PIG_BRISTLES = [0, 0, 0, 1, 1, 2, 3, 3, 4, 5, 6, 6, 7, 8, 9, 12];   // types/animals.ts, per trade-in
+const PIG_PRICE = 100;                                                   // coins, types/animals.ts
+const BRISTLE_PAYOUT = [1.1, 1.2, 1.3];
 const CATTLEGRIM = 0.25, BARN_MANAGER = 0.1;
 const TRUFFLE_YIELD = [1.1, 1.2, 1.3];
 const SWILL_SAVVY = [0.75, 0.65, 0.5], SWILL_DEBUFF = [1.5, 1.55, 1.65];
@@ -461,9 +467,41 @@ export function pigDay(ctx, st, level) {
   const feed = pigFeed(ctx, st, level, pigXpMult(st));
   return { truffles, feed, net: truffles * truffleValue(ctx) - feed };
 }
+/** Bristles for trading a pig in at `level` (lib/animals.ts getPigBristles: same adds as Truffles, ×Bristle Payout). */
+function bristlesAt(st, level) {
+  let b = PIG_BRISTLES[level] || 0;
+  if (!b) return 0;
+  if (on(st, "Cattlegrim")) b += CATTLEGRIM;
+  if (lvl(st, "Barn Manager")) b += BARN_MANAGER;
+  if (lvl(st, "Bristle Payout")) b *= rank(BRISTLE_PAYOUT, lvl(st, "Bristle Payout"));
+  return b;
+}
+/**
+ * A pen slot's long run, FLOWER a day: keeping a pig at L15, or the best trade-in cycle — buy a pig,
+ * raise it to L (L days: feed at levels 0…L−1, Truffles at 1…L), trade it in for its Bristles.
+ * Bristles are only counted at a p2p price.
+ */
+export function pigSlot(ctx, st) {
+  const tv = truffleValue(ctx), bp = (ctx.prices || {})["Pig Bristles"] || 0;
+  const coin = !ctx.coinsFree && ctx.coinsPerSFL > 0 ? PIG_PRICE / ctx.coinsPerSFL : 0;
+  const keep = pigDay(ctx, st, 15).net;
+  const cycles = [];
+  let truffles = 0, feed = 0;
+  for (let L = 1; L <= 15; L++) {
+    feed += pigFeed(ctx, st, L - 1, pigXpMult(st));
+    truffles += trufflesPerClaim(st, L);
+    const bristles = bristlesAt(st, L);
+    if (!bristles) continue;
+    const total = truffles * tv - feed + bristles * bp - coin;
+    cycles.push({ level: L, days: L, truffles, bristles, feed, total, perDay: total / L });
+  }
+  const best = bp > 0 ? cycles.reduce((a, c) => (!a || c.perDay > a.perDay ? c : a), null) : null;
+  const tradeIn = !!(best && best.perDay > keep);
+  return { keep, cycles, best, tradeIn, perDay: tradeIn ? best.perDay : keep };
+}
 function pigsNet(ctx, st) {
   const pigs = farmPigs(ctx.farm);
-  let v = pigs.reduce((t, l) => t + pigDay(ctx, st, l).net, 0);
+  let v = pigs.length * pigSlot(ctx, st).perDay;
   // Swill Savvy's debuff: every other animal eats ×1.5 / 1.55 / 1.65.
   if (lvl(st, "Swill Savvy") && ctx.catGain) {
     const d = rank(SWILL_DEBUFF, lvl(st, "Swill Savvy")) - 1;
@@ -560,7 +598,8 @@ function caveNet(ctx, st) { return caveDay(ctx, st).net; }
 export function sideCavePigsNow(ctx) {
   const st = sideState(ctx);
   const pigs = farmPigs(ctx.farm);
-  return { pigs: pigs.map((l) => ({ level: l, ...pigDay(ctx, st, l) })), pigsNet: pigsNet(ctx, st), truffleValue: truffleValue(ctx), cave: caveDay(ctx, st) };
+  return { pigs: pigs.map((l) => ({ level: l, ...pigDay(ctx, st, l) })), pigsNet: pigsNet(ctx, st), slot: pigSlot(ctx, st),
+    truffleValue: truffleValue(ctx), cave: caveDay(ctx, st) };
 }
 
 /* ── registry ──────────────────────────────────────────────────────────────────────────── */
@@ -609,6 +648,7 @@ export const SIDE_MODELS = {
   "Pig Onesie": { cat: "pigs", net: pigsNet },
   "Cattlegrim": { cat: "pigs", net: pigsNet },
   "Barn Manager": { cat: "pigs", net: pigsNet, skill: true, maxLevel: 1 },
+  "Bristle Payout": { cat: "pigs", net: pigsNet, skill: true, maxLevel: 3 },
   // cave — the Myco Bins' day
   ...Object.fromEntries(Object.keys(CAVE_SKILLS).filter((n) => n !== "Tool Hoarder").map((n) => [n, { cat: "cave", net: caveNet, skill: true, maxLevel: 3 }])),
   // power skills — "if you use it every time the cooldown is up"
@@ -635,7 +675,6 @@ const NO_VALUE = [
     "compost — denní hodnotu má jen část compost skillů (u ostatních záleží, jak často boostuješ)"],
   [["Kale Mix", "Alternate Medicine", "Barn Blueprint", "Oil Rig"], "mění recept nebo kapacitu zvířat — zatím neoceněno"],
   [["Straw House"], "compost — denní hodnotu má jen část compost skillů (u ostatních záleží, jak často boostuješ)"],
-  [["Bristle Payout"], "Pig Bristles jsou jen z výměny prasete (trade-in) — žádný denní výnos"],
   [["Tool Hoarder"], "jen větší zásoba lopat a vrtáků — výnos nemění, ušetří restock"],
   [["Cyclops Bloom", "Pot of Luck"], "rychlejší Fish Market / poklady v poušti — tracker tyhle činnosti zatím neoceňuje"],
   [["Rooster", "Carrot Sword"], "šance na mutanta — náhodný drop bez tržní ceny"],

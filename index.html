@@ -5463,7 +5463,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.18</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.19</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5490,6 +5490,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.19", items: [
+          { t: "feat", text: "<b>Pig trade-in strategy.</b> A Pigpen slot is now valued on its long run: keep a pig at L15 for its Truffles, or buy one (100 coins), raise it a level a day and trade it in for its Pig Bristles. POWER → 🐖 PIGS shows your pigs today and the trade-in table for every level L3–L15 with the best one marked; ROADMAP's Pigpen L2 / L3 and the pig skills (Bristle Payout now has a value) use the better play. 🍄 CAVE shows each Myco Bin's recipe and day." },
+        ] },
         { ver: "v6.18", items: [
           { t: "feat", text: "<b>Truffle, Pig Bristles and the four Beetles have prices.</b> They trade in the game since today but sfl.world's feed does not list them yet, so the in-game marketplace prices of 2. 11. are used until it does (Truffle 0.70, Green 1.38, Blue 1.40, Pink 4.40, Amber 7.80, Bristles 6.40 FLOWER). A Beetle is now worth the better of selling it and feeding it, which turns the Cave from a loss into the best recipe being <b>Beetle</b> — and ROADMAP now offers further Cave tiers. Launch-day prices on a thin market: expect them to fall." },
         ] },
@@ -17510,6 +17513,7 @@
             <span class="power-toggle-arrow">▶</span>
           </div>`;
           content += `<div class="power-cat-body">`;
+          content += _cavePigsHtml(catId, powerState.cavePigs);
           if (owned.length > 0) {
             content += `<div class="power-subsection-label">✅ OWNED (${owned.length})</div>`;
             for (const b of owned) {
@@ -25395,6 +25399,33 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
      * This chapter's auction rounds (the in-game list the owner copied): every item, its supply,
      * the next round in local time and how many are left, and what it would add on this farm a day.
      */
+    /*
+     * POWER's PIGS / CAVE panels: the farm's pigs and Myco Bins as they stand (power section
+     * cavePigs, core/engine/side-values.mjs). For pigs, the pen slot's long run — keep a pig at L15
+     * for Truffles, or raise one and trade it in for Pig Bristles — with the per-level table.
+     */
+    function _cavePigsHtml(catId, cp) {
+      if (!cp || (catId !== "pigs" && catId !== "cave")) return "";
+      const f = (v, d = 2) => (v == null || !isFinite(v) ? "—" : (v >= 0 ? "+" : "") + v.toFixed(d));
+      const r = "text-align:right";
+      const box = (body) => `<div style="font-size:0.6rem;line-height:1.7;padding:8px 10px;margin:4px 0 10px;border:1px dashed var(--border-dark);border-radius:6px">${body}</div>`;
+      if (catId === "pigs") {
+        const s = cp.slot || {};
+        const best = s.best;
+        const rows = (s.cycles || []).map((c) => `<tr${best && c.level === best.level ? ` style="color:var(--green);font-weight:bold"` : ""}><td>L${c.level}</td><td style="${r}">${c.level} d</td><td style="${r}">${c.truffles.toFixed(1)}</td><td style="${r}">${c.bristles.toFixed(1)}</td><td style="${r}">${f(c.total, 1)}</td><td style="${r}">${f(c.perDay)}</td></tr>`).join("");
+        return box(`<b>Tvoje prasata dnes:</b> ${cp.pigs.length} × (levely ${cp.pigs.map((p) => p.level).join(", ") || "—"}) = <b>${f(cp.pigsNow)}</b> ${sflIcon()}/den · lanýž ${cp.truffleValue.toFixed(3)} ${sflIcon()}
+          <br><b>Místo v Pigpenu dlouhodobě:</b> držet prase na L15 = ${f(s.keep)}/den${best ? ` · vychovat na <b>L${best.level}</b> a vyměnit za Bristles = <b>${f(best.perDay)}</b>/den` : " · Bristles nemají cenu"}
+          → <b style="color:var(--green)">${s.tradeIn ? `vyměňovat na L${best.level}` : "držet"}</b>
+          <div style="color:var(--text-dim)">Nové prase za 100 coinů, každý den o level výš (krmení do dalšího levelu), lanýže při každém sběru, Bristles při výměně (prase musí být vzhůru). Bez 10% poplatku za prodej.</div>
+          ${rows ? `<table class="node-res-table" style="width:100%;margin-top:4px"><tr><th>VÝMĚNA NA</th><th style="${r}">DNÍ</th><th style="${r}">LANÝŽE</th><th style="${r}">BRISTLES</th><th style="${r}">CELKEM</th><th style="${r}">/DEN</th></tr>${rows}</table>` : ""}`);
+      }
+      const c = cp.cave || { bins: [] };
+      const rows = c.bins.map((b, i) => `<tr><td>Myco Bin ${i + 1}</td><td>${escHTML(b.recipe)}</td><td style="${r}">${b.mushrooms.toFixed(1)} / ${b.beetles.toFixed(1)} / ${b.mud.toFixed(0)}</td><td style="${r}">${f(-(b.input + b.dig))}</td><td style="${r}">${f(b.dayNet)}</td></tr>`).join("");
+      return box(`<b>Jeskyně dnes:</b> ${c.bins.length} Myco Bin × ${(c.batchesPerDay || 0).toFixed(2)} dávky/den = <b>${f(c.net)}</b> ${sflIcon()}/den
+        <div style="color:var(--text-dim)">Každý Myco Bin s nejlepším receptem. Brouci za lepší z ceny na trhu a hodnoty krmiva, houby jako Slop, Mud jen kolik ho prasata spotřebují na kabát. Kopání 25 políček Sand Shovelem.</div>
+        ${rows ? `<table class="node-res-table" style="width:100%;margin-top:4px"><tr><th>BIN</th><th>RECEPT</th><th style="${r}">HOUBY / BROUCI / MUD</th><th style="${r}">VSTUP+KOPÁNÍ /DÁVKU</th><th style="${r}">/DEN</th></tr>${rows}</table>` : ""}`);
+    }
+
     function _tkScheduleHtml(sch) {
       if (!sch || !sch.items || !sch.items.length) return "";
       const now = Date.now(), right = "text-align:right;white-space:nowrap", muted = "color:var(--text-dim)";

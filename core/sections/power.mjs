@@ -40,7 +40,7 @@ import {
   calcLavaPitCostPerDay, getAnimalCatSfl, getPriceProduct, activeShrineEffects,
   buildQueueData, shrineStatuses, weatherProtection,
 } from "../engine/power-costs.mjs";
-import { _setPowerContext, calcBoostValue, roadmapEffFactor, getRoadmapSettings, roadmapSideRankDelta } from "../engine/roadmap.mjs";
+import { _setPowerContext, calcBoostValue, roadmapEffFactor, getRoadmapSettings, roadmapSideRankDelta, roadmapCavePigs } from "../engine/roadmap.mjs";
 import { SKILL_UPGRADES, powerSkillRankVals, skillRankText, skillUpgradeCost, powerCooldownEffects } from "../engine/skill-ranks.mjs";
 import { buildFormulaHTML } from "../engine/power-formula.mjs";
 // A composter is a PERIODIC action — cycle + inputs — so it is served as a per-day net here
@@ -662,6 +662,9 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   // rebuilding it. Same object identity for everything else.
   powerCtx.skillRanks = skillRanks;
   _setPowerContext(powerCtx);
+  // Pigs and the cave as the farm stands — POWER's PIGS / CAVE panels.
+  let cavePigs = null;
+  try { cavePigs = roadmapCavePigs(); } catch { cavePigs = null; }
 
   /*
    * The wishlist's two columns, for a named subset only: THEORETICAL (every node harvested the
@@ -895,5 +898,5 @@ export function buildPowerSection(farm, p2p, nftData, exchange, settings = {}) {
   // effUnmeasured: no measured efficiency applies to this response (no history posted, or the
   // history had no harvest signal) — every figure is at theoretical (100 %) throughput.
   const effUnmeasured = !(settings.effMeta && settings.effMeta.measured);
-  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, skillRanks, composters: composterVerdicts(farm, p2pPrices, season, { savedProducts }), shrines: shrineStatuses(farm), weather: weatherProtection(farm), compostSkills, digging: diggingVerdict(farm, p2pPrices, exchangeRates, { coinsFree: false }), valueBasis: settings.measured ? "measured" : "theoretical", effUnmeasured, restockQueues, dormantBoosts, ...(cropMachine ? { cropMachine } : {}), ...(boostValuesEff ? { boostValuesEff, boostValuesTheo } : {}), ...(formulaHtml !== undefined ? { formulaHtml } : {}) };
+  return { boostItems, capacity, p2pPrices, skillCostInfo, exchangeRates, stockMods, season, nftData: nftSlim, categories, boostValues, skillRanks, cavePigs, composters: composterVerdicts(farm, p2pPrices, season, { savedProducts }), shrines: shrineStatuses(farm), weather: weatherProtection(farm), compostSkills, digging: diggingVerdict(farm, p2pPrices, exchangeRates, { coinsFree: false }), valueBasis: settings.measured ? "measured" : "theoretical", effUnmeasured, restockQueues, dormantBoosts, ...(cropMachine ? { cropMachine } : {}), ...(boostValuesEff ? { boostValuesEff, boostValuesTheo } : {}), ...(formulaHtml !== undefined ? { formulaHtml } : {}) };
 }

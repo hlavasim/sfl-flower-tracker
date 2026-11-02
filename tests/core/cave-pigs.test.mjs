@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { sideValue, sideState, pigDay, truffleValue, caveBatch, caveDay, farmPigs, farmBins, sideCavePigsNow } from "../../core/engine/side-values.mjs";
+import { sideValue, sideState, pigDay, pigSlot, truffleValue, caveBatch, caveDay, farmPigs, farmBins, sideCavePigsNow } from "../../core/engine/side-values.mjs";
 
 /*
  * Cave Dwellers (game source 2026-11-02): pigs give Truffles for Slop, the cave's Myco Bins dig a
@@ -47,13 +47,31 @@ test("Truffle Yield multiplies the Truffles; Swill Savvy pays its debuff on the 
   const c = ctx(farm());
   const ty = sideValue("Truffle Yield", c, 1);
   assert.equal(ty.cat, "pigs");
-  assert.ok(Math.abs(ty.perDay - (0.1 * 1 + 0.1 * 1 + 0.1 * 2) * truffleValue(c)) < 1e-12);
+  // Valued on the pen's long run: three slots, each a pig kept at L15 (4 Truffles) — no Bristle price here.
+  assert.ok(Math.abs(ty.perDay - 3 * 0.1 * 4 * truffleValue(c)) < 1e-12);
   const calls = [];
   const withDebuff = ctx(farm(), { catGain: (cat, eff) => { calls.push([cat, eff[0].value]); return -1; } });
   const ss = sideValue("Swill Savvy", withDebuff, 1);
   assert.deepEqual(calls.map((x) => x[0]).sort(), ["chickens", "cows", "sheep"]);
   assert.ok(Math.abs(calls[0][1] - 0.5) < 1e-12, "+50% feed for every other animal at rank 1");
   assert.ok(ss.perDay < sideValue("Swill Savvy", c, 1).perDay, "the debuff lowers its value");
+});
+
+test("a pen slot: keep the pig at L15, or raise it to L and trade it in for its Bristles", () => {
+  const c = ctx(farm(), { prices: { ...prices, Truffle: 0.7, "Pig Bristles": 6.4 } }), st = sideState(c);
+  const slot = pigSlot(c, st);
+  // Bristles from L3 (1) to L15 (12); a cycle to L takes L days and pays Truffles at levels 1…L.
+  assert.deepEqual(slot.cycles.map((x) => x.level), [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+  const l15 = slot.cycles.find((x) => x.level === 15);
+  assert.equal(l15.bristles, 12);
+  assert.equal(l15.truffles, 3 * 1 + 4 * 2 + 7 * 3 + 4);
+  assert.ok(Math.abs(l15.total - (36 * 0.7 - l15.feed + 12 * 6.4 - 100 / 320)) < 1e-9);
+  assert.equal(slot.tradeIn, true, "at 6.4 a Bristle, trading in beats keeping");
+  assert.ok(Math.abs(slot.keep - pigDay(c, st, 15).net) < 1e-12);
+  // Without a Bristle price there is nothing to trade for: keep.
+  assert.equal(pigSlot(ctx(farm(), { prices: { ...prices, Truffle: 0.7 } }), st).tradeIn, false);
+  // Bristle Payout is worth something only through the trade-in.
+  assert.ok(sideValue("Bristle Payout", c, 1).perDay > 0);
 });
 
 test("a Myco Bin batch: the recipe's tiles, Mud ×2 on the Mud recipe, skills move tiles from Mud", () => {

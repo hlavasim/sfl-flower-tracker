@@ -37,7 +37,7 @@ import {
   CROP_MACHINE_NFTS, CROP_MACHINE_SPEED_ITEMS,
 } from "./crop-machine.mjs";
 import { decodeBud, budSetSfl, budBoostText } from "./buds.mjs";
-import { SIDE_MODELS, sideValue, sideRankDelta, sideState, pigDay, farmPigs, caveDay, caveBatch, farmBins } from "./side-values.mjs";
+import { SIDE_MODELS, sideValue, sideRankDelta, sideState, pigSlot, farmPigs, caveDay, caveBatch, farmBins, sideCavePigsNow } from "./side-values.mjs";
 
 // Deviation 1: the page global, module-scoped. Set before any calc.
 let powerState = null;
@@ -1503,11 +1503,12 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         return { sfl, unpriced };
       };
       const costText = (res) => Object.entries(res).map(([k, q]) => `${q} ${k}`).join(", ");
-      // Pigpen chain
+      // Pigpen chain — a pen slot's long run: keep the pig at L15, or raise and trade it in (pigSlot).
       const pigs = farmPigs(farm);
       const pen = (farm.pigpen && Number(farm.pigpen.level)) || (pigs.length ? 1 : 0);
-      const meanLvl = pigs.length ? Math.max(1, Math.round(pigs.reduce((t, l) => t + l, 0) / pigs.length)) : 1;
-      const perPig = pigDay(ctx, st, meanLvl).net;
+      const slot = pigSlot(ctx, st);
+      const perPig = slot.perDay;
+      const play = slot.tradeIn ? `vychovat na L${slot.best.level} a vyměnit za Bristles` : "držet na L15 kvůli lanýžům";
       let seq = 0;
       for (const step of PIGPEN_STEPS) {
         if (step.level <= pen) continue;
@@ -1517,7 +1518,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         if (!(marg > 0)) break;
         const name = step.level === 1 ? "Pigpen" : `Pigpen L${step.level}`;
         out.push({ name, type: "Building", floor: pr.sfl, supply: 0,
-          boost: `+${step.pigs} prasata (lanýže na levelu ${meanLvl}) · ${costText(step.cost)}`,
+          boost: `+${step.pigs} prasata (${play}) · ${costText(step.cost)}`,
           clone: { name, categories: ["pigs"], effects: [], fixedMarginal: marg, has: false, isDisabled: false },
           chainId: "pigpen", chainSeq: seq++ });
       }
@@ -1539,6 +1540,19 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
           chainId: "cave", chainSeq: seq++ });
       }
       return out;
+    }
+
+    /** Pigs and cave as the farm stands, at the roadmap's prices and coin rule (POWER's PIGS / CAVE panels). */
+    function roadmapCavePigs() {
+      const ctx = roadmapSideCtx(getRoadmapSettings(powerState.roadmapSettingsRaw), powerState.p2pPrices);
+      const r = sideCavePigsNow(ctx);
+      return {
+        pigs: r.pigs, pigsNow: r.pigs.reduce((t, p) => t + p.net, 0), truffleValue: r.truffleValue,
+        slot: { keep: r.slot.keep, tradeIn: r.slot.tradeIn, perDay: r.slot.perDay, best: r.slot.best,
+          cycles: r.slot.cycles.map((c) => ({ level: c.level, bristles: c.bristles, truffles: c.truffles, perDay: c.perDay, total: c.total })) },
+        cave: { net: r.cave.net, batchesPerDay: r.cave.batchesPerDay,
+          bins: r.cave.bins.map((b) => ({ recipe: b.recipe, dayNet: b.dayNet, mushrooms: b.mushrooms, beetles: b.beetles, mud: b.mud, input: b.input, dig: b.dig, gross: b.gross })) },
+      };
     }
 
     /*
@@ -2275,6 +2289,7 @@ export {
   // Exported for testing: the node actions the buy path folds in. Its escalation has to match
   // nodeAcq's, and a test that re-derives the rule instead of calling this proves nothing.
   roadmapNodeCandidates, roadmapSkillCandidates, roadmapAscensionCandidates, roadmapStartupPlans, roadmapBuildClones,
+  roadmapCaveCandidates, roadmapCavePigs,
   ROADMAP_EFF_HKEY, roadmapComputeEfficiency,
   getRoadmapSettings, roadmapOwnedEffects, roadmapCatBreakdown, roadmapCatNet,
   roadmapMiningChain, roadmapCatMix, ROADMAP_MINING_CATS, roadmapAnimalCapacity, calcBoostValue, cmGetSeedRestockCount,
