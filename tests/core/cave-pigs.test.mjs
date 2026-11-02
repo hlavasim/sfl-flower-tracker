@@ -40,7 +40,9 @@ test("a Truffle is worth its best recipe's XP over the other ingredients until i
   const risotto = (32000 * 0.0001 - 3 * 0.21 - 5 * 6 * 0.0135) / 8;
   const cake = (30000 * 0.0001 - 30 * 0.0135 - 30 * 0.0245 - 5 * 0.097) / 15;
   assert.ok(Math.abs(truffleValue(c) - Math.max(risotto, cake, 1000 * 0.0001 - 30 * 0.0002)) < 1e-12);
-  assert.equal(truffleValue(ctx(farm(), { prices: { ...prices, Truffle: 0.5 } })), 0.5, "a p2p price wins");
+  // Sold, it keeps 90 % of the p2p price — and wins when that beats cooking.
+  assert.ok(Math.abs(truffleValue(ctx(farm(), { prices: { ...prices, Truffle: 0.5 } })) - 0.45) < 1e-12, "a sale less the 10 % fee");
+  assert.ok(Math.abs(truffleValue(ctx(farm(), { prices: { ...prices, Truffle: 0.01 } })) - truffleValue(c)) < 1e-12, "cooking wins over a cheap sale");
 });
 
 test("Truffle Yield multiplies the Truffles; Swill Savvy pays its debuff on the other animals", () => {
@@ -65,7 +67,7 @@ test("a pen slot: keep the pig at L15, or raise it to L and trade it in for its 
   const l15 = slot.cycles.find((x) => x.level === 15);
   assert.equal(l15.bristles, 12);
   assert.equal(l15.truffles, 3 * 1 + 4 * 2 + 7 * 3 + 4);
-  assert.ok(Math.abs(l15.total - (36 * 0.7 - l15.feed + 12 * 6.4 - 100 / 320)) < 1e-9);
+  assert.ok(Math.abs(l15.total - (36 * 0.7 * 0.9 - l15.feed + 12 * 6.4 * 0.9 - 100 / 320)) < 1e-9, "both sold, less the fee");
   assert.equal(slot.tradeIn, true, "at 6.4 a Bristle, trading in beats keeping");
   assert.ok(Math.abs(slot.keep - pigDay(c, st, 15).net) < 1e-12);
   // Without a Bristle price there is nothing to trade for: keep.
@@ -95,8 +97,8 @@ test("a Beetle is worth the better of its market price and its feed XP", () => {
   // No slop crops priced: feed XP is worth 0 and mushrooms too, so the batch is its Beetles at market.
   const beetles = { "Green Beetle": 1.379, "Blue Beetle": 1.4, "Pink Beetle": 4.4, "Amber Beetle": 7.8 };
   const c = ctx(farm(), { prices: { Egg: 0.0245, ...beetles } }), st = sideState(c);
-  // Base odds 40/30/20/10: 0.4·1.379 + 0.3·1.4 + 0.2·4.4 + 0.1·7.8 = 2.6316 a Beetle, 5 on the Beetle recipe.
-  assert.ok(Math.abs(caveBatch(c, st, "Beetle", 0).gross - 5 * 2.6316) < 1e-9);
+  // Base odds 40/30/20/10: 0.4·1.379 + 0.3·1.4 + 0.2·4.4 + 0.1·7.8 = 2.6316 a Beetle, sold for 90 %, 5 on the Beetle recipe.
+  assert.ok(Math.abs(caveBatch(c, st, "Beetle", 0).gross - 5 * 2.6316 * 0.9) < 1e-9);
   // Without a market price a Beetle falls back to its feed XP (here 0).
   assert.equal(caveBatch(ctx(farm(), { prices: { Egg: 0.0245 } }), st, "Beetle", 0).gross, 0);
 });

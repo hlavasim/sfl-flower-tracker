@@ -5463,7 +5463,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.19</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.20</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5490,6 +5490,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.20", items: [
+          { t: "fix", text: "<b>Cave and pig values were too optimistic.</b> The Chapter 16 prices took the cheapest listing, but listings ran up to 11× the last sale (Blue Beetle 1.4 vs 0.2, Pink 4.4 vs 0.4). Each now takes the lower of the two, and Truffles, Beetles and Bristles are valued at what a sale keeps after the 10 % market fee (a Truffle is the better of selling and cooking). The Cave's day drops from ~22 to ~6 FLOWER; trading pigs in at L15 still beats keeping them." },
+        ] },
         { ver: "v6.19", items: [
           { t: "feat", text: "<b>Pig trade-in strategy.</b> A Pigpen slot is now valued on its long run: keep a pig at L15 for its Truffles, or buy one (100 coins), raise it a level a day and trade it in for its Pig Bristles. POWER → 🐖 PIGS shows your pigs today and the trade-in table for every level L3–L15 with the best one marked; ROADMAP's Pigpen L2 / L3 and the pig skills (Bristle Payout now has a value) use the better play. 🍄 CAVE shows each Myco Bin's recipe and day." },
         ] },

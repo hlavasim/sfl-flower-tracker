@@ -339,8 +339,8 @@ function xpNet(ctx, st) {
  * finds the better per day; valuations use it, as a pen slot is held for good.
  *
  * The Cave's Myco Bins dig a 25-tile patch every 12 h (types/caveRecipes.ts, cavePatch.ts).
- * Its outputs are valued by what they bring on THIS farm: a Beetle is the better of its p2p price
- * and that much animal-feed XP, a Wild / Magic Mushroom is one Rich / Gourmet Slop, and Mud is the feed a Mud coat saves (×1.25 feed XP for one claim,
+ * Its outputs are valued by what they bring on THIS farm: a Beetle is the better of selling it
+ * (p2p less the 10 % fee) and that much animal-feed XP, a Wild / Magic Mushroom is one Rich / Gourmet Slop, and Mud is the feed a Mud coat saves (×1.25 feed XP for one claim,
  * 25 Mud; two claims with Vibraphone) — only as much Mud as the farm's pigs can use.
  * A Truffle is its p2p price once it trades, else what its best recipe pays in XP over the
  * other ingredients (consumables.ts), at the farm's FLOWER per XP.
@@ -368,6 +368,9 @@ const TRUFFLE_RECIPES = [            // consumables.ts
 ];
 const PIG_BRISTLES = [0, 0, 0, 1, 1, 2, 3, 3, 4, 5, 6, 6, 7, 8, 9, 12];   // types/animals.ts, per trade-in
 const PIG_PRICE = 100;                                                   // coins, types/animals.ts
+// What selling on the marketplace keeps: the 10 % fee off. Truffles, Beetles and Bristles are
+// produce to SELL here, so they are valued at what the sale brings, not at the listing.
+const SALE = 0.9;
 const BRISTLE_PAYOUT = [1.1, 1.2, 1.3];
 const CATTLEGRIM = 0.25, BARN_MANAGER = 0.1;
 const TRUFFLE_YIELD = [1.1, 1.2, 1.3];
@@ -437,16 +440,16 @@ function pigFeed(ctx, st, level, xpMult) {
 }
 function pigXpMult(st) { return on(st, "Pig Onesie") ? 1.05 : 1; }
 /**
- * FLOWER for one Truffle: its p2p price, else its best recipe's XP over the other ingredients.
+ * FLOWER for one Truffle: the better of selling it (p2p price less the fee) and its best recipe's
+ * XP over the other ingredients.
  * ctx.sflPerXP is per BOOSTED XP (the skill-point price), so the recipe's XP takes the farm's
  * own food-XP boost (ctx.xpBoost, boostedXP / xp of that recipe).
  */
 export function truffleValue(ctx) {
   const pr = ctx.prices || {};
-  if (pr["Truffle"] > 0) return pr["Truffle"];
-  if (!(ctx.sflPerXP > 0)) return 0;
+  let best = pr["Truffle"] > 0 ? pr["Truffle"] * SALE : 0;
+  if (!(ctx.sflPerXP > 0)) return best;
   const wild = slopCost(ctx, "Rich Slop");
-  let best = 0;
   for (const r of TRUFFLE_RECIPES) {
     const other = Object.entries(r.other).reduce((t, [k, q]) => t + q * (k === "Wild Mushroom" ? wild : (pr[k] || 0)), 0);
     best = Math.max(best, (r.xp * (ctx.xpBoost || 1) * ctx.sflPerXP - other) / r.truffles);
@@ -482,7 +485,7 @@ function bristlesAt(st, level) {
  * Bristles are only counted at a p2p price.
  */
 export function pigSlot(ctx, st) {
-  const tv = truffleValue(ctx), bp = (ctx.prices || {})["Pig Bristles"] || 0;
+  const tv = truffleValue(ctx), bp = ((ctx.prices || {})["Pig Bristles"] || 0) * SALE;
   const coin = !ctx.coinsFree && ctx.coinsPerSFL > 0 ? PIG_PRICE / ctx.coinsPerSFL : 0;
   const keep = pigDay(ctx, st, 15).net;
   const cycles = [];
@@ -546,7 +549,7 @@ export function caveBatch(ctx, st, recipe, mudValue) {
   const beetleXp = Object.entries(odds).reduce((t, [b, p]) => t + (p / 100) * BEETLE_XP[b], 0);
   // A Beetle is worth the better of selling it and feeding it (its XP as animal feed).
   const fpx = feedPerXP(ctx);
-  const beetleValue = Object.entries(odds).reduce((t, [b, p]) => t + (p / 100) * Math.max(pr[b] || 0, BEETLE_XP[b] * fpx), 0);
+  const beetleValue = Object.entries(odds).reduce((t, [b, p]) => t + (p / 100) * Math.max((pr[b] || 0) * SALE, BEETLE_XP[b] * fpx), 0);
   const mud = mudT * r.mudX * cs(st, "Muddy Bounty", 1);
   let input = 0;
   if (r.input) { input = bundleCost(ctx, r.input); if (!isFinite(input)) input = 0; }
