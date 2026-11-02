@@ -229,6 +229,21 @@ async function fetchExchange() {
   return result.data;
 }
 
+// USD → CZK for the widget's Kč, from Coinbase's public rates; an hour's cache, 0 when unreachable.
+const usdCzkCache = G.usdCzkCache ??= new Map();
+async function fetchUsdCzk() {
+  const result = await cachedFetch(usdCzkCache, "usdczk", async () => {
+    try {
+      const r = await fetch("https://api.coinbase.com/v2/exchange-rates?currency=USD");
+      if (!r.ok) return { ok: false, data: 0 };
+      return { ok: true, data: parseFloat((await r.json())?.data?.rates?.CZK) || 0 };
+    } catch {
+      return { ok: false, data: 0 };
+    }
+  }, 3600000);
+  return result.data;
+}
+
 // Marketplace id -> name (api/_item-names.js), for the sfl.world NFT rows that ship without a
 // name. Imported lazily and fault-tolerant: it is a .js ESM file next to an .mjs, and a module
 // that fails to load must cost the names, never the whole endpoint.
@@ -583,6 +598,36 @@ async function _handler(req, res) {
         exchangeOk: !!(exchange && (exchange.coins || exchange.gems)),
         btcOk: btcUsd > 0,
       };
+    }
+    /*
+     * `widget`: the phone widget's data, computed here instead of on the phone. Every node's next
+     * harvest with its EXACT yield — the game's own reducers replayed on a copy of the farm
+     * (core/engine/harvest-sim.mjs) — and what it is worth: FLOWER at the p2p price (sfl.world feed
+     * + the hand-entered chapter resources), Kč via FLOWER USD × USD→CZK. Plus the pigs' and Myco
+     * Bins' value from the POWER models.
+     */
+    else if (section === "widget") {
+      const [nftResult, exchange, usdCzk] = await Promise.all([fetchNfts(), fetchExchange(), fetchUsdCzk()]);
+      const sflUsd = (exchange && (exchange.sfl?.usd || exchange.data?.sfl?.usd)) || 0;
+      const kc = (flower) => (flower != null && sflUsd > 0 && usdCzk > 0 ? +(flower * sflUsd * usdCzk).toFixed(2) : null);
+      const { simulateHarvests } = await import("../core/engine/harvest-sim.mjs");
+      const now = Date.now();
+      const harvests = await simulateHarvests(farm, Number(farmId), now);
+      // POWER's price map: the feed plus what it derives (Oil from its production cost).
+      let ps = null;
+      try { if (nftResult.ok) ps = buildPowerSection(farm, p2p, nftResult.data, exchange, settings); } catch { ps = null; }
+      const prices = (ps && ps.p2pPrices) || p2p;
+      const price = (item) => parseFloat(prices[item]) || 0;
+      const items = harvests.map((h) => {
+        const flower = h.amount != null && price(h.product) > 0 ? +(h.amount * price(h.product)).toFixed(4) : null;
+        return { ...h, flower, czk: kc(flower) };
+      });
+      const cavePigs = (ps && ps.cavePigs) || null;
+      const pigLevels = cavePigs ? cavePigs.levels.map((l) => ({ level: l.level, flower: +l.net.toFixed(4), czk: kc(l.net) })) : [];
+      const recipes = cavePigs ? cavePigs.recipes.map((r) => ({ recipe: r.recipe, flower: +r.net.toFixed(4), czk: kc(r.net) })) : [];
+      data = { now, rates: { sflUsd, usdCzk }, items, pigLevels, recipes,
+        manualPrices: cavePigs ? cavePigs.manualPrices : null,
+        status: { pricesOk: Object.keys(p2p).length > 0, nftsOk: !!nftResult.ok, rateOk: sflUsd > 0 && usdCzk > 0 } };
     }
     // `tickets`: what each ticket source costs this farm against the auction lot it can win.
     // Prices = this farm's section=prices maps; animal slot output = section=power's per-animal

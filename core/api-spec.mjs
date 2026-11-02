@@ -29,7 +29,7 @@ export const API_SPEC = {
             name: "section",
             in: "query",
             required: false,
-            schema: { type: "string", enum: ["ascension", "buds", "constants", "cooking", "diff", "eff", "openapi", "pets", "power", "prices", "roadmap", "roi", "tickets", "treasury", "wishlist"], default: "cooking" },
+            schema: { type: "string", enum: ["ascension", "buds", "constants", "cooking", "diff", "eff", "openapi", "pets", "power", "prices", "roadmap", "roi", "tickets", "treasury", "widget", "wishlist"], default: "cooking" },
             description:
               "Which computation to run. `constants`: the canonical core/data game tables " +
               "plus flowers.html migration-coverage status, no farm needed. `cooking`: " +
@@ -94,6 +94,12 @@ export const API_SPEC = {
               "last sale against today's floor) and `rates`. Optional POST body `{ weeks }` from " +
               "`/api/farm-history?type=ticket-weeks` adds `history`: every recorded week through " +
               "the same model at today's prices, per-chapter medians and the tickets-per-week cost curve. " +
+              "`widget`: the phone widget's data — `items`: every node's NEXT harvest (trees, rocks, " +
+              "oil, crops, fruit, greenhouse, flowers) with `readyAt` and its EXACT `amount`, computed " +
+              "by the game's own reducers replayed on a copy of the farm (the game seeds its rolls, so " +
+              "the next harvest is fixed), priced in `flower` (p2p, POWER's map) and `czk`; " +
+              "`pigLevels` (a pig's claim by level) and `recipes` (a Myco Bin batch), `rates` " +
+              "(FLOWER USD, USD→CZK) and `manualPrices`. " +
               "`roadmap`: POST-only — the roadmap page's computed layer: measured efficiency " +
               "(body `{ snapshots }` like `eff`), `currentProd` (net income by category at " +
               "real efficiency), and `sim` (the reinvestment-ordered buy path: timeline, " +
