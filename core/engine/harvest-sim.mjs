@@ -25,9 +25,9 @@ const placed = (n) => n && n.x !== undefined && n.y !== undefined;
 
 /**
  * Every node's next harvest: { kind, id, name, product, readyAt, amount, gains } (amount null +
- * error when the game refused it; gains = every item it added). kind: tree | stone | iron | gold |
- * crimstone | oil | crop | fruit | greenhouse | flower | animal. Only nodes with something
- * growing / a timer are listed.
+ * error when the game refused it; gains = every item it added, spent = every item it used up).
+ * kind: tree | stone | iron | gold | crimstone | oil | crop | fruit | greenhouse | flower | animal |
+ * lava. Only nodes with something growing / a timer are listed.
  */
 export async function simulateHarvests(farmJson, farmId, now = Date.now()) {
   const G = await game();
@@ -149,14 +149,34 @@ export async function simulateHarvests(farmJson, farmId, now = Date.now()) {
         const d = Number(v || 0) - Number(before[k] || 0);
         if (d > 1e-9) gains[k] = +d.toFixed(4);
       }
+      // And everything it used up (the Oil Drills a drill takes).
+      const spent = {};
+      for (const [k, v] of Object.entries(before)) {
+        const d = Number(v || 0) - Number(state.inventory[k] || 0);
+        if (d > 1e-9) spent[k] = +d.toFixed(4);
+      }
       const product = t.product || Object.keys(gains)[0] || null;
       out.push({ kind: t.kind, id: t.id, name: t.name, product, readyAt: t.readyAt, startedAt: t.startedAt,
-        amount: product && gains[product] != null ? gains[product] : 0, gains, ...(instant ? { instant } : {}) });
+        amount: product && gains[product] != null ? gains[product] : 0, gains, ...(Object.keys(spent).length ? { spent } : {}), ...(instant ? { instant } : {}) });
     } catch (e) {
       out.push({ kind: t.kind, id: t.id, name: t.name, product: t.product, readyAt: t.readyAt, startedAt: t.startedAt, amount: null, error: String(e && e.message || e) });
     }
   }
   } finally { console.log = log; console.warn = warn; }
+  /*
+   * Lava pits: collecting rolls nothing, so they are not replayed — the Obsidian is the game's
+   * yield, and `spent` is what lighting the pit again costs (the season's requirements, Lava
+   * Swimwear included), at its ready time.
+   */
+  for (const [id, pit] of Object.entries(state.lavaPits || {})) {
+    if (!placed(pit) || pit.startedAt === undefined || pit.collectedAt !== undefined) continue;
+    const readyAt = pit.readyAt ?? pit.startedAt + G.getLavaPitTime({ game: state }).time;
+    const amount = G.getObsidianYield({ game: state }).amount;
+    const spent = {};
+    for (const [k, v] of Object.entries(G.getLavaPitRequirements(state, Math.max(now, readyAt)).requirements)) spent[k] = Number(v);
+    out.push({ kind: "lava", id, name: "Lava Pit", product: "Obsidian", readyAt, startedAt: pit.startedAt, amount, gains: { Obsidian: amount }, spent });
+  }
+  out.sort((a, b) => a.readyAt - b.readyAt);
   return out;
 }
 

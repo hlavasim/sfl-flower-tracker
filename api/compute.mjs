@@ -621,7 +621,16 @@ async function _handler(req, res) {
       const prices = (ps && ps.p2pPrices) || p2p;
       const price = (item) => parseFloat(prices[item]) || 0;
       // A harvest is worth every item it adds at its price (null when none of them has one).
+      // Oil and Obsidian are not sold — they are used — so an oil drill or a lava pit shows what
+      // its next run costs instead, as a negative: the Oil Drills used up / the pit's relight.
+      const { itemMarketValue } = await import("../core/engine/item-value.mjs");
+      const cost = (item) => price(item) || itemMarketValue(item, prices, undefined, { coinsPerSFL }) || 0;
       const items = harvests.map((h) => {
+        if ((h.kind === "oil" || h.kind === "lava") && h.amount != null) {
+          const spent = Object.entries(h.spent || {});
+          const flower = spent.length && spent.every(([k]) => cost(k) > 0) ? -(+spent.reduce((t, [k, q]) => t + q * cost(k), 0).toFixed(4)) : null;
+          return { ...h, flower, czk: kc(flower) };
+        }
         const priced = Object.entries(h.gains || {}).filter(([k]) => price(k) > 0);
         const flower = h.amount != null && priced.length ? +priced.reduce((t, [k, q]) => t + q * price(k), 0).toFixed(4) : null;
         return { ...h, flower, czk: kc(flower) };

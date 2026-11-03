@@ -77,8 +77,9 @@ export const CHAPTER_BOOST_ITEMS = [
  * 4.4 vs 0.4). Used ONLY while the feed lacks the item: once sfl.world lists it, the feed wins.
  */
 export const CHAPTER_RESOURCE_PRICES = {
-  readAt: "2026-11-02", source: "in-game marketplace, read by the owner",
-  prices: { "Green Beetle": 1.15, "Blue Beetle": 0.2, "Pink Beetle": 0.4, "Amber Beetle": 7.8, "Pig Bristles": 6.4, "Truffle": 0.6996 },
+  readAt: "2026-11-03", source: "in-game marketplace, read by the owner",
+  // Amber Beetle had no listing: its last sale. Pig Bristles' last sale (0.2) under a 6.4 listing.
+  prices: { "Green Beetle": 0.1437, "Blue Beetle": 0.2799, "Pink Beetle": 3.06, "Amber Beetle": 8, "Pig Bristles": 0.2, "Truffle": 0.1899 },
 };
 
 /** The ticket every current-chapter shop price is quoted in; other currencies stay unpriced. */

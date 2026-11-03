@@ -45,6 +45,8 @@ export { harvestFlower } from "features/game/events/landExpansion/harvestFlower"
 export { getFlowerReadyAt } from "features/game/lib/flowerBedReadiness";
 export { claimProduce } from "features/game/events/landExpansion/claimProduce";
 export { getAnimalReadyAt } from "features/game/lib/animals";
+export { getObsidianYield } from "features/game/events/landExpansion/collectLavaPit";
+export { getLavaPitRequirements, getLavaPitTime } from "features/game/events/landExpansion/startLavaPit";
 `;
 
 const banner = [

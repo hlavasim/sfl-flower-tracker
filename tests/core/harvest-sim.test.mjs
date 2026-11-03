@@ -23,6 +23,18 @@ test("every node's next harvest runs through the game's own code", async () => {
   assert.ok(r.every((h) => h.amount > 0), "every harvest yields something");
 });
 
+// Oil and Obsidian are used, not sold: the widget prices an oil drill and a lava pit by what they use up.
+test("an oil drill uses up its Oil Drill, a lava pit lists its relight cost", async () => {
+  const r = await simulateHarvests(farm, 155498, NOW);
+  const oil = r.filter((h) => h.kind === "oil");
+  assert.ok(oil.length > 0 && oil.every((h) => h.spent && h.spent["Oil Drill"] >= 1), "every drill spends a drill");
+  const lava = r.filter((h) => h.kind === "lava");
+  assert.ok(lava.length > 0, "lava pits listed");
+  // The fixture's autumn requirements at Lava Swimwear's x0.5 (the game's getLavaPitRequirements).
+  assert.deepEqual(lava[0].spent, { Artichoke: 15, Broccoli: 375, Yam: 500, Gold: 2.5, Crimstone: 3 });
+  assert.ok(lava[0].gains.Obsidian > 0);
+});
+
 test("the rolls are seeded: the same farm gives the same numbers, in ready order", async () => {
   const a = await simulateHarvests(farm, 155498, NOW);
   const b = await simulateHarvests(farm, 155498, NOW);

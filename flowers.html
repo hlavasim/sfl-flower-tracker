@@ -5463,7 +5463,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.27</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.28</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5490,6 +5490,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.28", items: [
+          { t: "feat", text: "Widget API: <b>Oil and Lava Pit show their cost</b>, as a negative. Oil can't be sold and Obsidian only about one a week, so their market price is no income: an oil drill shows the Oil Drill it uses up, a lava pit what lighting it again costs (the season's requirements from the game's own code, Lava Swimwear included)." },
+          { t: "fix", text: "Chapter resource prices re-read from the in-game marketplace (2026-11-03): Green Beetle 0.1437, Blue 0.2799, Pink 3.06, Amber 8, Pig Bristles 0.2, Truffle 0.1899 — the lower of the cheapest listing and the last sale." },
+        ] },
         { ver: "v6.27", items: [
           { t: "feat", text: "Widget API: <b>instant regrowths</b> are predicted too. Tree Turnaround and the instant mine / drill recoveries are seeded rolls like every yield, so after each harvest the replay checks whether the node is ready again at once and harvests it again — one visit's whole yield (it said 79 wood where a Tree Turnaround made it 127)." },
         ] },
