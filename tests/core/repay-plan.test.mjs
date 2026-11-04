@@ -120,6 +120,26 @@ test("today is the local date, not the UTC one", () => {
   }
 });
 
+// The chart is weekly: each withdrawal lands in the week it was made, not all on one day.
+test("weeks bucket the withdrawals by the week they were made (Monday start)", () => {
+  const plan = { start_date: "2026-09-01", rate: 10, period: "year" };   // a Tuesday
+  const s = repayPlanStats(plan, [
+    { tx_date: "2026-09-02", direction: "withdrawal", btc_amount: "0.001" },
+    { tx_date: "2026-09-06", direction: "withdrawal", btc_amount: "0.002" },   // Sunday, same week
+    { tx_date: "2026-09-16", direction: "withdrawal", btc_amount: "0.004" },
+  ], ctx);   // today 2026-09-22, a Tuesday
+  assert.deepEqual(s.weeks.map((w) => w.time), ["2026-08-31", "2026-09-07", "2026-09-14", "2026-09-21"]);
+  assert.deepEqual(s.weeks.map((w) => +w.withdrawn.toFixed(6)), [0.003, 0, 0.004, 0]);
+  assert.ok(Math.abs(s.weeks[2].actual - 0.007) < 1e-12, "running total at the week's end");
+  assert.ok(Math.abs(s.weeks[3].target - s.targetBtc) < 1e-12, "the current week ends today");
+  assert.ok(Math.abs(s.weeks[0].target - s.dailyTargetBtc * 5) < 1e-12, "target at Sunday 6 Sep");
+  assert.equal(s.futureWeeks.length, 10);
+  assert.equal(s.futureWeeks[0].time, "2026-09-28");
+  assert.ok(Math.abs(s.futureWeeks[0].target - s.dailyTargetBtc * 33) < 1e-12, "target at Sunday 4 Oct");
+  const short = repayPlanStats({ start_date: "2025-01-01", rate: 10, period: "year" }, [], { ...ctx, weeksBack: 3 });
+  assert.equal(short.weeks.length, 3, "history capped at weeksBack");
+});
+
 test("a start still in the future anchors the chart at today — no date appears twice", () => {
   const f = repayPlanStats({ start_date: "2026-10-01", rate: 10, period: "year" }, [], ctx);
   const times = f.series.concat(f.future).map((p) => p.time);
@@ -129,4 +149,39 @@ test("a start still in the future anchors the chart at today — no date appears
   const at = (d) => f.future.find((p) => p.time === d).target;
   assert.equal(at("2026-10-01"), 0, "nothing accrues before the start");
   assert.ok(Math.abs(at("2026-10-02") - f.dailyTargetBtc) < 1e-12, "and it accrues from the start on");
+});
+
+// cbBTC on chain is a balance; its transfer history (Basescan CSV) dates it for the plan.
+import { datedOnChainBtc, parseTokenTransfersCsv } from "../../core/engine/repay-plan.mjs";
+const W = "0x57D158E5e9761553e06e475524808301c567892e";
+const CSV = `﻿Transaction Hash,Status,Method,BlockNo,DateTime (UTC),From,From_Nametag,To,To_Nametag,Amount,Value (USD)
+"0xaa","Success","Execute","1","2026-10-06 11:33:33","0xfBB6","","${W}","","0.00541761","$429.35"
+"0xbb","Success","Execute","2","2026-10-08 16:16:47","${W}","","0x4985","Uniswap V4: Pool Manager","0.00027089","$21.47"
+"0xbb","Success","Execute","2","2026-10-08 16:16:47","${W}","","0xfBB6","","0.00514672","$407.88"
+"0xcc","Success","Execute","3","2026-10-11 19:25:15","0x4985","Uniswap V4: Pool Manager","${W}","","0.00074051","$1,058.69"
+"0xdd","Success","Execute","4","2026-10-12 09:00:00","${W}","","0x3ef234bc2a04d86f6041e419458d9acbd077f2c1","","0.001","$1"`;
+
+test("the explorer's cbBTC CSV becomes dated rows: in = withdrawal, out = deposit, own-to-own skipped", () => {
+  const rows = parseTokenTransfersCsv(CSV, [W, "0x3ef234bc2a04d86f6041e419458d9acbd077f2c1"]);
+  assert.deepEqual(rows.map((r) => [r.tx_date, r.direction, r.btc_amount]), [
+    ["2026-10-06", "withdrawal", 0.00541761], ["2026-10-08", "deposit", 0.00027089],
+    ["2026-10-08", "deposit", 0.00514672], ["2026-10-11", "withdrawal", 0.00074051]]);
+  assert.equal(rows[3].usd_amount, 1058.69, "thousands separator and $ stripped");
+  assert.equal(new Set(rows.map((r) => r.notes)).size, 4, "two transfers of one tx stay distinct");
+  assert.throws(() => parseTokenTransfersCsv("a,b\n1,2", [W]));
+});
+
+test("dated cbBTC rows move the on-chain BTC to their days; the unexplained rest lands today", () => {
+  const rows = parseTokenTransfersCsv(CSV, [W, "0x3ef234bc2a04d86f6041e419458d9acbd077f2c1"]);
+  const net = 0.00541761 - 0.00027089 - 0.00514672 + 0.00074051;
+  const d = datedOnChainBtc(rows, net + 0.002, "2026-11-04");
+  assert.equal(d.length, 5);
+  assert.deepEqual(d[4].tx_date, "2026-11-04");
+  assert.ok(Math.abs(d[4].btc_amount - 0.002) < 1e-12);
+  assert.equal(datedOnChainBtc(rows, net, "2026-11-04").length, 4, "fully explained: nothing booked today");
+  const s = repayPlanStats({ start_date: "2026-09-23", rate: 10, period: "year" }, datedOnChainBtc(rows, net, "2026-11-04"), { ...ctx, today: "2026-11-04" });
+  assert.ok(Math.abs(s.actualBtc - net) < 1e-12);
+  assert.ok(Math.abs(s.series.find((p) => p.time === "2026-10-06").actual - 0.00541761) < 1e-12, "the 6 Oct buy shows on its day");
+  assert.ok(Math.abs(s.weeks.find((w) => w.time === "2026-10-05").withdrawn - 0.00074051) < 1e-12, "and its week nets the swap back out");
+  assert.equal(datedOnChainBtc([], 0.009, "2026-11-04")[0].tx_date, "2026-11-04", "no history: all of it today, as before");
 });

@@ -5469,7 +5469,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.30</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.31</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5496,6 +5496,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.31", items: [
+          { t: "feat", text: "REPAY PLAN chart is weekly: up to 50 weeks back, this week and 10 ahead; bars are each week's net withdrawals, the lines the running total and the target at the week's end." },
+          { t: "fix", text: "cbBTC held on chain no longer lands as one withdrawal today: <b>[import CSV z Basescanu]</b> under the plan reads the explorer's cbBTC transfer export and dates every buy (in = withdrawal, out = deposit, own-to-own skipped). These rows only date the on-chain BTC — the balance is still read on chain and they stay out of the ledger figures; whatever the history does not explain still counts today. Re-importing skips transfers already saved." },
+        ] },
         { ver: "v6.30", items: [
           { t: "feat", text: "Bumpkin page: the three Chapter 16 Truffle recipes are listed with their cost and XP per FLOWER — Ember-Roasted Truffle Potatoes (Fire Pit, 1 Truffle + 30 Potato, 1,000 XP, 1 h), Truffle Cake (Bakery, 15 Truffle + 30 Wheat + 30 Egg + 5 Honey, 30,000 XP, 26 h) and Creamy Truffle Risotto (Kitchen, 8 Truffle + 3 Rice + 5 Wild Mushroom, 32,000 XP, 48 h), as the game lists them." },
         ] },
@@ -27447,7 +27451,14 @@ Kola: ${i.rounds.map(when).join(", ")}`;
             : `🔒 ledger je jen pro vlastníka — <span style="cursor:pointer;color:var(--lily)" onclick="_invUnlock()">zadej klíč</span>`}</div>`;
         return;
       }
-      const { transactions, rates } = _invState;
+      const { rates } = _invState;
+      /*
+       * cbBTC transfer history (venue "cbbtc", imported from the explorer's CSV) only DATES the BTC
+       * held on chain for the repay plan; that BTC is read as a balance, so these rows stay out of
+       * every ledger figure and table.
+       */
+      const transactions = (_invState.transactions || []).filter((t) => t.venue !== "cbbtc");
+      const cbbtcRows = (_invState.transactions || []).filter((t) => t.venue === "cbbtc");
       const errors = _invState.errors || {};
       const farmValue = _invState.farmValue || null;
       const agg = invAggregate(transactions);
@@ -27509,10 +27520,10 @@ Kola: ${i.rounds.map(when).join(", ")}`;
         : agg;
       const eggsLiquidBtc = chainEggs ? chainEggs.btc : 0;
       // ④ REPAY PLAN: the pace the user chose, measured against the withdrawals since its start.
-      // BTC derivatives held on chain are withdrawals too (see above), but the ledger has no row
-      // for them, so they enter as one withdrawal dated today — the day the plan first sees them.
-      const planTx = btcBackOnChain > 0
-        ? transactions.concat([{ direction: "withdrawal", tx_date: _localIsoDate(new Date()), btc_amount: btcBackOnChain }])
+      // BTC derivatives held on chain are withdrawals too (see above), dated by their imported
+      // transfer history; whatever that history does not explain enters as a withdrawal today.
+      const planTx = (btcBackOnChain > 0 || cbbtcRows.length)
+        ? transactions.concat(datedOnChainBtc(cbbtcRows, btcBackOnChain, _localIsoDate(new Date())))
         : transactions;
       const planStats = (_invPlan && !errors.ledger) ? repayPlanStats(_invPlan, planTx, { peakBtc: agg.peakBtc, netDebtBtc: aggSheet.netDebtBtc }) : null;
       // 1 BTC = (btcUsd/sflToUsd) FLOWER.
@@ -27522,6 +27533,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
       mount.innerHTML = `
         <h2 class="pixel-font" style="margin:0 0 10px 0;font-size:0.75rem;color:var(--sunpetal);letter-spacing:1px">💰 INVESTMENT TRACKER</h2>
         ${_invRepayHtml(aggSheet, planStats, flowerPerBtc, errors)}
+        ${_invPlan ? `<div class="pixel-font" style="font-size:0.45rem;color:var(--text-dim);margin:-6px 0 12px;line-height:1.8">cbBTC historie: ${cbbtcRows.length ? `${cbbtcRows.length} převodů (poslední ${escHTML(String(cbbtcRows.map((t) => String(t.tx_date).slice(0, 10)).sort().pop()))})` : "žádná — vše na peněžence se počítá k dnešku"} · <label style="cursor:pointer;color:var(--lily)">[import CSV z Basescanu]<input type="file" accept=".csv,text/csv" style="display:none" onchange="_invImportCbbtc(this)"></label> <span id="inv-cbbtc-msg"></span></div>` : ""}
         ${_invBalanceSheetHtml({ agg: aggSheet, btcBackOnChain, btcBackItems, flowerPerBtc, fmtFlower, treasuryTotalSfl, liquidValueSfl, liquidValueBtc, lockedBtc, chainWallet, chainEggs, walletLiquidBtc, walletHeldFlower, eggsLiquidBtc, farmValue, errors, btcUsd })}
         <div id="inv-satsflower" style="margin:6px 0 16px"></div>
         <div id="inv-tx-table-wrap">${renderInvTxTable(transactions)}</div>
@@ -27927,7 +27939,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
           ${stat(behind ? "YOU ARE BEHIND BY" : "YOU ARE AHEAD BY", `<b>${fmtFl(Math.abs(stats.balanceBtc))}</b>`, `${fmtBtc(Math.abs(stats.balanceBtc))} · ${lagDays} days · net withdrawn ${fmtFl(stats.actualBtc)} of ${fmtFl(stats.targetBtc)} since ${p.start_date}`, behind ? "var(--red)" : "var(--green)", netTip)}
         </div>
         <div id="inv-repay-chart" class="rp-chart"></div>
-        <div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);margin-top:3px;line-height:1.7">−50 d … dnes … +50 d · <span style="color:#e8c86a">- - cíl</span> · <span style="color:#7fe0a0">── vybráno (čistě)</span> · <span style="color:#7fb8e0">···· trend (tempo posledních 50 d)</span> · <span style="color:#7fe0a0">▮ výběry / den</span></div></div></div>`);
+        <div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);margin-top:3px;line-height:1.7">po týdnech: až 50 zpět … tento týden … +10 · <span style="color:#e8c86a">- - cíl</span> · <span style="color:#7fe0a0">── vybráno (čistě)</span> · <span style="color:#7fb8e0">···· trend (tempo posledních 50 d)</span> · <span style="color:#7fe0a0">▮ výběry / týden</span></div></div></div>`);
     }
     /*
      * BILANCE — one balance sheet instead of a card per venue: what went in (net BTC, with its
@@ -28138,23 +28150,23 @@ Kola: ${i.rounds.map(when).join(", ")}`;
       });
       _repayChartObj = chart;
       const fmt = { type: "custom", minMove: 0.00000001, formatter: (v) => v.toFixed(5) };
-      const past = stats.series, future = stats.future, today = past[past.length - 1];
-      // The target runs straight through today; withdrawals stop there and the trend takes over.
+      // Weekly points (repayPlanStats .weeks): a withdrawal shows in the week it was made.
+      const past = stats.weeks, future = stats.futureWeeks, today = past[past.length - 1];
+      // The target runs straight through this week; withdrawals stop there and the trend takes over.
       chart.addLineSeries({ color: "#e8c86a", lineWidth: 2, lineStyle: 2, priceFormat: fmt, title: "cíl", lastValueVisible: false })
         .setData(past.map((s) => ({ time: s.time, value: s.target })).concat(future.map((s) => ({ time: s.time, value: s.target }))));
       const actual = chart.addLineSeries({ color: "#7fe0a0", lineWidth: 2, lineType: 1, priceFormat: fmt, title: "vybráno" });
       actual.setData(past.map((s) => ({ time: s.time, value: s.actual })));
-      actual.setMarkers([{ time: today.time, position: "aboveBar", color: "#c4a882", shape: "arrowDown", text: "dnes" }]);
+      actual.setMarkers([{ time: today.time, position: "aboveBar", color: "#c4a882", shape: "arrowDown", text: "tento týden" }]);
       chart.addLineSeries({ color: "#7fb8e0", lineWidth: 1, lineStyle: 1, priceFormat: fmt, title: "trend", lastValueVisible: false })
         .setData([{ time: today.time, value: today.actual }].concat(future.map((s) => ({ time: s.time, value: s.trend }))));
-      // Daily withdrawals as bars on their own scale at the bottom, so a single day's pull is visible.
-      const daily = past.map((s, i) => ({ time: s.time, value: s.actual - (i ? past[i - 1].actual : 0), color: "rgba(127,224,160,0.45)" })).filter((b) => b.value > 0);
-      if (daily.length) {
-        chart.addHistogramSeries({ priceScaleId: "bars", priceFormat: fmt, lastValueVisible: false, priceLineVisible: false }).setData(daily);
+      // Each week's net withdrawals as bars on their own scale at the bottom.
+      const weekly = past.map((s) => ({ time: s.time, value: s.withdrawn, color: "rgba(127,224,160,0.45)" })).filter((b) => b.value > 0);
+      if (weekly.length) {
+        chart.addHistogramSeries({ priceScaleId: "bars", priceFormat: fmt, lastValueVisible: false, priceLineVisible: false }).setData(weekly);
         chart.priceScale("bars").applyOptions({ scaleMargins: { top: 0.7, bottom: 0 }, visible: false });
       }
-      const from = past[Math.max(0, past.length - 51)].time, to = future.length ? future[future.length - 1].time : today.time;
-      chart.timeScale().setVisibleRange({ from, to });
+      chart.timeScale().fitContent();
     }
     window._invSavePlan = async function () {
       const msg = document.getElementById("inv-plan-msg");
@@ -28166,6 +28178,30 @@ Kola: ${i.rounds.map(when).join(", ")}`;
         _invPlan = (await r.json()).plan;
         renderInvestmentTrackerContent();
       } catch (e) { if (msg) msg.textContent = "uložení selhalo: " + e.message; }
+    };
+    /*
+     * Basescan → cbBTC token → filter by the wallet address → "Download CSV". Every transfer of a
+     * registered wallet becomes a "cbbtc" row (in = withdrawal, out = deposit); a transfer already
+     * imported (same notes: hash, ends, amount) is skipped, so the same or a newer export can be
+     * imported again.
+     */
+    window._invImportCbbtc = async function (input) {
+      const msg = document.getElementById("inv-cbbtc-msg");
+      const say = (t) => { if (msg) msg.textContent = t; };
+      const file = input.files && input.files[0];
+      if (!file) return;
+      try {
+        const wallets = ((_invHoldings && _invHoldings.wallets) || []).map((w) => w.address);
+        if (!wallets.length) throw new Error("žádná registrovaná peněženka");
+        const rows = parseTokenTransfersCsv(await file.text(), wallets);
+        const have = new Set((_invState.transactions || []).filter((t) => t.venue === "cbbtc").map((t) => t.notes));
+        const fresh = rows.filter((r) => !have.has(r.notes));
+        say(`ukládám ${fresh.length} z ${rows.length}…`);
+        for (const r of fresh) await invAddTransaction(Object.assign({ farm_id: FARM_ID, venue: "cbbtc" }, r));
+        _invState.transactions = await invListTransactions(FARM_ID);
+        renderInvestmentTrackerContent();
+      } catch (e) { say("import selhal: " + (e.message || e)); }
+      input.value = "";
     };
     window._invDeletePlan = async function () {
       if (!confirm("Smazat repay plán?")) return;

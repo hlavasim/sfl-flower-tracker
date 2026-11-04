@@ -20,6 +20,49 @@
  *
  * Twin copy: flowers.html carries this function verbatim (tests/core/twin-copies.test.mjs).
  */
+/*
+ * BTC already back out on chain (cbBTC on the owner's wallets) is read as a balance, so on its own
+ * it has no date — the plan used to book all of it as one withdrawal today. Its transfer history
+ * (rows of venue "cbbtc", imported from the explorer's CSV) dates it: every transfer in is a
+ * withdrawal on its day, every transfer out a deposit. What the history does not explain — a buy
+ * made after the last import — still lands today, so the total always matches the balance.
+ */
+export function datedOnChainBtc(cbbtcRows, onChainBtc, today) {
+  const rows = (cbbtcRows || []).map((t) => ({ direction: t.direction, tx_date: t.tx_date, btc_amount: t.btc_amount }));
+  const net = rows.reduce((a, t) => a + (t.direction === "withdrawal" ? 1 : -1) * (parseFloat(t.btc_amount) || 0), 0);
+  const rest = (onChainBtc || 0) - net;
+  if (Math.abs(rest) > 1e-9) rows.push({ direction: rest > 0 ? "withdrawal" : "deposit", tx_date: today, btc_amount: Math.abs(rest) });
+  return rows;
+}
+
+/*
+ * The block explorer's token-transfer CSV (Basescan "Download CSV" for the cbBTC token on one
+ * address) as ledger rows: a transfer into one of `wallets` is a withdrawal, one out of them a
+ * deposit, one between two of them is skipped. `notes` carries the hash, ends and amount, so the
+ * same transfer imported twice is recognised.
+ */
+export function parseTokenTransfersCsv(csv, wallets) {
+  const own = new Set((wallets || []).map((a) => String(a).toLowerCase()));
+  const lines = String(csv || "").replace(/^﻿/, "").split(/\r?\n/).filter((l) => l.trim());
+  if (!lines.length) return [];
+  const cells = (l) => [...l.matchAll(/"([^"]*)"|([^,]+)|(?<=,)(?=,|$)|^(?=,)/g)].map((m) => (m[1] ?? m[2] ?? "").trim());
+  const head = cells(lines[0]);
+  const col = (n) => head.indexOf(n);
+  const iHash = col("Transaction Hash"), iDate = col("DateTime (UTC)"), iFrom = col("From"), iTo = col("To"), iAmt = col("Amount"), iUsd = col("Value (USD)");
+  if ([iHash, iDate, iFrom, iTo, iAmt].some((i) => i < 0)) throw new Error("not a token-transfer CSV (missing columns)");
+  const out = [];
+  for (const l of lines.slice(1)) {
+    const c = cells(l);
+    const from = (c[iFrom] || "").toLowerCase(), to = (c[iTo] || "").toLowerCase();
+    const amt = parseFloat(String(c[iAmt]).replace(/,/g, ""));
+    if (!(amt > 0) || own.has(from) === own.has(to)) continue;
+    const usd = iUsd >= 0 ? parseFloat(String(c[iUsd]).replace(/[$,]/g, "")) : NaN;
+    out.push({ tx_date: String(c[iDate]).slice(0, 10), direction: own.has(to) ? "withdrawal" : "deposit", btc_amount: amt,
+      usd_amount: Number.isFinite(usd) ? usd : null, notes: `cbBTC ${c[iHash]} ${from.slice(0, 8)}>${to.slice(0, 8)} ${c[iAmt]}` });
+  }
+  return out;
+}
+
 export function repayPlanStats(plan, transactions, ctx) {
   const perDay = { day: 1, month: 365 / 12, year: 365 };
   const dayMs = 86400000;
@@ -74,8 +117,34 @@ export function repayPlanStats(plan, transactions, ctx) {
     future.push({ time: new Date(ms).toISOString().slice(0, 10), target: targetAt(ms), trend: actualBtc + paceBtcPerDay * i });
   }
 
+  /*
+   * The chart reads weeks, not days: a withdrawal shows in the week it was made instead of as a
+   * one-day spike. Each week (Monday-start) carries the target and the running total at its last
+   * day (today for the current week) and the net it withdrew; up to `weeksBack` weeks of history,
+   * `weeksAhead` of target and trend after the current one.
+   */
+  const weekOf = (ms) => ms - ((new Date(ms).getUTCDay() + 6) % 7) * dayMs;
+  const weeksBack = (ctx && ctx.weeksBack) || 50, weeksAhead = (ctx && ctx.weeksAhead) || 10;
+  const weeks = [];
+  for (let i = 0; i < series.length; i++) {
+    const ms = Date.parse(series[i].time + "T00:00:00Z");
+    const wk = new Date(weekOf(ms)).toISOString().slice(0, 10);
+    const prev = i ? series[i - 1].actual : 0;
+    let w = weeks[weeks.length - 1];
+    if (!w || w.time !== wk) { w = { time: wk, target: 0, actual: 0, withdrawn: 0 }; weeks.push(w); }
+    w.target = series[i].target; w.actual = series[i].actual; w.withdrawn += series[i].actual - prev;
+  }
+  weeks.splice(0, Math.max(0, weeks.length - weeksBack));
+  const futureWeeks = [];
+  const thisWeek = weekOf(todayMs);
+  for (let i = 1; i <= weeksAhead; i++) {
+    const end = thisWeek + (7 * i + 6) * dayMs;
+    futureWeeks.push({ time: new Date(thisWeek + 7 * i * dayMs).toISOString().slice(0, 10), target: targetAt(end),
+      trend: actualBtc + paceBtcPerDay * Math.round((end - todayMs) / dayMs) });
+  }
+
   return {
-    dailyTargetBtc, daysElapsed, targetBtc, actualBtc, balanceBtc, paceBtcPerDay,
+    dailyTargetBtc, daysElapsed, targetBtc, actualBtc, balanceBtc, paceBtcPerDay, weeks, futureWeeks,
     // Days from now to a fully repaid position at the plan's pace, ignoring the current lead/lag.
     etaDays: netDebtBtc > 0 ? netDebtBtc / dailyTargetBtc : 0,
     series, future,
