@@ -1,5 +1,5 @@
 export const COOKING_RECIPES_DATA = {
-  // Fire Pit (18)
+  // Fire Pit (19)
   "Mashed Potato":        { building: "Fire Pit",       xp: 3,     cookSec: 30,     usesHoney: false },
   "Rhubarb Tart":         { building: "Fire Pit",       xp: 5,     cookSec: 60,     usesHoney: false },
   "Pumpkin Soup":         { building: "Fire Pit",       xp: 24,    cookSec: 180,    usesHoney: false },
@@ -18,7 +18,8 @@ export const COOKING_RECIPES_DATA = {
   "Antipasto":            { building: "Fire Pit",       xp: 3000,  cookSec: 10800,  usesHoney: false },
   "Pizza Margherita":     { building: "Fire Pit",       xp: 25000, cookSec: 72000,  usesHoney: false },
   "Furikake Sprinkle":    { building: "Fire Pit",       xp: 1000,  cookSec: 0,      usesHoney: false },
-  // Kitchen (27)
+  "Ember-Roasted Truffle Potatoes": { building: "Fire Pit", xp: 1000, cookSec: 3600, usesHoney: false },
+  // Kitchen (28)
   "Sunflower Crunch":     { building: "Kitchen",        xp: 50,    cookSec: 600,    usesHoney: false },
   "Club Sandwich":        { building: "Kitchen",        xp: 170,   cookSec: 10800,  usesHoney: false },
   "Roast Veggies":        { building: "Kitchen",        xp: 170,   cookSec: 7200,   usesHoney: false },
@@ -47,7 +48,8 @@ export const COOKING_RECIPES_DATA = {
   "Creamy Crab Bite":     { building: "Kitchen",        xp: 10000, cookSec: 0,      usesHoney: false },
   "Crimstone Infused Fish Oil": { building: "Kitchen",  xp: 18000, cookSec: 0,      usesHoney: false },
   "Surimi Rice Bowl":     { building: "Kitchen",        xp: 3000,  cookSec: 0,      usesHoney: false },
-  // Bakery (17)
+  "Creamy Truffle Risotto": { building: "Kitchen",  xp: 32000, cookSec: 172800, usesHoney: false },
+  // Bakery (18)
   "Sunflower Cake":       { building: "Bakery",         xp: 525,   cookSec: 23400,  usesHoney: false },
   "Cornbread":            { building: "Bakery",         xp: 600,   cookSec: 43200,  usesHoney: false },
   "Pumpkin Cake":         { building: "Bakery",         xp: 625,   cookSec: 37800,  usesHoney: false },
@@ -65,6 +67,7 @@ export const COOKING_RECIPES_DATA = {
   "Eggplant Cake":        { building: "Bakery",         xp: 1400,  cookSec: 86400,  usesHoney: false },
   "Honey Cake":           { building: "Bakery",         xp: 4000,  cookSec: 28800,  usesHoney: true  },
   "Lemon Cheesecake":     { building: "Bakery",         xp: 30000, cookSec: 108000, usesHoney: false },
+  "Truffle Cake":         { building: "Bakery",         xp: 30000, cookSec: 93600,  usesHoney: true  },
   // Deli (9)
   "Cheese":               { building: "Deli",           xp: 1,     cookSec: 1200,   usesHoney: false },
   "Fermented Carrots":    { building: "Deli",           xp: 250,   cookSec: 86400,  usesHoney: false },
@@ -147,6 +150,7 @@ export const COOKING_INGREDIENTS = {
   "Antipasto":            { "Olive": 2, "Grape": 2 },
   "Pizza Margherita":     { "Tomato": 30, "Cheese": 5, "Wheat": 20 },
   "Furikake Sprinkle":    { "Fish Flake": 1, "Seaweed": 1 },
+  "Ember-Roasted Truffle Potatoes": { "Truffle": 1, "Potato": 30 },
   // ── Kitchen ──
   "Sunflower Crunch":     { "Sunflower": 300 },
   "Club Sandwich":        { "Sunflower": 100, "Carrot": 25, "Wheat": 5 },
@@ -176,6 +180,7 @@ export const COOKING_INGREDIENTS = {
   "Creamy Crab Bite":           { "Crab Stick": 1, "Cheese": 3 },
   "Crimstone Infused Fish Oil": { "Fish Oil": 1, "Crimstone": 1 },
   "Surimi Rice Bowl":           { "Fish Stick": 1, "Rice": 1, "Onion": 1 },
+  "Creamy Truffle Risotto": { "Truffle": 8, "Rice": 3, "Wild Mushroom": 5 },
   // ── Bakery ──
   "Sunflower Cake":       { "Sunflower": 1000, "Wheat": 10, "Egg": 30 },
   "Cornbread":            { "Corn": 15, "Wheat": 5, "Egg": 10 },
@@ -194,6 +199,7 @@ export const COOKING_INGREDIENTS = {
   "Eggplant Cake":        { "Eggplant": 30, "Wheat": 10, "Egg": 30 },
   "Honey Cake":           { "Honey": 10, "Wheat": 10, "Egg": 20 },
   "Lemon Cheesecake":     { "Lemon": 20, "Cheese": 5, "Egg": 40 },
+  "Truffle Cake":         { "Truffle": 15, "Wheat": 30, "Egg": 30, "Honey": 5 },
   // ── Deli ──
   "Cheese":               { "Milk": 3 },
   "Fermented Carrots":    { "Carrot": 20 },

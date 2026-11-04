@@ -89,9 +89,9 @@ test("every core/data export is served in tables", async () => {
   }
 });
 
-test("COOKING_RECIPES_DATA round-trips with all 122 recipes", () => {
+test("COOKING_RECIPES_DATA round-trips with all 125 recipes", () => {
   const p = buildConstantsSection();
-  assert.equal(Object.keys(p.tables.COOKING_RECIPES_DATA).length, 122);
+  assert.equal(Object.keys(p.tables.COOKING_RECIPES_DATA).length, 125);
   assert.equal(p.tables.COOKING_RECIPES_DATA["Pizza Margherita"].building, "Fire Pit");
 });
 

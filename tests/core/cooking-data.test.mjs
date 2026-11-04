@@ -21,14 +21,14 @@ test("building list and defaults are consistent", () => {
 });
 
 // ── Aged Fish generator (Task 5b) — flowers.html generates one "Aged <fish>" recipe per
-// FISH_BASE_XP entry at runtime; the page's live table is 122 recipes (84 static + 38 generated).
+// FISH_BASE_XP entry at runtime; the page's live table is 125 recipes (87 static + 38 generated).
 //
 // 38, not 35: consumables.ts builds AGED_FISH from the WHOLE FISH record, which has 38 fish.
 // Whale Shark / Saw Shark / White Shark were missing from FISH_BASE_XP, so the shed's three
 // biggest recipes did not exist here and their Aged stacks banked no XP at all.
-test("recipe table has all 84 static recipes plus 38 generated Aged Fish recipes (122 total)", () => {
+test("recipe table has all 87 static recipes plus 38 generated Aged Fish recipes (125 total)", () => {
   const keys = Object.keys(COOKING_RECIPES_DATA);
-  assert.equal(keys.length, 122, `expected 122 recipes, got ${keys.length}`);
+  assert.equal(keys.length, 125, `expected 125 recipes, got ${keys.length}`);
   const aged = keys.filter((k) => k.startsWith("Aged "));
   assert.equal(aged.length, 38, `expected 38 Aged recipes, got ${aged.length}`);
   assert.equal(Object.keys(FISH_BASE_XP).length, 38);
@@ -65,4 +65,14 @@ test("Aged Hammerhead shark matches the page's generator formula (independently 
   assert.equal(r.cookSec, 10800);
   assert.deepEqual(COOKING_INGREDIENTS["Aged Hammerhead shark"], { "Hammerhead Shark": 1, Salt: 75 });
   assert.ok(COOKING_RECIPES_DATA["Aged Football fish"], "Football fish follows the game spelling too");
+});
+
+// Chapter 16's Truffle ladder (consumables.ts at a2b369373): 1,000 / 2,000 / 4,000 XP per Truffle.
+test("the three Truffle recipes are cookable, as the game lists them", () => {
+  assert.deepEqual(COOKING_RECIPES_DATA["Ember-Roasted Truffle Potatoes"], { building: "Fire Pit", xp: 1000, cookSec: 3600, usesHoney: false });
+  assert.deepEqual(COOKING_INGREDIENTS["Ember-Roasted Truffle Potatoes"], { Truffle: 1, Potato: 30 });
+  assert.deepEqual(COOKING_RECIPES_DATA["Truffle Cake"], { building: "Bakery", xp: 30000, cookSec: 93600, usesHoney: true });
+  assert.deepEqual(COOKING_INGREDIENTS["Truffle Cake"], { Truffle: 15, Wheat: 30, Egg: 30, Honey: 5 });
+  assert.deepEqual(COOKING_RECIPES_DATA["Creamy Truffle Risotto"], { building: "Kitchen", xp: 32000, cookSec: 172800, usesHoney: false });
+  assert.deepEqual(COOKING_INGREDIENTS["Creamy Truffle Risotto"], { Truffle: 8, Rice: 3, "Wild Mushroom": 5 });
 });

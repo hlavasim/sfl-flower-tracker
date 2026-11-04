@@ -3323,11 +3323,11 @@
     ];
 
     // ═══════════════════════════════════════
-    //  COOKING RECIPES (84 foods, 5 buildings)
+    //  COOKING RECIPES (87 foods, 5 buildings)
     // ═══════════════════════════════════════
 
     const COOKING_RECIPES_DATA = {
-      // Fire Pit (18)
+      // Fire Pit (19)
       "Mashed Potato":        { building: "Fire Pit",       xp: 3,     cookSec: 30,     usesHoney: false },
       "Rhubarb Tart":         { building: "Fire Pit",       xp: 5,     cookSec: 60,     usesHoney: false },
       "Pumpkin Soup":         { building: "Fire Pit",       xp: 24,    cookSec: 180,    usesHoney: false },
@@ -3346,7 +3346,8 @@
       "Antipasto":            { building: "Fire Pit",       xp: 3000,  cookSec: 10800,  usesHoney: false },
       "Pizza Margherita":     { building: "Fire Pit",       xp: 25000, cookSec: 72000,  usesHoney: false },
       "Furikake Sprinkle":    { building: "Fire Pit",       xp: 1000,  cookSec: 0,      usesHoney: false },
-      // Kitchen (27)
+      "Ember-Roasted Truffle Potatoes": { building: "Fire Pit", xp: 1000, cookSec: 3600, usesHoney: false },
+      // Kitchen (28)
       "Sunflower Crunch":     { building: "Kitchen",        xp: 50,    cookSec: 600,    usesHoney: false },
       "Club Sandwich":        { building: "Kitchen",        xp: 170,   cookSec: 10800,  usesHoney: false },
       "Roast Veggies":        { building: "Kitchen",        xp: 170,   cookSec: 7200,   usesHoney: false },
@@ -3375,7 +3376,8 @@
       "Creamy Crab Bite":     { building: "Kitchen",        xp: 10000, cookSec: 0,      usesHoney: false },
       "Crimstone Infused Fish Oil": { building: "Kitchen",  xp: 18000, cookSec: 0,      usesHoney: false },
       "Surimi Rice Bowl":     { building: "Kitchen",        xp: 3000,  cookSec: 0,      usesHoney: false },
-      // Bakery (17)
+      "Creamy Truffle Risotto": { building: "Kitchen",  xp: 32000, cookSec: 172800, usesHoney: false },
+      // Bakery (18)
       "Sunflower Cake":       { building: "Bakery",         xp: 525,   cookSec: 23400,  usesHoney: false },
       "Cornbread":            { building: "Bakery",         xp: 600,   cookSec: 43200,  usesHoney: false },
       "Pumpkin Cake":         { building: "Bakery",         xp: 625,   cookSec: 37800,  usesHoney: false },
@@ -3393,6 +3395,7 @@
       "Eggplant Cake":        { building: "Bakery",         xp: 1400,  cookSec: 86400,  usesHoney: false },
       "Honey Cake":           { building: "Bakery",         xp: 4000,  cookSec: 28800,  usesHoney: true  },
       "Lemon Cheesecake":     { building: "Bakery",         xp: 30000, cookSec: 108000, usesHoney: false },
+      "Truffle Cake":         { building: "Bakery",         xp: 30000, cookSec: 93600,  usesHoney: true  },
       // Deli (9)
       "Cheese":               { building: "Deli",           xp: 1,     cookSec: 1200,   usesHoney: false },
       "Fermented Carrots":    { building: "Deli",           xp: 250,   cookSec: 86400,  usesHoney: false },
@@ -3439,6 +3442,7 @@
       "Antipasto":            { "Olive": 2, "Grape": 2 },
       "Pizza Margherita":     { "Tomato": 30, "Cheese": 5, "Wheat": 20 },
       "Furikake Sprinkle":    { "Fish Flake": 1, "Seaweed": 1 },
+      "Ember-Roasted Truffle Potatoes": { "Truffle": 1, "Potato": 30 },
       // ── Kitchen ──
       "Sunflower Crunch":     { "Sunflower": 300 },
       "Club Sandwich":        { "Sunflower": 100, "Carrot": 25, "Wheat": 5 },
@@ -3468,6 +3472,7 @@
       "Creamy Crab Bite":           { "Crab Stick": 1, "Cheese": 3 },
       "Crimstone Infused Fish Oil": { "Fish Oil": 1, "Crimstone": 1 },
       "Surimi Rice Bowl":           { "Fish Stick": 1, "Rice": 1, "Onion": 1 },
+      "Creamy Truffle Risotto": { "Truffle": 8, "Rice": 3, "Wild Mushroom": 5 },
       // ── Bakery ──
       "Sunflower Cake":       { "Sunflower": 1000, "Wheat": 10, "Egg": 30 },
       "Cornbread":            { "Corn": 15, "Wheat": 5, "Egg": 10 },
@@ -3486,6 +3491,7 @@
       "Eggplant Cake":        { "Eggplant": 30, "Wheat": 10, "Egg": 30 },
       "Honey Cake":           { "Honey": 10, "Wheat": 10, "Egg": 20 },
       "Lemon Cheesecake":     { "Lemon": 20, "Cheese": 5, "Egg": 40 },
+      "Truffle Cake":         { "Truffle": 15, "Wheat": 30, "Egg": 30, "Honey": 5 },
       // ── Deli ──
       "Cheese":               { "Milk": 3 },
       "Fermented Carrots":    { "Carrot": 20 },
@@ -5463,7 +5469,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.29</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.30</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5490,6 +5496,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.30", items: [
+          { t: "feat", text: "Bumpkin page: the three Chapter 16 Truffle recipes are listed with their cost and XP per FLOWER — Ember-Roasted Truffle Potatoes (Fire Pit, 1 Truffle + 30 Potato, 1,000 XP, 1 h), Truffle Cake (Bakery, 15 Truffle + 30 Wheat + 30 Egg + 5 Honey, 30,000 XP, 26 h) and Creamy Truffle Risotto (Kitchen, 8 Truffle + 3 Rice + 5 Wild Mushroom, 32,000 XP, 48 h), as the game lists them." },
+        ] },
         { ver: "v6.29", items: [
           { t: "fix", text: "Chapter resource prices re-read from the in-game marketplace (2026-11-04): Green Beetle 0.0801, Blue 0.162, Pink 0.465, Amber 0.6, Pig Bristles 5.2, Truffle 0.221 — the lower of the cheapest listing and the last sale." },
         ] },
