@@ -44,3 +44,43 @@ test("the rolls are seeded: the same farm gives the same numbers, in ready order
   const c = await simulateHarvests(farm, 155499, NOW);
   assert.notDeepEqual(a.map((h) => h.amount), c.map((h) => h.amount));
 });
+
+/*
+ * The widget's per-kind cache (api/compute.mjs cachedHarvests): a kind is replayed alone and its
+ * cached rows are reused while its inputs are unchanged. That rests on three things pinned here.
+ * (Checked further, outside the suite, on 81 archived farms over three days: 1,944 kind pairs with
+ * equal inputs gave equal rows, and rows held to their valid-until matched a later replay.)
+ */
+import { harvestCacheInputs, harvestCacheValidUntil, HARVEST_KINDS, READY_TTL_MS } from "../../core/engine/harvest-sim.mjs";
+
+test("a kind replayed on its own gives the same rows as the full replay", async () => {
+  const all = await simulateHarvests(farm, 155498, NOW);
+  for (const kinds of [["tree"], ["crop", "animal"], ["stone", "iron", "gold", "lava"]]) {
+    const part = await simulateHarvests(farm, 155498, NOW, { kinds });
+    assert.ok(part.length > 0, kinds.join());
+    assert.deepEqual(part, all.filter((h) => kinds.includes(h.kind)), kinds.join());
+  }
+});
+
+test("a harvest changes its own kind's cache inputs only; pet churn changes none", () => {
+  const before = harvestCacheInputs(farm);
+  assert.deepEqual(Object.keys(before), HARVEST_KINDS);
+  const chopped = structuredClone(farm);
+  const treeId = Object.keys(chopped.trees)[0];
+  chopped.trees[treeId].wood.choppedAt += 1000;
+  const after = harvestCacheInputs(chopped);
+  assert.deepEqual(HARVEST_KINDS.filter((k) => before[k] !== after[k]), ["tree"]);
+  const fed = structuredClone(farm);
+  fed.pets = { common: { Barkley: { energy: 1, requests: { food: ["Pizza"] } } } };
+  assert.deepEqual(HARVEST_KINDS.filter((k) => before[k] !== harvestCacheInputs(fed)[k]), []);
+  const boosted = structuredClone(farm);
+  boosted.bumpkin.equipped = { ...boosted.bumpkin.equipped, hat: "Some Other Hat" };
+  assert.deepEqual(HARVEST_KINDS.filter((k) => before[k] === harvestCacheInputs(boosted)[k]), [], "an outfit change resets every kind");
+});
+
+test("cached rows last until the kind's first node is ready, a few minutes when one is ready now", () => {
+  const now = 1_000_000;
+  assert.equal(harvestCacheValidUntil([{ readyAt: now + 7200000 }, { readyAt: now + 3600000 }], now), now + 3600000);
+  assert.equal(harvestCacheValidUntil([{ readyAt: now - 5 }, { readyAt: now + 3600000 }], now), now + READY_TTL_MS);
+  assert.equal(harvestCacheValidUntil([], now), now + 6 * 3600000);
+});

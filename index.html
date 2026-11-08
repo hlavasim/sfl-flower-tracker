@@ -5469,7 +5469,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.31</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.32</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5496,6 +5496,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.32", items: [
+          { t: "perf", text: "WIDGET loads faster: the harvest replay is kept per node kind (trees, rocks, crops, fruit, greenhouse, flowers, animals, oil, lava) and only a kind whose state changed — a chop, a planting, a power skill — or whose first node is ready is replayed again. Prices are still read fresh on every call." },
+          { t: "fix", text: "Harvest replay: a farm without Wood got no axes in the replay, and an animal's main product depended on the inventory order (a cow could show Leather instead of Milk)." },
+        ] },
         { ver: "v6.31", items: [
           { t: "feat", text: "REPAY PLAN chart is weekly: up to 50 weeks back, this week and 10 ahead; bars are each week's net withdrawals, the lines the running total and the target at the week's end." },
           { t: "fix", text: "cbBTC held on chain no longer lands as one withdrawal today: <b>[import CSV z Basescanu]</b> under the plan reads the explorer's cbBTC transfer export and dates every buy (in = withdrawal, out = deposit, own-to-own skipped). These rows only date the on-chain BTC — the balance is still read on chain and they stay out of the ledger figures; whatever the history does not explain still counts today. Re-importing skips transfers already saved." },

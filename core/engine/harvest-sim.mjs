@@ -21,6 +21,7 @@ async function game() {
   return _game;
 }
 
+const ANIMAL_PRODUCT = { Chicken: "Egg", Cow: "Milk", Sheep: "Wool", Pig: "Truffle" };
 const placed = (n) => n && n.x !== undefined && n.y !== undefined;
 
 /**
@@ -29,10 +30,15 @@ const placed = (n) => n && n.x !== undefined && n.y !== undefined;
  * kind: tree | stone | iron | gold | crimstone | oil | crop | fruit | greenhouse | flower | animal |
  * lava. Only nodes with something growing / a timer are listed.
  */
-export async function simulateHarvests(farmJson, farmId, now = Date.now()) {
+export async function simulateHarvests(farmJson, farmId, now = Date.now(), { kinds } = {}) {
+  // `kinds`: replay only these (see HARVEST_KINDS) — each kind rolls on its own counters, so a
+  // subset gives the same rows as the full replay (tests/core/harvest-sim.test.mjs).
+  const want = kinds ? new Set(kinds) : null;
   const G = await game();
   let state = G.makeGame(farmJson);
-  const Dec = state.inventory.Wood ? state.inventory.Wood.constructor : null;
+  // The game's Decimal, taken from any inventory entry (a farm without Wood got no tools before).
+  const anyDec = Object.values(state.inventory || {}).find((v) => v && typeof v.add === "function");
+  const Dec = anyDec ? anyDec.constructor : null;
   if (Dec) for (const t of TOOLS) state.inventory[t] = new Dec(1e9);
 
   const tasks = [];
@@ -42,6 +48,7 @@ export async function simulateHarvests(farmJson, farmId, now = Date.now()) {
   // again(state) = the node's ready time after a harvest — a seeded instant regrowth (Tree
   // Turnaround, instant mine / drill recoveries) makes it ready at once, and the visit harvests again.
   const add = (kind, id, name, product, readyAt, run, startedAt, again) => {
+    if (want && !want.has(kind)) return;
     if (Number.isFinite(readyAt)) tasks.push({ kind, id, name, product, readyAt, run, startedAt: startedAt ?? null, again: again || null });
   };
 
@@ -95,7 +102,9 @@ export async function simulateHarvests(farmJson, farmId, now = Date.now()) {
   for (const [key, building] of [["henHouse", state.henHouse], ["barn", state.barn], ["pigpen", state.pigpen]]) {
     for (const [id, a] of Object.entries((building && building.animals) || {})) {
       if (!a || !a.type) continue;
-      add("animal", id, a.type, null, G.getAnimalReadyAt(a, state), (s, at) => {
+      // The main product is fixed per animal (it was the first new inventory key, so a Cow read
+      // Milk or Leather depending on the inventory's order).
+      add("animal", id, a.type, ANIMAL_PRODUCT[a.type] || null, G.getAnimalReadyAt(a, state), (s, at) => {
         const animal = s[key].animals[id];
         const ready = animal.state === "ready" ? s : { ...s, [key]: { ...s[key], animals: { ...s[key].animals, [id]: { ...animal, state: "ready" } } } };
         return G.claimProduce({ state: ready, action: { type: "produce.claimed", animal: a.type, id }, createdAt: at });
@@ -168,7 +177,7 @@ export async function simulateHarvests(farmJson, farmId, now = Date.now()) {
    * yield, and `spent` is what lighting the pit again costs (the season's requirements, Lava
    * Swimwear included), at its ready time.
    */
-  for (const [id, pit] of Object.entries(state.lavaPits || {})) {
+  for (const [id, pit] of Object.entries(want && !want.has("lava") ? {} : state.lavaPits || {})) {
     if (!placed(pit) || pit.startedAt === undefined || pit.collectedAt !== undefined) continue;
     const readyAt = pit.readyAt ?? pit.startedAt + G.getLavaPitTime({ game: state }).time;
     const amount = G.getObsidianYield({ game: state }).amount;
@@ -178,6 +187,62 @@ export async function simulateHarvests(farmJson, farmId, now = Date.now()) {
   }
   out.sort((a, b) => a.readyAt - b.readyAt);
   return out;
+}
+
+/*
+ * CACHING A KIND. A kind's rows depend on its own nodes (each harvest rewrites the node it took, so
+ * the node state also stands for the counter the next roll uses) and on what boosts every kind:
+ * placed collectibles (used / readyAt / createdAt included), the bumpkin's and farmhands' outfits,
+ * skills and power-skill uses, buds, pets, the calendar, season, island, VIP and faction. The
+ * inputs below are that, per kind, as strings: equal strings → the replay would give the same rows
+ * at the same harvest times. The time is the other input: a node not ready yet is replayed at its
+ * own ready time, one ready already at "now" — so a kind is only reused until its first node is
+ * ready, and a ready one for a few minutes (harvestCacheValidUntil).
+ */
+export const HARVEST_KINDS = ["tree", "stone", "iron", "gold", "crimstone", "oil", "crop", "fruit", "greenhouse", "flower", "animal", "lava"];
+// A kind's own state: its nodes, plus what else its reducer reads — the area-of-effect record
+// (lib/aoe.ts: scarecrows and the like on crops and rocks), the beehives a flower harvest updates,
+// and the buildings a harvest needs placed — animal buildings, the Greenhouse (coordinates, not
+// their queues).
+const placedBuildings = (f, names) => names.map((n) => ((f.buildings || {})[n] || []).map((b) => b && b.coordinates));
+const KIND_STATE = {
+  tree: (f) => [f.trees], stone: (f) => [f.stones, f.aoe], iron: (f) => [f.iron, f.aoe], gold: (f) => [f.gold, f.aoe],
+  crimstone: (f) => [f.crimstones], oil: (f) => [f.oilReserves], crop: (f) => [f.crops, f.aoe],
+  fruit: (f) => [f.fruitPatches], greenhouse: (f) => [f.greenhouse, placedBuildings(f, ["Greenhouse"])], flower: (f) => [f.flowers, f.beehives],
+  animal: (f) => [f.henHouse, f.barn, f.pigpen, placedBuildings(f, ["Hen House", "Barn", "Pigpen"])], lava: (f) => [f.lavaPits],
+};
+/*
+ * Left out because they churn without touching a yield: farm.pets (energy, food requests, XP — the
+ * game reads it only for monuments), the calendar's list of coming days and its "seen" stamps
+ * (reducers read only an event's startedAt / protected), and power-skill uses, which only date the
+ * ready time of their own kind (POWER_SKILL above), so each kind keys on its own.
+ */
+const KIND_POWER = { crop: "Instant Growth", tree: "Tree Blitz", greenhouse: "Greenhouse Guru", oil: "Grease Lightning",
+  flower: "Petal Blessed", animal: "Barnyard Rouse" };
+export function harvestCacheInputs(farm) {
+  const b = farm.bumpkin || {};
+  const calendar = Object.fromEntries(Object.entries(farm.calendar || {}).filter(([k]) => k !== "dates")
+    .map(([k, v]) => [k, v && typeof v === "object" ? { ...v, acknowledgedAt: undefined } : v]));
+  const shared = JSON.stringify([
+    farm.collectibles, farm.home && farm.home.collectibles, farm.interior,
+    b.equipped, b.skills, farm.farmHands, farm.buds, farm.petHouse,
+    calendar, farm.season, farm.island, farm.vip, farm.faction && farm.faction.name,
+    farm.buffs, farm.boostHistory, // Power Hour, sunshowers, Guardians (lib/boostWindows.ts)
+  ]);
+  const used = b.previousPowerUseAt || {};
+  return Object.fromEntries(HARVEST_KINDS.map((k) => [k,
+    shared + "|" + JSON.stringify(KIND_STATE[k](farm)) + "|" + (KIND_POWER[k] ? used[KIND_POWER[k]] ?? "" : "")]));
+}
+// A node ready already is replayed at "now", and a boost window can close meanwhile (a crop read
+// 2.6 then 2.4 ten minutes later): shorter than the widget's own 10-minute cache, so a ready kind is
+// in effect recomputed on every widget refresh, as before.
+export const READY_TTL_MS = 5 * 60000;
+// Bump when the replay's output changes, so rows cached by older code are not served.
+export const HARVEST_SIM_VERSION = 2;
+export function harvestCacheValidUntil(rows, now, idleMs = 6 * 3600000) {
+  let until = now + idleMs;
+  for (const r of rows) until = Math.min(until, r.readyAt > now ? r.readyAt : now + READY_TTL_MS);
+  return until;
 }
 
 export { DAY };

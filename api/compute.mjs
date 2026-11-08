@@ -231,6 +231,52 @@ async function fetchExchange() {
 
 // USD → CZK for the widget's Kč, from Coinbase's public rates; an hour's cache, 0 when unreachable.
 const usdCzkCache = G.usdCzkCache ??= new Map();
+/*
+ * The widget's harvest replay, a kind at a time through the harvest_cache table: a kind whose inputs
+ * (harvestCacheInputs) hash the same as its cached row, still before that row's valid_until, is
+ * served from it; only the rest are replayed, then written back. The hash also covers the replay's
+ * version and the game bundle's size, so new code never serves old rows. The database is optional:
+ * if it fails, everything is replayed as before.
+ */
+let _simVersion = null;
+async function cachedHarvests(farm, farmId, now) {
+  const sim = await import("../core/engine/harvest-sim.mjs");
+  const { createHash } = await import("node:crypto");
+  if (_simVersion == null) {
+    let size = 0;
+    try { size = (await import("node:fs")).statSync(new URL("../core/game-sim/game.bundle.mjs", import.meta.url)).size; } catch { size = 0; }
+    _simVersion = `${sim.HARVEST_SIM_VERSION}:${size}`;
+  }
+  const inputs = sim.harvestCacheInputs(farm);
+  const keys = Object.fromEntries(Object.entries(inputs).map(([k, v]) => [k, createHash("sha1").update(`${_simVersion}|${farmId}|${v}`).digest("hex")]));
+  const cached = {};
+  let pool = null;
+  try {
+    pool = (await import("./_db.js")).getPool();
+    const r = await pool.query("SELECT kind, key_hash, rows, valid_until FROM harvest_cache WHERE farm_id = $1", [farmId]);
+    for (const row of r.rows) if (row.key_hash === keys[row.kind] && new Date(row.valid_until).getTime() > now) cached[row.kind] = row.rows;
+  } catch { pool = null; }
+  const stale = sim.HARVEST_KINDS.filter((k) => !cached[k]);
+  const fresh = stale.length ? await sim.simulateHarvests(farm, farmId, now, { kinds: stale }) : [];
+  if (pool && stale.length) {
+    // A kind the game refused somewhere is not kept: it is retried next time.
+    const save = stale.map((k) => ({ kind: k, rows: fresh.filter((h) => h.kind === k) }))
+      .filter((x) => !x.rows.some((h) => h.amount == null))
+      .map((x) => ({ kind: x.kind, key_hash: keys[x.kind], rows: x.rows, until: sim.harvestCacheValidUntil(x.rows, now) }));
+    try {
+      if (save.length) await pool.query(
+        `INSERT INTO harvest_cache (farm_id, kind, key_hash, rows, valid_until, computed_at)
+         SELECT $1, x.kind, x.key_hash, x.rows, to_timestamp(x.until / 1000.0), NOW()
+         FROM jsonb_to_recordset($2::jsonb) AS x(kind TEXT, key_hash TEXT, rows JSONB, until DOUBLE PRECISION)
+         ON CONFLICT (farm_id, kind) DO UPDATE SET key_hash = EXCLUDED.key_hash, rows = EXCLUDED.rows,
+           valid_until = EXCLUDED.valid_until, computed_at = EXCLUDED.computed_at`,
+        [farmId, JSON.stringify(save)]);
+    } catch { /* not cached this time; the response is unaffected */ }
+  }
+  const harvests = Object.values(cached).flat().concat(fresh).sort((a, b) => a.readyAt - b.readyAt);
+  return { harvests, cache: { db: !!pool, served: sim.HARVEST_KINDS.filter((k) => cached[k]), replayed: stale } };
+}
+
 async function fetchUsdCzk() {
   const result = await cachedFetch(usdCzkCache, "usdczk", async () => {
     try {
@@ -609,9 +655,8 @@ async function _handler(req, res) {
     else if (section === "widget") {
       // The upstream fetches run while the harvests replay (I/O under the CPU-bound replay).
       const upstream = Promise.all([fetchNfts(), fetchExchange(), fetchUsdCzk()]);
-      const { simulateHarvests } = await import("../core/engine/harvest-sim.mjs");
       const now = Date.now();
-      const harvests = await simulateHarvests(farm, Number(farmId), now);
+      const { harvests, cache: harvestCache } = await cachedHarvests(farm, Number(farmId), now);
       const [nftResult, exchange, usdCzk] = await upstream;
       const sflUsd = (exchange && (exchange.sfl?.usd || exchange.data?.sfl?.usd)) || 0;
       const kc = (flower) => (flower != null && sflUsd > 0 && usdCzk > 0 ? +(flower * sflUsd * usdCzk).toFixed(2) : null);
@@ -640,7 +685,7 @@ async function _handler(req, res) {
       const recipes = cavePigs ? cavePigs.recipes.map((r) => ({ recipe: r.recipe, flower: +r.net.toFixed(4), czk: kc(r.net) })) : [];
       data = { now, rates: { sflUsd, usdCzk }, items, pigLevels, recipes,
         manualPrices: cavePigs ? cavePigs.manualPrices : null,
-        status: { pricesOk: Object.keys(p2p).length > 0, nftsOk: !!nftResult.ok, rateOk: sflUsd > 0 && usdCzk > 0 } };
+        status: { pricesOk: Object.keys(p2p).length > 0, nftsOk: !!nftResult.ok, rateOk: sflUsd > 0 && usdCzk > 0, harvestCache } };
     }
     // `tickets`: what each ticket source costs this farm against the auction lot it can win.
     // Prices = this farm's section=prices maps; animal slot output = section=power's per-animal
