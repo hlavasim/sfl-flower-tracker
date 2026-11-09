@@ -192,6 +192,9 @@ async function handleSpec(pool, req, res) {
       const owners = b.owners.slice(0, 1000).map((o) => ({ usd: +o.usd || 0, flower: +o.flower || 0, usdc: +o.usdc || 0, mine: !!o.mine,
         delta: Number.isFinite(o.delta) ? Math.round(o.delta) : null }));
       await pool.query(`INSERT INTO lp_leaderboard (ts, data) VALUES (NOW(), $1)`, [JSON.stringify({ price: +b.price, owners })]);
+      // Hourly boards: past 48 h only the first board of each day stays (~2 MB a day otherwise).
+      await pool.query(`DELETE FROM lp_leaderboard WHERE ts < NOW() - INTERVAL '48 hours'
+        AND ts NOT IN (SELECT MIN(ts) FROM lp_leaderboard GROUP BY date_trunc('day', ts))`);
       return res.status(200).json({ stored: owners.length });
     }
     return res.status(405).json({ error: "method not allowed" });
