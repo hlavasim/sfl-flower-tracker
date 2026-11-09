@@ -5361,8 +5361,6 @@
         html += `<button class="nav-link${cls}" onclick="navigateTo('${l.id}')">${l.label}</button>`;
       }
       html += `</div></div>`;
-      // Craft World lives on its own page (craftworld.html); it keeps the farm id for the way back.
-      html += `<a class="nav-link" href="/craftworld.html?farm=${encodeURIComponent(FARM_ID || "")}" title="Craft World planner — base, levelování, upgrady, trh" style="text-decoration:none">🦖 CRAFT</a>`;
       html += '<div class="nav-zoom">';
       html += '<button class="zoom-btn" onclick="changeZoom(-1)" title="Zmenšit text">A-</button>';
       html += '<button class="zoom-btn" onclick="changeZoom(1)" title="Zvětšit text">A+</button>';
@@ -5469,7 +5467,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.36</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.37</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5496,6 +5494,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.37", items: [
+          { t: "fix", text: "Craft World removed: the 🦖 CRAFT page and nav link, and the CRAFT venue of the Investment Tracker (its ledger entries are deleted)." },
+        ] },
         { ver: "v6.36", items: [
           { t: "feat", text: "LP leaderboard is recomputed <b>every hour</b> (positions read in batches); the hover board shows the time of the last board and movement is <b>over 24 h</b>. Hourly boards older than 48 h are pruned to one per day." },
         ] },
@@ -27696,9 +27697,6 @@ Kola: ${i.rounds.map(when).join(", ")}`;
       // FLOWER bought with BTC and held to speculate on the BTC price. Liquid — sellable today —
       // so it counts toward "liquidate now", and its held FLOWER is derived from the ledger.
       wallet: { label: "WALLET", color: "var(--blue)" },
-      // Craft World (Ronin): money put into the game's COIN and resources. Liquid only with the
-      // game's paid pass, and worth little on its thin pools, so it is tracked as money in.
-      craftworld: { label: "CRAFT", color: "var(--green)" },
     };
     /*
      * What each venue currently HOLDS, as opposed to what was sent to it. Without this a
