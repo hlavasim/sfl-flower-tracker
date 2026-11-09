@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { valueHoldings, eggBookValue, eggCostBasis, CHAINS } from "../../api/_holdings.js";
+import { valueHoldings, eggBookValue, eggCostBasis, lpAmounts, CHAINS } from "../../api/_holdings.js";
 
 /*
  * The Investment Tracker values a registered address by everything it holds. These pin the split
@@ -98,3 +98,31 @@ test("egg cost basis counts only the held eggs that were bought; received ones s
   assert.deepEqual(eggCostBasis(mine, cost), { wron: 430.46 + 325.01, bought: 2, unbought: 1 });
   assert.deepEqual(eggCostBasis(null, null), { wron: 0, bought: 0, unbought: 0 });
 });
+
+/*
+ * Uniswap v3 positions: amounts from liquidity and ticks (the whitepaper formulas), and the LP
+ * venue keeps them apart from the wallet, liquidity + uncollected fees, closed positions dropped.
+ */
+test("lpAmounts: in range splits, below range is all token0, above all token1", () => {
+  const L = 10n ** 18n, sqrtAt = (tick) => BigInt(Math.round(Math.pow(1.0001, tick / 2) * 2 ** 96));
+  const mid = lpAmounts(L, sqrtAt(0), -600, 600);
+  assert.ok(mid.inRange && mid.amount0 > 0 && mid.amount1 > 0);
+  assert.ok(Math.abs(mid.amount0 / mid.amount1 - 1) < 1e-6, "symmetric range at tick 0 holds equal amounts");
+  const below = lpAmounts(L, sqrtAt(-1200), -600, 600), above = lpAmounts(L, sqrtAt(1200), -600, 600);
+  assert.ok(!below.inRange && below.amount1 === 0 && below.amount0 > mid.amount0);
+  assert.ok(!above.inRange && above.amount0 === 0 && above.amount1 > mid.amount1);
+});
+
+test("LP positions go to the LP venue, with fees, never to the wallet", () => {
+  const lp = [
+    { chain: "base", symbol: "FLOWER", amount: 400, fees: 5, price: "flower-2", kind: "lp", pool: "FLOWER/USDC 0.3%", tokenId: "7", inRange: true },
+    { chain: "base", symbol: "USDC", amount: 60, fees: 1, price: "usd", kind: "lp", pool: "FLOWER/USDC 0.3%", tokenId: "7", inRange: true },
+    { chain: "base", symbol: "FLOWER", amount: 0, fees: 0, price: "flower-2", kind: "lp", pool: "FLOWER/USDC 0.3%", tokenId: "3", inRange: false },
+  ];
+  const { venues } = valueHoldings(balances.concat(lp), prices, deepBook);
+  assert.ok(Math.abs(venues.lp.usd - (405 * 0.16 + 61)) < 1e-9);
+  assert.deepEqual(venues.lp.items.map((i) => [i.symbol, i.tokenId, i.amount]), [["FLOWER", "7", 405], ["USDC", "7", 61]], "closed position dropped");
+  const wantWallet = 0.0005 * 4000 + 2187.61 + 22901 * 0.16 + 20 * 0.06 + 0.000001 * 4000;
+  assert.ok(Math.abs(venues.wallet.usd - wantWallet) < 1e-9, "wallet unchanged by LP");
+});
+

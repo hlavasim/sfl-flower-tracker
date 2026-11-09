@@ -5469,7 +5469,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.32</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.33</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5496,6 +5496,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.33", items: [
+          { t: "feat", text: "INVESTMENT TRACKER reads Uniswap v3 liquidity on the registered wallets (Base, e.g. the FLOWER/USDC 0.3% pool): a new <b>Uniswap LP</b> row values each position as the two tokens it returns if closed now plus the fees not yet collected, sellable today. In the recovery band it is a silver segment with a moving shine right after the gold <i>vybráno</i>, and the line under the band shows <i>v LP</i> next to it." },
+        ] },
         { ver: "v6.32", items: [
           { t: "perf", text: "WIDGET loads faster: the harvest replay is kept per node kind (trees, rocks, crops, fruit, greenhouse, flowers, animals, oil, lava) and only a kind whose state changed — a chop, a planting, a power skill — or whose first node is ready is replayed again. Prices are still read fresh on every call." },
           { t: "fix", text: "Harvest replay: a farm without Wood got no axes in the replay, and an animal's main product depended on the inventory order (a cow could show Leather instead of Milk)." },
@@ -27508,6 +27511,9 @@ Kola: ${i.rounds.map(when).join(", ")}`;
       // endpoint's CoinGecko pair — one table, one rate for each.
       const chainWallet = _invRepriceVenue(_invHoldings && _invHoldings.venues && _invHoldings.venues.wallet, sflToUsd, btcUsd);
       const chainEggs = _invRepriceVenue(_invHoldings && _invHoldings.venues && _invHoldings.venues.yakkamon, sflToUsd, btcUsd);
+      // Uniswap v3 liquidity (FLOWER/USDC): the two tokens it returns if closed now + uncollected fees. Sellable today.
+      const chainLp = _invRepriceVenue(_invHoldings && _invHoldings.venues && _invHoldings.venues.lp, sflToUsd, btcUsd);
+      const lpBtc = chainLp ? chainLp.btc : 0;
       /*
        * BTC derivatives on the wallets (cbBTC, WBTC, tBTC…) are BTC already back out of FLOWER: the
        * owner counts them as a WITHDRAWAL, not as wallet value. They leave the Wallet row and lower
@@ -27538,7 +27544,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
         <h2 class="pixel-font" style="margin:0 0 10px 0;font-size:0.75rem;color:var(--sunpetal);letter-spacing:1px">💰 INVESTMENT TRACKER</h2>
         ${_invRepayHtml(aggSheet, planStats, flowerPerBtc, errors)}
         ${_invPlan ? `<div class="pixel-font" style="font-size:0.45rem;color:var(--text-dim);margin:-6px 0 12px;line-height:1.8">cbBTC historie: ${cbbtcRows.length ? `${cbbtcRows.length} převodů (poslední ${escHTML(String(cbbtcRows.map((t) => String(t.tx_date).slice(0, 10)).sort().pop()))})` : "žádná — vše na peněžence se počítá k dnešku"} · <label style="cursor:pointer;color:var(--lily)">[import CSV z Basescanu]<input type="file" accept=".csv,text/csv" style="display:none" onchange="_invImportCbbtc(this)"></label> <span id="inv-cbbtc-msg"></span></div>` : ""}
-        ${_invBalanceSheetHtml({ agg: aggSheet, btcBackOnChain, btcBackItems, flowerPerBtc, fmtFlower, treasuryTotalSfl, liquidValueSfl, liquidValueBtc, lockedBtc, chainWallet, chainEggs, walletLiquidBtc, walletHeldFlower, eggsLiquidBtc, farmValue, errors, btcUsd })}
+        ${_invBalanceSheetHtml({ agg: aggSheet, btcBackOnChain, btcBackItems, flowerPerBtc, fmtFlower, treasuryTotalSfl, liquidValueSfl, liquidValueBtc, lockedBtc, chainWallet, chainEggs, chainLp, lpBtc, walletLiquidBtc, walletHeldFlower, eggsLiquidBtc, farmValue, errors, btcUsd })}
         <div id="inv-satsflower" style="margin:6px 0 16px"></div>
         <div id="inv-tx-table-wrap">${renderInvTxTable(transactions)}</div>
         <button class="roi-pill" onclick="_invShowAddForm()" style="margin-top:10px">+ Add transaction</button>
@@ -27985,6 +27991,12 @@ Kola: ${i.rounds.map(when).join(", ")}`;
         rows.push({ label: "Wallet", btc: NaN, liquid: true, ctl: walletCtl, info: "on-chain čtení selhalo — reload" });
       } else if (x.chainWallet) rows.push({ label: "Wallet", btc: ratesOk ? x.walletLiquidBtc : NaN, liquid: true, ctl: walletCtl, info: `on-chain (${wallets.map((w) => w.address.slice(0, 6) + "…" + w.address.slice(-4)).join(", ")}), všechny sítě: ${x.chainWallet.items.map((i) => `${amt(i)} ${usd(i.usd)} (${i.chain})`).join(", ") || "nic"} = ${usd(x.chainWallet.usd)} · FLOWER a BTC za kurz treasury · prodejné hned` });
       else rows.push({ label: "Wallet", btc: ratesOk ? x.walletLiquidBtc : NaN, liquid: true, ctl: walletCtl, info: `${x.walletHeldFlower > 0 ? fmtFlower(x.walletHeldFlower) + " " : ""}z transakcí (koupené − prodané 🌸) · přidej adresu [+] a přečte se on-chain` });
+      if (x.chainLp && x.chainLp.items.length) {
+        const byPos = {};
+        for (const i of x.chainLp.items) (byPos[i.tokenId] ||= { pool: i.pool, inRange: i.inRange, parts: [] }).parts.push(i);
+        rows.push({ label: "Uniswap LP", btc: ratesOk ? x.lpBtc : NaN, liquid: true, labelColor: "#d8dde3",
+          info: Object.entries(byPos).map(([id, q]) => `#${id} ${q.pool}${q.inRange ? "" : " (MIMO ROZSAH)"}: ${q.parts.map((i) => `${amt(i)} ${usd(i.usd)}${i.fees > 0 ? ` vč. fees ${i.fees.toPrecision(2)}` : ""}`).join(" + ")}`).join(" · ") + ` = ${usd(x.chainLp.usd)} · co vrátí zavření pozice dnes + nevybrané fees · FLOWER za kurz treasury · prodejné hned` });
+      }
       if (_invBalancesErr) {
         problems.push("Yakke balance: " + _invBalancesErr);
         rows.push({ label: "Yakke locked", btc: NaN, liquid: false, info: "zůstatek se nepodařilo načíst" });
@@ -28032,7 +28044,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
         ${!errors.ledger && _invRecoveredLine(agg) ? `<div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);margin:-1px 0 4px">${_invRecoveredLine(agg)}</div>` : ""}
         ${!errors.ledger && !problems.length ? _invRecoveryBand(agg, cost, rows) : ""}
         ${row("COST", fmtBtc(cost), fl(cost), { bold: true, info: errors.ledger ? "transakce se nepodařilo načíst" : `čisté BTC uvnitř · celkem ${fmtBtc(agg.depositBtc)} in, ${fmtBtc(agg.withdrawBtc)} out${x.btcBackOnChain > 0 ? ` + ${fmtBtc(x.btcBackOnChain)} BTC na walletce (${x.btcBackItems.map((i) => `${i.amount.toFixed(6)} ${i.symbol}`).join(", ")}) jako vybráno` : ""} · peak ${fmtBtc(agg.peakBtc)}` })}
-        ${rows.map((r) => row(r.label, fmtBtc(r.btc), fl(r.btc), { info: r.info, ctl: r.ctl, color: !isFinite(r.btc) ? "var(--text-dim)" : r.liquid ? "var(--green)" : "var(--lily)" })
+        ${rows.map((r) => row(r.label, fmtBtc(r.btc), fl(r.btc), { info: r.info, ctl: r.ctl, labelColor: r.labelColor, color: !isFinite(r.btc) ? "var(--text-dim)" : r.liquid ? "var(--green)" : "var(--lily)" })
           + (r.label === "Genesis eggs" && x.eggGain ? row("↳ zisk vajec", sgn(x.eggGain.btc, fmtBtc) + ` <span style="color:var(--text-dim)">${x.eggGain.pct >= 0 ? "+" : ""}${x.eggGain.pct.toFixed(1)} %</span>`, sgn(x.eggGain.btc, fl), { info: x.eggGain.info, color: tone(x.eggGain.btc) }) : "")).join("")}
         ${row("HODNOTA hned", fmtBtc(sellable), fl(sellable), { top: true, bold: true, info: "součet zelených řádků — prodejné dnes" })}
         ${(locked > 0 || !isFinite(locked)) ? row("HODNOTA po unlocku", fmtBtc(sellable + locked), fl(sellable + locked), { info: "+ Yakke deposit, až se v Q4 vrátí" }) : ""}
@@ -28065,7 +28077,11 @@ Kola: ${i.rounds.map(when).join(", ")}`;
       // VYBRÁNO — BTC that has already come back out: gold with a moving shine, the part that counts.
       const gold = "linear-gradient(110deg,#b8860b 0%,#ffd700 35%,#fff6c8 50%,#ffd700 65%,#b8860b 100%)";
       if (back > 0) segs.push({ name: "vybráno", btc: back, bg: `${gold};background-size:250% 100%;animation:invGoldShine 3s linear infinite` });
-      for (const r of rows.filter((r) => r.liquid && r.btc > 0)) segs.push({ name: short[r.label] || r.label, btc: r.btc, bg: color[r.label] || "#7fe0a0" });
+      // LP — liquidity in the FLOWER/USDC pool: silver with the same shine, right after the gold.
+      const silver = "linear-gradient(110deg,#7d838c 0%,#c9ced6 35%,#ffffff 50%,#c9ced6 65%,#7d838c 100%)";
+      const lpRow = rows.find((r) => r.label === "Uniswap LP" && r.btc > 0);
+      if (lpRow) segs.push({ name: "LP", btc: lpRow.btc, bg: `${silver};background-size:250% 100%;animation:invGoldShine 3s linear infinite` });
+      for (const r of rows.filter((r) => r.liquid && r.btc > 0 && r !== lpRow)) segs.push({ name: short[r.label] || r.label, btc: r.btc, bg: color[r.label] || "#7fe0a0" });
       const nowEnd = segs.reduce((a, s) => a + s.btc, 0);
       for (const r of rows.filter((r) => !r.liquid && r.btc > 0)) segs.push({ name: short[r.label] || r.label, btc: r.btc, bg: "var(--lily)", faded: true });
       const unlockEnd = segs.reduce((a, s) => a + s.btc, 0);
@@ -28133,7 +28149,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
             ${labels(above, "above")}${labels(below, "below")}
           </div>
           <div style="display:flex;justify-content:space-between;align-items:flex-start;font-size:0.5rem;color:var(--text-dim);margin-top:${botPad}px;gap:8px;flex-wrap:wrap">
-            <b style="background:${gold};background-size:250% 100%;animation:invGoldShine 3s linear infinite;-webkit-background-clip:text;background-clip:text;color:transparent">vybráno ${back > 0 ? fmt3(back) : "zatím 0"} ₿ (${(back / peak * 100).toFixed(1)} %)</b>
+            <span><b style="background:${gold};background-size:250% 100%;animation:invGoldShine 3s linear infinite;-webkit-background-clip:text;background-clip:text;color:transparent">vybráno ${back > 0 ? fmt3(back) : "zatím 0"} ₿ (${(back / peak * 100).toFixed(1)} %)</b>${lpRow ? ` · <b style="background:${silver};background-size:250% 100%;animation:invGoldShine 3s linear infinite;-webkit-background-clip:text;background-clip:text;color:transparent">v LP ${fmt3(lpRow.btc)} ₿ (${(lpRow.btc / peak * 100).toFixed(1)} %)</b>` : ""}</span>
             <span>${profit > 1e-9 ? `<b style="color:var(--green)">+${fmt3(profit)} ₿ za break-even (+${Math.round(profit / peak * 100)} %)</b>${nextCp != null ? ` · do +${Math.round(nextCp * 100)} % chybí ${fmt3(peak * (1 + nextCp) - unlockEnd)} ₿` : ""}` : missingNow > 1e-9 ? `do break-even chybí <b style="color:var(--text-secondary)">${fmt3(missingNow)} ₿</b> hned · <b style="color:var(--text-secondary)">${fmt3(Math.max(0, -profit))} ₿</b> po unlocku` : ""}</span>
           </div>
         </div>`;

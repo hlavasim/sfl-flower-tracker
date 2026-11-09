@@ -73,6 +73,58 @@ async function readEggs(url, addr, n) {
   }));
 }
 
+/*
+ * Uniswap v3 liquidity on Base (the FLOWER/USDC pool and any other pair of known tokens): each
+ * position NFT of the address, valued as the two tokens it would return if closed now — the
+ * liquidity at the pool's current price plus the fees not yet collected. The fees come from an
+ * eth_call of collect() sent as the owner, which returns what a real collect would pay out
+ * (tokensOwed + the fees accrued since) without changing anything.
+ */
+const NPM_BASE = "0x03a520b32c04bf3beef7beb72e919cf822ed34f1";       // NonfungiblePositionManager
+const V3_FACTORY_BASE = "0x33128a8fc17869897dce68ed026d694621f6fdfd";
+const word = (hex, i) => hex.replace(/^0x/, "").slice(i * 64, i * 64 + 64);
+const toInt = (w) => { const v = BigInt("0x" + w); return v >= 1n << 255n ? v - (1n << 256n) : v; };
+
+/** Pure: token amounts (raw units, floats) of `liquidity` between two ticks at sqrtPriceX96. */
+export function lpAmounts(liquidity, sqrtPriceX96, tickLower, tickUpper) {
+  const L = Number(liquidity), sp = Number(sqrtPriceX96) / 2 ** 96;
+  const sa = Math.pow(1.0001, tickLower / 2), sb = Math.pow(1.0001, tickUpper / 2);
+  if (sp <= sa) return { amount0: L * (sb - sa) / (sa * sb), amount1: 0, inRange: false };
+  if (sp >= sb) return { amount0: 0, amount1: L * (sb - sa), inRange: false };
+  return { amount0: L * (sb - sp) / (sp * sb), amount1: L * (sp - sa), inRange: true };
+}
+
+async function readLpPositions(url, addr) {
+  const n = Number(BigInt(await balanceOf(url, NPM_BASE, addr)));
+  const known = Object.fromEntries(Object.entries(CHAINS.base.tokens).map(([sym, t]) => [t.address, { sym, ...t }]));
+  const out = [];
+  for (let i = 0; i < Math.min(n, 50); i++) {
+    const id = BigInt(await rpc(url, "eth_call", [{ to: NPM_BASE, data: "0x2f745c59" + pad(addr) + i.toString(16).padStart(64, "0") }, "latest"]));
+    const idw = id.toString(16).padStart(64, "0");
+    const p = await rpc(url, "eth_call", [{ to: NPM_BASE, data: "0x99fbab88" + idw }, "latest"]);
+    const t0 = "0x" + word(p, 2).slice(24), t1 = "0x" + word(p, 3).slice(24);
+    const fee = Number(toInt(word(p, 4))), tl = Number(toInt(word(p, 5))), tu = Number(toInt(word(p, 6)));
+    const liq = BigInt("0x" + word(p, 7));
+    const a = known[t0], b = known[t1];
+    if (!a || !b) continue;   // a pair of tokens the wallet venue does not price
+    const max = "ffffffffffffffffffffffffffffffff".padStart(64, "0");
+    const owed = await rpc(url, "eth_call", [{ from: addr, to: NPM_BASE, data: "0xfc6f7865" + idw + pad(addr) + max + max }, "latest"]);
+    const fee0 = Number(BigInt("0x" + word(owed, 0))), fee1 = Number(BigInt("0x" + word(owed, 1)));
+    let amt = { amount0: 0, amount1: 0, inRange: false };
+    if (liq > 0n) {
+      const pool = "0x" + word(await rpc(url, "eth_call", [{ to: V3_FACTORY_BASE, data: "0x1698ee82" + pad(t0) + pad(t1) + fee.toString(16).padStart(64, "0") }, "latest"]), 0).slice(24);
+      const slot0 = await rpc(url, "eth_call", [{ to: pool, data: "0x3850c7bd" }, "latest"]);
+      amt = lpAmounts(liq, BigInt("0x" + word(slot0, 0)), tl, tu);
+    }
+    const name = `${a.sym}/${b.sym} ${fee / 10000}%`;
+    for (const [t, raw, f] of [[a, amt.amount0, fee0], [b, amt.amount1, fee1]]) {
+      out.push({ chain: "base", symbol: t.sym, amount: raw / 10 ** t.decimals, fees: f / 10 ** t.decimals, price: t.price,
+        kind: "lp", pool: name, tokenId: id.toString(), inRange: amt.inRange });
+    }
+  }
+  return out;
+}
+
 /** Raw balances of one address on every chain: [{ chain, symbol, amount, price }]. A chain that fails is skipped. */
 export async function readAddress(addr) {
   const out = [];
@@ -93,6 +145,10 @@ export async function readAddress(addr) {
       }
     } catch (e) {
       out.push({ chain, error: String(e.message || e).slice(0, 80) });
+    }
+    if (chain === "base") {
+      try { out.push(...await readLpPositions(c.rpc, addr)); }
+      catch (e) { out.push({ chain, error: "LP: " + String(e.message || e).slice(0, 70) }); }
     }
   }));
   return out;
@@ -193,7 +249,8 @@ export function eggBookValue(offers, count) {
  */
 export function valueHoldings(balances, prices, eggOffers, ownAddrs) {
   const btcUsd = prices.bitcoin || 0;
-  const venues = { wallet: { usd: 0, btc: 0, items: [] }, yakkamon: { usd: 0, btc: 0, items: [] } };
+  // lp = Uniswap v3 positions (readLpPositions): one item per token per position, liquidity + uncollected fees.
+  const venues = { wallet: { usd: 0, btc: 0, items: [] }, yakkamon: { usd: 0, btc: 0, items: [] }, lp: { usd: 0, btc: 0, items: [] } };
   const errors = [];
   const own = new Set((ownAddrs || []).map((a) => String(a).toLowerCase()));
   /*
@@ -214,15 +271,18 @@ export function valueHoldings(balances, prices, eggOffers, ownAddrs) {
   };
   for (const b of balances) {
     if (b.error) { errors.push(`${b.chain}: ${b.error}`); continue; }
-    if (!(b.amount > 0)) continue;
+    const lp = b.kind === "lp";
+    const amount = lp ? (b.amount || 0) + (b.fees || 0) : b.amount;
+    if (!(amount > 0)) continue;
     const book = b.kind === "egg" ? eggBook(b) : null;
     const eggUnitWron = book ? book.wron / b.amount : 0;
     const unit = b.kind === "egg" ? eggUnitWron * (prices.ronin || 0) : (prices[b.price] || 0);
-    const usd = b.amount * unit;
-    const v = venues[b.kind === "egg" ? "yakkamon" : "wallet"];
+    const usd = amount * unit;
+    const v = venues[b.kind === "egg" ? "yakkamon" : lp ? "lp" : "wallet"];
     v.usd += usd;
     if (usd >= DUST_USD || b.kind === "egg") {
-      const item = { chain: b.chain, symbol: b.symbol, amount: b.amount, usd, unitUsd: unit };
+      const item = { chain: b.chain, symbol: b.symbol, amount, usd, unitUsd: unit };
+      if (lp) Object.assign(item, { fees: b.fees || 0, pool: b.pool, tokenId: b.tokenId, inRange: b.inRange });
       if (b.kind === "egg") Object.assign(item, { unitWron: eggUnitWron, bookWron: book.wron, filled: book.filled, unfilled: book.unfilled });
       v.items.push(item);
     }
