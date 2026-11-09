@@ -5467,7 +5467,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.37</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.38</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5494,6 +5494,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.38", items: [
+          { t: "fix", text: "LP leaderboard popup no longer runs off the right edge on phones: below 700 px it is pinned to the screen (8 px margins) and scrolls." },
+        ] },
         { ver: "v6.37", items: [
           { t: "fix", text: "Craft World removed: the 🦖 CRAFT page and nav link, and the CRAFT venue of the Investment Tracker (its ledger entries are deleted)." },
         ] },
@@ -28194,7 +28197,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
       const topPad = 18 + Math.max(0, ...placedAbove.map((l) => l.line)) * LINE_H;
       const botPad = 22 + Math.max(0, ...placedBelow.map((l) => l.line)) * LINE_H;
       const profit = unlockEnd - peak, missingNow = peak - nowEnd;
-      return `<style>.lp-rank .lp-pop{display:none;position:absolute;left:0;top:calc(100% + 4px);z-index:60;width:min(340px,86vw);background:#1a120a;border:1px solid var(--border-brown);border-radius:6px;padding:8px;font-weight:normal;font-size:0.5rem;font-family:'Courier New',monospace;box-shadow:0 6px 18px rgba(0,0,0,0.6)}.lp-rank:hover .lp-pop,.lp-rank:focus-within .lp-pop{display:block}@keyframes invGoldShine{0%{background-position:100% 0}100%{background-position:-150% 0}}@keyframes invBePulse{0%,100%{opacity:1}50%{opacity:0.55}}</style>
+      return `<style>.lp-rank .lp-pop{display:none;position:absolute;left:0;top:calc(100% + 4px);z-index:60;width:min(340px,86vw);background:#1a120a;border:1px solid var(--border-brown);border-radius:6px;padding:8px;font-weight:normal;font-size:0.5rem;font-family:'Courier New',monospace;box-shadow:0 6px 18px rgba(0,0,0,0.6)}.lp-rank:hover .lp-pop,.lp-rank:focus-within .lp-pop{display:block}@media (max-width:700px){.lp-rank .lp-pop{position:fixed;left:8px;right:8px;top:15vh;width:auto;max-height:75vh;overflow-y:auto}}@keyframes invGoldShine{0%{background-position:100% 0}100%{background-position:-150% 0}}@keyframes invBePulse{0%,100%{opacity:1}50%{opacity:0.55}}</style>
         <div style="margin:${topPad}px 0 8px">
           <div style="position:relative;height:22px">
             <div style="position:absolute;left:${be}%;right:0;top:0;bottom:0;border-radius:0 4px 4px 0;background:repeating-linear-gradient(90deg,rgba(127,224,160,0.10) 0 4px,rgba(127,224,160,0.04) 4px 8px);border:1px dashed rgba(127,224,160,0.45);border-left:none"></div>
