@@ -175,7 +175,8 @@ async function handleSpec(pool, req, res) {
   }
   /*
    * FLOWER/USDC full-range LP leaderboard, built daily on the owner's PC (sfl-lp-leaderboard) and
-   * pushed here: { at, price, owners: [{ usd, flower, usdc, mine }] } sorted by value. No addresses.
+   * pushed here: { at, price, owners: [{ usd, flower, usdc, mine, delta }] } sorted by value, delta =
+   * places moved up since the previous push (null = new). No addresses.
    * GET = the latest snapshot.
    */
   if (what === "lp") {
@@ -188,7 +189,8 @@ async function handleSpec(pool, req, res) {
       if (!requireWriteToken(req, res)) return;
       const b = body();
       if (!Array.isArray(b.owners) || !(b.price > 0)) return res.status(400).json({ error: "owners and price required" });
-      const owners = b.owners.slice(0, 1000).map((o) => ({ usd: +o.usd || 0, flower: +o.flower || 0, usdc: +o.usdc || 0, mine: !!o.mine }));
+      const owners = b.owners.slice(0, 1000).map((o) => ({ usd: +o.usd || 0, flower: +o.flower || 0, usdc: +o.usdc || 0, mine: !!o.mine,
+        delta: Number.isFinite(o.delta) ? Math.round(o.delta) : null }));
       await pool.query(`INSERT INTO lp_leaderboard (ts, data) VALUES (NOW(), $1)`, [JSON.stringify({ price: +b.price, owners })]);
       return res.status(200).json({ stored: owners.length });
     }
