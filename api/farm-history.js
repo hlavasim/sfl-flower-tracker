@@ -173,7 +173,28 @@ async function handleSpec(pool, req, res) {
     }
     return res.status(405).json({ error: "method not allowed" });
   }
-  return res.status(400).json({ error: "what must be calendar, trades or eggs" });
+  /*
+   * FLOWER/USDC full-range LP leaderboard, built daily on the owner's PC (sfl-lp-leaderboard) and
+   * pushed here: { at, price, owners: [{ usd, flower, usdc, mine }] } sorted by value. No addresses.
+   * GET = the latest snapshot.
+   */
+  if (what === "lp") {
+    if (method === "GET") {
+      const r = await pool.query(`SELECT ts, data FROM lp_leaderboard ORDER BY ts DESC LIMIT 1`);
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json(r.rows[0] ? { ts: r.rows[0].ts, ...r.rows[0].data } : { owners: [] });
+    }
+    if (method === "POST") {
+      if (!requireWriteToken(req, res)) return;
+      const b = body();
+      if (!Array.isArray(b.owners) || !(b.price > 0)) return res.status(400).json({ error: "owners and price required" });
+      const owners = b.owners.slice(0, 1000).map((o) => ({ usd: +o.usd || 0, flower: +o.flower || 0, usdc: +o.usdc || 0, mine: !!o.mine }));
+      await pool.query(`INSERT INTO lp_leaderboard (ts, data) VALUES (NOW(), $1)`, [JSON.stringify({ price: +b.price, owners })]);
+      return res.status(200).json({ stored: owners.length });
+    }
+    return res.status(405).json({ error: "method not allowed" });
+  }
+  return res.status(400).json({ error: "what must be calendar, trades, eggs or lp" });
 }
 
 export default async function handler(req, res) {

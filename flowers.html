@@ -5469,7 +5469,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.33</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.34</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5496,6 +5496,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.34", items: [
+          { t: "feat", text: "INVESTMENT TRACKER: after <i>v LP</i> the owner's place in the FLOWER/USDC full-range LP leaderboard, e.g. <b>= Top 178</b>, coloured by the daily reward tier (top 10 gold box, 50 silver, 250 bronze, 500 bronze food box). Hover shows the board from #1 down to the owner and how much FLOWER + USDC to add for each better tier. The board is rebuilt daily from the pool's on-chain positions." },
+        ] },
         { ver: "v6.33", items: [
           { t: "feat", text: "INVESTMENT TRACKER reads Uniswap v3 liquidity on the registered wallets (Base, e.g. the FLOWER/USDC 0.3% pool): a new <b>Uniswap LP</b> row values each position as the two tokens it returns if closed now plus the fees not yet collected, sellable today. In the recovery band it is a silver segment with a moving shine right after the gold <i>vybráno</i>, and the line under the band shows <i>v LP</i> next to it." },
         ] },
@@ -27434,6 +27437,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
       await invLoadBalances(FARM_ID);
       await invLoadRepayPlan(FARM_ID);
       await invLoadHoldings(FARM_ID);
+      await invLoadLpBoard(FARM_ID);
 
       renderInvestmentTrackerContent();
     }
@@ -27719,6 +27723,52 @@ Kola: ${i.rounds.map(when).join(", ")}`;
      * One address is the same on every chain, so each is read on Base and Ronin and summed; fungible tokens value the WALLET venue, Genesis eggs the YAKKAMON venue at the
      * best fillable Hidden offer on Ronin Market. Null until an address is registered.
      */
+    /*
+     * FLOWER/USDC full-range LP leaderboard (daily from the owner's PC, farm-history what=lp):
+     * { ts, price, owners: [{ usd, flower, usdc, mine }] } by value. The daily reward box goes by
+     * rank: top 10 gold, 50 silver, 250 bronze, 500 bronze food box. A failed read only hides the rank.
+     */
+    let _invLpBoard = null;
+    async function invLoadLpBoard(farmId) {
+      try {
+        const r = await fetch(`${INV_API_BASE}?type=spec&what=lp&farm=${encodeURIComponent(farmId)}`);
+        _invLpBoard = r.ok ? await r.json() : null;
+      } catch (e) { _invLpBoard = null; }
+    }
+    const _LP_TIERS = [
+      { top: 10, name: "Gold box", color: "#ffd700" },
+      { top: 50, name: "Silver box", color: "#d8dde3" },
+      { top: 250, name: "Bronze box", color: "#cd7f32" },
+      { top: 500, name: "Bronze food box", color: "#a8744f" },
+    ];
+    const _lpTier = (rank) => _LP_TIERS.find((t) => rank <= t.top) || null;
+    /*
+     * " = Top N" after "v LP …": the owner's rank, coloured by its reward tier. Hover shows the board
+     * from 1 down to the owner (tiers coloured) and what to add to reach each better tier: the gap to
+     * that tier's last place + $0.01, half USDC and half FLOWER (a full-range position at the current
+     * price takes equal value of both).
+     */
+    function _invLpRankHtml() {
+      const b = _invLpBoard, owners = (b && b.owners) || [];
+      const me = owners.findIndex((o) => o.mine);
+      if (me < 0 || !(b.price > 0)) return "";
+      const rank = me + 1, my = owners[me], tier = _lpTier(rank);
+      const usd = (v) => "$" + (v >= 100 ? Math.round(v).toLocaleString("en-US") : v.toFixed(2));
+      const nf = (v) => Math.round(v).toLocaleString("en-US");
+      const needs = _LP_TIERS.filter((t) => rank > t.top && owners[t.top - 1]).map((t) => {
+        const gap = owners[t.top - 1].usd - my.usd + 0.01;
+        return `<div style="color:${t.color}">do Top ${t.top} (${t.name}): +${nf(gap / 2 / b.price)} 🌸 + ${usd(gap / 2)} USDC <span style="color:var(--text-dim)">(${usd(gap)})</span></div>`;
+      }).join("");
+      const rows = owners.slice(0, rank).map((o, i) => {
+        const t = _lpTier(i + 1);
+        return `<div style="display:grid;grid-template-columns:34px 1fr 70px;gap:6px;color:${t ? t.color : "var(--text-dim)"};${o.mine ? "background:rgba(255,255,255,0.12);font-weight:bold;" : ""}${_LP_TIERS.some((x) => x.top === i) ? "border-top:1px dashed rgba(255,255,255,0.25);" : ""}"><span>#${i + 1}</span><span>${o.mine ? "JÁ" : `${nf(o.flower)} 🌸 + ${usd(o.usdc)}`}</span><span style="text-align:right">${usd(o.usd)}</span></div>`;
+      }).join("");
+      const day = String(b.ts || "").slice(0, 10);
+      return ` = <span class="lp-rank" style="position:relative;cursor:help;color:${tier ? tier.color : "var(--text-dim)"};font-weight:bold">Top ${rank}${tier ? "" : " (bez boxu)"}<div class="lp-pop">
+          <div style="margin-bottom:4px;color:var(--text-secondary)">FLOWER/USDC full range · ${owners.length} LP · ${day}${tier ? ` · tvůj box: <b style="color:${tier.color}">${tier.name}</b>` : " · mimo top 500"}</div>
+          ${needs ? `<div style="margin-bottom:6px;line-height:1.6">${needs}</div>` : ""}
+          <div style="max-height:260px;overflow-y:auto">${rows}</div></div></span>`;
+    }
     let _invHoldings = null;   // { wallets, venues: { wallet, yakkamon }, egg, prices, errors }
     let _invHoldingsErr = null;   // why the last read failed — the Wallet row then shows "—", never the ledger guess
     async function invLoadHoldings(farmId) {
@@ -28138,7 +28188,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
       const topPad = 18 + Math.max(0, ...placedAbove.map((l) => l.line)) * LINE_H;
       const botPad = 22 + Math.max(0, ...placedBelow.map((l) => l.line)) * LINE_H;
       const profit = unlockEnd - peak, missingNow = peak - nowEnd;
-      return `<style>@keyframes invGoldShine{0%{background-position:100% 0}100%{background-position:-150% 0}}@keyframes invBePulse{0%,100%{opacity:1}50%{opacity:0.55}}</style>
+      return `<style>.lp-rank .lp-pop{display:none;position:absolute;left:0;top:calc(100% + 4px);z-index:60;width:min(340px,86vw);background:#1a120a;border:1px solid var(--border-brown);border-radius:6px;padding:8px;font-weight:normal;font-size:0.5rem;font-family:'Courier New',monospace;box-shadow:0 6px 18px rgba(0,0,0,0.6)}.lp-rank:hover .lp-pop,.lp-rank:focus-within .lp-pop{display:block}@keyframes invGoldShine{0%{background-position:100% 0}100%{background-position:-150% 0}}@keyframes invBePulse{0%,100%{opacity:1}50%{opacity:0.55}}</style>
         <div style="margin:${topPad}px 0 8px">
           <div style="position:relative;height:22px">
             <div style="position:absolute;left:${be}%;right:0;top:0;bottom:0;border-radius:0 4px 4px 0;background:repeating-linear-gradient(90deg,rgba(127,224,160,0.10) 0 4px,rgba(127,224,160,0.04) 4px 8px);border:1px dashed rgba(127,224,160,0.45);border-left:none"></div>
@@ -28149,7 +28199,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
             ${labels(above, "above")}${labels(below, "below")}
           </div>
           <div style="display:flex;justify-content:space-between;align-items:flex-start;font-size:0.5rem;color:var(--text-dim);margin-top:${botPad}px;gap:8px;flex-wrap:wrap">
-            <span><b style="background:${gold};background-size:250% 100%;animation:invGoldShine 3s linear infinite;-webkit-background-clip:text;background-clip:text;color:transparent">vybráno ${back > 0 ? fmt3(back) : "zatím 0"} ₿ (${(back / peak * 100).toFixed(1)} %)</b>${lpRow ? ` · <b style="background:${silver};background-size:250% 100%;animation:invGoldShine 3s linear infinite;-webkit-background-clip:text;background-clip:text;color:transparent">v LP ${fmt3(lpRow.btc)} ₿ (${(lpRow.btc / peak * 100).toFixed(1)} %)</b>` : ""}</span>
+            <span><b style="background:${gold};background-size:250% 100%;animation:invGoldShine 3s linear infinite;-webkit-background-clip:text;background-clip:text;color:transparent">vybráno ${back > 0 ? fmt3(back) : "zatím 0"} ₿ (${(back / peak * 100).toFixed(1)} %)</b>${lpRow ? ` · <b style="background:${silver};background-size:250% 100%;animation:invGoldShine 3s linear infinite;-webkit-background-clip:text;background-clip:text;color:transparent">v LP ${fmt3(lpRow.btc)} ₿ (${(lpRow.btc / peak * 100).toFixed(1)} %)</b>${_invLpRankHtml()}` : ""}</span>
             <span>${profit > 1e-9 ? `<b style="color:var(--green)">+${fmt3(profit)} ₿ za break-even (+${Math.round(profit / peak * 100)} %)</b>${nextCp != null ? ` · do +${Math.round(nextCp * 100)} % chybí ${fmt3(peak * (1 + nextCp) - unlockEnd)} ₿` : ""}` : missingNow > 1e-9 ? `do break-even chybí <b style="color:var(--text-secondary)">${fmt3(missingNow)} ₿</b> hned · <b style="color:var(--text-secondary)">${fmt3(Math.max(0, -profit))} ₿</b> po unlocku` : ""}</span>
           </div>
         </div>`;
