@@ -5467,7 +5467,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.38</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.39</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5494,6 +5494,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.39", items: [
+          { t: "feat", text: "POWER → 🐖 PIGS: new <b>BROUK</b> column — at each pig level, whether a Beetle is worth more fed (it replaces the cheapest Slop for its fixed XP, which Pig Onesie and Chonky Feed do not boost) or sold after the 10 % fee, and how many crops one Green Beetle saves (e.g. 6.7 Lemon at L3–5). Beetles pay off most from L10, where the favourite Gourmet Slop is dear and the next best gives only 30 XP." },
+        ] },
         { ver: "v6.38", items: [
           { t: "fix", text: "LP leaderboard popup no longer runs off the right edge on phones: below 700 px it is pinned to the screen (8 px margins) and scrolls." },
         ] },
@@ -25468,6 +25471,16 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
      * cavePigs, core/engine/side-values.mjs). For pigs, the pen slot's long run — keep a pig at L15
      * for Truffles, or raise one and trade it in for Pig Bristles — with the per-level table.
      */
+    /** POWER → PIGS, BROUK column: feed or sell each Beetle at this level, and one Green in crops. */
+    function _pigBeetleHtml(b) {
+      if (!b) return "—";
+      const feed = b.beetles.filter((x) => x.feedIt).map((x) => x.name[0]);
+      const tip = b.beetles.map((x) => `${x.name}: krmení ${x.feed.toFixed(3)}, prodej ${x.sale == null ? "bez ceny" : x.sale.toFixed(3)}`).join(" · ");
+      const verdict = feed.length === 4 ? `<b style="color:var(--green)">krmit</b>` : feed.length ? `<b style="color:var(--green)">krmit ${feed.join(" ")}</b>` : `<span style="color:var(--text-dim)">prodat</span>`;
+      const q = b.cropPerGreen >= 10 ? b.cropPerGreen.toFixed(0) : b.cropPerGreen.toFixed(1);
+      return `<span title="${escHTML(tip)}">${verdict} <span style="color:var(--text-dim)">(1 G = ${q} ${escHTML(b.crop)})</span></span>`;
+    }
+
     function _cavePigsHtml(catId, cp) {
       if (!cp || (catId !== "pigs" && catId !== "cave")) return "";
       const f = (v, d = 2) => (v == null || !isFinite(v) ? "—" : (v >= 0 ? "+" : "") + v.toFixed(d));
@@ -25491,6 +25504,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
             <td style="${r}">${f(-l.feed, 3)}</td>
             <td style="${r}">${l.truffles.toFixed(2)}</td>
             <td style="${r}${lose ? ";color:var(--red)" : ""}">${f(l.net)}</td>
+            <td>${_pigBeetleHtml(l.beetle)}</td>
             <td style="${r};border-left:2px solid var(--border-dark)">${c ? c.bristles.toFixed(1) : "—"}</td>
             <td style="${r}">${c ? f(c.total, 1) : "—"}</td>
             <td style="${r}">${c ? f(c.perDay) : "—"}</td></tr>`;
@@ -25498,10 +25512,10 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         return box(`<b>Tvoje prasata dnes:</b> ${cp.pigs.length} = <b>${f(cp.pigsNow)}</b> ${sflIcon()}/den · lanýž ${cp.truffleValue.toFixed(3)} ${sflIcon()} po poplatku
           <br><b>Co s místem v Pigpenu:</b> držet prase na L15 = ${f(s.keep)}/den${best ? ` · vychovat na <b>L${best.level}</b> a vyměnit = <b>${f(best.perDay)}</b>/den` : " · Bristles nemají cenu"}
           → <b style="color:var(--green)">${s.tradeIn ? `vyměňovat na L${best.level}` : "držet"}</b>
-          <div style="color:var(--text-dim)">Jeden řádek = jeden level. Vlevo jeden den prasete na tom levelu: čím ho krmit (nejlevnější Slop a z čeho), kolik krmení stojí, kolik dá lanýžů a zisk za den. Vpravo výměna na tom levelu: Bristles, kolik celý chov od nového prasete (100 coinů, každý den o level výš) vydělal, a to na den. Lanýže a Bristles po 10% poplatku.</div>
+          <div style="color:var(--text-dim)">Jeden řádek = jeden level. Vlevo jeden den prasete na tom levelu: čím ho krmit (nejlevnější Slop a z čeho), kolik krmení stojí, kolik dá lanýžů a zisk za den. <b>BROUK</b>: brouk dá pevné XP (Green 100, Blue 200, Pink 400, Amber 800) a nahradí tolik Slopu; „krmit“ = ušetří víc, než kolik dá prodej po 10% poplatku (G/B/P/A = které brouky), a kolik plodin ušetří jeden Green (Blue 2×, Pink 4×, Amber 8×). Vpravo výměna na tom levelu: Bristles, kolik celý chov od nového prasete (100 coinů, každý den o level výš) vydělal, a to na den. Lanýže a Bristles po 10% poplatku.</div>
           ${rows ? `<table class="node-res-table" style="width:100%;margin-top:4px">
-            <tr><th rowspan="2">LEVEL</th><th colspan="4">JEDEN DEN NA TOMHLE LEVELU</th><th colspan="3" style="border-left:2px solid var(--border-dark)">VYMĚNIT NA TOMHLE LEVELU</th></tr>
-            <tr><th>KRMIT</th><th style="${r}">KRMENÍ</th><th style="${r}">LANÝŽE</th><th style="${r}">ZISK</th><th style="${r};border-left:2px solid var(--border-dark)">BRISTLES</th><th style="${r}">CELÝ CHOV</th><th style="${r}">/DEN</th></tr>${rows}</table>` : ""}`);
+            <tr><th rowspan="2">LEVEL</th><th colspan="5">JEDEN DEN NA TOMHLE LEVELU</th><th colspan="3" style="border-left:2px solid var(--border-dark)">VYMĚNIT NA TOMHLE LEVELU</th></tr>
+            <tr><th>KRMIT</th><th style="${r}">KRMENÍ</th><th style="${r}">LANÝŽE</th><th style="${r}">ZISK</th><th title="brouka krmit, nebo prodat; 1 Green = kolik plodin ušetří">BROUK</th><th style="${r};border-left:2px solid var(--border-dark)">BRISTLES</th><th style="${r}">CELÝ CHOV</th><th style="${r}">/DEN</th></tr>${rows}</table>` : ""}`);
       }
       const c = cp.cave || { bins: [] };
       const per = c.batchesPerDay || 0;

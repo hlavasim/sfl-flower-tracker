@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { sideValue, sideState, pigDay, pigSlot, truffleValue, caveBatch, caveDay, farmPigs, farmBins, sideCavePigsNow } from "../../core/engine/side-values.mjs";
+import { sideValue, sideState, pigDay, pigSlot, truffleValue, caveBatch, caveDay, farmPigs, farmBins, sideCavePigsNow, pigBeetle } from "../../core/engine/side-values.mjs";
 
 /*
  * Cave Dwellers (game source 2026-11-02): pigs give Truffles for Slop, the cave's Myco Bins dig a
@@ -101,6 +101,26 @@ test("a Beetle is worth the better of its market price and its feed XP", () => {
   assert.ok(Math.abs(caveBatch(c, st, "Beetle", 0).gross - 5 * 2.6316 * 0.9) < 1e-9);
   // Without a market price a Beetle falls back to its feed XP (here 0).
   assert.equal(caveBatch(ctx(farm(), { prices: { Egg: 0.0245 } }), st, "Beetle", 0).gross, 0);
+});
+
+test("a Beetle fed to a pig replaces the cheapest Slop per XP at that level, against its sale", () => {
+  // Green sells for 0.07 (0.063 kept); Potato Basic Slop: 150 × 0.0002 / 60 XP = 0.0005 per XP.
+  const pr = { Potato: 0.0002, Grape: 0.3, Eggplant: 0.01, "Green Beetle": 0.07 };
+  const c = ctx(farm(), { prices: pr }), st = sideState(c);
+  const l1 = pigBeetle(c, st, 1);
+  assert.equal(l1.crop, "Potato");
+  assert.ok(Math.abs(l1.cropPerGreen - 250) < 1e-9, "100 XP = 5/3 Basic Slop = 250 Potato");
+  const g1 = l1.beetles.find((b) => b.name === "Green Beetle");
+  assert.ok(Math.abs(g1.feed - 0.05) < 1e-12);
+  assert.equal(g1.feedIt, false, "0.05 of feed < 0.063 from a sale");
+  // L10: Gourmet (Grape 0.3 / 80) and Basic at 10 XP (0.003) lose to Rich at 30 XP (6 Eggplant = 0.06 / 30 = 0.002 per XP): feed it.
+  const l10 = pigBeetle(c, st, 10);
+  assert.equal(l10.slop, "Rich Slop");
+  assert.ok(Math.abs(l10.cropPerGreen - 20) < 1e-9, "100 / 30 Rich Slop × 6 Eggplant");
+  assert.equal(l10.beetles.find((b) => b.name === "Green Beetle").feedIt, true);
+  // Pig Onesie boosts the Slop but not the Beetle: the Slop gets cheaper per XP.
+  const onesie = ctx(farm(), { prices: pr, isActive: (n) => n === "Pig Onesie" });
+  assert.ok(pigBeetle(onesie, sideState(onesie), 1).perXp < l1.perXp);
 });
 
 test("Mud is worth a coat's feed saving, but only as much Mud as the pigs can use", () => {

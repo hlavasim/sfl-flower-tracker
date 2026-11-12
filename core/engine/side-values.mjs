@@ -447,6 +447,30 @@ function pigFeedPick(ctx, st, level, xpMult) {
 }
 function pigXpMult(st) { return on(st, "Pig Onesie") ? 1.05 : 1; }
 /**
+ * A Beetle fed to a pig at `level` (feedAnimal.ts handleFoodXP): its fixed XP, which Pig Onesie and
+ * Chonky Feed do not boost, replaces the cheapest Slop per XP at that level. Per Beetle: what that
+ * feed is worth against selling it (p2p less the fee), and how much of the Slop's crop one Green
+ * Beetle stands for.
+ */
+export function pigBeetle(ctx, st, level) {
+  const pr = ctx.prices || {};
+  const row = SLOP_XP.filter(([from]) => level >= from).pop()[1];
+  const qty = lvl(st, "Swill Savvy") ? rank(SWILL_SAVVY, lvl(st, "Swill Savvy")) : 1;
+  let best = null;
+  for (const [slop, xp] of Object.entries(row)) {
+    const p = slopPick(ctx, slop);
+    if (!(p.cost > 0)) continue;
+    const perXp = (p.cost * qty) / (xp * pigXpMult(st));
+    if (!best || perXp < best.perXp) best = { perXp, slop, crop: p.crop, cropPerGreen: (BEETLE_XP["Green Beetle"] / (xp * pigXpMult(st))) * qty * p.qty };
+  }
+  if (!best) return null;
+  const beetles = Object.keys(BEETLE_XP).map((name) => {
+    const feed = BEETLE_XP[name] * best.perXp, sale = pr[name] > 0 ? pr[name] * SALE : null;
+    return { name, feed, sale, feedIt: sale == null || feed >= sale };
+  });
+  return { ...best, beetles };
+}
+/**
  * FLOWER for one Truffle: the better of selling it (p2p price less the fee) and its best recipe's
  * XP over the other ingredients.
  * ctx.sflPerXP is per BOOSTED XP (the skill-point price), so the recipe's XP takes the farm's
@@ -610,7 +634,7 @@ export function sideCavePigsNow(ctx) {
   const pigs = farmPigs(ctx.farm);
   // Every level's day and what to feed it; every Myco Bin recipe side by side (Mud at 0 — its coat
   // value depends on what the pigs need, which caveDay works out for the bins as they run).
-  const levels = Array.from({ length: 16 }, (_, l) => ({ level: l, ...pigDay(ctx, st, l), feedPick: pigFeedPick(ctx, st, l, pigXpMult(st)) }));
+  const levels = Array.from({ length: 16 }, (_, l) => ({ level: l, ...pigDay(ctx, st, l), feedPick: pigFeedPick(ctx, st, l, pigXpMult(st)), beetle: pigBeetle(ctx, st, l) }));
   const recipes = Object.keys(CAVE_RECIPES).map((r) => caveBatch(ctx, st, r, 0));
   return { pigs: pigs.map((l) => ({ level: l, ...pigDay(ctx, st, l) })), pigsNet: pigsNet(ctx, st), slot: pigSlot(ctx, st),
     truffleValue: truffleValue(ctx), cave: caveDay(ctx, st), levels, recipes };
