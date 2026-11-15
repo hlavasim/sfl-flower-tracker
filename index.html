@@ -5467,7 +5467,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.39</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.40</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5494,6 +5494,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.40", items: [
+          { t: "feat", text: "ROADMAP → WHAT TO FARM / MINE NOW: new <b>sell</b> column — how much of each resource you hold now and roughly what it fetches if you sell it today (p2p less the market fee), e.g. “120 ~150” for Crimstone. Animals count both products (Egg + Feather, Milk + Leather, Wool + Merino Wool); hover for the breakdown." },
+        ] },
         { ver: "v6.39", items: [
           { t: "feat", text: "POWER → 🐖 PIGS: new <b>BROUK</b> column — at each pig level, whether a Beetle is worth more fed (it replaces the cheapest Slop for its fixed XP, which Pig Onesie and Chonky Feed do not boost) or sold after the 10 % fee, and how many crops one Green Beetle saves (e.g. 6.7 Lemon at L3–5). Beetles pay off most from L10, where the favourite Gourmet Slop is dear and the next best gives only 30 XP." },
         ] },
@@ -15639,12 +15642,24 @@
         <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap"><span style="font-size:0.5rem;color:var(--text-dim)">cost basis:</span><button onclick="_roadmapSetMineMode('market')" style="font-size:0.5rem;padding:2px 8px;border:1px solid var(--border-brown);border-radius:4px;cursor:pointer;background:${_mc.mode === "market" ? "var(--sunpetal)" : "#241a10"};color:${_mc.mode === "market" ? "#1a120a" : "var(--text-secondary)"};font-weight:${_mc.mode === "market" ? "bold" : "normal"}" title="Opportunity cost: a tool's inputs cost their marketplace sell value, no matter how cheap they were to mine (Quarry-correct).">Market price</button><button onclick="_roadmapSetMineMode('production')" style="font-size:0.5rem;padding:2px 8px;border:1px solid var(--border-brown);border-radius:4px;cursor:pointer;background:${_mc.mode === "production" ? "var(--sunpetal)" : "#241a10"};color:${_mc.mode === "production" ? "#1a120a" : "var(--text-secondary)"};font-weight:${_mc.mode === "production" ? "bold" : "normal"}" title="Self-mine: an ore costs the Wood baked into its whole chain (climb to the best stop).">Self-mine chain</button>${_mc.mode === "market" ? ` <label style="font-size:0.5rem;color:var(--text-dim)" title="Marketplace fee on sales. Scales income; doesn\u2019t change which ores are worth mining.">fee <input type="number" value="${settings.marketFee != null ? settings.marketFee : 10}" min="0" max="50" step="0.5" style="width:42px" onchange="_roadmapSetMarketFee(this.value)">%</label>` : ``}</div>
         ${_verdict ? `<div style="font-size:0.62rem;color:var(--text-primary);background:#1a140c;border:1px solid var(--border-brown);border-left:3px solid var(--green);border-radius:6px;padding:7px 10px;margin-bottom:7px;line-height:1.5">${_verdict}</div>` : ``}
       </div>`;
+      // SELL column: what the row's resource in your inventory fetches right now (p2p less the fee).
+      const _inv = (powerState.farm && powerState.farm.inventory) || {}, _p2p = powerState.p2pPrices || {};
+      const _keep = 1 - (settings.marketFee != null ? settings.marketFee : 10) / 100;
+      const _SELL_ITEMS = { Egg: ["Egg", "Feather"], Milk: ["Milk", "Leather"], Wool: ["Wool", "Merino Wool"] };
+      const _sellCell = (r) => {
+        const parts = (_SELL_ITEMS[r.icon] || [r.icon]).map((it) => ({ it, q: parseFloat(_inv[it]) || 0, p: _p2p[it] || 0 })).filter((x) => x.q >= 1 && x.p > 0);
+        if (!parts.length) return "";
+        const v = parts.reduce((t, x) => t + x.q * x.p * _keep, 0);
+        const qty = parts.map((x) => Math.floor(x.q).toLocaleString("cs-CZ")).join(" + ");
+        const tip = parts.map((x) => `${x.it}: ${Math.floor(x.q)} × ${x.p} = ${roadmapFmtFlower(x.q * x.p * _keep)} po poplatku`).join(" · ");
+        return `<span title="${escHTML(tip)}"><span style="color:var(--text-dim)">${qty}</span> ~<b style="color:var(--sunpetal)">${roadmapFmtFlower(v)}</b></span>`;
+      };
       for (const g of groups) {
         if (!g.rows.length) continue;
         if (!g.keepOrder) g.rows.sort((a, b) => ((a.fade ? 1 : 0) - (b.fade ? 1 : 0)) || (b.net - a.net));
         h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin:12px 0 3px">${g.title}</div>`;
         if (g.note) h += `<div style="font-size:0.5rem;color:var(--text-dim);margin:0 0 4px;line-height:1.5">${g.note}</div>`;
-        h += `<table style="width:100%;border-collapse:collapse;font-size:0.58rem;table-layout:fixed"><colgroup><col style="width:auto"><col style="width:74px"><col style="width:74px"><col style="width:74px"></colgroup><tr style="color:var(--text-dim);font-size:0.5rem"><td></td><td style="text-align:right;padding:0 6px">gives/d</td><td style="text-align:right;padding:0 6px">cost/d</td><td style="text-align:right">net/d</td></tr>`;
+        h += `<div style="overflow-x:auto"><table style="width:100%;min-width:460px;border-collapse:collapse;font-size:0.58rem;table-layout:fixed"><colgroup><col style="width:auto"><col style="width:74px"><col style="width:74px"><col style="width:74px"><col style="width:96px"></colgroup><tr style="color:var(--text-dim);font-size:0.5rem"><td></td><td style="text-align:right;padding:0 6px">gives/d</td><td style="text-align:right;padding:0 6px">cost/d</td><td style="text-align:right">net/d</td><td style="text-align:right" title="Kolik toho máš v inventáři ~ kolik FLOWER bys za to dostal, kdybys to prodal teď (p2p cena po poplatku).">sell</td></tr>`;
         for (const r of g.rows) {
           const pos = r.net > 0.001, neg = r.net < -0.001;
           const ncol = pos ? "var(--green)" : (neg ? "var(--red)" : "var(--text-dim)");
@@ -15655,12 +15670,13 @@
             <td style="padding:2px 6px;text-align:right;color:var(--green)">${roadmapFmtFlower(r.gross)}</td>
             <td style="padding:2px 6px;text-align:right;color:var(--red)">${r.cost > 0.001 ? "−" + roadmapFmtFlower(r.cost) : "0"}</td>
             <td style="padding:2px 0 2px 6px;text-align:right;color:${ncol};font-weight:bold">${nt}${(r.soloNet !== undefined && Math.abs(r.soloNet - r.net) > 0.005) ? `<div style="font-size:0.48rem;color:var(--text-dim);font-weight:normal">solo ${r.soloNet >= 0 ? "+" : "\u2212"}${roadmapFmtFlower(Math.abs(r.soloNet))}</div>` : ""}</td>
+            <td style="padding:2px 0 2px 6px;text-align:right;white-space:nowrap">${_sellCell(r)}</td>
           </tr>`;
-          if (r.expandHtml) h += `<tr style="display:none"><td colspan="4" style="padding:3px 8px 8px 18px;background:#140f0a">${r.expandHtml}</td></tr>`;
+          if (r.expandHtml) h += `<tr style="display:none"><td colspan="5" style="padding:3px 8px 8px 18px;background:#140f0a">${r.expandHtml}</td></tr>`;
         }
-        h += `</table>`;
+        h += `</table></div>`;
       }
-      h += `<div style="margin-top:8px;font-size:0.5rem;color:var(--text-dim)">gives = gross sale value of a day's production; cost = feed+sickness (animals) / oil+seeds (crop machine) / wood (salt) / tools+seeds (mining,crops \u2014 free when coins are free). At full activity (not scaled by your harvest frequency).</div>`;
+      h += `<div style="margin-top:8px;font-size:0.5rem;color:var(--text-dim)">sell = what you hold now ~ FLOWER if you sold it all today (p2p price less the ${Math.round((1 - _keep) * 100)} % fee; a big sale would move the price). gives = gross sale value of a day's production; cost = feed+sickness (animals) / oil+seeds (crop machine) / wood (salt) / tools+seeds (mining,crops \u2014 free when coins are free). At full activity (not scaled by your harvest frequency).</div>`;
       h += `</div></div>`;
       return h;
     }
