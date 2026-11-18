@@ -5467,7 +5467,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.41</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.42</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5494,6 +5494,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.42", items: [
+          { t: "feat", text: "ROADMAP → sell column: a <b>total</b> under the table (what everything you hold fetches today, each resource once), the FLOWER icon by every value, and <b>Obsidian counts only what you may still sell this week</b> — one a week; once sold (or listed) it shows 0 with “tento týden prodáno”, read from your farm's weekly sales." },
+          { t: "fix", text: "Chapter 16 prices refreshed (18 Nov): Truffle 0.098, Pig Bristles 0.064, beetles 0.079 / 0.152 / 0.307 / 0.608 FLOWER." },
+        ] },
         { ver: "v6.41", items: [
           { t: "fix", text: "ROADMAP → sell column: an animal's two product counts (e.g. Wool + Merino Wool) go on their own small line above the FLOWER value instead of pushing the table into a sideways scroll." },
         ] },
@@ -15649,22 +15653,40 @@
       const _inv = (powerState.farm && powerState.farm.inventory) || {}, _p2p = powerState.p2pPrices || {};
       const _keep = 1 - (settings.marketFee != null ? settings.marketFee : 10) / 100;
       const _SELL_ITEMS = { Egg: ["Egg", "Feather"], Milk: ["Milk", "Leather"], Wool: ["Wool", "Merino Wool"] };
+      /*
+       * Obsidian is a limited trade: one sale a week (Tradeable.tsx MAX_LIMITED_SALES, less this
+       * week's sales and open listings; weeks start Monday 00:00 UTC from 2024-06-24, getWeekKey).
+       */
+      const _trades = (powerState.farm && powerState.farm.trades) || {};
+      const _weekKey = (() => { const s = Date.UTC(2024, 5, 24), d = new Date(); d.setUTCHours(0, 0, 0, 0); return new Date(s + Math.floor((d - s) / 864e5 / 7) * 7 * 864e5).toISOString().slice(0, 10); })();
+      const _limitedLeft = (it) => Math.max(0, 1 - (((_trades.weeklySales || {})[_weekKey] || {})[it] || 0)
+        - Object.values(_trades.listings || {}).filter((l) => l && l.items && l.items[it]).length);
+      const _LIMITED = { Obsidian: true };
+      const _sold = new Set();
+      let _sellTotal = 0;
       const _sellCell = (r) => {
-        const parts = (_SELL_ITEMS[r.icon] || [r.icon]).map((it) => ({ it, q: parseFloat(_inv[it]) || 0, p: _p2p[it] || 0 })).filter((x) => x.q >= 1 && x.p > 0);
+        const parts = (_SELL_ITEMS[r.icon] || [r.icon]).map((it) => {
+          const have = parseFloat(_inv[it]) || 0;
+          return { it, have, q: _LIMITED[it] ? Math.min(have, _limitedLeft(it)) : have, p: _p2p[it] || 0 };
+        }).filter((x) => x.have >= 1 && x.p > 0);
         if (!parts.length) return "";
         const v = parts.reduce((t, x) => t + x.q * x.p * _keep, 0);
+        // The same crop shows in CROPS and CROP MACHINE: the total counts it once.
+        for (const x of parts) if (!_sold.has(x.it)) { _sold.add(x.it); _sellTotal += x.q * x.p * _keep; }
         const qty = parts.map((x) => Math.floor(x.q).toLocaleString("cs-CZ")).join(" + ");
-        const tip = parts.map((x) => `${x.it}: ${Math.floor(x.q)} × ${x.p} = ${roadmapFmtFlower(x.q * x.p * _keep)} po poplatku`).join(" · ");
+        const tip = parts.map((x) => `${x.it}: ${Math.floor(x.q)} × ${x.p} = ${roadmapFmtFlower(x.q * x.p * _keep)} po poplatku`
+          + (_LIMITED[x.it] ? ` (máš ${Math.floor(x.have)}, prodat jde 1 kus týdně${x.q < 1 ? " — tento týden už prodáno" : ""})` : "")).join(" · ");
+        const lim = parts.some((x) => _LIMITED[x.it]) ? `<div style="color:var(--text-dim);font-size:0.46rem">${parts.some((x) => _LIMITED[x.it] && x.q < 1) ? "tento týden prodáno" : "limit 1/týden"}</div>` : "";
         // Two products (Wool + Merino Wool) do not fit the column on one line: their counts go above.
         const q = parts.length > 1 ? `<div style="color:var(--text-dim);font-size:0.48rem">${qty}</div>` : `<span style="color:var(--text-dim)">${qty}</span> `;
-        return `<span title="${escHTML(tip)}">${q}~<b style="color:var(--sunpetal)">${roadmapFmtFlower(v)}</b></span>`;
+        return `<span title="${escHTML(tip)}">${q}~<b style="color:var(--sunpetal)">${roadmapFmtFlower(v)}</b>${sflIcon()}${lim}</span>`;
       };
       for (const g of groups) {
         if (!g.rows.length) continue;
         if (!g.keepOrder) g.rows.sort((a, b) => ((a.fade ? 1 : 0) - (b.fade ? 1 : 0)) || (b.net - a.net));
         h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin:12px 0 3px">${g.title}</div>`;
         if (g.note) h += `<div style="font-size:0.5rem;color:var(--text-dim);margin:0 0 4px;line-height:1.5">${g.note}</div>`;
-        h += `<div style="overflow-x:auto"><table style="width:100%;min-width:460px;border-collapse:collapse;font-size:0.58rem;table-layout:fixed"><colgroup><col style="width:auto"><col style="width:74px"><col style="width:74px"><col style="width:74px"><col style="width:96px"></colgroup><tr style="color:var(--text-dim);font-size:0.5rem"><td></td><td style="text-align:right;padding:0 6px">gives/d</td><td style="text-align:right;padding:0 6px">cost/d</td><td style="text-align:right">net/d</td><td style="text-align:right" title="Kolik toho máš v inventáři ~ kolik FLOWER bys za to dostal, kdybys to prodal teď (p2p cena po poplatku).">sell</td></tr>`;
+        h += `<div style="overflow-x:auto"><table style="width:100%;min-width:480px;border-collapse:collapse;font-size:0.58rem;table-layout:fixed"><colgroup><col style="width:auto"><col style="width:74px"><col style="width:74px"><col style="width:74px"><col style="width:112px"></colgroup><tr style="color:var(--text-dim);font-size:0.5rem"><td></td><td style="text-align:right;padding:0 6px">gives/d</td><td style="text-align:right;padding:0 6px">cost/d</td><td style="text-align:right">net/d</td><td style="text-align:right" title="Kolik toho máš v inventáři ~ kolik FLOWER bys za to dostal, kdybys to prodal teď (p2p cena po poplatku).">sell</td></tr>`;
         for (const r of g.rows) {
           const pos = r.net > 0.001, neg = r.net < -0.001;
           const ncol = pos ? "var(--green)" : (neg ? "var(--red)" : "var(--text-dim)");
@@ -15681,6 +15703,7 @@
         }
         h += `</table></div>`;
       }
+      if (_sellTotal > 0) h += `<div style="margin-top:10px;text-align:right;font-size:0.62rem;color:var(--text-secondary)">Celkem na prodej teď: <b style="color:var(--sunpetal);font-size:0.72rem">~${roadmapFmtFlower(_sellTotal)}</b>${sflIcon()} <span style="font-size:0.5rem;color:var(--text-dim)">(každá surovina jednou, Obsidian jen co jde prodat tento týden)</span></div>`;
       h += `<div style="margin-top:8px;font-size:0.5rem;color:var(--text-dim)">sell = what you hold now ~ FLOWER if you sold it all today (p2p price less the ${Math.round((1 - _keep) * 100)} % fee; a big sale would move the price). gives = gross sale value of a day's production; cost = feed+sickness (animals) / oil+seeds (crop machine) / wood (salt) / tools+seeds (mining,crops \u2014 free when coins are free). At full activity (not scaled by your harvest frequency).</div>`;
       h += `</div></div>`;
       return h;
