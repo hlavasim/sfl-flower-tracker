@@ -17,6 +17,7 @@
  */
 
 import { FISH_BASE_XP, GAME_FISH_SPELLING, getAgingSaltCost, getAgingMaxXP } from "../data/cooking.mjs";
+import { dashHasVipAccess } from "./gifts-deliveries.mjs";
 
 const DAY_MS = 86400000;
 
@@ -400,6 +401,13 @@ const CAVE_SKILLS = {
   "Twin Beetles": [0.05, 0.1, 0.15],
 };
 const cs = (st, name, dflt) => (lvl(st, name) ? rank(CAVE_SKILLS[name], lvl(st, name)) : dflt);
+// Cave Dwellers VIP perk (vipAccess.ts hasVipBeetleBonus, flags.ts CAVE_DWELLERS_VIP_BEETLE):
+// 10 % chance of +1 on every dug Beetle, its own roll, so it adds to Twin Beetles.
+const VIP_BEETLE = { chance: 0.1, start: Date.UTC(2026, 10, 9), end: Date.UTC(2027, 1, 1) };
+export function vipBeetleBonus(farm, now) {
+  now = now || Date.now();
+  return farm && now >= VIP_BEETLE.start && now < VIP_BEETLE.end && dashHasVipAccess(farm, now) ? VIP_BEETLE.chance : 0;
+}
 
 /** FLOWER for a bundle of coins and items; Infinity when an item has no price (it cannot be the cheap route). */
 function bundleCost(ctx, b) {
@@ -575,7 +583,7 @@ export function caveBatch(ctx, st, recipe, mudValue) {
   const bloom = cs(st, "Mushroom Bloom", 0), nest = recipe === "Beetle" ? cs(st, "Beetle Nest", 0) : 0;
   const mushT = r.mush + bloom, beetleT = r.beetle + nest, mudT = Math.max(0, CAVE_TILES - mushT - beetleT);
   const mushrooms = mushT * (1 + cs(st, "Fungal Harvest", 0));
-  const beetles = beetleT * (1 + cs(st, "Twin Beetles", 0));
+  const beetles = beetleT * (1 + cs(st, "Twin Beetles", 0) + vipBeetleBonus(ctx.farm, ctx.now));
   const odds = BEETLE_ODDS[lvl(st, "Rare Breeds") ? Math.min(3, lvl(st, "Rare Breeds")) : 0];
   const beetleXp = Object.entries(odds).reduce((t, [b, p]) => t + (p / 100) * BEETLE_XP[b], 0);
   // A Beetle is worth the better of selling it and feeding it (its XP as animal feed).

@@ -93,6 +93,18 @@ test("a Myco Bin batch: the recipe's tiles, Mud ×2 on the Mud recipe, skills mo
   assert.ok(Math.abs(mud.dig - 25 * (20 / 320 + 2 * 0.0107 + 0.0202)) < 1e-12);
 });
 
+test("VIP Beetle Bonus: +10 % Beetles during Cave Dwellers, on top of Twin Beetles", () => {
+  const inChapter = Date.UTC(2026, 10, 23), after = Date.UTC(2027, 1, 1);
+  const vipFarm = { ...farm(), vip: { expiresAt: Date.UTC(2027, 5, 1) } };
+  const st = sideState(ctx(farm()));
+  const beetles = (f, now, s = st) => caveBatch({ ...ctx(f), now }, s, "Beetle", 0).beetles;
+  assert.equal(beetles(farm(), inChapter), 5, "no VIP, no bonus");
+  assert.ok(Math.abs(beetles(vipFarm, inChapter) - 5.5) < 1e-12);
+  assert.equal(beetles(vipFarm, after), 5, "the perk ends with the chapter");
+  const twin = { ...st, overrides: { "Twin Beetles": 3 } };
+  assert.ok(Math.abs(beetles(vipFarm, inChapter, twin) - 5 * 1.25) < 1e-12, "own roll: adds to Twin Beetles' 15 %");
+});
+
 test("a Beetle is worth the better of its market price and its feed XP", () => {
   // No slop crops priced: feed XP is worth 0 and mushrooms too, so the batch is its Beetles at market.
   const beetles = { "Green Beetle": 1.379, "Blue Beetle": 1.4, "Pink Beetle": 4.4, "Amber Beetle": 7.8 };
