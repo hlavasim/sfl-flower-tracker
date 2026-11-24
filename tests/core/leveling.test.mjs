@@ -160,3 +160,17 @@ test("a bait is not starved by aging its own input fish (2 restarts, slot-bound)
 test("Master Chef's Cleaver is recognised as owned under the game's spelling", () => {
   assert.ok(ownedLevelingItems(farm).has("Master Chef's Cleaver"));
 });
+
+test("budTypeFloors: the cheapest listed bud of each type from the marketplace book", async () => {
+  const { budTypeFloors } = await import("../../core/sections/leveling.mjs");
+  const { decodeBud } = await import("../../core/engine/buds.mjs");
+  const ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  const items = Object.fromEntries(ids.map((id, i) => [`Bud #${id}`, { f: 1000 + i * 10 }]));
+  items.Walrus = { f: 1399 };
+  const out = budTypeFloors(items);
+  for (const id of ids) {
+    const t = decodeBud(id).type;
+    assert.ok(out[t] <= 1000 + ids.indexOf(id) * 10, t);
+  }
+  assert.equal(Object.keys(out).every((t) => typeof out[t] === "number"), true);
+});

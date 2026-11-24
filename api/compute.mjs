@@ -13,6 +13,7 @@ import { buildCookingSection as _cookingForAscension } from "../core/sections/co
 import { buildBudsSection } from "../core/sections/buds.mjs";
 import { buildPetsSection } from "../core/sections/pets.mjs";
 import { buildTicketsSection, buildTicketHistory, measuredActivity, pastChapterPace } from "../core/sections/tickets.mjs";
+import { levelingPlan, defaultLevelingConfig, itemImpacts } from "../core/sections/leveling.mjs";
 import { computeBettyRate } from "../core/engine/prices.mjs";
 import { CHAPTER_RESOURCE_PRICES } from "../core/data/chapter-items.mjs";
 import { API_SPEC } from "../core/api-spec.mjs";
@@ -726,6 +727,19 @@ async function _handler(req, res) {
       data = buildTicketsSection(farm, tkPrices, { ...tkOpts, activity: tkActivity, pastPace });
       if (tkHistory) data.history = tkHistory;
       data.status = { pricesOk: Object.keys(p2p).length > 0, nftsOk: !!nftResult.ok };
+    }
+    // LEVELING: the inputs the page recomputes from on every click, plus the default plan.
+    // Floors come from the boost catalogue (POWER); bids and bud floors the page reads from
+    // marketplace-orderbook?book=1, so here an item with no bid costs 15 % of its floor to resell.
+    else if (section === "leveling") {
+      const [nftResult, exchange] = await Promise.all([fetchNfts(), fetchExchange()]);
+      const ps = buildPowerSection(farm, p2p, nftResult.ok ? nftResult.data : {}, exchange, settings);
+      const floors = {};
+      for (const it of ps.boostItems || []) if (it.floor > 0) floors[it.name] = it.floor;
+      const inputs = { prices: p2p, coinsPerSFL, floors, bids: {}, budFloors: {},
+        freePoints: (ps.skillCostInfo && ps.skillCostInfo.freePoints) || 0, now: Date.now() };
+      const config = defaultLevelingConfig(farm, inputs);
+      data = { inputs, config, plan: levelingPlan(farm, inputs, config), impacts: itemImpacts(farm, inputs, config) };
     }
     else return res.status(400).json({ error: `unknown section: ${section}` });
     const payload = { farm: farmId, computedAt: new Date().toISOString(), ..._freshness(farmResult, _reqCtx.getStore()?.nfts), section, data };

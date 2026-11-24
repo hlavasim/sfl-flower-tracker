@@ -24,7 +24,7 @@ import { computeFoodXP, detectCookingBoosts } from "../engine/cooking.mjs";
 import { FISH_BASE_XP, getAgingSaltCost } from "../data/cooking.mjs";
 import { FISH_TIER_MAP, FISH_BAIT_CATCH, FISH_MARKET_RECIPES } from "../data/fishing.mjs";
 import { hasItem, findCollectible } from "../derive/items.mjs";
-import { BUD_AURA_MULTIPLIERS } from "../engine/buds.mjs";
+import { BUD_AURA_MULTIPLIERS, decodeBud } from "../engine/buds.mjs";
 import { SKILL_UPGRADES, skillUpgradeCost } from "../engine/skill-ranks.mjs";
 import { SKILL_TREE_DATA } from "../engine/power-helpers.mjs";
 
@@ -328,4 +328,16 @@ export function itemImpacts(farm, inputs, config) {
       ...(it.kind === "skill" ? { pointCost: pointCost(farm, it) } : {}),
     };
   });
+}
+
+/** Cheapest listing per bud type from the marketplace book (`items["Bud #N"].f`), for the bud rows. */
+export function budTypeFloors(bookItems) {
+  const out = {};
+  for (const [k, v] of Object.entries(bookItems || {})) {
+    const m = /^Bud #(\d+)$/.exec(k);
+    if (!m || !(v && v.f > 0)) continue;
+    const b = decodeBud(Number(m[1]));
+    if (b && b.type && !(out[b.type] <= v.f)) out[b.type] = v.f;
+  }
+  return out;
 }

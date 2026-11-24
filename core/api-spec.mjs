@@ -29,11 +29,13 @@ export const API_SPEC = {
             name: "section",
             in: "query",
             required: false,
-            schema: { type: "string", enum: ["ascension", "buds", "constants", "cooking", "diff", "eff", "openapi", "pets", "power", "prices", "roadmap", "roi", "tickets", "treasury", "widget", "wishlist"], default: "cooking" },
+            schema: { type: "string", enum: ["ascension", "buds", "constants", "cooking", "diff", "eff", "leveling", "openapi", "pets", "power", "prices", "roadmap", "roi", "tickets", "treasury", "widget", "wishlist"], default: "cooking" },
             description:
               "Which computation to run. `constants`: the canonical core/data game tables " +
               "plus flowers.html migration-coverage status, no farm needed. `cooking`: " +
-              "per-building cooking XP/time/cost for the given farm. `prices`: precomputed " +
+              "per-building cooking XP/time/cost for the given farm. `leveling`: days and FLOWER to a " +
+              "target ascension level from kitchens and the fish route, the inputs to recompute it " +
+              "and each unowned boost's impact (LEVELING page). `prices`: precomputed " +
               "item-value maps for the given farm — `marketValue` (what an item is WORTH: " +
               "market price first, derived only when the market has none; farm-independent) " +
               "and `productionCost` (what it costs YOU to make: e.g. Salt is derived from " +
