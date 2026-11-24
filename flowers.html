@@ -5495,6 +5495,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.45", items: [
+          { t: "fix", text: "LEVELING: NFTs now count at their <b>full price</b> — a Walrus that saves 370 in running costs still costs ~1 000 net. Tick <b>„NFT po dosažení cíle prodám“</b> to count only what you lose reselling. The table splits <b>provoz do cíle</b> from <b>čistě</b>." },
+          { t: "fix", text: "LEVELING is closer to a real day: a cook or an aging job waits for your next visit (a 6.2 h Pizza at 6 restarts is 3 cooks, not 3.9). Salt follows your measured harvests, rakes are paid only for salt you use, baits are used only when they help, and no rods are charged when no fish can give XP. Fishy Chance / Roll / Gamble and Fishy Feast ranks are offered and counted (also on the Bumpkin page). Ticking two ranks of a skill counts its points once; „z nikdy na X dní“ shows what turns „nikdy“ into a date. About a third faster per click." },
+        ] },
         { ver: "v6.44", items: [
           { t: "feat", text: "<b>New LEVELING page</b> — how long to the end of A5 (or any target) and what it costs in FLOWER. Pick the kitchens and the recipe in each, whether to age fish (limited by salt and the 6 slots), eat the rest raw, how many reels and restarts a day, and whether to force big fish with Fish Market baits. Below, every fishing / salt / aging / cooking boost you do not have — NFTs, buds and skills — with its price, what you lose reselling it, and its <b>impact</b> (days sooner, FLOWER saved). Tick one and everything recomputes; what you set is saved and synced between your devices." },
           { t: "fix", text: "Aging Shed: <b>Winged Vase</b> (+14 % Prime), <b>Fish Smoking</b> and <b>Speedy Aging</b> ranks, <b>Fish Trap</b> (−20 % aging time) and <b>Astrolabe</b> (+5 % aged fish XP) now count on the Bumpkin page; raw fish get the fish XP boosts too." },
@@ -25222,7 +25226,13 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       app.innerHTML = head + `<div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Počítám kuchyně, ryby a sůl…</div></div>`;
       let d;
       try {
-        const [r] = await Promise.all([fetch(`/api/compute?farm=${FARM_ID}&section=leveling`), _rmBook ? null : _rmLoadBook()]);
+        // The recorded weeks (tracked farms only) let salt follow the measured harvests.
+        let weeks = null;
+        try { const rw = await fetch(`/api/farm-history?type=ticket-weeks&farm=${FARM_ID}`); if (rw.ok) weeks = (await rw.json()).weeks || null; } catch (e) { weeks = null; }
+        const req = weeks && weeks.length
+          ? fetch(`/api/compute?farm=${FARM_ID}&section=leveling`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ weeks }) })
+          : fetch(`/api/compute?farm=${FARM_ID}&section=leveling`);
+        const [r] = await Promise.all([req, _rmBook ? null : _rmLoadBook()]);
         if (!r.ok) throw new Error(`compute leveling ${r.status}`);
         d = (await r.json()).data;
       } catch (e) {
@@ -25238,11 +25248,9 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         if (v && v.b > 0) inputs.bids[n] = v.b;
         if (v && v.f > 0 && !(inputs.floors[n] > 0)) inputs.floors[n] = v.f;
       }
-      const def = defaultLevelingConfig(farm, inputs);
       let saved = null;
       try { saved = JSON.parse(localStorage.getItem("sfl_leveling") || "null"); } catch (e) { saved = null; }
-      const options = levelingRecipeOptions(farm, inputs, (saved && saved.restarts) || def.restarts);
-      window._lvl = { farm, inputs, def, options, cfg: sanitizeLevelingConfig(saved, def, options) };
+      window._lvl = { farm, inputs, ...levelingInit(farm, inputs, saved) };
       app.innerHTML = head + `<div id="lvl-body"></div>`;
       _lvlRender();
     }
@@ -25265,13 +25273,14 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         <div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:6px">${when ? `≈ ${when}` : "&nbsp;"}</div>
         <div style="font-size:0.7rem"><b>${lvlFmt(p.totalFlower)}</b> ${sflIcon()} celkem</div>
         <div style="font-size:0.55rem;color:var(--text-dim);line-height:1.7;margin-top:4px">
-          ${lvlFmt(p.costPerDay)} ${sflIcon()}/den${p.resaleLoss > 0 ? ` · ztráta při prodeji NFT ${lvlFmt(p.resaleLoss)} ${sflIcon()}` : ""}${p.nftCost > 0 ? ` · nákup ${lvlFmt(p.nftCost)} ${sflIcon()}` : ""}<br>
+          provoz ${lvlFmt(p.costPerDay)} ${sflIcon()}/den = ${lvlFmt(p.runningFlower)} ${sflIcon()} do cíle${p.nftCost > 0 ? ` · NFT ${window._lvl && window._lvl.cfg.resell ? `ztráta při prodeji ${lvlFmt(p.resaleLoss)}` : `nákup ${lvlFmt(p.nftCost)}`} ${sflIcon()}` : ""}<br>
           XP/den ${lvlFmt(x.total)}: kuchyně ${lvlFmt(x.kitchens)} · stárnutí ${lvlFmt(x.aging)} · syrové ryby ${lvlFmt(x.raw)}<br>
           ${p.bottleneck ? `stárnutí brzdí: <b>${lvlBottleneck[p.bottleneck]}</b> · ` : ""}${note || ""}</div></div>`;
     }
     function _lvlRender() {
-      const L = window._lvl, c = L.cfg, body = document.getElementById("lvl-body");
+      const L = window._lvl, body = document.getElementById("lvl-body");
       if (!L || !body) return;
+      const c = L.cfg;
       const plan = levelingPlan(L.farm, L.inputs, c);
       const bare = levelingPlan(L.farm, L.inputs, { ...c, ticked: [] });
       const cook = levelingPlan(L.farm, L.inputs, { ...c, ticked: [], fish: { ...c.fish, age: false, eatRaw: false } });
@@ -25283,6 +25292,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           <label>Cíl A<select onchange="_lvlChange((c)=>{c.target.ascension=+this.value})">${Array.from({ length: 10 }, (_, i) => `<option${sel(i + 1, c.target.ascension)}>${i + 1}</option>`).join("")}</select></label>
           <label>level <select onchange="_lvlChange((c)=>{c.target.level=+this.value})">${Array.from({ length: 50 }, (_, i) => `<option${sel(i + 1, c.target.level)}>${i + 1}</option>`).join("")}</select></label>
           <label>restartů za den <input type="number" min="1" max="48" value="${c.restarts}" style="width:52px" onchange="_lvlChange((c)=>{c.restarts=+this.value})"></label>
+          <label title="Zapnuto: NFT po dosažení cíle prodáš a počítá se jen ztráta (cena − nejvyšší nabídka). Vypnuto: počítá se celá cena."><input type="checkbox"${chk(c.resell)} onchange="_lvlChange((c)=>{c.resell=this.checked})"> NFT po dosažení cíle prodám</label>
           <span style="color:var(--text-dim)">chybí ${lvlFmt(plan.needXp)} XP</span>
           <button class="refresh-btn" style="font-size:0.5rem" onclick="_lvlReset()">výchozí</button>
         </div>
@@ -25310,18 +25320,21 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       const pts = tickedSkillPoints(L.farm, c.ticked);
       const free = L.inputs.freePoints || 0;
       h += `<div class="pixel-panel" style="padding:12px 14px"><div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal)">CO NEMÁŠ A CO BY TO UDĚLALO</div>
-        <div style="font-size:0.52rem;color:var(--text-dim);line-height:1.6;margin:4px 0 8px">Dopad = co se změní, když položku zaškrtneš (nebo odškrtneš) k tomu, co je teď nastavené. FLOWER zahrnuje provoz až do cíle a ztrátu při pozdějším prodeji (cena − nejvyšší nabídka, bez nabídky 15 %). Zelená = ušetří.
+        <div style="font-size:0.52rem;color:var(--text-dim);line-height:1.6;margin:4px 0 8px">Dopad = co se změní, když položku zaškrtneš (nebo odškrtneš) k tomu, co je teď nastavené. <b>Provoz</b> = co ušetří (nebo přidá) vaření, pruty a hrábě až do cíle. <b>Čistě</b> = provoz + ${c.resell ? "ztráta při prodeji NFT po dosažení cíle (cena − nejvyšší nabídka, bez nabídky 15 %)" : "celá cena NFT (zaškrtni „NFT po dosažení cíle prodám“, pokud je pak prodáš)"}. Zelená = ušetří.
         ${pts ? ` Skilly zaškrtnuté za <b>${pts}</b> bodů, volných máš <b>${free}</b>${pts > free ? ` <span style="color:var(--red)">⚠ přes limit</span>` : ""}.` : ""}</div>
         <div style="overflow-x:auto"><table class="roi-table" style="width:100%;font-size:0.55rem;border-collapse:collapse">
-        <tr><th></th><th style="text-align:left">položka</th><th>cena</th><th>ztráta při prodeji</th><th>XP/den</th><th>dny</th><th>FLOWER</th><th>body</th></tr>`;
+        <tr><th></th><th style="text-align:left">položka</th><th>cena</th><th>ztráta při prodeji</th><th>XP/den</th><th>dny</th><th>provoz do cíle</th><th>čistě</th><th>body</th></tr>`;
       const key = (r) => (Number.isFinite(r.dFlower) ? r.dFlower : 0);
       for (const [g, label] of lvlGroups) {
         const rows = impacts.filter((r) => r.group === g).sort((a, b) => key(a) - key(b));
         if (!rows.length) continue;
-        h += `<tr><td colspan="8" class="pixel-font" style="padding-top:8px;color:var(--sunpetal)">${label}</td></tr>`;
+        h += `<tr><td colspan="9" class="pixel-font" style="padding-top:8px;color:var(--sunpetal)">${label}</td></tr>`;
         for (const r of rows) {
-          const save = Number.isFinite(r.dFlower) ? r.dFlower : null;
-          const col = save == null ? "" : save < 0 ? "color:var(--green)" : save > 0 ? "color:var(--red)" : "";
+          const money = (v) => (!Number.isFinite(v) ? "—" : v < 0 ? `ušetří ${lvlFmt(-v)}` : v > 0 ? `stojí ${lvlFmt(v)}` : "0");
+          const tint = (v) => (!Number.isFinite(v) ? "" : v < 0 ? "color:var(--green)" : v > 0 ? "color:var(--red)" : "");
+          // From "never" to a date: say so instead of a meaningless −∞.
+          const days = r.dDays === -Infinity ? `z nikdy na ${lvlDays(r.days)}` : r.dDays === Infinity ? "na nikdy"
+            : Number.isFinite(r.dDays) && Math.abs(r.dDays) >= 0.05 ? r.dDays.toFixed(1) : "0";
           const price = r.kind === "skill" ? "za body" : r.price > 0 ? `${lvlFmt(r.price)} ${sflIcon()}` : r.tradeable ? "—" : "nelze koupit";
           h += `<tr class="roi-row"${r.ticked ? ' style="background:rgba(120,200,120,0.08)"' : ""}>
             <td><input type="checkbox"${chk(r.ticked)} data-n="${escHTML(r.name)}" onchange="_lvlTick(this.dataset.n,this.checked)"></td>
@@ -25329,8 +25342,9 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
             <td style="text-align:right">${price}</td>
             <td style="text-align:right">${r.loss > 0 ? lvlFmt(r.loss) : "—"}</td>
             <td style="text-align:right">${r.dXpPerDay ? (r.dXpPerDay > 0 ? "+" : "") + lvlFmt(r.dXpPerDay) : "0"}</td>
-            <td style="text-align:right">${Number.isFinite(r.dDays) && Math.abs(r.dDays) >= 0.05 ? r.dDays.toFixed(1) : "0"}</td>
-            <td style="text-align:right;${col}">${save == null ? "—" : save < 0 ? `ušetří ${lvlFmt(-save)}` : save > 0 ? `stojí ${lvlFmt(save)}` : "0"}</td>
+            <td style="text-align:right">${days}</td>
+            <td style="text-align:right;${tint(r.dRunning)}">${money(r.dRunning)}</td>
+            <td style="text-align:right;${tint(r.dFlower)}"><b>${money(r.dFlower)}</b></td>
             <td style="text-align:right">${r.pointCost || ""}</td></tr>`;
         }
       }

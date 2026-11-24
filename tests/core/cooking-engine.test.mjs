@@ -105,3 +105,14 @@ test("raw fish are fish consumables: fish XP boosts reach them (FISH_CONSUMABLES
   assert.equal(isFishConsumable("Hammerhead shark"), true);
   assert.equal(isFishConsumable("Pizza Margherita"), false);
 });
+
+test("fishing skill ranks: Fishy Chance/Roll/Gamble and Fishy Feast scale with rank", async () => {
+  const { computeFishYieldPerCast } = await import("../../core/engine/cooking-cost.mjs");
+  const at = (skills) => ({ ...farm, collectibles: {}, bumpkin: { ...farm.bumpkin, skills }, buds: {} });
+  assert.ok(Math.abs(computeFishYieldPerCast(at({ "Fishy Chance": 3 }), "basic") - computeFishYieldPerCast(at({ "Fishy Chance": 1 }), "basic") - 0.05) < 1e-9);
+  assert.ok(Math.abs(computeFishYieldPerCast(at({ "Fishy Roll": 2 }), "advanced") - computeFishYieldPerCast(at({}), "advanced") - 0.125) < 1e-9);
+  assert.ok(Math.abs(computeFishYieldPerCast(at({ "Fishy Gamble": 3 }), "expert") - computeFishYieldPerCast(at({}), "expert") - 0.3) < 1e-9);
+  const feast = (r) => detectCookingBoosts(agingFarm({ skills: { "Fishy Feast": r } }), {}).xpBoosts.find((b) => /Fishy Feast/.test(b.name)).multiplier;
+  assert.equal(feast(1), 1.2);
+  assert.equal(feast(3), 1.4);
+});

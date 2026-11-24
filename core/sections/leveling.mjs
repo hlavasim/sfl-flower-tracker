@@ -91,7 +91,10 @@ const isFishItem = (n) => !!BASE[lc(n)];
 function plannable(r) {
   return r && r.time > 0 && !r.isInstant && r.cost > 0 && !r.hasUnpriced && !(r.items || []).some((i) => isFishItem(i.name));
 }
-function cooksPerDay(r, restarts, count) { return Math.min(86400 / r.time, restarts) * count; }
+// Visits are evenly spaced (24 h / restarts): a cook or an aging job waits for the visit after it
+// finishes, so it takes a whole number of gaps — a 6.2 h Pizza at 6 restarts is an 8 h cycle.
+const cycleHours = (hours, restarts) => { const gap = 24 / restarts; return Math.max(1, Math.ceil(hours / gap - 1e-9)) * gap; };
+function cooksPerDay(r, restarts, count) { return (24 / cycleHours(r.time / 3600, restarts)) * count; }
 function bestRecipe(b, restarts) {
   let best = null, bx = -1;
   for (const r of b.recipes || []) {
@@ -104,6 +107,24 @@ function bestRecipe(b, restarts) {
 
 function cookingFor(farm, inputs) {
   return buildCookingSection(farm, inputs.prices || {}, { coinsPerSFL: inputs.coinsPerSFL || 0, now: inputs.now });
+}
+/*
+ * The cooking section for a what-if farm, remembered per (farm, inputs, ticked set). Salt items and
+ * reel items change nothing it computes (no kitchen recipe uses Salt; reels are not in it), so they
+ * are left out of the key — the impacts table re-plans once per catalogue row, and this halves it.
+ * Fish-per-cast items stay in: they price the Fish Market baits some kitchen recipes use.
+ */
+const COOKING_NEUTRAL = new Set(LEVELING_ITEMS.filter((it) => it.group === "salt"
+  || /daily reels/.test(it.boost)).map((it) => it.name));
+const _ckCache = new WeakMap();
+function cookingForWhatIf(farm, inputs, ticked, w) {
+  let byInputs = _ckCache.get(farm);
+  if (!byInputs) _ckCache.set(farm, (byInputs = new WeakMap()));
+  let m = byInputs.get(inputs);
+  if (!m) byInputs.set(inputs, (m = new Map()));
+  const key = ticked.filter((n) => !COOKING_NEUTRAL.has(n)).sort().join("|");
+  if (!m.has(key)) m.set(key, cookingFor(w, inputs));
+  return m.get(key);
 }
 
 /** Starting point: end of A5, 6 restarts, every placed kitchen but the Smoothie Shack on its best recipe. */
@@ -119,7 +140,7 @@ export function defaultLevelingConfig(farm, inputs = {}) {
   return {
     target: { ascension: 5, level: 50 }, restarts: 6, buildings,
     fish: { age: !!ck.buildings["Aging Shed"], eatRaw: true, reels: dailyFishingLimit(farm), baits: false },
-    ticked: [],
+    ticked: [], resell: false,
   };
 }
 
@@ -128,7 +149,7 @@ function itemPrice(it, inputs) {
   const floor = it.kind === "bud" ? (inputs.budFloors || {})[it.budType] : (inputs.floors || {})[it.name];
   if (!(floor > 0)) return { price: null, loss: 0 };
   const bid = (inputs.bids || {})[it.name];
-  return { price: floor, loss: floor - (bid > 0 && bid < floor ? bid : floor * (1 - NO_BID_LOSS)) };
+  return { price: floor, loss: bid > 0 ? Math.max(0, floor - bid) : floor * NO_BID_LOSS };
 }
 
 /** Greedy aging: fill salt and slot-hours with the best fish; tried in two orders, the better kept. */
@@ -138,7 +159,7 @@ function ageGreedy(rows, salt, slotHours, gap) {
     const taken = new Map();
     for (const r of [...rows].sort((a, b) => key(b) - key(a))) {
       if (!(r.gain > 0)) continue;
-      const occ = Math.max(r.hours, gap);
+      const occ = cycleHours(r.hours, 24 / gap);
       const n = Math.max(0, Math.min(r.n, occ > 0 ? sh / occ : Infinity, r.salt > 0 ? sl / r.salt : Infinity));
       if (!(n > 0)) continue;
       taken.set(r, n); gain += n * r.gain; used += n * r.salt;
@@ -147,7 +168,7 @@ function ageGreedy(rows, salt, slotHours, gap) {
     return { gain, used, saltLeft: sl, slotLeft: sh, taken };
   };
   const bySalt = run((r) => r.gain / Math.max(r.salt, 1e-9));
-  const bySlot = run((r) => r.gain / Math.max(r.hours, gap, 1e-9));
+  const bySlot = run((r) => r.gain / cycleHours(r.hours, 24 / gap));
   return bySlot.gain > bySalt.gain ? bySlot : bySalt;
 }
 
@@ -156,7 +177,7 @@ export function levelingPlan(farm, inputs, config) {
   const owned = ownedLevelingItems(farm);
   const ticked = (config.ticked || []).filter((n) => LEVELING_ITEM_BY_NAME[n] && !owned.has(n));
   const w = applyWhatIf(farm, ticked);
-  const ck = cookingFor(w, inputs);
+  const ck = cookingForWhatIf(farm, inputs, ticked, w);
   const restarts = Math.max(1, config.restarts || 1);
   const skills = (w.bumpkin && w.bumpkin.skills) || {};
 
@@ -182,8 +203,10 @@ export function levelingPlan(farm, inputs, config) {
 
   // ── fish ──
   const fishCfg = config.fish || {};
-  const fishing = !!(fishCfg.age || fishCfg.eatRaw) && (fishCfg.reels || 0) > 0;
   const mix = catchMix(farm);
+  const shedPlaced = !!ck.buildings["Aging Shed"];
+  // Cast only when a fish can give XP: a catch history to go by, and eating raw or a shed to age in.
+  const fishing = Object.keys(mix.share).length > 0 && (fishCfg.eatRaw || (fishCfg.age && shedPlaced)) && (fishCfg.reels || 0) > 0;
   const boosts = detectCookingBoosts(w, { now: inputs.now });
   const rawXp = (name) => computeFoodXP(name, { xp: BASE[lc(name)] || 0 }, null, boosts);
   const aged = Object.fromEntries(((ck.buildings["Aging Shed"] || {}).recipes || [])
@@ -212,13 +235,14 @@ export function levelingPlan(farm, inputs, config) {
   });
   const avgRaw = rows.reduce((a, r) => a + (fishPerDay > 0 ? r.raw * r.n / fishPerDay : 0), 0);
 
+  const fishRoute = (useBaits) => {
   let saltPerDay = 0, rakeCost = 0, ag = { gain: 0, used: 0, saltLeft: 0, slotLeft: 0, taken: new Map() }, baitsPerDay = 0;
   if (fishing && fishCfg.age && slots > 0) {
-    const s = sideSaltNow({ farm: w, prices: inputs.prices || {}, coinsPerSFL: inputs.coinsPerSFL || 0, isActive: (n) => hasItem(w, n) });
+    const s = sideSaltNow({ farm: w, prices: inputs.prices || {}, coinsPerSFL: inputs.coinsPerSFL || 0, isActive: (n) => hasItem(w, n), activity: inputs.activity || null });
     saltPerDay = (s.harvests || 0) * ((s.p && s.p.yieldPerRake) || 0);
     rakeCost = s.cost || 0;
     const cand = rows.filter((r) => r.agedXp > 0);
-    if (fishCfg.baits) {
+    if (useBaits) {
       // A bait forces its best fish; it costs its recipe's fish (their raw XP) and one cast's catch.
       const season = lc((farm.season && farm.season.season) || "summer");
       const bubble = hasItem(w, "Bubble Aura") ? BUBBLE_AURA_BAIT : 1;
@@ -267,15 +291,21 @@ export function levelingPlan(farm, inputs, config) {
       taken.set(r, n * f);
     }
   }
-  let agedN = 0, agingXp = 0, baitInputN = 0, saltUsed = 0;
+  let agedN = 0, agingXp = 0, baitInputN = 0, saltUsed = 0, slotUsed = 0;
   baitsPerDay = 0;
-  for (const [r, n] of taken) { agedN += n; agingXp += n * r.agedXp; saltUsed += n * r.salt; if (r.bait) baitsPerDay += n; }
+  for (const [r, n] of taken) { agedN += n; agingXp += n * r.agedXp; saltUsed += n * r.salt; slotUsed += n * cycleHours(r.hours, restarts); if (r.bait) baitsPerDay += n; }
   for (const n of spent.values()) baitInputN += n;
   let rawEaten = 0, eatenN = 0;
   for (const r of rows) {
     const left = Math.max(0, r.n * scale - (taken.get(r) || 0) - (spent.get(r) || 0));
     eatenN += left; rawEaten += left * r.raw;
   }
+  return { saltPerDay, rakeCost, agedN, agingXp, baitInputN, saltUsed, slotUsed, baitsPerDay, rawEaten, eatenN };
+  };
+  // Baits are a choice: use them only when they make the day better.
+  const plain = fishRoute(false), baited = fishCfg.baits ? fishRoute(true) : null;
+  const fr = baited && baited.agingXp + baited.rawEaten > plain.agingXp + plain.rawEaten ? baited : plain;
+  const { saltPerDay, rakeCost, agedN, agingXp, baitInputN, saltUsed, slotUsed, baitsPerDay, rawEaten, eatenN } = fr;
   const xpPerDay = { kitchens: kXp, aging: agingXp, raw: rawEaten };
   xpPerDay.total = kXp + agingXp + rawEaten;
 
@@ -289,12 +319,16 @@ export function levelingPlan(farm, inputs, config) {
   for (const n of ticked) { const p = itemPrice(LEVELING_ITEM_BY_NAME[n], inputs); nftCost += p.price || 0; resaleLoss += p.loss; }
 
   const days = needXp <= 0 ? 0 : xpPerDay.total > 0 ? needXp / xpPerDay.total : Infinity;
-  const totalFlower = days === 0 ? 0 : days === Infinity ? Infinity : costPerDay * days + resaleLoss;
+  // Running cost to the target, plus the NFTs: their full price, or only the resale loss when the
+  // owner sells them once the target is reached (config.resell).
+  const runningFlower = days === 0 ? 0 : days === Infinity ? Infinity : costPerDay * days;
+  const totalFlower = days === 0 ? 0 : runningFlower + (config.resell ? resaleLoss : nftCost);
+  const slotCap = slots * 24 * ager;
   const bottleneck = !(fishing && fishCfg.age && slots > 0) ? null
-    : ag.saltLeft <= saltPerDay * 0.01 ? "salt" : ag.slotLeft <= slots * 24 * ager * 0.01 ? "slots" : "fish";
+    : saltUsed >= saltPerDay * 0.99 ? "salt" : slotUsed >= slotCap * 0.99 ? "slots" : "fish";
 
   return {
-    needXp, bankedXp, xpPerDay, costPerDay, days, totalFlower, nftCost, resaleLoss, bottleneck, buildings,
+    needXp, bankedXp, xpPerDay, costPerDay, days, runningFlower, totalFlower, nftCost, resaleLoss, bottleneck, buildings,
     fish: { perDay: fishPerDay * (reels > 0 ? Math.max(0, (reels - baitsPerDay) / reels) : 0), fishPerCast, aged: agedN, agedCaughtN: agedN - baitsPerDay, eatenN, baitInputN,
       saltUsed, saltPerDay, baitsPerDay, slots },
   };
@@ -311,6 +345,8 @@ function pointCost(farm, it) {
   return pts;
 }
 
+// Never NaN: never → never is no change; never → a number is −Infinity (the page says "z nikdy").
+const diff = (a, b) => (a === b ? 0 : a - b);
 /** Every catalogue row the farm does not have: what toggling it (alone) does to the plan. */
 export function itemImpacts(farm, inputs, config) {
   const owned = ownedLevelingItems(farm);
@@ -325,8 +361,10 @@ export function itemImpacts(farm, inputs, config) {
       name: it.name, group: it.group, kind: it.kind, boost: it.boost, tradeable: it.tradeable,
       price: p.price, loss: p.loss, ticked: on,
       dXpPerDay: withIt.xpPerDay.total - without.xpPerDay.total,
-      dDays: withIt.days - without.days,
-      dFlower: withIt.totalFlower - without.totalFlower,
+      days: withIt.days, baseDays: without.days,
+      dDays: diff(withIt.days, without.days),
+      dRunning: diff(withIt.runningFlower, without.runningFlower),
+      dFlower: diff(withIt.totalFlower, without.totalFlower),
       ...(it.kind === "skill" ? { pointCost: pointCost(farm, it) } : {}),
     };
   });
@@ -380,6 +418,7 @@ export function sanitizeLevelingConfig(raw, defaults, recipeOptions) {
   }
   const f = raw.fish || {};
   for (const k of ["age", "eatRaw", "baits"]) if (typeof f[k] === "boolean") out.fish[k] = f[k];
+  out.resell = typeof raw.resell === "boolean" ? raw.resell : !!d.resell;
   out.fish.reels = clamp(f.reels, 0, 500, d.fish.reels);
   return out;
 }
@@ -392,4 +431,12 @@ export function tickedSkillPoints(farm, ticked) {
     if (it && it.kind === "skill" && !(top[it.skill] && top[it.skill].rank >= it.rank)) top[it.skill] = it;
   }
   return Object.values(top).reduce((a, it) => a + pointCost(farm, it), 0);
+}
+
+/** The page's start: defaults, the stored config made safe, and recipe options at ITS restarts. */
+export function levelingInit(farm, inputs, saved) {
+  const def = defaultLevelingConfig(farm, inputs);
+  const first = sanitizeLevelingConfig(saved, def, null);
+  const options = levelingRecipeOptions(farm, inputs, first.restarts);
+  return { def, options, cfg: sanitizeLevelingConfig(saved, def, options) };
 }

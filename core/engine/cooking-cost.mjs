@@ -43,11 +43,11 @@ export function computeFishYieldPerCast(farm, tier) {
   // Tier-specific chance boosts (expected value)
   if (tier === "basic") {
     if (has("Alba")) y += 0.5;                 // 50% chance +1 basic
-    if (skills["Fishy Chance"]) y += 0.10;     // 10% chance +1 basic
+    if (skills["Fishy Chance"]) y += [0.10, 0.125, 0.15][Math.min(_rankOf(skills["Fishy Chance"]), 3) - 1];   // rank 1/2/3 (bumpkinSkills.ts)
   } else if (tier === "advanced") {
-    if (skills["Fishy Roll"]) y += 0.10;       // 10% chance +1 advanced
+    if (skills["Fishy Roll"]) y += [0.10, 0.125, 0.15][Math.min(_rankOf(skills["Fishy Roll"]), 3) - 1];   // rank 1/2/3 (bumpkinSkills.ts)
   } else if (tier === "expert") {
-    if (skills["Fishy Gamble"]) y += 0.20;     // 20% chance +1 expert
+    if (skills["Fishy Gamble"]) y += [0.20, 0.25, 0.30][Math.min(_rankOf(skills["Fishy Gamble"]), 3) - 1];   // rank 1/2/3 (bumpkinSkills.ts)
   }
   return y;
 }

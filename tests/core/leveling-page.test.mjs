@@ -23,3 +23,15 @@ test("what the owner clicks is stored under sfl_leveling and synced through farm
 test("the skill-point total comes from tickedSkillPoints (each skill once)", () => {
   assert.match(SRC, /const pts = tickedSkillPoints\(L\.farm, c\.ticked\);/);
 });
+
+test("the page starts from levelingInit and offers the resell switch", () => {
+  assert.match(SRC, /\.\.\.levelingInit\(farm, inputs, saved\)/);
+  assert.match(SRC, /c\.resell=this\.checked/);
+  assert.match(SRC, /money\(r\.dRunning\)/);
+});
+
+test("the page sends the recorded weeks so salt follows the measured harvests", () => {
+  const api = readFileSync(new URL("../../api/compute.mjs", import.meta.url), "utf8");
+  assert.match(api, /activity: lvActivity/);
+  assert.match(SRC, /section=leveling`, \{ method: "POST"/);
+});

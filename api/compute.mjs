@@ -736,7 +736,12 @@ async function _handler(req, res) {
       const ps = buildPowerSection(farm, p2p, nftResult.ok ? nftResult.data : {}, exchange, settings);
       const floors = {};
       for (const it of ps.boostItems || []) if (it.floor > 0) floors[it.name] = it.floor;
-      const inputs = { prices: p2p, coinsPerSFL, floors, bids: {}, budFloors: {},
+      // Optional POST body { weeks } (as for tickets): salt then follows the measured harvests.
+      const lvBody = _parseBody(req.body);
+      const lvWeeks = Array.isArray(lvBody.weeks) ? lvBody.weeks.slice(0, 200) : [];
+      const lvMeasured = lvWeeks.length ? measuredActivity(lvWeeks) : null;
+      const lvActivity = lvMeasured && lvMeasured.saltHarvests > 0 ? { saltHarvests: lvMeasured.saltHarvests } : null;
+      const inputs = { prices: p2p, coinsPerSFL, floors, bids: {}, budFloors: {}, activity: lvActivity,
         freePoints: (ps.skillCostInfo && ps.skillCostInfo.freePoints) || 0, now: Date.now() };
       const config = defaultLevelingConfig(farm, inputs);
       data = { inputs, config, plan: levelingPlan(farm, inputs, config), impacts: itemImpacts(farm, inputs, config) };

@@ -153,8 +153,9 @@ test("a reel item adds its reels on top of the configured reels", () => {
   assert.ok(Math.abs((b.fish.perDay - a.fish.perDay) - 5 * a.fish.fishPerCast) < 1e-6);
 });
 
-test("a bait is not starved by aging its own input fish (2 restarts, slot-bound)", () => {
-  const p = plan(cfg({ restarts: 2, fish: { ...cfg().fish, baits: true } }));
+test("a bait is not starved by aging its own input fish (1 restart, slot-bound)", () => {
+  // With visits evenly spaced every fish holds a slot for whole gaps; at 1 restart the big fish pay.
+  const p = plan(cfg({ restarts: 1, fish: { ...cfg().fish, baits: true } }));
   assert.ok(p.fish.baitsPerDay > 0, JSON.stringify(p.fish));
 });
 
@@ -219,4 +220,83 @@ test("tickedSkillPoints counts each skill once, at its highest ticked rank", asy
   assert.ok(one > 0);
   assert.equal(tickedSkillPoints(farm, ["Ager 2", "Ager 3"]), one);
   assert.equal(tickedSkillPoints(farm, ["Walrus"]), 0);
+});
+
+// ── review follow-ups ──
+import { buildCookingSection as _bcs } from "../../core/sections/cooking.mjs";
+
+test("cooks a day follow the visits: a 6.2 h Pizza at 6 evenly spaced restarts cooks 3 times (8 h cycle)", () => {
+  const fp = plan(cfg({ restarts: 6 })).buildings.find((b) => b.name === "Fire Pit");
+  assert.equal(fp.recipe, "Pizza Margherita");
+  assert.ok(Math.abs(fp.cooksPerDay - 3) < 1e-9, String(fp.cooksPerDay));
+});
+
+test("Double Nom: a cook costs two ingredient sets", () => {
+  const fp = plan(cfg()).buildings.find((b) => b.name === "Fire Pit");
+  const r = _bcs(farm, prices, { coinsPerSFL: 1192, now: NOW }).buildings["Fire Pit"].recipes.find((x) => x.name === fp.recipe);
+  assert.ok(Math.abs(fp.costPerDay / fp.cooksPerDay - 2 * r.cost) < 1e-9);
+});
+
+test("measured salt harvests drive salt a day (capped at 2× the theory)", () => {
+  const a = plan(cfg());
+  const b = levelingPlan(farm, { ...inputs, activity: { saltHarvests: 1e6 } }, cfg());
+  assert.ok(Math.abs(b.fish.saltPerDay / a.fish.saltPerDay - 2) < 1e-6);
+});
+
+test("baits never make the plan worse", () => {
+  for (const restarts of [1, 2, 6, 24]) {
+    const c = cfg({ restarts });
+    assert.ok(plan({ ...c, fish: { ...c.fish, baits: true } }).xpPerDay.total >= plan(c).xpPerDay.total - 1e-6, `restarts ${restarts}`);
+  }
+});
+
+test("bottleneck matches what was used: 'salt' only when the salt is used up", () => {
+  for (const restarts of [1, 6, 24]) for (const baits of [false, true]) {
+    const c = cfg({ restarts }), p = plan({ ...c, fish: { ...c.fish, baits } });
+    if (p.bottleneck === "salt") assert.ok(p.fish.saltUsed >= p.fish.saltPerDay * 0.99, `${restarts}/${baits}`);
+  }
+});
+
+test("no catch history: fishing charges no casts", () => {
+  const f = JSON.parse(JSON.stringify(farm));
+  for (const k of Object.keys(f.farmActivity)) if (k.endsWith(" Caught")) delete f.farmActivity[k];
+  const c = defaultLevelingConfig(f, inputs), p = levelingPlan(f, inputs, c);
+  const kitchens = p.buildings.reduce((a, b) => a + b.costPerDay, 0);
+  assert.ok(Math.abs(p.costPerDay - kitchens) < 1e-9);
+});
+
+test("a bid at or above the floor means nothing lost reselling", () => {
+  const p = levelingPlan(farm, { ...inputs, bids: { Walrus: 1500 } }, cfg({ ticked: ["Walrus"], resell: true }));
+  assert.equal(p.resaleLoss, 0);
+});
+
+test("NFTs: the full price counts unless resold at the target", () => {
+  const keep = plan(cfg({ ticked: ["Walrus"] })), sell = plan(cfg({ ticked: ["Walrus"], resell: true }));
+  assert.ok(Math.abs((keep.totalFlower - keep.runningFlower) - 1399) < 1e-9);
+  assert.ok(Math.abs((sell.totalFlower - sell.runningFlower) - (1399 - 1155)) < 1e-9);
+  const row = itemImpacts(farm, inputs, cfg()).find((r) => r.name === "Walrus");
+  assert.ok(Math.abs(row.dFlower - (row.dRunning + 1399)) < 1e-6);
+});
+
+test("impacts stay numbers when the plan never reaches the target", () => {
+  const c = cfg();
+  const off = { ...c, buildings: Object.fromEntries(Object.entries(c.buildings).map(([k, v]) => [k, { ...v, on: false }])), fish: { ...c.fish, age: false, eatRaw: false } };
+  for (const r of itemImpacts(farm, inputs, off)) {
+    assert.equal(r.baseDays, Infinity);
+    assert.ok(!Number.isNaN(r.dDays) && !Number.isNaN(r.dFlower), r.name);
+  }
+});
+
+test("levelingInit clamps the stored restarts before the recipe options are built", async () => {
+  const { levelingInit, levelingRecipeOptions } = await import("../../core/sections/leveling.mjs");
+  const s = levelingInit(farm, inputs, { restarts: 500 });
+  assert.equal(s.cfg.restarts, 48);
+  assert.deepEqual(s.options, levelingRecipeOptions(farm, inputs, 48));
+});
+
+test("fishing skill rank-ups are in the catalogue and move the plan", () => {
+  for (const n of ["Fishy Chance 3", "Fishy Roll 2", "Fishy Gamble 3", "Fishy Feast 3"]) assert.ok(LEVELING_ITEMS.some((i) => i.name === n), n);
+  const f = { ...farm, bumpkin: { ...farm.bumpkin, skills: { ...farm.bumpkin.skills, "Fishy Feast": 1 } } };
+  const c = defaultLevelingConfig(f, inputs);
+  assert.ok(levelingPlan(f, inputs, { ...c, ticked: ["Fishy Feast 3"] }).xpPerDay.aging > levelingPlan(f, inputs, c).xpPerDay.aging);
 });

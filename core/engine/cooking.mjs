@@ -172,7 +172,7 @@ export function detectCookingBoosts(farm, settings = {}) {
   // Fish XP boosts — every FISH consumable (fish dishes and instant fish recipes as well as
   // Aged / Prime Aged fish): boosts.ts:320-328 (topper), :355-367 (Shrimpy, Fishy Feast).
   if (hasItem(farm, "Skill Shrimpy")) xpBoosts.push({ name: "Skill Shrimpy (+20% Fish XP)", multiplier: 1.20, fishOnly: true });
-  if (skills["Fishy Feast"]) xpBoosts.push({ name: "Fishy Feast (+20% Fish XP)", multiplier: 1.20, fishOnly: true });
+  if (skills["Fishy Feast"]) { const m = [1.2, 1.3, 1.4][_rank(skills["Fishy Feast"]) - 1]; xpBoosts.push({ name: `Fishy Feast (+${Math.round((m - 1) * 100)}% Fish XP)`, multiplier: m, fishOnly: true }); }
   // Marine Marvel Master milestone wearable. The game applies it to FISH_CONSUMABLES
   // (Aged + Prime Aged included) but only while WORN — hasItem's equipped check
   // (bumpkin or farm hand) is exactly isWearableActive; wardrobe ownership is not.
