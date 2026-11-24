@@ -64,3 +64,37 @@ test("topper merely owned in the wardrobe does NOT count", () => {
   assert.ok(!b.xpBoosts.some((x) => x.name.includes("Anglerfish")),
     "unworn topper must not boost");
 });
+
+// ── Aging Shed gaps (agingFormulas.ts getPrimeAgedChance / getBoostedAgingTimeMs, boosts.ts:328) ──
+import { getAgingPrimeChance } from "../../core/engine/cooking.mjs";
+const agingFarm = (extra = {}) => {
+  const f = JSON.parse(JSON.stringify(farm));
+  f.collectibles = { ...(f.collectibles || {}), ...(extra.collectibles || {}) };
+  f.bumpkin.skills = { ...f.bumpkin.skills, "Fish Smoking": 1, ...(extra.skills || {}) };
+  if (extra.equip) f.bumpkin.equipped = { ...f.bumpkin.equipped, ...extra.equip };
+  return f;
+};
+const placed = [{ coordinates: { x: 0, y: 0 }, id: "t", createdAt: 0, readyAt: 0 }];
+
+test("aging prime chance counts Winged Vase and Fish Smoking rank", () => {
+  // Fish Smoking rank 1 (x2 → 20 %) + Salt Sculpture level 6 (+4) = 24 %
+  assert.ok(Math.abs(getAgingPrimeChance(agingFarm()) - 0.24) < 1e-9);
+  assert.ok(Math.abs(getAgingPrimeChance(agingFarm({ collectibles: { "Winged Vase": placed } })) - 0.38) < 1e-9);
+  assert.ok(Math.abs(getAgingPrimeChance(agingFarm({ skills: { "Fish Smoking": 2 } })) - 0.34) < 1e-9);
+});
+
+test("Astrolabe adds 5 % to aged fish only", () => {
+  const r = { xp: 1000, building: "Aging Shed" };
+  const base = detectCookingBoosts(agingFarm(), {});
+  const astro = detectCookingBoosts(agingFarm({ collectibles: { Astrolabe: placed } }), {});
+  const aged = (b) => computeFoodXP("Aged Tuna", r, "Aging Shed", b);
+  assert.ok(Math.abs(aged(astro) / aged(base) - 1.05) < 1e-9);
+  assert.equal(computeFoodXP("Fish Burger", r, "Kitchen", astro), computeFoodXP("Fish Burger", r, "Kitchen", base));
+});
+
+test("Fish Trap and Speedy Aging rank shorten aging time", () => {
+  const t = (f) => computeCookTime(3600, "Aging Shed", detectCookingBoosts(f, {}), undefined, "Aged Tuna");
+  const base = t(agingFarm({ skills: { "Speedy Aging": 1 } }));
+  assert.ok(Math.abs(t(agingFarm({ skills: { "Speedy Aging": 1 }, equip: { wings: "Fish Trap" } })) / base - 0.8) < 1e-9);
+  assert.ok(Math.abs(t(agingFarm({ skills: { "Speedy Aging": 3 } })) / base - 0.8 / 0.9) < 1e-9);
+});

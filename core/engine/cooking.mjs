@@ -6,15 +6,19 @@ import {
 } from "../data/cooking.mjs";
 
 const AGING_PRIME_BASE = 0.10, AGING_PRIME_MULT = 1.3;   // from flowers.html:4861
+// A skill's rank (1-3): the farm stores the rank as a number, older farms `true`.
+const _rank = (v) => { const n = Number(v); return n > 0 ? Math.min(3, n) : (v ? 1 : 0); };
 
 // Per-farm prime-aged chance (0..1). Mirrors getPrimeAgedChance in the SFL repo.
 export function getAgingPrimeChance(farm) {
   const skills = farm?.bumpkin?.skills || {};
   const saltSculptLvl = farm?.sculptures?.["Salt Sculpture"]?.level || 0;
   let chance = AGING_PRIME_BASE * 100;  // percent
-  if (skills["Fish Smoking"]) chance *= 2;       // ×2  → 20
+  const smoking = _rank(skills["Fish Smoking"]);
+  if (smoking) chance *= [2, 3, 4][smoking - 1];  // Fish Smoking ×2/×3/×4 by rank → 20/30/40
   if (saltSculptLvl >= 2) chance += 4;            // +4% → 14 / 24
-  return chance / 100;
+  if (findCollectible(farm || {}, "Winged Vase").length > 0) chance += 14;   // agingFormulas.ts getPrimeAgedChance
+  return Math.min(100, chance) / 100;
 }
 export function getAgingPrimeFactor(farm) {
   return 1 + getAgingPrimeChance(farm) * (AGING_PRIME_MULT - 1);
@@ -144,7 +148,9 @@ export function detectCookingBoosts(farm, settings = {}) {
   const sculptures = farm.sculptures || {};
   const saltSculptLvl = sculptures["Salt Sculpture"]?.level || 0;
   // Time
-  if (skills["Speedy Aging"]) timeBoosts.push({ name: "Speedy Aging", multiplier: 0.9, buildings: ["Aging Shed"] });
+  // Speedy Aging ×0.9/0.85/0.8 by rank; Fish Trap worn ×0.8 (agingFormulas.ts getBoostedAgingTimeMs).
+  if (skills["Speedy Aging"]) timeBoosts.push({ name: "Speedy Aging", multiplier: [0.9, 0.85, 0.8][_rank(skills["Speedy Aging"]) - 1], buildings: ["Aging Shed"] });
+  if (hasItem(farm, "Fish Trap")) timeBoosts.push({ name: "Fish Trap", multiplier: 0.8, buildings: ["Aging Shed"] });
   if (saltSculptLvl >= 5) timeBoosts.push({ name: "Salt Sculpture L5+", multiplier: 0.95, buildings: ["Aging Shed"] });
   // Prime Aged weighted average. Base 10% chance of prime (×1.3 XP) → factor 1.03.
   // Fish Smoking doubles the chance (→ 20%); Salt Sculpture L2+ adds +4% (→ 14/24%).
@@ -169,6 +175,8 @@ export function detectCookingBoosts(farm, settings = {}) {
   // (Aged + Prime Aged included) but only while WORN — hasItem's equipped check
   // (bumpkin or farm hand) is exactly isWearableActive; wardrobe ownership is not.
   if (hasItem(farm, "Luminous Anglerfish Topper")) xpBoosts.push({ name: "Luminous Anglerfish Topper (+50% Fish XP)", multiplier: 1.5, fishOnly: true });
+  // Astrolabe placed: ×1.05 on Aged / Prime Aged fish only (boosts.ts:327-333).
+  if (findCollectible(farm, "Astrolabe").length > 0) xpBoosts.push({ name: "Astrolabe (+5% Aged Fish XP)", multiplier: 1.05, agedOnly: true });
   // Salt yield & rake-cost (informational — affect salt cost rather than recipe XP/time)
   if (skills["Wide Rakes"]) xpBoosts.push({ name: "Wide Rakes (+2 salt/rake)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
   if (skills["Cheap Rakes"]) xpBoosts.push({ name: "Cheap Rakes (-20% rake coin cost)", multiplier: 1, buildings: ["Aging Shed"], salt: true });
@@ -214,6 +222,7 @@ function cookBoostApplies(b, foodName, food, buildingName) {
   if (b.honeyOnly && !(food && food.usesHoney)) return false;
   if (b.foods && !(foodName && b.foods.includes(foodName))) return false;
   if (b.fishOnly && !(foodName && isFishConsumable(foodName))) return false;
+  if (b.agedOnly && !(foodName && /^(Prime )?Aged /.test(foodName))) return false;
   return true;
 }
 
