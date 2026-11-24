@@ -25307,7 +25307,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         ${_lvlCard("BEZ NÁKUPŮ", bare, "tvoje nastavení, nic nového")}
         ${_lvlCard("TVOJE VOLBA", plan, c.ticked.length ? `${c.ticked.length} zaškrtnutých` : "nic nezaškrtnuto")}</div>`;
       // The catalogue: what each thing you do not have would do, best saving first.
-      const pts = impacts.filter((r) => r.ticked && r.pointCost).reduce((a, r) => a + r.pointCost, 0);
+      const pts = tickedSkillPoints(L.farm, c.ticked);
       const free = L.inputs.freePoints || 0;
       h += `<div class="pixel-panel" style="padding:12px 14px"><div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal)">CO NEMÁŠ A CO BY TO UDĚLALO</div>
         <div style="font-size:0.52rem;color:var(--text-dim);line-height:1.6;margin:4px 0 8px">Dopad = co se změní, když položku zaškrtneš (nebo odškrtneš) k tomu, co je teď nastavené. FLOWER zahrnuje provoz až do cíle a ztrátu při pozdějším prodeji (cena − nejvyšší nabídka, bez nabídky 15 %). Zelená = ušetří.

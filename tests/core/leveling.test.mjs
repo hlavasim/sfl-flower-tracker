@@ -101,8 +101,9 @@ test("slots: 1 restart a day ages fewer fish than 12", () => {
   assert.ok(plan(cfg({ restarts: 1 })).fish.aged < plan(cfg({ restarts: 12 })).fish.aged);
 });
 
-test("Walrus adds fish without adding running cost", () => {
-  const c = cfg(), a = plan(c), b = plan({ ...c, ticked: ["Walrus"] });
+test("Walrus adds fish without adding running cost (casts are paid per cast, not per fish)", () => {
+  // Raw eating only: with aging on, more fish may rightly mean more salt raked.
+  const c0 = cfg(), c = { ...c0, fish: { ...c0.fish, age: false } }, a = plan(c), b = plan({ ...c, ticked: ["Walrus"] });
   assert.ok(b.fish.perDay > a.fish.perDay + c.fish.reels * 0.99);
   assert.ok(Math.abs(b.costPerDay - a.costPerDay) < 1e-9);
   assert.ok(Math.abs(b.resaleLoss - (1399 - 1155)) < 1e-9);
@@ -202,4 +203,20 @@ test("sanitizeLevelingConfig drops stale names and clamps numbers", async () => 
   assert.equal(sanitizeLevelingConfig({ buildings: { Kitchen: { on: true, recipe: kitchen } } }, def, opts).buildings.Kitchen.recipe, kitchen);
   assert.deepEqual(sanitizeLevelingConfig(null, def, opts), def);
   assert.deepEqual(sanitizeLevelingConfig("garbage", def, opts), def);
+});
+
+test("rakes are charged only for the salt aging uses: a salt boost never costs FLOWER a day when slots are the limit", () => {
+  const c = cfg({ restarts: 6 });
+  const a = plan(c);
+  assert.equal(a.bottleneck, "slots");
+  const b = plan({ ...c, ticked: ["Salt Worker Gnome"] });
+  assert.ok(b.costPerDay <= a.costPerDay + 1e-9, `${b.costPerDay} > ${a.costPerDay}`);
+});
+
+test("tickedSkillPoints counts each skill once, at its highest ticked rank", async () => {
+  const { tickedSkillPoints } = await import("../../core/sections/leveling.mjs");
+  const one = tickedSkillPoints(farm, ["Ager 3"]);
+  assert.ok(one > 0);
+  assert.equal(tickedSkillPoints(farm, ["Ager 2", "Ager 3"]), one);
+  assert.equal(tickedSkillPoints(farm, ["Walrus"]), 0);
 });

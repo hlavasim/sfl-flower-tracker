@@ -267,9 +267,9 @@ export function levelingPlan(farm, inputs, config) {
       taken.set(r, n * f);
     }
   }
-  let agedN = 0, agingXp = 0, baitInputN = 0;
+  let agedN = 0, agingXp = 0, baitInputN = 0, saltUsed = 0;
   baitsPerDay = 0;
-  for (const [r, n] of taken) { agedN += n; agingXp += n * r.agedXp; if (r.bait) baitsPerDay += n; }
+  for (const [r, n] of taken) { agedN += n; agingXp += n * r.agedXp; saltUsed += n * r.salt; if (r.bait) baitsPerDay += n; }
   for (const n of spent.values()) baitInputN += n;
   let rawEaten = 0, eatenN = 0;
   for (const r of rows) {
@@ -280,7 +280,9 @@ export function levelingPlan(farm, inputs, config) {
   xpPerDay.total = kXp + agingXp + rawEaten;
 
   const castCost = computeRodCostSFL(inputs.prices || {}, inputs.coinsPerSFL || 0, skills) + computeBaitCostSFL("Earthworm", inputs.prices || {});
-  const costPerDay = kCost + reels * castCost + (fishing && fishCfg.age && slots > 0 ? rakeCost : 0);
+  // Rakes only for the salt the shed uses: salt the nodes could give beyond that is not raked.
+  const raked = saltPerDay > 0 ? Math.min(1, saltUsed / saltPerDay) : 0;
+  const costPerDay = kCost + reels * castCost + (fishing && fishCfg.age && slots > 0 ? rakeCost * raked : 0);
 
   // ── items bought ──
   let nftCost = 0, resaleLoss = 0;
@@ -294,7 +296,7 @@ export function levelingPlan(farm, inputs, config) {
   return {
     needXp, bankedXp, xpPerDay, costPerDay, days, totalFlower, nftCost, resaleLoss, bottleneck, buildings,
     fish: { perDay: fishPerDay * (reels > 0 ? Math.max(0, (reels - baitsPerDay) / reels) : 0), fishPerCast, aged: agedN, agedCaughtN: agedN - baitsPerDay, eatenN, baitInputN,
-      saltUsed: ag.used, saltPerDay, baitsPerDay, slots },
+      saltUsed, saltPerDay, baitsPerDay, slots },
   };
 }
 
@@ -380,4 +382,14 @@ export function sanitizeLevelingConfig(raw, defaults, recipeOptions) {
   for (const k of ["age", "eatRaw", "baits"]) if (typeof f[k] === "boolean") out.fish[k] = f[k];
   out.fish.reels = clamp(f.reels, 0, 500, d.fish.reels);
   return out;
+}
+
+/** Skill points the ticked skill rows cost together: each skill once, at its highest ticked rank. */
+export function tickedSkillPoints(farm, ticked) {
+  const top = {};
+  for (const n of ticked || []) {
+    const it = LEVELING_ITEM_BY_NAME[n];
+    if (it && it.kind === "skill" && !(top[it.skill] && top[it.skill].rank >= it.rank)) top[it.skill] = it;
+  }
+  return Object.values(top).reduce((a, it) => a + pointCost(farm, it), 0);
 }

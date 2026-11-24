@@ -19,3 +19,7 @@ test("what the owner clicks is stored under sfl_leveling and synced through farm
   assert.match(SRC, /localStorage\.setItem\("sfl_leveling"/);
   assert.match(SRC, /sanitizeLevelingConfig\(/);
 });
+
+test("the skill-point total comes from tickedSkillPoints (each skill once)", () => {
+  assert.match(SRC, /const pts = tickedSkillPoints\(L\.farm, c\.ticked\);/);
+});
