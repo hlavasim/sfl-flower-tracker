@@ -98,3 +98,10 @@ test("Fish Trap and Speedy Aging rank shorten aging time", () => {
   assert.ok(Math.abs(t(agingFarm({ skills: { "Speedy Aging": 1 }, equip: { wings: "Fish Trap" } })) / base - 0.8) < 1e-9);
   assert.ok(Math.abs(t(agingFarm({ skills: { "Speedy Aging": 3 } })) / base - 0.8 / 0.9) < 1e-9);
 });
+
+test("raw fish are fish consumables: fish XP boosts reach them (FISH_CONSUMABLES includes FISH)", async () => {
+  const { isFishConsumable } = await import("../../core/engine/cooking.mjs");
+  assert.equal(isFishConsumable("Tuna"), true);
+  assert.equal(isFishConsumable("Hammerhead shark"), true);
+  assert.equal(isFishConsumable("Pizza Margherita"), false);
+});

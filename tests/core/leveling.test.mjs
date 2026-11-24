@@ -58,3 +58,105 @@ test("ownedLevelingItems: the fixture has Skill Shrimpy and Wide Rakes, not Walr
 test("catalogue names are unique", () => {
   assert.equal(new Set(LEVELING_ITEMS.map((i) => i.name)).size, LEVELING_ITEMS.length);
 });
+
+// ── the plan model (core/sections/leveling.mjs) ──
+import { levelingPlan, defaultLevelingConfig, itemImpacts } from "../../core/sections/leveling.mjs";
+import { ascensionXpFor } from "../../core/engine/ascension.mjs";
+const prices = JSON.parse(readFileSync(new URL("../fixtures/p2p-prices.json", import.meta.url)));
+const NOW = Date.UTC(2026, 10, 24);
+const inputs = { prices, coinsPerSFL: 1192, floors: { Walrus: 1399, "Surfer Hair": 3279, "Salt Worker Gnome": 2799 }, bids: { Walrus: 1155 }, budFloors: { Port: 1700, Sea: 1650 }, freePoints: 3, now: NOW };
+const cfg = (over = {}) => ({ ...defaultLevelingConfig(farm, inputs), ...over });
+const plan = (c) => levelingPlan(farm, inputs, c);
+
+test("default config: target end of A5, Smoothie Shack off, every other building on, 6 restarts", () => {
+  const c = defaultLevelingConfig(farm, inputs);
+  assert.deepEqual(c.target, { ascension: 5, level: 50 });
+  assert.equal(c.restarts, 6);
+  assert.equal(c.buildings["Smoothie Shack"].on, false);
+  for (const b of ["Fire Pit", "Kitchen", "Bakery", "Deli"]) assert.equal(c.buildings[b].on, true, b);
+  assert.ok(c.fish.reels >= 20);
+});
+
+test("need XP = target − experience − banked food XP", () => {
+  const p = plan(cfg());
+  const expect = ascensionXpFor(5, 50) - farm.bumpkin.experience - p.bankedXp;
+  assert.ok(Math.abs(p.needXp - expect) < 1, `${p.needXp} vs ${expect}`);
+  assert.ok(p.bankedXp > 0);
+});
+
+test("kitchens: turning Deli off lowers kitchen XP a day", () => {
+  const c = cfg();
+  const off = { ...c, buildings: { ...c.buildings, Deli: { ...c.buildings.Deli, on: false } } };
+  assert.ok(plan(off).xpPerDay.kitchens < plan(c).xpPerDay.kitchens);
+});
+
+test("aging is salt-limited: Surfer Hair raises aging XP, salt used never exceeds salt made", () => {
+  const c = cfg({ restarts: 24 });
+  const a = plan(c), b = plan({ ...c, ticked: ["Surfer Hair"] });
+  assert.ok(a.fish.saltUsed <= a.fish.saltPerDay + 1e-6);
+  assert.ok(b.xpPerDay.aging > a.xpPerDay.aging);
+});
+
+test("slots: 1 restart a day ages fewer fish than 12", () => {
+  assert.ok(plan(cfg({ restarts: 1 })).fish.aged < plan(cfg({ restarts: 12 })).fish.aged);
+});
+
+test("Walrus adds fish without adding running cost", () => {
+  const c = cfg(), a = plan(c), b = plan({ ...c, ticked: ["Walrus"] });
+  assert.ok(b.fish.perDay > a.fish.perDay + c.fish.reels * 0.99);
+  assert.ok(Math.abs(b.costPerDay - a.costPerDay) < 1e-9);
+  assert.ok(Math.abs(b.resaleLoss - (1399 - 1155)) < 1e-9);
+});
+
+test("target already reached: 0 days, 0 FLOWER", () => {
+  const p = plan(cfg({ target: { ascension: 1, level: 1 } }));
+  assert.equal(p.days, 0);
+  assert.equal(p.totalFlower, 0);
+});
+
+test("everything off: never", () => {
+  const c = cfg();
+  const off = { ...c, buildings: Object.fromEntries(Object.entries(c.buildings).map(([k, v]) => [k, { ...v, on: false }])), fish: { ...c.fish, age: false, eatRaw: false } };
+  const p = plan(off);
+  assert.equal(p.xpPerDay.total, 0);
+  assert.equal(p.days, Infinity);
+});
+
+test("a farm with no Aging Shed and no salt nodes ages nothing and stays finite", () => {
+  const bare = JSON.parse(JSON.stringify(farm));
+  delete bare.buildings["Aging Shed"]; bare.saltFarm = { nodes: {} };
+  const p = levelingPlan(bare, inputs, defaultLevelingConfig(bare, inputs));
+  assert.equal(p.xpPerDay.aging, 0);
+  assert.ok(Number.isFinite(p.xpPerDay.total) && Number.isFinite(p.costPerDay));
+});
+
+test("itemImpacts: owned items hidden, Walrus positive XP, skills carry point cost", () => {
+  const rows = itemImpacts(farm, inputs, cfg());
+  const names = new Set(rows.map((r) => r.name));
+  assert.ok(!names.has("Skill Shrimpy"));
+  const w = rows.find((r) => r.name === "Walrus");
+  assert.ok(w && w.dXpPerDay > 0 && w.loss === 1399 - 1155);
+  const sk = rows.find((r) => r.kind === "skill");
+  assert.ok(sk && sk.pointCost > 0);
+});
+
+test("baits: fish turned into baits are not also eaten — every caught fish is counted once", () => {
+  const p = plan(cfg({ restarts: 1, fish: { ...cfg().fish, baits: true } }));
+  assert.ok(p.fish.baitsPerDay > 0, "slot-bound at 1 restart, so a bait should be worth it");
+  const f = p.fish;
+  assert.ok(Math.abs(f.eatenN + f.agedCaughtN + f.baitInputN - f.perDay) < 1e-6, JSON.stringify(f));
+});
+
+test("a reel item adds its reels on top of the configured reels", () => {
+  const c = cfg(), a = plan(c), b = plan({ ...c, ticked: ["Nautilus"] });
+  assert.ok(Math.abs((b.fish.perDay - a.fish.perDay) - 5 * a.fish.fishPerCast) < 1e-6);
+});
+
+test("a bait is not starved by aging its own input fish (2 restarts, slot-bound)", () => {
+  const p = plan(cfg({ restarts: 2, fish: { ...cfg().fish, baits: true } }));
+  assert.ok(p.fish.baitsPerDay > 0, JSON.stringify(p.fish));
+});
+
+test("Master Chef's Cleaver is recognised as owned under the game's spelling", () => {
+  assert.ok(ownedLevelingItems(farm).has("Master Chef's Cleaver"));
+});

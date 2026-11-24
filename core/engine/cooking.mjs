@@ -2,7 +2,7 @@ import { hasItem, hasAny, findCollectible } from "../derive/items.mjs";
 import { dashHasVipAccess } from "./gifts-deliveries.mjs";
 import { BUD_AURA_MULTIPLIERS } from "./buds.mjs";
 import {
-  COOKING_RECIPES_DATA, COOKING_INGREDIENTS, FISH_COOKABLE_NAMES, COOKABLE_CAKES, PRIME_AGED_FISH_XP,
+  COOKING_RECIPES_DATA, COOKING_INGREDIENTS, FISH_COOKABLE_NAMES, COOKABLE_CAKES, PRIME_AGED_FISH_XP, FISH_BASE_XP,
 } from "../data/cooking.mjs";
 
 const AGING_PRIME_BASE = 0.10, AGING_PRIME_MULT = 1.3;   // from flowers.html:4861
@@ -30,8 +30,10 @@ export function getAgingPrimeFactor(farm) {
  * XP boosts (Skill Shrimpy, Fishy Feast, Luminous Anglerfish Topper, the Port bud) key on this
  * set — not on the Aging Shed, which is only a part of it.
  */
+const RAW_FISH = new Set(Object.keys(FISH_BASE_XP).map((n) => n.toLowerCase()));
 export function isFishConsumable(name) {
-  return FISH_COOKABLE_NAMES.includes(name) || /^(Prime )?Aged /.test(name);
+  // Raw fish too: FISH_CONSUMABLES spreads ...FISH (game spelling "Hammerhead shark", any case here).
+  return FISH_COOKABLE_NAMES.includes(name) || /^(Prime )?Aged /.test(name) || RAW_FISH.has(String(name).toLowerCase());
 }
 
 // isFoodMadeWithCheese (expansion/lib/boosts.ts:55-58): Cheese is a DIRECT ingredient.

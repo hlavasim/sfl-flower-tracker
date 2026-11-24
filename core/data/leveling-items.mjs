@@ -70,7 +70,7 @@ export const LEVELING_ITEMS = [
   item("Luna's Hat", "cooking", W, "-50% cooking time"),
   item("Desert Gnome", "cooking", C, "-10% cooking time"),
   item("Nightshade Medallion", "cooking", W, "-25% cooking time"),
-  item("Master Chefs Cleaver", "cooking", W, "-15% cooking time, chance of +1 dish"),
+  item("Master Chef's Cleaver", "cooking", W, "-15% cooking time, chance of +1 dish"),
   ...skill("Munching Mastery", "cooking", "+5% food XP"),
   ...skill("Juicy Boost", "cooking", "+10% Smoothie Shack XP"),
   ...skill("Drive-Through Deli", "cooking", "+15% Deli XP"),
