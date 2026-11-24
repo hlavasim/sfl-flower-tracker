@@ -28,4 +28,4 @@ export { SEED_DATA as _SEED_DATA } from "./engine/power-helpers.mjs";
 // The TICKETY page's chapter goal (reachability, ticket value, the alternatives).
 export { ticketGoal } from "./sections/tickets.mjs";
 // The LEVELING page: the plan, its default config, each catalogue row's impact, bud floors.
-export { levelingPlan, defaultLevelingConfig, itemImpacts, budTypeFloors } from "./sections/leveling.mjs";
+export { levelingPlan, defaultLevelingConfig, itemImpacts, budTypeFloors, levelingRecipeOptions, sanitizeLevelingConfig } from "./sections/leveling.mjs";

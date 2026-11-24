@@ -341,3 +341,43 @@ export function budTypeFloors(bookItems) {
   }
   return out;
 }
+
+/** Each placed kitchen's plannable recipes with XP and FLOWER a day at `restarts`, best first. */
+export function levelingRecipeOptions(farm, inputs, restarts) {
+  const ck = cookingFor(farm, inputs);
+  const nom = ((farm.bumpkin && farm.bumpkin.skills) || {})["Double Nom"] ? 2 : 1;
+  const out = {};
+  for (const name of LEVELING_KITCHENS) {
+    const b = ck.buildings[name];
+    if (!b) continue;
+    out[name] = (b.recipes || []).filter(plannable).map((r) => {
+      const cooks = cooksPerDay(r, Math.max(1, restarts || 1), b.buildingCount || 1);
+      return { name: r.name, xpPerDay: r.xp * r.amount * cooks, costPerDay: r.cost * nom * cooks, hours: r.time / 3600 };
+    }).sort((a, b) => b.xpPerDay - a.xpPerDay);
+  }
+  return out;
+}
+
+const clamp = (v, lo, hi, d) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
+/** A stored config made safe against `defaults`: unknown buildings, recipes and items dropped, numbers clamped. */
+export function sanitizeLevelingConfig(raw, defaults, recipeOptions) {
+  const d = JSON.parse(JSON.stringify(defaults));
+  if (!raw || typeof raw !== "object") return d;
+  const t = raw.target || {};
+  const out = {
+    target: { ascension: clamp(t.ascension, 1, 10, d.target.ascension), level: clamp(t.level, 1, 50, d.target.level) },
+    restarts: clamp(raw.restarts, 1, 48, d.restarts),
+    buildings: {},
+    fish: { ...d.fish },
+    ticked: Array.isArray(raw.ticked) ? [...new Set(raw.ticked.filter((n) => LEVELING_ITEM_BY_NAME[n]))] : [],
+  };
+  for (const [name, def] of Object.entries(d.buildings)) {
+    const b = (raw.buildings || {})[name] || {};
+    const ok = ((recipeOptions || {})[name] || []).some((r) => r.name === b.recipe);
+    out.buildings[name] = { on: typeof b.on === "boolean" ? b.on : def.on, recipe: ok ? b.recipe : def.recipe };
+  }
+  const f = raw.fish || {};
+  for (const k of ["age", "eatRaw", "baits"]) if (typeof f[k] === "boolean") out.fish[k] = f[k];
+  out.fish.reels = clamp(f.reels, 0, 500, d.fish.reels);
+  return out;
+}

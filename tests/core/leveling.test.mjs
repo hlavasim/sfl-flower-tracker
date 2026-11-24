@@ -174,3 +174,32 @@ test("budTypeFloors: the cheapest listed bud of each type from the marketplace b
   }
   assert.equal(Object.keys(out).every((t) => typeof out[t] === "number"), true);
 });
+
+test("levelingRecipeOptions: each placed kitchen's plannable recipes, best XP/day first", async () => {
+  const { levelingRecipeOptions } = await import("../../core/sections/leveling.mjs");
+  const o = levelingRecipeOptions(farm, inputs, 6);
+  assert.ok(o["Fire Pit"].length > 3);
+  for (const list of Object.values(o)) for (let i = 1; i < list.length; i++) assert.ok(list[i - 1].xpPerDay >= list[i].xpPerDay);
+  assert.equal(o["Fire Pit"][0].name, defaultLevelingConfig(farm, inputs).buildings["Fire Pit"].recipe);
+});
+
+test("sanitizeLevelingConfig drops stale names and clamps numbers", async () => {
+  const { sanitizeLevelingConfig, levelingRecipeOptions } = await import("../../core/sections/leveling.mjs");
+  const def = defaultLevelingConfig(farm, inputs), opts = levelingRecipeOptions(farm, inputs, 6);
+  const saved = { target: { ascension: 99, level: 0 }, restarts: 500, ticked: ["Walrus", "Gone Item"],
+    buildings: { "Fire Pit": { on: false, recipe: "Old Recipe" }, Moonbase: { on: true, recipe: "x" } },
+    fish: { age: false, eatRaw: true, reels: -3, baits: true } };
+  const c = sanitizeLevelingConfig(saved, def, opts);
+  assert.deepEqual(c.ticked, ["Walrus"]);
+  assert.equal(c.restarts, 48);
+  assert.deepEqual(c.target, { ascension: 10, level: 1 });
+  assert.equal(c.buildings["Fire Pit"].on, false);
+  assert.equal(c.buildings["Fire Pit"].recipe, def.buildings["Fire Pit"].recipe);
+  assert.ok(!("Moonbase" in c.buildings));
+  assert.equal(c.fish.reels, 0);
+  assert.equal(c.fish.baits, true);
+  const kitchen = opts.Kitchen[1].name;
+  assert.equal(sanitizeLevelingConfig({ buildings: { Kitchen: { on: true, recipe: kitchen } } }, def, opts).buildings.Kitchen.recipe, kitchen);
+  assert.deepEqual(sanitizeLevelingConfig(null, def, opts), def);
+  assert.deepEqual(sanitizeLevelingConfig("garbage", def, opts), def);
+});
