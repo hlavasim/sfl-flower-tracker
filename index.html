@@ -2710,7 +2710,7 @@
 
     const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
-    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "mytrades", "marks", "diff", "json", "constants", "ascension", "world", "yakkamon", "fishing", "decorations", "speculation", "tickets"];
+    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "mytrades", "marks", "diff", "json", "constants", "ascension", "world", "yakkamon", "fishing", "decorations", "speculation", "tickets", "leveling"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -5326,6 +5326,7 @@
       const overflow = [
         ...(FARM_ID === "155498" ? [{ id: "speculation", label: "🎲 SPEKULACE" }] : []),
         { id: "tickets", label: "🎟️ TICKETY" },
+        { id: "leveling", label: "📈 LEVELING" },
         { id: "yakkamon", label: "🐲 YAKKAMON" },
         { id: "fishing", label: "🎣 FISHING" },
         { id: "decorations", label: "🌸 DECORATIONS" },
@@ -5467,7 +5468,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.43</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.44</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5494,6 +5495,10 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.44", items: [
+          { t: "feat", text: "<b>New LEVELING page</b> — how long to the end of A5 (or any target) and what it costs in FLOWER. Pick the kitchens and the recipe in each, whether to age fish (limited by salt and the 6 slots), eat the rest raw, how many reels and restarts a day, and whether to force big fish with Fish Market baits. Below, every fishing / salt / aging / cooking boost you do not have — NFTs, buds and skills — with its price, what you lose reselling it, and its <b>impact</b> (days sooner, FLOWER saved). Tick one and everything recomputes; what you set is saved and synced between your devices." },
+          { t: "fix", text: "Aging Shed: <b>Winged Vase</b> (+14 % Prime), <b>Fish Smoking</b> and <b>Speedy Aging</b> ranks, <b>Fish Trap</b> (−20 % aging time) and <b>Astrolabe</b> (+5 % aged fish XP) now count on the Bumpkin page; raw fish get the fish XP boosts too." },
+        ] },
         { ver: "v6.43", items: [
           { t: "feat", text: "Cave: the new <b>VIP Beetle Bonus</b> — VIPs get +1 Beetle on 10 % of dug Beetles until 1 Feb 2027, its own roll on top of Twin Beetles. Counted in every Myco Bin batch, so the cave's FLOWER a day, Myco Bin / expansion values and the cave skills on POWER and ROADMAP all include it." },
           { t: "fix", text: "SATS / FLOWER chart: a rate-limited price source (429) no longer leaves “graf nedostupný” — each fetch retries twice, and the note shows why it failed with a <b>zkusit znovu</b> link." },
@@ -25109,6 +25114,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           case "constants": renderConstants(data); break;
           case "speculation": renderSpeculation(data); break;
           case "tickets": renderTickets(); break;
+          case "leveling": renderLeveling(); break;
           default: renderDashboard(data);
         }
 
@@ -25196,6 +25202,141 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
      * auction lot they can win. Everything is computed by core/sections/tickets.mjs
      * (/api/compute?section=tickets); this only lays it out.
      */
+    // ═══════════════════════════════════════
+    //  LEVELING (compute?section=leveling, then the page engine's levelingPlan on every click)
+    // ═══════════════════════════════════════
+    /*
+     * A configurator for reaching a target ascension level: kitchens on/off and their recipe, the fish
+     * route (aging bound by salt and slots, the rest eaten raw, Fish Market baits), restarts a day and
+     * any boost the farm does not have. Every click re-runs the core plan here — no API call — and is
+     * saved under sfl_leveling, which prefSyncKeys mirrors to the other devices.
+     */
+    const lvlGroups = [["fishing", "🎣 RYBOLOV"], ["salt", "🧂 SŮL"], ["aging", "🐟 STÁRNUTÍ"], ["cooking", "🍳 VAŘENÍ"]];
+    const lvlBottleneck = { salt: "sůl", slots: "sloty (restarty)", fish: "ryby" };
+    const lvlFmt = (n) => (Number.isFinite(n) ? Math.round(n).toLocaleString("cs-CZ") : "—");
+    const lvlDays = (d) => (d === Infinity || !Number.isFinite(d) ? "nikdy" : d <= 0 ? "hotovo" : `${lvlFmt(d)} dní`);
+    async function renderLeveling() {
+      const app = document.getElementById("app");
+      const head = `<div class="header pixel-panel pixel-font"><h1>📈 LEVELING</h1>
+        <div class="farm-id">Farm #${escHTML(FARM_ID)} · za jak dlouho a za kolik na cílový level</div></div>`;
+      app.innerHTML = head + `<div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Počítám kuchyně, ryby a sůl…</div></div>`;
+      let d;
+      try {
+        const [r] = await Promise.all([fetch(`/api/compute?farm=${FARM_ID}&section=leveling`), _rmBook ? null : _rmLoadBook()]);
+        if (!r.ok) throw new Error(`compute leveling ${r.status}`);
+        d = (await r.json()).data;
+      } catch (e) {
+        app.innerHTML = head + `<div class="error-screen pixel-panel pixel-font"><p>Nenačetlo se: ${escHTML(e.message)}</p></div>`;
+        return;
+      }
+      const farm = cachedFarmData && cachedFarmData.farm;
+      if (!farm) { app.innerHTML = head + `<div class="error-screen pixel-panel pixel-font"><p>Chybí data farmy — obnov stránku.</p></div>`; return; }
+      // Bids and bud floors from the marketplace book; a floor the boost catalogue lacks comes from it too.
+      const book = (_rmBook && _rmBook.items) || {};
+      const inputs = { ...d.inputs, floors: { ...(d.inputs.floors || {}) }, bids: {}, budFloors: budTypeFloors(book) };
+      for (const [n, v] of Object.entries(book)) {
+        if (v && v.b > 0) inputs.bids[n] = v.b;
+        if (v && v.f > 0 && !(inputs.floors[n] > 0)) inputs.floors[n] = v.f;
+      }
+      const def = defaultLevelingConfig(farm, inputs);
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem("sfl_leveling") || "null"); } catch (e) { saved = null; }
+      const options = levelingRecipeOptions(farm, inputs, (saved && saved.restarts) || def.restarts);
+      window._lvl = { farm, inputs, def, options, cfg: sanitizeLevelingConfig(saved, def, options) };
+      app.innerHTML = head + `<div id="lvl-body"></div>`;
+      _lvlRender();
+    }
+    function _lvlSave() { try { localStorage.setItem("sfl_leveling", JSON.stringify(window._lvl.cfg)); } catch (e) {} }
+    function _lvlChange(fn) {
+      const L = window._lvl; if (!L) return;
+      fn(L.cfg);
+      L.options = levelingRecipeOptions(L.farm, L.inputs, L.cfg.restarts);
+      L.cfg = sanitizeLevelingConfig(L.cfg, L.def, L.options);
+      _lvlSave(); _lvlRender();
+    }
+    function _lvlTick(name, on) { _lvlChange((c) => { c.ticked = on ? [...c.ticked, name] : c.ticked.filter((n) => n !== name); }); }
+    function _lvlReset() { _lvlChange((c) => { Object.assign(c, JSON.parse(JSON.stringify(window._lvl.def))); }); }
+    function _lvlCard(title, p, note) {
+      const x = p.xpPerDay;
+      const when = Number.isFinite(p.days) && p.days > 0 ? new Date(Date.now() + p.days * 86400000).toLocaleDateString("cs-CZ") : "";
+      return `<div class="pixel-panel" style="padding:12px 14px">
+        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:6px">${title}</div>
+        <div class="pixel-font" style="font-size:1.1rem">${lvlDays(p.days)}</div>
+        <div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:6px">${when ? `≈ ${when}` : "&nbsp;"}</div>
+        <div style="font-size:0.7rem"><b>${lvlFmt(p.totalFlower)}</b> ${sflIcon()} celkem</div>
+        <div style="font-size:0.55rem;color:var(--text-dim);line-height:1.7;margin-top:4px">
+          ${lvlFmt(p.costPerDay)} ${sflIcon()}/den${p.resaleLoss > 0 ? ` · ztráta při prodeji NFT ${lvlFmt(p.resaleLoss)} ${sflIcon()}` : ""}${p.nftCost > 0 ? ` · nákup ${lvlFmt(p.nftCost)} ${sflIcon()}` : ""}<br>
+          XP/den ${lvlFmt(x.total)}: kuchyně ${lvlFmt(x.kitchens)} · stárnutí ${lvlFmt(x.aging)} · syrové ryby ${lvlFmt(x.raw)}<br>
+          ${p.bottleneck ? `stárnutí brzdí: <b>${lvlBottleneck[p.bottleneck]}</b> · ` : ""}${note || ""}</div></div>`;
+    }
+    function _lvlRender() {
+      const L = window._lvl, c = L.cfg, body = document.getElementById("lvl-body");
+      if (!L || !body) return;
+      const plan = levelingPlan(L.farm, L.inputs, c);
+      const bare = levelingPlan(L.farm, L.inputs, { ...c, ticked: [] });
+      const cook = levelingPlan(L.farm, L.inputs, { ...c, ticked: [], fish: { ...c.fish, age: false, eatRaw: false } });
+      const impacts = itemImpacts(L.farm, L.inputs, c);
+      const sel = (v, cur) => (String(v) === String(cur) ? " selected" : "");
+      const chk = (on) => (on ? " checked" : "");
+      let h = `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px;font-size:0.62rem;line-height:2">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+          <label>Cíl A<select onchange="_lvlChange((c)=>{c.target.ascension=+this.value})">${Array.from({ length: 10 }, (_, i) => `<option${sel(i + 1, c.target.ascension)}>${i + 1}</option>`).join("")}</select></label>
+          <label>level <select onchange="_lvlChange((c)=>{c.target.level=+this.value})">${Array.from({ length: 50 }, (_, i) => `<option${sel(i + 1, c.target.level)}>${i + 1}</option>`).join("")}</select></label>
+          <label>restartů za den <input type="number" min="1" max="48" value="${c.restarts}" style="width:52px" onchange="_lvlChange((c)=>{c.restarts=+this.value})"></label>
+          <span style="color:var(--text-dim)">chybí ${lvlFmt(plan.needXp)} XP</span>
+          <button class="refresh-btn" style="font-size:0.5rem" onclick="_lvlReset()">výchozí</button>
+        </div>
+        <div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-top:6px">KUCHYNĚ</div>`;
+      for (const [name, b] of Object.entries(c.buildings)) {
+        const opts = L.options[name] || [];
+        h += `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <label style="min-width:120px"><input type="checkbox"${chk(b.on)} data-b="${escHTML(name)}" onchange="_lvlChange((c)=>{c.buildings[this.dataset.b].on=this.checked})"> ${escHTML(name)}</label>
+          <select style="max-width:100%" data-b="${escHTML(name)}" onchange="_lvlChange((c)=>{c.buildings[this.dataset.b].recipe=this.value})">${opts.map((o) => `<option value="${escHTML(o.name)}"${sel(o.name, b.recipe)}>${escHTML(o.name)} · ${lvlFmt(o.xpPerDay)} XP/den · ${o.costPerDay.toFixed(1)} FLOWER/den</option>`).join("")}</select></div>`;
+      }
+      const f = c.fish;
+      h += `<div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-top:6px">RYBY</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+          <label><input type="checkbox"${chk(f.age)} onchange="_lvlChange((c)=>{c.fish.age=this.checked})"> stárnout (podle soli)</label>
+          <label><input type="checkbox"${chk(f.eatRaw)} onchange="_lvlChange((c)=>{c.fish.eatRaw=this.checked})"> zbytek sníst syrový</label>
+          <label><input type="checkbox"${chk(f.baits)} onchange="_lvlChange((c)=>{c.fish.baits=this.checked})"> velké ryby přes návnady</label>
+          <label>reelů za den <input type="number" min="0" max="500" value="${f.reels}" style="width:56px" onchange="_lvlChange((c)=>{c.fish.reels=+this.value})"></label>
+        </div>
+        <div style="font-size:0.52rem;color:var(--text-dim);line-height:1.6">${lvlFmt(plan.fish.perDay)} ryb/den (${plan.fish.fishPerCast.toFixed(2)} na hod) · stárne ${lvlFmt(plan.fish.aged)}${plan.fish.baitsPerDay > 0 ? ` (z toho ${plan.fish.baitsPerDay.toFixed(1)} přes návnady)` : ""} · sůl ${lvlFmt(plan.fish.saltUsed)} / ${lvlFmt(plan.fish.saltPerDay)} za den · ryba stojí jen podíl prutu a červa, protože se sní nebo nechá stárnout všechno, co chytíš</div></div>`;
+      h += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-bottom:12px">
+        ${_lvlCard("JEN KUCHYNĚ", cook, "bez ryb a bez nákupů")}
+        ${_lvlCard("BEZ NÁKUPŮ", bare, "tvoje nastavení, nic nového")}
+        ${_lvlCard("TVOJE VOLBA", plan, c.ticked.length ? `${c.ticked.length} zaškrtnutých` : "nic nezaškrtnuto")}</div>`;
+      // The catalogue: what each thing you do not have would do, best saving first.
+      const pts = tickedSkillPoints(L.farm, c.ticked);
+      const free = L.inputs.freePoints || 0;
+      h += `<div class="pixel-panel" style="padding:12px 14px"><div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal)">CO NEMÁŠ A CO BY TO UDĚLALO</div>
+        <div style="font-size:0.52rem;color:var(--text-dim);line-height:1.6;margin:4px 0 8px">Dopad = co se změní, když položku zaškrtneš (nebo odškrtneš) k tomu, co je teď nastavené. FLOWER zahrnuje provoz až do cíle a ztrátu při pozdějším prodeji (cena − nejvyšší nabídka, bez nabídky 15 %). Zelená = ušetří.
+        ${pts ? ` Skilly zaškrtnuté za <b>${pts}</b> bodů, volných máš <b>${free}</b>${pts > free ? ` <span style="color:var(--red)">⚠ přes limit</span>` : ""}.` : ""}</div>
+        <div style="overflow-x:auto"><table class="roi-table" style="width:100%;font-size:0.55rem;border-collapse:collapse">
+        <tr><th></th><th style="text-align:left">položka</th><th>cena</th><th>ztráta při prodeji</th><th>XP/den</th><th>dny</th><th>FLOWER</th><th>body</th></tr>`;
+      const key = (r) => (Number.isFinite(r.dFlower) ? r.dFlower : 0);
+      for (const [g, label] of lvlGroups) {
+        const rows = impacts.filter((r) => r.group === g).sort((a, b) => key(a) - key(b));
+        if (!rows.length) continue;
+        h += `<tr><td colspan="8" class="pixel-font" style="padding-top:8px;color:var(--sunpetal)">${label}</td></tr>`;
+        for (const r of rows) {
+          const save = Number.isFinite(r.dFlower) ? r.dFlower : null;
+          const col = save == null ? "" : save < 0 ? "color:var(--green)" : save > 0 ? "color:var(--red)" : "";
+          const price = r.kind === "skill" ? "za body" : r.price > 0 ? `${lvlFmt(r.price)} ${sflIcon()}` : r.tradeable ? "—" : "nelze koupit";
+          h += `<tr class="roi-row"${r.ticked ? ' style="background:rgba(120,200,120,0.08)"' : ""}>
+            <td><input type="checkbox"${chk(r.ticked)} data-n="${escHTML(r.name)}" onchange="_lvlTick(this.dataset.n,this.checked)"></td>
+            <td title="${escHTML(r.boost)}">${escHTML(r.name)}<div style="color:var(--text-dim);font-size:0.48rem">${escHTML(r.boost)}</div></td>
+            <td style="text-align:right">${price}</td>
+            <td style="text-align:right">${r.loss > 0 ? lvlFmt(r.loss) : "—"}</td>
+            <td style="text-align:right">${r.dXpPerDay ? (r.dXpPerDay > 0 ? "+" : "") + lvlFmt(r.dXpPerDay) : "0"}</td>
+            <td style="text-align:right">${Number.isFinite(r.dDays) && Math.abs(r.dDays) >= 0.05 ? r.dDays.toFixed(1) : "0"}</td>
+            <td style="text-align:right;${col}">${save == null ? "—" : save < 0 ? `ušetří ${lvlFmt(-save)}` : save > 0 ? `stojí ${lvlFmt(save)}` : "0"}</td>
+            <td style="text-align:right">${r.pointCost || ""}</td></tr>`;
+        }
+      }
+      body.innerHTML = `<style>#lvl-body td,#lvl-body th{padding:3px 6px;vertical-align:top}</style>` + h + `</table></div></div>`;
+    }
+
     async function renderTickets() {
       const app = document.getElementById("app");
       app.innerHTML = `<div class="header pixel-panel pixel-font"><h1>🎟️ TICKETY</h1>
@@ -30271,7 +30412,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
       "sfl_tracked_dolls", "sfl_restock_settings", "sfl_gift_plan", "sfl_roi_multicat_assignment", "sfl_sleep_schedule",
       "sfl_marks_budget", "sfl_bumpkin_target", "sfl_bumpkin_recipes", "sfl_nodes_roi_cap", "sfl_coin_mode",
       "sfl_sales_sell_type", "sfl_sales_sell_min", "sfl_pet_streak", "sfl_wl_eff", "sfl_flower_mode", "sfl_flower_n", "sfl_sats_gran",
-      "sfl_repay_daily_flower", "sfl_tk_goal", "sfl_dash_voice"];
+      "sfl_repay_daily_flower", "sfl_tk_goal", "sfl_dash_voice", "sfl_leveling"];
     let _prefApplying = false, _prefPending = {}, _prefTimer = null;
     function _prefFarm() { try { return getConfig().farm || null; } catch (e) { return null; } }
     function _prefPush() {
