@@ -17,7 +17,8 @@ import { buildCookingSection } from "./cooking.mjs";
 import { applyWhatIf, ownedLevelingItems } from "../engine/leveling-whatif.mjs";
 import { LEVELING_ITEMS, LEVELING_ITEM_BY_NAME } from "../data/leveling-items.mjs";
 import { computeFishYieldPerCast } from "../engine/cooking-cost.mjs";
-import { computeRodCostSFL, computeBaitCostSFL, itemMarketValue } from "../engine/item-value.mjs";
+import { computeRodCostSFL, computeBaitCostSFL, itemMarketValue, computeWaterTrapCostSFL } from "../engine/item-value.mjs";
+import { CRUSTACEAN_RECIPES } from "../data/crafting.mjs";
 import { sideSaltNow } from "../engine/side-values.mjs";
 import { ascensionXpFor, ascensionStanding } from "../engine/ascension.mjs";
 import { computeFoodXP, detectCookingBoosts } from "../engine/cooking.mjs";
@@ -39,6 +40,10 @@ const FISH_BAITS = ["Fish Flake", "Fish Stick", "Fish Oil"];
 // queue is 1 without VIP and 4 with it (processResource.ts MAX_FISH_PROCESSING_SLOTS).
 const FISH_MARKET_HOURS = { "Fish Flake": 1, "Fish Stick": 2, "Crab Stick": 4, "Fish Oil": 16 };
 const FISH_MARKET_VIP_QUEUE = 4;
+// Water trap hours (crustaceans.ts WATER_TRAP readyTimeHours).
+const WATER_TRAP_HOURS = { "Crab Pot": 4, "Mariner Pot": 8 };
+// What the farm cannot buy: a day's supply is set on the page (Wild / Magic Mushroom).
+export const LEVELING_SUPPLY = ["Wild Mushroom", "Magic Mushroom"];
 export const LEVELING_WORMS = ["Earthworm", "Grub", "Red Wiggler"];
 const SEASON_LETTER = { winter: "w", spring: "p", summer: "s", autumn: "a" };
 /**
@@ -287,29 +292,54 @@ export function levelingPlan(farm, inputs, config) {
   const marketDishes = [];
   const buildings = [];
   let kXp = 0, kCost = 0;
-  // What one cook of an extra takes: fish, Fish Market jobs, scarce items, FLOWER.
+  // Water traps (crabTraps.trapSpots): a crustacean holds a spot for its pot's hours (Speed Trap x0.8,
+  // Crystal Altar x0.95), waiting for the next visit; a placed Royal Crab Pot keeps the pot.
+  const trapSpots = Object.keys(((w.crabTraps || {}).trapSpots) || {}).length;
+  const trapMult = (hasItem(w, "Speed Trap") ? 0.8 : 1) * (hasItem(w, "Crystal Altar") ? 0.95 : 1);
+  const trapHours = (pot) => cycleHours(WATER_TRAP_HOURS[pot] * trapMult, restarts);
+  const freePots = findCollectible(w, "Royal Crab Pot").length > 0;
+  const rates = { coinsPerSFL: inputs.coinsPerSFL || 0 };
+  const traps = { hours: 0 };
+  /*
+   * What one cook of an extra takes, all the way down: fish from the catch, Fish Market jobs, trap
+   * hours, a scarce item (Wild / Magic Mushroom), FLOWER. A Fish Market bait expands into its recipe
+   * (each season a quarter of the year); a crustacean into its pot and chum, the chum a bait again
+   * where it has to be (Oyster: 2 Fish Stick) and the cheaper of the two chums where there is a choice.
+   */
   const extraNeeds = (r) => {
-    const fish = {}, scarce = {}, jobs = {};
-    let cost = 0;
+    const need = { fish: {}, scarce: {}, jobs: {}, trapH: 0, cost: 0 };
+    const add = (name, q, depth) => {
+      if (!(q > 0) || depth > 5) return;
+      if (isFishItem(name)) { need.fish[lc(name)] = (need.fish[lc(name)] || 0) + q; return; }
+      if (FISH_MARKET_HOURS[name]) {
+        need.jobs[name] = (need.jobs[name] || 0) + q / bubble;
+        for (const rec of Object.values(FISH_MARKET_RECIPES[name] || {}))
+          for (const [inp, iq] of Object.entries(rec)) add(inp, (q / bubble) * iq / SEASONS.length, depth + 1);
+        return;
+      }
+      const cr = CRUSTACEAN_RECIPES[name];
+      if (cr) {
+        need.trapH += q * trapHours(cr.pot);
+        if (!freePots) need.cost += q * computeWaterTrapCostSFL(cr.pot, inputs.prices || {}, inputs.coinsPerSFL || 0);
+        if (cr.chum && cr.qty > 0) {
+          const alt = cr.alt && cr.alt.match(/^(.+?)\s*x(\d+)$/);
+          const opts = [[cr.chum, cr.qty], ...(alt ? [[alt[1], +alt[2]]] : [])]
+            .map(([n, k]) => ({ n, k, made: !!FISH_MARKET_HOURS[n], v: FISH_MARKET_HOURS[n] ? Infinity : itemMarketValue(n, inputs.prices || {}, null, rates) * k }));
+          const bought = opts.filter((o) => !o.made && o.v > 0).sort((a, b) => a.v - b.v)[0];
+          if (bought) need.cost += q * bought.v;
+          else { const m = opts.find((o) => o.made); if (m) add(m.n, q * m.k, depth + 1); }
+        }
+        return;
+      }
+      need.cost += q * (itemMarketValue(name, inputs.prices || {}, null, rates) || 0);
+    };
     for (const it of r.items || []) {
       const q = (it.qty || 0) * nom;
-      if (isFishItem(it.name)) fish[lc(it.name)] = (fish[lc(it.name)] || 0) + q;
-      else if (FISH_MARKET_HOURS[it.name]) {
-        jobs[it.name] = (jobs[it.name] || 0) + q / bubble;
-        // Crab Stick is crustaceans, and those come from the water traps the farm has, not at will.
-        if (it.name === "Crab Stick") scarce[it.name] = (scarce[it.name] || 0) + q;
-        // Its seasonal recipe, a quarter of the year each: fish from the catch, the rest (crustaceans) bought.
-        for (const rec of Object.values(FISH_MARKET_RECIPES[it.name] || {})) {
-          for (const [inp, iq] of Object.entries(rec)) {
-            const per = (q / bubble) * iq / SEASONS.length;
-            if (isFishItem(inp)) fish[lc(inp)] = (fish[lc(inp)] || 0) + per;
-            else cost += per * (itemMarketValue(inp, inputs.prices || {}) || 0);
-          }
-        }
-      } else if (it.selfProduced) scarce[it.name] = (scarce[it.name] || 0) + q;
-      else cost += (it.cost || 0) * nom;
+      if (it.selfProduced && !isFishItem(it.name) && !FISH_MARKET_HOURS[it.name] && !CRUSTACEAN_RECIPES[it.name]) need.scarce[it.name] = (need.scarce[it.name] || 0) + q;
+      else if (isFishItem(it.name) || FISH_MARKET_HOURS[it.name] || CRUSTACEAN_RECIPES[it.name]) add(it.name, q, 0);
+      else need.cost += (it.cost || 0) * nom;
     }
-    return { fish, scarce, jobs, cost };
+    return need;
   };
   for (const name of LEVELING_KITCHENS) {
     const b = ck.buildings[name], bc = (config.buildings || {})[name];
@@ -323,21 +353,25 @@ export function levelingPlan(farm, inputs, config) {
       if (!isExtra(r)) continue;
       const need = extraNeeds(r);
       const timed = r.time > 0 && !r.isInstant, cyc = timed ? cycleHours(r.time / 3600, restarts) : 0;
-      let c = timed ? timeLeft / cyc : Infinity;
-      for (const [f, q] of Object.entries(need.fish)) c = Math.min(c, q > 0 ? (avail[f] || 0) / q : c);
-      for (const [k, q] of Object.entries(need.scarce)) c = Math.min(c, q > 0 ? Math.max(0, +supply[k] || 0) / q : c);
+      // The cap a day, and what sets it — an instant dish is as slow as what goes into it.
+      let c = Infinity, limit = null;
+      const cap = (v, why) => { if (v < c) { c = v; limit = why; } };
+      if (timed) cap(timeLeft / cyc, "time");
+      for (const [f, q] of Object.entries(need.fish)) if (q > 0) cap((avail[f] || 0) / q, "fish");
+      for (const [k, q] of Object.entries(need.scarce)) if (q > 0) cap(Math.max(0, +supply[k] || 0) / q, "supply");
       let h = 0, j = 0;
       for (const [bait, n] of Object.entries(need.jobs)) { h += n * jobHours(bait); j += n; }
-      if (h > 0) c = Math.min(c, Math.max(0, 24 - market.hours) / h);
-      if (vip && j > 0) c = Math.min(c, Math.max(0, FISH_MARKET_VIP_QUEUE * restarts - market.jobs) / j);
-      if (!Number.isFinite(c) || c < 0) c = 0;           // an instant dish with nothing bounding it: not planned
+      if (h > 0) cap(Math.max(0, 24 - market.hours) / h, "market");
+      if (vip && j > 0) cap(Math.max(0, FISH_MARKET_VIP_QUEUE * restarts - market.jobs) / j, "market");
+      if (need.trapH > 0) cap(Math.max(0, trapSpots * 24 - traps.hours) / need.trapH, "traps");
+      if (!Number.isFinite(c) || c < 0) { c = 0; limit = limit || "none"; }
       for (const [f, q] of Object.entries(need.fish)) avail[f] = Math.max(0, (avail[f] || 0) - q * c);
       for (const [k, q] of Object.entries(need.scarce)) supply[k] = Math.max(0, (+supply[k] || 0) - q * c);
-      market.hours += h * c; market.jobs += j * c;
+      market.hours += h * c; market.jobs += j * c; traps.hours += need.trapH * c;
       for (const [bait, n] of Object.entries(need.jobs)) marketDishes.push({ recipe: r.name, building: name, product: bait, perDay: n * bubble * c });
       if (timed) timeLeft = Math.max(0, timeLeft - c * cyc);
       const xp = r.xp * r.amount * c, cost = need.cost * c;
-      extras.push({ name: r.name, cooksPerDay: c, xpPerDay: xp, costPerDay: cost });
+      extras.push({ name: r.name, cooksPerDay: c, xpPerDay: xp, costPerDay: cost, limit });
       kXp += xp; kCost += cost;
     }
     const r = !bc.on ? null : (b.recipes || []).find((x) => x.name === bc.recipe && x.time > 0) || bestRecipe(b, restarts);
@@ -604,9 +638,9 @@ export function levelingExtraOptions(farm, inputs, config) {
       const cfg = { ...config, buildings: { ...config.buildings, [name]: { ...bc, extras: on ? bc.extras : [...(bc.extras || []), en] } } };
       const p = on ? base : levelingPlan(farm, inputs, cfg);
       const ref = on ? levelingPlan(farm, inputs, { ...config, buildings: { ...config.buildings, [name]: { ...bc, extras: bc.extras.filter((x) => x !== en) } } }) : base;
-      const e = ((p.buildings.find((x) => x.name === name) || {}).extras || []).find((x) => x.name === en) || { cooksPerDay: 0 };
+      const e = ((p.buildings.find((x) => x.name === name) || {}).extras || []).find((x) => x.name === en) || { cooksPerDay: 0, limit: null };
       const dx = p.xpPerDay.total - ref.xpPerDay.total, dc = p.costPerDay - ref.costPerDay;
-      return { name: en, cooksPerDay: e.cooksPerDay, xpPerDay: dx, costPerDay: dc, perM: dx > 0 ? dc / (dx / 1e6) : Infinity };
+      return { name: en, cooksPerDay: e.cooksPerDay, limit: e.limit, xpPerDay: dx, costPerDay: dc, perM: dx > 0 ? dc / (dx / 1e6) : Infinity };
     });
   }
   return out;
@@ -635,7 +669,7 @@ export function sanitizeLevelingConfig(raw, defaults, recipeOptions) {
   const sup = {};
   for (const [k, v] of Object.entries((raw.supply && typeof raw.supply === "object") ? raw.supply : {})) {
     const n = Number(v);
-    if (typeof k === "string" && k.length < 40 && Number.isFinite(n) && n >= 0) sup[k] = Math.min(10000, n);
+    if (LEVELING_SUPPLY.includes(k) && Number.isFinite(n) && n >= 0) sup[k] = Math.min(10000, n);
   }
   out.supply = sup;
   const f = raw.fish || {};

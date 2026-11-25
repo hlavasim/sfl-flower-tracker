@@ -3,6 +3,7 @@ import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import * as LV from "../../core/sections/leveling.mjs";
 import { COOKING_RECIPES_DATA } from "../../core/data/cooking.mjs";
+import { computeWaterTrapCostSFL } from "../../core/engine/item-value.mjs";
 
 // LEVELING extras: every recipe a kitchen can cook is on the page. The ones bounded by something
 // other than time — instant dishes, fish, Fish Market baits, mushrooms — are add-ons with a daily cap.
@@ -54,6 +55,23 @@ test("a timed fish dish takes kitchen time from the main recipe and fish from th
   assert.ok(b.fish.eatenN + b.fish.aged < a.fish.eatenN + a.fish.aged, "the Anchovies went into the chowder");
 });
 
+test("Crab Stick is made, not rationed: its crustaceans need pots (priced) and trap time, and the Fish Market makes it", () => {
+  const c = withExtras({ ...base(), restarts: 48 }, "Kitchen", ["Creamy Crab Bite"]);
+  const p = LV.levelingPlan(farm, inputs, c);
+  const e = p.buildings.find((x) => x.name === "Kitchen").extras[0];
+  assert.ok(e.cooksPerDay > 0, "no ration needed");
+  const sticks = e.cooksPerDay * 2;                         // Double Nom: 2 Crab Sticks a cook
+  // every Crab Stick is 3 crustaceans = 3 pots (2 Crab Pot + 1 Mariner Pot in every season)
+  const pots = 2 * computeWaterTrapCostSFL("Crab Pot", prices, 1192) + computeWaterTrapCostSFL("Mariner Pot", prices, 1192);
+  assert.ok(pots > 0.1, String(pots));
+  assert.ok(e.costPerDay >= sticks * pots - 1e-9, `${e.costPerDay} for ${sticks} sticks, pots ${pots}`);
+  // 4 trap spots: 16 spot-hours a stick (two 4 h Crab Pots + one 8 h Mariner Pot) → at most 6 a day
+  assert.ok(sticks <= 4 * 24 / 16 + 1e-9, String(sticks));
+  assert.ok(["traps", "market", "fish"].includes(e.limit), e.limit);  // winter's Oyster wants 2 Fish Stick: fish too
+  assert.ok(e.costPerDay / sticks > 2, `a Crab Stick costs ${e.costPerDay / sticks} FLOWER`);
+  assert.ok(p.fish.marketHours <= 24 + 1e-6);
+});
+
 test("mushrooms: no supply set → no cooks; a supply a day caps it", () => {
   const c = withExtras(base(), "Fire Pit", ["Mushroom Soup"]);
   const a = LV.levelingPlan(farm, inputs, c).buildings.find((x) => x.name === "Fire Pit").extras[0];
@@ -65,7 +83,7 @@ test("mushrooms: no supply set → no cooks; a supply a day caps it", () => {
 
 test("sanitize keeps a building's extras that belong to it, and the supply numbers", () => {
   const d = base();
-  const s = LV.sanitizeLevelingConfig({ buildings: { Kitchen: { on: true, extras: ["Crimstone Infused Fish Oil", "Mushroom Soup", "Nope"] } }, supply: { "Wild Mushroom": 12, x: "a" } }, d, null);
+  const s = LV.sanitizeLevelingConfig({ buildings: { Kitchen: { on: true, extras: ["Crimstone Infused Fish Oil", "Mushroom Soup", "Nope"] } }, supply: { "Wild Mushroom": 12, "Crab Stick": 5, x: "a" } }, d, null);
   assert.deepEqual(s.buildings.Kitchen.extras, ["Crimstone Infused Fish Oil"]);
   assert.deepEqual(s.supply, { "Wild Mushroom": 12 });
 });

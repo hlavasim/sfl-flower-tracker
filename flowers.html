@@ -25501,8 +25501,10 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     // The day's supply of what the farm cannot buy, for the extras that use it (stock shown beside).
     function lvlSupplyInputs(L, c) {
       const inv = (L.farm && L.farm.inventory) || {};
-      return ["Wild Mushroom", "Magic Mushroom", "Crab Stick"].map((k) => `<label title="Kolik ${k} za den můžeš dát do doplňkových receptů (máš ${lvlFmt(+(inv[k] || 0))}). Bez čísla se recepty s ${k} nevaří.">${k}/den <input type="number" min="0" max="10000" step="any" value="${(c.supply || {})[k] || 0}" style="width:46px" data-k="${k}" onchange="_lvlChange((c)=>{c.supply={...(c.supply||{}),[this.dataset.k]:+this.value||0}})"></label>`).join("");
+      return ["Wild Mushroom", "Magic Mushroom"].map((k) => `<label title="Kolik ${k} za den můžeš dát do doplňkových receptů (máš ${lvlFmt(+(inv[k] || 0))}). Bez čísla se recepty s ${k} nevaří.">${k}/den <input type="number" min="0" max="10000" step="any" value="${(c.supply || {})[k] || 0}" style="width:46px" data-k="${k}" onchange="_lvlChange((c)=>{c.supply={...(c.supply||{}),[this.dataset.k]:+this.value||0}})"></label>`).join("");
     }
+    // What caps an extra a day (levelingPlan's extras[].limit).
+    const lvlLimit = { time: "čas kuchyně", fish: "ryby z úlovku", supply: "tvůj příděl za den", market: "Fish Market — jedna fronta (Fish Oil 16 h, Crab Stick 4 h, Fish Stick 2 h)", traps: "pasti na korýše (místa × 4 h / 8 h)", none: "nic — neplánuje se" };
     function _lvlExtra(building, name, on) {
       _lvlChange((c) => {
         const b = c.buildings[building], cur = (b.extras || []).filter((x) => x !== name);
@@ -25551,7 +25553,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           <select style="flex:1;min-width:0;max-width:100%" data-b="${escHTML(name)}" onchange="_lvlChange((c)=>{c.buildings[this.dataset.b].recipe=this.value})">${opts.map((o) => `<option value="${escHTML(o.name)}"${sel(o.name, b.recipe)}>${escHTML(o.name)} · ${lvlK(o.xpPerDay).replace("+", "")} XP/d · ${o.costPerDay.toFixed(1)} FL/d · ${lvlFmt(o.perM)} FL/1M</option>`).join("")}</select></div>
           ${ex.length ? `<div style="font-size:0.5rem;line-height:1.6;color:var(--text-dim);padding-left:18px">${ex.map((o) => {
             const on = (b.extras || []).includes(o.name), live = o.cooksPerDay > 0.005;
-            return `<label style="white-space:nowrap;margin-right:8px;${live || on ? "" : "opacity:0.55"}" title="${escHTML(o.name)}: sám o sobě ${o.cooksPerDay.toFixed(2)}× za den (strop: ${live ? "suroviny, Fish Market nebo čas" : "0 — chybí ryby, příděl nebo místo ve frontě"}), ${lvlK(o.xpPerDay)} XP/den, ${o.costPerDay >= 0 ? "+" : ""}${o.costPerDay.toFixed(2)} FL/den proti tomu bez něj"><input type="checkbox"${chk(on)} data-b="${escHTML(name)}" data-e="${escHTML(o.name)}" onchange="_lvlExtra(this.dataset.b,this.dataset.e,this.checked)"> ${escHTML(o.name)} <span style="color:${o.xpPerDay > 0 ? "var(--green)" : "var(--text-dim)"}">${o.cooksPerDay.toFixed(1)}/d ${lvlK(o.xpPerDay)} XP${Number.isFinite(o.perM) && o.xpPerDay > 0 ? ` · ${lvlFmt(o.perM)} FL/1M` : ""}</span></label>`;
+            return `<label style="white-space:nowrap;margin-right:8px;${live || on ? "" : "opacity:0.55"}" title="${escHTML(o.name)}: sám o sobě ${o.cooksPerDay.toFixed(2)}× za den (strop: ${lvlLimit[o.limit] || "—"}), ${lvlK(o.xpPerDay)} XP/den, ${o.costPerDay >= 0 ? "+" : ""}${o.costPerDay.toFixed(2)} FL/den proti tomu bez něj"><input type="checkbox"${chk(on)} data-b="${escHTML(name)}" data-e="${escHTML(o.name)}" onchange="_lvlExtra(this.dataset.b,this.dataset.e,this.checked)"> ${escHTML(o.name)} <span style="color:${o.xpPerDay > 0 ? "var(--green)" : "var(--text-dim)"}">${o.cooksPerDay.toFixed(1)}/d ${lvlK(o.xpPerDay)} XP${Number.isFinite(o.perM) && o.xpPerDay > 0 ? ` · ${lvlFmt(o.perM)} FL/1M` : ""}</span></label>`;
           }).join("")}</div>` : ""}</div>`;
       }
       const f = c.fish, saltPrice = (L.inputs.prices || {}).Salt || 0;
