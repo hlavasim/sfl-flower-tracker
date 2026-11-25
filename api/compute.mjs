@@ -123,6 +123,9 @@ const STALE_MAX_AGE_MS = 6 * 3600_000;
 const _reqCtx = new AsyncLocalStorage();
 const lastGoodFarm = G.lastGoodFarm ??= new Map(); // farmId -> { data, fetchedAt }
 const lastGoodNfts = G.lastGoodNfts ??= { data: null, fetchedAt: 0 };
+// Prices move slowly: a day-old map is far better than {} (every price 0). Flagged stale.
+const lastGoodPrices = G.lastGoodPrices ??= { data: null, fetchedAt: 0 };
+const PRICES_STALE_MAX_AGE_MS = 24 * 3600_000;
 
 function _staleOr(result, good) {
   if (good && good.data && Date.now() - good.fetchedAt <= STALE_MAX_AGE_MS) {
@@ -158,12 +161,19 @@ async function fetchPrices() {
       if (!r.ok) return { ok: false, data: {} };
       const json = await r.json();
       // New chapter resources the feed does not carry yet: the dated fallback, the feed wins.
-      return { ok: true, data: { ...CHAPTER_RESOURCE_PRICES.prices, ...(json?.data?.p2p || {}) } };
+      return { ok: true, data: { ...CHAPTER_RESOURCE_PRICES.prices, ...(json?.data?.p2p || {}) }, fetchedAt: Date.now() };
     } catch {
       return { ok: false, data: {} };
     }
   });
-  return result.data;
+  let out = result;
+  if (result.ok) { lastGoodPrices.data = result.data; lastGoodPrices.fetchedAt = result.fetchedAt || Date.now(); }
+  else if (lastGoodPrices.data && Date.now() - lastGoodPrices.fetchedAt <= PRICES_STALE_MAX_AGE_MS) {
+    out = { ok: true, data: lastGoodPrices.data, stale: true, fetchedAt: lastGoodPrices.fetchedAt };
+  }
+  const store = _reqCtx.getStore();
+  if (store) store.prices = out;
+  return out.data;
 }
 
 // Section=power upstreams. Nfts must load (the section is ABOUT the boost NFTs) → not ok
@@ -188,9 +198,9 @@ async function fetchNfts() {
 // Staleness of the two fallback-capable inputs, merged into the response envelope — never into
 // `data`, so no section's payload changes shape. `farmFetchedAt` is always the real upstream
 // time of the farm used; `stale`/`staleAgeMin`/`staleSources` say when a fallback was served.
-function _freshness(farmResult, nftResult) {
+function _freshness(farmResult, nftResult, pricesResult) {
   const out = { farmFetchedAt: farmResult.fetchedAt ? new Date(farmResult.fetchedAt).toISOString() : null, stale: false };
-  const staleOnes = [["farm", farmResult], ["nfts", nftResult]].filter(([, r]) => r && r.stale);
+  const staleOnes = [["farm", farmResult], ["nfts", nftResult], ["prices", pricesResult]].filter(([, r]) => r && r.stale);
   if (staleOnes.length) {
     const oldest = Math.min(...staleOnes.map(([, r]) => r.fetchedAt));
     out.stale = true;
@@ -317,6 +327,7 @@ export function _clearCacheForTests(opts = {}) {
   if (!opts.keepLastGood) {
     lastGoodFarm.clear();
     lastGoodNfts.data = null;
+    lastGoodPrices.data = null;
   }
   farmCache.clear();
   pricesCache.clear();
@@ -749,14 +760,16 @@ async function _handler(req, res) {
       data = { inputs, config, plan: levelingPlan(farm, inputs, config), impacts: itemImpacts(farm, inputs, config) };
     }
     else return res.status(400).json({ error: `unknown section: ${section}` });
-    const payload = { farm: farmId, computedAt: new Date().toISOString(), ..._freshness(farmResult, _reqCtx.getStore()?.nfts), section, data };
+    const payload = { farm: farmId, computedAt: new Date().toISOString(), ..._freshness(farmResult, _reqCtx.getStore()?.nfts, _reqCtx.getStore()?.prices), section, data };
     // section=prices only (task F2-2e-fix): fetchPrices() above is best-effort and silently
     // falls back to {} on any upstream failure, so a 200 alone cannot tell the client "prices
     // genuinely loaded" from "upstream was rate-limited, data.marketValue is near-empty". The
     // client's PRICES() cache has no TTL, so caching the latter as if it were the former reads
     // 0 for every migrated price for the rest of the session. pricesOk lets the client tell
     // the two apart and treat a false as retryable instead of durable success.
-    if (section === "prices" || section === "diff" || section === "treasury") payload.pricesOk = Object.keys(p2p).length > 0;
+    // Every section says whether it had prices (a {} map prices everything at 0); the page shows a
+    // banner instead of letting zeros pass for real numbers.
+    payload.pricesOk = Object.keys(p2p || {}).length > 0;
     // Stale farm (the live fetch failed, the last good one was served): say so, with its age.
     if (farmResult.stale) {
       payload.stale = true;

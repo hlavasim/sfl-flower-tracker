@@ -83,3 +83,25 @@ test("stale NFT data is flagged too (section=treasury)", async () => {
   assert.deepEqual(res._json.staleSources, ["nfts"], "the farm itself was fetched fresh");
   assert.equal(res._json.staleAgeMin, 30);
 });
+
+test("prices: every section says pricesOk; a failed price fetch serves the last good map, flagged stale", async () => {
+  globalThis.fetch = upstream();
+  const a = await call("cooking");
+  assert.equal(a._json.pricesOk, true, "pricesOk on a section that did not report it before");
+  now = T0 + 90 * 60000;
+  const base = upstream();
+  globalThis.fetch = async (url) => (decodeURIComponent(String(url)).includes("v1/prices") ? { ok: false, status: 429 } : base(url));
+  const b = await call("cooking");
+  assert.equal(b._status, 200);
+  assert.equal(b._json.pricesOk, true, "the last good prices were used, not {}");
+  assert.equal(b._json.stale, true);
+  assert.ok(b._json.staleSources.includes("prices"), JSON.stringify(b._json.staleSources));
+});
+
+test("prices: no good copy at all → pricesOk false on any section", async () => {
+  const base = upstream();
+  globalThis.fetch = async (url) => (decodeURIComponent(String(url)).includes("v1/prices") ? { ok: false, status: 429 } : base(url));
+  const r = await call("cooking");
+  assert.equal(r._status, 200);
+  assert.equal(r._json.pricesOk, false);
+});

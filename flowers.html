@@ -2690,6 +2690,7 @@
   <div class="container">
     <div id="nav-bar"></div>
     <div id="config-bar"></div>
+    <div id="price-banner" style="display:none;margin:0 0 8px;padding:6px 10px;border-radius:6px;font-size:0.6rem;line-height:1.5"></div>
     <div id="app">
       <div class="loading-screen pixel-font">
         <div class="loading-flower">🌻</div>
@@ -30764,6 +30765,36 @@ Kola: ${i.rounds.map(when).join(", ")}`;
      * sfl_pref_outbox) until the server has them: a failed push is retried, closing the tab flushes
      * it with keepalive, and a pull never overwrites a change still waiting there.
      */
+    /*
+     * Prices behind the numbers. Every /api/compute answer says pricesOk (false = the market feed
+     * failed and every price reads 0) and, when the server fell back to its last good price map,
+     * staleSources includes "prices". One hook on fetch turns that into a banner above the page,
+     * so zeros never pass for real numbers; the next good answer hides it.
+     */
+    function _priceBanner(p) {
+      const el = document.getElementById("price-banner");
+      if (!el || !p) return;
+      const stale = p.stale && Array.isArray(p.staleSources) && p.staleSources.includes("prices");
+      if (p.pricesOk === false) {
+        el.style.display = "block"; el.style.background = "#3a1212"; el.style.color = "#ffb4b4";
+        el.innerHTML = "⚠ Ceny z trhu se teď nenačetly — čísla, která na nich stojí (hodnoty, náklady, ROI), ukazují 0. Zkus za chvíli REFRESH.";
+      } else if (stale) {
+        el.style.display = "block"; el.style.background = "#33290f"; el.style.color = "#f0d58a";
+        el.innerHTML = "⚠ Trh teď neodpovídá — ceny jsou z dřívějška (" + (p.staleAgeMin || 0) + " min).";
+      } else el.style.display = "none";
+    }
+    try {
+      const _origFetch = window.fetch.bind(window);
+      window.fetch = async function (input, init) {
+        const r = await _origFetch(input, init);
+        try {
+          const u = String((input && input.url) || input);
+          if (u.includes("/api/compute") && r.ok) r.clone().json().then(_priceBanner).catch(() => {});
+        } catch (e) {}
+        return r;
+      };
+    } catch (e) {}
+
     const PREF_TOMBSTONE = "__sfl_deleted__";
     let _prefApplying = false, _prefTimer = null, _prefFails = 0, _prefPending = {};
     try { _prefPending = JSON.parse(localStorage.getItem("sfl_pref_outbox") || "{}") || {}; } catch (e) { _prefPending = {}; }
