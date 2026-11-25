@@ -59,3 +59,9 @@ test("inventory keys in the game's spelling (Hammerhead shark) still match", () 
   assert.equal(rows.length, 1);
   assert.equal(rows[0].age, 4);
 });
+
+test("the surplus runs biggest first: the fish you hold most over its partner leads", () => {
+  // autumn Fish Flake: Halibut 250 vs Muskellunge 50 → 150 over; Moray Eel 60 vs Napoleanfish 10 → 40 over
+  const rows = agingNow({ owned: { Halibut: 250, Muskellunge: 50, "Moray Eel": 60, Napoleanfish: 10 } }).filter((r) => r.group === "surplus");
+  assert.deepEqual(rows.map((r) => [r.name, r.age]), [["Halibut", 150], ["Moray Eel", 40]]);
+});

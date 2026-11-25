@@ -18,7 +18,8 @@ export function baitCommonIngredient(bait, recipes = FISH_MARKET_RECIPES) {
  *  - surplus: a recipe fish beyond `buffer` × what its scarcest HARD partner can match (the common
  *             ingredient never limits; the common one itself keeps `buffer` × what the hard ones make);
  *  - bait:    the kept rest of the recipe fish — listed only when no baits are being made.
- * Within a group: XP gained over eating it raw, per salt, highest first.
+ * Within a group: the surplus by how many are over (the biggest imbalance first); the others by XP
+ * gained over eating it raw, per salt, highest first.
  */
 export function agingNow({ owned = {}, recipes = FISH_MARKET_RECIPES, baitsWanted = true, buffer = 2 } = {}) {
   const have = {};
@@ -54,5 +55,6 @@ export function agingNow({ owned = {}, recipes = FISH_MARKET_RECIPES, baitsWante
     if (qty > kept) row("surplus", qty - kept, extra);
     if (!baitsWanted && kept > 0) row("bait", kept, extra);
   }
-  return rows.sort((a, b) => GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group) || b.gainPerSalt - a.gainPerSalt || b.agedXp - a.agedXp);
+  return rows.sort((a, b) => GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group) ||
+    (a.group === "surplus" ? b.age - a.age : 0) || b.gainPerSalt - a.gainPerSalt || b.agedXp - a.agedXp);
 }
