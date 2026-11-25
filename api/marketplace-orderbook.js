@@ -223,12 +223,21 @@ async function handleWishlist(pool, req, res) {
       await pool.query("DELETE FROM wishlist WHERE farm_id = $1 AND item_key = $2", [farm, String(body.remove)]);
       return res.status(200).json({ ok: true });
     }
+    // { upsert: { key: priority } }: add or re-prioritise several items (the import). Never deletes.
+    if (body.upsert && typeof body.upsert === "object") {
+      const entries = Object.entries(body.upsert).slice(0, 500);
+      for (const [key, prio] of entries) {
+        const p = Math.min(Math.max(parseInt(prio) || 2, 1), 3);
+        await pool.query("INSERT INTO wishlist (farm_id, item_key, priority) VALUES ($1,$2,$3) ON CONFLICT (farm_id,item_key) DO UPDATE SET priority = EXCLUDED.priority, updated_at = NOW()", [farm, String(key), p]);
+      }
+      return res.status(200).json({ ok: true, count: entries.length });
+    }
     if (body.key) {
       const p = Math.min(Math.max(parseInt(body.priority) || 2, 1), 3);
       await pool.query("INSERT INTO wishlist (farm_id, item_key, priority) VALUES ($1,$2,$3) ON CONFLICT (farm_id,item_key) DO UPDATE SET priority = EXCLUDED.priority, updated_at = NOW()", [farm, String(body.key), p]);
       return res.status(200).json({ ok: true });
     }
-    return res.status(400).json({ error: "provide key+priority, remove, or list" });
+    return res.status(400).json({ error: "provide key+priority, remove, upsert, or list" });
   }
   return res.status(405).json({ error: "method not allowed" });
 }

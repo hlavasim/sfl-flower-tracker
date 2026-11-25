@@ -13967,19 +13967,23 @@
     // and can be seeded/edited server-side. localStorage is a cache/offline
     // fallback. _wlCache holds the loaded list so _wlGet() stays synchronous for
     // its many call sites; mutations update the cache + POST the change.
+    // One cached list per farm (memory and localStorage): a list loaded for another farm must never
+    // be the one an edit or an import is applied to.
     let _wlCache = null;
-    let _wlLoaded = false;
+    let _wlLoaded = false, _wlFarm = null;
+    const _wlKey = () => "sfl_wishlist_v1_" + FARM_ID;
     function _wlGet() {
-      if (_wlCache) return _wlCache;
-      try { return JSON.parse(localStorage.getItem("sfl_wishlist_v1") || "{}"); } catch { return {}; }
+      if (_wlCache && _wlFarm === FARM_ID) return _wlCache;
+      try { return JSON.parse(localStorage.getItem(_wlKey()) || "{}"); } catch { return {}; }
     }
-    function _wlSave(list) { _wlCache = list; try { localStorage.setItem("sfl_wishlist_v1", JSON.stringify(list)); } catch {} }
+    function _wlSave(list) { _wlCache = list; _wlFarm = FARM_ID; try { localStorage.setItem(_wlKey(), JSON.stringify(list)); } catch {} }
     async function _wlLoadFromDb() {
+      _wlFarm = FARM_ID;
       try {
         const r = await fetch(`/api/marketplace-orderbook?wishlist=1&farm=${FARM_ID}`);
-        if (r.ok) { const d = await r.json(); _wlCache = d.list || {}; try { localStorage.setItem("sfl_wishlist_v1", JSON.stringify(_wlCache)); } catch {} return; }
+        if (r.ok) { const d = await r.json(); _wlCache = d.list || {}; try { localStorage.setItem(_wlKey(), JSON.stringify(_wlCache)); } catch {} return; }
       } catch {}
-      try { _wlCache = JSON.parse(localStorage.getItem("sfl_wishlist_v1") || "{}"); } catch { _wlCache = {}; }
+      try { _wlCache = JSON.parse(localStorage.getItem(_wlKey()) || "{}"); } catch { _wlCache = {}; }
     }
     // Bud catalog for the wishlist: mineral-boosting buds that are CURRENTLY listed
     // (buyable), joining marketplace floors (budfloors) with section=buds traits.
@@ -14014,10 +14018,13 @@
         return (_wlBudCache = cat);
       } catch { return (_wlBudCache = []); }
     }
-    // fire-and-forget write to the DB (owner farm only; others stay localStorage-only)
+    // Write to the DB (owner farm only; others stay localStorage-only). A refused or failed write
+    // is said on the panel, not swallowed.
     function _wlPost(payload) {
       writeFetch(`/api/marketplace-orderbook?wishlist=1`, { method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ farm: FARM_ID, ...payload }) }).catch(() => {});
+        body: JSON.stringify({ farm: FARM_ID, ...payload }) })
+        .then((r) => { if (r && !r.ok && r.status !== 403) { window._wlImportMsg = `<span style="color:var(--red)">uložení do DB selhalo (${r.status}) — změna je jen v tomto prohlížeči</span>`; renderWishlistPanel(); } })
+        .catch(() => { window._wlImportMsg = `<span style="color:var(--red)">uložení do DB selhalo — změna je jen v tomto prohlížeči</span>`; renderWishlistPanel(); });
     }
     window._wlSetPrio = function(key, p) {
       const l = _wlGet(); l[key] = p; _wlSave(l); _wlPost({ key, priority: p }); renderWishlistPanel();
@@ -14047,24 +14054,25 @@
       if (!ta || !_wlCatalog) return;
       const lines = ta.value.split(/[\n;]+/).map(s => s.replace(/🔗/g, "").trim()).filter(Boolean);
       const l = _wlGet();
-      let added = 0; const unmatched = [];
+      const added = {}; const unmatched = [];
       for (const line of lines) {
         const low = line.toLowerCase();
         const hit = _wlCatalog.filter(c => low.startsWith(c.name.toLowerCase())).sort((a, b) => b.name.length - a.name.length)[0]
           || _wlCatalog.find(c => c.name.toLowerCase() === low);
-        if (hit) { const k = hit.key || `${hit.collection}:${hit.name}`; if (!l[k]) added++; l[k] = l[k] || 2; }
+        if (hit) { const k = hit.key || `${hit.collection}:${hit.name}`; if (!l[k]) { l[k] = 2; added[k] = 2; } }
         else unmatched.push(line.slice(0, 24));
       }
-      _wlSave(l); _wlPost({ list: l });
+      // Only the new items are sent (upsert): the stored list is never replaced from this cache.
+      _wlSave(l); if (Object.keys(added).length) _wlPost({ upsert: added });
       ta.value = "";
-      window._wlImportMsg = `<span style="color:var(--green)">+${added} přidáno</span>${unmatched.length ? ` · <span style="color:var(--yellow)">nenalezeno: ${escHTML(unmatched.slice(0, 6).join(", "))}</span>` : ""}`;
+      window._wlImportMsg = `<span style="color:var(--green)">+${Object.keys(added).length} přidáno</span>${unmatched.length ? ` · <span style="color:var(--yellow)">nenalezeno: ${escHTML(unmatched.slice(0, 6).join(", "))}</span>` : ""}`;
       await renderWishlistPanel();
     };
     let _wlCatalog = null;
     async function renderWishlistPanel() {
       const el = document.getElementById("wishlist-panel");
       if (!el) return;
-      if (!_wlLoaded) { await _wlLoadFromDb(); _wlLoaded = true; }
+      if (!_wlLoaded || _wlFarm !== FARM_ID) { await _wlLoadFromDb(); _wlLoaded = true; }
       /*
        * The bud catalog is loaded BEFORE the compute call, not after it: the server resolves
        * "buds:<id>" wishlist rows itself now, and it needs their marketplace floors, which
