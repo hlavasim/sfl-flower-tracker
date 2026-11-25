@@ -69,6 +69,15 @@ module.exports = async function (context) {
        dump_modified_at = EXCLUDED.dump_modified_at,
        started_at = CASE WHEN cdn_ingest_state.dump_path = EXCLUDED.dump_path
                          THEN cdn_ingest_state.started_at ELSE NOW() END,
+       -- a new dump starts from record 0: the previous dump's counters must not carry over
+       records_done = CASE WHEN cdn_ingest_state.dump_path = EXCLUDED.dump_path
+                           THEN cdn_ingest_state.records_done ELSE $3 END,
+       changed = CASE WHEN cdn_ingest_state.dump_path = EXCLUDED.dump_path
+                      THEN cdn_ingest_state.changed ELSE 0 END,
+       unchanged = CASE WHEN cdn_ingest_state.dump_path = EXCLUDED.dump_path
+                        THEN cdn_ingest_state.unchanged ELSE 0 END,
+       bad = CASE WHEN cdn_ingest_state.dump_path = EXCLUDED.dump_path
+                  THEN cdn_ingest_state.bad ELSE 0 END,
        complete = FALSE, last_error = NULL`,
     [dump.path, dump.modifiedAt, skip]
   );
@@ -82,7 +91,9 @@ module.exports = async function (context) {
   }
 
   let lastLog = 0;
-  const out = await ingestStream(pool, {
+  let out;
+  try {
+  out = await ingestStream(pool, {
     // Node's fetch gives a web ReadableStream; ingestStream wants a Node stream.
     source: require("stream").Readable.fromWeb(res.body),
     bankedFoodXp: cooking.bankedFoodXp,
@@ -95,6 +106,12 @@ module.exports = async function (context) {
         `(unplayed) / ${p.changed} changed (${Math.round(p.elapsedMs / 1000)}s)`);
     },
   });
+  } catch (e) {
+    // The stream broke (network, a bad batch): say so in the state row, and let Azure see the failure.
+    await pool.query("UPDATE cdn_ingest_state SET last_error = $1, updated_at = NOW() WHERE id = 1",
+      [String((e && e.message) || e).slice(0, 500)]).catch(() => {});
+    throw e;
+  }
 
   await pool.query(
     `UPDATE cdn_ingest_state SET records_done = $1, changed = COALESCE(changed,0) + $2,
