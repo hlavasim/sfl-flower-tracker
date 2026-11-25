@@ -2690,6 +2690,7 @@
   <div class="container">
     <div id="nav-bar"></div>
     <div id="config-bar"></div>
+    <div id="price-banner" style="display:none;margin:0 0 8px;padding:6px 10px;border-radius:6px;font-size:0.6rem;line-height:1.5"></div>
     <div id="app">
       <div class="loading-screen pixel-font">
         <div class="loading-flower">🌻</div>
@@ -5223,6 +5224,13 @@
     let FARM_ID, LIMIT, FLOWER_BEDS, TRAP_COUNT;
     let lastInventory = null, lastInProgress = null;
     let cachedFarmData = null;
+    /*
+     * Navigation guard. Every main() takes a token; work that finishes after a newer navigation
+     * stops instead of painting over it. The farm fetch is shared by concurrent main() calls (one
+     * per farm), the cached farm is dropped when the farm changes, and a page or farm change gets
+     * a fresh #app so a slower render of the page left behind writes into a detached node.
+     */
+    let _navSeq = 0, _navPage = null, _navFarm = null, _farmInflight = null, _cachedFarmFor = null;
     let configExpanded = false;
     let growingTimerInterval = null;
     let pbTimerInterval = null;
@@ -5468,7 +5476,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.50</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.51</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5495,6 +5503,14 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.51", items: [
+          { t: "fix", text: "FISHING: ticking a worm + chum route in the Marvel planner crashed the page (and stayed crashed after a reload)." },
+          { t: "fix", text: "Settings shared between devices: a setting deleted on one device no longer comes back from another; a change that could not be sent waits and is sent again (also when the tab closes), and a pull never overwrites it." },
+          { t: "fix", text: "SALES wishlist: kept per farm; the import only adds items and can no longer replace the stored list; a failed save says so." },
+          { t: "fix", text: "When the market price feed fails, the last good prices (up to a day old) are used and a banner says so — no more pages full of zeros passing for real numbers." },
+          { t: "fix", text: "Faster and safer database access (small pool with timeouts, verified TLS); computed sections are shared by the CDN for 10 s." },
+          { t: "fix", text: "Switching pages quickly: a slow page you left no longer paints over the new one; the farm is fetched once and dropped on a farm switch." },
+        ] },
         { ver: "v6.50", items: [
           { t: "fix", text: "Crustaceans are priced one way on LEVELING and FISHING: the pot (free with a Royal Crab Pot) plus the <b>cheaper</b> chum — FISHING ignored the alternative chum (Ruffroot for Sea Snail, Ribbon for Blue Crab…) and could overprice a Crab Stick." },
         ] },
@@ -9634,7 +9650,7 @@
       let fresh = false;
       if (Date.now() - _farmFetchedAt >= DASH_LIVE_MS && !_dashLiveBusy) {
         _dashLiveBusy = true;
-        try { cachedFarmData = await fetchFarmData(); fresh = true; } catch (e) { console.warn("[dash live]", e); }
+        try { cachedFarmData = await fetchFarmData(); _cachedFarmFor = FARM_ID; fresh = true; } catch (e) { console.warn("[dash live]", e); }
         _dashLiveBusy = false;
       }
       const farm = cachedFarmData && cachedFarmData.farm;
@@ -13967,19 +13983,23 @@
     // and can be seeded/edited server-side. localStorage is a cache/offline
     // fallback. _wlCache holds the loaded list so _wlGet() stays synchronous for
     // its many call sites; mutations update the cache + POST the change.
+    // One cached list per farm (memory and localStorage): a list loaded for another farm must never
+    // be the one an edit or an import is applied to.
     let _wlCache = null;
-    let _wlLoaded = false;
+    let _wlLoaded = false, _wlFarm = null;
+    const _wlKey = () => "sfl_wishlist_v1_" + FARM_ID;
     function _wlGet() {
-      if (_wlCache) return _wlCache;
-      try { return JSON.parse(localStorage.getItem("sfl_wishlist_v1") || "{}"); } catch { return {}; }
+      if (_wlCache && _wlFarm === FARM_ID) return _wlCache;
+      try { return JSON.parse(localStorage.getItem(_wlKey()) || "{}"); } catch { return {}; }
     }
-    function _wlSave(list) { _wlCache = list; try { localStorage.setItem("sfl_wishlist_v1", JSON.stringify(list)); } catch {} }
+    function _wlSave(list) { _wlCache = list; _wlFarm = FARM_ID; try { localStorage.setItem(_wlKey(), JSON.stringify(list)); } catch {} }
     async function _wlLoadFromDb() {
+      _wlFarm = FARM_ID;
       try {
         const r = await fetch(`/api/marketplace-orderbook?wishlist=1&farm=${FARM_ID}`);
-        if (r.ok) { const d = await r.json(); _wlCache = d.list || {}; try { localStorage.setItem("sfl_wishlist_v1", JSON.stringify(_wlCache)); } catch {} return; }
+        if (r.ok) { const d = await r.json(); _wlCache = d.list || {}; try { localStorage.setItem(_wlKey(), JSON.stringify(_wlCache)); } catch {} return; }
       } catch {}
-      try { _wlCache = JSON.parse(localStorage.getItem("sfl_wishlist_v1") || "{}"); } catch { _wlCache = {}; }
+      try { _wlCache = JSON.parse(localStorage.getItem(_wlKey()) || "{}"); } catch { _wlCache = {}; }
     }
     // Bud catalog for the wishlist: mineral-boosting buds that are CURRENTLY listed
     // (buyable), joining marketplace floors (budfloors) with section=buds traits.
@@ -14014,10 +14034,13 @@
         return (_wlBudCache = cat);
       } catch { return (_wlBudCache = []); }
     }
-    // fire-and-forget write to the DB (owner farm only; others stay localStorage-only)
+    // Write to the DB (owner farm only; others stay localStorage-only). A refused or failed write
+    // is said on the panel, not swallowed.
     function _wlPost(payload) {
       writeFetch(`/api/marketplace-orderbook?wishlist=1`, { method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ farm: FARM_ID, ...payload }) }).catch(() => {});
+        body: JSON.stringify({ farm: FARM_ID, ...payload }) })
+        .then((r) => { if (r && !r.ok && r.status !== 403) { window._wlImportMsg = `<span style="color:var(--red)">uložení do DB selhalo (${r.status}) — změna je jen v tomto prohlížeči</span>`; renderWishlistPanel(); } })
+        .catch(() => { window._wlImportMsg = `<span style="color:var(--red)">uložení do DB selhalo — změna je jen v tomto prohlížeči</span>`; renderWishlistPanel(); });
     }
     window._wlSetPrio = function(key, p) {
       const l = _wlGet(); l[key] = p; _wlSave(l); _wlPost({ key, priority: p }); renderWishlistPanel();
@@ -14047,24 +14070,25 @@
       if (!ta || !_wlCatalog) return;
       const lines = ta.value.split(/[\n;]+/).map(s => s.replace(/🔗/g, "").trim()).filter(Boolean);
       const l = _wlGet();
-      let added = 0; const unmatched = [];
+      const added = {}; const unmatched = [];
       for (const line of lines) {
         const low = line.toLowerCase();
         const hit = _wlCatalog.filter(c => low.startsWith(c.name.toLowerCase())).sort((a, b) => b.name.length - a.name.length)[0]
           || _wlCatalog.find(c => c.name.toLowerCase() === low);
-        if (hit) { const k = hit.key || `${hit.collection}:${hit.name}`; if (!l[k]) added++; l[k] = l[k] || 2; }
+        if (hit) { const k = hit.key || `${hit.collection}:${hit.name}`; if (!l[k]) { l[k] = 2; added[k] = 2; } }
         else unmatched.push(line.slice(0, 24));
       }
-      _wlSave(l); _wlPost({ list: l });
+      // Only the new items are sent (upsert): the stored list is never replaced from this cache.
+      _wlSave(l); if (Object.keys(added).length) _wlPost({ upsert: added });
       ta.value = "";
-      window._wlImportMsg = `<span style="color:var(--green)">+${added} přidáno</span>${unmatched.length ? ` · <span style="color:var(--yellow)">nenalezeno: ${escHTML(unmatched.slice(0, 6).join(", "))}</span>` : ""}`;
+      window._wlImportMsg = `<span style="color:var(--green)">+${Object.keys(added).length} přidáno</span>${unmatched.length ? ` · <span style="color:var(--yellow)">nenalezeno: ${escHTML(unmatched.slice(0, 6).join(", "))}</span>` : ""}`;
       await renderWishlistPanel();
     };
     let _wlCatalog = null;
     async function renderWishlistPanel() {
       const el = document.getElementById("wishlist-panel");
       if (!el) return;
-      if (!_wlLoaded) { await _wlLoadFromDb(); _wlLoaded = true; }
+      if (!_wlLoaded || _wlFarm !== FARM_ID) { await _wlLoadFromDb(); _wlLoaded = true; }
       /*
        * The bud catalog is loaded BEFORE the compute call, not after it: the server resolves
        * "buds:<id>" wishlist rows itself now, and it needs their marketplace floors, which
@@ -19856,7 +19880,7 @@
         const pair = gr.filter((g) => g.fish.toLowerCase() === fish.name.toLowerCase() && g.cost > 0)
                        .sort((a, b) => a.cost - b.cost)[0];
         if (pair && p > 0) {
-          out.push({ kind: "pair", label: pair.bait + " + " + pair.qty + "× " + pair.chum,
+          out.push({ kind: "pair", pair, label: pair.bait + " + " + pair.qty + "× " + pair.chum,
                      perPiece: 1 / p, unit: "casts", total: (1 / p) * pieces * pair.cost,
                      detail: pair.cost.toFixed(2) + " " + sflIcon() + " per guaranteed " + escHTML(fish.name) });
         }
@@ -25216,8 +25240,15 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     }
 
     async function main() {
+      const seq = ++_navSeq;
       const cfg = getConfig();
       const page = getPage();
+      if (cachedFarmData && _cachedFarmFor !== cfg.farm) cachedFarmData = null;
+      if (_navPage !== null && (page !== _navPage || cfg.farm !== _navFarm)) {
+        const old = document.getElementById("app");
+        if (old && old.parentNode && old.cloneNode) old.parentNode.replaceChild(old.cloneNode(false), old);
+      }
+      _navPage = page; _navFarm = cfg.farm;
 
       FARM_ID = cfg.farm;
       LIMIT = cfg.limit;
@@ -25262,7 +25293,16 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
 
       try {
         if (!cachedFarmData) {
-          cachedFarmData = await fetchFarmData();
+          if (!_farmInflight || _farmInflight.farm !== FARM_ID) {
+            const farm = FARM_ID;
+            const p = fetchFarmData();
+            _farmInflight = { farm, p };
+            p.then(() => {}, () => {}).then(() => { if (_farmInflight && _farmInflight.p === p) _farmInflight = null; });
+          }
+          const inflight = _farmInflight;
+          const fetched = await inflight.p;
+          if (inflight.farm === getConfig().farm) { cachedFarmData = fetched; _cachedFarmFor = inflight.farm; }
+          if (seq !== _navSeq) return;               // a newer navigation took over
         }
         const data = cachedFarmData;
 
@@ -30750,16 +30790,79 @@ Kola: ${i.rounds.map(when).join(", ")}`;
       "sfl_marks_budget", "sfl_bumpkin_target", "sfl_bumpkin_recipes", "sfl_nodes_roi_cap", "sfl_coin_mode",
       "sfl_sales_sell_type", "sfl_sales_sell_min", "sfl_pet_streak", "sfl_wl_eff", "sfl_flower_mode", "sfl_flower_n", "sfl_sats_gran",
       "sfl_repay_daily_flower", "sfl_tk_goal", "sfl_dash_voice", "sfl_leveling"];
-    let _prefApplying = false, _prefPending = {}, _prefTimer = null;
-    function _prefFarm() { try { return getConfig().farm || null; } catch (e) { return null; } }
-    function _prefPush() {
-      const farm = _prefFarm(), prefs = _prefPending;
-      _prefPending = {}; _prefTimer = null;
-      if (!farm || !Object.keys(prefs).length) return;
-      writeFetch(`/api/farm-history?type=prefs&farm=${encodeURIComponent(farm)}`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prefs }) }, true).catch(() => {});
+    /*
+     * A deleted key is kept on the server as this marker (a tombstone), so a device that still has
+     * the key removes it instead of seeding it back. Changes wait in an outbox (localStorage
+     * sfl_pref_outbox) until the server has them: a failed push is retried, closing the tab flushes
+     * it with keepalive, and a pull never overwrites a change still waiting there.
+     */
+    /*
+     * Prices behind the numbers. Every /api/compute answer says pricesOk (false = the market feed
+     * failed and every price reads 0) and, when the server fell back to its last good price map,
+     * staleSources includes "prices". One hook on fetch turns that into a banner above the page,
+     * so zeros never pass for real numbers; the next good answer hides it.
+     */
+    function _priceBanner(p) {
+      const el = document.getElementById("price-banner");
+      if (!el || !p) return;
+      const stale = p.stale && Array.isArray(p.staleSources) && p.staleSources.includes("prices");
+      if (p.pricesOk === false) {
+        el.style.display = "block"; el.style.background = "#3a1212"; el.style.color = "#ffb4b4";
+        el.innerHTML = "⚠ Ceny z trhu se teď nenačetly — čísla, která na nich stojí (hodnoty, náklady, ROI), ukazují 0. Zkus za chvíli REFRESH.";
+      } else if (stale) {
+        el.style.display = "block"; el.style.background = "#33290f"; el.style.color = "#f0d58a";
+        el.innerHTML = "⚠ Trh teď neodpovídá — ceny jsou z dřívějška (" + (p.staleAgeMin || 0) + " min).";
+      } else el.style.display = "none";
     }
-    function _prefQueue(k, v) { _prefPending[k] = v; clearTimeout(_prefTimer); _prefTimer = setTimeout(_prefPush, 800); }
+    try {
+      const _origFetch = window.fetch.bind(window);
+      window.fetch = async function (input, init) {
+        const r = await _origFetch(input, init);
+        try {
+          const u = String((input && input.url) || input);
+          if (u.includes("/api/compute") && r.ok) r.clone().json().then(_priceBanner).catch(() => {});
+        } catch (e) {}
+        return r;
+      };
+    } catch (e) {}
+
+    const PREF_TOMBSTONE = "__sfl_deleted__";
+    let _prefApplying = false, _prefTimer = null, _prefFails = 0, _prefPending = {};
+    try { _prefPending = JSON.parse(localStorage.getItem("sfl_pref_outbox") || "{}") || {}; } catch (e) { _prefPending = {}; }
+    function _prefSaveOutbox() {
+      try {
+        if (Object.keys(_prefPending).length) localStorage.setItem("sfl_pref_outbox", JSON.stringify(_prefPending));
+        else localStorage.removeItem("sfl_pref_outbox");
+      } catch (e) {}
+    }
+    function _prefFarm() { try { return getConfig().farm || null; } catch (e) { return null; } }
+    function _prefPush(keepalive) {
+      const farm = _prefFarm(), sent = { ..._prefPending };
+      _prefTimer = null;
+      if (!farm || !Object.keys(sent).length) return;
+      const retry = () => { if (++_prefFails <= 5) { clearTimeout(_prefTimer); _prefTimer = setTimeout(_prefPush, 30000 * _prefFails); } };
+      writeFetch(`/api/farm-history?type=prefs&farm=${encodeURIComponent(farm)}`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prefs: sent }), keepalive: !!keepalive }, true)
+        .then((r) => {
+          if (r && r.ok) {
+            _prefFails = 0;
+            for (const [k, v] of Object.entries(sent)) if (_prefPending[k] === v) delete _prefPending[k];
+            _prefSaveOutbox();
+          } else if (r && (r.status === 401 || r.status === 403)) {
+            _prefPending = {}; _prefSaveOutbox();          // no write token: this device only reads
+          } else retry();
+        })
+        .catch(retry);
+    }
+    function _prefQueue(k, v) {
+      _prefPending[k] = v; _prefSaveOutbox();
+      clearTimeout(_prefTimer); _prefTimer = setTimeout(_prefPush, 800);
+    }
+    try {
+      window.addEventListener("pagehide", () => {
+        if (Object.keys(_prefPending).length) { clearTimeout(_prefTimer); _prefPush(true); }
+      });
+    } catch (e) {}
     try {
       const S = Storage.prototype, set = S.setItem, rem = S.removeItem;
       const synced = (st, k) => !_prefApplying && prefSyncKeys.includes(k) && typeof window !== "undefined" && st === window.localStorage;
@@ -30778,11 +30881,14 @@ Kola: ${i.rounds.map(when).join(", ")}`;
       try {
         for (const k of prefSyncKeys) {
           const local = localStorage.getItem(k);
+          if (Object.prototype.hasOwnProperty.call(_prefPending, k)) continue;   // our unsent change wins
           if (Object.prototype.hasOwnProperty.call(server, k)) {
-            if (server[k] !== local) { localStorage.setItem(k, server[k]); changed = true; }
+            if (server[k] === PREF_TOMBSTONE) { if (local !== null) { localStorage.removeItem(k); changed = true; } }
+            else if (server[k] !== local) { localStorage.setItem(k, server[k]); changed = true; }
           } else if (local !== null) _prefQueue(k, local);          // first device: seed the shared copy
         }
       } finally { _prefApplying = false; }
+      if (Object.keys(_prefPending).length && !_prefTimer) _prefPush();   // last session's outbox
       if (changed) {
         // The four settings the page caches in memory at load.
         try { _rmPicks = new Set(JSON.parse(localStorage.getItem("sfl_rm_picks") || "[]")); } catch (e) {}

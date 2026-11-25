@@ -5476,7 +5476,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.50</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.51</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5503,6 +5503,14 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.51", items: [
+          { t: "fix", text: "FISHING: ticking a worm + chum route in the Marvel planner crashed the page (and stayed crashed after a reload)." },
+          { t: "fix", text: "Settings shared between devices: a setting deleted on one device no longer comes back from another; a change that could not be sent waits and is sent again (also when the tab closes), and a pull never overwrites it." },
+          { t: "fix", text: "SALES wishlist: kept per farm; the import only adds items and can no longer replace the stored list; a failed save says so." },
+          { t: "fix", text: "When the market price feed fails, the last good prices (up to a day old) are used and a banner says so — no more pages full of zeros passing for real numbers." },
+          { t: "fix", text: "Faster and safer database access (small pool with timeouts, verified TLS); computed sections are shared by the CDN for 10 s." },
+          { t: "fix", text: "Switching pages quickly: a slow page you left no longer paints over the new one; the farm is fetched once and dropped on a farm switch." },
+        ] },
         { ver: "v6.50", items: [
           { t: "fix", text: "Crustaceans are priced one way on LEVELING and FISHING: the pot (free with a Royal Crab Pot) plus the <b>cheaper</b> chum — FISHING ignored the alternative chum (Ruffroot for Sea Snail, Ribbon for Blue Crab…) and could overprice a Crab Stick." },
         ] },
