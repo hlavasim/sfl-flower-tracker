@@ -149,7 +149,7 @@ test("baits: fish turned into baits are not also eaten — every caught fish is 
 });
 
 test("a reel item adds its reels on top of the configured reels", () => {
-  const c = cfg(), a = plan(c), b = plan({ ...c, ticked: ["Nautilus"] });
+  const c0 = cfg(), c = { ...c0, fish: { ...c0.fish, baits: false } }, a = plan(c), b = plan({ ...c, ticked: ["Nautilus"] });
   assert.ok(Math.abs((b.fish.perDay - a.fish.perDay) - 5 * a.fish.fishPerCast) < 1e-6);
 });
 
@@ -207,7 +207,7 @@ test("sanitizeLevelingConfig drops stale names and clamps numbers", async () => 
 });
 
 test("rakes are charged only for the salt aging uses: a salt boost never costs FLOWER a day when slots are the limit", () => {
-  const c = cfg({ restarts: 6 });
+  const c0 = cfg({ restarts: 6 }), c = { ...c0, fish: { ...c0.fish, baits: false } };
   const a = plan(c);
   assert.equal(a.bottleneck, "slots");
   const b = plan({ ...c, ticked: ["Salt Worker Gnome"] });
