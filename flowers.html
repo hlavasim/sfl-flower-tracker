@@ -5224,6 +5224,13 @@
     let FARM_ID, LIMIT, FLOWER_BEDS, TRAP_COUNT;
     let lastInventory = null, lastInProgress = null;
     let cachedFarmData = null;
+    /*
+     * Navigation guard. Every main() takes a token; work that finishes after a newer navigation
+     * stops instead of painting over it. The farm fetch is shared by concurrent main() calls (one
+     * per farm), the cached farm is dropped when the farm changes, and a page or farm change gets
+     * a fresh #app so a slower render of the page left behind writes into a detached node.
+     */
+    let _navSeq = 0, _navPage = null, _navFarm = null, _farmInflight = null, _cachedFarmFor = null;
     let configExpanded = false;
     let growingTimerInterval = null;
     let pbTimerInterval = null;
@@ -9635,7 +9642,7 @@
       let fresh = false;
       if (Date.now() - _farmFetchedAt >= DASH_LIVE_MS && !_dashLiveBusy) {
         _dashLiveBusy = true;
-        try { cachedFarmData = await fetchFarmData(); fresh = true; } catch (e) { console.warn("[dash live]", e); }
+        try { cachedFarmData = await fetchFarmData(); _cachedFarmFor = FARM_ID; fresh = true; } catch (e) { console.warn("[dash live]", e); }
         _dashLiveBusy = false;
       }
       const farm = cachedFarmData && cachedFarmData.farm;
@@ -25225,8 +25232,15 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     }
 
     async function main() {
+      const seq = ++_navSeq;
       const cfg = getConfig();
       const page = getPage();
+      if (cachedFarmData && _cachedFarmFor !== cfg.farm) cachedFarmData = null;
+      if (_navPage !== null && (page !== _navPage || cfg.farm !== _navFarm)) {
+        const old = document.getElementById("app");
+        if (old && old.parentNode && old.cloneNode) old.parentNode.replaceChild(old.cloneNode(false), old);
+      }
+      _navPage = page; _navFarm = cfg.farm;
 
       FARM_ID = cfg.farm;
       LIMIT = cfg.limit;
@@ -25271,7 +25285,16 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
 
       try {
         if (!cachedFarmData) {
-          cachedFarmData = await fetchFarmData();
+          if (!_farmInflight || _farmInflight.farm !== FARM_ID) {
+            const farm = FARM_ID;
+            const p = fetchFarmData();
+            _farmInflight = { farm, p };
+            p.then(() => {}, () => {}).then(() => { if (_farmInflight && _farmInflight.p === p) _farmInflight = null; });
+          }
+          const inflight = _farmInflight;
+          const fetched = await inflight.p;
+          if (inflight.farm === getConfig().farm) { cachedFarmData = fetched; _cachedFarmFor = inflight.farm; }
+          if (seq !== _navSeq) return;               // a newer navigation took over
         }
         const data = cachedFarmData;
 
