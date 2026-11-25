@@ -120,3 +120,11 @@ test("an unknown resource is an error result, not a throw", async () => {
   assert.strictEqual(r.status, "error");
   assert.match(r.error, /unknown resource/);
 });
+
+test("book: the marketplace book, one fetch shared by everyone", async () => {
+  const f = fakeFetch({ "marketplace-orderbook?book=1": { items: { A: { f: 1 } } } });
+  const s = createStore({ fetch: f });
+  const [a] = await Promise.all([s.get({ res: "book" }), s.get({ res: "book" })]);
+  assert.deepStrictEqual(a.data, { items: { A: { f: 1 } } });
+  assert.strictEqual(f.calls.length, 1);
+});

@@ -19175,6 +19175,9 @@
         return { savedLeveling: saved, marvelPlanned: Object.keys(_fishPlan).length > 0, cookSettings: _cookSettings(),
           icon: (n) => _mIcon(gameSpelling[n] || n, 12) };
       }
+      if (type === "leveling-ladder") {
+        try { return { savedLeveling: JSON.parse(localStorage.getItem("sfl_leveling") || "null") }; } catch (e) { return {}; }
+      }
       return {};
     }
     async function renderBoard() {
@@ -25503,11 +25506,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       if (!farm) { app.innerHTML = head + `<div class="error-screen pixel-panel pixel-font"><p>Chybí data farmy — obnov stránku.</p></div>`; return; }
       // Bids and bud floors from the marketplace book; a floor the boost catalogue lacks comes from it too.
       const book = (_rmBook && _rmBook.items) || {};
-      const inputs = { ...d.inputs, floors: { ...(d.inputs.floors || {}) }, bids: {}, budFloors: budTypeFloors(book), budBids: budTypeBids(book) };
-      for (const [n, v] of Object.entries(book)) {
-        if (v && v.b > 0) inputs.bids[n] = v.b;
-        if (v && v.f > 0 && !(inputs.floors[n] > 0)) inputs.floors[n] = v.f;
-      }
+      const inputs = levelingInputsWithBook(d.inputs, book);
       let saved = null;
       try { saved = JSON.parse(localStorage.getItem("sfl_leveling") || "null"); } catch (e) { saved = null; }
       window._lvl = { farm, inputs, book, front: null, showAll: false, ...levelingInit(farm, inputs, saved) };
@@ -25705,17 +25704,10 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       h += panel("👣 CO TĚ TEĎ NEJVÍC ZLEVNÍ <span style=\"color:var(--text-dim)\">(každý krok sám o sobě proti tomu, co je nastavené teď)</span>", sh, ";font-size:0.58rem");
       h += panel(`🧭 NEJLEVNĚJŠÍ CESTY DO ${targetLabel.toUpperCase()}`, fh, ";font-size:0.58rem");
 
-      // ── ladder ──
-      let lh = `<div style="overflow-x:auto"><table class="roi-table lvl-t" style="width:100%;border-collapse:collapse">
-        <tr><th style="text-align:left">ascenze</th><th>XP</th><th>dní</th><th>${S}</th><th>celkem dní</th><th>datum</th><th>celkem ${S}</th><th title="Volné skill body na konci (1 za level; levely ascenze se počítají po vylepšení ostrova)">body</th></tr>`;
-      for (const r of ladder) {
-        const on = r.ascension === c.target.ascension;
-        lh += `<tr class="roi-row" style="cursor:pointer${on ? ";background:rgba(255,200,80,0.12)" : ""}" onclick="_lvlTarget(${r.ascension})" title="nastavit jako cíl">
-          <td style="text-align:left;white-space:nowrap">${on ? "▶ " : ""}${r.fromLevel > 1 ? `dodělat A${r.ascension} (L${r.fromLevel}→50)` : `A${r.ascension}`}</td>
-          <td>${lvlK(r.xp / 1e6).replace("+", "")} M</td><td>${lvlFmt(r.days)}</td><td>${lvlFmt(r.flower)}</td>
-          <td><b>${lvlFmt(r.cumDays)}</b></td><td>${lvlDate(r.cumDays)}</td><td><b>${lvlFmt(r.cumFlower)}</b></td><td>${r.points == null ? "" : r.points}</td></tr>`;
-      }
-      h += panel("🪜 PO ASCENZÍCH (tvoje nastavení; klik = cíl)", lh + `</table></div>`, ";font-size:0.58rem");
+      // ── ladder: the leveling-ladder widget (widgets/leveling-ladder.mjs), pinnable; a row click sets the target ──
+      window._wRerender = _lvlRender;
+      h += __widgets.renderPage("leveling-ladder", { data: { farm: L.farm }, ctx: { plan, cfg: c, free },
+        fresh: __wFresh(__store.peek({ res: "leveling", farm: FARM_ID })) });
 
       // ── items × ascensions ──
       const cols = ladder.map((r) => ({ a: r.ascension, xp: r.xpEnd }));
@@ -25755,6 +25747,10 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       }
       h += panel("🧮 CO NEMÁŠ: ČISTĚ ZA AŽ DO KONCE ASCENZE", th + `</table></div>`, ";font-size:0.56rem");
       body.innerHTML = `<style>#lvl-body td,#lvl-body th{padding:1px 5px;vertical-align:top}#lvl-body .lvl-t td{text-align:right}#lvl-body .lvl-t th{font-weight:normal;color:var(--text-dim)}</style>` + h;
+      body.onclick = (e) => {
+        const tr = e.target.closest('[data-frame="page:leveling-ladder"] tr[data-row]');
+        if (tr) _lvlTarget(Number(tr.dataset.row.slice(1)));
+      };
     }
 
     async function renderTickets() {

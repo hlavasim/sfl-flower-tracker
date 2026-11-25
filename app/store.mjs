@@ -26,6 +26,11 @@ export const RESOURCES = {
     ttl: 10 * 60_000,
     load: async ({ farm }, { json }) => (await json(`/api/farm-history?type=ticket-weeks&farm=${enc(farm)}`)).weeks || null,
   },
+  // The marketplace book (floors f / bids b per item, buds included), from the community activity.
+  book: {
+    ttl: 5 * 60_000,
+    load: (_, { json }) => json("/api/marketplace-orderbook?book=1"),
+  },
   // The LEVELING plan inputs; POSTs the recorded weeks when there are any, as the pages always did.
   leveling: {
     ttl: 5 * 60_000,

@@ -572,6 +572,20 @@ export function budTypeFloors(bookItems) {
   return out;
 }
 
+/**
+ * The LEVELING inputs with the marketplace book applied: every item's best bid, its floor where the
+ * boost catalogue has none, and the bud floors/bids by type. Returns a new object.
+ */
+export function levelingInputsWithBook(inputs, bookItems) {
+  const book = bookItems || {};
+  const out = { ...inputs, floors: { ...(inputs.floors || {}) }, bids: {}, budFloors: budTypeFloors(book), budBids: budTypeBids(book) };
+  for (const [n, v] of Object.entries(book)) {
+    if (v && v.b > 0) out.bids[n] = v.b;
+    if (v && v.f > 0 && !(out.floors[n] > 0)) out.floors[n] = v.f;
+  }
+  return out;
+}
+
 /** Best bid per bud type from the marketplace book, for the bud rows' resale loss. */
 export function budTypeBids(bookItems) {
   const out = {};
