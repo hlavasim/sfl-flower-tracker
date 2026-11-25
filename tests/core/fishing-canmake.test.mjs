@@ -21,7 +21,10 @@ test("canMake is limited by the hard ingredients, the common one becomes 'missin
 
 test("DNES runs the LEVELING plan on the saved config and lists what to age from agingNow", () => {
   assert.match(SRC, /lvCfg = levelingInit\(_fishFarm, lin, saved\)\.cfg;/);
-  assert.match(SRC, /agingNow\(\{ owned: ownedNow, baitsWanted \}\)/);
+  assert.match(SRC, /__widgets\.renderPage\("fishing-age-now", \{/);
+  // FISHING reads the farm through the store, so the widget's freshness badge has an entry to read.
+  assert.match(SRC, /__store\.get\(\{ res: "farm", farm: FARM_ID \}\)\.then\(\(r\) => \(r\.status === "ok" \? r\.data : null\)\)/);
+  assert.match(SRC, /ctx: \{ lvPlan, marvelPlanned: Object\.keys\(_fishPlan\)\.length > 0/);
   assert.match(SRC, /☀️ DNES/);
 });
 

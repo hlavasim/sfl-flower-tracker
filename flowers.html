@@ -2670,13 +2670,46 @@
     .roi-table tr.roi-row:hover { background: rgba(255,255,255,0.04); }
     .roi-table th { font-size: 0.5rem; letter-spacing: 0.05em; }
 
+    /* Widgets (ui/frame.mjs, ui/table.mjs) */
+    .w-frame { padding: 8px 10px; margin: 8px 0; font-size: 0.5rem; line-height: 1.6; }
+    .w-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .w-title { font-family: 'Press Start 2P', monospace; font-size: 0.5rem; color: var(--sunpetal); }
+    .w-tools { margin-left: auto; display: flex; gap: 4px; align-items: center; }
+    .w-btn { background: transparent; border: 1px solid #3a2e1c; color: var(--text-secondary); font-size: 0.5rem; padding: 1px 5px; cursor: pointer; border-radius: 3px; }
+    .w-btn:hover { color: var(--sunpetal); border-color: var(--sunpetal); }
+    .w-fresh { font-size: 0.42rem; color: var(--text-dim); }
+    .w-fresh-stale { color: #e8a060; } .w-fresh-error { color: var(--red); }
+    .w-table { width: 100%; border-collapse: collapse; font-size: 0.5rem; margin: 4px 0; }
+    .w-table th { color: var(--text-dim); font-size: 0.42rem; font-weight: normal; text-align: left; padding: 0 6px 2px 0; cursor: pointer; white-space: nowrap; }
+    .w-table th:hover { color: var(--sunpetal); }
+    .w-table td { padding: 2px 6px 2px 0; border-top: 1px solid #20190f; }
+    .w-table.w-compact td { padding: 0 6px 0 0; }
+    .w-empty, .w-empty-msg { color: #e8a060; }
+    .w-missing { color: #e8a060; font-size: 0.44rem; }
+    .w-error { color: var(--red); }
+    .w-settings-wrap { border: 1px dashed #3a2e1c; padding: 6px 8px; margin: 4px 0 8px; }
+    .w-settings fieldset { border: none; padding: 0; margin: 0 0 6px; }
+    .w-settings legend { color: var(--sunpetal); font-size: 0.44rem; }
+    .w-settings button { font-size: 0.44rem; padding: 0 4px; margin-left: 2px; cursor: pointer; }
+    .w-set-col { display: inline-block; margin-right: 10px; white-space: nowrap; }
+    .w-picks { max-height: 140px; overflow: auto; margin-top: 4px; }
+    .w-pick { display: inline-block; margin-right: 10px; white-space: nowrap; }
+    .w-board { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 8px; align-items: start; }
+    .w-board > .w-frame { margin: 0; min-width: 0; overflow-x: auto; }
+    @media (max-width: 700px) { .w-board > .w-frame { grid-column: span 12 !important; } }
+
 </style>
   <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
   <script type="module">
     // Load the calculation engine (core/*.mjs — the modules the server runs) and hand it to the page.
     // The data store (app/store.mjs) comes with it: one fetch per resource key, shared by every panel.
-    Promise.all([import("/core/browser-engine.mjs"), import("/app/store.mjs")]).then(([engine, store]) => {
+    // The widget host (pin, cog, boards) too: panels converted to widgets render through it.
+    Promise.all([import("/core/browser-engine.mjs"), import("/app/store.mjs"), import("/app/widget-host.mjs"),
+      import("/widgets/registry.mjs"), import("/ui/frame.mjs")]).then(([engine, store, host, reg, frame]) => {
       window.__store = store.createStore();
+      window.__widgets = host.createHost({ registry: reg.WIDGETS, storage: localStorage, onChange: () => window._wRerender && window._wRerender() });
+      window.__wFresh = frame.freshness;
+      frame.bindFrames(document.body, (id, action, value) => window.__widgets.handle(id, action, value));
       window.__engine = engine;
       for (const [k, v] of Object.entries(engine)) if (!(k in window)) window[k] = v;
       window.dispatchEvent(new Event("sfl-engine"));
@@ -19214,8 +19247,7 @@
            * (bait recipes change with it) and which Marvels are already caught — you cannot find
            * pieces for one you own, so listing it would be pure noise.
            */
-          fetch("/api/proxy?url=" + encodeURIComponent("https://api.sunflower-land.com/community/farms/" + FARM_ID))
-            .then((r) => (r.ok ? r.json() : Promise.reject(r.status))).catch(() => null),
+          __store.get({ res: "farm", farm: FARM_ID }).then((r) => (r.status === "ok" ? r.data : null)),
         ]);
         // In the background, after the rest: the heaviest call, and only DNES needs it (null = loading,
         // false = failed).
@@ -20188,30 +20220,15 @@
         }).join("") + '</table>' +
         '<div style="color:var(--text-dim);line-height:1.6">Podíly úlovků jsou z komunitních dat (107 tis. hodů), přepočtené na sezónu. Které ryby který červ a sezóna dávají, sedí se hrou (fishing.ts) u všech 38 ryb; samotné poměry hra losuje na serveru, takže jsou odhadem. Ryb na hod ' + fpc.toFixed(2) + ' je tvoje vlastní číslo.</div></details>';
 
-      // Do sudu: free fish, then the surplus beyond twice what the partner matches, then (when no
-      // baits are being made, for LEVELING or a ticked Marvel route) the rest.
-      const baitsWanted = (!lvPlan || lvPlan.fish.baitsHelp) || Object.keys(_fishPlan).length > 0;
-      let saltRun = 0;
-      const ageList = agingNow({ owned: ownedNow, baitsWanted }).map((r) => {
-        const before = saltRun; saltRun += r.salt;
-        return Object.assign({}, r, { run: saltRun, saltOk: saltRun <= saltHeld + 1e-9, partial: before < saltHeld && saltRun > saltHeld });
+      // Do sudu: the "fishing-age-now" widget (widgets/fishing-age-now.mjs) — free fish, then the surplus
+      // beyond twice what the partner matches, then (when no baits are being made) the rest. Pinnable.
+      window._wRerender = renderFishing;
+      const ageHtml = __widgets.renderPage("fishing-age-now", {
+        data: { farm: _fishFarm, leveling: _fishLvl || null },
+        ctx: { lvPlan, marvelPlanned: Object.keys(_fishPlan).length > 0, cookSettings: _cookSettings(),
+          icon: (n) => _mIcon(agingIconName[n] || n, 12), bestWorm: bestW.worm },
+        fresh: __wFresh(__store.peek({ res: "farm", farm: FARM_ID })),
       });
-      const ageWhy = (r) => r.group === "free" ? "žádný bait ji nechce"
-        : r.group === "surplus" ? "přebytek: máš " + fmt(r.qty) + ", necháš " + fmt(r.keep) + " (2× na " + fmt(ownedLc[String(r.partner).toLowerCase()] || 0) + "× " + escHTML(r.partner) + ")"
-        : "drží ji " + escHTML(r.bait) + ", ale baity teď neděláš";
-      const ageShow = ageList.slice(0, 14);
-      const ageTot = ageList.reduce((a, r) => ({ n: a.n + r.age, xp: a.xp + r.age * r.agedXp * agedXpMult, salt: a.salt + r.salt }), { n: 0, xp: 0, salt: 0 });
-      const ageHtml = ageList.length
-        ? '<table style="width:100%;border-collapse:collapse;font-size:0.5rem;margin:4px 0"><tr style="color:var(--text-dim);font-size:0.42rem"><td style="padding:0 6px 2px 0">ryba</td><td style="text-align:right;padding:0 6px 2px">kolik</td><td style="padding:0 6px 2px">proč</td><td style="text-align:right;padding:0 6px 2px">XP</td><td style="text-align:right;padding:0 0 2px">sůl Σ</td></tr>' +
-          ageShow.map((r) => '<tr style="border-top:1px solid #20190f"><td style="padding:2px 6px 2px 0;white-space:nowrap">' + _mIcon(agingIconName[r.name] || r.name, 12) + ' ' + escHTML(r.name) + '</td>' +
-            '<td style="text-align:right;padding:2px 6px;font-weight:bold;color:var(--sunpetal)">' + fmt(r.age) + '</td>' +
-            '<td style="padding:2px 6px;font-size:0.44rem;color:' + (r.group === "free" ? "var(--green)" : r.group === "surplus" ? "var(--text-secondary)" : "#e8a060") + '">' + ageWhy(r) + '</td>' +
-            '<td style="text-align:right;padding:2px 6px;color:var(--text-secondary)">' + fmt(r.age * r.agedXp * agedXpMult) + '</td>' +
-            '<td style="text-align:right;padding:2px 0;color:' + (r.saltOk ? "var(--text-dim)" : r.partial ? "#e8a060" : "var(--red)") + '" title="' + fmt(r.salt) + ' na tenhle řádek">' + fmt(r.run) + '</td></tr>').join("") +
-          (ageList.length > ageShow.length ? '<tr><td colspan="5" style="color:var(--text-dim);padding-top:2px">… a dalších ' + (ageList.length - ageShow.length) + ' druhů</td></tr>' : "") + '</table>' +
-          '<div style="color:var(--text-dim)">Celkem <b>' + fmt(ageTot.n) + '</b> ryb · <b>' + fmt(ageTot.xp) + '</b> XP · sůl <b' + (ageTot.salt > saltHeld ? ' style="color:var(--red)"' : "") + '>' + fmt(ageTot.salt) + '</b> z tvých ' + fmt(saltHeld) +
-            ' · sud ' + agingBusy + '/' + agingSlots + ' slotů běží' + (ageTot.salt > saltHeld ? ' · <span style="color:var(--red)">červené už sůl nepokryje</span>' : "") + '</div>'
-        : '<div style="color:#e8a060">Nemáš co stárnout — všechno, co držíš, je v poměru, který recepty spárují. Chytej (' + escHTML(bestW.worm) + ').</div>';
 
       // Fish Market: the plan's verdict, and what this season's recipe lets you make now.
       const fmNow = lvPlan ? (lvPlan.fish.baitUse || []).filter((b) => b.season === season) : [];
@@ -20229,7 +20246,7 @@
         (lvPlan ? '<div style="color:var(--text-dim);margin-bottom:4px">Podle plánu z LEVELINGu (restarty ' + lvCfg.restarts + (lvCfg.fish.worm ? ", červ " + escHTML(lvCfg.fish.worm) : "") + (lvCfg.fish.buySalt ? ", dokupovaná sůl" : "") + '): stárnutí brzdí <b>' + escHTML(lvlBottleneck[lvPlan.bottleneck] || "nic") + '</b>' +
           (wormMode === "raw" ? " — další ryba se sní syrová, červ se volí podle syrového XP." : " — každá další ryba jde do sudu, červ se volí podle stárnutého XP.") + '</div>' : "") +
         '<div class="pixel-font" style="font-size:0.5rem;color:var(--sunpetal);margin-top:6px">🪱 NAHAZUJ: ' + escHTML(bestW.worm) + '</div>' + wormNowHtml + wormYearHtml +
-        '<div class="pixel-font" style="font-size:0.5rem;color:var(--sunpetal);margin-top:8px">🧂 DO SUDU TEĎ</div>' + ageHtml +
+        ageHtml +
         '<div class="pixel-font" style="font-size:0.5rem;color:var(--sunpetal);margin-top:8px">🏪 FISH MARKET</div><div>' + fmHtml + '</div></div>';
 
       // DNES first, then the bait and the shed tables; the history and the Marvels fold away.
@@ -30771,7 +30788,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
       "sfl_tracked_dolls", "sfl_restock_settings", "sfl_gift_plan", "sfl_roi_multicat_assignment", "sfl_sleep_schedule",
       "sfl_marks_budget", "sfl_bumpkin_target", "sfl_bumpkin_recipes", "sfl_nodes_roi_cap", "sfl_coin_mode",
       "sfl_sales_sell_type", "sfl_sales_sell_min", "sfl_pet_streak", "sfl_wl_eff", "sfl_flower_mode", "sfl_flower_n", "sfl_sats_gran",
-      "sfl_repay_daily_flower", "sfl_tk_goal", "sfl_dash_voice", "sfl_leveling"];
+      "sfl_repay_daily_flower", "sfl_tk_goal", "sfl_dash_voice", "sfl_leveling", "sfl_boards"];
     /*
      * A deleted key is kept on the server as this marker (a tombstone), so a device that still has
      * the key removes it instead of seeding it back. Changes wait in an outbox (localStorage
@@ -30878,6 +30895,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
         _wlEff = localStorage.getItem("sfl_wl_eff") === "1";
         const g = localStorage.getItem("sfl_sats_gran");
         if (g in _SATS_GRAN) _satsGran = g;
+        if (window.__widgets) window.__widgets.reload();
       }
       return changed;
     }
