@@ -17,7 +17,7 @@ import { buildCookingSection } from "./cooking.mjs";
 import { applyWhatIf, ownedLevelingItems } from "../engine/leveling-whatif.mjs";
 import { LEVELING_ITEMS, LEVELING_ITEM_BY_NAME } from "../data/leveling-items.mjs";
 import { computeFishYieldPerCast } from "../engine/cooking-cost.mjs";
-import { computeRodCostSFL, computeBaitCostSFL } from "../engine/item-value.mjs";
+import { computeRodCostSFL, computeBaitCostSFL, itemMarketValue } from "../engine/item-value.mjs";
 import { sideSaltNow } from "../engine/side-values.mjs";
 import { ascensionXpFor, ascensionStanding } from "../engine/ascension.mjs";
 import { computeFoodXP, detectCookingBoosts } from "../engine/cooking.mjs";
@@ -391,7 +391,10 @@ export function levelingPlan(farm, inputs, config) {
 
   // The cast's worm: the chosen one, or the mix the catch history points to (Earthworm if none).
   const wormMix = worm ? { [worm]: 1 } : (wormMixOf(own.share) || { Earthworm: 1 });
-  const wormCost = Object.entries(wormMix).reduce((a, [k, v]) => a + v * computeBaitCostSFL(k, inputs.prices || {}), 0);
+  // A worm is priced like everywhere else (the item-value engine: the composter's inputs shared over all
+  // it yields, fertiliser included), so this page and FISHING agree; the whole composter only if that fails.
+  const wormPrice = (k) => itemMarketValue(k, inputs.prices || {}) || computeBaitCostSFL(k, inputs.prices || {});
+  const wormCost = Object.entries(wormMix).reduce((a, [k, v]) => a + v * wormPrice(k), 0);
   const castCost = computeRodCostSFL(inputs.prices || {}, inputs.coinsPerSFL || 0, skills) + wormCost;
   // Rakes only for the salt the shed uses: salt the nodes could give beyond that is not raked.
   const raked = saltPerDay > 0 ? Math.min(1, saltUsed / saltPerDay) : 0;

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import * as LV from "../../core/sections/leveling.mjs";
-import { computeBaitCostSFL } from "../../core/engine/item-value.mjs";
+import { itemMarketValue } from "../../core/engine/item-value.mjs";
 
 // LEVELING fish v3: the worm you cast (catch mix + cast price), the Fish Market's one queue,
 // and which baits the plan actually makes.
@@ -28,7 +28,7 @@ test("the worm sets the cast price and the catch: Red Wiggler fish are bigger an
   const ew = LV.levelingPlan(farm, inputs, cfg({ worm: "Earthworm", age: false }));
   const rw = LV.levelingPlan(farm, inputs, cfg({ worm: "Red Wiggler", age: false }));
   assert.equal(rw.fish.worm, "Red Wiggler");
-  assert.ok(near(rw.fish.castCost - ew.fish.castCost, computeBaitCostSFL("Red Wiggler", prices) - computeBaitCostSFL("Earthworm", prices)));
+  assert.ok(near(rw.fish.castCost - ew.fish.castCost, itemMarketValue("Red Wiggler", prices) - itemMarketValue("Earthworm", prices)));
   assert.ok(rw.xpPerDay.raw / rw.fish.perDay > ew.xpPerDay.raw / ew.fish.perDay, "more raw XP per fish on Red Wiggler");
   // no worm set: the farm's own catch history, as before
   assert.equal(LV.levelingPlan(farm, inputs, cfg()).fish.worm, null);
