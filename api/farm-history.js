@@ -535,6 +535,7 @@ export default async function handler(req, res) {
   // { prefs: { key: value | null } }: owner-only upsert, null deletes. The page decides which
   // localStorage keys sync; the server only checks their shape and size.
   if (req.query.type === "prefs") {
+    const PREF_TOMBSTONE = "__sfl_deleted__";
     const method = (req.method || "GET").toUpperCase();
     try {
       const farm = parseInt(req.query.farm, 10);
@@ -554,10 +555,11 @@ export default async function handler(req, res) {
         if (v !== null && (typeof v !== "string" || v.length > 20000)) return res.status(400).json({ error: `bad value for ${k}` });
       }
       for (const [k, v] of entries) {
-        if (v === null) await pool.query(`DELETE FROM farm_prefs WHERE farm_id = $1 AND key = $2`, [farm, k]);
-        else await pool.query(
+        // A delete is kept as a tombstone, so another device that still holds the key drops it
+        // instead of seeding it back (the page knows the marker).
+        await pool.query(
           `INSERT INTO farm_prefs (farm_id, key, value) VALUES ($1, $2, $3)
-           ON CONFLICT (farm_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`, [farm, k, v]);
+           ON CONFLICT (farm_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`, [farm, k, v === null ? PREF_TOMBSTONE : v]);
       }
       return res.status(200).json({ ok: true, saved: entries.length });
     } catch (err) {
