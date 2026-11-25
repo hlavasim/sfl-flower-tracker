@@ -78,3 +78,17 @@ test("load/save round-trip through a storage object", () => {
   assert.deepStrictEqual(loadBoards(storage), d);
   assert.deepStrictEqual(loadBoards({ getItem: () => { throw new Error("blocked"); } }), emptyBoards());
 });
+
+test("review #2/#3: synced settings are cleaned on read — wrong types dropped, numbers clamped, nothing injectable", () => {
+  const evil = '"><img src=x onerror=alert(1)>';
+  const raw = JSON.stringify({ schema: 1, page: { t: { textSize: evil, rows: { mode: "x", top: evil, picked: null }, columns: "name", sort: { key: 5, dir: "up" }, density: evil } },
+    boards: [{ id: "main", name: "B", items: [{ i: "a", type: "t", settings: { rows: { picked: ["Eel", 7, null] }, textSize: 999, columns: ["n", 3] } }] }] });
+  const d = parseBoards(raw);
+  assert.deepStrictEqual(d.page.t, { rows: { mode: "all", top: 5, picked: [] } });
+  assert.deepStrictEqual(d.boards[0].items[0].settings, { rows: { mode: "all", top: 5, picked: ["Eel", "7"] }, textSize: 160, columns: ["n"] });
+});
+
+test("review #7: board ids with ':' are dropped (frame ids are b:<board>:<item>)", () => {
+  const d = parseBoards(JSON.stringify({ schema: 1, boards: [{ id: "x:y", name: "B", items: [] }, { id: "main", items: [{ i: "a", type: "t" }] }] }));
+  assert.deepStrictEqual(d.boards.map((b) => b.id), ["main"]);
+});

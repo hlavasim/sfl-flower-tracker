@@ -87,3 +87,13 @@ test("a slow optional need (the leveling plan) does not hold the board: it paint
   assert.match(html, /<tr data-row=/);
   assert.doesNotMatch(html, /Načítám/);
 });
+
+test("review #4/#6: a newer board render supersedes an older one's late paints; widgets load apart from the engine", () => {
+  assert.match(SRC, /const mine = \+\+_boardSeq;/);
+  assert.match(SRC, /if \(getPage\(\) !== "board" \|\| seq !== _navSeq \|\| mine !== _boardSeq\) return;/);
+  assert.match(SRC, /const board = __widgets\.doc\(\)\.boards\[0\];\s*\/\/ read at paint time/);
+  // The engine no longer depends on the widget modules loading.
+  assert.match(SRC, /Promise\.all\(\[import\("\/core\/browser-engine\.mjs"\), import\("\/app\/store\.mjs"\)\]\)/);
+  assert.match(SRC, /const _widgetsReady = Promise\.all\(\[import\("\/app\/widget-host\.mjs"\), import\("\/widgets\/registry\.mjs"\), import\("\/ui\/frame\.mjs"\)\]\)/);
+  assert.match(SRC, /\.catch\(\(e\) => console\.error\("\[widgets\] did not load"/);
+});

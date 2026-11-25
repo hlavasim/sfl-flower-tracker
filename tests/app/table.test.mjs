@@ -118,3 +118,9 @@ test("settings panel: a checkbox per column (checked = shown), the row picker li
   assert.match(html, /data-action="text-size"/);
   assert.match(html, /data-action="density"/);
 });
+
+test("review #2: the settings panel never prints a raw settings value", () => {
+  const evil = '"><img src=x onerror=alert(1)>';
+  const html = tableSettingsPanel(COLS, { textSize: evil, rows: { mode: "top", top: evil, picked: null } }, { rows: ROWS, rowKey: key });
+  assert.doesNotMatch(html, /<img/);
+});

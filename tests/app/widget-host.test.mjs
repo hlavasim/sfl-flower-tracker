@@ -149,3 +149,10 @@ test("a pending board item shows its frame and controls with a loading body", ()
   assert.match(html, /Načítám/);
   assert.doesNotMatch(html, /prázdno/);
 });
+
+test("review #3: a widget that throws still offers its cog with the reset button", () => {
+  const bad = { ...T, build: () => { throw new Error("kaboom"); } };
+  const h = createHost({ registry: { t: bad }, storage: mem() });
+  h.handle("page:t", "cog", "");
+  assert.match(h.renderPage("t", { data: DATA }), /data-action="reset"/);
+});

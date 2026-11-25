@@ -48,3 +48,17 @@ test("the pool honours PG_POOL_MAX (capped at 2) for local runs", () => {
   const src = readFileSync(new URL("../../api/_db.js", import.meta.url), "utf8");
   assert.match(src, /max: Math\.min\(2, Number\(process\.env\.PG_POOL_MAX\) \|\| 2\)/);
 });
+
+test("review #1: compute's game-API calls go to the LOCAL proxy, and no KV credentials reach a local run", async () => {
+  const env = devDbEnv({ KV_REST_API_URL: "https://kv", KV_REST_API_TOKEN: "t", PROXY_ORIGIN: "https://sunflower.sajmonium.quest" }, 3000);
+  assert.strictEqual(env.PROXY_ORIGIN, "http://127.0.0.1:3000");
+  assert.ok(!("KV_REST_API_URL" in env) && !("KV_REST_API_TOKEN" in env));
+});
+
+test("review #5: dot paths (.env.local, .git, .vercel) are never served; only a local Host is answered", async () => {
+  const { servablePath, localHost } = await import("../../dev-server.mjs");
+  for (const p of ["/.env.local", "/.git/config", "/api/../.env", "/x/.vercel/project.json", "/%2Eenv.local"]) assert.strictEqual(servablePath(p), false, p);
+  for (const p of ["/", "/flowers.html", "/app/store.mjs", "/core/browser-engine.mjs"]) assert.strictEqual(servablePath(p), true, p);
+  for (const h of ["localhost:3000", "127.0.0.1:3000", "[::1]:3000", "localhost"]) assert.strictEqual(localHost(h), true, h);
+  for (const h of ["evil.example:3000", "", undefined, "localhost.evil.example"]) assert.strictEqual(localHost(h), false, String(h));
+});

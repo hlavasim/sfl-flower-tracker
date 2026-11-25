@@ -16,21 +16,45 @@ const num = (v, dflt) => (Number.isFinite(Number(v)) && v !== null && v !== "" ?
 const clampW = (w) => Math.min(12, Math.max(1, num(w, W_DEFAULT)));
 const clampH = (h) => Math.min(24, Math.max(0, num(h, 0)));
 
+// Table settings arrive from other devices (prefs sync): the keys the table reads are checked and
+// coerced, a wrong one is dropped; keys it does not know are kept for widgets that add their own.
+const ROW_MODES = ["all", "top", "picked"];
+export function cleanSettings(raw) {
+  if (!isObj(raw)) return {};
+  const s = { ...raw };
+  delete s.columns; delete s.sort; delete s.rows; delete s.density; delete s.textSize;
+  if (Array.isArray(raw.columns)) s.columns = raw.columns.filter((k) => typeof k === "string");
+  if (isObj(raw.sort) && typeof raw.sort.key === "string" && ["asc", "desc"].includes(raw.sort.dir)) s.sort = { key: raw.sort.key, dir: raw.sort.dir };
+  if (isObj(raw.rows)) {
+    const top = Math.floor(Number(raw.rows.top));
+    s.rows = {
+      mode: ROW_MODES.includes(raw.rows.mode) ? raw.rows.mode : "all",
+      top: Number.isFinite(top) && top >= 1 ? top : 5,
+      picked: Array.isArray(raw.rows.picked) ? raw.rows.picked.filter((k) => typeof k === "string" || typeof k === "number").map(String) : [],
+    };
+  }
+  if (raw.density === "compact" || raw.density === "normal") s.density = raw.density;
+  const ts = Number(raw.textSize);
+  if (raw.textSize != null && Number.isFinite(ts)) s.textSize = Math.min(160, Math.max(70, Math.round(ts)));
+  return s;
+}
+
 function cleanItem(x) {
   if (!isObj(x) || typeof x.i !== "string" || !x.i || typeof x.type !== "string" || !x.type) return null;
-  return { i: x.i, type: x.type, settings: isObj(x.settings) ? x.settings : {}, w: clampW(x.w ?? W_DEFAULT), h: clampH(x.h) };
+  return { i: x.i, type: x.type, settings: cleanSettings(x.settings), w: clampW(x.w ?? W_DEFAULT), h: clampH(x.h) };
 }
 
 export function parseBoards(raw) {
   let d;
   try { d = typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return emptyBoards(); }
   if (!isObj(d) || d.schema !== 1 || !Array.isArray(d.boards)) return emptyBoards();
-  const boards = d.boards.filter((b) => isObj(b) && typeof b.id === "string" && b.id).map((b) => ({
+  // ":" separates board and item in frame ids (b:<board>:<item>).
+  const boards = d.boards.filter((b) => isObj(b) && typeof b.id === "string" && b.id && !b.id.includes(":")).map((b) => ({
     id: b.id,
     name: typeof b.name === "string" && b.name ? b.name : "Dashboard",
     items: (Array.isArray(b.items) ? b.items : []).map(cleanItem).filter(Boolean),
   }));
-  const page = Object.fromEntries(Object.entries(isObj(d.page) ? d.page : {}).filter(([, v]) => isObj(v)));
+  const page = Object.fromEntries(Object.entries(isObj(d.page) ? d.page : {}).filter(([, v]) => isObj(v)).map(([k, v]) => [k, cleanSettings(v)]));
   return { schema: 1, boards: boards.length ? boards : emptyBoards().boards, page };
 }
 

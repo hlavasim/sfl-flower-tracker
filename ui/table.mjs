@@ -135,7 +135,11 @@ export function tableSettingsPanel(columns, settings = {}, { rows = [], rowKey =
     return `<div class="w-set-col"><label><input type="checkbox" data-action="col-toggle" data-value="${esc(k)}"${on ? " checked" : ""}> ${esc(byKey.get(k).label)}</label>` +
       (on ? ` <button type="button" data-action="col-up" data-value="${esc(k)}" title="výš">▲</button><button type="button" data-action="col-down" data-value="${esc(k)}" title="níž">▼</button>` : "") + `</div>`;
   }).join("");
-  const sel = { mode: "all", top: 5, picked: [], ...(settings.rows || {}) };
+  // Coerced here too: the panel prints these into attributes.
+  const r0 = settings.rows || {};
+  const top0 = Math.floor(Number(r0.top));
+  const sel = { mode: ["all", "top", "picked"].includes(r0.mode) ? r0.mode : "all", top: top0 >= 1 ? top0 : 5,
+    picked: Array.isArray(r0.picked) ? r0.picked : [] };
   const picked = new Set(sel.picked.map(String));
   const label = rowLabel || rowKey;
   const mode = (m, t) => `<label><input type="radio" name="w-rows" data-action="rows-mode" data-value="${m}"${sel.mode === m ? " checked" : ""}> ${t}</label>`;
@@ -143,7 +147,7 @@ export function tableSettingsPanel(columns, settings = {}, { rows = [], rowKey =
     const k = String(rowKey(r));
     return `<label class="w-pick"><input type="checkbox" data-action="pick" data-value="${esc(k)}"${picked.has(k) ? " checked" : ""}> ${esc(label(r))}</label>`;
   }).join("");
-  const size = settings.textSize || 100;
+  const size = Math.min(TEXT_MAX, Math.max(TEXT_MIN, Math.round(Number(settings.textSize)) || 100));
   return `<div class="w-settings">
 <fieldset><legend>Sloupce</legend>${colRows}</fieldset>
 <fieldset><legend>Řádky</legend>${mode("all", "všechny")} ${mode("top", "prvních")} <input type="number" min="1" value="${sel.top}" data-action="rows-top" style="width:4em"> ${mode("picked", "jen vybrané")}

@@ -2703,13 +2703,17 @@
   <script type="module">
     // Load the calculation engine (core/*.mjs — the modules the server runs) and hand it to the page.
     // The data store (app/store.mjs) comes with it: one fetch per resource key, shared by every panel.
-    // The widget host (pin, cog, boards) too: panels converted to widgets render through it.
-    Promise.all([import("/core/browser-engine.mjs"), import("/app/store.mjs"), import("/app/widget-host.mjs"),
-      import("/widgets/registry.mjs"), import("/ui/frame.mjs")]).then(([engine, store, host, reg, frame]) => {
+    // The widget host (pin, cog, boards) loads beside them; if it fails, only the widget panels say
+    // so — every page still renders (the engine waits for it to settle, never for it to succeed).
+    const _widgetsReady = Promise.all([import("/app/widget-host.mjs"), import("/widgets/registry.mjs"), import("/ui/frame.mjs")])
+      .then(([host, reg, frame]) => {
+        window.__widgets = host.createHost({ registry: reg.WIDGETS, storage: localStorage, onChange: () => window._wRerender && window._wRerender() });
+        window.__wFresh = frame.freshness;
+        frame.bindFrames(document.body, (id, action, value) => window.__widgets.handle(id, action, value));
+      }).catch((e) => console.error("[widgets] did not load", e));
+    Promise.all([import("/core/browser-engine.mjs"), import("/app/store.mjs")]).then(async ([engine, store]) => {
       window.__store = store.createStore();
-      window.__widgets = host.createHost({ registry: reg.WIDGETS, storage: localStorage, onChange: () => window._wRerender && window._wRerender() });
-      window.__wFresh = frame.freshness;
-      frame.bindFrames(document.body, (id, action, value) => window.__widgets.handle(id, action, value));
+      await _widgetsReady;
       window.__engine = engine;
       for (const [k, v] of Object.entries(engine)) if (!(k in window)) window[k] = v;
       window.dispatchEvent(new Event("sfl-engine"));
@@ -19180,11 +19184,18 @@
       }
       return {};
     }
+    // Shown in place of a widget panel when the widget modules did not load.
+    function _wMissing(title) {
+      return '<div class="pixel-panel w-error" style="padding:8px 10px;margin:8px 0;font-size:0.5rem">' + escHTML(title) + ': panel se nenačetl (moduly widgetů) — zkus RELOAD.</div>';
+    }
+    let _boardSeq = 0;
     async function renderBoard() {
       const app = document.getElementById("app");
+      if (typeof __widgets === "undefined") { app.innerHTML = _wMissing("Můj dashboard"); return; }
       window._wRerender = renderBoard;
       const seq = _navSeq;
-      const board = __widgets.doc().boards[0];
+      const mine = ++_boardSeq;
+      let board = __widgets.doc().boards[0];
       const head = '<div class="header pixel-panel pixel-font"><h1>📌 ' + escHTML(board.name) + '</h1><div class="farm-id">Farm #' + escHTML(FARM_ID) +
         ' · připnuté panely, každý se svým nastavením</div></div>';
       if (!FARM_ID) { app.innerHTML = head + '<div class="pixel-panel" style="padding:12px;font-size:0.55rem">Zadej Farm ID nahoře.</div>'; return; }
@@ -19196,7 +19207,12 @@
       // Paint from what the store already holds, then again as each need arrives: a slow optional
       // need (the LEVELING plan waits on a ~20 s query) must not hold the whole board.
       const paint = () => {
-        if (getPage() !== "board" || seq !== _navSeq) return;   // navigated away meanwhile
+        // navigated away, or a newer render (a removed or resized item) took over
+        if (getPage() !== "board" || seq !== _navSeq || mine !== _boardSeq) return;
+        // Typing in an open settings panel: the next paint (settings change) will catch up.
+        const act = document.activeElement;
+        if (act && act.closest && act.closest(".w-settings-wrap") && act.matches("input[type=number],input[type=range]")) return;
+        const board = __widgets.doc().boards[0];   // read at paint time
         app.innerHTML = head + '<div class="w-board">' + board.items.map((it) => {
           const p = __widgets.peekData(it.type, FARM_ID, __store);
           return __widgets.renderItem(board.id, it, { data: p.data, ctx: _wCtx(it.type), fresh: __widgets.freshOf(p.entries), pending: p.pending });
@@ -20268,7 +20284,7 @@
       // Do sudu: the "fishing-age-now" widget (widgets/fishing-age-now.mjs) — free fish, then the surplus
       // beyond twice what the partner matches, then (when no baits are being made) the rest. Pinnable.
       window._wRerender = renderFishing;
-      const ageHtml = __widgets.renderPage("fishing-age-now", {
+      const ageHtml = typeof __widgets === "undefined" ? _wMissing("Do sudu teď") : __widgets.renderPage("fishing-age-now", {
         data: { farm: _fishFarm, leveling: _fishLvl || null },
         ctx: Object.assign(_wCtx("fishing-age-now"), { lvPlan, bestWorm: bestW.worm }),
         fresh: __wFresh(__store.peek({ res: "farm", farm: FARM_ID })),
@@ -25706,7 +25722,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
 
       // ── ladder: the leveling-ladder widget (widgets/leveling-ladder.mjs), pinnable; a row click sets the target ──
       window._wRerender = _lvlRender;
-      h += __widgets.renderPage("leveling-ladder", { data: { farm: L.farm }, ctx: { plan, cfg: c, free },
+      h += typeof __widgets === "undefined" ? _wMissing("Po ascenzích") : __widgets.renderPage("leveling-ladder", { data: { farm: L.farm }, ctx: { plan, cfg: c, free },
         fresh: __wFresh(__store.peek({ res: "leveling", farm: FARM_ID })) });
 
       // ── items × ascensions ──

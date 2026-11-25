@@ -43,7 +43,9 @@ export function createHost({ registry, storage, onChange = () => {} }) {
         settingsHtml: tableSettingsPanel(widget.columns, settings, { rows: out.rows, ...opts }),
       };
     } catch (e) {
-      return { html: `<div class="w-error">Widget spadl: ${esc((e && e.message) || e)}</div>`, settingsHtml: "" };
+      // The cog still offers a reset, so a bad saved setting is never a dead end.
+      return { html: `<div class="w-error">Widget spadl: ${esc((e && e.message) || e)}</div>`,
+        settingsHtml: `<div class="w-settings"><button type="button" data-action="reset" data-value="">výchozí nastavení</button></div>` };
     }
   }
 

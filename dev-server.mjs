@@ -48,8 +48,26 @@ export function parseEnvFile(file) {
 }
 
 // The DB settings a local run always gets, whatever .env.local says.
-export function devDbEnv(env) {
-  return { ...env, PGOPTIONS: "-c default_transaction_read_only=on", PG_POOL_MAX: "1", PG_CONNECT_TIMEOUT_MS: "60000" };
+// compute.mjs calls ${PROXY_ORIGIN}/api/proxy for game data: locally that is this server, never
+// production (whose proxy would also write the shared KV cache). KV credentials are removed.
+export function devDbEnv(env, port = 3000) {
+  const out = { ...env, PGOPTIONS: "-c default_transaction_read_only=on", PG_POOL_MAX: "1", PG_CONNECT_TIMEOUT_MS: "60000",
+    PROXY_ORIGIN: `http://127.0.0.1:${port}` };
+  delete out.KV_REST_API_URL; delete out.KV_REST_API_TOKEN;
+  return out;
+}
+
+// .env.local holds production secrets: no path segment starting with "." is ever served.
+export function servablePath(path) {
+  let p;
+  try { p = decodeURIComponent(path); } catch { return false; }
+  return !p.split(/[\\/]/).some((seg) => seg.startsWith("."));
+}
+// Only a local Host header is answered (a DNS-rebinding page arrives with its own host name).
+export function localHost(host) {
+  if (typeof host !== "string" || !host) return false;
+  const name = host.startsWith("[") ? host.slice(0, host.indexOf("]") + 1) : host.split(":")[0];
+  return ["localhost", "127.0.0.1", "[::1]"].includes(name);
 }
 
 // /api/<name> for every api/*.js|mjs that is not a helper (_*.js), plus vercel.json rewrites
@@ -82,7 +100,10 @@ async function readBody(req) {
 }
 
 function startServer() {
-Object.assign(process.env, devDbEnv({ ...parseEnvFile(join(ROOT, ".env.local")), ...process.env }));
+const fromFile = parseEnvFile(join(ROOT, ".env.local"));
+for (const k of Object.keys(process.env)) if (k.startsWith("KV_REST_API_")) delete process.env[k];
+Object.assign(process.env, devDbEnv({ ...fromFile, ...process.env }, PORT));
+delete process.env.KV_REST_API_URL; delete process.env.KV_REST_API_TOKEN;
 const LOCAL_API = localRoutes();
 // Under --watch the process restarts on any edit, so handlers load once and keep their in-memory
 // caches between requests; without it the handler file is re-imported per request (see above).
@@ -92,6 +113,8 @@ const proxyCache = new Map();
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const path = url.pathname;
+  if (!localHost(req.headers.host) && process.env.HOST !== "0.0.0.0") { res.statusCode = 403; res.end("local only"); return; }
+  if (!servablePath(path)) { res.statusCode = 404; res.end("not found"); return; }
   try {
     // 1) Local API function
     if (LOCAL_API[path]) {
