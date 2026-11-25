@@ -28,3 +28,8 @@ test("DNES runs the LEVELING plan on the saved config and lists what to age from
 test("history and Marvels fold into <details>, DNES comes first", () => {
   assert.match(SRC, /h = h\.slice\(0, _mHist0\) \+ dnesHtml \+ h\.slice\(_mHist1, _mMarv0\)/);
 });
+
+test("a worm+chum route carries its pair, which the order reads (r.pair.bait) — ticking it crashed the page", () => {
+  assert.match(SRC, /out\.push\(\{ kind: "pair", pair, label: pair\.bait/);
+  assert.match(SRC, /need\(r\.pair\.bait, c\.n, 0\);/);
+});

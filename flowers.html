@@ -19856,7 +19856,7 @@
         const pair = gr.filter((g) => g.fish.toLowerCase() === fish.name.toLowerCase() && g.cost > 0)
                        .sort((a, b) => a.cost - b.cost)[0];
         if (pair && p > 0) {
-          out.push({ kind: "pair", label: pair.bait + " + " + pair.qty + "× " + pair.chum,
+          out.push({ kind: "pair", pair, label: pair.bait + " + " + pair.qty + "× " + pair.chum,
                      perPiece: 1 / p, unit: "casts", total: (1 / p) * pieces * pair.cost,
                      detail: pair.cost.toFixed(2) + " " + sflIcon() + " per guaranteed " + escHTML(fish.name) });
         }
