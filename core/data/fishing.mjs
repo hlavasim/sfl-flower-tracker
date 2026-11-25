@@ -112,3 +112,50 @@ export const FISH_MARKET_RECIPES = {
     summer: { "Tuna": 8, "Cobia": 2, "Sunfish": 2 },
   },
 };
+
+/**
+ * Community catch counts per worm (107k casts), pooled over the seasons each fish swims in.
+ * Copied from flowers.html (FISHING page). Which worms and seasons each fish takes was checked
+ * against the game's FISH record (fishing.ts) on 2026-11-25: all 38 match. The SHARES are a
+ * community sample — the game draws the catch server-side, so there is no table to check them against.
+ */
+export const FISH_COMMUNITY_CATCH = {
+  "Anchovy": { s: "wpsa", b: { Earthworm: 23153 } },
+  "Angelfish": { s: "ws", b: { Grub: 423, "Fishing Lure": 237 } },
+  "Barred Knifejaw": { s: "ps", b: { Grub: 240, "Fishing Lure": 19 } },
+  "Blowfish": { s: "w", b: { Earthworm: 2002 } },
+  "Blue Marlin": { s: "ws", b: { "Red Wiggler": 2456, "Fishing Lure": 712, Grub: 316 } },
+  "Butterflyfish": { s: "sa", b: { Earthworm: 3235 } },
+  "Clownfish": { s: "ws", b: { Earthworm: 2322 } },
+  "Cobia": { s: "s", b: { "Red Wiggler": 1013 } },
+  "Coelacanth": { s: "wp", b: { "Red Wiggler": 349, "Fishing Lure": 38 } },
+  "Football fish": { s: "w", b: { "Red Wiggler": 736, "Fishing Lure": 149 } },
+  "Halibut": { s: "pa", b: { Earthworm: 3271 } },
+  "Hammerhead shark": { s: "sa", b: { "Fishing Lure": 123, Grub: 96 } },
+  "Horse Mackerel": { s: "ws", b: { Earthworm: 371 } },
+  "Mahi Mahi": { s: "sa", b: { "Red Wiggler": 2107, Grub: 738, "Fishing Lure": 301 } },
+  "Moray Eel": { s: "sa", b: { Grub: 2816, Earthworm: 1667, "Fishing Lure": 1444 } },
+  "Muskellunge": { s: "a", b: { Earthworm: 827 } },
+  "Napoleanfish": { s: "sa", b: { Grub: 1533, "Fishing Lure": 593 } },
+  "Oarfish": { s: "wp", b: { "Red Wiggler": 1596, "Fishing Lure": 498 } },
+  "Olive Flounder": { s: "pa", b: { Grub: 1787, Earthworm: 1213, "Fishing Lure": 640 } },
+  "Parrotfish": { s: "ps", b: { "Red Wiggler": 401, "Fishing Lure": 58 } },
+  "Porgy": { s: "p", b: { Earthworm: 1408 } },
+  "Ray": { s: "ps", b: { Grub: 264, "Fishing Lure": 117 } },
+  "Red Snapper": { s: "wpsa", b: { Grub: 6211, "Red Wiggler": 2976, "Fishing Lure": 2226 } },
+  "Rock Blackfish": { s: "a", b: { Grub: 709 } },
+  "Saw Shark": { s: "ps", b: { "Red Wiggler": 69, "Fishing Lure": 16 } },
+  "Sea Bass": { s: "pa", b: { Earthworm: 2299 } },
+  "Sea Horse": { s: "ps", b: { Earthworm: 1192 } },
+  "Squid": { s: "wp", b: { Earthworm: 1491 } },
+  "Sunfish": { s: "sa", b: { "Red Wiggler": 1593, "Fishing Lure": 573 } },
+  "Surgeonfish": { s: "sa", b: { Grub: 1426, "Fishing Lure": 594 } },
+  "Tilapia": { s: "s", b: { Grub: 846 } },
+  "Trout": { s: "w", b: { "Red Wiggler": 724 } },
+  "Tuna": { s: "wpsa", b: { Grub: 9638, "Red Wiggler": 5785, "Fishing Lure": 2162 } },
+  "Walleye": { s: "w", b: { Grub: 801 } },
+  "Weakfish": { s: "p", b: { "Red Wiggler": 975 } },
+  "Whale Shark": { s: "ws", b: { "Red Wiggler": 101, "Fishing Lure": 24 } },
+  "White Shark": { s: "ws", b: { "Red Wiggler": 54, "Fishing Lure": 9 } },
+  "Zebra Turkeyfish": { s: "ps", b: { Grub: 1622, "Fishing Lure": 556 } },
+};

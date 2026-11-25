@@ -22,7 +22,8 @@ import { sideSaltNow } from "../engine/side-values.mjs";
 import { ascensionXpFor, ascensionStanding } from "../engine/ascension.mjs";
 import { computeFoodXP, detectCookingBoosts } from "../engine/cooking.mjs";
 import { FISH_BASE_XP, getAgingSaltCost } from "../data/cooking.mjs";
-import { FISH_TIER_MAP, FISH_BAIT_CATCH, FISH_MARKET_RECIPES } from "../data/fishing.mjs";
+import { FISH_TIER_MAP, FISH_BAIT_CATCH, FISH_MARKET_RECIPES, FISH_COMMUNITY_CATCH } from "../data/fishing.mjs";
+import { dashHasVipAccess } from "../engine/gifts-deliveries.mjs";
 import { hasItem, findCollectible } from "../derive/items.mjs";
 import { BUD_AURA_MULTIPLIERS, decodeBud } from "../engine/buds.mjs";
 import { SKILL_UPGRADES, skillUpgradeCost } from "../engine/skill-ranks.mjs";
@@ -34,6 +35,50 @@ const NO_BID_LOSS = 0.15;          // resale loss when nobody bids: 15 % of the 
 const BUBBLE_AURA_BAIT = 1.2;      // Bubble Aura: 20 % chance of +1 bait per Fish Market job
 // Crab Stick needs crustaceans from water traps, which this plan does not model: fish baits only.
 const FISH_BAITS = ["Fish Flake", "Fish Stick", "Fish Oil"];
+// Fish Market job length (fishProcessing.ts FISH_PROCESSING_TIME_SECONDS); one job at a time, the
+// queue is 1 without VIP and 4 with it (processResource.ts MAX_FISH_PROCESSING_SLOTS).
+const FISH_MARKET_HOURS = { "Fish Flake": 1, "Fish Stick": 2, "Crab Stick": 4, "Fish Oil": 16 };
+const FISH_MARKET_VIP_QUEUE = 4;
+export const LEVELING_WORMS = ["Earthworm", "Grub", "Red Wiggler"];
+const SEASON_LETTER = { winter: "w", spring: "p", summer: "s", autumn: "a" };
+/**
+ * What one worm catches: the community counts undiluted per season (a fish in k seasons is 1/k of
+ * its pooled count in each), normalised per season, each season a 1/n share of the year.
+ */
+export function wormCatchShare(worm, seasons = SEASONS) {
+  const share = {};
+  for (const sn of seasons) {
+    const l = SEASON_LETTER[sn], m = {};
+    let tot = 0;
+    for (const [f, rec] of Object.entries(FISH_COMMUNITY_CATCH)) {
+      const n = rec.s.includes(l) ? (rec.b[worm] || 0) / rec.s.length : 0;
+      if (n > 0) { m[f] = n; tot += n; }
+    }
+    for (const [f, n] of Object.entries(m)) share[f] = (share[f] || 0) + n / tot / seasons.length;
+  }
+  return share;
+}
+/**
+ * The worms behind a catch history, from the fish only one worm catches (Anchovy is Earthworm's,
+ * Walleye Grub's, Trout Red Wiggler's): each worm's weight is its exclusive fish's observed share
+ * over the share that worm alone would give them. Normalised; null when nothing exclusive was caught.
+ */
+export function wormMixOf(share) {
+  const w = {};
+  for (const worm of LEVELING_WORMS) {
+    const model = wormCatchShare(worm);
+    let obs = 0, exp = 0;
+    for (const [f, rec] of Object.entries(FISH_COMMUNITY_CATCH)) {
+      const worms = Object.keys(rec.b).filter((b) => LEVELING_WORMS.includes(b));
+      if (worms.length !== 1 || worms[0] !== worm) continue;
+      obs += Object.entries(share).filter(([k]) => lc(k) === lc(f)).reduce((a, [, v]) => a + v, 0);
+      exp += model[f] || 0;
+    }
+    w[worm] = exp > 0 ? obs / exp : 0;
+  }
+  const tot = Object.values(w).reduce((a, b) => a + b, 0);
+  return tot > 0 ? Object.fromEntries(Object.entries(w).map(([k, v]) => [k, v / tot])) : null;
+}
 
 const lc = (s) => String(s).toLowerCase();
 const BASE = Object.fromEntries(Object.entries(FISH_BASE_XP).map(([k, v]) => [lc(k), v]));
@@ -207,7 +252,10 @@ export function levelingPlan(farm, inputs, config) {
 
   // ── fish ──
   const fishCfg = config.fish || {};
-  const mix = catchMix(farm);
+  // A chosen worm: its community catch and its price. None: the farm's own catch history.
+  const worm = LEVELING_WORMS.includes(fishCfg.worm) ? fishCfg.worm : null;
+  const own = catchMix(farm);
+  const mix = worm ? { share: wormCatchShare(worm), fishPerCast: own.fishPerCast } : own;
   const shedPlaced = !!ck.buildings["Aging Shed"];
   // Cast only when a fish can give XP: a catch history to go by, and eating raw or a shed to age in.
   const fishing = Object.keys(mix.share).length > 0 && (fishCfg.eatRaw || (fishCfg.age && shedPlaced)) && (fishCfg.reels || 0) > 0;
@@ -240,6 +288,19 @@ export function levelingPlan(farm, inputs, config) {
   const avgRaw = rows.reduce((a, r) => a + (fishPerDay > 0 ? r.raw * r.n / fishPerDay : 0), 0);
 
   const saltPrice = (inputs.prices || {}).Salt || 0;
+  const bubble = hasItem(w, "Bubble Aura") ? BUBBLE_AURA_BAIT : 1;
+  const vip = dashHasVipAccess(w, inputs.now || Date.now());
+  const jobMult = (hasItem(w, "Bubble Aura") ? 0.8 : 1) * (hasItem(w, "Cyclops Bloom") ? 0.8 : 1);
+  // Fish Market hours a day the taken baits fill. Without VIP a finished job waits for the next visit.
+  const marketUse = (taken) => {
+    let hours = 0, jobs = 0;
+    for (const [r, n] of taken) {
+      if (!r.bait) continue;
+      const j = n / bubble, h = FISH_MARKET_HOURS[r.bait] * jobMult;
+      jobs += j; hours += j * (vip ? h : cycleHours(h, restarts));
+    }
+    return { hours, jobs, fit: Math.min(1, hours > 24 ? 24 / hours : 1, vip && jobs > FISH_MARKET_VIP_QUEUE * restarts ? FISH_MARKET_VIP_QUEUE * restarts / jobs : 1) };
+  };
   const buySalt = !!fishCfg.buySalt && saltPrice > 0;
   const fishRoute = (useBaits) => {
   let saltPerDay = 0, rakeCost = 0, ag = { gain: 0, used: 0, saltLeft: 0, slotLeft: 0, taken: new Map() }, baitsPerDay = 0;
@@ -252,7 +313,6 @@ export function levelingPlan(farm, inputs, config) {
     if (useBaits) {
       // A bait forces its best fish; it costs its recipe's fish (their raw XP) and one cast's catch.
       // The Fish Market recipe changes with the season: each season's recipe gets a quarter of the year.
-      const bubble = hasItem(w, "Bubble Aura") ? BUBBLE_AURA_BAIT : 1;
       for (const season of SEASONS) for (const bait of FISH_BAITS) {
         const best = (FISH_BAIT_CATCH[bait] || []).map((n) => ({ n, r: aged[lc(n)] })).filter((x) => x.r)
           .sort((a, b) => b.r.xp - a.r.xp)[0];
@@ -265,13 +325,19 @@ export function levelingPlan(farm, inputs, config) {
           cap = Math.min(cap, src ? src.n * bubble / q : 0);
         }
         cap /= SEASONS.length;
-        if (cap > 0) cand.push({ name: best.n, bait, n: cap, agedXp: best.r.xp, hours: best.r.time / 3600,
+        if (cap > 0) cand.push({ name: best.n, bait, season, n: cap, agedXp: best.r.xp, hours: best.r.time / 3600,
           salt: getAgingSaltCost(BASE[lc(best.n)]) * surfer, gain: best.r.xp - loss, raw: 0,
           inputs: Object.entries(recipe).map(([inp, q]) => ({ row: rows.find((r) => lc(r.name) === lc(inp)), q: q / bubble })) });
       }
     }
     // Bought salt (fish.buySalt): aging is then bound by the slots and the fish, not the nodes.
     ag = ageGreedy(cand, buySalt ? Infinity : saltPerDay, slots * 24 * ager, 24 / restarts);
+    // One Fish Market: more baits than its queue makes are capped, and the freed salt and slots re-planned.
+    const mu = useBaits ? marketUse(ag.taken) : null;
+    if (mu && mu.fit < 1 - 1e-9) {
+      const capped = cand.filter((r) => !r.bait || ag.taken.has(r)).map((r) => (r.bait ? { ...r, n: ag.taken.get(r) * mu.fit } : r));
+      ag = ageGreedy(capped, buySalt ? Infinity : saltPerDay, slots * 24 * ager, 24 / restarts);
+    }
     for (const [r, n] of ag.taken) if (r.bait) baitsPerDay += n;
   }
   // Every fish is counted once: aged, spent on a bait, or eaten raw. A bait's cast catches no random
@@ -302,23 +368,31 @@ export function levelingPlan(farm, inputs, config) {
   }
   let agedN = 0, agingXp = 0, baitInputN = 0, saltUsed = 0, slotUsed = 0;
   baitsPerDay = 0;
-  for (const [r, n] of taken) { agedN += n; agingXp += n * r.agedXp; saltUsed += n * r.salt; slotUsed += n * cycleHours(r.hours, restarts); if (r.bait) baitsPerDay += n; }
+  const baitUse = [];
+  for (const [r, n] of taken) {
+    agedN += n; agingXp += n * r.agedXp; saltUsed += n * r.salt; slotUsed += n * cycleHours(r.hours, restarts);
+    if (r.bait && n > 1e-9) { baitsPerDay += n; baitUse.push({ bait: r.bait, fish: r.name, season: r.season, perDay: n, gainEach: r.gain }); }
+  }
+  const marketHours = marketUse(taken).hours;
   for (const n of spent.values()) baitInputN += n;
   let rawEaten = 0, eatenN = 0;
   for (const r of rows) {
     const left = Math.max(0, r.n * scale - (taken.get(r) || 0) - (spent.get(r) || 0));
     eatenN += left; rawEaten += left * r.raw;
   }
-  return { saltPerDay, rakeCost, agedN, agingXp, baitInputN, saltUsed, slotUsed, baitsPerDay, rawEaten, eatenN };
+  return { saltPerDay, rakeCost, agedN, agingXp, baitInputN, saltUsed, slotUsed, baitsPerDay, rawEaten, eatenN, baitUse, marketHours };
   };
   // Baits are a choice the plan makes itself: used only when they make the day better.
   const plain = fishRoute(false), baited = fishCfg.baits === false ? null : fishRoute(true);
   const fr = baited && baited.agingXp + baited.rawEaten > plain.agingXp + plain.rawEaten ? baited : plain;
-  const { saltPerDay, rakeCost, agedN, agingXp, baitInputN, saltUsed, slotUsed, baitsPerDay, rawEaten, eatenN } = fr;
+  const { saltPerDay, rakeCost, agedN, agingXp, baitInputN, saltUsed, slotUsed, baitsPerDay, rawEaten, eatenN, baitUse, marketHours } = fr;
   const xpPerDay = { kitchens: kXp, aging: agingXp, raw: rawEaten };
   xpPerDay.total = kXp + agingXp + rawEaten;
 
-  const castCost = computeRodCostSFL(inputs.prices || {}, inputs.coinsPerSFL || 0, skills) + computeBaitCostSFL("Earthworm", inputs.prices || {});
+  // The cast's worm: the chosen one, or the mix the catch history points to (Earthworm if none).
+  const wormMix = worm ? { [worm]: 1 } : (wormMixOf(own.share) || { Earthworm: 1 });
+  const wormCost = Object.entries(wormMix).reduce((a, [k, v]) => a + v * computeBaitCostSFL(k, inputs.prices || {}), 0);
+  const castCost = computeRodCostSFL(inputs.prices || {}, inputs.coinsPerSFL || 0, skills) + wormCost;
   // Rakes only for the salt the shed uses: salt the nodes could give beyond that is not raked.
   const raked = saltPerDay > 0 ? Math.min(1, saltUsed / saltPerDay) : 0;
   const saltBought = buySalt ? Math.max(0, saltUsed - saltPerDay) : 0;
@@ -344,7 +418,8 @@ export function levelingPlan(farm, inputs, config) {
     needXp, bankedXp, xpPerDay, costPerDay, costSplit: { kitchens: kCost * scale, fish: fishCost },
     days, runningFlower, totalFlower, nftCost, resaleLoss, oneOff: config.resell ? resaleLoss : nftCost, bottleneck, buildings,
     fish: { saltBought, saltPrice, perDay: fishPerDay * (reels > 0 ? Math.max(0, (reels - baitsPerDay) / reels) : 0), fishPerCast, aged: agedN, agedCaughtN: agedN - baitsPerDay, eatenN, baitInputN,
-      saltUsed, saltPerDay, baitsPerDay, slots },
+      saltUsed, saltPerDay, baitsPerDay, slots, worm, wormMix, castCost, baitUse, marketHours, vip,
+      baitsHelp: !!baited && fr === baited && baitsPerDay > 1e-9 },
   };
 }
 
@@ -453,6 +528,7 @@ export function sanitizeLevelingConfig(raw, defaults, recipeOptions) {
   const f = raw.fish || {};
   // Baits are no longer a switch on the page: the plan uses them whenever they pay.
   for (const k of ["age", "eatRaw", "buySalt"]) if (typeof f[k] === "boolean") out.fish[k] = f[k];
+  if (LEVELING_WORMS.includes(f.worm)) out.fish.worm = f.worm; else delete out.fish.worm;
   out.fish.baits = true;
   if ([0.8, 1, 1.2].includes(raw.costScale)) out.costScale = raw.costScale;
   out.resell = typeof raw.resell === "boolean" ? raw.resell : !!d.resell;
@@ -604,6 +680,7 @@ export function levelingSteps(farm, inputs, config, impacts, n = 3) {
   const fishSet = (v) => ({ ...config, fish: { ...f, ...v } });
   tryCfg(f.age ? "Nestárni ryby" : "Stárni ryby", "fish", fishSet({ age: !f.age }));
   tryCfg(f.eatRaw ? "Nejez syrové ryby" : "Jez zbytek ryb syrový", "fish", fishSet({ eatRaw: !f.eatRaw }));
+  for (const wm of LEVELING_WORMS) if (wm !== f.worm) tryCfg(`Nahazuj ${wm}`, "worm", fishSet({ worm: wm }));
   if ((inputs.prices || {}).Salt > 0) tryCfg(f.buySalt ? "Nekupuj sůl" : "Dokupuj sůl na stárnutí", "fish", fishSet({ buySalt: !f.buySalt }));
   return out.sort((a, b) => a.dFlower - b.dFlower).slice(0, n);
 }
@@ -619,6 +696,12 @@ function setPoints(farm, inputs, config, ticked) {
   const salt = (inputs.prices || {}).Salt > 0;
   for (const age of [true, false]) for (const eatRaw of [true, false]) for (const buySalt of salt && age ? [false, true] : [false]) {
     const fish = { ...config.fish, age, eatRaw, buySalt, baits: true };
+    const p = levelingPlan(farm, inputs, { ...config, ticked, buildings: offB, fish });
+    fishVariants.push({ fish, x: p.xpPerDay.total, c: p.costPerDay, banked: p.bankedXp || 0, one: p.oneOff || 0 });
+  }
+  // Each worm on the main setting (age + eat the rest): its own catch and cast price.
+  for (const worm of LEVELING_WORMS) for (const buySalt of salt ? [false, true] : [false]) {
+    const fish = { ...config.fish, age: true, eatRaw: true, buySalt, baits: true, worm };
     const p = levelingPlan(farm, inputs, { ...config, ticked, buildings: offB, fish });
     fishVariants.push({ fish, x: p.xpPerDay.total, c: p.costPerDay, banked: p.bankedXp || 0, one: p.oneOff || 0 });
   }
@@ -685,7 +768,7 @@ export function levelingFrontier(farm, inputs, config, max = 10) {
   // dear without items (fish only) can be the cheapest with them, and the greedy cannot see past that.
   const cheapestBy = new Map();
   for (const p of ok) {
-    const k = JSON.stringify([p.fish.age, p.fish.eatRaw, p.fish.buySalt]);
+    const k = JSON.stringify([p.fish.age, p.fish.eatRaw, p.fish.buySalt, p.fish.worm || null]);
     if (!cheapestBy.has(k) || p.flower < cheapestBy.get(k).flower) cheapestBy.set(k, p);
   }
   const anchors = [...new Set([front0[0], front0[Math.floor(front0.length / 2)], ...cheapestBy.values()].filter(Boolean))];
