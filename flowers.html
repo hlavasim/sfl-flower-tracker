@@ -5495,6 +5495,11 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.46", items: [
+          { t: "feat", text: "LEVELING redesigned: the three result cards are gone. A one-block summary (days, date, FLOWER, FLOWER per 1 M XP by source, food already cooked, and your <b>measured XP a day</b> next to the plan). <b>👣 Co tě teď nejvíc zlevní</b> — the three single changes that save the most, each with <b>použít</b>. <b>🧭 Nejlevnější cesty</b> — a days × FLOWER chart of the cheapest route for every pace (kitchens, recipes, fish and purchases searched for you), click a point to use it. <b>🪜 Po ascenzích</b> — finish A3, A4 … A10: days, FLOWER and date per band and from today, skill points you will have; click a row to make it the target." },
+          { t: "feat", text: "LEVELING items are now one compact table: price, <b>vyplatí se od</b> (the first level it pays), and the net FLOWER to the end of every ascension A3 … A10 in green / red, with a <b>Σ</b> row for everything ticked. New switches: <b>dokupovat sůl</b> (buy salt on the market when your nodes run out) and <b>ceny surovin ±20 %</b>. Recipes show FLOWER per 1 M XP. Baits are used automatically when they pay (all four seasons' Fish Market recipes)." },
+          { t: "fix", text: "LEVELING: salt boosts (Salty Seas, Salt Surge, Sea Blessed, Salt Worker Gnome) were ignored once your measured salt pace was used — they now count. NFTs with no listing show <b>cena ?</b> instead of being treated as free; buds use the best bid of their type; recipe choices follow the ticked items." },
+        ] },
         { ver: "v6.45", items: [
           { t: "fix", text: "LEVELING: NFTs now count at their <b>full price</b> — a Walrus that saves 370 in running costs still costs ~1 000 net. Tick <b>„NFT po dosažení cíle prodám“</b> to count only what you lose reselling. The table splits <b>provoz do cíle</b> from <b>čistě</b>." },
           { t: "fix", text: "LEVELING is closer to a real day: a cook or an aging job waits for your next visit (a 6.2 h Pizza at 6 restarts is 3 cooks, not 3.9). Salt follows your measured harvests, rakes are paid only for salt you use, baits are used only when they help, and no rods are charged when no fish can give XP. Fishy Chance / Roll / Gamble and Fishy Feast ranks are offered and counted (also on the Bumpkin page). Ticking two ranks of a skill counts its points once; „z nikdy na X dní“ shows what turns „nikdy“ into a date. About a third faster per click." },
@@ -25243,112 +25248,225 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       if (!farm) { app.innerHTML = head + `<div class="error-screen pixel-panel pixel-font"><p>Chybí data farmy — obnov stránku.</p></div>`; return; }
       // Bids and bud floors from the marketplace book; a floor the boost catalogue lacks comes from it too.
       const book = (_rmBook && _rmBook.items) || {};
-      const inputs = { ...d.inputs, floors: { ...(d.inputs.floors || {}) }, bids: {}, budFloors: budTypeFloors(book) };
+      const inputs = { ...d.inputs, floors: { ...(d.inputs.floors || {}) }, bids: {}, budFloors: budTypeFloors(book), budBids: budTypeBids(book) };
       for (const [n, v] of Object.entries(book)) {
         if (v && v.b > 0) inputs.bids[n] = v.b;
         if (v && v.f > 0 && !(inputs.floors[n] > 0)) inputs.floors[n] = v.f;
       }
       let saved = null;
       try { saved = JSON.parse(localStorage.getItem("sfl_leveling") || "null"); } catch (e) { saved = null; }
-      window._lvl = { farm, inputs, ...levelingInit(farm, inputs, saved) };
+      window._lvl = { farm, inputs, book, front: null, showAll: false, ...levelingInit(farm, inputs, saved) };
       app.innerHTML = head + `<div id="lvl-body"></div>`;
       _lvlRender();
     }
     function _lvlSave() { try { localStorage.setItem("sfl_leveling", JSON.stringify(window._lvl.cfg)); } catch (e) {} }
-    function _lvlChange(fn) {
+    // keepFront: applying a frontier point keeps the computed frontier; any other change drops it.
+    function _lvlChange(fn, keepFront) {
       const L = window._lvl; if (!L) return;
       fn(L.cfg);
-      L.options = levelingRecipeOptions(L.farm, L.inputs, L.cfg.restarts);
+      L.options = levelingRecipeOptions(L.farm, L.inputs, L.cfg.restarts, L.cfg.ticked);
       L.cfg = sanitizeLevelingConfig(L.cfg, L.def, L.options);
+      if (!keepFront) L.front = null;
       _lvlSave(); _lvlRender();
     }
     function _lvlTick(name, on) { _lvlChange((c) => { c.ticked = on ? [...c.ticked, name] : c.ticked.filter((n) => n !== name); }); }
     function _lvlReset() { _lvlChange((c) => { Object.assign(c, JSON.parse(JSON.stringify(window._lvl.def))); }); }
-    function _lvlCard(title, p, note) {
-      const x = p.xpPerDay;
-      const when = Number.isFinite(p.days) && p.days > 0 ? new Date(Date.now() + p.days * 86400000).toLocaleDateString("cs-CZ") : "";
-      return `<div class="pixel-panel" style="padding:12px 14px">
-        <div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:6px">${title}</div>
-        <div class="pixel-font" style="font-size:1.1rem">${lvlDays(p.days)}</div>
-        <div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:6px">${when ? `≈ ${when}` : "&nbsp;"}</div>
-        <div style="font-size:0.7rem"><b>${lvlFmt(p.totalFlower)}</b> ${sflIcon()} celkem</div>
-        <div style="font-size:0.55rem;color:var(--text-dim);line-height:1.7;margin-top:4px">
-          provoz ${lvlFmt(p.costPerDay)} ${sflIcon()}/den = ${lvlFmt(p.runningFlower)} ${sflIcon()} do cíle${p.nftCost > 0 ? ` · NFT ${window._lvl && window._lvl.cfg.resell ? `ztráta při prodeji ${lvlFmt(p.resaleLoss)}` : `nákup ${lvlFmt(p.nftCost)}`} ${sflIcon()}` : ""}<br>
-          XP/den ${lvlFmt(x.total)}: kuchyně ${lvlFmt(x.kitchens)} · stárnutí ${lvlFmt(x.aging)} · syrové ryby ${lvlFmt(x.raw)}<br>
-          ${p.bottleneck ? `stárnutí brzdí: <b>${lvlBottleneck[p.bottleneck]}</b> · ` : ""}${note || ""}</div></div>`;
+    function _lvlTarget(a) { _lvlChange((c) => { c.target = { ascension: a, level: 50 }; }); }
+    function _lvlUse(cfg, keepFront) { _lvlChange((c) => { Object.assign(c, JSON.parse(JSON.stringify(cfg))); }, keepFront); }
+    function _lvlUseFront(i) { const L = window._lvl; if (L && L.front && L.front.points[i]) _lvlUse(L.front.points[i].config, true); }
+    function _lvlUseStep(i) { const L = window._lvl; if (L && L.steps && L.steps[i]) _lvlUse(L.steps[i].config); }
+    // All the steps at once: each step changed one thing against the same config, so merge those.
+    function _lvlUseSteps() {
+      const L = window._lvl; if (!L || !L.steps) return;
+      const base = JSON.parse(JSON.stringify(L.cfg));
+      _lvlChange((c) => {
+        for (const s of L.steps) {
+          if (s.kind === "item") c.ticked = s.config.ticked.includes(s.name) ? [...new Set([...c.ticked, s.name])] : c.ticked.filter((n) => n !== s.name);
+          else if (s.kind === "fish") c.fish = { ...c.fish, ...Object.fromEntries(Object.entries(s.config.fish).filter(([k, v]) => base.fish[k] !== v)) };
+          else for (const [k, v] of Object.entries(s.config.buildings)) if (JSON.stringify(v) !== JSON.stringify(base.buildings[k])) c.buildings[k] = v;
+        }
+      });
     }
+    function _lvlFindFront() {
+      const L = window._lvl; if (!L) return;
+      const box = document.getElementById("lvl-front");
+      if (box) box.innerHTML = `<div style="padding:8px;color:var(--text-dim)">Počítám nejlevnější cesty… (pár sekund)</div>`;
+      setTimeout(() => {
+        const key = JSON.stringify([L.cfg.target, L.cfg.restarts, L.cfg.costScale, L.cfg.resell]);
+        L.front = { key, points: levelingFrontier(L.farm, L.inputs, L.cfg, 10) };
+        _lvlRender();
+      }, 30);
+    }
+    function _lvlShowAll(on) { window._lvl.showAll = on; _lvlRender(); }
+    // Compact FLOWER: 950, 1,2k, 14k.
+    const lvlK = (v) => {
+      if (!Number.isFinite(v)) return v > 0 ? "∞" : v < 0 ? "−∞" : "—";
+      const a = Math.abs(v), s = v < 0 ? "−" : v > 0 ? "+" : "";
+      return s + (a < 1000 ? Math.round(a) : a < 10000 ? (a / 1000).toFixed(1).replace(".", ",") + "k" : Math.round(a / 1000) + "k");
+    };
+    const lvlAL = (p) => (p === "now" ? "hned" : p ? `A${p.ascension} L${p.level}` : "—");
+    const lvlPerM = (c, x) => (x > 0 ? lvlFmt(c / (x / 1e6)) : "—");
+    const lvlDate = (d) => (Number.isFinite(d) && d > 0 ? new Date(Date.now() + d * 86400000).toLocaleDateString("cs-CZ") : "");
+
+    /* The days × FLOWER frontier: a scatter (fastest left), today's config as a cross; click to use. */
+    function _lvlFrontSvg(points, cur) {
+      const W = 600, H = 190, pl = 46, pr = 10, pt = 10, pb = 26;
+      const all = [...points, cur].filter((p) => Number.isFinite(p.days) && Number.isFinite(p.flower));
+      if (!all.length) return "";
+      const x0 = 0, x1 = Math.max(...all.map((p) => p.days)) * 1.05;
+      const yMin = Math.min(...all.map((p) => p.flower)), yMax = Math.max(...all.map((p) => p.flower));
+      const y0 = yMin - (yMax - yMin) * 0.1 - 1, y1 = yMax + (yMax - yMin) * 0.1 + 1;
+      const X = (d) => pl + ((d - x0) / (x1 - x0)) * (W - pl - pr), Y = (f) => pt + (1 - (f - y0) / (y1 - y0)) * (H - pt - pb);
+      let g = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto;display:block" font-size="10" fill="var(--text-dim)">`;
+      for (let i = 0; i <= 4; i++) {
+        const f = y0 + ((y1 - y0) * i) / 4, d = x0 + ((x1 - x0) * i) / 4;
+        g += `<line x1="${pl}" x2="${W - pr}" y1="${Y(f)}" y2="${Y(f)}" stroke="var(--text-dim)" stroke-opacity="0.15"/>`;
+        g += `<text x="${pl - 4}" y="${Y(f) + 3}" text-anchor="end">${lvlK(f).replace("+", "")}</text>`;
+        g += `<text x="${X(d)}" y="${H - 8}" text-anchor="middle">${lvlFmt(d)} d</text>`;
+      }
+      g += `<polyline fill="none" stroke="var(--sunpetal)" stroke-opacity="0.5" points="${points.map((p) => `${X(p.days)},${Y(p.flower)}`).join(" ")}"/>`;
+      points.forEach((p, i) => {
+        g += `<circle cx="${X(p.days)}" cy="${Y(p.flower)}" r="6" fill="var(--sunpetal)" style="cursor:pointer" onclick="_lvlUseFront(${i})"><title>${lvlFmt(p.days)} dní · ${lvlFmt(p.flower)} FLOWER — klikni pro použití</title></circle>`;
+      });
+      if (Number.isFinite(cur.days) && Number.isFinite(cur.flower)) {
+        const cx = X(cur.days), cy = Y(cur.flower);
+        g += `<path d="M${cx - 6},${cy - 6}L${cx + 6},${cy + 6}M${cx - 6},${cy + 6}L${cx + 6},${cy - 6}" stroke="var(--red)" stroke-width="2.5"><title>tvoje nastavení</title></path>`;
+      }
+      return g + `</svg>`;
+    }
+
     function _lvlRender() {
       const L = window._lvl, body = document.getElementById("lvl-body");
       if (!L || !body) return;
-      const c = L.cfg;
+      const c = L.cfg, free = L.inputs.freePoints || 0;
       const plan = levelingPlan(L.farm, L.inputs, c);
       const bare = levelingPlan(L.farm, L.inputs, { ...c, ticked: [] });
-      const cook = levelingPlan(L.farm, L.inputs, { ...c, ticked: [], fish: { ...c.fish, age: false, eatRaw: false } });
       const impacts = itemImpacts(L.farm, L.inputs, c);
+      const ladder = levelingLadder(L.farm, plan, 10, free);
+      L.steps = levelingSteps(L.farm, L.inputs, c, impacts, 3);
       const sel = (v, cur) => (String(v) === String(cur) ? " selected" : "");
       const chk = (on) => (on ? " checked" : "");
-      let h = `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px;font-size:0.62rem;line-height:2">
-        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
-          <label>Cíl A<select onchange="_lvlChange((c)=>{c.target.ascension=+this.value})">${Array.from({ length: 10 }, (_, i) => `<option${sel(i + 1, c.target.ascension)}>${i + 1}</option>`).join("")}</select></label>
-          <label>level <select onchange="_lvlChange((c)=>{c.target.level=+this.value})">${Array.from({ length: 50 }, (_, i) => `<option${sel(i + 1, c.target.level)}>${i + 1}</option>`).join("")}</select></label>
-          <label>restartů za den <input type="number" min="1" max="48" value="${c.restarts}" style="width:52px" onchange="_lvlChange((c)=>{c.restarts=+this.value})"></label>
-          <label title="Zapnuto: NFT po dosažení cíle prodáš a počítá se jen ztráta (cena − nejvyšší nabídka). Vypnuto: počítá se celá cena."><input type="checkbox"${chk(c.resell)} onchange="_lvlChange((c)=>{c.resell=this.checked})"> NFT po dosažení cíle prodám</label>
-          <span style="color:var(--text-dim)">chybí ${lvlFmt(plan.needXp)} XP</span>
-          <button class="refresh-btn" style="font-size:0.5rem" onclick="_lvlReset()">výchozí</button>
-        </div>
-        <div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-top:6px">KUCHYNĚ</div>`;
+      const S = sflIcon();
+      const panel = (title, inner, extra = "") => `<div class="pixel-panel" style="padding:8px 10px;margin-bottom:8px${extra}">${title ? `<div class="pixel-font" style="font-size:0.58rem;color:var(--sunpetal);margin-bottom:4px">${title}</div>` : ""}${inner}</div>`;
+
+      // ── settings ──
+      const targetLabel = `konce A${c.target.ascension}${c.target.level !== 50 ? ` (L${c.target.level})` : ""}`;
+      let set = `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <label>Cíl <select onchange="_lvlTarget(+this.value)">${Array.from({ length: 10 }, (_, i) => `<option value="${i + 1}"${sel(i + 1, c.target.ascension)}>konec A${i + 1}</option>`).join("")}</select></label>
+          <label>restartů/den <input type="number" min="1" max="48" value="${c.restarts}" style="width:46px" onchange="_lvlChange((c)=>{c.restarts=+this.value})"></label>
+          <label title="Co když ceny surovin (vaření, pruty, sůl) za ty stovky dní stoupnou nebo klesnou. Ceny NFT se nemění.">ceny surovin <select onchange="_lvlChange((c)=>{c.costScale=+this.value})">${[[0.8, "−20 %"], [1, "dnešní"], [1.2, "+20 %"]].map(([v, t]) => `<option value="${v}"${sel(v, c.costScale || 1)}>${t}</option>`).join("")}</select></label>
+          <label title="Zapnuto: NFT po dosažení cíle prodáš a počítá se jen ztráta (cena − nejvyšší nabídka). Vypnuto: celá cena."><input type="checkbox"${chk(c.resell)} onchange="_lvlChange((c)=>{c.resell=this.checked})"> NFT po cíli prodám</label>
+          <button class="refresh-btn" style="font-size:0.5rem" onclick="_lvlReset()">výchozí</button></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:2px 12px;margin-top:4px">`;
       for (const [name, b] of Object.entries(c.buildings)) {
         const opts = L.options[name] || [];
-        h += `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <label style="min-width:120px"><input type="checkbox"${chk(b.on)} data-b="${escHTML(name)}" onchange="_lvlChange((c)=>{c.buildings[this.dataset.b].on=this.checked})"> ${escHTML(name)}</label>
-          <select style="max-width:100%" data-b="${escHTML(name)}" onchange="_lvlChange((c)=>{c.buildings[this.dataset.b].recipe=this.value})">${opts.map((o) => `<option value="${escHTML(o.name)}"${sel(o.name, b.recipe)}>${escHTML(o.name)} · ${lvlFmt(o.xpPerDay)} XP/den · ${o.costPerDay.toFixed(1)} FLOWER/den</option>`).join("")}</select></div>`;
+        set += `<div style="display:flex;gap:6px;align-items:center;min-width:0">
+          <label style="white-space:nowrap;min-width:104px"><input type="checkbox"${chk(b.on)} data-b="${escHTML(name)}" onchange="_lvlChange((c)=>{c.buildings[this.dataset.b].on=this.checked})"> ${escHTML(name)}</label>
+          <select style="flex:1;min-width:0;max-width:100%" data-b="${escHTML(name)}" onchange="_lvlChange((c)=>{c.buildings[this.dataset.b].recipe=this.value})">${opts.map((o) => `<option value="${escHTML(o.name)}"${sel(o.name, b.recipe)}>${escHTML(o.name)} · ${lvlK(o.xpPerDay).replace("+", "")} XP/d · ${o.costPerDay.toFixed(1)} FL/d · ${lvlFmt(o.perM)} FL/1M</option>`).join("")}</select></div>`;
       }
-      const f = c.fish;
-      h += `<div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-top:6px">RYBY</div>
-        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
-          <label><input type="checkbox"${chk(f.age)} onchange="_lvlChange((c)=>{c.fish.age=this.checked})"> stárnout (podle soli)</label>
-          <label><input type="checkbox"${chk(f.eatRaw)} onchange="_lvlChange((c)=>{c.fish.eatRaw=this.checked})"> zbytek sníst syrový</label>
-          <label><input type="checkbox"${chk(f.baits)} onchange="_lvlChange((c)=>{c.fish.baits=this.checked})"> velké ryby přes návnady</label>
-          <label>reelů za den <input type="number" min="0" max="500" value="${f.reels}" style="width:56px" onchange="_lvlChange((c)=>{c.fish.reels=+this.value})"></label>
-        </div>
-        <div style="font-size:0.52rem;color:var(--text-dim);line-height:1.6">${lvlFmt(plan.fish.perDay)} ryb/den (${plan.fish.fishPerCast.toFixed(2)} na hod) · stárne ${lvlFmt(plan.fish.aged)}${plan.fish.baitsPerDay > 0 ? ` (z toho ${plan.fish.baitsPerDay.toFixed(1)} přes návnady)` : ""} · sůl ${lvlFmt(plan.fish.saltUsed)} / ${lvlFmt(plan.fish.saltPerDay)} za den · ryba stojí jen podíl prutu a červa, protože se sní nebo nechá stárnout všechno, co chytíš</div></div>`;
-      h += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-bottom:12px">
-        ${_lvlCard("JEN KUCHYNĚ", cook, "bez ryb a bez nákupů")}
-        ${_lvlCard("BEZ NÁKUPŮ", bare, "tvoje nastavení, nic nového")}
-        ${_lvlCard("TVOJE VOLBA", plan, c.ticked.length ? `${c.ticked.length} zaškrtnutých` : "nic nezaškrtnuto")}</div>`;
-      // The catalogue: what each thing you do not have would do, best saving first.
+      const f = c.fish, saltPrice = (L.inputs.prices || {}).Salt || 0;
+      set += `</div><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:4px">
+          <span class="pixel-font" style="font-size:0.5rem;color:var(--sunpetal)">RYBY</span>
+          <label><input type="checkbox"${chk(f.age)} onchange="_lvlChange((c)=>{c.fish.age=this.checked})"> stárnout</label>
+          <label><input type="checkbox"${chk(f.eatRaw)} onchange="_lvlChange((c)=>{c.fish.eatRaw=this.checked})"> zbytek syrový</label>
+          ${saltPrice > 0 ? `<label title="Když vlastní sůl nestačí, dokoupit ji na trhu (${saltPrice.toFixed(4)} FLOWER za kus). Stárnutí pak brzdí sloty."><input type="checkbox"${chk(f.buySalt)} onchange="_lvlChange((c)=>{c.fish.buySalt=this.checked})"> dokupovat sůl</label>` : ""}
+          <label>reelů/den <input type="number" min="0" max="500" value="${f.reels}" style="width:50px" onchange="_lvlChange((c)=>{c.fish.reels=+this.value})"></label>
+          <span style="color:var(--text-dim)">${lvlFmt(plan.fish.perDay)} ryb/den · stárne ${lvlFmt(plan.fish.aged)}${plan.fish.baitsPerDay > 0.05 ? ` (${plan.fish.baitsPerDay.toFixed(1)} přes návnady)` : ""} · sůl ${lvlFmt(plan.fish.saltUsed)}/${lvlFmt(plan.fish.saltPerDay)}${plan.fish.saltBought > 0.5 ? ` + koupeno ${lvlFmt(plan.fish.saltBought)}` : ""}</span></div>`;
+      let h = panel("", set, ";font-size:0.6rem;line-height:1.9");
+
+      // ── summary: the plan to the target in one block ──
+      const x = plan.xpPerDay;
+      const src = [...plan.buildings.map((b) => `${escHTML(b.name)} ${lvlPerM(b.costPerDay, b.xpPerDay)}`),
+        x.aging + x.raw > 0 ? `ryby ${lvlPerM(plan.costSplit.fish, x.aging + x.raw)}` : null].filter(Boolean).join(" · ");
+      const actual = L.inputs.actualXpPerDay;
+      h += panel("", `<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:baseline">
+          <span class="pixel-font" style="font-size:0.9rem">${lvlDays(plan.days)}</span>
+          <span style="color:var(--text-dim)">${lvlDate(plan.days) ? `≈ ${lvlDate(plan.days)} · ` : ""}do ${targetLabel}</span>
+          <span style="font-size:0.75rem"><b>${lvlFmt(plan.totalFlower)}</b> ${S}</span>
+          <span style="color:var(--text-dim)">${plan.oneOff > 0 ? `z toho NFT ${lvlFmt(plan.oneOff)} ${S}${c.resell ? " (ztráta při prodeji)" : ""}` : "bez nákupů"}</span></div>
+        <div style="color:var(--text-dim);line-height:1.7">
+          XP/den <b>${lvlFmt(x.total)}</b> (kuchyně ${lvlFmt(x.kitchens)} · stárnutí ${lvlFmt(x.aging)} · syrové ${lvlFmt(x.raw)}) · ${lvlFmt(plan.costPerDay)} ${S}/den · <b>${lvlPerM(plan.costPerDay, x.total)}</b> ${S} za 1 M XP${plan.bottleneck ? ` · stárnutí brzdí: <b>${lvlBottleneck[plan.bottleneck]}</b>` : ""}<br>
+          ${S} za 1 M XP podle zdroje: ${src || "—"}<br>
+          ${plan.bankedXp > 0 ? `uvařené jídlo ve skladu: ${lvlFmt(plan.bankedXp)} XP (už odečteno) · ` : ""}${actual ? `skutečně za poslední týdny: <b>${lvlFmt(actual)}</b> XP/den (${actual >= x.total ? "plníš" : `${Math.round((actual / x.total) * 100)} % plánu`})` : ""}</div>`, ";font-size:0.6rem");
+
+      // ── frontier + steps ──
+      const fr = L.front;
+      let fh = `<div id="lvl-front">`;
+      if (fr) {
+        const stale = fr.key !== JSON.stringify([c.target, c.restarts, c.costScale, c.resell]);
+        fh += `${stale ? `<div style="color:var(--red)">Spočítáno pro jiný cíl nebo nastavení — přepočítej.</div>` : ""}
+          ${_lvlFrontSvg(fr.points, plan)}
+          <div style="color:var(--text-dim)">✕ = tvoje nastavení · tečka = nejlevnější cesta pro to tempo (klik = použít)</div>
+          <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;margin-top:4px">${fr.points.map((p, i) => `<tr class="roi-row" style="cursor:pointer" onclick="_lvlUseFront(${i})">
+            <td style="white-space:nowrap"><b>${lvlFmt(p.days)}</b> dní</td><td style="white-space:nowrap"><b>${lvlFmt(p.flower)}</b> ${S}</td>
+            <td>${p.kitchens.length ? escHTML(p.kitchens.join(" + ")) : "žádná kuchyně"} · ${p.fish.age ? "stárnutí" : ""}${p.fish.age && p.fish.eatRaw ? " + " : ""}${p.fish.eatRaw ? "syrové" : ""}${!p.fish.age && !p.fish.eatRaw ? "bez ryb" : ""}${p.fish.buySalt ? " + kupovaná sůl" : ""}</td>
+            <td style="color:var(--text-dim)">${p.ticked.length ? escHTML(p.ticked.join(", ")) : "nic nekupovat"}</td>
+            <td><button class="refresh-btn" style="font-size:0.45rem">použít</button></td></tr>`).join("")}</table></div>`;
+      } else {
+        fh += `<div style="color:var(--text-dim)">Projde kombinace kuchyní, receptů, ryb a nákupů a ukáže nejlevnější cestu pro každé tempo (rychlejší = dražší).</div>`;
+      }
+      fh += `<button class="refresh-btn" style="font-size:0.5rem;margin-top:4px" onclick="_lvlFindFront()">${fr ? "přepočítat" : "Najdi nejlevnější cesty"}</button></div>`;
+      const st = L.steps;
+      const sh = st.length ? `<table style="width:100%;border-collapse:collapse">${st.map((s, i) => `<tr>
+          <td>${i + 1}. ${escHTML(s.label)}${s.price ? ` <span style="color:var(--text-dim)">(${lvlFmt(s.price)} ${S})</span>` : ""}</td>
+          <td style="text-align:right;color:var(--green);white-space:nowrap">${lvlK(s.dFlower)} ${S}</td>
+          <td style="text-align:right;white-space:nowrap;color:var(--text-dim)">${Number.isFinite(s.dDays) ? `${s.dDays > 0 ? "+" : ""}${lvlFmt(s.dDays)} d` : s.dDays < 0 ? "z nikdy" : "nikdy"}</td>
+          <td><button class="refresh-btn" style="font-size:0.45rem" onclick="_lvlUseStep(${i})">použít</button></td></tr>`).join("")}</table>
+          ${st.length > 1 ? `<button class="refresh-btn" style="font-size:0.5rem;margin-top:4px" onclick="_lvlUseSteps()">použít všechny</button>` : ""}`
+        : `<div style="color:var(--text-dim)">Žádná jednotlivá změna už cestu nezlevní.</div>`;
+      h += panel("👣 CO TĚ TEĎ NEJVÍC ZLEVNÍ <span style=\"color:var(--text-dim)\">(každý krok sám o sobě proti tomu, co je nastavené teď)</span>", sh, ";font-size:0.58rem");
+      h += panel(`🧭 NEJLEVNĚJŠÍ CESTY DO ${targetLabel.toUpperCase()}`, fh, ";font-size:0.58rem");
+
+      // ── ladder ──
+      let lh = `<div style="overflow-x:auto"><table class="roi-table lvl-t" style="width:100%;border-collapse:collapse">
+        <tr><th style="text-align:left">ascenze</th><th>XP</th><th>dní</th><th>${S}</th><th>celkem dní</th><th>datum</th><th>celkem ${S}</th><th title="Volné skill body na konci (1 za level; levely ascenze se počítají po vylepšení ostrova)">body</th></tr>`;
+      for (const r of ladder) {
+        const on = r.ascension === c.target.ascension;
+        lh += `<tr class="roi-row" style="cursor:pointer${on ? ";background:rgba(255,200,80,0.12)" : ""}" onclick="_lvlTarget(${r.ascension})" title="nastavit jako cíl">
+          <td style="text-align:left;white-space:nowrap">${on ? "▶ " : ""}${r.fromLevel > 1 ? `dodělat A${r.ascension} (L${r.fromLevel}→50)` : `A${r.ascension}`}</td>
+          <td>${lvlK(r.xp / 1e6).replace("+", "")} M</td><td>${lvlFmt(r.days)}</td><td>${lvlFmt(r.flower)}</td>
+          <td><b>${lvlFmt(r.cumDays)}</b></td><td>${lvlDate(r.cumDays)}</td><td><b>${lvlFmt(r.cumFlower)}</b></td><td>${r.points == null ? "" : r.points}</td></tr>`;
+      }
+      h += panel("🪜 PO ASCENZÍCH (tvoje nastavení; klik = cíl)", lh + `</table></div>`, ";font-size:0.58rem");
+
+      // ── items × ascensions ──
+      const cols = ladder.map((r) => ({ a: r.ascension, xp: r.xpEnd }));
       const pts = tickedSkillPoints(L.farm, c.ticked);
-      const free = L.inputs.freePoints || 0;
-      h += `<div class="pixel-panel" style="padding:12px 14px"><div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal)">CO NEMÁŠ A CO BY TO UDĚLALO</div>
-        <div style="font-size:0.52rem;color:var(--text-dim);line-height:1.6;margin:4px 0 8px">Dopad = co se změní, když položku zaškrtneš (nebo odškrtneš) k tomu, co je teď nastavené. <b>Provoz</b> = co ušetří (nebo přidá) vaření, pruty a hrábě až do cíle. <b>Čistě</b> = provoz + ${c.resell ? "ztráta při prodeji NFT po dosažení cíle (cena − nejvyšší nabídka, bez nabídky 15 %)" : "celá cena NFT (zaškrtni „NFT po dosažení cíle prodám“, pokud je pak prodáš)"}. Zelená = ušetří.
-        ${pts ? ` Skilly zaškrtnuté za <b>${pts}</b> bodů, volných máš <b>${free}</b>${pts > free ? ` <span style="color:var(--red)">⚠ přes limit</span>` : ""}.` : ""}</div>
-        <div style="overflow-x:auto"><table class="roi-table" style="width:100%;font-size:0.55rem;border-collapse:collapse">
-        <tr><th></th><th style="text-align:left">položka</th><th>cena</th><th>ztráta při prodeji</th><th>XP/den</th><th>dny</th><th>provoz do cíle</th><th>čistě</th><th>body</th></tr>`;
+      const cell = (v) => `<td style="text-align:right;${!Number.isFinite(v) || Math.abs(v) < 0.5 ? "color:var(--text-dim)" : v < 0 ? "color:var(--green)" : "color:var(--red)"}">${Math.abs(v) < 0.5 ? "0" : lvlK(v)}</td>`;
+      let th = `<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:4px">
+          <label><input type="checkbox"${chk(c.resell)} onchange="_lvlChange((c)=>{c.resell=this.checked})"> NFT po cíli prodám (počítá se jen ztráta při prodeji)</label>
+          <label><input type="checkbox"${chk(L.showAll)} onchange="_lvlShowAll(this.checked)"> ukázat i položky bez dopadu</label>
+          ${pts ? `<span>skilly za <b>${pts}</b> b., volných ${free}${pts > free ? ` <span style="color:var(--red)">⚠ zbytek od ${lvlAL(pointsReachedAt(L.farm, pts - free))}</span>` : ""}</span>` : ""}</div>
+        <details style="color:var(--text-dim);margin-bottom:4px"><summary style="cursor:pointer">? co znamenají čísla</summary>
+          Buňka = o kolik ${S} vyjde cesta do konce té ascenze s položkou oproti bez ní (zelená = ušetří, červená = prodělá): provoz (vaření, pruty, hrábě, sůl) + ${c.resell ? "ztráta při prodeji NFT (cena − nejvyšší nabídka, bez nabídky 15 %)" : "celá cena NFT"}. Každý řádek je změna proti tomu, co je zaškrtnuté teď. Σ nahoře = všechno zaškrtnuté dohromady proti ničemu — položky se navzájem ovlivňují (třeba víc ryb nepomůže, když chybí sůl), takže Σ není součet řádků. „Vyplatí se od" = první level, od kterého položka ušetří. Najetím na název uvidíš, co dělá a jak mění den.</details>
+        <div style="overflow-x:auto"><table class="roi-table lvl-t" style="width:100%;border-collapse:collapse">
+        <tr><th></th><th style="text-align:left">položka</th><th>cena</th><th>vyplatí se od</th>${cols.map((k) => `<th${k.a === c.target.ascension ? ' style="color:var(--sunpetal)"' : ""}>A${k.a}</th>`).join("")}<th>body</th></tr>
+        <tr style="font-weight:bold"><td></td><td style="text-align:left">Σ zaškrtnuté (${c.ticked.length})</td><td style="text-align:right">${plan.oneOff > 0 ? lvlFmt(plan.oneOff) : ""}</td><td></td>${cols.map((k) => cell(tickedAt(L.farm, plan, bare, k.xp))).join("")}<td>${pts || ""}</td></tr>`;
       const key = (r) => (Number.isFinite(r.dFlower) ? r.dFlower : 0);
       for (const [g, label] of lvlGroups) {
-        const rows = impacts.filter((r) => r.group === g).sort((a, b) => key(a) - key(b));
+        const rows = impacts.filter((r) => r.group === g).map((r) => ({ r, vals: cols.map((k) => impactAt(L.farm, r, k.xp)) }))
+          // No effect on the day (XP and running cost unchanged) = only its price: hidden unless asked.
+          .filter(({ r }) => L.showAll || r.ticked || Math.abs(r.dXpPerDay) >= 1 || !(Math.abs(r.dRunning) < 0.5))
+          .sort((a, b) => key(a.r) - key(b.r));
         if (!rows.length) continue;
-        h += `<tr><td colspan="9" class="pixel-font" style="padding-top:8px;color:var(--sunpetal)">${label}</td></tr>`;
-        for (const r of rows) {
-          const money = (v) => (!Number.isFinite(v) ? "—" : v < 0 ? `ušetří ${lvlFmt(-v)}` : v > 0 ? `stojí ${lvlFmt(v)}` : "0");
-          const tint = (v) => (!Number.isFinite(v) ? "" : v < 0 ? "color:var(--green)" : v > 0 ? "color:var(--red)" : "");
-          // From "never" to a date: say so instead of a meaningless −∞.
-          const days = r.dDays === -Infinity ? `z nikdy na ${lvlDays(r.days)}` : r.dDays === Infinity ? "na nikdy"
-            : Number.isFinite(r.dDays) && Math.abs(r.dDays) >= 0.05 ? r.dDays.toFixed(1) : "0";
-          const price = r.kind === "skill" ? "za body" : r.price > 0 ? `${lvlFmt(r.price)} ${sflIcon()}` : r.tradeable ? "—" : "nelze koupit";
-          h += `<tr class="roi-row"${r.ticked ? ' style="background:rgba(120,200,120,0.08)"' : ""}>
+        th += `<tr><td colspan="${5 + cols.length}" class="pixel-font" style="padding-top:6px;color:var(--sunpetal);text-align:left">${label}</td></tr>`;
+        for (const { r, vals } of rows) {
+          const bk = (L.book || {})[r.name] || {};
+          const price = r.kind === "skill" ? `<span style="color:var(--text-dim)">body</span>`
+            : r.priceKnown ? `<span title="nejvyšší nabídka ${bk.b > 0 ? lvlFmt(bk.b) : "—"} · poslední obchod ${bk.ls > 0 ? lvlFmt(bk.ls) : "—"} · ztráta při prodeji ${lvlFmt(r.loss)}">${lvlFmt(r.price)}</span>`
+            : r.tradeable ? `<span style="color:var(--red)" title="na trhu teď není nabídka — počítá se jako zdarma">cena ?</span>` : `<span style="color:var(--text-dim)" title="teď se nedá koupit">nelze</span>`;
+          let be = r.ticked ? "" : lvlAL(breakEven(L.farm, r, 10));
+          if (r.kind === "skill" && r.pointCost > free) be += `<div style="color:var(--text-dim)">body od ${lvlAL(pointsReachedAt(L.farm, r.pointCost - free))}</div>`;
+          const tip = `${r.boost} · XP/den ${r.dXpPerDay > 0 ? "+" : ""}${lvlFmt(r.dXpPerDay)} · do cíle ${Number.isFinite(r.dDays) ? `${r.dDays > 0 ? "+" : ""}${lvlFmt(r.dDays)} dní` : "z nikdy"} · provoz ${lvlK(r.dRunning)} FLOWER`;
+          th += `<tr class="roi-row"${r.ticked ? ' style="background:rgba(120,200,120,0.1)"' : ""}>
             <td><input type="checkbox"${chk(r.ticked)} data-n="${escHTML(r.name)}" onchange="_lvlTick(this.dataset.n,this.checked)"></td>
-            <td title="${escHTML(r.boost)}">${escHTML(r.name)}<div style="color:var(--text-dim);font-size:0.48rem">${escHTML(r.boost)}</div></td>
-            <td style="text-align:right">${price}</td>
-            <td style="text-align:right">${r.loss > 0 ? lvlFmt(r.loss) : "—"}</td>
-            <td style="text-align:right">${r.dXpPerDay ? (r.dXpPerDay > 0 ? "+" : "") + lvlFmt(r.dXpPerDay) : "0"}</td>
-            <td style="text-align:right">${days}</td>
-            <td style="text-align:right;${tint(r.dRunning)}">${money(r.dRunning)}</td>
-            <td style="text-align:right;${tint(r.dFlower)}"><b>${money(r.dFlower)}</b></td>
-            <td style="text-align:right">${r.pointCost || ""}</td></tr>`;
+            <td style="text-align:left;white-space:nowrap" title="${escHTML(tip)}">${escHTML(r.name)}</td>
+            <td style="text-align:right">${price}</td><td style="white-space:nowrap">${be}</td>
+            ${vals.map(cell).join("")}<td>${r.pointCost || ""}</td></tr>`;
         }
       }
-      body.innerHTML = `<style>#lvl-body td,#lvl-body th{padding:3px 6px;vertical-align:top}</style>` + h + `</table></div></div>`;
+      h += panel("🧮 CO NEMÁŠ: ČISTĚ ZA AŽ DO KONCE ASCENZE", th + `</table></div>`, ";font-size:0.56rem");
+      body.innerHTML = `<style>#lvl-body td,#lvl-body th{padding:1px 5px;vertical-align:top}#lvl-body .lvl-t td{text-align:right}#lvl-body .lvl-t th{font-weight:normal;color:var(--text-dim)}</style>` + h;
     }
 
     async function renderTickets() {
