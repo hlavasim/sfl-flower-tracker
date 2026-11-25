@@ -94,8 +94,10 @@ function saltNet(ctx, st) {
   const theo = saltHarvests(p);
   if (!(theo > 0)) return { net: 0, gross: 0, cost: 0, harvests: 0, p };
   // The farm's real pace: measured harvests against what its CURRENT setup allows; a change in
-  // the setup scales from there.
-  const cur = saltHarvests(saltParams(ctx, sideState(ctx)));
+  // the setup scales from there. A what-if caller (LEVELING) passes the farm as it stands in
+  // ctx.current, or the measured pace would swallow every what-if item that speeds the nodes up.
+  const curCtx = ctx.current || ctx;
+  const cur = saltHarvests(saltParams(curCtx, sideState(curCtx)));
   const measured = ctx.activity && ctx.activity.saltHarvests > 0 ? ctx.activity.saltHarvests : null;
   const eff = measured && cur > 0 ? Math.min(2, measured / cur) : 1;   // the ROADMAP_EFF_MAX ceiling
   const harvests = theo * eff;

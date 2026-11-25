@@ -238,7 +238,8 @@ export function levelingPlan(farm, inputs, config) {
   const fishRoute = (useBaits) => {
   let saltPerDay = 0, rakeCost = 0, ag = { gain: 0, used: 0, saltLeft: 0, slotLeft: 0, taken: new Map() }, baitsPerDay = 0;
   if (fishing && fishCfg.age && slots > 0) {
-    const s = sideSaltNow({ farm: w, prices: inputs.prices || {}, coinsPerSFL: inputs.coinsPerSFL || 0, isActive: (n) => hasItem(w, n), activity: inputs.activity || null });
+    const s = sideSaltNow({ farm: w, prices: inputs.prices || {}, coinsPerSFL: inputs.coinsPerSFL || 0, isActive: (n) => hasItem(w, n), activity: inputs.activity || null,
+      current: { farm, isActive: (n) => hasItem(farm, n) } });
     saltPerDay = (s.harvests || 0) * ((s.p && s.p.yieldPerRake) || 0);
     rakeCost = s.cost || 0;
     const cand = rows.filter((r) => r.agedXp > 0);
