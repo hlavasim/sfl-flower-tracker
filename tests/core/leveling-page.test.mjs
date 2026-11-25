@@ -33,7 +33,15 @@ test("the page starts from levelingInit and offers the resell switch", () => {
 test("the page sends the recorded weeks so salt follows the measured harvests", () => {
   const api = readFileSync(new URL("../../api/compute.mjs", import.meta.url), "utf8");
   assert.match(api, /activity: lvActivity/);
-  assert.match(SRC, /section=leveling`, \{ method: "POST"/);
+  // The store's leveling resource POSTs the weeks (tests/app/store.test.mjs); both pages ask it.
+  assert.doesNotMatch(SRC, /fetch\([^\n]*section=leveling/);
+  assert.strictEqual(SRC.split('__store.get({ res: "leveling", farm: FARM_ID })').length - 1, 2);
+});
+
+test("the page loads the store with the engine and reads the farm through it", () => {
+  assert.match(SRC, /import\("\/app\/store\.mjs"\)/);
+  assert.match(SRC, /window\.__store = store\.createStore\(\)/);
+  assert.match(SRC, /await __store\.get\(\{ res: "farm", farm: FARM_ID \}, \{ force: true \}\)/);
 });
 
 test("v2: no result cards; ladder, matrix with Σ, steps and the frontier button instead", () => {

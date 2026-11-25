@@ -2674,7 +2674,9 @@
   <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
   <script type="module">
     // Load the calculation engine (core/*.mjs — the modules the server runs) and hand it to the page.
-    import("/core/browser-engine.mjs").then((engine) => {
+    // The data store (app/store.mjs) comes with it: one fetch per resource key, shared by every panel.
+    Promise.all([import("/core/browser-engine.mjs"), import("/app/store.mjs")]).then(([engine, store]) => {
+      window.__store = store.createStore();
       window.__engine = engine;
       for (const [k, v] of Object.entries(engine)) if (!(k in window)) window[k] = v;
       window.dispatchEvent(new Event("sfl-engine"));
@@ -7588,21 +7590,12 @@
         throw new Error("Enter your Farm ID, then click LOAD");
       }
 
-      const apiUrl = `https://api.sunflower-land.com/community/farms/${FARM_ID}`;
-      const proxyUrl = `/api/proxy?url=${encodeURIComponent(apiUrl)}`;
-
-      let data, lastErr;
-
-      try {
-        const resp = await fetch(proxyUrl);
-        if (!resp.ok) throw new Error(`Proxy ${resp.status}`);
-        data = await resp.json();
-      } catch (proxyErr) {
-        lastErr = proxyErr;
-        console.warn("Proxy fetch failed:", proxyErr);
+      const got = await __store.get({ res: "farm", farm: FARM_ID }, { force: true });
+      if (got.status !== "ok" || !got.data) {
+        console.warn("Proxy fetch failed:", got.error);
+        throw new Error(got.error || "Failed to load farm data");
       }
-
-      if (!data) throw lastErr || new Error("Failed to load farm data");
+      const data = got.data;
       _farmFetchedAt = Date.now();
 
       const farm = data.farm || {};
@@ -19191,15 +19184,8 @@
 
     // The LEVELING page's inputs, the same way it loads them: salt follows the recorded weeks if any.
     async function _fishLvlFetch() {
-      try {
-        let weeks = null;
-        try { const rw = await fetch("/api/farm-history?type=ticket-weeks&farm=" + encodeURIComponent(FARM_ID)); if (rw.ok) weeks = (await rw.json()).weeks || null; } catch (e) { weeks = null; }
-        const url = "/api/compute?farm=" + encodeURIComponent(FARM_ID) + "&section=leveling";
-        const r = weeks && weeks.length
-          ? await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ weeks }) })
-          : await fetch(url);
-        return r.ok ? ((await r.json()).data || null) : null;
-      } catch (e) { return null; }
+      const r = await __store.get({ res: "leveling", farm: FARM_ID });
+      return r.status === "ok" ? r.data : null;
     }
     async function _fishFetch() {
       if (_fishLoading) return;
@@ -25444,15 +25430,10 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       app.innerHTML = head + `<div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Počítám kuchyně, ryby a sůl…</div></div>`;
       let d;
       try {
-        // The recorded weeks (tracked farms only) let salt follow the measured harvests.
-        let weeks = null;
-        try { const rw = await fetch(`/api/farm-history?type=ticket-weeks&farm=${FARM_ID}`); if (rw.ok) weeks = (await rw.json()).weeks || null; } catch (e) { weeks = null; }
-        const req = weeks && weeks.length
-          ? fetch(`/api/compute?farm=${FARM_ID}&section=leveling`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ weeks }) })
-          : fetch(`/api/compute?farm=${FARM_ID}&section=leveling`);
-        const [r] = await Promise.all([req, _rmBook ? null : _rmLoadBook()]);
-        if (!r.ok) throw new Error(`compute leveling ${r.status}`);
-        d = (await r.json()).data;
+        // The store's leveling resource POSTs the recorded weeks (salt follows the measured harvests).
+        const [r] = await Promise.all([__store.get({ res: "leveling", farm: FARM_ID }), _rmBook ? null : _rmLoadBook()]);
+        if (r.status !== "ok" || !r.data) throw new Error(r.error || "compute leveling");
+        d = r.data;
       } catch (e) {
         app.innerHTML = head + `<div class="error-screen pixel-panel pixel-font"><p>Nenačetlo se: ${escHTML(e.message)}</p></div>`;
         return;
