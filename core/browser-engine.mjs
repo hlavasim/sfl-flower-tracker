@@ -29,6 +29,6 @@ export { SEED_DATA as _SEED_DATA } from "./engine/power-helpers.mjs";
 export { ticketGoal } from "./sections/tickets.mjs";
 // The LEVELING page: the plan, its default config, each catalogue row's impact, bud floors.
 export { levelingPlan, defaultLevelingConfig, itemImpacts, budTypeFloors, budTypeBids, levelingRecipeOptions, sanitizeLevelingConfig, tickedSkillPoints, levelingInit,
-  levelingLadder, impactAt, tickedAt, breakEven, pointsReachedAt, levelingSteps, levelingFrontier, wormCatchShare } from "./sections/leveling.mjs";
+  levelingLadder, impactAt, tickedAt, breakEven, pointsReachedAt, levelingSteps, levelingFrontier, wormCatchShare, levelingExtraOptions } from "./sections/leveling.mjs";
 // The FISHING page: what to put in the Aging Shed now, and each bait's every-season ingredient.
 export { agingNow, baitCommonIngredient } from "./engine/aging-now.mjs";

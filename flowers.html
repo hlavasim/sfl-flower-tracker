@@ -25498,9 +25498,21 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     }
 
     // What the plan makes at the Fish Market, a day, summed over the seasons; or why it makes nothing.
+    // The day's supply of what the farm cannot buy, for the extras that use it (stock shown beside).
+    function lvlSupplyInputs(L, c) {
+      const inv = (L.farm && L.farm.inventory) || {};
+      return ["Wild Mushroom", "Magic Mushroom", "Crab Stick"].map((k) => `<label title="Kolik ${k} za den můžeš dát do doplňkových receptů (máš ${lvlFmt(+(inv[k] || 0))}). Bez čísla se recepty s ${k} nevaří.">${k}/den <input type="number" min="0" max="10000" step="any" value="${(c.supply || {})[k] || 0}" style="width:46px" data-k="${k}" onchange="_lvlChange((c)=>{c.supply={...(c.supply||{}),[this.dataset.k]:+this.value||0}})"></label>`).join("");
+    }
+    function _lvlExtra(building, name, on) {
+      _lvlChange((c) => {
+        const b = c.buildings[building], cur = (b.extras || []).filter((x) => x !== name);
+        b.extras = on ? [...cur, name] : cur;
+      });
+    }
     function lvlBaitLine(plan) {
       const f = plan.fish, by = {};
       for (const b of f.baitUse || []) { const k = `${b.bait} → ${b.fish}`; by[k] = (by[k] || 0) + b.perDay; }
+      for (const d of f.marketDishes || []) if (d.perDay > 1e-6) { const k = `${d.product} → ${d.recipe} (vaření)`; by[k] = (by[k] || 0) + d.perDay; }
       const list = Object.entries(by).sort((a, b) => b[1] - a[1]);
       if (!list.length) return `nic — ${plan.bottleneck === "salt" ? "brzdí sůl a každá ryba dá za sůl stejně XP, bait by jen spálil ryby na vstupu" : "bait se nevyplatí (stárnutí ryb, co chytíš, dá víc)"}`;
       return list.map(([k, n]) => `${escHTML(k)} ${n.toFixed(2)}/den`).join(" · ") + ` · fronta ${f.marketHours.toFixed(1)} z 24 h${f.vip ? " (VIP)" : ""}`;
@@ -25510,6 +25522,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       if (!L || !body) return;
       const c = L.cfg, free = L.inputs.freePoints || 0;
       const plan = levelingPlan(L.farm, L.inputs, c);
+      L.extraOpts = levelingExtraOptions(L.farm, L.inputs, c);
       const bare = levelingPlan(L.farm, L.inputs, { ...c, ticked: [] });
       const impacts = itemImpacts(L.farm, L.inputs, c);
       const ladder = levelingLadder(L.farm, plan, 10, free);
@@ -25530,9 +25543,16 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:2px 12px;margin-top:4px">`;
       for (const [name, b] of Object.entries(c.buildings)) {
         const opts = L.options[name] || [];
-        set += `<div style="display:flex;gap:6px;align-items:center;min-width:0">
+        // Extras: dishes bounded by something other than time (instant, fish, Fish Market, mushrooms),
+        // cooked up to their cap a day on top of the main recipe. Each line is that extra on its own.
+        const ex = (L.extraOpts && L.extraOpts[name]) || [];
+        set += `<div style="min-width:0"><div style="display:flex;gap:6px;align-items:center;min-width:0">
           <label style="white-space:nowrap;min-width:104px"><input type="checkbox"${chk(b.on)} data-b="${escHTML(name)}" onchange="_lvlChange((c)=>{c.buildings[this.dataset.b].on=this.checked})"> ${escHTML(name)}</label>
-          <select style="flex:1;min-width:0;max-width:100%" data-b="${escHTML(name)}" onchange="_lvlChange((c)=>{c.buildings[this.dataset.b].recipe=this.value})">${opts.map((o) => `<option value="${escHTML(o.name)}"${sel(o.name, b.recipe)}>${escHTML(o.name)} · ${lvlK(o.xpPerDay).replace("+", "")} XP/d · ${o.costPerDay.toFixed(1)} FL/d · ${lvlFmt(o.perM)} FL/1M</option>`).join("")}</select></div>`;
+          <select style="flex:1;min-width:0;max-width:100%" data-b="${escHTML(name)}" onchange="_lvlChange((c)=>{c.buildings[this.dataset.b].recipe=this.value})">${opts.map((o) => `<option value="${escHTML(o.name)}"${sel(o.name, b.recipe)}>${escHTML(o.name)} · ${lvlK(o.xpPerDay).replace("+", "")} XP/d · ${o.costPerDay.toFixed(1)} FL/d · ${lvlFmt(o.perM)} FL/1M</option>`).join("")}</select></div>
+          ${ex.length ? `<div style="font-size:0.5rem;line-height:1.6;color:var(--text-dim);padding-left:18px">${ex.map((o) => {
+            const on = (b.extras || []).includes(o.name), live = o.cooksPerDay > 0.005;
+            return `<label style="white-space:nowrap;margin-right:8px;${live || on ? "" : "opacity:0.55"}" title="${escHTML(o.name)}: sám o sobě ${o.cooksPerDay.toFixed(2)}× za den (strop: ${live ? "suroviny, Fish Market nebo čas" : "0 — chybí ryby, příděl nebo místo ve frontě"}), ${lvlK(o.xpPerDay)} XP/den, ${o.costPerDay >= 0 ? "+" : ""}${o.costPerDay.toFixed(2)} FL/den proti tomu bez něj"><input type="checkbox"${chk(on)} data-b="${escHTML(name)}" data-e="${escHTML(o.name)}" onchange="_lvlExtra(this.dataset.b,this.dataset.e,this.checked)"> ${escHTML(o.name)} <span style="color:${o.xpPerDay > 0 ? "var(--green)" : "var(--text-dim)"}">${o.cooksPerDay.toFixed(1)}/d ${lvlK(o.xpPerDay)} XP${Number.isFinite(o.perM) && o.xpPerDay > 0 ? ` · ${lvlFmt(o.perM)} FL/1M` : ""}</span></label>`;
+          }).join("")}</div>` : ""}</div>`;
       }
       const f = c.fish, saltPrice = (L.inputs.prices || {}).Salt || 0;
       set += `</div><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:4px">
@@ -25542,6 +25562,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           ${saltPrice > 0 ? `<label title="Když vlastní sůl nestačí, dokoupit ji na trhu (${saltPrice.toFixed(4)} FLOWER za kus). Stárnutí pak brzdí sloty."><input type="checkbox"${chk(f.buySalt)} onchange="_lvlChange((c)=>{c.fish.buySalt=this.checked})"> dokupovat sůl</label>` : ""}
           <label>reelů/den <input type="number" min="0" max="500" value="${f.reels}" style="width:50px" onchange="_lvlChange((c)=>{c.fish.reels=+this.value})"></label>
           <label title="Jakého červa nahazuješ: určuje, co chytíš (komunitní úlovky, rok rozdělený na 4 sezóny) a cenu hodu. Historie = tvoje dosavadní úlovky, hod oceněný mixem červů, na který ukazují.">červ <select onchange="_lvlChange((c)=>{if(this.value)c.fish.worm=this.value;else delete c.fish.worm})"><option value=""${sel("", f.worm || "")}>historie${plan.fish.wormMix && !f.worm ? ` (${Object.entries(plan.fish.wormMix).filter(([, v]) => v > 0.02).map(([k, v]) => `${Math.round(v * 100)} % ${k}`).join(", ")})` : ""}</option>${["Earthworm", "Grub", "Red Wiggler"].map((w) => `<option value="${w}"${sel(w, f.worm)}>${w}</option>`).join("")}</select></label>
+          ${lvlSupplyInputs(L, c)}
           <span style="color:var(--text-dim)">hod ${plan.fish.castCost.toFixed(3)} ${S} · ${lvlFmt(plan.fish.perDay)} ryb/den · stárne ${lvlFmt(plan.fish.aged)}${plan.fish.baitsPerDay > 0.05 ? ` (${plan.fish.baitsPerDay.toFixed(1)} přes návnady)` : ""} · sůl ${lvlFmt(plan.fish.saltUsed)}/${lvlFmt(plan.fish.saltPerDay)}${plan.fish.saltBought > 0.5 ? ` + koupeno ${lvlFmt(plan.fish.saltBought)}` : ""}</span></div>
         <div style="color:var(--text-dim)">Fish Market: ${lvlBaitLine(plan)}</div>`;
       let h = panel("", set, ";font-size:0.6rem;line-height:1.9");
@@ -25571,7 +25592,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           <div style="color:var(--text-dim)">✕ = tvoje nastavení · tečka = nejlevnější cesta pro to tempo (klik = použít)</div>
           <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;margin-top:4px">${fr.points.map((p, i) => `<tr class="roi-row" style="cursor:pointer" onclick="_lvlUseFront(${i})">
             <td style="white-space:nowrap"><b>${lvlFmt(p.days)}</b> dní</td><td style="white-space:nowrap"><b>${lvlFmt(p.flower)}</b> ${S}</td>
-            <td>${p.kitchens.length ? escHTML(p.kitchens.join(" + ")) : "žádná kuchyně"} · ${p.fish.age ? "stárnutí" : ""}${p.fish.age && p.fish.eatRaw ? " + " : ""}${p.fish.eatRaw ? "syrové" : ""}${!p.fish.age && !p.fish.eatRaw ? "bez ryb" : ""}${p.fish.buySalt ? " + kupovaná sůl" : ""}${p.fish.worm ? ` · ${escHTML(p.fish.worm)}` : ""}</td>
+            <td>${p.kitchens.length ? escHTML(p.kitchens.join(" + ")) : "žádná kuchyně"} · ${p.fish.age ? "stárnutí" : ""}${p.fish.age && p.fish.eatRaw ? " + " : ""}${p.fish.eatRaw ? "syrové" : ""}${!p.fish.age && !p.fish.eatRaw ? "bez ryb" : ""}${p.fish.buySalt ? " + kupovaná sůl" : ""}${p.fish.worm ? ` · ${escHTML(p.fish.worm)}` : ""}${(p.extras || []).length ? ` · + ${escHTML(p.extras.join(", "))}` : ""}</td>
             <td style="color:var(--text-dim)">${p.ticked.length ? escHTML(p.ticked.join(", ")) : "nic nekupovat"}</td>
             <td><button class="refresh-btn" style="font-size:0.45rem">použít</button></td></tr>`).join("")}</table></div>`;
       } else {
