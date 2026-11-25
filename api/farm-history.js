@@ -102,6 +102,7 @@ async function handleSpec(pool, req, res) {
     const num = (v) => (v === undefined || v === null || v === "" ? null : parseFloat(v));
     const date = (v) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
     if (method === "GET") {
+      if (!requireWriteToken(req, res)) return;          // the owner's trade log: owner-only read
       const r = await pool.query(`SELECT ${cols} FROM spec_trades WHERE farm_id = $1 ORDER BY buy_date DESC, id DESC`, [farm]);
       res.setHeader("Cache-Control", "no-store");
       return res.status(200).json({ trades: r.rows });
@@ -153,6 +154,7 @@ async function handleSpec(pool, req, res) {
 
   if (what === "eggs") {
     if (method === "GET") {
+      if (!requireWriteToken(req, res)) return;          // carries the owner's eggs and cost basis
       const r = await pool.query(`SELECT ts, data FROM egg_market ORDER BY ts DESC LIMIT 1000`);
       res.setHeader("Cache-Control", "no-store");
       return res.status(200).json({ snapshots: r.rows.reverse() });
@@ -427,6 +429,7 @@ export default async function handler(req, res) {
       const farm = parseInt(req.query.farm, 10);
       if (!Number.isFinite(farm) || !ALLOWED_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
       if (method === "GET") {
+        if (!requireWriteToken(req, res)) return;        // the owner's balances: owner-only read
         const r = await pool.query(
           `SELECT venue, amount, unit, source, noted_at FROM venue_balance WHERE farm_id = $1 ORDER BY venue`,
           [farm]
@@ -531,7 +534,7 @@ export default async function handler(req, res) {
   }
 
   // ─── Page choices shared across devices (farm_prefs) ───
-  // GET: every stored key for the farm (plain page settings, nothing sensitive). POST
+  // GET: every stored key for the farm (owner token required: budgets and plans are in there). POST
   // { prefs: { key: value | null } }: owner-only upsert, null deletes. The page decides which
   // localStorage keys sync; the server only checks their shape and size.
   if (req.query.type === "prefs") {
@@ -541,6 +544,7 @@ export default async function handler(req, res) {
       const farm = parseInt(req.query.farm, 10);
       if (!Number.isFinite(farm) || !ALLOWED_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
       if (method === "GET") {
+        if (!requireWriteToken(req, res)) return;        // the owner's settings: owner-only read
         const r = await pool.query(`SELECT key, value FROM farm_prefs WHERE farm_id = $1`, [farm]);
         res.setHeader("Cache-Control", "no-store");
         return res.status(200).json({ prefs: Object.fromEntries(r.rows.map((x) => [x.key, x.value])) });
@@ -619,6 +623,7 @@ export default async function handler(req, res) {
       const farm = parseInt(req.query.farm, 10);
       if (!Number.isFinite(farm) || !ALLOWED_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
       if (method === "GET") {
+        if (!requireWriteToken(req, res)) return;        // the owner's repay plan: owner-only read
         const r = await pool.query(
           `SELECT start_date::text AS start_date, rate, period, updated_at FROM repay_plan WHERE farm_id = $1`, [farm]);
         res.setHeader("Cache-Control", "no-store");
