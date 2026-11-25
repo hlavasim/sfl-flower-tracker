@@ -19457,13 +19457,16 @@
            * costs that pot rather than being free. Counting the chum alone made every crustacean
            * exactly one pot too cheap, and Crab Stick needs four of them.
            */
-          const chumIsBait = cr.chum && FISH_MARKET_RECIPES[cr.chum];
-          const unit = !cr.chum ? 0 : chumIsBait ? craftedBaitCost(cr.chum, seen, sn) : P(cr.chum);
-          const potP = P(cr.pot);
-          return { cost: potP + cr.qty * unit, casts: 0, est: false, pot: cr.pot,
-                   chum: cr.chum, chumQty: cr.qty, chumCrafted: !!chumIsBait,
-                   how: cr.pot + " " + potP.toFixed(2) + (cr.chum ? " + " + cr.qty + "× " + cr.chum +
-                        (chumIsBait ? " (crafted, " + unit.toFixed(2) + " each)" : "") : " · no chum") };
+          // The one crustacean price (core crustaceanCost, as LEVELING uses): pot + the cheaper bought
+          // chum; a Fish Market chum comes back as `made` and is costed here at its casts.
+          const cc = crustaceanCost(name in CRUSTACEAN_RECIPES ? name : _fishCanon(name), P, _fishFarm ? waterTraps(_fishFarm) : null);
+          const chumName = cc.made ? cc.made.name : cc.chum ? cc.chum.name : null;
+          const chumQty = cc.made ? cc.made.qty : cc.chum ? cc.chum.qty : 0;
+          const unit = cc.made ? craftedBaitCost(cc.made.name, seen, sn) : chumQty > 0 ? cc.chum.cost / chumQty : 0;
+          return { cost: cc.potCost + chumQty * unit, casts: 0, est: false, pot: cc.pot,
+                   chum: chumName, chumQty, chumCrafted: !!cc.made,
+                   how: cc.pot + " " + cc.potCost.toFixed(2) + (chumName ? " + " + chumQty + "× " + chumName +
+                        (cc.made ? " (crafted, " + unit.toFixed(2) + " each)" : "") : " · no chum") };
         }
         const com = fishBestBait(name, sn);
         const mine = rowOf(name);

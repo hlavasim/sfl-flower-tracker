@@ -18,7 +18,7 @@ import { applyWhatIf, ownedLevelingItems } from "../engine/leveling-whatif.mjs";
 import { LEVELING_ITEMS, LEVELING_ITEM_BY_NAME } from "../data/leveling-items.mjs";
 import { computeFishYieldPerCast } from "../engine/cooking-cost.mjs";
 import { computeRodCostSFL, computeBaitCostSFL, itemMarketValue, computeWaterTrapCostSFL } from "../engine/item-value.mjs";
-import { CRUSTACEAN_RECIPES } from "../data/crafting.mjs";
+import { crustaceanCost, waterTraps, WATER_TRAP_HOURS } from "../engine/crustaceans.mjs";
 import { sideSaltNow } from "../engine/side-values.mjs";
 import { ascensionXpFor, ascensionStanding } from "../engine/ascension.mjs";
 import { computeFoodXP, detectCookingBoosts } from "../engine/cooking.mjs";
@@ -40,8 +40,6 @@ const FISH_BAITS = ["Fish Flake", "Fish Stick", "Fish Oil"];
 // queue is 1 without VIP and 4 with it (processResource.ts MAX_FISH_PROCESSING_SLOTS).
 const FISH_MARKET_HOURS = { "Fish Flake": 1, "Fish Stick": 2, "Crab Stick": 4, "Fish Oil": 16 };
 const FISH_MARKET_VIP_QUEUE = 4;
-// Water trap hours (crustaceans.ts WATER_TRAP readyTimeHours).
-const WATER_TRAP_HOURS = { "Crab Pot": 4, "Mariner Pot": 8 };
 // What the farm cannot buy: a day's supply is set on the page (Wild / Magic Mushroom).
 export const LEVELING_SUPPLY = ["Wild Mushroom", "Magic Mushroom"];
 export const LEVELING_WORMS = ["Earthworm", "Grub", "Red Wiggler"];
@@ -294,11 +292,11 @@ export function levelingPlan(farm, inputs, config) {
   let kXp = 0, kCost = 0;
   // Water traps (crabTraps.trapSpots): a crustacean holds a spot for its pot's hours (Speed Trap x0.8,
   // Crystal Altar x0.95), waiting for the next visit; a placed Royal Crab Pot keeps the pot.
-  const trapSpots = Object.keys(((w.crabTraps || {}).trapSpots) || {}).length;
-  const trapMult = (hasItem(w, "Speed Trap") ? 0.8 : 1) * (hasItem(w, "Crystal Altar") ? 0.95 : 1);
-  const trapHours = (pot) => cycleHours(WATER_TRAP_HOURS[pot] * trapMult, restarts);
-  const freePots = findCollectible(w, "Royal Crab Pot").length > 0;
+  const wt = waterTraps(w), trapSpots = wt.spots;
   const rates = { coinsPerSFL: inputs.coinsPerSFL || 0 };
+  // FLOWER of a bought item: a pot is coins + materials, anything else the item-value engine.
+  const priceOf = (n) => (WATER_TRAP_HOURS[n] ? computeWaterTrapCostSFL(n, inputs.prices || {}, inputs.coinsPerSFL || 0)
+    : itemMarketValue(n, inputs.prices || {}, null, rates)) || 0;
   const traps = { hours: 0 };
   /*
    * What one cook of an extra takes, all the way down: fish from the catch, Fish Market jobs, trap
@@ -317,26 +315,20 @@ export function levelingPlan(farm, inputs, config) {
           for (const [inp, iq] of Object.entries(rec)) add(inp, (q / bubble) * iq / SEASONS.length, depth + 1);
         return;
       }
-      const cr = CRUSTACEAN_RECIPES[name];
-      if (cr) {
-        need.trapH += q * trapHours(cr.pot);
-        if (!freePots) need.cost += q * computeWaterTrapCostSFL(cr.pot, inputs.prices || {}, inputs.coinsPerSFL || 0);
-        if (cr.chum && cr.qty > 0) {
-          const alt = cr.alt && cr.alt.match(/^(.+?)\s*x(\d+)$/);
-          const opts = [[cr.chum, cr.qty], ...(alt ? [[alt[1], +alt[2]]] : [])]
-            .map(([n, k]) => ({ n, k, made: !!FISH_MARKET_HOURS[n], v: FISH_MARKET_HOURS[n] ? Infinity : itemMarketValue(n, inputs.prices || {}, null, rates) * k }));
-          const bought = opts.filter((o) => !o.made && o.v > 0).sort((a, b) => a.v - b.v)[0];
-          if (bought) need.cost += q * bought.v;
-          else { const m = opts.find((o) => o.made); if (m) add(m.n, q * m.k, depth + 1); }
-        }
+      const cc = crustaceanCost(name, priceOf, wt);
+      if (cc) {
+        need.trapH += q * cycleHours(cc.hours, restarts);
+        need.cost += q * cc.cost;
+        if (cc.made) add(cc.made.name, q * cc.made.qty, depth + 1);
         return;
       }
       need.cost += q * (itemMarketValue(name, inputs.prices || {}, null, rates) || 0);
     };
     for (const it of r.items || []) {
       const q = (it.qty || 0) * nom;
-      if (it.selfProduced && !isFishItem(it.name) && !FISH_MARKET_HOURS[it.name] && !CRUSTACEAN_RECIPES[it.name]) need.scarce[it.name] = (need.scarce[it.name] || 0) + q;
-      else if (isFishItem(it.name) || FISH_MARKET_HOURS[it.name] || CRUSTACEAN_RECIPES[it.name]) add(it.name, q, 0);
+      const crust = !!crustaceanCost(it.name, () => 0);
+      if (it.selfProduced && !isFishItem(it.name) && !FISH_MARKET_HOURS[it.name] && !crust) need.scarce[it.name] = (need.scarce[it.name] || 0) + q;
+      else if (isFishItem(it.name) || FISH_MARKET_HOURS[it.name] || crust) add(it.name, q, 0);
       else need.cost += (it.cost || 0) * nom;
     }
     return need;

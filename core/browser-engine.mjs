@@ -32,3 +32,5 @@ export { levelingPlan, defaultLevelingConfig, itemImpacts, budTypeFloors, budTyp
   levelingLadder, impactAt, tickedAt, breakEven, pointsReachedAt, levelingSteps, levelingFrontier, wormCatchShare, levelingExtraOptions } from "./sections/leveling.mjs";
 // The FISHING page: what to put in the Aging Shed now, and each bait's every-season ingredient.
 export { agingNow, baitCommonIngredient } from "./engine/aging-now.mjs";
+// One crustacean price (pot + chum, trap time) for LEVELING and FISHING.
+export { crustaceanCost, waterTraps } from "./engine/crustaceans.mjs";
