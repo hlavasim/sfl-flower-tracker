@@ -19001,6 +19001,8 @@
     // Craft time per bait (fishProcessing.ts). This is a real constraint, not trivia: 450 Fish
     // Oil at 16h a batch is a different proposition from 450 Fish Flake at 1h.
     const fishBaitHours = { "Fish Flake": 1, "Fish Stick": 2, "Crab Stick": 4, "Fish Oil": 16 };
+    // The common ingredient of each Fish Market recipe: it never limits how many you can make.
+    const FISH_BAIT_COMMON = new Set(["Anchovy", "Red Snapper", "Tuna", "Crab"]);
 
     /*
      * Map-piece triggers, from the game's getMapPieceFishTriggers(). Two named fish per Marvel,
@@ -19454,8 +19456,10 @@
          * Napoleanfish; winter's is Walleye and Angelfish at several times the casts. Knowing
          * that turns "this is expensive" into "this is expensive until spring".
          *
-         * `canMake` is how many the current inventory already covers, per season — the limiting
-         * ingredient, since a recipe is all-or-nothing.
+         * `canMake` is how many the current inventory covers, per season — limited by the HARD
+         * ingredients only (the two seasonal fish, or the three rare crustaceans). The common one
+         * (Anchovy, Red Snapper, Tuna, Crab) turns up on every few casts, so it never caps the
+         * count: what is short of it is listed as `missing` instead.
          */
         const bySeason = {};
         for (const sn of ["winter", "spring", "summer", "autumn"]) {
@@ -19471,15 +19475,19 @@
            * never measured. Unpriced ingredients are named and the total marked a floor.
            */
           const unpriced = [];
+          const hard = entries.filter(([ing]) => !FISH_BAIT_COMMON.has(ing));
+          for (const [ing, q] of (hard.length ? hard : entries)) canMake = Math.min(canMake, Math.floor((+(ownedNow[ing] || 0)) / q));
           for (const [ing, q] of entries) {
             const ic = ingredientCost(ing, null, sn);
             if (!isFinite(ic.cost)) ok = false;
             c += ic.cost * q;
-            canMake = Math.min(canMake, Math.floor((+(ownedNow[ing] || 0)) / q));
             const cr = CRUSTACEAN_RECIPES[ing] || CRUSTACEAN_RECIPES[_fishCanon(ing)];
             if (cr && cr.chum && !FISH_MARKET_RECIPES[cr.chum] && !(P(cr.chum) > 0)) unpriced.push(cr.chum);
           }
-          bySeason[sn] = { cost: c, ok, canMake: isFinite(canMake) ? canMake : 0, unpriced,
+          if (!isFinite(canMake)) canMake = 0;
+          const missing = hard.length ? entries.filter(([ing]) => FISH_BAIT_COMMON.has(ing))
+            .map(([ing, q]) => ({ ing, n: Math.max(0, canMake * q - (+(ownedNow[ing] || 0))) })).filter((m) => m.n > 0) : [];
+          bySeason[sn] = { cost: c, ok, canMake, missing, unpriced,
                            recipe: entries.map(([i, q]) => q + "× " + i).join(" + ") };
         }
         return { bait, parts, cost, hours: fishBaitHours[bait] || 0, bySeason,
@@ -19551,6 +19559,7 @@
                   ? '<div style="font-size:0.38rem;color:#e8a060;line-height:1.4">no price for ' + escHTML([...new Set(bs.unpriced)].join(", ")) + '</div>'
                   : "") +
                 '<div style="font-size:0.4rem;color:' + (bs.canMake > 0 ? "var(--green)" : "var(--text-dim)") + '">can make ' + fmt(bs.canMake) + '</div>' +
+                (bs.missing.length ? '<div style="font-size:0.38rem;color:#e8a060">missing ' + bs.missing.map((m) => fmt(m.n) + "× " + escHTML(m.ing)).join(", ") + '</div>' : "") +
                 '<div style="font-size:0.38rem;color:var(--text-dim);line-height:1.5">' + escHTML(bs.recipe) + '</div></div>';
             }).join("") +
           '</div>' +
