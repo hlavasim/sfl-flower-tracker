@@ -776,6 +776,12 @@ async function _handler(req, res) {
       payload.farmFetchedAt = new Date(farmResult.fetchedAt).toISOString();
       payload.farmAgeSec = Math.round((Date.now() - farmResult.fetchedAt) / 1000);
     }
+    // A GET (no body) is the same answer for everyone asking the same URL within seconds: let the
+    // CDN share it. A POST carries a body the URL does not show, so it is never cached.
+    if (typeof res.setHeader === "function") {
+      res.setHeader("Cache-Control", String(req.method || "GET").toUpperCase() === "GET" && !payload.stale && payload.pricesOk
+        ? "public, s-maxage=10, stale-while-revalidate=30" : "no-store");
+    }
     return res.status(200).json(payload);
   } catch (e) {
     return res.status(500).json({ error: String((e && e.message) || e) });

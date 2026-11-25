@@ -105,3 +105,12 @@ test("prices: no good copy at all → pricesOk false on any section", async () =
   assert.equal(r._status, 200);
   assert.equal(r._json.pricesOk, false);
 });
+
+test("a GET answer may be shared by the CDN for a few seconds; a POST never", async () => {
+  globalThis.fetch = upstream();
+  const g = await call("cooking");
+  assert.match(String(g.headers["Cache-Control"] || ""), /s-maxage=10/);
+  const res = mockRes();
+  await handler({ method: "POST", query: { farm: "155498", section: "cooking" }, body: {} }, res);
+  assert.ok(!/s-maxage/.test(String(res.headers["Cache-Control"] || "")));
+});
