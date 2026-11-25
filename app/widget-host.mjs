@@ -5,7 +5,7 @@
 // handle(frameId, action, value) applies one frame/table action, saves the document when it
 // changed, calls onChange(frameId) and returns whether it was handled.
 import { renderTable, tableSettingsPanel, applyTableAction } from "../ui/table.mjs";
-import { renderFrame } from "../ui/frame.mjs";
+import { renderFrame, freshness } from "../ui/frame.mjs";
 import { loadBoards, saveBoards, pin, unpin, moveItem, resizeItem, updateItemSettings,
   pageSettings, setPageSettings, pinnedCount } from "./boards.mjs";
 
@@ -56,14 +56,14 @@ export function createHost({ registry, storage, onChange = () => {} }) {
       settingsHtml: b.settingsHtml, settingsOpen: open.has(id) });
   }
 
-  function renderItem(boardId, item, { data, ctx, fresh } = {}) {
+  function renderItem(boardId, item, { data, ctx, fresh, pending = false } = {}) {
     const id = `b:${boardId}:${item.i}`;
     const widget = registry[item.type];
     if (!widget) {
       return renderFrame({ id, title: item.type, place: "board", w: item.w, body: `<div class="w-error">Tenhle widget už neexistuje — odeber ho.</div>` });
     }
     const settings = effective(widget, item.settings);
-    const b = body(widget, settings, data, ctx);
+    const b = pending ? { html: `<div class="w-fresh">Načítám…</div>`, settingsHtml: "" } : body(widget, settings, data, ctx);
     return renderFrame({ id, title: widget.title, place: "board", w: item.w, body: b.html, fresh,
       settingsHtml: b.settingsHtml, settingsOpen: open.has(id) });
   }
@@ -94,5 +94,45 @@ export function createHost({ registry, storage, onChange = () => {} }) {
     return false;
   }
 
-  return { doc: () => doc, reload: () => { doc = loadBoards(storage); }, renderPage, renderItem, handle };
+  // A widget's needs, fetched through the store. data[name] is the entry's data, except that a need
+  // named "farm" gets the game farm itself (the farm resource is the proxy's {farm: …} answer).
+  const needList = (type, farmId) => {
+    const widget = registry[type];
+    return widget && widget.needs ? Object.entries(widget.needs(farmId)) : [];
+  };
+  const needsOf = (type, farmId) => needList(type, farmId).map(([, q]) => q);
+  function shape(needs, entries) {
+    const data = {};
+    needs.forEach(([name], k) => {
+      const d = entries[k] ? entries[k].data : null;
+      data[name] = name === "farm" ? (d && d.farm) || null : d;
+    });
+    return data;
+  }
+  async function loadData(type, farmId, store) {
+    const needs = needList(type, farmId);
+    if (!needs.length) return { data: {}, entries: [] };
+    const entries = await Promise.all(needs.map(([, q]) => store.get(q)));
+    return { data: shape(needs, entries), entries };
+  }
+  // The same from what the store already holds, without waiting. pending = a need the widget cannot
+  // do without (not in widget.optional) has no entry yet.
+  function peekData(type, farmId, store) {
+    const needs = needList(type, farmId);
+    const optional = new Set((registry[type] && registry[type].optional) || []);
+    const got = needs.map(([, q]) => store.peek(q));
+    const pending = needs.some(([name], k) => !got[k] && !optional.has(name));
+    return { data: shape(needs, got), entries: got.filter(Boolean), pending };
+  }
+
+  // The badge for several entries: any error wins, otherwise the oldest.
+  function freshOf(entries, now = Date.now()) {
+    if (!entries.length) return freshness(null, now);
+    const bad = entries.find((e) => e.status !== "ok");
+    if (bad) return freshness(bad, now);
+    return freshness(entries.reduce((a, e) => (e.asOf < a.asOf ? e : a)), now);
+  }
+
+  return { doc: () => doc, reload: () => { doc = loadBoards(storage); }, registry, renderPage, renderItem, handle,
+    needsOf, loadData, peekData, freshOf };
 }

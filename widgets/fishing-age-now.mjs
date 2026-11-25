@@ -32,6 +32,8 @@ export const fishingAgeNow = {
   title: "🧂 Do sudu teď",
   page: "fishing",
   needs: (farmId) => ({ farm: { res: "farm", farm: farmId }, leveling: { res: "leveling", farm: farmId } }),
+  // The plan only decides whether recipe fish are kept for baits; without it they are kept.
+  optional: ["leveling"],
   defaults: { rows: { mode: "top", top: 14, picked: [] } },
   rowKey: (r) => r.name,
   rowLabel: (r) => r.name,

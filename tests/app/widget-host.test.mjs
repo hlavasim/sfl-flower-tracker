@@ -106,3 +106,46 @@ test("reload picks up a document changed elsewhere (prefs pull)", () => {
   h.reload();
   assert.strictEqual(h.doc().boards[0].items.length, 1);
 });
+
+test("loadData: a widget's needs go through the store; a need named farm gets the game farm", async () => {
+  const W = { ...T, needs: (farm) => ({ farm: { res: "farm", farm }, extra: { res: "x", farm } }) };
+  const asked = [];
+  const store = { get: async (q) => { asked.push(q); return q.res === "farm" ? { status: "ok", asOf: 5, data: { farm: { inventory: { a: 1 } } } } : { status: "error", asOf: null, error: "e", data: null }; } };
+  const h = createHost({ registry: { t: W }, storage: mem() });
+  const { data, entries } = await h.loadData("t", 77, store);
+  assert.deepStrictEqual(asked, [{ res: "farm", farm: 77 }, { res: "x", farm: 77 }]);
+  assert.deepStrictEqual(data, { farm: { inventory: { a: 1 } }, extra: null });
+  assert.strictEqual(entries.length, 2);
+  assert.deepStrictEqual(await h.loadData("gone", 77, store), { data: {}, entries: [] });
+});
+
+test("freshOf: the worst of a widget's entries decides the badge", () => {
+  const h = createHost({ registry: { t: T }, storage: mem() });
+  const now = 10 * 60_000;
+  assert.strictEqual(h.freshOf([{ status: "ok", asOf: now - 60_000 }, { status: "ok", asOf: now - 4 * 60_000 }], now).text, "před 4 min");
+  assert.strictEqual(h.freshOf([{ status: "ok", asOf: now }, { status: "error", stale: false, error: "x" }], now).level, "error");
+  assert.strictEqual(h.freshOf([], now).level, "loading");
+});
+
+test("peekData: renders from what the store already has; pending only while a required need is missing", () => {
+  const W = { ...T, needs: (farm) => ({ farm: { res: "farm", farm }, slow: { res: "slow", farm } }), optional: ["slow"] };
+  const have = new Map();
+  const store = { peek: (q) => have.get(q.res) || null };
+  const h = createHost({ registry: { t: W }, storage: mem() });
+  assert.strictEqual(h.peekData("t", 1, store).pending, true);
+  have.set("farm", { status: "ok", asOf: 1, data: { farm: { x: 1 } } });
+  const p = h.peekData("t", 1, store);
+  assert.strictEqual(p.pending, false);
+  assert.deepStrictEqual(p.data, { farm: { x: 1 }, slow: null });
+  assert.strictEqual(p.entries.length, 1);
+  assert.deepStrictEqual(h.needsOf("t", 1), [{ res: "farm", farm: 1 }, { res: "slow", farm: 1 }]);
+  assert.deepStrictEqual(h.needsOf("gone", 1), []);
+});
+
+test("a pending board item shows its frame and controls with a loading body", () => {
+  const h = createHost({ registry: { t: T }, storage: mem() });
+  const html = h.renderItem("main", { i: "a", type: "t", settings: {}, w: 6 }, { data: {}, pending: true });
+  assert.match(html, /data-action="remove"/);
+  assert.match(html, /Načítám/);
+  assert.doesNotMatch(html, /prázdno/);
+});

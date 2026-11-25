@@ -56,3 +56,7 @@ test("renders through the table: defaults show 14 rows; an extra column can be a
   const withExtra = renderTable(W.columns, rows, { ...W.defaults, columns: ["name", "gainPerSalt"] }, { rowKey: W.rowKey });
   assert.match(withExtra, />XP\/sůl</);
 });
+
+test("the leveling plan is optional: the board paints without it and fills it in later", () => {
+  assert.deepStrictEqual(W.optional, ["leveling"]);
+});

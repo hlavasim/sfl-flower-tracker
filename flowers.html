@@ -2746,7 +2746,7 @@
 
     const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
-    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "mytrades", "marks", "diff", "json", "constants", "ascension", "world", "yakkamon", "fishing", "decorations", "speculation", "tickets", "leveling"];
+    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "mytrades", "marks", "diff", "json", "constants", "ascension", "world", "yakkamon", "fishing", "decorations", "speculation", "tickets", "leveling", "board"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -5367,6 +5367,7 @@
         { id: "world", label: "🌍 WORLD" },
       ];
       const overflow = [
+        { id: "board", label: "📌 MŮJ DASHBOARD" },
         ...(FARM_ID === "155498" ? [{ id: "speculation", label: "🎲 SPEKULACE" }] : []),
         { id: "tickets", label: "🎟️ TICKETY" },
         { id: "leveling", label: "📈 LEVELING" },
@@ -19162,6 +19163,47 @@
       return hit;
     }
 
+    // ═══════════════════════════════════════
+    //  MŮJ DASHBOARD (?page=board) — the pinned widgets (app/widget-host.mjs), each with its own settings
+    // ═══════════════════════════════════════
+    // What a widget needs from the page beyond its data: saved settings of other pages, icons.
+    function _wCtx(type) {
+      if (type === "fishing-age-now") {
+        let saved = null;
+        try { saved = JSON.parse(localStorage.getItem("sfl_leveling") || "null"); } catch (e) { saved = null; }
+        const gameSpelling = { "Hammerhead Shark": "Hammerhead shark", "Football Fish": "Football fish" };
+        return { savedLeveling: saved, marvelPlanned: Object.keys(_fishPlan).length > 0, cookSettings: _cookSettings(),
+          icon: (n) => _mIcon(gameSpelling[n] || n, 12) };
+      }
+      return {};
+    }
+    async function renderBoard() {
+      const app = document.getElementById("app");
+      window._wRerender = renderBoard;
+      const seq = _navSeq;
+      const board = __widgets.doc().boards[0];
+      const head = '<div class="header pixel-panel pixel-font"><h1>📌 ' + escHTML(board.name) + '</h1><div class="farm-id">Farm #' + escHTML(FARM_ID) +
+        ' · připnuté panely, každý se svým nastavením</div></div>';
+      if (!FARM_ID) { app.innerHTML = head + '<div class="pixel-panel" style="padding:12px;font-size:0.55rem">Zadej Farm ID nahoře.</div>'; return; }
+      if (!board.items.length) {
+        app.innerHTML = head + '<div class="pixel-panel" style="padding:12px;font-size:0.55rem;line-height:1.7">Zatím tu nic není. ' +
+          'Na stránce s panelem (třeba 🎣 FISHING → „Do sudu teď“) klikni na 📌 a panel se objeví tady.</div>';
+        return;
+      }
+      // Paint from what the store already holds, then again as each need arrives: a slow optional
+      // need (the LEVELING plan waits on a ~20 s query) must not hold the whole board.
+      const paint = () => {
+        if (getPage() !== "board" || seq !== _navSeq) return;   // navigated away meanwhile
+        app.innerHTML = head + '<div class="w-board">' + board.items.map((it) => {
+          const p = __widgets.peekData(it.type, FARM_ID, __store);
+          return __widgets.renderItem(board.id, it, { data: p.data, ctx: _wCtx(it.type), fresh: __widgets.freshOf(p.entries), pending: p.pending });
+        }).join("") + "</div>";
+      };
+      paint();
+      const queries = board.items.flatMap((it) => __widgets.needsOf(it.type, FARM_ID));
+      await Promise.all(queries.map((q) => __store.get(q).then(paint)));
+    }
+
     let _fishData = null, _fishPrices = null, _fishErr = null, _fishLoading = false, _fishFarm = null;
     // The LEVELING plan inputs (compute?section=leveling) and which collapsed sections are open.
     let _fishLvl = null, _fishOpen = {};
@@ -20225,8 +20267,7 @@
       window._wRerender = renderFishing;
       const ageHtml = __widgets.renderPage("fishing-age-now", {
         data: { farm: _fishFarm, leveling: _fishLvl || null },
-        ctx: { lvPlan, marvelPlanned: Object.keys(_fishPlan).length > 0, cookSettings: _cookSettings(),
-          icon: (n) => _mIcon(agingIconName[n] || n, 12), bestWorm: bestW.worm },
+        ctx: Object.assign(_wCtx("fishing-age-now"), { lvPlan, bestWorm: bestW.worm }),
         fresh: __wFresh(__store.peek({ res: "farm", farm: FARM_ID })),
       });
 
@@ -25272,6 +25313,9 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       // does not exist this early in the dispatcher, and passing it threw a ReferenceError that
       // left the page blank.
       if (page === "fishing") { renderConfigBar(page); renderFishing(); return; }
+
+      // MY DASHBOARD: the pinned widgets fetch what they need through the store.
+      if (page === "board") { renderConfigBar(page); renderBoard(); return; }
 
       // DECORATIONS fetches the raw farm itself (it needs x/y of every placed object, which
       // the compute sections do not carry) — so it also skips the shared farm pipeline.
