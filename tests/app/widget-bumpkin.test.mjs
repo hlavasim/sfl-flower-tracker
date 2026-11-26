@@ -202,6 +202,11 @@ test("📱 glance models: XP (the level with a ring, the numbers as tiles), kitc
   assert.match(renderLook(p, "tiles-1").html, /<span>XP \/ day<\/span><b>1\.4M<\/b>/);
   assert.ok(looksFor(p).length >= 3);
   assert.match(bumpkinPlanWidget.glanceModel({ farm }, CTX).empty, /Loading cooking data/);
+  // XP to go but no recipe cooking anywhere: out of reach, not "0 days"
+  const idle = { ...cook, buildings: Object.fromEntries(Object.entries(cook.buildings).map(([n, b]) => [n, { ...b, recipes: [] }])) };
+  const q = bumpkinPlanWidget.glanceModel({ farm, cook: idle }, CTX);
+  assert.deepStrictEqual([q.head.value, q.head.tone, q.head.cap], ["—", "bad", "level 200: nothing cooking"]);
+  assert.match(bumpkinPlanWidget.glanceModel({ farm, cook: { ...cook, buildings: {} } }, CTX).empty, /No cooking buildings/);
   for (const w of [bumpkinXp, bumpkinKitchens, bumpkinPlanWidget]) assert.strictEqual(w.glance, undefined);
 });
 

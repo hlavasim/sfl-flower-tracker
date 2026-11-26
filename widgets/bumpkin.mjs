@@ -488,6 +488,9 @@ bumpkinPlanWidget.glanceModel = ({ farm, cook } = {}, ctx = {}, opts = {}) => {
   if (noFarm(farm)) return { empty: noFarm(farm) };
   if (!cook) return { empty: "Loading cooking data…" };
   const p = planOf(farm, cook, ctx, opts);
+  if (!p.buildings.length) return { empty: "No cooking buildings detected." };
+  // XP still to go but nothing cooking: the target is out of reach, not "0 days" away
+  if (p.xpAfterFood > 0 && !(p.totalXPPerDay > 0)) return { head: { value: "—", tone: "bad", cap: `${p.targetLabel}: nothing cooking` }, items: [] };
   const head = p.xpAfterFood > 0 ? { value: p.totalDays.toLocaleString("en-US"), unit: " days", cap: `to ${p.targetLabel}` }
     : { value: "✓", tone: "ok", cap: `${p.targetLabel} ${p.reached ? "reached" : "covered by food"}` };
   const rung = (r) => (typeof r.level === "number" ? `L${r.level}` : r.level);
