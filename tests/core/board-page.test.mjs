@@ -156,3 +156,15 @@ test("📌 celá stránka sits in the config bar of every page but the boards; t
   assert.match(SRC, /window\.__wPatch = frame\.patchFrames;/);
   assert.match(SRC, /if \(!grid \|\| !__wPatch\(grid, frames\)\) \{/);
 });
+
+test("FLOWERS: the needs table and the beds are the page's own widgets, the page's mode feeds them", () => {
+  assert.match(SRC, /__widgets\.renderPage\("flowers-needs", \{ data: \{ farm: data\.farm \}, ctx: _wCtx\("flowers-needs"\)/);
+  assert.match(SRC, /__widgets\.renderPage\("flower-beds", \{ data: \{ farm: data\.farm \}, ctx: _wCtx\("flower-beds"\)/);
+  assert.match(SRC, /if \(type === "flowers-needs"\) return \{ pageFlowers: \(\) => \(\{ mode: getFlowerMode\(\), n: getFlowerN\(\), giftPlan: getGiftPlan\(\) \}\),/);
+  assert.match(SRC, /window\._wRerender = \(\) => \{ if \(getPage\(\) === "flowers" && cachedFarmData\) renderFlowers\(cachedFarmData\); \};/);
+  // the old seed sections, summary bar and "currently growing" are gone from the FLOWERS page
+  const body = SRC.slice(SRC.indexOf("    function renderFlowers(data) {"), SRC.indexOf("    function renderDolls(data) {"));
+  assert.doesNotMatch(body, /<div class="seed-header pixel-font">/);
+  assert.doesNotMatch(body, /summary-bar/);
+  assert.doesNotMatch(body, /CURRENTLY GROWING/);
+});

@@ -10359,7 +10359,7 @@
     // ═══════════════════════════════════════
 
     function renderFlowers(data) {
-      const { inventory, inProgress, petalBlessed, flowerBeds, activeBoosts, flowerMultiplier, season } = data;
+      const { inventory, inProgress, petalBlessed, flowerBeds, season } = data;
       lastInventory = inventory;
       lastInProgress = inProgress;
 
@@ -10369,23 +10369,13 @@
       const { totalNeeded, dependents } = computeAllTotalNeeded(inventory, inProgress, baseDemandFn);
       const app = document.getElementById("app");
 
-      const groups = {};
-      for (const seed of SEED_ORDER) groups[seed] = [];
-      for (const [name, recipe] of Object.entries(FLOWER_RECIPES)) {
-        groups[recipe.seed].push(name);
-      }
-
       const flowerData = {};
-      let totalComplete = 0, totalAll = 0, grandRemaining = 0;
 
       for (const [name, needed] of Object.entries(totalNeeded)) {
         const have = getCount(inventory, name);
         const pend = inProgress[name] || 0;
         const remaining = Math.max(0, needed - have - pend);
         const isComplete = remaining === 0;
-        if (isComplete) totalComplete++;
-        totalAll++;
-        grandRemaining += remaining;
         const recipe = FLOWER_RECIPES[name];
         flowerData[name] = {
           name, needed, have, pend, remaining, isComplete,
@@ -10396,21 +10386,11 @@
         };
       }
 
-      const seedStats = {};
-      for (const seed of SEED_ORDER) {
-        const flowers = groups[seed];
-        let rem = 0, complete = 0;
-        for (const f of flowers) {
-          rem += flowerData[f].remaining;
-          if (flowerData[f].isComplete) complete++;
-        }
-        const batches = Math.ceil(rem / FLOWER_BEDS);
-        const hours = batches * SEED_DATA[seed].hours;
-        seedStats[seed] = { remaining: rem, complete, total: flowers.length, batches, hours };
-      }
-
-      const grandHours = Object.values(seedStats).reduce((s, x) => s + x.hours, 0);
-      const pctComplete = totalAll > 0 ? Math.round((totalComplete / totalAll) * 100) : 0;
+      // The needs table and the beds are widgets (widgets/flowers.mjs over core/engine/flower-plan.mjs):
+      // the same on a board; the mode row below feeds the page's copies.
+      window._wRerender = () => { if (getPage() === "flowers" && cachedFarmData) renderFlowers(cachedFarmData); };
+      window._wRefresh = refresh;
+      const _wFlowerFresh = __wFresh(__store.peek({ res: "farm", farm: FARM_ID }));
 
       let html = "";
 
@@ -10439,61 +10419,9 @@
         </div>
       </div>`;
 
-      html += `<div class="summary-bar pixel-panel pixel-font">
-        <div class="summary-stat"><div class="label">COMPLETE</div><div class="value complete">${totalComplete} / ${totalAll}</div></div>
-        <div class="summary-stat"><div class="label">REMAINING</div><div class="value pending">${grandRemaining} grows</div></div>
-        <div class="summary-stat"><div class="label">BEDS</div><div class="value" style="color:var(--sunpetal)">${FLOWER_BEDS}</div></div>
-        <div class="summary-stat"><div class="label">EST. TIME</div><div class="value time">${formatHours(grandHours)}</div></div>
-      </div>`;
-
-      if (activeBoosts && activeBoosts.length > 0) {
-        const pctStr = Math.round(Math.abs(1 - flowerMultiplier) * 100);
-        const sign = flowerMultiplier <= 1 ? "-" : "+";
-        const color = flowerMultiplier <= 1 ? "var(--green)" : "var(--red)";
-        html += `<div class="boost-bar pixel-panel pixel-font" style="padding:8px 12px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;font-size: 0.5625rem">
-          <span style="color:${color}">BOOSTS ${sign}${pctStr}%</span>
-          ${activeBoosts.map(b => `<span style="color:var(--text-secondary)">${escHTML(b.name)} <span style="color:var(--text-dim)">&times;${b.multiplier}</span></span>`).join("")}
-          <span style="color:var(--text-dim);margin-left:auto">Sunpetal: ${formatHours(SEED_DATA["Sunpetal Seed"].hours)}</span>
-        </div>`;
-      }
-
-      html += `<div class="progress-overview pixel-panel">
-        <div class="progress-label pixel-font"><span>Progress</span><span>${pctComplete}%</span></div>
-        <div class="progress-bar-outer"><div class="progress-bar-fill green" style="width:${pctComplete}%"></div></div>
-      </div>`;
-
-      // Currently Growing
       const plannerBeds = flowerBeds ? extractBedDetails(flowerBeds) : [];
-      if (plannerBeds.length > 0) {
-        html += `<div class="growing-section pixel-panel pixel-font">
-          <div class="growing-title">CURRENTLY GROWING</div>
-          <div class="growing-grid">`;
-        const now = Date.now();
-        for (const bed of plannerBeds) {
-          if (bed.empty) {
-            html += `<div class="growing-bed empty-bed">
-              <div style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size: 1.125rem;opacity:0.3">🌱</div>
-              <div class="growing-bed-info"><div class="growing-bed-name" style="color:var(--text-dim)">Empty</div></div>
-            </div>`;
-          } else {
-            const diff = bed.readyAt - now;
-            const isReady = diff <= 0;
-            let timeStr;
-            if (isReady) { timeStr = "Ready!"; }
-            else { const h = Math.floor(diff/3600000); const m = Math.floor((diff%3600000)/60000); timeStr = h > 0 ? `${h}h ${String(m).padStart(2,"0")}m` : `${m}m`; }
-            const sdLabel = SEED_DATA[bed.seedType]?.label || "?";
-            html += `<div class="growing-bed">
-              <img class="growing-bed-img" src="${getItemIcon(bed.name)}" onerror="this.style.display='none'" alt="">
-              <div class="growing-bed-info">
-                <div class="growing-bed-name">${escHTML(bed.name)}</div>
-                <div class="growing-bed-detail">${sdLabel} | yield: ${bed.totalYield}${bed.bonus > 0 ? ` (1+${bed.bonus})` : ""}</div>
-              </div>
-              <div class="growing-bed-time ${isReady ? "ready" : "growing"}" data-ready="${bed.readyAt}">${timeStr}</div>
-            </div>`;
-          }
-        }
-        html += `</div></div>`;
-      }
+      html += typeof __widgets === "undefined" ? _wMissing("Záhony")
+        : __widgets.renderPage("flower-beds", { data: { farm: data.farm }, ctx: _wCtx("flower-beds"), fresh: _wFlowerFresh });
 
       // Beehives
       const beehives = data.farm?.beehives ? extractBeehiveDetails(data.farm.beehives) : [];
@@ -10558,85 +10486,8 @@
       // Grow Planner
       html += renderGrowPlanner(flowerData, plannerBeds, petalBlessed);
 
-      // Seed sections
-      for (const seed of SEED_ORDER) {
-        const sd = SEED_DATA[seed];
-        const ss = seedStats[seed];
-        const flowers = groups[seed];
-        if (flowers.length === 0) continue;
-
-        html += `<div class="seed-section">`;
-        html += `<div class="seed-header pixel-font">
-          <img class="seed-icon" src="${getItemIcon(seed)}" onerror="this.style.display='none'" alt="">
-          <h2 style="color:${sd.color}">${sd.label}</h2>
-          ${sd.season ? (() => { const inSeason = sd.season.toLowerCase() === (season || "").toLowerCase(); return `<span class="seed-badge" style="border-color:${inSeason ? 'var(--green)' : 'var(--text-dim)'};color:${inSeason ? 'var(--green)' : 'var(--text-dim)'};${inSeason ? '' : 'opacity:0.5;text-decoration:line-through'}">${sd.season}</span>`; })() : ""}
-          <div class="seed-meta">
-            <span>${formatHours(sd.hours)} / grow</span>
-            <span>${ss.complete}/${ss.total} done</span>
-            <span>${ss.remaining > 0 ? `~${ss.batches} batches = ${formatHours(ss.hours)}` : "All complete!"}</span>
-          </div>
-        </div>`;
-
-        html += `<div class="flower-grid">`;
-
-        const sorted = [...flowers].sort((a, b) => {
-          const fa = flowerData[a], fb = flowerData[b];
-          if (fa.isComplete !== fb.isComplete) return fa.isComplete ? 1 : -1;
-          return fb.remaining - fa.remaining;
-        });
-
-        for (const fname of sorted) {
-          const f = flowerData[fname];
-          const pct = f.needed > 0 ? Math.min(100, Math.round(((f.have + f.pend) / f.needed) * 100)) : 100;
-          const color = flowerColorCSS(fname);
-          const isGradient = color.includes("gradient");
-
-          let chainHTML = "";
-          if (f.inputIsFlower) {
-            const inputData = flowerData[f.input];
-            const avail = inputData ? inputData.have + inputData.pend : 0;
-            const inputOk = avail > 0;
-            chainHTML += `<span style="color:${inputOk ? 'var(--green)' : 'var(--red)'}"><img class="inline-icon" src="${getItemIcon(f.input)}" onerror="this.style.display='none'" alt="">${escHTML(f.input)}</span>`;
-            chainHTML += ` (${avail} avail)`;
-          } else {
-            const cropHave = getCount(inventory, f.input);
-            const cropOk = cropHave > 0;
-            chainHTML += `<span style="color:${cropOk ? 'var(--green)' : 'var(--red)'}"><img class="inline-icon" src="${getItemIcon(f.input)}" onerror="this.style.display='none'" alt="">${escHTML(f.input)}</span> (${cropHave} avail)`;
-          }
-          if (f.consumedBy.length > 0) {
-            const tags = f.consumedBy.map(c => {
-              const cd = flowerData[c];
-              return `<span class="consumed-tag"><img class="inline-icon" src="${getItemIcon(c)}" onerror="this.style.display='none'" alt="">${escHTML(c)} (x${cd ? cd.needed : "?"})</span>`;
-            }).join("");
-            chainHTML += ` <span class="consumed-by">used in</span>${tags}`;
-          }
-
-          html += `<div class="flower-row ${f.isComplete ? "complete" : ""}" data-flower="${escHTML(fname)}" onclick="toggleChain(this)">
-            <div class="flower-img-wrap">
-              <img class="flower-img" src="${getItemIcon(fname)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" alt="">
-              <div class="flower-color-dot" style="display:none;${isGradient ? "background:" + color : "background-color:" + color}"></div>
-            </div>
-            <div class="flower-info">
-              <div class="flower-name">${escHTML(fname)}</div>
-              <div class="flower-chain">${chainHTML}</div>
-            </div>
-            <div class="flower-progress">
-              <div class="flower-bar-outer"><div class="flower-bar-fill ${barClass(pct)}" style="width:${pct}%"></div></div>
-              <div class="flower-count">
-                <span class="have">${f.have}${f.pend > 0 ? `<span class="pending">+${f.pend}</span>` : ""} / ${f.needed}</span>
-                ${f.depNeed > 0 ? `<span style="color:var(--text-dim);font-size: 0.5625rem">(${f.ownNeed}+${f.depNeed})</span>` : ""}
-              </div>
-            </div>
-            <div class="flower-time">
-              ${f.isComplete
-                ? `<div class="done pixel-font">DONE</div>`
-                : `<div class="remaining-count pixel-font">-${f.remaining}</div><div class="remaining-time">${formatHours(f.remaining * sd.hours)}</div>`}
-            </div>
-          </div>`;
-        }
-
-        html += `</div></div>`;
-      }
+      html += typeof __widgets === "undefined" ? _wMissing("Květiny – potřeba")
+        : __widgets.renderPage("flowers-needs", { data: { farm: data.farm }, ctx: _wCtx("flowers-needs"), fresh: _wFlowerFresh });
 
       html += `<div class="footer">
         <button class="refresh-btn" onclick="refresh()">REFRESH</button>
@@ -19149,6 +19000,10 @@
         try { return { savedLeveling: JSON.parse(localStorage.getItem("sfl_leveling") || "null") }; } catch (e) { return {}; }
       }
       if (type === "dash-actions") return { dashActions: parseDashboardActions, countdown: dashFormatCountdown };
+      if (type === "flowers-needs") return { pageFlowers: () => ({ mode: getFlowerMode(), n: getFlowerN(), giftPlan: getGiftPlan() }),
+        hours: formatHours, icon: (n) => `<img src="${getItemIcon(n)}" onerror="this.style.display='none'" alt="" style="height:1.3em;vertical-align:-0.25em;margin-right:3px">` };
+      if (type === "flower-beds") return { countdown: dashFormatCountdown,
+        icon: (n) => `<img src="${getItemIcon(n)}" onerror="this.style.display='none'" alt="" style="height:1.3em;vertical-align:-0.25em;margin-right:3px">` };
       if (type === "page-embed") return { pages: PAGES, embedUrl: (p) => location.pathname + "?page=" + encodeURIComponent(p) + "&embed=1" };
       if (type === "target-list") return { inProgress: extractInProgress,
         icon: (n) => `<img src="${getItemIcon(n)}" onerror="this.style.display='none'" alt="" style="height:1.3em;vertical-align:-0.25em;margin-right:3px">` };

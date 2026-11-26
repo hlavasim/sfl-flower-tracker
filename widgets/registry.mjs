@@ -16,6 +16,7 @@ import { flipTable } from "./flip-table.mjs";
 import { worldIslands, worldSkillPoints } from "./world-dist.mjs";
 import { targetList } from "./target-list.mjs";
 import { pageEmbed } from "./page-embed.mjs";
+import { flowersNeeds, flowerBeds } from "./flowers.mjs";
 
 export const WIDGETS = {
   [fishingAgeNow.type]: fishingAgeNow,
@@ -31,4 +32,6 @@ export const WIDGETS = {
   [worldSkillPoints.type]: worldSkillPoints,
   [targetList.type]: targetList,
   [pageEmbed.type]: pageEmbed,
+  [flowersNeeds.type]: flowersNeeds,
+  [flowerBeds.type]: flowerBeds,
 };
