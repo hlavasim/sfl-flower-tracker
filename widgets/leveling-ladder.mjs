@@ -3,7 +3,7 @@
 // that); on the board it is read-only.
 import { levelingInit, levelingPlan, levelingLadder, levelingInputsWithBook } from "../core/sections/leveling.mjs";
 import { sflIcon } from "../core/engine/power-formula.mjs";
-import { big, compact, rows as gRows } from "../ui/glance.mjs";
+import { compact } from "../ui/glance.mjs";
 
 // The board repaints often (each settings change, each data arrival): the plan is reused while the
 // farm, the inputs, the book and the saved config are the same.
@@ -61,19 +61,20 @@ export const levelingLadderWidget = {
   },
 };
 
-// ── iPhone glance face: S = total days to the target ascension and its date; M / L = the next
-// ascensions with their total days and FLOWER ──
-levelingLadderWidget.sizes = ["s", "m", "l"];
-levelingLadderWidget.size = "s";
-levelingLadderWidget.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+// ── iPhone glance model: the total days to the target ascension; the items are the ascensions, each
+// counting down live to the day it is done (at), with the FLOWER spent by then ──
+const DAY = 86400000;
+levelingLadderWidget.look = "number";
+levelingLadderWidget.glanceModel = (data = {}, ctx = {}) => {
   const out = levelingLadderWidget.build(data, { ...ctx, rowClick: false });
   if (!out.rows.length) return { empty: out.empty };
   const t = out.rows.find((r) => r.target) || out.rows[0];
   const d = date(t.cumDays, t.now);
-  const head = big(num(t.cumDays), { unit: " days", cap: `to the end of A${t.ascension}${d ? ` · ${d}` : ""}` }) +
-    `<div class="g-cap">${compact(t.cumFlower)} FLOWER in total</div>`;
-  if (size === "s") return { html: head };
-  const list = gRows(out.rows.slice(0, size === "m" ? 3 : 7).map((r) => ({ name: `${r.target ? "▶ " : ""}A${r.ascension}`, sub: date(r.cumDays, r.now) || "",
-    value: `${num(r.cumDays)} d · ${compact(r.cumFlower)}`, tone: r.target ? "accent" : "" })));
-  return { html: size === "m" ? `<div class="g-split"><div>${head}</div>${list}</div>` : head + list };
+  return {
+    head: { value: num(t.cumDays), unit: " days", cap: `to the end of A${t.ascension}${d ? ` · ${d}` : ""}` },
+    items: out.rows.map((r) => ({ name: `A${r.ascension}${r.target ? " · target" : ""}`, sub: `${compact(r.cumFlower)} FLOWER`,
+      ...(Number.isFinite(r.cumDays) && r.cumDays > 0 ? { at: Math.round(r.now + r.cumDays * DAY) } : { value: num(r.cumDays) }) })),
+    tiles: [{ label: "days", value: num(t.cumDays) }, { label: "FLOWER", value: compact(t.cumFlower) },
+      { label: "target", value: `A${t.ascension}` }],
+  };
 };

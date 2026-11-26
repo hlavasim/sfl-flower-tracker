@@ -11,7 +11,7 @@ import { SWAMP_EXPANSION_LEVELS, ascensionXpFor } from "../core/engine/ascension
 import { getUncappedTotalLevel, xpRemainingToNextLevel } from "../core/engine/bumpkin-xp.mjs";
 import { COOKING_BUILDING_EMOJI, BUMPKIN_DEFAULT_RECIPES } from "../core/data/cooking.mjs";
 import { bar, kpis, bigBar, pill } from "../ui/viz.mjs";
-import { big, compact, meter, rows, tiles } from "../ui/glance.mjs";
+import { compact } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const icon = (ctx, n) => (typeof ctx.icon === "function" ? ctx.icon(n) : "");
@@ -447,90 +447,91 @@ export const bumpkinPlanWidget = {
   },
 };
 
-// ── iPhone glance faces ──
-bumpkinXp.sizes = ["s", "m"];
-bumpkinXp.size = "s";
-bumpkinXp.glance = ({ farm, cook } = {}, ctx = {}, opts = {}, size = "s") => {
+// ── iPhone glance models (ui/glance-templates offers the looks) ──
+// XP: the level (or the band being filled) with a ring of the way to the target; the numbers as tiles
+bumpkinXp.look = "number";
+bumpkinXp.glanceModel = ({ farm, cook } = {}, ctx = {}, opts = {}) => {
   if (noFarm(farm)) return { empty: noFarm(farm) };
   const p = planOf(farm, cook, ctx, opts);
   const days = (xp) => (p.xpPerDayCook > 0 ? Math.ceil(xp / p.xpPerDayCook) : null);
-  let h;
-  if (p.ascended) {
-    const d = days(p.xpToBandDone);
-    h = big(`A${p.workBand}`, { unit: ` L${p.workBandLevel}` }) + meter(p.ascProgressPct, "accent") +
-      `<div class="g-cap">${p.xpToBandDone > 0 ? `A${p.workBand} done${d != null ? ` in ~${d.toLocaleString()} d` : ""}` : "ready to ascend ✦"}</div>`;
-  } else {
-    h = big(`L${p.currentLevel}`) + meter(p.xpPctTarget, "accent") + `<div class="g-cap">${p.xpPctTarget.toFixed(0)} % to L${p.targetLevel}</div>`;
-  }
-  // wide and short: the headline on the left, the numbers on the right
-  if (size === "m") h = `<div class="g-split"><div>${h}</div>` + rows([{ name: "XP", value: compact(p.currentXP) }, { name: "XP / day", value: compact(p.xpPerDayCook || 0) },
-    p.ascended ? { name: "ascension", value: `A${p.ascLevel}` } : { name: "to go", value: compact(p.xpRemaining) }]) + `</div>`;
-  return { html: h };
+  const head = p.ascended
+    ? { value: `A${p.workBand}`, unit: ` L${p.workBandLevel}`, ring: p.ascProgressPct, ringTone: "info",
+      cap: p.xpToBandDone > 0 ? `A${p.workBand} done${days(p.xpToBandDone) != null ? ` in ~${days(p.xpToBandDone).toLocaleString("en-US")} d` : ""}` : "ready to ascend" }
+    : { value: `L${p.currentLevel}`, ring: p.xpPctTarget, ringTone: "info", cap: `${p.xpPctTarget.toFixed(0)} % to L${p.targetLevel}` };
+  return {
+    head,
+    tiles: [{ label: "XP", value: compact(p.currentXP) }, { label: "XP / day", value: compact(p.xpPerDayCook || 0) },
+      p.ascended ? { label: "ascension", value: `A${p.ascLevel}` } : { label: "to go", value: compact(p.xpRemaining) }],
+  };
 };
 
-bumpkinKitchens.sizes = ["m", "l"];
-bumpkinKitchens.size = "m";
-bumpkinKitchens.glance = (data = {}, ctx = {}, opts = {}, size = "m") => {
+// kitchens: the XP a day of all kitchens; the items are the kitchens cooking, most XP first, each
+// with its recipe and its share of the day
+bumpkinKitchens.look = "number-list-2";
+bumpkinKitchens.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = bumpkinKitchens.build(data, ctx, opts);
   const on = out.rows.filter((r) => r.selected).sort((a, b) => b.xpPerDay - a.xpPerDay);
   if (!on.length) return { empty: out.empty || "Nothing is cooking." };
-  const total = on.reduce((a, r) => a + (r.xpPerDay || 0), 0);
-  if (size === "m") {
-    return { html: tiles(on.slice(0, 3).map((r) => ({ label: `${r.emoji} ${r.name}`, value: r.selected.isInstant ? "instant" : r.timeText,
-      sub: `${r.selected.name} · ${compact(r.xpPerDay)}` }))) + `<div class="g-cap g-foot">${compact(total)} XP / day · ${on.length} of ${out.rows.length} cooking</div>` };
-  }
-  return { html: rows(on.map((r) => ({ icon: icon(ctx, r.selected.name) || r.emoji, name: r.name, sub: `${r.selected.name} · ${r.selected.isInstant ? "instant" : r.timeText}`,
-    value: `${compact(r.xpPerDay)}/d` }))) + `<div class="g-cap g-foot">${compact(total)} XP / day, all kitchens</div>` };
+  const total = on.reduce((a, r) => a + (r.xpPerDay || 0), 0), cost = on.reduce((a, r) => a + (r.costPerCook > 0 ? r.costPerDay || 0 : 0), 0);
+  return {
+    head: { value: compact(total), unit: " XP/d", cap: `${on.length} of ${out.rows.length} kitchens cooking` },
+    items: on.map((r) => ({ icon: icon(ctx, r.selected.name) || r.emoji, name: r.name, sub: r.selected.isInstant ? `${r.selected.name} · instant` : `${r.selected.name} · ${r.timeText}`,
+      value: `${compact(r.xpPerDay)}/d`, pct: total > 0 ? ((r.xpPerDay || 0) / total) * 100 : 0 })),
+    tiles: [{ label: "XP / day", value: compact(total) }, { label: "cooking", value: `${on.length}/${out.rows.length}` },
+      ...(cost > 0 ? [{ label: "SFL / day", value: compact(cost) }] : [])],
+  };
 };
 
-bumpkinPlanWidget.sizes = ["s", "m"];
-bumpkinPlanWidget.size = "s";
-bumpkinPlanWidget.glance = ({ farm, cook } = {}, ctx = {}, opts = {}, size = "s") => {
+// leveling plan: the days to the target; the items are the next rungs of the ladder with their cost
+bumpkinPlanWidget.look = "number";
+bumpkinPlanWidget.glanceModel = ({ farm, cook } = {}, ctx = {}, opts = {}) => {
   if (noFarm(farm)) return { empty: noFarm(farm) };
   if (!cook) return { empty: "Loading cooking data…" };
   const p = planOf(farm, cook, ctx, opts);
-  const head = p.xpAfterFood > 0 ? big(`${p.totalDays.toLocaleString()}`, { unit: " days", cap: `to ${p.targetLabel}` })
-    : big("✓", { tone: "ok", cap: `${p.targetLabel} ${p.reached ? "reached" : "covered by food"}` });
-  if (size === "s") return { html: head };
-  return { html: head + tiles([{ label: "XP / day", value: compact(p.totalXPPerDay) },
-    ...(p.totalCostPerDay > 0 ? [{ label: "SFL / day", value: sfl(ctx, p.totalCostPerDay) }] : []),
-    ...(p.ladder.length ? [{ label: `to ${p.nextLabel}`, value: `${sfl(ctx, p.nextCost)} SFL`, sub: `${Math.ceil(p.nextDays)} d` }] : [])]) };
+  const head = p.xpAfterFood > 0 ? { value: p.totalDays.toLocaleString("en-US"), unit: " days", cap: `to ${p.targetLabel}` }
+    : { value: "✓", tone: "ok", cap: `${p.targetLabel} ${p.reached ? "reached" : "covered by food"}` };
+  const rung = (r) => (typeof r.level === "number" ? `L${r.level}` : r.level);
+  return {
+    head,
+    items: p.ladder.slice(0, 30).map((r) => ({ name: rung(r), sub: `${r.days < 1 ? r.days.toFixed(1) : Math.ceil(r.days).toLocaleString("en-US")} d`,
+      ...(p.totalCostPerDay > 0 ? { value: compact(r.cost) } : {}) })),
+    tiles: [{ label: "XP / day", value: compact(p.totalXPPerDay) },
+      ...(p.totalCostPerDay > 0 ? [{ label: "SFL / day", value: compact(p.totalCostPerDay) }, { label: "SFL total", value: compact(p.costToTarget) }] : []),
+      ...(p.ladder.length ? [{ label: "next", value: `${Math.ceil(p.nextDays)} d` }] : [])],
+  };
 };
 
-// banked food: S = the XP in stock and the level after eating it; M = the three biggest dishes
-// beside it; L = more dishes
-bumpkinFood.sizes = ["s", "m", "l"];
-bumpkinFood.size = "s";
-bumpkinFood.glance = ({ farm, cook } = {}, ctx = {}, opts = {}, size = "s") => {
+// banked food: the XP in stock and the level after eating it; the items are the dishes, biggest first
+bumpkinFood.look = "number";
+bumpkinFood.glanceModel = ({ farm, cook } = {}, ctx = {}, opts = {}) => {
   if (noFarm(farm)) return { empty: noFarm(farm) };
   if (!cook) return { empty: "Loading cooking data…" };
   const p = planOf(farm, cook, ctx, opts);
   if (!(p.bankedXP > 0)) return { empty: "No cooked food in the inventory." };
-  const head = big(compact(p.bankedXP), { unit: " XP", cap: `L${p.levelAfterFoodU} after eating${p.levelsGained > 0 ? ` · +${p.levelsGained}` : ""}` });
-  if (size === "s") return { html: head };
-  const list = rows(p.food.slice(0, size === "m" ? 3 : 6).map((f) => ({ icon: icon(ctx, f.name), name: f.name, sub: `${f.qty}×`, value: compact(f.totalFoodXP) })));
-  return { html: size === "m" ? `<div class="g-split"><div>${head}</div>${list}</div>` : head + list + `<div class="g-cap g-foot">${p.food.length} kinds of food in stock</div>` };
+  return {
+    head: { value: compact(p.bankedXP), unit: " XP", cap: `L${p.levelAfterFoodU} after eating${p.levelsGained > 0 ? ` · +${p.levelsGained}` : ""}` },
+    items: p.food.map((f) => ({ icon: icon(ctx, f.name), name: f.name, sub: `${f.qty}×`, value: compact(f.totalFoodXP), pct: (f.totalFoodXP / p.bankedXP) * 100 })),
+    tiles: [{ label: "XP", value: compact(p.bankedXP) }, { label: "dishes", value: p.food.length },
+      { label: "level after", value: `L${p.levelAfterFoodU}` }, { label: "levels", value: `+${Math.max(0, p.levelsGained)}` }],
+    foot: `${p.food.length} kinds of food in stock`,
+  };
 };
 
-// cooking boosts: S = the pet streak (the one thing to act on); M = the counts as tiles; L = the boosts
-bumpkinBoosts.sizes = ["s", "m", "l"];
-bumpkinBoosts.size = "s";
-bumpkinBoosts.glance = ({ farm, cook } = {}, ctx = {}, opts = {}, size = "s") => {
+// cooking boosts: the pet streak (the one thing to act on); the items are every boost
+bumpkinBoosts.look = "number";
+bumpkinBoosts.glanceModel = ({ farm, cook } = {}, ctx = {}) => {
   if (noFarm(farm)) return { empty: noFarm(farm) };
   if (!cook) return { empty: "Loading cooking data…" };
   const boosts = cook.boosts || {}, ps = boosts.petStreakInfo || {};
   const xp = (boosts.xpBoosts || []).filter((b) => !b.petStreak), time = boosts.timeBoosts || [], amount = boosts.amountBoosts || [];
   const next = ps.nextWeekQualified ? "next week ✓" : "feed your pet!";
-  if (size === "s") {
-    return { html: big(`×${ps.multiplier ?? 1}`, { tone: ps.thisWeekActive ? "ok" : "warn", cap: `pet streak ${ps.streak ?? 0}w · ${next}` }) };
-  }
-  if (size === "m") {
-    return { html: tiles([{ label: "XP boosts", value: String(xp.length) }, { label: "time / amount", value: String(time.length + amount.length) },
-      { label: "pet streak", value: `×${ps.multiplier ?? 1}`, sub: next }]) };
-  }
-  const list = [{ name: "Pet's Streak", sub: `${ps.streak ?? 0}w · ${next}`, value: `×${ps.multiplier ?? 1}`, tone: ps.thisWeekActive ? "ok" : "bad" },
-    ...xp.map((b) => ({ icon: icon(ctx, b.name), name: b.name + tagOf(b), sub: "XP", value: b.add ? "+" + b.add : "×" + b.multiplier })),
-    ...time.map((b) => ({ icon: icon(ctx, b.name), name: b.name, sub: "time", value: `×${b.multiplier}` })),
-    ...amount.map((b) => ({ icon: icon(ctx, b.name), name: b.name, sub: "amount", value: `+${b.extra}` }))];
-  return { html: rows(list.slice(0, 7)) + `<div class="g-cap g-foot">${xp.length} XP · ${time.length + amount.length} time / amount</div>` };
+  return {
+    head: { value: `×${ps.multiplier ?? 1}`, tone: ps.thisWeekActive ? "ok" : "warn", cap: `pet streak ${ps.streak ?? 0}w · ${next}` },
+    items: [{ name: "Pet's Streak", sub: `${ps.streak ?? 0}w · ${next}`, value: `×${ps.multiplier ?? 1}`, tone: ps.thisWeekActive ? "ok" : "bad" },
+      ...xp.map((b) => ({ icon: icon(ctx, b.name), name: b.name, sub: `XP${tagOf(b)}`, value: b.add ? "+" + b.add : "×" + b.multiplier })),
+      ...time.map((b) => ({ icon: icon(ctx, b.name), name: b.name, sub: "time", value: `×${b.multiplier}` })),
+      ...amount.map((b) => ({ icon: icon(ctx, b.name), name: b.name, sub: "amount", value: `+${b.extra}` }))],
+    tiles: [{ label: "XP boosts", value: xp.length }, { label: "time / amt", value: time.length + amount.length },
+      { label: "pet streak", value: `×${ps.multiplier ?? 1}` }],
+  };
 };

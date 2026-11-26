@@ -5,6 +5,7 @@ import { levelingSummary, levelingStepsWidget, levelingFrontierWidget, levelingM
 import * as LV from "../../core/sections/leveling.mjs";
 import { renderTable } from "../../ui/table.mjs";
 import { WIDGETS } from "../../widgets/registry.mjs";
+import { renderLook, looksFor } from "../../ui/glance-templates.mjs";
 
 // LEVELING's plan, steps, routes and matrix as widgets, on the fixture farm and the saved config.
 const farm = JSON.parse(readFileSync(new URL("../fixtures/farm-155498.json", import.meta.url))).farm;
@@ -89,36 +90,42 @@ test("matrix: Σ ticked, a column per ascension left, item rows with icons; tick
   assert.ok(rowsOf(levelingMatrix.view({ farm }, { state: st }, { showAll: true }).html) >= rowsOf(levelingMatrix.view({ farm }, { state: st }, {}).html));
 });
 
-test("📱 glance, plan: S = days to the target and its FLOWER; M = XP a day, FLOWER per 1 M XP, the bottleneck beside it; L = the XP split", () => {
-  assert.deepStrictEqual(levelingSummary.sizes, ["s", "m", "l"]);
+test("📱 glance model, plan: days to the target and its FLOWER; the XP split with shares; the plan's numbers as tiles", () => {
   const ctx = { savedLeveling: saved, icon: ICON };
-  const s = levelingSummary.glance({ farm, leveling }, ctx, {}, "s").html;
-  assert.match(s, new RegExp(`^<div class="g-big">${lvFmt(plan.days)}<small> days</small></div><div class="g-cap">to A6 · [\\d.]+k? FLOWER</div>$`));
-  const m = levelingSummary.glance({ farm, leveling }, ctx, {}, "m").html;
-  assert.match(m, /^<div class="g-split">/);
-  assert.strictEqual((m.match(/class="g-row"/g) || []).length, 3);
-  assert.match(m, /<div class="g-n">aging held back by<\/div><span class="g-v">(salt|slots \(restarts\)|fish|—)<\/span>/);
-  const l = levelingSummary.glance({ farm, leveling }, ctx, {}, "l").html;
-  assert.match(l, /<div class="g-n">kitchens<div>XP a day<\/div>/);
-  assert.ok((l.match(/class="g-row"/g) || []).length <= 7);
-  // the actual pace gets a meter
-  assert.match(levelingSummary.glance({ farm, leveling: { inputs: { ...inputs, actualXpPerDay: 1000 } } }, ctx, {}, "l").html, /class="g-meter"[\s\S]*actually 1k XP a day · \d+ % of the plan/);
-  assert.match(levelingSummary.glance({ farm }, {}, {}, "s").empty, /did not load/);
-  assert.match(levelingSummary.glance({}, {}, {}, "m").empty, /No farm data/);
+  const m = levelingSummary.glanceModel({ farm, leveling }, ctx);
+  assert.strictEqual(levelingSummary.look, "number");
+  assert.deepStrictEqual([m.head.value, m.head.unit], [lvFmt(plan.days), " days"]);
+  assert.match(m.head.cap, /^to A6 · [\d.]+k? FLOWER$/);
+  assert.strictEqual(m.head.ring, undefined, "no actual pace → no ring");
+  assert.deepStrictEqual(m.items.map((i) => i.name), ["Kitchens", "Aging", "Raw fish"]);
+  assert.ok(m.items.every((i) => i.pct >= 0 && i.pct <= 100));
+  assert.deepStrictEqual(m.tiles.map((t) => t.label), ["XP / day", "cost/1M", "cost/day", "held by"]);
+  assert.match(m.tiles[3].value, /^(salt|slots|fish|—)$/);
+  assert.match(renderLook(m, "number").html, new RegExp(`<div class="gx-num">${lvFmt(plan.days)}<small> days</small></div>`));
+  assert.ok(looksFor(m).length >= 3);
+  // the actual pace: a ring against the plan and a closing line
+  const a = levelingSummary.glanceModel({ farm, leveling: { inputs: { ...inputs, actualXpPerDay: 1000 } } }, ctx);
+  assert.ok(a.head.ring > 0 && a.head.ring < 100);
+  assert.match(a.foot, /^actually 1k XP a day · \d+ % of the plan$/);
+  assert.match(levelingSummary.glanceModel({ farm }, {}).empty, /did not load/);
+  assert.match(levelingSummary.glanceModel({}, {}).empty, /No farm data/);
+  assert.strictEqual(levelingSummary.glance, undefined);
 });
 
-test("📱 glance, steps: S = the cheapest single change and its saving; M = the first three", () => {
-  assert.deepStrictEqual(levelingStepsWidget.sizes, ["s", "m"]);
+test("📱 glance model, steps: the cheapest single change and its saving as the headline; every change as an item", () => {
   const st = levelingState(farm, leveling, null, saved);
   const ctx = { savedLeveling: saved, icon: ICON };
+  assert.strictEqual(levelingStepsWidget.look, "next");
   if (st.steps.length) {
-    const s = levelingStepsWidget.glance({ farm, leveling }, ctx, {}, "s").html;
-    assert.ok(s.includes(`${lvK(st.steps[0].dFlower)}<small> FLOWER</small></div><div class="g-cap">${st.steps[0].label}</div>`));
-    const m = levelingStepsWidget.glance({ farm, leveling }, ctx, {}, "m").html;
-    assert.strictEqual((m.match(/class="g-row"/g) || []).length, Math.min(3, st.steps.length));
-    assert.ok(m.includes(`<span class="g-v g-ok">${lvK(st.steps[0].dFlower)}</span>`));
-    assert.doesNotMatch(m, /_lvlUseStep/);
+    const m = levelingStepsWidget.glanceModel({ farm, leveling }, ctx);
+    assert.deepStrictEqual([m.head.value, m.head.cap], [lvK(st.steps[0].dFlower), `FLOWER · ${st.steps[0].label}`]);
+    assert.strictEqual(m.items.length, st.steps.length);
+    assert.strictEqual(m.items[0].value, lvK(st.steps[0].dFlower));
+    assert.ok(renderLook(m, "next").html.includes(`<div class="gx-next-name">${st.steps[0].label}</div>`));
+    assert.doesNotMatch(JSON.stringify(m), /_lvlUseStep/);
   }
-  assert.match(levelingStepsWidget.glance({ farm }, { state: { ...st, steps: [] } }, {}, "s").empty, /No single change/);
-  assert.match(levelingStepsWidget.glance({}, {}, {}, "m").empty, /No farm data/);
+  assert.match(levelingStepsWidget.glanceModel({ farm }, { state: { ...st, steps: [] } }).empty, /No single change/);
+  assert.match(levelingStepsWidget.glanceModel({}, {}).empty, /No farm data/);
+  assert.strictEqual(levelingStepsWidget.glance, undefined);
 });
+

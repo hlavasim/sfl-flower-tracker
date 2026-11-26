@@ -4,7 +4,6 @@
 // section=eff's measured efficiency (the Power/Roadmap rule). The per-shrine marginal is the page's
 // _shrineMarginalSflPerDay (also used by the roadmap's renew table), reached through ctx.
 import { pill, bar } from "../ui/viz.mjs";
-import { big, ring as gRing, rows as gRows } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const icon = (ctx, n) => (typeof ctx.icon === "function" && n ? ctx.icon(n) : "");
@@ -80,23 +79,29 @@ export const shrinesRoi = {
   },
 };
 
-// ── iPhone glance face: S = how many shrines are up (ring) and the net a day of all of them;
-// M / L = the shrines of this copy's filter, most profit first, active ones marked ──
-shrinesRoi.sizes = ["s", "m", "l"];
-shrinesRoi.size = "s";
-shrinesRoi.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+// ── iPhone glance model: how many shrines are up (a ring); the items are the shrines of this copy's
+// filter, active first (counting down live to when they run out), then most profit, each with how
+// much of its cost it earns back ──
+shrinesRoi.look = "number";
+shrinesRoi.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const all = shrinesRoi.build(data, ctx, { show: "all" });
   if (!all.rows.length) return { empty: all.empty === "No shrine data yet." ? all.empty : "No shrines." };
   const n = all.rows.length, active = all.rows.filter((r) => r.active).length, profitable = all.rows.filter((r) => r.netTotal > 0).length;
-  if (size === "s") {
-    return { html: `<div class="g-corner">${gRing((active / n) * 100, { tone: "ok" })}</div>` +
-      big(active, { unit: `/${n}`, tone: active ? "ok" : "", cap: `active · ${profitable} profitable` }) };
-  }
+  const now = ctx.now || Date.now();
+  let boost = 0, cost = 0;
+  for (const r of all.rows) { boost += r.perDay || 0; cost += r.costSfl > 0 ? r.costSfl / r.days : 0; }
+  const net = boost - cost, sign = (v, dec) => `${v >= 0 ? "+" : ""}${v.toFixed(dec)}`;
+  const dec = (v) => (Math.abs(v) >= 10 ? 0 : Math.abs(v) >= 1 ? 1 : 3);   // a tile keeps to a few digits
   const shown = shrinesRoi.build(data, ctx, opts).rows.slice().sort((a, b) => (b.active - a.active) || (b.netTotal - a.netTotal));
-  if (!shown.length) return { empty: "No shrines to show with this filter." };
-  return { html: gRows(shown.slice(0, size === "m" ? 3 : 7).map((r) => ({ icon: r.iconHtml, name: r.name,
-    sub: r.active ? r.timeLeft : `${(VERDICT[r.verdict] || ["—"])[0].toLowerCase()} · ${r.days} d`,
-    ...(r.active ? { chip: { text: "ACTIVE", tone: "ok" } } : { value: `${r.netTotal >= 0 ? "+" : ""}${r.netTotal.toFixed(2)}`, tone: r.netTotal >= 0 ? "ok" : "bad" }) }))) };
+  return {
+    head: { value: active, unit: `/${n}`, tone: active ? "ok" : "", ring: (active / n) * 100, ringTone: "ok", cap: `active · ${profitable} profitable` },
+    items: shown.map((r) => ({ icon: r.iconHtml, name: r.name,
+      sub: r.active ? `active · ${sign(r.netTotal, 2)}` : `${(VERDICT[r.verdict] || ["—"])[0].toLowerCase()} · ${r.days} d`,
+      ...(r.active ? { at: now + r.hoursLeft * 3600000 } : { value: sign(r.netTotal, 2), tone: r.netTotal >= 0 ? "ok" : "bad" }),
+      ...(r.costSfl > 0 && !r.indirect ? { pct: Math.min(100, (r.earnTotal / r.costSfl) * 100) } : {}) })),
+    tiles: [{ label: "active", value: `${active}/${n}` }, { label: "profitable", value: profitable },
+      { label: "boost/day", value: sign(boost, dec(boost)) }, { label: "net/day", value: sign(net, dec(net)) }],
+  };
 };
 
 export const SHRINES_WIDGETS = [shrinesRoi];

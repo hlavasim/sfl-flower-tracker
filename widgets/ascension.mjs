@@ -8,7 +8,7 @@
 // Each copy may pick its own production mode (real / theoretical); Grinx's Hammer changes the
 // server's plan, so it stays the page's setting.
 import { bar, kpis, pill } from "../ui/viz.mjs";
-import { big, compact, meter as gMeter, ring as gRing, rows as gRows } from "../ui/glance.mjs";
+import { compact } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const RES3 = ["Crimstone", "Oil", "Obsidian"];
@@ -232,63 +232,68 @@ export const ascensionSteps = {
   },
 };
 
-// ── iPhone glance face: the ascension and band; M adds the stock it is built from ──
-ascensionStatus.sizes = ["s", "m"];
-ascensionStatus.size = "s";
-ascensionStatus.glance = ({ asc: d } = {}, ctx = {}, opts = {}, size = "s") => {
+// ── iPhone glance models (ui/glance-templates offers the looks) ──
+// status: the band being filled (A? L?, a ring through its 50 levels); the items are the stock it
+// is built from, each with its sprite; the tiles the island, land, ascension and XP a day
+ascensionStatus.look = "number";
+ascensionStatus.glanceModel = ({ asc: d } = {}, ctx = {}) => {
   if (!d || !d.current) return { empty: "No ascension plan yet." };
-  const cur = d.current, rates = d.rates || {};
+  const cur = d.current, rates = d.rates || {}, stock = cur.stock || {};
   const bands = Object.entries(cur.bandStandings || {}).filter(([, l]) => l > 0);
   const [band, lvl] = bands.length ? bands[bands.length - 1] : [cur.ascensionLevel, 0];
-  let h = big(`A${band}`, { unit: ` L${lvl}` }) + gMeter((lvl / 50) * 100, "accent") +
-    `<div class="g-cap">${cur.readyToAscend ? "ready to ascend ✦" : `${esc(cur.island)} · ${compact(rates.xpPerDay || 0)} XP/day`}</div>`;
-  if (size === "m") {
-    // wide and short: the headline on the left, the stock on the right
-    h = `<div class="g-split"><div>${h}</div>` + gRows([["Ascension Shard", cur.shards], ["Ascension Crystal", cur.crystals], ["Oil", Math.floor(cur.stock.Oil || 0)], ["Obsidian", Math.floor(cur.stock.Obsidian || 0)]]
-      .map(([n, v]) => ({ icon: gi(ctx, n), name: n.replace("Ascension ", ""), value: compact(v) }))) + `</div>`;
-  }
-  return { html: h };
+  return {
+    head: { value: `A${band}`, unit: ` L${lvl}`, ring: (lvl / 50) * 100, ringTone: cur.readyToAscend ? "ok" : "info",
+      tone: cur.readyToAscend ? "ok" : "", cap: cur.readyToAscend ? "ready to ascend" : `${cur.island} · ${compact(rates.xpPerDay || 0)} XP/day` },
+    items: [["Ascension Shard", cur.shards, "Shards"], ["Ascension Crystal", cur.crystals, "Crystals"],
+      ...RES3.map((r) => [r, Math.floor(stock[r] || 0), r]), ["Coins", Math.round(stock.Coins || 0), "Coins"]]
+      .map(([n, v, name]) => ({ icon: gi(ctx, n), name, value: compact(v) })),
+    tiles: [{ label: "land", value: String(cur.basicLand) },
+      { label: "ascension", value: `A${cur.ascensionLevel}` }, { label: "XP/day", value: compact(rates.xpPerDay || 0) }],
+  };
 };
 
-// outlook: S = how many pending steps the stock alone covers (the scarcest resource) and where
-// continuous expand jams; M = the three scarcest resources beside it; L = all four
-ascensionOutlook.sizes = ["s", "m", "l"];
-ascensionOutlook.size = "s";
-ascensionOutlook.glance = ({ asc: d } = {}, ctx = {}, opts = {}, size = "s") => {
+// outlook: how many pending steps the stock alone covers (the scarcest resource, a ring) and where
+// continuous expand jams; the items are the four resources, scarcest first, each with its reach
+ascensionOutlook.look = "number";
+ascensionOutlook.glanceModel = ({ asc: d } = {}, ctx = {}, opts = {}) => {
   if (!d || !d.steps) return { empty: "No ascension plan yet." };
-  const mode = modeOf(ctx, opts), n = d.steps.length, reach = d.reach || {};
+  const mode = modeOf(ctx, opts), n = d.steps.length, reach = d.reach || {}, rates = d.rates || {};
   const res = ["Crimstone", "Oil", "Obsidian", "Coins"].sort((a, b) => (reach[a] ?? 0) - (reach[b] ?? 0));
   const k = reach[res[0]] ?? 0;
-  const jam = d.steps.find((s) => (s.sim && s.sim[mode] ? s.sim[mode].stuck : s.stuck));
-  const head = big(k, { unit: `/${n}`, cap: d.bottleneck ? `steps from stock · ${d.bottleneck} first` : "steps from stock" }) +
-    `<div class="g-cap">${jam ? `jams at ${esc(stepName(jam))}` : `on pace through A${esc(d.maxAsc || 10)}`}</div>`;
-  const corner = `<div class="g-corner">${gRing(n ? (k / n) * 100 : 100, { tone: jam ? "warn" : "ok" })}</div>`;
-  if (size === "s") return { html: corner + head };
-  const list = gRows(res.slice(0, size === "m" ? 3 : 4).map((r) => ({ icon: gi(ctx, r), name: r, value: `${reach[r] ?? 0}/${n}`, tone: r === d.bottleneck ? "bad" : "" })));
-  return { html: size === "m" ? `<div class="g-split"><div>${head}</div>${list}</div>` : corner + head + list };
+  const isStuck = (s) => (s.sim && s.sim[mode] ? s.sim[mode].stuck : s.stuck), jam = d.steps.find(isStuck);
+  return {
+    head: { value: k, unit: `/${n}`, ring: n ? (k / n) * 100 : 100, ringTone: jam ? "warn" : "ok",
+      cap: jam ? `steps from stock · jams at ${stepName(jam)}` : `steps from stock · on pace to A${d.maxAsc || 10}` },
+    items: res.map((r) => { const rr = rates[r] && rates[r][mode];
+      return { icon: gi(ctx, r), name: r, ...(rr ? { sub: `+${fd(rr, rr >= 100 ? 0 : 2)}/day` } : {}), value: `${reach[r] ?? 0}/${n}`,
+        tone: r === d.bottleneck ? "bad" : "", pct: n ? ((reach[r] ?? 0) / n) * 100 : 100 }; }),
+    tiles: [{ label: "covered", value: `${k}/${n}` },
+      { label: "stuck", value: d.steps.filter(isStuck).length }],
+  };
 };
 
-// island completion and one ascension's steps: S = steps covered now (ring) and the next one;
-// M = the next pending steps beside it; L = more of them
+// island completion and one ascension's steps: steps covered now (a ring); the items are the
+// steps, pending first, each with its state chip and its farm / build-slot ETA
 const GLANCE_STATE = { ok: "ok", pace: "info", stuck: "bad" };
-function stepsGlance(widget, doneCap) {
-  return (data = {}, ctx = {}, opts = {}, size = "s") => {
+function stepsModel(widget, doneCap) {
+  return (data = {}, ctx = {}, opts = {}) => {
     const d = data.asc;
     if (!d || !d.steps) return { empty: "No ascension plan yet." };
     const out = widget.build(data, ctx, opts);
-    if (!out.rows.length) return doneCap ? { html: big("✓", { tone: "ok", cap: doneCap }) } : { empty: out.empty };
+    if (!out.rows.length) return doneCap ? { head: { value: "✓", tone: "ok", cap: doneCap } } : { empty: out.empty };
     const n = out.rows.length, ok = out.rows.filter((r) => r.state === "ok").length, stuck = out.rows.filter((r) => r.state === "stuck").length;
-    const pending = out.rows.filter((r) => r.state !== "ok");
+    const pending = out.rows.filter((r) => r.state !== "ok"), list = [...pending, ...out.rows.filter((r) => r.state === "ok")];
     const farm = (r) => (r.sim ? (r.sim.blocked ? "∞" : fmtEta(r.sim.farmEtaDays)) : "?");
-    const head = big(ok, { unit: `/${n}`, cap: stuck ? `covered · ${stuck} stuck` : "covered now" });
-    const corner = `<div class="g-corner">${gRing((ok / n) * 100, { tone: stuck ? "bad" : "ok" })}</div>`;
-    if (size === "s") return { html: corner + head + (pending.length ? `<div class="g-cap">next: ${esc(stepName(pending[0].s))} · farm ${esc(farm(pending[0]))}</div>` : "") };
-    if (!pending.length) return { html: corner + big("✓", { tone: "ok", cap: "every step covered now" }) };
-    const list = gRows(pending.slice(0, size === "m" ? 3 : 6).map((r) => ({ name: stepName(r.s), sub: `farm ${farm(r)} · slot ${fmtEta(r.s.buildSlotDays)}`,
-      chip: { text: STATE[r.state][0], tone: GLANCE_STATE[r.state] } })));
-    return { html: size === "m" ? `<div class="g-split"><div>${head}</div>${list}</div>` : corner + head + list };
+    return {
+      head: { value: ok, unit: `/${n}`, ring: (ok / n) * 100, ringTone: stuck ? "bad" : "ok", tone: ok === n ? "ok" : "",
+        cap: ok === n ? "every step covered" : stuck ? `covered · ${stuck} stuck` : `covered · next ${stepName(pending[0].s)}` },
+      items: list.map((r) => ({ name: stepName(r.s), sub: r.state === "ok" ? "covered" : `farm ${farm(r)} · slot ${fmtEta(r.s.buildSlotDays)}`,
+        chip: { text: STATE[r.state][0], tone: GLANCE_STATE[r.state] } })),
+      tiles: [{ label: "covered", value: `${ok}/${n}` }, { label: "on pace", value: n - ok - stuck }, { label: "stuck", value: stuck },
+        ...(pending.length ? [{ label: "next farm", value: farm(pending[0]) }] : [])],
+    };
   };
 }
-for (const w of [ascensionIsland, ascensionSteps]) { w.sizes = ["s", "m", "l"]; w.size = "s"; }
-ascensionIsland.glance = stepsGlance(ascensionIsland, "every island complete");
-ascensionSteps.glance = stepsGlance(ascensionSteps, "");
+for (const w of [ascensionIsland, ascensionSteps]) w.look = "number";
+ascensionIsland.glanceModel = stepsModel(ascensionIsland, "every island complete");
+ascensionSteps.glanceModel = stepsModel(ascensionSteps, "");

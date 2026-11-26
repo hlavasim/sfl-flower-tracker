@@ -1,7 +1,7 @@
 // BUMPKIN · level tile: the absolute level, and how far the XP is into the band (ascended) or to
 // the next level (not ascended). A view widget — no table, no settings.
 import { getTotalBumpkinLevel, _ascBaseline, _ascBandXp, _withinAscensionLevel, BUMPKIN_XP_TABLE } from "../core/engine/power-helpers.mjs";
-import { big, compact, meter, rows } from "../ui/glance.mjs";
+import { compact } from "../ui/glance.mjs";
 
 const mxp = (n) => (n >= 1e6 ? `${(n / 1e6).toLocaleString("en-US", { maximumFractionDigits: 1 })} M` : Math.round(n).toLocaleString("en-US"));
 const bar = (pct) => `<div class="w-bar"><span style="width:${Math.max(0, Math.min(100, pct)).toFixed(1)}%"></span></div>`;
@@ -50,20 +50,19 @@ export const bumpkinLevel = {
   },
 };
 
-// ── iPhone glance face: S = the level with a meter to the next one (or through the band);
-// M = the XP numbers beside it ──
-bumpkinLevel.sizes = ["s", "m"];
-bumpkinLevel.size = "s";
-bumpkinLevel.glance = ({ farm } = {}, ctx = {}, opts = {}, size = "s") => {
+// ── iPhone glance model: the level with a ring of the way to the next one (or through the band);
+// the XP numbers as tiles ──
+bumpkinLevel.look = "number";
+bumpkinLevel.glanceModel = ({ farm } = {}) => {
   if (!farm) return { empty: "No farm data." };
   if (!farm.bumpkin) return { empty: "The farm has no Bumpkin." };
   const L = levelOf(farm);
   const cap = L.asc >= 1 ? `A${L.band} L${L.within}/50 · ${L.pct.toFixed(0)} %`
     : L.level >= 200 ? "max before ascension" : `${L.pct.toFixed(0)} % to L${L.level + 1}`;
-  const head = big(`L${L.level}`) + meter(L.pct, "accent") + `<div class="g-cap">${cap}</div>`;
-  if (size === "s") return { html: head };
-  const list = [{ name: "XP", value: compact(L.xp) },
-    { name: L.asc >= 1 ? "to band end" : L.level >= 200 ? "to go" : `to L${L.level + 1}`, value: compact(L.toGo) },
-    L.asc >= 1 ? { name: "XP worth", value: `L${L.uncapped}` } : { name: "to L200", value: compact(Math.max(0, BUMPKIN_XP_TABLE[199] - L.xp)) }];
-  return { html: `<div class="g-split"><div>${head}</div>${rows(list)}</div>` };
+  return {
+    head: { value: `L${L.level}`, ring: L.pct, ringTone: "info", cap },
+    tiles: [{ label: "XP", value: compact(L.xp) },
+      { label: L.asc >= 1 ? "to band" : L.level >= 200 ? "to go" : `to L${L.level + 1}`, value: compact(L.toGo) },
+      L.asc >= 1 ? { label: "XP worth", value: `L${L.uncapped}` } : { label: "to L200", value: compact(Math.max(0, BUMPKIN_XP_TABLE[199] - L.xp)) }],
+  };
 };
