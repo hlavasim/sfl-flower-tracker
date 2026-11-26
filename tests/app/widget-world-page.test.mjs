@@ -188,3 +188,59 @@ test("auction priority: live data passes farms; a running refresh shows its prog
   assert.deepStrictEqual(worldPriority.needs(""), {});
   assert.deepStrictEqual(worldPriority.needs("5"), { prio: { res: "worldPrio", farm: "5" } });
 });
+
+test("📱 glances: summary (24 h players / windows), dataset age (orange when stale), auction rank with the farms ahead", () => {
+  assert.strictEqual(worldSummary.glance({ stats: STATS }, {}, {}, "s").html, `<div class="g-big">120k</div><div class="g-cap">played in 24 h · of 656k farms</div>`);
+  const sm = worldSummary.glance({ stats: STATS }, {}, {}, "m").html;
+  assert.match(sm, /<span>7 days<\/span><b>210k<\/b>/);
+  assert.match(sm, /656k farms · 3\.5k banned/);
+  assert.deepStrictEqual(worldSummary.glance({}, {}, {}, "s"), { empty: "The WORLD data has not loaded yet." });
+
+  assert.match(worldDataset.glance({ stats: STATS }, {}, {}, "s").html, /<div class="g-big g-warn">40\.0 h<\/div><div class="g-cap">dump age · complete/);
+  const fresh = { ...STATS, dump: { ...STATS.dump, age_ms: 3 * 3600000 } };
+  assert.match(worldDataset.glance({ stats: fresh }, {}, {}, "s").html, /g-big g-ok">3\.0 h/);
+  assert.match(worldDataset.glance({ stats: STATS }, {}, {}, "m").html, /class="g-split".*records.*656k.*unparseable<\/div><span class="g-v g-warn">3/);
+  assert.deepStrictEqual(worldDataset.glance({}, {}, {}, "m"), { empty: "The WORLD data has not loaded yet." });
+
+  const ps = worldPriority.glance({ prio: PRIO }, { farmId: "9" }, {}, "s").html;
+  assert.match(ps, /<div class="g-big">#150<\/div><div class="g-cap">auction priority of 600k · A2 L180/);
+  const pm = worldPriority.glance({ prio: PRIO }, { farmId: "9" }, {}, "m").html;
+  assert.match(pm, /class="g-split"/);
+  // nearest first: a needs +100 k, b +300 k, c has a higher Ascension
+  assert.match(pm, /<div class="g-n">a<div>A2 · L180<\/div><\/div><span class="g-v g-warn">\+100\.0 k<\/span>/);
+  assert.match(pm, /<div class="g-n">c<div>A3 · L1<\/div><\/div><span class="g-chip">HIGHER ASC<\/span>/);
+  // live data passes "a": rank 149, two rows left
+  const live = { 9: { ascension: 2, level: 181, xp: 5_200_000 } };
+  const pl = worldPriority.glance({ prio: PRIO }, { farmId: "9", prioLive: () => live }, {}, "l").html;
+  assert.match(pl, /#149/);
+  assert.strictEqual((pl.match(/class="g-row"/g) || []).length, 2);
+  assert.match(worldPriority.glance({ prio: { ...PRIO, next: [] } }, { farmId: "9" }, {}, "l").html, /nobody ahead of you/);
+  assert.deepStrictEqual(worldPriority.glance({}, { farmId: "" }, {}, "s"), { empty: "No farm — nobody to rank." });
+  assert.deepStrictEqual(worldPriority.glance({}, { farmId: "9" }, {}, "s"), { empty: "Computing the ranking…" });
+  assert.match(worldPriority.glance({ prio: { found: false } }, { farmId: "5" }, {}, "s").empty, /not in the daily dump/);
+});
+
+test("📱 glances: every distribution — your bucket and rank (S), the most common buckets with yours marked (M / L)", () => {
+  const agg = [{ key: 10, n: 70 }, { key: 12, n: 20 }, { key: 15, n: 10 }];
+  for (const w of [worldSkillPoints, worldEffLevel, worldCurrentExpansion, worldReach, worldNodes, worldAscension, worldBanStatus, worldVerified]) {
+    assert.deepStrictEqual(w.sizes, ["s", "m", "l"], w.type);
+    assert.match(w.glance({ agg: null }, {}, {}, "s").empty, /WORLD/, w.type);
+  }
+  const me = { found: true, effective_level: 12 };
+  assert.strictEqual(worldEffLevel.glance({ agg, me }, {}, {}, "s").html, `<div class="g-big g-accent">12 sp</div><div class="g-cap">you · top 11.0% · #11</div>`);
+  const m = worldEffLevel.glance({ agg, me }, {}, {}, "m").html;
+  assert.match(m, /class="g-split"/);
+  assert.deepStrictEqual([...m.matchAll(/<div class="g-n">([^<]+)</g)].map((x) => x[1]), ["10 sp", "12 sp", "15 sp"]);
+  assert.match(m, /12 sp<div>20 farms<\/div><\/div><span class="g-v g-accent">20\.0%/);
+  // past the top rows, your bucket replaces the last one
+  const many = [{ key: 1, n: 90 }, { key: 2, n: 80 }, { key: 3, n: 70 }, { key: 4, n: 1 }];
+  const m2 = worldSkillPoints.glance({ agg: many, me: { found: true, total_level: 4 } }, {}, {}, "m").html;
+  assert.deepStrictEqual([...m2.matchAll(/<div class="g-n">([^<]+)</g)].map((x) => x[1]), ["1 sp", "2 sp", "4 sp"]);
+  // without your farm: the largest bucket's share
+  assert.strictEqual(worldBanStatus.glance({ agg: [{ key: "permanent", n: 30 }, { key: null, n: 70 }] }, {}, {}, "s").html,
+    `<div class="g-big">70.0%</div><div class="g-cap">(none) · of 100 farms</div>`);
+  assert.strictEqual((worldBanStatus.glance({ agg: [{ key: "permanent", n: 30 }, { key: null, n: 70 }] }, {}, {}, "l").html.match(/class="g-row"/g) || []).length, 2);
+  // buyable nodes: your T1-equivalent count
+  assert.match(worldNodes.glance({ agg: NODES }, { farmId: "9" }, { node: "trees" }, "s").html, /g-accent">6<\/div><div class="g-cap">you · top 1\.0% · #1/);
+  assert.deepStrictEqual(worldVerified.glance({ agg: [] }, {}, {}, "s"), { empty: "No farms." });
+});

@@ -5,6 +5,8 @@
 // ("worldMe"). Every copy may pick its own activity window (scope) — and the node chart its node
 // type; a query other than the default one comes through the page context: ctx.pull(query) → the
 // store's data, undefined while it loads, null when it failed.
+import { big, compact, rows as gRows } from "../ui/glance.mjs";
+
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const n0 = (v) => Math.round(+v || 0).toLocaleString("en-US");
 const icon = (ctx, n) => (typeof ctx.icon === "function" ? ctx.icon(n) : "");
@@ -163,7 +165,7 @@ const COLUMNS = (logBar) => [
 function distWidget({ type, title, group, limit, meKey, label, defaults, better, logBar = false, rowsOf = (a) => a.map((r) => ({ key: r.key, n: +r.n || 0 })),
   colorFor = null, shareBar = false, zeros = false, extraOptions = [], query = null, meOf = null, summary = null, iconFor = null, numericKey = false, titleFn = null }) {
   const baseQuery = query || { res: "worldAgg", group, ...(limit ? { limit } : {}) };
-  return {
+  const w = {
     type, title, page: "world",
     titleFor: (o) => `${titleFn ? titleFn(o) : title}${SCOPE_TITLE[o.scope] || ""}`,
     needs: (farmId) => ({ agg: typeof baseQuery === "function" ? baseQuery({}, farmId) : baseQuery, ...(farmId ? { me: { res: "worldMe", farm: farmId } } : {}) }),
@@ -205,6 +207,30 @@ function distWidget({ type, title, group, limit, meKey, label, defaults, better,
       return { rows, summary: summary ? summary(raw, rows, { ctx, opts, mine }) : "", footer: footer + "</div>", empty: "No farms." };
     },
   };
+  w.sizes = ["s", "m", "l"];
+  w.size = "s";
+  w.glance = (data = {}, ctx = {}, opts = {}, size = "s") => distGlance(w.build(data, ctx, opts), better, size);
+  return w;
+}
+
+// ── iPhone glance face (every distribution): S = your bucket and rank, or without one the largest
+// bucket's share; M / L = the most common buckets, yours marked ──
+function distGlance(out, better, size) {
+  if (!out.rows.length) return { empty: out.empty };
+  const total = out.rows.reduce((a, r) => a + r.n, 0);
+  if (!total) return { empty: out.empty };
+  const mine = out.rows.find((r) => r.mine);
+  const rk = mine && better ? rankIn(out.rows, mine.key, (r) => better(r, mine.key)) : null;
+  const pct = (v) => (v < 0.001 ? (v * 100).toFixed(2) : (v * 100).toFixed(1)) + "%";
+  const topRow = out.rows.reduce((a, r) => (r.n > a.n ? r : a));
+  const head = mine
+    ? big(mine.label, { tone: "accent", cap: rk ? `you · top ${pct(rk.pct / 100)} · #${n0(rk.rank)}` : `you · ${pct(mine.share)} of ${compact(total)} farms` })
+    : big(pct(topRow.share), { cap: `${topRow.label} · of ${compact(total)} farms` });
+  if (size === "s") return { html: head };
+  const list = out.rows.filter((r) => r.n > 0).sort((a, b) => b.n - a.n).slice(0, size === "m" ? 3 : 6);
+  if (mine && !list.includes(mine)) list[list.length - 1] = mine;
+  const html = gRows(list.map((r) => ({ icon: r.iconHtml || "", name: r.label, sub: `${compact(r.n)} farms`, value: pct(r.share), tone: r.mine ? "accent" : "" })));
+  return { html: size === "m" ? `<div class="g-split"><div>${head}</div>${html}</div>` : head + html };
 }
 
 const slotLabel = (k) => decodeReachSlot(Number(k)).label;

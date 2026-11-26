@@ -2,6 +2,7 @@
 //   🧩 Coverage: every table with its status (inline → duplicated → core), summary tiles on top.
 //   📚 Core data tables: each table's JSON, collapsed.
 import { kpis, bigBar, pill } from "../ui/viz.mjs";
+import { big, meter, ring, tiles } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const ORDER = { inline: 0, duplicated: 1, core: 2 };
@@ -35,6 +36,18 @@ export const constantsCoverage = {
       + bigBar(s.total ? (s.core / s.total) * 100 : 100);
     return { rows, summary, footer: "", empty: "No tables listed." };
   },
+};
+
+// ── iPhone glance face: S = the share of tables already in core, with a ring; M = the three counts ──
+constantsCoverage.sizes = ["s", "m"];
+constantsCoverage.size = "s";
+constantsCoverage.glance = ({ constants } = {}, ctx = {}, opts = {}, size = "s") => {
+  if (!constants || !Array.isArray(constants.coverage)) return { empty: LOADING };
+  const s = constants.summary || {};
+  if (!s.total) return { empty: "No tables listed." };
+  const pct = (s.core / s.total) * 100;
+  if (size === "s") return { html: `<div class="g-corner">${ring(pct, { tone: pct >= 100 ? "ok" : "accent" })}</div>` + big(Math.round(pct), { unit: "%", cap: `${s.core} of ${s.total} tables in core` }) };
+  return { html: tiles([{ label: "in core", value: s.core }, { label: "duplicated", value: s.duplicated }, { label: "inline", value: s.inline }]) + meter(pct, pct >= 100 ? "ok" : "accent") };
 };
 
 export const constantsTables = {

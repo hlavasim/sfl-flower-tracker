@@ -61,6 +61,15 @@ test("without my farm the charts still stand; no data → an explanation", () =>
   assert.match(worldIslands.build({ agg: null }).empty, /WORLD/);
 });
 
+test("📱 glance: my island and its rank (S), the islands by count with mine marked (L), no data → empty", () => {
+  assert.strictEqual(worldIslands.glance({ agg: ISL, me: ME }, {}, {}, "s").html, `<div class="g-big g-accent">volcano</div><div class="g-cap">you · top 0.1% · #1</div>`);
+  const l = worldIslands.glance({ agg: ISL, me: ME }, {}, {}, "l").html;
+  assert.deepStrictEqual([...l.matchAll(/<div class="g-n">([^<]+)</g)].map((x) => x[1]), ["basic", "spring", "volcano"], "the islands nobody is on are left out");
+  assert.match(l, /volcano<div>100 farms<\/div><\/div><span class="g-v g-accent">10\.0%/);
+  assert.match(worldIslands.glance({ agg: ISL }, {}, {}, "s").html, /60\.0%.*basic · of 1k farms/);
+  assert.match(worldIslands.glance({ agg: null }, {}, {}, "m").empty, /WORLD/);
+});
+
 test("store: worldAgg asks mode=agg with the group and limit, worldMe mode=farm", async () => {
   const urls = [];
   const f = async (url) => { urls.push(url); return { ok: true, status: 200, json: async () => (url.includes("mode=agg") ? { rows: SP } : ME) }; };

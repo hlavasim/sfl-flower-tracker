@@ -51,3 +51,15 @@ test("tables: one collapsed block per core table, the JSON escaped", () => {
   const real = constantsTables.view({ constants: DATA }, {});
   assert.strictEqual((real.html.match(/<details/g) || []).length, Object.keys(DATA.tables).length);
 });
+
+test("📱 glance: S = the share already in core with a ring, M = the three counts; no data → empty", () => {
+  const s = DATA.summary;
+  const S = constantsCoverage.glance({ constants: DATA }, {}, {}, "s").html;
+  assert.match(S, /class="g-corner"><svg class="g-ring/);
+  assert.ok(S.includes(`<div class="g-big">${Math.round((s.core / s.total) * 100)}<small>%</small></div><div class="g-cap">${s.core} of ${s.total} tables in core</div>`));
+  const M = constantsCoverage.glance({ constants: DATA }, {}, {}, "m").html;
+  assert.ok(M.includes(`<span>duplicated</span><b>${s.duplicated}</b>`) && M.includes(`<span>inline</span><b>${s.inline}</b>`));
+  assert.match(M, /class="g-meter"/);
+  assert.deepStrictEqual(constantsCoverage.glance({}, {}, {}, "s"), { empty: "Loading the constants…" });
+  assert.strictEqual(constantsTables.glance, undefined, "the raw tables have no face");
+});

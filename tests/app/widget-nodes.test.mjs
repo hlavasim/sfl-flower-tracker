@@ -7,6 +7,7 @@ import { buildPowerSection } from "../../core/sections/power.mjs";
 import { buildCookingSection } from "../../core/sections/cooking.mjs";
 import { WIDGETS } from "../../widgets/registry.mjs";
 import { renderTable } from "../../ui/table.mjs";
+import { compact } from "../../ui/glance.mjs";
 import { NODES_WIDGETS, nodesSummary, nodesPlan, nodesOptions, nodesRoad, nodesCurrent, nodesAcq, nodeOptions, nodePlan, nodeRoad, nodesQuery, PLAN_STEP_CAP } from "../../widgets/nodes.mjs";
 
 // NODES as widgets, on the real section=ascension answer (nodeAcq) for farm 155498.
@@ -114,4 +115,50 @@ test("expand vs buy: the served verdict, obsidian the gate, English", () => {
   assert.match(html, /EXPAND|BUY|buy only/);
   assert.match(out.footer, /Obsidian is the gate/);
   assert.doesNotMatch(html + out.footer, /[ěščřžůň]/);
+});
+
+test("📱 glances: every nodes widget has S and a larger face; no ascension answer → empty", () => {
+  const D = { farm, asc };
+  const count = (h) => (h.match(/class="g-row"/g) || []).length;
+  for (const w of NODES_WIDGETS) {
+    assert.ok(w.sizes.includes("s") && w.sizes.length > 1 && w.sizes.includes(w.size), w.type);
+    assert.deepStrictEqual(Object.keys(w.glance({}, CTX, {}, "s")), ["empty"], w.type);
+  }
+  // summary: obsidian in hand, the sunstone price
+  assert.match(nodesSummary.glance(D, CTX, {}, "s").html, new RegExp(`<div class="g-big">${Math.floor(parseFloat(farm.inventory.Obsidian))}<small> obsidian</small>`));
+  assert.match(nodesSummary.glance(D, CTX, {}, "m").html, /class="g-tiles".*a sunstone/);
+  // plan: the first buy's payback; M = 3 steps beside the count, L = 6
+  const plan = nodesPlan.build(D, CTX, { cap: "all" }).rows;
+  const ps = nodesPlan.glance(D, CTX, { cap: "all" }, "s").html;
+  assert.ok(ps.includes(`<n>${plan[0].node}</n>`) && ps.includes(`${plan[0].label} pays back`));
+  const pm = nodesPlan.glance(D, CTX, { cap: "all" }, "m").html;
+  assert.match(pm, new RegExp(`class="g-split"><div><div class="g-big">${plan.length}<small> buys`));
+  assert.strictEqual(count(pm), Math.min(3, plan.length));
+  assert.strictEqual(count(nodesPlan.glance(D, CTX, { cap: "all" }, "l").html), Math.min(6, plan.length));
+  assert.deepStrictEqual(nodesPlan.glance({ farm, asc: { nodeAcq: { ...acq, perType: {}, merge: [] } } }, CTX, {}, "m"), { empty: "Nothing pays back within this ROI cap." });
+  // options: by payback, the unaffordable ones say what is missing
+  const opts = nodesOptions.build(D, CTX, { which: "profitable" }).rows;
+  const om = nodesOptions.glance(D, CTX, { which: "profitable" }, "l").html;
+  assert.strictEqual(count(om), Math.min(7, opts.length));
+  assert.ok(om.includes(`<div class="g-n">${opts[0].action}<div>`));
+  const poor = opts.find((o) => !o.canAfford);
+  if (poor) assert.ok(om.includes(poor.need) || opts.indexOf(poor) >= 7);
+  // road: total FLOWER to 2× T3 with a ring; L = one row per mergeable type
+  const { rows: road, tot } = nodeRoad(acq);
+  assert.match(nodesRoad.glance(D, CTX, {}, "s").html, /class="g-corner"><svg class="g-ring/);
+  assert.ok(nodesRoad.glance(D, CTX, {}, "s").html.includes("to 2× T3"));
+  assert.ok(tot.sfl > 0);
+  assert.strictEqual(count(nodesRoad.glance(D, CTX, {}, "l").html), road.length);
+  assert.match(nodesRoad.glance(D, CTX, {}, "m").html, /<span>sunstones<\/span>/);
+  // current: the real FLOWER/day of every priced node type, biggest earners first
+  const cur = nodesCurrent.build(D, CTX).rows.filter((r) => !r.units);
+  const real = cur.reduce((a, r) => a + r.realTotal, 0);
+  assert.ok(nodesCurrent.glance(D, CTX, {}, "s").html.startsWith(`<div class="g-big">${Math.abs(real) >= 10 ? compact(real) : real.toFixed(2)}<small>/d</small></div><div class="g-cap">FLOWER, real · `));
+  const best = cur.slice().sort((a, b) => b.realTotal - a.realTotal)[0];
+  assert.ok(nodesCurrent.glance(D, CTX, {}, "m").html.includes(`<div class="g-n">${best.node}<div>`));
+  assert.strictEqual(count(nodesCurrent.glance(D, CTX, {}, "m").html), 3);
+  // expand vs buy: the served verdict per type as a chip
+  const acqL = nodesAcq.glance(D, CTX, {}, "l").html;
+  assert.match(acqL, /class="g-chip g-ok">EXPAND<|class="g-chip g-info">BUY<|class="g-chip">BUY ONLY</);
+  assert.match(nodesAcq.glance(D, CTX, {}, "s").html, new RegExp(`<small>/${Object.keys(acq.perType).length}</small>`));
 });

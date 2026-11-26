@@ -3,6 +3,7 @@
 // that among every farm and the XP to pass the ones just ahead). The distribution charts are table
 // widgets in world-dist.mjs.
 import { kpis } from "../ui/viz.mjs";
+import { big, compact, rows, tiles } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const num = (v) => (v == null ? "—" : Math.round(v).toLocaleString("en-US"));
@@ -75,6 +76,17 @@ export const fmtXp = (n) => (n >= 1e6 ? (n / 1e6).toFixed(n >= 1e8 ? 1 : 2) + " 
 const key = (x) => [x.ascension, x.level, x.xp];
 const gt = (a, b) => { const A = key(a), B = key(b); for (let i = 0; i < 3; i++) { if (A[i] !== B[i]) return A[i] > B[i]; } return false; };
 const farmsWord = (i) => (i === 0 ? "farm" : "farms");
+// You and the farms just ahead, with the live refresh applied: the ones live data shows you already
+// passed come off your rank; the rest sorted nearest first.
+function prioState(P, ctx) {
+  const live = (typeof ctx.prioLive === "function" && ctx.prioLive()) || {};
+  const liveOf = (x) => Object.assign({}, x, live[x.farm_id] ? { ...live[x.farm_id], live: true } : {});
+  const me = liveOf(P.me);
+  const rows = (P.next || []).map(liveOf);
+  const passed = rows.filter((r) => !gt(r, me)).length;      // live data: the ones you are already past
+  const ahead = rows.filter((r) => gt(r, me)).sort((a, b) => (gt(a, b) ? 1 : gt(b, a) ? -1 : 0));
+  return { me, ahead, passed, rank: Math.max(1, P.rank - passed) };
+}
 
 export const worldPriority = {
   type: "world-priority",
@@ -90,13 +102,7 @@ export const worldPriority = {
     if (!prio) return { html: intro + `<div class="v-dim">Computing the ranking…</div>` };
     if (!prio.found) return { html: intro + `<div class="v-dim">Farm ${esc(String(ctx.farmId))} is not in the daily dump yet.</div>` };
     const P = prio;
-    const live = (typeof ctx.prioLive === "function" && ctx.prioLive()) || {};
-    const liveOf = (x) => Object.assign({}, x, live[x.farm_id] ? { ...live[x.farm_id], live: true } : {});
-    const me = liveOf(P.me);
-    const rows = (P.next || []).map(liveOf);
-    const passed = rows.filter((r) => !gt(r, me)).length;      // live data: the ones you are already past
-    const ahead = rows.filter((r) => gt(r, me)).sort((a, b) => (gt(a, b) ? 1 : gt(b, a) ? -1 : 0));
-    const rank = Math.max(1, P.rank - passed);
+    const { me, ahead, passed, rank } = prioState(P, ctx);
     const run = typeof ctx.prioRun === "function" ? ctx.prioRun() : null;
     const running = run && !run.err && run.done < run.total;
     const tile = (v, l, sub) => `<div class="v-kpi"><b>${esc(v)}</b><span>${esc(l)}</span><small>${esc(sub)}</small></div>`;
@@ -127,4 +133,50 @@ export const worldPriority = {
       `<div class="v-dim" style="margin-top:6px">Level comes from XP and Ascension, so at the same Ascension only XP decides. “XP you need” = how much you must gain to pass that farm (and with it every one above it in the table).</div>`;
     return { html: h };
   },
+};
+
+// ── iPhone glance faces ──
+const NOT_LOADED = "The WORLD data has not loaded yet.";
+
+// S = farms that played in the last 24 h; M = the activity windows
+worldSummary.sizes = ["s", "m"];
+worldSummary.size = "s";
+worldSummary.glance = ({ stats } = {}, ctx = {}, opts = {}, size = "s") => {
+  if (!stats || !stats.stored) return { empty: NOT_LOADED };
+  const s = stats.stored, a = stats.active || {};
+  if (size === "s") return { html: big(compact(a.d1), { cap: `played in 24 h · of ${compact(s.farms)} farms` }) };
+  return { html: tiles([{ label: "24 h", value: compact(a.d1) }, { label: "7 days", value: compact(a.d7) }, { label: "30 days", value: compact(a.d30) }]) +
+    `<div class="g-cap g-foot">${compact(s.farms)} farms · ${compact(s.banned)} banned</div>` };
+};
+
+// S = how old the daily dump is (orange past 36 h or unfinished); M = what the last import did
+worldDataset.sizes = ["s", "m"];
+worldDataset.size = "s";
+worldDataset.glance = ({ stats } = {}, ctx = {}, opts = {}, size = "s") => {
+  if (!stats || !stats.stored) return { empty: NOT_LOADED };
+  const d = stats.dump || {};
+  const stale = (d.age_ms != null && d.age_ms > 36 * 3600000) || !d.complete;
+  const head = big(fmtDur(d.age_ms), { tone: stale ? "warn" : "ok", cap: `dump age · ${d.complete ? "complete" : "in progress / partial"}` });
+  if (size === "s") return { html: head };
+  return { html: `<div class="g-split"><div>${head}</div>` + rows([{ name: "records", value: compact(d.records_done) }, { name: "changed", value: compact(d.changed) },
+    { name: "unparseable", value: compact(d.unparseable), tone: d.unparseable ? "warn" : "" }]) + `</div>` };
+};
+
+// S = your auction rank; M / L = the farms just ahead and the XP to pass each
+worldPriority.sizes = ["s", "m", "l"];
+worldPriority.size = "s";
+worldPriority.glance = ({ prio } = {}, ctx = {}, opts = {}, size = "s") => {
+  if (!ctx.farmId) return { empty: "No farm — nobody to rank." };
+  if (!prio) return { empty: "Computing the ranking…" };
+  if (!prio.found) return { empty: `Farm ${ctx.farmId} is not in the daily dump yet.` };
+  const { me, ahead, rank } = prioState(prio, ctx);
+  const head = big(`#${num(rank)}`, { tone: rank === 1 ? "ok" : "", cap: `auction priority${prio.total ? ` of ${compact(prio.total)}` : ""} · A${me.ascension} L${me.level}` });
+  if (size === "s") return { html: head };
+  const row = (r) => {
+    const need = r.ascension > me.ascension ? null : Math.max(0, r.xp - me.xp) + 1;
+    return { name: r.username || `#${r.farm_id}`, sub: `A${r.ascension} · L${r.level}${r.live ? " · live" : ""}`,
+      ...(need == null ? { chip: { text: "HIGHER ASC" } } : { value: `+${fmtXp(need)}`, tone: "warn" }) };
+  };
+  const list = ahead.length ? rows(ahead.slice(0, size === "m" ? 3 : 6).map(row)) : big("✓", { tone: "ok", cap: "nobody ahead of you" });
+  return { html: size === "m" ? `<div class="g-split"><div>${head}</div>${list}</div>` : head + list };
 };
