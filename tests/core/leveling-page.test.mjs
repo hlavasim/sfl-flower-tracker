@@ -56,7 +56,7 @@ test("v2: no result cards; ladder, matrix with Σ, steps and the frontier button
 });
 
 test("the ladder is the pinnable leveling-ladder widget; a row click still sets the target", () => {
-  assert.match(SRC, /__widgets\.renderPage\("leveling-ladder", \{ data: \{ farm: L\.farm \}, ctx: \{ plan, cfg: c, free \}/);
+  assert.match(SRC, /__widgets\.renderPage\("leveling-ladder", \{ data: \{ farm: L\.farm \}, ctx: \{ plan, cfg: c, free, rowClick: true \}/);
   assert.doesNotMatch(SRC, /PO ASCENZÍCH \(tvoje nastavení; klik = cíl\)/);
   assert.match(SRC, /closest\('\[data-frame="page:leveling-ladder"\] tr\[data-row\]'\)/);
   assert.match(SRC, /_lvlTarget\(Number\(tr\.dataset\.row\.slice\(1\)\)\)/);

@@ -39,20 +39,27 @@ export function applyRows(columns, rows, settings = {}, rowKey = (r) => r.key) {
     }).map((x) => x.r);
   }
   const sel = settings.rows || {};
-  let missing = [];
-  if (sel.mode === "top") out = out.slice(0, Math.max(1, sel.top || 5));
+  let missing = [], hidden = 0;
+  if (sel.mode === "top") {
+    const n = Math.max(1, sel.top || 5);
+    hidden = Math.max(0, out.length - n);
+    out = out.slice(0, n);
+  }
   else if (sel.mode === "picked") {
     const want = new Set((sel.picked || []).map(String));
     const have = new Set(out.map((r) => String(rowKey(r))));
     out = out.filter((r) => want.has(String(rowKey(r))));
     missing = (sel.picked || []).filter((k) => !have.has(String(k)));
   }
-  return { rows: out, missing };
+  return { rows: out, missing, hidden };
 }
 
-export function renderTable(columns, rows, settings = {}, { rowKey = (r) => r.key, empty = "Žádné řádky." } = {}) {
+// column extras: title (header tooltip), labelHtml (trusted header HTML instead of label),
+// cumulative (the cell gets the running sum of get() in the order shown).
+// opts.rowClass(row) → class names for the row.
+export function renderTable(columns, rows, settings = {}, { rowKey = (r) => r.key, empty = "Žádné řádky.", rowClass } = {}) {
   const cols = visibleColumns(columns, settings);
-  const { rows: shown, missing } = applyRows(columns, rows, settings, rowKey);
+  const { rows: shown, missing, hidden } = applyRows(columns, rows, settings, rowKey);
   const sort = settings.sort || {};
   const size = settings.textSize ? Math.min(TEXT_MAX, Math.max(TEXT_MIN, settings.textSize)) : 0;
   const cls = "w-table" + (settings.density === "compact" ? " w-compact" : "");
@@ -60,14 +67,21 @@ export function renderTable(columns, rows, settings = {}, { rowKey = (r) => r.ke
   const head = cols.map((c) => {
     const aria = sort.key === c.key ? ` aria-sort="${sort.dir === "asc" ? "ascending" : "descending"}"` : "";
     const mark = sort.key === c.key ? (sort.dir === "asc" ? " ▲" : " ▼") : "";
-    return `<th data-action="sort" data-value="${esc(c.key)}" data-sort="${esc(c.key)}"${aria}${align(c)}>${esc(c.label)}${mark}</th>`;
+    const tip = c.title ? ` title="${esc(c.title)}"` : "";
+    return `<th data-action="sort" data-value="${esc(c.key)}" data-sort="${esc(c.key)}"${aria}${tip}${align(c)}>${c.labelHtml || esc(c.label)}${mark}</th>`;
   }).join("");
-  const body = shown.map((r) => `<tr data-row="${esc(rowKey(r))}">` + cols.map((c) => {
-    const v = valueOf(c, r);
-    const cell = c.fmt ? c.fmt(v, r) : isBlank(v) ? "" : esc(v);
-    return `<td${align(c)}>${cell}</td>`;
-  }).join("") + "</tr>").join("");
-  const none = shown.length ? "" : `<tr><td colspan="${cols.length || 1}" class="w-empty">${esc(empty)}</td></tr>`;
+  const sums = new Map(cols.filter((c) => c.cumulative).map((c) => [c.key, 0]));
+  const body = shown.map((r) => {
+    const cls = rowClass ? rowClass(r) : "";
+    return `<tr data-row="${esc(rowKey(r))}"${cls ? ` class="${esc(cls)}"` : ""}>` + cols.map((c) => {
+      let v = valueOf(c, r);
+      if (c.cumulative) { sums.set(c.key, sums.get(c.key) + (+v || 0)); v = sums.get(c.key); }
+      const cell = c.fmt ? c.fmt(v, r) : isBlank(v) ? "" : esc(v);
+      return `<td${align(c)}>${cell}</td>`;
+    }).join("") + "</tr>";
+  }).join("");
+  const more = hidden ? `<tr><td colspan="${cols.length || 1}" class="w-more">… a dalších ${hidden}</td></tr>` : "";
+  const none = shown.length ? more : `<tr><td colspan="${cols.length || 1}" class="w-empty">${esc(empty)}</td></tr>`;
   const miss = missing.length ? `<div class="w-missing">Vybrané, ale teď bez řádku: ${missing.map(esc).join(", ")}</div>` : "";
   return `<table class="${cls}"${size ? ` style="font-size:${size}%"` : ""}><thead><tr>${head}</tr></thead><tbody>${body}${none}</tbody></table>${miss}`;
 }

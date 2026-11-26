@@ -2687,6 +2687,10 @@
     .w-table.w-compact td { padding: 0 6px 0 0; }
     .w-empty, .w-empty-msg { color: #e8a060; }
     .w-missing { color: #e8a060; font-size: 0.44rem; }
+    .w-more { color: var(--text-dim); padding-top: 2px; }
+    .w-table tr.w-row-hl { background: rgba(255,200,80,0.12); }
+    .w-table tr.w-row-click { cursor: pointer; }
+    .w-table tr.w-row-click:hover { background: rgba(255,255,255,0.04); }
     .w-error { color: var(--red); }
     /* the settings popover: floats under the cog, never pushes the table down */
     .w-pop { position: absolute; top: 30px; right: 8px; z-index: 60; width: min(340px, calc(100% - 16px)); background: var(--bg-card);
@@ -2743,7 +2747,13 @@
     // so — every page still renders (the engine waits for it to settle, never for it to succeed).
     const _widgetsReady = Promise.all([import("/app/widget-host.mjs"), import("/widgets/registry.mjs"), import("/ui/frame.mjs")])
       .then(([host, reg, frame]) => {
-        window.__widgets = host.createHost({ registry: reg.WIDGETS, storage: localStorage, onChange: () => window._wRerender && window._wRerender() });
+        window.__widgets = host.createHost({ registry: reg.WIDGETS, storage: localStorage, onChange: () => window._wRerender && window._wRerender(),
+          // ↻ on a widget: drop what the store holds for its needs, then the page loads them again
+          onRefresh: (id, type) => {
+            if (window.__store && typeof FARM_ID !== "undefined") for (const q of window.__widgets.needsOf(type, FARM_ID)) window.__store.invalidate(q);
+            const again = window._wRefresh || window._wRerender;
+            if (again) again();
+          } });
         window.__wFresh = frame.freshness;
         frame.bindFrames(document.body, (id, action, value) => window.__widgets.handle(id, action, value));
       }).catch((e) => console.error("[widgets] did not load", e));
@@ -19228,7 +19238,7 @@
     async function renderBoard() {
       const app = document.getElementById("app");
       if (typeof __widgets === "undefined") { app.innerHTML = _wMissing("Můj dashboard"); return; }
-      window._wRerender = renderBoard;
+      window._wRerender = renderBoard; window._wRefresh = null;
       const seq = _navSeq;
       const mine = ++_boardSeq;
       let board = __widgets.doc().boards[0];
@@ -20319,7 +20329,7 @@
 
       // Do sudu: the "fishing-age-now" widget (widgets/fishing-age-now.mjs) — free fish, then the surplus
       // beyond twice what the partner matches, then (when no baits are being made) the rest. Pinnable.
-      window._wRerender = renderFishing;
+      window._wRerender = renderFishing; window._wRefresh = () => { _fishData = null; _fishErr = null; renderFishing(); };
       const ageHtml = typeof __widgets === "undefined" ? _wMissing("Do sudu teď") : __widgets.renderPage("fishing-age-now", {
         data: { farm: _fishFarm, leveling: _fishLvl || null },
         ctx: Object.assign(_wCtx("fishing-age-now"), { lvPlan, bestWorm: bestW.worm }),
@@ -25757,8 +25767,8 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       h += panel(`🧭 NEJLEVNĚJŠÍ CESTY DO ${targetLabel.toUpperCase()}`, fh, ";font-size:0.58rem");
 
       // ── ladder: the leveling-ladder widget (widgets/leveling-ladder.mjs), pinnable; a row click sets the target ──
-      window._wRerender = _lvlRender;
-      h += typeof __widgets === "undefined" ? _wMissing("Po ascenzích") : __widgets.renderPage("leveling-ladder", { data: { farm: L.farm }, ctx: { plan, cfg: c, free },
+      window._wRerender = _lvlRender; window._wRefresh = renderLeveling;
+      h += typeof __widgets === "undefined" ? _wMissing("Po ascenzích") : __widgets.renderPage("leveling-ladder", { data: { farm: L.farm }, ctx: { plan, cfg: c, free, rowClick: true },
         fresh: __wFresh(__store.peek({ res: "leveling", farm: FARM_ID })) });
 
       // ── items × ascensions ──

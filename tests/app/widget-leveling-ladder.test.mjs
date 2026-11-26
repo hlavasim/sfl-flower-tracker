@@ -41,6 +41,29 @@ test("on the LEVELING page: the page's own plan and config are used as given", (
   assert.deepStrictEqual(out.rows.map((r) => r.cumDays), LV.levelingLadder(farm, plan, 10, 3).map((r) => r.cumDays));
 });
 
+test("the target row is highlighted, rows are clickable only where the page wires it, FLOWER has its icon, body a tooltip", () => {
+  const out = W.build({ farm, leveling, book: null }, { savedLeveling: { target: { ascension: 5, level: 50 } } });
+  const opts = { rowKey: W.rowKey, rowClass: W.rowClass };
+  assert.match(renderTable(W.columns, out.rows, W.defaults, opts), /data-row="A5" class="w-row-hl"/);
+  assert.doesNotMatch(renderTable(W.columns, out.rows, W.defaults, opts), /w-row-click/);
+  const page = W.build({ farm, leveling, book: null }, { savedLeveling: { target: { ascension: 5, level: 50 } }, rowClick: true });
+  assert.match(renderTable(W.columns, page.rows, W.defaults, opts), /data-row="A6" class="w-row-click"/);
+  const html = renderTable(W.columns, out.rows, W.defaults, opts);
+  assert.match(html, /<th[^>]*><img[^>]*><\/th>/);
+  assert.match(html, /<th[^>]*title="Volné skill body[^"]*"[^>]*>body/);
+});
+
+test("the plan is computed once for the same farm, inputs and saved config (board repaints)", () => {
+  const ctx = { savedLeveling: { target: { ascension: 6, level: 50 } } };
+  const t0 = performance.now();
+  W.build({ farm, leveling, book: null }, ctx);
+  const first = performance.now() - t0;
+  const t1 = performance.now();
+  for (let i = 0; i < 5; i++) W.build({ farm, leveling, book: null }, { savedLeveling: { target: { ascension: 6, level: 50 } } });
+  const five = performance.now() - t1;
+  assert.ok(five < first, `5 repaints ${five.toFixed(1)} ms should be cheaper than the first ${first.toFixed(1)} ms`);
+});
+
 test("no farm / no leveling inputs: an explanation, not a throw", () => {
   assert.match(W.build({ farm: null }).empty, /Chybí data farmy/);
   assert.match(W.build({ farm, leveling: null }).empty, /nenačetl/);
@@ -49,6 +72,6 @@ test("no farm / no leveling inputs: an explanation, not a throw", () => {
 test("renders: target row marked, a partly done band says where it starts", () => {
   const out = W.build({ farm, leveling, book: null }, { savedLeveling: { target: { ascension: 5, level: 50 } } });
   const html = renderTable(W.columns, out.rows, W.defaults, { rowKey: W.rowKey });
-  assert.match(html, /data-row="A5"><td>[^<]*<span[^>]*>▶ /);
+  assert.match(html, /data-row="A5"[^>]*><td>[^<]*<span[^>]*>▶ /);
   assert.match(html, /dodělat A\d+ \(L\d+→50\)/);
 });

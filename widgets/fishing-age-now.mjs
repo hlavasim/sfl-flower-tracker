@@ -12,16 +12,23 @@ const SALT_COLOR = { ok: "var(--text-dim)", partial: "#e8a060", over: "var(--red
 
 // Whether recipe fish should be kept for baits: the LEVELING plan says baits help, or a Marvel
 // route is ticked; no plan yet = keep them (the page's rule).
+// The plan is reused while the farm, the inputs and the saved config are the same (board repaints).
+let last = null;
 function baitsWanted(farm, leveling, ctx) {
   if (ctx.marvelPlanned) return true;
   let plan = ctx.lvPlan;
   if (plan === undefined) {
     plan = null;
     if (farm && leveling && leveling.inputs) {
-      try {
-        const lin = { ...leveling.inputs };
-        plan = levelingPlan(farm, lin, levelingInit(farm, lin, ctx.savedLeveling || null).cfg);
-      } catch { plan = null; }
+      const savedKey = JSON.stringify(ctx.savedLeveling || null);
+      if (last && last.farm === farm && last.leveling === leveling && last.savedKey === savedKey) plan = last.plan;
+      else {
+        try {
+          const lin = { ...leveling.inputs };
+          plan = levelingPlan(farm, lin, levelingInit(farm, lin, ctx.savedLeveling || null).cfg);
+        } catch { plan = null; }
+        last = { farm, leveling, savedKey, plan };
+      }
     }
   }
   return !plan || !!plan.fish.baitsHelp;
@@ -42,7 +49,9 @@ export const fishingAgeNow = {
     { key: "age", label: "kolik", align: "right", fmt: (v) => `<b style="color:var(--sunpetal)">${fmt(v)}</b>` },
     { key: "why", label: "proč", fmt: (v, r) => `<span style="color:${GROUP_COLOR[r.group]}">${esc(v)}</span>` },
     { key: "xp", label: "XP", align: "right", fmt: (v) => fmt(v) },
-    { key: "run", label: "sůl Σ", align: "right", fmt: (v, r) => `<span style="color:${SALT_COLOR[r.saltState]}" title="${fmt(r.salt)} na tenhle řádek">${fmt(v)}</span>` },
+    // running salt in the order shown (the table sums it), coloured against the salt held
+    { key: "run", label: "sůl Σ", align: "right", title: "sůl průběžně, v pořadí tabulky", get: (r) => r.salt, cumulative: true,
+      fmt: (v, r) => `<span style="color:${SALT_COLOR[v <= r.saltHeld + 1e-9 ? "ok" : v - r.salt < r.saltHeld ? "partial" : "over"]}" title="${fmt(r.salt)} na tenhle řádek">${fmt(v)}</span>` },
     { key: "qty", label: "máš", align: "right", extra: true, fmt: (v) => fmt(v) },
     { key: "keep", label: "necháš", align: "right", extra: true, fmt: (v) => (v ? fmt(v) : "") },
     { key: "salt", label: "sůl", align: "right", extra: true, fmt: (v) => fmt(v) },
@@ -67,7 +76,7 @@ export const fishingAgeNow = {
         : r.group === "surplus" ? `přebytek: máš ${fmt(r.qty)}, necháš ${fmt(r.keep)} (2× na ${fmt(ownedLc[String(r.partner).toLowerCase()] || 0)}× ${r.partner})`
         : `drží ji ${r.bait}, ale baity teď neděláš`;
       return {
-        ...r, mult, why, xp: r.age * r.agedXp * mult, run,
+        ...r, mult, why, xp: r.age * r.agedXp * mult, run, saltHeld,
         saltState: run <= saltHeld + 1e-9 ? "ok" : before < saltHeld ? "partial" : "over",
         iconHtml: ctx.icon ? ctx.icon(r.name) : "",
       };

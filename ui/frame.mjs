@@ -25,7 +25,7 @@ export function renderFrame({ id, title, place, body, fresh, pinned = 0, w = 6, 
   const btn = (action, label, title, value = "", cls = "") =>
     `<button type="button" class="w-btn${cls}" data-action="${action}" data-value="${esc(value)}" title="${esc(title)}" aria-label="${esc(title)}">${label}</button>`;
   const board = place === "board";
-  const tools = btn("cog", "⚙", "nastavení", "", settingsOpen ? " on" : "") + (board
+  const tools = btn("refresh", "↻", "načíst znovu") + btn("cog", "⚙", "nastavení", "", settingsOpen ? " on" : "") + (board
     ? btn("remove", "✕", "odebrat z dashboardu")
     : btn("pin", pinned ? `📌 ${pinned}` : "📌", pinned ? `připnuto ${pinned}× — připnout další kopii` : "připnout na můj dashboard"));
   const grip = board ? `<span class="w-grip" data-drag="item" title="táhni a pusť na jiný widget">⠿</span>` : "";

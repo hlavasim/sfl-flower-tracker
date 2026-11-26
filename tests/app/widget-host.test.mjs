@@ -105,6 +105,25 @@ test("the settings popover: a tab sticks across renders; settings-close closes i
   assert.match(h.renderPage("t", { data: DATA }), /data-value="cols" aria-selected="true"/);
 });
 
+test("pin goes to the first board when there is no 'main' one (a synced document from elsewhere)", () => {
+  const storage = mem();
+  storage.setItem(BOARDS_KEY, JSON.stringify({ schema: 1, boards: [{ id: "x", name: "X", items: [] }], page: {} }));
+  const h = createHost({ registry: { t: T }, storage });
+  assert.strictEqual(h.handle("page:t", "pin", ""), true);
+  assert.strictEqual(h.doc().boards[0].items.length, 1);
+});
+
+test("refresh: the frame offers it and the host hands it to the page with the widget's type", () => {
+  const got = [];
+  const h = createHost({ registry: { t: T }, storage: mem(), onRefresh: (id, type) => got.push([id, type]) });
+  assert.match(h.renderPage("t", { data: DATA }), /data-action="refresh"/);
+  assert.strictEqual(h.handle("page:t", "refresh", ""), true);
+  h.handle("page:t", "pin", "");
+  const [item] = h.doc().boards[0].items;
+  h.handle(`b:main:${item.i}`, "refresh", "");
+  assert.deepStrictEqual(got, [["page:t", "t"], [`b:main:${item.i}`, "t"]]);
+});
+
 test("unknown frames, types and actions are ignored, not thrown", () => {
   const h = createHost({ registry: { t: T }, storage: mem() });
   assert.strictEqual(h.handle("page:nope", "sort", "v"), false);

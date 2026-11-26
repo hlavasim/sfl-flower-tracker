@@ -66,6 +66,29 @@ test("render: density and text size reach the markup; the sorted column is marke
   assert.match(html, /data-sort="qty"[^>]*aria-sort="descending"/);
 });
 
+test("render: top N says how many rows it left out", () => {
+  assert.match(renderTable(COLS, ROWS, { rows: { mode: "top", top: 2 } }, { rowKey: key }), /… a dalších 1/);
+  assert.doesNotMatch(renderTable(COLS, ROWS, { rows: { mode: "top", top: 3 } }, { rowKey: key }), /a dalších/);
+  assert.doesNotMatch(renderTable(COLS, ROWS, {}, { rowKey: key }), /a dalších/);
+});
+
+test("render: a header tooltip, a trusted header label, and a widget's row classes", () => {
+  const cols = [{ key: "name", label: "Ryba", title: "jméno <ryby>" }, { key: "qty", label: "Q", labelHtml: "<img alt=f>" }];
+  const html = renderTable(cols, ROWS, {}, { rowKey: key, rowClass: (r) => (r.name === "Cod" ? "w-row-hl" : "") });
+  assert.match(html, /<th[^>]*title="jméno &lt;ryby&gt;"[^>]*>Ryba/);
+  assert.match(html, /<th[^>]*><img alt=f><\/th>/);
+  assert.match(html, /<tr data-row="Cod" class="w-row-hl">/);
+  assert.match(html, /<tr data-row="Tuna">/);
+});
+
+test("render: a cumulative column sums in the order shown, also when sorted by another column", () => {
+  const cols = [{ key: "name", label: "N" }, { key: "qty", label: "Q" }, { key: "run", label: "Σ", get: (r) => r.qty, cumulative: true, fmt: (v) => `[${v}]` }];
+  const plain = renderTable(cols, ROWS, {}, { rowKey: key });
+  assert.deepStrictEqual([...plain.matchAll(/\[(\d+)\]/g)].map((m) => +m[1]), [9, 109, 119]);
+  const sorted = renderTable(cols, ROWS, { sort: { key: "qty", dir: "asc" } }, { rowKey: key });
+  assert.deepStrictEqual([...sorted.matchAll(/\[(\d+)\]/g)].map((m) => +m[1]), [9, 19, 119]);
+});
+
 test("render: an empty result says so", () => {
   assert.match(renderTable(COLS, [], {}, { rowKey: key, empty: "Nic." }), /Nic\./);
 });

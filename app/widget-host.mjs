@@ -12,7 +12,7 @@ import { loadBoards, saveBoards, pin, unpin, moveItemTo, resizeItem, updateItemS
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const TABLE_ACTIONS = new Set(["col-toggle", "col-move", "sort", "rows-mode", "rows-top", "pick", "density", "text-size", "reset"]);
 
-export function createHost({ registry, storage, onChange = () => {} }) {
+export function createHost({ registry, storage, onChange = () => {}, onRefresh = () => {} }) {
   let doc = loadBoards(storage);
   const open = new Map();   // frame id → the popover's active tab
 
@@ -36,7 +36,7 @@ export function createHost({ registry, storage, onChange = () => {} }) {
   function body(widget, settings, data, ctx, tab) {
     try {
       const out = widget.build(data || {}, ctx || {});
-      const opts = { rowKey: widget.rowKey, rowLabel: widget.rowLabel };
+      const opts = { rowKey: widget.rowKey, rowLabel: widget.rowLabel, rowClass: widget.rowClass };
       return {
         html: out.rows.length ? renderTable(widget.columns, out.rows, settings, opts) + (out.footer || "")
           : `<div class="w-empty-msg">${esc(out.empty || "Nic k zobrazení.")}</div>`,
@@ -73,6 +73,7 @@ export function createHost({ registry, storage, onChange = () => {} }) {
   function handle(frameId, action, value) {
     const f = parse(frameId);
     if (!f || !f.widget && action !== "remove") return false;
+    if (action === "refresh") { onRefresh(frameId, f.type); return true; }
     if (action === "cog") {
       open.has(frameId) ? open.delete(frameId) : open.set(frameId, "cols");
       onChange(frameId);
@@ -95,7 +96,8 @@ export function createHost({ registry, storage, onChange = () => {} }) {
     }
     if (f.place === "page" && action === "pin") {
       const settings = effective(f.widget, pageSettings(doc, f.type));
-      return save(pin(doc, { type: f.type, settings }), frameId);
+      // the first board: a synced document from another device may have no "main"
+      return save(pin(doc, { type: f.type, settings }, doc.boards[0].id), frameId);
     }
     if (f.place === "board") {
       if (action === "remove") { open.delete(frameId); return save(unpin(doc, f.boardId, f.item.i), frameId); }
