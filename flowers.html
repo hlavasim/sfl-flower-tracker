@@ -14990,7 +14990,12 @@
       _wCtxMap["roadmap-income"] = ctx;
       _wCtxMap["roadmap-buy-path"] = ctx;
       _wCtxMap["roadmap-offers"] = ctx;
+      // the panels below the buy path (widgets/roadmap-extras.mjs) also show NPCs
+      const npcIcon = (n) => `<img src="${getNpcIcon(n)}" onerror="this.style.display='none'" alt="" style="height:1.3em;vertical-align:-0.25em;margin-right:3px">`;
+      const extras = () => ({ ...ctx(), npcIcon });
+      for (const t of rmExtraWidgets) _wCtxMap[t] = extras;
     }
+    const rmExtraWidgets = ["roadmap-gifts", "roadmap-deliveries", "roadmap-animal-feed", "roadmap-animal-life"];
     /*
      * Roadmap settings as sent to section=roadmap. The planner does not reinvest what the repay plan
      * takes to BTC: unless the owner typed a figure, the daily withdrawal last shown on the
@@ -15050,7 +15055,7 @@
       // animals, settings) stays page HTML. A widget's own change repaints only its frame.
       window._wRerender = () => {
         if (getPage() !== "roadmap" || !_roadmapServer) return;
-        for (const t of ["roadmap-income", "roadmap-buy-path", "roadmap-offers"]) { const n = document.getElementById("rmw-" + t); if (n) n.innerHTML = _rmWidget(t); }
+        for (const t of ["roadmap-income", "roadmap-buy-path", "roadmap-offers", ...rmExtraWidgets]) { const n = document.getElementById("rmw-" + t); if (n) n.innerHTML = _rmWidget(t); }
       };
       window._wRefresh = refresh;
       const _w = (t) => `<div id="rmw-${t}">${_rmWidget(t)}</div>`;
@@ -15089,10 +15094,8 @@
       h += `</div>`;
       h += `<div id="buy-skills" style="display:none">` + roadmapSkillsViewHtml(settings) + `</div>`;
       h += `</div>`;
-      h += _rmCollapse("🎁 Gifts — best NPC flower gifts", roadmapGiftsHtml(settings));
-      h += _rmCollapse("🚚 Deliveries — which are worth doing", roadmapDeliveriesHtml(settings));
-      h += _rmCollapse("🐔 Animal feeding — what to feed, worth it?", roadmapAnimalFeedHtml(settings));
-      h += _rmCollapse("📈 Animal lifecycle — net per level", roadmapAnimalLifecycleHtml(settings));
+      // gifts, deliveries and the animals: widgets over section=roadmap's extras (pinnable)
+      h += rmExtraWidgets.map(_w).join("");
       // ── Controls ──
       h += `<details class="v-rm-sec"><summary>⚙ Settings &amp; assumptions — income source, efficiency sliders, restocks, ticket value, filters</summary><div class="v-rms">`;
       h += `<div class="v-rms-card">`;

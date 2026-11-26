@@ -22,7 +22,10 @@ import { roadmapPerPlot } from "../engine/roadmap.mjs";
 import {
   DEFAULT_FLOWER_POINTS, BUMPKIN_GIFTS_DATA, getFlowerGiftPoints, getFlowerChainHours, detectFlowerBoosts, computeFlowerMultiplier,
   dashCalculateDeliveryTickets, roadmapItemCost, roadmapGiftRewardValue, _setItemCostMaps,
+  roadmapGiftRewardLabel, roadmapKeyValue, KEY_CHEST, dashGetCurrentChapter, BUMPKIN_FLOWER_BONUSES,
 } from "../engine/gifts-deliveries.mjs";
+import { FEED_RECIPES, FEED_XP_TABLE, FEED_QTY, getFeedCostPerUnit } from "../engine/power-costs.mjs";
+import { ANIMAL_LEVELS, marksToSfl } from "../engine/power-helpers.mjs";
 import { buildPricesSection } from "./prices.mjs";
 import { buildPetsSection } from "./pets.mjs";
 
@@ -153,10 +156,13 @@ export function buildRoadmapSection(snapshots, settings = {}) {
     _setItemCostMaps({ productionCost: {}, marketValue: {} });
   }
   const todo = buildTodo(rs);
+  // the gifts / deliveries / animal panels' numbers (the widgets roadmap-gifts, -deliveries,
+  // -animal-feed, -animal-life render them); after _setItemCostMaps, which item costs read
+  const extras = buildExtras(rs, settings.now);
 
   // effUnmeasured: no harvest efficiency could be measured, so every figure is at theoretical
   // (100 %) throughput — the page says so instead of presenting it as "your last 7 days".
-  return { eff, effUnmeasured: !(eff.meta && eff.meta.measured), currentProd, startIncome, sim, profitability, todo, startup, startupError };
+  return { eff, effUnmeasured: !(eff.meta && eff.meta.measured), currentProd, startIncome, sim, profitability, todo, extras, startup, startupError };
 }
 
 function _fmtFlower(v) {
@@ -345,3 +351,148 @@ function buildProfitability(settings) {
   return { groups, coinsFree: cf, coins, miningChain: { byCat: _miCh.byCat, mode: _miCh.mode, fee: _miCh.fee, peak: _miCh.peak } };
 }
 
+
+// ── The ROADMAP panels below the buy path, ported from the page's roadmapGiftsHtml,
+// roadmapDeliveriesHtml, roadmapAnimalFeedHtml and roadmapAnimalLifecycleHtml: the same loops,
+// plain rows instead of HTML. ──
+function buildExtras(settings, now = Date.now()) {
+  const ps = _getPowerContext();
+  const out = { gifts: giftsOf(ps), ...deliveriesOf(ps, settings, now), animalFeed: animalFeedOf(ps), animalLife: animalLifeOf(ps),
+    keys: Object.fromEntries(Object.keys(KEY_CHEST).map((k) => [k, roadmapKeyValue(k)])) };
+  return JSON.parse(JSON.stringify(out, (k, v) => (typeof v === "number" && !isFinite(v) ? null : v)));
+}
+
+// Flowers → NPC gifts → keys: per NPC the flower with most points per grow-day, the repeat reward's
+// value and the FLOWER a day that gifting it once a day earns; beds = how many NPCs one can keep up.
+function giftsOf(powerState) {
+  const { farm, capacity } = powerState;
+  const skills = (farm.bumpkin && farm.bumpkin.skills) || {};
+  const hasBB = !!skills["Blossom Bonding"];
+  const nftFloor = (name) => { const nd = powerState.nftData || {}; for (const tk of ["collectibles", "wearables"]) for (const it of (nd[tk] || [])) if (it.name === name) return parseFloat(it.floor) || 0; return 0; };
+  const flowers = Object.keys(DEFAULT_FLOWER_POINTS);
+  // the farm's flower boosts shorten the grow chain (the page had them applied globally)
+  let flowerMult = 1; try { flowerMult = computeFlowerMultiplier(detectFlowerBoosts(farm)); } catch {}
+  const growH = {}; for (const f of flowers) { let hrs = 0; try { hrs = getFlowerChainHours(f, undefined, flowerMult); } catch {} growH[f] = hrs > 0 ? hrs : 24; }
+  const rows = [];
+  for (const [npc, data] of Object.entries(BUMPKIN_GIFTS_DATA)) {
+    if (!data.repeats) continue;
+    let best = null;
+    for (const f of flowers) { const pts = getFlowerGiftPoints(npc, f, hasBB); const days = Math.max(1, growH[f] / 24); const eff = pts / days; if (!best || eff > best.eff) best = { f, pts, days, eff }; }
+    const bonusMap = BUMPKIN_FLOWER_BONUSES[npc] || {};
+    let liked = null; for (const f of Object.keys(bonusMap)) { const pts = getFlowerGiftPoints(npc, f, hasBB); const days = Math.max(1, growH[f] / 24); const eff = pts / days; if (!liked || eff > liked.eff) liked = { f, pts, days, eff }; }
+    const repu = data.repeats;
+    const repVal = roadmapGiftRewardValue(repu, nftFloor);
+    const perGift = repu.fp > 0 ? repVal * best.pts / repu.fp : 0;
+    const daysToReward = best.eff > 0 ? repu.fp / best.eff : Infinity;
+    const perDay = (repVal > 0 && isFinite(daysToReward) && daysToReward > 0) ? repVal / daysToReward : 0;
+    rows.push({ npc, flower: best.f, pts: best.pts, growDays: best.days, liked: liked ? { flower: liked.f, pts: liked.pts, days: liked.days } : null,
+      repVal, repLabel: roadmapGiftRewardLabel(repu), perGift, daysToReward, perDay });
+  }
+  rows.sort((a, b) => b.perDay - a.perDay);
+  return { rows, beds: getCapacityCount("flowers", capacity) || 0 };
+}
+
+// Deliveries + bounties: the reward (SFL, coins, tickets × the ticket value, marks, keys, items)
+// minus what you hand over.
+function deliveriesOf(powerState, settings, now) {
+  const { farm, p2pPrices, exchangeRates } = powerState;
+  const cFree = roadmapCoinsFree(settings);
+  const estItem = (name) => roadmapItemCost(name);
+  let chapter = {}; try { chapter = dashGetCurrentChapter(now) || {}; } catch {}
+  const ticketName = chapter.ticket || "";
+  const TV = (typeof settings.ticketValueSfl === "number" ? settings.ticketValueSfl : 0);
+  const coinSfl = (c) => (c > 0 && exchangeRates.coinsPerSFL > 0) ? c / exchangeRates.coinsPerSFL : 0;
+  const dels = [];
+  for (const o of ((farm.delivery && farm.delivery.orders) || [])) {
+    if (o.completedAt) continue;
+    let cost = 0; for (const [it, q] of Object.entries(o.items || {})) cost += (it === "coins") ? (cFree ? 0 : coinSfl(q)) : estItem(it) * q;
+    const r = o.reward || {};
+    let rv = (r.sfl || 0) + coinSfl(r.coins || 0);
+    let tickets = 0; try { tickets = dashCalculateDeliveryTickets(o.from, farm, now) || 0; } catch {}
+    rv += tickets * TV;
+    for (const [it, q] of Object.entries(r.items || {})) { if (it === ticketName) continue; rv += (KEY_CHEST[it] ? roadmapKeyValue(it) : (p2pPrices[it] || estItem(it) || 0)) * q; }
+    dels.push({ id: o.id || o.from, from: o.from, needs: Object.entries(o.items || {}).map(([item, qty]) => ({ item, qty })), cost, tickets, rv, net: rv - cost });
+  }
+  dels.sort((a, b) => b.net - a.net);
+  const completed = new Set(((farm.bounties && farm.bounties.completed) || []).map((x) => (typeof x === "string" ? x : (x && x.id))));
+  const bos = [];
+  for (const req of ((farm.bounties && farm.bounties.requests) || [])) {
+    if (completed.has(req.id)) continue;
+    let rv = coinSfl(req.coins || 0), tickets = 0, marks = 0;
+    for (const [it, q] of Object.entries(req.items || {})) {
+      if (it === ticketName) { tickets += q; rv += q * TV; }
+      else if (it === "Mark") { marks += q; rv += marksToSfl(q); }
+      else rv += (KEY_CHEST[it] ? roadmapKeyValue(it) : (p2pPrices[it] || estItem(it) || 0)) * q;
+    }
+    const cost = estItem(req.name) || 0;
+    bos.push({ id: req.id, name: req.name, rv, cost, tickets, marks, net: rv - cost });
+  }
+  bos.sort((a, b) => b.net - a.net);
+  return { deliveries: dels, bounties: bos, ticketName, ticketValue: TV };
+}
+
+const ANIMAL_CATS = [["chickens", "Chicken"], ["cows", "Cow"], ["sheep", "Sheep"]];
+function foodXpAtLevel(food, lvl) {
+  for (const row of FEED_XP_TABLE) if (lvl >= row.min && lvl <= row.max) return row.xp[food] || 0;
+  const last = FEED_XP_TABLE[FEED_XP_TABLE.length - 1];
+  return (last && last.xp[food]) || 0;
+}
+// Per pen: produce − sickness − feed for every food (food changes only the feed), the best first.
+function animalFeedOf(powerState) {
+  const { capacity, p2pPrices, stockMods } = powerState;
+  const skills = (powerState.farm.bumpkin && powerState.farm.bumpkin.skills) || {};
+  const blocks = [];
+  for (const [cat, animalType] of ANIMAL_CATS) {
+    const animals = (capacity.animalDetails && capacity.animalDetails[cat]) || [];
+    if (!animals.length) continue;
+    const oeff = roadmapOwnedEffects(cat);
+    const produce = (getAnimalCatSfl(cat, capacity, oeff, p2pPrices).totalSfl) || 0;
+    const sick = (calcSicknessCost(cat, capacity, p2pPrices, powerState.boostItems, skills).costPerDay) || 0;
+    const fc = calcAnimalFeedCost(cat, capacity, p2pPrices, oeff, stockMods);
+    const cyclesPerDay = fc.cyclesPerDay || 0, effFeedQty = fc.effectiveFeedQty || (FEED_QTY[animalType] || 1);
+    const lvls = ANIMAL_LEVELS[animalType];
+    const golden = !!fc.isGolden;
+    const rows = [];
+    for (const food of Object.keys(FEED_RECIPES)) {
+      let costCycle = 0;
+      for (const a of animals) {
+        const lvl = a.level;
+        const xpPerCycle = lvl >= 15 ? (lvls[15] - lvls[14]) : ((lvls[lvl + 1] || lvls[15]) - lvls[lvl]);
+        const foodXp = foodXpAtLevel(food, lvl) || 1;
+        const noOfFeed = Math.max(1, Math.ceil(xpPerCycle / foodXp));
+        costCycle += noOfFeed * effFeedQty * getFeedCostPerUnit(food, p2pPrices, stockMods);
+      }
+      const feedDay = golden ? 0 : costCycle * cyclesPerDay;
+      rows.push({ food, feedDay, net: produce - sick - feedDay });
+    }
+    rows.sort((a, b) => b.net - a.net);
+    blocks.push({ animalType, count: animals.length, produce, sick, golden, rows });
+  }
+  return blocks;
+}
+// One animal at each level 1-15: produce − feed − sickness, your boosts; the peak and the last level
+// that pays.
+function animalLifeOf(powerState) {
+  const { capacity, p2pPrices, stockMods } = powerState;
+  const skills = (powerState.farm.bumpkin && powerState.farm.bumpkin.skills) || {};
+  const blocks = [];
+  for (const [cat, animalType] of ANIMAL_CATS) {
+    const have = (capacity.animalDetails && capacity.animalDetails[cat]) || [];
+    if (!have.length) continue;
+    const oeff = roadmapOwnedEffects(cat);
+    const per = [];
+    for (let L = 1; L <= 15; L++) {
+      const fakeCap = Object.assign({}, capacity, { animalDetails: Object.assign({}, capacity.animalDetails, { [cat]: [{ level: L, experience: 0 }] }) });
+      let produce = 0, feed = 0, sick = 0;
+      try { produce = (getAnimalCatSfl(cat, fakeCap, oeff, p2pPrices).totalSfl) || 0; } catch {}
+      try { feed = (calcAnimalFeedCost(cat, fakeCap, p2pPrices, oeff, stockMods).costPerDay) || 0; } catch {}
+      try { sick = (calcSicknessCost(cat, fakeCap, p2pPrices, powerState.boostItems, skills).costPerDay) || 0; } catch {}
+      per.push({ L, net: produce - feed - sick });
+    }
+    let peak = per[0], lastPos = 0;
+    for (const p of per) { if (p.net > peak.net) peak = p; if (p.net > 0.0001) lastPos = p.L; }
+    const avgL = Math.round(have.reduce((t, a) => t + (a.level || 0), 0) / have.length);
+    blocks.push({ animalType, per, peak: peak.L, lastPos, avgL });
+  }
+  return blocks;
+}
