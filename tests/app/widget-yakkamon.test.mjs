@@ -4,6 +4,7 @@ import * as Y from "../../widgets/yakkamon.mjs";
 import { YK, ykPoints, ykNeedFor, ykMult } from "../../core/yakkamon.mjs";
 import { renderTable } from "../../ui/table.mjs";
 import { createHost } from "../../app/widget-host.mjs";
+import { renderLook, looksFor, TEMPLATE_IDS } from "../../ui/glance-templates.mjs";
 
 // YAKKAMON as widgets: the live board, what a placing costs, the planner and calculator (per-copy
 // options over the page's saved settings), the published tables and the verdict.
@@ -163,57 +164,79 @@ test("the host renders a planner copy with its own options; views have a cog too
   assert.match(h.renderPage("yk-live", { data: {}, ctx: ctx() }), /data-action="cog"/, "every widget has a cog (title, options)");
 });
 
-test("📱 glance: live S = your trainer number with the tier ring; M = the #10/#50/#100 cut-offs; L prices them in FLOWER", () => {
-  assert.deepStrictEqual(Y.ykLive.sizes, ["s", "m", "l"]);
-  const s = Y.ykLive.glance({}, ctx(), {}, "s").html;
-  assert.match(s, /^<div class="g-corner"><svg class="g-ring g-warn"/);
-  assert.match(s, /<div class="g-big">#41\.2k<\/div><div class="g-cap">you'd be · Platinum egg · 58\.8k left<\/div>$/);
-  const m = Y.ykLive.glance({}, ctx(), {}, "m").html;
-  assert.match(m, /^<div class="g-split">/);
-  assert.strictEqual((m.match(/class="g-row"/g) || []).length, 3);
-  assert.match(m, /#50<div>last Storm<\/div><\/div><span class="g-v">150k</);
-  const l = Y.ykLive.glance({}, ctx(), {}, "l").html;
-  assert.strictEqual((l.match(/class="g-row"/g) || []).length, 5);
-  assert.match(l, /#50<div>last Storm · ≈ 68\.2k FLOWER<\/div>/);         // ceil(150,000 / 2.2)
-  // no board yet: M falls back to the number alone
-  assert.doesNotMatch(Y.ykLive.glance({}, ctx({ live: { ...LIVE, board: null } }), {}, "m").html, /g-row/);
-  assert.match(Y.ykLive.glance({}, ctx({ live: null }), {}, "s").empty, /Loading live data/);
-  assert.match(Y.ykLive.glance({}, ctx({ live: null, liveErr: "502" }), {}, "m").empty, /\(502\)/);
+test("📱 glance models: every YAKKAMON widget has a model and a natural look, no hand-written face, and at least three looks", () => {
+  const LOOKS = { "yk-live": "number", "yk-placing": "chart-2", "yk-facts": "number", "yk-planner": "number", "yk-calculator": "number",
+    "yk-tiers": "bars-4", "yk-sources": "list-4", "yk-ranks": "list-4", "yk-eggs": "icons-1", "yk-verdict": "list-4" };
+  for (const w of ALL) {
+    assert.strictEqual(w.look, LOOKS[w.type], w.type);
+    assert.ok(TEMPLATE_IDS.includes(w.look), w.type);
+    assert.strictEqual(w.glance, undefined, `${w.type}: the hand-written face is gone`);
+    const m = w.glanceModel({}, ctx(), {});
+    assert.ok(m.head && m.items.length, w.type);
+    assert.ok(looksFor(m).length >= 3, w.type);
+  }
 });
 
-test("📱 glance: placing S = the #50 threshold, its move and line; M adds #3 / #10 / #100", () => {
-  const s = Y.ykPlacing.glance({}, ctx(), {}, "s").html;
-  assert.match(s, /<div class="g-big">20\.6k<small> pts<\/small><\/div><div class="g-cap">#50 Storm cut-off · \+2\.4k in 24 h<\/div><svg class="g-spark g-warn"/);
-  const m = Y.ykPlacing.glance({}, ctx(), {}, "m").html;
-  assert.match(m, /#10<div>\+50\.1k in 24 h<\/div><\/div><span class="g-v g-warn">129k</);
-  assert.strictEqual((m.match(/class="g-row"/g) || []).length, 3);
-  assert.match(Y.ykPlacing.glance({}, ctx({ hist: HIST.slice(0, 1) }), {}, "s").empty, /Not enough snapshots/);
+test("📱 glance model, live: your trainer number with the tier ring; the leaderboard cut-offs priced in FLOWER", () => {
+  const m = Y.ykLive.glanceModel({}, ctx());
+  assert.deepStrictEqual([m.head.value, m.head.cap, m.head.ringTone], ["#41.2k", "you'd be · Platinum egg · 58.8k left", "warn"]);
+  assert.strictEqual(Math.round(m.head.ring), 41);                              // (41,230 − 1,000) / (100,000 − 1,000)
+  assert.strictEqual(m.items.length, 8);
+  assert.deepStrictEqual(m.items.find((i) => i.name === "#50"), { icon: "⛈️", name: "#50", sub: "last Storm · ≈ 68.2k FLOWER", value: "150k", pct: (150000 / 199000) * 100 });
+  assert.match(renderLook(m, "number").html, /<div class="gx-num">#41\.2k<\/div><div class="gx-cap">you'd be · Platinum egg · 58\.8k left<\/div>/);
+  assert.deepStrictEqual(Y.ykLive.glanceModel({}, ctx({ live: { ...LIVE, board: null } })).items, [], "no board yet: the number alone");
+  assert.match(Y.ykLive.glanceModel({}, ctx({ live: null })).empty, /Loading live data/);
+  assert.match(Y.ykLive.glanceModel({}, ctx({ live: null, liveErr: "502" })).empty, /\(502\)/);
 });
 
-test("📱 glance: planner S = the week-1 deposit; M = three tiles; L = the tranches", () => {
-  const s = Y.ykPlanner.glance({}, ctx(), {}, "s").html;
-  assert.match(s, /^<div class="g-big g-ok">943k<small> FLOWER<\/small><\/div><div class="g-cap">week 1 deposit · [\d.]+M pts · then 8 top-ups<\/div>$/);
-  const m = Y.ykPlanner.glance({}, ctx(), {}, "m").html;
-  assert.match(m, /<span>Week 1<\/span><b>943k<\/b>/);
-  assert.match(m, /<span>Top-ups<\/span><b>[\d.]+k<\/b><small>8 weeks<\/small>/);
-  assert.match(m, /<span>Total<\/span><b>960k<\/b><small>9 deposits<\/small>/);
-  const l = Y.ykPlanner.glance({}, ctx(), {}, "l").html;
-  assert.strictEqual((l.match(/class="g-row"/g) || []).length, 6);
-  assert.match(l, /Week 1<div>Aug 10 · 3\.0×<\/div><\/div><span class="g-v g-ok">943k</);
-  assert.match(Y.ykPlanner.glance({}, ctx({ live: null }), {}, "s").empty, /Waiting for the live FLOWER and BTC prices/);
+test("📱 glance model, placing: the #50 threshold, its move and its line; every tracked tier with its move", () => {
+  const m = Y.ykPlacing.glanceModel({}, ctx());
+  assert.deepStrictEqual([m.head.value, m.head.unit, m.head.tone, m.head.cap], ["20.6k", " pts", "warn", "#50 Storm cut-off · +2.4k in 24 h"]);
+  assert.strictEqual(m.items.length, 4);
+  assert.deepStrictEqual(m.items[1], { icon: "⛈️", name: "#10", sub: "+50.1k in 24 h", value: "129k", tone: "warn", pct: (129126 / 380252) * 100 });
+  assert.deepStrictEqual(m.series, [18229, 19016, 19812, 20592]);
+  assert.match(renderLook(m, "chart-2").html, /<div class="gx-num g-warn">20\.6k<small> pts<\/small><\/div>/);
+  assert.match(Y.ykPlacing.glanceModel({}, ctx({ hist: HIST.slice(0, 1) })).empty, /Not enough snapshots/);
 });
 
-test("📱 glance: calculator S = the points; M splits base / bonus / per FLOWER", () => {
-  assert.strictEqual(Y.ykCalculator.size, "s");
-  const s = Y.ykCalculator.glance({}, ctx(), {}, "s").html;
-  assert.match(s, /^<div class="g-big g-ok">1\.6k<small> pts<\/small><\/div><div class="g-cap">500 FLOWER in week 1 · 3\.0×<\/div>$/);
-  const m = Y.ykCalculator.glance({}, ctx(), { amount: 5000, week: 2 }, "m").html;
-  assert.match(m, /5,000 FLOWER in week 2 · 2\.8×/);
-  assert.match(m, /Bulk bonus<\/div><span class="g-v g-accent">\+2k</);       // 5,000 × 0.4 = 2,000
-  assert.match(m, /Per FLOWER<\/div><span class="g-v">3\.20 pts</);           // (14,000 + 2,000) / 5,000
-  assert.match(Y.ykCalculator.glance({}, ctx(), { amount: 0 }, "s").empty, /Enter a deposit amount/);
+test("📱 glance model, planner: the week-1 deposit; every tranche (bar = share of the biggest)", () => {
+  const m = Y.ykPlanner.glanceModel({}, ctx());
+  assert.deepStrictEqual([m.head.value, m.head.unit, m.head.tone], ["943k", " 🌸", "ok"]);
+  assert.match(m.head.cap, /^week 1 deposit · [\d.]+M pts · then 8 top-ups$/);
+  assert.strictEqual(m.items.length, 9);
+  assert.deepStrictEqual(m.items[0], { icon: "💰", name: "Week 1", sub: "Aug 10 · 3.0×", value: "943k", tone: "ok", pct: 100 });
+  assert.deepStrictEqual(m.tiles.map((t) => t.label), ["Week 1", "Top-ups", "Total"]);
+  assert.strictEqual(m.tiles[2].value, "960k");
+  assert.strictEqual((renderLook(m, "list-4").html.match(/class="gx-row"/g) || []).length, 8);
+  assert.match(Y.ykPlanner.glanceModel({}, ctx({ live: null })).empty, /Waiting for the live FLOWER and BTC prices/);
 });
 
-test("📱 glance: the reference tables and the verdict stay table-only", () => {
-  for (const w of [Y.ykFacts, Y.ykTiers, Y.ykSources, Y.ykRanks, Y.ykEggs, Y.ykVerdict]) assert.strictEqual(w.glance, undefined, w.type);
+test("📱 glance model, calculator: the points; base / bonus / per FLOWER / the next cliff", () => {
+  const m = Y.ykCalculator.glanceModel({}, ctx(), { amount: 5000, week: 2 });
+  assert.deepStrictEqual([m.head.value, m.head.cap], ["16k", "5,000 FLOWER in week 2 · 2.8×"]);
+  assert.strictEqual(m.items.length, 4);
+  assert.deepStrictEqual(m.items[1], { icon: "🎁", name: "Bulk bonus", sub: "+40 % step", value: "+2k", tone: "accent", pct: 12.5 });   // 5,000 × 0.4 of 16,000
+  assert.deepStrictEqual(m.items[2], { icon: "⚖️", name: "Per FLOWER", value: "3.20 pts" });
+  assert.match(renderLook(Y.ykCalculator.glanceModel({}, ctx()), "number").html, /^<div class="gx gx-1x1" style="--gw:1"><div class="gx-head"><div class="gx-num g-ok">1\.6k<small> pts<\/small><\/div><div class="gx-cap">500 FLOWER in week 1 · 3\.0×<\/div>/);
+  assert.match(Y.ykCalculator.glanceModel({}, ctx(), { amount: 0 }).empty, /Enter a deposit amount/);
+});
+
+test("📱 glance models, the reference widgets: facts, tiers, sources, ranks, eggs and the verdict", () => {
+  const f = Y.ykFacts.glanceModel({}, ctx());
+  assert.deepStrictEqual([f.head.value, f.head.unit, f.head.cap], ["2.2", "×", "week 6 multiplier · deposits live"]);
+  assert.deepStrictEqual(f.items[3], { icon: "💰", name: "Deposits", sub: "10 Aug – 16 Nov", value: "week 6 · 2.2×", tone: "ok" });
+  const t = Y.ykTiers.glanceModel({}, ctx());
+  assert.strictEqual(t.items.length, YK.tiers.length);
+  assert.ok(t.items.every((i) => i.pct > 0 && i.pct <= 100));
+  assert.strictEqual(t.series.length, 15);
+  assert.strictEqual((renderLook(t, "bars-4").html.match(/class="gx-bar/g) || []).length > 0, true);
+  assert.strictEqual(Y.ykSources.glanceModel().items.length, YK.actions.length);
+  assert.strictEqual(Y.ykRanks.glanceModel().items.length, YK.ranks.length);
+  const e = Y.ykEggs.glanceModel({}, ctx());
+  assert.deepStrictEqual([e.head.value, e.head.tone], ["Platinum", "ok"]);
+  assert.strictEqual(e.items.find((i) => i.name === "Platinum").tone, "ok", "your egg is marked");
+  assert.match(renderLook(e, "icons-1").html, /^<div class="gx gx-1x1" style="--gw:1"><div class="gx-icons"/);
+  const v = Y.ykVerdict.glanceModel({}, ctx());
+  assert.deepStrictEqual([v.head.value, v.head.tone], ["500", "bad"]);                  // 500 × 120 / 120
+  assert.strictEqual(v.items.length, 5);
 });

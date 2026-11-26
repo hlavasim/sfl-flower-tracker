@@ -2,7 +2,6 @@
 // POWER), owned ones first. Each copy can keep its own type / aura / owned-only filter.
 import { BUD_TYPE_NAMES, BUD_AURA_NAMES, BUD_AURA_MULTIPLIERS } from "../core/engine/buds.mjs";
 import { bar, kpis } from "../ui/viz.mjs";
-import { big, rows as gRows } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -68,21 +67,24 @@ export const budsTable = {
   },
 };
 
-// ── iPhone glance face: S = the best owned bud's FLOWER a day; M / L = the owned buds, best first
-// (the best buds overall when none of the filtered ones is owned) ──
+// ── iPhone glance model: the best owned bud's FLOWER a day (its picture as the hero); the owned buds,
+// best first (the best buds overall when none of the filtered ones is owned); bar = share of the best
+// bud on the farm ──
 const perDay = (v) => `+${v >= 1 ? v.toFixed(2) : v.toFixed(4)}`;
-budsTable.sizes = ["s", "m", "l"];
-budsTable.size = "s";
-budsTable.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+budsTable.look = "number";
+budsTable.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = budsTable.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
   const owned = out.rows.filter((r) => r.owned);
-  const list = (owned.length ? owned : out.rows).slice().sort((a, b) => b.sflPerDay - a.sflPerDay);
-  if (size === "s") {
-    const r = list[0];
-    return { html: (r.iconHtml ? `<div class="g-hero">${r.iconHtml}</div>` : "") + big(perDay(r.sflPerDay), { unit: " 🌸/day", tone: r.sflPerDay > 0 ? "ok" : "",
-      cap: owned.length ? `#${r.id} · best of ${owned.length} owned` : `#${r.id} · none owned` }) };
-  }
-  return { html: gRows(list.slice(0, size === "m" ? 3 : 7).map((r) => ({ icon: r.iconHtml, name: `#${r.id} ${r.type}`,
-    sub: r.aura !== "No Aura" ? `${r.aura} aura` : r.stem, value: perDay(r.sflPerDay), tone: r.sflPerDay > 0 ? "ok" : "" }))) };
+  const list = (owned.length ? owned : out.rows).slice().sort((a, b) => b.sflPerDay - a.sflPerDay), r = list[0];
+  const sumOwned = owned.reduce((a, x) => a + x.sflPerDay, 0);
+  return {
+    head: { value: perDay(r.sflPerDay), unit: " 🌸", tone: r.sflPerDay > 0 ? "ok" : "",
+      cap: owned.length ? `a day · #${r.id} · best of ${owned.length}` : `a day · #${r.id} · none owned`, ...(r.iconHtml ? { hero: r.iconHtml } : {}) },
+    items: list.slice(0, 40).map((x) => ({ icon: x.iconHtml || "🌱", name: `#${x.id} ${x.type}`, sub: x.aura !== "No Aura" ? `${x.aura} aura` : x.stem,
+      value: perDay(x.sflPerDay), tone: x.sflPerDay > 0 ? "ok" : "", pct: x.pct })),
+    tiles: [{ label: "buds shown", value: out.rows.length }, { label: "owned", value: owned.length },
+      { label: "best / day", value: perDay(r.sflPerDay) }, ...(owned.length ? [{ label: "owned/day", value: perDay(sumOwned) }] : [])],
+    foot: owned.length ? "your buds, best first" : "none owned — the best buds",
+  };
 };

@@ -7,6 +7,7 @@ import { petsSummary, petsNftCollection, petsMarket, petCards, petFetches, petPr
 import { WIDGETS } from "../../widgets/registry.mjs";
 import { renderTable } from "../../ui/table.mjs";
 import { buildBudsSection } from "../../core/sections/buds.mjs";
+import { renderLook, looksFor } from "../../ui/glance-templates.mjs";
 import { buildPetsSection } from "../../core/sections/pets.mjs";
 import { PET_FETCH_DATA } from "../../core/data/pets.mjs";
 import { petFetchYield } from "../../core/engine/pets.mjs";
@@ -54,24 +55,25 @@ test("🌱 buds: every bud, owned first then by FLOWER/day, the page's numbers a
   assert.match(renderTable(budsTable.columns, beach.rows.slice(0, 1), {}, {}), /Rare \(100%\)/);
 });
 
-test("📱 buds glance: S = the best owned bud a day (the best overall when none is owned); M / L = the owned buds, best first", () => {
-  assert.deepStrictEqual([budsTable.sizes, budsTable.size], [["s", "m", "l"], "s"]);
+test("📱 glance model, buds: the best owned bud a day (the best overall when none is owned); the owned buds, best first", () => {
+  assert.strictEqual(budsTable.look, "number");
+  assert.strictEqual(budsTable.glance, undefined, "the hand-written face is gone");
   const byDay = BUDS.rows.slice().sort((a, b) => b.sflPerDay - a.sflPerDay);
-  const none = budsTable.glance({ buds: BUDS }, CTX, {}, "s").html;
-  assert.ok(none.startsWith(`<div class="g-hero"><img data-bud></div><div class="g-big g-ok">+`));
-  assert.match(none, new RegExp(`<div class="g-cap">#${byDay[0].id} · none owned</div>$`));
-  // two owned buds: the face is about them, not the best on the market
+  const none = budsTable.glanceModel({ buds: BUDS }, CTX, {});
+  assert.deepStrictEqual([none.head.unit, none.head.tone, none.head.cap, none.head.hero], [" 🌸", "ok", `a day · #${byDay[0].id} · none owned`, "<img data-bud>"]);
+  assert.strictEqual(none.items.length, Math.min(40, BUDS.rows.length));
+  assert.match(renderLook(none, "number").html, /^<div class="gx gx-1x1" style="--gw:1"><div class="gx-head"><div class="gx-num g-ok">\+[\d.]+<small> 🌸<\/small><\/div>/);
+  assert.ok(looksFor(none).length >= 3);
+  // two owned buds: the model is about them, not the best on the market
   const mine = [byDay[5], byDay[9]];
   const D = { ...BUDS, rows: BUDS.rows.map((r) => ({ ...r, owned: mine.some((x) => x.id === r.id) })) };
-  assert.match(budsTable.glance({ buds: D }, CTX, {}, "s").html, new RegExp(`<div class="g-cap">#${mine[0].id} · best of 2 owned</div>`));
-  const m = budsTable.glance({ buds: D }, CTX, {}, "m").html;
-  assert.strictEqual((m.match(/class="g-row"/g) || []).length, 2);
-  assert.ok(m.indexOf(`#${mine[0].id} `) < m.indexOf(`#${mine[1].id} `));
-  assert.strictEqual((budsTable.glance({ buds: BUDS }, CTX, {}, "l").html.match(/class="g-row"/g) || []).length, 7);
-  assert.deepStrictEqual(budsTable.glance({}, CTX, {}, "s"), { empty: "No bud data." });
-  assert.deepStrictEqual(budsTable.glance({ buds: BUDS }, CTX, { type: "Nope" }, "s"), { empty: "No bud matches the filter." });
+  const m = budsTable.glanceModel({ buds: D }, CTX, {});
+  assert.strictEqual(m.head.cap, `a day · #${mine[0].id} · best of 2`);
+  assert.deepStrictEqual(m.items.map((i) => i.name), mine.map((x) => `#${x.id} ${x.type}`));
+  assert.deepStrictEqual(m.tiles.map((t) => t.label), ["buds shown", "owned", "best / day", "owned/day"]);
+  assert.deepStrictEqual(budsTable.glanceModel({}, CTX, {}), { empty: "No bud data." });
+  assert.deepStrictEqual(budsTable.glanceModel({ buds: BUDS }, CTX, { type: "Nope" }), { empty: "No bud matches the filter." });
 });
-
 test("🐾 summary: totals, the full-fetch earnings per pet (the page's sum) and the daily income", () => {
   // the fixture's pets are almost out of energy (no full fetch): give a copy 1 000 each
   const D = { ...PETS, pets: PETS.pets.map((p) => ({ ...p, energy: 1000 })) };
