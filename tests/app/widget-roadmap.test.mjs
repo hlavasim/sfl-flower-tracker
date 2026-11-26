@@ -206,3 +206,21 @@ test("📱 glances: income S/M (now → after the plan, a sparkline), buy path S
   assert.match(roadmapBuyPath.glance({ roadmap: fresh() }, CTX, {}, "s").html, /class="g-hero"/);
   assert.deepStrictEqual(roadmapIncome.glance({}, CTX, {}, "m"), { empty: "No roadmap data." });
 });
+
+test("📱 glance: offers S = my offers on top, M / L = outbid first with state chips; no data → empty", () => {
+  const BOOK2 = { items: { ...BOOK.items, "Test Other": { b: 10, f: 20, oc: 1, lc: 1, ls: 15, c: "collectibles", id: 9 } } };
+  const rm = fresh();
+  rm.sim.ranked = [...rm.sim.ranked, { ...rm.sim.ranked.find((r) => r.name === STATUE), name: "Test Other" }];
+  const top = roadmapOffers.glance({ roadmap: rm, book: BOOK2, farm: withOffer(35) }, CTX, {}, "s").html;
+  assert.strictEqual(top, `<div class="g-big g-ok">1<small>/1</small></div><div class="g-cap">my offers on top</div>`);
+  const outbid = roadmapOffers.glance({ roadmap: rm, book: BOOK2, farm: withOffer(20) }, CTX, {}, "s").html;
+  assert.match(outbid, /g-big g-warn">0<small>\/1<\/small><\/div><div class="g-cap">my offers on top · 1 outbid/);
+  const m = roadmapOffers.glance({ roadmap: rm, book: BOOK2, farm: withOffer(20) }, CTX, {}, "m").html;
+  assert.deepStrictEqual([...m.matchAll(/<div class="g-n">([^<]+)</g)].map((x) => x[1]), [STATUE, "Test Other"]);
+  assert.match(m, /mine 20\.00 · best 30\.00<\/div><\/div><span class="g-chip g-warn">OUTBID</);
+  assert.match(m, /best 10\.00 · floor 20\.00<\/div><\/div><span class="g-chip">NO OFFER</);
+  assert.match(m, /<img data-i="Test Unowned Statue">/);
+  assert.match(roadmapOffers.glance({ roadmap: rm, book: BOOK2, farm }, CTX, {}, "l").html, /<div class="g-big">2<\/div><div class="g-cap">buy-path items in the book · no offers of mine/);
+  assert.deepStrictEqual(roadmapOffers.glance({}, CTX, {}, "s"), { empty: "No roadmap data." });
+  assert.deepStrictEqual(roadmapOffers.glance({ roadmap: fresh(), book: null, farm }, CTX, {}, "m"), { empty: "The marketplace book is loading." });
+});

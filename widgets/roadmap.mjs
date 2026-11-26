@@ -406,3 +406,23 @@ roadmapBuyPath.glance = (data = {}, ctx = {}, opts = {}, size = "l") => {
   const n = size === "m" ? 3 : 6;
   return { html: rows(plan.slice(0, n).map(row)) + `<div class="g-cap g-foot">${plan.length} in the plan · next ${esc(plan[0].eta)}</div>` };
 };
+
+// S = how many of my offers are on top; M / L = the offers that need a look first (outbid), then the rest
+const OFFER_ORDER = { outbid: 0, "mine-nobook": 1, top: 2, none: 3 };
+const OFFER_TONE = { top: "ok", outbid: "warn", "mine-nobook": "warn", none: "" };
+roadmapOffers.sizes = ["s", "m", "l"];
+roadmapOffers.size = "s";
+roadmapOffers.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = roadmapOffers.build(data, ctx, opts);
+  if (!out.rows.length) return { empty: out.empty };
+  const own = out.rows.filter((r) => r.own), top = own.filter((r) => r.state === "top").length;
+  const head = own.length
+    ? big(top, { unit: `/${own.length}`, tone: top === own.length ? "ok" : "warn", cap: `my offers on top${own.length - top ? ` · ${own.length - top} outbid` : ""}` })
+    : big(out.rows.length, { cap: "buy-path items in the book · no offers of mine" });
+  if (size === "s") return { html: head };
+  const list = out.rows.slice().sort((a, b) => OFFER_ORDER[a.state] - OFFER_ORDER[b.state] || (b.gap ?? -1) - (a.gap ?? -1)).slice(0, size === "m" ? 3 : 6);
+  const html = rows(list.map((r) => ({ icon: r.iconHtml, name: r.name,
+    sub: r.own ? `mine ${fmtFlower(r.own.unit)} · best ${r.bid == null ? "—" : fmtFlower(r.bid)}` : `best ${r.bid == null ? "—" : fmtFlower(r.bid)} · floor ${r.ask == null ? "—" : fmtFlower(r.ask)}`,
+    chip: { text: STATE_PILL[r.state][0], tone: OFFER_TONE[r.state] } })));
+  return { html: size === "m" ? html : head + html };
+};
