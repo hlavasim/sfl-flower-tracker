@@ -7,7 +7,7 @@
 // ctx.goal() (sfl_tk_goal) and ctx.decide() (sfl_tk_decide).
 import { ticketGoal } from "../core/sections/tickets.mjs";
 import { bar, bigBar, pill } from "../ui/viz.mjs";
-import { big, compact, ring as gRing, rows as gRows, tiles as gTiles } from "../ui/glance.mjs";
+import { compact } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 // The page's _tkFmt, in English: fixed decimals, "—" for nothing.
@@ -469,54 +469,75 @@ export const ticketsReference = {
   },
 };
 
-// ── iPhone glance faces (boards and the ＋ gallery). The reference table (11) has none: it is a lookup. ──
-const corner = (pct, tone) => `<div class="g-corner">${gRing(pct, { tone })}</div>`;
-const split = (head, list) => `<div class="g-split"><div>${head}</div>${gRows(list)}</div>`;
-const hero = (html) => (html ? `<div class="g-hero">${html}</div>` : "");
+// ── iPhone glance models (boards and the ＋ gallery): every widget gives one model (a headline, a list,
+// key numbers) and ui/glance-templates offers the looks ──
 const until = (ms, now) => {
   const h = (ms - now) / 3600000;
   return h <= 0 ? "now" : h < 1 ? `${Math.max(1, Math.round(h * 60))}m` : h < 48 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d`;
 };
+const share = (a, b) => (b > 0 ? Math.min(100, Math.max(0, (a / b) * 100)) : 0);
 // A source as plain text and its item's icon (the glance escapes text).
 const srcName = (s) => (s.group === "daily" ? "Daily reward" : s.group === "delivery" ? cap(s.label)
   : s.group === "bounty" ? `Deliver ${s.label}` : s.group === "animal" ? `${s.animal} at level ${s.level}+` : String(s.label || ""));
 const srcIcon = (ctx, d, s) => icon(ctx, s.group === "daily" ? d.chapter.ticket : s.group === "delivery" ? Object.keys(s.items || {})[0]
   : s.group === "chore" ? s.item : s.group === "animal" ? s.animal : s.group === "bounty" ? s.label : null);
+// a step's progress for the bars: done = full, a chore its counter, else nothing yet
+const progress = (s) => (s.done ? 100 : s.group === "chore" && s.required > 0 ? share(s.progress, s.required) : 0);
 
-ticketsSummary.sizes = ["s", "m"];
-ticketsSummary.size = "s";
-ticketsSummary.glance = ({ tickets: d } = {}, ctx = {}, opts = {}, size = "s") => {
+ticketsSummary.look = "number";
+ticketsSummary.glanceModel = ({ tickets: d } = {}, ctx = {}) => {
   if (!ok(d)) return { empty: NO_DATA };
   const c = d.chapter, ta = d.thisAuction, open = !!(ta && ta.weeksUntil > 0);
   const days = open ? Math.max(0, Math.round(ta.weeksUntil * 7)) : 0;
-  if (size === "s") return { html: hero(icon(ctx, c.ticket)) + big(compact(open ? ta.ticketsExpected : c.collected),
-    { cap: open ? `by the auction · now ${compact(c.collected)}` : "collected · the auction is over" }) };
-  return { html: gTiles([
-    { label: "by the auction", value: open ? compact(ta.ticketsExpected) : "—", sub: `now ${compact(c.collected)}` },
-    { label: "auction", value: open ? (days <= 0 ? "now" : `${days} days`) : "over", sub: d.timeline.ticketAuction ? date(d.timeline.ticketAuction) : "" },
-    { label: "per week", value: compact(c.perWeek), sub: `top ${compact(d.observedTop.perWeek)}` }]) };
+  const best = d.items.filter((i) => i.source === "auction" && !i.owned && i.perDay > 0).sort((a, b) => b.perDay - a.perDay)[0] || null;
+  const when = open ? (days <= 0 ? "now" : `${days}d`) : "over", on = d.timeline.ticketAuction ? date(d.timeline.ticketAuction) : "";
+  return {
+    head: { value: compact(open ? ta.ticketsExpected : c.collected), hero: icon(ctx, c.ticket),
+      cap: open ? `by the auction · now ${compact(c.collected)}` : "collected · the auction is over" },
+    items: [
+      { icon: icon(ctx, c.ticket), name: "collected", sub: open ? `of ~${compact(ta.ticketsExpected)} by the auction` : c.ticket, value: compact(c.collected),
+        pct: open ? share(c.collected, ta.ticketsExpected) : 100 },
+      open && d.timeline.ticketAuction ? { icon: "🔨", name: "auction", sub: on, at: d.timeline.ticketAuction } : { icon: "🔨", name: "auction", sub: on, value: when },
+      { icon: "📈", name: "per week", sub: `top players ${compact(d.observedTop.perWeek)}`, value: compact(c.perWeek), pct: share(c.perWeek, d.observedTop.perWeek) },
+      ...(best ? [{ icon: icon(ctx, best.name), name: best.name, sub: "auction target", value: `+${fmt(best.perDay, 2)}/day`, tone: "ok" }] : []),
+    ],
+    tiles: [
+      { label: "by auction", value: open ? compact(ta.ticketsExpected) : "—" },
+      { label: "auction", value: when },
+      { label: "per week", value: compact(c.perWeek) },
+      ...(best ? [{ label: "target", value: `+${fmt(best.perDay, 2)}` }] : []),
+    ],
+  };
 };
 
-ticketsGoal.sizes = ["s", "m"];
-ticketsGoal.size = "s";
-ticketsGoal.glance = ({ tickets: d } = {}, ctx = {}, opts = {}, size = "s") => {
+ticketsGoal.look = "number";
+ticketsGoal.glanceModel = ({ tickets: d } = {}, ctx = {}) => {
   if (!ok(d)) return { empty: NO_DATA };
   const { goal } = ticketPlan(d, callOr(ctx.goal, {}));
   if (!goal) return { empty: "Set a chapter goal on the TICKETS page." };
   const [word, tone, why] = goal.verdict === "collect" ? ["Collect", "ok", "it pays off"]
     : goal.verdict === "not-worth" ? ["Skip", "bad", "costs more than the item"] : ["Short", "warn", "you won't make it"];
   const reach = goal.tickets > 0 ? Math.min(100, (goal.maxTickets / goal.tickets) * 100) : 100;
-  if (size === "s") return { html: corner(reach, tone) + big(word, { tone, cap: `${why} · ${Math.round(reach)} % reachable` }) };
-  return { html: split(big(word, { tone, cap: why }), [
-    { name: "need / week", value: compact(goal.needPerWeek) },
-    { name: "reachable", value: `${compact(goal.maxTickets)} / ${compact(goal.tickets)}`, tone: reach >= 100 ? "ok" : "warn" },
-    goal.net != null ? { name: "net", value: `${goal.net > 0 ? "+" : ""}${compact(goal.net)}`, tone: goal.net > 0 ? "ok" : "bad" }
-      : { name: "wait and buy", value: compact(goal.waitCost) }]) };
+  const costs = [goal.cost, goal.gemCost, goal.waitCost].filter((x) => x > 0), top = Math.max(1, ...costs);
+  return {
+    head: { value: word, tone, cap: `${why} · ${Math.round(reach)} % reachable`, ring: reach, ringTone: tone },
+    items: [
+      { icon: icon(ctx, d.chapter.ticket), name: "need / week", sub: `at most ~${compact(goal.maxPerWeek)}`, value: compact(goal.needPerWeek),
+        tone: goal.needPerWeek <= goal.maxPerWeek ? "ok" : "warn", pct: share(goal.needPerWeek, goal.maxPerWeek) },
+      { icon: "🎯", name: "reachable", sub: "tickets by the auction", value: `${compact(goal.maxTickets)} / ${compact(goal.tickets)}`, tone: reach >= 100 ? "ok" : "warn", pct: reach },
+      ...(goal.net != null ? [{ icon: "💰", name: "net", sub: "collecting", value: `${goal.net > 0 ? "+" : ""}${compact(goal.net)}`, tone: goal.net > 0 ? "ok" : "bad" }] : []),
+      ...(goal.cost > 0 ? [{ icon: "🎟️", name: "collecting", sub: "FLOWER", value: compact(goal.cost), pct: share(goal.cost, top) }] : []),
+      ...(goal.gemCost > 0 ? [{ icon: "💎", name: "gem round", sub: "FLOWER", value: compact(goal.gemCost), pct: share(goal.gemCost, top) }] : []),
+      { icon: "⏳", name: "wait and buy", sub: "FLOWER", value: compact(goal.waitCost), pct: share(goal.waitCost, top) },
+    ],
+    tiles: [{ label: "verdict", value: word }, { label: "need/week", value: compact(goal.needPerWeek) },
+      { label: "reachable", value: `${Math.round(reach)} %` },
+      goal.net != null ? { label: "net", value: `${goal.net > 0 ? "+" : ""}${compact(goal.net)}` } : { label: "wait+buy", value: compact(goal.waitCost) }],
+  };
 };
 
-ticketsToday.sizes = ["s", "m", "l"];
-ticketsToday.size = "s";
-ticketsToday.glance = ({ tickets: d } = {}, ctx = {}, opts = {}, size = "s") => {
+ticketsToday.look = "number";
+ticketsToday.glanceModel = ({ tickets: d } = {}, ctx = {}) => {
   if (!ok(d)) return { empty: NO_DATA };
   // the view's steps: the daily reward and every delivery, chore, bounty and animal bounty worth a ticket
   const { limit } = ticketPlan(d, callOr(ctx.goal, {}));
@@ -526,124 +547,170 @@ ticketsToday.glance = ({ tickets: d } = {}, ctx = {}, opts = {}, size = "s") => 
   if (!steps.length) return { empty: "Nothing worth a ticket this week." };
   const open = steps.filter((s) => !s.done), plus = open.reduce((a, s) => a + s.tickets, 0);
   const pct = ((steps.length - open.length) / steps.length) * 100;
-  const head = corner(pct, open.length ? "accent" : "ok") + big(open.length || "✓", { unit: open.length ? "left" : "",
-    tone: open.length ? "" : "ok", cap: open.length ? `+${fmt(plus)} tickets to collect` : "all done" });
-  if (size === "s") return { html: head };
-  const list = open.slice().sort((a, b) => b.tickets - a.tickets).slice(0, size === "m" ? 3 : 6)
-    .map((s) => ({ icon: srcIcon(ctx, d, s), name: srcName(s), sub: GROUP[s.group] || s.group, value: `+${s.tickets}`, tone: "ok" }));
-  if (size === "m") return { html: list.length ? gRows(list) : head };
-  return { html: head + (list.length ? gRows(list) : "") };
+  const item = (s) => ({ icon: srcIcon(ctx, d, s), name: srcName(s), sub: GROUP[s.group] || s.group, pct: progress(s) });
+  return {
+    head: { value: open.length || "✓", unit: open.length ? "left" : "", tone: open.length ? "" : "ok", ring: pct, ringTone: open.length ? "accent" : "ok",
+      cap: open.length ? `+${fmt(plus)} tickets to collect` : "all done" },
+    // open steps first, most tickets first; the done ones after
+    items: [...open.slice().sort((a, b) => b.tickets - a.tickets).map((s) => ({ ...item(s), value: `+${s.tickets}`, tone: "ok" })),
+      ...steps.filter((s) => s.done).map((s) => ({ ...item(s), chip: { text: "done", tone: "ok" } }))],
+    tiles: [{ label: "left", value: `${open.length} / ${steps.length}` }, { label: "tickets", value: `+${fmt(plus)}` },
+      { label: "limit", value: fmt(limit, 2) }],
+  };
 };
 
-ticketsItems.sizes = ["s", "m", "l"];
-ticketsItems.size = "s";
-ticketsItems.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+ticketsItems.look = "next";
+ticketsItems.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = ticketsItems.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
-  const top = out.rows.slice().sort((a, b) => b.val - a.val);
-  const per = (r) => (r.perDay != null ? "/day" : "/use");
-  if (size === "s") {
-    const r = top[0];
-    return { html: hero(r.iconHtml) + big(fmt(r.perDay != null ? r.perDay : r.perUse, 2), { unit: per(r), cap: `FLOWER · ${r.name}${r.owned ? " ✓" : ""}` }) };
-  }
-  return { html: gRows(top.slice(0, size === "m" ? 3 : 7).map((r) => ({ icon: r.iconHtml, name: r.name,
-    sub: `${r.source === "auction" ? "auction" : r.tickets ? `${fmt(r.tickets)} tickets` : "shop"}${r.owned ? " · owned" : ""}`,
-    value: `${fmt(r.perDay != null ? r.perDay : r.perUse, 2)}${per(r)}`, tone: "ok" }))) };
+  const top = out.rows.slice().sort((a, b) => b.val - a.val), r = top[0];
+  const per = (x) => (x.perDay != null ? "/day" : "/use"), num = (x) => fmt(x.perDay != null ? x.perDay : x.perUse, 2);
+  return {
+    head: { value: num(r), unit: per(r), hero: r.iconHtml, cap: `FLOWER · ${r.name}${r.owned ? " ✓" : ""}` },
+    items: top.map((x) => ({ icon: x.iconHtml, name: x.name, value: `${num(x)}${per(x)}`, tone: "ok", pct: x.rel,
+      sub: `${x.source === "auction" ? "auction" : x.tickets ? `${fmt(x.tickets)} tickets` : "shop"}${x.owned ? " · owned" : ""}` })),
+    tiles: [{ label: "top", value: num(r) }, { label: "items", value: String(top.length) },
+      { label: "owned", value: String(top.filter((x) => x.owned).length) }],
+  };
 };
 
-ticketsSchedule.sizes = ["s", "m", "l"];
-ticketsSchedule.size = "s";
-ticketsSchedule.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+ticketsSchedule.look = "next";
+ticketsSchedule.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = ticketsSchedule.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
   const now = ctx.now || Date.now();
   const next = out.rows.filter((r) => r.next).sort((a, b) => a.next - b.next);
   if (!next.length) return { empty: "Every auction round has ended." };
-  if (size === "s") {
-    const r = next[0];
-    return { html: hero(r.iconHtml) + big(until(r.next, now), { cap: `${r.name} · ${r.left} of ${r.rounds.length} rounds left` }) };
-  }
-  return { html: gRows(next.slice(0, size === "m" ? 3 : 7).map((r) => ({ icon: r.iconHtml, name: r.name,
-    sub: `${r.left} of ${r.rounds.length} rounds left${r.owned ? " · owned" : ""}`, chip: { text: until(r.next, now), tone: r.soon ? "ok" : "info" } }))) };
+  const r = next[0], left = next.reduce((a, x) => a + x.left, 0);
+  return {
+    head: { value: until(r.next, now), hero: r.iconHtml, cap: `${r.name} · ${r.left} of ${r.rounds.length} rounds left` },
+    items: [...next.map((x) => ({ icon: x.iconHtml, name: x.name, sub: `${x.left} of ${x.rounds.length} rounds left${x.owned ? " · owned" : ""}`,
+      at: x.next, pct: share(x.left, x.rounds.length) })),
+      ...out.rows.filter((x) => !x.next).map((x) => ({ icon: x.iconHtml, name: x.name, sub: "every round over", chip: { text: "ended", tone: "" }, pct: 0 }))],
+    tiles: [{ label: "next round", value: until(r.next, now) }, { label: "items", value: String(next.length) },
+      { label: "rounds", value: String(left) }],
+  };
 };
 
-ticketsDecide.sizes = ["s", "m"];
-ticketsDecide.size = "s";
-ticketsDecide.glance = ({ tickets: d } = {}, ctx = {}, opts = {}, size = "s") => {
+ticketsDecide.look = "number";
+ticketsDecide.glanceModel = ({ tickets: d } = {}, ctx = {}) => {
   if (!ok(d)) return { empty: NO_DATA };
   const { V, tkCost } = decidePaths(d, decideSettings(callOr(ctx.decide, {})));
   if (!(V > 0)) return { empty: "Enter an estimate in the calculator on the TICKETS page." };
   const r = d.rounds;
-  const paths = [{ name: "Collect tickets", cost: tkCost }, ...(r.gem ? [{ name: "Gem round", cost: V * r.gem.median }] : []),
-    ...(r.flower ? [{ name: "FLOWER round", cost: V * r.flower.median }] : []), { name: "Wait and buy", cost: V }];
+  const paths = [{ icon: icon(ctx, d.chapter.ticket) || "🎟️", name: "Collect tickets", tile: "tickets", cost: tkCost },
+    ...(r.gem ? [{ icon: "💎", name: "Gem round", tile: "gems", cost: V * r.gem.median }] : []),
+    ...(r.flower ? [{ icon: "🌸", name: "FLOWER round", tile: "FLOWER", cost: V * r.flower.median }] : []),
+    { icon: "⏳", name: "Wait and buy", tile: "wait", cost: V }];
   const best = paths.filter((p) => p.cost != null).reduce((b, p) => (!b || p.cost < b.cost ? p : b), null);
-  if (size === "s") return { html: big(compact(best.cost), { unit: "FLOWER", tone: "ok", cap: `cheapest: ${best.name}` }) };
+  const top = Math.max(1, ...paths.map((p) => p.cost || 0));
   // the cheapest first, then the rest in the calculator's order
-  return { html: gRows([best, ...paths.filter((p) => p !== best)].slice(0, 3).map((p) => ({ name: p.name,
-    value: p.cost == null ? "out of reach" : compact(p.cost), tone: p === best ? "ok" : p.cost == null ? "bad" : "" }))) };
+  const list = [best, ...paths.filter((p) => p !== best)];
+  return {
+    head: { value: compact(best.cost), unit: "FLOWER", tone: "ok", cap: `cheapest: ${best.name}` },
+    items: list.map((p) => ({ icon: p.icon, name: p.name, value: p.cost == null ? "out of reach" : compact(p.cost),
+      tone: p === best ? "ok" : p.cost == null ? "bad" : "", ...(p.cost != null ? { pct: share(p.cost, top) } : {}) })),
+    tiles: list.map((p) => ({ label: p.tile, value: p.cost == null ? "—" : compact(p.cost) })),
+  };
 };
 
-ticketsThisAuction.sizes = ["s", "m"];
-ticketsThisAuction.size = "s";
-ticketsThisAuction.glance = ({ tickets: d } = {}, ctx = {}, opts = {}, size = "s") => {
+ticketsThisAuction.look = "number";
+ticketsThisAuction.glanceModel = ({ tickets: d } = {}, ctx = {}) => {
   if (!ok(d)) return { empty: NO_DATA };
   const ta = d.thisAuction;
   if (!(ta && ta.weeksUntil > 0)) return { empty: "This chapter's ticket auction is behind you." };
-  // the view's lots just out of reach (within ~2,000 tickets), the most valuable one first
-  const near = d.auction.lots.filter((l) => l.value > 0 && l.tickets > ta.ticketsExpected && l.tickets - ta.ticketsExpected <= 2000)
-    .sort((a, b) => b.value - a.value);
+  const have = ta.ticketsExpected, lots = d.auction.lots.filter((l) => l.value > 0);
+  // the view's lots just out of reach (within ~2,000 tickets), the most valuable one first; then the ones in reach
+  const near = lots.filter((l) => l.tickets > have && l.tickets - have <= 2000).sort((a, b) => b.value - a.value);
+  const inReach = lots.filter((l) => l.tickets <= have).sort((a, b) => b.value - a.value);
   const lot = near[0] || null;
-  const head = (lot ? corner((ta.ticketsExpected / lot.tickets) * 100, "accent") : "") +
-    big(compact(ta.ticketsExpected), { cap: lot ? `by the auction · ${lot.name} is ${fmt(lot.tickets - ta.ticketsExpected)} away` : "tickets by the auction" });
-  if (size === "s" || !near.length) return { html: head };
-  return { html: split(big(compact(ta.ticketsExpected), { cap: "tickets by the auction" }), near.slice(0, 3).map((l) => ({ icon: icon(ctx, l.name), name: l.name,
-    sub: `worth ${compact(l.value)} FLOWER`, value: `+${compact(l.tickets - ta.ticketsExpected)}`, tone: "warn" }))) };
+  return {
+    head: { value: compact(have), cap: lot ? `by the auction · ${lot.name} is ${fmt(lot.tickets - have)} away` : "tickets by the auction",
+      ...(lot ? { ring: share(have, lot.tickets), ringTone: "accent" } : {}) },
+    items: [...near.map((l) => ({ icon: icon(ctx, l.name), name: l.name, sub: `worth ${compact(l.value)} FLOWER`, value: `+${compact(l.tickets - have)}`, tone: "warn",
+      pct: share(have, l.tickets) })),
+      ...inReach.map((l) => ({ icon: icon(ctx, l.name), name: l.name, sub: `worth ${compact(l.value)} FLOWER`, chip: { text: "in reach", tone: "ok" }, pct: 100 }))],
+    tiles: [{ label: "by auction", value: compact(have) },
+      { label: "auction in", value: `${fmt(ta.weeksUntil * 7)}d` },
+      ...(lot ? [{ label: "next lot", value: `+${compact(lot.tickets - have)}` }] : [])],
+  };
 };
 
-ticketsNextChapter.sizes = ["s", "m", "l"];
-ticketsNextChapter.size = "m";
-ticketsNextChapter.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+ticketsNextChapter.look = "overview-4";
+ticketsNextChapter.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = ticketsNextChapter.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
-  const b = data.tickets.best;
-  const head = b && b.net > 0
-    ? hero(icon(ctx, b.lot)) + big(`+${compact(b.net)}`, { unit: "FLOWER", tone: "ok", cap: `${b.lot} · ${fmt(b.ticketsPerWeek)} tickets / week` })
-    : big("—", { cap: "no lot pays off next chapter" });
-  if (size === "s") return { html: head };
-  const list = out.rows.filter((r) => r.reachable).sort((a, b2) => (b2.net || 0) - (a.net || 0)).slice(0, size === "m" ? 3 : 6)
-    .map((r) => ({ icon: r.iconHtml, name: r.name, sub: `${fmt(r.tickets)} tickets · ${fmt(r.needPerWeek)} / week`,
-      value: r.net == null ? "—" : `${r.net > 0 ? "+" : ""}${compact(r.net)}`, tone: r.net > 0 ? "ok" : "bad" }));
-  if (!list.length) return { html: big("—", { cap: "every lot is out of reach next chapter" }) };
-  return { html: (size === "l" ? head : "") + gRows(list) };
+  const b = data.tickets.best, top = Math.max(1, ...out.rows.map((r) => r.lotValue || 0));
+  const good = b && b.net > 0;
+  return {
+    head: good ? { value: `+${compact(b.net)}`, unit: "FLOWER", tone: "ok", hero: icon(ctx, b.lot), cap: `${b.lot} · ${fmt(b.ticketsPerWeek)} tickets / week` }
+      : { value: "—", cap: "no lot pays off next chapter" },
+    // the reachable lots by net, then the ones out of reach
+    items: [...out.rows.filter((r) => r.reachable).sort((a, c) => (c.net || 0) - (a.net || 0)).map((r) => ({ icon: r.iconHtml, name: r.name,
+      sub: `${fmt(r.tickets)} tickets · ${fmt(r.needPerWeek)} / week`, value: r.net == null ? "—" : `${r.net > 0 ? "+" : ""}${compact(r.net)}`,
+      tone: r.net > 0 ? "ok" : "bad", pct: share(r.lotValue, top) })),
+      ...out.rows.filter((r) => !r.reachable).sort((a, c) => a.tickets - c.tickets).map((r) => ({ icon: r.iconHtml, name: r.name,
+        sub: `${fmt(r.shortPerWeek)} / week short`, chip: { text: "out of reach", tone: "bad" }, pct: share(r.lotValue, top) }))],
+    ...(good ? { tiles: [{ label: "net", value: `+${compact(b.net)}` }, { label: "per week", value: compact(b.ticketsPerWeek) },
+      { label: "by auction", value: compact(b.atAuction) }, { label: "costs", value: compact(b.cost) }] } : {}),
+  };
 };
 
-ticketsHistory.sizes = ["s", "m"];
-ticketsHistory.size = "s";
-ticketsHistory.glance = ({ tickets: d } = {}, ctx = {}, opts = {}, size = "s") => {
+ticketsHistory.look = "chart-2";
+ticketsHistory.glanceModel = ({ tickets: d } = {}, ctx = {}) => {
   if (!ok(d)) return { empty: NO_DATA };
   const h = d.history;
   if (!h || !h.weeks || !h.weeks.length || !h.all || !(h.all.maxTickets > 0)) return { empty: "No recorded weeks for this farm." };
   const perTicket = h.all.maxCost / h.all.maxTickets;
-  if (size === "s") return { html: big(fmt(perTicket, 3), { unit: "/ticket", cap: `FLOWER when you do everything · ${h.all.weeks} weeks` }) };
-  return { html: gTiles([{ label: "max / week", value: compact(h.all.maxTickets) }, { label: "cost / week", value: compact(h.all.maxCost), sub: "FLOWER" },
-    { label: "per ticket", value: fmt(perTicket, 3), sub: `${h.all.weeks} weeks` }]) };
+  const chapters = (h.chapters || []).filter((c) => c.maxTickets > 0), top = Math.max(1, ...chapters.map((c) => c.maxTickets));
+  return {
+    head: { value: fmt(perTicket, 3), unit: "/ticket", cap: `FLOWER when you do everything · ${h.all.weeks} weeks` },
+    items: chapters.map((c) => ({ icon: icon(ctx, c.ticket), name: c.name, sub: `${c.weeks} weeks · ${compact(c.maxTickets)} / week`,
+      value: fmt(c.maxCost / c.maxTickets, 3), pct: share(c.maxTickets, top) })),
+    tiles: [{ label: "max/week", value: compact(h.all.maxTickets) }, { label: "cost/week", value: compact(h.all.maxCost) },
+      { label: "per ticket", value: fmt(perTicket, 3) }],
+    // FLOWER a ticket, week by week (oldest first), the weeks with a board
+    series: h.weeks.filter((w) => w.active && w.maxTickets > 0).map((w) => w.maxCost / w.maxTickets),
+    foot: `${h.weeks.length} recorded weeks`,
+  };
 };
 
-ticketsSources.sizes = ["s", "m", "l"];
-ticketsSources.size = "m";
-ticketsSources.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+ticketsSources.look = "number-list-2";
+ticketsSources.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = ticketsSources.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
   const d = data.tickets;
   const open = out.rows.filter((s) => !s.done && s.perTicket != null && s.tickets > 0).sort((a, b) => a.perTicket - b.perTicket);
   if (!open.length) return { empty: "No open priced source left this week." };
-  if (size === "s") {
-    const s = open[0];
-    return { html: hero(srcIcon(ctx, d, s)) + big(s.perTicket ? fmt(s.perTicket, 3) : "free", { unit: s.perTicket ? "/ticket" : "",
-      tone: s.perTicket ? "" : "ok", cap: `cheapest: ${srcName(s)} · +${s.tickets}` }) };
-  }
-  return { html: gRows(open.slice(0, size === "m" ? 3 : 7).map((s) => ({ icon: srcIcon(ctx, d, s), name: srcName(s),
-    sub: `+${s.tickets} ${s.per === "day" ? "a day" : "a week"}`, value: s.perTicket ? fmt(s.perTicket, 3) : "free", tone: s.perTicket <= d.guide.ticketValue ? "ok" : "bad" }))) };
+  const s = open[0], top = Math.max(0.001, ...open.map((x) => x.perTicket));
+  return {
+    head: { value: s.perTicket ? fmt(s.perTicket, 3) : "free", unit: s.perTicket ? "/ticket" : "", tone: s.perTicket ? "" : "ok",
+      hero: srcIcon(ctx, d, s), cap: `cheapest: ${srcName(s)} · +${s.tickets}` },
+    items: open.map((x) => ({ icon: srcIcon(ctx, d, x), name: srcName(x), sub: `+${x.tickets} ${x.per === "day" ? "a day" : "a week"}`,
+      value: x.perTicket ? fmt(x.perTicket, 3) : "free", tone: x.perTicket <= d.guide.ticketValue ? "ok" : "bad", pct: share(x.perTicket, top) })),
+    tiles: [{ label: "open", value: String(open.length) }, { label: "tickets", value: `+${fmt(open.reduce((a, x) => a + x.tickets, 0))}` },
+      { label: "max/ticket", value: fmt(d.guide.ticketValue, 3) }],
+  };
+};
+
+ticketsReference.look = "list-4";
+ticketsReference.glanceModel = ({ tickets: d } = {}, ctx = {}) => {
+  if (!ok(d)) return { empty: NO_DATA };
+  const ref = d.auction.reference || {};
+  // the lots that pay most FLOWER a ticket first; unpriced last
+  const lots = d.auction.lots.slice().sort((a, b) => (b.perTicket ?? -1) - (a.perTicket ?? -1));
+  if (!lots.length) return { empty: "No reference lots." };
+  const best = lots[0], top = Math.max(0.001, ...lots.map((l) => l.perTicket || 0));
+  return {
+    head: best.perTicket != null ? { value: fmt(best.perTicket, 3), unit: "/ticket", hero: icon(ctx, best.name), cap: `FLOWER · best: ${best.name}` }
+      : { value: String(lots.length), unit: "lots", cap: `last ticket auction${ref.chapter ? ` · ${ref.chapter}` : ""}` },
+    items: lots.map((l) => ({ icon: icon(ctx, l.name), name: l.name, sub: `${fmt(l.tickets)} tickets · floor ${compact(l.floor)}`,
+      value: l.perTicket == null ? "—" : fmt(l.perTicket, 3), ...(l.perTicket != null ? { pct: share(l.perTicket, top) } : {}) })),
+    tiles: [{ label: "lots", value: String(lots.length) },
+      { label: "cheapest", value: compact(Math.min(...lots.map((l) => l.tickets))) },
+      { label: "top lot", value: compact(Math.max(...lots.map((l) => l.tickets))) },
+      ...(best.perTicket != null ? [{ label: "best", value: fmt(best.perTicket, 3) }] : [])],
+  };
 };
 
 export const TICKETS_WIDGETS = [ticketsSummary, ticketsGoal, ticketsToday, ticketsItems, ticketsSchedule, ticketsDecide,

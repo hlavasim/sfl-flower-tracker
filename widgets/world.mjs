@@ -3,7 +3,7 @@
 // that among every farm and the XP to pass the ones just ahead). The distribution charts are table
 // widgets in world-dist.mjs.
 import { kpis } from "../ui/viz.mjs";
-import { big, compact, rows, tiles } from "../ui/glance.mjs";
+import { compact } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const num = (v) => (v == null ? "—" : Math.round(v).toLocaleString("en-US"));
@@ -135,48 +135,65 @@ export const worldPriority = {
   },
 };
 
-// ── iPhone glance faces ──
+// ── iPhone glance models: ui/glance-templates offers the looks ──
 const NOT_LOADED = "The WORLD data has not loaded yet.";
+const shareOf = (v, of) => (of > 0 ? Math.min(100, ((+v || 0) / of) * 100) : 0);
+const pctText = (v, of) => { const p = shareOf(v, of); return `${p < 1 ? p.toFixed(2) : p.toFixed(1)}%`; };
 
-// S = farms that played in the last 24 h; M = the activity windows
-worldSummary.sizes = ["s", "m"];
-worldSummary.size = "s";
-worldSummary.glance = ({ stats } = {}, ctx = {}, opts = {}, size = "s") => {
+// farms that played in the last 24 h (a ring = their share of every farm); the activity windows
+worldSummary.look = "number";
+worldSummary.glanceModel = ({ stats } = {}) => {
   if (!stats || !stats.stored) return { empty: NOT_LOADED };
-  const s = stats.stored, a = stats.active || {};
-  if (size === "s") return { html: big(compact(a.d1), { cap: `played in 24 h · of ${compact(s.farms)} farms` }) };
-  return { html: tiles([{ label: "24 h", value: compact(a.d1) }, { label: "7 days", value: compact(a.d7) }, { label: "30 days", value: compact(a.d30) }]) +
-    `<div class="g-cap g-foot">${compact(s.farms)} farms · ${compact(s.banned)} banned</div>` };
+  const s = stats.stored, a = stats.active || {}, all = +s.farms || 0;
+  const win = (icon, name, v, tone = "") => ({ icon, name, sub: `${pctText(v, all)} of every farm`, value: compact(v), tone, pct: shareOf(v, all) });
+  return {
+    head: { value: compact(a.d1), ring: shareOf(a.d1, all), ringTone: "info", cap: `played in 24 h · of ${compact(all)} farms` },
+    items: [win("⚡", "24 h", a.d1, "ok"), win("📅", "7 days", a.d7), win("🗓️", "30 days", a.d30), win("🌙", "90 days", a.d90), win("🚫", "banned", s.banned, "bad")],
+    tiles: [{ label: "farms", value: compact(all) }, { label: "24 h", value: compact(a.d1) }, { label: "7 days", value: compact(a.d7) }, { label: "30 days", value: compact(a.d30) }],
+    foot: `${compact(all)} farms · ${compact(s.banned)} banned`,
+  };
 };
 
-// S = how old the daily dump is (orange past 36 h or unfinished); M = what the last import did
-worldDataset.sizes = ["s", "m"];
-worldDataset.size = "s";
-worldDataset.glance = ({ stats } = {}, ctx = {}, opts = {}, size = "s") => {
+// how old the daily dump is (orange past 36 h or unfinished); what the last import did
+worldDataset.look = "number";
+worldDataset.glanceModel = ({ stats } = {}) => {
   if (!stats || !stats.stored) return { empty: NOT_LOADED };
-  const d = stats.dump || {};
+  const d = stats.dump || {}, s = stats.stored;
   const stale = (d.age_ms != null && d.age_ms > 36 * 3600000) || !d.complete;
-  const head = big(fmtDur(d.age_ms), { tone: stale ? "warn" : "ok", cap: `dump age · ${d.complete ? "complete" : "in progress / partial"}` });
-  if (size === "s") return { html: head };
-  return { html: `<div class="g-split"><div>${head}</div>` + rows([{ name: "records", value: compact(d.records_done) }, { name: "changed", value: compact(d.changed) },
-    { name: "unparseable", value: compact(d.unparseable), tone: d.unparseable ? "warn" : "" }]) + `</div>` };
+  const rec = +d.records_done || 0;
+  return {
+    head: { value: fmtDur(d.age_ms), tone: stale ? "warn" : "ok", cap: `dump age · ${d.complete ? "complete" : "in progress / partial"}` },
+    items: [
+      { icon: "📦", name: "records", value: compact(d.records_done) },
+      { icon: "✏️", name: "changed", sub: rec ? `${pctText(d.changed, rec)} of the records` : "", value: compact(d.changed), ...(rec ? { pct: shareOf(d.changed, rec) } : {}) },
+      { icon: "💤", name: "skipped", sub: "had not played", value: compact(d.unchanged), ...(rec ? { pct: shareOf(d.unchanged, rec) } : {}) },
+      { icon: "⚠️", name: "unparseable", value: compact(d.unparseable), tone: d.unparseable ? "warn" : "" },
+      { icon: "⏱️", name: "load time", value: fmtDur(d.duration_ms) },
+      { icon: "📊", name: "with activity", sub: `of ${compact(s.farms)} farms`, value: compact(s.with_activity), ...(s.farms ? { pct: shareOf(s.with_activity, s.farms) } : {}) },
+    ],
+    tiles: [{ label: "age", value: fmtDur(d.age_ms) }, { label: "records", value: compact(d.records_done) }, { label: "changed", value: compact(d.changed) },
+      { label: "status", value: d.complete ? "complete" : "partial" }],
+  };
 };
 
-// S = your auction rank; M / L = the farms just ahead and the XP to pass each
-worldPriority.sizes = ["s", "m", "l"];
-worldPriority.size = "s";
-worldPriority.glance = ({ prio } = {}, ctx = {}, opts = {}, size = "s") => {
+// your auction rank; the farms just ahead and the XP to pass each
+worldPriority.look = "number";
+worldPriority.glanceModel = ({ prio } = {}, ctx = {}) => {
   if (!ctx.farmId) return { empty: "No farm — nobody to rank." };
   if (!prio) return { empty: "Computing the ranking…" };
   if (!prio.found) return { empty: `Farm ${ctx.farmId} is not in the daily dump yet.` };
-  const { me, ahead, rank } = prioState(prio, ctx);
-  const head = big(`#${num(rank)}`, { tone: rank === 1 ? "ok" : "", cap: `auction priority${prio.total ? ` of ${compact(prio.total)}` : ""} · A${me.ascension} L${me.level}` });
-  if (size === "s") return { html: head };
-  const row = (r) => {
+  const { me, ahead, passed, rank } = prioState(prio, ctx);
+  const item = (r) => {
     const need = r.ascension > me.ascension ? null : Math.max(0, r.xp - me.xp) + 1;
     return { name: r.username || `#${r.farm_id}`, sub: `A${r.ascension} · L${r.level}${r.live ? " · live" : ""}`,
       ...(need == null ? { chip: { text: "HIGHER ASC" } } : { value: `+${fmtXp(need)}`, tone: "warn" }) };
   };
-  const list = ahead.length ? rows(ahead.slice(0, size === "m" ? 3 : 6).map(row)) : big("✓", { tone: "ok", cap: "nobody ahead of you" });
-  return { html: size === "m" ? `<div class="g-split"><div>${head}</div>${list}</div>` : head + list };
+  return {
+    head: { value: `#${num(rank)}`, tone: rank === 1 ? "ok" : "", cap: `auction priority${prio.total ? ` of ${compact(prio.total)}` : ""} · A${me.ascension} L${me.level}` },
+    items: ahead.map(item),
+    tiles: [{ label: "rank", value: `#${num(rank)}` }, { label: "ahead", value: num(prio.ahead - passed) },
+      { label: "you", value: `A${me.ascension} L${me.level}` }, { label: "higher Asc", value: num(prio.higherAscension) }],
+    foot: !ahead.length ? "nobody ahead of you" : ahead[0].ascension > me.ascension ? "only an Ascension passes the next farm"
+      : `+${fmtXp(Math.max(0, ahead[0].xp - me.xp) + 1)} XP passes the next farm`,
+  };
 };

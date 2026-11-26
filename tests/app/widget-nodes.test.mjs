@@ -8,6 +8,7 @@ import { buildCookingSection } from "../../core/sections/cooking.mjs";
 import { WIDGETS } from "../../widgets/registry.mjs";
 import { renderTable } from "../../ui/table.mjs";
 import { compact } from "../../ui/glance.mjs";
+import { renderLook, looksFor, TEMPLATE_IDS } from "../../ui/glance-templates.mjs";
 import { NODES_WIDGETS, nodesSummary, nodesPlan, nodesOptions, nodesRoad, nodesCurrent, nodesAcq, nodeOptions, nodePlan, nodeRoad, nodesQuery, PLAN_STEP_CAP } from "../../widgets/nodes.mjs";
 
 // NODES as widgets, on the real section=ascension answer (nodeAcq) for farm 155498.
@@ -117,48 +118,80 @@ test("expand vs buy: the served verdict, obsidian the gate, English", () => {
   assert.doesNotMatch(html + out.footer, /[ěščřžůň]/);
 });
 
-test("📱 glances: every nodes widget has S and a larger face; no ascension answer → empty", () => {
-  const D = { farm, asc };
-  const count = (h) => (h.match(/class="g-row"/g) || []).length;
+test("📱 glance models: every nodes widget has a model and a natural look, no hand-written face; no ascension answer → empty", () => {
   for (const w of NODES_WIDGETS) {
-    assert.ok(w.sizes.includes("s") && w.sizes.length > 1 && w.sizes.includes(w.size), w.type);
-    assert.deepStrictEqual(Object.keys(w.glance({}, CTX, {}, "s")), ["empty"], w.type);
+    assert.strictEqual(w.glance, undefined, `${w.type}: the hand-written face is gone`);
+    assert.strictEqual(w.sizes, undefined, w.type);
+    assert.ok(TEMPLATE_IDS.includes(w.look), `${w.type} ${w.look}`);
+    assert.deepStrictEqual(Object.keys(w.glanceModel({}, CTX, {})), ["empty"], w.type);
   }
-  // summary: obsidian in hand, the sunstone price
-  assert.match(nodesSummary.glance(D, CTX, {}, "s").html, new RegExp(`<div class="g-big">${Math.floor(parseFloat(farm.inventory.Obsidian))}<small> obsidian</small>`));
-  assert.match(nodesSummary.glance(D, CTX, {}, "m").html, /class="g-tiles".*a sunstone/);
-  // plan: the first buy's payback; M = 3 steps beside the count, L = 6
+});
+
+const D = { farm, asc };
+const rowsIn = (h) => (h.match(/class="gx-row"/g) || []).length;
+
+test("📱 glance summary: obsidian in hand with how far it goes to the cheapest node; the stock, the sunstone price", () => {
+  const m = nodesSummary.glanceModel(D, CTX, {});
+  const obs = Math.floor(parseFloat(farm.inventory.Obsidian));
+  assert.deepStrictEqual([m.head.value, m.head.unit, m.head.hero], [obs, " obs", "<i>Obsidian</i>"]);
+  assert.strictEqual(m.items.length, 5);
+  assert.deepStrictEqual([m.items[0].name, m.items[0].value, m.items[0].icon], ["Obsidian", obs, "<i>Obsidian</i>"]);
+  assert.deepStrictEqual(m.tiles.map((t) => t.label), ["obsidian", "sunstones", "a sunstone", "coins"]);
+  assert.match(renderLook(m, "number").html, new RegExp(`<div class="gx-num">${obs}<small> obs</small></div>`));
+  assert.ok(looksFor(m).length >= 3);
+});
+
+test("📱 glance plan: the first buy's payback; every step with what it adds; the income as a series", () => {
   const plan = nodesPlan.build(D, CTX, { cap: "all" }).rows;
-  const ps = nodesPlan.glance(D, CTX, { cap: "all" }, "s").html;
-  assert.ok(ps.includes(`<n>${plan[0].node}</n>`) && ps.includes(`${plan[0].label} pays back`));
-  const pm = nodesPlan.glance(D, CTX, { cap: "all" }, "m").html;
-  assert.match(pm, new RegExp(`class="g-split"><div><div class="g-big">${plan.length}<small> buys`));
-  assert.strictEqual(count(pm), Math.min(3, plan.length));
-  assert.strictEqual(count(nodesPlan.glance(D, CTX, { cap: "all" }, "l").html), Math.min(6, plan.length));
-  assert.deepStrictEqual(nodesPlan.glance({ farm, asc: { nodeAcq: { ...acq, perType: {}, merge: [] } } }, CTX, {}, "m"), { empty: "Nothing pays back within this ROI cap." });
-  // options: by payback, the unaffordable ones say what is missing
+  const m = nodesPlan.glanceModel(D, CTX, { cap: "all" });
+  assert.deepStrictEqual([m.head.hero, m.head.cap], [`<n>${plan[0].node}</n>`, `next: ${plan[0].label}`]);
+  assert.strictEqual(m.items.length, plan.length);
+  assert.strictEqual(m.series.length, plan.length + 1);
+  assert.deepStrictEqual([m.items[0].name, m.items[0].icon], [plan[0].label, `<n>${plan[0].node}</n>`]);
+  assert.ok(looksFor(m).length >= 3);
+  assert.deepStrictEqual(nodesPlan.glanceModel({ farm, asc: { nodeAcq: { ...acq, perType: {}, merge: [] } } }, CTX, {}), { empty: "Nothing pays back within this ROI cap." });
+});
+
+test("📱 glance options: the best option by payback; every option, the unaffordable ones say what is missing", () => {
   const opts = nodesOptions.build(D, CTX, { which: "profitable" }).rows;
-  const om = nodesOptions.glance(D, CTX, { which: "profitable" }, "l").html;
-  assert.strictEqual(count(om), Math.min(7, opts.length));
-  assert.ok(om.includes(`<div class="g-n">${opts[0].action}<div>`));
-  const poor = opts.find((o) => !o.canAfford);
-  if (poor) assert.ok(om.includes(poor.need) || opts.indexOf(poor) >= 7);
-  // road: total FLOWER to 2× T3 with a ring; L = one row per mergeable type
+  const m = nodesOptions.glanceModel(D, CTX, { which: "profitable" });
+  assert.strictEqual(m.items.length, opts.length);
+  assert.strictEqual(m.items[0].name, opts[0].action);
+  const poor = opts.findIndex((o) => !o.canAfford);
+  if (poor >= 0) assert.strictEqual(m.items[poor].sub, opts[poor].need);
+  assert.strictEqual(rowsIn(renderLook(m, "list-4").html), Math.min(8, opts.length));
+  assert.ok(looksFor(m).length >= 3);
+});
+
+test("📱 glance road: FLOWER to 2× T3 with the T3 share as a ring; one item per mergeable type", () => {
   const { rows: road, tot } = nodeRoad(acq);
-  assert.match(nodesRoad.glance(D, CTX, {}, "s").html, /class="g-corner"><svg class="g-ring/);
-  assert.ok(nodesRoad.glance(D, CTX, {}, "s").html.includes("to 2× T3"));
+  const m = nodesRoad.glanceModel(D, CTX, {});
   assert.ok(tot.sfl > 0);
-  assert.strictEqual(count(nodesRoad.glance(D, CTX, {}, "l").html), road.length);
-  assert.match(nodesRoad.glance(D, CTX, {}, "m").html, /<span>sunstones<\/span>/);
-  // current: the real FLOWER/day of every priced node type, biggest earners first
+  assert.deepStrictEqual([m.head.value, m.head.ringTone], [compact(tot.sfl), "accent"]);
+  assert.match(m.head.cap, /to 2× T3/);
+  assert.strictEqual(m.items.length, road.length);
+  assert.ok(m.items.every((i) => i.pct >= 0 && i.pct <= 100));
+  assert.match(renderLook(m, "number").html, /class="gx-corner"><svg class="gx-ring g-accent"/);
+  assert.ok(looksFor(m).length >= 3);
+});
+
+test("📱 glance current: the real FLOWER/day of every priced node type, biggest earners first", () => {
   const cur = nodesCurrent.build(D, CTX).rows.filter((r) => !r.units);
   const real = cur.reduce((a, r) => a + r.realTotal, 0);
-  assert.ok(nodesCurrent.glance(D, CTX, {}, "s").html.startsWith(`<div class="g-big">${Math.abs(real) >= 10 ? compact(real) : real.toFixed(2)}<small>/d</small></div><div class="g-cap">FLOWER, real · `));
+  const m = nodesCurrent.glanceModel(D, CTX, {});
+  assert.deepStrictEqual([m.head.value, m.head.unit], [Math.abs(real) >= 10 ? compact(real) : real.toFixed(2), "/d"]);
+  assert.match(m.head.cap, /^FLOWER, real · \d+ nodes$/);
   const best = cur.slice().sort((a, b) => b.realTotal - a.realTotal)[0];
-  assert.ok(nodesCurrent.glance(D, CTX, {}, "m").html.includes(`<div class="g-n">${best.node}<div>`));
-  assert.strictEqual(count(nodesCurrent.glance(D, CTX, {}, "m").html), 3);
-  // expand vs buy: the served verdict per type as a chip
-  const acqL = nodesAcq.glance(D, CTX, {}, "l").html;
-  assert.match(acqL, /class="g-chip g-ok">EXPAND<|class="g-chip g-info">BUY<|class="g-chip">BUY ONLY</);
-  assert.match(nodesAcq.glance(D, CTX, {}, "s").html, new RegExp(`<small>/${Object.keys(acq.perType).length}</small>`));
+  assert.deepStrictEqual([m.items[0].name, m.items[0].pct], [best.node, 100]);
+  assert.match(renderLook(m, "overview-4").html, /class="gx-tiles"/);
+  assert.ok(looksFor(m).length >= 3);
+});
+
+test("📱 glance expand vs buy: how many types expanding wins (a ring); the served verdict per type as a chip", () => {
+  const m = nodesAcq.glanceModel(D, CTX, {});
+  assert.strictEqual(m.head.unit, `/${Object.keys(acq.perType).length}`);
+  assert.strictEqual(m.items.length, Object.keys(acq.perType).length);
+  assert.ok(["EXPAND", "BUY", "BUY ONLY"].includes(m.items[0].chip.text));
+  assert.match(renderLook(m, "list-4").html, /class="gx-chip g-ok">EXPAND<|class="gx-chip g-info">BUY<|class="gx-chip">BUY ONLY</);
+  assert.ok(looksFor(m).length >= 3);
 });

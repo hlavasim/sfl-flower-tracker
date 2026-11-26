@@ -2,7 +2,6 @@
 //   🧩 Coverage: every table with its status (inline → duplicated → core), summary tiles on top.
 //   📚 Core data tables: each table's JSON, collapsed.
 import { kpis, bigBar, pill } from "../ui/viz.mjs";
-import { big, meter, ring, tiles } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const ORDER = { inline: 0, duplicated: 1, core: 2 };
@@ -38,16 +37,22 @@ export const constantsCoverage = {
   },
 };
 
-// ── iPhone glance face: S = the share of tables already in core, with a ring; M = the three counts ──
-constantsCoverage.sizes = ["s", "m"];
-constantsCoverage.size = "s";
-constantsCoverage.glance = ({ constants } = {}, ctx = {}, opts = {}, size = "s") => {
+// ── iPhone glance model: the share of tables already in core (a ring), the three statuses with their
+// share; ui/glance-templates offers the looks ──
+const STATUS_ITEM = [["core", "in core", "✅", "ok"], ["duplicated", "duplicated", "🔁", "warn"], ["inline", "inline", "📝", "bad"]];
+constantsCoverage.look = "number";
+constantsCoverage.glanceModel = ({ constants } = {}) => {
   if (!constants || !Array.isArray(constants.coverage)) return { empty: LOADING };
   const s = constants.summary || {};
   if (!s.total) return { empty: "No tables listed." };
   const pct = (s.core / s.total) * 100;
-  if (size === "s") return { html: `<div class="g-corner">${ring(pct, { tone: pct >= 100 ? "ok" : "accent" })}</div>` + big(Math.round(pct), { unit: "%", cap: `${s.core} of ${s.total} tables in core` }) };
-  return { html: tiles([{ label: "in core", value: s.core }, { label: "duplicated", value: s.duplicated }, { label: "inline", value: s.inline }]) + meter(pct, pct >= 100 ? "ok" : "accent") };
+  return {
+    head: { value: Math.round(pct), unit: "%", ring: pct, ringTone: pct >= 100 ? "ok" : "accent", cap: `${s.core} of ${s.total} tables in core` },
+    items: STATUS_ITEM.map(([k, name, ic, t]) => ({ icon: ic, name, sub: `${Math.round(((s[k] || 0) / s.total) * 100)}% of ${s.total}`, value: s[k] || 0, tone: t,
+      pct: ((s[k] || 0) / s.total) * 100 })),
+    tiles: [{ label: "total", value: s.total }, { label: "in core", value: s.core }, { label: "duplicated", value: s.duplicated }, { label: "inline", value: s.inline }],
+    foot: `${s.duplicated + s.inline} tables still to move`,
+  };
 };
 
 export const constantsTables = {
@@ -61,4 +66,19 @@ export const constantsTables = {
     return { html: `<div class="v-dim" style="margin-bottom:8px">${names.length} tables</div>` + names.map((n) =>
       `<details class="v-const-t"><summary>${esc(n)}</summary><pre>${esc(JSON.stringify(constants.tables[n], null, 2))}</pre></details>`).join("") };
   },
+};
+
+// glance model: how many core tables there are, each with its entry count (the biggest first)
+const entries = (t) => (Array.isArray(t) ? t.length : t && typeof t === "object" ? Object.keys(t).length : 1);
+constantsTables.look = "list-4";
+constantsTables.glanceModel = ({ constants } = {}) => {
+  if (!constants || !constants.tables) return { empty: LOADING };
+  const list = Object.entries(constants.tables).map(([name, t]) => ({ name, n: entries(t) })).sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
+  if (!list.length) return { empty: "No core tables." };
+  const sum = list.reduce((a, x) => a + x.n, 0), max = list[0].n || 1;
+  return {
+    head: { value: list.length, unit: " tables", cap: `${sum} entries in core` },
+    items: list.map((x) => ({ name: x.name, value: x.n, pct: (x.n / max) * 100 })),
+    tiles: [{ label: "tables", value: list.length }, { label: "entries", value: sum }, { label: "largest", value: list[0].n }],
+  };
 };

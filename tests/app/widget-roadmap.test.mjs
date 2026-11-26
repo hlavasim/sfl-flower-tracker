@@ -5,6 +5,7 @@ import { roadmapIncome, roadmapBuyPath, roadmapOffers, fmtFlower, fmtDays, normR
 import { WIDGETS } from "../../widgets/registry.mjs";
 import { renderTable } from "../../ui/table.mjs";
 import { createStore } from "../../app/store.mjs";
+import { renderLook, looksFor } from "../../ui/glance-templates.mjs";
 import { buildPowerSection } from "../../core/sections/power.mjs";
 import { buildRoadmapSection } from "../../core/sections/roadmap.mjs";
 
@@ -191,36 +192,46 @@ test("🛒 buy path cells stay on one line: a short ETA, the horizon % under its
   assert.match(eta, /class="v-dim v-nowrap"/);
 });
 
-test("📱 glances: income S/M (now → after the plan, a sparkline), buy path S/M/L (the next buys with icons)", () => {
-  const s = roadmapIncome.glance({ roadmap: fresh() }, CTX, {}, "s").html;
-  assert.match(s, /<div class="g-big">[\d.]+k?<small>\/day<\/small><\/div><div class="g-cap">→ [\d.]+k?\/day after the plan<\/div>/);
-  const m = roadmapIncome.glance({ roadmap: fresh() }, CTX, {}, "m").html;
-  assert.match(m, /class="g-tiles"/);
-  assert.match(m, /<svg class="g-spark/);
-  const l = roadmapBuyPath.glance({ roadmap: fresh() }, CTX, {}, "l").html;
+test("📱 glance models: income (now → after the plan, where it comes from, a chart), buy path (the next buys with icons)", () => {
+  for (const w of [roadmapIncome, roadmapBuyPath, roadmapOffers]) {
+    assert.strictEqual(w.glance, undefined, `${w.type}: the hand-written face is gone`);
+    assert.strictEqual(w.sizes, undefined, w.type);
+  }
+  assert.strictEqual(roadmapIncome.look, "chart-2");
+  const m = roadmapIncome.glanceModel({ roadmap: fresh() }, CTX, {});
+  assert.strictEqual(m.head.unit, "/day");
+  assert.match(m.head.cap, /^→ [\d.]+k?\/day after the plan$/);
+  assert.ok(m.head.meter >= 0 && m.head.meter <= 100);
+  assert.ok(m.items.length >= 1 && m.items.every((i) => i.icon.startsWith("<i data-c=") && i.name.startsWith("L:")), "the categories, labelled with icons");
+  assert.ok(m.series.length >= 2);
+  assert.match(renderLook(m, "chart-2").html, /<svg class="gx-spark/);
+  assert.ok(looksFor(m).length >= 3);
+  assert.deepStrictEqual(roadmapIncome.glanceModel({}, CTX, {}), { empty: "No roadmap data." });
+
   const plan = RM.sim.ranked.filter((r) => r.status === "plan");
-  assert.strictEqual((l.match(/class="g-row"/g) || []).length, Math.min(6, plan.length));
-  assert.ok(l.includes(`<div class="g-n">${plan[0].name}<div>`), "the next buy first");
-  assert.match(l, new RegExp(`${plan.length} in the plan · next `));
-  assert.strictEqual((roadmapBuyPath.glance({ roadmap: fresh() }, CTX, {}, "m").html.match(/class="g-row"/g) || []).length, Math.min(3, plan.length));
-  assert.match(roadmapBuyPath.glance({ roadmap: fresh() }, CTX, {}, "s").html, /class="g-hero"/);
-  assert.deepStrictEqual(roadmapIncome.glance({}, CTX, {}, "m"), { empty: "No roadmap data." });
+  const b = roadmapBuyPath.glanceModel({ roadmap: fresh() }, CTX, {});
+  assert.strictEqual(b.items.length, plan.length);
+  assert.deepStrictEqual([b.items[0].name, b.items[0].icon], [plan[0].name, `<img data-i="${plan[0].name}">`], "the next buy first");
+  assert.strictEqual(b.head.hero, `<img data-i="${plan[0].name}">`);
+  assert.match(b.foot, new RegExp(`^${plan.length} in the plan · next `));
+  assert.strictEqual((renderLook(b, "list-4").html.match(/class="gx-row"/g) || []).length, Math.min(8, plan.length));
+  assert.ok(looksFor(b).length >= 3);
 });
 
-test("📱 glance: offers S = my offers on top, M / L = outbid first with state chips; no data → empty", () => {
+test("📱 glance model: offers = my offers on top (a ring), outbid first with state chips; no data → empty", () => {
   const BOOK2 = { items: { ...BOOK.items, "Test Other": { b: 10, f: 20, oc: 1, lc: 1, ls: 15, c: "collectibles", id: 9 } } };
   const rm = fresh();
   rm.sim.ranked = [...rm.sim.ranked, { ...rm.sim.ranked.find((r) => r.name === STATUE), name: "Test Other" }];
-  const top = roadmapOffers.glance({ roadmap: rm, book: BOOK2, farm: withOffer(35) }, CTX, {}, "s").html;
-  assert.strictEqual(top, `<div class="g-big g-ok">1<small>/1</small></div><div class="g-cap">my offers on top</div>`);
-  const outbid = roadmapOffers.glance({ roadmap: rm, book: BOOK2, farm: withOffer(20) }, CTX, {}, "s").html;
-  assert.match(outbid, /g-big g-warn">0<small>\/1<\/small><\/div><div class="g-cap">my offers on top · 1 outbid/);
-  const m = roadmapOffers.glance({ roadmap: rm, book: BOOK2, farm: withOffer(20) }, CTX, {}, "m").html;
-  assert.deepStrictEqual([...m.matchAll(/<div class="g-n">([^<]+)</g)].map((x) => x[1]), [STATUE, "Test Other"]);
-  assert.match(m, /mine 20\.00 · best 30\.00<\/div><\/div><span class="g-chip g-warn">OUTBID</);
-  assert.match(m, /best 10\.00 · floor 20\.00<\/div><\/div><span class="g-chip">NO OFFER</);
-  assert.match(m, /<img data-i="Test Unowned Statue">/);
-  assert.match(roadmapOffers.glance({ roadmap: rm, book: BOOK2, farm }, CTX, {}, "l").html, /<div class="g-big">2<\/div><div class="g-cap">buy-path items in the book · no offers of mine/);
-  assert.deepStrictEqual(roadmapOffers.glance({}, CTX, {}, "s"), { empty: "No roadmap data." });
-  assert.deepStrictEqual(roadmapOffers.glance({ roadmap: fresh(), book: null, farm }, CTX, {}, "m"), { empty: "The marketplace book is loading." });
+  const top = roadmapOffers.glanceModel({ roadmap: rm, book: BOOK2, farm: withOffer(35) }, CTX, {});
+  assert.deepStrictEqual(top.head, { value: 1, unit: "/1", tone: "ok", ring: 100, ringTone: "ok", cap: "my offers on top" });
+  assert.match(renderLook(top, "number").html, /<div class="gx-num g-ok">1<small>\/1<\/small><\/div><div class="gx-cap">my offers on top<\/div>/);
+  const m = roadmapOffers.glanceModel({ roadmap: rm, book: BOOK2, farm: withOffer(20) }, CTX, {});
+  assert.deepStrictEqual([m.head.value, m.head.tone, m.head.cap], [0, "warn", "my offers on top · 1 outbid"]);
+  assert.deepStrictEqual(m.items.map((i) => i.name), [STATUE, "Test Other"]);
+  assert.deepStrictEqual([m.items[0].icon, m.items[0].sub, m.items[0].chip], ['<img data-i="Test Unowned Statue">', "mine 20.00 · best 30.00", { text: "OUTBID", tone: "warn" }]);
+  assert.deepStrictEqual([m.items[1].sub, m.items[1].chip], ["best 10.00 · floor 20.00", { text: "NO OFFER", tone: "" }]);
+  assert.ok(looksFor(m).length >= 3);
+  assert.deepStrictEqual(roadmapOffers.glanceModel({ roadmap: rm, book: BOOK2, farm }, CTX, {}).head, { value: 2, cap: "buy-path items in the book · no offers of mine" });
+  assert.deepStrictEqual(roadmapOffers.glanceModel({}, CTX, {}), { empty: "No roadmap data." });
+  assert.deepStrictEqual(roadmapOffers.glanceModel({ roadmap: fresh(), book: null, farm }, CTX, {}), { empty: "The marketplace book is loading." });
 });

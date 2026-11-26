@@ -4,6 +4,7 @@ import { constantsCoverage, constantsTables } from "../../widgets/constants.mjs"
 import { WIDGETS } from "../../widgets/registry.mjs";
 import { renderTable } from "../../ui/table.mjs";
 import { buildConstantsSection } from "../../core/sections/constants.mjs";
+import { renderLook, looksFor } from "../../ui/glance-templates.mjs";
 
 // CONSTANTS: the core/ vs flowers.html coverage (a table with summary tiles) and the core data tables.
 const DATA = buildConstantsSection();
@@ -52,14 +53,29 @@ test("tables: one collapsed block per core table, the JSON escaped", () => {
   assert.strictEqual((real.html.match(/<details/g) || []).length, Object.keys(DATA.tables).length);
 });
 
-test("📱 glance: S = the share already in core with a ring, M = the three counts; no data → empty", () => {
+test("📱 glance model: the share already in core with a ring, the three statuses with their share; the core tables by size; no data → empty", () => {
   const s = DATA.summary;
-  const S = constantsCoverage.glance({ constants: DATA }, {}, {}, "s").html;
-  assert.match(S, /class="g-corner"><svg class="g-ring/);
-  assert.ok(S.includes(`<div class="g-big">${Math.round((s.core / s.total) * 100)}<small>%</small></div><div class="g-cap">${s.core} of ${s.total} tables in core</div>`));
-  const M = constantsCoverage.glance({ constants: DATA }, {}, {}, "m").html;
-  assert.ok(M.includes(`<span>duplicated</span><b>${s.duplicated}</b>`) && M.includes(`<span>inline</span><b>${s.inline}</b>`));
-  assert.match(M, /class="g-meter"/);
-  assert.deepStrictEqual(constantsCoverage.glance({}, {}, {}, "s"), { empty: "Loading the constants…" });
-  assert.strictEqual(constantsTables.glance, undefined, "the raw tables have no face");
+  assert.strictEqual(constantsCoverage.glance, undefined, "the hand-written face is gone");
+  assert.strictEqual(constantsCoverage.look, "number");
+  const m = constantsCoverage.glanceModel({ constants: DATA }, {}, {});
+  const pct = (s.core / s.total) * 100;
+  assert.deepStrictEqual(m.head, { value: Math.round(pct), unit: "%", ring: pct, ringTone: pct >= 100 ? "ok" : "accent", cap: `${s.core} of ${s.total} tables in core` });
+  assert.deepStrictEqual(m.items.map((i) => [i.name, i.value]), [["in core", s.core], ["duplicated", s.duplicated], ["inline", s.inline]]);
+  assert.deepStrictEqual(m.items[0], { icon: "✅", name: "in core", sub: `${Math.round(pct)}% of ${s.total}`, value: s.core, tone: "ok", pct });
+  const html = renderLook(m, "number").html;
+  assert.match(html, /class="gx-corner"><svg class="gx-ring/);
+  assert.ok(html.includes(`<div class="gx-num">${Math.round(pct)}<small>%</small></div><div class="gx-cap">${s.core} of ${s.total} tables in core</div>`));
+  assert.ok(looksFor(m).length >= 3);
+  assert.deepStrictEqual(constantsCoverage.glanceModel({}, {}, {}), { empty: "Loading the constants…" });
+
+  assert.strictEqual(constantsTables.glance, undefined);
+  const t = constantsTables.glanceModel({ constants: DATA }, {}, {});
+  const n = Object.keys(DATA.tables).length;
+  assert.deepStrictEqual([t.head.value, t.head.unit], [n, " tables"]);
+  assert.strictEqual(t.items.length, n);
+  assert.strictEqual(t.items[0].pct, 100, "the biggest table first");
+  assert.ok(t.items.every((x, i) => !i || x.value <= t.items[i - 1].value));
+  assert.strictEqual((renderLook(t, "list-4").html.match(/class="gx-row"/g) || []).length, Math.min(8, n));
+  assert.ok(looksFor(t).length >= 3);
+  assert.deepStrictEqual(constantsTables.glanceModel({}, {}, {}), { empty: "Loading the constants…" });
 });

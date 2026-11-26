@@ -4,6 +4,7 @@ import { worldIslands, worldSkillPoints } from "../../widgets/world-dist.mjs";
 import { WIDGETS } from "../../widgets/registry.mjs";
 import { renderTable } from "../../ui/table.mjs";
 import { createStore } from "../../app/store.mjs";
+import { renderLook } from "../../ui/glance-templates.mjs";
 
 // WORLD distributions as table widgets: farms per bucket, share, a bar; the viewer's own bucket
 // highlighted and how many farms are above it.
@@ -61,13 +62,15 @@ test("without my farm the charts still stand; no data → an explanation", () =>
   assert.match(worldIslands.build({ agg: null }).empty, /WORLD/);
 });
 
-test("📱 glance: my island and its rank (S), the islands by count with mine marked (L), no data → empty", () => {
-  assert.strictEqual(worldIslands.glance({ agg: ISL, me: ME }, {}, {}, "s").html, `<div class="g-big g-accent">volcano</div><div class="g-cap">you · top 0.1% · #1</div>`);
-  const l = worldIslands.glance({ agg: ISL, me: ME }, {}, {}, "l").html;
-  assert.deepStrictEqual([...l.matchAll(/<div class="g-n">([^<]+)</g)].map((x) => x[1]), ["basic", "spring", "volcano"], "the islands nobody is on are left out");
-  assert.match(l, /volcano<div>100 farms<\/div><\/div><span class="g-v g-accent">10\.0%/);
-  assert.match(worldIslands.glance({ agg: ISL }, {}, {}, "s").html, /60\.0%.*basic · of 1k farms/);
-  assert.match(worldIslands.glance({ agg: null }, {}, {}, "m").empty, /WORLD/);
+test("📱 glance model: my island and its rank (a ring of farms behind me), the islands by count with mine moved up, no data → empty", () => {
+  assert.strictEqual(worldIslands.glance, undefined, "the hand-written face is gone");
+  const m = worldIslands.glanceModel({ agg: ISL, me: ME }, {}, {});
+  assert.deepStrictEqual([m.head.value, m.head.tone, m.head.cap], ["volcano", "accent", "you · top 0.1% · #1"]);
+  assert.deepStrictEqual(m.items.map((i) => i.name), ["basic", "▶ volcano", "spring"], "the islands nobody is on are left out");
+  assert.deepStrictEqual([m.items[1].sub, m.items[1].value, m.items[1].tone], ["100 farms", "10.0%", "accent"]);
+  assert.match(renderLook(m, "list-1").html, /▶ volcano<div class="gx-sub-tag g-accent">10\.0%/);
+  assert.match(renderLook(worldIslands.glanceModel({ agg: ISL }, {}, {}), "number").html, /60\.0%<\/div><div class="gx-cap">basic · of 1k farms/);
+  assert.match(worldIslands.glanceModel({ agg: null }, {}, {}).empty, /WORLD/);
 });
 
 test("store: worldAgg asks mode=agg with the group and limit, worldMe mode=farm", async () => {
