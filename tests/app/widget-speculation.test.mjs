@@ -129,3 +129,56 @@ test("the page renders the widgets and keeps the owner-only writes", () => {
   assert.match(src, /writeFetch\(_specApi\("trades", extra\)/);
   assert.ok(!/_specDrawEggChart|LightweightCharts\.createChart\(el, \{\s*height: 220/.test(src.slice(src.indexOf("SPEKULACE (farm 155498 only)"), src.indexOf("DIFF PAGE (farm 155498 only)"))));
 });
+
+test("📱 glance: calendar S = the season and how far into its week; M/L = the BUY / SELL signals", () => {
+  assert.deepStrictEqual(specCalendar.sizes, ["s", "m", "l"]);
+  const s = specCalendar.glance({ farm: FARM }, ctx(), {}, "s").html;
+  assert.match(s, /^<div class="g-corner"><svg class="g-ring g-info"/);
+  assert.match(s, /<div class="g-big">autumn<\/div><div class="g-cap">🍂 next season in 4 d · 2 signals<\/div>$/);
+  const m = specCalendar.glance({ farm: FARM }, ctx(), {}, "m").html;
+  assert.match(m, /^<div class="g-split">/);
+  assert.match(m, /<img data-i="Potato"><\/span><div class="g-n">Potato<div>held 1,683 · net \+12 %<\/div><\/div><span class="g-chip g-warn">SELL/);
+  assert.match(m, /Kale<div>net \+20 % · sell in spring<\/div><\/div><span class="g-chip g-info">BUY/);
+  assert.doesNotMatch(m, /Wheat/);
+  const quiet = { ...SPEC, cal: { ...CAL, items: CAL.items.filter((x) => x.signal === "noise") } };
+  assert.match(specCalendar.glance({}, ctx({ spec: quiet }), {}, "l").html, /no signal[\s\S]*No stable crop/);
+  let asked = 0;
+  assert.deepStrictEqual(specCalendar.glance({}, ctx({ spec: { err: {} }, ensure: () => asked++ }), {}, "s"), { empty: "Loading the calendar…" });
+  assert.strictEqual(asked, 1);
+  assert.deepStrictEqual(specCalendar.glance({}, ctx({ spec: { err: { cal: "401" } } }), {}, "s"), { empty: "Calendar did not load: 401" });
+});
+
+test("📱 glance: trades S = realised FLOWER; M = realised / open cost / open worth; L = the latest trades", () => {
+  const s = specTrades.glance({}, ctx(), {}, "s").html;
+  assert.match(s, /^<div class="g-big g-ok">\+0\.2<small> FLOWER<\/small><\/div><div class="g-cap">realised · 4 trades · 3 open<\/div>$/);
+  const m = specTrades.glance({}, ctx(), {}, "m").html;
+  assert.match(m, /<span>Open cost<\/span><b>7<\/b>/);                     // 1,000 × 0.002 + 10 × 0.5
+  assert.match(m, /<span>Open worth<\/span><b>≥ 2\.7<\/b>/);                // Barley has no price
+  const l = specTrades.glance({}, ctx(), {}, "l").html;
+  assert.strictEqual((l.match(/class="g-row"/g) || []).length, 4);
+  assert.ok(l.indexOf("Genesis egg #803") < l.indexOf(">Kale<"), "newest first");
+  assert.match(l, /Genesis egg #803<div>open · 1 · RON/);
+  assert.match(l, /Kale<div>sold · 100 · FLOWER<\/div><\/div><span class="g-v g-ok">\+0\.2</);
+  assert.deepStrictEqual(specTrades.glance({}, ctx({ spec: { trades: [], err: {} } }), {}, "s"), { empty: "No trades yet." });
+  assert.match(specTrades.glance({}, ctx({ spec: { err: {} } }), {}, "m").empty, /Loading the trade log/);
+});
+
+test("📱 glance: skim S = sats per FLOWER and the verdict; M adds the game balance, BTC and what was skimmed", () => {
+  const s = specSkim.glance({ farm: FARM }, ctx(), {}, "s").html;
+  assert.match(s, /^<div class="g-big g-ok">120<small> sats<\/small><\/div><div class="g-cap">per FLOWER · \+19 % vs 30 d · good day to skim<\/div>$/);
+  const m = specSkim.glance({ farm: FARM }, ctx(), {}, "m").html;
+  assert.match(m, /BTC 24 h<div>\$90,000<\/div><\/div><span class="g-v g-bad">−1\.0 %/);
+  assert.match(m, /Skimmed<div>2 withdrawals<\/div><\/div><span class="g-v g-ok">0\.0015 ₿/);
+  assert.match(specSkim.glance({}, ctx({ spec: { ...SPEC, err: { ledger: "401" } } }), {}, "m").html, /Skimmed<div>enter the key/);
+  assert.match(specSkim.glance({}, ctx({ spec: { err: {} } }), {}, "s").empty, /Loading the skim data/);
+});
+
+test("📱 glance: eggs S = the valid floor, its 24 h move and line; M adds the 10th ask, Bad Eggs and sales", () => {
+  const s = specEggs.glance({}, ctx(), {}, "s").html;
+  assert.match(s, /^<div class="g-big">50<small> RON<\/small><\/div><div class="g-cap">valid egg floor · \+25 % in 24 h<\/div><svg class="g-spark g-ok"/);
+  const m = specEggs.glance({}, ctx(), {}, "m").html;
+  assert.match(m, /Bad Eggs<div>\+2 last run<\/div><\/div><span class="g-v g-bad">110</);
+  assert.match(m, /Sales 1 h<div>median 52 RON<\/div><\/div><span class="g-v">4</);
+  assert.match(specEggs.glance({}, ctx({ spec: { eggs: [], err: {} } }), {}, "s").empty, /No egg snapshot yet/);
+  assert.match(specEggs.glance({}, ctx({ spec: { err: {} } }), {}, "s").empty, /Loading the egg snapshots/);
+});

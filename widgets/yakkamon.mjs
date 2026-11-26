@@ -6,6 +6,7 @@
 // The rules (multiplier, bulk bonus, points, the trend) are core/yakkamon.mjs.
 import { YK, ykWeekAt, ykMult, ykPoints, ykNeedFor, ykTrend } from "../core/yakkamon.mjs";
 import { bar } from "../ui/viz.mjs";
+import { big, compact, ring, spark, rows as gRows, tiles as gTiles } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const fmt = (n, d) => (+n).toLocaleString("en-US", { maximumFractionDigits: d === undefined ? 0 : d });
@@ -21,6 +22,8 @@ const noFarm = () => ({});
 const own = (opts, key, page) => (opts[key] !== undefined && opts[key] !== null && opts[key] !== "" && Number.isFinite(Number(opts[key])) ? Number(opts[key]) : page);
 
 // ── live: your trainer number + the public top 100 ──────────────────────────────────────────
+// The egg-tier boundaries inside the public top 100 — the only ranks where a point changes what you win.
+const LIVE_BOUNDS = [[1, "Storm + Echo"], [3, "last Storm + Echo"], [4, "Storm + Ghost"], [10, "last Storm + Ghost"], [11, "Storm"], [50, "last Storm"], [51, "Echo"], [100, "Echo"]];
 export const ykLive = {
   type: "yk-live",
   title: "🔴 Live — what number you'd be",
@@ -47,8 +50,7 @@ export const ykLive = {
       const e = bd.entries, at = (r) => (e.find((x) => x.rank === r) || {}).points;
       const mult = ykMult(Math.max(1, ykWeekAt(now)));
       const flowerFor = (p) => (p ? Math.ceil(p / mult) : null);
-      // The egg-tier boundaries inside the public top 100 — the only ranks where a point changes what you win.
-      const bounds = [[1, "Storm + Echo"], [3, "last Storm + Echo"], [4, "Storm + Ghost"], [10, "last Storm + Ghost"], [11, "Storm"], [50, "last Storm"], [51, "Echo"], [100, "Echo"]];
+      const bounds = LIVE_BOUNDS;
       const top = at(1) || 1;
       const gap50 = (at(50) || 0) - (at(51) || 0);
       const ageH = bd.generatedAt ? (now - bd.generatedAt) / 3600000 : 0;
@@ -480,4 +482,94 @@ export const ykVerdict = {
       note(`Timing: if you do go in, <b>the first week is the best</b> (3×) — each week of waiting shaves 0.2× off the multiplier. But do not rush purely for the multiplier: w1 vs w3 is only ${((1 - ykMult(3) / ykMult(1)) * 100).toFixed(0)}%, which is small against the risk of deciding wrong.`, "dim") + `</div>`;
     return { html };
   },
+};
+
+// ── iPhone glance faces ─────────────────────────────────────────────────────────────────────
+// Facts, the published tiers / sources / ranks, the sign-up eggs and the verdict are reference
+// text with nothing to glance at, so they stay table-only.
+const signed = (v) => (v >= 0 ? "+" : "") + compact(v);
+
+// live: S = the trainer number you'd get, the ring = how full your egg tier is; M/L add the
+// points the leaderboard's tier boundaries take today
+ykLive.sizes = ["s", "m", "l"];
+ykLive.size = "s";
+ykLive.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const su = ctx.live && ctx.live.signups, bd = ctx.live && ctx.live.board;
+  if (!su) return { empty: ykLive.view(data, ctx).empty };
+  const claimed = su.claimed || 0;
+  const lo = Math.max(0, ...(su.tiers || []).map((t) => t.until).filter((u) => u <= claimed));
+  const fill = su.tierUntil > lo ? ((claimed - lo) / (su.tierUntil - lo)) * 100 : 100;
+  const head = big(`#${compact(claimed + 1)}`, { cap: `you'd be · ${su.tier || "?"} egg · ${compact(su.remaining)} left` });
+  const e = (bd && bd.entries) || [];
+  const at = (r) => (e.find((x) => x.rank === r) || {}).points;
+  const mult = ykMult(Math.max(1, ykWeekAt(nowOf(ctx))));
+  const list = (ranks) => LIVE_BOUNDS.filter(([r]) => ranks.includes(r) && at(r)).map(([r, what]) => ({ name: `#${r}`,
+    sub: size === "l" ? `${what} · ≈ ${compact(Math.ceil(at(r) / mult))} FLOWER` : what, value: compact(at(r)) }));
+  if (size === "s" || !e.length) return { html: `<div class="g-corner">${ring(fill, { tone: "warn" })}</div>` + head };
+  if (size === "m") return { html: `<div class="g-split"><div>${head}</div>${gRows(list([10, 50, 100]))}</div>` };
+  return { html: `<div class="g-corner">${ring(fill, { tone: "warn" })}</div>` + head + gRows(list([1, 3, 10, 50, 100])) };
+};
+
+// placing: S = the #50 (Storm) threshold now, how far it moved, and its line; M adds #3 / #10 / #100
+ykPlacing.sizes = ["s", "m"];
+ykPlacing.size = "s";
+ykPlacing.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const hist = Array.isArray(ctx.hist) ? ctx.hist : [];
+  const series = (key) => hist.filter((r) => isFinite(r[key]));
+  const p50 = series("p50");
+  if (p50.length < 2) return { empty: "Not enough snapshots yet — the trend appears once a second build has been seen." };
+  const move = (pts, key) => pts[pts.length - 1][key] - pts[0][key];
+  const hours = ((p50[p50.length - 1].t - p50[0].t) / 3600000).toFixed(0);
+  const d50 = move(p50, "p50");
+  const head = big(compact(p50[p50.length - 1].p50), { unit: " pts", cap: `#50 Storm cut-off · ${signed(d50)} in ${hours} h` }) +
+    spark(p50.map((r) => r.p50), d50 > 0 ? "warn" : "ok");
+  if (size === "s") return { html: head };
+  const list = [["p3", "#3"], ["p10", "#10"], ["p100", "#100"]].map(([key, name]) => {
+    const pts = series(key);
+    if (!pts.length) return null;
+    const d = move(pts, key);
+    return { name, sub: `${signed(d)} in ${hours} h`, value: compact(pts[pts.length - 1][key]), tone: d > 0 ? "warn" : "" };
+  }).filter(Boolean);
+  return { html: `<div class="g-split"><div>${head}</div>${gRows(list)}</div>` };
+};
+
+// planner: S = the week-1 deposit; M = week 1 / the top-ups / the total; L = the tranches in order
+ykPlanner.sizes = ["s", "m", "l"];
+ykPlanner.size = "s";
+ykPlanner.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = ykPlanner.build(data, ctx, opts);
+  if (!out.rows.length) return { empty: out.empty };
+  const rs = out.rows, first = rs.find((r) => r.w === 1), later = rs.filter((r) => r.w > 1);
+  const lead = first || rs[0];
+  const head = big(compact(lead.amt), { unit: " FLOWER", tone: "ok",
+    cap: `week ${lead.w} deposit · ${compact(lead.pts)} pts${later.length ? ` · then ${later.length} top-ups` : ""}` });
+  if (size === "s") return { html: head };
+  if (size === "m") {
+    return { html: gTiles([
+      { label: "Week 1", value: compact(first ? first.amt : 0), sub: `${compact(first ? first.pts : 0)} pts` },
+      { label: "Top-ups", value: compact(later.reduce((a, r) => a + r.amt, 0)), sub: `${later.length} weeks` },
+      { label: "Total", value: compact(rs[rs.length - 1].run), sub: `${rs.length} deposits` },
+    ]) };
+  }
+  return { html: head + gRows(rs.slice(0, 6).map((r) => ({ name: `Week ${r.w}`,
+    sub: `${new Date(r.date).toLocaleDateString("en-US", { day: "numeric", month: "short" })} · ${r.mult.toFixed(1)}×`,
+    value: compact(r.amt), tone: r.w === 1 ? "ok" : "accent" }))) };
+};
+
+// calculator: S = the points the deposit earns; M adds base / bonus / points per FLOWER
+ykCalculator.sizes = ["s", "m"];
+ykCalculator.size = "s";
+ykCalculator.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = ykCalculator.build(data, ctx, opts);
+  const s = calcSettings(ctx, opts);
+  const part = (k) => (out.rows.find((r) => r.k === k) || {}).pts || 0;
+  const total = part("total");
+  if (!(total > 0)) return { empty: "Enter a deposit amount to see its points." };
+  const head = big(compact(total), { unit: " pts", tone: "ok", cap: `${fmt(s.amount)} FLOWER in week ${s.week} · ${ykMult(s.week).toFixed(1)}×` });
+  if (size === "s") return { html: head };
+  return { html: `<div class="g-split"><div>${head}</div>${gRows([
+    { name: "Base", value: compact(part("base")) },
+    { name: "Bulk bonus", value: `+${compact(part("bonus"))}`, tone: "accent" },
+    { name: "Per FLOWER", value: `${(total / s.amount).toFixed(2)} pts` },
+  ])}</div>` };
 };

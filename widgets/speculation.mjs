@@ -5,6 +5,7 @@
 //   ctx: { spec: {cal, trades, eggs, ledger, sats, btc, p2p, err}, ensure?(), icon?(name) → HTML,
 //          flower?: FLOWER icon HTML, now? }
 import { kpis, pill } from "../ui/viz.mjs";
+import { big, compact, ring, spark, rows as gRows, tiles as gTiles } from "../ui/glance.mjs";
 
 export const SPEC_FEE = 0.10;
 const SEASONS = ["spring", "summer", "autumn", "winter"];
@@ -261,6 +262,107 @@ export const specEggs = {
     }
     return { html: h };
   },
+};
+
+// ── iPhone glance faces ────────────────────────────────────────────────
+// Nothing loaded yet: ask the page to load (once); a glance face only has room for one line.
+function glanceWait(ctx, key, what) {
+  const e = errOf(ctx, key);
+  if (e) return { empty: `${what} did not load: ${e}` };
+  if (typeof ctx.ensure === "function") ctx.ensure();
+  return { empty: `Loading the ${what.toLowerCase()}…` };
+}
+const signed = (v) => (v >= 0 ? "+" : "") + compact(v);
+
+// calendar: S = the season now, the ring = how far into its week; M/L add this week's BUY / SELL signals
+specCalendar.sizes = ["s", "m", "l"];
+specCalendar.size = "s";
+specCalendar.glance = ({ farm } = {}, ctx = {}, opts = {}, size = "s") => {
+  const c = specOf(ctx).cal;
+  if (!c) return glanceWait(ctx, "cal", "Calendar");
+  const now = nowOf(ctx), WEEK = 7 * 86400000;
+  const days = Math.max(0, Math.ceil((c.current.startedAt + WEEK - now) / 86400000));
+  const act = c.items.filter((x) => x.signal === "buy" || x.signal === "sell");
+  const inv = (farm && farm.inventory) || {};
+  const head = big(c.current.season || "?", { cap: `${SEASON_ICON[c.current.season] || ""} next season in ${days} d · ${act.length ? `${act.length} signal${act.length === 1 ? "" : "s"}` : "no signal"}` });
+  const corner = `<div class="g-corner">${ring(((now - c.current.startedAt) / WEEK) * 100, { tone: "info" })}</div>`;
+  if (size === "s") return { html: corner + head };
+  const list = act.slice(0, size === "m" ? 3 : 6).map((x) => {
+    const buy = x.signal === "buy";
+    return { icon: icon(ctx, x.item), name: x.item, sub: buy ? `net ${pct(x.expectedNet)} · sell in ${x.sell}` : `held ${fmt(count(inv, x.item))} · net ${pct(x.expectedNet)}`,
+      chip: { text: buy ? "BUY" : "SELL", tone: buy ? "info" : "warn" } };
+  });
+  const body = list.length ? gRows(list) : `<div class="g-cap">No stable crop is in its buying or selling season this week.</div>`;
+  return { html: size === "m" ? `<div class="g-split"><div>${head}</div>${body}</div>` : corner + head + body };
+};
+
+// trades: S = the realised FLOWER; M = realised / open cost / open worth; L = the latest trades
+specTrades.sizes = ["s", "m", "l"];
+specTrades.size = "s";
+specTrades.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const spec = specOf(ctx);
+  if (spec.trades == null) return glanceWait(ctx, "trades", "Trade log");
+  if (!spec.trades.length) return { empty: "No trades yet." };
+  const st = tradeStats(spec);
+  const open = st.rows.filter((r) => r.sell == null).length;
+  const head = big(signed(st.realized), { unit: " FLOWER", tone: st.realized >= 0 ? "ok" : "bad",
+    cap: `realised · ${st.rows.length} trade${st.rows.length === 1 ? "" : "s"}${open ? ` · ${open} open` : ""}` });
+  if (size === "s") return { html: head };
+  if (size === "m") {
+    return { html: gTiles([
+      { label: "Realised", value: signed(st.realized), sub: st.realizedSats != null ? `≈ ${compact(st.realizedSats)} sats` : "FLOWER" },
+      { label: "Open cost", value: compact(st.openCost), sub: "FLOWER" },
+      { label: "Open worth", value: `${st.openValued ? "" : "≥ "}${compact(st.openValue)}`, sub: "after the fee" },
+    ]) };
+  }
+  return { html: head + gRows(st.rows.slice(-6).reverse().map(({ t, qty, sell, val }) => ({ icon: icon(ctx, t.item), name: t.item,
+    sub: `${sell == null ? "open" : "sold"} · ${fmt(qty, 4)} · ${t.currency}`,
+    value: val == null ? "—" : `${val >= 0 ? "+" : ""}${fmt(val, 2)}`, tone: val == null ? "" : val >= 0 ? "ok" : "bad" }))) };
+};
+
+// skim: S = sats per FLOWER today and whether it is a day to skim; M adds the FLOWER in the game,
+// BTC's day and what has been skimmed so far
+specSkim.sizes = ["s", "m"];
+specSkim.size = "s";
+specSkim.glance = ({ farm } = {}, ctx = {}, opts = {}, size = "s") => {
+  const spec = specOf(ctx);
+  if (!spec.sats && !spec.btc && !spec.ledger) {
+    if (typeof ctx.ensure === "function") ctx.ensure();
+    return { empty: "Loading the skim data…" };
+  }
+  const k = skimStats(spec, farm);
+  const good = k.verdict !== "normal";
+  const head = big(k.now == null ? "—" : fmt(k.now, 1), { unit: " sats", tone: good ? "ok" : "",
+    cap: `per FLOWER${k.avg30 ? ` · ${pct(k.now / k.avg30 - 1)} vs 30 d` : ""} · ${good ? "good day to skim" : "ordinary day"}` });
+  if (size === "s") return { html: head };
+  return { html: `<div class="g-split"><div>${head}</div>${gRows([
+    { name: "In the game", sub: k.now ? `≈ ${compact(k.bal * k.now)} sats` : "", value: `${compact(k.bal)} FLOWER` },
+    { name: "BTC 24 h", sub: spec.btc ? `$${fmt(spec.btc.usd)}` : "", value: pct(k.btcChg, 1), tone: k.btcChg != null && k.btcChg < 0 ? "bad" : "ok" },
+    errOf(ctx, "ledger") ? { name: "Skimmed", sub: "enter the key", value: "🔒" }
+      : { name: "Skimmed", sub: `${k.skims.length} withdrawal${k.skims.length === 1 ? "" : "s"}`, value: `${fmt(k.skimBtc, 5)} ₿`, tone: "ok" },
+  ])}</div>` };
+};
+
+// eggs: S = the valid egg floor, its 24 h move and its line; M adds the 10th ask, Bad Eggs and sales
+specEggs.sizes = ["s", "m"];
+specEggs.size = "s";
+specEggs.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const spec = specOf(ctx);
+  if (spec.eggs == null) return glanceWait(ctx, "eggs", "Egg snapshots");
+  const snaps = spec.eggs, last = snaps.length ? snaps[snaps.length - 1].data : null;
+  if (!last) return { empty: "No egg snapshot yet — the collector sends one every hour." };
+  const now = nowOf(ctx);
+  const dayAgo = snaps.filter((x) => Date.parse(x.ts) <= now - 24 * 3600000).slice(-1)[0];
+  const prev = dayAgo && dayAgo.data;
+  const chg = prev && prev.floor_hidden_ron ? ` · ${pct(last.floor_hidden_ron / prev.floor_hidden_ron - 1)} in 24 h` : "";
+  const head = big(fmt(last.floor_hidden_ron), { unit: " RON", cap: `valid egg floor${chg}` }) +
+    spark(snaps.map((x) => x.data && x.data.floor_hidden_ron).filter((v) => v != null), "ok");
+  if (size === "s") return { html: head };
+  return { html: `<div class="g-split"><div>${head}</div>${gRows([
+    { name: "10th ask", value: `${fmt(last.ask_10th_ron)} RON` },
+    { name: "Bad Eggs", sub: last.newly_flagged ? `+${fmt(last.newly_flagged)} last run` : "", value: fmt(last.official_bad_eggs), tone: "bad" },
+    { name: "Sales 1 h", sub: last.median_sale_1h_hidden_ron != null ? `median ${fmt(last.median_sale_1h_hidden_ron)} RON` : "", value: fmt(last.sales_1h_hidden) },
+  ])}</div>` };
 };
 
 export const SPECULATION_WIDGETS = [specCalendar, specTrades, specSkim, specEggs];
