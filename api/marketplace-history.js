@@ -1,4 +1,12 @@
 import { getPool } from "./_db.js";
+import ITEM_NAMES from "./_item-names.js";
+
+// The page named rows from its own hand-written table, which lacks most ids ("Collectibles #601"
+// for Wood); the generated table (the game's KNOWN_IDS + ITEM_IDS, per collection) names them here.
+const named = (rows) => rows.map((r) => {
+  const t = ITEM_NAMES[r.collection];
+  return t && t[r.item_id] ? { ...r, name: t[r.item_id] } : r;
+});
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -101,7 +109,7 @@ export default async function handler(req, res) {
           LIMIT $${params.length}`,
           params
         );
-        return res.status(200).json({ items: result.rows, mode: "delta", from: earliest, to: latest });
+        return res.status(200).json({ items: named(result.rows), mode: "delta", from: earliest, to: latest });
       } else {
         // Only 1 day of data — show latest snapshot with warning
         const conditions = [`date = $1`];
@@ -121,7 +129,7 @@ export default async function handler(req, res) {
            LIMIT $${params.length}`,
           params
         );
-        return res.status(200).json({ items: result.rows, mode: "cumulative", date: latest });
+        return res.status(200).json({ items: named(result.rows), mode: "cumulative", date: latest });
       }
     }
 

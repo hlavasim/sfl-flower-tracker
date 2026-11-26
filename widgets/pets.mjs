@@ -118,7 +118,7 @@ export const petsNftCollection = {
       const fd = PET_FETCH_DATA[breed] || [];
       const lv25 = fd.find((f) => f.level === 25);
       const res = fd.map((f) => `<span class="v-pet-chip${f.level === 25 ? " v-pet-unique" : f.res === "Moonfur" ? " v-pet-moon" : ""}">` +
-        `${o && o.level >= f.level ? "✅" : "🔒"} ${icon(ctx, f.res)}${esc(f.res)} <small>Lv${f.level} · ${f.energy}⚡</small></span>`).join("");
+        `${o && o.level >= f.level ? "✅" : "🔒"} ${icon(ctx, f.res)}${esc(f.res)} <small class="v-pol-sub">Lv${f.level} · ${f.energy}⚡</small></span>`).join("");
       return `<div class="v-pet-card${o ? "" : " v-pet-missing"}"><div class="v-pet-head"><span class="v-name">${icon(ctx, o ? `Pet #${o.id}` : breed)}<b>${esc(breed)}</b></span>` +
         `${o ? pill("OWNED", "ok") : pill("MISSING", "bad")}</div>` +
         (o ? `<div class="v-dim">Pet #${esc(o.id)} · Lv ${o.level} · ${o.energy.toLocaleString()} ⚡</div>` : `<div class="v-rm-neg">Not owned — buy from the marketplace</div>`) +
@@ -298,9 +298,9 @@ export const petCards = {
     { key: "energy", label: "⚡", align: "right", fmt: (v) => v.toLocaleString() },
     { key: "bestSfl", label: "best fetch now", align: "right", title: "The best unlocked fetch for the energy the pet has now",
       fmt: (v, r) => (r.best ? `${r.bestHtml} = <b class="v-done">${v.toFixed(2)}</b>` : `<span class="v-dim">${esc(r.noFetch)}</span>`) },
-    { key: "daily", label: "FLOWER/day", align: "right", fmt: (v, r) => (v > 0 ? `<b>${v.toFixed(2)}</b><small class="v-dim"> ${r.dailyRes}</small>` : "—") },
-    { key: "xp", label: "XP", get: (r) => r.prog.pct, fmt: (v, r) => `<div class="v-rm-val"><small class="v-dim">${r.prog.inLv.toLocaleString()} / ${r.prog.need.toLocaleString()} (${v}%)</small>${bar(v)}</div>` },
-    { key: "next", label: "next perk", get: (r) => r.prog.days, fmt: (v, r) => (r.prog.next ? `Lv ${r.prog.next.level} <small class="v-dim">${esc(r.prog.next.perk)}${v != null ? ` · ~${v}d` : ""}</small>` : "—") },
+    { key: "daily", label: "FLOWER/day", align: "right", fmt: (v, r) => (v > 0 ? `<b>${v.toFixed(2)}</b><small class="v-dim v-pol-sub"> ${r.dailyRes}</small>` : "—") },
+    { key: "xp", label: "XP", get: (r) => r.prog.pct, fmt: (v, r) => `<div class="v-rm-val"><small class="v-dim v-pol-sub">${r.prog.inLv.toLocaleString()} / ${r.prog.need.toLocaleString()} (${v}%)</small>${bar(v)}</div>` },
+    { key: "next", label: "next perk", get: (r) => r.prog.days, fmt: (v, r) => (r.prog.next ? `Lv ${r.prog.next.level} <small class="v-dim v-pol-sub">${esc(r.prog.next.perk)}${v != null ? ` · ~${v}d` : ""}</small>` : "—") },
     { key: "fed", label: "fed today", align: "right", extra: true, get: (r) => (r.feedN ? r.fedN / r.feedN : null), fmt: (v, r) => (r.feedN ? `${r.fedN}/${r.feedN}` : "—") },
     { key: "detail", label: "detail", fmt: (v, r) => `<details class="v-rm-more"${r.open ? " open" : ""}><summary>fetches · feeding · perks</summary>${r.detailHtml}</details>` },
   ],
