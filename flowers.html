@@ -2877,6 +2877,19 @@
     .v-mvl-route.on { background: rgba(95,179,107,0.10); }
     .v-mvl-route label { cursor: pointer; }
     .v-mini tr.v-age-row td { white-space: normal; }
+    .v-diff { font-family: var(--c-font); font-size: 13px; color: var(--c-text); }
+    .v-diff .diff-slicer, .v-diff .diff-timeline, .v-diff .diff-detail, .v-diff .diff-stat-card, .v-diff .diff-price-explain {
+      background: var(--c-card); border: 1px solid var(--c-line); border-radius: 14px; box-shadow: none; font-family: var(--c-font); }
+    .v-diff .diff-stat-card { padding: 10px 12px; }
+    .v-diff .diff-stat-label { font-family: var(--c-font); font-size: 12px; color: var(--c-muted); letter-spacing: 0; }
+    .v-diff .diff-stat-value { font-family: var(--c-font); font-size: 20px; font-weight: 700; }
+    .v-diff .diff-group-btn { font-family: var(--c-font); font-size: 12.5px; padding: 6px 12px; border-radius: 999px; background: var(--c-card2);
+      border: 1px solid var(--c-line); color: var(--c-muted); box-shadow: none; }
+    .v-diff .diff-group-btn.active { background: var(--c-text); color: var(--c-bg); border-color: var(--c-text); font-weight: 600; }
+    .v-diff .diff-slicer-input { background: var(--c-bg); color: var(--c-text); border: 1px solid var(--c-line); border-radius: 8px; font: 12.5px var(--c-font); }
+    .v-diff .diff-bar-label, .v-diff .diff-bar-val, .v-diff .diff-nodes-table, .v-diff .diff-item-table, .v-diff .diff-detail-header { font-family: var(--c-font); }
+    .v-diff .diff-item-table td, .v-diff .diff-nodes-table td { border-top: 1px solid var(--c-row); }
+    .v-diff .loading-text { font-family: var(--c-font); color: var(--c-muted); }
 
     .w-pinmenu { position: fixed; z-index: 1000; min-width: 220px; background: var(--bg-card); border: 2px solid var(--border-brown);
       box-shadow: 0 6px 18px rgba(0,0,0,0.6); padding: 4px; font-family: 'Courier New', monospace; font-size: 0.85rem; }
@@ -28276,19 +28289,11 @@ Kola: ${i.rounds.map(when).join(", ")}`;
     async function renderDiff(data) {
       const app = document.getElementById("app");
 
-      let hdr = `<div class="header pixel-panel pixel-font">
-        <h1>FARM CHANGELOG</h1>
-        <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
-      </div>`;
+      // An explorer (periods, a draggable window, a selected bar, the POSTed valuation of that window):
+      // page-only, in the clean style. The investment panels mounted below are their own code.
+      let hdr = _wPageHead("🔍 Farm changelog", `Farm #${escHTML(FARM_ID)} · what changed between snapshots, in FLOWER — P2P prices, Betty coins and the gem exchange; crafted items at their ingredient cost`);
 
-      hdr += `<div class="under-dev-banner pixel-font" style="background:linear-gradient(180deg,#1a1a2e,#16213e);padding:8px 12px;border:3px solid #000;margin-bottom:16px;text-align:center;font-size:0.5625rem;color:#e94560">
-        &#x1F50D; FARM DIFF VIEWER &#x1F50D;
-        <div style="margin-top:6px;font-size:0.5rem;color:var(--text-secondary);line-height:1.5">
-          SFL values from P2P prices + Betty coins + gem exchange. Crafted items valued by ingredient costs.
-        </div>
-      </div>`;
-
-      hdr += `<div id="diff-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading...</div></div></div>`;
+      hdr += `<div id="diff-content" class="v-diff"><div class="loading-screen" style="padding:20px"><div class="loading-text">Loading...</div></div></div>`;
       app.innerHTML = hdr;
 
       // Fetch with retry
@@ -28370,24 +28375,24 @@ Kola: ${i.rounds.map(when).join(", ")}`;
       // Render the Investment Tracker mount BEFORE the diff body so the user sees it first.
       const invMount = document.createElement("div");
       invMount.id = "investment-tracker";
-      invMount.className = "pixel-panel";
+      invMount.className = "w-card";
       invMount.style.cssText = "padding:12px;margin-bottom:16px;background:rgba(0,0,0,0.15)";
-      invMount.innerHTML = `<div class="loading-screen pixel-font" style="padding:12px"><div class="loading-text">Loading investment tracker…</div></div>`;
+      invMount.innerHTML = `<div class="loading-screen" style="padding:12px"><div class="loading-text">Loading investment tracker…</div></div>`;
       app.insertBefore(invMount, document.getElementById("diff-content"));
 
       // Investment Insights mount (collapsible, lazy-loaded)
       const insMount = document.createElement("div");
       insMount.id = "investment-insights";
-      insMount.className = "pixel-panel";
+      insMount.className = "w-card";
       insMount.style.cssText = "padding:12px;margin-bottom:16px;background:rgba(0,0,0,0.15)";
       const insOpen = localStorage.getItem("sfl_diff_insights_open") === "1";
       insMount.innerHTML = `
         <div onclick="_invToggleInsights()" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between">
-          <h2 class="pixel-font" style="margin:0;font-size:0.75rem;color:var(--lily);letter-spacing:1px">📊 INVESTMENT INSIGHTS</h2>
-          <span class="pixel-font" id="ins-arrow" style="color:var(--text-secondary);font-size:0.625rem">${insOpen ? "▼" : "▶"}</span>
+          <h2 class="v-dim" style="margin:0;font-size:0.75rem;color:var(--lily);letter-spacing:1px">📊 INVESTMENT INSIGHTS</h2>
+          <span class="v-dim" id="ins-arrow" style="color:var(--text-secondary);font-size:0.625rem">${insOpen ? "▼" : "▶"}</span>
         </div>
         <div id="ins-body" style="display:${insOpen ? "block" : "none"};margin-top:12px">
-          <div class="loading-screen pixel-font" style="padding:12px"><div class="loading-text">Click to load…</div></div>
+          <div class="loading-screen" style="padding:12px"><div class="loading-text">Click to load…</div></div>
         </div>
       `;
       app.insertBefore(insMount, document.getElementById("diff-content"));
@@ -28398,13 +28403,13 @@ Kola: ${i.rounds.map(when).join(", ")}`;
 
       // Kick off the load in the background — don't block diff render.
       renderInvestmentTracker(data, { td: _diffTd, tdError: _diffTdError }).catch(err => {
-        invMount.innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Investment tracker failed: ${escHTML(err.message)}</p></div>`;
+        invMount.innerHTML = `<div class="error-screen"><p>Investment tracker failed: ${escHTML(err.message)}</p></div>`;
       });
 
       if (insOpen) {
         renderInvestmentInsights(data).catch(err => {
           const body = document.getElementById("ins-body");
-          if (body) body.innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>${escHTML(err.message)}</p></div>`;
+          if (body) body.innerHTML = `<div class="error-screen"><p>${escHTML(err.message)}</p></div>`;
         });
       }
 
@@ -28493,7 +28498,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
           if (!res.ok) {
             loading = false;
             document.getElementById("diff-content").innerHTML = renderGroupSelector() +
-              `<div class="pixel-panel pixel-font" style="padding:20px;text-align:center;color:var(--red)">Failed to load: ${escHTML(res.error)}<br><button class="pixel-font" style="margin-top:10px;padding:8px 16px;cursor:pointer" onclick="window._diffSetGroup('all')">Retry</button></div>`;
+              `<div class="v-dim" style="padding:20px;text-align:center;color:var(--red)">Failed to load: ${escHTML(res.error)}<br><button class="v-dim" style="margin-top:10px;padding:8px 16px;cursor:pointer" onclick="window._diffSetGroup('all')">Retry</button></div>`;
             return;
           }
           const snapshots = (res.data.snapshots || []).reverse();
@@ -28503,7 +28508,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
           catch (e) {
             loading = false;
             document.getElementById("diff-content").innerHTML = renderGroupSelector() +
-              `<div class="pixel-panel pixel-font" style="padding:20px;text-align:center;color:var(--red)">Failed to value changes: ${escHTML(e.message)}<br><button class="pixel-font" style="margin-top:10px;padding:8px 16px;cursor:pointer" onclick="window._diffSetGroup('all')">Retry</button></div>`;
+              `<div class="v-dim" style="padding:20px;text-align:center;color:var(--red)">Failed to value changes: ${escHTML(e.message)}<br><button class="v-dim" style="margin-top:10px;padding:8px 16px;cursor:pointer" onclick="window._diffSetGroup('all')">Retry</button></div>`;
             return;
           }
           processed = snapshots.map((snap, i) => {
@@ -28524,7 +28529,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
           if (!res.ok) {
             loading = false;
             document.getElementById("diff-content").innerHTML = renderGroupSelector() +
-              `<div class="pixel-panel pixel-font" style="padding:20px;text-align:center;color:var(--red)">Failed to load: ${escHTML(res.error)}<br><button class="pixel-font" style="margin-top:10px;padding:8px 16px;cursor:pointer" onclick="window._diffSetGroup('${escHTML(mode)}')">Retry</button></div>`;
+              `<div class="v-dim" style="padding:20px;text-align:center;color:var(--red)">Failed to load: ${escHTML(res.error)}<br><button class="v-dim" style="margin-top:10px;padding:8px 16px;cursor:pointer" onclick="window._diffSetGroup('${escHTML(mode)}')">Retry</button></div>`;
             return;
           }
           const periods = res.data.periods || [];
@@ -28534,7 +28539,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
           catch (e) {
             loading = false;
             document.getElementById("diff-content").innerHTML = renderGroupSelector() +
-              `<div class="pixel-panel pixel-font" style="padding:20px;text-align:center;color:var(--red)">Failed to value changes: ${escHTML(e.message)}<br><button class="pixel-font" style="margin-top:10px;padding:8px 16px;cursor:pointer" onclick="window._diffSetGroup('${escHTML(mode)}')">Retry</button></div>`;
+              `<div class="v-dim" style="padding:20px;text-align:center;color:var(--red)">Failed to value changes: ${escHTML(e.message)}<br><button class="v-dim" style="margin-top:10px;padding:8px 16px;cursor:pointer" onclick="window._diffSetGroup('${escHTML(mode)}')">Retry</button></div>`;
             return;
           }
           processed = periods.map((p, i) => {
@@ -28573,7 +28578,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
         ];
         let s = `<div class="diff-group-selector">`;
         for (const m of modes) {
-          s += `<button class="diff-group-btn pixel-font${groupMode === m.id ? ' active' : ''}" onclick="window._diffSetGroup('${m.id}')">${m.label}</button>`;
+          s += `<button class="diff-group-btn${groupMode === m.id ? ' active' : ''}" onclick="window._diffSetGroup('${m.id}')">${m.label}</button>`;
         }
         s += `</div>`;
         return s;
@@ -28588,7 +28593,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
         ];
         let s = `<div class="diff-group-selector" style="gap:3px">`;
         for (const m of modes) {
-          s += `<button class="diff-group-btn pixel-font${currencyMode === m.id ? ' active' : ''}" style="padding:4px 10px;font-size:0.5rem" onclick="window._diffSetCurrency('${m.id}')">${m.label}</button>`;
+          s += `<button class="diff-group-btn${currencyMode === m.id ? ' active' : ''}" style="padding:4px 10px;font-size:0.5rem" onclick="window._diffSetCurrency('${m.id}')">${m.label}</button>`;
         }
         s += `</div>`;
         return s;
@@ -28651,22 +28656,22 @@ Kola: ${i.rounds.map(when).join(", ")}`;
         const fromVal = _dtLocal(rangeFrom ? new Date(rangeFrom) : first, false);
         const toVal = _dtLocal(rangeTo ? new Date(rangeTo) : last, true);
         const ranged = !!(rangeFrom || rangeTo);
-        let sl = `<div class="pixel-panel diff-slicer">`;
+        let sl = `<div class="diff-slicer">`;
         sl += `<div class="diff-slicer-row"><span class="diff-slicer-lbl">SHOW</span>`;
         for (const z of sizes) {
-          sl += `<button class="diff-group-btn diff-slicer-btn pixel-font${windowSize === z.n ? " active" : ""}" onclick="window._diffSetSize(${z.n})">${z.label}</button>`;
+          sl += `<button class="diff-group-btn diff-slicer-btn${windowSize === z.n ? " active" : ""}" onclick="window._diffSetSize(${z.n})">${z.label}</button>`;
         }
         sl += `<span class="diff-slicer-lbl">LAST</span>`;
         for (const z of quick) {
-          sl += `<button class="diff-group-btn diff-slicer-btn pixel-font${(!ranged && z.h === 0) ? " active" : ""}" onclick="window._diffQuickRange(${z.h})">${z.label}</button>`;
+          sl += `<button class="diff-group-btn diff-slicer-btn${(!ranged && z.h === 0) ? " active" : ""}" onclick="window._diffQuickRange(${z.h})">${z.label}</button>`;
         }
         sl += `</div>`;
         sl += `<div class="diff-slicer-row"><span class="diff-slicer-lbl">FROM</span>` +
               `<input type="datetime-local" step="300" id="diff-from" class="diff-slicer-input" value="${fromVal}">` +
               `<span class="diff-slicer-lbl">TO</span>` +
               `<input type="datetime-local" step="300" id="diff-to" class="diff-slicer-input" value="${toVal}">` +
-              `<button class="diff-group-btn diff-slicer-btn pixel-font${ranged ? " active" : ""}" onclick="window._diffApplyRange()">APPLY</button>` +
-              `<button class="diff-group-btn diff-slicer-btn pixel-font" onclick="window._diffClearRange()">CLEAR</button>` +
+              `<button class="diff-group-btn diff-slicer-btn${ranged ? " active" : ""}" onclick="window._diffApplyRange()">APPLY</button>` +
+              `<button class="diff-group-btn diff-slicer-btn" onclick="window._diffClearRange()">CLEAR</button>` +
               `<span class="diff-slicer-note">5-minute steps${ranged ? " \u00b7 window is live" : ""}</span></div>`;
         /*
          * The scrubber. oninput moves the LABEL only and onchange does the repaint, so a drag
@@ -28674,11 +28679,11 @@ Kola: ${i.rounds.map(when).join(", ")}`;
          * on every pixel — replacing it mid-drag drops the pointer capture and the handle sticks.
          */
         sl += `<div class="diff-slicer-row">` +
-              `<button class="diff-group-btn diff-slicer-btn pixel-font" onclick="window._diffPan(-1)" title="older">\u25c0</button>` +
+              `<button class="diff-group-btn diff-slicer-btn" onclick="window._diffPan(-1)" title="older">\u25c0</button>` +
               `<input type="range" id="diff-slicer-range" class="diff-slicer-range" min="0" max="${win.maxStart}" step="1" value="${win.start}"` +
               ` ${win.maxStart === 0 ? "disabled" : ""} oninput="window._diffPreviewStart(this.value)" onchange="window._diffSetStart(this.value)">` +
-              `<button class="diff-group-btn diff-slicer-btn pixel-font" onclick="window._diffPan(1)" title="newer">\u25b6</button>` +
-              `<button class="diff-group-btn diff-slicer-btn pixel-font${win.atNow ? " active" : ""}" onclick="window._diffNow()">NOW</button>` +
+              `<button class="diff-group-btn diff-slicer-btn" onclick="window._diffPan(1)" title="newer">\u25b6</button>` +
+              `<button class="diff-group-btn diff-slicer-btn${win.atNow ? " active" : ""}" onclick="window._diffNow()">NOW</button>` +
               `</div>`;
         sl += `<div class="diff-slicer-note" id="diff-window-label">${escHTML(windowLabelText(win))}</div>`;
         sl += `</div>`;
@@ -28690,14 +28695,14 @@ Kola: ${i.rounds.map(when).join(", ")}`;
         out += renderCurrencySelector();
 
         if (loading) {
-          out += `<div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading...</div></div>`;
+          out += `<div class="loading-screen" style="padding:20px"><div class="loading-text">Loading...</div></div>`;
           document.getElementById("diff-content").innerHTML = out;
           return;
         }
 
         // Warnings
         if (warnings.length > 0) {
-          out += `<div class="pixel-panel pixel-font" style="padding:8px 12px;margin-bottom:12px;border-color:var(--red);font-size:0.5rem;color:var(--text-secondary)">
+          out += `<div class="v-dim" style="padding:8px 12px;margin-bottom:12px;border-color:var(--red);font-size:0.5rem;color:var(--text-secondary)">
             ${noPrices ? '<span style="color:var(--red)">Price data unavailable</span> \u2014 SFL values will be missing. ' : '<span style="color:var(--yellow)">Partial data</span> \u2014 '}
             ${warnings.map(w => escHTML(w)).join("; ")}
           </div>`;
@@ -28711,7 +28716,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
            */
           out += renderSlicer(diffWindowRange(0, windowSize, null));
           const ranged = !!(rangeFrom || rangeTo);
-          out += `<div class="pixel-panel pixel-font" style="padding:20px;text-align:center;color:var(--text-secondary);font-size:0.5625rem;line-height:1.8">
+          out += `<div class="v-dim" style="padding:20px;text-align:center;color:var(--text-secondary);font-size:0.5625rem;line-height:1.8">
             No data found for this period.` +
             /*
              * A window shorter than the capture interval is the likely cause and reads exactly
@@ -28757,19 +28762,19 @@ Kola: ${i.rounds.map(when).join(", ")}`;
         const _ci = getCurIcon("0.85em");
 
         out += `<div class="diff-stat-cards">
-          <div class="pixel-panel diff-stat-card">
+          <div class="diff-stat-card">
             <div class="diff-stat-label">NET CHANGE</div>
             <div class="diff-stat-value" style="color:${totalNet >= 0 ? 'var(--green)' : 'var(--red)'}">${fmtCurSigned(totalNet)} ${_ci}</div>
           </div>
-          <div class="pixel-panel diff-stat-card">
+          <div class="diff-stat-card">
             <div class="diff-stat-label">GAINS</div>
             <div class="diff-stat-value" style="color:var(--green)">+${fmtCur(totalGain)} ${_ci}</div>
           </div>
-          <div class="pixel-panel diff-stat-card">
+          <div class="diff-stat-card">
             <div class="diff-stat-label">LOSSES</div>
             <div class="diff-stat-value" style="color:var(--red)">${fmtCur(totalLoss)} ${_ci}</div>
           </div>
-          <div class="pixel-panel diff-stat-card">
+          <div class="diff-stat-card">
             <div class="diff-stat-label">${countLabel}</div>
             <div class="diff-stat-value" style="color:var(--text-primary)">${win.size}${countExtra}</div>
           </div>
@@ -28806,9 +28811,9 @@ Kola: ${i.rounds.map(when).join(", ")}`;
         const singularMode = groupMode === "all" ? "SNAPSHOT" : groupMode.slice(0, -1).toUpperCase();
         const chartLabel = `${getCurLabel()} VALUE CHANGE PER ${singularMode}`;
 
-        out += `<div class="pixel-panel diff-timeline" style="padding:10px 8px">
+        out += `<div class="diff-timeline" style="padding:10px 8px">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;padding:0 6px">
-            <span class="pixel-font" style="font-size:0.5625rem;color:var(--text-dim)">${chartLabel}</span>
+            <span class="v-dim" style="font-size:0.5625rem;color:var(--text-dim)">${chartLabel}</span>
             <div class="diff-toggle-wrap">
               <label class="diff-toggle"><input type="checkbox" id="diff-zero-toggle" ${showZeroPrice ? 'checked' : ''} onchange="window._diffToggleZero(this.checked)"> Show zero-price items</label>
             </div>
@@ -28852,7 +28857,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
           const timeFmt = groupMode === "all" ? p.time.toLocaleString() : periodLabel(p.time, groupMode);
           const visibleItems = showZeroPrice ? p.items : p.items.filter(it => it.hasPrice);
 
-          out += `<div class="pixel-panel diff-detail">
+          out += `<div class="diff-detail">
             <div class="diff-detail-header">
               <div>
                 <div class="diff-detail-time">${escHTML(timeFmt)}</div>
@@ -28883,8 +28888,8 @@ Kola: ${i.rounds.map(when).join(", ")}`;
               sheep:       { name:"Sheep",     res:"Sheep",    tool:null, isAnimal: true },
             };
             const ii = n => `<img class="dn-ico" src="${getItemIcon(n)}" onerror="this.style.display='none'">`;
-            out += `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:2px" class="pixel-font">ACTIONS</div>`;
-            out += `<table class="diff-nodes-table pixel-font">`;
+            out += `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:2px" class="v-dim">ACTIONS</div>`;
+            out += `<table class="diff-nodes-table">`;
             for (const [key, nd] of Object.entries(p.nodes)) {
               const c = NC[key] || { name: key, res: key, tool: key };
               const h = nd.harvested || nd.fed || 0;
@@ -28966,14 +28971,14 @@ Kola: ${i.rounds.map(when).join(", ")}`;
         // a viewer can see when they disagree (the C6/C8/C9 discrepancy detector).
         const priceTraces = PRICE_TRACES(roiRates);
         if (priceTraces === null) {
-          out += `<div class="diff-price-explain pixel-font" style="padding:8px 12px;font-size:0.5625rem;color:var(--text-dim)">Loading pricing methods\u2026</div>`;
+          out += `<div class="diff-price-explain" style="padding:8px 12px;font-size:0.5625rem;color:var(--text-dim)">Loading pricing methods\u2026</div>`;
         } else {
           const marketTrace = priceTraces.marketTrace || {};
           const productionTrace = priceTraces.productionTrace || {};
           const priceExplanations = collectDerivedPriceItems(marketTrace, productionTrace);
           if (priceExplanations.length > 0) {
             const _cl = getCurLabel();
-            out += `<details class="diff-price-explain pixel-font">`;
+            out += `<details class="diff-price-explain">`;
             out += `<summary>Pricing methods (${priceExplanations.length} derived items)</summary>`;
             out += `<div class="pe-list">`;
             for (const name of priceExplanations) {
