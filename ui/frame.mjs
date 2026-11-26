@@ -5,7 +5,19 @@
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 export const ROW_PX = 40;   // one unit of a board item's height (h)
 
-// A store entry → the freshness badge: { text, level: loading|ok|stale|error }.
+// What went wrong, in a few words, from the store's error ("/api/proxy 429", "Failed to fetch"…).
+function why(error) {
+  const e = String(error || "");
+  const code = Number((e.match(/\b([45]\d\d)\b/) || [])[1]);
+  if (code === 429) return "rate-limited";
+  if (code === 401 || code === 403) return "not allowed";
+  if (code === 404) return "not found";
+  if (code >= 500) return "server error";
+  if (/failed to fetch|network|load failed/i.test(e)) return "offline?";
+  return e.length > 40 ? e.slice(0, 40) + "…" : e || "error";
+}
+
+// A store entry → the freshness badge: { text, level: loading|ok|stale|error, title? (the tooltip) }.
 export function freshness(entry, now = Date.now()) {
   if (!entry) return { text: "loading…", level: "loading" };
   const age = (t) => {
@@ -13,15 +25,16 @@ export function freshness(entry, now = Date.now()) {
     return min < 1 ? "now" : `${min} min ago`;
   };
   if (entry.status === "ok") return { text: age(entry.asOf), level: "ok" };
-  if (entry.stale) return { text: `older data (${age(entry.asOf)}) — ${entry.error}`, level: "stale" };
-  return { text: `error — ${entry.error}`, level: "error" };
+  if (entry.stale) return { text: `older data · ${age(entry.asOf)} · ${why(entry.error)}`, level: "stale",
+    title: `Showing the last good data (${age(entry.asOf)}); the refresh failed: ${entry.error}` };
+  return { text: `failed · ${why(entry.error)}`, level: "error", title: `Could not load: ${entry.error} — press ↻ to try again` };
 }
 
 // place "page": cog + pin (pinned = how many copies are on boards). place "board": a drag handle
 // (⠿, drop onto another widget to move), cog, remove and a resize corner; w (1-12) becomes the
 // grid span, h (rows of ROW_PX, 0 = auto) the height. The settings open as a popover.
 export function renderFrame({ id, title, place, body, fresh, pinned = 0, w = 6, h = 0, settingsHtml = "", settingsOpen = false, cog = true }) {
-  const badge = fresh ? `<span class="w-fresh w-fresh-${fresh.level}" title="${esc(fresh.text)}">${esc(fresh.text)}</span>` : "";
+  const badge = fresh ? `<span class="w-fresh w-fresh-${fresh.level}" title="${esc(fresh.title || fresh.text)}">${esc(fresh.text)}</span>` : "";
   const btn = (action, label, title, value = "", cls = "") =>
     `<button type="button" class="w-btn${cls}" data-action="${action}" data-value="${esc(value)}" title="${esc(title)}" aria-label="${esc(title)}">${label}</button>`;
   const board = place === "board";

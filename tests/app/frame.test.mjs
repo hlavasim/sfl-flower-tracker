@@ -9,9 +9,17 @@ test("freshness reads the store entry: loading, ok with age, stale, error", () =
   assert.deepStrictEqual(freshness(null, now), { text: "loading…", level: "loading" });
   assert.deepStrictEqual(freshness({ status: "ok", asOf: now - 30_000 }, now), { text: "now", level: "ok" });
   assert.deepStrictEqual(freshness({ status: "ok", asOf: now - 5 * 60_000 }, now), { text: "5 min ago", level: "ok" });
-  assert.deepStrictEqual(freshness({ status: "error", stale: true, asOf: now - 3 * 60_000, error: "x 429" }, now),
-    { text: "older data (3 min ago) — x 429", level: "stale" });
-  assert.deepStrictEqual(freshness({ status: "error", stale: false, error: "boom" }, now), { text: "error — boom", level: "error" });
+  // a failed refresh says what went wrong in plain words; the raw error is the tooltip
+  assert.deepStrictEqual(freshness({ status: "error", stale: true, asOf: now - 3 * 60_000, error: "/api/proxy 429" }, now),
+    { text: "older data · 3 min ago · rate-limited", level: "stale", title: "Showing the last good data (3 min ago); the refresh failed: /api/proxy 429" });
+  assert.deepStrictEqual(freshness({ status: "error", stale: false, error: "/api/compute 502" }, now),
+    { text: "failed · server error", level: "error", title: "Could not load: /api/compute 502 — press ↻ to try again" });
+  assert.strictEqual(freshness({ status: "error", error: "Failed to fetch" }, now).text, "failed · offline?");
+  assert.strictEqual(freshness({ status: "error", error: "/api/x 401" }, now).text, "failed · not allowed");
+  assert.strictEqual(freshness({ status: "error", error: "boom" }, now).text, "failed · boom");
+  // the badge's tooltip is the full story
+  assert.match(renderFrame({ id: "x", title: "X", place: "page", body: "", fresh: freshness({ status: "error", error: "/api/proxy 429" }, now) }),
+    /title="Could not load: \/api\/proxy 429 — press ↻ to try again">failed · rate-limited</);
 });
 
 test("on its page: title, badge, cog and a pin button; no board controls", () => {
