@@ -15368,6 +15368,8 @@
       const opt = w && (w.options || []).find((o) => o.key === "node");
       for (const [node] of opt ? opt.choices : []) {
         if (token !== _worldPrefetchToken) return;
+        // left WORLD: stop (each query is heavy and would queue ahead of the new page's own); resumes on return
+        if (getPage() !== "world") { _worldPrefetchedFor = undefined; return; }
         const q = { res: "worldNodes", node, ...(FARM_ID ? { farm: FARM_ID } : {}), ...(scope ? { active: scope } : {}) };
         if (__store.peek(q)) continue;
         await __store.get(q);

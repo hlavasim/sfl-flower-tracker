@@ -53,3 +53,18 @@ test("stats: one scan of farm_world, cached for the dump; the same shape as befo
   assert.deepStrictEqual(again.stored, s.stored);
   assert.ok(again.dump.age_ms > 0, "the dump age is live");
 });
+
+test("priority: the field size comes from the cached daily counts scan, not a second full scan of its own", async () => {
+  // Its own COUNT(*) took ~16.5 s against the 20 s statement timeout, uncached until it once succeeded.
+  const d = db({ dump_path: "2026-11-25/active.jsonl.gz", complete: true });
+  COUNTS.live = "598000";
+  try {
+    const p = await handleWorld(d.pool, { mode: "priority", farm: "155498" });
+    assert.strictEqual(p.total, 598000);
+    assert.strictEqual(d.pool.sqlMatching(/AS n FROM farm_world/).length, 0, "no separate field-size scan");
+    const counts = d.pool.sqlMatching(/AS farms/)[0].sql;
+    assert.match(counts, /COUNT\(\*\) FILTER \(WHERE COALESCE\(ban_status, 'ok'\) = 'ok' AND NOT COALESCE\(is_blacklisted, false\)\)::bigint AS live/);
+    await handleWorld(d.pool, { mode: "stats" });
+    assert.strictEqual(d.pool.sqlMatching(/AS farms/).length, 1, "WORLD stats reuse the same stored scan");
+  } finally { delete COUNTS.live; }
+});

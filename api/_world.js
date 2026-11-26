@@ -258,12 +258,12 @@ async function longQuery(pool, sql, params = [], timeout = "55s") {
   }
 }
 
-async function crawlStats(pool) {
-  // The counts are ONE scan of farm_world (~10 s at 700k rows; two parallel scans took 21 s and hit
-  // the 20 s statement timeout), stored per dump generation like the charts. The ingest row is
-  // read live: it is one row and the dump's age must tick.
-  const [ingest, counts] = await Promise.all([
-    pool.query("SELECT * FROM cdn_ingest_state WHERE id = 1"),
+/*
+ * The farm_world counts: ONE scan (~10-17 s at 700k rows; two parallel scans took 21 s and hit the
+ * 20 s statement timeout), stored per dump generation like the charts. Shared by WORLD's stats and
+ * AUCTION PRIORITY's field size (`live`: neither banned nor blacklisted).
+ */
+const crawlCounts = (pool) =>
     cachedChart(pool, "all", "stats:counts", async () => ({ row: (await longQuery(pool, `SELECT COUNT(*)::bigint AS farms,
                        COUNT(last_activity)::bigint AS with_activity,
                        COUNT(*) FILTER (WHERE is_blacklisted)::bigint AS blacklisted,
@@ -277,8 +277,15 @@ async function crawlStats(pool) {
                        COUNT(*) FILTER (WHERE last_activity > NOW() - INTERVAL '1 day')::bigint  AS d1,
                        COUNT(*) FILTER (WHERE last_activity > NOW() - INTERVAL '7 days')::bigint AS d7,
                        COUNT(*) FILTER (WHERE last_activity > NOW() - INTERVAL '30 days')::bigint AS d30,
-                       COUNT(*) FILTER (WHERE last_activity > NOW() - INTERVAL '90 days')::bigint AS d90
-                  FROM farm_world`)).rows[0] || {} })),
+                       COUNT(*) FILTER (WHERE last_activity > NOW() - INTERVAL '90 days')::bigint AS d90,
+                       COUNT(*) FILTER (WHERE COALESCE(ban_status, 'ok') = 'ok' AND NOT COALESCE(is_blacklisted, false))::bigint AS live
+                  FROM farm_world`)).rows[0] || {} }));
+
+async function crawlStats(pool) {
+  // The ingest row is read live: it is one row and the dump's age must tick.
+  const [ingest, counts] = await Promise.all([
+    pool.query("SELECT * FROM cdn_ingest_state WHERE id = 1"),
+    crawlCounts(pool),
   ]);
 
   const i = ingest.rows[0] || {};
@@ -382,11 +389,14 @@ async function auctionPriority(pool, q) {
             COUNT(*) FILTER (WHERE ${key} > ($1::int, $2::int, $3::float8) AND ascension_level = $1)::bigint AS ahead_same_asc,
             COUNT(*) FILTER (WHERE ascension_level > $1)::bigint AS higher_asc
        FROM farm_world WHERE ${near}`, mine)).rows[0];
-  // The field size is shared by every viewer and changes slowly — cached per crawl generation.
+  // The field size: the daily counts scan's `live` (cached per crawl generation, shared with WORLD).
   let total = null;
   try {
-    total = (await cachedChart(pool, "all", "priority:total", async () =>
-      ({ n: Number((await pool.query(`SELECT COUNT(*)::bigint AS n FROM farm_world WHERE ${live}`)).rows[0].n) }))).n;
+    const row = (await crawlCounts(pool)).row || {};
+    total = row.live != null ? Number(row.live)
+      // a generation stored before `live` existed: the old separate count, once per generation
+      : (await cachedChart(pool, "all", "priority:total", async () =>
+        ({ n: Number((await pool.query(`SELECT COUNT(*)::bigint AS n FROM farm_world WHERE ${live}`)).rows[0].n) }))).n;
   } catch { total = null; }   // the rank stands without the field size
   const next = (await pool.query(
     `SELECT farm_id, username, COALESCE(ascension_level, 0) AS asc, COALESCE(total_level, 0) AS lvl, COALESCE(xp, 0) AS xp, last_seen_at
