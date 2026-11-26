@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Glance lab</title>
+<link rel="stylesheet" href="/ui/glance-templates.css">
+<style>
+  :root { --c-bg:#1c1b1a; --c-card:#262624; --c-card2:#2d2c2a; --c-line:#3a3936; --c-text:#f2f0e9; --c-muted:#a39e96; --c-dim:#77726b;
+    --c-font: Inter, "Segoe UI", system-ui, -apple-system, sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: radial-gradient(1200px 700px at 15% -10%, #2b1f4a33, transparent 60%), var(--c-bg); color: var(--c-text); font-family: var(--c-font); }
+  main { max-width: 1520px; margin: 0 auto; padding: 28px 20px 80px; }
+  h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.02em; }
+  h2 { font-size: 19px; margin: 34px 0 4px; }
+  .sub { color: var(--c-muted); font-size: 14px; margin-bottom: 14px; }
+  .board { display: grid; grid-template-columns: repeat(var(--cols), var(--cell)); grid-auto-rows: var(--cell); gap: 16px; grid-auto-flow: row dense; }
+  .board .gcard { --fs: calc(var(--cellpx) / 170 * 13px); }
+  .slot { position: relative; }
+  .slot .gcard { height: 100%; }
+  .lbl { position: absolute; left: 6px; bottom: -18px; font-size: 11px; color: var(--c-dim); white-space: nowrap; }
+  .board { margin-bottom: 30px; row-gap: 34px; }
+  .phone { width: 375px; padding: 14px; border: 1px solid var(--c-line); border-radius: 28px; background: #141312; }
+  .tbl { border-collapse: collapse; font-size: 14px; margin-top: 8px; }
+  .tbl td, .tbl th { padding: 6px 14px; border-bottom: 1px solid var(--c-line); text-align: left; }
+  .flag { color: #ff6961; font-weight: 600; }
+</style></head>
+<body><main>
+<h1>Glance lab</h1>
+<div class="sub">Every look the template catalogue offers for four sample widgets, at true board size (170 px cell), and on a phone (2 columns). Looks that don't fill well or only repeat a smaller one are not offered.</div>
+<div id="out"></div>
+</main>
+<script type="module">
+import { looksFor, renderLook, TEMPLATES, templateById } from "/ui/glance-templates.mjs";
+import { ITEM_ICONS } from "/app/item-icons.mjs";
+const img = (n) => ITEM_ICONS[n] ? `<img src="${ITEM_ICONS[n]}" alt="">` : "";
+const NOW = Date.now(), H = 3600e3;
+
+const MODELS = [
+  { title: "🌀 Weather protection", m: {
+    head: { value: 2, unit: "/4", tone: "bad", ring: 50, ringTone: "bad", cap: "uncovered: tsunami, insect plague" },
+    items: [["Tornado Pinwheel", "tornado", "active", "ok"], ["Mangrove", "tsunami", "used up", "bad"], ["Thermal Stone", "great freeze", "partly used", "warn"], ["Protective Pesticide", "insect plague", "missing", "bad"]]
+      .map(([n, s, c, t]) => ({ icon: img(n), name: n, sub: s, chip: { text: c, tone: t } })),
+    tiles: [{ label: "protected", value: "2/4" }, { label: "uncovered", value: 2 }] } },
+  { title: "🪆 Crafting box", m: {
+    head: { value: 1, unit: "/6 ready", tone: "ok", ring: 17, cap: "next: Gilded Doll in 2h" },
+    items: [["Wooly Doll", -1], ["Gilded Doll", 2.1], ["Cluck Doll", 5.6], ["Juicy Doll", 9.2], ["Ember Doll", 14], ["Lunar Doll", 20.5]]
+      .map(([n, h]) => ({ icon: img(n), name: n, sub: "queued", at: NOW + h * H })),
+    tiles: [{ label: "ready", value: 1 }, { label: "crafting", value: 5 }, { label: "queue done", value: "20h" }] } },
+  { title: "📈 Income", m: {
+    head: { value: "152", unit: "/day", cap: "→ 287/day after the plan" },
+    tiles: [{ label: "now", value: "152/d" }, { label: "after plan", value: "287/d" }, { label: "133 buys", value: "53.7k" }],
+    series: Array.from({ length: 24 }, (_, k) => 152 + k * 5.6 + Math.sin(k / 2) * 6),
+    items: [["Sturdy Shovel", "52 days", "+1.70/d", 100], ["Lean Compost", "3.2 mo", "+0.91/d", 54], ["Beetle Nest", "3.2 mo", "+4.44/d", 92], ["Long Pickings", "4.5 mo", "+1.93/d", 60],
+      ["Stone node", "4.5 mo", "+0.66/d", 30], ["Nana", "5.8 mo", "+0.22/d", 12], ["Munching Mastery", "5.6 mo", "+0.52/d", 22]]
+      .map(([n, s, v, p]) => ({ icon: img(n), name: n, sub: `pays back in ${s}`, value: v, tone: "ok", pct: p })) } },
+  { title: "🎯 Dolls to 10", m: {
+    head: { value: 1, unit: "/15", ring: 7, ringTone: "accent", cap: "75 missing in total" },
+    items: [["Cluck Doll", 2], ["Ember Doll", 2], ["Lunar Doll", 2], ["Juicy Doll", 3], ["Lumber Doll", 3], ["Angler Doll", 4], ["Gilded Doll", 4], ["Moo Doll", 4],
+      ["Harvest Doll", 6], ["Sizzle Doll", 6], ["Wooly Doll", 6], ["Bloom Doll", 7], ["Buzz Doll", 8], ["Crude Doll", 8]]
+      .map(([n, h]) => ({ icon: img(n), name: n, sub: `${h} / 10`, value: `−${10 - h}`, tone: "bad", pct: h * 10 })),
+    tiles: [{ label: "at the limit", value: "1/15" }, { label: "missing", value: 75 }] } },
+];
+
+const span = (size) => { const [w, h] = size.split("x").map(Number); return `grid-column:span ${w};grid-row:span ${h}`; };
+function board(model, title, looks, { cols, cell }) {
+  return `<div class="board" style="--cols:${cols};--cell:${cell}px;--cellpx:${cell}">` + looks.map((id) => {
+    const r = renderLook(model, id, { cols, now: NOW }), t = templateById(r.id);
+    return `<div class="slot" style="${span(r.size)}"><div class="gcard"><div class="gcard-h">${title}</div>${r.html}</div><div class="lbl">${r.size} · ${t.name}</div></div>`;
+  }).join("") + `</div>`;
+}
+let html = `<table class="tbl"><tr><th>widget</th><th>looks offered</th><th>by size</th></tr>`;
+for (const { title, m } of MODELS) {
+  const looks = looksFor(m), by = {};
+  for (const id of looks) { const s = templateById(id).size; by[s] = (by[s] || 0) + 1; }
+  html += `<tr><td>${title}</td><td><b>${looks.length}</b></td><td>${Object.entries(by).map(([s, n]) => `${s}: ${n}`).join(" · ")}</td></tr>`;
+}
+html += `</table>`;
+for (const { title, m } of MODELS) {
+  const looks = looksFor(m);
+  html += `<h2>${title} — ${looks.length} looks</h2><div class="sub">Desktop board, 8 columns</div>` + board(m, title, looks, { cols: 8, cell: 170 }) +
+    `<div class="sub">Phone, 2 columns (wide looks switch to their narrow twin)</div><div class="phone">` + board(m, title, looks, { cols: 2, cell: 165 }) + `</div>`;
+}
+document.getElementById("out").innerHTML = html;
+// the automatic checks: overflow and text under 11 px
+const flags = [];
+for (const card of document.querySelectorAll(".gcard")) {
+  const lbl = card.parentElement.querySelector(".lbl").textContent, gx = card.querySelector(".gx");
+  if (gx.scrollHeight > gx.clientHeight + 2) flags.push(`overflow: ${card.querySelector(".gcard-h").textContent} ${lbl} (+${gx.scrollHeight - gx.clientHeight}px)`);
+  for (const e of card.querySelectorAll("*")) {
+    if ([...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()) && parseFloat(getComputedStyle(e).fontSize) < 10.5) { flags.push(`small text ${parseFloat(getComputedStyle(e).fontSize).toFixed(1)}px: ${lbl} "${e.textContent.trim().slice(0, 20)}"`); break; }
+  }
+}
+window.__labReport = flags;
+document.getElementById("out").insertAdjacentHTML("afterbegin", `<div class="sub">${flags.length ? `<span class="flag">${flags.length} problems:</span> ${flags.join(" · ")}` : "✓ no overflow, no text under 11 px"}</div>`);
+</script>
+</body></html>
