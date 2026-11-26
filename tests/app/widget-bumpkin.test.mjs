@@ -180,7 +180,7 @@ test("📱 glance models: XP (the level with a ring, the numbers as tiles), kitc
   assert.match(String(x.head.value), /^L\d+$/);
   assert.ok(x.head.ring >= 0 && x.head.ring <= 100);
   assert.deepStrictEqual(x.tiles.map((t) => t.label), ["XP", "XP / day", "to go"]);
-  assert.match(renderLook(x, "number").html, /<div class="gx-num">L\d+<\/div><div class="gx-cap">\d+ % to L200<\/div>/);
+  assert.match(renderLook(x, "number").html, /<div class="gx-num(?: gx-num-long)?">L\d+<\/div><div class="gx-cap">\d+ % to L200<\/div>/);
   assert.ok(looksFor(x).length >= 3);
   assert.match(String(bumpkinXp.glanceModel({ farm: ascended, cook }, CTX).head.value), /^A\d+$/);
   assert.match(bumpkinXp.glanceModel({}, CTX).empty, /No farm data/);

@@ -91,7 +91,7 @@ test("📱 glance model: how many fish to age with a salt ring, the fish (a row 
   assert.match(m.head.cap, /^[^<]+ XP · [^<]+ salt$/);
   assert.strictEqual(m.items.length, out.rows.length);
   assert.deepStrictEqual([m.items[0].icon, m.items[0].name, m.items[0].value], [`<i>${out.rows[0].name}</i>`, out.rows[0].name, `×${out.rows[0].age}`]);
-  assert.match(renderLook(m, "number").html, new RegExp(`<div class="gx-num">${t.n}<small> fish</small></div><div class="gx-cap">[^<]+ XP · [^<]+ salt</div>`));
+  assert.match(renderLook(m, "number").html, new RegExp(`<div class="gx-num(?: gx-num-long)?">${t.n}<small> fish</small></div><div class="gx-cap">[^<]+ XP · [^<]+ salt</div>`));
   assert.strictEqual((renderLook(m, "list-4").html.match(/class="gx-row"/g) || []).length, Math.min(8, out.rows.length));
   assert.ok(looksFor(m).length >= 3);
   // with one salt the rows past the first are not covered: red

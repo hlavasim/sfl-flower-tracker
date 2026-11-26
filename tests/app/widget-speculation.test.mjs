@@ -159,7 +159,7 @@ test("📱 glance model, trades: the realised FLOWER; every trade, newest first;
   assert.strictEqual(m.items.length, 4);
   assert.deepStrictEqual(m.items[0], { icon: '<img data-i="Genesis egg #803">', name: "Genesis egg #803", sub: "open · 1 · RON", value: "+10", tone: "ok" });
   assert.deepStrictEqual(m.tiles.map((t) => [t.label, t.value]), [["Realised", "+0.2"], ["Open cost", "7"], ["Open worth", "≥ 2.7"], ["Trades", 4]]);
-  assert.match(renderLook(m, "number").html, /<div class="gx-num g-ok">\+0\.2<small> 🌸<\/small><\/div>/);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num g-ok(?: gx-num-long)?">\+0\.2<small> 🌸<\/small><\/div>/);
   assert.ok(looksFor(m).length >= 3);
   assert.deepStrictEqual(specTrades.glanceModel({}, ctx({ spec: { trades: [], err: {} } })), { empty: "No trades yet." });
   assert.match(specTrades.glanceModel({}, ctx({ spec: { err: {} } })).empty, /Loading the trade log/);

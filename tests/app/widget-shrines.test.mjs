@@ -67,7 +67,7 @@ test("📱 glance model: active / total with a ring; the shrines, active first (
   assert.deepStrictEqual(m.items[0], { icon: "<i>Bear Shrine</i>", name: "Bear Shrine", sub: "active · +1.50", at: NOW + 50 * 3600000, pct: 100 });
   assert.deepStrictEqual(m.items[1], { icon: "<i>Boar Shrine</i>", name: "Boar Shrine", sub: "judge · 1 d", value: "-1.00", tone: "bad" });
   assert.deepStrictEqual(m.tiles.map((t) => [t.label, t.value]), [["active", "1/2"], ["profitable", 1], ["boost/day", "+0.500"], ["net/day", "-0.786"]]);
-  assert.match(renderLook(m, "number").html, /<div class="gx-num g-ok">1<small>\/2<\/small><\/div><div class="gx-cap">active · 1 profitable<\/div>/);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num g-ok(?: gx-num-long)?">1<small>\/2<\/small><\/div><div class="gx-cap">active · 1 profitable<\/div>/);
   assert.ok(looksFor(m).length >= 3);
   assert.strictEqual(shrinesRoi.glanceModel({ farm, power: {} }, CTX, { show: "active" }).items.length, 1);
   assert.deepStrictEqual(shrinesRoi.glanceModel({}, CTX), { empty: "No shrine data yet." });

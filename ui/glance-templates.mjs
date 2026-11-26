@@ -45,7 +45,7 @@ function headBlock(h, { ring = true, big = "", top = false, meter = false } = {}
   if (meter) ring = false;
   return (ring && h.ring != null ? `<div class="gx-corner">${ringSvg(h.ring, h.ringTone || "ok")}</div>` : "") +
     `<div class="gx-head${big ? ` gx-head-${big}` : ""}${top && ring && h.ring != null ? " gx-head-top" : ""}">` +
-    `<div class="gx-num${tone(h.tone)}">${esc(h.value)}${h.unit ? `<small>${esc(h.unit)}</small>` : ""}</div>` +
+    `<div class="gx-num${tone(h.tone)}${String(h.value ?? "").length + String(h.unit ?? "").length >= 8 ? " gx-num-long" : ""}">${esc(h.value)}${h.unit ? `<small>${esc(h.unit)}</small>` : ""}</div>` +
     (h.cap ? `<div class="gx-cap">${esc(h.cap)}</div>` : "") +
     (h.meter != null ? `<div class="gx-meter"><i class="g-${h.meterTone || "accent"}" style="width:${Math.round(pct(h.meter))}%"></i></div>` : "") + `</div>`;
 }
@@ -129,7 +129,7 @@ export const TEMPLATES = [
   T("tiles-1", "1x1", "tiles", ["tiles3"], () => 3, (m) => tilesBlock(tl(m), 3, 1, true), { fill: GRID, name: "Numbers" }),
   // 2×1 — the number with one more layer
   T("number-list-2", "2x1", "number-list", ["head", "items"], () => 3, (m, now) => `<div class="gx-split"><div>${headBlock(m.head, { meter: true })}</div>${rowsBlock(it(m), 3, now, 1, true)}</div>`, { name: "Number + list" }),
-  T("number-tiles-2", "2x1", "number-tiles", ["head", "tiles"], () => 4, (m) => `<div class="gx-split"><div>${headBlock(m.head, { meter: true })}</div>${tilesBlock(tl(m), 4, 2)}</div>`, { fill: GRID, name: "Number + tiles" }),
+  T("number-tiles-2", "2x1", "number-tiles", ["head", "tiles"], () => 3, (m) => `<div class="gx-split"><div>${headBlock(m.head, { meter: true })}</div>${tilesBlock(tl(m), 3, 1, true)}</div>`, { fill: GRID, name: "Number + numbers" }),
   T("strip-2", "2x1", "strip", ["icons"], () => 6, (m, now) => iconsBlock(iconsOf(m), 6, Math.min(6, iconsOf(m).length), now), { fill: 0.6, name: "Icon strip" }),
   T("next-2", "2x1", "next-list", ["items"], () => 3, (m, now) => `<div class="gx-split">${nextBlock(it(m)[0], now, true)}${rowsBlock(it(m).slice(1), 2, now, 1, true)}</div>`, { name: "Next up + list" }),
   T("list-2", "2x1", "list", ["items"], () => 6, (m, now) => rowsBlock(it(m), 6, now, 2, true), { name: "List" }),

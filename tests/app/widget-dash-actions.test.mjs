@@ -87,7 +87,7 @@ test("📱 glance model: how many are ready (ring = ready vs running); items rea
   assert.deepStrictEqual(m.items[3], { icon: "🌾", name: "Sunflower", sub: "Crops", chip: { text: "60m", tone: "info" } });
   assert.deepStrictEqual(m.tiles.map((t) => [t.label, t.value]), [["ready", 3], ["running", 1], ["next", "60m"], ["idle", 1]]);
   assert.strictEqual(m.foot, "3 ready · 1 running · 1 idle");
-  assert.match(renderLook(m, "number").html, /<svg class="gx-ring g-ok"[^]*<div class="gx-num g-ok">3<\/div><div class="gx-cap">to collect · 1 running<\/div>/);
+  assert.match(renderLook(m, "number").html, /<svg class="gx-ring g-ok"[^]*<div class="gx-num g-ok(?: gx-num-long)?">3<\/div><div class="gx-cap">to collect · 1 running<\/div>/);
   assert.match(renderLook(m, "icons-4").html, /<small class="gx-tag g-info">60m<\/small>/);
   assert.strictEqual((renderLook(m, "list-4").html.match(/class="gx-row"/g) || []).length, 5);
   assert.ok(looksFor(m).length >= 3);

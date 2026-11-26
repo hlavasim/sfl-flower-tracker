@@ -56,7 +56,7 @@ test("host: a view widget renders its html, with a cog; the page's pin still wor
   h.handle("page:bumpkin-level", "pin", "");
   const [item] = h.doc().boards[0].items;
   // pinned on a board it shows its glance face
-  assert.match(h.renderItem("main", item, { data: { farm: FARM } }), /class="gx-num">L\d+</);
+  assert.match(h.renderItem("main", item, { data: { farm: FARM } }), /class="gx-num(?: gx-num-long)?">L\d+</);
 });
 
 // ── Weather protection ──
@@ -115,7 +115,7 @@ test("📱 glance model, bumpkin level: L<level> with a ring of the way to the n
   assert.match(m.head.cap, new RegExp(`^\\d+ % to L${lvl + 1}$`));
   assert.ok(m.head.ring > 0 && m.head.ring < 100);
   assert.deepStrictEqual(m.tiles.map((t) => t.label), ["XP", `to L${lvl + 1}`, "to L200"]);
-  assert.match(renderLook(m, "number").html, new RegExp(`<div class="gx-num">L${lvl}</div><div class="gx-cap">\\d+ % to L${lvl + 1}</div>`));
+  assert.match(renderLook(m, "number").html, new RegExp(`<div class="gx-num(?: gx-num-long)?">L${lvl}</div><div class="gx-cap">\\d+ % to L${lvl + 1}</div>`));
   assert.ok(looksFor(m).length >= 3);
   // ascended: the band being filled and what the XP is worth
   const asc = bumpkinLevel.glanceModel({ farm: { ...FARM, island: { ...FARM.island, ascensionLevel: 1 } } });
@@ -139,7 +139,7 @@ test("📱 glance model, weather: the count protecting now (ring) and every item
   const icons = renderLook(mi, "icons-1").html;
   assert.strictEqual((icons.match(/class="gx-cell"/g) || []).length, 4, "all four items");
   assert.match(icons, /<small class="gx-tag g-bad">used up<\/small>/);
-  assert.match(renderLook(m, "number").html, /<div class="gx-num g-bad">2<small>\/4<\/small><\/div><div class="gx-cap">uncovered: tsunami, insect plague<\/div>/);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num g-bad(?: gx-num-long)?">2<small>\/4<\/small><\/div><div class="gx-cap">uncovered: tsunami, insect plague<\/div>/);
   assert.ok(looksFor(mi).length >= 6, "a handful of looks that each show something different");
   const all = weatherProtection.glanceModel({ farm: FARM }, { weatherRows: () => WCTX.weatherRows().map((r) => ({ ...r, state: "ok" })) });
   assert.strictEqual(all.head.cap, "all protected");

@@ -183,7 +183,7 @@ test("📱 glance model, live: your trainer number with the tier ring; the leade
   assert.strictEqual(Math.round(m.head.ring), 41);                              // (41,230 − 1,000) / (100,000 − 1,000)
   assert.strictEqual(m.items.length, 8);
   assert.deepStrictEqual(m.items.find((i) => i.name === "#50"), { icon: "⛈️", name: "#50", sub: "last Storm · ≈ 68.2k FLOWER", value: "150k", pct: (150000 / 199000) * 100 });
-  assert.match(renderLook(m, "number").html, /<div class="gx-num">#41\.2k<\/div><div class="gx-cap">you'd be · Platinum egg · 58\.8k left<\/div>/);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num(?: gx-num-long)?">#41\.2k<\/div><div class="gx-cap">you'd be · Platinum egg · 58\.8k left<\/div>/);
   assert.deepStrictEqual(Y.ykLive.glanceModel({}, ctx({ live: { ...LIVE, board: null } })).items, [], "no board yet: the number alone");
   assert.match(Y.ykLive.glanceModel({}, ctx({ live: null })).empty, /Loading live data/);
   assert.match(Y.ykLive.glanceModel({}, ctx({ live: null, liveErr: "502" })).empty, /\(502\)/);
@@ -195,7 +195,7 @@ test("📱 glance model, placing: the #50 threshold, its move and its line; ever
   assert.strictEqual(m.items.length, 4);
   assert.deepStrictEqual(m.items[1], { icon: "⛈️", name: "#10", sub: "+50.1k in 24 h", value: "129k", tone: "warn", pct: (129126 / 380252) * 100 });
   assert.deepStrictEqual(m.series, [18229, 19016, 19812, 20592]);
-  assert.match(renderLook(m, "chart-2").html, /<div class="gx-num g-warn">20\.6k<small> pts<\/small><\/div>/);
+  assert.match(renderLook(m, "chart-2").html, /<div class="gx-num g-warn(?: gx-num-long)?">20\.6k<small> pts<\/small><\/div>/);
   assert.match(Y.ykPlacing.glanceModel({}, ctx({ hist: HIST.slice(0, 1) })).empty, /Not enough snapshots/);
 });
 
@@ -217,7 +217,7 @@ test("📱 glance model, calculator: the points; base / bonus / per FLOWER / the
   assert.strictEqual(m.items.length, 4);
   assert.deepStrictEqual(m.items[1], { icon: "🎁", name: "Bulk bonus", sub: "+40 % step", value: "+2k", tone: "accent", pct: 12.5 });   // 5,000 × 0.4 of 16,000
   assert.deepStrictEqual(m.items[2], { icon: "⚖️", name: "Per FLOWER", value: "3.20 pts" });
-  assert.match(renderLook(Y.ykCalculator.glanceModel({}, ctx()), "number").html, /<div class="gx-head"><div class="gx-num g-ok">1\.6k<small> pts<\/small><\/div><div class="gx-cap">500 FLOWER in week 1 · 3\.0×<\/div>/);
+  assert.match(renderLook(Y.ykCalculator.glanceModel({}, ctx()), "number").html, /<div class="gx-head"><div class="gx-num g-ok(?: gx-num-long)?">1\.6k<small> pts<\/small><\/div><div class="gx-cap">500 FLOWER in week 1 · 3\.0×<\/div>/);
   assert.match(Y.ykCalculator.glanceModel({}, ctx(), { amount: 0 }).empty, /Enter a deposit amount/);
 });
 

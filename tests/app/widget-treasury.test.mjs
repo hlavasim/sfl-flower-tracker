@@ -61,7 +61,7 @@ test("📱 glance model: the total with USD and BTC; each category's share, bigg
   assert.deepStrictEqual(m.items[0], { icon: "⛏️", name: "Resources", sub: "500 🌸", value: "50 %", pct: 50 });
   assert.deepStrictEqual(m.tiles.map((t) => t.label), ["SFL", "USD", "BTC", "1 SFL"]);
   assert.strictEqual(m.foot, undefined);
-  assert.match(renderLook(m, "number").html, /<div class="gx-num">1k<small> 🌸<\/small><\/div><div class="gx-cap">\$500\.00 · 0\.00500000 BTC<\/div>/);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num(?: gx-num-long)?">1k<small> 🌸<\/small><\/div><div class="gx-cap">\$500\.00 · 0\.00500000 BTC<\/div>/);
   assert.ok(looksFor(m).length >= 3);
   assert.strictEqual(treasuryValue.glanceModel({ treasury: { ...T, pricesOk: false } }).foot, "⚠ incomplete valuation");
   assert.deepStrictEqual(treasuryValue.glanceModel({}), { empty: "The Treasury valuation did not load." });

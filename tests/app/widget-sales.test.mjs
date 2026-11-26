@@ -145,7 +145,7 @@ test("📱 glance model, overview: active listings with a ring (share at market)
   assert.deepStrictEqual(m.items.map((i) => i.name), ["To claim", "Listed", "At market", "Overpriced", "Stale", "Offers"]);
   assert.deepStrictEqual(m.items[3], { icon: "⚠️", name: "Overpriced", sub: "> +20 %", value: 1, tone: "bad", pct: 50 });
   assert.deepStrictEqual(m.tiles.map((t) => t.label), ["listed", "offers", "to claim", "points"]);
-  assert.match(renderLook(m, "number").html, /<div class="gx-num">2<small> listed<\/small><\/div><div class="gx-cap">✅ 2 ready to claim<\/div>/);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num(?: gx-num-long)?">2<small> listed<\/small><\/div><div class="gx-cap">✅ 2 ready to claim<\/div>/);
   assert.ok(looksFor(m).length >= 3);
   const bare = { farm: { ...base, trades: {} }, prices: { td } };
   assert.match(salesSummary.glanceModel(bare, ctx).empty, /No listings/);

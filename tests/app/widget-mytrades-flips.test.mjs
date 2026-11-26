@@ -109,7 +109,7 @@ test("📱 glance model, trade totals: the cash net with the sold share as a met
   assert.deepStrictEqual([m.head.value, m.head.unit, m.head.tone, m.head.cap, Math.round(m.head.meter)], ["+301", " SFL", "ok", "cash net · 5 trades", 55]);
   assert.strictEqual(m.items.length, 3);
   assert.deepStrictEqual({ ...m.items[1], pct: Math.round(m.items[1].pct) }, { icon: "💸", name: "Bought", sub: "3×", value: "1.5k", tone: "bad", pct: 45 });
-  assert.match(renderLook(m, "number").html, /<div class="gx-num g-ok">\+301<small> SFL<\/small><\/div><div class="gx-cap">cash net · 5 trades<\/div><div class="gx-meter"><i class="g-ok" style="width:55%">/);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num g-ok(?: gx-num-long)?">\+301<small> SFL<\/small><\/div><div class="gx-cap">cash net · 5 trades<\/div><div class="gx-meter"><i class="g-ok" style="width:55%">/);
   assert.ok(looksFor(m).length >= 3);
   assert.match(myTradesSummary.glanceModel({ trades: null }, ctx).empty, /unavailable/);
   assert.deepStrictEqual(myTradesSummary.glanceModel({ trades: { totals: { tradeCount: 0 } } }, ctx), { empty: "No trades yet." });
@@ -142,7 +142,7 @@ test("📱 glance model, flips: the top flip by score, the flips with their marg
   assert.strictEqual(m.items.length, 2);
   assert.deepStrictEqual({ ...m.items[1] }, { icon: '<img data-i="Hat">', name: "Hat", sub: "net -0.55", value: "-5%", tone: "bad", pct: 0 });
   assert.deepStrictEqual(m.tiles.map((t) => [t.label, t.value]), [["NFTs", 2], ["≥ 15 %", 1], ["net ≤ 0", 1], ["best", "26%"]]);
-  assert.match(renderLook(m, "number").html, /<div class="gx-num g-ok">26%<\/div><div class="gx-cap">Gnome · net 26<\/div>/);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num g-ok(?: gx-num-long)?">26%<\/div><div class="gx-cap">Gnome · net 26<\/div>/);
   assert.ok(looksFor(m).length >= 3);
   // a troll listing's billions of % are capped, not printed
   const troll = { count: 1, items: [{ ...FLIPS.items[0], margin: 3.6e13, net: 9e10, score: 1e9 }] };

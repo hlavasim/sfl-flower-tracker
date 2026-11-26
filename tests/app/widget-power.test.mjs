@@ -344,7 +344,7 @@ test("📱 crop machine queue: the daily rate with the machine's busy share as a
   assert.deepStrictEqual(m.head, { value: "+2.50", unit: " 🌸", tone: "ok", cap: "a day · 1 crops · 24.0h window", ring: (7200 / 86400) * 100, ringTone: "info" });
   assert.deepStrictEqual(m.items, [{ icon: "<i>Kale</i>", name: "Kale", sub: "10/30 seeds", value: "+1.25", tone: "ok", pct: (10 / 30) * 100 }]);
   assert.deepStrictEqual(m.tiles.map((t) => t.value), ["24.0h", 12, "+1.3", "+2.5"]);
-  assert.match(renderLook(m, "number").html, /<div class="gx-num g-ok">\+2\.50<small> 🌸<\/small><\/div>/);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num g-ok(?: gx-num-long)?">\+2\.50<small> 🌸<\/small><\/div>/);
   assert.ok(looksFor(m).length >= 3);
   assert.deepStrictEqual(gm(powerCmQueue, { farm, power }, { ...CTX, cmQueue: () => null }), { empty: "No crop machine on this farm." });
 });

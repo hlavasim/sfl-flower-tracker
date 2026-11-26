@@ -137,7 +137,7 @@ test("📱 glance summary: obsidian in hand with how far it goes to the cheapest
   assert.strictEqual(m.items.length, 5);
   assert.deepStrictEqual([m.items[0].name, m.items[0].value, m.items[0].icon], ["Obsidian", obs, "<i>Obsidian</i>"]);
   assert.deepStrictEqual(m.tiles.map((t) => t.label), ["obsidian", "sunstones", "a sunstone", "coins"]);
-  assert.match(renderLook(m, "number").html, new RegExp(`<div class="gx-num">${obs}<small> obs</small></div>`));
+  assert.match(renderLook(m, "number").html, new RegExp(`<div class="gx-num(?: gx-num-long)?">${obs}<small> obs</small></div>`));
   assert.ok(looksFor(m).length >= 3);
 });
 

@@ -169,7 +169,7 @@ test("📱 glance overview: your rank with your share of #1 as a ring; the week'
   assert.strictEqual(m.items.length, 4);
   assert.deepStrictEqual(m.items[2], { name: "#2 Me", sub: "Raver", value: "5k", tone: "accent", pct: 5000 / 12000 * 100 });
   assert.deepStrictEqual(m.tiles.map((t) => t.value), ["#2", "5k", "4d 12h", "7k"]);
-  assert.match(renderLook(m, "number").html, /<div class="gx-num">#2<\/div><div class="gx-cap">5k marks · 42 % of #1<\/div>/);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num(?: gx-num-long)?">#2<\/div><div class="gx-cap">5k marks · 42 % of #1<\/div>/);
   assert.match(renderLook(m, "number").html, /class="gx-ring g-accent"/);
   assert.ok(looksFor(m).length >= 3);
   assert.match(marksSummary.glanceModel({ marks: MARKS }, { ...ctx, farmId: "7" }, {}).head.cap, /#1's marks · you are not on the board/);
@@ -224,7 +224,7 @@ test("📱 glance projections: your projected place; the projected board, you ke
   assert.deepStrictEqual([m.head.value, m.head.cap], ["#2", "projected · 8.5k marks · #1 13k"]);
   assert.deepStrictEqual(m.items[1], { name: "#2 Me", sub: "now 5k · +3.5k", value: "8.5k", tone: "accent", pct: m.items[1].pct });
   assert.deepStrictEqual(names(marksProjections.glanceModel({ marks: MARKS_FAR }, ctx, {})).slice(0, 3), ["#1 P1", "#2 P2", "#6 Me"]);
-  assert.match(renderLook(m, "number").html, /<div class="gx-num">#2<\/div>/);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num(?: gx-num-long)?">#2<\/div>/);
   assert.ok(looksFor(m).length >= 3);
   assert.match(marksProjections.glanceModel({ marks: { ...MARKS, players: [] } }, ctx, {}).empty, /No players/);
 });

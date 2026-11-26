@@ -142,7 +142,7 @@ test("📱 glance models: today = the worm to cast, the three worms; bait = the 
   assert.deepStrictEqual([m.items[0].icon, m.items[0].name, m.items[0].value, m.items[0].tone], ["<i>Earthworm</i>", "Earthworm", m.items[0].value, ""]);
   const grub = m.items.find((i) => i.name === "Grub");
   assert.deepStrictEqual([grub.value, grub.tone, grub.pct], ["13.8k", "ok", 100]);
-  assert.match(renderLook(m, "number").html, /<div class="gx-num">13.8k<small> XP\/🌸<\/small><\/div><div class="gx-cap">cast Grub · autumn<\/div>/);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num(?: gx-num-long)?">13.8k<small> XP\/🌸<\/small><\/div><div class="gx-cap">cast Grub · autumn<\/div>/);
   assert.ok(looksFor(m).length >= 3);
   const b = fishingBait.glanceModel({}, ctx(), {});
   assert.deepStrictEqual([b.head.value, b.head.cap], ["0.11", "Crab Stick · can make 7"]);

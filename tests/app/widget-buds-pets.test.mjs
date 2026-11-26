@@ -61,7 +61,7 @@ test("📱 glance model, buds: the best owned bud a day (the best overall when n
   const none = budsTable.glanceModel({ buds: BUDS }, CTX, {});
   assert.deepStrictEqual([none.head.unit, none.head.tone, none.head.cap, none.head.hero], [" 🌸", "ok", `a day · #${byDay[0].id} · none owned`, "<img data-bud>"]);
   assert.strictEqual(none.items.length, Math.min(40, BUDS.rows.length));
-  assert.match(renderLook(none, "number").html, /<div class="gx-head"><div class="gx-num g-ok">\+[\d.]+<small> 🌸<\/small><\/div>/);
+  assert.match(renderLook(none, "number").html, /<div class="gx-head"><div class="gx-num g-ok(?: gx-num-long)?">\+[\d.]+<small> 🌸<\/small><\/div>/);
   assert.ok(looksFor(none).length >= 3);
   // two owned buds: the model is about them, not the best on the market
   const mine = [byDay[5], byDay[9]];
@@ -149,7 +149,7 @@ test("📱 glance model, pets earnings: the daily income, the pets by FLOWER a d
   assert.strictEqual(m.items.length, PETS.pets.length);
   assert.deepStrictEqual([m.items[0].name, m.items[0].tone, m.items[0].pct], [top.name, "ok", 100]);
   assert.match(m.items[0].icon, /^<img data-i="[^"]+">$/);
-  assert.match(renderLook(m, "number").html, new RegExp(`<div class="gx-num">${total.toFixed(2)}<small> 🌸/day</small></div>`));
+  assert.match(renderLook(m, "number").html, new RegExp(`<div class="gx-num(?: gx-num-long)?">${total.toFixed(2)}<small> 🌸/day</small></div>`));
   assert.ok(looksFor(m).length >= 3);
   assert.match(petsSummary.glanceModel({ pets: { ...PETS, pets: [] } }, CTX).empty, /No pets found/);
   assert.match(petsSummary.glanceModel({}, CTX).empty, /No pet data/);

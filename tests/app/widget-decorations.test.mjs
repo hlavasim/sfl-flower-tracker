@@ -92,7 +92,7 @@ test("📱 glance models: each has a natural look and no hand-written face", () 
 test("📱 glance models: summary = still to grow with a ring, the flowers, the plan's tiles; colours = even or not, the five colours", () => {
   const s = decSummary.glanceModel({ farm }, ctx, {});
   assert.deepStrictEqual([s.head.value, s.head.cap, s.head.ring, s.head.ringTone], ["7", "still to grow · 12 of 30 planted", 40, "accent"]);
-  assert.match(renderLook(s, "number").html, /<div class="gx-corner"><svg class="gx-ring g-accent".*<div class="gx-num">7<\/div><div class="gx-cap">still to grow · 12 of 30 planted<\/div>/);
+  assert.match(renderLook(s, "number").html, /<div class="gx-corner"><svg class="gx-ring g-accent".*<div class="gx-num(?: gx-num-long)?">7<\/div><div class="gx-cap">still to grow · 12 of 30 planted<\/div>/);
   assert.deepStrictEqual(s.items.map((i) => i.name), ["Red Pansy", "White Lotus", "Blue Daffodil"]);
   assert.match(renderLook(s, "tiles-t").html, /<div class="gx-numlist"><div><span>planted<\/span><b>12\/30<\/b><\/div><div><span>to grow<\/span><b>7<\/b>/);
   assert.ok(looksFor(s).length >= 3);

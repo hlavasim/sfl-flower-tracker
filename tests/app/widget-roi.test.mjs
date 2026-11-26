@@ -110,7 +110,7 @@ test("📱 glance model, NFTs without a yield: their sale value in the copy's cu
   assert.deepStrictEqual([m.items[0].icon, m.items[0].name, m.items[0].pct], [`<i>${top.name}</i>`, top.name, (top.floor / sum) * 100]);
   assert.strictEqual(m.tiles[0].label, "sale value");
   assert.ok(m.tiles.every((t) => t.label.length <= 10 && !String(t.value).includes("🌸")), "tiles stay short");
-  assert.match(renderLook(m, "number").html, /<div class="gx-num g-warn">/);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num g-warn(?: gx-num-long)?">/);
   assert.ok(looksFor(m).length >= 3);
   assert.deepStrictEqual(roiPassive.glanceModel({ roi: { ...roi, boostItems: [] } }, ctxWith(), {}), { empty: "No owned sellable NFTs without a yield." });
   assert.deepStrictEqual(roiPassive.glanceModel({}, ctxWith(), {}), { empty: "No ROI data yet." });

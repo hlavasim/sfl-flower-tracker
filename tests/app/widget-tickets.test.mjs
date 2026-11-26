@@ -203,7 +203,7 @@ test("📱 glance summary: tickets by the auction under the ticket icon; the auc
   assert.deepStrictEqual(m.head, { value: "4.4k", hero: ICON("Shiny Feather"), cap: "by the auction · now 4k" });
   assert.strictEqual(m.items.length, 3);
   assert.deepStrictEqual(m.items[1], { icon: "🔨", name: "auction", sub: "Oct 5", at: D.timeline.ticketAuction });
-  assert.match(renderLook(m, "number").html, /<div class="gx-num">4\.4k<\/div><div class="gx-cap">by the auction · now 4k<\/div>/);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num(?: gx-num-long)?">4\.4k<\/div><div class="gx-cap">by the auction · now 4k<\/div>/);
   assert.match(G(W.ticketsSummary, ctx(), { ...D, thisAuction: null }).head.cap, /collected · the auction is over/);
 });
 

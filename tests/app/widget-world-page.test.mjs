@@ -199,7 +199,7 @@ test("📱 glance models: summary (24 h players as a ring of all farms), dataset
   assert.deepStrictEqual(s.head, { value: "120k", ring: (120000 / 656123) * 100, ringTone: "info", cap: "played in 24 h · of 656k farms" });
   assert.deepStrictEqual(s.items.map((i) => [i.name, i.value]), [["24 h", "120k"], ["7 days", "210k"], ["30 days", "330k"], ["90 days", "500k"], ["banned", "3.5k"]]);
   assert.strictEqual(s.foot, "656k farms · 3.5k banned");
-  assert.match(renderLook(s, "number").html, /<div class="gx-num">120k<\/div><div class="gx-cap">played in 24 h · of 656k farms<\/div>/);
+  assert.match(renderLook(s, "number").html, /<div class="gx-num(?: gx-num-long)?">120k<\/div><div class="gx-cap">played in 24 h · of 656k farms<\/div>/);
   assert.ok(looksFor(s).length >= 3);
   assert.deepStrictEqual(worldSummary.glanceModel({}, {}, {}), { empty: "The WORLD data has not loaded yet." });
 
@@ -207,7 +207,7 @@ test("📱 glance models: summary (24 h players as a ring of all farms), dataset
   assert.deepStrictEqual(d.head, { value: "40.0 h", tone: "warn", cap: "dump age · complete" });
   assert.strictEqual(d.items.length, 6);
   assert.deepStrictEqual(d.items[3], { icon: "⚠️", name: "unparseable", value: "3", tone: "warn" });
-  assert.match(renderLook(d, "number").html, /<div class="gx-num g-warn">40\.0 h<\/div>/);
+  assert.match(renderLook(d, "number").html, /<div class="gx-num g-warn(?: gx-num-long)?">40\.0 h<\/div>/);
   assert.ok(looksFor(d).length >= 3);
   const fresh = { ...STATS, dump: { ...STATS.dump, age_ms: 3 * 3600000 } };
   assert.deepStrictEqual([worldDataset.glanceModel({ stats: fresh }, {}, {}).head.value, worldDataset.glanceModel({ stats: fresh }, {}, {}).head.tone], ["3.0 h", "ok"]);
@@ -243,7 +243,7 @@ test("📱 glance models: every distribution — your bucket and rank (a ring of
   assert.deepStrictEqual(m.head, { value: "12 sp", tone: "accent", cap: "you · top 11.0% · #11", ring: 89, ringTone: "accent" });
   assert.deepStrictEqual(m.items.map((i) => i.name), ["10 sp", "▶ 12 sp", "15 sp"]);
   assert.deepStrictEqual(m.items[1], { name: "▶ 12 sp", sub: "20 farms", value: "20.0%", tone: "accent", pct: (20 / 70) * 100 });
-  assert.match(renderLook(m, "number").html, /<div class="gx-num g-accent">12 sp<\/div><div class="gx-cap">you · top 11\.0% · #11<\/div>/);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num g-accent(?: gx-num-long)?">12 sp<\/div><div class="gx-cap">you · top 11\.0% · #11<\/div>/);
   assert.ok(looksFor(m).length >= 3);
   // past the top rows, your bucket moves up to second
   const many = [{ key: 1, n: 90 }, { key: 2, n: 80 }, { key: 3, n: 70 }, { key: 4, n: 1 }];

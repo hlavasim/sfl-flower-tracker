@@ -224,7 +224,7 @@ test("📱 glance model: offers = my offers on top (a ring), outbid first with s
   rm.sim.ranked = [...rm.sim.ranked, { ...rm.sim.ranked.find((r) => r.name === STATUE), name: "Test Other" }];
   const top = roadmapOffers.glanceModel({ roadmap: rm, book: BOOK2, farm: withOffer(35) }, CTX, {});
   assert.deepStrictEqual(top.head, { value: 1, unit: "/1", tone: "ok", ring: 100, ringTone: "ok", cap: "my offers on top" });
-  assert.match(renderLook(top, "number").html, /<div class="gx-num g-ok">1<small>\/1<\/small><\/div><div class="gx-cap">my offers on top<\/div>/);
+  assert.match(renderLook(top, "number").html, /<div class="gx-num g-ok(?: gx-num-long)?">1<small>\/1<\/small><\/div><div class="gx-cap">my offers on top<\/div>/);
   const m = roadmapOffers.glanceModel({ roadmap: rm, book: BOOK2, farm: withOffer(20) }, CTX, {});
   assert.deepStrictEqual([m.head.value, m.head.tone, m.head.cap], [0, "warn", "my offers on top · 1 outbid"]);
   assert.deepStrictEqual(m.items.map((i) => i.name), [STATUE, "Test Other"]);

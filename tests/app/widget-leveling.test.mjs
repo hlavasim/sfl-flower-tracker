@@ -101,7 +101,7 @@ test("📱 glance model, plan: days to the target and its FLOWER; the XP split w
   assert.ok(m.items.every((i) => i.pct >= 0 && i.pct <= 100));
   assert.deepStrictEqual(m.tiles.map((t) => t.label), ["XP / day", "cost/1M", "cost/day", "held by"]);
   assert.match(m.tiles[3].value, /^(salt|slots|fish|—)$/);
-  assert.match(renderLook(m, "number").html, new RegExp(`<div class="gx-num">${lvFmt(plan.days)}<small> days</small></div>`));
+  assert.match(renderLook(m, "number").html, new RegExp(`<div class="gx-num(?: gx-num-long)?">${lvFmt(plan.days)}<small> days</small></div>`));
   assert.ok(looksFor(m).length >= 3);
   // the actual pace: a ring against the plan and a closing line
   const a = levelingSummary.glanceModel({ farm, leveling: { inputs: { ...inputs, actualXpPerDay: 1000 } } }, ctx);

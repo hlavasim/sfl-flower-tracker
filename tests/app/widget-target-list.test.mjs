@@ -135,7 +135,7 @@ test("📱 glance model: at the limit / all with a ring (done rows count even wh
   assert.deepStrictEqual(m.items[0], { icon: "<i>Doll</i>", name: "Doll", sub: "3 / 10", value: "−7", tone: "bad", pct: 30 });
   assert.deepStrictEqual([m.items[1].sub, m.items[1].pct], ["8+1 / 10", 90]);
   assert.deepStrictEqual(m.tiles.map((t) => [t.label, t.value]), [["at the limit", "17/19"], ["missing", 8], ["on the way", 1]]);
-  assert.match(renderLook(m, "number").html, /<div class="gx-num">17<small>\/19<\/small><\/div><div class="gx-cap">8 missing in total<\/div>/);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num(?: gx-num-long)?">17<small>\/19<\/small><\/div><div class="gx-cap">8 missing in total<\/div>/);
   assert.match(renderLook(m, "icons-1").html, /<small class="gx-tag g-bad">−7<\/small>/);
   assert.ok(looksFor(m).length >= 3);
   // done rows shown → they come last, with a ✓

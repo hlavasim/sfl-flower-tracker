@@ -96,7 +96,7 @@ test("📱 glance model, items: the category's value; its items by value (the ba
   assert.strictEqual(m.items.length, 50);
   assert.deepStrictEqual(m.items[0], { icon: '<img data-i="Obsidian">', name: "Obsidian", sub: "×67 · 19.20", value: "1.3k", pct: 100 });
   assert.deepStrictEqual(m.tiles.map((t) => t.label), ["items", "🌸", "of farm"]);
-  assert.match(renderLook(m, "number").html, /<div class="gx-num">1\.8k<small> 🌸<\/small><\/div><div class="gx-cap">50 items<\/div>/);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num(?: gx-num-long)?">1\.8k<small> 🌸<\/small><\/div><div class="gx-cap">50 items<\/div>/);
   assert.ok(looksFor(m).length >= 3);
   assert.ok(treasuryItems.glanceModel({ treasury: T }, ctx, { cat: "treasures" }).tiles.some((t) => t.label === "boost"));
   assert.deepStrictEqual(treasuryItems.glanceModel({ treasury: T }, ctx, { cat: "pets" }), { empty: "No items found." });

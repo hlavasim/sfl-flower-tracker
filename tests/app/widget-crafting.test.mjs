@@ -69,7 +69,7 @@ test("📱 glance model, traps: the soonest catch (ready first) as the headline;
   assert.strictEqual(m.items.length, 2);
   assert.deepStrictEqual(m.items[1], { icon: "<i>Blue Crab</i>", name: "1× Blue Crab", at: NOW + 3_600_000, pct: 50 }, "a live countdown");
   assert.deepStrictEqual(m.tiles.map((t) => [t.label, t.value]), [["ready", 1], ["in traps", 1], ["next", "60m"]]);
-  assert.match(renderLook(m, "number").html, /<div class="gx-num g-ok">Ready<\/div><div class="gx-cap">Isopod · 1 of 2 ready<\/div>/);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num g-ok(?: gx-num-long)?">Ready<\/div><div class="gx-cap">Isopod · 1 of 2 ready<\/div>/);
   assert.strictEqual((renderLook(m, "list-4").html.match(/class="gx-row"/g) || []).length, 2);
   assert.strictEqual(crabTraps.look, "next");
   assert.ok(looksFor(m).length >= 3);
