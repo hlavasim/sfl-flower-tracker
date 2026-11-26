@@ -50,8 +50,40 @@ export const RESOURCES = {
   worldAgg: {
     persist: true,
     ttl: 30 * 60_000,
-    load: async ({ group, limit }, { json }) =>
-      (await json(`/api/farm-history?type=world&mode=agg&group=${enc(group)}${limit ? `&limit=${enc(limit)}` : ""}`)).rows || [],
+    // active: the activity window in days (90 / 30), absent = every farm in the dataset
+    load: async ({ group, limit, active }, { json }) =>
+      (await json(`/api/farm-history?type=world&mode=agg&group=${enc(group)}${limit ? `&limit=${enc(limit)}` : ""}` +
+        `${active ? `&active_days=${enc(active)}` : ""}`)).rows || [],
+  },
+  // WORLD: the dataset stats (farm counts, activity, the daily dump's provenance).
+  worldStats: {
+    persist: true,
+    ttl: 30 * 60_000,
+    load: async (_, { json }) => {
+      const d = await json("/api/farm-history?type=world&mode=stats");
+      if (d && d.error) throw new Error(d.error);
+      return d;
+    },
+  },
+  // WORLD: one buyable node type's T1-equivalent distribution (with the viewer's own count).
+  worldNodes: {
+    persist: true,
+    ttl: 30 * 60_000,
+    load: async ({ node, active, farm }, { json }) => {
+      const d = await json(`/api/farm-history?type=world&mode=nodes&node=${enc(node)}${active ? `&active_days=${enc(active)}` : ""}` +
+        `${farm ? `&farm=${enc(farm)}` : ""}`);
+      if (d && d.error) throw new Error(d.error);
+      return d;
+    },
+  },
+  // WORLD: the viewer's auction-priority rank (ascension, level, XP) and the 50 farms just ahead.
+  worldPrio: {
+    ttl: 30 * 60_000,
+    load: async ({ farm }, { json }) => {
+      const d = await json(`/api/farm-history?type=world&mode=priority&farm=${enc(farm)}`);
+      if (d && d.error) throw new Error(d.error);
+      return d;
+    },
   },
   worldMe: {
     persist: true,

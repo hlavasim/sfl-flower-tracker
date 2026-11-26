@@ -14,19 +14,8 @@ import path from "node:path";
  */
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
-function extract(name) {
-  const src = readFileSync(path.join(ROOT, "flowers.html"), "utf8");
-  const start = src.indexOf(`function ${name}(`);
-  assert.ok(start > 0, `${name} present in flowers.html`);
-  let depth = 0, i = src.indexOf("{", start);
-  const open = i;
-  for (; i < src.length; i++) {
-    if (src[i] === "{") depth++;
-    else if (src[i] === "}") { depth--; if (depth === 0) break; }
-  }
-  assert.ok(i > open, `${name} body is brace-balanced`);
-  return new Function(`${src.slice(start, i + 1)}; return ${name};`)();
-}
+// The trend moved from flowers.html (_ykTrend) to core/yakkamon.mjs (ykTrend).
+const { ykTrend } = await import("../../core/yakkamon.mjs");
 
 const DAY = 86400000;
 // Flat, flat, one 50k step, flat — the real shape of #10 over the first four snapshots.
@@ -38,7 +27,7 @@ const stepSeries = [
 ];
 
 test("a single step does not become a trend", () => {
-  const trend = extract("_ykTrend");
+  const trend = ykTrend;
   const r = trend(stepSeries, "p10");
   assert.ok(r, "returns a trend for a 4-point series");
   assert.equal(r.k, 3, "three intervals between four snapshots");
@@ -50,14 +39,14 @@ test("a single step does not become a trend", () => {
 });
 
 test("the range is what exposes a spiky series", () => {
-  const trend = extract("_ykTrend");
+  const trend = ykTrend;
   const r = trend(stepSeries, "p10");
   assert.ok(r.hi - r.lo > Math.abs(r.slope) * 10,
     "a series whose range dwarfs its median is one the median cannot summarise — the panel prints both");
 });
 
 test("a genuinely steady climb is reported as one", () => {
-  const trend = extract("_ykTrend");
+  const trend = ykTrend;
   const steady = [0, 1, 2, 3].map((d) => ({ t: d * DAY, p50: 20000 + d * 500 }));
   const r = trend(steady, "p50");
   assert.equal(r.slope, 500, "even spacing, even growth => the median is the growth");
@@ -73,9 +62,10 @@ test("the tier chart is small multiples, never a second y-axis", () => {
    * panel, while #50 and #100 were crushed into one flat line. Four series spanning 17k..380k
    * get four panels — that is the only honest option, and a log scale is not a substitute.
    */
-  for (const name of ["flowers.html", "index.html"]) {
+  // The page's renderer moved into the YAKKAMON widget module; index.html (prod) still has its own.
+  for (const [name, fn] of [["widgets/yakkamon.mjs", "function ykTierSvg("], ["index.html", "function _ykTierSvg("]]) {
     const src = readFileSync(path.join(ROOT, name), "utf8");
-    const start = src.indexOf("function _ykTierSvg(");
+    const start = src.indexOf(fn);
     assert.ok(start > 0, `${name}: the small-multiples renderer exists`);
     const body = src.slice(start, start + 6000);
     assert.ok(!/priceScaleId/.test(body), `${name}: no second price scale`);

@@ -20,6 +20,13 @@ import { crabTraps, craftingBox } from "./crafting.mjs";
 // BUMPKIN and ASCENSION pages
 import { bumpkinXp, bumpkinFood, bumpkinBoosts, bumpkinKitchens, bumpkinPlanWidget } from "./bumpkin.mjs";
 import { ascensionStatus, ascensionOutlook, ascensionIsland, ascensionSteps } from "./ascension.mjs";
+// TICKETS, WORLD, YAKKAMON, SPECULATION, DECORATIONS pages
+import { ticketsSummary, ticketsGoal, ticketsToday, ticketsItems, ticketsSchedule, ticketsDecide, ticketsThisAuction, ticketsNextChapter, ticketsHistory, ticketsSources, ticketsReference } from "./tickets.mjs";
+import { worldEffLevel, worldCurrentExpansion, worldReach, worldNodes, worldAscension, worldBanStatus, worldVerified } from "./world-dist.mjs";
+import { worldSummary, worldDataset, worldPriority } from "./world.mjs";
+import { ykLive, ykPlacing, ykFacts, ykPlanner, ykCalculator, ykTiers, ykSources, ykRanks, ykEggs, ykVerdict } from "./yakkamon.mjs";
+import { specCalendar, specTrades, specSkim, specEggs } from "./speculation.mjs";
+import { decSummary, decColours, decGrow } from "./decorations.mjs";
 
 export const WIDGETS = {
   [fishingAgeNow.type]: fishingAgeNow,
@@ -48,4 +55,16 @@ export const WIDGETS = {
   [ascensionOutlook.type]: ascensionOutlook,
   [ascensionIsland.type]: ascensionIsland,
   [ascensionSteps.type]: ascensionSteps,
+  // TICKETS, WORLD, YAKKAMON, SPECULATION, DECORATIONS pages
+  [ticketsSummary.type]: ticketsSummary, [ticketsGoal.type]: ticketsGoal, [ticketsToday.type]: ticketsToday,
+  [ticketsItems.type]: ticketsItems, [ticketsSchedule.type]: ticketsSchedule, [ticketsDecide.type]: ticketsDecide,
+  [ticketsThisAuction.type]: ticketsThisAuction, [ticketsNextChapter.type]: ticketsNextChapter,
+  [ticketsHistory.type]: ticketsHistory, [ticketsSources.type]: ticketsSources, [ticketsReference.type]: ticketsReference,
+  [worldSummary.type]: worldSummary, [worldPriority.type]: worldPriority, [worldDataset.type]: worldDataset,
+  [worldEffLevel.type]: worldEffLevel, [worldCurrentExpansion.type]: worldCurrentExpansion, [worldReach.type]: worldReach,
+  [worldNodes.type]: worldNodes, [worldAscension.type]: worldAscension, [worldBanStatus.type]: worldBanStatus, [worldVerified.type]: worldVerified,
+  [ykLive.type]: ykLive, [ykPlacing.type]: ykPlacing, [ykFacts.type]: ykFacts, [ykPlanner.type]: ykPlanner, [ykCalculator.type]: ykCalculator,
+  [ykTiers.type]: ykTiers, [ykSources.type]: ykSources, [ykRanks.type]: ykRanks, [ykEggs.type]: ykEggs, [ykVerdict.type]: ykVerdict,
+  [specCalendar.type]: specCalendar, [specTrades.type]: specTrades, [specSkim.type]: specSkim, [specEggs.type]: specEggs,
+  [decSummary.type]: decSummary, [decColours.type]: decColours, [decGrow.type]: decGrow,
 };

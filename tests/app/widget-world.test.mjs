@@ -21,13 +21,15 @@ test("registered; needs the aggregate and (optionally) the viewer's farm", () =>
   assert.deepStrictEqual(worldIslands.optional, ["me"]);
 });
 
-test("islands: share and bar per row, my island highlighted", () => {
+test("islands: the fixed island order (unseen ones at 0), share and bar per row, my island highlighted with its rank", () => {
   const { rows, footer } = worldIslands.build({ agg: ISL, me: ME });
   const html = renderTable(worldIslands.columns, rows, worldIslands.defaults, opts(worldIslands));
-  assert.deepStrictEqual(keys(html), ["basic", "spring", "volcano"]);
+  assert.deepStrictEqual(keys(html), ["basic", "spring", "desert", "volcano", "swamp"]);
   assert.match(html, /60\.0 %/);
-  assert.match(html, /class="w-hbar"><span style="width:100\.0%/);
+  assert.match(html, /class="w-hbar"><span style="width:100\.0%;background:#3987e5/);
   assert.match(html, /data-row="volcano" class="w-row-hl"/);
+  // nobody is past volcano: rank #1 of 1,000 → top 0.1 %
+  assert.match(html, /YOU \(top 0\.1% · #1\)/);
   assert.match(footer, /1,000 farms/);
 });
 
@@ -37,7 +39,8 @@ test("skill points: highest first, my level highlighted, farms above me in the f
   assert.deepStrictEqual(keys(html), ["300", "285", "150", "1"]);
   assert.match(html, /data-row="285" class="w-row-hl"/);
   assert.match(footer, /50 farms above you/);
-  assert.match(footer, /top 5[,.]0 %/);
+  // the old chart's tag: rank = 1 + farms above, top = rank / all farms
+  assert.match(footer, /YOU \(top 5\.1% · #51\)/);
 });
 
 test("my row stays visible past the top N (host passes keepRow)", async () => {
@@ -47,6 +50,10 @@ test("my row stays visible past the top N (host passes keepRow)", async () => {
   h.handle("page:world-skill-points", "rows-top", "1");
   const html = h.renderPage("world-skill-points", { data: { agg: SP, me: ME } });
   assert.deepStrictEqual(keys(html), ["300", "285"]);
+  // the gap fill's empty levels are hidden unless the copy shows them
+  h.handle("page:world-skill-points", "opt:zeros", "1");
+  h.handle("page:world-skill-points", "rows-top", "3");
+  assert.deepStrictEqual(keys(h.renderPage("world-skill-points", { data: { agg: SP, me: ME } })), ["300", "299", "298", "285"]);
 });
 
 test("without my farm the charts still stand; no data → an explanation", () => {
