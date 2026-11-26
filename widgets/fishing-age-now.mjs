@@ -4,6 +4,7 @@
 import { agingNow } from "../core/engine/aging-now.mjs";
 import { computeFoodXP, detectCookingBoosts } from "../core/engine/cooking.mjs";
 import { levelingInit, levelingPlan } from "../core/sections/leveling.mjs";
+import { big, compact, ring, rows } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const fmt = (n) => (+n || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -93,4 +94,20 @@ export const fishingAgeNow = {
     const empty = `Nothing to age — everything you hold is in the ratio the recipes pair up. Go fishing${ctx.bestWorm ? ` (${ctx.bestWorm})` : ""}.`;
     return { rows, footer, empty, totals: { ...tot, saltHeld, slots, busy } };
   },
+};
+
+// ── iPhone glance face: S = how many fish to age now (ring: the salt held against their need);
+// M = beside it, the first fish; L = over the list. A fish the salt does not cover is orange / red.
+fishingAgeNow.sizes = ["s", "m", "l"];
+fishingAgeNow.size = "s";
+fishingAgeNow.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = fishingAgeNow.build(data, ctx, opts);
+  if (!out.rows.length) return { empty: out.empty };
+  const t = out.totals, cover = t.salt > 0 ? (t.saltHeld / t.salt) * 100 : 100;
+  const head = big(compact(t.n), { unit: " fish", cap: `${compact(t.xp)} XP · ${compact(t.salt)} salt` });
+  const ringed = `<div class="g-corner">${ring(cover, { tone: cover >= 100 ? "ok" : "warn" })}</div>` + head;
+  if (size === "s") return { html: ringed };
+  const list = rows(out.rows.slice(0, size === "m" ? 3 : 7).map((r) => ({ icon: r.iconHtml, name: r.name, sub: `${compact(r.xp)} XP`,
+    value: `×${fmt(r.age)}`, tone: r.saltState === "ok" ? "" : r.saltState === "partial" ? "warn" : "bad" })));
+  return { html: size === "m" ? `<div class="g-split"><div>${head}</div>${list}</div>` : ringed + list };
 };

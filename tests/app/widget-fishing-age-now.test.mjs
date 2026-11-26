@@ -78,3 +78,23 @@ test("the hidden rest is counted under the table", () => {
 test("the leveling plan is optional: the board paints without it and fills it in later", () => {
   assert.deepStrictEqual(W.optional, ["leveling"]);
 });
+
+test("📱 glance: S = how many fish to age with a salt ring, M = beside the first three, L = the list; nothing to age is empty", () => {
+  assert.deepStrictEqual(W.sizes, ["s", "m", "l"]);
+  const data = { farm: FARM, leveling: null }, c = { lvPlan: null, icon: (n) => `<i>${n}</i>` };
+  const out = W.build(data, c);
+  const t = out.totals;
+  const s = W.glance(data, c, {}, "s").html;
+  assert.match(s, new RegExp(`^<div class="g-corner"><svg class="g-ring g-${t.saltHeld >= t.salt ? "ok" : "warn"}"`));
+  assert.match(s, new RegExp(`<div class="g-big">${t.n}<small> fish</small></div><div class="g-cap">[^<]+ XP · [^<]+ salt</div>$`));
+  const m = W.glance(data, c, {}, "m").html;
+  assert.match(m, /^<div class="g-split"><div><div class="g-big">/);
+  assert.strictEqual((m.match(/class="g-row"/g) || []).length, Math.min(3, out.rows.length));
+  assert.match(m, new RegExp(`<i>${out.rows[0].name}</i></span><div class="g-n">${out.rows[0].name}<div>`));
+  assert.strictEqual((W.glance(data, c, {}, "l").html.match(/class="g-row"/g) || []).length, Math.min(7, out.rows.length));
+  // with one salt the rows past the first are not covered: red
+  const poor = { farm: { ...FARM, inventory: { ...FARM.inventory, Salt: "1" } }, leveling: null };
+  assert.match(W.glance(poor, c, {}, "s").html, /<svg class="g-ring g-warn"/);
+  assert.match(W.glance(poor, c, {}, "m").html, /<span class="g-v g-bad">×/);
+  assert.match(W.glance({ farm: { inventory: {} }, leveling: null }, { lvPlan: null }, {}, "s").empty, /Nothing to age/);
+});

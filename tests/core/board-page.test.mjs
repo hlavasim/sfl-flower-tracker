@@ -68,7 +68,7 @@ test("an empty board explains how to pin", async () => {
 
 test("a pinned widget renders in the grid with its own settings and board controls", async () => {
   const boards = JSON.stringify({ schema: 1, page: {}, boards: [{ id: "main", name: "Můj dashboard", items: [
-    { i: "w1", type: "fishing-age-now", w: 8, h: 0, settings: { columns: ["name", "age"], rows: { mode: "top", top: 3, picked: [] } } },
+    { i: "w1", type: "fishing-age-now", w: 8, h: 0, settings: { size: "full", columns: ["name", "age"], rows: { mode: "top", top: 3, picked: [] } } },
   ] }] });
   const { html, win } = await renderBoardWith(boards);
   assert.match(html, /class="w-board"/);
@@ -87,7 +87,7 @@ test("a pinned widget whose type is gone does not break the board", async () => 
 });
 
 test("a slow optional need (the leveling plan) does not hold the board: it paints with the farm alone", async () => {
-  const boards = JSON.stringify({ schema: 1, page: {}, boards: [{ id: "main", name: "B", items: [{ i: "w1", type: "fishing-age-now", settings: {}, w: 6 }] }] });
+  const boards = JSON.stringify({ schema: 1, page: {}, boards: [{ id: "main", name: "B", items: [{ i: "w1", type: "fishing-age-now", settings: { size: "full" }, w: 6 }] }] });
   const { html } = await renderBoardWith(boards, { slowLeveling: true });
   assert.match(html, /<tr data-row=/);
   assert.doesNotMatch(html, /Loading…/);
