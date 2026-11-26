@@ -25,7 +25,7 @@ export const ticketChecklist = {
   page: "tickets",
   needs: (farmId) => ({ tickets: { res: "tickets", farm: farmId } }),
   // open sources first, most tickets first; done ones (blank) after
-  defaults: { sort: { key: "plus", dir: "desc" } },
+  defaults: { sort: { key: "plus", dir: "desc" }, rows: { mode: "top", top: 20, picked: [] } },
   rowKey: (r) => r.id,
   rowLabel: (r) => r.label || r.id,
   rowClass: (r) => (r.done ? "w-st-done" : ""),
