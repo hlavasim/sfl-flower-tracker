@@ -20,12 +20,12 @@ export function freshness(entry, now = Date.now()) {
 // place "page": cog + pin (pinned = how many copies are on boards). place "board": a drag handle
 // (⠿, drop onto another widget to move), cog, remove and a resize corner; w (1-12) becomes the
 // grid span, h (rows of ROW_PX, 0 = auto) the height. The settings open as a popover.
-export function renderFrame({ id, title, place, body, fresh, pinned = 0, w = 6, h = 0, settingsHtml = "", settingsOpen = false }) {
+export function renderFrame({ id, title, place, body, fresh, pinned = 0, w = 6, h = 0, settingsHtml = "", settingsOpen = false, cog = true }) {
   const badge = fresh ? `<span class="w-fresh w-fresh-${fresh.level}" title="${esc(fresh.text)}">${esc(fresh.text)}</span>` : "";
   const btn = (action, label, title, value = "", cls = "") =>
     `<button type="button" class="w-btn${cls}" data-action="${action}" data-value="${esc(value)}" title="${esc(title)}" aria-label="${esc(title)}">${label}</button>`;
   const board = place === "board";
-  const tools = btn("refresh", "↻", "načíst znovu") + btn("cog", "⚙", "nastavení", "", settingsOpen ? " on" : "") + (board
+  const tools = btn("refresh", "↻", "načíst znovu") + (cog ? btn("cog", "⚙", "nastavení", "", settingsOpen ? " on" : "") : "") + (board
     ? btn("remove", "✕", "odebrat z dashboardu")
     : btn("pin", pinned ? `📌 ${pinned}` : "📌", pinned ? `připnuto ${pinned}× — připnout další kopii` : "připnout na můj dashboard"));
   const grip = board ? `<span class="w-grip" data-drag="item" title="táhni a pusť na jiný widget">⠿</span>` : "";

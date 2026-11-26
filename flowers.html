@@ -2691,6 +2691,13 @@
     .w-table tr.w-row-hl { background: rgba(255,200,80,0.12); }
     .w-table tr.w-row-click { cursor: pointer; }
     .w-table tr.w-st-ready { background: rgba(80,200,120,0.07); }
+    .w-table tr.w-st-miss { background: rgba(255,90,90,0.08); }
+    .w-tile { text-align: center; padding: 6px 0; }
+    .w-tile-big { font-family: 'Press Start 2P', monospace; font-size: 1.1rem; color: var(--sunpetal); }
+    .w-tile-sub { color: var(--text-secondary); margin: 4px 0; }
+    .w-bar { height: 8px; background: #111; border: 1px solid var(--border-brown); margin: 6px 8px; }
+    .w-bar > span { display: block; height: 100%; background: var(--sunpetal); }
+    .w-pin-btn { font-size: 0.5rem; padding: 2px 6px; vertical-align: middle; }
     .w-table .dash-detail { color: var(--text-dim); font-size: 0.9em; }
     .w-filter { margin-bottom: 6px; } .w-filter-h { color: var(--sunpetal); margin-bottom: 2px; }
     .w-table tr.w-row-click:hover { background: rgba(255,255,255,0.04); }
@@ -9836,7 +9843,7 @@
         </span>`;
       }).join("");
       html += `<div class="dash-weather-card pixel-panel ${_wCardCls}">
-        <div class="dash-weather-title pixel-font">🌦 ${_wTitle}</div>
+        <div class="dash-weather-title pixel-font">🌦 ${_wTitle} ${_wPinBtn("weather-protection", "Ochrana před počasím")}</div>
         <div class="dash-weather-pills">${_wPills}</div>
       </div>`;
 
@@ -10603,7 +10610,7 @@
         const swarmActive = beehives.some(h => h.hasSwarm);
         const now = Date.now();
         html += `<div class="growing-section pixel-panel pixel-font">
-          <div class="growing-title">BEEHIVES${swarmActive ? ' <span style="color:var(--yellow)">BEE SWARM!</span>' : ''}</div>
+          <div class="growing-title">BEEHIVES${swarmActive ? ' <span style="color:var(--yellow)">BEE SWARM!</span>' : ''} ${_wPinBtn("beehives", "Úly")}</div>
           <div class="growing-grid">`;
 
         for (const hive of beehives) {
@@ -11121,6 +11128,7 @@
       const _capNote = ascended && uncappedLevel > currentLevel;
       html += `<div class="bumpkin-xp-section pixel-panel pixel-font">
         <div class="bumpkin-level-big">LVL ${currentLevel}${_capNote ? ` <span style="font-size:0.5em;color:var(--text-dim)">(XP na ${uncappedLevel})</span>` : ""}</div>
+        <div style="margin:4px 0">${_wPinBtn("bumpkin-level", "Bumpkin level")}</div>
         <div class="bumpkin-xp-info">
           ${Math.floor(currentXP).toLocaleString()} XP${ascended
             ? ` · Ascension A${ascLevel}${_capNote
@@ -19240,15 +19248,25 @@
         try { return { savedLeveling: JSON.parse(localStorage.getItem("sfl_leveling") || "null") }; } catch (e) { return {}; }
       }
       if (type === "dash-actions") return { dashActions: parseDashboardActions, countdown: dashFormatCountdown };
+      if (type === "weather-protection") return { weatherRows: (farm) => DASH_WEATHER_ITEMS.map((n) =>
+        ({ name: n, state: dashWeatherState(farm, n), prevents: DASH_WEATHER_PREVENTS[n], iconHtml: _dashIcon(n) })) };
+      if (type === "beehives") return { hives: (farm) => (farm.beehives ? extractBeehiveDetails(farm.beehives) : []), countdown: dashFormatCountdown };
       return {};
     }
     // 📌 on a page that is not itself a widget frame (DASH): pin the widget with its defaults.
-    window._wPin = (type) => { if (typeof __widgets !== "undefined") __widgets.handle("page:" + type, "pin", ""); };
-    const _wPinBtn = (type, label) => {
-      if (typeof __widgets === "undefined") return "";
-      const n = __widgets.doc().boards.reduce((a, b) => a + b.items.filter((x) => x.type === type).length, 0);
-      return `<button class="dash-toggle-btn${n ? " on" : ""}" onclick="_wPin('${type}')" title="připnout na 📌 MŮJ DASHBOARD">📌 ${escHTML(label)}${n ? ` (připnuto ${n}×)` : ""}</button>`;
+    // Function declarations (hoisted): the pages that call _wPinBtn sit earlier in this script.
+    function _wPinned(type) { return __widgets.doc().boards.reduce((a, b) => a + b.items.filter((x) => x.type === type).length, 0); }
+    function _wPinText(label, n) { return `📌 ${escHTML(label)}${n ? ` (připnuto ${n}×)` : ""}`; }
+    window._wPin = (type, btn) => {
+      if (typeof __widgets === "undefined") return;
+      __widgets.handle("page:" + type, "pin", "");
+      if (btn) { btn.classList.add("on"); btn.innerHTML = _wPinText(btn.dataset.label, _wPinned(type)); }
     };
+    function _wPinBtn(type, label) {
+      if (typeof __widgets === "undefined") return "";
+      const n = _wPinned(type);
+      return `<button class="dash-toggle-btn w-pin-btn${n ? " on" : ""}" data-label="${escHTML(label)}" onclick="_wPin('${type}', this)" title="připnout na 📌 MŮJ DASHBOARD">${_wPinText(label, n)}</button>`;
+    }
     // Shown in place of a widget panel when the widget modules did not load.
     function _wMissing(title) {
       return '<div class="pixel-panel w-error" style="padding:8px 10px;margin:8px 0;font-size:0.5rem">' + escHTML(title) + ': panel se nenačetl (moduly widgetů) — zkus RELOAD.</div>';

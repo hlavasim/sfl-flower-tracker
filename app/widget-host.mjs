@@ -35,6 +35,11 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
 
   function body(widget, settings, data, ctx, tab) {
     try {
+      if (widget.view) {
+        // a tile or a chart: its own HTML, no table settings
+        const out = widget.view(data || {}, ctx || {}) || {};
+        return { html: out.html || `<div class="w-empty-msg">${esc(out.empty || "Nic k zobrazení.")}</div>`, settingsHtml: "" };
+      }
       const out = widget.build(data || {}, ctx || {});
       const opts = { rowKey: widget.rowKey, rowLabel: widget.rowLabel, rowClass: widget.rowClass };
       return {
@@ -54,7 +59,7 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     const id = `page:${type}`;
     const settings = effective(widget, pageSettings(doc, type));
     const b = body(widget, settings, data, ctx, open.get(id));
-    return renderFrame({ id, title: widget.title, place: "page", body: b.html, fresh, pinned: pinnedCount(doc, type),
+    return renderFrame({ id, title: widget.title, place: "page", body: b.html, fresh, pinned: pinnedCount(doc, type), cog: !widget.view,
       settingsHtml: b.settingsHtml, settingsOpen: open.has(id) });
   }
 
@@ -66,7 +71,7 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     }
     const settings = effective(widget, item.settings);
     const b = pending ? { html: `<div class="w-fresh">Načítám…</div>`, settingsHtml: "" } : body(widget, settings, data, ctx, open.get(id));
-    return renderFrame({ id, title: widget.title, place: "board", w: item.w, h: item.h, body: b.html, fresh,
+    return renderFrame({ id, title: widget.title, place: "board", w: item.w, h: item.h, body: b.html, fresh, cog: !widget.view,
       settingsHtml: b.settingsHtml, settingsOpen: open.has(id) });
   }
 

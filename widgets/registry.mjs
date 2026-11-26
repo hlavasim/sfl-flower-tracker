@@ -1,12 +1,21 @@
-// Every widget the page can show and pin, by type. A table widget:
+// Every widget the page can show and pin, by type.
+// A table widget:
 //   { type, title, page, needs(farmId) → {name: storeQuery}, optional?: [need names the widget can
 //     render without], defaults, columns, rowKey, rowLabel, rowClass?, build(data, ctx) → { rows, footer, empty } }
+// A view widget (a tile or a chart, no table settings):
+//   { type, title, page, needs, optional?, view(data, ctx) → { html } | { empty } }
 import { fishingAgeNow } from "./fishing-age-now.mjs";
 import { levelingLadderWidget } from "./leveling-ladder.mjs";
 import { dashActions } from "./dash-actions.mjs";
+import { bumpkinLevel } from "./bumpkin-level.mjs";
+import { weatherProtection } from "./weather-protection.mjs";
+import { beehives } from "./beehives.mjs";
 
 export const WIDGETS = {
   [fishingAgeNow.type]: fishingAgeNow,
   [levelingLadderWidget.type]: levelingLadderWidget,
   [dashActions.type]: dashActions,
+  [bumpkinLevel.type]: bumpkinLevel,
+  [weatherProtection.type]: weatherProtection,
+  [beehives.type]: beehives,
 };
