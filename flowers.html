@@ -5476,7 +5476,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.52</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.53</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5503,6 +5503,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.53", items: [
+          { t: "fix", text: "The \u201cstale: Farm snapshots\u201d warning no longer fires on a quiet night: the collector records every run, and the check uses its last successful run (an unchanged farm is not stored again). Runs that fail now say why." },
+        ] },
         { ver: "v6.52", items: [
           { t: "fix", text: "Owner-private data (SPEKULACE trade log, egg cost basis, venue balances, repay plan, synced settings) can no longer be read without the write token; the season calendar and the LP board stay public." },
         ] },
