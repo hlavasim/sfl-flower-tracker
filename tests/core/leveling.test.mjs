@@ -14,6 +14,14 @@ test("applyWhatIf places Walrus: fish per cast +1", () => {
   assert.equal(computeFishYieldPerCast(w, "basic") - computeFishYieldPerCast(farm, "basic"), 1);
 });
 
+test("Dumbo Octopus (20% chance of +1 fish, every tier) is in the catalogue and adds 0.2 fish per cast", () => {
+  assert.ok(LEVELING_ITEMS.some((i) => i.name === "Dumbo Octopus" && i.group === "fishing" && i.kind === "collectible"));
+  const w = applyWhatIf(farm, ["Dumbo Octopus"]);
+  for (const tier of ["basic", "advanced", "expert"]) {
+    assert.ok(Math.abs(computeFishYieldPerCast(w, tier) - computeFishYieldPerCast(farm, tier) - 0.2) < 1e-12, tier);
+  }
+});
+
 test("applyWhatIf wears a wearable (Surfer Hair) on a what-if farm hand", () => {
   assert.equal(isWearableEquipped(farm, "Surfer Hair"), false);
   assert.equal(isWearableEquipped(applyWhatIf(farm, ["Surfer Hair"]), "Surfer Hair"), true);
