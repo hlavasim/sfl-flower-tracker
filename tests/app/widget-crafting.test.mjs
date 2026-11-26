@@ -57,3 +57,16 @@ test("crafting box: the game's queue — every job, ready ones first, with how m
   assert.match(html, />60m</);
   assert.match(out.footer, /1 ready · 2 crafting/);
 });
+
+test("📱 glances: S = the soonest job (ready first) as a big countdown, M = up to 3 rows with READY / countdown chips", () => {
+  const farm = { crabTraps: { trapSpots: {
+    t1: { waterTrap: { readyAt: NOW + 3_600_000, caught: { "Blue Crab": 1 } } },
+    t2: { waterTrap: { readyAt: NOW - 1, caught: { Isopod: 2 } } },
+  } } };
+  const s = crabTraps.glance({ farm }, CTX, {}, "s").html;
+  assert.match(s, /<div class="g-hero"><i>Isopod<\/i><\/div><div class="g-big g-ok">Ready<\/div><div class="g-cap">Isopod · 1 of 2 ready<\/div>/);
+  const m = crabTraps.glance({ farm }, CTX, {}, "m").html;
+  assert.match(m, /<div class="g-n">2× Isopod<\/div><span class="g-chip g-ok">READY<\/span>/);
+  assert.match(m, /<div class="g-n">1× Blue Crab<\/div><span class="g-chip g-info">60m<\/span>/);
+  assert.deepStrictEqual(craftingBox.glance({ farm: {} }, CTX, {}, "s"), { empty: "The crafting box is idle right now." });
+});

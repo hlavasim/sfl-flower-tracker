@@ -123,3 +123,14 @@ test("every item in a recipe has its icon: dolls, crustaceans, dishes, flowers",
   assert.match(html(row("foods", "Pumpkin Soup", { foods: ["Pumpkin Soup"] })), /Fire Pit · 10× <i>Pumpkin<\/i>Pumpkin/);
   assert.match(html(row("flowers", "Yellow Pansy")), /<i>Sunpetal Seed<\/i>Sunpetal Seed \+ <i>Sunflower<\/i>Sunflower/);
 });
+
+test("📱 glance: S = at the limit / all with a ring (done rows count even when hidden); M = the most missing", () => {
+  const inv = all(Object.keys(DOLL_RECIPES), 10);
+  inv["Doll"] = "3.0";
+  const ctx = { inProgress: () => ({}), icon: (n) => `<i>${n}</i>` };
+  const s = W.glance({ farm: { inventory: inv } }, ctx, opts({ cat: "dolls", limit: 10 }), "s").html;
+  const [, done, total] = s.match(/<div class="g-big">(\d+)<small>\/(\d+)<\/small><\/div><div class="g-cap">7 missing in total<\/div>/).map(Number);
+  assert.strictEqual(done, total - 1, "only Doll is short");
+  const m = W.glance({ farm: { inventory: inv } }, ctx, opts({ cat: "dolls", limit: 10 }), "m").html;
+  assert.match(m, /<span class="g-ic"><i>Doll<\/i><\/span><div class="g-n">Doll<div>3 \/ 10<\/div><\/div><span class="g-v g-bad">−7<\/span>/);
+});

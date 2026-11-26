@@ -6,6 +6,7 @@
 //      cost, best offer, +FLOWER/day, payback, horizon result, Σ cost and ETA.
 //   🏷 Offers — the tradeable rows against the marketplace book: your offer on top / outbid / none.
 import { bar, kpis, bigBar, pill } from "../ui/viz.mjs";
+import { big, compact, rows, spark, tiles } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const icon = (ctx, n) => (typeof ctx.icon === "function" ? ctx.icon(n) : "");
@@ -374,4 +375,34 @@ export const roadmapOffers = {
     return { rows, summary, footer: `<div class="v-dim">🟢 your offer is the highest · 🟠 someone bids more · ⚪ no offer of yours — the price is the bid to beat</div>`,
       empty: book ? "No buy-path item has offers or listings." : "The marketplace book is loading." };
   },
+};
+
+// ── iPhone glance faces ──
+roadmapIncome.sizes = ["s", "m"];
+roadmapIncome.size = "m";
+roadmapIncome.glance = ({ roadmap } = {}, ctx = {}, opts = {}, size = "m") => {
+  if (!roadmap || !roadmap.sim) return { empty: "No roadmap data." };
+  const d = normRoadmap(roadmap), sim = d.sim;
+  const total = d.startIncome > 0 ? d.startIncome : (d.currentProd && d.currentProd.total) || 0;
+  if (size === "s") return { html: big(compact(total), { unit: "/day", cap: `→ ${compact(sim.finalRate)}/day after the plan` }) };
+  // the income as the plan buys its way up, a point per buy
+  const steps = (sim.ranked || []).filter((r) => r.status === "plan" && Number.isFinite(r.rateAfter)).map((r) => r.rateAfter);
+  return { html: tiles([{ label: "now", value: `${compact(total)}/d` }, { label: "after the plan", value: `${compact(sim.finalRate)}/d` },
+    { label: `${sim.econSteps} buys`, value: compact(sim.econCost) }]) + spark([total, ...steps]) };
+};
+
+roadmapBuyPath.sizes = ["s", "m", "l"];
+roadmapBuyPath.size = "l";
+roadmapBuyPath.glance = (data = {}, ctx = {}, opts = {}, size = "l") => {
+  const out = roadmapBuyPath.build(data, ctx, { ...opts, status: "plan" });
+  const plan = out.rows.filter((r) => r.status === "plan");
+  if (!plan.length) return { empty: out.empty || "Nothing to buy." };
+  const row = (r) => ({ icon: r.iconHtml, name: r.name, sub: `${TYPE_META[typeOf(r)].label.toLowerCase()} · pays back in ${fmtDays(r.sortRoi ?? r.roi)}`,
+    ...(r.skillTakeNow ? { chip: { text: "TAKE NOW", tone: "ok" } } : { value: `+${fmtFlower(r.value)}/d`, tone: "ok" }) });
+  if (size === "s") {
+    const r = plan[0];
+    return { html: `<div class="g-hero">${r.iconHtml}</div>` + big(fmtDays(r.sortRoi ?? r.roi), { cap: `${r.name} · +${fmtFlower(r.value)}/d` }) };
+  }
+  const n = size === "m" ? 3 : 6;
+  return { html: rows(plan.slice(0, n).map(row)) + `<div class="g-cap g-foot">${plan.length} in the plan · next ${esc(plan[0].eta)}</div>` };
 };

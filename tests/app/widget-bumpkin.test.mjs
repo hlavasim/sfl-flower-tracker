@@ -172,3 +172,20 @@ test("kitchens: a kitchen that is not cooking renders, no crash on its empty num
   const out = bumpkinKitchens.build({ farm, cook }, { ...CTX, page: () => ({ ...PAGE, recipes: { Deli: "" } }) }, {});
   assert.doesNotThrow(() => table(bumpkinKitchens, out));
 });
+
+test("📱 glances: XP (S/M), kitchens (M tiles, L rows with icons), leveling plan (S/M)", () => {
+  const xs = bumpkinXp.glance({ farm, cook }, CTX, {}, "s").html;
+  assert.match(xs, /class="g-big">(A\d+<small> L\d+|L\d+)/);
+  assert.match(xs, /class="g-meter"/);
+  assert.match(bumpkinXp.glance({ farm, cook }, CTX, {}, "m").html, /class="g-split"[\s\S]*<div class="g-n">XP \/ day<\/div>/);
+  const km = bumpkinKitchens.glance({ farm, cook }, CTX, {}, "m").html;
+  assert.strictEqual((km.match(/<div><span>/g) || []).length, 3, "the three busiest kitchens");
+  assert.match(km, /XP \/ day · 6 of 6 cooking/);
+  const kl = bumpkinKitchens.glance({ farm, cook }, CTX, {}, "l").html;
+  assert.strictEqual((kl.match(/class="g-row"/g) || []).length, 6);
+  assert.match(kl, /<span class="g-ic"><i>Pizza Margherita<\/i><\/span><div class="g-n">Fire Pit<div>Pizza Margherita · /);
+  const ps = bumpkinPlanWidget.glance({ farm, cook }, CTX, {}, "s").html;
+  assert.match(ps, /<div class="g-big">42<small> days<\/small><\/div><div class="g-cap">to level 200<\/div>/);
+  assert.match(bumpkinPlanWidget.glance({ farm, cook }, CTX, {}, "m").html, /XP \/ day<\/span><b>1\.4M<\/b>/);
+  assert.match(bumpkinXp.glance({}, CTX, {}, "s").empty, /No farm data/);
+});

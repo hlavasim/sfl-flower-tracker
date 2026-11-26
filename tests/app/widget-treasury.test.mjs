@@ -51,3 +51,12 @@ test("store: treasury asks section=treasury with the page's coin mode and pet pr
     assert.match(calls[0], /petprices=%7B%22Pet%22%3A3%7D/);
   } finally { globalThis.localStorage = prev; }
 });
+
+test("📱 glance: S = the total compact with USD and BTC; M adds a stacked bar of the categories, biggest first", () => {
+  const s = treasuryValue.glance({ treasury: T }, { catColors: COLORS }, {}, "s").html;
+  assert.match(s, /^<div class="g-big">[\d.]+[kM]?<small> 🌸<\/small><\/div><div class="g-cap">\$[\d,.]+ · [\d.]+ BTC<\/div>$/);
+  const m = treasuryValue.glance({ treasury: T }, { catColors: COLORS }, {}, "m").html;
+  assert.match(m, /<div class="g-stack"><i style="width:[\d.]+%;background:#/);
+  assert.match(m, /class="g-legend"/);
+  assert.deepStrictEqual(treasuryValue.glance({}, {}, {}, "s"), { empty: "The Treasury valuation did not load." });
+});

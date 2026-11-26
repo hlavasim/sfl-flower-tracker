@@ -190,3 +190,19 @@ test("🛒 buy path cells stay on one line: a short ETA, the horizon % under its
   const eta = roadmapBuyPath.columns.find((c) => c.key === "atDay").fmt(r.atDay, r);
   assert.match(eta, /class="v-dim v-nowrap"/);
 });
+
+test("📱 glances: income S/M (now → after the plan, a sparkline), buy path S/M/L (the next buys with icons)", () => {
+  const s = roadmapIncome.glance({ roadmap: fresh() }, CTX, {}, "s").html;
+  assert.match(s, /<div class="g-big">[\d.]+k?<small>\/day<\/small><\/div><div class="g-cap">→ [\d.]+k?\/day after the plan<\/div>/);
+  const m = roadmapIncome.glance({ roadmap: fresh() }, CTX, {}, "m").html;
+  assert.match(m, /class="g-tiles"/);
+  assert.match(m, /<svg class="g-spark/);
+  const l = roadmapBuyPath.glance({ roadmap: fresh() }, CTX, {}, "l").html;
+  const plan = RM.sim.ranked.filter((r) => r.status === "plan");
+  assert.strictEqual((l.match(/class="g-row"/g) || []).length, Math.min(6, plan.length));
+  assert.ok(l.includes(`<div class="g-n">${plan[0].name}<div>`), "the next buy first");
+  assert.match(l, new RegExp(`${plan.length} in the plan · next `));
+  assert.strictEqual((roadmapBuyPath.glance({ roadmap: fresh() }, CTX, {}, "m").html.match(/class="g-row"/g) || []).length, Math.min(3, plan.length));
+  assert.match(roadmapBuyPath.glance({ roadmap: fresh() }, CTX, {}, "s").html, /class="g-hero"/);
+  assert.deepStrictEqual(roadmapIncome.glance({}, CTX, {}, "m"), { empty: "No roadmap data." });
+});

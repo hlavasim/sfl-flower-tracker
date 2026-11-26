@@ -8,6 +8,7 @@
 // Each copy may pick its own production mode (real / theoretical); Grinx's Hammer changes the
 // server's plan, so it stays the page's setting.
 import { bar, kpis, pill } from "../ui/viz.mjs";
+import { big, compact, meter as gMeter, rows as gRows } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const RES3 = ["Crimstone", "Oil", "Obsidian"];
@@ -229,4 +230,22 @@ export const ascensionSteps = {
       { v: `${150 + (a - 1) * 50}+`, l: "absolute level · band L1–L50" }]) : "";
     return { rows, summary, footer: LEGEND, empty: `Ascension ${a} is not in the plan (done, or past the plan's ${d.maxAsc || 10} ascensions).` };
   },
+};
+
+// ── iPhone glance face: the ascension and band; M adds the stock it is built from ──
+ascensionStatus.sizes = ["s", "m"];
+ascensionStatus.size = "s";
+ascensionStatus.glance = ({ asc: d } = {}, ctx = {}, opts = {}, size = "s") => {
+  if (!d || !d.current) return { empty: "No ascension plan yet." };
+  const cur = d.current, rates = d.rates || {};
+  const bands = Object.entries(cur.bandStandings || {}).filter(([, l]) => l > 0);
+  const [band, lvl] = bands.length ? bands[bands.length - 1] : [cur.ascensionLevel, 0];
+  let h = big(`A${band}`, { unit: ` L${lvl}` }) + gMeter((lvl / 50) * 100, "accent") +
+    `<div class="g-cap">${cur.readyToAscend ? "ready to ascend ✦" : `${esc(cur.island)} · ${compact(rates.xpPerDay || 0)} XP/day`}</div>`;
+  if (size === "m") {
+    // wide and short: the headline on the left, the stock on the right
+    h = `<div class="g-split"><div>${h}</div>` + gRows([["Ascension Shard", cur.shards], ["Ascension Crystal", cur.crystals], ["Oil", Math.floor(cur.stock.Oil || 0)], ["Obsidian", Math.floor(cur.stock.Obsidian || 0)]]
+      .map(([n, v]) => ({ icon: gi(ctx, n), name: n.replace("Ascension ", ""), value: compact(v) }))) + `</div>`;
+  }
+  return { html: h };
 };

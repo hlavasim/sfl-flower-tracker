@@ -11,6 +11,7 @@ import { SWAMP_EXPANSION_LEVELS, ascensionXpFor } from "../core/engine/ascension
 import { getUncappedTotalLevel, xpRemainingToNextLevel } from "../core/engine/bumpkin-xp.mjs";
 import { COOKING_BUILDING_EMOJI, BUMPKIN_DEFAULT_RECIPES } from "../core/data/cooking.mjs";
 import { bar, kpis, bigBar, pill } from "../ui/viz.mjs";
+import { big, compact, meter, rows, tiles } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const icon = (ctx, n) => (typeof ctx.icon === "function" ? ctx.icon(n) : "");
@@ -444,4 +445,54 @@ export const bumpkinPlanWidget = {
     return { rows, summary: kpis(tiles) + per, footer: note,
       empty: p.xpAfterEating >= p.targetXP ? `✓ ${p.targetLabel} is reached after eating the food.` : "Nothing to plan." };
   },
+};
+
+// ── iPhone glance faces ──
+bumpkinXp.sizes = ["s", "m"];
+bumpkinXp.size = "s";
+bumpkinXp.glance = ({ farm, cook } = {}, ctx = {}, opts = {}, size = "s") => {
+  if (noFarm(farm)) return { empty: noFarm(farm) };
+  const p = planOf(farm, cook, ctx, opts);
+  const days = (xp) => (p.xpPerDayCook > 0 ? Math.ceil(xp / p.xpPerDayCook) : null);
+  let h;
+  if (p.ascended) {
+    const d = days(p.xpToBandDone);
+    h = big(`A${p.workBand}`, { unit: ` L${p.workBandLevel}` }) + meter(p.ascProgressPct, "accent") +
+      `<div class="g-cap">${p.xpToBandDone > 0 ? `A${p.workBand} done${d != null ? ` in ~${d.toLocaleString()} d` : ""}` : "ready to ascend ✦"}</div>`;
+  } else {
+    h = big(`L${p.currentLevel}`) + meter(p.xpPctTarget, "accent") + `<div class="g-cap">${p.xpPctTarget.toFixed(0)} % to L${p.targetLevel}</div>`;
+  }
+  // wide and short: the headline on the left, the numbers on the right
+  if (size === "m") h = `<div class="g-split"><div>${h}</div>` + rows([{ name: "XP", value: compact(p.currentXP) }, { name: "XP / day", value: compact(p.xpPerDayCook || 0) },
+    p.ascended ? { name: "ascension", value: `A${p.ascLevel}` } : { name: "to go", value: compact(p.xpRemaining) }]) + `</div>`;
+  return { html: h };
+};
+
+bumpkinKitchens.sizes = ["m", "l"];
+bumpkinKitchens.size = "m";
+bumpkinKitchens.glance = (data = {}, ctx = {}, opts = {}, size = "m") => {
+  const out = bumpkinKitchens.build(data, ctx, opts);
+  const on = out.rows.filter((r) => r.selected).sort((a, b) => b.xpPerDay - a.xpPerDay);
+  if (!on.length) return { empty: out.empty || "Nothing is cooking." };
+  const total = on.reduce((a, r) => a + (r.xpPerDay || 0), 0);
+  if (size === "m") {
+    return { html: tiles(on.slice(0, 3).map((r) => ({ label: `${r.emoji} ${r.name}`, value: r.selected.isInstant ? "instant" : r.timeText,
+      sub: `${r.selected.name} · ${compact(r.xpPerDay)}` }))) + `<div class="g-cap g-foot">${compact(total)} XP / day · ${on.length} of ${out.rows.length} cooking</div>` };
+  }
+  return { html: rows(on.map((r) => ({ icon: icon(ctx, r.selected.name) || r.emoji, name: r.name, sub: `${r.selected.name} · ${r.selected.isInstant ? "instant" : r.timeText}`,
+    value: `${compact(r.xpPerDay)}/d` }))) + `<div class="g-cap g-foot">${compact(total)} XP / day, all kitchens</div>` };
+};
+
+bumpkinPlanWidget.sizes = ["s", "m"];
+bumpkinPlanWidget.size = "s";
+bumpkinPlanWidget.glance = ({ farm, cook } = {}, ctx = {}, opts = {}, size = "s") => {
+  if (noFarm(farm)) return { empty: noFarm(farm) };
+  if (!cook) return { empty: "Loading cooking data…" };
+  const p = planOf(farm, cook, ctx, opts);
+  const head = p.xpAfterFood > 0 ? big(`${p.totalDays.toLocaleString()}`, { unit: " days", cap: `to ${p.targetLabel}` })
+    : big("✓", { tone: "ok", cap: `${p.targetLabel} ${p.reached ? "reached" : "covered by food"}` });
+  if (size === "s") return { html: head };
+  return { html: head + tiles([{ label: "XP / day", value: compact(p.totalXPPerDay) },
+    ...(p.totalCostPerDay > 0 ? [{ label: "SFL / day", value: sfl(ctx, p.totalCostPerDay) }] : []),
+    ...(p.ladder.length ? [{ label: `to ${p.nextLabel}`, value: `${sfl(ctx, p.nextCost)} SFL`, sub: `${Math.ceil(p.nextDays)} d` }] : [])]) };
 };

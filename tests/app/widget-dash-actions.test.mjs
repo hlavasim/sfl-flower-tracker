@@ -78,3 +78,15 @@ test("what to list is this widget's own choice: non-ticket bounties, animal turn
   // the column the user filters by is called "typ"
   assert.strictEqual(W.columns.find((c) => c.key === "category").label, "type");
 });
+
+test("📱 glance: S = how many are ready, with a ring; M = ready ones first, then the soonest, as plain text with icons", () => {
+  const s = W.glance({ farm: {} }, CTX, {}, "s").html;
+  const ready = ACTIONS.filter((a) => a.status === "ready").length, running = ACTIONS.filter((a) => a.status === "upcoming").length;
+  assert.match(s, /<svg class="g-ring g-ok"/);
+  assert.ok(s.includes(`${ready}</div><div class="g-cap">to collect · ${running} running</div>`));
+  const m = W.glance({ farm: {} }, CTX, {}, "m").html;
+  assert.strictEqual((m.match(/class="g-row"/g) || []).length, Math.min(3, ready + running));
+  assert.doesNotMatch(m.replace(/<span class="g-ic">[^]*?<\/span>/g, ""), /<b>/, "label markup flattened to text");
+  const none = W.glance({ farm: {} }, { ...CTX, dashActions: () => [] }, {}, "s").html;
+  assert.match(none, /nothing pending/);
+});

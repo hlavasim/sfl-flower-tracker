@@ -5,6 +5,7 @@ import { FLOWER_RECIPES, DOLL_RECIPES } from "../core/data/recipes.mjs";
 import { CRUSTACEAN_RECIPES } from "../core/data/crafting.mjs";
 import { COOKING_RECIPES_DATA, COOKING_INGREDIENTS, COOKING_BUILDING_EMOJI } from "../core/data/cooking.mjs";
 import { bar, kpis, bigBar } from "../ui/viz.mjs";
+import { big, ring as gRing, rows as gRows } from "../ui/glance.mjs";
 import { PET_REQUEST_FOODS } from "../core/engine/pet-requests.mjs";
 
 // Whole lists of dishes the game keeps asking for (the user picks the list, not each dish).
@@ -118,4 +119,20 @@ export const targetList = {
       + bigBar(all.length ? (done / all.length) * 100 : 100);
     return { rows, summary, footer: "", empty: `✓ All at the limit (${all.length}).` };
   },
+};
+
+// ── iPhone glance face: S = how many are at the limit, with a ring; M / L = the most missing ──
+targetList.sizes = ["s", "m", "l"];
+targetList.size = "s";
+targetList.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = targetList.build(data, ctx, { ...opts, hideDone: false });
+  if (!out.rows.length) return { empty: out.empty };
+  const done = out.rows.filter((r) => r.done).length, left = out.rows.reduce((a, r) => a + r.missing, 0);
+  const pct = (done / out.rows.length) * 100;
+  const head = `<div class="g-corner">${gRing(pct, { tone: pct >= 100 ? "ok" : "accent" })}</div>` +
+    big(done, { unit: `/${out.rows.length}`, cap: left ? `${left} missing in total` : "all at the limit ✓" });
+  if (size === "s") return { html: head };
+  const miss = out.rows.filter((r) => r.missing > 0).sort((a, b) => b.missing - a.missing).slice(0, size === "m" ? 3 : 7);
+  return { html: (size === "l" ? head : "") + (miss.length ? gRows(miss.map((r) => ({ icon: r.iconHtml, name: r.name,
+    sub: `${r.have}${r.pend ? `+${r.pend}` : ""} / ${r.need}`, value: `−${r.missing}`, tone: "bad" }))) : big("✓", { tone: "ok", cap: "all at the limit" })) };
 };

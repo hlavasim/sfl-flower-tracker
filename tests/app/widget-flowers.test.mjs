@@ -88,3 +88,15 @@ test("needs: what a flower grows from and the flowers that use it carry their ic
   assert.match(html, /from <i>Sunflower<\/i>Sunflower/);
   assert.match(html, /used in <i>Yellow Cosmos<\/i>Yellow Cosmos ×/);
 });
+
+test("📱 glances: flowers S = complete / total with a ring, M = the most-missing; beds S = ready count, M = the beds", () => {
+  const farm = { inventory: { ...all(2), "Red Pansy": "0" } };
+  const s = flowersNeeds.glance({ farm }, CTX, {}, "s").html;
+  assert.match(s, /<svg class="g-ring/);
+  assert.match(s, /<div class="g-big">\d+<small>\/\d+<\/small><\/div>/);
+  const m = flowersNeeds.glance({ farm }, CTX, {}, "m").html;
+  assert.match(m, /<div class="g-n">Red Pansy<div>0 \/ 2<\/div><\/div><span class="g-v g-bad">−2<\/span>/);
+  const done = flowersNeeds.glance({ farm: { inventory: all(9) } }, CTX, {}, "s").html;
+  assert.match(done, /all at target ✓/);
+  assert.deepStrictEqual(flowerBeds.glance({ farm: {} }, CTX, {}, "s").empty, "No flower beds on the farm.");
+});

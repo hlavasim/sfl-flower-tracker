@@ -1,6 +1,7 @@
 // What is on the way right now: 🦀 the crab traps (CRABS page) and 🪆 the crafting box (DOLLS page).
 import { toMs } from "../core/engine/power-costs.mjs";
 import { craftingJobs } from "../core/engine/crafting-box.mjs";
+import { big, rows } from "../ui/glance.mjs";
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const icon = (ctx, n) => (typeof ctx.icon === "function" ? ctx.icon(n) : "");
 const when = (r) => (r.ready ? `<span class="v-pill v-ok">READY</span>`
@@ -70,3 +71,21 @@ export const craftingBox = {
     return { rows, footer: `<div class="v-dim">${ready} ready · ${rows.length - ready} crafting</div>`, empty: "" };
   },
 };
+
+// ── iPhone glance faces: what is on the way, soonest first ──
+function onTheWay(widget, empty) {
+  return (data = {}, ctx = {}, opts = {}, size = "s") => {
+    const out = widget.build(data, ctx, opts);
+    if (!out.rows.length) return { empty: out.empty || empty };
+    const list = out.rows.slice().sort((a, b) => (a.ready === b.ready ? (a.readyAt || 0) - (b.readyAt || 0) : a.ready ? -1 : 1));
+    const chip = (r) => (r.ready ? { text: "READY", tone: "ok" } : { text: r.countdown || "…", tone: "info" });
+    if (size === "s") {
+      const r = list[0], ready = list.filter((x) => x.ready).length;
+      return { html: `<div class="g-hero">${r.iconHtml}</div>` + big(r.ready ? "Ready" : r.countdown || "…", { tone: r.ready ? "ok" : "", cap: `${r.name}${list.length > 1 ? ` · ${ready} of ${list.length} ready` : ""}` }) };
+    }
+    return { html: rows(list.slice(0, size === "m" ? 3 : 7).map((r) => ({ icon: r.iconHtml, name: r.qty ? `${r.qty}× ${r.name}` : r.name, chip: chip(r) }))) };
+  };
+}
+for (const w of [craftingBox, crabTraps]) { w.sizes = ["s", "m"]; w.size = "s"; }
+craftingBox.glance = onTheWay(craftingBox, "The crafting box is idle.");
+crabTraps.glance = onTheWay(crabTraps, "Nothing in the traps.");

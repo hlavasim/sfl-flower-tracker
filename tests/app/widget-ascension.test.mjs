@@ -110,3 +110,13 @@ test("ascension steps: one ascension per copy, resources with header icons, slot
   const theo = ascensionSteps.build({ asc: d }, CTX, { asc: "2", mode: "theo" });
   assert.ok(theo.rows.every((r) => r.sim === (r.s.sim && r.s.sim.theo)));
 });
+
+test("📱 glance: S = the band being filled (A? L?) with a meter; M puts the shards, crystals, oil and obsidian beside it", () => {
+
+  const s = ascensionStatus.glance({ asc: d }, CTX, {}, "s").html;
+  assert.match(s, /^<div class="g-big">A\d+<small> L\d+<\/small><\/div><div class="g-meter">/);
+  const m = ascensionStatus.glance({ asc: d }, CTX, {}, "m").html;
+  assert.match(m, /^<div class="g-split">/);
+  for (const n of ["Shard", "Crystal", "Oil", "Obsidian"]) assert.match(m, new RegExp(`<div class="g-n">${n}</div>`));
+  assert.deepStrictEqual(ascensionStatus.glance({}, CTX, {}, "s"), { empty: "No ascension plan yet." });
+});
