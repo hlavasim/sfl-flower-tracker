@@ -5,6 +5,7 @@ import { bumpkinXp, bumpkinFood, bumpkinBoosts, bumpkinKitchens, bumpkinPlanWidg
 import { WIDGETS } from "../../widgets/registry.mjs";
 import { renderTable } from "../../ui/table.mjs";
 import { buildCookingSection } from "../../core/sections/cooking.mjs";
+import { renderLook, looksFor } from "../../ui/glance-templates.mjs";
 
 // BUMPKIN as widgets, on the real fixture farm (level 186, not ascended) and the engine's cooking
 // payload — the same numbers the old page showed (checked against it when the page was converted).
@@ -173,51 +174,63 @@ test("kitchens: a kitchen that is not cooking renders, no crash on its empty num
   assert.doesNotThrow(() => table(bumpkinKitchens, out));
 });
 
-test("📱 glances: XP (S/M), kitchens (M tiles, L rows with icons), leveling plan (S/M)", () => {
-  const xs = bumpkinXp.glance({ farm, cook }, CTX, {}, "s").html;
-  assert.match(xs, /class="g-big">(A\d+<small> L\d+|L\d+)/);
-  assert.match(xs, /class="g-meter"/);
-  assert.match(bumpkinXp.glance({ farm, cook }, CTX, {}, "m").html, /class="g-split"[\s\S]*<div class="g-n">XP \/ day<\/div>/);
-  const km = bumpkinKitchens.glance({ farm, cook }, CTX, {}, "m").html;
-  assert.strictEqual((km.match(/<div><span>/g) || []).length, 3, "the three busiest kitchens");
-  assert.match(km, /XP \/ day · 6 of 6 cooking/);
-  const kl = bumpkinKitchens.glance({ farm, cook }, CTX, {}, "l").html;
-  assert.strictEqual((kl.match(/class="g-row"/g) || []).length, 6);
-  assert.match(kl, /<span class="g-ic"><i>Pizza Margherita<\/i><\/span><div class="g-n">Fire Pit<div>Pizza Margherita · /);
-  const ps = bumpkinPlanWidget.glance({ farm, cook }, CTX, {}, "s").html;
-  assert.match(ps, /<div class="g-big">42<small> days<\/small><\/div><div class="g-cap">to level 200<\/div>/);
-  assert.match(bumpkinPlanWidget.glance({ farm, cook }, CTX, {}, "m").html, /XP \/ day<\/span><b>1\.4M<\/b>/);
-  assert.match(bumpkinXp.glance({}, CTX, {}, "s").empty, /No farm data/);
+test("📱 glance models: XP (the level with a ring, the numbers as tiles), kitchens (XP a day, the kitchens with their share), leveling plan (days, the ladder)", () => {
+  const x = bumpkinXp.glanceModel({ farm, cook }, CTX);
+  assert.strictEqual(bumpkinXp.look, "number");
+  assert.match(String(x.head.value), /^L\d+$/);
+  assert.ok(x.head.ring >= 0 && x.head.ring <= 100);
+  assert.deepStrictEqual(x.tiles.map((t) => t.label), ["XP", "XP / day", "to go"]);
+  assert.match(renderLook(x, "number").html, /<div class="gx-num">L\d+<\/div><div class="gx-cap">\d+ % to L200<\/div>/);
+  assert.ok(looksFor(x).length >= 3);
+  assert.match(String(bumpkinXp.glanceModel({ farm: ascended, cook }, CTX).head.value), /^A\d+$/);
+  assert.match(bumpkinXp.glanceModel({}, CTX).empty, /No farm data/);
+
+  const k = bumpkinKitchens.glanceModel({ farm, cook }, CTX);
+  assert.strictEqual(bumpkinKitchens.look, "number-list-2");
+  assert.match(k.head.cap, /6 of 6 kitchens cooking/);
+  assert.strictEqual(k.items.length, 6);
+  assert.deepStrictEqual(Object.keys(k.items[0]), ["icon", "name", "sub", "value", "pct"]);
+  assert.match(k.items.find((i) => i.name === "Fire Pit").sub, /^Pizza Margherita · /);
+  assert.ok(Math.abs(k.items.reduce((a, i) => a + i.pct, 0) - 100) < 1e-6, "shares of the day add up");
+  assert.strictEqual((renderLook(k, "number-list-2").html.match(/class="gx-row"/g) || []).length, 3);
+  assert.ok(looksFor(k).length >= 3);
+
+  const p = bumpkinPlanWidget.glanceModel({ farm, cook }, CTX);
+  assert.deepStrictEqual([p.head.value, p.head.unit, p.head.cap], ["42", " days", "to level 200"]);
+  assert.strictEqual(p.items[0].name, "L188");
+  assert.match(p.items[0].sub, /^[\d.]+ d$/);
+  assert.match(renderLook(p, "tiles-1").html, /<span>XP \/ day<\/span><b>1\.4M<\/b>/);
+  assert.ok(looksFor(p).length >= 3);
+  assert.match(bumpkinPlanWidget.glanceModel({ farm }, CTX).empty, /Loading cooking data/);
+  for (const w of [bumpkinXp, bumpkinKitchens, bumpkinPlanWidget]) assert.strictEqual(w.glance, undefined);
 });
 
-test("📱 glances: banked food (S = XP and the level after eating, M / L = the biggest dishes) and cooking boosts (S = pet streak, M tiles, L rows)", () => {
-  assert.deepStrictEqual(bumpkinFood.sizes, ["s", "m", "l"]);
-  const fs = bumpkinFood.glance({ farm, cook }, CTX, {}, "s").html;
-  assert.match(fs, /^<div class="g-big">[\d.]+[kM]?<small> XP<\/small><\/div><div class="g-cap">L187 after eating · \+1<\/div>$/);
+test("📱 glance models: banked food (XP and the level after eating, the dishes biggest first) and cooking boosts (pet streak, every boost)", () => {
+  const f = bumpkinFood.glanceModel({ farm, cook }, CTX);
+  assert.strictEqual(bumpkinFood.look, "number");
+  assert.deepStrictEqual([f.head.unit, f.head.cap], [" XP", "L187 after eating · +1"]);
   const top = [...cook.bankedFood.items].sort((a, b) => b.totalFoodXP - a.totalFoodXP);
-  const fm = bumpkinFood.glance({ farm, cook }, CTX, {}, "m").html;
-  assert.match(fm, /^<div class="g-split">/);
-  assert.strictEqual((fm.match(/class="g-row"/g) || []).length, 3);
-  assert.match(fm, new RegExp(`<span class="g-ic"><i>${top[0].name}</i></span><div class="g-n">${top[0].name}<div>${top[0].qty}×</div>`));
-  const fl = bumpkinFood.glance({ farm, cook }, CTX, {}, "l").html;
-  assert.strictEqual((fl.match(/class="g-row"/g) || []).length, Math.min(6, top.length));
-  assert.match(fl, new RegExp(`${top.length} kinds of food in stock`));
-  assert.match(bumpkinFood.glance({ farm }, CTX, {}, "s").empty, /Loading cooking data/);
-  assert.match(bumpkinFood.glance({ farm, cook: { ...cook, bankedFood: { totalXp: 0, items: [] } } }, CTX, {}, "s").empty, /No cooked food/);
-  assert.match(bumpkinFood.glance({}, CTX, {}, "s").empty, /No farm data/);
+  assert.strictEqual(f.items.length, top.length);
+  assert.deepStrictEqual([f.items[0].icon, f.items[0].name, f.items[0].sub], [`<i>${top[0].name}</i>`, top[0].name, `${top[0].qty}×`]);
+  assert.ok(f.items[0].pct > 0 && f.items[0].pct <= 100);
+  assert.match(renderLook(f, "list-4").html, new RegExp(`<span class="gx-ic"><i>${top[0].name}</i></span><div class="gx-n">${top[0].name}<div>${top[0].qty}×</div>`));
+  assert.ok(looksFor(f).length >= 3);
+  assert.match(bumpkinFood.glanceModel({ farm }, CTX).empty, /Loading cooking data/);
+  assert.match(bumpkinFood.glanceModel({ farm, cook: { ...cook, bankedFood: { totalXp: 0, items: [] } } }, CTX).empty, /No cooked food/);
+  assert.match(bumpkinFood.glanceModel({}, CTX).empty, /No farm data/);
 
-  assert.deepStrictEqual(bumpkinBoosts.sizes, ["s", "m", "l"]);
   const ps = cook.boosts.petStreakInfo;
-  const bs = bumpkinBoosts.glance({ farm, cook }, CTX, {}, "s").html;
-  assert.match(bs, new RegExp(`^<div class="g-big g-(ok|warn)">×${ps.multiplier}</div><div class="g-cap">pet streak ${ps.streak}w · (next week ✓|feed your pet!)`));
-  const bm = bumpkinBoosts.glance({ farm, cook }, CTX, {}, "m").html;
-  const xpN = cook.boosts.xpBoosts.filter((b) => !b.petStreak).length;
-  assert.match(bm, new RegExp(`<span>XP boosts</span><b>${xpN}</b>`));
-  assert.match(bm, /<span>pet streak<\/span><b>×/);
-  const bl = bumpkinBoosts.glance({ farm, cook }, CTX, {}, "l").html;
-  assert.match(bl, /^<div class="g-rows"><div class="g-row"><div class="g-n">Pet's Streak/);
-  assert.match(bl, /<i>Observatory<\/i><\/span><div class="g-n">Observatory<div>XP<\/div><\/div><span class="g-v">×1\.05/);
-  assert.ok((bl.match(/class="g-row"/g) || []).length <= 7);
-  assert.match(bumpkinBoosts.glance({ farm }, CTX, {}, "s").empty, /Loading cooking data/);
-  assert.match(bumpkinBoosts.glance({}, CTX, {}, "m").empty, /No farm data/);
+  const b = bumpkinBoosts.glanceModel({ farm, cook }, CTX);
+  assert.strictEqual(b.head.value, `×${ps.multiplier}`);
+  assert.match(b.head.cap, new RegExp(`^pet streak ${ps.streak}w · (next week ✓|feed your pet!)$`));
+  const xpN = cook.boosts.xpBoosts.filter((x) => !x.petStreak).length;
+  assert.strictEqual(b.items[0].name, "Pet's Streak");
+  assert.deepStrictEqual(b.items.find((i) => i.name === "Observatory"), { icon: "<i>Observatory</i>", name: "Observatory", sub: "XP", value: "×1.05" });
+  assert.deepStrictEqual(b.tiles[0], { label: "XP boosts", value: xpN });
+  assert.match(renderLook(b, "number").html, new RegExp(`<div class="gx-num g-(ok|warn)">×${ps.multiplier}</div>`));
+  assert.ok(looksFor(b).length >= 3);
+  assert.match(bumpkinBoosts.glanceModel({ farm }, CTX).empty, /Loading cooking data/);
+  assert.match(bumpkinBoosts.glanceModel({}, CTX).empty, /No farm data/);
+  for (const w of [bumpkinFood, bumpkinBoosts]) assert.strictEqual(w.glance, undefined);
 });
+

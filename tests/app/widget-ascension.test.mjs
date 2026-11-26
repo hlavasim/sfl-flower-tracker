@@ -9,6 +9,7 @@ import { createStore } from "../../app/store.mjs";
 import { buildAscensionSection } from "../../core/sections/ascension.mjs";
 import { buildPowerSection } from "../../core/sections/power.mjs";
 import { buildCookingSection } from "../../core/sections/cooking.mjs";
+import { renderLook, looksFor } from "../../ui/glance-templates.mjs";
 
 // ASCENSION as widgets over the engine's plan for the real fixture farm (volcano, not ascended yet).
 
@@ -111,56 +112,60 @@ test("ascension steps: one ascension per copy, resources with header icons, slot
   assert.ok(theo.rows.every((r) => r.sim === (r.s.sim && r.s.sim.theo)));
 });
 
-test("📱 glance: S = the band being filled (A? L?) with a meter; M puts the shards, crystals, oil and obsidian beside it", () => {
-
-  const s = ascensionStatus.glance({ asc: d }, CTX, {}, "s").html;
-  assert.match(s, /^<div class="g-big">A\d+<small> L\d+<\/small><\/div><div class="g-meter">/);
-  const m = ascensionStatus.glance({ asc: d }, CTX, {}, "m").html;
-  assert.match(m, /^<div class="g-split">/);
-  for (const n of ["Shard", "Crystal", "Oil", "Obsidian"]) assert.match(m, new RegExp(`<div class="g-n">${n}</div>`));
-  assert.deepStrictEqual(ascensionStatus.glance({}, CTX, {}, "s"), { empty: "No ascension plan yet." });
+test("📱 glance model, status: the band being filled (A? L?) with a ring; the stock as items with sprites; island and XP as tiles", () => {
+  const m = ascensionStatus.glanceModel({ asc: d }, CTX);
+  assert.strictEqual(ascensionStatus.look, "number");
+  assert.match(String(m.head.value), /^A\d+$/);
+  assert.match(m.head.unit, /^ L\d+$/);
+  assert.ok(m.head.ring >= 0 && m.head.ring <= 100);
+  assert.strictEqual(m.items.length, 6);
+  assert.deepStrictEqual(m.items.map((i) => i.name), ["Shards", "Crystals", "Crimstone", "Oil", "Obsidian", "Coins"]);
+  assert.match(m.items[3].icon, /<i>Oil<\/i>/);
+  assert.deepStrictEqual(m.tiles.map((t) => t.label), ["land", "ascension", "XP/day"]);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num( g-ok)?">A\d+<small> L\d+<\/small><\/div>/);
+  assert.ok(looksFor(m).length >= 3);
+  assert.deepStrictEqual(ascensionStatus.glanceModel({}, CTX), { empty: "No ascension plan yet." });
+  assert.strictEqual(ascensionStatus.glance, undefined);
 });
 
-test("📱 glance, outlook: S = steps the stock covers (scarcest resource) and the jam; M = the three scarcest beside it; L = all four", () => {
-  assert.deepStrictEqual(ascensionOutlook.sizes, ["s", "m", "l"]);
+test("📱 glance model, outlook: steps the stock covers (scarcest resource) with a ring and the jam; the four resources with their reach", () => {
   const n = d.steps.length, low = Math.min(...["Crimstone", "Oil", "Obsidian", "Coins"].map((r) => d.reach[r]));
-  const s = ascensionOutlook.glance({ asc: d }, CTX, {}, "s").html;
-  assert.match(s, /^<div class="g-corner"><svg class="g-ring/);
-  assert.match(s, new RegExp(`<div class="g-big">${low}<small>/${n}</small></div>`));
-  if (d.bottleneck) assert.match(s, new RegExp(`${d.bottleneck} first`));
-  assert.match(s, /jams at A\d+·exp\d+|on pace through A\d+/);
-  const m = ascensionOutlook.glance({ asc: d }, CTX, {}, "m").html;
-  assert.match(m, /^<div class="g-split">/);
-  assert.strictEqual((m.match(/class="g-row"/g) || []).length, 3);
-  if (d.bottleneck) assert.match(m, new RegExp(`<div class="g-n">${d.bottleneck}</div><span class="g-v g-bad">${d.reach[d.bottleneck]}/${n}`));
-  assert.strictEqual((ascensionOutlook.glance({ asc: d }, CTX, {}, "l").html.match(/class="g-row"/g) || []).length, 4);
-  assert.deepStrictEqual(ascensionOutlook.glance({}, CTX, {}, "s"), { empty: "No ascension plan yet." });
+  const m = ascensionOutlook.glanceModel({ asc: d }, CTX, {});
+  assert.deepStrictEqual([m.head.value, m.head.unit], [low, `/${n}`]);
+  assert.match(m.head.cap, /jams at A\d+·exp\d+|on pace to A\d+/);
+  assert.strictEqual(m.items.length, 4);
+  assert.strictEqual(m.items[0].value, `${low}/${n}`, "scarcest first");
+  if (d.bottleneck) assert.strictEqual(m.items.find((i) => i.name === d.bottleneck).tone, "bad");
+  assert.ok(m.items.every((i) => i.pct >= 0 && i.pct <= 100 && i.icon));
+  assert.strictEqual((renderLook(m, "bars-t").html.match(/class="gx-bar"/g) || []).length, 4);
+  assert.ok(looksFor(m).length >= 3);
+  assert.deepStrictEqual(ascensionOutlook.glanceModel({}, CTX), { empty: "No ascension plan yet." });
+  assert.strictEqual(ascensionOutlook.glance, undefined);
 });
 
-test("📱 glance, steps: S = covered / total with a ring and the next step; M / L = the pending steps with their state chip", () => {
-  for (const w of [ascensionIsland, ascensionSteps]) assert.deepStrictEqual(w.sizes, ["s", "m", "l"]);
+test("📱 glance model, steps: covered / total with a ring; the steps, pending first, each with its state chip", () => {
   const out = ascensionSteps.build({ asc: d }, CTX, { asc: "1" });
   const ok = out.rows.filter((r) => r.state === "ok").length, pending = out.rows.filter((r) => r.state !== "ok");
-  const s = ascensionSteps.glance({ asc: d }, CTX, { asc: "1" }, "s").html;
-  assert.match(s, new RegExp(`<div class="g-big">${ok}<small>/${out.rows.length}</small></div>`));
-  assert.match(s, /class="g-ring/);
+  const m = ascensionSteps.glanceModel({ asc: d }, CTX, { asc: "1" });
+  assert.deepStrictEqual([m.head.value, m.head.unit], [ok, `/${out.rows.length}`]);
+  assert.strictEqual(m.items.length, out.rows.length);
   if (pending.length) {
-    assert.match(s, /next: A1·exp\d+ · farm /);
-    const m = ascensionSteps.glance({ asc: d }, CTX, { asc: "1" }, "m").html;
-    assert.match(m, /^<div class="g-split">/);
-    assert.strictEqual((m.match(/class="g-row"/g) || []).length, Math.min(3, pending.length));
-    assert.match(m, /<span class="g-chip g-(info|bad)">(on pace|stuck)<\/span>/);
-    assert.match(m, /farm [\d.∞?hd]+ · slot /);
-    assert.strictEqual((ascensionSteps.glance({ asc: d }, CTX, { asc: "1" }, "l").html.match(/class="g-row"/g) || []).length, Math.min(6, pending.length));
+    assert.match(m.items[0].sub, /^farm [\d.∞?hd]+ · slot /);
+    assert.ok(["on pace", "stuck"].includes(m.items[0].chip.text));
   }
+  assert.match(m.items[0].name, /^A1·exp\d+|A1 upgrade$/);
+  assert.strictEqual((renderLook(m, "list-4").html.match(/class="gx-row"/g) || []).length, Math.min(8, out.rows.length));
+  assert.ok(looksFor(m).length >= 3);
   // a finished set: islands say ✓, an ascension outside the plan says why
-  assert.match(ascensionIsland.glance({ asc: d }, CTX, {}, "s").html, /g-big g-ok">✓<\/div><div class="g-cap">every island complete/);
-  assert.match(ascensionSteps.glance({ asc: { ...d, steps: [] } }, CTX, { asc: "1" }, "m").empty, /not in the plan/);
+  assert.deepStrictEqual(ascensionIsland.glanceModel({ asc: d }, CTX, {}), { head: { value: "✓", tone: "ok", cap: "every island complete" } });
+  assert.match(ascensionSteps.glanceModel({ asc: { ...d, steps: [] } }, CTX, { asc: "1" }).empty, /not in the plan/);
   // a desert farm still has island steps
   const f = structuredClone(farm);
   f.island = { type: "desert" };
   f.inventory["Basic Land"] = "24";
   const dd = JSON.parse(JSON.stringify(buildAscensionSection(f, powerData, cooking.totalXpPerDay, eff, { max: 1 })));
-  assert.match(ascensionIsland.glance({ asc: dd }, CTX, {}, "l").html, /class="g-row"><div class="g-n">(desert|volcano|⬆|[a-z]+)/);
-  assert.deepStrictEqual(ascensionIsland.glance({}, CTX, {}, "s"), { empty: "No ascension plan yet." });
+  assert.ok(ascensionIsland.glanceModel({ asc: dd }, CTX, {}).items.length > 0);
+  assert.deepStrictEqual(ascensionIsland.glanceModel({}, CTX), { empty: "No ascension plan yet." });
+  for (const w of [ascensionIsland, ascensionSteps]) { assert.strictEqual(w.glance, undefined); assert.strictEqual(w.look, "number"); }
 });
+
