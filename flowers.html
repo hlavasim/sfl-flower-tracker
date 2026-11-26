@@ -6001,9 +6001,7 @@
               Created by 0xStableFarmer · #155498<br>
               Data from <a href="https://sfl.world" target="_blank">sfl.world</a> · <a href="/swagger.html" target="_blank">API docs</a><br>
             <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.59</span>
-            <div id="changelog-content" class="changelog-content" style="display:none">
-              ${renderChangelog()}
-            </div>
+            <div id="changelog-content" class="changelog-content" style="display:none"></div>
             </div>
           </div>
         </details>`;
@@ -6022,6 +6020,8 @@
       const arrow = document.getElementById("changelog-arrow");
       if (!el) return;
       const show = el.style.display === "none";
+      // built on the first open, not on every page render (~280 KB of text, ~1,600 elements)
+      if (show && !el.childElementCount) el.innerHTML = renderChangelog();
       el.style.display = show ? "block" : "none";
       arrow.textContent = show ? "▼" : "▶";
     }
@@ -7400,7 +7400,8 @@
       return log.map(v =>
         `<div class="changelog-ver">${v.ver}</div>` +
         v.items.map(i =>
-          `<div class="changelog-item"><span class="changelog-${i.t}">${i.t === "new" ? "NEW" : "FIX"}</span> ${escHTML(i.text)}</div>`
+          // the entries are our own text with deliberate <b> / <code> markup: shown as HTML, not escaped
+          `<div class="changelog-item"><span class="changelog-${i.t === "feat" ? "new" : i.t}">${({ new: "NEW", feat: "NEW", fix: "FIX" })[i.t] || String(i.t).toUpperCase()}</span> ${i.text}</div>`
         ).join("")
       ).join("");
     }
