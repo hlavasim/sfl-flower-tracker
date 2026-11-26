@@ -218,3 +218,15 @@ test("📱 glance models: grow planner = the next thing to do, the plantings in 
   const done = growPlanner.glanceModel({ farm: FARM }, ctx(() => ({ done: true, plan: {}, sleep: {} })), opts);
   assert.match(done.empty, /All flowers at target/);
 });
+
+test("gift cycle: Petal Blessed is never used again before its cooldown — also across one cycle into the next", () => {
+  for (const plan of [FEASIBLE, { betty: "Red Pansy" }]) {
+    const c = withPlan(plan, () => P._giftsModel(P._flowerPageData(FARM))).cycle;
+    assert.ok(c.pbCooldownH > 0);
+    const uses = c.events.filter((e) => e.kind === "pb_harvest").map((e) => e.time);
+    for (let k = 1; k < uses.length; k++) assert.ok(uses[k] - uses[k - 1] >= c.pbCooldownH - 1e-6, "within a cycle");
+    // on average PB cannot be used more often than its cooldown allows
+    assert.ok(c.pbUsesInCycle <= c.cycleH / c.pbCooldownH + 0.02, `${c.pbUsesInCycle} uses in a ${c.cycleH}h cycle, cooldown ${c.pbCooldownH}h`);
+    assert.ok(c.cycleH >= 1, `a real cycle, not ${c.cycleH}h`);
+  }
+});

@@ -10318,28 +10318,43 @@
           }
           // Longest batches schedule first (max PB benefit)
           batchList.sort((a, b) => b.baseH - a.baseH);
-          let t = 0;
-          let nextPBAt = 0;  // PB available at T=0
-          scheduleEvents = [];
-          pbUsesInCycle = 0;
-          for (const b of batchList) {
-            const plantAt = t;
-            const naturalEnd = plantAt + b.baseH;
-            const pbReadyAt = Math.max(plantAt + 0.01, nextPBAt);
-            // Use PB if it would finish this batch before natural completion AND batch is long enough to benefit
-            const usePB = (pbReadyAt < naturalEnd) && (b.baseH >= 12);
-            scheduleEvents.push({ time: plantAt, kind: "plant", flower: b.flower, seed: b.seed, baseH: b.baseH });
-            if (usePB) {
-              scheduleEvents.push({ time: pbReadyAt, kind: "pb_harvest", flower: b.flower, beds: FLOWER_BEDS, flowersOut: batchSize });
-              t = pbReadyAt;
-              nextPBAt = t + pbCooldownH;
-              pbUsesInCycle++;
-            } else {
-              scheduleEvents.push({ time: naturalEnd, kind: "harvest", flower: b.flower, beds: FLOWER_BEDS, flowersOut: batchSize });
-              t = naturalEnd;
+          // One cycle, with PB first ready at startPB (hours into the cycle).
+          const runCycle = (startPB) => {
+            let t = 0, nextPBAt = startPB, uses = 0;
+            const events = [];
+            for (const b of batchList) {
+              const plantAt = t;
+              const naturalEnd = plantAt + b.baseH;
+              const pbReadyAt = Math.max(plantAt + 0.01, nextPBAt);
+              // Use PB if it would finish this batch before natural completion AND batch is long enough to benefit
+              const usePB = (pbReadyAt < naturalEnd) && (b.baseH >= 12);
+              events.push({ time: plantAt, kind: "plant", flower: b.flower, seed: b.seed, baseH: b.baseH });
+              if (usePB) {
+                events.push({ time: pbReadyAt, kind: "pb_harvest", flower: b.flower, beds: FLOWER_BEDS, flowersOut: batchSize });
+                t = pbReadyAt;
+                nextPBAt = t + pbCooldownH;
+                uses++;
+              } else {
+                events.push({ time: naturalEnd, kind: "harvest", flower: b.flower, beds: FLOWER_BEDS, flowersOut: batchSize });
+                t = naturalEnd;
+              }
             }
+            return { t, events, uses, nextPBAt };
+          };
+          // The cycle repeats and PB's cooldown runs on from one cycle into the next (a PB used at the end
+          // of a cycle is not ready at the start of the next — assuming it was gave a 0.01 h "cycle" for
+          // one daily Red Pansy). So: 24 cycles back to back with the cooldown carried over; the cycle is
+          // their average and PB uses per cycle their average; the events shown are the last cycle's.
+          const K = 24;
+          let total = 0, uses = 0, carry = 0, run = null;
+          for (let k = 0; k < K; k++) {
+            run = runCycle(carry);
+            total += run.t; uses += run.uses;
+            carry = Math.max(0, run.nextPBAt - run.t);
           }
-          cycleH = t;
+          scheduleEvents = run.events;
+          pbUsesInCycle = Math.round((uses / K) * 100) / 100;
+          cycleH = total / K;
           let changed = false;
           for (const s of stepList) {
             const demand = s.dailyCount * cycleH / 24;
@@ -10364,7 +10379,7 @@
           return { flower, qty, have: (inventory[flower] !== undefined) ? parseFloat(inventory[flower]) : 0,
             pend: inProgress[flower] || 0, hours: (sd[seedName]?.seconds || 0) / 3600 };
         });
-        cycle = { stepRows, events: scheduleEvents, cycleH, pbUsesInCycle, giftProduction, needList,
+        cycle = { stepRows, events: scheduleEvents, cycleH, pbUsesInCycle, pbCooldownH, giftProduction, needList,
           totalBatches: stepRows.reduce((s, r) => s + r.batches, 0),
           longestFlower: stepRows.length > 0 ? stepRows[0].flower : null, longestBaseH: stepRows.length > 0 ? stepRows[0].baseH : 0 };
       }
