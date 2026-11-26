@@ -97,6 +97,14 @@ test("a board copy shows its look; ◀ ▶ walks the offered looks; ▦ opens th
   assert.match(html, /style="--gw:2;--gh:1"/);
   h.handle(id, "look", "full");
   assert.match(h.renderItem("main", first(h), { data: {} }), /<table/);
+  // a saved look the list does not offer (the nav shows "–"): ▶ starts at the first offered, ◀ at the last
+  const away = TEMPLATE_IDS.find((x) => !offered.includes(x) && templateById(x).size === "2x4");
+  for (const [dir, want] of [["1", offered[0]], ["-1", offered[offered.length - 1]]]) {
+    h.handle(id, "look", away);
+    assert.match(h.renderItem("main", first(h), { data: {} }), /<span class="w-var-n">– \/ /);
+    h.handle(id, "variant", dir);
+    assert.strictEqual(first(h).settings.look, want, dir);
+  }
 });
 
 test("phones: a 2-column board renders a wide look's narrow twin", () => {

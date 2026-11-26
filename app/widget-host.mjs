@@ -201,8 +201,9 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
       // ◀ ▶: the previous / next offered look (wrapping), from the list the last render offered
       const last = lastLooks.get(frameId);
       if (!last || !last.offered.length) return false;
-      const list = last.offered, at = Math.max(0, list.indexOf(last.id));
-      const next = list[((at + (Number(value) < 0 ? -1 : 1)) % list.length + list.length) % list.length];
+      // a look not in the list (the nav shows "–"): ▶ goes to the first, ◀ to the last
+      const list = last.offered, at = list.indexOf(last.id), back = Number(value) < 0;
+      const next = at < 0 ? list[back ? list.length - 1 : 0] : list[((at + (back ? -1 : 1)) % list.length + list.length) % list.length];
       return save(updateItemSettings(doc, f.boardId, f.item.i, withLook(effective(f.widget, f.item.settings), next)), frameId);
     }
     if (action === "looks" && f.place === "board") { picking.add(frameId); open.delete(frameId); onChange(frameId); return true; }
