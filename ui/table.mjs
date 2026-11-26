@@ -155,6 +155,10 @@ export function applyTableAction(columns, settings = {}, action, value) {
       // the widget's summary (tiles, big bar): shown, compact (one line) or hidden
       if (["full", "compact", "off"].includes(value)) s.summary = value;
       return s;
+    case "size":
+      // a board copy's size: S / M / L (its glance face) or the full table
+      if (["s", "m", "l", "full"].includes(value)) s.size = value;
+      return s;
     case "title": {
       // a name of the owner's for this copy; blank = the widget's own title again
       const t = String(value ?? "").trim().slice(0, TITLE_MAX);
@@ -232,7 +236,7 @@ export function optionsPanel(options = [], settings = {}) {
 const TABS = [["cols", "Columns"], ["rows", "Rows"], ["filter", "Filter"], ["look", "Look"]];
 export const TITLE_MAX = 60;
 export function tableSettingsPanel(columns, settings = {}, { rows = [], rowKey = (r) => r.key, rowLabel, tab, options = [], optionsLabel = "Options",
-  summary = false, defaultTitle = "", view = false } = {}) {
+  summary = false, defaultTitle = "", view = false, sizes = [] } = {}) {
   const filterCols = columns.filter((c) => c.filter);
   // the widget's own options, when it has any, come first and open by default; a view widget (a tile,
   // no table) has only its options and Look (the title)
@@ -279,6 +283,9 @@ export function tableSettingsPanel(columns, settings = {}, { rows = [], rowKey =
       (sel.mode === "picked" ? `<div class="w-picks">${picks}</div>` : ""))) +
     (filterCols.length ? section("filter", filters) : "") +
     section("look", `<label class="w-line">Title <input type="text" data-action="title" value="${esc(settings.title || "")}" placeholder="${esc(defaultTitle)}" maxlength="${TITLE_MAX}"></label>` +
+      // a board copy of a widget with a glance face: its size (sizes = [[value, label, on]])
+      (sizes.length ? `<div class="w-line">Size <span class="w-segs">` + sizes.map(([v, t, on]) =>
+        `<button type="button" class="w-seg${on ? " on" : ""}" data-action="size" data-value="${v}">${t}</button>`).join("") + `</span></div>` : "") +
       (summary ? `<div class="w-line">Summary <span class="w-segs">` + [["full", "Shown"], ["compact", "Compact"], ["off", "Hidden"]].map(([v, t]) =>
         `<button type="button" class="w-seg${(settings.summary || "full") === v ? " on" : ""}" data-action="summary" data-value="${v}">${t}</button>`).join("") + `</span></div>` : "") +
       (view ? "" : `<label class="w-line">Text size <input type="range" min="${TEXT_MIN}" max="${TEXT_MAX}" step="10" value="${size}" data-action="text-size"> ${size} %</label>` +

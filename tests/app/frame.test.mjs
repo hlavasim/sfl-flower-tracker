@@ -163,3 +163,19 @@ test("live settings: typing a number or dragging a slider applies after a short 
   listeners.change({ target: num });
   assert.strictEqual(got.length, 2);
 });
+
+test("Escape closes an open sheet (the full widget over the board) when no popover is open", () => {
+  const listeners = {};
+  const frame = el({ "data-frame": "b:main:x" });
+  const sheet = el({ class: "w-sheet" }, frame);
+  let pops = [];
+  const root = { addEventListener: (t, fn) => { listeners[t] = fn; }, removeEventListener() {},
+    querySelectorAll: (sel) => (sel === "[data-pop]" ? pops : sel === ".w-sheet" ? [sheet] : []) };
+  const got = [];
+  bindFrames(root, (f, action) => got.push([f, action]));
+  listeners.keydown({ key: "Escape", target: el({}, null) });
+  assert.deepStrictEqual(got, [["b:main:x", "collapse"]]);
+  pops = [el({ "data-pop": "" }, frame)];
+  listeners.keydown({ key: "Escape", target: el({}, null) });
+  assert.deepStrictEqual(got.at(-1), ["b:main:x", "settings-close"], "an open popover closes first");
+});

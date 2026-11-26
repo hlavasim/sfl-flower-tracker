@@ -33,23 +33,27 @@ export function freshness(entry, now = Date.now()) {
 // place "page": cog + pin (pinned = how many copies are on boards). place "board": a drag handle
 // (⠿, drop onto another widget to move), cog, remove and a resize corner; w (1-12) becomes the
 // grid span, h (rows of ROW_PX, 0 = auto) the height. The settings open as a popover.
-export function renderFrame({ id, title, place, body, fresh, pinned = 0, w = 6, h = 0, settingsHtml = "", settingsOpen = false, cog = true }) {
+export function renderFrame({ id, title, place, body, fresh, pinned = 0, w = 6, h = 0, settingsHtml = "", settingsOpen = false, cog = true, glance = "" }) {
   const badge = fresh ? `<span class="w-fresh w-fresh-${fresh.level}" title="${esc(fresh.title || fresh.text)}">${esc(fresh.text)}</span>` : "";
   const btn = (action, label, title, value = "", cls = "") =>
     `<button type="button" class="w-btn${cls}" data-action="${action}" data-value="${esc(value)}" title="${esc(title)}" aria-label="${esc(title)}">${label}</button>`;
-  const board = place === "board";
-  const tools = btn("refresh", "↻", "reload") + (cog ? btn("cog", "⚙", "settings", "", settingsOpen ? " on" : "") : "") + (board
-    ? btn("remove", "✕", "remove from the board")
+  // place "sheet": the full widget opened from a glance, over the board (✕ closes it)
+  const board = place === "board", sheet = place === "sheet";
+  const tools = btn("refresh", "↻", "reload") + (cog ? btn("cog", "⚙", "settings", "", settingsOpen ? " on" : "") : "") + (sheet
+    ? btn("collapse", "✕", "close")
+    : board ? btn("remove", "✕", "remove from the board")
     : btn("pin", pinned ? `📌 ${pinned}` : "📌", pinned ? `pinned ${pinned}× — pin another copy` : "pin to a board"));
   const grip = board ? `<span class="w-grip" data-drag="item" title="drag and drop onto another widget">⠿</span>` : "";
-  const style = board
+  // a glance (S / M / L) is sized by its class; a full board item by its span and height
+  const style = board && !glance
     ? ` style="grid-column:span ${Math.min(12, Math.max(1, w))}${h > 0 ? `;height:${h * ROW_PX}px` : ""}"` : "";
   const pop = settingsOpen && settingsHtml
     ? `<div class="w-pop" data-pop role="dialog" aria-label="Settings"><div class="w-pop-head"><span>Settings</span>` +
       `<button type="button" class="w-btn" data-action="cog" data-value="" title="close" aria-label="close">✕</button></div>${settingsHtml}</div>` : "";
-  return `<section class="w-frame pixel-panel${board ? " w-on-board" : ""}" data-frame="${esc(id)}"${style}>` +
+  return `<section class="w-frame pixel-panel${board ? " w-on-board" : ""}${glance ? ` w-glance w-g-${glance}` : ""}${sheet ? " w-in-sheet" : ""}" data-frame="${esc(id)}"${style}>` +
     `<header class="w-head">${grip}<span class="w-title">${esc(title)}</span>${badge}<span class="w-tools">${tools}</span></header>` +
-    pop + `<div class="w-body">${body}</div>` + (board ? `<span class="w-resize" data-resize title="drag to resize"></span>` : "") + `</section>`;
+    pop + (glance ? `<div class="w-body" data-action="expand" data-value="">${body}</div>` : `<div class="w-body">${body}</div>`) +
+    (board && !glance ? `<span class="w-resize" data-resize title="drag to resize"></span>` : "") + `</section>`;
 }
 
 // Resize geometry. The pointer's distance from the frame's left edge, in grid steps (a column plus
@@ -131,7 +135,14 @@ export function bindFrames(root, handler) {
     }, LIVE_MS));
   };
   const onClick = fire("click"), onChange = fire("change");
-  const onKey = (e) => { if (e.key === "Escape") closeOpen(null); };
+  // Escape: an open popover first, else an open sheet (the full widget opened from a glance)
+  const onKey = (e) => {
+    if (e.key !== "Escape") return;
+    const pops = root.querySelectorAll ? [...root.querySelectorAll("[data-pop]")] : [];
+    if (pops.length) { closeOpen(null); return; }
+    const sheets = root.querySelectorAll ? [...root.querySelectorAll(".w-sheet")] : [];
+    for (const s of sheets) { const f = s.closest("[data-frame]"); if (f) handler(f.dataset.frame, "collapse", ""); }
+  };
   const onDown = (e) => startDrag(e, handler);
   root.addEventListener("click", onClick);
   root.addEventListener("change", onChange);
