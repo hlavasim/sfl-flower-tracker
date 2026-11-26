@@ -348,15 +348,15 @@ function xpNet(ctx, st) {
  * A Truffle is its p2p price once it trades, else what its best recipe pays in XP over the
  * other ingredients (consumables.ts), at the farm's FLOWER per XP.
  */
-const PIG_LEVELS = [0, 180, 360, 720, 1080, 1440, 1980, 2520, 3060, 3600, 4320, 5040, 5760, 6480, 7200, 8160];
+export const PIG_LEVELS = [0, 180, 360, 720, 1080, 1440, 1980, 2520, 3060, 3600, 4320, 5040, 5760, 6480, 7200, 8160];
 const PIG_TRUFFLES = [0, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 4];
-const SLOP_XP = [   // [from level, XP of Basic / Hearty / Rich / Gourmet]
+export const SLOP_XP = [   // [from level, XP of Basic / Hearty / Rich / Gourmet]
   [0, { "Basic Slop": 60, "Hearty Slop": 10, "Rich Slop": 20, "Gourmet Slop": 30 }],
   [3, { "Basic Slop": 10, "Hearty Slop": 60, "Rich Slop": 20, "Gourmet Slop": 30 }],
   [6, { "Basic Slop": 10, "Hearty Slop": 20, "Rich Slop": 60, "Gourmet Slop": 30 }],
   [10, { "Basic Slop": 10, "Hearty Slop": 20, "Rich Slop": 30, "Gourmet Slop": 80 }],
 ];
-const SLOP_CROPS = {
+export const SLOP_CROPS = {
   "Basic Slop": { Sunflower: 800, Potato: 150, Rhubarb: 100, Pumpkin: 60, Zucchini: 60, Carrot: 25, Yam: 25, Cabbage: 15, Broccoli: 15, Soybean: 9 },
   "Hearty Slop": { Beetroot: 15, Pepper: 15, Cauliflower: 8, Parsnip: 5, Tomato: 20, Lemon: 4, Blueberry: 4 },
   "Rich Slop": { Eggplant: 6, Wheat: 6, Turnip: 6, Corn: 5, Onion: 5, Radish: 5, Kale: 4, Artichoke: 4, Barley: 3, Orange: 3, Apple: 2, Banana: 2 },
