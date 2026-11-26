@@ -2,6 +2,7 @@
 // POWER), owned ones first. Each copy can keep its own type / aura / owned-only filter.
 import { BUD_TYPE_NAMES, BUD_AURA_NAMES, BUD_AURA_MULTIPLIERS } from "../core/engine/buds.mjs";
 import { bar, kpis } from "../ui/viz.mjs";
+import { big, rows as gRows } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -65,4 +66,23 @@ export const budsTable = {
       `<div class="v-dim v-rm-note">Capacity: ${c.crops} plots, ${c.fruitPatches} fruit, ${c.greenhouse || 0} greenhouse, ${c.lavaPits || 0} lava pits, ${c.oilReserves || 0} oil reserves, ${c.trees} trees</div>`;
     return { rows, summary, footer: "", empty: "No bud matches the filter." };
   },
+};
+
+// ── iPhone glance face: S = the best owned bud's FLOWER a day; M / L = the owned buds, best first
+// (the best buds overall when none of the filtered ones is owned) ──
+const perDay = (v) => `+${v >= 1 ? v.toFixed(2) : v.toFixed(4)}`;
+budsTable.sizes = ["s", "m", "l"];
+budsTable.size = "s";
+budsTable.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = budsTable.build(data, ctx, opts);
+  if (!out.rows.length) return { empty: out.empty };
+  const owned = out.rows.filter((r) => r.owned);
+  const list = (owned.length ? owned : out.rows).slice().sort((a, b) => b.sflPerDay - a.sflPerDay);
+  if (size === "s") {
+    const r = list[0];
+    return { html: (r.iconHtml ? `<div class="g-hero">${r.iconHtml}</div>` : "") + big(perDay(r.sflPerDay), { unit: " 🌸/day", tone: r.sflPerDay > 0 ? "ok" : "",
+      cap: owned.length ? `#${r.id} · best of ${owned.length} owned` : `#${r.id} · none owned` }) };
+  }
+  return { html: gRows(list.slice(0, size === "m" ? 3 : 7).map((r) => ({ icon: r.iconHtml, name: `#${r.id} ${r.type}`,
+    sub: r.aura !== "No Aura" ? `${r.aura} aura` : r.stem, value: perDay(r.sflPerDay), tone: r.sflPerDay > 0 ? "ok" : "" }))) };
 };

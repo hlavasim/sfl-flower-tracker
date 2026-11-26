@@ -53,6 +53,24 @@ test("🌱 buds: every bud, owned first then by FLOWER/day, the page's numbers a
   assert.match(renderTable(budsTable.columns, beach.rows.slice(0, 1), {}, {}), /Rare \(100%\)/);
 });
 
+test("📱 buds glance: S = the best owned bud a day (the best overall when none is owned); M / L = the owned buds, best first", () => {
+  assert.deepStrictEqual([budsTable.sizes, budsTable.size], [["s", "m", "l"], "s"]);
+  const byDay = BUDS.rows.slice().sort((a, b) => b.sflPerDay - a.sflPerDay);
+  const none = budsTable.glance({ buds: BUDS }, CTX, {}, "s").html;
+  assert.ok(none.startsWith(`<div class="g-hero"><img data-bud></div><div class="g-big g-ok">+`));
+  assert.match(none, new RegExp(`<div class="g-cap">#${byDay[0].id} · none owned</div>$`));
+  // two owned buds: the face is about them, not the best on the market
+  const mine = [byDay[5], byDay[9]];
+  const D = { ...BUDS, rows: BUDS.rows.map((r) => ({ ...r, owned: mine.some((x) => x.id === r.id) })) };
+  assert.match(budsTable.glance({ buds: D }, CTX, {}, "s").html, new RegExp(`<div class="g-cap">#${mine[0].id} · best of 2 owned</div>`));
+  const m = budsTable.glance({ buds: D }, CTX, {}, "m").html;
+  assert.strictEqual((m.match(/class="g-row"/g) || []).length, 2);
+  assert.ok(m.indexOf(`#${mine[0].id} `) < m.indexOf(`#${mine[1].id} `));
+  assert.strictEqual((budsTable.glance({ buds: BUDS }, CTX, {}, "l").html.match(/class="g-row"/g) || []).length, 7);
+  assert.deepStrictEqual(budsTable.glance({}, CTX, {}, "s"), { empty: "No bud data." });
+  assert.deepStrictEqual(budsTable.glance({ buds: BUDS }, CTX, { type: "Nope" }, "s"), { empty: "No bud matches the filter." });
+});
+
 test("🐾 summary: totals, the full-fetch earnings per pet (the page's sum) and the daily income", () => {
   // the fixture's pets are almost out of energy (no full fetch): give a copy 1 000 each
   const D = { ...PETS, pets: PETS.pets.map((p) => ({ ...p, energy: 1000 })) };

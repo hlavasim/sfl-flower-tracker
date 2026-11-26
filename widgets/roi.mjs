@@ -5,6 +5,7 @@
 // category of a multi-category NFT are yours, shared by every copy.
 import { POWER_CATEGORIES, isAnimalCat, getAnimalData } from "../core/engine/power-helpers.mjs";
 import { pill, bar } from "../ui/viz.mjs";
+import { big, rows as gRows } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const icon = (ctx, n) => (typeof ctx.icon === "function" && n ? ctx.icon(n) : "");
@@ -228,3 +229,36 @@ export const roiPassive = {
 };
 
 export const ROI_WIDGETS = [roiSellOrFarm, roiPassive];
+
+// ── iPhone glance faces (plain text, so FLOWER is 🌸, not the page's icon HTML) ──
+const G_TONE = { bad: "bad", run: "warn", ok: "ok", idle: "" };
+const gFmt = (roi, currency) => (sfl) => roiFormatValue(sfl, currency, roi.sflUsd, roi.btcUsd, "🌸");
+
+// 💸 sell or farm: S = how many categories to sell at the copy's login frequency; M / L = the verdicts, sell first
+roiSellOrFarm.sizes = ["s", "m", "l"];
+roiSellOrFarm.size = "s";
+roiSellOrFarm.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = roiSellOrFarm.build(data, ctx, opts);
+  if (!out.rows.length) return { empty: out.empty };
+  const { L } = settingsOf(opts);
+  if (size === "s") {
+    const sell = out.rows.filter((r) => r.verdict === "sell-now" || r.verdict === "sell").length, keep = out.rows.filter((r) => r.verdict === "keep").length;
+    return { html: big(sell, { unit: ` to sell`, tone: sell ? "bad" : "ok", cap: `${keep} to keep · ${L}× a day` }) };
+  }
+  return { html: gRows(out.rows.slice(0, size === "m" ? 3 : 7).map((r) => {
+    const [text, t] = VERDICT[r.verdict] || ["—", "idle"];
+    return { icon: r.emoji, name: r.label, sub: `${r.nfts} NFT${r.nfts !== 1 ? "s" : ""} · payback ${r.roiText}`, chip: { text, tone: G_TONE[t] } };
+  })) };
+};
+
+// 🎁 NFTs without a yield: S = what they would sell for; M / L = the most valuable ones
+roiPassive.sizes = ["s", "m", "l"];
+roiPassive.size = "s";
+roiPassive.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = roiPassive.build(data, ctx, opts);
+  if (!out.rows.length) return { empty: out.empty };
+  const fmt = gFmt(data.roi, settingsOf(opts).currency);
+  if (size === "s") return { html: big(fmt(out.rows.reduce((s, r) => s + r.floor, 0)), { tone: "warn", cap: `sale value · ${out.rows.length} NFT${out.rows.length !== 1 ? "s" : ""} without a yield` }) };
+  return { html: gRows(out.rows.slice().sort((a, b) => b.floor - a.floor).slice(0, size === "m" ? 3 : 7)
+    .map((r) => ({ icon: r.iconHtml, name: r.name, sub: `${catDef(r.group).emoji} ${catDef(r.group).label}`, value: fmt(r.floor) }))) };
+};

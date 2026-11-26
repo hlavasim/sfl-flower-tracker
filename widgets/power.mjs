@@ -7,6 +7,7 @@ import { POWER_CATEGORIES, getDefaultProduct, isAnimalCat, SEED_DATA } from "../
 import { CROP_GROW_DATA, FRUIT_GROW_DATA, GREENHOUSE_GROW_DATA } from "../core/engine/power-boosts.mjs";
 import { getPriceProduct } from "../core/engine/buds.mjs";
 import { bar, kpis, bigBar, pill } from "../ui/viz.mjs";
+import { big, compact, ring as gRing, rows as gRows } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const icon = (ctx, n) => (typeof ctx.icon === "function" && n ? ctx.icon(n) : "");
@@ -667,3 +668,182 @@ export const powerAllBoosts = {
 
 export const POWER_WIDGETS = [powerTotals, powerDormant, powerBestBuys, powerCategories, powerBoosts, powerCropMachine, powerCmQueue,
   powerActivity, powerPets, powerSeedCosts, powerToolCosts, powerLavaCosts, powerFeedCosts, powerAllBoosts];
+
+// ── iPhone glance faces ─────────────────────────────────────────────────────────────────────────
+// Plain text (the faces escape it), so FLOWER is 🌸 here, not the page's icon HTML. The seed / tool
+// cost tables and "all boosts" are reference tables and have no face.
+const FLW = " 🌸";
+// 0.0123 → "0.0123", 1.234 → "1.23", 1234 → "1.2k" (compact() would round the small ones to 0)
+const amt = (v) => { const a = Math.abs(v); return a >= 100 ? compact(a) : a >= 1 ? a.toFixed(2) : a >= 0.01 ? a.toFixed(3) : a.toFixed(4); };
+const sgn = (v) => `${v < 0 ? "−" : "+"}${amt(v)}`;
+const gTone = (v) => (v > 0 ? "ok" : v < 0 ? "bad" : "");
+// payback in days: within a year green, within 4 years orange, longer red
+const roiTone = (d) => (d <= 365 ? "ok" : d <= 1460 ? "warn" : "bad");
+const split = (head, list) => `<div class="g-split"><div>${head}</div>${gRows(list)}</div>`;
+const fits = (size) => (size === "m" ? 3 : 7);
+
+// 💰 totals: S = net a day with the owned share as a ring; M = net beside gross / costs / boost value
+powerTotals.sizes = ["s", "m"];
+powerTotals.size = "s";
+powerTotals.glance = ({ power } = {}, ctx = {}, opts = {}, size = "s") => {
+  if (!power || !power.boostItems) return { empty: "No POWER data yet." };
+  const c = power.categories || { totalBaseSfl: 0, totalBoostedSfl: 0, totalCostSfl: 0 };
+  const r = call(ctx, "restock", power) || { restockPerDay: 0 };
+  const owned = power.boostItems.filter((b) => b.has || b.owned).length, total = power.boostItems.length;
+  const cost = c.totalCostSfl + (r.restockPerDay || 0), gross = c.totalBoostedSfl, net = gross - cost;
+  const head = big(sgn(net), { unit: `${FLW}/day`, tone: gTone(net), cap: `net · ${owned}/${total} boosts owned` });
+  if (size === "s") return { html: `<div class="g-corner">${gRing(total ? (owned / total) * 100 : 0, { tone: "ok" })}</div>` + head };
+  return { html: split(head, [{ name: "Gross", value: sgn(gross), tone: "ok" }, { name: "Costs", value: sgn(-cost), tone: "bad" },
+    { name: "Boosts add", value: sgn(gross - c.totalBaseSfl), tone: "info" }]) };
+};
+
+// 🏆 best buys: S = the best payback with its icon; M / L = the next buys with their payback
+powerBestBuys.sizes = ["s", "m", "l"];
+powerBestBuys.size = "m";
+powerBestBuys.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = powerBestBuys.build(data, ctx, { ...opts, n: 7 });
+  if (!out.rows.length) return { empty: out.empty };
+  if (size === "s") {
+    const r = out.rows[0];
+    return { html: `<div class="g-hero">${r.iconHtml}</div>` + big(r.roi.toFixed(0), { unit: "d", tone: roiTone(r.roi), cap: `${r.name} · ${sgn(r.synergy)}/day` }) };
+  }
+  return { html: gRows(out.rows.slice(0, fits(size)).map((r) => ({ icon: r.iconHtml, name: r.name, sub: `${sgn(r.synergy)}/day · ${amt(r.floor)}${FLW}`,
+    chip: { text: `${r.roi.toFixed(0)}d`, tone: roiTone(r.roi) } }))) };
+};
+
+// 📊 categories: S = net a day over the priced categories; M / L = the categories, best earners first
+powerCategories.sizes = ["s", "m", "l"];
+powerCategories.size = "m";
+powerCategories.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = powerCategories.build(data, ctx, opts);
+  if (!out.rows.length) return { empty: out.empty };
+  const priced = out.rows.filter((r) => r.net != null);
+  if (size === "s") {
+    const owned = out.rows.reduce((a, r) => a + r.owned, 0), total = out.rows.reduce((a, r) => a + r.total, 0);
+    if (!priced.length) return { html: big(owned, { unit: `/${total}`, cap: `boosts owned · ${out.rows.length} categories` }) };
+    const net = priced.reduce((a, r) => a + r.net, 0);
+    return { html: big(sgn(net), { unit: `${FLW}/day`, tone: gTone(net), cap: `net · ${priced.length} priced categories` }) };
+  }
+  const list = out.rows.slice().sort((a, b) => (b.net ?? -Infinity) - (a.net ?? -Infinity) || b.owned / b.total - a.owned / a.total);
+  return { html: gRows(list.slice(0, fits(size)).map((r) => ({ icon: r.emoji, name: r.label, sub: `${r.owned}/${r.total} boosts owned`,
+    ...(r.net != null ? { value: sgn(r.net), tone: gTone(r.net) } : r.unvalued ? { chip: { text: "not priced" } } : {}) }))) };
+};
+
+// ⚡ boosts of one category: S = how many are owned (ring); M / L = the missing ones with the fastest payback
+powerBoosts.sizes = ["s", "m", "l"];
+powerBoosts.size = "s";
+powerBoosts.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = powerBoosts.build(data, ctx, { ...opts, show: "all" });
+  if (!out.rows.length) return { empty: out.empty };
+  const base = out.rows.filter((r) => !r.rank), owned = base.filter((r) => r.owned).length;
+  const d = POWER_CATEGORIES[opts.cat] || POWER_CATEGORIES.crops;
+  const head = big(owned, { unit: `/${base.length}`, cap: `${d.emoji} ${d.label} boosts owned` });
+  if (size === "s") return { html: `<div class="g-corner">${gRing(base.length ? (owned / base.length) * 100 : 0, { tone: "ok" })}</div>` + head };
+  const buys = base.filter((r) => !r.owned && r.roi != null).slice(0, fits(size));
+  const list = buys.length ? buys.map((r) => ({ icon: r.iconHtml, name: r.name, sub: `${sgn(r.value)}/day`, chip: { text: `${r.roi.toFixed(0)}d`, tone: roiTone(r.roi) } }))
+    : base.filter((r) => !r.owned).slice(0, fits(size)).map((r) => ({ icon: r.iconHtml, name: r.name, sub: r.value ? `${sgn(r.value)}/day` : "", chip: { text: "MISSING" } }));
+  if (!list.length) return { html: size === "l" ? head + big("✓", { tone: "ok", cap: "every boost owned" }) : split(head, [{ name: "Every boost owned", value: "✓", tone: "ok" }]) };
+  return { html: size === "m" ? split(head, list) : head + gRows(list) };
+};
+
+// 💤 dormant: S = what the idle boosts could add a day; M / L = the biggest ones to equip or place
+powerDormant.sizes = ["s", "m", "l"];
+powerDormant.size = "s";
+powerDormant.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = powerDormant.build(data, ctx);
+  if (!out.rows.length) return { empty: out.empty };
+  const total = ((data.power || {}).dormantBoosts || []).reduce((s, d) => s + (d.value > 0 ? d.value : 0), 0);
+  const wear = out.rows.filter((r) => r.group === "wear").length, place = out.rows.length - wear;
+  if (size === "s") return { html: big(`+${amt(total)}`, { unit: `${FLW}/day`, tone: "warn", cap: `idle · ${wear} to equip · ${place} to place` }) };
+  const list = out.rows.slice().sort((a, b) => b.value - a.value).slice(0, fits(size));
+  return { html: gRows(list.map((r) => ({ icon: r.iconHtml, name: r.name, sub: r.value > 0 ? `${sgn(r.value)}/day` : "",
+    chip: { text: r.group === "wear" ? "EQUIP" : "PLACE", tone: r.group === "wear" ? "info" : "" } }))) };
+};
+
+// 🌱 crop machine: S = the best crop; M / L = the crops by net a day
+powerCropMachine.sizes = ["s", "m", "l"];
+powerCropMachine.size = "s";
+powerCropMachine.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = powerCropMachine.build(data, ctx);
+  if (!out.rows.length) return { empty: out.empty };
+  const list = out.rows.filter((r) => !r.locked).sort((a, b) => b.net - a.net);
+  if (!list.length) return { empty: "Every crop machine crop is locked." };
+  if (size === "s") {
+    const r = list[0];
+    return { html: `<div class="g-hero">${r.iconHtml}</div>` + big(sgn(r.net), { unit: `${FLW}/day`, tone: gTone(r.net), cap: `${r.crop} · best of ${list.length}` }) };
+  }
+  return { html: gRows(list.slice(0, fits(size)).map((r) => ({ icon: r.iconHtml, name: r.crop, sub: `${r.yieldPerSeed.toFixed(2)}/seed · ${hms(r.cycleSec)}`,
+    value: sgn(r.net), tone: gTone(r.net) }))) };
+};
+
+// ⚙️ restock queue: S = the daily rate; M / L = the queue beside it
+powerCmQueue.sizes = ["s", "m", "l"];
+powerCmQueue.size = "s";
+powerCmQueue.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = powerCmQueue.build(data, ctx);
+  if (!out.rows.length) return { empty: out.empty };
+  const q = call(ctx, "cmQueue", data.power, data.farm), daily = q.sim.totalNet * q.dailyFactor;
+  const head = big(sgn(daily), { unit: `${FLW}/day`, tone: gTone(daily), cap: `${out.rows.length} crops · ${q.windowHours.toFixed(1)}h window` });
+  if (size === "s") return { html: head };
+  const list = out.rows.slice(0, fits(size)).map((r) => ({ icon: r.iconHtml, name: r.crop, sub: `${r.seedsUsed}/${r.restockCap} seeds`, value: sgn(r.net), tone: gTone(r.net) }));
+  return { html: size === "m" ? split(head, list) : head + gRows(list) };
+};
+
+// ⛏️ does it pay: S = digging per hole (or the best composter); M = digging and the composters as rows
+powerActivity.sizes = ["s", "m"];
+powerActivity.size = "s";
+powerActivity.glance = ({ power } = {}, ctx = {}, opts = {}, size = "s") => {
+  const dg = power && power.digging, comps = (power && power.composters) || [];
+  if (!dg && !comps.length) return { empty: "No digging or composters to judge." };
+  const pd = dg && dg.measured ? dg.perDig || {} : null;
+  const best = comps.slice().sort((a, b) => b.netPerDay - a.netPerDay)[0];
+  if (size === "s") {
+    if (pd && pd.netWithCoins != null) return { html: big(sgn(pd.netWithCoins), { unit: `${FLW}/hole`, tone: gTone(pd.netWithCoins), cap: `digging, coins counted${dg.remaining > 0 ? ` · ${dg.remaining} holes left` : ""}` }) };
+    if (best) return { html: `<div class="g-hero">${icon(ctx, best.name)}</div>` + big(sgn(best.netPerDay), { unit: `${FLW}/day`, tone: gTone(best.netPerDay), cap: `${best.name}${comps.length > 1 ? " · best composter" : ""}` }) };
+    return { html: big("—", { cap: "digging: nothing dug yet" }) };
+  }
+  const list = [];
+  if (dg) list.push(pd && pd.netWithCoins != null ? { icon: icon(ctx, "Sand Shovel"), name: "Digging", sub: `per hole · ${dg.digs} dug`, value: sgn(pd.netWithCoins), tone: gTone(pd.netWithCoins) }
+    : { icon: icon(ctx, "Sand Shovel"), name: "Digging", sub: "nothing dug yet", value: "—" });
+  for (const x of comps.slice().sort((a, b) => b.netPerDay - a.netPerDay)) list.push({ icon: icon(ctx, x.name), name: x.name, sub: x.built ? "net / day" : "not built", value: sgn(x.netPerDay), tone: gTone(x.netPerDay) });
+  return { html: gRows(list.slice(0, 3)) };
+};
+
+// 🐾 pets: S = fetch income a day; M / L = the best earners beside it
+powerPets.sizes = ["s", "m", "l"];
+powerPets.size = "s";
+powerPets.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = powerPets.build(data, ctx);
+  if (!out.rows.length) return { empty: out.empty };
+  const p = call(ctx, "pets", data.power, data.farm);
+  const head = big(`+${amt(p.totalDaily)}`, { unit: `${FLW}/day`, tone: "ok", cap: `${p.pets.length} pets${p.grossRoi != null ? ` · ROI ${Math.ceil(p.grossRoi)}d` : ""}` });
+  if (size === "s") return { html: head };
+  const list = out.rows.slice().sort((a, b) => b.dailySfl - a.dailySfl).slice(0, fits(size))
+    .map((r) => ({ icon: r.iconHtml, name: r.displayName, sub: `lv ${r.level}`, value: r.dailySfl > 0 ? `+${amt(r.dailySfl)}` : "—", tone: r.dailySfl > 0 ? "ok" : "" }));
+  return { html: size === "m" ? split(head, list) : head + gRows(list) };
+};
+
+// 🌋 lava pits: S = this season's cost per ignition; M = its most expensive materials
+powerLavaCosts.sizes = ["s", "m"];
+powerLavaCosts.size = "s";
+powerLavaCosts.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = powerLavaCosts.build(data, ctx);
+  if (!out.rows.length) return { empty: out.empty };
+  const t = tablesOf(data.power, data.farm, ctx).lava, now = t.totals.find((x) => x.current);
+  const cur = out.rows.filter((r) => r.current);
+  if (size === "s") return { html: big(now ? amt(now.total) : "—", { unit: now ? FLW : "", cap: `per ignition · ${t.season} · ${t.pits} pits` }) };
+  return { html: gRows((cur.length ? cur : out.rows).slice().sort((a, b) => b.cost - a.cost).slice(0, 3)
+    .map((r) => ({ icon: r.iconHtml, name: r.item, sub: `${r.qty}×`, value: amt(r.cost) }))) };
+};
+
+// 🐾 feed: S = what the animals cost a day; M = the dearest animals
+powerFeedCosts.sizes = ["s", "m"];
+powerFeedCosts.size = "s";
+powerFeedCosts.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = powerFeedCosts.build(data, ctx);
+  if (!out.rows.length) return { empty: out.empty };
+  const total = out.rows.reduce((a, r) => a + r.total, 0), n = out.rows.reduce((a, r) => a + r.count, 0);
+  if (size === "s") return { html: big(`−${amt(total)}`, { unit: `${FLW}/day`, tone: "bad", cap: `feed + sickness · ${n} animals` }) };
+  return { html: gRows(out.rows.slice().sort((a, b) => b.total - a.total).slice(0, 3)
+    .map((r) => ({ icon: r.iconHtml, name: r.animal, sub: r.isGolden ? `${r.count}× · free feed` : `${r.count}× · ${r.feedQty} feed`, value: `−${amt(r.total)}`, tone: "bad" }))) };
+};

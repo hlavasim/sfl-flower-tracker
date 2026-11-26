@@ -234,3 +234,144 @@ test("all boosts: every boost with its parsed effects, sorted by type then name"
   const html = table(powerAllBoosts, out, { rows: { mode: "all" } });
   assert.match(html, /qualitative: \+1 Fruit Harvest/);
 });
+
+// ── 📱 glance faces ──
+const g = (w, data, ctx, opts, size) => w.glance(data, ctx, opts || {}, size);
+
+test("📱 glances: which POWER widgets have a face — the cost tables and the boost catalogue are reference only", () => {
+  const withFace = POWER_WIDGETS.filter((w) => w.glance).map((w) => w.type);
+  assert.deepStrictEqual(withFace.sort(), ["power-activity", "power-best-buys", "power-boosts", "power-categories", "power-cm-queue", "power-crop-machine",
+    "power-dormant", "power-feed-costs", "power-lava-costs", "power-pets", "power-totals"]);
+  for (const w of POWER_WIDGETS.filter((x) => x.glance)) {
+    assert.ok(w.sizes.includes("s") && w.sizes.length > 1 && w.sizes.includes(w.size), w.type);
+    assert.deepStrictEqual(g(w, {}, CTX, {}, "s"), { empty: w === powerActivity ? "No digging or composters to judge." : w === powerCropMachine ? "No crop machine on this farm." : "No POWER data yet." }, w.type);
+  }
+});
+
+test("📱 totals: S = net a day with the owned share as a ring; M = gross / costs / boost value beside it", () => {
+  const c = power.categories, ctx = { ...CTX, restock: () => ({ restockPerDay: 0.5 }) };
+  const net = c.totalBoostedSfl - c.totalCostSfl - 0.5;
+  const owned = power.boostItems.filter((b) => b.has || b.owned).length;
+  const s = g(powerTotals, { power }, ctx, {}, "s").html;
+  assert.match(s, /^<div class="g-corner"><svg class="g-ring g-ok"/);
+  assert.ok(s.includes(`<div class="g-big g-ok">+${net.toFixed(2)}<small> 🌸/day</small></div><div class="g-cap">net · ${owned}/${power.boostItems.length} boosts owned</div>`));
+  const m = g(powerTotals, { power }, ctx, {}, "m").html;
+  assert.match(m, /^<div class="g-split">/);
+  assert.ok(m.includes(`<div class="g-n">Costs</div><span class="g-v g-bad">−${(c.totalCostSfl + 0.5).toFixed(2)}</span>`));
+  assert.ok(m.includes(`<div class="g-n">Boosts add</div><span class="g-v g-info">+${(c.totalBoostedSfl - c.totalBaseSfl).toFixed(2)}</span>`));
+});
+
+test("📱 best buys: S = the fastest payback with its icon; M = 3 rows, L = 7, each with a payback chip", () => {
+  const all = bestBuys(power);
+  const s = g(powerBestBuys, { power }, CTX, {}, "s").html;
+  assert.ok(s.startsWith(`<div class="g-hero"><i>${all[0].boost.name}</i></div><div class="g-big g-ok">${all[0].roi.toFixed(0)}<small>d</small></div>`));
+  const m = g(powerBestBuys, { power }, CTX, {}, "m").html;
+  assert.strictEqual((m.match(/class="g-row"/g) || []).length, 3);
+  assert.ok(m.includes(`<span class="g-chip g-ok">${all[0].roi.toFixed(0)}d</span>`));
+  assert.strictEqual((g(powerBestBuys, { power }, CTX, {}, "l").html.match(/class="g-row"/g) || []).length, Math.min(7, all.length));
+  // the copy's category filter carries over
+  const cat = all[0].catId, one = g(powerBestBuys, { power }, CTX, { cat }, "l").html;
+  assert.strictEqual((one.match(/class="g-row"/g) || []).length, Math.min(7, all.filter((x) => x.catId === cat).length));
+});
+
+test("📱 categories: S = net over the priced categories; M = the top earners with their owned share", () => {
+  const out = powerCategories.build({ power }, { ...CTX, products: () => ({}) }, {});
+  const priced = out.rows.filter((r) => r.net != null), net = priced.reduce((a, r) => a + r.net, 0);
+  const s = g(powerCategories, { power }, { ...CTX, products: () => ({}) }, {}, "s").html;
+  assert.ok(s.includes(`${net >= 0 ? "+" : "−"}${Math.abs(net).toFixed(2)}<small> 🌸/day</small>`));
+  assert.match(s, new RegExp(`net · ${priced.length} priced categories`));
+  const best = priced.slice().sort((a, b) => b.net - a.net)[0];
+  const m = g(powerCategories, { power }, CTX, {}, "m").html;
+  assert.strictEqual((m.match(/class="g-row"/g) || []).length, 3);
+  assert.ok(m.startsWith(`<div class="g-rows"><div class="g-row"><span class="g-ic">${best.emoji}</span><div class="g-n">${best.label}<div>${best.owned}/${best.total} boosts owned</div>`));
+  // only unpriced kinds → S counts owned boosts instead
+  assert.match(g(powerCategories, { power }, CTX, { kind: "qualitative" }, "s").html, /boosts owned · \d+ categories/);
+});
+
+test("📱 boosts: S = owned / total with a ring; M = the split with missing ones; a category with every boost owned says so", () => {
+  const out = powerBoosts.build({ farm, power }, CTX, { cat: "crops", show: "all" });
+  const base = out.rows.filter((r) => !r.rank), owned = base.filter((r) => r.owned).length;
+  const s = g(powerBoosts, { farm, power }, CTX, { cat: "crops" }, "s").html;
+  assert.match(s, /^<div class="g-corner"><svg class="g-ring/);
+  assert.ok(s.includes(`<div class="g-big">${owned}<small>/${base.length}</small></div><div class="g-cap">🌾 CROPS boosts owned</div>`));
+  const m = g(powerBoosts, { farm, power }, CTX, { cat: "crops", show: "owned" }, "m").html;   // "show" does not hide the missing ones on the face
+  assert.match(m, /^<div class="g-split">/);
+  assert.strictEqual((m.match(/class="g-row"/g) || []).length, 3);
+  assert.match(m, /MISSING|g-chip g-(ok|warn|bad)">\d+d/);
+  const p = { ...power, boostItems: power.boostItems.map((b) => (b.categories || []).includes("iron") ? { ...b, has: true } : b) };
+  assert.match(g(powerBoosts, { farm, power: p }, CTX, { cat: "iron" }, "l").html, /every boost owned/);
+});
+
+test("📱 dormant: S = what the idle boosts could add; M = the biggest to equip / place; all active = empty", () => {
+  const p = { ...power, dormantBoosts: [
+    { name: "Ruby Hat", type: "Wearable", boost: "+1 Gold", value: 0.2 },
+    { name: "Statue", type: "Collectible", boost: "+0.1 Stone", value: 1.4 },
+    { name: "Gnome Deco", type: "Collectible", boost: "x", value: 0.001 },
+  ] };
+  assert.strictEqual(g(powerDormant, { power: p }, CTX, {}, "s").html,
+    `<div class="g-big g-warn">+1.60<small> 🌸/day</small></div><div class="g-cap">idle · 1 to equip · 1 to place</div>`);
+  const m = g(powerDormant, { power: p }, CTX, {}, "m").html;
+  assert.match(m, /<i>Statue<\/i><\/span><div class="g-n">Statue<div>\+1\.40\/day<\/div><\/div><span class="g-chip">PLACE<\/span>.*Ruby Hat.*<span class="g-chip g-info">EQUIP<\/span>/);
+  assert.deepStrictEqual(g(powerDormant, { power }, CTX, {}, "s"), { empty: "✓ Every boost you own is active." });
+});
+
+test("📱 crop machine: S = the best unlocked crop; M = the crops by net", () => {
+  const best = power.cropMachine.rows.filter((r) => !r.locked).sort((a, b) => b.net - a.net)[0];
+  const s = g(powerCropMachine, { power }, CTX, {}, "s").html;
+  assert.ok(s.startsWith(`<div class="g-hero"><i>${best.crop}</i></div><div class="g-big g-ok">+`));
+  assert.match(s, new RegExp(`${best.crop} · best of \\d+`));
+  const m = g(powerCropMachine, { power }, CTX, {}, "m").html;
+  assert.strictEqual((m.match(/class="g-row"/g) || []).length, 3);
+  assert.match(m, /\/seed · \d+h/);
+});
+
+test("📱 crop machine queue: S = the daily rate; M = the queue beside it; no machine = empty", () => {
+  const sim = { queue: [{ crop: "Kale", seedsUsed: 10, restockCap: 30, timeSec: 7200, revenue: 2, oilCost: 0.5, seedCost: 0.25, net: 1.25 }],
+    windowSec: 86400, timeUsed: 7200, totalCrops: 12, totalNet: 1.25, totalRevenue: 2, totalOilCost: 0.5, totalSeedCost: 0.25, plots: 10, speedMult: 1, oilPerHour: 1 };
+  const ctx = { ...CTX, cmQueue: () => ({ sim, windowHours: 24, wheatRestock: 240, hasWarehouse: true, plotCount: 68, wheatBatches: 4, wheatGrowH: 6,
+    wheatGrowBaseH: 6, wheatBoosts: { mult: 1, boosts: [] }, skNames: [], oilCostPerH: 0.11, dailyFactor: 2 }) };
+  assert.strictEqual(g(powerCmQueue, { farm, power }, ctx, {}, "s").html, `<div class="g-big g-ok">+2.50<small> 🌸/day</small></div><div class="g-cap">1 crops · 24.0h window</div>`);
+  const m = g(powerCmQueue, { farm, power }, ctx, {}, "m").html;
+  assert.match(m, /^<div class="g-split">.*<i>Kale<\/i>.*10\/30 seeds.*\+1\.25/);
+  assert.deepStrictEqual(g(powerCmQueue, { farm, power }, { ...CTX, cmQueue: () => null }, {}, "s"), { empty: "No crop machine on this farm." });
+});
+
+test("📱 does it pay: S = digging per hole; without digging the best composter; M = digging + composters", () => {
+  const pd = power.digging.perDig;
+  const s = g(powerActivity, { power }, CTX, {}, "s").html;
+  assert.ok(s.includes(`${pd.netWithCoins >= 0 ? "+" : "−"}${Math.abs(pd.netWithCoins).toFixed(3)}<small> 🌸/hole</small>`));
+  assert.match(s, /digging, coins counted/);
+  const comps = power.composters.slice().sort((a, b) => b.netPerDay - a.netPerDay);
+  assert.match(g(powerActivity, { power: { ...power, digging: null } }, CTX, {}, "s").html, new RegExp(`<div class="g-hero"><i>${comps[0].name}</i></div>.*best composter`));
+  const m = g(powerActivity, { power }, CTX, {}, "m").html;
+  assert.match(m, /<div class="g-n">Digging<div>per hole · 17 dug<\/div>/);
+  assert.ok(m.includes(`<div class="g-n">${comps[0].name}<div>`));
+});
+
+test("📱 pets: S = fetch income a day with the portfolio ROI; M = the best earners beside it", () => {
+  const ctx = { ...CTX, pets: () => ({ pets: [
+    { key: "a", displayName: "Dragon #1", petType: "Dragon", isNft: true, level: 20, energy: 1, dailySfl: 0.5, price: 50, roiDays: 100 },
+    { key: "b", displayName: "Barkley", species: "Dog", isNft: false, level: 3, energy: 1, dailySfl: 0.1, price: 0, roiDays: null }],
+    totalDaily: 0.6, totalPrice: 50, grossRoi: 83.3, feedMult: 1, boosts: [] }) };
+  assert.strictEqual(g(powerPets, { farm, power }, ctx, {}, "s").html, `<div class="g-big g-ok">+0.600<small> 🌸/day</small></div><div class="g-cap">2 pets · ROI 84d</div>`);
+  const m = g(powerPets, { farm, power }, ctx, {}, "m").html;
+  assert.match(m, /^<div class="g-split">.*Dragon #1<div>lv 20<\/div>.*\+0\.500.*Barkley/);
+  assert.deepStrictEqual(g(powerPets, { farm, power }, { ...CTX, pets: () => null }, {}, "s"), { empty: "No pets on this farm." });
+});
+
+test("📱 lava pits and feed: S = this season's ignition / the feed bill a day; M = the dearest lines", () => {
+  const t = { lava: { season: "autumn", pits: 4, rows: [
+      { season: "autumn", item: "Pumpkin", qty: 10, price: 0.01, cost: 0.1, current: true }, { season: "autumn", item: "Oil", qty: 2, price: 0.5, cost: 1, current: true },
+      { season: "winter", item: "Kale", qty: 5, price: 1, cost: 5, current: false }],
+      totals: [{ season: "autumn", total: 1.1, current: true }, { season: "winter", total: 5, current: false }] },
+    feed: [{ catId: "cows", animal: "Cow", count: 10, isGolden: false, feedQty: 3, total: 0.25 }, { catId: "chickens", animal: "Chicken", count: 5, isGolden: false, feedQty: 1, total: 0.5 }] };
+  const ctx = { ...CTX, costTables: () => t };
+  assert.strictEqual(g(powerLavaCosts, { farm, power }, ctx, {}, "s").html, `<div class="g-big">1.10<small> 🌸</small></div><div class="g-cap">per ignition · autumn · 4 pits</div>`);
+  const lm = g(powerLavaCosts, { farm, power }, ctx, {}, "m").html;
+  assert.match(lm, /Oil<div>2×<\/div>.*Pumpkin/);
+  assert.doesNotMatch(lm, /Kale/, "this season's materials only");
+  assert.deepStrictEqual(g(powerLavaCosts, { farm, power }, { ...CTX, costTables: () => ({ ...t, lava: null }) }, {}, "s"), { empty: "No lava pits on this farm." });
+  assert.strictEqual(g(powerFeedCosts, { farm, power }, ctx, {}, "s").html, `<div class="g-big g-bad">−0.750<small> 🌸/day</small></div><div class="g-cap">feed + sickness · 15 animals</div>`);
+  assert.match(g(powerFeedCosts, { farm, power }, ctx, {}, "m").html, /Chicken<div>5× · 1 feed<\/div><\/div><span class="g-v g-bad">−0\.500<\/span>.*Cow/);
+  assert.deepStrictEqual(g(powerFeedCosts, { farm, power }, { ...CTX, costTables: () => ({ ...t, feed: [] }) }, {}, "s"), { empty: "No animals." });
+});

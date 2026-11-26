@@ -76,3 +76,33 @@ test("NFTs without a yield: owned sellable boosts with no quantifiable category,
   }
   assert.ok(roiPassive.build({ roi }, ctxWith(), { group: "protection" }).rows.every((r) => r.group === "protection"));
 });
+
+test("📱 sell or farm glance: S = categories to sell at the copy's frequency; M / L = the verdicts as chips", () => {
+  for (const w of ROI_WIDGETS) assert.ok(w.sizes.includes("s") && w.sizes.length > 1 && w.sizes.includes(w.size));
+  const rows = roiRows(roi, 2), sell = rows.filter((r) => r.verdict === "sell-now" || r.verdict === "sell").length, keep = rows.filter((r) => r.verdict === "keep").length;
+  assert.strictEqual(roiSellOrFarm.glance({ roi }, ctxWith(), {}, "s").html,
+    `<div class="g-big g-${sell ? "bad" : "ok"}">${sell}<small> to sell</small></div><div class="g-cap">${keep} to keep · 2× a day</div>`);
+  assert.match(roiSellOrFarm.glance({ roi }, ctxWith(), { logins: "4" }, "s").html, /4× a day/);
+  // a made-up answer with a SELL verdict: red, and the chip in the M rows
+  const fake = { ...roi, rowsByLogins: { 2: [{ catId: "iron", verdict: "sell", roiYears: 9, sellableInCat: [{ name: "X", floor: 1, quantCats: ["iron"] }], externallyAssigned: [],
+    nodeCount: 0, saleSfl: 10, marginalSflPerDay: 0.003 }] } };
+  assert.match(roiSellOrFarm.glance({ roi: fake }, ctxWith(), {}, "s").html, /^<div class="g-big g-bad">1<small> to sell/);
+  const m = roiSellOrFarm.glance({ roi: fake }, ctxWith(), {}, "m").html;
+  assert.match(m, /<div class="g-n">IRON<div>1 NFT · payback 9\.0y<\/div><\/div><span class="g-chip g-bad">SELL<\/span>/);
+  const l = roiSellOrFarm.glance({ roi }, ctxWith(), {}, "l").html;
+  assert.strictEqual((l.match(/class="g-row"/g) || []).length, Math.min(7, rows.length));
+  assert.deepStrictEqual(roiSellOrFarm.glance({}, ctxWith(), {}, "s"), { empty: "No ROI data yet." });
+});
+
+test("📱 NFTs without a yield glance: S = their sale value in the copy's currency; M = the most valuable", () => {
+  const want = roi.boostItems.filter((b) => b.has && !b.isDisabled && b.isSellable && b.quantCats.length === 0);
+  assert.ok(want.length > 0);
+  const sum = want.reduce((s, b) => s + b.floor, 0);
+  assert.ok(roiPassive.glance({ roi }, ctxWith(), {}, "s").html.startsWith(`<div class="g-big g-warn">${roiFormatValue(sum, "flower", 0.5, 97000, "🌸")}</div>`));
+  assert.ok(roiPassive.glance({ roi }, ctxWith(), { currency: "usd" }, "s").html.includes(roiFormatValue(sum, "usd", 0.5, 97000)));
+  const top = want.slice().sort((a, b) => b.floor - a.floor)[0];
+  const m = roiPassive.glance({ roi }, ctxWith(), {}, "m").html;
+  assert.ok(m.startsWith(`<div class="g-rows"><div class="g-row"><span class="g-ic"><i>${top.name}</i></span>`));
+  assert.deepStrictEqual(roiPassive.glance({ roi: { ...roi, boostItems: [] } }, ctxWith(), {}, "s"), { empty: "No owned sellable NFTs without a yield." });
+  assert.deepStrictEqual(roiPassive.glance({}, ctxWith(), {}, "s"), { empty: "No ROI data yet." });
+});
