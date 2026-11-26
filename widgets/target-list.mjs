@@ -4,6 +4,7 @@
 import { FLOWER_RECIPES, DOLL_RECIPES } from "../core/data/recipes.mjs";
 import { CRUSTACEAN_RECIPES } from "../core/data/crafting.mjs";
 import { COOKING_RECIPES_DATA, COOKING_INGREDIENTS, COOKING_BUILDING_EMOJI } from "../core/data/cooking.mjs";
+import { bar, kpis, bigBar } from "../ui/viz.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const count = (inv, name) => { const v = parseFloat(inv[name]); return Number.isFinite(v) ? Math.floor(v) : 0; };
@@ -57,17 +58,19 @@ export const targetList = {
     { key: "foods", label: "Dishes", kind: "checklist", choices: (o) => (o.cat === "foods"
       ? Object.entries(COOKING_RECIPES_DATA).map(([n, r]) => [n, `${COOKING_BUILDING_EMOJI[r.building] || ""} ${n}`]) : []) },
   ],
-  defaults: { opts: { cat: "dolls", limit: 10, hideDone: true, foods: [] }, sort: { key: "missing", dir: "desc" } },
+  defaults: { opts: { cat: "dolls", limit: 5, hideDone: true, foods: [] }, sort: { key: "missing", dir: "desc" } },
   rowKey: (r) => r.name,
   rowLabel: (r) => r.name,
-  rowClass: (r) => (r.done ? "w-st-ready" : ""),
+  rowClass: (r) => (r.done ? "w-st-done" : ""),
   columns: [
-    { key: "name", label: "item", fmt: (v, r) => `<span style="white-space:nowrap">${r.iconHtml || ""}${esc(v)}</span>` },
-    { key: "have", label: "have", align: "right" },
-    { key: "pend", label: "running", align: "right", title: "blooming / crafting / in traps", fmt: (v) => (v ? esc(v) : "") },
-    { key: "need", label: "target", align: "right", title: "for flowers, also what other flowers' recipes use up" },
-    { key: "missing", label: "missing", align: "right", fmt: (v) => (v ? `<b>${esc(v)}</b>` : "✓") },
-    { key: "recipe", label: "recipe" },
+    // icon, name and the recipe under it
+    { key: "name", label: "item", fmt: (v, r) => `<div class="v-name">${r.iconHtml || ""}<div><b>${esc(v)}</b><small>${esc(r.recipe)}</small></div></div>` },
+    { key: "progress", label: "progress", get: (r) => (r.need ? ((r.have + r.pend) / r.need) * 100 : 100), fmt: (v) => bar(v) },
+    { key: "have", label: "have / target", align: "right", title: "have + on the way (blooming / crafting / in traps) / target; for flowers the target includes what other flowers' recipes use up",
+      fmt: (v, r) => `<span class="v-count">${esc(v)}${r.pend ? `<em>+${esc(r.pend)}</em>` : ""} / ${esc(r.need)}</span>` },
+    { key: "missing", label: "missing", align: "right", fmt: (v) => (v ? `<span class="v-miss">−${esc(v)}</span>` : `<span class="v-done">✓</span>`) },
+    { key: "pend", label: "on the way", align: "right", extra: true, fmt: (v) => (v ? esc(v) : "") },
+    { key: "recipe", label: "recipe", extra: true },
   ],
 
   // data: { farm }; ctx: { inProgress(farm) → {name: qty}, icon(name) → HTML, tracked? {doll: bool} }; opts: the copy's options
@@ -95,7 +98,8 @@ export const targetList = {
     const done = all.filter((r) => r.done).length;
     const rows = opts.hideDone ? all.filter((r) => !r.done) : all;
     const left = all.reduce((a, r) => a + r.missing, 0);
-    const footer = `<div style="color:var(--text-dim)">${done} / ${all.length} at the limit · ${left} missing in total</div>`;
-    return { rows, footer, empty: `✓ All at the limit (${all.length}).` };
+    const summary = kpis([{ v: `${done} / ${all.length}`, l: "at the limit" }, { v: left, l: "missing in total" }])
+      + bigBar(all.length ? (done / all.length) * 100 : 100);
+    return { rows, summary, footer: "", empty: `✓ All at the limit (${all.length}).` };
   },
 };

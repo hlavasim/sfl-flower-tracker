@@ -2687,6 +2687,124 @@
     .welcome-go { background: #d97757; color: #fff; border: none; border-radius: 10px; padding: 11px; font: inherit; font-weight: 600; font-size: 1rem; cursor: pointer; }
     .welcome-back { background: none; border: none; color: #a39e96; font: inherit; cursor: pointer; text-decoration: underline; }
     .nav-farm { margin-left: auto; opacity: 0.8; }
+    /* ═══ The clean theme (widgets, boards, the top bar, support): warm neutral dark, cards, sans type ═══ */
+    :root { --c-bg: #1c1b1a; --c-card: #262624; --c-card2: #2d2c2a; --c-line: #3a3936; --c-row: #302f2c; --c-text: #f2f0e9;
+      --c-muted: #a39e96; --c-dim: #77726b; --c-accent: #d97757; --c-green: #5fb36b; --c-yellow: #e0b34a; --c-red: #e06c5f;
+      --c-blue: #6aa7e0; --c-font: Inter, "Segoe UI", system-ui, -apple-system, sans-serif; }
+    body { background: var(--c-bg); }
+    .nav-bar.pixel-panel { background: transparent; border: none; border-bottom: 1px solid var(--c-line); box-shadow: none; margin-bottom: 16px; }
+    .nav-link, .nav-more-btn, .zoom-btn { font-family: var(--c-font); font-size: 13px; color: var(--c-muted); }
+    .nav-link.help-btn { font-size: 15px; }
+    .nav-link.active, .nav-more-btn.active { color: var(--c-text); font-weight: 600; border-bottom-color: var(--c-accent); }
+    .nav-link:hover, .nav-more-btn:hover, .zoom-btn:hover { color: var(--c-text); }
+    .nav-more-menu { background: var(--c-card); border: 1px solid var(--c-line); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); overflow: hidden; }
+    .nav-more-menu .nav-link { font-size: 13px; border-bottom: 1px solid var(--c-row); }
+    .nav-more-menu .nav-link:hover { background: var(--c-card2); }
+
+    .w-page-head { margin: 4px 0 16px; font-family: var(--c-font); color: var(--c-text); }
+    .w-page-head h1 { font-size: 22px; font-weight: 700; margin: 0 0 2px; }
+    .w-page-head .sub { color: var(--c-muted); font-size: 13px; margin-bottom: 12px; }
+    .w-page-head .dash-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0; }
+    .w-page-head .dash-toggle-btn { font-family: var(--c-font); font-size: 13px; padding: 7px 14px; border-radius: 999px; background: var(--c-card);
+      border: 1px solid var(--c-line); color: var(--c-muted); box-shadow: none; }
+    .w-page-head .dash-toggle-btn:hover { color: var(--c-text); }
+    .w-page-head .dash-toggle-btn.on { background: var(--c-text); color: var(--c-bg); border-color: var(--c-text); font-weight: 600; }
+    .w-page-head .w-add-btn { margin-left: auto; background: var(--c-accent) !important; color: #fff !important; border-color: var(--c-accent) !important;
+      border-radius: 10px !important; font-weight: 600; }
+
+    .w-frame.pixel-panel { background: var(--c-card); border: 1px solid var(--c-line); border-radius: 14px; box-shadow: none; padding: 14px 16px;
+      margin: 12px 0; font-family: var(--c-font); font-size: 13px; line-height: 1.45; color: var(--c-text); image-rendering: auto; }
+    .w-board { gap: 16px; }
+    .w-board > .w-frame.pixel-panel { margin: 0; }
+    .w-head { gap: 10px; margin-bottom: 10px; }
+    .w-title { font-family: var(--c-font); font-size: 15px; font-weight: 600; color: var(--c-text); }
+    .w-btn { border: none; background: transparent; color: var(--c-dim); font-size: 14px; padding: 2px 6px; border-radius: 6px; }
+    .w-btn:hover, .w-btn.on { color: var(--c-text); background: var(--c-card2); border: none; }
+    .w-fresh { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(95,179,107,0.12); color: var(--c-green); }
+    .w-fresh-loading { background: var(--c-card2); color: var(--c-muted); }
+    .w-fresh-stale { background: rgba(224,179,74,0.14); color: var(--c-yellow); }
+    .w-fresh-error { background: rgba(224,108,95,0.14); color: var(--c-red); }
+    .w-table { font-size: 13px; margin: 0; }
+    .w-table th { font-size: 11px; color: var(--c-dim); text-transform: uppercase; letter-spacing: 0.5px; padding: 0 12px 6px 0; }
+    .w-table th:hover { color: var(--c-text); }
+    .w-table td { padding: 7px 12px 7px 0; border-top: 1px solid var(--c-row); vertical-align: middle; }
+    .w-table.w-compact td { padding: 3px 12px 3px 0; }
+    .w-table tr.w-st-ready { background: rgba(95,179,107,0.06); }
+    .w-table tr.w-st-done { opacity: 0.5; }
+    .w-table tr.w-st-miss { background: rgba(224,108,95,0.08); }
+    .w-table .dash-detail { color: var(--c-dim); font-size: 12px; }
+    .w-empty, .w-empty-msg { color: var(--c-muted); }
+    .w-more, .w-missing { color: var(--c-dim); font-size: 12px; }
+    .w-error { color: var(--c-red); }
+    .w-body > div[style*="text-dim"] { margin-top: 8px; font-size: 12px; }
+
+    .v-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .v-name img { height: 26px !important; width: 26px; object-fit: contain; margin: 0 !important; flex: none; }
+    .v-name b { font-weight: 600; }
+    .v-name small { display: block; color: var(--c-dim); font-size: 11.5px; line-height: 1.3; }
+    .v-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+    .v-bar { height: 6px; min-width: 90px; background: var(--c-line); border-radius: 999px; overflow: hidden; }
+    .v-bar > i { display: block; height: 100%; border-radius: 999px; }
+    .v-bar > i.v-bad { background: var(--c-red); } .v-bar > i.v-mid { background: var(--c-yellow); } .v-bar > i.v-ok { background: var(--c-green); }
+    .v-count { font-variant-numeric: tabular-nums; color: var(--c-muted); white-space: nowrap; }
+    .v-count em { color: var(--c-yellow); font-style: normal; }
+    .v-miss { font-weight: 700; font-variant-numeric: tabular-nums; }
+    .v-done { color: var(--c-green); font-weight: 600; }
+    .v-dim { color: var(--c-dim); }
+    .v-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .v-kpi { background: var(--c-card2); border-radius: 10px; padding: 10px 12px; }
+    .v-kpi b { display: block; font-size: 20px; font-weight: 700; }
+    .v-kpi span { color: var(--c-muted); font-size: 12px; }
+    .v-big { height: 8px; background: var(--c-line); border-radius: 999px; overflow: hidden; margin: 0 0 12px; }
+    .v-big > i { display: block; height: 100%; background: linear-gradient(90deg, var(--c-green), #8fd19a); border-radius: 999px; }
+    .v-pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 999px; min-width: 56px; text-align: center;
+      font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .v-pill.v-run { background: rgba(224,179,74,0.14); color: var(--c-yellow); }
+    .v-pill.v-idle { background: rgba(106,167,224,0.14); color: var(--c-blue); }
+    .v-pill.v-bad { background: rgba(224,108,95,0.14); color: var(--c-red); }
+    .v-pill.v-ok, .v-pill.ready { background: rgba(95,179,107,0.16); color: var(--c-green); }
+    .v-ring { --p: 0; width: 38px; height: 38px; border-radius: 50%; flex: none; display: inline-grid; place-items: center;
+      background: conic-gradient(var(--c-accent) calc(var(--p) * 1%), var(--c-line) 0); }
+    .v-ring > span { width: 29px; height: 29px; border-radius: 50%; background: var(--c-card); display: grid; place-items: center; overflow: hidden; }
+    .v-ring img { height: 20px !important; width: 20px !important; }
+
+    .w-pop { background: var(--c-card); border: 1px solid var(--c-line); border-radius: 12px; font-family: var(--c-font); font-size: 13px; }
+    .w-pop-head { font-size: 14px; color: var(--c-text); }
+    .w-tab[aria-selected="true"] { color: var(--c-text); border-bottom-color: var(--c-accent); }
+    .w-pop input[type=number], .w-pop select { background: var(--c-bg); border: 1px solid var(--c-line); border-radius: 8px; padding: 4px 6px; }
+    .w-pop input[type=checkbox]:checked { background: var(--c-accent); }
+    .w-pinmenu { background: var(--c-card); border: 1px solid var(--c-line); border-radius: 12px; font-family: var(--c-font); font-size: 13px; }
+    .w-pinmenu-h { color: var(--c-muted); font-weight: 600; }
+    .w-pinmenu button { border-radius: 8px; }
+    .w-pinmenu button:hover { background: var(--c-card2); color: var(--c-text); }
+    .w-toast { background: var(--c-card); color: var(--c-text); border: 1px solid var(--c-line); border-radius: 12px; font-family: var(--c-font); font-size: 13px; }
+    .w-gal-panel { background: var(--c-bg); border: 1px solid var(--c-line); border-radius: 16px; font-family: var(--c-font); font-size: 13px; padding: 18px 20px; }
+    .w-gal-head { color: var(--c-text); font-size: 17px; }
+    .w-gal-cat { font-family: var(--c-font); font-size: 12px; font-weight: 700; letter-spacing: 0.8px; color: var(--c-muted); }
+    .w-gal-card { background: var(--c-card); border: 1px solid var(--c-line); border-radius: 12px; padding: 12px; }
+    .w-gal-card:hover { border-color: var(--c-accent); }
+    .w-gal-title { color: var(--c-text); font-size: 14px; }
+    .w-gal-add { color: var(--c-accent); font-weight: 600; }
+
+    /* thin, quiet scrollbars everywhere (Firefox: scrollbar-*, Chromium/Safari: ::-webkit-scrollbar) */
+    * { scrollbar-width: thin; scrollbar-color: #4a4845 transparent; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #4a4845; border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+    ::-webkit-scrollbar-thumb:hover { background: #6a6763; border: 2px solid transparent; background-clip: padding-box; }
+    .support { max-width: 520px; margin: 28px auto 20px; font-family: var(--c-font); font-size: 13px; color: var(--c-muted); }
+    .support > summary { list-style: none; cursor: pointer; text-align: center; color: var(--c-muted); padding: 8px; border-radius: 10px; }
+    .support > summary::-webkit-details-marker { display: none; }
+    .support > summary:hover { color: var(--c-text); background: var(--c-card); }
+    .support[open] > summary { color: var(--c-text); }
+    .support-body { margin-top: 8px; background: var(--c-card); border: 1px solid var(--c-line); border-radius: 14px; padding: 18px; text-align: center; }
+    .support-body p { margin: 0 0 12px; }
+    .support-body img { width: 140px; height: 140px; border-radius: 10px; background: #fff; padding: 6px; }
+    .support-addr { display: flex; gap: 8px; justify-content: center; align-items: center; margin: 12px 0 4px; flex-wrap: wrap; }
+    .support-addr code { background: var(--c-bg); border: 1px solid var(--c-line); border-radius: 8px; padding: 6px 8px; font-size: 11.5px; color: var(--c-text); word-break: break-all; }
+    .support-addr button { background: var(--c-accent); color: #fff; border: none; border-radius: 8px; padding: 6px 12px; font: inherit; font-weight: 600; cursor: pointer; }
+    .support-meta { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--c-line); line-height: 1.8; }
+    .support-meta a, .support-meta .changelog-toggle { color: var(--c-accent); text-decoration: none; cursor: pointer; }
     .w-pinmenu { position: fixed; z-index: 1000; min-width: 220px; background: var(--bg-card); border: 2px solid var(--border-brown);
       box-shadow: 0 6px 18px rgba(0,0,0,0.6); padding: 4px; font-family: 'Courier New', monospace; font-size: 0.85rem; }
     .w-pinmenu-h { color: var(--sunpetal); font-weight: bold; padding: 4px 8px; }
@@ -5394,18 +5512,15 @@
       const storedFarm = localStorage.getItem("sfl_farm_id") || "";
       const farm = urlFarm || storedFarm || DEFAULTS.farm;
       if (urlFarm) localStorage.setItem("sfl_farm_id", urlFarm);
-      const urlLimit = p.get("limit");
-      const storedLimit = localStorage.getItem("sfl_limit") || "";
-      const limit = parseInt(urlLimit || storedLimit || DEFAULTS.limit, 10) || 5;
-      if (urlLimit) localStorage.setItem("sfl_limit", urlLimit);
-      return { farm, limit };
+      // The default target per item is 5, no setting: each page or widget sets its own in ⚙.
+      return { farm, limit: 5 };
     }
 
     function saveConfig(farm, limit) {
       const p = new URLSearchParams(window.location.search);
       if (farm) { p.set("farm", farm); localStorage.setItem("sfl_farm_id", farm); }
       else { p.delete("farm"); localStorage.removeItem("sfl_farm_id"); }
-      if (limit) { p.set("limit", limit); localStorage.setItem("sfl_limit", limit); }
+      p.delete("limit");
       // Clean up legacy params
       p.delete("sunpetal");
       p.delete("key");
@@ -5418,9 +5533,8 @@
 
     function applyConfig() {
       const farm = document.getElementById("cfg-farm").value.trim();
-      const limit = document.getElementById("cfg-limit").value.trim();
       if (!farm) return;
-      saveConfig(farm, limit);
+      saveConfig(farm);
       cachedFarmData = null;
       _welcomeOpen = false;
       main();
@@ -5544,8 +5658,6 @@
           <p>Enter your farm ID to open your dashboard.</p>
           <label>Farm ID <input id="cfg-farm" type="text" inputmode="numeric" value="${escHTML(cfg.farm)}" placeholder="e.g. 155498" autofocus
             onkeydown="if (event.key === 'Enter') applyConfig()"></label>
-          <label>Default target per item <input id="cfg-limit" type="number" min="1" max="99" value="${cfg.limit}"
-            onkeydown="if (event.key === 'Enter') applyConfig()"></label>
           <button class="welcome-go" onclick="applyConfig()">Open</button>
           ${cfg.farm && _welcomeOpen ? `<button class="welcome-back" onclick="_welcomeOpen = false; main()">Back to farm #${escHTML(cfg.farm)}</button>` : ""}
         </div>
@@ -5557,38 +5669,35 @@
     //  DONATE
     // ═══════════════════════════════════════
 
+    // Support the project: one line at the bottom, the address, QR and links open on a click.
+    let _supportOpen = false;
     function renderDonate() {
       const qrURL = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(DONATE_ADDR)}&bgcolor=ffffff&color=2c1810`;
       document.getElementById("donate-section").innerHTML = `
-        <div class="donate-section pixel-panel pixel-font">
-          <h3>SUPPORT THE PROJECT</h3>
-          <p>If this tool helped you, consider sending<br>a flower or some ETH</p>
-          <div class="donate-qr">
-            <img src="${qrURL}" alt="Donate QR">
-          </div>
-          <br>
-          <div class="donate-addr-wrap">
-            <span class="donate-addr">${DONATE_ADDR}</span>
-            <button class="donate-copy" onclick="copyAddr()">COPY</button>
-          </div>
-          <div class="donate-chain-label">ETH / Polygon / Base / Arbitrum</div>
-          <div style="margin-top:16px;padding-top:12px;border-top:2px solid rgba(92,58,30,0.4);font-size: 0.625rem;color:var(--text-dim)">
-            Created by 0xStableFarmer - #155498<br>
-            Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
-            <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
+        <details class="support"${_supportOpen ? " open" : ""} ontoggle="_supportOpen = this.open">
+          <summary>♥ Support the project</summary>
+          <div class="support-body">
+            <p>If this tool helped you, consider sending a flower or some ETH.</p>
+            <img src="${qrURL}" alt="Donate QR" loading="lazy">
+            <div class="support-addr"><code class="donate-addr">${DONATE_ADDR}</code><button class="donate-copy" onclick="copyAddr()">Copy</button></div>
+            <div>ETH / Polygon / Base / Arbitrum</div>
+            <div class="support-meta">
+              Created by 0xStableFarmer · #155498<br>
+              Data from <a href="https://sfl.world" target="_blank">sfl.world</a> · <a href="/swagger.html" target="_blank">API docs</a><br>
             <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.59</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
+            </div>
           </div>
-        </div>`;
+        </details>`;
     }
 
     function copyAddr() {
       navigator.clipboard.writeText(DONATE_ADDR).then(() => {
         const btn = document.querySelector(".donate-copy");
-        btn.textContent = "COPIED!";
-        setTimeout(() => btn.textContent = "COPY", 2000);
+        btn.textContent = "Copied";
+        setTimeout(() => btn.textContent = "Copy", 2000);
       });
     }
 
@@ -9741,7 +9850,7 @@
       window._wRerender = () => { if (getPage() === "chores" && cachedFarmData) renderDashboard(cachedFarmData); };
       window._wRefresh = refresh;
       const fresh = __wFresh(__store.peek({ res: "farm", farm: FARM_ID }));
-      app.innerHTML = `<div class="header pixel-panel pixel-font"><h1>CHORES</h1><div class="farm-id">Farm #${escHTML(FARM_ID)} · what is ready, running or idle on the farm; 📌 copies a panel to DASH</div></div>` +
+      app.innerHTML = `<div class="w-page-head"><h1>CHORES</h1><div class="sub">Farm #${escHTML(FARM_ID)} · what is ready, running or idle on the farm; 📌 copies a panel to DASH</div></div>` +
         __widgets.renderPage("dash-actions", { data: { farm: data.farm }, ctx: _wCtx("dash-actions"), fresh }) +
         __widgets.renderPage("weather-protection", { data: { farm: data.farm }, ctx: _wCtx("weather-protection"), fresh });
       startGrowingTimers();
@@ -10317,7 +10426,7 @@
       if (typeof __widgets === "undefined") html += _wMissing("Panenky");
       else {
         html += __widgets.renderPage("crafting-box", { data: { farm: data.farm }, ctx: _wCtx("crafting-box"), fresh: _wFresh });
-        html += __widgets.renderPage("target-list", { data: { farm: data.farm }, ctx: _wCtx("target-list"), fresh: _wFresh, variant: "dolls", force: { cat: "dolls", limit: LIMIT } });
+        html += __widgets.renderPage("target-list", { data: { farm: data.farm }, ctx: _wCtx("target-list"), fresh: _wFresh, variant: "dolls", force: { cat: "dolls" } });
       }
 
       html += `<div class="footer">
@@ -10352,7 +10461,7 @@
       if (typeof __widgets === "undefined") html += _wMissing("Korýši");
       else {
         html += __widgets.renderPage("crab-traps", { data: { farm: data.farm }, ctx: _wCtx("crab-traps"), fresh: _wFresh });
-        html += __widgets.renderPage("target-list", { data: { farm: data.farm }, ctx: _wCtx("target-list"), fresh: _wFresh, variant: "crabs", force: { cat: "crabs", limit: LIMIT } });
+        html += __widgets.renderPage("target-list", { data: { farm: data.farm }, ctx: _wCtx("target-list"), fresh: _wFresh, variant: "crabs", force: { cat: "crabs" } });
       }
 
       html += `<div class="footer">
@@ -18683,13 +18792,13 @@
     };
 
     // One button per board, a new one, and deleting one of your own.
-    function _wBoardSwitcher(currentId) {
+    function _wBoardSwitcher(currentId, extra = "") {
       const btn = (b) => `<button class="dash-toggle-btn${b.id === currentId ? " on" : ""}" data-board="${escHTML(b.id)}" onclick="_wOpenBoard(this.dataset.board)">📌 ${escHTML(b.name)}</button>`;
       return '<div class="dash-toolbar">' + __widgets.doc().boards.map(btn).join("") +
         '<button class="dash-toggle-btn" onclick="_wNewBoard()">＋ New board</button>' +
         (currentId !== "main"
           ? `<button class="dash-toggle-btn" data-board="${escHTML(currentId)}" onclick="_wDeleteBoard(this.dataset.board)" title="deletes the board with its widgets">🗑 Delete this board</button>` : "") +
-        '</div>';
+        extra + '</div>';
     }
     window._wOpenBoard = (id) => {
       const url = new URL(window.location);
@@ -18723,9 +18832,8 @@
       const board = d0.boards.find((b) => b.id === want) || d0.boards[0];
       const boardId = board.id;
       __widgets.visit(boardId);   // the 📌 menu lists this board first next time
-      const head = '<div class="header pixel-panel pixel-font"><h1>📌 ' + escHTML(board.name) + '</h1><div class="farm-id">Farm #' + escHTML(FARM_ID) +
-          ' · your widgets, each with its own ⚙ settings</div>' + _wBoardSwitcher(boardId) +
-          `<div><button class="dash-toggle-btn w-add-btn" data-board="${escHTML(boardId)}" onclick="_wGallery(this.dataset.board)">＋ Add widget</button></div></div>`;
+      const head = '<div class="w-page-head"><h1>📌 ' + escHTML(board.name) + '</h1><div class="sub">Farm #' + escHTML(FARM_ID) +
+          ' · your widgets, each with its own ⚙ settings</div>' + _wBoardSwitcher(boardId, `<button class="dash-toggle-btn w-add-btn" data-board="${escHTML(boardId)}" onclick="_wGallery(this.dataset.board)">＋ Add widget</button>`) + '</div>';
       if (!FARM_ID) { app.innerHTML = head + '<div class="pixel-panel" style="padding:12px;font-size:0.55rem">Enter your Farm ID above.</div>'; return; }
       if (!board.items.length) {
         app.innerHTML = head + '<div class="pixel-panel" style="padding:12px;font-size:0.55rem;line-height:1.7">Nothing here yet. ' +

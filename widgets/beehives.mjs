@@ -17,8 +17,8 @@ export const beehives = {
   columns: [
     { key: "id", label: "hive", fmt: (v, r) => `Hive #${esc(String(v).slice(-3))}${r.hasSwarm ? ' <span title="swarm: the next harvest gives extra">🐝 swarm</span>' : ""}` },
     { key: "pct", label: "full", align: "right", get: (r) => (r.kind === "empty" ? null : r.progressPct), fmt: (v) => (v == null ? "" : `${Math.round(v)} %`) },
-    { key: "when", label: "when", get: whenKey, fmt: (v, r) => r.kind === "full" ? `<span class="dash-ready-badge green">READY</span>`
-      : r.kind === "filling" ? `<span class="dash-time growing-bed-time" data-ready="${r.readyAt}">${esc(r.countdown)}</span>`
+    { key: "when", label: "when", get: whenKey, fmt: (v, r) => r.kind === "full" ? `<span class="v-pill v-ok">READY</span>`
+      : r.kind === "filling" ? `<span class="v-pill v-run growing-bed-time" data-ready="${r.readyAt}">${esc(r.countdown)}</span>`
       : r.kind === "idle" ? `<span style="color:var(--text-dim)">no flowers</span>` : `<span style="color:var(--text-dim)">empty</span>` },
   ],
 

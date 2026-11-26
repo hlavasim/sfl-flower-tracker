@@ -2,8 +2,8 @@
 import { toMs } from "../core/engine/power-costs.mjs";
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const icon = (ctx, n) => (typeof ctx.icon === "function" ? ctx.icon(n) : "");
-const when = (r) => (r.ready ? `<span class="dash-ready-badge green">READY</span>`
-  : r.readyAt ? `<span class="dash-time growing-bed-time" data-ready="${r.readyAt}">${esc(r.countdown)}</span>` : "");
+const when = (r) => (r.ready ? `<span class="v-pill v-ok">READY</span>`
+  : r.readyAt ? `<span class="v-pill v-run growing-bed-time" data-ready="${r.readyAt}">${esc(r.countdown)}</span>` : "");
 
 export const crabTraps = {
   type: "crab-traps",

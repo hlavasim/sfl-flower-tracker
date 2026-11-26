@@ -268,3 +268,11 @@ test("preview: the widget's body with its defaults plus the given options, no fr
   assert.deepStrictEqual(rowsIn(html), ["a", "b"]);
   assert.strictEqual(h.preview("nope", {}), "");
 });
+
+test("a widget's summary (tiles, a big bar) renders above its table, also when every row is hidden", () => {
+  const S = { ...T, build: ({ list }) => ({ rows: list || [], footer: "", empty: "none", summary: "<p class=s>SUM</p>" }) };
+  const h = createHost({ registry: { s: S }, storage: mem() });
+  const html = h.renderPage("s", { data: DATA });
+  assert.ok(html.indexOf("<p class=s>SUM</p>") < html.indexOf("<table"));
+  assert.match(h.renderPage("s", { data: { list: [] } }), /<p class=s>SUM<\/p><div class="w-empty-msg">none/);
+});

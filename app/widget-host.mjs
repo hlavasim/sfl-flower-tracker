@@ -54,8 +54,9 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
       const out = widget.build(data || {}, ctx || {}, settings.opts || {});
       const opts = { rowKey: widget.rowKey, rowLabel: widget.rowLabel, rowClass: widget.rowClass, keepRow: widget.keepRow };
       return {
-        html: out.rows.length ? renderTable(widget.columns, out.rows, settings, opts) + (out.footer || "")
-          : `<div class="w-empty-msg">${esc(out.empty || "Nothing to show.")}</div>`,
+        // summary: trusted HTML from the widget above its table (tiles, a big bar)
+        html: (out.summary || "") + (out.rows.length ? renderTable(widget.columns, out.rows, settings, opts) + (out.footer || "")
+          : `<div class="w-empty-msg">${esc(out.empty || "Nothing to show.")}</div>`),
         settingsHtml: tableSettingsPanel(widget.columns, settings, { rows: out.rows, ...opts, tab,
           options: (widget.options || []).filter((o) => !force || !(o.key in force)), optionsLabel: widget.optionsLabel }),
       };

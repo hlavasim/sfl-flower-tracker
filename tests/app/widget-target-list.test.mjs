@@ -18,19 +18,19 @@ test("registered; needs only the farm; options: category, limit, hide done, dish
   assert.strictEqual(WIDGETS["target-list"], W);
   assert.deepStrictEqual(W.needs(7), { farm: { res: "farm", farm: 7 } });
   assert.deepStrictEqual(W.options.map((o) => o.key), ["cat", "limit", "hideDone", "foods"]);
-  assert.deepStrictEqual(W.defaults.opts, { cat: "dolls", limit: 10, hideDone: true, foods: [] });
+  assert.deepStrictEqual(W.defaults.opts, { cat: "dolls", limit: 5, hideDone: true, foods: [] });
 });
 
 test("dolls to the limit: have + in progress vs the limit; done rows hidden by default", () => {
   const inv = all(Object.keys(DOLL_RECIPES), 10);
   inv["Doll"] = "3.0"; inv["Angler Doll"] = "9";
   const ctx = { inProgress: () => ({ "Angler Doll": 1 }) };
-  const { rows, footer } = W.build({ farm: { inventory: inv } }, ctx, opts({ cat: "dolls", limit: 10 }));
+  const { rows } = W.build({ farm: { inventory: inv } }, ctx, opts({ cat: "dolls", limit: 10 }));
   assert.deepStrictEqual(rows.map((r) => r.name), ["Doll"]);
   assert.deepStrictEqual([rows[0].have, rows[0].pend, rows[0].need, rows[0].missing], [3, 0, 10, 7]);
   assert.match(rows[0].recipe, /4× Leather, 5× Wool/);
   // dolls without a recipe (not craftable yet) are left out, as the DASH suggestions do
-  assert.match(footer, /18 \/ 19 at the limit/);
+  assert.match(W.build({ farm: { inventory: inv } }, ctx, opts({ cat: "dolls", limit: 10 })).summary, /<b>18 \/ 19<\/b><span>at the limit<\/span>/);
   // with done rows shown, Angler Doll is there and done
   const shown = byName(W.build({ farm: { inventory: inv } }, ctx, opts({ cat: "dolls", limit: 10, hideDone: false })).rows);
   assert.strictEqual(Object.keys(shown).length, 19);
@@ -92,4 +92,11 @@ test("dolls: the page's tracked dolls (ctx.tracked) narrow the list", () => {
   const ctx = { tracked: { Doll: true, "Angler Doll": false } };
   const rows = W.build({ farm: { inventory: {} } }, ctx, opts({ cat: "dolls", limit: 2, hideDone: false })).rows;
   assert.deepStrictEqual(rows.map((r) => r.name), ["Doll"]);
+});
+
+test("each row has its progress bar; the count shows have + running / target", () => {
+  const { rows } = W.build({ farm: { inventory: { Doll: "3" } } }, { inProgress: () => ({ Doll: 1 }) }, opts({ cat: "dolls", limit: 10, hideDone: false }));
+  const html = renderTable(W.columns, rows.filter((r) => r.name === "Doll"), W.defaults, { rowKey: W.rowKey });
+  assert.match(html, /class="v-bar"><i class="v-bad" style="width:40%">/);
+  assert.match(html, />3<em>\+1<\/em> \/ 10</);
 });

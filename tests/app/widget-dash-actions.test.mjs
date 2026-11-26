@@ -32,7 +32,9 @@ test("rows are the page's actions; default order as on DASH: ready by readyAt (n
 test("cells: READY / live countdown / IDLE; the label's HTML when the page gives it, escaped otherwise", () => {
   const html = renderTable(W.columns, W.build({ farm: {} }, CTX).rows, W.defaults, { rowKey: W.rowKey });
   assert.match(html, /READY/);
-  assert.match(html, /class="dash-time growing-bed-time" data-ready="\d+">60m</);
+  assert.match(html, /class="v-pill v-run growing-bed-time" data-ready="\d+">60m</);
+  assert.match(html, /<span class="v-pill v-ok">READY<\/span>/);
+  assert.match(html, /<span class="v-pill v-idle">IDLE<\/span>/);
   assert.match(html, /IDLE/);
   assert.match(html, /Tree <i>2<\/i>/);
   assert.match(html, /No produce!/);

@@ -3,6 +3,7 @@
 //      with the page's summary as the footer; each copy may set its own mode and N.
 //   🌱 Záhony: what grows in each bed and when it is ready.
 import { flowerPlan } from "../core/engine/flower-plan.mjs";
+import { bar, kpis, bigBar, pill, ring } from "../ui/viz.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const hrs = (ctx, h) => (typeof ctx.hours === "function" ? ctx.hours(h) : `${Math.round(h)} h`);
@@ -33,19 +34,22 @@ export const flowersNeeds = {
   defaults: { opts: { mode: "", hideDone: false } },
   rowKey: (r) => r.name,
   rowLabel: (r) => r.name,
-  rowClass: (r) => (r.done ? "w-st-ready" : ""),
+  rowClass: (r) => (r.done ? "w-st-done" : ""),
   columns: [
-    { key: "name", label: "flower", fmt: (v, r) => `<span style="white-space:nowrap">${r.iconHtml || ""}${esc(v)}</span>` },
-    { key: "seed", label: "seed", filter: true, filterLabel: (v) => v.replace(/ Seed$/, ""),
-      fmt: (v, r) => `<span style="color:${esc(r.seedColor)}">${esc(r.seedLabel)}</span>` },
-    { key: "have", label: "have", align: "right", fmt: (v, r) => `${esc(v)}${r.pend ? ` <span style="color:var(--yellow)" title="growing">+${esc(r.pend)}</span>` : ""}` },
-    { key: "need", label: "target", align: "right", title: "own target + what the flowers grown from this one use up",
-      fmt: (v, r) => (r.dep > 0 ? `${esc(v)} <span style="color:var(--text-dim)">(${esc(r.own)}+${esc(r.dep)})</span>` : esc(v)) },
-    { key: "missing", label: "missing", align: "right", fmt: (v) => (v ? `<b>${esc(v)}</b>` : "✓") },
+    // icon, name, and under it the seed (its colour), what it grows from and which flowers use it
+    { key: "name", label: "flower", fmt: (v, r) => `<div class="v-name">${r.iconHtml || ""}<div><b>${esc(v)}</b><small>` +
+      `<span class="v-dot" style="background:${esc(r.seedColor)}"></span>${esc(r.seedLabel)} · from ${esc(r.input)}` +
+      `${r.usedIn.length ? ` · used in ${esc(r.usedIn.map((u) => `${u.name} ×${u.need}`).join(", "))}` : ""}</small></div></div>` },
+    { key: "progress", label: "progress", get: (r) => (r.need ? ((r.have + r.pend) / r.need) * 100 : 100), fmt: (v) => bar(v) },
+    { key: "have", label: "have / target", align: "right", title: "have + growing / own target + what the flowers grown from it use up",
+      fmt: (v, r) => `<span class="v-count">${esc(v)}${r.pend ? `<em>+${esc(r.pend)}</em>` : ""} / ${esc(r.need)}</span>` },
+    { key: "missing", label: "missing", align: "right", fmt: (v) => (v ? `<span class="v-miss">−${esc(v)}</span>` : `<span class="v-done">✓</span>`) },
     { key: "hoursLeft", label: "time", align: "right", title: "missing × grow time (with boosts), one bed",
-      fmt: (v, r) => (r.missing ? esc(r.timeText) : "") },
-    { key: "input", label: "from", fmt: (v, r) => `<span style="color:${r.inputAvail > 0 ? "var(--green)" : "var(--red)"}">${esc(v)}</span> <span style="color:var(--text-dim)">(${esc(r.inputAvail)})</span>` },
-    { key: "usedIn", label: "used in", get: (r) => r.usedIn.length, fmt: (v, r) => esc(r.usedIn.map((u) => `${u.name} (×${u.need})`).join(", ")) },
+      fmt: (v, r) => (r.missing ? `<span class="v-dim">${esc(r.timeText)}</span>` : "") },
+    { key: "seed", label: "seed", extra: true, filter: true, filterLabel: (v) => v.replace(/ Seed$/, ""),
+      fmt: (v, r) => `<span style="color:${esc(r.seedColor)}">${esc(r.seedLabel)}</span>` },
+    { key: "input", label: "from", extra: true, fmt: (v, r) => `<span style="color:${r.inputAvail > 0 ? "var(--green)" : "var(--red)"}">${esc(v)}</span> <span class="v-dim">(${esc(r.inputAvail)})</span>` },
+    { key: "usedIn", label: "used in", extra: true, get: (r) => r.usedIn.length, fmt: (v, r) => esc(r.usedIn.map((u) => `${u.name} (×${u.need})`).join(", ")) },
   ],
 
   // data: { farm }; ctx: { pageFlowers() → {mode, n, giftPlan}, hours(h) → text, icon(name) → HTML, now? }
@@ -54,12 +58,11 @@ export const flowersNeeds = {
     const { rows: all, summary: s } = planOf(farm, ctx, opts);
     const rows = (opts.hideDone ? all.filter((r) => !r.done) : all)
       .map((r) => ({ ...r, timeText: hrs(ctx, r.hoursLeft), iconHtml: icon(ctx, r.name) }));
-    const pct = s.total ? Math.round((s.complete / s.total) * 100) : 100;
-    const boost = s.boosts.length
-      ? ` · boosts ${s.multiplier <= 1 ? "−" : "+"}${Math.round(Math.abs(1 - s.multiplier) * 100)} % <span title="${esc(s.boosts.map((b) => `${b.name} ×${b.multiplier}`).join(", "))}">ⓘ</span>` : "";
-    const footer = `<div style="color:var(--text-dim)">${s.complete} / ${s.total} done (${pct} %) · ${s.remaining} left · ` +
-      `${s.beds} bed${s.beds === 1 ? "" : "s"} · est. ${esc(hrs(ctx, s.hours))}${boost}</div>`;
-    return { rows, footer, empty: `✓ All flowers at target (${s.total}).` };
+    const pct = s.total ? (s.complete / s.total) * 100 : 100;
+    const boost = s.boosts.length ? ` · boosts ${s.multiplier <= 1 ? "−" : "+"}${Math.round(Math.abs(1 - s.multiplier) * 100)} %` : "";
+    const summary = kpis([{ v: `${s.complete} / ${s.total}`, l: "at target" }, { v: s.remaining, l: "grows left" },
+      { v: s.beds, l: s.beds === 1 ? "bed" : "beds" }, { v: hrs(ctx, s.hours), l: `est.${boost}` }]) + bigBar(pct);
+    return { rows, summary, footer: "", empty: `✓ All flowers at target (${s.total}).` };
   },
 };
 
@@ -73,12 +76,13 @@ export const flowerBeds = {
   rowLabel: (r) => r.name || "empty",
   rowClass: (r) => (r.kind === "ready" ? "w-st-ready" : ""),
   columns: [
-    { key: "name", label: "flower", fmt: (v, r) => (v ? `<span style="white-space:nowrap">${r.iconHtml || ""}${esc(v)}</span>` : `<span style="color:var(--text-dim)">empty</span>`) },
-    { key: "seedLabel", label: "seed", fmt: (v) => esc(v || "") },
-    { key: "totalYield", label: "yield", align: "right", fmt: (v, r) => (r.empty ? "" : `${esc(v)}${r.bonus ? ` <span style="color:var(--text-dim)">(1+${esc(r.bonus)})</span>` : ""}`) },
-    { key: "when", label: "when", get: (r) => (r.empty ? null : r.readyAt),
-      fmt: (v, r) => r.kind === "ready" ? `<span class="dash-ready-badge green">READY</span>`
-        : r.kind === "growing" ? `<span class="dash-time growing-bed-time" data-ready="${r.readyAt}">${esc(r.countdown)}</span>` : "" },
+    // a ring around the flower filling up as it grows; the seed and the yield under the name
+    { key: "name", label: "flower", fmt: (v, r) => (v
+      ? `<div class="v-name">${ring(r.pct, r.iconHtml || "🌱")}<div><b>${esc(v)}</b><small>${esc(r.seedLabel || "")} · yield ${esc(r.totalYield)}${r.bonus ? ` (1+${esc(r.bonus)})` : ""}</small></div></div>`
+      : `<div class="v-name">${ring(0, "·")}<div class="v-dim">empty</div></div>`) },
+    { key: "when", label: "when", align: "right", get: (r) => (r.empty ? null : r.readyAt),
+      fmt: (v, r) => r.kind === "ready" ? pill("READY", "ok")
+        : r.kind === "growing" ? `<span class="v-pill v-run growing-bed-time" data-ready="${r.readyAt}">${esc(r.countdown)}</span>` : "" },
   ],
 
   // ctx: { countdown(ms) → text, icon(name) → HTML, now? }
@@ -87,7 +91,8 @@ export const flowerBeds = {
     const now = ctx.now || Date.now();
     const rows = flowerPlan(farm, { now }).beds.map((b) => {
       const kind = b.empty ? "empty" : b.readyAt <= now ? "ready" : "growing";
-      return { ...b, kind, iconHtml: b.name ? icon(ctx, b.name) : "",
+      const pct = b.empty ? 0 : b.readyAt <= now ? 100 : Math.max(0, Math.min(100, ((now - b.plantedAt) / (b.readyAt - b.plantedAt)) * 100));
+      return { ...b, kind, pct, iconHtml: b.name ? icon(ctx, b.name) : "",
         countdown: kind === "growing" && typeof ctx.countdown === "function" ? ctx.countdown(b.readyAt - now) : "" };
     });
     const n = (k) => rows.filter((r) => r.kind === k).length;

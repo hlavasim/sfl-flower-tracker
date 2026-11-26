@@ -68,8 +68,8 @@ test("DASH suggestions take per-widget limits; the target widget gets the page's
   assert.match(SRC, /const dollLimit = limits\.dolls \?\? LIMIT;/);
   assert.match(SRC, /const crabLimit = limits\.crabs \?\? LIMIT;/);
   // DOLLS and CRABS render their own copy (a page variant with the category and the page's LIMIT fixed)
-  assert.match(SRC, /__widgets\.renderPage\("target-list", \{ data: \{ farm: data\.farm \}, ctx: _wCtx\("target-list"\), fresh: _wFresh, variant: "dolls", force: \{ cat: "dolls", limit: LIMIT \} \}\)/);
-  assert.match(SRC, /__widgets\.renderPage\("target-list", \{ data: \{ farm: data\.farm \}, ctx: _wCtx\("target-list"\), fresh: _wFresh, variant: "crabs", force: \{ cat: "crabs", limit: LIMIT \} \}\)/);
+  assert.match(SRC, /__widgets\.renderPage\("target-list", \{ data: \{ farm: data\.farm \}, ctx: _wCtx\("target-list"\), fresh: _wFresh, variant: "dolls", force: \{ cat: "dolls" \} \}\)/);
+  assert.match(SRC, /__widgets\.renderPage\("target-list", \{ data: \{ farm: data\.farm \}, ctx: _wCtx\("target-list"\), fresh: _wFresh, variant: "crabs", force: \{ cat: "crabs" \} \}\)/);
   assert.match(SRC, /__widgets\.renderPage\("crafting-box", /);
   assert.match(SRC, /__widgets\.renderPage\("crab-traps", /);
   assert.match(SRC, /if \(type === "target-list"\) return \{ inProgress: extractInProgress, tracked: getTrackedDolls\(\),/);

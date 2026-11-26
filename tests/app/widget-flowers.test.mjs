@@ -27,8 +27,10 @@ test("needs: one row per flower in the page's order; the page's mode unless the 
   assert.strictEqual(out.rows.length, Object.keys(FLOWER_RECIPES).length);
   const html = renderTable(flowersNeeds.columns, out.rows, flowersNeeds.defaults, { rowKey: flowersNeeds.rowKey });
   assert.strictEqual(keys(html)[0], "Yellow Pansy", "the most missing Sunpetal first");
-  assert.match(out.footer, /34 \/ 36|\d+ \/ \d+ done/);
-  assert.match(out.footer, /4 left/);
+  // the summary above the table: tiles and a big bar
+  assert.match(out.summary, /<div class="v-kpi"><b>\d+ \/ \d+<\/b><span>at target<\/span>/);
+  assert.match(out.summary, /<b>4<\/b><span>grows left<\/span>/);
+  assert.match(out.summary, /class="v-big"/);
   // own mode on this copy: collection of 3 → more missing
   const own = flowersNeeds.build({ farm: { inventory } }, CTX, { mode: "collection", n: 3 });
   const rp = own.rows.find((r) => r.name === "Red Pansy");
@@ -42,8 +44,11 @@ test("needs: hide what is done; filter by seed; the recipe and what uses it show
   const out = flowersNeeds.build({ farm: { inventory } }, CTX, { hideDone: true });
   assert.deepStrictEqual(out.rows.map((r) => r.name).sort(), ["Yellow Cosmos", "Yellow Pansy"]);
   const html = renderTable(flowersNeeds.columns, out.rows, flowersNeeds.defaults, { rowKey: flowersNeeds.rowKey });
-  assert.match(html, /Sunflower/);
-  assert.match(html, /Yellow Cosmos \(×2\)/);
+  // the name cell: icon, name, seed dot, where it comes from and what uses it; a progress bar per row
+  assert.match(html, /<b>Yellow Pansy<\/b><small><span class="v-dot" style="background:#FFD700"><\/span>Sunpetal · from Sunflower/);
+  assert.match(html, /used in Yellow Cosmos ×2/);
+  assert.match(html, /class="v-bar"><i class="v-bad" style="width:0%">/);
+  assert.match(html, /class="v-miss">−3</);
   const panel = tableSettingsPanel(flowersNeeds.columns, flowersNeeds.defaults, { rows: out.rows, rowKey: flowersNeeds.rowKey, tab: "filter" });
   assert.match(panel, /data-value="seed\|Sunpetal Seed"/);
   const s = applyTableAction(flowersNeeds.columns, flowersNeeds.defaults, "filter", "seed|Sunpetal Seed");
@@ -63,8 +68,9 @@ test("beds: what grows and when, ready first; empty beds say so", () => {
   const out = flowerBeds.build({ farm }, CTX, {});
   const html = renderTable(flowerBeds.columns, out.rows, flowerBeds.defaults, { rowKey: flowerBeds.rowKey });
   assert.deepStrictEqual(keys(html), ["b1", "b3", "b2"]);
-  assert.match(html, /READY/);
-  assert.match(html, /data-ready="\d+">1380m</);
+  assert.match(html, /<span class="v-pill v-ok">READY<\/span>/);
+  assert.match(html, /class="v-pill v-run growing-bed-time" data-ready="\d+">1380m</);
+  assert.match(html, /class="v-ring" style="--p:100"/);
   assert.match(html, />empty</);
   assert.match(out.footer, /1 ready · 1 growing · 1 empty/);
 });

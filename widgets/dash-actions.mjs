@@ -27,9 +27,9 @@ export const dashActions = {
   rowLabel: (r) => `${r.category}: ${r.label}`,
   rowClass: (r) => `w-st-${r.status}`,
   columns: [
-    { key: "when", label: "when", get: whenKey, fmt: (v, r) => r.status === "ready" ? `<span class="dash-ready-badge green">READY</span>`
-      : r.status === "upcoming" ? (r.readyAt > 0 && r.readyAt < Infinity ? `<span class="dash-time growing-bed-time" data-ready="${r.readyAt}">${esc(r.countdown)}</span>` : "")
-      : `<span class="dash-ready-badge blue">IDLE</span>` },
+    { key: "when", label: "when", get: whenKey, fmt: (v, r) => r.status === "ready" ? `<span class="v-pill v-ok">READY</span>`
+      : r.status === "upcoming" ? (r.readyAt > 0 && r.readyAt < Infinity ? `<span class="v-pill v-run growing-bed-time" data-ready="${r.readyAt}">${esc(r.countdown)}</span>` : "")
+      : `<span class="v-pill v-idle">IDLE</span>` },
     { key: "category", label: "type", filter: true, fmt: (v, r) => `<span style="white-space:nowrap">${r.icon || ""} ${esc(v)}</span>` },
     { key: "label", label: "what", fmt: (v, r) => (r.labelHtml || esc(v)) +
       (r.detailHtml || r.detail ? `<div class="dash-detail">${r.detailHtml || esc(r.detail)}</div>` : "") },
