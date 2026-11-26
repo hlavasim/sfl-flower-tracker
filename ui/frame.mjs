@@ -166,3 +166,18 @@ function startDrag(e, handler) {
   doc.addEventListener("pointerup", up);
   doc.addEventListener("pointercancel", up);
 }
+
+// A board repaint, frame by frame: only a frame whose HTML changed is replaced, so an embedded page
+// (📄 Stránka) is not reloaded by a neighbour's update. false = a different set or order of frames:
+// the caller rebuilds the grid (and stamps each child's _wHtml).
+export function patchFrames(grid, frames) {
+  if (!grid || !grid.children || grid.children.length !== frames.length) return false;
+  for (let k = 0; k < frames.length; k++) if (!grid.children[k].dataset || grid.children[k].dataset.frame !== frames[k].id) return false;
+  frames.forEach((f, k) => {
+    const el = grid.children[k];
+    if (el._wHtml === f.html) return;
+    el.outerHTML = f.html;
+    grid.children[k]._wHtml = f.html;
+  });
+  return true;
+}

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { renderFrame, freshness, bindFrames, spanAt, rowsAt, dropIndex } from "../../ui/frame.mjs";
+import { renderFrame, freshness, bindFrames, spanAt, rowsAt, dropIndex, patchFrames } from "../../ui/frame.mjs";
 
 // The widget frame: title, freshness, cog, pin (on its page) or remove/move/width (on the board).
 
@@ -113,4 +113,20 @@ test("a click outside an open popover, or Escape, closes it; a click inside does
   assert.deepStrictEqual(got, [["w1", "settings-close"], ["w1", "cog"]]);
   listeners.keydown({ key: "Escape", target: el({}, null) });
   assert.deepStrictEqual(got.at(-1), ["w1", "settings-close"]);
+});
+
+test("patchFrames: a repaint replaces only the frames whose HTML changed (an embedded page is not reloaded)", () => {
+  const child = (id, html) => {
+    const c = { dataset: { frame: id }, _wHtml: html, replaced: 0 };
+    Object.defineProperty(c, "outerHTML", { set(v) { c.replaced++; c._set = v; } });
+    return c;
+  };
+  const a = child("b:m:a", "<A>"), b = child("b:m:b", "<B>");
+  const grid = { children: [a, b] };
+  assert.strictEqual(patchFrames(grid, [{ id: "b:m:a", html: "<A>" }, { id: "b:m:b", html: "<B2>" }]), true);
+  assert.deepStrictEqual([a.replaced, b.replaced, b._set], [0, 1, "<B2>"]);
+  // a different set or order of frames: the caller rebuilds the grid
+  assert.strictEqual(patchFrames(grid, [{ id: "b:m:b", html: "<B>" }, { id: "b:m:a", html: "<A>" }]), false);
+  assert.strictEqual(patchFrames(grid, [{ id: "b:m:a", html: "<A>" }]), false);
+  assert.strictEqual(patchFrames(null, []), false);
 });

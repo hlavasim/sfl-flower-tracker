@@ -44,7 +44,7 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     try {
       if (widget.view) {
         // a tile or a chart: its own HTML, no table settings
-        const out = widget.view(data || {}, ctx || {}) || {};
+        const out = widget.view(data || {}, ctx || {}, settings.opts || {}) || {};
         return { html: out.html || `<div class="w-empty-msg">${esc(out.empty || "Nic k zobrazení.")}</div>`, settingsHtml: "" };
       }
       const out = widget.build(data || {}, ctx || {}, settings.opts || {});

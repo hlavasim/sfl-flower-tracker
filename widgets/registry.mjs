@@ -3,7 +3,7 @@
 //   { type, title, page, needs(farmId) → {name: storeQuery}, optional?: [need names the widget can
 //     render without], defaults, columns, rowKey, rowLabel, rowClass?, build(data, ctx) → { rows, footer, empty } }
 // A view widget (a tile or a chart, no table settings):
-//   { type, title, page, needs, optional?, view(data, ctx) → { html } | { empty } }
+//   { type, title, page, needs, optional?, view(data, ctx, opts) → { html } | { empty } }
 import { fishingAgeNow } from "./fishing-age-now.mjs";
 import { levelingLadderWidget } from "./leveling-ladder.mjs";
 import { dashActions } from "./dash-actions.mjs";
@@ -15,6 +15,7 @@ import { ticketChecklist } from "./ticket-checklist.mjs";
 import { flipTable } from "./flip-table.mjs";
 import { worldIslands, worldSkillPoints } from "./world-dist.mjs";
 import { targetList } from "./target-list.mjs";
+import { pageEmbed } from "./page-embed.mjs";
 
 export const WIDGETS = {
   [fishingAgeNow.type]: fishingAgeNow,
@@ -29,4 +30,5 @@ export const WIDGETS = {
   [worldIslands.type]: worldIslands,
   [worldSkillPoints.type]: worldSkillPoints,
   [targetList.type]: targetList,
+  [pageEmbed.type]: pageEmbed,
 };
