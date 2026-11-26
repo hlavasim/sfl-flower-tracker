@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
-import { roadmapGifts, roadmapDeliveries, roadmapAnimalFeed, roadmapAnimalLife } from "../../widgets/roadmap-extras.mjs";
+import { roadmapGifts, roadmapDeliveries, roadmapAnimalFeed, roadmapAnimalLife, roadmapExpired } from "../../widgets/roadmap-extras.mjs";
 import { WIDGETS } from "../../widgets/registry.mjs";
 import { renderTable } from "../../ui/table.mjs";
 import { looksFor, renderLook } from "../../ui/glance-templates.mjs";
@@ -102,4 +102,31 @@ test("animal lifecycle: 15 levels per animal, the peak is the best level, pays-t
   const m = roadmapAnimalLife.glanceModel({ roadmap: RM }, CTX);
   assert.strictEqual(m.items.length, X.animalLife.length);
   assert.match(renderLook(m, "number").html, /class="gx-num/);
+});
+
+test("expired: the page's rows (roadmapExpiredRows over the board's power payload), warnings first-class, a value where there is one", () => {
+  assert.strictEqual(WIDGETS["roadmap-expired"], roadmapExpired);
+  assert.deepStrictEqual(Object.keys(roadmapExpired.needs("7")), ["power", "farm"]);
+  const ROWS = [
+    { what: "Renew Badger Shrine", icon: "Badger Shrine", now: true, warn: true, gain: 29.65, note: "earns 208 in 7 days, costs 8.37 (15x Acorn)" },
+    { what: "Buy Tornado Pinwheel", icon: "Tornado Pinwheel", now: false, warn: true, gain: null, note: "you have none &mdash; <img src=x>tornado hits you" },
+  ];
+  let got = null;
+  const ctx = { ...CTX, expiredRows: (power, farm) => { got = [power, farm]; return ROWS; } };
+  const out = roadmapExpired.build({ power: { p: 1 }, farm: { f: 1 } }, ctx);
+  assert.deepStrictEqual(got, [{ p: 1 }, { f: 1 }], "the board's payload reaches the page function");
+  assert.strictEqual(out.rows.length, 2);
+  const html = table(roadmapExpired, out);
+  assert.match(html, /<span class="v-rmf-warn">⚠<\/span> Renew Badger Shrine/);
+  assert.match(html, /\+29\.65\/d/);
+  const m = roadmapExpired.glanceModel({ power: {}, farm: {} }, ctx);
+  assert.deepStrictEqual([m.head.value, m.head.tone], [2, "warn"]);
+  assert.strictEqual(m.items[1].sub, "you have none &mdash; tornado hits you".replace("&mdash;", "&mdash;"));
+  assert.deepStrictEqual(m.items[1].chip, { text: "now", tone: "warn" });
+  assert.match(roadmapExpired.build({}, {}).empty, /Loading/);
+  assert.match(roadmapExpired.build({}, { expiredRows: () => [] }).empty, /Nothing has lapsed/);
+  // the page: the rows are one function shared by the old panel and the widget; the widget replaces the panel
+  assert.match(SRC, /function roadmapExpiredRows\(ps, owned\)/);
+  assert.match(SRC, /h \+= _w\("roadmap-expired"\);/);
+  assert.doesNotMatch(SRC, /h \+= roadmapPeriodicHtml\(\);/);
 });

@@ -213,3 +213,42 @@ roadmapAnimalLife.glanceModel = (data = {}, ctx = {}) => {
     tiles: out.rows.map((r) => ({ label: r.animalType.toLowerCase(), value: r.lastPos > 0 ? `≤ L${r.lastPos}` : "never" })),
   };
 };
+
+// ── ⏳ Expired — renew: weather protection used up or missing, shrines that lapsed and pay back ──
+// The rows are the page's roadmapExpiredRows (it shares the SHRINES page's shrine helpers), reached
+// through ctx over a board copy's section=power + farm, or the ROADMAP page's own context.
+const plain = (h) => String(h || "").replace(/<[^>]*>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+export const roadmapExpired = {
+  type: "roadmap-expired",
+  title: "⏳ Expired — renew",
+  page: "roadmap",
+  needs: (farmId) => ({ power: { res: "compute", farm: farmId, section: "power" }, farm: { res: "farm", farm: farmId } }),
+  defaults: {},
+  rowKey: (r) => r.what,
+  rowLabel: (r) => plain(r.what),
+  rowClass: (r) => (r.warn ? "w-st-warn" : ""),
+  columns: [
+    // what / note are the page's own HTML (names escaped there, item icons inline)
+    { key: "what", label: "to do", fmt: (v, r) => `<div class="v-name">${r.iconHtml}<div><b>${r.warn ? '<span class="v-rmf-warn">⚠</span> ' : r.now ? '<span class="v-dim">▸</span> ' : ""}${v}</b><small>${r.note}</small></div></div>` },
+    { key: "gain", label: "FLOWER/day", align: "right", title: "FLOWER a day it earns back, where it has a value",
+      fmt: (v) => (v != null ? `<b class="${v > 0 ? "v-sk-pos" : "v-rm-neg"}">${v > 0 ? "+" : ""}${fmtFlower(v)}/d</b>` : '<span class="v-dim">—</span>') },
+  ],
+  build({ power, farm } = {}, ctx = {}) {
+    const list = typeof ctx.expiredRows === "function" ? ctx.expiredRows(power, farm) : null;
+    if (!list) return { rows: [], footer: "", empty: "Loading the power data…" };
+    const rows = list.map((r) => ({ ...r, gain: r.gain != null && isFinite(r.gain) ? r.gain : null, iconHtml: r.icon ? icon(ctx, r.icon) : "" }));
+    return { rows, empty: "Nothing has lapsed — weather protection and shrines are all up.",
+      footer: `<div class="v-dim">Only what runs out by itself and stops working: shrines (7 days, listed when they pay back) and protection against weather events.</div>` };
+  },
+};
+roadmapExpired.look = "number-list-2";
+roadmapExpired.glanceModel = (data = {}, ctx = {}) => {
+  const out = roadmapExpired.build(data, ctx);
+  if (!out.rows.length) return { empty: out.empty };
+  const urgent = out.rows.filter((r) => r.warn).length, gain = out.rows.reduce((a, r) => a + (r.gain > 0 ? r.gain : 0), 0);
+  return {
+    head: { value: out.rows.length, cap: `to renew${urgent ? ` · ${urgent} uncovered` : ""}${gain > 0 ? ` · +${fmtFlower(gain)}/d` : ""}`, tone: urgent ? "warn" : "" },
+    items: out.rows.map((r) => ({ icon: r.iconHtml, name: plain(r.what), sub: plain(r.note),
+      ...(r.gain != null ? { value: `${r.gain > 0 ? "+" : ""}${fmtFlower(r.gain)}`, tone: r.gain > 0 ? "ok" : "bad" } : { chip: { text: r.warn ? "now" : "renew", tone: r.warn ? "warn" : "" } }) })),
+  };
+};

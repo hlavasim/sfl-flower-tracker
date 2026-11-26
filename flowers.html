@@ -14659,8 +14659,12 @@
       h += `</div>`;
       return h;
     }
-    function roadmapPeriodicHtml() {
-      const ps = powerState || {};
+    // What has lapsed and needs renewing (weather protection, shrines worth rebuilding): plain rows
+    // over a power context — the page's powerState, or a board copy's section=power + farm. owned(cat)
+    // = the owned boost effects of a category (the roadmap's, else from the payload's boostItems).
+    function roadmapExpiredRows(ps, owned) {
+      ps = ps || {};
+      owned = owned || ((cat) => (ps.boostItems || []).filter((b) => b.has && !b.isDisabled).flatMap((b) => (b.effects || []).filter((e) => e.cat === cat)));
       const rows = [];
 
       /*
@@ -14721,7 +14725,7 @@
         let cost = null, perDay = null, netTotal = null;
         try {
           cost = _shrineIngredientCostSfl(sh.ingredients, ps.p2pPrices || {}, ps.p2pPrices || {});
-          const m = _shrineMarginalSflPerDay(sh, ps.capacity, ps.p2pPrices || {}, roadmapOwnedEffects(sh.catId), null);
+          const m = _shrineMarginalSflPerDay(sh, ps.capacity, ps.p2pPrices || {}, owned(sh.catId), null);
           perDay = m && isFinite(m.sflPerDay) ? m.sflPerDay : null;
           if (perDay != null && cost != null) netTotal = perDay * sh.duration_d - cost;
         } catch (e) {}
@@ -14741,9 +14745,13 @@
       }
       // A shrine still running is not listed, however little is left: the owner wants it here only
       // once it has actually lapsed (the "Obnovit" rows above), not as a countdown.
-      if (!rows.length) return '';
       // Value first where we have one; the unquantified chores go under it rather than on top.
       rows.sort((a, b) => (b.gain || -Infinity) - (a.gain || -Infinity));
+      return rows;
+    }
+    function roadmapPeriodicHtml() {
+      const rows = roadmapExpiredRows(powerState, roadmapOwnedEffects);
+      if (!rows.length) return '';
 
       let h = `<div class="w-card v-rmf-panel">`;
       h += `<h3>\u23F3 Expired \u2014 renew</h3>`;
@@ -14994,6 +15002,11 @@
       const npcIcon = (n) => `<img src="${getNpcIcon(n)}" onerror="this.style.display='none'" alt="" style="height:1.3em;vertical-align:-0.25em;margin-right:3px">`;
       const extras = () => ({ ...ctx(), npcIcon });
       for (const t of rmExtraWidgets) _wCtxMap[t] = extras;
+      _wCtxMap["roadmap-expired"] = () => ({ ...ctx(), expiredRows: (power, farm) => {
+        // the ROADMAP page's own context (shrine effects included); a board copy: its payload
+        if (!power && powerState) return roadmapExpiredRows(powerState, roadmapOwnedEffects);
+        return power ? roadmapExpiredRows({ ...power, farm }, null) : null;
+      } });
     }
     const rmExtraWidgets = ["roadmap-gifts", "roadmap-deliveries", "roadmap-animal-feed", "roadmap-animal-life"];
     /*
@@ -15055,7 +15068,7 @@
       // animals, settings) stays page HTML. A widget's own change repaints only its frame.
       window._wRerender = () => {
         if (getPage() !== "roadmap" || !_roadmapServer) return;
-        for (const t of ["roadmap-income", "roadmap-buy-path", "roadmap-offers", ...rmExtraWidgets]) { const n = document.getElementById("rmw-" + t); if (n) n.innerHTML = _rmWidget(t); }
+        for (const t of ["roadmap-income", "roadmap-buy-path", "roadmap-offers", "roadmap-expired", ...rmExtraWidgets]) { const n = document.getElementById("rmw-" + t); if (n) n.innerHTML = _rmWidget(t); }
       };
       window._wRefresh = refresh;
       const _w = (t) => `<div id="rmw-${t}">${_rmWidget(t)}</div>`;
@@ -15069,7 +15082,7 @@
       h += roadmapProfitabilityHtml(settings);
       // ── Buy path: Table or Skills (toggle) ──
       h += `<div class="v-rm-buy">`;
-      h += roadmapPeriodicHtml();
+      h += _w("roadmap-expired");
       h += `<div class="v-rm-tabs"><b>Your buy path</b><span class="v-dim">what to buy next, in order</span><span class="v-rm-tabbtns"><button id="bp-tab-table" class="dash-toggle-btn on" onclick="_roadmapBuyView('table')">☰ Table</button><button id="bp-tab-skills" class="dash-toggle-btn" onclick="_roadmapBuyView('skills')">⭐ Skills</button></span></div>`;
       {
         const _effReal = settings.effMode === "real";
