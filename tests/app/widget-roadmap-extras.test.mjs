@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
-import { roadmapGifts, roadmapDeliveries, roadmapAnimalFeed, roadmapAnimalLife, roadmapExpired, roadmapSkills } from "../../widgets/roadmap-extras.mjs";
+import { roadmapGifts, roadmapDeliveries, roadmapAnimalFeed, roadmapAnimalLife, roadmapExpired, roadmapSkills, roadmapProfit, sellOf, limitedWeekKey } from "../../widgets/roadmap-extras.mjs";
 import { WIDGETS } from "../../widgets/registry.mjs";
 import { renderTable } from "../../ui/table.mjs";
 import { looksFor, renderLook } from "../../ui/glance-templates.mjs";
@@ -149,4 +149,35 @@ test("skills: every skill valued server-side (the buy path's breakdown), take / 
   // the page: the ⭐ Skills tab holds the widget and the upgrade ladder; the valuation is the engine's
   assert.match(SRC, /<div id="rmw-roadmap-skills">\$\{_rmWidget\("roadmap-skills"\)\}<\/div>/);
   assert.doesNotMatch(SRC, /function roadmapSkillBreakdown\(/, "moved to core/engine/roadmap.mjs");
+});
+
+test("what to farm: the server's profitability rows by group, net = gives − costs, sell-now from the inventory, filters and the glance", () => {
+  assert.strictEqual(WIDGETS["roadmap-profit"], roadmapProfit);
+  const groups = RM.profitability.groups.filter((g) => g.rows.length);
+  const out = roadmapProfit.build({ roadmap: RM, farm }, { ...CTX, p2p: () => p2p }, {});
+  assert.strictEqual(out.rows.length, groups.reduce((a, g) => a + g.rows.length, 0));
+  for (const r of out.rows) if (!r.unvalued) assert.ok(Math.abs(r.net - (r.gross - r.cost)) < 1e-6, `${r.label}: net = gives − costs`);
+  // a group that is not kept in chain order lists its rows best first (faded, out of season, last)
+  for (const g of groups.filter((g) => !g.keepOrder)) {
+    const mine = out.rows.filter((r) => r.group === g.id && !r.fade);
+    for (let k = 1; k < mine.length; k++) assert.ok(mine[k - 1].net >= mine[k].net);
+  }
+  assert.ok(roadmapProfit.build({ roadmap: RM, farm }, CTX, { group: "crops" }).rows.every((r) => r.group === "crops"));
+  assert.ok(roadmapProfit.build({ roadmap: RM, farm }, CTX, { paying: true }).rows.every((r) => r.net > 0.001));
+  const m = roadmapProfit.glanceModel({ roadmap: RM, farm }, { ...CTX, p2p: () => p2p }, {});
+  const best = out.rows.filter((r) => !r.unvalued).sort((a, b) => b.net - a.net)[0];
+  assert.match(m.head.cap, new RegExp(`^best: ${best.label}`));
+  assert.ok(looksFor(m).length >= 3);
+  assert.match(SRC, /h \+= roadmapProfitabilityHtml\(settings, true\) \+ _w\("roadmap-profit"\);/);
+});
+
+test("sell now: the inventory at p2p less the fee; animals count both products; Obsidian only what this week still allows", () => {
+  const now = Date.UTC(2026, 10, 26);
+  const f = { inventory: { Egg: "10", Feather: "4", Obsidian: "3" }, trades: { weeklySales: { [limitedWeekKey(now)]: {} }, listings: {} } };
+  const p = { Egg: 1, Feather: 0.5, Obsidian: 20 };
+  assert.ok(Math.abs(sellOf("Egg", f, p, 10, now).value - (10 * 1 + 4 * 0.5) * 0.9) < 1e-9);
+  assert.ok(Math.abs(sellOf("Obsidian", f, p, 10, now).value - 20 * 0.9) < 1e-9, "one Obsidian a week");
+  const sold = { ...f, trades: { weeklySales: { [limitedWeekKey(now)]: { Obsidian: 1 } }, listings: {} } };
+  assert.strictEqual(sellOf("Obsidian", sold, p, 10, now).value, 0, "already sold this week");
+  assert.strictEqual(limitedWeekKey(Date.UTC(2026, 10, 26)), "2026-11-23", "weeks start Monday");
 });

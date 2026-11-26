@@ -29,7 +29,7 @@ test("JSON and DIFF: clean heads, no retro panels or pixel type", () => {
 
 test("ROADMAP: WHAT TO FARM / MINE NOW, Expired — renew, the scenario bar/table and the skills by tree are clean, with item icons", () => {
   const legacy = /pixel-font|Press Start|#161009|#2a1410|#20190f|var\(--border-brown\)|var\(--sunpetal\)|var\(--lily\)|font-size:0\.\d/;
-  const prof = body("        function roadmapProfitabilityHtml(settings) {", "\n    function ");
+  const prof = body("        function roadmapProfitabilityHtml(settings, headOnly = false) {", "\n    function ");
   const detail = body("    function roadmapMiningDetail(c, r, f) {", "\n        function ");
   const bar = body("    function roadmapScenarioBarHtml() {", "\n    function ");
   const scen = body("    function roadmapScenarioTableHtml(plan) {", "\n    function ");

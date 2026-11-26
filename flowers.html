@@ -14086,7 +14086,7 @@
       h += `</div>`;
       return h;
     }
-        function roadmapProfitabilityHtml(settings) {
+        function roadmapProfitabilityHtml(settings, headOnly = false) {
       const cf = roadmapCoinsFree(settings);
       const _excl = (c) => (settings.excludeCats || []).indexOf(c) >= 0;
       const coins = Math.round(parseFloat(powerState.farm && powerState.farm.coins) || 0);
@@ -14114,7 +14114,7 @@
       }
 
       let h = `<div class="w-card v-rmf-panel">`;
-      h += `<h3>WHAT TO FARM / MINE NOW</h3>`;
+      if (!headOnly) h += `<h3>WHAT TO FARM / MINE NOW</h3>`;   // the widget under it has the title
       h += `<div class="v-rmf-intro">Per-day economics: <span class="v-sk-pos">gives</span> minus <span class="v-rm-neg">costs</span> = net. Scaled by your real harvest efficiency (mining/animals/fruits/greenhouse \u2014 see the efficiency line above); crops &amp; crop machine capped to your ${settings.restocksPerDay}\u00d7 daily restocks. Out-of-season crops faded. ${cf ? `Coins are FREE (you hold ${coins.toLocaleString()} &gt; 10k) so coin-priced tools/seeds cost 0 \u2014 only real resource costs count (animal feed &amp; sickness, salt wood, crop-machine oil).` : `Coin costs at Betty rate (you hold ${coins.toLocaleString()}).`} Obsidian sells ~1/week.</div>`;
       {
         const _single = [["Mining & Trees", [["trees","Wood"],["stone","Stone"],["iron","Iron"],["gold","Gold"],["crimstone","Crimstone"],["oil","Oil"]]],
@@ -14166,6 +14166,8 @@
       else _verdict = "<b class=\"v-rm-neg\">No ore beats just selling your Wood</b> — every chain eats more Wood than the ore sells for. Just sell the Wood.";
       h += `<div class="v-rmf-ctl"><span>cost basis:</span><button class="dash-toggle-btn${_mc.mode === "market" ? " on" : ""}" onclick="_roadmapSetMineMode('market')" title="Opportunity cost: a tool's inputs cost their marketplace sell value, no matter how cheap they were to mine (Quarry-correct).">Market price</button><button class="dash-toggle-btn${_mc.mode === "production" ? " on" : ""}" onclick="_roadmapSetMineMode('production')" title="Self-mine: an ore costs the Wood baked into its whole chain (climb to the best stop).">Self-mine chain</button>${_mc.mode === "market" ? ` <label title="Marketplace fee on sales. Scales income; doesn’t change which ores are worth mining.">fee <input type="number" value="${settings.marketFee != null ? settings.marketFee : 10}" min="0" max="50" step="0.5" onchange="_roadmapSetMarketFee(this.value)">%</label>` : ``}</div>`;
       if (_verdict) h += `<div class="v-rmf-verdict">${_verdict}</div>`;
+      // the page shows these controls over the roadmap-profit widget, which has the table
+      if (headOnly) return h + `</div>`;
       // SELL column: what the row's resource in your inventory fetches right now (p2p less the fee).
       const _inv = (powerState.farm && powerState.farm.inventory) || {}, _p2p = powerState.p2pPrices || {};
       const _keep = 1 - (settings.marketFee != null ? settings.marketFee : 10) / 100;
@@ -14892,6 +14894,9 @@
       const extras = () => ({ ...ctx(), npcIcon });
       for (const t of rmExtraWidgets) _wCtxMap[t] = extras;
       _wCtxMap["roadmap-skills"] = ctx;
+      // what to farm: the page's p2p (a board copy reads its section=power), the fee, the mining "why"
+      _wCtxMap["roadmap-profit"] = () => ({ ...ctx(), p2p: () => (powerState && powerState.p2pPrices) || null,
+        marketFee: getRoadmapSettings().marketFee, miningDetail: (cat, chain, eff) => { try { return roadmapMiningDetail(cat, chain, eff); } catch (e) { return ""; } } });
       _wCtxMap["roadmap-expired"] = () => ({ ...ctx(), expiredRows: (power, farm) => {
         // the ROADMAP page's own context (shrine effects included); a board copy: its payload
         if (!power && powerState) return roadmapExpiredRows(powerState, roadmapOwnedEffects);
@@ -14958,7 +14963,7 @@
       // animals, settings) stays page HTML. A widget's own change repaints only its frame.
       window._wRerender = () => {
         if (getPage() !== "roadmap" || !_roadmapServer) return;
-        for (const t of ["roadmap-income", "roadmap-buy-path", "roadmap-offers", "roadmap-expired", "roadmap-skills", ...rmExtraWidgets]) { const n = document.getElementById("rmw-" + t); if (n) n.innerHTML = _rmWidget(t); }
+        for (const t of ["roadmap-income", "roadmap-buy-path", "roadmap-offers", "roadmap-expired", "roadmap-skills", "roadmap-profit", ...rmExtraWidgets]) { const n = document.getElementById("rmw-" + t); if (n) n.innerHTML = _rmWidget(t); }
       };
       window._wRefresh = refresh;
       const _w = (t) => `<div id="rmw-${t}">${_rmWidget(t)}</div>`;
@@ -14969,7 +14974,7 @@
 
       // ── What to farm / mine now (per-category profitability) ──
       const _rmCollapse = (title, inner) => inner ? `<details class="v-rm-sec"><summary>${title}</summary><div>${inner}</div></details>` : "";
-      h += roadmapProfitabilityHtml(settings);
+      h += roadmapProfitabilityHtml(settings, true) + _w("roadmap-profit");
       // ── Buy path: Table or Skills (toggle) ──
       h += `<div class="v-rm-buy">`;
       h += _w("roadmap-expired");

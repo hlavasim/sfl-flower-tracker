@@ -321,3 +321,103 @@ roadmapSkills.glanceModel = (data = {}, ctx = {}) => {
     tiles: [{ label: "level", value: k.level }, { label: "free pts", value: k.freePts }, { label: "to take", value: take.length }, { label: "to reset", value: reset.length }],
   };
 };
+
+// ── 🌾 What to farm / mine now: every activity's FLOWER a day — gives − costs = net, from
+// section=roadmap's profitability (the page's former table). "sell" = what you hold of it now at p2p
+// less the market fee (Obsidian: only what can still be sold this week). The checkboxes of what you
+// farm, the cost basis and the verdict stay page controls above it. ──
+const PROFIT_GROUPS = [["mine", "⛏️ Mining & trees"], ["animals", "🐮 Animals"], ["crops", "🌾 Crops"], ["greenhouse", "🏠 Greenhouse"],
+  ["fruits", "🍎 Fruits"], ["cropMachine", "⚙️ Crop machine"], ["other", "✨ Other"]];
+const GROUP_LABEL = Object.fromEntries(PROFIT_GROUPS);
+const groupName = (id) => (GROUP_LABEL[id] || id).replace(/^\S+\s/, "");
+const VERDICT_PILL = { sell: ["SELL", "v-ok"], step: ["STEP", "v-idle"], skip: ["SKIP", "v-bad"], input: ["INPUT", "v-run"] };
+const SELL_ITEMS = { Egg: ["Egg", "Feather"], Milk: ["Milk", "Leather"], Wool: ["Wool", "Merino Wool"] };
+const LIMITED = { Obsidian: true };
+// the week key of limited sales (weeks start Monday 00:00 UTC from 2024-06-24, the game's getWeekKey)
+export function limitedWeekKey(now = Date.now()) {
+  const s = Date.UTC(2024, 5, 24), d = new Date(now); d.setUTCHours(0, 0, 0, 0);
+  return new Date(s + Math.floor((d - s) / 864e5 / 7) * 7 * 864e5).toISOString().slice(0, 10);
+}
+// what the row's product(s) in your inventory fetch now: parts [{ it, have, q, p }] and the value after the fee
+export function sellOf(name, farm, p2p, fee = 10, now = Date.now()) {
+  const inv = (farm && farm.inventory) || {}, trades = (farm && farm.trades) || {}, keep = 1 - fee / 100, wk = limitedWeekKey(now);
+  const left = (it) => Math.max(0, 1 - (((trades.weeklySales || {})[wk] || {})[it] || 0) - Object.values(trades.listings || {}).filter((l) => l && l.items && l.items[it]).length);
+  const parts = (SELL_ITEMS[name] || [name]).map((it) => { const have = parseFloat(inv[it]) || 0; return { it, have, q: LIMITED[it] ? Math.min(have, left(it)) : have, p: (p2p || {})[it] || 0 }; })
+    .filter((x) => x.have >= 1 && x.p > 0);
+  return { parts, value: parts.reduce((t, x) => t + x.q * x.p * keep, 0), keep };
+}
+const sellHtml = (r) => {
+  if (!r.sellParts.length) return "";
+  const lim = r.sellParts.some((x) => LIMITED[x.it]) ? `<small class="v-rmf-sub">${r.sellParts.some((x) => LIMITED[x.it] && x.q < 1) ? "sold this week" : "limit 1/week"}</small>` : "";
+  const q = r.sellParts.length > 1 ? `<small class="v-rmf-sub">${r.sellQty}</small>` : `<span class="v-dim">${r.sellQty}</span> `;
+  return `${q}~<b class="v-rmf-sell">${fmtFlower(r.sell)}</b>${lim}`;
+};
+export const roadmapProfit = {
+  type: "roadmap-profit",
+  title: "🌾 What to farm / mine now",
+  titleFor: (o) => (o.group && GROUP_LABEL[o.group] ? `🌾 What to farm — ${groupName(o.group)}` : "🌾 What to farm / mine now"),
+  page: "roadmap",
+  needs: (farmId) => ({ roadmap: { res: "roadmap", farm: farmId }, farm: { res: "farm", farm: farmId }, power: { res: "compute", farm: farmId, section: "power" } }),
+  optional: ["power"],
+  optionsLabel: "Rows",
+  options: [
+    { key: "group", label: "Group", kind: "select", choices: [["", "every group"], ...PROFIT_GROUPS] },
+    { key: "paying", label: "Only what pays (net > 0)", kind: "bool" },
+  ],
+  defaults: { opts: { group: "", paying: false } },
+  rowKey: (r) => `${r.group}|${r.label}`,
+  rowLabel: (r) => r.label,
+  rowClass: (r) => (r.fade ? "v-rmf-fade" : ""),
+  columns: [
+    { key: "label", label: "activity", fmt: (v, r) => `<div class="v-name">${r.iconHtml}<div><b>${esc(v)}</b>${r.badgeHtml}${r.sub ? ` <span class="v-dim">${esc(r.sub)}</span>` : ""}` +
+      (r.detail ? `<small class="v-dim">${esc(r.detail)}</small>` : "") +
+      (r.detailHtml ? `<details class="v-roi-row"><summary class="v-dim">why</summary><div class="v-power-detail">${r.detailHtml}</div></details>` : "") + `</div></div>` },
+    { key: "group", label: "group", extra: true, fmt: (v) => esc(groupName(v)) },
+    { key: "gross", label: "gives/d", align: "right", fmt: (v) => `<span class="v-rmf-gain">${fmtFlower(v)}</span>` },
+    { key: "cost", label: "costs/d", align: "right", fmt: (v) => (v > 0.001 ? `<span class="v-rmf-cost">−${fmtFlower(v)}</span>` : "0") },
+    { key: "net", label: "net/d", align: "right", fmt: (v, r) => (r.unvalued ? '<span class="v-dim">not priced</span>' : netHtml(v)) +
+      (r.soloNet != null && Math.abs(r.soloNet - v) > 0.005 ? `<small class="v-rmf-sub">solo ${sgn(r.soloNet)}</small>` : "") },
+    { key: "sell", label: "sell now", align: "right", title: "What you hold now, at p2p less the market fee (a big sale would move the price).", fmt: (v, r) => sellHtml(r) },
+  ],
+  build({ roadmap, farm, power } = {}, ctx = {}, opts = {}) {
+    const pf = roadmap && roadmap.profitability;
+    if (!pf) return { rows: [], footer: "", empty: NO_DATA };
+    const p2p = (typeof ctx.p2p === "function" && ctx.p2p()) || (power && power.p2pPrices) || {};
+    const fee = typeof ctx.marketFee === "number" ? ctx.marketFee : 10, now = ctx.now || Date.now();
+    const sold = new Set(); let sellTotal = 0;
+    const rows = [];
+    // "STEP → Gold": a mining row names the tier it feeds by its category; show that tier's label
+    const catLabel = {}; for (const g of pf.groups || []) for (const r of g.rows || []) if (r.cat) catLabel[r.cat] = r.label;
+    for (const g of pf.groups || []) {
+      const list = (g.rows || []).slice();
+      if (!g.keepOrder) list.sort((a, b) => ((a.fade ? 1 : 0) - (b.fade ? 1 : 0)) || (b.net - a.net));
+      for (const r of list) {
+        const VB = VERDICT_PILL[r.verdict];
+        const s = sellOf(r.icon, farm, p2p, fee, now);
+        for (const x of s.parts) if (!sold.has(x.it)) { sold.add(x.it); sellTotal += x.q * x.p * s.keep; }   // a crop in CROPS and CROP MACHINE counts once
+        rows.push({ ...r, group: g.id, iconHtml: icon(ctx, r.icon),
+          badgeHtml: (VB ? ` <span class="v-pill ${VB[1]}">${VB[0]}${r.verdict === "step" && r.feeds ? "→" + esc(catLabel[r.feeds] || r.feeds) : ""}</span>` : "") + (r.isPeak ? ' <span class="v-pill v-ok">★ best stop</span>' : ""),
+          detailHtml: r.cat && r.chain && typeof ctx.miningDetail === "function" ? ctx.miningDetail(r.cat, r.chain, r.eff) : "",
+          sell: s.value, sellParts: s.parts, sellQty: s.parts.map((x) => Math.floor(x.q).toLocaleString("en-US")).join(" + ") });
+      }
+    }
+    const shown = rows.filter((r) => (!opts.group || r.group === opts.group) && (!opts.paying || r.net > 0.001));
+    const paying = rows.filter((r) => r.net > 0.001).length, losing = rows.filter((r) => r.net < -0.001).length;
+    return { rows: shown, sellTotal, empty: rows.length ? "Nothing matches this filter." : "Nothing to farm on this farm yet.",
+      footer: `<div class="v-dim">${paying} pay · ${losing} lose FLOWER${sellTotal > 0 ? ` · for sale now in total ~${fmtFlower(sellTotal)} ${fl(ctx)} (each resource once)` : ""}. ` +
+        `gives = a day's production at its sale value; costs = tools, seeds, feed and sickness; net at your harvest efficiency${pf.coinsFree ? ` · coins count as free (you hold ${Number(pf.coins || 0).toLocaleString("en-US")})` : ""}.</div>` };
+  },
+};
+roadmapProfit.look = "number-list-t";
+roadmapProfit.glanceModel = (data = {}, ctx = {}, opts = {}) => {
+  const out = roadmapProfit.build(data, ctx, opts);
+  if (!out.rows.length) return { empty: out.empty };
+  const list = out.rows.filter((r) => !r.unvalued).slice().sort((a, b) => b.net - a.net), best = list[0];
+  const paying = list.filter((r) => r.net > 0.001).length;
+  return {
+    head: best ? { value: sgn(best.net), unit: "/day", tone: tone(best.net), hero: best.iconHtml, cap: `best: ${best.label}${best.verdict ? ` (${best.verdict})` : ""}` } : { value: "—", cap: "nothing priced" },
+    items: list.map((r) => ({ icon: r.iconHtml, name: r.label, sub: groupName(r.group) + (r.verdict ? ` · ${r.verdict}` : ""), value: sgn(r.net), tone: tone(r.net) })),
+    tiles: [{ label: "pay", value: paying }, { label: "lose", value: list.filter((r) => r.net < -0.001).length },
+      ...(out.sellTotal > 0 ? [{ label: "for sale", value: fmtFlower(out.sellTotal) }] : [])],
+  };
+};
