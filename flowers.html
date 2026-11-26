@@ -16414,6 +16414,59 @@
       }
     };
 
+    /*
+     * The glance lab, for checking looks (docs/superpowers/plans/2026-11-26-glance-templates.md):
+     * await _glanceLab(["crafting-box", …]) renders every look each listed widget offers with the live
+     * farm, at the 170 px reference cell and at phone width, in an overlay, and returns the problems as
+     * data: [{ type, look, size, problem }] — overflow, text under 11 px, a widget that failed.
+     */
+    window._glanceLab = async (types, { show = true } = {}) => {
+      const list = (types && types.length ? types : Object.keys(__widgets.registry)).filter((t) => __widgets.sizesOf(t)[0] === "look");
+      const old = document.getElementById("w-lab"); if (old) old.remove();
+      const box = document.createElement("div");
+      box.id = "w-lab";
+      box.style.cssText = `position:fixed;inset:0;z-index:1200;overflow:auto;background:var(--c-bg);padding:20px;${show ? "" : "left:-99999px"}`;
+      document.body.appendChild(box);
+      const out = [];
+      for (const type of list) {
+        let data;
+        try { data = (await __widgets.loadData(type, FARM_ID, __store)).data; } catch (e) { out.push({ type, look: "-", size: "-", problem: `data: ${e.message || e}` }); continue; }
+        for (const [cols, cell] of [[8, 170], [2, 165]]) {
+          const p = __widgets.lookPreview(type, { data, ctx: _wCtx(type), cols });
+          if (!p || !p.offered.length) { out.push({ type, look: "-", size: "-", problem: p ? "no looks (empty model?)" : "not a model widget" }); break; }
+          const sec = document.createElement("div");
+          sec.innerHTML = `<h3 style="font:600 15px var(--c-font);color:var(--c-text);margin:18px 0 8px">${escHTML(type)} — ${p.offered.length} looks · ${cols === 2 ? "phone" : "desktop"}</h3>`;
+          const grid = document.createElement("div");
+          grid.style.cssText = `display:grid;grid-template-columns:repeat(${cols},${cell}px);grid-auto-rows:${cell}px;gap:30px 16px;grid-auto-flow:row dense`;
+          for (const id of p.offered) {
+            const r = __widgets.lookPreview(type, { data, ctx: _wCtx(type), cols, look: id });
+            const [w, h] = r.size.split("x").map(Number);
+            const c = document.createElement("div");
+            c.className = "gcard"; c.style.cssText = `grid-column:span ${w};grid-row:span ${h};--fs:${(cell / 170) * 13}px`;
+            c.innerHTML = `<div class="gcard-h">${escHTML(type)} · ${escHTML(r.id)} ${r.size}</div>` + r.html;
+            grid.appendChild(c);
+          }
+          sec.appendChild(grid); box.appendChild(sec);
+          for (const c of grid.children) {
+            const gx = c.querySelector(".gx"), label = c.querySelector(".gcard-h").textContent.split(" · ")[1] || "";
+            const [look, size] = label.split(" ");
+            const tag = (problem) => out.push({ type, look, size, cols, problem });
+            if (!gx) { tag("no look rendered"); continue; }
+            if (/widget failed/i.test(c.textContent)) tag("failed: " + c.textContent.slice(0, 80));
+            if (gx.scrollHeight > gx.clientHeight + 2) tag(`overflow +${gx.scrollHeight - gx.clientHeight}px`);
+            if (gx.scrollWidth > gx.clientWidth + 2) tag(`overflow sideways +${gx.scrollWidth - gx.clientWidth}px`);
+            for (const e of gx.querySelectorAll("*")) {
+              if ([...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()) && parseFloat(getComputedStyle(e).fontSize) < 10.5) {
+                tag(`text ${parseFloat(getComputedStyle(e).fontSize).toFixed(1)}px: "${e.textContent.trim().slice(0, 24)}"`); break;
+              }
+            }
+          }
+        }
+      }
+      window.__labReport = out;
+      return out;
+    };
+
     // One button per board, a new one, and deleting one of your own.
     function _wBoardSwitcher(currentId, extra = "") {
       const btn = (b) => `<button class="dash-toggle-btn${b.id === currentId ? " on" : ""}" data-board="${escHTML(b.id)}" onclick="_wOpenBoard(this.dataset.board)">📌 ${escHTML(b.name)}</button>`;

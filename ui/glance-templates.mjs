@@ -124,7 +124,7 @@ export const TEMPLATES = [
   T("icons-1", "1x1", "icons", ["icons"], () => 6, (m, now) => iconsBlock(iconsOf(m), 6, iconCols(Math.min(6, iconsOf(m).length), 1, 1), now), { fill: GRID, name: "Icons" }),
   T("list-1", "1x1", "list", ["items"], () => 3, (m, now) => rowsBlock(it(m), 3, now, 1, true), { name: "List" }),
   T("lines-1", "1x1", "lines", ["items"], () => 4, (m, now) => linesBlock(it(m), 4, now), { name: "Lines" }),
-  T("tiles-1", "1x1", "tiles", ["tiles3"], () => 4, (m) => tilesBlock(tl(m), 4, 1, true), { fill: GRID, name: "Numbers" }),
+  T("tiles-1", "1x1", "tiles", ["tiles3"], () => 3, (m) => tilesBlock(tl(m), 3, 1, true), { fill: GRID, name: "Numbers" }),
   // 2×1 — the number with one more layer
   T("number-list-2", "2x1", "number-list", ["head", "items"], () => 3, (m, now) => `<div class="gx-split"><div>${headBlock(m.head, { meter: true })}</div>${rowsBlock(it(m), 3, now, 1, true)}</div>`, { name: "Number + list" }),
   T("number-tiles-2", "2x1", "number-tiles", ["head", "tiles"], () => 4, (m) => `<div class="gx-split"><div>${headBlock(m.head, { meter: true })}</div>${tilesBlock(tl(m), 4, 2)}</div>`, { fill: GRID, name: "Number + tiles" }),
