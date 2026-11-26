@@ -112,7 +112,7 @@ function auctionSchedule(farm, chapterItems, opts, now) {
     const ci = byName[it.name];
     let perDay = ci && ci.perDay != null ? ci.perDay : (bpd[it.name] != null ? bpd[it.name] : null);
     let basis = ci && ci.perDay != null ? ci.basis : (bpd[it.name] != null ? "hodnota boostu jako v POWER" : (ci ? ci.basis : ""));
-    if (it.kind === "nft") { perDay = null; basis = "náhodný pet — nelze ocenit"; }
+    if (it.kind === "nft") { perDay = null; basis = "a random pet — cannot be valued"; }
     // Won to resell: today's floor after the market fee — the most a round is worth bidding even
     // when the farm already has one (or gains nothing from it).
     const f = (opts.floors || {})[it.name] || {};
@@ -626,18 +626,18 @@ function auctionItemValues(farm, prices, opts) {
     const sc = calcSkillPointCost(farm.bumpkin, prices.marketValue || {}, farm);
     if (sc && sc.bestRecipe && sc.bestRecipe.boostedXP > 0) sflPerXP = sc.bestRecipe.cost / sc.bestRecipe.boostedXP;
   } catch { sflPerXP = 0; }
-  const needAct = "potřebuje historii farmy (jen sledované farmy)";
+  const needAct = "needs the farm history (tracked farms only)";
   // Cave Dwellers' auctioneer (collections.ts). Production boosts are valued in POWER (their
   // marginal arrives as opts.boostPerDay in the schedule); Giant Truffle by the XP side model below.
-  const inPower = "v ROADMAP/POWER";
+  const inPower = "in ROADMAP/POWER";
   const items = [
-    { name: "Giant Truffle", kind: "collectible", what: "+30 % XP z jídla (mimo ryby), +60 % ze Smoothie Shack a Deli", perDay: null, basis: needAct },
-    { name: "Firefly Aura", kind: "wearable", what: "Lava Pit o 20 % rychleji, 5 % hned hotová", perDay: null, basis: inPower },
-    { name: "Antique Dress", kind: "wearable", what: "hrozny o 30 % rychleji, 10 % šance +10 hroznů", perDay: null, basis: inPower },
-    { name: "Harpoon", kind: "wearable", what: "20 % šance, že nahození nespotřebuje denní pokus", perDay: null, basis: inPower },
-    { name: "Stick House", kind: "collectible", what: "expanze −25 % Oil a o 10 % rychleji (ne s Grinx's Hammer)", perDay: 0, basis: "jednorázově u expanzí" },
-    { name: "Brick House", kind: "collectible", what: "expanze −25 % Crimstone a −5 % coinů (ne s Grinx's Hammer)", perDay: 0, basis: "jednorázově u expanzí" },
-    { name: "Hercules Beetle Hat", kind: "wearable", what: "expanze −25 % Obsidian (ne s Grinx's Hammer)", perDay: 0, basis: "jednorázově u expanzí" },
+    { name: "Giant Truffle", kind: "collectible", what: "+30 % XP from food (not fish), +60 % from Smoothie Shack and Deli", perDay: null, basis: needAct },
+    { name: "Firefly Aura", kind: "wearable", what: "Lava Pit 20 % faster, 5 % done at once", perDay: null, basis: inPower },
+    { name: "Antique Dress", kind: "wearable", what: "grapes 30 % faster, 10 % chance of +10 grapes", perDay: null, basis: inPower },
+    { name: "Harpoon", kind: "wearable", what: "20 % chance a cast does not use a daily reel", perDay: null, basis: inPower },
+    { name: "Stick House", kind: "collectible", what: "expansions −25 % Oil and 10 % faster (not with Grinx's Hammer)", perDay: 0, basis: "once, on expansions" },
+    { name: "Brick House", kind: "collectible", what: "expansions −25 % Crimstone and −5 % coins (not with Grinx's Hammer)", perDay: 0, basis: "once, on expansions" },
+    { name: "Hercules Beetle Hat", kind: "wearable", what: "expansions −25 % Obsidian (not with Grinx's Hammer)", perDay: 0, basis: "once, on expansions" },
     { name: "Piggy Bank", kind: "collectible", what: "dekorace", perDay: 0, basis: "" },
     { name: "Big Bad Wolf", kind: "collectible", what: "dekorace", perDay: 0, basis: "" },
   ];
@@ -654,10 +654,10 @@ function auctionItemValues(farm, prices, opts) {
   for (const it of items) {
     if (!SIDE_MODELS[it.name]) continue;
     const needsAct = SIDE_MODELS[it.name].cat !== "salt";
-    if (needsAct && !act) continue;                         // keeps its "potřebuje historii" note
+    if (needsAct && !act) continue;                         // keeps its "needs the farm history" note
     let r = null;
     try { r = sideValue(it.name, sideCtx, null); } catch { r = null; }
-    if (r && isFinite(r.perDay)) { it.perDay = r.perDay; it.basis = (it.basis ? it.basis + " · " : "") + "stejný výpočet jako POWER / ROADMAP"; }
+    if (r && isFinite(r.perDay)) { it.perDay = r.perDay; it.basis = (it.basis ? it.basis + " · " : "") + "the same calculation as POWER / ROADMAP"; }
   }
   // A production boost takes POWER's marginal for it (opts.boostPerDay), the number POWER shows.
   const bpd = opts.boostPerDay || {};
@@ -687,26 +687,26 @@ function shopItemValues(farm, prices, opts) {
     const net = cats.reduce((s, c) => s + Math.max(0, catNet[c] || 0), 0);
     return { name, kind: "consumable", what: `${what}, ${hours} h`, tickets: name === "Ore Hourglass" ? 400 : 200,
       perUse: cats.length && Object.keys(catNet).length ? net * (hours / 24) * (1 / mult - 1) : null,
-      basis: Object.keys(catNet).length ? `čisté ${cats.join("+")} ${net.toFixed(1)}/den, když celé okno sázíš/těžíš` : "bez výpočtu POWER" };
+      basis: Object.keys(catNet).length ? `net ${cats.join("+")} ${net.toFixed(1)}/day, planting/mining the whole window` : "no POWER calculation" };
   };
   const items = [
-    hourglass("Harvest Hourglass", 6, 0.75, ["crops", "greenhouse"], "plodiny a skleník rostou o 25 % rychleji"),
-    hourglass("Timber Hourglass", 4, 0.75, ["trees"], "stromy o 25 % rychleji"),
-    hourglass("Ore Hourglass", 3, 0.5, ["stone", "iron", "gold"], "kámen, železo, zlato 2× rychleji"),
-    hourglass("Orchard Hourglass", 6, 0.75, ["fruits"], "ovoce o 25 % rychleji"),
-    hourglass("Blossom Hourglass", 4, 0.75, ["flowers"], "květiny o 25 % rychleji"),
-    { name: "Gourmet Hourglass", kind: "consumable", what: "vaření 2× rychleji, 4 h", tickets: 100, perUse: null, basis: "vaření tracker neoceňuje" },
-    { name: "Fisher's Hourglass", kind: "consumable", what: "50 % šance +1 ryba, 4 h", tickets: 200, perUse: null, basis: "rybaření tracker neoceňuje" },
+    hourglass("Harvest Hourglass", 6, 0.75, ["crops", "greenhouse"], "crops and greenhouse grow 25 % faster"),
+    hourglass("Timber Hourglass", 4, 0.75, ["trees"], "trees 25 % faster"),
+    hourglass("Ore Hourglass", 3, 0.5, ["stone", "iron", "gold"], "stone, iron, gold 2× faster"),
+    hourglass("Orchard Hourglass", 6, 0.75, ["fruits"], "fruits 25 % faster"),
+    hourglass("Blossom Hourglass", 4, 0.75, ["flowers"], "flowers 25 % faster"),
+    { name: "Gourmet Hourglass", kind: "consumable", what: "cooking 2× faster, 4 h", tickets: 100, perUse: null, basis: "the tracker does not value cooking" },
+    { name: "Fisher's Hourglass", kind: "consumable", what: "50 % chance of +1 fish, 4 h", tickets: 200, perUse: null, basis: "the tracker does not value fishing" },
     // Cave Dwellers megastore (megastore.ts)
-    { name: "Duende Hat", kind: "wearable", what: "plodiny na polích a ovoce rostou o 10 % rychleji", tickets: 9000,
+    { name: "Duende Hat", kind: "wearable", what: "plot crops and fruits grow 10 % faster", tickets: 9000,
       perDay: Object.keys(catNet).length ? (Math.max(0, catNet.crops || 0) + Math.max(0, catNet.fruits || 0)) * (1 / 0.9 - 1) : null,
-      basis: Object.keys(catNet).length ? `čisté crops+fruits ${(Math.max(0, catNet.crops || 0) + Math.max(0, catNet.fruits || 0)).toFixed(1)}/den × 11 %` : "bez výpočtu POWER" },
-    { name: "Straw House", kind: "collectible", what: "kompostér o 10 % rychleji, 3× základní kompost a červi", tickets: 9000, perDay: null, basis: "compost tracker oceňuje jen u skillů" },
-    { name: "Duende Monument", kind: "collectible", what: "expanze −10 % surovin (ne s Grinx's Hammer) a o 10 % rychleji (s 1000 fandy vesnice)", tickets: 4000, perDay: 0, basis: "žádný denní výnos" },
-    { name: "Pot of Luck", kind: "collectible", what: "1/3 šance na poklad navíc v poušti", tickets: null, price: "250 Clover Coin", perDay: null, basis: "kopání tracker neoceňuje" },
-    { name: "Duende Shoes", kind: "wearable", what: "+1 Duende Cap za chore, dodávku i bounty", tickets: null, price: "5,000 coins", perDay: null, basis: "viz bonusy ticketů" },
-    { name: "Duende Pants", kind: "wearable", what: "+1 Duende Cap za chore, dodávku i bounty", tickets: null, price: "10 FLOWER", perDay: null, basis: "viz bonusy ticketů" },
-    { name: "Duende Shirt", kind: "wearable", what: "+1 Duende Cap za chore, dodávku i bounty", tickets: null, price: "50 FLOWER", perDay: null, basis: "viz bonusy ticketů" },
+      basis: Object.keys(catNet).length ? `net crops+fruits ${(Math.max(0, catNet.crops || 0) + Math.max(0, catNet.fruits || 0)).toFixed(1)}/day × 11 %` : "no POWER calculation" },
+    { name: "Straw House", kind: "collectible", what: "composters 10 % faster, 3× base compost and worms", tickets: 9000, perDay: null, basis: "the tracker values compost only for skills" },
+    { name: "Duende Monument", kind: "collectible", what: "expansions −10 % resources (not with Grinx's Hammer) and 10 % faster (with 1000 village fans)", tickets: 4000, perDay: 0, basis: "no daily yield" },
+    { name: "Pot of Luck", kind: "collectible", what: "1/3 chance of an extra desert treasure", tickets: null, price: "250 Clover Coin", perDay: null, basis: "the tracker does not value digging" },
+    { name: "Duende Shoes", kind: "wearable", what: "+1 Duende Cap per chore, delivery and bounty", tickets: null, price: "5,000 coins", perDay: null, basis: "see the ticket bonuses" },
+    { name: "Duende Pants", kind: "wearable", what: "+1 Duende Cap per chore, delivery and bounty", tickets: null, price: "10 FLOWER", perDay: null, basis: "see the ticket bonuses" },
+    { name: "Duende Shirt", kind: "wearable", what: "+1 Duende Cap per chore, delivery and bounty", tickets: null, price: "50 FLOWER", perDay: null, basis: "see the ticket bonuses" },
   ];
   // An hourglass burns out, so having some is no reason not to buy more: count them instead.
   return items.map((it) => ({ ...it, source: "shop",

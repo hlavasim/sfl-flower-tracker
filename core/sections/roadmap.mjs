@@ -269,7 +269,7 @@ function buildProfitability(settings) {
     if (oilRow && oilCost > 0) Object.assign(oilRow, { gross: 0, cost: oilCost, net: -oilCost, soloNet: undefined, verdict: "input" });
     const lavaCost = roadmapInputCost("obsidian", settings);
     if (lavaCost > 0) gOther.rows.push({ label: "Lava pit", icon: "Obsidian", gross: 0, cost: lavaCost, net: -lavaCost,
-      sub: "obsidian pro expanze a nody · neprodává se" });
+      sub: "obsidian for expansions and nodes · not sold" });
   }
   for (const [cat, icon] of [["chickens", "Egg"], ["cows", "Milk"], ["sheep", "Wool"]]) {
     if (getCapacityCount(cat, cap) <= 0 || _excl(cat)) continue;
