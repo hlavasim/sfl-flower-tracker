@@ -5584,7 +5584,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.57</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.58</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5611,6 +5611,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.58", items: [
+          { t: "feat", text: "BUMPKIN: new switch <b>🎣 ryby jen za reely</b> next to SORT. With it on, every fish in a recipe costs one plain cast (rod + the cheapest Earthworm / Grub / Red Wiggler it bites on) divided by the fish a cast yields from your skills and NFTs. Odds of a named fish, chum and Fish Market baits are ignored, so you see what cooking costs if you just cook whatever you catch. Aged Hammerhead: 0.46 → 0.29 SFL/cook." },
+        ] },
         { ver: "v6.57", items: [
           { t: "fix", text: "LEVELING, TICKETY and FISHING load about 15 s faster: reading your recorded weeks took 12-21 s (and sometimes failed); it now takes 0.3 s with exactly the same data." },
         ] },
@@ -7176,6 +7179,13 @@
       if (cachedFarmData) renderBumpkin(cachedFarmData);
     }
 
+    // "Ryby jen za reely": price every fish as one plain cast (rod + worm) / fish per cast.
+    function toggleFishReels() {
+      const on = localStorage.getItem("sfl_fish_reels") === "1";
+      localStorage.setItem("sfl_fish_reels", on ? "0" : "1");
+      if (cachedFarmData) renderBumpkin(cachedFarmData);
+    }
+
     function togglePetStreak() {
       const on = localStorage.getItem("sfl_pet_streak") === "1";
       localStorage.setItem("sfl_pet_streak", on ? "0" : "1");
@@ -7196,7 +7206,8 @@
     function _bumpkinCookingQuery() {
       const petSim = (localStorage.getItem("sfl_pet_streak") === "1") ? "1" : "0";
       const recipes = encodeURIComponent(JSON.stringify(getSavedBumpkinRecipes()));
-      return `farm=${FARM_ID}&section=cooking&petSimulate=${petSim}&recipes=${recipes}&explain=1`;
+      const fishReels = (localStorage.getItem("sfl_fish_reels") === "1") ? "1" : "0";
+      return `farm=${FARM_ID}&section=cooking&petSimulate=${petSim}&recipes=${recipes}&fishReels=${fishReels}&explain=1`;
     }
 
     async function _fetchBumpkinCooking(key) {
@@ -11318,12 +11329,17 @@
         </div>`;
       } else {
         // Sort toggle
+        const fishReelsOn = localStorage.getItem("sfl_fish_reels") === "1";
         const sortBtn = (mode, label) => `<button class="bumpkin-sort-btn ${sortMode === mode ? "active" : ""}" onclick="setBumpkinSort('${mode}')">${label}</button>`;
         html += `<div class="bumpkin-sort-row pixel-font">
           <span style="font-size:0.5625rem;color:var(--text-dim);margin-right:6px">SORT:</span>
           ${sortBtn("xpPerHour", "XP/hour")}
           ${sortBtn("xpPerSfl", "XP per SFL")}
           ${sortBtn("sflPerCook", "SFL/cook")}
+          <label style="margin-left:12px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:0.5625rem;color:${fishReelsOn ? "var(--green)" : "var(--text-dim)"}" title="Ryba = (prut + Earthworm / Grub / Red Wiggler) ÷ průměr ryb na nahození podle skillů a NFT. Bez šance na konkrétní rybu, bez chumu a Fish Market návnad — kolik to stojí, když vaříš z toho, co prostě chytíš.">
+            <input type="checkbox" ${fishReelsOn ? "checked" : ""} onchange="toggleFishReels()" style="cursor:pointer;accent-color:var(--green)">
+            🎣 ryby jen za reely
+          </label>
         </div>`;
         html += `<div class="bumpkin-buildings-grid">`;
 
@@ -11398,9 +11414,11 @@
           let fishBreakdownHTML = "";
           if (selected && recipeCost) {
             for (const it of recipeCost.items) {
-              if (it.source !== "fish" && it.source !== "fish-bait") continue;
+              if (it.source !== "fish" && it.source !== "fish-bait" && it.source !== "fish-reel") continue;
               let path = "";
-              if (it.source === "fish-bait" && it.via) {
+              if (it.source === "fish-reel") {
+                path = `just reels: rod + <b>${escHTML(it.via || "worm")}</b>, whatever bites`;
+              } else if (it.source === "fish-bait" && it.via) {
                 path = `forced with <b>${escHTML(it.via)}</b> (1 cast, no luck)`;
               } else if (it.fc) {
                 const fd = it.fc.fd;
@@ -30981,7 +30999,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
     const prefSyncKeys = ["sfl_rm_picks", "sfl_roadmap_settings", "sfl_power_products", "sfl_ascension_settings",
       "sfl_tracked_dolls", "sfl_restock_settings", "sfl_gift_plan", "sfl_roi_multicat_assignment", "sfl_sleep_schedule",
       "sfl_marks_budget", "sfl_bumpkin_target", "sfl_bumpkin_recipes", "sfl_nodes_roi_cap", "sfl_coin_mode",
-      "sfl_sales_sell_type", "sfl_sales_sell_min", "sfl_pet_streak", "sfl_wl_eff", "sfl_flower_mode", "sfl_flower_n", "sfl_sats_gran",
+      "sfl_sales_sell_type", "sfl_sales_sell_min", "sfl_pet_streak", "sfl_fish_reels", "sfl_wl_eff", "sfl_flower_mode", "sfl_flower_n", "sfl_sats_gran",
       "sfl_repay_daily_flower", "sfl_tk_goal", "sfl_dash_voice", "sfl_leveling", "sfl_boards"];
     /*
      * A deleted key is kept on the server as this marker (a tombstone), so a device that still has

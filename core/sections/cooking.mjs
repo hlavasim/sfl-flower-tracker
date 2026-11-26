@@ -5,7 +5,8 @@ import { computeRecipeCost, computeSaltYieldPerRake, computeSaltRakeCoinMult, co
 
 const rnd = (x) => (x == null || !isFinite(x)) ? null : Math.round(x * 1000) / 1000;
 
-// settings = { savedRecipes?: object, petSimulate?: boolean, coinsPerSFL?: number, now?: ms }
+// settings = { savedRecipes?: object, petSimulate?: boolean, coinsPerSFL?: number, now?: ms,
+//              fishReelsOnly?: boolean — every fish priced as one plain cast / fish per cast }
 // prices = p2p price map (sfl.world/api/v1/prices .data.p2p), or {} if unavailable —
 // recipe costs come back null (unpriced) rather than throwing.
 export function buildCookingSection(farm, prices = {}, settings = {}) {
@@ -30,6 +31,7 @@ export function buildCookingSection(farm, prices = {}, settings = {}) {
     // A water trap is consumed per catch, so it is charged per crustacean — unless a Royal Crab
     // Pot is PLACED, which is the one thing that stops placeWaterTrap decrementing the pot.
     freeWaterTraps: findCollectible(farm, "Royal Crab Pot").length > 0,
+    fishReelsOnly: !!settings.fishReelsOnly,
   };
   const buildings = {};
   const cookingTrace = {};   // per-building xp/day derivation, only filled when settings.explain
@@ -120,6 +122,7 @@ export function buildCookingSection(farm, prices = {}, settings = {}) {
     // page's boost lists (flowers.html:10707-10717) and xpLabel() building/honey tags.
     boosts: { xpBoosts: boosts.xpBoosts || [], timeBoosts: boosts.timeBoosts || [], amountBoosts: boosts.amountBoosts || [], petStreakInfo: pi },
     bankedFood: { totalXp: banked.totalXp, items: banked.items },
+    fishReelsOnly: !!settings.fishReelsOnly,
     ...(settings.explain ? { cookingTrace, costTrace } : {}),
   };
 }

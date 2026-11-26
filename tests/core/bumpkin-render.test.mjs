@@ -108,3 +108,13 @@ test("the BUMPKIN page renders a below-200 farm with priced cooking without thro
   assert.ok(!/undefined|NaN/.test(html.replace(/undefined-/g, "")),
     "no undefined/NaN leaked into the rendered page");
 });
+
+test("BUMPKIN: the 'fish only by reels' switch is stored, synced, sent to section=cooking and read by compute", () => {
+  const SRC2 = readFileSync(new URL("../../flowers.html", import.meta.url), "utf8");
+  const API = readFileSync(new URL("../../api/compute.mjs", import.meta.url), "utf8");
+  assert.match(SRC2, /onchange="toggleFishReels\(\)"/);
+  assert.match(SRC2, /localStorage\.setItem\("sfl_fish_reels"/);
+  assert.match(SRC2, /&fishReels=\$\{fishReels\}/);
+  assert.match(SRC2, /const prefSyncKeys = \[[^\]]*"sfl_fish_reels"/s);
+  assert.match(API, /fishReelsOnly: req\.query\.fishReels === "1"/);
+});
