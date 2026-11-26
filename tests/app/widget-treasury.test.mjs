@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
+import { looksFor, renderLook } from "../../ui/glance-templates.mjs";
 import { treasuryValue } from "../../widgets/treasury-value.mjs";
 import { WIDGETS } from "../../widgets/registry.mjs";
 import { createStore } from "../../app/store.mjs";
@@ -52,11 +53,17 @@ test("store: treasury asks section=treasury with the page's coin mode and pet pr
   } finally { globalThis.localStorage = prev; }
 });
 
-test("📱 glance: S = the total compact with USD and BTC; M adds a stacked bar of the categories, biggest first", () => {
-  const s = treasuryValue.glance({ treasury: T }, { catColors: COLORS }, {}, "s").html;
-  assert.match(s, /^<div class="g-big">[\d.]+[kM]?<small> 🌸<\/small><\/div><div class="g-cap">\$[\d,.]+ · [\d.]+ BTC<\/div>$/);
-  const m = treasuryValue.glance({ treasury: T }, { catColors: COLORS }, {}, "m").html;
-  assert.match(m, /<div class="g-stack"><i style="width:[\d.]+%;background:#/);
-  assert.match(m, /class="g-legend"/);
-  assert.deepStrictEqual(treasuryValue.glance({}, {}, {}, "s"), { empty: "The Treasury valuation did not load." });
+test("📱 glance model: the total with USD and BTC; each category's share, biggest first; incomplete prices flagged", () => {
+  const m = treasuryValue.glanceModel({ treasury: T });
+  assert.strictEqual(treasuryValue.look, "number");
+  assert.deepStrictEqual(m.head, { value: "1k", unit: " 🌸", cap: "$500.00 · 0.00500000 BTC", hero: "💰" });
+  assert.deepStrictEqual(m.items.map((i) => [i.name, i.value]), [["Resources", "50 %"], ["Collectibles", "25 %"], ["Wearables", "15 %"], ["Liquid", "10 %"]]);
+  assert.deepStrictEqual(m.items[0], { icon: "⛏️", name: "Resources", sub: "500 🌸", value: "50 %", pct: 50 });
+  assert.deepStrictEqual(m.tiles.map((t) => t.label), ["SFL", "USD", "BTC", "1 SFL"]);
+  assert.strictEqual(m.foot, undefined);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num">1k<small> 🌸<\/small><\/div><div class="gx-cap">\$500\.00 · 0\.00500000 BTC<\/div>/);
+  assert.ok(looksFor(m).length >= 3);
+  assert.strictEqual(treasuryValue.glanceModel({ treasury: { ...T, pricesOk: false } }).foot, "⚠ incomplete valuation");
+  assert.deepStrictEqual(treasuryValue.glanceModel({}), { empty: "The Treasury valuation did not load." });
+  assert.strictEqual(treasuryValue.glance, undefined, "the hand-written face is gone");
 });

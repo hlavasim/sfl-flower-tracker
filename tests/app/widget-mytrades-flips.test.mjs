@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
+import { looksFor, renderLook } from "../../ui/glance-templates.mjs";
 import { readFileSync } from "node:fs";
 import { myTradesSummary, myTradesItems, myTradesRecent } from "../../widgets/my-trades.mjs";
 import { flipTable, flipSummary } from "../../widgets/flip-table.mjs";
@@ -102,37 +103,59 @@ test("page wiring: FLIPS and MY TRADES render widgets, no Czech left", () => {
   assert.doesNotMatch(SRC, /POSLEDNÍ OBCHODY|boostovaných NFT|Marketplace API omezeno/);
 });
 
-test("📱 glance: trade totals S = cash net + sold-share bar; M = bought / sold beside it; no trades → empty", () => {
-  const s = myTradesSummary.glance({ trades: MT }, ctx, {}, "s").html;
-  assert.match(s, /<div class="g-big g-ok">\+301<small> SFL<\/small><\/div><div class="g-cap">cash net · 5 trades<\/div><div class="g-meter"><i class="g-ok" style="width:55%">/);
-  const m = myTradesSummary.glance({ trades: MT }, ctx, {}, "m").html;
-  assert.match(m, /^<div class="g-split">.*Bought<div>3×<\/div><\/div><span class="g-v g-bad">1\.5k<.*Sold<div>2×<\/div><\/div><span class="g-v g-ok">1\.8k</);
-  assert.match(myTradesSummary.glance({ trades: null }, ctx, {}, "s").empty, /unavailable/);
-  assert.strictEqual(myTradesSummary.glance({ trades: { totals: { tradeCount: 0 } } }, ctx, {}, "s").empty, "No trades yet.");
+test("📱 glance model, trade totals: the cash net with the sold share as a meter; sold / bought / trades; no trades → empty", () => {
+  const m = myTradesSummary.glanceModel({ trades: MT }, ctx);
+  assert.strictEqual(myTradesSummary.look, "number");
+  assert.deepStrictEqual([m.head.value, m.head.unit, m.head.tone, m.head.cap, Math.round(m.head.meter)], ["+301", " SFL", "ok", "cash net · 5 trades", 55]);
+  assert.strictEqual(m.items.length, 3);
+  assert.deepStrictEqual({ ...m.items[1], pct: Math.round(m.items[1].pct) }, { icon: "💸", name: "Bought", sub: "3×", value: "1.5k", tone: "bad", pct: 45 });
+  assert.match(renderLook(m, "number").html, /<div class="gx-num g-ok">\+301<small> SFL<\/small><\/div><div class="gx-cap">cash net · 5 trades<\/div><div class="gx-meter"><i class="g-ok" style="width:55%">/);
+  assert.ok(looksFor(m).length >= 3);
+  assert.match(myTradesSummary.glanceModel({ trades: null }, ctx).empty, /unavailable/);
+  assert.deepStrictEqual(myTradesSummary.glanceModel({ trades: { totals: { tradeCount: 0 } } }, ctx), { empty: "No trades yet." });
+  assert.strictEqual(myTradesSummary.glance, undefined, "the hand-written face is gone");
 });
 
-test("📱 glance: per item S = realized P&L; M = biggest cash movers; recent S = the latest trade, M = the latest rows", () => {
-  assert.match(myTradesItems.glance({ trades: MT }, ctx, {}, "s").html, /<div class="g-big g-ok">\+300<small> SFL<\/small><\/div><div class="g-cap">realized on 1 of 2 items<\/div>/);
-  const m = myTradesItems.glance({ trades: MT }, ctx, {}, "m").html;
-  assert.match(m, /Bad &lt;Hat&gt;<div>0 bought · 1 sold<\/div><\/div><span class="g-v g-ok">\+1\.0k<.*Gnome<div>2 bought · 1 sold<\/div><\/div><span class="g-v g-bad">-200</);
-  assert.match(myTradesItems.glance({ trades: MT }, ctx, {}, "l").html, /^<div class="g-big g-ok">\+300.*g-rows/);
-  assert.strictEqual(myTradesItems.glance({ trades: { ...MT, items: [] } }, ctx, {}, "s").empty, "No trades yet.");
-  const rs = myTradesRecent.glance({ trades: MT }, ctx, {}, "s").html;
-  assert.match(rs, /<div class="g-hero"><img data-i="Gnome"><\/div><div class="g-big g-ok">\+800<small> SFL<\/small><\/div><div class="g-cap">sold Gnome · 30\/08\/2026<\/div>/);
-  assert.match(myTradesRecent.glance({ trades: MT }, ctx, {}, "m").html, /sold · 30\/08\/2026.*g-ok">\+800<.*bought · 20\/08\/2026.*g-bad">−1\.0k</);
-  assert.match(myTradesRecent.glance({ trades: null }, ctx, {}, "s").empty, /unavailable/);
+test("📱 glance model, per item: realized P&L, the biggest cash movers; recent: the latest trade and the running cash net as a series", () => {
+  const m = myTradesItems.glanceModel({ trades: MT }, ctx);
+  assert.strictEqual(myTradesItems.look, "number-list-2");
+  assert.deepStrictEqual(m.head, { value: "+300", unit: " SFL", tone: "ok", cap: "realized on 1 of 2 items" });
+  assert.deepStrictEqual(m.items.map((i) => [i.name, i.value, i.tone]), [["Bad <Hat>", "+1.0k", "ok"], ["Gnome", "-200", "bad"]]);
+  assert.match(renderLook(m, "number-list-2").html, /Bad &lt;Hat&gt;<div class="gx-sub-tag g-ok">\+1\.0k<\/div>/, "escaped");
+  assert.ok(looksFor(m).length >= 3);
+  assert.deepStrictEqual(myTradesItems.glanceModel({ trades: { ...MT, items: [] } }, ctx), { empty: "No trades yet." });
+  const r = myTradesRecent.glanceModel({ trades: MT }, ctx);
+  assert.strictEqual(myTradesRecent.look, "list-2");
+  assert.deepStrictEqual([r.head.value, r.head.tone, r.head.cap], ["+800", "ok", "sold Gnome · 30/08/2026"]);
+  assert.deepStrictEqual(r.items.map((i) => [i.sub, i.value, i.tone]), [["sold · 30/08/2026", "+800", "ok"], ["bought · 20/08/2026", "−1.0k", "bad"]]);
+  assert.deepStrictEqual(r.series, [-1000, -200], "the running cash net, oldest first");
+  assert.ok(looksFor(r).includes("chart-2"));
+  assert.match(myTradesRecent.glanceModel({ trades: null }, ctx).empty, /unavailable/);
+  assert.strictEqual(myTradesItems.glance, undefined);
+  assert.strictEqual(myTradesRecent.glance, undefined);
 });
 
-test("📱 glance: flips S = the top flip by score; M = best flips; overview S = healthy margins, M = the best one", () => {
-  const s = flipTable.glance({ flips: FLIPS }, ctx, {}, "s").html;
-  assert.match(s, /<div class="g-hero"><img data-i="Gnome"><\/div><div class="g-big g-ok">26%<\/div><div class="g-cap">Gnome · net 26<\/div>/);
-  const m = flipTable.glance({ flips: FLIPS }, ctx, {}, "m").html;
-  assert.match(m, /Gnome<div>100→140 · net 26<\/div><\/div><span class="g-v g-ok">26%<.*Hat<div>10→11 · net -0\.55<\/div><\/div><span class="g-v g-bad">-5%</);
+test("📱 glance model, flips: the top flip by score, the flips with their margin bar; overview: healthy margins as a ring", () => {
+  const m = flipTable.glanceModel({ flips: FLIPS }, ctx);
+  assert.strictEqual(flipTable.look, "list-2");
+  assert.deepStrictEqual(m.head, { value: "26%", tone: "ok", cap: "Gnome · net 26", hero: '<img data-i="Gnome">' });
+  assert.strictEqual(m.items.length, 2);
+  assert.deepStrictEqual({ ...m.items[1] }, { icon: '<img data-i="Hat">', name: "Hat", sub: "net -0.55", value: "-5%", tone: "bad", pct: 0 });
+  assert.deepStrictEqual(m.tiles.map((t) => [t.label, t.value]), [["NFTs", 2], ["≥ 15 %", 1], ["net ≤ 0", 1], ["best", "26%"]]);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num g-ok">26%<\/div><div class="gx-cap">Gnome · net 26<\/div>/);
+  assert.ok(looksFor(m).length >= 3);
+  // a troll listing's billions of % are capped, not printed
+  const troll = { count: 1, items: [{ ...FLIPS.items[0], margin: 3.6e13, net: 9e10, score: 1e9 }] };
+  assert.deepStrictEqual([flipTable.glanceModel({ flips: troll }, ctx).head.value, flipTable.glanceModel({ flips: troll }, ctx).items[0].sub], ["999%+", "net 1M+"]);
   const old = { ...FLIPS, items: FLIPS.items.map((i) => ({ ...i, updatedAt: "2026-09-01T00:00:00Z" })) };
-  assert.match(flipTable.glance({ flips: old }, ctx, {}, "s").html, /⏸ paused/);
-  assert.match(flipTable.glance({ flips: old }, ctx, {}, "l").html, /g-foot">⏸ collection paused/);
-  assert.strictEqual(flipTable.glance({ flips: { count: 0, items: [] } }, ctx, {}, "s").empty, "No NFTs with both a bid and an ask.");
-  assert.match(flipSummary.glance({ flips: FLIPS }, ctx, {}, "s").html, /<div class="g-big g-ok">1<small>\/2<\/small><\/div><div class="g-cap">margin ≥ 15 %<\/div>/);
-  assert.match(flipSummary.glance({ flips: FLIPS }, ctx, {}, "m").html, /^<div class="g-split">.*Gnome<div>best margin<\/div>.*Net ≤ 0<\/div><span class="g-v g-bad">1</);
-  assert.match(flipSummary.glance({ flips: null }, ctx, {}, "s").empty, /did not load/);
+  const o = flipTable.glanceModel({ flips: old }, ctx);
+  assert.deepStrictEqual([o.head.cap, o.foot], ["Gnome · ⏸ paused", "⏸ paused, data frozen"]);
+  assert.deepStrictEqual(flipTable.glanceModel({ flips: { count: 0, items: [] } }, ctx), { empty: "No NFTs with both a bid and an ask." });
+  const s = flipSummary.glanceModel({ flips: FLIPS }, ctx);
+  assert.strictEqual(flipSummary.look, "gauge");
+  assert.deepStrictEqual(s.head, { value: 1, unit: "/2", tone: "ok", cap: "margin ≥ 15 %", ring: 50, ringTone: "ok" });
+  assert.match(renderLook(s, "gauge").html, /<div class="gx-gauge"><svg class="gx-ring g-ok"/);
+  assert.match(flipSummary.glanceModel({ flips: null }, ctx).empty, /did not load/);
+  assert.strictEqual(flipTable.glance, undefined);
+  assert.strictEqual(flipSummary.glance, undefined);
 });

@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
+import { looksFor, renderLook } from "../../ui/glance-templates.mjs";
 import { readFileSync } from "node:fs";
 import { budsTable, budsQuery } from "../../widgets/buds.mjs";
 import { petsSummary, petsNftCollection, petsMarket, petCards, petFetches, petProgress, NFT_BREED_TYPES } from "../../widgets/pets.mjs";
@@ -137,51 +138,62 @@ test("🐶 pets one by one: the best fetch, FLOWER/day, XP bar, next perk and th
   assert.match(petCards.titleFor({ which: "nft" }), /NFT/);
 });
 
-test("📱 glance: pets earnings S = daily income; M = top pets beside it; no pets → empty", () => {
+test("📱 glance model, pets earnings: the daily income, the pets by FLOWER a day; no pets → empty", () => {
   const total = PETS.pets.reduce((s, p) => s + (p.calc.dailySfl > 0 ? p.calc.dailySfl : 0), 0);
-  const s = petsSummary.glance({ pets: PETS }, CTX, {}, "s").html;
-  assert.match(s, new RegExp(`<div class="g-big">${total.toFixed(2)}<small> 🌸/day</small></div><div class="g-cap">${PETS.pets.length} pets · `));
   const top = PETS.pets.slice().sort((a, b) => (b.calc.dailySfl || 0) - (a.calc.dailySfl || 0))[0];
-  const m = petsSummary.glance({ pets: PETS }, CTX, {}, "m").html;
-  assert.match(m, /^<div class="g-split">/);
-  assert.match(m, new RegExp(`<div class="g-rows"><div class="g-row"><span class="g-ic"><img data-i="[^"]+"></span><div class="g-n">${top.name}<div>Lv ${top.level} · `));
-  assert.strictEqual((petsSummary.glance({ pets: PETS }, CTX, {}, "l").html.match(/class="g-row"/g) || []).length, Math.min(6, PETS.pets.length));
-  assert.match(petsSummary.glance({ pets: { ...PETS, pets: [] } }, CTX, {}, "s").empty, /No pets found/);
-  assert.match(petsSummary.glance({}, CTX, {}, "s").empty, /No pet data/);
+  const m = petsSummary.glanceModel({ pets: PETS }, CTX);
+  assert.strictEqual(petsSummary.look, "number");
+  assert.deepStrictEqual([m.head.value, m.head.unit], [total.toFixed(2), " 🌸/day"]);
+  assert.match(m.head.cap, new RegExp(`^${PETS.pets.length} pets · `));
+  assert.strictEqual(m.items.length, PETS.pets.length);
+  assert.deepStrictEqual([m.items[0].name, m.items[0].tone, m.items[0].pct], [top.name, "ok", 100]);
+  assert.match(m.items[0].icon, /^<img data-i="[^"]+">$/);
+  assert.match(renderLook(m, "number").html, new RegExp(`<div class="gx-num">${total.toFixed(2)}<small> 🌸/day</small></div>`));
+  assert.ok(looksFor(m).length >= 3);
+  assert.match(petsSummary.glanceModel({ pets: { ...PETS, pets: [] } }, CTX).empty, /No pets found/);
+  assert.match(petsSummary.glanceModel({}, CTX).empty, /No pet data/);
+  assert.strictEqual(petsSummary.glance, undefined, "the hand-written face is gone");
 });
 
-test("📱 glance: NFT collection S = breeds owned with a ring; M = the missing ones; L = all seven", () => {
+test("📱 glance model, NFT collection: breeds owned as a ring; the seven breeds, missing first, each with a chip", () => {
   const owned = new Set(Object.values(farm.pets.nfts || {}).map((p) => p.traits && p.traits.type).filter((t) => NFT_BREED_TYPES.includes(t)));
-  const s = petsNftCollection.glance({ farm }, CTX, {}, "s").html;
-  assert.match(s, /^<div class="g-corner"><svg class="g-ring/);
-  assert.match(s, new RegExp(`<div class="g-big">${owned.size}<small>/7</small></div>`));
-  const m = petsNftCollection.glance({ farm }, CTX, {}, "m").html;
   const missing = NFT_BREED_TYPES.filter((b) => !owned.has(b));
-  assert.match(m, new RegExp(`<div class="g-n">${missing[0]}</div><span class="g-chip g-bad">MISSING</span>`));
-  const l = petsNftCollection.glance({ farm }, CTX, {}, "l").html;
-  assert.strictEqual((l.match(/g-chip g-ok">OWNED/g) || []).length, owned.size);
-  assert.strictEqual((l.match(/class="g-row"/g) || []).length, 7);
-  assert.match(petsNftCollection.glance({}, CTX, {}, "s").empty, /No farm data/);
+  const m = petsNftCollection.glanceModel({ farm }, CTX);
+  assert.strictEqual(petsNftCollection.look, "gauge");
+  assert.deepStrictEqual([m.head.value, m.head.unit, Math.round(m.head.ring)], [owned.size, "/7", Math.round((owned.size / 7) * 100)]);
+  assert.strictEqual(m.items.length, 7);
+  assert.deepStrictEqual(m.items[0], { icon: `<img data-i="${missing[0]}">`, name: missing[0], sub: "not owned", chip: { text: "MISSING", tone: "bad" }, pct: 0 });
+  assert.match(renderLook(m, "gauge").html, new RegExp(`<div class="gx-gauge"><svg class="gx-ring g-accent".*<b class="">${owned.size}</b><small>/7</small>`));
+  assert.ok(looksFor(m).length >= 3);
+  assert.match(petsNftCollection.glanceModel({}, CTX).empty, /No farm data/);
+  assert.strictEqual(petsNftCollection.glance, undefined);
 });
 
-test("📱 glance: resource market S = best FLOWER per energy; M = top three; pet cards S = requests fed, M = what is left to feed", () => {
+test("📱 glance model, resource market: the best FLOWER per energy, the priced resources; pet cards: requests fed as a ring, the pets with most to feed first", () => {
   const top = petsMarket.build({ pets: PETS }, CTX, {}).rows[0];
-  assert.match(petsMarket.glance({ pets: PETS }, CTX, {}, "s").html, new RegExp(`<div class="g-hero"><img data-i="${top.res}"></div><div class="g-big">${top.ratio.toFixed(4)}</div><div class="g-cap">${top.res} · 🌸 per ⚡</div>`));
-  assert.strictEqual((petsMarket.glance({ pets: PETS }, CTX, {}, "m").html.match(/class="g-row"/g) || []).length, 3);
-  assert.match(petsMarket.glance({ pets: { ...PETS, p2pPrices: {} } }, CTX, {}, "s").empty, /No fetchable resource has a price/);
-  assert.match(petsMarket.glance({}, CTX, {}, "s").empty, /No price data/);
+  const m = petsMarket.glanceModel({ pets: PETS }, CTX);
+  assert.strictEqual(petsMarket.look, "list-2");
+  assert.deepStrictEqual(m.head, { value: top.ratio.toFixed(4), cap: `${top.res} · 🌸 per ⚡`, hero: `<img data-i="${top.res}">` });
+  assert.deepStrictEqual([m.items[0].name, m.items[0].pct], [top.res, 100]);
+  assert.strictEqual((renderLook(m, "list-2").html.match(/class="gx-row"/g) || []).length, Math.min(6, m.items.length));
+  assert.ok(looksFor(m).length >= 3);
+  assert.match(petsMarket.glanceModel({ pets: { ...PETS, p2pPrices: {} } }, CTX).empty, /No fetchable resource has a price/);
+  assert.match(petsMarket.glanceModel({}, CTX).empty, /No price data/);
   const req = (fed) => ({ fed, difficulty: "easy", food: "Pumpkin Soup", energy: 100, xp: 10, price: 1, energyPerSfl: 100 });
   const D = { ...PETS, pets: PETS.pets.map((p, k) => ({ ...p, feeding: [req(k === 0), req(false)] })) };
   const n = D.pets.length;
   assert.ok(n > 1);
-  assert.match(petCards.glance({ pets: D }, CTX, {}, "s").html, new RegExp(`<div class="g-big">1<small>/${2 * n}</small></div><div class="g-cap">requests fed today</div>`));
-  const chips = [...petCards.glance({ pets: D }, CTX, {}, "l").html.matchAll(/g-chip g-warn">(\d) to feed/g)].map((x) => x[1]);
-  assert.strictEqual(chips.length, Math.min(7, n));
-  assert.strictEqual(chips[0], "2", "the pets with the most left to feed come first");
-  if (n <= 7) assert.strictEqual(chips[chips.length - 1], "1");
-  assert.strictEqual((petCards.glance({ pets: D }, CTX, {}, "m").html.match(/class="g-row"/g) || []).length, Math.min(3, n));
-  assert.match(petCards.glance({ pets: { ...PETS, pets: PETS.pets.map((p) => ({ ...p, feeding: [] })) } }, CTX, {}, "s").html, /no food requests today/);
-  assert.match(petCards.glance({ pets: { ...PETS, pets: [] } }, CTX, {}, "s").empty, /No pets found/);
+  const c = petCards.glanceModel({ pets: D }, CTX);
+  assert.strictEqual(petCards.look, "number-list-2");
+  assert.deepStrictEqual([c.head.value, c.head.unit, c.head.cap, Math.round(c.head.ring), c.head.ringTone], [1, `/${2 * n}`, "requests fed today", Math.round(100 / (2 * n)), "warn"]);
+  assert.strictEqual(c.items.length, n);
+  assert.deepStrictEqual(c.items.map((i) => i.chip.text), [...Array(n - 1).fill("2 to feed"), "1 to feed"], "the pets with the most left to feed come first");
+  assert.match(renderLook(c, "number-list-2").html, /<div class="gx-sub-tag g-warn">2 to feed<\/div>/);
+  assert.ok(looksFor(c).length >= 3);
+  assert.match(petCards.glanceModel({ pets: { ...PETS, pets: PETS.pets.map((p) => ({ ...p, feeding: [] })) } }, CTX).head.cap, /no food requests today/);
+  assert.match(petCards.glanceModel({ pets: { ...PETS, pets: [] } }, CTX).empty, /No pets found/);
+  assert.strictEqual(petsMarket.glance, undefined);
+  assert.strictEqual(petCards.glance, undefined);
 });
 
 test("the BUDS and PETS pages render their widgets and register the context", () => {

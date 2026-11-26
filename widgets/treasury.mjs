@@ -5,7 +5,7 @@
 //      total and each item's share of the category.
 import { sflIcon, esc, icon, formatSFL, colorBar } from "./market-common.mjs";
 import { kpis } from "../ui/viz.mjs";
-import { big, compact, rows as gRows } from "../ui/glance.mjs";
+import { compact } from "../ui/glance.mjs";
 
 const need = (farmId) => ({ treasury: { res: "treasury", farm: farmId } });
 const valueOf = (t) => (t && t.value && t.value.totals ? t.value : null);
@@ -99,32 +99,33 @@ export const treasuryItems = {
   },
 };
 
-// ── iPhone glance faces ──
-// categories: S = the biggest category's share; M / L = the categories by value
-treasuryCategories.sizes = ["s", "m", "l"];
-treasuryCategories.size = "m";
-treasuryCategories.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+// ── iPhone glance models (ui/glance-templates.mjs offers the looks) ──
+// categories: the biggest category's share; the categories by value (the bar = share of the farm)
+treasuryCategories.look = "list-2";
+treasuryCategories.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = treasuryCategories.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
-  const list = out.rows.slice().sort((a, b) => b.total - a.total);
-  if (size === "s") {
-    const r = list[0];
-    return { html: `<div class="g-hero">${r.emoji}</div>` + big(r.pct.toFixed(0), { unit: " %", cap: `${r.label} · ${compact(r.total)} 🌸` }) };
-  }
-  return { html: gRows(list.slice(0, size === "m" ? 3 : 8).map((r) => ({ icon: r.emoji, name: r.label,
-    sub: `${r.pct.toFixed(1)} %${r.count != null ? ` · ${r.count} items` : ""}`, value: compact(r.total) }))) };
+  const list = out.rows.slice().sort((a, b) => b.total - a.total), r = list[0];
+  return {
+    head: { value: r.pct.toFixed(0), unit: " %", cap: `${r.label} · ${compact(r.total)} 🌸`, hero: r.emoji },
+    items: list.map((x) => ({ icon: x.emoji, name: x.label, sub: `${x.pct.toFixed(1)} %${x.count != null ? ` · ${x.count} items` : ""}`, value: compact(x.total), pct: x.pct })),
+    tiles: list.map((x) => ({ label: `${x.emoji} ${x.pct.toFixed(0)} %`, value: compact(x.total) })),
+  };
 };
 
-// items of one category: S = the category's value; M = beside its top three; L = its top six under it
-treasuryItems.sizes = ["s", "m", "l"];
-treasuryItems.size = "m";
-treasuryItems.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+// items of one category: the category's value; its items by value (the bar against the biggest)
+treasuryItems.look = "number-list-2";
+treasuryItems.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = treasuryItems.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
   const v = valueOf(data.treasury), cat = CAT_INFO[opts.cat] ? opts.cat : "resources";
-  const head = big(compact(v.totals[cat] || 0), { unit: " 🌸", cap: `${out.rows.length} items` });
-  if (size === "s") return { html: head };
-  const list = gRows(out.rows.slice().sort((a, b) => b.total - a.total).slice(0, size === "m" ? 3 : 6).map((r) => ({ icon: r.iconHtml, name: r.name,
-    sub: `×${r.qty} · ${formatSFL(r.unitPrice)}`, value: compact(r.total) })));
-  return { html: size === "m" ? `<div class="g-split"><div>${head}</div>${list}</div>` : head + list };
+  const catTotal = v.totals[cat] || 0, grand = v.totals.grand || 0;
+  const list = out.rows.slice().sort((a, b) => b.total - a.total), top = list[0].total;
+  return {
+    head: { value: compact(catTotal), unit: " 🌸", cap: `${out.rows.length} items`, hero: CAT_INFO[cat].icon },
+    items: list.map((r) => ({ icon: r.iconHtml, name: r.name, sub: `×${r.qty} · ${formatSFL(r.unitPrice)}`, value: compact(r.total), pct: top > 0 ? (r.total / top) * 100 : 0 })),
+    tiles: [{ label: "items", value: out.rows.length }, { label: "🌸", value: compact(catTotal) },
+      { label: "of farm", value: `${(grand > 0 ? (catTotal / grand) * 100 : 0).toFixed(1)} %` },
+      ...(cat === "treasures" && v.treasureBoost > 1 ? [{ label: "boost", value: `×${v.treasureBoost.toFixed(1)}` }] : [])],
+  };
 };

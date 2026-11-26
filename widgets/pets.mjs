@@ -7,7 +7,7 @@
 import { PET_FETCH_DATA } from "../core/data/pets.mjs";
 import { petFetchYield, petCumulativeXp, petLevel } from "../core/engine/pets.mjs";
 import { bar, kpis, bigBar, pill } from "../ui/viz.mjs";
-import { big, compact, ring as gRing, rows as gRows } from "../ui/glance.mjs";
+import { compact } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const icon = (ctx, n) => (typeof ctx.icon === "function" ? ctx.icon(n) : "");
@@ -334,67 +334,73 @@ export const petCards = {
   },
 };
 
-// ── iPhone glance faces ──
+// ── iPhone glance models (ui/glance-templates.mjs offers the looks) ──
 const daily = (p) => (p.calc && p.calc.dailySfl > 0 ? p.calc.dailySfl : 0);
-// earnings: S = the daily pet income; M = beside the top three pets; L = the top six under it
-petsSummary.sizes = ["s", "m", "l"];
-petsSummary.size = "s";
-petsSummary.glance = ({ pets: d } = {}, ctx = {}, opts = {}, size = "s") => {
+// earnings: the daily pet income; the pets by FLOWER a day (the bar against the best pet)
+petsSummary.look = "number";
+petsSummary.glanceModel = ({ pets: d } = {}, ctx = {}) => {
   if (!d || !Array.isArray(d.pets)) return { empty: "No pet data." };
   if (!d.pets.length) return { empty: "No pets found on this farm." };
   const total = d.pets.reduce((s, p) => s + daily(p), 0), nft = d.pets.filter((p) => p.isNft).length;
-  const head = big(total.toFixed(2), { unit: " 🌸/day", cap: `${d.pets.length} pets · ${nft} NFT` });
-  if (size === "s") return { html: head };
-  const list = gRows(d.pets.slice().sort((a, b) => daily(b) - daily(a)).slice(0, size === "m" ? 3 : 6).map((p) => ({ icon: petIcon(ctx, p), name: p.name,
-    sub: `Lv ${p.level} · ${compact(p.energy)} ⚡`, value: daily(p) > 0 ? `${daily(p).toFixed(2)}/d` : "—", tone: daily(p) > 0 ? "ok" : "" })));
-  return { html: size === "m" ? `<div class="g-split"><div>${head}</div>${list}</div>` : head + list };
+  const list = d.pets.slice().sort((a, b) => daily(b) - daily(a)), top = daily(list[0]);
+  return {
+    head: { value: total.toFixed(2), unit: " 🌸/day", cap: `${d.pets.length} pets · ${nft} NFT` },
+    items: list.map((p) => ({ icon: petIcon(ctx, p), name: p.name, sub: `Lv ${p.level} · ${compact(p.energy)} ⚡`,
+      value: daily(p) > 0 ? `${daily(p).toFixed(2)}/d` : "—", tone: daily(p) > 0 ? "ok" : "", pct: top > 0 ? (daily(p) / top) * 100 : 0 })),
+    tiles: [{ label: "pets", value: d.pets.length }, { label: "NFT", value: nft },
+      { label: "energy", value: compact(d.pets.reduce((s, p) => s + p.energy, 0)) }, { label: "🌸/day", value: total.toFixed(2) }],
+  };
 };
 
-// NFT collection: S = breeds owned with a ring; M = beside the missing breeds; L = all seven
-petsNftCollection.sizes = ["s", "m", "l"];
-petsNftCollection.size = "s";
-petsNftCollection.glance = ({ farm } = {}, ctx = {}, opts = {}, size = "s") => {
+// NFT collection: breeds owned (a ring); the seven breeds, missing first; the bar = the way to
+// the Lv 25 unique fetch
+petsNftCollection.look = "gauge";
+petsNftCollection.glanceModel = ({ farm } = {}, ctx = {}) => {
   if (!farm) return { empty: "No farm data." };
   const owned = nftBreedsOwned(farm), n = Object.keys(owned).length, all = NFT_BREED_TYPES.length;
-  const head = `<div class="g-corner">${gRing((n / all) * 100, { tone: n === all ? "ok" : "accent" })}</div>` +
-    big(n, { unit: `/${all}`, cap: n === all ? "every NFT breed ✓" : "NFT breeds owned" });
-  if (size === "s") return { html: head };
-  const row = (b) => (owned[b] ? { icon: icon(ctx, `Pet #${owned[b].id}`), name: b, sub: `Lv ${owned[b].level} · ${compact(owned[b].energy)} ⚡`, chip: { text: "OWNED", tone: "ok" } }
-    : { icon: icon(ctx, b), name: b, chip: { text: "MISSING", tone: "bad" } });
-  if (size === "l") return { html: gRows(NFT_BREED_TYPES.map(row)) };
-  const missing = NFT_BREED_TYPES.filter((b) => !owned[b]);
-  return { html: `<div class="g-split"><div>${head}</div>${gRows((missing.length ? missing : NFT_BREED_TYPES).slice(0, 3).map(row))}</div>` };
+  const item = (b) => (owned[b]
+    ? { icon: icon(ctx, `Pet #${owned[b].id}`), name: b, sub: `Lv ${owned[b].level} · ${compact(owned[b].energy)} ⚡`, chip: { text: "OWNED", tone: "ok" },
+      pct: Math.min(100, (owned[b].level / 25) * 100) }
+    : { icon: icon(ctx, b), name: b, sub: "not owned", chip: { text: "MISSING", tone: "bad" }, pct: 0 });
+  const levels = Object.values(owned).map((o) => o.level);
+  return {
+    head: { value: n, unit: `/${all}`, cap: n === all ? "every NFT breed ✓" : "NFT breeds owned", ring: (n / all) * 100, ringTone: n === all ? "ok" : "accent" },
+    items: [...NFT_BREED_TYPES.filter((b) => !owned[b]), ...NFT_BREED_TYPES.filter((b) => owned[b])].map(item),
+    tiles: [{ label: "owned", value: n }, { label: "missing", value: all - n }, { label: "top level", value: levels.length ? Math.max(...levels) : "—" }],
+  };
 };
 
-// resource market: S = the best FLOWER per energy; M / L = the best resources
-petsMarket.sizes = ["s", "m", "l"];
-petsMarket.size = "m";
-petsMarket.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+// resource market: the best FLOWER per energy; the priced resources (the bar against the best)
+petsMarket.look = "list-2";
+petsMarket.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = petsMarket.build(data, ctx, opts);
   const priced = out.rows.filter((r) => r.ratio > 0);
   if (!priced.length) return { empty: out.rows.length ? "No fetchable resource has a price." : out.empty };
-  if (size === "s") {
-    const r = priced[0];
-    return { html: `<div class="g-hero">${r.iconHtml}</div>` + big(r.ratio.toFixed(4), { cap: `${r.res} · 🌸 per ⚡` }) };
-  }
-  return { html: gRows(priced.slice(0, size === "m" ? 3 : 7).map((r) => ({ icon: r.iconHtml, name: r.res,
-    sub: `${r.price.toFixed(2)} · ${r.energy} ⚡`, value: r.ratio.toFixed(4) }))) };
+  const r = priced[0];
+  return {
+    head: { value: r.ratio.toFixed(4), cap: `${r.res} · 🌸 per ⚡`, ...(r.iconHtml ? { hero: r.iconHtml } : {}) },
+    items: priced.map((x) => ({ icon: x.iconHtml, name: x.res, sub: `${x.price.toFixed(2)} · ${x.energy} ⚡`, value: x.ratio.toFixed(4), pct: x.pct })),
+    tiles: [{ label: "best", value: r.res }, { label: "priced", value: `${priced.length}/${out.rows.length}` },
+      { label: "price", value: r.price.toFixed(2) }],
+  };
 };
 
-// one by one: S = today's requests fed, with a ring; M / L = each pet with what is left to feed
-petCards.sizes = ["s", "m", "l"];
-petCards.size = "m";
-petCards.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+// one by one: today's requests fed (a ring); each pet with what is left to feed; the bar = XP in the level
+petCards.look = "number-list-2";
+petCards.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = petCards.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
   const fed = out.rows.reduce((s, r) => s + r.fedN, 0), all = out.rows.reduce((s, r) => s + r.feedN, 0);
-  if (size === "s") {
-    if (!all) return { html: big(out.rows.length, { unit: " pets", cap: "no food requests today" }) };
-    return { html: `<div class="g-corner">${gRing((fed / all) * 100, { tone: fed === all ? "ok" : "warn" })}</div>` +
-      big(fed, { unit: `/${all}`, cap: fed === all ? "all requests fed ✓" : "requests fed today" }) };
-  }
+  const perDay = out.rows.reduce((s, r) => s + r.daily, 0);
   // the pets with the most left to feed first, then by FLOWER/day
-  const list = out.rows.slice().sort((a, b) => (b.feedN - b.fedN) - (a.feedN - a.fedN) || b.daily - a.daily).slice(0, size === "m" ? 3 : 7);
-  return { html: gRows(list.map((r) => ({ icon: r.iconHtml, name: r.name, sub: `Lv ${r.level}${r.daily > 0 ? ` · ${r.daily.toFixed(2)} 🌸/d` : ""}`,
-    ...(r.feedN ? { chip: r.fedN < r.feedN ? { text: `${r.feedN - r.fedN} to feed`, tone: "warn" } : { text: "FED", tone: "ok" } } : {}) }))) };
+  const list = out.rows.slice().sort((a, b) => (b.feedN - b.fedN) - (a.feedN - a.fedN) || b.daily - a.daily);
+  return {
+    head: all ? { value: fed, unit: `/${all}`, cap: fed === all ? "all requests fed ✓" : "requests fed today", ring: (fed / all) * 100, ringTone: fed === all ? "ok" : "warn" }
+      : { value: out.rows.length, unit: " pets", cap: "no food requests today" },
+    items: list.map((r) => ({ icon: r.iconHtml, name: r.name, sub: `Lv ${r.level}${r.daily > 0 ? ` · ${r.daily.toFixed(2)} 🌸/d` : ""}`,
+      value: `Lv ${r.level}`, pct: r.prog.pct,
+      ...(r.feedN ? { chip: r.fedN < r.feedN ? { text: `${r.feedN - r.fedN} to feed`, tone: "warn" } : { text: "FED", tone: "ok" } } : {}) })),
+    tiles: [{ label: "pets", value: out.rows.length }, { label: "fed", value: all ? `${fed}/${all}` : "—" },
+      { label: "to feed", value: all - fed }, { label: "🌸/day", value: perDay.toFixed(2) }],
+  };
 };

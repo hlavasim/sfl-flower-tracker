@@ -9,7 +9,7 @@ import { toMs } from "../core/engine/power-costs.mjs";
 import { nftUnitPrice } from "../core/engine/prices.mjs";
 import { esc, icon, sflIcon, itemList } from "./market-common.mjs";
 import { kpis, bar, pill } from "../ui/viz.mjs";
-import { big, compact, rows as gRows } from "../ui/glance.mjs";
+import { compact } from "../ui/glance.mjs";
 
 const need = (farmId) => ({ farm: { res: "farm", farm: farmId }, prices: { res: "compute", farm: farmId, section: "treasury" } });
 const WEEK_MS = 7 * 24 * 3600000;
@@ -282,69 +282,95 @@ export const salesWeekly = {
 // The page fetches the live order book for exactly these rows (it has no other copy of the split).
 salesListings.activeOf = (farm, td, ctx) => salesData(farm, td, ctx).active;
 
-// ── iPhone glance faces ──
+// ── iPhone glance models (ui/glance-templates.mjs offers the looks) ──
 const pctText = (d) => `${d > 0 ? "+" : ""}${Math.round(d)}%`;
 const qtyName = (l) => `${l.itemName}${l.qty > 1 ? ` ×${fmtQty(l.qty)}` : ""}`;
-// overview: S = active listings (or what waits to be claimed); M = the totals beside it
-salesSummary.sizes = ["s", "m"];
-salesSummary.size = "s";
-salesSummary.glance = ({ farm, prices } = {}, ctx = {}, opts = {}, size = "s") => {
+const share = (x, of) => (of > 0 ? (x / of) * 100 : 0);
+const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+
+// overview: the active listings (a ring = the share priced at or below the market +20 %) and
+// the totals as a list: listed, overpriced, stale, offers, what waits to be claimed
+salesSummary.look = "number";
+salesSummary.glanceModel = ({ farm, prices } = {}, ctx = {}) => {
   if (!farm || !prices || !prices.td) return { empty: NO_DATA };
   const d = salesData(farm, prices.td, ctx);
   if (!d.active.length && !d.offers.length && !d.readyToClaim) return { empty: "No listings, offers or sales to claim." };
+  const n = d.active.length;
   const listed = d.active.reduce((s, l) => s + l.priceSFL, 0), offered = d.offers.reduce((s, o) => s + o.priceSFL, 0);
   const over = d.active.filter((l) => l.delta > 20).length, stale = d.active.filter((l) => l.age > WEEK_MS).length;
-  const head = big(d.active.length, { unit: " listed", cap: d.readyToClaim ? `✅ ${d.readyToClaim} ready to claim` : `${compact(listed)} SFL listed` });
-  if (size === "s") return { html: head };
-  return { html: `<div class="g-split"><div>${head}</div>` + gRows([
-    { name: "Listed", value: `${compact(listed)} SFL` },
-    { name: "Overpriced · stale", value: `${over} · ${stale}`, tone: over || stale ? "warn" : "ok" },
-    { name: `${d.offers.length} offer${d.offers.length === 1 ? "" : "s"}`, value: `${compact(offered)} SFL` }]) + `</div>` };
+  const items = [
+    ...(d.readyToClaim ? [{ icon: "✅", name: "To claim", sub: "sold or filled", value: d.readyToClaim, tone: "ok" }] : []),
+    { icon: "📤", name: "Listed", sub: plural(n, "listing"), value: `${compact(listed)} SFL` },
+    { icon: "🎯", name: "At market", sub: "≤ +20 %", value: `${n - over}/${n}`, tone: over ? "warn" : "ok", pct: share(n - over, n) },
+    { icon: "⚠️", name: "Overpriced", sub: "> +20 %", value: over, tone: over ? "bad" : "ok", pct: share(over, n) },
+    { icon: "⏳", name: "Stale", sub: "> 7 days", value: stale, tone: stale ? "warn" : "ok", pct: share(stale, n) },
+    { icon: "📥", name: "Offers", sub: `${compact(offered)} SFL`, value: d.offers.length },
+  ];
+  return {
+    head: { value: n, unit: " listed", cap: d.readyToClaim ? `✅ ${d.readyToClaim} ready to claim` : `${compact(listed)} SFL listed`,
+      ...(n ? { ring: share(n - over, n), ringTone: over ? "warn" : "ok" } : {}) },
+    items,
+    tiles: [{ label: "listed", value: n }, { label: "offers", value: d.offers.length },
+      { label: "to claim", value: d.readyToClaim }, ...(d.tradePoints ? [{ label: "points", value: Math.round(d.tradePoints) }] : [])],
+  };
 };
 
-// listings / offers / sold: S = how many and their total; M / L = the rows as the table orders them
-function tradeGlance(widget, { what, chipOf }) {
-  widget.sizes = ["s", "m", "l"];
-  widget.size = "s";
-  widget.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+// listings / offers / sold: how many and their total; every row as the table orders it, with its
+// live status or delta chip; the bar is each row's price against the biggest one
+function tradeModel(widget, { what, chipOf, tilesOf, ring }) {
+  widget.look = "number";
+  widget.glanceModel = (data = {}, ctx = {}, opts = {}) => {
     const out = widget.build(data, ctx, opts);
     if (!out.rows.length) return { empty: out.empty };
-    const sum = out.rows.reduce((s, l) => s + l.priceSFL, 0);
-    const head = big(out.rows.length, { unit: ` ${what}`, cap: `${compact(sum)} SFL in total` });
-    if (size === "s") return { html: head };
-    const list = out.rows.slice(0, size === "m" ? 3 : 6).map((l) => ({ icon: imgOf(ctx, l), name: qtyName(l),
-      sub: `${fmtSfl(l.priceSFL)} SFL · ${formatAge(l.age)} ago`, ...chipOf(l) }));
-    return { html: (size === "l" ? head : "") + gRows(list) };
+    const sum = out.rows.reduce((s, l) => s + l.priceSFL, 0), top = Math.max(...out.rows.map((l) => l.priceSFL));
+    return {
+      head: { value: out.rows.length, unit: ` ${what}`, cap: `${compact(sum)} SFL in total`, ...(ring ? ring(out.rows) : {}) },
+      items: out.rows.map((l) => ({ icon: imgOf(ctx, l), name: qtyName(l), sub: `${fmtSfl(l.priceSFL)} SFL · ${formatAge(l.age)} ago`,
+        value: compact(l.priceSFL), pct: share(l.priceSFL, top), ...chipOf(l) })),
+      tiles: [{ label: what, value: out.rows.length }, { label: "SFL", value: compact(sum) }, ...tilesOf(out.rows)],
+    };
   };
 }
 const deltaChip = (l) => (l.marketPrice > 0 ? { chip: { text: pctText(l.delta), tone: l.delta > 20 ? "bad" : l.delta > 5 ? "warn" : "ok" } } : {});
 const LIVE_CHIP = { 1: { text: "OFFER", tone: "ok" }, 2: { text: "NOT 1ST", tone: "bad" }, 3: { text: "1ST", tone: "info" } };
-tradeGlance(salesListings, { what: "listed", chipOf: (l) => (l.group ? { chip: LIVE_CHIP[l.group] } : deltaChip(l)) });
-tradeGlance(salesOffers, { what: "offers", chipOf: (l) => (l.marketPrice > 0 ? { chip: { text: pctText(l.delta), tone: "info" } } : {}) });
-tradeGlance(salesSold, { what: "sold", chipOf: () => ({ chip: { text: "CLAIM", tone: "ok" } }) });
+tradeModel(salesListings, { what: "listed", chipOf: (l) => (l.group ? { chip: LIVE_CHIP[l.group] } : deltaChip(l)),
+  // the ring: the listings priced at or below the market +20 %
+  ring: (rows) => { const over = rows.filter((l) => l.delta > 20).length; return { ring: share(rows.length - over, rows.length), ringTone: over ? "warn" : "ok" }; },
+  tilesOf: (rows) => [{ label: "overpriced", value: rows.filter((l) => l.delta > 20).length }, { label: "stale", value: rows.filter((l) => l.age > WEEK_MS).length }] });
+tradeModel(salesOffers, { what: "offers", chipOf: (l) => (l.marketPrice > 0 ? { chip: { text: pctText(l.delta), tone: "info" } } : {}),
+  tilesOf: (rows) => [{ label: "below mkt", value: rows.filter((l) => l.marketPrice > 0 && l.delta < 0).length }] });
+tradeModel(salesSold, { what: "sold", chipOf: () => ({ chip: { text: "CLAIM", tone: "ok" } }),
+  tilesOf: (rows) => (rows[0] && rows[0].soldAt ? [{ label: "latest", value: new Date(rows[0].soldAt).toLocaleDateString("en-GB") }] : []) });
 
-// what can I sell: S = the total value; M = beside the three biggest; L = the top six
-salesSellable.sizes = ["s", "m", "l"];
-salesSellable.size = "m";
-salesSellable.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+// what can I sell: the total value, then the items by value (the bar against the biggest)
+salesSellable.look = "number-list-2";
+salesSellable.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = salesSellable.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
-  const sum = out.rows.reduce((s, r) => s + r.total, 0);
-  const head = big(compact(sum), { unit: " SFL", cap: `${out.rows.length} unlisted item${out.rows.length === 1 ? "" : "s"}` });
-  if (size === "s") return { html: head };
-  const list = gRows(out.rows.slice(0, size === "m" ? 3 : 6).map((r) => ({ icon: r.iconHtml, name: r.name,
-    sub: `×${fmtQty(r.qty)} · ${fmtSfl(r.unitPrice)}/ea`, value: compact(r.total) })));
-  return { html: size === "m" ? `<div class="g-split"><div>${head}</div>${list}</div>` : head + list };
+  const sum = out.rows.reduce((s, r) => s + r.total, 0), top = out.rows[0].total;
+  const res = out.rows.filter((r) => r.collection === "resources").reduce((s, r) => s + r.total, 0);
+  return {
+    head: { value: compact(sum), unit: " SFL", cap: `${out.rows.length} unlisted item${out.rows.length === 1 ? "" : "s"}` },
+    items: out.rows.map((r) => ({ icon: r.iconHtml, name: r.name, sub: `×${fmtQty(r.qty)} · ${fmtSfl(r.unitPrice)}/ea`, value: compact(r.total), pct: share(r.total, top) })),
+    tiles: [{ label: "items", value: out.rows.length }, { label: "SFL", value: compact(sum) },
+      { label: "resources", value: compact(res) }, { label: "NFTs", value: compact(sum - res) }],
+  };
 };
 
-// weekly history: S = what sold in the latest week; M / L = the latest weeks
-salesWeekly.sizes = ["s", "m", "l"];
-salesWeekly.size = "s";
-salesWeekly.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+// weekly history: what sold in the latest week; the weeks (icon = the week's first sold item, the
+// bar = items sold against the best week); the series = items sold per week, oldest first
+salesWeekly.look = "number";
+salesWeekly.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = salesWeekly.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
-  const w = out.rows[0];
-  if (size === "s") return { html: big(w.soldN, { unit: " sold", cap: `week of ${w.dateText} · ${w.boughtN} bought` }) };
-  return { html: gRows(out.rows.slice(0, size === "m" ? 3 : 7).map((r) => ({ name: `Week of ${r.dateText}`,
-    sub: `${r.soldN} sold · ${r.boughtN} bought`, value: r.soldN ? `↑${r.soldN}` : "—", tone: r.soldN ? "ok" : "" }))) };
+  const w = out.rows[0], best = Math.max(...out.rows.map((r) => r.soldN));
+  const lead = (r) => Object.keys(r.sales)[0] || Object.keys(r.purchases)[0];
+  return {
+    head: { value: w.soldN, unit: " sold", cap: `week of ${w.dateText} · ${w.boughtN} bought` },
+    items: out.rows.map((r) => ({ icon: lead(r) ? icon(ctx, lead(r)) : "", name: r.dateText, sub: `${r.soldN} sold · ${r.boughtN} bought`,
+      value: r.soldN ? `↑${r.soldN}` : "—", tone: r.soldN ? "ok" : "", pct: share(r.soldN, best) })),
+    tiles: [{ label: "weeks", value: out.rows.length }, { label: "sold", value: out.rows.reduce((s, r) => s + r.soldN, 0) },
+      { label: "bought", value: out.rows.reduce((s, r) => s + r.boughtN, 0) }, { label: "best week", value: best }],
+    series: out.rows.map((r) => r.soldN).reverse(),
+  };
 };

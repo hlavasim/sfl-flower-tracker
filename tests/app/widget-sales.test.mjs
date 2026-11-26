@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
+import { looksFor, renderLook } from "../../ui/glance-templates.mjs";
 import { readFileSync } from "node:fs";
 import { buildTreasurySection } from "../../core/sections/treasury.mjs";
 import { salesSummary, salesListings, salesSellable, salesOffers, salesSold, salesWeekly, salesData, liveLine } from "../../widgets/sales.mjs";
@@ -137,43 +138,56 @@ test("page wiring: SALES renders its widgets; wishlist and price trackers stay p
   assert.doesNotMatch(SRC, /Wishlist je prázdný/);
 });
 
-test("📱 glance: overview S = listings + what waits to be claimed; M = totals beside it; nothing → empty", () => {
-  assert.deepStrictEqual(salesSummary.sizes, ["s", "m"]);
-  const s = salesSummary.glance(DATA, ctx, {}, "s").html;
-  assert.match(s, /<div class="g-big">2<small> listed<\/small><\/div><div class="g-cap">✅ 2 ready to claim<\/div>/);
-  const m = salesSummary.glance(DATA, ctx, {}, "m").html;
-  assert.match(m, /^<div class="g-split">/);
-  assert.match(m, /Overpriced · stale<\/div><span class="g-v g-warn">1 · 1</);
-  assert.match(m, /1 offer<\/div><span class="g-v">2 SFL</);
+test("📱 glance model, overview: active listings with a ring (share at market), the totals as a list; nothing → empty", () => {
+  const m = salesSummary.glanceModel(DATA, ctx);
+  assert.strictEqual(salesSummary.look, "number");
+  assert.deepStrictEqual(m.head, { value: 2, unit: " listed", cap: "✅ 2 ready to claim", ring: 50, ringTone: "warn" });
+  assert.deepStrictEqual(m.items.map((i) => i.name), ["To claim", "Listed", "At market", "Overpriced", "Stale", "Offers"]);
+  assert.deepStrictEqual(m.items[3], { icon: "⚠️", name: "Overpriced", sub: "> +20 %", value: 1, tone: "bad", pct: 50 });
+  assert.deepStrictEqual(m.tiles.map((t) => t.label), ["listed", "offers", "to claim", "points"]);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num">2<small> listed<\/small><\/div><div class="gx-cap">✅ 2 ready to claim<\/div>/);
+  assert.ok(looksFor(m).length >= 3);
   const bare = { farm: { ...base, trades: {} }, prices: { td } };
-  assert.match(salesSummary.glance(bare, ctx, {}, "s").empty, /No listings/);
-  assert.match(salesSummary.glance({ farm }, ctx, {}, "s").empty, /did not load/);
+  assert.match(salesSummary.glanceModel(bare, ctx).empty, /No listings/);
+  assert.match(salesSummary.glanceModel({ farm }, ctx).empty, /did not load/);
+  assert.strictEqual(salesSummary.glance, undefined, "the hand-written face is gone");
 });
 
-test("📱 glance: listings / offers / sold — S = count and total; M = rows with the live status or delta chip", () => {
-  assert.match(salesListings.glance(DATA, ctx, {}, "s").html, /<div class="g-big">2<small> listed<\/small><\/div><div class="g-cap">1\.\dk SFL in total<\/div>/);
-  const m = salesListings.glance(DATA, ctx, {}, "m").html;
-  assert.match(m, /<span class="g-ic"><img data-i="Obsidian"><\/span><div class="g-n">Obsidian ×10<div>250\.0 SFL · 1w ago<\/div><\/div><span class="g-chip g-ok">OFFER<\/span>/);
-  assert.match(m, /Foreman Beaver.*g-chip g-info">1ST/);
+test("📱 glance model, listings / offers / sold: count and total; every row with its live status or delta chip and its price bar", () => {
+  const m = salesListings.glanceModel(DATA, ctx);
+  assert.deepStrictEqual(m.head, { value: 2, unit: " listed", cap: "1.3k SFL in total", ring: 50, ringTone: "warn" });
+  assert.strictEqual(m.items.length, 2);
+  assert.deepStrictEqual(m.items[0], { icon: '<img data-i="Obsidian">', name: "Obsidian ×10", sub: "250.0 SFL · 1w ago", value: "250", pct: 25, chip: { text: "OFFER", tone: "ok" } });
+  assert.match(renderLook(m, "list-4").html, /<span class="gx-ic"><img data-i="Obsidian"><\/span><div class="gx-n">Obsidian ×10<div>250\.0 SFL · 1w ago<\/div><\/div><span class="gx-chip g-ok">OFFER<\/span>.*Foreman Beaver.*gx-chip g-info">1ST/);
+  assert.ok(looksFor(m).length >= 3);
   // live order book not in yet: the delta against the market
-  assert.match(salesListings.glance(DATA, { ...ctx, liveDone: () => false }, {}, "m").html, /Obsidian ×10.*g-chip g-bad">\+30%/);
-  assert.match(salesListings.glance(DATA, ctx, {}, "l").html, /^<div class="g-big">2.*g-rows/);
-  assert.match(salesOffers.glance(DATA, ctx, {}, "s").html, /<div class="g-big">1<small> offers<\/small>/);
-  assert.match(salesOffers.glance(DATA, ctx, {}, "m").html, /Fruit Picker Apron.*g-chip g-info">-20%/);
-  assert.match(salesSold.glance(DATA, ctx, {}, "m").html, /Wood ×100.*g-chip g-ok">CLAIM/);
+  assert.deepStrictEqual(salesListings.glanceModel(DATA, { ...ctx, liveDone: () => false }).items[0].chip, { text: "+30%", tone: "bad" });
+  assert.deepStrictEqual(salesOffers.glanceModel(DATA, ctx).items[0].chip, { text: "-20%", tone: "info" });
+  assert.deepStrictEqual([salesSold.glanceModel(DATA, ctx).items[0].name, salesSold.glanceModel(DATA, ctx).items[0].chip], ["Wood ×100", { text: "CLAIM", tone: "ok" }]);
+  for (const w of [salesListings, salesOffers, salesSold]) { assert.strictEqual(w.look, "number"); assert.strictEqual(w.glance, undefined, w.type); }
   const bare = { farm: { ...base, trades: {} }, prices: { td } };
-  assert.strictEqual(salesListings.glance(bare, ctx, {}, "s").empty, "No active listings.");
-  assert.strictEqual(salesSold.glance(bare, ctx, {}, "m").empty, "Nothing sold and unclaimed.");
+  assert.deepStrictEqual(salesListings.glanceModel(bare, ctx), { empty: "No active listings." });
+  assert.deepStrictEqual(salesSold.glanceModel(bare, ctx), { empty: "Nothing sold and unclaimed." });
 });
 
-test("📱 glance: what can I sell — S = total value; M = beside the biggest; weekly S = the latest week", () => {
-  const all = salesSellable.build(DATA, ctx, { type: "both", min: "10" }).rows;
-  const s = salesSellable.glance(DATA, ctx, { type: "both", min: "10" }, "s").html;
-  assert.match(s, new RegExp(`<div class="g-cap">${all.length} unlisted items</div>`));
-  const m = salesSellable.glance(DATA, ctx, { type: "both", min: "10" }, "m").html;
-  assert.match(m, /^<div class="g-split">.*<span class="g-ic"><img data-i="Milk"><\/span><div class="g-n">Milk<div>×1563 · /);
-  assert.match(salesSellable.glance(DATA, ctx, { type: "nft", min: "5000" }, "s").empty, /≥ 5000/);
-  assert.match(salesWeekly.glance({ farm }, ctx, {}, "s").html, /<div class="g-cap">week of 06\/07\/2026 · \d+ bought<\/div>/);
-  assert.match(salesWeekly.glance({ farm }, ctx, {}, "m").html, /Week of 06\/07\/2026.*Week of 29\/09\/2025/);
-  assert.strictEqual(salesWeekly.glance({ farm: { ...base, trades: {} } }, ctx, {}, "s").empty, "No weekly activity yet.");
+test("📱 glance model, what can I sell: the total, the items by value; weekly: the latest week and sold per week as a series", () => {
+  const opts = { type: "both", min: "10" };
+  const all = salesSellable.build(DATA, ctx, opts).rows;
+  const m = salesSellable.glanceModel(DATA, ctx, opts);
+  assert.strictEqual(salesSellable.look, "number-list-2");
+  assert.deepStrictEqual([m.head.unit, m.head.cap], [" SFL", `${all.length} unlisted items`]);
+  assert.strictEqual(m.items.length, all.length);
+  assert.deepStrictEqual([m.items[0].icon, m.items[0].name, m.items[0].pct], ['<img data-i="Milk">', "Milk", 100]);
+  assert.match(m.items[0].sub, /^×1563 · /);
+  assert.match(renderLook(m, "number-list-2").html, /^<div class="gx gx-2x1" style="--gw:2"><div class="gx-split">.*<span class="gx-ic"><img data-i="Milk"><\/span><div class="gx-n">Milk/);
+  assert.ok(looksFor(m).length >= 3);
+  assert.match(salesSellable.glanceModel(DATA, ctx, { type: "nft", min: "5000" }).empty, /≥ 5000/);
+  const w = salesWeekly.glanceModel({ farm }, ctx);
+  assert.deepStrictEqual([w.head.value, w.head.cap], [1, "week of 06/07/2026 · 0 bought"]);
+  assert.deepStrictEqual(w.items.map((i) => i.name), ["06/07/2026", "29/09/2025"]);
+  assert.deepStrictEqual(w.series, [0, 1], "oldest first");
+  assert.ok(looksFor(w).includes("chart-2"));
+  assert.deepStrictEqual(salesWeekly.glanceModel({ farm: { ...base, trades: {} } }, ctx), { empty: "No weekly activity yet." });
+  assert.strictEqual(salesSellable.glance, undefined);
+  assert.strictEqual(salesWeekly.glance, undefined);
 });

@@ -6,7 +6,6 @@
 //   💱 NFT flips: the table.   📊 Flip overview: tiles, the colour legend and the paused notice.
 import { esc, kf, pausedNotice } from "./market-common.mjs";
 import { kpis, bar } from "../ui/viz.mjs";
-import { big, rows as gRows } from "../ui/glance.mjs";
 
 const STALE_H = 3;
 const isStale = (upd, now = Date.now()) => !!upd && (now - new Date(upd).getTime()) / 3600000 > STALE_H;
@@ -72,40 +71,50 @@ export const flipSummary = {
   },
 };
 
-// ── iPhone glance faces ──
-const pctOf = (v) => `${(+v || 0).toFixed(0)}%`;
+// ── iPhone glance models (ui/glance-templates.mjs offers the looks) ──
+// a troll listing makes margins of billions of %: the glance caps what it prints
+const pctOf = (v) => ((+v || 0) > 999 ? "999%+" : `${(+v || 0).toFixed(0)}%`);
+const sfl = (v) => (Math.abs(+v || 0) >= 1e6 ? `${v < 0 ? "−" : ""}1M+` : kf(v));
 const marginTone = (i) => (i.margin >= 15 ? "ok" : i.net <= 0 ? "bad" : "warn");
 const frozen = (items, now) => isStale(items[0] && items[0].updatedAt, now);
-// flips: S = the top flip by score; M / L = the best flips by score
-flipTable.sizes = ["s", "m", "l"];
-flipTable.size = "m";
-flipTable.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+const PAUSED = "⏸ paused, data frozen";
+// a flip as a list item: the bar is the margin column's bar (full at 30 %)
+const flipItem = (r, iconHtml) => ({ icon: iconHtml || "", name: r.name || `#${r.itemId}`, sub: `net ${sfl(r.net)}`,
+  value: pctOf(r.margin), tone: marginTone(r), pct: Math.min(100, Math.max(0, ((+r.margin || 0) / 30) * 100)) });
+const flipTiles = (items) => {
+  const best = items.reduce((a, i) => (!a || i.margin > a.margin ? i : a), null);
+  return [{ label: "NFTs", value: items.length }, { label: "≥ 15 %", value: items.filter((i) => i.margin >= 15).length },
+    { label: "net ≤ 0", value: items.filter((i) => i.net <= 0).length }, { label: "best", value: best ? pctOf(best.margin) : "—" }];
+};
+
+// flips: the top flip by score (its margin), then the flips by score
+flipTable.look = "list-2";
+flipTable.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = flipTable.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
   const list = out.rows.slice().sort((a, b) => (b.score ?? -Infinity) - (a.score ?? -Infinity));
-  const paused = frozen(out.rows, ctx.now || Date.now()) ? " · ⏸ paused" : "";
-  if (size === "s") {
-    const r = list[0];
-    return { html: `<div class="g-hero">${r.iconHtml || ""}</div>` + big(pctOf(r.margin), { tone: marginTone(r), cap: `${r.name || "#" + r.itemId} · net ${kf(r.net)}${paused}` }) };
-  }
-  return { html: gRows(list.slice(0, size === "m" ? 3 : 6).map((r) => ({ icon: r.iconHtml, name: r.name || `#${r.itemId}`,
-    sub: `${kf(r.bestOffer)}→${kf(r.bestListing)} · net ${kf(r.net)}`, value: pctOf(r.margin), tone: marginTone(r) }))) +
-    (size === "l" && paused ? `<div class="g-cap g-foot">⏸ collection paused — data frozen</div>` : "") };
+  const paused = frozen(out.rows, ctx.now || Date.now()), r = list[0];
+  return {
+    head: { value: pctOf(r.margin), tone: marginTone(r), cap: `${r.name || "#" + r.itemId}${paused ? " · ⏸ paused" : ` · net ${sfl(r.net)}`}`, hero: r.iconHtml || undefined },
+    items: list.map((x) => flipItem(x, x.iconHtml)),
+    tiles: flipTiles(out.rows),
+    ...(paused ? { foot: PAUSED } : {}),
+  };
 };
 
-// overview: S = how many flips have a healthy margin; M = beside the best one and the losers
-flipSummary.sizes = ["s", "m"];
-flipSummary.size = "s";
-flipSummary.glance = ({ flips } = {}, ctx = {}, opts = {}, size = "s") => {
+// overview: how many flips have a healthy margin (a ring), then the flips by margin
+flipSummary.look = "gauge";
+flipSummary.glanceModel = ({ flips } = {}, ctx = {}) => {
   if (!flips || !Array.isArray(flips.items)) return { empty: "The orderbook data did not load." };
   const items = flips.items;
   if (!items.length) return { empty: "No NFTs with both a bid and an ask." };
-  const good = items.filter((i) => i.margin >= 15).length, bad = items.filter((i) => i.net <= 0).length;
+  const good = items.filter((i) => i.margin >= 15).length;
   const paused = frozen(items, ctx.now || Date.now());
-  const head = big(good, { unit: `/${items.length}`, tone: good ? "ok" : "", cap: `margin ≥ 15 %${paused ? " · ⏸ paused" : ""}` });
-  if (size === "s") return { html: head };
-  const best = items.reduce((a, i) => (!a || i.margin > a.margin ? i : a), null);
-  return { html: `<div class="g-split"><div>${head}</div>` + gRows([
-    { icon: ctx.icon ? ctx.icon(best.name) : "", name: best.name || `#${best.itemId}`, sub: "best margin", value: pctOf(best.margin), tone: marginTone(best) },
-    { name: "Net ≤ 0", value: bad, tone: bad ? "bad" : "" }]) + `</div>` };
+  return {
+    head: { value: good, unit: `/${items.length}`, tone: good ? "ok" : "", cap: `margin ≥ 15 %${paused ? " · ⏸ paused" : ""}`,
+      ring: (good / items.length) * 100, ringTone: good ? "ok" : "warn" },
+    items: items.slice().sort((a, b) => b.margin - a.margin).map((i) => flipItem(i, ctx.icon ? ctx.icon(i.name) : "")),
+    tiles: flipTiles(items),
+    ...(paused ? { foot: PAUSED } : {}),
+  };
 };

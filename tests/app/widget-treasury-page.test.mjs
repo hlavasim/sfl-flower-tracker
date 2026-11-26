@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
+import { looksFor, renderLook } from "../../ui/glance-templates.mjs";
 import { readFileSync } from "node:fs";
 import { buildTreasurySection } from "../../core/sections/treasury.mjs";
 import { treasuryValue } from "../../widgets/treasury-value.mjs";
@@ -74,24 +75,33 @@ test("items: treasures show the treasure boost; produced says it is not sellable
   assert.match(treasuryItems.build({ treasury: null }, ctx, {}).empty, /did not load/);
 });
 
-test("📱 glance: categories S = the biggest share; M = the top three by value; no valuation → empty", () => {
+test("📱 glance model, categories: the biggest share; the categories by value with their share bar; no valuation → empty", () => {
   // produced food (at production cost) outweighs resources on this farm
-  assert.match(treasuryCategories.glance({ treasury: T }, ctx, {}, "s").html, /<div class="g-hero">🍲<\/div><div class="g-big">41<small> %<\/small><\/div><div class="g-cap">Produced · 2\.7k 🌸<\/div>/);
-  const m = treasuryCategories.glance({ treasury: T }, ctx, {}, "m").html;
-  assert.strictEqual((m.match(/class="g-row"/g) || []).length, 3);
-  assert.match(m, /^<div class="g-rows"><div class="g-row"><span class="g-ic">🍲<\/span><div class="g-n">Produced<div>40\.9 % · 151 items<\/div><\/div><span class="g-v">2\.7k<\/span><\/div><div class="g-row"><span class="g-ic">⛏️<\/span><div class="g-n">Resources<div>26\.5 % · 50 items<\/div><\/div><span class="g-v">1\.8k<\/span>/);
-  assert.strictEqual((treasuryCategories.glance({ treasury: T }, ctx, {}, "l").html.match(/class="g-row"/g) || []).length, 6);
-  assert.match(treasuryCategories.glance({ treasury: null }, ctx, {}, "s").empty, /did not load/);
+  const m = treasuryCategories.glanceModel({ treasury: T }, ctx);
+  assert.strictEqual(treasuryCategories.look, "list-2");
+  assert.deepStrictEqual(m.head, { value: "41", unit: " %", cap: "Produced · 2.7k 🌸", hero: "🍲" });
+  assert.strictEqual(m.items.length, 6);
+  assert.deepStrictEqual({ ...m.items[1], pct: m.items[1].pct.toFixed(1) }, { icon: "⛏️", name: "Resources", sub: "26.5 % · 50 items", value: "1.8k", pct: "26.5" });
+  assert.deepStrictEqual(m.tiles[0], { label: "🍲 41 %", value: "2.7k" });
+  assert.match(renderLook(m, "list-2").html, /<span class="gx-ic">🍲<\/span><div class="gx-n">Produced<div class="gx-sub-tag">2\.7k<\/div><\/div>/);
+  assert.ok(looksFor(m).length >= 3);
+  assert.match(treasuryCategories.glanceModel({ treasury: null }, ctx).empty, /did not load/);
+  assert.strictEqual(treasuryCategories.glance, undefined, "the hand-written face is gone");
 });
 
-test("📱 glance: items S = the category's value; M = beside its top three; L = top six; empty category → empty", () => {
-  assert.match(treasuryItems.glance({ treasury: T }, ctx, { cat: "resources" }, "s").html, /<div class="g-big">1\.8k<small> 🌸<\/small><\/div><div class="g-cap">50 items<\/div>/);
-  const m = treasuryItems.glance({ treasury: T }, ctx, { cat: "resources" }, "m").html;
-  assert.match(m, /^<div class="g-split">.*<span class="g-ic"><img data-i="Obsidian"><\/span><div class="g-n">Obsidian<div>×67 · 19\.20<\/div><\/div><span class="g-v">1\.3k<\/span>/);
-  assert.strictEqual((m.match(/class="g-row"/g) || []).length, 3);
-  assert.strictEqual((treasuryItems.glance({ treasury: T }, ctx, { cat: "resources" }, "l").html.match(/class="g-row"/g) || []).length, 6);
-  assert.strictEqual(treasuryItems.glance({ treasury: T }, ctx, { cat: "pets" }, "s").empty, "No items found.");
-  assert.match(treasuryItems.glance({ treasury: null }, ctx, {}, "s").empty, /did not load/);
+test("📱 glance model, items: the category's value; its items by value (the bar against the biggest); empty category → empty", () => {
+  const m = treasuryItems.glanceModel({ treasury: T }, ctx, { cat: "resources" });
+  assert.strictEqual(treasuryItems.look, "number-list-2");
+  assert.deepStrictEqual([m.head.value, m.head.unit, m.head.cap], ["1.8k", " 🌸", "50 items"]);
+  assert.strictEqual(m.items.length, 50);
+  assert.deepStrictEqual(m.items[0], { icon: '<img data-i="Obsidian">', name: "Obsidian", sub: "×67 · 19.20", value: "1.3k", pct: 100 });
+  assert.deepStrictEqual(m.tiles.map((t) => t.label), ["items", "🌸", "of farm"]);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num">1\.8k<small> 🌸<\/small><\/div><div class="gx-cap">50 items<\/div>/);
+  assert.ok(looksFor(m).length >= 3);
+  assert.ok(treasuryItems.glanceModel({ treasury: T }, ctx, { cat: "treasures" }).tiles.some((t) => t.label === "boost"));
+  assert.deepStrictEqual(treasuryItems.glanceModel({ treasury: T }, ctx, { cat: "pets" }), { empty: "No items found." });
+  assert.match(treasuryItems.glanceModel({ treasury: null }, ctx, {}).empty, /did not load/);
+  assert.strictEqual(treasuryItems.glance, undefined);
 });
 
 test("page wiring: the TREASURY page renders its widgets through renderPage", () => {
