@@ -29,7 +29,7 @@ import { specCalendar, specTrades, specSkim, specEggs } from "./speculation.mjs"
 import { decSummary, decColours, decGrow } from "./decorations.mjs";
 // ROADMAP, BUDS, PETS
 import { roadmapIncome, roadmapBuyPath, roadmapOffers } from "./roadmap.mjs";
-import { roadmapGifts, roadmapDeliveries, roadmapAnimalFeed, roadmapAnimalLife, roadmapExpired } from "./roadmap-extras.mjs";
+import { roadmapGifts, roadmapDeliveries, roadmapAnimalFeed, roadmapAnimalLife, roadmapExpired, roadmapSkills } from "./roadmap-extras.mjs";
 import { budsTable } from "./buds.mjs";
 import { petsSummary, petsNftCollection, petsMarket, petCards } from "./pets.mjs";
 // TREASURY · SALES · MY TRADES · MARKS · FLIPS
@@ -91,6 +91,7 @@ export const WIDGETS = {
   [roadmapAnimalFeed.type]: roadmapAnimalFeed,
   [roadmapAnimalLife.type]: roadmapAnimalLife,
   [roadmapExpired.type]: roadmapExpired,
+  [roadmapSkills.type]: roadmapSkills,
   [budsTable.type]: budsTable,
   [petsSummary.type]: petsSummary,
   [petsNftCollection.type]: petsNftCollection,

@@ -12,8 +12,9 @@ import {
   roadmapEffFactor, roadmapOwnedEffects, roadmapCoinsFree, roadmapInSeason, MINE_RES,
   _getPowerContext,
   roadmapStartupPlans, roadmapBuildClones, roadmapMachineCrops, roadmapCropMachineMix,
-  roadmapInputCost,
+  roadmapInputCost, roadmapSkillBreakdown, roadmapSkillExtraFlow,
 } from "../engine/roadmap.mjs";
+import { calcSkillPointCost, getTotalBumpkinLevel } from "../engine/power-helpers.mjs";
 import { getCapacityCount, POWER_CATEGORIES } from "../engine/power-helpers.mjs";
 import { getAnimalCatSfl, calcAnimalFeedCost, calcSicknessCost } from "../engine/power-costs.mjs";
 import { CROP_GROW_DATA, FRUIT_GROW_DATA, GREENHOUSE_GROW_DATA } from "../engine/power-boosts.mjs";
@@ -159,6 +160,7 @@ export function buildRoadmapSection(snapshots, settings = {}) {
   // the gifts / deliveries / animal panels' numbers (the widgets roadmap-gifts, -deliveries,
   // -animal-feed, -animal-life render them); after _setItemCostMaps, which item costs read
   const extras = buildExtras(rs, settings.now);
+  extras.skills = buildSkills(rs);
 
   // effUnmeasured: no harvest efficiency could be measured, so every figure is at theoretical
   // (100 %) throughput — the page says so instead of presenting it as "your last 7 days".
@@ -495,4 +497,29 @@ function animalLifeOf(powerState) {
     blocks.push({ animalType, per, peak: peak.L, lastPos, avgL });
   }
   return blocks;
+}
+
+// ── Skills: every skill's FLOWER a day on this farm (the ⭐ Skills view's rows, from the same
+// roadmapSkillBreakdown + roadmapSkillExtraFlow), plus the level, points and FLOWER a point. ──
+function buildSkills(settings) {
+  const ps = _getPowerContext();
+  let built; try { built = roadmapBuildClones(); } catch (e) { return { rows: [], error: String((e && e.message) || e) }; }
+  const { byName, catBoostsW } = built;
+  const farm = ps.farm, bumpkin = farm.bumpkin || {};
+  let info = {}; try { info = calcSkillPointCost(bumpkin, ps.p2pPrices, farm) || {}; } catch (e) {}
+  const ascLvl = (farm.island && farm.island.ascensionLevel) || 0;
+  const level = info.level || getTotalBumpkinLevel(bumpkin.experience || 0, ascLvl);
+  const autoFree = Math.max(0, (ps.skillCostInfo && ps.skillCostInfo.freePoints) || 0);
+  const freePts = (settings.skillPts != null && isFinite(settings.skillPts)) ? Math.max(0, settings.skillPts) : autoFree;
+  const rows = Object.values(byName).filter((c) => c.type === "Skill").map((c) => {
+    const bd = roadmapSkillBreakdown(c, catBoostsW, settings);
+    const ex = roadmapSkillExtraFlow(c, settings);
+    const net = bd.net + ex.flow.reduce((t, f) => t + f.delta, 0);
+    return { name: c.name, tree: c.skillTree || "Other", tier: Number(c.skillTier) || 1, points: c.skillPoints || 1, has: !!c.has,
+      boost: (c.boost || "").split("\n").join(" · "), net,
+      parts: bd.parts.concat(ex.flow).map((p) => ({ label: p.label, delta: p.delta, kind: p.kind || "" })),
+      cond: (bd.cond || []).map((x) => ({ label: x.label, mining: !!x.mining, sit: x.sit || 0, netWith: x.netWith ?? null })),
+      tags: (ex.tags || []).map((t) => ({ group: t.group, text: t.text, ref: t.ref || 0 })) };
+  });
+  return { rows, level, freePts, autoFree, sflPerPt: info.sflPerPoint || 0, effMode: settings.effMode };
 }

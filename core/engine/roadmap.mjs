@@ -2288,6 +2288,120 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       return { gross, cost, net: gross - cost };
     }
 
+    // ── flowers.html: roadmapSkillExtraFlow + roadmapSkillBreakdown (moved verbatim; the page and
+    // section=roadmap's skills rows both use them) ──
+    function roadmapSkillExtraFlow(clone, settings) {
+      const flow = [], tags = [];
+      if (!clone || !clone.effects) return { flow, tags };
+      const er = powerState.exchangeRates || {}, cps = er.coinsPerSFL > 0 ? er.coinsPerSFL : 0;   // 0 = coins unpriced
+      const cap = powerState.capacity, p2p = roadmapPrices(settings), sm = powerState.stockMods || {};
+      const ef = (cat) => roadmapEffFactor(cat, settings);
+      const lblOf = (cat) => (POWER_CATEGORIES[cat] && POWER_CATEGORIES[cat].label) || cat;
+      const toolCost = (cat) => { try { const r = calcToolCostPerDay(cat, cap, er, p2p, sm, false); return r.freeTool ? 0 : (r.costPerDay || 0); } catch (e) { return 0; } };
+      const catCost = (cat) => { try { return Math.max(0, roadmapCatBreakdown(cat, roadmapOwnedEffects(cat), Object.assign({}, settings, { coinsFree: false })).cost || 0); } catch (e) { return 0; } };
+      const chopsPerDay = (cat) => { try { return (miningToolsPerDay(cat, cap) || 0) * ef(cat); } catch (e) { return 0; } };
+      const TOOLCAT = { "axe": "trees", "pickaxe": "stone", "stone pickaxe": "stone", "iron pickaxe": "iron", "gold pickaxe": "gold" };
+      const SEEDWORD = { "fruit": "fruits", "flower": "flowers", "crop": "crops", "greenhouse": "greenhouse" };
+      const tagMisc = (raw) => tags.push({ group: "misc", text: raw });
+      for (const e of clone.effects) {
+        const raw = (e.raw || "").trim(); let m;
+        if (e.type === "cost_reduction" && ROADMAP_MINING_CATS.indexOf(e.cat) >= 0) {
+          /*
+           * COIN portion only. `toolCost(cat)` is the whole per-day tool bill — coins AND the
+           * wood/stone/iron a pickaxe is crafted from — but these skills discount the coin
+           * price alone. power-helpers names the variable `coinDiscount` and applies it to
+           * `tool.coins`; a Stone Pickaxe is 20 coins + 3 Wood + 5 Stone, so cutting 20% off
+           * everything came out ~30x too high. Frugal Miner read +10.00/day here while the
+           * Power page's calcBoostValue said +0.31 for the same skill on the same farm.
+           */
+          let coinsPerDay = 0;
+          try {
+            const ti = calcToolCostPerDay(e.cat, cap, er, p2p, sm, false);
+            if (!ti.freeTool && cps > 0) coinsPerDay = ((ti.baseCoins || 0) * (ti.toolsPerDay || 0)) / cps;
+          } catch (err) {}
+          const sv = coinsPerDay * (e.value || 0) * ef(e.cat);
+          if (sv > 1e-6) flow.push({ label: lblOf(e.cat) + " tools saved", delta: sv, kind: "cost" }); else tagMisc(raw);
+          continue;
+        }
+        if ((m = raw.match(/-\s*(\d+(?:\.\d+)?)\s*%\s*([A-Za-z ]+?)\s*seeds?\s*cost/i))) {
+          const pct = parseFloat(m[1]) / 100, cat = SEEDWORD[m[2].trim().toLowerCase().split(" ")[0]] || "crops";
+          const sv = catCost(cat) * pct * ef(cat);
+          if (sv > 1e-6) flow.push({ label: lblOf(cat) + " seeds saved", delta: sv, kind: "cost" }); else tagMisc(raw);
+          continue;
+        }
+        if ((m = raw.match(/-\s*(\d+(?:\.\d+)?)\s*%\s*([A-Za-z ]+?)\s*cost/i))) {
+          const pct = parseFloat(m[1]) / 100, cat = TOOLCAT[m[2].trim().toLowerCase()] || null;
+          if (cat) { const sv = toolCost(cat) * pct * ef(cat); if (sv > 1e-6) flow.push({ label: lblOf(cat) + " tools saved", delta: sv, kind: "cost" }); else tagMisc(raw); continue; }
+        }
+        if (/Coins?/i.test(raw) && (m = raw.match(/(?:(\d+(?:\.\d+)?)\s*%\s*chance\s*)?\+?\s*(\d+)\s*Coins?/i)) && parseFloat(m[2]) > 0 && /chop|tree|mine|rock|stone|iron|gold/i.test(raw)) {
+          const chance = m[1] ? parseFloat(m[1]) / 100 : 1, amt = parseFloat(m[2]);
+          const cat = /tree|chop/i.test(raw) ? "trees" : (/iron/i.test(raw) ? "iron" : (/gold/i.test(raw) ? "gold" : "stone"));
+          const sv = cps > 0 ? (chance * amt * chopsPerDay(cat)) / cps : 0;
+          if (sv > 1e-6) flow.push({ label: "Coins (" + lblOf(cat) + ")", delta: sv, kind: "coin" }); else tagMisc(raw);
+          continue;
+        }
+        if (e.type === "qualitative") {
+          if (/deliver|deliveries|Bounties|selling[^.]*Market|coins/i.test(raw)) {
+            let ref = 0; const pm = raw.match(/(\d+(?:\.\d+)?)\s*%/); if (pm && cps > 0) ref = (parseFloat(pm[1]) / 100) * 1000 / cps;
+            tags.push({ group: "coins", text: raw, ref });
+          } else if (/XP/i.test(raw)) tags.push({ group: "xp", text: raw });
+          else if (/time/i.test(raw)) tags.push({ group: "speed", text: raw });
+          else if (/limit|stock|fold|frenzy/i.test(raw)) tags.push({ group: "limit", text: raw });
+          else tags.push({ group: "misc", text: raw });
+        }
+      }
+      return { flow, tags };
+    }
+
+    function roadmapSkillBreakdown(clone, catBoostsW, settings) {
+      if (!clone) return { parts: [], net: 0, cond: [] };
+      const parts = [], cond = [];
+      const _exV = (settings.excludeCats || []);
+      const nm = clone.name;
+      const ownedNo = (cat) => (catBoostsW[cat] || []).filter(b => b.has && !b.isDisabled && b.name !== nm).flatMap(b => b.effects.filter(e => e.cat === cat));
+      const lbl = (cat) => (POWER_CATEGORIES[cat] && POWER_CATEGORIES[cat].label) || cat;
+      // Mining categories: per-resource signed delta via the WHOLE chain (captures tool-cost interplay).
+      const mineCats = clone.categories.filter(c => ROADMAP_MINING_CATS.indexOf(c) >= 0 && POWER_CATEGORIES[c] && POWER_CATEGORIES[c].quantifiable && clone.effects.some(e => e.cat === c) && _exV.indexOf(c) < 0);
+      if (mineCats.length) {
+        const ovNo = {}, ovYes = {};
+        for (const cat of MINE_CHAIN) {
+          if (_exV.indexOf(cat) >= 0) continue;
+          const base = ownedNo(cat);
+          ovNo[cat] = base;
+          ovYes[cat] = base.concat(clone.effects.filter(e => e.cat === cat));
+        }
+        const chYes = roadmapMiningChain(settings, ovYes), chNo = roadmapMiningChain(settings, ovNo);
+        for (const cat of MINE_CHAIN) {
+          if (_exV.indexOf(cat) >= 0) continue;
+          const wB = chYes.byCat[cat] || {}, nB = chNo.byCat[cat] || {}, ef = roadmapEffFactor(cat, settings);
+          const d = ((wB.net || 0) - (nB.net || 0)) * ef;
+          if (Math.abs(d) > 1e-6) { parts.push({ cat, label: lbl(cat), delta: d }); continue; }
+          // ore is currently SKIP (not worth mining on this farm) — show the gain IF it were mined
+          const sd = ((wB.marketNet || 0) - (nB.marketNet || 0)) * ef;
+          if (sd > 1e-6) cond.push({ cat, label: lbl(cat), sit: sd, mining: true });
+        }
+      }
+      // Non-mining: FLOOR each side at 0 — a loss-making category nets 0 in the income engine (you wouldn't
+      // run it), so a skill that only SOFTENS a still-negative category adds no real FLOWER. Such cases go to
+      // `cond` with the absolute net so the UI can show "still below break-even".
+      for (const cat of clone.categories) {
+        if (ROADMAP_MINING_CATS.indexOf(cat) >= 0) continue;
+        if (_exV.indexOf(cat) >= 0) continue;
+        if (!POWER_CATEGORIES[cat] || !POWER_CATEGORIES[cat].quantifiable) continue;
+        const itemEff = clone.effects.filter(e => e.cat === cat);
+        if (!itemEff.length) continue;
+        const base = ownedNo(cat), ef = roadmapEffFactor(cat, settings);
+        const nw = roadmapCatNet(cat, base, settings), ni = roadmapCatNet(cat, base.concat(itemEff), settings);
+        const real = (Math.max(0, ni) - Math.max(0, nw)) * ef;
+        const raw = (ni - nw) * ef;
+        if (Math.abs(real) > 1e-6) parts.push({ cat, label: lbl(cat), delta: real });
+        else if (Math.abs(raw) > 1e-6 && ni < 0) cond.push({ cat, label: lbl(cat), netWith: ni * ef, netWithout: nw * ef, raw });
+      }
+      const net = parts.reduce((s, p) => s + p.delta, 0);
+      return { parts, net, cond };
+    }
+
+
 export {
   farmHasWarehouse, gameResUnitsPerDay, roadmapPrices, roadmapProductNetEff,
   roadmapProductBreakdown, roadmapSaltBreakdown, roadmapEffFactor, roadmapSideRankDelta,
@@ -2303,4 +2417,5 @@ export {
   roadmapMiningChain, roadmapCatMix, ROADMAP_MINING_CATS, roadmapAnimalCapacity, calcBoostValue, cmGetSeedRestockCount,
   roadmapMachineCrops, roadmapCropMachineMix, roadmapOwnedBuds, roadmapBudSetValue, roadmapBudMarginal,
   ROADMAP_INPUT_CATS, roadmapInputRun, roadmapInputCost, roadmapInputSaving, roadmapInputEff,
+  roadmapSkillExtraFlow, roadmapSkillBreakdown,
 };

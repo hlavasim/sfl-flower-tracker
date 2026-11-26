@@ -406,10 +406,6 @@ export const TABLE_INVENTORY = [
     "lines": 5
   },
   {
-    "name": "SEEDWORD",
-    "lines": 2
-  },
-  {
     "name": "SHRINE_DATA",
     "lines": 17
   },
@@ -448,10 +444,6 @@ export const TABLE_INVENTORY = [
   {
     "name": "TOOL_TO_CAT",
     "lines": 4
-  },
-  {
-    "name": "TOOLCAT",
-    "lines": 2
   },
   {
     "name": "TRACKED_DOLLS_DEFAULT",

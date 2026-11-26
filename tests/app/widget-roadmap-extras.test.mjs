@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
-import { roadmapGifts, roadmapDeliveries, roadmapAnimalFeed, roadmapAnimalLife, roadmapExpired } from "../../widgets/roadmap-extras.mjs";
+import { roadmapGifts, roadmapDeliveries, roadmapAnimalFeed, roadmapAnimalLife, roadmapExpired, roadmapSkills } from "../../widgets/roadmap-extras.mjs";
 import { WIDGETS } from "../../widgets/registry.mjs";
 import { renderTable } from "../../ui/table.mjs";
 import { looksFor, renderLook } from "../../ui/glance-templates.mjs";
@@ -129,4 +129,24 @@ test("expired: the page's rows (roadmapExpiredRows over the board's power payloa
   assert.match(SRC, /function roadmapExpiredRows\(ps, owned\)/);
   assert.match(SRC, /h \+= _w\("roadmap-expired"\);/);
   assert.doesNotMatch(SRC, /h \+= roadmapPeriodicHtml\(\);/);
+});
+
+test("skills: every skill valued server-side (the buy path's breakdown), take / reset verdicts, Show filters, the glance's best pick", () => {
+  assert.strictEqual(WIDGETS["roadmap-skills"], roadmapSkills);
+  const k = X.skills;
+  assert.ok(!k.error && k.rows.length > 100 && k.level > 0);
+  for (const r of k.rows) assert.ok(Math.abs(r.net - r.parts.reduce((a, p) => a + p.delta, 0)) < 1e-9, `${r.name}: net = its parts`);
+  const out = roadmapSkills.build({ roadmap: RM }, CTX, {});
+  assert.strictEqual(out.rows.length, k.rows.length);
+  for (const r of out.rows) assert.strictEqual(r.verdict, r.has ? (r.net < -0.01 ? "reset" : "owned") : (r.net > 0.01 ? "take" : "skip"));
+  assert.ok(roadmapSkills.build({ roadmap: RM }, CTX, { show: "take" }).rows.every((r) => !r.has && r.net > 0.01));
+  assert.ok(roadmapSkills.build({ roadmap: RM }, CTX, { show: "owned" }).rows.every((r) => r.has));
+  const m = roadmapSkills.glanceModel({ roadmap: RM }, CTX);
+  const take = out.rows.filter((r) => r.verdict === "take").sort((a, b) => b.net - a.net);
+  if (take.length) assert.match(m.head.cap, new RegExp(`^best to take: ${take[0].name.replace(/[()]/g, "\$&")}`));
+  assert.deepStrictEqual(m.tiles.map((t) => t.label), ["level", "free pts", "to take", "to reset"]);
+  assert.ok(looksFor(m).length >= 3);
+  // the page: the ⭐ Skills tab holds the widget and the upgrade ladder; the valuation is the engine's
+  assert.match(SRC, /<div id="rmw-roadmap-skills">\$\{_rmWidget\("roadmap-skills"\)\}<\/div>/);
+  assert.doesNotMatch(SRC, /function roadmapSkillBreakdown\(/, "moved to core/engine/roadmap.mjs");
 });

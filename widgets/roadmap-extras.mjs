@@ -252,3 +252,72 @@ roadmapExpired.glanceModel = (data = {}, ctx = {}) => {
       ...(r.gain != null ? { value: `${r.gain > 0 ? "+" : ""}${fmtFlower(r.gain)}`, tone: r.gain > 0 ? "ok" : "bad" } : { chip: { text: r.warn ? "now" : "renew", tone: r.warn ? "warn" : "" } }) })),
   };
 };
+
+// ── ⭐ Skills: every skill's FLOWER a day on this farm (section=roadmap's extras.skills, the same
+// roadmapSkillBreakdown + roadmapSkillExtraFlow the buy path uses); what to take, what to reset ──
+const EPS = 0.01;
+const skillVerdict = (r) => (r.has ? (r.net < -EPS ? "reset" : "owned") : r.net > EPS ? "take" : "skip");
+const SKILL_PILL = { take: ["take", "v-run"], reset: ["reset?", "v-bad"], owned: ["✓ owned", "v-ok"], skip: ["", ""] };
+// the value where it is not a plain FLOWER a day: "if mined", coins, XP, faster, limit+
+function skillValue(r) {
+  if (r.net > EPS) return `<b class="v-sk-pos">+${fmtFlower(r.net)}/d</b>`;
+  if (r.net < -EPS) return `<b class="v-rm-neg">−${fmtFlower(-r.net)}/d</b>`;
+  const sit = r.cond.filter((c) => c.mining && c.sit > EPS);
+  if (sit.length) return `<span class="v-rmf-warn">+${fmtFlower(sit.reduce((a, c) => a + c.sit, 0))}/d <small>if mined</small></span>`;
+  const coin = r.tags.find((t) => t.group === "coins");
+  if (coin) return `<span class="v-rmf-coin">coins${coin.ref ? " ≈+" + fmtFlower(coin.ref) + "/1k" : ""}</span>`;
+  if (r.tags.length) { const g = r.tags[0].group; return `<span class="v-dim">${g === "xp" ? "XP" : g === "speed" ? "faster" : g === "limit" ? "limit+" : "minor"}</span>`; }
+  return '<span class="v-dim">—</span>';
+}
+const skillIconName = (n) => String(n).replace(/\s*→\s*Level\s*\d+$/, "");
+export const roadmapSkills = {
+  type: "roadmap-skills",
+  title: "⭐ Skills — what each adds on your farm",
+  titleFor: (o) => (o.show === "take" ? "⭐ Skills to take" : o.show === "reset" ? "⭐ Skills to reset" : "⭐ Skills — what each adds on your farm"),
+  page: "roadmap",
+  needs,
+  optionsLabel: "Skills",
+  options: [{ key: "show", label: "Show", kind: "select", choices: [["all", "every skill"], ["take", "worth taking"], ["reset", "owned, worth resetting"], ["owned", "owned"]] }],
+  defaults: { opts: { show: "all" }, sort: { key: "net", dir: "desc" } },
+  rowKey: (r) => r.name,
+  rowLabel: (r) => r.name,
+  rowClass: (r) => (r.has ? "w-st-ready" : ""),
+  columns: [
+    { key: "name", label: "skill", fmt: (v, r) => `<div class="v-name">${r.iconHtml}<div><b>${esc(v)}</b><small>${esc(r.boost)}</small></div></div>` },
+    { key: "tree", label: "tree", get: (r) => `${r.tree} ${r.tier}`, fmt: (v, r) => `${esc(r.tree)} <span class="v-dim">T${r.tier}</span>` },
+    { key: "points", label: "pts", align: "right" },
+    { key: "net", label: "FLOWER/day", align: "right", fmt: (v, r) => skillValue(r) },
+    { key: "verdict", label: "", fmt: (v) => (SKILL_PILL[v][0] ? `<span class="v-pill ${SKILL_PILL[v][1]}">${SKILL_PILL[v][0]}</span>` : "") },
+    { key: "parts", label: "where it comes from", extra: true, get: (r) => r.parts.length,
+      fmt: (v, r) => r.parts.slice().sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).map((p) => `<span class="${p.delta >= 0 ? "v-sk-pos" : "v-rm-neg"}">${esc(p.label)} ${p.delta >= 0 ? "+" : "−"}${fmtFlower(Math.abs(p.delta))}</span>`).join(" · ") },
+  ],
+  build({ roadmap } = {}, ctx = {}, opts = {}) {
+    const x = extrasOf(roadmap);
+    if (!x || !x.skills) return { rows: [], footer: "", empty: NO_DATA };
+    const k = x.skills;
+    if (k.error) return { rows: [], footer: "", empty: `Skills could not be valued: ${k.error}` };
+    const all = k.rows.map((r) => ({ ...r, verdict: skillVerdict(r), iconHtml: icon(ctx, skillIconName(r.name)) }));
+    const show = opts.show || "all";
+    const rows = all.filter((r) => (show === "take" ? r.verdict === "take" : show === "reset" ? r.verdict === "reset" : show === "owned" ? r.has : true));
+    const take = all.filter((r) => r.verdict === "take").length, reset = all.filter((r) => r.verdict === "reset").length;
+    return { rows, empty: all.length ? "No skill matches this filter." : "No skill data.",
+      footer: `<div class="v-dim">Level ${k.level} · ≈${k.freePts} free point${k.freePts === 1 ? "" : "s"}${k.sflPerPt > 0 ? ` · ${fmtFlower(k.sflPerPt)} SFL of XP a point` : ""} · ${take} worth taking · ${reset} owned but losing FLOWER. ` +
+        `FLOWER a day on your farm at ${k.effMode === "real" ? "your last-7-days activity" : "100 % (theoretical)"} efficiency.</div>` };
+  },
+};
+roadmapSkills.look = "number-list-t";
+roadmapSkills.glanceModel = (data = {}, ctx = {}) => {
+  const out = roadmapSkills.build(data, ctx, { show: "all" });
+  if (!out.rows.length) return { empty: out.empty };
+  const k = data.roadmap.extras.skills;
+  const take = out.rows.filter((r) => r.verdict === "take").sort((a, b) => b.net - a.net);
+  const reset = out.rows.filter((r) => r.verdict === "reset").sort((a, b) => a.net - b.net);
+  const best = take[0];
+  return {
+    head: best ? { value: `+${fmtFlower(best.net)}`, unit: "/day", tone: "ok", cap: `best to take: ${best.name} (${best.points} pt)` }
+      : { value: "✓", tone: "ok", cap: "no unowned skill adds FLOWER" },
+    items: [...take.slice(0, 8).map((r) => ({ icon: r.iconHtml, name: r.name, sub: `${r.tree} T${r.tier} · ${r.points} pt`, value: `+${fmtFlower(r.net)}`, tone: "ok" })),
+      ...reset.map((r) => ({ icon: r.iconHtml, name: r.name, sub: "owned, loses FLOWER", value: `−${fmtFlower(-r.net)}`, tone: "bad", chip: { text: "reset?", tone: "bad" } }))],
+    tiles: [{ label: "level", value: k.level }, { label: "free pts", value: k.freePts }, { label: "to take", value: take.length }, { label: "to reset", value: reset.length }],
+  };
+};
