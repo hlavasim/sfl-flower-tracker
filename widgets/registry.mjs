@@ -17,6 +17,10 @@ import { worldIslands, worldSkillPoints } from "./world-dist.mjs";
 import { targetList } from "./target-list.mjs";
 import { flowersNeeds, flowerBeds } from "./flowers.mjs";
 import { crabTraps, craftingBox } from "./crafting.mjs";
+// ROADMAP, BUDS, PETS
+import { roadmapIncome, roadmapBuyPath, roadmapOffers } from "./roadmap.mjs";
+import { budsTable } from "./buds.mjs";
+import { petsSummary, petsNftCollection, petsMarket, petCards } from "./pets.mjs";
 
 export const WIDGETS = {
   [fishingAgeNow.type]: fishingAgeNow,
@@ -35,4 +39,13 @@ export const WIDGETS = {
   [flowerBeds.type]: flowerBeds,
   [crabTraps.type]: crabTraps,
   [craftingBox.type]: craftingBox,
+  // ROADMAP, BUDS, PETS
+  [roadmapIncome.type]: roadmapIncome,
+  [roadmapBuyPath.type]: roadmapBuyPath,
+  [roadmapOffers.type]: roadmapOffers,
+  [budsTable.type]: budsTable,
+  [petsSummary.type]: petsSummary,
+  [petsNftCollection.type]: petsNftCollection,
+  [petsMarket.type]: petsMarket,
+  [petCards.type]: petCards,
 };

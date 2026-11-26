@@ -91,6 +91,54 @@ export const RESOURCES = {
       return d && typeof d === "object" && !Array.isArray(d) ? { ...d, pricesOk: body.pricesOk !== false } : d;
     },
   },
+  // ROADMAP: the last 7 days of farm-history slimmed to the _h.* diff slices section=roadmap
+  // measures the harvest efficiency from ([] when there is no history).
+  roadmapHistory: {
+    ttl: 10 * 60_000,
+    load: async ({ farm }, { json }) => {
+      const day = (ms) => new Date(ms).toISOString().slice(0, 10);
+      const now = Date.now();
+      let d;
+      try { d = await json(`/api/farm-history?farm=${enc(farm)}&from=${day(now - 7 * 86400000)}&to=${day(now + 86400000)}&limit=2000`); }
+      catch { return []; }
+      return (d.snapshots || []).map((sn) => ({ captured_at: sn.captured_at,
+        diff: Object.fromEntries(Object.entries(sn.diff || {}).filter(([k]) => k.startsWith("_h."))) }));
+    },
+  },
+  // Listed buds' marketplace floors { "<id>": floor } ({} when the book is unreachable).
+  budFloors: {
+    ttl: 10 * 60_000,
+    load: async (_, { json }) => {
+      const floors = {};
+      try { for (const i of (await json("/api/marketplace-orderbook?budfloors=1")).items || []) floors[i.id] = i.floor; }
+      catch { /* no buds on the buy path */ }
+      return floors;
+    },
+  },
+  // ROADMAP: section=roadmap POSTed with the history, the bud floors and the recorded weeks, and the
+  // page's own settings read from its keys at load time (the product picks, sfl_roadmap_settings;
+  // no typed BTC withdrawal = the repay plan's daily one), exactly as the ROADMAP page sends them.
+  roadmap: {
+    ttl: 5 * 60_000,
+    load: async ({ farm }, { json, get }) => {
+      const ls = globalThis.localStorage;
+      const read = (k) => { try { return ls ? ls.getItem(k) : null; } catch { return null; } };
+      let s = {};
+      try { s = JSON.parse(read("sfl_roadmap_settings") || "{}") || {}; } catch { s = {}; }
+      if (!(typeof s.withdrawPerDay === "number" && s.withdrawPerDay >= 0)) {
+        const auto = parseFloat(read("sfl_repay_daily_flower"));
+        if (isFinite(auto) && auto > 0) s.withdrawPerDay = auto;
+      }
+      let products = {};
+      try { products = JSON.parse(read("sfl_power_products") || "{}") || {}; } catch { products = {}; }
+      const [h, b, w] = await Promise.all([get({ res: "roadmapHistory", farm }), get({ res: "budFloors" }), get({ res: "ticketWeeks", farm })]);
+      const body = await json(`/api/compute?farm=${enc(farm)}&section=roadmap&products=${enc(JSON.stringify(products))}&roadmap=${enc(JSON.stringify(s))}`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ snapshots: h.data || [], budFloors: b.data || {}, weeks: w.data || [] }),
+      });
+      return body.data || null;
+    },
+  },
   // The LEVELING plan inputs; POSTs the recorded weeks when there are any, as the pages always did.
   leveling: {
     persist: true,
