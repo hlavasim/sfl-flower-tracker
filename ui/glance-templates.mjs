@@ -15,6 +15,8 @@ export function countdown(at, now = Date.now()) {
   const ms = Number(at) - now;
   if (!(ms > 0)) return "Ready";
   const m = Math.ceil(ms / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24);
+  if (d >= 365) return `${(d / 365).toFixed(1)}y`;
+  if (d >= 60) return `${Math.round(d / 30)}mo`;
   return d >= 1 ? `${d}d ${h % 24}h` : h >= 1 ? `${h}h ${m % 60}m` : `${m}m`;
 }
 // an item's tag: a live countdown (at), else its chip, else its value
@@ -27,7 +29,7 @@ function tagOf(it, now) {
   if (it.value != null && it.value !== "") return { html: esc(it.value), tone: it.tone, text: String(it.value) };
   return null;
 }
-const icon = (it) => it.icon || `<span class="g-ini">${esc(String(it.name || "?").slice(0, 2))}</span>`;
+const icon = (it) => it.icon || `<span class="g-ini">${esc(String(it.name || "?").replace(/[^\p{L}\p{N}]/gu, "").slice(0, 2) || "?")}</span>`;
 function ringSvg(p, t = "ok") {
   const r = 22, c = 2 * Math.PI * r;
   return `<svg class="gx-ring${tone(t)}" viewBox="0 0 54 54"><circle cx="27" cy="27" r="${r}" class="g-ring-bg"/>` +
@@ -75,7 +77,7 @@ function iconsBlock(items, cap, cols, now) {
 }
 function tilesBlock(tiles, n, cols, asList = false) {
   if (asList) return `<div class="gx-numlist">` + tiles.slice(0, n).map((t) => `<div><span>${esc(t.label)}</span><b>${esc(t.value)}</b></div>`).join("") + `</div>`;
-  return `<div class="gx-tiles" style="--c:${cols}">` + tiles.slice(0, n).map((t) =>
+  return `<div class="gx-tiles${cols === 2 ? " gx-tiles-2" : ""}" style="--c:${cols}">` + tiles.slice(0, n).map((t) =>
     `<div><span>${esc(t.label)}</span><b>${esc(t.value)}</b>${t.sub ? `<small>${esc(t.sub)}</small>` : ""}</div>`).join("") + `</div>`;
 }
 function barsBlock(items, n, now) {

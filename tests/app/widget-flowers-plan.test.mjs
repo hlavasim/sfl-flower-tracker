@@ -210,9 +210,10 @@ test("📱 glance models: grow planner = the next thing to do, the plantings in 
   if (first.now) assert.deepStrictEqual([g.head.value, g.head.tone], ["Now", "ok"]);
   assert.match(g.head.cap, new RegExp(`${first.pb ? "⚡ Petal Blessed" : "plant"} ${first.flower}`));
   assert.strictEqual(g.items.length, out.rows.length);
-  assert.deepStrictEqual(g.items.map((i) => i.at), list.map((r) => r.at), "a live countdown to each planting");
+  // the plan is computed from the clock twice (build, then the model): the same times within a moment
+  g.items.forEach((it, k) => assert.ok(Math.abs(it.at - list[k].at) < 1000, "a live countdown to each planting"));
   assert.ok(g.items.every((i) => i.chip === undefined));
-  assert.match(renderLook(g, "next").html, new RegExp(`<div class="gx-next-name">${first.flower}</div>.*<span class="g-at" data-at="${first.at}">`));
+  assert.match(renderLook(g, "next").html, new RegExp(`<div class="gx-next-name">${first.flower}</div>.*<span class="g-at" data-at="${g.items[0].at}">`));
   assert.ok(looksFor(g).length >= 3);
   const done = growPlanner.glanceModel({ farm: FARM }, ctx(() => ({ done: true, plan: {}, sleep: {} })), opts);
   assert.match(done.empty, /All flowers at target/);

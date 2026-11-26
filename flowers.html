@@ -16455,6 +16455,10 @@
             if (/widget failed/i.test(c.textContent)) tag("failed: " + c.textContent.slice(0, 80));
             if (gx.scrollHeight > gx.clientHeight + 2) tag(`overflow +${gx.scrollHeight - gx.clientHeight}px`);
             if (gx.scrollWidth > gx.clientWidth + 2) tag(`overflow sideways +${gx.scrollWidth - gx.clientWidth}px`);
+            // key text cut to "…" (a tile's value or label, the number, a chip or tag)
+            for (const e of gx.querySelectorAll(".gx-tiles b, .gx-tiles span, .gx-num, .gx-chip, .gx-tag, .gx-numlist b")) {
+              if (e.scrollWidth > e.clientWidth + 1) { tag(`cut: "${e.textContent.trim().slice(0, 24)}"`); break; }
+            }
             for (const e of gx.querySelectorAll("*")) {
               if ([...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()) && parseFloat(getComputedStyle(e).fontSize) < 10.5) {
                 tag(`text ${parseFloat(getComputedStyle(e).fontSize).toFixed(1)}px: "${e.textContent.trim().slice(0, 24)}"`); break;
@@ -16500,7 +16504,7 @@
       for (const el of document.querySelectorAll(".g-at[data-at]")) {
         const ms = Number(el.dataset.at) - Date.now(), was = el.textContent;
         const m = Math.ceil(ms / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24);
-        el.textContent = !(ms > 0) ? "Ready" : d >= 1 ? `${d}d ${h % 24}h` : h >= 1 ? `${h}h ${m % 60}m` : `${m}m`;
+        el.textContent = !(ms > 0) ? "Ready" : d >= 365 ? `${(d / 365).toFixed(1)}y` : d >= 60 ? `${Math.round(d / 30)}mo` : d >= 1 ? `${d}d ${h % 24}h` : h >= 1 ? `${h}h ${m % 60}m` : `${m}m`;
         if (el.textContent === "Ready" && was !== "Ready") turned = true;
       }
       if (turned && getPage() === "board" && window._wRerender && !document.querySelector("[data-pop], .w-sheet")) window._wRerender();

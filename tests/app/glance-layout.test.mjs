@@ -133,3 +133,11 @@ test("a board keeps its own column count (2-12, default 6); a full table spans i
   h.setBoardCols("main", 4);
   assert.match(h.renderItem("main", first(h), { data: {} }), /style="grid-column:span 2"/);
 });
+
+test("long countdowns read as months / years; initials skip symbols; three tiles stay one row", () => {
+  assert.strictEqual(countdown(NOW + 90 * 24 * H, NOW), "3mo");
+  assert.strictEqual(countdown(NOW + 3395 * 24 * H, NOW), "9.3y");
+  assert.match(renderLook({ items: [{ name: "▶ A5 · target" }, { name: "x" }, { name: "y" }] }, "list-1").html, /<span class="g-ini">A5<\/span>/);
+  const ov = renderLook({ head: { value: 1 }, items: [{ name: "a" }, { name: "b" }, { name: "c" }], tiles: [{ label: "a", value: 1 }, { label: "b", value: 2 }, { label: "c", value: 3 }] }, "overview-4").html;
+  assert.match(ov, /class="gx-tiles" style="--c:3"/, "a 3-column row, not the 2-column orphan rule");
+});
