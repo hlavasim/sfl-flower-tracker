@@ -538,8 +538,9 @@ ykPlacing.glanceModel = (data = {}, ctx = {}) => {
   return {
     head: { value: compact(p50[p50.length - 1].p50), unit: " pts", tone: d50 > 0 ? "warn" : "", cap: `#50 Storm cut-off · ${signed(d50)} in ${hours} h`, hero: "⛈️" },
     items: lines.map(({ key, name, what, pts }) => {
-      const d = move(pts, key), cur = pts[pts.length - 1][key];
-      return { icon: monsterIcon(what), name, sub: `${signed(d)} in ${hours} h`, value: compact(cur), tone: d > 0 ? "warn" : "", pct: (cur / topNow) * 100 };
+      // each tier over its own span (a tier tracked later has fewer snapshots than #50)
+      const d = move(pts, key), cur = pts[pts.length - 1][key], h = ((pts[pts.length - 1].t - pts[0].t) / 3600000).toFixed(0);
+      return { icon: monsterIcon(what), name, sub: `${signed(d)} in ${h} h`, value: compact(cur), tone: d > 0 ? "warn" : "", pct: (cur / topNow) * 100 };
     }),
     tiles: [
       { label: "#50 now", value: compact(p50[p50.length - 1].p50) },

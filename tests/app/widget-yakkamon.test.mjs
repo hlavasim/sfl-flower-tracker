@@ -197,6 +197,9 @@ test("📱 glance model, placing: the #50 threshold, its move and its line; ever
   assert.deepStrictEqual(m.series, [18229, 19016, 19812, 20592]);
   assert.match(renderLook(m, "chart-2").html, /<div class="gx-num g-warn(?: gx-num-long)?">20\.6k<small> pts<\/small><\/div>/);
   assert.match(Y.ykPlacing.glanceModel({}, ctx({ hist: HIST.slice(0, 1) })).empty, /Not enough snapshots/);
+  // a tier tracked later (#3 only in the last two snapshots) says its own span, not #50's 24 h
+  const late = HIST.map((r, k) => (k < 2 ? { ...r, p3: undefined } : r));
+  assert.strictEqual(Y.ykPlacing.glanceModel({}, ctx({ hist: late })).items[0].sub, "+39 in 4 h");
 });
 
 test("📱 glance model, planner: the week-1 deposit; every tranche (bar = share of the biggest)", () => {
