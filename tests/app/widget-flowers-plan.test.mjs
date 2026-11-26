@@ -58,8 +58,17 @@ test("a reward lists every item, coin and wearable with its icon", () => {
   assert.strictEqual(h, "1× <i>Treasure Key</i>Treasure Key · <i>Coin</i>2,500 · <i>Pirate Hat</i>Pirate Hat · 📜 <i>Pirate Bed</i>Pirate Bed");
 });
 
+// The gift plan the page reads (localStorage) swapped for one call.
+const withPlan = (plan, fn) => {
+  const was = page.store.sfl_gift_plan;
+  page.store.sfl_gift_plan = JSON.stringify(plan);
+  try { return fn(); } finally { page.store.sfl_gift_plan = was; }
+};
+// a plan the four beds can grow: one Prism Petal (its 4-flower chain) and one Red Pansy a day
+const FEASIBLE = { betty: "Red Pansy", bert: "Prism Petal" };
+
 test("gift cycle: the batch schedule's numbers, a timeline, production vs demand with bars", () => {
-  const m = P._giftsModel(P._flowerPageData(FARM));
+  const m = withPlan(FEASIBLE, () => P._giftsModel(P._flowerPageData(FARM)));
   const c = m.cycle;
   assert.ok(c && c.cycleH > 0 && c.totalBatches >= c.stepRows.length);
   // Prism Petal's chain is three flowers; Red Pansy one: every step of both is grown
@@ -72,8 +81,24 @@ test("gift cycle: the batch schedule's numbers, a timeline, production vs demand
   assert.match(out.html, /class="v-pill v-idle">🌱 plant</);
   assert.match(out.html, /Production vs demand/);
   assert.strictEqual((out.html.match(/class="v-bar"/g) || []).length, c.stepRows.length);
+  assert.match(out.html, /<b>4\.0d \(96\.0h\)<\/b><span>one cycle<\/span>/);
   // nothing planned → says how to start
   assert.match(flowerGiftCycle.view({ farm: FARM }, ctx(() => ({ ...m, cycle: null }))).empty, /Select flowers/);
+});
+
+test("gift cycle: a plan the beds cannot grow says so instead of a runaway cycle (was '1003.0d (24073.0h) — one cycle')", () => {
+  // two Prism Petals and a Red Pansy a day: ~64 h of growing a day in 4 beds; the page's scheduler
+  // never settles and stops after 8 rounds at a cycle of ~24,000 h
+  const m = P._giftsModel(P._flowerPageData(FARM));
+  assert.ok(m.cycle.cycleH > 10000, "the page model still runs away");
+  const { html } = flowerGiftCycle.view({ farm: FARM }, ctx(() => m));
+  assert.doesNotMatch(html, /one cycle/);
+  assert.doesNotMatch(html, /\d{3,}\.\d+d/);
+  assert.match(html, /needs about <b>64h<\/b> of growing a day in all 4 beds/);
+  assert.match(html, /cannot keep up/);
+  assert.match(html, /Daily demand/);
+  const g = flowerGiftCycle.glance({ farm: FARM }, ctx(() => m), {}, "s").html;
+  assert.match(g, /<div class="g-big g-bad">Too much<\/div><div class="g-cap">the plan needs ~64h of growing a day<\/div>/);
 });
 
 test("Petal Blessed: the beds to plant with their recipes (icons), the hours it saves", () => {
@@ -122,4 +147,59 @@ test("beehives: a honey ring per hive and the swarm note", () => {
   const html = renderTable(beehives.columns, out.rows, beehives.defaults, { rowKey: beehives.rowKey });
   assert.match(html, /class="v-ring" style="--p:40"><span><i>Honey<\/i>/);
   assert.match(out.footer, /Bee swarm active/);
+});
+
+test("📱 glances: gift planner S = planned gifts given today with a ring, M = the planned NPCs; nothing planned is empty", () => {
+  const m = P._giftsModel(P._flowerPageData(FARM));
+  const given = m.npcs.filter((n) => n.planned && n.givenToday).length;
+  const s = flowerGifts.glance({ farm: FARM }, ctx(() => m), {}, "s").html;
+  assert.match(s, /<svg class="g-ring/);
+  assert.match(s, new RegExp(`<div class="g-big[^"]*">${given}<small>/3</small></div><div class="g-cap">planned gifts given today</div>`));
+  const mid = flowerGifts.glance({ farm: FARM }, ctx(() => m), {}, "m").html;
+  assert.strictEqual((mid.match(/class="g-row"/g) || []).length, 3);
+  assert.match(mid, /<span class="g-ic"><i>Red Pansy<\/i><\/span><div class="g-n">Betty<div>Red Pansy · /);
+  assert.match(mid, /class="g-chip g-(bad|ok)">(to give|given)</);
+  const none = { ...m, npcs: m.npcs.map((n) => ({ ...n, planned: "" })) };
+  assert.match(flowerGifts.glance({ farm: FARM }, ctx(() => none), {}, "s").empty, /No gifts planned/);
+  assert.strictEqual(flowerGifts.glance({}, ctx(() => m), {}, "s").empty, "No farm data.");
+});
+
+test("📱 glances: gift cycle S = one cycle's length, M = batches / Petal Blessed / yield tiles; no plan is empty", () => {
+  const m = withPlan(FEASIBLE, () => P._giftsModel(P._flowerPageData(FARM)));
+  assert.strictEqual(flowerGiftCycle.glance({ farm: FARM }, ctx(() => m), {}, "s").html,
+    '<div class="g-big">4.0d</div><div class="g-cap">one cycle · 5 batches</div>');
+  const mid = flowerGiftCycle.glance({ farm: FARM }, ctx(() => m), {}, "m").html;
+  assert.match(mid, /<div class="g-tiles"><div><span>batches<\/span><b>5<\/b><\/div><div><span>Petal Blessed<\/span><b>1<\/b><\/div><div><span>yield<\/span><b>×1\.60<\/b>/);
+  assert.match(flowerGiftCycle.glance({ farm: FARM }, ctx(() => ({ ...m, cycle: null })), {}, "s").empty, /No gifts planned/);
+});
+
+test("📱 glances: Petal Blessed S = its state and what it saves, M = beside the beds to plant; no farm is empty", () => {
+  const m = P._petalBlessedModel(P._flowerPageData(FARM));
+  const saved = m.picks.reduce((s, p) => s + p.seedHours, 0);
+  const s = petalBlessed.glance({ farm: FARM }, ctx(() => m), {}, "s").html;
+  assert.strictEqual(s, `<div class="g-big g-ok">Ready</div><div class="g-cap">${m.picks.length} to plant · saves ${saved}h</div>`);
+  const cd = petalBlessed.glance({ farm: FARM }, { ...ctx(() => ({ ...m, status: { status: "cooldown", nextAt: 2e12 } })), now: 2e12 - 600000 }, {}, "s").html;
+  assert.match(cd, /<div class="g-big g-info">10m<\/div>/);
+  const mid = petalBlessed.glance({ farm: FARM }, ctx(() => m), {}, "m").html;
+  assert.match(mid, /^<div class="g-split"><div><div class="g-big g-ok">Ready/);
+  assert.strictEqual((mid.match(/class="g-row"/g) || []).length, Math.min(3, m.picks.length));
+  assert.match(mid, new RegExp(`<i>${m.picks[0].name}</i></span><div class="g-n">${m.picks[0].name}<div>${m.picks[0].seedLabel} Seed [+] ${m.picks[0].input}`));
+  assert.strictEqual(petalBlessed.glance({}, ctx(() => m), {}, "s").empty, "No farm data.");
+});
+
+test("📱 glances: grow planner S = the next thing to do, L = the plantings in order; nothing to plan is empty", () => {
+  const opts = { mode: "collection", n: 5 };
+  const model = (f, o) => P._growPlanModel(P._flowerPageData(f), o);
+  const out = growPlanner.build({ farm: FARM }, ctx(model), opts);
+  assert.ok(out.rows.length > 0);
+  const first = out.rows.slice().sort((a, b) => a.at - b.at)[0];
+  const s = growPlanner.glance({ farm: FARM }, ctx(model), opts, "s").html;
+  assert.match(s, new RegExp(`^<div class="g-hero"><i>${first.flower}</i></div>`));
+  assert.match(s, first.now ? /<div class="g-big g-ok">Now<\/div>/ : /<div class="g-big">/);
+  assert.match(s, new RegExp(`${first.pb ? "⚡ Petal Blessed" : "plant"} ${first.flower}`));
+  const l = growPlanner.glance({ farm: FARM }, ctx(model), opts, "l").html;
+  assert.strictEqual((l.match(/class="g-row"/g) || []).length, Math.min(7, out.rows.length));
+  assert.match(l, /class="g-chip g-(ok|accent|info)">/);
+  const done = growPlanner.glance({ farm: FARM }, ctx(() => ({ done: true, plan: {}, sleep: {} })), opts, "s");
+  assert.match(done.empty, /All flowers at target/);
 });

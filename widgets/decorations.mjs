@@ -3,6 +3,7 @@
 // expansion geometry, the chosen layout, what stands on the farm — is the page's _decCompute(farm),
 // handed over as ctx.plan; these only lay out its numbers.
 import { bar, bigBar, pill } from "../ui/viz.mjs";
+import { big, ring as gRing, rows as gRows, tiles as gTiles } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const n0 = (v) => Math.round(+v || 0).toLocaleString("en-US");
@@ -59,6 +60,34 @@ export const decColours = {
   },
 };
 
+// ── iPhone glance faces ──
+// summary: S = what is still to grow (ring: planned flowers already planted); M = planted / to grow / plantable
+decSummary.sizes = ["s", "m"];
+decSummary.size = "s";
+decSummary.glance = (data, ctx = {}, opts = {}, size = "s") => {
+  const { P, empty } = planOf(data, ctx);
+  if (!P) return { empty };
+  const pct = P.totalNeed ? (P.totalDone / P.totalNeed) * 100 : 0;
+  if (size === "m") return { html: gTiles([{ label: "planted", value: n0(P.totalDone), sub: `of ${n0(P.totalNeed)}` },
+    { label: "to grow", value: n0(P.totalMissing), sub: P.totalMissing ? "not in the bag" : "all in hand ✓" }, { label: "plantable", value: n0(P.plantable), sub: `A${P.ascLevel} band` }]) };
+  return { html: `<div class="g-corner">${gRing(pct, { tone: pct >= 100 ? "ok" : "accent" })}</div>` + (P.totalMissing
+    ? big(n0(P.totalMissing), { cap: `still to grow · ${n0(P.totalDone)} of ${n0(P.totalNeed)} planted` })
+    : big("✓", { tone: "ok", cap: `all in hand · ${n0(P.totalDone)} of ${n0(P.totalNeed)} planted` })) };
+};
+
+// colours: S = even or not, with the five colours as one stacked bar
+decColours.sizes = ["s"];
+decColours.size = "s";
+decColours.glance = (data, ctx = {}) => {
+  const { P, empty } = planOf(data, ctx);
+  if (!P) return { empty };
+  const by = P.byColour || {}, total = COLOURS.reduce((s, c) => s + (by[c] || 0), 0);
+  if (!total) return { empty: "The plan has no flowers in scope." };
+  const even = new Set(COLOURS.map((c) => by[c] || 0)).size === 1;
+  return { html: big(even ? "Even" : "Uneven", { tone: even ? "ok" : "bad", cap: `${n0(total)} flowers, five colours` }) +
+    `<div class="g-stack">` + COLOURS.map((c) => `<i style="width:${(((by[c] || 0) / total) * 100).toFixed(1)}%;background:${SWATCH[c]}" title="${c} ${n0(by[c] || 0)}"></i>`).join("") + `</div>` };
+};
+
 // One flower's placement guide: the band (in scope) as a small grid with each target square's step
 // number, and the walk from the previous tile of the same flower.
 function guideHtml(r) {
@@ -99,4 +128,23 @@ export const decGrow = {
       `<th class="v-dec-r">need</th><th class="v-dec-r">planted</th><th class="v-dec-r">in bag</th><th class="v-dec-r">to grow</th></tr></thead><tbody>${rows}</tbody></table></div>`;
     return { html };
   },
+};
+
+// what to grow: S = the flower most still to grow; M / L = the flowers not yet finished, most missing first
+decGrow.sizes = ["s", "m", "l"];
+decGrow.size = "m";
+decGrow.glance = (data, ctx = {}, opts = {}, size = "s") => {
+  const { P, empty } = planOf(data, ctx);
+  if (!P) return { empty };
+  if (!P.rows.length) return { empty: "The plan has no flowers in scope." };
+  const left = P.rows.filter((r) => r.left > 0).sort((a, b) => b.missing - a.missing || b.left - a.left);
+  if (!left.length) return { html: big("✓", { tone: "ok", cap: `all ${P.rows.length} flower${P.rows.length === 1 ? "" : "s"} planted` }) };
+  if (size === "s") {
+    const r = left[0];
+    return { html: `<div class="g-hero">${icon(ctx, r.name)}</div>` + (r.missing
+      ? big(n0(r.missing), { tone: "bad", cap: `${r.name} to grow · ${left.length} flowers left` })
+      : big(n0(r.left), { cap: `${r.name} to plant from the bag · ${left.length} flowers left` })) };
+  }
+  return { html: gRows(left.slice(0, size === "m" ? 3 : 7).map((r) => ({ icon: icon(ctx, r.name), name: r.name, sub: `${n0(r.done)} of ${n0(r.n)} planted`,
+    ...(r.missing ? { value: `−${n0(r.missing)}`, tone: "bad" } : { chip: { text: "in bag", tone: "info" } }) }))) };
 };
