@@ -688,7 +688,7 @@ ticketsSources.glanceModel = (data = {}, ctx = {}, opts = {}) => {
       hero: srcIcon(ctx, d, s), cap: `cheapest: ${srcName(s)} · +${s.tickets}` },
     items: open.map((x) => ({ icon: srcIcon(ctx, d, x), name: srcName(x), sub: `+${x.tickets} ${x.per === "day" ? "a day" : "a week"}`,
       value: x.perTicket ? fmt(x.perTicket, 3) : "free", tone: x.perTicket <= d.guide.ticketValue ? "ok" : "bad", pct: share(x.perTicket, top) })),
-    tiles: [{ label: "open", value: String(open.length) }, { label: "tickets", value: `+${fmt(open.reduce((a, x) => a + x.tickets, 0))}` },
+    tiles: [{ label: "open", value: String(open.length) }, { label: "tickets/week", value: `+${fmt(open.reduce((a, x) => a + x.tickets * (x.per === "day" ? 7 : 1), 0))}` },   // a daily source counts 7 times
       { label: "max/ticket", value: fmt(d.guide.ticketValue, 3) }],
   };
 };

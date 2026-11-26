@@ -290,6 +290,10 @@ test("📱 glance sources: the cheapest open source; open ones cheapest first, t
   assert.strictEqual(m.items.length, 6);
   assert.deepStrictEqual(m.items.find((i) => i.name === "Deliver Sunfish"), { icon: ICON("Sunfish"), name: "Deliver Sunfish", sub: "+2 a week", value: "1.000", tone: "bad", pct: (1 / 12) * 100 });
   assert.ok(!m.items.some((i) => /Red Cosmos/.test(i.name)), "done sources are left out");
+  // the tickets tile is a week's worth: a daily source counts 7 times
+  const week = m.items.reduce((a, i) => { const [, n, per] = i.sub.match(/^\+(\d+) a (day|week)$/); return a + Number(n) * (per === "day" ? 7 : 1); }, 0);
+  assert.ok(m.items.some((i) => / a day$/.test(i.sub)), "the fixture has a daily source");
+  assert.deepStrictEqual(m.tiles[1], { label: "tickets/week", value: `+${week}` });
   assert.strictEqual(rowsIn(renderLook(m, "number-list-2").html), 3);
   const allDone = { ...D, sources: D.sources.map((x) => ({ ...x, done: true })) };
   assert.match(G(W.ticketsSources, ctx(), allDone).empty, /No open priced source/);
