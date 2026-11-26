@@ -9718,6 +9718,7 @@
     // ═══════════════════════════════════════
 
     function dashAgoText(ms) {
+      if (ms > 3650 * 86400000) return "";   // a sentinel timestamp (oil's drilledAt: 1), not a real age
       if (ms < 60000) return "just now";
       if (ms < 3600000) return Math.floor(ms / 60000) + "m ago";
       if (ms < 86400000) return Math.floor(ms / 3600000) + "h " + Math.floor((ms % 3600000) / 60000) + "m ago";
