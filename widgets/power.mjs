@@ -762,10 +762,11 @@ powerBoosts.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const s = d.quantifiable ? ((data.power.categories || {}).catSummaries || {})[catId] : null;
   return {
     head: { value: owned.length, unit: `/${base.length}`, cap: `${d.emoji} ${d.label} boosts owned`, ring: ownedPct(owned.length, base.length), ringTone: "ok" },
+    // the head counts the whole category; the list follows the copy's Show (owned / missing / all)
     items: [
-      ...buys.map((r) => ({ icon: r.iconHtml, name: r.name, sub: val(r), chip: { text: `${r.roi.toFixed(0)}d`, tone: roiTone(r.roi) }, pct: yearPct(r.roi) })),
-      ...rest.map((r) => ({ icon: r.iconHtml, name: r.name, sub: val(r), chip: { text: r.loss ? "loss" : "missing", tone: r.loss ? "bad" : "" } })),
-      ...owned.map((r) => ({ icon: r.iconHtml, name: r.name, sub: r.dimmed ? "no effect" : val(r), chip: { text: "owned", tone: "ok" } })),
+      ...(opts.show === "owned" ? [] : buys.map((r) => ({ icon: r.iconHtml, name: r.name, sub: val(r), chip: { text: `${r.roi.toFixed(0)}d`, tone: roiTone(r.roi) }, pct: yearPct(r.roi) }))),
+      ...(opts.show === "owned" ? [] : rest.map((r) => ({ icon: r.iconHtml, name: r.name, sub: val(r), chip: { text: r.loss ? "loss" : "missing", tone: r.loss ? "bad" : "" } }))),
+      ...(opts.show === "missing" ? [] : owned.map((r) => ({ icon: r.iconHtml, name: r.name, sub: r.dimmed ? "no effect" : val(r), chip: { text: "owned", tone: "ok" } }))),
     ],
     tiles: [{ label: "owned", value: `${owned.length}/${base.length}` }, { label: "missing", value: base.length - owned.length },
       ...(s && !s.unvalued ? [{ label: "net/day", value: tv(s.boostedSfl - (s.costPerDay || 0)) }] : []),

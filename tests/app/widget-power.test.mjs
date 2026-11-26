@@ -299,10 +299,17 @@ test("📱 categories: net over the priced categories; the categories best earne
 test("📱 boosts: owned / total with a ring; the missing ones by payback, then the owned", () => {
   const out = powerBoosts.build({ farm, power }, CTX, { cat: "crops", show: "all" });
   const base = out.rows.filter((r) => !r.rank), owned = base.filter((r) => r.owned).length;
-  const m = gm(powerBoosts, { farm, power }, CTX, { cat: "crops", show: "owned" });   // "show" does not hide the missing ones
+  const m = gm(powerBoosts, { farm, power }, CTX, { cat: "crops", show: "all" });
   assert.deepStrictEqual([m.head.value, m.head.unit, m.head.cap], [owned, `/${base.length}`, "🌾 CROPS boosts owned"]);
   assert.strictEqual(m.items.length, base.length);
   assert.deepStrictEqual(m.items[m.items.length - 1].chip, { text: "owned", tone: "ok" });
+  // the copy's Show filters the list; the head still counts the whole category
+  const own = gm(powerBoosts, { farm, power }, CTX, { cat: "crops", show: "owned" }), miss = gm(powerBoosts, { farm, power }, CTX, { cat: "crops", show: "missing" });
+  assert.strictEqual(own.items.length, owned);
+  assert.ok(own.items.every((i) => i.chip.text === "owned"));
+  assert.strictEqual(miss.items.length, base.length - owned);
+  assert.ok(miss.items.every((i) => i.chip.text !== "owned"));
+  assert.deepStrictEqual([own.head.value, miss.head.value], [owned, owned]);
   assert.match(renderLook(m, "number").html, /^<div class="gx gx-1x1" style="--gw:1"><div class="gx-corner"><svg class="gx-ring g-ok"/);
   assert.ok(looksFor(m).length >= 3);
   const p = { ...power, boostItems: power.boostItems.map((b) => (b.categories || []).includes("iron") ? { ...b, has: true } : b) };
