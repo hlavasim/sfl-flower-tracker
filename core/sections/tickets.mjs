@@ -111,7 +111,7 @@ function auctionSchedule(farm, chapterItems, opts, now) {
     const rounds = Array.from({ length: S.rounds }, (_, k) => it.first + k * S.everyH * H);
     const ci = byName[it.name];
     let perDay = ci && ci.perDay != null ? ci.perDay : (bpd[it.name] != null ? bpd[it.name] : null);
-    let basis = ci && ci.perDay != null ? ci.basis : (bpd[it.name] != null ? "hodnota boostu jako v POWER" : (ci ? ci.basis : ""));
+    let basis = ci && ci.perDay != null ? ci.basis : (bpd[it.name] != null ? "boost value as in POWER" : (ci ? ci.basis : ""));
     if (it.kind === "nft") { perDay = null; basis = "a random pet — cannot be valued"; }
     // Won to resell: today's floor after the market fee — the most a round is worth bidding even
     // when the farm already has one (or gains nothing from it).
@@ -662,7 +662,7 @@ function auctionItemValues(farm, prices, opts) {
   // A production boost takes POWER's marginal for it (opts.boostPerDay), the number POWER shows.
   const bpd = opts.boostPerDay || {};
   for (const it of items) {
-    if (it.perDay == null && it.basis === inPower && bpd[it.name] != null) { it.perDay = bpd[it.name]; it.basis = "hodnota boostu jako v POWER"; }
+    if (it.perDay == null && it.basis === inPower && bpd[it.name] != null) { it.perDay = bpd[it.name]; it.basis = "boost value as in POWER"; }
   }
   return items.map((it) => ({ ...it, source: "auction", owned: hasItem(farm, it.name, it.kind),
     perYear: it.perDay == null ? null : it.perDay * 365 }));

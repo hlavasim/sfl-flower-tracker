@@ -189,7 +189,8 @@ export const ticketsItems = {
   rowClass: (r) => (r.owned ? "w-st-done" : ""),
   columns: [
     { key: "name", label: "item", fmt: (v, r) => `<div class="v-name">${r.iconHtml}<div><b>${esc(v)}</b>${r.owned ? " ✅" : ""}${r.have > 0 ? ` <span class="v-dim">×${fmt(r.have)}</span>` : ""}` +
-      `<small>${esc(r.what)}${r.basis ? ` — ${esc(r.basis)}` : ""}</small></div></div>` },
+      // what it does under the name; how its value was worked out in the tooltip (a long note crushed the column)
+      `<small${r.basis ? ` title="${esc(r.basis)}"` : ""}>${esc(r.what)}${r.basis ? ' <span class="v-dim">ⓘ</span>' : ""}</small></div></div>` },
     { key: "bar", label: "", get: (r) => r.rel, fmt: (v) => bar(v, "ok") },
     { key: "source", label: "from", filter: true, filterLabel: (v) => (v === "auction" ? "🔨 auction" : "🛒 shop"), fmt: (v) => (v === "auction" ? "🔨 auction" : "🛒 shop") },
     { key: "price", label: "price", align: "right", get: (r) => (r.source === "auction" ? null : r.tickets || null),
