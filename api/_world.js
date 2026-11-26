@@ -238,9 +238,12 @@ async function itemHolders(pool, q) {
  * population is actually active.
  */
 async function crawlStats(pool) {
-  const [ingest, totals, buckets] = await Promise.all([
+  // The counts are ONE scan of farm_world (~10 s at 700k rows; two parallel scans took 21 s and hit
+  // the 20 s statement timeout), stored per dump generation like the charts. The ingest row is
+  // read live: it is one row and the dump's age must tick.
+  const [ingest, counts] = await Promise.all([
     pool.query("SELECT * FROM cdn_ingest_state WHERE id = 1"),
-    pool.query(`SELECT COUNT(*)::bigint AS farms,
+    cachedChart(pool, "all", "stats:counts", async () => ({ row: (await pool.query(`SELECT COUNT(*)::bigint AS farms,
                        COUNT(last_activity)::bigint AS with_activity,
                        COUNT(*) FILTER (WHERE is_blacklisted)::bigint AS blacklisted,
                        -- isBlacklisted is only sent for ~46% of farms and does not track
@@ -248,19 +251,18 @@ async function crawlStats(pool) {
                        COUNT(is_blacklisted)::bigint AS with_blacklist,
                        COUNT(*) FILTER (WHERE ban_status = 'permanent')::bigint AS banned,
                        COUNT(*) FILTER (WHERE verified)::bigint AS verified,
-                       MAX(last_activity) AS newest_activity
-                  FROM farm_world`),
-    pool.query(`SELECT
-        COUNT(*) FILTER (WHERE last_activity > NOW() - INTERVAL '1 day')::bigint  AS d1,
-        COUNT(*) FILTER (WHERE last_activity > NOW() - INTERVAL '7 days')::bigint AS d7,
-        COUNT(*) FILTER (WHERE last_activity > NOW() - INTERVAL '30 days')::bigint AS d30,
-        COUNT(*) FILTER (WHERE last_activity > NOW() - INTERVAL '90 days')::bigint AS d90
-      FROM farm_world`),
+                       MAX(last_activity) AS newest_activity,
+                       -- activity windows relative to when the dump's counts were taken
+                       COUNT(*) FILTER (WHERE last_activity > NOW() - INTERVAL '1 day')::bigint  AS d1,
+                       COUNT(*) FILTER (WHERE last_activity > NOW() - INTERVAL '7 days')::bigint AS d7,
+                       COUNT(*) FILTER (WHERE last_activity > NOW() - INTERVAL '30 days')::bigint AS d30,
+                       COUNT(*) FILTER (WHERE last_activity > NOW() - INTERVAL '90 days')::bigint AS d90
+                  FROM farm_world`)).rows[0] || {} })),
   ]);
 
   const i = ingest.rows[0] || {};
-  const t = totals.rows[0] || {};
-  const b = buckets.rows[0] || {};
+  const t = counts.row || {};
+  const b = t;
   const durationMs = i.started_at && i.finished_at
     ? new Date(i.finished_at) - new Date(i.started_at) : null;
 
