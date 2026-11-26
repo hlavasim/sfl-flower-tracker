@@ -222,3 +222,11 @@ test("a full table on a board spans its share of 12 over the columns the board s
   fit(grid, 6);   // set to 6, a tablet shows 4
   assert.deepStrictEqual(kids.map((k) => k.style.gridColumn), ["span 2", "span 4", "", "span 4"]);
 });
+
+test("Columns: the control says when the screen fits fewer than set, and − starts from what it shows", () => {
+  const grab = (name) => { const a = SRC.indexOf(`function ${name}(`); let d = 0, k = SRC.indexOf("{", a); for (; k < SRC.length; k++) { if (SRC[k] === "{") d++; else if (SRC[k] === "}" && !--d) break; } return SRC.slice(a, k + 1); };
+  const fit = new Function("__widgets", "window", `${grab("_wLiveCols")}\n${grab("_wColsFit")}\nreturn _wColsFit;`)({ colsOf: () => 6 }, { innerWidth: 900 });
+  assert.match(fit({ clientWidth: 900 }, "main"), /· 4 fit</);       // a tablet: 4 of the 6 set
+  assert.strictEqual(fit({ clientWidth: 1400 }, "main"), "");          // a desktop shows all 6
+  assert.match(SRC, /__widgets\.setBoardCols\(b\.id, d < 0 \? Math\.min\(cur, live\) - 1 : cur \+ 1\)/);
+});

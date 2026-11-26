@@ -16459,7 +16459,9 @@
     window._wSetCols = (d) => {
       const doc = __widgets.doc(), want = new URLSearchParams(window.location.search).get("board") || doc.last;
       const b = doc.boards.find((x) => x.id === want) || doc.boards[0];
-      __widgets.setBoardCols(b.id, __widgets.colsOf(b.id) + d);
+      // − starts from what the screen shows (a tablet fits 4 of 6 set: − goes to 3, a visible change)
+      const cur = __widgets.colsOf(b.id), live = _wLiveCols(document.getElementById("app"), cur);
+      __widgets.setBoardCols(b.id, d < 0 ? Math.min(cur, live) - 1 : cur + 1);
       renderBoard();
     };
     /*
@@ -16478,6 +16480,11 @@
       const w = (app && app.clientWidth) || window.innerWidth || 1200;
       if (w < 700) return 2;
       return Math.max(2, Math.min(setting, w < 1100 ? 4 : 12, Math.floor((w + 16) / 156)));
+    }
+    // "· 4 fit" when the screen shows fewer columns than the board is set to
+    function _wColsFit(app, boardId) {
+      const set = __widgets.colsOf(boardId), live = _wLiveCols(app, set);
+      return live < set ? `<small class="w-cols-fit" title="this screen fits ${live} of the ${set} columns set">· ${live} fit</small>` : "";
     }
     function _wFitBoard(grid, cols) {
       if (!grid || !grid.children) return;
@@ -16509,7 +16516,7 @@
       __widgets.visit(boardId);   // the 📌 menu lists this board first next time
       const head = '<div class="w-page-head"><h1>📌 ' + escHTML(board.name) + '</h1><div class="sub">Farm #' + escHTML(FARM_ID) +
           ' · your widgets, each with its own ⚙ settings</div>' + _wBoardSwitcher(boardId, `<span class="w-cols-ctl" title="how many small widgets fit side by side on this board">Columns ` +
-          `<button type="button" onclick="_wSetCols(-1)" aria-label="fewer columns">−</button><b>${__widgets.colsOf(boardId)}</b><button type="button" onclick="_wSetCols(1)" aria-label="more columns">＋</button></span>` +
+          `<button type="button" onclick="_wSetCols(-1)" aria-label="fewer columns">−</button><b>${__widgets.colsOf(boardId)}</b>${_wColsFit(app, boardId)}<button type="button" onclick="_wSetCols(1)" aria-label="more columns">＋</button></span>` +
           `<button class="dash-toggle-btn w-add-btn" data-board="${escHTML(boardId)}" onclick="_wGallery(this.dataset.board)">＋ Add widget</button>`) + '</div>';
       if (!FARM_ID) { app.innerHTML = head + '<div class="pixel-panel" style="padding:12px;font-size:0.55rem">Enter your Farm ID above.</div>'; return; }
       if (!board.items.length) {
