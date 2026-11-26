@@ -9,7 +9,7 @@ const whenKey = (r) => (r.status === "ready" ? (r.readyAt || 0) - 1e13 : r.statu
 export const dashActions = {
   type: "dash-actions",
   title: "🚨 Co je hotové",
-  page: "dashboard",
+  page: "chores",
   needs: (farmId) => ({ farm: { res: "farm", farm: farmId } }),
   // deliveries alone can be 50+ rows: the first 20 by default, the rest via the cog (top N / Filtr)
   defaults: { sort: { key: "when", dir: "asc" }, rows: { mode: "top", top: 20, picked: [] },

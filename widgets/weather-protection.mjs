@@ -13,7 +13,7 @@ const missing = (s) => s === "none" || s === "spent";
 export const weatherProtection = {
   type: "weather-protection",
   title: "🌦 Ochrana před počasím",
-  page: "dashboard",
+  page: "chores",
   needs: (farmId) => ({ farm: { res: "farm", farm: farmId } }),
   defaults: {},
   rowKey: (r) => r.name,

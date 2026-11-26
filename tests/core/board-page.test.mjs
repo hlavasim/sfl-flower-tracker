@@ -16,9 +16,11 @@ const SRC = readFileSync(path.join(ROOT, "flowers.html"), "utf8");
 const SCRIPT = SRC.slice(SRC.indexOf("<script>") + 8, SRC.lastIndexOf("</script>"));
 const FARM = JSON.parse(readFileSync(path.join(ROOT, "tests/fixtures/farm-155498.json"), "utf8"));
 
-test("board is a page, first under MORE, routed to renderBoard", () => {
+test("DASH (the boards) is the home page, first in the bar; CHORES next to it; routed to renderBoard", () => {
   assert.match(SRC, /"leveling", "board"\];/);
-  assert.match(SRC, /const overflow = \[\s*\{ id: "board", label: "📌 MŮJ DASHBOARD" \}/);
+  assert.match(SRC, /const primary = \[\s*\{ id: "board", label: "DASH" \},\s*\{ id: "chores", label: "CHORES" \}/);
+  assert.match(SRC, /if \(page === "dashboard"\) return "chores";/);
+  assert.match(SRC, /return "board";\s*\}/);
   assert.match(SRC, /if \(page === "board"\) \{ renderConfigBar\(page\); renderBoard\(\); return; \}/);
 });
 
@@ -50,9 +52,9 @@ async function renderBoardWith(boardsJson, { slowLeveling = false, page = "board
     () => 0, () => 0, () => 0, () => {}, () => {}, win.location, win.history, win.navigator, win.matchMedia);
   assert.ok(api.renderBoard, "renderBoard is declared");
   api.setFarm("155498");
-  const render = page === "dashboard" ? () => api.renderDashboard() : () => api.renderBoard();
+  const render = page === "chores" ? () => api.renderDashboard() : () => api.renderBoard();
   // DASH also waits on the price fetch for the bounties, which never settles under the stubbed timers
-  if (slowLeveling || page === "dashboard") { render(); await new Promise((r) => setTimeout(r, 50)); }
+  if (slowLeveling || page === "chores") { render(); await new Promise((r) => setTimeout(r, 50)); }
   else await render();
   return { html: app.innerHTML, win, api, app, storage };
 }
@@ -102,11 +104,11 @@ test("review #4/#6: a newer board render supersedes an older one's late paints; 
 
 const docOf = (storage) => JSON.parse(storage.getItem(BOARDS_KEY));
 
-test("DASH is a page: its widgets render on it (each with 📌 to copy it to a board); no DASH board is created", async () => {
+test("CHORES (the old DASH) is a page: its widgets render on it (each with 📌 to copy it to a board); no DASH board is created", async () => {
   const { app, storage, api } = await renderBoardWith(null, { page: "board" });
   api.renderDashboard({ farm: FARM.farm });
   await new Promise((r) => setTimeout(r, 50));
-  assert.match(app.innerHTML, /<h1>DASHBOARD<\/h1>/);
+  assert.match(app.innerHTML, /<h1>CHORES<\/h1>/);
   assert.match(app.innerHTML, /data-frame="page:dash-actions"/);
   assert.match(app.innerHTML, /data-frame="page:weather-protection"/);
   assert.match(app.innerHTML, /data-action="pin"/);

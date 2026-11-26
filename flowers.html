@@ -2787,7 +2787,7 @@
 
     const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
-    const PAGES = ["dashboard", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "mytrades", "marks", "diff", "json", "constants", "ascension", "world", "yakkamon", "fishing", "decorations", "speculation", "tickets", "leveling", "board"];
+    const PAGES = ["chores", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "mytrades", "marks", "diff", "json", "constants", "ascension", "world", "yakkamon", "fishing", "decorations", "speculation", "tickets", "leveling", "board"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -5319,8 +5319,9 @@
       const p = new URLSearchParams(window.location.search);
       const page = p.get("page");
       if (page && PAGES.includes(page)) return page;
-      const cfg = getConfig();
-      return "dashboard";
+      if (page === "dashboard") return "chores";   // the old name of CHORES
+      // DASH (the boards) is the home page
+      return "board";
     }
 
     function navigateTo(page) {
@@ -5400,7 +5401,8 @@
       // MORE button to the left edge, where its right-anchored dropdown was clipped.
       const canDiff = ["155498", "1260204733777858"].includes(FARM_ID);
       const primary = [
-        { id: "dashboard", label: "DASH" },
+        { id: "board", label: "DASH" },
+        { id: "chores", label: "CHORES" },
         { id: "bumpkin", label: "BUMPKIN" },
         { id: "ascension", label: "ASCENSION" },
         { id: "roadmap", label: "ROADMAP" },
@@ -5408,7 +5410,6 @@
         { id: "world", label: "🌍 WORLD" },
       ];
       const overflow = [
-        { id: "board", label: "📌 MŮJ DASHBOARD" },
         ...(FARM_ID === "155498" ? [{ id: "speculation", label: "🎲 SPEKULACE" }] : []),
         { id: "tickets", label: "🎟️ TICKETY" },
         { id: "leveling", label: "📈 LEVELING" },
@@ -9680,30 +9681,30 @@
     var _farmFetchedAt = 0;   // var: fetchFarmData (earlier in the file) writes it
     let _dashLiveBusy = false;
     async function _dashLiveTick() {
-      if (!FARM_ID || getPage() !== "dashboard" || _dashLiveBusy || Date.now() - _farmFetchedAt < DASH_LIVE_MS) return;
+      if (!FARM_ID || getPage() !== "chores" || _dashLiveBusy || Date.now() - _farmFetchedAt < DASH_LIVE_MS) return;
       if (document.querySelector("[data-pop]") || (document.activeElement && /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName))) return;
       _dashLiveBusy = true;
       try { cachedFarmData = await fetchFarmData(); _cachedFarmFor = FARM_ID; } catch (e) { console.warn("[dash live]", e); }
       _dashLiveBusy = false;
-      if (getPage() === "dashboard" && cachedFarmData) { const y = window.scrollY; await renderDashboard(cachedFarmData); window.scrollTo(0, y); }
+      if (getPage() === "chores" && cachedFarmData) { const y = window.scrollY; await renderDashboard(cachedFarmData); window.scrollTo(0, y); }
     }
     setInterval(_dashLiveTick, 30 * 1000);
 
-    // DASH: a page like the others — its panels are widgets (dash-actions, weather-protection), each
+    // CHORES (was DASH): a page like the others — its panels are widgets (dash-actions, weather-protection), each
     // with its own settings and 📌 to copy it onto a board.
     let _dashPricesAsked = false;
     async function renderDashboard(data) {
       // Bounty and delivery prices: render at once, then once more when they arrive (asked once).
       if (!_dashPricesAsked && (Object.keys(dashP2P).length === 0 || dashRates.coinsPerSFL == null)) {
         _dashPricesAsked = true;
-        Promise.all([dashFetchP2P(), dashFetchRates()]).then(() => { if (getPage() === "dashboard" && window._wRerender) window._wRerender(); });
+        Promise.all([dashFetchP2P(), dashFetchRates()]).then(() => { if (getPage() === "chores" && window._wRerender) window._wRerender(); });
       }
       const app = document.getElementById("app");
       if (!data || !data.farm) {
-        app.innerHTML = `<div class="header pixel-panel pixel-font"><h1>DASHBOARD</h1><div class="farm-id">Load your farm to see pending actions</div></div>`;
+        app.innerHTML = `<div class="header pixel-panel pixel-font"><h1>CHORES</h1><div class="farm-id">Load your farm to see pending actions</div></div>`;
         return;
       }
-      if (typeof __widgets === "undefined") { app.innerHTML = _wMissing("DASH"); return; }
+      if (typeof __widgets === "undefined") { app.innerHTML = _wMissing("CHORES"); return; }
       // The first time: the page's "What's done" starts from the old DASH toggles (sfl_dash_prefs).
       if (!(__widgets.doc().page["dash-actions"] || {}).opts) {
         const p = dashGetPrefs();
@@ -9712,10 +9713,10 @@
         __widgets.handle("page:dash-actions", "opt:showAnimals", p.showAnimals ? "1" : "0");
         __widgets.handle("page:dash-actions", "opt:showFaction", p.showFaction === false ? "0" : "1");
       }
-      window._wRerender = () => { if (getPage() === "dashboard" && cachedFarmData) renderDashboard(cachedFarmData); };
+      window._wRerender = () => { if (getPage() === "chores" && cachedFarmData) renderDashboard(cachedFarmData); };
       window._wRefresh = refresh;
       const fresh = __wFresh(__store.peek({ res: "farm", farm: FARM_ID }));
-      app.innerHTML = `<div class="header pixel-panel pixel-font"><h1>DASHBOARD</h1><div class="farm-id">Farm #${escHTML(FARM_ID)}</div></div>` +
+      app.innerHTML = `<div class="header pixel-panel pixel-font"><h1>CHORES</h1><div class="farm-id">Farm #${escHTML(FARM_ID)} · what is ready, running or idle on the farm; 📌 copies a panel to DASH</div></div>` +
         __widgets.renderPage("dash-actions", { data: { farm: data.farm }, ctx: _wCtx("dash-actions"), fresh }) +
         __widgets.renderPage("weather-protection", { data: { farm: data.farm }, ctx: _wCtx("weather-protection"), fresh });
       startGrowingTimers();
@@ -24835,7 +24836,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         applyFlowerBoosts(data.flowerMultiplier);
 
         switch (page) {
-          case "dashboard": renderDashboard(data); break;
+          case "chores": renderDashboard(data); break;
           case "flowers": renderFlowers(data); break;
           case "dolls": renderDolls(data); break;
           case "crustaceans": renderCrustaceans(data); break;
@@ -24862,7 +24863,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           default: renderDashboard(data);
         }
 
-        if (page === "dashboard") {
+        if (page === "chores") {
           startGrowingTimers();
         }
         if (page === "flowers") {
