@@ -2746,11 +2746,6 @@
     .w-pick { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
     /* the board: drag ⠿ onto another widget to move, drag the corner to resize */
     .w-board { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 8px; align-items: start; }
-    .w-embed { display: block; width: 100%; height: 600px; border: 0; background: transparent; }
-    /* a fixed widget height (resize corner): the page fills it and scrolls inside */
-    .w-board > .w-frame[style*="height"] .w-embed { height: 100% !important; }
-    html.embed #nav-bar, html.embed #config-bar, html.embed #donate-section, html.embed #wide-toggle { display: none !important; }
-    html.embed .container { max-width: none !important; padding: 0 4px !important; margin: 0 !important; }
     .w-board > .w-frame { margin: 0; min-width: 0; display: flex; flex-direction: column; }
     .w-board > .w-frame > .w-body { flex: 1; min-height: 0; overflow: auto; }
     .w-on-board.w-dragging { opacity: 0.5; }
@@ -2824,31 +2819,6 @@
 
     const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
-    // ?embed=1: the page inside a 📄 Stránka widget on a board (no menu, no config bar). The board
-    // page around it keeps the voice, the prefs pull and the tracking; the iframe reports its height.
-    const EMBED = (() => { try { return new URLSearchParams(location.search).get("embed") === "1"; } catch (e) { return false; } })();
-    if (EMBED) {
-      document.documentElement.classList.add("embed");
-      const _embedReport = () => {
-        const c = document.querySelector(".container");
-        const h = Math.ceil((c ? c.getBoundingClientRect().height : document.body.scrollHeight) + 12);
-        try { parent.postMessage({ type: "sfl-embed-height", h }, location.origin); } catch (e) {}
-      };
-      window.addEventListener("DOMContentLoaded", () => {
-        const c = document.querySelector(".container");
-        if (c && typeof ResizeObserver !== "undefined") new ResizeObserver(_embedReport).observe(c);
-        _embedReport();
-      });
-    } else {
-      // An embedded page says how tall it is: its iframe follows (at most 1600 px, the rest scrolls
-      // inside); a fixed widget height wins (CSS).
-      window.addEventListener("message", (e) => {
-        if (e.origin !== location.origin || !e.data || e.data.type !== "sfl-embed-height") return;
-        for (const f of document.querySelectorAll("iframe.w-embed")) {
-          if (f.contentWindow === e.source && f.dataset.auto === "1") f.style.height = Math.min(1600, Math.max(80, Number(e.data.h) || 0)) + "px";
-        }
-      });
-    }
     const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "mytrades", "marks", "diff", "json", "constants", "ascension", "world", "yakkamon", "fishing", "decorations", "speculation", "tickets", "leveling", "board"];
 
     // ═══════════════════════════════════════
@@ -5568,7 +5538,6 @@
         el.innerHTML = `<div class="config-collapsed pixel-panel pixel-font" onclick="expandConfig()">
           <span>Farm #${escHTML(cfg.farm)}</span>
           <span>Limit: ${cfg.limit}</span>
-          ${_wPinPageBtn(page)}
           <span class="config-toggle">EDIT &#9660;</span>
         </div>`;
         return;
@@ -9818,7 +9787,6 @@
         </div>`;
     }
     async function _dashVoiceTick() {
-      if (EMBED) return;
       const st = dashVoiceSettings();
       const onDash = getPage() === "dashboard";
       if (!FARM_ID || (!onDash && !st.on) || typeof parseDashboardActions !== "function") return;
@@ -19004,7 +18972,6 @@
         hours: formatHours, icon: (n) => `<img src="${getItemIcon(n)}" onerror="this.style.display='none'" alt="" style="height:1.3em;vertical-align:-0.25em;margin-right:3px">` };
       if (type === "flower-beds") return { countdown: dashFormatCountdown,
         icon: (n) => `<img src="${getItemIcon(n)}" onerror="this.style.display='none'" alt="" style="height:1.3em;vertical-align:-0.25em;margin-right:3px">` };
-      if (type === "page-embed") return { pages: PAGES, embedUrl: (p) => location.pathname + "?page=" + encodeURIComponent(p) + "&embed=1" };
       if (type === "target-list") return { inProgress: extractInProgress,
         icon: (n) => `<img src="${getItemIcon(n)}" onerror="this.style.display='none'" alt="" style="height:1.3em;vertical-align:-0.25em;margin-right:3px">` };
       if (type === "weather-protection") return { weatherRows: (farm) => DASH_WEATHER_ITEMS.map((n) =>
@@ -19024,17 +18991,6 @@
       __widgets.handle("page:" + type, "pin", (btn && btn.dataset.preset) || "");
       if (btn) { btn.classList.add("on"); btn.innerHTML = _wPinText(btn.dataset.label, _wPinned(type)); }
       if ((getPage() === "board" || getPage() === "dashboard") && window._wRerender) window._wRerender();
-    };
-    // 📌 celá stránka: the whole classic page as a 📄 Stránka widget (widgets/page-embed.mjs).
-    function _wPinPageBtn(page) {
-      if (typeof __widgets === "undefined" || page === "board" || page === "dashboard" || page === "hub") return "";
-      const preset = escHTML(JSON.stringify({ page, label: page.toUpperCase() }));
-      return `<button class="dash-toggle-btn w-pin-btn" data-preset="${preset}" onclick="event.stopPropagation();_wPinPage(this)" title="připnout celou stránku na nástěnku „${escHTML(_wPinTargetName())}“">📌 celá stránka</button>`;
-    }
-    window._wPinPage = (btn) => {
-      __widgets.handle("page:page-embed", "pin", btn.dataset.preset || "");
-      btn.classList.add("on");
-      btn.textContent = "📌 připnuto";
     };
     // Where 📌 pins: the board visited last (DASH included), else the first.
     function _wPinTargetName() {
@@ -19126,11 +19082,12 @@
         if (!board) return;
         const frames = board.items.map((it) => {
           const p = __widgets.peekData(it.type, FARM_ID, __store);
-          // a widget with no needs (📄 Stránka) has no data age to show
+          // a widget with no needs has no data age to show
           const fresh = __widgets.needsOf(it.type, FARM_ID).length ? __widgets.freshOf(p.entries) : null;
           return { id: `b:${board.id}:${it.i}`, html: __widgets.renderItem(board.id, it, { data: p.data, ctx: _wCtx(it.type), fresh, pending: p.pending }) };
         });
-        // Only the frames that changed are replaced: an embedded page must not reload on every paint.
+        // Only the frames that changed are replaced: an open settings panel or a typed value survives a
+        // neighbour's update.
         let grid = app.querySelector && app.querySelector(":scope > .w-board");
         if (grid && grid.dataset.board !== board.id) grid = null;
         if (!grid || !__wPatch(grid, frames)) {
@@ -25356,7 +25313,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           startGrowingTimers();
         }
 
-        if (!EMBED) fetch(`/api/track?farm=${FARM_ID}&page=${page}`).catch(() => {});
+        fetch(`/api/track?farm=${FARM_ID}&page=${page}`).catch(() => {});
       } catch (err) {
         console.error(err);
         const needsConfig = !FARM_ID;
@@ -30925,7 +30882,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
     main();
     // The shared settings arrive after the first render; only when they change something (another
     // device ticked it) does the page render again.
-    if (!EMBED) _prefPull().then((changed) => { if (changed) main(); }).catch(() => {});
+    _prefPull().then((changed) => { if (changed) main(); }).catch(() => {});
     renderHealthBanner();
     renderDormantBanner();
     });

@@ -138,21 +138,7 @@ test("the DASH parser takes a widget's filters for one call, the stored toggles 
   assert.match(SRC, /return _dashPrefOverride \? \{ \.\.\.p, \.\.\._dashPrefOverride \} : p;/);
 });
 
-test("📄 Stránka: ?embed=1 hides the menu and config, keeps the voice, prefs pull and tracking to the parent, reports its height", () => {
-  assert.match(SRC, /const EMBED = \(\(\) => \{ try \{ return new URLSearchParams\(location\.search\)\.get\("embed"\) === "1"; \} catch \(e\) \{ return false; \} \}\)\(\);/);
-  assert.match(SRC, /html\.embed #nav-bar, html\.embed #config-bar, html\.embed #donate-section, html\.embed #wide-toggle \{ display: none !important; \}/);
-  assert.match(SRC, /async function _dashVoiceTick\(\) \{\s*if \(EMBED\) return;/);
-  assert.match(SRC, /if \(!EMBED\) _prefPull\(\)\.then/);
-  assert.match(SRC, /if \(!EMBED\) fetch\(`\/api\/track/);
-  assert.match(SRC, /parent\.postMessage\(\{ type: "sfl-embed-height", h \}, location\.origin\)/);
-  // the board sizes the iframe that sent it, same origin only
-  assert.match(SRC, /if \(e\.origin !== location\.origin \|\| !e\.data \|\| e\.data\.type !== "sfl-embed-height"\) return;/);
-  assert.match(SRC, /if \(type === "page-embed"\) return \{ pages: PAGES, embedUrl: \(p\) =>/);
-});
-
-test("📌 celá stránka sits in the config bar of every page but the boards; the board repaints frame by frame", () => {
-  assert.match(SRC, /function _wPinPageBtn\(page\) \{\s*if \(typeof __widgets === "undefined" \|\| page === "board" \|\| page === "dashboard" \|\| page === "hub"\) return "";/);
-  assert.match(SRC, /\$\{_wPinPageBtn\(page\)\}/);
+test("the board repaints frame by frame", () => {
   assert.match(SRC, /window\.__wPatch = frame\.patchFrames;/);
   assert.match(SRC, /if \(!grid \|\| !__wPatch\(grid, frames\)\) \{/);
 });

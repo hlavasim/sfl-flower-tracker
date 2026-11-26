@@ -15,7 +15,6 @@ import { ticketChecklist } from "./ticket-checklist.mjs";
 import { flipTable } from "./flip-table.mjs";
 import { worldIslands, worldSkillPoints } from "./world-dist.mjs";
 import { targetList } from "./target-list.mjs";
-import { pageEmbed } from "./page-embed.mjs";
 import { flowersNeeds, flowerBeds } from "./flowers.mjs";
 
 export const WIDGETS = {
@@ -31,7 +30,6 @@ export const WIDGETS = {
   [worldIslands.type]: worldIslands,
   [worldSkillPoints.type]: worldSkillPoints,
   [targetList.type]: targetList,
-  [pageEmbed.type]: pageEmbed,
   [flowersNeeds.type]: flowersNeeds,
   [flowerBeds.type]: flowerBeds,
 };

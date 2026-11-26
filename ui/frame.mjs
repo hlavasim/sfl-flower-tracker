@@ -167,8 +167,8 @@ function startDrag(e, handler) {
   doc.addEventListener("pointercancel", up);
 }
 
-// A board repaint, frame by frame: only a frame whose HTML changed is replaced, so an embedded page
-// (📄 Stránka) is not reloaded by a neighbour's update. false = a different set or order of frames:
+// A board repaint, frame by frame: only a frame whose HTML changed is replaced, so an open settings
+// panel or a typed value is not lost to a neighbour's update. false = a different set or order of frames:
 // the caller rebuilds the grid (and stamps each child's _wHtml).
 export function patchFrames(grid, frames) {
   if (!grid || !grid.children || grid.children.length !== frames.length) return false;

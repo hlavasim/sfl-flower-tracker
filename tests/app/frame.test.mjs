@@ -115,7 +115,7 @@ test("a click outside an open popover, or Escape, closes it; a click inside does
   assert.deepStrictEqual(got.at(-1), ["w1", "settings-close"]);
 });
 
-test("patchFrames: a repaint replaces only the frames whose HTML changed (an embedded page is not reloaded)", () => {
+test("patchFrames: a repaint replaces only the frames whose HTML changed (the others keep their state)", () => {
   const child = (id, html) => {
     const c = { dataset: { frame: id }, _wHtml: html, replaced: 0 };
     Object.defineProperty(c, "outerHTML", { set(v) { c.replaced++; c._set = v; } });
