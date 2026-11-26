@@ -157,7 +157,7 @@ export const RESOURCES = {
       const day = (ms) => new Date(ms).toISOString().slice(0, 10);
       const now = Date.now();
       let d;
-      try { d = await json(`/api/farm-history?farm=${enc(farm)}&from=${day(now - 7 * 86400000)}&to=${day(now + 86400000)}&limit=2000`); }
+      try { d = await json(`/api/farm-history?farm=${enc(farm)}&from=${day(now - 7 * 86400000)}&to=${day(now + 86400000)}&limit=2000&slim=h`); }
       catch { return []; }
       return (d.snapshots || []).map((sn) => ({ captured_at: sn.captured_at,
         diff: Object.fromEntries(Object.entries(sn.diff || {}).filter(([k]) => k.startsWith("_h."))) }));

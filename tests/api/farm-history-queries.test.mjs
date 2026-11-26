@@ -91,3 +91,20 @@ test("rows carrying game_data are capped at 100; diff-only rows keep 1000", asyn
   await handler({ method: "GET", query: { farm: "155498", limit: "1000" } }, mockRes());
   assert.equal(fake.calls[2].params[3], 1000);
 });
+
+test("slim=h returns only the _h.* harvest slices (filtered in SQL), and a diff-only range is cached at the edge for 2 min", async () => {
+  const fake = usePool((sql) => (/COUNT\(\*\)/.test(sql) ? [{ count: "0" }] : []));
+  const res = mockRes();
+  await handler({ method: "GET", query: { farm: "155498", from: "2026-11-19", to: "2026-11-27", limit: "2000", slim: "h" } }, res);
+  assert.equal(res._status, 200);
+  assert.match(fake.calls[0].sql, /jsonb_object_agg\(k, v\) FROM jsonb_each\(diff\) AS e\(k, v\) WHERE k LIKE '\\_h\.%'/);
+  assert.equal(res.headers["Cache-Control"], "public, s-maxage=120, stale-while-revalidate=600");
+  // a full diff read is unchanged; rows carrying game data are not edge-cached
+  const plain = usePool((sql) => (/COUNT\(\*\)/.test(sql) ? [{ count: "0" }] : []));
+  await handler({ method: "GET", query: { farm: "155498", limit: "10" } }, mockRes());
+  assert.match(plain.calls[0].sql, /SELECT id, farm_id, captured_at, diff,/);
+  const withData = mockRes();
+  usePool((sql) => (/COUNT\(\*\)/.test(sql) ? [{ count: "0" }] : []));
+  await handler({ method: "GET", query: { farm: "155498", limit: "10", include: "game_data" } }, withData);
+  assert.notEqual(withData.headers["Cache-Control"], "public, s-maxage=120, stale-while-revalidate=600");
+});
