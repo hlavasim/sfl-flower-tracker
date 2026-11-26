@@ -2805,6 +2805,45 @@
     .support-addr button { background: var(--c-accent); color: #fff; border: none; border-radius: 8px; padding: 6px 12px; font: inherit; font-weight: 600; cursor: pointer; }
     .support-meta { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--c-line); line-height: 1.8; }
     .support-meta a, .support-meta .changelog-toggle { color: var(--c-accent); text-decoration: none; cursor: pointer; }
+    /* ── clean pages: CONSTANTS, JSON, DIFF, FLOWERS, FISHING, LEVELING (page-specific bits) ── */
+    .v-const-t { margin: 0 0 8px; border: 1px solid var(--c-line); border-radius: 10px; background: var(--c-card2); }
+    .v-const-t > summary { cursor: pointer; padding: 7px 12px; font-weight: 600; font-size: 12.5px; }
+    .v-const-t > pre { margin: 0; padding: 8px 12px; font-size: 12px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-word; color: var(--c-muted); }
+    .w-card { background: var(--c-card); border: 1px solid var(--c-line); border-radius: 14px; padding: 14px 16px; margin: 12px 0;
+      font-family: var(--c-font); font-size: 13px; line-height: 1.5; color: var(--c-text); }
+    .w-card h3 { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
+    .w-card input[type=number], .w-card input[type=text], .w-card select { background: var(--c-bg); color: var(--c-text); border: 1px solid var(--c-line);
+      border-radius: 8px; padding: 4px 6px; font: inherit; }
+    .w-card button, .v-btn { font-family: var(--c-font); font-size: 12.5px; padding: 5px 12px; border-radius: 999px; background: var(--c-card2);
+      border: 1px solid var(--c-line); color: var(--c-text); cursor: pointer; }
+    .w-card button:hover, .v-btn:hover { border-color: var(--c-accent); }
+    .v-chip { display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--c-line);
+      background: var(--c-card2); color: var(--c-muted); font: 12.5px var(--c-font); cursor: pointer; white-space: nowrap; }
+    .v-chip.on { border-color: var(--c-green); color: var(--c-green); background: rgba(95,179,107,0.12); }
+    .v-note { color: var(--c-muted); font-size: 12px; line-height: 1.55; margin: 6px 0; }
+    .v-warn { color: var(--c-yellow); }
+    .v-good { color: var(--c-green); }
+    .v-bad { color: var(--c-red); }
+    .v-sub { font-size: 13px; font-weight: 600; margin: 12px 0 6px; color: var(--c-text); }
+    .v-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+    .v-tile { background: var(--c-card2); border: 1px solid transparent; border-radius: 10px; padding: 8px 10px; font-size: 12px; line-height: 1.45; }
+    .v-tile.on { border-color: var(--c-accent); }
+    .v-tile b.v-big-n { display: block; font-size: 16px; }
+    .v-mini { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .v-mini th { font-size: 11px; color: var(--c-dim); text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600; text-align: left; padding: 0 10px 5px 0; }
+    .v-mini td { padding: 5px 10px 5px 0; border-top: 1px solid var(--c-row); vertical-align: top; }
+    .v-mini .r, .v-mini th.r { text-align: right; font-variant-numeric: tabular-nums; }
+    .v-mini tr.hl { background: rgba(217,119,87,0.08); }
+    .v-mini tr.click { cursor: pointer; }
+    .v-mini tr.click:hover { background: var(--c-card2); }
+    .v-card { background: var(--c-card2); border-radius: 12px; padding: 10px 12px; margin: 0 0 8px; }
+    .v-card-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+    .v-card-h b { font-size: 14px; }
+    .v-ii img { height: 1.2em; vertical-align: -0.25em; margin-right: 3px; }
+    details.w-fold { margin: 12px 0; }
+    details.w-fold > summary { cursor: pointer; font: 600 14px var(--c-font); color: var(--c-muted); padding: 8px 2px; }
+    details.w-fold > summary:hover { color: var(--c-text); }
+
     .w-pinmenu { position: fixed; z-index: 1000; min-width: 220px; background: var(--bg-card); border: 2px solid var(--border-brown);
       box-shadow: 0 6px 18px rgba(0,0,0,0.6); padding: 4px; font-family: 'Courier New', monospace; font-size: 0.85rem; }
     .w-pinmenu-h { color: var(--sunpetal); font-weight: bold; padding: 4px 8px; }
@@ -7339,31 +7378,6 @@
       if (cachedFarmData && getPage() === "bumpkin") renderBumpkin(cachedFarmData);
     }
 
-    // ── Constants payload cache (/api/compute?section=constants) ──
-    // Task 13b: renders the core/data migration coverage (Task 13a). Farm-independent —
-    // no farm param, no upstream farm fetch — so one cached payload serves every farm for
-    // the whole page lifetime. Same cache-then-rerender shape as the cooking payload above;
-    // refresh() clears this too (see refresh()).
-    let _constantsData = null;     // data from the last successful fetch
-    let _constantsErr = null;      // error message from the last failed fetch
-    let _constantsLoading = false; // fetch in flight
-
-    async function _fetchConstants() {
-      if (_constantsLoading) return;
-      _constantsLoading = true;
-      try {
-        const resp = await fetch(`/api/compute?section=constants`);
-        if (!resp.ok) throw new Error(`compute ${resp.status}`);
-        _constantsData = (await resp.json()).data;
-        _constantsErr = null;
-      } catch (e) {
-        console.warn("constants compute fetch:", e);
-        _constantsErr = (e && e.message) || String(e);
-      }
-      _constantsLoading = false;
-      if (getPage() === "constants") renderConstants(cachedFarmData);
-    }
-
     // ── Price-map cache (/api/compute?section=prices) ──
     // Precomputed marketValue/productionCost maps from the item-value engine, one map per
     // rate profile (coinsPerSFL, sflPerXP, season, treasureBoost, gemsPerSFL — see
@@ -7528,84 +7542,21 @@
       return null;
     }
 
-    function renderConstants(data) {
+    // CONSTANTS: the coverage table and the core tables are widgets (widgets/constants.mjs) over the
+    // store's compute?section=constants — the same data a pinned copy reads.
+    function renderConstants() {
       const app = document.getElementById("app");
-      let html = `<div class="header pixel-panel pixel-font">
-        <h1>CONSTANTS</h1>
-        <div class="farm-id">core/ vs flowers.html migration coverage</div>
-      </div>`;
-
-      if (!_constantsData) {
-        if (!_constantsLoading && !_constantsErr) _fetchConstants();
-        html += `<div class="pixel-panel pixel-font" style="padding:24px;text-align:center;font-size:0.6875rem;color:${_constantsErr ? "var(--yellow)" : "var(--text-dim)"}">
-          ${_constantsErr
-            ? `Constants data unavailable — ${escHTML(_constantsErr)}. Press REFRESH to retry.`
-            : "Loading constants..."}
-        </div>`;
-        html += `<div class="footer">
-          <button class="refresh-btn" onclick="refresh()">REFRESH</button>
-          <div class="timestamp pixel-font">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
-        </div>`;
-        app.innerHTML = html;
-        return;
-      }
-
-      const { summary, coverage, tables } = _constantsData;
-
-      html += `<div class="summary-bar pixel-panel pixel-font">
-        <div class="summary-stat"><div class="label">TOTAL</div><div class="value">${escHTML(summary.total)}</div></div>
-        <div class="summary-stat"><div class="label">CORE</div><div class="value complete">${escHTML(summary.core)} ✅</div></div>
-        <div class="summary-stat"><div class="label">DUPLICATED</div><div class="value pending">${escHTML(summary.duplicated)} ⚠</div></div>
-        <div class="summary-stat"><div class="label">INLINE</div><div class="value" style="color:var(--red)">${escHTML(summary.inline)} ⏳</div></div>
-      </div>`;
-
-      // Coverage list — work remaining reads first: inline, then duplicated, then core.
-      const statusOrder = { inline: 0, duplicated: 1, core: 2 };
-      const statusBadge = {
-        core: `<span style="color:var(--green)">✅ core</span>`,
-        duplicated: `<span style="color:var(--yellow)">⚠ duplicated</span>`,
-        inline: `<span style="color:var(--red)">⏳ inline</span>`,
-      };
-      const sortedCoverage = coverage.slice().sort((a, b) =>
-        statusOrder[a.status] - statusOrder[b.status] || a.name.localeCompare(b.name));
-
-      html += `<div class="pixel-panel pixel-font" style="padding:12px;margin-bottom:16px">
-        <div style="font-size:0.6875rem;color:var(--sunpetal);margin-bottom:8px">COVERAGE (${sortedCoverage.length})</div>
-        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.625rem">
-          <thead><tr style="color:var(--text-dim);text-align:left">
-            <th style="padding:4px 6px">NAME</th>
-            <th style="padding:4px 6px">LINES</th>
-            <th style="padding:4px 6px">STATUS</th>
-            <th style="padding:4px 6px">FILE</th>
-          </tr></thead>
-          <tbody>
-            ${sortedCoverage.map(c => `<tr style="border-top:1px solid var(--border-brown)">
-              <td style="padding:4px 6px;font-family:'Courier New',monospace">${escHTML(c.name)}</td>
-              <td style="padding:4px 6px">${c.lines != null ? escHTML(c.lines) : "—"}</td>
-              <td style="padding:4px 6px">${statusBadge[c.status] || escHTML(c.status)}</td>
-              <td style="padding:4px 6px;color:var(--text-dim)">${escHTML(c.file)}</td>
-            </tr>`).join("")}
-          </tbody>
-        </table></div>
-      </div>`;
-
-      // Tables — collapsed <details> per entry; COOKING_RECIPES_DATA alone is 119 recipes,
-      // ITEM_IMAGE_MAP (1220 lines, still inline) will land here once migrated.
-      const tableNames = Object.keys(tables).sort();
-      html += `<div class="pixel-panel pixel-font" style="padding:12px">
-        <div style="font-size:0.6875rem;color:var(--sunpetal);margin-bottom:8px">CORE DATA TABLES (${tableNames.length})</div>
-        ${tableNames.map(name => `<details style="margin:2px 0 10px;border:1px solid var(--border-brown);border-radius:8px;background:#1a140c">
-          <summary style="cursor:pointer;padding:6px 10px;font-family:'Press Start 2P',monospace;font-size:0.5rem;color:var(--sunpetal)">${escHTML(name)}</summary>
-          <pre style="padding:8px 10px;margin:0;font-size:0.625rem;line-height:1.5;overflow-x:auto;white-space:pre-wrap;word-break:break-word;color:var(--text-secondary);font-family:'Courier New',monospace">${escHTML(JSON.stringify(tables[name], null, 2))}</pre>
-        </details>`).join("")}
-      </div>`;
-
-      html += `<div class="footer">
-        <button class="refresh-btn" onclick="refresh()">REFRESH</button>
-        <div class="timestamp pixel-font">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
-      </div>`;
-
-      app.innerHTML = html;
+      const q = { res: "compute", farm: FARM_ID || "", section: "constants" };
+      window._wRerender = () => { if (getPage() === "constants") renderConstants(); };
+      window._wRefresh = window._wRerender;
+      const e = __store.peek(q);
+      if (!e) __store.get(q).then(window._wRerender);
+      const err = e && e.status === "error" && !e.data ? `<div class="w-error">Constants data unavailable — ${escHTML(e.error || "error")}. Press ↻ to retry.</div>` : "";
+      const fresh = __wFresh(e);
+      const data = { constants: (e && e.data) || null };
+      app.innerHTML = _wPageHead("🧩 Constants", "core/ vs flowers.html migration coverage") + err +
+        (typeof __widgets === "undefined" ? _wMissing("Constants")
+          : __widgets.renderPage("constants-coverage", { data, ctx: {}, fresh }) + __widgets.renderPage("constants-tables", { data, ctx: {}, fresh }));
     }
 
     function toggleFoodInventory() {
@@ -24929,8 +24880,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       // silently leave XP/day, costs and banked food frozen at their first-load values.
       _bumpkinCooking = null;
       _bumpkinCookingErrKey = null;
-      _constantsData = null;
-      _constantsErr = null;
+      if (typeof __store !== "undefined") __store.invalidate({ res: "compute", section: "constants" });
       // Same reasoning for the price-map cache: its key is farm+rates, and REFRESH changes
       // neither, so a kept entry would silently serve first-load prices for the rest of the
       // page's lifetime (the exact bug the cooking cache shipped once, fixed in 5a1d9a9).

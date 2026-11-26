@@ -36,3 +36,7 @@ export const WIDGETS = {
   [crabTraps.type]: crabTraps,
   [craftingBox.type]: craftingBox,
 };
+
+// ── FISHING, LEVELING, FLOWERS, DIFF, JSON, CONSTANTS pages (one block) ──
+import { constantsCoverage, constantsTables } from "./constants.mjs";
+for (const w of [constantsCoverage, constantsTables]) WIDGETS[w.type] = w;
