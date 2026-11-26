@@ -78,6 +78,13 @@ const GUARDED = [
     body: { ts_utc: "2026-09-22T10:05:00Z", floor_hidden_ron: 1 } }],
   ["wishlist POST", orderbook, { method: "POST", query: { wishlist: "1" }, body: { farm: 155498, key: "collectibles:X", priority: 1 } }],
   ["marks force-refresh", marksHistory, { query: { mode: "force-refresh" } }],
+  // Owner-private READS (the review found them public): trade log, egg cost basis, venue balances,
+  // repay plan, synced settings.
+  ["spec trades GET", farmHistory, { method: "GET", query: { type: "spec", what: "trades", farm: FARM } }],
+  ["spec eggs GET", farmHistory, { method: "GET", query: { type: "spec", what: "eggs", farm: FARM } }],
+  ["venue-balance GET", farmHistory, { method: "GET", query: { type: "venue-balance", farm: FARM } }],
+  ["repay-plan GET", farmHistory, { method: "GET", query: { type: "repay-plan", farm: FARM } }],
+  ["prefs GET", farmHistory, { method: "GET", query: { type: "prefs", farm: FARM } }],
 ];
 
 test("every guarded endpoint answers 401 without a token, and never reaches the database", async () => {
@@ -115,10 +122,19 @@ test("the right token gets through to the database", async () => {
   assert.ok(queries.some((q) => /INSERT INTO egg_market/.test(q)));
 });
 
-test("public reads stay public: spec trades/eggs, venue-balance, repay-plan GET need no token", async () => {
-  for (const q of [{ type: "spec", what: "trades", farm: FARM }, { type: "spec", what: "eggs", farm: FARM },
-                   { type: "venue-balance", farm: FARM }, { type: "repay-plan", farm: FARM }]) {
+// Since 2026-11-25 the owner's trade log, egg cost basis, balances, repay plan and settings are
+// owner-only reads (in GUARDED above). What stays public: the season calendar and the LP board.
+test("public reads stay public: the SPEKULACE calendar and the LP leaderboard need no token", async () => {
+  for (const q of [{ type: "spec", what: "lp", farm: FARM }]) {
     const res = await call(farmHistory, { query: q });
+    assert.equal(res._status, 200, JSON.stringify(q));
+  }
+});
+
+test("owner-private reads answer 200 with the token", async () => {
+  for (const q of [{ type: "spec", what: "trades", farm: FARM }, { type: "spec", what: "eggs", farm: FARM },
+                   { type: "venue-balance", farm: FARM }, { type: "repay-plan", farm: FARM }, { type: "prefs", farm: FARM }]) {
+    const res = await call(farmHistory, { query: q, token: TOKEN });
     assert.equal(res._status, 200, JSON.stringify(q));
   }
 });

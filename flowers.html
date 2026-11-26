@@ -25405,8 +25405,9 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       await Promise.all([
         // Shape-checked: a wrong answer must show as an error panel, not crash the render.
         get("cal", _specApi("calendar"), (j) => { if (!j || !j.current || !Array.isArray(j.items)) throw new Error((j && j.error) || "neplatná odpověď"); return j; }),
-        get("trades", _specApi("trades"), (j) => { if (!j || !Array.isArray(j.trades)) throw new Error((j && j.error) || "neplatná odpověď"); return j.trades; }),
-        get("eggs", _specApi("eggs"), (j) => { if (!j || !Array.isArray(j.snapshots)) throw new Error((j && j.error) || "neplatná odpověď"); return j.snapshots; }),
+        // Owner-only reads (the write token): refused, the panel shows the error instead of data.
+        get("trades", _specApi("trades"), (j) => { if (!j || !Array.isArray(j.trades)) throw new Error((j && j.error) || "neplatná odpověď"); return j.trades; }, (u) => writeFetch(u, undefined, true)),
+        get("eggs", _specApi("eggs"), (j) => { if (!j || !Array.isArray(j.snapshots)) throw new Error((j && j.error) || "neplatná odpověď"); return j.snapshots; }, (u) => writeFetch(u, undefined, true)),
         // The ledger is an owner-only read; refused, the skim tile shows a 🔒 link instead of 0.
         get("ledger", `/api/farm-history?type=btc-tx&farm=${FARM_ID}`, (j) => j.transactions || [], (u) => writeFetch(u, undefined, true)),
         get("btc", `/api/proxy?url=${encodeURIComponent("https://api.exchange.coinbase.com/products/BTC-USD/stats")}`, (j) => {
@@ -28300,7 +28301,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
     let _invBalancesErr = null;   // a failed read shows the Yakke row as "—", not as "not set"
     async function invLoadBalances(farmId) {
       try {
-        const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(farmId)}&type=venue-balance`);
+        const r = await writeFetch(`${INV_API_BASE}?farm=${encodeURIComponent(farmId)}&type=venue-balance`, undefined, true);
         if (!r.ok) throw new Error(`venue-balance ${r.status}`);
         const j = await r.json();
         _invBalances = {};
@@ -28419,7 +28420,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
     let _invPlan = null;   // { start_date, rate, period } or null
     async function invLoadRepayPlan(farmId) {
       try {
-        const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(farmId)}&type=repay-plan`);
+        const r = await writeFetch(`${INV_API_BASE}?farm=${encodeURIComponent(farmId)}&type=repay-plan`, undefined, true);
         if (r.ok) _invPlan = (await r.json()).plan || null;
       } catch (e) { /* the card offers to create one */ }
     }
@@ -30873,7 +30874,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
     async function _prefPull() {
       const farm = _prefFarm();
       if (!farm) return false;
-      const r = await fetch(`/api/farm-history?type=prefs&farm=${encodeURIComponent(farm)}`);
+      const r = await writeFetch(`/api/farm-history?type=prefs&farm=${encodeURIComponent(farm)}`, undefined, true);
       if (!r.ok) return false;
       const server = (await r.json()).prefs || {};
       let changed = false;
