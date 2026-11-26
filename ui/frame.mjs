@@ -53,12 +53,29 @@ export function dropIndex(rects, y) {
   return rects.filter((r) => r.top + r.height / 2 < y).length;
 }
 
-// Inputs that report a value (number, range, text, select) act on change; everything else
-// (buttons, headers, checkboxes) acts on click. handler(frameId, action, value, event).
+// Inputs that report a value (number, range, text, select) act on change, and number / range /
+// text also live while typing or dragging (after a short pause, the field keeps the focus across
+// the re-render); everything else (buttons, headers, checkboxes) acts on click. handler(frameId, action, value, event).
 // A click outside an open popover, or Escape, sends "settings-close" for it. Pointer drags:
 // a column grip reports "col-move" ("key|index"), a board item's grip "move-to" (the frame it was
 // dropped on), the resize corner "resize" ("w|h"); all three show a live preview while dragging.
 const VALUE_INPUT = new Set(["number", "range", "text", "select-one"]);
+const LIVE_INPUT = new Set(["number", "range", "text"]);
+const LIVE_MS = 350;
+
+// The focused control inside a frame, as something that survives a re-render of that frame.
+export function focusKey(t) {
+  const frame = t && t.closest ? t.closest("[data-frame]") : null;
+  if (!frame || !t.dataset || !t.dataset.action) return null;
+  return { frame: frame.dataset.frame, action: t.dataset.action };
+}
+export function refocus(root, key) {
+  if (!key || !root || !root.querySelector) return;
+  const el = root.querySelector(`[data-frame="${key.frame}"] [data-action="${key.action}"]`);
+  if (!el || typeof el.focus !== "function") return;
+  el.focus();
+  try { if (el.type === "text" && el.setSelectionRange) el.setSelectionRange(el.value.length, el.value.length); } catch (e) { /* not selectable */ }
+}
 
 export function bindFrames(root, handler) {
   const closeOpen = (except) => {
@@ -80,17 +97,36 @@ export function bindFrames(root, handler) {
     if ((kind === "change") !== isValue) return;
     const frame = t.closest("[data-frame]");
     if (!frame) return;
+    if (kind === "change" && t._wSent === t.value) return;   // already applied while typing
+    const key = isValue ? focusKey(t) : null;
     handler(frame.dataset.frame, t.dataset.action, isValue ? t.value : (t.dataset.value ?? ""), e);
+    if (key) refocus(root, key);
+  };
+  const timers = new Map();   // "frame|action" → pending live update
+  const onInput = (e) => {
+    const t = e.target && e.target.closest ? e.target.closest("[data-action]") : null;
+    if (!t || !LIVE_INPUT.has(t.type)) return;
+    const key = focusKey(t);
+    if (!key) return;
+    const k = key.frame + "|" + key.action;
+    clearTimeout(timers.get(k));
+    timers.set(k, setTimeout(() => {
+      timers.delete(k);
+      t._wSent = t.value;
+      handler(key.frame, key.action, t.value, e);
+      refocus(root, key);
+    }, LIVE_MS));
   };
   const onClick = fire("click"), onChange = fire("change");
   const onKey = (e) => { if (e.key === "Escape") closeOpen(null); };
   const onDown = (e) => startDrag(e, handler);
   root.addEventListener("click", onClick);
   root.addEventListener("change", onChange);
+  root.addEventListener("input", onInput);
   root.addEventListener("keydown", onKey);
   root.addEventListener("pointerdown", onDown);
   return () => {
-    root.removeEventListener("click", onClick); root.removeEventListener("change", onChange);
+    root.removeEventListener("click", onClick); root.removeEventListener("change", onChange); root.removeEventListener("input", onInput);
     root.removeEventListener("keydown", onKey); root.removeEventListener("pointerdown", onDown);
   };
 }

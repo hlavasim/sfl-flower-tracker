@@ -130,3 +130,28 @@ test("patchFrames: a repaint replaces only the frames whose HTML changed (the ot
   assert.strictEqual(patchFrames(grid, [{ id: "b:m:a", html: "<A>" }]), false);
   assert.strictEqual(patchFrames(null, []), false);
 });
+
+test("live settings: typing a number or dragging a slider applies after a short pause, without leaving the field", async () => {
+  const listeners = {};
+  const frame = el({ "data-frame": "w1" });
+  let focused = null;
+  const fresh = { focus() { focused = "new"; }, setSelectionRange() {} };
+  const root = { addEventListener: (t, fn) => { listeners[t] = fn; }, removeEventListener() {},
+    querySelector: (sel) => (sel === '[data-frame="w1"] [data-action="text-size"]' || sel === '[data-frame="w1"] [data-action="opt:n"]' ? fresh : null) };
+  const got = [];
+  bindFrames(root, (f, action, value) => got.push([f, action, value]));
+  const range = el({ "data-action": "text-size", type: "range", value: "110" }, frame);
+  listeners.input({ target: range });
+  range.value = "120"; listeners.input({ target: range });
+  const num = el({ "data-action": "opt:n", type: "number", value: "3" }, frame);
+  listeners.input({ target: num });
+  // a checkbox acts on click, not on input
+  listeners.input({ target: el({ "data-action": "opt:hideDone", type: "checkbox" }, frame) });
+  assert.deepStrictEqual(got, [], "nothing until the pause");
+  await new Promise((r) => setTimeout(r, 450));
+  assert.deepStrictEqual(got, [["w1", "text-size", "120"], ["w1", "opt:n", "3"]], "the last value of each field, once");
+  assert.strictEqual(focused, "new", "the re-rendered field gets the focus back");
+  // the change that follows (blur) with the same value is not applied twice
+  listeners.change({ target: num });
+  assert.strictEqual(got.length, 2);
+});
