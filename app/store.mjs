@@ -31,6 +31,19 @@ export const RESOURCES = {
     ttl: 5 * 60_000,
     load: (_, { json }) => json("/api/marketplace-orderbook?book=1"),
   },
+  // The farm valuation (TREASURY): section=treasury with the page's coin mode and pet prices, read
+  // from the page's own keys at load time (a change shows after the TTL or a ↻).
+  treasury: {
+    ttl: 5 * 60_000,
+    load: async ({ farm }, { json }) => {
+      const ls = globalThis.localStorage;
+      const pick = (k, d) => { try { return (ls && ls.getItem(k)) || d; } catch { return d; } };
+      const body = await json(`/api/compute?farm=${enc(farm)}&section=treasury&coinMode=${enc(pick("sfl_coin_mode", "betty"))}` +
+        `&petprices=${enc(pick("sfl_pet_prices_v1", "{}"))}`);
+      const d = body.data || {};
+      return { value: d.value || null, coinMode: d.coinMode, pricesOk: body.pricesOk !== false };
+    },
+  },
   // The LEVELING plan inputs; POSTs the recorded weeks when there are any, as the pages always did.
   leveling: {
     ttl: 5 * 60_000,

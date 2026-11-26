@@ -10,6 +10,7 @@ import { dashActions } from "./dash-actions.mjs";
 import { bumpkinLevel } from "./bumpkin-level.mjs";
 import { weatherProtection } from "./weather-protection.mjs";
 import { beehives } from "./beehives.mjs";
+import { treasuryValue } from "./treasury-value.mjs";
 
 export const WIDGETS = {
   [fishingAgeNow.type]: fishingAgeNow,
@@ -18,4 +19,5 @@ export const WIDGETS = {
   [bumpkinLevel.type]: bumpkinLevel,
   [weatherProtection.type]: weatherProtection,
   [beehives.type]: beehives,
+  [treasuryValue.type]: treasuryValue,
 };

@@ -2698,6 +2698,10 @@
     .w-bar { height: 8px; background: #111; border: 1px solid var(--border-brown); margin: 6px 8px; }
     .w-bar > span { display: block; height: 100%; background: var(--sunpetal); }
     .w-pin-btn { font-size: 0.5rem; padding: 2px 6px; vertical-align: middle; }
+    .w-pie-wrap { display: flex; gap: 12px; align-items: center; justify-content: center; flex-wrap: wrap; padding: 4px 0; }
+    .w-pie { width: 90px; height: 90px; border-radius: 50%; flex: none; }
+    .w-pie-legend { line-height: 1.8; }
+    .w-swatch { display: inline-block; width: 8px; height: 8px; margin-right: 5px; vertical-align: middle; }
     .w-table .dash-detail { color: var(--text-dim); font-size: 0.9em; }
     .w-filter { margin-bottom: 6px; } .w-filter-h { color: var(--sunpetal); margin-bottom: 2px; }
     .w-table tr.w-row-click:hover { background: rgba(255,255,255,0.04); }
@@ -12998,6 +13002,7 @@
         </div>
         <div class="treasury-secondary">${formatUSD(usdTotal)} &nbsp;|&nbsp; ${formatBTC(btcTotal)}</div>
         <div class="treasury-rates">1 ${sflIcon()} = ${rates.sflUsd.toFixed(4)} USD &nbsp;|&nbsp; 1 BTC = ${formatUSD(rates.btcUsd)}</div>
+        <div style="margin-top:6px">${_wPinBtn("treasury-value", "Hodnota farmy")}</div>
         <div style="margin-top:8px;font-size: 0.5625rem">
           <span style="color:var(--text-dim)">Coin rate:</span>
           <select onchange="setCoinMode(this.value)" style="font-family:'Courier New',monospace;font-size: 0.5625rem;background:#111;color:var(--text-primary);border:2px solid var(--border-brown);padding:2px 4px">
@@ -19250,6 +19255,7 @@
       if (type === "dash-actions") return { dashActions: parseDashboardActions, countdown: dashFormatCountdown };
       if (type === "weather-protection") return { weatherRows: (farm) => DASH_WEATHER_ITEMS.map((n) =>
         ({ name: n, state: dashWeatherState(farm, n), prevents: DASH_WEATHER_PREVENTS[n], iconHtml: _dashIcon(n) })) };
+      if (type === "treasury-value") return { catColors: TREASURY_CAT_COLORS };
       if (type === "beehives") return { hives: (farm) => (farm.beehives ? extractBeehiveDetails(farm.beehives) : []), countdown: dashFormatCountdown };
       return {};
     }
