@@ -91,6 +91,30 @@ export const RESOURCES = {
       return d && typeof d === "object" && !Array.isArray(d) ? { ...d, pricesOk: body.pricesOk !== false } : d;
     },
   },
+  // The ASCENSION plan: section=ascension with the BUMPKIN page's recipe pick (recipes: its JSON; else
+  // the server assumes every kitchen cooks) and the last week's farm-history snapshots POSTed for the measured
+  // production, as the page always sent it; a flaky upstream (502) gets two more tries.
+  ascension: {
+    persist: true,
+    ttl: 5 * 60_000,
+    load: async ({ farm, grinx, recipes }, { json }) => {
+      let snapshots = [];
+      try {
+        const from = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10), to = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+        const h = await json(`/api/farm-history?farm=${enc(farm)}&from=${from}&to=${to}&limit=2000`);
+        snapshots = (h.snapshots || []).map((sn) => ({ captured_at: sn.captured_at,
+          diff: Object.fromEntries(Object.entries(sn.diff || {}).filter(([k]) => k.startsWith("_h."))) }));
+      } catch { /* no history: the plan runs on theoretical production */ }
+      const url = `/api/compute?farm=${enc(farm)}&section=ascension&grinx=${grinx ? 1 : 0}&max=10&recipes=${enc(recipes || "{}")}`;
+      const init = { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ snapshots }) };
+      for (let attempt = 1; ; attempt++) {
+        try { return (await json(url, init)).data || null; } catch (e) {
+          if (attempt >= 3) throw e;
+          await new Promise((r) => setTimeout(r, 1000 * attempt));
+        }
+      }
+    },
+  },
   // The LEVELING plan inputs; POSTs the recorded weeks when there are any, as the pages always did.
   leveling: {
     persist: true,

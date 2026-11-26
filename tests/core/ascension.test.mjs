@@ -967,29 +967,26 @@ test("a gated step is judged against its real slot, not the ungated one", () => 
   }
 });
 
-// The gate is only useful if the page SAYS why the schedule jumps. Slice that banner
-// out of flowers.html and render it, so silently dropping the explanation fails here.
-test("the page explains the gate, with the arrival and the idle time", () => {
-  const html = readFileSync(new URL("../../flowers.html", import.meta.url), "utf8");
-  const start = html.indexOf("const waitGates = (d.gates || [])");
-  assert.ok(start > 0, "gate banner not found in flowers.html");
-  const end = html.indexOf("\n      }", start);
-  const body = html.slice(start, end) + "\n      }";
+// The gate is only useful if the page SAYS why the schedule jumps. The banner lives in the
+// ASCENSION outlook widget (widgets/ascension.mjs); render it, so silently dropping the
+// explanation fails here.
+test("the page explains the gate, with the arrival and the idle time", async () => {
+  const { gateBanner, ascensionOutlook } = await import("../../widgets/ascension.mjs");
+  const render = (gates) => gateBanner({ gates });
 
-  const render = (gates) => new Function("d", "fmtEta", "escHTML",
-    "let h = '';\n" + body + "\nreturn h;"
-  )({ gates }, (x) => x == null ? "—" : `${x.toFixed(1)}d`, String);
-
-  const out = render([{ asc: 2, unlockMs: Date.UTC(2026, 8, 7), waitDays: 11.6, buildSlotDays: 32.6 }]);
-  assert.match(out, /A2 unlocks 7\. ?9\. ?2026/, `unlock date not shown: ${out}`);
-  assert.match(out, /11\.6d/, "idle time not shown");
-  assert.match(out, /21\.0d/, "arrival (slot − wait) not shown");
-  assert.match(out, /SPOOKY_ASCENSION/, "should name the game flag it comes from");
-  assert.doesNotMatch(out, /undefined|NaN/);
+  const banner = render([{ asc: 2, unlockMs: Date.UTC(2026, 8, 7), waitDays: 11.6, buildSlotDays: 32.6 }]);
+  assert.match(banner, /A2 unlocks 7\. ?9\. ?2026/, `unlock date not shown: ${banner}`);
+  assert.match(banner, /11\.6d/, "idle time not shown");
+  assert.match(banner, /21\.0d/, "arrival (slot − wait) not shown");
+  assert.match(banner, /SPOOKY_ASCENSION/, "should name the game flag it comes from");
+  assert.doesNotMatch(banner, /undefined|NaN/);
 
   // No wait → no banner. A gate the queue already runs past is not news.
   assert.equal(render([{ asc: 2, unlockMs: Date.UTC(2026, 8, 7), waitDays: 0, buildSlotDays: 40 }]), "");
   assert.equal(render([]), "");
+  // the outlook widget carries the banner
+  const html = ascensionOutlook.view({ asc: { ...out, gates: [{ asc: 2, unlockMs: Date.UTC(2026, 8, 7), waitDays: 11.6, buildSlotDays: 32.6 }] } }, {}, {}).html;
+  assert.match(html, /A2 unlocks/);
 });
 
 /*

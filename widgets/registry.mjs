@@ -17,6 +17,9 @@ import { worldIslands, worldSkillPoints } from "./world-dist.mjs";
 import { targetList } from "./target-list.mjs";
 import { flowersNeeds, flowerBeds } from "./flowers.mjs";
 import { crabTraps, craftingBox } from "./crafting.mjs";
+// BUMPKIN and ASCENSION pages
+import { bumpkinXp, bumpkinFood, bumpkinBoosts, bumpkinKitchens, bumpkinPlanWidget } from "./bumpkin.mjs";
+import { ascensionStatus, ascensionOutlook, ascensionIsland, ascensionSteps } from "./ascension.mjs";
 
 export const WIDGETS = {
   [fishingAgeNow.type]: fishingAgeNow,
@@ -35,4 +38,14 @@ export const WIDGETS = {
   [flowerBeds.type]: flowerBeds,
   [crabTraps.type]: crabTraps,
   [craftingBox.type]: craftingBox,
+  // BUMPKIN and ASCENSION pages
+  [bumpkinXp.type]: bumpkinXp,
+  [bumpkinFood.type]: bumpkinFood,
+  [bumpkinBoosts.type]: bumpkinBoosts,
+  [bumpkinKitchens.type]: bumpkinKitchens,
+  [bumpkinPlanWidget.type]: bumpkinPlanWidget,
+  [ascensionStatus.type]: ascensionStatus,
+  [ascensionOutlook.type]: ascensionOutlook,
+  [ascensionIsland.type]: ascensionIsland,
+  [ascensionSteps.type]: ascensionSteps,
 };

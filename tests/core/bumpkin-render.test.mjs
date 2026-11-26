@@ -101,10 +101,14 @@ test("the BUMPKIN page renders a below-200 farm with priced cooking without thro
   const cook = buildCookingSection(FARM, p2p, { savedRecipes: {}, petSimulate: false });
   const { html } = renderPage(FARM, cook);
   // The crash only reproduces when the guarded branches actually render — pin that they did.
-  assert.ok(html.includes("ALL BUILDINGS COMBINED"), "summary section rendered");
-  assert.ok(html.includes("INGREDIENT COST (P2P)"), "cost section rendered (totalCostPerDay > 0)");
-  assert.ok(/To level \d+/.test(html), "the cost-to-next-level row names the next level");
-  assert.ok(html.includes("Cost per level ("), "the collapsible cost-per-level table rendered");
+  // The panels are widgets now (widgets/bumpkin.mjs), rendered through the host like on a board.
+  for (const type of ["bumpkin-xp", "bumpkin-food", "bumpkin-boosts", "bumpkin-kitchens", "bumpkin-plan"]) {
+    assert.ok(html.includes(`data-frame="page:${type}"`), `${type} rendered on the page`);
+  }
+  assert.ok(html.includes("XP / day, all kitchens"), "summary section rendered");
+  assert.ok(html.includes("ingredient cost / day (P2P)"), "cost section rendered (totalCostPerDay > 0)");
+  assert.ok(/to level \d+ \(after food\)/.test(html), "the cost-to-next-level tile names the next level");
+  assert.ok(/Cost per level \d+ → 200/.test(html), "the cost-per-level table rendered");
   assert.ok(!/undefined|NaN/.test(html.replace(/undefined-/g, "")),
     "no undefined/NaN leaked into the rendered page");
 });
