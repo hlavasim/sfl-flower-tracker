@@ -46,11 +46,11 @@ test("bumpkin: no farm or no bumpkin → an explanation", () => {
   assert.match(bumpkinLevel.view({ farm: {} }).empty, /Bumpkin/);
 });
 
-test("host: a view widget renders its html, without a cog; the page's pin still works", () => {
+test("host: a view widget renders its html, with a cog; the page's pin still works", () => {
   const h = createHost({ registry: { "bumpkin-level": bumpkinLevel }, storage: mem() });
   const html = h.renderPage("bumpkin-level", { data: { farm: FARM } });
   assert.match(html, /LVL \d+/);
-  assert.doesNotMatch(html, /data-action="cog"/);
+  assert.match(html, /data-action="cog"/, "a tile has a cog too (its title, its options)");
   assert.match(html, /data-action="refresh"/);
   h.handle("page:bumpkin-level", "pin", "");
   const [item] = h.doc().boards[0].items;

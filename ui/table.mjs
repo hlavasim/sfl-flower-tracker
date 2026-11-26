@@ -226,10 +226,12 @@ function optionsHtml(options, opts) {
 const TABS = [["cols", "Columns"], ["rows", "Rows"], ["filter", "Filter"], ["look", "Look"]];
 export const TITLE_MAX = 60;
 export function tableSettingsPanel(columns, settings = {}, { rows = [], rowKey = (r) => r.key, rowLabel, tab, options = [], optionsLabel = "Options",
-  summary = false, defaultTitle = "" } = {}) {
+  summary = false, defaultTitle = "", view = false } = {}) {
   const filterCols = columns.filter((c) => c.filter);
-  // the widget's own options, when it has any, come first and open by default
-  const tabsHere = [...(options.length ? [["opts", optionsLabel]] : []), ...TABS.filter(([t]) => t !== "filter" || filterCols.length)];
+  // the widget's own options, when it has any, come first and open by default; a view widget (a tile,
+  // no table) has only its options and Look (the title)
+  const tabsHere = [...(options.length ? [["opts", optionsLabel]] : []),
+    ...TABS.filter(([t]) => (view ? t === "look" : t !== "filter" || filterCols.length))];
   const active = tabsHere.some(([t]) => t === tab) ? tab : tabsHere[0][0];
   const shown = visibleColumns(columns, settings).map((c) => c.key);
   const order = [...shown, ...columns.map((c) => c.key).filter((k) => !shown.includes(k))];
@@ -265,15 +267,15 @@ export function tableSettingsPanel(columns, settings = {}, { rows = [], rowKey =
   const section = (t, html) => `<div class="w-sec" data-tab="${t}"${t === active ? "" : " hidden"}>${html}</div>`;
   return `<div class="w-settings"><div class="w-tabs">${tabs}</div>` +
     (options.length ? section("opts", optionsHtml(options, settings.opts || {})) : "") +
-    section("cols", `<div class="w-cols">${colRows}</div><div class="w-hint">Tick what to show; drag ⠿ to reorder. Click a table header to sort.</div>`) +
+    (view ? "" : section("cols", `<div class="w-cols">${colRows}</div><div class="w-hint">Tick what to show; drag ⠿ to reorder. Click a table header to sort.</div>`) +
     section("rows", `<div class="w-segs">${mode("all", "All")}${mode("top", "First N")}${mode("picked", "Picked only")}</div>` +
       (sel.mode === "top" ? `<label class="w-line">Count <input type="number" min="1" value="${sel.top}" data-action="rows-top"></label>` : "") +
-      (sel.mode === "picked" ? `<div class="w-picks">${picks}</div>` : "")) +
+      (sel.mode === "picked" ? `<div class="w-picks">${picks}</div>` : ""))) +
     (filterCols.length ? section("filter", filters) : "") +
     section("look", `<label class="w-line">Title <input type="text" data-action="title" value="${esc(settings.title || "")}" placeholder="${esc(defaultTitle)}" maxlength="${TITLE_MAX}"></label>` +
       (summary ? `<div class="w-line">Summary <span class="w-segs">` + [["full", "Shown"], ["compact", "Compact"], ["off", "Hidden"]].map(([v, t]) =>
         `<button type="button" class="w-seg${(settings.summary || "full") === v ? " on" : ""}" data-action="summary" data-value="${v}">${t}</button>`).join("") + `</span></div>` : "") +
-      `<label class="w-line">Text size <input type="range" min="${TEXT_MIN}" max="${TEXT_MAX}" step="10" value="${size}" data-action="text-size"> ${size} %</label>` +
-      `<label class="w-line"><input type="checkbox" data-action="density" data-value="${settings.density === "compact" ? "normal" : "compact"}"${settings.density === "compact" ? " checked" : ""}> Compact rows</label>`) +
+      (view ? "" : `<label class="w-line">Text size <input type="range" min="${TEXT_MIN}" max="${TEXT_MAX}" step="10" value="${size}" data-action="text-size"> ${size} %</label>` +
+      `<label class="w-line"><input type="checkbox" data-action="density" data-value="${settings.density === "compact" ? "normal" : "compact"}"${settings.density === "compact" ? " checked" : ""}> Compact rows</label>`)) +
     `<div class="w-foot"><button type="button" class="w-link" data-action="reset" data-value="">Reset to defaults</button></div></div>`;
 }

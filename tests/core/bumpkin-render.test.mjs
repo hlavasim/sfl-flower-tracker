@@ -26,7 +26,7 @@ const wrap = JSON.parse(readFileSync(new URL("../fixtures/farm-155498.json", imp
 const FARM = wrap.farm || wrap;
 const p2p = JSON.parse(readFileSync(new URL("../fixtures/p2p-prices.json", import.meta.url)));
 
-function renderPage(farm, cookData) {
+async function renderPage(farm, cookData) {
   const app = { innerHTML: "" };
   const store = {};
   const elements = { app };
@@ -81,8 +81,6 @@ function renderPage(farm, cookData) {
            bumpkin: farm.bumpkin, buildings: farm.buildings, trades: farm.trades || {}, farm,
          };
          cachedFarmData = data;
-         // Prime the cooking cache so the cook-dependent half renders (the crash lived there).
-         _bumpkinCooking = { key: _bumpkinCookingQuery(), data: cookData };
          renderBumpkin(data);
        },
      };`
@@ -93,13 +91,21 @@ function renderPage(farm, cookData) {
     win.setInterval, win.clearTimeout, win.clearInterval, win.location, win.history,
     win.navigator, win.matchMedia
   );
+  // The widgets read their data through the store, each with its own options: prime it with the
+  // farm and the cooking payload so the cook-dependent half renders (the crash lived there).
+  const { createStore } = await import("../../app/store.mjs");
+  globalThis.__store = createStore({ fetch: async (url) => ({ ok: true, status: 200,
+    json: async () => (url.includes("/api/compute") ? { data: cookData } : { farm }) }) });
+  for (const t of ["bumpkin-xp", "bumpkin-food", "bumpkin-boosts", "bumpkin-kitchens", "bumpkin-plan"]) {
+    await __widgets.loadData(t, "155498", __store, __widgets.pageOpts(t));
+  }
   api.renderWith(farm, cookData);
   return { html: app.innerHTML };
 }
 
-test("the BUMPKIN page renders a below-200 farm with priced cooking without throwing", () => {
+test("the BUMPKIN page renders a below-200 farm with priced cooking without throwing", async () => {
   const cook = buildCookingSection(FARM, p2p, { savedRecipes: {}, petSimulate: false });
-  const { html } = renderPage(FARM, cook);
+  const { html } = await renderPage(FARM, cook);
   // The crash only reproduces when the guarded branches actually render — pin that they did.
   // The panels are widgets now (widgets/bumpkin.mjs), rendered through the host like on a board.
   for (const type of ["bumpkin-xp", "bumpkin-food", "bumpkin-boosts", "bumpkin-kitchens", "bumpkin-plan"]) {
@@ -113,12 +119,11 @@ test("the BUMPKIN page renders a below-200 farm with priced cooking without thro
     "no undefined/NaN leaked into the rendered page");
 });
 
-test("BUMPKIN: the 'fish only by reels' switch is stored, synced, sent to section=cooking and read by compute", () => {
+test("BUMPKIN: 'fish only by reels' and the pet streak are per-widget options, seeded once from the old page settings, read by compute", () => {
   const SRC2 = readFileSync(new URL("../../flowers.html", import.meta.url), "utf8");
   const API = readFileSync(new URL("../../api/compute.mjs", import.meta.url), "utf8");
-  assert.match(SRC2, /onchange="toggleFishReels\(\)"/);
-  assert.match(SRC2, /localStorage\.setItem\("sfl_fish_reels"/);
-  assert.match(SRC2, /&fishReels=\$\{fishReels\}/);
-  assert.match(SRC2, /const prefSyncKeys = \[[^\]]*"sfl_fish_reels"/s);
+  assert.doesNotMatch(SRC2, /toggleFishReels|togglePetStreak|setBumpkinSort/, "no page control bar any more");
+  assert.match(SRC2, /if \(keys\.has\("fishReels"\)\) set\(t, "fishReels", localStorage\.getItem\("sfl_fish_reels"\) === "1" \? "1" : "0"\);/);
+  assert.match(SRC2, /for \(const t of types\) html \+= _wLive\(t\);/);
   assert.match(API, /fishReelsOnly: req\.query\.fishReels === "1"/);
 });

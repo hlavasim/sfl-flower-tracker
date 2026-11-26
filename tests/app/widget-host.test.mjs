@@ -289,3 +289,35 @@ test("the frame shows the custom title; the summary renders full, compact or not
   h.handle("page:s", "summary", "off");
   assert.doesNotMatch(h.renderPage("s", { data: DATA }), /SUM/);
 });
+
+test("needs follow each copy's own options: a page copy and a board copy can ask for different data", () => {
+  const N = { ...T, options: [{ key: "pet", label: "Pet", kind: "bool" }], defaults: { opts: { pet: false } },
+    needs: (farm, o = {}) => ({ d: { res: "compute", farm, section: "cooking", q: { pet: o.pet ? "1" : "0" } } }) };
+  const storage = mem();
+  const h = createHost({ registry: { n: N }, storage });
+  assert.strictEqual(h.needsOf("n", 7)[0].q.pet, "0", "no options given: the defaults");
+  h.handle("page:n", "opt:pet", "1");
+  assert.deepStrictEqual(h.pageOpts("n"), { pet: true });
+  assert.strictEqual(h.needsOf("n", 7, h.pageOpts("n"))[0].q.pet, "1");
+  h.handle("page:n", "pin", "");
+  const item = h.doc().boards[0].items[0];
+  assert.strictEqual(h.needsOf("n", 7, h.itemOpts(item))[0].q.pet, "1", "the pinned copy starts from the page copy");
+  const peeked = h.peekData("n", 7, { peek: (q) => (q.q.pet === "1" ? { data: "P1", status: "ok", asOf: 1 } : null) }, h.itemOpts(item));
+  assert.deepStrictEqual([peeked.data.d, peeked.pending], ["P1", false]);
+});
+
+test("a view widget (a tile) has a cog too: its own options and a title, no table tabs", () => {
+  const V = { type: "v", title: "Tile", options: [{ key: "n", label: "N", kind: "number", min: 1, max: 9 }], defaults: { opts: {} },
+    view: (d, ctx, o) => ({ html: `<p>n=${o.n ?? "-"}</p>` }) };
+  const h = createHost({ registry: { v: V }, storage: mem() });
+  assert.match(h.renderPage("v", {}), /data-action="cog"/);
+  h.handle("page:v", "cog", "");
+  const html = h.renderPage("v", {});
+  assert.match(html, /data-action="opt:n"/);
+  assert.match(html, /data-action="title"/);
+  assert.doesNotMatch(html, /data-value="cols"|data-value="rows"/);
+  h.handle("page:v", "opt:n", "4");
+  assert.match(h.renderPage("v", {}), /<p>n=4<\/p>/);
+  h.handle("page:v", "title", "My tile");
+  assert.match(h.renderPage("v", {}), /class="w-title">My tile</);
+});

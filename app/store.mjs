@@ -118,7 +118,12 @@ export const RESOURCES = {
     load: async ({ farm, section, q = {} }, { json }) => {
       if (!section) throw new Error("compute: no section");
       const extra = Object.keys(q).sort().map((k) => `&${enc(k)}=${enc(q[k])}`).join("");
-      const body = await json(`/api/compute?farm=${enc(farm)}&section=${enc(section)}${extra}`);
+      // the upstream farm fetch behind /api/compute is intermittently flaky (502): two retries
+      let body;
+      for (let attempt = 0; ; attempt++) {
+        try { body = await json(`/api/compute?farm=${enc(farm)}&section=${enc(section)}${extra}`); break; }
+        catch (e) { if (attempt >= 2) throw e; await new Promise((r) => setTimeout(r, 400 * (attempt + 1))); }
+      }
       const d = body.data;
       return d && typeof d === "object" && !Array.isArray(d) ? { ...d, pricesOk: body.pricesOk !== false } : d;
     },

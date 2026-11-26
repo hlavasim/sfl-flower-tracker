@@ -152,7 +152,7 @@ test("facts and verdict read the clock and the saved settings", () => {
   assert.match(v, /500 FLOWER in week 1 = 1,600 points/);
 });
 
-test("the host renders a planner copy with its own options; views have no cog", () => {
+test("the host renders a planner copy with its own options; views have a cog too", () => {
   const m = new Map();
   const reg = Object.fromEntries(ALL.map((w) => [w.type, w]));
   const h = createHost({ registry: reg, storage: { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v) } });
@@ -160,5 +160,5 @@ test("the host renders a planner copy with its own options; views have no cog", 
   assert.match(html, /data-frame="page:yk-planner"/);
   h.handle("page:yk-planner", "opt:trackWeeks", "0");
   assert.strictEqual((h.renderPage("yk-planner", { data: {}, ctx: ctx() }).match(/data-row="/g) || []).length, 1);
-  assert.doesNotMatch(h.renderPage("yk-live", { data: {}, ctx: ctx() }), /data-action="cog"/);
+  assert.match(h.renderPage("yk-live", { data: {}, ctx: ctx() }), /data-action="cog"/, "every widget has a cog (title, options)");
 });

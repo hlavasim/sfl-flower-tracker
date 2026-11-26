@@ -2652,7 +2652,8 @@
     .v-bumpkin-line { margin: 6px 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
     .v-bumpkin-line .v-bar { flex: 1; max-width: 220px; }
     .v-bumpkin-sub, .v-asc-sub { font-size: 11px; color: var(--c-dim); text-transform: uppercase; letter-spacing: 0.5px; margin: 12px 0 6px; }
-    .v-bumpkin-gate { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(60px, 1fr) auto; gap: 10px; align-items: center; padding: 3px 0;
+    /* the last column has a fixed width, so every bar in the list starts and ends at the same place */
+    .v-bumpkin-gate { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(60px, 2fr) 190px; gap: 10px; align-items: center; padding: 3px 0;
       border-top: 1px solid var(--c-row); color: var(--c-muted); }
     .v-bumpkin-gate.ok { color: var(--c-text); }
     .v-bumpkin-note { margin-top: 8px; font-size: 12px; }
@@ -2670,7 +2671,8 @@
     .v-bumpkin-trace summary { cursor: pointer; color: var(--c-accent); font-size: 12px; margin-top: 4px; }
     .v-bumpkin-trace > div { margin-top: 6px; padding: 8px 10px; background: var(--c-bg); border-left: 2px solid var(--c-accent); border-radius: 6px;
       font-family: 'Courier New', monospace; font-size: 11.5px; line-height: 1.6; color: var(--c-muted); white-space: normal; }
-    .v-bumpkin-per > div { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(60px, 1fr) auto; gap: 10px; align-items: center; padding: 3px 0; }
+    .v-bumpkin-per > div { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(60px, 2fr) 230px; gap: 10px; align-items: center; padding: 3px 0; }
+    .v-bumpkin-gate > :last-child, .v-bumpkin-per > div > :last-child { text-align: right; white-space: nowrap; }
     .v-bumpkin-per { margin-bottom: 12px; }
     .v-bumpkin-lvl { color: var(--c-accent); }
     .v-bumpkin img, .v-bumpkin-cols img, .v-name small img, .v-asc img { height: 1.2em; vertical-align: -0.25em; margin-right: 3px; }
@@ -2681,7 +2683,7 @@
     .v-asc-note { background: var(--c-card2); border-radius: 10px; padding: 8px 12px; margin-bottom: 8px; }
     .v-asc-note.v-asc-gate { border: 1px solid rgba(224,179,74,0.4); }
     .v-asc-bad { color: var(--c-red); }
-    .v-asc-reach-row { display: grid; grid-template-columns: minmax(110px, 140px) minmax(60px, 1fr) auto; gap: 10px; align-items: center; padding: 4px 0;
+    .v-asc-reach-row { display: grid; grid-template-columns: minmax(110px, 140px) minmax(60px, 1fr) 170px; gap: 10px; align-items: center; padding: 4px 0;
       border-top: 1px solid var(--c-row); }
     .v-asc-reach-row.bad > span:first-child { color: var(--c-red); font-weight: 600; }
     .v-asc-have { color: var(--c-green); }
@@ -2967,8 +2969,8 @@
       .then(([host, reg, frame]) => {
         window.__widgets = host.createHost({ registry: reg.WIDGETS, storage: localStorage, onChange: () => window._wRerender && window._wRerender(),
           // ↻ on a widget: drop what the store holds for its needs, then the page loads them again
-          onRefresh: (id, type) => {
-            if (window.__store && typeof FARM_ID !== "undefined") for (const q of window.__widgets.needsOf(type, FARM_ID)) window.__store.invalidate(q);
+          onRefresh: (id, type, opts) => {
+            if (window.__store && typeof FARM_ID !== "undefined") for (const q of window.__widgets.needsOf(type, FARM_ID, opts)) window.__store.invalidate(q);
             const again = window._wRefresh || window._wRerender;
             if (again) again();
           } });
@@ -7327,61 +7329,6 @@
       if (cachedFarmData) renderBumpkin(cachedFarmData);
     }
 
-    // "Fish by plain reels only": price every fish as one plain cast (rod + worm) / fish per cast.
-    function toggleFishReels() {
-      const on = localStorage.getItem("sfl_fish_reels") === "1";
-      localStorage.setItem("sfl_fish_reels", on ? "0" : "1");
-      if (cachedFarmData) renderBumpkin(cachedFarmData);
-    }
-
-    function togglePetStreak() {
-      const on = localStorage.getItem("sfl_pet_streak") === "1";
-      localStorage.setItem("sfl_pet_streak", on ? "0" : "1");
-      if (cachedFarmData) renderBumpkin(cachedFarmData);
-    }
-
-
-    // ── Cooking payload cache (/api/compute?section=cooking) ──
-    // The Bumpkin page renders cooking from the unified engine — the same payload the
-    // power-summary reads (:17557) — so the cook math lives in exactly one place.
-    // Cached per query (farm + petSimulate + selected recipes); changing any of those
-    // is a new key and re-fetches. Cache-then-rerender, which keeps renderBumpkin
-    // synchronous for all of its call sites. refresh() must clear this (see :23000).
-    let _bumpkinCooking = null;        // { key, data } for the last successful fetch
-    let _bumpkinCookingErrKey = null;  // key whose fetch failed (do not auto-retry it)
-    let _bumpkinCookingLoading = null; // key currently in flight
-
-    function _bumpkinCookingQuery() {
-      const petSim = (localStorage.getItem("sfl_pet_streak") === "1") ? "1" : "0";
-      const recipes = encodeURIComponent(JSON.stringify(getSavedBumpkinRecipes()));
-      const fishReels = (localStorage.getItem("sfl_fish_reels") === "1") ? "1" : "0";
-      return `farm=${FARM_ID}&section=cooking&petSimulate=${petSim}&recipes=${recipes}&fishReels=${fishReels}&explain=1`;
-    }
-
-    async function _fetchBumpkinCooking(key) {
-      if (_bumpkinCookingLoading) return;
-      _bumpkinCookingLoading = key;
-      // The upstream farm fetch behind /api/compute is intermittently flaky (502), so a
-      // single miss must not strand the page on the error state — retry briefly first.
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          const resp = await fetch(`/api/compute?${key}`);
-          if (!resp.ok) throw new Error(`compute ${resp.status}`);
-          _bumpkinCooking = { key, data: (await resp.json()).data };
-          _bumpkinCookingErrKey = null;
-          break;
-        } catch (e) {
-          if (attempt === 2) {
-            console.warn("cooking compute fetch:", e);
-            _bumpkinCookingErrKey = key;
-          } else {
-            await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
-          }
-        }
-      }
-      _bumpkinCookingLoading = null;
-      if (cachedFarmData && getPage() === "bumpkin") renderBumpkin(cachedFarmData);
-    }
 
     // ── Constants payload cache (/api/compute?section=constants) ──
     // Task 13b: renders the core/data migration coverage (Task 13a). Farm-independent —
@@ -7645,21 +7592,29 @@
       </div>`;
 
       html += `<div class="footer">
-        <button class="refresh-btn" onclick="refresh()">REFRESH</button>
+        <button class="refresh-btn" onclick="(window._wRefresh || refresh)()">REFRESH</button>
         <div class="timestamp pixel-font">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
       </div>`;
 
       app.innerHTML = html;
     }
-
-    function setBumpkinTargetLevel(val) {
-      localStorage.setItem("sfl_bumpkin_target", val);
-      if (cachedFarmData) renderBumpkin(cachedFarmData);
-    }
-
-    function setBumpkinSort(mode) {
-      localStorage.setItem("sfl_bumpkin_sort", mode);
-      if (cachedFarmData) renderBumpkin(cachedFarmData);
+    // The first time: the page copies start from the page settings the old control bar kept
+    // (pet streak, fish by reels, recipe order, target level), so nothing the user chose is lost.
+    function _bumpkinSeedOpts(types) {
+      const saved = __widgets.doc().page || {};
+      const set = (t, k, v) => __widgets.handle("page:" + t, "opt:" + k, v);
+      const rerender = window._wRerender;
+      window._wRerender = null;
+      for (const t of types) {
+        if ((saved[t] || {}).opts) continue;
+        const keys = new Set((__widgets.registry[t].options || []).map((o) => o.key));
+        if (keys.has("petSimulate")) set(t, "petSimulate", localStorage.getItem("sfl_pet_streak") === "1" ? "1" : "0");
+        if (keys.has("fishReels")) set(t, "fishReels", localStorage.getItem("sfl_fish_reels") === "1" ? "1" : "0");
+        if (keys.has("sort") && localStorage.getItem("sfl_bumpkin_sort")) set(t, "sort", localStorage.getItem("sfl_bumpkin_sort"));
+        const tl = localStorage.getItem("sfl_bumpkin_target");
+        if (keys.has("target") && tl && tl !== "200") set(t, "target", tl);
+      }
+      window._wRerender = rerender;
     }
 
     // ═══════════════════════════════════════
@@ -10520,54 +10475,20 @@
         return;
       }
 
-      // All cooking numbers come from the unified engine (/api/compute?section=cooking),
-      // cached per query above — nothing on this page recomputes cook XP/time/cost.
-      const cookKey = _bumpkinCookingQuery();
-      const cook = (_bumpkinCooking && _bumpkinCooking.key === cookKey) ? _bumpkinCooking.data : null;
-      const cookFailed = (_bumpkinCookingErrKey === cookKey);
-      if (!cook && !cookFailed && _bumpkinCookingLoading !== cookKey) _fetchBumpkinCooking(cookKey);
-
-      // The panels are widgets (widgets/bumpkin.mjs): the same on a board. The controls below are
-      // the page's settings, which the page's copies (and pinned copies without their own) follow.
+      // The panels are widgets (widgets/bumpkin.mjs), the same on a board. Every copy has its own
+      // settings in ⚙ (target, pet streak, fish by reels, recipe order) and asks for its own cooking
+      // data through the store; only the recipe pick stays the page's (the selects in Kitchens).
       window._wRerender = () => { if (getPage() === "bumpkin" && cachedFarmData) renderBumpkin(cachedFarmData); };
-      window._wRefresh = refresh;
-      const fresh = __wFresh(__store.peek({ res: "farm", farm: FARM_ID }));
-
-      const currentXP = parseFloat(bumpkin.experience || 0);
-      const ascLevel = (farm && farm.island && farm.island.ascensionLevel) || 0;
-      const currentLevel = getTotalBumpkinLevel(currentXP, ascLevel);
-      const savedTarget = parseInt(localStorage.getItem("sfl_bumpkin_target") || "200");
-      const targetLevel = Math.max(Math.min(currentLevel, 199) + 1, Math.min(200, savedTarget));
-      const sortMode = localStorage.getItem("sfl_bumpkin_sort") || "xpPerHour"; // xpPerHour | xpPerSfl | sflPerCook
-      const fishReelsOn = localStorage.getItem("sfl_fish_reels") === "1";
-      const petSimOn = localStorage.getItem("sfl_pet_streak") === "1";
-
+      const types = ["bumpkin-xp", "bumpkin-food", "bumpkin-boosts", "bumpkin-kitchens", "bumpkin-plan"];
+      window._wRefresh = () => {
+        for (const t of types) for (const q of __widgets.needsOf(t, FARM_ID, __widgets.pageOpts(t))) __store.invalidate(q);
+        refresh();
+      };
       let html = head;
-      const sortBtn = (mode, label) => `<button class="v-seg${sortMode === mode ? " on" : ""}" onclick="setBumpkinSort('${mode}')">${label}</button>`;
-      html += `<div class="w-frame pixel-panel v-bumpkin-ctl">
-        ${ascLevel >= 1 ? "" : `<label>Target level
-          <input type="range" min="${currentLevel + 1}" max="200" value="${targetLevel}" oninput="document.getElementById('target-val').textContent=this.value" onchange="setBumpkinTargetLevel(this.value)">
-          <b id="target-val">${targetLevel}</b></label>`}
-        <span>Order recipes by ${sortBtn("xpPerHour", "XP/hour")} ${sortBtn("xpPerSfl", "XP per SFL")} ${sortBtn("sflPerCook", "SFL/cook")}</span>
-        <label title="A fish = (rod + Earthworm / Grub / Red Wiggler) ÷ the average fish per cast from your skills and NFTs. No odds for a specific fish, no chum, no Fish Market bait — what cooking costs when you use whatever you catch.">
-          <input type="checkbox" ${fishReelsOn ? "checked" : ""} onchange="toggleFishReels()"> 🎣 fish by plain reels only</label>
-        <label title="Price the cooking as if the pet streak were at its maximum ×1.5">
-          <input type="checkbox" ${petSimOn ? "checked" : ""} onchange="togglePetStreak()"> 🐾 simulate pet streak ×1.5</label>
-      </div>`;
-
       if (typeof __widgets === "undefined") html += _wMissing("Bumpkin");
       else {
-        const w = (type) => __widgets.renderPage(type, { data: { farm, cook }, ctx: _wCtx(type), fresh });
-        html += w("bumpkin-xp");
-        // Everything below needs the cooking payload; the level stays on screen while it loads or fails.
-        if (!cook) {
-          html += `<div class="w-frame pixel-panel"><div class="${cookFailed ? "w-error" : "w-empty-msg"}">${cookFailed
-            ? "Cooking data unavailable — check your connection, then press REFRESH."
-            : "Loading cooking data..."}</div></div>`;
-        } else {
-          if (cook.bankedFood && cook.bankedFood.totalXp > 0) html += w("bumpkin-food");
-          html += w("bumpkin-boosts") + w("bumpkin-kitchens") + w("bumpkin-plan");
-        }
+        _bumpkinSeedOpts(types);
+        for (const t of types) html += _wLive(t);
       }
 
       html += `<div class="footer">
@@ -17852,6 +17773,17 @@
     function _wPageHead(title, sub = "") {
       return `<div class="w-page-head"><h1>${escHTML(title)}</h1>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`;
     }
+    // A page widget fed like a board item: its data through the store, asked with the needs of ITS OWN
+    // options (a page copy may want other data than the page, e.g. the pet streak on or off). Missing
+    // data is fetched and the page re-renders when it arrives.
+    function _wLive(type, { variant = "", force = null, ctx = null } = {}) {
+      const opts = __widgets.pageOpts(type, variant, force);
+      const p = __widgets.peekData(type, FARM_ID, __store, opts);
+      for (const q of __widgets.needsOf(type, FARM_ID, opts)) {
+        if (!__store.peek(q)) __store.get(q).then(() => { if (window._wRerender) window._wRerender(); });
+      }
+      return __widgets.renderPage(type, { data: p.data, ctx: ctx || _wCtx(type), fresh: __widgets.freshOf(p.entries), variant, force });
+    }
     function _wCtx(type) {
       if (_wCtxMap[type]) return _wCtxMap[type]();
       if (type === "fishing-age-now") {
@@ -18010,7 +17942,7 @@
       // the previews, each as its data arrives (the store shares and caches the fetches)
       if (items.some((it) => it.type === "dash-actions") && Object.keys(dashP2P).length === 0) dashFetchP2P().catch(() => {});
       items.forEach((it, k) => {
-        __widgets.loadData(it.type, FARM_ID, __store).then(({ data }) => {
+        __widgets.loadData(it.type, FARM_ID, __store, __widgets.optsFor(it.type, { opts: it.opts || {} })).then(({ data }) => {
           const el = document.getElementById("w-gal-prev-" + k);
           if (el) el.innerHTML = __widgets.preview(it.type, { data, ctx: _wCtx(it.type), opts: it.opts });
         }).catch((err) => {
@@ -18079,9 +18011,10 @@
         const board = __widgets.doc().boards.find((b) => b.id === boardId);   // read at paint time
         if (!board) return;
         const frames = board.items.map((it) => {
-          const p = __widgets.peekData(it.type, FARM_ID, __store);
+          const o = __widgets.itemOpts(it);   // this copy's options pick its data (needs(farm, opts))
+          const p = __widgets.peekData(it.type, FARM_ID, __store, o);
           // a widget with no needs has no data age to show
-          const fresh = __widgets.needsOf(it.type, FARM_ID).length ? __widgets.freshOf(p.entries) : null;
+          const fresh = __widgets.needsOf(it.type, FARM_ID, o).length ? __widgets.freshOf(p.entries) : null;
           return { id: `b:${board.id}:${it.i}`, html: __widgets.renderItem(board.id, it, { data: p.data, ctx: _wCtx(it.type), fresh, pending: p.pending }) };
         });
         // Only the frames that changed are replaced: an open settings panel or a typed value survives a
@@ -18100,7 +18033,7 @@
         if (focusAt) __wRefocus(app, focusAt);
       };
       paint();
-      const queries = board.items.flatMap((it) => __widgets.needsOf(it.type, FARM_ID));
+      const queries = board.items.flatMap((it) => __widgets.needsOf(it.type, FARM_ID, __widgets.itemOpts(it)));
       const extra = [];
       if (board.items.some((it) => it.type === "dash-actions")) {
         // the DASH parser prices bounties and deliveries from these, as on the DASH page
@@ -23017,11 +22950,6 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
 
     function refresh() {
       cachedFarmData = null;
-      // Drop BOTH cooking caches: the key is farm+petSimulate+recipes, none of which REFRESH
-      // changes, so a kept payload would survive the whole page lifetime and REFRESH would
-      // silently leave XP/day, costs and banked food frozen at their first-load values.
-      _bumpkinCooking = null;
-      _bumpkinCookingErrKey = null;
       _constantsData = null;
       _constantsErr = null;
       // Same reasoning for the price-map cache: its key is farm+rates, and REFRESH changes

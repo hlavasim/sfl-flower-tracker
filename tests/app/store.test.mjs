@@ -199,3 +199,11 @@ test("compute: any /api/compute section with its extra query params; the answer'
   const bad = await s.get({ res: "compute", farm: "7" });
   assert.strictEqual(bad.status, "error");
 });
+
+test("compute retries a flaky upstream twice before it reports the error", async () => {
+  let n = 0;
+  const f = async () => { n++; return n < 3 ? { ok: false, status: 502, json: async () => ({}) } : { ok: true, status: 200, json: async () => ({ data: { v: 1 } }) }; };
+  const s = createStore({ fetch: f });
+  const r = await s.get({ res: "compute", farm: "7", section: "cooking" });
+  assert.deepStrictEqual([r.status, r.data.v, n], ["ok", 1, 3]);
+});

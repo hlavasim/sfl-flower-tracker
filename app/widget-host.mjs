@@ -52,7 +52,9 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
       if (widget.view) {
         // a tile or a chart: its own HTML, no table settings
         const out = widget.view(data || {}, ctx || {}, settings.opts || {}) || {};
-        return { html: out.html || `<div class="w-empty-msg">${esc(out.empty || "Nothing to show.")}</div>`, settingsHtml: "" };
+        return { html: out.html || `<div class="w-empty-msg">${esc(out.empty || "Nothing to show.")}</div>`,
+          settingsHtml: tableSettingsPanel([], settings, { tab, view: true, options: (widget.options || []).filter((o) => !force || !(o.key in force)),
+            optionsLabel: widget.optionsLabel, defaultTitle: ownTitle(widget, settings) }) };
       }
       const out = widget.build(data || {}, ctx || {}, settings.opts || {});
       const opts = { rowKey: widget.rowKey, rowLabel: widget.rowLabel, rowClass: widget.rowClass, keepRow: widget.keepRow };
@@ -78,7 +80,7 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     if (force) forced.set(id, force); else forced.delete(id);
     const settings = withForce(effective(widget, pageSettings(doc, key)), force);
     const b = body(widget, settings, data, ctx, open.get(id), force);
-    return renderFrame({ id, title: titleOf(widget, settings), place: "page", body: b.html, fresh, pinned: pinnedCount(doc, type), cog: !widget.view,
+    return renderFrame({ id, title: titleOf(widget, settings), place: "page", body: b.html, fresh, pinned: pinnedCount(doc, type), cog: true,
       settingsHtml: b.settingsHtml, settingsOpen: open.has(id) });
   }
 
@@ -90,14 +92,17 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     }
     const settings = effective(widget, item.settings);
     const b = pending ? { html: `<div class="w-fresh">Loading…</div>`, settingsHtml: "" } : body(widget, settings, data, ctx, open.get(id));
-    return renderFrame({ id, title: titleOf(widget, settings), place: "board", w: item.w, h: item.h, body: b.html, fresh, cog: !widget.view,
+    return renderFrame({ id, title: titleOf(widget, settings), place: "board", w: item.w, h: item.h, body: b.html, fresh, cog: true,
       settingsHtml: b.settingsHtml, settingsOpen: open.has(id) });
   }
 
   function handle(frameId, action, value) {
     const f = parse(frameId);
     if (!f || !f.widget && action !== "remove") return false;
-    if (action === "refresh") { onRefresh(frameId, f.type); return true; }
+    if (action === "refresh") {
+      onRefresh(frameId, f.type, f.place === "page" ? pageOpts(f.type, f.key.includes("@") ? f.key.split("@")[1] : "", f.force) : itemOpts(f.item));
+      return true;
+    }
     if (action === "cog") {
       open.has(frameId) ? open.delete(frameId) : open.set(frameId, "");   // "" = the panel's first tab
       onChange(frameId);
@@ -153,11 +158,18 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
 
   // A widget's needs, fetched through the store. data[name] is the entry's data, except that a need
   // named "farm" gets the game farm itself (the farm resource is the proxy's {farm: …} answer).
-  const needList = (type, farmId) => {
+  // needs(farmId, opts): a widget may ask for different data per copy (its own options); without
+  // opts the widget's defaults.
+  const optsFor = (type, saved) => (registry[type] ? effective(registry[type], saved || {}).opts || {} : {});
+  const needList = (type, farmId, opts) => {
     const widget = registry[type];
-    return widget && widget.needs ? Object.entries(widget.needs(farmId)) : [];
+    return widget && widget.needs ? Object.entries(widget.needs(farmId, opts || optsFor(type))) : [];
   };
-  const needsOf = (type, farmId) => needList(type, farmId).map(([, q]) => q);
+  const needsOf = (type, farmId, opts) => needList(type, farmId, opts).map(([, q]) => q);
+  // the options of the page copy (with what the page forces) and of a board item
+  const pageOpts = (type, variant = "", force = null) =>
+    ({ ...optsFor(type, pageSettings(doc, variant ? `${type}@${variant}` : type)), ...(force || {}) });
+  const itemOpts = (item) => optsFor(item.type, item.settings);
   function shape(needs, entries) {
     const data = {};
     needs.forEach(([name], k) => {
@@ -166,16 +178,16 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     });
     return data;
   }
-  async function loadData(type, farmId, store) {
-    const needs = needList(type, farmId);
+  async function loadData(type, farmId, store, opts) {
+    const needs = needList(type, farmId, opts);
     if (!needs.length) return { data: {}, entries: [] };
     const entries = await Promise.all(needs.map(([, q]) => store.get(q)));
     return { data: shape(needs, entries), entries };
   }
   // The same from what the store already holds, without waiting. pending = a need the widget cannot
   // do without (not in widget.optional) has no entry yet.
-  function peekData(type, farmId, store) {
-    const needs = needList(type, farmId);
+  function peekData(type, farmId, store, opts) {
+    const needs = needList(type, farmId, opts);
     const optional = new Set((registry[type] && registry[type].optional) || []);
     const got = needs.map(([, q]) => store.peek(q));
     const pending = needs.some(([name], k) => !got[k] && !optional.has(name));
@@ -200,7 +212,7 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     return body(widget, withForce(effective(widget, {}), opts), data, ctx, null).html;
   }
 
-  return { doc: () => doc, update, preview,
+  return { doc: () => doc, update, preview, optsFor, pageOpts, itemOpts,
     addBoard: (b) => update((d) => addBoard(d, b)), removeBoard: (id) => update((d) => removeBoard(d, id)),
     visit: (id) => update((d) => setLastBoard(d, id)), reload: () => { doc = loadBoards(storage); }, registry, renderPage, renderItem, handle,
     needsOf, loadData, peekData, freshOf };

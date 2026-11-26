@@ -35,22 +35,24 @@ export function pageBumpkin() {
   return { target: parseInt(readLs("sfl_bumpkin_target", "200")), recipes: savedRecipes(), sort: readLs("sfl_bumpkin_sort", "xpPerHour") };
 }
 
-// The section=cooking query the page sends (pet streak simulation, recipe pick, fish by reels).
-export function cookingQuery(farmId) {
+// The section=cooking query of one copy: its own pet-streak simulation and fish-by-reels (options),
+// the recipe pick of the BUMPKIN page (picked in the Kitchens widget there).
+export function cookingQuery(farmId, opts = {}) {
   return { res: "compute", farm: farmId, section: "cooking", q: {
-    petSimulate: readLs("sfl_pet_streak", "0") === "1" ? "1" : "0",
+    petSimulate: opts.petSimulate ? "1" : "0",
     recipes: JSON.stringify(savedRecipes()),
-    fishReels: readLs("sfl_fish_reels", "0") === "1" ? "1" : "0",
+    fishReels: opts.fishReels ? "1" : "0",
     explain: "1",
   } };
 }
-const needs = (farmId) => ({ farm: { res: "farm", farm: farmId }, cook: cookingQuery(farmId) });
+const needs = (farmId, opts = {}) => ({ farm: { res: "farm", farm: farmId }, cook: cookingQuery(farmId, opts) });
 
 const page = (ctx) => (typeof ctx.page === "function" ? ctx.page() || {} : pageBumpkin());
-const targetOpt = (opts) => (opts.target !== undefined && opts.target !== null && opts.target !== "" && Number.isFinite(Number(opts.target)) ? Number(opts.target) : null);
+const numOpt = (v) => (v !== undefined && v !== null && v !== "" && Number.isFinite(Number(v)) ? Number(v) : null);
+const targetOpt = (opts) => numOpt(opts.target);
 
 // Everything the page computed from the farm and the cooking payload, in one place.
-export function bumpkinPlan(farm, cook, { target = 200, recipes = {}, sort = "xpPerHour" } = {}) {
+export function bumpkinPlan(farm, cook, { target = 200, targetAsc = null, targetBand = null, recipes = {}, sort = "xpPerHour" } = {}) {
   const bumpkin = farm.bumpkin || {};
   const currentXP = parseFloat(bumpkin.experience || 0);
   const ascLevel = (farm.island && farm.island.ascensionLevel) || 0;
@@ -58,9 +60,6 @@ export function bumpkinPlan(farm, cook, { target = 200, recipes = {}, sort = "xp
   const currentLevel = getTotalBumpkinLevel(currentXP, ascLevel);
   const maxXP = BUMPKIN_XP_TABLE[199];
   const targetLevel = Math.max(Math.min(currentLevel, 199) + 1, Math.min(200, Number.isFinite(target) ? target : 200));
-  const targetXP = BUMPKIN_XP_TABLE[targetLevel - 1] || maxXP;
-  const xpRemaining = Math.max(0, targetXP - currentXP);
-  const xpPctTarget = targetXP > 0 ? Math.min(100, (currentXP / targetXP) * 100) : 100;
   const nextLevelXP = currentLevel < 200 ? BUMPKIN_XP_TABLE[currentLevel] : maxXP;
   const prevLevelXP = BUMPKIN_XP_TABLE[Math.min(currentLevel, 200) - 1] || 0;
   const levelProgress = currentLevel >= 200 ? 100 : Math.round(((currentXP - prevLevelXP) / (nextLevelXP - prevLevelXP)) * 100);
@@ -76,6 +75,20 @@ export function bumpkinPlan(farm, cook, { target = 200, recipes = {}, sort = "xp
     xpToBandDone = Math.max(0, wbBase + wbBand - currentXP);
     ascProgressPct = wbBand > 0 ? Math.min(100, Math.max(0, ((currentXP - wbBase) / wbBand) * 100)) : 0;
   }
+  // The target: a level (not ascended), or an ascension and a level in its band (ascended; by
+  // default finishing the band being filled now: past the first cap a plain level means nothing).
+  let targetXP, targetLabel, tAsc = 0, tBand = 0;
+  if (ascended) {
+    tAsc = Math.max(workBand, Number.isFinite(targetAsc) ? Math.round(targetAsc) : workBand);
+    tBand = Math.min(50, Math.max(1, Number.isFinite(targetBand) ? Math.round(targetBand) : 50));
+    targetXP = ascensionXpFor(tAsc, tBand);
+    targetLabel = `A${tAsc} L${tBand}`;
+  } else {
+    targetXP = BUMPKIN_XP_TABLE[targetLevel - 1] || maxXP;
+    targetLabel = `level ${targetLevel}`;
+  }
+  const xpRemaining = Math.max(0, targetXP - currentXP);
+  const xpPctTarget = targetXP > 0 ? Math.min(100, (currentXP / targetXP) * 100) : 100;
   const xpPerDayCook = (cook && cook.totalXpPerDay) || 0;
   // Expansion level-gates of the working band: pure XP milestones (1 level ⇒ 1 skill point ⇒ 1 unlock).
   const gates = [];
@@ -85,7 +98,7 @@ export function bumpkinPlan(farm, cook, { target = 200, recipes = {}, sort = "xp
       gates.push({ e, band: g, reached: workBandLevel >= g, xpToGate: Math.max(0, ascensionXpFor(workBand, g) - currentXP) });
     }
   }
-  const out = { currentXP, ascLevel, ascended, currentLevel, targetLevel, xpRemaining, xpPctTarget, levelProgress,
+  const out = { currentXP, ascLevel, ascended, currentLevel, targetLevel, targetXP, targetLabel, tAsc, tBand, xpRemaining, xpPctTarget, levelProgress,
     uncappedLevel, workBand, workBandLevel, xpToBandDone, ascProgressPct, gates, xpPerDayCook, cook: !!cook };
   if (!cook) return out;
 
@@ -131,7 +144,25 @@ export function bumpkinPlan(farm, cook, { target = 200, recipes = {}, sort = "xp
   const xpToNextFromFood = xpRemainingToNextLevel(xpAfterEating, ascLevel);
   const daysToNextLevel = totalXPPerDay > 0 && xpToNextFromFood > 0 ? xpToNextFromFood / totalXPPerDay : 0;
   const ladder = [];
-  if (levelAfterFood < targetLevel) {
+  if (ascended) {
+    // band by band, level by level, from where the eaten food leaves the XP to the target
+    let band = ascLevel;
+    while (xpAfterEating >= _ascBaseline(band) + _ascBandXp(band)) band++;
+    const from = _withinAscensionLevel(xpAfterEating, band);
+    let cum = 0, prevXP = xpAfterEating;
+    for (let b = band; b <= tAsc; b++) {
+      for (let l = b === band ? from + 1 : 1; l <= (b === tAsc ? tBand : 50); l++) {
+        const lvlXP = ascensionXpFor(b, l);
+        if (lvlXP <= prevXP) continue;
+        const delta = lvlXP - prevXP;
+        const days = totalXPPerDay > 0 ? delta / totalXPPerDay : 0;
+        const cost = totalCostPerDay * days;
+        cum += cost;
+        prevXP = lvlXP;
+        ladder.push({ level: `A${b} L${l}`, xp: delta, days, cost, cum });
+      }
+    }
+  } else if (levelAfterFood < targetLevel) {
     let cum = 0, prevXP = xpAfterEating;
     for (let lvl = nextLvlAfterFood; lvl <= targetLevel; lvl++) {
       const lvlXP = BUMPKIN_XP_TABLE[lvl - 1];
@@ -145,16 +176,29 @@ export function bumpkinPlan(farm, cook, { target = 200, recipes = {}, sort = "xp
   }
   return { ...out, bankedXP, food, xpAfterFood, xpAfterEating, levelAfterFoodU, levelsGained: levelAfterFoodU - uncappedLevel, afterFoodPct,
     buildings, totalXPPerDay, totalCostPerDay, totalDays, levelAfterFood, nextLvlAfterFood, daysToNextLevel,
-    costToNextLevel: totalCostPerDay * daysToNextLevel, costToTarget: totalCostPerDay * totalDays, ladder };
+    costToNextLevel: totalCostPerDay * daysToNextLevel, costToTarget: totalCostPerDay * totalDays, ladder,
+    // the next rung of the ladder, whatever the target kind
+    nextLabel: ladder.length ? (ascended ? ladder[0].level : `level ${ladder[0].level}`) : "", nextCost: ladder.length ? ladder[0].cost : 0,
+    nextDays: ladder.length ? ladder[0].days : 0, reached: currentXP >= targetXP };
 }
 
 const noFarm = (farm) => (!farm ? "No farm data." : !farm.bumpkin ? "No bumpkin data found — check the Farm ID." : "");
+// Everything a copy shows comes from its own options; the page only adds the recipe pick.
 const planOf = (farm, cook, ctx, opts = {}) => {
   const p = page(ctx);
-  const t = targetOpt(opts);
-  return bumpkinPlan(farm, cook || null, { target: t ?? p.target, recipes: p.recipes || {}, sort: SORTS.some(([k]) => k === opts.sort) ? opts.sort : p.sort });
+  return bumpkinPlan(farm, cook || null, { target: targetOpt(opts) ?? 200, targetAsc: numOpt(opts.targetAsc), targetBand: numOpt(opts.targetBand),
+    recipes: p.recipes || {}, sort: SORTS.some(([k]) => k === opts.sort) ? opts.sort : "xpPerHour" });
 };
-const TARGET_OPT = { key: "target", label: "Target level (blank = same as the page)", kind: "number", min: 2, max: 200 };
+const TARGET_OPTS = [
+  { key: "target", label: "Target level, before ascending (blank = 200)", kind: "number", min: 2, max: 200 },
+  { key: "targetAsc", label: "Ascended: target ascension (blank = the one being filled)", kind: "number", min: 1, max: 50 },
+  { key: "targetBand", label: "Ascended: target level in that band (blank = 50, complete)", kind: "number", min: 1, max: 50 },
+];
+const COOK_OPTS = [
+  { key: "petSimulate", label: "🐾 Simulate pet streak ×1.5", kind: "bool" },
+  { key: "fishReels", label: "🎣 Fish by plain reels only (rod + worm per fish caught)", kind: "bool" },
+];
+const COOK_DEFAULTS = { petSimulate: false, fishReels: false };
 
 // ── 🧑‍🌾 Bumpkin XP ──
 export const bumpkinXp = {
@@ -163,8 +207,9 @@ export const bumpkinXp = {
   page: "bumpkin",
   needs,
   optional: ["cook"],
-  options: [TARGET_OPT],
-  defaults: { opts: { target: "" } },
+  optionsLabel: "Target",
+  options: [...TARGET_OPTS, ...COOK_OPTS],
+  defaults: { opts: { ...COOK_DEFAULTS } },
 
   view({ farm, cook } = {}, ctx = {}, opts = {}) {
     if (noFarm(farm)) return { empty: noFarm(farm) };
@@ -201,8 +246,9 @@ export const bumpkinFood = {
   title: "🍲 Banked food",
   page: "bumpkin",
   needs,
-  options: [TARGET_OPT],
-  defaults: { opts: { target: "" }, sort: { key: "xp", dir: "desc" } },
+  optionsLabel: "Target",
+  options: [...TARGET_OPTS, ...COOK_OPTS],
+  defaults: { opts: { ...COOK_DEFAULTS }, sort: { key: "xp", dir: "desc" } },
   rowKey: (r) => r.name,
   rowLabel: (r) => r.name,
   columns: [
@@ -224,8 +270,8 @@ export const bumpkinFood = {
     const summary = kpis([{ v: `LVL ${p.levelAfterFoodU}`, l: `after eating all food${p.ascended ? " (uncapped)" : ""}` },
       { v: fmtXP(p.bankedXP), l: `XP in ${rows.length} items` }]) + `<div class="v-bumpkin-line">${gained}</div>`;
     const footer = p.xpAfterFood > 0
-      ? `<div class="v-bumpkin-line">After eating: <b class="v-bumpkin-warn">${fmtXP(p.xpAfterFood)}</b> XP still needed to target LVL ${p.targetLevel}</div>`
-      : `<div class="v-bumpkin-line v-done">Eating all food would reach level ${p.targetLevel}!</div>`;
+      ? `<div class="v-bumpkin-line">After eating: <b class="v-bumpkin-warn">${fmtXP(p.xpAfterFood)}</b> XP still needed to ${esc(p.targetLabel)}</div>`
+      : `<div class="v-bumpkin-line v-done">Eating all food would reach ${esc(p.targetLabel)}!</div>`;
     return { rows, summary, footer, empty: "" };
   },
 };
@@ -245,6 +291,8 @@ export const bumpkinBoosts = {
   title: "⚡ Cooking boosts",
   page: "bumpkin",
   needs,
+  options: COOK_OPTS,
+  defaults: { opts: { ...COOK_DEFAULTS } },
 
   view({ farm, cook } = {}, ctx = {}) {
     if (noFarm(farm)) return { empty: noFarm(farm) };
@@ -307,15 +355,15 @@ export const bumpkinKitchens = {
   page: "bumpkin",
   needs,
   optionsLabel: "Recipes",
-  options: [{ key: "sort", label: "Order recipes by", kind: "select", choices: [["", "same as the BUMPKIN page"], ...SORTS] }, TARGET_OPT],
-  defaults: { opts: { sort: "", target: "" } },
+  options: [{ key: "sort", label: "Order recipes by", kind: "select", choices: SORTS }, ...TARGET_OPTS, ...COOK_OPTS],
+  defaults: { opts: { sort: "xpPerHour", ...COOK_DEFAULTS } },
   rowKey: (r) => r.name,
   rowLabel: (r) => r.name,
   rowClass: (r) => (r.selected ? "" : "w-st-done"),
   columns: [
     { key: "name", label: "kitchen", fmt: (v, r) => `<div class="v-name"><span class="v-bumpkin-emoji">${r.emoji}</span><div><b>${esc(v)}</b>` +
       `${r.countText ? ` <span class="v-dim">${esc(r.countText)}</span>` : ""}<small>${r.recipeHtml}</small>${r.ingredients ? `<small class="v-bumpkin-ing">${r.ingredients}</small>` : ""}${r.fish.map((f) => `<small class="v-bumpkin-fish">${f}</small>`).join("")}${r.traceHtml}</div></div>` },
-    { key: "xp", label: "XP/cook", align: "right", get: (r) => (r.selected ? r.selected.xp : null), fmt: (v, r) => blank(r, `<span class="v-done">${esc(fmtXP2(v))}</span>`) },
+    { key: "xp", label: "XP/cook", align: "right", get: (r) => (r.selected ? r.selected.xp : null), fmt: (v) => (v == null ? "" : `<span class="v-done">${esc(fmtXP2(v))}</span>`) },
     { key: "time", label: "time", align: "right", get: (r) => (r.selected ? r.selected.time : null),
       fmt: (v, r) => blank(r, r.selected && r.selected.isInstant ? pill("INSTANT", "run") : `<span class="v-bumpkin-blue">${esc(r.timeText)}</span>`) },
     { key: "xpPerHour", label: "XP/hour", align: "right", get: (r) => (r.selected && !r.selected.isInstant ? r.selected.xpPerHour : null), fmt: (v) => (v == null ? "" : esc(fmtXP2(v))) },
@@ -334,7 +382,7 @@ export const bumpkinKitchens = {
     if (noFarm(farm)) return { rows: [], footer: "", empty: noFarm(farm) };
     if (!cook) return { rows: [], footer: "", empty: "Loading cooking data…" };
     const p = planOf(farm, cook, ctx, opts);
-    const sort = SORTS.some(([k]) => k === opts.sort) ? opts.sort : page(ctx).sort;
+    const sort = SORTS.some(([k]) => k === opts.sort) ? opts.sort : "xpPerHour";
     const maxDay = Math.max(0, ...p.buildings.map((b) => b.xpPerDay));
     const rows = p.buildings.map((b) => {
       const s = b.selected;
@@ -365,8 +413,9 @@ export const bumpkinPlanWidget = {
   title: "📈 Leveling plan",
   page: "bumpkin",
   needs,
-  options: [TARGET_OPT],
-  defaults: { opts: { target: "" } },
+  optionsLabel: "Target",
+  options: [...TARGET_OPTS, ...COOK_OPTS],
+  defaults: { opts: { ...COOK_DEFAULTS } },
   rowKey: (r) => String(r.level),
   rowLabel: (r) => `Level ${r.level}`,
   columns: [
@@ -383,19 +432,19 @@ export const bumpkinPlanWidget = {
     const p = planOf(farm, cook, ctx, opts);
     if (!p.buildings.length) return { rows: [], footer: "", empty: "No cooking buildings detected." };
     const tiles = [{ v: `${num(p.totalXPPerDay)}`, l: "XP / day, all kitchens" }];
-    if (p.xpAfterFood > 0) tiles.push({ v: `${p.totalDays.toLocaleString()} days`, l: `to level ${p.targetLevel}${p.bankedXP > 0 ? " (after eating food)" : ""}` });
-    else tiles.push({ v: p.currentLevel >= p.targetLevel ? "TARGET REACHED!" : "Food covers it!", l: `level ${p.targetLevel}` });
+    if (p.xpAfterFood > 0) tiles.push({ v: `${p.totalDays.toLocaleString()} days`, l: `to ${p.targetLabel}${p.bankedXP > 0 ? " (after eating food)" : ""}` });
+    else tiles.push({ v: p.reached ? "TARGET REACHED!" : "Food covers it!", l: p.targetLabel });
     if (p.totalCostPerDay > 0) {
       tiles.push({ v: `${sfl(ctx, p.totalCostPerDay)} SFL`, l: "ingredient cost / day (P2P)" });
-      if (p.levelAfterFood < 200) tiles.push({ v: `${sfl(ctx, p.costToNextLevel)} SFL`, l: `to level ${p.nextLvlAfterFood}${p.levelAfterFood > p.currentLevel ? " (after food)" : ""} · ${Math.ceil(p.daysToNextLevel)}d` });
-      if (p.targetLevel > p.currentLevel + 1) tiles.push({ v: `${sfl(ctx, p.costToTarget)} SFL`, l: `to level ${p.targetLevel} · ${p.totalDays}d` });
+      if (p.ladder.length) tiles.push({ v: `${sfl(ctx, p.nextCost)} SFL`, l: `to ${p.nextLabel}${p.xpAfterEating > p.currentXP ? " (after food)" : ""} · ${Math.ceil(p.nextDays)}d` });
+      if (p.ladder.length > 1) tiles.push({ v: `${sfl(ctx, p.costToTarget)} SFL`, l: `to ${p.targetLabel} · ${p.totalDays}d` });
     }
     const per = p.buildings.length > 1 ? `<div class="v-bumpkin-per">` + p.buildings.map((b) =>
       `<div><span>${COOKING_BUILDING_EMOJI[b.name] || ""} ${esc(b.name)}${b.count > 1 ? ` ×${b.count}` : ""}</span>` +
       `${bar(p.totalXPPerDay > 0 ? (b.xpPerDay / p.totalXPPerDay) * 100 : 0, "ok")}<span>${num(b.xpPerDay)} XP/day${b.costPerDay > 0 ? ` · ${sfl(ctx, b.costPerDay)} SFL/day` : ""}</span></div>`).join("") + `</div>` : "";
     const rows = p.ladder.map((r) => ({ ...r, costText: sfl(ctx, r.cost), cumText: sfl(ctx, r.cum) }));
-    const note = p.totalCostPerDay > 0 ? `<div class="v-dim">Cost per level ${p.nextLvlAfterFood} → ${p.targetLevel}. Based on P2P market prices; self-produced items (eggs, milk, honey, fish) = free.</div>` : "";
+    const note = p.totalCostPerDay > 0 && p.ladder.length ? `<div class="v-dim">Cost per level ${esc(p.ladder[0].level)} → ${esc(p.ladder.at(-1).level)}. Based on P2P market prices; self-produced items (eggs, milk, honey, fish) = free.</div>` : "";
     return { rows, summary: kpis(tiles) + per, footer: note,
-      empty: p.levelAfterFood >= p.targetLevel ? `✓ Level ${p.targetLevel} is reached after eating the food.` : "Nothing to plan." };
+      empty: p.xpAfterEating >= p.targetXP ? `✓ ${p.targetLabel} is reached after eating the food.` : "Nothing to plan." };
   },
 };

@@ -72,7 +72,7 @@ test("banked food: every dish with its icon and XP, the level after eating", () 
   assert.strictEqual(out.rows.length, cook.bankedFood.items.length);
   assert.match(out.summary, /<b>LVL 187<\/b><span>after eating all food<\/span>/);
   assert.match(out.summary, /\+1 level \(184,773,311 XP total, 63% to 188\)/);
-  assert.match(out.footer, /XP still needed to target LVL 200/);
+  assert.match(out.footer, /XP still needed to level 200/);
   const html = table(bumpkinFood, out);
   const top = [...cook.bankedFood.items].sort((a, b) => b.totalFoodXP - a.totalFoodXP)[0].name;
   assert.strictEqual(keys(html)[0], top, "the most XP first");
@@ -124,4 +124,38 @@ test("leveling plan: tiles, per-kitchen split and the cost per level", () => {
 test("no farm / no bumpkin → a message", () => {
   assert.match(bumpkinXp.view({}, CTX, {}).empty, /No farm data/);
   assert.match(bumpkinKitchens.build({ farm: { inventory: {} }, cook }, CTX, {}).empty, /No bumpkin data/);
+});
+
+test("per-copy settings: pet streak and fish-by-reels change this copy's cooking query; sort lives on the kitchens widget", () => {
+  const q = bumpkinKitchens.needs(7, { petSimulate: true, fishReels: true }).cook.q;
+  assert.deepStrictEqual([q.petSimulate, q.fishReels], ["1", "1"]);
+  assert.deepStrictEqual([bumpkinKitchens.needs(7, {}).cook.q.petSimulate, bumpkinKitchens.needs(7, {}).cook.q.fishReels], ["0", "0"]);
+  for (const w of [bumpkinFood, bumpkinBoosts, bumpkinKitchens, bumpkinPlanWidget]) {
+    const keys = (w.options || []).map((o) => o.key);
+    assert.ok(keys.includes("petSimulate") && keys.includes("fishReels"), w.type);
+  }
+  const sort = bumpkinKitchens.options.find((o) => o.key === "sort");
+  assert.deepStrictEqual(sort.choices.map(([v]) => v), ["xpPerHour", "xpPerSfl", "sflPerCook"]);
+  assert.strictEqual(bumpkinKitchens.defaults.opts.sort, "xpPerHour");
+});
+
+test("ascended: the target is an ascension and a level in its band — by default finishing the band being filled", () => {
+  const p = bumpkinPlan(ascended, cook, { recipes: {} });
+  assert.strictEqual(p.targetLabel, `A${p.workBand} L50`);
+  assert.ok(Math.abs(p.xpRemaining - p.xpToBandDone) < 1e-6, "finishing the band = the XP to complete it");
+  const next = p.workBand + 1;
+  const far = bumpkinPlan(ascended, cook, { recipes: {}, targetAsc: next, targetBand: 10 });
+  assert.strictEqual(far.targetLabel, `A${next} L10`);
+  assert.strictEqual(far.ladder.at(-1).level, `A${next} L10`);
+  assert.ok(far.ladder.length > p.ladder.length);
+  assert.ok(far.xpRemaining > p.xpRemaining);
+  // the plan widget says it, never "level 200"
+  const out = bumpkinPlanWidget.build({ farm: ascended, cook }, CTX, { targetAsc: next, targetBand: 10 });
+  assert.match(out.summary, new RegExp(`to A${next} L10`));
+  assert.doesNotMatch(out.summary, /TARGET REACHED/);
+});
+
+test("kitchens: a kitchen that is not cooking renders, no crash on its empty numbers", () => {
+  const out = bumpkinKitchens.build({ farm, cook }, { ...CTX, page: () => ({ ...PAGE, recipes: { Deli: "" } }) }, {});
+  assert.doesNotThrow(() => table(bumpkinKitchens, out));
 });
