@@ -1,5 +1,7 @@
 // Beehives: each hive's honey, swarm and when it is full. The hive maths (flowers attached, rates)
 // is the page's extractBeehiveDetails (ctx.hives); this module shapes it into rows.
+import { ring } from "../ui/viz.mjs";
+
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const kind = (h, now) => (h.empty ? "empty" : h.idle || h.readyAt === undefined ? "idle" : h.readyAt <= now ? "full" : "filling");
 // Full first, then the soonest; idle and empty (blank) last.
@@ -15,24 +17,29 @@ export const beehives = {
   rowLabel: (r) => `Hive #${String(r.id).slice(-3)}`,
   rowClass: (r) => (r.kind === "full" ? "w-st-ready" : ""),
   columns: [
-    { key: "id", label: "hive", fmt: (v, r) => `Hive #${esc(String(v).slice(-3))}${r.hasSwarm ? ' <span title="swarm: the next harvest gives extra">🐝 swarm</span>' : ""}` },
+    // a ring filling with honey around the honey icon; the swarm under the name
+    { key: "id", label: "hive", fmt: (v, r) => `<div class="v-name">${ring(r.kind === "empty" ? 0 : r.progressPct, r.kind === "empty" ? "🍯" : r.iconHtml || "🍯")}` +
+      `<div><b>Hive #${esc(String(v).slice(-3))}</b>${r.hasSwarm ? '<small title="swarm: the next harvest gives extra">🐝 swarm</small>' : ""}</div></div>` },
     { key: "pct", label: "full", align: "right", get: (r) => (r.kind === "empty" ? null : r.progressPct), fmt: (v) => (v == null ? "" : `${Math.round(v)} %`) },
     { key: "when", label: "when", get: whenKey, fmt: (v, r) => r.kind === "full" ? `<span class="v-pill v-ok">READY</span>`
       : r.kind === "filling" ? `<span class="v-pill v-run growing-bed-time" data-ready="${r.readyAt}">${esc(r.countdown)}</span>`
       : r.kind === "idle" ? `<span style="color:var(--text-dim)">no flowers</span>` : `<span style="color:var(--text-dim)">empty</span>` },
   ],
 
-  // ctx: { hives(farm) → extractBeehiveDetails rows, countdown(ms) → text, now? }
+  // ctx: { hives(farm) → extractBeehiveDetails rows, countdown(ms) → text, icon?(name), now? }
   build({ farm }, ctx = {}) {
     if (!farm) return { rows: [], footer: "", empty: "No farm data." };
     if (typeof ctx.hives !== "function") return { rows: [], footer: "", empty: "The hive calculation did not load." };
     const now = ctx.now || Date.now();
     const rows = ctx.hives(farm).map((h) => {
       const k = kind(h, now);
-      return { ...h, kind: k, countdown: k === "filling" && ctx.countdown ? ctx.countdown(h.readyAt - now) : "" };
+      return { ...h, kind: k, iconHtml: typeof ctx.icon === "function" ? ctx.icon("Honey") : "",
+        countdown: k === "filling" && ctx.countdown ? ctx.countdown(h.readyAt - now) : "" };
     });
     const full = rows.filter((r) => r.kind === "full").length, idle = rows.filter((r) => r.kind === "idle").length;
-    const footer = rows.length ? `<div style="color:var(--text-dim)">${full} full · ${rows.length - full - idle} filling · ${idle} no flowers</div>` : "";
+    const swarm = rows.some((r) => r.hasSwarm)
+      ? `<div class="v-warn">🐝 Bee swarm active — collecting honey now adds +0.2 yield to all growing crops!</div>` : "";
+    const footer = rows.length ? `<div style="color:var(--text-dim)">${full} full · ${rows.length - full - idle} filling · ${idle} no flowers</div>${swarm}` : "";
     return { rows, footer, empty: "No beehives on the farm." };
   },
 };

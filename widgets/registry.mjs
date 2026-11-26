@@ -39,4 +39,5 @@ export const WIDGETS = {
 
 // ── FISHING, LEVELING, FLOWERS, DIFF, JSON, CONSTANTS pages (one block) ──
 import { constantsCoverage, constantsTables } from "./constants.mjs";
-for (const w of [constantsCoverage, constantsTables]) WIDGETS[w.type] = w;
+import { flowerGifts, flowerGiftCycle, petalBlessed, growPlanner } from "./flowers-plan.mjs";
+for (const w of [constantsCoverage, constantsTables, flowerGifts, flowerGiftCycle, petalBlessed, growPlanner]) WIDGETS[w.type] = w;
