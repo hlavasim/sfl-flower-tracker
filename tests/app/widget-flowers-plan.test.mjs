@@ -7,6 +7,7 @@ import { beehives } from "../../widgets/beehives.mjs";
 import { WIDGETS } from "../../widgets/registry.mjs";
 import { renderTable } from "../../ui/table.mjs";
 import { evalPage } from "../helpers/page-eval.mjs";
+import { renderLook, looksFor, TEMPLATE_IDS } from "../../ui/glance-templates.mjs";
 
 // FLOWERS planners as widgets, fed the page's own models (evaluated from flowers.html) on a real farm.
 const FARM = JSON.parse(readFileSync(new URL("../fixtures/farm-155498.json", import.meta.url), "utf8")).farm;
@@ -97,8 +98,8 @@ test("gift cycle: a plan the beds cannot grow says so instead of a runaway cycle
   assert.match(html, /needs about <b>64h<\/b> of growing a day in all 4 beds/);
   assert.match(html, /cannot keep up/);
   assert.match(html, /Daily demand/);
-  const g = flowerGiftCycle.glance({ farm: FARM }, ctx(() => m), {}, "s").html;
-  assert.match(g, /<div class="g-big g-bad">Too much<\/div><div class="g-cap">the plan needs ~64h of growing a day<\/div>/);
+  const g = flowerGiftCycle.glanceModel({ farm: FARM }, ctx(() => m), {});
+  assert.deepStrictEqual([g.head.value, g.head.tone, g.head.cap], ["Too much", "bad", "the plan needs ~64h of growing a day"]);
 });
 
 test("Petal Blessed: the beds to plant with their recipes (icons), the hours it saves", () => {
@@ -149,57 +150,70 @@ test("beehives: a honey ring per hive and the swarm note", () => {
   assert.match(out.footer, /Bee swarm active/);
 });
 
-test("📱 glances: gift planner S = planned gifts given today with a ring, M = the planned NPCs; nothing planned is empty", () => {
+test("📱 glance models: the four planners have a model and a natural look, no hand-written face", () => {
+  for (const w of [flowerGifts, flowerGiftCycle, petalBlessed, growPlanner]) {
+    assert.strictEqual(typeof w.glanceModel, "function", w.type);
+    assert.ok(TEMPLATE_IDS.includes(w.look), w.type);
+    assert.strictEqual(w.glance, undefined, w.type);
+  }
+});
+
+test("📱 glance models: gift planner = planned gifts given today with a ring, the planned NPCs (to give first); nothing planned is empty", () => {
   const m = P._giftsModel(P._flowerPageData(FARM));
   const given = m.npcs.filter((n) => n.planned && n.givenToday).length;
-  const s = flowerGifts.glance({ farm: FARM }, ctx(() => m), {}, "s").html;
-  assert.match(s, /<svg class="g-ring/);
-  assert.match(s, new RegExp(`<div class="g-big[^"]*">${given}<small>/3</small></div><div class="g-cap">planned gifts given today</div>`));
-  const mid = flowerGifts.glance({ farm: FARM }, ctx(() => m), {}, "m").html;
-  assert.strictEqual((mid.match(/class="g-row"/g) || []).length, 3);
-  assert.match(mid, /<span class="g-ic"><i>Red Pansy<\/i><\/span><div class="g-n">Betty<div>Red Pansy · /);
-  assert.match(mid, /class="g-chip g-(bad|ok)">(to give|given)</);
+  const g = flowerGifts.glanceModel({ farm: FARM }, ctx(() => m), {});
+  assert.deepStrictEqual([g.head.value, g.head.unit, g.head.cap, g.head.ring], [given, "/3", "planned gifts given today", (given / 3) * 100]);
+  assert.strictEqual(g.items.length, 3);
+  const betty = g.items.find((i) => i.name === "Betty");
+  assert.strictEqual(betty.icon, "<i>Red Pansy</i>");
+  assert.match(betty.sub, /^Red Pansy · /);
+  assert.ok(["to give", "given"].includes(betty.chip.text));
+  assert.match(renderLook(g, "list-4").html, /<span class="gx-ic"><i>Red Pansy<\/i><\/span><div class="gx-n">Betty<div>Red Pansy · /);
+  assert.ok(looksFor(g).length >= 3);
   const none = { ...m, npcs: m.npcs.map((n) => ({ ...n, planned: "" })) };
-  assert.match(flowerGifts.glance({ farm: FARM }, ctx(() => none), {}, "s").empty, /No gifts planned/);
-  assert.strictEqual(flowerGifts.glance({}, ctx(() => m), {}, "s").empty, "No farm data.");
+  assert.match(flowerGifts.glanceModel({ farm: FARM }, ctx(() => none), {}).empty, /No gifts planned/);
+  assert.strictEqual(flowerGifts.glanceModel({}, ctx(() => m), {}).empty, "No farm data.");
 });
 
-test("📱 glances: gift cycle S = one cycle's length, M = batches / Petal Blessed / yield tiles; no plan is empty", () => {
+test("📱 glance models: gift cycle = one cycle's length, the daily demand per flower, batches / PB / yield tiles; no plan is empty", () => {
   const m = withPlan(FEASIBLE, () => P._giftsModel(P._flowerPageData(FARM)));
-  assert.strictEqual(flowerGiftCycle.glance({ farm: FARM }, ctx(() => m), {}, "s").html,
-    '<div class="g-big">4.0d</div><div class="g-cap">one cycle · 5 batches</div>');
-  const mid = flowerGiftCycle.glance({ farm: FARM }, ctx(() => m), {}, "m").html;
-  assert.match(mid, /<div class="g-tiles"><div><span>batches<\/span><b>5<\/b><\/div><div><span>Petal Blessed<\/span><b>1<\/b><\/div><div><span>yield<\/span><b>×1\.60<\/b>/);
-  assert.match(flowerGiftCycle.glance({ farm: FARM }, ctx(() => ({ ...m, cycle: null })), {}, "s").empty, /No gifts planned/);
+  const g = flowerGiftCycle.glanceModel({ farm: FARM }, ctx(() => m), {});
+  assert.deepStrictEqual([g.head.value, g.head.cap], ["4.0d", "one cycle · 5 batches"]);
+  assert.strictEqual(g.items.length, m.cycle.needList.length);
+  assert.match(g.items[0].value, /^\d+\/day$/);
+  assert.match(renderLook(g, "tiles-1").html, /<div class="gx-numlist"><div><span>batches<\/span><b>5<\/b><\/div><div><span>⚡ PB uses<\/span><b>1<\/b><\/div><div><span>yield<\/span><b>×1\.60<\/b>/);
+  assert.match(flowerGiftCycle.glanceModel({ farm: FARM }, ctx(() => ({ ...m, cycle: null })), {}).empty, /No gifts planned/);
 });
 
-test("📱 glances: Petal Blessed S = its state and what it saves, M = beside the beds to plant; no farm is empty", () => {
+test("📱 glance models: Petal Blessed = its state and what it saves, the beds to plant; no farm is empty", () => {
   const m = P._petalBlessedModel(P._flowerPageData(FARM));
   const saved = m.picks.reduce((s, p) => s + p.seedHours, 0);
-  const s = petalBlessed.glance({ farm: FARM }, ctx(() => m), {}, "s").html;
-  assert.strictEqual(s, `<div class="g-big g-ok">Ready</div><div class="g-cap">${m.picks.length} to plant · saves ${saved}h</div>`);
-  const cd = petalBlessed.glance({ farm: FARM }, { ...ctx(() => ({ ...m, status: { status: "cooldown", nextAt: 2e12 } })), now: 2e12 - 600000 }, {}, "s").html;
-  assert.match(cd, /<div class="g-big g-info">10m<\/div>/);
-  const mid = petalBlessed.glance({ farm: FARM }, ctx(() => m), {}, "m").html;
-  assert.match(mid, /^<div class="g-split"><div><div class="g-big g-ok">Ready/);
-  assert.strictEqual((mid.match(/class="g-row"/g) || []).length, Math.min(3, m.picks.length));
-  assert.match(mid, new RegExp(`<i>${m.picks[0].name}</i></span><div class="g-n">${m.picks[0].name}<div>${m.picks[0].seedLabel} Seed [+] ${m.picks[0].input}`));
-  assert.strictEqual(petalBlessed.glance({}, ctx(() => m), {}, "s").empty, "No farm data.");
+  const g = petalBlessed.glanceModel({ farm: FARM }, ctx(() => m), {});
+  assert.deepStrictEqual([g.head.value, g.head.tone, g.head.cap], ["Ready", "ok", `${m.picks.length} to plant · saves ${saved}h`]);
+  assert.strictEqual(renderLook(g, "number").html, `<div class="gx gx-1x1" style="--gw:1"><div class="gx-head"><div class="gx-num g-ok">Ready</div><div class="gx-cap">${m.picks.length} to plant · saves ${saved}h</div></div></div>`);
+  const cd = petalBlessed.glanceModel({ farm: FARM }, { ...ctx(() => ({ ...m, status: { status: "cooldown", nextAt: 2e12 } })), now: 2e12 - 600000 }, {});
+  assert.deepStrictEqual([cd.head.value, cd.head.tone], ["10m", "info"]);
+  assert.strictEqual(g.items.length, m.picks.length);
+  assert.deepStrictEqual([g.items[0].icon, g.items[0].name, g.items[0].sub], [`<i>${m.picks[0].name}</i>`, m.picks[0].name, `${m.picks[0].seedLabel} Seed + ${m.picks[0].input}`]);
+  assert.strictEqual(petalBlessed.glanceModel({}, ctx(() => m), {}).empty, "No farm data.");
 });
 
-test("📱 glances: grow planner S = the next thing to do, L = the plantings in order; nothing to plan is empty", () => {
+test("📱 glance models: grow planner = the next thing to do, the plantings in order, each counting down to its time; nothing to plan is empty", () => {
   const opts = { mode: "collection", n: 5 };
   const model = (f, o) => P._growPlanModel(P._flowerPageData(f), o);
   const out = growPlanner.build({ farm: FARM }, ctx(model), opts);
   assert.ok(out.rows.length > 0);
-  const first = out.rows.slice().sort((a, b) => a.at - b.at)[0];
-  const s = growPlanner.glance({ farm: FARM }, ctx(model), opts, "s").html;
-  assert.match(s, new RegExp(`^<div class="g-hero"><i>${first.flower}</i></div>`));
-  assert.match(s, first.now ? /<div class="g-big g-ok">Now<\/div>/ : /<div class="g-big">/);
-  assert.match(s, new RegExp(`${first.pb ? "⚡ Petal Blessed" : "plant"} ${first.flower}`));
-  const l = growPlanner.glance({ farm: FARM }, ctx(model), opts, "l").html;
-  assert.strictEqual((l.match(/class="g-row"/g) || []).length, Math.min(7, out.rows.length));
-  assert.match(l, /class="g-chip g-(ok|accent|info)">/);
-  const done = growPlanner.glance({ farm: FARM }, ctx(() => ({ done: true, plan: {}, sleep: {} })), opts, "s");
+  const list = out.rows.slice().sort((a, b) => a.at - b.at), first = list[0];
+  const g = growPlanner.glanceModel({ farm: FARM }, ctx(model), opts);
+  assert.strictEqual(growPlanner.look, "next");
+  assert.strictEqual(g.head.hero, `<i>${first.flower}</i>`);
+  if (first.now) assert.deepStrictEqual([g.head.value, g.head.tone], ["Now", "ok"]);
+  assert.match(g.head.cap, new RegExp(`${first.pb ? "⚡ Petal Blessed" : "plant"} ${first.flower}`));
+  assert.strictEqual(g.items.length, out.rows.length);
+  assert.deepStrictEqual(g.items.map((i) => i.at), list.map((r) => r.at), "a live countdown to each planting");
+  assert.ok(g.items.every((i) => i.chip === undefined));
+  assert.match(renderLook(g, "next").html, new RegExp(`<div class="gx-next-name">${first.flower}</div>.*<span class="g-at" data-at="${first.at}">`));
+  assert.ok(looksFor(g).length >= 3);
+  const done = growPlanner.glanceModel({ farm: FARM }, ctx(() => ({ done: true, plan: {}, sleep: {} })), opts);
   assert.match(done.empty, /All flowers at target/);
 });

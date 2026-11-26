@@ -4,7 +4,6 @@
 //   🌱 Záhony: what grows in each bed and when it is ready.
 import { flowerPlan } from "../core/engine/flower-plan.mjs";
 import { bar, kpis, bigBar, pill, ring } from "../ui/viz.mjs";
-import { big, ring as gRing, rows as gRows } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const hrs = (ctx, h) => (typeof ctx.hours === "function" ? ctx.hours(h) : `${Math.round(h)} h`);
@@ -103,35 +102,44 @@ export const flowerBeds = {
   },
 };
 
-// ── iPhone glance faces ──
-// flowers needed: S = complete / total with a ring; M/L = the most-missing flowers
-flowersNeeds.sizes = ["s", "m", "l"];
-flowersNeeds.size = "s";
-flowersNeeds.glance = ({ farm } = {}, ctx = {}, opts = {}, size = "s") => {
+// ── iPhone glance models; ui/glance-templates offers the looks ──
+// flowers needed: complete / total with a ring; the flowers, most missing first, then the done ones
+flowersNeeds.look = "number";
+flowersNeeds.glanceModel = ({ farm } = {}, ctx = {}, opts = {}) => {
   if (!farm) return { empty: "No farm data." };
   const { rows: all, summary: s } = planOf(farm, ctx, opts);
+  if (!all.length) return { empty: "No flowers in the plan." };
   const pct = s.total ? (s.complete / s.total) * 100 : 100;
-  const head = `<div class="g-corner">${gRing(pct, { tone: pct >= 100 ? "ok" : "accent" })}</div>` +
-    big(s.complete, { unit: `/${s.total}`, cap: s.remaining ? `${s.remaining} grows left · ${hrs(ctx, s.hours)}` : "all at target ✓" });
-  if (size === "s") return { html: head };
-  const miss = all.filter((r) => r.missing > 0).sort((a, b) => b.missing - a.missing).slice(0, size === "m" ? 3 : 7);
-  return { html: (size === "l" ? head : "") + (miss.length ? gRows(miss.map((r) => ({ icon: icon(ctx, r.name), name: r.name, sub: `${r.have + r.pend} / ${r.need}`,
-    value: `−${r.missing}`, tone: "bad" }))) : big("✓", { tone: "ok", cap: "all at target" })) };
+  const miss = all.filter((r) => r.missing > 0).sort((a, b) => b.missing - a.missing);
+  const done = opts.hideDone ? [] : all.filter((r) => !(r.missing > 0));
+  const prog = (r) => (r.need ? Math.min(100, ((r.have + r.pend) / r.need) * 100) : 100);
+  return {
+    head: { value: s.complete, unit: `/${s.total}`, cap: s.remaining ? `${s.remaining} grows left · ${hrs(ctx, s.hours)}` : "all at target ✓",
+      tone: pct >= 100 ? "ok" : "", ring: pct, ringTone: pct >= 100 ? "ok" : "accent" },
+    items: [...miss.map((r) => ({ icon: icon(ctx, r.name), name: r.name, sub: `${r.have + r.pend} / ${r.need}`, value: `−${r.missing}`, tone: "bad", pct: prog(r) })),
+      ...done.map((r) => ({ icon: icon(ctx, r.name), name: r.name, sub: `${r.have + r.pend} / ${r.need}`, chip: { text: "✓", tone: "ok" }, pct: 100 }))],
+    tiles: [{ label: "at target", value: `${s.complete}/${s.total}` }, { label: "grows left", value: s.remaining },
+      { label: s.beds === 1 ? "bed" : "beds", value: s.beds }, { label: "time", value: hrs(ctx, s.hours) }],
+    foot: miss.length ? `${miss.length} flower${miss.length === 1 ? "" : "s"} short` : "every flower at target",
+  };
 };
 
-// beds: S = how many are ready (ring of the beds in use); M = the beds, soonest first
-flowerBeds.sizes = ["s", "m"];
-flowerBeds.size = "s";
-flowerBeds.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+// beds: how many are ready (ring: the beds in use); the beds, ready then soonest, each counting down live
+flowerBeds.look = "icons-1";   // the beds as icons with the time under each
+flowerBeds.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = flowerBeds.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
-  const ready = out.rows.filter((r) => r.kind === "ready").length, used = out.rows.filter((r) => !r.empty).length;
-  if (size === "s") {
-    const next = out.rows.filter((r) => r.kind === "growing").sort((a, b) => a.readyAt - b.readyAt)[0];
-    return { html: `<div class="g-corner">${gRing(out.rows.length ? (used / out.rows.length) * 100 : 0)}</div>` +
-      big(ready, { tone: ready ? "ok" : "", cap: ready ? `ready of ${out.rows.length} beds` : next ? `next in ${next.countdown}` : `${out.rows.length} beds empty` }) };
-  }
-  const list = out.rows.slice().sort((a, b) => (a.empty - b.empty) || (a.readyAt || 0) - (b.readyAt || 0)).slice(0, 4);
-  return { html: gRows(list.map((r) => ({ icon: r.iconHtml || "🌱", name: r.name || "empty", sub: r.name ? `yield ${r.totalYield}` : "",
-    ...(r.kind === "ready" ? { chip: { text: "READY", tone: "ok" } } : r.kind === "growing" ? { chip: { text: r.countdown || "…", tone: "info" } } : {}) }))) };
+  const n = (k) => out.rows.filter((r) => r.kind === k).length;
+  const ready = n("ready"), used = out.rows.length - n("empty");
+  const next = out.rows.filter((r) => r.kind === "growing").sort((a, b) => a.readyAt - b.readyAt)[0];
+  const isEmpty = (r) => (r.kind === "empty" ? 1 : 0);
+  const list = out.rows.slice().sort((a, b) => (isEmpty(a) - isEmpty(b)) || (a.readyAt || 0) - (b.readyAt || 0));
+  return {
+    head: { value: ready, unit: `/${out.rows.length}`, tone: ready ? "ok" : "", ring: (used / out.rows.length) * 100,
+      cap: ready ? "beds ready" : next ? `next in ${next.countdown}` : `${out.rows.length} beds empty` },
+    items: list.map((r) => ({ icon: r.iconHtml || "🌱", name: r.name || "empty", sub: r.name ? `yield ${r.totalYield}` : "", pct: r.pct,
+      ...(r.kind === "empty" ? { value: "—" } : { at: r.readyAt }) })),
+    tiles: [{ label: "ready", value: ready }, { label: "growing", value: n("growing") }, { label: "empty", value: n("empty") }],
+    foot: `${ready} ready · ${n("growing")} growing · ${n("empty")} empty`,
+  };
 };

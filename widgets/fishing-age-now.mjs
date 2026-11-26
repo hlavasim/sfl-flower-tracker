@@ -4,7 +4,7 @@
 import { agingNow } from "../core/engine/aging-now.mjs";
 import { computeFoodXP, detectCookingBoosts } from "../core/engine/cooking.mjs";
 import { levelingInit, levelingPlan } from "../core/sections/leveling.mjs";
-import { big, compact, ring, rows } from "../ui/glance.mjs";
+import { compact } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const fmt = (n) => (+n || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -96,18 +96,20 @@ export const fishingAgeNow = {
   },
 };
 
-// ── iPhone glance face: S = how many fish to age now (ring: the salt held against their need);
-// M = beside it, the first fish; L = over the list. A fish the salt does not cover is orange / red.
-fishingAgeNow.sizes = ["s", "m", "l"];
-fishingAgeNow.size = "s";
-fishingAgeNow.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+// ── iPhone glance model: how many fish to age now (ring: the salt held against their need) and the
+// fish, a row the salt does not cover orange / red; ui/glance-templates offers the looks ──
+fishingAgeNow.look = "number";
+fishingAgeNow.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = fishingAgeNow.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
   const t = out.totals, cover = t.salt > 0 ? (t.saltHeld / t.salt) * 100 : 100;
-  const head = big(compact(t.n), { unit: " fish", cap: `${compact(t.xp)} XP · ${compact(t.salt)} salt` });
-  const ringed = `<div class="g-corner">${ring(cover, { tone: cover >= 100 ? "ok" : "warn" })}</div>` + head;
-  if (size === "s") return { html: ringed };
-  const list = rows(out.rows.slice(0, size === "m" ? 3 : 7).map((r) => ({ icon: r.iconHtml, name: r.name, sub: `${compact(r.xp)} XP`,
-    value: `×${fmt(r.age)}`, tone: r.saltState === "ok" ? "" : r.saltState === "partial" ? "warn" : "bad" })));
-  return { html: size === "m" ? `<div class="g-split"><div>${head}</div>${list}</div>` : ringed + list };
+  const top = Math.max(...out.rows.map((r) => r.xp), 1e-9);
+  return {
+    head: { value: compact(t.n), unit: " fish", cap: `${compact(t.xp)} XP · ${compact(t.salt)} salt`, ring: Math.min(100, cover), ringTone: cover >= 100 ? "ok" : "warn" },
+    items: out.rows.map((r) => ({ icon: r.iconHtml, name: r.name, sub: `${compact(r.xp)} XP`, value: `×${fmt(r.age)}`,
+      tone: r.saltState === "ok" ? "" : r.saltState === "partial" ? "warn" : "bad", pct: (r.xp / top) * 100 })),
+    tiles: [{ label: "fish", value: compact(t.n) }, { label: "XP", value: compact(t.xp) },
+      { label: "salt", value: compact(t.salt) }, { label: "shed", value: `${t.busy}/${t.slots}` }],
+    foot: t.salt > t.saltHeld ? `salt short by ${fmt(t.salt - t.saltHeld)}` : `salt covers all · ${fmt(t.saltHeld)} held`,
+  };
 };

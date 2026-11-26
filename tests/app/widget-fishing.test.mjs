@@ -7,6 +7,7 @@ import { FISHING_WIDGETS, fishingToday, fishingBait, fishingSafeAge, fishingMarv
 import { WIDGETS } from "../../widgets/registry.mjs";
 import { renderTable } from "../../ui/table.mjs";
 import { evalPage } from "../helpers/page-eval.mjs";
+import { renderLook, looksFor, TEMPLATE_IDS } from "../../ui/glance-templates.mjs";
 
 // FISHING as widgets over the page's own model (_fishModelNow in flowers.html), on the fixture farm.
 const FARM = JSON.parse(readFileSync(new URL("../fixtures/farm-155498.json", import.meta.url), "utf8")).farm;
@@ -121,79 +122,86 @@ test("today: the worm to cast, a bar per worm, the seasons table; treasure with 
   assert.match(t, new RegExp(`${(46 * 0.4 + 40 * 0.1).toFixed(2)} FLOWER`));
 });
 
-const rowsIn = (html) => (html.match(/class="g-row"/g) || []).length;
+const rowsIn = (html) => (html.match(/class="gx-row"/g) || []).length;
 
-test("📱 glances: every fishing widget offers S and a larger size; no model → loading, an error → said", () => {
+test("📱 glance models: every fishing widget has a model and a natural look, no hand-written face; no model → loading, an error → said", () => {
   for (const w of FISHING_WIDGETS) {
-    assert.strictEqual(typeof w.glance, "function", w.type);
-    assert.ok(w.sizes.includes("s") && w.sizes.length > 1 && w.sizes.includes(w.size), w.type);
-    assert.match(w.glance({}, { model: () => null }, {}, "s").empty, /Reading your fishing history/, w.type);
-    assert.match(w.glance({}, { model: () => ({ error: "503" }) }, {}, "m").empty, /Could not load the fishing history \(503\)/, w.type);
+    assert.strictEqual(typeof w.glanceModel, "function", w.type);
+    assert.ok(TEMPLATE_IDS.includes(w.look), w.type);
+    assert.strictEqual(w.glance, undefined, w.type);
+    assert.strictEqual(w.sizes, undefined, w.type);
+    assert.match(w.glanceModel({}, { model: () => null }, {}).empty, /Reading your fishing history/, w.type);
+    assert.match(w.glanceModel({}, { model: () => ({ error: "503" }) }, {}).empty, /Could not load the fishing history \(503\)/, w.type);
   }
 });
 
-test("📱 glances: today S = the worm to cast, M = the three worms; bait S = the cheapest, M = three rows", () => {
-  const s = fishingToday.glance({}, ctx(), {}, "s").html;
-  assert.strictEqual(s, `<div class="g-hero"><i>Grub</i></div><div class="g-big">13.8k<small> XP/🌸</small></div><div class="g-cap">cast Grub · autumn</div>`);
-  const m = fishingToday.glance({}, ctx(), {}, "m").html;
-  assert.match(m, /^<div class="g-split">/);
-  assert.strictEqual(rowsIn(m), 3);
-  assert.match(m, /<div class="g-n">Grub<\/div><span class="g-v g-ok">13.8k<\/span>/);
-  assert.strictEqual(rowsIn(fishingToday.glance({}, ctx(), {}, "l").html), 3);
-  const b = fishingBait.glance({}, ctx(), {}, "s").html;
-  assert.strictEqual(b, `<div class="g-hero"><i>Crab Stick</i></div><div class="g-big">0.11<small> 🌸</small></div><div class="g-cap">Crab Stick · can make 7</div>`);
-  const bm = fishingBait.glance({}, ctx(), {}, "m").html;
-  assert.strictEqual(rowsIn(bm), 3);
-  assert.match(bm, /<div class="g-n">Crab Stick<div>can make 7 · 4h<\/div><\/div><span class="g-v g-ok">0.11 🌸<\/span>/);
-  assert.strictEqual(rowsIn(fishingBait.glance({}, ctx(), {}, "l").html), M.baits.length);
+test("📱 glance models: today = the worm to cast, the three worms; bait = the cheapest, every bait", () => {
+  const m = fishingToday.glanceModel({}, ctx(), {});
+  assert.deepStrictEqual([m.head.value, m.head.unit, m.head.cap], ["13.8k", " XP/🌸", "cast Grub · autumn"]);
+  assert.strictEqual(m.items.length, 3);
+  assert.deepStrictEqual([m.items[0].icon, m.items[0].name, m.items[0].value, m.items[0].tone], ["<i>Earthworm</i>", "Earthworm", m.items[0].value, ""]);
+  const grub = m.items.find((i) => i.name === "Grub");
+  assert.deepStrictEqual([grub.value, grub.tone, grub.pct], ["13.8k", "ok", 100]);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num">13.8k<small> XP\/🌸<\/small><\/div><div class="gx-cap">cast Grub · autumn<\/div>/);
+  assert.ok(looksFor(m).length >= 3);
+  const b = fishingBait.glanceModel({}, ctx(), {});
+  assert.deepStrictEqual([b.head.value, b.head.cap], ["0.11", "Crab Stick · can make 7"]);
+  assert.strictEqual(b.items.length, M.baits.filter((x) => x.complete).length);
+  assert.deepStrictEqual([b.items[0].name, b.items[0].sub, b.items[0].value, b.items[0].tone], ["Crab Stick", "can make 7 · 4h", "0.11 🌸", "ok"]);
+  assert.strictEqual(rowsIn(renderLook(b, "number-list-2").html), 3);
+  assert.ok(looksFor(b).includes(fishingBait.look), "its natural look is offered");
 });
 
-test("📱 glances: safe to age S = the free fish with a salt ring, M = tiles, L = the fish; Marvels S = maps left, M = cheapest first", () => {
-  const s = fishingSafeAge.glance({}, ctx(), {}, "s").html;
-  assert.match(s, /<div class="g-corner"><svg class="g-ring g-ok"/);
-  assert.match(s, /<div class="g-big">26<small> fish<\/small><\/div><div class="g-cap">free to age · 195k XP<\/div>/);
-  assert.match(fishingSafeAge.glance({}, ctx(), {}, "m").html, /<div class="g-tiles"><div><span>free to age<\/span><b>26<\/b><small>12 species<\/small>/);
-  const l = fishingSafeAge.glance({}, ctx(), {}, "l").html;
-  assert.match(l, /<div class="g-n">White Shark<div>2 held · 7.6h<\/div><\/div><span class="g-v">40k<\/span>/);
-  const ms = fishingMarvels.glance({}, ctx(), {}, "s").html;
-  assert.strictEqual(ms, `<div class="g-big">8<small>/8</small></div><div class="g-cap">maps left · 1.3k 🌸 cheapest</div>`);
-  const mm = fishingMarvels.glance({}, ctx(), {}, "m").html;
-  assert.deepStrictEqual([...mm.matchAll(/<div class="g-n">([^<]+)</g)].map((x) => x[1]), ["Gilded Swordfish", "Twilight Anglerfish", "Starlight Tuna"]);
-  assert.match(mm, /<div class="g-n">Gilded Swordfish<div>9 to go · via White Shark<\/div><\/div><span class="g-v">2.5 🌸<\/span>/);
+test("📱 glance models: safe to age = the free fish with a salt ring, the held fish; Marvels = maps left, cheapest first, then the caught", () => {
+  const s = fishingSafeAge.glanceModel({}, ctx(), {});
+  assert.deepStrictEqual([s.head.value, s.head.unit, s.head.cap, s.head.ringTone], ["26", " fish", "free to age · 195k XP", "ok"]);
+  assert.deepStrictEqual([s.items[0].name, s.items[0].sub, s.items[0].value, s.items[0].pct], ["Saw Shark", "3 held · 7.3h", "57.6k", 100]);
+  assert.match(renderLook(s, "number").html, /<div class="gx-corner"><svg class="gx-ring g-ok"/);
+  assert.ok(looksFor(s).length >= 3);
+  const v = fishingMarvels.glanceModel({}, ctx(), {});
+  assert.deepStrictEqual([v.head.value, v.head.unit, v.head.cap], [8, "/8", "maps left · 1.3k 🌸 cheapest"]);
+  assert.deepStrictEqual(v.items.slice(0, 3).map((i) => i.name), ["Gilded Swordfish", "Twilight Anglerfish", "Starlight Tuna"]);
+  assert.deepStrictEqual([v.items[0].sub, v.items[0].value], ["via White Shark", "2.5 🌸"]);
   const owned = { ...M, marvels: { ...M.marvels, cards: M.marvels.cards.map((c) => ({ ...c, owned: true })) } };
-  assert.match(fishingMarvels.glance({}, { model: () => owned }, {}, "s").html, /every Marine Marvel caught/);
+  const all = fishingMarvels.glanceModel({}, { model: () => owned }, {});
+  assert.deepStrictEqual([all.head.value, all.head.cap], ["✓", "every Marine Marvel caught"]);
+  assert.deepStrictEqual(all.items[0].chip, { text: "caught", tone: "ok" });
 });
 
-test("📱 glances: order S = what the ticked routes cost, M = tiles, nothing ticked is empty; cost S = per cast, M = tiles", () => {
+test("📱 glance models: order = what the ticked routes cost and the shopping list, nothing ticked is empty; cost = per cast, the rods and bait", () => {
   page.api.set("_fishPlan", {}); page.api.set("_fishMemo", null);
-  assert.match(fishingOrder.glance({}, ctx(), {}, "s").empty, /Nothing ticked yet/);
+  assert.match(fishingOrder.glanceModel({}, ctx(), {}).empty, /Nothing ticked yet/);
   const card = page.api._fishModelNow({}).marvels.cards.find((c) => !c.owned && c.evaluated[0].routes.length);
   page.api.set("_fishPlan", { [card.evaluated[0].routes[0].key]: true }); page.api.set("_fishMemo", null);
   const o = page.api._fishModelNow({}).order;
-  const s = fishingOrder.glance({}, ctx(), {}, "s").html;
-  assert.match(s, /^<div class="g-big">[^<]+<small> 🌸<\/small><\/div><div class="g-cap">1 marvel · [\d,]+ casts<\/div>$/);
-  assert.match(fishingOrder.glance({}, ctx(), {}, "m").html, /<div class="g-tiles"><div><span>marvels<\/span><b>1<\/b>/);
-  assert.strictEqual(rowsIn(fishingOrder.glance({}, ctx(), {}, "l").html), Math.min(6, o.rows.length));
-  assert.strictEqual(fishingCost.glance({}, ctx(), {}, "s").html,
-    `<div class="g-big">${M.costPerCast.toFixed(3)}<small> 🌸</small></div><div class="g-cap">a cast · over 1,515 rods</div>`);
-  assert.match(fishingCost.glance({}, ctx(), {}, "m").html, /<span>rods<\/span><b>1.5k<\/b>.*<span>per cast<\/span><b>1.67<\/b>/);
+  const m = fishingOrder.glanceModel({}, ctx(), {});
+  assert.match(m.head.cap, /^1 marvel · [\d,]+ casts$/);
+  assert.strictEqual(m.items.length, o.rows.length);
+  assert.deepStrictEqual(m.tiles[0], { label: "marvels", value: 1 });
+  const c = fishingCost.glanceModel({}, ctx(), {});
+  assert.deepStrictEqual([c.head.value, c.head.cap], [M.costPerCast.toFixed(3), "a cast · over 1,515 rods"]);
+  assert.deepStrictEqual(c.items.map((i) => i.name), ["Rod", "Earthworm", "Grub", "Red Wiggler"]);
+  assert.deepStrictEqual([c.items[0].value, c.items[0].pct], ["1.5k", 100]);
+  assert.match(renderLook(c, "tiles-t").html, /<span>rods<\/span><b>1.5k<\/b>.*<span>per cast<\/span><b>1.67<\/b>/);
+  assert.ok(looksFor(c).length >= 3);
 });
 
-test("📱 glances: per fish and guaranteed S = the best XP per FLOWER, M = rows; treasure S = the share of a cast back", () => {
-  const pf = fishingPerFish.glance({}, ctx(), {}, "s").html;
-  assert.match(pf, /^<div class="g-hero"><i>Moray Eel<\/i><\/div><div class="g-big">2.6k<small> XP\/🌸<\/small><\/div>/);
-  assert.strictEqual(rowsIn(fishingPerFish.glance({}, ctx(), {}, "m").html), 3);
-  const g = fishingGuaranteed.glance({}, ctx(), {}, "s").html;
-  assert.match(g, /^<div class="g-hero"><i>White Shark<\/i><\/div><div class="g-big">23.2k<small> XP\/🌸<\/small><\/div><div class="g-cap">White Shark · Red Wiggler \+ Rich Chicken<\/div>$/);
-  const gl = fishingGuaranteed.glance({}, ctx(), {}, "l").html;
-  assert.strictEqual(rowsIn(gl), 7);
-  assert.match(gl, /<div class="g-n">Tuna<div>Grub \+ \d+× Orange<\/div><\/div><span class="g-chip g-ok">−85% vs random<\/span>/);
-  assert.match(fishingPerFish.glance({}, { model: () => ({ ...M, rows: [] }) }, {}, "s").empty, /No species caught/);
+test("📱 glance models: per fish and guaranteed = the best XP per FLOWER and the list; treasure = the share of a cast back and what was found", () => {
+  const pf = fishingPerFish.glanceModel({}, ctx(), {});
+  assert.deepStrictEqual([pf.head.value, pf.head.cap], ["2.6k", "Moray Eel · aged"]);
+  assert.strictEqual(pf.items[0].name, "Moray Eel");
+  assert.ok(looksFor(pf).length >= 3);
+  assert.match(fishingPerFish.glanceModel({}, { model: () => ({ ...M, rows: [] }) }, {}).empty, /No species caught/);
+  const g = fishingGuaranteed.glanceModel({}, ctx(), {});
+  assert.deepStrictEqual([g.head.value, g.head.cap], ["23.2k", "White Shark · Red Wiggler + Rich Chicken"]);
+  const tuna = g.items.find((i) => i.name === "Tuna");
+  assert.match(tuna.sub, /^\d+× Orange$/);
+  assert.deepStrictEqual(tuna.chip, { text: "−85%", tone: "ok" });
+  assert.match(renderLook(g, "list-4").html, /<div class="gx-n">Tuna<div>\d+× Orange<\/div><\/div><span class="gx-chip g-ok">−85%<\/span>/);
   const back = (46 * 0.4 + 40 * 0.1) / 516;
-  const t = fishingTreasure.glance({}, ctx(), {}, "s").html;
-  assert.strictEqual(t, `<div class="g-big">${((back / M.costPerCast) * 100).toFixed(0)}<small>%</small></div><div class="g-cap">of a cast's cost comes back · ${back.toFixed(4)} 🌸</div>`);
-  const tm = fishingTreasure.glance({}, ctx(), {}, "m").html;
-  assert.match(tm, /<div class="g-n">Clam Shell<\/div><span class="g-v">46<\/span>/);
+  const t = fishingTreasure.glanceModel({}, ctx(), {});
+  assert.deepStrictEqual([t.head.value, t.head.unit, t.head.cap], [((back / M.costPerCast) * 100).toFixed(0), "%", `of a cast's cost comes back · ${back.toFixed(4)} 🌸`]);
+  assert.deepStrictEqual(t.items.map((i) => [i.name, i.value]), [["Clam Shell", "46"], ["Old Bottle", "40"]]);
   const none = { ...M, treasure: { tr: { items: {}, rods: 0, diffs: 0, total: 0 }, trVal: 0 } };
-  assert.match(fishingTreasure.glance({}, { model: () => none }, {}, "s").empty, /No clean treasure sample/);
+  assert.match(fishingTreasure.glanceModel({}, { model: () => none }, {}).empty, /No clean treasure sample/);
 });
