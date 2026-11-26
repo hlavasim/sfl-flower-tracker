@@ -87,11 +87,30 @@ const footHtml = (m) => (m.foot ? `<div class="g-cap g-foot">${esc(m.foot)}</div
 function listHtml(list, cols, cls = "g-rows") {
   return `<div class="${cls}${cols > 1 ? ` g-cols-${cols}` : ""}">` + rows(list).slice('<div class="g-rows">'.length);
 }
+// The icon grid for n items in a W×H area: the columns × rows that give each icon the most room (a
+// cell is about 1 wide × 1.3 tall with its tag), so 4 items are 2×2 in 1×1, 4×1 in a wide one, 1×4
+// in a tall one. More than fit at a readable size: the last cell says how many more.
+const ICON_MIN = 0.3;   // the smallest icon cell, in board cells
+function iconGrid(n, w, h) {
+  let best = { c: 1, r: Math.max(1, n), size: 0 };
+  for (let c = 1; c <= Math.max(1, n); c++) {
+    const r = Math.ceil(n / c), size = Math.min(w / c, h / (1.3 * r));
+    if (size > best.size + 1e-9 || (Math.abs(size - best.size) < 1e-9 && c * r < best.c * best.r)) best = { c, r, size };
+  }
+  return best;
+}
+export function iconCap(w, h) {
+  let k = 1;
+  while (k < 200 && iconGrid(k + 1, w, h).size >= ICON_MIN) k++;
+  return k;
+}
 function iconsHtml(items, w, h) {
-  const cols = w * 2, cap = cols * h * 2;
+  const cap = iconCap(w, h);
   const shown = items.length > cap ? items.slice(0, cap - 1) : items;
+  const cells = shown.length + (items.length > cap ? 1 : 0);
+  const { c, r } = iconGrid(cells, w, h);
   const more = items.length > cap ? `<div class="g-cell g-more">+${items.length - shown.length}</div>` : "";
-  return `<div class="g-icons" style="--gc:${cols}">` + shown.map((it) => {
+  return `<div class="g-icons" style="--gc:${c};--gr:${r}">` + shown.map((it) => {
     const tag = it.chip ? it.chip.text : it.value != null ? it.value : "";
     const tt = it.chip ? it.chip.tone : it.tone;
     return `<div class="g-cell" title="${esc(it.name)}${it.sub ? ` · ${esc(it.sub)}` : ""}"><span class="g-ic">${it.icon || esc(String(it.name || "?").slice(0, 2))}</span>` +
@@ -128,10 +147,44 @@ export function stylesFor(m) {
     : st === "chart" ? (m.series || []).length >= 2
     : st === "hero" ? !!m.head && !!(m.head.hero || (it[0] && it[0].icon)) : false));
 }
-// Every size × style the model can fill, in the order the ◀ ▶ arrows walk them (size by size).
+// How many of the model's things a size shows in a style (the same numbers layout() uses).
+const listCols = (w) => (w >= 4 ? 2 : 1);
+function shows(st, w, hh) {
+  if (st === "number") return w === 1 && hh === 1 ? 0 : hh === 1 ? 3 * listCols(w) : listCols(w) * (hh * 3 - 2);
+  if (st === "rows") return (w === 2 && hh === 1 ? 2 : listCols(w)) * hh * 3;
+  if (st === "compact") return (w >= 2 ? 2 : 1) * hh * 5;
+  if (st === "icons") return iconCap(w, hh);
+  if (st === "bars") return hh * 3;
+  if (st === "tiles") return Math.max(2, w * 2) * hh * (w === 1 ? 2 : 1);
+  return 1;
+}
+function needs(st, m) {
+  const it = m.items || [];
+  if (st === "tiles") return tilesOf(m).length;
+  if (st === "bars") return it.filter((x) => Number.isFinite(Number(x.pct))).length;
+  return it.length;
+}
+// Only the sizes that show something a smaller one cannot: a style grows through the sizes (by area)
+// until all its content fits, so four weather items never offer a 4×2 that is mostly empty. A chart
+// and a hero have nothing to grow into: they come at their own few sizes.
+const FIXED = { chart: ["2x1", "4x1"], hero: ["1x1", "2x1"] };
+export function sizesFor(m, st) {
+  if (FIXED[st]) return FIXED[st];
+  const need = needs(st, m), out = [];
+  let best = -1;
+  for (const size of SIZES) {
+    const { w, h } = dims(size), n = Math.min(need, shows(st, w, h));
+    if (out.length && (best >= need || n <= best)) continue;
+    out.push(size);
+    best = Math.max(best, n);
+  }
+  return out;
+}
+// Every look worth offering, in the order the ◀ ▶ arrows walk them (size by size).
 export function variants(m) {
   const st = stylesFor(m || {});
-  return SIZES.flatMap((size) => st.filter((s) => s !== "hero" || ["1x1", "2x1"].includes(size)).map((style) => ({ size, style })));
+  const per = Object.fromEntries(st.map((s) => [s, new Set(sizesFor(m, s))]));
+  return SIZES.flatMap((size) => st.filter((s) => per[s].has(size)).map((style) => ({ size, style })));
 }
 
 export function layout(model, size = "1x1", style = "number") {
@@ -139,20 +192,20 @@ export function layout(model, size = "1x1", style = "number") {
   const { w, h: hh } = dims(size);
   const ok = stylesFor(m);
   let st = STYLES.includes(style) && ok.includes(style) ? style : ok.includes("number") ? "number" : ok[0] || "number";
-  const cols = w >= 4 ? 2 : 1;                   // a wide widget lists in two columns
-  const perCol = hh * 3;                          // about three rows fit one cell's height
+  const cols = listCols(w);
   if (st === "icons") return iconsHtml(items, w, hh);
-  if (st === "rows") return listHtml(items.slice(0, (w === 2 && hh === 1 ? 2 : cols) * perCol), w === 2 && hh === 1 ? 2 : cols) + (hh > 1 ? footHtml(m) : "");
-  if (st === "compact") return compactHtml(items, w >= 2 ? 2 : 1, (w >= 2 ? 2 : 1) * hh * 5) + (hh > 1 ? footHtml(m) : "");
+  if (st === "rows") { const c = w === 2 && hh === 1 ? 2 : cols; return listHtml(items.slice(0, shows("rows", w, hh)), c) + (hh > 1 ? footHtml(m) : ""); }
+  if (st === "compact") return compactHtml(items, w >= 2 ? 2 : 1, shows("compact", w, hh)) + (hh > 1 ? footHtml(m) : "");
   if (st === "tiles") return tilesHtml(tilesOf(m), w, hh);
-  if (st === "bars") return barsHtml(items.filter((x) => Number.isFinite(Number(x.pct))), hh * 3 * (w >= 4 ? 1 : 1));
+  if (st === "bars") return barsHtml(items.filter((x) => Number.isFinite(Number(x.pct))), shows("bars", w, hh));
   if (st === "chart") return `<div class="g-head-top">${headHtml(h ? { ...h, ring: undefined } : null)}</div>` + spark(m.series) + (hh > 1 ? footHtml(m) : "");
   if (st === "hero") {
     const icon = h.hero || (items[0] && items[0].icon);
     return `<div class="g-heroline"><div class="g-hero g-hero-xl">${icon}</div><div>${big(h.value, { unit: h.unit, cap: h.cap, tone: h.tone })}</div></div>`;
   }
   // number
-  if (!items.length || (w === 1 && hh === 1)) return headHtml(h) + (hh > 1 && m.spark ? spark(m.spark) : "") + (hh > 1 || w > 1 ? footHtml(m) : "");
-  if (hh === 1) return `<div class="g-split${w >= 4 ? " g-split-wide" : ""}"><div>${headHtml(h)}</div>${listHtml(items.slice(0, 3 * cols), cols)}</div>`;
-  return `<div class="g-head-top">${headHtml(h)}</div>` + listHtml(items.slice(0, cols * (perCol - 2)), cols) + footHtml(m);
+  const n = shows("number", w, hh);
+  if (!items.length || n === 0) return headHtml(h) + (hh > 1 && m.spark ? spark(m.spark) : "") + (hh > 1 || w > 1 ? footHtml(m) : "");
+  if (hh === 1) return `<div class="g-split${w >= 4 ? " g-split-wide" : ""}"><div>${headHtml(h)}</div>${listHtml(items.slice(0, n), cols)}</div>`;
+  return `<div class="g-head-top">${headHtml(h)}</div>` + listHtml(items.slice(0, n), cols) + footHtml(m);
 }

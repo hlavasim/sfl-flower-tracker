@@ -139,7 +139,7 @@ test("📱 glance model, weather: the count protecting now (ring) and every item
   assert.strictEqual((icons.match(/class="g-cell"/g) || []).length, 4);
   assert.match(icons, /<small class="g-tag g-bad">used up<\/small>/);
   assert.match(layout(m, "1x1", "number"), /<div class="g-big g-bad">2<small>\/4<\/small><\/div><div class="g-cap">uncovered: tsunami, insect plague<\/div>/);
-  assert.ok(variants(m).length >= 30, "dozens of ready-made looks");
+  assert.ok(variants(mi).length >= 6, "a handful of looks that each show something different");
   const all = weatherProtection.glanceModel({ farm: FARM }, { weatherRows: () => WCTX.weatherRows().map((r) => ({ ...r, state: "ok" })) });
   assert.strictEqual(all.head.cap, "all protected");
   assert.match(weatherProtection.glanceModel({ farm: FARM }, { weatherRows: () => [] }).empty, /No weather items/);
