@@ -22,7 +22,11 @@ const ROW_MODES = ["all", "top", "picked"];
 export function cleanSettings(raw) {
   if (!isObj(raw)) return {};
   const s = { ...raw };
-  delete s.columns; delete s.sort; delete s.rows; delete s.density; delete s.textSize;
+  delete s.columns; delete s.sort; delete s.rows; delete s.density; delete s.textSize; delete s.filters;
+  if (isObj(raw.filters)) {
+    s.filters = Object.fromEntries(Object.entries(raw.filters).filter(([k, v]) => k && Array.isArray(v))
+      .map(([k, v]) => [k, v.filter((x) => typeof x === "string" || typeof x === "number").map(String)]));
+  }
   if (Array.isArray(raw.columns)) s.columns = raw.columns.filter((k) => typeof k === "string");
   if (isObj(raw.sort) && typeof raw.sort.key === "string" && ["asc", "desc"].includes(raw.sort.dir)) s.sort = { key: raw.sort.key, dir: raw.sort.dir };
   if (isObj(raw.rows)) {

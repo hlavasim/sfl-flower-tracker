@@ -89,6 +89,22 @@ test("render: a cumulative column sums in the order shown, also when sorted by a
   assert.deepStrictEqual([...sorted.matchAll(/\[(\d+)\]/g)].map((m) => +m[1]), [9, 19, 119]);
 });
 
+test("filters: a column marked filter hides the values switched off; the panel gets a Filtr tab only then", () => {
+  const cols = [{ key: "name", label: "N", filter: true }, { key: "qty", label: "Q" }];
+  let s = applyTableAction(cols, {}, "filter", "name|Cod");
+  assert.deepStrictEqual(s.filters, { name: ["Cod"] });
+  assert.deepStrictEqual(applyRows(cols, ROWS, s, key).rows.map(key), ["Tuna", "Eel"]);
+  s = applyTableAction(cols, s, "filter", "name|Cod");
+  assert.deepStrictEqual(s.filters, { name: [] });
+  assert.strictEqual(applyRows(cols, ROWS, s, key).rows.length, 3);
+  assert.deepStrictEqual(applyTableAction(cols, {}, "filter", "qty|9").filters, undefined);
+  const panel = tableSettingsPanel(cols, { filters: { name: ["Eel"] } }, { rows: ROWS, rowKey: key });
+  assert.match(panel, /data-value="filter"/);
+  assert.match(panel, /data-action="filter" data-value="name\|Tuna" checked/);
+  assert.match(panel, /data-action="filter" data-value="name\|Eel"(?! checked)/);
+  assert.doesNotMatch(tableSettingsPanel(COLS, {}, { rows: ROWS, rowKey: key }), /data-value="filter"/);
+});
+
 test("render: an empty result says so", () => {
   assert.match(renderTable(COLS, [], {}, { rowKey: key, empty: "Nic." }), /Nic\./);
 });

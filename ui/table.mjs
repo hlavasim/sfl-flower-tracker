@@ -28,6 +28,11 @@ function compare(a, b) {
 // the picked keys that matched no row, so a pick that disappeared is visible instead of silent.
 export function applyRows(columns, rows, settings = {}, rowKey = (r) => r.key) {
   let out = rows.slice();
+  // filters: { columnKey: [values switched off] } on columns marked filter
+  for (const c of columns.filter((x) => x.filter)) {
+    const off = new Set(((settings.filters || {})[c.key] || []).map(String));
+    if (off.size) out = out.filter((r) => !off.has(String(valueOf(c, r))));
+  }
   const sort = settings.sort;
   const col = sort && columns.find((c) => c.key === sort.key);
   if (col) {
@@ -127,6 +132,15 @@ export function applyTableAction(columns, settings = {}, action, value) {
       s.rows = { ...r, picked: r.picked.map(String).includes(k) ? r.picked.filter((p) => String(p) !== k) : [...r.picked, k] };
       return s;
     }
+    case "filter": {
+      // "column|value": switch that value of a filter column off, or back on
+      const at = String(value).indexOf("|");
+      const k = String(value).slice(0, at), v = String(value).slice(at + 1);
+      if (at < 0 || !columns.some((c) => c.key === k && c.filter)) return s;
+      const off = ((settings.filters || {})[k] || []).map(String);
+      s.filters = { ...(settings.filters || {}), [k]: off.includes(v) ? off.filter((x) => x !== v) : [...off, v] };
+      return s;
+    }
     case "density":
       s.density = value === "compact" ? "compact" : "normal";
       return s;
@@ -143,9 +157,11 @@ export function applyTableAction(columns, settings = {}, action, value) {
 // The cog panel's HTML: three tabs (Sloupce / Řádky / Vzhled), the inactive ones hidden. Every
 // control carries data-action / data-value; the frame delegates the events (and the drag of a
 // column's grip, which reports col-move) and feeds them to applyTableAction.
-const TABS = [["cols", "Sloupce"], ["rows", "Řádky"], ["look", "Vzhled"]];
+const TABS = [["cols", "Sloupce"], ["rows", "Řádky"], ["filter", "Filtr"], ["look", "Vzhled"]];
 export function tableSettingsPanel(columns, settings = {}, { rows = [], rowKey = (r) => r.key, rowLabel, tab = "cols" } = {}) {
-  const active = TABS.some(([t]) => t === tab) ? tab : "cols";
+  const filterCols = columns.filter((c) => c.filter);
+  const tabsHere = TABS.filter(([t]) => t !== "filter" || filterCols.length);
+  const active = tabsHere.some(([t]) => t === tab) ? tab : "cols";
   const shown = visibleColumns(columns, settings).map((c) => c.key);
   const order = [...shown, ...columns.map((c) => c.key).filter((k) => !shown.includes(k))];
   const byKey = new Map(columns.map((c) => [c.key, c]));
@@ -168,7 +184,14 @@ export function tableSettingsPanel(columns, settings = {}, { rows = [], rowKey =
     return `<label class="w-pick"><input type="checkbox" data-action="pick" data-value="${esc(k)}"${picked.has(k) ? " checked" : ""}> ${esc(label(r))}</label>`;
   }).join("");
   const size = Math.min(TEXT_MAX, Math.max(TEXT_MIN, Math.round(Number(settings.textSize)) || 100));
-  const tabs = TABS.map(([t, label]) =>
+  // one group of checkboxes per filter column: every value the rows have, checked = shown
+  const filters = filterCols.map((c) => {
+    const off = new Set(((settings.filters || {})[c.key] || []).map(String));
+    const vals = [...new Set(rows.map((r) => String(valueOf(c, r))))];
+    return `<div class="w-filter"><div class="w-filter-h">${esc(c.label)}</div>` + vals.map((v) =>
+      `<label class="w-pick"><input type="checkbox" data-action="filter" data-value="${esc(c.key + "|" + v)}"${off.has(v) ? "" : " checked"}> ${esc(c.filterLabel ? c.filterLabel(v) : v)}</label>`).join("") + `</div>`;
+  }).join("");
+  const tabs = tabsHere.map(([t, label]) =>
     `<button type="button" class="w-tab" data-action="settings-tab" data-value="${t}" aria-selected="${t === active}">${label}</button>`).join("");
   const section = (t, html) => `<div class="w-sec" data-tab="${t}"${t === active ? "" : " hidden"}>${html}</div>`;
   return `<div class="w-settings"><div class="w-tabs">${tabs}</div>` +
@@ -176,6 +199,7 @@ export function tableSettingsPanel(columns, settings = {}, { rows = [], rowKey =
     section("rows", `<div class="w-segs">${mode("all", "Všechny")}${mode("top", "Prvních N")}${mode("picked", "Jen vybrané")}</div>` +
       (sel.mode === "top" ? `<label class="w-line">Počet <input type="number" min="1" value="${sel.top}" data-action="rows-top"></label>` : "") +
       (sel.mode === "picked" ? `<div class="w-picks">${picks}</div>` : "")) +
+    (filterCols.length ? section("filter", filters) : "") +
     section("look", `<label class="w-line">Písmo <input type="range" min="${TEXT_MIN}" max="${TEXT_MAX}" step="10" value="${size}" data-action="text-size"> ${size} %</label>` +
       `<label class="w-line"><input type="checkbox" data-action="density" data-value="${settings.density === "compact" ? "normal" : "compact"}"${settings.density === "compact" ? " checked" : ""}> Husté řádky</label>`) +
     `<div class="w-foot"><button type="button" class="w-link" data-action="reset" data-value="">Obnovit výchozí</button></div></div>`;

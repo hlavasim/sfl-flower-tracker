@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { BOARDS_KEY, emptyBoards, parseBoards, pin, unpin, moveItemTo, resizeItem, updateItemSettings,
-  pageSettings, setPageSettings, pinnedCount, loadBoards, saveBoards } from "../../app/boards.mjs";
+  pageSettings, setPageSettings, pinnedCount, loadBoards, saveBoards, cleanSettings } from "../../app/boards.mjs";
 
 // The boards document: what is pinned where, at what size, with which settings; plus the settings
 // of each widget on its own page. One synced localStorage key.
@@ -88,6 +88,11 @@ test("review #2/#3: synced settings are cleaned on read — wrong types dropped,
   const d = parseBoards(raw);
   assert.deepStrictEqual(d.page.t, { rows: { mode: "all", top: 5, picked: [] } });
   assert.deepStrictEqual(d.boards[0].items[0].settings, { rows: { mode: "all", top: 5, picked: ["Eel", "7"] }, textSize: 160, columns: ["n"] });
+});
+
+test("synced filters are cleaned: an object of string lists, anything else dropped", () => {
+  assert.deepStrictEqual(cleanSettings({ filters: { status: ["empty", 3, null], category: "x", "": ["a"] } }).filters, { status: ["empty", "3"] });
+  assert.strictEqual(cleanSettings({ filters: ["a"] }).filters, undefined);
 });
 
 test("review #7: board ids with ':' are dropped (frame ids are b:<board>:<item>)", () => {
