@@ -2671,12 +2671,13 @@
     .roi-table th { font-size: 0.5rem; letter-spacing: 0.05em; }
 
     /* Widgets (ui/frame.mjs, ui/table.mjs) */
-    .w-frame { padding: 8px 10px; margin: 8px 0; font-size: 0.5rem; line-height: 1.6; }
+    .w-frame { position: relative; padding: 8px 10px; margin: 8px 0; font-size: 0.5rem; line-height: 1.6; }
     .w-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .w-body { overflow-x: auto; }
     .w-title { font-family: 'Press Start 2P', monospace; font-size: 0.5rem; color: var(--sunpetal); }
     .w-tools { margin-left: auto; display: flex; gap: 4px; align-items: center; }
     .w-btn { background: transparent; border: 1px solid #3a2e1c; color: var(--text-secondary); font-size: 0.5rem; padding: 1px 5px; cursor: pointer; border-radius: 3px; }
-    .w-btn:hover { color: var(--sunpetal); border-color: var(--sunpetal); }
+    .w-btn:hover, .w-btn.on { color: var(--sunpetal); border-color: var(--sunpetal); }
     .w-fresh { font-size: 0.42rem; color: var(--text-dim); }
     .w-fresh-stale { color: #e8a060; } .w-fresh-error { color: var(--red); }
     .w-table { width: 100%; border-collapse: collapse; font-size: 0.5rem; margin: 4px 0; }
@@ -2687,16 +2688,51 @@
     .w-empty, .w-empty-msg { color: #e8a060; }
     .w-missing { color: #e8a060; font-size: 0.44rem; }
     .w-error { color: var(--red); }
-    .w-settings-wrap { border: 1px dashed #3a2e1c; padding: 6px 8px; margin: 4px 0 8px; }
-    .w-settings fieldset { border: none; padding: 0; margin: 0 0 6px; }
-    .w-settings legend { color: var(--sunpetal); font-size: 0.44rem; }
-    .w-settings button { font-size: 0.44rem; padding: 0 4px; margin-left: 2px; cursor: pointer; }
-    .w-set-col { display: inline-block; margin-right: 10px; white-space: nowrap; }
-    .w-picks { max-height: 140px; overflow: auto; margin-top: 4px; }
-    .w-pick { display: inline-block; margin-right: 10px; white-space: nowrap; }
+    /* the settings popover: floats under the cog, never pushes the table down */
+    .w-pop { position: absolute; top: 30px; right: 8px; z-index: 60; width: min(340px, calc(100% - 16px)); background: var(--bg-card);
+      border: 2px solid var(--border-brown); box-shadow: 0 6px 18px rgba(0,0,0,0.6); padding: 8px 10px; color-scheme: dark; accent-color: var(--sunpetal); }
+    .w-pop-head { display: flex; align-items: center; justify-content: space-between; color: var(--sunpetal); font-size: 0.5rem; margin-bottom: 6px; }
+    .w-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border-brown); margin-bottom: 8px; }
+    .w-tab { background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--text-secondary); font: inherit; font-size: 0.5rem; padding: 3px 8px; cursor: pointer; }
+    .w-tab[aria-selected="true"] { color: var(--sunpetal); border-bottom-color: var(--sunpetal); }
+    .w-tab:hover { color: var(--sunpetal); }
+    .w-cols { max-height: 260px; overflow: auto; }
+    .w-col-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; border-top: 2px solid transparent; }
+    .w-col-row.off { opacity: 0.6; }
+    .w-col-row.w-dragging { opacity: 0.4; }
+    .w-col-row.w-drop-before { border-top-color: var(--sunpetal); }
+    .w-cols.w-drop-end { border-bottom: 2px solid var(--sunpetal); }
+    .w-grip { cursor: grab; color: var(--text-dim); touch-action: none; user-select: none; padding: 0 2px; }
+    .w-grip:hover { color: var(--sunpetal); }
+    .w-grip-none { width: 12px; }
+    .w-hint { color: var(--text-dim); font-size: 0.44rem; margin-top: 6px; }
+    .w-segs { display: inline-flex; border: 1px solid var(--border-brown); margin-bottom: 6px; }
+    .w-seg { background: #111; color: var(--text-secondary); border: none; border-right: 1px solid var(--border-brown); font: inherit; font-size: 0.5rem; padding: 3px 8px; cursor: pointer; }
+    .w-seg:last-child { border-right: none; }
+    .w-seg.on { background: var(--sunpetal); color: #111; }
+    .w-line { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+    .w-pop input[type=number], .w-pop select { background: #111; color: var(--text-primary); border: 2px solid var(--border-brown); font: inherit; font-size: 0.5rem; padding: 2px 4px; width: 5em; outline: none; }
+    .w-pop input[type=number]:focus, .w-pop select:focus { border-color: var(--sunpetal); }
+    .w-pop input[type=checkbox] { appearance: none; width: 12px; height: 12px; margin: 0; background: #111; border: 2px solid var(--border-brown); cursor: pointer; flex: none; }
+    .w-pop input[type=checkbox]:checked { background: var(--sunpetal); box-shadow: inset 0 0 0 2px #111; }
+    .w-pop input[type=range] { flex: 1; }
+    .w-pop label { cursor: pointer; }
+    .w-foot { border-top: 1px solid var(--border-brown); margin-top: 8px; padding-top: 6px; text-align: right; }
+    .w-link { background: none; border: none; color: var(--text-secondary); font: inherit; font-size: 0.44rem; cursor: pointer; text-decoration: underline; }
+    .w-link:hover { color: var(--sunpetal); }
+    .w-picks { max-height: 160px; overflow: auto; margin-top: 4px; }
+    .w-pick { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+    /* the board: drag ⠿ onto another widget to move, drag the corner to resize */
     .w-board { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 8px; align-items: start; }
-    .w-board > .w-frame { margin: 0; min-width: 0; overflow-x: auto; }
-    @media (max-width: 700px) { .w-board > .w-frame { grid-column: span 12 !important; } }
+    .w-board > .w-frame { margin: 0; min-width: 0; display: flex; flex-direction: column; }
+    .w-board > .w-frame > .w-body { flex: 1; min-height: 0; overflow: auto; }
+    .w-on-board.w-dragging { opacity: 0.5; }
+    .w-on-board.w-drop-target { outline: 2px dashed var(--sunpetal); outline-offset: 2px; }
+    .w-on-board.w-resizing { outline: 1px dashed var(--sunpetal); }
+    .w-resize { position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; touch-action: none;
+      background: linear-gradient(135deg, transparent 50%, var(--border-brown) 50%, var(--border-brown) 60%, transparent 60%, transparent 75%, var(--border-brown) 75%); }
+    .w-resize:hover { background: linear-gradient(135deg, transparent 50%, var(--sunpetal) 50%, var(--sunpetal) 60%, transparent 60%, transparent 75%, var(--sunpetal) 75%); }
+    @media (max-width: 700px) { .w-board > .w-frame { grid-column: span 12 !important; } .w-resize { display: none; } }
 
 </style>
   <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
@@ -19211,7 +19247,7 @@
         if (getPage() !== "board" || seq !== _navSeq || mine !== _boardSeq) return;
         // Typing in an open settings panel: the next paint (settings change) will catch up.
         const act = document.activeElement;
-        if (act && act.closest && act.closest(".w-settings-wrap") && act.matches("input[type=number],input[type=range]")) return;
+        if (act && act.closest && act.closest("[data-pop]") && act.matches("input[type=number],input[type=range]")) return;
         const board = __widgets.doc().boards[0];   // read at paint time
         app.innerHTML = head + '<div class="w-board">' + board.items.map((it) => {
           const p = __widgets.peekData(it.type, FARM_ID, __store);

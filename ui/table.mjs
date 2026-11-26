@@ -83,13 +83,15 @@ export function applyTableAction(columns, settings = {}, action, value) {
       s.columns = list.includes(value) ? list.filter((k) => k !== value) : [...list, value];
       return s;
     }
-    case "col-up":
-    case "col-down": {
+    case "col-move": {
+      // "key|index": a shown column dragged to position index of the shown list (clamped).
+      const [k, at] = String(value).split("|");
       const list = current();
-      const i = list.indexOf(value), j = action === "col-up" ? i - 1 : i + 1;
-      if (i < 0 || j < 0 || j >= list.length) return s;
-      [list[i], list[j]] = [list[j], list[i]];
-      s.columns = list;
+      const idx = Math.floor(Number(at));
+      if (!list.includes(k) || !Number.isFinite(idx)) return s;
+      const rest = list.filter((x) => x !== k);
+      rest.splice(Math.max(0, Math.min(rest.length, idx)), 0, k);
+      s.columns = rest;
       return s;
     }
     case "sort": {
@@ -124,16 +126,20 @@ export function applyTableAction(columns, settings = {}, action, value) {
   }
 }
 
-// The cog panel's HTML. Every control carries data-action / data-value; the frame delegates the
-// events and feeds them to applyTableAction.
-export function tableSettingsPanel(columns, settings = {}, { rows = [], rowKey = (r) => r.key, rowLabel } = {}) {
+// The cog panel's HTML: three tabs (Sloupce / Řádky / Vzhled), the inactive ones hidden. Every
+// control carries data-action / data-value; the frame delegates the events (and the drag of a
+// column's grip, which reports col-move) and feeds them to applyTableAction.
+const TABS = [["cols", "Sloupce"], ["rows", "Řádky"], ["look", "Vzhled"]];
+export function tableSettingsPanel(columns, settings = {}, { rows = [], rowKey = (r) => r.key, rowLabel, tab = "cols" } = {}) {
+  const active = TABS.some(([t]) => t === tab) ? tab : "cols";
   const shown = visibleColumns(columns, settings).map((c) => c.key);
   const order = [...shown, ...columns.map((c) => c.key).filter((k) => !shown.includes(k))];
   const byKey = new Map(columns.map((c) => [c.key, c]));
   const colRows = order.map((k) => {
     const on = shown.includes(k);
-    return `<div class="w-set-col"><label><input type="checkbox" data-action="col-toggle" data-value="${esc(k)}"${on ? " checked" : ""}> ${esc(byKey.get(k).label)}</label>` +
-      (on ? ` <button type="button" data-action="col-up" data-value="${esc(k)}" title="výš">▲</button><button type="button" data-action="col-down" data-value="${esc(k)}" title="níž">▼</button>` : "") + `</div>`;
+    return `<div class="w-col-row${on ? "" : " off"}" data-col="${esc(k)}">` +
+      (on ? `<span class="w-grip" data-drag="col" title="táhni pro změnu pořadí">⠿</span>` : `<span class="w-grip-none"></span>`) +
+      `<label><input type="checkbox" data-action="col-toggle" data-value="${esc(k)}"${on ? " checked" : ""}> ${esc(byKey.get(k).label)}</label></div>`;
   }).join("");
   // Coerced here too: the panel prints these into attributes.
   const r0 = settings.rows || {};
@@ -142,18 +148,21 @@ export function tableSettingsPanel(columns, settings = {}, { rows = [], rowKey =
     picked: Array.isArray(r0.picked) ? r0.picked : [] };
   const picked = new Set(sel.picked.map(String));
   const label = rowLabel || rowKey;
-  const mode = (m, t) => `<label><input type="radio" name="w-rows" data-action="rows-mode" data-value="${m}"${sel.mode === m ? " checked" : ""}> ${t}</label>`;
+  const mode = (m, t) => `<button type="button" class="w-seg${sel.mode === m ? " on" : ""}" data-action="rows-mode" data-value="${m}">${t}</button>`;
   const picks = rows.map((r) => {
     const k = String(rowKey(r));
     return `<label class="w-pick"><input type="checkbox" data-action="pick" data-value="${esc(k)}"${picked.has(k) ? " checked" : ""}> ${esc(label(r))}</label>`;
   }).join("");
   const size = Math.min(TEXT_MAX, Math.max(TEXT_MIN, Math.round(Number(settings.textSize)) || 100));
-  return `<div class="w-settings">
-<fieldset><legend>Sloupce</legend>${colRows}</fieldset>
-<fieldset><legend>Řádky</legend>${mode("all", "všechny")} ${mode("top", "prvních")} <input type="number" min="1" value="${sel.top}" data-action="rows-top" style="width:4em"> ${mode("picked", "jen vybrané")}
-${sel.mode === "picked" ? `<div class="w-picks">${picks}</div>` : ""}</fieldset>
-<fieldset><legend>Vzhled</legend><label>Písmo <input type="range" min="${TEXT_MIN}" max="${TEXT_MAX}" step="10" value="${size}" data-action="text-size"> ${size} %</label>
-<label><input type="checkbox" data-action="density" data-value="${settings.density === "compact" ? "normal" : "compact"}"${settings.density === "compact" ? " checked" : ""}> husté řádky</label>
-<button type="button" data-action="reset" data-value="">výchozí</button></fieldset>
-</div>`;
+  const tabs = TABS.map(([t, label]) =>
+    `<button type="button" class="w-tab" data-action="settings-tab" data-value="${t}" aria-selected="${t === active}">${label}</button>`).join("");
+  const section = (t, html) => `<div class="w-sec" data-tab="${t}"${t === active ? "" : " hidden"}>${html}</div>`;
+  return `<div class="w-settings"><div class="w-tabs">${tabs}</div>` +
+    section("cols", `<div class="w-cols">${colRows}</div><div class="w-hint">Zaškrtni, co zobrazit; ⠿ táhni pro pořadí. Řadí se klikem na hlavičku tabulky.</div>`) +
+    section("rows", `<div class="w-segs">${mode("all", "Všechny")}${mode("top", "Prvních N")}${mode("picked", "Jen vybrané")}</div>` +
+      (sel.mode === "top" ? `<label class="w-line">Počet <input type="number" min="1" value="${sel.top}" data-action="rows-top"></label>` : "") +
+      (sel.mode === "picked" ? `<div class="w-picks">${picks}</div>` : "")) +
+    section("look", `<label class="w-line">Písmo <input type="range" min="${TEXT_MIN}" max="${TEXT_MAX}" step="10" value="${size}" data-action="text-size"> ${size} %</label>` +
+      `<label class="w-line"><input type="checkbox" data-action="density" data-value="${settings.density === "compact" ? "normal" : "compact"}"${settings.density === "compact" ? " checked" : ""}> Husté řádky</label>`) +
+    `<div class="w-foot"><button type="button" class="w-link" data-action="reset" data-value="">Obnovit výchozí</button></div></div>`;
 }

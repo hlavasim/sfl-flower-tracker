@@ -76,9 +76,9 @@ test("actions: column toggle, move, sort cycling, rows mode, top, pick, density,
   assert.deepStrictEqual(s.columns, ["name", "xp"]);
   s = applyTableAction(COLS, s, "col-toggle", "note");
   assert.deepStrictEqual(s.columns, ["name", "xp", "note"]);
-  s = applyTableAction(COLS, s, "col-up", "note");
+  s = applyTableAction(COLS, s, "col-move", "note|1");
   assert.deepStrictEqual(s.columns, ["name", "note", "xp"]);
-  s = applyTableAction(COLS, s, "col-down", "name");
+  s = applyTableAction(COLS, s, "col-move", "name|1");
   assert.deepStrictEqual(s.columns, ["note", "name", "xp"]);
   s = applyTableAction(COLS, s, "sort", "qty");
   assert.deepStrictEqual(s.sort, { key: "qty", dir: "desc" });
@@ -100,6 +100,33 @@ test("actions: column toggle, move, sort cycling, rows mode, top, pick, density,
   assert.strictEqual(s.textSize, 160);
   s = applyTableAction(COLS, s, "reset", "");
   assert.deepStrictEqual(s, {});
+});
+
+test("col-move: a dragged column lands at the drop index among the shown columns", () => {
+  let s = applyTableAction(COLS, {}, "col-move", "xp|0");
+  assert.deepStrictEqual(s.columns, ["xp", "name", "qty"]);
+  s = applyTableAction(COLS, s, "col-move", "xp|2");
+  assert.deepStrictEqual(s.columns, ["name", "qty", "xp"]);
+  s = applyTableAction(COLS, s, "col-move", "name|99");
+  assert.deepStrictEqual(s.columns, ["qty", "xp", "name"]);
+  assert.deepStrictEqual(applyTableAction(COLS, s, "col-move", "note|0").columns, ["qty", "xp", "name"]);
+  assert.deepStrictEqual(applyTableAction(COLS, s, "col-move", "garbage").columns, ["qty", "xp", "name"]);
+});
+
+test("settings panel: tabs with one section shown, rows mode as buttons (no shared radio names), grips on shown columns", () => {
+  const html = tableSettingsPanel(COLS, { rows: { mode: "top", top: 3, picked: [] } }, { rows: ROWS, rowKey: key, tab: "rows" });
+  assert.match(html, /data-action="settings-tab" data-value="rows" aria-selected="true"/);
+  assert.match(html, /data-action="settings-tab" data-value="cols" aria-selected="false"/);
+  assert.match(html, /data-tab="cols" hidden/);
+  assert.match(html, /data-tab="rows">/);
+  assert.match(html, /data-tab="look" hidden/);
+  assert.doesNotMatch(html, /type="radio"/);
+  assert.match(html, /class="w-seg on" data-action="rows-mode" data-value="top"/);
+  const cols = tableSettingsPanel(COLS, {}, { rows: ROWS, rowKey: key });
+  assert.match(cols, /data-tab="cols">/);
+  assert.match(cols, /<div class="w-col-row" data-col="name"><span class="w-grip" data-drag="col"/);
+  assert.doesNotMatch(cols, /data-col="note"><span class="w-grip"/);
+  assert.doesNotMatch(cols, /col-up|col-down/);
 });
 
 test("actions never mutate the settings they are given", () => {

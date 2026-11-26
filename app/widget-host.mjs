@@ -6,15 +6,15 @@
 // changed, calls onChange(frameId) and returns whether it was handled.
 import { renderTable, tableSettingsPanel, applyTableAction } from "../ui/table.mjs";
 import { renderFrame, freshness } from "../ui/frame.mjs";
-import { loadBoards, saveBoards, pin, unpin, moveItem, resizeItem, updateItemSettings,
+import { loadBoards, saveBoards, pin, unpin, moveItemTo, resizeItem, updateItemSettings,
   pageSettings, setPageSettings, pinnedCount } from "./boards.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-const TABLE_ACTIONS = new Set(["col-toggle", "col-up", "col-down", "sort", "rows-mode", "rows-top", "pick", "density", "text-size", "reset"]);
+const TABLE_ACTIONS = new Set(["col-toggle", "col-move", "sort", "rows-mode", "rows-top", "pick", "density", "text-size", "reset"]);
 
 export function createHost({ registry, storage, onChange = () => {} }) {
   let doc = loadBoards(storage);
-  const open = new Set();
+  const open = new Map();   // frame id → the popover's active tab
 
   const save = (next, frameId) => { doc = next; saveBoards(storage, doc); onChange(frameId); return true; };
   const effective = (widget, saved) => ({ ...(widget.defaults || {}), ...(saved || {}) });
@@ -33,14 +33,14 @@ export function createHost({ registry, storage, onChange = () => {} }) {
     return { place: "board", boardId: m[1], item, type: item.type, widget: registry[item.type] || null };
   }
 
-  function body(widget, settings, data, ctx) {
+  function body(widget, settings, data, ctx, tab) {
     try {
       const out = widget.build(data || {}, ctx || {});
       const opts = { rowKey: widget.rowKey, rowLabel: widget.rowLabel };
       return {
         html: out.rows.length ? renderTable(widget.columns, out.rows, settings, opts) + (out.footer || "")
           : `<div class="w-empty-msg">${esc(out.empty || "Nic k zobrazení.")}</div>`,
-        settingsHtml: tableSettingsPanel(widget.columns, settings, { rows: out.rows, ...opts }),
+        settingsHtml: tableSettingsPanel(widget.columns, settings, { rows: out.rows, ...opts, tab }),
       };
     } catch (e) {
       // The cog still offers a reset, so a bad saved setting is never a dead end.
@@ -53,7 +53,7 @@ export function createHost({ registry, storage, onChange = () => {} }) {
     const widget = registry[type];
     const id = `page:${type}`;
     const settings = effective(widget, pageSettings(doc, type));
-    const b = body(widget, settings, data, ctx);
+    const b = body(widget, settings, data, ctx, open.get(id));
     return renderFrame({ id, title: widget.title, place: "page", body: b.html, fresh, pinned: pinnedCount(doc, type),
       settingsHtml: b.settingsHtml, settingsOpen: open.has(id) });
   }
@@ -62,11 +62,11 @@ export function createHost({ registry, storage, onChange = () => {} }) {
     const id = `b:${boardId}:${item.i}`;
     const widget = registry[item.type];
     if (!widget) {
-      return renderFrame({ id, title: item.type, place: "board", w: item.w, body: `<div class="w-error">Tenhle widget už neexistuje — odeber ho.</div>` });
+      return renderFrame({ id, title: item.type, place: "board", w: item.w, h: item.h, body: `<div class="w-error">Tenhle widget už neexistuje — odeber ho.</div>` });
     }
     const settings = effective(widget, item.settings);
-    const b = pending ? { html: `<div class="w-fresh">Načítám…</div>`, settingsHtml: "" } : body(widget, settings, data, ctx);
-    return renderFrame({ id, title: widget.title, place: "board", w: item.w, body: b.html, fresh,
+    const b = pending ? { html: `<div class="w-fresh">Načítám…</div>`, settingsHtml: "" } : body(widget, settings, data, ctx, open.get(id));
+    return renderFrame({ id, title: widget.title, place: "board", w: item.w, h: item.h, body: b.html, fresh,
       settingsHtml: b.settingsHtml, settingsOpen: open.has(id) });
   }
 
@@ -74,7 +74,17 @@ export function createHost({ registry, storage, onChange = () => {} }) {
     const f = parse(frameId);
     if (!f || !f.widget && action !== "remove") return false;
     if (action === "cog") {
-      open.has(frameId) ? open.delete(frameId) : open.add(frameId);
+      open.has(frameId) ? open.delete(frameId) : open.set(frameId, "cols");
+      onChange(frameId);
+      return true;
+    }
+    if (action === "settings-close") {
+      if (!open.delete(frameId)) return false;
+      onChange(frameId);
+      return true;
+    }
+    if (action === "settings-tab") {
+      open.set(frameId, String(value));
       onChange(frameId);
       return true;
     }
@@ -89,9 +99,15 @@ export function createHost({ registry, storage, onChange = () => {} }) {
     }
     if (f.place === "board") {
       if (action === "remove") { open.delete(frameId); return save(unpin(doc, f.boardId, f.item.i), frameId); }
-      if (action === "move-up") return save(moveItem(doc, f.boardId, f.item.i, -1), frameId);
-      if (action === "move-down") return save(moveItem(doc, f.boardId, f.item.i, 1), frameId);
-      if (action === "width") return save(resizeItem(doc, f.boardId, f.item.i, { w: value }), frameId);
+      if (action === "move-to") {
+        const t = parse(value);
+        if (!t || t.place !== "board" || t.boardId !== f.boardId || t.item.i === f.item.i) return false;
+        return save(moveItemTo(doc, f.boardId, f.item.i, t.item.i), frameId);
+      }
+      if (action === "resize") {
+        const [w, h] = String(value).split("|");
+        return save(resizeItem(doc, f.boardId, f.item.i, { w, h: h === undefined ? undefined : h }), frameId);
+      }
     }
     return false;
   }

@@ -76,11 +76,13 @@ export function unpin(doc, boardId, i) {
   return withBoard(doc, boardId, (items) => items.filter((x) => x.i !== i));
 }
 
-export function moveItem(doc, boardId, i, delta) {
+// Dragged item i dropped onto item target: i takes target's place, the items between shift by one.
+export function moveItemTo(doc, boardId, i, target) {
   return withBoard(doc, boardId, (items) => {
-    const a = items.findIndex((x) => x.i === i), b = a + delta;
-    if (a < 0 || b < 0 || b >= items.length) return items;
-    [items[a], items[b]] = [items[b], items[a]];
+    const a = items.findIndex((x) => x.i === i), b = items.findIndex((x) => x.i === target);
+    if (a < 0 || b < 0 || a === b) return items;
+    const [moved] = items.splice(a, 1);
+    items.splice(b, 0, moved);
     return items;
   });
 }

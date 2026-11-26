@@ -67,18 +67,42 @@ test("pin copies the page settings to the board; the page shows the count; board
   assert.deepStrictEqual(rowsIn(h.renderPage("t", { data: DATA })), ["a", "b", "c"]);
 });
 
-test("board controls: width, move, remove", () => {
+test("board controls: resize by the corner, move by dropping onto another widget, remove", () => {
   const h = createHost({ registry: { t: T }, storage: mem() });
   h.handle("page:t", "pin", "");
   h.handle("page:t", "pin", "");
-  const [a, b] = h.doc().boards[0].items;
-  h.handle(`b:main:${a.i}`, "width", "12");
-  assert.strictEqual(h.doc().boards[0].items[0].w, 12);
-  assert.match(h.renderItem("main", h.doc().boards[0].items[0], { data: DATA }), /grid-column:span 12/);
-  h.handle(`b:main:${b.i}`, "move-up", "");
+  h.handle("page:t", "pin", "");
+  const [a, b, c] = h.doc().boards[0].items;
+  h.handle(`b:main:${a.i}`, "resize", "12|10");
+  assert.deepStrictEqual([h.doc().boards[0].items[0].w, h.doc().boards[0].items[0].h], [12, 10]);
+  assert.match(h.renderItem("main", h.doc().boards[0].items[0], { data: DATA }), /grid-column:span 12[^"]*height:400px/);
+  h.handle(`b:main:${c.i}`, "move-to", `b:main:${a.i}`);
+  assert.deepStrictEqual(h.doc().boards[0].items.map((x) => x.i), [c.i, a.i, b.i]);
+  h.handle(`b:main:${c.i}`, "move-to", `b:main:${b.i}`);
+  assert.deepStrictEqual(h.doc().boards[0].items.map((x) => x.i), [a.i, b.i, c.i]);
+  assert.strictEqual(h.handle(`b:main:${c.i}`, "move-to", "b:main:nope"), false);
+  h.handle(`b:main:${c.i}`, "remove", "");
+  h.handle(`b:main:${b.i}`, "move-to", `b:main:${a.i}`);
   assert.deepStrictEqual(h.doc().boards[0].items.map((x) => x.i), [b.i, a.i]);
   h.handle(`b:main:${a.i}`, "remove", "");
   assert.deepStrictEqual(h.doc().boards[0].items.map((x) => x.i), [b.i]);
+});
+
+test("the settings popover: a tab sticks across renders; settings-close closes it and only re-renders when it was open", () => {
+  let changes = 0;
+  const h = createHost({ registry: { t: T }, storage: mem(), onChange: () => changes++ });
+  assert.strictEqual(h.handle("page:t", "settings-close", ""), false);
+  assert.strictEqual(changes, 0);
+  h.handle("page:t", "cog", "");
+  assert.match(h.renderPage("t", { data: DATA }), /data-pop/);
+  h.handle("page:t", "settings-tab", "look");
+  assert.match(h.renderPage("t", { data: DATA }), /data-value="look" aria-selected="true"/);
+  h.handle("page:t", "rows-mode", "all");
+  assert.match(h.renderPage("t", { data: DATA }), /data-value="look" aria-selected="true"/);
+  assert.strictEqual(h.handle("page:t", "settings-close", ""), true);
+  assert.doesNotMatch(h.renderPage("t", { data: DATA }), /data-pop/);
+  h.handle("page:t", "cog", "");
+  assert.match(h.renderPage("t", { data: DATA }), /data-value="cols" aria-selected="true"/);
 });
 
 test("unknown frames, types and actions are ignored, not thrown", () => {

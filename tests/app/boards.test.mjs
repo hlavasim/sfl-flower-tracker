@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { BOARDS_KEY, emptyBoards, parseBoards, pin, unpin, moveItem, resizeItem, updateItemSettings,
+import { BOARDS_KEY, emptyBoards, parseBoards, pin, unpin, moveItemTo, resizeItem, updateItemSettings,
   pageSettings, setPageSettings, pinnedCount, loadBoards, saveBoards } from "../../app/boards.mjs";
 
 // The boards document: what is pinned where, at what size, with which settings; plus the settings
@@ -45,9 +45,11 @@ test("pin copies the settings; unpin, move, resize and settings update address o
   settings.columns.push("mutated");
   assert.deepStrictEqual(d.boards[0].items.map((x) => [x.i, x.type, x.w]), [["w1", "fishing-age-now", 6], ["w2", "leveling-ladder", 12]]);
   assert.deepStrictEqual(d.boards[0].items[0].settings, { columns: ["name"] });
-  d = moveItem(d, "main", "w2", -1);
+  d = moveItemTo(d, "main", "w2", "w1");
   assert.deepStrictEqual(d.boards[0].items.map((x) => x.i), ["w2", "w1"]);
-  d = moveItem(d, "main", "w2", -1);
+  d = moveItemTo(d, "main", "w2", "w2");
+  assert.deepStrictEqual(d.boards[0].items.map((x) => x.i), ["w2", "w1"]);
+  d = moveItemTo(d, "main", "w2", "missing");
   assert.deepStrictEqual(d.boards[0].items.map((x) => x.i), ["w2", "w1"]);
   d = resizeItem(d, "main", "w1", { w: 0, h: 3 });
   assert.deepStrictEqual([d.boards[0].items[1].w, d.boards[0].items[1].h], [1, 3]);
