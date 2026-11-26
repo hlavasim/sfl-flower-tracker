@@ -33,10 +33,13 @@ function ringSvg(p, t = "ok") {
   return `<svg class="gx-ring${tone(t)}" viewBox="0 0 54 54"><circle cx="27" cy="27" r="${r}" class="g-ring-bg"/>` +
     `<circle cx="27" cy="27" r="${r}" class="g-ring-fg" stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${(c * (1 - pct(p) / 100)).toFixed(2)}" transform="rotate(-90 27 27)"/></svg>`;
 }
-function headBlock(h, { ring = true, big = "" } = {}) {
+// The ring sits in the top-right corner of the box the head is in (the card, or its half of a
+// split), never next to the number wherever that ends up; top = the head opens the box, so its text
+// keeps clear of the ring.
+function headBlock(h, { ring = true, big = "", top = false } = {}) {
   if (!h) return "";
-  return `<div class="gx-head${big ? ` gx-head-${big}` : ""}">` +
-    (ring && h.ring != null ? `<div class="gx-corner">${ringSvg(h.ring, h.ringTone || "ok")}</div>` : "") +
+  return (ring && h.ring != null ? `<div class="gx-corner">${ringSvg(h.ring, h.ringTone || "ok")}</div>` : "") +
+    `<div class="gx-head${big ? ` gx-head-${big}` : ""}${top && ring && h.ring != null ? " gx-head-top" : ""}">` +
     `<div class="gx-num${tone(h.tone)}">${esc(h.value)}${h.unit ? `<small>${esc(h.unit)}</small>` : ""}</div>` +
     (h.cap ? `<div class="gx-cap">${esc(h.cap)}</div>` : "") +
     (h.meter != null ? `<div class="gx-meter"><i class="g-${h.meterTone || "accent"}" style="width:${Math.round(pct(h.meter))}%"></i></div>` : "") + `</div>`;
@@ -128,18 +131,18 @@ export const TEMPLATES = [
   T("chart-2", "2x1", "chart", ["head", "series"], null, (m) => `<div class="gx-split gx-split-chart"><div>${headBlock(m.head, { ring: false })}</div>${sparkSvg(m.series)}</div>`, { name: "Chart" }),
   T("bars-2", "2x1", "bars", ["pct"], () => 3, (m, now) => barsBlock(it(m), 3, now), { name: "Bars" }),
   // 1×2 — a column
-  T("number-list-t", "1x2", "number-list", ["head", "items"], () => 5, (m, now) => headBlock(m.head) + rowsBlock(it(m), 5, now, 1, true), { name: "Number + list" }),
+  T("number-list-t", "1x2", "number-list", ["head", "items"], () => 5, (m, now) => headBlock(m.head, { top: true }) + rowsBlock(it(m), 5, now, 1, true), { name: "Number + list" }),
   T("icons-t", "1x2", "icons", ["icons"], () => 8, (m, now) => iconsBlock(iconsOf(m), 8, 2, now), { fill: GRID, name: "Icons" }),
   T("bars-t", "1x2", "bars", ["pct"], () => 6, (m, now) => barsBlock(it(m), 6, now), { name: "Bars" }),
   T("lines-t", "1x2", "lines", ["items"], () => 10, (m, now) => linesBlock(it(m), 10, now), { name: "Lines" }),
   T("tiles-t", "1x2", "tiles", ["tiles"], () => 6, (m) => tilesBlock(tl(m), 6, 2), { fill: GRID, name: "Tiles" }),
   // 2×2 — the overview
-  T("overview-4", "2x2", "overview", ["head", "items", "tiles"], () => 4, (m, now) => headBlock(m.head) + tilesBlock(tl(m), 3, 3) + rowsBlock(it(m), 4, now), { fill: 0.5, name: "Overview" }),
+  T("overview-4", "2x2", "overview", ["head", "items", "tiles"], () => 4, (m, now) => headBlock(m.head, { top: true }) + tilesBlock(tl(m), 3, 3) + rowsBlock(it(m), 4, now), { fill: 0.5, name: "Overview" }),
   T("icons-4", "2x2", "icons", ["icons"], () => 16, (m, now) => iconsBlock(iconsOf(m), 16, iconCols(Math.min(16, iconsOf(m).length), 2, 2), now), { fill: GRID, name: "Icons" }),
   T("chart-4", "2x2", "chart-list", ["head", "series"], () => 3, (m, now) => headBlock(m.head, { ring: false }) + sparkSvg(m.series) + rowsBlock(it(m), 3, now), { fill: 0, name: "Chart + list" }),
   T("list-4", "2x2", "list", ["items"], () => 8, (m, now) => rowsBlock(it(m), 8, now), { name: "List" }),
   T("gauge-list-4", "2x2", "gauge-list", ["ring", "items"], () => 5, (m, now) => `<div class="gx-split gx-split-gauge">${`<div>${gaugeBlock(m.head)}</div>`}${rowsBlock(it(m), 5, now, 1, true)}</div>`, { name: "Gauge + list" }),
-  T("bars-4", "2x2", "number-bars", ["head", "pct"], () => 5, (m, now) => headBlock(m.head) + barsBlock(it(m), 5, now), { name: "Number + bars" }),
+  T("bars-4", "2x2", "number-bars", ["head", "pct"], () => 5, (m, now) => headBlock(m.head, { top: true }) + barsBlock(it(m), 5, now), { name: "Number + bars" }),
   // 4×1 — a wide band (a narrow board shows its twin)
   T("strip-w", "4x1", "strip", ["icons"], () => 8, (m, now) => iconsBlock(iconsOf(m), 8, Math.min(8, iconsOf(m).length), now), { fill: 0.6, narrow: "icons-4", name: "Icon strip" }),
   T("number-list-w", "4x1", "number-list", ["head", "items"], () => 6, (m, now) => `<div class="gx-split gx-split-w">${`<div>${headBlock(m.head)}</div>`}${rowsBlock(it(m), 6, now, 2)}</div>`, { narrow: "number-list-t", name: "Number + list" }),
@@ -150,9 +153,9 @@ export const TEMPLATES = [
   T("list-tall", "1x4", "list", ["items"], () => 12, (m, now) => rowsBlock(it(m), 12, now, 1, true), { narrow: null, name: "List" }),
   T("icons-tall", "1x4", "icons", ["icons"], () => 16, (m, now) => iconsBlock(iconsOf(m), 16, 2, now), { fill: GRID, name: "Icons" }),
   // 4×2 / 2×4 — everything
-  T("dashboard", "4x2", "dashboard", ["head", "items", "tiles"], () => 8, (m, now) => `<div class="gx-dash"><div>${headBlock(m.head)}${tilesBlock(tl(m), 4, 2)}${m.series ? sparkSvg(m.series) : ""}</div>${rowsBlock(it(m), 8, now, 2)}</div>`, { fill: 0.75, narrow: "overview-4", name: "Dashboard" }),
+  T("dashboard", "4x2", "dashboard", ["head", "items", "tiles"], () => 8, (m, now) => `<div class="gx-dash"><div>${headBlock(m.head, { top: true })}${tilesBlock(tl(m), 4, 2)}${m.series ? sparkSvg(m.series) : ""}</div>${rowsBlock(it(m), 8, now, 2)}</div>`, { fill: 0.75, narrow: "overview-4", name: "Dashboard" }),
   T("icons-wall", "4x2", "icons", ["icons"], () => 32, (m, now) => iconsBlock(iconsOf(m), 32, 8, now), { fill: GRID, narrow: "icons-4", name: "Icon wall" }),
-  T("long-list", "2x4", "list", ["items"], () => 18, (m, now) => headBlock(m.head) + rowsBlock(it(m), 16, now) + foot(m), { name: "Long list" }),
+  T("long-list", "2x4", "list", ["items"], () => 18, (m, now) => headBlock(m.head, { top: true }) + rowsBlock(it(m), 16, now) + foot(m), { name: "Long list" }),
 ];
 export const TEMPLATE_IDS = TEMPLATES.map((t) => t.id);
 const byId = new Map(TEMPLATES.map((t) => [t.id, t]));
