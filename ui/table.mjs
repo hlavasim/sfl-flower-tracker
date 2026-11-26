@@ -158,14 +158,67 @@ export function applyTableAction(columns, settings = {}, action, value) {
   }
 }
 
+// A widget's own options: [{ key, label, kind: "number"|"bool"|"select"|"checklist", min?, max?,
+// choices?: [[value, label]] | (opts) → [[value, label]] }], stored in settings.opts. Pure; an
+// unknown key or a value outside the choices leaves the settings as they were.
+const choicesOf = (o, opts) => (typeof o.choices === "function" ? o.choices(opts || {}) : o.choices || []);
+export function applyOption(options = [], settings = {}, key, value) {
+  const o = options.find((x) => x.key === key);
+  if (!o) return settings;
+  const opts = { ...(settings.opts || {}) };
+  const v = String(value ?? "");
+  if (o.kind === "number") {
+    if (v.trim() === "") delete opts[key];
+    else {
+      const n = Math.round(Number(v));
+      if (!Number.isFinite(n)) return settings;
+      opts[key] = Math.min(o.max ?? Infinity, Math.max(o.min ?? -Infinity, n));
+    }
+  } else if (o.kind === "bool") opts[key] = v === "1" || v === "true";
+  else if (o.kind === "select") {
+    if (!choicesOf(o, opts).some(([c]) => String(c) === v)) return settings;
+    opts[key] = v;
+  } else if (o.kind === "checklist") {
+    const cur = Array.isArray(opts[key]) ? opts[key].map(String) : [];
+    if (cur.includes(v)) opts[key] = cur.filter((x) => x !== v);
+    else if (choicesOf(o, opts).some(([c]) => String(c) === v)) opts[key] = [...cur, v];
+    else return settings;
+  } else return settings;
+  return { ...settings, opts };
+}
+
+function optionsHtml(options, opts) {
+  return options.map((o) => {
+    const a = `data-action="opt:${esc(o.key)}"`, cur = opts[o.key];
+    if (o.kind === "number") {
+      const lim = (o.min != null ? ` min="${o.min}"` : "") + (o.max != null ? ` max="${o.max}"` : "");
+      return `<label class="w-line">${esc(o.label)} <input type="number"${lim} value="${cur == null ? "" : esc(cur)}" ${a}></label>`;
+    }
+    if (o.kind === "bool") return `<label class="w-line"><input type="checkbox" ${a} data-value="${cur ? "0" : "1"}"${cur ? " checked" : ""}> ${esc(o.label)}</label>`;
+    if (o.kind === "select") {
+      return `<label class="w-line">${esc(o.label)} <select ${a}>` + choicesOf(o, opts).map(([v, t]) =>
+        `<option value="${esc(v)}"${String(v) === String(cur) ? " selected" : ""}>${esc(t)}</option>`).join("") + `</select></label>`;
+    }
+    if (o.kind === "checklist") {
+      const list = choicesOf(o, opts);
+      if (!list.length) return "";
+      const on = new Set((Array.isArray(cur) ? cur : []).map(String));
+      return `<div class="w-filter"><div class="w-filter-h">${esc(o.label)} (${on.size})</div><div class="w-picks">` + list.map(([v, t]) =>
+        `<label class="w-pick"><input type="checkbox" ${a} data-value="${esc(v)}"${on.has(String(v)) ? " checked" : ""}> ${esc(t)}</label>`).join("") + `</div></div>`;
+    }
+    return "";
+  }).join("");
+}
+
 // The cog panel's HTML: three tabs (Sloupce / Řádky / Vzhled), the inactive ones hidden. Every
 // control carries data-action / data-value; the frame delegates the events (and the drag of a
 // column's grip, which reports col-move) and feeds them to applyTableAction.
 const TABS = [["cols", "Sloupce"], ["rows", "Řádky"], ["filter", "Filtr"], ["look", "Vzhled"]];
-export function tableSettingsPanel(columns, settings = {}, { rows = [], rowKey = (r) => r.key, rowLabel, tab = "cols" } = {}) {
+export function tableSettingsPanel(columns, settings = {}, { rows = [], rowKey = (r) => r.key, rowLabel, tab, options = [], optionsLabel = "Volby" } = {}) {
   const filterCols = columns.filter((c) => c.filter);
-  const tabsHere = TABS.filter(([t]) => t !== "filter" || filterCols.length);
-  const active = tabsHere.some(([t]) => t === tab) ? tab : "cols";
+  // the widget's own options, when it has any, come first and open by default
+  const tabsHere = [...(options.length ? [["opts", optionsLabel]] : []), ...TABS.filter(([t]) => t !== "filter" || filterCols.length)];
+  const active = tabsHere.some(([t]) => t === tab) ? tab : tabsHere[0][0];
   const shown = visibleColumns(columns, settings).map((c) => c.key);
   const order = [...shown, ...columns.map((c) => c.key).filter((k) => !shown.includes(k))];
   const byKey = new Map(columns.map((c) => [c.key, c]));
@@ -199,6 +252,7 @@ export function tableSettingsPanel(columns, settings = {}, { rows = [], rowKey =
     `<button type="button" class="w-tab" data-action="settings-tab" data-value="${t}" aria-selected="${t === active}">${label}</button>`).join("");
   const section = (t, html) => `<div class="w-sec" data-tab="${t}"${t === active ? "" : " hidden"}>${html}</div>`;
   return `<div class="w-settings"><div class="w-tabs">${tabs}</div>` +
+    (options.length ? section("opts", optionsHtml(options, settings.opts || {})) : "") +
     section("cols", `<div class="w-cols">${colRows}</div><div class="w-hint">Zaškrtni, co zobrazit; ⠿ táhni pro pořadí. Řadí se klikem na hlavičku tabulky.</div>`) +
     section("rows", `<div class="w-segs">${mode("all", "Všechny")}${mode("top", "Prvních N")}${mode("picked", "Jen vybrané")}</div>` +
       (sel.mode === "top" ? `<label class="w-line">Počet <input type="number" min="1" value="${sel.top}" data-action="rows-top"></label>` : "") +

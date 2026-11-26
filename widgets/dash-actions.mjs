@@ -13,6 +13,12 @@ export const dashActions = {
   needs: (farmId) => ({ farm: { res: "farm", farm: farmId } }),
   // deliveries alone can be 50+ rows: the first 20 by default, the rest via the cog (top N / Filtr)
   defaults: { sort: { key: "when", dir: "asc" }, rows: { mode: "top", top: 20, picked: [] } },
+  // the "➡ Craft / ➡ Catch" suggestions stop at these limits; blank = the page's LIMIT
+  optionsLabel: "Limity",
+  options: [
+    { key: "dollLimit", label: "Panenky do (prázdné = LIMIT stránky)", kind: "number", min: 1, max: 9999 },
+    { key: "crabLimit", label: "Korýši do (prázdné = LIMIT stránky)", kind: "number", min: 1, max: 9999 },
+  ],
   rowKey: (r) => `${r.category}|${r.label}`,
   rowLabel: (r) => `${r.category}: ${r.label}`,
   rowClass: (r) => `w-st-${r.status}`,
@@ -29,12 +35,13 @@ export const dashActions = {
   ],
 
   // data: { farm: <game farm> }
-  // ctx:  { dashActions(farm) → actions (the page's parser), countdown(ms) → text, now? }
-  build({ farm }, ctx = {}) {
+  // ctx:  { dashActions(farm, {dolls, crabs}) → actions (the page's parser), countdown(ms) → text, now? }
+  build({ farm }, ctx = {}, opts = {}) {
     if (!farm) return { rows: [], footer: "", empty: "Chybí data farmy." };
     if (typeof ctx.dashActions !== "function") return { rows: [], footer: "", empty: "Seznam akcí z DASH se nenačetl." };
     const now = ctx.now || Date.now();
-    const rows = ctx.dashActions(farm).map((a) => ({
+    const limits = { dolls: opts.dollLimit ?? null, crabs: opts.crabLimit ?? null };
+    const rows = ctx.dashActions(farm, limits).map((a) => ({
       ...a,
       countdown: a.status === "upcoming" && ctx.countdown ? ctx.countdown(a.readyAt - now) : "",
     }));

@@ -4,7 +4,7 @@
 // Frame ids: "page:<type>" on the widget's page, "b:<boardId>:<itemId>" on a board.
 // handle(frameId, action, value) applies one frame/table action, saves the document when it
 // changed, calls onChange(frameId) and returns whether it was handled.
-import { renderTable, tableSettingsPanel, applyTableAction } from "../ui/table.mjs";
+import { renderTable, tableSettingsPanel, applyTableAction, applyOption } from "../ui/table.mjs";
 import { renderFrame, freshness } from "../ui/frame.mjs";
 import { loadBoards, saveBoards, pin, unpin, moveItemTo, resizeItem, updateItemSettings,
   pageSettings, setPageSettings, pinnedCount } from "./boards.mjs";
@@ -17,7 +17,14 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
   const open = new Map();   // frame id → the popover's active tab
 
   const save = (next, frameId) => { doc = next; saveBoards(storage, doc); onChange(frameId); return true; };
-  const effective = (widget, saved) => ({ ...(widget.defaults || {}), ...(saved || {}) });
+  // A widget's own options merge key by key, so an option added later still gets its default.
+  const effective = (widget, saved) => {
+    const d = widget.defaults || {}, s = saved || {};
+    const out = { ...d, ...s };
+    if (d.opts || s.opts) out.opts = { ...(d.opts || {}), ...(s.opts || {}) };
+    return out;
+  };
+  const titleOf = (widget, settings) => (typeof widget.titleFor === "function" ? widget.titleFor(settings.opts || {}) : widget.title);
 
   function parse(frameId) {
     const s = String(frameId);
@@ -40,12 +47,13 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
         const out = widget.view(data || {}, ctx || {}) || {};
         return { html: out.html || `<div class="w-empty-msg">${esc(out.empty || "Nic k zobrazení.")}</div>`, settingsHtml: "" };
       }
-      const out = widget.build(data || {}, ctx || {});
+      const out = widget.build(data || {}, ctx || {}, settings.opts || {});
       const opts = { rowKey: widget.rowKey, rowLabel: widget.rowLabel, rowClass: widget.rowClass, keepRow: widget.keepRow };
       return {
         html: out.rows.length ? renderTable(widget.columns, out.rows, settings, opts) + (out.footer || "")
           : `<div class="w-empty-msg">${esc(out.empty || "Nic k zobrazení.")}</div>`,
-        settingsHtml: tableSettingsPanel(widget.columns, settings, { rows: out.rows, ...opts, tab }),
+        settingsHtml: tableSettingsPanel(widget.columns, settings, { rows: out.rows, ...opts, tab,
+          options: widget.options || [], optionsLabel: widget.optionsLabel }),
       };
     } catch (e) {
       // The cog still offers a reset, so a bad saved setting is never a dead end.
@@ -59,7 +67,7 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     const id = `page:${type}`;
     const settings = effective(widget, pageSettings(doc, type));
     const b = body(widget, settings, data, ctx, open.get(id));
-    return renderFrame({ id, title: widget.title, place: "page", body: b.html, fresh, pinned: pinnedCount(doc, type), cog: !widget.view,
+    return renderFrame({ id, title: titleOf(widget, settings), place: "page", body: b.html, fresh, pinned: pinnedCount(doc, type), cog: !widget.view,
       settingsHtml: b.settingsHtml, settingsOpen: open.has(id) });
   }
 
@@ -71,7 +79,7 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     }
     const settings = effective(widget, item.settings);
     const b = pending ? { html: `<div class="w-fresh">Načítám…</div>`, settingsHtml: "" } : body(widget, settings, data, ctx, open.get(id));
-    return renderFrame({ id, title: widget.title, place: "board", w: item.w, h: item.h, body: b.html, fresh, cog: !widget.view,
+    return renderFrame({ id, title: titleOf(widget, settings), place: "board", w: item.w, h: item.h, body: b.html, fresh, cog: !widget.view,
       settingsHtml: b.settingsHtml, settingsOpen: open.has(id) });
   }
 
@@ -80,7 +88,7 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     if (!f || !f.widget && action !== "remove") return false;
     if (action === "refresh") { onRefresh(frameId, f.type); return true; }
     if (action === "cog") {
-      open.has(frameId) ? open.delete(frameId) : open.set(frameId, "cols");
+      open.has(frameId) ? open.delete(frameId) : open.set(frameId, "");   // "" = the panel's first tab
       onChange(frameId);
       return true;
     }
@@ -99,8 +107,18 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
       const next = applyTableAction(f.widget.columns, current, action, value);
       return save(f.place === "page" ? setPageSettings(doc, f.type, next) : updateItemSettings(doc, f.boardId, f.item.i, next), frameId);
     }
+    if (String(action).startsWith("opt:")) {
+      const current = effective(f.widget, f.place === "page" ? pageSettings(doc, f.type) : f.item.settings);
+      const next = applyOption(f.widget.options || [], current, String(action).slice(4), value);
+      if (next === current) return true;
+      return save(f.place === "page" ? setPageSettings(doc, f.type, next) : updateItemSettings(doc, f.boardId, f.item.i, next), frameId);
+    }
     if (f.place === "page" && action === "pin") {
       const settings = effective(f.widget, pageSettings(doc, f.type));
+      // value: optional JSON of options to preset on the pinned copy (📌 "Panenky do limitu" → {cat: "dolls"})
+      let preset = null;
+      try { preset = value ? JSON.parse(value) : null; } catch { preset = null; }
+      if (preset && typeof preset === "object" && !Array.isArray(preset)) settings.opts = { ...(settings.opts || {}), ...preset };
       // the first board: a synced document from another device may have no "main"
       return save(pin(doc, { type: f.type, settings }, doc.boards[0].id), frameId);
     }

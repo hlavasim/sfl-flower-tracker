@@ -55,3 +55,13 @@ test("no farm, or no parser yet: an explanation, not a throw", () => {
   assert.match(W.build({ farm: null }, CTX).empty, /Chybí data farmy/);
   assert.match(W.build({ farm: {} }, {}).empty, /DASH/);
 });
+
+test("the Craft / Catch suggestions follow this widget's own limits (blank = the page's LIMIT)", () => {
+  assert.deepStrictEqual(W.options.map((o) => [o.key, o.kind]), [["dollLimit", "number"], ["crabLimit", "number"]]);
+  let seen = null;
+  const ctx = { ...CTX, dashActions: (farm, limits) => { seen = limits; return []; } };
+  W.build({ farm: {} }, ctx, { dollLimit: 10, crabLimit: 3 });
+  assert.deepStrictEqual(seen, { dolls: 10, crabs: 3 });
+  W.build({ farm: {} }, ctx, {});
+  assert.deepStrictEqual(seen, { dolls: null, crabs: null });
+});

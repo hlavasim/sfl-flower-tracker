@@ -8661,7 +8661,7 @@
       return actions;
     }
 
-    function dashParseCraftingBox(farm, inventory, inProgress) {
+    function dashParseCraftingBox(farm, inventory, inProgress, limit = LIMIT) {
       const actions = [];
       const now = Date.now();
       const cb = farm.craftingBox;
@@ -8682,17 +8682,17 @@
         for (const [name, on] of Object.entries(tracked)) {
           if (!on) continue;
           const have = getCount(inventory, name) + (inProgress[name] || 0);
-          if (have >= LIMIT) continue;
+          if (have >= limit) continue;
           const recipe = DOLL_RECIPES[name];
           if (!recipe || recipe.length === 0) continue;
           const ingredients = recipe.map(r => r.qty + "x " + r.item).join(", ");
-          actions.push({ category:"Crafting Box", icon:"🔨", label:"➡ Craft: " + name + " (" + have + "/" + LIMIT + ")", detail:ingredients, status:"empty", readyAt:0, priority:86 });
+          actions.push({ category:"Crafting Box", icon:"🔨", label:"➡ Craft: " + name + " (" + have + "/" + limit + ")", detail:ingredients, status:"empty", readyAt:0, priority:86 });
         }
       }
       return actions;
     }
 
-    function dashParseCrabTraps(farm, inventory, inProgress) {
+    function dashParseCrabTraps(farm, inventory, inProgress, limit = LIMIT) {
       const actions = [];
       const now = Date.now();
       const spots = farm.crabTraps?.trapSpots || {};
@@ -8717,10 +8717,10 @@
       if (freeTraps > 0) {
         for (const [name, recipe] of Object.entries(CRUSTACEAN_RECIPES)) {
           const have = getCount(inventory, name) + (inProgress[name] || 0);
-          if (have >= LIMIT) continue;
+          if (have >= limit) continue;
           const chum = recipe.chum ? recipe.qty + "x " + recipe.chum : "No chum";
           const pot = recipe.pot;
-          actions.push({ category:"Crab Traps", icon:"🦀", label:"➡ Catch: " + name + " (" + have + "/" + LIMIT + ")", detail:pot + " • " + chum, status:"empty", readyAt:0, priority:89 });
+          actions.push({ category:"Crab Traps", icon:"🦀", label:"➡ Catch: " + name + " (" + have + "/" + limit + ")", detail:pot + " • " + chum, status:"empty", readyAt:0, priority:89 });
         }
       }
 
@@ -9649,9 +9649,12 @@
     //  DASHBOARD — Main Render
     // ═══════════════════════════════════════
 
-    function parseDashboardActions(farm) {
+    // limits: { dolls, crabs } from a pinned "Co je hotové" widget's settings; blank = LIMIT
+    function parseDashboardActions(farm, limits = {}) {
       const inventory = farm.inventory || {};
       const inProgress = extractInProgress(farm);
+      const dollLimit = limits.dolls ?? LIMIT;
+      const crabLimit = limits.crabs ?? LIMIT;
       const actions = [];
 
       actions.push(...dashParseCrops(farm));
@@ -9663,8 +9666,8 @@
       actions.push(...dashParseComposters(farm));
       actions.push(...dashParseGreenhouse(farm));
       actions.push(...dashParseBeehives(farm));
-      actions.push(...dashParseCraftingBox(farm, inventory, inProgress));
-      actions.push(...dashParseCrabTraps(farm, inventory, inProgress));
+      actions.push(...dashParseCraftingBox(farm, inventory, inProgress, dollLimit));
+      actions.push(...dashParseCrabTraps(farm, inventory, inProgress, crabLimit));
       actions.push(...dashParsePets(farm));
       actions.push(...dashParseFaction(farm));
       actions.push(...dashParsePowers(farm));
@@ -10554,6 +10557,7 @@
       html += `<div class="header pixel-panel pixel-font">
         <h1>FLOWER TRACKER</h1>
         <div class="farm-id">Farm #${escHTML(FARM_ID)} | ${targetText}${season ? ` | Season: ${escHTML(season)}` : ""}</div>
+        <div>${_wPinBtn("target-list", "Květiny do limitu", { cat: "flowers" })}</div>
       </div>`;
 
       // Mode toggle + N slider
@@ -10810,6 +10814,7 @@
       let html = `<div class="header pixel-panel pixel-font">
         <h1>DOLL TRACKER</h1>
         <div class="farm-id">Farm #${escHTML(FARM_ID)} | Target: ${LIMIT} of each</div>
+        <div>${_wPinBtn("target-list", "Panenky do limitu", { cat: "dolls" })}</div>
       </div>`;
 
       // Tracked dolls toggle
@@ -10937,6 +10942,7 @@
       let html = `<div class="header pixel-panel pixel-font">
         <h1>CRUSTACEAN TRACKER</h1>
         <div class="farm-id">Farm #${escHTML(FARM_ID)} | Target: ${LIMIT} of each</div>
+        <div>${_wPinBtn("target-list", "Korýši do limitu", { cat: "crabs" })}</div>
       </div>`;
 
       html += `<div class="summary-bar pixel-panel pixel-font">
@@ -19273,6 +19279,8 @@
         try { return { savedLeveling: JSON.parse(localStorage.getItem("sfl_leveling") || "null") }; } catch (e) { return {}; }
       }
       if (type === "dash-actions") return { dashActions: parseDashboardActions, countdown: dashFormatCountdown };
+      if (type === "target-list") return { inProgress: extractInProgress,
+        icon: (n) => `<img src="${getItemIcon(n)}" onerror="this.style.display='none'" alt="" style="height:1.3em;vertical-align:-0.25em;margin-right:3px">` };
       if (type === "weather-protection") return { weatherRows: (farm) => DASH_WEATHER_ITEMS.map((n) =>
         ({ name: n, state: dashWeatherState(farm, n), prevents: DASH_WEATHER_PREVENTS[n], iconHtml: _dashIcon(n) })) };
       if (type === "treasury-value") return { catColors: TREASURY_CAT_COLORS };
@@ -19286,13 +19294,16 @@
     function _wPinText(label, n) { return `📌 ${escHTML(label)}${n ? ` (připnuto ${n}×)` : ""}`; }
     window._wPin = (type, btn) => {
       if (typeof __widgets === "undefined") return;
-      __widgets.handle("page:" + type, "pin", "");
+      // data-preset: the pinned copy's options (📌 Panenky do limitu → {"cat":"dolls"})
+      __widgets.handle("page:" + type, "pin", (btn && btn.dataset.preset) || "");
       if (btn) { btn.classList.add("on"); btn.innerHTML = _wPinText(btn.dataset.label, _wPinned(type)); }
+      if (getPage() === "board") renderBoard();
     };
-    function _wPinBtn(type, label) {
+    function _wPinBtn(type, label, preset) {
       if (typeof __widgets === "undefined") return "";
       const n = _wPinned(type);
-      return `<button class="dash-toggle-btn w-pin-btn${n ? " on" : ""}" data-label="${escHTML(label)}" onclick="_wPin('${type}', this)" title="připnout na 📌 MŮJ DASHBOARD">${_wPinText(label, n)}</button>`;
+      const pre = preset ? ` data-preset="${escHTML(JSON.stringify(preset))}"` : "";
+      return `<button class="dash-toggle-btn w-pin-btn${n ? " on" : ""}" data-label="${escHTML(label)}"${pre} onclick="_wPin('${type}', this)" title="připnout na 📌 MŮJ DASHBOARD">${_wPinText(label, n)}</button>`;
     }
     // Shown in place of a widget panel when the widget modules did not load.
     function _wMissing(title) {
@@ -19307,7 +19318,8 @@
       const mine = ++_boardSeq;
       let board = __widgets.doc().boards[0];
       const head = '<div class="header pixel-panel pixel-font"><h1>📌 ' + escHTML(board.name) + '</h1><div class="farm-id">Farm #' + escHTML(FARM_ID) +
-        ' · připnuté panely, každý se svým nastavením</div></div>';
+        ' · připnuté panely, každý se svým nastavením</div>' +
+        '<div>' + _wPinBtn("target-list", "🎯 přidat „Do limitu“ (kategorie a limit v ⚙)", { cat: "foods" }) + '</div></div>';
       if (!FARM_ID) { app.innerHTML = head + '<div class="pixel-panel" style="padding:12px;font-size:0.55rem">Zadej Farm ID nahoře.</div>'; return; }
       if (!board.items.length) {
         app.innerHTML = head + '<div class="pixel-panel" style="padding:12px;font-size:0.55rem;line-height:1.7">Zatím tu nic není. ' +

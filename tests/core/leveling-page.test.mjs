@@ -62,3 +62,13 @@ test("the ladder is the pinnable leveling-ladder widget; a row click still sets 
   assert.match(SRC, /_lvlTarget\(Number\(tr\.dataset\.row\.slice\(1\)\)\)/);
   assert.match(SRC, /if \(type === "leveling-ladder"\)/);
 });
+
+test("DASH suggestions take per-widget limits; the target widget gets the page's in-progress counts and icons", () => {
+  assert.match(SRC, /function parseDashboardActions\(farm, limits = \{\}\)/);
+  assert.match(SRC, /const dollLimit = limits\.dolls \?\? LIMIT;/);
+  assert.match(SRC, /const crabLimit = limits\.crabs \?\? LIMIT;/);
+  assert.match(SRC, /if \(type === "target-list"\) return \{ inProgress: extractInProgress,/);
+  assert.match(SRC, /_wPinBtn\("target-list", "Panenky do limitu", \{ cat: "dolls" \}\)/);
+  assert.match(SRC, /_wPinBtn\("target-list", "Korýši do limitu", \{ cat: "crabs" \}\)/);
+  assert.match(SRC, /_wPinBtn\("target-list", "Květiny do limitu", \{ cat: "flowers" \}\)/);
+});

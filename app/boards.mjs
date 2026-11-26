@@ -22,7 +22,13 @@ const ROW_MODES = ["all", "top", "picked"];
 export function cleanSettings(raw) {
   if (!isObj(raw)) return {};
   const s = { ...raw };
-  delete s.columns; delete s.sort; delete s.rows; delete s.density; delete s.textSize; delete s.filters;
+  delete s.columns; delete s.sort; delete s.rows; delete s.density; delete s.textSize; delete s.filters; delete s.opts;
+  // a widget's own options: plain values and lists of strings only
+  if (isObj(raw.opts)) {
+    const plain = (v) => v === null || ["string", "number", "boolean"].includes(typeof v);
+    s.opts = Object.fromEntries(Object.entries(raw.opts).flatMap(([k, v]) =>
+      plain(v) ? [[k, v]] : Array.isArray(v) ? [[k, v.filter((x) => typeof x === "string" || typeof x === "number").map(String)]] : []));
+  }
   if (isObj(raw.filters)) {
     s.filters = Object.fromEntries(Object.entries(raw.filters).filter(([k, v]) => k && Array.isArray(v))
       .map(([k, v]) => [k, v.filter((x) => typeof x === "string" || typeof x === "number").map(String)]));

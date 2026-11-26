@@ -14,6 +14,7 @@ import { treasuryValue } from "./treasury-value.mjs";
 import { ticketChecklist } from "./ticket-checklist.mjs";
 import { flipTable } from "./flip-table.mjs";
 import { worldIslands, worldSkillPoints } from "./world-dist.mjs";
+import { targetList } from "./target-list.mjs";
 
 export const WIDGETS = {
   [fishingAgeNow.type]: fishingAgeNow,
@@ -27,4 +28,5 @@ export const WIDGETS = {
   [flipTable.type]: flipTable,
   [worldIslands.type]: worldIslands,
   [worldSkillPoints.type]: worldSkillPoints,
+  [targetList.type]: targetList,
 };
