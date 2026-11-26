@@ -38,8 +38,8 @@ export const flowersNeeds = {
   columns: [
     // icon, name, and under it the seed (its colour), what it grows from and which flowers use it
     { key: "name", label: "flower", fmt: (v, r) => `<div class="v-name">${r.iconHtml || ""}<div><b>${esc(v)}</b><small>` +
-      `<span class="v-dot" style="background:${esc(r.seedColor)}"></span>${esc(r.seedLabel)} · from ${esc(r.input)}` +
-      `${r.usedIn.length ? ` · used in ${esc(r.usedIn.map((u) => `${u.name} ×${u.need}`).join(", "))}` : ""}</small></div></div>` },
+      `<span class="v-dot" style="background:${esc(r.seedColor)}"></span>${esc(r.seedLabel)} · from ${r.inputIcon}${esc(r.input)}` +
+      `${r.usedIn.length ? ` · used in ${r.usedIn.map((u) => `${u.icon}${esc(u.name)} ×${esc(u.need)}`).join(", ")}` : ""}</small></div></div>` },
     { key: "progress", label: "progress", get: (r) => (r.need ? ((r.have + r.pend) / r.need) * 100 : 100), fmt: (v) => bar(v) },
     { key: "have", label: "have / target", align: "right", title: "have + growing / own target + what the flowers grown from it use up",
       fmt: (v, r) => `<span class="v-count">${esc(v)}${r.pend ? `<em>+${esc(r.pend)}</em>` : ""} / ${esc(r.need)}</span>` },
@@ -57,7 +57,8 @@ export const flowersNeeds = {
     if (!farm) return { rows: [], footer: "", empty: "No farm data." };
     const { rows: all, summary: s } = planOf(farm, ctx, opts);
     const rows = (opts.hideDone ? all.filter((r) => !r.done) : all)
-      .map((r) => ({ ...r, timeText: hrs(ctx, r.hoursLeft), iconHtml: icon(ctx, r.name) }));
+      .map((r) => ({ ...r, timeText: hrs(ctx, r.hoursLeft), iconHtml: icon(ctx, r.name), inputIcon: icon(ctx, r.input),
+        usedIn: r.usedIn.map((u) => ({ ...u, icon: icon(ctx, u.name) })) }));
     const pct = s.total ? (s.complete / s.total) * 100 : 100;
     const boost = s.boosts.length ? ` · boosts ${s.multiplier <= 1 ? "−" : "+"}${Math.round(Math.abs(1 - s.multiplier) * 100)} %` : "";
     const summary = kpis([{ v: `${s.complete} / ${s.total}`, l: "at target" }, { v: s.remaining, l: "grows left" },

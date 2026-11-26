@@ -45,8 +45,8 @@ test("needs: hide what is done; filter by seed; the recipe and what uses it show
   assert.deepStrictEqual(out.rows.map((r) => r.name).sort(), ["Yellow Cosmos", "Yellow Pansy"]);
   const html = renderTable(flowersNeeds.columns, out.rows, flowersNeeds.defaults, { rowKey: flowersNeeds.rowKey });
   // the name cell: icon, name, seed dot, where it comes from and what uses it; a progress bar per row
-  assert.match(html, /<b>Yellow Pansy<\/b><small><span class="v-dot" style="background:#FFD700"><\/span>Sunpetal · from Sunflower/);
-  assert.match(html, /used in Yellow Cosmos ×2/);
+  assert.match(html, /<b>Yellow Pansy<\/b><small><span class="v-dot" style="background:#FFD700"><\/span>Sunpetal · from <i>Sunflower<\/i>Sunflower/);
+  assert.match(html, /used in <i>Yellow Cosmos<\/i>Yellow Cosmos ×2/);
   assert.match(html, /class="v-bar"><i class="v-bad" style="width:0%">/);
   assert.match(html, /class="v-miss">−3</);
   const panel = tableSettingsPanel(flowersNeeds.columns, flowersNeeds.defaults, { rows: out.rows, rowKey: flowersNeeds.rowKey, tab: "filter" });
@@ -79,4 +79,12 @@ test("the real farm renders both", () => {
   const farm = JSON.parse(readFileSync(new URL("../fixtures/farm-155498.json", import.meta.url))).farm;
   assert.ok(flowersNeeds.build({ farm }, CTX, {}).rows.length > 0);
   assert.ok(Array.isArray(flowerBeds.build({ farm }, CTX, {}).rows));
+});
+
+test("needs: what a flower grows from and the flowers that use it carry their icons", () => {
+  const inventory = { ...all(2), "Yellow Pansy": "0" };
+  const out = flowersNeeds.build({ farm: { inventory } }, CTX, {});
+  const html = renderTable(flowersNeeds.columns, out.rows.filter((r) => r.name === "Yellow Pansy"), flowersNeeds.defaults, { rowKey: flowersNeeds.rowKey });
+  assert.match(html, /from <i>Sunflower<\/i>Sunflower/);
+  assert.match(html, /used in <i>Yellow Cosmos<\/i>Yellow Cosmos ×/);
 });

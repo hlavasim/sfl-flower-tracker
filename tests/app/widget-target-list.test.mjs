@@ -17,8 +17,8 @@ const all = (names, n) => Object.fromEntries(names.map((k) => [k, String(n)]));
 test("registered; needs only the farm; options: category, limit, hide done, dishes", () => {
   assert.strictEqual(WIDGETS["target-list"], W);
   assert.deepStrictEqual(W.needs(7), { farm: { res: "farm", farm: 7 } });
-  assert.deepStrictEqual(W.options.map((o) => o.key), ["cat", "limit", "hideDone", "foods"]);
-  assert.deepStrictEqual(W.defaults.opts, { cat: "dolls", limit: 5, hideDone: true, foods: [] });
+  assert.deepStrictEqual(W.options.map((o) => o.key), ["cat", "limit", "hideDone", "lists", "foods"]);
+  assert.deepStrictEqual(W.defaults.opts, { cat: "dolls", limit: 5, hideDone: true, lists: [], foods: [] });
 });
 
 test("dolls to the limit: have + in progress vs the limit; done rows hidden by default", () => {
@@ -64,7 +64,7 @@ test("flowers: a flower that other flowers are grown from also needs what they s
 test("food: only the picked dishes; nothing picked → a hint; recipe and kitchen shown", () => {
   const none = W.build({ farm: { inventory: {} } }, {}, opts({ cat: "foods", foods: [] }));
   assert.strictEqual(none.rows.length, 0);
-  assert.match(none.empty, /Pick dishes/);
+  assert.match(none.empty, /Pick lists or dishes/);
   const r = W.build({ farm: { inventory: { "Pumpkin Soup": "4" } } }, {}, opts({ cat: "foods", limit: 5, foods: ["Pumpkin Soup", "Nope"] })).rows;
   assert.deepStrictEqual(r.map((x) => [x.name, x.missing]), [["Pumpkin Soup", 1]]);
   assert.match(r[0].recipe, /🔥 Fire Pit · 10× Pumpkin/);
@@ -99,4 +99,27 @@ test("each row has its progress bar; the count shows have + running / target", (
   const html = renderTable(W.columns, rows.filter((r) => r.name === "Doll"), W.defaults, { rowKey: W.rowKey });
   assert.match(html, /class="v-bar"><i class="v-bad" style="width:40%">/);
   assert.match(html, />3<em>\+1<\/em> \/ 10</);
+});
+
+test("dishes: whole lists instead of single dishes — every food a pet can request, by difficulty (the game's pool)", () => {
+  const lists = W.options.find((o) => o.key === "lists");
+  assert.deepStrictEqual(lists.choices({ cat: "foods" }).map(([v]) => v), ["pets-easy", "pets-medium", "pets-hard"]);
+  assert.deepStrictEqual(lists.choices({ cat: "dolls" }), []);
+  const easy = W.build({ farm: { inventory: {} } }, {}, opts({ cat: "foods", limit: 2, hideDone: false, lists: ["pets-easy"] })).rows;
+  assert.strictEqual(easy.length, 14);
+  assert.ok(easy.some((r) => r.name === "Mashed Potato") && easy.some((r) => r.name === "Purple Smoothie"));
+  // lists and single picks together, each dish once
+  const both = W.build({ farm: { inventory: {} } }, {}, opts({ cat: "foods", limit: 2, hideDone: false, lists: ["pets-easy", "pets-medium", "pets-hard"], foods: ["Popcorn", "Pumpkin Soup", "Pizza Margherita", "Chowder"] })).rows;
+  assert.strictEqual(both.length, 64 + 1, "64 pet foods + Chowder");
+  assert.match(W.titleFor(opts({ cat: "foods", limit: 3, lists: ["pets-hard"] })), /Dishes to 3/);
+});
+
+test("every item in a recipe has its icon: dolls, crustaceans, dishes, flowers", () => {
+  const ctx = { icon: (n) => `<i>${n}</i>` };
+  const row = (cat, name, o = {}) => W.build({ farm: { inventory: {} } }, ctx, opts({ cat, limit: 2, hideDone: false, ...o })).rows.find((r) => r.name === name);
+  const html = (r) => renderTable(W.columns, [r], W.defaults, { rowKey: W.rowKey });
+  assert.match(html(row("dolls", "Doll")), /4× <i>Leather<\/i>Leather, 5× <i>Wool<\/i>Wool/);
+  assert.match(html(row("crabs", "Blue Crab")), /<i>Crab Pot<\/i>Crab Pot · 3× <i>Heart Leaf<\/i>Heart Leaf/);
+  assert.match(html(row("foods", "Pumpkin Soup", { foods: ["Pumpkin Soup"] })), /Fire Pit · 10× <i>Pumpkin<\/i>Pumpkin/);
+  assert.match(html(row("flowers", "Yellow Pansy")), /<i>Sunpetal Seed<\/i>Sunpetal Seed \+ <i>Sunflower<\/i>Sunflower/);
 });

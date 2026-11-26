@@ -5,6 +5,14 @@ import { FLOWER_RECIPES, DOLL_RECIPES } from "../core/data/recipes.mjs";
 import { CRUSTACEAN_RECIPES } from "../core/data/crafting.mjs";
 import { COOKING_RECIPES_DATA, COOKING_INGREDIENTS, COOKING_BUILDING_EMOJI } from "../core/data/cooking.mjs";
 import { bar, kpis, bigBar } from "../ui/viz.mjs";
+import { PET_REQUEST_FOODS } from "../core/engine/pet-requests.mjs";
+
+// Whole lists of dishes the game keeps asking for (the user picks the list, not each dish).
+const LISTS = {
+  "pets-easy": ["🐾 Pet requests · easy", PET_REQUEST_FOODS.easy],
+  "pets-medium": ["🐾 Pet requests · medium", PET_REQUEST_FOODS.medium],
+  "pets-hard": ["🐾 Pet requests · hard", PET_REQUEST_FOODS.hard],
+};
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const count = (inv, name) => { const v = parseFloat(inv[name]); return Number.isFinite(v) ? Math.floor(v) : 0; };
@@ -32,17 +40,20 @@ function flowerNeeds(limit, have) {
   return need;
 }
 
-function recipeOf(cat, name) {
-  if (cat === "dolls") return (DOLL_RECIPES[name] || []).map((x) => `${x.qty}× ${x.item}`).join(", ");
+// The recipe, as text (ic = () => "") or as HTML with every item's icon (ic = ctx.icon).
+function recipeOf(cat, name, ic = () => "") {
+  const it = (n) => `${ic(n)}${ic === NO_ICON ? n : esc(n)}`;
+  if (cat === "dolls") return (DOLL_RECIPES[name] || []).map((x) => `${x.qty}× ${it(x.item)}`).join(", ");
   if (cat === "crabs") {
     const r = CRUSTACEAN_RECIPES[name];
-    return `${r.pot} · ${r.chum ? `${r.qty}× ${r.chum}` : "no bait"}${r.alt ? ` (or ${r.alt})` : ""}`;
+    return `${it(r.pot)} · ${r.chum ? `${r.qty}× ${it(r.chum)}` : "no bait"}${r.alt ? ` (or ${ic === NO_ICON ? r.alt : esc(r.alt)})` : ""}`;
   }
-  if (cat === "flowers") { const r = FLOWER_RECIPES[name]; return `${r.seed} + ${r.input}`; }
+  if (cat === "flowers") { const r = FLOWER_RECIPES[name]; return `${it(r.seed)} + ${it(r.input)}`; }
   const b = (COOKING_RECIPES_DATA[name] || {}).building || "";
-  const ing = Object.entries(COOKING_INGREDIENTS[name] || {}).map(([k, q]) => `${q}× ${k}`).join(", ");
-  return `${COOKING_BUILDING_EMOJI[b] || ""} ${b} · ${ing}`.trim();
+  const ing = Object.entries(COOKING_INGREDIENTS[name] || {}).map(([k, q]) => `${q}× ${it(k)}`).join(", ");
+  return `${COOKING_BUILDING_EMOJI[b] || ""} ${ic === NO_ICON ? b : esc(b)} · ${ing}`.trim();
 }
+const NO_ICON = () => "";
 
 export const targetList = {
   type: "target-list",
@@ -55,16 +66,18 @@ export const targetList = {
     { key: "cat", label: "Category", kind: "select", choices: CATS },
     { key: "limit", label: "Limit (of each item)", kind: "number", min: 1, max: 9999 },
     { key: "hideDone", label: "Hide done", kind: "bool" },
+    { key: "lists", label: "Lists", kind: "checklist", choices: (o) => (o.cat === "foods"
+      ? Object.entries(LISTS).map(([k, [label, foods]]) => [k, `${label} (${foods.length})`]) : []) },
     { key: "foods", label: "Dishes", kind: "checklist", choices: (o) => (o.cat === "foods"
       ? Object.entries(COOKING_RECIPES_DATA).map(([n, r]) => [n, `${COOKING_BUILDING_EMOJI[r.building] || ""} ${n}`]) : []) },
   ],
-  defaults: { opts: { cat: "dolls", limit: 5, hideDone: true, foods: [] }, sort: { key: "missing", dir: "desc" } },
+  defaults: { opts: { cat: "dolls", limit: 5, hideDone: true, lists: [], foods: [] }, sort: { key: "missing", dir: "desc" } },
   rowKey: (r) => r.name,
   rowLabel: (r) => r.name,
   rowClass: (r) => (r.done ? "w-st-done" : ""),
   columns: [
     // icon, name and the recipe under it
-    { key: "name", label: "item", fmt: (v, r) => `<div class="v-name">${r.iconHtml || ""}<div><b>${esc(v)}</b><small>${esc(r.recipe)}</small></div></div>` },
+    { key: "name", label: "item", fmt: (v, r) => `<div class="v-name">${r.iconHtml || ""}<div><b>${esc(v)}</b><small>${r.recipeHtml || esc(r.recipe)}</small></div></div>` },
     { key: "progress", label: "progress", get: (r) => (r.need ? ((r.have + r.pend) / r.need) * 100 : 100), fmt: (v) => bar(v) },
     { key: "have", label: "have / target", align: "right", title: "have + on the way (blooming / crafting / in traps) / target; for flowers the target includes what other flowers' recipes use up",
       fmt: (v, r) => `<span class="v-count">${esc(v)}${r.pend ? `<em>+${esc(r.pend)}</em>` : ""} / ${esc(r.need)}</span>` },
@@ -85,14 +98,17 @@ export const targetList = {
     const names = cat === "dolls" ? Object.keys(DOLL_RECIPES).filter((n) => DOLL_RECIPES[n].length && (!tracked || tracked[n]))
       : cat === "crabs" ? Object.keys(CRUSTACEAN_RECIPES)
       : cat === "flowers" ? Object.keys(FLOWER_RECIPES)
-      : (Array.isArray(opts.foods) ? opts.foods : []).filter((n) => COOKING_RECIPES_DATA[n]);
-    if (cat === "foods" && !names.length) return { rows: [], footer: "", empty: "Pick dishes in ⚙ → Target." };
+      // the picked lists, then the single picks, each dish once
+      : [...new Set([...(Array.isArray(opts.lists) ? opts.lists : []).flatMap((k) => (LISTS[k] ? LISTS[k][1] : [])),
+        ...(Array.isArray(opts.foods) ? opts.foods : [])])].filter((n) => COOKING_RECIPES_DATA[n]);
+    if (cat === "foods" && !names.length) return { rows: [], footer: "", empty: "Pick lists or dishes in ⚙ → Target." };
     const held = (n) => count(inv, n) + (pend[n] || 0);
     const needOf = cat === "flowers" ? flowerNeeds(limit, held) : () => limit;
     const all = names.map((name) => {
       const have = count(inv, name), p = pend[name] || 0, need = needOf(name);
       const missing = Math.max(0, need - have - p);
-      return { name, have, pend: p, need, missing, done: missing === 0, recipe: recipeOf(cat, name),
+      return { name, have, pend: p, need, missing, done: missing === 0, recipe: recipeOf(cat, name, NO_ICON),
+        recipeHtml: typeof ctx.icon === "function" ? recipeOf(cat, name, ctx.icon) : "",
         iconHtml: typeof ctx.icon === "function" ? ctx.icon(name) : "" };
     });
     const done = all.filter((r) => r.done).length;
