@@ -102,29 +102,29 @@ test("review #4/#6: a newer board render supersedes an older one's late paints; 
 
 const docOf = (storage) => JSON.parse(storage.getItem(BOARDS_KEY));
 
-test("DASH is the board 'dash': the first visit seeds Co je hotové (full width, the old toggles as its options) and the weather card", async () => {
-  const { html, api, app, storage } = await renderBoardWith(null, { page: "dashboard", extra: { sfl_dash_prefs: JSON.stringify({ showAnimals: true, showFaction: false }) } });
-  const dash = docOf(storage).boards.find((b) => b.id === "dash");
-  assert.deepStrictEqual(dash.items.map((x) => [x.type, x.w]), [["dash-actions", 12], ["weather-protection", 6]]);
-  assert.deepStrictEqual(dash.items[0].settings.opts, { showNonTicket: false, showAnimals: true, showFaction: false });
-  assert.match(html, /data-frame="b:dash:/);
-  assert.match(html, /<h1>DASHBOARD<\/h1>/);
-  assert.strictEqual(docOf(storage).last, "dash", "📌 on a page now pins to DASH");
-  // the old card list is gone; the second visit adds nothing
-  assert.doesNotMatch(html, /READY NOW/);
-  api.renderDashboard();
+test("DASH is a page: its widgets render on it (each with 📌 to copy it to a board); no DASH board is created", async () => {
+  const { app, storage, api } = await renderBoardWith(null, { page: "board" });
+  api.renderDashboard({ farm: FARM.farm });
   await new Promise((r) => setTimeout(r, 50));
-  assert.strictEqual(docOf(storage).boards.find((b) => b.id === "dash").items.length, 2);
-  assert.match(app.innerHTML, /data-frame="b:dash:/);
+  assert.match(app.innerHTML, /<h1>DASHBOARD<\/h1>/);
+  assert.match(app.innerHTML, /data-frame="page:dash-actions"/);
+  assert.match(app.innerHTML, /data-frame="page:weather-protection"/);
+  assert.match(app.innerHTML, /data-action="pin"/);
+  assert.ok(!(docOf(storage) || { boards: [] }).boards.some((b) => b.id === "dash"));
+  assert.doesNotMatch(SRC, /dashVoice|voiceDue|speechSynthesis/, "no voice");
 });
 
-test("every board page has the switcher; ?board= picks the board, DASH opens the dashboard page", async () => {
+test("no HUB page: an empty farm id asks for it on the dashboard", () => {
+  assert.doesNotMatch(SRC, /renderHub|"hub"/);
+  assert.match(SRC, /Enter your Farm ID above, then click LOAD/);
+});
+
+test("every board page has the switcher; ?board= picks the board", async () => {
   const boards = JSON.stringify({ schema: 1, page: {}, boards: [
-    { id: "main", name: "Můj dashboard", items: [] }, { id: "dash", name: "DASH", items: [] }, { id: "x1", name: "Rybaření", items: [] }] });
+    { id: "main", name: "Můj dashboard", items: [] }, { id: "x1", name: "Rybaření", items: [] }] });
   const { html, storage } = await renderBoardWith(boards, { search: "&board=x1" });
   assert.match(html, /<h1>📌 Rybaření<\/h1>/);
   assert.match(html, /data-board="main" onclick="_wOpenBoard\(this\.dataset\.board\)"/);
-  assert.match(html, /data-board="dash" onclick="_wOpenBoard\(this\.dataset\.board\)"/);
   assert.match(html, /_wNewBoard\(\)/);
   assert.match(html, /data-board="x1" onclick="_wDeleteBoard\(this\.dataset\.board\)"/, "a board of one's own can be deleted");
   assert.strictEqual(docOf(storage).last, "x1");

@@ -788,40 +788,6 @@
     .pb-close:hover { border-color: #7c3aed; color: #c084fc; }
 
     /* ── Hub cards ── */
-    .hub-cards {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 16px;
-      margin-top: 16px;
-    }
-    .hub-card {
-      padding: 24px 16px;
-      text-align: center;
-      cursor: pointer;
-      transition: transform 0.15s, box-shadow 0.15s;
-    }
-    .hub-card:hover {
-      transform: translateY(-3px);
-    }
-    .hub-card-icon {
-      font-size: 2.5rem;
-      margin-bottom: 10px;
-    }
-    .hub-card h3 {
-      font-size: 0.8125rem;
-      color: var(--sunpetal);
-      margin-bottom: 8px;
-      text-shadow: 1px 1px 0 #000;
-    }
-    .hub-card-count {
-      font-size: 0.625rem;
-      color: var(--text-secondary);
-    }
-    .hub-card-progress {
-      font-size: 0.6875rem;
-      color: var(--green);
-      margin-top: 8px;
-    }
 
     /* ── Help Modal ── */
     .modal-overlay {
@@ -1689,7 +1655,6 @@
       .config-field.small { flex: 1; min-width: 80px; }
       .donate-addr { font-size: 0.625rem; }
       .growing-grid { grid-template-columns: 1fr; }
-      .hub-cards { grid-template-columns: 1fr; }
       .nav-link { font-size: 0.5625rem; padding: 12px 12px; }
       .nav-link.help-btn { padding: 12px 14px; font-size: 0.8125rem; }
       .config-collapsed { gap: 10px; font-size: 0.5625rem; flex-wrap: wrap; justify-content: center; }
@@ -2819,7 +2784,7 @@
 
     const DEFAULTS = { farm: "", limit: "5" };
     const DONATE_ADDR = "0x5688ee5f0488e1dc96d9aad5715e958914987cfc";
-    const PAGES = ["dashboard", "hub", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "mytrades", "marks", "diff", "json", "constants", "ascension", "world", "yakkamon", "fishing", "decorations", "speculation", "tickets", "leveling", "board"];
+    const PAGES = ["dashboard", "flowers", "dolls", "crustaceans", "bumpkin", "treasury", "sales", "power", "roadmap", "nodes", "roi", "shrines", "buds", "pets", "flips", "mytrades", "marks", "diff", "json", "constants", "ascension", "world", "yakkamon", "fishing", "decorations", "speculation", "tickets", "leveling", "board"];
 
     // ═══════════════════════════════════════
     //  SEED DATA
@@ -5352,7 +5317,7 @@
       const page = p.get("page");
       if (page && PAGES.includes(page)) return page;
       const cfg = getConfig();
-      return cfg.farm ? "dashboard" : "hub";
+      return "dashboard";
     }
 
     function navigateTo(page) {
@@ -5447,7 +5412,6 @@
         { id: "yakkamon", label: "🐲 YAKKAMON" },
         { id: "fishing", label: "🎣 FISHING" },
         { id: "decorations", label: "🌸 DECORATIONS" },
-        { id: "hub", label: "HUB" },
         { id: "flowers", label: "FLOWERS" },
         { id: "dolls", label: "DOLLS" },
         { id: "crustaceans", label: "CRABS" },
@@ -5532,9 +5496,7 @@
     function renderConfigBar(page) {
       const cfg = getConfig();
       const el = document.getElementById("config-bar");
-      const isHub = page === "hub";
-
-      if (!isHub && !configExpanded && cfg.farm) {
+      if (!configExpanded && cfg.farm) {
         el.innerHTML = `<div class="config-collapsed pixel-panel pixel-font" onclick="expandConfig()">
           <span>Farm #${escHTML(cfg.farm)}</span>
           <span>Limit: ${cfg.limit}</span>
@@ -9708,232 +9670,53 @@
       }
     }
 
-    /*
-     * DASH VOICE + LIVE. The dashboard re-reads the farm every 3 minutes while it is open (or the
-     * voice is on), so a chopped tree or a replanted plot leaves READY NOW without a reload. The
-     * voice reads READY NOW as short English commands through the browser's speech engine — when
-     * a category turns ready and again every N minutes while it stays ready, only on the chosen
-     * days and hours (core/engine/dash-voice.mjs decides; this only wires it up). The schedule is
-     * shared across devices (sfl_dash_voice); ON/OFF stays per browser (sfl_dash_voice_on), as a
-     * browser may only speak after a click on it.
-     */
+    // DASH LIVE: while the dashboard is open the farm is re-read every 3 minutes (the proxy caches it
+    // for 20 s), so a chopped tree or a replanted plot leaves the list without a reload. Never while
+    // a settings panel is open or an input has the focus.
     const DASH_LIVE_MS = 3 * 60 * 1000;
     var _farmFetchedAt = 0;   // var: fetchFarmData (earlier in the file) writes it
-    let _dashLiveBusy = false, _dashVoiceSpoken = {}, _dashReadyKey = "";
-    function dashVoiceSettings() {
-      let st = {};
-      try { st = JSON.parse(localStorage.getItem("sfl_dash_voice") || "{}") || {}; } catch (e) { st = {}; }
-      let on = false;
-      try { on = localStorage.getItem("sfl_dash_voice_on") === "1"; } catch (e) {}
-      return { ...voiceSettings(st), on };
+    let _dashLiveBusy = false;
+    async function _dashLiveTick() {
+      if (!FARM_ID || getPage() !== "dashboard" || _dashLiveBusy || Date.now() - _farmFetchedAt < DASH_LIVE_MS) return;
+      if (document.querySelector("[data-pop]") || (document.activeElement && /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName))) return;
+      _dashLiveBusy = true;
+      try { cachedFarmData = await fetchFarmData(); _cachedFarmFor = FARM_ID; } catch (e) { console.warn("[dash live]", e); }
+      _dashLiveBusy = false;
+      if (getPage() === "dashboard" && cachedFarmData) { const y = window.scrollY; await renderDashboard(cachedFarmData); window.scrollTo(0, y); }
     }
-    function _dashVoiceSave(patch) {
-      const { on, ...rest } = { ...dashVoiceSettings(), ...patch };
-      try { localStorage.setItem("sfl_dash_voice", JSON.stringify(rest)); localStorage.setItem("sfl_dash_voice_on", on ? "1" : "0"); } catch (e) {}
-    }
-    function _dashSay(text) {
-      if (!text || typeof speechSynthesis === "undefined") return;
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = "en-US";
-      const v = speechSynthesis.getVoices().find((x) => /^en(-|_)US/i.test(x.lang)) || speechSynthesis.getVoices().find((x) => /^en/i.test(x.lang));
-      if (v) u.voice = v;
-      speechSynthesis.speak(u);
-    }
-    window.dashVoiceToggle = function () {
-      const on = !dashVoiceSettings().on;
-      _dashVoiceSave({ on });
-      _dashVoiceSpoken = {};
-      if (on) { _dashSay("Voice on."); setTimeout(_dashVoiceTick, 1500); }
-      else if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
-      if (cachedFarmData && getPage() === "dashboard") renderDashboard(cachedFarmData);
-    };
-    window.dashVoiceDay = function (d, checked) {
-      const days = new Set(dashVoiceSettings().days);
-      if (checked) days.add(d); else days.delete(d);
-      _dashVoiceSave({ days: [...days].sort() });
-    };
-    window.dashVoiceMute = function (cat, muted) {
-      const m = new Set(dashVoiceSettings().muted || []);
-      if (muted) m.add(cat); else m.delete(cat);
-      _dashVoiceSave({ muted: [...m] });
-    };
-    window.dashVoiceSet = function (k, v) {
-      if (k === "repeatMin") { const n = Math.round(parseFloat(v)); if (!(n >= 1)) return; v = n; }
-      _dashVoiceSave({ [k]: v });
-    };
-    window.dashVoiceTest = function () {
-      const farm = cachedFarmData && cachedFarmData.farm;
-      const ready = farm ? parseDashboardActions(farm).filter((a) => a.status === "ready") : [];
-      const r = voiceDue(ready, Date.now(), { ...dashVoiceSettings(), on: true, days: [0, 1, 2, 3, 4, 5, 6], from: "00:00", to: "24:00" }, {});
-      _dashSay(r.text || "Nothing is ready.");
-    };
-    function _dashVoicePanelHtml() {
-      if (typeof voiceSettings === "undefined") return "";
-      const st = dashVoiceSettings();
-      const names = [[1, "Po"], [2, "Út"], [3, "St"], [4, "Čt"], [5, "Pá"], [6, "So"], [0, "Ne"]];
-      const ago = _farmFetchedAt ? Math.max(0, Math.round((Date.now() - _farmFetchedAt) / 60000)) : null;
-      const inp = "background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-dark);border-radius:4px;font-family:'Courier New',monospace;font-size:0.65rem;padding:2px 4px";
-      return `<div class="dash-toolbar" style="align-items:center;font-family:'Courier New',monospace;font-size:0.62rem;color:var(--text-secondary)">
-          <button class="dash-toggle-btn ${st.on ? "on" : ""}" onclick="dashVoiceToggle()">${st.on ? "🔊 Hlas: ZAP" : "🔇 Hlas: VYP"}</button>
-          <span>${names.map(([d, n]) => `<label style="margin-right:4px;cursor:pointer"><input type="checkbox" ${st.days.includes(d) ? "checked" : ""} onchange="dashVoiceDay(${d},this.checked)"> ${n}</label>`).join("")}</span>
-          <label>od <input type="time" value="${escHTML(st.from)}" onchange="dashVoiceSet('from',this.value)" style="${inp}"></label>
-          <label>do <input type="time" value="${escHTML(st.to)}" onchange="dashVoiceSet('to',this.value)" style="${inp}"></label>
-          <label>znovu po <input type="number" min="1" step="1" value="${st.repeatMin}" onchange="dashVoiceSet('repeatMin',this.value)" style="${inp};width:44px"> min</label>
-          <button class="dash-toggle-btn" onclick="dashVoiceTest()" title="Řekne teď, co je hotové (bez ohledu na dny a hodiny)">▶ test</button>
-          <details style="flex-basis:100%"><summary style="cursor:pointer">⚙ co hlásit — odškrtni, co neděláš (např. Oil) · ztlumeno ${(st.muted || []).length}</summary>
-            <div style="display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:4px">${voiceCategories().map((c) => `<label style="cursor:pointer"><input type="checkbox" ${(st.muted || []).includes(c) ? "" : "checked"} onchange="dashVoiceMute(${escHTML(JSON.stringify(c))},!this.checked)"> ${escHTML(c)}</label>`).join("")}</div>
-          </details>
-          <span style="color:var(--text-dim)">🔄 živě: farma ${ago == null ? "—" : ago === 0 ? "právě načtená" : `načtená před ${ago} min`} · obnova každé 3 min</span>
-        </div>`;
-    }
-    async function _dashVoiceTick() {
-      const st = dashVoiceSettings();
-      const onDash = getPage() === "dashboard";
-      if (!FARM_ID || (!onDash && !st.on) || typeof parseDashboardActions !== "function") return;
-      // Re-read the farm when it is older than 3 minutes (the proxy caches it for 20 s, so this
-      // costs the SFL API one call per 3 minutes per open tab).
-      let fresh = false;
-      if (Date.now() - _farmFetchedAt >= DASH_LIVE_MS && !_dashLiveBusy) {
-        _dashLiveBusy = true;
-        try { cachedFarmData = await fetchFarmData(); _cachedFarmFor = FARM_ID; fresh = true; } catch (e) { console.warn("[dash live]", e); }
-        _dashLiveBusy = false;
-      }
-      const farm = cachedFarmData && cachedFarmData.farm;
-      if (!farm) return;
-      const ready = parseDashboardActions(farm).filter((a) => a.status === "ready");
-      const key = ready.map((a) => a.category + ":" + a.label).sort().join("|");
-      // Repaint when the farm was re-read or something turned ready, keeping the scroll position;
-      // never while the user is typing in one of the dashboard's own inputs.
-      if (onDash && (fresh || key !== _dashReadyKey) && !(document.activeElement && /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName))) {
-        const y = window.scrollY;
-        await renderDashboard(cachedFarmData);
-        window.scrollTo(0, y);
-      }
-      _dashReadyKey = key;
-      const r = voiceDue(ready, Date.now(), st, _dashVoiceSpoken);
-      _dashVoiceSpoken = r.spoken;
-      if (r.text) _dashSay(r.text);
-    }
-    setInterval(_dashVoiceTick, 30 * 1000);
+    setInterval(_dashLiveTick, 30 * 1000);
 
-    // DASH is the board "dash" (app/boards.mjs): seeded on the first visit with "Co je hotové" (the
-    // stored toggles become its own options) and the weather card, then edited like any other board.
-    async function renderDashboard() {
-      if (typeof __widgets === "undefined") { document.getElementById("app").innerHTML = _wMissing("DASH"); return; }
-      if (!__widgets.doc().boards.some((b) => b.id === "dash")) {
-        const p = dashGetPrefs();
-        __widgets.addBoard({ id: "dash", name: "DASH", items: [
-          { i: "dash-actions", type: "dash-actions", w: 12, settings: { opts: {
-            showNonTicket: !!p.showNonTicket, showAnimals: !!p.showAnimals, showFaction: p.showFaction === undefined ? true : !!p.showFaction } } },
-          { i: "weather", type: "weather-protection", w: 6, settings: {} },
-        ] });
+    // DASH: a page like the others — its panels are widgets (dash-actions, weather-protection), each
+    // with its own settings and 📌 to copy it onto a board.
+    let _dashPricesAsked = false;
+    async function renderDashboard(data) {
+      // Bounty and delivery prices: render at once, then once more when they arrive (asked once).
+      if (!_dashPricesAsked && (Object.keys(dashP2P).length === 0 || dashRates.coinsPerSFL == null)) {
+        _dashPricesAsked = true;
+        Promise.all([dashFetchP2P(), dashFetchRates()]).then(() => { if (getPage() === "dashboard" && window._wRerender) window._wRerender(); });
       }
-      return renderBoard("dash");
-    }
-    function renderHub(data) {
       const app = document.getElementById("app");
-      const flowerTotal = Object.keys(FLOWER_RECIPES).length;
-      const trackedDolls = getTrackedDolls();
-      const dollTotal = Object.entries(trackedDolls).filter(([,v]) => v).length;
-      const crustTotal = Object.keys(CRUSTACEAN_RECIPES).length;
-
-      let flowerProgress = "", dollProgress = "", crustProgress = "", bumpkinProgress = "";
-
-      if (data) {
-        const { inventory, inProgress } = data;
-        const { totalNeeded } = computeAllTotalNeeded(inventory, inProgress, buildFlowerDemandFn());
-
-        let fc = 0;
-        for (const [name, needed] of Object.entries(totalNeeded)) {
-          if (getCount(inventory, name) + (inProgress[name] || 0) >= needed) fc++;
-        }
-        flowerProgress = `<div class="hub-card-progress pixel-font">${fc}/${flowerTotal} complete</div>`;
-
-        let dc = 0;
-        for (const [name, tracked] of Object.entries(trackedDolls)) {
-          if (!tracked) continue;
-          if (getCount(inventory, name) + (inProgress[name] || 0) >= LIMIT) dc++;
-        }
-        dollProgress = `<div class="hub-card-progress pixel-font">${dc}/${dollTotal} complete</div>`;
-
-        let cc = 0;
-        for (const name of Object.keys(CRUSTACEAN_RECIPES)) {
-          if (getCount(inventory, name) + (inProgress[name] || 0) >= LIMIT) cc++;
-        }
-        crustProgress = `<div class="hub-card-progress pixel-font">${cc}/${crustTotal} complete</div>`;
-
-        if (data.bumpkin) {
-          const bxp = parseFloat(data.bumpkin.experience || 0);
-          const _al = (data.farm && data.farm.island && data.farm.island.ascensionLevel) || (data.island && data.island.ascensionLevel) || 0;
-          const blvl = getTotalBumpkinLevel(bxp, _al);
-          bumpkinProgress = `<div class="hub-card-progress pixel-font">Level ${blvl}${_al >= 1 ? "" : "/200"}</div>`;
-        }
+      if (!data || !data.farm) {
+        app.innerHTML = `<div class="header pixel-panel pixel-font"><h1>DASHBOARD</h1><div class="farm-id">Load your farm to see pending actions</div></div>`;
+        return;
       }
-
-      let html = `<div class="header pixel-panel pixel-font">
-        <h1>SFL COLLECTION TRACKER</h1>
-        ${FARM_ID ? `<div class="farm-id">Farm #${escHTML(FARM_ID)} | Target: ${LIMIT} of each</div>` : `<div class="farm-id">Enter your Farm ID to get started</div>`}
-      </div>`;
-
-      html += `<div class="hub-cards">
-        <div class="hub-card pixel-panel" onclick="navigateTo('flowers')">
-          <div class="hub-card-icon">🌸</div>
-          <h3 class="pixel-font">FLOWERS</h3>
-          <div class="hub-card-count pixel-font">${flowerTotal} types</div>
-          ${flowerProgress}
-        </div>
-        <div class="hub-card pixel-panel" onclick="navigateTo('dolls')">
-          <div class="hub-card-icon">🪆</div>
-          <h3 class="pixel-font">DOLLS</h3>
-          <div class="hub-card-count pixel-font">${dollTotal} tracked</div>
-          ${dollProgress}
-        </div>
-        <div class="hub-card pixel-panel" onclick="navigateTo('crustaceans')">
-          <div class="hub-card-icon">🦀</div>
-          <h3 class="pixel-font">CRUSTACEANS</h3>
-          <div class="hub-card-count pixel-font">${crustTotal} types</div>
-          ${crustProgress}
-        </div>
-        <div class="hub-card pixel-panel" onclick="navigateTo('bumpkin')">
-          <div class="hub-card-icon">👨‍🍳</div>
-          <h3 class="pixel-font">BUMPKIN</h3>
-          <div class="hub-card-count pixel-font">XP Calculator</div>
-          ${bumpkinProgress}
-        </div>
-        <div class="hub-card pixel-panel" onclick="navigateTo('treasury')">
-          <div class="hub-card-icon">💰</div>
-          <h3 class="pixel-font">TREASURY</h3>
-          <div class="hub-card-count pixel-font">Farm Value</div>
-        </div>
-        <div class="hub-card pixel-panel" onclick="navigateTo('sales')">
-          <div class="hub-card-icon">📤</div>
-          <h3 class="pixel-font">SALES</h3>
-          <div class="hub-card-count pixel-font">Marketplace</div>
-        </div>
-        <div class="hub-card pixel-panel" onclick="navigateTo('power')">
-          <div class="hub-card-icon">⚡</div>
-          <h3 class="pixel-font">POWER</h3>
-          <div class="hub-card-count pixel-font">Boost ROI Analyzer</div>
-        </div>
-        <div class="hub-card pixel-panel" onclick="navigateTo('roi')">
-          <div class="hub-card-icon">💸</div>
-          <h3 class="pixel-font">ROI</h3>
-          <div class="hub-card-count pixel-font">Sell-or-Farm Advisor</div>
-        </div>
-        <div class="hub-card pixel-panel" onclick="navigateTo('buds')">
-          <div class="hub-card-icon">🌱</div>
-          <h3 class="pixel-font">BUDS</h3>
-          <div class="hub-card-count pixel-font">${BUD_COUNT} NFTs</div>
-        </div>
-      </div>`;
-
-      app.innerHTML = html;
+      if (typeof __widgets === "undefined") { app.innerHTML = _wMissing("DASH"); return; }
+      // The first time: the page's "What's done" starts from the old DASH toggles (sfl_dash_prefs).
+      if (!(__widgets.doc().page["dash-actions"] || {}).opts) {
+        const p = dashGetPrefs();
+        window._wRerender = null;
+        __widgets.handle("page:dash-actions", "opt:showNonTicket", p.showNonTicket ? "1" : "0");
+        __widgets.handle("page:dash-actions", "opt:showAnimals", p.showAnimals ? "1" : "0");
+        __widgets.handle("page:dash-actions", "opt:showFaction", p.showFaction === false ? "0" : "1");
+      }
+      window._wRerender = () => { if (getPage() === "dashboard" && cachedFarmData) renderDashboard(cachedFarmData); };
+      window._wRefresh = refresh;
+      const fresh = __wFresh(__store.peek({ res: "farm", farm: FARM_ID }));
+      app.innerHTML = `<div class="header pixel-panel pixel-font"><h1>DASHBOARD</h1><div class="farm-id">Farm #${escHTML(FARM_ID)}</div></div>` +
+        __widgets.renderPage("dash-actions", { data: { farm: data.farm }, ctx: _wCtx("dash-actions"), fresh }) +
+        __widgets.renderPage("weather-protection", { data: { farm: data.farm }, ctx: _wCtx("weather-protection"), fresh });
+      startGrowingTimers();
     }
-
-    // ═══════════════════════════════════════
-    //  RENDER: GIFTS SECTION (flowers page)
-    // ═══════════════════════════════════════
-
     function renderGiftsSection(data) {
       const farm = data.farm || {};
       const npcsData = farm.npcs || {};
@@ -18773,9 +18556,9 @@
       // data-preset: the pinned copy's options (📌 Panenky do limitu → {"cat":"dolls"})
       __widgets.handle("page:" + type, "pin", (btn && btn.dataset.preset) || "");
       if (btn) { btn.classList.add("on"); btn.innerHTML = _wPinText(btn.dataset.label, _wPinned(type)); }
-      if ((getPage() === "board" || getPage() === "dashboard") && window._wRerender) window._wRerender();
+      if (getPage() === "board" && window._wRerender) window._wRerender();
     };
-    // Where 📌 pins: the board visited last (DASH included), else the first.
+    // Where 📌 pins: the board visited last, else the first.
     function _wPinTargetName() {
       const d = __widgets.doc();
       const b = d.boards.find((x) => x.id === d.last) || d.boards[0];
@@ -18793,15 +18576,14 @@
     }
     // One button per board (DASH opens the dashboard page), a new one, and deleting one of your own.
     function _wBoardSwitcher(currentId) {
-      const btn = (b) => `<button class="dash-toggle-btn${b.id === currentId ? " on" : ""}" data-board="${escHTML(b.id)}" onclick="_wOpenBoard(this.dataset.board)">${b.id === "dash" ? "🚨" : "📌"} ${escHTML(b.name)}</button>`;
+      const btn = (b) => `<button class="dash-toggle-btn${b.id === currentId ? " on" : ""}" data-board="${escHTML(b.id)}" onclick="_wOpenBoard(this.dataset.board)">📌 ${escHTML(b.name)}</button>`;
       return '<div class="dash-toolbar">' + __widgets.doc().boards.map(btn).join("") +
         '<button class="dash-toggle-btn" onclick="_wNewBoard()">＋ nová nástěnka</button>' +
-        (currentId !== "main" && currentId !== "dash"
+        (currentId !== "main"
           ? `<button class="dash-toggle-btn" data-board="${escHTML(currentId)}" onclick="_wDeleteBoard(this.dataset.board)" title="smaže nástěnku i s jejími widgety">🗑 smazat tuhle nástěnku</button>` : "") +
         '</div>';
     }
     window._wOpenBoard = (id) => {
-      if (id === "dash") { navigateTo("dashboard"); return; }
       const url = new URL(window.location);
       url.searchParams.set("page", "board");
       url.searchParams.set("board", id);
@@ -18818,33 +18600,26 @@
     };
     window._wDeleteBoard = (id) => {
       const b = __widgets.doc().boards.find((x) => x.id === id);
-      if (!b || id === "main" || id === "dash") return;
+      if (!b || id === "main") return;
       if (!confirm(`Smazat nástěnku „${b.name}“ i s ${b.items.length} widgety?`)) return;
       __widgets.removeBoard(id);
-      const next = __widgets.doc().boards.find((x) => x.id !== "dash");
-      _wOpenBoard(next ? next.id : "main");
+      _wOpenBoard(__widgets.doc().boards[0].id);
     };
     let _boardSeq = 0;
-    // boardIdArg: "dash" from the DASH page; on ?page=board the ?board= one, else the last visited
-    // (never DASH, it has its own page), else the first.
-    async function renderBoard(boardIdArg) {
+    // The ?board= one, else the board visited last, else the first.
+    async function renderBoard() {
       const app = document.getElementById("app");
       if (typeof __widgets === "undefined") { app.innerHTML = _wMissing("Můj dashboard"); return; }
-      window._wRerender = boardIdArg ? () => renderBoard(boardIdArg) : renderBoard; window._wRefresh = null;
+      window._wRerender = renderBoard; window._wRefresh = null;
       const page = getPage();
       const seq = _navSeq;
       const mine = ++_boardSeq;
       const d0 = __widgets.doc();
-      const want = boardIdArg || new URLSearchParams(window.location.search).get("board") || d0.last;
-      let board = d0.boards.find((b) => b.id === want && (boardIdArg || b.id !== "dash")) || d0.boards.find((b) => b.id !== "dash");
-      if (!board) { __widgets.addBoard({ id: "main", name: "Můj dashboard" }); board = __widgets.doc().boards.find((b) => b.id === "main"); }
+      const want = new URLSearchParams(window.location.search).get("board") || d0.last;
+      const board = d0.boards.find((b) => b.id === want) || d0.boards[0];
       const boardId = board.id;
       __widgets.visit(boardId);   // 📌 on a page now pins here
-      const head = boardId === "dash"
-        ? '<div class="header pixel-panel pixel-font"><h1>DASHBOARD</h1><div class="farm-id">Farm #' + escHTML(FARM_ID) +
-          ' · nástěnka: 📌 z jiných stránek přidá widget sem, ⚙ u widgetu = jeho nastavení</div>' + _wBoardSwitcher(boardId) +
-          '<div>' + _wPinBtn("target-list", "🎯 přidat „Do limitu“ (kategorie a limit v ⚙)", { cat: "foods" }) + '</div>' + _dashVoicePanelHtml() + '</div>'
-        : '<div class="header pixel-panel pixel-font"><h1>📌 ' + escHTML(board.name) + '</h1><div class="farm-id">Farm #' + escHTML(FARM_ID) +
+      const head = '<div class="header pixel-panel pixel-font"><h1>📌 ' + escHTML(board.name) + '</h1><div class="farm-id">Farm #' + escHTML(FARM_ID) +
           ' · připnuté panely, každý se svým nastavením</div>' + _wBoardSwitcher(boardId) +
           '<div>' + _wPinBtn("target-list", "🎯 přidat „Do limitu“ (kategorie a limit v ⚙)", { cat: "foods" }) + '</div></div>';
       if (!FARM_ID) { app.innerHTML = head + '<div class="pixel-panel" style="padding:12px;font-size:0.55rem">Zadej Farm ID nahoře.</div>'; return; }
@@ -18898,7 +18673,7 @@
       window._boardLive = setTimeout(() => {
         if (getPage() !== page || mine !== _boardSeq || document.querySelector("[data-pop]")) return;
         __store.invalidate({ res: "farm", farm: FARM_ID });
-        renderBoard(boardIdArg);
+        renderBoard();
       }, 3 * 60 * 1000);
     }
 
@@ -25021,8 +24796,8 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       if (page === "decorations") { renderConfigBar(page); renderDecorations(); return; }
 
       if (!FARM_ID) {
-        renderConfigBar("hub");
-        renderHub(null);
+        renderConfigBar(page);
+        document.getElementById("app").innerHTML = `<div class="header pixel-panel pixel-font"><h1>SFL TRACKER</h1><div class="farm-id">Enter your Farm ID above, then click LOAD</div></div>`;
         return;
       }
 
@@ -25058,7 +24833,6 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
 
         switch (page) {
           case "dashboard": renderDashboard(data); break;
-          case "hub": renderHub(data); break;
           case "flowers": renderFlowers(data); break;
           case "dolls": renderDolls(data); break;
           case "crustaceans": renderCrustaceans(data); break;
@@ -30525,7 +30299,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
       "sfl_tracked_dolls", "sfl_restock_settings", "sfl_gift_plan", "sfl_roi_multicat_assignment", "sfl_sleep_schedule",
       "sfl_marks_budget", "sfl_bumpkin_target", "sfl_bumpkin_recipes", "sfl_nodes_roi_cap", "sfl_coin_mode",
       "sfl_sales_sell_type", "sfl_sales_sell_min", "sfl_pet_streak", "sfl_fish_reels", "sfl_wl_eff", "sfl_flower_mode", "sfl_flower_n", "sfl_sats_gran",
-      "sfl_repay_daily_flower", "sfl_tk_goal", "sfl_dash_voice", "sfl_leveling", "sfl_boards"];
+      "sfl_repay_daily_flower", "sfl_tk_goal", "sfl_leveling", "sfl_boards"];
     /*
      * A deleted key is kept on the server as this marker (a tombstone), so a device that still has
      * the key removes it instead of seeding it back. Changes wait in an outbox (localStorage
