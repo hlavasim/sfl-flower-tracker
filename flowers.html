@@ -3337,7 +3337,9 @@
     .w-look-table small { font-size: 12px; margin-top: 6px; }
     .w-gal-pick { z-index: 1000; }
     @media (max-width: 560px) { .w-looks { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 42vw; } .w-picker { padding: 14px; } }
-    @media (hover: none) { .w-glance .w-tools { opacity: 1 !important; } .w-glance .w-btn { min-width: 36px; min-height: 36px; } }
+    /* touch: a card is just the widget (as on an iPhone); a tap opens it, and the sheet holds every control */
+    @media (hover: none) { .w-board > .w-glance > .w-head .w-tools, .w-board > .w-glance > .w-head .w-grip { display: none !important; }
+      .w-in-sheet .w-btn { min-width: 36px; min-height: 36px; } }
 
     /* ＋ gallery: a home screen of live previews, each at its own size (S / M / L / Table) */
     .w-gallery { background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }

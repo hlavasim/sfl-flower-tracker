@@ -99,3 +99,12 @@ test("pinning from the gallery can preset the look or the table", () => {
   h.handle("page:g", "pin", JSON.stringify({ board: "main", look: "full" }));
   assert.strictEqual(item(h, 1).settings.size, "full");
 });
+
+test("the sheet carries every control a phone needs: looks, settings, remove from the board, close", () => {
+  const { h, id } = hostWith();
+  h.handle(id(), "expand", "");
+  const sheet = h.renderItem("main", item(h), { data: DATA }).split('class="w-sheet"')[1];
+  for (const a of ["looks", "cog", "remove", "collapse"]) assert.match(sheet, new RegExp(`data-action="${a}"`), a);
+  h.handle(id(), "remove", "");
+  assert.strictEqual(h.doc().boards[0].items.length, 0);
+});

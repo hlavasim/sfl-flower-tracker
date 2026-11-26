@@ -179,7 +179,7 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
           pickerHtml(m, offered, current, cols) + `</div></div></section>`;
       }
       if (!isOpen) return face;
-      const sheet = renderFrame({ id, title, place: "sheet", body: b.html, fresh, cog: true, settingsHtml: b.settingsHtml, settingsOpen: open.has(id) });
+      const sheet = renderFrame({ id, title, place: "sheet", body: b.html, fresh, cog: true, settingsHtml: b.settingsHtml, settingsOpen: open.has(id), looks: offered.length > 0 });
       return face.slice(0, -"</section>".length) +
         `<div class="w-sheet" data-action="collapse" data-value=""><div class="w-sheet-card" data-action="noop" data-value="">${sheet}</div></div></section>`;
     }

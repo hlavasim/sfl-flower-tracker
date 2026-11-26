@@ -43,7 +43,7 @@ export function renderFrame({ id, title, place, body, fresh, pinned = 0, w = 6, 
   const nav = (variant ? btn("variant", "◀", "previous look", "-1") + `<span class="w-var-n">${variant.n} / ${variant.total}</span>` + btn("variant", "▶", "next look", "1") : "") +
     (looks ? btn("looks", "▦", "choose a look — see them all") : "");
   const tools = nav + btn("refresh", "↻", "reload") + (cog ? btn("cog", "⚙", "settings", "", settingsOpen ? " on" : "") : "") + (sheet
-    ? btn("collapse", "✕", "close")
+    ? btn("remove", "🗑", "remove from the board") + btn("collapse", "✕", "close")
     : board ? btn("remove", "✕", "remove from the board")
     : btn("pin", pinned ? `📌 ${pinned}` : "📌", pinned ? `pinned ${pinned}× — pin another copy` : "pin to a board"));
   const grip = board ? `<span class="w-grip" data-drag="item" title="drag and drop onto another widget">⠿</span>` : "";
