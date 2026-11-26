@@ -272,7 +272,19 @@ export function keyOf(query) {
 const PERSIST_PREFIX = "sfl_wcache:";
 const PERSIST_MAX_AGE = 12 * 3600_000;
 
+// At most this many requests on the network at once: a board of heavy widgets (POWER, ROADMAP…)
+// would otherwise start every compute section together and exhaust the database's connections.
+const MAX_PARALLEL = 4;
+
 export function createStore({ fetch: f = (...a) => globalThis.fetch(...a), now = Date.now, resources = RESOURCES, persist = null } = {}) {
+  // a slot per request (not per resource load: a load waiting on another resource holds none)
+  let active = 0;
+  const waiting = [];
+  const limited = async (fn) => {
+    if (active >= MAX_PARALLEL) await new Promise((r) => waiting.push(r));   // a finished request hands its slot over
+    else active++;
+    try { return await fn(); } finally { const next = waiting.shift(); if (next) next(); else active--; }
+  };
   const entries = new Map();   // key → {query, data, status, asOf, stale, error}
   const inflight = new Map();  // key → Promise<entry>
   const subs = new Map();      // key → Set<fn>
@@ -323,7 +335,7 @@ export function createStore({ fetch: f = (...a) => globalThis.fetch(...a), now =
     const { res, ...params } = query;
     const p = (async () => {
       try {
-        const data = await def.load(params, { json: (url, init) => fetchJson(f, url, init), get });
+        const data = await def.load(params, { json: (url, init) => limited(() => fetchJson(f, url, init)), get });
         return settle(key, { query, data, status: "ok", asOf: now(), stale: false });
       } catch (e) {
         const prev = entries.get(key);

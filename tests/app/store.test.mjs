@@ -224,3 +224,13 @@ test("computeHist: POSTs the 7-day _h.* history (with weeks the ticket weeks too
     "/api/compute": (url, init) => ({ data: { method: init.method || "GET" } }) }) });
   assert.strictEqual((await g.get({ res: "computeHist", farm: "7", section: "power", weeks: true })).data.method, "GET");
 });
+
+test("at most four requests are on the network at once; the rest wait their turn and all resolve", async () => {
+  let live = 0, peak = 0;
+  const f = async () => { live++; peak = Math.max(peak, live); await new Promise((r) => setTimeout(r, 15)); live--; return { ok: true, status: 200, json: async () => ({ data: { ok: 1 } }) }; };
+  const s = createStore({ fetch: f });
+  const all = await Promise.all(Array.from({ length: 10 }, (_, i) => s.get({ res: "compute", farm: "7", section: "s" + i })));
+  assert.ok(all.every((r) => r.status === "ok"));
+  assert.ok(peak <= 4, `peak ${peak}`);
+  assert.ok(peak >= 2, "still in parallel, just capped");
+});
