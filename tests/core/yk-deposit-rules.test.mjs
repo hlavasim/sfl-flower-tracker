@@ -1,9 +1,6 @@
 import "../helpers/page-engine.mjs";
 import { test } from "node:test";
 import assert from "node:assert";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
 
 /*
  * The Yakkamon deposit calculator mirrors rules Yakkamon publishes in its own page script
@@ -18,22 +15,8 @@ import path from "node:path";
  *  - referral was +30 (now +75), the free mint was "1 Oct" (it ran 14–17 Sep), and the ladder
  *    still used the pre-12-Aug names and the old wave bands.
  */
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const src = readFileSync(path.join(ROOT, "flowers.html"), "utf8");
-
-function slice(marker) {
-  const start = src.indexOf(marker);
-  assert.ok(start > 0, `${marker} present in flowers.html`);
-  let depth = 0, i = src.indexOf("{", start);
-  for (; i < src.length; i++) {
-    if (src[i] === "{") depth++;
-    else if (src[i] === "}") { depth--; if (depth === 0) break; }
-  }
-  return src.slice(start, i + 1);
-}
-const yk = new Function(
-  ["const YK = {", "function ykWeekAt(", "function ykMult(", "function ykBonus(", "function ykPoints("].map(slice).join(";\n") +
-  ";\nreturn { YK, ykWeekAt, ykMult, ykBonus, ykPoints };")();
+// The rules live in core/yakkamon.mjs (widgets/yakkamon.mjs reads them there).
+const yk = await import("../../core/yakkamon.mjs");
 const multAt = (iso) => yk.ykMult(yk.ykWeekAt(Date.parse(iso)));
 const near = (a, b) => Math.abs(a - b) < 1e-9;
 
