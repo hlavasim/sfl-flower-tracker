@@ -214,6 +214,13 @@ test("📱 glance models: income (now → after the plan, where it comes from, a
   assert.deepStrictEqual([b.items[0].name, b.items[0].icon], [plan[0].name, `<img data-i="${plan[0].name}">`], "the next buy first");
   assert.strictEqual(b.head.hero, `<img data-i="${plan[0].name}">`);
   assert.match(b.foot, new RegExp(`^${plan.length} in the plan · next `));
+  // a copy hiding the first buy's type lists the rest, but "in plan" still counts the whole plan
+  const t0 = roadmapBuyPath.build({ roadmap: fresh() }, CTX, { status: "plan" }).rows[0];
+  const hid = roadmapBuyPath.glanceModel({ roadmap: fresh() }, CTX, { hide: [t0.type || "Collectible"] });
+  if (hid.items && hid.items.length < plan.length) {
+    assert.strictEqual(hid.tiles[0].value, plan.length);
+    assert.match(hid.foot, new RegExp(`^${plan.length} in the plan \\(${plan.length - hid.items.length} hidden\\)`));
+  } else assert.fail("the hide option did not hide anything — fix the test's type lookup");
   assert.strictEqual((renderLook(b, "list-4").html.match(/class="gx-row[" ]/g) || []).length, Math.min(8, plan.length));
   assert.ok(looksFor(b).length >= 3);
 });

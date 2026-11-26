@@ -413,14 +413,17 @@ roadmapBuyPath.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   if (!plan.length) return { empty: out.empty || "Nothing to buy." };
   const sim = normRoadmap(data.roadmap).sim, r = plan[0];
   const maxVal = Math.max(0, ...plan.map((x) => x.value || 0));
+  // the list follows the copy's hidden types; "in plan" counts the whole plan, as its cost does
+  const whole = roadmapBuyPath.build(data, ctx, { ...opts, status: "plan", hide: [] }).rows.filter((x) => x.status === "plan").length;
+  const hidden = whole - plan.length;
   return {
     head: { value: fmtDays(r.sortRoi ?? r.roi), hero: r.iconHtml, cap: `${r.name} · +${fmtFlower(r.value)}/d` },
     items: plan.map((x) => ({ icon: x.iconHtml, name: x.name, sub: `${TYPE_META[typeOf(x)].label.toLowerCase()} · pays back in ${fmtDays(x.sortRoi ?? x.roi)}`,
       ...(x.skillTakeNow ? { chip: { text: "TAKE NOW", tone: "ok" } } : { value: `+${fmtFlower(x.value)}/d`, tone: "ok" }),
       ...(maxVal > 0 ? { pct: ((x.value || 0) / maxVal) * 100 } : {}) })),
-    tiles: [{ label: "in plan", value: plan.length }, { label: "plan cost", value: fmtFlower(sim.econCost) },
+    tiles: [{ label: "in plan", value: whole }, { label: "plan cost", value: fmtFlower(sim.econCost) },
       { label: "after plan", value: `${fmtFlower(sim.finalRate)}/d` }, { label: "next", value: r.eta }],
-    foot: `${plan.length} in the plan · next ${plan[0].eta}`,
+    foot: `${whole} in the plan${hidden ? ` (${hidden} hidden)` : ""} · next ${plan[0].eta}`,
   };
 };
 
