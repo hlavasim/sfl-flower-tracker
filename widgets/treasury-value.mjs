@@ -1,14 +1,14 @@
-// TREASURY · farm value: the total (SFL, USD, BTC) and each category's share as a pie. The numbers
-// are the server's section=treasury valuation (store resource "treasury"), the same as the page;
-// the page hands over its category colours (ctx.catColors).
-import { sflIcon } from "../core/engine/power-formula.mjs";
+// TREASURY · farm value: the total (SFL, USD, BTC), the rates it stands on and each category's
+// share as a pie. The numbers are the server's section=treasury valuation (store resource
+// "treasury"), the same as the page; the page hands over its category colours (ctx.catColors) and,
+// on the page, the full list of what failed to load (treasury.warnings).
+import { sflIcon, esc, formatSFL, formatUSD } from "./market-common.mjs";
 
-const CATS = [
+export const CATS = [
   ["resources", "Resources"], ["treasures", "Treasures"], ["collectibles", "Collectibles"], ["produced", "Produced"],
   ["wearables", "Wearables"], ["pets", "Pets"], ["listings", "Listings"], ["liquid", "Liquid"],
 ];
-const sfl = (n) => (+n || 0).toLocaleString("en-US", { maximumFractionDigits: n >= 100 ? 0 : 2 });
-const usd = (n) => "$" + (+n || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
+const btcText = (v) => (v >= 0.01 ? v.toFixed(4) : v.toFixed(8)) + " BTC";
 
 export const treasuryValue = {
   type: "treasury-value",
@@ -16,7 +16,7 @@ export const treasuryValue = {
   page: "treasury",
   needs: (farmId) => ({ treasury: { res: "treasury", farm: farmId } }),
 
-  // data: { treasury: { value: { totals, rates }, pricesOk } }   ctx: { catColors? }
+  // data: { treasury: { value: { totals, rates }, pricesOk, warnings? } }   ctx: { catColors? }
   view({ treasury }, ctx = {}) {
     const v = treasury && treasury.value;
     if (!v || !v.totals) return { empty: "The Treasury valuation did not load." };
@@ -35,11 +35,13 @@ export const treasuryValue = {
     }
     const usdTotal = grand * (rates.sflUsd || 0);
     const btc = rates.btcUsd > 0 ? usdTotal / rates.btcUsd : 0;
-    const warn = treasury.pricesOk === false
-      ? `<div style="color:#ff8c42">⚠ prices did not load — part of the farm counts as 0</div>` : "";
+    const warns = Array.isArray(treasury.warnings) && treasury.warnings.length ? treasury.warnings
+      : treasury.pricesOk === false ? ["prices did not load — part of the farm counts as 0"] : [];
+    const warn = warns.length ? `<div class="v-mkt-note v-mkt-warn">⚠ Incomplete valuation: ${warns.map(esc).join(" · ")}</div>` : "";
+    const rateLine = `1 ${sflIcon()} = ${(rates.sflUsd || 0).toFixed(4)} USD · 1 BTC = ${formatUSD(rates.btcUsd || 0)}`;
     return {
-      html: `<div class="w-tile">${warn}<div class="w-tile-big">${sfl(grand)} ${sflIcon()}</div>` +
-        `<div class="w-tile-sub">${usd(usdTotal)} · ${btc.toFixed(8)} BTC</div></div>` +
+      html: `${warn}<div class="w-tile v-treasury-tile"><div class="w-tile-big v-treasury-total">${formatSFL(grand)} ${sflIcon()}</div>` +
+        `<div class="w-tile-sub">${formatUSD(usdTotal)} · ${btcText(btc)}</div><div class="v-dim v-treasury-rates">${rateLine}</div></div>` +
         `<div class="w-pie-wrap"><div class="w-pie" style="background:conic-gradient(${slices.join(", ") || "#333 0% 100%"})"></div>` +
         `<div class="w-pie-legend">${legend.join("")}</div></div>`,
     };

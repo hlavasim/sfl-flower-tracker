@@ -254,14 +254,6 @@ export const TABLE_INVENTORY = [
     "lines": 4
   },
   {
-    "name": "GEAR_BOOST",
-    "lines": 2
-  },
-  {
-    "name": "GEAR_BST",
-    "lines": 2
-  },
-  {
     "name": "GIFT_NPC_ORDER",
     "lines": 2
   },
@@ -319,10 +311,6 @@ export const TABLE_INVENTORY = [
   },
   {
     "name": "PAGES",
-    "lines": 2
-  },
-  {
-    "name": "PET_BASE",
     "lines": 2
   },
   {
@@ -442,10 +430,6 @@ export const TABLE_INVENTORY = [
     "lines": 2
   },
   {
-    "name": "SELL_MIN_STEPS",
-    "lines": 2
-  },
-  {
     "name": "SHRINE_DATA",
     "lines": 17
   },
@@ -476,14 +460,6 @@ export const TABLE_INVENTORY = [
   {
     "name": "TICKET_REWARDS",
     "lines": 4
-  },
-  {
-    "name": "TIER_TABLE",
-    "lines": 2
-  },
-  {
-    "name": "TIER_TBL",
-    "lines": 2
   },
   {
     "name": "TOOL_COSTS",

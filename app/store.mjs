@@ -104,6 +104,24 @@ export const RESOURCES = {
       return body.data || null;
     },
   },
+  // MY TRADES: the farm's marketplace trade ledger (buys, sells, per-item P&L).
+  myTrades: {
+    persist: true,
+    ttl: 10 * 60_000,
+    load: ({ farm }, { json }) => json(`/api/marketplace-trades?mytrades=1&farm=${enc(farm)}`),
+  },
+  // MARKS: the faction leaderboard of a week (latest without `week`) and the crawler's state.
+  marks: {
+    persist: true,
+    ttl: 5 * 60_000,
+    load: async ({ week }, { json }) => {
+      const [latest, state] = await Promise.all([
+        json(`/api/marks-history?mode=latest${week ? `&week=${enc(week)}` : ""}`),
+        json("/api/marks-history?mode=state").catch(() => ({ state: null })),
+      ]);
+      return { ...latest, state: (state && state.state) || null };
+    },
+  },
 };
 
 export function keyOf(query) {

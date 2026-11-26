@@ -1,29 +1,38 @@
 // FLIPS · boosted NFTs worth flipping: buy on the bid, relist on the ask (−10 % fee). The feed is
-// /api/marketplace-orderbook?flips=1 (store "flips"); sorting and filtering are the table's.
+// /api/marketplace-orderbook?flips=1 (store "flips"); sorting and filtering are the table's (the
+// page's old sort chips are its columns: score, margin, net, spread, liquidity, pressure, floor).
 // The marketplace collectors are paused since 2026-09-01 (RT-001): the footer says so while the
 // data is older than the collector's own threshold.
-const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-const kf = (v) => (v == null ? "—" : Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + "k" : Math.abs(v) >= 1 ? v.toFixed(0) : v.toFixed(2));
+//   💱 NFT flips: the table.   📊 Flip overview: tiles, the colour legend and the paused notice.
+import { esc, kf, pausedNotice } from "./market-common.mjs";
+import { kpis, bar } from "../ui/viz.mjs";
+
 const STALE_H = 3;
+const isStale = (upd, now = Date.now()) => !!upd && (now - new Date(upd).getTime()) / 3600000 > STALE_H;
 
 export const flipTable = {
   type: "flip-table",
   title: "💱 NFT flips",
   page: "flips",
   needs: () => ({ flips: { res: "flips" } }),
-  defaults: { sort: { key: "margin", dir: "desc" }, rows: { mode: "top", top: 20, picked: [] } },
+  defaults: { sort: { key: "score", dir: "desc" }, rows: { mode: "top", top: 50, picked: [] } },
   rowKey: (r) => `${r.collection}:${r.itemId}`,
   rowLabel: (r) => r.name || `#${r.itemId}`,
   columns: [
-    { key: "name", label: "NFT", fmt: (v, r) => `<a href="https://sunflower-land.com/play/#/marketplace/${esc(r.collection)}/${esc(r.itemId)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">${r.iconHtml || ""}${esc(v || "#" + r.itemId)} 🔗</a>` +
-      (r.boost ? `<div class="dash-detail">⚡ ${esc(String(r.boost).replace(/\n+/g, " / "))}</div>` : "") },
+    { key: "name", label: "NFT", fmt: (v, r) => `<div class="v-name">${r.iconHtml || ""}<div><a href="https://sunflower-land.com/play/#/marketplace/${esc(r.collection)}/${esc(r.itemId)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none"><b>${esc(v || "#" + r.itemId)}</b> 🔗</a>` +
+      (r.boost ? `<small>⚡ ${esc(String(r.boost).replace(/\n+/g, " / "))}</small>` : "") + `</div></div>` },
     { key: "bidAsk", label: "bid→ask", align: "right", get: (r) => r.bestListing, fmt: (v, r) => `${kf(r.bestOffer)}→${kf(r.bestListing)}` },
     { key: "avgTrade10", label: "avg10", align: "right", extra: true, fmt: kf },
     { key: "spreadPct", label: "spread", align: "right", fmt: (v) => (v == null ? "—" : `${v.toFixed(0)}%`) },
     { key: "net", label: "net", align: "right", fmt: (v) => `<span class="${v <= 0 ? "flip-bad" : "flip-good"}">${kf(v)}</span>` },
     { key: "margin", label: "margin", align: "right", fmt: (v, r) => `<span class="${v >= 15 ? "flip-good" : r.net <= 0 ? "flip-bad" : ""}">${(+v || 0).toFixed(0)}%</span>` },
-    { key: "trades", label: "trades/day", align: "right", get: (r) => r.tradesToday || 0, fmt: (v, r) => `${v}/d ${r.nTrades10 || 0}/10` },
+    // margin as a bar: full at 30 % and more, the colours of the margin column
+    { key: "marginBar", label: "", get: (r) => r.margin, fmt: (v, r) => bar(Math.max(0, (+v || 0) / 30 * 100), v >= 15 ? "ok" : r.net <= 0 ? "bad" : "mid") },
+    { key: "score", label: "score", align: "right", title: "margin × (1 + liquidity)", fmt: (v) => (v == null ? "—" : `🔥 ${(+v).toFixed(0)}`) },
+    { key: "trades", label: "trades", align: "right", get: (r) => r.tradesToday || 0, fmt: (v, r) => `${v}/d ${r.nTrades10 || 0}/10` },
+    { key: "liq", label: "liquidity", align: "right", extra: true, title: "trades today + offer pressure × 0.5" },
     { key: "pressure", label: "pressure o/l", align: "right", extra: true, get: (r) => (r.offerPressure || 0) - (r.listingPressure || 0), fmt: (v, r) => `${r.offerPressure || 0}/${r.listingPressure || 0}` },
+    { key: "floor", label: "floor", align: "right", extra: true, fmt: kf },
     { key: "collection", label: "kind", extra: true, filter: true, fmt: (v) => esc(v) },
   ],
 
@@ -32,9 +41,32 @@ export const flipTable = {
     if (!flips || !Array.isArray(flips.items)) return { rows: [], footer: "", empty: "The orderbook data did not load." };
     const rows = flips.items.map((it) => ({ ...it, iconHtml: ctx.icon ? ctx.icon(it.name) : "" }));
     const upd = rows[0] && rows[0].updatedAt;
-    const stale = upd && (Date.now() - new Date(upd).getTime()) / 3600000 > STALE_H;
-    const footer = `<div style="color:var(--text-dim)">${stale ? "⏸ Collection paused (the game restricted the marketplace API) — data frozen" : "Collected hourly"}` +
-      `${upd ? ` · last: ${new Date(upd).toLocaleString("en-US")}` : ""}</div>`;
+    const footer = `<div style="color:var(--text-dim)">${isStale(upd) ? "⏸ Collection paused (the game restricted the marketplace API) — data frozen" : "Collected hourly"}` +
+      `${upd ? ` · last: ${new Date(upd).toLocaleString("en-GB")}` : ""}</div>`;
     return { rows, footer, empty: "No NFTs with both a bid and an ask." };
+  },
+};
+
+export const flipSummary = {
+  type: "flip-summary",
+  title: "📊 Flip overview",
+  page: "flips",
+  needs: () => ({ flips: { res: "flips" } }),
+
+  view({ flips } = {}, ctx = {}) {
+    if (!flips || !Array.isArray(flips.items)) return { empty: "The orderbook data did not load." };
+    const items = flips.items, n = items.length;
+    const good = items.filter((i) => i.margin >= 15).length, bad = items.filter((i) => i.net <= 0).length;
+    const best = items.reduce((a, i) => (!a || i.margin > a.margin ? i : a), null);
+    const upd = items[0] && items[0].updatedAt;
+    return {
+      html: pausedNotice(upd, STALE_H, ctx.now || Date.now()) +
+        kpis([{ v: flips.count ?? n, l: "boosted NFTs with bid and ask" }, { v: good, l: "margin ≥ 15 %" }, { v: bad, l: "net ≤ 0" },
+          { v: best ? `${best.margin.toFixed(0)} %` : "—", l: "best margin" }]) +
+        (best ? `<div class="v-mkt-line">Best margin: <span class="v-mkt-item">${ctx.icon ? ctx.icon(best.name) : ""}${esc(best.name || "#" + best.itemId)}</span> ` +
+          `${kf(best.bestOffer)}→${kf(best.bestListing)}, net ${kf(best.net)}</div>` : "") +
+        `<div class="v-dim">Buy on the bid → relist on the ask (−10 % fee) · <span class="flip-good">green</span> margin ≥ 15 % (a healthy flip) · ` +
+        `<span class="flip-bad">red</span> net ≤ 0 (the spread does not cover the fee)</div>`,
+    };
   },
 };
