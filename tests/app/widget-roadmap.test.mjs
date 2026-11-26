@@ -180,3 +180,13 @@ test("the ROADMAP page renders its widgets through the host and registers their 
   assert.doesNotMatch(body, /class="pixel-font"/, "no retro headings in the content");
   assert.doesNotMatch(SRC, /function _rmOfferCell|function roadmapIncomeHeroHtml|function _roadmapHiddenTypes/, "the replaced helpers are gone");
 });
+
+test("🛒 buy path cells stay on one line: a short ETA, the horizon % under its gain, badges never wrap", () => {
+  const out = roadmapBuyPath.build({ roadmap: fresh() }, { ...CTX, now: Date.UTC(2026, 10, 26) }, {});
+  const r = out.rows.find((x) => x.status === "plan" && !x.bundle && x.floor > 0);
+  assert.match(r.eta, /^\d{1,2} [A-Z][a-z]{2}( \d{4})?$/, `ETA "${r.eta}" like "27 Nov" (the year only when not this one)`);
+  assert.match(r.horizonHtml, /<small class="v-dim v-rm-pct"/, "the % sits under the gain");
+  assert.match(r.badgesHtml, /^<span class="v-rm-badges">/);
+  const eta = roadmapBuyPath.columns.find((c) => c.key === "atDay").fmt(r.atDay, r);
+  assert.match(eta, /class="v-dim v-nowrap"/);
+});

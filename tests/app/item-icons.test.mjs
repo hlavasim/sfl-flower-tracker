@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { itemIconsOf, sunnysideOf } from "../../scripts/gen-item-icons.mjs";
+import { itemIconsOf, sunnysideOf, skillIconsOf } from "../../scripts/gen-item-icons.mjs";
 import { ITEM_ICONS } from "../../app/item-icons.mjs";
 
 // Item icons come from the game's own image map, not from sfl.world guesses (which answer "?" for
@@ -72,4 +72,35 @@ test("the page reads the game's map first", async () => {
   const src = readFileSync(new URL("../../flowers.html", import.meta.url), "utf8");
   assert.match(src, /if \(window\.__itemIcons && window\.__itemIcons\[name\]\) return window\.__itemIcons\[name\];/);
   assert.match(src, /import\("\/app\/item-icons\.mjs"\)/);
+});
+
+test("skills: the image of each skill from bumpkinSkills.ts (they are not in images.ts, so the buy path showed \"?\")", () => {
+  const skills = `import sturdyShovel from "assets/skills/sturdy_shovel.webp";
+export const BUMPKIN_REVAMP_SKILL_TREE = {
+  "Sturdy Shovel": {
+    name: "Sturdy Shovel",
+    tree: "Cave",
+    boosts: {
+      buff: {
+        boostedItemIcon: ITEM_DETAILS["Sand Shovel"].image,
+      },
+    },
+    image: sturdyShovel,
+  },
+  "Green Thumb": {
+    name: "Green Thumb",
+    image: SUNNYSIDE?.crafting?.timber,
+  },
+  "Lucky Pick": {
+    name: "Lucky Pick",
+    image: ITEM_DETAILS["Apple Seed"].image,
+  },
+};`;
+  const items = itemIconsOf(IMAGES, SUNNY);
+  assert.deepStrictEqual(skillIconsOf(skills, SUNNY, items), {
+    "Sturdy Shovel": "https://raw.githubusercontent.com/sunflower-land/sunflower-land/main/src/assets/skills/sturdy_shovel.webp",
+    "Green Thumb": "https://sunflower-land.com/game-assets/crafting/timber.webp",
+    "Lucky Pick": items["Apple Seed"],
+  });
+  assert.ok(ITEM_ICONS["Sturdy Shovel"] && ITEM_ICONS["Beetle Nest"] && ITEM_ICONS["Lean Compost"], "the generated map carries the skills");
 });

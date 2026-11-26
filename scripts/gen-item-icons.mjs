@@ -4,7 +4,7 @@
 // so the page's onerror never fires) — Timber, Crimsteel, Kelp Fibre… showed "?".
 //
 //   node scripts/gen-item-icons.mjs            (fetches the two files from GitHub main)
-//   node scripts/gen-item-icons.mjs <images.ts> <sunnyside.ts> <plant.ts>
+//   node scripts/gen-item-icons.mjs <images.ts> <sunnyside.ts> <plant.ts> <bumpkinSkills.ts>
 import { readFileSync, writeFileSync } from "node:fs";
 
 const RAW = "https://raw.githubusercontent.com/sunflower-land/sunflower-land/main/src/";
@@ -80,11 +80,37 @@ export function itemIconsOf(imagesTs, sunnysideTs, plantTs = "") {
   return out;
 }
 
+// Skills are not in images.ts: each skill in bumpkinSkills.ts has its own `image:` (an imported
+// asset, a SUNNYSIDE?.… path or another item's ITEM_DETAILS[…].image) at the end of its block.
+export function skillIconsOf(skillsTs, sunnysideTs, items = {}, plantTs = "") {
+  const imports = importsOf(skillsTs);
+  const sunny = sunnysideOf(sunnysideTs);
+  const folders = cropFoldersOf(plantTs);
+  const out = {};
+  let name = null;
+  for (const line of skillsTs.split(/\r?\n/)) {
+    const open = line.match(/^ {2}(?:"([^"]+)"|([\w$]+)): \{$/);
+    if (open) { name = open[1] || open[2]; continue; }
+    if (/^ {2}\},?$/.test(line)) { name = null; continue; }
+    const img = name && line.match(/^ {4}image: (.+?),?$/);
+    if (!img) continue;
+    const expr = img[1].trim().replace(/\?\./g, ".");
+    const item = expr.match(/^ITEM_DETAILS\["([^"]+)"\]\.image$/);
+    const url = expr.startsWith("SUNNYSIDE.") ? sunny[expr.slice(10)]
+      : expr.startsWith("CROP_LIFECYCLE") ? cropUrl(expr, folders)
+      : item ? items[item[1]] : imports[expr];
+    if (url) out[name] = url;   // the revamped tree comes after the legacy one and wins
+  }
+  return out;
+}
+
 if (process.argv[1] && process.argv[1].endsWith("gen-item-icons.mjs")) {
   const images = await source(process.argv[2], "features/game/types/images.ts");
   const sunny = await source(process.argv[3], "assets/sunnyside.ts");
   const plant = await source(process.argv[4], "features/island/plots/lib/plant.ts");
+  const skillsTs = await source(process.argv[5], "features/game/types/bumpkinSkills.ts");
   const icons = itemIconsOf(images, sunny, plant);
+  for (const [k, v] of Object.entries(skillIconsOf(skillsTs, sunny, icons, plant))) if (!(k in icons)) icons[k] = v;
   const keys = Object.keys(icons).sort();
   const body = keys.map((k) => `  ${JSON.stringify(k)}: ${JSON.stringify(icons[k])},`).join("\n");
   writeFileSync(new URL("../app/item-icons.mjs", import.meta.url),

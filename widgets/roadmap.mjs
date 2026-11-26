@@ -21,7 +21,9 @@ export function fmtDays(d) {
 }
 export function fmtDate(d, now = Date.now()) {
   if (!isFinite(d)) return "—";
-  return new Date(now + d * 86400000).toISOString().slice(0, 10);
+  // "27 Nov", the year only when it is not this one ("3 Mar 2028")
+  const t = new Date(now + d * 86400000), mon = t.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+  return `${t.getUTCDate()} ${mon}` + (t.getUTCFullYear() !== new Date(now).getUTCFullYear() ? ` ${t.getUTCFullYear()}` : "");
 }
 export function fmtFlower(v) {
   if (!isFinite(v)) return "∞";
@@ -212,7 +214,7 @@ export const roadmapBuyPath = {
     { key: "rateAfter", label: "FL/day", align: "right", title: "Income per day after this buy.",
       get: (r) => (r.status === "plan" ? r.rateAfter : null), fmt: (v) => (v == null ? "—" : fmtFlower(v)) },
     { key: "atDay", label: "ETA", align: "right", title: "When the plan has saved up for it.",
-      get: (r) => (r.status === "plan" ? r.atDay : null), fmt: (v, r) => (v == null ? "—" : `<span class="v-dim">${esc(r.eta)}</span>`) },
+      get: (r) => (r.status === "plan" ? r.atDay : null), fmt: (v, r) => (v == null ? "—" : `<span class="v-dim v-nowrap">${esc(r.eta)}</span>`) },
   ],
 
   // data: { roadmap, book?, farm? }; ctx: { icon(name) → HTML, flower → HTML, picks() → [names], now? }
@@ -250,11 +252,11 @@ export const roadmapBuyPath = {
       const horizonHtml = grouped ? `<span class="v-rm-group">in the group</span>`
         : r.horizonGain != null && isFinite(r.horizonGain)
           ? `<span class="${r.horizonGain > 0 ? "v-done" : "v-rm-neg"}"${r.resale > 0 ? ` title="including the NFT’s resale at the end for ${fmtFlower(r.resale)}"` : ""}>${r.horizonGain > 0 ? "+" : "−"}${fmtFlower(Math.abs(r.horizonGain))}</span>` +
-            (!r.bundle && r.floor > 0 ? ` <small class="v-dim" title="result after ${esc(years)} years as % of the buy price ${fmtFlower(r.floor)}">(${r.horizonGain >= 0 ? "+" : "−"}${Math.round((Math.abs(r.horizonGain) / r.floor) * 100)} %)</small>` : "")
+            (!r.bundle && r.floor > 0 ? `<small class="v-dim v-rm-pct" title="result after ${esc(years)} years as % of the buy price ${fmtFlower(r.floor)}">(${r.horizonGain >= 0 ? "+" : "−"}${Math.round((Math.abs(r.horizonGain) / r.floor) * 100)} %)</small>` : "")
           : "—";
       return { ...r, rank: k + 1, trade, offer, offerAt: op > 0 ? op : r.floor || 0, picked: picks.has(r.name),
         iconHtml: (grouped ? `<span class="v-rm-group" title="Belongs to the group above — bought with it.">↳</span>` : "") + rowIcon(ctx, r),
-        linkHtml: name, badgesHtml: badges.join(" "), boostHtml: boost, valuePct: maxVal > 0 ? ((r.value || 0) / maxVal) * 100 : 0,
+        linkHtml: name, badgesHtml: `<span class="v-rm-badges">${badges.join("")}</span>`, boostHtml: boost, valuePct: maxVal > 0 ? ((r.value || 0) / maxVal) * 100 : 0,
         offerRoiHtml, chainHtml, horizonHtml, eta: fmtDate(r.atDay, now) };
     });
     const rows = all.filter((r) => !hide.has(typeOf(r)) && (opts.status === "plan" ? r.status === "plan" : opts.status === "worth" ? r.status !== "beyond" : true));
