@@ -23,6 +23,7 @@ import { worldEffLevel, worldCurrentExpansion, worldReach, worldNodes, worldAsce
 import { worldSummary, worldDataset, worldPriority } from "./world.mjs";
 import { ykLive, ykPlacing, ykFacts, ykPlanner, ykCalculator, ykTiers, ykSources, ykRanks, ykEggs, ykVerdict } from "./yakkamon.mjs";
 import { specCalendar, specTrades, specSkim, specEggs } from "./speculation.mjs";
+import { decSummary, decColours, decGrow } from "./decorations.mjs";
 
 export const WIDGETS = {
   [fishingAgeNow.type]: fishingAgeNow,
@@ -52,4 +53,5 @@ export const WIDGETS = {
   [ykLive.type]: ykLive, [ykPlacing.type]: ykPlacing, [ykFacts.type]: ykFacts, [ykPlanner.type]: ykPlanner, [ykCalculator.type]: ykCalculator,
   [ykTiers.type]: ykTiers, [ykSources.type]: ykSources, [ykRanks.type]: ykRanks, [ykEggs.type]: ykEggs, [ykVerdict.type]: ykVerdict,
   [specCalendar.type]: specCalendar, [specTrades.type]: specTrades, [specSkim.type]: specSkim, [specEggs.type]: specEggs,
+  [decSummary.type]: decSummary, [decColours.type]: decColours, [decGrow.type]: decGrow,
 };

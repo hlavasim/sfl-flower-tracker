@@ -2903,6 +2903,28 @@
     .v-spec-form label { display: flex; flex-direction: column; gap: 3px; color: var(--c-muted); font-size: 12px; }
     .v-spec-form input, .v-spec-form select { background: var(--c-bg); color: var(--c-text); border: 1px solid var(--c-line); border-radius: 8px; padding: 6px 8px; font: inherit; }
     .v-spec-form button { background: var(--c-accent); color: #fff; border: none; border-radius: 8px; padding: 7px 14px; font: inherit; font-weight: 600; cursor: pointer; }
+    /* DECORATIONS (widgets/decorations.mjs + the page's map and editors) */
+    .v-dec-kpis .v-kpi small { display: block; color: var(--c-dim); font-size: 11.5px; margin-top: 2px; }
+    .v-dec-colours { display: grid; gap: 8px; margin-bottom: 10px; }
+    .v-dec-colour { display: grid; grid-template-columns: 14px 70px 50px 1fr; align-items: center; gap: 8px; }
+    .v-dec-table td.v-dec-r, .v-dec-table th.v-dec-r { text-align: right; }
+    .v-dec-table tr.v-dec-fin td { color: var(--c-green); }
+    .v-dec-table tr.v-dec-guide td { background: var(--c-card2); padding: 10px 12px; }
+    .v-dec-mini { display: grid; grid-auto-rows: 20px; width: max-content; background: var(--c-bg); border: 1px solid var(--c-line); border-radius: 6px; }
+    .v-dec-mini > div { outline: 1px solid rgba(255,255,255,0.06); outline-offset: -1px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; }
+    .v-dec-mini > div.v-dec-occ { background: #3a3326; }
+    .v-dec-done { background: rgba(95,179,107,0.22); color: var(--c-green); }
+    .v-dec-todo { background: rgba(224,179,74,0.22); color: var(--c-yellow); }
+    .v-dec-steps { display: flex; flex-wrap: wrap; gap: 4px; }
+    .v-dec-step { display: inline-block; min-width: 96px; padding: 3px 8px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
+    .v-dec-controls { display: grid; gap: 8px; }
+    .v-dec-line { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .v-dec-controls input[type=number], .v-dec-controls input:not([type]) { background: var(--c-bg); color: var(--c-text); border: 1px solid var(--c-line); border-radius: 8px; padding: 4px 6px; width: 64px; font: inherit; }
+    .v-dec-clear { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--c-line); border-radius: 10px; cursor: pointer; }
+    .v-dec-clear.on { border-color: var(--c-green); background: rgba(95,179,107,0.06); }
+    .v-dec-map { overflow-x: auto; border: 1px solid var(--c-line); border-radius: 10px; background: #12110f; }
+    .v-dec-json { width: 100%; height: 90px; box-sizing: border-box; font-family: ui-monospace, monospace; font-size: 11.5px; background: var(--c-bg); color: var(--c-muted); border: 1px solid var(--c-line); border-radius: 8px; padding: 8px; }
+    .v-dec-reload { position: fixed; right: 14px; bottom: 14px; z-index: 60; font-family: var(--c-font); font-size: 13px; font-weight: 600; padding: 9px 16px; border: none; border-radius: 10px; background: var(--c-accent); color: #fff; cursor: pointer; box-shadow: 0 6px 18px rgba(0,0,0,0.5); }
     /* thin, quiet scrollbars everywhere (Firefox: scrollbar-*, Chromium/Safari: ::-webkit-scrollbar) */
     * { scrollbar-width: thin; scrollbar-color: #4a4845 transparent; }
     ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -20396,7 +20418,10 @@
       return plan;
     }
 
-    let _decData = null, _decErr = null, _decLoading = false;
+    let _decErr = null;
+    // The raw farm (x/y of every placed object) through the store, so the page and pinned copies share it.
+    const _decQ = () => ({ res: "farm", farm: FARM_ID });
+    function _decFarmNow() { const e = typeof __store === "undefined" ? null : __store.peek(_decQ()); return e && e.data ? (e.data.farm || e.data) : null; }
     /*
      * Everything you set on this page survives a reload — the layout, the scope, the custom
      * JSON and which flowers you have open. Planting is done with the page open beside the
@@ -20456,15 +20481,11 @@
       if (_decReloading) return;
       _decReloading = true;
       const btn = document.getElementById("dec-reload");
-      if (btn) { btn.textContent = "↻ RELOADING…"; btn.style.opacity = "0.65"; btn.style.pointerEvents = "none"; }
-      try {
-        const r = await fetch(`/api/proxy?url=${encodeURIComponent("https://api.sunflower-land.com/community/farms/" + FARM_ID)}`);
-        const j = await r.json();
-        _decData = j.farm || j;
-        _decErr = null;
-      } catch (e) { _decErr = "Could not reload the farm (" + e.message + ")"; }
+      if (btn) { btn.textContent = "↻ Reloading…"; btn.style.opacity = "0.65"; btn.style.pointerEvents = "none"; }
+      const e = await __store.get(_decQ(), { force: true });
+      _decErr = e.status === "ok" ? null : "Could not reload the farm (" + e.error + ")";
       _decReloading = false;
-      if (getPage() !== "decorations") return;
+      if (getPage() !== "decorations") { if (window._wRerender) window._wRerender(); return; }
       const y = window.scrollY;
       await renderDecorations();
       window.scrollTo(0, y);
@@ -20486,22 +20507,12 @@
     };
     window._decUseGenerated = function () { _decCustom = null; _decSave(); renderDecorations(); };
 
-    async function renderDecorations() {
-      const app = document.getElementById("app");
-      if (!FARM_ID) { app.innerHTML = `<div class="error-screen pixel-panel pixel-font"><div class="icon">⚠️</div><h2>Set your Farm ID first</h2></div>`; return; }
-      if (!_decData && !_decLoading) {
-        _decLoading = true;
-        app.innerHTML = `<div class="pixel-panel pixel-font" style="padding:14px">Loading farm layout…</div>`;
-        try {
-          const r = await fetch(`/api/proxy?url=${encodeURIComponent("https://api.sunflower-land.com/community/farms/" + FARM_ID)}`);
-          const j = await r.json();
-          _decData = j.farm || j;
-        } catch (e) { _decErr = "Could not load the farm (" + e.message + ")"; }
-        _decLoading = false;
-      }
-      const farm = _decData;
-      if (!farm) { app.innerHTML = `<div class="error-screen pixel-panel pixel-font"><div class="icon">⚠️</div><h2>${escHTML(_decErr || "No farm data")}</h2><button class="refresh-btn" onclick="_decData=null;renderDecorations()">RETRY</button></div>`; return; }
-
+    /*
+     * The flower plan for the ascension band from the farm and the page's settings (layout, scope,
+     * per-flower count, clearing): every number the DECORATIONS widgets show (widgets/decorations.mjs)
+     * and what the map and the layout card need. A function of the farm, so a pinned copy computes it too.
+     */
+    function _decCompute(farm) {
       const expansions = Math.max(1, parseInt((farm.inventory || {})["Basic Land"]) || 1);
       const ascLevel = (farm.island || {}).ascensionLevel || 0;
       /*
@@ -20612,48 +20623,94 @@
       const collisions = [...plan.keys()].filter((k) => occ.has(k));
       const outside = [...plan.keys()].filter((k) => !owner.has(k));
 
-      let h = `<div class="header pixel-panel pixel-font"><h1>🌸 DECORATIONS</h1>
-        <div class="farm-id">Farm #${escHTML(FARM_ID)} · ${expansions} expansions · ascension A${ascLevel}</div>
-        <div style="font-size:0.44rem;color:var(--text-dim);margin-top:5px">plant in the game, press ↺ RELOAD, and the tiles you did turn green</div></div>`;
+      // Each flower's placement guide: its tiles walked in ribbon order, every step the move from the
+      // previous tile of the SAME flower, and the band in scope as a small grid carrying the step numbers.
+      const guideOf = (r) => {
+        const mine = [...scoped.entries()].filter(([, v]) => v === r.name).map(([k]) => k.split(",").map(Number));
+        mine.sort((a, b) => {
+          const pa = ribbon.rib.get(a[0] + "," + a[1]) || [0, 0], pb = ribbon.rib.get(b[0] + "," + b[1]) || [0, 0];
+          return pa[0] - pb[0] || pa[1] - pb[1];
+        });
+        const placed = (x, y) => occ.get(x + "," + y) === r.name;
+        const steps = mine.map(([x, y], i) => {
+          let move = "start";
+          if (i > 0) {
+            const [px, py] = mine[i - 1], dx = x - px, dy = y - py;
+            const parts = [];
+            if (dx) parts.push(`${dx > 0 ? "→" : "←"}${Math.abs(dx)}`);
+            if (dy) parts.push(`${dy > 0 ? "↑" : "↓"}${Math.abs(dy)}`);
+            move = parts.join(" ") || "—";
+          }
+          return { n: i + 1, move, done: placed(x, y) };
+        });
+        const order = new Map(mine.map(([x, y], i) => [x + "," + y, i + 1]));
+        const cells = [];
+        for (let y = gY1; y >= gY0; y--) for (let x = gX0; x <= gX1; x++) {
+          const k = x + "," + y;
+          if (!ascSet.has(k)) continue;
+          const step = order.get(k);
+          cells.push({ col: x - gX0 + 1, row: gY1 - y + 1, step: step || 0, done: !!(step && placed(x, y)), occ: occ.has(k), title: `${k}${step ? " · step " + step : ""}` });
+        }
+        return { steps, mini: { cols: gX1 - gX0 + 1, cells } };
+      };
+      const built = Math.max(0, Math.min(12, expansions - ASC_FROM));
+      const byColour = {};
+      for (const name of scoped.values()) { const c = decColors.find((c) => name.startsWith(c + " ")) || "other"; byColour[c] = (byColour[c] || 0) + 1; }
+      return {
+        expansions, ascLevel, ASC_FROM, ASC_TO, occ, owner, origins, items, ascTiles, freeAsc, freeNow, autoPer, per, slots, overflow,
+        plan, blocked, toMove, scoped, need, collisions, outside, built, toCome: Math.max(0, 12 - built),
+        ascFrom: ASC_FROM, plantable: _decClear ? freeAsc.length : freeNow.length,
+        plantableNote: _decClear ? (blocked.length ? blocked.length + " need clearing first" : "nothing in the way") : blocked.length + " taken by nodes",
+        planSize: plan.size, kinds: Object.keys(need).length, totalNeed, totalDone, totalMissing, flowersDone, byColour,
+        rows: rows.map((r) => ({ ...r, guide: guideOf(r) })),
+      };
+    }
+    // The widgets' page context: the plan from the page's settings, icons, which guides are open.
+    for (const t of ["dec-summary", "dec-colours", "dec-grow"]) {
+      _wCtxMap[t] = () => ({ plan: _decCompute, open: () => _decOpen,
+        icon: (n) => `<img src="${getItemIcon(n)}" onerror="this.style.display='none'" alt="" style="height:1.2em;vertical-align:-0.25em;margin-right:3px">` });
+    }
 
-      h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px">
-          ${[["ASCENSION BAND", "12 expansions", Math.max(0, Math.min(12, expansions - ASC_FROM)) + " built, " + Math.max(0, 12 - Math.max(0, expansions - ASC_FROM)) + " to come"],
-             ["TILES THERE", _fmtNum(ascTiles.length), "12 × 36"],
-             ["PLANTABLE", _fmtNum(_decClear ? freeAsc.length : freeNow.length), _decClear ? (blocked.length ? blocked.length + " need clearing first" : "nothing in the way") : blocked.length + " taken by nodes"],
-             ["PLAN USES", _fmtNum(plan.size), totalNeed ? Object.keys(need).length + " kinds" : "—"],
-             ["STILL TO GROW", _fmtNum(totalMissing), totalMissing ? "not in inventory" : "all in hand ✓"]]
-            .map(([k, v, n]) => `<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:7px 9px">
-              <div style="font-size:0.44rem;color:var(--text-dim);letter-spacing:0.05em">${k}</div>
-              <div style="font-size:0.72rem;color:var(--sunpetal);font-weight:bold">${v}</div>
-              <div style="font-size:0.43rem;color:var(--text-dim)">${n}</div></div>`).join("")}
-        </div>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:9px">
-          <label style="font-size:0.5rem;color:var(--text-dim)">${_decCustom ? "<b>custom JSON layout in use</b>" : `generated layout — <input type="number" min="0" max="40" placeholder="auto" value="${_decPer == null ? "" : _decPer}" style="width:52px;font-size:0.6rem" onchange="_decSetPer(this.value)"> of each flower <span style="color:var(--text-dim)">(auto = ${autoPer}, the most that stays even in ${_fmtNum(freeAsc.length)} tiles)</span>`}</label>
-          ${_decCustom ? `<button onclick="_decUseGenerated()" style="font-size:0.5rem;padding:3px 10px;border:1px solid var(--border-brown);border-radius:4px;background:#241a10;color:var(--sunpetal);cursor:pointer">back to generated</button>` : ""}
-        </div>
-        ${!_decCustom && overflow ? `<div style="font-size:0.5rem;color:var(--red);margin-top:6px">⚠ ${per} of each needs ${_fmtNum(per * slots)} tiles but only ${_fmtNum(freeAsc.length)} are free — the last colours get cut off. Use ${autoPer} (or leave it on auto).</div>` : ""}
-        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:8px">
-          <span style="font-size:0.46rem;color:var(--text-dim)">plan for</span>
-          ${[["all", "whole band (12)"], ["built", "only what I have (" + Math.max(0, Math.min(12, expansions - ASC_FROM)) + ")"]].map(([v, l]) => {
-            const on = _decScope === v;
-            return `<button onclick="_decSetScope('${v}')" style="font-size:0.48rem;padding:2px 9px;border:1px solid var(--border-brown);border-radius:4px;cursor:pointer;background:${on ? "var(--sunpetal)" : "#241a10"};color:${on ? "#1a120a" : "var(--text-secondary)"};font-weight:${on ? "bold" : "normal"}">${l}</button>`;
-          }).join("")}
-          <span style="font-size:0.44rem;color:var(--text-dim)">${_decScope === "built" ? "shopping list and guide cover only the expansions that exist today" : "the finished layout, including expansions still to come"}</span>
-        </div>
-        <div style="margin-top:8px;border:1px solid ${_decClear ? "var(--green)" : "var(--border-brown)"};border-radius:6px;background:${_decClear ? "#16190d" : "#161009"};padding:7px 9px">
-          <label style="font-size:0.52rem;color:var(--text-secondary);display:flex;gap:6px;align-items:center;cursor:pointer">
-            <input type="checkbox" ${_decClear ? "checked" : ""} onchange="_decToggleClear(this.checked)" style="cursor:pointer">
-            <b>Plan the whole band — I'll move its nodes onto expansions 1–30</b>
-          </label>
-          <div style="font-size:0.46rem;color:var(--text-dim);margin-top:4px;line-height:1.6">${_decClear
-            ? `All <b>432</b> tiles of the 12 ascension expansions count as plantable.${toMove.length ? ` First clear what sits there now: <b>${escHTML(toMove.join(", "))}</b> — ${blocked.length} tiles across ${Math.max(0, Math.min(12, expansions - ASC_FROM))} built expansions.` : ""} The unbuilt ones are drawn with a dashed edge.`
-            : `The layout is unchanged, but only the tiles that are free <b>right now</b> are listed — ${_fmtNum(freeNow.length)} of ${_fmtNum(ascTiles.length)}.`}</div>
-        </div>
-        ${collisions.length || outside.length ? `<div style="font-size:0.5rem;color:var(--red);margin-top:7px">⚠ ${collisions.length} tile(s) in your layout sit on something already placed${outside.length ? `, ${outside.length} are outside any expansion you own` : ""}.</div>` : ""}
-        ${_decErr ? `<div style="font-size:0.5rem;color:var(--red);margin-top:6px">${escHTML(_decErr)}</div>` : ""}
+    async function renderDecorations() {
+      const app = document.getElementById("app");
+      if (!FARM_ID) { app.innerHTML = _wPageHead("🌸 Decorations") + `<div class="w-frame pixel-panel">⚠️ Set your Farm ID first.</div>`; return; }
+      window._wRerender = () => { if (getPage() === "decorations") renderDecorations(); };
+      window._wRefresh = () => window._decReload();
+      if (!_decFarmNow()) {
+        app.innerHTML = _wPageHead("🌸 Decorations") + `<div class="w-frame pixel-panel v-dim">Loading farm layout…</div>`;
+        const e = await __store.get(_decQ());
+        if (e.status !== "ok") _decErr = "Could not load the farm (" + e.error + ")";
+        if (getPage() !== "decorations") return;
+      }
+      const farm = _decFarmNow();
+      if (!farm) { app.innerHTML = _wPageHead("🌸 Decorations") + `<div class="w-frame pixel-panel"><div class="w-error">${escHTML(_decErr || "No farm data")}</div><button class="dash-toggle-btn" onclick="renderDecorations()">Retry</button></div>`; return; }
+
+      const P = _decCompute(farm);
+      const { expansions, ascLevel, ASC_FROM, ASC_TO, occ, owner, origins, items, ascTiles, freeAsc, freeNow, autoPer, per, slots, overflow,
+        plan, blocked, toMove, collisions, outside, built } = P;
+      const fresh = __wFresh(__store.peek(_decQ()));
+      const W_ = (type) => (typeof __widgets === "undefined" ? _wMissing(type)
+        : __widgets.renderPage(type, { data: { farm }, ctx: _wCtx(type), fresh }));
+      const seg = (on, onclick, label, title = "") => `<button class="dash-toggle-btn${on ? " on" : ""}" onclick="${onclick}"${title ? ` title="${escHTML(title)}"` : ""}>${label}</button>`;
+
+      let h = _wPageHead("🌸 Decorations", `Farm #${escHTML(FARM_ID)} · ${expansions} expansions · ascension A${ascLevel} · plant in the game, press ↺ Reload, and the tiles you did turn green`);
+
+      // the plan's settings (page-only controls) and the warnings
+      h += `<div class="w-frame pixel-panel v-dec-controls">
+        <div class="v-dec-line">${_decCustom ? "<b>Custom JSON layout in use</b>" : `Generated layout — <input type="number" min="0" max="40" placeholder="auto" value="${_decPer == null ? "" : _decPer}" onchange="_decSetPer(this.value)"> of each flower <span class="v-dim">(auto = ${autoPer}, the most that stays even in ${_fmtNum(freeAsc.length)} tiles)</span>`}
+          ${_decCustom ? seg(false, "_decUseGenerated()", "Back to generated") : ""}</div>
+        ${!_decCustom && overflow ? `<div class="w-error">⚠ ${per} of each needs ${_fmtNum(per * slots)} tiles but only ${_fmtNum(freeAsc.length)} are free — the last colours get cut off. Use ${autoPer} (or leave it on auto).</div>` : ""}
+        <div class="v-dec-line"><span class="v-dim">Plan for</span>
+          ${[["all", "Whole band (12)"], ["built", "Only what I have (" + built + ")"]].map(([v, l]) => seg(_decScope === v, `_decSetScope('${v}')`, l)).join("")}
+          <span class="v-dim">${_decScope === "built" ? "shopping list and guide cover only the expansions that exist today" : "the finished layout, including expansions still to come"}</span></div>
+        <label class="v-dec-clear${_decClear ? " on" : ""}"><input type="checkbox" ${_decClear ? "checked" : ""} onchange="_decToggleClear(this.checked)">
+          <span><b>Plan the whole band — I'll move its nodes onto expansions 1–30</b><br><span class="v-dim">${_decClear
+            ? `All <b>432</b> tiles of the 12 ascension expansions count as plantable.${toMove.length ? ` First clear what sits there now: ${toMove.map((n) => `${_wCtxMap["dec-grow"]().icon(n)}<b>${escHTML(n)}</b>`).join(", ")} — ${blocked.length} tiles across ${built} built expansions.` : ""} The unbuilt ones are drawn with a dashed edge.`
+            : `The layout is unchanged, but only the tiles that are free <b>right now</b> are listed — ${_fmtNum(freeNow.length)} of ${_fmtNum(ascTiles.length)}.`}</span></span></label>
+        ${collisions.length || outside.length ? `<div class="w-error">⚠ ${collisions.length} tile(s) in your layout sit on something already placed${outside.length ? `, ${outside.length} are outside any expansion you own` : ""}.</div>` : ""}
+        ${_decErr ? `<div class="w-error">${escHTML(_decErr)}</div>` : ""}
       </div>`;
-
+      h += W_("dec-summary");
       // ── the map ───────────────────────────────────────────────────────
       let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
       origins.forEach((o) => { const b = decBox(o); minX = Math.min(minX, b.x0); maxX = Math.max(maxX, b.x1); minY = Math.min(minY, b.y0); maxY = Math.max(maxY, b.y1); });
@@ -20725,120 +20782,33 @@
       // than the window, so sizing off window.innerWidth overflowed. A first guess goes into the
       // markup and _decFitMap corrects it against the real container right after insertion.
       const px = _decTile === "fit" ? 13 : _decTile;
-      h += `<div class="pixel-panel" style="padding:10px;margin-bottom:12px">
-        <div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-bottom:6px">ISLAND MAP <span style="color:var(--text-dim);font-size:0.45rem">· ${W}×${H} tiles · gold outline = ascension expansions</span></div>
-        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
-          <span style="font-size:0.46rem;color:var(--text-dim)">tile size</span>
-          ${[["fit", "↔ fit width"], [8, "8"], [13, "13"], [20, "20"], [28, "28"]].map(([v, l]) => {
-            const on = String(_decTile) === String(v);
-            return `<button onclick="_decSetTile('${v}')" style="font-size:0.48rem;padding:2px 9px;border:1px solid var(--border-brown);border-radius:4px;cursor:pointer;background:${on ? "var(--sunpetal)" : "#241a10"};color:${on ? "#1a120a" : "var(--text-secondary)"};font-weight:${on ? "bold" : "normal"}">${l}</button>`;
-          }).join("")}
-          <span style="font-size:0.44rem;color:var(--text-dim)">${px}px · ${W * px}×${H * px}</span>
-        </div>
-        <div style="overflow-x:auto;border:1px solid var(--border-brown);border-radius:6px;background:#0d0b07">
-          <div id="dec-grid" data-cols="${W}" style="display:grid;grid-template-columns:repeat(${W}, ${px}px);grid-auto-rows:${px}px;gap:0;width:max-content">${cells.join("")}</div>
-        </div>
-        <div style="font-size:0.45rem;color:var(--text-dim);margin-top:6px;line-height:1.6">Hover a tile for its coordinates. Flowers are drawn on plain ground with no colour wash behind them, so this is roughly what the arrangement will look like in game — the bands come from the flowers themselves. Tiles with any other icon are nodes, buildings and decorations you already have; plain dark tiles are free. A dashed edge means that expansion is not built yet.</div>
+      h += `<div class="w-frame pixel-panel">
+        <div class="w-head"><span class="w-title">🗺️ Island map</span><span class="v-dim">${W}×${H} tiles · gold outline = ascension expansions</span></div>
+        <div class="v-dec-line"><span class="v-dim">Tile size</span>
+          ${[["fit", "↔ Fit width"], [8, "8"], [13, "13"], [20, "20"], [28, "28"]].map(([v, l]) => seg(String(_decTile) === String(v), `_decSetTile('${v}')`, l)).join("")}
+          <span class="v-dim">${px}px · ${W * px}×${H * px}</span></div>
+        <div class="v-dec-map"><div id="dec-grid" data-cols="${W}" style="display:grid;grid-template-columns:repeat(${W}, ${px}px);grid-auto-rows:${px}px;gap:0;width:max-content">${cells.join("")}</div></div>
+        <div class="v-dim" style="margin-top:8px">Hover a tile for its coordinates. Flowers are drawn on plain ground with no colour wash behind them, so this is roughly what the arrangement will look like in game — the bands come from the flowers themselves. Tiles with any other icon are nodes, buildings and decorations you already have; plain dark tiles are free. A dashed edge means that expansion is not built yet.</div>
       </div>`;
 
-      // ── colour legend + shopping list ────────────────────────────────
-      const byColour = {};
-      for (const name of scoped.values()) { const c = decColors.find((c) => name.startsWith(c + " ")) || "other"; byColour[c] = (byColour[c] || 0) + 1; }
-      h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
-        <div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-bottom:6px">COLOUR BALANCE</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:0.52rem">
-          ${decColors.map((c) => `<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:11px;height:11px;background:${decSwatch[c]};border-radius:2px;display:inline-block"></span>${c} <b style="color:var(--sunpetal)">${byColour[c] || 0}</b></span>`).join(" &nbsp; ")}
-        </div>
-        <div style="font-size:0.45rem;color:var(--text-dim);margin-top:5px">${new Set(decColors.map((c) => byColour[c] || 0)).size === 1 ? "✓ perfectly even across all five colours" : "⚠ colours are not even — adjust the per-flower count or your JSON"}</div>
-      </div>`;
+      h += W_("dec-colours");
+      h += W_("dec-grow");
 
-      h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
-        <div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-bottom:6px">WHAT TO GROW <span style="color:var(--text-dim);font-size:0.45rem">· plan needs ${_fmtNum(totalNeed)}, <b style="color:var(--green)">${_fmtNum(totalDone)} already planted</b>${flowersDone ? ` (${flowersDone} of ${rows.length} flowers finished)` : ""}, ${_fmtNum(totalMissing)} still to grow</span></div>
-        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:340px">
-          <tr style="color:var(--text-dim);font-size:0.45rem"><td style="padding:0 6px 3px 0">flower</td><td style="text-align:right;padding:0 6px 3px">need</td><td style="text-align:right;padding:0 6px 3px">planted</td><td style="text-align:right;padding:0 6px 3px">in bag</td><td style="text-align:right;padding:0 0 3px">to grow</td></tr>
-          ${rows.map((r) => {
-            /*
-             * Placement guide. Coordinates are useless when you are stood in the game with a
-             * flower in hand — what you need is "from the last one, three right and two up".
-             * So the tiles are walked in ribbon order and each step is expressed as a move from
-             * the previous tile of the SAME flower, with a map of just the band beside it.
-             */
-            const mine = [...scoped.entries()].filter(([, v]) => v === r.name).map(([k]) => k.split(",").map(Number));
-            mine.sort((a, b) => {
-              const pa = ribbon.rib.get(a[0] + "," + a[1]) || [0, 0], pb = ribbon.rib.get(b[0] + "," + b[1]) || [0, 0];
-              return pa[0] - pb[0] || pa[1] - pb[1];
-            });
-            const placed = (x, y) => occ.get(x + "," + y) === r.name;
-            const steps = mine.map(([x, y], i) => {
-              const done = placed(x, y);
-              let move = "<span style=\"color:var(--text-dim)\">start</span>";
-              if (i > 0) {
-                const [px, py] = mine[i - 1], dx = x - px, dy = y - py;
-                const parts = [];
-                if (dx) parts.push(`${dx > 0 ? "→" : "←"}${Math.abs(dx)}`);
-                if (dy) parts.push(`${dy > 0 ? "↑" : "↓"}${Math.abs(dy)}`);
-                move = parts.join(" ") || "—";
-              }
-              return `<span style="display:inline-block;min-width:104px;padding:3px 7px;border-radius:4px;background:${done ? "#1d3d12" : "#6b5410"};color:${done ? "#8ce06a" : "#ffd86b"};font-size:0.6rem;white-space:nowrap"><b>${i + 1}.</b> ${move}${done ? " ✓" : ""}</span>`;
-            }).join("");
-            /*
-             * Guide map: the band at a size you can actually read, with a grid so tiles can be
-             * counted off, and each target square carrying its STEP NUMBER so the numbered walk
-             * below and the picture refer to the same thing.
-             */
-            const order = new Map(mine.map(([x, y], i) => [x + "," + y, i + 1]));
-            const GP = 20;
-            let mini = "";
-            for (let y = gY1; y >= gY0; y--) for (let x = gX0; x <= gX1; x++) {
-              const k = x + "," + y;
-              if (!ascSet.has(k)) continue;
-              const step = order.get(k);
-              const done = step && placed(x, y);
-              const bg = step ? (done ? "#1d3d12" : "#6b5410") : (occ.has(k) ? "#3a2c18" : "#1a1710");
-              const label = step
-                ? `<span style="color:${done ? "#8ce06a" : "#ffd86b"};font-size:${GP > 15 ? 10 : 8}px;font-weight:bold;line-height:1">${step}</span>`
-                : "";
-              mini += `<div title="${k}${step ? " · step " + step : ""}" style="grid-column:${x - gX0 + 1};grid-row:${gY1 - y + 1};background:${bg};outline:1px solid rgba(255,255,255,0.07);outline-offset:-1px;display:flex;align-items:center;justify-content:center">${label}</div>`;
-            }
-            const isOpen = _decOpen.has(r.name);
-            const detail = `<tr style="display:${isOpen ? "table-row" : "none"}"><td colspan="5" style="padding:8px 8px 12px;background:#120d07">
-              <div style="font-size:0.55rem;color:var(--text-secondary);margin-bottom:7px;line-height:1.7">Each step is the move from the <b>previous ${escHTML(r.name)}</b> — <b style="color:#8ce06a">green</b> is already standing there, <b style="color:#ffd86b">amber</b> still to place. The number in a square is its step below. Follow them in order with the flower selected in your inventory.</div>
-              <div style="overflow-x:auto;margin-bottom:8px"><div style="display:grid;grid-template-columns:repeat(${gX1 - gX0 + 1},${GP}px);grid-auto-rows:${GP}px;width:max-content;background:#0d0b07;border:1px solid var(--border-brown)">${mini}</div></div>
-              <div style="display:flex;flex-wrap:wrap;gap:3px">${steps}</div></td></tr>`;
-            // A flower whose every tile is already standing is done — the whole row goes green
-            // so the ones left to do stand out at a glance.
-            const fin = r.left === 0;
-            return `<tr data-flower="${escHTML(r.name)}" onclick="_decToggleRow(this)" title="click for the placement guide" style="border-top:1px solid #20190f;cursor:pointer;background:${fin ? "#132009" : "transparent"}"><td style="padding:2px 6px 2px 0;color:${fin ? "var(--green)" : "inherit"}"><span class="dec-caret" style="color:var(--text-dim);font-size:0.45rem">${isOpen ? "▾" : "▸"}</span> <img class="inline-icon" src="${getItemIcon(r.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.name)}${fin ? " ✓" : ""}</td><td style="text-align:right;padding:2px 6px;color:${fin ? "var(--green)" : "inherit"}">${r.n}</td><td style="text-align:right;padding:2px 6px;color:${r.done ? "var(--green)" : "var(--text-dim)"};font-weight:${r.done ? "bold" : "normal"}">${r.done || "–"}</td><td style="text-align:right;padding:2px 6px;color:var(--text-dim)">${r.have}</td><td style="text-align:right;padding:2px 0;color:${fin ? "var(--green)" : r.missing ? "var(--red)" : "var(--yellow)"};font-weight:bold">${fin ? "done" : r.missing || "✓"}</td></tr>${detail}`;
-          }).join("")}
-        </table></div>
-      </div>`;
-
-      // ── JSON in/out ──────────────────────────────────────────────────
+      // ── the layout and your own JSON (page-only editor) ──
       const asJson = JSON.stringify(Object.fromEntries([...plan.entries()]), null, 0);
-      h += `<div class="pixel-panel" style="padding:12px;margin-bottom:12px">
-        <div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-bottom:6px">LAYOUT</div>
-        <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
+      h += `<div class="w-frame pixel-panel v-dec-controls">
+        <div class="w-head"><span class="w-title">🧩 Layout</span>${_decCustom ? `<span class="v-pill v-idle">custom JSON in use</span>` : ""}</div>
+        <div class="v-dec-line">
           ${[["bands", "Colour bands"], ["scatter", "Even scatter"], ["text", "Written word"],
-             ...Object.entries(decPatterns).map(([k, p]) => [k, p.label])].map(([v, l]) => {
-            const on = !_decCustom && _decLayout === v;
-            return `<button onclick="_decSetLayout('${v}')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;cursor:pointer;background:${on ? "var(--sunpetal)" : "#241a10"};color:${on ? "#1a120a" : "var(--text-secondary)"};font-weight:${on ? "bold" : "normal"}">${l}</button>`;
-          }).join("")}
-          ${_decCustom ? `<span style="font-size:0.47rem;color:var(--lily)">custom JSON in use</span>` : ""}
-          ${!_decCustom && _decLayout === "text" ? `<label style="font-size:0.48rem;color:var(--text-dim)">word <input value="${escHTML(_decWord)}" maxlength="10" style="width:96px;font-size:0.55rem" onchange="_decSetWord(this.value)"></label>` : ""}
+             ...Object.entries(decPatterns).map(([k, p]) => [k, p.label])].map(([v, l]) => seg(!_decCustom && _decLayout === v, `_decSetLayout('${v}')`, l)).join("")}
+          ${!_decCustom && _decLayout === "text" ? `<label class="v-dim">word <input value="${escHTML(_decWord)}" maxlength="10" style="width:110px" onchange="_decSetWord(this.value)"></label>` : ""}
         </div>
-        ${!_decCustom && _decLayout === "text" ? `<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
-          ${["SAJMONIUM", "SAJMON"].map((w) => {
-            const on = _decWord === w;
-            return `<button onclick="_decSetWord('${w}')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;cursor:pointer;background:${on ? "var(--sunpetal)" : "#241a10"};color:${on ? "#1a120a" : "var(--text-secondary)"};font-weight:${on ? "bold" : "normal"}">${w}</button>`;
-          }).join("")}
-          <span style="width:10px"></span>
-          ${Object.entries(decTextStyles).map(([k, st]) => {
-            const on = _decTextStyle === k;
-            const dots = st.swatch.map((c) => `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${decSwatch[c]};margin-right:1px;vertical-align:middle"></span>`).join("");
-            return `<button onclick="_decSetTextStyle('${k}')" title="${escHTML(st.hint)}" style="font-size:0.5rem;padding:3px 9px;border:1px solid ${on ? "var(--sunpetal)" : "var(--border-brown)"};border-radius:5px;cursor:pointer;background:${on ? "#3a2a12" : "#241a10"};color:${on ? "var(--sunpetal)" : "var(--text-secondary)"}">${dots} ${st.label}</button>`;
-          }).join("")}
+        ${!_decCustom && _decLayout === "text" ? `<div class="v-dec-line">
+          ${["SAJMONIUM", "SAJMON"].map((w) => seg(_decWord === w, `_decSetWord('${w}')`, w)).join("")}
+          ${Object.entries(decTextStyles).map(([k, st]) => seg(_decTextStyle === k, `_decSetTextStyle('${k}')`,
+            st.swatch.map((c) => `<span class="v-dot" style="background:${decSwatch[c]}"></span>`).join("") + " " + st.label, st.hint)).join("")}
         </div>` : ""}
-        <div style="font-size:0.46rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">${
+        <div class="v-dim" style="margin-bottom:10px">${
           decPatterns[_decLayout]
             ? "The band is a <b>ribbon</b> — six tiles wide all the way along the top and down the side — so this pattern varies <b>along</b> it rather than across the map. Colours are evened to a fifth each and species spread inside them, keeping every flower near 8–9 of the 432 tiles with nothing identical touching."
           : _decLayout === "scatter"
@@ -20846,12 +20816,12 @@
             : _decLayout === "text"
               ? `The word is written across the top expansions (a 42 × 6 strip), all in <b>pansies</b> so only the colour changes and the letters stay sharp. A short word (SAJMON) gets a bigger, bolder 5-wide font; SAJMONIUM needs the 3-wide one. Style <b>${escHTML(decTextStyles[_decTextStyle].label)}</b>: ${escHTML(decTextStyles[_decTextStyle].hint)} Every other tile of the band is the field colour. Only letters of SAJMONIUM are available.`
               : "Five contiguous colour bands, the same count of every flower inside each. Fills as many whole sets as the space allows."}</div>
-        <div class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);margin-bottom:4px">YOUR OWN LAYOUT (JSON)</div>
-        <div style="font-size:0.47rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Format is <code>{"x,y": "Flower Name"}</code> — one entry per tile, coordinates in the game's own grid (hover the map to read them). Paste yours and press CHECK: the map redraws from it and everything above — colour balance, what to grow, collisions — is recomputed against it.</div>
-        <textarea id="dec-json" spellcheck="false" style="width:100%;height:90px;font-family:monospace;font-size:0.5rem;background:#0d0b07;color:var(--text-secondary);border:1px solid var(--border-brown);border-radius:5px;padding:6px">${escHTML(asJson)}</textarea>
-        <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
-          <button onclick="_decApplyJson()" style="font-size:0.5rem;padding:4px 12px;border:1px solid var(--border-brown);border-radius:5px;background:var(--sunpetal);color:#1a120a;cursor:pointer;font-weight:bold">CHECK</button>
-          <button onclick="var t=document.getElementById('dec-json');t.select();document.execCommand('copy')" style="font-size:0.5rem;padding:4px 12px;border:1px solid var(--border-brown);border-radius:5px;background:#241a10;color:var(--text-secondary);cursor:pointer">COPY</button>
+        <div class="w-title" style="margin-bottom:4px">Your own layout (JSON)</div>
+        <div class="v-dim" style="margin-bottom:6px">Format is <code>{"x,y": "Flower Name"}</code> — one entry per tile, coordinates in the game's own grid (hover the map to read them). Paste yours and press Check: the map redraws from it and everything above — colour balance, what to grow, collisions — is recomputed against it.</div>
+        <textarea id="dec-json" class="v-dec-json" spellcheck="false">${escHTML(asJson)}</textarea>
+        <div class="v-dec-line">
+          <button class="dash-toggle-btn on" onclick="_decApplyJson()">Check</button>
+          <button class="dash-toggle-btn" onclick="var t=document.getElementById('dec-json');t.select();document.execCommand('copy')">Copy</button>
         </div>
       </div>`;
 
@@ -20860,8 +20830,7 @@
         * the guide happens to be. A reload button that only exists at the top or the bottom is
         * a scroll away every single time, so it is pinned to the viewport instead.
         */
-      h += `<button id="dec-reload" onclick="_decReload()" title="re-read the farm — planted tiles turn green"
-        style="position:fixed;right:14px;bottom:14px;z-index:60;font-size:0.55rem;padding:9px 15px;border:1px solid var(--sunpetal);border-radius:8px;background:#241a10;color:var(--sunpetal);cursor:pointer;font-weight:bold;box-shadow:0 3px 12px rgba(0,0,0,0.6)" class="pixel-font">↺ RELOAD</button>`;
+      h += `<button id="dec-reload" class="v-dec-reload" onclick="_decReload()" title="re-read the farm — planted tiles turn green">↺ Reload</button>`;
       app.innerHTML = h;
       _decFitMap();
       // Come back to where you were reading, but only on the first draw after a reload —
