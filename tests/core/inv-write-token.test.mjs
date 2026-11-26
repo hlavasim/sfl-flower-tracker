@@ -77,7 +77,7 @@ test("a 401 asks once, stores the key and retries once with it", async () => {
   const r = await h.writeFetch("/api/x", { method: "DELETE" });
   assert.equal(r.status, 200);
   assert.equal(h.prompts.length, 1);
-  assert.match(h.prompts[0], /zápisový klíč \(write token\)/);
+  assert.match(h.prompts[0], /owner key \(write token\)/);
   assert.equal(h.store.sfl_write_token, "new-key");
   assert.equal(h.calls.length, 2);
   assert.equal(h.calls[0].headers["x-write-token"], undefined);

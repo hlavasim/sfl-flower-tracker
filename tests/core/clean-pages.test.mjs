@@ -27,6 +27,16 @@ test("JSON and DIFF: clean heads, no retro panels or pixel type", () => {
   for (const b of [json, diff]) assert.doesNotMatch(b, /pixel-panel|pixel-font|Press Start/);
 });
 
+test("DIFF investment panels (tracker, repay plan, balance sheet, ledger, insights): clean style, English text", () => {
+  const b = body("    //  INVESTMENT TRACKER", "    async function renderDiff(data) {");
+  assert.doesNotMatch(b, /pixel-panel|pixel-font|Press Start|roi-pill|summary-stat|Courier New/);
+  assert.doesNotMatch(b, /[ěščřžýáíéůúňťďĚŠČŘŽÝÁÍÉŮÚŇŤĎ]/, "no Czech text left");
+  assert.match(b, /class="v-inv-title">💰 Investment tracker</);
+  assert.match(b, /<table class="w-table v-inv-table">/);
+  // the CSS lives in one v-inv- block right after the .v-treasury-top media rule
+  assert.match(SRC, /@media \(max-width: 800px\) \{ \.v-treasury-top \{[^\n]*\n\s*\/\* DIFF page: investment tracker[^\n]*\n\s*\.v-inv \{/);
+});
+
 test("DOLLS: the tracked-dolls panel is a clean card of chips, each doll with its icon, and stays open across a toggle", () => {
   const b = body("    function renderDolls(data) {", "\n    function ");
   assert.match(b, /<details class="w-card v-dolls-cfg"\$\{window\._dollCfgOpen \? " open" : ""\} ontoggle="window\._dollCfgOpen=this\.open">/);

@@ -2932,6 +2932,102 @@
     /* minmax(0, …): a bare 1fr's floor is its content's min width, which pushed the frames past a phone screen */
     .v-treasury-top { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(0, 2fr); gap: 0 16px; }
     @media (max-width: 800px) { .v-treasury-top { grid-template-columns: minmax(0, 1fr); } }
+    /* DIFF page: investment tracker, repay plan, balance sheet, ledger and insights (the v-inv- panels) */
+    .v-inv { font-size: 13px; }
+    .v-inv-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; font: 600 15px var(--c-font); color: var(--c-text); margin: 0 0 12px; }
+    .v-inv-toggle { cursor: pointer; }
+    .v-inv-box { background: var(--c-card2); border-radius: 12px; padding: 12px 14px; margin: 0 0 12px; }
+    .v-inv-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+    .v-inv-head > b { font-size: 14px; font-weight: 600; color: var(--c-text); }
+    .v-inv-head > .v-inv-note { flex: 1; }
+    .v-inv-note { color: var(--c-muted); font-size: 12px; line-height: 1.55; }
+    .v-inv-note b { color: var(--c-text); font-weight: 600; }
+    .v-inv-warn { color: var(--c-yellow); font-size: 12px; line-height: 1.55; margin-top: 8px; }
+    .v-inv-err { color: var(--c-red); font-size: 12px; margin-top: 8px; }
+    .v-inv-link { color: var(--c-accent); cursor: pointer; }
+    .v-inv-link:hover { text-decoration: underline; }
+    .v-inv-x { color: var(--c-red); cursor: pointer; margin-left: 4px; }
+    .v-inv-i { cursor: help; color: var(--c-dim); margin-left: 4px; font-size: 12px; font-style: normal; }
+    .v-inv-num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+    .v-inv-up { color: var(--c-green); } .v-inv-down { color: var(--c-red); }
+    .v-inv input[type=date], .v-inv input[type=number], .v-inv input[type=text], .v-inv select { background: var(--c-bg); color: var(--c-text);
+      border: 1px solid var(--c-line); border-radius: 8px; padding: 5px 8px; font: 13px var(--c-font); color-scheme: dark; }
+    .v-inv input:focus, .v-inv select:focus { border-color: var(--c-accent); outline: none; }
+    .w-card .v-inv-primary { background: var(--c-accent); border-color: var(--c-accent); color: #fff; font-weight: 600; }
+    .w-card .v-inv-danger { color: var(--c-red); }
+    .w-card .v-inv-ib { background: none; border: none; padding: 2px 6px; font-size: 15px; line-height: 1; color: var(--c-muted); }
+    .w-card .v-inv-ib:hover { color: var(--c-text); }
+    .w-card .v-inv-ib.v-inv-del:hover { color: var(--c-red); }
+    .w-card button.v-inv-venue { padding: 2px 10px; font-size: 11px; font-weight: 700; background: transparent; letter-spacing: 0.3px; }
+    .v-inv-form { display: flex; gap: 8px 12px; flex-wrap: wrap; align-items: center; margin-top: 12px; color: var(--c-muted); }
+    .v-inv-form label { display: inline-flex; align-items: center; gap: 6px; }
+    .v-inv-fgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+    .v-inv-fgrid label, .v-inv-field { display: flex; flex-direction: column; gap: 4px; }
+    .v-inv-fgrid input, .v-inv-fgrid select, .v-inv-field input { width: 100%; box-sizing: border-box; }
+    .v-inv-lbl { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--c-dim); }
+    .v-inv-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 12px; margin: 12px 0 4px; align-items: stretch; }
+    .v-inv-right { display: flex; flex-direction: column; min-width: 0; }
+    .v-inv-right .v-kpis { margin-bottom: 8px; }
+    .v-inv .v-kpi b { font-size: 18px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .v-inv-right .v-kpi > span { display: block; }
+    .v-inv-right .v-kpi .v-inv-kpisub { margin-top: 2px; font-size: 11.5px; color: var(--c-dim); line-height: 1.45; }
+    .v-inv-chart { flex: 1; min-height: 280px; }
+    .v-inv-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+    .v-inv-card { background: var(--c-card); border: 1px solid var(--c-line); border-radius: 10px; padding: 10px 12px; }
+    .v-inv-big { font-size: 22px; font-weight: 700; line-height: 1.25; font-variant-numeric: tabular-nums; }
+    .v-inv-mid { font-size: 15px; font-weight: 600; margin: 6px 0 4px; line-height: 1.4; }
+    .v-inv-sub { font-size: 12px; color: var(--c-muted); line-height: 1.5; }
+    .v-inv-sub b { color: var(--c-text); font-weight: 600; }
+    .v-inv-row2 { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 4px 0 8px; }
+    .v-inv-scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--c-dim); }
+    .v-inv-eta { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; }
+    .v-inv-track { position: relative; height: 10px; border-radius: 999px; background: var(--c-line); margin: 8px 0 4px; }
+    .v-inv-zone { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+    .v-inv-fill { position: absolute; top: 2px; height: 6px; border-radius: 999px; }
+    .v-inv-midline { position: absolute; left: 50%; top: -4px; bottom: -4px; width: 2px; background: var(--c-yellow); transform: translateX(-1px); }
+    .v-inv-dot { position: absolute; top: 50%; width: 14px; height: 14px; border-radius: 50%; background: var(--c-card); border: 3px solid; transform: translate(-50%, -50%); }
+    .v-inv-pbar { position: relative; height: 10px; border-radius: 999px; background: var(--c-line); margin: 8px 0 24px; }
+    .v-inv-pbar > i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #b8860b, var(--c-yellow)); }
+    .v-inv-ms { position: absolute; top: -3px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; font-size: 12px; line-height: 1; }
+    .v-inv-ms:last-child { transform: translateX(-90%); }
+    .v-inv-ms small { font-size: 10.5px; color: var(--c-dim); margin-top: 5px; white-space: nowrap; }
+    .v-inv-gold { background: linear-gradient(110deg, #b8860b 0%, #ffd700 35%, #fff6c8 50%, #ffd700 65%, #b8860b 100%); background-size: 250% 100%;
+      animation: invGoldShine 3s linear infinite; -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .v-inv-silver { background: linear-gradient(110deg, #7d838c 0%, #c9ced6 35%, #ffffff 50%, #c9ced6 65%, #7d838c 100%); background-size: 250% 100%;
+      animation: invGoldShine 3s linear infinite; -webkit-background-clip: text; background-clip: text; color: transparent; }
+    @keyframes invGoldShine { 0% { background-position: 100% 0; } 100% { background-position: -150% 0; } }
+    @keyframes invBePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+    .v-inv-sheet { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; column-gap: 16px; align-items: baseline; }
+    .v-inv-sheet > div { padding: 6px 0; border-top: 1px solid var(--c-row); }
+    .v-inv-sheet > .v-inv-sh { border-top: none; padding-top: 0; font-size: 11px; font-weight: 600; color: var(--c-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+    .v-inv-sheet > .v-inv-sh.v-inv-num { text-transform: none; }
+    .v-inv-sheet > .v-inv-tot { border-top-color: var(--c-line); font-weight: 600; }
+    .v-inv-sheet > .v-inv-lab { color: var(--c-muted); }
+    .v-inv-sheet > .v-inv-lab.v-inv-tot { color: var(--c-text); }
+    .v-inv-sheet > .v-inv-dimcol { color: var(--c-dim); }
+    .v-inv-band { margin: 0 0 8px; }
+    .v-inv-band-l { position: absolute; white-space: nowrap; font-size: 11px; }
+    .v-inv-band-seg { display: flex; align-items: center; justify-content: center; overflow: hidden; white-space: nowrap; font-size: 11px; border-right: 1px solid rgba(0,0,0,0.35); }
+    .v-inv-band-foot { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--c-muted); }
+    .v-inv-lp { position: relative; cursor: help; font-weight: 700; }
+    .v-inv-lp .v-inv-lp-pop { display: none; position: absolute; left: 0; top: calc(100% + 4px); z-index: 60; width: min(360px, 86vw); background: var(--c-card);
+      border: 1px solid var(--c-line); border-radius: 10px; padding: 10px; font: 400 12px var(--c-font); color: var(--c-text); box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+    .v-inv-lp:hover .v-inv-lp-pop, .v-inv-lp:focus-within .v-inv-lp-pop { display: block; }
+    .v-inv-lp-row { display: grid; grid-template-columns: 38px minmax(0, 1fr) 46px 72px; gap: 6px; padding: 1px 4px; font-variant-numeric: tabular-nums; }
+    .v-inv-lp-row.v-inv-lp-me { background: rgba(255,255,255,0.1); font-weight: 700; border-radius: 4px; }
+    .v-inv-lp-row.v-inv-lp-cut { border-top: 1px dashed var(--c-line); }
+    .v-inv-gran { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+    .v-inv-gran > b { flex: 1; font-size: 14px; font-weight: 600; }
+    .v-inv-table td.r, .v-inv-table th.r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .v-inv-table td.c, .v-inv-table th.c { text-align: center; white-space: nowrap; }
+    .v-inv-table td.nw { white-space: nowrap; }
+    .v-inv-table td.v-inv-notes { color: var(--c-muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .v-inv-table tr.v-inv-tot td { border-top: 1px solid var(--c-line); font-weight: 600; }
+    .v-inv-scroll { overflow-x: auto; }
+    @media (max-width: 900px) { .v-inv-split { grid-template-columns: minmax(0, 1fr); } .v-inv-chart { flex: none; height: 280px; } }
+    @media (max-width: 700px) { .v-inv-lp .v-inv-lp-pop { position: fixed; left: 8px; right: 8px; top: 15vh; width: auto; max-height: 75vh; overflow-y: auto; } }
+    @media (max-width: 600px) { .v-inv-sheet { column-gap: 10px; font-size: 12px; } .v-inv-big { font-size: 19px; } .v-inv-box { padding: 10px 12px; } }
+    @media (prefers-reduced-motion: reduce) { .v-inv-gold, .v-inv-silver { animation: none; } }
     .v-treasury-total { font-family: var(--c-font); font-size: 28px; font-weight: 700; color: var(--c-text); }
     .v-treasury-total img, .v-treasury-rates img { height: 0.9em; vertical-align: -0.1em; }
     .v-treasury-rates { font-size: 12px; }
@@ -19983,7 +20079,7 @@
       return t ? { ...(h || {}), "x-write-token": t } : { ...(h || {}) };
     }
     function askWriteToken() {
-      const v = prompt("Zadej zápisový klíč (write token) — uloží se jen v tomto prohlížeči:");
+      const v = prompt("Enter the owner key (write token) — it is stored in this browser only:");
       if (v === null || !v.trim()) return false;
       try { localStorage.setItem("sfl_write_token", v.trim()); } catch (e) {}
       return true;
@@ -20159,7 +20255,7 @@
       if (!askWriteToken()) return;
       const mount = document.getElementById("investment-tracker");
       renderInvestmentTracker(window._invDataRef, (_invState && _invState.opts) || {}).catch(err => {
-        if (mount) mount.innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Investment tracker failed: ${escHTML(err.message)}</p></div>`;
+        if (mount) mount.innerHTML = `<div class="w-error">Investment tracker failed: ${escHTML(err.message)}</div>`;
       });
     };
 
@@ -20169,10 +20265,10 @@
       // Ledger refused: every figure below is derived from it, so render a lock rather than a
       // BILANCE with COST 0 that reads as "nothing invested".
       if (_invState.locked) {
-        mount.innerHTML = `<h2 class="pixel-font" style="margin:0 0 10px 0;font-size:0.75rem;color:var(--sunpetal);letter-spacing:1px">💰 INVESTMENT TRACKER</h2>
-          <div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim);line-height:1.8">${_invState.locked === 503
-            ? "🔒 zápisy jsou na serveru vypnuté (WRITE_TOKEN není nastavený)"
-            : `🔒 ledger je jen pro vlastníka — <span style="cursor:pointer;color:var(--lily)" onclick="_invUnlock()">zadej klíč</span>`}</div>`;
+        mount.innerHTML = `<h2 class="v-inv-title">💰 Investment tracker</h2>
+          <div class="v-inv-box v-inv-note">${_invState.locked === 503
+            ? "🔒 Writes are turned off on the server (no WRITE_TOKEN is set)."
+            : `🔒 The ledger is visible to the owner only — <span class="v-inv-link" onclick="_invUnlock()">enter the owner key</span>`}</div>`;
         return;
       }
       const { rates } = _invState;
@@ -20234,7 +20330,7 @@
       /*
        * BTC derivatives on the wallets (cbBTC, WBTC, tBTC…) are BTC already back out of FLOWER: the
        * owner counts them as a WITHDRAWAL, not as wallet value. They leave the Wallet row and lower
-       * the net BTC inside (cost), so RECOVERED and the band's gold "vybráno" include them. BILANCE
+       * the net BTC inside (cost), so RECOVERED and the band's gold "withdrawn" include them. BILANCE
        * is unchanged — the same BTC just moves from "held" to "taken out". 1:1 with BTC.
        */
       const btcDerivs = new Set(["cbBTC", "WBTC", "tBTC", "BTCB", "WBTC.e"]);
@@ -20258,14 +20354,17 @@
       const fmtFlower = (v) => Math.round(v).toLocaleString("en-US") + " 🌸";
 
       mount.innerHTML = `
-        <h2 class="pixel-font" style="margin:0 0 10px 0;font-size:0.75rem;color:var(--sunpetal);letter-spacing:1px">💰 INVESTMENT TRACKER</h2>
+        <h2 class="v-inv-title">💰 Investment tracker</h2>
         ${_invRepayHtml(aggSheet, planStats, flowerPerBtc, errors)}
-        ${_invPlan ? `<div class="pixel-font" style="font-size:0.45rem;color:var(--text-dim);margin:-6px 0 12px;line-height:1.8">cbBTC historie: ${cbbtcRows.length ? `${cbbtcRows.length} převodů (poslední ${escHTML(String(cbbtcRows.map((t) => String(t.tx_date).slice(0, 10)).sort().pop()))})` : "žádná — vše na peněžence se počítá k dnešku"} · <label style="cursor:pointer;color:var(--lily)">[import CSV z Basescanu]<input type="file" accept=".csv,text/csv" style="display:none" onchange="_invImportCbbtc(this)"></label> <span id="inv-cbbtc-msg"></span></div>` : ""}
+        ${_invPlan ? `<div class="v-inv-note" style="margin:-4px 0 12px">cbBTC history: ${cbbtcRows.length ? `${cbbtcRows.length} transfers (latest ${escHTML(String(cbbtcRows.map((t) => String(t.tx_date).slice(0, 10)).sort().pop()))})` : "none — everything on the wallet counts as of today"} · <label class="v-inv-link">Import CSV from Basescan<input type="file" accept=".csv,text/csv" style="display:none" onchange="_invImportCbbtc(this)"></label> <span id="inv-cbbtc-msg"></span></div>` : ""}
         ${_invBalanceSheetHtml({ agg: aggSheet, btcBackOnChain, btcBackItems, flowerPerBtc, fmtFlower, treasuryTotalSfl, liquidValueSfl, liquidValueBtc, lockedBtc, chainWallet, chainEggs, chainLp, lpBtc, walletLiquidBtc, walletHeldFlower, eggsLiquidBtc, farmValue, errors, btcUsd })}
-        <div id="inv-satsflower" style="margin:6px 0 16px"></div>
-        <div id="inv-tx-table-wrap">${renderInvTxTable(transactions)}</div>
-        <button class="roi-pill" onclick="_invShowAddForm()" style="margin-top:10px">+ Add transaction</button>
-        <div id="inv-add-form" style="display:none"></div>
+        <div id="inv-satsflower" class="v-inv-box"></div>
+        <div class="v-inv-box">
+          <div class="v-inv-head" style="margin-bottom:8px"><b>Ledger</b><span class="v-inv-note">BTC moved in and out, newest first</span></div>
+          <div id="inv-tx-table-wrap">${renderInvTxTable(transactions)}</div>
+          <button class="v-inv-primary" onclick="_invShowAddForm()" style="margin-top:10px">+ Add transaction</button>
+          <div id="inv-add-form" style="display:none"></div>
+        </div>
       `;
       _invRenderSatsChart();   // fire-and-forget; builds the switcher + draws (cached per granularity)
       _invDrawRepayChart(planStats);
@@ -20295,19 +20394,19 @@
       if (!_SATS_GRAN[g]) return;
       _satsGran = g;
       localStorage.setItem("sfl_sats_gran", g);
-      document.querySelectorAll("[data-satsgran]").forEach(b => b.classList.toggle("active", b.dataset.satsgran === g));
+      document.querySelectorAll("[data-satsgran]").forEach(b => b.classList.toggle("on", b.dataset.satsgran === g));
       _invDrawSatsChart();
     };
 
     function _invRenderSatsChart() {
       const el = document.getElementById("inv-satsflower");
       if (!el) return;
-      el.innerHTML = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px">
-          <span class="pixel-font" style="font-size:0.55rem;color:var(--sunpetal);letter-spacing:0.5px;flex:1">SATS / FLOWER</span>
-          ${Object.keys(_SATS_GRAN).map(g => `<button class="roi-pill${g === _satsGran ? " active" : ""}" data-satsgran="${g}" onclick="_invSetSatsGran('${g}')" style="padding:2px 8px;font-size:0.55rem">${g}</button>`).join("")}
+      el.innerHTML = `<div class="v-inv-gran">
+          <b>Sats per ${sflIcon()} FLOWER</b>
+          ${Object.keys(_SATS_GRAN).map(g => `<button class="dash-toggle-btn${g === _satsGran ? " on" : ""}" data-satsgran="${g}" onclick="_invSetSatsGran('${g}')">${g}</button>`).join("")}
         </div>
         <div id="inv-satsflower-canvas" style="height:200px"></div>
-        <div id="inv-satsflower-note" class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin-top:3px"></div>`;
+        <div id="inv-satsflower-note" class="v-inv-note" style="margin-top:4px"></div>`;
       _invDrawSatsChart();
     }
 
@@ -20373,20 +20472,20 @@
       const canvas = document.getElementById("inv-satsflower-canvas");
       const note = document.getElementById("inv-satsflower-note");
       if (!canvas) return;
-      if (typeof LightweightCharts === "undefined") { canvas.innerHTML = `<div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);padding:8px 0">Chart library not loaded.</div>`; return; }
+      if (typeof LightweightCharts === "undefined") { canvas.innerHTML = `<div class="v-inv-note" style="padding:8px 0">Chart library not loaded.</div>`; return; }
       const cfg = _SATS_GRAN[_satsGran];
       let data = _satsCache[_satsGran];
       if (!data) {
-        if (note) note.textContent = "načítám…";
+        if (note) note.textContent = "loading…";
         try { data = await _invLoadSats(_satsGran); }
-        catch (e) { console.warn("[sats/flower]", e); if (note) note.innerHTML = `graf nedostupný (${String(e && e.message || e).replace(/[<>&"]/g, "")}) — <a href="#" onclick="_invSetSatsGran(_satsGranNow());return false" style="color:var(--sunpetal)">zkusit znovu</a>`; return; }
+        catch (e) { console.warn("[sats/flower]", e); if (note) note.innerHTML = `chart unavailable (${String(e && e.message || e).replace(/[<>&"]/g, "")}) — <a href="#" class="v-inv-link" onclick="_invSetSatsGran(_satsGranNow());return false">try again</a>`; return; }
       }
-      if (data.length < 2) { if (note) note.textContent = "málo dat pro tuto granularitu"; return; }
+      if (data.length < 2) { if (note) note.textContent = "not enough data for this granularity"; return; }
       if (_satsChartObj) { try { _satsChartObj.remove(); } catch (e) {} _satsChartObj = null; }
       canvas.innerHTML = "";
       const chart = LightweightCharts.createChart(canvas, {
         height: 200, autoSize: true,
-        layout: { background: { color: "transparent" }, textColor: "#c4a882" },
+        layout: { background: { color: "transparent" }, textColor: "#a39e96" },
         grid: { vertLines: { color: "rgba(255,255,255,0.05)" }, horzLines: { color: "rgba(255,255,255,0.05)" } },
         timeScale: { timeVisible: cfg.timeVisible, secondsVisible: false, borderColor: "rgba(255,255,255,0.1)" },
         rightPriceScale: { borderColor: "rgba(255,255,255,0.1)" },
@@ -20397,7 +20496,7 @@
       s.setData(data);
       chart.timeScale().fitContent();
       const xs = data.map(p => p.value);
-      if (note) note.textContent = `teď ${data[data.length - 1].value.toFixed(1)} sats/🌸 · rozsah ${Math.min(...xs).toFixed(1)}–${Math.max(...xs).toFixed(1)} · flower-2 (CoinGecko)`;
+      if (note) note.textContent = `now ${data[data.length - 1].value.toFixed(1)} sats/🌸 · range ${Math.min(...xs).toFixed(1)}–${Math.max(...xs).toFixed(1)} · flower-2 (CoinGecko)`;
     }
 
     /*
@@ -20474,20 +20573,20 @@
       const rank = me + 1, my = owners[me], tier = _lpTier(rank);
       const usd = (v) => "$" + (v >= 100 ? Math.round(v).toLocaleString("en-US") : v.toFixed(2));
       const nf = (v) => Math.round(v).toLocaleString("en-US");
-      // Places moved over ~24 h (boards are hourly): (+8) up, (−3) down, (=) same, "nový" = not on that board.
-      const mv = (d) => d == null ? `<span style="color:var(--text-dim)">nový</span>` : d > 0 ? `<span style="color:var(--green)">(+${d})</span>` : d < 0 ? `<span style="color:var(--red)">(−${-d})</span>` : `<span style="color:var(--text-dim)">(=)</span>`;
+      // Places moved over ~24 h (boards are hourly): (+8) up, (−3) down, (=) same, "new" = not on that board.
+      const mv = (d) => d == null ? `<span class="v-dim">new</span>` : d > 0 ? `<span class="v-inv-up">(+${d})</span>` : d < 0 ? `<span class="v-inv-down">(−${-d})</span>` : `<span class="v-dim">(=)</span>`;
       const needs = _LP_TIERS.filter((t) => rank > t.top && owners[t.top - 1]).map((t) => {
         const gap = owners[t.top - 1].usd - my.usd + 0.01;
-        return `<div style="color:${t.color}">do Top ${t.top} (${t.name}): +${nf(gap / 2 / b.price)} 🌸 + ${usd(gap / 2)} USDC <span style="color:var(--text-dim)">(${usd(gap)})</span></div>`;
+        return `<div style="color:${t.color}">to Top ${t.top} (${t.name}): +${nf(gap / 2 / b.price)} 🌸 + ${usd(gap / 2)} USDC <span class="v-dim">(${usd(gap)})</span></div>`;
       }).join("");
       const rows = owners.slice(0, rank).map((o, i) => {
         const t = _lpTier(i + 1);
-        return `<div style="display:grid;grid-template-columns:34px 1fr 44px 70px;gap:6px;color:${t ? t.color : "var(--text-dim)"};${o.mine ? "background:rgba(255,255,255,0.12);font-weight:bold;" : ""}${_LP_TIERS.some((x) => x.top === i) ? "border-top:1px dashed rgba(255,255,255,0.25);" : ""}"><span>#${i + 1}</span><span>${o.mine ? "JÁ" : `${nf(o.flower)} 🌸 + ${usd(o.usdc)}`}</span><span style="text-align:right">${mv(o.delta)}</span><span style="text-align:right">${usd(o.usd)}</span></div>`;
+        return `<div class="v-inv-lp-row${o.mine ? " v-inv-lp-me" : ""}${_LP_TIERS.some((x) => x.top === i) ? " v-inv-lp-cut" : ""}" style="color:${t ? t.color : "var(--c-dim)"}"><span>#${i + 1}</span><span>${o.mine ? "YOU" : `${nf(o.flower)} 🌸 + ${usd(o.usdc)}`}</span><span class="v-inv-num">${mv(o.delta)}</span><span class="v-inv-num">${usd(o.usd)}</span></div>`;
       }).join("");
-      const when = b.ts ? new Date(b.ts).toLocaleString("cs-CZ", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
-      return ` = <span class="lp-rank" style="position:relative;cursor:help;color:${tier ? tier.color : "var(--text-dim)"};font-weight:bold">Top ${rank}${tier ? "" : " (bez boxu)"}${my.delta != null ? " " + mv(my.delta) : ""}<div class="lp-pop">
-          <div style="margin-bottom:4px;color:var(--text-secondary)">FLOWER/USDC full range · ${owners.length} LP · ${when} · posun za 24 h${tier ? ` · tvůj box: <b style="color:${tier.color}">${tier.name}</b>` : " · mimo top 500"}</div>
-          ${needs ? `<div style="margin-bottom:6px;line-height:1.6">${needs}</div>` : ""}
+      const when = b.ts ? new Date(b.ts).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
+      return ` = <span class="v-inv-lp" style="color:${tier ? tier.color : "var(--c-dim)"}">Top ${rank}${tier ? "" : " (no box)"}${my.delta != null ? " " + mv(my.delta) : ""}<div class="v-inv-lp-pop">
+          <div class="v-inv-note" style="margin-bottom:6px">FLOWER/USDC full range · ${owners.length} LPs · ${when} · change over 24 h${tier ? ` · your box: <b style="color:${tier.color}">${tier.name}</b>` : " · outside the top 500"}</div>
+          ${needs ? `<div style="margin-bottom:8px;line-height:1.6">${needs}</div>` : ""}
           <div style="max-height:260px;overflow-y:auto">${rows}</div></div></span>`;
     }
     let _invHoldings = null;   // { wallets, venues: { wallet, yakkamon }, egg, prices, errors }
@@ -20519,25 +20618,25 @@
       return Object.assign({}, venue, { items, usd, btc: btcUsd > 0 ? usd / btcUsd : NaN });
     }
     window._invAddWallet = async function () {
-      const raw = prompt("Adresa peněženky (0x…) — přečte se na Base i Roninu naráz:");
+      const raw = prompt("Wallet address (0x…) — it is read on Base and Ronin at once:");
       if (raw === null) return;
       const address = String(raw).trim();
-      if (!/^0x[0-9a-fA-F]{40}$/.test(address)) { alert("To není EVM adresa (0x + 40 hex znaků)."); return; }
+      if (!/^0x[0-9a-fA-F]{40}$/.test(address)) { alert("That is not an EVM address (0x + 40 hex characters)."); return; }
       try {
         const r = await writeFetch(`${INV_API_BASE}?farm=${encodeURIComponent(FARM_ID)}&type=farm-wallet`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address }) });
         if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
         await invLoadHoldings(FARM_ID);
         renderInvestmentTrackerContent();
-      } catch (e) { alert("přidání selhalo: " + e.message); }
+      } catch (e) { alert("Could not add the wallet: " + e.message); }
     };
     window._invRemoveWallet = async function (address) {
-      if (!confirm(`Odebrat ${address.slice(0, 6)}…${address.slice(-4)} ze sledovaných peněženek?`)) return;
+      if (!confirm(`Stop tracking ${address.slice(0, 6)}…${address.slice(-4)}?`)) return;
       try {
         const r = await writeFetch(`${INV_API_BASE}?farm=${encodeURIComponent(FARM_ID)}&type=farm-wallet&address=${encodeURIComponent(address)}`, { method: "DELETE" });
         if (!r.ok) throw new Error(r.statusText);
         await invLoadHoldings(FARM_ID);
         renderInvestmentTrackerContent();
-      } catch (e) { alert("odebrání selhalo: " + e.message); }
+      } catch (e) { alert("Could not remove the wallet: " + e.message); }
     };
     let _invPlan = null;   // { start_date, rate, period } or null
     async function invLoadRepayPlan(farmId) {
@@ -20546,7 +20645,7 @@
         if (r.ok) _invPlan = (await r.json()).plan || null;
       } catch (e) { /* the card offers to create one */ }
     }
-    const _planPeriodCz = { day: "denně", month: "měsíčně", year: "ročně" };
+    const _planPeriodLabel = { day: "daily", month: "monthly", year: "yearly" };
     /*
      * The REPAY PLAN card: the plan's daily withdrawal and how far ahead of / behind it the ledger
      * is, and a chart of the last 50 days and the next 50 under it.
@@ -20566,67 +20665,67 @@
     function _invRepayHeroHtml(agg, stats, flowerPerBtc) {
       const daily = stats.dailyTargetBtc;
       if (!(daily > 0)) return "";
-      const fl = (btc) => flowerPerBtc > 0 ? Math.round(btc * flowerPerBtc).toLocaleString("cs-CZ") + " 🌸" : fmtBtc(btc);
-      const dateIn = (days) => { const d = new Date(); d.setDate(d.getDate() + Math.ceil(days)); return d.toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" }); };
-      const dny = (n) => { const a = Math.abs(n); return a === 1 ? "den" : a >= 2 && a <= 4 ? "dny" : "dní"; };
+      const fl = (btc) => flowerPerBtc > 0 ? Math.round(btc * flowerPerBtc).toLocaleString("en-US") + " " + sflIcon() : fmtBtc(btc);
+      const dateIn = (days) => { const d = new Date(); d.setDate(d.getDate() + Math.ceil(days)); return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); };
+      const dny = (n) => Math.abs(n) === 1 ? "day" : "days";
       const leadDays = stats.balanceBtc / daily;
       const lead = Math.round(leadDays);
       const ahead = stats.balanceBtc >= 0;
-      const tone = ahead ? "var(--green)" : "var(--red)";
-      const glow = ahead ? "rgba(127,224,160,0.35)" : "rgba(255,107,107,0.35)";
+      const tone = ahead ? "var(--c-green)" : "var(--c-red)";
+      const glow = ahead ? "rgba(95,179,107,0.3)" : "rgba(224,108,95,0.3)";
 
       // LEAD track: plan in the middle, ±range days to the edges.
       const range = Math.max(14, Math.min(120, Math.ceil(Math.abs(leadDays) * 1.3 / 7) * 7));
       const pos = 50 + Math.max(-50, Math.min(50, leadDays / range * 50));
       const fillL = Math.min(50, pos), fillW = Math.abs(pos - 50);
-      const leadCard = `<div class="rp-card" style="grid-column:1/-1">
-          <div class="rp-lbl">${ahead ? "🚀 NÁSKOK PŘED PLÁNEM" : "⏳ SKLUZ ZA PLÁNEM"}</div>
-          <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:4px 0 10px">
-            <span class="rp-big" style="color:${tone};text-shadow:0 0 14px ${glow}">${lead > 0 ? "+" : ""}${lead} ${dny(lead)}</span>
-            <span class="rp-sub">${ahead ? "máš vybráno navíc" : "chybí vybrat"} <b style="color:var(--text-secondary)">${fl(Math.abs(stats.balanceBtc))}</b> · ${fmtBtc(Math.abs(stats.balanceBtc))}</span>
+      const leadCard = `<div class="v-inv-card">
+          <div class="v-inv-lbl">${ahead ? "🚀 Ahead of plan" : "⏳ Behind plan"}</div>
+          <div class="v-inv-row2">
+            <span class="v-inv-big" style="color:${tone}">${lead > 0 ? "+" : ""}${lead} ${dny(lead)}</span>
+            <span class="v-inv-sub">${ahead ? "withdrawn beyond the plan" : "still to withdraw"} <b>${fl(Math.abs(stats.balanceBtc))}</b> · ${fmtBtc(Math.abs(stats.balanceBtc))}</span>
           </div>
-          <div class="rp-track">
-            <div class="rp-zone" style="left:0;width:50%;background:linear-gradient(90deg,rgba(255,107,107,0.22),rgba(255,107,107,0.04))"></div>
-            <div class="rp-zone" style="left:50%;width:50%;background:linear-gradient(90deg,rgba(127,224,160,0.04),rgba(127,224,160,0.22))"></div>
-            <div class="rp-fill" style="left:${fillL}%;width:${fillW}%;background:${tone};box-shadow:0 0 10px ${glow}"></div>
-            <div class="rp-mid"></div>
-            <div class="rp-dot" style="left:${pos}%;border-color:${tone};box-shadow:0 0 0 4px ${glow}"></div>
+          <div class="v-inv-track">
+            <div class="v-inv-zone" style="left:0;width:50%;background:linear-gradient(90deg,rgba(224,108,95,0.3),rgba(224,108,95,0.04))"></div>
+            <div class="v-inv-zone" style="left:50%;width:50%;background:linear-gradient(90deg,rgba(95,179,107,0.04),rgba(95,179,107,0.3))"></div>
+            <div class="v-inv-fill" style="left:${fillL}%;width:${fillW}%;background:${tone}"></div>
+            <div class="v-inv-midline"></div>
+            <div class="v-inv-dot" style="left:${pos}%;border-color:${tone};box-shadow:0 0 0 4px ${glow}"></div>
           </div>
-          <div style="display:flex;justify-content:space-between" class="rp-sub"><span>−${range} d</span><span>plán</span><span>+${range} d</span></div>
+          <div class="v-inv-scale"><span>−${range} d</span><span>plan</span><span>+${range} d</span></div>
         </div>`;
 
       // TODAY
       const catchUp = Math.max(0, -stats.balanceBtc) + daily;
       const coveredDays = Math.floor(Math.max(0, leadDays));
-      const todayCard = `<div class="rp-card">
-          <div class="rp-lbl">🎯 DNES</div>
+      const todayCard = `<div class="v-inv-card">
+          <div class="v-inv-lbl">🎯 Today</div>
           ${ahead
-            ? `<div class="rp-mid-val" style="color:var(--green)">${coveredDays > 0 ? `kryto do ${dateIn(coveredDays)}` : "jsi přesně v plánu"}</div>
-               <div class="rp-sub">${coveredDays > 0 ? `${coveredDays} ${dny(coveredDays)} nemusíš vybrat nic. Každý výběr navíc náskok prodlouží — ${fl(daily)} = +1 den.` : `Dnešní splátka: <b>${fl(daily)}</b>.`}</div>`
-            : `<div class="rp-mid-val" style="color:var(--sunpetal)">vyber ${fl(catchUp)}</div>
-               <div class="rp-sub">= ${fmtBtc(catchUp)} a jsi zpátky v plánu i s dnešní splátkou (${fl(daily)} / den).</div>`}
+            ? `<div class="v-inv-mid" style="color:var(--c-green)">${coveredDays > 0 ? `covered until ${dateIn(coveredDays)}` : "exactly on plan"}</div>
+               <div class="v-inv-sub">${coveredDays > 0 ? `Nothing to withdraw for ${coveredDays} ${dny(coveredDays)}. Every extra withdrawal stretches the lead — ${fl(daily)} = +1 day.` : `Today's payment: <b>${fl(daily)}</b>.`}</div>`
+            : `<div class="v-inv-mid" style="color:var(--c-yellow)">withdraw ${fl(catchUp)}</div>
+               <div class="v-inv-sub">= ${fmtBtc(catchUp)}, and you are back on plan with today's payment included (${fl(daily)} / day).</div>`}
         </div>`;
 
       // TEMPO: realized pace in days of plan per day, over repayPlanStats' lookback (≤ 50 d)
       const ser = stats.series || [];
       const lookDays = Math.min(50, Math.max(0, ser.length - 1));
       const ratio = Math.max(0, stats.paceBtcPerDay || 0) / daily;
-      const rTone = ratio >= 1 ? "var(--green)" : ratio >= 0.75 ? "var(--sunpetal)" : "var(--red)";
+      const rTone = ratio >= 1 ? "var(--c-green)" : ratio >= 0.75 ? "var(--c-yellow)" : "var(--c-red)";
       const rPos = Math.min(100, ratio / 2 * 100);
       const debtLeft = Math.max(0, agg.netDebtBtc || 0);
-      const tempoCard = `<div class="rp-card">
-          <div class="rp-lbl">⚡ TEMPO</div>
-          <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:4px 0 8px">
-            <span class="rp-big" style="color:${rTone}">${ratio.toFixed(2).replace(".", ",")} d/den</span>
-            <span class="rp-sub">posíláš <b style="color:var(--text-secondary)">${Math.round(ratio * 100)} %</b> plánu · za posledních ${lookDays} ${dny(lookDays)} ${fl((stats.paceBtcPerDay || 0) * lookDays)} z ${fl(daily * lookDays)}</span>
+      const tempoCard = `<div class="v-inv-card">
+          <div class="v-inv-lbl">⚡ Pace</div>
+          <div class="v-inv-row2">
+            <span class="v-inv-big" style="color:${rTone}">${ratio.toFixed(2)} d/day</span>
+            <span class="v-inv-sub">you send <b>${Math.round(ratio * 100)} %</b> of the plan · ${fl((stats.paceBtcPerDay || 0) * lookDays)} of ${fl(daily * lookDays)} over the last ${lookDays} ${dny(lookDays)}</span>
           </div>
-          <div class="rp-track">
-            <div class="rp-fill" style="left:0;width:${rPos}%;background:${rTone};transform-origin:left"></div>
-            <div class="rp-mid"></div>
-            <div class="rp-dot" style="left:${rPos}%;border-color:${rTone};box-shadow:none;animation:none"></div>
+          <div class="v-inv-track">
+            <div class="v-inv-fill" style="left:0;width:${rPos}%;background:${rTone}"></div>
+            <div class="v-inv-midline"></div>
+            <div class="v-inv-dot" style="left:${rPos}%;border-color:${rTone}"></div>
           </div>
-          <div style="display:flex;justify-content:space-between" class="rp-sub"><span>0×</span><span>plán 1×</span><span>2×</span></div>
-          <div class="rp-sub" style="margin-top:4px">${ratio > 0 ? `tímhle tempem splaceno za <b style="color:${rTone}">${Math.ceil(debtLeft / (stats.paceBtcPerDay)).toLocaleString("cs-CZ")} ${dny(Math.ceil(debtLeft / stats.paceBtcPerDay))}</b>${ratio < 1 ? ` · na 1× chybí ${fl(daily - stats.paceBtcPerDay)} / den` : ""}` : "za posledních 50 dní žádný čistý výběr"}</div>
+          <div class="v-inv-scale"><span>0×</span><span>plan 1×</span><span>2×</span></div>
+          <div class="v-inv-sub" style="margin-top:4px">${ratio > 0 ? `at this pace, paid back in <b style="color:${rTone}">${Math.ceil(debtLeft / (stats.paceBtcPerDay)).toLocaleString("en-US")} ${dny(Math.ceil(debtLeft / stats.paceBtcPerDay))}</b>${ratio < 1 ? ` · ${fl(daily - stats.paceBtcPerDay)} / day short of 1×` : ""}` : "no net withdrawal in the last 50 days"}</div>
         </div>`;
 
       // PAYOFF
@@ -20635,92 +20734,64 @@
       const planEta = debt / daily;
       const pace = stats.paceBtcPerDay > 0 ? stats.paceBtcPerDay : 0;
       const paceEta = pace > 0 ? debt / pace : null;
-      const marks = [25, 50, 75, 100].map((m) => `<div class="rp-ms" style="left:${m}%"><span style="color:${pct >= m ? "var(--sunpetal)" : "var(--text-dim)"}">${pct >= m ? "★" : "☆"}</span><small>${m} %</small></div>`).join("");
-      const etaRow = (label, days, best) => `<div style="display:flex;justify-content:space-between;gap:8px;margin-top:4px"><span class="rp-sub">${label}</span><span style="font-family:'Courier New',monospace;font-size:0.72rem;color:${best ? "var(--green)" : "var(--text-secondary)"}">${days == null ? "—" : `${Math.ceil(days).toLocaleString("cs-CZ")} ${dny(Math.ceil(days))} · ${dateIn(days)}`}</span></div>`;
-      const payCard = `<div class="rp-card" style="grid-column:1/-1">
-          <div class="rp-lbl">🏁 DO ÚPLNÉHO SPLACENÍ</div>
-          <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:4px 0 8px">
-            <span class="rp-big" style="background:linear-gradient(110deg,#b8860b 0%,#ffd700 35%,#fff6c8 50%,#ffd700 65%,#b8860b 100%);background-size:250% 100%;animation:invGoldShine 3s linear infinite;-webkit-background-clip:text;background-clip:text;color:transparent">${debt > 0 ? `${Math.ceil(planEta).toLocaleString("cs-CZ")} ${dny(Math.ceil(planEta))}` : "SPLACENO 🎉"}</span>
-            <span class="rp-sub">vráceno <b style="color:var(--text-secondary)">${pct.toFixed(1)} %</b> z peaku ${fmtBtc(peak)} · zbývá ${fl(debt)} (${fmtBtc(debt)})</span>
+      const marks = [25, 50, 75, 100].map((m) => `<div class="v-inv-ms" style="left:${m}%"><span style="color:${pct >= m ? "var(--c-yellow)" : "var(--c-dim)"}">${pct >= m ? "★" : "☆"}</span><small>${m} %</small></div>`).join("");
+      const etaRow = (label, days, best) => `<div class="v-inv-eta"><span class="v-inv-sub">${label}</span><span class="v-inv-num" style="color:${best ? "var(--c-green)" : "var(--c-text)"}">${days == null ? "—" : `${Math.ceil(days).toLocaleString("en-US")} ${dny(Math.ceil(days))} · ${dateIn(days)}`}</span></div>`;
+      const payCard = `<div class="v-inv-card">
+          <div class="v-inv-lbl">🏁 Until fully paid back</div>
+          <div class="v-inv-row2">
+            <span class="v-inv-big v-inv-gold">${debt > 0 ? `${Math.ceil(planEta).toLocaleString("en-US")} ${dny(Math.ceil(planEta))}` : "PAID BACK"}</span>
+            <span class="v-inv-sub"><b>${pct.toFixed(1)} %</b> of the ${fmtBtc(peak)} peak is back · ${fl(debt)} (${fmtBtc(debt)}) to go</span>
           </div>
-          <div class="rp-bar"><div class="rp-bar-in" style="width:${pct}%"></div>${marks}</div>
-          ${debt > 0 ? etaRow("tempem plánu", planEta, paceEta == null || planEta <= paceEta) + etaRow("tempem posledních 50 dní", paceEta, paceEta != null && paceEta < planEta) : ""}
+          <div class="v-inv-pbar"><i style="width:${pct}%"></i>${marks}</div>
+          ${debt > 0 ? etaRow("at the plan's pace", planEta, paceEta == null || planEta <= paceEta) + etaRow("at the last 50 days' pace", paceEta, paceEta != null && paceEta < planEta) : ""}
         </div>`;
 
-      return `<style>
-          .rp-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
-          .rp-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:12px;margin:10px 0 6px;align-items:stretch}
-          .rp-right{display:flex;flex-direction:column;min-width:0}
-          .rp-right .summary-bar{margin:0 0 8px}
-          .rp-chart{flex:1;min-height:280px}
-          @media (max-width:900px){.rp-split{grid-template-columns:minmax(0,1fr)}.rp-chart{flex:none;height:280px}}
-          .rp-card{background:linear-gradient(160deg,rgba(255,255,255,0.05),rgba(0,0,0,0.25));border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px 12px;animation:rpIn .5s ease both}
-          .rp-lbl{font-family:'Press Start 2P',monospace;font-size:0.45rem;color:var(--text-dim);letter-spacing:0.5px}
-          .rp-big{font-family:'Press Start 2P',monospace;font-size:1.15rem;line-height:1.3}
-          .rp-mid-val{font-family:'Press Start 2P',monospace;font-size:0.7rem;margin:6px 0 4px;line-height:1.5}
-          .rp-sub{font-size:0.62rem;color:var(--text-dim);line-height:1.5}
-          .rp-track{position:relative;height:14px;border-radius:7px;background:rgba(0,0,0,0.4);overflow:visible;margin:6px 0 4px}
-          .rp-zone{position:absolute;top:0;bottom:0;border-radius:7px}
-          .rp-fill{position:absolute;top:4px;height:6px;border-radius:3px;animation:rpGrow .9s cubic-bezier(.2,.8,.2,1) both;transform-origin:${ahead ? "left" : "right"}}
-          .rp-mid{position:absolute;left:50%;top:-4px;bottom:-4px;width:2px;background:#e8c86a;transform:translateX(-1px)}
-          .rp-dot{position:absolute;top:50%;width:16px;height:16px;border-radius:50%;background:#1c160f;border:3px solid;transform:translate(-50%,-50%);animation:rpPulse 2s ease-in-out infinite}
-          .rp-bar{position:relative;height:12px;border-radius:6px;background:rgba(0,0,0,0.4);margin:6px 0 22px}
-          .rp-bar-in{height:100%;border-radius:6px;background:linear-gradient(90deg,#b8860b,#ffd700);box-shadow:0 0 10px rgba(255,215,0,0.35);animation:rpGrow 1.1s cubic-bezier(.2,.8,.2,1) both;transform-origin:left}
-          .rp-ms{position:absolute;top:-3px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;font-size:0.7rem;line-height:1}
-          .rp-ms:last-child{transform:translateX(-90%)}
-          .rp-ms small{font-size:0.5rem;color:var(--text-dim);margin-top:5px;white-space:nowrap}
-          @keyframes rpIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-          @keyframes rpGrow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
-          @keyframes rpPulse{0%,100%{box-shadow:0 0 0 3px ${glow}}50%{box-shadow:0 0 0 8px transparent}}
-          @keyframes invGoldShine{0%{background-position:100% 0}100%{background-position:-150% 0}}
-          @media (prefers-reduced-motion:reduce){.rp-card,.rp-fill,.rp-bar-in,.rp-dot{animation:none}}
-        </style>
-        <div class="rp-grid">${leadCard}${tempoCard}${todayCard}${payCard}</div>`;
+      return `<div class="v-inv-cards">${leadCard}${tempoCard}${todayCard}${payCard}</div>`;
     }
 
     function _invRepayHtml(agg, stats, flowerPerBtc, errors) {
-      const fmtFl = (btc) => flowerPerBtc > 0 ? Math.round(btc * flowerPerBtc).toLocaleString("en-US") + " 🌸" : "—";
+      const fmtFl = (btc) => flowerPerBtc > 0 ? Math.round(btc * flowerPerBtc).toLocaleString("en-US") + " " + sflIcon() : "—";
       const fmtN = (v) => Math.round(v).toLocaleString("en-US") + " 🌸";
       const p = _invPlan;
       const ledgerErr = errors && errors.ledger;
-      const stat = (label, val, sub, color, tip) => `<div class="summary-stat" style="min-width:150px"${tip ? ` title="${String(tip).replace(/"/g, "&quot;")}"` : ""}>
-          <div class="label pixel-font" style="font-size:0.45rem">${label}${tip ? ` <span style="cursor:help;color:var(--text-dim)">ⓘ</span>` : ""}</div>
-          <div style="font-family:'Courier New',monospace;font-size:0.82rem;color:${color || "var(--text-secondary)"};margin-top:2px">${val}</div>
-          ${sub ? `<div class="label pixel-font" style="margin-top:2px;color:var(--text-dim);font-size:0.42rem;line-height:1.6">${sub}</div>` : ""}
+      const stat = (label, val, sub, color, tip) => `<div class="v-kpi"${tip ? ` title="${String(tip).replace(/"/g, "&quot;")}"` : ""}>
+          <span>${label}${tip ? ` <i class="v-inv-i">ⓘ</i>` : ""}</span>
+          <b style="color:${color || "var(--c-text)"}">${val}</b>
+          ${sub ? `<span class="v-inv-kpisub">${sub}</span>` : ""}
         </div>`;
-      const form = `<div id="inv-plan-form" style="margin-top:8px;display:${p ? "none" : "flex"};gap:8px;flex-wrap:wrap;align-items:center;font-family:'Courier New',monospace;font-size:0.72rem">
-          <label class="pixel-font" style="font-size:0.45rem;color:var(--text-dim)">od <input type="date" id="inv-plan-start" value="${p ? p.start_date : _localIsoDate(new Date())}" style="background:rgba(0,0,0,0.4);border:1px solid var(--text-dim);color:var(--text-primary);padding:3px 5px;border-radius:3px;font-family:inherit;font-size:0.7rem"></label>
-          <label class="pixel-font" style="font-size:0.45rem;color:var(--text-dim)">splácet <input type="number" id="inv-plan-rate" step="any" min="0.01" value="${p ? p.rate : 10}" style="width:64px;background:rgba(0,0,0,0.4);border:1px solid var(--text-dim);color:var(--text-primary);padding:3px 5px;border-radius:3px;font-family:inherit;font-size:0.7rem"> % z peaku</label>
-          <select id="inv-plan-period" style="background:rgba(0,0,0,0.4);border:1px solid var(--text-dim);color:var(--text-primary);padding:3px 5px;border-radius:3px;font-family:inherit;font-size:0.7rem">
-            ${Object.entries(_planPeriodCz).map(([k, v]) => `<option value="${k}"${(p ? p.period : "year") === k ? " selected" : ""}>${v}</option>`).join("")}
+      const form = `<div id="inv-plan-form" class="v-inv-form" style="display:${p ? "none" : "flex"}">
+          <label>from <input type="date" id="inv-plan-start" value="${p ? p.start_date : _localIsoDate(new Date())}"></label>
+          <label>pay back <input type="number" id="inv-plan-rate" step="any" min="0.01" value="${p ? p.rate : 10}" style="width:72px"> % of the peak</label>
+          <select id="inv-plan-period">
+            ${Object.entries(_planPeriodLabel).map(([k, v]) => `<option value="${k}"${(p ? p.period : "year") === k ? " selected" : ""}>${v}</option>`).join("")}
           </select>
-          <button class="roi-pill" onclick="_invSavePlan()" style="padding:3px 10px;font-size:0.55rem">💾 uložit</button>
-          ${p ? `<button class="roi-pill" onclick="_invDeletePlan()" style="padding:3px 10px;font-size:0.55rem;color:var(--red)">smazat</button>` : ""}
-          <span id="inv-plan-msg" class="pixel-font" style="font-size:0.45rem;color:var(--text-dim)"></span>
+          <button class="v-inv-primary" onclick="_invSavePlan()">Save</button>
+          ${p ? `<button class="v-inv-danger" onclick="_invDeletePlan()">Delete</button>` : ""}
+          <span id="inv-plan-msg" class="v-inv-note"></span>
         </div>`;
-      const head = `<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
-          <span class="label pixel-font" style="flex:1">REPAY PLAN <span style="color:var(--text-dim)">— splátky do BTC${p && stats ? ` · ${p.rate} % ${_planPeriodCz[p.period]} z peaku, od ${p.start_date} (${stats.daysElapsed} d)` : ""}</span></span>
-          ${p ? `<span class="pixel-font" style="font-size:0.45rem;color:var(--lily);cursor:pointer" onclick="const f=document.getElementById('inv-plan-form');f.style.display=f.style.display==='none'?'flex':'none'">[upravit]</span>` : ""}
+      const head = `<div class="v-inv-head">
+          <b>Repay plan</b><span class="v-inv-note">paying back into BTC${p && stats ? ` · ${p.rate} % of the peak ${_planPeriodLabel[p.period]}, since ${p.start_date} (${stats.daysElapsed} d)` : ""}</span>
+          ${p ? `<span class="v-inv-link" onclick="const f=document.getElementById('inv-plan-form');f.style.display=f.style.display==='none'?'flex':'none'">Edit plan</span>` : ""}
         </div>`;
-      const box = (inner) => `<div style="border:1px solid var(--lily);border-radius:6px;padding:8px 10px;margin-bottom:12px;background:rgba(0,0,0,0.25)">${head}${inner}${form}</div>`;
+      const box = (inner) => `<div class="v-inv-box">${head}${inner}${form}</div>`;
       if (ledgerErr) {
-        return box(`<div class="label pixel-font" style="margin-top:8px;color:#ff8c42;line-height:1.7">⚠ transakce se nepodařilo načíst (${escHTML(ledgerErr)}) — plán nejde spočítat, reload</div>`);
+        return box(`<div class="v-inv-warn">⚠ Could not load the transactions (${escHTML(ledgerErr)}) — the plan cannot be computed. Reload the page.</div>`);
       }
       if (!p || !stats) {
-        return box(`<div class="label pixel-font" style="margin-top:8px;color:var(--text-dim);line-height:1.7">${p ? "plán nejde spočítat (chybí peak nebo kurz)" : `Zatím žádný plán. Nastav, kolik z peaku ${fmtBtc(agg.peakBtc)} chceš vracet do BTC — denně, měsíčně nebo ročně. Start v minulosti započítá i výběry od té doby.`}</div>`);
+        return box(`<div class="v-inv-note" style="margin-top:8px">${p ? "The plan cannot be computed (the peak or an exchange rate is missing)." : `No plan yet. Choose how much of the ${fmtBtc(agg.peakBtc)} peak to pay back into BTC — daily, monthly or yearly. A start date in the past also credits the withdrawals made since then.`}</div>`);
       }
       const behind = stats.balanceBtc < 0;
       // The ROADMAP plans with what is left after this withdrawal (see _rmServerSettingsJson).
       if (flowerPerBtc > 0 && stats.dailyTargetBtc > 0) { try { localStorage.setItem("sfl_repay_daily_flower", String(Math.round(stats.dailyTargetBtc * flowerPerBtc * 100) / 100)); } catch (e) {} }
       const lagDays = stats.dailyTargetBtc > 0 ? Math.round(Math.abs(stats.balanceBtc) / stats.dailyTargetBtc) : 0;
       // E13: what counts is NET withdrawn since the start — a withdrawal put back later repays nothing.
-      const netTip = `Počítají se ČISTÉ výběry od ${p.start_date}: výběry − vklady (všechna místa), průběžný součet nikdy pod nulou. Výběr, který se pak vrátí zpět vkladem (round trip), se jako splátka nepočítá. BTC na peněžence (cbBTC, WBTC…) se počítá jako výběr ke dnešku. Dny jsou lokální kalendářní dny.`;
-      return box(`<div class="rp-split"><div>${_invRepayHeroHtml(agg, stats, flowerPerBtc)}</div><div class="rp-right"><div class="summary-bar">
-          ${stat("WITHDRAW DAILY", `<b>${fmtFl(stats.dailyTargetBtc)}</b>`, `${fmtBtc(stats.dailyTargetBtc)} / day · ${p.rate} % ${_planPeriodCz[p.period]} of peak ${fmtBtc(agg.peakBtc)}`)}
-          ${stat(behind ? "YOU ARE BEHIND BY" : "YOU ARE AHEAD BY", `<b>${fmtFl(Math.abs(stats.balanceBtc))}</b>`, `${fmtBtc(Math.abs(stats.balanceBtc))} · ${lagDays} days · net withdrawn ${fmtFl(stats.actualBtc)} of ${fmtFl(stats.targetBtc)} since ${p.start_date}`, behind ? "var(--red)" : "var(--green)", netTip)}
+      const netTip = `Counts NET withdrawals since ${p.start_date}: withdrawals − deposits (all venues), a running total that never drops below zero. A withdrawal later put back as a deposit (a round trip) does not count as a payment. BTC on the wallet (cbBTC, WBTC…) counts as withdrawn today. Days are local calendar days.`;
+      return box(`<div class="v-inv-split"><div>${_invRepayHeroHtml(agg, stats, flowerPerBtc)}</div><div class="v-inv-right"><div class="v-kpis">
+          ${stat("Withdraw daily", fmtFl(stats.dailyTargetBtc), `${fmtBtc(stats.dailyTargetBtc)} / day · ${p.rate} % of the ${fmtBtc(agg.peakBtc)} peak ${_planPeriodLabel[p.period]}`)}
+          ${stat(behind ? "You are behind by" : "You are ahead by", fmtFl(Math.abs(stats.balanceBtc)), `${fmtBtc(Math.abs(stats.balanceBtc))} · ${lagDays} days · net withdrawn ${fmtFl(stats.actualBtc)} of ${fmtFl(stats.targetBtc)} since ${p.start_date}`, behind ? "var(--c-red)" : "var(--c-green)", netTip)}
         </div>
-        <div id="inv-repay-chart" class="rp-chart"></div>
-        <div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);margin-top:3px;line-height:1.7">po týdnech: až 50 zpět … tento týden … +10 · <span style="color:#e8c86a">- - cíl</span> · <span style="color:#7fe0a0">── vybráno (čistě)</span> · <span style="color:#7fb8e0">···· trend (tempo posledních 50 d)</span> · <span style="color:#7fe0a0">▮ výběry / týden</span></div></div></div>`);
+        <div id="inv-repay-chart" class="v-inv-chart"></div>
+        <div class="v-inv-note" style="margin-top:4px">By week: up to 50 back … this week … +10 · <span style="color:#e8c86a">- - target</span> · <span style="color:#7fe0a0">── withdrawn (net)</span> · <span style="color:#7fb8e0">···· trend (last 50 days' pace)</span> · <span style="color:#7fe0a0">▮ withdrawals / week</span></div></div></div>`);
     }
     /*
      * BILANCE — one balance sheet instead of a card per venue: what went in (net BTC, with its
@@ -20739,11 +20810,11 @@
       const amt = (i) => (i.amount >= 1000 ? Math.round(i.amount).toLocaleString("en-US") : i.amount >= 1 ? i.amount.toFixed(2).replace(/\.?0+$/, "") : i.amount.toPrecision(2))
         + " " + (i.symbol === "FLOWER" ? "🌸" : i.symbol === "Genesis Egg" ? "🥚" : i.symbol);
       const esc = (t) => String(t).replace(/"/g, "&quot;");
-      const info = (t) => `<span title="${esc(t)}" style="cursor:help;color:var(--text-dim);margin-left:4px">ⓘ</span>`;
+      const info = (t) => `<span title="${esc(t)}" class="v-inv-i">ⓘ</span>`;
       const wallets = (_invHoldings && _invHoldings.wallets) || [];
-      const walletCtl = ` ${wallets.map((w) => `<span style="cursor:pointer;color:var(--red)" title="odebrat ${escHTML(w.address)}" onclick="_invRemoveWallet('${escJsAttr(w.address)}')">×</span>`).join(" ")} <span style="cursor:pointer;color:var(--lily)" title="přidat adresu" onclick="_invAddWallet()">[+]</span>`;
+      const walletCtl = ` ${wallets.map((w) => `<span class="v-inv-x" title="Remove ${escHTML(w.address)}" onclick="_invRemoveWallet('${escJsAttr(w.address)}')">×</span>`).join(" ")} <span class="v-inv-link" style="margin-left:4px" title="Add a wallet address" onclick="_invAddWallet()">+ address</span>`;
       const typed = _invBalances.yakkamon;
-      const fl = (btc) => (flowerPerBtc > 0 && isFinite(btc)) ? fmtFlower(btc * flowerPerBtc) : "—";
+      const fl = (btc) => (flowerPerBtc > 0 && isFinite(btc)) ? Math.round(btc * flowerPerBtc).toLocaleString("en-US") + " " + sflIcon() : "—";
       const ratesOk = flowerPerBtc > 0;
       const problems = [];
       if (errors.rates) problems.push(errors.rates);
@@ -20751,35 +20822,35 @@
       const fv = x.farmValue;
       if (errors.treasury || !fv) {
         problems.push("farm value: " + (errors.treasury || "unavailable"));
-        rows.push({ label: "SFL farma", btc: NaN, liquid: true, info: "hodnotu farmy se nepodařilo spočítat" });
+        rows.push({ label: "SFL farm", btc: NaN, liquid: true, info: "the farm value could not be computed" });
       } else {
         const s = fv.sellable, ex = s.excluded;
-        rows.push({ label: "SFL farma", btc: ratesOk ? x.liquidValueBtc : NaN, liquid: true,
-          info: `${fmtFlower(s.total)} = marketplace ${fmtFlower(s.marketplace)} (resources, NFT collectibles / wearables / pets, listings) −10 % fee ${fmtFlower(s.fee)} + FLOWER balance ${fmtFlower(s.flowerBalance)} (bez fee) · NEPOČÍTÁ SE (marketplace je neobchoduje): coins ≈ ${fmtFlower(ex.coins)}, gems ≈ ${fmtFlower(ex.gems)}, treasures ≈ ${fmtFlower(ex.treasures)}, vařené/vyrobené ≈ ${fmtFlower(ex.produced)} · treasury celkem ${fmtFlower(x.treasuryTotalSfl)} · coin rate: ${treasuryCoinMode}` });
+        rows.push({ label: "SFL farm", btc: ratesOk ? x.liquidValueBtc : NaN, liquid: true,
+          info: `${fmtFlower(s.total)} = marketplace ${fmtFlower(s.marketplace)} (resources, NFT collectibles / wearables / pets, listings) −10 % fee ${fmtFlower(s.fee)} + FLOWER balance ${fmtFlower(s.flowerBalance)} (no fee) · NOT COUNTED (the marketplace does not trade them): coins ≈ ${fmtFlower(ex.coins)}, gems ≈ ${fmtFlower(ex.gems)}, treasures ≈ ${fmtFlower(ex.treasures)}, cooked / crafted ≈ ${fmtFlower(ex.produced)} · treasury total ${fmtFlower(x.treasuryTotalSfl)} · coin rate: ${treasuryCoinMode}` });
       }
       if (_invHoldingsErr) {
         problems.push("on-chain read: " + _invHoldingsErr);
-        rows.push({ label: "Wallet", btc: NaN, liquid: true, ctl: walletCtl, info: "on-chain čtení selhalo — reload" });
-      } else if (x.chainWallet) rows.push({ label: "Wallet", btc: ratesOk ? x.walletLiquidBtc : NaN, liquid: true, ctl: walletCtl, info: `on-chain (${wallets.map((w) => w.address.slice(0, 6) + "…" + w.address.slice(-4)).join(", ")}), všechny sítě: ${x.chainWallet.items.map((i) => `${amt(i)} ${usd(i.usd)} (${i.chain})`).join(", ") || "nic"} = ${usd(x.chainWallet.usd)} · FLOWER a BTC za kurz treasury · prodejné hned` });
-      else rows.push({ label: "Wallet", btc: ratesOk ? x.walletLiquidBtc : NaN, liquid: true, ctl: walletCtl, info: `${x.walletHeldFlower > 0 ? fmtFlower(x.walletHeldFlower) + " " : ""}z transakcí (koupené − prodané 🌸) · přidej adresu [+] a přečte se on-chain` });
+        rows.push({ label: "Wallet", btc: NaN, liquid: true, ctl: walletCtl, info: "the on-chain read failed — reload" });
+      } else if (x.chainWallet) rows.push({ label: "Wallet", btc: ratesOk ? x.walletLiquidBtc : NaN, liquid: true, ctl: walletCtl, info: `on-chain (${wallets.map((w) => w.address.slice(0, 6) + "…" + w.address.slice(-4)).join(", ")}), all chains: ${x.chainWallet.items.map((i) => `${amt(i)} ${usd(i.usd)} (${i.chain})`).join(", ") || "nothing"} = ${usd(x.chainWallet.usd)} · FLOWER and BTC at the treasury rate · sellable now` });
+      else rows.push({ label: "Wallet", btc: ratesOk ? x.walletLiquidBtc : NaN, liquid: true, ctl: walletCtl, info: `${x.walletHeldFlower > 0 ? fmtFlower(x.walletHeldFlower) + " " : ""}from the transactions (bought − sold 🌸) · add an address and it is read on-chain` });
       if (x.chainLp && x.chainLp.items.length) {
         const byPos = {};
         for (const i of x.chainLp.items) (byPos[i.tokenId] ||= { pool: i.pool, inRange: i.inRange, parts: [] }).parts.push(i);
         rows.push({ label: "Uniswap LP", btc: ratesOk ? x.lpBtc : NaN, liquid: true, labelColor: "#d8dde3",
-          info: Object.entries(byPos).map(([id, q]) => `#${id} ${q.pool}${q.inRange ? "" : " (MIMO ROZSAH)"}: ${q.parts.map((i) => `${amt(i)} ${usd(i.usd)}${i.fees > 0 ? ` vč. fees ${i.fees.toPrecision(2)}` : ""}`).join(" + ")}`).join(" · ") + ` = ${usd(x.chainLp.usd)} · co vrátí zavření pozice dnes + nevybrané fees · FLOWER za kurz treasury · prodejné hned` });
+          info: Object.entries(byPos).map(([id, q]) => `#${id} ${q.pool}${q.inRange ? "" : " (OUT OF RANGE)"}: ${q.parts.map((i) => `${amt(i)} ${usd(i.usd)}${i.fees > 0 ? ` incl. fees ${i.fees.toPrecision(2)}` : ""}`).join(" + ")}`).join(" · ") + ` = ${usd(x.chainLp.usd)} · what closing the position returns today + uncollected fees · FLOWER at the treasury rate · sellable now` });
       }
       if (_invBalancesErr) {
         problems.push("Yakke balance: " + _invBalancesErr);
-        rows.push({ label: "Yakke locked", btc: NaN, liquid: false, info: "zůstatek se nepodařilo načíst" });
+        rows.push({ label: "Yakke locked", btc: NaN, liquid: false, info: "the balance could not be loaded" });
       } else rows.push(typed
-        ? { label: "Yakke locked", btc: ratesOk ? x.lockedBtc : NaN, liquid: false, ctl: ` <span style="cursor:pointer;color:var(--lily)" onclick="_invSetBalance('yakkamon')">[edit]</span>`, info: `${fmtFlower(typed.amount)} deposit v Yakkamonu, vrací se v Q4 bez fee · ${typed.source === "game" ? "read from the game" : "zadáno ručně"} ${String(typed.noted_at).slice(0, 10)} · počítá se až po unlocku` }
-        : { label: "Yakke locked", btc: 0, liquid: false, ctl: ` <span style="cursor:pointer;color:var(--lily)" onclick="_invSetBalance('yakkamon')">[set]</span>`, info: "holding neznámý — zadej, kolik 🌸 je v Yakkamonu" });
+        ? { label: "Yakke locked", btc: ratesOk ? x.lockedBtc : NaN, liquid: false, ctl: ` <span class="v-inv-link" style="margin-left:4px" onclick="_invSetBalance('yakkamon')">Edit</span>`, info: `${fmtFlower(typed.amount)} deposited in Yakkamon, returned in Q4 with no fee · ${typed.source === "game" ? "read from the game" : "entered by hand"} ${String(typed.noted_at).slice(0, 10)} · counts only after the unlock` }
+        : { label: "Yakke locked", btc: 0, liquid: false, ctl: ` <span class="v-inv-link" style="margin-left:4px" onclick="_invSetBalance('yakkamon')">Set</span>`, info: "holding unknown — enter how much 🌸 is in Yakkamon" });
       if (x.chainEggs && x.chainEggs.items.length) {
         const e = x.chainEggs.items[0], off = _invHoldings.egg || {};
         const book = e.unitWron !== undefined
-          ? `${amt(e)} prodáno do knihy nabídek: ${Math.round(e.bookWron || 0)} WRON celkem, Ø ${Math.round(e.unitWron)} WRON/ks (každé vejce za nejlepší nabídku, jejíž traity splňuje — nabídka na Raigo či Legendary Brazito neocení)${e.unfilled ? ` · ${e.unfilled} ks bez odpovídající nabídky → 0` : ""}`
+          ? `${amt(e)} sold into the offer book: ${Math.round(e.bookWron || 0)} WRON in total, avg ${Math.round(e.unitWron)} WRON each (every egg at the best offer whose traits it meets — an offer for a Raigo or a Legendary Brazito does not price it)${e.unfilled ? ` · ${e.unfilled} without a matching offer → 0` : ""}`
           : `${amt(e)} × ${Math.round(off.offerWron || 0)} WRON`;
-        rows.push({ label: "Genesis eggs", btc: ratesOk ? x.eggsLiquidBtc : NaN, liquid: true, info: `${book} = ${usd(e.usd)} · trait nabídky na Ronin Marketu${off.fillableOffers ? ` (${off.fillableOffers} nabídek s krytým WRON)` : ""} · prodejné hned` });
+        rows.push({ label: "Genesis eggs", btc: ratesOk ? x.eggsLiquidBtc : NaN, liquid: true, info: `${book} = ${usd(e.usd)} · trait offers on Ronin Market${off.fillableOffers ? ` (${off.fillableOffers} offers backed by WRON)` : ""} · sellable now` });
         // Profit on the eggs BOUGHT (cost from the egg collector): what they fetch in the offer book
         // now minus what was paid. A detail of the row above — not added to the totals again.
         const c = off.cost;
@@ -20787,7 +20858,7 @@
           const usdPerWron = e.unitUsd / e.unitWron, nowWron = c.bought * e.unitWron, gainWron = nowWron - c.wron;
           const gainBtc = x.btcUsd > 0 ? gainWron * usdPerWron / x.btcUsd : NaN;
           x.eggGain = { btc: ratesOk ? gainBtc : NaN, pct: gainWron / c.wron * 100,
-            info: `${c.bought} koupených za ${Math.round(c.wron).toLocaleString("en-US")} WRON (Ø ${(c.wron / c.bought).toFixed(1)}) · dnes do knihy nabídek Ø ${Math.round(e.unitWron)} = ${Math.round(nowWron).toLocaleString("en-US")} WRON · zisk ${gainWron >= 0 ? "+" : ""}${Math.round(gainWron).toLocaleString("en-US")} WRON = ${gainWron >= 0 ? "+" : "−"}${usd(Math.abs(gainWron * usdPerWron))}${c.unbought ? ` · ${c.unbought} ks nekoupené (bez ceny), nepočítají se` : ""} · bez prodejního fee · jen detail, v součtech už je řádek Genesis eggs · nákupy k ${String(c.at).slice(0, 16).replace("T", " ")}` };
+            info: `${c.bought} bought for ${Math.round(c.wron).toLocaleString("en-US")} WRON (avg ${(c.wron / c.bought).toFixed(1)}) · into the offer book today at avg ${Math.round(e.unitWron)} = ${Math.round(nowWron).toLocaleString("en-US")} WRON · profit ${gainWron >= 0 ? "+" : ""}${Math.round(gainWron).toLocaleString("en-US")} WRON = ${gainWron >= 0 ? "+" : "−"}${usd(Math.abs(gainWron * usdPerWron))}${c.unbought ? ` · ${c.unbought} not bought (no price), not counted` : ""} · no sale fee · detail only, the Genesis eggs row is already in the totals · purchases as of ${String(c.at).slice(0, 16).replace("T", " ")}` };
         }
       }
       const sum = (list) => list.reduce((a, r) => a + r.btc, 0);   // NaN if any row is unknown
@@ -20796,33 +20867,32 @@
       if (errors.ledger) problems.push("transactions: " + errors.ledger);
       const cost = errors.ledger ? NaN : agg.netDebtBtc;
       const bilNow = sellable - cost, bilUnlock = sellable + locked - cost;
-      const pct = (v) => (cost > 0 && isFinite(v)) ? ` <span style="color:var(--text-dim)">${v >= 0 ? "+" : ""}${(v / cost * 100).toFixed(1)} %</span>` : "";
-      const tone = (v) => !isFinite(v) ? "var(--text-dim)" : v >= 0 ? "var(--green)" : "var(--red)";
+      const pct = (v) => (cost > 0 && isFinite(v)) ? ` <span class="v-dim">${v >= 0 ? "+" : ""}${(v / cost * 100).toFixed(1)} %</span>` : "";
+      const tone = (v) => !isFinite(v) ? "var(--c-dim)" : v >= 0 ? "var(--c-green)" : "var(--c-red)";
       const sgn = (v, f) => !isFinite(v) ? "—" : (v >= 0 ? "+" : "") + f(v);
-      const mono = "font-family:'Courier New',monospace";
-      const row = (label, btc, flower, o = {}) => `<div style="display:grid;grid-template-columns:1fr 120px 120px;gap:8px;align-items:baseline;padding:3px 0;border-top:1px solid rgba(255,255,255,0.06)${o.top ? ";border-top:1px solid rgba(255,255,255,0.18)" : ""}">
-          <div class="pixel-font" style="font-size:0.45rem;color:${o.labelColor || "var(--text-dim)"};letter-spacing:0.5px">${label}${o.info ? info(o.info) : ""}${o.ctl || ""}</div>
-          <div style="${mono};font-size:0.74rem;text-align:right;color:${o.color || "var(--text-secondary)"};${o.bold ? "font-weight:bold" : ""}">${btc}</div>
-          <div style="${mono};font-size:0.7rem;text-align:right;color:${o.color || "var(--text-dim)"}">${flower}</div>
-        </div>`;
+      const row = (label, btc, flower, o = {}) => {
+        const t = o.top ? " v-inv-tot" : "";
+        return `<div class="v-inv-lab${t}"${o.labelColor ? ` style="color:${o.labelColor}"` : ""}>${label}${o.info ? info(o.info) : ""}${o.ctl || ""}</div>
+          <div class="v-inv-num${t}" style="color:${o.color || "var(--c-text)"}${o.bold ? ";font-weight:600" : ""}">${btc}</div>
+          <div class="v-inv-num${t}" style="color:${o.color || "var(--c-muted)"}">${flower}</div>`;
+      };
       const errs = (_invHoldings && _invHoldings.errors || []).filter(Boolean);
-      return `<div style="border:1px solid var(--sunpetal);border-radius:6px;padding:8px 10px;margin-bottom:12px;background:rgba(0,0,0,0.25)">
-        <div style="display:grid;grid-template-columns:1fr 120px 120px;gap:8px;padding-bottom:3px">
-          <div class="label pixel-font">BILANCE${info("Co šlo dovnitř (čisté BTC) proti tomu, co držení dnes stojí. Zelené řádky jdou prodat hned, fialový až po unlocku. 🌸 = přepočet při dnešní ceně. Všechny řádky za jeden kurz FLOWER/USD a BTC/USD (z treasury).")}</div>
-          <div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);text-align:right">₿</div>
-          <div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);text-align:right">🌸</div>
-        </div>
-        ${!errors.ledger && _invRecoveredLine(agg) ? `<div class="pixel-font" style="font-size:0.42rem;color:var(--text-dim);margin:-1px 0 4px">${_invRecoveredLine(agg)}</div>` : ""}
+      return `<div class="v-inv-box">
+        <div class="v-inv-head"><b>Balance sheet</b>${info("What went in (net BTC) against what the holdings are worth today. Green rows can be sold now, the purple one only after the unlock. The FLOWER column converts at today's price. Every row uses one FLOWER/USD and one BTC/USD rate (the treasury's).")}</div>
+        ${!errors.ledger && _invRecoveredLine(agg) ? `<div class="v-inv-note" style="margin-top:2px">${_invRecoveredLine(agg)}</div>` : ""}
         ${!errors.ledger && !problems.length ? _invRecoveryBand(agg, cost, rows) : ""}
-        ${row("COST", fmtBtc(cost), fl(cost), { bold: true, info: errors.ledger ? "transakce se nepodařilo načíst" : `čisté BTC uvnitř · celkem ${fmtBtc(agg.depositBtc)} in, ${fmtBtc(agg.withdrawBtc)} out${x.btcBackOnChain > 0 ? ` + ${fmtBtc(x.btcBackOnChain)} BTC na walletce (${x.btcBackItems.map((i) => `${i.amount.toFixed(6)} ${i.symbol}`).join(", ")}) jako vybráno` : ""} · peak ${fmtBtc(agg.peakBtc)}` })}
-        ${rows.map((r) => row(r.label, fmtBtc(r.btc), fl(r.btc), { info: r.info, ctl: r.ctl, labelColor: r.labelColor, color: !isFinite(r.btc) ? "var(--text-dim)" : r.liquid ? "var(--green)" : "var(--lily)" })
-          + (r.label === "Genesis eggs" && x.eggGain ? row("↳ zisk vajec", sgn(x.eggGain.btc, fmtBtc) + ` <span style="color:var(--text-dim)">${x.eggGain.pct >= 0 ? "+" : ""}${x.eggGain.pct.toFixed(1)} %</span>`, sgn(x.eggGain.btc, fl), { info: x.eggGain.info, color: tone(x.eggGain.btc) }) : "")).join("")}
-        ${row("HODNOTA hned", fmtBtc(sellable), fl(sellable), { top: true, bold: true, info: "součet zelených řádků — prodejné dnes" })}
-        ${(locked > 0 || !isFinite(locked)) ? row("HODNOTA po unlocku", fmtBtc(sellable + locked), fl(sellable + locked), { info: "+ Yakke deposit, až se v Q4 vrátí" }) : ""}
-        ${row("BILANCE hned", sgn(bilNow, fmtBtc) + pct(bilNow), sgn(bilNow, fl), { top: true, bold: true, color: tone(bilNow), labelColor: "var(--text-secondary)", info: "hodnota hned − cost" })}
-        ${(locked > 0 || !isFinite(locked)) ? row("BILANCE po unlocku", sgn(bilUnlock, fmtBtc) + pct(bilUnlock), sgn(bilUnlock, fl), { bold: true, color: tone(bilUnlock), labelColor: "var(--text-secondary)", info: "hodnota po unlocku − cost" }) : ""}
-        ${problems.length ? `<div class="pixel-font" style="font-size:0.45rem;color:#ff8c42;margin-top:6px">⚠ nekompletní — ${problems.map(escHTML).join(" · ")} · součty ukazují „—“, reload</div>` : ""}
-        ${errs.length ? `<div class="pixel-font" style="font-size:0.45rem;color:#ff8c42;margin-top:6px">⚠ on-chain read incomplete — ${errs.map(escHTML).join(" · ")} · Wallet is undervalued, reload</div>` : ""}
+        <div class="v-inv-sheet" style="margin-top:10px">
+          <div class="v-inv-sh"></div><div class="v-inv-sh v-inv-num">₿</div><div class="v-inv-sh v-inv-num">${sflIcon()}</div>
+          ${row("Cost", fmtBtc(cost), fl(cost), { bold: true, info: errors.ledger ? "the transactions could not be loaded" : `net BTC inside · ${fmtBtc(agg.depositBtc)} in, ${fmtBtc(agg.withdrawBtc)} out in total${x.btcBackOnChain > 0 ? ` + ${fmtBtc(x.btcBackOnChain)} BTC on the wallet (${x.btcBackItems.map((i) => `${i.amount.toFixed(6)} ${i.symbol}`).join(", ")}) counted as withdrawn` : ""} · peak ${fmtBtc(agg.peakBtc)}` })}
+          ${rows.map((r) => row(r.label, fmtBtc(r.btc), fl(r.btc), { info: r.info, ctl: r.ctl, labelColor: r.labelColor, color: !isFinite(r.btc) ? "var(--c-dim)" : r.liquid ? "var(--c-green)" : "var(--lily)" })
+            + (r.label === "Genesis eggs" && x.eggGain ? row("↳ egg profit", sgn(x.eggGain.btc, fmtBtc) + ` <span class="v-dim">${x.eggGain.pct >= 0 ? "+" : ""}${x.eggGain.pct.toFixed(1)} %</span>`, sgn(x.eggGain.btc, fl), { info: x.eggGain.info, color: tone(x.eggGain.btc) }) : "")).join("")}
+          ${row("Value now", fmtBtc(sellable), fl(sellable), { top: true, bold: true, info: "sum of the green rows — sellable today" })}
+          ${(locked > 0 || !isFinite(locked)) ? row("Value after unlock", fmtBtc(sellable + locked), fl(sellable + locked), { info: "+ the Yakke deposit, once it returns in Q4" }) : ""}
+          ${row("Balance now", sgn(bilNow, fmtBtc) + pct(bilNow), sgn(bilNow, fl), { top: true, bold: true, color: tone(bilNow), labelColor: "var(--c-text)", info: "value now − cost" })}
+          ${(locked > 0 || !isFinite(locked)) ? row("Balance after unlock", sgn(bilUnlock, fmtBtc) + pct(bilUnlock), sgn(bilUnlock, fl), { bold: true, color: tone(bilUnlock), labelColor: "var(--c-text)", info: "value after unlock − cost" }) : ""}
+        </div>
+        ${problems.length ? `<div class="v-inv-warn">⚠ Incomplete — ${problems.map(escHTML).join(" · ")} · the totals show “—”, reload</div>` : ""}
+        ${errs.length ? `<div class="v-inv-warn">⚠ On-chain read incomplete — ${errs.map(escHTML).join(" · ")} · the Wallet is undervalued, reload</div>` : ""}
       </div>`;
     }
     // "RECOVERED x % of peak y ₿" — how far the net BTC inside has come back down from its peak
@@ -20833,7 +20903,7 @@
     }
     /*
      * The way back, as one band from 0 to the PEAK at risk (the owner's pick of five mockups):
-     * what already came back out (vráceno), then what each holding would cover — sellable now in
+     * what already came back out (withdrawn), then what each holding would cover — sellable now in
      * full colour, the Yakkamon deposit faded (only after the unlock) — and the grey gap still
      * missing. Two markers: covered now, covered after the unlock. Value beyond the peak shows as
      * profit at the end instead of overflowing the band. Same numbers as the rows below.
@@ -20841,13 +20911,13 @@
     function _invRecoveryBand(agg, cost, rows) {
       const peak = agg && agg.peakBtc;
       if (!(peak > 0) || !isFinite(cost) || rows.some((r) => !isFinite(r.btc))) return "";
-      const short = { "SFL farma": "farma", "Wallet": "wallet", "Genesis eggs": "vejce", "Yakke locked": "Yakke" };
-      const color = { "SFL farma": "var(--green)", "Wallet": "#5DADE2", "Genesis eggs": "#e8c86a" };
+      const short = { "SFL farm": "farm", "Wallet": "wallet", "Genesis eggs": "eggs", "Yakke locked": "Yakke" };
+      const color = { "SFL farm": "var(--c-green)", "Wallet": "#5DADE2", "Genesis eggs": "#e8c86a" };
       const back = Math.max(0, peak - cost);
       const segs = [];
-      // VYBRÁNO — BTC that has already come back out: gold with a moving shine, the part that counts.
+      // WITHDRAWN — BTC that has already come back out: gold with a moving shine, the part that counts.
       const gold = "linear-gradient(110deg,#b8860b 0%,#ffd700 35%,#fff6c8 50%,#ffd700 65%,#b8860b 100%)";
-      if (back > 0) segs.push({ name: "vybráno", btc: back, bg: `${gold};background-size:250% 100%;animation:invGoldShine 3s linear infinite` });
+      if (back > 0) segs.push({ name: "withdrawn", btc: back, bg: `${gold};background-size:250% 100%;animation:invGoldShine 3s linear infinite` });
       // LP — liquidity in the FLOWER/USDC pool: silver with the same shine, right after the gold.
       const silver = "linear-gradient(110deg,#7d838c 0%,#c9ced6 35%,#ffffff 50%,#c9ced6 65%,#7d838c 100%)";
       const lpRow = rows.find((r) => r.label === "Uniswap LP" && r.btc > 0);
@@ -20868,10 +20938,10 @@
       const cps = reached.concat(nextCp != null ? [nextCp] : []);
       const scale = Math.max(peak * 1.15, unlockEnd * 1.04, nextCp != null ? peak * (1 + nextCp) * 1.06 : 0);
       const shown = segs.map((s) => ({ ...s, w: s.btc }));
-      if (unlockEnd < peak - 1e-9) shown.push({ name: "chybí", w: peak - unlockEnd, bg: "repeating-linear-gradient(45deg,rgba(255,255,255,0.05) 0 6px,rgba(255,255,255,0.11) 6px 12px)", gap: true });
+      if (unlockEnd < peak - 1e-9) shown.push({ name: "missing", w: peak - unlockEnd, bg: "repeating-linear-gradient(45deg,rgba(255,255,255,0.05) 0 6px,rgba(255,255,255,0.11) 6px 12px)", gap: true });
       const pc = (v) => Math.max(0, Math.min(100, v / scale * 100));
-      const fmt3 = (v) => v.toFixed(3).replace(".", ",");
-      const seg = (s) => `<div title="${escHTML(s.name)} ${fmt3(s.w)} ₿ · ${(s.w / peak * 100).toFixed(1)} % vrcholu" style="width:${pc(s.w)}%;background:${s.bg};${s.faded ? "opacity:0.55;" : ""}display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap;font-size:0.58rem;color:${s.gap ? "var(--text-dim)" : "#1a120a"};${s.gap ? "" : "font-weight:bold;"}border-right:1px solid rgba(0,0,0,0.35)">${pc(s.w) >= 11 ? `${escHTML(s.name)} ${fmt3(s.w)}` : ""}</div>`;
+      const fmt3 = (v) => v.toFixed(3);
+      const seg = (s) => `<div class="v-inv-band-seg" title="${escHTML(s.name)} ${fmt3(s.w)} ₿ · ${(s.w / peak * 100).toFixed(1)} % of the peak" style="width:${pc(s.w)}%;background:${s.bg};${s.faded ? "opacity:0.55;" : ""}color:${s.gap ? "var(--c-dim)" : "#1a120a"};${s.gap ? "" : "font-weight:700;"}">${pc(s.w) >= 11 ? `${escHTML(s.name)} ${fmt3(s.w)}` : ""}</div>`;
       /*
        * Labels never overlap: per side (above / below the band) they are placed left to right and
        * one closer than MIN_GAP % to the previous drops to the next line; near the edges they are
@@ -20890,38 +20960,37 @@
       };
       const tickLine = (at, css) => `<div style="position:absolute;left:${at}%;top:-4px;bottom:-4px;${css}"></div>`;
       const above = [], below = [], ticks = [];
-      ticks.push(tickLine(pc(nowEnd), "border-left:1px solid var(--text-primary)"));
-      above.push({ at: pc(nowEnd), html: `hned ${Math.round(nowEnd / peak * 100)} %`, color: "var(--text-secondary)" });
+      ticks.push(tickLine(pc(nowEnd), "border-left:1px solid var(--c-text)"));
+      above.push({ at: pc(nowEnd), html: `now ${Math.round(nowEnd / peak * 100)} %`, color: "var(--c-muted)" });
       if (unlockEnd > nowEnd + peak * 0.005) {
-        ticks.push(tickLine(pc(unlockEnd), "border-left:1px dashed var(--text-primary)"));
-        above.push({ at: pc(unlockEnd), html: `po unlocku ${Math.round(unlockEnd / peak * 100)} %`, color: "var(--text-secondary)" });
+        ticks.push(tickLine(pc(unlockEnd), "border-left:1px dashed var(--c-text)"));
+        above.push({ at: pc(unlockEnd), html: `after unlock ${Math.round(unlockEnd / peak * 100)} %`, color: "var(--c-muted)" });
       }
       for (const c of cps) {
         const at = pc(peak * (1 + c)), got = reached.includes(c);
         ticks.push(tickLine(at, `border-left:1px dashed ${got ? "#ffd700" : "rgba(255,215,0,0.35)"}`));
-        below.push({ at, html: `${got ? "✓ " : ""}+${Math.round(c * 100)} %`, color: got ? "#ffd700" : "var(--text-dim)" });
+        below.push({ at, html: `${got ? "✓ " : ""}+${Math.round(c * 100)} %`, color: got ? "#ffd700" : "var(--c-dim)" });
       }
       const be = pc(peak);
-      below.push({ at: be, html: `<span style="font-size:0.7rem;font-family:'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',sans-serif">🏁</span> <span class="pixel-font">BREAK-EVEN</span> ${fmt3(peak)} ₿`, color: "#ffd700", main: true });
-      const LINE_H = 13;
-      const labels = (items, side) => place(items).map((l) => `<div style="position:absolute;left:${l.at}%;${side === "above" ? `bottom:${26 + l.line * LINE_H}px` : `top:${28 + l.line * LINE_H}px`};transform:translateX(${l.tx});white-space:nowrap;font-size:${l.main ? "0.48rem" : "0.44rem"};color:${l.color}">${l.html}</div>`).join("");
+      below.push({ at: be, html: `🏁 <b>Break-even</b> ${fmt3(peak)} ₿`, color: "#ffd700", main: true });
+      const LINE_H = 15;
+      const labels = (items, side) => place(items).map((l) => `<div class="v-inv-band-l" style="left:${l.at}%;${side === "above" ? `bottom:${26 + l.line * LINE_H}px` : `top:${28 + l.line * LINE_H}px`};transform:translateX(${l.tx});color:${l.color}${l.main ? ";font-size:12px" : ""}">${l.html}</div>`).join("");
       const placedAbove = place(above.slice()), placedBelow = place(below.slice());
-      const topPad = 18 + Math.max(0, ...placedAbove.map((l) => l.line)) * LINE_H;
-      const botPad = 22 + Math.max(0, ...placedBelow.map((l) => l.line)) * LINE_H;
+      const topPad = 20 + Math.max(0, ...placedAbove.map((l) => l.line)) * LINE_H;
+      const botPad = 24 + Math.max(0, ...placedBelow.map((l) => l.line)) * LINE_H;
       const profit = unlockEnd - peak, missingNow = peak - nowEnd;
-      return `<style>.lp-rank .lp-pop{display:none;position:absolute;left:0;top:calc(100% + 4px);z-index:60;width:min(340px,86vw);background:#1a120a;border:1px solid var(--border-brown);border-radius:6px;padding:8px;font-weight:normal;font-size:0.5rem;font-family:'Courier New',monospace;box-shadow:0 6px 18px rgba(0,0,0,0.6)}.lp-rank:hover .lp-pop,.lp-rank:focus-within .lp-pop{display:block}@media (max-width:700px){.lp-rank .lp-pop{position:fixed;left:8px;right:8px;top:15vh;width:auto;max-height:75vh;overflow-y:auto}}@keyframes invGoldShine{0%{background-position:100% 0}100%{background-position:-150% 0}}@keyframes invBePulse{0%,100%{opacity:1}50%{opacity:0.55}}</style>
-        <div style="margin:${topPad}px 0 8px">
+      return `<div class="v-inv-band" style="margin-top:${topPad}px">
           <div style="position:relative;height:22px">
-            <div style="position:absolute;left:${be}%;right:0;top:0;bottom:0;border-radius:0 4px 4px 0;background:repeating-linear-gradient(90deg,rgba(127,224,160,0.10) 0 4px,rgba(127,224,160,0.04) 4px 8px);border:1px dashed rgba(127,224,160,0.45);border-left:none"></div>
-            <div style="position:absolute;left:0;top:0;bottom:0;width:${be}%;border:1px solid var(--border-brown);border-radius:4px 0 0 4px"></div>
-            <div style="position:absolute;left:0;top:0;bottom:0;right:0;display:flex;border-radius:4px;overflow:hidden">${shown.map(seg).join("")}</div>
+            <div style="position:absolute;left:${be}%;right:0;top:0;bottom:0;border-radius:0 6px 6px 0;background:repeating-linear-gradient(90deg,rgba(95,179,107,0.10) 0 4px,rgba(95,179,107,0.04) 4px 8px);border:1px dashed rgba(95,179,107,0.45);border-left:none"></div>
+            <div style="position:absolute;left:0;top:0;bottom:0;width:${be}%;border:1px solid var(--c-line);border-radius:6px 0 0 6px"></div>
+            <div style="position:absolute;left:0;top:0;bottom:0;right:0;display:flex;border-radius:6px;overflow:hidden">${shown.map(seg).join("")}</div>
             ${ticks.join("")}
-            <div style="position:absolute;left:${be}%;top:-7px;bottom:-7px;width:3px;transform:translateX(-1.5px);background:linear-gradient(180deg,#ffd700,#7fe0a0);box-shadow:0 0 6px rgba(255,215,0,0.7);animation:invBePulse 2.4s ease-in-out infinite"></div>
+            <div style="position:absolute;left:${be}%;top:-7px;bottom:-7px;width:3px;transform:translateX(-1.5px);background:linear-gradient(180deg,#ffd700,var(--c-green));animation:invBePulse 2.4s ease-in-out infinite"></div>
             ${labels(above, "above")}${labels(below, "below")}
           </div>
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;font-size:0.5rem;color:var(--text-dim);margin-top:${botPad}px;gap:8px;flex-wrap:wrap">
-            <span><b style="background:${gold};background-size:250% 100%;animation:invGoldShine 3s linear infinite;-webkit-background-clip:text;background-clip:text;color:transparent">vybráno ${back > 0 ? fmt3(back) : "zatím 0"} ₿ (${(back / peak * 100).toFixed(1)} %)</b>${lpRow ? ` · <b style="background:${silver};background-size:250% 100%;animation:invGoldShine 3s linear infinite;-webkit-background-clip:text;background-clip:text;color:transparent">v LP ${fmt3(lpRow.btc)} ₿ (${(lpRow.btc / peak * 100).toFixed(1)} %)</b>${_invLpRankHtml()}` : ""}</span>
-            <span>${profit > 1e-9 ? `<b style="color:var(--green)">+${fmt3(profit)} ₿ za break-even (+${Math.round(profit / peak * 100)} %)</b>${nextCp != null ? ` · do +${Math.round(nextCp * 100)} % chybí ${fmt3(peak * (1 + nextCp) - unlockEnd)} ₿` : ""}` : missingNow > 1e-9 ? `do break-even chybí <b style="color:var(--text-secondary)">${fmt3(missingNow)} ₿</b> hned · <b style="color:var(--text-secondary)">${fmt3(Math.max(0, -profit))} ₿</b> po unlocku` : ""}</span>
+          <div class="v-inv-band-foot" style="margin-top:${botPad}px">
+            <span><b class="v-inv-gold">withdrawn ${back > 0 ? fmt3(back) + " ₿" : "0 ₿ so far"} (${(back / peak * 100).toFixed(1)} %)</b>${lpRow ? ` · <b class="v-inv-silver">in LP ${fmt3(lpRow.btc)} ₿ (${(lpRow.btc / peak * 100).toFixed(1)} %)</b>${_invLpRankHtml()}` : ""}</span>
+            <span>${profit > 1e-9 ? `<b class="v-inv-up">+${fmt3(profit)} ₿ past break-even (+${Math.round(profit / peak * 100)} %)</b>${nextCp != null ? ` · ${fmt3(peak * (1 + nextCp) - unlockEnd)} ₿ short of +${Math.round(nextCp * 100)} %` : ""}` : missingNow > 1e-9 ? `<b style="color:var(--c-text)">${fmt3(missingNow)} ₿</b> short of break-even now · <b style="color:var(--c-text)">${fmt3(Math.max(0, -profit))} ₿</b> after unlock` : ""}</span>
           </div>
         </div>`;
     }
@@ -20929,12 +20998,12 @@
     function _invDrawRepayChart(stats) {
       const el = document.getElementById("inv-repay-chart");
       if (!el || !stats) return;
-      if (typeof LightweightCharts === "undefined") { el.innerHTML = `<div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);padding:8px 0">Chart library not loaded.</div>`; return; }
+      if (typeof LightweightCharts === "undefined") { el.innerHTML = `<div class="v-inv-note" style="padding:8px 0">Chart library not loaded.</div>`; return; }
       if (_repayChartObj) { try { _repayChartObj.remove(); } catch (e) {} _repayChartObj = null; }
       el.innerHTML = "";
       const chart = LightweightCharts.createChart(el, {
         autoSize: true,
-        layout: { background: { color: "transparent" }, textColor: "#c4a882" },
+        layout: { background: { color: "transparent" }, textColor: "#a39e96" },
         grid: { vertLines: { color: "rgba(255,255,255,0.05)" }, horzLines: { color: "rgba(255,255,255,0.05)" } },
         timeScale: { borderColor: "rgba(255,255,255,0.1)" },
         rightPriceScale: { borderColor: "rgba(255,255,255,0.1)" },
@@ -20944,11 +21013,11 @@
       // Weekly points (repayPlanStats .weeks): a withdrawal shows in the week it was made.
       const past = stats.weeks, future = stats.futureWeeks, today = past[past.length - 1];
       // The target runs straight through this week; withdrawals stop there and the trend takes over.
-      chart.addLineSeries({ color: "#e8c86a", lineWidth: 2, lineStyle: 2, priceFormat: fmt, title: "cíl", lastValueVisible: false })
+      chart.addLineSeries({ color: "#e8c86a", lineWidth: 2, lineStyle: 2, priceFormat: fmt, title: "target", lastValueVisible: false })
         .setData(past.map((s) => ({ time: s.time, value: s.target })).concat(future.map((s) => ({ time: s.time, value: s.target }))));
-      const actual = chart.addLineSeries({ color: "#7fe0a0", lineWidth: 2, lineType: 1, priceFormat: fmt, title: "vybráno" });
+      const actual = chart.addLineSeries({ color: "#7fe0a0", lineWidth: 2, lineType: 1, priceFormat: fmt, title: "withdrawn" });
       actual.setData(past.map((s) => ({ time: s.time, value: s.actual })));
-      actual.setMarkers([{ time: today.time, position: "aboveBar", color: "#c4a882", shape: "arrowDown", text: "tento týden" }]);
+      actual.setMarkers([{ time: today.time, position: "aboveBar", color: "#c4a882", shape: "arrowDown", text: "this week" }]);
       chart.addLineSeries({ color: "#7fb8e0", lineWidth: 1, lineStyle: 1, priceFormat: fmt, title: "trend", lastValueVisible: false })
         .setData([{ time: today.time, value: today.actual }].concat(future.map((s) => ({ time: s.time, value: s.trend }))));
       // Each week's net withdrawals as bars on their own scale at the bottom.
@@ -20962,13 +21031,13 @@
     window._invSavePlan = async function () {
       const msg = document.getElementById("inv-plan-msg");
       const body = { start_date: document.getElementById("inv-plan-start").value, rate: parseFloat(document.getElementById("inv-plan-rate").value), period: document.getElementById("inv-plan-period").value };
-      if (!body.start_date || !(body.rate > 0)) { if (msg) msg.textContent = "vyplň datum a sazbu > 0"; return; }
+      if (!body.start_date || !(body.rate > 0)) { if (msg) msg.textContent = "Fill in a date and a rate > 0"; return; }
       try {
         const r = await writeFetch(`${INV_API_BASE}?farm=${encodeURIComponent(FARM_ID)}&type=repay-plan`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
         if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
         _invPlan = (await r.json()).plan;
         renderInvestmentTrackerContent();
-      } catch (e) { if (msg) msg.textContent = "uložení selhalo: " + e.message; }
+      } catch (e) { if (msg) msg.textContent = "Could not save: " + e.message; }
     };
     /*
      * Basescan → cbBTC token → filter by the wallet address → "Download CSV". Every transfer of a
@@ -20983,25 +21052,25 @@
       if (!file) return;
       try {
         const wallets = ((_invHoldings && _invHoldings.wallets) || []).map((w) => w.address);
-        if (!wallets.length) throw new Error("žádná registrovaná peněženka");
+        if (!wallets.length) throw new Error("no wallet registered");
         const rows = parseTokenTransfersCsv(await file.text(), wallets);
         const have = new Set((_invState.transactions || []).filter((t) => t.venue === "cbbtc").map((t) => t.notes));
         const fresh = rows.filter((r) => !have.has(r.notes));
-        say(`ukládám ${fresh.length} z ${rows.length}…`);
+        say(`saving ${fresh.length} of ${rows.length}…`);
         for (const r of fresh) await invAddTransaction(Object.assign({ farm_id: FARM_ID, venue: "cbbtc" }, r));
         _invState.transactions = await invListTransactions(FARM_ID);
         renderInvestmentTrackerContent();
-      } catch (e) { say("import selhal: " + (e.message || e)); }
+      } catch (e) { say("Import failed: " + (e.message || e)); }
       input.value = "";
     };
     window._invDeletePlan = async function () {
-      if (!confirm("Smazat repay plán?")) return;
+      if (!confirm("Delete the repay plan?")) return;
       try {
         const r = await writeFetch(`${INV_API_BASE}?farm=${encodeURIComponent(FARM_ID)}&type=repay-plan`, { method: "DELETE" });
         if (!r.ok) throw new Error(r.statusText);
         _invPlan = null;
         renderInvestmentTrackerContent();
-      } catch (e) { alert("smazání selhalo: " + e.message); }
+      } catch (e) { alert("Could not delete: " + e.message); }
     };
     window._invSetBalance = async function (venue) {
       const cur = _invBalances[venue];
@@ -21038,40 +21107,39 @@
 
     function renderInvTxTable(transactions) {
       if (transactions.length === 0) {
-        return `<div style="font-size:0.6875rem;color:var(--text-dim);padding:12px;text-align:center;font-family:'Courier New',monospace">No transactions yet. Click <b>+ Add transaction</b> to log your first deposit.</div>`;
+        return `<div class="v-inv-note" style="padding:12px;text-align:center">No transactions yet. Click <b>+ Add transaction</b> to log your first deposit.</div>`;
       }
-      // Headers use pixel font (small); rows use Courier New for readability of numbers.
-      let html = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-family:'Courier New',monospace;font-size:0.75rem">
-        <thead><tr class="pixel-font" style="background:rgba(0,0,0,0.35);color:var(--text-secondary);font-size:0.5625rem;letter-spacing:0.5px">
-          <th style="text-align:left;padding:8px 10px">DATE</th>
-          <th style="text-align:left;padding:8px 10px">TYPE</th>
-          <th style="text-align:left;padding:8px 10px">WHERE</th>
-          <th style="text-align:right;padding:8px 10px">BTC</th>
-          <th style="text-align:right;padding:8px 10px">FLOWER</th>
-          <th style="text-align:right;padding:8px 10px">USD</th>
-          <th style="text-align:left;padding:8px 10px">NOTES</th>
-          <th style="text-align:center;padding:8px 10px"></th>
+      let html = `<div class="v-inv-scroll"><table class="w-table v-inv-table">
+        <thead><tr>
+          <th>Date</th>
+          <th>Type</th>
+          <th>Venue</th>
+          <th class="r">BTC</th>
+          <th class="r">FLOWER</th>
+          <th class="r">USD</th>
+          <th>Notes</th>
+          <th class="c"></th>
         </tr></thead><tbody>`;
       for (const t of transactions) {
         const isDep = t.direction === "deposit";
         const signed = (isDep ? "−" : "+") + parseFloat(t.btc_amount).toFixed(8);
-        const color = isDep ? "var(--red)" : "var(--green)";
+        const color = isDep ? "var(--c-red)" : "var(--c-green)";
         const usd = t.usd_amount ? "$" + parseFloat(t.usd_amount).toFixed(2) : "—";
         // The venue is a click-to-cycle chip: it is the one field that gets corrected after the
         // fact (you know where the money went; you may have logged it before the column existed).
         const venue = (t.venue || "sfl").toLowerCase();
-        const vLabel = invVenues[venue] || { label: venue.toUpperCase(), color: "var(--text-dim)" };
-        html += `<tr style="border-top:1px solid rgba(255,255,255,0.05)">
-          <td style="padding:8px 10px;white-space:nowrap">${escHTML(String(t.tx_date).slice(0, 10))}</td>
-          <td style="padding:8px 10px;color:${color};font-weight:bold;white-space:nowrap">${isDep ? "DEPOSIT" : "WITHDRAW"}</td>
-          <td style="padding:8px 10px;white-space:nowrap"><button data-id="${escHTML(t.id)}" data-venue="${escHTML(venue)}" onclick="_invCycleVenue(this.dataset.id, this.dataset.venue)" title="click to change where this went" style="background:rgba(0,0,0,0.3);border:1px solid ${vLabel.color};color:${vLabel.color};border-radius:4px;padding:2px 7px;cursor:pointer;font-family:'Courier New',monospace;font-size:0.65rem">${escHTML(vLabel.label)}</button></td>
-          <td style="text-align:right;padding:8px 10px;color:${color};font-weight:bold;white-space:nowrap">${signed} ₿</td>
-          <td style="text-align:right;padding:8px 10px;color:var(--text-dim);white-space:nowrap">${t.flower_amount != null ? Math.round(parseFloat(t.flower_amount)).toLocaleString("en-US") + " 🌸" : "—"}</td>
-          <td style="text-align:right;padding:8px 10px;color:var(--text-dim);white-space:nowrap">${usd}</td>
-          <td style="padding:8px 10px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px" title="${escHTML(t.notes || "")}">${escHTML(t.notes || "")}</td>
-          <td style="text-align:center;padding:8px 10px;white-space:nowrap">
-            <button onclick="_invShowAddForm(${t.id})" style="background:transparent;border:none;color:var(--lily);cursor:pointer;font-size:0.85rem;line-height:1;margin-right:4px" title="Edit">✎</button>
-            <button onclick="_invDeleteTx(${t.id})" style="background:transparent;border:none;color:var(--red);cursor:pointer;font-size:1rem;line-height:1" title="Delete">×</button>
+        const vLabel = invVenues[venue] || { label: venue.toUpperCase(), color: "var(--c-dim)" };
+        html += `<tr>
+          <td class="nw">${escHTML(String(t.tx_date).slice(0, 10))}</td>
+          <td><span class="v-pill ${isDep ? "v-bad" : "v-ok"}">${isDep ? "Deposit" : "Withdraw"}</span></td>
+          <td><button class="v-inv-venue" data-id="${escHTML(t.id)}" data-venue="${escHTML(venue)}" onclick="_invCycleVenue(this.dataset.id, this.dataset.venue)" title="Click to change where this went" style="border-color:${vLabel.color};color:${vLabel.color}">${escHTML(vLabel.label)}</button></td>
+          <td class="r" style="color:${color};font-weight:600">${signed} ₿</td>
+          <td class="r v-dim">${t.flower_amount != null ? Math.round(parseFloat(t.flower_amount)).toLocaleString("en-US") + " 🌸" : "—"}</td>
+          <td class="r v-dim">${usd}</td>
+          <td class="v-inv-notes" title="${escHTML(t.notes || "")}">${escHTML(t.notes || "")}</td>
+          <td class="c">
+            <button class="v-inv-ib" onclick="_invShowAddForm(${t.id})" title="Edit">✎</button>
+            <button class="v-inv-ib v-inv-del" onclick="_invDeleteTx(${t.id})" title="Delete">×</button>
           </td>
         </tr>`;
       }
@@ -21094,31 +21162,29 @@
       const venueVal = edit ? (edit.venue || "sfl").toLowerCase() : "sfl";
       const notesVal = (edit && edit.notes) ? edit.notes : "";
       wrap.style.display = "block";
-      const inputStyle = "width:100%;padding:6px 8px;background:#2a1050;color:#fff;border:2px solid #000;font-family:'Courier New',monospace;font-size:0.75rem";
-      const labelStyle = "display:block;font-size:0.5625rem;color:var(--text-secondary);letter-spacing:0.5px;margin-bottom:4px";
       const sel = (a, b) => a === b ? " selected" : "";
       wrap.innerHTML = `
-        <div class="pixel-panel" style="margin-top:12px;padding:14px;background:rgba(0,0,0,0.3)">
-          <div class="pixel-font" style="font-size:0.6875rem;color:var(--sunpetal);margin-bottom:12px;letter-spacing:1px">${edit ? "EDIT TRANSACTION" : "ADD TRANSACTION"}</div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px">
-            <div><span class="pixel-font" style="${labelStyle}">DATE</span><input type="date" id="inv-f-date" value="${escHTML(dVal)}" style="${inputStyle}"></div>
-            <div><span class="pixel-font" style="${labelStyle}">TYPE</span><select id="inv-f-dir" style="${inputStyle}">
-              <option value="withdrawal"${sel("withdrawal", dirVal)}>WITHDRAWAL (cash out)</option>
-              <option value="deposit"${sel("deposit", dirVal)}>DEPOSIT (money in)</option>
-            </select></div>
-            <div><span class="pixel-font" style="${labelStyle}">BTC AMOUNT</span><input type="number" id="inv-f-btc" min="0" step="0.00000001" placeholder="0.020000" value="${btcVal}" style="${inputStyle}"></div>
-            <div><span class="pixel-font" id="inv-f-flower-label" style="${labelStyle}">FLOWER (optional)</span><input type="number" id="inv-f-flower" min="0" step="1" placeholder="8000" value="${flowerVal}" style="${inputStyle}"></div>
-            <div><span class="pixel-font" style="${labelStyle}">USD VALUE (optional)</span><input type="number" id="inv-f-usd" min="0" step="0.01" placeholder="145.20" value="${usdVal}" style="${inputStyle}"></div>
-            <div><span class="pixel-font" style="${labelStyle}">WHERE</span><select id="inv-f-venue" onchange="_invVenueChanged()" style="${inputStyle}">
+        <div class="v-inv-card" style="margin-top:12px">
+          <div class="v-inv-head" style="margin-bottom:12px"><b>${edit ? "Edit transaction" : "Add transaction"}</b></div>
+          <div class="v-inv-fgrid">
+            <label><span class="v-inv-lbl">Date</span><input type="date" id="inv-f-date" value="${escHTML(dVal)}"></label>
+            <label><span class="v-inv-lbl">Type</span><select id="inv-f-dir">
+              <option value="withdrawal"${sel("withdrawal", dirVal)}>Withdrawal (cash out)</option>
+              <option value="deposit"${sel("deposit", dirVal)}>Deposit (money in)</option>
+            </select></label>
+            <label><span class="v-inv-lbl">BTC amount</span><input type="number" id="inv-f-btc" min="0" step="0.00000001" placeholder="0.020000" value="${btcVal}"></label>
+            <label><span class="v-inv-lbl" id="inv-f-flower-label">FLOWER (optional)</span><input type="number" id="inv-f-flower" min="0" step="1" placeholder="8000" value="${flowerVal}"></label>
+            <label><span class="v-inv-lbl">USD value (optional)</span><input type="number" id="inv-f-usd" min="0" step="0.01" placeholder="145.20" value="${usdVal}"></label>
+            <label><span class="v-inv-lbl">Venue</span><select id="inv-f-venue" onchange="_invVenueChanged()">
               ${Object.entries(invVenues).map(([k, v]) => `<option value="${k}"${sel(k, venueVal)}>${v.label}</option>`).join("")}
-            </select></div>
+            </select></label>
           </div>
-          <div style="margin-top:14px"><span class="pixel-font" style="${labelStyle}">NOTES</span><input type="text" id="inv-f-notes" maxlength="500" placeholder="cash out 1000 FLOWER…" value="${escHTML(notesVal)}" style="${inputStyle}"></div>
-          <div style="margin-top:14px;display:flex;gap:8px">
-            <button class="roi-pill" onclick="_invSubmitAdd(${edit ? edit.id : "null"})">Save</button>
-            <button class="roi-pill" onclick="_invHideAddForm()">Cancel</button>
+          <label class="v-inv-field" style="margin-top:12px"><span class="v-inv-lbl">Notes</span><input type="text" id="inv-f-notes" maxlength="500" placeholder="cash out 1000 FLOWER…" value="${escHTML(notesVal)}"></label>
+          <div style="margin-top:12px;display:flex;gap:8px">
+            <button class="v-inv-primary" onclick="_invSubmitAdd(${edit ? edit.id : "null"})">Save</button>
+            <button onclick="_invHideAddForm()">Cancel</button>
           </div>
-          <div id="inv-add-error" style="display:none;margin-top:10px;font-size:0.6875rem;color:var(--red);font-family:'Courier New',monospace"></div>
+          <div id="inv-add-error" class="v-inv-err" style="display:none"></div>
         </div>
       `;
       _invVenueChanged();   // set the FLOWER label to match the selected venue
@@ -21205,9 +21271,9 @@
       if (arrow) arrow.textContent = willOpen ? "▼" : "▶";
       localStorage.setItem("sfl_diff_insights_open", willOpen ? "1" : "0");
       if (willOpen && _insLoadedFor !== FARM_ID) {
-        body.innerHTML = `<div class="loading-screen pixel-font" style="padding:12px"><div class="loading-text">Computing insights — may take a few seconds…</div></div>`;
+        body.innerHTML = `<div class="v-inv-note" style="padding:12px 0">Computing insights — this may take a few seconds…</div>`;
         renderInvestmentInsights(window._invDataRef).catch(err => {
-          body.innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>${escHTML(err.message)}</p></div>`;
+          body.innerHTML = `<div class="w-error">${escHTML(err.message)}</div>`;
         });
       }
     };
@@ -21231,7 +21297,7 @@
       const hist = await histResp.json();
       let snaps = hist.snapshots || [];
       if (snaps.length === 0) {
-        body.innerHTML = `<div class="pixel-font" style="padding:12px;font-size:0.55rem;color:var(--text-dim)">No historical snapshots yet. Insights will populate as the data collector accumulates farm data.</div>`;
+        body.innerHTML = `<div class="v-inv-note" style="padding:12px 0">No historical snapshots yet. Insights will fill in as the data collector gathers farm data.</div>`;
         return;
       }
 
@@ -21347,10 +21413,10 @@
       const body = document.getElementById("ins-body");
       if (!body || !_insState) return;
       body.innerHTML = `
-        <div id="ins-earning-rate" style="margin-bottom:12px">${renderInsightEarningRate()}</div>
-        <div id="ins-history-chart" style="margin-bottom:12px;min-height:240px"></div>
-        <div id="ins-income-breakdown" style="margin-bottom:12px">${renderInsightIncomeBreakdown()}</div>
-        <div id="ins-burn-vs-growth" style="margin-bottom:12px">${renderInsightBurnGrowth()}</div>
+        <div id="ins-earning-rate">${renderInsightEarningRate()}</div>
+        <div id="ins-history-chart" style="min-height:240px"></div>
+        <div id="ins-income-breakdown">${renderInsightIncomeBreakdown()}</div>
+        <div id="ins-burn-vs-growth">${renderInsightBurnGrowth()}</div>
       `;
       // Chart renders into its container after innerHTML is set
       renderInsightHistoryChart();
@@ -21364,19 +21430,19 @@
       const btcUsd = _insState?.rates?.btcUsd || 0;
 
       function fmtRate(r) {
-        if (!r) return "<span style='color:var(--text-dim)'>(insufficient data)</span>";
+        if (!r) return `<b class="v-dim">insufficient data</b><span>&nbsp;</span>`;
         const btcPerDay = (sflToUsd > 0 && btcUsd > 0) ? r.sflPerDay * sflToUsd / btcUsd : 0;
         const sign = r.sflPerDay >= 0 ? "+" : "−";
-        const color = r.sflPerDay >= 0 ? "var(--green)" : "var(--red)";
-        return `<span style="color:${color}">${sign}${Math.abs(r.sflPerDay).toFixed(1)} ⛀/day</span>` +
-               (btcPerDay ? ` <span style="color:var(--text-dim)">(${sign}${Math.abs(btcPerDay).toFixed(8)} ₿/day)</span>` : "");
+        const color = r.sflPerDay >= 0 ? "var(--c-green)" : "var(--c-red)";
+        return `<b style="color:${color};font-variant-numeric:tabular-nums">${sign}${Math.abs(r.sflPerDay).toFixed(1)} ${sflIcon()}/day</b>` +
+               (btcPerDay ? `<span style="font-variant-numeric:tabular-nums">${sign}${Math.abs(btcPerDay).toFixed(8)} ₿/day</span>` : "");
       }
 
-      return `<div class="pixel-panel" style="padding:12px 14px;background:rgba(0,0,0,0.25)">
-        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);margin-bottom:8px;letter-spacing:0.5px">EARNING RATE</div>
-        <div style="font-family:'Courier New',monospace;font-size:0.75rem;color:var(--text-secondary);line-height:1.8">
-          <span class="pixel-font" style="font-size:0.5625rem;color:var(--text-dim);display:inline-block;min-width:60px">7-day</span> ${fmtRate(r7)}<br>
-          <span class="pixel-font" style="font-size:0.5625rem;color:var(--text-dim);display:inline-block;min-width:60px">30-day</span> ${fmtRate(r30)}
+      return `<div class="v-inv-box">
+        <div class="v-inv-head" style="margin-bottom:8px"><b>Earning rate</b></div>
+        <div class="v-kpis" style="margin:0">
+          <div class="v-kpi"><span>7-day</span>${fmtRate(r7)}</div>
+          <div class="v-kpi"><span>30-day</span>${fmtRate(r30)}</div>
         </div>
       </div>`;
     }
@@ -21388,24 +21454,26 @@
       const { points, transactions, rates } = _insState;
       const { sflToUsd, btcUsd } = rates;
       if (!sflToUsd || !btcUsd || points.length < 2) {
-        container.innerHTML = `<div style="font-family:'Courier New',monospace;font-size:0.6875rem;color:var(--text-dim);padding:12px">Not enough data for chart.</div>`;
+        container.innerHTML = `<div class="v-inv-box v-inv-note">Not enough data for the chart.</div>`;
         return;
       }
       if (typeof LightweightCharts === "undefined") {
-        container.innerHTML = `<div style="font-family:'Courier New',monospace;font-size:0.6875rem;color:var(--text-dim);padding:12px">Chart library not loaded.</div>`;
+        container.innerHTML = `<div class="v-inv-box v-inv-note">Chart library not loaded.</div>`;
         return;
       }
 
-      container.innerHTML = `<div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);margin-bottom:8px;letter-spacing:0.5px">CUMULATIVE WEALTH OVER TIME (BTC)</div>
-        <div style="font-size:0.6875rem;color:var(--text-dim);margin-bottom:8px;font-family:'Courier New',monospace">
-          Yellow: farm value + already-extracted BTC (so withdrawals don't appear as drops).<br>
-          Dashed red: total deposited (your break-even target).
-        </div>
-        <div id="ins-chart-canvas" style="height:240px"></div>`;
+      container.innerHTML = `<div class="v-inv-box">
+          <div class="v-inv-head"><b>Cumulative wealth over time (BTC)</b></div>
+          <div class="v-inv-note" style="margin:4px 0 8px">
+            <span style="color:#FFD700">Yellow</span>: farm value + BTC already withdrawn (so withdrawals don't show as drops).<br>
+            <span style="color:#ff6b6b">Dashed red</span>: total deposited (your break-even target).
+          </div>
+          <div id="ins-chart-canvas" style="height:240px"></div>
+        </div>`;
       const canvas = document.getElementById("ins-chart-canvas");
       const chart = LightweightCharts.createChart(canvas, {
         height: 240,
-        layout: { background: { color: "transparent" }, textColor: "#c4a882" },
+        layout: { background: { color: "transparent" }, textColor: "#a39e96" },
         grid: { vertLines: { color: "rgba(255,255,255,0.05)" }, horzLines: { color: "rgba(255,255,255,0.05)" } },
         timeScale: { timeVisible: true, secondsVisible: false },
         rightPriceScale: { borderColor: "rgba(255,255,255,0.1)" },
@@ -21449,7 +21517,7 @@
     function renderInsightIncomeBreakdown() {
       if (!_insState) return "";
       const { points } = _insState;
-      const emptyMsg = (text) => `<div class="pixel-panel" style="padding:12px 14px;background:rgba(0,0,0,0.25)"><div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);margin-bottom:8px;letter-spacing:0.5px">INCOME BREAKDOWN</div><div style="font-family:'Courier New',monospace;font-size:0.6875rem;color:var(--text-dim)">${text}</div></div>`;
+      const emptyMsg = (text) => `<div class="v-inv-box"><div class="v-inv-head" style="margin-bottom:6px"><b>Income breakdown</b></div><div class="v-inv-note">${text}</div></div>`;
       if (points.length < 2) return emptyMsg("Need ≥ 2 snapshots for breakdown.");
 
       const cutoff = Date.now() - 30 * 86400000;
@@ -21516,48 +21584,48 @@
       // Use sum of absolute deltas as the % denominator so mixed-sign categories don't
       // produce nonsense like "205 %". This is "share of movement", color carries the sign.
       const totalAbs = rows.reduce((s, r) => s + Math.abs(r.delta), 0);
-      let html = `<div class="pixel-panel" style="padding:12px 14px;background:rgba(0,0,0,0.25)">
-        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);margin-bottom:8px;letter-spacing:0.5px">INCOME BREAKDOWN (last 30 days)</div>
-        <table style="width:100%;font-family:'Courier New',monospace;font-size:0.75rem;border-collapse:collapse">
-          <thead><tr class="pixel-font" style="color:var(--text-dim);font-size:0.5rem;letter-spacing:0.5px">
-            <th style="text-align:left;padding:6px 8px">CATEGORY</th>
-            <th style="text-align:right;padding:6px 8px">Δ VALUE</th>
-            <th style="text-align:right;padding:6px 8px">SHARE</th>
+      let html = `<div class="v-inv-box">
+        <div class="v-inv-head" style="margin-bottom:8px"><b>Income breakdown</b><span class="v-inv-note">last 30 days</span></div>
+        <div class="v-inv-scroll"><table class="w-table v-inv-table">
+          <thead><tr>
+            <th>Category</th>
+            <th class="r">Δ value</th>
+            <th class="r">Share</th>
           </tr></thead><tbody>`;
       for (const r of rows) {
         const pct = totalAbs > 0 ? (Math.abs(r.delta) / totalAbs) * 100 : 0;
-        const color = r.delta >= 0 ? "var(--green)" : "var(--red)";
+        const color = r.delta >= 0 ? "var(--c-green)" : "var(--c-red)";
         const sign = r.delta >= 0 ? "+" : "−";
-        html += `<tr style="border-top:1px solid rgba(255,255,255,0.05)">
-          <td style="padding:6px 8px;color:var(--text-secondary)">${escHTML(r.label)}</td>
-          <td style="text-align:right;padding:6px 8px;color:${color}">${sign}${Math.abs(r.delta).toFixed(1)} ⛀</td>
-          <td style="text-align:right;padding:6px 8px;color:var(--text-dim)">${pct.toFixed(0)} %</td>
+        html += `<tr>
+          <td>${escHTML(r.label)}</td>
+          <td class="r" style="color:${color}">${sign}${Math.abs(r.delta).toFixed(1)} ${sflIcon()}</td>
+          <td class="r v-dim">${pct.toFixed(0)} %</td>
         </tr>`;
       }
-      const totalColor = total >= 0 ? "var(--green)" : "var(--red)";
-      html += `<tr style="border-top:2px solid rgba(255,255,255,0.15);font-weight:bold">
-        <td style="padding:6px 8px">TOTAL (raw farm Δ)</td>
-        <td style="text-align:right;padding:6px 8px;color:${totalColor}">${total >= 0 ? "+" : "−"}${Math.abs(total).toFixed(1)} ⛀</td>
-        <td style="text-align:right;padding:6px 8px">100 %</td>
+      const totalColor = total >= 0 ? "var(--c-green)" : "var(--c-red)";
+      html += `<tr class="v-inv-tot">
+        <td>Total (raw farm Δ)</td>
+        <td class="r" style="color:${totalColor}">${total >= 0 ? "+" : "−"}${Math.abs(total).toFixed(1)} ${sflIcon()}</td>
+        <td class="r">100 %</td>
       </tr>`;
       if (Math.abs(netCashflowSfl) > 0.5 || txInWindow.length > 0) {
-        const cashColor = netCashflowSfl >= 0 ? "var(--text-dim)" : "var(--sunpetal)";
+        const cashColor = netCashflowSfl >= 0 ? "var(--c-dim)" : "var(--c-yellow)";
         const cashSign = netCashflowSfl >= 0 ? "+" : "−";
         const cashLabel = netCashflowSfl >= 0 ? "You deposited (added)" : "You extracted (removed)";
         html += `<tr style="color:${cashColor}">
-          <td style="padding:6px 8px;font-style:italic">${cashLabel}</td>
-          <td style="text-align:right;padding:6px 8px">${cashSign}${Math.abs(netCashflowSfl).toFixed(1)} ⛀</td>
-          <td style="text-align:right;padding:6px 8px;font-style:italic">cashflow</td>
+          <td style="font-style:italic">${cashLabel}</td>
+          <td class="r">${cashSign}${Math.abs(netCashflowSfl).toFixed(1)} ${sflIcon()}</td>
+          <td class="r" style="font-style:italic">cashflow</td>
         </tr>`;
-        const prodColor = productiveTotal >= 0 ? "var(--green)" : "var(--red)";
+        const prodColor = productiveTotal >= 0 ? "var(--c-green)" : "var(--c-red)";
         const prodSign = productiveTotal >= 0 ? "+" : "−";
-        html += `<tr style="border-top:1px solid rgba(255,215,0,0.4);font-weight:bold">
-          <td style="padding:6px 8px;color:var(--sunpetal)">PRODUCTIVITY (raw − cashflow)</td>
-          <td style="text-align:right;padding:6px 8px;color:${prodColor}">${prodSign}${Math.abs(productiveTotal).toFixed(1)} ⛀</td>
-          <td style="text-align:right;padding:6px 8px"></td>
+        html += `<tr class="v-inv-tot">
+          <td>Productivity (raw − cashflow)</td>
+          <td class="r" style="color:${prodColor}">${prodSign}${Math.abs(productiveTotal).toFixed(1)} ${sflIcon()}</td>
+          <td class="r"></td>
         </tr>`;
       }
-      html += `</tbody></table></div>`;
+      html += `</tbody></table></div></div>`;
       return html;
     }
 
@@ -21569,21 +21637,21 @@
         { label: "Last 30d", r: _insSlopeForWindow(30) },
         { label: "Lifetime", r: _insSlopeForWindow(99999) },
       ];
-      let html = `<div class="pixel-panel" style="padding:12px 14px;background:rgba(0,0,0,0.25)">
-        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);margin-bottom:8px;letter-spacing:0.5px">NET RATE (signed)</div>
-        <table style="font-family:'Courier New',monospace;font-size:0.75rem;width:100%;border-collapse:collapse">`;
+      let html = `<div class="v-inv-box">
+        <div class="v-inv-head" style="margin-bottom:8px"><b>Net rate</b><span class="v-inv-note">signed, cashflow removed</span></div>
+        <table class="w-table v-inv-table">`;
       for (const row of rows) {
         if (!row.r) {
-          html += `<tr><td class="pixel-font" style="padding:6px 8px;color:var(--text-secondary);font-size:0.5625rem">${row.label}</td><td style="text-align:right;padding:6px 8px;color:var(--text-dim)" colspan="2">(no data)</td></tr>`;
+          html += `<tr><td>${row.label}</td><td class="r v-dim" colspan="2">no data</td></tr>`;
           continue;
         }
         const sign = row.r.sflPerDay >= 0 ? "+" : "−";
-        const color = row.r.sflPerDay >= 0 ? "var(--green)" : "var(--red)";
-        const emoji = row.r.sflPerDay >= 0 ? "📈 growth" : "📉 burn";
-        html += `<tr style="border-top:1px solid rgba(255,255,255,0.05)">
-          <td class="pixel-font" style="padding:6px 8px;color:var(--text-secondary);font-size:0.5625rem">${row.label}</td>
-          <td style="text-align:right;padding:6px 8px;color:${color}">${sign}${Math.abs(row.r.sflPerDay).toFixed(1)} ⛀/day</td>
-          <td style="text-align:right;padding:6px 8px;color:var(--text-dim)">${emoji}</td>
+        const color = row.r.sflPerDay >= 0 ? "var(--c-green)" : "var(--c-red)";
+        const emoji = row.r.sflPerDay >= 0 ? `<span class="v-pill v-ok">📈 growth</span>` : `<span class="v-pill v-bad">📉 burn</span>`;
+        html += `<tr>
+          <td>${row.label}</td>
+          <td class="r" style="color:${color}">${sign}${Math.abs(row.r.sflPerDay).toFixed(1)} ${sflIcon()}/day</td>
+          <td class="r">${emoji}</td>
         </tr>`;
       }
       html += `</table></div>`;
@@ -21719,24 +21787,21 @@
       // Render the Investment Tracker mount BEFORE the diff body so the user sees it first.
       const invMount = document.createElement("div");
       invMount.id = "investment-tracker";
-      invMount.className = "w-card";
-      invMount.style.cssText = "padding:12px;margin-bottom:16px;background:rgba(0,0,0,0.15)";
-      invMount.innerHTML = `<div class="loading-screen" style="padding:12px"><div class="loading-text">Loading investment tracker…</div></div>`;
+      invMount.className = "w-card v-inv";
+      invMount.innerHTML = `<div class="v-inv-note">Loading the investment tracker…</div>`;
       app.insertBefore(invMount, document.getElementById("diff-content"));
 
       // Investment Insights mount (collapsible, lazy-loaded)
       const insMount = document.createElement("div");
       insMount.id = "investment-insights";
-      insMount.className = "w-card";
-      insMount.style.cssText = "padding:12px;margin-bottom:16px;background:rgba(0,0,0,0.15)";
+      insMount.className = "w-card v-inv";
       const insOpen = localStorage.getItem("sfl_diff_insights_open") === "1";
       insMount.innerHTML = `
-        <div onclick="_invToggleInsights()" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between">
-          <h2 class="v-dim" style="margin:0;font-size:0.75rem;color:var(--lily);letter-spacing:1px">📊 INVESTMENT INSIGHTS</h2>
-          <span class="v-dim" id="ins-arrow" style="color:var(--text-secondary);font-size:0.625rem">${insOpen ? "▼" : "▶"}</span>
-        </div>
+        <h2 class="v-inv-title v-inv-toggle" onclick="_invToggleInsights()" style="margin:0">📊 Investment insights
+          <span class="v-dim" id="ins-arrow">${insOpen ? "▼" : "▶"}</span>
+        </h2>
         <div id="ins-body" style="display:${insOpen ? "block" : "none"};margin-top:12px">
-          <div class="loading-screen" style="padding:12px"><div class="loading-text">Click to load…</div></div>
+          <div class="v-inv-note">Click to load…</div>
         </div>
       `;
       app.insertBefore(insMount, document.getElementById("diff-content"));
@@ -21747,13 +21812,13 @@
 
       // Kick off the load in the background — don't block diff render.
       renderInvestmentTracker(data, { td: _diffTd, tdError: _diffTdError }).catch(err => {
-        invMount.innerHTML = `<div class="error-screen"><p>Investment tracker failed: ${escHTML(err.message)}</p></div>`;
+        invMount.innerHTML = `<div class="w-error">Investment tracker failed: ${escHTML(err.message)}</div>`;
       });
 
       if (insOpen) {
         renderInvestmentInsights(data).catch(err => {
           const body = document.getElementById("ins-body");
-          if (body) body.innerHTML = `<div class="error-screen"><p>${escHTML(err.message)}</p></div>`;
+          if (body) body.innerHTML = `<div class="w-error">${escHTML(err.message)}</div>`;
         });
       }
 

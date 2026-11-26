@@ -146,10 +146,10 @@ test("E4: the BILANCE farm row counts only what the marketplace buys, plus the F
   await p.renderDiff({ farm: farmAt(1000000) });
   await p.settle();
   const html = p.el("investment-tracker").innerHTML;
-  const farmRow = html.slice(html.indexOf("SFL farma"), html.indexOf("SFL farma") + 1400);
+  const farmRow = html.slice(html.indexOf("SFL farm"), html.indexOf("SFL farm") + 1400);
   // 100 Wood × 0.01 = 1 FLOWER, less 10 % = 0.9, + 50 FLOWER balance = 50.9 FLOWER × 0.02 USD / 100,000 USD/₿.
   assert.ok(farmRow.includes((50.9 * 0.02 / 100000).toFixed(6) + " ₿"), `farm row: ${farmRow.replace(/<[^>]+>/g, " ").slice(0, 300)}`);
-  assert.ok(/NEPOČÍTÁ SE[^"]*coins/.test(farmRow), "and it says coins are left out");
+  assert.ok(/NOT COUNTED[^"]*coins/.test(farmRow), "and it says coins are left out");
 });
 
 // E14 — before: a failed ledger read rendered as an empty ledger: COST 0.000000 ₿ and a green
@@ -159,9 +159,9 @@ test("E14: a failed ledger read renders as '—' with a warning, never as COST 0
   await p.renderDiff({ farm: farmAt(0) });
   await p.settle();
   const html = p.el("investment-tracker").innerHTML;
-  assert.ok(html.includes("BILANCE"), "the balance sheet rendered");
-  assert.ok(!/COST[\s\S]{0,400}?0\.000000 ₿/.test(html), "COST is not shown as 0");
-  assert.ok(/nekompletní[^<]*transactions: /.test(html), "and the failure is named");
+  assert.ok(html.includes("Balance sheet"), "the balance sheet rendered");
+  assert.ok(!/Cost[\s\S]{0,400}?0\.000000 ₿/.test(html), "Cost is not shown as 0");
+  assert.ok(/Incomplete[^<]*transactions: /.test(html), "and the failure is named");
 });
 
 // E10 + E11 — before: Insights valued the farm in hard-coded "betty" mode whatever the Treasury
@@ -179,7 +179,7 @@ test("E10/E11: Insights use the Treasury coin mode, and only farm cashflow nets 
   await p.renderDiff({ farm: farmAt(10000) });
   await p.settle();
   const html = p.el("ins-body").innerHTML.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-  assert.ok(/INCOME BREAKDOWN/.test(html), "the breakdown rendered");
+  assert.ok(/Income breakdown/.test(html), "the breakdown rendered");
   // 10,000 coins at the api rate (100/FLOWER) = +100 FLOWER; betty (1000/FLOWER) would be +10.
   assert.ok(/Liquid \(SFL\/coins\/gems\) \+100\.0/.test(html), `liquid Δ at the api rate: ${html.slice(0, 400)}`);
   assert.ok(/Pets/.test(html) && /Listings/.test(html) && /Produced/.test(html), "every category has a row");
