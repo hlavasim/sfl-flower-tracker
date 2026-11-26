@@ -541,7 +541,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         try { r = sideValue(boostItem.name, roadmapSideCtx(getRoadmapSettings(powerState.roadmapSettingsRaw), p2pPrices), sm.skill ? (isOwned ? Math.max(1, cur) : 1) : null); } catch (e) { r = null; }
         const v = r && isFinite(r.perDay) ? r.perDay : 0;
         return { solo: v, synergy: v, roi: (boostItem.floor > 0 && v > 0) ? boostItem.floor / v : Infinity, side: true,
-          ...(sm.power ? { conditional: "power skill — počítá s použitím pokaždé, když vyprší cooldown" } : {}) };
+          ...(sm.power ? { conditional: "power skill — counts on using it every time the cooldown runs out" } : {}) };
       }
 
       // Handle cost_reduction effects (e.g., Feller's Discount, Frugal Miner)
@@ -1315,7 +1315,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
         }
         const chain = ladder.length ? { chainId: `rank:${r.b.name}`, chainSeq: 0 } : {};
         out.push(mk(r.b.name, r.pts * sflPerPoint, r.cat, r.marg,
-          `${r.pts}pt · ${r.b.skillTree || "?"}${r.gap ? ` (${r.pts - r.gap}pt skill + ${r.gap}pt do nižšího tieru na odemčení tier ${r.b.skillTier})` : ""} · ${r.pts} × ${sflPerPoint.toFixed(0)} FLOWER XP${canTakeNow ? " · body už máš, můžeš hned" : ""}`,
+          `${r.pts}pt · ${r.b.skillTree || "?"}${r.gap ? ` (${r.pts - r.gap}pt skill + ${r.gap}pt in a lower tier to unlock tier ${r.b.skillTier})` : ""} · ${r.pts} × ${sflPerPoint.toFixed(0)} FLOWER XP${canTakeNow ? " · you have the points, take it now" : ""}`,
           { skillFree: false, skillTakeNow: canTakeNow, skillPoints: r.pts, skillTree: r.b.skillTree || null, ...chain }));
         let cseq = 1;
         for (const { row, shards, floor } of ladder) {
@@ -1323,7 +1323,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
             `${row.points}pt + ${shards} Ascension Shard · ${row.text || ""}`,
             { skillRank: row.lvl, skillPoints: row.points, shards, shardSfl,
               chainId: `rank:${r.b.name}`, chainSeq: cseq++,
-              shardNote: `shard oceňován materiálem Gold Pickaxe (≈${shardSfl.toFixed(2)} FLOWER) — odvození, ne tržní cena` }));
+              shardNote: `shard valued by the Gold Pickaxe materials (≈${shardSfl.toFixed(2)} FLOWER) — derived, not a market price` }));
         }
       }
 
@@ -1359,7 +1359,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
             { skillRank: row.lvl, skillPoints: row.points, shards, shardSfl,
               chainId: `rank:${name}`, chainSeq: cseq++,
               // The assumption travels with the row so a consumer cannot show the number without it.
-              shardNote: `shard oce\u0148ov\u00e1n materi\u00e1lem Gold Pickaxe (\u2248${shardSfl.toFixed(2)} FLOWER) \u2014 odvozen\u00ed, ne tr\u017en\u00ed cena` }));
+              shardNote: `shard valued by the Gold Pickaxe materials (\u2248${shardSfl.toFixed(2)} FLOWER) \u2014 derived, not a market price` }));
         }
       }
       return out;
@@ -1437,13 +1437,13 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
           gained.push(`${n}x ${node}`);
         }
         const label = st.asc === 0
-          ? (st.kind === "upgrade" ? `Upgrade na ${st.next || "?"}` : `${st.island || "?"} Expansion ${st.expansion}`)
+          ? (st.kind === "upgrade" ? `Upgrade to ${st.next || "?"}` : `${st.island || "?"} Expansion ${st.expansion}`)
           : (st.kind === "upgrade" ? `Ascension A${st.asc}` : `A${st.asc} · Expansion ${st.expansion}`);
         if (!(marg > 0)) { via.push(label); continue; }   // no income of its own: roll its cost on
         if (!(pending > 0)) { via.length = 0; pending = 0; continue; }
         out.push({
           name: label, type: "Ascension", floor: pending, supply: 0,
-          boost: `${gained.join(" + ")}${via.length ? ` · přes ${via.join(", ")}` : ""}${st.absLevel ? ` · level ${st.absLevel}` : ""}`,
+          boost: `${gained.join(" + ")}${via.length ? ` · via ${via.join(", ")}` : ""}${st.absLevel ? ` · level ${st.absLevel}` : ""}`,
           clone: { name: label, categories: ["crops"], effects: [], fixedMarginal: marg, has: false, isDisabled: false },
           /*
            * chainId/chainSeq are the generic sequencing hook: within a chain, step N cannot be
@@ -1509,7 +1509,7 @@ function _setRoadmapState(rs) { roadmapState = rs; } // deviation 3: eff arrives
       const pen = (farm.pigpen && Number(farm.pigpen.level)) || (pigs.length ? 1 : 0);
       const slot = pigSlot(ctx, st);
       const perPig = slot.perDay;
-      const play = slot.tradeIn ? `vychovat na L${slot.best.level} a vyměnit za Bristles` : "držet na L15 kvůli lanýžům";
+      const play = slot.tradeIn ? `raise to L${slot.best.level} and trade in for Bristles` : "keep at L15 for the truffles";
       let seq = 0;
       for (const step of PIGPEN_STEPS) {
         if (step.level <= pen) continue;

@@ -314,10 +314,6 @@ export const TABLE_INVENTORY = [
     "lines": 7
   },
   {
-    "name": "NFT_BREED_TYPES",
-    "lines": 2
-  },
-  {
     "name": "PAGES",
     "lines": 2
   },
@@ -336,10 +332,6 @@ export const TABLE_INVENTORY = [
   {
     "name": "PET_FOOD_CATEGORY_FALLBACK",
     "lines": 2
-  },
-  {
-    "name": "PET_LEVEL_PERKS",
-    "lines": 23
   },
   {
     "name": "PET_NAME_SPECIES",

@@ -27,6 +27,10 @@ import { worldSummary, worldDataset, worldPriority } from "./world.mjs";
 import { ykLive, ykPlacing, ykFacts, ykPlanner, ykCalculator, ykTiers, ykSources, ykRanks, ykEggs, ykVerdict } from "./yakkamon.mjs";
 import { specCalendar, specTrades, specSkim, specEggs } from "./speculation.mjs";
 import { decSummary, decColours, decGrow } from "./decorations.mjs";
+// ROADMAP, BUDS, PETS
+import { roadmapIncome, roadmapBuyPath, roadmapOffers } from "./roadmap.mjs";
+import { budsTable } from "./buds.mjs";
+import { petsSummary, petsNftCollection, petsMarket, petCards } from "./pets.mjs";
 
 export const WIDGETS = {
   [fishingAgeNow.type]: fishingAgeNow,
@@ -67,4 +71,13 @@ export const WIDGETS = {
   [ykTiers.type]: ykTiers, [ykSources.type]: ykSources, [ykRanks.type]: ykRanks, [ykEggs.type]: ykEggs, [ykVerdict.type]: ykVerdict,
   [specCalendar.type]: specCalendar, [specTrades.type]: specTrades, [specSkim.type]: specSkim, [specEggs.type]: specEggs,
   [decSummary.type]: decSummary, [decColours.type]: decColours, [decGrow.type]: decGrow,
+  // ROADMAP, BUDS, PETS
+  [roadmapIncome.type]: roadmapIncome,
+  [roadmapBuyPath.type]: roadmapBuyPath,
+  [roadmapOffers.type]: roadmapOffers,
+  [budsTable.type]: budsTable,
+  [petsSummary.type]: petsSummary,
+  [petsNftCollection.type]: petsNftCollection,
+  [petsMarket.type]: petsMarket,
+  [petCards.type]: petCards,
 };
