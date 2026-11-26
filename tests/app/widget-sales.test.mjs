@@ -136,3 +136,44 @@ test("page wiring: SALES renders its widgets; wishlist and price trackers stay p
   assert.match(SRC, /<div id="wishlist-panel"><\/div>/);
   assert.doesNotMatch(SRC, /Wishlist je prázdný/);
 });
+
+test("📱 glance: overview S = listings + what waits to be claimed; M = totals beside it; nothing → empty", () => {
+  assert.deepStrictEqual(salesSummary.sizes, ["s", "m"]);
+  const s = salesSummary.glance(DATA, ctx, {}, "s").html;
+  assert.match(s, /<div class="g-big">2<small> listed<\/small><\/div><div class="g-cap">✅ 2 ready to claim<\/div>/);
+  const m = salesSummary.glance(DATA, ctx, {}, "m").html;
+  assert.match(m, /^<div class="g-split">/);
+  assert.match(m, /Overpriced · stale<\/div><span class="g-v g-warn">1 · 1</);
+  assert.match(m, /1 offer<\/div><span class="g-v">2 SFL</);
+  const bare = { farm: { ...base, trades: {} }, prices: { td } };
+  assert.match(salesSummary.glance(bare, ctx, {}, "s").empty, /No listings/);
+  assert.match(salesSummary.glance({ farm }, ctx, {}, "s").empty, /did not load/);
+});
+
+test("📱 glance: listings / offers / sold — S = count and total; M = rows with the live status or delta chip", () => {
+  assert.match(salesListings.glance(DATA, ctx, {}, "s").html, /<div class="g-big">2<small> listed<\/small><\/div><div class="g-cap">1\.\dk SFL in total<\/div>/);
+  const m = salesListings.glance(DATA, ctx, {}, "m").html;
+  assert.match(m, /<span class="g-ic"><img data-i="Obsidian"><\/span><div class="g-n">Obsidian ×10<div>250\.0 SFL · 1w ago<\/div><\/div><span class="g-chip g-ok">OFFER<\/span>/);
+  assert.match(m, /Foreman Beaver.*g-chip g-info">1ST/);
+  // live order book not in yet: the delta against the market
+  assert.match(salesListings.glance(DATA, { ...ctx, liveDone: () => false }, {}, "m").html, /Obsidian ×10.*g-chip g-bad">\+30%/);
+  assert.match(salesListings.glance(DATA, ctx, {}, "l").html, /^<div class="g-big">2.*g-rows/);
+  assert.match(salesOffers.glance(DATA, ctx, {}, "s").html, /<div class="g-big">1<small> offers<\/small>/);
+  assert.match(salesOffers.glance(DATA, ctx, {}, "m").html, /Fruit Picker Apron.*g-chip g-info">-20%/);
+  assert.match(salesSold.glance(DATA, ctx, {}, "m").html, /Wood ×100.*g-chip g-ok">CLAIM/);
+  const bare = { farm: { ...base, trades: {} }, prices: { td } };
+  assert.strictEqual(salesListings.glance(bare, ctx, {}, "s").empty, "No active listings.");
+  assert.strictEqual(salesSold.glance(bare, ctx, {}, "m").empty, "Nothing sold and unclaimed.");
+});
+
+test("📱 glance: what can I sell — S = total value; M = beside the biggest; weekly S = the latest week", () => {
+  const all = salesSellable.build(DATA, ctx, { type: "both", min: "10" }).rows;
+  const s = salesSellable.glance(DATA, ctx, { type: "both", min: "10" }, "s").html;
+  assert.match(s, new RegExp(`<div class="g-cap">${all.length} unlisted items</div>`));
+  const m = salesSellable.glance(DATA, ctx, { type: "both", min: "10" }, "m").html;
+  assert.match(m, /^<div class="g-split">.*<span class="g-ic"><img data-i="Milk"><\/span><div class="g-n">Milk<div>×1563 · /);
+  assert.match(salesSellable.glance(DATA, ctx, { type: "nft", min: "5000" }, "s").empty, /≥ 5000/);
+  assert.match(salesWeekly.glance({ farm }, ctx, {}, "s").html, /<div class="g-cap">week of 06\/07\/2026 · \d+ bought<\/div>/);
+  assert.match(salesWeekly.glance({ farm }, ctx, {}, "m").html, /Week of 06\/07\/2026.*Week of 29\/09\/2025/);
+  assert.strictEqual(salesWeekly.glance({ farm: { ...base, trades: {} } }, ctx, {}, "s").empty, "No weekly activity yet.");
+});

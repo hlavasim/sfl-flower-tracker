@@ -6,6 +6,7 @@
 //   💱 NFT flips: the table.   📊 Flip overview: tiles, the colour legend and the paused notice.
 import { esc, kf, pausedNotice } from "./market-common.mjs";
 import { kpis, bar } from "../ui/viz.mjs";
+import { big, rows as gRows } from "../ui/glance.mjs";
 
 const STALE_H = 3;
 const isStale = (upd, now = Date.now()) => !!upd && (now - new Date(upd).getTime()) / 3600000 > STALE_H;
@@ -69,4 +70,42 @@ export const flipSummary = {
         `<span class="flip-bad">red</span> net ≤ 0 (the spread does not cover the fee)</div>`,
     };
   },
+};
+
+// ── iPhone glance faces ──
+const pctOf = (v) => `${(+v || 0).toFixed(0)}%`;
+const marginTone = (i) => (i.margin >= 15 ? "ok" : i.net <= 0 ? "bad" : "warn");
+const frozen = (items, now) => isStale(items[0] && items[0].updatedAt, now);
+// flips: S = the top flip by score; M / L = the best flips by score
+flipTable.sizes = ["s", "m", "l"];
+flipTable.size = "m";
+flipTable.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = flipTable.build(data, ctx, opts);
+  if (!out.rows.length) return { empty: out.empty };
+  const list = out.rows.slice().sort((a, b) => (b.score ?? -Infinity) - (a.score ?? -Infinity));
+  const paused = frozen(out.rows, ctx.now || Date.now()) ? " · ⏸ paused" : "";
+  if (size === "s") {
+    const r = list[0];
+    return { html: `<div class="g-hero">${r.iconHtml || ""}</div>` + big(pctOf(r.margin), { tone: marginTone(r), cap: `${r.name || "#" + r.itemId} · net ${kf(r.net)}${paused}` }) };
+  }
+  return { html: gRows(list.slice(0, size === "m" ? 3 : 6).map((r) => ({ icon: r.iconHtml, name: r.name || `#${r.itemId}`,
+    sub: `${kf(r.bestOffer)}→${kf(r.bestListing)} · net ${kf(r.net)}`, value: pctOf(r.margin), tone: marginTone(r) }))) +
+    (size === "l" && paused ? `<div class="g-cap g-foot">⏸ collection paused — data frozen</div>` : "") };
+};
+
+// overview: S = how many flips have a healthy margin; M = beside the best one and the losers
+flipSummary.sizes = ["s", "m"];
+flipSummary.size = "s";
+flipSummary.glance = ({ flips } = {}, ctx = {}, opts = {}, size = "s") => {
+  if (!flips || !Array.isArray(flips.items)) return { empty: "The orderbook data did not load." };
+  const items = flips.items;
+  if (!items.length) return { empty: "No NFTs with both a bid and an ask." };
+  const good = items.filter((i) => i.margin >= 15).length, bad = items.filter((i) => i.net <= 0).length;
+  const paused = frozen(items, ctx.now || Date.now());
+  const head = big(good, { unit: `/${items.length}`, tone: good ? "ok" : "", cap: `margin ≥ 15 %${paused ? " · ⏸ paused" : ""}` });
+  if (size === "s") return { html: head };
+  const best = items.reduce((a, i) => (!a || i.margin > a.margin ? i : a), null);
+  return { html: `<div class="g-split"><div>${head}</div>` + gRows([
+    { icon: ctx.icon ? ctx.icon(best.name) : "", name: best.name || `#${best.itemId}`, sub: "best margin", value: pctOf(best.margin), tone: marginTone(best) },
+    { name: "Net ≤ 0", value: bad, tone: bad ? "bad" : "" }]) + `</div>` };
 };

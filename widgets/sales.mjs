@@ -9,6 +9,7 @@ import { toMs } from "../core/engine/power-costs.mjs";
 import { nftUnitPrice } from "../core/engine/prices.mjs";
 import { esc, icon, sflIcon, itemList } from "./market-common.mjs";
 import { kpis, bar, pill } from "../ui/viz.mjs";
+import { big, compact, rows as gRows } from "../ui/glance.mjs";
 
 const need = (farmId) => ({ farm: { res: "farm", farm: farmId }, prices: { res: "compute", farm: farmId, section: "treasury" } });
 const WEEK_MS = 7 * 24 * 3600000;
@@ -280,3 +281,70 @@ export const salesWeekly = {
 
 // The page fetches the live order book for exactly these rows (it has no other copy of the split).
 salesListings.activeOf = (farm, td, ctx) => salesData(farm, td, ctx).active;
+
+// ── iPhone glance faces ──
+const pctText = (d) => `${d > 0 ? "+" : ""}${Math.round(d)}%`;
+const qtyName = (l) => `${l.itemName}${l.qty > 1 ? ` ×${fmtQty(l.qty)}` : ""}`;
+// overview: S = active listings (or what waits to be claimed); M = the totals beside it
+salesSummary.sizes = ["s", "m"];
+salesSummary.size = "s";
+salesSummary.glance = ({ farm, prices } = {}, ctx = {}, opts = {}, size = "s") => {
+  if (!farm || !prices || !prices.td) return { empty: NO_DATA };
+  const d = salesData(farm, prices.td, ctx);
+  if (!d.active.length && !d.offers.length && !d.readyToClaim) return { empty: "No listings, offers or sales to claim." };
+  const listed = d.active.reduce((s, l) => s + l.priceSFL, 0), offered = d.offers.reduce((s, o) => s + o.priceSFL, 0);
+  const over = d.active.filter((l) => l.delta > 20).length, stale = d.active.filter((l) => l.age > WEEK_MS).length;
+  const head = big(d.active.length, { unit: " listed", cap: d.readyToClaim ? `✅ ${d.readyToClaim} ready to claim` : `${compact(listed)} SFL listed` });
+  if (size === "s") return { html: head };
+  return { html: `<div class="g-split"><div>${head}</div>` + gRows([
+    { name: "Listed", value: `${compact(listed)} SFL` },
+    { name: "Overpriced · stale", value: `${over} · ${stale}`, tone: over || stale ? "warn" : "ok" },
+    { name: `${d.offers.length} offer${d.offers.length === 1 ? "" : "s"}`, value: `${compact(offered)} SFL` }]) + `</div>` };
+};
+
+// listings / offers / sold: S = how many and their total; M / L = the rows as the table orders them
+function tradeGlance(widget, { what, chipOf }) {
+  widget.sizes = ["s", "m", "l"];
+  widget.size = "s";
+  widget.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+    const out = widget.build(data, ctx, opts);
+    if (!out.rows.length) return { empty: out.empty };
+    const sum = out.rows.reduce((s, l) => s + l.priceSFL, 0);
+    const head = big(out.rows.length, { unit: ` ${what}`, cap: `${compact(sum)} SFL in total` });
+    if (size === "s") return { html: head };
+    const list = out.rows.slice(0, size === "m" ? 3 : 6).map((l) => ({ icon: imgOf(ctx, l), name: qtyName(l),
+      sub: `${fmtSfl(l.priceSFL)} SFL · ${formatAge(l.age)} ago`, ...chipOf(l) }));
+    return { html: (size === "l" ? head : "") + gRows(list) };
+  };
+}
+const deltaChip = (l) => (l.marketPrice > 0 ? { chip: { text: pctText(l.delta), tone: l.delta > 20 ? "bad" : l.delta > 5 ? "warn" : "ok" } } : {});
+const LIVE_CHIP = { 1: { text: "OFFER", tone: "ok" }, 2: { text: "NOT 1ST", tone: "bad" }, 3: { text: "1ST", tone: "info" } };
+tradeGlance(salesListings, { what: "listed", chipOf: (l) => (l.group ? { chip: LIVE_CHIP[l.group] } : deltaChip(l)) });
+tradeGlance(salesOffers, { what: "offers", chipOf: (l) => (l.marketPrice > 0 ? { chip: { text: pctText(l.delta), tone: "info" } } : {}) });
+tradeGlance(salesSold, { what: "sold", chipOf: () => ({ chip: { text: "CLAIM", tone: "ok" } }) });
+
+// what can I sell: S = the total value; M = beside the three biggest; L = the top six
+salesSellable.sizes = ["s", "m", "l"];
+salesSellable.size = "m";
+salesSellable.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = salesSellable.build(data, ctx, opts);
+  if (!out.rows.length) return { empty: out.empty };
+  const sum = out.rows.reduce((s, r) => s + r.total, 0);
+  const head = big(compact(sum), { unit: " SFL", cap: `${out.rows.length} unlisted item${out.rows.length === 1 ? "" : "s"}` });
+  if (size === "s") return { html: head };
+  const list = gRows(out.rows.slice(0, size === "m" ? 3 : 6).map((r) => ({ icon: r.iconHtml, name: r.name,
+    sub: `×${fmtQty(r.qty)} · ${fmtSfl(r.unitPrice)}/ea`, value: compact(r.total) })));
+  return { html: size === "m" ? `<div class="g-split"><div>${head}</div>${list}</div>` : head + list };
+};
+
+// weekly history: S = what sold in the latest week; M / L = the latest weeks
+salesWeekly.sizes = ["s", "m", "l"];
+salesWeekly.size = "s";
+salesWeekly.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = salesWeekly.build(data, ctx, opts);
+  if (!out.rows.length) return { empty: out.empty };
+  const w = out.rows[0];
+  if (size === "s") return { html: big(w.soldN, { unit: " sold", cap: `week of ${w.dateText} · ${w.boughtN} bought` }) };
+  return { html: gRows(out.rows.slice(0, size === "m" ? 3 : 7).map((r) => ({ name: `Week of ${r.dateText}`,
+    sub: `${r.soldN} sold · ${r.boughtN} bought`, value: r.soldN ? `↑${r.soldN}` : "—", tone: r.soldN ? "ok" : "" }))) };
+};

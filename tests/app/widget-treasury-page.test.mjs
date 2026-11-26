@@ -74,6 +74,26 @@ test("items: treasures show the treasure boost; produced says it is not sellable
   assert.match(treasuryItems.build({ treasury: null }, ctx, {}).empty, /did not load/);
 });
 
+test("📱 glance: categories S = the biggest share; M = the top three by value; no valuation → empty", () => {
+  // produced food (at production cost) outweighs resources on this farm
+  assert.match(treasuryCategories.glance({ treasury: T }, ctx, {}, "s").html, /<div class="g-hero">🍲<\/div><div class="g-big">41<small> %<\/small><\/div><div class="g-cap">Produced · 2\.7k 🌸<\/div>/);
+  const m = treasuryCategories.glance({ treasury: T }, ctx, {}, "m").html;
+  assert.strictEqual((m.match(/class="g-row"/g) || []).length, 3);
+  assert.match(m, /^<div class="g-rows"><div class="g-row"><span class="g-ic">🍲<\/span><div class="g-n">Produced<div>40\.9 % · 151 items<\/div><\/div><span class="g-v">2\.7k<\/span><\/div><div class="g-row"><span class="g-ic">⛏️<\/span><div class="g-n">Resources<div>26\.5 % · 50 items<\/div><\/div><span class="g-v">1\.8k<\/span>/);
+  assert.strictEqual((treasuryCategories.glance({ treasury: T }, ctx, {}, "l").html.match(/class="g-row"/g) || []).length, 6);
+  assert.match(treasuryCategories.glance({ treasury: null }, ctx, {}, "s").empty, /did not load/);
+});
+
+test("📱 glance: items S = the category's value; M = beside its top three; L = top six; empty category → empty", () => {
+  assert.match(treasuryItems.glance({ treasury: T }, ctx, { cat: "resources" }, "s").html, /<div class="g-big">1\.8k<small> 🌸<\/small><\/div><div class="g-cap">50 items<\/div>/);
+  const m = treasuryItems.glance({ treasury: T }, ctx, { cat: "resources" }, "m").html;
+  assert.match(m, /^<div class="g-split">.*<span class="g-ic"><img data-i="Obsidian"><\/span><div class="g-n">Obsidian<div>×67 · 19\.20<\/div><\/div><span class="g-v">1\.3k<\/span>/);
+  assert.strictEqual((m.match(/class="g-row"/g) || []).length, 3);
+  assert.strictEqual((treasuryItems.glance({ treasury: T }, ctx, { cat: "resources" }, "l").html.match(/class="g-row"/g) || []).length, 6);
+  assert.strictEqual(treasuryItems.glance({ treasury: T }, ctx, { cat: "pets" }, "s").empty, "No items found.");
+  assert.match(treasuryItems.glance({ treasury: null }, ctx, {}, "s").empty, /did not load/);
+});
+
 test("page wiring: the TREASURY page renders its widgets through renderPage", () => {
   const SRC = readFileSync(new URL("../../flowers.html", import.meta.url), "utf8");
   assert.match(SRC, /__widgets\.renderPage\("treasury-value"/);
