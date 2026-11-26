@@ -61,7 +61,7 @@ test("📱 glance model, buds: the best owned bud a day (the best overall when n
   const none = budsTable.glanceModel({ buds: BUDS }, CTX, {});
   assert.deepStrictEqual([none.head.unit, none.head.tone, none.head.cap, none.head.hero], [" 🌸", "ok", `a day · #${byDay[0].id} · none owned`, "<img data-bud>"]);
   assert.strictEqual(none.items.length, Math.min(40, BUDS.rows.length));
-  assert.match(renderLook(none, "number").html, /^<div class="gx gx-1x1" style="--gw:1"><div class="gx-head"><div class="gx-num g-ok">\+[\d.]+<small> 🌸<\/small><\/div>/);
+  assert.match(renderLook(none, "number").html, /<div class="gx-head"><div class="gx-num g-ok">\+[\d.]+<small> 🌸<\/small><\/div>/);
   assert.ok(looksFor(none).length >= 3);
   // two owned buds: the model is about them, not the best on the market
   const mine = [byDay[5], byDay[9]];

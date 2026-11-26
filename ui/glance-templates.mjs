@@ -96,7 +96,7 @@ function sparkSvg(values, t = "ok") {
   return `<svg class="gx-spark${tone(t)}" viewBox="0 0 300 46" preserveAspectRatio="none"><path d="${line} L300 46 L0 46Z" class="g-spark-fill"/><path d="${line}" class="g-spark-line"/></svg>`;
 }
 function gaugeBlock(h) {
-  return `<div class="gx-gauge">${ringSvg(h.ring, h.ringTone || "ok")}<div class="gx-gauge-in"><b class="${tone(h.tone).trim()}">${esc(h.value)}</b>${h.unit ? `<small>${esc(h.unit)}</small>` : ""}</div></div>` +
+  return `<div class="gx-gauge${String(h.value).length >= 5 ? " gx-gauge-long" : ""}">${ringSvg(h.ring, h.ringTone || "ok")}<div class="gx-gauge-in"><b class="${tone(h.tone).trim()}">${esc(h.value)}</b>${h.unit ? `<small>${esc(h.unit)}</small>` : ""}</div></div>` +
     (h.cap ? `<div class="gx-cap gx-center">${esc(h.cap)}</div>` : "");
 }
 function nextBlock(it, now, wide) {
@@ -120,7 +120,7 @@ const T = (id, size, pres, needs, slots, render, extra = {}) => ({ id, size, pre
 
 export const TEMPLATES = [
   // 1×1 — one piece of information
-  T("number", "1x1", "number", ["head"], null, (m) => headBlock(m.head), { name: "Number" }),
+  T("number", "1x1", "number", ["head"], null, (m) => (m.head.hero ? `<div class="gx-hero-ic"><span class="gx-ic">${m.head.hero}</span></div>` : "") + headBlock(m.head), { name: "Number" }),
   T("gauge", "1x1", "gauge", ["ring"], null, (m) => gaugeBlock(m.head), { name: "Gauge" }),
   T("next", "1x1", "next", ["items"], null, (m, now) => nextBlock(it(m)[0], now, false), { name: "Next up" }),
   T("icons-1", "1x1", "icons", ["icons"], () => 6, (m, now) => iconsBlock(iconsOf(m), 6, iconCols(Math.min(6, iconsOf(m).length), 1, 1), now), { fill: GRID, name: "Icons" }),
@@ -139,7 +139,7 @@ export const TEMPLATES = [
   T("icons-t", "1x2", "icons", ["icons"], () => 8, (m, now) => iconsBlock(iconsOf(m), 8, 2, now), { fill: GRID, name: "Icons" }),
   T("bars-t", "1x2", "bars", ["pct"], () => 7, (m, now) => barsBlock(it(m), 7, now), { name: "Bars" }),
   T("lines-t", "1x2", "lines", ["items"], () => 12, (m, now) => linesBlock(it(m), 12, now), { name: "Lines" }),
-  T("tiles-t", "1x2", "tiles", ["tiles"], () => 6, (m) => tilesBlock(tl(m), 6, 2), { fill: GRID, name: "Tiles" }),
+  T("tiles-t", "1x2", "tiles", ["tiles3"], () => 6, (m) => tilesBlock(tl(m), 6, 1, true), { fill: GRID, name: "Numbers" }),
   // 2×2 — the overview
   T("overview-4", "2x2", "overview", ["head", "items", "tiles"], () => 3, (m, now) => headBlock(m.head, { top: true }) + tilesBlock(tl(m), 3, 3) + rowsBlock(it(m), 3, now), { fill: 0.5, name: "Overview" }),
   T("icons-4", "2x2", "icons", ["icons"], () => 16, (m, now) => iconsBlock(iconsOf(m), 16, iconCols(Math.min(16, iconsOf(m).length), 2, 2), now), { fill: GRID, name: "Icons" }),

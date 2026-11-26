@@ -217,7 +217,7 @@ test("📱 glance model, calculator: the points; base / bonus / per FLOWER / the
   assert.strictEqual(m.items.length, 4);
   assert.deepStrictEqual(m.items[1], { icon: "🎁", name: "Bulk bonus", sub: "+40 % step", value: "+2k", tone: "accent", pct: 12.5 });   // 5,000 × 0.4 of 16,000
   assert.deepStrictEqual(m.items[2], { icon: "⚖️", name: "Per FLOWER", value: "3.20 pts" });
-  assert.match(renderLook(Y.ykCalculator.glanceModel({}, ctx()), "number").html, /^<div class="gx gx-1x1" style="--gw:1"><div class="gx-head"><div class="gx-num g-ok">1\.6k<small> pts<\/small><\/div><div class="gx-cap">500 FLOWER in week 1 · 3\.0×<\/div>/);
+  assert.match(renderLook(Y.ykCalculator.glanceModel({}, ctx()), "number").html, /<div class="gx-head"><div class="gx-num g-ok">1\.6k<small> pts<\/small><\/div><div class="gx-cap">500 FLOWER in week 1 · 3\.0×<\/div>/);
   assert.match(Y.ykCalculator.glanceModel({}, ctx(), { amount: 0 }).empty, /Enter a deposit amount/);
 });
 
