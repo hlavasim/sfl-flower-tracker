@@ -22,8 +22,8 @@ test("board is a page, first under MORE, routed to renderBoard", () => {
   assert.match(SRC, /if \(page === "board"\) \{ renderConfigBar\(page\); renderBoard\(\); return; \}/);
 });
 
-async function renderBoardWith(boardsJson, { slowLeveling = false } = {}) {
-  const mem = new Map([["sfl_config", JSON.stringify({ farm: "155498" })]]);
+async function renderBoardWith(boardsJson, { slowLeveling = false, page = "board", search = "", extra = {} } = {}) {
+  const mem = new Map([["sfl_config", JSON.stringify({ farm: "155498" })], ...Object.entries(extra)]);
   if (boardsJson) mem.set(BOARDS_KEY, boardsJson);
   const storage = { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, String(v)), removeItem: (k) => mem.delete(k) };
   // The farm answers; leveling does not (its badge shows the error, the widget still renders).
@@ -38,21 +38,23 @@ async function renderBoardWith(boardsJson, { slowLeveling = false } = {}) {
   const doc = { getElementById: (id) => els[id] || (els[id] = stub()), querySelector: () => null, querySelectorAll: () => [],
     createElement: stub, addEventListener() {}, removeEventListener() {}, body: stub(), documentElement: stub(), head: stub(), readyState: "complete", cookie: "" };
   const win = { localStorage: storage, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
-    location: { href: "https://example.test/?page=board", search: "?page=board", hash: "", pathname: "/", origin: "https://example.test" },
+    location: { href: `https://example.test/?page=${page}${search}`, search: `?page=${page}${search}`, hash: "", pathname: "/", origin: "https://example.test" },
     addEventListener() {}, removeEventListener() {}, matchMedia: () => ({ matches: false, addEventListener() {} }),
     history: { replaceState() {}, pushState() {} }, navigator: { userAgent: "node" }, console };
   win.window = win; win.document = doc;
   const run = new Function("window", "document", "localStorage", "sessionStorage", "fetch", "requestAnimationFrame", "setTimeout",
     "setInterval", "clearTimeout", "clearInterval", "location", "history", "navigator", "matchMedia",
     `${SCRIPT}
-     return { renderBoard: typeof renderBoard === "function" ? renderBoard : null, setFarm: (f) => { FARM_ID = f; } };`);
+     return { renderBoard: typeof renderBoard === "function" ? renderBoard : null, renderDashboard, setFarm: (f) => { FARM_ID = f; } };`);
   const api = run(win, doc, storage, win.sessionStorage, async () => ({ ok: false, status: 503, json: async () => ({}) }),
     () => 0, () => 0, () => 0, () => {}, () => {}, win.location, win.history, win.navigator, win.matchMedia);
   assert.ok(api.renderBoard, "renderBoard is declared");
   api.setFarm("155498");
-  if (slowLeveling) { api.renderBoard(); await new Promise((r) => setTimeout(r, 50)); }
-  else await api.renderBoard();
-  return { html: app.innerHTML, win };
+  const render = page === "dashboard" ? () => api.renderDashboard() : () => api.renderBoard();
+  // DASH also waits on the price fetch for the bounties, which never settles under the stubbed timers
+  if (slowLeveling || page === "dashboard") { render(); await new Promise((r) => setTimeout(r, 50)); }
+  else await render();
+  return { html: app.innerHTML, win, api, app, storage };
 }
 
 test("an empty board explains how to pin", async () => {
@@ -90,10 +92,48 @@ test("a slow optional need (the leveling plan) does not hold the board: it paint
 
 test("review #4/#6: a newer board render supersedes an older one's late paints; widgets load apart from the engine", () => {
   assert.match(SRC, /const mine = \+\+_boardSeq;/);
-  assert.match(SRC, /if \(getPage\(\) !== "board" \|\| seq !== _navSeq \|\| mine !== _boardSeq\) return;/);
-  assert.match(SRC, /const board = __widgets\.doc\(\)\.boards\[0\];\s*\/\/ read at paint time/);
+  assert.match(SRC, /if \(getPage\(\) !== page \|\| seq !== _navSeq \|\| mine !== _boardSeq\) return;/);
+  assert.match(SRC, /const board = __widgets\.doc\(\)\.boards\.find\(\(b\) => b\.id === boardId\);\s*\/\/ read at paint time/);
   // The engine no longer depends on the widget modules loading.
   assert.match(SRC, /Promise\.all\(\[import\("\/core\/browser-engine\.mjs"\), import\("\/app\/store\.mjs"\)\]\)/);
   assert.match(SRC, /const _widgetsReady = Promise\.all\(\[import\("\/app\/widget-host\.mjs"\), import\("\/widgets\/registry\.mjs"\), import\("\/ui\/frame\.mjs"\)\]\)/);
   assert.match(SRC, /\.catch\(\(e\) => console\.error\("\[widgets\] did not load"/);
+});
+
+const docOf = (storage) => JSON.parse(storage.getItem(BOARDS_KEY));
+
+test("DASH is the board 'dash': the first visit seeds Co je hotové (full width, the old toggles as its options) and the weather card", async () => {
+  const { html, api, app, storage } = await renderBoardWith(null, { page: "dashboard", extra: { sfl_dash_prefs: JSON.stringify({ showAnimals: true, showFaction: false }) } });
+  const dash = docOf(storage).boards.find((b) => b.id === "dash");
+  assert.deepStrictEqual(dash.items.map((x) => [x.type, x.w]), [["dash-actions", 12], ["weather-protection", 6]]);
+  assert.deepStrictEqual(dash.items[0].settings.opts, { showNonTicket: false, showAnimals: true, showFaction: false });
+  assert.match(html, /data-frame="b:dash:/);
+  assert.match(html, /<h1>DASHBOARD<\/h1>/);
+  assert.strictEqual(docOf(storage).last, "dash", "📌 on a page now pins to DASH");
+  // the old card list is gone; the second visit adds nothing
+  assert.doesNotMatch(html, /READY NOW/);
+  api.renderDashboard();
+  await new Promise((r) => setTimeout(r, 50));
+  assert.strictEqual(docOf(storage).boards.find((b) => b.id === "dash").items.length, 2);
+  assert.match(app.innerHTML, /data-frame="b:dash:/);
+});
+
+test("every board page has the switcher; ?board= picks the board, DASH opens the dashboard page", async () => {
+  const boards = JSON.stringify({ schema: 1, page: {}, boards: [
+    { id: "main", name: "Můj dashboard", items: [] }, { id: "dash", name: "DASH", items: [] }, { id: "x1", name: "Rybaření", items: [] }] });
+  const { html, storage } = await renderBoardWith(boards, { search: "&board=x1" });
+  assert.match(html, /<h1>📌 Rybaření<\/h1>/);
+  assert.match(html, /data-board="main" onclick="_wOpenBoard\(this\.dataset\.board\)"/);
+  assert.match(html, /data-board="dash" onclick="_wOpenBoard\(this\.dataset\.board\)"/);
+  assert.match(html, /_wNewBoard\(\)/);
+  assert.match(html, /data-board="x1" onclick="_wDeleteBoard\(this\.dataset\.board\)"/, "a board of one's own can be deleted");
+  assert.strictEqual(docOf(storage).last, "x1");
+  const main = await renderBoardWith(boards);
+  assert.match(main.html, /<h1>📌 Můj dashboard<\/h1>/);
+  assert.doesNotMatch(main.html, /_wDeleteBoard/);
+});
+
+test("the DASH parser takes a widget's filters for one call, the stored toggles otherwise", () => {
+  assert.match(SRC, /function parseDashboardActions\(farm, limits = \{\}\) \{\s*const _prevOverride = _dashPrefOverride;\s*_dashPrefOverride = limits\.filters \|\| null;/);
+  assert.match(SRC, /return _dashPrefOverride \? \{ \.\.\.p, \.\.\._dashPrefOverride \} : p;/);
 });

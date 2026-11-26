@@ -106,10 +106,6 @@ export const TABLE_INVENTORY = [
     "lines": 7
   },
   {
-    "name": "CATEGORY_PRIORITY",
-    "lines": 5
-  },
-  {
     "name": "CHANCE_CAT_MAP",
     "lines": 7
   },
@@ -200,10 +196,6 @@ export const TABLE_INVENTORY = [
   {
     "name": "DOLL_RECIPES",
     "lines": 25
-  },
-  {
-    "name": "EFF_ORDER",
-    "lines": 16
   },
   {
     "name": "FACTION_SHIELDS",

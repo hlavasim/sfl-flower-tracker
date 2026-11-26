@@ -57,11 +57,22 @@ test("no farm, or no parser yet: an explanation, not a throw", () => {
 });
 
 test("the Craft / Catch suggestions follow this widget's own limits (blank = the page's LIMIT)", () => {
-  assert.deepStrictEqual(W.options.map((o) => [o.key, o.kind]), [["dollLimit", "number"], ["crabLimit", "number"]]);
+  assert.deepStrictEqual(W.options.map((o) => [o.key, o.kind]), [["dollLimit", "number"], ["crabLimit", "number"],
+    ["showNonTicket", "bool"], ["showAnimals", "bool"], ["showFaction", "bool"]]);
   let seen = null;
   const ctx = { ...CTX, dashActions: (farm, limits) => { seen = limits; return []; } };
   W.build({ farm: {} }, ctx, { dollLimit: 10, crabLimit: 3 });
-  assert.deepStrictEqual(seen, { dolls: 10, crabs: 3 });
+  assert.deepStrictEqual([seen.dolls, seen.crabs], [10, 3]);
   W.build({ farm: {} }, ctx, {});
-  assert.deepStrictEqual(seen, { dolls: null, crabs: null });
+  assert.deepStrictEqual([seen.dolls, seen.crabs], [null, null]);
+});
+
+test("what to list is this widget's own choice: non-ticket bounties, animal turn-ins, faction items", () => {
+  assert.deepStrictEqual([W.defaults.opts.showNonTicket, W.defaults.opts.showAnimals, W.defaults.opts.showFaction], [false, false, true]);
+  let seen = null;
+  const ctx = { ...CTX, dashActions: (farm, limits) => { seen = limits; return []; } };
+  W.build({ farm: {} }, ctx, { showNonTicket: true, showAnimals: false, showFaction: false });
+  assert.deepStrictEqual(seen.filters, { showNonTicket: true, showAnimals: false, showFaction: false });
+  // the column the user filters by is called "typ"
+  assert.strictEqual(W.columns.find((c) => c.key === "category").label, "typ");
 });

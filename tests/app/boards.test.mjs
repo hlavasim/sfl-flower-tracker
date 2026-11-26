@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { BOARDS_KEY, emptyBoards, parseBoards, pin, unpin, moveItemTo, resizeItem, updateItemSettings,
-  pageSettings, setPageSettings, pinnedCount, loadBoards, saveBoards, cleanSettings } from "../../app/boards.mjs";
+  pageSettings, setPageSettings, pinnedCount, loadBoards, saveBoards, cleanSettings,
+  addBoard, removeBoard, setLastBoard, pinTarget } from "../../app/boards.mjs";
 
 // The boards document: what is pinned where, at what size, with which settings; plus the settings
 // of each widget on its own page. One synced localStorage key.
@@ -98,4 +99,25 @@ test("synced filters are cleaned: an object of string lists, anything else dropp
 test("review #7: board ids with ':' are dropped (frame ids are b:<board>:<item>)", () => {
   const d = parseBoards(JSON.stringify({ schema: 1, boards: [{ id: "x:y", name: "B", items: [] }, { id: "main", items: [{ i: "a", type: "t" }] }] }));
   assert.deepStrictEqual(d.boards.map((b) => b.id), ["main"]);
+});
+
+test("several boards: add one (with seed items, once), remove one (never the last), the last visited is the pin target", () => {
+  let d = emptyBoards();
+  d = addBoard(d, { id: "dash", name: "DASH", items: [{ i: "a", type: "dash-actions", w: 12, settings: { opts: { showAnimals: true } } }] });
+  assert.deepStrictEqual(d.boards.map((b) => b.id), ["main", "dash"]);
+  assert.deepStrictEqual(d.boards[1].items, [{ i: "a", type: "dash-actions", settings: { opts: { showAnimals: true } }, w: 12, h: 0 }]);
+  assert.strictEqual(addBoard(d, { id: "dash", name: "Jiný" }), d, "an existing board is left as it is");
+  assert.strictEqual(addBoard(d, { id: "a:b", name: "X" }), d, "':' cannot be in a board id");
+  // pin target: the board visited last, else the first
+  assert.strictEqual(pinTarget(d), "main");
+  d = setLastBoard(d, "dash");
+  assert.strictEqual(pinTarget(d), "dash");
+  assert.strictEqual(setLastBoard(d, "nope"), d, "an unknown board is not remembered");
+  // the last visited survives a round-trip; a stale one is dropped
+  assert.strictEqual(parseBoards(JSON.stringify(d)).last, "dash");
+  assert.strictEqual(parseBoards(JSON.stringify({ ...d, last: "gone" })).last, undefined);
+  d = removeBoard(d, "dash");
+  assert.deepStrictEqual(d.boards.map((b) => b.id), ["main"]);
+  assert.strictEqual(pinTarget(d), "main");
+  assert.strictEqual(removeBoard(d, "main"), d, "the last board stays");
 });

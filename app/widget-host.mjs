@@ -7,7 +7,7 @@
 import { renderTable, tableSettingsPanel, applyTableAction, applyOption } from "../ui/table.mjs";
 import { renderFrame, freshness } from "../ui/frame.mjs";
 import { loadBoards, saveBoards, pin, unpin, moveItemTo, resizeItem, updateItemSettings,
-  pageSettings, setPageSettings, pinnedCount } from "./boards.mjs";
+  pageSettings, setPageSettings, pinnedCount, pinTarget, addBoard, removeBoard, setLastBoard } from "./boards.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const TABLE_ACTIONS = new Set(["col-toggle", "col-move", "sort", "rows-mode", "rows-top", "pick", "density", "text-size", "reset"]);
@@ -119,8 +119,8 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
       let preset = null;
       try { preset = value ? JSON.parse(value) : null; } catch { preset = null; }
       if (preset && typeof preset === "object" && !Array.isArray(preset)) settings.opts = { ...(settings.opts || {}), ...preset };
-      // the first board: a synced document from another device may have no "main"
-      return save(pin(doc, { type: f.type, settings }, doc.boards[0].id), frameId);
+      // the board visited last, else the first (a synced document from another device may have no "main")
+      return save(pin(doc, { type: f.type, settings }, pinTarget(doc)), frameId);
     }
     if (f.place === "board") {
       if (action === "remove") { open.delete(frameId); return save(unpin(doc, f.boardId, f.item.i), frameId); }
@@ -176,6 +176,11 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     return freshness(entries.reduce((a, e) => (e.asOf < a.asOf ? e : a)), now);
   }
 
-  return { doc: () => doc, reload: () => { doc = loadBoards(storage); }, registry, renderPage, renderItem, handle,
+  // A page-level document change (add/remove a board, remember the visited one); saved, no re-render.
+  const update = (fn) => { const next = fn(doc); if (next !== doc) { doc = next; saveBoards(storage, doc); } return doc; };
+
+  return { doc: () => doc, update,
+    addBoard: (b) => update((d) => addBoard(d, b)), removeBoard: (id) => update((d) => removeBoard(d, id)),
+    visit: (id) => update((d) => setLastBoard(d, id)), reload: () => { doc = loadBoards(storage); }, registry, renderPage, renderItem, handle,
     needsOf, loadData, peekData, freshOf };
 }

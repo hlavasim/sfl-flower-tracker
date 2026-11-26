@@ -9125,9 +9125,13 @@
 
     // Per-user dashboard toggle prefs (persisted in localStorage).
     const DASH_PREFS_KEY = "sfl_dash_prefs";
+    // A DASH widget's own filters (showNonTicket/showAnimals/showFaction), for one parseDashboardActions call.
+    let _dashPrefOverride = null;
     function dashGetPrefs() {
-      try { return JSON.parse(localStorage.getItem(DASH_PREFS_KEY) || "{}") || {}; }
-      catch { return {}; }
+      let p;
+      try { p = JSON.parse(localStorage.getItem(DASH_PREFS_KEY) || "{}") || {}; }
+      catch { p = {}; }
+      return _dashPrefOverride ? { ...p, ..._dashPrefOverride } : p;
     }
     function dashSetPref(k, v) {
       const p = dashGetPrefs(); p[k] = v;
@@ -9665,36 +9669,42 @@
 
     // limits: { dolls, crabs } from a pinned "Co je hotové" widget's settings; blank = LIMIT
     function parseDashboardActions(farm, limits = {}) {
-      const inventory = farm.inventory || {};
-      const inProgress = extractInProgress(farm);
-      const dollLimit = limits.dolls ?? LIMIT;
-      const crabLimit = limits.crabs ?? LIMIT;
-      const actions = [];
+      const _prevOverride = _dashPrefOverride;
+      _dashPrefOverride = limits.filters || null;
+      try {
+        const inventory = farm.inventory || {};
+        const inProgress = extractInProgress(farm);
+        const dollLimit = limits.dolls ?? LIMIT;
+        const crabLimit = limits.crabs ?? LIMIT;
+        const actions = [];
 
-      actions.push(...dashParseCrops(farm));
-      actions.push(...dashParseFruits(farm));
-      actions.push(...dashParseResources(farm));
-      actions.push(...dashParseFlowers(farm, inventory, inProgress));
-      actions.push(...dashParseAnimals(farm));
-      actions.push(...dashParseCooking(farm));
-      actions.push(...dashParseComposters(farm));
-      actions.push(...dashParseGreenhouse(farm));
-      actions.push(...dashParseBeehives(farm));
-      actions.push(...dashParseCraftingBox(farm, inventory, inProgress, dollLimit));
-      actions.push(...dashParseCrabTraps(farm, inventory, inProgress, crabLimit));
-      actions.push(...dashParsePets(farm));
-      actions.push(...dashParseFaction(farm));
-      actions.push(...dashParsePowers(farm));
-      actions.push(...dashParseDailies(farm));
-      actions.push(...dashParseTrades(farm));
-      actions.push(...dashParseLavaPits(farm));
-      actions.push(...dashParseCropMachine(farm));
-      actions.push(...dashParseMushrooms(farm));
-      actions.push(...dashParseDeliveryOrders(farm));
-      actions.push(...dashParseBounties(farm));
-      actions.push(...dashParseChores(farm));
+        actions.push(...dashParseCrops(farm));
+        actions.push(...dashParseFruits(farm));
+        actions.push(...dashParseResources(farm));
+        actions.push(...dashParseFlowers(farm, inventory, inProgress));
+        actions.push(...dashParseAnimals(farm));
+        actions.push(...dashParseCooking(farm));
+        actions.push(...dashParseComposters(farm));
+        actions.push(...dashParseGreenhouse(farm));
+        actions.push(...dashParseBeehives(farm));
+        actions.push(...dashParseCraftingBox(farm, inventory, inProgress, dollLimit));
+        actions.push(...dashParseCrabTraps(farm, inventory, inProgress, crabLimit));
+        actions.push(...dashParsePets(farm));
+        actions.push(...dashParseFaction(farm));
+        actions.push(...dashParsePowers(farm));
+        actions.push(...dashParseDailies(farm));
+        actions.push(...dashParseTrades(farm));
+        actions.push(...dashParseLavaPits(farm));
+        actions.push(...dashParseCropMachine(farm));
+        actions.push(...dashParseMushrooms(farm));
+        actions.push(...dashParseDeliveryOrders(farm));
+        actions.push(...dashParseBounties(farm));
+        actions.push(...dashParseChores(farm));
 
-      return actions;
+        return actions;
+      } finally {
+        _dashPrefOverride = _prevOverride;
+      }
     }
 
     /*
@@ -9805,214 +9815,20 @@
     }
     setInterval(_dashVoiceTick, 30 * 1000);
 
-    async function renderDashboard(data) {
-      if (Object.keys(dashP2P).length === 0) await dashFetchP2P();
-      if (dashRates.coinsPerSFL == null) await dashFetchRates();
-      const app = document.getElementById("app");
-      if (!data || !data.farm) {
-        app.innerHTML = `<div class="header pixel-panel pixel-font">
-          <h1>DASHBOARD</h1>
-          <div class="farm-id">Load your farm to see pending actions</div>
-        </div>`;
-        return;
+    // DASH is the board "dash" (app/boards.mjs): seeded on the first visit with "Co je hotové" (the
+    // stored toggles become its own options) and the weather card, then edited like any other board.
+    async function renderDashboard() {
+      if (typeof __widgets === "undefined") { document.getElementById("app").innerHTML = _wMissing("DASH"); return; }
+      if (!__widgets.doc().boards.some((b) => b.id === "dash")) {
+        const p = dashGetPrefs();
+        __widgets.addBoard({ id: "dash", name: "DASH", items: [
+          { i: "dash-actions", type: "dash-actions", w: 12, settings: { opts: {
+            showNonTicket: !!p.showNonTicket, showAnimals: !!p.showAnimals, showFaction: p.showFaction === undefined ? true : !!p.showFaction } } },
+          { i: "weather", type: "weather-protection", w: 6, settings: {} },
+        ] });
       }
-
-      const farm = data.farm;
-      const actions = parseDashboardActions(farm);
-      const now = Date.now();
-      window._wRerender = () => { if (getPage() === "dashboard" && cachedFarmData) renderDashboard(cachedFarmData); };
-
-      const ready = actions.filter(a => a.status === "ready");
-      const upcoming = actions.filter(a => a.status === "upcoming");
-      const idle = actions.filter(a => a.status === "empty");
-
-      // Sort: ready by most overdue first, upcoming by soonest, idle by priority
-      ready.sort((a, b) => a.readyAt - b.readyAt);
-      upcoming.sort((a, b) => a.readyAt - b.readyAt);
-      idle.sort((a, b) => a.priority - b.priority);
-
-      const _prefs = dashGetPrefs();
-      // Faction toggle defaults TRUE (show) when key is missing
-      const _showFaction = (_prefs.showFaction === undefined) ? true : !!_prefs.showFaction;
-      let html = `<div class="header pixel-panel pixel-font">
-        <h1>DASHBOARD</h1>
-        <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
-        <div class="dash-summary">
-          ${ready.length ? `<span class="dash-summary-badge ready">${ready.length} ready</span>` : ""}
-          ${upcoming.length ? `<span class="dash-summary-badge upcoming">${upcoming.length} upcoming</span>` : ""}
-          ${idle.length ? `<span class="dash-summary-badge idle">${idle.length} idle</span>` : ""}
-        </div>
-        <div class="dash-toolbar">
-          <button class="dash-toggle-btn ${_prefs.showNonTicket ? "on" : ""}" onclick="dashTogglePref('showNonTicket')">
-            ${_prefs.showNonTicket ? "☑" : "☐"} Show non-ticket bounties &amp; chores
-          </button>
-          <button class="dash-toggle-btn ${_prefs.showAnimals ? "on" : ""}" onclick="dashTogglePref('showAnimals')">
-            ${_prefs.showAnimals ? "☑" : "☐"} Show animal turn-ins (Chicken/Cow/Sheep)
-          </button>
-          <button class="dash-toggle-btn ${_showFaction ? "on" : ""}" onclick="dashToggleFaction()">
-            ${_showFaction ? "☑" : "☐"} Show faction items (Goblin NPCs, Mark rewards)
-          </button>
-          ${_wPinBtn("dash-actions", "Co je hotové")}
-        </div>
-        ${_dashVoicePanelHtml()}
-      </div>`;
-
-      // Weather Shop placement status — needs all 4 placed (Tornado Pinwheel /
-      // Mangrove / Thermal Stone / Protective Pesticide) to be protected against
-      // all 4 disasters. Show a status card so missing protection is obvious.
-      const _wState = {};
-      for (const w of DASH_WEATHER_ITEMS) _wState[w] = dashWeatherState(farm, w);
-      const _wUncovered = DASH_WEATHER_ITEMS.filter(w => _wState[w] === "none" || _wState[w] === "spent");
-      const _wAllOk = _wUncovered.length === 0;
-      const _wCardCls = _wAllOk ? "ready" : "upcoming";
-      const _wTitle = _wAllOk
-        ? "ALL 4 WEATHER ITEMS ACTIVE"
-        : `${_wUncovered.length}/4 NEKRYTÝCH — ${_wUncovered.map(w => DASH_WEATHER_PREVENTS[w]).join(", ")}`;
-      const _wPills = DASH_WEATHER_ITEMS.map(w => {
-        const st = _wState[w];
-        // "spent" is the case worth shouting about: it is placed, it looks fine, and it will not
-        // save a single crop until it is renewed.
-        const mark = st === "ok" ? "✓" : st === "partial" ? "✓/⚠" : st === "spent" ? "⚠ spotřebovaný" : "✗";
-        const tip = st === "spent"
-          ? `Postavený, ale spotřebovaný předchozí ${DASH_WEATHER_PREVENTS[w]} — musíš ho obnovit ve Weather Shopu, jinak tě další zasáhne.`
-          : st === "none" ? `Nemáš postavený — ${DASH_WEATHER_PREVENTS[w]} tě zasáhne bez ochrany.`
-          : st === "partial" ? `Krytí zbývá, ale část kusů je spotřebovaná.`
-          : `Aktivní — chrání proti ${DASH_WEATHER_PREVENTS[w]}.`;
-        return `<span class="dash-weather-pill ${st === "none" || st === "spent" ? "miss" : "ok"}" title="${escHTML(tip)}">
-          ${_dashIcon(w)}${escHTML(w)} <b>${escHTML(mark)}</b>
-          <span style="opacity:0.7;font-size:0.55rem">${escHTML(DASH_WEATHER_PREVENTS[w])}</span>
-        </span>`;
-      }).join("");
-      html += `<div class="dash-weather-card pixel-panel ${_wCardCls}">
-        <div class="dash-weather-title pixel-font">🌦 ${_wTitle} ${_wPinBtn("weather-protection", "Ochrana před počasím")}</div>
-        <div class="dash-weather-pills">${_wPills}</div>
-      </div>`;
-
-      if (ready.length === 0 && upcoming.length === 0 && idle.length === 0) {
-        html += `<div class="dash-all-done pixel-panel pixel-font">
-          <div class="icon">✅</div>
-          All caught up! Nothing to do right now.
-        </div>`;
-        app.innerHTML = html;
-        return;
-      }
-
-      // Group by category within each status
-      const CATEGORY_PRIORITY = {
-        // Default for everything else is 50 — these two appear last in each group.
-        "Bounty Board": 98,
-        "Chores": 99
-      };
-      function groupByCategory(items) {
-        const cats = {};
-        for (const item of items) {
-          if (!cats[item.category]) cats[item.category] = [];
-          cats[item.category].push(item);
-        }
-        // Sort items inside each category by efficiency when present:
-        //   ticket ascending (cheapest SFL/ticket first)
-        //   net    descending (highest profit first)
-        const EFF_ORDER = { coinrate: 0, ticket: 1, net: 2 };
-        for (const cat of Object.keys(cats)) {
-          cats[cat].sort((a, b) => {
-            const ea = a.efficiency, eb = b.efficiency;
-            if (!ea && !eb) return 0;
-            if (!ea) return 1;
-            if (!eb) return -1;
-            const oa = EFF_ORDER[ea.kind] ?? 9;
-            const ob = EFF_ORDER[eb.kind] ?? 9;
-            if (oa !== ob) return oa - ob;
-            if (ea.kind === "ticket") return ea.value - eb.value;
-            if (ea.kind === "coinrate") return eb.value - ea.value;
-            if (ea.kind === "net") return eb.value - ea.value;
-            return 0;
-          });
-        }
-        return cats;
-      }
-      function categoryEntries(cats) {
-        return Object.entries(cats).sort((a, b) => {
-          const pa = CATEGORY_PRIORITY[a[0]] || 50;
-          const pb = CATEGORY_PRIORITY[b[0]] || 50;
-          return pa - pb;
-        });
-      }
-
-      function renderItem(item) {
-        const cls = item.status === "ready" ? "ready" : item.status === "upcoming" ? "upcoming" : "empty";
-        let timeHtml = "";
-        if (item.status === "ready") {
-          timeHtml = `<span class="dash-ready-badge green">READY</span>`;
-        } else if (item.status === "upcoming") {
-          if (item.readyAt > 0 && item.readyAt < Infinity) {
-            const diff = item.readyAt - Date.now();
-            timeHtml = `<span class="dash-time growing-bed-time" data-ready="${item.readyAt}">${dashFormatCountdown(diff)}</span>`;
-          }
-        } else if (item.status === "empty") {
-          timeHtml = `<span class="dash-ready-badge blue">IDLE</span>`;
-        }
-        let effHtml = "";
-        if (item.efficiency) {
-          let effCls = "dash-eff-net-pos";
-          if (item.efficiency.kind === "ticket") effCls = "dash-eff-ticket";
-          else if (item.efficiency.kind === "coinrate") effCls = "dash-eff-coinrate";
-          else if (item.efficiency.value < 0) effCls = "dash-eff-net-neg";
-          effHtml = `<span class="dash-eff ${effCls}">${escHTML(item.efficiency.label)}</span>`;
-        }
-        const detailInner = item.detailHtml || (item.detail ? escHTML(item.detail) : "");
-        const detailBlock = detailInner ? `<div class="dash-detail">${detailInner}</div>` : "";
-        const labelInner = item.labelHtml || escHTML(item.label);
-        const prefix = item.prefixHtml || "";
-        return `<div class="dash-item ${cls}">
-          <span>${item.icon}</span>
-          ${prefix}
-          <div class="dash-item-label">${labelInner}${detailBlock}</div>
-          ${effHtml}
-          ${timeHtml}
-        </div>`;
-      }
-
-      function renderSection(catName, items, badgeCls) {
-        const icon = items[0]?.icon || "";
-        return `<div class="dash-section pixel-panel pixel-font">
-          <div class="dash-section-title">
-            <span>${icon}</span> ${escHTML(catName)}
-            <span class="dash-count ${badgeCls}">${items.length}</span>
-          </div>
-          ${items.map(renderItem).join("")}
-        </div>`;
-      }
-
-      // READY NOW
-      if (ready.length > 0) {
-        html += `<div class="dash-group-title pixel-font">🚨 READY NOW</div>`;
-        const cats = groupByCategory(ready);
-        for (const [cat, items] of categoryEntries(cats)) {
-          html += renderSection(cat, items, "");
-        }
-      }
-
-      // COMING SOON
-      if (upcoming.length > 0) {
-        html += `<div class="dash-group-title pixel-font">⏳ COMING SOON</div>`;
-        const cats = groupByCategory(upcoming);
-        for (const [cat, items] of categoryEntries(cats)) {
-          html += renderSection(cat, items, "upcoming");
-        }
-      }
-
-      // IDLE
-      if (idle.length > 0) {
-        html += `<div class="dash-group-title pixel-font">💤 IDLE</div>`;
-        const cats = groupByCategory(idle);
-        for (const [cat, items] of categoryEntries(cats)) {
-          html += renderSection(cat, items, "idle");
-        }
-      }
-
-      app.innerHTML = html;
+      return renderBoard("dash");
     }
-
     function renderHub(data) {
       const app = document.getElementById("app");
       const flowerTotal = Object.keys(FLOWER_RECIPES).length;
@@ -19318,29 +19134,80 @@
       // data-preset: the pinned copy's options (📌 Panenky do limitu → {"cat":"dolls"})
       __widgets.handle("page:" + type, "pin", (btn && btn.dataset.preset) || "");
       if (btn) { btn.classList.add("on"); btn.innerHTML = _wPinText(btn.dataset.label, _wPinned(type)); }
-      if (getPage() === "board") renderBoard();
+      if ((getPage() === "board" || getPage() === "dashboard") && window._wRerender) window._wRerender();
     };
+    // Where 📌 pins: the board visited last (DASH included), else the first.
+    function _wPinTargetName() {
+      const d = __widgets.doc();
+      const b = d.boards.find((x) => x.id === d.last) || d.boards[0];
+      return b ? b.name : "";
+    }
     function _wPinBtn(type, label, preset) {
       if (typeof __widgets === "undefined") return "";
       const n = _wPinned(type);
       const pre = preset ? ` data-preset="${escHTML(JSON.stringify(preset))}"` : "";
-      return `<button class="dash-toggle-btn w-pin-btn${n ? " on" : ""}" data-label="${escHTML(label)}"${pre} onclick="_wPin('${type}', this)" title="připnout na 📌 MŮJ DASHBOARD">${_wPinText(label, n)}</button>`;
+      return `<button class="dash-toggle-btn w-pin-btn${n ? " on" : ""}" data-label="${escHTML(label)}"${pre} onclick="_wPin('${type}', this)" title="připnout na nástěnku „${escHTML(_wPinTargetName())}“ (ta, kde jsi byl naposledy)">${_wPinText(label, n)}</button>`;
     }
     // Shown in place of a widget panel when the widget modules did not load.
     function _wMissing(title) {
       return '<div class="pixel-panel w-error" style="padding:8px 10px;margin:8px 0;font-size:0.5rem">' + escHTML(title) + ': panel se nenačetl (moduly widgetů) — zkus RELOAD.</div>';
     }
+    // One button per board (DASH opens the dashboard page), a new one, and deleting one of your own.
+    function _wBoardSwitcher(currentId) {
+      const btn = (b) => `<button class="dash-toggle-btn${b.id === currentId ? " on" : ""}" data-board="${escHTML(b.id)}" onclick="_wOpenBoard(this.dataset.board)">${b.id === "dash" ? "🚨" : "📌"} ${escHTML(b.name)}</button>`;
+      return '<div class="dash-toolbar">' + __widgets.doc().boards.map(btn).join("") +
+        '<button class="dash-toggle-btn" onclick="_wNewBoard()">＋ nová nástěnka</button>' +
+        (currentId !== "main" && currentId !== "dash"
+          ? `<button class="dash-toggle-btn" data-board="${escHTML(currentId)}" onclick="_wDeleteBoard(this.dataset.board)" title="smaže nástěnku i s jejími widgety">🗑 smazat tuhle nástěnku</button>` : "") +
+        '</div>';
+    }
+    window._wOpenBoard = (id) => {
+      if (id === "dash") { navigateTo("dashboard"); return; }
+      const url = new URL(window.location);
+      url.searchParams.set("page", "board");
+      url.searchParams.set("board", id);
+      history.pushState(null, "", url);
+      configExpanded = false;
+      main();
+    };
+    window._wNewBoard = () => {
+      const name = String(prompt("Název nové nástěnky:", "Nástěnka") || "").trim().slice(0, 40);
+      if (!name) return;
+      const id = "b" + Date.now().toString(36);
+      __widgets.addBoard({ id, name });
+      _wOpenBoard(id);
+    };
+    window._wDeleteBoard = (id) => {
+      const b = __widgets.doc().boards.find((x) => x.id === id);
+      if (!b || id === "main" || id === "dash") return;
+      if (!confirm(`Smazat nástěnku „${b.name}“ i s ${b.items.length} widgety?`)) return;
+      __widgets.removeBoard(id);
+      const next = __widgets.doc().boards.find((x) => x.id !== "dash");
+      _wOpenBoard(next ? next.id : "main");
+    };
     let _boardSeq = 0;
-    async function renderBoard() {
+    // boardIdArg: "dash" from the DASH page; on ?page=board the ?board= one, else the last visited
+    // (never DASH, it has its own page), else the first.
+    async function renderBoard(boardIdArg) {
       const app = document.getElementById("app");
       if (typeof __widgets === "undefined") { app.innerHTML = _wMissing("Můj dashboard"); return; }
-      window._wRerender = renderBoard; window._wRefresh = null;
+      window._wRerender = boardIdArg ? () => renderBoard(boardIdArg) : renderBoard; window._wRefresh = null;
+      const page = getPage();
       const seq = _navSeq;
       const mine = ++_boardSeq;
-      let board = __widgets.doc().boards[0];
-      const head = '<div class="header pixel-panel pixel-font"><h1>📌 ' + escHTML(board.name) + '</h1><div class="farm-id">Farm #' + escHTML(FARM_ID) +
-        ' · připnuté panely, každý se svým nastavením</div>' +
-        '<div>' + _wPinBtn("target-list", "🎯 přidat „Do limitu“ (kategorie a limit v ⚙)", { cat: "foods" }) + '</div></div>';
+      const d0 = __widgets.doc();
+      const want = boardIdArg || new URLSearchParams(window.location.search).get("board") || d0.last;
+      let board = d0.boards.find((b) => b.id === want && (boardIdArg || b.id !== "dash")) || d0.boards.find((b) => b.id !== "dash");
+      if (!board) { __widgets.addBoard({ id: "main", name: "Můj dashboard" }); board = __widgets.doc().boards.find((b) => b.id === "main"); }
+      const boardId = board.id;
+      __widgets.visit(boardId);   // 📌 on a page now pins here
+      const head = boardId === "dash"
+        ? '<div class="header pixel-panel pixel-font"><h1>DASHBOARD</h1><div class="farm-id">Farm #' + escHTML(FARM_ID) +
+          ' · nástěnka: 📌 z jiných stránek přidá widget sem, ⚙ u widgetu = jeho nastavení</div>' + _wBoardSwitcher(boardId) +
+          '<div>' + _wPinBtn("target-list", "🎯 přidat „Do limitu“ (kategorie a limit v ⚙)", { cat: "foods" }) + '</div>' + _dashVoicePanelHtml() + '</div>'
+        : '<div class="header pixel-panel pixel-font"><h1>📌 ' + escHTML(board.name) + '</h1><div class="farm-id">Farm #' + escHTML(FARM_ID) +
+          ' · připnuté panely, každý se svým nastavením</div>' + _wBoardSwitcher(boardId) +
+          '<div>' + _wPinBtn("target-list", "🎯 přidat „Do limitu“ (kategorie a limit v ⚙)", { cat: "foods" }) + '</div></div>';
       if (!FARM_ID) { app.innerHTML = head + '<div class="pixel-panel" style="padding:12px;font-size:0.55rem">Zadej Farm ID nahoře.</div>'; return; }
       if (!board.items.length) {
         app.innerHTML = head + '<div class="pixel-panel" style="padding:12px;font-size:0.55rem;line-height:1.7">Zatím tu nic není. ' +
@@ -19351,11 +19218,12 @@
       // need (the LEVELING plan waits on a ~20 s query) must not hold the whole board.
       const paint = () => {
         // navigated away, or a newer render (a removed or resized item) took over
-        if (getPage() !== "board" || seq !== _navSeq || mine !== _boardSeq) return;
+        if (getPage() !== page || seq !== _navSeq || mine !== _boardSeq) return;
         // Typing in an open settings panel: the next paint (settings change) will catch up.
         const act = document.activeElement;
         if (act && act.closest && act.closest("[data-pop]") && act.matches("input[type=number],input[type=range]")) return;
-        const board = __widgets.doc().boards[0];   // read at paint time
+        const board = __widgets.doc().boards.find((b) => b.id === boardId);   // read at paint time
+        if (!board) return;
         app.innerHTML = head + '<div class="w-board">' + board.items.map((it) => {
           const p = __widgets.peekData(it.type, FARM_ID, __store);
           return __widgets.renderItem(board.id, it, { data: p.data, ctx: _wCtx(it.type), fresh: __widgets.freshOf(p.entries), pending: p.pending });
@@ -19374,9 +19242,9 @@
       // Live like DASH: the farm is re-read every 3 minutes while the board is open.
       clearTimeout(window._boardLive);
       window._boardLive = setTimeout(() => {
-        if (getPage() !== "board" || mine !== _boardSeq || document.querySelector("[data-pop]")) return;
+        if (getPage() !== page || mine !== _boardSeq || document.querySelector("[data-pop]")) return;
         __store.invalidate({ res: "farm", farm: FARM_ID });
-        renderBoard();
+        renderBoard(boardIdArg);
       }, 3 * 60 * 1000);
     }
 

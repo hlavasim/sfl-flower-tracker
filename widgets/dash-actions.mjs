@@ -12,12 +12,16 @@ export const dashActions = {
   page: "dashboard",
   needs: (farmId) => ({ farm: { res: "farm", farm: farmId } }),
   // deliveries alone can be 50+ rows: the first 20 by default, the rest via the cog (top N / Filtr)
-  defaults: { sort: { key: "when", dir: "asc" }, rows: { mode: "top", top: 20, picked: [] } },
-  // the "➡ Craft / ➡ Catch" suggestions stop at these limits; blank = the page's LIMIT
-  optionsLabel: "Limity",
+  defaults: { sort: { key: "when", dir: "asc" }, rows: { mode: "top", top: 20, picked: [] },
+    opts: { showNonTicket: false, showAnimals: false, showFaction: true } },
+  // the "➡ Craft / ➡ Catch" suggestions stop at these limits (blank = the page's LIMIT); what to list
+  optionsLabel: "Volby",
   options: [
     { key: "dollLimit", label: "Panenky do (prázdné = LIMIT stránky)", kind: "number", min: 1, max: 9999 },
     { key: "crabLimit", label: "Korýši do (prázdné = LIMIT stránky)", kind: "number", min: 1, max: 9999 },
+    { key: "showNonTicket", label: "Bounties a chores bez ticketů", kind: "bool" },
+    { key: "showAnimals", label: "Odevzdání zvířat (Chicken/Cow/Sheep)", kind: "bool" },
+    { key: "showFaction", label: "Frakční položky (Goblin NPC, Mark odměny)", kind: "bool" },
   ],
   rowKey: (r) => `${r.category}|${r.label}`,
   rowLabel: (r) => `${r.category}: ${r.label}`,
@@ -26,7 +30,7 @@ export const dashActions = {
     { key: "when", label: "kdy", get: whenKey, fmt: (v, r) => r.status === "ready" ? `<span class="dash-ready-badge green">READY</span>`
       : r.status === "upcoming" ? (r.readyAt > 0 && r.readyAt < Infinity ? `<span class="dash-time growing-bed-time" data-ready="${r.readyAt}">${esc(r.countdown)}</span>` : "")
       : `<span class="dash-ready-badge blue">IDLE</span>` },
-    { key: "category", label: "kategorie", filter: true, fmt: (v, r) => `<span style="white-space:nowrap">${r.icon || ""} ${esc(v)}</span>` },
+    { key: "category", label: "typ", filter: true, fmt: (v, r) => `<span style="white-space:nowrap">${r.icon || ""} ${esc(v)}</span>` },
     { key: "label", label: "co", fmt: (v, r) => (r.labelHtml || esc(v)) +
       (r.detailHtml || r.detail ? `<div class="dash-detail">${r.detailHtml || esc(r.detail)}</div>` : "") },
     { key: "eff", label: "efektivita", get: (r) => (r.efficiency ? r.efficiency.value : null),
@@ -40,7 +44,8 @@ export const dashActions = {
     if (!farm) return { rows: [], footer: "", empty: "Chybí data farmy." };
     if (typeof ctx.dashActions !== "function") return { rows: [], footer: "", empty: "Seznam akcí z DASH se nenačetl." };
     const now = ctx.now || Date.now();
-    const limits = { dolls: opts.dollLimit ?? null, crabs: opts.crabLimit ?? null };
+    const limits = { dolls: opts.dollLimit ?? null, crabs: opts.crabLimit ?? null,
+      filters: { showNonTicket: !!opts.showNonTicket, showAnimals: !!opts.showAnimals, showFaction: opts.showFaction !== false } };
     const rows = ctx.dashActions(farm, limits).map((a) => ({
       ...a,
       countdown: a.status === "upcoming" && ctx.countdown ? ctx.countdown(a.readyAt - now) : "",

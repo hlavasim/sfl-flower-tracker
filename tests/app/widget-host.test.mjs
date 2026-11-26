@@ -199,3 +199,31 @@ test("review #3: a widget that throws still offers its cog with the reset button
   h.handle("page:t", "cog", "");
   assert.match(h.renderPage("t", { data: DATA }), /data-action="reset"/);
 });
+
+test("pin goes to the board visited last", () => {
+  const storage = mem();
+  storage.setItem(BOARDS_KEY, JSON.stringify({ schema: 1, last: "dash", page: {},
+    boards: [{ id: "main", name: "M", items: [] }, { id: "dash", name: "DASH", items: [] }] }));
+  const h = createHost({ registry: { t: T }, storage });
+  h.handle("page:t", "pin", "");
+  assert.deepStrictEqual(h.doc().boards.map((b) => b.items.length), [0, 1]);
+});
+
+test("update(fn) applies a document change and saves it", () => {
+  const storage = mem();
+  const h = createHost({ registry: { t: T }, storage });
+  h.update((d) => ({ ...d, boards: [...d.boards, { id: "x", name: "X", items: [] }] }));
+  assert.deepStrictEqual(JSON.parse(storage.getItem(BOARDS_KEY)).boards.map((b) => b.id), ["main", "x"]);
+});
+
+test("board operations for the page: add (once), visit = the pin target, remove", () => {
+  const h = createHost({ registry: { t: T }, storage: mem() });
+  h.addBoard({ id: "dash", name: "DASH", items: [{ i: "a", type: "t", w: 12 }] });
+  h.addBoard({ id: "dash", name: "again" });
+  assert.deepStrictEqual(h.doc().boards.map((b) => [b.id, b.items.length]), [["main", 0], ["dash", 1]]);
+  h.visit("dash");
+  h.handle("page:t", "pin", "");
+  assert.strictEqual(h.doc().boards[1].items.length, 2);
+  h.removeBoard("dash");
+  assert.deepStrictEqual(h.doc().boards.map((b) => b.id), ["main"]);
+});

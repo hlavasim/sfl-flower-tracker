@@ -1,7 +1,8 @@
 // The boards document, kept in one synced localStorage key:
 //   { schema: 1,
 //     boards: [{ id, name, items: [{ i, type, settings, w, h }] }],   // w = columns of 12, h = rows (0 = auto)
-//     page:   { [widgetType]: settings } }                            // each widget on its own page
+//     page:   { [widgetType]: settings },                             // each widget on its own page
+//     last:   boardId }                                                // the board visited last = where 📌 pins
 // Every update returns a new document. A malformed document reads as empty: it must never break a page.
 
 export const BOARDS_KEY = "sfl_boards";
@@ -65,7 +66,9 @@ export function parseBoards(raw) {
     items: (Array.isArray(b.items) ? b.items : []).map(cleanItem).filter(Boolean),
   }));
   const page = Object.fromEntries(Object.entries(isObj(d.page) ? d.page : {}).filter(([, v]) => isObj(v)).map(([k, v]) => [k, cleanSettings(v)]));
-  return { schema: 1, boards: boards.length ? boards : emptyBoards().boards, page };
+  const out = { schema: 1, boards: boards.length ? boards : emptyBoards().boards, page };
+  if (typeof d.last === "string" && out.boards.some((b) => b.id === d.last)) out.last = d.last;
+  return out;
 }
 
 const copy = (v) => JSON.parse(JSON.stringify(v));
@@ -105,6 +108,28 @@ export function resizeItem(doc, boardId, i, { w, h }) {
 export function updateItemSettings(doc, boardId, i, settings) {
   return withBoard(doc, boardId, (items) => items.map((x) => (x.i === i ? { ...x, settings: copy(settings) } : x)));
 }
+
+// Another board (DASH is one, seeded with its widgets on the first visit). An existing id is left as it is.
+export function addBoard(doc, { id, name, items = [] }) {
+  if (typeof id !== "string" || !id || id.includes(":") || doc.boards.some((b) => b.id === id)) return doc;
+  return { ...doc, boards: [...doc.boards, { id, name: name || "Dashboard", items: items.map(cleanItem).filter(Boolean) }] };
+}
+
+// Never the last board: a page always has one to show.
+export function removeBoard(doc, id) {
+  if (doc.boards.length < 2 || !doc.boards.some((b) => b.id === id)) return doc;
+  const out = { ...doc, boards: doc.boards.filter((b) => b.id !== id) };
+  if (out.last === id) delete out.last;
+  return out;
+}
+
+export function setLastBoard(doc, id) {
+  if (doc.last === id || !doc.boards.some((b) => b.id === id)) return doc;
+  return { ...doc, last: id };
+}
+
+// Where 📌 on a page pins: the board visited last, else the first one.
+export const pinTarget = (doc) => (doc.last && doc.boards.some((b) => b.id === doc.last) ? doc.last : doc.boards[0].id);
 
 export const pageSettings = (doc, type) => (doc.page && doc.page[type]) || {};
 
