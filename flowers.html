@@ -5580,7 +5580,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.56</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.57</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5607,6 +5607,9 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.57", items: [
+          { t: "fix", text: "LEVELING, TICKETY and FISHING load about 15 s faster: reading your recorded weeks took 12-21 s (and sometimes failed); it now takes 0.3 s with exactly the same data." },
+        ] },
         { ver: "v6.56", items: [
           { t: "fix", text: "WORLD: the first visit after each new daily dump no longer times out while the statistics are being counted (that one query may now take up to 55 s; everything else keeps the 20 s limit)." },
         ] },
