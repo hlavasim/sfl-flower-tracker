@@ -176,7 +176,7 @@ test("📱 glance model, resource market: the best FLOWER per energy, the priced
   assert.strictEqual(petsMarket.look, "list-2");
   assert.deepStrictEqual(m.head, { value: top.ratio.toFixed(4), cap: `${top.res} · 🌸 per ⚡`, hero: `<img data-i="${top.res}">` });
   assert.deepStrictEqual([m.items[0].name, m.items[0].pct], [top.res, 100]);
-  assert.strictEqual((renderLook(m, "list-2").html.match(/class="gx-row"/g) || []).length, Math.min(6, m.items.length));
+  assert.strictEqual((renderLook(m, "list-2").html.match(/class="gx-row[" ]/g) || []).length, Math.min(6, m.items.length));
   assert.ok(looksFor(m).length >= 3);
   assert.match(petsMarket.glanceModel({ pets: { ...PETS, p2pPrices: {} } }, CTX).empty, /No fetchable resource has a price/);
   assert.match(petsMarket.glanceModel({}, CTX).empty, /No price data/);

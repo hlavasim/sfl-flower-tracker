@@ -128,7 +128,7 @@ test("📱 glance models: every nodes widget has a model and a natural look, no 
 });
 
 const D = { farm, asc };
-const rowsIn = (h) => (h.match(/class="gx-row"/g) || []).length;
+const rowsIn = (h) => (h.match(/class="gx-row[" ]/g) || []).length;
 
 test("📱 glance summary: obsidian in hand with how far it goes to the cheapest node; the stock, the sunstone price", () => {
   const m = nodesSummary.glanceModel(D, CTX, {});

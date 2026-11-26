@@ -75,7 +75,7 @@ test("📱 glance model: the share already in core with a ring, the three status
   assert.strictEqual(t.items.length, n);
   assert.strictEqual(t.items[0].pct, 100, "the biggest table first");
   assert.ok(t.items.every((x, i) => !i || x.value <= t.items[i - 1].value));
-  assert.strictEqual((renderLook(t, "list-4").html.match(/class="gx-row"/g) || []).length, Math.min(8, n));
+  assert.strictEqual((renderLook(t, "list-4").html.match(/class="gx-row[" ]/g) || []).length, Math.min(8, n));
   assert.ok(looksFor(t).length >= 3);
   assert.deepStrictEqual(constantsTables.glanceModel({}, {}, {}), { empty: "Loading the constants…" });
 });

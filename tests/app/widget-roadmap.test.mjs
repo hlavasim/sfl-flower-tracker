@@ -214,7 +214,7 @@ test("📱 glance models: income (now → after the plan, where it comes from, a
   assert.deepStrictEqual([b.items[0].name, b.items[0].icon], [plan[0].name, `<img data-i="${plan[0].name}">`], "the next buy first");
   assert.strictEqual(b.head.hero, `<img data-i="${plan[0].name}">`);
   assert.match(b.foot, new RegExp(`^${plan.length} in the plan · next `));
-  assert.strictEqual((renderLook(b, "list-4").html.match(/class="gx-row"/g) || []).length, Math.min(8, plan.length));
+  assert.strictEqual((renderLook(b, "list-4").html.match(/class="gx-row[" ]/g) || []).length, Math.min(8, plan.length));
   assert.ok(looksFor(b).length >= 3);
 });
 

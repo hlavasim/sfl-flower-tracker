@@ -58,7 +58,10 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     if (!id && /^[124]x[124]$/.test(v2 || "")) id = offered.find((x) => templateById(x).size === v2) || null;
     // the natural look counts as offered when the board shows its narrow twin instead
     const ok = (x) => !!x && (offered.includes(x) || (templateById(x) && offered.includes(templateById(x).narrow)));
-    if (!id) id = ok(widget.look) ? widget.look : offered[0] || "number";
+    // natural look not offered (e.g. a list that would hide one or two things): the same kind of look
+    // that is (a taller "Number + list"), else the first
+    const kin = () => { const p = templateById(widget.look)?.pres; return p ? offered.find((x) => templateById(x).pres === p) : null; };
+    if (!id) id = ok(widget.look) ? widget.look : kin() || offered[0] || "number";
     return { id, offered };
   }
   // every offered look of this model, rendered small to pick from; action = a board copy's picker

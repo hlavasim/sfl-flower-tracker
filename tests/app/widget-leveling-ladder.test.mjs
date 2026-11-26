@@ -83,7 +83,7 @@ test("📱 glance model: total days to the target ascension; every ascension cou
   assert.match(it5.sub, /^[\d.]+[kM]? FLOWER$/);
   assert.ok(Math.abs(it5.at - (t.now + t.cumDays * 86400000)) < 1, "a live countdown to the day A5 is done");
   assert.deepStrictEqual(m.tiles.slice(0, 3).map((x) => x.label), ["days", "FLOWER", "target"]);
-  assert.strictEqual((renderLook(m, "list-4").html.match(/class="gx-row"/g) || []).length, Math.min(8, rows.length));
+  assert.strictEqual((renderLook(m, "list-4").html.match(/class="gx-row[" ]/g) || []).length, Math.min(8, rows.length));
   assert.match(renderLook(m, "list-4").html, /<span class="g-at" data-at="\d+">\d+d \d+h<\/span>/);
   assert.ok(looksFor(m).length >= 3);
   assert.deepStrictEqual(W.glanceModel({ farm: null }, {}), { empty: "No farm data." });

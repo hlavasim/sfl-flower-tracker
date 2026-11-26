@@ -108,3 +108,11 @@ test("the sheet carries every control a phone needs: looks, settings, remove fro
   h.handle(id(), "remove", "");
   assert.strictEqual(h.doc().boards[0].items.length, 0);
 });
+
+test("a natural look that would hide one or two things gives way to the same kind that shows them all", () => {
+  const L = { ...G, type: "l", look: "number-list-2" };
+  const h = createHost({ registry: { l: L }, storage: mem() });
+  const four = { list: [{ n: "a" }, { n: "b" }, { n: "c" }, { n: "d" }] };
+  assert.strictEqual(h.lookPreview("l", { data: four }).id, "number-list-t");
+  assert.strictEqual(h.lookPreview("l", { data: { list: [{ n: "a" }, { n: "b" }, { n: "c" }] } }).id, "number-list-2");
+});

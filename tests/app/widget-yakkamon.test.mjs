@@ -207,7 +207,7 @@ test("📱 glance model, planner: the week-1 deposit; every tranche (bar = share
   assert.deepStrictEqual(m.items[0], { icon: "💰", name: "Week 1", sub: "Aug 10 · 3.0×", value: "943k", tone: "ok", pct: 100 });
   assert.deepStrictEqual(m.tiles.map((t) => t.label), ["Week 1", "Top-ups", "Total"]);
   assert.strictEqual(m.tiles[2].value, "960k");
-  assert.strictEqual((renderLook(m, "list-4").html.match(/class="gx-row"/g) || []).length, 8);
+  assert.strictEqual((renderLook(m, "list-4").html.match(/class="gx-row[" ]/g) || []).length, 8);
   assert.match(Y.ykPlanner.glanceModel({}, ctx({ live: null })).empty, /Waiting for the live FLOWER and BTC prices/);
 });
 

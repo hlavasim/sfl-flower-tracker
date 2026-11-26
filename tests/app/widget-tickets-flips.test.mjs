@@ -64,7 +64,7 @@ test("📱 tickets glance model: sources left with a ring and their tickets; ope
   assert.deepStrictEqual([m.items[5].name, m.items[5].chip], ["Betty", { text: "done", tone: "ok" }]);
   assert.match(renderLook(m, "number").html, /<div class="gx-num(?: gx-num-long)?">5<small>left<\/small><\/div><div class="gx-cap">\+19 tickets this week<\/div>/);
   assert.match(renderLook(m, "number").html, /class="gx-ring g-accent"/);
-  assert.strictEqual((renderLook(m, "list-1").html.match(/class="gx-row"/g) || []).length, 3);
+  assert.strictEqual((renderLook(m, "list-1").html.match(/class="gx-row[" ]/g) || []).length, 3);
   assert.ok(looksFor(m).length >= 3);
   const done = G({ sources: SOURCES.map((x) => ({ ...x, done: true })) });
   assert.deepStrictEqual([done.head.value, done.head.tone, done.head.cap], ["✓", "ok", "all done this week"]);

@@ -51,20 +51,25 @@ function headBlock(h, { ring = true, big = "", top = false, meter = false } = {}
 }
 // stack: a narrow column — the tag goes under the name (coloured) instead of a chip beside it, so the
 // name keeps its width
+// A list that cannot show everything says so: its last slot is "+N more" (as the icon grids do).
+const cut = (items, n) => (items.length > n ? [items.slice(0, Math.max(1, n - 1)), items.length - Math.max(1, n - 1)] : [items, 0]);
+const moreRow = (k, cls) => (k ? `<div class="${cls} gx-more-row">+${k} more</div>` : "");
 function rowsBlock(items, n, now, cols = 1, stack = false) {
-  return `<div class="gx-rows${cols > 1 ? ` gx-cols-${cols}` : ""}">` + items.slice(0, n).map((it) => {
+  const [shown, rest] = cut(items, n);
+  return `<div class="gx-rows${cols > 1 ? ` gx-cols-${cols}` : ""}">` + shown.map((it) => {
     const t = tagOf(it, now);
     if (stack) return `<div class="gx-row"><span class="gx-ic">${icon(it)}</span><div class="gx-n">${esc(it.name)}` +
       `${t ? `<div class="gx-sub-tag${tone(t.tone)}">${t.html}</div>` : it.sub ? `<div>${esc(it.sub)}</div>` : ""}</div></div>`;
     return `<div class="gx-row"><span class="gx-ic">${icon(it)}</span><div class="gx-n">${esc(it.name)}${it.sub ? `<div>${esc(it.sub)}</div>` : ""}</div>` +
       (t ? `<span class="gx-chip${tone(t.tone)}">${t.html}</span>` : "") + `</div>`;
-  }).join("") + `</div>`;
+  }).join("") + moreRow(rest, "gx-row") + `</div>`;
 }
 function linesBlock(items, n, now, cols = 1) {
-  return `<div class="gx-lines${cols > 1 ? ` gx-cols-${cols}` : ""}">` + items.slice(0, n).map((it) => {
+  const [shown, rest] = cut(items, n);
+  return `<div class="gx-lines${cols > 1 ? ` gx-cols-${cols}` : ""}">` + shown.map((it) => {
     const t = tagOf(it, now);
     return `<div class="gx-line"><span>${esc(it.name)}</span>${t ? `<b class="${tone(t.tone).trim()}">${t.html}</b>` : ""}</div>`;
-  }).join("") + `</div>`;
+  }).join("") + moreRow(rest, "gx-line") + `</div>`;
 }
 // Icons in c equal columns (1-4), rows centred; the last cell says "+N" when more than fit.
 function iconsBlock(items, cap, cols, now) {
@@ -141,7 +146,7 @@ export const TEMPLATES = [
   T("lines-t", "1x2", "lines", ["items"], () => 12, (m, now) => linesBlock(it(m), 12, now), { name: "Lines" }),
   T("tiles-t", "1x2", "tiles", ["tiles3"], () => 6, (m) => tilesBlock(tl(m), 6, 1, true), { fill: GRID, name: "Numbers" }),
   // 2×2 — the overview
-  T("overview-4", "2x2", "overview", ["head", "items", "tiles"], () => 3, (m, now) => headBlock(m.head, { top: true }) + tilesBlock(tl(m), 3, 3) + rowsBlock(it(m), 3, now), { fill: 0.5, name: "Overview" }),
+  T("overview-4", "2x2", "overview", ["head", "items", "tiles"], () => 4, (m, now) => headBlock(m.head, { top: true }) + tilesBlock(tl(m), 3, 3) + rowsBlock(it(m), 4, now), { fill: 0.5, name: "Overview" }),
   T("icons-4", "2x2", "icons", ["icons"], () => 16, (m, now) => iconsBlock(iconsOf(m), 16, iconCols(Math.min(16, iconsOf(m).length), 2, 2), now), { fill: GRID, name: "Icons" }),
   T("chart-4", "2x2", "chart-list", ["head", "series"], () => 3, (m, now) => headBlock(m.head, { ring: false }) + sparkSvg(m.series) + rowsBlock(it(m), 3, now), { fill: 0, name: "Chart + list" }),
   T("list-4", "2x2", "list", ["items"], () => 8, (m, now) => rowsBlock(it(m), 8, now), { name: "List" }),
@@ -194,13 +199,19 @@ export const renderable = (t, m) => t.needs.every((n) => has(m, n));
 // smaller look of the same presentation. In catalogue order (by size).
 export function looksFor(m, { cols = 12 } = {}) {
   const out = [], seen = new Map();   // pres → the most things a look of it already shows
+  const cutPres = new Set();          // kinds whose smaller look would hide one or two things
   for (const t of TEMPLATES) {
     if (!renderable(t, m)) continue;
     let shown = 1;
     if (t.slots) {
       const slots = t.slots(m), n = countFor(t, m);
       shown = Math.min(n, slots);
-      if (slots && shown / slots < t.fill) continue;
+      // a list that would hide just one or two things looks broken ("4/4" over three rows): the next
+      // look of its kind that shows them all is offered instead, however full; long lists end in "+N more"
+      if (!/icons|strip|tiles/.test(t.pres) && n > slots && n - slots <= 2) { cutPres.add(t.pres); continue; }
+      const roomy = cutPres.has(t.pres) && shown === n;
+      if (slots && shown / slots < t.fill && !roomy) continue;
+      cutPres.delete(t.pres);
     }
     if (seen.has(t.pres) && seen.get(t.pres) >= shown && t.slots) continue;
     if (seen.has(t.pres) && !t.slots) continue;

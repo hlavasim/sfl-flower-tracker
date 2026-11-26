@@ -141,3 +141,15 @@ test("long countdowns read as months / years; initials skip symbols; three tiles
   const ov = renderLook({ head: { value: 1 }, items: [{ name: "a" }, { name: "b" }, { name: "c" }], tiles: [{ label: "a", value: 1 }, { label: "b", value: 2 }, { label: "c", value: 3 }] }, "overview-4").html;
   assert.match(ov, /class="gx-tiles" style="--c:3"/, "a 3-column row, not the 2-column orphan rule");
 });
+
+test("a list never hides one or two things: 4 things get looks that show all 4; a long list ends in +N more", () => {
+  const m = { head: { value: 4, unit: "/4", cap: "all protected", ring: 1 }, items: four, tiles: [{ label: "a", value: 1 }, { label: "b", value: 2 }] };
+  const offered = looksFor(m);
+  for (const id of ["list-1", "number-list-2", "next-2"]) assert.ok(!offered.includes(id), `${id} would show 3 of 4`);
+  assert.ok(offered.includes("lines-1") && offered.includes("overview-4"));
+  assert.strictEqual((renderLook(m, "overview-4", { now: NOW }).html.match(/class="gx-row"/g) || []).length, 4, "the overview shows all four");
+  const many = { items: Array.from({ length: 20 }, (_, k) => ({ name: `n${k}` })) };
+  const html = renderLook(many, "list-4", { now: NOW }).html;
+  assert.strictEqual((html.match(/class="gx-row"/g) || []).length, 7);
+  assert.match(html, /gx-more-row">\+13 more</);
+});

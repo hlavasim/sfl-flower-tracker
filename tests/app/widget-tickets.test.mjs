@@ -186,7 +186,7 @@ test("reference: last auction's lots at today's prices, with the current items l
 // ── 📱 glance models ──
 const G = (w, c = ctx(), d = D) => w.glanceModel({ tickets: d }, c, {});
 const GOAL = { goal: () => ({ item: "Salt Rug", est: 100, unit: "flower", tickets: 5000 }) };
-const rowsIn = (html) => (html.match(/class="gx-row"/g) || []).length;
+const rowsIn = (html) => (html.match(/class="gx-row[" ]/g) || []).length;
 
 test("📱 glance: every widget has a model and a natural look from the catalogue, no hand-written face; nothing loaded → the message", () => {
   for (const w of W.TICKETS_WIDGETS) {

@@ -239,7 +239,7 @@ test("all boosts: every boost with its parsed effects, sorted by type then name"
 
 // ── 📱 glance models ──
 const gm = (w, data, ctx, opts) => w.glanceModel(data, ctx, opts || {});
-const rowsIn = (html) => (html.match(/class="gx-row"/g) || []).length;
+const rowsIn = (html) => (html.match(/class="gx-row[" ]/g) || []).length;
 
 test("📱 glance models: every POWER widget has a model and a natural look, no hand-written face; no data = empty", () => {
   const LOOKS = { "power-best-buys": "number-list-2", "power-categories": "number-list-2", "power-seed-costs": "list-4", "power-tool-costs": "list-4" };

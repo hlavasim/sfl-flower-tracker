@@ -154,7 +154,7 @@ test("📱 glance model, steps: covered / total with a ring; the steps, pending 
     assert.ok(["on pace", "stuck"].includes(m.items[0].chip.text));
   }
   assert.match(m.items[0].name, /^A1·exp\d+|A1 upgrade$/);
-  assert.strictEqual((renderLook(m, "list-4").html.match(/class="gx-row"/g) || []).length, Math.min(8, out.rows.length));
+  assert.strictEqual((renderLook(m, "list-4").html.match(/class="gx-row[" ]/g) || []).length, Math.min(8, out.rows.length));
   assert.ok(looksFor(m).length >= 3);
   // a finished set: islands say ✓, an ascension outside the plan says why
   assert.deepStrictEqual(ascensionIsland.glanceModel({ asc: d }, CTX, {}), { head: { value: "✓", tone: "ok", cap: "every island complete" } });

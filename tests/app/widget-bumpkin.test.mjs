@@ -192,7 +192,7 @@ test("📱 glance models: XP (the level with a ring, the numbers as tiles), kitc
   assert.deepStrictEqual(Object.keys(k.items[0]), ["icon", "name", "sub", "value", "pct"]);
   assert.match(k.items.find((i) => i.name === "Fire Pit").sub, /^Pizza Margherita · /);
   assert.ok(Math.abs(k.items.reduce((a, i) => a + i.pct, 0) - 100) < 1e-6, "shares of the day add up");
-  assert.strictEqual((renderLook(k, "number-list-2").html.match(/class="gx-row"/g) || []).length, 3);
+  assert.strictEqual((renderLook(k, "number-list-2").html.match(/class="gx-row[" ]/g) || []).length, 3);
   assert.ok(looksFor(k).length >= 3);
 
   const p = bumpkinPlanWidget.glanceModel({ farm, cook }, CTX);

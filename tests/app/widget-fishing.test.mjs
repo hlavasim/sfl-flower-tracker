@@ -122,7 +122,7 @@ test("today: the worm to cast, a bar per worm, the seasons table; treasure with 
   assert.match(t, new RegExp(`${(46 * 0.4 + 40 * 0.1).toFixed(2)} FLOWER`));
 });
 
-const rowsIn = (html) => (html.match(/class="gx-row"/g) || []).length;
+const rowsIn = (html) => (html.match(/class="gx-row[" ]/g) || []).length;
 
 test("📱 glance models: every fishing widget has a model and a natural look, no hand-written face; no model → loading, an error → said", () => {
   for (const w of FISHING_WIDGETS) {
@@ -149,7 +149,8 @@ test("📱 glance models: today = the worm to cast, the three worms; bait = the 
   assert.strictEqual(b.items.length, M.baits.filter((x) => x.complete).length);
   assert.deepStrictEqual([b.items[0].name, b.items[0].sub, b.items[0].value, b.items[0].tone], ["Crab Stick", "can make 7 · 4h", "0.11 🌸", "ok"]);
   assert.strictEqual(rowsIn(renderLook(b, "number-list-2").html), 3);
-  assert.ok(looksFor(b).includes(fishingBait.look), "its natural look is offered");
+  // 4-5 baits: the 2×1 "Number + list" would hide one or two, so the board uses the taller one
+  assert.ok(!looksFor(b).includes("number-list-2") && looksFor(b).includes("number-list-t"), "a look that shows every bait is offered");
 });
 
 test("📱 glance models: safe to age = the free fish with a salt ring, the held fish; Marvels = maps left, cheapest first, then the caught", () => {
