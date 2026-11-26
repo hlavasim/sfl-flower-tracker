@@ -2884,6 +2884,60 @@
     .support-addr button { background: var(--c-accent); color: #fff; border: none; border-radius: 8px; padding: 6px 12px; font: inherit; font-weight: 600; cursor: pointer; }
     .support-meta { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--c-line); line-height: 1.8; }
     .support-meta a, .support-meta .changelog-toggle { color: var(--c-accent); text-decoration: none; cursor: pointer; }
+    /* TREASURY · SALES · MY TRADES · MARKS · FLIPS (the market pages; .v-mkt-* is shared by the five) */
+    .v-mkt-item { white-space: nowrap; }
+    .v-mkt-item img { height: 1.2em; vertical-align: -0.25em; margin-right: 3px; }
+    .v-mkt-note { border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; font-size: 12.5px; line-height: 1.5; }
+    .v-mkt-warn { background: rgba(224,179,74,0.12); color: var(--c-yellow); }
+    .v-mkt-ok { background: rgba(95,179,107,0.12); color: var(--c-green); }
+    .v-mkt-line { margin: 0 0 8px; color: var(--c-muted); }
+    .v-mkt-btn, .v-mkt-chip { font-family: var(--c-font); font-size: 12.5px; padding: 5px 12px; border-radius: 999px; background: var(--c-card2);
+      border: 1px solid var(--c-line); color: var(--c-text); cursor: pointer; }
+    .v-mkt-btn:hover, .v-mkt-chip:hover { border-color: var(--c-accent); }
+    .v-mkt-chip.on { background: var(--c-text); color: var(--c-bg); border-color: var(--c-text); font-weight: 600; }
+    .v-mkt-search, .w-page-head select, .v-marks-budget input { font-family: var(--c-font); font-size: 13px; background: var(--c-bg); color: var(--c-text);
+      border: 1px solid var(--c-line); border-radius: 8px; padding: 5px 8px; }
+    .v-mkt-split { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+    .v-mkt-split .v-bar { flex: 1; }
+    .v-mkt-stack { display: flex; height: 8px; min-width: 120px; background: var(--c-line); border-radius: 999px; overflow: hidden; }
+    .v-mkt-stack > i { display: block; height: 100%; }
+    .v-mkt-s1 { background: var(--c-yellow); } .v-mkt-s2 { background: rgba(224,179,74,0.35); } .v-mkt-s3 { background: rgba(106,167,224,0.55); }
+    .v-mkt-key { display: inline-block; width: 12px; height: 8px; border-radius: 2px; vertical-align: middle; }
+    .w-frame .flip-good { color: var(--c-green); } .w-frame .flip-bad { color: var(--c-red); }
+    .v-treasury-top { display: grid; grid-template-columns: minmax(260px, 1fr) 2fr; gap: 0 16px; }
+    @media (max-width: 800px) { .v-treasury-top { grid-template-columns: 1fr; } }
+    .v-treasury-total { font-family: var(--c-font); font-size: 28px; font-weight: 700; color: var(--c-text); }
+    .v-treasury-total img, .v-treasury-rates img { height: 0.9em; vertical-align: -0.1em; }
+    .v-treasury-rates { font-size: 12px; }
+    .v-treasury-ico { font-size: 20px; width: 26px; text-align: center; flex: none; }
+    .v-treasury-share { display: flex; align-items: center; gap: 8px; min-width: 140px; }
+    .v-treasury-share .v-bar { flex: 1; }
+    .v-treasury-num { color: var(--c-muted); font-variant-numeric: tabular-nums; }
+    .v-treasury-note { margin: -4px 0 10px; font-size: 12px; }
+    .v-treasury-coin select { margin-left: 4px; }
+    .v-sales-first { color: var(--c-yellow); } .v-sales-behind { color: #e8955a; }
+    .v-sales-boost { color: var(--c-blue) !important; }
+    .v-sales-live { color: var(--c-muted) !important; margin-top: 2px; }
+    .v-sales-pet { display: inline-block; width: 26px; height: 26px; flex: none; border-radius: 6px; background-size: cover; background-position: center; }
+    .v-sales-sold { color: var(--c-green); } .v-sales-bought { color: var(--c-blue); }
+    .v-sales-wl-mode { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 0 0 10px; }
+    .v-sales-wl details, .v-sales-wl > div { margin-top: 8px; }
+    .v-sales-legacy, .v-sales-legacy * { font-family: var(--c-font) !important; }
+    .v-sales-legacy:empty { display: none; }
+    .v-sales-legacy .sales-section-header, .v-sales-legacy .market-overview { background: transparent; border: none; box-shadow: none; padding: 0 0 8px; margin: 0; }
+    .v-sales-legacy .sales-section-header h3, .v-sales-legacy .market-overview-title { font-size: 15px; font-weight: 600; color: var(--c-text); letter-spacing: 0; }
+    .v-sales-legacy .sales-section-body { background: transparent; border: none; box-shadow: none; }
+    .v-sales-legacy .ph-row, .v-sales-legacy .volume-leader-row { border-top: 1px solid var(--c-row); border-bottom: none; font-size: 13px; }
+    .v-sales-legacy .ph-row-name { color: var(--c-text); font-size: 13px; } .v-sales-legacy .ph-row-sub { color: var(--c-dim); font-size: 12px; }
+    .v-sales-legacy .ph-search { background: var(--c-bg); color: var(--c-text); border: 1px solid var(--c-line); border-radius: 8px; font-size: 13px; }
+    .v-sales-legacy .ph-tab { border-radius: 999px; font-size: 12px; }
+    .v-marks-controls { display: inline-flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .v-marks-budget { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-family: var(--c-font); font-size: 13px; color: var(--c-muted); margin: 12px 0 -4px; }
+    .v-marks-budget input[type=range] { flex: 1; max-width: 300px; accent-color: var(--c-accent); padding: 0; }
+    .v-marks-budget b { color: var(--c-text); }
+    .w-table tr.v-marks-me { background: rgba(217,119,87,0.12); }
+    .v-marks-hot { color: var(--c-yellow); }
+    .v-marks-stock { display: flex; flex-wrap: wrap; gap: 2px 12px; }
     .w-pinmenu { position: fixed; z-index: 1000; min-width: 220px; background: var(--bg-card); border: 2px solid var(--border-brown);
       box-shadow: 0 6px 18px rgba(0,0,0,0.6); padding: 4px; font-family: 'Courier New', monospace; font-size: 0.85rem; }
     .w-pinmenu-h { color: var(--sunpetal); font-weight: bold; padding: 4px 8px; }
@@ -11933,101 +11987,26 @@
       return __engine.computeFarmValue(farm, td, coinMode, petPrices);
     }
 
-    let treasuryDetailOpen = {};
     let treasuryCoinMode = localStorage.getItem("sfl_coin_mode") || "betty";
     let cachedTreasuryData = null;
+    let _treasuryFetchedAt = 0;
 
     async function setCoinMode(mode) {
       treasuryCoinMode = mode;
       localStorage.setItem("sfl_coin_mode", mode);
       if (cachedTreasuryData && cachedFarmData) {
-        try { cachedTreasuryData = await fetchTreasuryData(); } catch {}
+        try { cachedTreasuryData = await fetchTreasuryData(); _treasuryFetchedAt = Date.now(); } catch {}
         renderTreasuryWithData(cachedFarmData, cachedTreasuryData);
       }
     }
 
-    function toggleTreasuryDetail(cat) {
-      treasuryDetailOpen[cat] = !treasuryDetailOpen[cat];
-      const grid = document.getElementById("treasury-detail-" + cat);
-      const arrow = document.getElementById("treasury-arrow-" + cat);
-      if (grid) grid.style.display = treasuryDetailOpen[cat] ? "block" : "none";
-      if (arrow) arrow.textContent = treasuryDetailOpen[cat] ? "▼" : "▶";
-    }
+    // What the TREASURY widgets need from the page (registered in _wCtxMap with the market pages' ones).
+    function _wTreasuryCtx() { return { catColors: TREASURY_CAT_COLORS, icon: _mktIcon }; }
+    // The detail tables the page shows, one copy of 📦 Treasury items each (the category fixed).
+    const treasuryPageCats = ["resources", "treasures", "collectibles", "produced", "wearables"];
 
-    function renderPieChart(totals) {
-      const cats = [
-        { key: "resources", label: "Resources", color: TREASURY_CAT_COLORS.resources },
-        { key: "treasures", label: "Treasures", color: TREASURY_CAT_COLORS.treasures },
-        { key: "collectibles", label: "Collectibles", color: TREASURY_CAT_COLORS.collectibles },
-        { key: "produced", label: "Produced", color: TREASURY_CAT_COLORS.produced },
-        { key: "wearables", label: "Wearables", color: TREASURY_CAT_COLORS.wearables },
-        { key: "pets", label: "Pets", color: TREASURY_CAT_COLORS.pets },
-        { key: "listings", label: "Listings", color: TREASURY_CAT_COLORS.listings },
-        { key: "liquid", label: "Liquid", color: TREASURY_CAT_COLORS.liquid },
-      ];
-      const grand = totals.grand || 1;
-      let gradParts = [];
-      let cumPct = 0;
-      for (const c of cats) {
-        const pct = (totals[c.key] / grand) * 100;
-        if (pct < 0.1) continue;
-        gradParts.push(`${c.color} ${cumPct}% ${cumPct + pct}%`);
-        cumPct += pct;
-      }
-      if (gradParts.length === 0) gradParts.push("#333 0% 100%");
-      const gradient = `conic-gradient(${gradParts.join(", ")})`;
-
-      let legendHTML = "";
-      for (const c of cats) {
-        const pct = ((totals[c.key] / grand) * 100).toFixed(1);
-        legendHTML += `<div><span class="treasury-pie-swatch" style="background:${c.color}"></span>${c.label}: ${pct}%</div>`;
-      }
-
-      return `<div class="treasury-pie-wrap pixel-panel">
-        <div class="treasury-pie" style="background:${gradient}"></div>
-        <div class="treasury-pie-legend pixel-font">${legendHTML}</div>
-      </div>`;
-    }
-
-    function renderTreasuryItemRows(items) {
-      if (items.length === 0) return '<div style="padding:12px;text-align:center;font-size: 0.625rem;color:var(--text-dim)">No items found</div>';
-      return items.map(item => {
-        const imgUrl = getItemIcon(item.name);
-        return `<div class="treasury-item-row">
-          <img class="treasury-item-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">
-          <div class="treasury-item-name" title="${escHTML(item.name)}">${escHTML(item.name)}</div>
-          <div class="treasury-item-qty">×${item.qty}</div>
-          <div class="treasury-item-unit">${formatSFL(item.unitPrice)}</div>
-          <div class="treasury-item-total">${formatSFL(item.total)}</div>
-        </div>`;
-      }).join("");
-    }
-
-    function renderCategoryCard(key, icon, label, total, grandTotal, items) {
-      const pct = grandTotal > 0 ? ((total / grandTotal) * 100) : 0;
-      const color = TREASURY_CAT_COLORS[key];
-      const top5 = items.slice(0, 5);
-      let topHTML = "";
-      for (const item of top5) {
-        const imgUrl = getItemIcon(item.name);
-        topHTML += `<div class="treasury-cat-top-item">
-          <img src="${imgUrl}" onerror="this.style.display='none'" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated">
-          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHTML(item.name)}</span>
-          <span style="color:var(--sunpetal)">${formatSFL(item.total)}</span>
-        </div>`;
-      }
-      return `<div class="treasury-cat-card pixel-panel" onclick="toggleTreasuryDetail('${key}')">
-        <div class="treasury-cat-header">
-          <span class="treasury-cat-icon">${icon}</span>
-          <span class="treasury-cat-name pixel-font">${label}</span>
-        </div>
-        <div class="treasury-cat-value pixel-font">${formatSFL(total)} ${sflIcon()}</div>
-        <div class="treasury-cat-pct pixel-font">${pct.toFixed(1)}%</div>
-        <div class="treasury-cat-bar"><div class="treasury-cat-bar-fill" style="width:${pct.toFixed(1)}%;background:${color}"></div></div>
-        <div class="treasury-cat-top">${topHTML}</div>
-      </div>`;
-    }
-
+    // TREASURY is widgets (widgets/treasury-value.mjs, widgets/treasury.mjs) over the page's own
+    // section=treasury fetch; a pinned copy reads the same section through the store.
     function renderTreasuryWithData(data, td) {
       const app = document.getElementById("app");
       const farm = data.farm;
@@ -12036,121 +12015,47 @@
       const val = (_treasuryServerValue && _treasuryServerValue.coinMode === treasuryCoinMode)
         ? _treasuryServerValue.value
         : computeFarmValue(farm, td, treasuryCoinMode);
-      const { totals, rates, resources, treasures, collectibles, wearables, pets, listings, liquid, treasureBoost } = val;
-      const produced = val.produced || [];
-
-      const usdTotal = totals.grand * rates.sflUsd;
-      const btcTotal = rates.btcUsd > 0 ? usdTotal / rates.btcUsd : 0;
+      const rates = val.rates || {};
       const rateLbl = (r) => r > 0 ? Math.round(r) : "n/a";
-
-      const statusWarn = treasuryStatusWarnings(td);
-
-      let html = `${statusWarn.length ? `<div class="pixel-panel pixel-font" style="padding:8px 12px;margin-bottom:10px;font-size:0.5625rem;color:#ff8c42;line-height:1.7">⚠ Incomplete valuation: ${statusWarn.map(escHTML).join(" · ")}</div>` : ""}
-      <div class="treasury-header pixel-panel pixel-font">
-        <h1>TREASURY</h1>
-        <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
-        <div class="treasury-total">
-          ${sflIcon('1.5em')}
-          ${formatSFL(totals.grand)} ${sflIcon()}
-        </div>
-        <div class="treasury-secondary">${formatUSD(usdTotal)} &nbsp;|&nbsp; ${formatBTC(btcTotal)}</div>
-        <div class="treasury-rates">1 ${sflIcon()} = ${rates.sflUsd.toFixed(4)} USD &nbsp;|&nbsp; 1 BTC = ${formatUSD(rates.btcUsd)}</div>
-        <div style="margin-top:6px">${_wPinBtn("treasury-value", "Farm value")}</div>
-        <div style="margin-top:8px;font-size: 0.5625rem">
-          <span style="color:var(--text-dim)">Coin rate:</span>
-          <select onchange="setCoinMode(this.value)" style="font-family:'Courier New',monospace;font-size: 0.5625rem;background:#111;color:var(--text-primary);border:2px solid var(--border-brown);padding:2px 4px">
-            <option value="betty" ${treasuryCoinMode === "betty" ? "selected" : ""}>Betty (${escHTML(rates.bettyItem)} ${rateLbl(rates.coinsPerSFL_betty)}/SFL)</option>
+      const coinSel = `<label class="v-treasury-coin">Coin rate <select onchange="setCoinMode(this.value)">
+            <option value="betty" ${treasuryCoinMode === "betty" ? "selected" : ""}>Betty (${escHTML(rates.bettyItem || "")} ${rateLbl(rates.coinsPerSFL_betty)}/SFL)</option>
             <option value="api" ${treasuryCoinMode === "api" ? "selected" : ""}>Exchange API (${rateLbl(rates.coinsPerSFL_api)}/SFL)</option>
             <option value="zero" ${treasuryCoinMode === "zero" ? "selected" : ""}>0 (no real value)</option>
-          </select>
-        </div>
-      </div>`;
+          </select></label>`;
 
-      // Pie chart
-      html += renderPieChart(totals);
+      window._wRerender = () => { if (getPage() === "treasury" && cachedFarmData && cachedTreasuryData) renderTreasuryWithData(cachedFarmData, cachedTreasuryData); };
+      window._wRefresh = refresh;
 
-      // Category cards
-      html += '<div class="treasury-categories">';
-      html += renderCategoryCard("resources", "⛏️", "RESOURCES", totals.resources, totals.grand, resources);
-      html += renderCategoryCard("treasures", "🏴‍☠️", "TREASURES", totals.treasures, totals.grand, treasures);
-      html += renderCategoryCard("collectibles", "🏆", "COLLECTIBLES", totals.collectibles, totals.grand, collectibles);
-      if (produced.length > 0) html += renderCategoryCard("produced", "🍲", "PRODUCED", totals.produced || 0, totals.grand, produced);
-      html += renderCategoryCard("wearables", "👕", "WEARABLES", totals.wearables, totals.grand, wearables);
-      if (pets.length > 0) html += renderCategoryCard("pets", "🐾", "PETS", totals.pets, totals.grand, pets);
-      if (listings.length > 0) html += renderCategoryCard("listings", "🏷️", "LISTINGS", totals.listings, totals.grand, listings);
-
-      // Liquid card
-      const liqPct = totals.grand > 0 ? ((totals.liquid / totals.grand) * 100) : 0;
-      html += `<div class="treasury-cat-card pixel-panel">
-        <div class="treasury-cat-header">
-          <span class="treasury-cat-icon">💧</span>
-          <span class="treasury-cat-name pixel-font">LIQUID</span>
-        </div>
-        <div class="treasury-cat-value pixel-font">${formatSFL(totals.liquid)} ${sflIcon()}</div>
-        <div class="treasury-cat-pct pixel-font">${liqPct.toFixed(1)}%</div>
-        <div class="treasury-cat-bar"><div class="treasury-cat-bar-fill" style="width:${liqPct.toFixed(1)}%;background:${TREASURY_CAT_COLORS.liquid}"></div></div>
-        <div class="treasury-cat-top" style="line-height:2.2">
-          <div>${sflIcon()} Balance: <span style="color:var(--sunpetal)">${formatSFL(liquid.sflBalance)}</span></div>
-          <div>Coins: <span style="color:var(--text-secondary)">${Math.floor(liquid.coinBalance).toLocaleString()}</span> <span style="color:var(--text-dim)">(≈ ${formatSFL(liquid.coinsAsSFL)} ${sflIcon()})</span></div>
-          <div>Gems: <span style="color:var(--text-secondary)">${Math.floor(liquid.gemBalance).toLocaleString()}</span> <span style="color:var(--text-dim)">(≈ ${formatSFL(liquid.gemsAsSFL)} ${sflIcon()})</span></div>
-        </div>
-      </div>`;
-      html += '</div>';
-
-      // Detail sections
-      const boostLabel = treasureBoost > 1 ? ` (×${treasureBoost.toFixed(1)} boost)` : "";
-      const sections = [
-        { key: "resources", icon: "⛏️", label: "Resources", items: resources },
-        { key: "treasures", icon: "🏴‍☠️", label: `Treasures${boostLabel}`, items: treasures },
-        { key: "collectibles", icon: "🏆", label: "Collectibles", items: collectibles },
-        // Off the p2p feed (cooked dishes, crafted goods, fish): valued at production cost, and
-        // NOT sellable on the marketplace — the Investment Tracker's BILANCE leaves them out.
-        { key: "produced", icon: "🍲", label: "Produced (at production cost, not marketplace-sellable)", items: produced },
-        { key: "wearables", icon: "👕", label: "Wearables", items: wearables },
-      ];
-      for (const sec of sections) {
-        const isOpen = treasuryDetailOpen[sec.key];
-        html += `<div class="treasury-detail-section">
-          <div class="treasury-detail-header pixel-panel pixel-font" onclick="toggleTreasuryDetail('${sec.key}')">
-            <span>${sec.icon}</span>
-            <h3>${sec.label} (${sec.items.length})</h3>
-            <span class="treasury-detail-arrow" id="treasury-arrow-${sec.key}">${isOpen ? "▼" : "▶"}</span>
-          </div>
-          <div class="treasury-detail-grid" id="treasury-detail-${sec.key}" style="display:${isOpen ? "block" : "none"}">
-            ${renderTreasuryItemRows(sec.items)}
-          </div>
-        </div>`;
+      let html = _wPageHead("Treasury", `Farm #${escHTML(FARM_ID)} · ${coinSel}`);
+      if (typeof __widgets === "undefined") { app.innerHTML = html + _wMissing("Treasury"); return; }
+      const st = td.status || {};
+      const tdata = { treasury: { value: val, coinMode: treasuryCoinMode, pricesOk: st.pricesOk !== false, warnings: treasuryStatusWarnings(td) } };
+      const fresh = __wFresh({ status: "ok", asOf: _treasuryFetchedAt || Date.now() });
+      const ctx = _wCtx("treasury-value");
+      html += `<div class="v-treasury-top">`;
+      html += __widgets.renderPage("treasury-value", { data: tdata, ctx, fresh });
+      html += __widgets.renderPage("treasury-categories", { data: tdata, ctx, fresh });
+      html += `</div>`;
+      for (const cat of treasuryPageCats) {
+        html += __widgets.renderPage("treasury-items", { data: tdata, ctx, fresh, variant: cat, force: { cat } });
       }
-
       app.innerHTML = html;
     }
 
     async function renderTreasury(data) {
       const app = document.getElementById("app");
-
-      app.innerHTML = `<div class="header pixel-panel pixel-font">
-        <h1>TREASURY</h1>
-        <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
-      </div>
-      <div class="loading-screen pixel-font" style="min-height:30vh">
-        <div class="loading-flower">💰</div>
-        <div class="loading-text">Fetching market data...</div>
-      </div>`;
+      const head = _wPageHead("Treasury", `Farm #${escHTML(FARM_ID)}`);
+      app.innerHTML = head + `<div class="w-frame pixel-panel"><div class="w-empty-msg">💰 Fetching market data…</div></div>`;
 
       try {
         cachedTreasuryData = await fetchTreasuryData();
+        _treasuryFetchedAt = Date.now();
         renderTreasuryWithData(data, cachedTreasuryData);
       } catch (err) {
         console.error("Treasury error:", err);
-        app.innerHTML = `<div class="header pixel-panel pixel-font">
-          <h1>TREASURY</h1>
-          <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
-        </div>
-        <div class="error-screen pixel-panel pixel-font">
-          <div class="icon">⚠️</div>
-          <h2>Failed to load market data</h2>
-          <p>${escHTML(err.message)}</p>
-          <button class="refresh-btn" onclick="refresh()">RETRY</button>
+        app.innerHTML = head + `<div class="w-frame pixel-panel">
+          <div class="w-error">⚠ Failed to load market data: ${escHTML(err.message)}</div>
+          <button class="v-mkt-btn" onclick="refresh()">Retry</button>
         </div>`;
       }
     }
@@ -12159,31 +12064,7 @@
     //  RENDER: SALES
     // ═══════════════════════════════════════
 
-    // Market prices — MIGRATED: derived from compute?section=treasury's td (the SIXTH
-    // copy of the nfts/prices fetch block dies). The name→{floor,lastSale,…} mapping is
-    // the old body verbatim, applied to td's full nft objects; numbers are unchanged.
-    async function fetchMarketPrices() {
-      const td = await fetchTreasuryData();
-      const nfts = {};
-      for (const [name, c] of Object.entries(td.nftCollectibles || {})) {
-        nfts[name] = { floor: parseFloat(c.floor) || 0, lastSale: parseFloat(c.lastSalePrice) || 0, price: parseFloat(c.floor) || 0, type: "collectible", id: c.id, collection: "collectibles", boost: c.boost_text || "" };
-      }
-      // `price` for a wearable is the one wearable rule (nftUnitPrice: floor, else last sale) —
-      // the number Treasury / ROI / Power value the same wearable at.
-      for (const [name, w] of Object.entries(td.nftWearables || {})) {
-        nfts[name] = { floor: parseFloat(w.floor) || 0, lastSale: parseFloat(w.lastSalePrice) || 0, price: nftUnitPrice(w), type: "wearable", id: w.id, collection: "wearables", boost: w.boost_text || "" };
-      }
-      return { nfts, p2p: td.p2pPrices || {} };
-    }
-
-    function formatAge(ms) {
-      const h = Math.floor(ms / 3600000);
-      if (h < 24) return `${h}h`;
-      const d = Math.floor(h / 24);
-      if (d < 7) return `${d}d`;
-      const w = Math.floor(d / 7);
-      return `${w}w`;
-    }
+    // The SALES numbers (market prices from section=treasury's td, listing ages) live in widgets/sales.mjs.
 
     // ── Price History fetch helpers ──
 
@@ -12400,8 +12281,8 @@
         layout: {
           background: { color: "transparent" },
           textColor: "#9ca3af",
-          fontFamily: "'Press Start 2P', monospace",
-          fontSize: 9,
+          fontFamily: "Inter, 'Segoe UI', system-ui, sans-serif",
+          fontSize: 11,
         },
         grid: {
           vertLines: { color: "rgba(92,58,30,0.15)" },
@@ -12830,7 +12711,7 @@
               const name = _resolveMarketName(m.collection, m.item_id);
               html += `<div class="market-mover-row">
                 <span class="market-mover-rank">${i + 1}.</span>
-                <span class="market-mover-name">${escHTML(name)}</span>
+                <span class="market-mover-name">${_mktIcon(name)}${escHTML(name)}</span>
                 <span class="market-mover-vol">${_fmtBigNum(m.total_volume)} SFL</span>
                 <span class="market-mover-trades">${_fmtBigNum(m.total_quantity || 0)} qty</span>
               </div>`;
@@ -13128,7 +13009,7 @@
       try { localStorage.setItem("sfl_wl_eff", _wlEff ? "1" : "0"); } catch {}
       renderWishlistPanel();
     };
-    const _wlTip = "Co ti ta položka přidá za den, v FLOWER. Bere se SYNERGICKÁ hodnota — tedy co přidá nad to, co už na farmě máš, ne co by dala samostatně. Stejný výpočet (calcBoostValue), jaký používá stránka POWER, takže si ta čísla nemohou odporovat. Boost působící na víc kategorií je sečtený přes všechny.";
+    const _wlTip = "What the item adds per day, in FLOWER. This is the SYNERGY value — what it adds on top of what the farm already has, not what it would give on its own. The same calculation (calcBoostValue) as the POWER page, so the two cannot disagree. A boost on several categories is summed over all of them.";
 
     //  WISHLIST (sales page, compute?section=wishlist — cockpit fold-in)
     // ═══════════════════════════════════════
@@ -13192,8 +13073,8 @@
     function _wlPost(payload) {
       writeFetch(`/api/marketplace-orderbook?wishlist=1`, { method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ farm: FARM_ID, ...payload }) })
-        .then((r) => { if (r && !r.ok && r.status !== 403) { window._wlImportMsg = `<span style="color:var(--red)">uložení do DB selhalo (${r.status}) — změna je jen v tomto prohlížeči</span>`; renderWishlistPanel(); } })
-        .catch(() => { window._wlImportMsg = `<span style="color:var(--red)">uložení do DB selhalo — změna je jen v tomto prohlížeči</span>`; renderWishlistPanel(); });
+        .then((r) => { if (r && !r.ok && r.status !== 403) { window._wlImportMsg = `<span style="color:var(--red)">saving to the DB failed (${r.status}) — the change is only in this browser</span>`; renderWishlistPanel(); } })
+        .catch(() => { window._wlImportMsg = `<span style="color:var(--red)">saving to the DB failed — the change is only in this browser</span>`; renderWishlistPanel(); });
     }
     window._wlSetPrio = function(key, p) {
       const l = _wlGet(); l[key] = p; _wlSave(l); _wlPost({ key, priority: p }); renderWishlistPanel();
@@ -13234,7 +13115,7 @@
       // Only the new items are sent (upsert): the stored list is never replaced from this cache.
       _wlSave(l); if (Object.keys(added).length) _wlPost({ upsert: added });
       ta.value = "";
-      window._wlImportMsg = `<span style="color:var(--green)">+${Object.keys(added).length} přidáno</span>${unmatched.length ? ` · <span style="color:var(--yellow)">nenalezeno: ${escHTML(unmatched.slice(0, 6).join(", "))}</span>` : ""}`;
+      window._wlImportMsg = `<span style="color:var(--green)">+${Object.keys(added).length} added</span>${unmatched.length ? ` · <span style="color:var(--yellow)">not found: ${escHTML(unmatched.slice(0, 6).join(", "))}</span>` : ""}`;
       await renderWishlistPanel();
     };
     let _wlCatalog = null;
@@ -13267,7 +13148,7 @@
                     body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [], budFloors }) } });
         d = payload.data || {};
       } catch (e) {
-        el.innerHTML = `<div class="pixel-panel pixel-font" style="padding:10px;color:var(--red);font-size:0.55rem">Wishlist failed to load: ${escHTML(e.message)}</div>`;
+        el.innerHTML = `<div class="w-frame pixel-panel"><div class="w-error">Wishlist failed to load: ${escHTML(e.message)}</div></div>`;
         return;
       }
       // auto-prune took effect server-side — reflect it in localStorage too (§1.3)
@@ -13283,16 +13164,16 @@
       // like every other item; appending them here is exactly what left them without an ROI.
       for (const bc of budCat) _wlCatalog.push(bc);
       const _wlPrio = { 1: ["🔴", "now"], 2: ["🟡", "soon"], 3: ["🟢", "later"] };
-      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
-      h += `<div class="pixel-font" style="font-size:0.6875rem;color:var(--lily);font-weight:bold;margin-bottom:8px">⭐ WISHLIST</div>`;
+      let h = `<section class="w-frame pixel-panel v-sales-wl"><header class="w-head"><span class="w-title">⭐ Wishlist</span></header>`;
       // summary
       const p1 = d.byPriority[1], p2 = d.byPriority[2], p3 = d.byPriority[3];
-      h += `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-secondary);margin-bottom:8px;line-height:1.9">
-        Balance: <strong>${d.balance.toFixed(1)} ${sflIcon()}</strong> ·
-        ${[1, 2, 3].map(p => { const b = d.byPriority[p]; return `${_wlPrio[p][0]} P${p}: ${b.unowned}× = ${b.cost.toFixed(1)} (kumulativně ${b.cumulative.toFixed(1)} ${b.affordable ? "✅" : "❌"})`; }).join(" · ")}
-      </div>`;
+      // the balance against each priority's cumulative cost, as tiles with a bar
+      h += `<div class="v-kpis"><div class="v-kpi"><b>${d.balance.toFixed(1)} ${sflIcon()}</b><span>balance</span></div>` +
+        [1, 2, 3].map(p => { const b = d.byPriority[p]; const pct = b.cumulative > 0 ? Math.min(100, d.balance / b.cumulative * 100) : 100;
+          return `<div class="v-kpi"><b>${_wlPrio[p][0]} ${b.unowned}× = ${b.cost.toFixed(1)}</b><span>P${p} ${_wlPrio[p][1]} · cumulative ${b.cumulative.toFixed(1)} ${b.affordable ? "✅" : "❌"}</span>` +
+            `<div class="v-bar"><i class="v-${pct >= 100 ? "ok" : pct >= 50 ? "mid" : "bad"}" style="width:${pct.toFixed(0)}%"></i></div></div>`; }).join("") + `</div>`;
       if (d.pruned && d.pruned.length) {
-        h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--green);margin-bottom:6px">Auto-pruned (placed/worn): ${d.pruned.map(k => escHTML(k.split(":")[1])).join(", ")}</div>`;
+        h += `<div class="v-mkt-line" style="color:var(--c-green)">Auto-pruned (placed/worn): ${d.pruned.map(k => `<span class="v-mkt-item">${_mktIcon(k.split(":")[1])}${escHTML(k.split(":")[1])}</span>`).join(", ")}</div>`;
       }
       /*
        * Theoretical vs measured. Both numbers arrive in the same payload, so this only
@@ -13300,20 +13181,16 @@
        * one: theoretical is what the boost can do, measured is what it will do at this
        * farm's observed harvest rate, and for an idle category those differ by a lot.
        */
-      h += `<div class="pixel-font" style="font-size:0.5rem;margin-bottom:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        <span style="color:var(--text-dim)">FLOWER/den a ROI:</span>
-        ${[[false, "teoreticky"], [true, "dle efektivity"]].map(([v, lbl]) => `<button onclick="_wlSetEff(${v})" class="pixel-font" style="
-          font-size:0.5rem;padding:3px 8px;cursor:pointer;border:2px solid #000;
-          background:${_wlEff === v ? "var(--lily)" : "#241a12"};
-          color:${_wlEff === v ? "#1a0e08" : "var(--text-secondary)"}">${lbl}</button>`).join("")}
-        <span style="color:var(--text-dim);font-size:0.46rem">${_wlEff
-          ? "podle tvého naměřeného výběru — co ten boost reálně přinese"
-          : "při plné sklizni každého nodu — strop, ne odhad"}</span>
+      h += `<div class="v-sales-wl-mode"><span class="v-dim">FLOWER/day and ROI:</span>
+        ${[[false, "theoretical"], [true, "by efficiency"]].map(([v, lbl]) => `<button onclick="_wlSetEff(${v})" class="v-mkt-chip${_wlEff === v ? " on" : ""}">${lbl}</button>`).join("")}
+        <span class="v-dim">${_wlEff
+          ? "from your measured harvests — what the boost really brings"
+          : "at a full harvest of every node — a ceiling, not an estimate"}</span>
       </div>`;
       // rows
       if (d.rows.length) {
-        h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.55rem">
-          <thead><tr style="color:var(--text-dim);text-align:left"><th style="padding:2px 6px">priorita</th><th>item</th><th style="text-align:right">buy now (floor)</th><th style="text-align:right">last sale</th><th style="text-align:right;cursor:help" title="${_wlTip}">FLOWER/den</th><th style="text-align:right;cursor:help" title="Za jak dlouho se položka zaplatí: floor ÷ FLOWER/den. „—“ = spočítáno, ale nevydělá nic. „?“ = neumíme ocenit.">ROI</th><th style="text-align:right">kumulativně</th><th style="text-align:center">na to mám?</th><th></th></tr></thead><tbody>`;
+        h += `<div style="overflow-x:auto"><table class="w-table">
+          <thead><tr><th>priority</th><th>item</th><th style="text-align:right">buy now (floor)</th><th style="text-align:right">last sale</th><th style="text-align:right;cursor:help" title="${_wlTip}">FLOWER/day</th><th style="text-align:right;cursor:help" title="How long the item takes to pay for itself: floor ÷ FLOWER/day. “—” = valued, but it earns nothing. “?” = cannot be valued.">ROI</th><th style="text-align:right">cumulative</th><th style="text-align:center">can I afford it?</th><th></th></tr></thead><tbody>`;
         let cum = 0;
         for (const r of d.rows) {
           if (!r.owned) cum += r.floor;
@@ -13332,19 +13209,19 @@
            */
           const unknown = perDay == null;
           const perDayCell = unknown
-            ? `<span title="Tuhle položku neumíme ocenit — není mezi boosty, které engine modeluje.">?</span>`
+            ? `<span title="This item cannot be valued — it is not among the boosts the engine models.">?</span>`
             : perDay > 0 ? "+" + perDay.toFixed(2)
-            : `<span title="Spočítáno: na téhle farmě ti to nepřinese nic (např. boost na plodinu, kterou nepěstuješ).">—</span>`;
+            : `<span title="Valued: on this farm it brings nothing (e.g. a boost on a crop you do not grow).">—</span>`;
           const roiCell = unknown
-            ? `<span title="Bez FLOWER/den nejde ROI spočítat.">?</span>`
+            ? `<span title="Without FLOWER/day there is no ROI.">?</span>`
             : !(r.floor > 0)
-            ? `<span title="Položka není nikde v prodeji, takže není z čeho ROI počítat.">?</span>`
+            ? `<span title="The item is not for sale anywhere, so there is nothing to compute the ROI from.">?</span>`
             : roi != null && isFinite(roi)
-            ? (roi < 1 ? (roi * 24).toFixed(0) + "h" : roi < 400 ? roi.toFixed(0) + "d" : (roi / 365).toFixed(1) + "r")
-            : `<span title="Nevydělá nic, takže se nikdy nezaplatí.">—</span>`;
-          h += `<tr style="border-top:1px solid #222">
-            <td style="padding:3px 6px;white-space:nowrap">${[1, 2, 3].map(p => `<span onclick="_wlSetPrio('${escJsAttr(r.key)}',${p})" style="cursor:pointer;opacity:${r.priority === p ? 1 : 0.3}">${_wlPrio[p][0]}</span>`).join(" ")}</td>
-            <td style="white-space:nowrap"><img class="inline-icon" src="${getItemIcon(r.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.name)}${r.owned ? ' <span style="font-size:0.45rem;color:var(--green)">📦 owned</span>' : ""}</td>
+            ? (roi < 1 ? (roi * 24).toFixed(0) + "h" : roi < 400 ? roi.toFixed(0) + "d" : (roi / 365).toFixed(1) + "y")
+            : `<span title="It earns nothing, so it never pays for itself.">—</span>`;
+          h += `<tr>
+            <td style="white-space:nowrap">${[1, 2, 3].map(p => `<span onclick="_wlSetPrio('${escJsAttr(r.key)}',${p})" style="cursor:pointer;opacity:${r.priority === p ? 1 : 0.3}">${_wlPrio[p][0]}</span>`).join(" ")}</td>
+            <td style="white-space:nowrap">${_mktIcon(r.name)}<b>${escHTML(r.name)}</b>${r.owned ? ' <span class="v-pill v-ok">📦 owned</span>' : ""}</td>
             <td style="text-align:right">${r.floor > 0 ? r.floor.toFixed(1) : "—"}</td>
             <td style="text-align:right;color:var(--text-dim)">${r.lastSale > 0 ? r.lastSale.toFixed(1) : "—"}</td>
             <td style="text-align:right;color:${perDay > 0 ? "var(--green)" : unknown ? "var(--yellow)" : "var(--text-dim)"}">${perDayCell}</td>
@@ -13356,516 +13233,188 @@
         }
         h += `</tbody></table></div>`;
       } else {
-        h += `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-dim)">Wishlist je prázdný — přidej boostované NFT níž.</div>`;
+        h += `<div class="w-empty-msg">The wishlist is empty — add boosted NFTs below.</div>`;
       }
       // picker (datalist over the boosted catalog)
       h += `<div style="margin-top:10px;display:flex;gap:6px;align-items:center">
-        <input id="wl-picker" list="wl-catalog" placeholder="přidat NFT… (${_wlCatalog.length} boosted items)" style="flex:1;font-size:0.55rem;padding:4px 6px;background:var(--bg-input,#1a140c);color:var(--text-primary);border:1px solid var(--border-dark)">
-        <button class="pixel-font" onclick="_wlAddFromPicker()" style="font-size:0.55rem;padding:4px 10px;cursor:pointer">+ přidat</button>
+        <input id="wl-picker" class="v-mkt-search" list="wl-catalog" placeholder="add an NFT… (${_wlCatalog.length} boosted items)" style="flex:1">
+        <button class="v-mkt-btn" onclick="_wlAddFromPicker()">+ add</button>
       </div>
       <datalist id="wl-catalog">${_wlCatalog.filter(c => !c.active).map(c => `<option value="${escHTML(c.name)}">${c.floor > 0 ? c.floor.toFixed(1) + " ⚀ · " : ""}${escHTML((c.boost || "").split("\n")[0])}</option>`).join("")}</datalist>`;
       // bulk import (paste a list of names)
-      h += `<details style="margin-top:8px"${window._wlImportMsg ? " open" : ""}><summary style="cursor:pointer;font-size:0.52rem;color:var(--text-dim)">📋 hromadný import (vlož seznam názvů)</summary>
+      h += `<details style="margin-top:8px"${window._wlImportMsg ? " open" : ""}><summary style="cursor:pointer" class="v-dim">📋 bulk import (paste a list of names)</summary>
         <div style="margin-top:6px">
-          <textarea id="wl-import" rows="4" placeholder="Oil Gallon&#10;Golden Spatula&#10;Humming Bird&#10;…jeden název na řádek (sloupce/🔗 se ignorují)" style="width:100%;box-sizing:border-box;font-size:0.55rem;padding:5px 6px;background:var(--bg-input,#1a140c);color:var(--text-primary);border:1px solid var(--border-dark);font-family:'Courier New',monospace"></textarea>
+          <textarea id="wl-import" rows="4" placeholder="Oil Gallon&#10;Golden Spatula&#10;Humming Bird&#10;…one name per line (columns / 🔗 are ignored)" class="v-mkt-search" style="width:100%;box-sizing:border-box"></textarea>
           <div style="display:flex;gap:8px;align-items:center;margin-top:5px">
-            <button class="pixel-font" onclick="_wlImport()" style="font-size:0.55rem;padding:4px 10px;cursor:pointer">📥 importovat</button>
-            <span id="wl-import-status" style="font-size:0.52rem">${window._wlImportMsg || ""}</span>
+            <button class="v-mkt-btn" onclick="_wlImport()">📥 import</button>
+            <span id="wl-import-status">${window._wlImportMsg || ""}</span>
           </div>
         </div></details>`;
-      h += `</div>`;
+      h += `</section>`;
       el.innerHTML = h;
     }
 
+    // SALES: the listings, offers, sold items, what can be sold and the weekly history are widgets
+    // (widgets/sales.mjs) over the farm and section=treasury's td; the page also fetches the live
+    // order book of each listed item, slowly, and patches the listings widget as it comes in. The
+    // wishlist editor, the market overview, volume leaders and the price trackers stay page cards.
+    let _salesState = null;                 // { farm, td, at }
+    let _salesLive = {}, _salesLiveBusy = {}, _salesLiveDone = false, _salesLiveProg = { loaded: 0, total: 0 };
+    let _salesLiveRun = 0;
+    function _salesNftId(name, collection) {
+      // sfl.world /nfts misses some wearables (e.g. Luna's Crescent); pets are 1-of-1 NFTs whose token id is in the name
+      if (collection === "wearables") return WEARABLE_IDS[name] || null;
+      if (collection === "pets") { const m = String(name).match(/#(\d+)/); return m ? parseInt(m[1]) : null; }
+      if (collection === "resources") return RESOURCE_IDS[name] || null;
+      return null;
+    }
+    function _salesListingIcon(l) {
+      if (l.collection === "pets" && l.nftId) return `<span class="v-sales-pet" style="background-image:url('https://pets.sunflower-land.com/marketplace/${l.nftId}.webp')" title="${escHTML(l.itemName)}"></span>`;
+      if (l.collection === "wearables" && l.nftId) return `<img src="https://cdn.jsdelivr.net/gh/sunflower-land/sunflower-land@main/src/assets/wearables/${l.nftId}.webp" onerror="this.style.display='none'" alt="" style="height:1.2em;vertical-align:-0.25em;margin-right:3px">`;
+      return _mktIcon(l.itemName);
+    }
+    function _wSalesCtx() {
+      return { icon: _mktIcon, nftIdOf: _salesNftId, listingIcon: _salesListingIcon,
+        live: (id) => _salesLive[id] || null, liveBusy: (id) => !!_salesLiveBusy[id],
+        liveDone: () => _salesLiveDone, liveProgress: () => _salesLiveProg };
+    }
+    const _salesData = () => ({ farm: _salesState.farm, prices: { td: _salesState.td } });
+    const _salesFresh = () => __wFresh({ status: "ok", asOf: _salesState.at });
+    const salesWidgets = ["sales-summary", "sales-listings", "sales-sellable", "sales-offers", "sales-sold", "sales-weekly"];
+
     async function renderSales(data) {
       const app = document.getElementById("app");
-      const { trades } = data;
-      const listings = trades.listings || {};
-      const offers = trades.offers || {};
-
-      let html = `<div class="header pixel-panel pixel-font">
-        <h1>SALES TRACKER</h1>
-        <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
-      </div>`;
-
-
-      // Show loading while fetching market data
-      html += `<div id="wishlist-panel"></div>`;
-      html += `<div id="sales-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading market prices...</div></div></div>`;
-      app.innerHTML = html;
+      app.innerHTML = _wPageHead("Sales", `Farm #${escHTML(FARM_ID)} · your listings and offers against the market`) +
+        `<div id="wishlist-panel"></div>` +
+        `<div id="sales-content"><div class="w-frame pixel-panel"><div class="w-empty-msg">Loading market prices…</div></div></div>`;
       renderWishlistPanel(); // async — fills the panel from compute?section=wishlist
+      if (typeof __widgets === "undefined") { document.getElementById("sales-content").innerHTML = _wMissing("Sales"); return; }
 
-      // Fetch market data + P2P history in parallel
-      let market, p2pPrices = [];
+      // Market prices (section=treasury's td) + P2P history in parallel
+      let td, p2pPrices = [];
       try {
-        [market, p2pPrices] = await Promise.all([
-          fetchMarketPrices(),
-          fetchP2PLatest().catch(() => []),
-        ]);
+        [td, p2pPrices] = await Promise.all([fetchTreasuryData(), fetchP2PLatest().catch(() => [])]);
       } catch (err) {
-        document.getElementById("sales-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load prices: ${escHTML(err.message)}</p></div>`;
+        document.getElementById("sales-content").innerHTML = `<div class="w-frame pixel-panel"><div class="w-error">Failed to load prices: ${escHTML(err.message)}</div></div>`;
         return;
       }
+      if (getPage() !== "sales") return;
+      _salesState = { farm: data.farm, td, at: Date.now() };
+      _salesLive = {}; _salesLiveBusy = {}; _salesLiveDone = false; _salesLiveProg = { loaded: 0, total: 0 };
+      window._wRerender = () => { if (getPage() === "sales" && _salesState) _salesPaint(); };
+      window._wRefresh = refresh;
 
-      const now = Date.now();
+      document.getElementById("sales-content").innerHTML = `<div id="sales-widgets"></div>
+        <div class="w-frame pixel-panel v-sales-legacy" id="market-overview-container"></div>
+        <div class="w-frame pixel-panel v-sales-legacy" id="volume-leaders-container"></div>
+        <div class="w-frame pixel-panel v-sales-legacy">${renderP2PHistorySection(p2pPrices)}</div>
+        <div class="w-frame pixel-panel v-sales-legacy">${renderNftHistorySection()}</div>`;
+      _salesPaint();
 
-      // Process listings
-      const activeListings = [];
-      const soldListings = [];
+      // Async: market overview, volume leaders (an empty answer hides its card)
+      const hideEmpty = (el) => { if (el && !el.innerHTML.trim()) el.style.display = "none"; };
+      const mo = document.getElementById("market-overview-container"), vl = document.getElementById("volume-leaders-container");
+      _renderMarketOverview(mo).then(() => hideEmpty(mo));
+      _renderVolumeLeaders(vl).then(() => hideEmpty(vl));
+      _salesFillLive(__widgets.registry["sales-listings"].activeOf(data.farm, td, _wSalesCtx()));
+    }
 
-      for (const [id, listing] of Object.entries(listings)) {
-        const items = Object.entries(listing.items || {});
-        if (items.length === 0) continue;
-        const [itemName, qty] = items[0];
-        const priceSFL = listing.sfl || 0;
-        const unitPrice = qty > 0 ? priceSFL / qty : priceSFL;
-        const createdAt = toMs(listing.createdAt || 0);
-        const age = now - createdAt;
-        const collection = listing.collection || "unknown";
+    function _salesPaint() {
+      const el = document.getElementById("sales-widgets");
+      if (!el || !_salesState) return;
+      const data = _salesData(), fresh = _salesFresh();
+      el.innerHTML = salesWidgets.map((t) => __widgets.renderPage(t, { data, ctx: _wCtx(t), fresh })).join("");
+    }
+    function _salesPatchListings() {
+      if (getPage() !== "sales" || !_salesState) return;
+      _mktPatch("sales-listings", __widgets.renderPage("sales-listings", { data: _salesData(), ctx: _wCtx("sales-listings"), fresh: _salesFresh() }));
+    }
 
-        // Get market price
-        let marketPrice = 0;
-        let priceSource = "";
-        if (market.p2p[itemName]) {
-          marketPrice = market.p2p[itemName];
-          priceSource = "P2P";
-        } else if (market.nfts[itemName]) {
-          marketPrice = market.nfts[itemName].price;
-          priceSource = market.nfts[itemName].floor > 0 ? "Floor" : "Last sale";
-        }
-
-        const delta = marketPrice > 0 ? ((unitPrice - marketPrice) / marketPrice) * 100 : 0;
-
-        // Resolve item_id for the live orderbook. Collectibles/wearables carry id in sfl.world /nfts;
-        // pets are 1-of-1 NFTs whose token id is in the listing name ("Pet #262" → 262).
-        let nftId = market.nfts[itemName]?.id || null;
-        if (!nftId && collection === "wearables") nftId = WEARABLE_IDS[itemName] || null; // sfl.world /nfts misses some wearables (e.g. Luna's Crescent)
-        if (!nftId && collection === "pets") { const _m = String(itemName).match(/#(\d+)/); if (_m) nftId = parseInt(_m[1]); }
-        if (!nftId && collection === "resources") nftId = RESOURCE_IDS[itemName] || null;
-        // Marketplace path for resources is the collectibles collection (e.g. Wool → collectibles/642).
-        const mkt = collection === "resources" ? "collectibles" : collection;
-
-        const entry = {
-          id, itemName, qty, priceSFL, unitPrice, createdAt, age,
-          marketPrice, priceSource, delta, collection, nftId, mkt,
-          boost: market.nfts[itemName]?.boost || "",
-          tradeType: listing.tradeType || "onchain",
-        };
-
-        if (listing.fulfilledAt || listing.boughtAt) {
-          entry.soldAt = toMs(listing.fulfilledAt || listing.boughtAt);
-          soldListings.push(entry);
-        } else {
-          activeListings.push(entry);
-        }
+    // ── Live marketplace order book (on demand, only for the items YOU have listed) ──
+    // Real-time listings/offers per item via the proxy → the best offer and your exact rank among
+    // sellers. Sequential, paced (~1 request / 5 s, the community API's limit), 2-min cached, 429
+    // backoff. Never runs on a schedule.
+    function _salesLiveMetrics(l, d) {
+      const myUnit = l.unitPrice;
+      const asks = (d.listings || []).map(x => (x.qty > 0 ? x.sfl / x.qty : x.sfl)).filter(v => isFinite(v) && v > 0).sort((a, b) => a - b);
+      const bids = (d.offers || []).map(x => (x.qty > 0 ? x.sfl / x.qty : x.sfl)).filter(v => isFinite(v) && v > 0);
+      const cheaper = asks.filter(v => v < myUnit - 1e-9).length;
+      const bestBid = bids.length ? Math.max(...bids) : 0;
+      const gap = bestBid > 0 ? ((myUnit - bestBid) / myUnit) * 100 : null;
+      return { total: asks.length, rank: cheaper + 1, isFirst: cheaper === 0, cheapest: asks[0] || 0, bestBid, gap, nBids: bids.length, goodOffer: bestBid > 0 && gap <= 5 };
+    }
+    // Pets are 1-of-1: the rank is within the same TYPE (per-type floors, one call for all).
+    function _salesPetMetrics(l, byType) {
+      const t = PET_TYPES[l.nftId];
+      const same = (byType[t] || []).filter(x => x.id !== l.nftId);
+      const floors = same.map(x => x.floor).sort((a, b) => a - b);
+      const cheaper = floors.filter(v => v < l.unitPrice - 1e-9).length;
+      return { isPet: true, type: t || "pet", total: same.length + 1, rank: cheaper + 1,
+               isFirst: cheaper === 0, cheapest: floors[0] || 0, bestBid: 0, gap: null, nBids: 0, goodOffer: false };
+    }
+    async function _salesFillLive(rows) {
+      const run = ++_salesLiveRun;
+      const alive = () => run === _salesLiveRun && getPage() === "sales";
+      const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+      const queue = rows.filter(l => l.nftId && l.collection);
+      _salesLiveProg = { loaded: 0, total: queue.length };
+      const step = (l, m) => { if (m) _salesLive[l.id] = m; _salesLiveProg = { ..._salesLiveProg, loaded: _salesLiveProg.loaded + 1 }; _salesPatchListings(); };
+      if (!queue.length) { _salesLiveDone = true; return; }
+      _salesPatchListings();
+      let petByType = null;
+      if (queue.some(l => l.collection === "pets")) {
+        try {
+          const pr = await fetch("/api/marketplace-orderbook?petfloors=1");
+          if (pr.ok) {
+            petByType = {};
+            for (const it of ((await pr.json()).items || [])) {
+              const t = PET_TYPES[it.id];
+              if (t && it.floor) (petByType[t] = petByType[t] || []).push({ id: it.id, floor: it.floor });
+            }
+          }
+        } catch {}
       }
-
-      // Process offers (buy orders)
-      const activeOffers = [];
-      for (const [id, offer] of Object.entries(offers)) {
-        const items = Object.entries(offer.items || {});
-        if (items.length === 0) continue;
-        const [itemName, qty] = items[0];
-        const priceSFL = offer.sfl || 0;
-        const unitPrice = qty > 0 ? priceSFL / qty : priceSFL;
-        const createdAt = toMs(offer.createdAt || 0);
-        const age = now - createdAt;
-
-        let marketPrice = 0;
-        let priceSource = "";
-        if (market.p2p[itemName]) {
-          marketPrice = market.p2p[itemName];
-          priceSource = "P2P";
-        } else if (market.nfts[itemName]) {
-          marketPrice = market.nfts[itemName].price;
-          priceSource = market.nfts[itemName].floor > 0 ? "Floor" : "Last sale";
-        }
-
-        const delta = marketPrice > 0 ? ((unitPrice - marketPrice) / marketPrice) * 100 : 0;
-
-        if (!offer.fulfilledAt) {
-          activeOffers.push({
-            id, itemName, qty, priceSFL, unitPrice, createdAt, age,
-            marketPrice, priceSource, delta, collection: offer.collection || "unknown",
-            boost: market.nfts[itemName]?.boost || "",
-          });
-        }
-      }
-
-      // Sort: most overpriced first (for listings), cheapest first (for offers)
-      activeListings.sort((a, b) => b.delta - a.delta);
-      activeOffers.sort((a, b) => a.delta - b.delta);
-      soldListings.sort((a, b) => (b.soldAt || 0) - (a.soldAt || 0));
-
-      // Ready to claim: sold listings + fulfilled offers
-      const fulfilledOffers = Object.values(offers).filter(o => o.fulfilledAt).length;
-      const readyToClaim = soldListings.length + fulfilledOffers;
-
-      // Summary stats
-      const totalListedSFL = activeListings.reduce((s, l) => s + l.priceSFL, 0);
-      const totalOfferSFL = activeOffers.reduce((s, o) => s + o.priceSFL, 0);
-      const overpricedCount = activeListings.filter(l => l.delta > 20).length;
-      const staleCount = activeListings.filter(l => l.age > 7 * 24 * 3600000).length;
-
-      let content = "";
-
-      // Summary
-      content += `<div class="sales-summary-grid pixel-font">
-        ${readyToClaim > 0 ? `<div class="sales-stat" style="background:linear-gradient(135deg,rgba(46,204,113,0.2),rgba(46,204,113,0.05));border:2px solid var(--green)"><div class="sales-stat-label" style="color:var(--green)">READY TO CLAIM</div><div class="sales-stat-value" style="color:var(--green);font-size:1.5rem">${readyToClaim}</div></div>` : ""}
-        <div class="sales-stat"><div class="sales-stat-label">ACTIVE LISTINGS</div><div class="sales-stat-value">${activeListings.length}</div></div>
-        <div class="sales-stat"><div class="sales-stat-label">TOTAL LISTED</div><div class="sales-stat-value">${totalListedSFL.toFixed(1)} ${sflIcon()}</div></div>
-        <div class="sales-stat"><div class="sales-stat-label">OVERPRICED</div><div class="sales-stat-value" style="color:${overpricedCount > 0 ? 'var(--red)' : 'var(--green)'}">${overpricedCount}</div></div>
-        <div class="sales-stat"><div class="sales-stat-label">STALE (>7d)</div><div class="sales-stat-value" style="color:${staleCount > 0 ? 'var(--yellow)' : 'var(--green)'}">${staleCount}</div></div>
-        <div class="sales-stat"><div class="sales-stat-label">ACTIVE OFFERS</div><div class="sales-stat-value">${activeOffers.length}</div></div>
-        <div class="sales-stat"><div class="sales-stat-label">TOTAL OFFERED</div><div class="sales-stat-value">${totalOfferSFL.toFixed(1)} ${sflIcon()}</div></div>
-        ${trades.tradePoints ? `<div class="sales-stat"><div class="sales-stat-label">TRADE POINTS</div><div class="sales-stat-value">${Math.round(trades.tradePoints)}</div></div>` : ""}
-      </div>`;
-
-      // Smart number formatting: integers stay clean, floats get max 2 decimals
-      const fmtQty = n => Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, "");
-      const fmtSfl = n => n >= 100 ? n.toFixed(1) : n >= 1 ? n.toFixed(2) : n.toFixed(3);
-
-      // Render listing rows helper
-      const renderListingRow = (l, isSell) => {
-        const imgUrl = (l.collection === "pets" && l.nftId) ? `https://pets.sunflower-land.com/marketplace/${l.nftId}.webp`
-          : (l.collection === "wearables" && l.nftId) ? `https://cdn.jsdelivr.net/gh/sunflower-land/sunflower-land@main/src/assets/wearables/${l.nftId}.webp`
-          : getItemIcon(l.itemName);
-        const badges = [];
-        // Note: the live orderbook line (filled async below) is authoritative for seller rank.
-        // We intentionally DON'T show a floor-proxy "1ST" badge here — it disagreed with the
-        // real rank (e.g. floor matched your price but someone was 1 SFL cheaper → actually #2).
-        if (isSell && l.delta > 20) badges.push(`<span class="sales-badge overpriced">+${Math.round(l.delta)}%</span>`);
-        else if (isSell && l.delta < -10) badges.push(`<span class="sales-badge good">${Math.round(l.delta)}%</span>`);
-        if (l.age > 7 * 24 * 3600000) badges.push(`<span class="sales-badge stale">STALE</span>`);
-        if (l.soldAt) badges.push(`<span class="sales-badge sold">SOLD</span>`);
-
-        return `<div class="sales-listing">
-          ${(l.collection === "pets" && l.nftId)
-            ? `<div class="sales-listing-img pet-frame" style="background-image:url('${imgUrl}')" title="${escHTML(l.itemName)}"></div>`
-            : `<img class="sales-listing-img" src="${imgUrl}" onerror="this.style.display='none'" alt="">`}
-          <div class="sales-listing-info">
-            <div class="sales-listing-name">${escHTML(l.itemName)}${l.qty > 1 ? ` x${fmtQty(l.qty)}` : ""} ${badges.join("")}${(isSell && l.nftId && l.collection) ? ` <a href="https://sunflower-land.com/play/#/marketplace/${l.mkt || l.collection}/${l.nftId}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open in marketplace — adjust price / re-list" style="text-decoration:none;margin-left:2px">🔗</a>` : ""}</div>
-            <div class="sales-listing-detail">${formatAge(l.age)} ago · ${l.tradeType || l.collection}${l.marketPrice > 0 ? ` · market: ${fmtSfl(l.marketPrice)} ${sflIcon()}/${l.priceSource}` : ""}</div>
-            ${l.boost ? `<div class="sales-listing-detail" style="color:var(--lily)">⚡ ${escHTML(String(l.boost).replace(/\n+/g, " / "))}</div>` : ""}
-            ${isSell && !l.soldAt && l.nftId ? `<div class="sales-live" id="sales-live-${l.id}">${l._live ? _liveLine(l, l._live) : `<span class="sales-live-load"><span class="sales-spin">⟳</span> live market…</span>`}</div>` : ""}
-          </div>
-          <div class="sales-listing-prices">
-            <div class="sales-price-yours">${fmtSfl(l.priceSFL)} ${sflIcon()}</div>
-            ${l.marketPrice > 0 && l.qty > 0 ? `<div class="sales-price-market">${fmtSfl(l.unitPrice)}/ea vs ${fmtSfl(l.marketPrice)} <span style="color:${l.delta > 5 ? 'var(--red)' : l.delta < -5 ? 'var(--green)' : 'var(--text-dim)'};font-weight:bold">${l.delta > 0 ? "+" : ""}${Math.round(l.delta)}%</span></div>` : ""}
-          </div>
-        </div>`;
-      };
-
-      // ── Live marketplace orderbook (on-demand, only for the items YOU have listed) ──
-      // Real-time listings/offers per item via the authenticated proxy → nearest offer + your
-      // exact rank among sellers. Sequential + paced + 2-min cached. Never runs on a schedule.
-      // Metrics are also used to bucket listings into: 1) a live offer within 5% of (or above)
-      // your ask, 2) NOT FIRST (someone cheaper), 3) the rest. Re-grouped once data is in.
-      const _liveMetrics = (l, d) => {
-        const myUnit = l.unitPrice;
-        const asks = (d.listings || []).map(x => (x.qty > 0 ? x.sfl / x.qty : x.sfl)).filter(v => isFinite(v) && v > 0).sort((a, b) => a - b);
-        const bids = (d.offers || []).map(x => (x.qty > 0 ? x.sfl / x.qty : x.sfl)).filter(v => isFinite(v) && v > 0);
-        const cheaper = asks.filter(v => v < myUnit - 1e-9).length;
-        const bestBid = bids.length ? Math.max(...bids) : 0;
-        const gap = bestBid > 0 ? ((myUnit - bestBid) / myUnit) * 100 : null;
-        return { total: asks.length, rank: cheaper + 1, isFirst: cheaper === 0, cheapest: asks[0] || 0, bestBid, gap, nBids: bids.length, goodOffer: bestBid > 0 && gap <= 5 };
-      };
-      const _liveLine = (l, m) => {
-        if (m.isPet) {
-          // Pets are 1-of-1 → rank within the same TYPE (breed); offers are per-token (a buyer
-          // wanting YOUR specific pet) from the per-item orderbook.
-          const parts = [];
-          if (m.total <= 1) parts.push(`<span style="color:var(--sunpetal);font-weight:bold">🥇 only ${m.type || "pet"} listed</span>`);
-          else if (m.isFirst) parts.push(`<span style="color:var(--sunpetal);font-weight:bold">🥇 1ST ${m.type}</span> <span style="color:var(--text-dim)">of ${m.total}</span>`);
-          else { const diff = m.cheapest - l.unitPrice; parts.push(`<span style="color:#ff8c42;font-weight:bold">#${m.rank}/${m.total} ${m.type}</span> <span style="color:var(--text-dim)">cheapest ${fmtSfl(m.cheapest)} ${sflIcon(9)} (${diff < 0 ? "-" : "+"}${fmtSfl(Math.abs(diff))})</span>`); }
-          if (m.bestBid > 0) {
-            if (m.bestBid >= l.unitPrice - 1e-9) parts.push(`<span style="color:var(--green);font-weight:bold">💰 best offer ${fmtSfl(m.bestBid)} ≥ your ask!</span>`);
-            else parts.push(`best offer <b>${fmtSfl(m.bestBid)}</b> ${sflIcon(9)} <span style="color:var(--text-dim)">(−${m.gap.toFixed(0)}%, ${m.nBids} bid${m.nBids !== 1 ? "s" : ""})</span>`);
-          } else parts.push(`<span style="color:var(--text-dim)">no offers</span>`);
-          return parts.join(" · ");
-        }
-        const parts = [];
-        if (m.total <= 1) parts.push(`<span style="color:var(--sunpetal);font-weight:bold">🥇 only listing</span>`);
-        else if (m.isFirst) parts.push(`<span style="color:var(--sunpetal);font-weight:bold">🥇 1ST</span> <span style="color:var(--text-dim)">of ${m.total}</span>`);
-        else parts.push(`<span style="color:#ff8c42;font-weight:bold">#${m.rank}/${m.total}</span> <span style="color:var(--text-dim)">cheapest ${fmtSfl(m.cheapest)} ${sflIcon(9)}</span>`);
-        if (m.bestBid > 0) {
-          if (m.bestBid >= l.unitPrice - 1e-9) parts.push(`<span style="color:var(--green);font-weight:bold">💰 best offer ${fmtSfl(m.bestBid)} ≥ your ask!</span>`);
-          else parts.push(`best offer <b>${fmtSfl(m.bestBid)}</b> ${sflIcon(9)} <span style="color:var(--text-dim)">(−${m.gap.toFixed(0)}%, ${m.nBids} bid${m.nBids !== 1 ? "s" : ""})</span>`);
-        } else parts.push(`<span style="color:var(--text-dim)">no offers</span>`);
-        return parts.join(" · ");
-      };
-      // Re-bucket + re-sort the Active Listings once live data is loaded.
-      const _regroupActive = () => {
-        const body = document.getElementById("active-listings-body");
-        if (!body) return;
-        const catOf = (l) => { const m = l._live; if (!m) return 3; if (m.goodOffer) return 1; if (!m.isFirst) return 2; return 3; };
-        const groups = [
-          { n: 1, cls: "sales-cat-1", label: "💰 OFFER WITHIN 5% — consider selling" },
-          { n: 2, cls: "sales-cat-2", label: "⚠️ NOT FIRST — undercut to win" },
-          { n: 3, cls: "sales-cat-3", label: "✓ FIRST / no close offer" },
-        ];
-        let html = "";
-        for (const g of groups) {
-          const rows = activeListings.filter(l => catOf(l) === g.n).sort((a, b) => b.priceSFL - a.priceSFL);
-          if (!rows.length) continue;
-          html += `<div class="sales-cat-header ${g.cls}">${g.label} <span style="opacity:0.7">(${rows.length})</span></div>`;
-          for (const l of rows) html += renderListingRow(l, true);
-        }
-        body.innerHTML = html;
-      };
-      // Pet undercut uses per-TYPE floors (1-of-1 NFTs). One call covers all types.
-      const _petMetrics = (l, byType) => {
-        const t = PET_TYPES[l.nftId];
-        const my = l.unitPrice;
-        const same = (byType[t] || []).filter(x => x.id !== l.nftId);
-        const floors = same.map(x => x.floor).sort((a, b) => a - b);
-        const cheaper = floors.filter(v => v < my - 1e-9).length;
-        return { isPet: true, type: t || "pet", total: same.length + 1, rank: cheaper + 1,
-                 isFirst: cheaper === 0, cheapest: floors[0] || 0, bestBid: 0, gap: null, nBids: 0, goodOffer: false };
-      };
-      const _sleep = (ms) => new Promise(r => setTimeout(r, ms));
-      // Sequential + paced (~2.5 req/s) with 429 backoff — gentle on the SFL API to avoid bans/limits.
-      const _fillLiveOffers = async (rows) => {
-        const queue = rows.filter(l => l.nftId && l.collection);
-        const prog = document.getElementById("sales-live-progress");
-        const total = queue.length;
-        let loaded = 0;
-        const setProg = () => { if (prog) prog.innerHTML = loaded < total ? `<span class="sales-spin">⟳</span> live ${loaded}/${total}` : `✓ live market — sorted`; };
-        if (total > 0) setProg();
-        // Pets: fetch per-type floors once (covers every pet listing).
-        let petByType = null;
-        if (queue.some(l => l.collection === "pets")) {
+      for (const l of queue) {
+        if (!alive()) return;
+        if (l.collection === "pets") {
+          const m = petByType ? _salesPetMetrics(l, petByType)
+            : { isPet: true, type: PET_TYPES[l.nftId] || "pet", total: 1, rank: 1, isFirst: true, cheapest: 0, bestBid: 0, gap: null, nBids: 0, goodOffer: false };
+          // offers are per token (a buyer wanting YOUR pet) → the per-item order book
           try {
-            const pr = await fetch("/api/marketplace-orderbook?petfloors=1");
-            if (pr.ok) {
-              petByType = {};
-              for (const it of ((await pr.json()).items || [])) {
-                const t = PET_TYPES[it.id];
-                if (t && it.floor) (petByType[t] = petByType[t] || []).push({ id: it.id, floor: it.floor });
-              }
+            const r = await fetch(`/api/marketplace-orderbook?live=1&collection=pets&item_id=${l.nftId}`);
+            if (r.ok) {
+              const bids = ((await r.json()).offers || []).map(x => x.qty > 0 ? x.sfl / x.qty : x.sfl).filter(v => isFinite(v) && v > 0);
+              if (bids.length) { const bb = Math.max(...bids); m.bestBid = bb; m.nBids = bids.length; m.gap = ((l.unitPrice - bb) / l.unitPrice) * 100; m.goodOffer = m.gap <= 5; }
             }
           } catch {}
+          if (!alive()) return;
+          step(l, m);
+          await sleep(5200);
+          continue;
         }
-        for (const l of queue) {
-          const el = document.getElementById(`sales-live-${l.id}`);
-          if (l.collection === "pets") {
-            const m = petByType ? _petMetrics(l, petByType)
-              : { isPet: true, type: PET_TYPES[l.nftId] || "pet", total: 1, rank: 1, isFirst: true, cheapest: 0, bestBid: 0, gap: null, nBids: 0, goodOffer: false };
-            // Offers are per-token (a buyer wanting YOUR specific pet) → per-item orderbook.
-            try {
-              const r = await fetch(`/api/marketplace-orderbook?live=1&collection=pets&item_id=${l.nftId}`);
-              if (r.ok) {
-                const bids = ((await r.json()).offers || []).map(x => x.qty > 0 ? x.sfl / x.qty : x.sfl).filter(v => isFinite(v) && v > 0);
-                if (bids.length) { const bb = Math.max(...bids); m.bestBid = bb; m.nBids = bids.length; m.gap = ((l.unitPrice - bb) / l.unitPrice) * 100; m.goodOffer = m.gap <= 5; }
-              }
-            } catch {}
-            l._live = m;
-            if (el) el.innerHTML = _liveLine(l, m);
-            loaded++; setProg();
-            await _sleep(5200);   // community API: ~1 request / 5 s
-            continue;
-          }
-          const liveColl = l.mkt || l.collection; // resources live under the collectibles collection
-          const key = `${liveColl}:${l.nftId}`;
-          const cached = _liveObCache[key];
-          if (cached && Date.now() - cached._t < 120000) { l._live = _liveMetrics(l, cached); if (el) el.innerHTML = _liveLine(l, l._live); loaded++; setProg(); continue; }
-          let done = false;
-          for (let attempt = 0; attempt < 4 && !done; attempt++) {
-            if (attempt > 0) { if (el) el.innerHTML = `<span class="sales-live-load"><span class="sales-spin">⟳</span> retrying…</span>`; await _sleep(1500 * attempt); }
-            try {
-              const r = await fetch(`/api/marketplace-orderbook?live=1&collection=${encodeURIComponent(liveColl)}&item_id=${l.nftId}`);
-              if (r.status === 429) continue; // retry with backoff
-              if (!r.ok) { if (el) el.innerHTML = ""; done = true; break; }
-              const d = await r.json(); d._t = Date.now(); _liveObCache[key] = d;
-              l._live = _liveMetrics(l, d); if (el) el.innerHTML = _liveLine(l, l._live); done = true;
-            } catch { if (el) el.innerHTML = ""; done = true; }
-          }
-          if (!done && el) el.innerHTML = `<span style="color:var(--yellow)">⏳ market busy — reopen later</span>`;
-          loaded++; setProg();
-          await _sleep(5200);   // community API: ~1 request / 5 s
+        const liveColl = l.mkt || l.collection; // resources live under the collectibles collection
+        const key = `${liveColl}:${l.nftId}`;
+        const cached = _liveObCache[key];
+        if (cached && Date.now() - cached._t < 120000) { step(l, _salesLiveMetrics(l, cached)); continue; }
+        let done = false;
+        for (let attempt = 0; attempt < 4 && !done; attempt++) {
+          if (attempt > 0) await sleep(1500 * attempt);
+          try {
+            const r = await fetch(`/api/marketplace-orderbook?live=1&collection=${encodeURIComponent(liveColl)}&item_id=${l.nftId}`);
+            if (r.status === 429) continue; // retry with backoff
+            if (!r.ok) { done = true; break; }
+            const d = await r.json(); d._t = Date.now(); _liveObCache[key] = d;
+            if (!alive()) return;
+            step(l, _salesLiveMetrics(l, d)); done = true;
+          } catch { done = true; }
         }
-        _regroupActive(); // bucket + sort once all live data is in
-      };
-
-      // Market Overview container (async-filled)
-      content += `<div id="market-overview-container"></div>`;
-
-      // Active Listings section
-      content += `<div style="margin-bottom:16px">
-        <div class="sales-section-header pixel-font" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
-          <h3>📤 ACTIVE LISTINGS</h3>
-          <span class="sales-section-count">${activeListings.length} items</span>
-          <span id="sales-live-progress" class="sales-live-progress"></span>
-        </div>
-        <div class="sales-section-body" id="active-listings-body">`;
-      if (activeListings.length === 0) {
-        content += `<div style="padding:16px;text-align:center;font-size: 0.625rem;color:var(--text-dim)">No active listings</div>`;
-      } else {
-        for (const l of activeListings) content += renderListingRow(l, true);
+        if (!done) { _salesLiveBusy[l.id] = true; step(l, null); }
+        else if (!_salesLive[l.id]) step(l, null);
+        await sleep(5200);
       }
-      content += `</div></div>`;
-
-      // ── What can I sell? — unlisted inventory/wardrobe items with market value ──
-      // Resources at p2p, collectibles at floor, wearables at lastSale/floor. Items already
-      // sitting in an active listing are excluded (by name). Threshold slider (min total value)
-      // persists in localStorage; rows sorted by total value high → low.
-      const SELL_MIN_STEPS = [0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
-      const listedNames = new Set(activeListings.map(x => x.itemName));
-      const _invSell = data.inventory || data.farm?.inventory || {};
-      const _wardSell = data.farm?.wardrobe || {};
-      const sellableRows = [];
-      for (const [name, price] of Object.entries(market.p2p)) {
-        const p = parseFloat(price) || 0;
-        const qty = getCount(_invSell, name);
-        if (qty <= 0 || p <= 0 || listedNames.has(name)) continue;
-        sellableRows.push({ name, qty, unitPrice: p, total: qty * p, collection: "resources", nftId: RESOURCE_IDS[name] || null });
-      }
-      for (const [name, nft] of Object.entries(market.nfts)) {
-        if (listedNames.has(name)) continue;
-        const isWear = nft.collection === "wearables";
-        const qty = isWear ? (parseFloat(_wardSell[name]) || 0) : getCount(_invSell, name);
-        const p = isWear ? (nft.lastSale || nft.floor) : nft.floor;
-        if (qty <= 0 || !p || p <= 0) continue;
-        sellableRows.push({ name, qty, unitPrice: p, total: qty * p, collection: nft.collection, nftId: nft.id || null, boost: nft.boost || "" });
-      }
-      sellableRows.sort((a, b) => b.total - a.total);
-
-      const _sellMinGet = () => { const v = parseFloat(localStorage.getItem("sfl_sales_sell_min")); return isFinite(v) ? v : 10; };
-      // type filter: both | nft | resources (persisted)
-      const _sellTypeGet = () => { const t = localStorage.getItem("sfl_sales_sell_type"); return ["both", "nft", "resources"].includes(t) ? t : "both"; };
-      const _sellTypeMatch = (r) => { const t = _sellTypeGet(); return t === "both" || (t === "resources" ? r.collection === "resources" : r.collection !== "resources"); };
-      const _renderSellList = () => {
-        const wrap = document.getElementById("sellable-list");
-        const cnt = document.getElementById("sellable-count");
-        if (!wrap) return;
-        const min = _sellMinGet();
-        const rows = sellableRows.filter(r => r.total >= min && _sellTypeMatch(r));
-        if (cnt) cnt.textContent = `${rows.length} items`;
-        if (rows.length === 0) { wrap.innerHTML = `<div style="padding:14px;text-align:center;font-size:0.625rem;color:var(--text-dim)">Nothing unlisted worth ≥ ${min} ⚀</div>`; return; }
-        wrap.innerHTML = rows.map(r => `
-          <div class="sales-listing">
-            <img class="sales-listing-img" src="${getItemIcon(r.name)}" onerror="this.style.display='none'" alt="">
-            <div class="sales-listing-info">
-              <div class="sales-listing-name">${escHTML(r.name)}${r.qty > 1 ? ` x${fmtQty(r.qty)}` : ""}${r.nftId ? ` <a href="https://sunflower-land.com/play/#/marketplace/${r.collection === "resources" ? "collectibles" : r.collection}/${r.nftId}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open in marketplace — list it" style="text-decoration:none;margin-left:2px">🔗</a>` : ""}</div>
-              <div class="sales-listing-detail">${r.collection} · ${fmtSfl(r.unitPrice)} ${sflIcon()}/ea</div>
-              ${r.boost ? `<div class="sales-listing-detail" style="color:var(--lily)">⚡ ${escHTML(String(r.boost).replace(/\n+/g, " / "))}</div>` : ""}
-            </div>
-            <div class="sales-listing-prices"><div class="sales-price-yours">${fmtSfl(r.total)} ${sflIcon()}</div></div>
-          </div>`).join("");
-      };
-      window._sellMinSlide = (idx) => {
-        const v = SELL_MIN_STEPS[parseInt(idx)] ?? 10;
-        localStorage.setItem("sfl_sales_sell_min", String(v));
-        const lab = document.getElementById("sell-min-label");
-        if (lab) lab.textContent = `≥ ${v} ⚀`;
-        _renderSellList();
-      };
-      window._sellTypeSet = (t) => {
-        localStorage.setItem("sfl_sales_sell_type", t);
-        document.querySelectorAll("#sell-type-toggle .roi-pill").forEach(b => b.classList.toggle("active", b.dataset.t === t));
-        _renderSellList();
-      };
-      const _sellMin0 = _sellMinGet();
-      let _sellIdx0 = SELL_MIN_STEPS.findIndex(s => s >= _sellMin0);
-      if (_sellIdx0 < 0) _sellIdx0 = SELL_MIN_STEPS.length - 1;
-      content += `<div style="margin-bottom:16px">
-        <div class="sales-section-header pixel-font" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
-          <h3>💸 WHAT CAN I SELL</h3>
-          <span class="sales-section-count" id="sellable-count"></span>
-        </div>
-        <div class="sales-section-body">
-          <div id="sell-type-toggle" style="display:flex;align-items:center;gap:6px;padding:10px 14px 4px;flex-wrap:wrap">
-            <span class="pixel-font" style="font-size:0.5rem;color:var(--text-secondary);white-space:nowrap;margin-right:4px">SHOW</span>
-            ${[["both", "Both"], ["nft", "🎴 NFT"], ["resources", "⛏️ Resources"]].map(([t, lbl]) =>
-              `<button class="roi-pill${_sellTypeGet() === t ? " active" : ""}" data-t="${t}" onclick="_sellTypeSet('${t}')">${lbl}</button>`).join("")}
-          </div>
-          <div style="display:flex;align-items:center;gap:10px;padding:6px 14px 10px;border-bottom:1px solid rgba(255,255,255,0.07)">
-            <span class="pixel-font" style="font-size:0.5rem;color:var(--text-secondary);white-space:nowrap">MIN VALUE</span>
-            <input type="range" min="0" max="${SELL_MIN_STEPS.length - 1}" step="1" value="${_sellIdx0}" oninput="_sellMinSlide(this.value)" style="flex:1;max-width:260px">
-            <span id="sell-min-label" class="pixel-font" style="font-size:0.5625rem;color:var(--sunpetal);white-space:nowrap">≥ ${SELL_MIN_STEPS[_sellIdx0]} ⚀</span>
-          </div>
-          <div id="sellable-list"></div>
-        </div>
-      </div>`;
-
-      // Active Offers section
-      if (activeOffers.length > 0) {
-        content += `<div style="margin-bottom:16px">
-          <div class="sales-section-header pixel-font" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
-            <h3>📥 ACTIVE OFFERS</h3>
-            <span class="sales-section-count">${activeOffers.length} items</span>
-          </div>
-          <div class="sales-section-body">`;
-        for (const o of activeOffers) content += renderListingRow(o, false);
-        content += `</div></div>`;
-      }
-
-      // Sold / Fulfilled section
-      if (soldListings.length > 0) {
-        content += `<div style="margin-bottom:16px">
-          <div class="sales-section-header pixel-font" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
-            <h3>✅ SOLD</h3>
-            <span class="sales-section-count">${soldListings.length} items</span>
-          </div>
-          <div class="sales-section-body" style="display:none">`;
-        for (const l of soldListings) content += renderListingRow(l, true);
-        content += `</div></div>`;
-      }
-
-      // Weekly stats
-      const weeklySales = trades.weeklySales || {};
-      const weeklyPurchases = trades.weeklyPurchases || {};
-      const weekKeys = [...new Set([...Object.keys(weeklySales), ...Object.keys(weeklyPurchases)])].sort().reverse();
-
-      if (weekKeys.length > 0) {
-        content += `<div style="margin-bottom:16px">
-          <div class="sales-section-header pixel-font" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
-            <h3>📊 WEEKLY HISTORY</h3>
-            <span class="sales-section-count">${weekKeys.length} weeks</span>
-          </div>
-          <div class="sales-section-body" style="display:none;padding:10px 14px">`;
-
-        for (const week of weekKeys.slice(0, 8)) {
-          const sales = weeklySales[week] || {};
-          const purchases = weeklyPurchases[week] || {};
-          const saleItems = Object.entries(sales).map(([n, q]) => `${n} x${fmtQty(q)}`).join(", ");
-          const purchItems = Object.entries(purchases).map(([n, q]) => `${n} x${fmtQty(q)}`).join(", ");
-          const weekDate = new Date(parseInt(week)).toLocaleDateString("en-GB");
-
-          content += `<div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid rgba(92,58,30,0.2)">
-            <div style="font-size: 0.625rem;color:var(--text-secondary);margin-bottom:3px">${weekDate}</div>
-            ${saleItems ? `<div style="font-size: 0.5625rem;color:var(--green)">Sold: ${escHTML(saleItems)}</div>` : ""}
-            ${purchItems ? `<div style="font-size: 0.5625rem;color:var(--blue)">Bought: ${escHTML(purchItems)}</div>` : ""}
-            ${!saleItems && !purchItems ? `<div style="font-size: 0.5625rem;color:var(--text-dim)">No activity</div>` : ""}
-          </div>`;
-        }
-
-        content += `</div></div>`;
-      }
-
-      // Debug: log raw trade data
-      console.log("[Sales] trades:", trades);
-      console.log("[Sales] listings:", Object.keys(listings).length, "offers:", Object.keys(offers).length);
-
-      // Volume Leaders container (async-filled)
-      content += `<div id="volume-leaders-container"></div>`;
-
-      // ── Price History sections ──
-      content += renderP2PHistorySection(p2pPrices);
-      content += renderNftHistorySection();
-
-      content += `<div class="footer">
-        <button class="refresh-btn" onclick="refresh()">REFRESH</button>
-        <div class="timestamp pixel-font">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
-      </div>`;
-
-      document.getElementById("sales-content").innerHTML = content;
-
-      // Async: fill market overview, volume leaders
-      _renderMarketOverview(document.getElementById("market-overview-container"));
-      _renderVolumeLeaders(document.getElementById("volume-leaders-container"));
-      _renderSellList(); // what-can-I-sell list (threshold from localStorage)
-      _fillLiveOffers(activeListings); // live nearest-offer + seller rank (on-demand)
+      if (!alive()) return;
+      _salesLiveDone = true;   // bucket + sort once all live data is in
+      _salesPatchListings();
     }
 
     // ═══════════════════════════════════════
@@ -17600,8 +17149,6 @@
         icon: (n) => `<img src="${getItemIcon(n)}" onerror="this.style.display='none'" alt="" style="height:1.3em;vertical-align:-0.25em;margin-right:3px">` };
       if (type === "weather-protection") return { weatherRows: (farm) => DASH_WEATHER_ITEMS.map((n) =>
         ({ name: n, state: dashWeatherState(farm, n), prevents: DASH_WEATHER_PREVENTS[n], iconHtml: _dashIcon(n) })) };
-      if (type === "treasury-value") return { catColors: TREASURY_CAT_COLORS };
-      if (type === "flip-table") return { icon: (n) => `<img src="${getItemIcon(n)}" onerror="this.style.display='none'" alt="" style="height:1.3em;vertical-align:-0.25em;margin-right:3px">` };
       if (type === "beehives") return { hives: (farm) => (farm.beehives ? extractBeehiveDetails(farm.beehives) : []), countdown: dashFormatCountdown };
       return {};
     }
@@ -22961,82 +22508,62 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     // ══════════════════════════════════════════════════════════════
     // FLIP OPPORTUNITIES (orderbook — MIGRATION.md §4.2/4.5)
     // ══════════════════════════════════════════════════════════════
-    // Reads /api/orderbook-flips (historized boosted-NFT orderbook). Buy on the
-    // bid, relist on the ask; net = ask×0.9 − bid (after 10% fee). Sort chips
-    // pick the ranking. Farm-independent — `data` is ignored.
-    const _flipSorts = [["score", "🔥 Score"], ["margin", "% Margin"], ["net", "Net"], ["spread", "Spread"], ["liquidity", "Liquidity"], ["pressure", "Pressure"], ["floor", "Floor"]];
-    function _flipSort() { const s = localStorage.getItem("sfl_flip_sort"); return _flipSorts.some(([k]) => k === s) ? s : "score"; }
-    window._flipSetSort = (s) => { localStorage.setItem("sfl_flip_sort", s); renderFlips(); };
-    window._flipSearch = (v) => { window._flipQ = v; clearTimeout(window._flipT); window._flipT = setTimeout(() => renderFlips(), 300); };
+    // Farm-independent: the store's "flips" feed (sort=score); the search filters it on the page.
+    // FLIPS, MY TRADES and MARKS are widgets (widgets/flip-table.mjs, my-trades.mjs, marks.mjs).
 
-    // The marketplace collectors were paused 2026-09-01, when the game walled its /collection
-    // and /marketplace endpoints behind a request-token anti-bot layer (RT-001) no server-side
-    // caller can sign; the stored orderbook/trade tables stopped growing. This notice shows
-    // ONLY while the data is genuinely stale (older than the collector's own threshold), so it
-    // clears itself the moment collection ever resumes — no code change needed to un-say it.
-    function _mktPausedNotice(latestTs, thresholdH) {
-      if (latestTs && (Date.now() - new Date(latestTs).getTime()) / 3600000 <= thresholdH) return "";
-      const asOf = latestTs ? new Date(latestTs).toLocaleString("cs-CZ") : "—";
-      return `<div class="pixel-panel" style="padding:12px;margin-bottom:10px;border-left:3px solid var(--yellow);color:var(--yellow);font-size:0.58rem;line-height:1.5">⏸️ <b>Marketplace API omezeno hrou</b> (anti-bot ochrana, 1. 9. 2026). Serverový sběr byl pozastaven — data jsou zamrzlá k <b>${escHTML(asOf)}</b> a dál se neaktualizují.</div>`;
+    // ── The widgets' page context for TREASURY, SALES, FLIPS, MY TRADES and MARKS (TREASURY and SALES
+    // sit earlier in this script than _wCtxMap, so theirs are registered here as well). ──
+    function _mktIcon(n) {
+      return `<img src="${getItemIcon(n)}" onerror="this.style.display='none'" alt="" style="height:1.2em;vertical-align:-0.25em;margin-right:3px">`;
     }
+    // Replace one page widget's frame in place (a live update without repainting the page).
+    function _mktPatch(type, html) {
+      const el = document.querySelector(`[data-frame="page:${type}"]`);
+      if (el) el.outerHTML = html;
+    }
+    _wCtxMap["treasury-value"] = _wTreasuryCtx;
+    _wCtxMap["treasury-categories"] = _wTreasuryCtx;
+    _wCtxMap["treasury-items"] = _wTreasuryCtx;
+    for (const t of ["sales-summary", "sales-offers", "sales-sold", "sales-sellable", "sales-weekly"]) _wCtxMap[t] = _wSalesCtx;
+    _wCtxMap["sales-listings"] = _wSalesCtx;
+    _wCtxMap["flip-table"] = () => ({ icon: _mktIcon });
+    _wCtxMap["flip-summary"] = () => ({ icon: _mktIcon });
+    for (const t of ["my-trades-summary", "my-trades-items", "my-trades-recent"]) _wCtxMap[t] = () => ({ icon: _mktIcon });
+    for (const t of ["marks-summary", "marks-shopping", "marks-leaderboard", "marks-cost1", "marks-projections", "marks-burn"]) _wCtxMap[t] = _wMarksCtx;
+    _wCtxMap["marks-sources"] = _wMarksCtx;
+
+    // ══════════════════════════════════════════════════════════════
+    // FLIPS
+    // ══════════════════════════════════════════════════════════════
+    let _flipsEntry = null;
+    window._flipSearch = (v) => { window._flipQ = v; clearTimeout(window._flipT); window._flipT = setTimeout(() => _flipsPaint(), 300); };
 
     async function renderFlips() {
       const app = document.getElementById("app");
-      const sort = _flipSort();
       const q = window._flipQ || "";
-      app.innerHTML = `<div class="header pixel-panel pixel-font"><h1>💱 FLIP OPPORTUNITIES</h1>
-        <div class="farm-id">boosted NFT orderbook · buy bid → relist ask (−10% fee)</div></div>
-        <div id="flips-root" class="pixel-font" style="padding:8px 0"><div style="text-align:center;padding:40px;color:var(--text-dim)">Loading orderbook…</div></div>`;
-      let d;
-      try {
-        const r = await fetch(`/api/marketplace-orderbook?flips=1&sort=${encodeURIComponent(sort)}${q ? "&q=" + encodeURIComponent(q) : ""}`);
-        if (!r.ok) throw new Error(`orderbook ${r.status}`);
-        d = await r.json();
-      } catch (e) {
-        document.getElementById("flips-root").innerHTML = `<div class="pixel-panel" style="padding:20px;color:var(--yellow);font-size:0.6rem">Orderbook data unavailable (${escHTML(e.message)}). The collector runs hourly — try later.</div>`;
+      app.innerHTML = _wPageHead("💱 Flip opportunities", `Boosted NFT order book · buy the bid → relist on the ask (−10 % fee) · ` +
+          `<input type="text" class="v-mkt-search" placeholder="🔎 search NFT" value="${escHTML(q)}" oninput="_flipSearch(this.value)">`) +
+        `<div id="flips-root"><div class="w-frame pixel-panel"><div class="w-empty-msg">Loading the order book…</div></div></div>`;
+      if (typeof __widgets === "undefined" || !window.__store) { document.getElementById("flips-root").innerHTML = _wMissing("Flips"); return; }
+      window._wRerender = () => { if (getPage() === "flips") _flipsPaint(); };
+      window._wRefresh = () => { __store.invalidate({ res: "flips" }); renderFlips(); };
+      _flipsEntry = await __store.get({ res: "flips" });
+      if (getPage() === "flips") _flipsPaint();
+    }
+    function _flipsPaint() {
+      const root = document.getElementById("flips-root");
+      const r = _flipsEntry;
+      if (!root || !r) return;
+      if (!r.data) {
+        root.innerHTML = `<div class="w-frame pixel-panel"><div class="w-error">Order book data unavailable (${escHTML(r.error || "?")}). The collector runs hourly — try later.</div></div>`;
         return;
       }
-      const kf = (v) => v == null ? "—" : Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + "k" : (Math.abs(v) >= 1 ? v.toFixed(0) : v.toFixed(2));
-      let h = `<style>
-        .flip-ctrl{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
-        .flip-t{width:100%;border-collapse:collapse;font-size:0.58rem}
-        .flip-t th{font-size:0.48rem;color:var(--text-dim);text-align:right;padding:4px 6px;border-bottom:1px solid var(--border-dark);white-space:nowrap}
-        .flip-t th:first-child{text-align:left}
-        .flip-t td{padding:5px 6px;text-align:right;white-space:nowrap;border-top:1px solid #1d1710}
-        .flip-t td:first-child{text-align:left}
-        .flip-t tr:hover{background:rgba(255,255,255,0.04)}
-        .flip-t .icn{height:1.3em;vertical-align:-0.25em;margin-right:3px}
-        .flip-good{color:#7fe0a0}.flip-bad{color:#ff8888}.flip-dim{color:var(--text-dim)}
-        .flip-name{color:var(--text-primary)}
-      </style>`;
-      h += `<div class="flip-ctrl">`;
-      h += `<input type="text" placeholder="🔎 search NFT" value="${escHTML(q)}" oninput="_flipSearch(this.value)" style="background:#1c160f;border:1px solid var(--border-brown);color:var(--text-primary);border-radius:5px;padding:4px 8px;font-size:0.6rem;font-family:'Courier New',monospace;min-width:140px">`;
-      for (const [k, lbl] of _flipSorts) h += `<button class="roi-pill${sort === k ? " active" : ""}" onclick="_flipSetSort('${k}')">${lbl}</button>`;
-      h += _wPinBtn("flip-table", "NFT flips") + `</div>`;
-      h += _mktPausedNotice(d.items[0]?.updatedAt, 3);
-      h += `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px">${d.count} boostovaných NFT s bid i ask · <span class="flip-good">zelená</span> marže ≥15 % (zdravý flip) · <span class="flip-bad">červená</span> net ≤0 (spread nepokryje poplatek)</div>`;
-      h += `<div style="overflow-x:auto"><table class="flip-t"><thead><tr>
-        <th>NFT</th><th>bid→ask</th><th>avg10</th><th>spread</th><th>net</th><th>marže</th><th>obch.</th><th>tlak o/l</th>
-      </tr></thead><tbody>`;
-      for (const it of d.items.slice(0, 200)) {
-        const good = it.margin >= 15, bad = it.net <= 0;
-        const link = `https://sunflower-land.com/play/#/marketplace/${it.collection}/${it.itemId}`;
-        h += `<tr>
-          <td><a href="${link}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><img class="icn" src="${getItemIcon(it.name)}" onerror="this.style.display='none'" alt=""><span class="flip-name">${escHTML(it.name || "#" + it.itemId)}</span> 🔗</a>${it.boost ? `<div class="flip-dim" style="font-size:0.46rem">⚡ ${escHTML(String(it.boost).replace(/\n+/g, " / "))}</div>` : ""}</td>
-          <td>${kf(it.bestOffer)}→${kf(it.bestListing)}</td>
-          <td class="flip-dim">${kf(it.avgTrade10)}</td>
-          <td>${it.spreadPct != null ? it.spreadPct.toFixed(0) + "%" : "—"}</td>
-          <td class="${bad ? "flip-bad" : "flip-good"}">${kf(it.net)}</td>
-          <td class="${good ? "flip-good" : bad ? "flip-bad" : ""}">${it.margin.toFixed(0)}%</td>
-          <td class="flip-dim">${it.tradesToday || 0}<span style="font-size:0.44rem">/d</span> ${it.nTrades10 || 0}<span style="font-size:0.44rem">/10</span></td>
-          <td class="flip-dim">${it.offerPressure || 0}/${it.listingPressure || 0}</td>
-        </tr>`;
-      }
-      h += `</tbody></table></div>`;
-      const upd = d.items[0]?.updatedAt;
-      const flipStale = upd && (Date.now() - new Date(upd).getTime()) / 3600000 > 3;
-      h += `<div class="flip-dim" style="font-size:0.5rem;margin-top:8px">${flipStale ? "Sběr pozastaven" : "Sběr každou hodinu"}${upd ? " · poslední: " + new Date(upd).toLocaleString("cs-CZ") : ""}</div>`;
-      document.getElementById("flips-root").innerHTML = h;
+      const q = (window._flipQ || "").trim().toLowerCase();
+      const items = q ? (r.data.items || []).filter((i) => (i.name || "").toLowerCase().includes(q)) : (r.data.items || []);
+      const data = { flips: { ...r.data, items, count: q ? items.length : r.data.count } };
+      const fresh = __wFresh(r);
+      root.innerHTML = __widgets.renderPage("flip-summary", { data, ctx: _wCtx("flip-summary"), fresh }) +
+        __widgets.renderPage("flip-table", { data, ctx: _wCtx("flip-table"), fresh });
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -23044,877 +22571,126 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     // ══════════════════════════════════════════════════════════════
     async function renderMyTrades() {
       const app = document.getElementById("app");
-      app.innerHTML = `<div class="header pixel-panel pixel-font"><h1>💰 MY TRADES</h1>
-        <div class="farm-id">every marketplace trade you were part of · buy / sell ledger</div></div>
-        <div id="mt-root" class="pixel-font" style="padding:8px 0"><div style="text-align:center;padding:40px;color:var(--text-dim)">Loading your trades…</div></div>`;
-      let d;
-      try {
-        const r = await fetch(`/api/marketplace-trades?mytrades=1&farm=${encodeURIComponent(FARM_ID)}`);
-        if (!r.ok) throw new Error(`trades ${r.status}`);
-        d = await r.json();
-      } catch (e) {
-        document.getElementById("mt-root").innerHTML = `<div class="pixel-panel" style="padding:20px;color:var(--yellow);font-size:0.6rem">Trade history unavailable (${escHTML(e.message)}).</div>`;
-        return;
-      }
-      const kf = (v) => v == null ? "—" : (Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + "k" : (Math.abs(v) >= 1 ? v.toFixed(0) : v.toFixed(2)));
-      const t = d.totals || {};
-      const sfl = () => sflIcon();
-      let h = `<style>
-        .mt-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:14px}
-        .mt-card{background:linear-gradient(160deg,#251c12,#1c160f);border:1px solid var(--border-brown);border-radius:8px;padding:10px 12px}
-        .mt-card .lbl{font-size:0.5rem;color:var(--text-dim)}
-        .mt-card .val{font-size:0.85rem;font-family:'Courier New',monospace;margin-top:2px}
-        .mt-t{width:100%;border-collapse:collapse;font-size:0.58rem}
-        .mt-t th{font-size:0.48rem;color:var(--text-dim);text-align:right;padding:4px 6px;border-bottom:1px solid var(--border-dark);white-space:nowrap}
-        .mt-t th:first-child{text-align:left}
-        .mt-t td{padding:5px 6px;text-align:right;white-space:nowrap;border-top:1px solid #1d1710}
-        .mt-t td:first-child{text-align:left}
-        .mt-t .icn{height:1.3em;vertical-align:-0.25em;margin-right:3px}
-        .g{color:#7fe0a0}.r{color:#ff8888}.dim{color:var(--text-dim)}
-      </style>`;
-      h += _mktPausedNotice(d.trades?.[0]?.date, 6);
-      h += `<div class="mt-cards">
-        <div class="mt-card"><div class="lbl">💸 Nakoupeno (${t.buyCount || 0}×)</div><div class="val r">${kf(t.boughtSfl)} ${sfl()}</div></div>
-        <div class="mt-card"><div class="lbl">💰 Prodáno (${t.sellCount || 0}×)</div><div class="val g">${kf(t.soldSfl)} ${sfl()}</div></div>
-        <div class="mt-card"><div class="lbl">📊 Cash net</div><div class="val ${(t.cashNet || 0) >= 0 ? "g" : "r"}">${(t.cashNet || 0) >= 0 ? "+" : ""}${kf(t.cashNet)} ${sfl()}</div></div>
-        <div class="mt-card"><div class="lbl">🔁 Obchodů</div><div class="val">${t.tradeCount || 0}</div></div>
-      </div>`;
-      // per-item ledger
-      h += `<div class="pixel-panel" style="padding:10px;margin-bottom:14px"><div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:6px">PER ITEM</div>
-        <div style="overflow-x:auto"><table class="mt-t"><thead><tr>
-          <th>NFT</th><th>koupeno</th><th>ø koup</th><th>prodáno</th><th>ø prodej</th><th>realized</th><th>cash net</th>
-        </tr></thead><tbody>`;
-      for (const it of (d.items || []).slice(0, 100)) {
-        h += `<tr>
-          <td><img class="icn" src="${getItemIcon(it.name || "")}" onerror="this.style.display='none'" alt=""><span>${escHTML(it.name || "#" + it.itemId)}</span></td>
-          <td class="dim">${it.boughtQty || 0}×</td><td class="dim">${it.avgBuy != null ? kf(it.avgBuy) : "—"}</td>
-          <td class="dim">${it.soldQty || 0}×</td><td class="dim">${it.avgSell != null ? kf(it.avgSell) : "—"}</td>
-          <td class="${it.realized == null ? "dim" : it.realized >= 0 ? "g" : "r"}">${it.realized == null ? "—" : (it.realized >= 0 ? "+" : "") + kf(it.realized)}</td>
-          <td class="${(it.cashNet || 0) >= 0 ? "g" : "r"}">${(it.cashNet || 0) >= 0 ? "+" : ""}${kf(it.cashNet)}</td>
-        </tr>`;
-      }
-      h += `</tbody></table></div></div>`;
-      // recent trades
-      h += `<div class="pixel-panel" style="padding:10px"><div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:6px">POSLEDNÍ OBCHODY</div>
-        <div style="overflow-x:auto"><table class="mt-t"><thead><tr><th>datum</th><th>NFT</th><th>směr</th><th>cena/ks</th><th>ks</th><th>celkem</th><th>protistrana</th></tr></thead><tbody>`;
-      for (const tr of (d.trades || []).slice(0, 80)) {
-        const buy = tr.side === "buy";
-        h += `<tr>
-          <td class="dim">${new Date(tr.date).toLocaleDateString("cs-CZ")}</td>
-          <td><img class="icn" src="${getItemIcon(tr.name || "")}" onerror="this.style.display='none'" alt=""><span>${escHTML(tr.name || "#" + tr.itemId)}</span></td>
-          <td class="${buy ? "r" : "g"}">${buy ? "koupil" : "prodal"}</td>
-          <td class="dim">${kf(tr.unitPrice)}</td><td class="dim">${tr.qty}</td>
-          <td class="${buy ? "r" : "g"}">${buy ? "−" : "+"}${kf(tr.sfl)}</td>
-          <td class="dim">${escHTML(tr.counterparty || "?")}</td>
-        </tr>`;
-      }
-      h += `</tbody></table></div></div>`;
-      document.getElementById("mt-root").innerHTML = h;
+      const head = _wPageHead("💰 My trades", "Every marketplace trade you were part of · buy / sell ledger");
+      app.innerHTML = head + `<div class="w-frame pixel-panel"><div class="w-empty-msg">Loading your trades…</div></div>`;
+      if (typeof __widgets === "undefined" || !window.__store) { app.innerHTML = head + _wMissing("My trades"); return; }
+      const q = { res: "myTrades", farm: FARM_ID };
+      window._wRefresh = () => { __store.invalidate(q); renderMyTrades(); };
+      const r = await __store.get(q);
+      if (getPage() !== "mytrades") return;
+      const paint = () => {
+        if (!r.data) {
+          app.innerHTML = head + `<div class="w-frame pixel-panel"><div class="w-error">Trade history unavailable (${escHTML(r.error || "?")}).</div></div>`;
+          return;
+        }
+        const data = { trades: r.data }, fresh = __wFresh(r);
+        app.innerHTML = head + ["my-trades-summary", "my-trades-items", "my-trades-recent"]
+          .map((t) => __widgets.renderPage(t, { data, ctx: _wCtx(t), fresh })).join("");
+      };
+      window._wRerender = () => { if (getPage() === "mytrades") paint(); };
+      paint();
     }
 
     // ══════════════════════════════════════════════════════════════
     // MARKS WAR TRACKER
     // ══════════════════════════════════════════════════════════════
+    // The leaderboard of a week through the store ("marks"); the strategy widgets add the live farm and
+    // the p2p prices (section=treasury). The week picker, auto-refresh, the crawl trigger and the
+    // chart (lightweight-charts) stay on the page.
 
     let _marksRefreshTimer = null;
+    let _marksWeek = "";            // "" = the latest week
+    let _marksWeeks = [];
+    let _marksFarm = null;
+    let _marksEntry = null, _marksPricesEntry = null;
+    let _marksSnapshots = null;     // { week, snapshots } for the chart
+
+    // What the MARKS widgets need from the page: the farm id, icons, the delivery cost rule over the
+    // shared price map (memoised per p2p map), recipes for pet food, the saved shopping budget.
+    let _marksPriceMemo = { p2p: null, maps: null, map: null };
+    function _wMarksCtx() {
+      let budget = "0.03";
+      try { budget = localStorage.getItem("sfl_marks_budget") || "0.03"; } catch (e) {}
+      return { farmId: FARM_ID, icon: _mktIcon, budget,
+        priceMap: (p2p) => {
+          const maps = PRICES(null) || {};
+          if (_marksPriceMemo.p2p === p2p && _marksPriceMemo.maps === maps) return _marksPriceMemo.map;
+          const map = {};
+          for (const k of new Set([...Object.keys(maps.productionCost || {}), ...Object.keys(maps.marketValue || {}), ...Object.keys(p2p || {})])) {
+            map[k] = deliveryItemCostSfl(k, null, p2p);   // Roadmap's rule, shared with Dashboard
+          }
+          _marksPriceMemo = { p2p, maps, map };
+          return map;
+        },
+        recipe: (f) => (typeof RECIPE_INGREDIENTS !== "undefined" && RECIPE_INGREDIENTS[f]) || null };
+    }
+    const _marksQuery = () => (_marksWeek ? { res: "marks", week: _marksWeek } : { res: "marks" });
 
     async function renderMarks(data) {
       const app = document.getElementById("app");
-      app.innerHTML = `<div class="header pixel-panel pixel-font">
-        <h1>\u2694\uFE0F MARKS WAR TRACKER</h1>
-        <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
-      </div>
-      <div id="marks-root" class="pixel-font" style="padding:8px 0">
-        <div style="text-align:center;padding:40px;color:var(--text-dim)">Loading marks data...</div>
-      </div>`;
+      _marksFarm = (data && data.farm) || null;
+      app.innerHTML = _wPageHead("⚔️ Marks war tracker", `Farm #${escHTML(FARM_ID)}`) +
+        `<div class="w-frame pixel-panel"><div class="w-empty-msg">Loading marks data…</div></div>`;
+      if (typeof __widgets === "undefined" || !window.__store) { app.innerHTML += _wMissing("Marks"); return; }
+      window._wRerender = () => { if (getPage() === "marks") _marksPaint(); };
+      window._wRefresh = () => _marksReload(true);
+      fetch("/api/marks-history?mode=weeks").then((r) => (r.ok ? r.json() : { weeks: [] }))
+        .then((w) => { _marksWeeks = w.weeks || []; if (getPage() === "marks" && _marksEntry) _marksPaint(); }).catch(() => {});
+      await _marksReload(false);
+    }
 
-      try {
-        // Fetch weeks list + latest data + crawl state in parallel
-        const [weeksResp, latestResp, stateResp] = await Promise.all([
-          fetch("/api/marks-history?mode=weeks"),
-          fetch("/api/marks-history?mode=latest"),
-          fetch("/api/marks-history?mode=state"),
-        ]);
-
-        const weeksData = weeksResp.ok ? await weeksResp.json() : { weeks: [] };
-        const latestData = latestResp.ok ? await latestResp.json() : { week: {}, players: [], snapshot_count: 0 };
-        const stateData = stateResp.ok ? await stateResp.json() : { state: null };
-
-        await _renderMarksContent(latestData, weeksData, stateData, data);
-
-        // Fetch timeline data for chart
-        const weekStart = latestData.week?.week_start;
-        if (weekStart) {
-          fetch(`/api/marks-history?mode=snapshots&week=${weekStart}`)
-            .then(r => r.ok ? r.json() : { snapshots: [] })
-            .then(timelineData => _renderMarksChart(timelineData.snapshots, latestData.players))
-            .catch(() => {});
-        }
-      } catch (err) {
-        document.getElementById("marks-root").innerHTML =
-          `<div style="color:var(--red);padding:20px">Error: ${escHTML(err.message)}</div>`;
+    async function _marksReload(force) {
+      const q = _marksQuery();
+      if (force) __store.invalidate(q);
+      const [m, p] = await Promise.all([__store.get(q, { force }), __store.get({ res: "compute", farm: FARM_ID, section: "treasury" })]);
+      _marksEntry = m; _marksPricesEntry = p;
+      if (getPage() !== "marks") return;
+      _marksPaint();
+      const weekStart = m.data && m.data.week && m.data.week.week_start;
+      if (weekStart && (!_marksSnapshots || _marksSnapshots.week !== weekStart || force)) {
+        fetch(`/api/marks-history?mode=snapshots&week=${weekStart}`)
+          .then((r) => (r.ok ? r.json() : { snapshots: [] }))
+          .then((t) => { _marksSnapshots = { week: weekStart, snapshots: t.snapshots || [] }; if (getPage() === "marks") _renderMarksChart(_marksSnapshots.snapshots, (m.data || {}).players); })
+          .catch(() => {});
       }
     }
 
-    async function _renderMarksContent(latestData, weeksData, stateData, liveData) {
-      const root = document.getElementById("marks-root");
-      const players = latestData.players || [];
-      const week = latestData.week || {};
-      const kitchenItems = week.kitchen_items || [];
-      const crawlState = stateData.state || {};
-      const myFarmId = parseInt(FARM_ID);
-
-      // Sort by rank
-      players.sort((a, b) => (a.rank || 999) - (b.rank || 999));
-
-      // Find own player
-      const me = players.find(p => p.farm_id === myFarmId || String(p.farm_id) === FARM_ID);
-      const topPlayer = players[0];
-
-      // Days left calculation
-      const weekStart = week.week_start;
-      const wsDate = weekStart ? new Date(typeof weekStart === "string" && weekStart.length === 10 ? weekStart + "T00:00:00Z" : weekStart) : null;
-      const daysLeft = wsDate ? Math.max(0, (wsDate.getTime() + 7 * 86400000 - Date.now()) / 86400000) : 0;
-      const hoursLeft = Math.floor(daysLeft * 24);
-      const minsLeft = Math.floor((daysLeft * 24 - hoursLeft) * 60);
-
-      // Week selector
-      const weeks = weeksData.weeks || [];
-      let weekOptions = weeks.map(w =>
-        `<option value="${w.week_start}" ${w.week_start === weekStart ? "selected" : ""}>${w.week_start}</option>`
-      ).join("");
-      if (!weekOptions) weekOptions = `<option>${weekStart || "No data"}</option>`;
-
-      // Crawl status
-      let crawlStatus = "";
-      if (crawlState.phase === "discover") {
-        crawlStatus = `\uD83D\uDD0D Discovering players... (${crawlState.discover_cursor || 0} calls)`;
-      } else if (crawlState.phase === "crawl") {
-        crawlStatus = `\uD83D\uDCE1 Crawling farm data... (${crawlState.crawl_cursor || 0}/${crawlState.roster_size || "?"})`;
-      } else {
-        const ago = crawlState.updated_at ? _timeAgo(new Date(crawlState.updated_at)) : "?";
-        crawlStatus = `\u2705 Last cycle: ${ago} ago`;
+    function _marksPaint() {
+      const app = document.getElementById("app");
+      const m = _marksEntry;
+      if (!app || !m) return;
+      const marks = m.data;
+      const weekStart = marks && marks.week && marks.week.week_start;
+      let opts = _marksWeeks.map((w) => `<option value="${escHTML(w.week_start)}" ${w.week_start === weekStart ? "selected" : ""}>${escHTML(w.week_start)}</option>`).join("");
+      if (!opts) opts = `<option>${escHTML(weekStart || "No data")}</option>`;
+      const budget = parseFloat(_wMarksCtx().budget) || 0.03;
+      const controls = `<span class="v-marks-controls"><select onchange="_marksChangeWeek(this.value)">${opts}</select>
+        <label><input type="checkbox" ${_marksRefreshTimer ? "checked" : ""} onchange="_marksToggleRefresh(this.checked)"> Auto-refresh</label>
+        <button class="v-mkt-btn" onclick="_marksForceRefresh(event)">↻ Force refresh</button></span>`;
+      let html = _wPageHead("⚔️ Marks war tracker", `Farm #${escHTML(FARM_ID)} · ${controls}`);
+      if (!marks) {
+        app.innerHTML = html + `<div class="w-frame pixel-panel"><div class="w-error">Error: ${escHTML(m.error || "no data")}</div></div>`;
+        return;
       }
-
-      let html = "";
-
-      // ── Controls ──
-      // Calculate next snapshot time
-      const nowUtc = new Date();
-      const utcDay = nowUtc.getUTCDay();
-      const utcHour = nowUtc.getUTCHours();
-      let intervalH = 8; // Mon-Thu
-      if (utcDay === 5) intervalH = 4;
-      if (utcDay === 6) intervalH = 2;
-      if (utcDay === 0) intervalH = utcHour >= 20 ? 0.17 : 1; // Sun: nonstop after 20:00
-      const nextHour = intervalH > 0 ? Math.ceil(utcHour / intervalH) * intervalH : utcHour;
-      const nextSnapshot = new Date(nowUtc);
-      nextSnapshot.setUTCHours(nextHour <= utcHour && intervalH > 0 ? nextHour + intervalH : nextHour, 0, 0, 0);
-      if (nextSnapshot <= nowUtc) nextSnapshot.setUTCHours(nextSnapshot.getUTCHours() + (intervalH || 1));
-      const minsUntilNext = Math.max(0, Math.round((nextSnapshot - nowUtc) / 60000));
-      const nextStr = minsUntilNext < 60 ? `${minsUntilNext}m` : `${Math.floor(minsUntilNext/60)}h${minsUntilNext%60}m`;
-
-      html += `<div class="marks-controls">
-        <select onchange="_marksChangeWeek(this.value)">${weekOptions}</select>
-        <label><input type="checkbox" id="marks-auto-refresh" onchange="_marksToggleRefresh(this.checked)"> Auto-refresh</label>
-        <button onclick="_marksForceRefresh()" style="background:var(--bg-card);color:var(--sunpetal);border:2px solid var(--border-brown);padding:4px 10px;font-size:0.5rem;font-family:inherit;cursor:pointer">\u21BB Force refresh</button>
-        <span class="marks-crawl-status">${crawlStatus} | Next: ~${nextStr}</span>
-      </div>`;
-
-      // ── Summary stats ──
-      html += `<div class="marks-summary">
-        <div class="marks-summary-stat"><div class="marks-summary-label">YOUR RANK</div>
-          <div class="marks-summary-value">${me ? "#" + me.rank : "N/A"}</div></div>
-        <div class="marks-summary-stat"><div class="marks-summary-label">YOUR MARKS</div>
-          <div class="marks-summary-value" style="color:var(--sunpetal)">${me ? _fmtNum(me.marks) : "N/A"}</div></div>
-        <div class="marks-summary-stat"><div class="marks-summary-label">#1 MARKS</div>
-          <div class="marks-summary-value">${topPlayer ? _fmtNum(topPlayer.marks) : "N/A"}</div></div>
-        <div class="marks-summary-stat"><div class="marks-summary-label">TIME LEFT</div>
-          <div class="marks-summary-value">${hoursLeft}h ${minsLeft}m</div></div>
-      </div>`;
-
-      // Additional stats row
-      html += `<div class="marks-summary" style="margin-top:-8px">
-        <div class="marks-summary-stat"><div class="marks-summary-label">YOUR MULT</div>
-          <div class="marks-summary-value">${me ? me.multiplier.toFixed(1) + "x" : "N/A"}</div></div>
-        <div class="marks-summary-stat"><div class="marks-summary-label">PLAYERS</div>
-          <div class="marks-summary-value">${players.length}</div></div>
-        <div class="marks-summary-stat"><div class="marks-summary-label">SNAPSHOTS</div>
-          <div class="marks-summary-value">${latestData.snapshot_count || 0}</div></div>
-        <div class="marks-summary-stat"><div class="marks-summary-label">KITCHEN</div>
-          <div class="marks-summary-value" style="font-size:0.5rem">${kitchenItems.map(k => _mIcon(k.item, 14) + " " + k.item).join(", ") || "?"}</div></div>
-      </div>`;
-
-      // ── Your Strategy: cheapest way to gain marks ──
-      // Fetch P2P prices for cost calculation
-      let _marksP2pPrices = {};
-      try {
-        // MIGRATED: raw p2p comes from section=treasury's td (last direct sfl.world fetch dies)
-        _marksP2pPrices = (await fetchTreasuryData()).p2pPrices || {};
-      } catch(e) { console.warn("P2P prices fetch failed:", e); }
-
-      // F2-2c: marks passes no rates, so it reads the no-rates market-value profile from
-      // the shared price map (/api/compute?section=prices) instead of calling
-      // estimateItemSfl directly. PRICES(null) is null until the first fetch resolves;
-      // guard to {} so lookups fall through to the existing "|| 0" absence handling
-      // rather than throwing, and the arrival rerender (via main()) repaints with real data.
-      const _marksMaps = PRICES(null) || {};
-      const _marksPriceMap = {};
-      for (const k of new Set([...Object.keys(_marksMaps.productionCost || {}), ...Object.keys(_marksMaps.marketValue || {}), ...Object.keys(_marksP2pPrices)])) {
-        _marksPriceMap[k] = deliveryItemCostSfl(k, null, _marksP2pPrices);   // Roadmap's rule, shared with Dashboard
-      }
-
-      // Use LIVE farm data for strategy (not stale snapshot)
-      const liveFarm = liveData?.farm || null;
-      if (liveFarm) {
-        const liveInv = liveFarm.inventory || {};
-        const liveFaction = liveFarm.faction || {};
-        const liveKitchen = liveFaction.kitchen || {};
-        const livePet = liveFaction.pet || {};
-        const liveBumpkin = liveFarm.bumpkin || {};
-        const liveEquipped = liveBumpkin.equipped || {};
-
-        // Compute live multiplier from emblems + gear
-        const TIER_TABLE = [[16850,4],[8700,3.8],[5500,3.5],[2700,3],[290,1.5],[20,0.05],[0,0]];
-        const GEAR_BOOST = {"Nightshade Armor":0.2,"Nightshade Helmet":0.1,"Nightshade Crown":0.1,"Nightshade Sword":0.1,"Nightshade Pants":0.05,"Nightshade Sabatons":0.05};
-        const liveEmblems = parseFloat(liveInv["Nightshade Emblem"] || 0);
-        const rankBoost = (TIER_TABLE.find(t => liveEmblems >= t[0]) || [0,0])[1];
-        let wearBoost = 0;
-        for (const [item, boost] of Object.entries(GEAR_BOOST)) {
-          if (Object.values(liveEquipped).includes(item)) wearBoost += boost;
-        }
-        const myMult = 1 + rankBoost + wearBoost;
-        const hasPawShield = liveEquipped.secondaryTool === "Paw Shield";
-        const myPetMult = myMult + (hasPawShield ? 0.25 : 0);
-
-        // Live kitchen fulfilled (today's day number)
-        const num = (key) => parseFloat(liveInv[key] || 0) || 0;
-        const weekStartDate = new Date(typeof weekStart === "string" && weekStart.length === 10 ? weekStart + "T00:00:00Z" : weekStart);
-        const todayDay = Math.min(Math.max(Math.floor((Date.now() - weekStartDate.getTime()) / 86400000) + 1, 1), 7);
-        const dayStr = String(todayDay);
-
-        // Get live kitchen requests + fulfilled
-        const liveKitchenReqs = liveKitchen.requests || [];
-        const liveKitchenItems = liveKitchenReqs.length > 0
-          ? liveKitchenReqs.map(r => ({ item: r.item, amount: r.amount }))
-          : kitchenItems; // fallback to snapshot week config
-
-        const kitchenAnalysis = liveKitchenItems.map(ki => {
-          const stock = num(ki.item);
-          const totalDlv = ki.amount > 0 ? Math.floor(stock / ki.amount) : 0;
-          // Get LIVE fulfilled counter for today
-          const req = liveKitchenReqs.find(r => r.item === ki.item);
-          const fulfilled = req ? (req.dailyFulfilled?.[dayStr] || 0) : 0;
-          const nextRaw = Math.max(20 - fulfilled * 2, 1);
-          const nextMarks = nextRaw * myMult;
-          let dailyRaw = 0;
-          for (let i = 0; i < Math.min(10, totalDlv); i++) dailyRaw += Math.max(20 - i * 2, 1);
-          const dailyMarks = dailyRaw * myMult;
-          const daysNeeded = totalDlv > 0 ? Math.ceil(totalDlv / 10) : 0;
-          return { item: ki.item, amount: ki.amount, stock, totalDlv, fulfilled, nextRaw, nextMarks, dailyMarks, daysNeeded };
-        });
-
-        // Live pet requests + fulfilled
-        const PET_BASE = [4, 8, 12, 20];
-        const livePetReqs = livePet.requests || [];
-        const petItems = livePetReqs.length > 0
-          ? livePetReqs.map(r => ({ food: r.food, quantity: r.quantity }))
-          : (week.pet_items || []);
-
-        const petAnalysis = petItems.map((pi, slot) => {
-          const food = pi.food;
-          const qty = pi.quantity || 1;
-          const have = num(food);
-          const dlv = qty > 0 ? Math.floor(have / qty) : 0;
-          const base = PET_BASE[slot] || 4;
-          // Get LIVE pet fulfilled counter for today
-          const petReq = livePetReqs[slot];
-          const fulfilled = petReq ? (petReq.dailyFulfilled?.[dayStr] || 0) : 0;
-          const nextRaw = Math.max(base - fulfilled * 2, 1);
-          const nextMarks = nextRaw * myPetMult;
-          const label = ["Easy", "Medium", "Hard", "Doll"][slot] || `Slot ${slot}`;
-          return { food, qty, have, dlv, base, nextMarks, label, slot, fulfilled };
-        });
-
-        // Sort all sources by next marks per action (descending)
-        const allSources = [];
-        for (const ka of kitchenAnalysis) {
-          {
-            const kitchenCost = (_marksPriceMap[ka.item] || 0) * ka.amount;
-            allSources.push({
-              type: "kitchen",
-              label: `Donate ${ka.amount}\u00D7 ${ka.item}`, icon: ka.item,
-              nextMarks: ka.nextMarks,
-              costPerDlv: kitchenCost,
-              costPerMark: ka.nextMarks > 0 ? kitchenCost / ka.nextMarks : 0,
-              stock: ka.totalDlv + " dlv left",
-              dailyMarks: ka.dailyMarks,
-              daysLeft: ka.daysNeeded + "d supply",
-              fulfilled: ka.fulfilled,
-              hint: ka.fulfilled >= 10 ? "\u26A0\uFE0F Diminished (10+ today)" : ka.fulfilled > 0 ? `${ka.fulfilled}/10 done today` : "\u2705 Fresh counter",
-            });
-          }
-        }
-        for (const pa of petAnalysis) {
-          if (pa.dlv > 0) {
-            // estimateItemSfl may fail for foods — fallback: compute from RECIPE_INGREDIENTS directly
-            let petUnitCost = _marksPriceMap[pa.food] || 0;
-            if (petUnitCost <= 0 && RECIPE_INGREDIENTS[pa.food]) {
-              let rc = 0;
-              for (const [ing, qty] of Object.entries(RECIPE_INGREDIENTS[pa.food])) {
-                const ip = _marksP2pPrices[ing] || _marksPriceMap[ing] || 0;
-                rc += ip * qty;
-              }
-              petUnitCost = rc;
-            }
-            const petFoodCost = petUnitCost * pa.qty;
-            allSources.push({
-              type: "pet",
-              label: `Feed pet: ${pa.food} (${pa.label})`, icon: pa.food,
-              nextMarks: pa.nextMarks,
-              costPerDlv: petFoodCost,
-              costPerMark: pa.nextMarks > 0 ? petFoodCost / pa.nextMarks : 0,
-              stock: pa.dlv + " feeds",
-              dailyMarks: pa.nextMarks,
-              daysLeft: pa.dlv + " total",
-              fulfilled: 0,
-              hint: (pa.fulfilled > 0 ? `${pa.fulfilled} fed today` : "\u2705 Fresh") + (hasPawShield ? " | \uD83D\uDEE1\uFE0F Paw Shield" : ""),
-            });
-          }
-        }
-        // Sort by cost per mark (cheapest first = best value)
-        allSources.sort((a, b) => {
-          // Put zero-cost items first, then sort by cost/mark ascending
-          if (a.costPerMark === 0 && b.costPerMark === 0) return b.nextMarks - a.nextMarks;
-          if (a.costPerMark === 0) return 1;
-          if (b.costPerMark === 0) return -1;
-          return a.costPerMark - b.costPerMark;
-        });
-
-        html += `<div class="marks-section pixel-panel">
-          <div class="marks-section-title" onclick="_marksToggle('marks-strategy-section')">\u25BC Your Strategy — Best Marks Sources</div>
-          <div id="marks-strategy-section">
-          <div style="padding:8px 12px;font-size:0.5rem;color:var(--text-dim)">
-            Your multiplier: <b style="color:var(--sunpetal)">${myMult.toFixed(2)}x</b> (kitchen)
-            &nbsp;|&nbsp; Pet: <b style="color:var(--lily)">${myPetMult.toFixed(2)}x</b>
-            ${hasPawShield ? ' | \uD83D\uDEE1\uFE0F Paw Shield (+25% pet)' : ''}
-            &nbsp;|&nbsp; Day ${todayDay}/7
-          </div>
-          <table class="marks-table"><thead><tr>
-            <th>#</th><th>Action</th><th class="num-col">Next marks</th>
-            <th class="num-col">Cost/dlv</th><th class="num-col">SFL/mark</th>
-            <th class="num-col">Daily (fresh)</th><th>Stock</th><th>Status</th>
-          </tr></thead><tbody>`;
-
-        for (let i = 0; i < allSources.length; i++) {
-          const s = allSources[i];
-          const best = i === 0 ? ' style="color:var(--green);font-weight:bold"' : '';
-          const costStr = s.costPerDlv > 0 ? s.costPerDlv.toFixed(2) : "?";
-          const cpmStr = s.costPerMark > 0 ? s.costPerMark.toFixed(4) : "?";
-          const cpmColor = s.costPerMark > 0 && s.costPerMark < 0.01 ? "var(--green)" : s.costPerMark > 0.05 ? "var(--red)" : "var(--text-secondary)";
-          html += `<tr>
-            <td${best}>${i + 1}</td>
-            <td${best}>${s.icon ? _mIcon(s.icon, 16) + " " : ""}${escHTML(s.label)}</td>
-            <td class="num-col"${best}>${s.nextMarks.toFixed(1)}</td>
-            <td class="num-col">${costStr} SFL</td>
-            <td class="num-col" style="color:${cpmColor}">${cpmStr}</td>
-            <td class="num-col">${s.dailyMarks.toFixed(0)}</td>
-            <td>${escHTML(s.stock)}</td>
-            <td style="font-size:0.5rem">${s.hint}</td>
-          </tr>`;
-        }
-
-        if (allSources.length === 0) {
-          html += `<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:16px">No resources available for donations</td></tr>`;
-        }
-
-        html += `</tbody></table>`;
-
-        // Quick summary
-        const totalDailyFresh = kitchenAnalysis.reduce((s, k) => s + k.dailyMarks, 0);
-        const totalPetDaily = petAnalysis.reduce((s, p) => s + p.nextMarks, 0);
-        const minDaysSupply = kitchenAnalysis.filter(k => k.totalDlv > 0).map(k => k.daysNeeded);
-        const bottleneck = minDaysSupply.length > 0 ? Math.min(...minDaysSupply) : 0;
-
-        html += `<div style="padding:8px 12px;font-size:0.5625rem;color:var(--text-secondary);border-top:1px solid rgba(92,58,30,0.15)">
-          <b>Daily potential:</b> Kitchen ${_fmtNum(Math.round(totalDailyFresh))} + Pet ${_fmtNum(Math.round(totalPetDaily))} = <b style="color:var(--sunpetal)">${_fmtNum(Math.round(totalDailyFresh + totalPetDaily))}</b> marks/day
-          ${bottleneck > 0 ? ` | Shortest supply: <b>${bottleneck}d</b>` : ''}
-        </div>`;
-
-        html += `
-        <div style="padding:4px 12px;text-align:right">
-          <span style="font-size:0.5rem;color:var(--text-dim);cursor:pointer" onclick="document.getElementById('leg-strat').style.display=document.getElementById('leg-strat').style.display==='none'?'block':'none'">\u2139\uFE0F Legend</span></div>
-        <div id="leg-strat" style="display:none;padding:8px 12px;font-size:0.5rem;line-height:1.8;background:var(--bg-card);border-top:1px solid rgba(92,58,30,0.15)">
-          <dl style="display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:0">
-            <dt style="color:var(--sunpetal)">Next marks</dt><dd>How many marks you'll get from the NEXT donation/feed action, considering diminishing returns today</dd>
-            <dt style="color:var(--sunpetal)">Cost/dlv</dt><dd>SFL cost per delivery — for kitchen: P2P price of resources. For pet food: ingredient cost (raw materials, not food P2P price)</dd>
-            <dt style="color:var(--sunpetal)">SFL/mark</dt><dd>Cost efficiency — how much SFL each mark costs you. Lower = better value. Green = cheap (&lt;0.01), Red = expensive (&gt;0.05)</dd>
-            <dt style="color:var(--sunpetal)">Daily (fresh)</dt><dd>Total marks per day if you start with a fresh counter (10 optimal kitchen donations, or pet feeds)</dd>
-            <dt style="color:var(--sunpetal)">Stock</dt><dd>How many deliveries/feeds you can still do with current inventory</dd>
-            <dt style="color:var(--sunpetal)">Status</dt><dd>Counter state — \u2705 Fresh = best value, \u26A0\uFE0F Diminished = you've already donated 10+ today (only 1 mark per donation)</dd>
-          </dl>
-          <p style="margin:6px 0 0;color:var(--text-dim)"><b>Tip:</b> Table is sorted by SFL/mark (cheapest first). Focus on sources with the lowest cost per mark. Kitchen donations have diminishing returns after 10/day per resource — spread across resources and days for maximum value. Pet feeding also has diminishing returns per slot.</p>
-        </div>
-        </div></div>`;
-
-        // ── Today's Shopping List (budget-constrained) ──
-        const savedBudget = parseFloat(localStorage.getItem("sfl_marks_budget") || "0.03");
-
-        html += `<div class="marks-section pixel-panel">
-          <div class="marks-section-title" onclick="_marksToggle('marks-shop-section')">\u25BC Today's Shopping List</div>
-          <div id="marks-shop-section">
-          <div style="padding:10px 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            <span style="font-size:0.5625rem;color:var(--text-dim)">Max SFL/mark:</span>
-            <input type="range" id="marks-budget-slider" min="0.005" max="0.1" step="0.005" value="${savedBudget}"
-              style="flex:1;min-width:120px;accent-color:var(--sunpetal);cursor:pointer">
-            <span id="marks-budget-val" style="font-size:0.625rem;color:var(--sunpetal);min-width:60px;font-weight:bold">${savedBudget.toFixed(3)}</span>
-            <span style="font-size:0.5rem;color:var(--text-dim)">SFL/mark</span>
-          </div>
-          <div id="marks-shop-table"></div>
-          </div></div>`;
-
-        // Store data for slider callback
-        window._marksShopCtx = { kitchenAnalysis, petAnalysis, mult: myMult, petMult: myPetMult, p2p: _marksP2pPrices, priceMap: _marksPriceMap };
-      }
-
-      // ── Marks Over Time Chart ──
-      html += `<div class="marks-section pixel-panel">
-        <div class="marks-section-title" onclick="_marksToggle('marks-chart-section')">\u25BC Marks Over Time</div>
-        <div id="marks-chart-section">
-          <div id="marks-timeline-chart" class="marks-chart-wrap" style="background:var(--bg-card)">
-            <div style="text-align:center;padding:40px;color:var(--text-dim);font-size:0.5rem">Loading chart...</div>
-          </div>
-        </div>
-      </div>`;
-
-      // ── Leaderboard Table ──
-      const maxOptimal = Math.max(...players.map(p => (p.marks || 0) + (p.marks_optimal || 0)), 1);
-
-      html += `<div class="marks-section pixel-panel">
-        <div class="marks-section-title" onclick="_marksToggle('marks-lb-section')">\u25BC Leaderboard</div>
-        <div id="marks-lb-section">
-        <div class="marks-table-wrap"><table class="marks-table" id="marks-table">
-        <thead><tr>
-          <th class="rank-col" data-sort="rank">#</th>
-          <th data-sort="name">Name</th>
-          <th class="marks-col" data-sort="marks">Marks</th>
-          <th class="num-col" data-sort="delta">\u0394</th>
-          <th class="num-col" data-sort="multiplier">Mult</th>
-          <th data-sort="tier">Tier</th>`;
-
-      for (const ki of kitchenItems) {
-        html += `<th class="num-col" data-sort="res_${ki.item}">${_mIcon(ki.item, 14)}</th>`;
-      }
-
-      html += `<th class="num-col" data-sort="optimal">Optimal</th>
-          <th class="num-col" data-sort="dump">Dump</th>
-          <th data-sort="threat">Threat</th>
-        </tr></thead><tbody>`;
-
-      for (const p of players) {
-        const isMe = p.farm_id === myFarmId || String(p.farm_id) === FARM_ID;
-        const delta = p.prev_marks != null ? p.marks - p.prev_marks : null;
-        const deltaClass = delta > 0 ? "marks-delta-pos" : delta < 0 ? "marks-delta-neg" : "marks-delta-zero";
-        const deltaStr = delta != null ? (delta > 0 ? "+" : "") + _fmtNum(delta) : "-";
-        const tierClass = "marks-tier-" + (p.tier || "pagan").toLowerCase();
-        const threatPct = maxOptimal > 0 ? Math.min(100, ((p.marks || 0) + (p.marks_optimal || 0)) / maxOptimal * 100) : 0;
-        const threatColor = threatPct > 80 ? "#ff4444" : threatPct > 50 ? "#ff8800" : "#44cc44";
-
-        html += `<tr class="${isMe ? "marks-me" : ""}" onclick="_marksToggleRow('mexp-${p.farm_id}')" style="cursor:pointer">
-          <td class="rank-col">${p.rank || "?"}</td>
-          <td>${escHTML(p.player_name || "?")}</td>
-          <td class="marks-col">${_fmtNum(p.marks)}</td>
-          <td class="num-col ${deltaClass}">${deltaStr}</td>
-          <td class="num-col">${p.multiplier ? p.multiplier.toFixed(1) + "x" : "?"}</td>
-          <td class="${tierClass}">${escHTML(p.tier || "?")}</td>`;
-
-        const res = p.resources || {};
-        for (const ki of kitchenItems) {
-          html += `<td class="num-col">${_fmtNum(res[ki.item] || 0)}</td>`;
-        }
-
-        const projOptimal = Math.round(p.marks_optimal || 0);
-        const projDump = Math.round(p.marks_dump || 0);
-
-        // Calculate rank gain if this player dumped everything now
-        const afterDump = (p.marks || 0) + projDump;
-        const rankAfterDump = players.filter(op => (op.marks || 0) > afterDump).length + 1;
-        const currentRank = p.rank || 999;
-        const rankGain = currentRank - rankAfterDump;
-        const rankGainStr = rankGain > 0 ? ` (↑${rankGain})` : rankGain < 0 ? ` (↓${Math.abs(rankGain)})` : "";
-        const rankGainColor = rankGain > 0 ? "var(--green)" : rankGain < 0 ? "var(--red)" : "var(--text-dim)";
-
-        html += `<td class="num-col">${_fmtNum(projOptimal)}</td>
-          <td class="num-col">${_fmtNum(projDump)}<span style="font-size:0.45rem;color:${rankGainColor}">${rankGainStr}</span></td>
-          <td><div class="marks-threat-bar"><div class="marks-threat-fill" style="width:${threatPct.toFixed(1)}%;background:${threatColor}"></div></div></td>
-        </tr>`;
-
-        // Expandable detail row
-        html += `<tr class="marks-expand" id="mexp-${p.farm_id}"><td colspan="${7 + kitchenItems.length + 3}">`;
-        html += `<div class="marks-detail-grid">
-          <dt>Farm ID</dt><dd>${p.farm_id}</dd>
-          <dt>Emblems</dt><dd>${_fmtNum(p.emblems || 0)}</dd>
-          <dt>Rank Boost</dt><dd>+${((p.rank_boost || 0) * 100).toFixed(0)}%</dd>
-          <dt>Wear Boost</dt><dd>+${((p.wear_boost || 0) * 100).toFixed(0)}%</dd>
-          <dt>Paw Shield</dt><dd>${p.has_paw_shield ? "\u2705 Yes" : "\u274C No"}</dd>
-          <dt>Pet Mult</dt><dd>${(p.pet_mult || 1).toFixed(2)}x</dd>
-          <dt>Pet Daily</dt><dd>${_fmtNum(Math.round(p.pet_daily || 0))}</dd>
-          <dt>Pet Weekly</dt><dd>${_fmtNum(Math.round(p.pet_weekly || 0))}</dd>
-          <dt>Daily Fresh</dt><dd>${_fmtNum(Math.round(p.marks_daily_fresh || 0))}</dd>
-          <dt>SFL Balance</dt><dd>${(p.sfl || 0).toFixed(1)}</dd>`;
-
-        // Resource details with deltas
-        const prevRes = p.prev_resources || {};
-        for (const ki of kitchenItems) {
-          const cur = res[ki.item] || 0;
-          const prev = prevRes[ki.item];
-          const resDelta = prev != null ? cur - prev : null;
-          const rdStr = resDelta != null ? ` (${resDelta > 0 ? "+" : ""}${_fmtNum(resDelta)})` : "";
-          const fulfilled = (p.today_fulfilled || {})[ki.item] || 0;
-          const deliveries = ki.amount > 0 ? Math.floor(cur / ki.amount) : 0;
-          html += `<dt>${escHTML(ki.item)}</dt><dd>${_fmtNum(cur)}${rdStr} (${deliveries} dlv, ${fulfilled} done today)</dd>`;
-        }
-
-        // Pet food stock
-        const petStock = p.pet_food_stock || {};
-        for (const [food, qty] of Object.entries(petStock)) {
-          html += `<dt>Pet: ${escHTML(food)}</dt><dd>${_fmtNum(qty)}</dd>`;
-        }
-
-        html += `</div>`;
-
-        // Projection bar
-        const totalProj = (p.marks || 0) + (p.marks_optimal || 0);
-        if (totalProj > 0) {
-          const curPct = (p.marks || 0) / totalProj * 100;
-          html += `<div style="margin-top:8px;font-size:0.5rem;color:var(--text-dim)">
-            Current ${_fmtNum(p.marks)} + Optimal remaining ${_fmtNum(projOptimal)} = ${_fmtNum(Math.round(totalProj))}
-            <div class="marks-proj-bar">
-              <div class="marks-proj-current" style="width:${curPct.toFixed(1)}%"></div>
-              <div class="marks-proj-remaining" style="width:${(100 - curPct).toFixed(1)}%"></div>
-            </div></div>`;
-        }
-
-        html += `</td></tr>`;
-      }
-
-      html += `</tbody></table></div>
-      <div style="padding:4px 12px;text-align:right">
-        <span style="font-size:0.5rem;color:var(--text-dim);cursor:pointer" onclick="document.getElementById('leg-lb').style.display=document.getElementById('leg-lb').style.display==='none'?'block':'none'">\u2139\uFE0F Legend</span></div>
-      <div id="leg-lb" style="display:none;padding:8px 12px;font-size:0.5rem;line-height:1.8;background:var(--bg-card);border-top:1px solid rgba(92,58,30,0.15)">
-        <dl style="display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:0">
-          <dt style="color:var(--sunpetal)">#</dt><dd>Current leaderboard rank within Nightshades faction</dd>
-          <dt style="color:var(--sunpetal)">Marks</dt><dd>Total marks earned this week (from faction kitchen donations + pet feeding)</dd>
-          <dt style="color:var(--sunpetal)">\u0394</dt><dd>Change in marks since previous snapshot — green = gained, red = lost (rare, data correction)</dd>
-          <dt style="color:var(--sunpetal)">Mult</dt><dd>Total marks multiplier = 1 + emblem tier boost + wearable boost. Applied to all raw marks.</dd>
-          <dt style="color:var(--sunpetal)">Tier</dt><dd>Emblem tier (Lich=+400%, Sorcerer=+380%, Witch=+350%, Raver=+300%, Enchanter=+150%, Occultist=+5%)</dd>
-          <dt style="color:var(--sunpetal)">Resources</dt><dd>Current stock of this week's kitchen donation items. Higher = more potential marks.</dd>
-          <dt style="color:var(--sunpetal)">Optimal</dt><dd>Max additional marks if resources are spread optimally (10 donations/day per resource, fresh counter each day)</dd>
-          <dt style="color:var(--sunpetal)">Dump</dt><dd>Marks if ALL remaining resources are donated right now (diminishing returns apply after 10/day). Arrow shows how many ranks you'd climb.</dd>
-          <dt style="color:var(--sunpetal)">Threat</dt><dd>Visual bar showing projected total (current + optimal) relative to the top player. Red = high threat.</dd>
-        </dl>
-      </div>
-      </div></div>`;
-
-      // ── Cost to #1 ──
-      if (liveFarm && topPlayer && me) {
-        // Live multiplier (same calc as strategy section)
-        const TIER_TBL = [[16850,4],[8700,3.8],[5500,3.5],[2700,3],[290,1.5],[20,0.05],[0,0]];
-        const GEAR_BST = {"Nightshade Armor":0.2,"Nightshade Helmet":0.1,"Nightshade Crown":0.1,"Nightshade Sword":0.1,"Nightshade Pants":0.05,"Nightshade Sabatons":0.05};
-        const _inv = liveFarm.inventory || {};
-        const _eq = (liveFarm.bumpkin || {}).equipped || {};
-        const _emb = parseFloat(_inv["Nightshade Emblem"] || 0);
-        const _rb = (TIER_TBL.find(t => _emb >= t[0]) || [0,0])[1];
-        let _wb = 0;
-        for (const [it, b] of Object.entries(GEAR_BST)) { if (Object.values(_eq).includes(it)) _wb += b; }
-        const c1Mult = 1 + _rb + _wb;
-
-        const myMarks = me.marks || 0;
-        const topMarks = topPlayer.marks || 0;
-        const gap = topMarks - myMarks;
-
-        // Get live kitchen config
-        const _kitReqs = (liveFarm.faction?.kitchen?.requests || []);
-        const _wsDate = new Date(typeof weekStart === "string" && weekStart.length === 10 ? weekStart + "T00:00:00Z" : weekStart);
-        const _dayNum = Math.min(Math.max(Math.floor((Date.now() - _wsDate.getTime()) / 86400000) + 1, 1), 7);
-        const _dayStr = String(_dayNum);
-        const daysRemaining = Math.max(0, 7 - _dayNum + 1); // today counts
-
-        if (gap > 0 && _kitReqs.length > 0) {
-
-          // Simpler: for each resource, cost per delivery and marks per delivery
-          // Use greedy: always pick the cheapest SFL/mark next delivery
-          const resources = _kitReqs.map(r => {
-            const price = (_marksPriceMap[r.item] || 0) * r.amount;
-            const stock = parseFloat(_inv[r.item] || 0) || 0;
-            const haveDeliveries = r.amount > 0 ? Math.floor(stock / r.amount) : 0;
-            const fulfilled = r.dailyFulfilled?.[_dayStr] || 0;
-            return { item: r.item, amount: r.amount, price, stock, haveDeliveries, fulfilled, dayFulfilled: fulfilled };
-          });
-
-          // Simulate greedy: each step, pick the resource with cheapest cost/mark for its NEXT delivery
-          // Track per-resource: fulfilled today, day number, total deliveries done
-          const sim = resources.map(r => ({
-            item: r.item,
-            price: r.price,
-            amount: r.amount,
-            fulfilled: r.fulfilled, // today's starting point
-            day: _dayNum,
-            totalDeliveries: 0,
-            totalMarks: 0,
-            totalCost: 0,
-            haveDeliveries: r.haveDeliveries,
-            needToBuy: 0,
-          }));
-
-          let totalMarksGained = 0;
-          let totalCost = 0;
-          let steps = 0;
-          const maxSteps = 50000; // safety
-
-          while (totalMarksGained < gap && steps < maxSteps) {
-            // Find cheapest next delivery across all resources
-            let bestIdx = -1;
-            let bestCostPerMark = Infinity;
-            for (let i = 0; i < sim.length; i++) {
-              const s = sim[i];
-              const rawNext = Math.max(20 - s.fulfilled * 2, 1);
-              const marksNext = rawNext * c1Mult;
-              if (marksNext <= 0 || s.price <= 0) continue;
-              const cpm = s.price / marksNext;
-              if (cpm < bestCostPerMark) {
-                bestCostPerMark = cpm;
-                bestIdx = i;
-              }
-            }
-            if (bestIdx < 0) break; // no viable option
-
-            const s = sim[bestIdx];
-            const rawNext = Math.max(20 - s.fulfilled * 2, 1);
-            const marksNext = rawNext * c1Mult;
-
-            s.fulfilled++;
-            s.totalDeliveries++;
-            s.totalMarks += marksNext;
-            s.totalCost += s.price;
-            totalMarksGained += marksNext;
-            totalCost += s.price;
-            steps++;
-
-            // Check if the resource was from stock or needs buying
-            if (s.totalDeliveries > s.haveDeliveries) {
-              s.needToBuy++;
-            }
-
-            // Day rollover: after 10 deliveries per resource per day, could reset
-            // But we do it per-resource: if all resources hit diminishing (fulfilled >= 10),
-            // advance to next day
-            if (sim.every(r => r.fulfilled >= 10)) {
-              const nextDay = sim[0].day + 1;
-              if (nextDay > 7) break; // week over
-              for (const r of sim) {
-                r.day = nextDay;
-                r.fulfilled = 0;
-              }
-            }
-          }
-
-          const success = totalMarksGained >= gap;
-
-          html += `<div class="marks-section pixel-panel">
-            <div class="marks-section-title" onclick="_marksToggle('marks-cost1-section')">\u25BC ${success ? "\uD83C\uDFC6" : "\u26A0\uFE0F"} Cost to Reach #1</div>
-            <div id="marks-cost1-section">
-            <div style="padding:10px 12px;font-size:0.5625rem;color:var(--text-secondary)">
-              <b>Gap to #1:</b> ${escHTML(topPlayer.player_name || "?")} has <b style="color:var(--sunpetal)">${_fmtNum(topMarks)}</b> marks, you have <b>${_fmtNum(myMarks)}</b> \u2192 need <b style="color:var(--red)">${_fmtNum(Math.ceil(gap))}</b> more marks
-              <br>Simulation: greedy, kitchen resources only (no food — too slow to cook), ${daysRemaining} days left, your mult ${c1Mult.toFixed(2)}x
-            </div>
-            <table class="marks-table"><thead><tr>
-              <th>Resource</th><th class="num-col">Deliveries</th><th class="num-col">Marks gained</th>
-              <th class="num-col">Have</th><th class="num-col">Need to buy</th><th class="num-col">Buy cost (SFL)</th>
-            </tr></thead><tbody>`;
-
-          let grandNeedBuy = 0;
-          let grandBuyCost = 0;
-          for (const s of sim) {
-            const needUnits = s.needToBuy * s.amount;
-            const buyCost = s.needToBuy * s.price;
-            grandNeedBuy += needUnits;
-            grandBuyCost += buyCost;
-            html += `<tr>
-              <td>${_mIcon(s.item, 16)} ${escHTML(s.item)} (\u00D7${s.amount})</td>
-              <td class="num-col">${_fmtNum(s.totalDeliveries)}</td>
-              <td class="num-col">${_fmtNum(Math.round(s.totalMarks))}</td>
-              <td class="num-col">${_fmtNum(s.haveDeliveries)} dlv</td>
-              <td class="num-col" style="color:${s.needToBuy > 0 ? "var(--red)" : "var(--green)"}">${s.needToBuy > 0 ? _fmtNum(needUnits) + " units" : "\u2705 enough"}</td>
-              <td class="num-col">${s.needToBuy > 0 ? buyCost.toFixed(2) : "-"}</td>
-            </tr>`;
-          }
-
-          html += `</tbody></table>
-            <div style="padding:10px 12px;font-size:0.625rem;color:var(--text-secondary);border-top:1px solid rgba(92,58,30,0.15)">
-              <b>Total marks needed:</b> ${_fmtNum(Math.ceil(gap))} | <b>Total from simulation:</b> ${_fmtNum(Math.round(totalMarksGained))}
-              <br><b>Already in stock:</b> covers ${_fmtNum(Math.round(totalMarksGained - grandBuyCost / (totalCost / totalMarksGained || 1)))} marks
-              <br><b style="color:var(--sunpetal)">Total buy cost: ${grandBuyCost.toFixed(2)} SFL</b> (${_fmtNum(steps)} total deliveries over ${daysRemaining} days)
-              ${!success ? '<br><span style="color:var(--red)">\u26A0\uFE0F Not enough days/resources to close the gap with kitchen alone!</span>' : '<br><span style="color:var(--green)">\u2705 Achievable!</span>'}
-            </div>
-            <div style="padding:4px 12px;text-align:right">
-              <span style="font-size:0.5rem;color:var(--text-dim);cursor:pointer" onclick="document.getElementById('leg-cost1').style.display=document.getElementById('leg-cost1').style.display==='none'?'block':'none'">\u2139\uFE0F Legend</span></div>
-            <div id="leg-cost1" style="display:none;padding:8px 12px;font-size:0.5rem;line-height:1.8;background:var(--bg-card);border-top:1px solid rgba(92,58,30,0.15)">
-              <dl style="display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:0">
-                <dt style="color:var(--sunpetal)">Simulation</dt><dd>Greedy algorithm: each step picks the resource with the cheapest SFL/mark for the next delivery, considering diminishing returns (max 20\u21922\u21921 per delivery after 10/day). Resets daily.</dd>
-                <dt style="color:var(--sunpetal)">Have</dt><dd>Deliveries possible from current inventory without buying anything</dd>
-                <dt style="color:var(--sunpetal)">Need to buy</dt><dd>Additional units you'd need to purchase at P2P market prices</dd>
-                <dt style="color:var(--sunpetal)">Kitchen only</dt><dd>Food/pet feeding excluded \u2014 cooking takes real time, can't mass-produce instantly</dd>
-              </dl>
-              <p style="margin:6px 0 0;color:var(--text-dim)"><b>Note:</b> This assumes #1 player stops gaining marks. In reality they keep playing too, so actual cost may be higher.</p>
-            </div>
-            </div></div>`;
-        }
-      }
-
-      // ── Projections section ──
-      html += `<div class="marks-section pixel-panel">
-        <div class="marks-section-title" onclick="_marksToggle('marks-proj-section')">\u25BC Projections & Threat Assessment</div>
-        <div id="marks-proj-section">`;
-
-      // Sort by projected total (marks + optimal)
-      const projected = [...players]
-        .map(p => ({ ...p, total: (p.marks || 0) + (p.marks_optimal || 0) }))
-        .sort((a, b) => b.total - a.total);
-      const maxProj = projected.length > 0 ? projected[0].total : 1;
-
-      html += `<div style="display:flex;gap:12px;padding:8px 12px;font-size:0.5rem;color:var(--text-dim);flex-wrap:wrap">
-        <span><span style="display:inline-block;width:12px;height:8px;background:var(--sunpetal);border-radius:2px"></span> Current marks</span>
-        <span><span style="display:inline-block;width:12px;height:8px;background:rgba(255,215,0,0.25);border-radius:2px"></span> Optimal remaining (kitchen)</span>
-        <span><span style="display:inline-block;width:12px;height:8px;background:rgba(100,200,255,0.3);border-radius:2px"></span> Pet weekly</span>
-      </div>`;
-      html += `<table class="marks-table"><thead><tr>
-        <th class="rank-col">#</th><th>Name</th><th class="num-col">Current</th>
-        <th class="num-col">Optimal</th><th class="num-col">Pet Wk</th>
-        <th class="num-col">Total Proj</th><th>Bar</th>
-      </tr></thead><tbody>`;
-
-      for (let i = 0; i < projected.length; i++) {
-        const p = projected[i];
-        const isMe = p.farm_id === myFarmId || String(p.farm_id) === FARM_ID;
-        const curPct = p.total > 0 ? (p.marks || 0) / maxProj * 100 : 0;
-        const optPct = p.total > 0 ? (p.marks_optimal || 0) / maxProj * 100 : 0;
-        const petPct = p.total > 0 ? (p.pet_weekly || 0) / maxProj * 100 : 0;
-
-        html += `<tr class="${isMe ? "marks-me" : ""}">
-          <td class="rank-col">${i + 1}</td>
-          <td>${escHTML(p.player_name || "?")}</td>
-          <td class="num-col marks-col">${_fmtNum(p.marks)}</td>
-          <td class="num-col">${_fmtNum(Math.round(p.marks_optimal || 0))}</td>
-          <td class="num-col">${_fmtNum(Math.round(p.pet_weekly || 0))}</td>
-          <td class="num-col" style="font-weight:bold">${_fmtNum(Math.round(p.total + (p.pet_weekly || 0)))}</td>
-          <td style="min-width:120px">
-            <div class="marks-proj-bar" style="height:12px">
-              <div class="marks-proj-current" style="width:${curPct.toFixed(1)}%"></div>
-              <div class="marks-proj-remaining" style="width:${optPct.toFixed(1)}%"></div>
-              <div style="width:${petPct.toFixed(1)}%;background:rgba(100,200,255,0.3);height:100%"></div>
-            </div>
-          </td></tr>`;
-      }
-
-      html += `</tbody></table>
-      <div style="padding:4px 12px;text-align:right">
-        <span style="font-size:0.5rem;color:var(--text-dim);cursor:pointer" onclick="document.getElementById('leg-proj').style.display=document.getElementById('leg-proj').style.display==='none'?'block':'none'">\u2139\uFE0F Legend</span></div>
-      <div id="leg-proj" style="display:none;padding:8px 12px;font-size:0.5rem;line-height:1.8;background:var(--bg-card);border-top:1px solid rgba(92,58,30,0.15)">
-        <dl style="display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:0">
-          <dt style="color:var(--sunpetal)">Current</dt><dd>Marks already earned this week</dd>
-          <dt style="color:var(--sunpetal)">Optimal</dt><dd>Additional marks possible from kitchen resources if played optimally (10 donations/day/resource, max value per donation)</dd>
-          <dt style="color:var(--sunpetal)">Pet Wk</dt><dd>Total pet feeding marks possible this week (4 slots: Easy 4pts, Medium 8pts, Hard 12pts, Doll 20pts base \u00D7 pet multiplier)</dd>
-          <dt style="color:var(--sunpetal)">Total Proj</dt><dd>Current + Optimal + Pet Weekly = projected end-of-week total if played perfectly</dd>
-          <dt style="color:var(--sunpetal)">Bar</dt><dd>Gold = current marks, transparent gold = kitchen optimal remaining, blue = pet weekly potential</dd>
-        </dl>
-        <p style="margin:6px 0 0;color:var(--text-dim)"><b>Tip:</b> Players sorted by total projection. Watch for players below you with high Optimal — they may overtake you if they start dumping resources.</p>
-      </div>
-      </div></div>`;
-
-      // ── Resource Burn Rate ──
-      const playersWithDelta = players.filter(p => p.prev_resources && p.prev_captured_at);
-      if (kitchenItems.length > 0) {
-        const burnPlayers = playersWithDelta.length > 0 ? playersWithDelta : players;
-        html += `<div class="marks-section pixel-panel">
-          <div class="marks-section-title" onclick="_marksToggle('marks-burn-section')">\u25BC Resource Burn Rate</div>
-          <div id="marks-burn-section">
-          <table class="marks-table"><thead><tr>
-            <th class="rank-col">#</th><th>Name</th>`;
-
-        for (const ki of kitchenItems) {
-          html += `<th class="num-col">${_mIcon(ki.item, 14)} \u0394</th><th class="num-col">${_mIcon(ki.item, 14)} Dlv</th>`;
-        }
-        html += `<th>Signal</th></tr></thead><tbody>`;
-
-        for (const p of burnPlayers.slice(0, 50)) {
-          const isMe = p.farm_id === myFarmId || String(p.farm_id) === FARM_ID;
-          const res = p.resources || {};
-          const prevRes = p.prev_resources || {};
-          const hoursBetween = p.prev_captured_at
-            ? (new Date(p.captured_at) - new Date(p.prev_captured_at)) / 3600000
-            : null;
-
-          let signals = [];
-          const marksDelta = p.prev_marks != null ? p.marks - p.prev_marks : 0;
-          if (marksDelta > 500) signals.push("\uD83D\uDFE2 MARKS+");
-
-          html += `<tr class="${isMe ? "marks-me" : ""}">
-            <td class="rank-col">${p.rank || "?"}</td>
-            <td>${escHTML(p.player_name || "?")}</td>`;
-
-          for (const ki of kitchenItems) {
-            const cur = res[ki.item] || 0;
-            const prev = prevRes[ki.item];
-            const d = prev != null ? cur - prev : null;
-            const dClass = d != null ? (d < 0 ? "marks-delta-neg" : d > 0 ? "marks-delta-pos" : "marks-delta-zero") : "";
-            const dStr = d != null ? (d > 0 ? "+" : "") + _fmtNum(d) : "-";
-            const dlvLeft = ki.amount > 0 ? Math.floor(cur / ki.amount) : 0;
-
-            if (d != null && d < -50) signals.push(`\uD83D\uDD3B ${ki.item.slice(0, 4)}`);
-            else if (d != null && d > 50) signals.push(`\uD83D\uDD3A ${ki.item.slice(0, 4)}`);
-
-            html += `<td class="num-col ${dClass}">${dStr}</td><td class="num-col">${_fmtNum(dlvLeft)}</td>`;
-          }
-
-          html += `<td style="font-size:0.5rem">${signals.join(" ") || "\u2022"}</td></tr>`;
-        }
-
-        html += `</tbody></table>
-        <div style="padding:4px 12px;text-align:right">
-          <span style="font-size:0.5rem;color:var(--text-dim);cursor:pointer" onclick="document.getElementById('leg-burn').style.display=document.getElementById('leg-burn').style.display==='none'?'block':'none'">\u2139\uFE0F Legend</span></div>
-        <div id="leg-burn" style="display:none;padding:8px 12px;font-size:0.5rem;line-height:1.8;background:var(--bg-card);border-top:1px solid rgba(92,58,30,0.15)">
-          <dl style="display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:0">
-            <dt style="color:var(--sunpetal)">\u0394 (resource)</dt><dd>Change in resource stock since previous snapshot. Negative = player is donating/using it. Large drops = possible dump.</dd>
-            <dt style="color:var(--sunpetal)">Dlv Left</dt><dd>How many more kitchen donations this resource can sustain (stock \u00F7 required amount per donation)</dd>
-            <dt style="color:var(--sunpetal)">Signals</dt><dd>\uD83D\uDFE2 MARKS+ = big marks jump, \uD83D\uDD3B = resource dropping fast (dumping?), \uD83D\uDD3A = resource growing (stockpiling for later dump?)</dd>
-          </dl>
-          <p style="margin:6px 0 0;color:var(--text-dim)"><b>Tip:</b> Watch for players with \uD83D\uDD3B signals — they may be dumping resources to gain marks quickly. Players with \uD83D\uDD3A are stockpiling for a last-minute push.</p>
-        </div>
-        </div></div>`;
-      }
-
-      root.innerHTML = html;
-
-      // Make table headers sortable
-      _marksInitSort();
-
-      // Initial render of shopping list + wire up slider
-      const _shopSlider = document.getElementById("marks-budget-slider");
-      if (_shopSlider && window._marksShopCtx) {
-        const update = (v) => {
-          document.getElementById("marks-budget-val").textContent = parseFloat(v).toFixed(3);
-          _marksUpdateShop(v);
-        };
-        _shopSlider.addEventListener("input", (e) => update(e.target.value));
-        update(_shopSlider.value);
-      }
+      const data = { marks, farm: _marksFarm, prices: _marksPricesEntry && _marksPricesEntry.data };
+      const fresh = __wFresh(m);
+      const w = (t) => __widgets.renderPage(t, { data, ctx: _wCtx(t), fresh });
+      html += w("marks-summary") + w("marks-sources");
+      html += `<div class="v-marks-budget">🛒 Max SFL/mark for the shopping list <input type="range" min="0.005" max="0.1" step="0.005" value="${budget}"
+        oninput="document.getElementById('marks-budget-val').textContent=parseFloat(this.value).toFixed(3)" onchange="_marksSetBudget(this.value)">
+        <b id="marks-budget-val">${budget.toFixed(3)}</b> SFL/mark</div>`;
+      html += w("marks-shopping");
+      html += `<div class="w-frame pixel-panel"><header class="w-head"><span class="w-title">📉 Marks over time</span></header>
+        <div id="marks-timeline-chart" class="marks-chart-wrap"><div class="w-empty-msg">Loading chart…</div></div></div>`;
+      html += w("marks-leaderboard") + w("marks-cost1") + w("marks-projections") + w("marks-burn");
+      app.innerHTML = html;
+      if (_marksSnapshots && _marksSnapshots.week === weekStart) _renderMarksChart(_marksSnapshots.snapshots, marks.players);
     }
 
     function _renderMarksChart(snapshots, players) {
       const container = document.getElementById("marks-timeline-chart");
       if (!container || typeof LightweightCharts === "undefined" || !snapshots || snapshots.length === 0) {
-        if (container) container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-dim);font-size:0.5rem">No timeline data yet</div>';
+        if (container) container.innerHTML = '<div class="w-empty-msg">No timeline data yet</div>';
         return;
       }
 
@@ -23945,8 +22721,8 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         layout: {
           background: { color: "transparent" },
           textColor: "#9ca3af",
-          fontFamily: "'Press Start 2P', monospace",
-          fontSize: 9,
+          fontFamily: "Inter, 'Segoe UI', system-ui, sans-serif",
+          fontSize: 11,
         },
         grid: {
           vertLines: { color: "rgba(92,58,30,0.15)" },
@@ -24017,248 +22793,47 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       return Math.floor(sec / 86400) + "d";
     }
 
-    function _marksToggle(id) {
-      const el = document.getElementById(id);
-      if (el) el.style.display = el.style.display === "none" ? "" : "none";
-    }
-
-    function _marksToggleRow(id) {
-      const el = document.getElementById(id);
-      if (el) el.classList.toggle("open");
-    }
-
     function _marksChangeWeek(week) {
-      fetch(`/api/marks-history?mode=latest&week=${week}`)
-        .then(r => r.json())
-        .then(async data => {
-          await _renderMarksContent(data, { weeks: [] }, { state: null });
-          fetch(`/api/marks-history?mode=snapshots&week=${week}`)
-            .then(r => r.json())
-            .then(td => _renderMarksChart(td.snapshots, data.players))
-            .catch(() => {});
-        })
-        .catch(e => console.error("Week change error:", e));
+      _marksWeek = week || "";
+      _marksReload(false).catch((e) => console.error("Week change error:", e));
     }
 
     function _marksToggleRefresh(enabled) {
       if (_marksRefreshTimer) { clearInterval(_marksRefreshTimer); _marksRefreshTimer = null; }
       if (enabled) {
         _marksRefreshTimer = setInterval(() => {
-          Promise.all([
-            fetch("/api/marks-history?mode=latest").then(r => r.json()),
-            fetch("/api/marks-history?mode=state").then(r => r.json()),
-          ]).then(async ([latest, state]) => {
-            await _renderMarksContent(latest, { weeks: [] }, state);
-          }).catch(() => {});
+          if (getPage() !== "marks") { clearInterval(_marksRefreshTimer); _marksRefreshTimer = null; return; }
+          _marksReload(true).catch(() => {});
         }, 60000);
       }
     }
 
-    async function _marksForceRefresh() {
-      const btn = event.target;
+    function _marksSetBudget(v) {
+      const budget = parseFloat(v) || 0.03;
+      try { localStorage.setItem("sfl_marks_budget", budget.toFixed(3)); } catch (e) {}
+      if (!_marksEntry || !_marksEntry.data) return;
+      const data = { marks: _marksEntry.data, farm: _marksFarm, prices: _marksPricesEntry && _marksPricesEntry.data };
+      _mktPatch("marks-shopping", __widgets.renderPage("marks-shopping", { data, ctx: _wCtx("marks-shopping"), fresh: __wFresh(_marksEntry) }));
+    }
+
+    async function _marksForceRefresh(ev) {
+      const btn = ev && ev.target;
+      if (!btn) return;
       btn.disabled = true;
-      btn.textContent = "\u23F3 Crawling...";
+      btn.textContent = "⏳ Crawling…";
       try {
         const resp = await writeFetch("/api/marks-history?mode=force-refresh");
         if (resp.ok) {
-          btn.textContent = "\u2705 Triggered!";
-          // Auto-refresh after 30s to show new data
-          setTimeout(() => {
-            fetch("/api/marks-history?mode=latest").then(r => r.json()).then(async data => {
-              await _renderMarksContent(data, { weeks: [] }, { state: null });
-            }).catch(() => {});
-          }, 30000);
+          btn.textContent = "✅ Triggered!";
+          // show the new data after 30 s
+          setTimeout(() => { if (getPage() === "marks") _marksReload(true).catch(() => {}); }, 30000);
         } else {
-          btn.textContent = "\u274C Failed";
+          btn.textContent = "❌ Failed";
         }
       } catch (e) {
-        btn.textContent = "\u274C Error";
+        btn.textContent = "❌ Error";
       }
-      setTimeout(() => { btn.disabled = false; btn.textContent = "\u21BB Force refresh"; }, 5000);
-    }
-
-    function _marksUpdateShop(budgetVal) {
-      const budget = parseFloat(budgetVal) || 0.03;
-      localStorage.setItem("sfl_marks_budget", budget.toFixed(3));
-
-      const ctx = window._marksShopCtx;
-      if (!ctx) return;
-      const { kitchenAnalysis, petAnalysis, mult, petMult, p2p, priceMap } = ctx;
-
-      // Simulate: for each resource, how many deliveries can we do today under budget?
-      // Diminishing: delivery i gives max(20 - fulfilled*2, 1) raw marks × mult
-      // Cost per delivery is fixed (resource amount × P2P price)
-      // SFL/mark = cost / marks. We stop when SFL/mark > budget.
-      const rows = [];
-      let totalMarks = 0, totalCost = 0, totalDlv = 0;
-
-      for (const ka of kitchenAnalysis) {
-        const costPerDlv = (priceMap[ka.item] || 0) * ka.amount;
-        if (costPerDlv <= 0) continue;
-        let dlvCount = 0, marks = 0, cost = 0;
-        let ful = ka.fulfilled; // start from today's actual fulfilled
-        const maxDlv = 50; // cap per resource (after 10, each gives 1 mark — rarely worth more)
-        while (dlvCount < maxDlv) {
-          const rawNext = Math.max(20 - ful * 2, 1);
-          const marksNext = rawNext * mult;
-          const cpm = costPerDlv / marksNext;
-          if (cpm > budget) break;
-          dlvCount++;
-          marks += marksNext;
-          cost += costPerDlv;
-          ful++;
-        }
-        // Track last and next SFL/mark
-        const lastRaw = ful > 0 ? Math.max(20 - (ful - 1) * 2, 1) : 20;
-        const lastCpm = dlvCount > 0 ? costPerDlv / (lastRaw * mult) : 0;
-        const nextRaw = Math.max(20 - ful * 2, 1);
-        const nextCpm = costPerDlv / (nextRaw * mult);
-        const stockCovers = Math.min(dlvCount, ka.totalDlv);
-        const needBuyDlv = Math.max(0, dlvCount - ka.totalDlv);
-        const needUnits = needBuyDlv * ka.amount;
-        const buyCost = needBuyDlv * costPerDlv;
-        if (dlvCount > 0) {
-          rows.push({ icon: ka.item, label: `${ka.item} (\u00D7${ka.amount})`, dlvCount, marks, cost, needUnits, buyCost, have: ka.totalDlv, type: "kitchen", lastCpm, nextCpm, stockCovers, needBuyDlv, costPerDlv, rawMult: mult });
-          totalMarks += marks;
-          totalCost += cost;
-          totalDlv += dlvCount;
-        }
-      }
-
-      for (const pa of petAnalysis) {
-        let petUnit = priceMap[pa.food] || 0;
-        if (petUnit <= 0 && typeof RECIPE_INGREDIENTS !== "undefined" && RECIPE_INGREDIENTS[pa.food]) {
-          let rc = 0;
-          for (const [ing, qty] of Object.entries(RECIPE_INGREDIENTS[pa.food])) {
-            rc += (p2p[ing] || priceMap[ing] || 0) * qty;
-          }
-          petUnit = rc;
-        }
-        const costPerFeed = petUnit * pa.qty;
-        if (costPerFeed <= 0) continue;
-        let feedCount = 0, marks = 0, cost = 0;
-        let ful = pa.fulfilled;
-        const maxFeeds = 30;
-        while (feedCount < maxFeeds) {
-          const rawNext = Math.max(pa.base - ful * 2, 1);
-          const marksNext = rawNext * petMult;
-          const cpm = costPerFeed / marksNext;
-          if (cpm > budget) break;
-          feedCount++;
-          marks += marksNext;
-          cost += costPerFeed;
-          ful++;
-        }
-        const lastRawP = ful > 0 ? Math.max(pa.base - (ful - 1) * 2, 1) : pa.base;
-        const lastCpmP = feedCount > 0 ? costPerFeed / (lastRawP * petMult) : 0;
-        const nextRawP = Math.max(pa.base - ful * 2, 1);
-        const nextCpmP = costPerFeed / (nextRawP * petMult);
-        const needBuyDlvP = Math.max(0, feedCount - pa.dlv);
-        const needUnits = needBuyDlvP * pa.qty;
-        const buyCost = needBuyDlvP * costPerFeed;
-        if (feedCount > 0) {
-          rows.push({ icon: pa.food, label: `${pa.food} (${pa.label})`, dlvCount: feedCount, marks, cost, needUnits, buyCost, have: pa.dlv, type: "pet", lastCpm: lastCpmP, nextCpm: nextCpmP, stockCovers: Math.min(feedCount, pa.dlv), needBuyDlv: needBuyDlvP, costPerDlv: costPerFeed, rawMult: petMult });
-          totalMarks += marks;
-          totalCost += cost;
-          totalDlv += feedCount;
-        }
-      }
-
-      let html = `<table class="marks-table"><thead><tr>
-        <th>Item</th><th class="num-col">Do</th><th class="num-col">Marks</th>
-        <th class="num-col">Last SFL/m</th><th class="num-col">Stock</th><th class="num-col">Buy</th><th class="num-col">Buy cost</th><th>Note</th>
-      </tr></thead><tbody>`;
-
-      if (rows.length === 0) {
-        html += `<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:16px">No actions under ${budget.toFixed(3)} SFL/mark today</td></tr>`;
-      }
-      for (const r of rows) {
-        const buyColor = r.needUnits > 0 ? "var(--red)" : "var(--green)";
-        // Note: if stock covers fewer than optimal, and buying more is still under budget
-        let note = "";
-        if (r.needBuyDlv > 0 && r.stockCovers < r.dlvCount) {
-          // Stock runs out before optimal — need to buy
-          // Show: stock gives X marks at good rate, then Y more need buying
-          const stockMarksRaw = [];
-          let f = r.type === "kitchen" ? (r.dlvCount - r.stockCovers - r.needBuyDlv + (r.have > 0 ? 0 : 0)) : 0;
-          note = `\uD83D\uDED2 Stock covers ${r.stockCovers}/${r.dlvCount}, buy ${r.needBuyDlv} more`;
-        } else if (r.needBuyDlv === 0 && r.nextCpm <= budget * 1.5 && r.nextCpm > budget) {
-          // Next delivery is just above budget — note it's close
-          note = `\u26A0\uFE0F Next would be ${r.nextCpm.toFixed(4)} SFL/m (${((r.nextCpm / budget - 1) * 100).toFixed(0)}% over budget)`;
-        } else if (r.needBuyDlv === 0) {
-          note = "\u2705 All from stock";
-        }
-
-        // Last SFL/mark color
-        const lastColor = r.lastCpm <= budget * 0.5 ? "var(--green)" : r.lastCpm > budget * 0.8 ? "var(--sunpetal)" : "var(--text-secondary)";
-
-        html += `<tr>
-          <td>${_mIcon(r.icon, 16)} ${escHTML(r.label)}</td>
-          <td class="num-col">${r.dlvCount}</td>
-          <td class="num-col" style="color:var(--sunpetal)">${_fmtNum(Math.round(r.marks))}</td>
-          <td class="num-col" style="color:${lastColor}">${r.lastCpm.toFixed(4)}</td>
-          <td class="num-col">${r.have} in stock</td>
-          <td class="num-col" style="color:${buyColor}">${r.needUnits > 0 ? _fmtNum(r.needUnits) + " units" : "\u2705"}</td>
-          <td class="num-col">${r.buyCost > 0 ? r.buyCost.toFixed(2) + " SFL" : "-"}</td>
-          <td style="font-size:0.45rem">${note}</td>
-        </tr>`;
-      }
-
-      html += `</tbody></table>`;
-      html += `<div style="padding:8px 12px;font-size:0.5625rem;color:var(--text-secondary);border-top:1px solid rgba(92,58,30,0.15)">
-        <b>Today's total:</b> ${_fmtNum(totalDlv)} actions \u2192 <b style="color:var(--sunpetal)">${_fmtNum(Math.round(totalMarks))} marks</b> for ${totalCost.toFixed(2)} SFL
-        ${totalMarks > 0 ? ` (avg ${(totalCost / totalMarks).toFixed(4)} SFL/mark)` : ""}
-      </div>`;
-
-      document.getElementById("marks-shop-table").innerHTML = html;
-    }
-
-    function _marksInitSort() {
-      const table = document.getElementById("marks-table");
-      if (!table) return;
-      const headers = table.querySelectorAll("th[data-sort]");
-      headers.forEach(th => {
-        th.addEventListener("click", () => {
-          const key = th.dataset.sort;
-          const tbody = table.querySelector("tbody");
-          const rows = Array.from(tbody.querySelectorAll("tr:not(.marks-expand)"));
-          const asc = th.classList.contains("sorted-asc");
-
-          headers.forEach(h => h.classList.remove("sorted-asc", "sorted-desc"));
-          th.classList.add(asc ? "sorted-desc" : "sorted-asc");
-
-          rows.sort((a, b) => {
-            const av = _marksSortVal(a, key);
-            const bv = _marksSortVal(b, key);
-            return asc ? (bv - av || 0) : (av - bv || 0);
-          });
-
-          for (const row of rows) {
-            const expandRow = row.nextElementSibling;
-            tbody.appendChild(row);
-            if (expandRow && expandRow.classList.contains("marks-expand")) {
-              tbody.appendChild(expandRow);
-            }
-          }
-        });
-      });
-    }
-
-    function _marksSortVal(row, key) {
-      const cells = row.querySelectorAll("td");
-      if (key === "rank") return parseFloat(cells[0]?.textContent) || 999;
-      if (key === "name") return cells[1]?.textContent?.toLowerCase() || "zzz";
-      if (key === "marks") return parseFloat(cells[2]?.textContent?.replace(/[^0-9.-]/g, "")) || 0;
-      if (key === "delta") return parseFloat(cells[3]?.textContent?.replace(/[^0-9.+-]/g, "")) || 0;
-      if (key === "multiplier") return parseFloat(cells[4]?.textContent) || 0;
-      if (key === "tier") return cells[5]?.textContent || "zzz";
-      if (key === "optimal") return parseFloat(cells[cells.length - 3]?.textContent?.replace(/[^0-9.-]/g, "")) || 0;
-      if (key === "dump") return parseFloat(cells[cells.length - 2]?.textContent?.replace(/[^0-9.-]/g, "")) || 0;
-      if (key === "threat") {
-        const bar = cells[cells.length - 1]?.querySelector(".marks-threat-fill");
-        return bar ? parseFloat(bar.style.width) || 0 : 0;
-      }
-      return 0;
+      setTimeout(() => { btn.disabled = false; btn.textContent = "↻ Force refresh"; }, 5000);
     }
 
     // ═══════════════════════════════════════
