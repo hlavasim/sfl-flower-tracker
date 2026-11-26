@@ -7,7 +7,7 @@
 //   🏆 Cost to reach #1 · 📈 Projections · 🔥 Resource burn rate
 import { esc, icon, fmtNum } from "./market-common.mjs";
 import { kpis, bar, bigBar, pill } from "../ui/viz.mjs";
-import { big, compact, ring as gRing, rows as gRows, tiles as gTiles } from "../ui/glance.mjs";
+import { compact } from "../ui/glance.mjs";
 
 const needLb = () => ({ marks: { res: "marks" } });
 const needAll = (farmId) => ({ marks: { res: "marks" }, farm: { res: "farm", farm: farmId },
@@ -535,109 +535,142 @@ export const marksBurn = {
   },
 };
 
-// ── iPhone glance faces (boards and the ＋ gallery) ──
-const corner = (pct, tone) => `<div class="g-corner">${gRing(pct, { tone })}</div>`;
-const split = (head, list) => `<div class="g-split"><div>${head}</div>${gRows(list)}</div>`;
-const hero = (html) => (html ? `<div class="g-hero">${html}</div>` : "");
+// ── iPhone glance models (boards and the ＋ gallery): ui/glance-templates offers the looks ──
 const who = (r) => `#${r.rank || "?"} ${r.player_name || r.farm_id}`;
-// the first n rows, the viewer's row kept in the last place when it is further down
-const withMe = (list, n) => {
-  const top = list.slice(0, n), me = list.find((r) => r.me);
-  return me && !top.includes(me) ? [...top.slice(0, n - 1), me] : top;
+const share = (v, of) => (of > 0 ? Math.min(100, Math.max(0, ((+v || 0) / of) * 100)) : 0);
+// the list in its order, the viewer's row moved up to place k (0-based) when it is further down, so
+// a short look still shows it
+const meUp = (list, k = 2) => {
+  const i = list.findIndex((r) => r.me);
+  if (i <= k) return list;
+  const out = list.slice();
+  out.splice(k, 0, ...out.splice(i, 1));
+  return out;
 };
 const timeLeft = (days) => (days >= 1 ? `${Math.floor(days)}d ${Math.floor((days % 1) * 24)}h` : `${Math.floor(days * 24)}h`);
 
-marksSummary.sizes = ["s", "m"];
-marksSummary.size = "s";
-marksSummary.glance = ({ marks } = {}, ctx = {}, opts = {}, size = "s") => {
+// your rank with your share of #1 as a ring; the board (you moved up); rank, marks, time left; the week's end counts down
+marksSummary.look = "number";
+marksSummary.glanceModel = ({ marks } = {}, ctx = {}) => {
   if (!marks || !Array.isArray(marks.players)) return { empty: NO_MARKS };
   if (!marks.players.length) return { empty: "No players this week." };
-  const { me, top, daysLeft } = marksBoard(marks, ctx);
+  const { players, me, top, daysLeft } = marksBoard(marks, ctx);
+  const now = ctx.now || Date.now();
   const pct = me && top.marks > 0 ? (me.marks / top.marks) * 100 : 0;
-  if (size === "s") return { html: me
-    ? corner(pct, me.rank === 1 ? "ok" : "accent") + big(`#${me.rank}`, { cap: `${compact(me.marks)} marks · ${Math.round(pct)} % of #1 · ${timeLeft(daysLeft)} left` })
-    : big(compact(top.marks), { cap: `#1's marks · you are not on the board · ${timeLeft(daysLeft)} left` }) };
-  return { html: gTiles([
-    me ? { label: "your rank", value: `#${me.rank}`, sub: `of ${marks.players.length}` } : { label: "players", value: String(marks.players.length) },
-    me ? { label: "your marks", value: compact(me.marks), sub: `${Math.round(pct)} % of #1` } : { label: "#1 marks", value: compact(top.marks) },
-    { label: "time left", value: timeLeft(daysLeft), sub: me && me.multiplier ? `${me.multiplier.toFixed(1)}x multiplier` : "" }]) };
+  const list = meUp(players.map((p) => ({ ...p, me: p === me })));
+  return {
+    head: me
+      ? { value: `#${me.rank}`, ring: pct, ringTone: me.rank === 1 ? "ok" : "accent", cap: `${compact(me.marks)} marks · ${Math.round(pct)} % of #1` }
+      : { value: compact(top.marks), cap: "#1's marks · you are not on the board" },
+    items: [
+      ...(daysLeft > 0 ? [{ icon: "⏳", name: "week ends", at: Math.round(now + daysLeft * 86400000) }] : []),
+      ...list.map((p) => ({ name: who(p), sub: p.tier || "", value: compact(p.marks), tone: p.me ? "accent" : "", pct: share(p.marks, top.marks) })),
+    ],
+    tiles: [
+      me ? { label: "your rank", value: `#${me.rank}` } : { label: "players", value: String(players.length) },
+      me ? { label: "your marks", value: compact(me.marks) } : { label: "#1 marks", value: compact(top.marks) },
+      { label: "time left", value: timeLeft(daysLeft) },
+      ...(me && me.rank > 1 ? [{ label: "to #1", value: compact(Math.max(0, top.marks - me.marks)) }] : []),
+    ],
+    foot: `${players.length} players · ${timeLeft(daysLeft)} left`,
+  };
 };
 
-marksSources.sizes = ["s", "m", "l"];
-marksSources.size = "m";
-marksSources.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+// the best next donation (marks it brings); every source, the cheapest a mark first
+marksSources.look = "next";
+marksSources.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = marksSources.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
   const cpm = (r) => (r.costPerMark > 0 ? `${r.costPerMark.toFixed(4)} SFL/mark` : "unpriced");
-  if (size === "s") {
-    const r = out.rows[0];
-    return { html: hero(r.iconHtml) + big(r.nextMarks.toFixed(0), { unit: "marks", cap: `${r.label} · ${cpm(r)}` }) };
-  }
-  return { html: gRows(out.rows.slice(0, size === "m" ? 3 : 7).map((r) => ({ icon: r.iconHtml, name: r.label, sub: `${cpm(r)} · ${r.hint}`,
-    value: r.nextMarks.toFixed(0), tone: r.n === 1 ? "ok" : "" }))) };
+  const r = out.rows[0], top = Math.max(1, ...out.rows.map((x) => x.nextMarks || 0));
+  return {
+    head: { value: r.nextMarks.toFixed(0), unit: "marks", hero: r.iconHtml, cap: `${r.label} · ${cpm(r)}` },
+    items: out.rows.map((x) => ({ icon: x.iconHtml, name: x.label, sub: cpm(x), value: x.nextMarks.toFixed(0), tone: x.n === 1 ? "ok" : "", pct: share(x.nextMarks, top) })),
+    tiles: [{ label: "sources", value: out.rows.length }, { label: "best", value: r.nextMarks.toFixed(0) },
+      { label: "SFL/mark", value: r.costPerMark > 0 ? r.costPerMark.toFixed(4) : "—" }],
+  };
 };
 
-marksShoppingList.sizes = ["s", "m", "l"];
-marksShoppingList.size = "s";
-marksShoppingList.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+// marks today with the budget; the items by marks, what to buy
+marksShoppingList.look = "number";
+marksShoppingList.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = marksShoppingList.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
-  const sum = (k) => out.rows.reduce((a, r) => a + r[k], 0), buy = sum("buyCost");
-  const head = big(compact(Math.round(sum("marks"))), { unit: "marks", cap: `${sum("dlvCount")} deliveries today · ${buy > 0 ? `${buy.toFixed(2)} SFL to buy` : "all from stock"}` });
-  if (size === "s") return { html: head };
-  const list = out.rows.slice().sort((a, b) => b.marks - a.marks).slice(0, size === "m" ? 3 : 6).map((r) => ({ icon: r.iconHtml, name: r.label,
-    sub: r.needUnits > 0 ? `${r.dlvCount}× · buy ${fmtNum(r.needUnits)} units` : `${r.dlvCount}× · from stock`, value: `+${compact(Math.round(r.marks))}`, tone: "ok" }));
-  return { html: (size === "l" ? head : "") + gRows(list) };
+  const sum = (k) => out.rows.reduce((a, r) => a + r[k], 0), buy = sum("buyCost"), total = sum("marks");
+  const list = out.rows.slice().sort((a, b) => b.marks - a.marks);
+  return {
+    head: { value: compact(Math.round(total)), unit: "marks", cap: `${sum("dlvCount")} deliveries today · ${buy > 0 ? `${buy.toFixed(2)} SFL to buy` : "all from stock"}` },
+    items: list.map((r) => ({ icon: r.iconHtml, name: r.label, sub: r.needUnits > 0 ? `${r.dlvCount}× · buy ${fmtNum(r.needUnits)}` : `${r.dlvCount}× · from stock`,
+      value: `+${compact(Math.round(r.marks))}`, tone: "ok", pct: share(r.marks, total) })),
+    tiles: [{ label: "marks", value: compact(Math.round(total)) }, { label: "deliveries", value: sum("dlvCount") },
+      { label: "to buy", value: buy > 0 ? buy.toFixed(2) : "0" }],
+  };
 };
 
-marksLeaderboard.sizes = ["m", "l"];
-marksLeaderboard.size = "m";
-marksLeaderboard.glance = (data = {}, ctx = {}, opts = {}, size = "m") => {
+// the top of the board, you highlighted (moved up when further down)
+marksLeaderboard.look = "list-4";
+marksLeaderboard.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = marksLeaderboard.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
-  return { html: gRows(withMe(out.rows, size === "l" ? 7 : 3).map((r) => ({ name: who(r),
-    sub: r.delta ? `${deltaStr(r.delta)} since the last snapshot` : r.tier || "", value: compact(r.marks), tone: r.me ? "accent" : "" }))) };
+  const me = out.rows.find((r) => r.me), top = out.rows[0];
+  return {
+    head: me ? { value: `#${me.rank}`, cap: `you · ${compact(me.marks)} marks`, tone: "accent" } : { value: compact(top.marks), cap: `#1 · ${top.player_name || top.farm_id}` },
+    items: meUp(out.rows).map((r) => ({ name: who(r), sub: r.delta ? `${deltaStr(r.delta)} since the last snapshot` : r.tier || "",
+      value: compact(r.marks), tone: r.me ? "accent" : "", pct: share(r.marks, top.marks) })),
+    tiles: [{ label: "players", value: out.rows.length }, { label: "#1 marks", value: compact(top.marks) },
+      ...(me ? [{ label: "you", value: `#${me.rank}` }] : [])],
+  };
 };
 
-marksCostFirst.sizes = ["s", "m"];
-marksCostFirst.size = "s";
-marksCostFirst.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+// the gap to #1 with the simulation's reach as a ring; the resources it takes
+marksCostFirst.look = "number";
+marksCostFirst.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = marksCostFirst.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
   const { me, top } = marksBoard(data.marks, ctx);
   const gap = (top.marks || 0) - (me.marks || 0);
   const gained = out.rows.reduce((a, r) => a + r.totalMarks, 0), buy = out.rows.reduce((a, r) => a + r.buyCost, 0);
-  const cap = gained >= gap ? `to #1 · ${buy > 0 ? `${buy.toFixed(2)} SFL to buy` : "all from stock"}` : "to #1 · not with the kitchen alone";
-  const head = big(compact(Math.ceil(gap)), { unit: "marks", cap });
-  if (size === "s") return { html: corner((gained / gap) * 100, gained >= gap ? "ok" : "bad") + head };
-  return { html: split(head, out.rows.filter((r) => r.totalDeliveries > 0).sort((a, b) => b.totalMarks - a.totalMarks).slice(0, 3)
-    .map((r) => ({ icon: r.iconHtml, name: r.item, sub: `${fmtNum(r.totalDeliveries)} deliveries`,
-      value: r.needToBuy > 0 ? `buy ${fmtNum(r.needUnits)}` : "stock", tone: r.needToBuy > 0 ? "bad" : "ok" }))) };
+  const reach = gained >= gap;
+  return {
+    head: { value: compact(Math.ceil(gap)), unit: "marks", ring: share(gained, gap), ringTone: reach ? "ok" : "bad",
+      cap: reach ? `to #1 · ${buy > 0 ? `${buy.toFixed(2)} SFL to buy` : "all from stock"}` : "to #1 · not with the kitchen alone" },
+    items: out.rows.filter((r) => r.totalDeliveries > 0).sort((a, b) => b.totalMarks - a.totalMarks).map((r) => ({ icon: r.iconHtml, name: r.item,
+      sub: `${fmtNum(r.totalDeliveries)} deliveries`, value: r.needToBuy > 0 ? `buy ${fmtNum(r.needUnits)}` : "stock", tone: r.needToBuy > 0 ? "bad" : "ok",
+      pct: r.totalDeliveries ? ((r.totalDeliveries - r.needToBuy) / r.totalDeliveries) * 100 : 100 })),
+    tiles: [{ label: "gap", value: compact(Math.ceil(gap)) }, { label: "simulated", value: compact(Math.round(gained)) },
+      { label: "to buy", value: buy.toFixed(2) }],
+  };
 };
 
-marksProjections.sizes = ["s", "m", "l"];
-marksProjections.size = "m";
-marksProjections.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+// your projected place; the projected board, you kept
+marksProjections.look = "number";
+marksProjections.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = marksProjections.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
-  const first = out.rows[0];
-  if (size === "s") {
-    const me = out.rows.find((r) => r.me);
-    return { html: me ? corner(first.projected > 0 ? (me.projected / first.projected) * 100 : 0, me.n === 1 ? "ok" : "accent") +
-      big(`#${me.n}`, { cap: `projected · ${compact(me.projected)} marks${me.n > 1 ? ` · #1 ${compact(first.projected)}` : ""}` })
-      : big(compact(first.projected), { cap: `#1 projected · ${first.player_name || first.farm_id}` }) };
-  }
-  return { html: gRows(withMe(out.rows, size === "l" ? 7 : 3).map((r) => ({ name: `#${r.n} ${r.player_name || r.farm_id}`,
-    sub: `now ${compact(r.marks)} · +${compact(r.optimal + r.petWk)} possible`, value: compact(r.projected), tone: r.me ? "accent" : "" }))) };
+  const first = out.rows[0], me = out.rows.find((r) => r.me);
+  return {
+    head: me ? { value: `#${me.n}`, ring: share(me.projected, first.projected), ringTone: me.n === 1 ? "ok" : "accent",
+      cap: `projected · ${compact(me.projected)} marks${me.n > 1 ? ` · #1 ${compact(first.projected)}` : ""}` }
+      : { value: compact(first.projected), cap: `#1 projected · ${first.player_name || first.farm_id}` },
+    items: meUp(out.rows).map((r) => ({ name: `#${r.n} ${r.player_name || r.farm_id}`, sub: `now ${compact(r.marks)} · +${compact(r.optimal + r.petWk)}`,
+      value: compact(r.projected), tone: r.me ? "accent" : "", pct: share(r.projected, first.projected) })),
+    tiles: [{ label: "#1 proj", value: compact(first.projected) }, ...(me ? [{ label: "you proj", value: compact(me.projected) },
+      { label: "you now", value: compact(me.marks) }] : [{ label: "players", value: out.rows.length }])],
+  };
 };
 
-marksBurn.sizes = ["m", "l"];
-marksBurn.size = "m";
-marksBurn.glance = (data = {}, ctx = {}, opts = {}, size = "m") => {
+// who is moving: the players with a signal, the first signal as a chip
+marksBurn.look = "list-4";
+marksBurn.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = marksBurn.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
   const moving = out.rows.filter((r) => r.signals.length).sort((a, b) => b.signals.length - a.signals.length || (a.rank || 999) - (b.rank || 999));
   if (!moving.length) return { empty: "No big moves since the last snapshot." };
-  return { html: gRows(moving.slice(0, size === "l" ? 7 : 3).map((r) => ({ name: who(r), sub: r.signals.slice(1).join(" ") || `${deltaStr(r.burnTotal)} kitchen stock`,
-    chip: { text: r.signals[0], tone: r.signals[0].startsWith("🔻") ? "bad" : r.signals[0].startsWith("🟢") ? "ok" : "warn" } }))) };
+  const n = (p) => moving.filter((r) => r.signals.some((s) => s.startsWith(p))).length;
+  return {
+    head: { value: moving.length, unit: `/${out.rows.length}`, cap: "players moving since the last snapshot" },
+    items: moving.map((r) => ({ name: who(r), sub: r.signals[1] ? `${r.signals[1]}${r.signals.length > 2 ? ` +${r.signals.length - 2}` : ""}` : `${deltaStr(r.burnTotal)} stock`,
+      chip: { text: r.signals[0], tone: r.signals[0].startsWith("🔻") ? "bad" : r.signals[0].startsWith("🟢") ? "ok" : "warn" } })),
+    tiles: [{ label: "dumping", value: n("🔻") }, { label: "stocking", value: n("🔺") }, { label: "marks+", value: n("🟢") }],
+  };
 };

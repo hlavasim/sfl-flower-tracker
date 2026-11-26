@@ -1,6 +1,5 @@
 // TICKETY · this week's checklist: every ticket source (daily reward, deliveries, chores, bounties,
 // young-animal bounties) with done / what is left, from compute?section=tickets (store "tickets").
-import { big, ring, rows } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const cap = (s) => String(s || "").charAt(0).toUpperCase() + String(s || "").slice(1);
@@ -50,23 +49,28 @@ export const ticketChecklist = {
   },
 };
 
-// ── iPhone glance face: S = sources left with a ring and the tickets they bring; M / L = the biggest open ones ──
+// ── iPhone glance model: sources left (a ring) and the tickets they bring; the list = the open sources,
+// most tickets first, then the done ones; ui/glance-templates offers the looks ──
 const plain = (s) => (s.group === "daily" ? "Daily reward" : s.group === "delivery" ? cap(s.label) : s.group === "chore" ? `${cap(s.npc)}: ${s.label}`
   : s.group === "bounty" ? `Deliver ${s.label}` : s.group === "animal" ? `${s.animal} at level ${s.level}+` : String(s.label || s.id));
-ticketChecklist.sizes = ["s", "m", "l"];
-ticketChecklist.size = "s";
-ticketChecklist.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+// a source's progress for the bars: done = full, a chore its counter, else nothing yet
+const progress = (s) => (s.done ? 100 : s.group === "chore" && s.required > 0 ? Math.min(100, Math.max(0, (s.progress / s.required) * 100)) : 0);
+ticketChecklist.look = "number";
+ticketChecklist.glanceModel = (data = {}, ctx = {}) => {
   const out = ticketChecklist.build(data);
   if (!out.rows.length) return { empty: out.empty };
-  const open = out.rows.filter((r) => !r.done).sort((a, b) => b.tickets - a.tickets);
-  const plus = open.reduce((a, r) => a + r.tickets, 0), pct = ((out.rows.length - open.length) / out.rows.length) * 100;
-  const head = `<div class="g-corner">${ring(pct, { tone: open.length ? "accent" : "ok" })}</div>` +
-    big(open.length || "✓", { unit: open.length ? "left" : "", tone: open.length ? "" : "ok", cap: open.length ? `+${n(plus)} tickets this week` : "all done this week" });
-  if (size === "s" || !open.length) return { html: head };
+  const open = out.rows.filter((r) => !r.done).sort((a, b) => b.tickets - a.tickets), done = out.rows.filter((r) => r.done);
+  const plus = open.reduce((a, r) => a + r.tickets, 0), pct = (done.length / out.rows.length) * 100;
   const ic = (r) => {
     const item = r.group === "delivery" ? Object.keys(r.items || {})[0] : r.group === "animal" ? r.animal : r.group === "bounty" ? r.label : r.item;
-    return item && typeof ctx.icon === "function" ? ctx.icon(item) : "";
+    return item && typeof ctx.icon === "function" ? ctx.icon(item) : r.group === "daily" ? "🎁" : "";
   };
-  const list = open.slice(0, size === "m" ? 3 : 6).map((r) => ({ icon: ic(r), name: plain(r), sub: GROUP[r.group] || r.group, value: `+${r.tickets}`, tone: "ok" }));
-  return { html: (size === "l" ? head : "") + rows(list) };
+  const item = (r) => ({ icon: ic(r), name: plain(r), sub: GROUP[r.group] || r.group, pct: progress(r) });
+  return {
+    head: { value: open.length || "✓", unit: open.length ? "left" : "", tone: open.length ? "" : "ok", ring: pct, ringTone: open.length ? "accent" : "ok",
+      cap: open.length ? `+${n(plus)} tickets this week` : "all done this week" },
+    items: [...open.map((r) => ({ ...item(r), value: `+${r.tickets}`, tone: "ok" })), ...done.map((r) => ({ ...item(r), chip: { text: "done", tone: "ok" } }))],
+    tiles: [{ label: "left", value: `${open.length} / ${out.rows.length}` }, { label: "tickets", value: `+${n(plus)}` },
+      { label: "done", value: String(done.length) }],
+  };
 };

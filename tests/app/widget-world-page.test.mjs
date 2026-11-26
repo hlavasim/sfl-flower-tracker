@@ -5,6 +5,7 @@ import { worldSkillPoints, worldEffLevel, worldCurrentExpansion, worldReach, wor
 import { worldSummary, worldDataset, worldPriority, fmtDur, fmtXp } from "../../widgets/world.mjs";
 import { renderTable } from "../../ui/table.mjs";
 import { keyOf } from "../../app/store.mjs";
+import { renderLook, looksFor } from "../../ui/glance-templates.mjs";
 
 // The WORLD page's panels as widgets: the same numbers the old charts and tables showed.
 const keys = (html) => [...html.matchAll(/data-row="([^"]+)"/g)].map((m) => m[1]);
@@ -189,58 +190,70 @@ test("auction priority: live data passes farms; a running refresh shows its prog
   assert.deepStrictEqual(worldPriority.needs("5"), { prio: { res: "worldPrio", farm: "5" } });
 });
 
-test("📱 glances: summary (24 h players / windows), dataset age (orange when stale), auction rank with the farms ahead", () => {
-  assert.strictEqual(worldSummary.glance({ stats: STATS }, {}, {}, "s").html, `<div class="g-big">120k</div><div class="g-cap">played in 24 h · of 656k farms</div>`);
-  const sm = worldSummary.glance({ stats: STATS }, {}, {}, "m").html;
-  assert.match(sm, /<span>7 days<\/span><b>210k<\/b>/);
-  assert.match(sm, /656k farms · 3\.5k banned/);
-  assert.deepStrictEqual(worldSummary.glance({}, {}, {}, "s"), { empty: "The WORLD data has not loaded yet." });
+test("📱 glance models: summary (24 h players as a ring of all farms), dataset age (orange when stale), auction rank with the farms ahead", () => {
+  for (const w of [worldSummary, worldDataset, worldPriority]) {
+    assert.strictEqual(w.glance, undefined, `${w.type}: the hand-written face is gone`);
+    assert.strictEqual(w.look, "number", w.type);
+  }
+  const s = worldSummary.glanceModel({ stats: STATS }, {}, {});
+  assert.deepStrictEqual(s.head, { value: "120k", ring: (120000 / 656123) * 100, ringTone: "info", cap: "played in 24 h · of 656k farms" });
+  assert.deepStrictEqual(s.items.map((i) => [i.name, i.value]), [["24 h", "120k"], ["7 days", "210k"], ["30 days", "330k"], ["90 days", "500k"], ["banned", "3.5k"]]);
+  assert.strictEqual(s.foot, "656k farms · 3.5k banned");
+  assert.match(renderLook(s, "number").html, /<div class="gx-num">120k<\/div><div class="gx-cap">played in 24 h · of 656k farms<\/div>/);
+  assert.ok(looksFor(s).length >= 3);
+  assert.deepStrictEqual(worldSummary.glanceModel({}, {}, {}), { empty: "The WORLD data has not loaded yet." });
 
-  assert.match(worldDataset.glance({ stats: STATS }, {}, {}, "s").html, /<div class="g-big g-warn">40\.0 h<\/div><div class="g-cap">dump age · complete/);
+  const d = worldDataset.glanceModel({ stats: STATS }, {}, {});
+  assert.deepStrictEqual(d.head, { value: "40.0 h", tone: "warn", cap: "dump age · complete" });
+  assert.strictEqual(d.items.length, 6);
+  assert.deepStrictEqual(d.items[3], { icon: "⚠️", name: "unparseable", value: "3", tone: "warn" });
+  assert.match(renderLook(d, "number").html, /<div class="gx-num g-warn">40\.0 h<\/div>/);
+  assert.ok(looksFor(d).length >= 3);
   const fresh = { ...STATS, dump: { ...STATS.dump, age_ms: 3 * 3600000 } };
-  assert.match(worldDataset.glance({ stats: fresh }, {}, {}, "s").html, /g-big g-ok">3\.0 h/);
-  assert.match(worldDataset.glance({ stats: STATS }, {}, {}, "m").html, /class="g-split".*records.*656k.*unparseable<\/div><span class="g-v g-warn">3/);
-  assert.deepStrictEqual(worldDataset.glance({}, {}, {}, "m"), { empty: "The WORLD data has not loaded yet." });
+  assert.deepStrictEqual([worldDataset.glanceModel({ stats: fresh }, {}, {}).head.value, worldDataset.glanceModel({ stats: fresh }, {}, {}).head.tone], ["3.0 h", "ok"]);
+  assert.deepStrictEqual(worldDataset.glanceModel({}, {}, {}), { empty: "The WORLD data has not loaded yet." });
 
-  const ps = worldPriority.glance({ prio: PRIO }, { farmId: "9" }, {}, "s").html;
-  assert.match(ps, /<div class="g-big">#150<\/div><div class="g-cap">auction priority of 600k · A2 L180/);
-  const pm = worldPriority.glance({ prio: PRIO }, { farmId: "9" }, {}, "m").html;
-  assert.match(pm, /class="g-split"/);
+  const p = worldPriority.glanceModel({ prio: PRIO }, { farmId: "9" }, {});
+  assert.deepStrictEqual(p.head, { value: "#150", tone: "", cap: "auction priority of 600k · A2 L180" });
   // nearest first: a needs +100 k, b +300 k, c has a higher Ascension
-  assert.match(pm, /<div class="g-n">a<div>A2 · L180<\/div><\/div><span class="g-v g-warn">\+100\.0 k<\/span>/);
-  assert.match(pm, /<div class="g-n">c<div>A3 · L1<\/div><\/div><span class="g-chip">HIGHER ASC<\/span>/);
-  // live data passes "a": rank 149, two rows left
+  assert.deepStrictEqual(p.items[0], { name: "a", sub: "A2 · L180", value: "+100.0 k", tone: "warn" });
+  assert.deepStrictEqual(p.items[2], { name: "c", sub: "A3 · L1", chip: { text: "HIGHER ASC" } });
+  assert.strictEqual(p.foot, "+100.0 k XP passes the next farm");
+  assert.match(renderLook(p, "list-1").html, /class="gx-sub-tag g-warn">\+100\.0 k</);
+  assert.ok(looksFor(p).length >= 3);
+  // live data passes "a": rank 149, two left
   const live = { 9: { ascension: 2, level: 181, xp: 5_200_000 } };
-  const pl = worldPriority.glance({ prio: PRIO }, { farmId: "9", prioLive: () => live }, {}, "l").html;
-  assert.match(pl, /#149/);
-  assert.strictEqual((pl.match(/class="g-row"/g) || []).length, 2);
-  assert.match(worldPriority.glance({ prio: { ...PRIO, next: [] } }, { farmId: "9" }, {}, "l").html, /nobody ahead of you/);
-  assert.deepStrictEqual(worldPriority.glance({}, { farmId: "" }, {}, "s"), { empty: "No farm — nobody to rank." });
-  assert.deepStrictEqual(worldPriority.glance({}, { farmId: "9" }, {}, "s"), { empty: "Computing the ranking…" });
-  assert.match(worldPriority.glance({ prio: { found: false } }, { farmId: "5" }, {}, "s").empty, /not in the daily dump/);
+  const pl = worldPriority.glanceModel({ prio: PRIO }, { farmId: "9", prioLive: () => live }, {});
+  assert.deepStrictEqual([pl.head.value, pl.items.length], ["#149", 2]);
+  assert.strictEqual(worldPriority.glanceModel({ prio: { ...PRIO, next: [] } }, { farmId: "9" }, {}).foot, "nobody ahead of you");
+  assert.deepStrictEqual(worldPriority.glanceModel({}, { farmId: "" }, {}), { empty: "No farm — nobody to rank." });
+  assert.deepStrictEqual(worldPriority.glanceModel({}, { farmId: "9" }, {}), { empty: "Computing the ranking…" });
+  assert.match(worldPriority.glanceModel({ prio: { found: false } }, { farmId: "5" }, {}).empty, /not in the daily dump/);
 });
 
-test("📱 glances: every distribution — your bucket and rank (S), the most common buckets with yours marked (M / L)", () => {
+test("📱 glance models: every distribution — your bucket and rank (a ring of farms behind you), the buckets by count with yours moved up", () => {
   const agg = [{ key: 10, n: 70 }, { key: 12, n: 20 }, { key: 15, n: 10 }];
   for (const w of [worldSkillPoints, worldEffLevel, worldCurrentExpansion, worldReach, worldNodes, worldAscension, worldBanStatus, worldVerified]) {
-    assert.deepStrictEqual(w.sizes, ["s", "m", "l"], w.type);
-    assert.match(w.glance({ agg: null }, {}, {}, "s").empty, /WORLD/, w.type);
+    assert.strictEqual(w.glance, undefined, `${w.type}: the hand-written face is gone`);
+    assert.strictEqual(w.look, "number", w.type);
+    assert.match(w.glanceModel({ agg: null }, {}, {}).empty, /WORLD/, w.type);
   }
   const me = { found: true, effective_level: 12 };
-  assert.strictEqual(worldEffLevel.glance({ agg, me }, {}, {}, "s").html, `<div class="g-big g-accent">12 sp</div><div class="g-cap">you · top 11.0% · #11</div>`);
-  const m = worldEffLevel.glance({ agg, me }, {}, {}, "m").html;
-  assert.match(m, /class="g-split"/);
-  assert.deepStrictEqual([...m.matchAll(/<div class="g-n">([^<]+)</g)].map((x) => x[1]), ["10 sp", "12 sp", "15 sp"]);
-  assert.match(m, /12 sp<div>20 farms<\/div><\/div><span class="g-v g-accent">20\.0%/);
-  // past the top rows, your bucket replaces the last one
+  const m = worldEffLevel.glanceModel({ agg, me }, {}, {});
+  assert.deepStrictEqual(m.head, { value: "12 sp", tone: "accent", cap: "you · top 11.0% · #11", ring: 89, ringTone: "accent" });
+  assert.deepStrictEqual(m.items.map((i) => i.name), ["10 sp", "▶ 12 sp", "15 sp"]);
+  assert.deepStrictEqual(m.items[1], { name: "▶ 12 sp", sub: "20 farms", value: "20.0%", tone: "accent", pct: (20 / 70) * 100 });
+  assert.match(renderLook(m, "number").html, /<div class="gx-num g-accent">12 sp<\/div><div class="gx-cap">you · top 11\.0% · #11<\/div>/);
+  assert.ok(looksFor(m).length >= 3);
+  // past the top rows, your bucket moves up to second
   const many = [{ key: 1, n: 90 }, { key: 2, n: 80 }, { key: 3, n: 70 }, { key: 4, n: 1 }];
-  const m2 = worldSkillPoints.glance({ agg: many, me: { found: true, total_level: 4 } }, {}, {}, "m").html;
-  assert.deepStrictEqual([...m2.matchAll(/<div class="g-n">([^<]+)</g)].map((x) => x[1]), ["1 sp", "2 sp", "4 sp"]);
+  assert.deepStrictEqual(worldSkillPoints.glanceModel({ agg: many, me: { found: true, total_level: 4 } }, {}, {}).items.map((i) => i.name), ["1 sp", "▶ 4 sp", "2 sp", "3 sp"]);
   // without your farm: the largest bucket's share
-  assert.strictEqual(worldBanStatus.glance({ agg: [{ key: "permanent", n: 30 }, { key: null, n: 70 }] }, {}, {}, "s").html,
-    `<div class="g-big">70.0%</div><div class="g-cap">(none) · of 100 farms</div>`);
-  assert.strictEqual((worldBanStatus.glance({ agg: [{ key: "permanent", n: 30 }, { key: null, n: 70 }] }, {}, {}, "l").html.match(/class="g-row"/g) || []).length, 2);
+  const ban = worldBanStatus.glanceModel({ agg: [{ key: "permanent", n: 30 }, { key: null, n: 70 }] }, {}, {});
+  assert.deepStrictEqual(ban.head, { value: "70.0%", cap: "(none) · of 100 farms" });
+  assert.strictEqual(ban.items.length, 2);
   // buyable nodes: your T1-equivalent count
-  assert.match(worldNodes.glance({ agg: NODES }, { farmId: "9" }, { node: "trees" }, "s").html, /g-accent">6<\/div><div class="g-cap">you · top 1\.0% · #1/);
-  assert.deepStrictEqual(worldVerified.glance({ agg: [] }, {}, {}, "s"), { empty: "No farms." });
+  const nodes = worldNodes.glanceModel({ agg: NODES }, { farmId: "9" }, { node: "trees" });
+  assert.deepStrictEqual([nodes.head.value, nodes.head.cap], ["6", "you · top 1.0% · #1"]);
+  assert.deepStrictEqual(worldVerified.glanceModel({ agg: [] }, {}, {}), { empty: "No farms." });
 });

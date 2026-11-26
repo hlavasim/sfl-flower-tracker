@@ -6,7 +6,6 @@
 //      cost, best offer, +FLOWER/day, payback, horizon result, Σ cost and ETA.
 //   🏷 Offers — the tradeable rows against the marketplace book: your offer on top / outbid / none.
 import { bar, kpis, bigBar, pill } from "../ui/viz.mjs";
-import { big, compact, rows, spark, tiles } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const icon = (ctx, n) => (typeof ctx.icon === "function" ? ctx.icon(n) : "");
@@ -377,52 +376,72 @@ export const roadmapOffers = {
   },
 };
 
-// ── iPhone glance faces ──
-roadmapIncome.sizes = ["s", "m"];
-roadmapIncome.size = "m";
-roadmapIncome.glance = ({ roadmap } = {}, ctx = {}, opts = {}, size = "m") => {
+// ── iPhone glance models: ui/glance-templates offers the looks ──
+
+// income now (a meter = how far it is from the plan's end rate); where today's income comes from; the
+// income as the plan buys its way up, a point per buy
+roadmapIncome.look = "chart-2";
+roadmapIncome.glanceModel = ({ roadmap } = {}, ctx = {}) => {
   if (!roadmap || !roadmap.sim) return { empty: "No roadmap data." };
   const d = normRoadmap(roadmap), sim = d.sim;
-  const total = d.startIncome > 0 ? d.startIncome : (d.currentProd && d.currentProd.total) || 0;
-  if (size === "s") return { html: big(compact(total), { unit: "/day", cap: `→ ${compact(sim.finalRate)}/day after the plan` }) };
-  // the income as the plan buys its way up, a point per buy
+  const prod = d.currentProd || { total: 0, breakdown: [] };
+  const total = d.startIncome > 0 ? d.startIncome : prod.total || 0;
+  const lbl = (c) => (typeof ctx.catLabel === "function" ? ctx.catLabel(c) : c);
+  const ci = (c) => (typeof ctx.catIcon === "function" ? ctx.catIcon(c) : "");
+  const bd = (prod.breakdown || []).filter((b) => b.sfl > 0.01).sort((a, b) => b.sfl - a.sfl);
+  const base = bd.reduce((s, b) => s + b.sfl, 0);
+  const doneIn = (sim.timeline || []).filter((t) => t.kind === "econ").reduce((a, t) => Math.max(a, t.atDay || 0), 0);
   const steps = (sim.ranked || []).filter((r) => r.status === "plan" && Number.isFinite(r.rateAfter)).map((r) => r.rateAfter);
-  return { html: tiles([{ label: "now", value: `${compact(total)}/d` }, { label: "after the plan", value: `${compact(sim.finalRate)}/d` },
-    { label: `${sim.econSteps} buys`, value: compact(sim.econCost) }]) + spark([total, ...steps]) };
+  return {
+    head: { value: fmtFlower(total), unit: "/day", cap: `→ ${fmtFlower(sim.finalRate)}/day after the plan`,
+      meter: sim.finalRate > 0 ? Math.min(100, (total / sim.finalRate) * 100) : 100, meterTone: "ok" },
+    items: bd.map((b) => ({ ...(ci(b.cat) ? { icon: ci(b.cat) } : {}), name: String(lbl(b.cat)), sub: `${base > 0 ? Math.round((b.sfl / base) * 100) : 0}% of today`,
+      value: fmtFlower(b.sfl), tone: "ok", pct: base > 0 ? (b.sfl / base) * 100 : 0 })),
+    tiles: [{ label: "now", value: `${fmtFlower(total)}/d` }, { label: "after plan", value: `${fmtFlower(sim.finalRate)}/d` },
+      { label: `${sim.econSteps} buys`, value: fmtFlower(sim.econCost) }, { label: "done in", value: fmtDays(doneIn) },
+      ...(sim.wealth != null ? [{ label: `in ${sim.horizonYears} y`, value: fmtFlower(sim.wealth) }] : [])],
+    series: [total, ...steps],
+    foot: `${sim.econSteps} buys for ${fmtFlower(sim.econCost)} · done in ${fmtDays(doneIn)}`,
+  };
 };
 
-roadmapBuyPath.sizes = ["s", "m", "l"];
-roadmapBuyPath.size = "l";
-roadmapBuyPath.glance = (data = {}, ctx = {}, opts = {}, size = "l") => {
+// the next buy's payback; the plan in order, each with what it adds a day (bars = against the best)
+roadmapBuyPath.look = "list-4";
+roadmapBuyPath.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = roadmapBuyPath.build(data, ctx, { ...opts, status: "plan" });
   const plan = out.rows.filter((r) => r.status === "plan");
   if (!plan.length) return { empty: out.empty || "Nothing to buy." };
-  const row = (r) => ({ icon: r.iconHtml, name: r.name, sub: `${TYPE_META[typeOf(r)].label.toLowerCase()} · pays back in ${fmtDays(r.sortRoi ?? r.roi)}`,
-    ...(r.skillTakeNow ? { chip: { text: "TAKE NOW", tone: "ok" } } : { value: `+${fmtFlower(r.value)}/d`, tone: "ok" }) });
-  if (size === "s") {
-    const r = plan[0];
-    return { html: `<div class="g-hero">${r.iconHtml}</div>` + big(fmtDays(r.sortRoi ?? r.roi), { cap: `${r.name} · +${fmtFlower(r.value)}/d` }) };
-  }
-  const n = size === "m" ? 3 : 6;
-  return { html: rows(plan.slice(0, n).map(row)) + `<div class="g-cap g-foot">${plan.length} in the plan · next ${esc(plan[0].eta)}</div>` };
+  const sim = normRoadmap(data.roadmap).sim, r = plan[0];
+  const maxVal = Math.max(0, ...plan.map((x) => x.value || 0));
+  return {
+    head: { value: fmtDays(r.sortRoi ?? r.roi), hero: r.iconHtml, cap: `${r.name} · +${fmtFlower(r.value)}/d` },
+    items: plan.map((x) => ({ icon: x.iconHtml, name: x.name, sub: `${TYPE_META[typeOf(x)].label.toLowerCase()} · pays back in ${fmtDays(x.sortRoi ?? x.roi)}`,
+      ...(x.skillTakeNow ? { chip: { text: "TAKE NOW", tone: "ok" } } : { value: `+${fmtFlower(x.value)}/d`, tone: "ok" }),
+      ...(maxVal > 0 ? { pct: ((x.value || 0) / maxVal) * 100 } : {}) })),
+    tiles: [{ label: "in plan", value: plan.length }, { label: "plan cost", value: fmtFlower(sim.econCost) },
+      { label: "after plan", value: `${fmtFlower(sim.finalRate)}/d` }, { label: "next", value: r.eta }],
+    foot: `${plan.length} in the plan · next ${plan[0].eta}`,
+  };
 };
 
-// S = how many of my offers are on top; M / L = the offers that need a look first (outbid), then the rest
+// how many of my offers are on top (a ring); the offers that need a look first (outbid), then the rest;
+// bars = how far the best bid sits under the floor
 const OFFER_ORDER = { outbid: 0, "mine-nobook": 1, top: 2, none: 3 };
 const OFFER_TONE = { top: "ok", outbid: "warn", "mine-nobook": "warn", none: "" };
-roadmapOffers.sizes = ["s", "m", "l"];
-roadmapOffers.size = "s";
-roadmapOffers.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+roadmapOffers.look = "number";
+roadmapOffers.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = roadmapOffers.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
   const own = out.rows.filter((r) => r.own), top = own.filter((r) => r.state === "top").length;
-  const head = own.length
-    ? big(top, { unit: `/${own.length}`, tone: top === own.length ? "ok" : "warn", cap: `my offers on top${own.length - top ? ` · ${own.length - top} outbid` : ""}` })
-    : big(out.rows.length, { cap: "buy-path items in the book · no offers of mine" });
-  if (size === "s") return { html: head };
-  const list = out.rows.slice().sort((a, b) => OFFER_ORDER[a.state] - OFFER_ORDER[b.state] || (b.gap ?? -1) - (a.gap ?? -1)).slice(0, size === "m" ? 3 : 6);
-  const html = rows(list.map((r) => ({ icon: r.iconHtml, name: r.name,
-    sub: r.own ? `mine ${fmtFlower(r.own.unit)} · best ${r.bid == null ? "—" : fmtFlower(r.bid)}` : `best ${r.bid == null ? "—" : fmtFlower(r.bid)} · floor ${r.ask == null ? "—" : fmtFlower(r.ask)}`,
-    chip: { text: STATE_PILL[r.state][0], tone: OFFER_TONE[r.state] } })));
-  return { html: size === "m" ? html : head + html };
+  const list = out.rows.slice().sort((a, b) => OFFER_ORDER[a.state] - OFFER_ORDER[b.state] || (b.gap ?? -1) - (a.gap ?? -1));
+  return {
+    head: own.length
+      ? { value: top, unit: `/${own.length}`, tone: top === own.length ? "ok" : "warn", ring: (top / own.length) * 100, ringTone: top === own.length ? "ok" : "warn",
+        cap: `my offers on top${own.length - top ? ` · ${own.length - top} outbid` : ""}` }
+      : { value: out.rows.length, cap: "buy-path items in the book · no offers of mine" },
+    items: list.map((r) => ({ ...(r.iconHtml ? { icon: r.iconHtml } : {}), name: r.name,
+      sub: r.own ? `mine ${fmtFlower(r.own.unit)} · best ${r.bid == null ? "—" : fmtFlower(r.bid)}` : `best ${r.bid == null ? "—" : fmtFlower(r.bid)} · floor ${r.ask == null ? "—" : fmtFlower(r.ask)}`,
+      chip: { text: STATE_PILL[r.state][0], tone: OFFER_TONE[r.state] }, ...(r.gap != null ? { pct: Math.max(0, Math.min(100, r.gap)) } : {}) })),
+    tiles: [{ label: "my offers", value: own.length }, { label: "on top", value: top }, { label: "outbid", value: own.length - top }, { label: "in book", value: out.rows.length }],
+  };
 };

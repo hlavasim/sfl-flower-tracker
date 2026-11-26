@@ -3,6 +3,7 @@ import assert from "node:assert";
 import { buildTicketsSection, buildTicketHistory, ticketGoal, AUCTION_REFERENCE } from "../../core/sections/tickets.mjs";
 import * as W from "../../widgets/tickets.mjs";
 import { renderTable } from "../../ui/table.mjs";
+import { renderLook, looksFor, TEMPLATE_IDS } from "../../ui/glance-templates.mjs";
 
 // TICKETS as widgets, over a real compute?section=tickets answer built by the same model the server
 // runs (core/sections/tickets.mjs) on a small farm, with a two-week history.
@@ -182,113 +183,122 @@ test("reference: last auction's lots at today's prices, with the current items l
   assert.match(out.summary, /This chapter's auction: <img data-icon="/);
 });
 
-// ── 📱 glance faces ──
-const G = (w, size, c = ctx(), d = D) => w.glance({ tickets: d }, c, {}, size);
+// ── 📱 glance models ──
+const G = (w, c = ctx(), d = D) => w.glanceModel({ tickets: d }, c, {});
 const GOAL = { goal: () => ({ item: "Salt Rug", est: 100, unit: "flower", tickets: 5000 }) };
+const rowsIn = (html) => (html.match(/class="gx-row"/g) || []).length;
 
-test("📱 glance: every widget but the reference has a face, its natural size among its sizes; nothing loaded → the message", () => {
+test("📱 glance: every widget has a model and a natural look from the catalogue, no hand-written face; nothing loaded → the message", () => {
   for (const w of W.TICKETS_WIDGETS) {
-    if (w === W.ticketsReference) { assert.strictEqual(w.glance, undefined); continue; }
-    assert.ok(w.sizes.includes(w.size), w.type);
-    for (const s of w.sizes) assert.match(G(w, s, ctx(GOAL), null).empty, /did not load/, `${w.type} ${s}`);
+    assert.strictEqual(w.glance, undefined, `${w.type}: the hand-written face is gone`);
+    assert.strictEqual(w.sizes, undefined, w.type);
+    assert.ok(TEMPLATE_IDS.includes(w.look), `${w.type} ${w.look}`);
+    assert.match(G(w, ctx(GOAL), null).empty, /did not load/, w.type);
+    assert.ok(looksFor(G(w, ctx(GOAL))).length >= 3, w.type);
   }
 });
 
-test("📱 glance summary: S = tickets by the auction under the ticket icon; M = three tiles", () => {
-  assert.strictEqual(G(W.ticketsSummary, "s").html,
-    `<div class="g-hero"><img data-icon="Shiny Feather"></div><div class="g-big">4.4k</div><div class="g-cap">by the auction · now 4k</div>`);
-  const m = G(W.ticketsSummary, "m").html;
-  assert.match(m, /<span>auction<\/span><b>6 days<\/b>/);
-  assert.match(m, /<span>per week<\/span><b>554<\/b><small>top 1\.6k<\/small>/);
-  assert.match(G(W.ticketsSummary, "s", ctx(), { ...D, thisAuction: null }).html, /4k<\/div><div class="g-cap">collected · the auction is over/);
+test("📱 glance summary: tickets by the auction under the ticket icon; the auction counts down live", () => {
+  const m = G(W.ticketsSummary);
+  assert.deepStrictEqual(m.head, { value: "4.4k", hero: ICON("Shiny Feather"), cap: "by the auction · now 4k" });
+  assert.strictEqual(m.items.length, 3);
+  assert.deepStrictEqual(m.items[1], { icon: "🔨", name: "auction", sub: "Oct 5", at: D.timeline.ticketAuction });
+  assert.match(renderLook(m, "number").html, /<div class="gx-num">4\.4k<\/div><div class="gx-cap">by the auction · now 4k<\/div>/);
+  assert.match(G(W.ticketsSummary, ctx(), { ...D, thisAuction: null }).head.cap, /collected · the auction is over/);
 });
 
-test("📱 glance goal: S = the verdict word with the reachable share as a ring; M = need, reach, net / wait; no goal → empty", () => {
+test("📱 glance goal: the verdict word with the reachable share as a ring; the costs as items; no goal → empty", () => {
   const P = W.ticketPlan(D, GOAL.goal()).goal;
   assert.strictEqual(P.verdict, "unreachable");
-  const s = G(W.ticketsGoal, "s", ctx(GOAL)).html;
-  assert.match(s, /class="g-ring g-warn"/);
-  assert.match(s, new RegExp(`<div class="g-big g-warn">Short</div><div class="g-cap">you won't make it · ${Math.round(P.maxTickets / 50)} % reachable`));
-  const m = G(W.ticketsGoal, "m", ctx(GOAL)).html;
-  assert.match(m, /class="g-split"/);
-  assert.match(m, /reachable<\/div><span class="g-v g-warn">4\.2k \/ 5k</);
-  assert.match(m, /wait and buy<\/div><span class="g-v">100</);
-  assert.match(G(W.ticketsGoal, "s", ctx({ goal: () => ({}) })).empty, /Set a chapter goal/);
+  const m = G(W.ticketsGoal, ctx(GOAL));
+  assert.deepStrictEqual([m.head.value, m.head.tone, m.head.ringTone, Math.round(m.head.ring)], ["Short", "warn", "warn", Math.round(P.maxTickets / 50)]);
+  assert.deepStrictEqual(m.items.map((i) => i.name), ["need / week", "reachable", "gem round", "wait and buy"]);
+  assert.match(renderLook(m, "number").html, /class="gx-ring g-warn"/);
+  assert.match(G(W.ticketsGoal, ctx({ goal: () => ({}) })).empty, /Set a chapter goal/);
 });
 
-test("📱 glance today: S = steps left with a ring (1 of 5 done) and their tickets; M = the biggest open steps; L = both", () => {
-  const s = G(W.ticketsToday, "s").html;
-  assert.match(s, /<div class="g-big">4<small>left<\/small><\/div><div class="g-cap">\+18 tickets to collect/);
-  assert.match(s, /stroke-dashoffset="110\.58"/);   // 20 % done
-  const m = G(W.ticketsToday, "m").html;
-  assert.strictEqual([...m.matchAll(/class="g-row"/g)].length, 3);
-  assert.match(m, /<img data-icon="Potato"><\/span><div class="g-n">Tywin<div>📦 Delivery<\/div><\/div><span class="g-v g-ok">\+12/);
-  assert.ok(!/Red Cosmos/.test(m), "the done bounty is not listed");
-  const l = G(W.ticketsToday, "l").html;
-  assert.match(l, /g-corner/);
-  assert.match(l, /Chicken at level 2\+/);
-  // every step done → a tick
+test("📱 glance today: steps left with a ring (1 of 5 done); open steps by tickets, then the done ones", () => {
+  const m = G(W.ticketsToday);
+  assert.deepStrictEqual(m.head, { value: 4, unit: "left", tone: "", ring: 20, ringTone: "accent", cap: "+18 tickets to collect" });
+  assert.strictEqual(m.items.length, 5);
+  assert.deepStrictEqual(m.items[0], { icon: ICON("Potato"), name: "Tywin", sub: "📦 Delivery", pct: 0, value: "+12", tone: "ok" });
+  assert.deepStrictEqual(m.items[4].chip, { text: "done", tone: "ok" });
+  assert.strictEqual(rowsIn(renderLook(m, "list-1").html), 3);
   const done = { ...D, sources: D.sources.map((x) => ({ ...x, done: true })) };
-  assert.match(G(W.ticketsToday, "s", ctx(), done).html, /<div class="g-big g-ok">✓<\/div><div class="g-cap">all done/);
+  assert.deepStrictEqual([G(W.ticketsToday, ctx(), done).head.value, G(W.ticketsToday, ctx(), done).head.cap], ["✓", "all done"]);
 });
 
-test("📱 glance items: S = the top earner with its icon; M = top three by FLOWER (a day, or a use); none → empty", () => {
-  assert.match(G(W.ticketsItems, "s").html, /<img data-icon="Duende Hat"><\/div><div class="g-big">1\.67<small>\/day<\/small><\/div><div class="g-cap">FLOWER · Duende Hat/);
-  const m = G(W.ticketsItems, "m").html;
-  assert.deepStrictEqual([...m.matchAll(/<div class="g-n">([^<]+)/g)].map((x) => x[1]), ["Duende Hat", "Harvest Hourglass", "Ore Hourglass"]);
-  assert.match(m, /0\.83\/use/);
-  assert.strictEqual([...G(W.ticketsItems, "l").html.matchAll(/class="g-row"/g)].length, 7);
-  assert.match(G(W.ticketsItems, "s", ctx(), { ...D, items: [] }).empty, /No auction or shop items/);
+test("📱 glance items: the top earner first (its natural look: next up); every item by FLOWER; none → empty", () => {
+  const m = G(W.ticketsItems);
+  assert.strictEqual(W.ticketsItems.look, "next");
+  assert.deepStrictEqual(m.head, { value: "1.67", unit: "/day", hero: ICON("Duende Hat"), cap: "FLOWER · Duende Hat" });
+  assert.deepStrictEqual(m.items.slice(0, 3).map((i) => i.name), ["Duende Hat", "Harvest Hourglass", "Ore Hourglass"]);
+  assert.strictEqual(m.items[1].value, "0.83/use");
+  assert.match(renderLook(m, "next").html, /<div class="gx-next-name">Duende Hat<\/div>/);
+  assert.match(G(W.ticketsItems, ctx(), { ...D, items: [] }).empty, /No auction or shop items/);
 });
 
-test("📱 glance schedule: S = time to the next round; M = the next three with chips; every round over → empty", () => {
-  assert.match(G(W.ticketsSchedule, "s").html, /<img data-icon="Salt Rug"><\/div><div class="g-big">6d<\/div><div class="g-cap">Salt Rug · 5 of 5 rounds left/);
-  const m = G(W.ticketsSchedule, "m").html;
-  assert.match(m, /Salt Rug<div>5 of 5 rounds left<\/div><\/div><span class="g-chip g-ok">6d/);
-  assert.match(m, /Coat Rack.*g-chip g-info/);
+test("📱 glance schedule: the next round counts down live (at), soonest first; every round over → empty", () => {
+  const m = G(W.ticketsSchedule);
+  assert.strictEqual(m.head.value, "6d");
+  assert.deepStrictEqual(m.items[0], { icon: ICON("Salt Rug"), name: "Salt Rug", sub: "5 of 5 rounds left", at: m.items[0].at, pct: 100 });
+  assert.ok(m.items[0].at > NOW && m.items[0].at <= m.items[1].at);
+  assert.match(renderLook(m, "next", { now: NOW }).html, /<span class="g-at" data-at="\d+">6d \d+h<\/span>/);
   const ended = { ...D, schedule: { ...D.schedule, items: D.schedule.items.map((i) => ({ ...i, next: null })) } };
-  assert.match(G(W.ticketsSchedule, "s", ctx(), ended).empty, /Every auction round has ended/);
+  assert.match(G(W.ticketsSchedule, ctx(), ended).empty, /Every auction round has ended/);
 });
 
-test("📱 glance calculator: S = the cheapest path's cost; M = it first, then the others", () => {
+test("📱 glance calculator: the cheapest path's cost; it first, then the others; no estimate → empty", () => {
   const V = 30000;
-  assert.strictEqual(G(W.ticketsDecide, "s").html, `<div class="g-big g-ok">${(V * D.rounds.flower.median / 1000).toFixed(1)}k<small>FLOWER</small></div><div class="g-cap">cheapest: FLOWER round</div>`);
-  const m = G(W.ticketsDecide, "m").html;
-  assert.deepStrictEqual([...m.matchAll(/<div class="g-n">([^<]+)/g)].map((x) => x[1]), ["FLOWER round", "Collect tickets", "Gem round"]);
-  assert.match(m, /Collect tickets<\/div><span class="g-v g-bad">out of reach/);
-  assert.match(G(W.ticketsDecide, "s", ctx({ decide: () => ({ est: 0 }) })).empty, /Enter an estimate/);
+  const m = G(W.ticketsDecide);
+  assert.deepStrictEqual(m.head, { value: `${(V * D.rounds.flower.median / 1000).toFixed(1)}k`, unit: "FLOWER", tone: "ok", cap: "cheapest: FLOWER round" });
+  assert.deepStrictEqual(m.items.map((i) => i.name), ["FLOWER round", "Collect tickets", "Gem round", "Wait and buy"]);
+  assert.deepStrictEqual([m.items[1].value, m.items[1].tone], ["out of reach", "bad"]);
+  assert.match(G(W.ticketsDecide, ctx({ decide: () => ({ est: 0 }) })).empty, /Enter an estimate/);
 });
 
-test("📱 glance this auction: S = tickets by then, the next lot's gap and a ring; M = the lots just above; behind → empty", () => {
-  const s = G(W.ticketsThisAuction, "s").html;
-  assert.match(s, /<div class="g-big">4\.4k<\/div><div class="g-cap">by the auction · Vibraphone is 22 away/);
-  assert.match(s, /g-ring g-accent/);
-  assert.match(G(W.ticketsThisAuction, "m").html, /class="g-split".*<img data-icon="Vibraphone">.*<span class="g-v g-warn">\+22</);
-  assert.match(G(W.ticketsThisAuction, "s", ctx(), { ...D, thisAuction: { ...D.thisAuction, weeksUntil: 0 } }).empty, /behind you/);
+test("📱 glance this auction: tickets by then with the next lot's gap as a ring; lots just above, then the ones in reach", () => {
+  const m = G(W.ticketsThisAuction);
+  assert.deepStrictEqual([m.head.value, m.head.cap, m.head.ringTone], ["4.4k", "by the auction · Vibraphone is 22 away", "accent"]);
+  assert.deepStrictEqual([m.items[0].name, m.items[0].value, m.items[0].tone], ["Vibraphone", "+22", "warn"]);
+  assert.deepStrictEqual(m.items[1].chip, { text: "in reach", tone: "ok" });
+  assert.match(renderLook(m, "number").html, /gx-ring g-accent/);
+  assert.match(G(W.ticketsThisAuction, ctx(), { ...D, thisAuction: { ...D.thisAuction, weeksUntil: 0 } }).empty, /behind you/);
 });
 
-test("📱 glance next chapter: S = the best plan's net; M = the reachable lots by net; L = both", () => {
-  assert.match(G(W.ticketsNextChapter, "s").html, /<img data-icon="Salt Rug"><\/div><div class="g-big g-ok">\+3\.7k<small>FLOWER<\/small><\/div><div class="g-cap">Salt Rug · 12 tickets \/ week/);
-  const m = G(W.ticketsNextChapter, "m").html;
-  assert.deepStrictEqual([...m.matchAll(/<div class="g-n">([^<]+)/g)].map((x) => x[1]), ["Salt Rug", "Coat Rack"]);
-  assert.ok(!/Vibraphone/.test(m), "out-of-reach lots are left out");
-  assert.match(G(W.ticketsNextChapter, "l").html, /g-hero.*g-rows/);
-  assert.match(G(W.ticketsNextChapter, "m", ctx(), { ...D, perLot: [] }).empty, /No lot of last chapter/);
+test("📱 glance next chapter: the best plan's net; reachable lots by net, then those out of reach", () => {
+  const m = G(W.ticketsNextChapter);
+  assert.deepStrictEqual(m.head, { value: "+3.7k", unit: "FLOWER", tone: "ok", hero: ICON("Salt Rug"), cap: "Salt Rug · 12 tickets / week" });
+  assert.deepStrictEqual(m.items.slice(0, 2).map((i) => i.name), ["Salt Rug", "Coat Rack"]);
+  assert.deepStrictEqual(m.items.find((i) => i.name === "Vibraphone").chip, { text: "out of reach", tone: "bad" });
+  assert.match(renderLook(m, "overview-4").html, /class="gx-tiles"/);
+  assert.match(G(W.ticketsNextChapter, ctx(), { ...D, perLot: [] }).empty, /No lot of last chapter/);
 });
 
-test("📱 glance history: S = FLOWER a ticket for doing everything; M = three tiles; no weeks → empty", () => {
-  assert.match(G(W.ticketsHistory, "s").html, /<div class="g-big">0\.295<small>\/ticket<\/small><\/div><div class="g-cap">FLOWER when you do everything · 2 weeks/);
-  assert.match(G(W.ticketsHistory, "m").html, /<span>max \/ week<\/span><b>211<\/b>.*<span>cost \/ week<\/span><b>62\.3<\/b>/);
-  assert.match(G(W.ticketsHistory, "s", ctx(), { ...D, history: null }).empty, /No recorded weeks/);
+test("📱 glance history: FLOWER a ticket for doing everything, week by week as a chart; no weeks → empty", () => {
+  const m = G(W.ticketsHistory);
+  assert.deepStrictEqual(m.head, { value: "0.295", unit: "/ticket", cap: "FLOWER when you do everything · 2 weeks" });
+  assert.strictEqual(m.series.length, 2);
+  assert.deepStrictEqual(m.tiles.slice(0, 2).map((t) => [t.label, t.value]), [["max/week", "211"], ["cost/week", "62.3"]]);
+  assert.match(renderLook(m, "chart-2").html, /class="gx-spark/);
+  assert.match(G(W.ticketsHistory, ctx(), { ...D, history: null }).empty, /No recorded weeks/);
 });
 
-test("📱 glance sources: S = the cheapest open source; M = the cheapest three; L = more, the over-priced in red", () => {
-  assert.match(G(W.ticketsSources, "s").html, /<div class="g-big g-ok">free<\/div><div class="g-cap">cheapest: Daily reward · \+1/);
-  assert.strictEqual([...G(W.ticketsSources, "m").html.matchAll(/class="g-row"/g)].length, 3);
-  const l = G(W.ticketsSources, "l").html;
-  assert.match(l, /Tywin<div>\+12 a day<\/div><\/div><span class="g-v g-ok">0\.002/);
-  assert.match(l, /Deliver Sunfish<div>\+2 a week<\/div><\/div><span class="g-v g-bad">1\.000/);
-  assert.ok(!/Red Cosmos/.test(l), "done sources are left out");
+test("📱 glance sources: the cheapest open source; open ones cheapest first, the over-priced in red; all done → empty", () => {
+  const m = G(W.ticketsSources);
+  assert.deepStrictEqual([m.head.value, m.head.tone, m.head.cap], ["free", "ok", "cheapest: Daily reward · +1"]);
+  assert.strictEqual(m.items.length, 6);
+  assert.deepStrictEqual(m.items.find((i) => i.name === "Deliver Sunfish"), { icon: ICON("Sunfish"), name: "Deliver Sunfish", sub: "+2 a week", value: "1.000", tone: "bad", pct: (1 / 12) * 100 });
+  assert.ok(!m.items.some((i) => /Red Cosmos/.test(i.name)), "done sources are left out");
+  assert.strictEqual(rowsIn(renderLook(m, "number-list-2").html), 3);
   const allDone = { ...D, sources: D.sources.map((x) => ({ ...x, done: true })) };
-  assert.match(G(W.ticketsSources, "m", ctx(), allDone).empty, /No open priced source/);
+  assert.match(G(W.ticketsSources, ctx(), allDone).empty, /No open priced source/);
+});
+
+test("📱 glance reference: the lot paying most FLOWER a ticket first; every lot", () => {
+  const m = G(W.ticketsReference);
+  assert.deepStrictEqual([m.head.value, m.head.unit, m.head.cap], ["44.458", "/ticket", "FLOWER · best: Salt Rug"]);
+  assert.strictEqual(m.items.length, D.auction.lots.length);
+  assert.deepStrictEqual([m.items[0].name, m.items[0].pct], ["Salt Rug", 100]);
+  assert.strictEqual(rowsIn(renderLook(m, "list-4").html), 8);
 });

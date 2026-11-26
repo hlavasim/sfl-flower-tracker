@@ -4,7 +4,7 @@
 // expand-vs-buy verdict — so this page cannot disagree with the roadmap and the ascension plan.
 // The ordering below (options, the greedy plan, the road) is page-local arithmetic on that answer.
 import { bar, pill } from "../ui/viz.mjs";
-import { big, compact, ring, rows as gRows, tiles as gTiles } from "../ui/glance.mjs";
+import { compact } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const icon = (ctx, n) => (typeof ctx.icon === "function" && n ? ctx.icon(n) : "");
@@ -389,100 +389,127 @@ export const nodesAcq = {
 
 export const NODES_WIDGETS = [nodesSummary, nodesPlan, nodesOptions, nodesRoad, nodesCurrent, nodesAcq];
 
-// ── iPhone glance faces ──
+// ── iPhone glance models: ui/glance-templates offers the looks ──
 const gFl = (v) => (Math.abs(v) >= 10 ? compact(v) : (v || 0).toFixed(2));
 const roiTone = (d) => (d <= 30 ? "ok" : d <= 90 ? "warn" : "");
-const split = (head, list) => `<div class="g-split"><div>${head}</div>${list}</div>`;
+const share = (v, max) => (max > 0 ? Math.max(0, Math.min(100, (v / max) * 100)) : 0);
 
-// S = obsidian in hand; M = obsidian, sunstones and what a sunstone costs
-nodesSummary.sizes = ["s", "m"];
-nodesSummary.size = "s";
-nodesSummary.glance = ({ farm, asc } = {}, ctx = {}, opts = {}, size = "s") => {
+// obsidian in hand (the gate for every node), and how far the stock goes toward the cheapest next node
+nodesSummary.look = "number";
+nodesSummary.glanceModel = ({ farm, asc } = {}, ctx = {}) => {
   const acq = acqOf(asc);
   if (!acq || !farm) return { empty: NO_DATA.empty };
-  const p = player(farm);
-  if (size === "s") return { html: `<div class="g-hero">${icon(ctx, "Obsidian")}</div>` + big(Math.floor(p.obsidian), { unit: " obsidian", cap: `${Math.floor(p.sunstones)} sunstones · 1 = ${sunSfl(acq).toFixed(2)} FLOWER` }) };
-  return { html: gTiles([{ label: "obsidian", value: Math.floor(p.obsidian) }, { label: "sunstones", value: Math.floor(p.sunstones) },
-    { label: "a sunstone", value: sunSfl(acq).toFixed(2), sub: "FLOWER" }]) };
+  const p = player(farm), sun = sunSfl(acq);
+  const buys = Object.values(acq.perType).map((d) => (d.buy || [])[0]).filter(Boolean);
+  const minObs = buys.length ? Math.min(...buys.map((b) => b.obsidian)) : 0, minSun = buys.length ? Math.min(...buys.map((b) => b.sunstones)) : 0;
+  const isl = ((farm.island && farm.island.type) || "basic").toLowerCase();
+  return {
+    head: { value: Math.floor(p.obsidian), unit: " obs", hero: icon(ctx, "Obsidian"), cap: `obsidian · ${Math.floor(p.sunstones)} sunstones`,
+      ...(minObs > 0 ? { meter: share(p.obsidian, minObs), meterTone: p.obsidian >= minObs ? "ok" : "accent" } : {}) },
+    items: [
+      { icon: icon(ctx, "Obsidian"), name: "Obsidian", sub: minObs ? `${minObs} buy a node` : "", value: Math.floor(p.obsidian), ...(minObs ? { pct: share(p.obsidian, minObs) } : {}) },
+      { icon: icon(ctx, "Sunstone"), name: "Sunstones", sub: minSun ? `${minSun} buy a node` : "", value: Math.floor(p.sunstones), ...(minSun ? { pct: share(p.sunstones, minSun) } : {}) },
+      { icon: icon(ctx, "Sunstone"), name: "A sunstone", sub: `${acq.obsidianPerSunstone || 3} obsidian`, value: sun.toFixed(2), tone: "warn" },
+      { icon: icon(ctx, "Coins"), name: "Coins", value: compact(p.coins) },
+      { icon: "🏝️", name: "Island", value: isl.charAt(0).toUpperCase() + isl.slice(1) },
+    ],
+    tiles: [{ label: "obsidian", value: Math.floor(p.obsidian) }, { label: "sunstones", value: Math.floor(p.sunstones) },
+      { label: "a sunstone", value: sun.toFixed(2) }, { label: "coins", value: compact(p.coins) }],
+  };
 };
 
-// S = the next buy and its payback; M / L = the plan's first steps
-const planRow = (ctx, r) => ({ icon: nodeIcon(ctx, r.node), name: r.label, sub: `${r.isMerge ? `${r.obsidian} obsidian + ${compact(r.coins)} coins` : `${r.sunstoneCost} sunstones`} · +${r.real.toFixed(3)}/d`,
-  value: roiText(r.roi), tone: roiTone(r.roi) });
-nodesPlan.sizes = ["s", "m", "l"];
-nodesPlan.size = "m";
-nodesPlan.glance = (data = {}, ctx = {}, opts = {}, size = "m") => {
+// the next buy and its payback; the plan's steps; the income as the plan buys its way up
+nodesPlan.look = "overview-4";
+nodesPlan.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = nodesPlan.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
   const r = out.rows[0], last = out.rows[out.rows.length - 1];
-  if (size === "s") return { html: `<div class="g-hero">${nodeIcon(ctx, r.node)}</div>` + big(roiText(r.roi), { tone: roiTone(r.roi), cap: `${r.label} pays back` }) };
-  const head = big(out.rows.length, { unit: " buys", cap: `+${last.cumReal.toFixed(2)} FLOWER/d for ${gFl(last.cumCost)}` });
-  if (size === "m") return { html: split(head, gRows(out.rows.slice(0, 3).map((x) => planRow(ctx, x)))) };
-  return { html: head + gRows(out.rows.slice(0, 6).map((x) => planRow(ctx, x))) };
+  const maxReal = Math.max(...out.rows.map((x) => x.real));
+  return {
+    head: { value: roiText(r.roi), tone: roiTone(r.roi), hero: nodeIcon(ctx, r.node), cap: `next: ${r.label}` },
+    items: out.rows.map((x) => ({ icon: nodeIcon(ctx, x.node), name: x.label,
+      sub: `${x.isMerge ? `${x.obsidian} obs + ${compact(x.coins)} coins` : `${x.sunstoneCost} sunstones`} · +${x.real.toFixed(3)}/d`,
+      value: roiText(x.roi), tone: roiTone(x.roi), pct: share(x.real, maxReal) })),
+    tiles: [{ label: "buys", value: out.rows.length }, { label: "invested", value: gFl(last.cumCost) },
+      { label: "real/day", value: `+${last.cumReal.toFixed(2)}` }, { label: "first ROI", value: roiText(r.roi) }],
+    series: [0, ...out.rows.map((x) => x.cumReal)],
+    foot: `${out.rows.length} buys · +${last.cumReal.toFixed(2)} FLOWER/d for ${gFl(last.cumCost)}`,
+  };
 };
 
-// S = the best option; M / L = the options by payback, a NEED chip when you cannot afford it yet
-const optRow = (ctx, o) => ({ icon: nodeIcon(ctx, o.node), name: o.action, sub: o.canAfford ? `${o.costSfl == null ? "?" : gFl(o.costSfl)} FLOWER · +${(o.real || 0).toFixed(3)}/d` : o.need,
-  ...(o.real > 0 ? { value: roiText(o.roiDays), tone: roiTone(o.roiDays) } : { value: (o.real || 0).toFixed(3), tone: "bad" }) });
-nodesOptions.sizes = ["s", "m", "l"];
-nodesOptions.size = "m";
-nodesOptions.glance = (data = {}, ctx = {}, opts = {}, size = "m") => {
+// the best option by payback; every option, what is missing when you cannot afford it yet
+nodesOptions.look = "list-4";
+nodesOptions.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = nodesOptions.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
-  const o = out.rows[0];
-  if (size === "s") return { html: `<div class="g-hero">${nodeIcon(ctx, o.node)}</div>` + big(o.real > 0 ? roiText(o.roiDays) : (o.real || 0).toFixed(3), { tone: o.real > 0 ? roiTone(o.roiDays) : "bad",
-    cap: `${o.action}${o.canAfford ? "" : " · can't afford yet"}` }) };
-  return { html: gRows(out.rows.slice(0, size === "m" ? 3 : 7).map((x) => optRow(ctx, x))) };
+  const o = out.rows[0], afford = out.rows.filter((x) => x.canAfford).length;
+  const maxReal = Math.max(0, ...out.rows.map((x) => x.real || 0));
+  return {
+    head: { value: o.real > 0 ? roiText(o.roiDays) : (o.real || 0).toFixed(3), tone: o.real > 0 ? roiTone(o.roiDays) : "bad", hero: nodeIcon(ctx, o.node),
+      cap: `${o.action}${o.canAfford ? "" : " · can't afford yet"}`, ring: (afford / out.rows.length) * 100, ringTone: afford ? "ok" : "warn" },
+    items: out.rows.map((x) => ({ icon: nodeIcon(ctx, x.node), name: x.action,
+      sub: x.canAfford ? `${x.costSfl == null ? "?" : gFl(x.costSfl)} FLOWER · +${(x.real || 0).toFixed(3)}/d` : x.need,
+      ...(x.real > 0 ? { value: roiText(x.roiDays), tone: x.canAfford ? roiTone(x.roiDays) : "" } : { value: (x.real || 0).toFixed(3), tone: "bad" }),
+      ...(maxReal > 0 ? { pct: share(x.real || 0, maxReal) } : {}) })),
+    tiles: [{ label: "options", value: out.rows.length }, { label: "affordable", value: afford },
+      { label: "best ROI", value: o.real > 0 ? roiText(o.roiDays) : "—" }],
+  };
 };
 
-// S = what the road still costs, a ring of T3s made; M = the materials; L = each type's progress
-nodesRoad.sizes = ["s", "m", "l"];
-nodesRoad.size = "s";
-nodesRoad.glance = ({ asc } = {}, ctx = {}, opts = {}, size = "s") => {
+// what the road to 2× T3 still costs; each type's progress in T1-equivalent (a T3 = 16, 2× T3 = 32)
+nodesRoad.look = "number";
+nodesRoad.glanceModel = ({ asc } = {}, ctx = {}) => {
   const acq = acqOf(asc);
   if (!acq) return { empty: NO_DATA.empty };
   const { rows, tot } = nodeRoad(acq);
   if (!rows.length) return { empty: "No mergeable nodes." };
   const pct = (rows.reduce((a, r) => a + Math.min(2, r.current.t3), 0) / (2 * rows.length)) * 100;
-  const done = rows.filter((r) => r.done).length;
-  const head = `<div class="g-corner">${ring(pct, { tone: pct >= 100 ? "ok" : "accent" })}</div>` +
-    (done === rows.length ? big("Done", { tone: "ok", cap: "2× T3 of every type" }) : big(gFl(tot.sfl), { cap: `FLOWER to 2× T3 · ${done}/${rows.length} types done` }));
-  if (size === "s") return { html: head };
-  if (size === "m") return { html: gTiles([{ label: "sunstones", value: compact(tot.sunstones) }, { label: "obsidian", value: compact(tot.obsidian) }, { label: "coins", value: compact(tot.coins) }]) };
-  return { html: head + gRows(rows.map((r) => ({ icon: nodeIcon(ctx, r.label), name: r.label, sub: `T1/T2/T3 ${r.current.t1}/${r.current.t2}/${r.current.t3}`,
-    ...(r.done ? { chip: { text: "DONE", tone: "ok" } } : { value: gFl(r.totalSfl) }) }))) };
+  const done = rows.filter((r) => r.done).length, all = done === rows.length;
+  const eq = (c) => c.t1 + 4 * c.t2 + 16 * c.t3;
+  return {
+    head: { value: all ? "Done" : gFl(tot.sfl), tone: all ? "ok" : "", ring: pct, ringTone: pct >= 100 ? "ok" : "accent",
+      cap: all ? "2× T3 of every type" : `FLOWER to 2× T3 · ${done}/${rows.length} done` },
+    // the types still on the road first, the done ones last
+    items: rows.slice().sort((a, b) => a.done - b.done).map((r) => ({ icon: nodeIcon(ctx, r.label), name: r.label, sub: `T1 ${r.current.t1} · T2 ${r.current.t2} · T3 ${r.current.t3}`,
+      ...(r.done ? { chip: { text: "DONE", tone: "ok" } } : { value: gFl(r.totalSfl) }), pct: r.done ? 100 : share(eq(r.current), 32) })),
+    tiles: [{ label: "FLOWER", value: gFl(tot.sfl) }, { label: "sunstones", value: compact(tot.sunstones) },
+      { label: "obsidian", value: compact(tot.obsidian) }, { label: "coins", value: compact(tot.coins) }],
+    foot: `${done}/${rows.length} types at 2× T3`,
+  };
 };
 
-// S = what the nodes earn a day; M / L = the biggest earners
-nodesCurrent.sizes = ["s", "m", "l"];
-nodesCurrent.size = "m";
-nodesCurrent.glance = (data = {}, ctx = {}, opts = {}, size = "m") => {
+// what the nodes earn a day; the biggest earners first, the unit-only ones (oil, obsidian…) after them
+nodesCurrent.look = "overview-4";
+nodesCurrent.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = nodesCurrent.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
   const priced = out.rows.filter((r) => !r.units);
-  const real = priced.reduce((a, r) => a + r.realTotal, 0), n = out.rows.reduce((a, r) => a + (r.effective || 0), 0);
-  const head = big(gFl(real), { unit: "/d", tone: real < 0 ? "bad" : "", cap: `FLOWER, real · ${n} nodes` });
-  if (size === "s") return { html: head };
-  // priced earners first, biggest first; the unit-only ones (oil, obsidian…) after them
+  const real = priced.reduce((a, r) => a + r.realTotal, 0), theo = priced.reduce((a, r) => a + r.totalNet, 0);
+  const n = out.rows.reduce((a, r) => a + (r.effective || 0), 0);
   const key = (r) => (r.units ? -Infinity : r.realTotal);
   const top = out.rows.filter((r) => r.effective > 0).sort((a, b) => (key(b) > key(a) ? 1 : key(b) < key(a) ? -1 : 0));
-  const row = (r) => ({ icon: nodeIcon(ctx, r.node), name: r.node, sub: `${r.effective} nodes`, value: r.units ? r.units.real : r.realTotal.toFixed(2), tone: r.units ? "" : r.realTotal < 0 ? "bad" : "ok" });
-  if (size === "m") return { html: split(head, gRows(top.slice(0, 3).map(row))) };
-  return { html: head + gRows(top.slice(0, 6).map(row)) };
+  const maxReal = Math.max(0, ...priced.map((r) => r.realTotal));
+  return {
+    head: { value: gFl(real), unit: "/d", tone: real < 0 ? "bad" : "", cap: `FLOWER, real · ${n} nodes` },
+    items: top.map((r) => ({ icon: nodeIcon(ctx, r.node), name: r.node, sub: `${r.effective} nodes`,
+      value: r.units ? r.units.real : r.realTotal.toFixed(2), tone: r.units ? "" : r.realTotal < 0 ? "bad" : "ok",
+      ...(!r.units && maxReal > 0 ? { pct: share(r.realTotal, maxReal) } : {}) })),
+    tiles: [{ label: "real /d", value: gFl(real) }, { label: "theo /d", value: gFl(theo) }, { label: "nodes", value: n }, { label: "types", value: top.length }],
+  };
 };
 
-// S = for how many types expanding beats buying; M / L = the verdict per type
-nodesAcq.sizes = ["s", "m", "l"];
-nodesAcq.size = "m";
-nodesAcq.glance = (data = {}, ctx = {}, opts = {}, size = "m") => {
+// for how many types expanding beats buying; the served verdict per type
+nodesAcq.look = "list-4";
+nodesAcq.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = nodesAcq.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
-  const win = (r) => (r.d.verdict || {}).obsWin;
-  const exp = out.rows.filter((r) => r.d.expand && r.d.expand[0] && win(r) === "expand").length;
-  if (size === "s") return { html: big(exp, { unit: `/${out.rows.length}`, tone: exp ? "ok" : "", cap: "types where expanding beats buying" }) };
-  const row = (r) => {
-    const w = !(r.d.expand && r.d.expand[0]) ? "BUY ONLY" : win(r) === "expand" ? "EXPAND" : "BUY";
-    return { icon: nodeIcon(ctx, r.node), name: r.node, sub: `you have ${r.d.currentCount}`, chip: { text: w, tone: w === "EXPAND" ? "ok" : w === "BUY" ? "info" : "" } };
+  const word = (r) => (!(r.d.expand && r.d.expand[0]) ? "BUY ONLY" : (r.d.verdict || {}).obsWin === "expand" ? "EXPAND" : "BUY");
+  const count = (w) => out.rows.filter((r) => word(r) === w).length;
+  const exp = count("EXPAND");
+  return {
+    head: { value: exp, unit: `/${out.rows.length}`, tone: exp ? "ok" : "", ring: (exp / out.rows.length) * 100, cap: "types where expanding beats buying" },
+    items: out.rows.map((r) => { const w = word(r);
+      return { icon: nodeIcon(ctx, r.node), name: r.node, sub: `you have ${r.d.currentCount}`, chip: { text: w, tone: w === "EXPAND" ? "ok" : w === "BUY" ? "info" : "" } }; }),
+    tiles: [{ label: "expand", value: exp }, { label: "buy", value: count("BUY") }, { label: "buy only", value: count("BUY ONLY") }],
   };
-  return { html: gRows(out.rows.slice(0, size === "m" ? 3 : 7).map(row)) };
 };

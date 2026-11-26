@@ -5,6 +5,7 @@ import { flipTable } from "../../widgets/flip-table.mjs";
 import { WIDGETS } from "../../widgets/registry.mjs";
 import { renderTable, applyTableAction } from "../../ui/table.mjs";
 import { createStore } from "../../app/store.mjs";
+import { renderLook, looksFor } from "../../ui/glance-templates.mjs";
 
 const keys = (html) => [...html.matchAll(/data-row="([^"]+)"/g)].map((m) => m[1]);
 const opts = (w) => ({ rowKey: w.rowKey, rowClass: w.rowClass });
@@ -51,21 +52,24 @@ test("tickets: not loaded → an explanation", () => {
   assert.match(ticketChecklist.build({ tickets: null }).empty, /tickets/i);
 });
 
-test("📱 tickets glance: S = sources left with a ring and their tickets; M = the biggest open ones; L = both; empty / all done", () => {
-  const G = (size, tk = TK) => ticketChecklist.glance({ tickets: tk }, { icon: (n) => `<i>${n}</i>` }, {}, size);
-  assert.ok(ticketChecklist.sizes.includes(ticketChecklist.size));
-  const s = G("s").html;
-  assert.match(s, /<div class="g-big">5<small>left<\/small><\/div><div class="g-cap">\+19 tickets this week<\/div>/);
-  assert.match(s, /class="g-ring g-accent"/);
-  const m = G("m").html;
-  assert.deepStrictEqual([...m.matchAll(/<div class="g-n">([^<]+)/g)].map((x) => x[1]), ["Deliver Rapid Roast", "Tywin: Chop 50 trees", "Jester: Harvest 10 Kale"]);
-  assert.match(m, /<span class="g-ic"><i>Rapid Roast<\/i><\/span>.*<span class="g-v g-ok">\+7</);
-  const l = G("l").html;
-  assert.match(l, /g-corner.*Cow at level 5\+.*Daily reward/);
-  assert.ok(!/Betty/.test(l), "the done delivery is not listed");
-  assert.match(G("s", { sources: SOURCES.map((x) => ({ ...x, done: true })) }).html, /<div class="g-big g-ok">✓<\/div><div class="g-cap">all done this week/);
-  assert.match(G("s", null).empty, /did not load/);
-  assert.match(G("m", { sources: [] }).empty, /No ticket sources/);
+test("📱 tickets glance model: sources left with a ring and their tickets; open ones by tickets, then the done ones; empty / all done", () => {
+  const G = (tk = TK) => ticketChecklist.glanceModel({ tickets: tk }, { icon: (n) => `<i>${n}</i>` }, {});
+  assert.strictEqual(ticketChecklist.glance, undefined, "the hand-written face is gone");
+  assert.strictEqual(ticketChecklist.look, "number");
+  const m = G();
+  assert.deepStrictEqual(m.head, { value: 5, unit: "left", tone: "", ring: (1 / 6) * 100, ringTone: "accent", cap: "+19 tickets this week" });
+  assert.strictEqual(m.items.length, 6);
+  assert.deepStrictEqual(m.items.slice(0, 3).map((i) => i.name), ["Deliver Rapid Roast", "Tywin: Chop 50 trees", "Jester: Harvest 10 Kale"]);
+  assert.deepStrictEqual(m.items[1], { icon: "", name: "Tywin: Chop 50 trees", sub: m.items[1].sub, pct: 40, value: "+5", tone: "ok" });
+  assert.deepStrictEqual([m.items[5].name, m.items[5].chip], ["Betty", { text: "done", tone: "ok" }]);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num">5<small>left<\/small><\/div><div class="gx-cap">\+19 tickets this week<\/div>/);
+  assert.match(renderLook(m, "number").html, /class="gx-ring g-accent"/);
+  assert.strictEqual((renderLook(m, "list-1").html.match(/class="gx-row"/g) || []).length, 3);
+  assert.ok(looksFor(m).length >= 3);
+  const done = G({ sources: SOURCES.map((x) => ({ ...x, done: true })) });
+  assert.deepStrictEqual([done.head.value, done.head.tone, done.head.cap], ["✓", "ok", "all done this week"]);
+  assert.match(G(null).empty, /did not load/);
+  assert.match(G({ sources: [] }).empty, /No ticket sources/);
 });
 
 test("store: tickets POSTs the recorded weeks like the TICKETY page", async () => {

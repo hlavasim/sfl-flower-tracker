@@ -6,6 +6,7 @@ import { marksSummary, marksSources, marksShoppingList, marksLeaderboard, marksC
 import { WIDGETS } from "../../widgets/registry.mjs";
 import { renderTable } from "../../ui/table.mjs";
 import { createStore } from "../../app/store.mjs";
+import { renderLook, looksFor, TEMPLATE_IDS } from "../../ui/glance-templates.mjs";
 
 // MARKS widgets: the page's arithmetic over one week's leaderboard and a live farm.
 const NOW = Date.UTC(2026, 10, 25, 12);   // Wed, day 3 of the week starting Mon 23 Nov
@@ -145,79 +146,96 @@ test("burn rate: players with a previous snapshot, per-item change with icons an
   assert.match(table(marksBurn, out), /<img data-i="Wood"><span class="flip-bad">-100<\/span>/);
 });
 
-// ── 📱 glance faces ──
+// ── 📱 glance models ──
 const MARKS_FAR = { ...MARKS, players: [...MARKS.players.map((p) => ({ ...p, rank: p.rank + 4 })),
   ...[1, 2, 3, 4].map((k) => ({ farm_id: 900 + k, player_name: `P${k}`, rank: k, marks: 90000 - k * 1000, marks_optimal: 0, resources: {} }))] };
-const names = (html) => [...html.matchAll(/<div class="g-n">([^<]+)/g)].map((x) => x[1]);
+const MARKS_WIDGETS = [marksSummary, marksSources, marksShoppingList, marksLeaderboard, marksCostFirst, marksProjections, marksBurn];
+const names = (m) => m.items.map((i) => i.name);
+const rowsIn = (html) => (html.match(/class="gx-row"/g) || []).length;
 
-test("📱 glance: every MARKS widget has a face, its natural size among its sizes; nothing loaded → the message", () => {
-  for (const w of [marksSummary, marksSources, marksShoppingList, marksLeaderboard, marksCostFirst, marksProjections, marksBurn]) {
-    assert.ok(w.sizes.includes(w.size), w.type);
-    for (const s of w.sizes) assert.match(w.glance({}, ctx, {}, s).empty, /did not load/, `${w.type} ${s}`);
+test("📱 glance: every MARKS widget has a model and a natural look, no hand-written face; nothing loaded → the message", () => {
+  for (const w of MARKS_WIDGETS) {
+    assert.strictEqual(w.glance, undefined, `${w.type}: the hand-written face is gone`);
+    assert.strictEqual(w.sizes, undefined, w.type);
+    assert.ok(TEMPLATE_IDS.includes(w.look), `${w.type} ${w.look}`);
+    assert.match(w.glanceModel({}, ctx, {}).empty, /did not load/, w.type);
   }
 });
 
-test("📱 glance overview: S = your rank with your share of #1 as a ring; M = rank, marks, time left; off the board → #1", () => {
-  const s = marksSummary.glance({ marks: MARKS }, ctx, {}, "s").html;
-  assert.match(s, /<div class="g-big">#2<\/div><div class="g-cap">5k marks · 42 % of #1 · 4d 12h left<\/div>/);
-  assert.match(s, /class="g-ring g-accent"/);
-  const m = marksSummary.glance({ marks: MARKS }, ctx, {}, "m").html;
-  assert.match(m, /<span>your rank<\/span><b>#2<\/b><small>of 3<\/small>.*<span>time left<\/span><b>4d 12h<\/b><small>2\.5x multiplier/);
-  assert.match(marksSummary.glance({ marks: MARKS }, { ...ctx, farmId: "7" }, {}, "s").html, /12k<\/div><div class="g-cap">#1's marks · you are not on the board/);
-  assert.match(marksSummary.glance({ marks: { ...MARKS, players: [] } }, ctx, {}, "s").empty, /No players/);
+test("📱 glance overview: your rank with your share of #1 as a ring; the week's end counts down; the board, you kept", () => {
+  const m = marksSummary.glanceModel({ marks: MARKS }, ctx, {});
+  assert.deepStrictEqual(m.head, { value: "#2", ring: 5000 / 12000 * 100, ringTone: "accent", cap: "5k marks · 42 % of #1" });
+  assert.deepStrictEqual(m.items[0], { icon: "⏳", name: "week ends", at: Date.UTC(2026, 10, 30) });
+  assert.strictEqual(m.items.length, 4);
+  assert.deepStrictEqual(m.items[2], { name: "#2 Me", sub: "Raver", value: "5k", tone: "accent", pct: 5000 / 12000 * 100 });
+  assert.deepStrictEqual(m.tiles.map((t) => t.value), ["#2", "5k", "4d 12h", "7k"]);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num">#2<\/div><div class="gx-cap">5k marks · 42 % of #1<\/div>/);
+  assert.match(renderLook(m, "number").html, /class="gx-ring g-accent"/);
+  assert.ok(looksFor(m).length >= 3);
+  assert.match(marksSummary.glanceModel({ marks: MARKS }, { ...ctx, farmId: "7" }, {}).head.cap, /#1's marks · you are not on the board/);
+  assert.match(marksSummary.glanceModel({ marks: { ...MARKS, players: [] } }, ctx, {}).empty, /No players/);
 });
 
-test("📱 glance sources: S = the best next donation; M = the best three with SFL a mark", () => {
-  assert.match(marksSources.glance(ALL, ctx, {}, "s").html, /<img data-i="Wood"><\/div><div class="g-big">43<small>marks<\/small><\/div><div class="g-cap">Donate 10× Wood · 0\.0023 SFL\/mark/);
-  const m = marksSources.glance(ALL, ctx, {}, "m").html;
-  assert.deepStrictEqual(names(m), ["Donate 10× Wood", "Donate 5× Stone", "Feed pet: Pumpkin Soup (Easy)"]);
-  assert.match(m, /0\.0023 SFL\/mark · 2\/10 done today<\/div><\/div><span class="g-v g-ok">43/);
-  assert.match(marksSources.glance({ marks: MARKS }, ctx, {}, "m").empty, /live farm/);
+test("📱 glance sources: the best next donation first (next up), every source with SFL a mark", () => {
+  const m = marksSources.glanceModel(ALL, ctx, {});
+  assert.strictEqual(marksSources.look, "next");
+  assert.deepStrictEqual(m.head, { value: "43", unit: "marks", hero: '<img data-i="Wood">', cap: "Donate 10× Wood · 0.0023 SFL/mark" });
+  assert.deepStrictEqual(names(m).slice(0, 3), ["Donate 10× Wood", "Donate 5× Stone", "Feed pet: Pumpkin Soup (Easy)"]);
+  assert.deepStrictEqual(m.items[0], { icon: '<img data-i="Wood">', name: "Donate 10× Wood", sub: "0.0023 SFL/mark", value: "43", tone: "ok", pct: 80 });
+  assert.match(renderLook(m, "next").html, /<div class="gx-next-name">Donate 10× Wood<\/div>/);
+  assert.ok(looksFor(m).length >= 3);
+  assert.match(marksSources.glanceModel({ marks: MARKS }, ctx, {}).empty, /live farm/);
 });
 
-test("📱 glance shopping: S = marks today, deliveries and what to buy; M = the items by marks; nothing under budget → empty", () => {
-  assert.match(marksShoppingList.glance(ALL, ctx, {}, "s").html, /<div class="g-big">486<small>marks<\/small><\/div><div class="g-cap">17 deliveries today · 2\.05 SFL to buy/);
-  const m = marksShoppingList.glance(ALL, ctx, {}, "m").html;
+test("📱 glance shopping: marks today, deliveries and what to buy; the items by marks; nothing under budget → empty", () => {
+  const m = marksShoppingList.glanceModel(ALL, ctx, {});
+  assert.deepStrictEqual(m.head, { value: "486", unit: "marks", cap: "17 deliveries today · 2.05 SFL to buy" });
   assert.deepStrictEqual(names(m), ["Stone (×5)", "Wood (×10)"]);
-  assert.match(m, /9× · buy 35 units<\/div><\/div><span class="g-v g-ok">\+292/);
-  assert.match(marksShoppingList.glance(ALL, ctx, {}, "l").html, /g-big.*g-rows/);
-  assert.match(marksShoppingList.glance(ALL, ctx, { budget: "0.001" }, "s").empty, /No actions under 0\.001/);
+  assert.deepStrictEqual([m.items[0].sub, m.items[0].value, m.items[0].tone], ["9× · buy 35", "+292", "ok"]);
+  assert.strictEqual(rowsIn(renderLook(m, "number-list-2").html), 2);
+  assert.ok(looksFor(m).length >= 3);
+  assert.match(marksShoppingList.glanceModel(ALL, ctx, { budget: "0.001" }).empty, /No actions under 0\.001/);
 });
 
-test("📱 glance leaderboard: M = the top three, you highlighted; when you are further down you keep the last place", () => {
-  const m = marksLeaderboard.glance({ marks: MARKS }, ctx, {}, "m").html;
-  assert.deepStrictEqual(names(m), ["#1 Top", "#2 Me", "#3 &lt;b&gt;x&lt;/b&gt;"]);
-  assert.match(m, /#2 Me<div>\+600 since the last snapshot<\/div><\/div><span class="g-v g-accent">5k/);
-  assert.deepStrictEqual(names(marksLeaderboard.glance({ marks: MARKS_FAR }, ctx, {}, "m").html), ["#1 P1", "#2 P2", "#6 Me"]);
-  assert.strictEqual(names(marksLeaderboard.glance({ marks: MARKS_FAR }, ctx, {}, "l").html).length, 7);
-  assert.match(marksLeaderboard.glance({ marks: { ...MARKS, players: [] } }, ctx, {}, "m").empty, /No players/);
+test("📱 glance leaderboard: the board, you highlighted and moved up to third when further down", () => {
+  const m = marksLeaderboard.glanceModel({ marks: MARKS }, ctx, {});
+  assert.deepStrictEqual(names(m), ["#1 Top", "#2 Me", "#3 <b>x</b>"]);
+  assert.deepStrictEqual(m.items[1], { name: "#2 Me", sub: "+600 since the last snapshot", value: "5k", tone: "accent", pct: 5000 / 12000 * 100 });
+  assert.match(renderLook(m, "list-4").html, /#3 &lt;b&gt;x&lt;\/b&gt;/, "text is escaped");
+  const far = marksLeaderboard.glanceModel({ marks: MARKS_FAR }, ctx, {});
+  assert.deepStrictEqual(names(far).slice(0, 4), ["#1 P1", "#2 P2", "#6 Me", "#3 P3"]);
+  assert.strictEqual(far.items.length, 7);
+  assert.ok(looksFor(far).length >= 3);
+  assert.match(marksLeaderboard.glanceModel({ marks: { ...MARKS, players: [] } }, ctx, {}).empty, /No players/);
 });
 
-test("📱 glance cost to #1: S = the gap with the simulation's reach as a ring; M = the resources; #1 → empty", () => {
-  const s = marksCostFirst.glance(ALL, ctx, {}, "s").html;
-  assert.match(s, /class="g-ring g-ok"/);
-  assert.match(s, /<div class="g-big">7k<small>marks<\/small><\/div><div class="g-cap">to #1 · 243\.35 SFL to buy/);
-  const m = marksCostFirst.glance(ALL, ctx, {}, "m").html;
-  assert.match(m, /class="g-split"/);
-  assert.match(m, /Wood<div>2,421 deliveries<\/div><\/div><span class="g-v g-bad">buy 24\.2k/);
+test("📱 glance cost to #1: the gap with the simulation's reach as a ring; the resources; #1 → empty", () => {
+  const m = marksCostFirst.glanceModel(ALL, ctx, {});
+  assert.deepStrictEqual([m.head.value, m.head.unit, m.head.ringTone, m.head.cap], ["7k", "marks", "ok", "to #1 · 243.35 SFL to buy"]);
+  assert.deepStrictEqual([m.items[0].name, m.items[0].sub, m.items[0].value, m.items[0].tone], ["Wood", "2,421 deliveries", "buy 24.2k", "bad"]);
+  assert.match(renderLook(m, "number").html, /class="gx-ring g-ok"/);
+  assert.ok(looksFor(m).length >= 3);
   const first = { ...MARKS, players: MARKS.players.map((p) => (p.farm_id === 155498 ? { ...p, marks: 20000 } : p)) };
-  assert.match(marksCostFirst.glance({ ...ALL, marks: first }, ctx, {}, "s").empty, /You are #1/);
+  assert.match(marksCostFirst.glanceModel({ ...ALL, marks: first }, ctx, {}).empty, /You are #1/);
 });
 
-test("📱 glance projections: S = your projected place; M = the projected top three, you kept", () => {
-  assert.match(marksProjections.glance({ marks: MARKS }, ctx, {}, "s").html, /<div class="g-big">#2<\/div><div class="g-cap">projected · 8\.5k marks · #1 13k/);
-  const m = marksProjections.glance({ marks: MARKS }, ctx, {}, "m").html;
-  assert.match(m, /#2 Me<div>now 5k · \+3\.5k possible<\/div><\/div><span class="g-v g-accent">8\.5k/);
-  assert.deepStrictEqual(names(marksProjections.glance({ marks: MARKS_FAR }, ctx, {}, "m").html), ["#1 P1", "#2 P2", "#6 Me"]);
-  assert.match(marksProjections.glance({ marks: { ...MARKS, players: [] } }, ctx, {}, "s").empty, /No players/);
+test("📱 glance projections: your projected place; the projected board, you kept", () => {
+  const m = marksProjections.glanceModel({ marks: MARKS }, ctx, {});
+  assert.deepStrictEqual([m.head.value, m.head.cap], ["#2", "projected · 8.5k marks · #1 13k"]);
+  assert.deepStrictEqual(m.items[1], { name: "#2 Me", sub: "now 5k · +3.5k", value: "8.5k", tone: "accent", pct: m.items[1].pct });
+  assert.deepStrictEqual(names(marksProjections.glanceModel({ marks: MARKS_FAR }, ctx, {})).slice(0, 3), ["#1 P1", "#2 P2", "#6 Me"]);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num">#2<\/div>/);
+  assert.ok(looksFor(m).length >= 3);
+  assert.match(marksProjections.glanceModel({ marks: { ...MARKS, players: [] } }, ctx, {}).empty, /No players/);
 });
 
-test("📱 glance burn rate: M = the players with a signal, the first as a chip; nobody moving → empty", () => {
-  const m = marksBurn.glance({ marks: MARKS }, ctx, {}, "m").html;
-  assert.deepStrictEqual(names(m), ["#2 Me"]);
-  assert.match(m, /<div>🔻 Wood<\/div><\/div><span class="g-chip g-ok">🟢 MARKS\+/);
+test("📱 glance burn rate: the players with a signal, the first as a chip; nobody moving → empty", () => {
+  const m = marksBurn.glanceModel({ marks: MARKS }, ctx, {});
+  assert.deepStrictEqual(m.items, [{ name: "#2 Me", sub: "🔻 Wood", chip: { text: "🟢 MARKS+", tone: "ok" } }]);
+  assert.deepStrictEqual(m.head, { value: 1, unit: "/2", cap: "players moving since the last snapshot" });
+  assert.match(renderLook(m, "list-1").html, /<span class="gx-chip g-ok">🟢 MARKS\+<\/span>|class="gx-sub-tag g-ok">🟢 MARKS\+/);
   const calm = { ...MARKS, players: MARKS.players.map((p) => ({ ...p, prev_marks: p.marks, prev_resources: p.resources })) };
-  assert.match(marksBurn.glance({ marks: calm }, ctx, {}, "l").empty, /No big moves/);
+  assert.match(marksBurn.glanceModel({ marks: calm }, ctx, {}).empty, /No big moves/);
 });
 
 test("next snapshot follows the collector cadence", () => {
