@@ -325,7 +325,8 @@ specTrades.glanceModel = (data = {}, ctx = {}) => {
   return {
     head: { value: signed(st.realized), unit: " 🌸", tone: st.realized >= 0 ? "ok" : "bad", hero: "📒",
       cap: `realised · ${st.rows.length} trade${st.rows.length === 1 ? "" : "s"}${open ? ` · ${open} open` : ""}` },
-    items: st.rows.slice().reverse().map((r) => ({ icon: icon(ctx, r.t.item) || "📒", name: r.t.item,
+    // newest bought first, whatever order the API sent (it sends newest first; reversing listed the oldest)
+    items: st.rows.slice().sort((a, b) => String(b.t.buy_date || "").localeCompare(String(a.t.buy_date || "")) || (Number(b.t.id) || 0) - (Number(a.t.id) || 0)).map((r) => ({ icon: icon(ctx, r.t.item) || "📒", name: r.t.item,
       sub: `${r.sell == null ? "open" : "sold"} · ${fmt(r.qty, 4)} · ${r.t.currency}`,
       value: r.val == null ? "—" : `${r.val >= 0 ? "+" : ""}${fmt(r.val, 2)}`, tone: r.val == null ? "" : r.val >= 0 ? "ok" : "bad",
       ...(flowerVal(r) != null && maxAbs > 0 ? { pct: (Math.abs(flowerVal(r)) / maxAbs) * 100 } : {}) })),
