@@ -389,12 +389,13 @@ fishingMarvels.glanceModel = model((m, ctx) => {
     ...owned.map((c) => ({ icon: ic(ctx, c.marvel), name: c.marvel, sub: "caught", chip: { text: "caught", tone: "ok" }, pct: 100 }))];
   const caught = v.cards.length ? (owned.length / v.cards.length) * 100 : 0;
   const head = left.length
-    ? { value: left.length, unit: `/${v.cards.length}`, cap: `maps left · ${compact(v.planTotal)}${FL} cheapest`, ring: caught, ringTone: "accent" }
+    // planKnown false: some map has no route at all, so the total is a floor ("≥")
+    ? { value: left.length, unit: `/${v.cards.length}`, cap: `maps left · ${v.planKnown ? "" : "≥ "}${compact(v.planTotal)}${FL} cheapest`, ring: caught, ringTone: "accent" }
     : { value: "✓", tone: "ok", cap: "every Marine Marvel caught", ring: 100 };
   return { head, items,
-    tiles: [{ label: "maps left", value: `${left.length}/${v.cards.length}` }, { label: "cheapest", value: `${compact(v.planTotal)}${FL}` },
+    tiles: [{ label: "maps left", value: `${left.length}/${v.cards.length}` }, { label: "cheapest", value: `${v.planKnown ? "" : "≥ "}${compact(v.planTotal)}${FL}` },
       { label: "drop rate", value: `${v.mult}×` }],
-    foot: `${v.chapter} chapter + permanent Marvels` };
+    foot: `${v.chapter} chapter + permanent Marvels${v.planKnown ? "" : " · cheapest excludes maps with no route"}` };
 });
 
 // order: what the ticked routes cost; the shopping list, how much of each you already have

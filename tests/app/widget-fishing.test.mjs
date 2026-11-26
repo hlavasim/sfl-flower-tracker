@@ -163,6 +163,11 @@ test("📱 glance models: safe to age = the free fish with a salt ring, the held
   assert.deepStrictEqual([v.head.value, v.head.unit, v.head.cap], [8, "/8", "maps left · 1.3k 🌸 cheapest"]);
   assert.deepStrictEqual(v.items.slice(0, 3).map((i) => i.name), ["Gilded Swordfish", "Twilight Anglerfish", "Starlight Tuna"]);
   assert.deepStrictEqual([v.items[0].sub, v.items[0].value], ["via White Shark", "2.5 🌸"]);
+  // a map with no route at all: the total is a floor and says so
+  const partial = fishingMarvels.glanceModel({}, { model: () => ({ ...M, marvels: { ...M.marvels, planKnown: false } }) }, {});
+  assert.strictEqual(partial.head.cap, "maps left · ≥ 1.3k 🌸 cheapest");
+  assert.match(partial.foot, / · cheapest excludes maps with no route$/);
+  assert.ok(M.marvels.planKnown !== false && !/≥/.test(v.head.cap), "a known plan has no ≥");
   const owned = { ...M, marvels: { ...M.marvels, cards: M.marvels.cards.map((c) => ({ ...c, owned: true })) } };
   const all = fishingMarvels.glanceModel({}, { model: () => owned }, {});
   assert.deepStrictEqual([all.head.value, all.head.cap], ["✓", "every Marine Marvel caught"]);
