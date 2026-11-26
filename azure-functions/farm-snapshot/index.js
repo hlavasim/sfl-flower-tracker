@@ -9,6 +9,9 @@ module.exports = async function (context) {
   const farmIds = (process.env.FARM_IDS || "155498").split(",").map((s) => s.trim());
   farmIds.sort((a, b) => (a === "155498" ? -1 : b === "155498" ? 1 : 0));
   const pool = getPool();
+  // A run is ok when at least one farm was read (changed or not); errors are kept for the health check.
+  let okFarms = 0;
+  const errors = [];
 
   for (let idx = 0; idx < farmIds.length; idx++) {
     if (idx > 0) {
@@ -21,6 +24,7 @@ module.exports = async function (context) {
       const apiKey = process.env[`FARM_${farmId}_KEY`] || process.env.SFL_API_KEY;
       const data = await fetchFarmData(farmId, apiKey);
       const gameData = data.farm || data;
+      okFarms++;
 
       // Get previous snapshot for diff
       const prevResult = await pool.query(
@@ -46,6 +50,20 @@ module.exports = async function (context) {
       context.log(`Farm ${farmId}: snapshot saved (${diffKeys} changes)`);
     } catch (err) {
       context.log.error(`Farm ${farmId} error: ${err.message}`);
+      errors.push(`${farmId}: ${err.message}`);
     }
+  }
+
+  // The run itself, for ?health=1 (migration 2026-11-26-collector-runs). Never fails the run.
+  try {
+    await pool.query(
+      `INSERT INTO collector_runs (name, last_run, last_ok, last_error)
+       VALUES ($1, NOW(), CASE WHEN $2 THEN NOW() END, $3)
+       ON CONFLICT (name) DO UPDATE SET last_run = NOW(),
+         last_ok = COALESCE(EXCLUDED.last_ok, collector_runs.last_ok), last_error = EXCLUDED.last_error`,
+      ["farm-snapshot", okFarms > 0, errors.length ? errors.join("; ").slice(0, 500) : null]
+    );
+  } catch (err) {
+    context.log.warn(`collector_runs not recorded: ${err.message}`);
   }
 };
