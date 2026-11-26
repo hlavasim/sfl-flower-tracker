@@ -220,6 +220,12 @@ function optionsHtml(options, opts) {
   }).join("");
 }
 
+// The cog panel of a view widget (a tile or a chart) that has options: just those, and a reset.
+export function optionsPanel(options = [], settings = {}) {
+  return `<div class="w-settings">${optionsHtml(options, settings.opts || {})}` +
+    `<div class="w-foot"><button type="button" class="w-link" data-action="reset" data-value="">Reset to defaults</button></div></div>`;
+}
+
 // The cog panel's HTML: tabs (Columns / Rows / Filter / Look), the inactive ones hidden. Every
 // control carries data-action / data-value; the frame delegates the events (and the drag of a
 // column's grip, which reports col-move) and feeds them to applyTableAction.

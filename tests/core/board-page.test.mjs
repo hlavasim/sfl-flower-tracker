@@ -151,9 +151,14 @@ test("the board repaints frame by frame", () => {
   assert.match(SRC, /if \(!grid \|\| !__wPatch\(grid, frames\)\) \{/);
 });
 
-test("FLOWERS: the needs table and the beds are the page's own widgets, the page's mode feeds them", () => {
-  assert.match(SRC, /__widgets\.renderPage\("flowers-needs", \{ data: \{ farm: data\.farm \}, ctx: _wCtx\("flowers-needs"\)/);
-  assert.match(SRC, /__widgets\.renderPage\("flower-beds", \{ data: \{ farm: data\.farm \}, ctx: _wCtx\("flower-beds"\)/);
+test("FLOWERS: every panel is the page's own widget, the page's mode feeds them", () => {
+  // one renderPage call per panel, each with the farm and its _wCtx (+ the page-only PB timer id)
+  assert.match(SRC, /const w = \(type, extra\) => __widgets\.renderPage\(type, \{ data: \{ farm: data\.farm \}, ctx: Object\.assign\(_wCtx\(type\), extra \|\| \{\}\), fresh: _wFlowerFresh \}\);/);
+  for (const t of ["flower-beds", "beehives", "flower-gifts", "flower-gift-cycle", "grow-planner", "flowers-needs"]) assert.ok(SRC.includes(`w("${t}")`), t);
+  assert.match(SRC, /w\("petal-blessed", \{ pbTimer: true \}\)/);
+  assert.match(SRC, /_wCtxMap\["flower-gifts"\] = _wCtxMap\["flower-gift-cycle"\] = \(\) => \(\{ icon: _wIcon, model: \(farm\) => _giftsModel\(_flowerPageData\(farm\)\) \}\);/);
+  assert.match(SRC, /_wCtxMap\["grow-planner"\] = /);
+  assert.match(SRC, /_wCtxMap\["petal-blessed"\] = /);
   assert.match(SRC, /if \(type === "flowers-needs"\) return \{ pageFlowers: \(\) => \(\{ mode: getFlowerMode\(\), n: getFlowerN\(\), giftPlan: getGiftPlan\(\) \}\),/);
   assert.match(SRC, /window\._wRerender = \(\) => \{ if \(getPage\(\) === "flowers" && cachedFarmData\) renderFlowers\(cachedFarmData\); \};/);
   // the old seed sections, summary bar and "currently growing" are gone from the FLOWERS page
@@ -161,6 +166,9 @@ test("FLOWERS: the needs table and the beds are the page's own widgets, the page
   assert.doesNotMatch(body, /<div class="seed-header pixel-font">/);
   assert.doesNotMatch(body, /summary-bar/);
   assert.doesNotMatch(body, /CURRENTLY GROWING/);
+  // the retro header, the old gift/planner/PB markup are gone too
+  assert.doesNotMatch(body, /pixel-panel|FLOWER TRACKER|renderGiftsSection|renderGrowPlanner|togglePetalBlessed/);
+  assert.match(body, /_wPageHead\("🌸 Flowers"/);
 });
 
 test("📌 asks which board (the boards, or a new one); ＋ Add widget shows every widget by page with a live preview", () => {

@@ -4,7 +4,7 @@
 // Frame ids: "page:<type>" on the widget's page, "b:<boardId>:<itemId>" on a board.
 // handle(frameId, action, value) applies one frame/table action, saves the document when it
 // changed, calls onChange(frameId) and returns whether it was handled.
-import { renderTable, tableSettingsPanel, applyTableAction, applyOption } from "../ui/table.mjs";
+import { renderTable, tableSettingsPanel, optionsPanel, applyTableAction, applyOption } from "../ui/table.mjs";
 import { renderFrame, freshness } from "../ui/frame.mjs";
 import { loadBoards, saveBoards, pin, unpin, moveItemTo, resizeItem, updateItemSettings,
   pageSettings, setPageSettings, pinnedCount, pinTarget, addBoard, removeBoard, setLastBoard } from "./boards.mjs";
@@ -50,7 +50,7 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
   function body(widget, settings, data, ctx, tab, force = null) {
     try {
       if (widget.view) {
-        // a tile or a chart: its own HTML, no table settings
+        // a tile or a chart: its own HTML, no table settings; its own options (if any) are the panel
         const out = widget.view(data || {}, ctx || {}, settings.opts || {}) || {};
         return { html: out.html || `<div class="w-empty-msg">${esc(out.empty || "Nothing to show.")}</div>`,
           settingsHtml: tableSettingsPanel([], settings, { tab, view: true, options: (widget.options || []).filter((o) => !force || !(o.key in force)),

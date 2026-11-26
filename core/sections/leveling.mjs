@@ -817,29 +817,29 @@ export function levelingSteps(farm, inputs, config, impacts, n = 3) {
     const d = r.ticked ? -r.dFlower : r.dFlower;
     if (!(d < -1)) continue;
     const ticked = r.ticked ? config.ticked.filter((x) => x !== r.name) : [...config.ticked, r.name];
-    out.push({ label: `${r.ticked ? "Odeber" : r.kind === "skill" ? "Vezmi skill" : "Kup"} ${r.name}`, kind: "item", name: r.name,
+    out.push({ label: `${r.ticked ? "Drop" : r.kind === "skill" ? "Take skill" : "Buy"} ${r.name}`, kind: "item", name: r.name,
       dFlower: d, dDays: r.ticked ? -r.dDays : r.dDays, price: r.ticked ? null : r.price, config: { ...config, ticked } });
   }
   const opts = levelingRecipeOptions(farm, inputs, config.restarts, config.ticked);
   for (const [name, b] of Object.entries(config.buildings || {})) {
     const set = (v) => ({ ...config, buildings: { ...config.buildings, [name]: { ...b, ...v } } });
-    if (b.on) tryCfg(`Vypni ${name}`, "building", set({ on: false }));
-    else if (b.recipe) tryCfg(`Zapni ${name}`, "building", set({ on: true }));
+    if (b.on) tryCfg(`Switch off ${name}`, "building", set({ on: false }));
+    else if (b.recipe) tryCfg(`Switch on ${name}`, "building", set({ on: true }));
     const list = opts[name] || [], top = list[0];
     const cheap = list.filter((o) => top && o.xpPerDay >= 0.25 * top.xpPerDay).sort((x, y) => x.perM - y.perM)[0];
-    if (b.on && cheap && cheap.name !== b.recipe) tryCfg(`${name}: vař ${cheap.name}`, "recipe", set({ recipe: cheap.name }));
+    if (b.on && cheap && cheap.name !== b.recipe) tryCfg(`${name}: cook ${cheap.name}`, "recipe", set({ recipe: cheap.name }));
     const on = b.extras || [];
     for (const en of extraNames(farm, inputs, config.ticked, name)) {
-      if (on.includes(en)) tryCfg(`${name}: bez ${en}`, "extra", set({ extras: on.filter((x) => x !== en) }));
-      else tryCfg(`${name}: přidej ${en}`, "extra", set({ extras: [...on, en] }));
+      if (on.includes(en)) tryCfg(`${name}: without ${en}`, "extra", set({ extras: on.filter((x) => x !== en) }));
+      else tryCfg(`${name}: add ${en}`, "extra", set({ extras: [...on, en] }));
     }
   }
   const f = config.fish || {};
   const fishSet = (v) => ({ ...config, fish: { ...f, ...v } });
-  tryCfg(f.age ? "Nestárni ryby" : "Stárni ryby", "fish", fishSet({ age: !f.age }));
-  tryCfg(f.eatRaw ? "Nejez syrové ryby" : "Jez zbytek ryb syrový", "fish", fishSet({ eatRaw: !f.eatRaw }));
-  for (const wm of LEVELING_WORMS) if (wm !== f.worm) tryCfg(`Nahazuj ${wm}`, "worm", fishSet({ worm: wm }));
-  if ((inputs.prices || {}).Salt > 0) tryCfg(f.buySalt ? "Nekupuj sůl" : "Dokupuj sůl na stárnutí", "fish", fishSet({ buySalt: !f.buySalt }));
+  tryCfg(f.age ? "Stop aging fish" : "Age fish", "fish", fishSet({ age: !f.age }));
+  tryCfg(f.eatRaw ? "Stop eating fish raw" : "Eat the rest of the fish raw", "fish", fishSet({ eatRaw: !f.eatRaw }));
+  for (const wm of LEVELING_WORMS) if (wm !== f.worm) tryCfg(`Cast ${wm}`, "worm", fishSet({ worm: wm }));
+  if ((inputs.prices || {}).Salt > 0) tryCfg(f.buySalt ? "Stop buying salt" : "Buy salt for aging", "fish", fishSet({ buySalt: !f.buySalt }));
   return out.sort((a, b) => a.dFlower - b.dFlower).slice(0, n);
 }
 

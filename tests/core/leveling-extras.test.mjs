@@ -106,5 +106,5 @@ test("an extra runs in a building whose main recipe is off: no main cooks, the e
   assert.ok(k.extras[0].cooksPerDay > 0 && near(k.xpPerDay, k.extras[0].xpPerDay));
   // and the steps offer it although the building is off
   const steps = LV.levelingSteps(farm, inputs, { ...d, buildings: { ...d.buildings, Kitchen: { ...d.buildings.Kitchen, on: false } } }, [], 30);
-  assert.ok(steps.some((s) => s.label === "Kitchen: přidej Crimstone Infused Fish Oil"), steps.map((s) => s.label).join(" | "));
+  assert.ok(steps.some((s) => s.label === "Kitchen: add Crimstone Infused Fish Oil"), steps.map((s) => s.label).join(" | "));
 });

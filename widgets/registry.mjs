@@ -113,3 +113,11 @@ export const WIDGETS = {
   // POWER, NODES, ROI, SHRINES
   ...Object.fromEntries([...POWER_WIDGETS, ...NODES_WIDGETS, ...ROI_WIDGETS, ...SHRINES_WIDGETS].map((w) => [w.type, w])),
 };
+
+// ── FISHING, LEVELING, FLOWERS, DIFF, JSON, CONSTANTS pages (one block) ──
+import { constantsCoverage, constantsTables } from "./constants.mjs";
+import { flowerGifts, flowerGiftCycle, petalBlessed, growPlanner } from "./flowers-plan.mjs";
+import { levelingSummary, levelingStepsWidget, levelingFrontierWidget, levelingMatrix } from "./leveling.mjs";
+import { FISHING_WIDGETS } from "./fishing.mjs";
+for (const w of [constantsCoverage, constantsTables, flowerGifts, flowerGiftCycle, petalBlessed, growPlanner,
+  levelingSummary, levelingStepsWidget, levelingFrontierWidget, levelingMatrix, ...FISHING_WIDGETS]) WIDGETS[w.type] = w;
